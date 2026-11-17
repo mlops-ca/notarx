@@ -46,7 +46,26 @@
         { "id": "adr-console-theme-system", "title": { "en": "ADR 0005: Console semantic theme system", "zh-CN": "ADR 0005：Console 语义主题系统" }, "en": "docs/adr/0005-console-semantic-theme-system.md", "zh-CN": "docs/adr/0005-console-semantic-theme-system.zh-CN.md" },
         { "id": "adr-account-levels", "title": { "en": "ADR 0006: account levels and per-repository authority", "zh-CN": "ADR 0006：账号等级与按仓库授权" }, "en": "docs/adr/0006-account-levels-and-repository-grants.md", "zh-CN": "docs/adr/0006-account-levels-and-repository-grants.zh-CN.md" },
         { "id": "adr-agctl-cli", "title": { "en": "ADR 0007: agctl CLI shape and cross-cutting contract", "zh-CN": "ADR 0007：agctl 命令行形态与横切契约" }, "en": "docs/adr/0007-agctl-cli-shape.md", "zh-CN": "docs/adr/0007-agctl-cli-shape.zh-CN.md" },
-        { "id": "adr-go-module-path", "title": { "en": "ADR 0008: Go module path", "zh-CN": "ADR 0008：Go 模块路径" }, "en": "docs/adr/0008-go-module-path.md", "zh-CN": "docs/adr/0008-go-module-path.zh-CN.md" }
+        { "id": "adr-go-module-path", "title": { "en": "ADR 0008: Go module path", "zh-CN": "ADR 0008：Go 模块路径" }, "en": "docs/adr/0008-go-module-path.md", "zh-CN": "docs/adr/0008-go-module-path.zh-CN.md" },
+        { "id": "adr-notarx-fork-charter", "title": { "en": "ADR 0013: notarx Fork Charter" }, "en": "docs/adr/0013-notarx-fork-charter.md" },
+        { "id": "adr-locale-policy", "title": { "en": "ADR 0014: Locale Policy: en-CA Reference, fr-CA First-Class, zh-CN Secondary" }, "en": "docs/adr/0014-locale-policy.md" },
+        { "id": "adr-single-baseline-migration", "title": { "en": "ADR 0015: Single Baseline Migration" }, "en": "docs/adr/0015-single-baseline-migration.md" },
+        { "id": "adr-native-architecture-builds", "title": { "en": "ADR 0016: Native Per-Architecture Builds" }, "en": "docs/adr/0016-native-architecture-builds.md" },
+        { "id": "adr-runtime-backends-and-oci-free-tier", "title": { "en": "ADR 0017: Runtime Backends and the Oracle Cloud Free Tier Reference Deployment" }, "en": "docs/adr/0017-runtime-backends-and-oci-free-tier.md" },
+        { "id": "adr-identity-providers-saml-scim", "title": { "en": "ADR 0018: Human Identity Providers: OIDC and SAML Registry, SCIM Provisioning, Groups" }, "en": "docs/adr/0018-identity-providers-saml-scim.md" },
+        { "id": "adr-workload-identity-federation", "title": { "en": "ADR 0019: Workload Identity Federation (Inbound)" }, "en": "docs/adr/0019-workload-identity-federation.md" },
+        { "id": "adr-notarx-oidc-issuer", "title": { "en": "ADR 0020: notarx as an OIDC Token Issuer" }, "en": "docs/adr/0020-notarx-oidc-issuer.md" },
+        { "id": "adr-promotion-rules-and-repository-chains", "title": { "en": "ADR 0021: Rule-Based Promotion and Repository Chains" }, "en": "docs/adr/0021-promotion-rules-and-repository-chains.md" },
+        { "id": "adr-database-portability-mysql-heatwave", "title": { "en": "ADR 0022: Database Portability: MySQL 8.4 (HeatWave) as Second Backend" }, "en": "docs/adr/0022-database-portability-mysql-heatwave.md" },
+        { "id": "adr-data-model-scalability", "title": { "en": "ADR 0023: Data Model Scalability: Write Decoupling, Partitioning, Retention, Counters and Caches" }, "en": "docs/adr/0023-data-model-scalability.md" },
+        { "id": "adr-release-versioning", "title": { "en": "ADR 0024: Release Versioning, Conventional Commits and Nightly-to-Stable Promotion" }, "en": "docs/adr/0024-release-versioning-and-conventional-commits.md" },
+        { "id": "adr-distribution-channels", "title": { "en": "ADR 0025: Distribution Channels: Images, Archives, Native Packages and Signed Repositories" }, "en": "docs/adr/0025-distribution-channels.md" },
+        { "id": "adr-debian-rpm-repositories", "title": { "en": "ADR 0026: Debian and RPM Repositories" }, "en": "docs/adr/0026-debian-and-rpm-repositories.md" },
+        { "id": "adr-hugging-face-repositories", "title": { "en": "ADR 0027: Hugging Face Model and Dataset Repositories" }, "en": "docs/adr/0027-hugging-face-repositories.md" },
+        { "id": "adr-generic-versioned-packages", "title": { "en": "ADR 0028: Generic Versioned Packages on Raw" }, "en": "docs/adr/0028-generic-versioned-packages.md" },
+        { "id": "adr-repository-visibility", "title": { "en": "ADR 0029: Repository Visibility: Public and Private Feeds" }, "en": "docs/adr/0029-repository-visibility-public-private-feeds.md" },
+        { "id": "adr-sbom-vulnerability-scanning", "title": { "en": "ADR 0030: SBOM Generation and Vulnerability Scanning" }, "en": "docs/adr/0030-sbom-generation-and-vulnerability-scanning.md" },
+        { "id": "brand-assets", "title": { "en": "notarx brand assets" }, "en": "docs/assets/brand/README.md" }
       ]
     },
     {

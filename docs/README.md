@@ -48,6 +48,25 @@ agree with executable tests and the
 - [ADR 0010: Memory store contracts](adr/0010-memory-store-contracts.md)
 - [ADR 0011: Explicit format modules and Raw tracer](adr/0011-format-modules.md)
 - [ADR 0012: Management API domain composition](adr/0012-management-domain-composition.md)
+- [ADR 0013: notarx Fork Charter](adr/0013-notarx-fork-charter.md)
+- [ADR 0014: Locale Policy: en-CA Reference, fr-CA First-Class, zh-CN Secondary](adr/0014-locale-policy.md)
+- [ADR 0015: Single Baseline Migration](adr/0015-single-baseline-migration.md)
+- [ADR 0016: Native Per-Architecture Builds](adr/0016-native-architecture-builds.md)
+- [ADR 0017: Runtime Backends and the Oracle Cloud Free Tier Reference Deployment](adr/0017-runtime-backends-and-oci-free-tier.md)
+- [ADR 0018: Human Identity Providers: OIDC and SAML Registry, SCIM Provisioning, Groups](adr/0018-identity-providers-saml-scim.md)
+- [ADR 0019: Workload Identity Federation (Inbound)](adr/0019-workload-identity-federation.md)
+- [ADR 0020: notarx as an OIDC Token Issuer](adr/0020-notarx-oidc-issuer.md)
+- [ADR 0021: Rule-Based Promotion and Repository Chains](adr/0021-promotion-rules-and-repository-chains.md)
+- [ADR 0022: Database Portability: MySQL 8.4 (HeatWave) as Second Backend](adr/0022-database-portability-mysql-heatwave.md)
+- [ADR 0023: Data Model Scalability: Write Decoupling, Partitioning, Retention, Counters and Caches](adr/0023-data-model-scalability.md)
+- [ADR 0024: Release Versioning, Conventional Commits and Nightly-to-Stable Promotion](adr/0024-release-versioning-and-conventional-commits.md)
+- [ADR 0025: Distribution Channels: Images, Archives, Native Packages and Signed Repositories](adr/0025-distribution-channels.md)
+- [ADR 0026: Debian and RPM Repositories](adr/0026-debian-and-rpm-repositories.md)
+- [ADR 0027: Hugging Face Model and Dataset Repositories](adr/0027-hugging-face-repositories.md)
+- [ADR 0028: Generic Versioned Packages on Raw](adr/0028-generic-versioned-packages.md)
+- [ADR 0029: Repository Visibility: Public and Private Feeds](adr/0029-repository-visibility-public-private-feeds.md)
+- [ADR 0030: SBOM Generation and Vulnerability Scanning](adr/0030-sbom-generation-and-vulnerability-scanning.md)
+- [notarx brand assets](assets/brand/README.md) — mark, lockups, icons, colour tokens.
 
 ## Protocols and formats
 

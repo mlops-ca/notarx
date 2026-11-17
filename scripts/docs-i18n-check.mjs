@@ -44,10 +44,10 @@ export function findPairIssues(repoRoot, englishDocuments, readFile = (file) => 
     const chinesePath = chinesePathFor(englishPath);
     const absoluteEnglish = path.join(repoRoot, englishPath);
     const absoluteChinese = path.join(repoRoot, chinesePath);
-    if (!existsSync(absoluteChinese)) {
-      issues.push(`${englishPath}: missing ${chinesePath}`);
-      continue;
-    }
+    // ADR 0014: English is the reference language and a Simplified Chinese
+    // companion is optional. When one exists it must still be a real
+    // translation with reciprocal language links.
+    if (!existsSync(absoluteChinese)) continue;
 
     const english = readFile(absoluteEnglish);
     const chinese = readFile(absoluteChinese);
@@ -72,7 +72,7 @@ export function flattenSiteMap(siteMap) {
   return siteMap.sections.flatMap((section) => section.items);
 }
 
-export function findSiteMapIssues(siteMap, englishDocuments) {
+export function findSiteMapIssues(siteMap, englishDocuments, chineseDocuments = undefined) {
   const issues = [];
   if (siteMap.version !== 1) issues.push('site-map.json: version must be 1');
   if (siteMap.defaultLocale !== 'en') issues.push('site-map.json: defaultLocale must be en');
@@ -87,20 +87,36 @@ export function findSiteMapIssues(siteMap, englishDocuments) {
   for (const item of items) {
     if (!item.id || ids.has(item.id)) issues.push(`site-map.json: duplicate or empty id ${item.id ?? ''}`);
     ids.add(item.id);
-    if (!item.title?.en || !item.title?.['zh-CN']) {
-      issues.push(`site-map.json: ${item.id} requires both localized titles`);
+    if (!item.title?.en) {
+      issues.push(`site-map.json: ${item.id} requires an English title`);
+    }
+    if (item['zh-CN'] && !item.title?.['zh-CN']) {
+      issues.push(`site-map.json: ${item.id} requires a Chinese title for its Chinese companion`);
     }
     if (englishPaths.has(item.en)) issues.push(`site-map.json: duplicate English path ${item.en}`);
-    if (chinesePaths.has(item['zh-CN'])) issues.push(`site-map.json: duplicate Chinese path ${item['zh-CN']}`);
+    if (item['zh-CN'] && chinesePaths.has(item['zh-CN'])) {
+      issues.push(`site-map.json: duplicate Chinese path ${item['zh-CN']}`);
+    }
     englishPaths.add(item.en);
-    chinesePaths.add(item['zh-CN']);
-    if (item['zh-CN'] !== chinesePathFor(item.en)) {
+    if (item['zh-CN']) chinesePaths.add(item['zh-CN']);
+    if (item['zh-CN'] && item['zh-CN'] !== chinesePathFor(item.en)) {
       issues.push(`site-map.json: ${item.id} has a non-conventional language pair`);
     }
   }
 
   for (const englishPath of englishDocuments) {
     if (!englishPaths.has(englishPath)) issues.push(`site-map.json: missing ${englishPath}`);
+  }
+  if (chineseDocuments) {
+    for (const item of items) {
+      const companion = chinesePathFor(item.en);
+      if (chineseDocuments.has(companion) && item['zh-CN'] !== companion) {
+        issues.push(`site-map.json: ${item.id} must list its existing Chinese companion ${companion}`);
+      }
+      if (item['zh-CN'] && !chineseDocuments.has(item['zh-CN'])) {
+        issues.push(`site-map.json: ${item.id} lists missing ${item['zh-CN']}`);
+      }
+    }
   }
   for (const englishPath of englishPaths) {
     if (!englishDocuments.includes(englishPath)) issues.push(`site-map.json: unknown ${englishPath}`);
@@ -122,7 +138,11 @@ function main() {
   const siteMap = JSON.parse(readFileSync(path.join(repoRoot, 'docs/site-map.json'), 'utf8'));
   const issues = [
     ...findPairIssues(repoRoot, englishDocuments),
-    ...findSiteMapIssues(siteMap, englishDocuments),
+    ...findSiteMapIssues(
+      siteMap,
+      englishDocuments,
+      new Set(markdownFiles.filter((file) => file.endsWith('.zh-CN.md'))),
+    ),
   ];
   if (markdownFiles.some((file) => file.endsWith('.en.md'))) {
     issues.push('English documents must use the unsuffixed .md route');
@@ -133,7 +153,7 @@ function main() {
     return;
   }
   process.stdout.write(
-    `documentation i18n check passed (${englishDocuments.length} bilingual pairs, ${siteMap.sections.length} sections)\n`,
+    `documentation i18n check passed (${englishDocuments.length} documents, ${siteMap.sections.length} sections)\n`,
   );
 }
 

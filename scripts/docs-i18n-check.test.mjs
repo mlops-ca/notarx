@@ -48,6 +48,39 @@ test('reports missing bodies and reciprocal language links', () => {
   }
 });
 
+test('treats a missing Chinese companion as optional', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'notarx-i18n-'));
+  try {
+    mkdirSync(path.join(root, 'docs'));
+    writeFileSync(path.join(root, 'docs/guide.md'), '# Guide\n');
+    assert.deepEqual(findPairIssues(root, ['docs/guide.md']), []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('accepts English-only navigation entries and keeps existing companions listed', () => {
+  const siteMap = {
+    version: 1,
+    defaultLocale: 'en',
+    locales: ['en', 'zh-CN'],
+    sections: [
+      {
+        id: 'start',
+        title: { en: 'Start' },
+        items: [
+          { id: 'guide', title: { en: 'Guide' }, en: 'docs/guide.md' },
+          { id: 'old', title: { en: 'Old' }, en: 'docs/old.md' },
+        ],
+      },
+    ],
+  };
+  assert.deepEqual(
+    findSiteMapIssues(siteMap, ['docs/guide.md', 'docs/old.md'], new Set(['docs/old.zh-CN.md'])),
+    ['site-map.json: old must list its existing Chinese companion docs/old.zh-CN.md'],
+  );
+});
+
 test('requires one conventional navigation entry per document pair', () => {
   const siteMap = {
     version: 1,
