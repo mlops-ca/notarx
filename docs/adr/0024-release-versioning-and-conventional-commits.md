@@ -105,7 +105,9 @@ the version policy, commit policy and repository governance.
 - Versions are SemVer 2.0. While the major is `0`: `feat` bumps minor, `fix`, `perf`
   and `revert` bump patch, a breaking change (`!` or `BREAKING CHANGE:` footer) bumps
   minor. `1.0.0` is only ever produced by an explicit `version_override` input of the
-  stable run, so a breaking change cannot jump the line by accident. After `1.0.0`
+  stable run, so a breaking change cannot jump the line by accident. The criteria for `1.0.0` (API
+  stability promises per ADR) are a separate "1.0 readiness" ADR, written when the 0.x scope nears
+  completion; this ADR only requires the explicit `version_override`. After `1.0.0`
   the standard rules apply (breaking bumps major) via flipping `breaking_always_bump_major`
   in `cliff.toml` in that same PR.
 - Nightly: `X.Y.Z-nightly.N`, tag `vX.Y.Z-nightly.N`. `X.Y.Z` (the core) is the next
@@ -317,7 +319,13 @@ trigger CI.
 | Ruleset `tag-creation` | `refs/tags/v*`: creation restricted to the release App |
 | Release App | installation token for tag creation, prune and the changelog PR; contents, pull requests, packages write |
 | Environment `stable-release` | optional required reviewers on the stable `publish` job; the manual dispatch is the trigger |
-| Scheduled-workflow liveness | the plan job calls the workflow-enable API on every run; a monthly alert issue if no nightly or skip notice was recorded in 35 days |
+| Scheduled-workflow liveness | the plan job calls the workflow-enable API on every run as a best-effort measure (GitHub documents only repository activity as resetting the 60-day inactivity timer, so nothing relies on the call); the monthly alert issue if no nightly or skip notice was recorded in 35 days is the backstop |
+
+Attestation verification for artifacts produced by the reusable workflows uses
+`gh attestation verify <file> --repo mlops-ca/notarx --signer-workflow mlops-ca/notarx/.github/workflows/<called>.yml`
+(the signer is the called workflow, and the value must be repo-qualified; a bare path fails). `--source-ref`
+or `--cert-identity` are added only where a tag is pinned. `--signer-repo` alone is not used, because it
+accepts any workflow in the repository.
 
 ## Security considerations
 
@@ -400,6 +408,7 @@ trigger CI.
    - [ ] a `workflow_dispatch` dry run in the PR shows plan output and the intended tags
    - [ ] a real nightly on a sandbox tag publishes a pre-release with SHA256SUMS, manifest and attestations; `gh attestation verify` accepts them
    - [ ] failed arm64 leg publishes no tag
+   - [ ] a negative test shows `gh attestation verify --repo mlops-ca/notarx --signer-workflow mlops-ca/notarx/.github/workflows/image-build.yml` accepts the real attestation and rejects a bare-path `--signer-workflow` and an attestation from another workflow; the exact flags are recorded in `docs/releasing.md`
    - [ ] `release-manifest.json` `images` and the attestation check cover every image of the ADR 0016 matrix list (three once ADR 0030 slice 1b lands)
    - [ ] job graph keeps an extension point after `publish` for `publish-feeds` and `verify-feeds` (ADR 0026) without changing `plan`
    - [ ] `make release-version-check`, `make docs-check` pass
@@ -430,6 +439,7 @@ trigger CI.
    0.x rules, milestones convention, verification commands), docs index and
    `site-map.json`, creation of the themed milestones, liveness alert job.
    - [ ] script is idempotent and prints the effective rulesets
+   - [ ] `docs/releasing.md` records the empirical outcome of the workflow-enable call (whether a schedule disabled by inactivity is revived) and states that the monthly liveness alert, not the call, is the guarantee
    - [ ] the themed milestones created are exactly `Foundation`, `Data scale`, `Identity & federation`, `Promotion chains`, `MySQL HeatWave`, `Formats`, `Public feeds`, `Supply-chain security` and `Backlog`
    - [ ] `make docs-check` passes
    Dependencies: slice 4.
@@ -440,10 +450,10 @@ trigger CI.
    - [ ] `scripts/migration-immutability-check.sh` (ADR 0015 slice 6) is enforcing
    Dependencies: slices 5-8, ADR 0015 slices 6-7, ADR 0013 slices 1-9.
 
-## Open questions
+## Resolved questions
 
-- Whether calling the workflow-enable API on every run resets GitHub's 60-day
-  inactivity timer is not documented; slice 8 keeps the monthly alert as the backstop.
-- When a reusable workflow produces an attestation, the certificate identity names the
-  called workflow; slice 4 must confirm the exact `gh attestation verify` flags.
-- Whether the `1.0.0` criteria (API stability promises per ADR) get their own ADR.
+**Q1 — Does calling the workflow-enable API on every run reset GitHub's 60-day inactivity timer.** Decision: keep the call as best-effort alongside the monthly liveness alert and do not rely on it; record the empirical outcome in slice 8. GitHub documents only repository activity as resetting the timer, so the 35-day alert covers the gap.
+
+**Q2 — Which `gh attestation verify` flags are correct for reusable-workflow attestations.** Decision: `--repo` plus the repo-qualified `--signer-workflow <owner>/<repo>/<path>`, adding `--source-ref` or `--cert-identity` only when pinning tags; confirmed by the slice 4 negative test. For a reusable workflow the signer is the called workflow, and `--signer-repo` alone is too loose.
+
+**Q3 — Do the 1.0.0 criteria get their own ADR.** Decision: yes, a separate "1.0 readiness" ADR written when 0.x scope nears completion; this ADR requires only an explicit `version_override` for `1.0.0`. Stability promises depend on APIs not yet settled and the override guard already prevents an accidental 1.0.

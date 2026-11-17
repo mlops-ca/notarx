@@ -160,7 +160,7 @@ at creation. Backups are dialect-specific.
 | `NOTARX_DATABASE_DRIVER` | `postgres` | `postgres` or `mysql`; anything else is a start-up error. |
 | `NOTARX_DATABASE_URL` | none | PostgreSQL: unchanged. MySQL: `mysql://user:password@host:3306/notarx?tls=verify-full`, parsed by notarx and converted to a `go-sql-driver/mysql` config; the driver DSN form is not accepted so credentials cannot leak through odd quoting. |
 | `NOTARX_DATABASE_TLS_CA_FILE` | system roots | CA bundle for the MySQL server certificate; `tls=` values are `required` (no verification, warns), `verify-ca` (custom `VerifyPeerCertificate`, since Go's `crypto/tls` has no CA-only mode), `verify-full` (default when the host is not loopback). They are notarx's own names, mapped to `RegisterTLSConfig` entries of `go-sql-driver/mysql`. |
-| `NOTARX_DATABASE_MAX_CONNECTIONS` | derived | Total budget across the four pools; split in the 32:8:4 ratio for MySQL (the notification pool is not opened, since there is no LISTEN), minimum 1 per pool. Unset keeps today's 46 on PostgreSQL and 44 on MySQL. The free-tier profile (ADR 0017 slice 6) sets a value taken from the verified HeatWave `max_connections`. |
+| `NOTARX_DATABASE_MAX_CONNECTIONS` | derived | Total budget across the four pools; split in the 32:8:4 ratio for MySQL (the notification pool is not opened, since there is no LISTEN), minimum 1 per pool. Unset keeps today's 46 on PostgreSQL and 44 on MySQL. The free-tier profile (ADR 0017 slice 6) sets a value taken from the HeatWave `max_connections` measured in slice 11, and ships a conservative value until then; the start-up check compares `@@max_connections` with the pool budget and fails loudly rather than guessing. |
 | `NOTARX_DATABASE_POLL_INTERVAL` | `500ms` | MySQL queue and notification polling cadence (see "Locks, queues and notifications"). |
 | `NOTARX_DATABASE_MIGRATE_URL` | none | Optional separate MySQL URL with DDL rights for the migration runner only; when set, the serving URL needs DML only. |
 | `NOTARX_EXPERIMENTAL_MYSQL` | `false` | Gate described above; removed by slice 11. |
@@ -236,8 +236,9 @@ UUIDv7 ids, polling `cache_epochs` for cache invalidation, lease rows instead of
 `GET_LOCK` for long operations, and keyset pagination. The free-tier retention
 profile (`NOTARX_RETENTION_PROFILE=freetier`: raw audit 7 d, domain events 3 d,
 terminal jobs 1 d) is the default for variant C; it is what keeps the 50 GB
-budget (data, indexes, binary logs) from filling, which answers open question 3
-in principle and leaves the size measurement to slice 10.
+budget (data, indexes, binary logs) from filling, and raises a storage alert at about 70% of the fixed 50 GB (data, indexes and
+logs); slice 10 measures actual growth and tunes the defaults, and operators may
+raise the retention.
 
 ### Migrations
 
@@ -256,8 +257,10 @@ in principle and leaves the size measurement to slice 10.
   applies statements split by a MySQL-aware splitter (no `DELIMITER`; routines are
   avoided), aborts on a changed checksum and takes `GET_LOCK` on a database-qualified name (`notarx-migrate:<db>`)
   so two replicas do not race. The PostgreSQL path keeps `scripts/run-migrations.sh`
-  until the Go runner passes `scripts/migration-runner-check.sh` against PostgreSQL
-  with a byte-identical ledger; only then may it be unified (a later decision).
+  until the Go runner has run in parity mode against PostgreSQL for one release
+  (`scripts/migration-runner-check.sh` with a byte-identical ledger on every
+  release); after that release it replaces `run-migrations.sh` and the four ADR 0015
+  manifests are updated in a follow-up change, not in this ADR's slices.
 - No transactional DDL: before each file the runner inserts a ledger row in state
   `applying` and sets it to `applied` afterwards. A crash leaves `applying`, and start-up
   refuses to run until `notarx migrate --repair` shows the statement offset and the
@@ -276,7 +279,7 @@ in principle and leaves the size measurement to slice 10.
 
 `internal/backupops/postgres.go` and `docker.go` become a `Dump`/`Restore` pair
 per dialect. MySQL uses `mysqldump --single-transaction --routines --triggers
---set-gtid-purged=OFF --no-tablespaces` (assumed: the HeatWave administrator lacks `PROCESS`; open question 1). Dumps and restores must not depend on `DEFINER` privileges: triggers and routines are created without `SUPER`/`SET_USER_ID`-class rights, and the runner strips `DEFINER` clauses on restore
+--set-gtid-purged=OFF --no-tablespaces` (the HeatWave administrator is assumed to lack `PROCESS`, and no code may depend on `SUPER`-class, `PROCESS` or `LOCK TABLES` privileges; slice 11 records the actual grants). Dumps and restores must not depend on `DEFINER` privileges: triggers and routines are created without `SUPER`/`SET_USER_ID`-class rights, and the runner strips `DEFINER` clauses on restore
 streamed through the existing manifest, checksum and object-reference
 verification; the restore sandbox runs a `mysql:8.4` container with no network,
 as the PostgreSQL one does. The backup manifest and `backup-drill`/`restore-drill`
@@ -355,7 +358,7 @@ creates them.
 2. **Go migration runner.**
    Scope: new `internal/migrate`, `cmd` subcommand, `scripts/migration-runner-check.sh`
    extension.
-   - [ ] runs the PostgreSQL baseline with a ledger byte-identical to `run-migrations.sh`
+   - [ ] runs the PostgreSQL baseline with a ledger byte-identical to `run-migrations.sh`, wired as a parity check (not the deployed runner) that runs on every release for one release before unification is considered; `run-migrations.sh` stays the PostgreSQL runner in all four manifests
    - [ ] MySQL: `applying`/`applied` states, `--repair`, `GET_LOCK` exclusion tested with two concurrent runners
    - [ ] lint for re-runnable post-baseline MySQL migrations
    Depends on: slice 1, ADR 0015 slice 4.
@@ -396,22 +399,17 @@ creates them.
     Scope: `internal/backupops` dialect split, manifest `dialect` field, drills, performance smoke (`make performance-baseline` against both dialects: upload, resolve, list, substring search at 1k, 100k and 1M rows).
     - [ ] `make backup-drill` and `make restore-drill` pass on MySQL; cross-dialect restore refused
     - [ ] recorded numbers and the search degradation threshold committed to `docs/`
+    - [ ] free-tier profile storage measured against the 50 GB budget (data, indexes, binary logs); a storage metric and alert at about 70% is defined and the `freetier` retention defaults are tuned from the result
     Depends on: slice 9, ADR 0017 slice 4 (backup on both object drivers).
 11. **HeatWave verification, OCI variant C and the support claim.**
     Scope: `deploy/oci-free-tier` variant, runbook, `docs/postgresql-capabilities.md` neighbour doc for MySQL, remove `NOTARX_EXPERIMENTAL_MYSQL`.
-    - [ ] live run of the full integration suite against a HeatWave Always Free instance; recorded `max_connections`, `sql_mode`, version, TLS CA
+    - [ ] live run of the full integration suite against a HeatWave Always Free instance; recorded `max_connections`, `sql_mode`, version, TLS CA, and the granted privileges (`PROCESS`, `SUPER`-class, `LOCK TABLES`); the free-tier profile pool budget is set from the measured `max_connections` and the 70% storage alert is verified
     - [ ] compose or OpenTofu variant starts with notarx only, passes `make evidence` subset
     - [ ] the gate lists zero missing stores; docs claim MySQL only now
     Depends on: slices 9 and 10, ADR 0017 slice 6.
 
-## Open questions
+## Resolved questions
 
-1. What are the real `max_connections` and available privileges on HeatWave Always
-   Free (`PROCESS`, `SUPER`-class statements, `LOCK TABLES`)? Slice 11 answers
-   them; slices 1 and 10 assume the values in this ADR are conservative.
-2. Should the Go migration runner replace `run-migrations.sh` for PostgreSQL once
-   the check passes? Deferred; it changes four deployment manifests that ADR 0015
-   lists.
-3. Is HeatWave Always Free's 50 GB sufficient for audit retention at the default
-   policy? Slice 10 sizes it; the answer may lower the default audit retention in the
-   free-tier profile.
+- **Q1 — Real `max_connections` and privileges on HeatWave Always Free?** Decision: measure in slice 11, ship the start-up check of `@@max_connections` against the pool budget, keep the conservative default meanwhile, and never depend on `SUPER`-class, `PROCESS` or `LOCK TABLES`. Oracle publishes neither a connection limit nor a privilege matrix and restricts SUPER-class rights on the managed service.
+- **Q2 — Should the Go runner replace `run-migrations.sh` for PostgreSQL?** Decision: keep the deferral; replace only after the Go runner has run in parity mode for one release. The change touches four manifests and the baseline is new, so stability beats convergence, and MySQL is not blocked.
+- **Q3 — Is 50 GB enough for audit retention at the default policy?** Decision: ship the free-tier profile with short raw audit retention and a storage alert at about 70%, then tune with slice 10 measurements. Storage is fixed at 50 GB including logs, so a conservative default protects the instance.

@@ -63,8 +63,8 @@ to this fork.
    Costs a second runner per job and a merge step, and makes the CI graph larger.
 4. **Self-hosted arm64 runners (e.g. on the Always Free A1 tenancy).** Cheap, but
    introduces untrusted-code execution on infrastructure we operate, runner
-   maintenance, and a supply-chain trust root. Rejected while hosted arm64
-   runners are free; revisit if the repository becomes private.
+   maintenance, and a supply-chain trust root. Rejected permanently: the repository is public
+   and hosted arm64 runners are used on every run.
 
 ## Decision
 
@@ -90,13 +90,14 @@ the fork charter of ADR 0013.
 | linux/amd64 | `ubuntu-24.04` | images, archives, tests |
 | linux/arm64 | `ubuntu-24.04-arm` | images, archives, tests |
 | darwin/arm64 | `macos-15` | `notarxctl` (and server) archives |
-| darwin/amd64 | `macos-15-intel` | `notarxctl` archives; kept until the label retires (August 2027), see Open questions |
+| darwin/amd64 | `macos-15-intel` | `notarxctl` archives; kept until the label retires (August 2027), then dropped |
 
 Labels are pinned to explicit OS versions, not `ubuntu-latest`, so that the
 runner image changes only by a reviewed edit. `macos-15-intel` is the last x86_64 hosted macOS image; GitHub states it is
 available until August 2027 (actions/runner-images#13045). The guard
 (below) fails on or after 2027-09-01 if the label is still referenced, so the
-retirement cannot pass unnoticed. Windows is not a supported target;
+retirement cannot pass unnoticed: `darwin/amd64` ships until then and is removed when the guard fires, never
+cross-built. Windows is not a supported target;
 the `windows` branch accepted by `scripts/build-release-artifacts.sh:132` is
 removed.
 
@@ -116,7 +117,10 @@ removed.
   resolves its native variant of the same reviewed digest.
 - The Console static bundle is architecture independent, but it is still built
   per architecture image. This is a few minutes of CPU in exchange for one rule
-  without exceptions.
+  without exceptions; the bundle is not shared across images.
+- **Runners.** The repository is and stays public. Every run (pull requests, `main`, tags) uses
+  GitHub-hosted `ubuntu-24.04` (amd64) and `ubuntu-24.04-arm` (arm64) runners. There are no self-hosted
+  runners (design 4 is rejected for good) and no single-arch fallback for any run.
 
 ### Image publishing
 
@@ -241,6 +245,7 @@ job) fails when any of the following appears outside an explicit allowlist file
 - `docker/setup-qemu-action`, `qemu-user-static`, or `tonistiigi/binfmt`;
 - the `macos-15-intel` runner label on or after 2027-09-01 (calendar guard,
   tested with an injected date);
+- `self-hosted` in any `runs-on` value;
 - a `platforms:` key whose value lists more than one platform in
   `docker/build-push-action` steps, and any `CGO_ENABLED=1` combined with a
   `CC=` cross compiler.
@@ -307,6 +312,7 @@ pattern is detected.
    - [ ] Self-test proves each forbidden pattern in the Guard section is
      detected and the compliant tree passes.
    - [ ] The `macos-15-intel` guard fails with an injected date of 2027-09-01.
+   - [ ] The guard fails on a `self-hosted` runner label (negative fixture).
    - [ ] `make native-build-check` is wired into `make preflight`.
    - [ ] `make lint` and `make docs-check` pass.
    Dependencies: slice 1 (the tree must be clean first).
@@ -368,15 +374,10 @@ pattern is detected.
    - [ ] `make docs-check` passes.
    Dependencies: slices 3-5.
 
-## Open questions
+## Resolved questions
 
-- Keep `darwin/amd64`? `macos-15-intel` is the last Intel hosted label and is
-  available until August 2027; shipping the Intel CLI beyond that would require a
-  cross build, which this ADR forbids. Proposal: ship it until the label retires
-  and drop it then; the calendar guard enforces the decision point.
-- Should the Console static bundle be built once and shared across both
-  architecture images to save minutes, accepting a single documented exception to
-  the "everything builds natively" rule? This ADR says no.
-- If the repository ever becomes private, arm64 hosted minutes are billed; does
-  that justify the self-hosted option (design 4) or is single-arch CI
-  acceptable for pull requests?
+**Q1 — Keep `darwin/amd64` `notarxctl` until `macos-15-intel` retires.** Decision: ship it until the label retires (August 2027) and let the calendar guard force removal. It costs one native CI leg, honours the no-cross-compilation rule and has a hard decision date.
+
+**Q2 — Build the Console static bundle once and share it across both architecture images.** Decision: no; build natively per architecture with no exception. CI minutes are free for a public repository and one uniform rule keeps the guard simple.
+
+**Q3 — Self-hosted arm64 runners or single-arch PR CI if the repository becomes private.** Decision: neither applies: the repository is and stays public, and CI uses GitHub-hosted amd64 and arm64 runners on all runs (PRs, `main`, tags), with no self-hosted runners and no single-arch fallback. Hosted arm64 is free for public repositories and removes the trust and maintenance cost of self-hosting.

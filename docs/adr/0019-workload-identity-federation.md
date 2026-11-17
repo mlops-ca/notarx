@@ -87,7 +87,10 @@ exchange here) are specified in `api/openapi/protocols/*.yaml`.
 Option 2. Workload JWTs are verified against configured trusted issuers, matched
 by explicit claim conditions in a trust policy, and mapped to an existing
 service account. A CEL evaluator may be added later behind the same policy
-interface without a data migration (see Open questions).
+interface without a data migration. If added, it uses `cel-go` with Kubernetes-style
+budgets (about 1,000,000 cost units and 0.1 s per evaluation, expression-size
+caps) and the matcher's mandatory immutable-claim conditions still apply in
+addition to the expression.
 
 ### Shared JOSE package
 
@@ -154,7 +157,7 @@ CREATE TABLE workload_trust_policies (
   service_account_id UUID NOT NULL REFERENCES service_accounts(id),
   conditions JSONB NOT NULL,                           -- [{claim, op, values}]
   max_token_ttl_seconds INT NOT NULL DEFAULT 900,      -- exchanged token lifetime cap
-  single_use BOOLEAN NOT NULL DEFAULT false,           -- enforce jti one-time use
+  single_use BOOLEAN NOT NULL DEFAULT false,           -- enforce jti one-time use; off by default for every kind
   state TEXT NOT NULL DEFAULT 'active', version BIGINT NOT NULL DEFAULT 1,
   expires_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
 
@@ -227,8 +230,10 @@ New `internal/authorization/workload.go` defines `WorkloadAuthenticator`
 4. Require the service account to be active. If `single_use`, insert `(issuer,
    sha256(jti))` with `ON CONFLICT DO NOTHING` and reject on conflict; the row
    expires at `exp + skew`; the ADR 0023 RetentionJanitor deletes expired
-   rows in throttled batches. Replay protection is optional per policy because Actions and
-   Kubernetes tokens are legitimately reused across steps within their lifetime.
+   rows in throttled batches. Replay protection is optional per policy (default off for all kinds) because
+   Actions and Kubernetes tokens are legitimately reused across steps within their
+   lifetime. Saving `single_use=true` is refused when the issuer's sample token
+   has no `jti`; the policy tester warns when a token lacks `jti`.
 5. Return `Principal{Actor: "service-account:<uuid>", AuthenticationKind:
    AuthenticationWorkloadFederation ("workload_federation"), CredentialID:
    <policy id>}` plus a bounded `WorkloadClaims` summary on the principal for audit.
@@ -267,11 +272,13 @@ grant_type=urn:ietf:params:oauth:grant-type:token-exchange
 subject_token=<jwt>
 subject_token_type=urn:ietf:params:oauth:token-type:jwt
 audience=<optional, informational>
-scope=<optional, informational; grants are never widened by scope>
+scope=<optional, ignored in 0.2; grants are never widened or narrowed by scope>
 policy=<optional policy name>
 ```
 
 Response `200`: `{"access_token","issued_token_type":"urn:ietf:params:oauth:token-type:access_token","token_type":"Bearer","expires_in"}`.
+Narrowing exchanged tokens is by a future per-policy token profile (not a
+client-supplied `scope`), to be added if ADR 0021 needs publish-only tokens.
 The access token is a principal token (existing v2 format, extended with the
 policy id), TTL `min(policy.max_token_ttl_seconds, NOTARX_WORKLOAD_EXCHANGE_MAX_TTL)`
 (default 900 s, ceiling 1 h). Errors follow RFC 6749 (`invalid_request`,
@@ -382,14 +389,15 @@ the v0.1.0 tag, and slice 1 is first.
 
 1. **Shared JOSE package.** Add `internal/jose` (go-jose v4.1.9 or later):
    verifier with algorithm allow-list, skew, max age, JWKS discovery/static
-   sources, kid-miss singleflight refetch with rate limit, dial-time SSRF-guarded
+   sources, kid-miss singleflight refetch with rate limit, a per-issuer JWKS TTL override (60 s
+   for notarx-trusted issuers per ADR 0020), dial-time SSRF-guarded
    client, claim-map output; plus JWK/JWKS encoding, RFC 7638 thumbprints and
    signing helpers for ADR 0020. Replace `internal/authorization/oidc.go`
    internals and publish the verifier interface that ADR 0018's OIDC slice
    consumes.
    - [ ] Table tests: RS256/ES256/EdDSA, `none`/HS256 rejected, expired, nbf,
      iat in the future, skew edge, over-age, wrong `aud`/`iss`, unknown kid
-     refetch once and rate limited, stale-on-failure, RSA under 2048 bits and
+     refetch once and rate limited, notarx-trusted issuer JWKS refreshed within 60 s, stale-on-failure, RSA under 2048 bits and
      `kty`/`alg` mismatch rejected, DNS-rebinding and redirect-to-private tests.
    - [ ] `make test`, `make lint` (architecture-check), `make coverage`,
      `make dependency-audit` pass; existing OIDC tests unchanged in behaviour.
@@ -429,12 +437,14 @@ the v0.1.0 tag, and slice 1 is first.
    including `policies:test`, `issuers:probe`); regenerate server and client;
    domain handler per ADR 0012; rate limiting; RFC 6749 errors.
    - [ ] `make openapi-check`, `make api-contract`, handler tests including
+     `single_use=true` refused when the sample token has no `jti`, `scope` ignored,
      version preconditions, uniform `invalid_grant`, and a test that
      `POST /auth/token` with `grant_type=password|refresh_token` is unaffected;
      `make test`, `make lint`.
    - Dependencies: ADR 0019 slice 4.
 6. **CLI and console.** `notarxctl workload ...`, `login --workload-token-file`,
-   console page with per-kind policy templates and the dry-run tester; fr-CA and
+   console page with per-kind policy templates (exchange-only templates recommend
+   `single_use`) and the dry-run tester, which warns when a token lacks `jti`; fr-CA and
    en-CA strings (ADR 0014).
    - [ ] `make cli-test`, `make cli-contract-check`, `make console-check`,
      `make console-test`, `make console-api-check`, `make docs-check`.
@@ -447,13 +457,10 @@ the v0.1.0 tag, and slice 1 is first.
      target listed in the Makefile `.PHONY` and help text, `make integration-test`.
    - Dependencies: ADR 0019 slices 4, 5.
 
-## Open questions
+## Resolved questions
 
-- Should a CEL policy kind be offered later for advanced conditions, and if so
-  with what cost limits? Deferred until a real request cannot be met by the
-  matcher.
-- Is single-use `jti` default-on for `generic` issuers, given that some issuers
-  omit `jti`? Proposed default off, with a warning in the policy tester.
-- Should exchanged tokens be narrowable per request (subset of the service
-  account's grants through `scope`)? Current design ignores `scope`; revisit with
-  ADR 0021 promotion tooling which may want publish-only tokens.
+**Q1 — Offer a CEL policy kind later, and with what cost limits?** Decision: Stay deferred. If a real request arrives, add `cel-go` behind the policy interface with Kubernetes-style budgets (per-evaluation cost about 1,000,000 units, about 0.1 s, plus expression-size caps) and require the matcher's mandatory immutable-claim conditions in addition to the expression. CEL is non-Turing-complete and Kubernetes ships this pattern, so adding it later is safe.
+
+**Q2 — Is single-use `jti` default-on for generic issuers?** Decision: No; `single_use` defaults off for all kinds. The tester warns when a token lacks `jti`, saving `single_use=true` is refused when the issuer's sample token has no `jti`, and UI templates recommend it for exchange-only policies. Tokens are legitimately reused across steps and pulls, so default-on would break the common path.
+
+**Q3 — Should exchanged tokens be narrowable per request through `scope`?** Decision: No; `scope` stays ignored in 0.2 (RFC 8693 makes it optional). If ADR 0021 needs publish-only tokens, a per-policy token profile is preferred over a client-supplied scope, which avoids a cross-format scope vocabulary.

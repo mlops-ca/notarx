@@ -92,7 +92,9 @@ keep the defaults; enforced by a shape CHECK like
 `hosted_repositories_repo_shape_check`, `migrations/000051`). They are chosen at
 `POST /repositories` and are immutable afterwards; changing a non-empty
 `path` repository to `versioned` is not offered (`409 layout_immutable`).
-`GET /repositories/{id}/capabilities` reports `layout` and `versions: true`.
+`GET /repositories/{id}/capabilities` reports `layout`, `versions: true` and `strict`.
+
+**Strict mode.** `hosted_repositories.raw_strict BOOLEAN NOT NULL DEFAULT false`, valid only with `raw_layout = 'versioned'` (shape CHECK), is set at `POST /repositories` and immutable afterwards, like the layout. In a strict repository even open versions are create-only end to end: file `DELETE` is refused (`409 version_file_immutable`), so a failed upload needs a new version (the abandoned open version stays reportable and may be tombstoned by an operator). The default stays non-strict. Compliance users who need create-only enable it at creation.
 Groups may contain versioned and path members; group reads resolve by path
 exactly as today and stay read-only.
 
@@ -124,9 +126,9 @@ sealed` through restore).
   `If-Match` is rejected. Implementation: the publication coordinator
   (`PutRawAssetIf` + `RequireAbsent`) then, on `ErrPreconditionFailed`, a digest
   comparison under the version row lock.
-- While `open`, a single file may be `DELETE`d (to repair a failed upload) and
-  re-uploaded; this is the only mutation and it is refused once sealed
-  (`409 version_sealed`). Reads work in every state except `tombstoned`.
+- While `open` in a non-strict repository, a single file may be `DELETE`d (to repair a failed upload) and
+  re-uploaded; this is the only mutation, it is refused once sealed
+  (`409 version_sealed`) and it is refused at any time in a strict repository (`409 version_file_immutable`). Reads work in every state except `tombstoned`.
 - **Sealing** (`POST /repositories/{id}/packages/{name}/versions/{version}:seal`)
   takes the version row lock, rejects an empty version, optionally verifies an
   expected file list (`files: [{path, sha256}]`, exact set equality) and an
@@ -139,13 +141,18 @@ sealed` through restore).
 - `seal_mode = idle`: a sweep seals open versions with no write for
   `NOTARX_GENERIC_AUTOSEAL_IDLE` (default 300s, minimum 60s). It exists for
   GitLab-style and plain `curl` publishers that never call seal.
+- **No automatic tombstone of stale open versions.** An open version older than a threshold
+  is only reported (metric, `GET .../versions?state=open&olderThanDays=N` filter, console badge), because
+  tombstone burns the `name@version` identifier permanently and automatic action on a slow or stuck
+  upload would block that version. Open versions are already unpromotable, unreplicable and not served
+  anonymously. Publishers that never seal use `seal_mode = idle`, which seals rather than deletes.
 - **Tombstone** hides the version (hosted reads and listings return 404, like a
   Raw asset tombstone) and burns the identifier: the same `name@version` cannot
   be re-published (`409 version_tombstoned`) until restored. Garbage collection removes
   the tombstoned files' unreferenced objects but keeps the version row, so the identifier stays
   burned permanently; only an administrator may delete the row (audited, `DELETE ...?purge=true`).
   Restore is allowed while file rows exist (ADR 0002 lifecycle).
-- **Store-level guard.** The layout rule is enforced in `replaceRawAssetIf` (`internal/repository/postgres_raw.go:210`, shared by `PutRawAssetIf` and `CompleteRawUploadIf`, so resumable uploads are covered) and its memory/MySQL equivalents, not only in the HTTP handler: any write, delete or restore of a `native_raw_assets` row in a versioned repository that does not come through the versioned store methods is refused. Nexus migration, snapshot import and backup restore therefore cannot bypass create-only or seal.
+- **Store-level guard.** The layout rule and the strict flag are enforced in `replaceRawAssetIf` (`internal/repository/postgres_raw.go:210`, shared by `PutRawAssetIf` and `CompleteRawUploadIf`, so resumable uploads are covered) and its memory/MySQL equivalents, not only in the HTTP handler: any write, delete or restore of a `native_raw_assets` row in a versioned repository that does not come through the versioned store methods is refused. Nexus migration, snapshot import and backup restore therefore cannot bypass create-only or seal.
 - Only `sealed` versions are eligible for events, promotion, replication,
   retention and rule matching. Publishing events on individual files in a
   versioned repository is suppressed.
@@ -246,10 +253,10 @@ migration source; nothing here blocks it.
 | `DELETE .../versions/{version}`, `POST .../versions/{version}:restore` | the existing tombstone/restore permission |
 
 `latest` means the newest sealed version by `sealed_at`, not the highest semver
-(see Consequences). Errors use the existing problem format with codes
+(a v1 decision, see Consequences). Errors use the existing problem format with codes
 `version_file_exists`, `version_sealed`, `version_tombstoned`,
 `invalid_generic_path`, `checksum_mismatch`, `layout_mismatch`,
-`layout_immutable`. Seal, tombstone and restore write audit rows with the
+`layout_immutable`, `version_file_immutable`. Seal, tombstone and restore write audit rows with the
 actor and manifest digest. The data plane is unchanged
 (`api/openapi/protocols/raw.yaml`), with the versioned-layout behaviours added
 to its operation descriptions.
@@ -323,7 +330,7 @@ Not included: the wire shape `PUT /raw/{repository}/{name}/{version}/{file}` alr
 `NOTARX_GENERIC_MAX_FILES_PER_VERSION` (1000),
 `NOTARX_GENERIC_AUTOSEAL_IDLE` (300s, min 60s),
 `NOTARX_GENERIC_AUTOSEAL_INTERVAL` (60s sweep period, lease-elected through
-`scheduled_tasks` per ADR 0023 section 2). The per-file size cap is inherited
+`scheduled_tasks` per ADR 0023 section 2), `NOTARX_GENERIC_STALE_OPEN_AFTER` (7d, age after which an open version is counted as stale in the metric, filter default and console badge; report only). The per-file size cap is inherited
 from Raw (1 GiB, `internal/format/raw/native.go:113`) and is unchanged by ADR 0027, whose larger
 cap applies to Hugging Face only.
 
@@ -366,7 +373,8 @@ Versioned and path Raw repositories follow ADR 0029 repository visibility; the R
   cannot be promoted, replicated or matched by a rule.
 - `latest` is by seal time, not semver, because a stored sortable semver key
   would need a normalised column and breaks for non-semver versions; clients may
-  sort the listing. Revisit if requested.
+  sort the listing. Seal-time ordering is the v1 decision; if semver ordering is requested later it
+  is added as an additive opt-in per-repository normalised column, without changing the default.
 - ADR 0021 gains a concrete `scope: release` definition for Raw versioned
   repositories and a narrow property matcher; other formats still promote per
   coordinate.
@@ -383,8 +391,8 @@ Versioned and path Raw repositories follow ADR 0029 repository visibility; the R
 Every slice is one PR and passes `make test`, `make lint` (includes `architecture-check`) and `make coverage`. API slices edit `api/openapi/*` first and pass `make openapi-check`; CLI mappings pass `make cli-contract-check`. All depend on ADR 0015 slice 4 and use numbered migrations (`000002+`) unless folded before ADR 0015 slice 7. This ADR owns generic versioned packages; the Hugging Face ADR (0027) has no generic slice.
 
 1. **Layout, version tables and store contract.** Milestone: Formats.
-   Scope: migration for `raw_layout`, `seal_mode`, `native_raw_versions`, `native_raw_version_properties`; `POST /repositories` and capabilities fields in `management.yaml`; `NativeRawVersionStore` in `internal/repository` (memory and PostgreSQL; MySQL by ADR 0022 slice 7); contract suite in the style of `internal/repository/raw_store_contract_test.go`.
-   - [ ] Contract tests pass on memory and PostgreSQL (and MySQL once ADR 0022 stores exist); shape CHECK rejects layout on proxy and non-Raw repositories; `layout_immutable` test.
+   Scope: migration for `raw_layout`, `seal_mode`, `raw_strict`, `native_raw_versions`, `native_raw_version_properties`; `POST /repositories` and capabilities fields in `management.yaml`; `NativeRawVersionStore` in `internal/repository` (memory and PostgreSQL; MySQL by ADR 0022 slice 7); contract suite in the style of `internal/repository/raw_store_contract_test.go`.
+   - [ ] Contract tests pass on memory and PostgreSQL (and MySQL once ADR 0022 stores exist); shape CHECK rejects layout on proxy and non-Raw repositories; `layout_immutable` test; `raw_strict` is accepted only with the versioned layout, is immutable after creation and is reported by capabilities.
    - [ ] Version file range query is index-backed (EXPLAIN test, ADR 0023 section 11); column names avoid MySQL reserved words.
    - [ ] `make migrate`, `make integration-test`, `make openapi-check`, `make test`, `make lint`
    - Depends on: ADR 0015 slice 4; ADR 0023 slice 1 (`internal/ids`).
@@ -393,10 +401,12 @@ Every slice is one PR and passes `make test`, `make lint` (includes `architectur
    - [ ] Path validation table tests (name/version/file, reserved `.notarx`, bidi, traversal); same-digest replay is 200, different digest is 409 and never mutates.
    - [ ] Race test: N concurrent PUTs of one path yield one winner and consistent `file_count`; delete allowed only while open; tombstoned version refuses re-publish; files-per-version cap.
    - [ ] Resumable upload completion and a direct store call on a versioned repository obey the same create-only rule (store-level guard test).
+   - [ ] In a `raw_strict` repository, file `DELETE` of an open version returns `409 version_file_immutable` through the handler, the store guard, Nexus migration, snapshot import and restore; non-strict behaviour is unchanged.
    - [ ] `make raw-e2e` stays green for `path` repositories; `make openapi-check`, `make test`, `make lint`
    - Depends on: slice 1.
 3a. **Version read API and manifest.** Milestone: Formats.
-   Scope: handlers composed per ADR 0012 for packages list, versions list (state, property filter, keyset cursor), version detail, `manifest`, `checksums`; canonical manifest builder; OpenAPI first.
+   Scope: handlers composed per ADR 0012 for packages list, versions list (state, property filter, `olderThanDays` filter, keyset cursor), version detail, `manifest`, `checksums`; canonical manifest builder; OpenAPI first.
+   - [ ] `state=open&olderThanDays=N` returns only stale open versions (index-backed, EXPLAIN test); version detail exposes `createdAt` and `lastWriteAt`.
    - [ ] List, detail and keyset pagination tests; manifest digest golden test (canonical bytes pinned); `checksums` output verified with `sha256sum -c`.
    - [ ] Permission tests per role (read); tombstoned versions return 404.
    - [ ] `make openapi-check`, `make test`, `make lint`
@@ -416,6 +426,7 @@ Every slice is one PR and passes `make test`, `make lint` (includes `architectur
 5. **Idle auto-seal.** Milestone: Formats.
    Scope: sweep job, config keys, `scheduled_tasks` lease.
    - [ ] Injected-clock test; minimum interval enforced; only one node sweeps (lease test).
+   - [ ] The sweep exports `notarx_generic_open_versions_stale` and `notarx_generic_open_version_oldest_age_seconds` (threshold `NOTARX_GENERIC_STALE_OPEN_AFTER`); it never tombstones or deletes an open version (test).
    - [ ] `make test`, `make integration-test`, `make lint`
    - Depends on: slice 3b.
 6. **Promotion of versions and published event.** Milestone: Formats.
@@ -430,8 +441,9 @@ Every slice is one PR and passes `make test`, `make lint` (includes `architectur
    - [ ] `make cli-test`, `make cli-contract-check`, `make lint`
    - Depends on: slice 3b; ADR 0013 slice 3.
 8. **Console versions view.** Milestone: Formats.
-   Scope: `console/` package list, version detail (files, digests, properties, seal state, checksums copy), seal, tombstone and promote actions, i18n keys en-CA and fr-CA (ADR 0014), brand tokens (ADR 0013).
+   Scope: `console/` package list, version detail (files, digests, properties, seal state, checksums copy), seal, tombstone and promote actions, stale-open badge, strict option on repository creation, i18n keys en-CA and fr-CA (ADR 0014), brand tokens (ADR 0013).
    - [ ] Properties rendered escaped; actions keyboard-operable.
+   - [ ] Open versions older than the stale threshold show a badge; strict repositories hide the file delete action.
    - [ ] `make console-test`, `make console-check`, `make console-api-check`, `make console-visual`
    - Depends on: slices 3b, 4.
 9. **Remote import and push of versions.** Milestone: Formats.
@@ -441,6 +453,7 @@ Every slice is one PR and passes `make test`, `make lint` (includes `architectur
    - Depends on: slice 6; ADR 0021 slices 7b and 8.
 10. **E2E and docs.** Milestone: Formats.
    Scope: `make generic-e2e` (extends `raw-e2e` fixtures: push, seal, pull, promote, retention), new `docs/generic-packages.md` (convention, `curl` recipes including GitLab-style equivalents, sealing, retention), updates to `docs/nexus-gap-analysis.md` and `docs/security-admission-policy.md`.
+   - [ ] `docs/generic-packages.md` states: seal-time `latest` (clients sort the listing), report-only stale open versions with `seal_mode=idle` as the answer for `curl` publishers, and the strict flag for create-only compliance use.
    - [ ] `make generic-e2e`, `make docs-check`, `make lint`
    - Depends on: slices 6, 7.
 11. **Anonymous reads of public versioned repositories.** Milestone: Public feeds.
@@ -454,11 +467,10 @@ Every slice is one PR and passes `make test`, `make lint` (includes `architectur
    - [ ] `make test`, `make integration-test`, `make lint`
    - Depends on: slice 6; ADR 0021 slice 3a.
 
-## Open questions
+## Resolved questions
 
-- Should `latest` and listing order support a semver sort key (normalised
-  column) for repositories whose versions are all semver, or stay seal-time only?
-- Should an open version older than a TTL be auto-tombstoned or only reported?
-- Is a per-file `DELETE` in an open version acceptable to compliance users, or
-  should `layout: versioned` offer a strict mode where even open files are
-  create-only and a failed upload requires a new version?
+**Q1 — Should `latest` and listing order support a semver sort key, or stay seal-time only?** Decision: seal-time only for v1; if requested later it is an additive opt-in per-repository column. Versions need not be semver and promotion rules already evaluate semver only when a version parses, and there is no demand evidence yet.
+
+**Q2 — Should an open version older than a TTL be auto-tombstoned or only reported?** Decision: report only (metric, list filter, console badge); no auto-tombstone, and publishers that never seal use `seal_mode=idle`. Tombstone burns the identifier permanently, so automating it could block a slow upload, while open versions are already isolated from consumers.
+
+**Q3 — Is per-file DELETE in an open version acceptable to compliance users, or offer a strict mode?** Decision: open-version DELETE stays the default, and a `raw_strict` flag fixed at repository creation makes open versions create-only, enforced in the same store-level guard as the layout rule. Immutability is claimed at seal, and the guard already centralises the layout rule, so strict mode is one more condition.

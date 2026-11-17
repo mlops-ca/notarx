@@ -211,8 +211,14 @@ unchanged, including the 404 fallback.
 - Today every write is one `PutObject` (`store.go:261-284`), so artifact size is
   bounded by the service's single-request limit. Multipart upload is introduced
   only above `NOTARX_OBJECT_STORE_MULTIPART_THRESHOLD` (default 256 MiB) using
-  the SDK transfer manager; part-size and part-count limits are taken from the
-  provider and verified by the live test rather than hard-coded here.
+  the SDK transfer manager with a default part size of 16 MiB
+  (`NOTARX_OBJECT_STORE_MULTIPART_PART_SIZE`), which keeps even very large objects
+  well under 10,000 parts. The part-size and part-count limits are confirmed by
+  the slice 5 live probe, which is a gating test, not a hard-coded assumption.
+- Contingency for compat gaps: there is no in-tree OCI native-SDK driver and no
+  out-of-tree plugin driver. If the slice 5 probe shows that `CopyObject` REPLACE
+  or multipart fails and the streaming fallback is unacceptable, that failure
+  opens a follow-up ADR for a native driver; nothing is built pre-emptively.
 - The free Object Storage allowance (20 GB total, 50,000 API requests per month
   after the trial) is too small to be the primary byte store for a registry, and
   one request per blob or per `List` page would exhaust it. The reference
@@ -225,6 +231,10 @@ unchanged, including the 404 fallback.
 Purpose: single node, no extra service. It is not for multi-node and not for
 shared network filesystems.
 
+- Dedup: none across repositories at the filesystem level (no hardlink tier, no
+  refcounted content store); dedup stays with the database object table by digest,
+  which keeps the driver portable (no same-device or hardlink assumptions) and GC
+  simple. Revisit only on demonstrated user demand.
 - Layout: `<root>/data/<key>` for bytes, `<root>/meta/<key>.sha256` for the
   verified digest, `<root>/tmp/` for in-flight writes, `<root>/.notarx-root`
   containing a random root ID. All must live on one filesystem so `rename(2)` is
@@ -313,9 +323,10 @@ Always Free A1 allowance):
   A1 allowance usefully (two 1-OCPU / 6 GB instances), so the variant needs Pay
   As You Go. Idle reclamation applies to Always Free instances when CPU, network
   and memory are all under 20% for seven days; the runbook says so and notes
-  that a Pay As You Go account is not subject to it. The RustFS image has no
-  verified arm64 manifest, so variant B names MinIO or another verified S3 server
-  until slice 6 checks it.
+  that a Pay As You Go account is not subject to it. The pinned RustFS digest
+  is inspected with `docker buildx imagetools inspect` in slice 6; if it lacks
+  linux/arm64 it is re-pinned to a stable multi-arch RustFS release (no second S3
+  server is added), and a CI check asserts the pinned manifest list contains arm64.
 
 ## Security considerations
 
@@ -386,12 +397,18 @@ Always Free A1 allowance):
    Depends on: 1, 3.
 5. **OCI compatibility probe and live test.**
    Scope: capability probe for `CopyObject` REPLACE with streaming fallback,
-   multipart above threshold, `//go:build ocilive` test running the contract suite.
+   multipart above threshold (16 MiB default part size, under 10,000 parts),
+   `//go:build ocilive` test running the contract suite. The probe result is
+   gating: a REPLACE failure selects the copy-free streaming path, and a failure of
+   either capability that the fallback cannot cover opens the native-driver
+   follow-up ADR.
    - [ ] live job runs only when `OCI_*` repository secrets exist, never on forks
          or untrusted PRs, uses a throwaway prefix and cleans up
    - [ ] fallback path covered by unit tests with a stub that rejects `CopyObject`
    - [ ] live checklist includes keys containing `/` for `CopyObject`, and
          `aws-chunked` single-part and multipart uploads with both checksum modes
+   - [ ] multipart upload verified at the default 16 MiB part size, with the
+         part count asserted below 10,000 for the largest supported object
    - [ ] `make test`, `make lint` pass
    Depends on: 2.
 6. **`deploy/oci-free-tier` Compose stack and runbook.**
@@ -400,6 +417,9 @@ Always Free A1 allowance):
    - [ ] `docker compose config` check in CI for arm64 service definitions; every
          image (postgres, caddy, notarx, console; RustFS only if used) has an arm64
          manifest (script asserting `docker buildx imagetools inspect`)
+   - [ ] the pinned RustFS digest is inspected; if it lacks arm64 it is re-pinned
+         to a stable multi-arch release, and a CI script asserts the manifest list
+         of the pinned digest contains linux/arm64
    - [ ] resource limits sum within 12 GB; compose starts PostgreSQL with
          `shared_preload_libraries=pg_stat_statements`
    - [ ] smoke script: push and pull an OCI image and a Raw file through Caddy
@@ -419,14 +439,9 @@ Always Free A1 allowance):
          any, added OpenAPI-first with regenerated server/client)
    Depends on: 3.
 
-## Open questions
+## Resolved questions
 
-- Does the OCI S3 compat API honour `CopyObject` with `MetadataDirective: REPLACE`
-  and what are its multipart part-size and part-count limits? Slice 5 answers
-  this empirically; defaults here are provisional.
-- Does the pinned RustFS digest (`compose.yml:227`) publish an arm64 manifest, or
-  must the arm64 reference deployment use another S3 server for variant B?
-- Should the filesystem driver support a second tier (hardlink-based dedup across
-  repositories), or is dedup left to the database-level object table as today?
-- Do we offer an in-tree OCI native-SDK driver if compat quirks prove too costly
-  (design 3 above)?
+- **Q1 — Does OCI S3-compat honour CopyObject REPLACE, and what are its multipart limits?** Decision: keep the provisional defaults (16 MiB parts, well under 10,000 parts) and make the slice 5 live probe a gating test, falling back to the copy-free streaming path if REPLACE fails. Oracle documents only native limits, so compat behaviour can only be confirmed empirically.
+- **Q2 — Does the pinned RustFS digest publish arm64?** Decision: inspect the digest in slice 6; if arm64 is missing, re-pin to a stable multi-arch RustFS release rather than add another S3 server, and add a CI manifest check. Recent RustFS tags are multi-platform, so a re-pin is likely sufficient.
+- **Q3 — Hardlink dedup tier in the filesystem driver?** Decision: no; dedup stays in the database object table. Hardlinks add GC and filesystem portability risk for a minor gain.
+- **Q4 — In-tree OCI native-SDK driver?** Decision: not now; a slice 5 probe failure that the fallback cannot cover opens a follow-up ADR. Building it pre-emptively is speculative.

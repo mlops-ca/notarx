@@ -113,6 +113,10 @@ another image is a separate decision with its own ADR. Helper binaries (`cmd/hea
 `cmd/reference-*` other than the scanner, `cmd/native-*-fixture`) keep their names; only their imports
 change.
 
+The organization `mlops-ca`, the repository `github.com/mlops-ca/notarx` and the GHCR namespace
+`ghcr.io/mlops-ca` are final and provisioned (decided 2026-11-17); the module path and image names
+are not reopened after `v0.1.0`.
+
 A grep gate enforces the rename permanently: `scripts/identity-check.sh` fails
 `make lint` when `ccsert`, `artifact-gateway`, `artifact_gateway`, `GATEWAY_`,
 `agctl` or the `gateway_` metric prefix appear in tracked files. The allow-list
@@ -149,7 +153,9 @@ last (slice 9), after every rewrite it checks has landed.
 
 ### Branding
 
-- Brand source is mlops.ca. Assets live in `docs/assets/brand/`: `notarx-mark.svg`,
+- Brand source is mlops.ca. A short `TRADEMARKS.md` (added before `v0.1.0`; registration is deferred) states
+  that nominative use of the notarx name and mlops.ca marks is allowed and that modified builds and forks
+  must not use the name or logo; `LICENSE-ASSETS` links to it. Assets live in `docs/assets/brand/`: `notarx-mark.svg`,
   `notarx-lockup-dark.svg`, `notarx-lockup-light.svg`, `favicon.svg`,
   `favicon-32.png`, `apple-touch-icon.png`, `og-image.png` (1200x630), and a
   `README.md`-free `LICENSE-ASSETS` line stating the assets are MIT with the
@@ -309,7 +315,7 @@ the source repository `github.com/mlops-ca/notarx`), now against the new names.
 - Cherry-picks are security-relevant code; each is reviewed as new code, not
   trusted for coming from upstream.
 - Trademarks: the notarx name and mlops.ca marks are reserved; the code licence
-  does not grant brand use.
+  does not grant brand use. `TRADEMARKS.md` (slice 7) is the policy of record.
 
 ## Consequences
 
@@ -343,6 +349,9 @@ the source repository `github.com/mlops-ca/notarx`), now against the new names.
    - [ ] `grep -r github.com/ccsert` finds nothing outside the allow-list
    - [ ] `make openapi-check`, `make lint`, `make test`, `make architecture-check` pass
    - [ ] `make release-version-check` passes with the new module path
+   Entry checklist (the slice does not start until every item is ticked in the PR description): the
+   `mlops-ca` organization exists, `github.com/mlops-ca/notarx` is created, GitHub Actions can write
+   packages to `ghcr.io/mlops-ca`, and package visibility is public.
    Dependencies: ADR 0013 slice 1.
 
 3. **Binary, directory and CLI package renames.**
@@ -382,13 +391,14 @@ the source repository `github.com/mlops-ca/notarx`), now against the new names.
    Dependencies: ADR 0013 slice 4.
 
 7. **Brand assets and console theme.**
-   Scope: `docs/assets/brand/*`, `console/index.html`, `console/public`,
+   Scope: `docs/assets/brand/*`, `TRADEMARKS.md`, `console/index.html`, `console/public`,
    `console/src/lib/theme/*`, self-hosted fonts, README hero image.
    - [ ] `notarx-dark`/`notarx-light` registered, set as defaults, AA contrast tests in `defaultConsoleThemes.test.ts`
    - [ ] `make console-test` and `make console-build` pass; page title and favicon are notarx
    - [ ] no external font or image URL in the built console
-   - [ ] `LICENSE-ASSETS` states the assets are MIT with the repository except that the mlops.ca marks are not licensed as another project's identity
-   Dependencies: ADR 0013 slice 3 (names); ADR 0005.
+   - [ ] `LICENSE-ASSETS` states the assets are MIT with the repository except that the mlops.ca marks are not licensed as another project's identity, and links to `TRADEMARKS.md`
+   - [ ] `TRADEMARKS.md` exists (nominative use allowed; modified builds and forks must not use the name or logo; no registration claimed) and is linked from `README.md`; `make docs-check` passes
+   Dependencies: ADR 0013 slice 3 (names); ADR 0005. Scope also includes `TRADEMARKS.md`.
 
 8. **Contribution rules.**
    Scope: `CONTRIBUTING.md`, `.agents/skills/issue-authoring/SKILL.md`,
@@ -417,10 +427,8 @@ the source repository `github.com/mlops-ca/notarx`), now against the new names.
     - [ ] exposed to consumers through one typed config accessor; unit tests cover rejection cases
     Dependencies: ADR 0013 slice 4.
 
-## Open questions
+## Resolved questions
 
-- Is `github.com/mlops-ca/notarx` the final GitHub organization and repository
-  name, and is `ghcr.io/mlops-ca` already provisioned? Slice 2 must not start
-  until confirmed.
-- Should the mlops.ca marks be licensed separately (trademark policy file) or is
-  the `LICENSE-ASSETS` note sufficient?
+**Q1 — Is `github.com/mlops-ca/notarx` the final name and is `ghcr.io/mlops-ca` provisioned.** Decision: confirmed final; the GHCR namespace is provisioned now and its readiness is the slice 2 entry checklist. Module path and image names are very hard to change after v0.1.0.
+
+**Q2 — Separate trademark policy or only the `LICENSE-ASSETS` note.** Decision: add a short `TRADEMARKS.md` before v0.1.0 (nominative use allowed, modified builds must not use the name or logo); defer registration. The code licence grants no marks and a one-page policy is cheap insurance for a name-bearing fork.

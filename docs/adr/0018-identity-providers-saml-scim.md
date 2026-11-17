@@ -163,7 +163,9 @@ provider that does not assert `externalId` relies on the admin link flow
 (`/links`, section 4). `issuer` stays as informational text. The 000088
 constraints (`UNIQUE (kind, issuer, subject)`, `UNIQUE (user_id, kind, issuer)`)
 are dropped in the same migration. `user_sessions.kind` becomes
-`local_session|oidc|saml`.
+`local_session|oidc|saml`, and `user_sessions.idp_session_id TEXT NULL` (OIDC `sid` /
+SAML `SessionIndex`) is added now, unused in v1, so back-channel logout can land
+without a re-migration.
 
 Routes (browser, public, rate limited):
 `GET /auth/idp` (enabled providers only for the chooser: slug, display name,
@@ -190,7 +192,10 @@ built per provider and cached by `(provider_id, version)`. `NOTARX_OIDC_*` repla
 Entra ID specifics: issuer `https://login.microsoftonline.com/{tenant}/v2.0`,
 stable subject is `(tid, oid)` stored as `tid:oid` (`oid` is unique only per
 tenant; `sub` is pairwise per app) selectable in `attribute_mapping`; `groups` overage (`_claim_names`) is not chased via Graph in
-v1 - SCIM is the supported route for large directories.
+v1 - SCIM is the supported route for large directories. On overage the token's
+claims yield no groups (never partial ones), an audit event is written and the
+console shows a warning on the provider; app roles or assigned-groups claims are
+the documented alternative.
 
 ### 3. SAML 2.0 Web SSO (SP-initiated only)
 
@@ -248,7 +253,8 @@ v1 - SCIM is the supported route for large directories.
   notarx-generated keypair stored encrypted, also rotatable with two active keys
   published in SP metadata.
 - Single Logout is not in v1: logout revokes the notarx `user_sessions` row only
-  and the UI says so. SLO is listed under Open questions.
+  and the UI says so. `user_sessions.idp_session_id` (nullable) is stored for a
+  later OIDC back-channel logout, which can look up by `sub`/`sid`.
 - Library: use `github.com/russellhaering/gosaml2` with `goxmldsig`, wrapped in
   `internal/identity/saml` so the rest of the code sees only a narrow
   `Verifier` port. Reason: SP-only, smaller surface than `crewjam/saml`, which
@@ -370,7 +376,9 @@ the next request. `none` stays a hard stop only for the user's own level per
 ADR 0006: a disabled account is blocked regardless of groups. `admin` via group is
 allowed only for `source IN ('local')` groups or SCIM groups an administrator
 explicitly flagged `global_role='admin'`; the default for any provisioned group
-is `none`.
+is `none`. SCIM can never create a group with, or set, `global_role='admin'`; a
+local administrator may flag an existing SCIM group (audited), and the flag is
+cleared if that group is deleted or recreated.
 
 Grants: `repository_grants.principal` accepts `group:<uuid>` in addition to the
 existing actor string. `Principal` gains `GroupIDs []string`, loaded by one
@@ -448,14 +456,16 @@ first), then the rest of ADR 0019.
 1. **Secrets key-ring.** Scope: `internal/secrets` (key ids, ring of keys from
    `NOTARX_SETTINGS_ENCRYPTION_KEY` plus `NOTARX_SETTINGS_ENCRYPTION_KEY_PREVIOUS`,
    sealed format `v1:<kid>:<base64>` with the legacy format still readable,
-   rotation, `notarxctl secrets reseal`), callers of `Seal`/`Open`, TEXT storage.
+   rotation, `notarxctl secrets reseal`), a `KeySource` port with the env ring as
+   its only v1 implementation (KMS/OCI Vault-wrapped keys are a later, unscheduled
+   slice), callers of `Seal`/`Open`, TEXT storage.
    Acceptance: [ ] round-trip and legacy-read tests; [ ] rotation test (seal with
    key A, add key B, reseal, drop A); [ ] wrong-key and tamper failures; [ ]
-   `purpose` still bound as AAD. Dependencies: ADR 0013 slice 4 (env rename),
+   `purpose` still bound as AAD; [ ] ring is consumed only through `KeySource`. Dependencies: ADR 0013 slice 4 (env rename),
    ADR 0015 cut-over slice. ADR 0020 slice 1 depends on this slice.
 2. **Provider registry schema and OIDC port.** Scope: migration (`identity_providers`,
-   generalised `user_identities`, `user_sessions.kind`, `users.disabled_reason`,
-   copy of `oidc_settings`), `internal/identity` store, `OIDCRuntime` rewritten per
+   generalised `user_identities`, `user_sessions.kind`, nullable `user_sessions.idp_session_id`,
+   `users.disabled_reason`, copy of `oidc_settings`), `internal/identity` store, `OIDCRuntime` rewritten per
    provider on the `internal/jose` verifier, env seed,
    `api/openapi/management/authentication.yaml` provider CRUD,
    `api/openapi/protocols/oidc-login.yaml`, regenerate `internal/admin/openapi`.
@@ -466,10 +476,13 @@ first), then the rest of ADR 0019.
 3. **Group model and grant principals.** Scope: `user_groups`,
    `user_group_members`, `internal/authorization` (`Principal.GroupIDs`,
    `ManagedResourceDecision`), grants API accepting `group:<id>`, `global_role`
-   replacing `OIDCRoleMapping`, claims-sourced group population for OIDC.
+   replacing `OIDCRoleMapping`, claims-sourced group population for OIDC (Entra overage yields no groups plus
+   an audit event), SCIM groups never created with or set to `global_role=admin`.
    Acceptance: [ ] table-driven authorization tests for user+group union, `none`
    hard stop, revoked membership, claims never matching privileged or other-provider
-   groups; [ ] principal tokens carry no group ids; [ ] effective-access
+   groups; [ ] overage claim yields no groups and an audit event; [ ] SCIM cannot
+   set `global_role=admin`, local flag is audited and cleared on group
+   delete/recreate; [ ] principal tokens carry no group ids; [ ] effective-access
    simulation includes groups; [ ] benchmark shows <1 ms added at 100 groups; [ ]
    `make openapi-check`. Dependencies: ADR 0018 slice 2 and ADR 0023 slice 12 (`internal/readcache`, ordered
    before this ADR by ADR 0013 step 6b); the `user_group_members(user_id, group_id)`
@@ -498,21 +511,21 @@ first), then the rest of ADR 0019.
    coverage floors met. Dependencies: ADR 0018 slice 3.
 7. **Console identity provider UI.** Scope: provider list/wizards for OIDC and
    SAML (Entra ID, Okta, Keycloak templates), SCIM token reveal-once dialog,
-   group management and group principals in the grant editors, login chooser;
+   group management and group principals in the grant editors, login chooser,
+   Entra overage warning on the provider page;
    en-CA and fr-CA strings per ADR 0014. Acceptance: [ ] `make console-test`,
    `make console-api-check`; [ ] Playwright login-chooser test
    (`make console-e2e`). Dependencies: ADR 0018 slices 2, 3, 6; ADR 0014.
 8. **Docs and runbooks.** Scope: Entra ID, Okta, Keycloak setup guides, update
    `docs/user-governance.md` for SCIM/group lifecycle, security note on SLO
-   absence. Acceptance: [ ] `make docs-check`. Dependencies: ADR 0018 slices 1-7.
+   absence, Entra groups overage (use SCIM or app roles). Acceptance: [ ] `make docs-check`. Dependencies: ADR 0018 slices 1-7.
 
-## Open questions
+## Resolved questions
 
-- Is SAML Single Logout (and OIDC back-channel logout) a 0.2 requirement for any
-  design-partner customer, which would need a session-to-IdP-session index?
-- Do we need Entra ID `groups` overage resolution via Microsoft Graph for
-  tenants that cannot run SCIM, or is "use SCIM" an acceptable answer?
-- Should SCIM-managed groups be allowed to carry `global_role=admin` at all, or
-  must platform administrators always be local/console-assigned?
-- Should the key-ring (slice 1) later support an external KMS/OCI Vault key
-  source? The env-based ring is the v1 decision and is shared with ADR 0020.
+**Q1 — Is SAML SLO / OIDC back-channel logout a 0.2 requirement?** Decision: No. SLO is deferred; the slice 2 migration adds a nullable `user_sessions.idp_session_id` (OIDC `sid` / SAML `SessionIndex`) so back-channel logout can be added additively later. Entra's SAML SLO is redirect-only and SP-initiated, its OIDC docs describe front-channel logout only, and SCIM deactivation already covers offboarding.
+
+**Q2 — Resolve Entra `groups` overage through Graph?** Decision: No; "use SCIM" for large directories. Overage is treated as "no claims-sourced groups" with an audit event and a console warning, and app roles or assigned-groups claims are documented as the alternative. Failing to resolve only removes access, so Graph cost is not justified for 0.2.
+
+**Q3 — May SCIM-managed groups carry `global_role=admin`?** Decision: SCIM can never create a group with, or set, `global_role=admin`; a local administrator may flag an existing SCIM group (audited), and the flag is cleared if the group is deleted or recreated. This is the minimal safe path and matches the ban on SCIM touching admin accounts.
+
+**Q4 — Should the key-ring support an external KMS/OCI Vault source?** Decision: Slice 1 ships the env ring behind a `KeySource` port; KMS/OCI Vault-wrapped keys are a later, unscheduled slice. The sealed-format `kid` already enables it and OCI Always Free Vault keys make it affordable later.

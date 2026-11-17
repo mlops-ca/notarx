@@ -192,7 +192,9 @@ applied to the format's canonical coordinate after `ValidCoordinate`.
 `refs` uses an optional `format.Tagged` capability (OCI tag, npm
 dist-tag). `properties` is valid only for versioned-generic sources (ADR 0028), where the
 properties are frozen at seal, so evaluation stays pinned; a cross-format property store
-remains out of scope (Open questions). A `version` semver range simply does not match a
+remains out of scope; if demand appears it will be an immutable-once-set
+post-publish property API (frozen before a rule evaluates), not a change to publish
+APIs. A `version` semver range simply does not match a
 non-semver version string. Rules never match on mutable data that could change after
 the decision, so the evaluation always pins `(coordinate, digest)`.
 
@@ -325,7 +327,9 @@ instead the approver must differ from the rule's `created_by`, its
 bound to `(digest, rule.version)`: a rule edit invalidates pending
 approvals. On the last approval the service re-evaluates conditions,
 quarantine and admission policy (state may have changed), then enqueues.
-Expired rows move to `expired` via the sweep.
+Expired rows move to `expired` via the sweep. Approvals stay in-product in 0.2:
+delegation uses documented temporary grants, and an external approval callback, if
+ever added, is an extra approver that still records an in-product approval row.
 
 Public targets (ADR 0029 slice 11): promoting into a public repository needs the per-repository
 capability `promote:public`, a rule flag `publishing: bool`, and the evaluator forces
@@ -414,7 +418,9 @@ after `commit` was sent, the sender re-sends `commit` with the same
 Shipped `evidence` (scan, SBOM, signature) is stored as imported claims
 and only counts toward policy when `trust_evidence` is true; otherwise
 the remote scans (`autoScanOnPublish`). The remote's policy always has
-the final word.
+the final word. The flag stays binary in 0.2; signed evidence will be DSSE/in-toto
+statements verified against the pinned sender issuer key (ADR 0020), at which point
+`trust_evidence` means "verified signature required".
 
 ### Format capabilities and scope
 
@@ -423,9 +429,11 @@ per-format replication wiring are replaced by registry lookups. New optional
 capabilities in `internal/format/capabilities.go`:
 `PromotionPublisher` (extends `Promotion`), `Exporter`
 (`ExportUnit` returns manifest plus blob descriptors) and
-`Importer` (`ImportUnit`), `Tagged`. Rule creation consults the
+`Importer` (`ImportUnit`), `Tagged`, and `ReleaseSet` (the format package returns the
+members of the release identified by a coordinate; implemented for Raw, then OCI and Maven,
+no generic inference). Rule creation consults the
 registry and returns `422 unsupported_format` for a format lacking the
-capability. All nine core formats (OCI, Maven, npm, PyPI, Go, Cargo, Raw,
+capability, including `scope: release` on a format without `ReleaseSet`. All nine core formats (OCI, Maven, npm, PyPI, Go, Cargo, Raw,
 Conan, APT) are in scope for local rules; remote push lands in waves (Raw,
 OCI, Maven, npm first). Later formats join by registration through their own ADR slices, with
 no engine change: RPM as a tenth format (ADR 0026 slice 13: `PromotionPublisher`, `Exporter`,
@@ -448,7 +456,8 @@ execution is per item and idempotent, and the batch state aggregates
 (`completed`, `partially_failed`). A rule may set
 `scope: "release"` with a format-defined grouping; versioned Raw repositories define it as
 the version, identified by `(name@version, manifest_digest)` (ADR 0028); until other formats
-define a release grouping the rule engine promotes per coordinate, and batches are explicit.
+define a release grouping (through `ReleaseSet`: Raw, then OCI and Maven) the rule engine
+promotes per coordinate, and batches are explicit.
 
 ### Console and CLI
 
@@ -564,12 +573,13 @@ depend on ADR 0015 slice 4 (cut-over) and use numbered migrations.
    `GET /artifact-promotions`, `artifact.promoted`/`promotion.failed`
    events, policy re-evaluation at publish. Acceptance: [ ] every manual
    promotion writes one provenance row; [ ] idempotent replay returns the same
-   row; [ ] unsupported-format test; [ ] test tightening target policy between
+   row; [ ] unsupported-format test; [ ] `ReleaseSet` capability declared in the registry;
+   [ ] test tightening target policy between
    enqueue and execution refuses the job. Depends on 1a, 2a.
 3a. **Rules schema, matcher, API and dry-run.** Scope: `promotion_rules`,
    `internal/promotionrules`, `/promotion-rules`, dry-run, creator
    privilege check against the service account. Acceptance: [ ] glob/regex
-   table tests including ReDoS-length limits; [ ] `match.properties` accepted only for versioned-generic sources (ADR 0028), rejected with `422` otherwise, and `match.version` ranges do not match non-semver versions; [ ] confused-deputy refusal
+   table tests including ReDoS-length limits; [ ] `match.properties` accepted only for versioned-generic sources (ADR 0028), rejected with `422` otherwise, `scope: release` rejected with `422 unsupported_format` for formats without `ReleaseSet`, and `match.version` ranges do not match non-semver versions; [ ] confused-deputy refusal
    test; [ ] dry-run never enqueues. Depends on 2b.
 3b. **Chain graph and cycle check.** Scope: advisory-locked cycle check,
    `GET /repositories/{id}/chain`, hop cap. Acceptance: [ ] cycle and
@@ -579,7 +589,8 @@ depend on ADR 0015 slice 4 (cut-over) and use numbered migrations.
    fan-out in `Emit`, `authorization_lost` parking. Acceptance:
    [ ] duplicate delivery and worker crash produce one promotion row and one
    job (kill-and-restart test); [ ] retry creates a linked attempt row; [ ]
-   re-promotion after target tombstone; [ ] integration test dev -> staging ->
+   re-promotion after target tombstone; [ ] `scope: release` on Raw expands to the version's files through `ReleaseSet`;
+   [ ] integration test dev -> staging ->
    release on OCI and Maven. Depends on 3a, 1b.
 4. **Conditions, waiting and schedules.** Scope: scan/minAge/signature
    conditions, re-pend on `artifact.scan.completed`, cron sweep job kind
@@ -612,9 +623,9 @@ depend on ADR 0015 slice 4 (cut-over) and use numbered migrations.
    Depends on 7a. Authentication for tests uses a stub principal until ADR
    0019 slice 4 (trusted-issuer authenticator) lands.
 7c. **OCI importer.** Scope: `format.Importer` for OCI (children,
-   referrers, tag rules). Acceptance: [ ] tag conflict yields `conflict`;
+   referrers, tag rules) and its `ReleaseSet` (index plus child manifests). Acceptance: [ ] tag conflict yields `conflict`;
    [ ] referrers imported by digest; [ ] cross-instance blob re-upload
-   verified. Depends on 7b.
+   verified; [ ] `scope: release` on OCI promotes index and children together. Depends on 7b.
 8. **Remote push sender.** Scope: `remote_push` job kind on
    `replication.Worker`, peer client with bearer-assertion auth plus
    static-token fallback, rule `target_kind=remote`, `trust_evidence`,
@@ -626,7 +637,8 @@ depend on ADR 0015 slice 4 (cut-over) and use numbered migrations.
    Depends on 3c, 7b, 7c, ADR 0020 slice 4 (assertion minting) and ADR 0019
    slice 4.
 9. **Format waves for remote push.** Maven, npm, then PyPI, Go, Cargo, Conan,
-   APT; one PR per wave with `Exporter`/`Importer`. RPM, Hugging Face and versioned Raw are not waves of this slice: they register their own `Exporter`/`Importer` in ADR 0026 slice 13, ADR 0027 slice 12 and ADR 0028 slice 9. Acceptance per
+   APT; one PR per wave with `Exporter`/`Importer` (the Maven wave also ships its `ReleaseSet`,
+   all files of one version). RPM, Hugging Face and versioned Raw are not waves of this slice: they register their own `Exporter`/`Importer` in ADR 0026 slice 13, ADR 0027 slice 12 and ADR 0028 slice 9. Acceptance per
    wave: [ ] round-trip digest equality test; [ ] native client install from
    the remote. Depends on 8.
 10a. **Console: rules and chain graph.** Scope: `console/` Promotions area,
@@ -646,21 +658,16 @@ depend on ADR 0015 slice 4 (cut-over) and use numbered migrations.
    Depends on 3a-3b, 5, 6, 7a as commands land.
 12. **Docs.** Scope: new `docs/promotion-rules.md`, update
    `docs/security-admission-policy.md` and
-   `docs/nexus-gap-analysis.md`. Acceptance: [ ] `make docs-check`.
+   `docs/nexus-gap-analysis.md`; document delegation via temporary grants, `ReleaseSet`
+   support per format and the binary `trust_evidence` flag. Acceptance: [ ] `make docs-check`.
    Depends on 3c, 5, 8.
 
-## Open questions
+## Resolved questions
 
-- Should a cross-format artifact property store (key/value labels set by CI) be
-  added so rules can match on properties, or is the coordinate plus ref match
-  enough? ADR 0028 adds a bounded per-version property map for versioned Raw only, so a
-  cross-format store is still deferred; adding it later touches every format's publish API.
-- Which other formats define a "release set" (for example all Maven files of one
-  version, or an OCI index plus children) so `scope: release` is
-  meaningful, and who owns that definition per format? Answered for versioned generic Raw
-  by ADR 0028: the release set is the version, identified by `(name@version, manifest_digest)`.
-- Should the receiver accept sender evidence under a signature (for example a
-  notarx-signed attestation) rather than the binary `trust_evidence`
-  flag? Today evidence is unsigned.
-- Should approvals support a time-bounded delegation or an external approval
-  system through a webhook response, or stay in-product only?
+**Q1 — Add a cross-format artifact property store so rules can match properties?** Decision: No; it stays deferred and rules match coordinate, ref and (for versioned Raw, ADR 0028) frozen properties only. If demand appears, add an immutable-once-set post-publish property API (set before a rule evaluates, frozen after promotion) rather than changing publish APIs. Rules must never match mutable data and a publish-time store would touch every format.
+
+**Q2 — Which other formats define a release set for `scope: release`, and who owns it?** Decision: Add an optional `ReleaseSet` capability beside `Exporter`/`Importer`, owned by each format package; ship Raw (the version, ADR 0028) first, then OCI (index plus children) and Maven, and return `422 unsupported_format` for any other format. The set is format-defined and cannot be inferred generically.
+
+**Q3 — Should the receiver accept signed sender evidence instead of the binary `trust_evidence` flag?** Decision: Keep the binary flag for 0.2; signed evidence is planned as DSSE/in-toto statements verified against the pinned sender issuer key (ADR 0020), after which `trust_evidence` means "verified signature required". It is additive and the sender's JWKS already provides the verification root.
+
+**Q4 — Should approvals support time-bounded delegation or an external approval webhook?** Decision: Stay in-product for 0.2; delegation is done with documented temporary grants, and an external approval callback is revisited only on a design-partner request, modeled as an additional approver that still records an in-product approval row. This matches GitHub environments, where third-party approval is a preview add-on.

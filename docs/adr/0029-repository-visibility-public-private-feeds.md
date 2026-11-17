@@ -213,7 +213,11 @@ know the class). Per node, in memory, bounded:
   sources.
 - Metrics: `notarx_ratelimited_total{class,limit}`,
   `notarx_anonymous_egress_bytes_total`, `notarx_anonymous_inflight`. Per-node
-  limits are the v1 contract; a shared limiter in PostgreSQL is out of scope.
+  limits plus CDN limiting are the v1 contract; a shared limiter in PostgreSQL is out of scope
+  (it would add a database write per anonymous request, against the async-audit design and the
+  free-tier database). With several nodes the effective limit multiplies by the node count, so
+  the operations docs prescribe sticky routing by client IP at the load balancer; revisit only on
+  evidence of abuse.
 
 ### Cache headers by visibility
 
@@ -232,6 +236,8 @@ request or a non-public repository. A format whose repository allows overwrite
 (Maven redeploy, Raw) is demoted from `Immutable` to `Metadata` by its
 `CacheClass`.
 
+**OCI anonymous pulls.** The advertised default is the standard `/v2/` challenge and anonymous-token flow (needed for hosts that mix visibilities and for `docker login`), and public repositories additionally keep direct unauthenticated `GET`/`HEAD` reads without a challenge (current `internal/app/oci.go` behaviour when the gate allows). Because a bearer token is an `Authorization` header, only requests without it are cached by a shared cache; the CDN docs state this, and operators who need layer caching for token-carrying clients use the presigned redirect (below). Docker, containerd, podman and ORAS are verified against both paths in slice 2.
+
 ### CDN guidance and purge
 
 A new `docs/public-feeds-cdn.md` documents Cloudflare (and the same rules for
@@ -240,6 +246,8 @@ other CDNs): a proxied read-only hostname for pulls (cache GET/HEAD, bypass on
 non-GET/HEAD) and an unproxied hostname for publication and management. The
 cache key is path plus `Accept` for OCI. Origin headers above are authoritative;
 the docs do not require operators to override TTLs.
+
+The docs do not recommend the Cloudflare Free plan for caching OCI layers or other large non-HTML blobs: its terms on serving non-HTML content at volume on non-paid plans are unverified and pending legal review, and the doc words this as unverified. They recommend a paid plan or another CDN for blobs (or the presigned redirect to S3-capable object storage), and the Free plan for metadata and small files.
 
 On visibility lowering, repository or group deletion, and quarantine of an
 artifact in a `public` repository, the same transaction inserts a
@@ -322,13 +330,18 @@ Each registers in the conformance harness before its capability is advertised.
 ADR 0030 mirrors the Trivy databases through an OCI proxy repository (no new format).
 An operator may mark that repository `public` so unauthenticated Trivy clients can use it.
 It is **off by default**, read-only, subject to the anonymous rate limits and egress
-budget above, and publishes nothing beyond the mirrored OCI artifacts. Whether upstream
-terms permit redistribution is an open question (below) and gates enabling it on any
-instance the project operates (slice 13).
+budget above, and publishes nothing beyond the mirrored OCI artifacts. The project does
+not operate a public Trivy database mirror and no project-operated instance enables this
+feed: the database aggregates third-party advisories and redistribution rights are
+unverified. Each instance proxies the upstream databases for its own scanner only (pull-through,
+not redistribution, ADR 0030 proxy mode); an operator who enables the public feed does so on their
+own responsibility for upstream terms.
 
 ### Public instance operations
 
 `docs/public-feeds-operations.md` (extends `docs/anonymous-access-operations.md`):
+- Multi-node: rate limits are per node, so route by client IP (sticky routing) at the load
+  balancer to keep them accurate; CDN limiting complements them.
 - Abuse: enable the rate limits above before opening the gate; keep the gate as
   the incident kill switch; block by IP at the CDN; publish an abuse contact and
   takedown procedure (quarantine plus purge).
@@ -391,6 +404,7 @@ regenerated server and client), coverage floors and `architecture-check`.
      x {GET, HEAD, write}`; migrate OCI, Maven, Conan and
      `hosted_group_resolver.go`.
    - [ ] deny shaping asserted byte-identical for private versus absent
+   - [ ] OCI anonymous pulls of a `public` repository succeed through both the challenge and anonymous-token flow and direct unauthenticated `GET`/`HEAD`, verified with docker, containerd, podman and ORAS in the conformance harness
    - [ ] deleted: `anonymousOCIAllowed`, `anonymousMavenAllowed`, `anonymousConanAllowed`
    - [ ] `make test`, `make lint`, `make architecture-check`
    - Depends on: slice 1.
@@ -417,6 +431,7 @@ regenerated server and client), coverage floors and `architecture-check`.
    - Scope: `internal/ratelimit`, trusted-proxy parser, writer wrapper,
      config keys, metrics, `docs/operational-signals.md`.
    - [ ] spoofed `X-Forwarded-For` from untrusted peer ignored
+   - [ ] no shared or database-backed limiter is added; the per-node contract and the multi-node sticky-routing advice are stated in `docs/operational-signals.md`
    - [ ] bounded key table under rotating-source test; `429` with `Retry-After`
    - [ ] `make test`, `make lint`
    - Depends on: slice 14.
@@ -424,6 +439,7 @@ regenerated server and client), coverage floors and `architecture-check`.
    - Scope: `CacheClass` per format module, header emission in `internal/access`,
      `internal/artifacthttp/object.go`, protocol OpenAPI response headers.
    - [ ] header table test over all formats and classes; `Vary` always present
+   - [ ] OCI blob and manifest: the direct unauthenticated response is cacheable per the table, while the same request carrying an anonymous bearer token is `private, no-store`
    - [ ] `make test`, `make openapi-check`
    - Depends on: slice 14.
 8. **CDN purge outbox and CDN docs.** Milestone: Public feeds.
@@ -432,6 +448,7 @@ regenerated server and client), coverage floors and `architecture-check`.
      `PublicPathPrefixes`, `docs/public-feeds-cdn.md`.
    - [ ] purge enqueued in the same transaction (rollback test), retry/backoff
    - [ ] provider tested against an HTTP fake; unconfigured provider caps TTL
+   - [ ] `docs/public-feeds-cdn.md` states that only requests without `Authorization` are cached for OCI, does not recommend the Cloudflare Free plan for layers (worded as unverified, pending legal review) and points to a paid plan, another CDN or the presigned redirect
    - [ ] `make test`, `make lint`
    - Depends on: slice 7; ADR 0021 slice 1a (events).
 9. **Anonymous audit and usage aggregation.** Milestone: Public feeds.
@@ -459,9 +476,10 @@ regenerated server and client), coverage floors and `architecture-check`.
     - [ ] `make console-test`, `make test`
     - Depends on: slices 8, 10, 11.
 13. **Optional Trivy database public feed.** Milestone: Supply-chain security.
-   - Scope: documented opt-in to mark the ADR 0030 mirror repository `public`, default-off configuration, rate-limit and egress class for the feed, `docs/public-feeds-operations.md` section with the redistribution-terms finding.
+   - Scope: documented opt-in to mark the ADR 0030 mirror repository `public`, default-off configuration, rate-limit and egress class for the feed, `docs/public-feeds-operations.md` section stating that the project operates no public Trivy mirror, that instances proxy databases for their own scanner only and that an operator enabling the feed owns the upstream-terms question.
    - [ ] Default-off proven: a fresh install exposes no Trivy mirror anonymously; enabling serves `trivy-db` pulls anonymously with the limits applied.
-   - [ ] Unauthenticated Trivy client run against the public mirror succeeds in the ADR 0030 e2e.
+   - [ ] Unauthenticated Trivy client run against the public mirror succeeds in the ADR 0030 e2e (fixture instance only).
+   - [ ] No project-operated deployment, compose profile or reference value enables the feed (config grep gate).
    - [ ] `make test`, `make native-oci-e2e`, `make docs-check`, `make lint`.
    - Depends on: slices 5, 6, 7; ADR 0030 slice 4a (database mirror).
 14. **Choke point wave 3, browse/search and enforcement lint.** Milestone: Foundation.
@@ -471,15 +489,14 @@ regenerated server and client), coverage floors and `architecture-check`.
    - [ ] `make test`, `make lint`, `make architecture-check`
    - Depends on: slice 3.
 
-## Open questions
+## Resolved questions
 
-1. Should anonymous OCI pulls of public repositories skip the token round trip
-   (serve `/v2/` without a challenge), or keep the standard anonymous-token flow
-   so clients behave uniformly? Slice 2 chooses the token flow unless a client
-   incompatibility is found.
-2. Does the Cloudflare free plan's terms on bulk non-HTML content allow caching OCI layers? Not verified; legal review precedes recommending it in the CDN docs. (Prefix purge on all plans: verified, see CDN guidance.)
-3. Is a single `authenticated` tier enough, or do operators need "authenticated
-   via IdP X"? Today that is `private` with a group grant (ADR 0018).
-4. May the project publish a public Trivy database mirror (slice 13) given the upstream database licence and ghcr.io terms? Resolved before any project-operated instance enables it.
-5. Is a shared (PostgreSQL) rate limiter needed for multi-node public
-   instances, or is per-node plus CDN limiting sufficient?
+**Q1 — Should anonymous OCI pulls of public repositories skip the token round trip, or keep the anonymous-token flow?** Decision: keep the challenge and token flow as the advertised default and retain direct unauthenticated reads of public repositories; the CDN docs state that only requests without `Authorization` are cached (or use the presigned redirect), and slice 2 verifies docker, containerd, podman and ORAS. Mixed-visibility hosts need the token flow, and a bearer header would otherwise defeat layer caching.
+
+**Q2 — Does the Cloudflare free plan allow caching OCI layers?** Decision: not recommended; the CDN docs word this as unverified pending legal review and point to a paid plan, another CDN or the presigned redirect, keeping the Free plan for metadata and small files. The terms could not be verified from the primary source, so recommending it would be unsafe.
+
+**Q3 — Is a single `authenticated` tier enough, or do operators need "authenticated via IdP X"?** Decision: a single `authenticated` tier; IdP-scoped access stays `private` plus a group grant (ADR 0018). The enum is ordered (private < authenticated < public) and extra tiers would break the invariant the group strict and lenient rules rely on.
+
+**Q4 — May the project publish a public Trivy database mirror given the upstream licence and ghcr.io terms?** Decision: no project-operated public mirror; each instance proxies the databases for its own scanner (ADR 0030 proxy mode) and the public feed capability stays off by default. Redistribution rights for the aggregated advisory data are unverified, while pull-through for own use is how Trivy is designed to work.
+
+**Q5 — Is a shared PostgreSQL rate limiter needed for multi-node public instances?** Decision: no; per-node limits plus CDN limiting are the v1 contract, with sticky routing by client IP documented for multi-node and a revisit on evidence of abuse. A per-request database write would hurt the free-tier database and contradict the async-audit design.

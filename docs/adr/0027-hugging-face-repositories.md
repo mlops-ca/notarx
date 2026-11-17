@@ -191,8 +191,8 @@ error (`upstream_redirect_rejected`). The allowlist default applies only to the 
 
 **No Xet.** The server strips `X-Xet-Hash` and any Xet link header from upstream
 responses and never serves `/api/{type}s/{id}/xet-read-token/{rev}` (404). The Hub documents Git LFS as a supported legacy path (Xet docs, "Backwards Compatibility & Legacy"); for files whose resolve response carries Xet headers, the proxy uses the plain `resolve` redirect and ignores the Xet headers. If
-upstream stops providing it, those files fail with 502 `upstream_xet_only`; this is
-documented. Client guidance in `docs/formats/huggingface.md`: set
+upstream stops providing it, those files fail with 502 `upstream_xet_only` (a stable problem code, counted by `notarx_hf_xet_only_total`); this is
+documented as the unsupported-files behaviour. The bridge is relied on, not replaced: no Xet reconstruction client is built, and a scheduled live-Hub smoke test (slice 7) fails when the bridge stops serving a Xet-backed file. Client guidance in `docs/formats/huggingface.md`: set
 `HF_HUB_DISABLE_XET=1` (the standard 0.x and 1.x client falls back to HTTP anyway
 when no Xet header is present), and raise `HF_HUB_ETAG_TIMEOUT` and
 `HF_HUB_DOWNLOAD_TIMEOUT` for cold multi-GB fetches.
@@ -245,7 +245,7 @@ return 405 with the member to use.
 
 ### Hosted repositories
 
-Hosted write support is a second phase over the same schema:
+Hosted write support is a second phase over the same schema. Non-HF model artifacts that need create-only per-version publication are not a mode of this format (commits here are mutable by design); they use generic versioned packages (ADR 0028).
 
 | Request | Behaviour |
 | --- | --- |
@@ -326,7 +326,7 @@ async for reads (ADR 0023).
   first slice, and cache GC must understand unreferenced commits.
 - The format needs a client conformance matrix; `huggingface_hub` moves fast and
   Xet may become the only upstream path, which would degrade proxying of new files.
-  The risk is mitigated by the Hub's Git LFS bridge and by revisiting option 3.
+  The risk is mitigated by the Hub's Git LFS bridge and by a scheduled live-Hub smoke test that fails when the bridge disappears; if that happens the documented `upstream_xet_only` path applies to new files and a Xet client (option 3) is a new decision, not part of this ADR.
 - The egress layer gains a controlled redirect primitive that other formats
   (npm tarball CDNs) may reuse.
 - Spaces and git push/clone are not available.
@@ -363,7 +363,7 @@ Every slice is one PR and passes `make test`, `make lint` (includes `make archit
 4b. **Proxy resolve and HEAD.** Milestone: Formats.
    Scope: `api/openapi/protocols/huggingface.yaml`, resolve and HEAD handlers, byte fetch through the tee, commit-keyed cache, stale serving, X-Xet stripping.
    - [ ] Cold, warm and offline HEAD tests; pinned GETs stay pinned when the ref moves; 5 GiB synthetic object streams.
-   - [ ] Contract tests with a fake Hub.
+   - [ ] Contract tests with a fake Hub, including a Xet-only file that returns 502 `upstream_xet_only`, increments `notarx_hf_xet_only_total` and leaves the rest of the commit servable.
    - [ ] `make test`, `make openapi-check`, `make lint`.
    - Depends on: slices 2b, 4a.
 5. **Proxy API: model info, revision, tree, paths-info, whoami.** Milestone: Formats.
@@ -378,8 +378,9 @@ Every slice is one PR and passes `make test`, `make lint` (includes `make archit
    - [ ] `make test`, `make integration-test`, `make lint`.
    - Depends on: slice 4b; ADR 0019 slice 4 (JWT case); ADR 0029 slice 2 (`internal/access`).
 7. **Client conformance suite.** Milestone: Formats.
-   Scope: `make native-hf-e2e` (modelled on `native-raw-e2e`, `Makefile:292`) with `huggingface_hub` versions pinned in `tests/e2e/huggingface/versions.txt` (oldest supported, current 0.x, current 1.x) in a container against a fake Hub; nightly job against the real Hub with a tiny public model.
+   Scope: `make native-hf-e2e` (modelled on `native-raw-e2e`, `Makefile:292`) with `huggingface_hub` versions pinned in `tests/e2e/huggingface/versions.txt` (oldest supported, current 0.x, current 1.x) in a container against a fake Hub; nightly job against the real Hub with a tiny public model that has a Xet-backed file.
    - [ ] `hf_hub_download`, `snapshot_download`, `from_pretrained` pass with `HF_HUB_DISABLE_XET=1` and with default client settings; offline mode runs from cache; supported matrix documented.
+   - [ ] The nightly live-Hub job downloads the Xet-backed file through notarx with `HF_HUB_DISABLE_XET=1` and with default client settings, and fails (opening an issue) if the Git LFS bridge stops serving it.
    - [ ] `make native-hf-e2e`, `make lint`.
    - Depends on: slices 5, 6.
 8. **Datasets and external-location refusal.** Milestone: Formats.
@@ -413,7 +414,7 @@ Every slice is one PR and passes `make test`, `make lint` (includes `make archit
     - [ ] `make test`, `make integration-test`, `make lint`.
     - Depends on: slice 11b; ADR 0021 slices 1a, 2b, 7b and 8.
 13a. **CLI and docs.** Milestone: Formats.
-    Scope: `notarxctl hf`, `docs/formats/huggingface.md` (HF_ENDPOINT, HF_TOKEN, Xet, timeouts), `docs/cli-command-map.md`, metrics.
+    Scope: `notarxctl hf`, `docs/formats/huggingface.md` (HF_ENDPOINT, HF_TOKEN, Xet and the `upstream_xet_only` unsupported-files behaviour, timeouts), `docs/cli-command-map.md`, metrics.
     - [ ] `make cli-contract-check`, `make docs-check`, `make lint`.
     - Depends on: slices 8, 9, 11b.
 13b. **Console browse view.** Milestone: Formats.
@@ -421,9 +422,8 @@ Every slice is one PR and passes `make test`, `make lint` (includes `make archit
     - [ ] `make console-test`, `make console-api-check`, `make lint`.
     - Depends on: slices 8, 10.
 
-## Open questions
+## Resolved questions
 
-1. Will upstream keep serving the Git LFS path for Xet-backed files? If not,
-   slice 4b needs either a minimal Xet reconstruction client (read-only) or an
-   explicit unsupported list.
-2. Non-HF model artifacts that need create-only per-version publication belong to ADR 0028 (generic versioned packages), not to this format.
+**Q1 — Will upstream keep serving the Git LFS path for Xet-backed files?** Decision: keep the bridge-based design with no Xet client; a scheduled live-Hub smoke test fails when the bridge is missing, and the `upstream_xet_only` unsupported-files error path ships. The Hub docs keep the legacy LFS path with no deprecation stated, and a Xet client is quarter-scale against a moving spec.
+
+**Q2 — Where do non-HF model artifacts needing create-only per-version publication belong?** Decision: ADR 0028 generic versioned packages, not this format. HF commits are mutable by design and ADR 0028 already provides open and sealed versions with create-only files.

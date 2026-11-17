@@ -124,8 +124,12 @@ signature packet (V4, RSA, SHA-256) and sends only the digest to a backend that 
 the raw RSA PKCS#1 v1.5 private-key operation. Backends:
 
 - `pkcs11` (HSM, SoftHSM2 in CI; cgo, build tag `pkcs11`, built natively per ADR 0016),
-- `oci-vault` (OCI Vault `Sign` with `messageType=DIGEST` and `signingAlgorithm=SHA_256_RSA_PKCS1_V1_5`, fits ADR 0017's reference deployment). A community report says software-protected keys may return a signature without the PKCS#1 DigestInfo wrapper for DIGEST input, so the backend runs a signature self-test against the public key at startup and in `cert-init`, and a live-vault run is mandatory before S2 is trusted (slice 3),
+- `oci-vault` (OCI Vault `Sign` with `messageType=DIGEST` and `signingAlgorithm=SHA_256_RSA_PKCS1_V1_5`, fits ADR 0017's reference deployment). A community report says software-protected keys may return a signature without the PKCS#1 DigestInfo wrapper for DIGEST input, so the backend runs a signature self-test against the public key at startup and in `cert-init`, and a live-vault run is mandatory before S2 is trusted (slice 3; the OCI Always Free tier includes Vault, with software-protected keys free and 20 HSM-protected key versions free per tenancy),
 - later: AWS KMS, Google Cloud KMS, Azure Key Vault (Backlog; same `Backend` interface).
+
+**S2 key custody.** S2 is an HSM-protected OCI Vault RSA 4096 key, kept within the 20 free HSM key versions per tenancy (enough for S2 plus a few rotations); this also avoids the software-key DigestInfo caveat if it is real. The order of preference is HSM-protected OCI Vault key, then software-protected OCI Vault key, then the `pkcs11` backend with SoftHSM2 on an encrypted volume. The slice 3 live-vault run decides which one is used and proves RSA 4096 and `SHA_256_RSA_PKCS1_V1_5`; `docs/release/feeds-signing.md` states the resulting custody level, and the SoftHSM2 fallback carries the explicit weaker custody claim.
+
+**Replay and freshness.** APT `Valid-Until` is an opt-in per-suite setting (`validUntilDays`, default unset: no `Valid-Until` line), so private and offline feeds cannot be bricked by a missed re-sign. When set, snapshot generation writes `Valid-Until = Date + validUntilDays`, and a re-sign of an unchanged snapshot goes through `notarx-signer` with a fresh `Date`, which the existing `Date` rollback guard accepts. It bounds replay of stale metadata after expiry only; it does not stop a freeze inside the window, which is why TLS is also required. RPM does nothing beyond client `metadata_expire` and the signer `revision` rollback guard, because repomd has no signed expiry.
 
 Adapter configuration: `NOTARX_SIGNER_LISTEN` (default `127.0.0.1:18083`; a non-loopback address requires TLS), `_TOKEN_FILE`,
 `_BACKEND`, `_CERT_FILE` (public OpenPGP certificate binding the KMS key, produced once by
@@ -196,7 +200,7 @@ the tag.
 main header; derives NEVRA, dependencies, file list; rejects identity mismatch), `POST
 .../rpm/snapshots` (`{sequence, publicationSessionIds}`) builds, signs and publishes.
 Parsing uses `github.com/sassoftware/go-rpmutils` (Apache-2.0, verifies signatures with
-`ProtonMail/go-crypto`); `cavaliergopher/rpm` is the fallback. The payload is hashed, never
+`ProtonMail/go-crypto`); `cavaliergopher/rpm` is the fallback. `go-rpmutils` (v0.4.0, last release May 2024) is used behind an internal parser interface in `internal/format/rpm`; slice 21 adds a fuzz target and oversize and truncated fixtures, and the parser is forked or replaced only if those expose crashes or a fix is needed that is not released. The payload is hashed, never
 decompressed. Limits: `NOTARX_RPM_MAX_PACKAGE_BYTES` (2 GiB), header 64 MiB, 1,000,000 file
 entries, `NOTARX_RPM_MAX_SNAPSHOT_PACKAGES` (50000). Ordering (`rpmvercmp`, `~`, `^`) lives in
 `internal/format/rpm/evr.go` with rpm's own vectors and the ADR 0025 ordering
@@ -299,6 +303,7 @@ notarx. The hosted feed is a second, equal-trust mirror used first for nightly.
   `gh attestation verify`-ed assets as `sync-repo`, never R2 or the feed. `notarxctl`
   uploads sessions, then publishes one snapshot with `Idempotency-Key =
   <run id>-<package-set digest>`. The CI job holds no signing key.
+- **Freshness.** Both public APT suites set `validUntilDays: 30`. A scheduled (weekly) `publish-feeds` run re-signs the unchanged stable suite through S2 with a fresh `Date`, and `verify-feeds` fails, and so alerts, when the remaining `Valid-Until` of either suite is under 14 days. RPM feeds rely on `metadata_expire` in the documented `.repo` files.
 - **Residual risk (stated, not hidden).** An attacker controlling the feeds instance can
   ask the signer to sign arbitrary `Release` text. Mitigations: signer allow-lists and
   rollback guard, signer logs shipped off-host, and a `verify-feeds` job (slice 22) that checks
@@ -327,11 +332,16 @@ notarx. The hosted feed is a second, equal-trust mirror used first for nightly.
   allow-list, size caps, hash verification of `repomd.xml` (metalink) and of each
   metadata file against it.
 - Replay and freeze: yum has no `Valid-Until`; `repomd.xml` carries `revision` and
-  `timestamp` and clients bound staleness with `metadata_expire`. An APT `Valid-Until`
-  option is an open question.
+  `timestamp` and clients bound staleness with `metadata_expire`. APT `Valid-Until` is
+  opt-in per suite (default off) and enabled on the project public feeds (30 days, weekly
+  re-sign); it bounds replay after expiry but not a freeze inside the window.
 - `gpgcheck` (packages) and `repo_gpgcheck` (metadata) are independent; the docs and
   `.repo` examples enable both and state that metadata signing does not vouch for
   package provenance.
+- OpenPGP v6 package signatures (RHEL 10.1 and later accept them, while v4 signatures
+  coexist and stay verifiable) are out of scope: the signer and `require_valid` handle RSA
+  v4 only. A tracking issue is filed, and the Part C matrix carries a canary that fails if
+  any matrix image stops accepting v4, which is the trigger to add v6 support.
 - Anonymous reads expose only the current visible snapshot and its pool objects.
 
 ## Consequences
@@ -378,6 +388,7 @@ dialect-neutral port). Slices that add migrations depend on ADR 0015 slice 4. Sl
    Scope: `internal/signer/ocivault`, `docs/release/feeds-signing.md`.
    - [ ] Backend uses `messageType=DIGEST` with `SHA_256_RSA_PKCS1_V1_5`; startup and `cert-init` self-test verifies a signature against the public key (guards the DigestInfo caveat).
    - [ ] Contract test against a recorded fake plus a live test gated by an env flag; one live run is recorded in the PR before S2 is trusted.
+   - [ ] The live run proves an HSM-protected RSA 4096 key signs with `SHA_256_RSA_PKCS1_V1_5` within the 20 free HSM key versions (PR records the budget used); if it fails, the software-protected key is tried next and then the `pkcs11` SoftHSM2 fallback, and `docs/release/feeds-signing.md` states the custody level actually shipped.
    - [ ] Runbook: S2 creation as subkey of the offline primary, `gpg.key` republish, recovery and revocation drill result recorded.
    - [ ] `make docs-check`, `make test`, `make lint`.
    - Depends on: Slice 2; ADR 0025 slice 4 (key ceremony).
@@ -386,8 +397,9 @@ dialect-neutral port). Slices that add migrations depend on ADR 0015 slice 4. Sl
    Scope: `internal/aptpublication/snapshot.go` and tests.
    - [ ] Deterministic `Packages.xz` plus by-hash entry and `Release` listing; configurable `Origin`, `Label`, `Description` (default `notarx`).
    - [ ] Golden tests; Debian and Ubuntu containers install with xz-only index (`make native-apt-e2e`).
+   - [ ] Opt-in per-suite `validUntilDays` setting (OpenAPI first, default unset): when set, `Release` carries `Valid-Until`, a re-sign of an unchanged snapshot with a fresh `Date` is accepted by the signer rollback guard, and an apt container refuses an expired `Release` while accepting a valid one.
    - [ ] No migration; existing snapshots still restore (`make backup-drill`, `make restore-drill`).
-   - [ ] `make test`, `make lint`.
+   - [ ] `make test`, `make openapi-check`, `make lint`.
    - Depends on: None.
 
 5. **APT scheduled retention.** Milestone: Formats.
@@ -461,6 +473,7 @@ dialect-neutral port). Slices that add migrations depend on ADR 0015 slice 4. Sl
 14. **Client conformance matrix in CI.** Milestone: Formats.
    Scope: `Makefile` (`pkg-clients-e2e`), `.github/workflows/ci.yml` matrix, fixtures. Land as two PRs: apt legs, then dnf legs.
    - [ ] Part C matrix on both native runners; required checks on `main` after two green weeks.
+   - [ ] OpenPGP v4 canary: the job fails if any matrix image stops accepting RSA v4 signatures; a tracking issue for v6 support is filed and linked in `docs/release/feeds-signing.md`.
    - [ ] `make lint`, `make release-readiness-check`.
    - Depends on: Slices 6, 9, 17 (apt legs can start earlier).
 
@@ -469,6 +482,7 @@ dialect-neutral port). Slices that add migrations depend on ADR 0015 slice 4. Sl
    - [ ] Instance provisioned per runbook with S2 signer; repositories created declaratively (RPM with `require_valid`); `feeds-publisher` trust policy bound to repo, workflow, environment and ref.
    - [ ] Nightly publication green on both architectures; `verify-feeds` (slice 22) passes including R2 byte equality.
    - [ ] Rotation, restore and R2-fallback drills recorded in the PR.
+   - [ ] Both APT suites set `validUntilDays: 30`; a scheduled weekly `publish-feeds` run re-signs the unchanged stable suite (verified by a drill that skips a run and shows the alert before expiry).
    - [ ] `make release-readiness-check`, `make docs-check`, `make lint`.
    - Depends on: Slices 3, 5, 6, 9, 14, 19, 20, 22; ADR 0017 slices 1 and 6; ADR 0019 slices 2 to 6; ADR 0025 slice 6; ADR 0029 slices 1 to 7; ADR 0024 slice 4.
 
@@ -508,7 +522,7 @@ dialect-neutral port). Slices that add migrations depend on ADR 0015 slice 4. Sl
    Scope: `internal/format/rpm` (domain, parser, `evr.go`), `go.mod` (`go-rpmutils`).
    - [ ] Parser tests with signed, unsigned, corrupt, truncated and oversized fixtures; fuzz target; payload never decompressed; limits enforced.
    - [ ] `evr.go` vectors from rpm plus the ADR 0025 ordering.
-   - [ ] Open question 3 decided with evidence (use or fork go-rpmutils).
+   - [ ] `go-rpmutils` stays behind an internal interface; the fuzz target and the oversize and truncated fixtures pass, and the PR records the result. A fork or replacement (`cavaliergopher/rpm` or an own header parser) happens only if they expose crashes or an unreleased upstream fix is needed.
    - [ ] `make test`, `make lint`.
    - Depends on: None.
 
@@ -516,12 +530,16 @@ dialect-neutral port). Slices that add migrations depend on ADR 0015 slice 4. Sl
    Scope: `scripts/verify-feeds.sh`, `release.yml` job `verify-feeds`.
    - [ ] Install, upgrade and anonymous-read assertions on `debian:12`, `ubuntu:24.04`, `rockylinux:9`, `fedora:latest`, both native runners, against a given base URL.
    - [ ] Every package hash in the published indices checked against attested assets; package set equals the R2 set byte for byte; fails the release on mismatch.
+   - [ ] Fails, and so alerts, when the remaining `Valid-Until` of an APT suite on the feeds is under 14 days.
    - [ ] Tested against the fixture stack. `make docs-check`, `make release-readiness-check`, `make lint`.
    - Depends on: Slices 9, 14; ADR 0025 slice 6.
 
-## Open questions
+## Resolved questions
 
-1. Does the OCI Always Free tier include a Vault able to hold an RSA 4096 software or HSM-protected key at no cost? If not, S2 falls back to a `pkcs11` SoftHSM2 backed by an encrypted volume with a weaker custody claim that the docs must state.
-2. Should APT suites support `Valid-Until` with a scheduled re-sign job to limit freeze attacks, and should RPM do anything equivalent beyond `metadata_expire`?
-3. Does `go-rpmutils` v0.4.0 (last release May 2024) meet maintenance and fuzz expectations, or should parsing be forked into `internal/format/rpm`? Slice 21 decides with evidence.
-4. When EL10 and later require OpenPGP v6 package signatures, do we add v6 support in the signer and `require_valid`? Not needed while RSA v4 verifies on all matrix images.
+**Q1 — Does OCI Always Free Vault hold an RSA 4096 signing key at no cost, else fall back to pkcs11 SoftHSM2?** Decision: S2 is planned as an HSM-protected OCI Vault key within the 20 free key versions, with a software-protected key as second choice and SoftHSM2 as the documented fallback; the slice 3 live-vault run decides. Oracle states software keys and 20 HSM key versions per tenancy are free, and HSM also sidesteps the DigestInfo caveat.
+
+**Q2 — Should APT suites support Valid-Until with a scheduled re-sign job, and should RPM do anything beyond metadata_expire?** Decision: `Valid-Until` is opt-in per suite (default off) and enabled on the project public feeds with a 30-day window re-signed weekly by `publish-feeds` with an expiry alert; RPM keeps `metadata_expire` and the revision rollback guard only. It bounds replay after expiry without risking outages on private feeds, and the signer already accepts a re-sign with a fresh `Date`.
+
+**Q3 — Does go-rpmutils v0.4.0 meet maintenance and fuzz expectations, or fork parsing into internal/format/rpm?** Decision: keep go-rpmutils behind an internal interface; slice 21 adds the fuzz target and hostile fixtures and forks only on evidence of crashes or a needed unreleased fix. Fuzzing evidence is the right gate and `cavaliergopher/rpm` is already the named fallback.
+
+**Q4 — Add OpenPGP v6 support to the signer and require_valid when EL10+ require v6 package signatures?** Decision: defer; RSA v4 only, with a tracking issue and a matrix canary (slice 14) that fails if any image stops accepting v4. RHEL 10.1 accepts v6 but v4 signatures coexist and stay verifiable, so nothing forces v6 yet.

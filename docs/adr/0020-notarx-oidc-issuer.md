@@ -139,7 +139,8 @@ token_signing_keys(
   be published, each algorithm having its own `next`/`active` pair and
   independent rotation. Switching `NOTARX_ISSUER_ALG` only changes which active
   key signs; a missing `next` or `active` for the new algorithm is created by
-  the bootstrap path below. RSA is 3072-bit, ECDSA P-256.
+  the bootstrap path below. RSA is 3072-bit (accepted on the Always Free Ampere A1: keygen only at rotation),
+  ECDSA P-256 for notarx-to-notarx.
 - States: `next` (published in JWKS, never signs), `active` (signs and is
   published), `retired` (published, never signs, until `expires_at`).
 - Rotation interval `NOTARX_ISSUER_KEY_ROTATION_INTERVAL` (default `720h`).
@@ -277,7 +278,11 @@ stored in the upstream auth object (extended JSON, no `Secret`):
 `tenantId`, `clientId`, `scope` (for example
 `https://storage.azure.com/.default`), optional `subject` (a service account
 whose subject to use; default a built-in instance principal
-`notarx:instance:<deployment-id>`, the stable id described above). Algorithm:
+`notarx:instance:<deployment-id>`, the stable id described above; both modes are
+supported and neither is mandatory). The instance subject is a single Entra
+federated credential shared by every upstream bound to it, which keeps the
+20-credentials-per-app quota intact. Every self-signed exchange records the
+resolved subject, tenant, client and repository in audit. Algorithm:
 
 1. Self-sign an assertion in-process (no HTTP hop, no API key) with the
    audience derived from the authority host: `api://AzureADTokenExchange`
@@ -340,7 +345,9 @@ trusted-issuer path; no exchange step is required (the ADR 0019 exchange is
 optional). The sender-side peer client is owned by ADR 0021; ADR 0020 ships no
 peer client. The audience allow-list on A names B's URL, so a service account on
 A cannot obtain assertions for arbitrary peers. No shared secret exists between
-instances.
+instances. Revoke is JWKS removal only (no `jti`/`kid` deny list); B's ADR 0019
+verifier uses a 60 s JWKS TTL for notarx-trusted issuers, so revoke takes effect
+well inside the 10 min assertion life.
 
 ## Security considerations
 
@@ -427,14 +434,16 @@ of 0019, and precedes 0021; slice 9 trails ADR 0021 slice 8).
    Acceptance: [ ] command map updated; [ ] `make test`, `make lint` pass.
    Depends on 3, 4.
 6. **Console and docs.** Scope: console page under service-account detail, i18n
-   keys en-CA and fr-CA (ADR 0014), issuer and Entra setup guide in `docs/`.
+   keys en-CA and fr-CA (ADR 0014), issuer and Entra setup guide in `docs/` (instance subject is one federated
+   credential shared by all upstreams bound to it; 20-credential Entra limit).
    Acceptance: [ ] `make console-test`, `make test`, `make lint` pass. Depends
    on 5.
 7. **`entra-workload` upstream scheme.** Scope:
    `internal/repository/model.go`, `internal/upstreamauth`, management OpenAPI
    for upstream auth, preflight check. Acceptance: [ ] token exchange against an
    `httptest` Entra stub verifies assertion claims and form fields; [ ]
-   audience derived per authority host; [ ] refuses non-RS256 signing; [ ] cache,
+   audience derived per authority host; [ ] works with and without an explicit
+   `subject` service account, audit records subject, tenant, client and repository; [ ] refuses non-RS256 signing; [ ] cache,
    singleflight and 401-retry-once; [ ] fixed host allow-list; [ ] `make
    openapi-check`, `make test`, `make lint` pass. Depends on 2, 3.
 8. **ACR token exchange.** Scope: `internal/upstreamauth` ACR branch.
@@ -442,18 +451,16 @@ of 0019, and precedes 0021; slice 9 trails ADR 0021 slice 8).
    stub; [ ] cache reuse. Depends on 7.
 9. **notarx-to-notarx docs and two-instance e2e.** Scope: docs, e2e test only
    (no peer client; the sender is owned by ADR 0021). Acceptance: [ ] A mints, B
-   verifies as a Bearer JWT via ADR 0019; [ ] unlisted peer audience refused.
+   verifies as a Bearer JWT via ADR 0019; [ ] unlisted peer audience refused; [ ] after `issuer revoke` on A, B rejects A's
+   tokens within the 60 s notarx-issuer JWKS TTL.
    Depends on 4, ADR 0021 slice 8 (remote push sender).
 10. **KMS signer (deferred).** Scope: `kms` `Signer` implementations. Not
     scheduled.
 
-## Open questions
+## Resolved questions
 
-- Should the instance principal (`notarx:instance:<deployment-id>`) exist for
-  `entra-workload` without a service account, or must every use bind to an
-  explicit service account for audit clarity? Draft leans to allowing both.
-- Is 3072-bit RSA acceptable on the Always Free Ampere A1 (key generation is
-  seconds, signing is cheap)? RS256 stays mandatory for Entra, so the answer only
-  affects key size.
-- Should `revoke` support an immediate, issuer-side deny list (`jti` or `kid`)
-  for notarx-to-notarx verifiers beyond JWKS removal?
+**Q1 — Should the instance principal exist for `entra-workload` without a service account?** Decision: Allow both. Every self-signed exchange records the resolved subject, tenant, client and repository in audit, and the docs state that the instance subject is one federated credential shared by all upstreams bound to it. Entra needs an exact issuer+subject match and allows at most 20 federated credentials per app, so mandatory per-account subjects would burn the quota.
+
+**Q2 — Is 3072-bit RSA acceptable on the Always Free Ampere A1?** Decision: Yes; keep RSA-3072 for the mandatory RS256 key (rotation every 720 h, a few signatures per minute) and ES256 for notarx-to-notarx. Keygen happens only at rotation and signing volume is low, so the cost is negligible; Entra requires RS256, not a key size.
+
+**Q3 — Should revoke support an issuer-side deny list (`jti` or `kid`)?** Decision: No deny list in 0.2; revoke is JWKS removal, and the ADR 0019 verifier honours a short JWKS TTL (60 s) for notarx-trusted issuers, below the 300 s `Cache-Control` max-age and the 10 min assertion life. A deny list would shorten exposure only marginally and cannot affect Entra-exchanged tokens.

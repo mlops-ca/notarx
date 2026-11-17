@@ -28,7 +28,7 @@ release and a nightly reach those channels. Facts in the tree today:
   it through the compose `migrate` service (`compose.yml:214-224`). There is no
   `gateway migrate` subcommand in `cmd/gateway/main.go` today; ADR 0022 slice 2 adds a Go
   runner (`internal/migrate`, `notarx migrate`) whose PostgreSQL ledger is byte-identical,
-  while ADR 0022 keeps `run-migrations.sh` for PostgreSQL until its open question 2 decides
+  while ADR 0022 keeps `run-migrations.sh` for PostgreSQL until it decides
   to unify.
 - **Release pipeline.** `.github/workflows/release.yml` has four jobs:
   `verify-candidate`, `build-assets`, `publish-images`, `publish-release`
@@ -134,7 +134,8 @@ Packages:
   `/usr/share/doc/notarx-console/examples/nginx.conf` that proxies to
   `127.0.0.1:8080`. `Recommends: nginx`. Built once (on the amd64 leg) because the
   assets are identical per architecture; nfpm `arch: all`. Embedding the console in
-  the server is a larger change and is an open question, not decided here.
+  the server is a larger change: the separate package is decided for Foundation and embedding is
+  revisited after Foundation (Backlog).
 - **`notarxctl` (per architecture).** `/usr/bin/notarxctl` only. Separate package so
   workstations and CI runners do not pull a service.
 
@@ -158,7 +159,7 @@ migration set differs from the applied ledger; it prints a warning instead
 Go-native runner (ADR 0022 slice 2, `notarx migrate`) does not exist yet. Until it lands
 the wrapper drives `run-migrations.sh` (hence `postgresql-client`). Once it has landed,
 the wrapper keeps its name and flags and delegates to `notarx migrate`, and the
-`psql` recommendation is dropped when ADR 0022's open question 2 unifies the PostgreSQL
+`psql` recommendation is dropped when ADR 0022 unifies the PostgreSQL
 path on the Go runner (Backlog slice 12).
 
 ### Compose bundle and the OCI free-tier deployment
@@ -222,7 +223,8 @@ newest 14 nightly releases, so the inputs for regeneration always exist. `stable
 
 ### Trust model and signing
 
-- One OpenPGP key `notarx packages <packages@mlops.ca>`, **distinct from the
+- One OpenPGP key `notarx packages <packages@mlops.ca>` (`packages@mlops.ca` is created as a monitored
+  alias before the key is minted, so the uid is never changed), **distinct from the
   reference APT signer fixture key and from customer signers**. RSA 4096 primary
   (certify only, kept offline on hardware token plus an offline backup) with one
   RSA 4096 signing subkey valid two years (S1, in the `packages-signing` environment). The
@@ -423,6 +425,8 @@ docs-check`, and `make architecture-check` when Go packages change. Slices touch
    Milestone: Foundation.
    Scope: `docs/release/packages-signing.md`, repository settings checklist script
    `scripts/check-packages-environments.sh` (reads via `gh api`), staging bucket.
+   - [ ] The `packages@mlops.ca` alias exists, forwards to the owner or team and is monitored; this is
+     verified (a test message is received) before the key is minted, and the key uid uses it.
    - [ ] Key creation, subkey, revocation certificate, custody and rotation steps
      documented; fingerprint recorded in `SECURITY.md`.
    - [ ] Environments `packages-signing` and `packages-publish` exist with required
@@ -505,7 +509,7 @@ docs-check`, and `make architecture-check` when Go packages change. Slices touch
     Milestone: Backlog.
     - [ ] `notarx-migrate` delegates to `notarx migrate` (ADR 0022 slice 2, same ledger
       semantics, tested with the shared vectors of `migration-runner-check.sh`) with the same
-      name and flags; the `psql` recommendation is removed once ADR 0022's open question 2 unifies PostgreSQL on the Go runner.
+      name and flags; the `psql` recommendation is removed once ADR 0022 unifies PostgreSQL on the Go runner.
     Dependencies: slice 1; ADR 0022 slice 2.
 13. **notarx-hosted nightly and stable feeds (tracking slice).**
     Milestone: Public feeds.
@@ -520,10 +524,8 @@ docs-check`, and `make architecture-check` when Go packages change. Slices touch
     - [ ] Package ships `gpg.key` so apt/dnf key rotation is an upgrade; rotation drill documented.
     Dependencies: slice 6.
 
-## Open questions
+## Resolved questions
 
-1. Is serving the console from the server (embedding, with `Cache-Control` and SPA
-   fallback) preferable to a separate `notarx-console` package and nginx? Deferred
-   until after Foundation; the package split above does not block it.
-2. Is `packages@mlops.ca` operated as a monitored mailbox (needed for key
-   uid)? If not, the uid uses a project issues URL.
+**Q1 — Serve the console from the server (embedded) or ship a separate `notarx-console` package with nginx.** Decision: keep the separate package for Foundation and revisit embedding after Foundation. The split does not block embedding later and embedding is a feature, not a distribution blocker.
+
+**Q2 — Is `packages@mlops.ca` a monitored mailbox for the signing key uid.** Decision: yes; it is created as a monitored alias and used as the uid. Key uids cannot be edited cheaply after distribution and an alias costs minutes.

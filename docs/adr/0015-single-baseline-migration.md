@@ -227,6 +227,12 @@ before the cut-over, to be recorded in the PR description).
   reads. Data backfills live in migrations, never in the baseline.
 - `make migrate` and `scripts/migration-runner-check.sh` (reworked to count
   files dynamically, already the case) remain the verification entry points.
+- `pg_trgm` stays required by the baseline. A preflight (`internal/preflight`, run by `make preflight`, and
+  by `scripts/run-migrations.sh` before the first statement) checks that the extension is installed or
+  that the connecting role may `CREATE EXTENSION` it, and fails fast with a clear message otherwise.
+  There are no guarded trigram blocks or B-tree fallbacks. The tested PostgreSQL providers are listed in
+  ADR 0017 (mainstream managed services ship `pg_trgm` as a contrib extension); MySQL/HeatWave is a
+  separate path (ADR 0022) with no trigram indexes.
 
 ### Backup, restore and release modules
 
@@ -327,10 +333,13 @@ before the cut-over, to be recorded in the PR description).
      `scripts/migration-runner-check.sh` expectations, update tests listed in
      Context that name migration files or count 136 ledger entries
      (`internal/backupops/*_test.go`, `internal/backupmanifest/verify_test.go`,
-     `internal/preflight/backup_test.go`,
+     `internal/preflight/` (new `pg_trgm` check) and `internal/preflight/backup_test.go`,
      `internal/repositorypreset/pgstore/store_integration_test.go`).
    - [ ] `make test`, `make integration-test`, `make backup-drill`,
      `make restore-drill`, `make preflight` pass on a fresh database.
+   - [ ] The `pg_trgm` preflight passes when the extension exists or is creatable and fails with a clear
+     message otherwise (unit and integration tests with a role lacking the privilege); the result of
+     running it against OCI Database with PostgreSQL is recorded in the PR.
    - [ ] The second-run no-op check reports exactly one skip.
    - Depends on: slice 3. This is the "ADR 0015 slice 4" that other ADRs cite.
 5. **Retire upstream upgrade tooling**
@@ -369,8 +378,6 @@ before the cut-over, to be recorded in the PR description).
      `anonymous_read`, `internal/access` choke point in three waves, group invariants; all foundation work merged). It is the last
      change before the `v0.1.0` tag.
 
-## Open questions
+## Resolved questions
 
-1. Which backends (ADR 0017) lack `pg_trgm`, if any? The baseline requires it;
-   a backend without it would need the trigram indexes moved into a guarded
-   block with plain B-tree fallbacks, which is not designed here.
+**Q1 — Which runtime backends (ADR 0017) lack `pg_trgm`.** Decision: none are assumed to; keep `pg_trgm` required and add a startup and migration preflight that checks `CREATE EXTENSION` permission, with tested providers listed in ADR 0017. Mainstream managed PostgreSQL ships `pg_trgm` as a contrib extension, and failing fast avoids an untested B-tree fallback path.

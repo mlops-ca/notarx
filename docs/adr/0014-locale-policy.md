@@ -94,7 +94,12 @@ Option 3.
 | --- | --- | --- | --- | --- |
 | `en-CA` | reference | complete by construction | complete | blocking |
 | `fr-CA` | first-class | 100 percent of keys | core set (below) | blocking for the Console and core docs |
-| `zh-CN` | secondary | may lag, falls back to `en-CA` | existing files kept, new ones optional | non-blocking report (existing twins still structure-checked) |
+| `zh-CN` | secondary, frozen at the upstream snapshot, community-maintained | may lag, falls back to `en-CA` | existing files kept, new ones optional | non-blocking report (existing twins still structure-checked) |
+
+`en-CA` spelling (`colour`, `-ize`) applies to all Console copy and docs; a spell-check dictionary
+(cspell `en-CA`) runs in CI so cherry-picked upstream copy is flagged mechanically. zh-CN is
+frozen at the snapshot: no one is assigned, keys keep working through the `en-CA` fallback, the
+prune tooling stays, and `CONTRIBUTING.md` lists zh-CN as community-maintained until a contributor appears.
 
 Locale tags are BCP 47 and exact (`en-CA`, `fr-CA`, `zh-CN`). The legacy tags
 `en-US` and the bare `en` are retired; there is no alias (consistent with ADR
@@ -173,7 +178,7 @@ straight apostrophes between letters.
 `glossary.ts` is restructured from `{en, zh, avoid}` to
 `{term, labels: {"en-CA": string, "fr-CA": string, "zh-CN"?: string},
 avoid?: {"fr-CA"?: string[], "zh-CN"?: string[]}}`, keyed on the `CONTEXT.md`
-term. Initial fr-CA labels (reviewed by a fluent speaker before merge):
+term. Initial fr-CA labels (checked by the LLM review step against the OQLF-aligned terms before merge):
 Repository, dépôt; Artifact, artefact; Promotion, promotion; Group, groupe;
 Tombstone, pierre tombale (avoid *épitaphe*); Quarantine, quarantaine; Upstream,
 amont; Proxy repository, dépôt mandataire (the word *proxy* is kept in the
@@ -262,9 +267,13 @@ test enforces the avoid lists per locale.
    missing keys with an LLM run by the contributor locally, always including the
    glossary and writing rules in the prompt. Drafts are marked in a sidecar
    `console/src/messages/.review/fr-CA.json` (`{key: "draft"|"reviewed"}`; `critical` is a separate flag).
-3. A fluent human reviews fr-CA drafts; CODEOWNERS routes `*.fr-CA.ts` and
-   `*.fr-CA.md` to the fr-CA reviewer group. A release candidate fails
-   `make i18n-release-check` while any fr-CA key is `draft`.
+3. fr-CA is reviewed by an automated LLM review step (`.github/workflows/i18n-review.yml`, slice 13), not by a
+   Québec-based human: it checks changed fr-CA strings against the OQLF-aligned glossary and writing rules
+   and flags issues on the PR. The provider is configurable among Claude, Mistral and Cohere
+   (`I18N_REVIEW_PROVIDER`). `critical` keys must pass the review, passing keys become `reviewed` in the
+   sidecar, and a maintainer approves the PR (CODEOWNERS routes `*.fr-CA.ts` and `*.fr-CA.md` to the
+   maintainers). A release candidate fails `make i18n-release-check` while any fr-CA key is `draft`
+   or any `critical` key has not passed the review.
 4. zh-CN has no release gate; community or maintainer contributions are welcome
    and are not blocked by review of other locales.
 
@@ -278,7 +287,7 @@ test enforces the avoid lists per locale.
   `<script>` in a placeholder for each bundle.
 - Machine-drafted strings are reviewed before release to avoid misleading
   wording on destructive actions (delete, quarantine, revoke); those keys are
-  tagged `critical` in the review sidecar and require human review even for zh-CN.
+  tagged `critical` in the review sidecar and must pass the LLM review step (and the maintainer's approval) for fr-CA; zh-CN keys are not gated.
 - Draft tooling sends only UI strings, never repository data.
 
 ## Consequences
@@ -316,6 +325,8 @@ working tree and needs no slice.
      `zh-CN`, `zh-Hans`, `zh-TW` skipped, unknown) and default.
    - [ ] `make console-test`, `make lint` pass; no `en-US` string remains
      (`rg "en-US" console/src` is empty).
+   - [ ] A cspell config with the `en-CA` dictionary covers `console/src/messages/*.en-CA.ts` and docs,
+     runs inside `make lint`, and a fixture with `color` fails it.
    Dependencies: ADR 0013 slice 3.
 2. **Test migration off Chinese.** Scope: console unit, e2e and visual tests,
    `messages.test.ts`, `glossary.ts` restructure, `scripts/i18n-prune.mjs`.
@@ -379,26 +390,41 @@ working tree and needs no slice.
 10. **Docs language switchers and guides.** Scope: `docs/documentation-site-guide.md`,
     `CONTRIBUTING.md`, `PRODUCT.md`, route prefixes. Acceptance:
     - [ ] Switcher lists only existing locales; guides describe the tiers.
+    - [ ] `CONTRIBUTING.md` lists zh-CN as community-maintained (frozen at the snapshot) and describes the fr-CA LLM review.
     - [ ] `make docs-check`.
     Dependencies: slice 9.
 11. **fr-CA core docs.** Scope: `README.fr-CA.md`, `docs/README.fr-CA.md`,
     `docs/getting-started.fr-CA.md`, `SECURITY.fr-CA.md`,
     `CONTRIBUTING.fr-CA.md`. Acceptance:
-    - [ ] Reciprocal links; reviewed by the fr-CA group; `make docs-check`.
-    Dependencies: slice 9.
+    - [ ] Reciprocal links; pass the LLM review of slice 13 and maintainer approval; `make docs-check`.
+    Dependencies: slice 9; reviewed through slice 13.
 12. **Translation tooling and gate.** Scope: `scripts/i18n-draft.mjs`,
     `.review/fr-CA.json`, CODEOWNERS, `make i18n-release-check`. Acceptance:
     - [ ] Draft script is deterministic given a stub model in tests.
-    - [ ] Release check fails on `draft` keys and passes when reviewed.
-    Dependencies: slice 5.
+    - [ ] Release check fails on `draft` keys and on `critical` keys without a passed review, and passes when reviewed.
+    Dependencies: slice 5. The review itself is slice 13.
 
-## Open questions
+13. **fr-CA LLM review workflow.** Scope: `scripts/i18n-review.mjs` (provider adapters for
+    Claude, Mistral and Cohere behind one interface, plus a stub for tests),
+    `.github/workflows/i18n-review.yml`, `console/src/messages/.review/fr-CA.json`
+    (sets `reviewed` or leaves `draft`), CODEOWNERS, `CONTRIBUTING.md`. Acceptance:
+    - [ ] The workflow runs on PRs that touch `*.fr-CA.ts`, `*.fr-CA.md` or the glossary; it sends only
+      the changed UI strings, the glossary and the writing rules, never repository data.
+    - [ ] The provider is chosen by repository variable `I18N_REVIEW_PROVIDER`
+      (`anthropic`, `mistral` or `cohere`) with its API key in an Actions secret; fork PRs get no secret and the
+      review is run by a maintainer-triggered `workflow_dispatch` against the PR head.
+    - [ ] Findings (glossary avoid-term hits, France-French terms, typography, meaning drift from en-CA)
+      are posted as a PR check and review comments; the check fails when any `critical` key has a finding
+      and is the only gate for `critical` keys (no human Québec reviewer is required).
+    - [ ] Keys that pass are recorded `reviewed` in the sidecar; the maintainer approves the PR (CODEOWNERS).
+    - [ ] Tests with the stub provider are deterministic; an adapter test per provider uses recorded fixtures.
+    - [ ] `make lint`, `make test` and `make i18n-release-check` pass.
+    Dependencies: slices 5 and 12.
 
-- Who is the fr-CA reviewer group, and is review of `critical` keys required
-  from a Québec-based speaker (terminology such as *dépôt* versus *référentiel*)?
-- Should `en-CA` spelling (`colour`, `-ize`) apply to the Console, or should
-  product copy stay spelling-neutral to ease cherry-picks from upstream (ADR
-  0013)? This ADR assumes en-CA spelling and accepts the cost in cherry-picked
-  copy.
-- Is a zh-CN maintainer identified, or is zh-CN frozen at the upstream snapshot
-  until a contributor appears?
+## Resolved questions
+
+**Q1 — Who reviews fr-CA, and must critical keys be reviewed by a Québec-based speaker.** Decision: fr-CA review is an automated LLM review step (Claude, Mistral or Cohere, configurable) that checks strings against the OQLF-aligned glossary and flags issues on the PR; `critical` keys must pass it and a maintainer approves the PR, with no human Québec reviewer requirement. This keeps review continuous and cheap while the glossary sidecar still centralises terminology.
+
+**Q2 — Apply en-CA spelling to the Console or keep copy spelling-neutral.** Decision: keep en-CA spelling and add a cspell `en-CA` dictionary to CI. Cherry-picked upstream copy needs manual touch anyway and the lint flags it mechanically.
+
+**Q3 — Is a zh-CN maintainer identified or is zh-CN frozen.** Decision: frozen at the upstream snapshot with the `en-CA` fallback and prune tooling kept, listed as community-maintained in `CONTRIBUTING.md`. zh-CN is already non-blocking and partial, so freezing is zero-risk and reversible.

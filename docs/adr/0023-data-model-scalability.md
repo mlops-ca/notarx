@@ -148,6 +148,14 @@ port. Every `AuditRecord` gets a durability class from `AuditRecord.Durability()
 | `sync` | authorization denials for an authenticated principal, management API mutations, publish, delete, quarantine, release, promotion, token mint, settings changes, retention and key operations | in the caller's transaction or an immediately committed insert (unchanged semantics) | the record is the evidence of a security decision or a state change; it must not be lost or reordered relative to it |
 | `async` | successful reads and downloads, cache hits and misses, group resolution, anonymous 401/403 | enqueue to a bounded in-process buffer, return immediately | high volume, attacker-controlled volume in the anonymous case, loss of a trailing second is acceptable |
 
+Audit is stored in two tables with separate retention: `security_audit_log` receives
+every `sync` class record (denials for authenticated principals, management
+mutations, publish, delete, quarantine, release, promotion, token mint, settings,
+retention and key operations) and `resolver_audit_log` receives every `async`
+class record (reads, downloads, cache hits and misses, group resolution, anonymous
+401/403). Both have the same columns, keys and indexes (section 2); the audit list
+API merges them by `(occurred_at, id)` keyset and exposes the class as a filter.
+
 State changes and management mutations are audited in the same transaction as the
 change and are never dropped, never subject to the semaphore and never queued: if
 the audit insert fails the change fails (fail closed). Only the high-rate `sync`
@@ -204,11 +212,14 @@ time apply a grace of at least 2 x `NOTARX_USAGE_FLUSH_INTERVAL`. A hot artifact
 node per interval instead of one per download.
 
 Rollups replace the 30-day scan. New table
-`repository_request_rollup(repository_id UUID, bucket_start TIMESTAMPTZ, requests BIGINT, denied BIGINT, bytes BIGINT, PRIMARY KEY (repository_id, bucket_start))`
-at hourly granularity, incremented by the same flush from the in-memory
+`repository_request_rollup(repository_id UUID, bucket_start TIMESTAMPTZ, outcome SMALLINT, requests BIGINT, bytes BIGINT, PRIMARY KEY (repository_id, bucket_start, outcome))`
+at hourly granularity (no per-minute rollup), where `outcome` is a small enum:
+`allowed` or a denial reason (`unauthenticated`, `forbidden`, `quota`,
+`quarantined`, `rate_limited`, `other`), so denied counts break down by reason at the cost of
+a few extra rows per bucket; incremented by the same flush from the in-memory
 aggregate (sync denials increment through the same aggregator, so counts are
 eventually consistent within seconds). `ListRepositoryRequestStatistics` and the
-overview read it (about 24 x 30 rows per repository). Rollup retention is 400 days.
+overview read it (at most 24 x 30 x outcomes rows per repository per month, and only outcomes that occurred have rows). Rollup retention is 400 days.
 Retention evidence that today depends on `artifact_usage_stats` (last download)
 lags by at most `NOTARX_USAGE_FLUSH_INTERVAL`.
 
@@ -240,7 +251,8 @@ keys point into them:**
 
 | Table | Partition key | Primary key | Default retention |
 | --- | --- | --- | --- |
-| `resolver_audit_log` | `occurred_at`, monthly | `(occurred_at, id)` | 90 d |
+| `resolver_audit_log` (read and async-class audit) | `occurred_at`, monthly | `(occurred_at, id)` | 90 d |
+| `security_audit_log` (sync-class audit) | `occurred_at`, monthly | `(occurred_at, id)` | 730 d (2 years; operators raise it for longer regimes) |
 | `domain_events` (ADR 0021) | `occurred_at`, monthly | `(occurred_at, seq)` | 14 d |
 | `webhook_events` | removed by ADR 0021 slice 1a | | |
 | `artifact_scan_history` (ADR 0030) | scan time, monthly, with a `DEFAULT` partition | `(partition key, id)` | 180 d |
@@ -249,7 +261,7 @@ keys point into them:**
 swept with the artifact. The final shape of `artifact_sbom` and `artifact_vulnerability` is
 owned by ADR 0030 section 2.
 
-`resolver_audit_log` indexes shrink from six to three: the primary key (serves
+`resolver_audit_log` and `security_audit_log` both get the same three indexes (`security_audit_log` is created in the same migration, so there is no data to move). `resolver_audit_log` indexes shrink from six to three: the primary key (serves
 `ORDER BY occurred_at DESC, id DESC` cursors, replacing `000049`, BRIN `000064` and
 `000073`), `(repository, occurred_at DESC)` and `(actor, occurred_at DESC)`; the
 `group_name` index (`000002`) is kept only if the group audit view needs it
@@ -264,7 +276,7 @@ construction, and the reconciler and re-emission paths insert with
 under `pg_advisory_xact_lock(hashtextextended($k,0))`, backed by a non-unique
 `(dedupe_key, occurred_at)` index per partition.
 
-**MySQL (ADR 0022).** Same tables, no partitions: `resolver_audit_log` and
+**MySQL (ADR 0022).** Same tables, no partitions: `resolver_audit_log`, `security_audit_log` and
 `domain_events` are plain InnoDB tables with `AUTO_INCREMENT` keys, and retention
 runs through the RetentionJanitor below as `DELETE ... WHERE id <= ? ORDER BY id LIMIT n`
 by primary-key range (never by an unindexed time scan), READ COMMITTED, with
@@ -280,7 +292,7 @@ and runs one table at a time per cluster under a `scheduled_tasks` lease. It is
 default-on. Keys: `NOTARX_RETENTION_PROFILE=standard|freetier` (the free-tier
 reference deployment of ADR 0017 sets `freetier`) and per-table overrides
 `NOTARX_RETENTION_<TABLE>=<duration>|off`. The `audit_retention_policy` row
-(`000049`) stays as the console-editable override of the audit entry; its baseline
+(`000049`) stays as the console-editable override of the `resolver_audit_log` entry (the `security_audit_log` entry is overridden only by `NOTARX_RETENTION_SECURITY_AUDIT_LOG`); its baseline
 default changes to `enabled=true, keep_days=90`, and the 1000-row cap on
 `audit_cleanup_jobs.batch_size` is lifted. Metrics:
 `notarx_retention_deleted_rows_total{table}` and `notarx_retention_lag_seconds{table}`.
@@ -290,6 +302,7 @@ default changes to `enabled=true, keep_days=90`, and the 1000-row cap on
 | Table | Standard | Free tier | Mechanism |
 | --- | --- | --- | --- |
 | `resolver_audit_log` | 90 d | 7 d | partition drop (MySQL: batched) |
+| `security_audit_log` | 730 d | 90 d | partition drop (MySQL: batched) |
 | `repository_request_rollup` | 400 d | 400 d | batched |
 | `domain_events` | 14 d | 3 d | partition drop (MySQL: batched) |
 | `artifact_scan_history` (ADR 0030) | 180 d | 30 d | partition drop (MySQL: batched) |
@@ -335,8 +348,11 @@ default 6h, per repository with jitter, in batches) recomputes usage with the
 existing aggregation query, corrects drift in one UPDATE and records
 `notarx_quota_drift_bytes`; an alert fires above 0.1 percent. `ListRepositoryCapacityRecords`
 and quota alert evaluation (`postgres_quota_evaluation.go`) read counters, so the
-overview is O(repositories). Required test: for every format that the dropped
-triggers covered, publish, replace, delete and re-publish through the store and
+overview is O(repositories). Quota is enforced for every hosted format, not only the four (Raw, Maven, OCI, Conan)
+that `000046` covered: every hosted format store, including the formats of ADRs
+0026 to 0028 (RPM, versioned Raw, Hugging Face where hosted), calls `capacity.Reserve` from day one; a
+format registry test fails when a hosted format has no counter coverage, so a new
+format cannot land unbounded. Required test: for every hosted format, publish, replace, delete and re-publish through the store and
 assert `counter == SUM` from the reconciler query, so an uncovered writer fails CI.
 
 ### 4. Typed keys and identifiers
@@ -414,7 +430,8 @@ quarantine state, and the verified-token result keyed by `sha256(token)` until
   user disabled, grant removed, group membership changed, policy disabled,
   quarantine) is effective on every node within `NOTARX_AUTHZ_CACHE_TTL`
   (default 5s, validated range 1s to 30s, or `0` which disables every cache for
-  regulated deployments at the cost of the per-request query load described in Context). It is the hard upper bound even when an invalidation is lost. The
+  regulated deployments at the cost of the per-request query load described in Context). 5s stays the default (a stated, bounded
+  latency, shortened in practice by `NOTIFY`); the documented regulated profile is `NOTARX_AUTHZ_CACHE_TTL=1s`, or `0` where no staleness is acceptable. It is the hard upper bound even when an invalidation is lost. The
   window is a property of the product, not an implementation detail: it is
   documented, shown in the console security settings and covered by the revocation
   test.
@@ -659,29 +676,32 @@ v0.1.0 land after the cut-over and before ADR 0015 slice 7 (re-squash).
    - [ ] lint passes with no allowlist after 4c; each format's e2e target passes
    - Depends on: slices 1, 2a, 2b, 3a-3d for 4c; slice 1 for 4a and 4b.
 5. **Partition manager and partitioned audit table.** Milestone: Foundation.
-   - Scope: `internal/partitions`, migration recreating `resolver_audit_log` partitioned (header comment: pre-tag, no data copy) with the three indexes and `repository_id`, default partition, `internal/repository/postgres_audit*.go` (dynamic filters, keyset), `ListAuditPage` index-backed, composition root start-up ordering, metrics, `docs/postgresql-capabilities.md`.
+   - Scope: `internal/partitions`, migration recreating `resolver_audit_log` partitioned (header comment: pre-tag, no data copy) with the three indexes and `repository_id`, creating `security_audit_log` with the same shape, default partition for both, merged keyset reads across the two tables, `internal/repository/postgres_audit*.go` (dynamic filters, keyset), `ListAuditPage` index-backed, composition root start-up ordering, metrics, `docs/postgresql-capabilities.md`.
    - [ ] manager creates N future partitions idempotently, drops expired ones, survives two concurrent nodes (lease test), moves default-partition rows
    - [ ] audit cursor and filter queries pass `make explain-check`-style assertions with partition pruning
-   - [ ] retention drop test: 13 monthly partitions, expiry drops only old ones
+   - [ ] retention drop test: 13 monthly partitions, expiry drops only old ones, on both audit tables
+   - [ ] audit list returns a merged, keyset-ordered page across both tables and filters by class
    - [ ] `make test`, `make lint`, `make integration-test`, `make openapi-check` (if filter parameters change)
    - Depends on: slice 1; ADR 0015 slice 4 (cut-over).
 6. **Asynchronous audit writer, usage aggregation and rollups.** Milestone: Foundation.
-   - Scope: `internal/auditwriter`, `AuditRecord.Durability()`, migration `repository_request_rollup` and `artifact_usage_stats` re-key, `postgres_artifact_usage.go`, `ListRepositoryRequestStatistics`, config keys of section 1, graceful-shutdown hook in `cmd`.
+   - Scope: `internal/auditwriter` (`sync` class to `security_audit_log`, `async` class to `resolver_audit_log`), `AuditRecord.Durability()`, migration `repository_request_rollup` (with the `outcome` enum) and `artifact_usage_stats` re-key, `postgres_artifact_usage.go`, `ListRepositoryRequestStatistics`, config keys of section 1, graceful-shutdown hook in `cmd`.
    - [ ] race tests (`make race`) for writer, full-buffer drop with metric, never blocks the request path
    - [ ] mutation audit failure fails the mutation; denial semaphore exhaustion drops with metric unless `NOTARX_AUDIT_DENIAL_MODE=sync`
    - [ ] shutdown flush test; crash-loss bound test; `sync` class never dropped
    - [ ] 1k concurrent downloads of one artifact produce at most one usage UPDATE per interval per node
-   - [ ] statistics read from rollups; overview no longer scans audit
+   - [ ] statistics read from rollups, with denied counts per reason; overview no longer scans audit
+   - [ ] each record lands in the table of its durability class (test per class)
    - Depends on: slice 5.
 7. **RetentionJanitor and default retention.** Milestone: Foundation.
    - Scope: `internal/retention`, scheduled-task lease, per-table registry per the table in section 2, baseline default for `audit_retention_policy`, lift the 1000 cap, `NOTARX_RETENTION_*` config, docs.
    - [ ] each registry entry has a test deleting only terminal, expired rows in throttled batches and honouring `FOR UPDATE SKIP LOCKED`
-   - [ ] free-tier profile values asserted
+   - [ ] free-tier profile values asserted (including `security_audit_log` 730 d standard and 90 d free tier, independent of `resolver_audit_log`)
    - [ ] metrics and one-runner-per-table lease test
    - Depends on: slice 5; ADR 0017 slice 6.
 8. **Incremental quota counters.** Milestone: Foundation.
    - Scope: migration for `repository_usage_counters`, drop of the capacity triggers and functions, `internal/capacity` (`Reserve`, reconciler), all format stores, `postgres_capacity.go`, `postgres_quota_evaluation.go`.
-   - [ ] per-format equality test (publish, replace, delete, re-publish) against the reconciler query
+   - [ ] the slice starts with an inventory of every hosted format and its quota coverage; every hosted format store calls `Reserve` and has the per-format equality test (publish, replace, delete, re-publish) against the reconciler query, and the format registry test fails for a hosted format without coverage
+   - [ ] formats added later by ADRs 0026 to 0028 call `Reserve` in their own slices (their acceptance criteria cite this test)
    - [ ] concurrent publishes at the quota edge reject exactly the overflow; 1M-row repository publish is O(1) (plan assertion)
    - [ ] ADR 0022 slice 7 `AssertRepositoryCapacity` is superseded by `Reserve`
    - Depends on: slices 2a, 2b, 3a-3d, 4a-4c (every store that writes capacity-bearing rows).
@@ -704,7 +724,8 @@ v0.1.0 land after the cut-over and before ADR 0015 slice 7 (re-squash).
 12. **Read caches and key-usage throttling.** Milestone: Data scale.
     - Scope: `internal/readcache`, invalidation via `NOTIFY` and `cache_epochs` poll, repository, group, grant, repository and group visibility (the access decision of ADR 0029, invalidated by `repository.visibility_changed` and the scope epoch), principal, quarantine caches, `last_used_at` batching, config keys of section 6.
     - [ ] revocation test: key revoked on node A is rejected on node B within `NOTARX_AUTHZ_CACHE_TTL` with NOTIFY dropped
-    - [ ] lost-NOTIFY and listener-reconnect tests (all caches flushed on reconnect); a load racing an eviction does not re-install stale data; `NOTARX_AUTHZ_CACHE_TTL=0` disables caching
+    - [ ] the revocation test also runs at `NOTARX_AUTHZ_CACHE_TTL=1s` (regulated profile) and `0`; the regulated profile is documented in the security settings page and the deployment guide
+   - [ ] lost-NOTIFY and listener-reconnect tests (all caches flushed on reconnect); a load racing an eviction does not re-install stale data; `NOTARX_AUTHZ_CACHE_TTL=0` disables caching
    - [ ] a bumped grants or policy version turns a cached entry into a miss
    - [ ] a visibility change (ADR 0029) is effective on every node within `NOTARX_AUTHZ_CACHE_TTL`, and the access-decision cache never serves a stale `public` after a repository or member group is made private
    - [ ] singleflight stampede test; negative cache at most 1s; max entries enforced
@@ -752,20 +773,11 @@ Findings of the three reviews that are not decided here, with the reason:
   tables, not a growth risk; classified per column in ADR 0022 slice 3.
 - **Archiving `artifact_promotions` and `artifact_intelligence` history.**
   Provenance is kept; revisit with slice 17 measurements.
-- **Splitting security audit from read audit into two tables.** See open
-  questions.
 - **Statement-level quota triggers** were rejected in considered design C.
 
-## Open questions
+## Resolved questions
 
-- Should raw read audit and security audit be split into two tables so security
-  events can be retained for years while read events keep 90 days? One partitioned
-  table with one retention is simpler; operators needing long security retention
-  currently raise the whole retention.
-- Is hourly rollup granularity enough for the console (per-minute graphs are not
-  provided today), and should denied counts break down by reason?
-- Which formats are quota-enforced today beyond Raw, Maven, OCI and Conan (the
-  `000046` set), and should quota extend to all formats now that enforcement is
-  O(1)? Slice 8 inventories it.
-- Is 5s the right default revocation window for regulated deployments? (`0`, no
-  cache, is supported; the question is only the default.)
+- **Q1 — Split raw read audit and security audit into two tables?** Decision: yes, `security_audit_log` (730 d default) and `resolver_audit_log` (90 d), created in the same pre-tag migration. Reads dominate volume while security events are small, and splitting is free before the baseline ships.
+- **Q2 — Is hourly rollup enough, and should denied be broken down by reason?** Decision: hourly only, with an `outcome` enum in the rollup key giving denied counts per reason; no per-minute rollup. The console shows no per-minute graphs and the enum adds only a few rows per bucket.
+- **Q3 — Which formats are quota-enforced, and should it extend to all?** Decision: all hosted formats, including the ADR 0026 to 0028 formats from day one, confirmed by the slice 8 inventory and a registry test. With an O(1) counter update the cost objection disappears and the guarantee becomes uniform.
+- **Q4 — Is 5s the right default revocation window?** Decision: keep 5s as the default and document a regulated profile of 1s or 0. The knob exists, `NOTIFY` shortens the window in practice, and compliance regimes ask for a stated bound, not zero.
