@@ -2,7 +2,8 @@ notarx
 Copyright (c) 2026 mlops.ca (Kharkevich Engineering Lab) and notarx contributors
 
 notarx is a hard fork of ccsert/artifact-gateway (https://github.com/ccsert/artifact-gateway),
-taken at upstream version 0.9.0. It is licensed under the MIT License; see LICENSE.
+taken at upstream version 0.9.0 plus later upstream work (exact commit in
+docs/upstream.md). It is licensed under the MIT License; see LICENSE.
 The upstream copyright notice, "Copyright (c) 2026 ccsert and Artifact Gateway
 contributors", is retained in LICENSE as the MIT License requires. Upstream
 history up to 0.9.0 is preserved in this repository.

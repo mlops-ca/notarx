@@ -31,7 +31,7 @@ migration baseline and auth model differ.
    names, prefixes) so no upstream identity is reintroduced.
 4. Keep the original author's `Co-authored-by:` line and add the trailer
    `Upstream: ccsert/artifact-gateway@<sha>`.
-5. Record the commit in the table below in the same pull request.
+5. Record the pick in the table below in the same pull request. Identify the notarx commit by subject, or fill in its SHA in a follow-up after the squash merge; for declined commits write "n/a" and the reason in Notes.
 6. Remove the temporary remote.
 
 Upstream security advisories are reviewed at each notarx minor release.

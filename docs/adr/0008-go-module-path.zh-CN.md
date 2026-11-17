@@ -2,7 +2,7 @@
 
 [English](0008-go-module-path.md) · [文档索引](../README.zh-CN.md)
 
-状态：已接受
+状态：已被 [ADR 0013](../adr/0013-notarx-fork-charter.md) 取代
 
 ## 背景
 
