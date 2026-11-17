@@ -2,7 +2,7 @@
 
 [Documentation index](../README.md)
 
-Status: proposed (2026-11-17)
+Status: accepted (2026-11-17)
 
 Supersedes: [ADR 0008](0008-go-module-path.md)
 
@@ -52,7 +52,13 @@ baseline, [0016](0016-native-architecture-builds.md) builds,
 [0019](0019-workload-identity-federation.md) workload identity,
 [0020](0020-notarx-oidc-issuer.md) issuer,
 [0021](0021-promotion-rules-and-repository-chains.md) promotion) build on the
-identity chosen here. This ADR owns identity, upstream relationship, branding,
+identity chosen here. See also the format and platform ADRs of the roadmap:
+[0022](0022-database-portability-mysql-heatwave.md) MySQL, [0023](0023-data-model-scalability.md) scale,
+[0024](0024-release-versioning-and-conventional-commits.md) releases, [0025](0025-distribution-channels.md) channels,
+[0026](0026-debian-and-rpm-repositories.md) APT and RPM, [0027](0027-hugging-face-repositories.md) Hugging Face,
+[0028](0028-generic-versioned-packages.md) versioned generic packages,
+[0029](0029-repository-visibility-public-private-feeds.md) public visibility and
+[0030](0030-sbom-generation-and-vulnerability-scanning.md) SBOM and scanning. This ADR owns identity, upstream relationship, branding,
 rename mechanics, the shared public-URL setting, the v0.1.0 release scope and the
 global slice ordering.
 
@@ -88,21 +94,23 @@ retained except attribution required by the licence.
 | Go module | `github.com/ccsert/artifact-gateway` | `github.com/mlops-ca/notarx` |
 | Server binary / `cmd/` dir | `gateway` / `cmd/gateway` | `notarx` / `cmd/notarx` |
 | CLI binary / `cmd/` dir | `agctl` / `cmd/agctl` | `notarxctl` / `cmd/notarxctl` |
-| Images | `ghcr.io/ccsert/artifact-gateway`, `artifact-gateway-console` | `ghcr.io/mlops-ca/notarx`, `ghcr.io/mlops-ca/notarx-console`; these are the only two published images |
-| Release archives | `artifact-gateway_<v>_<os>_<arch>` | `notarx_<v>_<os>_<arch>`, `notarxctl_<v>_<os>_<arch>` |
+| Images | `ghcr.io/ccsert/artifact-gateway`, `artifact-gateway-console` | `ghcr.io/mlops-ca/notarx`, `ghcr.io/mlops-ca/notarx-console`, `ghcr.io/mlops-ca/notarx-scanner` (ADR 0030, optional in every profile); these are the only three published images |
+| Release archives | `artifact-gateway_<v>_<os>_<arch>` | `notarx_<v>_<os>_<arch>`, `notarxctl_<v>_<os>_<arch>`, and `notarx-signer_<v>_<os>_<arch>` (ADR 0026; `cmd/notarx-signer`, new; a release archive, not an image; the `pkcs11` build tag is not in the default archive) |
+| Scanner | `cmd/reference-scanner`, `Dockerfile.scanner`, make target `reference-scanner-smoke`, volumes `gateway-scanner-sboms` and `gateway-trivy-cache` | `cmd/notarx-scanner`, `Dockerfile.notarx-scanner`, the smoke target renamed to match, volume `notarx-trivy-cache` (the SBOM volume goes away); ADR 0030 slice 1b |
 | Env prefix | `GATEWAY_` | `NOTARX_`, **no aliases, no fallback reads** |
 | Versions | `0.9.0` | `VERSION` carries the development value `0.0.0-dev`; the first stable tag is `v0.1.0` and versions are stamped at build time (ADR 0024); `CHANGELOG.md` restarts with a "forked from upstream 0.9.0 (commit <sha>)" preamble |
 | Buildinfo | `internal/buildinfo` | same package, new import path in `-X` flags |
 | CLI internals | `internal/agctl`, `.agents/skills/agctl` | `internal/notarxctl`, `.agents/skills/notarxctl` |
 | Metrics, ledger, metadata | `gateway_*` metric prefix, `artifact_gateway_*` tables, `artifact-gateway-sha256` metadata key | `notarx_*`, `notarx_*`, `notarx-sha256`; tables are renamed by ADR 0015, metrics and metadata keys by slice 6 |
 
-Only two images are published today (`ci.yml:253-255`, `release.yml:78-80`;
-`release.yml:36` requires exactly two `mainline-images` runs), and that does not
-change. There is no CLI image: `notarxctl` is distributed as release archives and
+Two images are published today (`ci.yml:253-255`, `release.yml:78-80`;
+`release.yml:36` requires exactly two `mainline-images` runs). ADR 0030 slice 1b adds a
+third and last one, `notarx-scanner`, and `release.yml` then requires three runs (ADR 0016 and 0024
+own the workflow change). There is no CLI image: `notarxctl` is distributed as release archives and
 through `go install github.com/mlops-ca/notarx/cmd/notarxctl@<version>`.
-`Dockerfile.agctl` and any apt-signer or scanner images are not published; adding
-one is a separate decision with its own ADR. Helper binaries (`cmd/healthcheck`,
-`cmd/reference-*`, `cmd/native-*-fixture`) keep their names; only their imports
+`Dockerfile.agctl` and the apt reference signer (an unpublished test fixture) are not published; adding
+another image is a separate decision with its own ADR. Helper binaries (`cmd/healthcheck`,
+`cmd/reference-*` other than the scanner, `cmd/native-*-fixture`) keep their names; only their imports
 change.
 
 A grep gate enforces the rename permanently: `scripts/identity-check.sh` fails
@@ -110,7 +118,11 @@ A grep gate enforces the rename permanently: `scripts/identity-check.sh` fails
 `agctl` or the `gateway_` metric prefix appear in tracked files. The allow-list
 is exactly: `LICENSE`, `NOTICE`, `docs/upstream.md`, `CHANGELOG*`, `docs/adr/**`
 (ADRs quote history and old names, including ADR 0007's filename), and
-`*.zh-CN.md` (legacy twins, not a gate per ADR 0014). The gate is introduced
+`*.zh-CN.md` (legacy twins, not a gate per ADR 0014). The wire header spellings `X-Artifact-Signer-*`
+and `X-Artifact-*` of the signer contract (`api/openapi/protocols/signer.yaml`, `internal/signing`,
+`internal/refaptsigner`; ADR 0026) are protocol names, not identity strings, and are not flagged by
+the patterns above. ADR 0030 slice 1a extends the gate to fail on `aquasec/trivy:` references without
+`@sha256:`. The gate is introduced
 last (slice 9), after every rewrite it checks has landed.
 
 ### Relationship with upstream
@@ -186,6 +198,14 @@ the cross-ADR settings below; the others are defined by the ADR that introduces 
 | `NOTARX_INSTANCE_ID` | Renamed from `GATEWAY_INSTANCE_ID` (`internal/config/config.go:172`). | ADR 0017, ADR 0020 |
 | `NOTARX_SETTINGS_ENCRYPTION_KEY` | Renamed from `GATEWAY_SETTINGS_ENCRYPTION_KEY`; read through `internal/secrets` only. Key-ring support is owned by ADR 0018. | ADR 0018, ADR 0020 |
 | `NOTARX_EMAIL_DEFAULT_LOCALE` | Default locale tag for new email targets (`en-CA`, `fr-CA` or `zh-CN`; default `en-CA`). Defined by ADR 0014 slice 7; registered here so the table stays the one list of cross-ADR keys. | ADR 0014 |
+| `NOTARX_TRUSTED_PROXIES`, `NOTARX_CLIENT_IP_HEADER` | Trusted reverse-proxy CIDRs and the header carrying the client IP; one resolution of the client address for rate limiting and audit. Defined by ADR 0029 slice 6. | ADR 0029, ADR 0019 (IP in audit rows) |
+| `NOTARX_APT_SIGNER_*` (renamed from `GATEWAY_APT_SIGNER_*`), `NOTARX_RPM_SIGNER_*`, `NOTARX_SIGNER_*`, `NOTARX_RPM_*` | Signer client and `notarx-signer` settings and RPM format settings. | ADR 0026 |
+| `NOTARX_HF_*` | Hugging Face format settings. | ADR 0027 |
+| `NOTARX_SCANNER_*` (renamed from `GATEWAY_SCANNER_*`), `NOTARX_RESCAN_*` | Scanner, Trivy database mirror and re-scan settings. | ADR 0030 |
+
+Metric names registered by later ADRs keep the `notarx_` prefix: ADR 0029 adds
+`notarx_ratelimited_total`, `notarx_anonymous_egress_bytes_total`, `notarx_anonymous_inflight`,
+`notarx_cdn_purge_pending` and `notarx_cdn_purge_failures_total`.
 
 No other ADR may introduce a second public-URL key (`NOTARX_EXTERNAL_URL`,
 `NOTARX_PUBLIC_BASE_URL`) or a second encryption key. There is no `NOTARX_ENV`.
@@ -197,8 +217,9 @@ JWKS, SAML, SCIM, token exchange) are specified under `api/openapi/protocols/`.
 ### Release scope and global ordering
 
 **v0.1.0 is the foundation release: ADRs 0013, 0014, 0015, 0016 and 0017, plus the
-schema-shape slices of ADR 0023 (data-model scalability).** ADRs
-0018-0021 ship in 0.2.x and later as additive numbered migrations (`000002+`, per
+schema-shape slices of ADR 0023 (data-model scalability) and ADR 0029 slices 1-4 and 14 (visibility
+enum replacing `anonymous_read`, `internal/access` choke point in three waves, group invariants).** ADRs
+0018-0022 and 0026-0030 ship in 0.2.x and later as additive numbered migrations (`000002+`, per
 ADR 0015). Other ADRs depend on "ADR 0015 slice <cut-over>", never on ADR 0015 as a
 whole. `release.yml` is owned by ADR 0024 (orchestration) and its reusable build workflows by
 ADR 0016; slices in this ADR that touch it depend on those slices instead of editing it independently.
@@ -212,6 +233,7 @@ ADR 0016; slices in this ADR that touch it depend on those slices instead of edi
 | 5 | ADR 0013 slices 9-10 | identity gate and development version (`0.0.0-dev`) with stamping; both depend on ADR 0016 slice 3 so the workflows are already renamed |
 | 5a | ADR 0024 slices 1-8 and ADR 0025 | milestone Foundation, before the first release: commit policy, stamping, plan script, nightly and stable pipeline, governance; ADR 0024 slices 4-5 follow ADR 0016 slices 3-4; ADR 0024 slice 2 replaces ADR 0013 slice 10 |
 | 5b | ADR 0023 slices 1-10 (milestone Foundation) | schema-shape and write-path work (typed keys, partitioned audit, async audit writer, RetentionJanitor, quota counters, index hygiene, payload shape) lands as numbered migrations after the cut-over and before the re-squash, so it is folded into the final baseline at no upgrade cost; ADR 0023 slices 1-4 may start right after step 2, slices 5-10 after step 4 |
+| 5c | ADR 0029 slices 1-4 and 14 (milestone Foundation) | visibility enum (replaces `anonymous_read`), `internal/access` choke point in three waves (slice 14 is the browse, search and lint wave), group invariants; land after the ADR 0015 cut-over and before the re-squash (ADR 0015 slice 7), which depends on them; slice 1 needs ADR 0023 slice 1 |
 | 6 | ADR 0015 re-squash (slice 7), then the manual stable dispatch of ADR 0024 slice 9 creates `v0.1.0` | fresh baseline from the same generator, equivalence proof re-run |
 | 6b | ADR 0023 slices 11-15 and 17 (milestone Data scale) | runs immediately after the `v0.1.0` tag and before any of ADRs 0018-0022: externalised payloads, read caches (slice 12), queue claiming, keyset and catalogue search, load harness. Slice 12 gates the cache consumers of ADR 0018 slice 3 and ADR 0019 slice 4 (hard dependency, no local-map fallback); slice 17 may start as soon as slice 9 is merged and gates slice 15; slices 11 to 14 are independent of ADRs 0018-0022 and may run in parallel with them once slice 12 has merged |
 | 7 | ADR 0019 slice 1 | `internal/jose` |
@@ -220,9 +242,22 @@ ADR 0016; slices in this ADR that touch it depend on those slices instead of edi
 | 10 | ADR 0020 | slice 1 depends on ADR 0019 slice 1 and the ADR 0018 key-ring; slice 9 (two-instance e2e) trails ADR 0021 slice 8 |
 | 11 | ADR 0021 | owns the peer client for notarx-to-notarx push |
 | 12 | ADR 0022 | MySQL 8.4 (HeatWave) backend, milestone MySQL HeatWave; ADR 0023 slice 16 (pool sizing and lease rows) follows ADR 0022 slice 6; parallel to ADRs 0018-0021; depends on ADR 0015 slice 4 (cut-over) and ADR 0017 slice 1; its baseline slice waits for ADR 0015 slice 7 (re-squash) |
+| 13 | ADR 0028 (milestone Formats) | after `v0.1.0`; generic versioned packages on Raw; slices 1-5, 7 and 8 need only ADR 0015 slice 4 and ADR 0023 slice 1; slice 6 needs ADR 0021 slices 1b and 2b, slice 12 (rule matching) needs ADR 0021 slice 3a; slice 9 needs ADR 0021 slices 7b and 8; slice 11 (anonymous reads through public groups) is milestone Public feeds and needs ADR 0029 slices 2, 5, 7 and 14 |
+| 14 | ADR 0027 (milestone Formats) | after `v0.1.0`; Hugging Face repositories; needs ADR 0023 usage-counter slices; the workload-JWT case of slice 6 is gated on ADR 0019 slice 4; slice 12 needs ADR 0021 |
+| 15 | ADR 0026 slices 1-14 and 17-21 (milestone Formats) | after `v0.1.0`; signing package and `notarx-signer` (1-3), APT metadata and retention (4-5; slice 5 needs ADR 0023 slice 7), APT GA (6, 17 and 18; needs ADR 0029 slices 2 and 3, which are within the Foundation set, and ADR 0021 slices 2b and 7b; it keeps only the `format.Scanner` hook and does not depend on ADR 0030), RPM (7-13, 19-21) and the conformance matrix (14); slice 3 needs ADR 0025 slice 4 |
+| 16 | ADR 0029 slices 5-12 (milestone Public feeds; slice 13, the optional Trivy database feed, is Supply-chain security) | public catalog, rate limiting, cache headers, CDN purge, anonymous audit, presigned redirect, promotion to public, console and docs; after ADR 0023 slices 6 and 14 and ADR 0021 slices 1a, 3a and 5 |
+| 17 | ADR 0026 slices 15, 16 and 22 (milestone Public feeds) | dogfooding: notarx publishes its own deb and rpm packages to public feeds on the dedicated instance `feeds.mlops.ca`, nightly first and stable after the ADR 0026 promotion criteria; needs ADR 0026 slices 3, 6, 9 and 14, ADR 0029 slices 1-7 and 14 (public visibility, catalog, rate limit, cache headers), ADR 0019 slices 2-5 (GitHub issuer), ADR 0025 slices 6 and 8 and ADR 0024 slice 4; `packages.mlops.ca` (ADR 0025) stays the bootstrap and fallback source |
+| 18 | ADR 0030 (milestone Supply-chain security) | `notarx-scanner` image, SBOM and findings model, Trivy database mirror through the OCI proxy, re-scan, VEX, policy automation; the `.deb` and `.rpm` scanning adapters (slices 9a and 9b) depend on ADR 0026, never the reverse; slice 11 (ML-BOM) depends on ADR 0027; slice 6 needs ADR 0021 slice 1a and slice 8 the ADR 0021 evaluator |
 
 ADR 0013 slices that would edit `release.yml` do not do so; the image and archive
 names there change inside ADR 0016 slice 3.
+
+Follow-ups outside this change (ADRs 0006 and 0011 are not edited here): ADR 0006 or its successor defines
+`promote:public` as a per-repository grant capability held by the global admin, and the semantics of the
+`authenticated` visibility tier (any non-anonymous identity, including ADR 0019 workload tokens; never
+grants write); ADR 0011 gets a note that format modules supply `CacheClass(request)` and
+`PublicPathPrefixes(repo)` and own no access decisions (ADR 0029); `docs/artifact-scanner-contract.md`
+moves to schema v2 in ADR 0030 slice 2b.
 
 ### Rename mechanics and order
 

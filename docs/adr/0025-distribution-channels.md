@@ -2,7 +2,9 @@
 
 [Documentation index](../README.md)
 
-Status: proposed (date 2026-11-17)
+Status: accepted (2026-11-17)
+
+See also: [ADR 0026](0026-debian-and-rpm-repositories.md), [ADR 0029](0029-repository-visibility-public-private-feeds.md), [ADR 0030](0030-sbom-generation-and-vulnerability-scanning.md).
 
 ## Context
 
@@ -71,7 +73,9 @@ defines what `build` and `publish` produce and where they send it. ADR 0024 slic
    sync discipline; no vendor quota and no server to keep alive.
 4. **Dogfood: host the repositories in notarx itself.** Attractive soak test, but
    there is no RPM support, the APT Hosted preview gates are open, and installing
-   notarx from a notarx that is down is circular.
+   notarx from a notarx that is down is circular. Revisited by ADR 0026, which adds RPM
+   Hosted and APT GA and lets notarx publish its own packages on a dedicated instance
+   while R2 stays the bootstrap source.
 5. **Source-build services (Launchpad PPA, COPR, OBS).** Rejected: builds are
    offline and need vendored Go 1.26 sources, and the shipped binary would not be the
    binary the native test lanes exercised.
@@ -79,19 +83,23 @@ defines what `build` and `publish` produce and where they send it. ADR 0024 slic
 ## Decision
 
 Option 3 for apt and yum, with option 1 as the canonical artifact store and option 2
-as a documented fallback mirror. Option 4 is limited to a later nightly suite.
+as a documented fallback mirror. Option 4 is realised as a second, equal-trust source: ADR 0026
+Part D publishes the same packages to public notarx feeds at `feeds.mlops.ca` (nightly first,
+stable after the ADR 0026 promotion criteria; Milestone Public feeds, requiring ADR 0029 public
+visibility), and `packages.mlops.ca` on R2 remains the bootstrap and fallback source.
 
 ### Channel matrix
 
 | Channel | Artifact | Where | Stable | Nightly |
 |---|---|---|---|---|
-| Images | `ghcr.io/mlops-ca/notarx`, `notarx-console` (multi-arch index; ADR 0016) | GHCR | tags `<version>`, `<major.minor>`, `latest` | tags `nightly`, `<version>-nightly.<N>` (retained per ADR 0024) |
-| Archives | `notarx`, `notarxctl` tar.gz (zip not needed: Windows is out per ADR 0016) | GitHub Release | yes | GitHub pre-release |
+| Images | `ghcr.io/mlops-ca/notarx`, `notarx-console`, `notarx-scanner` (optional, ADR 0030; multi-arch index; ADR 0016), all signed and attested and all covered by the release gate | GHCR | tags `<version>`, `<major.minor>`, `latest` | tags `nightly`, `<version>-nightly.<N>` (retained per ADR 0024) |
+| Archives | `notarx`, `notarxctl`, `notarx-signer` (ADR 0026; no `pkcs11` build tag in the default archive) tar.gz (zip not needed: Windows is out per ADR 0016) | GitHub Release | yes | GitHub pre-release |
 | Integrity | one `SHA256SUMS` over every asset, plus a GitHub attestation per file (`actions/attest`; `actions/attest-build-provenance` is a wrapper over it) | GitHub Release | yes | yes |
 | Compose bundle | `notarx-compose-<version>.tar.gz`, image references pinned by the digests of that run's own build | GitHub Release | yes | no |
 | Native packages | `notarx`, `notarx-console`, `notarxctl` as `.deb` and `.rpm` | GitHub Release and apt/yum repos | `stable` suite | `nightly` suite |
 | apt / yum repos | signed static repositories | `https://packages.mlops.ca` (R2) | `stable` | `nightly` |
 | Homebrew | `mlops-ca/homebrew-tap`, `Formula/notarxctl.rb` | tap repo | yes | no |
+| notarx feeds | the same deb and rpm packages in notarx-hosted public repositories, ADR 0026 Part D | `https://feeds.mlops.ca` | after the ADR 0026 promotion criteria | `nightly` suite and `notarx-nightly` |
 | Helm chart (OCI) | `oci://ghcr.io/mlops-ca/charts/notarx` | GHCR | Backlog | Backlog |
 | cosign signatures | keyless signature on the image index digest | GHCR | Backlog | Backlog |
 
@@ -159,7 +167,7 @@ path on the Go runner (Backlog slice 12).
 `notarx-compose-<version>.tar.gz`: `compose.yml`, `Caddyfile`, `.env.example`,
 `migrations/`, `run-migrations.sh`, cloud-init template and a README. Image
 references are `ghcr.io/mlops-ca/notarx@sha256:<digest>` resolved from the
-multi-arch index built by the stable run, so the bundle is reproducible and a tag move
+multi-arch index built by the stable run (the optional `notarx-scanner` image of ADR 0030 is pinned the same way), so the bundle is reproducible and a tag move
 cannot change a deployed stack. The Always Free A1 runbook installs from this bundle
 (compose supplies PostgreSQL, the `migrate` job, Caddy and the console image, which
 is why the console question does not arise there). The `.deb` path serves hosts that
@@ -215,9 +223,13 @@ newest 14 nightly releases, so the inputs for regeneration always exist. `stable
 ### Trust model and signing
 
 - One OpenPGP key `notarx packages <packages@mlops.ca>`, **distinct from the
-  Oracle-hosted APT signer** used by notarx's own APT format. RSA 4096 primary
+  reference APT signer fixture key and from customer signers**. RSA 4096 primary
   (certify only, kept offline on hardware token plus an offline backup) with one
-  RSA 4096 signing subkey valid two years. RSA, not Ed25519, because EL8-era `rpm`
+  RSA 4096 signing subkey valid two years (S1, in the `packages-signing` environment). The
+  same certificate carries a second RSA 4096 signing subkey S2 held in a KMS behind
+  `notarx-signer` for the notarx-hosted feeds (ADR 0026 Part D); the primary stays offline,
+  the two subkeys are never in the same place, and `gpg.key` publishes both, so clients switch
+  between R2 and the feeds without a key change. RSA, not Ed25519, because EL8-era `rpm`
   and `gnupg` cannot verify EdDSA. A revocation certificate is generated at creation
   and stored offline separately.
 - The armored subkey (never the primary) is stored as an Actions secret scoped to the
@@ -293,6 +305,7 @@ block that runs the binary's version command.
 | `plan` | computes the package version strings (`0.2.0-1`, `0.2.0~nightly.N-1`, `0.2.0-0.nightly.N`) and the channel (`nightly` or `stable`) from the plan's `version`; `release-version-check` stays the single version gate |
 | `build` | native matrix legs run nfpm after the archive with the stamped version; uploads packages and the bundle inputs; attests every file |
 | `publish` (nightly) | attaches packages, tarballs, `SHA256SUMS` to the GitHub pre-release; runs `sign-repo` and `sync-repo` for the `nightly` suites |
+| `publish-feeds`, `verify-feeds` (both channels, after `publish`) | owned by ADR 0026 slices 15, 16 and 22 (`verify-feeds` is slice 22): publish the same packages to `feeds.mlops.ca` and compare bytes with R2 |
 | `publish` (stable) | attaches the stable run's packages, tarballs, `SHA256SUMS` to the GitHub Release; runs `sign-repo` and `sync-repo` for `stable`; renders the compose bundle pinned to that run's image digests; updates the Homebrew tap |
 
 Stable packages, archives, images, the Homebrew formula and `notarxctl version` all
@@ -331,7 +344,9 @@ of Class A operations (4.50 USD per million).
 
 ### Fallback
 
-If R2 or the custom domain is unavailable for an extended period, the same generated
+The notarx feeds (`feeds.mlops.ca`, ADR 0026) are a second equal-trust source signed by the
+same certificate (subkey S2); R2 remains the bootstrap source and the fallback, and the install
+docs list R2 first. If R2 or the custom domain is unavailable for an extended period, the same generated
 trees are mirrored to Cloudsmith OSS (documented, manual until Backlog slice 11) and
 the docs list a second URL. Release assets always allow `dpkg -i` / `rpm -i`.
 
@@ -358,8 +373,8 @@ the docs list a second URL. Release assets always allow `dpkg -i` / `rpm -i`.
   byte-identical to the nightly's (ADR 0024 rejects digest promotion for that reason).
 - A second source of release outputs (`packaging/`) must stay in step with the
   archive builder; `make package-check` guards the contents list.
-- notarx remains absent from its own distribution path until RPM support exists
-  (an opportunity: an `rpm` hosted format would let notarx host `nightly` itself).
+- notarx joins its own distribution path through ADR 0026 (RPM Hosted, APT GA, the
+  `feeds.mlops.ca` instance); until that ships, R2 is the only package source.
 
 ## Implementation slices
 
@@ -412,6 +427,8 @@ docs-check`, and `make architecture-check` when Go packages change. Slices touch
      documented; fingerprint recorded in `SECURITY.md`.
    - [ ] Environments `packages-signing` and `packages-publish` exist with required
      reviewers and tag restrictions (checked by the script).
+   - [ ] The ceremony documents certifying a second signing subkey (S2, held in a KMS for
+     ADR 0026) with the primary staying offline, and `gpg.key` publication of all subkeys.
    - [ ] A revocation and subkey-rotation drill ran on the staging key and the
      result is linked in the PR.
    - [ ] `make docs-check` passes.
@@ -490,11 +507,13 @@ docs-check`, and `make architecture-check` when Go packages change. Slices touch
       semantics, tested with the shared vectors of `migration-runner-check.sh`) with the same
       name and flags; the `psql` recommendation is removed once ADR 0022's open question 2 unifies PostgreSQL on the Go runner.
     Dependencies: slice 1; ADR 0022 slice 2.
-13. **notarx-hosted `nightly` apt suite and RPM format.**
-    Milestone: Backlog.
-    - [ ] Nightly suite served by the OCI instance mirrors R2 content; R2 stays the
-      fallback. An RPM hosted format (yum metadata) is scoped in its own ADR.
-    Dependencies: slice 6; promotion of APT Hosted out of preview.
+13. **notarx-hosted nightly and stable feeds (tracking slice).**
+    Milestone: Public feeds.
+    - [ ] The RPM hosted format is delivered by ADR 0026 slices 7 to 14 and 19 to 21 (not here).
+    - [ ] The nightly suite served by the notarx instance `feeds.mlops.ca` mirrors R2 content
+      (ADR 0026 slice 15) and stable follows after the ADR 0026 promotion criteria (slice 16; `verify-feeds` is slice 22);
+      R2 stays the bootstrap and fallback source, with the same certificate and a separate signing subkey.
+    Dependencies: slice 6; ADR 0026 slices 6, 15, 16 and 22 (APT GA, feeds instance, stable suite, `verify-feeds`).
 
 14. **`notarx-archive-keyring` package.**
     Milestone: Backlog.

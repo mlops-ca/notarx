@@ -2,7 +2,9 @@
 
 [Documentation index](../README.md)
 
-Status: proposed (date 2026-11-17)
+Status: accepted (2026-11-17)
+
+See also: [ADR 0026](0026-debian-and-rpm-repositories.md), [ADR 0027](0027-hugging-face-repositories.md), [ADR 0028](0028-generic-versioned-packages.md), [ADR 0029](0029-repository-visibility-public-private-feeds.md), [ADR 0030](0030-sbom-generation-and-vulnerability-scanning.md).
 
 ## Context
 
@@ -377,19 +379,19 @@ creates them.
    - [ ] `TEST_DATABASE_DRIVER` selects the engine; isolation checks accept a MySQL URL
    - [ ] CI job per dialect and architecture; MySQL job allowed to fail until slice 11 is merged, listed in the PR
    Depends on: slice 3, ADR 0016 slice 3.
-6. **Store group A: foundation.** Hosted repositories, groups, settings, anonymous policy, themes, users, service accounts, API keys, sessions, audit, authorization templates. `mysql_*.go` twins and `mysqlstore` registration.
+6. **Store group A: foundation.** Hosted repositories, groups, settings, repository visibility (ADR 0029: `visibility` is a short text column with a `CHECK` and a plain composite index on `(visibility, name)`, so no partial-index mapping is needed and the neutral catalogue records it as is; this replaces the anonymous policy), themes, users, service accounts, API keys, sessions, audit, authorization templates. `mysql_*.go` twins and `mysqlstore` registration.
    - [ ] every store contract in this group runs and passes on MySQL; ported `RETURNING` sites listed in the PR
    - [ ] last-active-admin and idempotency-key tests under concurrency
    Depends on: slices 4 and 5.
-7. **Store group B: raw, generic hosted, Maven, capacity.** Capacity uses `capacity.Reserve` from ADR 0023 slice 8 (no `AssertRepositoryCapacity`).
+7. **Store group B: raw, generic hosted, versioned generic packages, Maven, capacity.** The versioned-Raw stores of ADR 0028 (`native_raw_versions`, `native_raw_version_properties`) are included: `VARCHAR(128)` keys and a binary collation so the path range scan stays on the primary key. Capacity uses `capacity.Reserve` from ADR 0023 slice 8 (no `AssertRepositoryCapacity`).
    - [ ] raw contract (ADR 0010) passes; capacity quota test proves rejection under concurrent uploads
    Depends on: slice 6; ADR 0023 slice 8 (`capacity.Reserve`, pre-tag).
 8. **Store group C: npm, PyPI, Go, Cargo, Conan, OCI plus cache control store.**
    - [ ] per-format contract and e2e (`make native-*-e2e`) pass with `NOTARX_DATABASE_DRIVER=mysql`
    Depends on: slice 7.
-9. **Store group D: APT, Helm, NuGet, RubyGems (`rubygemspublication/mysqlstore`), lifecycle, replication, webhooks, e-mail and notification queues, `repositorypreset`, `nexussource`, `nexusmigration/mysqlstore`.** One PR per package if over 1.5k lines.
+9. **Store group D: APT, RPM (`rpmpublication`, ADR 0026 slice 7), Helm, NuGet, RubyGems (`rubygemspublication/mysqlstore`), lifecycle, replication, webhooks, e-mail and notification queues, `repositorypreset`, `nexussource`, `nexusmigration/mysqlstore`.** One PR per package if over 1.5k lines.
    - [ ] each package's contract and integration tests pass; queue claim fairness test
-   Depends on: slice 8. Stores added by ADRs 0018-0021 (identity providers, SCIM, issuer keys, promotion rules) join this list as they land; the start-up gate lists any missing port, so none can be forgotten.
+   Depends on: slice 8. Stores added by ADRs 0018-0021 (identity providers, SCIM, issuer keys, promotion rules) and by ADRs 0026-0030 (`rpmpublication`, Hugging Face `hf_*`, scan and SBOM tables, `cdn_purge_requests`) join this list as they land; the start-up gate lists any missing port, so none can be forgotten.
 10. **Backup, restore and performance.**
     Scope: `internal/backupops` dialect split, manifest `dialect` field, drills, performance smoke (`make performance-baseline` against both dialects: upload, resolve, list, substring search at 1k, 100k and 1M rows).
     - [ ] `make backup-drill` and `make restore-drill` pass on MySQL; cross-dialect restore refused

@@ -60,6 +60,11 @@
         { "id": "adr-data-model-scalability", "title": { "en": "ADR 0023: Data Model Scalability: Write Decoupling, Partitioning, Retention, Counters and Caches" }, "en": "docs/adr/0023-data-model-scalability.md" },
         { "id": "adr-release-versioning", "title": { "en": "ADR 0024: Release Versioning, Conventional Commits and Nightly-to-Stable Promotion" }, "en": "docs/adr/0024-release-versioning-and-conventional-commits.md" },
         { "id": "adr-distribution-channels", "title": { "en": "ADR 0025: Distribution Channels: Images, Archives, Native Packages and Signed Repositories" }, "en": "docs/adr/0025-distribution-channels.md" },
+        { "id": "adr-debian-rpm-repositories", "title": { "en": "ADR 0026: Debian and RPM Repositories" }, "en": "docs/adr/0026-debian-and-rpm-repositories.md" },
+        { "id": "adr-hugging-face-repositories", "title": { "en": "ADR 0027: Hugging Face Model and Dataset Repositories" }, "en": "docs/adr/0027-hugging-face-repositories.md" },
+        { "id": "adr-generic-versioned-packages", "title": { "en": "ADR 0028: Generic Versioned Packages on Raw" }, "en": "docs/adr/0028-generic-versioned-packages.md" },
+        { "id": "adr-repository-visibility", "title": { "en": "ADR 0029: Repository Visibility: Public and Private Feeds" }, "en": "docs/adr/0029-repository-visibility-public-private-feeds.md" },
+        { "id": "adr-sbom-vulnerability-scanning", "title": { "en": "ADR 0030: SBOM Generation and Vulnerability Scanning" }, "en": "docs/adr/0030-sbom-generation-and-vulnerability-scanning.md" },
         { "id": "brand-assets", "title": { "en": "notarx brand assets" }, "en": "docs/assets/brand/README.md" }
       ]
     },

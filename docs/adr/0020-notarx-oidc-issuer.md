@@ -2,7 +2,7 @@
 
 [Documentation index](../README.md)
 
-Status: proposed (2026-11-17)
+Status: accepted (2026-11-17)
 
 Management API paths in this ADR are relative to `/api/v2` (the `servers` entry of
 `api/openapi/management.yaml`). Root-mounted protocol endpoints (OIDC discovery

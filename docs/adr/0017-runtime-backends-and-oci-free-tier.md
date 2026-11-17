@@ -2,7 +2,9 @@
 
 [Documentation index](../README.md)
 
-Status: proposed (2026-11-17)
+Status: accepted (2026-11-17)
+
+See also: [ADR 0026](0026-debian-and-rpm-repositories.md), [ADR 0029](0029-repository-visibility-public-private-feeds.md), [ADR 0030](0030-sbom-generation-and-vulnerability-scanning.md).
 
 ## Context
 
@@ -174,6 +176,9 @@ these, SQLite/Oracle requests are declined.
 | `NOTARX_OBJECT_STORE_FS_ROOT` | required for `filesystem` | absolute directory |
 | `NOTARX_OBJECT_STORE_FS_FSYNC` | `true` | fsync file and parent directory on commit |
 
+The object store has an optional `Presigner` capability (S3-compatible drivers; absent on
+the filesystem driver, which then proxies); ADR 0029 slice 10 uses it for public OCI blobs.
+
 Code shape: `RustFSStore` becomes `S3Store`; a single `objectstore.Config` and
 `objectstore.Open(ctx, cfg) (Store, error)` build either driver. A shared
 `newS3Client(cfg)` is used by `S3Store` and by `internal/backupops/s3.go`, so
@@ -272,7 +277,10 @@ Always Free A1 allowance):
   and `caddy` for automatic TLS on a user-supplied DNS name; only 80/443 are
   exposed in the OCI security list. Resource limits: PostgreSQL 3 GB, notarx 3 GB,
   console 256 MB, leaving about 5 GB for the OS and page cache; the scanner
-  stays off. PostgreSQL starts with `shared_preload_libraries=pg_stat_statements`.
+  stays off by default and is an opt-in `scanner` compose profile (2 GiB, 1 CPU, on an internal network with no default route, ADR 0030 slice 1b, never the gateway network namespace;
+  re-scan limited to 20 per hour; ADR 0030 section 11). Its Trivy database mirror
+  runs in notarx's OCI proxy mode, which also keeps the free-tier instance clear of
+  ghcr.io rate limits. PostgreSQL starts with `shared_preload_libraries=pg_stat_statements`.
 - Data on one block volume (budget 200 GB total including the 50 GB minimum boot
   volume): `/srv/notarx/{postgres,objects,backups}`; the filesystem driver is the
   default, `NOTARX_OBJECT_STORE_FS_ROOT=/srv/notarx/objects`.
@@ -289,6 +297,12 @@ Always Free A1 allowance):
   security list, A1 instance, block volume and attachment, Object Storage bucket,
   IAM user, customer secret key (output marked sensitive), least-privilege policy.
   Applying it is optional; the runbook also lists the console steps.
+- Public feeds profile: ADR 0026 slice 15 adds a feeds profile of this directory for the
+  dedicated instance `feeds.mlops.ca` (public visibility per ADR 0029, nightly and stable
+  deb and rpm feeds), with OCI Vault as the signer backend behind `notarx-signer`
+  (ADR 0026 slice 3). Public egress is bounded by `NOTARX_PUBLIC_EGRESS_MONTHLY_BYTES`
+  (ADR 0029), set below the Oracle outbound allowance (10 TB per month as dated in
+  ADR 0029; the runbook restates and dates it).
 - Distribution: the runbook installs from the digest-pinned `notarx-compose-<version>.tar.gz`
   release asset rendered from this directory (ADR 0025 slice 3); the `.deb` packages
   of ADR 0025 are the alternative for hosts that already run PostgreSQL.

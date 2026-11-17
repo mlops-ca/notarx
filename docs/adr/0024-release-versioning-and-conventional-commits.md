@@ -2,7 +2,9 @@
 
 [Documentation index](../README.md)
 
-Status: proposed (date 2026-11-17)
+Status: accepted (2026-11-17)
+
+See also: [ADR 0026](0026-debian-and-rpm-repositories.md), [ADR 0030](0030-sbom-generation-and-vulnerability-scanning.md).
 
 ## Context
 
@@ -119,7 +121,7 @@ the version policy, commit policy and repository governance.
   `1.0.0` without any relabelling).
 - Milestones are themed, never numbered, because versions are computed:
   `Foundation`, `Data scale`, `Identity & federation`, `Promotion chains`,
-  `MySQL HeatWave`; unscheduled work has none. A milestone closes when its theme is
+  `MySQL HeatWave`, `Formats`, `Public feeds`, `Supply-chain security` and `Backlog`; unscheduled work has none. A milestone closes when its theme is
   complete. The stable release notes list the milestones whose last issue closed since
   the previous stable. ADRs refer to milestones by name.
 
@@ -133,7 +135,7 @@ the version policy, commit policy and repository governance.
   Scope is optional, may list several separated by commas, and must be one of the
   following, matched to the real tree (`internal/`, `cmd/`, `deploy/`, `console/`):
   - formats (`internal/protocol/*`, `internal/format/*`): `oci`, `maven`, `npm`, `pypi`,
-    `go`, `cargo`, `raw`, `conan`, `apt`, `nuget`, `helm`, `rubygems`;
+    `go`, `cargo`, `raw`, `conan`, `apt`, `rpm`, `huggingface`, `nuget`, `helm`, `rubygems`;
   - platform: `server` (`cmd/notarx`), `cli` (`internal/agctl`, `cmd/notarxctl`),
     `console`, `api`, `openapi`, `auth` (`internal/authorization`, `internal/upstreamauth`),
     `identity` (IdP, SCIM, workload federation, issuer: ADRs 0018-0020), `storage`
@@ -142,7 +144,8 @@ the version policy, commit policy and repository governance.
     `backup` (`internal/backupops`, `internal/backupmanifest`), `migration`
     (`internal/nexus*`, `internal/snapshotimport`), `notification`
     (`internal/emailnotification`, `internal/quotaalert`), `config`, `i18n`, `brand`,
-    `observability`, `deploy`;
+    `observability`, `deploy`, `signer` (`cmd/notarx-signer`, `internal/signer`, ADR 0026),
+    `scanner` (`cmd/notarx-scanner`, the Trivy pin and its image, ADR 0030);
   - meta: `deps`, `docs`, `ci`, `release`, `security`, `repo`.
 - The policy lives in one file, `.github/commit-policy.json` (types, releasing types,
   scopes). `scripts/commit-policy-check.mjs` (tested like the other `scripts/*.mjs`)
@@ -150,6 +153,8 @@ the version policy, commit policy and repository governance.
   `synchronize`; the release plan runs it over commit subjects on `main` as a
   warning. git-cliff ignores unconventional commits (`filter_unconventional = true`).
   Adding a scope is a one-line PR. No third-party action is needed.
+- A Trivy pin change is `build(scanner)` and requires a reviewer from `CODEOWNERS` (ADR 0030 slice 1a);
+  it is non-releasing on its own, like every `build`.
 - `fix(security)` and `fix(deps)` release a patch. Dependabot titles must match the policy
   through its `commit-message` configuration.
 
@@ -213,7 +218,10 @@ Stable (`workflow_dispatch` inputs `nightly_tag` default latest verified nightly
 2. `build` legs call ADR 0016's reusable workflows with `version`, `sha` and the tag list
    (`:nightly`, `:X.Y.Z-nightly.N`): images are built natively per architecture on
    `ubuntu-24.04` and `ubuntu-24.04-arm`, pushed by digest, merged by
-   `docker buildx imagetools create`, attested on the index digest; archives are built
+   `docker buildx imagetools create`, attested on the index digest (every published image: `notarx`,
+   `notarx-console` and, from ADR 0030 slice 1b, `notarx-scanner`; the release gate requires all
+   of them signed and attested, and `release-manifest.json` lists each index digest, including the
+   scanner image digest); archives are built
    natively on the four runner labels of ADR 0016, including darwin.
 3. `publish` (needs everything): generates notes with
    `git cliff <previous>..<sha> --tag <version> --strip all` over the range since the
@@ -224,6 +232,10 @@ Stable (`workflow_dispatch` inputs `nightly_tag` default latest verified nightly
    Because the tag appears last, a failed run leaves only untagged digests and the
    next night retries naturally.
 4. `prune` (below).
+5. Jobs owned by other ADRs run after `publish` and never alter the plan: ADR 0025 (channels) and
+   ADR 0026 slices 15 and 16, `publish-feeds` (uploads the deb and rpm packages to the public
+   notarx feeds, nightly first and stable after the ADR 0026 promotion criteria) followed by
+   `verify-feeds` (installs from the feeds and compares bytes with the R2 channel).
 
 ### Stable path: rebuild of the verified commit
 
@@ -345,7 +357,8 @@ trigger CI.
   no longer edits `release.yml` beyond calling reusable workflows until slice 4 below
   replaces it.
 - Slices assume ADR 0025 (distribution channels) consumes `release-manifest.json`;
-  it adds jobs after `publish` (both channels) and must not alter the plan.
+  it adds jobs after `publish` (both channels) and must not alter the plan. ADR 0026 slices 15 and
+  16 add `publish-feeds` and `verify-feeds` after `publish` in the same way.
 
 ## Implementation slices
 
@@ -355,6 +368,7 @@ trigger CI.
    `.github/dependabot.yml` commit-message prefixes, `CONTRIBUTING.md`, `Makefile`
    target `commit-policy-check` wired into `make preflight`.
    - [ ] tests cover valid, unknown type, unknown scope, multi-scope, `!` and footer breaking, empty subject
+   - [ ] the policy file already lists the scopes `rpm`, `huggingface`, `signer` and `scanner` (ADRs 0026, 0027, 0030)
    - [ ] a scope-coverage test fails if `cmd/*` or `internal/protocol/*` has no scope alias
    - [ ] `make lint`, `make docs-check`, `make test` pass
    Dependencies: ADR 0013 slice 7 (contribution rules text).
@@ -386,6 +400,8 @@ trigger CI.
    - [ ] a `workflow_dispatch` dry run in the PR shows plan output and the intended tags
    - [ ] a real nightly on a sandbox tag publishes a pre-release with SHA256SUMS, manifest and attestations; `gh attestation verify` accepts them
    - [ ] failed arm64 leg publishes no tag
+   - [ ] `release-manifest.json` `images` and the attestation check cover every image of the ADR 0016 matrix list (three once ADR 0030 slice 1b lands)
+   - [ ] job graph keeps an extension point after `publish` for `publish-feeds` and `verify-feeds` (ADR 0026) without changing `plan`
    - [ ] `make release-version-check`, `make docs-check` pass
    Dependencies: slices 2-3; ADR 0016 slices 3-4 (reusable workflows).
 5. **Stable release build and first-release gate.** Milestone: Foundation.
@@ -414,6 +430,7 @@ trigger CI.
    0.x rules, milestones convention, verification commands), docs index and
    `site-map.json`, creation of the themed milestones, liveness alert job.
    - [ ] script is idempotent and prints the effective rulesets
+   - [ ] the themed milestones created are exactly `Foundation`, `Data scale`, `Identity & federation`, `Promotion chains`, `MySQL HeatWave`, `Formats`, `Public feeds`, `Supply-chain security` and `Backlog`
    - [ ] `make docs-check` passes
    Dependencies: slice 4.
 9. **First stable release.** Milestone: Foundation.

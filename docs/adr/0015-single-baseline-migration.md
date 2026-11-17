@@ -2,7 +2,9 @@
 
 [Documentation index](../README.md)
 
-Status: proposed (2026-11-17)
+Status: accepted (2026-11-17)
+
+See also: [ADR 0029](0029-repository-visibility-public-private-feeds.md).
 
 ## Context
 
@@ -360,9 +362,11 @@ before the cut-over, to be recorded in the PR description).
      passes on both architectures; output attached to the PR.
    - [ ] `make test`, `make integration-test`, `make backup-drill`,
      `make restore-drill` pass on a fresh database.
+   - [ ] The generated baseline has the `visibility` column of ADR 0029 and no `anonymous_read` column or old policy-table name (grep gate over the baseline), so the generator never reintroduces it.
    - [ ] Ledger has one row; `make migration-check` passes.
    - Depends on: ADR 0015 slices 4 and 6, and ADR 0013 remaining slices plus
-     ADRs 0014, 0016 and 0017 and ADR 0023 slices 1-10 (all foundation work merged). It is the last
+     ADRs 0014, 0016 and 0017, ADR 0023 slices 1-10 and ADR 0029 slices 1-4 and 14 (visibility enum replacing
+     `anonymous_read`, `internal/access` choke point in three waves, group invariants; all foundation work merged). It is the last
      change before the `v0.1.0` tag.
 
 ## Open questions

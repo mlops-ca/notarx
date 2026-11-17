@@ -2,7 +2,12 @@
 
 [Documentation index](../README.md)
 
-Status: proposed (2026-11-17)
+Status: accepted (2026-11-17)
+
+See also: [ADR 0026](0026-debian-and-rpm-repositories.md) (APT GA, RPM), [ADR 0027](0027-hugging-face-repositories.md)
+(Hugging Face), [ADR 0028](0028-generic-versioned-packages.md) (versioned generic packages),
+[ADR 0029](0029-repository-visibility-public-private-feeds.md) (public visibility) and
+[ADR 0030](0030-sbom-generation-and-vulnerability-scanning.md) (SBOM and scanning).
 
 Management paths in this ADR are relative to `/api/v2` (the `servers` entry
 of `api/openapi/management.yaml`). Root-mounted protocol endpoints are
@@ -59,8 +64,9 @@ schedule and no remote target.
 - **Metadata available for matching.** Coordinates are format-defined
   immutable units (`format.Governance.ValidCoordinate`,
   `internal/format/capabilities.go`); OCI tags and npm dist-tags are
-  mutable refs. No generic artifact-property store exists (no migration
-  defines one).
+  mutable refs. No cross-format artifact-property store exists (no migration
+  defines one); ADR 0028 adds only a bounded per-version property map, frozen at seal,
+  for versioned Raw repositories.
 - **Permissions.** `ImportWrite` does not exist yet; this ADR introduces
   it as a new permission in the permission model.
 
@@ -122,7 +128,10 @@ Types: `artifact.published`, `artifact.scan.completed`,
 `artifact.promoted`, `promotion.pending_approval`,
 `promotion.approved`, `promotion.rejected`,
 `promotion.failed`, `replication.completed`,
-`replication.failed`. The Cargo-only names are dropped; `format` is
+`replication.failed`, and `repository.visibility_changed` (payload
+`{repositoryId, from, to, groups}`, emitted by ADR 0029 slice 8; its `cdn_purge_requests`
+row is inserted in the same transaction as the event). The payload of
+`artifact.scan.completed` is `{previous, current, newFindings}` (ADR 0030). The Cargo-only names are dropped; `format` is
 a payload field and every format emits the same set.
 
 `dedupe_key` is `type|repo|coordinate|digest|version` and makes
@@ -176,19 +185,23 @@ promotion_rules(id UUID PK, name UNIQUE, source_repository_id FK,
   updated_by, created_at, updated_at)
 ```
 
-`match`: `{coordinate: {glob|regex}, version: {semver range}?, refs: ["latest","v*"]?}`.
+`match`: `{coordinate: {glob|regex}, version: {semver range}?, refs: ["latest","v*"]?, properties: {key: glob}?}`.
 Glob `*` does not cross `/`, `**` does; regex is Go RE2 (linear
 time), anchored, at most 512 bytes, compiled at create time. The pattern is
 applied to the format's canonical coordinate after `ValidCoordinate`.
 `refs` uses an optional `format.Tagged` capability (OCI tag, npm
-dist-tag). Generic properties are out of scope until a property store exists
-(Open questions); rules never match on mutable data that could change after
+dist-tag). `properties` is valid only for versioned-generic sources (ADR 0028), where the
+properties are frozen at seal, so evaluation stays pinned; a cross-format property store
+remains out of scope (Open questions). A `version` semver range simply does not match a
+non-semver version string. Rules never match on mutable data that could change after
 the decision, so the evaluation always pins `(coordinate, digest)`.
 
 `conditions` (all must hold): `securityPolicy: pass` (evaluates the
 target's admission policy now, for early feedback; the authoritative
 evaluation runs again inside the promotion job at the point of publish, see
-Evaluator), `scan: {completed: true, maxSeverity: "medium"}`,
+Evaluator), `scan: {completed: true, maxSeverity: "medium"}` (read from `artifact_vulnerability` joined with
+`scanner_db_generation`; a result against a database older than `NOTARX_SCANNER_DATABASE_MAX_AGE`
+does not satisfy `completed: true`, ADR 0030),
 `minAge: "72h"` (since `artifact.published`), `notQuarantined`
 (always implied), `requireSignature/sbom/provenance` (reuses the policy
 evaluator inputs).
@@ -210,6 +223,9 @@ Authorisation of rule changes (confused-deputy guard):
   re-authorisation as the preview replication jobs). A revoked account parks
   the rule with state `authorization_lost` and emits
   `promotion.failed`.
+- A rule is also parked in state `paused` (reason `target_became_public`) when its target
+  repository becomes public after the rule was created, until an approver resumes it
+  (ADR 0029 slice 11).
 - Every rule edit increments `version`; it is recorded in the audit log
   with `updated_by`.
 
@@ -311,6 +327,15 @@ approvals. On the last approval the service re-evaluates conditions,
 quarantine and admission policy (state may have changed), then enqueues.
 Expired rows move to `expired` via the sweep.
 
+Public targets (ADR 0029 slice 11): promoting into a public repository needs the per-repository
+capability `promote:public`, a rule flag `publishing: bool`, and the evaluator forces
+`approval.required >= 1` at run time when the target is public, except for a `publishing` rule
+when `NOTARX_PROMOTE_PUBLIC_REQUIRE_APPROVAL=false`. `artifact_promotions` records
+`target_visibility` (payload field or column, set at request time). Remote push never sets
+visibility on the receiver.
+
+Promotion copies SBOM bodies (hash-verified), never scanner URLs (ADR 0030 slice 2c).
+
 ### Remote targets
 
 ```
@@ -402,11 +427,17 @@ capabilities in `internal/format/capabilities.go`:
 registry and returns `422 unsupported_format` for a format lacking the
 capability. All nine core formats (OCI, Maven, npm, PyPI, Go, Cargo, Raw,
 Conan, APT) are in scope for local rules; remote push lands in waves (Raw,
-OCI, Maven, npm first). **NuGet, Helm and RubyGems previews are out of scope
+OCI, Maven, npm first). Later formats join by registration through their own ADR slices, with
+no engine change: RPM as a tenth format (ADR 0026 slice 13: `PromotionPublisher`, `Exporter`,
+`Importer`; the importer coalesces into one target snapshot per `NOTARX_RPM_SNAPSHOT_COALESCE`
+window), Hugging Face (ADR 0027 slice 12: `Tagged`, `Governance`, `Importer`, preserving the
+upstream `commit_sha`; its digest is the sha256 of the canonical commit manifest) and versioned
+Raw (ADR 0028 slices 6 and 9: `Promotion`, `Exporter`, `Importer`, coordinate `name@version`). **NuGet, Helm and RubyGems previews are out of scope
 for this ADR**: their replication jobs and endpoints stay as they are, and
 they join rules by implementing the capabilities when they leave preview (a
 registration, no engine change). The APT preview gate stays until APT leaves
-preview.
+preview in ADR 0026 slices 6 and 18 (slice 18 removes `supportsAPTDistributionPreview`
+(`internal/app/repository_distribution_api.go`)).
 
 ### Batch and version sets
 
@@ -415,9 +446,9 @@ items (the preview batch limit) plus target. Admission is all-or-nothing:
 every item passes quarantine, policy and authorisation before any is queued;
 execution is per item and idempotent, and the batch state aggregates
 (`completed`, `partially_failed`). A rule may set
-`scope: "release"` with a format-defined grouping; until formats define
-a release grouping the rule engine promotes per coordinate, and batches are
-explicit.
+`scope: "release"` with a format-defined grouping; versioned Raw repositories define it as
+the version, identified by `(name@version, manifest_digest)` (ADR 0028); until other formats
+define a release grouping the rule engine promotes per coordinate, and batches are explicit.
 
 ### Console and CLI
 
@@ -440,6 +471,7 @@ matched artifacts with a per-condition verdict and never enqueues.
 `NOTARX_PROMOTION_MAX_HOPS` (8), `NOTARX_PROMOTION_APPROVAL_TTL`
 (168h), `NOTARX_PROMOTION_SCHEDULE_MIN_INTERVAL` (5m),
 `NOTARX_EVENTS_RETENTION` (14d),
+`NOTARX_PROMOTE_PUBLIC_REQUIRE_APPROVAL` (true; ADR 0029),
 `NOTARX_REMOTE_ALLOW_PRIVATE_NETWORKS` (false),
 `NOTARX_REMOTE_PUSH_MAX_ATTEMPTS` (8), `NOTARX_IMPORT_SESSION_TTL`
 (24h), `NOTARX_IMPORT_MAX_BLOB_BYTES` (10 GiB),
@@ -510,7 +542,7 @@ depend on ADR 0015 slice 4 (cut-over) and use numbered migrations.
    emission. Acceptance: [ ] `Emit` is transactional (rollback test shows
    no event/delivery); [ ] dedupe-key idempotency test with per-type
    `version`; [ ] re-scan re-emits; [ ] retention test; [ ] Cargo-specific
-   names removed; [ ] `make openapi-check`; [ ] partition and retention behaviour
+   names removed; [ ] event type enum also lists `repository.visibility_changed` (ADR 0029 slice 8) and the catalogue documents the `artifact.scan.completed` payload `{previous, current, newFindings}` (ADR 0030); [ ] `make openapi-check`; [ ] partition and retention behaviour
    per ADR 0023 (default partition empty, 14d drop). Depends on ADR 0015 slice 4
    and ADR 0023 slice 5 (partition manager).
 1b. **Published emission for Raw, OCI and Maven.** Scope: emit
@@ -537,7 +569,7 @@ depend on ADR 0015 slice 4 (cut-over) and use numbered migrations.
 3a. **Rules schema, matcher, API and dry-run.** Scope: `promotion_rules`,
    `internal/promotionrules`, `/promotion-rules`, dry-run, creator
    privilege check against the service account. Acceptance: [ ] glob/regex
-   table tests including ReDoS-length limits; [ ] confused-deputy refusal
+   table tests including ReDoS-length limits; [ ] `match.properties` accepted only for versioned-generic sources (ADR 0028), rejected with `422` otherwise, and `match.version` ranges do not match non-semver versions; [ ] confused-deputy refusal
    test; [ ] dry-run never enqueues. Depends on 2b.
 3b. **Chain graph and cycle check.** Scope: advisory-locked cycle check,
    `GET /repositories/{id}/chain`, hop cap. Acceptance: [ ] cycle and
@@ -552,7 +584,7 @@ depend on ADR 0015 slice 4 (cut-over) and use numbered migrations.
 4. **Conditions, waiting and schedules.** Scope: scan/minAge/signature
    conditions, re-pend on `artifact.scan.completed`, cron sweep job kind
    `promotion_sweep` and backfill. Acceptance: [ ] clean and dirty scan
-   fixtures with the reference scanner (`make reference-scanner-smoke`);
+   fixtures with the reference scanner (the scanner smoke target, renamed with `cmd/notarx-scanner` by ADR 0030 slice 1b); [ ] the `scan` condition reads through one reader port so ADR 0030 slice 8a can add the stale-database rule (a result older than `NOTARX_SCANNER_DATABASE_MAX_AGE` does not satisfy `completed: true`);
    [ ] minAge uses an injected clock; [ ] sweep bound test. Depends on 3c.
 5. **Approval workflow.** Scope: `pending_approval` states,
    approve/reject/cancel endpoints, distinct-approver rules, rule-version
@@ -594,7 +626,7 @@ depend on ADR 0015 slice 4 (cut-over) and use numbered migrations.
    Depends on 3c, 7b, 7c, ADR 0020 slice 4 (assertion minting) and ADR 0019
    slice 4.
 9. **Format waves for remote push.** Maven, npm, then PyPI, Go, Cargo, Conan,
-   APT; one PR per wave with `Exporter`/`Importer`. Acceptance per
+   APT; one PR per wave with `Exporter`/`Importer`. RPM, Hugging Face and versioned Raw are not waves of this slice: they register their own `Exporter`/`Importer` in ADR 0026 slice 13, ADR 0027 slice 12 and ADR 0028 slice 9. Acceptance per
    wave: [ ] round-trip digest equality test; [ ] native client install from
    the remote. Depends on 8.
 10a. **Console: rules and chain graph.** Scope: `console/` Promotions area,
@@ -619,12 +651,14 @@ depend on ADR 0015 slice 4 (cut-over) and use numbered migrations.
 
 ## Open questions
 
-- Should a generic artifact property store (key/value labels set by CI) be
+- Should a cross-format artifact property store (key/value labels set by CI) be
   added so rules can match on properties, or is the coordinate plus ref match
-  enough? Adding it later touches every format's publish API.
-- Which formats define a "release set" (for example all Maven files of one
+  enough? ADR 0028 adds a bounded per-version property map for versioned Raw only, so a
+  cross-format store is still deferred; adding it later touches every format's publish API.
+- Which other formats define a "release set" (for example all Maven files of one
   version, or an OCI index plus children) so `scope: release` is
-  meaningful, and who owns that definition per format?
+  meaningful, and who owns that definition per format? Answered for versioned generic Raw
+  by ADR 0028: the release set is the version, identified by `(name@version, manifest_digest)`.
 - Should the receiver accept sender evidence under a signature (for example a
   notarx-signed attestation) rather than the binary `trust_evidence`
   flag? Today evidence is unsigned.

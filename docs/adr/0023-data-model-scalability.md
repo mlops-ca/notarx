@@ -2,7 +2,9 @@
 
 [Documentation index](../README.md)
 
-Status: proposed (2026-11-17)
+Status: accepted (2026-11-17)
+
+See also: [ADR 0027](0027-hugging-face-repositories.md), [ADR 0029](0029-repository-visibility-public-private-feeds.md), [ADR 0030](0030-sbom-generation-and-vulnerability-scanning.md).
 
 ## Context
 
@@ -181,6 +183,12 @@ requires complete read audit (for example per-access logging obligations) set
 `NOTARX_AUDIT_READ_MODE=sync`, accepting one commit per request and the
 throughput ceiling that implies, and are told so in the capacity guidance.
 
+Anonymous traffic on public repositories (ADR 0029 slice 9) adds the audit fields `visibility`,
+`cache_disposition` and `rate_limited`, and samples anonymous `allow` records with
+`NOTARX_AUDIT_ANON_ALLOW_SAMPLE` (one in N written; counters stay exact) and
+`NOTARX_AUDIT_ANON_DENY_BURST` (cap on anonymous denials written per interval); sampled-out
+records increment a drop metric, in the same buffer and under the same overflow rules as above.
+
 Usage counters are aggregated before they reach the database. The writer keeps a
 map keyed by `(repository_id, format, resource)` holding count, bytes, last time and
 last actor, flushed every `NOTARX_USAGE_FLUSH_INTERVAL` (default 5s) in key order as
@@ -235,6 +243,11 @@ keys point into them:**
 | `resolver_audit_log` | `occurred_at`, monthly | `(occurred_at, id)` | 90 d |
 | `domain_events` (ADR 0021) | `occurred_at`, monthly | `(occurred_at, seq)` | 14 d |
 | `webhook_events` | removed by ADR 0021 slice 1a | | |
+| `artifact_scan_history` (ADR 0030) | scan time, monthly, with a `DEFAULT` partition | `(partition key, id)` | 180 d |
+
+`artifact_vulnerability_finding` (ADR 0030) is not partitioned: its rows are replaced per scan and
+swept with the artifact. The final shape of `artifact_sbom` and `artifact_vulnerability` is
+owned by ADR 0030 section 2.
 
 `resolver_audit_log` indexes shrink from six to three: the primary key (serves
 `ORDER BY occurred_at DESC, id DESC` cursors, replacing `000049`, BRIN `000064` and
@@ -279,6 +292,9 @@ default changes to `enabled=true, keep_days=90`, and the 1000-row cap on
 | `resolver_audit_log` | 90 d | 7 d | partition drop (MySQL: batched) |
 | `repository_request_rollup` | 400 d | 400 d | batched |
 | `domain_events` | 14 d | 3 d | partition drop (MySQL: batched) |
+| `artifact_scan_history` (ADR 0030) | 180 d | 30 d | partition drop (MySQL: batched) |
+| `cdn_purge_requests` (ADR 0029) | 7 d | 3 d | batched delete |
+| `hf_refs` (ADR 0027) | `expires_at` + keep (`NOTARX_RETENTION_HF_REFS`) | same | batched; `hf_commits` and `hf_files` are not append-only and are managed by the format's cache GC |
 | `webhook_deliveries` | succeeded 14 d, failed/dead 90 d | 3 d / 30 d | batched, terminal rows |
 | `lifecycle_jobs` | completed/cancelled 7 d, failed 30 d | 1 d / 7 d | batched, index `(completed_at) WHERE terminal` |
 | `promotion_evaluations` | terminal 7 d | 1 d | batched |
@@ -293,7 +309,7 @@ default changes to `enabled=true, keep_days=90`, and the 1000-row cap on
 | import sessions (ADR 0021) | `expires_at` + 24 h | same | batched |
 | `workload_jti_seen` (ADR 0019), `saml_assertion_ids`, `saml_request_state` (ADR 0018) | `expires_at` | same | batched; plain tables (a global unique key rules out partitioning) |
 | tombstones and soft-deleted rows (`artifact_tombstones`, `native_*_manifest_tombstones`, rows with `collected_at`) | `collected_at` + 30 d | + 7 d | batched hard delete |
-| `artifact_promotions`, `artifact_usage_stats`, `artifact_intelligence` | none (provenance and aggregates) | none | not append-only logs |
+| `artifact_promotions`, `artifact_usage_stats`, `artifact_intelligence` | none (provenance and aggregates) | none | not append-only logs; `artifact_intelligence.sboms` and `.vulnerability` stop being written once ADR 0030 slice 2c lands |
 
 ### 3. Quota and capacity accounting
 
@@ -388,7 +404,7 @@ assert `counter == SUM` from the reconciler query, so an uncovered writer fails 
 New `internal/readcache`: a generic `Cache[K,V]` (bounded LRU, per-entry TTL,
 `singleflight` from golang.org/x/sync, already a dependency) with a version stamp.
 Cached: repositories by id and name, repository groups with members, grant sets
-keyed by `(repository, grants_version)`, the anonymous access policy, user and
+keyed by `(repository, grants_version)`, repository and group visibility (the access-decision inputs of ADR 0029, replacing the anonymous access policy), user and
 service-account state, user group ids (ADR 0018), API-key principals by key hash,
 workload issuers, trust policies and JWKS (ADR 0019), signing-key sets (ADR 0020),
 quarantine state, and the verified-token result keyed by `sha256(token)` until
@@ -494,7 +510,8 @@ inline; above it the row stores `body_digest`, `body_size` and `body_key` and th
 bytes live in the object store at `meta/sha256/<hex>`, content-addressed, read
 through a small in-process LRU. Applies to SBOMs and other `artifact_intelligence`
 jsonb (also split into `artifact_sbom` and `artifact_vulnerability` so a CVE
-re-scan does not rewrite the SBOM, keyed `(repository_id, digest)`), `nuspec` and
+re-scan does not rewrite the SBOM, keyed `(repository_id, digest)`; the final shape, including
+`artifact_vulnerability_finding` and `artifact_scan_history`, is owned by ADR 0030 section 2), `nuspec` and
 `chart_yaml`, proxy documents (`native_nuget_source_documents`, Helm `body`, Cargo
 index bodies, `oci_discovery_snapshots`) and npm version manifests. A mark-and-sweep
 job deletes unreferenced `meta/` objects after a grace period. `metadata_json TEXT`
@@ -638,7 +655,7 @@ v0.1.0 land after the cut-over and before ADR 0015 slice 7 (re-squash).
    - [ ] `make test`, `make lint`, `make integration-test`
    - Depends on: slice 1.
 4. **Typed keys, wave C: remaining formats; lint at zero.** Milestone: Foundation.
-   - 4a raw, PyPI, Go, Cargo; 4b APT, Helm, NuGet, RubyGems; 4c Nexus and replication stores, then delete `tools/sqllint/allowlist.txt` (4c lands last).
+   - 4a raw, PyPI, Go, Cargo; 4b APT, Helm, NuGet, RubyGems; 4c Nexus and replication stores, then delete `tools/sqllint/allowlist.txt` (4c lands last). Tables introduced by ADRs 0026 to 0030 (`native_rpm_*`, `hf_*`, `native_raw_versions`, scan tables) are created typed from the start and add nothing to this ratchet; 4b re-keys only the existing APT tables. No new partitioned tables beyond `artifact_scan_history`.
    - [ ] lint passes with no allowlist after 4c; each format's e2e target passes
    - Depends on: slices 1, 2a, 2b, 3a-3d for 4c; slice 1 for 4a and 4b.
 5. **Partition manager and partitioned audit table.** Milestone: Foundation.
@@ -685,10 +702,11 @@ v0.1.0 land after the cut-over and before ADR 0015 slice 7 (re-squash).
     - [ ] sweep never deletes referenced objects (race test with concurrent publish)
     - Depends on: slice 10, ADR 0017 slice 1.
 12. **Read caches and key-usage throttling.** Milestone: Data scale.
-    - Scope: `internal/readcache`, invalidation via `NOTIFY` and `cache_epochs` poll, repository, group, grant, anonymous policy, principal, quarantine caches, `last_used_at` batching, config keys of section 6.
+    - Scope: `internal/readcache`, invalidation via `NOTIFY` and `cache_epochs` poll, repository, group, grant, repository and group visibility (the access decision of ADR 0029, invalidated by `repository.visibility_changed` and the scope epoch), principal, quarantine caches, `last_used_at` batching, config keys of section 6.
     - [ ] revocation test: key revoked on node A is rejected on node B within `NOTARX_AUTHZ_CACHE_TTL` with NOTIFY dropped
     - [ ] lost-NOTIFY and listener-reconnect tests (all caches flushed on reconnect); a load racing an eviction does not re-install stale data; `NOTARX_AUTHZ_CACHE_TTL=0` disables caching
    - [ ] a bumped grants or policy version turns a cached entry into a miss
+   - [ ] a visibility change (ADR 0029) is effective on every node within `NOTARX_AUTHZ_CACHE_TTL`, and the access-decision cache never serves a stale `public` after a repository or member group is made private
    - [ ] singleflight stampede test; negative cache at most 1s; max entries enforced
     - [ ] query-count test: authenticated read issues at most 1 database statement on a warm cache
     - Depends on: slice 6. ADR 0018 slice 3 and ADR 0019 slice 4 depend on this slice and add their caches through this package; this slice therefore lands before ADR 0018 starts (ADR 0013 ordering table, step 6b).

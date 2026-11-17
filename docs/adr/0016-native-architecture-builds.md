@@ -2,7 +2,9 @@
 
 [Documentation index](../README.md)
 
-Status: proposed (2026-11-17)
+Status: accepted (2026-11-17)
+
+See also: [ADR 0026](0026-debian-and-rpm-repositories.md), [ADR 0030](0030-sbom-generation-and-vulnerability-scanning.md).
 
 ## Context
 
@@ -17,6 +19,7 @@ amd64 Linux runner:
   lines 1-21, `Dockerfile.agctl` lines 1-13). `Dockerfile.console` also pins its
   Node build stage to `$BUILDPLATFORM` (line 1). `Dockerfile.scanner` and
   `Dockerfile.apt-signer` carry no platform override and already build natively.
+  (ADR 0030 slice 1b renames `Dockerfile.scanner` to `Dockerfile.notarx-scanner` and publishes it as a third image.)
 - `.github/workflows/ci.yml` (`mainline-images`, around line 290) and
   `.github/workflows/release.yml` (`publish-images`, around line 111) build one
   `platforms: linux/amd64,linux/arm64` image on `ubuntu-latest` with
@@ -117,10 +120,15 @@ removed.
 
 ### Image publishing
 
-Exactly two images are published: `ghcr.io/mlops-ca/notarx` and
+Two images are published by v0.1.0: `ghcr.io/mlops-ca/notarx` and
 `ghcr.io/mlops-ca/notarx-console`. `notarxctl` ships as release archives and
-`go install`, never as an image (ADR 0013); the scanner and apt-signer
-Dockerfiles are not published. Per image, a two-stage workflow replaces the single `build-push-action` call:
+`go install`, never as an image (ADR 0013); `notarx-signer` (ADR 0026) is a release
+archive, not an image, and the apt reference signer stays an unpublished fixture.
+The image list is a single matrix input of `image-build.yml`: ADR 0030 slice 1b adds
+`ghcr.io/mlops-ca/notarx-scanner` (built from `Dockerfile.notarx-scanner`) as the
+third and last published image by adding one matrix entry, to the `image-manifest`
+jobs and to the release gate, and `release.yml` then expects three `mainline-images`
+runs. No other image is published without its own ADR. Per image, a two-stage workflow replaces the single `build-push-action` call:
 
 1. `image-build` matrix `{image} x {linux/amd64 on ubuntu-24.04, linux/arm64 on
    ubuntu-24.04-arm}`: `docker/build-push-action` with
@@ -162,8 +170,8 @@ Properties:
 - The "Confirm this run still owns the main tip" guard of `mainline-images` moves
   into `image-manifest`, immediately before tagging.
 - `verify-candidate` in `release.yml` requires named check runs
-  (`quality`, `contract-and-test`, `console`, `mainline-assets`, and exactly two
-  `mainline-images ` runs). Those names change; the check list is updated to the
+  (`quality`, `contract-and-test`, `console`, `mainline-assets`, and one
+  `mainline-images ` run per published image: two at v0.1.0, three once ADR 0030 slice 1b lands). Those names change; the check list is updated to the
   new job names and to require both architecture runs of each image.
 
 ### Release archives
@@ -273,7 +281,7 @@ pattern is detected.
 - `scripts/build-release-artifacts.sh` loses its multi-target interface; callers
   that relied on `--target` for a foreign target (documentation in `docs/` and
   `scripts/release-readiness-check.sh`) are updated.
-- The release set is exactly two images plus archives; v0.1.0 ships this ADR
+- The release set at v0.1.0 is two images plus archives (a third image, `notarx-scanner`, is added by ADR 0030); v0.1.0 ships this ADR
   together with ADRs 0013-0015 and 0017.
 - A runner-label or capacity outage for one architecture blocks the release
   instead of silently producing a partial one.
@@ -309,7 +317,7 @@ pattern is detected.
    names, `arm64-native-gate`), a reusable workflow `.github/workflows/image-build.yml`.
    - [ ] amd64 and arm64 legs build on `ubuntu-24.04` and `ubuntu-24.04-arm`,
      push by digest, and upload digests.
-   - [ ] Only `notarx` and `notarx-console` are published.
+   - [ ] Only the images listed in the single matrix input are published (`notarx` and `notarx-console` at v0.1.0); adding an image is one matrix entry plus its release-gate check (ADR 0030 slice 1b adds `notarx-scanner`).
    - [ ] Manifest job creates the multi-arch tags; `imagetools inspect` shows
      both platforms with platform fields set; pulling `<tag>` on each
      architecture yields an attestation that `gh attestation verify` accepts.

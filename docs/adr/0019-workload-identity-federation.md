@@ -2,7 +2,9 @@
 
 [Documentation index](../README.md)
 
-Status: proposed (2026-11-17)
+Status: accepted (2026-11-17)
+
+See also: [ADR 0026](0026-debian-and-rpm-repositories.md), [ADR 0027](0027-hugging-face-repositories.md).
 
 ## Context
 
@@ -304,6 +306,8 @@ identity" page with policy builder templates per issuer kind. Preflight
 `NOTARX_WORKLOAD_EXCHANGE_MAX_TTL`, `NOTARX_WORKLOAD_EXCHANGE_RATE`,
 `NOTARX_WORKLOAD_ALLOW_PRIVATE_NETWORK` (global default, per-issuer override),
 `NOTARX_PUBLIC_URL` (owned by ADR 0013; default audience). No `GATEWAY_*` aliases (ADR 0013).
+When audit rows record a client IP, they use the proxy-aware resolution of
+`NOTARX_TRUSTED_PROXIES` and `NOTARX_CLIENT_IP_HEADER` (registered in ADR 0013, defined by ADR 0029).
 
 ### Documentation examples (shipped under `docs/`)
 
@@ -318,6 +322,10 @@ identity" page with policy builder templates per issuer kind. Preflight
   `expirationSeconds: 600`; the policy binds
   `sub = system:serviceaccount:team-a:builder`; issuer registered with static JWKS
   (`kubectl get --raw /openid/v1/jwks`) when the API server is private.
+- Release publishing (ADR 0026 slice 15): the GitHub Actions service account `feeds-publisher`
+  has a trust policy bound to the repository, the workflow, the environment `packages-publish`
+  and the ref (all required, per the Security considerations), and publishes deb and rpm
+  packages to the feeds instance `feeds.mlops.ca`.
 
 ## Security considerations
 
@@ -409,6 +417,8 @@ the v0.1.0 tag, and slice 1 is first.
      mismatch, replay with `single_use`, disabled policy/account, regression of
      API-key, HMAC and resolver paths; OCI `docker login` e2e via
      `make native-oci-e2e` using a local JWKS fixture.
+   - [ ] The Hugging Face route `/hf` (ADR 0027 slice 6) accepts the exchanged Bearer
+     token and a workload JWT through the same authenticator; Hub-shaped 401/403 asserted.
    - [ ] `make test`, `make race`, `make lint`, `make coverage`.
    - Dependencies: ADR 0019 slices 1, 2, 3; ADR 0023 slice 12
      (`internal/readcache`, ordered before this ADR by ADR 0013 step 6b); the

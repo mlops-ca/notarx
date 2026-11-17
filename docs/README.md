@@ -61,6 +61,11 @@ agree with executable tests and the
 - [ADR 0023: Data Model Scalability: Write Decoupling, Partitioning, Retention, Counters and Caches](adr/0023-data-model-scalability.md)
 - [ADR 0024: Release Versioning, Conventional Commits and Nightly-to-Stable Promotion](adr/0024-release-versioning-and-conventional-commits.md)
 - [ADR 0025: Distribution Channels: Images, Archives, Native Packages and Signed Repositories](adr/0025-distribution-channels.md)
+- [ADR 0026: Debian and RPM Repositories](adr/0026-debian-and-rpm-repositories.md)
+- [ADR 0027: Hugging Face Model and Dataset Repositories](adr/0027-hugging-face-repositories.md)
+- [ADR 0028: Generic Versioned Packages on Raw](adr/0028-generic-versioned-packages.md)
+- [ADR 0029: Repository Visibility: Public and Private Feeds](adr/0029-repository-visibility-public-private-feeds.md)
+- [ADR 0030: SBOM Generation and Vulnerability Scanning](adr/0030-sbom-generation-and-vulnerability-scanning.md)
 - [notarx brand assets](assets/brand/README.md) — mark, lockups, icons, colour tokens.
 
 ## Protocols and formats
