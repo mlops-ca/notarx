@@ -90,8 +90,9 @@ dist/notarxctl_darwin_arm64 version
 dist/notarxctl_linux_amd64 info --server https://gateway.example.com --token "$NOTARX_TOKEN"
 ```
 
-`make cli-build` cross-compiles linux and darwin for amd64 and arm64 with the
-local Go toolchain at the version declared in `go.mod`, and injects the
+`make cli-build` builds the machine's own platform (no cross-compilation, see
+[native builds](native-builds.md)) with the local Go toolchain at the version
+declared in `go.mod`, and injects the
 `VERSION` file value and the current Git revision with the same `-ldflags` as
 the release archives. From a checkout, `go install ./cmd/notarxctl` installs the
 same client into `$GOBIN`; without the injection it reports the development

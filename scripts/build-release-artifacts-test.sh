@@ -9,13 +9,27 @@ version=0.1.0
 revision=0123456789abcdef0123456789abcdef01234567
 goos=$(go env GOOS)
 goarch=$(go env GOARCH)
+# Releases are host-only (ADR 0016): the only target this host can build is its own.
 release_targets=("$goos/$goarch")
-if [[ "$goos" != linux ]]; then
-  release_targets+=("linux/$goarch")
-fi
-targets=()
-for release_target in "${release_targets[@]}"; do
-  targets+=(--target "$release_target")
+targets=(--target "$goos/$goarch")
+
+# A target that differs from the host would be a cross build and must be rejected.
+foreign_os=linux
+[[ "$goos" == linux ]] && foreign_os=darwin
+foreign_arch=arm64
+[[ "$goarch" == arm64 ]] && foreign_arch=amd64
+for foreign_target in "$foreign_os/$goarch" "$goos/$foreign_arch" "$foreign_os/$foreign_arch" windows/amd64; do
+  if bash "$root/scripts/build-release-artifacts.sh" \
+    --version "$version" \
+    --revision "$revision" \
+    --output "$workdir/foreign" \
+    --target "$foreign_target" \
+    --skip-console >"$workdir/foreign.log" 2>&1; then
+    printf 'release builder accepted foreign target %s\n' "$foreign_target" >&2
+    exit 1
+  fi
+  grep -F 'no cross-compilation' "$workdir/foreign.log" >/dev/null
+  rm -rf "$workdir/foreign"
 done
 
 if bash "$root/scripts/build-release-artifacts.sh" \
@@ -39,9 +53,6 @@ fi
 )
 
 archive="$workdir/dist/notarx_${version}_${goos}_${goarch}.tar.gz"
-if [[ "$goos" == "windows" ]]; then
-  archive="$workdir/dist/notarx_${version}_${goos}_${goarch}.zip"
-fi
 test -f "$archive"
 test -f "$workdir/dist/SHA256SUMS"
 
@@ -61,15 +72,9 @@ if grep -F 'ignored.txt' "$workdir/checksum-fixtures/SHA256SUMS" >/dev/null; the
 fi
 
 mkdir -p "$workdir/unpacked"
-if [[ "$archive" == *.zip ]]; then
-  unzip -q "$archive" -d "$workdir/unpacked"
-  gateway="$workdir/unpacked/notarx.exe"
-  healthcheck="$workdir/unpacked/gateway-healthcheck.exe"
-else
-  tar -xzf "$archive" -C "$workdir/unpacked"
-  gateway="$workdir/unpacked/notarx"
-  healthcheck="$workdir/unpacked/gateway-healthcheck"
-fi
+tar -xzf "$archive" -C "$workdir/unpacked"
+gateway="$workdir/unpacked/notarx"
+healthcheck="$workdir/unpacked/gateway-healthcheck"
 test -x "$gateway"
 test -x "$healthcheck"
 test -x "$workdir/unpacked/run-migrations.sh"
@@ -92,25 +97,15 @@ test "$("$healthcheck" --version)" = "$healthcheck_version_output"
 for release_target in "${release_targets[@]}"; do
   target_goos=${release_target%/*}
   target_goarch=${release_target#*/}
-  target_extension=tar.gz
-  target_suffix=
-  if [[ "$target_goos" == "windows" ]]; then
-    target_extension=zip
-    target_suffix=.exe
-  fi
-  notarxctl_name="notarxctl_${version}_${target_goos}_${target_goarch}.${target_extension}"
+  notarxctl_name="notarxctl_${version}_${target_goos}_${target_goarch}.tar.gz"
   notarxctl_archive="$workdir/dist/$notarxctl_name"
   test -f "$notarxctl_archive"
   grep -F "$notarxctl_name" "$workdir/dist/SHA256SUMS" >/dev/null
 
   notarxctl_unpacked="$workdir/notarxctl-unpacked_${target_goos}_${target_goarch}"
   mkdir -p "$notarxctl_unpacked"
-  if [[ "$target_extension" == "zip" ]]; then
-    unzip -q "$notarxctl_archive" -d "$notarxctl_unpacked"
-  else
-    tar -xzf "$notarxctl_archive" -C "$notarxctl_unpacked"
-  fi
-  test -x "$notarxctl_unpacked/notarxctl$target_suffix"
+  tar -xzf "$notarxctl_archive" -C "$notarxctl_unpacked"
+  test -x "$notarxctl_unpacked/notarxctl"
   test -f "$notarxctl_unpacked/VERSION.txt"
   test -f "$notarxctl_unpacked/INSTALL.txt"
   for server_material in notarx gateway-healthcheck migrations run-migrations.sh artifact-gateway.env.example; do
@@ -121,7 +116,7 @@ for release_target in "${release_targets[@]}"; do
   done
 
   if [[ "$target_goos" == "$goos" && "$target_goarch" == "$goarch" ]]; then
-    notarxctl_version_output=$("$notarxctl_unpacked/notarxctl$target_suffix" version)
+    notarxctl_version_output=$("$notarxctl_unpacked/notarxctl" version)
     printf '%s\n' "$notarxctl_version_output" | grep -F "notarxctl $version (revision $revision," >/dev/null
   fi
 done
@@ -149,11 +144,7 @@ cmp "$archive" "$repeat_archive"
 for release_target in "${release_targets[@]}"; do
   target_goos=${release_target%/*}
   target_goarch=${release_target#*/}
-  target_extension=tar.gz
-  if [[ "$target_goos" == "windows" ]]; then
-    target_extension=zip
-  fi
-  repeat_notarxctl="notarxctl_${version}_${target_goos}_${target_goarch}.${target_extension}"
+  repeat_notarxctl="notarxctl_${version}_${target_goos}_${target_goarch}.tar.gz"
   cmp "$workdir/dist/$repeat_notarxctl" "$workdir/dist-repeat/$repeat_notarxctl"
 done
 cmp "$workdir/dist/SHA256SUMS" "$workdir/dist-repeat/SHA256SUMS"
