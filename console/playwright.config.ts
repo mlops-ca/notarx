@@ -8,7 +8,13 @@ export default defineConfig({
   // Visual baselines run fully mocked through playwright.visual.config.ts.
   testIgnore: "visual/**",
   timeout: 30_000,
-  reporter: process.env.CI ? [["dot"], ["html", { open: "never" }]] : undefined,
+  // CI shards write blob reports that the merge-reports job turns into one
+  // HTML report; see docs/ci.md.
+  reporter: process.env.PLAYWRIGHT_BLOB_REPORT
+    ? [["dot"], ["blob"]]
+    : process.env.CI
+      ? [["dot"], ["html", { open: "never" }]]
+      : undefined,
   use: {
     baseURL: `http://127.0.0.1:${port}`,
     browserName: "chromium",

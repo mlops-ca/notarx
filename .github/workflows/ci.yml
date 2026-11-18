@@ -28,12 +28,15 @@ jobs:
       docs: ${{ steps.classify.outputs.docs }}
       ci: ${{ steps.classify.outputs.ci }}
       images: ${{ steps.classify.outputs.images }}
+      e2e_specs: ${{ steps.select.outputs.specs }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Verify the classifier fixtures
-        run: bash scripts/ci-changes-test.sh
+        run: |
+          bash scripts/ci-changes-test.sh
+          bash scripts/ci-e2e-select-test.sh
       - name: Classify changed paths
         id: classify
         env:
@@ -41,6 +44,13 @@ jobs:
           HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || '' }}
         run: |
           scripts/ci-changes.sh "$BASE_SHA" "$HEAD_SHA" | tee -a "$GITHUB_OUTPUT"
+      - name: Select the Console E2E specs the change affects
+        id: select
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+          HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || '' }}
+        run: |
+          scripts/ci-e2e-select.sh "$BASE_SHA" "$HEAD_SHA" | tee -a "$GITHUB_OUTPUT"
 
   pr-title:
     if: github.event_name == 'pull_request'
@@ -256,24 +266,42 @@ jobs:
           retention-days: 7
 
   # Gateway-backed Console and CLI E2E: runs when the gateway or the Console
-  # changed, since both execute the real stack.
+  # changed, since both execute the real stack. The Playwright suite is split
+  # into three parallel shards (every spec lands in exactly one) and the
+  # CLI E2E runs as its own lane against its own gateway. A console-only change
+  # that touches nothing but spec files runs just those specs (docs/ci.md).
   console-e2e:
+    name: console-e2e (${{ matrix.name }})
     needs: [changes, build-images]
     if: needs.changes.outputs.go == 'true' || needs.changes.outputs.console == 'true'
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # Each entry names its own shard fraction, so the total cannot drift
+        # from the list. Add or remove entries to change the shard count.
+        include:
+          - { name: '1', shard: 1/3 }
+          - { name: '2', shard: 2/3 }
+          - { name: '3', shard: 3/3 }
+          - { name: cli, shard: '' }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: matrix.shard != ''
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: console/package-lock.json
       - name: Verify public npm lockfile sources before install
+        if: matrix.shard != ''
         run: node scripts/npm-lockfile-check.mjs
       - run: npm ci --timing --loglevel=http
+        if: matrix.shard != ''
         timeout-minutes: 10
         working-directory: console
       - name: Install browser
+        if: matrix.shard != ''
         run: npx playwright install --with-deps chromium
         working-directory: console
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -302,26 +330,39 @@ jobs:
           NOTARX_OIDC_JWKS_URL=http://127.0.0.1:1/ci-cli-e2e/jwks
           EOF
           docker compose --env-file "$NOTARX_ENV_FILE" -f compose.yml up --no-build --wait --remove-orphans
-      - name: Run console E2E
+      - name: Run console E2E shard ${{ matrix.shard }}
         id: console-e2e
+        if: matrix.shard != ''
         env:
           NOTARX_ENV_FILE: ${{ runner.temp }}/artifact-gateway.env
+          PLAYWRIGHT_BLOB_REPORT: '1'
+          CONSOLE_E2E_SPECS: ${{ needs.changes.outputs.e2e_specs }}
+          CONSOLE_E2E_SHARD: ${{ matrix.shard }}
         run: make console-e2e
-      - name: Upload Console E2E report and traces
-        if: ${{ !cancelled() && (steps.console-e2e.outcome == 'success' || steps.console-e2e.outcome == 'failure') }}
+      - name: Upload Console E2E blob report
+        if: ${{ !cancelled() && matrix.shard != '' && (steps.console-e2e.outcome == 'success' || steps.console-e2e.outcome == 'failure') }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: console-e2e-results
-          path: |
-            console/test-results/
-            console/playwright-report/
+          name: console-e2e-blob-${{ matrix.name }}
+          path: console/blob-report/
           retention-days: 7
-          if-no-files-found: error
+          # A shard that a spec selection leaves empty writes no blob.
+          if-no-files-found: ignore
+      - name: Upload Console E2E traces
+        if: ${{ failure() && matrix.shard != '' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: console-e2e-traces-${{ matrix.name }}
+          path: console/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        if: matrix.shard == ''
         with:
           go-version-file: go.mod
           cache: true
       - name: Run notarxctl CLI E2E against the same gateway
+        if: matrix.shard == ''
         env:
           CLI_E2E_SERVER: http://127.0.0.1:18080
           CLI_E2E_TOKEN: ci-admin-token
@@ -339,11 +380,46 @@ jobs:
             echo "Gateway environment file was not created; nothing to clean up."
           fi
 
+  # Merges the shard blob reports into one HTML report (traces included). Runs
+  # when every shard passed; a failed shard already fails the gate and uploads
+  # its own blob report and traces.
+  console-e2e-report:
+    needs: [changes, console-e2e]
+    if: needs.console-e2e.result == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: console/package-lock.json
+      - name: Verify public npm lockfile sources before install
+        run: node scripts/npm-lockfile-check.mjs
+      - run: npm ci --timing --loglevel=http
+        timeout-minutes: 10
+        working-directory: console
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: console-e2e-blob-*
+          path: ${{ runner.temp }}/blob-reports
+          merge-multiple: true
+      - name: Merge shard reports
+        run: npx playwright merge-reports --reporter html "$RUNNER_TEMP/blob-reports"
+        working-directory: console
+      - name: Upload merged Console E2E report
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: console-e2e-report
+          path: console/playwright-report/
+          retention-days: 7
+          if-no-files-found: error
+
   # The one stable required check: passes when every job succeeded or was
   # skipped by change detection, fails on any failure or cancellation.
   ci-ok:
     if: always()
-    needs: [changes, pr-title, no-chinese, docs, quality, console, console-e2e, image-test-stages, build-images, contract-plan, contract, contract-and-test]
+    needs: [changes, pr-title, no-chinese, docs, quality, console, console-e2e, console-e2e-report, image-test-stages, build-images, contract-plan, contract, contract-and-test]
     runs-on: ubuntu-24.04
     steps:
       - name: Require every needed job to succeed or be skipped
@@ -360,8 +436,12 @@ jobs:
           # a job skipped because something upstream failed must not pass.
           e2e=false
           if [[ "$GO" == true || "$CONSOLE" == true ]]; then e2e=true; fi
+          # The merged report is required whenever the shards all passed; when a
+          # shard failed, that failure already fails the gate.
+          report=false
+          if [[ "$e2e" == true && $(echo "$NEEDS" | jq -r '.["console-e2e"].result') == success ]]; then report=true; fi
           status=0
-          for pair in quality:$GO contract-plan:$GO contract:$GO contract-and-test:$GO console:$CONSOLE console-e2e:$e2e build-images:$e2e docs:$DOCS image-test-stages:$IMAGES; do
+          for pair in quality:$GO contract-plan:$GO contract:$GO contract-and-test:$GO console:$CONSOLE console-e2e:$e2e console-e2e-report:$report build-images:$e2e docs:$DOCS image-test-stages:$IMAGES; do
             job=${pair%%:*} class=${pair##*:}
             result=$(echo "$NEEDS" | jq -r --arg job "$job" '.[$job].result')
             if [[ "$class" == true && "$result" != success ]]; then
