@@ -52,13 +52,14 @@ check_environment() {
   fi
   ok "$env: exists"
 
-  if jq -e '[.protection_rules[]? | select(.type == "required_reviewers") | .reviewers[]?] | length >= 2' >/dev/null <<<"$settings"; then
-    ok "$env: at least two required reviewers"
+  # Count distinct individual reviewers; a team can have a single member, so it does not count.
+  if jq -e '[.protection_rules[]? | select(.type == "required_reviewers") | .reviewers[]? | select(.type == "User") | .reviewer.id] | unique | length >= 2' >/dev/null <<<"$settings"; then
+    ok "$env: at least two individual required reviewers"
   else
-    fail "$env: needs required reviewers (at least two, so self-review prevention still leaves an approver)"
+    fail "$env: needs at least two individual (User) required reviewers, so self-review prevention still leaves an approver"
   fi
 
-  if jq -e '[.protection_rules[]? | select(.type == "required_reviewers") | .prevent_self_review] | any' >/dev/null <<<"$settings"; then
+  if jq -e '[.protection_rules[]? | select(.type == "required_reviewers")] | length >= 1 and all(.[]; .prevent_self_review == true)' >/dev/null <<<"$settings"; then
     ok "$env: self-review prevented"
   else
     fail "$env: self-review is allowed"
@@ -108,17 +109,19 @@ for env in packages-signing packages-publish; do
   check_environment "$env"
 done
 
-# Signing and publishing secrets must not also exist at repository level, where
-# every workflow job could read them.
-if repo_secrets=$(api --paginate "repos/$repo/actions/secrets" --jq '.secrets[].name' 2>/dev/null); then
-  if grep -Eq '^(PACKAGES_SIGNING_|CLOUDFLARE_API_TOKEN$)' <<<"$repo_secrets"; then
-    fail "repository: package signing or Cloudflare secret exists outside its environment"
+# Signing and publishing secrets must not also exist where every workflow job
+# could read them: repository level or organization level (visible to this repo).
+for scope in actions/secrets actions/organization-secrets; do
+  if scope_secrets=$(api --paginate "repos/$repo/$scope" --jq '.secrets[].name' 2>/dev/null); then
+    if grep -Eq '^(PACKAGES_SIGNING_|CLOUDFLARE_API_TOKEN$)' <<<"$scope_secrets"; then
+      fail "$scope: package signing or Cloudflare secret exists outside its environment"
+    else
+      ok "$scope: no package secret outside its environment"
+    fi
   else
-    ok "repository: no package secret outside its environment"
+    fail "$scope: cannot be read"
   fi
-else
-  fail "repository: cannot read repository secrets"
-fi
+done
 
 if [[ $failures -gt 0 ]]; then
   printf '%d check(s) failed for %s\n' "$failures" "$repo" >&2

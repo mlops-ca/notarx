@@ -40,9 +40,10 @@ signing subkeys with a two-year validity). The key ceremony, custody, rotation a
 procedures are in [docs/release/packages-signing.md](docs/release/packages-signing.md).
 Verify `https://packages.mlops.ca/gpg.key` against the fingerprint below before trusting it.
 
-Primary key fingerprint: pending the production key ceremony (the key has not been minted yet).
-The ceremony checklist requires this line to be replaced with the 40-character fingerprint in the
-same change that publishes `gpg.key`.
+Primary key fingerprint: not yet issued. The production key has not been minted, so no signed
+repository is published and any `gpg.key` served before this line shows a 40-character fingerprint
+must not be trusted. The ceremony checklist replaces this line with the fingerprint in the same
+change that publishes `gpg.key`.
 
 ## Current security baseline
 

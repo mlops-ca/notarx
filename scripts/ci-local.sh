@@ -103,7 +103,12 @@ run_quality() {
   run "go lint" make lint
   run "go vet" make vet
   run "release version and artifact builder" make release-version-check release-artifacts-test
-  run "package signing drill and environment checks" make packages-signing-drill packages-environments-test
+  if command -v gpg >/dev/null 2>&1; then
+    run "package signing drill and environment checks" make packages-signing-drill packages-environments-test
+  else
+    printf 'SKIPPED package signing drill and environment checks: gpg is not installed (CI runs it)\n'
+    run "package environment checks" make packages-environments-test
+  fi
   run "race detector" make race
   run "coverage floor" make coverage
   run "dependency audit" make dependency-audit

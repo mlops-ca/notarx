@@ -47,7 +47,7 @@ Use a clean `GNUPGHOME` on the offline machine:
 
 ```sh
 export GNUPGHOME=$(mktemp -d) && chmod 700 "$GNUPGHOME"
-gpg --batch --passphrase-fd 0 --quick-generate-key \
+gpg --batch --pinentry-mode loopback --passphrase-fd 0 --quick-generate-key \
   'notarx packages <packages@mlops.ca>' rsa4096 cert never <<< "$PASSPHRASE"
 FPR=$(gpg --list-keys --with-colons 'packages@mlops.ca' | awk -F: '/^fpr/ {print $10; exit}')
 ```
@@ -58,16 +58,17 @@ example, one half per maintainer in separate sealed envelopes).
 ## Add signing subkey S1
 
 ```sh
-gpg --batch --passphrase-fd 0 --quick-add-key "$FPR" rsa4096 sign 2y <<< "$PASSPHRASE"
+gpg --batch --pinentry-mode loopback --passphrase-fd 0 --quick-add-key "$FPR" rsa4096 sign 2y <<< "$PASSPHRASE"
+S1=$(gpg --list-keys --with-colons "$FPR" | awk -F: '/^sub:/ {want = 1; next} /^fpr/ && want {print $10; want = 0}' | tail -n 1)
 ```
 
-Export only the secret subkey for the `packages-signing` environment. The `--export-secret-subkeys`
-output has the primary secret stripped; confirm with `gpg --list-secret-keys` after importing it
+Export only the secret S1 for the `packages-signing` environment. The trailing `!` selects exactly that
+subkey, so S2 (or any later subkey) is never included, and the primary secret is stripped; confirm with `gpg --list-secret-keys` after importing it
 into a scratch keyring that the primary shows `sec#` (secret part absent).
 
 ```sh
 gpg --batch --pinentry-mode loopback --passphrase-fd 0 --armor \
-  --export-secret-subkeys "$FPR" <<< "$PASSPHRASE" > s1-secret.asc
+  --export-secret-subkeys "$S1!" <<< "$PASSPHRASE" > s1-secret.asc
 ```
 
 Store the S1 passphrase-less or passphrase-protected armor as the Actions secret
@@ -99,8 +100,9 @@ lands, publish `gpg.key` with the primary and S1 only and republish when S2 exis
 Generate it immediately after creating the primary, while it is still offline:
 
 ```sh
-gpg --batch --pinentry-mode loopback --passphrase-fd 0 --output revoke.asc \
-  --gen-revoke "$FPR" <<< "$PASSPHRASE"
+# Interactive: confirm, choose reason 0 (no reason specified), enter a description, confirm,
+# then type the primary passphrase at the pinentry prompt.
+gpg --output revoke.asc --gen-revoke "$FPR"
 ```
 
 GnuPG 2.1 and newer also writes a revocation certificate to `openpgp-revocs.d/<fingerprint>.rev` in
@@ -218,7 +220,8 @@ lifecycle on a throwaway staging key in a temporary `GNUPGHOME`:
 2. Export only the secret S1 to a second keyring and confirm the primary is not there (`sec#`).
 3. Sign a Release-like document with S1 and verify it against the exported public key.
 4. Rotate: add S1', revoke S1 with the primary, re-export the public key, and confirm a
-   verifier with the new `gpg.key` sees S1 as revoked and accepts a signature from S1'.
+   verifier with the new `gpg.key` rejects a signature made earlier by S1 (revoked) and accepts
+   a signature from S1'.
 5. Revoke the primary with the revocation certificate in a verifier keyring and confirm the
    certificate shows as revoked and signatures from it are no longer accepted.
 

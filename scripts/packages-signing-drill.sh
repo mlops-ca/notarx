@@ -62,6 +62,7 @@ trusted_verify "$work/Release.gpg" "$work/Release" || die "signature from S1 did
 printf 'tampered\n' >>"$work/Release"
 if trusted_verify "$work/Release.gpg" "$work/Release"; then die "tampered document verified"; fi
 head -n 3 "$work/Release" >"$work/Release.tmp" && mv "$work/Release.tmp" "$work/Release"
+cp "$work/Release.gpg" "$work/Release.s1.gpg"
 
 step "rotate: add S1', revoke S1 with the offline primary, republish"
 g offline --quick-add-key "$fpr" rsa4096 sign 2y 2>/dev/null
@@ -86,9 +87,8 @@ resethome signer
 g signer --import "$work/s1new-secret.asc" >/dev/null 2>&1
 g signer --armor --detach-sign --local-user "$s1new!" --output "$work/Release.gpg" "$work/Release" 2>/dev/null
 trusted_verify "$work/Release.gpg" "$work/Release" || die "signature from the rotated subkey did not verify"
-# Old S1 signatures no longer count once the revocation is imported.
-g offline --armor --detach-sign --local-user "$s1!" --output "$work/old.gpg" "$work/Release" 2>/dev/null && \
-  if trusted_verify "$work/old.gpg" "$work/Release"; then die "signature from the revoked S1 still verifies"; fi
+# A signature S1 made before the rotation no longer counts once the revocation is imported.
+if trusted_verify "$work/Release.s1.gpg" "$work/Release"; then die "signature from the revoked S1 still verifies"; fi
 
 step "revoke the primary with the revocation certificate"
 g client --import "$work/revoke.asc" >/dev/null 2>&1 || die "revocation certificate import failed"
