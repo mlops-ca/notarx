@@ -53,6 +53,14 @@ jobs:
         with:
           go-version-file: go.mod
           cache: ${{ !inputs.cold_cache }}
+      - name: Fetch the upstream release baseline tag
+        # The hard fork carries no upstream tags; upgrade-readiness pins the
+        # v0.5.0 commit of the upstream repository. Only a missing tag is
+        # fetched, so a fork tag of the same name is never overwritten.
+        if: inputs.lane == 'core'
+        run: |
+          git rev-parse -q --verify 'refs/tags/v0.5.0^{commit}' >/dev/null ||
+            git fetch --no-tags https://github.com/ccsert/artifact-gateway.git tag v0.5.0
       - name: Warm the Go module cache with retries
         run: |
           for attempt in 1 2 3 4; do
