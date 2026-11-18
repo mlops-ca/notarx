@@ -290,7 +290,7 @@ PY
 # inspect members and resolution order, rename with a stale If-Match that
 # never overwrites, reorder members, and delete without touching members.
 member="cli-e2e-npm-member-${suffix}"
-expect 0 "$out" -- repo create "$member" --format npm --json
+expect 0 "$out" -- repo create "$member" --format npm --visibility public --json
 member_id=$(field "$out" data.id)
 group="cli-e2e-group-${suffix}"
 expect 0 "$out" -- group create "$group" --format npm --member "$repo_id" --member "$member_id" --dry-run --json

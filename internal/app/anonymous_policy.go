@@ -100,9 +100,9 @@ func (h ConanHandler) anonymousGroupRead(ctx context.Context, groupName, method 
 	return err == nil && anonymousLegacyGroupAllowed(ctx, h.Store, group, method)
 }
 
-// anonymousRead reports whether an anonymous caller may read the Conan remote
+// anonymousConanRead reports whether an anonymous caller may read the Conan remote
 // with this name: a legacy group, or a native hosted or proxy repository.
-func (h ConanHandler) anonymousRead(ctx context.Context, name, method string) bool {
+func (h ConanHandler) anonymousConanRead(ctx context.Context, name, method string) bool {
 	if h.anonymousGroupRead(ctx, name, method) {
 		return true
 	}

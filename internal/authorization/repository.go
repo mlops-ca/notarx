@@ -100,7 +100,7 @@ func (a RepositoryAuthorizer) Authorize(ctx context.Context, principal Principal
 
 func (a RepositoryAuthorizer) AuthorizeResource(ctx context.Context, principal Principal, target repository.HostedRepository, operation RepositoryOperation, resource string) AuthorizationDecision {
 	decision := a.authorizeResource(ctx, principal, target, operation, resource)
-	if lifted, ok := visibilityTier(ctx, principal, target, operation, decision); ok {
+	if lifted, ok := a.visibilityTier(ctx, principal, target, operation, decision); ok {
 		return lifted
 	}
 	return decision
@@ -143,7 +143,7 @@ func (a RepositoryAuthorizer) ManagedDecision(ctx context.Context, principal Pri
 
 func (a RepositoryAuthorizer) ManagedResourceDecision(ctx context.Context, principal Principal, target repository.HostedRepository, operation RepositoryOperation, resource string) (AuthorizationDecision, bool) {
 	decision, managed := a.managedResourceDecision(ctx, principal, target, operation, resource)
-	if lifted, ok := visibilityTier(ctx, principal, target, operation, decision); ok {
+	if lifted, ok := a.visibilityTier(ctx, principal, target, operation, decision); ok {
 		return lifted, true
 	}
 	return decision, managed
@@ -152,13 +152,31 @@ func (a RepositoryAuthorizer) ManagedResourceDecision(ctx context.Context, princ
 // visibilityTier admits an authenticated identity without a grant to read a
 // repository whose visibility is authenticated or public (ADR 0029). It only
 // ever lifts a read denial; writes always need a grant, and an account-state
-// block or an anonymous caller is never lifted.
-func visibilityTier(ctx context.Context, principal Principal, target repository.HostedRepository, operation RepositoryOperation, decision AuthorizationDecision) (AuthorizationDecision, bool) {
+// block or an anonymous caller is never lifted. A principal that has its own
+// grant entry on the repository is decided by that entry (a prefix-scoped grant
+// stays scoped), and a failed grant lookup fails closed.
+func (a RepositoryAuthorizer) visibilityTier(ctx context.Context, principal Principal, target repository.HostedRepository, operation RepositoryOperation, decision AuthorizationDecision) (AuthorizationDecision, bool) {
 	if decision.Allowed || operation != RepositoryRead || principal.Actor == "" || principal.Actor == "anonymous" {
 		return decision, false
 	}
 	if _, blocked := accountStateDecision(principal); blocked {
 		return decision, false
+	}
+	if decision.Source == "repository_grants" {
+		if decision.Reason == "grant_lookup_failed" {
+			return decision, false
+		}
+		if a.Grants != nil {
+			set, err := a.Grants.GetRepositoryGrants(ctx, target.ID)
+			if err != nil {
+				return decision, false
+			}
+			for _, grant := range set.Grants {
+				if grant.Principal == principal.Actor {
+					return decision, false
+				}
+			}
+		}
 	}
 	admitted, _, _ := access.Decide(ctx, access.ReadRequest{Class: access.Authenticated, Method: http.MethodGet, Repository: &target})
 	if !admitted.Allow {

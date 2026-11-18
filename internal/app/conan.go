@@ -114,7 +114,7 @@ func (h ConanHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if group, ok := parseConanPing(r.Method, r.URL.Path); ok {
-		if h.anonymousRead(r.Context(), group, r.Method) {
+		if h.anonymousConanRead(r.Context(), group, r.Method) {
 			w.Header().Set("X-Conan-Server-Capabilities", "revisions")
 			h.audit(withConanAuditDisposition(withConanAuditStatus(r.Context(), http.StatusOK), "bypass"), group, "", "", "anonymous", repository.AuditResolved)
 			w.WriteHeader(http.StatusOK)
@@ -184,7 +184,7 @@ func (h ConanHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p, authenticated := h.authenticate(r)
-	if !authenticated && r.Header.Get("Authorization") == "" && anonymousReadMethod(r.Method) && h.anonymousRead(r.Context(), group, r.Method) {
+	if !authenticated && r.Header.Get("Authorization") == "" && anonymousReadMethod(r.Method) && h.anonymousConanRead(r.Context(), group, r.Method) {
 		p = Principal{Actor: "anonymous"}
 		authenticated = true
 	}

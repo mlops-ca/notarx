@@ -43,8 +43,8 @@ is executable in the same revision.
 - `GroupSupported` controls Group creation; it does not imply that arbitrary
   repositories can be mixed. Every member must still be active and match the
   Group format.
-- `AnonymousRead` means the protocol can honour the global and repository/Group
-  anonymous policy. It does not enable anonymous access by default.
+- `PublicVisibility` means the protocol can honour the public visibility tier and
+  the global public-access gate. It does not enable anonymous access by default.
 - `PublicationScanning` means Hosted publications expose canonical immutable
   assets to automatic scanning and bounded scan reconciliation. It does not
   enable scanning by itself; scanner configuration and repository policy still

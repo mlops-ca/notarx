@@ -54,9 +54,8 @@ notices are discovery features; publishing, grants, and administration still
 require an authenticated management identity.
 
 The `authenticated` tier is an identity-level allowance: any valid non-anonymous
-identity may read, whatever its grants say. A grant that omits read, or a
-credential limited to other repositories, does not remove it; only an account-state
-block does. Writes always need a grant.
+identity may read, unless it has its own grant entry on that repository, which then decides (a
+prefix-scoped grant stays scoped). An account-state block always applies. Writes always need a grant.
 
 ## Group visibility
 
