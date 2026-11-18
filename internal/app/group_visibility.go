@@ -4,15 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/mlops-ca/notarx/internal/access"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 // writeVisibilityConflict answers 409 visibility_conflict. The body names the
-// offending members the caller may administer; members the caller cannot
-// administer are counted in the message but never named, so the refusal does not
-// disclose private repositories.
+// offending members the caller may administer; the message counts the ones the
+// caller cannot administer without naming them, so the refusal does not disclose
+// private repositories.
 func writeVisibilityConflict(w http.ResponseWriter, message string, members []repository.VisibilityRef) {
 	if members == nil {
 		members = []repository.VisibilityRef{}
@@ -44,7 +45,10 @@ func (h repositoryManagementHandler) rejectVisibilityConflict(w http.ResponseWri
 	for _, member := range group.Members {
 		repo, err := h.store.GetHostedRepository(r.Context(), member.RepositoryID)
 		if err != nil {
-			continue // validHostedGroup already refused members that do not resolve
+			// validHostedGroup resolved every member, so a failure here is transient.
+			// Skipping the member would let a conflicting write through; fail closed.
+			writeHostedProblem(w, http.StatusServiceUnavailable, "internal_error", "group member lookup failed; retry the request")
+			return true
 		}
 		members = append(members, repo)
 	}
@@ -52,7 +56,12 @@ func (h repositoryManagementHandler) rejectVisibilityConflict(w http.ResponseWri
 	if len(conflicts) == 0 {
 		return false
 	}
-	writeVisibilityConflict(w, "group visibility must not exceed the visibility of its least visible member", h.administeredBy(r.Context(), principal, conflicts))
+	named := h.administeredBy(r.Context(), principal, conflicts)
+	message := "group visibility must not exceed the visibility of its least visible member"
+	if hidden := len(conflicts) - len(named); hidden > 0 {
+		message += "; " + strconv.Itoa(hidden) + " offending member(s) are repositories you do not administer and are not listed"
+	}
+	writeVisibilityConflict(w, message, named)
 	return true
 }
 
@@ -60,8 +69,14 @@ func (h repositoryManagementHandler) rejectVisibilityConflict(w http.ResponseWri
 // visibility is lowered: no group that contains it may stay more visible than
 // it. It reports whether it answered.
 func (h hostedRepositoryAPIHandler) rejectLoweringBelowGroups(w http.ResponseWriter, r *http.Request, repo repository.HostedRepository, next repository.Visibility) bool {
-	if !h.groupMode.Enforced() || h.groups == nil || !access.LowersRepository(repo, next) {
+	if !h.groupMode.Enforced() || !access.LowersRepository(repo, next) {
 		return false
+	}
+	if h.groups == nil {
+		// Strict mode cannot be checked without the group store; refusing is the
+		// only answer that keeps the invariant.
+		writeHostedProblem(w, http.StatusServiceUnavailable, "internal_error", "group store unavailable; the visibility change cannot be checked against groups")
+		return true
 	}
 	after := ""
 	for {

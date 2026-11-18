@@ -53,6 +53,11 @@ Its repository search, format filters, source-type guidance, and read-only
 notices are discovery features; publishing, grants, and administration still
 require an authenticated management identity.
 
+The `authenticated` tier is an identity-level allowance: any valid non-anonymous
+identity may read, whatever its grants say. A grant that omits read, or a
+credential limited to other repositories, does not remove it; only an account-state
+block does. Writes always need a grant.
+
 ## Group visibility
 
 A Group is a visibility ceiling. For each caller the resolved member list is

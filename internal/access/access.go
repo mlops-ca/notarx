@@ -347,3 +347,11 @@ func PolicyVersion(ctx context.Context, source any) (string, error) {
 	policy, err := reader.GetPublicAccessPolicy(ctx)
 	return policy.Version, err
 }
+
+// AnonymousGroupFullyPublic reports whether an anonymous caller may read the
+// group and every one of its members, with one decision. Cargo uses it to tell
+// clients whether the registry needs a token.
+func AnonymousGroupFullyPublic(ctx context.Context, gate any, group repository.HostedGroup, members []repository.Member) bool {
+	decision, resolved, _ := Decide(ctx, ReadRequest{Class: Anonymous, Method: http.MethodGet, Gate: gate, Group: &group, Members: members})
+	return decision.Allow && len(resolved.Members) == len(members)
+}

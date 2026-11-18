@@ -452,9 +452,6 @@ func (h hostedRepositoryAPIHandler) update(w http.ResponseWriter, r *http.Reques
 			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "visibility must be private, authenticated or public")
 			return
 		}
-		if h.rejectLoweringBelowGroups(w, r, repo, *request.Visibility) {
-			return
-		}
 		updatedRepo.Visibility = *request.Visibility
 	}
 	if request.MavenStrictPublication != nil {
@@ -530,6 +527,12 @@ func (h hostedRepositoryAPIHandler) update(w http.ResponseWriter, r *http.Reques
 			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "an editable hosted repository setting is required")
 			return
 		}
+	}
+	// The lowering check runs last, after every 400 and after the version check, so
+	// a stale or malformed request keeps its own status. A stale If-Match falls
+	// through to the store, which answers 412.
+	if request.Visibility != nil && ifMatch == repo.Version && h.rejectLoweringBelowGroups(w, r, repo, *request.Visibility) {
+		return
 	}
 	updated, err := h.store.UpdateHostedRepository(r.Context(), updatedRepo, ifMatch)
 	if errors.Is(err, repository.ErrNotFound) {

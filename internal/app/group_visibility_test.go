@@ -210,3 +210,51 @@ func TestGroupVisibilityModeDefaultsToStrict(t *testing.T) {
 		t.Fatalf("a handler without a mode must be strict: %d %s", response.Code, response.Body.String())
 	}
 }
+
+func TestStrictGroupModeFailsClosedWhenAMemberCannotBeRead(t *testing.T) {
+	f := newVisibilityFixture(t, access.GroupStrict)
+	public := f.repo("public-repo", repository.VisibilityPublic, false)
+	private := f.repo("private-repo", repository.VisibilityPrivate, false)
+	// A store whose member lookups fail after the group was validated must not let
+	// a conflicting write through; the handler answers 503 instead.
+	h := repositoryManagementHandler{store: failingMemberStore{HostedRepositoryStore: f.store, failID: private.ID, after: 1}, groupMode: access.GroupStrict}
+	group := repository.HostedGroup{Name: "feed", Format: repository.FormatRaw, Visibility: repository.VisibilityPublic, Members: []repository.GroupMember{{RepositoryID: public.ID, Position: 0}, {RepositoryID: private.ID, Position: 1}}}
+	response := httptest.NewRecorder()
+	if !h.rejectVisibilityConflict(response, httptest.NewRequest(http.MethodPost, "/api/v2/groups", nil), Principal{Admin: true}, group) || response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("a failing member lookup must fail closed: %d %s", response.Code, response.Body.String())
+	}
+}
+
+type failingMemberStore struct {
+	repository.HostedRepositoryStore
+	failID string
+	after  int
+}
+
+func (s failingMemberStore) GetHostedRepository(ctx context.Context, id string) (repository.HostedRepository, error) {
+	if id == s.failID {
+		return repository.HostedRepository{}, context.DeadlineExceeded
+	}
+	return s.HostedRepositoryStore.GetHostedRepository(ctx, id)
+}
+
+func TestStrictModeRefusesLoweringWithoutAGroupStoreAndKeepsStatusOrder(t *testing.T) {
+	f := newVisibilityFixture(t, access.GroupStrict)
+	public := f.repo("public-repo", repository.VisibilityPublic, false)
+	if created := f.call(http.MethodPost, "/api/v2/groups", groupBody("feed", repository.VisibilityPublic, public), ""); created.Code != http.StatusCreated {
+		t.Fatalf("create = %d %s", created.Code, created.Body.String())
+	}
+	// A stale If-Match keeps its 412 and a malformed body its 400 ahead of the 409.
+	if stale := f.call(http.MethodPatch, "/api/v2/repositories/"+public.ID, `{"visibility":"private"}`, "999"); stale.Code != http.StatusPreconditionFailed {
+		t.Fatalf("a stale If-Match = %d %s, want 412", stale.Code, stale.Body.String())
+	}
+	if bad := f.call(http.MethodPatch, "/api/v2/repositories/"+public.ID, `{"visibility":"hidden"}`, public.Version); bad.Code != http.StatusBadRequest {
+		t.Fatalf("an invalid visibility = %d %s, want 400", bad.Code, bad.Body.String())
+	}
+	// Without the group store the invariant cannot be checked, so strict mode refuses.
+	h := hostedRepositoryAPIHandler{store: f.store, groupMode: access.GroupStrict}
+	response := httptest.NewRecorder()
+	if !h.rejectLoweringBelowGroups(response, httptest.NewRequest(http.MethodPatch, "/", nil), public, repository.VisibilityPrivate) || response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("lowering without a group store = %d %s", response.Code, response.Body.String())
+	}
+}

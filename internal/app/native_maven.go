@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/access"
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
 	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -77,7 +78,14 @@ func newNativeMavenHandler(store GatewayStore, objects ObjectStore, auth Authent
 			}
 			return AuthorizationDecision{Source: "legacy_static", Reason: "scope_not_granted"}
 		},
-	}, management: hostedRepositoryAPIHandler{store: store, authenticator: auth}}
+	}, management: hostedRepositoryAPIHandler{store: store, groups: store, authenticator: auth}}
+}
+
+// withGroupVisibilityMode carries the strict or lenient group mode to the
+// repository management routes this handler forwards.
+func (h nativeMavenHandler) withGroupVisibilityMode(mode access.GroupMode) nativeMavenHandler {
+	h.management.groupMode = mode
+	return h
 }
 
 type nativeMavenSessionRequest struct {

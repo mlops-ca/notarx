@@ -230,6 +230,42 @@ func TestLegacyGroupDecision(t *testing.T) {
 	}
 }
 
+func TestLegacyGroupClasses(t *testing.T) {
+	ctx := context.Background()
+	members := []repository.Member{{Name: "a"}}
+	public := repository.Group{Enabled: true, Anonymous: true, Members: members}
+	private := repository.Group{Enabled: true, Members: members}
+	for name, tc := range map[string]struct {
+		group repository.Group
+		class Class
+		open  bool
+		want  bool
+	}{
+		"anonymous, open gate":                 {public, Anonymous, true, true},
+		"anonymous, closed gate":               {public, Anonymous, false, false},
+		"authenticated reads a public group":   {public, Authenticated, false, true},
+		"authenticated, private group":         {private, Authenticated, true, false},
+		"granted reads a private group":        {private, Granted, false, true},
+		"granted, disabled group still passes": {repository.Group{Members: members}, Granted, false, true},
+		"authenticated, disabled group":        {repository.Group{Anonymous: true, Members: members}, Authenticated, true, false},
+	} {
+		d, _, err := Decide(ctx, ReadRequest{Class: tc.class, Method: http.MethodGet, Gate: gate{enabled: tc.open}, LegacyGroup: &tc.group})
+		if err != nil || d.Allow != tc.want {
+			t.Errorf("%s: allow=%v err=%v, want %v", name, d.Allow, err, tc.want)
+		}
+	}
+}
+
+func TestAnonymousGroupFullyPublicUsesOneDecision(t *testing.T) {
+	ctx := context.Background()
+	group := repository.HostedGroup{Visibility: repository.VisibilityPublic}
+	both := []repository.Member{member("a", repository.VisibilityPublic), member("b", repository.VisibilityPublic)}
+	mixed := []repository.Member{member("a", repository.VisibilityPublic), member("b", repository.VisibilityAuthenticated)}
+	if !AnonymousGroupFullyPublic(ctx, FixedGate(true), group, both) || AnonymousGroupFullyPublic(ctx, FixedGate(true), group, mixed) || AnonymousGroupFullyPublic(ctx, FixedGate(false), group, both) {
+		t.Fatal("a group is fully public only when the gate is open and every member is public")
+	}
+}
+
 func TestDescribeAnonymousReasons(t *testing.T) {
 	ctx := context.Background()
 	for name, tc := range map[string]struct {

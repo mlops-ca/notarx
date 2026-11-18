@@ -26,8 +26,15 @@ func (h anonymousAbsentShaper) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	if access.IsRead(r.Method) && r.Header.Get("Authorization") == "" {
 		if _, _, basic := r.BasicAuth(); !basic {
 			if name := protocolRepositoryName(h.format, r.URL.Path); name != "" {
-				if _, err := h.repos.GetHostedRepositoryByName(r.Context(), name); errors.Is(err, repository.ErrNotFound) {
+				_, err := h.repos.GetHostedRepositoryByName(r.Context(), name)
+				switch {
+				case errors.Is(err, repository.ErrNotFound):
 					h.challenge(w, r)
+					return
+				case err != nil:
+					// Never fall through to a handler's own 404: that would make an
+					// absent name distinguishable from a private one under errors.
+					http.Error(w, "repository lookup failed", http.StatusServiceUnavailable)
 					return
 				}
 			}

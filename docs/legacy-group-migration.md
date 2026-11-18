@@ -22,6 +22,14 @@ explicit Hosted and Proxy Repositories, then switch clients after validation.
 6. Retain the Legacy Group until all clients have moved. Deleting a V2 Group
    never deletes its member Repositories or Artifact bytes.
 
+## Upgrade of per-member anonymous flags
+
+Legacy Group members no longer carry an anonymous flag (migration `000006`). So
+that an upgrade never widens access, a Legacy Group stays anonymous only when it
+was anonymous and every one of its members was; a mixed Group becomes private and
+an operator re-enables it deliberately, or moves to a V2 Group whose members bind
+to repositories with their own visibility.
+
 ## Boundaries
 
 ### Maven resolution and cache compatibility

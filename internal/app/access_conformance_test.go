@@ -368,3 +368,48 @@ func TestAccessConformanceCoversProtocolCompatibilityFormats(t *testing.T) {
 		t.Fatalf("protocol-compatibility.md names formats the access conformance harness does not drive: %v", missing)
 	}
 }
+
+func TestOCIAnonymousTokenScopesAreValidated(t *testing.T) {
+	for scope, want := range map[string]bool{
+		"repository:team/app:pull":              true,
+		"repository:a:pull repository:b/c:pull": true,
+		"repository:team/app:push":              false,
+		"repository:team/app:pull,push":         false,
+		"repository:../etc:pull":                false,
+		"repository:Team/App:pull":              false,
+		"repository::pull":                      false,
+		"registry:catalog:*":                    false,
+		"":                                      false,
+	} {
+		if got := ociPullOnlyScopes([]string{scope}); got != want {
+			t.Errorf("scope %q: got %v, want %v", scope, got, want)
+		}
+	}
+	if ociPullOnlyScopes(nil) {
+		t.Error("a token request without a scope must not receive an anonymous token")
+	}
+}
+
+// A lookup failure for an anonymous request must not fall through to a handler's
+// own 404: that would tell an absent name from a private one under errors.
+func TestAnonymousAbsentShaperFailsClosedOnStoreErrors(t *testing.T) {
+	reached := false
+	shaper := anonymousAbsentShaper{
+		format: repository.FormatNPM, repos: failingRepositoryByName{},
+		challenge: func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusUnauthorized) },
+		next:      http.HandlerFunc(func(http.ResponseWriter, *http.Request) { reached = true }),
+	}
+	response := httptest.NewRecorder()
+	shaper.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/npm/feed/left-pad", nil))
+	if reached || response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("a store error answered %d (handler reached: %v)", response.Code, reached)
+	}
+}
+
+type failingRepositoryByName struct {
+	repository.HostedRepositoryStore
+}
+
+func (failingRepositoryByName) GetHostedRepositoryByName(context.Context, string) (repository.HostedRepository, error) {
+	return repository.HostedRepository{}, context.DeadlineExceeded
+}

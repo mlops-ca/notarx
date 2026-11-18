@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/felixge/httpsnoop"
+	"github.com/mlops-ca/notarx/internal/access"
 	"github.com/mlops-ca/notarx/internal/protocol/cargo"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/upstreamauth"
@@ -63,8 +64,7 @@ func (h v2GroupCargoHandler) serve(w http.ResponseWriter, r *http.Request, resol
 	switch route.kind {
 	case "config":
 		// The config is public only when the group and every member are.
-		public := anonymousGroupAllowed(r.Context(), resolver.groups, group, http.MethodGet) &&
-			len(anonymousGroupMembers(r.Context(), resolver.groups, group, allMembers)) == len(allMembers)
+		public := access.AnonymousGroupFullyPublic(r.Context(), resolver.groups, group, allMembers)
 		h.native.config(w, r, repository.HostedRepository{Name: group.Name, Format: repository.FormatCargo,
 			State: repository.RepositoryActive, Visibility: cargoConfigVisibility(public)})
 	case "index":

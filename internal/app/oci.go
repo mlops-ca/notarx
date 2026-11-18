@@ -795,7 +795,7 @@ func ociPullOnlyScopes(scopes []string) bool {
 				return false
 			}
 			index := strings.LastIndex(rest, ":")
-			if index < 0 || rest[:index] == "" || rest[index+1:] != "pull" {
+			if index < 0 || rest[index+1:] != "pull" || !validOCIScopeName(rest[:index]) {
 				return false
 			}
 			seen = true
@@ -820,4 +820,23 @@ func (h anonymousBearerHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		r = stripped
 	}
 	h.next.ServeHTTP(w, r)
+}
+
+// validOCIScopeName accepts only repository names a registry could serve:
+// lowercase path components of letters, digits and . _ - separated by slashes.
+func validOCIScopeName(name string) bool {
+	if name == "" || len(name) > 255 {
+		return false
+	}
+	for _, component := range strings.Split(name, "/") {
+		if component == "" || component == "." || component == ".." {
+			return false
+		}
+		for _, r := range component {
+			if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '.' || r == '_' || r == '-') {
+				return false
+			}
+		}
+	}
+	return true
 }
