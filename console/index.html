@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN" class="dark" data-theme="dark">
+<html lang="en" class="dark" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta
@@ -9,8 +9,12 @@
     <script>
       try {
         const themeId = localStorage.getItem("ag.console.theme.id");
+        const stored = localStorage.getItem("ag.console.theme");
+        // No stored choice: follow the system colour scheme, dark if unspecified.
         const theme =
-          localStorage.getItem("ag.console.theme") === "light"
+          stored === "light" ||
+          (stored !== "dark" &&
+            window.matchMedia("(prefers-color-scheme: light)").matches)
             ? "light"
             : "dark";
         if (themeId) document.documentElement.dataset.themeId = themeId;
@@ -19,11 +23,10 @@
         document.documentElement.style.colorScheme = theme;
       } catch {}
     </script>
-    <link
-      rel="icon"
-      href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 rx=%2212%22 fill=%22%23090a0c%22/><path d=%22M14 20h36v8H14zm0 16h36v8H14z%22 fill=%22%2322d3ee%22/></svg>"
-    />
-    <title>Artifact Gateway Console</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <title>notarx Console</title>
   </head>
   <body>
     <div id="root"></div>

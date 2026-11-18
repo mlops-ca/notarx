@@ -10,8 +10,8 @@ func DefaultSiteSettings() SiteSettings {
 		Version:         "1",
 		SiteName:        "Artifact Gateway",
 		BrandMark:       "AG",
-		EnabledThemeIDs: []string{"gateway-dark", "gateway-light", "aerok-dark", "aerok-light"},
-		DefaultThemeID:  "gateway-dark",
+		EnabledThemeIDs: []string{"notarx-dark", "notarx-light"},
+		DefaultThemeID:  "notarx-dark",
 		UpdatedAt:       time.Unix(0, 0).UTC(),
 	}
 }

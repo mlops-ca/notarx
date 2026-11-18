@@ -53,3 +53,25 @@ test('reports missing and escaping links while accepting valid files', () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('tolerates a zh-CN companion linking to a dropped zh-CN twin', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'notarx-docs-'));
+  try {
+    mkdirSync(path.join(root, 'docs'));
+    const read = (file) =>
+      file.endsWith('docs/index.zh-CN.md')
+        ? '[a](../CHANGELOG.zh-CN.md) [b](missing.md)'
+        : '[a](CHANGELOG.zh-CN.md)';
+    const broken = findBrokenDocumentLinks(
+      root,
+      ['docs/index.zh-CN.md', 'README.md'],
+      read,
+    );
+    assert.deepEqual(broken, [
+      { file: 'docs/index.zh-CN.md', target: 'missing.md', reason: 'missing target' },
+      { file: 'README.md', target: 'CHANGELOG.zh-CN.md', reason: 'missing target' },
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

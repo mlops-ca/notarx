@@ -1,12 +1,35 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+root=${RELEASE_VERSION_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}
 cd "$root"
 
+# The committed tree carries the development version 0.0.0-dev (ADR 0024); release
+# builds stamp the real version with scripts/stamp-version.sh and pass it here.
+usage() {
+  printf 'usage: %s [--expect <version>]\n' "$0" >&2
+  exit 2
+}
+expect=
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --expect)
+      [[ $# -ge 2 ]] || usage
+      expect=$2
+      shift 2
+      ;;
+    *) usage ;;
+  esac
+done
+
 version=$(tr -d '[:space:]' < VERSION)
-if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  printf 'VERSION is not a stable SemVer core: %s\n' "$version" >&2
+semver='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
+if [[ ! "$version" =~ $semver ]]; then
+  printf 'VERSION is not a SemVer version: %s\n' "$version" >&2
+  exit 1
+fi
+if [[ -n "$expect" && "$version" != "$expect" ]]; then
+  printf 'VERSION is %s, expected %s.\n' "$version" "$expect" >&2
   exit 1
 fi
 
@@ -19,6 +42,7 @@ check_value() {
   fi
 }
 
+command -v node >/dev/null || { printf 'release-version-check: node is required\n' >&2; exit 1; }
 check_value 'Console package' "$(node -p "require('./console/package.json').version")"
 check_value 'Console lockfile' "$(node -p "require('./console/package-lock.json').version")"
 check_value 'OpenAPI tools package' "$(node -p "require('./tools/openapi/package.json').version")"
@@ -27,6 +51,9 @@ check_value 'OpenAPI tools lockfile' "$(node -p "require('./tools/openapi/packag
 for contract in api/openapi/native-hosted.yaml api/openapi/management-runtime.yaml api/openapi/management.yaml; do
   contract_version=$(awk '/^info:$/ { in_info = 1; next } in_info && /^  version:/ { print $2; exit }' "$contract")
   check_value "$contract" "$contract_version"
+done
+for bundle in api/openapi/native-hosted-v1.json api/openapi/management-runtime-v1.json; do
+  check_value "$bundle" "$(node -p "require('./$bundle').info.version")"
 done
 
 # The notarxctl client takes its version from this same VERSION file. Keep its
@@ -61,11 +88,5 @@ for doc in docs/cli.md; do
     exit 1
   fi
 done
-
-release_heading=$(grep -E "^## $version - [0-9]{4}-[0-9]{2}-[0-9]{2}$" CHANGELOG.md | head -n 1)
-test -n "$release_heading"
-grep -Fxq "$release_heading" CHANGELOG.zh-CN.md
-test -s ".github/release-notes/v$version.md"
-grep -Fq "# Artifact Gateway v$version" ".github/release-notes/v$version.md"
 
 printf 'Release version check passed: %s.\n' "$version"

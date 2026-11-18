@@ -15,19 +15,19 @@ func TestSiteSettingsArePubliclyReadableAndAdminVersioned(t *testing.T) {
 
 	read := httptest.NewRecorder()
 	handler.ServeHTTP(read, httptest.NewRequest(http.MethodGet, "/api/v2/site-settings", nil))
-	if read.Code != http.StatusOK || read.Header().Get("ETag") != "1" || !strings.Contains(read.Body.String(), `"siteName":"Artifact Gateway"`) || !strings.Contains(read.Body.String(), `"id":"aerok-dark"`) {
+	if read.Code != http.StatusOK || read.Header().Get("ETag") != "1" || !strings.Contains(read.Body.String(), `"siteName":"Artifact Gateway"`) || !strings.Contains(read.Body.String(), `"id":"notarx-dark"`) {
 		t.Fatalf("public read=%d etag=%q body=%s", read.Code, read.Header().Get("ETag"), read.Body.String())
 	}
 
 	unauthorized := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPut, "/api/v2/site-settings", strings.NewReader(`{"siteName":"Acme Packages","logoUrl":"","brandMark":"AC","enabledThemeIds":["aerok-dark","aerok-light"],"defaultThemeId":"aerok-dark"}`))
+	request := httptest.NewRequest(http.MethodPut, "/api/v2/site-settings", strings.NewReader(`{"siteName":"Acme Packages","logoUrl":"","brandMark":"AC","enabledThemeIds":["notarx-dark","notarx-light"],"defaultThemeId":"notarx-dark"}`))
 	request.Header.Set("If-Match", "1")
 	handler.ServeHTTP(unauthorized, request)
 	if unauthorized.Code != http.StatusUnauthorized {
 		t.Fatalf("unauthorized replace=%d body=%s", unauthorized.Code, unauthorized.Body.String())
 	}
 
-	replace := httptest.NewRequest(http.MethodPut, "/api/v2/site-settings", strings.NewReader(`{"siteName":"Acme Packages","logoUrl":"/assets/acme.webp","brandMark":"AC","enabledThemeIds":["aerok-dark","aerok-light"],"defaultThemeId":"aerok-light"}`))
+	replace := httptest.NewRequest(http.MethodPut, "/api/v2/site-settings", strings.NewReader(`{"siteName":"Acme Packages","logoUrl":"/assets/acme.webp","brandMark":"AC","enabledThemeIds":["notarx-dark","notarx-light"],"defaultThemeId":"notarx-light"}`))
 	replace.Header.Set("If-Match", "1")
 	authorize(replace, "admin-secret")
 	replaced := httptest.NewRecorder()
@@ -39,7 +39,7 @@ func TestSiteSettingsArePubliclyReadableAndAdminVersioned(t *testing.T) {
 		t.Fatalf("audits=%#v", store.Audits)
 	}
 
-	stale := httptest.NewRequest(http.MethodPut, "/api/v2/site-settings", strings.NewReader(`{"siteName":"Stale","logoUrl":"","brandMark":"ST","enabledThemeIds":["aerok-dark"],"defaultThemeId":"aerok-dark"}`))
+	stale := httptest.NewRequest(http.MethodPut, "/api/v2/site-settings", strings.NewReader(`{"siteName":"Stale","logoUrl":"","brandMark":"ST","enabledThemeIds":["notarx-dark"],"defaultThemeId":"notarx-dark"}`))
 	stale.Header.Set("If-Match", "1")
 	authorize(stale, "admin-secret")
 	staleResponse := httptest.NewRecorder()
@@ -54,7 +54,7 @@ func TestSiteSettingsRejectUnavailableOrDisabledDefaultTheme(t *testing.T) {
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
 	for name, body := range map[string]string{
 		"unavailable":      `{"siteName":"Acme","logoUrl":"","brandMark":"AC","enabledThemeIds":["missing-theme"],"defaultThemeId":"missing-theme"}`,
-		"disabled default": `{"siteName":"Acme","logoUrl":"","brandMark":"AC","enabledThemeIds":["aerok-dark"],"defaultThemeId":"aerok-light"}`,
+		"disabled default": `{"siteName":"Acme","logoUrl":"","brandMark":"AC","enabledThemeIds":["notarx-dark"],"defaultThemeId":"notarx-light"}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			request := httptest.NewRequest(http.MethodPut, "/api/v2/site-settings", strings.NewReader(body))
@@ -72,7 +72,7 @@ func TestSiteSettingsRejectUnavailableOrDisabledDefaultTheme(t *testing.T) {
 func TestSiteSettingsRejectUnsafeLogoURLs(t *testing.T) {
 	store := repository.NewMemoryStore()
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
-	request := httptest.NewRequest(http.MethodPut, "/api/v2/site-settings", strings.NewReader(`{"siteName":"Acme","logoUrl":"javascript:alert(1)","brandMark":"AC","enabledThemeIds":["aerok-dark"],"defaultThemeId":"aerok-dark"}`))
+	request := httptest.NewRequest(http.MethodPut, "/api/v2/site-settings", strings.NewReader(`{"siteName":"Acme","logoUrl":"javascript:alert(1)","brandMark":"AC","enabledThemeIds":["notarx-dark"],"defaultThemeId":"notarx-dark"}`))
 	request.Header.Set("If-Match", "1")
 	authorize(request, "admin-secret")
 	response := httptest.NewRecorder()

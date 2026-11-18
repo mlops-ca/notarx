@@ -52,20 +52,6 @@ jobs:
         run: |
           scripts/ci-e2e-select.sh "$BASE_SHA" "$HEAD_SHA" | tee -a "$GITHUB_OUTPUT"
 
-  pr-title:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Require a Conventional Commit PR title
-        env:
-          TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          pattern='^(feat|fix|perf|revert|docs|test|refactor|build|ci|chore|style)(\([a-z0-9._/-]+\))?!?: .+'
-          if [[ ! "$TITLE" =~ $pattern ]]; then
-            echo "PR title must be 'type(scope): subject' (ADR 0024); got: $TITLE" >&2
-            exit 1
-          fi
-
   # Owner rule: no Chinese content may be added anywhere (zh-CN deletions are
   # allowed). Runs on every pull request, not only when docs changed.
   no-chinese:
@@ -212,7 +198,7 @@ jobs:
       - name: Run Go vet
         run: make vet
       - name: Verify release version and artifact builder
-        run: make release-version-check release-artifacts-test
+        run: make release-version-check stamp-version-test release-plan-test release-artifacts-test
       - name: Verify package signing runbook and environment checks
         run: make packages-signing-drill packages-environments-test
       - name: Run race detector
@@ -419,7 +405,7 @@ jobs:
   # skipped by change detection, fails on any failure or cancellation.
   ci-ok:
     if: always()
-    needs: [changes, pr-title, no-chinese, docs, quality, console, console-e2e, console-e2e-report, image-test-stages, build-images, contract-plan, contract, contract-and-test]
+    needs: [changes, no-chinese, docs, quality, console, console-e2e, console-e2e-report, image-test-stages, build-images, contract-plan, contract, contract-and-test]
     runs-on: ubuntu-24.04
     steps:
       - name: Require every needed job to succeed or be skipped

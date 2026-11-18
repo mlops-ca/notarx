@@ -56,5 +56,5 @@ def og(W,H):
     t3,_=text_path(mono,"MLOPS.CA",100,560,18,0.14); b.append(f'<path d="{t3}" fill="{MUTED}"/>')
     b.append(f'<rect x="100" y="520" width="{W-200}" height="1" fill="#2a2d24"/>')
     return svg(W,H,'<title>notarx — verified artifacts, private by default</title>'+"".join(b))
-save("notarx-og.svg", og(1200,630))
+save("og-image.svg", og(1200,630))
 print("ok")

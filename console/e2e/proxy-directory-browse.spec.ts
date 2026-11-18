@@ -57,7 +57,7 @@ async function mockProxyDirectory(page: Page, format: "maven" | "raw") {
           logoUrl: "",
           brandMark: "AG",
           enabledThemeIds: defaultConsoleThemes.map((theme) => theme.id),
-          defaultThemeId: "gateway-dark",
+          defaultThemeId: "notarx-dark",
           availableThemes: defaultConsoleThemes,
         },
       });

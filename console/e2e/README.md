@@ -10,7 +10,7 @@ series (#284).
 
 ## Visual baseline
 
-`e2e/visual/` screenshots the main surfaces in Gateway Dark and Gateway Light
+`e2e/visual/` screenshots the main surfaces in notarx Dark and notarx Light
 at 1440×900 with a frozen clock. Every Gateway request is served from
 `visual/fixtures.ts`, whose payloads are checked against the generated
 `src/client` types. A request without a fixture fails the test, so a page that

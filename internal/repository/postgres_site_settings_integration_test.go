@@ -32,13 +32,13 @@ func TestPostgresSiteSettingsVersionedReplacement(t *testing.T) {
 	})
 	updated, err := store.ReplaceSiteSettings(ctx, SiteSettings{
 		SiteName: "Acme Packages", LogoURL: "/assets/acme.webp", BrandMark: "AC",
-		EnabledThemeIDs: []string{"aerok-light"}, DefaultThemeID: "aerok-light",
+		EnabledThemeIDs: []string{"notarx-light"}, DefaultThemeID: "notarx-light",
 	}, current.Version)
 	if err != nil || updated.SiteName != "Acme Packages" || updated.Version == current.Version || updated.UpdatedAt.IsZero() {
 		t.Fatalf("updated=%#v err=%v", updated, err)
 	}
 	loaded, err := store.GetSiteSettings(ctx)
-	if err != nil || loaded.LogoURL != "/assets/acme.webp" || loaded.BrandMark != "AC" || loaded.DefaultThemeID != "aerok-light" || len(loaded.EnabledThemeIDs) != 1 {
+	if err != nil || loaded.LogoURL != "/assets/acme.webp" || loaded.BrandMark != "AC" || loaded.DefaultThemeID != "notarx-light" || len(loaded.EnabledThemeIDs) != 1 {
 		t.Fatalf("loaded=%#v err=%v", loaded, err)
 	}
 	if _, err := store.ReplaceSiteSettings(ctx, current, current.Version); err != ErrVersionConflict {

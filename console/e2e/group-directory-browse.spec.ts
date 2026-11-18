@@ -42,9 +42,9 @@ const asset = {
 };
 
 for (const [width, theme] of [
-  [1440, "gateway-dark"],
-  [1024, "gateway-light"],
-  [390, "gateway-dark"],
+  [1440, "notarx-dark"],
+  [1024, "notarx-light"],
+  [390, "notarx-dark"],
 ] as const) {
   test(`Group directory shows source evidence and usable geometry at ${width}px`, async ({
     page,

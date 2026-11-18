@@ -1,0 +1,29 @@
+# git-cliff configuration (ADR 0024). git-cliff computes the version bump from
+# conventional commits; scripts/release-plan.sh is the only caller that turns it
+# into a release version. The pinned git-cliff version is scripts/git-cliff.version.
+
+[bump]
+# While the major is 0: feat bumps minor, fix/perf/revert bump patch, and a
+# breaking change bumps minor. 1.0.0 is only produced by an explicit
+# version_override of the stable run.
+features_always_bump_minor = true
+breaking_always_bump_major = false
+# The core of the first nightly before any stable tag exists. release-plan.sh
+# does not depend on it (it states 0.1.0 itself), it documents the policy.
+initial_tag = "0.1.0"
+# Not used: no_increment_regex also ignores breaking commits of a non-releasing
+# type (a "refactor(api)!:" must bump minor), so non-releasing types are skipped
+# by the commit_parsers below instead, with protect_breaking_commits keeping
+# breaking ones.
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+protect_breaking_commits = true
+# Nightly tags (vX.Y.Z-nightly.N) are invisible to git-cliff.
+tag_pattern = '^v[0-9]+\.[0-9]+\.[0-9]+$'
+commit_parsers = [
+  # Non-releasing types never bump the version.
+  { message = '^(docs|test|refactor|build|ci|chore|style)(\(.+\))?!?:', skip = true },
+  { message = '.*', group = "Changes" },
+]

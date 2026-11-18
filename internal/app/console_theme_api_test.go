@@ -167,7 +167,7 @@ func TestConsoleThemePackageRejectsInvalidAndReservedPackages(t *testing.T) {
 	if malformedColor.Code != http.StatusBadRequest || !strings.Contains(malformedColor.Body.String(), "invalid_theme_package") {
 		t.Fatalf("malformed color = %d %s", malformedColor.Code, malformedColor.Body.String())
 	}
-	reservedBody := strings.Replace(acmeDarkTheme, `"id":"acme-dark"`, `"id":"gateway-dark"`, 1)
+	reservedBody := strings.Replace(acmeDarkTheme, `"id":"acme-dark"`, `"id":"notarx-dark"`, 1)
 	reserved := request("/api/v2/console-themes:validate", reservedBody)
 	if reserved.Code != http.StatusOK || !strings.Contains(reserved.Body.String(), `"status":"reserved"`) || !strings.Contains(reserved.Body.String(), `"existingSource":"builtin"`) {
 		t.Fatalf("reserved validation = %d %s", reserved.Code, reserved.Body.String())
@@ -182,7 +182,7 @@ func TestConsoleThemeCatalogMutationsShareOneLock(t *testing.T) {
 	store := &catalogLockObservingStore{MemoryStore: repository.NewMemoryStore()}
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
 
-	settingsBody := `{"siteName":"Artifact Gateway","logoUrl":"","brandMark":"AG","enabledThemeIds":["gateway-dark","gateway-light","aerok-dark","aerok-light"],"defaultThemeId":"gateway-dark"}`
+	settingsBody := `{"siteName":"Artifact Gateway","logoUrl":"","brandMark":"AG","enabledThemeIds":["notarx-dark", "notarx-light"],"defaultThemeId":"notarx-dark"}`
 	settingsRequest := httptest.NewRequest(http.MethodPut, "/api/v2/site-settings", strings.NewReader(settingsBody))
 	authorize(settingsRequest, "admin-secret")
 	settingsRequest.Header.Set("If-Match", "1")

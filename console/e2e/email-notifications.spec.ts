@@ -371,7 +371,7 @@ for (const mode of ["dark", "light"]) {
     await fixture(page, "zh-CN", mode);
     await page.addInitScript(
       (id) => localStorage.setItem("ag.console.theme.id", id),
-      `gateway-${mode}`,
+      `notarx-${mode}`,
     );
     await page.route("**/api/v2/site-settings", (route) =>
       route.fulfill({
@@ -382,7 +382,7 @@ for (const mode of ["dark", "light"]) {
           brandMark: "AG",
           availableThemes: defaultConsoleThemes,
           enabledThemeIds: defaultConsoleThemes.map((theme) => theme.id),
-          defaultThemeId: "gateway-dark",
+          defaultThemeId: "notarx-dark",
           updatedAt: "2026-01-01T12:00:00Z",
         },
       }),
@@ -390,7 +390,7 @@ for (const mode of ["dark", "light"]) {
     await page.goto("/system?tab=email");
     await expect(page.locator("html")).toHaveAttribute(
       "data-theme-id",
-      `gateway-${mode}`,
+      `notarx-${mode}`,
     );
     const button = page.getByRole("button", {
       name: "新建邮件目标",
@@ -451,8 +451,8 @@ for (const mode of ["dark", "light"]) {
     const results = [];
     const expectedBackground =
       mode === "dark"
-        ? ["rgb(250, 250, 250)", "rgb(255, 255, 255)", "rgb(228, 228, 231)"]
-        : ["rgb(9, 9, 11)", "rgb(39, 39, 42)", "rgb(63, 63, 70)"];
+        ? ["rgb(200, 241, 53)", "rgb(214, 245, 92)", "rgb(180, 217, 42)"]
+        : ["rgb(29, 32, 24)", "rgb(42, 45, 36)", "rgb(58, 62, 50)"];
     for (const state of ["normal", "hover", "active"]) {
       if (state === "hover") await button.hover();
       if (state === "active") await page.mouse.down();

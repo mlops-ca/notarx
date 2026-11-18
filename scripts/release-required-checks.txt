@@ -1,0 +1,8 @@
+# Check runs that must be green on a commit before it is released (ADR 0024).
+# One exact check name per line; "name* N" requires at least N successful check
+# runs whose name starts with "name" (trailing spaces are ignored). scripts/release-plan.sh reads this list.
+quality
+contract-and-test
+console
+mainline-assets
+mainline-images * 2

@@ -1,43 +1,43 @@
-name: 功能需求
-description: 新增或扩展用户可见能力
+name: Feature request
+description: Add or extend a user-visible capability
 labels: ["type: feature"]
 body:
   - type: markdown
     attributes:
       value: |
-        创建后请补 `area:*` 标签（涉及时再加 `format:*`），标题用 `<区域>: <结论式短语>`。系列需求请建总览 issue，并在正文用任务清单列出子单。
+        After creating the issue, add an `area:*` label (and `format:*` when it applies) and title it `<area>: <outcome statement>`. For a series, create an overview issue and list the children as a task list in its body.
   - type: textarea
     id: background
     attributes:
-      label: 背景与现状
-      description: 现在怎么工作、为什么不够；引用相关代码路径、契约或文档。
+      label: Background and current state
+      description: How it works today and why that is not enough; cite the relevant code paths, contract or documents.
     validations:
       required: true
   - type: textarea
     id: scope
     attributes:
-      label: 范围
-      description: 要做什么，分条列出可独立验证的交付物。
+      label: Scope
+      description: What to build, as separate deliverables that can each be verified.
     validations:
       required: true
   - type: textarea
     id: acceptance
     attributes:
-      label: 验收标准
-      description: 可执行的验收条件（测试、命令、截图或契约断言）。
+      label: Acceptance criteria
+      description: Executable acceptance conditions (tests, commands, screenshots or contract assertions).
     validations:
       required: true
   - type: textarea
     id: out-of-scope
     attributes:
-      label: 不在范围
-      description: 明确排除的内容，避免评审时反复确认。
+      label: Out of scope
+      description: What is explicitly excluded, so review does not have to re-confirm it.
     validations:
       required: true
   - type: textarea
     id: dependencies
     attributes:
-      label: 依赖与顺序
-      description: 依赖的 issue、与其他单的先后顺序、同一文件的冲突提示。
+      label: Dependencies and ordering
+      description: Issues this depends on, ordering against other issues, and conflict notes for shared files.
     validations:
       required: false

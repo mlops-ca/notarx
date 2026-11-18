@@ -14,43 +14,43 @@ afterEach(() => {
 describe("console themes", () => {
   it("preserves explicit Ant Design aliases after the mode algorithm", () => {
     const dark = defaultConsoleThemes.find(
-      (theme) => theme.id === "aerok-dark",
+      (theme) => theme.id === "notarx-dark",
     )!;
     const { token } = resolveConsoleTheme(dark);
 
-    expect(token.colorPrimary).toBe("#3258D0");
-    expect(token.colorBgLayout).toBe("#090D16");
-    expect(token.colorBgContainer).toBe("#121722");
-    expect(token.colorBgElevated).toBe("#1B2230");
-    expect(token.colorBorder).toBe("rgba(95, 112, 156, 0.32)");
-    expect(token.colorTextSecondary).toBe("#B0B6C5");
+    expect(token.colorPrimary).toBe("#C8F135");
+    expect(token.colorBgLayout).toBe("#0B0C0A");
+    expect(token.colorBgContainer).toBe("#161812");
+    expect(token.colorBgElevated).toBe("#1D2018");
+    expect(token.colorBorder).toBe("#2A2D24");
+    expect(token.colorTextSecondary).toBe("#9CA091");
   });
 
   it("derives Console CSS variables from the same resolved token map", () => {
     const light = defaultConsoleThemes.find(
-      (theme) => theme.id === "aerok-light",
+      (theme) => theme.id === "notarx-light",
     )!;
 
     applyConsoleTheme(light, document.documentElement);
 
     expect(
       document.documentElement.style.getPropertyValue("--ag-action-primary"),
-    ).toBe("#26499D");
+    ).toBe("#1d2018");
     expect(
       document.documentElement.style.getPropertyValue("--ag-surface-container"),
-    ).toBe("#ffffff");
+    ).toBe("#f6f5ee");
     expect(
       document.documentElement.style.getPropertyValue("--ag-status-danger"),
-    ).toBe("#B2154E");
+    ).toBe("#B0310F");
     expect(document.documentElement).toHaveAttribute(
       "data-theme-contract",
       "semantic-v1",
     );
   });
 
-  it("projects the Gateway Dark v2 shell palette", () => {
+  it("projects the notarx Dark v2 shell palette", () => {
     const dark = defaultConsoleThemes.find(
-      (theme) => theme.id === "gateway-dark",
+      (theme) => theme.id === "notarx-dark",
     )!;
 
     applyConsoleTheme(dark, document.documentElement);
@@ -60,34 +60,34 @@ describe("console themes", () => {
     );
     expect(
       document.documentElement.style.getPropertyValue("--ag-surface-sider"),
-    ).toBe("#0c0c0f");
+    ).toBe("#0e100c");
     expect(
       document.documentElement.style.getPropertyValue(
         "--ag-surface-container-translucent",
       ),
-    ).toBe("rgba(17, 17, 20, 0.82)");
+    ).toBe("rgba(22, 24, 18, 0.9)");
     expect(
       document.documentElement.style.getPropertyValue(
         "--ag-action-primary-soft",
       ),
-    ).toBe("rgba(255, 255, 255, 0.08)");
+    ).toBe("rgba(200, 241, 53, 0.12)");
 
     const config = buildConsoleThemeConfig(dark);
     expect(config.components?.Menu?.darkItemBg).toBe("transparent");
-    expect(config.components?.Menu?.darkItemSelectedColor).toBe("#fafafa");
-    expect(config.components?.Button?.defaultBg).toBe("#111114");
+    expect(config.components?.Menu?.darkItemSelectedColor).toBe("#f6f5ee");
+    expect(config.components?.Button?.defaultBg).toBe("#161812");
     expect(config.components?.Input?.activeShadow).toBe(
-      "0 0 0 2px rgba(34, 211, 238, 0.4)",
+      "0 0 0 2px rgba(200, 241, 53, 0.4)",
     );
     expect(config.components?.Segmented?.trackBg).toBe(
-      "rgba(255, 255, 255, 0.04)",
+      "rgba(236, 235, 227, 0.04)",
     );
-    expect(config.components?.Table?.headerColor).toBe("#8b8b94");
+    expect(config.components?.Table?.headerColor).toBe("#8a8e7f");
   });
 
-  it("keeps the Gateway Light v2 menu on the sider surface", () => {
+  it("keeps the notarx Light v2 menu on the sider surface", () => {
     const light = defaultConsoleThemes.find(
-      (theme) => theme.id === "gateway-light",
+      (theme) => theme.id === "notarx-light",
     )!;
     const resolved = resolveConsoleTheme(light);
 
@@ -99,10 +99,10 @@ describe("console themes", () => {
   });
 
   it.each(["success", "warning", "danger", "info"] as const)(
-    "keeps Gateway Light %s text above AA on resting and hovered surfaces",
+    "keeps notarx Light %s text above AA on resting and hovered surfaces",
     (status) => {
       const light = defaultConsoleThemes.find(
-        (theme) => theme.id === "gateway-light",
+        (theme) => theme.id === "notarx-light",
       )!;
       const { roles } = resolveConsoleTheme(light);
       const luminance = (hex: string) => {
@@ -132,24 +132,32 @@ describe("console themes", () => {
   );
 
   it("keeps extension menus on their package palette", () => {
-    const dark = defaultConsoleThemes.find(
-      (theme) => theme.id === "aerok-dark",
-    )!;
-    const config = buildConsoleThemeConfig(dark);
+    const extension = {
+      ...defaultConsoleThemes[0],
+      id: "operator-plum",
+      name: "Operator Plum",
+      token: {
+        ...defaultConsoleThemes[0].token,
+        colorPrimary: "#7C3AED",
+        colorPrimaryHover: "#8B5CF6",
+        colorPrimaryBg: "#1E1B4B",
+      },
+    };
+    const config = buildConsoleThemeConfig(extension);
 
     expect(config.components?.Menu?.darkItemBg).toBe("transparent");
     expect(config.components?.Menu?.darkItemHoverBg).toBe(
-      "rgba(105, 121, 158, 0.18)",
+      "rgba(236, 235, 227, 0.09)",
     );
-    expect(config.components?.Menu?.darkItemSelectedBg).toBe("#17203A");
-    expect(config.components?.Menu?.darkItemSelectedColor).toBe("#6686EA");
+    expect(config.components?.Menu?.darkItemSelectedBg).toBe("#1E1B4B");
+    expect(config.components?.Menu?.darkItemSelectedColor).toBe("#8B5CF6");
   });
 
   it("keeps component geometry in the shared Console contract", () => {
     const config = buildConsoleThemeConfig(defaultConsoleThemes[0]);
 
     expect(config.components?.Menu?.itemHeight).toBe(38);
-    expect(config.components?.Button?.borderRadius).toBe(8);
+    expect(config.components?.Button?.borderRadius).toBe(2);
   });
 
   it("keeps native text selection neutral across every built-in theme", () => {
@@ -201,11 +209,11 @@ describe("console themes", () => {
 
   it("resolves a v1 extension package without built-in CSS knowledge", () => {
     const extension = {
-      ...defaultConsoleThemes[3],
+      ...defaultConsoleThemes[1],
       id: "operator-plum",
       name: "Operator Plum",
       token: {
-        ...defaultConsoleThemes[3].token,
+        ...defaultConsoleThemes[1].token,
         colorPrimary: "#7C3AED",
         colorPrimaryHover: "#8B5CF6",
         colorPrimaryActive: "#6D28D9",
@@ -216,7 +224,7 @@ describe("console themes", () => {
 
     expect(resolved.roles.action.primary).toBe("#7C3AED");
     expect(resolved.roles.navigation.indicatorStart).toBe("#8B5CF6");
-    expect(resolved.roles.surface.container).toBe("#ffffff");
+    expect(resolved.roles.surface.container).toBe("#F6F5EE");
     expect(resolved.roles.selection.background).not.toContain("#7C3AED");
     expect(Object.keys(resolved.cssVariables).length).toBeGreaterThan(50);
   });
@@ -272,8 +280,8 @@ describe("console themes", () => {
 });
 
 it.each([
-  ["gateway-dark", "#09090b", "#fafafa"],
-  ["gateway-light", "#ffffff", "#09090b"],
+  ["notarx-dark", "#0b0c0a", "#c8f135"],
+  ["notarx-light", "#f6f5ee", "#1d2018"],
 ])(
   "projects readable %s action tokens without replacing global solid text",
   (id, foreground, background) => {
