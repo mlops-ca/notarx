@@ -238,7 +238,7 @@ func (s *PostgresStore) CommitMavenSnapshotImport(ctx context.Context, p MavenSn
 	for i, a := range p.Artifacts {
 		id := uuid.NewSHA1(uuid.MustParse(v.SessionID), []byte(a.SourceTimestamp+":"+strconv.Itoa(a.SourceBuildNumber)+":"+a.Digest)).String()
 		created, _ := time.Parse("20060102.150405", a.SourceTimestamp)
-		_, err = tx.ExecContext(ctx, `INSERT INTO native_maven_artifacts(id,repository_id,coordinate,digest,state,created_at,build_number,source_timestamp,source_build_number) VALUES($1,$2,$3,$4,'visible',$5,$6,$7,$8)`, id, p.RepositoryID, p.Coordinate, a.Digest, created, i+1, a.SourceTimestamp, a.SourceBuildNumber)
+		_, err = tx.ExecContext(ctx, `INSERT INTO native_maven_artifacts(id,repository_id,coordinate,digest,state,created_at,build_number,source_timestamp,source_build_number,publisher) VALUES($1,$2,$3,$4,'visible',$5,$6,$7,$8,COALESCE((SELECT s.publisher FROM native_maven_publish_sessions s WHERE s.repository_id=$2 AND s.coordinate=$3 AND s.state IN ('open','committed') ORDER BY s.expires_at DESC LIMIT 1),''))`, id, p.RepositoryID, p.Coordinate, a.Digest, created, i+1, a.SourceTimestamp, a.SourceBuildNumber)
 		if err != nil {
 			return v, err
 		}

@@ -317,7 +317,7 @@ func (s *PostgresStore) PublishMavenProtocolAssets(ctx context.Context, id strin
 		if artifact.BuildNumber > MaxMavenSnapshotBuildNumber {
 			return MavenArtifact{}, ErrMavenSnapshotBuildExhausted
 		}
-		err = tx.QueryRowContext(ctx, `INSERT INTO native_maven_artifacts (id,repository_id,coordinate,digest,state,build_number) VALUES ($1,$2,$3,$4,'visible',$5) RETURNING created_at`, artifact.ID, artifact.RepositoryID, artifact.Coordinate, artifact.Digest, artifact.BuildNumber).Scan(&artifact.CreatedAt)
+		err = tx.QueryRowContext(ctx, `INSERT INTO native_maven_artifacts (id,repository_id,coordinate,digest,state,build_number,publisher) VALUES ($1,$2,$3,$4,'visible',$5,COALESCE((SELECT s.publisher FROM native_maven_publish_sessions s WHERE s.repository_id=$2 AND s.coordinate=$3 AND s.state IN ('open','committed') ORDER BY s.expires_at DESC LIMIT 1),'')) RETURNING created_at`, artifact.ID, artifact.RepositoryID, artifact.Coordinate, artifact.Digest, artifact.BuildNumber).Scan(&artifact.CreatedAt)
 		if isUnique(err) {
 			return MavenArtifact{}, ErrNameExists
 		}
@@ -513,7 +513,7 @@ func (s *PostgresStore) commitMavenPublishSession(ctx context.Context, id, key, 
 		if err = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(build_number),0)+1 FROM native_maven_artifacts WHERE repository_id=$1 AND coordinate=$2`, a.RepositoryID, a.Coordinate).Scan(&a.BuildNumber); err != nil {
 			return MavenArtifact{}, false, err
 		}
-		err = tx.QueryRowContext(ctx, `INSERT INTO native_maven_artifacts (id,repository_id,coordinate,digest,state,build_number) VALUES ($1,$2,$3,$4,'visible',$5) RETURNING id::text, digest, state, created_at`, a.ID, a.RepositoryID, a.Coordinate, a.Digest, a.BuildNumber).Scan(&a.ID, &a.Digest, &a.State, &a.CreatedAt)
+		err = tx.QueryRowContext(ctx, `INSERT INTO native_maven_artifacts (id,repository_id,coordinate,digest,state,build_number,publisher) VALUES ($1,$2,$3,$4,'visible',$5,COALESCE((SELECT s.publisher FROM native_maven_publish_sessions s WHERE s.repository_id=$2 AND s.coordinate=$3 AND s.state IN ('open','committed') ORDER BY s.expires_at DESC LIMIT 1),'')) RETURNING id::text, digest, state, created_at`, a.ID, a.RepositoryID, a.Coordinate, a.Digest, a.BuildNumber).Scan(&a.ID, &a.Digest, &a.State, &a.CreatedAt)
 		if isUnique(err) {
 			return MavenArtifact{}, false, ErrNameExists
 		}
@@ -569,7 +569,7 @@ func (s *PostgresStore) commitMavenPublishSession(ctx context.Context, id, key, 
 				return MavenArtifact{}, false, err
 			}
 		}
-		err = tx.QueryRowContext(ctx, `INSERT INTO native_maven_artifacts (id,repository_id,coordinate,digest,state) VALUES ($1,$2,$3,$4,'visible') ON CONFLICT (repository_id,coordinate,build_number) DO NOTHING RETURNING id::text, digest, state, created_at`, a.ID, a.RepositoryID, a.Coordinate, a.Digest).Scan(&a.ID, &a.Digest, &a.State, &a.CreatedAt)
+		err = tx.QueryRowContext(ctx, `INSERT INTO native_maven_artifacts (id,repository_id,coordinate,digest,state,publisher) VALUES ($1,$2,$3,$4,'visible',COALESCE((SELECT s.publisher FROM native_maven_publish_sessions s WHERE s.repository_id=$2 AND s.coordinate=$3 AND s.state IN ('open','committed') ORDER BY s.expires_at DESC LIMIT 1),'')) ON CONFLICT (repository_id,coordinate,build_number) DO NOTHING RETURNING id::text, digest, state, created_at`, a.ID, a.RepositoryID, a.Coordinate, a.Digest).Scan(&a.ID, &a.Digest, &a.State, &a.CreatedAt)
 		if errors.Is(err, sql.ErrNoRows) {
 			return MavenArtifact{}, false, ErrNameExists
 		}
@@ -683,13 +683,8 @@ func (s *PostgresStore) SearchMavenArtifacts(ctx context.Context, repoID, prefix
 	if after.BuildNumber > 2_147_483_647 {
 		after.BuildNumber = 2_147_483_647
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT a.id::text,a.repository_id::text,a.coordinate,a.digest,a.state,a.created_at,a.build_number,a.source_timestamp,a.source_build_number,COALESCE(p.publisher,'')
+	rows, err := s.db.QueryContext(ctx, `SELECT a.id::text,a.repository_id::text,a.coordinate,a.digest,a.state,a.created_at,a.build_number,a.source_timestamp,a.source_build_number,a.publisher
 		FROM native_maven_artifacts a
-		LEFT JOIN LATERAL (
-			SELECT s.publisher FROM native_maven_publish_sessions s
-			WHERE s.repository_id=a.repository_id AND s.coordinate=a.coordinate AND s.state='committed'
-			ORDER BY s.expires_at DESC LIMIT 1
-		) p ON true
 		WHERE a.repository_id=$1::uuid AND a.state='visible' AND `+searchTextSQL("a.coordinate", "$2", matches)+`
 			AND (a.coordinate>$3 OR (a.coordinate=$3 AND a.build_number>$4))
 		ORDER BY a.coordinate ASC, a.build_number ASC LIMIT $5`, repoID, searchTextPattern(prefix, matches), after.Coordinate, after.BuildNumber, limit)
@@ -879,7 +874,7 @@ func (s *PostgresStore) PromoteMavenArtifact(ctx context.Context, promotion Mave
 	if err != nil {
 		return MavenArtifact{}, err
 	}
-	result, err := tx.ExecContext(ctx, `INSERT INTO native_maven_artifacts (id,repository_id,coordinate,digest,state) VALUES ($1,$2,$3,$4,'visible') ON CONFLICT (repository_id,coordinate,build_number) DO NOTHING`, promotion.ID, promotion.TargetRepositoryID, source.Coordinate, source.Digest)
+	result, err := tx.ExecContext(ctx, `INSERT INTO native_maven_artifacts (id,repository_id,coordinate,digest,state,publisher) VALUES ($1,$2,$3,$4,'visible',COALESCE((SELECT s.publisher FROM native_maven_publish_sessions s WHERE s.repository_id=$2 AND s.coordinate=$3 AND s.state IN ('open','committed') ORDER BY s.expires_at DESC LIMIT 1),'')) ON CONFLICT (repository_id,coordinate,build_number) DO NOTHING`, promotion.ID, promotion.TargetRepositoryID, source.Coordinate, source.Digest)
 	if err != nil {
 		return MavenArtifact{}, err
 	}
@@ -990,7 +985,7 @@ func (s *PostgresStore) PublishReplicatedMavenArtifact(ctx context.Context, repl
 		}
 	}
 	artifact := MavenArtifact{ID: replication.ID, RepositoryID: replication.TargetRepositoryID, Coordinate: replication.Coordinate, Digest: replication.Digest, State: "visible"}
-	err = tx.QueryRowContext(ctx, `INSERT INTO native_maven_artifacts (id,repository_id,coordinate,digest,state) VALUES ($1,$2,$3,$4,'visible') RETURNING created_at`, artifact.ID, artifact.RepositoryID, artifact.Coordinate, artifact.Digest).Scan(&artifact.CreatedAt)
+	err = tx.QueryRowContext(ctx, `INSERT INTO native_maven_artifacts (id,repository_id,coordinate,digest,state,publisher) VALUES ($1,$2,$3,$4,'visible',COALESCE((SELECT s.publisher FROM native_maven_publish_sessions s WHERE s.repository_id=$2 AND s.coordinate=$3 AND s.state IN ('open','committed') ORDER BY s.expires_at DESC LIMIT 1),'')) RETURNING created_at`, artifact.ID, artifact.RepositoryID, artifact.Coordinate, artifact.Digest).Scan(&artifact.CreatedAt)
 	if isUnique(err) {
 		return MavenArtifact{}, ErrNameExists
 	}
