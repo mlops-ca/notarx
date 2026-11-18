@@ -1,0 +1,231 @@
+name: Image build
+
+# Reusable per-architecture image build, merge and attest (ADR 0016). Callers:
+# ci.yml (mainline-images) today and the ADR 0024 release pipeline. The image
+# list, the version and the tags to create all come from the caller; this
+# workflow hard-codes none of them.
+#
+#   1. image-build: one native leg per {image} x {linux/amd64 on ubuntu-24.04,
+#      linux/arm64 on ubuntu-24.04-arm}. Each leg pushes by digest (a plain image
+#      manifest, no BuildKit attestations), pulls that digest back from the
+#      registry, runs it natively, checks the version and revision labels and
+#      scans an SBOM.
+#   2. image-manifest: one job per image. It only combines the two digests into
+#      the requested tags, verifies the revision label of each digest, and
+#      attests the final index (provenance and SBOM). It never rebuilds.
+#
+# Nothing is cross-built or emulated; a failing leg of either architecture
+# prevents every tag from being created.
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Stamped version (X.Y.Z, X.Y.Z-nightly.N or a mainline pre-release); no v prefix.
+        required: true
+        type: string
+      sha:
+        description: Full commit SHA to build; becomes the revision label.
+        required: true
+        type: string
+      tags:
+        description: Newline-separated tags to create on every image index.
+        required: true
+        type: string
+      images:
+        description: >-
+          JSON list of the published images, the single place that defines the image set,
+          for example [{"image": "notarx", "file": "Dockerfile", "version-command": true}].
+          version-command is true when the image answers the version subcommand.
+        required: true
+        type: string
+      require-main-tip:
+        description: Fail instead of tagging when sha is no longer the tip of main (mainline path).
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      legs: ${{ steps.legs.outputs.legs }}
+    steps:
+      - name: Expand the image list into one native leg per architecture
+        id: legs
+        env:
+          IMAGES: ${{ inputs.images }}
+        run: |
+          legs=$(jq -c '[.[] | . as $i | ({arch: "amd64", runner: "ubuntu-24.04"}, {arch: "arm64", runner: "ubuntu-24.04-arm"}) + $i]' <<<"$IMAGES")
+          echo "legs=$legs" >> "$GITHUB_OUTPUT"
+
+  image-build:
+    needs: plan
+    name: image-build (${{ matrix.image }}, linux/${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: true
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.legs) }}
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.sha }}
+      - name: Sign in to GitHub Container Registry
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      - name: Build natively and push by digest
+        id: build
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          platforms: linux/${{ matrix.arch }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-only=true,push=true
+          provenance: false
+          sbom: false
+          build-args: |
+            VERSION=${{ inputs.version }}
+            REVISION=${{ inputs.sha }}
+            SOURCE=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
+      - name: Run the pushed digest natively and check its labels
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          VERSION: ${{ inputs.version }}
+          REVISION: ${{ inputs.sha }}
+          RUN_VERSION: ${{ matrix.version-command }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          # Push-by-digest tags nothing, so pull the image from the registry by digest.
+          docker pull "$IMAGE@$DIGEST"
+          test "$(docker image inspect "$IMAGE@$DIGEST" --format '{{ .Architecture }}')" = "$ARCH"
+          test "$(docker image inspect "$IMAGE@$DIGEST" --format '{{ index .Config.Labels "org.opencontainers.image.version" }}')" = "$VERSION"
+          test "$(docker image inspect "$IMAGE@$DIGEST" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')" = "$REVISION"
+          if [ "$RUN_VERSION" = true ]; then
+            docker run --rm "$IMAGE@$DIGEST" version | grep -F "$VERSION (revision $REVISION,"
+          fi
+      - name: Scan an SBOM of this architecture
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          output-file: sbom-${{ matrix.image }}-${{ matrix.arch }}.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Record the digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/digest"
+          printf '%s\n' "$DIGEST" > "$RUNNER_TEMP/digest/digest"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digest-${{ matrix.image }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digest/digest
+          if-no-files-found: error
+          retention-days: 1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom-${{ matrix.image }}-${{ matrix.arch }}
+          path: sbom-${{ matrix.image }}-${{ matrix.arch }}.spdx.json
+          if-no-files-found: error
+          retention-days: 7
+
+  image-manifest:
+    needs: [plan, image-build]
+    name: image-manifest (${{ matrix.image }})
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: true
+      matrix:
+        include: ${{ fromJSON(inputs.images) }}
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
+    steps:
+      - name: Confirm this run still owns the main tip
+        if: inputs.require-main-tip
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ inputs.sha }}
+        run: |
+          tip=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
+          test "$SHA" = "$tip"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: digest-${{ matrix.image }}-*
+          path: ${{ runner.temp }}/digests
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: sbom-${{ matrix.image }}-*
+          path: ${{ runner.temp }}/sboms
+          merge-multiple: true
+      - name: Sign in to GitHub Container Registry
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      - name: Verify each digest, then create the multi-architecture tags
+        id: merge
+        env:
+          REVISION: ${{ inputs.sha }}
+          TAGS: ${{ inputs.tags }}
+          IMAGE_NAME: ${{ matrix.image }}
+        run: |
+          amd64=$(cat "$RUNNER_TEMP/digests/digest-$IMAGE_NAME-amd64/digest")
+          arm64=$(cat "$RUNNER_TEMP/digests/digest-$IMAGE_NAME-arm64/digest")
+          for ref in "$IMAGE@$amd64" "$IMAGE@$arm64"; do
+            label=$(docker buildx imagetools inspect "$ref" --format '{{ json .Image }}' | jq -r '.config.Labels["org.opencontainers.image.revision"]')
+            if [ "$label" != "$REVISION" ]; then
+              echo "::error::$ref carries revision '$label', expected $REVISION"
+              exit 1
+            fi
+          done
+          args=()
+          while IFS= read -r tag; do
+            if [ -n "$tag" ]; then args+=(--tag "$IMAGE:$tag"); fi
+          done <<<"$TAGS"
+          docker buildx imagetools create "${args[@]}" "$IMAGE@$amd64" "$IMAGE@$arm64"
+          first=$(sed -n '1p' <<<"$TAGS")
+          index=$(docker buildx imagetools inspect "$IMAGE:$first" --format '{{ json .Manifest }}')
+          echo "digest=$(jq -r .digest <<<"$index")" >> "$GITHUB_OUTPUT"
+          # Both platforms must be present with their platform fields set.
+          jq -e '[.manifests[] | .platform | select(.os == "linux") | .architecture] | sort == ["amd64", "arm64"]' <<<"$index" >/dev/null
+      - name: Attest the index provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.merge.outputs.digest }}
+          push-to-registry: true
+      - name: Attest the amd64 SBOM on the index
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.merge.outputs.digest }}
+          sbom-path: ${{ runner.temp }}/sboms/sbom-${{ matrix.image }}-amd64.spdx.json
+          push-to-registry: true
+      - name: Attest the arm64 SBOM on the index
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.merge.outputs.digest }}
+          sbom-path: ${{ runner.temp }}/sboms/sbom-${{ matrix.image }}-arm64.spdx.json
+          push-to-registry: true
