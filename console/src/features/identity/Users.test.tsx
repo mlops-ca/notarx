@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -193,7 +194,7 @@ describe("UsersPage", () => {
       const user = userEvent.setup();
       renderPage({ destination: `/users?${key}=${value}` });
       await screen.findByText("Alice Chen");
-      await user.click(screen.getByTitle("2"));
+      await user.click(within(screen.getByTitle("2")).getByRole("button"));
       await waitFor(() =>
         expect(mockListUsers.mock.calls.at(-1)?.[0]?.query?.offset).toBe(20),
       );

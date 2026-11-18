@@ -1,4 +1,4 @@
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it } from "vitest";
 import { PreferencesProvider } from "../../lib/preferences";
@@ -23,7 +23,7 @@ it("uses the shared total, page sizes and end placement, resetting size changes"
   );
   expect(screen.getByText("1-20 of 120 items")).toBeVisible();
   expect(container.querySelector(".ant-table-pagination-end")).not.toBeNull();
-  await user.click(screen.getByTitle("2"));
+  await user.click(within(screen.getByTitle("2")).getByRole("button"));
   expect(screen.getByText("21-40 of 120 items")).toBeVisible();
   await user.click(screen.getByRole("combobox"));
   await user.click(screen.getByTitle("50 / page"));
