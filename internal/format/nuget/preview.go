@@ -262,6 +262,10 @@ func (m *Module) servePreview(w http.ResponseWriter, r *http.Request) {
 		m.problem(w, 404, "not_found")
 		return
 	}
+	if _, err := uuid.Parse(parts[2]); err != nil {
+		m.problem(w, 404, "not_found")
+		return
+	}
 	session, err := m.store.GetNuGetSession(r.Context(), parts[2])
 	if err != nil || session.RepositoryID != repo.ID {
 		m.problem(w, 404, "not_found")

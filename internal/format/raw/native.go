@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/authorization"
 	"github.com/mlops-ca/notarx/internal/cache"
 	"github.com/mlops-ca/notarx/internal/ids"
@@ -74,6 +75,12 @@ func (h *Module) serveRepository(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	}
 	if id := r.URL.Query().Get("uploadId"); id != "" {
+		// The store binds the upload id as a uuid, so a malformed one is a client
+		// error rather than a database error (ADR 0023 section 4).
+		if _, err := uuid.Parse(id); err != nil {
+			http.Error(w, "invalid uploadId", http.StatusBadRequest)
+			return true
+		}
 		h.upload(w, r, repo, path, id, principal.Actor)
 		return true
 	}
