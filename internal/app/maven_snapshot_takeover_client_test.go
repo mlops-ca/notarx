@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/mavenfixture"
+	"github.com/mlops-ca/notarx/internal/mavenfixture/mavenfixturetest"
 	testsupport "github.com/mlops-ca/notarx/internal/testsupport/snapshotfixture"
 )
 
@@ -54,6 +56,9 @@ func TestMavenClientSnapshotHistoryTakeoverAndDeploy(t *testing.T) {
 		f.h.ServeHTTP(w, r)
 	}))
 	defer server.Close()
+	// Plugins come from the recorded Central fixture and any other external host
+	// is refused, so the gate never depends on the network (hermetic Maven 2/5).
+	central := mavenfixturetest.Start(t)
 	root := t.TempDir()
 	pom := filepath.Join(root, "pom.xml")
 	settings := filepath.Join(root, "settings.xml")
@@ -67,7 +72,7 @@ func TestMavenClientSnapshotHistoryTakeoverAndDeploy(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write(settings, `<settings><servers><server><id>synthetic-snapshots</id><username>maven</username><password>resolver-secret</password></server></servers></settings>`)
+	write(settings, `<settings><mirrors>`+mavenfixture.MirrorXML(central.URL)+`</mirrors><proxies>`+mavenfixture.BlockedProxiesXML()+`</proxies><servers><server><id>synthetic-snapshots</id><username>maven</username><password>resolver-secret</password></server></servers></settings>`)
 	write(pom, fmt.Sprintf(`<project><modelVersion>4.0.0</modelVersion><groupId>org.example</groupId><artifactId>widget</artifactId><version>1.0-SNAPSHOT</version><distributionManagement><snapshotRepository><id>synthetic-snapshots</id><url>%s/repository/maven/%s</url></snapshotRepository></distributionManagement><build><plugins><plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-deploy-plugin</artifactId><version>3.1.4</version></plugin></plugins></build></project>`, server.URL, f.repo.Name))
 	marker := filepath.Join(root, "src/main/resources/marker.txt")
 	write(marker, "first client build")

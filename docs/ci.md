@@ -167,6 +167,12 @@ recordings live in `internal/mavenfixture/testdata/maven-central-fixture`: the
 portal. `internal/mavenfixture` serves them (Go tests start it with
 `mavenfixturetest.Start`; `cmd/maven-fixture-mirror` serves it to scripts). A
 path that was not recorded answers 404 and the log names the re-record hint.
+`scripts/native-maven-e2e.sh` starts the same fixture as a loopback mirror
+(`cmd/maven-fixture-mirror`, URL printed at start), points Maven at it with a
+settings mirror for `central`, refuses every other non-loopback host through
+blocked settings proxies, and prints the unrecorded paths when Maven fails. The
+Maven client Go tests do the same through `mavenfixture.MirrorXML` and
+`mavenfixture.AddBlockedProxies`.
 `go test ./internal/mavenfixture` checks every recorded artifact against the
 SHA-1 sidecar Central published next to it.
 

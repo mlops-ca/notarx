@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/mavenfixture"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -57,7 +58,7 @@ func TestPostgresRustFSPrivateProxyOfficialClients(t *testing.T) {
 								settings, globalSettings, pom := filepath.Join(work, "settings.xml"), filepath.Join(work, "global-settings.xml"), filepath.Join(work, "pom.xml")
 								local := filepath.Join(work, "empty-target-repository")
 								writeRedirectMavenClientFile(t, globalSettings, []byte(`<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"/>`))
-								writeRedirectMavenClientFile(t, settings, []byte(fmt.Sprintf(`<settings><mirrors><mirror><id>owned-gateway</id><mirrorOf>*</mirrorOf><url>%s/maven/%s</url></mirror></mirrors><servers><server><id>owned-gateway</id><username>private-client</username><password>private-client-secret</password></server></servers></settings>`, server.URL, name)))
+								writeRedirectMavenClientFile(t, settings, []byte(mavenfixture.AddBlockedProxies(fmt.Sprintf(`<settings><mirrors><mirror><id>owned-gateway</id><mirrorOf>*</mirrorOf><url>%s/maven/%s</url></mirror></mirrors><servers><server><id>owned-gateway</id><username>private-client</username><password>private-client-secret</password></server></servers></settings>`, server.URL, name))))
 								writeRedirectMavenClientFile(t, pom, []byte(`<project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0</modelVersion><groupId>gateway.fixture</groupId><artifactId>private-source-consumer</artifactId><version>1</version><dependencies><dependency><groupId>org.example</groupId><artifactId>widget</artifactId><version>1.0</version></dependency></dependencies></project>`))
 								writeRedirectMavenClientFile(t, filepath.Join(local, redirectMavenClientPluginPath+".jar"), plugin)
 								writeRedirectMavenClientFile(t, filepath.Join(local, redirectMavenClientPluginPath+".pom"), []byte(`<project><modelVersion>4.0.0</modelVersion><groupId>gateway.fixture</groupId><artifactId>maven-client-fixture</artifactId><version>1.0.0</version><packaging>maven-plugin</packaging></project>`))

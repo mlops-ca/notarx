@@ -11,6 +11,9 @@ for binary in curl mvn gradle go python3; do
   }
 done
 
+# Maven Central and the Gradle plugin portal are served from the recorded fixture
+# (docs/ci.md, "Re-record the Maven and Gradle fixtures"); no step reaches an
+# external host. A path that was not recorded answers 404 and is reported.
 # Mandatory real clients: snapshot history/takeover and unchanged Hosted POMs from an empty cache.
 go test -v -count=1 -tags=mavenclient ./internal/app -run '^TestMavenClient(SnapshotHistoryTakeoverAndDeploy|HostedPOMCompatibilityColdCache)$'
 
@@ -18,6 +21,7 @@ port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0));
 notarx_url="http://127.0.0.1:${port}"
 workdir=$(mktemp -d)
 fixture_pid=""
+mirror_pid=""
 
 cleanup() {
   local status=$?
@@ -25,11 +29,47 @@ cleanup() {
     kill "$fixture_pid" 2>/dev/null || true
     wait "$fixture_pid" 2>/dev/null || true
   fi
+  if [[ -n "$mirror_pid" ]]; then
+    kill "$mirror_pid" 2>/dev/null || true
+    wait "$mirror_pid" 2>/dev/null || true
+  fi
   rm -rf "$workdir"
   trap - EXIT
   exit "$status"
 }
 trap cleanup EXIT
+
+go build -o "$workdir/maven-fixture-mirror" ./cmd/maven-fixture-mirror
+"$workdir/maven-fixture-mirror" >"$workdir/mirror.url" 2>"$workdir/mirror.log" &
+mirror_pid=$!
+for _ in $(seq 1 100); do
+  [[ -s "$workdir/mirror.url" ]] && break
+  sleep 0.1
+done
+mirror_url=$(head -n 1 "$workdir/mirror.url")
+[[ -n "$mirror_url" ]] || {
+  cat "$workdir/mirror.log" >&2
+  exit 1
+}
+printf 'Maven Central fixture mirror: %s (a miss is logged in %s)\n' "$mirror_url" "$workdir/mirror.log"
+mirror_xml="<mirror><id>central-fixture</id><mirrorOf>central</mirrorOf><url>${mirror_url}/maven2</url></mirror>"
+# Outside record mode every non-loopback host is refused, so a stray external request fails.
+blocked_proxies=""
+if [[ "${MAVEN_CENTRAL_FIXTURE_RECORD:-}" != "1" ]]; then
+  blocked_proxies="<proxies>"
+  for protocol in http https; do
+    blocked_proxies+="<proxy><id>no-outbound-$protocol</id><active>true</active><protocol>$protocol</protocol><host>127.0.0.1</host><port>9</port><nonProxyHosts>127.0.0.1|localhost|[::1]</nonProxyHosts></proxy>"
+  done
+  blocked_proxies+="</proxies>"
+fi
+# A fixture miss prints the re-record hint and fails the script.
+fixture_misses() {
+  if grep -q 'Maven fixture miss' "$workdir/mirror.log"; then
+    printf 'Maven Central fixture misses (re-record with the record-maven-fixtures workflow, docs/ci.md):\n' >&2
+    grep 'Maven fixture miss' "$workdir/mirror.log" >&2
+    return 1
+  fi
+}
 
 go build -o "$workdir/native-maven-fixture" ./cmd/native-maven-fixture
 LISTEN_ADDR="127.0.0.1:${port}" "$workdir/native-maven-fixture" >"$workdir/notarx.log" 2>&1 &
@@ -84,12 +124,12 @@ expect_status 409 "${basic[@]}" -H 'Idempotency-Key: strict-release-other' -H 'C
 maven_dir="$workdir/maven"
 mkdir -p "$maven_dir"
 cat >"$maven_dir/settings.xml" <<EOF
-<settings><servers><server><id>native</id><username>fixture</username><password>fixture-secret</password></server></servers></settings>
+<settings><mirrors>${mirror_xml}</mirrors>${blocked_proxies}<servers><server><id>native</id><username>fixture</username><password>fixture-secret</password></server></servers></settings>
 EOF
 cat >"$maven_dir/pom.xml" <<EOF
 <project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0</modelVersion><groupId>org.example</groupId><artifactId>maven-widget</artifactId><version>1.2.3</version><distributionManagement><repository><id>native</id><url>${notarx_url}/repository/maven/deploys</url></repository></distributionManagement></project>
 EOF
-(cd "$maven_dir" && mvn --batch-mode --settings settings.xml -Dmaven.repo.local="$workdir/maven-deploy-repository" deploy)
+(cd "$maven_dir" && mvn --batch-mode --settings settings.xml -Dmaven.repo.local="$workdir/maven-deploy-repository" deploy) || { fixture_misses || true; exit 1; }
 expect_status 200 "${basic[@]}" "$notarx_url/repository/maven/deploys/org/example/maven-widget/1.2.3/maven-widget-1.2.3.jar"
 expect_status 409 "${basic[@]}" -H 'Idempotency-Key: direct-mode-does-not-commit' -H 'Content-Type: application/json' \
   --data '{"expectedAssetNames":["maven-widget-1.2.3.pom","maven-widget-1.2.3.jar"]}' \
@@ -100,7 +140,7 @@ mkdir -p "$resolve_dir"
 cat >"$resolve_dir/pom.xml" <<EOF
 <project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0</modelVersion><groupId>fixture</groupId><artifactId>resolver</artifactId><version>1</version><repositories><repository><id>native</id><url>${notarx_url}/maven/maven-chain</url></repository></repositories><dependencies><dependency><groupId>org.example</groupId><artifactId>maven-widget</artifactId><version>1.2.3</version></dependency></dependencies></project>
 EOF
-(cd "$resolve_dir" && mvn --batch-mode --settings "$maven_dir/settings.xml" -Dmaven.repo.local="$workdir/maven-resolve-repository" dependency:resolve)
+(cd "$resolve_dir" && mvn --batch-mode --settings "$maven_dir/settings.xml" -Dmaven.repo.local="$workdir/maven-resolve-repository" dependency:resolve) || { fixture_misses || true; exit 1; }
 
 gradle_dir="$workdir/gradle"
 mkdir -p "$gradle_dir/src/main/java/org/example"
