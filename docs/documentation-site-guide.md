@@ -2,7 +2,7 @@
 
 [简体中文](documentation-site-guide.zh-CN.md) | [Documentation index](README.md)
 
-Artifact Gateway keeps its Markdown portable so the repository can later feed
+notarx keeps its Markdown portable so the repository can later feed
 Docusaurus, VitePress, MkDocs, or another static documentation system without
 rewriting document ownership and language rules.
 

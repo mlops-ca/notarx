@@ -111,7 +111,7 @@ assert_log 'kubectl -n artifact-gateway-local rollout status statefulset/rustfs 
 assert_log 'kubectl -n artifact-gateway-local rollout status deployment/artifact-gateway --timeout=300s'
 assert_log 'kubectl -n artifact-gateway-local rollout status deployment/artifact-gateway-ingress --timeout=180s'
 assert_log '--from-literal=NOTARX_APT_SIGNER_TOKEN='
-grep -Fq 'Artifact Gateway Kubernetes stack is ready at http://artifact-gateway.localhost' "$workdir/stdout" || fail 'up did not report the Ingress endpoint'
+grep -Fq 'notarx Kubernetes stack is ready at http://artifact-gateway.localhost' "$workdir/stdout" || fail 'up did not report the Ingress endpoint'
 
 : >"$log"
 FAKE_K8S_POSTGRES_PASSWORD='persisted-postgres-password' \

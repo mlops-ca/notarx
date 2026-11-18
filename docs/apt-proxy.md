@@ -2,7 +2,7 @@
 
 [简体中文](apt-proxy.zh-CN.md) · [Documentation index](README.md)
 
-Artifact Gateway exposes Debian repositories at:
+notarx exposes Debian repositories at:
 
 ```text
 https://gateway.example.com/apt/<repository>/

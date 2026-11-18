@@ -39,7 +39,7 @@ func (h ConanHandler) uploadNativeConan(w http.ResponseWriter, r *http.Request) 
 	}
 	principal, ok := h.authenticate(r)
 	if !ok {
-		w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Conan"`)
+		w.Header().Set("WWW-Authenticate", `Basic realm="notarx Conan"`)
 		h.audit(withConanAuditStatus(r.Context(), http.StatusUnauthorized), repo.Name, p.Reference, "native", "anonymous", repository.AuditAccessDenied)
 		writeHostedProblem(w, http.StatusUnauthorized, "access_denied", "authentication is required")
 		return

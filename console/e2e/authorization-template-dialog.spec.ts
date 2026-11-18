@@ -54,7 +54,7 @@ async function mockPoliciesTab(page: Page) {
     route.fulfill({
       json: {
         version: 1,
-        siteName: "Artifact Gateway",
+        siteName: "notarx",
         logoUrl: "",
         brandMark: "AG",
         enabledThemeIds: ["notarx-dark"],

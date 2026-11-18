@@ -28,7 +28,7 @@ cleanup() {
 trap cleanup EXIT
 
 openssl req -x509 -newkey rsa:2048 -sha256 -nodes -days 2 \
-  -subj '/CN=Artifact Gateway APT Signer E2E Root' \
+  -subj '/CN=notarx APT Signer E2E Root' \
   -keyout "$workdir/ca.key" -out "$workdir/ca.pem" >/dev/null 2>&1
 openssl req -newkey rsa:2048 -sha256 -nodes \
   -subj '/CN=reference-apt-signer-old' \
@@ -149,7 +149,7 @@ docker run --rm --volume "$workdir:/work" "$debian_image" /bin/sh -ec '
     "Package: artifact-gateway-rotation" \
     "Version: 1.0.0-1" \
     "Architecture: all" \
-    "Maintainer: Artifact Gateway Rotation <apt-rotation@example.test>" \
+    "Maintainer: notarx Rotation <apt-rotation@example.test>" \
     "Description: external signer rotation acceptance package" \
     > /tmp/artifact-gateway-rotation/DEBIAN/control
   printf "%s\n" "installed-from-rotated-signer" > /tmp/artifact-gateway-rotation/usr/share/artifact-gateway-rotation/installed.txt

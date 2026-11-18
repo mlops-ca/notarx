@@ -1,8 +1,8 @@
-# Contribuer à Artifact Gateway
+# Contribuer à notarx
 
 [English](CONTRIBUTING.md)
 
-Artifact Gateway est actuellement développé par son équipe principale. Ce guide
+notarx est actuellement développé par son équipe principale. Ce guide
 consigne le flux de travail d’ingénierie utilisé dans le dépôt afin que les
 changements demeurent révisables et reproductibles pendant que le projet se
 prépare à accueillir davantage de contributions.

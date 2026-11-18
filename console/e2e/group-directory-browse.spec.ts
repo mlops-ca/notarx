@@ -67,7 +67,7 @@ for (const [width, theme] of [
         return route.fulfill({
           json: {
             version: "1",
-            siteName: "Artifact Gateway",
+            siteName: "notarx",
             logoUrl: "",
             brandMark: "AG",
             enabledThemeIds: defaultConsoleThemes.map((item) => item.id),

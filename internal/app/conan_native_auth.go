@@ -56,7 +56,7 @@ func (h ConanHandler) serveConanHandshake(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if !authenticated || principal.RepositoryAccessBlocked() {
-		w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Conan"`)
+		w.Header().Set("WWW-Authenticate", `Basic realm="notarx Conan"`)
 		h.audit(withConanAuditStatus(r.Context(), http.StatusUnauthorized), scope.Name, "users", "native", "anonymous", repository.AuditAccessDenied)
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return

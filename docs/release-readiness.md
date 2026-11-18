@@ -1,4 +1,4 @@
-# Artifact Gateway Controlled Deployment Readiness
+# notarx Controlled Deployment Readiness
 
 [简体中文](release-readiness.zh-CN.md) | [Documentation index](README.md)
 
@@ -246,7 +246,7 @@ and any registry access failure separately.
 
 ```mermaid
 flowchart LR
-  clients[Docker / ORAS / Maven / Gradle / npm / pip / Go] --> gateway[Artifact Gateway]
+  clients[Docker / ORAS / Maven / Gradle / npm / pip / Go] --> gateway[notarx]
   gateway --> auth[Service Accounts, OIDC, or break-glass tokens]
   gateway --> postgres[(PostgreSQL metadata, audit, and cache coordination)]
   gateway --> cache[(S3-compatible cache)]

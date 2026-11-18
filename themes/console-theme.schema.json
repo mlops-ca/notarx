@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://artifact-gateway.local/schemas/console-theme-v1.json",
-  "title": "Artifact Gateway Console Theme",
+  "title": "notarx Console Theme",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "id", "name", "mode", "token"],

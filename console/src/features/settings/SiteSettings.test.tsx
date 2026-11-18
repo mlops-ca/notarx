@@ -47,7 +47,7 @@ const mockValidateConsoleThemePackage = vi.mocked(validateConsoleThemePackage);
 
 const initial: SiteSettings = {
   version: "3",
-  siteName: "Artifact Gateway",
+  siteName: "notarx",
   logoUrl: "",
   brandMark: "AG",
   enabledThemeIds: ["notarx-dark", "notarx-light"],
@@ -146,9 +146,7 @@ describe("SiteSettingsPage", () => {
     renderPage();
 
     const name = await screen.findByLabelText("Site name");
-    expect(screen.getByTestId("global-site-name")).toHaveTextContent(
-      "Artifact Gateway",
-    );
+    expect(screen.getByTestId("global-site-name")).toHaveTextContent("notarx");
     await user.clear(name);
     await user.type(name, "Acme Packages");
     await user.click(screen.getByRole("button", { name: "Save and apply" }));
@@ -192,7 +190,7 @@ describe("SiteSettingsPage", () => {
     await waitFor(() =>
       expect(mockReplaceSiteSettings).toHaveBeenCalledWith({
         body: {
-          siteName: "Artifact Gateway",
+          siteName: "notarx",
           logoUrl: "",
           brandMark: "AG",
           enabledThemeIds: ["notarx-light"],
@@ -269,7 +267,7 @@ describe("SiteSettingsPage", () => {
     await waitFor(() =>
       expect(mockReplaceSiteSettings).toHaveBeenCalledWith({
         body: {
-          siteName: "Artifact Gateway",
+          siteName: "notarx",
           logoUrl: "",
           brandMark: "AG",
           enabledThemeIds: [...initial.enabledThemeIds, uploadedTheme.id],

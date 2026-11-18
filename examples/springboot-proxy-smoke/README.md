@@ -1,7 +1,7 @@
 # Spring Boot Maven Proxy Smoke
 
 This project resolves a broad Spring Boot dependency graph exclusively through
-the local Artifact Gateway Maven Proxy.
+the local notarx Maven Proxy.
 
 ```sh
 export NOTARX_MAVEN_PROXY_URL=http://127.0.0.1:18080/maven/maven-central-proxy

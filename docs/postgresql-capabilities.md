@@ -2,7 +2,7 @@
 
 [简体中文](postgresql-capabilities.zh-CN.md) · [Architecture diagrams](architecture-diagrams.md) · [Documentation index](README.md)
 
-The runtime baseline is PostgreSQL 16 or later; the reference image runs PostgreSQL 18. Artifact Gateway uses PostgreSQL as its
+The runtime baseline is PostgreSQL 16 or later; the reference image runs PostgreSQL 18. notarx uses PostgreSQL as its
 only database and control-plane coordination service. Repositories,
 authorization, artifact metadata, audit records, idempotency keys, background
 jobs, leases, locks, and runtime-node state all treat PostgreSQL as the source
@@ -17,10 +17,10 @@ and a separate message queue are not required.
 ## PostgreSQL-native or PostgreSQL-bound capabilities
 
 Some entries below are PostgreSQL-specific; others exist in additional
-databases, but Artifact Gateway relies on their PostgreSQL syntax and failure
+databases, but notarx relies on their PostgreSQL syntax and failure
 semantics.
 
-| Capability | Use in Artifact Gateway | Why it matters |
+| Capability | Use in notarx | Why it matters |
 | --- | --- | --- |
 | Session and transaction advisory locks | OCI/Raw uploads, object deduplication, cache fills, first Maven/npm publication, user administration, lifecycle serialization | Logical resources do not need a dedicated lock table; locks release with the connection or transaction |
 | `hashtextextended` lock keys | Maps repository names, object keys, upload IDs, and package coordinates into one stable 64-bit lock space | Every Gateway instance derives the same lock for the same logical resource |

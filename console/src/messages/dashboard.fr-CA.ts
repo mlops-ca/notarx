@@ -46,7 +46,7 @@ export const dashboardFrCA: Record<keyof typeof dashboardEnCA, string> = {
   "dashboard.loadingAuditEvents": "Chargement des événements d’audit…",
   "dashboard.overview": "Vue d’ensemble",
   "dashboard.artifactGatewayRuntimeAtAGlance":
-    "Aperçu de l’exécution d’Artifact Gateway",
+    "Aperçu de l’exécution de notarx",
   "dashboard.statisticsWindow": "Période des statistiques",
   "dashboard.1Day": "1 jour",
   "dashboard.7Days": "7 jours",

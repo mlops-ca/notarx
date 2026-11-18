@@ -29,7 +29,7 @@ FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c
 ARG VERSION=dev
 ARG REVISION=unknown
 ARG SOURCE=https://github.com/mlops-ca/notarx
-LABEL org.opencontainers.image.title="Artifact Gateway" \
+LABEL org.opencontainers.image.title="notarx" \
       org.opencontainers.image.version="$VERSION" \
       org.opencontainers.image.revision="$REVISION" \
       org.opencontainers.image.source="$SOURCE"

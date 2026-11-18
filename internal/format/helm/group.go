@@ -43,7 +43,7 @@ func (m *Module) authorizeGroup(w http.ResponseWriter, r *http.Request, g reposi
 	p, ok := m.principal(r)
 	if !ok {
 		if r.Header.Get("Authorization") != "" || !access.AnonymousGroupRead(r.Context(), m.anonymous, g, r.Method) {
-			w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Helm"`)
+			w.Header().Set("WWW-Authenticate", `Basic realm="notarx Helm"`)
 			m.problem(w, 401, "authentication_required")
 			return p, false
 		}

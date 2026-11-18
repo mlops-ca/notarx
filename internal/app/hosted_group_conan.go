@@ -41,7 +41,7 @@ func (h v2GroupConanHandler) serve(w http.ResponseWriter, r *http.Request, resol
 		if r.Header.Get("Authorization") == "" && anonymousGroupAllowed(r.Context(), resolver.groups, group, r.Method) {
 			principal = anonymousPrincipal()
 		} else {
-			w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Conan"`)
+			w.Header().Set("WWW-Authenticate", `Basic realm="notarx Conan"`)
 			http.Error(w, "authentication required", http.StatusUnauthorized)
 			return
 		}
@@ -62,13 +62,13 @@ func (h v2GroupConanHandler) serve(w http.ResponseWriter, r *http.Request, resol
 	var denied bool
 	members, denied = resolver.authorizeMembers(r.Context(), principal, repository.FormatConan, path, members)
 	if denied && len(members) == 0 {
-		w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Conan"`)
+		w.Header().Set("WWW-Authenticate", `Basic realm="notarx Conan"`)
 		http.Error(w, "repository read permission required", http.StatusForbidden)
 		return
 	}
 	if len(members) == 0 {
 		resolver.auditResolution(r.Context(), group, repository.FormatConan, path, strings.ToLower(r.Method), principal.Actor, repository.AuditAccessDenied, http.StatusUnauthorized)
-		w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Conan"`)
+		w.Header().Set("WWW-Authenticate", `Basic realm="notarx Conan"`)
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}

@@ -8,7 +8,7 @@ reviewable source of truth for architecture relationships.
 
 ## Visual system overview
 
-![Artifact Gateway lightweight system architecture](assets/artifact-gateway-system-architecture.png)
+![notarx lightweight system architecture](assets/artifact-gateway-system-architecture.png)
 
 ## System and storage boundaries
 
@@ -19,7 +19,7 @@ flowchart LR
         Native[OCI, Maven, npm, PyPI, Go, APT, Conan, Raw clients]
     end
 
-    Gateway[Artifact Gateway<br/>native protocols and management API]
+    Gateway[notarx<br/>native protocols and management API]
     PG[(PostgreSQL 16<br/>metadata, authorization, audit,<br/>jobs, leases, locks)]
     S3[(S3-compatible storage<br/>immutable verified bytes)]
     Upstream[Allowlisted upstream registries]
@@ -38,7 +38,7 @@ storage is a separate byte plane; the local stack provides it with RustFS.
 
 ## Compact standalone and split-role deployment
 
-![Artifact Gateway standalone and distributed deployment topology](assets/artifact-gateway-deployment-topology.png)
+![notarx standalone and distributed deployment topology](assets/artifact-gateway-deployment-topology.png)
 
 ```mermaid
 flowchart TB

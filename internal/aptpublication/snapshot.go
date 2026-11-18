@@ -474,7 +474,7 @@ func buildSnapshotBundleWithScopes(snapshot repository.APTRepositorySnapshot, pa
 	slices.Sort(componentValues)
 	slices.Sort(architectureValues)
 	var release bytes.Buffer
-	fmt.Fprintf(&release, "Origin: Artifact Gateway\nLabel: Artifact Gateway\nSuite: %s\nCodename: %s\nDate: %s\nArchitectures: %s\nComponents: %s\nAcquire-By-Hash: yes\nDescription: Artifact Gateway immutable APT snapshot %d\nSHA256:\n",
+	fmt.Fprintf(&release, "Origin: notarx\nLabel: notarx\nSuite: %s\nCodename: %s\nDate: %s\nArchitectures: %s\nComponents: %s\nAcquire-By-Hash: yes\nDescription: notarx immutable APT snapshot %d\nSHA256:\n",
 		snapshot.Suite, snapshot.Suite, snapshot.CreatedAt.UTC().Format("Mon, 02 Jan 2006 15:04:05 -0700"),
 		strings.Join(architectureValues, " "), strings.Join(componentValues, " "), snapshot.Sequence)
 	for _, index := range indices {

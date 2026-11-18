@@ -3,7 +3,7 @@
 ## Kokonut UI Beams Background
 
 The login-page background adapts the Canvas 2D beam construction from Kokonut
-UI's Beams Background. Artifact Gateway narrows the palette and motion, sizes
+UI's Beams Background. notarx narrows the palette and motion, sizes
 the canvas to its host, caps rendering at 30fps, pauses hidden work, and removes
 the upstream demo content and Motion-only overlay.
 

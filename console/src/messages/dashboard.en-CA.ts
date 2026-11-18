@@ -39,8 +39,7 @@ export const dashboardEnCA = {
     "Recent decisions appear here once access or publishing is recorded.",
   "dashboard.loadingAuditEvents": "Loading audit events…",
   "dashboard.overview": "Overview",
-  "dashboard.artifactGatewayRuntimeAtAGlance":
-    "Artifact Gateway runtime at a glance",
+  "dashboard.artifactGatewayRuntimeAtAGlance": "notarx runtime at a glance",
   "dashboard.statisticsWindow": "Statistics window",
   "dashboard.1Day": "1 day",
   "dashboard.7Days": "7 days",

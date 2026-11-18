@@ -135,7 +135,7 @@ func (m *Module) authorize(w http.ResponseWriter, r *http.Request, repo reposito
 		return authorization.Principal{Actor: "anonymous"}, true
 	}
 	if !ok {
-		w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Helm"`)
+		w.Header().Set("WWW-Authenticate", `Basic realm="notarx Helm"`)
 		m.problem(w, 401, "authentication_required")
 		return p, false
 	}
@@ -275,7 +275,7 @@ func (m *Module) anonymousAbsent(w http.ResponseWriter, r *http.Request, err err
 	if _, ok := m.principal(r); ok {
 		return false
 	}
-	w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Helm"`)
+	w.Header().Set("WWW-Authenticate", `Basic realm="notarx Helm"`)
 	m.problem(w, 401, "authentication_required")
 	return true
 }

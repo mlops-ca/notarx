@@ -23,11 +23,11 @@ import (
 
 func TestHandlerProducesVerifiableAPTReleaseSignatures(t *testing.T) {
 	t.Parallel()
-	entity, err := openpgp.NewEntity("Artifact Gateway Test", "reference signer", "apt@example.test", &packet.Config{RSABits: 1024, DefaultHash: crypto.SHA256})
+	entity, err := openpgp.NewEntity("notarx Test", "reference signer", "apt@example.test", &packet.Config{RSABits: 1024, DefaultHash: crypto.SHA256})
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := NewService(entity, "Artifact Gateway Test <apt@example.test>")
+	service, err := NewService(entity, "notarx Test <apt@example.test>")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func TestHandlerProducesVerifiableAPTReleaseSignatures(t *testing.T) {
 	if _, err = openpgp.CheckArmoredDetachedSignature(openpgp.EntityList{entity}, bytes.NewReader(release), bytes.NewReader(signed.Detached), nil); err != nil {
 		t.Fatalf("verify Release.gpg: %v", err)
 	}
-	if signed.SignerIdentity != "Artifact Gateway Test <apt@example.test>" || signed.KeyFingerprint == "" || signed.Algorithm != "rsa1024-sha256" {
+	if signed.SignerIdentity != "notarx Test <apt@example.test>" || signed.KeyFingerprint == "" || signed.Algorithm != "rsa1024-sha256" {
 		t.Fatalf("signature evidence=%#v", signed)
 	}
 
@@ -76,7 +76,7 @@ func TestHandlerProducesVerifiableAPTReleaseSignatures(t *testing.T) {
 
 func TestHandlerRejectsUnauthenticatedAndMismatchedRelease(t *testing.T) {
 	t.Parallel()
-	entity, err := openpgp.NewEntity("Artifact Gateway Test", "", "apt@example.test", &packet.Config{RSABits: 1024})
+	entity, err := openpgp.NewEntity("notarx Test", "", "apt@example.test", &packet.Config{RSABits: 1024})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +121,7 @@ func TestLoadOrCreateEntityPersistsOnePrivateKeyWithRestrictedMode(t *testing.T)
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "keys", "apt-release.gpg")
 	first, err := LoadOrCreateEntity(context.Background(), KeyOptions{
-		Path: path, Name: "Artifact Gateway Local", Comment: "reference signer", Email: "apt@localhost", RSABits: 1024,
+		Path: path, Name: "notarx Local", Comment: "reference signer", Email: "apt@localhost", RSABits: 1024,
 	})
 	if err != nil {
 		t.Fatal(err)

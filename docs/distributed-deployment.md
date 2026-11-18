@@ -2,7 +2,7 @@
 
 [简体中文](distributed-deployment.zh-CN.md) · [Documentation index](README.md)
 
-Artifact Gateway stores metadata and durable work in PostgreSQL and Asset bytes
+notarx stores metadata and durable work in PostgreSQL and Asset bytes
 in shared S3-compatible object storage. Gateway processes keep no artifact state
 that another instance must read locally, so the service can scale horizontally.
 

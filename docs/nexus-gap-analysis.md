@@ -2,7 +2,7 @@
 
 [简体中文](nexus-gap-analysis.zh-CN.md) | [Documentation index](README.md)
 
-Status: feature and experience comparison between Artifact Gateway and
+Status: feature and experience comparison between notarx and
 Sonatype Nexus Repository Manager. This document owns the cross-product gap
 view; the per-protocol compatibility baseline lives in
 [the protocol compatibility matrix](protocol-compatibility.md) and the V1
@@ -13,7 +13,7 @@ Repository/Group/Hosted/Proxy Console improvement backlog lives in
 
 ## Scope
 
-Artifact Gateway is a complete artifact repository across OCI, Maven, Raw,
+notarx is a complete artifact repository across OCI, Maven, Raw,
 Conan, npm, PyPI, and Go Hosted/Proxy/Group paths. Nexus Repository Manager is a mature, general-purpose
 artifact repository spanning twenty-plus package ecosystems.
 
@@ -24,14 +24,14 @@ general artifact repository manager is expected to provide **regardless of how
 many formats it admits**. Where a shared format has a depth gap, it is called
 out separately in the Shared Format Depth section.
 
-The baseline for the Artifact Gateway side is the completed V1 backend in
+The baseline for the notarx side is the completed V1 backend in
 [the backend completion checklist](backend-completion-checklist.md) (lifecycle,
 protocol, management API, distribution, and operations work is checked off) and
 the Console described in `console/src/app/router.tsx`.
 
 ## Client Migration Boundary
 
-Artifact Gateway uses its own canonical protocol roots. Nexus-style
+notarx uses its own canonical protocol roots. Nexus-style
 `/repository/<name>/...` aliases and version-only Go ZIP uploads are retired;
 clients must update their base URLs and regenerate lockfiles that retain the
 old roots. Standard Maven/Gradle, npm, twine/pip, Raw HTTP, GOPROXY and OCI
@@ -41,7 +41,7 @@ This does not imply production client cutover or data validation has completed.
 
 ## Gap Summary
 
-| Area | Nexus | Artifact Gateway | Severity |
+| Area | Nexus | notarx | Severity |
 | --- | --- | --- | --- |
 | Identity and RBAC | Users, Roles, Privileges, Content Selectors, LDAP/SAML/Crowd/OIDC | Governed local users, API keys, reusable permission roles, the member/administrator account levels, format-aware repository grants, effective-access explanation, and OIDC role mapping; multi-role identity assignments and LDAP/SAML remain future work | Medium |
 | Login and SSO entry | Login page, SAML/OIDC buttons, sessions | Local credentials, bearer tokens, database-configured OIDC authorization-code SSO with encrypted client secrets, and per-client session inventory/revocation; back-channel and IdP-initiated logout remain future work | Low |
@@ -66,7 +66,7 @@ Privileges scoped to a repository, format, path, or content selector, with
 external identity through LDAP, SAML, Crowd, OIDC, and Active Directory plus
 external role mapping.
 
-Artifact Gateway supports break-glass static tokens, local users, API keys,
+notarx supports break-glass static tokens, local users, API keys,
 and a runtime PostgreSQL-backed OIDC configuration. The OIDC authorization-code
 flow uses HttpOnly sessions, encrypted client secrets, discovery/JWKS
 validation, and member/administrator role mapping. Local users and API keys hold
@@ -110,7 +110,7 @@ than a managed anonymous role.
 
 ### Distribution And Integration
 
-Artifact Gateway is comparatively strong here. Immutable promotion creates an
+notarx is comparatively strong here. Immutable promotion creates an
 audited destination artifact without mutating the source, and checkpointed
 replication persists checkpoints, retries, resumes, and SHA-256-verifies bytes.
 The remaining gaps are integration surfaces Nexus provides:
@@ -121,12 +121,12 @@ The remaining gaps are integration surfaces Nexus provides:
 - No email or SMTP notification configuration.
 - No routing rules (per-path allow/deny beyond the Proxy host allowlist).
 - No external blob destination for replication; replication targets are other
-  Artifact Gateway repositories.
+  notarx repositories.
 
 ### Storage Backend
 
 Nexus supports multiple concurrent blob stores (file, S3, Azure Blob), blob
-store groups, and an admin-managed compaction task. Artifact Gateway stores
+store groups, and an admin-managed compaction task. notarx stores
 bytes in a single S3-compatible RustFS object store. Reclamation is performed
 by the Orphan Collector after a grace period and reference recheck, which is a
 more rigorous lifecycle model than Nexus trash, but there is no operator UI to
@@ -136,7 +136,7 @@ inspect blob stores, run compaction, or attach a second store.
 
 Nexus exposes a Task Scheduler where an administrator creates scheduled or
 manual tasks: rebuild index, compact blob store, purge, run cleanup policies,
-rebuild repository browse, export. Artifact Gateway provides an
+rebuild repository browse, export. notarx provides an
 administrator-managed task catalog for repository retention and audit
 retention. Tasks use bounded fixed intervals, may be enabled or disabled, can
 be dispatched manually, and retain a history linked to the existing lifecycle
@@ -253,7 +253,7 @@ concurrency; format, type, and name remain immutable by design.
 ### User, Role, And Security Pages
 
 Nexus ships a broader Security section including LDAP, SAML and content
-selectors. Artifact Gateway provides Users, API Keys, Service Accounts, Access
+selectors. notarx provides Users, API Keys, Service Accounts, Access
 Control, grants, anonymous policy, reusable authorization roles and OIDC role
 mapping. Service Accounts separate stable machine principals from rotatable
 credentials; API Keys expose bounded roles, expiry, revocation and last-used
@@ -315,9 +315,9 @@ localized dates and numbers, and light/dark themes. The product intentionally
 targets desktop operator workflows; mobile navigation and compact data-table
 reflow are not release requirements.
 
-## Where Artifact Gateway Holds Its Own
+## Where notarx Holds Its Own
 
-This section keeps the comparison balanced. Artifact Gateway is not uniformly
+This section keeps the comparison balanced. notarx is not uniformly
 behind; several design decisions are stricter or more modern than Nexus:
 
 - **Lifecycle model.** Tombstone, grace period, reference recheck, and the

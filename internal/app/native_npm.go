@@ -1164,7 +1164,7 @@ func (h nativeNPMHandler) tarballURL(r *http.Request, repositoryName, packageNam
 }
 
 func (h nativeNPMHandler) challenge(w http.ResponseWriter, status int, message string) {
-	w.Header().Set("WWW-Authenticate", `Bearer realm="Artifact Gateway npm"`)
+	w.Header().Set("WWW-Authenticate", `Bearer realm="notarx npm"`)
 	h.writeError(w, status, message)
 }
 

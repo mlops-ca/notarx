@@ -26,7 +26,7 @@ At commit `7881539a` on 2026-08-21:
 - all 397,000 measured requests completed with zero ApacheBench failures, and
   Gateway remained live and ready with no `panic` or `fatal` log entries.
 
-These numbers support a specific advantage: Artifact Gateway keeps its own Go
+These numbers support a specific advantage: notarx keeps its own Go
 process small and uses PostgreSQL as its only coordination and database
 dependency. Artifact bytes still require an S3-compatible byte plane; the
 tested local stack uses RustFS. Redis, Kafka, Elasticsearch, and an external

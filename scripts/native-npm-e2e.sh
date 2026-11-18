@@ -108,7 +108,7 @@ mkdir "$unscoped"
 (
   cd "$unscoped"
   npm init -y >/dev/null
-  npm pkg set name='ag-npm-fixture' version='1.0.0' description='Artifact Gateway npm fixture' license='MIT'
+  npm pkg set name='ag-npm-fixture' version='1.0.0' description='notarx npm fixture' license='MIT'
   npm_config_userconfig="$auth_config" npm publish --registry="$registry_url" --tag=latest
   npm version 1.1.0 --no-git-tag-version >/dev/null
   npm_config_userconfig="$auth_config" npm publish --registry="$registry_url" --tag=next
@@ -119,7 +119,7 @@ mkdir "$scoped"
 (
   cd "$scoped"
   npm init -y >/dev/null
-  npm pkg set name='@artifact-gateway/npm-fixture' version='2.0.0' description='Scoped Artifact Gateway npm fixture' license='Apache-2.0'
+  npm pkg set name='@artifact-gateway/npm-fixture' version='2.0.0' description='Scoped notarx npm fixture' license='Apache-2.0'
   npm_config_userconfig="$auth_config" npm publish --registry="$registry_url" --tag=latest --access=public
 )
 
@@ -331,7 +331,7 @@ mkdir "$private_package"
 (
   cd "$private_package"
   npm init -y >/dev/null
-  npm pkg set name='ag-npm-private-fixture' version='3.0.0' description='Artifact Gateway Group hosted fixture' license='MIT'
+  npm pkg set name='ag-npm-private-fixture' version='3.0.0' description='notarx Group hosted fixture' license='MIT'
   npm_config_userconfig="$auth_config" npm publish --registry="$private_registry_url" --tag=latest
 )
 

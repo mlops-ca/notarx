@@ -2,7 +2,7 @@
   <img src="docs/assets/artifact-gateway-hero.png" alt="Des flux d’artefacts convergeant par une passerelle de vérification unique vers les métadonnées PostgreSQL et un stockage d’objets immuable" width="100%">
 </p>
 
-<h1 align="center">Artifact Gateway</h1>
+<h1 align="center">notarx</h1>
 
 <p align="center">
   Un dépôt léger et natif au protocole pour des artefacts logiciels vérifiés.
@@ -36,9 +36,9 @@ contraire. Le noyau de la documentation (ce fichier, l’index de la documentati
 le guide de démarrage, la politique de sécurité et le guide de contribution) est
 offert en français.*
 
-## Pourquoi Artifact Gateway
+## Pourquoi notarx
 
-Artifact Gateway garde volontairement le plan de contrôle opérationnel très
+notarx garde volontairement le plan de contrôle opérationnel très
 compact :
 
 - **Un seul binaire Gateway.** La même image peut fonctionner comme nœud autonome
@@ -197,7 +197,7 @@ de cycle de vie et le dépannage.
 
 ## L’architecture en un coup d’œil
 
-![Architecture système légère d’Artifact Gateway](docs/assets/artifact-gateway-system-architecture.png)
+![Architecture système légère de notarx](docs/assets/artifact-gateway-system-architecture.png)
 
 Le rôle `standalone` par défaut exécute les responsabilités d’API,
 d’ordonnanceur et de worker dans un seul processus. Les grandes installations
@@ -249,6 +249,6 @@ compte pas comme une prise en charge du protocole.
 
 ## Licence
 
-Artifact Gateway est offert sous la [licence MIT](LICENSE). Les composants et
+notarx est offert sous la [licence MIT](LICENSE). Les composants et
 les ressources tiers restent soumis à leurs propres conditions de licence. Le nom
 et le logo sont couverts par la [politique sur les marques de commerce](TRADEMARKS.md).

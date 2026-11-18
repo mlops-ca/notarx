@@ -450,7 +450,7 @@ func (h nativeMavenHandler) read(w http.ResponseWriter, r *http.Request) {
 		if anonymousHostedRepositoryReadAllowed(r.Context(), h.store, repo, r.Method) {
 			principal = anonymousPrincipal()
 		} else {
-			w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Maven"`)
+			w.Header().Set("WWW-Authenticate", `Basic realm="notarx Maven"`)
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
@@ -638,7 +638,7 @@ func mavenCoordinateCommitPath(path string) (repositoryName, coordinate string, 
 func (h nativeMavenHandler) coordinateCommit(w http.ResponseWriter, r *http.Request, repositoryName, coordinate string) {
 	principal, ok := h.protocolPrincipal(r)
 	if !ok {
-		w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Maven"`)
+		w.Header().Set("WWW-Authenticate", `Basic realm="notarx Maven"`)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
@@ -762,7 +762,7 @@ func sameMavenAssetNames(expected []string, objects []repository.MavenDeclaredOb
 func (h nativeMavenHandler) deploy(w http.ResponseWriter, r *http.Request) {
 	principal, ok := h.protocolPrincipal(r)
 	if !ok {
-		w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Maven"`)
+		w.Header().Set("WWW-Authenticate", `Basic realm="notarx Maven"`)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
