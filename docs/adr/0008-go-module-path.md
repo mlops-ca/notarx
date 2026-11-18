@@ -2,7 +2,7 @@
 
 [简体中文](0008-go-module-path.zh-CN.md) · [Documentation index](../README.md)
 
-Status: accepted
+Status: superseded by [ADR 0013](0013-notarx-fork-charter.md)
 
 ## Context
 
