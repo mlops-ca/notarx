@@ -1,39 +1,72 @@
 version: 2
+# One grouped pull request per ecosystem and update class, opened on Mondays and
+# capped at two open per ecosystem, so a dependency sweep cannot starve the
+# batch pull requests of CI runners (docs/ci.md, "Dependency updates").
+# Titles must satisfy .github/commit-policy.json (ADR 0024); the prefix below is
+# the whole "type(scope)" part, so no scope is derived from the directory.
 updates:
-  # Titles must satisfy .github/commit-policy.json (ADR 0024); the prefix below is
-  # the whole "type(scope)" part, so no scope is derived from the directory.
   - package-ecosystem: gomod
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+      day: monday
+    open-pull-requests-limit: 2
     commit-message:
       prefix: "build(deps)"
+    groups:
+      gomod-root-minor-patch:
+        update-types: [minor, patch]
+      gomod-root-major:
+        update-types: [major]
   - package-ecosystem: npm
     directory: /console
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+      day: monday
+    open-pull-requests-limit: 2
     commit-message:
       prefix: "build(deps)"
+    groups:
+      npm-console-minor-patch:
+        update-types: [minor, patch]
+      npm-console-major:
+        update-types: [major]
   - package-ecosystem: npm
     directory: /tools/openapi
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+      day: monday
+    open-pull-requests-limit: 2
     commit-message:
       prefix: "build(deps)"
-  - package-ecosystem: github-actions
-    directory: /
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    commit-message:
-      prefix: "ci(deps)"
+    groups:
+      npm-tools-openapi-minor-patch:
+        update-types: [minor, patch]
+      npm-tools-openapi-major:
+        update-types: [major]
   - package-ecosystem: docker
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+      day: monday
+    open-pull-requests-limit: 2
     commit-message:
       prefix: "build(deps)"
+    groups:
+      docker-root-minor-patch:
+        update-types: [minor, patch]
+      docker-root-major:
+        update-types: [major]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      github_actions-root-minor-patch:
+        update-types: [minor, patch]
+      github_actions-root-major:
+        update-types: [major]
