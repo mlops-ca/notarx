@@ -22,6 +22,7 @@ import {
 } from "../../client";
 import type { AuthorizationRole } from "../../client";
 import { usePreferences } from "../../lib/preferences";
+import { useFormatters } from "../../lib/useFormatters";
 import { EmptyState, ErrorBanner, Loading } from "../../components/ui/Feedback";
 import { Card, CardHeader } from "../../components/ui/Layout";
 import { ConsoleTable } from "../../components/ui/ConsolePrimitives";
@@ -34,6 +35,7 @@ export type AuthorizationScope = AuthorizationRole["scopes"][number];
 /** Custom roles, shared with the templates panel through the roles query. */
 export function AuthorizationRolesPanel() {
   const { t } = usePreferences();
+  const { formatDateTime } = useFormatters();
   const rolesQuery = useAuthorizationRoles();
   const roles = rolesQuery.data ?? null;
   const invalidate = useInvalidateAccess();
@@ -148,7 +150,7 @@ export function AuthorizationRolesPanel() {
       title: t("access.updated"),
       dataIndex: "updatedAt",
       width: 190,
-      render: (value: string) => new Date(value).toLocaleString(),
+      render: (value: string) => formatDateTime(value),
     },
     {
       title: t("access.actions"),

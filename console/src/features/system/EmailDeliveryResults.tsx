@@ -2,6 +2,7 @@ import type { EmailDelivery, EmailTarget } from "../../client";
 import { Card, CardHeader } from "../../components/ui/Layout";
 import { EmptyState } from "../../components/ui/Feedback";
 import { usePreferences } from "../../lib/preferences";
+import { useFormatters } from "../../lib/useFormatters";
 import { QuotaBadge } from "./QuotaBadge";
 import { quotaLabel } from "./quotaAlertPresentation";
 
@@ -13,9 +14,10 @@ export function EmailDeliveryResults({
   targets: EmailTarget[];
 }) {
   const { t } = usePreferences();
+  const { formatDateTime } = useFormatters();
   const time = (value?: string) =>
     value
-      ? new Date(value).toLocaleString(undefined, { timeZone: "UTC" }) + " UTC"
+      ? formatDateTime(value, { timeZone: "UTC" }) + " UTC"
       : t("system.unknown");
   return (
     <Card>

@@ -11,6 +11,7 @@ import { QuotaBadge as Badge } from "./QuotaBadge";
 import { Card, CardHeader } from "../../components/ui/Layout";
 import { ErrorBanner } from "../../components/ui/Feedback";
 import { usePreferences } from "../../lib/preferences";
+import { useFormatters } from "../../lib/useFormatters";
 import {
   percent,
   quotaLabel,
@@ -43,7 +44,8 @@ export function QuotaRuleDetail({
   onChanged: (rule: RepositoryQuotaAlertRule) => void;
   onDeleted: () => void;
 }) {
-  const { t } = usePreferences();
+  const { t, locale } = usePreferences();
+  const { formatDateTime } = useFormatters();
   const [confirmation, setConfirmation] = useState<{
     kind: "enable" | "disable" | "delete";
     rule: RepositoryQuotaAlertRule;
@@ -188,9 +190,9 @@ export function QuotaRuleDetail({
               {rule.state.dataState === "available"
                 ? t("system.latestSample")
                 : t("system.historicalSample")}{" "}
-              ({new Date(rule.state.lastSampleAt).toLocaleString()}):{" "}
-              {sampleBytes(rule.state.usedBytes, t)} /{" "}
-              {sampleBytes(rule.state.quotaBytes, t)}
+              ({formatDateTime(rule.state.lastSampleAt)}):{" "}
+              {sampleBytes(rule.state.usedBytes, t, locale)} /{" "}
+              {sampleBytes(rule.state.quotaBytes, t, locale)}
               {((rule.state.usedBytes !== undefined &&
                 !Number.isSafeInteger(rule.state.usedBytes)) ||
                 (rule.state.quotaBytes !== undefined &&
@@ -223,7 +225,7 @@ export function QuotaRuleDetail({
               [
                 t("system.lastEvaluation"),
                 rule.evaluatedAt
-                  ? new Date(rule.evaluatedAt).toLocaleString()
+                  ? formatDateTime(rule.evaluatedAt)
                   : t("system.notEvaluatedYet"),
               ],
             ].map(([label, value]) => (
@@ -243,7 +245,7 @@ export function QuotaRuleDetail({
             ([key, label]) =>
               rule.state[key] && (
                 <p key={key} className="text-xs text-fg-tertiary">
-                  {label}: {new Date(rule.state[key]).toLocaleString()}
+                  {label}: {formatDateTime(rule.state[key])}
                 </p>
               ),
           )}

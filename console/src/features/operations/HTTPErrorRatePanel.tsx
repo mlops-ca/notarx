@@ -8,6 +8,7 @@ import { Badge } from "../../components/ui/Badge";
 import { Card, CardHeader } from "../../components/ui/Layout";
 import { formatDate } from "../../lib/format";
 import { usePreferences } from "../../lib/preferences";
+import { useFormatters } from "../../lib/useFormatters";
 import "./operations.css";
 
 const reasons: Record<HttpErrorRateReason, MessageKey> = {
@@ -33,6 +34,7 @@ export function HTTPErrorRatePanel({
   rate?: DiagnosticHttpErrorRate;
 }) {
   const { t, locale } = usePreferences();
+  const { formatNumber } = useFormatters();
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
     const receivedAt = Date.now();
@@ -83,7 +85,7 @@ export function HTTPErrorRatePanel({
   const percent = valid
     ? rate.ratio! > 0 && rate.ratio! * 100 < 0.01
       ? "<0.01%"
-      : `${(rate.ratio! * 100).toLocaleString(locale, { maximumFractionDigits: 2 })}%`
+      : `${formatNumber(rate.ratio! * 100, { maximumFractionDigits: 2 })}%`
     : "—";
   return (
     <Card className="ag-http-error-rate-card">
@@ -119,7 +121,7 @@ export function HTTPErrorRatePanel({
                 ? t("operations.previousSnapshotRequests")
                 : t("operations.requests")}
             </dt>
-            <dd>{countsValid ? rate.requests!.toLocaleString(locale) : "—"}</dd>
+            <dd>{countsValid ? formatNumber(rate.requests!) : "—"}</dd>
           </div>
           <div>
             <dt>
@@ -127,7 +129,7 @@ export function HTTPErrorRatePanel({
                 ? t("operations.previousSnapshot5xx")
                 : t("operations.5xxErrors")}
             </dt>
-            <dd>{countsValid ? rate.errors!.toLocaleString(locale) : "—"}</dd>
+            <dd>{countsValid ? formatNumber(rate.errors!) : "—"}</dd>
           </div>
         </dl>
         {rate && (
@@ -147,7 +149,7 @@ export function HTTPErrorRatePanel({
                   <>
                     {" "}
                     ·{" "}
-                    {rate.coverageSeconds.toLocaleString(locale, {
+                    {formatNumber(rate.coverageSeconds, {
                       maximumFractionDigits: 1,
                     })}
                     s

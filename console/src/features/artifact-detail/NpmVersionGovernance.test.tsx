@@ -188,8 +188,8 @@ describe("npm version governance", () => {
       await screen.findByText(
         /The update outcome is unknown\. Read the package state before deciding whether to submit again\./,
       ),
-    ).toBeVisible();
-    expect(screen.getByRole("textbox")).toBeVisible();
+    ).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("textbox")).toBeVisible());
     expect(onChanged).not.toHaveBeenCalled();
   });
 

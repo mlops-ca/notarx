@@ -21,6 +21,7 @@ import { EmptyState, ErrorBanner, Loading } from "../../components/ui/Feedback";
 import { Card, CardHeader } from "../../components/ui/Layout";
 import { ConsoleTable } from "../../components/ui/ConsolePrimitives";
 import { usePreferences } from "../../lib/preferences";
+import { useFormatters } from "../../lib/useFormatters";
 import { accessKeys } from "../../lib/query/keys";
 import {
   useAuthorizationRoles,
@@ -106,6 +107,7 @@ export function AuthorizationTemplatesPanel({
   principalOptions = [],
 }: Props) {
   const { t } = usePreferences();
+  const { formatDateTime } = useFormatters();
   const templatesQuery = useAuthorizationTemplates();
   const rolesQuery = useAuthorizationRoles();
   const templates = templatesQuery.data ?? null;
@@ -214,7 +216,7 @@ export function AuthorizationTemplatesPanel({
       title: t("access.updated"),
       dataIndex: "updatedAt",
       width: 190,
-      render: (value: string) => new Date(value).toLocaleString(),
+      render: (value: string) => formatDateTime(value),
     },
     {
       title: t("access.actions"),
