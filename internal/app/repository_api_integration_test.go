@@ -693,11 +693,11 @@ func TestPostgresAnonymousMigrationPreservesLegacyOCIAndMavenRows(t *testing.T) 
 		}
 	}
 	oci, err := store.GetGroup(context.Background(), "legacy-policy-oci")
-	if err != nil || oci.Anonymous || len(oci.Members) != 1 || oci.Members[0].Anonymous {
+	if err != nil || oci.Anonymous || len(oci.Members) != 1 {
 		t.Fatalf("OCI compatibility group=%#v err=%v", oci, err)
 	}
 	maven, err := store.GetMavenGroup(context.Background(), "legacy-policy-maven")
-	if err != nil || maven.Anonymous || len(maven.Members) != 1 || maven.Members[0].Anonymous {
+	if err != nil || maven.Anonymous || len(maven.Members) != 1 {
 		t.Fatalf("Maven compatibility group=%#v err=%v", maven, err)
 	}
 	audits, err := store.ListAudits(context.Background(), repository.AuditQuery{GroupName: "legacy-policy-oci"})

@@ -22,6 +22,11 @@ type baseline struct {
 	Violations            []string `json:"violations"`
 	GatewayStoreMembers   []string `json:"gatewayStoreMembers"`
 	EffectiveStoreMethods []string `json:"effectiveStoreMethods"`
+	// VisibilityAccessors lists the files outside internal/access that still
+	// touch a Visibility field or the public-access policy. They are management
+	// write models and API projections, never read paths, and the list only
+	// shrinks (ADR 0029, slice 14).
+	VisibilityAccessors []string `json:"visibilityAccessors"`
 }
 
 type definition struct {
@@ -30,10 +35,11 @@ type definition struct {
 }
 
 type inventory struct {
-	Imports map[string]map[string]bool
-	Members []string
-	Metrics map[string]int
-	Types   map[string]definition
+	VisibilityAccessors []string
+	Imports             map[string]map[string]bool
+	Members             []string
+	Metrics             map[string]int
+	Types               map[string]definition
 }
 
 func scan(root string) (inventory, error) {
@@ -58,6 +64,9 @@ func scan(root string) (inventory, error) {
 		}
 		if result.Imports[pkg] == nil {
 			result.Imports[pkg] = map[string]bool{}
+		}
+		if touchesVisibility(file) && !visibilityOwner(pkg) {
+			result.VisibilityAccessors = append(result.VisibilityAccessors, rel)
 		}
 		aliases := map[string]string{}
 		for _, spec := range file.Imports {
@@ -139,8 +148,54 @@ func scan(root string) (inventory, error) {
 		return nil
 	})
 	sort.Strings(result.Members)
+	sort.Strings(result.VisibilityAccessors)
 	result.Metrics["gatewayStoreMembers"] = len(result.Members)
 	return result, err
+}
+
+// visibilityOwner reports the packages allowed to read visibility and the
+// public-access policy: the one choke point, the store that persists them, the
+// generated API types and the command-line client of that API.
+func visibilityOwner(pkg string) bool {
+	for _, owner := range []string{"internal/access", "internal/repository", "internal/admin/openapi", "internal/notarxctl"} {
+		if pkg == owner || strings.HasPrefix(pkg, owner+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// touchesVisibility reports whether a file selects a Visibility field or calls
+// the public-access policy accessors.
+func touchesVisibility(file *ast.File) bool {
+	// A qualified reference to the Visibility type itself (repository.Visibility)
+	// is not a read of a field.
+	packages := map[string]bool{}
+	for _, spec := range file.Imports {
+		value, err := strconv.Unquote(spec.Path.Value)
+		if err != nil || !strings.HasSuffix(value, "/internal/repository") {
+			continue
+		}
+		name := "repository"
+		if spec.Name != nil {
+			name = spec.Name.Name
+		}
+		packages[name] = true
+	}
+	found := false
+	ast.Inspect(file, func(node ast.Node) bool {
+		selector, ok := node.(*ast.SelectorExpr)
+		if ok {
+			if qualifier, isIdent := selector.X.(*ast.Ident); isIdent && packages[qualifier.Name] && qualifier.Obj == nil && selector.Sel.Name == "Visibility" {
+				return true
+			}
+		}
+		if ok && (selector.Sel.Name == "Visibility" || selector.Sel.Name == "GetPublicAccessPolicy" || selector.Sel.Name == "ReplacePublicAccessPolicy") {
+			found = true
+		}
+		return !found
+	})
+	return found
 }
 
 func formatPackage(pkg string) string {
@@ -289,7 +344,7 @@ func run(root string, metrics bool) error {
 	if err != nil {
 		return err
 	}
-	current := baseline{Violations: violations(inv, fields[1]), GatewayStoreMembers: inv.Members, EffectiveStoreMethods: methods}
+	current := baseline{Violations: violations(inv, fields[1]), GatewayStoreMembers: inv.Members, EffectiveStoreMethods: methods, VisibilityAccessors: inv.VisibilityAccessors}
 	if metrics {
 		output, err := json.MarshalIndent(inv.Metrics, "", "  ")
 		if err != nil {
@@ -315,6 +370,12 @@ func run(root string, metrics bool) error {
 	}
 	for _, member := range additions(current.GatewayStoreMembers, allowed.GatewayStoreMembers) {
 		failures = append(failures, "GatewayStore adds "+member)
+	}
+	for _, file := range additions(current.VisibilityAccessors, allowed.VisibilityAccessors) {
+		failures = append(failures, file+" reads repository visibility or the public-access policy outside internal/access; decide through access.Decide")
+	}
+	for _, file := range additions(allowed.VisibilityAccessors, current.VisibilityAccessors) {
+		failures = append(failures, "remove resolved visibility accessor from baseline: "+file)
 	}
 	// Removed debt must leave the allowlist, so it cannot be silently reintroduced later.
 	for _, stale := range additions(allowed.Violations, current.Violations) {

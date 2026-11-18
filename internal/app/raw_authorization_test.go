@@ -35,13 +35,12 @@ func TestRawRejectsUnsafePathsAndUnauthorizedRequests(t *testing.T) {
 	}
 }
 
-func TestRawAnonymousPolicyRequiresPublicGroupAndMember(t *testing.T) {
+func TestRawAnonymousPolicyRequiresPublicGroup(t *testing.T) {
 	store := repository.NewMemoryStore()
 	enableAnonymousAccess(t, store)
 	for _, group := range []repository.Group{
-		{Name: "private", Members: []repository.Member{{Name: "hosted", Type: repository.MemberHosted, Anonymous: true}}},
-		{Name: "member-private", Anonymous: true, Members: []repository.Member{{Name: "hosted", Type: repository.MemberHosted}}},
-		{Name: "public", Anonymous: true, Members: []repository.Member{{Name: "hosted", Type: repository.MemberHosted, Anonymous: true}}},
+		{Name: "private", Members: []repository.Member{{Name: "hosted", Type: repository.MemberHosted}}},
+		{Name: "public", Anonymous: true, Members: []repository.Member{{Name: "hosted", Type: repository.MemberHosted}}},
 	} {
 		if _, err := store.CreateRawGroup(context.Background(), group); err != nil {
 			t.Fatal(err)
@@ -49,7 +48,7 @@ func TestRawAnonymousPolicyRequiresPublicGroupAndMember(t *testing.T) {
 	}
 	client := &rawFixtureClient{responses: map[string]int{"hosted": http.StatusOK}, body: []byte("artifact")}
 	h := RawHandler{Store: store, Authenticator: testAuthenticator(), Client: client, Metrics: &Metrics{}, Cache: NewRawCache(objectstore.NewMemoryStore(), time.Hour, time.Hour, nil)}
-	for group, want := range map[string]int{"private": http.StatusUnauthorized, "member-private": http.StatusUnauthorized, "public": http.StatusOK} {
+	for group, want := range map[string]int{"private": http.StatusUnauthorized, "public": http.StatusOK} {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/raw/"+group+"/artifact", nil))
 		if w.Code != want {
@@ -70,7 +69,7 @@ func TestRawAnonymousFilteringDoesNotMutateMemoryStoreGroupMembers(t *testing.T)
 	enableAnonymousAccess(t, store)
 	wantMembers := []repository.Member{
 		{Name: "private", Type: repository.MemberHosted, Endpoint: "https://private.example", Position: 0},
-		{Name: "public", Type: repository.MemberHosted, Endpoint: "https://public.example", Position: 1, Anonymous: true},
+		{Name: "public", Type: repository.MemberHosted, Endpoint: "https://public.example", Position: 1},
 	}
 	if _, err := store.CreateRawGroup(context.Background(), repository.Group{Name: "public", Anonymous: true, Members: wantMembers}); err != nil {
 		t.Fatal(err)

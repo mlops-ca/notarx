@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/access"
 	"github.com/mlops-ca/notarx/internal/authorization"
 	formatmodule "github.com/mlops-ca/notarx/internal/format"
 	dist "github.com/mlops-ca/notarx/internal/nugetdistribution"
@@ -157,11 +158,8 @@ func (m *Module) authorizeCollection(w http.ResponseWriter, r *http.Request, rep
 
 func (m *Module) authorizeRequest(w http.ResponseWriter, r *http.Request, repo repository.HostedRepository, operation authorization.RepositoryOperation, resource string, collection bool) (authorization.Principal, bool) {
 	p, ok := m.principal(r)
-	if !ok && r.Header.Get("Authorization") == "" && r.Header.Get("X-NuGet-ApiKey") == "" && operation == authorization.RepositoryRead && repo.Visibility == repository.VisibilityPublic && m.anonymous != nil {
-		policy, err := m.anonymous.GetPublicAccessPolicy(r.Context())
-		if err == nil && policy.Enabled {
-			return authorization.Principal{Actor: "anonymous"}, true
-		}
+	if !ok && r.Header.Get("Authorization") == "" && r.Header.Get("X-NuGet-ApiKey") == "" && operation == authorization.RepositoryRead && access.AnonymousRepositoryRead(r.Context(), m.anonymous, repo, r.Method) {
+		return authorization.Principal{Actor: "anonymous"}, true
 	}
 	if !ok {
 		w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway NuGet"`)
@@ -274,6 +272,9 @@ func (m *Module) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+		if m.anonymousAbsent(w, r, err) {
+			return
+		}
 		m.failure(w, err)
 		return
 	}
@@ -298,4 +299,19 @@ func (m *Module) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.read(w, r, repo, parts[2:])
+}
+
+// anonymousAbsent answers an anonymous read of a name that does not exist
+// exactly like one that is not visible, so existence never leaks (ADR 0029,
+// "Deny shaping").
+func (m *Module) anonymousAbsent(w http.ResponseWriter, r *http.Request, err error) bool {
+	if !errors.Is(err, repository.ErrNotFound) || !access.IsRead(r.Method) || r.Header.Get("Authorization") != "" || r.Header.Get("X-NuGet-ApiKey") != "" {
+		return false
+	}
+	if _, ok := m.principal(r); ok {
+		return false
+	}
+	w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway NuGet"`)
+	m.problem(w, 401, "authentication_required")
+	return true
 }

@@ -36,7 +36,7 @@ func (h v2GroupCargoHandler) serve(w http.ResponseWriter, r *http.Request, resol
 	}
 	principal, authenticated := h.native.principal(r)
 	if !authenticated {
-		if group.Visibility != repository.VisibilityPublic || !anonymousAccessAllowed(r.Context(), resolver.groups) {
+		if !anonymousGroupAllowed(r.Context(), resolver.groups, group, r.Method) {
 			h.native.challenge(w, http.StatusUnauthorized)
 			return
 		}
@@ -49,7 +49,7 @@ func (h v2GroupCargoHandler) serve(w http.ResponseWriter, r *http.Request, resol
 	}
 	allMembers := members
 	if isAnonymous(principal) {
-		members = anonymousHostedGroupMembers(group, members)
+		members = anonymousGroupMembers(r.Context(), resolver.groups, group, members)
 	}
 	members, denied := resolver.authorizeRepositoryMembers(r.Context(), principal, group.Name, repository.FormatCargo, route.name, members, RepositoryRead)
 	if denied && len(members) == 0 {
@@ -62,10 +62,9 @@ func (h v2GroupCargoHandler) serve(w http.ResponseWriter, r *http.Request, resol
 	}
 	switch route.kind {
 	case "config":
-		public := group.Visibility == repository.VisibilityPublic
-		for _, member := range allMembers {
-			public = public && member.Anonymous
-		}
+		// The config is public only when the group and every member are.
+		public := anonymousGroupAllowed(r.Context(), resolver.groups, group, http.MethodGet) &&
+			len(anonymousGroupMembers(r.Context(), resolver.groups, group, allMembers)) == len(allMembers)
 		h.native.config(w, r, repository.HostedRepository{Name: group.Name, Format: repository.FormatCargo,
 			State: repository.RepositoryActive, Visibility: cargoConfigVisibility(public)})
 	case "index":

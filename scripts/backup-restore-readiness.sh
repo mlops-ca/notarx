@@ -473,7 +473,7 @@ curl --silent --show-error --fail -X PUT \
   -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" -H 'Content-Type: application/json' -H "If-Match: $anonymous_policy_version" \
   --data "{\"version\":\"$anonymous_policy_version\",\"enabled\":true}" "$gateway_url/api/v2/public-access-policy" >/dev/null
 assert_go_module_download "$go_source_repository" "$go_module_path" "$go_version" pre-backup
-conan_payload=$(printf '{"name":"%s","anonymous":true,"cacheQuotaBytes":1048576,"members":[{"name":"fixture","type":"hosted","endpoint":"http://host.docker.internal:9","position":0,"anonymous":true}]}' "$conan_group")
+conan_payload=$(printf '{"name":"%s","anonymous":true,"cacheQuotaBytes":1048576,"members":[{"name":"fixture","type":"hosted","endpoint":"http://host.docker.internal:9","position":0}]}' "$conan_group")
 status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
   -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" -H 'Content-Type: application/json' \
   --data "$conan_payload" "$gateway_url/api/v1/conan/groups")
@@ -516,7 +516,7 @@ publish_go_module "$go_source_repository" "$go_module_path" "$go_mutation_versio
 go_mutation_zip_digest=$(go_asset_digest "$go_source_repository" "$go_module_path" "$go_mutation_version" zip)
 go_mutation_object_key="native/go/sha256/$go_mutation_zip_digest"
 assert_rustfs_object_state present "$go_mutation_object_key"
-mutation_payload=$(printf '{"name":"post-restore-%s","anonymous":false,"cacheQuotaBytes":1048576,"members":[{"name":"fixture","type":"hosted","endpoint":"http://host.docker.internal:9","position":0,"anonymous":false}]}' "$run_id")
+mutation_payload=$(printf '{"name":"post-restore-%s","anonymous":false,"cacheQuotaBytes":1048576,"members":[{"name":"fixture","type":"hosted","endpoint":"http://host.docker.internal:9","position":0}]}' "$run_id")
 status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
   -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" -H 'Content-Type: application/json' \
   --data "$mutation_payload" "$gateway_url/api/v1/raw/groups")

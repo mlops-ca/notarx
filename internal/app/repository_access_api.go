@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/access"
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
 	"github.com/mlops-ca/notarx/internal/authorization"
 	helmprotocol "github.com/mlops-ca/notarx/internal/protocol/helm"
@@ -134,15 +135,15 @@ func (h accessManagementHandler) repositoryEffectiveAccess(ctx context.Context, 
 	decision := func(operation RepositoryOperation) adminopenapi.EffectiveAccessDecision {
 		return effectiveAccessDecision(h.authorizer.AuthorizeResource(ctx, principal, repo, operation, resource))
 	}
-	anonymousReason := anonymousRepositoryReason(ctx, h.anonymousPolicy, repo)
+	anonymous := access.DescribeAnonymous(ctx, h.anonymousPolicy, repo)
 	response := adminopenapi.RepositoryEffectiveAccess{
 		Actor: principal.Actor, Identity: currentIdentityResponse(principal),
 		Resource: resource, Simulated: simulated,
-		Visibility: adminopenapi.Visibility(repo.Visibility),
+		Visibility: adminopenapi.Visibility(anonymous.Visibility),
 		AnonymousAccess: adminopenapi.EffectiveAccessDecision{
-			Allowed: anonymousReason == "repository_anonymous_read_enabled",
+			Allowed: anonymous.Allowed,
 			Source:  "anonymous_policy",
-			Reason:  anonymousReason,
+			Reason:  anonymous.Reason,
 		},
 		Permissions: adminopenapi.EffectiveAccessPermissions{
 			Read:         decision(RepositoryRead),
@@ -161,19 +162,6 @@ func (h accessManagementHandler) repositoryEffectiveAccess(ctx context.Context, 
 
 func effectiveAccessDecision(decision AuthorizationDecision) adminopenapi.EffectiveAccessDecision {
 	return adminopenapi.EffectiveAccessDecision{Allowed: decision.Allowed, Source: decision.Source, Reason: decision.Reason}
-}
-
-func anonymousRepositoryReason(ctx context.Context, source any, repo repository.HostedRepository) string {
-	if repo.State != repository.RepositoryActive {
-		return "repository_not_active"
-	}
-	if !anonymousAccessAllowed(ctx, source) {
-		return "global_anonymous_access_disabled"
-	}
-	if repo.Visibility != repository.VisibilityPublic {
-		return "repository_anonymous_read_disabled"
-	}
-	return "repository_anonymous_read_enabled"
 }
 
 func (h accessManagementHandler) ListGrants(w http.ResponseWriter, r *http.Request, repositoryID adminopenapi.RepositoryId) {

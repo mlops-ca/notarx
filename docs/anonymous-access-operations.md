@@ -53,6 +53,52 @@ Its repository search, format filters, source-type guidance, and read-only
 notices are discovery features; publishing, grants, and administration still
 require an authenticated management identity.
 
+## Group visibility
+
+A Group is a visibility ceiling. For each caller the resolved member list is
+computed per request from the members whose own visibility admits that caller;
+nothing derived is stored, and a member's visibility is always its repository's
+own (a proxy member included). Reading a repository directly uses that
+repository's visibility only.
+
+`NOTARX_GROUP_VISIBILITY_MODE` selects how writes are checked:
+
+- `strict` (the default) refuses a group more visible than its least visible
+  member, and refuses lowering a repository below a group that contains it, with
+  `409 visibility_conflict`. The response lists the offending member
+  repositories the caller may administer. The Console shows the same message.
+- `lenient` keeps the computed filtering only: members above the caller's class
+  are silently invisible. It exists to migrate existing layouts and is not a
+  recommended steady state.
+
+Legacy protocol-specific Groups (OCI, Maven, Raw, Conan) carry no per-member
+visibility: a legacy Group marked anonymous resolves every member for an
+anonymous caller. Migrate to V2 Groups, which bind members to repositories, when
+members need different visibility.
+
+## Existence and denial shaping
+
+For an anonymous caller a private repository or group and a name that does not
+exist produce the same response: `401` with the format's challenge, the same
+body and headers. An authenticated caller without read access receives the
+`404` of a missing resource. `internal/access` is the only package that decides
+reads, and `make architecture-check` fails when other code reads visibility or the
+public-access policy. The conformance harness (`internal/app/access_conformance_test.go`)
+drives every format in [the protocol compatibility baseline](protocol-compatibility.md)
+with anonymous, authenticated and granted callers, the gate on and off, and asserts
+that a private name and an absent one are byte-identical.
+
+## OCI anonymous pulls
+
+A public repository can be pulled two ways. A client may send an unauthenticated
+`GET` or `HEAD` directly, as ORAS does first. Docker, containerd and Podman follow
+the standard flow: `GET /v2/` answers `401` with a bearer challenge, the client asks
+`/auth/token` with no credentials and a `repository:NAME:pull` scope, and the token
+endpoint returns an anonymous token. That token is the same for every name and
+carries no authority; a request bearing it is served exactly as an anonymous
+request, so it reads only what an anonymous caller may read and never writes. A
+token request that asks for `push` or names no scope still needs credentials.
+
 ## Client Examples
 
 Authenticated Maven pull:

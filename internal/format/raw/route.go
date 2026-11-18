@@ -31,8 +31,8 @@ func (h *Module) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if _, ok := h.protocolPrincipal(r); !ok && !h.anonymousRepositoryRead(r.Context(), repo, r.Method) {
-				w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway"`)
-				http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+				w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Raw"`)
+				http.Error(w, "authentication required", http.StatusUnauthorized)
 				return
 			}
 		}

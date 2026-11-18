@@ -344,6 +344,50 @@ func (a Authenticator) IssueToken(actor string) string {
 	return payload + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
+// anonymousTokenLifetime bounds an anonymous pull token (ADR 0029, "OCI
+// anonymous pulls").
+const anonymousTokenLifetime = 5 * time.Minute
+
+// IssueAnonymousToken mints the bearer token the OCI token endpoint hands an
+// unauthenticated client that asks only to pull. It names no principal and
+// carries no authority: a request bearing it is served exactly as an anonymous
+// request (see IsAnonymousToken), so it can never read what an anonymous caller
+// cannot. It exists because Docker, containerd, Podman and ORAS fetch a token
+// after the registry challenge even for public repositories.
+func (a Authenticator) IssueAnonymousToken() string {
+	if a.ResolverToken == "" {
+		return ""
+	}
+	payload := "an1." + strconv.FormatInt(time.Now().UTC().Add(anonymousTokenLifetime).Unix(), 10)
+	mac := hmac.New(sha256.New, []byte(a.ResolverToken))
+	_, _ = mac.Write([]byte("anonymous-pull:" + payload))
+	return payload + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
+
+// IsAnonymousToken reports whether an Authorization header carries a valid,
+// unexpired anonymous pull token.
+func (a Authenticator) IsAnonymousToken(header string) bool {
+	token, ok := strings.CutPrefix(header, "Bearer ")
+	if !ok || a.ResolverToken == "" {
+		return false
+	}
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 || parts[0] != "an1" {
+		return false
+	}
+	expiresAt, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil || time.Now().UTC().Unix() >= expiresAt {
+		return false
+	}
+	signature, err := base64.RawURLEncoding.DecodeString(parts[2])
+	if err != nil {
+		return false
+	}
+	mac := hmac.New(sha256.New, []byte(a.ResolverToken))
+	_, _ = mac.Write([]byte("anonymous-pull:" + strings.Join(parts[:2], ".")))
+	return hmac.Equal(signature, mac.Sum(nil))
+}
+
 // IssuePrincipalToken mints a short-lived protocol token that preserves the
 // authenticated principal's role. Legacy actor-only tokens remain supported
 // through IssueToken for existing clients and tests.

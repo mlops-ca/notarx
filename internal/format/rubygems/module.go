@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/access"
 	"github.com/mlops-ca/notarx/internal/authorization"
 	formatmodule "github.com/mlops-ca/notarx/internal/format"
 	"github.com/mlops-ca/notarx/internal/objectstore"
@@ -101,11 +102,8 @@ func (m *Module) principal(r *http.Request) (authorization.Principal, bool) {
 }
 func (m *Module) authorize(w http.ResponseWriter, r *http.Request, repo repository.HostedRepository, op authorization.RepositoryOperation, resource string, collection bool) (authorization.Principal, bool) {
 	p, ok := m.principal(r)
-	if !ok && r.Header.Get("Authorization") == "" && op == authorization.RepositoryRead && repo.Visibility == repository.VisibilityPublic {
-		policy, e := m.anonymous.GetPublicAccessPolicy(r.Context())
-		if e == nil && policy.Enabled {
-			return authorization.Principal{Actor: "anonymous"}, true
-		}
+	if !ok && r.Header.Get("Authorization") == "" && op == authorization.RepositoryRead && access.AnonymousRepositoryRead(r.Context(), m.anonymous, repo, r.Method) {
+		return authorization.Principal{Actor: "anonymous"}, true
 	}
 	if !ok {
 		w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway RubyGems"`)
@@ -187,6 +185,9 @@ func (m *Module) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	repo, e := m.repository(r.Context(), parts[0], false)
 	if e != nil {
+		if m.anonymousAbsent(w, r, e) {
+			return
+		}
 		m.failure(w, e)
 		return
 	}
@@ -213,4 +214,19 @@ func (m *Module) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.read(w, r, repo, relative)
+}
+
+// anonymousAbsent answers an anonymous read of a name that does not exist
+// exactly like one that is not visible, so existence never leaks (ADR 0029,
+// "Deny shaping").
+func (m *Module) anonymousAbsent(w http.ResponseWriter, r *http.Request, err error) bool {
+	if !errors.Is(err, repository.ErrNotFound) || !access.IsRead(r.Method) || r.Header.Get("Authorization") != "" {
+		return false
+	}
+	if _, ok := m.principal(r); ok {
+		return false
+	}
+	w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway RubyGems"`)
+	m.problem(w, 401, "authentication_required")
+	return true
 }

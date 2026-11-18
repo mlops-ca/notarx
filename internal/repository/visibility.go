@@ -49,3 +49,21 @@ func MinVisibility(a, b Visibility) Visibility {
 	}
 	return b
 }
+
+// VisibilityRef names a repository and its visibility in a visibility_conflict
+// problem (ADR 0029, strict group mode).
+type VisibilityRef struct {
+	RepositoryID string     `json:"repositoryId"`
+	Name         string     `json:"name"`
+	Visibility   Visibility `json:"visibility"`
+}
+
+// VisibilityRef is the repository's reference at its stored visibility.
+func (r HostedRepository) VisibilityRef() VisibilityRef {
+	return VisibilityRef{RepositoryID: r.ID, Name: r.Name, Visibility: r.Visibility}
+}
+
+// VisibilityRefAt is the reference at a requested visibility.
+func (r HostedRepository) VisibilityRefAt(visibility Visibility) VisibilityRef {
+	return VisibilityRef{RepositoryID: r.ID, Name: r.Name, Visibility: visibility}
+}

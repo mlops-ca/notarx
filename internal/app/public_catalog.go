@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/mlops-ca/notarx/internal/access"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -29,12 +30,13 @@ type publicRepositoryCatalogResponse struct {
 }
 
 func (h publicRepositoryCatalogHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	policy, err := h.anonymous.GetPublicAccessPolicy(r.Context())
-	if err != nil || !policy.Enabled {
+	if !anonymousAccessAllowed(r.Context(), h.anonymous) {
 		writeNativeMavenJSON(w, http.StatusOK, publicRepositoryCatalogResponse{Enabled: false, Items: []publicRepositoryCatalogEntry{}})
 		return
 	}
 
+	// The gate is open here; decide every target against that one reading.
+	gate := access.FixedGate(true)
 	items := make([]publicRepositoryCatalogEntry, 0)
 	after := ""
 	for {
@@ -44,7 +46,7 @@ func (h publicRepositoryCatalogHandler) ServeHTTP(w http.ResponseWriter, r *http
 			return
 		}
 		for _, repo := range repositories {
-			if repository.IsSupportedFormat(repo.Format) && repo.State == repository.RepositoryActive && repo.Visibility == repository.VisibilityPublic {
+			if repository.IsSupportedFormat(repo.Format) && anonymousHostedRepositoryReadAllowed(r.Context(), gate, repo, http.MethodGet) {
 				items = append(items, publicRepositoryCatalogEntry{ID: repo.ID, Name: repo.Name, Format: repo.Format, Type: string(repo.Type)})
 			}
 		}
@@ -62,7 +64,7 @@ func (h publicRepositoryCatalogHandler) ServeHTTP(w http.ResponseWriter, r *http
 				return
 			}
 			for _, group := range groups {
-				if repository.IsSupportedFormat(group.Format) && anonymousHostedGroupReadAllowed(r.Context(), h.anonymous, h.repositories, group, r.Method) {
+				if repository.IsSupportedFormat(group.Format) && anonymousHostedGroupReadAllowed(r.Context(), gate, h.repositories, group, r.Method) {
 					items = append(items, publicRepositoryCatalogEntry{ID: group.ID, Name: group.Name, Format: group.Format, Type: "group"})
 				}
 			}

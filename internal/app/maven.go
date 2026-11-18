@@ -84,7 +84,7 @@ func (h MavenHandler) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 		return
 	}
 	principal, ok := h.authenticate(request)
-	if !ok && h.anonymousMavenAllowed(request.Context(), groupName) {
+	if !ok && h.anonymousGroupRead(request.Context(), groupName, request.Method) {
 		principal = Principal{Actor: "anonymous"}
 		ok = true
 	}
@@ -146,16 +146,8 @@ func (h MavenHandler) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 		http.Error(w, "Maven group is disabled", http.StatusForbidden)
 		return
 	}
-	members := group.Members
-	if actor == "anonymous" {
-		members = make([]repository.Member, 0, len(group.Members))
-		for _, member := range group.Members {
-			if member.Anonymous {
-				members = append(members, member)
-			}
-		}
-	}
-	members = prioritizeHosted(members)
+	// A legacy group's visibility is the group's own; its members carry none.
+	members := prioritizeHosted(group.Members)
 	var hadAuthorizationDenied bool
 	if actor != "anonymous" {
 		members, hadAuthorizationDenied, err = h.authorizedMavenMembers(request.Context(), groupName, artifactPath, actor, principal, members)

@@ -114,7 +114,7 @@ func (h ConanHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if group, ok := parseConanPing(r.Method, r.URL.Path); ok {
-		if h.anonymousConanAllowed(r.Context(), group) {
+		if h.anonymousRead(r.Context(), group, r.Method) {
 			w.Header().Set("X-Conan-Server-Capabilities", "revisions")
 			h.audit(withConanAuditDisposition(withConanAuditStatus(r.Context(), http.StatusOK), "bypass"), group, "", "", "anonymous", repository.AuditResolved)
 			w.WriteHeader(http.StatusOK)
@@ -184,7 +184,7 @@ func (h ConanHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p, authenticated := h.authenticate(r)
-	if !authenticated && r.Header.Get("Authorization") == "" && anonymousReadMethod(r.Method) && h.anonymousConanAllowed(r.Context(), group) {
+	if !authenticated && r.Header.Get("Authorization") == "" && anonymousReadMethod(r.Method) && h.anonymousRead(r.Context(), group, r.Method) {
 		p = Principal{Actor: "anonymous"}
 		authenticated = true
 	}
@@ -650,15 +650,8 @@ func (h ConanHandler) resolve(ctx context.Context, group repository.Group, path,
 	actor := principal.Actor
 	metadata := kind == "metadata"
 	hadFailure, denied, accessDenied := false, false, false
+	// A legacy group's visibility is the group's own; its members carry none.
 	members := group.Members
-	if actor == "anonymous" {
-		members = make([]repository.Member, 0, len(group.Members))
-		for _, member := range group.Members {
-			if member.Anonymous {
-				members = append(members, member)
-			}
-		}
-	}
 	for _, member := range prioritizeHosted(members) {
 		if err := upstreamauth.Validate(member.UpstreamAuth); err != nil {
 			return conanCacheEntry{}, http.StatusBadGateway, upstreamauth.ErrCredential

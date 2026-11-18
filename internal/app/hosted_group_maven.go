@@ -34,11 +34,11 @@ func (h v2GroupMavenHandler) serve(w http.ResponseWriter, r *http.Request, resol
 	}
 	principal, ok := h.native.protocolPrincipal(r)
 	if !ok {
-		if group.Visibility == repository.VisibilityPublic && anonymousReadMethod(r.Method) && anonymousAccessAllowed(r.Context(), resolver.groups) {
+		if anonymousGroupAllowed(r.Context(), resolver.groups, group, r.Method) {
 			principal = anonymousPrincipal()
 		} else {
 			w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Maven"`)
-			w.WriteHeader(http.StatusUnauthorized)
+			http.Error(w, "authentication required", http.StatusUnauthorized)
 			return
 		}
 	}
@@ -53,7 +53,7 @@ func (h v2GroupMavenHandler) serve(w http.ResponseWriter, r *http.Request, resol
 		return
 	}
 	if isAnonymous(principal) {
-		members = anonymousHostedGroupMembers(group, members)
+		members = anonymousGroupMembers(r.Context(), resolver.groups, group, members)
 	}
 	var denied bool
 	// Match the native and legacy Maven read paths before touching member
@@ -66,7 +66,7 @@ func (h v2GroupMavenHandler) serve(w http.ResponseWriter, r *http.Request, resol
 	if len(members) == 0 {
 		resolver.auditResolution(r.Context(), group, repository.FormatMaven, assetPath, strings.ToLower(r.Method), principal.Actor, repository.AuditAccessDenied, http.StatusUnauthorized)
 		w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Maven"`)
-		w.WriteHeader(http.StatusUnauthorized)
+		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
 	var proxies []repository.Member

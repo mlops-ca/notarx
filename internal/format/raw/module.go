@@ -4,8 +4,8 @@ package raw
 
 import (
 	"context"
-	"net/http"
 
+	"github.com/mlops-ca/notarx/internal/access"
 	"github.com/mlops-ca/notarx/internal/authorization"
 	formatmodule "github.com/mlops-ca/notarx/internal/format"
 	"github.com/mlops-ca/notarx/internal/objectstore"
@@ -45,7 +45,8 @@ type GroupRuntime interface {
 	ResolveMembers(context.Context, repository.HostedGroup) ([]repository.Member, error)
 	AuthorizeMembers(context.Context, authorization.Principal, repository.Format, string, []repository.Member) ([]repository.Member, bool)
 	AuditResolution(context.Context, repository.HostedGroup, repository.Format, string, string, string, repository.AuditOutcome, int)
-	AnonymousAllowed(context.Context) bool
+	// Gate is the source of the public-access policy, consulted only by internal/access.
+	Gate() any
 }
 
 // JobStore and ReplicationStore retain the concrete durable store's dynamic
@@ -137,15 +138,13 @@ func (m *Module) failure(ctx context.Context, code string) {
 	}
 }
 
-func (m *Module) anonymousAllowed(ctx context.Context) bool {
-	if m.anonymous == nil {
-		return false
-	}
-	policy, err := m.anonymous.GetPublicAccessPolicy(ctx)
-	return err == nil && policy.Enabled
-}
 func (m *Module) anonymousRepositoryRead(ctx context.Context, repo repository.HostedRepository, method string) bool {
-	return (method == http.MethodGet || method == http.MethodHead) && repo.State == repository.RepositoryActive && repo.Visibility == repository.VisibilityPublic && m.anonymousAllowed(ctx)
+	var gate any
+	if m.anonymous != nil {
+		gate = m.anonymous
+	}
+	decision, _, _ := access.Decide(ctx, access.ReadRequest{Class: access.Anonymous, Method: method, Gate: gate, Repository: &repo})
+	return decision.Allow
 }
 
 const anonymousActor = "anonymous"

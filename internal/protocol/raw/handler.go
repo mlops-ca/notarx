@@ -113,15 +113,8 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "repository read permission required", http.StatusForbidden)
 		return
 	}
+	// A legacy group's visibility is the group's own; its members carry none.
 	members := g.Members
-	if p.Actor == "anonymous" {
-		members = make([]repository.Member, 0, len(g.Members))
-		for _, member := range g.Members {
-			if member.Anonymous {
-				members = append(members, member)
-			}
-		}
-	}
 	hadFailure, hadProxyDenied, hadAuthorizationDenied := false, false, false
 	var lastNegative *repository.Member
 	for _, member := range h.Runtime.Prioritize(members) {

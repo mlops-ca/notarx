@@ -15,7 +15,7 @@ import (
 )
 
 func groupRepository(g repository.HostedGroup) repository.HostedRepository {
-	return repository.HostedRepository{ID: g.ID, Name: g.Name, Version: g.Version, Format: repository.FormatHelm, Type: repository.RepositoryTypeProxy, State: repository.RepositoryActive, Visibility: g.Visibility}
+	return g.AsRepository(repository.FormatHelm)
 }
 func (m *Module) groupMembers(ctx context.Context, g repository.HostedGroup) ([]repository.HostedRepository, error) {
 	if m.sources == nil || m.groups == nil || len(g.Members) == 0 || len(g.Members) > 32 {
@@ -41,13 +41,8 @@ func (m *Module) groupMembers(ctx context.Context, g repository.HostedGroup) ([]
 func (m *Module) authorizeGroup(w http.ResponseWriter, r *http.Request, g repository.HostedGroup, members []repository.HostedRepository, name string, collection bool) (authorization.Principal, bool) {
 	p, ok := m.principal(r)
 	if !ok {
-		if r.Header.Get("Authorization") != "" || g.Visibility != repository.VisibilityPublic {
+		if r.Header.Get("Authorization") != "" || !access.AnonymousGroupRead(r.Context(), m.anonymous, g, r.Method) {
 			w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Helm"`)
-			m.problem(w, 401, "authentication_required")
-			return p, false
-		}
-		policy, e := m.anonymous.GetPublicAccessPolicy(r.Context())
-		if e != nil || !policy.Enabled {
 			m.problem(w, 401, "authentication_required")
 			return p, false
 		}

@@ -133,3 +133,47 @@ func TestFutureFormatModulesCannotImportOtherFormats(t *testing.T) {
 		t.Fatalf("got %v; want %v", got, want)
 	}
 }
+
+func TestVisibilityReadsStayInsideTheChokePoint(t *testing.T) {
+	root := t.TempDir()
+	write := func(name, body string) {
+		t.Helper()
+		path := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("go.mod", "module example.test/gateway\n")
+	write("internal/app/store.go", "package app\ntype GatewayStore interface { Read() error }\n")
+	write("tools/architecture/baseline.json", `{"violations":[],"gatewayStoreMembers":["Read func() error"],"effectiveStoreMethods":["internal/app.GatewayStore.Read func() error"],"visibilityAccessors":[]}`)
+	// The choke point, the store and a type reference are allowed.
+	write("internal/access/access.go", "package access\nfunc f(r struct{ Visibility string }) string { return r.Visibility }\n")
+	write("internal/repository/model.go", "package repository\ntype Visibility string\nfunc g(r struct{ Visibility Visibility }) Visibility { return r.Visibility }\n")
+	write("internal/app/types.go", "package app\nimport \"example.test/gateway/internal/repository\"\nvar _ repository.Visibility\n")
+	if err := run(root, false); err != nil {
+		t.Fatalf("allowed uses rejected: %v", err)
+	}
+	for name, body := range map[string]string{
+		"a field read":   "package app\nfunc h(r struct{ Visibility string }) bool { return r.Visibility == \"public\" }\n",
+		"a policy read":  "package app\nfunc h(s interface{ GetPublicAccessPolicy() }) { s.GetPublicAccessPolicy() }\n",
+		"a policy write": "package app\nfunc h(s interface{ ReplacePublicAccessPolicy() }) { s.ReplacePublicAccessPolicy() }\n",
+	} {
+		write("internal/app/handler.go", body)
+		if err := run(root, false); err == nil || !strings.Contains(err.Error(), "internal/app/handler.go reads repository visibility") {
+			t.Fatalf("%s outside internal/access accepted: %v", name, err)
+		}
+	}
+	// A listed file is tolerated, and a listed file that is fixed must leave the list.
+	write("internal/app/handler.go", "package app\nfunc h(r struct{ Visibility string }) string { return r.Visibility }\n")
+	write("tools/architecture/baseline.json", `{"violations":[],"gatewayStoreMembers":["Read func() error"],"effectiveStoreMethods":["internal/app.GatewayStore.Read func() error"],"visibilityAccessors":["internal/app/handler.go"]}`)
+	if err := run(root, false); err != nil {
+		t.Fatalf("listed accessor rejected: %v", err)
+	}
+	write("internal/app/handler.go", "package app\n")
+	if err := run(root, false); err == nil || !strings.Contains(err.Error(), "remove resolved visibility accessor") {
+		t.Fatalf("a resolved accessor stayed in the baseline: %v", err)
+	}
+}

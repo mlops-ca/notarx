@@ -217,7 +217,12 @@ func TestArtifactManagementMissingSearchAndBrowseNeverBecomeEmptySuccess(t *test
 			}
 		})
 	}
-	// The global query continues to hide repositories this caller cannot read.
+	// The global query continues to hide repositories this caller cannot read; a
+	// public repository is readable by any identity (ADR 0029), so it goes private.
+	repo.Visibility = repository.VisibilityPrivate
+	if _, err := store.UpdateHostedRepository(ctx, repo, repo.Version); err != nil {
+		t.Fatal(err)
+	}
 	request := httptest.NewRequest(http.MethodGet, "/api/v2/artifact-search?q=com.example&format=maven", nil)
 	authorize(request, auth.IssueToken("user:ungranted"))
 	response := httptest.NewRecorder()

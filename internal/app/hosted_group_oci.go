@@ -44,7 +44,7 @@ func (h v2GroupOCIHandler) serve(w http.ResponseWriter, r *http.Request, resolve
 	}
 	principal, authenticated := h.auth.Authenticate(r.Header.Get("Authorization"))
 	if !authenticated {
-		if group.Visibility == repository.VisibilityPublic && anonymousReadMethod(r.Method) && anonymousAccessAllowed(r.Context(), resolver.groups) {
+		if anonymousGroupAllowed(r.Context(), resolver.groups, group, r.Method) {
 			principal = anonymousPrincipal()
 		} else {
 			writeOCIChallenge(w, r)
@@ -67,7 +67,7 @@ func (h v2GroupOCIHandler) serve(w http.ResponseWriter, r *http.Request, resolve
 		return
 	}
 	if resource == "referrers" && !authenticated || resource != "referrers" && isAnonymous(principal) {
-		members = anonymousHostedGroupMembers(group, members)
+		members = anonymousGroupMembers(r.Context(), resolver.groups, group, members)
 	}
 	var denied bool
 	if resource == "referrers" {

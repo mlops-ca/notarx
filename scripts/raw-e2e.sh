@@ -54,8 +54,8 @@ done
 create_group() {
   local name=$1 anonymous=$2 member_type=$3 endpoint=$4 hosts=${5:-[]}
   local payload status
-  payload=$(printf '{"name":"%s","anonymous":%s,"cacheQuotaBytes":1048576,"members":[{"name":"fixture","type":"%s","endpoint":"%s","position":0,"anonymous":%s,"allowedHosts":%s}]}' \
-    "$name" "$anonymous" "$member_type" "$endpoint" "$anonymous" "$hosts")
+  payload=$(printf '{"name":"%s","anonymous":%s,"cacheQuotaBytes":1048576,"members":[{"name":"fixture","type":"%s","endpoint":"%s","position":0,"allowedHosts":%s}]}' \
+    "$name" "$anonymous" "$member_type" "$endpoint" "$hosts")
   status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
     -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" -H 'Content-Type: application/json' \
     --data "$payload" "$gateway_url/api/v1/raw/groups")

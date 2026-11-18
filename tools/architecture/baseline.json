@@ -486,5 +486,15 @@
     "internal/repository.WebhookStore.ListWebhookSubscriptions func(context.Context) ([]WebhookSubscription, error)",
     "internal/repository.WebhookStore.ReplayWebhookDelivery func(context.Context, string, time.Time) (WebhookDelivery, error)",
     "internal/repository.WebhookStore.UpdateWebhookSubscription func(context.Context, WebhookSubscription, string) (WebhookSubscription, error)"
+  ],
+  "visibilityAccessors": [
+    "internal/app/audit_management_api.go",
+    "internal/app/hosted_group_api.go",
+    "internal/app/hosted_repository_api.go",
+    "internal/app/repository_access_api.go",
+    "internal/format/helm/preview.go",
+    "internal/format/helm/preview_sources.go",
+    "internal/format/nuget/preview_sources.go",
+    "internal/format/rubygems/preview.go"
   ]
 }

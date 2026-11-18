@@ -2,9 +2,11 @@ package authorization
 
 import (
 	"context"
+	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/mlops-ca/notarx/internal/access"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -97,6 +99,14 @@ func (a RepositoryAuthorizer) Authorize(ctx context.Context, principal Principal
 }
 
 func (a RepositoryAuthorizer) AuthorizeResource(ctx context.Context, principal Principal, target repository.HostedRepository, operation RepositoryOperation, resource string) AuthorizationDecision {
+	decision := a.authorizeResource(ctx, principal, target, operation, resource)
+	if lifted, ok := visibilityTier(ctx, principal, target, operation, decision); ok {
+		return lifted
+	}
+	return decision
+}
+
+func (a RepositoryAuthorizer) authorizeResource(ctx context.Context, principal Principal, target repository.HostedRepository, operation RepositoryOperation, resource string) AuthorizationDecision {
 	if decision, blocked := accountStateDecision(principal); blocked {
 		return decision
 	}
@@ -132,6 +142,32 @@ func (a RepositoryAuthorizer) ManagedDecision(ctx context.Context, principal Pri
 }
 
 func (a RepositoryAuthorizer) ManagedResourceDecision(ctx context.Context, principal Principal, target repository.HostedRepository, operation RepositoryOperation, resource string) (AuthorizationDecision, bool) {
+	decision, managed := a.managedResourceDecision(ctx, principal, target, operation, resource)
+	if lifted, ok := visibilityTier(ctx, principal, target, operation, decision); ok {
+		return lifted, true
+	}
+	return decision, managed
+}
+
+// visibilityTier admits an authenticated identity without a grant to read a
+// repository whose visibility is authenticated or public (ADR 0029). It only
+// ever lifts a read denial; writes always need a grant, and an account-state
+// block or an anonymous caller is never lifted.
+func visibilityTier(ctx context.Context, principal Principal, target repository.HostedRepository, operation RepositoryOperation, decision AuthorizationDecision) (AuthorizationDecision, bool) {
+	if decision.Allowed || operation != RepositoryRead || principal.Actor == "" || principal.Actor == "anonymous" {
+		return decision, false
+	}
+	if _, blocked := accountStateDecision(principal); blocked {
+		return decision, false
+	}
+	admitted, _, _ := access.Decide(ctx, access.ReadRequest{Class: access.Authenticated, Method: http.MethodGet, Repository: &target})
+	if !admitted.Allow {
+		return decision, false
+	}
+	return AuthorizationDecision{Allowed: true, Source: "visibility", Reason: "visibility_authenticated"}, true
+}
+
+func (a RepositoryAuthorizer) managedResourceDecision(ctx context.Context, principal Principal, target repository.HostedRepository, operation RepositoryOperation, resource string) (AuthorizationDecision, bool) {
 	if decision, blocked := accountStateDecision(principal); blocked {
 		return decision, true
 	}

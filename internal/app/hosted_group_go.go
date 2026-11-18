@@ -30,7 +30,7 @@ func (h v2GroupGoHandler) serve(w http.ResponseWriter, r *http.Request, resolver
 	}
 	principal, authenticated := h.native.protocolPrincipal(r)
 	if !authenticated {
-		if group.Visibility == repository.VisibilityPublic && anonymousReadMethod(r.Method) && anonymousAccessAllowed(r.Context(), resolver.groups) {
+		if anonymousGroupAllowed(r.Context(), resolver.groups, group, r.Method) {
 			principal = anonymousPrincipal()
 		} else {
 			h.native.challenge(w, http.StatusUnauthorized, "authentication required")
@@ -43,7 +43,7 @@ func (h v2GroupGoHandler) serve(w http.ResponseWriter, r *http.Request, resolver
 		return
 	}
 	if isAnonymous(principal) {
-		members = anonymousHostedGroupMembers(group, members)
+		members = anonymousGroupMembers(r.Context(), resolver.groups, group, members)
 	}
 	members, denied := resolver.authorizeRepositoryMembers(r.Context(), principal, group.Name, repository.FormatGo, route.module, members, RepositoryRead)
 	if denied && len(members) == 0 {

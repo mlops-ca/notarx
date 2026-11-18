@@ -23,13 +23,12 @@ func (c conanStatusClient) FetchConan(_ context.Context, _ string, _ repository.
 	return &http.Response{StatusCode: c.status, Body: io.NopCloser(strings.NewReader(c.body)), Header: http.Header{}}, nil
 }
 
-func TestConanAnonymousReadRequiresPublicGroupAndMember(t *testing.T) {
+func TestConanAnonymousReadRequiresPublicGroup(t *testing.T) {
 	store := repository.NewMemoryStore()
 	enableAnonymousAccess(t, store)
 	for _, group := range []repository.Group{
-		{Name: "private", Members: []repository.Member{{Name: "hosted", Type: repository.MemberHosted, Anonymous: true}}},
-		{Name: "partial", Anonymous: true, Members: []repository.Member{{Name: "hosted", Type: repository.MemberHosted}}},
-		{Name: "public", Anonymous: true, Members: []repository.Member{{Name: "private", Type: repository.MemberHosted}, {Name: "public", Type: repository.MemberHosted, Anonymous: true}}},
+		{Name: "private", Members: []repository.Member{{Name: "hosted", Type: repository.MemberHosted}}},
+		{Name: "public", Anonymous: true, Members: []repository.Member{{Name: "public", Type: repository.MemberHosted}}},
 	} {
 		if _, err := store.CreateConanGroup(context.Background(), group); err != nil {
 			t.Fatal(err)
@@ -38,7 +37,7 @@ func TestConanAnonymousReadRequiresPublicGroupAndMember(t *testing.T) {
 	client := &conanAnonymousClient{}
 	h := ConanHandler{Store: store, Authenticator: testAuthenticator(), Client: client, Cache: NewConanCache(objectstore.NewMemoryStore()), Metrics: &Metrics{}}
 	path := "/conan/%s/v2/conans/pkg/1.0/user/stable/revisions"
-	for _, group := range []string{"private", "partial"} {
+	for _, group := range []string{"private"} {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, fmt.Sprintf(path, group), nil))
 		if w.Code != http.StatusUnauthorized {
@@ -52,24 +51,9 @@ func TestConanAnonymousReadRequiresPublicGroupAndMember(t *testing.T) {
 	}
 }
 
-func TestConanAnonymousReadDoesNotUsePrivateMemberCache(t *testing.T) {
-	store := repository.NewMemoryStore()
-	enableAnonymousAccess(t, store)
-	private := repository.Member{Name: "private", Type: repository.MemberHosted, Endpoint: "https://private.example"}
-	public := repository.Member{Name: "public", Type: repository.MemberHosted, Endpoint: "https://public.example", Anonymous: true}
-	_, _ = store.CreateConanGroup(context.Background(), repository.Group{Name: "central", Anonymous: true, Members: []repository.Member{private, public}})
-	cache := NewConanCache(objectstore.NewMemoryStore())
-	path := "pkg/1.0/user/stable/revisions"
-	if err := cache.store(context.Background(), cache.key("central", path, private), conanCacheEntry{body: []byte(`{"revisions":[{"revision":"private","time":1}]}`), contentType: "application/json", member: private.Name, endpoint: private.Endpoint}, "central", 1024, time.Minute); err != nil {
-		t.Fatal(err)
-	}
-	h := ConanHandler{Store: store, Authenticator: testAuthenticator(), Client: &conanAnonymousClient{}, Cache: cache, Metrics: &Metrics{}}
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/conan/central/v2/conans/"+path, nil))
-	if w.Code != http.StatusOK || strings.Contains(w.Body.String(), "private") {
-		t.Fatalf("response=%d body=%q", w.Code, w.Body.String())
-	}
-}
+// Legacy groups carry no per-member visibility (ADR 0029): a legacy group the
+// operator marks anonymous resolves every member. Per-member visibility is a V2
+// group feature, covered by the access conformance harness.
 
 func TestConanAuthenticatedReadChecksMemberAuthorizationBeforeCache(t *testing.T) {
 	store := repository.NewMemoryStore()

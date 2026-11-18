@@ -422,7 +422,16 @@ func TestRepositoryEffectiveAccessReportsPermissionsAndAnonymousPolicy(t *testin
 		}
 		return body.Code + " " + body.Message
 	}
-	denied := httptest.NewRequest(http.MethodGet, "/api/v2/repositories/"+repo.ID+"/effective-access", nil)
+	// A public repository is readable by any identity (ADR 0029), so the
+	// existence check uses a private one.
+	hidden, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{ID: uuid.NewString(), Name: "effective-hidden", Format: repository.FormatRaw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ReplaceRepositoryGrants(context.Background(), hidden.ID, []repository.RepositoryGrant{{Principal: "reader", Scopes: []string{"repositories:read"}}}, "1"); err != nil {
+		t.Fatal(err)
+	}
+	denied := httptest.NewRequest(http.MethodGet, "/api/v2/repositories/"+hidden.ID+"/effective-access", nil)
 	authorize(denied, authenticator.IssueToken("stranger"))
 	deniedResponse := httptest.NewRecorder()
 	handler.ServeHTTP(deniedResponse, denied)

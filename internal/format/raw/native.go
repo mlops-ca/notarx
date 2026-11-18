@@ -48,7 +48,7 @@ func (h *Module) serveRepository(w http.ResponseWriter, r *http.Request) bool {
 		if h.anonymousRepositoryRead(r.Context(), repo, r.Method) {
 			principal = anonymousPrincipal()
 		} else {
-			w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway"`)
+			w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Raw"`)
 			http.Error(w, "authentication required", http.StatusUnauthorized)
 			return true
 		}
@@ -60,7 +60,7 @@ func (h *Module) serveRepository(w http.ResponseWriter, r *http.Request) bool {
 	if !isAnonymous(principal) {
 		if decision := h.authorizer.AuthorizeResource(r.Context(), principal, repo, operation, strings.TrimSuffix(path, "/")); !decision.Allowed {
 			h.recordAuthorizationDenial(r, principal, repo, operation, decision)
-			w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway"`)
+			w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Raw"`)
 			http.Error(w, "authentication required", http.StatusUnauthorized)
 			return true
 		}

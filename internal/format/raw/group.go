@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/access"
 	"github.com/mlops-ca/notarx/internal/authorization"
 	rawprotocol "github.com/mlops-ca/notarx/internal/protocol/raw"
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -26,10 +27,10 @@ func (h *Module) serveGroup(w http.ResponseWriter, r *http.Request, group reposi
 	}
 	principal, authenticated := h.auth.Authenticate(r.Header.Get("Authorization"))
 	if !authenticated {
-		if group.Visibility == repository.VisibilityPublic && (r.Method == http.MethodGet || r.Method == http.MethodHead) && h.groupRuntime.AnonymousAllowed(r.Context()) {
+		if decision, _, _ := access.Decide(r.Context(), access.ReadRequest{Class: access.Anonymous, Method: r.Method, Gate: h.groupRuntime.Gate(), Group: &group}); decision.Allow {
 			principal = anonymousPrincipal()
 		} else {
-			w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway"`)
+			w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Raw"`)
 			http.Error(w, "authentication required", http.StatusUnauthorized)
 			return
 		}
@@ -45,7 +46,8 @@ func (h *Module) serveGroup(w http.ResponseWriter, r *http.Request, group reposi
 		return
 	}
 	if isAnonymous(principal) {
-		members = anonymousMembers(group, members)
+		_, resolved, _ := access.Decide(r.Context(), access.ReadRequest{Class: access.Anonymous, Method: http.MethodGet, Gate: h.groupRuntime.Gate(), Group: &group, Members: members})
+		members = resolved.Members
 	}
 	var denied bool
 	members, denied = h.groupRuntime.AuthorizeMembers(r.Context(), principal, repository.FormatRaw, path, members)
@@ -55,7 +57,7 @@ func (h *Module) serveGroup(w http.ResponseWriter, r *http.Request, group reposi
 	}
 	if len(members) == 0 {
 		h.groupRuntime.AuditResolution(r.Context(), group, repository.FormatRaw, path, strings.ToLower(r.Method), principal.Actor, repository.AuditAccessDenied, http.StatusUnauthorized)
-		w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway"`)
+		w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Raw"`)
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
@@ -131,17 +133,4 @@ func (h *Module) blockQuarantinedRead(w http.ResponseWriter, r *http.Request, re
 	}
 	http.Error(w, repository.ArtifactQuarantinedReason, http.StatusForbidden)
 	return true
-}
-
-func anonymousMembers(group repository.HostedGroup, members []repository.Member) []repository.Member {
-	if group.Visibility != repository.VisibilityPublic {
-		return nil
-	}
-	allowed := make([]repository.Member, 0, len(members))
-	for _, member := range members {
-		if member.Anonymous {
-			allowed = append(allowed, member)
-		}
-	}
-	return allowed
 }

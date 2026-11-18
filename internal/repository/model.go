@@ -248,6 +248,13 @@ type HostedGroup struct {
 	Version    string        `json:"version"`
 }
 
+// AsRepository projects a group onto the repository shape that authorization
+// and audit code takes, so a group is authorized like a proxy repository of its
+// format. The projection keeps the group's visibility.
+func (g HostedGroup) AsRepository(format Format) HostedRepository {
+	return HostedRepository{ID: g.ID, Name: g.Name, Version: g.Version, Format: format, Type: RepositoryTypeProxy, State: RepositoryActive, Visibility: g.Visibility}
+}
+
 type GroupMember struct {
 	RepositoryID string `json:"repositoryId"`
 	Position     int    `json:"position"`
@@ -1274,7 +1281,6 @@ type Member struct {
 	Type         MemberType   `json:"type"`
 	Endpoint     string       `json:"endpoint"`
 	Position     int          `json:"position"`
-	Anonymous    bool         `json:"anonymous"`
 	AllowedHosts []string     `json:"allowedHosts,omitempty"`
 	EgressProxy  *EgressProxy `json:"egressProxy,omitempty"`
 	// OCIBearer is projected from V2 repository configuration at runtime. It is
@@ -1285,6 +1291,10 @@ type Member struct {
 	UpstreamAuth      *UpstreamAuth `json:"-"`
 	RepositoryVersion string        `json:"-"`
 	RepositoryID      string        `json:"repositoryId,omitempty"`
+	// Visibility is the visibility of the member repository, projected per
+	// request by access.BindMember so a group decision can filter members. It is
+	// derived, never stored (ADR 0029).
+	Visibility Visibility `json:"-"`
 }
 
 type Group struct {

@@ -35,19 +35,11 @@ func (r rawRuntime) Authenticate(header string) (rawprotocol.Principal, bool) {
 }
 
 func (r rawRuntime) AnonymousAllowed(ctx context.Context, groupName string) bool {
-	if r.handler.Store == nil || !anonymousAccessAllowed(ctx, r.handler.Store) {
+	if r.handler.Store == nil {
 		return false
 	}
 	group, err := r.handler.Store.GetRawGroup(ctx, groupName)
-	if err != nil || !group.Enabled || !group.Anonymous {
-		return false
-	}
-	for _, member := range group.Members {
-		if member.Anonymous {
-			return true
-		}
-	}
-	return false
+	return err == nil && anonymousLegacyGroupAllowed(ctx, r.handler.Store, group, http.MethodGet)
 }
 
 func (r rawRuntime) CanRead(principal rawprotocol.Principal, name string) bool {

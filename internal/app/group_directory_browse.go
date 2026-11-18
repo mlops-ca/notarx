@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/access"
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -53,7 +54,7 @@ func (h artifactManagementHandler) BrowseGroup(w http.ResponseWriter, r *http.Re
 	}
 	principal, authenticated := h.authenticator.Authenticate(r.Header.Get("Authorization"))
 	if !authenticated {
-		if group.Visibility != repository.VisibilityPublic || !anonymousAccessAllowed(r.Context(), h.anonymousPolicy) {
+		if !anonymousGroupAllowed(r.Context(), h.anonymousPolicy, group, r.Method) {
 			writeHostedProblem(w, 401, "access_denied", "authentication is required")
 			return
 		}
@@ -173,7 +174,7 @@ func (h artifactManagementHandler) groupBrowseMembers(r *http.Request, group rep
 			revisions = append(revisions, repo, grants.Version)
 		}
 		if isAnonymous(principal) {
-			if repo.Visibility != repository.VisibilityPublic {
+			if !anonymousHostedRepositoryReadAllowed(r.Context(), h.anonymousPolicy, repo, http.MethodGet) {
 				continue
 			}
 		} else if !h.authorizer.Authorize(r.Context(), principal, repo, RepositoryRead).Allowed {
@@ -195,11 +196,11 @@ func (h artifactManagementHandler) groupBrowseMembers(r *http.Request, group rep
 	if missingGrants || h.anonymousPolicy == nil {
 		return nil, "", "", errArtifactCapabilityUnavailable
 	}
-	policy, err := h.anonymousPolicy.GetPublicAccessPolicy(r.Context())
+	policyVersion, err := access.PolicyVersion(r.Context(), h.anonymousPolicy)
 	if err != nil {
 		return nil, "", "", err
 	}
-	revisions[2] = policy.Version
+	revisions[2] = policyVersion
 	mavenScope := ""
 	if group.Format == repository.FormatMaven && h.mavenCache != nil {
 		mavenScope = (MavenHandler{Cache: h.mavenCache}).mavenResolutionScope(proxies)

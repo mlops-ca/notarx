@@ -45,7 +45,7 @@ func (h nativeOCIHandler) discoveryGuards(ctx context.Context, scope ociDiscover
 		return nil, discovery.ErrChanged
 	}
 	if !p.authenticated {
-		if repo.Visibility != repository.VisibilityPublic || !anonymousAccessAllowed(ctx, h.store) {
+		if !anonymousHostedRepositoryReadAllowed(ctx, h.store, repo, http.MethodGet) {
 			return nil, &ociFetchError{status: 403, code: "DENIED", message: "requested source access is denied"}
 		}
 	} else {
