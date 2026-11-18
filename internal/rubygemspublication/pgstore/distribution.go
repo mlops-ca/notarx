@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	protocol "github.com/mlops-ca/notarx/internal/protocol/rubygems"
 	"github.com/mlops-ca/notarx/internal/repository"
 	dist "github.com/mlops-ca/notarx/internal/rubygemsdistribution"
@@ -29,7 +29,7 @@ func loadRubyGemsReplication(ctx context.Context, q rubyGemsReplicationQuery, id
 	}
 	var j dist.Job
 	var until, credentialUntil sql.NullTime
-	err := q.QueryRowContext(ctx, `SELECT `+rubyGemsReplicationColumns+` FROM native_rubygems_replication_jobs WHERE id::text=$1`+suffix, id).Scan(&j.ID, &j.PlanDigest, &j.SourceRepositoryID, &j.TargetRepositoryID, &j.Actor, &j.ActorKind, &j.CredentialID, &j.UserID, &j.SessionID, &j.SessionVersion, &credentialUntil, &j.Version, &j.State, &j.Lease.Owner, &j.Lease.Token, &j.Lease.Fence, &until, &j.CreatedAt, &j.UpdatedAt)
+	err := q.QueryRowContext(ctx, `SELECT `+rubyGemsReplicationColumns+` FROM native_rubygems_replication_jobs WHERE id=$1::uuid`+suffix, id).Scan(&j.ID, &j.PlanDigest, &j.SourceRepositoryID, &j.TargetRepositoryID, &j.Actor, &j.ActorKind, &j.CredentialID, &j.UserID, &j.SessionID, &j.SessionVersion, &credentialUntil, &j.Version, &j.State, &j.Lease.Owner, &j.Lease.Token, &j.Lease.Fence, &until, &j.CreatedAt, &j.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return j, dist.ErrNotFound
 	}
@@ -43,7 +43,7 @@ func loadRubyGemsReplication(ctx context.Context, q rubyGemsReplicationQuery, id
 	if until.Valid {
 		j.Lease.Until = until.Time
 	}
-	rows, err := q.QueryContext(ctx, `SELECT item_index,name,version,digest,size,platform,source_governance_version::text,state,attempts,code,COALESCE(target_session_id::text,''),result,completed_at FROM native_rubygems_replication_items WHERE job_id::text=$1 ORDER BY item_index`, id)
+	rows, err := q.QueryContext(ctx, `SELECT item_index,name,version,digest,size,platform,source_governance_version::text,state,attempts,code,COALESCE(target_session_id::text,''),result,completed_at FROM native_rubygems_replication_items WHERE job_id=$1::uuid ORDER BY item_index`, id)
 	if err != nil {
 		return j, err
 	}
@@ -81,7 +81,7 @@ func rubyGemsReplicationAuthorityTx(ctx context.Context, tx *sql.Tx, j dist.Job)
 	sort.Strings(ids)
 	for _, id := range ids {
 		var r repository.HostedRepository
-		err := tx.QueryRowContext(ctx, `SELECT id::text,name,format,repo_type,state FROM hosted_repositories WHERE id::text=$1 FOR UPDATE`, id).Scan(&r.ID, &r.Name, &r.Format, &r.Type, &r.State)
+		err := tx.QueryRowContext(ctx, `SELECT id::text,name,format,repo_type,state FROM hosted_repositories WHERE id=$1::uuid FOR UPDATE`, id).Scan(&r.ID, &r.Name, &r.Format, &r.Type, &r.State)
 		if errors.Is(err, sql.ErrNoRows) {
 			return dist.Authority{}, dist.ErrNotFound
 		}
@@ -116,7 +116,7 @@ func replicationQuota(ctx context.Context, tx *sql.Tx, repo string, extra int64)
 	return nil
 }
 func replicationPublication(ctx context.Context, q rubyGemsReplicationQuery, repo, name, version, platform, lock string) (domain.Publication, error) {
-	s, err := scan(q.QueryRowContext(ctx, `SELECT `+columns+` FROM native_rubygems_sessions WHERE repository_id::text=$1 AND name=$2 AND canonical_version=$3 AND platform=$4 AND state='committed'`+lock, repo, name, protocol.CanonicalVersion(version), platform))
+	s, err := scan(q.QueryRowContext(ctx, `SELECT `+columns+` FROM native_rubygems_sessions WHERE repository_id=$1::uuid AND name=$2 AND canonical_version=$3 AND platform=$4 AND state='committed'`+lock, repo, name, protocol.CanonicalVersion(version), platform))
 	return domain.Visible(s), err
 }
 func rubyGemsReplicationSourceTx(ctx context.Context, tx *sql.Tx, j dist.Job, index int) (domain.Publication, error) {
@@ -135,7 +135,7 @@ func rubyGemsReplicationSourceTx(ctx context.Context, tx *sql.Tx, j dist.Job, in
 }
 func saveRubyGemsReplicationItem(ctx context.Context, tx *sql.Tx, j dist.Job, index int) error {
 	i := j.Items[index]
-	_, err := tx.ExecContext(ctx, `UPDATE native_rubygems_replication_items SET state=$3,attempts=$4,code=$5,target_session_id=NULLIF($6,'')::uuid,result=$7,completed_at=$8 WHERE job_id::text=$1 AND item_index=$2`, j.ID, index, i.State, i.Attempts, i.Code, i.TargetSessionID, i.Result, i.CompletedAt)
+	_, err := tx.ExecContext(ctx, `UPDATE native_rubygems_replication_items SET state=$3,attempts=$4,code=$5,target_session_id=NULLIF($6,'')::uuid,result=$7,completed_at=$8 WHERE job_id=$1::uuid AND item_index=$2`, j.ID, index, i.State, i.Attempts, i.Code, i.TargetSessionID, i.Result, i.CompletedAt)
 	return err
 }
 func saveRubyGemsReplicationProgress(ctx context.Context, tx *sql.Tx, j dist.Job, lease dist.Lease, validUntil time.Time, advance bool) error {
@@ -147,7 +147,7 @@ func saveRubyGemsReplicationProgress(ctx context.Context, tx *sql.Tx, j dist.Job
 	if !validUntil.IsZero() {
 		expiry = validUntil
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE native_rubygems_replication_jobs SET `+progress+` WHERE id::text=$1 AND state='running' AND lease_owner=$2 AND lease_token=$3 AND lease_fence=$4 AND lease_until>clock_timestamp() AND ($5::timestamptz IS NULL OR $5>clock_timestamp())`, j.ID, lease.Owner, lease.Token, lease.Fence, expiry)
+	result, err := tx.ExecContext(ctx, `UPDATE native_rubygems_replication_jobs SET `+progress+` WHERE id=$1::uuid AND state='running' AND lease_owner=$2 AND lease_token=$3 AND lease_fence=$4 AND lease_until>clock_timestamp() AND ($5::timestamptz IS NULL OR $5>clock_timestamp())`, j.ID, lease.Owner, lease.Token, lease.Fence, expiry)
 	if err != nil {
 		return err
 	}
@@ -201,7 +201,7 @@ func (s *Store) CreateRubyGemsReplication(ctx context.Context, j dist.Job, check
 		if err != nil {
 			return dist.Job{}, false, err
 		}
-		prior, err := scan(tx.QueryRowContext(ctx, `SELECT `+columns+` FROM native_rubygems_sessions WHERE repository_id::text=$1 AND ((name=$2 AND canonical_version=$3 AND platform=$4) OR full_name=$5) AND (state='committed' OR state='pending' AND expires_at>clock_timestamp()) FOR SHARE`, j.TargetRepositoryID, item.Name, protocol.CanonicalVersion(item.Version), item.Platform, source.FullName()))
+		prior, err := scan(tx.QueryRowContext(ctx, `SELECT `+columns+` FROM native_rubygems_sessions WHERE repository_id=$1::uuid AND ((name=$2 AND canonical_version=$3 AND platform=$4) OR full_name=$5) AND (state='committed' OR state='pending' AND expires_at>clock_timestamp()) FOR SHARE`, j.TargetRepositoryID, item.Name, protocol.CanonicalVersion(item.Version), item.Platform, source.FullName()))
 		if err == nil {
 			if err = domain.ReplicationSession(source, prior, j.TargetRepositoryID); err != nil {
 				return dist.Job{}, false, err
@@ -277,7 +277,7 @@ func (s *Store) RetryRubyGemsReplication(ctx context.Context, id, expected strin
 		return dist.Job{}, false, err
 	}
 	var prior string
-	err = tx.QueryRowContext(ctx, `SELECT payload_digest FROM native_rubygems_replication_retries WHERE job_id::text=$1 AND request_key=$2`, id, key).Scan(&prior)
+	err = tx.QueryRowContext(ctx, `SELECT payload_digest FROM native_rubygems_replication_retries WHERE job_id=$1::uuid AND request_key=$2`, id, key).Scan(&prior)
 	if err == nil {
 		if prior != digest {
 			return dist.Job{}, false, dist.ErrConflict
@@ -294,7 +294,7 @@ func (s *Store) RetryRubyGemsReplication(ctx context.Context, id, expected strin
 	if err != nil {
 		return dist.Job{}, false, err
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE native_rubygems_replication_jobs SET state='queued',version=version+1,lease_owner='',lease_token='',lease_until=NULL,updated_at=clock_timestamp() WHERE id::text=$1`, id); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE native_rubygems_replication_jobs SET state='queued',version=version+1,lease_owner='',lease_token='',lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1::uuid`, id); err != nil {
 		return dist.Job{}, false, err
 	}
 	for _, index := range indexes {
@@ -334,10 +334,10 @@ func (s *Store) ClaimRubyGemsReplication(ctx context.Context, owner string, d ti
 	if err != nil {
 		return dist.Job{}, err
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE native_rubygems_replication_jobs SET state='running',version=version+1,lease_owner=$2,lease_token=$3,lease_fence=lease_fence+1,lease_until=clock_timestamp()+$4::bigint*interval '1 millisecond',updated_at=clock_timestamp() WHERE id::text=$1`, id, owner, uuid.NewString(), d.Milliseconds()); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE native_rubygems_replication_jobs SET state='running',version=version+1,lease_owner=$2,lease_token=$3,lease_fence=lease_fence+1,lease_until=clock_timestamp()+$4::bigint*interval '1 millisecond',updated_at=clock_timestamp() WHERE id=$1::uuid`, id, owner, ids.New(), d.Milliseconds()); err != nil {
 		return dist.Job{}, err
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE native_rubygems_replication_items SET state='pending' WHERE job_id::text=$1 AND state='running'`, id); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE native_rubygems_replication_items SET state='pending' WHERE job_id=$1::uuid AND state='running'`, id); err != nil {
 		return dist.Job{}, err
 	}
 	j, err := loadRubyGemsReplication(ctx, tx, id, false)
@@ -351,7 +351,7 @@ func (s *Store) RenewRubyGemsReplication(ctx context.Context, lease dist.Lease, 
 		return dist.Lease{}, dist.ErrInvalid
 	}
 	var until time.Time
-	err := s.db.QueryRowContext(ctx, `UPDATE native_rubygems_replication_jobs SET lease_until=clock_timestamp()+$5::bigint*interval '1 millisecond' WHERE id::text=$1 AND state='running' AND lease_owner=$2 AND lease_token=$3 AND lease_fence=$4 AND lease_until>clock_timestamp() RETURNING lease_until`, lease.JobID, lease.Owner, lease.Token, lease.Fence, d.Milliseconds()).Scan(&until)
+	err := s.db.QueryRowContext(ctx, `UPDATE native_rubygems_replication_jobs SET lease_until=clock_timestamp()+$5::bigint*interval '1 millisecond' WHERE id=$1::uuid AND state='running' AND lease_owner=$2 AND lease_token=$3 AND lease_fence=$4 AND lease_until>clock_timestamp() RETURNING lease_until`, lease.JobID, lease.Owner, lease.Token, lease.Fence, d.Milliseconds()).Scan(&until)
 	if errors.Is(err, sql.ErrNoRows) {
 		return dist.Lease{}, dist.ErrLeaseLost
 	}
@@ -375,7 +375,7 @@ func (s *Store) BindRubyGemsReplicationSession(ctx context.Context, lease dist.L
 	if err != nil {
 		return dist.Job{}, err
 	}
-	session, err := scan(tx.QueryRowContext(ctx, `SELECT `+columns+` FROM native_rubygems_sessions WHERE id::text=$1 FOR SHARE`, sessionID))
+	session, err := scan(tx.QueryRowContext(ctx, `SELECT `+columns+` FROM native_rubygems_sessions WHERE id=$1::uuid FOR SHARE`, sessionID))
 	if err != nil {
 		return dist.Job{}, err
 	}
@@ -428,7 +428,7 @@ func (s *Store) CompleteRubyGemsReplicationItem(ctx context.Context, lease dist.
 	if item.TargetSessionID != proof.SessionID {
 		return dist.Job{}, dist.ErrConflict
 	}
-	session, err := scan(tx.QueryRowContext(ctx, `SELECT `+columns+` FROM native_rubygems_sessions WHERE id::text=$1 FOR UPDATE`, proof.SessionID))
+	session, err := scan(tx.QueryRowContext(ctx, `SELECT `+columns+` FROM native_rubygems_sessions WHERE id=$1::uuid FOR UPDATE`, proof.SessionID))
 	if err != nil {
 		return dist.Job{}, err
 	}
@@ -453,7 +453,7 @@ func (s *Store) CompleteRubyGemsReplicationItem(ctx context.Context, lease dist.
 		if err = replicationQuota(ctx, tx, j.TargetRepositoryID, 0); err != nil {
 			return dist.Job{}, err
 		}
-		session, err = scan(tx.QueryRowContext(ctx, `UPDATE native_rubygems_sessions SET state='committed',committed_at=clock_timestamp() WHERE id::text=$1 RETURNING `+columns, session.ID))
+		session, err = scan(tx.QueryRowContext(ctx, `UPDATE native_rubygems_sessions SET state='committed',committed_at=clock_timestamp() WHERE id=$1::uuid RETURNING `+columns, session.ID))
 		if err != nil {
 			return dist.Job{}, err
 		}
@@ -514,7 +514,7 @@ func (s *Store) FailRubyGemsReplicationItem(ctx context.Context, lease dist.Leas
 		return err
 	}
 	var name string
-	if err = tx.QueryRowContext(ctx, `SELECT name FROM hosted_repositories WHERE id::text=$1`, j.TargetRepositoryID).Scan(&name); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT name FROM hosted_repositories WHERE id=$1::uuid`, j.TargetRepositoryID).Scan(&name); err != nil {
 		return err
 	}
 	if err = insertAudit(ctx, tx, domain.ReplicationAudit(j, name, "item", dist.FailureStatus(code), &item)); err != nil {
@@ -541,7 +541,7 @@ func (s *Store) FinishRubyGemsReplication(ctx context.Context, lease dist.Lease)
 		}
 	}
 	var name string
-	if err = tx.QueryRowContext(ctx, `SELECT name FROM hosted_repositories WHERE id::text=$1`, j.TargetRepositoryID).Scan(&name); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT name FROM hosted_repositories WHERE id=$1::uuid`, j.TargetRepositoryID).Scan(&name); err != nil {
 		return dist.Job{}, err
 	}
 	j.Version = dist.NextVersion(j.Version)
@@ -552,7 +552,7 @@ func (s *Store) FinishRubyGemsReplication(ctx context.Context, lease dist.Lease)
 	if err = insertAudit(ctx, tx, domain.ReplicationAudit(j, name, "complete", status, nil)); err != nil {
 		return dist.Job{}, err
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE native_rubygems_replication_jobs SET state=$2,version=version+1,updated_at=clock_timestamp(),lease_owner='',lease_token='',lease_until=NULL WHERE id::text=$1 AND state='running' AND lease_owner=$3 AND lease_token=$4 AND lease_fence=$5 AND lease_until>clock_timestamp()`, j.ID, j.State, lease.Owner, lease.Token, lease.Fence)
+	result, err := tx.ExecContext(ctx, `UPDATE native_rubygems_replication_jobs SET state=$2,version=version+1,updated_at=clock_timestamp(),lease_owner='',lease_token='',lease_until=NULL WHERE id=$1::uuid AND state='running' AND lease_owner=$3 AND lease_token=$4 AND lease_fence=$5 AND lease_until>clock_timestamp()`, j.ID, j.State, lease.Owner, lease.Token, lease.Fence)
 	if err != nil {
 		return dist.Job{}, err
 	}

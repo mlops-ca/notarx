@@ -9,7 +9,7 @@ import (
 
 func (s *PostgresStore) GetHelmSourceDocument(ctx context.Context, id, version string) (HelmSourceDocument, error) {
 	var in HelmSourceDocument
-	e := s.db.QueryRowContext(ctx, `SELECT d.repository_id::text,d.repository_version,d.body,d.digest,d.etag,d.last_modified,d.fetched_at,d.expires_at FROM native_helm_source_documents d JOIN hosted_repositories h ON h.id=d.repository_id WHERE h.id::text=$1 AND h.version::text=$2 AND h.format='helm' AND h.repo_type='proxy' AND h.state='active' AND d.repository_version=$2`, id, version).Scan(&in.RepositoryID, &in.RepositoryVersion, &in.Body, &in.Digest, &in.ETag, &in.LastModified, &in.FetchedAt, &in.ExpiresAt)
+	e := s.db.QueryRowContext(ctx, `SELECT d.repository_id::text,d.repository_version,d.body,d.digest,d.etag,d.last_modified,d.fetched_at,d.expires_at FROM native_helm_source_documents d JOIN hosted_repositories h ON h.id=d.repository_id WHERE h.id=$1::uuid AND h.version=$2::text::bigint AND h.format='helm' AND h.repo_type='proxy' AND h.state='active' AND d.repository_version=$2`, id, version).Scan(&in.RepositoryID, &in.RepositoryVersion, &in.Body, &in.Digest, &in.ETag, &in.LastModified, &in.FetchedAt, &in.ExpiresAt)
 	if errors.Is(e, sql.ErrNoRows) {
 		e = ErrNotFound
 	}
@@ -36,7 +36,7 @@ func (s *PostgresStore) helmSourceTransaction(ctx context.Context, id, version s
 		return nil, "", e
 	}
 	var current, name string
-	e = tx.QueryRowContext(ctx, `SELECT name,version::text FROM hosted_repositories WHERE id::text=$1 AND format='helm' AND repo_type='proxy' AND state='active' FOR UPDATE`, id).Scan(&name, &current)
+	e = tx.QueryRowContext(ctx, `SELECT name,version::text FROM hosted_repositories WHERE id=$1::uuid AND format='helm' AND repo_type='proxy' AND state='active' FOR UPDATE`, id).Scan(&name, &current)
 	if errors.Is(e, sql.ErrNoRows) {
 		e = ErrNotFound
 	}
@@ -51,9 +51,9 @@ func (s *PostgresStore) helmSourceTransaction(ctx context.Context, id, version s
 }
 func checkHelmView(ctx context.Context, tx *sql.Tx, id, version string) error {
 	var current string
-	e := tx.QueryRowContext(ctx, `SELECT version::text FROM hosted_repositories WHERE id::text=$1 AND format='helm' AND state='active' FOR SHARE`, id).Scan(&current)
+	e := tx.QueryRowContext(ctx, `SELECT version::text FROM hosted_repositories WHERE id=$1::uuid AND format='helm' AND state='active' FOR SHARE`, id).Scan(&current)
 	if errors.Is(e, sql.ErrNoRows) {
-		e = tx.QueryRowContext(ctx, `SELECT version::text FROM hosted_groups WHERE id::text=$1 AND format='helm' FOR SHARE`, id).Scan(&current)
+		e = tx.QueryRowContext(ctx, `SELECT version::text FROM hosted_groups WHERE id=$1::uuid AND format='helm' FOR SHARE`, id).Scan(&current)
 	}
 	if errors.Is(e, sql.ErrNoRows) {
 		return ErrNotFound
@@ -94,7 +94,7 @@ func (s *PostgresStore) PutHelmSourceSnapshot(ctx context.Context, in HelmSource
 	if _, e = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "helm-snapshot:"+in.ViewID); e != nil {
 		return HelmSourceSnapshot{}, e
 	}
-	prior, e := scanHelmSnapshot(tx.QueryRowContext(ctx, `SELECT `+helmSnapshotColumns+` FROM native_helm_source_snapshots WHERE id::text=$1`, in.ID))
+	prior, e := scanHelmSnapshot(tx.QueryRowContext(ctx, `SELECT `+helmSnapshotColumns+` FROM native_helm_source_snapshots WHERE id=$1::uuid`, in.ID))
 	if e == nil {
 		if prior.ViewID != in.ViewID || prior.ViewVersion != in.ViewVersion || prior.Digest != in.Digest {
 			return HelmSourceSnapshot{}, ErrHelmPublicationConflict
@@ -105,7 +105,7 @@ func (s *PostgresStore) PutHelmSourceSnapshot(ctx context.Context, in HelmSource
 		return HelmSourceSnapshot{}, e
 	}
 	var count int
-	e = tx.QueryRowContext(ctx, `SELECT count(*) FROM native_helm_source_snapshots WHERE view_id::text=$1`, in.ViewID).Scan(&count)
+	e = tx.QueryRowContext(ctx, `SELECT count(*) FROM native_helm_source_snapshots WHERE view_id=$1::uuid`, in.ViewID).Scan(&count)
 	if e != nil {
 		return HelmSourceSnapshot{}, e
 	}
@@ -114,7 +114,7 @@ func (s *PostgresStore) PutHelmSourceSnapshot(ctx context.Context, in HelmSource
 	}
 	for _, entry := range in.Entries {
 		var v string
-		e = tx.QueryRowContext(ctx, `SELECT version::text FROM hosted_repositories WHERE id::text=$1 AND format='helm' AND state='active' FOR SHARE`, entry.RepositoryID).Scan(&v)
+		e = tx.QueryRowContext(ctx, `SELECT version::text FROM hosted_repositories WHERE id=$1::uuid AND format='helm' AND state='active' FOR SHARE`, entry.RepositoryID).Scan(&v)
 		if errors.Is(e, sql.ErrNoRows) || e == nil && v != entry.RepositoryVersion {
 			return HelmSourceSnapshot{}, ErrHelmSourceChanged
 		}
@@ -130,7 +130,7 @@ func (s *PostgresStore) PutHelmSourceSnapshot(ctx context.Context, in HelmSource
 	return out, tx.Commit()
 }
 func (s *PostgresStore) GetHelmSourceSnapshot(ctx context.Context, view, id string) (HelmSourceSnapshot, error) {
-	return scanHelmSnapshot(s.db.QueryRowContext(ctx, `SELECT `+helmSnapshotColumns+` FROM native_helm_source_snapshots WHERE id::text=$1 AND view_id::text=$2`, id, view))
+	return scanHelmSnapshot(s.db.QueryRowContext(ctx, `SELECT `+helmSnapshotColumns+` FROM native_helm_source_snapshots WHERE id=$1::uuid AND view_id=$2::uuid`, id, view))
 }
 func scanHelmAuthority(row helmScanner) (HelmGroupAuthority, error) {
 	var in HelmGroupAuthority
@@ -146,7 +146,7 @@ func scanHelmAuthority(row helmScanner) (HelmGroupAuthority, error) {
 }
 func checkHelmAuthorityOwner(ctx context.Context, tx *sql.Tx, in HelmGroupAuthority) error {
 	var v string
-	e := tx.QueryRowContext(ctx, `SELECT h.version::text FROM hosted_repositories h WHERE h.id::text=$1 AND h.format='helm' AND h.state='active' AND EXISTS(SELECT 1 FROM hosted_group_members m WHERE m.group_id::text=$2 AND m.repository_id=h.id) FOR SHARE`, in.Entry.RepositoryID, in.GroupID).Scan(&v)
+	e := tx.QueryRowContext(ctx, `SELECT h.version::text FROM hosted_repositories h WHERE h.id=$1::uuid AND h.format='helm' AND h.state='active' AND EXISTS(SELECT 1 FROM hosted_group_members m WHERE m.group_id=$2::uuid AND m.repository_id=h.id) FOR SHARE`, in.Entry.RepositoryID, in.GroupID).Scan(&v)
 	if errors.Is(e, sql.ErrNoRows) || e == nil && v != in.Entry.RepositoryVersion {
 		return ErrHelmSourceChanged
 	}
@@ -162,7 +162,7 @@ func (s *PostgresStore) BindHelmGroupAuthority(ctx context.Context, expected str
 	}
 	defer func() { _ = tx.Rollback() }()
 	var v string
-	e = tx.QueryRowContext(ctx, `SELECT version::text FROM hosted_groups WHERE id::text=$1 AND format='helm' FOR UPDATE`, in.GroupID).Scan(&v)
+	e = tx.QueryRowContext(ctx, `SELECT version::text FROM hosted_groups WHERE id=$1::uuid AND format='helm' FOR UPDATE`, in.GroupID).Scan(&v)
 	if errors.Is(e, sql.ErrNoRows) {
 		return HelmGroupAuthority{}, ErrNotFound
 	}
@@ -172,7 +172,7 @@ func (s *PostgresStore) BindHelmGroupAuthority(ctx context.Context, expected str
 	if v != expected {
 		return HelmGroupAuthority{}, ErrVersionConflict
 	}
-	prior, e := scanHelmAuthority(tx.QueryRowContext(ctx, `SELECT group_id::text,entry_json,created_at FROM native_helm_group_authorities WHERE group_id::text=$1 AND name=$2 AND version=$3`, in.GroupID, in.Entry.Name, in.Entry.Version))
+	prior, e := scanHelmAuthority(tx.QueryRowContext(ctx, `SELECT group_id::text,entry_json,created_at FROM native_helm_group_authorities WHERE group_id=$1::uuid AND name=$2 AND version=$3`, in.GroupID, in.Entry.Name, in.Entry.Version))
 	if e == nil {
 		if e = checkHelmAuthorityOwner(ctx, tx, prior); e != nil {
 			return HelmGroupAuthority{}, e
@@ -193,5 +193,5 @@ func (s *PostgresStore) BindHelmGroupAuthority(ctx context.Context, expected str
 	return out, tx.Commit()
 }
 func (s *PostgresStore) GetHelmGroupAuthority(ctx context.Context, group, name, version string) (HelmGroupAuthority, error) {
-	return scanHelmAuthority(s.db.QueryRowContext(ctx, `SELECT group_id::text,entry_json,created_at FROM native_helm_group_authorities WHERE group_id::text=$1 AND name=$2 AND version=$3`, group, name, version))
+	return scanHelmAuthority(s.db.QueryRowContext(ctx, `SELECT group_id::text,entry_json,created_at FROM native_helm_group_authorities WHERE group_id=$1::uuid AND name=$2 AND version=$3`, group, name, version))
 }

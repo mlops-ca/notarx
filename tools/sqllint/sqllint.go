@@ -32,6 +32,8 @@ var (
 	castComparison = regexp.MustCompile(`::text\s*=\s*\$\d|\$\d+::text\s*=`)
 	bareIDCast     = regexp.MustCompile(`\bid::text`)
 	whereKeyword   = regexp.MustCompile(`(?i)\bwhere\b`)
+	// endOfWhere ends the filter region: id::text after these is a select-list item.
+	endOfWhere = regexp.MustCompile(`(?i)\b(returning|order\s+by|group\s+by|limit|union)\b`)
 )
 
 // Result is the outcome of scanning a source tree.
@@ -51,7 +53,11 @@ func CountCasts(sql string) int {
 		spans = append(spans, span{m[0], m[1]})
 	}
 	if where := whereKeyword.FindStringIndex(sql); where != nil {
-		for _, m := range bareIDCast.FindAllStringIndex(sql[where[1]:], -1) {
+		region := sql[where[1]:]
+		if end := endOfWhere.FindStringIndex(region); end != nil {
+			region = region[:end[0]]
+		}
+		for _, m := range bareIDCast.FindAllStringIndex(region, -1) {
 			spans = append(spans, span{where[1] + m[0], where[1] + m[1]})
 		}
 	}

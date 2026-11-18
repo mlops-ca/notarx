@@ -11,7 +11,7 @@ import (
 
 func (s *Store) GetReadPolicy(ctx context.Context, id string) (repository.RepositoryQuarantineReadPolicy, error) {
 	var p repository.RepositoryQuarantineReadPolicy
-	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(p.version,1)::text,COALESCE(p.enabled,false) FROM hosted_repositories r LEFT JOIN repository_quarantine_read_policies p ON p.repository_id=r.id WHERE r.id::text=$1 AND r.format='rubygems' AND r.repo_type='hosted' AND r.state='active'`, id).Scan(&p.Version, &p.Enabled)
+	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(p.version,1)::text,COALESCE(p.enabled,false) FROM hosted_repositories r LEFT JOIN repository_quarantine_read_policies p ON p.repository_id=r.id WHERE r.id=$1::uuid AND r.format='rubygems' AND r.repo_type='hosted' AND r.state='active'`, id).Scan(&p.Version, &p.Enabled)
 	if errors.Is(err, sql.ErrNoRows) {
 		err = repository.ErrNotFound
 	}
@@ -31,7 +31,7 @@ func (s *Store) ReplaceReadPolicy(ctx context.Context, c domain.PolicyChange, ch
 		return repository.RepositoryQuarantineReadPolicy{}, err
 	}
 	var current repository.RepositoryQuarantineReadPolicy
-	if err = tx.QueryRowContext(ctx, `SELECT version::text,enabled FROM repository_quarantine_read_policies WHERE repository_id::text=$1 FOR UPDATE`, c.RepositoryID).Scan(&current.Version, &current.Enabled); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT version::text,enabled FROM repository_quarantine_read_policies WHERE repository_id=$1::uuid FOR UPDATE`, c.RepositoryID).Scan(&current.Version, &current.Enabled); err != nil {
 		return current, err
 	}
 	a, err := governanceAuthorityTx(ctx, tx, domain.GovernanceChange{RepositoryID: c.RepositoryID, Identity: c.Identity, Actor: c.Actor})
@@ -43,7 +43,7 @@ func (s *Store) ReplaceReadPolicy(ctx context.Context, c domain.PolicyChange, ch
 		return current, err
 	}
 	if audit != nil {
-		if _, err = tx.ExecContext(ctx, `UPDATE repository_quarantine_read_policies SET version=$2,enabled=$3 WHERE repository_id::text=$1`, c.RepositoryID, next.Version, next.Enabled); err != nil {
+		if _, err = tx.ExecContext(ctx, `UPDATE repository_quarantine_read_policies SET version=$2,enabled=$3 WHERE repository_id=$1::uuid`, c.RepositoryID, next.Version, next.Enabled); err != nil {
 			return current, err
 		}
 		if err = insertAudit(ctx, tx, *audit); err != nil {

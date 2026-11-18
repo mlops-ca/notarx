@@ -23,6 +23,9 @@ func TestCountCasts(t *testing.T) {
 		{"SELECT id::text FROM t WHERE state='a'", 0},
 		{"SELECT 1 FROM t WHERE lower(id::text) LIKE $1", 1},
 		{"SELECT 1 FROM t WHERE parent_id::text = $1", 1},
+		{"UPDATE t SET a=1 WHERE id=$1 RETURNING id::text,x", 0},
+		{"SELECT 1 FROM t WHERE id::text = $1 ORDER BY id::text", 1},
+		{"SELECT 1 FROM t WHERE state='a' ORDER BY id::text LIMIT 1", 0},
 	}
 	for _, c := range cases {
 		if got := CountCasts(c.sql); got != c.want {

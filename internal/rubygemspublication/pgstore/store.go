@@ -82,7 +82,7 @@ func (s *Store) transaction(ctx context.Context, id string) (*sql.Tx, string, er
 		return nil, "", e
 	}
 	var name string
-	e = tx.QueryRowContext(ctx, `SELECT name FROM hosted_repositories WHERE id::text=$1 AND format='rubygems' AND repo_type='hosted' AND state='active' FOR UPDATE`, id).Scan(&name)
+	e = tx.QueryRowContext(ctx, `SELECT name FROM hosted_repositories WHERE id=$1::uuid AND format='rubygems' AND repo_type='hosted' AND state='active' FOR UPDATE`, id).Scan(&name)
 	if e != nil {
 		_ = tx.Rollback()
 		if errors.Is(e, sql.ErrNoRows) {
@@ -94,7 +94,7 @@ func (s *Store) transaction(ctx context.Context, id string) (*sql.Tx, string, er
 }
 func capacity(ctx context.Context, tx *sql.Tx, repo string) (domain.Capacity, error) {
 	var c domain.Capacity
-	e := tx.QueryRowContext(ctx, `SELECT COALESCE(SUM(size) FILTER(WHERE state='committed'),0),COALESCE(SUM(size) FILTER(WHERE state='pending' AND expires_at>now()),0),COUNT(*) FILTER(WHERE state='committed'),COALESCE((SELECT quota_bytes FROM native_rubygems_quotas WHERE repository_id::text=$1),0) FROM native_rubygems_sessions WHERE repository_id::text=$1`, repo).Scan(&c.UsedBytes, &c.PendingBytes, &c.ObjectCount, &c.QuotaBytes)
+	e := tx.QueryRowContext(ctx, `SELECT COALESCE(SUM(size) FILTER(WHERE state='committed'),0),COALESCE(SUM(size) FILTER(WHERE state='pending' AND expires_at>now()),0),COUNT(*) FILTER(WHERE state='committed'),COALESCE((SELECT quota_bytes FROM native_rubygems_quotas WHERE repository_id=$1::uuid),0) FROM native_rubygems_sessions WHERE repository_id=$1::uuid`, repo).Scan(&c.UsedBytes, &c.PendingBytes, &c.ObjectCount, &c.QuotaBytes)
 	return c, e
 }
 func (s *Store) Reserve(ctx context.Context, in domain.Session) (domain.Session, bool, error) {
@@ -106,10 +106,10 @@ func (s *Store) Reserve(ctx context.Context, in domain.Session) (domain.Session,
 		return domain.Session{}, false, e
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, e = tx.ExecContext(ctx, `UPDATE native_rubygems_sessions SET state='expired' WHERE repository_id::text=$1 AND state='pending' AND expires_at<=now()`, in.RepositoryID); e != nil {
+	if _, e = tx.ExecContext(ctx, `UPDATE native_rubygems_sessions SET state='expired' WHERE repository_id=$1::uuid AND state='pending' AND expires_at<=now()`, in.RepositoryID); e != nil {
 		return domain.Session{}, false, e
 	}
-	prior, e := scan(tx.QueryRowContext(ctx, `SELECT `+columns+` FROM native_rubygems_sessions WHERE id::text=$1`, in.ID))
+	prior, e := scan(tx.QueryRowContext(ctx, `SELECT `+columns+` FROM native_rubygems_sessions WHERE id=$1::uuid`, in.ID))
 	if e == nil {
 		if prior.Governance.Yanked || prior.Governance.Quarantined || !domain.Same(prior, in) || prior.Actor != in.Actor {
 			return domain.Session{}, false, domain.ErrConflict
@@ -122,7 +122,7 @@ func (s *Store) Reserve(ctx context.Context, in domain.Session) (domain.Session,
 	if !errors.Is(e, repository.ErrNotFound) {
 		return domain.Session{}, false, e
 	}
-	prior, e = scan(tx.QueryRowContext(ctx, `SELECT `+columns+` FROM native_rubygems_sessions WHERE repository_id::text=$1 AND ((name=$2 AND canonical_version=$3 AND platform=$4) OR full_name=$5) AND state IN ('pending','committed')`, in.RepositoryID, in.Name, protocol.CanonicalVersion(in.Version), in.Platform, domain.Visible(in).FullName()))
+	prior, e = scan(tx.QueryRowContext(ctx, `SELECT `+columns+` FROM native_rubygems_sessions WHERE repository_id=$1::uuid AND ((name=$2 AND canonical_version=$3 AND platform=$4) OR full_name=$5) AND state IN ('pending','committed')`, in.RepositoryID, in.Name, protocol.CanonicalVersion(in.Version), in.Platform, domain.Visible(in).FullName()))
 	if e == nil {
 		if prior.Governance.Yanked || prior.Governance.Quarantined || !domain.Same(prior, in) || prior.State == "pending" && prior.Actor != in.Actor {
 			return domain.Session{}, false, domain.ErrConflict
@@ -140,7 +140,7 @@ func (s *Store) Reserve(ctx context.Context, in domain.Session) (domain.Session,
 		return domain.Session{}, false, repository.ErrQuotaExceeded
 	}
 	var count int
-	e = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM native_rubygems_sessions WHERE repository_id::text=$1 AND state IN ('pending','committed')`, in.RepositoryID).Scan(&count)
+	e = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM native_rubygems_sessions WHERE repository_id=$1::uuid AND state IN ('pending','committed')`, in.RepositoryID).Scan(&count)
 	if e != nil {
 		return domain.Session{}, false, e
 	}
@@ -157,7 +157,7 @@ func (s *Store) Reserve(ctx context.Context, in domain.Session) (domain.Session,
 }
 func (s *Store) Commit(ctx context.Context, id, actor string) (domain.Publication, bool, error) {
 	var repo string
-	e := s.db.QueryRowContext(ctx, `SELECT repository_id::text FROM native_rubygems_sessions WHERE id::text=$1`, id).Scan(&repo)
+	e := s.db.QueryRowContext(ctx, `SELECT repository_id::text FROM native_rubygems_sessions WHERE id=$1::uuid`, id).Scan(&repo)
 	if errors.Is(e, sql.ErrNoRows) {
 		e = repository.ErrNotFound
 	}
@@ -169,7 +169,7 @@ func (s *Store) Commit(ctx context.Context, id, actor string) (domain.Publicatio
 		return domain.Publication{}, false, e
 	}
 	defer func() { _ = tx.Rollback() }()
-	in, e := scan(tx.QueryRowContext(ctx, `SELECT `+columns+` FROM native_rubygems_sessions WHERE id::text=$1 FOR UPDATE`, id))
+	in, e := scan(tx.QueryRowContext(ctx, `SELECT `+columns+` FROM native_rubygems_sessions WHERE id=$1::uuid FOR UPDATE`, id))
 	if e != nil {
 		return domain.Publication{}, false, e
 	}
@@ -185,7 +185,7 @@ func (s *Store) Commit(ctx context.Context, id, actor string) (domain.Publicatio
 	if in.Actor != actor {
 		return domain.Publication{}, false, domain.ErrConflict
 	}
-	in, e = scan(tx.QueryRowContext(ctx, `UPDATE native_rubygems_sessions SET state='committed',committed_at=now() WHERE id::text=$1 RETURNING `+columns, id))
+	in, e = scan(tx.QueryRowContext(ctx, `UPDATE native_rubygems_sessions SET state='committed',committed_at=now() WHERE id=$1::uuid RETURNING `+columns, id))
 	if e != nil {
 		return domain.Publication{}, false, e
 	}
@@ -196,14 +196,14 @@ func (s *Store) Commit(ctx context.Context, id, actor string) (domain.Publicatio
 	return p, false, tx.Commit()
 }
 func (s *Store) Get(ctx context.Context, repo, fullName string) (domain.Publication, error) {
-	in, e := scan(s.db.QueryRowContext(ctx, `SELECT `+columns+` FROM native_rubygems_sessions WHERE repository_id::text=$1 AND full_name=$2 AND state='committed' AND NOT yanked AND EXISTS(SELECT 1 FROM hosted_repositories r WHERE r.id=repository_id AND r.format='rubygems' AND r.repo_type='hosted' AND r.state='active')`, repo, fullName))
+	in, e := scan(s.db.QueryRowContext(ctx, `SELECT `+columns+` FROM native_rubygems_sessions WHERE repository_id=$1::uuid AND full_name=$2 AND state='committed' AND NOT yanked AND EXISTS(SELECT 1 FROM hosted_repositories r WHERE r.id=repository_id AND r.format='rubygems' AND r.repo_type='hosted' AND r.state='active')`, repo, fullName))
 	return domain.Visible(in), e
 }
 func (s *Store) List(ctx context.Context, repo string, limit int) ([]domain.Publication, error) {
 	if limit < 1 || limit > 4097 {
 		limit = 4097
 	}
-	rows, e := s.db.QueryContext(ctx, `SELECT `+columns+` FROM native_rubygems_sessions WHERE repository_id::text=$1 AND state='committed' AND NOT yanked AND EXISTS(SELECT 1 FROM hosted_repositories r WHERE r.id=repository_id AND r.format='rubygems' AND r.repo_type='hosted' AND r.state='active') ORDER BY full_name COLLATE "C" LIMIT $2`, repo, limit)
+	rows, e := s.db.QueryContext(ctx, `SELECT `+columns+` FROM native_rubygems_sessions WHERE repository_id=$1::uuid AND state='committed' AND NOT yanked AND EXISTS(SELECT 1 FROM hosted_repositories r WHERE r.id=repository_id AND r.format='rubygems' AND r.repo_type='hosted' AND r.state='active') ORDER BY full_name COLLATE "C" LIMIT $2`, repo, limit)
 	if e != nil {
 		return nil, e
 	}
@@ -219,7 +219,7 @@ func (s *Store) List(ctx context.Context, repo string, limit int) ([]domain.Publ
 	return out, rows.Err()
 }
 func (s *Store) GetSession(ctx context.Context, id string) (domain.Session, error) {
-	return scan(s.db.QueryRowContext(ctx, `SELECT `+columns+` FROM native_rubygems_sessions WHERE id::text=$1`, id))
+	return scan(s.db.QueryRowContext(ctx, `SELECT `+columns+` FROM native_rubygems_sessions WHERE id=$1::uuid`, id))
 }
 func (s *Store) Expire(ctx context.Context, now time.Time, limit int) ([]domain.Session, error) {
 	if limit < 1 || limit > 1000 {
@@ -241,7 +241,7 @@ func (s *Store) Expire(ctx context.Context, now time.Time, limit int) ([]domain.
 	return out, rows.Err()
 }
 func (s *Store) MarkCollected(ctx context.Context, id, key string) error {
-	r, e := s.db.ExecContext(ctx, `UPDATE native_rubygems_sessions SET collected_at=COALESCE(collected_at,now()) WHERE id::text=$1 AND object_key=$2 AND state='expired'`, id, key)
+	r, e := s.db.ExecContext(ctx, `UPDATE native_rubygems_sessions SET collected_at=COALESCE(collected_at,now()) WHERE id=$1::uuid AND object_key=$2 AND state='expired'`, id, key)
 	if e != nil {
 		return e
 	}

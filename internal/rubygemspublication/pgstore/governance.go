@@ -8,7 +8,7 @@ import (
 )
 
 func (s *Store) GetRetained(ctx context.Context, repo, name, version, platform string) (domain.Publication, error) {
-	in, err := scan(s.db.QueryRowContext(ctx, `SELECT `+columns+` FROM native_rubygems_sessions WHERE repository_id::text=$1 AND name=$2 AND canonical_version=$3 AND platform=$4 AND state='committed' AND EXISTS(SELECT 1 FROM hosted_repositories r WHERE r.id=repository_id AND r.format='rubygems' AND r.repo_type='hosted' AND r.state='active')`, repo, name, protocol.CanonicalVersion(version), platform))
+	in, err := scan(s.db.QueryRowContext(ctx, `SELECT `+columns+` FROM native_rubygems_sessions WHERE repository_id=$1::uuid AND name=$2 AND canonical_version=$3 AND platform=$4 AND state='committed' AND EXISTS(SELECT 1 FROM hosted_repositories r WHERE r.id=repository_id AND r.format='rubygems' AND r.repo_type='hosted' AND r.state='active')`, repo, name, protocol.CanonicalVersion(version), platform))
 	return domain.Visible(in), err
 }
 
@@ -21,7 +21,7 @@ func (s *Store) TransitionGovernance(ctx context.Context, c domain.GovernanceCha
 		return domain.Publication{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	in, err := scan(tx.QueryRowContext(ctx, `SELECT `+columns+` FROM native_rubygems_sessions WHERE repository_id::text=$1 AND name=$2 AND canonical_version=$3 AND platform=$4 AND state='committed' FOR UPDATE`, c.RepositoryID, c.Name, protocol.CanonicalVersion(c.Version), c.Platform))
+	in, err := scan(tx.QueryRowContext(ctx, `SELECT `+columns+` FROM native_rubygems_sessions WHERE repository_id=$1::uuid AND name=$2 AND canonical_version=$3 AND platform=$4 AND state='committed' FOR UPDATE`, c.RepositoryID, c.Name, protocol.CanonicalVersion(c.Version), c.Platform))
 	if err != nil {
 		return domain.Publication{}, err
 	}
@@ -39,7 +39,7 @@ func (s *Store) TransitionGovernance(ctx context.Context, c domain.GovernanceCha
 	if !changed {
 		return domain.Visible(in), tx.Commit()
 	}
-	in, err = scan(tx.QueryRowContext(ctx, `UPDATE native_rubygems_sessions SET governance_version=$2,yanked=$3,governance_updated_at=$4,governance_updated_by=$5,governance_reason=$6,quarantined=$7 WHERE id::text=$1 RETURNING `+columns, in.ID, g.Version, g.Yanked, g.UpdatedAt, g.UpdatedBy, g.Reason, g.Quarantined))
+	in, err = scan(tx.QueryRowContext(ctx, `UPDATE native_rubygems_sessions SET governance_version=$2,yanked=$3,governance_updated_at=$4,governance_updated_by=$5,governance_reason=$6,quarantined=$7 WHERE id=$1::uuid RETURNING `+columns, in.ID, g.Version, g.Yanked, g.UpdatedAt, g.UpdatedBy, g.Reason, g.Quarantined))
 	if err != nil {
 		return domain.Publication{}, err
 	}
