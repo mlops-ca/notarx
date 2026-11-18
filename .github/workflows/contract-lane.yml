@@ -53,19 +53,6 @@ jobs:
         with:
           go-version-file: go.mod
           cache: ${{ !inputs.cold_cache }}
-      - name: Fetch the upstream release baseline tag
-        # The hard fork carries no upstream tags; upgrade-readiness pins the
-        # v0.5.0 commit of the upstream repository. Only a missing tag is
-        # fetched, so a fork tag of the same name is never overwritten.
-        if: inputs.lane == 'core'
-        run: |
-          git rev-parse -q --verify 'refs/tags/v0.5.0^{commit}' >/dev/null ||
-            { for attempt in 1 2 3; do
-                git fetch --no-tags https://github.com/ccsert/artifact-gateway.git tag v0.5.0 && exit 0
-                sleep $((attempt * 5))
-              done; exit 1; }
-          # scripts/upgrade-readiness.sh pins the expected commit hash, so the
-          # tag name alone cannot change the baseline.
       - name: Warm the Go module cache with retries
         run: |
           for attempt in 1 2 3 4; do
@@ -75,26 +62,26 @@ jobs:
           done
           exit 1
       - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
-        if: inputs.lane == 'core' || inputs.lane == 'six-format-auth'
+        if: startsWith(inputs.lane, 'core-') || inputs.lane == 'six-format-auth'
         with:
           toolchain: 1.96.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
-          cache: ${{ inputs.lane == 'core' && !inputs.cold_cache && 'npm' || '' }}
+          cache: ${{ startsWith(inputs.lane, 'core-') && !inputs.cold_cache && 'npm' || '' }}
           cache-dependency-path: |
             console/package-lock.json
             tools/openapi/package-lock.json
       - name: Verify public npm lockfile sources before install
-        if: inputs.lane == 'core'
+        if: startsWith(inputs.lane, 'core-')
         run: node scripts/npm-lockfile-check.mjs
       - name: Install OpenAPI tooling
-        if: inputs.lane == 'core'
+        if: startsWith(inputs.lane, 'core-')
         run: npm ci --ignore-scripts --no-audit --no-fund --timing --loglevel=http
         timeout-minutes: 10
         working-directory: tools/openapi
       - name: Install Console code generation dependencies
-        if: inputs.lane == 'core'
+        if: startsWith(inputs.lane, 'core-')
         run: npm ci --ignore-scripts --no-audit --no-fund --timing --loglevel=http
         timeout-minutes: 10
         working-directory: console

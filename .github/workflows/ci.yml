@@ -80,9 +80,13 @@ jobs:
   contract-core:
     needs: changes
     if: needs.changes.outputs.go == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [core-checks, core-email, core-native-e2e, core-backup]
     uses: ./.github/workflows/contract-lane.yml
     with:
-      lane: core
+      lane: ${{ matrix.lane }}
 
   contract-native:
     needs: changes

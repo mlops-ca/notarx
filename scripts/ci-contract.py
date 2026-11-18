@@ -25,6 +25,7 @@ import uuid
 ROOT = Path(__file__).resolve().parent.parent
 PLAN = json.loads((ROOT / 'scripts/ci-contract-lanes.json').read_text())
 LANES = tuple(PLAN['lanes'])
+CORE_LANES = tuple(PLAN['coreOrder'])
 BENCHMARK_LANES = tuple(PLAN['benchmarkOrder'])
 RAW_DIRS = sorted({p for lane in PLAN['lanes'].values() for p in lane['rawDirectories']})
 
@@ -121,12 +122,12 @@ def docker_step_snapshot(path):
 
 class CoreGoCacheVolumes:
     """Own only two caches absent before this dedicated core lane started."""
-    def __init__(self, output, run_id, attempt):
+    def __init__(self, output, run_id, attempt, lane):
         self.path = output / 'docker-cache-claims.json'
         self.labels = {'artifact-gateway.ci-owner': uuid.uuid4().hex,
                        'artifact-gateway.ci-run': run_id,
                        'artifact-gateway.ci-attempt': attempt,
-                       'artifact-gateway.ci-lane': 'core'}
+                       'artifact-gateway.ci-lane': lane}
         self.names = CORE_GO_CACHE_VOLUMES
         self.state = {'schemaVersion': 1, 'labels': self.labels, 'attempted': [],
                       'receipts': {}, 'removed': [], 'remaining': [], 'errors': []}
@@ -340,7 +341,7 @@ def run_lane(args):
     if args.cold_cache:
         env.update(GOCACHE=str(work / 'go-build'), GOMODCACHE=str(work / 'go-mod'),
                    GOFLAGS=(env.get('GOFLAGS', '') + ' -modcacherw').strip())
-    dedicated_core = dedicated and args.lane == 'core' and not args.local
+    dedicated_core = dedicated and args.lane in CORE_LANES and not args.local
     caches = None
     def stop_lane(signum, _frame):
         report['status'] = 'failure'
@@ -356,7 +357,7 @@ def run_lane(args):
                              for sig in (signal.SIGINT, signal.SIGTERM)}
     try:
         if dedicated_core:
-            caches = CoreGoCacheVolumes(output, report['runId'], report['attempt'])
+            caches = CoreGoCacheVolumes(output, report['runId'], report['attempt'], args.lane)
             caches.claim(before_docker)
         for index, step in enumerate(lane['steps']):
             command = step['command']
@@ -490,14 +491,14 @@ def validate_evidence(root, prefix, expected_lanes, head, attempt):
                 or any(not isinstance(v, list) or any(not isinstance(case, str) or not case for case in v)
                        for v in cases.values())):
             raise ValueError('case evidence missing: ' + lane)
-        if lane != 'core' and (not cases['run'] or not cases['pass'] or cases['fail'] or cases['skip']):
+        if lane not in CORE_LANES and (not cases['run'] or not cases['pass'] or cases['fail'] or cases['skip']):
             raise ValueError('mandatory native cases missing, failed or skipped: ' + lane)
         files = item.get('filesSHA256', {})
         required_logs = {f'logs/{i:02d}.log' for i in range(len(steps))}
         if not files or not {'source.json', *required_logs}.issubset(files):
             raise ValueError('missing file manifest: ' + lane)
         for directory in PLAN['lanes'][lane]['rawDirectories']:
-            if lane != 'core':
+            if lane not in CORE_LANES:
                 prefix_path = 'raw/' + Path(directory).name + '/'
                 if not any(name.startswith(prefix_path) and name.endswith('/cleanup.json') for name in files):
                     raise ValueError('original producer cleanup report missing: ' + lane)
@@ -552,10 +553,11 @@ def completed_runner_steps(job, lane):
         ('Initialize failure evidence before checkout or tool setup', 'success'),
         ('Run actions/checkout' + action, 'success'),
         ('Run actions/setup-go' + action, 'success'),
+        ('Warm the Go module cache with retries', 'success'),
         ('Run dtolnay/rust-toolchain' + action,
-         'success' if lane in ('core', 'six-format-auth') else 'skipped'),
+         'success' if lane in CORE_LANES or lane == 'six-format-auth' else 'skipped'),
         ('Run actions/setup-node' + action, 'success'),
-        *[(name, 'success' if lane == 'core' else 'skipped') for name in (
+        *[(name, 'success' if lane in CORE_LANES else 'skipped') for name in (
             'Verify public npm lockfile sources before install', 'Install OpenAPI tooling',
             'Install Console code generation dependencies')],
         ('Run unchanged lane targets and preserve raw evidence', 'success'),
@@ -588,7 +590,7 @@ def completed_runner_steps(job, lane):
             previous_number, previous_end = step['number'], end
         # A post action must belong to the same pinned action as its main step.
         if any(steps[post]['name'][5:] != steps[main]['name']
-               for post, main in ((11, 5), (12, 3), (13, 2))):
+               for post, main in ((12, 6), (13, 3), (14, 2))):
             return None
     except (KeyError, TypeError, ValueError, AttributeError):
         return None
@@ -829,7 +831,7 @@ def collect_job_logs(destination, prefixes=('contract',), lanes=LANES):
                 elif (job['status'] in ('queued', 'in_progress', 'waiting', 'pending', 'requested')
                       or (job['status'] == 'completed' and job.get('conclusion') is None)):
                     lane = name.split('/', 1)[1]
-                    group = 'contract-core' if lane == 'core' else f'contract-native ({lane})'
+                    group = f'contract-core ({lane})' if lane in CORE_LANES else f'contract-native ({lane})'
                     steps = None
                     if (scheduler_success and job['run_attempt'] == int(attempt)
                             and job['status'] == 'in_progress' and job.get('conclusion') is None
@@ -889,7 +891,7 @@ def collect_job_logs(destination, prefixes=('contract',), lanes=LANES):
                     log_receipts[job['id']] = receipt
                     manifest['completionEvidence'][str(job['id'])] = {
                         'source': 'github-needs-and-runner-completion',
-                        'schedulerJob': 'contract-core' if job['name'].endswith('contract/core') else 'contract-native',
+                        'schedulerJob': 'contract-core' if job['name'].split(' / ')[0].startswith('contract-core') else 'contract-native',
                         'schedulerResults': {key: needs[key]['result'] for key in needs},
                         'jobId': job['id'], 'runId': job['run_id'], 'attempt': job['run_attempt'],
                         'head': job['head_sha'], 'observedStatus': job['status'],

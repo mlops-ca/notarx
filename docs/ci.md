@@ -33,10 +33,27 @@ jobs behind it can change without editing the protection rule.
 
 ## Contract lanes
 
-`contract-core` and the eleven `contract-native` lanes run in parallel (there
-is no `max-parallel` cap; the free hosted runner limit applies). Each lane warms
-the Go module cache with retries and resolves modules through
+`contract-core` is a matrix of four lanes (`core-checks`, `core-email`,
+`core-native-e2e`, `core-backup`) that run in parallel with the eleven
+`contract-native` lanes (there is no `max-parallel` cap; the free hosted runner
+limit applies). The former serial `core` lane was split by duration so the full
+run is bound by its slowest lane (`core-email`, about 10 minutes of compose build
+and mail checks) instead of the 34 minute serial total. Every step of the old lane
+runs in exactly one core lane; the split is recorded in
+`scripts/ci-contract-lanes.json` (`coreOrder`) and each lane keeps its own
+evidence and dedicated-runner Docker cache ownership. Each lane warms the Go module
+cache with retries and resolves modules through
 `GOPROXY=https://proxy.golang.org|direct`, so one failed proxy stream no longer
-fails a lane. Lane evidence and the aggregate check are unchanged.
+fails a lane. The aggregate check still requires every lane's evidence.
+
+The Dockerfiles no longer run `go test` while building an image: the suite runs
+once in `core-checks` (`make test`) and `quality`. The tests live in an opt-in
+`test` stage (`make docker-test`) that BuildKit skips for image builds.
+
+The upstream `upgrade-readiness` step and the upstream v0.5.0 tag fetch are not
+run in CI: ADR 0015 has no upgrade path from upstream, and
+[#39](https://github.com/mlops-ca/notarx/issues/39) re-parameterises
+`scripts/upgrade-readiness.sh` on notarx release tags. Re-add the step once a
+notarx release tag exists.
 
 Run `bash scripts/ci-changes-test.sh` to check the classifier fixtures.

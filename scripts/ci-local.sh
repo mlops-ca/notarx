@@ -117,11 +117,10 @@ run_contract_lane() {
 }
 
 run_contract() {
-  printf '\n== contract-and-test (core plus every native lane) ==\n'
-  run_contract_lane core
+  printf '\n== contract-and-test (every core and native lane) ==\n'
   while IFS= read -r lane; do
     run_contract_lane "$lane"
-  done < <(python3 -c 'import json; print("\n".join(json.load(open("scripts/ci-contract-lanes.json"))["nativeOrder"]))')
+  done < <(python3 -c 'import json; p = json.load(open("scripts/ci-contract-lanes.json")); print("\n".join(p["coreOrder"] + p["nativeOrder"]))')
   # Keep the existing additional local CLI stack check; CI runs this client
   # against the Console job's gateway instead.
   run "agctl CLI E2E (isolated Compose stack)" make cli-e2e
@@ -164,8 +163,8 @@ case "$job" in
   list)
     printf 'fast     : lint, vet, go test ./..., docs-check, CLI command map contract, openapi freshness, console typecheck/check/test\n'
     printf 'quality  : CI job quality\n'
-    printf 'contract : core plus all native lanes, then the local CLI stack check\n'
-    printf 'lanes    : use --lane core|migration-clients|inventory|nuget|oci-migration|maven-oci-auth|six-format-auth|oci-discovery|npm-migration|helm|rubygems|pypi-migration\n'
+    printf 'contract : every core and native lane, then the local CLI stack check\n'
+    printf 'lanes    : use --lane core-checks|core-email|core-native-e2e|core-backup|migration-clients|inventory|nuget|oci-migration|maven-oci-auth|six-format-auth|oci-discovery|npm-migration|helm|rubygems|pypi-migration\n'
     printf 'console  : CI job console\n'
     printf 'all      : quality, contract, console\n'
     ;;

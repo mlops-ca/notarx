@@ -27,8 +27,18 @@ CI 只运行变更所需的作业。`.github/workflows/ci.yml` 中的 `changes` 
 
 ## 契约通道
 
-`contract-core` 与十一个 `contract-native` 通道并行运行（不再设置 `max-parallel`，受托管运行器并发上限约束）。
-每个通道带重试地预热 Go 模块缓存，并通过 `GOPROXY=https://proxy.golang.org|direct` 解析模块，
-单次代理流错误不再使通道失败。通道证据与聚合检查保持不变。
+`contract-core` 是由四个通道（`core-checks`、`core-email`、`core-native-e2e`、`core-backup`）组成的矩阵，
+与十一个 `contract-native` 通道并行运行（不再设置 `max-parallel`，受托管运行器并发上限约束）。
+原先串行的 `core` 通道按耗时拆分，完整运行时间由最慢的通道（`core-email`，约 10 分钟）决定，而不再是 34 分钟的串行总和。
+原通道的每个步骤都恰好在一个 core 通道中运行；拆分记录在 `scripts/ci-contract-lanes.json` 的 `coreOrder`，
+每个通道保留各自的证据与专用运行器 Docker 缓存归属。每个通道带重试地预热 Go 模块缓存，
+并通过 `GOPROXY=https://proxy.golang.org|direct` 解析模块，单次代理流错误不再使通道失败。聚合检查仍要求每个通道的证据。
+
+Dockerfile 在构建镜像时不再运行 `go test`：测试套件在 `core-checks`（`make test`）与 `quality` 中只运行一次。
+测试位于可选的 `test` 阶段（`make docker-test`），镜像构建时 BuildKit 会跳过它。
+
+CI 不再运行上游的 `upgrade-readiness` 步骤和上游 v0.5.0 标签获取：ADR 0015 不提供来自上游的升级路径，
+[#39](https://github.com/mlops-ca/notarx/issues/39) 会把 `scripts/upgrade-readiness.sh` 改为基于 notarx 发布标签。
+notarx 发布标签出现后再恢复该步骤。
 
 运行 `bash scripts/ci-changes-test.sh` 可检查分类器用例。

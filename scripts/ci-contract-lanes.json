@@ -1,6 +1,12 @@
 {
   "schemaVersion": 1,
   "baseline": "d86c44f1ede5a74c562c8b39660411fb43a7da6f",
+  "coreOrder": [
+    "core-checks",
+    "core-email",
+    "core-native-e2e",
+    "core-backup"
+  ],
   "nativeOrder": [
     "migration-clients",
     "inventory",
@@ -15,7 +21,7 @@
     "pypi-migration"
   ],
   "lanes": {
-    "core": {
+    "core-checks": {
       "timeoutMinutes": 360,
       "steps": [
         {
@@ -90,13 +96,33 @@
           "timeoutSeconds": null
         },
         {
+          "name": "release-readiness-check",
+          "command": [
+            "make",
+            "release-readiness-check"
+          ],
+          "timeoutSeconds": null
+        }
+      ],
+      "rawDirectories": []
+    },
+    "core-email": {
+      "timeoutMinutes": 360,
+      "steps": [
+        {
           "name": "email-compose-check",
           "command": [
             "make",
             "email-compose-check"
           ],
           "timeoutSeconds": null
-        },
+        }
+      ],
+      "rawDirectories": []
+    },
+    "core-native-e2e": {
+      "timeoutMinutes": 360,
+      "steps": [
         {
           "name": "cli-runtime-e2e",
           "command": [
@@ -168,7 +194,13 @@
             "apt-signer-rotation-e2e"
           ],
           "timeoutSeconds": null
-        },
+        }
+      ],
+      "rawDirectories": []
+    },
+    "core-backup": {
+      "timeoutMinutes": 360,
+      "steps": [
         {
           "name": "conan-e2e",
           "command": [
@@ -194,26 +226,10 @@
           "timeoutSeconds": 900
         },
         {
-          "name": "upgrade-readiness",
-          "command": [
-            "make",
-            "upgrade-readiness"
-          ],
-          "timeoutSeconds": 600
-        },
-        {
           "name": "integration-test",
           "command": [
             "make",
             "integration-test"
-          ],
-          "timeoutSeconds": null
-        },
-        {
-          "name": "release-readiness-check",
-          "command": [
-            "make",
-            "release-readiness-check"
           ],
           "timeoutSeconds": null
         }

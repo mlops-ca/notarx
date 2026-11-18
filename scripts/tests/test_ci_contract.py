@@ -77,12 +77,12 @@ class CoreCacheOwnershipTests(unittest.TestCase):
         raise AssertionError('unexpected Docker operation: ' + repr(command))
 
     def test_claims_and_removes_only_two_new_core_caches(self):
-        caches = ci.CoreGoCacheVolumes(self.output, 'run-123', '2')
+        caches = ci.CoreGoCacheVolumes(self.output, 'run-123', '2', 'core-checks')
         caches.claim({'volumes': ['unrelated-sentinel']})
         for name in ('artifact-gateway-go-mod', 'artifact-gateway-go-build'):
             self.assertEqual(self.volumes[name]['Labels']['artifact-gateway.ci-run'], 'run-123')
             self.assertEqual(self.volumes[name]['Labels']['artifact-gateway.ci-attempt'], '2')
-            self.assertEqual(self.volumes[name]['Labels']['artifact-gateway.ci-lane'], 'core')
+            self.assertEqual(self.volumes[name]['Labels']['artifact-gateway.ci-lane'], 'core-checks')
         result = caches.cleanup()
         self.assertEqual(set(result['removed']), {'artifact-gateway-go-mod', 'artifact-gateway-go-build'})
         self.assertEqual(result['remaining'], [])
@@ -98,7 +98,7 @@ class CoreCacheOwnershipTests(unittest.TestCase):
                 self.volumes[name] = self.volume(name, {'foreign': 'preserve'})
                 original = copy.deepcopy(self.volumes)
                 self.calls.clear()
-                caches = ci.CoreGoCacheVolumes(self.output, 'run-123', '2')
+                caches = ci.CoreGoCacheVolumes(self.output, 'run-123', '2', 'core-checks')
                 with self.assertRaisesRegex(RuntimeError, 'pre-existing'):
                     caches.claim({'volumes': list(self.volumes)})
                 self.assertEqual(caches.cleanup()['removed'], [])
@@ -112,7 +112,7 @@ class CoreCacheOwnershipTests(unittest.TestCase):
                              ('Scope', 'global'), ('Options', {'device': '/foreign'})]:
             with self.subTest(field=field):
                 self.volumes = {'unrelated-sentinel': self.volume('unrelated-sentinel', {})}
-                caches = ci.CoreGoCacheVolumes(self.output, 'run-123', '2')
+                caches = ci.CoreGoCacheVolumes(self.output, 'run-123', '2', 'core-checks')
                 caches.claim({'volumes': ['unrelated-sentinel']})
                 name = 'artifact-gateway-go-mod'
                 self.volumes[name][field] = value
@@ -126,7 +126,7 @@ class CoreCacheOwnershipTests(unittest.TestCase):
 
     def test_lost_create_ack_recovers_only_our_receipt_for_cleanup(self):
         self.fail_create_ack = True
-        caches = ci.CoreGoCacheVolumes(self.output, 'run-123', '2')
+        caches = ci.CoreGoCacheVolumes(self.output, 'run-123', '2', 'core-checks')
         with self.assertRaises(subprocess.TimeoutExpired):
             caches.claim({'volumes': ['unrelated-sentinel']})
         self.assertEqual(caches.state['receipts'], {})
@@ -138,7 +138,7 @@ class CoreCacheOwnershipTests(unittest.TestCase):
 
     def test_lost_create_ack_does_not_adopt_replaced_foreign_volume(self):
         self.fail_create_ack = True
-        caches = ci.CoreGoCacheVolumes(self.output, 'run-123', '2')
+        caches = ci.CoreGoCacheVolumes(self.output, 'run-123', '2', 'core-checks')
         with self.assertRaises(subprocess.TimeoutExpired):
             caches.claim({'volumes': ['unrelated-sentinel']})
         name = 'artifact-gateway-go-mod'
@@ -151,7 +151,7 @@ class CoreCacheOwnershipTests(unittest.TestCase):
         self.assertIn('unrelated-sentinel', self.volumes)
 
     def test_removal_failure_remains_failed_and_preserves_volume(self):
-        caches = ci.CoreGoCacheVolumes(self.output, 'run-123', '2')
+        caches = ci.CoreGoCacheVolumes(self.output, 'run-123', '2', 'core-checks')
         caches.claim({'volumes': ['unrelated-sentinel']})
         self.fail_rm = 'artifact-gateway-go-mod'
         result = caches.cleanup()
@@ -185,7 +185,7 @@ class CoreCacheOwnershipTests(unittest.TestCase):
         root = self.output / 'repository'
         root.mkdir(exist_ok=True)
         output = self.output / 'lane'
-        args = argparse.Namespace(lane='core', output=output, prefix='contract',
+        args = argparse.Namespace(lane='core-checks', output=output, prefix='contract',
                                   cold_cache=False, local=local, keep_going=False)
         step = {'name': 'unchanged target', 'command': ['make', 'original-target'], 'timeoutSeconds': 600}
         source = {'head': '1' * 40, 'tree': '2' * 40, 'businessDigest': 'unchanged-business'}
@@ -198,7 +198,7 @@ class CoreCacheOwnershipTests(unittest.TestCase):
                     'timeoutSeconds': timeout, 'processGroup': 123, 'remainingLiveGroupMembers': []}
         with patch.dict(os.environ, {'GITHUB_ACTIONS': 'true', 'GITHUB_RUN_ID': '123', 'GITHUB_RUN_ATTEMPT': '2'}):
             with patch.object(ci, 'ROOT', root), patch.object(ci, 'business_source', return_value=source):
-                with patch.object(ci, 'PLAN', {'lanes': {'core': {'steps': [step], 'rawDirectories': raw_directories or []}}}):
+                with patch.object(ci, 'PLAN', {'lanes': {'core-checks': {'steps': [step], 'rawDirectories': raw_directories or []}}}):
                     with patch.object(ci, 'run_command', side_effect=command) as ran:
                         try:
                             status = ci.run_lane(args)
@@ -280,7 +280,7 @@ class CoreCacheOwnershipTests(unittest.TestCase):
 
 
     def test_acknowledged_removal_without_readback_stays_failed(self):
-        caches = ci.CoreGoCacheVolumes(self.output, 'run-123', '2')
+        caches = ci.CoreGoCacheVolumes(self.output, 'run-123', '2', 'core-checks')
         caches.claim({'volumes': ['unrelated-sentinel']})
         self.ignore_rm = True
         result = caches.cleanup()
@@ -332,7 +332,7 @@ class ContractGateTests(unittest.TestCase):
             for index in range(len(ci.PLAN['lanes'][lane]['steps'])):
                 (directory / 'logs' / f'{index:02d}.log').write_text('original unmodified producer log\n')
             for raw in ci.PLAN['lanes'][lane]['rawDirectories']:
-                if lane != 'core':
+                if lane not in ci.CORE_LANES:
                     ci.write(directory / 'raw' / Path(raw).name / 'owned-project' / 'cleanup.json', {'exitCode': 0})
                     (directory / 'raw' / Path(raw).name / 'owned-project' / 'results.jsonl').write_text('{"Action":"pass","Test":"mandatory-native-case"}\n')
             item = {**source, 'lane': lane, 'prefix': 'contract', 'attempt': '1',
@@ -652,7 +652,7 @@ class ContractGateTests(unittest.TestCase):
         result = subprocess.run([str(ROOT / 'scripts/ci-local.sh'), '--job', 'contract'], cwd=ROOT,
                                 env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=15)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertEqual(trace.read_text().splitlines(), ['core', *ci.PLAN['nativeOrder']])
+        self.assertEqual(trace.read_text().splitlines(), [*ci.PLAN['coreOrder'], *ci.PLAN['nativeOrder']])
 
     def test_deadline_and_resistant_descendants_survive_neither_pipe_shape(self):
         for mode in ('leader-eof', 'descendant-eof', 'descendant-inherit'):
@@ -755,7 +755,7 @@ class ContractGateTests(unittest.TestCase):
         actual = [s['command'][1] for lane in ci.PLAN['lanes'].values() for s in lane['steps'] if s['command'][0] == 'make']
         # New native gates extend the matrix without removing any original
         # target from the fixed six-lane performance scope.
-        self.assertCountEqual(actual, [*expected, 'native-oci-discovery-e2e',
+        self.assertCountEqual([*actual, 'upgrade-readiness'], [*expected, 'native-oci-discovery-e2e',
                                      'nexus-npm-migration-e2e', 'native-helm-e2e',
                                      'native-rubygems-e2e', 'nexus-pypi-migration-e2e'])
         self.assertEqual(ci.PLAN['lanes']['oci-discovery']['steps'][-1]['timeoutSeconds'], 900)
@@ -766,9 +766,22 @@ class ContractGateTests(unittest.TestCase):
         for lane in ci.PLAN['nativeOrder']:
             self.assertEqual(ci.PLAN['lanes'][lane]['steps'][0]['command'], ['go', 'mod', 'download'])
             self.assertEqual(ci.PLAN['lanes'][lane]['steps'][0]['timeoutSeconds'], 300)
-        steps = {s['name']: s for s in ci.PLAN['lanes']['core']['steps']}
+        steps = {s['name']: s for lane in ci.CORE_LANES for s in ci.PLAN['lanes'][lane]['steps']}
         self.assertEqual(steps['published-native-backup-test']['timeoutSeconds'], 900)
-        self.assertEqual(steps['upgrade-readiness']['timeoutSeconds'], 600)
+        self.assertNotIn('upgrade-readiness', steps)  # ADR 0015 / #39: no upstream upgrade lane in CI
+
+    def test_core_split_keeps_every_original_core_step_exactly_once(self):
+        base = json.loads(subprocess.check_output(
+            ['git', 'show', 'origin/main:scripts/ci-contract-lanes.json'], cwd=ROOT, text=True))
+        original = [s['name'] for s in base['lanes']['core']['steps']]
+        split = [s['name'] for lane in ci.CORE_LANES for s in ci.PLAN['lanes'][lane]['steps']]
+        # upgrade-readiness leaves CI per ADR 0015 / issue 39; every other step stays.
+        self.assertCountEqual(split, [n for n in original if n != 'upgrade-readiness'])
+        self.assertNotIn('core', ci.PLAN['lanes'])
+        self.assertEqual(set(ci.LANES), {*ci.CORE_LANES, *ci.PLAN['nativeOrder']})
+        workflow = (ROOT / '.github/workflows/ci.yml').read_text()
+        matrix = re.search(r'contract-core:.*?lane: \[([^\]]+)\]', workflow, re.S)[1]
+        self.assertEqual([x.strip() for x in matrix.split(',')], list(ci.CORE_LANES))
 
     def test_workflow_preserves_stable_aggregate_and_publication_dependencies(self):
         workflow = (ROOT / '.github/workflows/ci.yml').read_text()
@@ -931,7 +944,7 @@ class JobLogConsistencyTests(unittest.TestCase):
                     'GITHUB_RUN_ATTEMPT': '2', 'GITHUB_SHA': '1' * 40,
                     'GITHUB_EVENT_NAME': 'push',
                     'GITHUB_TOKEN': 'synthetic-token-not-recorded'}
-        self.job = {'id': 42, 'name': 'contract-core / contract/core',
+        self.job = {'id': 42, 'name': 'contract-core (core-checks) / contract/core-checks',
                     'run_id': 123, 'run_attempt': 2, 'head_sha': self.env['GITHUB_SHA'],
                     'status': 'completed', 'conclusion': 'success'}
         self.log = b'Set up job\nOriginal producer output\nComplete job\n'
@@ -941,7 +954,7 @@ class JobLogConsistencyTests(unittest.TestCase):
         self.request_elapsed = {}
         self.log_receipt = None
 
-    def collect(self, snapshots, logs, prefixes=('contract',), lanes=('core',), receipts=None):
+    def collect(self, snapshots, logs, prefixes=('contract',), lanes=('core-checks',), receipts=None):
         calls = {'metadata': 0, 'log': 0}
         class Response:
             def __init__(self, body, receipt=None):
@@ -993,7 +1006,7 @@ class JobLogConsistencyTests(unittest.TestCase):
         return [json.loads(path.read_text())
                 for path in sorted((self.output / 'job-log-polls').glob('*-readback.json'))]
 
-    def scheduler_completed_job(self, lane='core'):
+    def scheduler_completed_job(self, lane='core-checks'):
         self.env['CI_CONTRACT_NEEDS'] = json.dumps({
             'contract-core': {'result': 'success'}, 'contract-native': {'result': 'success'}})
         actions = {'checkout': 'actions/checkout@' + 'a' * 40,
@@ -1001,7 +1014,9 @@ class JobLogConsistencyTests(unittest.TestCase):
                    'rust': 'dtolnay/rust-toolchain@' + 'c' * 40,
                    'node': 'actions/setup-node@' + 'd' * 40}
         names = ['Set up job', 'Initialize failure evidence before checkout or tool setup',
-                 'Run ' + actions['checkout'], 'Run ' + actions['go'], 'Run ' + actions['rust'],
+                 'Run ' + actions['checkout'], 'Run ' + actions['go'],
+                 'Warm the Go module cache with retries',
+                 'Run ' + actions['rust'],
                  'Run ' + actions['node'], 'Verify public npm lockfile sources before install',
                  'Install OpenAPI tooling', 'Install Console code generation dependencies',
                  'Run unchanged lane targets and preserve raw evidence',
@@ -1010,25 +1025,25 @@ class JobLogConsistencyTests(unittest.TestCase):
                  'Post Run ' + actions['checkout'], 'Complete job']
         steps = []
         for index, name in enumerate(names, 1):
-            skipped = ((index == 5 and lane not in ('core', 'six-format-auth'))
-                       or (index in (7, 8, 9) and lane != 'core'))
+            skipped = ((index == 6 and lane not in (*ci.CORE_LANES, 'six-format-auth'))
+                       or (index in (8, 9, 10) and lane not in ci.CORE_LANES))
             steps.append({'name': name, 'number': index, 'status': 'completed',
                           'conclusion': 'skipped' if skipped else 'success',
                           'started_at': f'2026-10-22T00:00:{index:02d}Z',
                           'completed_at': f'2026-10-22T00:00:{index:02d}Z'})
-        group = 'contract-core' if lane == 'core' else f'contract-native ({lane})'
+        group = f'contract-core ({lane})' if lane in ci.CORE_LANES else f'contract-native ({lane})'
         job = {**self.job, 'name': f'{group} / contract/{lane}',
                'status': 'in_progress', 'conclusion': None, 'completed_at': None,
                'started_at': '2026-10-22T00:00:00Z', 'steps': steps}
         self.log = (b'\xef\xbb\xbf2026-10-22T00:00:01.1000000Z Current runner version: \'2.338.0\'\n'
                     + b''.join(f'2026-10-22T00:00:{index:02d}.1000000Z Step original output\n'.encode()
-                               for index in range(2, 12)
+                               for index in range(2, 13)
                                if steps[index - 1]['conclusion'] != 'skipped')
-                    + b'2026-10-22T00:00:12.1000000Z Post job cleanup.\n'
-                    b'2026-10-22T00:00:13.1000000Z Post job cleanup.\n'
+                    + b'2026-10-22T00:00:13.1000000Z Post job cleanup.\n'
                     b'2026-10-22T00:00:14.1000000Z Post job cleanup.\n'
-                    b'2026-10-22T00:00:15.1000000Z Cleaning up orphan processes\n'
-                    b'2026-10-22T00:00:15.2000000Z ##[warning]Runner warning after cleanup\n')
+                    b'2026-10-22T00:00:15.1000000Z Post job cleanup.\n'
+                    b'2026-10-22T00:00:16.1000000Z Cleaning up orphan processes\n'
+                    b'2026-10-22T00:00:16.2000000Z ##[warning]Runner warning after cleanup\n')
         self.log_receipt = self.final_log_receipt(self.log)
         return job
 
@@ -1038,7 +1053,7 @@ class JobLogConsistencyTests(unittest.TestCase):
                 'headers': {'Content-Length': str(len(body)),
                             'Content-MD5': base64.b64encode(hashlib.md5(body, usedforsecurity=False).digest()).decode(),
                             'Content-Type': 'text/plain', 'x-ms-blob-type': 'BlockBlob',
-                            'ETag': '"0x123ABC"', 'Last-Modified': 'Thu, 22 Oct 2026 00:00:17 GMT'}}
+                            'ETag': '"0x123ABC"', 'Last-Modified': 'Thu, 22 Oct 2026 00:00:18 GMT'}}
 
     def test_scheduler_and_complete_runner_log_collect_despite_stale_outer_status(self):
         stale = self.scheduler_completed_job()
@@ -1061,7 +1076,7 @@ class JobLogConsistencyTests(unittest.TestCase):
 
     def test_provider_receipt_rejects_a_true_prefix_truncation_after_machine_cleanup(self):
         job = self.scheduler_completed_job()
-        body = self.log.rsplit(b'2026-10-22T00:00:15.2000000Z', 1)[0]
+        body = self.log.rsplit(b'2026-10-22T00:00:16.2000000Z', 1)[0]
         with self.assertRaises(ValueError):
             self.collect([[job]], [body])
         self.assertFalse(self.manifest()['complete'])
@@ -1201,17 +1216,17 @@ class JobLogConsistencyTests(unittest.TestCase):
         for change in ({'status': 'in_progress'}, {'conclusion': 'failure'},
                        {'conclusion': 'skipped'}, {'conclusion': 'cancelled'},
                        {'number': True}, {'number': 1}, {'started_at': None},
-                       {'started_at': '2026-10-22T00:00:15'},
-                       {'completed_at': '2026-10-22T00:00:14Z'}):
+                       {'started_at': '2026-10-22T00:00:16'},
+                       {'completed_at': '2026-10-22T00:00:13Z'}):
             job = copy.deepcopy(good)
             job['steps'][-1].update(change)
             invalid.append(job)
-        for index in (4, 9, 10, 11, 12, 13):
+        for index in (4, 5, 10, 11, 12, 13, 14):
             job = copy.deepcopy(good)
             job['steps'][index]['conclusion'] = 'skipped'
             invalid.append(job)
         job = copy.deepcopy(good)
-        job['steps'][11]['name'] = 'Post Run actions/setup-node@' + 'e' * 40
+        job['steps'][12]['name'] = 'Post Run actions/setup-node@' + 'e' * 40
         invalid.append(job)
         job = copy.deepcopy(good)
         job['steps'].append({**job['steps'][-1], 'name': 'Unexpected step after completion', 'number': 99})
@@ -1230,8 +1245,8 @@ class JobLogConsistencyTests(unittest.TestCase):
                    b''.join(lines[1:]), b''.join(lines[:5]), b''.join(lines[:3] + lines[4:]),
                    good[:-1], good + b'\xff\n',
                    good.replace(b'Z Cleaning up orphan processes', b'Z stdout: Cleaning up orphan processes'),
-                   good.replace(b'00:00:15.1000000Z Cleaning', b'00:00:10.1000000Z Cleaning'),
-                   good.replace(b'00:00:15.1000000Z Cleaning', b'00:00:16.1000000Z Cleaning'),
+                   good.replace(b'00:00:16.1000000Z Cleaning', b'00:00:10.1000000Z Cleaning'),
+                   good.replace(b'00:00:16.1000000Z Cleaning', b'00:00:17.1000000Z Cleaning'),
                    b''.join(lines[:4] + lines[5:6] + lines[4:5] + lines[6:]),
                    good + lines[5], good.replace(lines[2], lines[2] + lines[2])]
         for index, log in enumerate(invalid):
@@ -1244,7 +1259,7 @@ class JobLogConsistencyTests(unittest.TestCase):
 
     def test_partial_runner_log_is_preserved_and_polled_until_original_completion(self):
         job = self.scheduler_completed_job()
-        partial = self.log.split(b'2026-10-22T00:00:15.', 1)[0]
+        partial = self.log.split(b'2026-10-22T00:00:16.', 1)[0]
         self.assertEqual(self.collect([[job]], [partial, self.log]), [job])
         readbacks = self.poll_readbacks()
         self.assertEqual(readbacks[0]['logReads'][0]['reason'], 'incomplete_runner_log')
@@ -1258,7 +1273,7 @@ class JobLogConsistencyTests(unittest.TestCase):
         job = self.scheduler_completed_job()
         with self.assertRaisesRegex(ValueError, 'retained job source binding'):
             self.collect([[{**job, 'run_attempt': 1}]], [self.log])
-        job['name'] = 'serial (core) / benchmark-serial/core'
+        job['name'] = 'serial (core-checks) / benchmark-serial/core-checks'
         with self.assertRaisesRegex(ValueError, 'deadline'):
             self.collect([[job]], [self.log], prefixes=('benchmark-serial',))
         self.assertFalse(any(c['endpoint'] == 'log' for c in self.calls))
@@ -1268,8 +1283,8 @@ class JobLogConsistencyTests(unittest.TestCase):
         good = self.scheduler_completed_job()
         for change in ({'status': 'queued'}, {'status': 'waiting'}, {'status': 'pending'},
                        {'status': 'requested'}, {'status': 'completed'},
-                       {'name': 'unrelated / contract/core'},
-                       {'completed_at': '2026-10-22T00:00:15Z'}):
+                       {'name': 'unrelated / contract/core-checks'},
+                       {'completed_at': '2026-10-22T00:00:16Z'}):
             with self.subTest(change=change), self.assertRaisesRegex(ValueError, 'deadline'):
                 self.collect([[{**good, **change}]], [self.log])
             self.assertFalse(self.manifest()['complete'])
@@ -1343,7 +1358,7 @@ class JobLogConsistencyTests(unittest.TestCase):
         self.assertEqual(self.elapsed, 120)
         self.assertLessEqual(len(self.sleeps), 60)
         self.assertFalse(self.manifest()['complete'])
-        self.assertEqual(self.manifest()['missing'], ['contract/core'])
+        self.assertEqual(self.manifest()['missing'], ['contract/core-checks'])
         self.assertFalse((self.output / 'job-42.log').exists())
         self.assertGreater(len(self.poll_readbacks()), 1)
 
@@ -1386,7 +1401,7 @@ class JobLogConsistencyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'deadline'):
             self.collect([[self.job]], [unavailable])
         self.assertEqual(self.elapsed, 120)
-        self.assertEqual(self.manifest()['missingLogs'], ['contract/core'])
+        self.assertEqual(self.manifest()['missingLogs'], ['contract/core-checks'])
         self.assertFalse(self.manifest()['complete'])
         self.assertFalse((self.output / 'job-42.log').exists())
 
