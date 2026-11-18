@@ -38,6 +38,7 @@ recherche.*
 - [Diagrammes d’architecture](architecture-diagrams.md) — flux du système, du déploiement, de la publication et des workers.
 - [Système de conception](../DESIGN.md) — langage visuel, composants, mise en page et règles d’interaction de la Console.
 - [Langage du domaine](../CONTEXT.md) — terminologie canonique des dépôts, des artefacts, du cycle de vie et de la distribution.
+- [Déploiement sur Oracle Cloud Always Free](deployment/oci-free-tier.md) — déploiement de référence sur une seule machine virtuelle Ampere A1 : pile Compose, guide d’exploitation, sauvegardes et variantes.
 - [Configuration du stockage d’objets](object-storage.md) — pilotes, clés `NOTARX_OBJECT_STORE_*`, modes de sommes de contrôle et paramètres OCI.
 - [Capacités PostgreSQL](postgresql-capabilities.md) — verrous, baux, files, notifications, JSONB, recherche, observabilité, l’empreinte du code dans PostgreSQL et la matrice de prise en charge de PostgreSQL géré.
 - [Contrat Native Hosted](native-hosted-contract.md) — autorité des métadonnées, cycle de vie des objets, transactions et idempotence.
