@@ -75,7 +75,7 @@ Object intents and capacity reservations are durable before content writes. Pack
 - Each Gateway instance permits two concurrent restore requests and a 64 GiB tar limit. Provision temporary disk accordingly; spools are removed after success or failure. Object, manifest and signature bounds above also apply; normalized package control metadata is capped at 128 MiB.
 - Errors include 400 for malformed or corrupt archives, 404 for a different repository, 409 for disabled trust or metadata/state conflicts, 412 for receipt mismatch, 413 for size limits, 415 for media type, 422 for untrusted signatures, 429 for restore concurrency, and 507 for quota rejection.
 
-Migration `000116_native_apt_archive_restore.sql` appends restore attempts and object intents; historical migrations are unchanged. Snapshot deletion, retention and re-signed restoration are described in the [lifecycle guide](apt-hosted-lifecycle.md); promotion/replication remain a later stage. APT Hosted remains an operator preview; this does not complete production KMS/HSM custody.
+The schema (baseline migration `000001_baseline.sql`) holds restore attempts and object intents; released migrations are immutable. Snapshot deletion, retention and re-signed restoration are described in the [lifecycle guide](apt-hosted-lifecycle.md); promotion/replication remain a later stage. APT Hosted remains an operator preview; this does not complete production KMS/HSM custody.
 
 ## Staged Legacy Migration
 
@@ -88,7 +88,7 @@ Parent [#30](https://github.com/mlops-ca/notarx/issues/30) uses these fixed refe
 | --- | --- |
 | export.go / archive.go / export API | [#36](https://github.com/mlops-ca/notarx/issues/36): retain deterministic archives, adapt current package membership, and strengthen streaming failure, length, terminator, and package-identity checks. Add snapshot-ID asset reads to Memory/PostgreSQL without a migration. |
 | import.go / trusted recovery | [#37](https://github.com/mlops-ca/notarx/issues/37): exact same-repository recovery with independent backup receipts and public keys, canonical signed index checks, atomic metadata, quotas, replay, concurrency and durable object cleanup. |
-| lifecycle.go / snapshot.go / lifecycle persistence | [#38](https://github.com/mlops-ca/notarx/issues/38): separately port deletion, retention, and restoration through newly signed snapshots. Never overwrite mainline migrations 000107/000108; append migrations after the then-current mainline when needed. |
+| lifecycle.go / snapshot.go / lifecycle persistence | [#38](https://github.com/mlops-ca/notarx/issues/38): separately port deletion, retention, and restoration through newly signed snapshots. Never edit released migrations; append numbered migrations after the then-current mainline when needed. |
 | promotion.go / replication.go / scanning and quarantine | [#39](https://github.com/mlops-ca/notarx/issues/39): separate PRs against current scan identity, admission, and Worker contracts. Rebuild and sign destination metadata instead of copying the source Release as destination authority. |
 | Old OpenAPI, generated code, docs, and public capability claims | Regenerate or rewrite against current mainline. Discard the old public Hosted release-candidate claim; preserve H3/KMS/HSM and Group aggregate-signing boundaries. Do not revert current error wrapping, Go/Maven, or Console fixes. |
 

@@ -2,7 +2,7 @@
 
 [简体中文](helm-replication-preview.zh-CN.md) · [Documentation index](README.md)
 
-Helm Hosted→Hosted replication copies a complete chart and optional provenance within one installation, producing a target publication with independent objects. It uses the existing default-off `NOTARX_HELM_PREVIEW_ENABLED` flag and remains a traditional HTTP Helm preview. Apply migration `000188` before enabling it. API nodes create and read jobs; workers execute them only when `NOTARX_WORKER_FORMATS` selects `helm` and `NOTARX_WORKER_KINDS` selects `replication`.
+Helm Hosted→Hosted replication copies a complete chart and optional provenance within one installation, producing a target publication with independent objects. It uses the existing default-off `NOTARX_HELM_PREVIEW_ENABLED` flag and remains a traditional HTTP Helm preview. The schema is part of the baseline migration (`000001_baseline.sql`); apply migrations with the standard runner before enabling it. API nodes create and read jobs; workers execute them only when `NOTARX_WORKER_FORMATS` selects `helm` and `NOTARX_WORKER_KINDS` selects `replication`.
 
 ## Freeze a bounded plan
 

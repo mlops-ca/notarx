@@ -58,7 +58,7 @@ The lifecycle response includes each package's server-generated `poolPath`, used
 
 ## Upgrade and verification
 
-Migration `000117_native_apt_lifecycle.sql` is additive and does not rewrite historical migrations. Take a consistent PostgreSQL/RustFS backup and stop all old writer nodes and workers before migration. Do not mix binaries that do not enforce deletion barriers.
+The lifecycle schema is part of the baseline migration (`000001_baseline.sql`); later schema changes are additive forward migrations that never rewrite released ones. Take a consistent PostgreSQL/RustFS backup and stop all old writer nodes and workers before migration. Do not mix binaries that do not enforce deletion barriers.
 
 Existing nonempty v1 archives remain readable without byte changes. Empty snapshots use the v1 archive structure, but older validators reject an empty package set. Older binaries also do not understand pruned state or deletion barriers. Down migration explicitly refuses to run; rollback requires restoring the pre-upgrade database, objects and matching binary, not merely switching the image.
 

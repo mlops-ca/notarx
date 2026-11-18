@@ -7,7 +7,6 @@ import (
 	"database/sql"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -68,15 +67,32 @@ func presetDatabase(t *testing.T, existing bool) *sql.DB {
 			t.Fatal(err)
 		}
 	}
-	migration, err := os.ReadFile(filepath.Join("..", "..", "..", "migrations", "000174_installation_repository_presets.sql"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(string(migration)); err != nil {
+	if _, err := db.Exec(presetsMigration); err != nil {
 		t.Fatal(err)
 	}
 	return db
 }
+
+// presetsMigration recreates, inside the isolated schema, the state an
+// installation reaches for installation_repository_presets: the table, and a
+// row that is 'pending' on an empty catalog or 'skipped_existing' when the
+// administrator already owns repositories or groups. The baseline seeds only
+// the empty-installation row (ADR 0015), so the existing-catalog branch is kept
+// here to exercise the store against both starting states.
+const presetsMigration = `CREATE TABLE installation_repository_presets (
+    singleton BOOLEAN PRIMARY KEY DEFAULT true CHECK (singleton),
+    catalog_version TEXT NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('pending', 'applied', 'skipped_existing')),
+    repositories_created INTEGER NOT NULL DEFAULT 0 CHECK (repositories_created >= 0),
+    groups_created INTEGER NOT NULL DEFAULT 0 CHECK (groups_created >= 0),
+    finished_at TIMESTAMPTZ
+);
+INSERT INTO installation_repository_presets (singleton, catalog_version, state, finished_at)
+SELECT true, 'standard-v1',
+    CASE WHEN EXISTS(SELECT 1 FROM hosted_repositories) OR EXISTS(SELECT 1 FROM hosted_groups)
+         THEN 'skipped_existing' ELSE 'pending' END,
+    CASE WHEN EXISTS(SELECT 1 FROM hosted_repositories) OR EXISTS(SELECT 1 FROM hosted_groups)
+         THEN now() ELSE NULL END;`
 
 func TestPostgresPresetsConcurrentInitializationAndAdministratorLifecycle(t *testing.T) {
 	db := presetDatabase(t, false)

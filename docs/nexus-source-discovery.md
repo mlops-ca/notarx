@@ -132,7 +132,7 @@ configuration. `invalid` and `unsupported` make `valid: false`. The preview writ
 no source or target business resources. Actual provisioning continues to use the
 existing supported repository/Group contracts.
 
-The PostgreSQL migration is append-only `000146_nexus_migration_sources.sql`.
+The PostgreSQL schema for migration sources is part of the baseline migration `000001_baseline.sql`.
 Synthetic Nexus fixtures cover pagination, release/MIXED/SNAPSHOT, multiple
 repositories, unknown types, interruption/cycles, hostile links, permissions, TLS,
 timeouts, budgets and operator private-address policy. Real PostgreSQL tests cover

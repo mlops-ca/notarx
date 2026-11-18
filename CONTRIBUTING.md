@@ -238,8 +238,9 @@ regenerates and compares file hashes so uncommitted generated changes remain
 reviewable. The lane runner controls run with
 `python3 -B -m unittest discover -s scripts/tests -p test_ci_contract.py`.
 A failing lane uploads `contract-<lane>-<attempt>` with its step logs and raw
-producer reports. The upstream `upgrade-readiness` step is not run in CI (ADR
-0015, [#39](https://github.com/mlops-ca/notarx/issues/39)).
+producer reports. `upgrade-readiness` is not run in CI until a stable notarx release tag exists (ADR
+0015); `make backup-transfer-test` runs the baseline-plus-synthetic-`000002`
+upgrade fixture meanwhile.
 
 ## Documentation conventions
 
@@ -301,16 +302,44 @@ titles, and complete site-map coverage. See the
 
 ## Database migrations
 
-Migrations are append-only and are applied before Gateway nodes start. The
+Migrations are forward-only and are applied before Gateway nodes start. The
 database records both migration filenames and SHA-256 checksums in
-`artifact_gateway_schema_migrations`. Validate a migration with:
+`notarx_schema_migrations`; a recorded file whose checksum changed aborts the
+run. Validate a migration with:
 
 ```sh
+make migration-check
 make integration-test
 ```
 
 The integration suite applies all migrations to a clean PostgreSQL database
 and verifies that a second run is a no-op.
+
+Rules (ADR 0015):
+
+- The schema starts from `migrations/000001_baseline.sql`, a normalised
+  `pg_dump`. Never edit it in place; schema changes are new files
+  `000002_<snake_case>.sql`, `000003_...`, with a unique, gap-free 6-digit
+  prefix.
+- Forward-only, expand/contract: a release may add objects and backfill. It may
+  drop or rename only objects that the previous minor release no longer reads.
+  There is no Down section.
+- Data backfills live in numbered migrations, never in the baseline. The
+  baseline seeds only the four singleton rows the code expects.
+- `pg_trgm` is required (trigram indexes). `make preflight` and the migration
+  runner check that the extension is installed or creatable before the first
+  statement.
+- Before the first stable release (`vX.Y.Z`, ADR 0024) databases are disposable:
+  the baseline is regenerated once before the tag, and you recreate your
+  development database. After that tag, released migrations are immutable.
+
+`make migration-check` (`scripts/migration-immutability-check.sh`) runs in CI
+and in `make preflight`. It always rejects duplicate, out-of-sequence or gapped
+prefixes and names that do not match `NNNNNN_<snake_case>.sql`. Once a stable
+tag exists it also fails when a file that exists at the latest stable tag (the
+highest tag matching `^v[0-9]+\.[0-9]+\.[0-9]+$`; nightly pre-releases are
+ignored) differs from that tag. It needs the tags, so use a full clone.
+`bash scripts/migration-immutability-check-test.sh` runs its fixtures.
 
 Integration lifecycle commands explicitly use the `artifact-gateway-integration`
 Compose project and `/dev/null` as the environment file. They ignore the checkout

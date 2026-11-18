@@ -78,7 +78,7 @@ healthcheck="$workdir/unpacked/gateway-healthcheck"
 test -x "$gateway"
 test -x "$healthcheck"
 test -x "$workdir/unpacked/run-migrations.sh"
-test -f "$workdir/unpacked/migrations/000001_initial.sql"
+test -f "$workdir/unpacked/migrations/000001_baseline.sql"
 test -f "$workdir/unpacked/artifact-gateway.env.example"
 test -f "$workdir/unpacked/INSTALL.txt"
 

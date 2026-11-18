@@ -41,4 +41,4 @@ registry = "sparse+https://gateway.example/cargo/crates-io-proxy/"
 
 Run `cargo build` or `cargo install` normally. The Proxy validates the upstream checksum before making `.crate` bytes visible and can serve cached versions when upstream is offline. An uncached version still needs upstream access. Proxy and Group reject publish, yank, and unyank.
 
-The verified client baseline is Cargo 1.96.0. Run `make cargo-contract`, `make integration-test`, `make backup-restore-readiness`, and `make cargo-upgrade-readiness` for the repository's client and persistent recovery gates. These source and test claims do not assert that an existing deployment has been upgraded.
+The verified client baseline is Cargo 1.96.0. Run `make cargo-contract`, `make integration-test`, and `make backup-restore-readiness` for the repository's client and persistent recovery gates. These source and test claims do not assert that an existing deployment has been upgraded.

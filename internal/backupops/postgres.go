@@ -30,7 +30,7 @@ func (p Postgres) Ledger(ctx context.Context) ([]byte, error) {
 		return nil, errors.New("database unavailable")
 	}
 	defer func() { _ = conn.Close(ctx) }()
-	rows, err := conn.Query(ctx, "SELECT filename,checksum FROM artifact_gateway_schema_migrations ORDER BY filename")
+	rows, err := conn.Query(ctx, "SELECT filename,checksum FROM notarx_schema_migrations ORDER BY filename")
 	if err != nil {
 		return nil, errors.New("schema unavailable")
 	}

@@ -217,7 +217,7 @@ func Export(ctx context.Context, source FrozenSource, directory string, release 
 	m.CompletedAt = time.Now().UTC()
 	m.Metadata = &metaFile
 	m.Database = backupmanifest.DatabaseExport{Format: "pg-custom-v1", File: dumpFile}
-	m.Schema = backupmanifest.SchemaExport{Format: "gateway-migrations-tsv-v1", File: schemaFile}
+	m.Schema = backupmanifest.SchemaExport{Format: "notarx-migrations-tsv-v1", File: schemaFile}
 	m.Objects = backupmanifest.ObjectExport{Format: "s3-bytes-v1", Inventory: indexFile, Count: &r.VerifiedObjects, Bytes: &r.VerifiedBytes}
 	for i := range m.Writers.Writers {
 		m.Writers.Writers[i].StopConfirmed = true
