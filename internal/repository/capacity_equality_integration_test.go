@@ -8,7 +8,9 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -36,6 +38,7 @@ type counterEquality struct {
 var counterEqualityCases = map[string]counterEquality{
 	"raw":   {repoFormat: FormatRaw, run: rawCounterEquality, edge: rawCounterEdge},
 	"go":    {repoFormat: FormatGo, run: goCounterEquality, edge: goCounterEdge},
+	"apt":   {repoFormat: FormatAPT, run: aptCounterEquality, edge: aptCounterEdge},
 	"cargo": {repoFormat: FormatCargo, run: cargoCounterEquality, edge: cargoCounterEdge},
 	"npm":   {repoFormat: FormatNPM, run: npmCounterEquality, edge: npmCounterEdge},
 	"pypi":  {repoFormat: FormatPyPI, run: pypiCounterEquality, edge: pypiCounterEdge},
@@ -543,6 +546,151 @@ func cargoCounterEdge(t *testing.T, ctx context.Context, store *PostgresStore, r
 		go func() {
 			defer wg.Done()
 			switch _, err := cargoCommit(t, ctx, store, repo, "edge-crate", "1.0."+strconv.Itoa(index), size); {
+			case err == nil:
+				acc.Add(1)
+			case IsQuotaExceeded(err):
+				rej.Add(1)
+			default:
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	return acc.Load(), rej.Load()
+}
+
+// aptPackage stages one package revision through a publication session.
+type aptStaged struct {
+	Revision  APTPackageRevision
+	SessionID string
+}
+
+func aptPackage(t *testing.T, ctx context.Context, store *PostgresStore, repo HostedRepository, name string, size int64) (aptStaged, error) {
+	t.Helper()
+	digest := uniqueDigest()
+	objectKey := "native/apt/sha256/" + strings.TrimPrefix(digest, "sha256:")
+	objectName := name + "_1.0-1_amd64.deb"
+	session := APTPublicationSession{
+		ID: uuid.NewString(), RepositoryID: repo.ID, Suite: "stable", Component: "main", Publisher: "ci",
+		ObjectName: objectName, DeclaredDigest: digest, DeclaredSize: size,
+		State: APTPublicationSessionOpen, ExpiresAt: time.Now().Add(time.Hour),
+	}
+	if _, _, err := store.CreateAPTPublicationSessionIdempotently(ctx, session, "ci", "apt/"+repo.ID, "key-"+session.ID, "payload-"+session.ID); err != nil {
+		return aptStaged{}, err
+	}
+	if err := store.BeginAPTPackageUpload(ctx, session.ID, objectKey); err != nil {
+		return aptStaged{}, err
+	}
+	revision, err := store.CompleteAPTPackageUpload(ctx, session.ID, APTPackageRevision{
+		ID: uuid.NewString(), RepositoryID: repo.ID, Package: name, Version: "1.0-1", Architecture: "amd64",
+		CanonicalIdentity: name + "@1.0-1#amd64", Digest: digest, ObjectKey: objectKey, Size: size, ObjectName: objectName, Publisher: "ci",
+	})
+	return aptStaged{Revision: revision, SessionID: session.ID}, err
+}
+
+// aptPublishSnapshot publishes a visible snapshot of the suite holding the given
+// revisions; marker changes the generated dists/ objects, so each snapshot has its own.
+func aptPublishSnapshot(t *testing.T, ctx context.Context, store *PostgresStore, repo HostedRepository, sequence int64, marker string, staged []aptStaged) {
+	t.Helper()
+	packages := make([]APTSnapshotPackage, 0, len(staged))
+	revisions := make([]APTPackageRevision, 0, len(staged))
+	for _, item := range staged {
+		revisions = append(revisions, item.Revision)
+		packages = append(packages, APTSnapshotPackage{PublicationSessionID: item.SessionID, PackageRevisionID: item.Revision.ID, Component: "main", Architecture: "amd64"})
+	}
+	snapshot, err := store.CreateAPTRepositorySnapshot(ctx, APTRepositorySnapshot{ID: uuid.NewString(), RepositoryID: repo.ID, Suite: "stable", Sequence: sequence, State: APTRepositorySnapshotBuilding}, packages)
+	if err != nil {
+		t.Fatal(err)
+	}
+	indexBody := []byte(marker + ":Packages")
+	indexSum := sha256.Sum256(indexBody)
+	indexDigest := "sha256:" + hex.EncodeToString(indexSum[:])
+	releaseBody := []byte(fmt.Sprintf("Suite: stable\nAcquire-By-Hash: yes\nSHA256:\n %s %16d main/binary-amd64/Packages\n", strings.TrimPrefix(indexDigest, "sha256:"), len(indexBody)))
+	bodies := map[string][]byte{
+		"dists/stable/Release": releaseBody, "dists/stable/InRelease": []byte(marker + ":InRelease"),
+		"dists/stable/Release.gpg": []byte(marker + ":Release.gpg"), "dists/stable/main/binary-amd64/Packages": indexBody,
+		"dists/stable/main/binary-amd64/by-hash/SHA256/" + strings.TrimPrefix(indexDigest, "sha256:"): indexBody,
+	}
+	assets := make([]APTSnapshotAsset, 0, len(bodies)+len(revisions))
+	for path, body := range bodies {
+		sum := sha256.Sum256(body)
+		digest := "sha256:" + hex.EncodeToString(sum[:])
+		assets = append(assets, APTSnapshotAsset{SnapshotID: snapshot.ID, RepositoryID: repo.ID, Path: path, Digest: digest, ObjectKey: "native/apt/sha256/" + strings.TrimPrefix(digest, "sha256:"), Size: int64(len(body)), ContentType: "text/plain"})
+	}
+	for _, revision := range revisions {
+		assets = append(assets, APTSnapshotAsset{SnapshotID: snapshot.ID, RepositoryID: repo.ID, Path: APTPoolPath("main", revision.Package, revision.ObjectName), Digest: revision.Digest, ObjectKey: revision.ObjectKey, Size: revision.Size, ContentType: "application/vnd.debian.binary-package"})
+	}
+	snapshot.State = APTRepositorySnapshotVisible
+	for _, asset := range assets {
+		switch asset.Path {
+		case "dists/stable/Release":
+			snapshot.ReleaseDigest = asset.Digest
+		case "dists/stable/InRelease":
+			snapshot.InReleaseDigest = asset.Digest
+		}
+	}
+	snapshot.SignerIdentity, snapshot.KeyFingerprint, snapshot.SignatureAlgorithm = "integration-signer", strings.Repeat("b", 40), "integration-fixture"
+	if _, err = store.PublishAPTRepositorySnapshotWithAudit(ctx, snapshot, assets, releaseBody, AuditRecord{Repository: repo.Name, Actor: "release-operator", Outcome: AuditResolved, Operation: "apt.repository_snapshot.publish", Status: 200}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func aptCounterEquality(t *testing.T, ctx context.Context, store *PostgresStore, repo HostedRepository, check func(string)) {
+	first, err := aptPackage(t, ctx, store, repo, "widget", 80)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("stage a package revision")
+	second, err := aptPackage(t, ctx, store, repo, "gadget", 120)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("stage a second package revision")
+	aptPublishSnapshot(t, ctx, store, repo, 1, "one", []aptStaged{first})
+	check("publish the first snapshot (generated objects become visible)")
+	aptPublishSnapshot(t, ctx, store, repo, 2, "two", []aptStaged{first, second})
+	check("publish a second snapshot that retires the first")
+	aptPublishSnapshot(t, ctx, store, repo, 3, "two", []aptStaged{first, second})
+	check("publish a third snapshot with the same generated objects")
+	// A proxy repository caches upstream objects; refreshed index files replace their bytes.
+	proxy, err := store.CreateHostedRepository(ctx, HostedRepository{ID: uuid.NewString(), Name: "apt-proxy-counter-" + uuid.NewString(), Format: FormatAPT, Type: RepositoryTypeProxy, Endpoint: "https://deb.example"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = store.db.Exec(`DELETE FROM hosted_repositories WHERE id=$1`, proxy.ID) })
+	cache := func(path string, size int64, step string) {
+		t.Helper()
+		digest := uniqueDigest()
+		if _, err := store.CacheAPTAsset(ctx, APTAsset{RepositoryID: proxy.ID, SourceVersion: proxy.Version, Path: path, Digest: digest, ObjectKey: "native/apt/" + uuid.NewString(), Size: size, ContentType: "text/plain", SourceURL: "https://deb.example/" + path}); err != nil {
+			t.Fatalf("%s: %v", step, err)
+		}
+		assertCounterEqualsUsage(t, store, proxy, step)
+	}
+	cache("pool/main/h/hello/hello_1.deb", 50, "cache a package")
+	cache("dists/bookworm/InRelease", 10, "cache an index")
+	cache("dists/bookworm/InRelease", 25, "refresh the index with a larger object")
+	cache("dists/bookworm/InRelease", 5, "refresh the index with a smaller object")
+	var used int64
+	if err = store.db.QueryRow(`SELECT bytes FROM repository_usage_counters WHERE repository_id=$1::uuid`, repo.ID).Scan(&used); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.ReplaceRepositoryCapacityQuota(ctx, repo.ID, used); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = aptPackage(t, ctx, store, repo, "overflow", 1); !IsQuotaExceeded(err) {
+		t.Fatalf("stage over quota = %v, want quota exceeded", err)
+	}
+	check("rejected package over quota")
+}
+
+func aptCounterEdge(t *testing.T, ctx context.Context, store *PostgresStore, repo HostedRepository, size int64, workers int) (accepted, rejected int64) {
+	var acc, rej atomic.Int64
+	var wg sync.WaitGroup
+	for index := range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			switch _, err := aptPackage(t, ctx, store, repo, "edge"+string(rune('a'+index)), size); {
 			case err == nil:
 				acc.Add(1)
 			case IsQuotaExceeded(err):

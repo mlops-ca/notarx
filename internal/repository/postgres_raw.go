@@ -227,7 +227,7 @@ func (d rawUsageDelta) reserve(ctx context.Context, tx *sql.Tx, repositoryID str
 // path, so the usage delta computed from the previous reference is exact. It returns
 // the size the path counted before the write (0 and false when absent).
 func lockRawPath(ctx context.Context, tx *sql.Tx, repositoryID, path string) (size int64, exists bool, err error) {
-	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text,0))`, "raw:"+repositoryID+":"+path); err != nil {
+	if err = lockUsagePath(ctx, tx, "raw:"+repositoryID+":"+path); err != nil {
 		return 0, false, err
 	}
 	err = tx.QueryRowContext(ctx, `SELECT o.size FROM native_raw_assets a JOIN native_raw_objects o ON o.digest=a.digest WHERE a.repository_id=$1::uuid AND a.path=$2`, repositoryID, path).Scan(&size)

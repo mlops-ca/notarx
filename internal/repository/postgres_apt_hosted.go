@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/mlops-ca/notarx/internal/capacity"
 	"strings"
 	"time"
 )
@@ -237,7 +238,7 @@ func (s *PostgresStore) completeAPTPackageUpload(ctx context.Context, id string,
 	if !revision.CreatedAt.IsZero() {
 		revisionCreatedAt = revision.CreatedAt
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO native_apt_package_revisions
+	inserted, err := tx.ExecContext(ctx, `INSERT INTO native_apt_package_revisions
 		(id,repository_id,package_name,version,architecture,canonical_identity,digest,object_key,size,object_name,publisher,created_at)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,COALESCE($12,clock_timestamp()))
 		ON CONFLICT (repository_id,canonical_identity) DO NOTHING`, revision.ID, revision.RepositoryID, revision.Package,
@@ -246,6 +247,7 @@ func (s *PostgresStore) completeAPTPackageUpload(ctx context.Context, id string,
 	if err != nil {
 		return APTPackageRevision{}, err
 	}
+	revisionInserted, _ := inserted.RowsAffected()
 	var stored APTPackageRevision
 	err = scanAPTPackageRevision(tx.QueryRowContext(ctx, `SELECT `+aptPackageRevisionColumns+` FROM native_apt_package_revisions WHERE repository_id=$1 AND canonical_identity=$2 FOR UPDATE`, revision.RepositoryID, revision.CanonicalIdentity), &stored)
 	if err != nil {
@@ -263,6 +265,11 @@ func (s *PostgresStore) completeAPTPackageUpload(ctx context.Context, id string,
 	}
 	if audit != nil {
 		if err = insertAudit(ctx, tx, *audit); err != nil {
+			return APTPackageRevision{}, err
+		}
+	}
+	if revisionInserted == 1 {
+		if err = capacity.Reserve(ctx, tx, stored.RepositoryID, stored.Size, 1); err != nil {
 			return APTPackageRevision{}, err
 		}
 	}
@@ -621,6 +628,12 @@ func publishAPTRepositorySnapshotTx(ctx context.Context, tx *sql.Tx, snapshot AP
 	if err = checkAPTAssetsAdmissionTx(ctx, tx, snapshot.RepositoryID, assets); err != nil {
 		return APTRepositorySnapshot{}, err
 	}
+	// The repository row lock above serialises snapshot visibility changes, so the usage the
+	// visible snapshots' generated objects contribute can be measured before and after.
+	generatedBefore, err := aptGeneratedUsage(ctx, tx, snapshot.RepositoryID)
+	if err != nil {
+		return APTRepositorySnapshot{}, err
+	}
 	var current APTRepositorySnapshot
 	if err = scanAPTRepositorySnapshot(tx.QueryRowContext(ctx, `SELECT `+aptRepositorySnapshotColumns+` FROM native_apt_repository_snapshots WHERE id=$1 FOR UPDATE`, snapshot.ID), &current); errors.Is(err, sql.ErrNoRows) {
 		return APTRepositorySnapshot{}, ErrNotFound
@@ -776,6 +789,15 @@ func publishAPTRepositorySnapshotTx(ctx context.Context, tx *sql.Tx, snapshot AP
 	}
 	if err = insertAudit(ctx, tx, audit); err != nil {
 		return APTRepositorySnapshot{}, err
+	}
+	generatedAfter, err := aptGeneratedUsage(ctx, tx, snapshot.RepositoryID)
+	if err != nil {
+		return APTRepositorySnapshot{}, err
+	}
+	if delta := generatedAfter.minus(generatedBefore); delta != (aptUsage{}) {
+		if err = capacity.Reserve(ctx, tx, snapshot.RepositoryID, delta.bytes, delta.objects); err != nil {
+			return APTRepositorySnapshot{}, err
+		}
 	}
 	return snapshot, nil
 }

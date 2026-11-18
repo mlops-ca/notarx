@@ -58,3 +58,11 @@ func (d *usageDelta) reserve(ctx context.Context, tx *sql.Tx) error {
 	}
 	return nil
 }
+
+// lockUsagePath takes a transaction-scoped advisory lock on key, so writers of one asset path
+// (including the first insert of an absent path) compute their usage delta from the row
+// the previous writer committed.
+func lockUsagePath(ctx context.Context, tx *sql.Tx, key string) error {
+	_, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text,0))`, key)
+	return err
+}

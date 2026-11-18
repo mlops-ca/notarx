@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/mlops-ca/notarx/internal/capacity"
 )
 
 func (s *PostgresStore) LockAPTObject(ctx context.Context, objectKey string) (func(), error) {
@@ -27,6 +28,18 @@ func (s *PostgresStore) CacheAPTAsset(ctx context.Context, incoming APTAsset) (A
 	}
 	defer func() { _ = tx.Rollback() }()
 	if err := checkProxySourceVersion(ctx, tx, incoming.RepositoryID, incoming.SourceVersion); err != nil {
+		return APTAsset{}, err
+	}
+	// Serialise writers of one path (including the first insert) so the usage delta computed
+	// from the previous row is exact.
+	if err = lockUsagePath(ctx, tx, "apt:"+incoming.RepositoryID+":"+incoming.Path); err != nil {
+		return APTAsset{}, err
+	}
+	var previousSize int64
+	previousExisted := true
+	if err = tx.QueryRowContext(ctx, `SELECT size FROM native_apt_assets WHERE repository_id=$1::uuid AND path=$2`, incoming.RepositoryID, incoming.Path).Scan(&previousSize); errors.Is(err, sql.ErrNoRows) {
+		previousExisted = false
+	} else if err != nil {
 		return APTAsset{}, err
 	}
 	var stored APTAsset
@@ -53,6 +66,15 @@ func (s *PostgresStore) CacheAPTAsset(ctx context.Context, incoming APTAsset) (A
 	}
 	if stored.Digest != incoming.Digest || stored.ObjectKey != incoming.ObjectKey || stored.Size != incoming.Size || stored.SourceURL != incoming.SourceURL {
 		return APTAsset{}, ErrUpstreamChanged
+	}
+	delta := aptUsage{bytes: stored.Size - previousSize}
+	if !previousExisted {
+		delta.objects = 1
+	}
+	if delta != (aptUsage{}) {
+		if err = capacity.Reserve(ctx, tx, stored.RepositoryID, delta.bytes, delta.objects); err != nil {
+			return APTAsset{}, err
+		}
 	}
 	return stored, tx.Commit()
 }
