@@ -6,7 +6,7 @@ import (
 	"database/sql"
 	"errors"
 
-	"github.com/ccsert/artifact-gateway/internal/nexussource"
+	"github.com/mlops-ca/notarx/internal/nexussource"
 )
 
 type Store struct{ db *sql.DB }

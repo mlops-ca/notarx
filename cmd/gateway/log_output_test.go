@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/config"
-	"github.com/ccsert/artifact-gateway/internal/operationalog"
+	"github.com/mlops-ca/notarx/internal/config"
+	"github.com/mlops-ca/notarx/internal/operationalog"
 )
 
 func TestRuntimeLogOutputClosesAfterRuntimeCleanup(t *testing.T) {

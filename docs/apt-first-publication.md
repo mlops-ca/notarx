@@ -5,7 +5,7 @@
 The Console can publish the first signed snapshot of an empty suite in an APT
 Hosted Repository. This is part of the existing operator preview. It does not
 provide production key custody, install alerts, distribute trusted public keys,
-or complete formal Hosted admission tracked by [#305](https://github.com/ccsert/artifact-gateway/issues/305).
+or complete formal Hosted admission tracked by [#305](https://github.com/mlops-ca/notarx/issues/305).
 
 An operator needs Repository administrator access. The Gateway must already have
 the APT publication service and a trusted signer configured. See

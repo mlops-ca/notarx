@@ -11,7 +11,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	rawmaintenance "github.com/ccsert/artifact-gateway/internal/maintenance/raw"
+	rawmaintenance "github.com/mlops-ca/notarx/internal/maintenance/raw"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -21,9 +21,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func TestPostgresNativeRawStateTransitions(t *testing.T) {

@@ -3,8 +3,8 @@ package repository
 import (
 	"context"
 	"errors"
-	"github.com/ccsert/artifact-gateway/internal/quotaalert"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/quotaalert"
 	"testing"
 	"time"
 )

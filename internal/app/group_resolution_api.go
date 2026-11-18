@@ -3,8 +3,8 @@ package app
 import (
 	"net/http"
 
-	adminopenapi "github.com/ccsert/artifact-gateway/internal/admin/openapi"
 	"github.com/google/uuid"
+	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
 )
 
 // GetGroupResolution inspects configuration using the protocol resolver itself.

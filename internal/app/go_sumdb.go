@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/egress"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/egress"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 // goSumDBResponseLimit bounds one mirrored checksum database response. Lookup

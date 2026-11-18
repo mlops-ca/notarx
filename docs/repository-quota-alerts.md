@@ -4,11 +4,11 @@
 
 This default-off finite evaluator connects sustained repository logical quota
 breaches to PostgreSQL state/events and the [existing TLS email channel](email-notification-delivery.md).
-[#237](https://github.com/ccsert/artifact-gateway/issues/237) delivers part of
-[#211](https://github.com/ccsert/artifact-gateway/issues/211),
-[#212](https://github.com/ccsert/artifact-gateway/issues/212),
-[#229](https://github.com/ccsert/artifact-gateway/issues/229) and
-[#230](https://github.com/ccsert/artifact-gateway/issues/230).
+[#237](https://github.com/mlops-ca/notarx/issues/237) delivers part of
+[#211](https://github.com/mlops-ca/notarx/issues/211),
+[#212](https://github.com/mlops-ca/notarx/issues/212),
+[#229](https://github.com/mlops-ca/notarx/issues/229) and
+[#230](https://github.com/mlops-ca/notarx/issues/230).
 It does not evaluate local mounts or 5xx. S3/NAS physical pool capacity stays
 unknown. Platform administrators can manage rules and read safe delivery evidence
 in Console under **System → Quota alerts** (`/system?tab=alerts`).

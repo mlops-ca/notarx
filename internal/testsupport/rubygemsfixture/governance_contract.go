@@ -5,14 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	protocol "github.com/ccsert/artifact-gateway/internal/protocol/rubygems"
+	protocol "github.com/mlops-ca/notarx/internal/protocol/rubygems"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	d "github.com/ccsert/artifact-gateway/internal/rubygemspublication"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/repository"
+	d "github.com/mlops-ca/notarx/internal/rubygemspublication"
 )
 
 func GovernanceContract(t *testing.T, store d.Store, repo repository.HostedRepository) {

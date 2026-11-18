@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	dist "github.com/ccsert/artifact-gateway/internal/rubygemsdistribution"
+	"github.com/mlops-ca/notarx/internal/repository"
+	dist "github.com/mlops-ca/notarx/internal/rubygemsdistribution"
 )
 
 type Memory struct {

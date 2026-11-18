@@ -30,18 +30,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/egress"
-	"github.com/ccsert/artifact-gateway/internal/nexusmigration"
-	migrationpg "github.com/ccsert/artifact-gateway/internal/nexusmigration/pgstore"
-	"github.com/ccsert/artifact-gateway/internal/nexussource"
-	sourcepg "github.com/ccsert/artifact-gateway/internal/nexussource/pgstore"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	pypi "github.com/ccsert/artifact-gateway/internal/protocol/pypi"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/secrets"
-	"github.com/ccsert/artifact-gateway/internal/testsupport"
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/mlops-ca/notarx/internal/egress"
+	"github.com/mlops-ca/notarx/internal/nexusmigration"
+	migrationpg "github.com/mlops-ca/notarx/internal/nexusmigration/pgstore"
+	"github.com/mlops-ca/notarx/internal/nexussource"
+	sourcepg "github.com/mlops-ca/notarx/internal/nexussource/pgstore"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	pypi "github.com/mlops-ca/notarx/internal/protocol/pypi"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/secrets"
+	"github.com/mlops-ca/notarx/internal/testsupport"
 )
 
 type pypiMigrationRemote struct {

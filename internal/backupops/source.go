@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ccsert/artifact-gateway/internal/backupmanifest"
+	"github.com/mlops-ca/notarx/internal/backupmanifest"
 )
 
 type WriterSpec struct {

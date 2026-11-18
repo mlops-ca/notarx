@@ -11,9 +11,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ccsert/artifact-gateway/internal/nexussource"
-	npmprotocol "github.com/ccsert/artifact-gateway/internal/protocol/npm"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/nexussource"
+	npmprotocol "github.com/mlops-ca/notarx/internal/protocol/npm"
 )
 
 // NPMSource is a format-owned read port, independent of ordinary asset reads.

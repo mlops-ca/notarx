@@ -1,6 +1,6 @@
 package app
 
-import mavenprotocol "github.com/ccsert/artifact-gateway/internal/protocol/maven"
+import mavenprotocol "github.com/mlops-ca/notarx/internal/protocol/maven"
 
 // Compatibility aliases retain the app composition surface while Maven cache
 // behavior is owned by the protocol module.

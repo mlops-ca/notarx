@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-GO_IMAGE := golang:1.26.10-alpine@sha256:9ce231b28998b32e116927c61aa5c406183061d4f3f2d61b292c88e7f6bdf7ca
+GO_IMAGE := golang:1.26.11-alpine@sha256:ecb67f987aa1a57794c91d19ade7ae0209f2f0f5496aaef9e6ae85ddf92d02ab
 LINT_IMAGE := golangci/golangci-lint:v2.12.2
 OPENAPI_TOOLS := tools/openapi
 CONSOLE_DIR := console
@@ -12,7 +12,7 @@ OPENAPI_BUNDLE := api/openapi/native-hosted-v1.json
 VERSION ?= $(shell tr -d '[:space:]' < VERSION)
 CLI_REVISION ?= $(shell git rev-parse --verify HEAD 2>/dev/null || printf 'unknown')
 CLI_TARGETS ?= linux/amd64 linux/arm64 darwin/amd64 darwin/arm64
-CLI_LDFLAGS = -s -w -X github.com/ccsert/artifact-gateway/internal/buildinfo.injectedVersion=$(VERSION) -X github.com/ccsert/artifact-gateway/internal/buildinfo.injectedRevision=$(CLI_REVISION)
+CLI_LDFLAGS = -s -w -X github.com/mlops-ca/notarx/internal/buildinfo.injectedVersion=$(VERSION) -X github.com/mlops-ca/notarx/internal/buildinfo.injectedRevision=$(CLI_REVISION)
 .PHONY: help dev-bootstrap dev dev-status dev-down local-dev-test rustfs-only-check kubernetes-local-check kubernetes-local-up kubernetes-local-status kubernetes-local-verify kubernetes-local-down reference-scanner-smoke cargo-contract openapi-dependency-test openapi-tools-ready console-codegen-ready raw-e2e conan-e2e native-maven-e2e native-oci-e2e native-raw-e2e native-npm-e2e native-pypi-e2e native-go-e2e native-apt-e2e apt-signer-rotation-e2e readiness-e2e resolver-rotation-e2e service-account-rotation-e2e oci-performance-e2e performance-baseline cache-operations-e2e backup-restore-readiness backup-transfer-test upgrade-readiness member-role-migration-report release-readiness-check release-version-check release-artifacts release-artifacts-test docs-check preflight evidence up down test api-contract cli-contract-check cli-test cli-e2e cli-runtime-e2e integration-test integration-down lint vet race coverage dependency-audit fmt cli-build build docker-build docker-test console-docker-build cli-docker-build migrate backup-drill restore-drill console-build console-typecheck console-check console-test console-api-check console-e2e console-visual console-visual-update openapi-bundle openapi-generate-admin openapi-check
 
 help:

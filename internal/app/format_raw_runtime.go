@@ -2,10 +2,10 @@ package app
 
 import (
 	"context"
-	adminopenapi "github.com/ccsert/artifact-gateway/internal/admin/openapi"
-	formatmodule "github.com/ccsert/artifact-gateway/internal/format"
-	rawformat "github.com/ccsert/artifact-gateway/internal/format/raw"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
+	formatmodule "github.com/mlops-ca/notarx/internal/format"
+	rawformat "github.com/mlops-ca/notarx/internal/format/raw"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 // This adapter supplies shared authorization/member ordering. Raw response,

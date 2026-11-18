@@ -7,8 +7,8 @@ import (
 	"io"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/capacityplan"
-	"github.com/ccsert/artifact-gateway/internal/nexussource"
+	"github.com/mlops-ca/notarx/internal/capacityplan"
+	"github.com/mlops-ca/notarx/internal/nexussource"
 )
 
 var (

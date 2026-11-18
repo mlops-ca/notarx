@@ -1,10 +1,10 @@
 package app
 
 import (
-	helmapi "github.com/ccsert/artifact-gateway/internal/admin/helm"
-	nugetapi "github.com/ccsert/artifact-gateway/internal/admin/nuget"
-	adminopenapi "github.com/ccsert/artifact-gateway/internal/admin/openapi"
-	rubygemsapi "github.com/ccsert/artifact-gateway/internal/admin/rubygems"
+	helmapi "github.com/mlops-ca/notarx/internal/admin/helm"
+	nugetapi "github.com/mlops-ca/notarx/internal/admin/nuget"
+	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
+	rubygemsapi "github.com/mlops-ca/notarx/internal/admin/rubygems"
 )
 
 // managementServer composes domain handlers. Generated route and parameter

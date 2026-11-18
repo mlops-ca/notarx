@@ -4,7 +4,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/ccsert/artifact-gateway/internal/protocol/cargo"
+	"github.com/mlops-ca/notarx/internal/protocol/cargo"
 )
 
 func (s *MemoryStore) listMemoryCargoBrowseNodes(repositoryID string, parent ArtifactBrowseParent) []ArtifactBrowseNode {

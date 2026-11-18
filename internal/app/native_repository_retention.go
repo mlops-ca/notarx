@@ -9,11 +9,11 @@ import (
 	"sort"
 	"time"
 
-	formatmodule "github.com/ccsert/artifact-gateway/internal/format"
-	rawformat "github.com/ccsert/artifact-gateway/internal/format/raw"
-	mavenprotocol "github.com/ccsert/artifact-gateway/internal/protocol/maven"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	formatmodule "github.com/mlops-ca/notarx/internal/format"
+	rawformat "github.com/mlops-ca/notarx/internal/format/raw"
+	mavenprotocol "github.com/mlops-ca/notarx/internal/protocol/maven"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 type repositoryRetentionStore interface {

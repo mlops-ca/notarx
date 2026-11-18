@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/protocol/cargo"
+	"github.com/mlops-ca/notarx/internal/protocol/cargo"
 )
 
 // CargoPublication is a committed Hosted version. Reservations and uploaded

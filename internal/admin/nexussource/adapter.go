@@ -9,11 +9,11 @@ import (
 	"net/http"
 	"time"
 
-	api "github.com/ccsert/artifact-gateway/internal/admin/openapi"
-	"github.com/ccsert/artifact-gateway/internal/authorization"
-	source "github.com/ccsert/artifact-gateway/internal/nexussource"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	api "github.com/mlops-ca/notarx/internal/admin/openapi"
+	"github.com/mlops-ca/notarx/internal/authorization"
+	source "github.com/mlops-ca/notarx/internal/nexussource"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 type Authenticator interface {

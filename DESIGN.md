@@ -138,7 +138,7 @@ components:
 
 ## Overview
 
-**Creative North Star: "The Refined Engineering Console"** (design language v2, [#319](https://github.com/ccsert/artifact-gateway/issues/319))
+**Creative North Star: "The Refined Engineering Console"** (design language v2, [#319](https://github.com/mlops-ca/notarx/issues/319))
 
 Artifact Gateway Console should feel like the control surface for a system whose claims can be proved, built with the care of a well-made developer tool. The visual language is calm, precise, and generous: neutral layers separated by hairline borders, open spacing, and a single foreground-colored primary action. Real status, immutable identity, policy boundaries, and recoverable actions receive attention before decoration. The default dark theme is a quiet, near-black workspace rather than a glowing dashboard; the light theme preserves the same hierarchy instead of becoming a separate product.
 

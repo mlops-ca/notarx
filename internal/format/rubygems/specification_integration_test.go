@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	protocol "github.com/ccsert/artifact-gateway/internal/protocol/rubygems"
-	gemfixture "github.com/ccsert/artifact-gateway/internal/testsupport/rubygemsfixture"
 	"github.com/google/uuid"
+	protocol "github.com/mlops-ca/notarx/internal/protocol/rubygems"
+	gemfixture "github.com/mlops-ca/notarx/internal/testsupport/rubygemsfixture"
 )
 
 func TestRubyGemsFixedOfficialSpecificationDateAndRequirePaths(t *testing.T) {

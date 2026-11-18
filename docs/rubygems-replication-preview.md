@@ -112,8 +112,8 @@ resource ownership and cleanup.
 
 This slice excludes Proxy/Group, promotion, federation, formal admission,
 scanning/GC, backup admission, Nexus migration and production deployment.
-[Parent #293](https://github.com/ccsert/artifact-gateway/issues/293) remains open;
-[implementation #472](https://github.com/ccsert/artifact-gateway/issues/472) covers
+[Parent #293](https://github.com/mlops-ca/notarx/issues/293) remains open;
+[implementation #472](https://github.com/mlops-ca/notarx/issues/472) covers
 only this preview. Local fixtures, CI, business migration and production remain
 separate acceptance layers. Native client configuration is described in the
 [Hosted preview guide](rubygems-hosted-preview.md).

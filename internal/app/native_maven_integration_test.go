@@ -17,10 +17,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	mavenprotocol "github.com/ccsert/artifact-gateway/internal/protocol/maven"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	mavenprotocol "github.com/mlops-ca/notarx/internal/protocol/maven"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func TestPostgresMavenProtocolPublishesDirectlyByDefault(t *testing.T) {

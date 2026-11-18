@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/requestcontext"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/requestcontext"
 )
 
 func (h *Module) ServeHTTP(w http.ResponseWriter, r *http.Request) {

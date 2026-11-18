@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 // PolicyChange uses the same durable subject and current administrator check as

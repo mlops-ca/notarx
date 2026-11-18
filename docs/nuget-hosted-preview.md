@@ -7,7 +7,7 @@ publication DTOs under `/api/v2/previews/nuget`, and a native `/nuget/{name}`
 protocol endpoint. It remains absent from the admitted format profiles, formal
 repository creation/catalog, and Console format selector. The separately enabled
 [Proxy/Group preview](nuget-proxy-group-preview.md) extends native reads.
-The [#449](https://github.com/ccsert/artifact-gateway/issues/449) governance slice
+The [#449](https://github.com/mlops-ca/notarx/issues/449) governance slice
 adds unlist/relist, retained tombstones and quarantine read enforcement. Symbols
 publication, signature verification, scanning, promotion/replication, retention,
 reclamation, Console and full governance admission remain tracked by #289.

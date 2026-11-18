@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/config"
+	"github.com/mlops-ca/notarx/internal/config"
 )
 
 func TestRepositoryPresetsOnlyRunOnEnabledAPINodes(t *testing.T) {

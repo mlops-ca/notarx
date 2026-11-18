@@ -16,12 +16,12 @@ import (
 	"testing"
 	"time"
 
-	rawformat "github.com/ccsert/artifact-gateway/internal/format/raw"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	rawprotocol "github.com/ccsert/artifact-gateway/internal/protocol/raw"
-	"github.com/ccsert/artifact-gateway/internal/replication"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	rawformat "github.com/mlops-ca/notarx/internal/format/raw"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	rawprotocol "github.com/mlops-ca/notarx/internal/protocol/raw"
+	"github.com/mlops-ca/notarx/internal/replication"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 type failOnceReplicationCheckpointPostgresStore struct {

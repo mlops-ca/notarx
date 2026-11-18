@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"sort"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 // Module is the identity of a format-owned implementation. Capabilities are

@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	protocol "github.com/ccsert/artifact-gateway/internal/protocol/rubygems"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	dist "github.com/ccsert/artifact-gateway/internal/rubygemsdistribution"
-	domain "github.com/ccsert/artifact-gateway/internal/rubygemspublication"
 	"github.com/google/uuid"
+	protocol "github.com/mlops-ca/notarx/internal/protocol/rubygems"
+	"github.com/mlops-ca/notarx/internal/repository"
+	dist "github.com/mlops-ca/notarx/internal/rubygemsdistribution"
+	domain "github.com/mlops-ca/notarx/internal/rubygemspublication"
 )
 
 type ReplicationStore interface {

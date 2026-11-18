@@ -11,13 +11,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/authorization"
-	formatmodule "github.com/ccsert/artifact-gateway/internal/format"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	protocol "github.com/ccsert/artifact-gateway/internal/protocol/rubygems"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	dist "github.com/ccsert/artifact-gateway/internal/rubygemsdistribution"
-	domain "github.com/ccsert/artifact-gateway/internal/rubygemspublication"
+	"github.com/mlops-ca/notarx/internal/authorization"
+	formatmodule "github.com/mlops-ca/notarx/internal/format"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	protocol "github.com/mlops-ca/notarx/internal/protocol/rubygems"
+	"github.com/mlops-ca/notarx/internal/repository"
+	dist "github.com/mlops-ca/notarx/internal/rubygemsdistribution"
+	domain "github.com/mlops-ca/notarx/internal/rubygemspublication"
 )
 
 type RepositoryStore interface {

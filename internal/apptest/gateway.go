@@ -5,8 +5,8 @@ package apptest
 import (
 	"net/http"
 
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 // Reporter is implemented by testing.T and log.Logger. Keeping this package

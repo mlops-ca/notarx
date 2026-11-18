@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/config"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	"github.com/ccsert/artifact-gateway/internal/secrets"
 	"github.com/jackc/pgx/v5"
+	"github.com/mlops-ca/notarx/internal/config"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/secrets"
 )
 
 type Status string

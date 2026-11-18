@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/operationalog"
-	"github.com/ccsert/artifact-gateway/internal/requestcontext"
 	"github.com/felixge/httpsnoop"
+	"github.com/mlops-ca/notarx/internal/operationalog"
+	"github.com/mlops-ca/notarx/internal/requestcontext"
 )
 
 type AccessLogOptions struct {

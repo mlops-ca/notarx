@@ -13,7 +13,7 @@ import (
 	"github.com/ProtonMail/go-crypto/openpgp"
 	"github.com/ProtonMail/go-crypto/openpgp/clearsign"
 	"github.com/ProtonMail/go-crypto/openpgp/packet"
-	helm "github.com/ccsert/artifact-gateway/internal/protocol/helm"
+	helm "github.com/mlops-ca/notarx/internal/protocol/helm"
 )
 
 type entry struct {

@@ -12,10 +12,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/cache"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/upstreamauth"
+	"github.com/mlops-ca/notarx/internal/cache"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/upstreamauth"
 )
 
 const defaultMaxObjectBytes = int64(1 << 30)

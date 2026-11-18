@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	adminopenapi "github.com/ccsert/artifact-gateway/internal/admin/openapi"
-	formatmodule "github.com/ccsert/artifact-gateway/internal/format"
-	rawformat "github.com/ccsert/artifact-gateway/internal/format/raw"
-	npmprotocol "github.com/ccsert/artifact-gateway/internal/protocol/npm"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
+	formatmodule "github.com/mlops-ca/notarx/internal/format"
+	rawformat "github.com/mlops-ca/notarx/internal/format/raw"
+	npmprotocol "github.com/mlops-ca/notarx/internal/protocol/npm"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func (h artifactManagementHandler) SearchRepositoryArtifacts(w http.ResponseWriter, r *http.Request, repositoryID adminopenapi.RepositoryId, params adminopenapi.SearchRepositoryArtifactsParams) {

@@ -9,9 +9,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ccsert/artifact-gateway/internal/nexussource"
-	"github.com/ccsert/artifact-gateway/internal/ocigraph"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/nexussource"
+	"github.com/mlops-ca/notarx/internal/ocigraph"
 )
 
 type ociInventory struct {

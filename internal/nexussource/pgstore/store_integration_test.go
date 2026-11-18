@@ -12,12 +12,12 @@ import (
 	"sync"
 	"testing"
 
-	source "github.com/ccsert/artifact-gateway/internal/nexussource"
-	"github.com/ccsert/artifact-gateway/internal/nexussource/pgstore"
-	"github.com/ccsert/artifact-gateway/internal/secrets"
-	"github.com/ccsert/artifact-gateway/internal/testsupport"
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	source "github.com/mlops-ca/notarx/internal/nexussource"
+	"github.com/mlops-ca/notarx/internal/nexussource/pgstore"
+	"github.com/mlops-ca/notarx/internal/secrets"
+	"github.com/mlops-ca/notarx/internal/testsupport"
 )
 
 func TestPostgresSourcePagingCASAndCredentialKeyLifecycle(t *testing.T) {

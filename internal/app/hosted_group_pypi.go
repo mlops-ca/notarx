@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/upstreamauth"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/upstreamauth"
 )
 
 type v2GroupPyPIHandler struct {

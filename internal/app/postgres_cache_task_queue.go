@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/database"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/database"
 )
 
 const (

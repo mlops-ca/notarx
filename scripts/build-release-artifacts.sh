@@ -126,7 +126,7 @@ fi
 
 workdir=$(mktemp -d)
 trap 'rm -rf "$workdir"' EXIT
-ldflags="-s -w -X github.com/ccsert/artifact-gateway/internal/buildinfo.injectedVersion=$version -X github.com/ccsert/artifact-gateway/internal/buildinfo.injectedRevision=$revision"
+ldflags="-s -w -X github.com/mlops-ca/notarx/internal/buildinfo.injectedVersion=$version -X github.com/mlops-ca/notarx/internal/buildinfo.injectedRevision=$revision"
 
 for target in "${targets[@]}"; do
   if [[ ! "$target" =~ ^(linux|darwin|windows)/(amd64|arm64)$ ]]; then
@@ -157,7 +157,7 @@ for target in "${targets[@]}"; do
     '   MIGRATION_DIR=./migrations ./run-migrations.sh' \
     '4. Export the required GATEWAY_* variables and start ./gateway.' \
     '' \
-    "Documentation: https://github.com/ccsert/artifact-gateway/blob/$revision/docs/getting-started.md" \
+    "Documentation: https://github.com/mlops-ca/notarx/blob/$revision/docs/getting-started.md" \
     > "$stage/INSTALL.txt"
 
   if [[ "$goos" == "windows" ]]; then
@@ -200,7 +200,7 @@ for target in "${targets[@]}"; do
     '3. Configure a profile in ~/.config/agctl/config.yaml (mode 0600) or export AGCTL_SERVER and AGCTL_TOKEN.' \
     '4. Point the client at a deployment, for example ./agctl info --server https://gateway.example.com' \
     '' \
-    "Documentation: https://github.com/ccsert/artifact-gateway/blob/$revision/docs/cli.md" \
+    "Documentation: https://github.com/mlops-ca/notarx/blob/$revision/docs/cli.md" \
     > "$agctl_stage/INSTALL.txt"
 
   if [[ "$goos" == "windows" ]]; then

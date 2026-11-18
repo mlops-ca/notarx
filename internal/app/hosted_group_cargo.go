@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/protocol/cargo"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/upstreamauth"
 	"github.com/felixge/httpsnoop"
+	"github.com/mlops-ca/notarx/internal/protocol/cargo"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/upstreamauth"
 	"golang.org/x/mod/semver"
 )
 

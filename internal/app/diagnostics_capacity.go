@@ -3,8 +3,8 @@ package app
 import (
 	"context"
 
-	adminopenapi "github.com/ccsert/artifact-gateway/internal/admin/openapi"
-	"github.com/ccsert/artifact-gateway/internal/localcapacity"
+	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
+	"github.com/mlops-ca/notarx/internal/localcapacity"
 )
 
 func diagnosticLocalCapacity(ctx context.Context, observer *localcapacity.Observer) *adminopenapi.DiagnosticLocalCapacity {

@@ -18,10 +18,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	ociprotocol "github.com/ccsert/artifact-gateway/internal/protocol/oci"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	ociprotocol "github.com/mlops-ca/notarx/internal/protocol/oci"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func TestPostgresRustFSOCIPromotionCopiesManifestAndMountsBlob(t *testing.T) {

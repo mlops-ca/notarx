@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	m "github.com/ccsert/artifact-gateway/internal/nexusmigration"
 	"github.com/google/uuid"
+	m "github.com/mlops-ca/notarx/internal/nexusmigration"
 )
 
 var _ m.ScheduleStore = (*Store)(nil)

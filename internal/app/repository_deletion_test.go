@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func TestRepositoryDeletionWorkerFinalizesDeletingRepositories(t *testing.T) {

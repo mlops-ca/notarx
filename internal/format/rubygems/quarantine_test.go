@@ -6,16 +6,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/ccsert/artifact-gateway/internal/authorization"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/authorization"
 	"io"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	domain "github.com/ccsert/artifact-gateway/internal/rubygemspublication"
+	"github.com/mlops-ca/notarx/internal/repository"
+	domain "github.com/mlops-ca/notarx/internal/rubygemspublication"
 )
 
 func policyPath(id string) string {

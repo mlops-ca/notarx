@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ccsert/artifact-gateway/internal/database"
+	"github.com/mlops-ca/notarx/internal/database"
 )
 
 // PostgresCacheControlStore stores cache indexes, negative entries, and GC

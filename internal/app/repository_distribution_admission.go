@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 // artifactDistributionDigests returns every immutable file digest published by

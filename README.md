@@ -16,10 +16,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ccsert/artifact-gateway/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ccsert/artifact-gateway/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="https://github.com/ccsert/artifact-gateway/releases/tag/v0.4.1"><img alt="Release 0.4.1" src="https://img.shields.io/badge/release-0.4.1-2563EB"></a>
+  <a href="https://github.com/mlops-ca/notarx/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/mlops-ca/notarx/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/mlops-ca/notarx/releases/tag/v0.4.1"><img alt="Release 0.4.1" src="https://img.shields.io/badge/release-0.4.1-2563EB"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-22C55E"></a>
-  <img alt="Go 1.26.10" src="https://img.shields.io/badge/Go-1.26.10-00ADD8?logo=go&logoColor=white">
+  <img alt="Go 1.26.11" src="https://img.shields.io/badge/Go-1.26.11-00ADD8?logo=go&logoColor=white">
   <img alt="PostgreSQL 16" src="https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white">
   <img alt="S3 compatible" src="https://img.shields.io/badge/Object_storage-S3_compatible-06B6D4">
   <img alt="Status: early release" src="https://img.shields.io/badge/status-early_release-6B7280">
@@ -102,7 +102,7 @@ restore workflows. Each area is tracked from the [documentation index](docs/READ
 
 ## Install 0.4.1
 
-The [0.4.1 Release](https://github.com/ccsert/artifact-gateway/releases/tag/v0.4.1)
+The [0.4.1 Release](https://github.com/mlops-ca/notarx/releases/tag/v0.4.1)
 contains Linux and macOS archives for amd64/arm64, the static Console bundle,
 resolved OpenAPI contracts, and `SHA256SUMS`. Every Gateway archive includes
 the server and healthcheck binaries, PostgreSQL migrations, a portable
@@ -138,7 +138,7 @@ the GitHub repository and GHCR package visibility.
 Prerequisites: Docker with Compose, Node.js 24+, npm, GNU Make, and OpenSSL.
 
 ```sh
-git clone https://github.com/ccsert/artifact-gateway.git
+git clone https://github.com/mlops-ca/notarx.git
 cd artifact-gateway
 make dev-bootstrap
 make dev

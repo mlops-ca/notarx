@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/protocol/cargo"
+	"github.com/mlops-ca/notarx/internal/protocol/cargo"
 )
 
 func (s *MemoryStore) ReserveCargoIdentity(ctx context.Context, claim CargoIdentityClaim) (CargoIdentityReservation, bool, error) {

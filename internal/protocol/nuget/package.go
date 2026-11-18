@@ -15,7 +15,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ccsert/artifact-gateway/internal/protocol/identity"
+	"github.com/mlops-ca/notarx/internal/protocol/identity"
 )
 
 const (

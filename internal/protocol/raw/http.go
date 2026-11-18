@@ -13,9 +13,9 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/ccsert/artifact-gateway/internal/artifacthttp"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/v2contract"
+	"github.com/mlops-ca/notarx/internal/artifacthttp"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/v2contract"
 )
 
 // Client fetches a complete canonical Raw representation from a member.

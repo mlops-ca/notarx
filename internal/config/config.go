@@ -13,12 +13,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/aptpublication"
-	"github.com/ccsert/artifact-gateway/internal/authorization"
-	"github.com/ccsert/artifact-gateway/internal/database"
-	"github.com/ccsert/artifact-gateway/internal/emailnotification"
-	"github.com/ccsert/artifact-gateway/internal/localcapacity"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/aptpublication"
+	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/database"
+	"github.com/mlops-ca/notarx/internal/emailnotification"
+	"github.com/mlops-ca/notarx/internal/localcapacity"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 // NodeRole controls which parts of the Gateway runtime are enabled. The

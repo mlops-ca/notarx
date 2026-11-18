@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/localcapacity"
+	"github.com/mlops-ca/notarx/internal/localcapacity"
 )
 
 func TestUnconfiguredObserverDoesNotProbeDefaultLocations(t *testing.T) {

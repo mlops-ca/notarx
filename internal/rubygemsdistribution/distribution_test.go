@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	dist "github.com/ccsert/artifact-gateway/internal/rubygemsdistribution"
 	"github.com/google/uuid"
+	dist "github.com/mlops-ca/notarx/internal/rubygemsdistribution"
 )
 
 func plan() dist.Plan {

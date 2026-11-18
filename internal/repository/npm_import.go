@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"sort"
 
-	"github.com/ccsert/artifact-gateway/internal/protocol/identity"
+	"github.com/mlops-ca/notarx/internal/protocol/identity"
 )
 
 // NPMImportStore is the narrow atomic publication port for a complete, verified

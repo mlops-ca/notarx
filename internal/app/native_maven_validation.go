@@ -7,7 +7,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/repository"
 	"golang.org/x/text/encoding/charmap"
 )
 

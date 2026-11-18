@@ -12,8 +12,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/protocol/cargo"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/protocol/cargo"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func TestReserveCargoPublicationIdentityValidatesBeforeWriting(t *testing.T) {

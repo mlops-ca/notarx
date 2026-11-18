@@ -3,9 +3,9 @@ package nexusmigration
 import (
 	"net/http"
 
-	api "github.com/ccsert/artifact-gateway/internal/admin/openapi"
-	m "github.com/ccsert/artifact-gateway/internal/nexusmigration"
 	"github.com/google/uuid"
+	api "github.com/mlops-ca/notarx/internal/admin/openapi"
+	m "github.com/mlops-ca/notarx/internal/nexusmigration"
 )
 
 func (h *BatchAdapter) beginSchedule(w http.ResponseWriter, r *http.Request, action, id string) (*operation, bool) {

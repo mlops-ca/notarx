@@ -12,10 +12,10 @@ import (
 	"sync"
 	"time"
 
-	protocol "github.com/ccsert/artifact-gateway/internal/protocol/rubygems"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/requestcontext"
-	domain "github.com/ccsert/artifact-gateway/internal/rubygemspublication"
+	protocol "github.com/mlops-ca/notarx/internal/protocol/rubygems"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/requestcontext"
+	domain "github.com/mlops-ca/notarx/internal/rubygemspublication"
 )
 
 type Store struct{ db, locks *sql.DB }

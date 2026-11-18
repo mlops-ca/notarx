@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/backupmanifest"
+	"github.com/mlops-ca/notarx/internal/backupmanifest"
 )
 
 func backupInput(t *testing.T) (string, []byte) {

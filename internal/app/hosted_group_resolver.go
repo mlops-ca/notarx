@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 // v2GroupResolver resolves protocol requests against a V2 HostedGroup. A V2

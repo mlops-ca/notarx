@@ -8,11 +8,11 @@ import (
 	"regexp"
 	"time"
 
-	formatmodule "github.com/ccsert/artifact-gateway/internal/format"
-	rawmaintenance "github.com/ccsert/artifact-gateway/internal/maintenance/raw"
-	rawprotocol "github.com/ccsert/artifact-gateway/internal/protocol/raw"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/scanning"
+	formatmodule "github.com/mlops-ca/notarx/internal/format"
+	rawmaintenance "github.com/mlops-ca/notarx/internal/maintenance/raw"
+	rawprotocol "github.com/mlops-ca/notarx/internal/protocol/raw"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/scanning"
 )
 
 func (*Module) Profile() repository.FormatProfile {

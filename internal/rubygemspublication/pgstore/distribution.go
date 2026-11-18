@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
-	protocol "github.com/ccsert/artifact-gateway/internal/protocol/rubygems"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	dist "github.com/ccsert/artifact-gateway/internal/rubygemsdistribution"
-	domain "github.com/ccsert/artifact-gateway/internal/rubygemspublication"
 	"github.com/google/uuid"
+	protocol "github.com/mlops-ca/notarx/internal/protocol/rubygems"
+	"github.com/mlops-ca/notarx/internal/repository"
+	dist "github.com/mlops-ca/notarx/internal/rubygemsdistribution"
+	domain "github.com/mlops-ca/notarx/internal/rubygemspublication"
 )
 
 const rubyGemsReplicationColumns = `id::text,plan_digest,source_repository_id::text,target_repository_id::text,actor,actor_kind,credential_id,user_id,session_id,session_version,credential_until,version::text,state,lease_owner,lease_token,lease_fence,lease_until,created_at,updated_at`

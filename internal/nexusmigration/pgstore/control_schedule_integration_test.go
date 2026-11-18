@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	m "github.com/ccsert/artifact-gateway/internal/nexusmigration"
-	"github.com/ccsert/artifact-gateway/internal/nexusmigration/pgstore"
 	"github.com/google/uuid"
+	m "github.com/mlops-ca/notarx/internal/nexusmigration"
+	"github.com/mlops-ca/notarx/internal/nexusmigration/pgstore"
 )
 
 func scheduleReplica(t *testing.T) (*pgstore.Store, string) {

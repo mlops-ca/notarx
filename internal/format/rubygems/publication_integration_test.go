@@ -9,13 +9,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/authorization"
-	"github.com/ccsert/artifact-gateway/internal/database"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/rubygemspublication/pgstore"
-	"github.com/ccsert/artifact-gateway/internal/testsupport"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/database"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/rubygemspublication/pgstore"
+	"github.com/mlops-ca/notarx/internal/testsupport"
 )
 
 func TestRubyGemsPostgresRustFSAtomicAuditInterruptionQuotaAndRestart(t *testing.T) {

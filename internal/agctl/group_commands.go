@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	adminopenapi "github.com/ccsert/artifact-gateway/internal/admin/openapi"
+	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 

@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	protocol "github.com/ccsert/artifact-gateway/internal/protocol/rubygems"
 	"github.com/google/uuid"
+	protocol "github.com/mlops-ca/notarx/internal/protocol/rubygems"
 )
 
 const MaxItems = 100

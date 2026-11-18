@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/requestcontext"
+	"github.com/mlops-ca/notarx/internal/requestcontext"
 )
 
 // memoryAuditBatch is private to a locked repository operation. Its context may

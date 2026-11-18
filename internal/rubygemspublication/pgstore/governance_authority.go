@@ -7,8 +7,8 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	domain "github.com/ccsert/artifact-gateway/internal/rubygemspublication"
+	"github.com/mlops-ca/notarx/internal/repository"
+	domain "github.com/mlops-ca/notarx/internal/rubygemspublication"
 )
 
 // All reads use this transaction and connection. Grant replacements lock the

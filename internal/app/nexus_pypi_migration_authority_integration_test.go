@@ -14,11 +14,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/authorization"
-	"github.com/ccsert/artifact-gateway/internal/nexusmigration"
-	migrationpg "github.com/ccsert/artifact-gateway/internal/nexusmigration/pgstore"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/nexusmigration"
+	migrationpg "github.com/mlops-ca/notarx/internal/nexusmigration/pgstore"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func (f *pypiMigrationPG) authorityRequest(auth Authenticator, token, method, path, version string, body any, keys ...string) *httptest.ResponseRecorder {

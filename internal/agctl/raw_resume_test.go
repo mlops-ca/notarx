@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/app"
-	"github.com/ccsert/artifact-gateway/internal/apptest"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/app"
+	"github.com/mlops-ca/notarx/internal/apptest"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func TestPublishRawResumableUsesRealProtocolAndReconcilesLostPatchResponse(t *testing.T) {

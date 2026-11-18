@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	m "github.com/ccsert/artifact-gateway/internal/nexusmigration"
+	m "github.com/mlops-ca/notarx/internal/nexusmigration"
 )
 
 func TestEntryResponseHidesPrivateMigrationMetadata(t *testing.T) {

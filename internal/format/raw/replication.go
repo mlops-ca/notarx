@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	"github.com/ccsert/artifact-gateway/internal/replication"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/replication"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 // Replication turns verified generic checkpoints into immutable Raw asset

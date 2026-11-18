@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/ccsert/artifact-gateway/internal/protocol/cargo"
-	"github.com/ccsert/artifact-gateway/internal/replication"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/protocol/cargo"
+	"github.com/mlops-ca/notarx/internal/replication"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 type NativeCargoPromotion struct {

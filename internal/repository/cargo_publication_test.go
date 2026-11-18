@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/protocol/cargo"
+	"github.com/mlops-ca/notarx/internal/protocol/cargo"
 )
 
 func cargoTestClaim(repositoryID, version, digestCharacter string) CargoIdentityClaim {

@@ -14,10 +14,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/secrets"
-	"github.com/ccsert/artifact-gateway/internal/upstreamauth"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/secrets"
+	"github.com/mlops-ca/notarx/internal/upstreamauth"
 )
 
 func hostedPackage(t *testing.T, f fixture, repo repository.HostedRepository, body []byte) {

@@ -71,7 +71,7 @@ discovery and identity boundaries below. Its pinned official-client gate covers
 private Basic/Bearer sources, complete transitive packages, upstream-unlisted
 exact versions and replay after source shutdown and storage restart. Search
 checks the full package ID before persisting a Group authority. This stage does
-not admit the format publicly. The [#449](https://github.com/ccsert/artifact-gateway/issues/449)
+not admit the format publicly. The [#449](https://github.com/mlops-ca/notarx/issues/449)
 [governance preview](nuget-hosted-preview.md#listing-and-retained-governance) adds
 local Hosted unlist/relist, retained tombstones, and optional quarantine read
 enforcement, including verified Proxy caches and pinned Group owners.

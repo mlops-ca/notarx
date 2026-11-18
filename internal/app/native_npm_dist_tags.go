@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	npmprotocol "github.com/ccsert/artifact-gateway/internal/protocol/npm"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	npmprotocol "github.com/mlops-ca/notarx/internal/protocol/npm"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 const (

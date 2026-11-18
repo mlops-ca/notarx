@@ -3,7 +3,7 @@ package ocidiscovery
 import (
 	"encoding/json"
 
-	"github.com/ccsert/artifact-gateway/internal/ocigraph"
+	"github.com/mlops-ca/notarx/internal/ocigraph"
 )
 
 type Requirement struct {

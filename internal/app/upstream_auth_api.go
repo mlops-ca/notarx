@@ -3,8 +3,8 @@ package app
 import (
 	"errors"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/secrets"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/secrets"
 )
 
 // upstreamAuthSecretPurpose binds every stored upstream credential ciphertext

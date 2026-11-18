@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func privateRejectSourceRebinding(t *testing.T, handler http.Handler, store GatewayStore, repo repository.HostedRepository, requests func() int32) {

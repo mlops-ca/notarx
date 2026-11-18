@@ -4,8 +4,8 @@ package repository
 
 import (
 	"context"
-	"github.com/ccsert/artifact-gateway/internal/quotaalert"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/quotaalert"
 	"os"
 	"testing"
 )

@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	m "github.com/ccsert/artifact-gateway/internal/nexusmigration"
-	"github.com/ccsert/artifact-gateway/internal/nexussource"
-	sourcepg "github.com/ccsert/artifact-gateway/internal/nexussource/pgstore"
 	"github.com/google/uuid"
+	m "github.com/mlops-ca/notarx/internal/nexusmigration"
+	"github.com/mlops-ca/notarx/internal/nexussource"
+	sourcepg "github.com/mlops-ca/notarx/internal/nexussource/pgstore"
 )
 
 func TestPostgresMigrationInventorySourceUpdateAfterFinalCheckCannotPublish(t *testing.T) {

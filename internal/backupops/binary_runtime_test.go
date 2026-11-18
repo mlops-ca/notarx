@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/backupmanifest"
+	"github.com/mlops-ca/notarx/internal/backupmanifest"
 )
 
 func TestBinaryRuntimePinsBelongToTrustedIndex(t *testing.T) {

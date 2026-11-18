@@ -7,8 +7,8 @@ import (
 	"errors"
 	"io"
 
-	conanprotocol "github.com/ccsert/artifact-gateway/internal/protocol/conan"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	conanprotocol "github.com/mlops-ca/notarx/internal/protocol/conan"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func validateConanPublication(ctx context.Context, objects ObjectStore, session repository.ConanPublishSession, uploads map[string]string) error {

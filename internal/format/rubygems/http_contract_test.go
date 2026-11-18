@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	gemfixture "github.com/ccsert/artifact-gateway/internal/testsupport/rubygemsfixture"
+	"github.com/mlops-ca/notarx/internal/repository"
+	gemfixture "github.com/mlops-ca/notarx/internal/testsupport/rubygemsfixture"
 )
 
 func TestRubyGemsHeadConditionalAndRangeKeepAuthorizedRepresentation(t *testing.T) {

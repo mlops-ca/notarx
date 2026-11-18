@@ -7,8 +7,8 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/egress"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/egress"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 const goProxyUserAgent = "Go-http-client/2.0 Artifact-Gateway/1.0"

@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"time"
 
-	npmprotocol "github.com/ccsert/artifact-gateway/internal/protocol/npm"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	npmprotocol "github.com/mlops-ca/notarx/internal/protocol/npm"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func (h nativeNPMHandler) serveNPMRevision(w http.ResponseWriter, r *http.Request, repo repository.HostedRepository, route npmprotocol.Route, actor string) {

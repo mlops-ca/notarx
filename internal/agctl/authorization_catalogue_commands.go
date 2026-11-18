@@ -12,8 +12,8 @@ import (
 	"os"
 	"strings"
 
-	adminopenapi "github.com/ccsert/artifact-gateway/internal/admin/openapi"
 	"github.com/google/uuid"
+	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
 )
 
 // These catalogues contain named scope sets and grant recipes. They do not

@@ -16,7 +16,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ccsert/artifact-gateway/internal/backupmanifest"
+	"github.com/mlops-ca/notarx/internal/backupmanifest"
 )
 
 var errRelease = errors.New("approved release and schema do not match backup")
@@ -93,7 +93,7 @@ func VerifyRelease(m backupmanifest.Manifest, release Release, ledger io.Reader)
 		// Published releases retain the module namespace used when built. Bind
 		// the command and linker identity to that same, exact namespace.
 		module := bi.Main.Path
-		if module != "github.com/ccsert/artifact-gateway" && module != "github.com/artifact-gateway/artifact-gateway" {
+		if module != "github.com/mlops-ca/notarx" && module != "github.com/artifact-gateway/artifact-gateway" {
 			return errRelease
 		}
 		prefix := module + "/internal/buildinfo."

@@ -12,8 +12,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/capacityplan"
-	"github.com/ccsert/artifact-gateway/internal/opsjson"
+	"github.com/mlops-ca/notarx/internal/capacityplan"
+	"github.com/mlops-ca/notarx/internal/opsjson"
 )
 
 const maxCapacityInputBytes = 8 << 20

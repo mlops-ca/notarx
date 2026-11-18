@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	dist "github.com/ccsert/artifact-gateway/internal/helmdistribution"
 	"github.com/google/uuid"
+	dist "github.com/mlops-ca/notarx/internal/helmdistribution"
 )
 
 func TestPostgresHelmReplicationStoreContract(t *testing.T) {

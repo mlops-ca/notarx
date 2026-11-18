@@ -13,11 +13,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	discovery "github.com/ccsert/artifact-gateway/internal/ocidiscovery"
-	"github.com/ccsert/artifact-gateway/internal/ocigraph"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	discovery "github.com/mlops-ca/notarx/internal/ocidiscovery"
+	"github.com/mlops-ca/notarx/internal/ocigraph"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 type discoveryFixtureObject struct {

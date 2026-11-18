@@ -7,9 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	adminopenapi "github.com/ccsert/artifact-gateway/internal/admin/openapi"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func TestGroupResolutionUsesRuntimeOrderAndExcludesUnavailableMembers(t *testing.T) {

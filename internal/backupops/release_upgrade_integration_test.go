@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/backupmanifest"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/backupmanifest"
 )
 
 const alertUpgradeBaseline = "ea60aea333b29bb60d4ac1b8e2b2a8720563726f"

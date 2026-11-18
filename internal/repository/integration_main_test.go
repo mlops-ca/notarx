@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/testsupport"
+	"github.com/mlops-ca/notarx/internal/testsupport"
 )
 
 func TestMain(m *testing.M) {

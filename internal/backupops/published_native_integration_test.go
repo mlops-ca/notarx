@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/backupmanifest"
+	"github.com/mlops-ca/notarx/internal/backupmanifest"
 )
 
 // The same owned PG/RustFS/source/sentinel fixture as the existing recovery

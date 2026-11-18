@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	aptprotocol "github.com/ccsert/artifact-gateway/internal/protocol/apt"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	aptprotocol "github.com/mlops-ca/notarx/internal/protocol/apt"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 const (

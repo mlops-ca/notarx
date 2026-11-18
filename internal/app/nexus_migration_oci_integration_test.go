@@ -11,12 +11,12 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/nexusmigration"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/testsupport"
-	"github.com/ccsert/artifact-gateway/internal/testsupport/ocifixture"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/nexusmigration"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/testsupport"
+	"github.com/mlops-ca/notarx/internal/testsupport/ocifixture"
 )
 
 type ownedNexusOCIStore struct {

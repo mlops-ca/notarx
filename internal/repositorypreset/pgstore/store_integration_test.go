@@ -12,11 +12,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/repositorypreset/pgstore"
-	"github.com/ccsert/artifact-gateway/internal/testsupport"
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/repositorypreset/pgstore"
+	"github.com/mlops-ca/notarx/internal/testsupport"
 )
 
 func presetDatabase(t *testing.T, existing bool) *sql.DB {

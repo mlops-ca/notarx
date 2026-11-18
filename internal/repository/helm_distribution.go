@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	dist "github.com/ccsert/artifact-gateway/internal/helmdistribution"
+	dist "github.com/mlops-ca/notarx/internal/helmdistribution"
 )
 
 func helmReplicationSource(p HelmPublication, item dist.Item) error {

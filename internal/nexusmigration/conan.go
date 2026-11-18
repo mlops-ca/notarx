@@ -3,7 +3,7 @@ package nexusmigration
 import (
 	"strings"
 
-	conanprotocol "github.com/ccsert/artifact-gateway/internal/protocol/conan"
+	conanprotocol "github.com/mlops-ca/notarx/internal/protocol/conan"
 )
 
 // ConanCoordinate is the immutable identity of one complete Conan 2 revision.

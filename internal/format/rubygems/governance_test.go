@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	domain "github.com/ccsert/artifact-gateway/internal/rubygemspublication"
+	"github.com/mlops-ca/notarx/internal/repository"
+	domain "github.com/mlops-ca/notarx/internal/rubygemspublication"
 )
 
 func yankRequest(h http.Handler, repo, name, version, platform, token string) *httptest.ResponseRecorder {

@@ -2,7 +2,7 @@
 
 [简体中文](runtime-log-product-design.zh-CN.md) | [Current logging behavior](runtime-logging.md) | [Documentation index](README.md)
 
-> Status: output direction agreed on 2026-10-01: optional **files and OTLP Logs**, with stdout preserved. This document separates that direction from the remaining history/query decisions tracked by [#151](https://github.com/ccsert/artifact-gateway/issues/151) and [#152](https://github.com/ccsert/artifact-gateway/issues/152). File output is implemented in [#194](https://github.com/ccsert/artifact-gateway/pull/194); optional OTLP/HTTP protobuf configuration and delivery bounds are documented in [runtime logging](runtime-logging.md). Neither output adds Console history or completes multi-node/restart deployment acceptance. No log backend or collector product is selected here.
+> Status: output direction agreed on 2026-10-01: optional **files and OTLP Logs**, with stdout preserved. This document separates that direction from the remaining history/query decisions tracked by [#151](https://github.com/mlops-ca/notarx/issues/151) and [#152](https://github.com/mlops-ca/notarx/issues/152). File output is implemented in [#194](https://github.com/mlops-ca/notarx/pull/194); optional OTLP/HTTP protobuf configuration and delivery bounds are documented in [runtime logging](runtime-logging.md). Neither output adds Console history or completes multi-node/restart deployment acceptance. No log backend or collector product is selected here.
 
 ## 1. Current behavior and shared events
 

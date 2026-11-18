@@ -1,13 +1,13 @@
 package app
 
 import (
-	migrationapi "github.com/ccsert/artifact-gateway/internal/admin/nexusmigration"
-	sourceapi "github.com/ccsert/artifact-gateway/internal/admin/nexussource"
-	"github.com/ccsert/artifact-gateway/internal/aptpublication"
-	"github.com/ccsert/artifact-gateway/internal/consoletheme"
-	"github.com/ccsert/artifact-gateway/internal/operationalog"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/scanning"
+	migrationapi "github.com/mlops-ca/notarx/internal/admin/nexusmigration"
+	sourceapi "github.com/mlops-ca/notarx/internal/admin/nexussource"
+	"github.com/mlops-ca/notarx/internal/aptpublication"
+	"github.com/mlops-ca/notarx/internal/consoletheme"
+	"github.com/mlops-ca/notarx/internal/operationalog"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/scanning"
 )
 
 // generatedRepositoryAPIAdapter temporarily owns the domains not yet extracted

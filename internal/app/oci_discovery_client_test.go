@@ -21,10 +21,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/authorization"
-	"github.com/ccsert/artifact-gateway/internal/ocigraph"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/ocigraph"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func ociDiscoveryClientCommand(ctx context.Context, environment []string, input []byte, binary string, args ...string) ([]byte, error) {

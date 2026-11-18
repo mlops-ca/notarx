@@ -7,12 +7,12 @@ RubyGems Hosted is a default-disabled preview under
 RubyGems/Bundler compact indexes, legacy Marshal 4.8 indexes and zlib gemspecs.
 It is absent from the admitted format profiles, formal repository catalog,
 Console creation selector and installation presets. There is no preview `agctl`
-command. The Hosted slice is tracked by [#459](https://github.com/ccsert/artifact-gateway/issues/459);
+command. The Hosted slice is tracked by [#459](https://github.com/mlops-ca/notarx/issues/459);
 Native yank and controlled restore are tracked by
-[#462](https://github.com/ccsert/artifact-gateway/issues/462). Independent quarantine and release are tracked by
-[#468](https://github.com/ccsert/artifact-gateway/issues/468). [Durable Hosted replication](rubygems-replication-preview.md) is tracked by [#472](https://github.com/ccsert/artifact-gateway/issues/472). Proxy/Group, hard deletion, Console, scanning,
+[#462](https://github.com/mlops-ca/notarx/issues/462). Independent quarantine and release are tracked by
+[#468](https://github.com/mlops-ca/notarx/issues/468). [Durable Hosted replication](rubygems-replication-preview.md) is tracked by [#472](https://github.com/mlops-ca/notarx/issues/472). Proxy/Group, hard deletion, Console, scanning,
 backup admission and Nexus migration remain in
-[#293](https://github.com/ccsert/artifact-gateway/issues/293).
+[#293](https://github.com/mlops-ca/notarx/issues/293).
 
 ## Enable and provision
 

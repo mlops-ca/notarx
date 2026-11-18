@@ -18,9 +18,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/capacityplan"
-	"github.com/ccsert/artifact-gateway/internal/nexussource"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/capacityplan"
+	"github.com/mlops-ca/notarx/internal/nexussource"
 )
 
 type Options struct {

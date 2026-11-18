@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/httperrorrate"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/mlops-ca/notarx/internal/httperrorrate"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func TestHTTPErrorRateActualHTTPAndDiagnosticsContract(t *testing.T) {

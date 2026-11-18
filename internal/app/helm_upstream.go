@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/upstreamauth"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/upstreamauth"
 )
 
 // FetchHelm shares the established per-hop DNS pinning, explicit egress and

@@ -10,10 +10,10 @@ import (
 	"time"
 	"unicode/utf8"
 
-	adminopenapi "github.com/ccsert/artifact-gateway/internal/admin/openapi"
-	"github.com/ccsert/artifact-gateway/internal/artifactquery"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
+	"github.com/mlops-ca/notarx/internal/artifactquery"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 type globalArtifactSearchCursor struct {

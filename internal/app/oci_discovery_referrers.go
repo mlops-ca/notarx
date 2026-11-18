@@ -10,10 +10,10 @@ import (
 	"strconv"
 	"time"
 
-	discovery "github.com/ccsert/artifact-gateway/internal/ocidiscovery"
-	"github.com/ccsert/artifact-gateway/internal/ocigraph"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	discovery "github.com/mlops-ca/notarx/internal/ocidiscovery"
+	"github.com/mlops-ca/notarx/internal/ocigraph"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 // Authentication is a request fact, independent of a principal's display or

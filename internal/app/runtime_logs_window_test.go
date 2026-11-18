@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/operationalog"
+	"github.com/mlops-ca/notarx/internal/operationalog"
 )
 
 func TestRuntimeLogRolling24HourWindowAndCursor(t *testing.T) {

@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	helmprotocol "github.com/ccsert/artifact-gateway/internal/protocol/helm"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	helmprotocol "github.com/mlops-ca/notarx/internal/protocol/helm"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func governancePath(repo repository.HostedRepository, name, version string) string {

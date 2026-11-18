@@ -14,8 +14,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ccsert/artifact-gateway/internal/protocol/identity"
 	"github.com/klauspost/compress/zstd"
+	"github.com/mlops-ca/notarx/internal/protocol/identity"
 	"github.com/ulikunitz/xz"
 	"github.com/ulikunitz/xz/lzma"
 )

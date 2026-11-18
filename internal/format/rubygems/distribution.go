@@ -8,13 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/authorization"
-	dist "github.com/ccsert/artifact-gateway/internal/rubygemsdistribution"
+	"github.com/mlops-ca/notarx/internal/authorization"
+	dist "github.com/mlops-ca/notarx/internal/rubygemsdistribution"
 
-	protocol "github.com/ccsert/artifact-gateway/internal/protocol/rubygems"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	domain "github.com/ccsert/artifact-gateway/internal/rubygemspublication"
 	"github.com/google/uuid"
+	protocol "github.com/mlops-ca/notarx/internal/protocol/rubygems"
+	"github.com/mlops-ca/notarx/internal/repository"
+	domain "github.com/mlops-ca/notarx/internal/rubygemspublication"
 )
 
 // The read-only adapter feeds transaction-locked grant snapshots through the

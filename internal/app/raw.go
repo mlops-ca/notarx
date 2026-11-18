@@ -7,12 +7,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/egress"
-	rawformat "github.com/ccsert/artifact-gateway/internal/format/raw"
-	rawprotocol "github.com/ccsert/artifact-gateway/internal/protocol/raw"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/requestcontext"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/egress"
+	rawformat "github.com/mlops-ca/notarx/internal/format/raw"
+	rawprotocol "github.com/mlops-ca/notarx/internal/protocol/raw"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/requestcontext"
 )
 
 var rawProxyLookupIP = net.DefaultResolver.LookupIP

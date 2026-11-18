@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"strings"
 
-	conanprotocol "github.com/ccsert/artifact-gateway/internal/protocol/conan"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	conanprotocol "github.com/mlops-ca/notarx/internal/protocol/conan"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func (h ConanHandler) uploadNativeConan(w http.ResponseWriter, r *http.Request) {

@@ -9,11 +9,11 @@ import (
 	"net/http"
 	"sort"
 
-	discovery "github.com/ccsert/artifact-gateway/internal/ocidiscovery"
-	"github.com/ccsert/artifact-gateway/internal/ocigraph"
-	ociprotocol "github.com/ccsert/artifact-gateway/internal/protocol/oci"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/upstreamauth"
+	discovery "github.com/mlops-ca/notarx/internal/ocidiscovery"
+	"github.com/mlops-ca/notarx/internal/ocigraph"
+	ociprotocol "github.com/mlops-ca/notarx/internal/protocol/oci"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/upstreamauth"
 )
 
 const discoveryMaxBlobBytes int64 = 64 << 20

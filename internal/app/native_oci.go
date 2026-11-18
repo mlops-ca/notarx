@@ -14,10 +14,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/ocidiscovery"
-	ociprotocol "github.com/ccsert/artifact-gateway/internal/protocol/oci"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ocidiscovery"
+	ociprotocol "github.com/mlops-ca/notarx/internal/protocol/oci"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 // nativeOCIHandler is the write-capable Registry V2 implementation. It only

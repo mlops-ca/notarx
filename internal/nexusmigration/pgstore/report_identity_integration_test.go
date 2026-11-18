@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/app"
-	m "github.com/ccsert/artifact-gateway/internal/nexusmigration"
+	"github.com/mlops-ca/notarx/internal/app"
+	m "github.com/mlops-ca/notarx/internal/nexusmigration"
 )
 
 func TestPostgresMigrationUnsupportedReportCannotCollideWithRawIdentity(t *testing.T) {

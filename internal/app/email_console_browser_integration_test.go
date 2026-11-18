@@ -22,9 +22,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/emailnotification"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/testsupport"
+	"github.com/mlops-ca/notarx/internal/emailnotification"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/testsupport"
 )
 
 // Opt-in host browser gate. Its owned SMTP fixtures cannot forward mail; production

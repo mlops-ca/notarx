@@ -3,7 +3,7 @@ package app
 import (
 	"context"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 type groupMemberAccess struct {

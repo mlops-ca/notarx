@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/ocigraph"
+	"github.com/mlops-ca/notarx/internal/ocigraph"
 )
 
 // OCIImportStore is an explicit capability outside NativeOCIStore/GatewayStore.

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/v2contract"
+	"github.com/mlops-ca/notarx/internal/v2contract"
 )
 
 type fakeSource map[string]v2contract.FetchResult

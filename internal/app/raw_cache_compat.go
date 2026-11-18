@@ -1,6 +1,6 @@
 package app
 
-import rawprotocol "github.com/ccsert/artifact-gateway/internal/protocol/raw"
+import rawprotocol "github.com/mlops-ca/notarx/internal/protocol/raw"
 
 // Raw cache ownership is in the protocol package. These aliases preserve the
 // app composition surface while routes are migrated.

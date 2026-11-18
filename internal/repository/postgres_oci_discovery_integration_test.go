@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	discovery "github.com/ccsert/artifact-gateway/internal/ocidiscovery"
 	"github.com/google/uuid"
+	discovery "github.com/mlops-ca/notarx/internal/ocidiscovery"
 )
 
 func openDiscoveryPostgres(t *testing.T) *PostgresStore {

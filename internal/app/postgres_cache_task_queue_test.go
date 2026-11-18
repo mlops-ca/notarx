@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/database"
+	"github.com/mlops-ca/notarx/internal/database"
 )
 
 func TestCacheTaskQueueFiltersUnsupportedWorkerFormats(t *testing.T) {

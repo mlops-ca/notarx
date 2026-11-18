@@ -26,14 +26,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/database"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	protocol "github.com/ccsert/artifact-gateway/internal/protocol/rubygems"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	dist "github.com/ccsert/artifact-gateway/internal/rubygemsdistribution"
-	publicationpg "github.com/ccsert/artifact-gateway/internal/rubygemspublication/pgstore"
-	"github.com/ccsert/artifact-gateway/internal/testsupport"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/database"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	protocol "github.com/mlops-ca/notarx/internal/protocol/rubygems"
+	"github.com/mlops-ca/notarx/internal/repository"
+	dist "github.com/mlops-ca/notarx/internal/rubygemsdistribution"
+	publicationpg "github.com/mlops-ca/notarx/internal/rubygemspublication/pgstore"
+	"github.com/mlops-ca/notarx/internal/testsupport"
 )
 
 type rubyNativeObservation struct {

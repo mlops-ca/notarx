@@ -16,9 +16,9 @@ import (
 	"sync"
 	"time"
 
-	cache "github.com/ccsert/artifact-gateway/internal/cache"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	cache "github.com/mlops-ca/notarx/internal/cache"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 var ErrCacheMiss = errors.New("raw cache miss")

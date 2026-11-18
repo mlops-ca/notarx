@@ -6,7 +6,7 @@ import (
 	"errors"
 	"io"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 // RawMessage distinguishes an omitted PATCH field (preserve) from JSON null

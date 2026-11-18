@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/rubygemspublication"
-	"github.com/ccsert/artifact-gateway/internal/testsupport/rubygemsfixture"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/rubygemspublication"
+	"github.com/mlops-ca/notarx/internal/testsupport/rubygemsfixture"
 )
 
 func rubyGemsGatewayRequest(handler http.Handler, method, path string, body []byte) *httptest.ResponseRecorder {

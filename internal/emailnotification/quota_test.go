@@ -2,8 +2,8 @@ package emailnotification
 
 import (
 	"bytes"
-	"github.com/ccsert/artifact-gateway/internal/quotaalert"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/quotaalert"
 	"strings"
 	"testing"
 	"time"

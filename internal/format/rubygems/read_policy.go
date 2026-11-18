@@ -3,9 +3,9 @@ package rubygems
 import (
 	"net/http"
 
-	"github.com/ccsert/artifact-gateway/internal/authorization"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	domain "github.com/ccsert/artifact-gateway/internal/rubygemspublication"
+	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/repository"
+	domain "github.com/mlops-ca/notarx/internal/rubygemspublication"
 )
 
 func (m *Module) previewReadPolicy(w http.ResponseWriter, r *http.Request, repo repository.HostedRepository) {

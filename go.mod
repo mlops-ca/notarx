@@ -1,6 +1,6 @@
-module github.com/ccsert/artifact-gateway
+module github.com/mlops-ca/notarx
 
-go 1.26.10
+go 1.26.11
 
 require (
 	github.com/Masterminds/semver/v3 v3.5.0
@@ -15,7 +15,7 @@ require (
 	github.com/getkin/kin-openapi v0.143.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
-	github.com/klauspost/compress v1.18.2
+	github.com/klauspost/compress v1.20.2
 	github.com/oapi-codegen/runtime v1.6.0
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/ulikunitz/xz v0.5.15

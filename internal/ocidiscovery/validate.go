@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/ocigraph"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ocigraph"
 )
 
 func ValidateGuards(guards []Guard) error {

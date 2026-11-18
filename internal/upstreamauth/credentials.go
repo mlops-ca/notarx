@@ -11,8 +11,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/secrets"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/secrets"
 )
 
 const SecretPurpose = "repository-upstream-auth"

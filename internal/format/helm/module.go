@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/authorization"
-	formatmodule "github.com/ccsert/artifact-gateway/internal/format"
-	dist "github.com/ccsert/artifact-gateway/internal/helmdistribution"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	helmprotocol "github.com/ccsert/artifact-gateway/internal/protocol/helm"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/authorization"
+	formatmodule "github.com/mlops-ca/notarx/internal/format"
+	dist "github.com/mlops-ca/notarx/internal/helmdistribution"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	helmprotocol "github.com/mlops-ca/notarx/internal/protocol/helm"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 type RepositoryStore interface {

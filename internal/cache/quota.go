@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/objectstore"
 )
 
 // ErrQuotaExceeded means a valid upstream response cannot be retained because

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 const ociBearerConfigJSON = `{"realm":"https://auth.example.test/token","service":"registry.example.test"}`

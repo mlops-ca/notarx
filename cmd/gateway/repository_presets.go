@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/config"
-	presetpg "github.com/ccsert/artifact-gateway/internal/repositorypreset/pgstore"
+	"github.com/mlops-ca/notarx/internal/config"
+	presetpg "github.com/mlops-ca/notarx/internal/repositorypreset/pgstore"
 )
 
 func initializeRepositoryPresets(cfg config.Config, db *sql.DB) error {

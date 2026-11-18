@@ -3,9 +3,9 @@ package nexussource
 import (
 	"strings"
 
-	conanprotocol "github.com/ccsert/artifact-gateway/internal/protocol/conan"
-	npmprotocol "github.com/ccsert/artifact-gateway/internal/protocol/npm"
-	pypi "github.com/ccsert/artifact-gateway/internal/protocol/pypi"
+	conanprotocol "github.com/mlops-ca/notarx/internal/protocol/conan"
+	npmprotocol "github.com/mlops-ca/notarx/internal/protocol/npm"
+	pypi "github.com/mlops-ca/notarx/internal/protocol/pypi"
 	"path"
 )
 

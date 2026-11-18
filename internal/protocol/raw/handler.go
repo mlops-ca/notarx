@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"strings"
 
-	cache "github.com/ccsert/artifact-gateway/internal/cache"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	cache "github.com/mlops-ca/notarx/internal/cache"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 type Principal struct {

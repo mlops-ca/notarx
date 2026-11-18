@@ -23,14 +23,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/egress"
-	"github.com/ccsert/artifact-gateway/internal/nexusmigration"
-	migrationpg "github.com/ccsert/artifact-gateway/internal/nexusmigration/pgstore"
-	"github.com/ccsert/artifact-gateway/internal/nexussource"
-	sourcepg "github.com/ccsert/artifact-gateway/internal/nexussource/pgstore"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/egress"
+	"github.com/mlops-ca/notarx/internal/nexusmigration"
+	migrationpg "github.com/mlops-ca/notarx/internal/nexusmigration/pgstore"
+	"github.com/mlops-ca/notarx/internal/nexussource"
+	sourcepg "github.com/mlops-ca/notarx/internal/nexussource/pgstore"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 type conanMigrationSourceFixture struct {

@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	d "github.com/ccsert/artifact-gateway/internal/rubygemspublication"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/repository"
+	d "github.com/mlops-ca/notarx/internal/rubygemspublication"
 )
 
 type readPolicyAuditor func(context.Context, repository.AuditRecord) error

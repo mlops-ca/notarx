@@ -17,11 +17,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/nexusmigration"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	pypi "github.com/ccsert/artifact-gateway/internal/protocol/pypi"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/nexusmigration"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	pypi "github.com/mlops-ca/notarx/internal/protocol/pypi"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 // Real replication owns different object keys from native upload. Reclaiming

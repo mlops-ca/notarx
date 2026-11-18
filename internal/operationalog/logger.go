@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/ccsert/artifact-gateway/internal/requestcontext"
+	"github.com/mlops-ca/notarx/internal/requestcontext"
 )
 
 // NewLogger emits one bounded-schema JSON object per line. Runtime output is

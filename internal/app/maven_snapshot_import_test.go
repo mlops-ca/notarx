@@ -3,16 +3,16 @@ package app
 import (
 	"bytes"
 	"context"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	"github.com/ccsert/artifact-gateway/internal/snapshotimport"
-	testsupport "github.com/ccsert/artifact-gateway/internal/testsupport/snapshotfixture"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/snapshotimport"
+	testsupport "github.com/mlops-ca/notarx/internal/testsupport/snapshotfixture"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func TestMavenSnapshotImportAbsentMetadataAndQuarantineReads(t *testing.T) {

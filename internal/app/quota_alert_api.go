@@ -3,10 +3,10 @@ package app
 import (
 	"encoding/json"
 	"errors"
-	adminopenapi "github.com/ccsert/artifact-gateway/internal/admin/openapi"
-	"github.com/ccsert/artifact-gateway/internal/quotaalert"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
+	"github.com/mlops-ca/notarx/internal/quotaalert"
+	"github.com/mlops-ca/notarx/internal/repository"
 	"io"
 	"net/http"
 	"time"

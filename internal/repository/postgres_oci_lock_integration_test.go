@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/database"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/database"
 )
 
 func newOCILockTestStore(t *testing.T, primarySize, lockSize int) (*PostgresStore, *sql.DB, *sql.DB) {

@@ -19,8 +19,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/app"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/app"
 )
 
 const migrationMavenVersion = "3.9.16"

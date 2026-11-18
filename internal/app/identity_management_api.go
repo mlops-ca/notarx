@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 // Identity management does not receive authentication lookups, login mutation,

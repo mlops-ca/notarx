@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/backupmanifest"
-	"github.com/ccsert/artifact-gateway/internal/backupops"
+	"github.com/mlops-ca/notarx/internal/backupmanifest"
+	"github.com/mlops-ca/notarx/internal/backupops"
 )
 
 type nativeEntry struct {
@@ -193,12 +193,12 @@ func TestArchiveNeverOverridesConflictingStaticOrModuleIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	body = bytes.ReplaceAll(body, []byte("github.com/ccsert/artifact-gateway"), []byte("github.com/ccsert/artifact-gatewaX"))
+	body = bytes.ReplaceAll(body, []byte("github.com/mlops-ca/notarx"), []byte("github.com/mlops-ca/notarX"))
 	if err = os.WriteFile(p, body, 0600); err != nil {
 		t.Fatal(err)
 	}
 	bi, err := buildinfo.ReadFile(p)
-	if err != nil || bi.Main.Path == "github.com/ccsert/artifact-gateway" {
+	if err != nil || bi.Main.Path == "github.com/mlops-ca/notarx" {
 		t.Fatal("wrong-module static fixture unavailable")
 	}
 	m.Gateway.Artifact.SHA256 = digestFile(t, p)
@@ -228,7 +228,7 @@ func TestArchiveRejectsExplicitEmptyStaticIdentity(t *testing.T) {
 }
 
 func TestArchiveRejectsUnparsedRetainedLinkerIdentity(t *testing.T) {
-	prefix := "github.com/ccsert/artifact-gateway/internal/buildinfo."
+	prefix := "github.com/mlops-ca/notarx/internal/buildinfo."
 	for _, field := range []string{"version", "revision", "missing identity"} {
 		t.Run(field, func(t *testing.T) {
 			version, revision := prefix+"injectedVersion=synthetic-v1", prefix+"injectedRevision="+strings.Repeat("a", 40)
