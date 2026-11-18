@@ -3,17 +3,33 @@ set -euo pipefail
 
 environment_file=${NOTARX_ENV_FILE:-.env}
 backup_dir=${1:-.artifacts/backup-drill/$(date -u +%Y%m%dT%H%M%SZ)}
+# The object store the Gateway runs on (ADR 0017): s3 (the Compose RustFS) or
+# filesystem, whose root directory on this host is NOTARX_OBJECT_STORE_FS_ROOT.
+object_driver=${NOTARX_OBJECT_STORE_DRIVER:-s3}
 compose=(docker compose --env-file "$environment_file" -f compose.yml)
 mkdir -p "$backup_dir"
 
-rustfs_container=$("${compose[@]}" ps -aq rustfs)
+case "$object_driver" in
+  s3) ;;
+  filesystem)
+    fs_root=${NOTARX_OBJECT_STORE_FS_ROOT:?set NOTARX_OBJECT_STORE_FS_ROOT to the filesystem object root}
+    test -f "$fs_root/.notarx-root" || { printf '%s\n' "$fs_root is not an initialised filesystem object root." >&2; exit 1; }
+    ;;
+  *) printf 'Unsupported NOTARX_OBJECT_STORE_DRIVER %s (use s3 or filesystem).\n' "$object_driver" >&2; exit 1 ;;
+esac
+
 gateway_container=$("${compose[@]}" ps -aq gateway)
-test -n "$rustfs_container"
 test -n "$gateway_container"
+if [[ "$object_driver" == s3 ]]; then
+  rustfs_container=$("${compose[@]}" ps -aq rustfs)
+  test -n "$rustfs_container"
+fi
 services_stopped=0
 resume_services() {
-  docker start "$rustfs_container" >/dev/null
-  "${compose[@]}" run --rm --no-deps rustfs-ready
+  if [[ "$object_driver" == s3 ]]; then
+    docker start "$rustfs_container" >/dev/null
+    "${compose[@]}" run --rm --no-deps rustfs-ready
+  fi
   docker start "$gateway_container" >/dev/null
 }
 cleanup() {
@@ -30,13 +46,22 @@ services_stopped=1
 "${compose[@]}" exec -T postgres \
   pg_dump -U gateway -d gateway --format=custom >"$backup_dir/gateway.dump"
 
-# Stop the RustFS writer before streaming its volume. This archive is supported
-# only for the pinned RustFS baseline used by the running stack.
-"${compose[@]}" stop rustfs
-docker cp "$rustfs_container:/data/." - >"$backup_dir/rustfs-data.tar"
+if [[ "$object_driver" == s3 ]]; then
+  # Stop the RustFS writer before streaming its volume. This archive is supported
+  # only for the pinned RustFS baseline used by the running stack.
+  "${compose[@]}" stop rustfs
+  docker cp "$rustfs_container:/data/." - >"$backup_dir/rustfs-data.tar"
+  artifacts=(gateway.dump rustfs-data.tar)
+else
+  # The Gateway is stopped, so the root is quiescent. The archive keeps the
+  # .notarx-root marker, which the restored database's recorded object store
+  # identity must match; tmp/ holds only abandoned in-flight writes.
+  tar -C "$fs_root" --exclude=./tmp -cf "$backup_dir/objects-fs.tar" .
+  artifacts=(gateway.dump objects-fs.tar)
+fi
 resume_services
 services_stopped=0
 trap - EXIT
 
-shasum -a 256 "$backup_dir/gateway.dump" "$backup_dir/rustfs-data.tar" >"$backup_dir/SHA256SUMS"
+shasum -a 256 "${artifacts[@]/#/$backup_dir/}" >"$backup_dir/SHA256SUMS"
 printf 'Backup created: %s\n' "$backup_dir"

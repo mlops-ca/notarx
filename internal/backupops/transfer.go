@@ -33,6 +33,19 @@ type FrozenSource interface {
 
 // Destination exists only after the concrete adapter proves new resource
 // ownership and isolation. Data restoration never accepts arbitrary endpoints.
+// ObjectFormatSource is implemented by a source whose objects should be exported
+// in a format other than s3-bytes-v1 (the filesystem source exports
+// fs-bytes-v1). SegmentBytes, when also implemented, overrides the default
+// 256 MiB segment size.
+type ObjectFormatSource interface {
+	ObjectFormat() string
+}
+
+// segmentBytesSource lets a source pick the fs-bytes-v1 segment size.
+type segmentBytesSource interface {
+	SegmentBytes() int64
+}
+
 type Destination interface {
 	CheckEmpty(context.Context) error
 	RestoreDatabase(context.Context, io.Reader) error
@@ -159,11 +172,43 @@ func Export(ctx context.Context, source FrozenSource, directory string, release 
 	}
 	previous := ""
 	encoder := json.NewEncoder(index)
+	objectFormat := backupmanifest.FormatS3Bytes
+	var segments *segmentWriter
+	if formatted, ok := source.(ObjectFormatSource); ok && formatted.ObjectFormat() == backupmanifest.FormatFSBytes {
+		objectFormat = backupmanifest.FormatFSBytes
+		var limit int64
+		if sized, ok := source.(segmentBytesSource); ok {
+			limit = sized.SegmentBytes()
+		}
+		segments = newSegmentWriter(directory, limit)
+	}
 	walkErr := source.WalkObjects(ctx, func(key string, expectedSize int64) error {
 		if key == "" || key <= previous || expectedSize < 0 || expectedSize == math.MaxInt64 || len(key) > 32<<10 {
 			return errors.New("invalid object inventory")
 		}
 		previous = key
+		if r.VerifiedBytes > math.MaxInt64-expectedSize {
+			return errors.New("object byte overflow")
+		}
+		if segments != nil {
+			stage, failedKey, objectFile = "object_export", key, segments.name
+			body, size, err := source.Open(ctx, key)
+			if err != nil {
+				return err
+			}
+			entry, addErr := segments.add(key, expectedSize, body)
+			closeErr := body.Close()
+			if addErr != nil || closeErr != nil || size != expectedSize {
+				return errors.New("object export failed")
+			}
+			objectFile = entry.File.Path
+			if err = encoder.Encode(entry); err != nil {
+				return err
+			}
+			r.VerifiedObjects++
+			r.VerifiedBytes += expectedSize
+			return nil
+		}
 		stage, failedKey, objectFile = "object_export", key, fmt.Sprintf("objects/%012d.data", r.VerifiedObjects)
 		body, size, err := source.Open(ctx, key)
 		if err != nil {
@@ -175,9 +220,6 @@ func Export(ctx context.Context, source FrozenSource, directory string, release 
 		if copyErr != nil || closeErr != nil || size != expectedSize || *info.Size != expectedSize {
 			return errors.New("object export failed")
 		}
-		if r.VerifiedBytes > math.MaxInt64-expectedSize {
-			return errors.New("object byte overflow")
-		}
 		if err = encoder.Encode(backupmanifest.Object{Key: key, File: info}); err != nil {
 			return err
 		}
@@ -185,6 +227,14 @@ func Export(ctx context.Context, source FrozenSource, directory string, release 
 		r.VerifiedBytes += expectedSize
 		return nil
 	})
+	var segmentFiles []backupmanifest.File
+	if segments != nil {
+		if walkErr != nil {
+			segments.abort()
+		} else if segmentFiles, err = segments.finish(); err != nil {
+			walkErr = err
+		}
+	}
 	syncErr = index.Sync()
 	closeErr = index.Close()
 	if walkErr != nil || syncErr != nil || closeErr != nil {
@@ -218,7 +268,10 @@ func Export(ctx context.Context, source FrozenSource, directory string, release 
 	m.Metadata = &metaFile
 	m.Database = backupmanifest.DatabaseExport{Format: "pg-custom-v1", File: dumpFile}
 	m.Schema = backupmanifest.SchemaExport{Format: "notarx-migrations-tsv-v1", File: schemaFile}
-	m.Objects = backupmanifest.ObjectExport{Format: "s3-bytes-v1", Inventory: indexFile, Count: &r.VerifiedObjects, Bytes: &r.VerifiedBytes}
+	m.Objects = backupmanifest.ObjectExport{Format: objectFormat, Inventory: indexFile, Count: &r.VerifiedObjects, Bytes: &r.VerifiedBytes, Segments: segmentFiles}
+	if identified, ok := source.(interface{ RootID() string }); ok && objectFormat == backupmanifest.FormatFSBytes {
+		m.Objects.RootID = identified.RootID()
+	}
 	for i := range m.Writers.Writers {
 		m.Writers.Writers[i].StopConfirmed = true
 		m.Writers.Writers[i].StoppedAt = m.StartedAt
@@ -304,47 +357,80 @@ func Restore(ctx context.Context, directory string, release Release, target Dest
 	}
 	r.Metadata = "verified"
 	recordMetadataEvidence(restoredMetadata, &r)
-	index, err := root.Open(m.Objects.Inventory.Path)
-	if err != nil {
-		return fail(r, "inventory_input_invalid")
-	}
-	defer func() { _ = index.Close() }()
-	scanner := bufio.NewScanner(io.LimitReader(index, 64<<20+1))
-	scanner.Buffer(make([]byte, 4096), 64<<10)
-	for scanner.Scan() {
-		var object backupmanifest.Object
-		if opsjson.Decode(scanner.Bytes(), &object) != nil {
-			return fail(r, "inventory_input_invalid")
-		}
-		file, err := checkedFile(root, object.File)
-		if err != nil {
-			return fail(r, "object_input_invalid")
-		}
-		putErr := target.Put(ctx, object.Key, file, *object.File.Size, object.File.SHA256)
-		closeErr := file.Close()
-		if putErr != nil || closeErr != nil {
-			return fail(r, "object_restore_failed")
-		}
-		body, size, err := target.Open(ctx, object.Key)
-		if err != nil {
-			return fail(r, "restored_object_unavailable")
-		}
-		sum, count, readErr := hashReader(io.LimitReader(body, *object.File.Size+1))
-		closeErr = body.Close()
-		if readErr != nil || closeErr != nil || count != *object.File.Size || size != count || sum != object.File.SHA256 {
-			return fail(r, "restored_object_mismatch")
-		}
-		r.VerifiedObjects++
-		r.VerifiedBytes += count
-	}
-	if scanner.Err() != nil || r.VerifiedObjects != *m.Objects.Count || r.VerifiedBytes != *m.Objects.Bytes {
-		return fail(r, "restored_inventory_mismatch")
+	if reason := restoreObjects(ctx, root, m, target, &r); reason != "" {
+		return fail(r, reason)
 	}
 	r.SchemaSHA256 = m.Schema.File.SHA256
 	r.Consistency = "operator_declared_scope"
 	r.Status = "restored"
 	r.Objects = "verified"
 	return r, nil
+}
+
+// objectDestination is the object half of a restore target.
+type objectDestination interface {
+	Put(context.Context, string, io.ReadSeeker, int64, string) error
+	Open(context.Context, string) (io.ReadCloser, int64, error)
+}
+
+// restoreObjects writes every inventory object to target, reads it back and
+// compares size and SHA-256 with the bundle. It returns a failure reason, or
+// "" when every object and the declared totals verified.
+func restoreObjects(ctx context.Context, root *os.Root, m backupmanifest.Manifest, target objectDestination, r *TransferReport) string {
+	index, err := root.Open(m.Objects.Inventory.Path)
+	if err != nil {
+		return "inventory_input_invalid"
+	}
+	defer func() { _ = index.Close() }()
+	scanner := bufio.NewScanner(io.LimitReader(index, 64<<20+1))
+	scanner.Buffer(make([]byte, 4096), 64<<10)
+	segmentFiles := map[string]backupmanifest.File{}
+	for _, segment := range m.Objects.Segments {
+		segmentFiles[segment.Path] = segment
+	}
+	var segment openSegment
+	defer segment.close()
+	for scanner.Scan() {
+		var object backupmanifest.Object
+		if opsjson.Decode(scanner.Bytes(), &object) != nil {
+			return "inventory_input_invalid"
+		}
+		var source io.ReadSeeker
+		var closeObject func() error
+		if m.Objects.Format == backupmanifest.FormatFSBytes {
+			section, sectionErr := segment.object(root, segmentFiles, object)
+			if sectionErr != nil {
+				return "object_input_invalid"
+			}
+			source, closeObject = section, func() error { return nil }
+		} else {
+			file, fileErr := checkedFile(root, object.File)
+			if fileErr != nil {
+				return "object_input_invalid"
+			}
+			source, closeObject = file, file.Close
+		}
+		putErr := target.Put(ctx, object.Key, source, *object.File.Size, object.File.SHA256)
+		closeErr := closeObject()
+		if putErr != nil || closeErr != nil {
+			return "object_restore_failed"
+		}
+		body, size, err := target.Open(ctx, object.Key)
+		if err != nil {
+			return "restored_object_unavailable"
+		}
+		sum, count, readErr := hashReader(io.LimitReader(body, *object.File.Size+1))
+		closeErr = body.Close()
+		if readErr != nil || closeErr != nil || count != *object.File.Size || size != count || sum != object.File.SHA256 {
+			return "restored_object_mismatch"
+		}
+		r.VerifiedObjects++
+		r.VerifiedBytes += count
+	}
+	if scanner.Err() != nil || r.VerifiedObjects != *m.Objects.Count || r.VerifiedBytes != *m.Objects.Bytes {
+		return "restored_inventory_mismatch"
+	}
+	return ""
 }
 
 func LoadManifest(directory string) (backupmanifest.Manifest, error) {

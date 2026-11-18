@@ -121,6 +121,7 @@ test:
 	@./scripts/local-dev-test.sh
 	@./scripts/rustfs-only-contract-test.sh
 	@./scripts/run-rustfs-test.sh
+	@./scripts/backup-drill-filesystem-test.sh
 	@bash ./scripts/openapi-dependency-test.sh
 	@./scripts/release-readiness-check.sh
 	@./scripts/docs-capability-check.sh
@@ -380,7 +381,7 @@ packages-environments-test:
 
 # Explicit opt-in real transfer fixture; no server .env or existing data targets.
 backup-transfer-test:
-	@BACKUPOPS_DOCKER_TEST=1 BACKUPOPS_DOCKER_CONTEXT="$$(docker context show)" go test -v -count=1 ./internal/backupops -run '^(TestLocalRecoveryIntegration|TestLocalReleaseUpgrade)$$'
+	@BACKUPOPS_DOCKER_TEST=1 BACKUPOPS_DOCKER_CONTEXT="$$(docker context show)" go test -v -count=1 ./internal/backupops -run '^(TestLocalRecoveryIntegration|TestLocalReleaseUpgrade|TestFilesystemExport.*|TestEmptyFilesystemExportAndRestore|TestRestoreFilesystemObjects.*|TestBackupCLIRestoresObjects.*)$$'
 
 .PHONY: published-native-backup-test
 published-native-backup-test:

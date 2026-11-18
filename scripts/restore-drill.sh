@@ -3,10 +3,24 @@ set -euo pipefail
 
 environment_file=${NOTARX_ENV_FILE:-.env}
 backup_dir=${1:?usage: scripts/restore-drill.sh <backup-directory>}
+object_driver=${NOTARX_OBJECT_STORE_DRIVER:-s3}
 compose=(docker compose --env-file "$environment_file" -f compose.yml)
+
+case "$object_driver" in
+  s3) ;;
+  filesystem)
+    fs_root=${NOTARX_OBJECT_STORE_FS_ROOT:?set NOTARX_OBJECT_STORE_FS_ROOT to the filesystem object root}
+    test -f "$backup_dir/objects-fs.tar" || { printf '%s\n' "$backup_dir has no objects-fs.tar; was it made with NOTARX_OBJECT_STORE_DRIVER=filesystem?" >&2; exit 1; }
+    ;;
+  *) printf 'Unsupported NOTARX_OBJECT_STORE_DRIVER %s (use s3 or filesystem).\n' "$object_driver" >&2; exit 1 ;;
+esac
 shasum -a 256 --check "$backup_dir/SHA256SUMS"
 
-"${compose[@]}" stop gateway rustfs
+if [[ "$object_driver" == s3 ]]; then
+  "${compose[@]}" stop gateway rustfs
+else
+  "${compose[@]}" stop gateway
+fi
 # pg_restore --clean drops each partition's inherited primary key constraint and
 # fails on partitioned tables (the audit tables, ADR 0023), so reset the schema
 # explicitly and restore into the empty database.
@@ -14,17 +28,24 @@ shasum -a 256 --check "$backup_dir/SHA256SUMS"
   psql -U gateway -d gateway -v ON_ERROR_STOP=1 -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
 "${compose[@]}" exec -T postgres \
   pg_restore -U gateway -d gateway --exit-on-error <"$backup_dir/gateway.dump"
-rustfs_container=$("${compose[@]}" ps -aq rustfs)
-test -n "$rustfs_container"
-"${compose[@]}" run --rm --no-deps --entrypoint sh rustfs \
-  -ec 'find /data -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +'
-docker cp - "$rustfs_container:/data" <"$backup_dir/rustfs-data.tar"
-docker start "$rustfs_container" >/dev/null
-if ! "${compose[@]}" run --rm --no-deps rustfs-ready; then
-  printf 'Restored RustFS did not become healthy before the readiness deadline.\n' >&2
-  "${compose[@]}" ps rustfs >&2 || true
-  "${compose[@]}" logs --tail=50 rustfs >&2 || true
-  exit 1
+if [[ "$object_driver" == s3 ]]; then
+  rustfs_container=$("${compose[@]}" ps -aq rustfs)
+  test -n "$rustfs_container"
+  "${compose[@]}" run --rm --no-deps --entrypoint sh rustfs \
+    -ec 'find /data -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +'
+  docker cp - "$rustfs_container:/data" <"$backup_dir/rustfs-data.tar"
+  docker start "$rustfs_container" >/dev/null
+  if ! "${compose[@]}" run --rm --no-deps rustfs-ready; then
+    printf 'Restored RustFS did not become healthy before the readiness deadline.\n' >&2
+    "${compose[@]}" ps rustfs >&2 || true
+    "${compose[@]}" logs --tail=50 rustfs >&2 || true
+    exit 1
+  fi
+else
+  # Replace the root's contents, marker included: the restored database
+  # records the root ID that is inside the archive.
+  find "$fs_root" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+  tar -C "$fs_root" -xf "$backup_dir/objects-fs.tar"
 fi
 # Starting through Compose re-evaluates the completed migrate dependency on
 # some Compose releases. The restored dump already contains its schema, so

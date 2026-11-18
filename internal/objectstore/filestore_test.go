@@ -492,6 +492,64 @@ func TestFileStoreCrashInjection(t *testing.T) {
 	}
 }
 
+func TestOpenFileStoreReadOnlyReadsWithoutChangingTheRoot(t *testing.T) {
+	cfg := testFileConfig(t)
+	writer := openTestFileStore(t, cfg)
+	ctx := context.Background()
+	data := []byte("frozen source")
+	if err := writer.PutVerifiedReader(ctx, "a/b", bytes.NewReader(data), int64(len(data)), digestOf(data)); err != nil {
+		t.Fatal(err)
+	}
+	stale := filepath.Join(cfg.FSRoot, "tmp", "left-behind")
+	if err := os.WriteFile(stale, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-3 * time.Hour)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+	reader, err := OpenFileStoreReadOnly(cfg.FSRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = reader.Close() }()
+	if reader.RootID() != writer.RootID() {
+		t.Fatalf("root ID %q, want %q", reader.RootID(), writer.RootID())
+	}
+	if got, getErr := reader.Get(ctx, "a/b"); getErr != nil || !bytes.Equal(got, data) {
+		t.Fatalf("Get = %q, %v", got, getErr)
+	}
+	if info, statErr := reader.Stat(ctx, "a/b"); statErr != nil || info.Digest != digestOf(data) {
+		t.Fatalf("Stat = %#v, %v", info, statErr)
+	}
+	if err = reader.Put(ctx, "c", []byte("x")); !errors.Is(err, ErrReadOnly) {
+		t.Fatalf("Put = %v, want ErrReadOnly", err)
+	}
+	if err = reader.Delete(ctx, "a/b"); !errors.Is(err, ErrReadOnly) {
+		t.Fatalf("Delete = %v, want ErrReadOnly", err)
+	}
+	if err = reader.SetVerifiedDigest(ctx, "a/b", digestOf(data)); !errors.Is(err, ErrReadOnly) {
+		t.Fatalf("SetVerifiedDigest = %v, want ErrReadOnly", err)
+	}
+	if _, statErr := os.Stat(stale); statErr != nil {
+		t.Fatalf("a read-only open removed a temporary file: %v", statErr)
+	}
+	// It refuses a directory that is not an initialised root and never creates one.
+	empty := filepath.Join(t.TempDir(), "empty")
+	if err = os.MkdirAll(empty, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = OpenFileStoreReadOnly(empty); err == nil {
+		t.Fatal("OpenFileStoreReadOnly accepted an uninitialised directory")
+	}
+	if entries, _ := os.ReadDir(empty); len(entries) != 0 {
+		t.Fatalf("a read-only open created %d entries", len(entries))
+	}
+	if _, err = OpenFileStoreReadOnly("relative"); err == nil {
+		t.Fatal("OpenFileStoreReadOnly accepted a relative path")
+	}
+}
+
 func TestFileStoreFailedWritesLeaveNoTemporaryFiles(t *testing.T) {
 	cfg := testFileConfig(t)
 	store := openTestFileStore(t, cfg)

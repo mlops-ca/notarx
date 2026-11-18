@@ -1,6 +1,8 @@
 package backupmanifest
 
 import (
+	"archive/tar"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -382,5 +384,208 @@ func TestMetadataLimitsAndIncompleteObjectQuantitiesAreNotVerified(t *testing.T)
 		if r := Verify(context.Background(), dir, m); r.Status != Invalid || r.VerifiedObjects != 0 {
 			t.Fatalf("missing/negative bytes counted as zero: %+v", r)
 		}
+	}
+}
+
+// fsFixture builds an fs-bytes-v1 bundle with two tar segments. The objects are
+// a/1 ("abc") and a/2 (empty) in segment 1, and b/1 ("hello world") in segment 2.
+func fsFixture(t *testing.T) (string, Manifest) {
+	t.Helper()
+	dir, m := fixture(t)
+	type entry struct {
+		key  string
+		body []byte
+	}
+	var segments []File
+	var inventory []byte
+	write := func(name string, entries []entry) {
+		var buffer bytes.Buffer
+		writer := tar.NewWriter(&buffer)
+		var rows []Object
+		for _, e := range entries {
+			if err := writer.WriteHeader(&tar.Header{Name: e.key, Mode: 0o600, Size: int64(len(e.body)), Typeflag: tar.TypeReg, Format: tar.FormatPAX}); err != nil {
+				t.Fatal(err)
+			}
+			offset := int64(buffer.Len())
+			if _, err := writer.Write(e.body); err != nil {
+				t.Fatal(err)
+			}
+			if err := writer.Flush(); err != nil {
+				t.Fatal(err)
+			}
+			rows = append(rows, Object{Key: e.key, File: File{Path: name, Size: ptr(int64(len(e.body))), SHA256: digest(e.body)}, Offset: ptr(offset)})
+		}
+		if err := writer.Close(); err != nil {
+			t.Fatal(err)
+		}
+		segments = append(segments, writeFixtureFile(t, dir, name, buffer.Bytes()))
+		for _, row := range rows {
+			encoded, err := json.Marshal(row)
+			if err != nil {
+				t.Fatal(err)
+			}
+			inventory = append(inventory, append(encoded, '\n')...)
+		}
+	}
+	write("objects/segment-000001.tar", []entry{{"a/1", []byte("abc")}, {"a/2", nil}})
+	write("objects/segment-000002.tar", []entry{{"b/1", []byte("hello world")}})
+	m.Objects = ObjectExport{Format: FormatFSBytes, Count: ptr(3), Bytes: ptr(14), Segments: segments, Inventory: writeFixtureFile(t, dir, "objects.jsonl", inventory)}
+	return dir, m
+}
+
+func rewriteInventory(t *testing.T, dir string, m *Manifest, mutate func([]Object) []Object) {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(dir, "objects.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rows []Object
+	for _, line := range bytes.Split(bytes.TrimSpace(data), []byte("\n")) {
+		var row Object
+		if err = json.Unmarshal(line, &row); err != nil {
+			t.Fatal(err)
+		}
+		rows = append(rows, row)
+	}
+	var body []byte
+	for _, row := range mutate(rows) {
+		encoded, marshalErr := json.Marshal(row)
+		if marshalErr != nil {
+			t.Fatal(marshalErr)
+		}
+		body = append(body, append(encoded, '\n')...)
+	}
+	if err = os.Remove(filepath.Join(dir, "objects.jsonl")); err != nil {
+		t.Fatal(err)
+	}
+	m.Objects.Inventory = writeFixtureFile(t, dir, "objects.jsonl", body)
+}
+
+func TestFSBytesSegmentsAreVerifiedWholeAndCounted(t *testing.T) {
+	dir, m := fsFixture(t)
+	r := Verify(context.Background(), dir, m)
+	if r.Integrity != Verified || r.VerifiedObjects != 3 || r.VerifiedObjectBytes != 14 {
+		t.Fatalf("report=%+v", r)
+	}
+	if r.Consistency != Unknown {
+		t.Fatalf("verified bytes must not prove consistency: %+v", r)
+	}
+}
+
+func TestFSBytesRejectsDamagedOrUndeclaredSegments(t *testing.T) {
+	t.Run("changed segment bytes", func(t *testing.T) {
+		dir, m := fsFixture(t)
+		path := filepath.Join(dir, "objects/segment-000002.tar")
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data[600] ^= 0xff
+		if err = os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if r := Verify(context.Background(), dir, m); r.Integrity != Invalid {
+			t.Fatalf("a damaged segment verified: %+v", r)
+		}
+	})
+	t.Run("missing segment", func(t *testing.T) {
+		dir, m := fsFixture(t)
+		if err := os.Remove(filepath.Join(dir, "objects/segment-000001.tar")); err != nil {
+			t.Fatal(err)
+		}
+		if r := Verify(context.Background(), dir, m); r.Integrity != Invalid {
+			t.Fatalf("a missing segment verified: %+v", r)
+		}
+	})
+	t.Run("segment list out of order", func(t *testing.T) {
+		dir, m := fsFixture(t)
+		m.Objects.Segments[0], m.Objects.Segments[1] = m.Objects.Segments[1], m.Objects.Segments[0]
+		if r := Verify(context.Background(), dir, m); r.Integrity != Invalid {
+			t.Fatalf("unordered segments verified: %+v", r)
+		}
+	})
+	t.Run("segment path outside the pattern", func(t *testing.T) {
+		for _, name := range []string{"objects/other.tar", "objects/segment-1.tar", "objects/../database.dump", "segment-000001.tar"} {
+			dir, m := fsFixture(t)
+			m.Objects.Segments[0].Path = name
+			if r := Verify(context.Background(), dir, m); r.Integrity != Invalid {
+				t.Fatalf("segment path %q verified: %+v", name, r)
+			}
+		}
+	})
+	t.Run("s3 format may not declare segments", func(t *testing.T) {
+		dir, m := fixture(t)
+		m.Objects.Segments = []File{writeFixtureFile(t, dir, "objects/segment-000001.tar", []byte("x"))}
+		if r := Verify(context.Background(), dir, m); r.Integrity == Verified {
+			t.Fatalf("s3-bytes-v1 with segments verified: %+v", r)
+		}
+	})
+}
+
+func TestFSBytesInventoryMustStayInsideTheDeclaredSegments(t *testing.T) {
+	cases := map[string]func([]Object) []Object{
+		"unknown segment":     func(rows []Object) []Object { rows[0].File.Path = "objects/segment-000009.tar"; return rows },
+		"missing offset":      func(rows []Object) []Object { rows[0].Offset = nil; return rows },
+		"offset in header":    func(rows []Object) []Object { rows[0].Offset = ptr(100); return rows },
+		"negative offset":     func(rows []Object) []Object { rows[0].Offset = ptr(-1); return rows },
+		"past segment end":    func(rows []Object) []Object { rows[2].Offset = ptr(*rows[2].Offset + 4096); return rows },
+		"size past the end":   func(rows []Object) []Object { rows[2].File.Size = ptr(1 << 20); return rows },
+		"overlapping objects": func(rows []Object) []Object { rows[1].Offset = rows[0].Offset; rows[1].File.Size = ptr(1); return rows },
+		"malformed digest":    func(rows []Object) []Object { rows[0].File.SHA256 = "sha256:abc"; return rows },
+		"segments reordered": func(rows []Object) []Object {
+			rows[0].File.Path = "objects/segment-000002.tar"
+			return rows
+		},
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir, m := fsFixture(t)
+			rewriteInventory(t, dir, &m, mutate)
+			if r := Verify(context.Background(), dir, m); r.Integrity == Verified {
+				t.Fatalf("an inconsistent inventory verified: %+v", r)
+			}
+		})
+	}
+	t.Run("totals must match", func(t *testing.T) {
+		dir, m := fsFixture(t)
+		m.Objects.Bytes = ptr(15)
+		if r := Verify(context.Background(), dir, m); r.Integrity == Verified {
+			t.Fatalf("wrong byte total verified: %+v", r)
+		}
+	})
+}
+
+func TestS3BytesInventoryRejectsOffsets(t *testing.T) {
+	dir, m := fixture(t)
+	rewriteInventory(t, dir, &m, func(rows []Object) []Object { rows[0].Offset = ptr(512); return rows })
+	if r := Verify(context.Background(), dir, m); r.Integrity == Verified {
+		t.Fatalf("an s3-bytes-v1 inventory with offsets verified: %+v", r)
+	}
+}
+
+func TestEmptyFSBytesExportHasNoSegments(t *testing.T) {
+	dir, m := fixture(t)
+	m.Objects = ObjectExport{Format: FormatFSBytes, Count: ptr(0), Bytes: ptr(0), Inventory: writeFixtureFile(t, dir, "objects-empty.jsonl", nil)}
+	if r := Verify(context.Background(), dir, m); r.Integrity != Verified || r.VerifiedObjects != 0 {
+		t.Fatalf("an empty filesystem export did not verify: %+v", r)
+	}
+}
+
+func TestFSBytesRootIDMustBeAWellFormedIdentifier(t *testing.T) {
+	dir, m := fsFixture(t)
+	m.Objects.RootID = "5e1625e7-9c7b-42b8-9b83-c9a1fc242662"
+	if r := Verify(context.Background(), dir, m); r.Integrity != Verified {
+		t.Fatalf("a valid root ID was refused: %+v", r)
+	}
+	for _, bad := range []string{"not-a-uuid", "5E1625E7-9C7B-42B8-9B83-C9A1FC242662", "../etc"} {
+		m.Objects.RootID = bad
+		if r := Verify(context.Background(), dir, m); r.Integrity == Verified {
+			t.Fatalf("root ID %q verified", bad)
+		}
+	}
+	s3dir, s3m := fixture(t)
+	s3m.Objects.RootID = "5e1625e7-9c7b-42b8-9b83-c9a1fc242662"
+	if r := Verify(context.Background(), s3dir, s3m); r.Integrity == Verified {
+		t.Fatalf("an s3-bytes-v1 export may not carry a root ID: %+v", r)
 	}
 }

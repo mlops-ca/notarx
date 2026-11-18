@@ -87,6 +87,9 @@ type FileStore struct {
 	fsync    bool
 	reserve  int64
 	now      func() time.Time
+	// readOnly stores refuse every write; the backup tooling uses one to read a
+	// frozen source without touching it.
+	readOnly bool
 	// hook, when set by tests, runs at each named commit step; an error aborts
 	// the write as a crash would, leaving the on-disk state behind.
 	hook  func(step string) error
@@ -97,10 +100,21 @@ type FileStore struct {
 // cfg.FSRoot, validates its layout and removes temporary files left by a
 // crash. It performs no database work; see VerifyIdentity.
 func NewFileStore(cfg Config) (*FileStore, error) {
-	return newFileStore(cfg, time.Now)
+	return newFileStore(cfg, time.Now, "")
 }
 
-func newFileStore(cfg Config, now func() time.Time) (*FileStore, error) {
+// NewFileStoreWithRootID is NewFileStore for restoring a backup: a root that has
+// no marker yet is initialised with rootID instead of a new random one, so the
+// restored database's recorded identity matches the restored root. A root that
+// already has a different ID is refused.
+func NewFileStoreWithRootID(cfg Config, rootID string) (*FileStore, error) {
+	if _, err := uuid.Parse(rootID); err != nil {
+		return nil, errors.New("object store root ID is not valid")
+	}
+	return newFileStore(cfg, time.Now, rootID)
+}
+
+func newFileStore(cfg Config, now func() time.Time, rootID string) (*FileStore, error) {
 	cfg = cfg.withDefaults()
 	if err := cfg.validateFilesystem(); err != nil {
 		return nil, err
@@ -116,14 +130,50 @@ func newFileStore(cfg Config, now func() time.Time) (*FileStore, error) {
 		return nil, fmt.Errorf("open object store root: %w", err)
 	}
 	store := &FileStore{rootPath: cfg.FSRoot, root: root, fsync: cfg.FSFsync, reserve: cfg.FSReserveBytes, now: now}
-	if err = store.initialize(); err != nil {
+	if err = store.initialize(rootID); err != nil {
 		_ = root.Close()
 		return nil, err
 	}
 	return store, nil
 }
 
-func (s *FileStore) initialize() error {
+// ErrReadOnly is returned by writes to a store opened with OpenFileStoreReadOnly.
+var ErrReadOnly = errors.New("object store is read-only")
+
+// OpenFileStoreReadOnly opens an existing, initialised root for reading only. It
+// creates nothing, removes nothing and takes no lock, so it is safe on the root
+// of a stopped gateway that a backup is reading.
+func OpenFileStoreReadOnly(rootPath string) (*FileStore, error) {
+	cfg := Config{Driver: DriverFilesystem, FSRoot: rootPath}
+	if err := cfg.validateFilesystem(); err != nil {
+		return nil, err
+	}
+	root, err := os.OpenRoot(rootPath)
+	if err != nil {
+		return nil, fmt.Errorf("open object store root: %w", err)
+	}
+	store := &FileStore{rootPath: rootPath, root: root, now: time.Now, readOnly: true}
+	for _, dir := range []string{fsDataDir, fsMetaDir} {
+		if info, statErr := root.Lstat(dir); statErr != nil || !info.IsDir() {
+			_ = root.Close()
+			return nil, fmt.Errorf("object store root has no %s directory: is it an initialised filesystem root?", dir)
+		}
+	}
+	content, err := root.ReadFile(fsRootMarker)
+	if err != nil {
+		_ = root.Close()
+		return nil, fmt.Errorf("read root marker: %w", err)
+	}
+	id := strings.TrimSpace(string(content))
+	if _, parseErr := uuid.Parse(id); parseErr != nil {
+		_ = root.Close()
+		return nil, errors.New("object store root marker is not a valid root ID")
+	}
+	store.rootID = id
+	return store, nil
+}
+
+func (s *FileStore) initialize(wantRootID string) error {
 	for _, dir := range []string{fsDataDir, fsMetaDir, fsTmpDir} {
 		if err := s.root.Mkdir(dir, 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
 			return fmt.Errorf("create %s directory: %w", dir, err)
@@ -133,21 +183,27 @@ func (s *FileStore) initialize() error {
 			return fmt.Errorf("object store %s entry is not a directory", dir)
 		}
 	}
-	id, err := s.loadOrCreateRootID()
+	id, err := s.loadOrCreateRootID(wantRootID)
 	if err != nil {
 		return err
+	}
+	if wantRootID != "" && id != wantRootID {
+		return errors.New("object store root already has a different root ID")
 	}
 	s.rootID = id
 	return s.removeStaleTmp()
 }
 
-func (s *FileStore) loadOrCreateRootID() (string, error) {
+func (s *FileStore) loadOrCreateRootID(wantRootID string) (string, error) {
 	content, err := s.root.ReadFile(fsRootMarker)
 	if errors.Is(err, fs.ErrNotExist) {
-		id := uuid.NewString()
+		id := wantRootID
+		if id == "" {
+			id = uuid.NewString()
+		}
 		file, createErr := s.root.OpenFile(fsRootMarker, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 		if errors.Is(createErr, fs.ErrExist) {
-			return s.loadOrCreateRootID() // another process created it first
+			return s.loadOrCreateRootID(wantRootID) // another process created it first
 		}
 		if createErr != nil {
 			return "", fmt.Errorf("create root marker: %w", createErr)
@@ -385,6 +441,9 @@ func (s *FileStore) PutVerifiedReader(ctx context.Context, key string, value io.
 // so a crash can never pair new bytes with an old digest. The per-key lock
 // makes same-key writers last-writer-wins with bytes and digest from one writer.
 func (s *FileStore) write(ctx context.Context, key string, value io.Reader, size int64, wantHex string) error {
+	if s.readOnly {
+		return ErrReadOnly
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -646,6 +705,9 @@ func (s *FileStore) readSidecar(key string) string {
 }
 
 func (s *FileStore) SetVerifiedDigest(ctx context.Context, key, digest string) error {
+	if s.readOnly {
+		return ErrReadOnly
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -664,6 +726,9 @@ func (s *FileStore) SetVerifiedDigest(ctx context.Context, key, digest string) e
 }
 
 func (s *FileStore) Delete(ctx context.Context, key string) error {
+	if s.readOnly {
+		return ErrReadOnly
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}

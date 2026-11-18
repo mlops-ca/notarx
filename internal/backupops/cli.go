@@ -21,10 +21,13 @@ import (
 // It does not load the server .env, mint credentials, or use default endpoints.
 func RunCLI(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		_, _ = fmt.Fprintln(stderr, "usage: gateway backup <export|restore> --spec private.json --bundle directory")
+		_, _ = fmt.Fprintln(stderr, "usage: gateway backup <export|restore|restore-objects> ...")
 		return 2
 	}
 	action := args[0]
+	if action == "restore-objects" {
+		return runRestoreObjects(ctx, args[1:], stdout, stderr)
+	}
 	if action != "export" && action != "restore" {
 		_, _ = fmt.Fprintln(stderr, "invalid backup action")
 		return 2
@@ -73,7 +76,7 @@ func RunCLI(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		}
 		result, err = RestoreNew(ctx, *directory, spec)
 	}
-	if json.NewEncoder(stdout).Encode(result) != nil {
+	if writeReport(stdout, result) != nil {
 		_, _ = fmt.Fprintln(stderr, "backup report could not be written")
 		return 2
 	}
@@ -81,6 +84,10 @@ func RunCLI(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+func writeReport(w io.Writer, result TransferReport) error {
+	return json.NewEncoder(w).Encode(result)
 }
 
 func privateSpec(path string) ([]byte, error) {
