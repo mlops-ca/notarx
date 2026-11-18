@@ -1,8 +1,9 @@
 # Console messages
 
 Every piece of display text lives here, one dictionary per feature and locale:
-`<feature>.en-CA.ts` is the typed reference and `<feature>.zh-CN.ts` is a lagging,
-partial overlay (ADR 0014). `index.ts` merges them into the `enCA` and `zhCN`
+`<feature>.en-CA.ts` is the typed reference, `<feature>.fr-CA.ts` is the complete
+first-class translation and `<feature>.zh-CN.ts` is a lagging, partial overlay
+(ADR 0014). `index.ts` merges them into the `enCA`, `frCA` and `zhCN`
 tables, and `MessageKey` is the union of every en-CA key. `locales.ts` is the
 registry of supported locales (tag, antd locale, dayjs locale, Intl tag) and the
 browser-language detection that `usePreferences()` uses.
@@ -57,6 +58,34 @@ synonyms to avoid.
   and the built-in theme package descriptions are exempt.
 
 It also prints the zh-CN coverage percentage, without failing.
+
+## fr-CA
+
+`<feature>.fr-CA.ts` is a total `Record<keyof typeof <feature>EnCA, string>`, so a key
+missing from fr-CA fails type checking, and `messages.test.ts` also checks the
+placeholders and the writing rules of ADR 0014 (`frCAStyle.ts`): courriel, no
+regular space before `: ? ! ;` (a no-break space before `:`, none before `? ! ;`),
+guillemets with no-break spaces and the typographic apostrophe. Write a no-break
+space as `\u00a0`.
+
+When you add or change an en-CA string, add the fr-CA text in the same change,
+or draft it:
+
+```sh
+node scripts/i18n-draft.mjs --locale fr-CA --model-cmd "<your local LLM command>"
+node scripts/i18n-draft.mjs --locale fr-CA --model stub      # deterministic, for tests
+node scripts/i18n-draft.mjs --sync-sidecar                   # keep the review sidecar in step
+(cd console && node scripts/i18n-fr-check.mjs <feature>)     # verify one dictionary
+```
+
+The model is a command on your own machine (prompt on stdin, a JSON object
+`{key: text}` on stdout); the prompt holds only the UI strings of the missing keys,
+the glossary and the writing rules, never repository data. `.review/fr-CA.json`
+records each key as `draft` or `reviewed` under `keys`, and lists the
+destructive-action keys (delete, quarantine, revoke...) under `critical`.
+`make i18n-release-check` fails while any key is a draft or a critical key has not
+passed the LLM review, so it is expected to fail on a release candidate until that
+review has run. zh-CN has no sidecar and no gate.
 
 ## Migrating inline text
 
