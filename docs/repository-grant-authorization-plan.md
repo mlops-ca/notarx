@@ -250,7 +250,7 @@ depend on it.
 
 ## Metrics
 
-`artifact_gateway_repository_authorization_denials_total` counts denied
+`notarx_repository_authorization_denials_total` counts denied
 decisions produced by an explicitly managed Repository grant set. It has only
 these bounded labels:
 
@@ -264,7 +264,7 @@ can identify a policy rollout problem with:
 
 ```promql
 sum by (format, authorization_reason) (
-  increase(artifact_gateway_repository_authorization_denials_total[15m])
+  increase(notarx_repository_authorization_denials_total[15m])
 )
 ```
 

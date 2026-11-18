@@ -415,7 +415,7 @@ DiagnosticHTTPErrorRate:
     checkedAt: {type: string, format: date-time}
     instanceId: {type: string}
     sessionId: {type: string}
-    source: {type: string, enum: [artifact_gateway_http_requests_total]}
+    source: {type: string, enum: [notarx_http_requests_total]}
     scope: {type: string, enum: [responding_process_business_http]}
     state: {"$ref": "#/HTTPErrorRateState"}
     reason: {"$ref": "#/HTTPErrorRateReason"}

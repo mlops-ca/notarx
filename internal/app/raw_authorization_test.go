@@ -183,7 +183,7 @@ func TestRawUsesManagedGrantsForBoundMembers(t *testing.T) {
 	}
 	metricResponse := httptest.NewRecorder()
 	metrics.Handler(metricResponse, httptest.NewRequest(http.MethodGet, "/metrics", nil))
-	if !strings.Contains(metricResponse.Body.String(), `artifact_gateway_repository_authorization_denials_total{format="raw",authorization_source="repository_grants",authorization_reason="scope_not_granted"} 1`) {
+	if !strings.Contains(metricResponse.Body.String(), `notarx_repository_authorization_denials_total{format="raw",authorization_source="repository_grants",authorization_reason="scope_not_granted"} 1`) {
 		t.Fatalf("authorization metrics=%s", metricResponse.Body.String())
 	}
 }

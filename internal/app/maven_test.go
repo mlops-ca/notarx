@@ -122,7 +122,7 @@ func TestMavenProxyCacheCachesComponentsAndMetadataSeparately(t *testing.T) {
 	}
 	metricResponse := httptest.NewRecorder()
 	metrics.Handler(metricResponse, httptest.NewRequest(http.MethodGet, "/metrics", nil))
-	if !strings.Contains(metricResponse.Body.String(), `artifact_gateway_maven_cache_requests_total{outcome="hit"} 3`) {
+	if !strings.Contains(metricResponse.Body.String(), `notarx_maven_cache_requests_total{outcome="hit"} 3`) {
 		t.Fatalf("metrics = %s", metricResponse.Body.String())
 	}
 }
@@ -435,7 +435,7 @@ func TestMavenUsesManagedGrantsForBoundMembersAndCachedSources(t *testing.T) {
 	}
 	metricResponse := httptest.NewRecorder()
 	metrics.Handler(metricResponse, httptest.NewRequest(http.MethodGet, "/metrics", nil))
-	if !strings.Contains(metricResponse.Body.String(), `artifact_gateway_repository_authorization_denials_total{format="maven",authorization_source="repository_grants",authorization_reason="scope_not_granted"} 3`) {
+	if !strings.Contains(metricResponse.Body.String(), `notarx_repository_authorization_denials_total{format="maven",authorization_source="repository_grants",authorization_reason="scope_not_granted"} 3`) {
 		t.Fatalf("authorization metrics=%s", metricResponse.Body.String())
 	}
 }

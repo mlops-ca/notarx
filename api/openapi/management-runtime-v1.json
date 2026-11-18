@@ -20529,7 +20529,7 @@
           "source": {
             "type": "string",
             "enum": [
-              "artifact_gateway_http_requests_total"
+              "notarx_http_requests_total"
             ]
           },
           "scope": {

@@ -136,7 +136,7 @@ func TestPublicationScanSchedulerRecordsRepositoryLookupFailures(t *testing.T) {
 	}
 	response := httptest.NewRecorder()
 	metrics.Handler(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
-	if !strings.Contains(response.Body.String(), `artifact_gateway_background_operations_total{kind="scan",format="maven",outcome="failed"} 1`) {
+	if !strings.Contains(response.Body.String(), `notarx_background_operations_total{kind="scan",format="maven",outcome="failed"} 1`) {
 		t.Fatalf("lookup failure metrics = %s", response.Body.String())
 	}
 }

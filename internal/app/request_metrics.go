@@ -131,21 +131,21 @@ func requestStatusIndex(status int) int {
 }
 
 func (m *Metrics) writeHTTPMetrics(w io.Writer) {
-	_, _ = io.WriteString(w, "# TYPE artifact_gateway_http_requests_total counter\n# TYPE artifact_gateway_http_requests_in_flight gauge\n# TYPE artifact_gateway_http_request_duration_seconds histogram\n")
+	_, _ = io.WriteString(w, "# TYPE notarx_http_requests_total counter\n# TYPE notarx_http_requests_in_flight gauge\n# TYPE notarx_http_request_duration_seconds histogram\n")
 	for classIndex, class := range requestClassNames {
-		_, _ = io.WriteString(w, "artifact_gateway_http_requests_in_flight{class=\""+class+"\"} "+itoa(m.httpRequests.inFlight[classIndex].Load())+"\n")
+		_, _ = io.WriteString(w, "notarx_http_requests_in_flight{class=\""+class+"\"} "+itoa(m.httpRequests.inFlight[classIndex].Load())+"\n")
 		for statusIndex, status := range requestStatusNames {
 			count := m.httpRequests.requests[classIndex][statusIndex].Load()
 			labels := "class=\"" + class + "\",status=\"" + status + "\""
-			_, _ = io.WriteString(w, "artifact_gateway_http_requests_total{"+labels+"} "+utoa(count)+"\n")
+			_, _ = io.WriteString(w, "notarx_http_requests_total{"+labels+"} "+utoa(count)+"\n")
 			for bucketIndex, upperBound := range requestDurationBuckets {
 				seconds := strconv.FormatFloat(upperBound.Seconds(), 'f', -1, 64)
-				_, _ = io.WriteString(w, "artifact_gateway_http_request_duration_seconds_bucket{"+labels+",le=\""+seconds+"\"} "+utoa(m.httpRequests.buckets[classIndex][statusIndex][bucketIndex].Load())+"\n")
+				_, _ = io.WriteString(w, "notarx_http_request_duration_seconds_bucket{"+labels+",le=\""+seconds+"\"} "+utoa(m.httpRequests.buckets[classIndex][statusIndex][bucketIndex].Load())+"\n")
 			}
-			_, _ = io.WriteString(w, "artifact_gateway_http_request_duration_seconds_bucket{"+labels+",le=\"+Inf\"} "+utoa(count)+"\n")
+			_, _ = io.WriteString(w, "notarx_http_request_duration_seconds_bucket{"+labels+",le=\"+Inf\"} "+utoa(count)+"\n")
 			sum := float64(m.httpRequests.sumNanos[classIndex][statusIndex].Load()) / float64(time.Second)
-			_, _ = io.WriteString(w, "artifact_gateway_http_request_duration_seconds_sum{"+labels+"} "+strconv.FormatFloat(sum, 'f', 9, 64)+"\n")
-			_, _ = io.WriteString(w, "artifact_gateway_http_request_duration_seconds_count{"+labels+"} "+utoa(count)+"\n")
+			_, _ = io.WriteString(w, "notarx_http_request_duration_seconds_sum{"+labels+"} "+strconv.FormatFloat(sum, 'f', 9, 64)+"\n")
+			_, _ = io.WriteString(w, "notarx_http_request_duration_seconds_count{"+labels+"} "+utoa(count)+"\n")
 		}
 	}
 }
@@ -156,16 +156,16 @@ func (m *Metrics) writeRuntimeMetrics(w io.Writer) {
 		for _, role := range m.nodeRoles {
 			roles = append(roles, escapeMetricLabel(role))
 		}
-		_, _ = io.WriteString(w, "# TYPE artifact_gateway_node_info gauge\nartifact_gateway_node_info{instance_id=\""+escapeMetricLabel(m.instanceID)+"\",roles=\""+strings.Join(roles, ",")+"\"} 1\n")
+		_, _ = io.WriteString(w, "# TYPE notarx_node_info gauge\nnotarx_node_info{instance_id=\""+escapeMetricLabel(m.instanceID)+"\",roles=\""+strings.Join(roles, ",")+"\"} 1\n")
 	}
 	var stats runtime.MemStats
 	runtime.ReadMemStats(&stats)
-	_, _ = io.WriteString(w, "# TYPE artifact_gateway_runtime_goroutines gauge\nartifact_gateway_runtime_goroutines "+utoa(uint64(runtime.NumGoroutine()))+"\n")
-	_, _ = io.WriteString(w, "# TYPE artifact_gateway_runtime_heap_alloc_bytes gauge\nartifact_gateway_runtime_heap_alloc_bytes "+utoa(stats.HeapAlloc)+"\n")
-	_, _ = io.WriteString(w, "# TYPE artifact_gateway_runtime_heap_inuse_bytes gauge\nartifact_gateway_runtime_heap_inuse_bytes "+utoa(stats.HeapInuse)+"\n")
-	_, _ = io.WriteString(w, "# TYPE artifact_gateway_runtime_heap_sys_bytes gauge\nartifact_gateway_runtime_heap_sys_bytes "+utoa(stats.HeapSys)+"\n")
-	_, _ = io.WriteString(w, "# TYPE artifact_gateway_runtime_gc_cycles_total counter\nartifact_gateway_runtime_gc_cycles_total "+utoa(uint64(stats.NumGC))+"\n")
-	_, _ = io.WriteString(w, "# TYPE artifact_gateway_runtime_gc_pause_seconds_total counter\nartifact_gateway_runtime_gc_pause_seconds_total "+strconv.FormatFloat(float64(stats.PauseTotalNs)/float64(time.Second), 'f', 9, 64)+"\n")
+	_, _ = io.WriteString(w, "# TYPE notarx_runtime_goroutines gauge\nnotarx_runtime_goroutines "+utoa(uint64(runtime.NumGoroutine()))+"\n")
+	_, _ = io.WriteString(w, "# TYPE notarx_runtime_heap_alloc_bytes gauge\nnotarx_runtime_heap_alloc_bytes "+utoa(stats.HeapAlloc)+"\n")
+	_, _ = io.WriteString(w, "# TYPE notarx_runtime_heap_inuse_bytes gauge\nnotarx_runtime_heap_inuse_bytes "+utoa(stats.HeapInuse)+"\n")
+	_, _ = io.WriteString(w, "# TYPE notarx_runtime_heap_sys_bytes gauge\nnotarx_runtime_heap_sys_bytes "+utoa(stats.HeapSys)+"\n")
+	_, _ = io.WriteString(w, "# TYPE notarx_runtime_gc_cycles_total counter\nnotarx_runtime_gc_cycles_total "+utoa(uint64(stats.NumGC))+"\n")
+	_, _ = io.WriteString(w, "# TYPE notarx_runtime_gc_pause_seconds_total counter\nnotarx_runtime_gc_pause_seconds_total "+strconv.FormatFloat(float64(stats.PauseTotalNs)/float64(time.Second), 'f', 9, 64)+"\n")
 }
 
 func escapeMetricLabel(value string) string {
@@ -178,21 +178,21 @@ func (m *Metrics) writeDatabaseMetrics(w io.Writer) {
 	if len(m.databaseStats) == 0 {
 		return
 	}
-	_, _ = io.WriteString(w, "# TYPE artifact_gateway_database_connections gauge\n")
-	_, _ = io.WriteString(w, "# TYPE artifact_gateway_database_connection_wait_total counter\n")
-	_, _ = io.WriteString(w, "# TYPE artifact_gateway_database_connection_wait_seconds_total counter\n")
-	_, _ = io.WriteString(w, "# TYPE artifact_gateway_database_connections_closed_total counter\n")
+	_, _ = io.WriteString(w, "# TYPE notarx_database_connections gauge\n")
+	_, _ = io.WriteString(w, "# TYPE notarx_database_connection_wait_total counter\n")
+	_, _ = io.WriteString(w, "# TYPE notarx_database_connection_wait_seconds_total counter\n")
+	_, _ = io.WriteString(w, "# TYPE notarx_database_connections_closed_total counter\n")
 	for _, source := range m.databaseStats {
 		stats := source.stats()
 		pool := `pool="` + source.pool + `"`
-		_, _ = io.WriteString(w, "artifact_gateway_database_connections{"+pool+",state=\"max_open\"} "+itoa(int64(stats.MaxOpenConnections))+"\n")
-		_, _ = io.WriteString(w, "artifact_gateway_database_connections{"+pool+",state=\"open\"} "+itoa(int64(stats.OpenConnections))+"\n")
-		_, _ = io.WriteString(w, "artifact_gateway_database_connections{"+pool+",state=\"in_use\"} "+itoa(int64(stats.InUse))+"\n")
-		_, _ = io.WriteString(w, "artifact_gateway_database_connections{"+pool+",state=\"idle\"} "+itoa(int64(stats.Idle))+"\n")
-		_, _ = io.WriteString(w, "artifact_gateway_database_connection_wait_total{"+pool+"} "+utoa(uint64(stats.WaitCount))+"\n")
-		_, _ = io.WriteString(w, "artifact_gateway_database_connection_wait_seconds_total{"+pool+"} "+strconv.FormatFloat(stats.WaitDuration.Seconds(), 'f', 9, 64)+"\n")
-		_, _ = io.WriteString(w, "artifact_gateway_database_connections_closed_total{"+pool+",reason=\"idle_limit\"} "+utoa(uint64(stats.MaxIdleClosed))+"\n")
-		_, _ = io.WriteString(w, "artifact_gateway_database_connections_closed_total{"+pool+",reason=\"idle_time\"} "+utoa(uint64(stats.MaxIdleTimeClosed))+"\n")
-		_, _ = io.WriteString(w, "artifact_gateway_database_connections_closed_total{"+pool+",reason=\"lifetime\"} "+utoa(uint64(stats.MaxLifetimeClosed))+"\n")
+		_, _ = io.WriteString(w, "notarx_database_connections{"+pool+",state=\"max_open\"} "+itoa(int64(stats.MaxOpenConnections))+"\n")
+		_, _ = io.WriteString(w, "notarx_database_connections{"+pool+",state=\"open\"} "+itoa(int64(stats.OpenConnections))+"\n")
+		_, _ = io.WriteString(w, "notarx_database_connections{"+pool+",state=\"in_use\"} "+itoa(int64(stats.InUse))+"\n")
+		_, _ = io.WriteString(w, "notarx_database_connections{"+pool+",state=\"idle\"} "+itoa(int64(stats.Idle))+"\n")
+		_, _ = io.WriteString(w, "notarx_database_connection_wait_total{"+pool+"} "+utoa(uint64(stats.WaitCount))+"\n")
+		_, _ = io.WriteString(w, "notarx_database_connection_wait_seconds_total{"+pool+"} "+strconv.FormatFloat(stats.WaitDuration.Seconds(), 'f', 9, 64)+"\n")
+		_, _ = io.WriteString(w, "notarx_database_connections_closed_total{"+pool+",reason=\"idle_limit\"} "+utoa(uint64(stats.MaxIdleClosed))+"\n")
+		_, _ = io.WriteString(w, "notarx_database_connections_closed_total{"+pool+",reason=\"idle_time\"} "+utoa(uint64(stats.MaxIdleTimeClosed))+"\n")
+		_, _ = io.WriteString(w, "notarx_database_connections_closed_total{"+pool+",reason=\"lifetime\"} "+utoa(uint64(stats.MaxLifetimeClosed))+"\n")
 	}
 }

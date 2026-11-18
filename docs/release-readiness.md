@@ -210,7 +210,7 @@ and any registry access failure separately.
 
       ```promql
       sum by (format, authorization_reason) (
-        increase(artifact_gateway_repository_authorization_denials_total[15m])
+        increase(notarx_repository_authorization_denials_total[15m])
       )
       ```
 
@@ -220,10 +220,10 @@ and any registry access failure separately.
 
       ```promql
       sum by (kind, format, state) (
-        artifact_gateway_background_jobs{state=~"pending|retrying"}
+        notarx_background_jobs{state=~"pending|retrying"}
       )
       max by (kind, format) (
-        artifact_gateway_background_queue_oldest_actionable_age_seconds
+        notarx_background_queue_oldest_actionable_age_seconds
       )
       ```
 
@@ -308,7 +308,7 @@ approved both switches: set `anonymous: true` on the format Group and on every
 member Repository that may serve unauthenticated `GET`/`HEAD`. A false member
 switch narrows the Group and keeps that member's cache and upstream inaccessible
 to anonymous requests. Verify the change with an unauthenticated read, the
-`actor=anonymous` audit record, and `artifact_gateway_anonymous_reads_total`.
+`actor=anonymous` audit record, and `notarx_anonymous_reads_total`.
 
 To roll back public access, first set the affected member switches to false,
 then the Group switch to false and confirm unauthenticated reads receive the

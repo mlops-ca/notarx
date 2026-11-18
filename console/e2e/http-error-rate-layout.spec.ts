@@ -14,7 +14,7 @@ function rate(
     windowEnd: now,
     instanceId: "synthetic-http-node",
     sessionId: "synthetic-http-session",
-    source: "artifact_gateway_http_requests_total",
+    source: "notarx_http_requests_total",
     scope: "responding_process_business_http",
     state: "available",
     windowSeconds: 300,

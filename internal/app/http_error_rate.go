@@ -59,7 +59,7 @@ func diagnosticHTTPErrorRate(o *httperrorrate.Observer, runtime DiagnosticRuntim
 	}
 	r := &adminopenapi.DiagnosticHTTPErrorRate{
 		CheckedAt: s.CheckedAt, InstanceId: s.InstanceID, SessionId: s.SessionID,
-		Source: "artifact_gateway_http_requests_total", Scope: "responding_process_business_http",
+		Source: "notarx_http_requests_total", Scope: "responding_process_business_http",
 		State: adminopenapi.HTTPErrorRateState(s.State), SampleAt: s.SampleAt,
 		WindowSeconds: int(httperrorrate.Window / time.Second), MinimumRequests: int(httperrorrate.MinimumRequests),
 		SampleIntervalSeconds: int(httperrorrate.SampleInterval / time.Second), MaxSampleAgeSeconds: int(httperrorrate.MaxSampleAge / time.Second),

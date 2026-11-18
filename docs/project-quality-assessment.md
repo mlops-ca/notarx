@@ -84,7 +84,7 @@ The Raw byte-path review produced concrete backend improvements in this slice:
 - Each Gateway admits at most four concurrent Raw Proxy staging files by
   default. The positive configurable limit is enforced before upstream access;
   saturation returns `503` with `Retry-After: 1` and increments
-  `artifact_gateway_raw_spool_rejections_total`.
+  `notarx_raw_spool_rejections_total`.
 - A controlled HTTPS Docker workload transferred one cold 64 MiB Proxy path to
   eight concurrent clients with one upstream body GET, then verified byte-exact
   cache replay after the upstream stopped.

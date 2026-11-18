@@ -172,10 +172,10 @@ The readiness values are operationally significant:
 histogram:
 
 ```text
-artifact_gateway_apt_signing_requests_total{outcome="success|untrusted_signer|invalid_signature|unavailable"}
-artifact_gateway_apt_signing_duration_seconds_bucket
-artifact_gateway_apt_signing_duration_seconds_sum
-artifact_gateway_apt_signing_duration_seconds_count
+notarx_apt_signing_requests_total{outcome="success|untrusted_signer|invalid_signature|unavailable"}
+notarx_apt_signing_duration_seconds_bucket
+notarx_apt_signing_duration_seconds_sum
+notarx_apt_signing_duration_seconds_count
 ```
 
 The labels deliberately exclude repository, actor, endpoint, and fingerprint.
@@ -183,8 +183,8 @@ A deployment may start with alerts equivalent to these PromQL expressions,
 tuning the window and threshold to its release frequency:
 
 ```promql
-sum(increase(artifact_gateway_apt_signing_requests_total{outcome!="success"}[15m])) > 0
-histogram_quantile(0.95, sum by (le) (rate(artifact_gateway_apt_signing_duration_seconds_bucket[15m]))) > 10
+sum(increase(notarx_apt_signing_requests_total{outcome!="success"}[15m])) > 0
+histogram_quantile(0.95, sum by (le) (rate(notarx_apt_signing_duration_seconds_bucket[15m]))) > 10
 ```
 
 The first alert should page during an active release window; the second is a

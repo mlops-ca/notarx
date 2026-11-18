@@ -119,7 +119,7 @@ grep -Eq '"Actor":"anonymous"' <<<"$audits" || { printf '%s\n' 'Raw anonymous au
 grep -Eq '"CacheDisposition":"hit"' <<<"$audits" || { printf '%s\n' 'Raw cache-hit audit was not recorded.' >&2; exit 1; }
 grep -Eq '"Outcome":"not_found".*"CacheDisposition":"hit"' <<<"$audits" || { printf '%s\n' 'Raw negative-cache audit hit was not recorded.' >&2; exit 1; }
 metrics=$(curl --silent --show-error --fail "$gateway_url/metrics")
-grep -Eq 'artifact_gateway_raw_cache_requests_total\{outcome="hit"\} [1-9]' <<<"$metrics" || { printf '%s\n' 'Raw cache-hit metric did not increment.' >&2; exit 1; }
-grep -Eq 'artifact_gateway_raw_negative_cache_hits_total [1-9]' <<<"$metrics" || { printf '%s\n' 'Raw negative-cache metric did not increment.' >&2; exit 1; }
+grep -Eq 'notarx_raw_cache_requests_total\{outcome="hit"\} [1-9]' <<<"$metrics" || { printf '%s\n' 'Raw cache-hit metric did not increment.' >&2; exit 1; }
+grep -Eq 'notarx_raw_negative_cache_hits_total [1-9]' <<<"$metrics" || { printf '%s\n' 'Raw negative-cache metric did not increment.' >&2; exit 1; }
 
 printf '%s\n' 'Raw HTTP E2E passed: live Gateway GET/HEAD/range, anonymous policy, canonical rejection, negative cache, allowlist denial, cache recovery, audit, and metrics.'

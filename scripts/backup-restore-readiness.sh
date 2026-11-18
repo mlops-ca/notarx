@@ -459,7 +459,7 @@ status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}
   -H "Authorization: Bearer $denied_token" "$gateway_url/raw/$grant_repository/releases/app.txt")
 [[ "$status" == 401 ]] || { printf 'Managed grant denial before backup returned HTTP %s.\n' "$status" >&2; exit 1; }
 metrics=$(curl --silent --show-error --fail "$gateway_url/metrics")
-grep -Fq 'artifact_gateway_repository_authorization_denials_total{format="raw",authorization_source="repository_grants",authorization_reason="scope_not_granted"} 1' <<<"$metrics" || {
+grep -Fq 'notarx_repository_authorization_denials_total{format="raw",authorization_source="repository_grants",authorization_reason="scope_not_granted"} 1' <<<"$metrics" || {
   printf '%s\n' 'Managed grant denial metric is unavailable or has unexpected labels.' >&2; exit 1;
 }
 status=$(curl --silent --show-error --output "$grant_response" --write-out '%{http_code}' \

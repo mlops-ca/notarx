@@ -110,7 +110,7 @@ wait for it during shutdown; process exit releases its OS resources.
 
 Administrator diagnostics and the Console report optional `httpErrorRate` for
 the responding API/standalone process. The observation reuses
-`artifact_gateway_http_requests_total`: the ten fixed business classes
+`notarx_http_requests_total`: the ten fixed business classes
 `management`, `oci`, `maven`, `raw`, `conan`, `npm`, `pypi`, `go`, `cargo` and
 `other`. All recorded 1xx–5xx statuses contribute to requests; only 5xx contributes
 to errors. Health and metrics probe classes and the `other` status bucket are

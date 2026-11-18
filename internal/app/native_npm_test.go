@@ -203,7 +203,7 @@ func TestNativeNPMHostedUsesManagedRepositoryGrants(t *testing.T) {
 	}
 	metrics := httptest.NewRecorder()
 	handler.ServeHTTP(metrics, httptest.NewRequest(http.MethodGet, "/metrics", nil))
-	if !strings.Contains(metrics.Body.String(), `artifact_gateway_repository_authorization_denials_total{format="npm",authorization_source="repository_grants",authorization_reason="scope_not_granted"} 1`) {
+	if !strings.Contains(metrics.Body.String(), `notarx_repository_authorization_denials_total{format="npm",authorization_source="repository_grants",authorization_reason="scope_not_granted"} 1`) {
 		t.Fatalf("authorization metrics=%s", metrics.Body.String())
 	}
 }
@@ -370,10 +370,10 @@ func TestNativeNPMProxyCachesPackumentAndVerifiedTarball(t *testing.T) {
 	metricResponse := httptest.NewRecorder()
 	metrics.Handler(metricResponse, httptest.NewRequest(http.MethodGet, "/metrics", nil))
 	for _, expectedMetric := range []string{
-		`artifact_gateway_npm_requests_total{method="get"} 5`,
-		`artifact_gateway_npm_cache_requests_total{outcome="hit"} 3`,
-		`artifact_gateway_npm_cache_requests_total{outcome="miss"} 2`,
-		`artifact_gateway_npm_response_bytes_total`,
+		`notarx_npm_requests_total{method="get"} 5`,
+		`notarx_npm_cache_requests_total{outcome="hit"} 3`,
+		`notarx_npm_cache_requests_total{outcome="miss"} 2`,
+		`notarx_npm_response_bytes_total`,
 	} {
 		if !strings.Contains(metricResponse.Body.String(), expectedMetric) {
 			t.Fatalf("metrics missing %q\n%s", expectedMetric, metricResponse.Body.String())

@@ -20,7 +20,7 @@ func TestCollectorWritesRedactedEvidence(t *testing.T) {
 		case "/readyz":
 			w.WriteHeader(http.StatusNoContent)
 		case "/metrics":
-			_, _ = w.Write([]byte("artifact_gateway_oci_cache_requests_total{outcome=\"hit\"} 3\nprivate_metric{actor=\"release-admin\"} 7\n"))
+			_, _ = w.Write([]byte("notarx_oci_cache_requests_total{outcome=\"hit\"} 3\nprivate_metric{actor=\"release-admin\"} 7\n"))
 		case "/api/v1/audits":
 			_, _ = w.Write([]byte(`[{"Outcome":"access_denied","Format":"oci","Actor":"release-admin","Resource":"secret/path","UpstreamHost":"private.example.test"}]`))
 		case "/api/v1/operations/cache":
@@ -51,7 +51,7 @@ func TestCollectorWritesRedactedEvidence(t *testing.T) {
 		}
 	}
 	metrics, err := os.ReadFile(filepath.Join(output, "metrics.json"))
-	if err != nil || !strings.Contains(string(metrics), "artifact_gateway_oci_cache_requests_total") {
+	if err != nil || !strings.Contains(string(metrics), "notarx_oci_cache_requests_total") {
 		t.Fatalf("metrics=%s err=%v", metrics, err)
 	}
 }

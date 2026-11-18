@@ -24,9 +24,9 @@ func TestBackgroundOperationQueueMetricsExposeDurableStateWithBoundedLabels(t *t
 	metrics.Handler(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
 	body := response.Body.String()
 	for _, want := range []string{
-		`artifact_gateway_background_jobs{kind="promotion",format="raw",state="pending"} 2`,
-		`artifact_gateway_background_jobs{kind="promotion",format="raw",state="retrying"} 1`,
-		`artifact_gateway_background_queue_oldest_actionable_age_seconds{kind="promotion",format="raw"} 90`,
+		`notarx_background_jobs{kind="promotion",format="raw",state="pending"} 2`,
+		`notarx_background_jobs{kind="promotion",format="raw",state="retrying"} 1`,
+		`notarx_background_queue_oldest_actionable_age_seconds{kind="promotion",format="raw"} 90`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("metrics missing %q:\n%s", want, body)
@@ -51,7 +51,7 @@ func TestBackgroundOperationQueueObserverRefreshesMetricsFromStore(t *testing.T)
 
 	response := httptest.NewRecorder()
 	metrics.Handler(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
-	if body := response.Body.String(); !strings.Contains(body, `artifact_gateway_background_jobs{kind="promotion",format="oci",state="pending"} 1`) {
+	if body := response.Body.String(); !strings.Contains(body, `notarx_background_jobs{kind="promotion",format="oci",state="pending"} 1`) {
 		t.Fatalf("metrics did not refresh from durable queue:\n%s", body)
 	}
 }
@@ -70,7 +70,7 @@ func TestBackgroundOperationQueueObserverStartsWithImmediateRefresh(t *testing.T
 	for {
 		response := httptest.NewRecorder()
 		metrics.Handler(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
-		if strings.Contains(response.Body.String(), `artifact_gateway_background_jobs{kind="lifecycle",format="conan",state="pending"} 1`) {
+		if strings.Contains(response.Body.String(), `notarx_background_jobs{kind="lifecycle",format="conan",state="pending"} 1`) {
 			return
 		}
 		if time.Now().After(deadline) {
