@@ -19,8 +19,8 @@ import (
 )
 
 func TestPostgresRustFSCargoReplicationRecoveryPreservesIndependentReadPolicies(t *testing.T) {
-	databaseURL, endpoint := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_RUSTFS_ENDPOINT")
-	accessKey, secretKey := os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY")
+	databaseURL, endpoint := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
+	accessKey, secretKey := os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY")
 	if databaseURL == "" || endpoint == "" || accessKey == "" || secretKey == "" {
 		t.Skip("PostgreSQL and RustFS integration environment is required")
 	}
@@ -36,14 +36,14 @@ func TestPostgresRustFSCargoReplicationRecoveryPreservesIndependentReadPolicies(
 	}
 	t.Cleanup(func() { _ = storeA.Close(); _ = storeB.Close() })
 	bucketSuffix := strings.ReplaceAll(uuid.NewString(), "-", "")[:20]
-	sourceObjects, err := objectstore.NewRustFSStore(endpoint, accessKey, secretKey, "cargo-policy-src-"+bucketSuffix)
+	sourceObjects, err := objectstore.NewS3StoreWithCredentials(endpoint, accessKey, secretKey, "cargo-policy-src-"+bucketSuffix)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := sourceObjects.EnsureBucket(ctx); err != nil {
 		t.Fatal(err)
 	}
-	targetObjects, err := objectstore.NewRustFSStore(endpoint, accessKey, secretKey, "cargo-policy-dst-"+bucketSuffix)
+	targetObjects, err := objectstore.NewS3StoreWithCredentials(endpoint, accessKey, secretKey, "cargo-policy-dst-"+bucketSuffix)
 	if err != nil {
 		t.Fatal(err)
 	}

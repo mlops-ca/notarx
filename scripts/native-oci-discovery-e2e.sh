@@ -128,7 +128,7 @@ s3=$("${compose[@]}" port rustfs 9000)
 python3 - "$work" "$evidence" "$pg" "$s3" "$project" "$docker_image" <<'PY'
 import hashlib,json,os,pathlib,subprocess,sys
 work,evidence=map(pathlib.Path,sys.argv[1:3]);x=json.loads((work/'credentials.json').read_text())
-env=dict(os.environ,TEST_DATABASE_URL='postgres://gateway:'+x['password']+'@'+sys.argv[3]+'/gateway_test?sslmode=disable',TEST_RUSTFS_ENDPOINT='http://'+sys.argv[4],TEST_RUSTFS_ACCESS_KEY=x['access'],TEST_RUSTFS_SECRET_KEY=x['secret'],OCI_DISCOVERY_REQUIRED='1',OCI_DISCOVERY_ORAS=str(work/'bin/oras'),OCI_DISCOVERY_PROJECT=sys.argv[5],OCI_DISCOVERY_DIND_IMAGE=sys.argv[6],TMPDIR=str(work))
+env=dict(os.environ,TEST_DATABASE_URL='postgres://gateway:'+x['password']+'@'+sys.argv[3]+'/gateway_test?sslmode=disable',TEST_OBJECT_STORE_ENDPOINT='http://'+sys.argv[4],TEST_OBJECT_STORE_ACCESS_KEY=x['access'],TEST_OBJECT_STORE_SECRET_KEY=x['secret'],OCI_DISCOVERY_REQUIRED='1',OCI_DISCOVERY_ORAS=str(work/'bin/oras'),OCI_DISCOVERY_PROJECT=sys.argv[5],OCI_DISCOVERY_DIND_IMAGE=sys.argv[6],TMPDIR=str(work))
 command=['go','test','-json','-race','-count=1','-p','1','-timeout=8m','-tags=integration,ocidiscoveryclient','./internal/ocidiscovery','./internal/repository','./internal/app','-run','^Test(OCICatalog|OCIReferrers|MemoryOCIDiscovery|ReferrerManifest|Postgres.*OCIDiscovery)']
 (evidence/'command.json').write_text(json.dumps(command,indent=2)+'\n')
 with (evidence/'results.jsonl').open('w') as out:result=subprocess.run(command,env=env,stdout=out,stderr=subprocess.STDOUT)

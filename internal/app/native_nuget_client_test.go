@@ -110,7 +110,7 @@ func startNuGetGatewayBinaryWithRoles(t *testing.T, c nugetOfficialClient, bucke
 			cmd.Env = append(cmd.Env, e)
 		}
 	}
-	cmd.Env = append(cmd.Env, "NOTARX_DATABASE_URL="+os.Getenv("TEST_DATABASE_URL"), "NOTARX_RUSTFS_ENDPOINT="+os.Getenv("TEST_RUSTFS_ENDPOINT"), "NOTARX_RUSTFS_ACCESS_KEY="+os.Getenv("TEST_RUSTFS_ACCESS_KEY"), "NOTARX_RUSTFS_SECRET_KEY="+os.Getenv("TEST_RUSTFS_SECRET_KEY"), "NOTARX_RUSTFS_BUCKET="+bucket, "NOTARX_ADMIN_TOKEN="+c.admin, "NOTARX_ADMIN_ACTOR=nuget-gate-operator", "NOTARX_RESOLVER_TOKEN="+c.reader, "NOTARX_RESOLVER_ACTOR=nuget-gate-reader", "NOTARX_NUGET_PREVIEW_ENABLED=true", "NOTARX_NODE_ROLES="+roles, "NOTARX_LISTEN_ADDRESS="+address, "NOTARX_ACCESS_LOG=limited")
+	cmd.Env = append(cmd.Env, "NOTARX_DATABASE_URL="+os.Getenv("TEST_DATABASE_URL"), "NOTARX_OBJECT_STORE_ENDPOINT="+os.Getenv("TEST_OBJECT_STORE_ENDPOINT"), "NOTARX_OBJECT_STORE_ACCESS_KEY="+os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), "NOTARX_OBJECT_STORE_SECRET_KEY="+os.Getenv("TEST_OBJECT_STORE_SECRET_KEY"), "NOTARX_OBJECT_STORE_AUTO_CREATE_BUCKET=true", "NOTARX_OBJECT_STORE_BUCKET="+bucket, "NOTARX_ADMIN_TOKEN="+c.admin, "NOTARX_ADMIN_ACTOR=nuget-gate-operator", "NOTARX_RESOLVER_TOKEN="+c.reader, "NOTARX_RESOLVER_ACTOR=nuget-gate-reader", "NOTARX_NUGET_PREVIEW_ENABLED=true", "NOTARX_NODE_ROLES="+roles, "NOTARX_LISTEN_ADDRESS="+address, "NOTARX_ACCESS_LOG=limited")
 	cmd.Stdout, cmd.Stderr = file, file
 	if err = cmd.Start(); err != nil {
 		_ = file.Close()
@@ -213,7 +213,7 @@ func restartNuGetOwnedService(t *testing.T, project, service string) {
 	if service == "rustfs" {
 		client := &http.Client{Timeout: time.Second}
 		for {
-			request, _ := http.NewRequestWithContext(ctx, http.MethodGet, os.Getenv("TEST_RUSTFS_ENDPOINT")+"/health", nil)
+			request, _ := http.NewRequestWithContext(ctx, http.MethodGet, os.Getenv("TEST_OBJECT_STORE_ENDPOINT")+"/health", nil)
 			response, err := client.Do(request)
 			if err == nil {
 				_ = response.Body.Close()
@@ -231,7 +231,7 @@ func restartNuGetOwnedService(t *testing.T, project, service string) {
 }
 
 func TestNativeNuGetRealDotnetPushAndColdTransitiveRestore(t *testing.T) {
-	for _, key := range []string{"NUGET_NOTARX_BIN", "NUGET_DOTNET_IMAGE", "NUGET_COMPOSE_PROJECT", "NUGET_EVIDENCE_DIR", "TEST_DATABASE_URL", "TEST_RUSTFS_ENDPOINT"} {
+	for _, key := range []string{"NUGET_NOTARX_BIN", "NUGET_DOTNET_IMAGE", "NUGET_COMPOSE_PROJECT", "NUGET_EVIDENCE_DIR", "TEST_DATABASE_URL", "TEST_OBJECT_STORE_ENDPOINT"} {
 		if os.Getenv(key) == "" {
 			t.Skip("owned native-nuget-e2e fixture is required")
 		}

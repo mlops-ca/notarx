@@ -163,8 +163,8 @@ apply_runtime_inputs() {
     --from-literal=RUSTFS_SECRET_KEY="$configured_rustfs_secret_key" \
     --from-literal=RUSTFS_RPC_SECRET="$configured_rustfs_rpc_secret" \
     --from-literal=NOTARX_DATABASE_URL="postgres://gateway:${configured_postgres_password}@postgres:5432/gateway?sslmode=disable" \
-    --from-literal=NOTARX_RUSTFS_ACCESS_KEY="$configured_rustfs_access_key" \
-    --from-literal=NOTARX_RUSTFS_SECRET_KEY="$configured_rustfs_secret_key" \
+    --from-literal=NOTARX_OBJECT_STORE_ACCESS_KEY="$configured_rustfs_access_key" \
+    --from-literal=NOTARX_OBJECT_STORE_SECRET_KEY="$configured_rustfs_secret_key" \
     --from-literal=NOTARX_ADMIN_TOKEN="$configured_admin_token" \
     --from-literal=NOTARX_RESOLVER_TOKEN="$configured_resolver_token" \
     --from-literal=NOTARX_SETTINGS_ENCRYPTION_KEY="$configured_settings_key" \

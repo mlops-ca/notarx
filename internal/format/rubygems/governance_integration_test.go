@@ -23,7 +23,7 @@ import (
 
 func TestRubyGemsPostgresRustFSGovernanceAtomicAuditAndRestart(t *testing.T) {
 	dsn := os.Getenv("TEST_DATABASE_URL")
-	if dsn == "" || os.Getenv("TEST_RUSTFS_ENDPOINT") == "" {
+	if dsn == "" || os.Getenv("TEST_OBJECT_STORE_ENDPOINT") == "" {
 		t.Skip("owned PostgreSQL and RustFS required")
 	}
 	if err := testsupport.ValidateIsolatedDatabaseURL(dsn); err != nil {
@@ -48,7 +48,7 @@ func TestRubyGemsPostgresRustFSGovernanceAtomicAuditAndRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	objects, err := objectstore.NewRustFSStore(os.Getenv("TEST_RUSTFS_ENDPOINT"), os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY"), "ruby-governance-"+uuid.NewString())
+	objects, err := objectstore.NewS3StoreWithCredentials(os.Getenv("TEST_OBJECT_STORE_ENDPOINT"), os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY"), "ruby-governance-"+uuid.NewString())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -7,21 +7,44 @@ import (
 	"net/url"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 )
 
+// S3Settings describes an S3-compatible backup or restore target. Zero Region,
+// PathStyle and ChecksumMode values select the local-service defaults
+// (us-east-1, path-style, when_required) so existing specs keep working; set
+// them explicitly for OCI or real-region S3.
 type S3Settings struct {
-	Endpoint  string `json:"endpoint"`
-	Bucket    string `json:"bucket"`
-	AccessKey string `json:"accessKey"`
-	SecretKey string `json:"secretKey"`
+	Endpoint     string `json:"endpoint"`
+	Bucket       string `json:"bucket"`
+	AccessKey    string `json:"accessKey"`
+	SecretKey    string `json:"secretKey"`
+	Region       string `json:"region,omitempty"`
+	PathStyle    *bool  `json:"pathStyle,omitempty"`
+	ChecksumMode string `json:"checksumMode,omitempty"`
 }
+
 type s3Objects struct {
-	store  *objectstore.RustFSStore
+	store  *objectstore.S3Store
 	client *s3.Client
 	bucket string
+}
+
+// objectStoreConfig maps the settings onto the shared object store config.
+func (s S3Settings) objectStoreConfig() objectstore.Config {
+	cfg := objectstore.Defaults()
+	cfg.Endpoint, cfg.Bucket, cfg.AccessKey, cfg.SecretKey = s.Endpoint, s.Bucket, s.AccessKey, s.SecretKey
+	if s.Region != "" {
+		cfg.Region = s.Region
+	}
+	if s.PathStyle != nil {
+		cfg.PathStyle = *s.PathStyle
+	}
+	if s.ChecksumMode != "" {
+		cfg.ChecksumMode = s.ChecksumMode
+	}
+	return cfg
 }
 
 func newS3(s S3Settings) (*s3Objects, error) {
@@ -29,12 +52,11 @@ func newS3(s S3Settings) (*s3Objects, error) {
 	if err != nil || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.Host == "" || endpoint.User != nil || endpoint.RawQuery != "" || endpoint.Fragment != "" || s.Bucket == "" || s.AccessKey == "" || s.SecretKey == "" {
 		return nil, errors.New("invalid explicit S3 settings")
 	}
-	store, err := objectstore.NewRustFSStore(s.Endpoint, s.AccessKey, s.SecretKey, s.Bucket)
+	store, err := objectstore.NewS3Store(s.objectStoreConfig())
 	if err != nil {
 		return nil, errors.New("object settings unavailable")
 	}
-	client := s3.New(s3.Options{Region: "us-east-1", BaseEndpoint: aws.String(s.Endpoint), UsePathStyle: true, Credentials: credentials.NewStaticCredentialsProvider(s.AccessKey, s.SecretKey, "")})
-	return &s3Objects{store: store, client: client, bucket: s.Bucket}, nil
+	return &s3Objects{store: store, client: store.Client(), bucket: s.Bucket}, nil
 }
 func (s *s3Objects) WalkObjects(ctx context.Context, visit func(string, int64) error) error {
 	pages := s3.NewListObjectsV2Paginator(s.client, &s3.ListObjectsV2Input{Bucket: aws.String(s.bucket), MaxKeys: aws.Int32(1000)}, func(o *s3.ListObjectsV2PaginatorOptions) { o.StopOnDuplicateToken = true })

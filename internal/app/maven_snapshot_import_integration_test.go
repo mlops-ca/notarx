@@ -29,7 +29,7 @@ import (
 )
 
 func TestPostgresRustFSArchetypeSnapshotImportCLIExplicitTarget(t *testing.T) {
-	if os.Getenv("TEST_DATABASE_URL") == "" || os.Getenv("TEST_RUSTFS_ENDPOINT") == "" {
+	if os.Getenv("TEST_DATABASE_URL") == "" || os.Getenv("TEST_OBJECT_STORE_ENDPOINT") == "" {
 		t.Skip("isolated PostgreSQL/RustFS required")
 	}
 	ctx := context.Background()
@@ -43,7 +43,7 @@ func TestPostgresRustFSArchetypeSnapshotImportCLIExplicitTarget(t *testing.T) {
 		t.Fatal(err)
 	}
 	bucket := "snapshot-cli-" + uuid.NewString()
-	objects, err := objectstore.NewRustFSStore(os.Getenv("TEST_RUSTFS_ENDPOINT"), os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY"), bucket)
+	objects, err := objectstore.NewS3StoreWithCredentials(os.Getenv("TEST_OBJECT_STORE_ENDPOINT"), os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY"), bucket)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestPostgresRustFSArchetypeSnapshotImportCLIExplicitTarget(t *testing.T) {
 		t.Fatalf("%v %v", rejected, err)
 	}
 	defer func() { _ = p.Close() }()
-	spec := snapshotimport.TargetSpec{TargetID: "synthetic-target", Actor: "synthetic-operator", RepositoryID: repo.ID, DatabaseURLEnv: "TEST_DATABASE_URL", S3Endpoint: os.Getenv("TEST_RUSTFS_ENDPOINT"), S3Bucket: bucket, S3AccessKeyEnv: "TEST_RUSTFS_ACCESS_KEY", S3SecretKeyEnv: "TEST_RUSTFS_SECRET_KEY"}
+	spec := snapshotimport.TargetSpec{TargetID: "synthetic-target", Actor: "synthetic-operator", RepositoryID: repo.ID, DatabaseURLEnv: "TEST_DATABASE_URL", S3Endpoint: os.Getenv("TEST_OBJECT_STORE_ENDPOINT"), S3Bucket: bucket, S3AccessKeyEnv: "TEST_OBJECT_STORE_ACCESS_KEY", S3SecretKeyEnv: "TEST_OBJECT_STORE_SECRET_KEY"}
 	specPath := filepath.Join(t.TempDir(), "target.json")
 	b, _ := json.Marshal(spec)
 	if err = os.WriteFile(specPath, b, 0600); err != nil {
@@ -234,7 +234,7 @@ func TestPostgresRustFSArchetypeSnapshotImportCLIExplicitTarget(t *testing.T) {
 
 	// A changed physical bucket is rejected even with the same human targetId.
 	spec.S3Bucket = "snapshot-other-" + uuid.NewString()
-	other, err := objectstore.NewRustFSStore(spec.S3Endpoint, os.Getenv(spec.S3AccessKeyEnv), os.Getenv(spec.S3SecretKeyEnv), spec.S3Bucket)
+	other, err := objectstore.NewS3StoreWithCredentials(spec.S3Endpoint, os.Getenv(spec.S3AccessKeyEnv), os.Getenv(spec.S3SecretKeyEnv), spec.S3Bucket)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -462,7 +462,7 @@ func TestPostgresSnapshotImportOneConnectionPoolsAndSourceBuildBoundary(t *testi
 }
 
 func TestPostgresRustFSMavenSnapshotImportAtomicReplay(t *testing.T) {
-	if os.Getenv("TEST_DATABASE_URL") == "" || os.Getenv("TEST_RUSTFS_ENDPOINT") == "" {
+	if os.Getenv("TEST_DATABASE_URL") == "" || os.Getenv("TEST_OBJECT_STORE_ENDPOINT") == "" {
 		t.Skip("isolated PostgreSQL/RustFS required")
 	}
 	ctx := context.Background()
@@ -475,7 +475,7 @@ func TestPostgresRustFSMavenSnapshotImportAtomicReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	objects, err := objectstore.NewRustFSStore(os.Getenv("TEST_RUSTFS_ENDPOINT"), os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY"), "synthetic-snapshot-"+uuid.NewString())
+	objects, err := objectstore.NewS3StoreWithCredentials(os.Getenv("TEST_OBJECT_STORE_ENDPOINT"), os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY"), "synthetic-snapshot-"+uuid.NewString())
 	if err != nil {
 		t.Fatal(err)
 	}

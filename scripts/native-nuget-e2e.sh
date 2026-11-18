@@ -127,7 +127,7 @@ python3 - "$work" "$evidence" "$postgres_address" "$rustfs_address" "$sdk_image"
 import hashlib,json,os,pathlib,subprocess,sys
 work,evidence=map(pathlib.Path,sys.argv[1:3]);credentials=json.loads((work/'credentials.json').read_text())
 env=dict(os.environ)
-env.update({'TEST_DATABASE_URL':'postgres://gateway:'+credentials['password']+'@'+sys.argv[3]+'/gateway_test?sslmode=disable','TEST_RUSTFS_ENDPOINT':'http://'+sys.argv[4],'TEST_RUSTFS_ACCESS_KEY':credentials['access'],'TEST_RUSTFS_SECRET_KEY':credentials['secret'],'NUGET_NOTARX_BIN':str(work/'gateway'),'NUGET_NOTARX_LINUX_BIN':str(work/'gateway-linux'),'NUGET_DOTNET_IMAGE':sys.argv[5],'NUGET_COMPOSE_PROJECT':sys.argv[6],'NUGET_EVIDENCE_DIR':str(evidence)})
+env.update({'TEST_DATABASE_URL':'postgres://gateway:'+credentials['password']+'@'+sys.argv[3]+'/gateway_test?sslmode=disable','TEST_OBJECT_STORE_ENDPOINT':'http://'+sys.argv[4],'TEST_OBJECT_STORE_ACCESS_KEY':credentials['access'],'TEST_OBJECT_STORE_SECRET_KEY':credentials['secret'],'NUGET_NOTARX_BIN':str(work/'gateway'),'NUGET_NOTARX_LINUX_BIN':str(work/'gateway-linux'),'NUGET_DOTNET_IMAGE':sys.argv[5],'NUGET_COMPOSE_PROJECT':sys.argv[6],'NUGET_EVIDENCE_DIR':str(evidence)})
 with (evidence/'results.jsonl').open('w') as output:
     result=subprocess.run(['go','test','-json','-count=1','-p','1','-tags=integration,nugetclient','./internal/protocol/nuget','./internal/repository','./internal/format/nuget','./internal/app','./internal/backupops','-run','^Test(NuGet|PostgresNuGet|PostgresRustFSNuGet|NativeNuGetRealDotnet)','-timeout','1200s'],env=env,stdout=output,stderr=subprocess.STDOUT)
 events=[]

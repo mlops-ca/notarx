@@ -18,6 +18,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/database"
 	"github.com/mlops-ca/notarx/internal/emailnotification"
 	"github.com/mlops-ca/notarx/internal/localcapacity"
+	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -114,10 +115,7 @@ type Config struct {
 	DatabasePool                database.PoolConfig
 	DatabaseCoordinatorPool     database.PoolConfig
 	DatabaseArtifactLockPool    database.PoolConfig
-	RustFSEndpoint              string
-	RustFSBucket                string
-	RustFSAccessKey             string
-	RustFSSecretKey             string
+	ObjectStore                 objectstore.Config
 	OCIProxyAllowedHosts        []string
 	MavenProxyAllowedHosts      []string
 	RawProxyAllowedHosts        []string
@@ -208,10 +206,6 @@ func Load() (Config, error) {
 		DatabasePool:                    database.DefaultPoolConfig(),
 		DatabaseCoordinatorPool:         database.DefaultCoordinatorPoolConfig(),
 		DatabaseArtifactLockPool:        database.DefaultArtifactLockPoolConfig(),
-		RustFSEndpoint:                  os.Getenv("NOTARX_RUSTFS_ENDPOINT"),
-		RustFSBucket:                    os.Getenv("NOTARX_RUSTFS_BUCKET"),
-		RustFSAccessKey:                 os.Getenv("NOTARX_RUSTFS_ACCESS_KEY"),
-		RustFSSecretKey:                 os.Getenv("NOTARX_RUSTFS_SECRET_KEY"),
 		OCIProxyAllowedHosts:            splitCSV(os.Getenv("NOTARX_OCI_PROXY_ALLOWED_HOSTS")),
 		MavenProxyAllowedHosts:          splitCSV(os.Getenv("NOTARX_MAVEN_PROXY_ALLOWED_HOSTS")),
 		RawProxyAllowedHosts:            splitCSV(os.Getenv("NOTARX_RAW_PROXY_ALLOWED_HOSTS")),
@@ -318,15 +312,17 @@ func Load() (Config, error) {
 	if cfg.ConanTokenSecret != "" && (len(cfg.ConanTokenSecret) < 32 || cfg.ConanTokenSecret == cfg.ResolverToken || cfg.ConanTokenSecret == cfg.AdminToken) {
 		return Config{}, fmt.Errorf("NOTARX_CONAN_TOKEN_SECRET requires at least 32 bytes and must differ from login credentials")
 	}
-	if cfg.DatabaseURL == "" || cfg.RustFSEndpoint == "" || cfg.RustFSBucket == "" || cfg.RustFSAccessKey == "" || cfg.RustFSSecretKey == "" || cfg.AdminToken == "" || cfg.ResolverToken == "" {
-		return Config{}, fmt.Errorf("NOTARX_DATABASE_URL, NOTARX_RUSTFS_ENDPOINT, NOTARX_RUSTFS_BUCKET, NOTARX_RUSTFS_ACCESS_KEY, NOTARX_RUSTFS_SECRET_KEY, NOTARX_ADMIN_TOKEN, and NOTARX_RESOLVER_TOKEN are required")
+	if cfg.DatabaseURL == "" || cfg.AdminToken == "" || cfg.ResolverToken == "" {
+		return Config{}, fmt.Errorf("NOTARX_DATABASE_URL, NOTARX_ADMIN_TOKEN, and NOTARX_RESOLVER_TOKEN are required")
 	}
 	if _, err := url.ParseRequestURI(cfg.DatabaseURL); err != nil {
 		return Config{}, fmt.Errorf("NOTARX_DATABASE_URL is not a valid URL")
 	}
-	if _, err := url.ParseRequestURI(cfg.RustFSEndpoint); err != nil {
-		return Config{}, fmt.Errorf("NOTARX_RUSTFS_ENDPOINT is not a valid URL")
+	objectConfig, err := loadObjectStore()
+	if err != nil {
+		return Config{}, err
 	}
+	cfg.ObjectStore = objectConfig
 	if err := configureScanner(&cfg); err != nil {
 		return Config{}, err
 	}

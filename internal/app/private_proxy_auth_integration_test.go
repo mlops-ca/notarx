@@ -32,12 +32,12 @@ func TestPostgresRustFSPrivateProxyCredentials(t *testing.T) {
 
 func newPrivateProxyPostgresBackend(t *testing.T) privateProxyBackend {
 	t.Helper()
-	databaseURL, endpoint := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_RUSTFS_ENDPOINT")
-	accessKey, secretKey := os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY")
+	databaseURL, endpoint := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
+	accessKey, secretKey := os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY")
 	if databaseURL == "" || endpoint == "" || accessKey == "" || secretKey == "" {
 		t.Skip("isolated PostgreSQL and RustFS are required")
 	}
-	objects, err := objectstore.NewRustFSStore(endpoint, accessKey, secretKey, "private-auth-"+strings.ReplaceAll(uuid.NewString(), "-", ""))
+	objects, err := objectstore.NewS3StoreWithCredentials(endpoint, accessKey, secretKey, "private-auth-"+strings.ReplaceAll(uuid.NewString(), "-", ""))
 	if err != nil {
 		t.Fatal(err)
 	}

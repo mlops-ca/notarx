@@ -153,9 +153,9 @@ func TestPostgresReplicationPlansPersistCheckpointsAndRetry(t *testing.T) {
 
 func TestPostgresRustFSReplicationStreamsLargeObjectAndRecoversCheckpointFailure(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	endpoint := os.Getenv("TEST_RUSTFS_ENDPOINT")
-	accessKey := os.Getenv("TEST_RUSTFS_ACCESS_KEY")
-	secretKey := os.Getenv("TEST_RUSTFS_SECRET_KEY")
+	endpoint := os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
+	accessKey := os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY")
+	secretKey := os.Getenv("TEST_OBJECT_STORE_SECRET_KEY")
 	if databaseURL == "" || endpoint == "" || accessKey == "" || secretKey == "" {
 		t.Skip("PostgreSQL and S3 integration environment is required")
 	}
@@ -179,11 +179,11 @@ func TestPostgresRustFSReplicationStreamsLargeObjectAndRecoversCheckpointFailure
 		t.Fatal(err)
 	}
 	suffix := strings.ReplaceAll(uuid.NewString(), "-", "")[:20]
-	sourceObjects, err := objectstore.NewRustFSStore(endpoint, accessKey, secretKey, "replication-source-"+suffix)
+	sourceObjects, err := objectstore.NewS3StoreWithCredentials(endpoint, accessKey, secretKey, "replication-source-"+suffix)
 	if err != nil {
 		t.Fatal(err)
 	}
-	targetObjects, err := objectstore.NewRustFSStore(endpoint, accessKey, secretKey, "replication-target-"+suffix)
+	targetObjects, err := objectstore.NewS3StoreWithCredentials(endpoint, accessKey, secretKey, "replication-target-"+suffix)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -501,9 +501,9 @@ func TestPostgresRawReplicationManagementAPI(t *testing.T) {
 
 func TestPostgresRustFSRawPromotionRetainsSharedObject(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	endpoint := os.Getenv("TEST_RUSTFS_ENDPOINT")
-	accessKey := os.Getenv("TEST_RUSTFS_ACCESS_KEY")
-	secretKey := os.Getenv("TEST_RUSTFS_SECRET_KEY")
+	endpoint := os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
+	accessKey := os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY")
+	secretKey := os.Getenv("TEST_OBJECT_STORE_SECRET_KEY")
 	if databaseURL == "" || endpoint == "" || accessKey == "" || secretKey == "" {
 		t.Skip("PostgreSQL and S3 integration environment is required")
 	}
@@ -521,7 +521,7 @@ func TestPostgresRustFSRawPromotionRetainsSharedObject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	objects, err := objectstore.NewRustFSStore(endpoint, accessKey, secretKey, "promotion-raw-"+strings.ReplaceAll(uuid.NewString(), "-", "")[:20])
+	objects, err := objectstore.NewS3StoreWithCredentials(endpoint, accessKey, secretKey, "promotion-raw-"+strings.ReplaceAll(uuid.NewString(), "-", "")[:20])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -560,9 +560,9 @@ func TestPostgresRustFSRawPromotionRetainsSharedObject(t *testing.T) {
 
 func TestPostgresRustFSRawReplicationPublishesTargetAsset(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	endpoint := os.Getenv("TEST_RUSTFS_ENDPOINT")
-	accessKey := os.Getenv("TEST_RUSTFS_ACCESS_KEY")
-	secretKey := os.Getenv("TEST_RUSTFS_SECRET_KEY")
+	endpoint := os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
+	accessKey := os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY")
+	secretKey := os.Getenv("TEST_OBJECT_STORE_SECRET_KEY")
 	if databaseURL == "" || endpoint == "" || accessKey == "" || secretKey == "" {
 		t.Skip("PostgreSQL and S3 integration environment is required")
 	}
@@ -572,7 +572,7 @@ func TestPostgresRustFSRawReplicationPublishesTargetAsset(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	objects, err := objectstore.NewRustFSStore(endpoint, accessKey, secretKey, "replication-raw-"+strings.ReplaceAll(uuid.NewString(), "-", "")[:20])
+	objects, err := objectstore.NewS3StoreWithCredentials(endpoint, accessKey, secretKey, "replication-raw-"+strings.ReplaceAll(uuid.NewString(), "-", "")[:20])
 	if err != nil {
 		t.Fatal(err)
 	}

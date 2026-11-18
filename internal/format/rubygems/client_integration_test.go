@@ -85,7 +85,7 @@ func ownedFile(t *testing.T, root, name, body string) {
 func TestRubyGemsFixedOfficialClientColdTransitiveInstallAndRestart(t *testing.T) {
 	image := os.Getenv("RUBYGEMS_TEST_IMAGE")
 	dsn := os.Getenv("TEST_DATABASE_URL")
-	if image == "" || dsn == "" || os.Getenv("TEST_RUSTFS_ENDPOINT") == "" {
+	if image == "" || dsn == "" || os.Getenv("TEST_OBJECT_STORE_ENDPOINT") == "" {
 		t.Skip("fixed official Ruby image and owned PostgreSQL/RustFS required")
 	}
 	if e := testsupport.ValidateIsolatedDatabaseURL(dsn); e != nil {
@@ -243,7 +243,7 @@ func TestRubyGemsFixedOfficialClientColdTransitiveInstallAndRestart(t *testing.T
 	if e := os.WriteFile(filepath.Join(evidence, "original-gem-closures.json"), append(encoded, '\n'), 0600); e != nil {
 		t.Fatal(e)
 	}
-	var objects *objectstore.RustFSStore
+	var objects *objectstore.S3Store
 	var repos *repository.PostgresStore
 	var repo repository.HostedRepository
 	var server *httptest.Server
@@ -260,7 +260,7 @@ func TestRubyGemsFixedOfficialClientColdTransitiveInstallAndRestart(t *testing.T
 		}
 		ownedRepos := repos
 		t.Cleanup(func() { _ = ownedRepos.Close() })
-		objects, e = objectstore.NewRustFSStore(os.Getenv("TEST_RUSTFS_ENDPOINT"), os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY"), bucket)
+		objects, e = objectstore.NewS3StoreWithCredentials(os.Getenv("TEST_OBJECT_STORE_ENDPOINT"), os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY"), bucket)
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -796,7 +796,7 @@ func startRealRubyGateway(t *testing.T, admin, reader, bucket, evidence string, 
 			cmd.Env = append(cmd.Env, value)
 		}
 	}
-	cmd.Env = append(cmd.Env, "NOTARX_DATABASE_URL="+os.Getenv("TEST_DATABASE_URL"), "NOTARX_RUSTFS_ENDPOINT="+os.Getenv("TEST_RUSTFS_ENDPOINT"), "NOTARX_RUSTFS_ACCESS_KEY="+os.Getenv("TEST_RUSTFS_ACCESS_KEY"), "NOTARX_RUSTFS_SECRET_KEY="+os.Getenv("TEST_RUSTFS_SECRET_KEY"), "NOTARX_RUSTFS_BUCKET="+bucket, "NOTARX_ADMIN_TOKEN="+admin, "NOTARX_ADMIN_ACTOR=ruby-gate-operator", "NOTARX_RESOLVER_TOKEN="+reader, "NOTARX_RESOLVER_ACTOR=ruby-gate-reader", "NOTARX_RUBYGEMS_PREVIEW_ENABLED=true", "NOTARX_REPOSITORY_PRESETS=none", "NOTARX_NODE_ROLES=api", "NOTARX_LISTEN_ADDRESS="+address, "NOTARX_ACCESS_LOG=limited")
+	cmd.Env = append(cmd.Env, "NOTARX_DATABASE_URL="+os.Getenv("TEST_DATABASE_URL"), "NOTARX_OBJECT_STORE_ENDPOINT="+os.Getenv("TEST_OBJECT_STORE_ENDPOINT"), "NOTARX_OBJECT_STORE_ACCESS_KEY="+os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), "NOTARX_OBJECT_STORE_SECRET_KEY="+os.Getenv("TEST_OBJECT_STORE_SECRET_KEY"), "NOTARX_OBJECT_STORE_AUTO_CREATE_BUCKET=true", "NOTARX_OBJECT_STORE_BUCKET="+bucket, "NOTARX_ADMIN_TOKEN="+admin, "NOTARX_ADMIN_ACTOR=ruby-gate-operator", "NOTARX_RESOLVER_TOKEN="+reader, "NOTARX_RESOLVER_ACTOR=ruby-gate-reader", "NOTARX_RUBYGEMS_PREVIEW_ENABLED=true", "NOTARX_REPOSITORY_PRESETS=none", "NOTARX_NODE_ROLES=api", "NOTARX_LISTEN_ADDRESS="+address, "NOTARX_ACCESS_LOG=limited")
 	if len(replication) > 0 && replication[0] {
 		for i, v := range cmd.Env {
 			if v == "NOTARX_NODE_ROLES=api" {
@@ -883,7 +883,7 @@ func restartOwnedRubyServices(t *testing.T, dsn string) []string {
 		cancel()
 		if err == nil {
 			client := &http.Client{Timeout: time.Second}
-			response, e := client.Get(strings.TrimSuffix(os.Getenv("TEST_RUSTFS_ENDPOINT"), "/") + "/health")
+			response, e := client.Get(strings.TrimSuffix(os.Getenv("TEST_OBJECT_STORE_ENDPOINT"), "/") + "/health")
 			if e != nil {
 				err = e
 			} else {

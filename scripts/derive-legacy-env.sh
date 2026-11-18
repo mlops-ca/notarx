@@ -20,7 +20,10 @@ git cat-file -e "$ref^{commit}" 2>/dev/null || {
   exit 1
 }
 
-names=$(git grep -ohE "${legacy_prefix}[A-Z0-9_]*[A-Z0-9]" "$ref" -- 'cmd/*.go' 'internal/*.go' ':!*_test.go' | sort -u)
+# The object store keys were renamed a second time by ADR 0017 (to
+# NOTARX_OBJECT_STORE_*), so they are not a 1:1 rename; internal/config/
+# legacy_env_objectstore.go carries them with their final replacement.
+names=$(git grep -ohE "${legacy_prefix}[A-Z0-9_]*[A-Z0-9]" "$ref" -- 'cmd/*.go' 'internal/*.go' ':!*_test.go' | grep -v "^${legacy_prefix}RUSTFS_" | sort -u)
 if [[ -z "$names" ]]; then
   echo "no legacy environment names found at $ref" >&2
   exit 1

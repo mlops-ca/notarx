@@ -19,8 +19,8 @@ import (
 )
 
 func TestPostgresRustFSPublisherExposesOneCompleteSignedSnapshotAcrossInstances(t *testing.T) {
-	databaseURL, endpoint := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_RUSTFS_ENDPOINT")
-	accessKey, secretKey := os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY")
+	databaseURL, endpoint := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
+	accessKey, secretKey := os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY")
 	if databaseURL == "" || endpoint == "" || accessKey == "" || secretKey == "" {
 		t.Skip("PostgreSQL and RustFS integration environment is required")
 	}
@@ -36,7 +36,7 @@ func TestPostgresRustFSPublisherExposesOneCompleteSignedSnapshotAcrossInstances(
 		t.Fatal(err)
 	}
 	defer func() { _ = storeB.Close() }()
-	objects, err := objectstore.NewRustFSStore(endpoint, accessKey, secretKey, "apt-snapshot-"+strings.ReplaceAll(uuid.NewString(), "-", "")[:20])
+	objects, err := objectstore.NewS3StoreWithCredentials(endpoint, accessKey, secretKey, "apt-snapshot-"+strings.ReplaceAll(uuid.NewString(), "-", "")[:20])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -247,8 +247,8 @@ func TestPostgresRustFSPublisherExposesOneCompleteSignedSnapshotAcrossInstances(
 }
 
 func TestPostgresRustFSFailedSnapshotObjectsAreDurablyReclaimed(t *testing.T) {
-	databaseURL, endpoint := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_RUSTFS_ENDPOINT")
-	accessKey, secretKey := os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY")
+	databaseURL, endpoint := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
+	accessKey, secretKey := os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY")
 	if databaseURL == "" || endpoint == "" || accessKey == "" || secretKey == "" {
 		t.Skip("PostgreSQL and RustFS integration environment is required")
 	}
@@ -259,7 +259,7 @@ func TestPostgresRustFSFailedSnapshotObjectsAreDurablyReclaimed(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = store.Close() }()
-	objects, err := objectstore.NewRustFSStore(endpoint, accessKey, secretKey, "apt-failed-snapshot-"+strings.ReplaceAll(uuid.NewString(), "-", "")[:14])
+	objects, err := objectstore.NewS3StoreWithCredentials(endpoint, accessKey, secretKey, "apt-failed-snapshot-"+strings.ReplaceAll(uuid.NewString(), "-", "")[:14])
 	if err != nil {
 		t.Fatal(err)
 	}

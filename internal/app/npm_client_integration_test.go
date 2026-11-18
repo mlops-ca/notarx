@@ -39,7 +39,7 @@ func TestPostgresRustFSNPMDistTagOfficialClient(t *testing.T) {
 	}
 	node, cli := required("NPM_CLIENT_NODE"), required("NPM_CLIENT_JS")
 	databaseURL := required("TEST_DATABASE_URL")
-	endpoint, access, secret := required("TEST_RUSTFS_ENDPOINT"), required("TEST_RUSTFS_ACCESS_KEY"), required("TEST_RUSTFS_SECRET_KEY")
+	endpoint, access, secret := required("TEST_OBJECT_STORE_ENDPOINT"), required("TEST_OBJECT_STORE_ACCESS_KEY"), required("TEST_OBJECT_STORE_SECRET_KEY")
 	ctx := context.Background()
 	store, err := repository.NewPostgresStore(databaseURL)
 	if err != nil {
@@ -47,7 +47,7 @@ func TestPostgresRustFSNPMDistTagOfficialClient(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	bucket := "npm-client-" + uuid.NewString()
-	objects, err := objectstore.NewRustFSStore(endpoint, access, secret, bucket)
+	objects, err := objectstore.NewS3StoreWithCredentials(endpoint, access, secret, bucket)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +152,7 @@ func TestPostgresRustFSNPMDistTagOfficialClient(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = restarted.Close() })
-	restartedObjects, err := objectstore.NewRustFSStore(endpoint, access, secret, bucket)
+	restartedObjects, err := objectstore.NewS3StoreWithCredentials(endpoint, access, secret, bucket)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -297,7 +297,7 @@ func TestPostgresRustFSNPMDistTagOfficialClient(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	restartedObjects, err = objectstore.NewRustFSStore(endpoint, access, secret, bucket)
+	restartedObjects, err = objectstore.NewS3StoreWithCredentials(endpoint, access, secret, bucket)
 	if err != nil {
 		t.Fatal(err)
 	}

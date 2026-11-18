@@ -10,6 +10,7 @@ import (
 
 	"github.com/mlops-ca/notarx/internal/config"
 	"github.com/mlops-ca/notarx/internal/database"
+	"github.com/mlops-ca/notarx/internal/objectstore"
 )
 
 type checkerFunc func(context.Context) error
@@ -34,10 +35,10 @@ func TestReadinessReportsDependencyFailure(t *testing.T) {
 	}
 }
 
-func TestNewDependenciesChecksRustFSEndpoint(t *testing.T) {
+func TestNewDependenciesChecksObjectStoreEndpoint(t *testing.T) {
 	dependencies := NewDependencies(config.Config{
-		DatabaseURL:    "postgres://gateway:password@db:5432/gateway",
-		RustFSEndpoint: "https://objects.example.test/prefix",
+		DatabaseURL: "postgres://gateway:password@db:5432/gateway",
+		ObjectStore: objectstore.Config{Driver: objectstore.DriverS3, Endpoint: "https://objects.example.test/prefix"},
 	})
 	if len(dependencies.checkers) != 2 {
 		t.Fatalf("checker count = %d, want 2", len(dependencies.checkers))

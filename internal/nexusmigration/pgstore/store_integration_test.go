@@ -140,7 +140,7 @@ type fixture struct {
 	t           *testing.T
 	db          *sql.DB
 	native      *repository.PostgresStore
-	objects     *objectstore.RustFSStore
+	objects     *objectstore.S3Store
 	ledger      *pgstore.Store
 	source      *nexussource.Service
 	sourceID    string
@@ -154,7 +154,7 @@ type fixture struct {
 
 func newFixture(t *testing.T, format string, files map[string][]byte) *fixture {
 	t.Helper()
-	connection, endpoint := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_RUSTFS_ENDPOINT")
+	connection, endpoint := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
 	if connection == "" || endpoint == "" {
 		t.Skip("isolated PostgreSQL and RustFS required")
 	}
@@ -172,7 +172,7 @@ func newFixture(t *testing.T, format string, files map[string][]byte) *fixture {
 	}
 	t.Cleanup(func() { _ = native.Close() })
 	bucket := "migration-" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	objects, err := objectstore.NewRustFSStore(endpoint, os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY"), bucket)
+	objects, err := objectstore.NewS3StoreWithCredentials(endpoint, os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY"), bucket)
 	if err != nil {
 		t.Fatal(err)
 	}

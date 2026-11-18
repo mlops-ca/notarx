@@ -17,12 +17,12 @@ import (
 	"github.com/google/uuid"
 )
 
-func TestRustFSStoreConcurrentBucketInitializationIsIdempotent(t *testing.T) {
-	endpoint := os.Getenv("TEST_RUSTFS_ENDPOINT")
-	accessKey := os.Getenv("TEST_RUSTFS_ACCESS_KEY")
-	secretKey := os.Getenv("TEST_RUSTFS_SECRET_KEY")
+func TestS3StoreConcurrentBucketInitializationIsIdempotent(t *testing.T) {
+	endpoint := os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
+	accessKey := os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY")
+	secretKey := os.Getenv("TEST_OBJECT_STORE_SECRET_KEY")
 	if endpoint == "" || accessKey == "" || secretKey == "" {
-		t.Skip("TEST_RUSTFS_ENDPOINT and credentials are required")
+		t.Skip("TEST_OBJECT_STORE_ENDPOINT and credentials are required")
 	}
 	bucket := "gateway-concurrent-" + uuid.NewString()
 	const clients = 8
@@ -36,7 +36,7 @@ func TestRustFSStoreConcurrentBucketInitializationIsIdempotent(t *testing.T) {
 	for index := range clients {
 		go func() {
 			defer workers.Done()
-			store, err := NewRustFSStore(endpoint, accessKey, secretKey, bucket)
+			store, err := NewS3StoreWithCredentials(endpoint, accessKey, secretKey, bucket)
 			if err != nil {
 				errorsByClient[index] = err
 				ready.Done()
@@ -57,16 +57,16 @@ func TestRustFSStoreConcurrentBucketInitializationIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestRustFSStoreContractAgainstConfiguredImplementation(t *testing.T) {
-	endpoint := os.Getenv("TEST_RUSTFS_ENDPOINT")
-	accessKey := os.Getenv("TEST_RUSTFS_ACCESS_KEY")
-	secretKey := os.Getenv("TEST_RUSTFS_SECRET_KEY")
+func TestS3StoreContractAgainstConfiguredImplementation(t *testing.T) {
+	endpoint := os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
+	accessKey := os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY")
+	secretKey := os.Getenv("TEST_OBJECT_STORE_SECRET_KEY")
 	if endpoint == "" || accessKey == "" || secretKey == "" {
-		t.Skip("TEST_RUSTFS_ENDPOINT and credentials are required")
+		t.Skip("TEST_OBJECT_STORE_ENDPOINT and credentials are required")
 	}
 
 	ctx := context.Background()
-	store, err := NewRustFSStore(endpoint, accessKey, secretKey, "gateway-contract-"+uuid.NewString())
+	store, err := NewS3StoreWithCredentials(endpoint, accessKey, secretKey, "gateway-contract-"+uuid.NewString())
 	if err != nil {
 		t.Fatal(err)
 	}

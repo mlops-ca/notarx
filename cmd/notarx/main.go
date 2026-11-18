@@ -139,13 +139,9 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 			slog.Error("shutdown tracing", "error", err)
 		}
 	}()
-	objectStore, err := objectstore.NewRustFSStore(cfg.RustFSEndpoint, cfg.RustFSAccessKey, cfg.RustFSSecretKey, cfg.RustFSBucket)
+	objectStore, err := objectstore.Open(context.Background(), cfg.ObjectStore)
 	if err != nil {
-		slog.Error("create object store", "error", err)
-		return 1
-	}
-	if err := objectStore.EnsureBucket(context.Background()); err != nil {
-		slog.Error("ensure object-store bucket", "error", err)
+		slog.Error("open object store", "driver", cfg.ObjectStore.Driver, "error", err)
 		return 1
 	}
 
@@ -266,7 +262,7 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 		WithDatabasePoolStats("coordinator", coordinatorPool.Stats).
 		WithDatabasePoolStats("notifications", notificationPool.Stats).
 		WithNodeIdentity(cfg.InstanceID, nodeRoleStrings(cfg.NodeRoles))
-	migrationTargetID := nexusmigration.TargetBinding(cfg.RustFSEndpoint, cfg.RustFSBucket)
+	migrationTargetID := nexusmigration.TargetBinding(cfg.ObjectStore.Binding())
 	migrationScanner := app.NewPublicationScanScheduler(store, dependencies.ArtifactScanner != nil, dependencies.ArtifactScannerFormats, metrics)
 	migrationPublication := app.NewNexusMigrationPublication(store, app.SharedObjectStores(objectStore), migrationTargetID, cfg.MigrationStoragePoolID).
 		WithPublicationScanner(migrationScanner).

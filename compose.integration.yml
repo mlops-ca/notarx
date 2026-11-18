@@ -38,9 +38,9 @@ services:
         condition: service_completed_successfully
     environment:
       TEST_DATABASE_URL: postgres://gateway:integration-password@postgres:5432/gateway_test?sslmode=disable
-      TEST_RUSTFS_ENDPOINT: http://rustfs:9000
-      TEST_RUSTFS_ACCESS_KEY: integration-rustfs
-      TEST_RUSTFS_SECRET_KEY: integration-password
+      TEST_OBJECT_STORE_ENDPOINT: http://rustfs:9000
+      TEST_OBJECT_STORE_ACCESS_KEY: integration-rustfs
+      TEST_OBJECT_STORE_SECRET_KEY: integration-password
     working_dir: /src
     command: ["go", "test", "-count=1", "-p", "1", "-tags=integration", "./internal/app", "./internal/aptpublication", "./internal/partitions", "./internal/repository", "./internal/objectstore", "./internal/nexussource/pgstore", "./internal/nexusmigration/pgstore", "./internal/repositorypreset/pgstore", "./internal/format/nuget", "./internal/format/helm", "./internal/format/rubygems", "./internal/rubygemspublication/pgstore", "./internal/backupops", "./internal/preflight"]
     volumes:

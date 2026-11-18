@@ -32,7 +32,7 @@ import (
 
 func TestHelmFixedOfficialCLIReplicatedClosureTargetOnlyColdRestart(t *testing.T) {
 	binary, dsn := os.Getenv("HELM_TEST_BINARY"), os.Getenv("TEST_DATABASE_URL")
-	if binary == "" || dsn == "" || os.Getenv("TEST_RUSTFS_ENDPOINT") == "" {
+	if binary == "" || dsn == "" || os.Getenv("TEST_OBJECT_STORE_ENDPOINT") == "" {
 		t.Skip("fixed Helm and owned PostgreSQL/RustFS required")
 	}
 	work := t.TempDir()
@@ -138,7 +138,7 @@ func TestHelmFixedOfficialCLIReplicatedClosureTargetOnlyColdRestart(t *testing.T
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	objects, err := objectstore.NewRustFSStore(os.Getenv("TEST_RUSTFS_ENDPOINT"), os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY"), "helm-copy-client-"+uuid.NewString())
+	objects, err := objectstore.NewS3StoreWithCredentials(os.Getenv("TEST_OBJECT_STORE_ENDPOINT"), os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY"), "helm-copy-client-"+uuid.NewString())
 	if err != nil {
 		t.Fatal(err)
 	}

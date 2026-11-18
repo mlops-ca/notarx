@@ -53,7 +53,7 @@ cat >"$workdir/bin/go" <<'SH'
 set -euo pipefail
 if [[ "$1" == test && "$*" == *TestPostgresRustFSCargoProxyOfficialOfflineReplay* ]]; then
   [[ "$TEST_DATABASE_URL" == 'postgres://gateway:integration-password@127.0.0.1:15432/gateway_test?sslmode=disable' ]] || exit 13
-  [[ "$TEST_RUSTFS_ENDPOINT" == 'http://127.0.0.1:19000' && "$CARGO_REQUIRED" == 1 ]] || exit 14
+  [[ "$TEST_OBJECT_STORE_ENDPOINT" == 'http://127.0.0.1:19000' && "$CARGO_REQUIRED" == 1 ]] || exit 14
   printf 'official Cargo persistent replay invoked\n' >>"$AG_ISOLATION_LOG"
   exit 0
 fi

@@ -377,8 +377,8 @@ integration_started=1
 postgres_address=$("${integration_compose[@]}" port postgres 5432)
 rustfs_address=$("${integration_compose[@]}" port rustfs 9000)
 if ! TEST_DATABASE_URL="postgres://gateway:integration-password@${postgres_address}/gateway_test?sslmode=disable" \
-  TEST_RUSTFS_ENDPOINT="http://${rustfs_address}" \
-  TEST_RUSTFS_ACCESS_KEY=integration-rustfs TEST_RUSTFS_SECRET_KEY=integration-password \
+  TEST_OBJECT_STORE_ENDPOINT="http://${rustfs_address}" \
+  TEST_OBJECT_STORE_ACCESS_KEY=integration-rustfs TEST_OBJECT_STORE_SECRET_KEY=integration-password \
   NPM_CLIENT_NODE="$(command -v node)" NPM_CLIENT_JS="$workdir/npm-client/package/bin/npm-cli.js" \
   go test -json -count=1 -tags=integration,npmclient ./internal/app \
     -run '^TestPostgresRustFSNPMDistTagOfficialClient$' >"$workdir/persistent-npm.jsonl"; then

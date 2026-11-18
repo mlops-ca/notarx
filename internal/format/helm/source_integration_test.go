@@ -15,7 +15,7 @@ import (
 )
 
 func TestPostgresRustFSHelmProxyInterruptedClosureRestartAndOffline(t *testing.T) {
-	if os.Getenv("TEST_DATABASE_URL") == "" || os.Getenv("TEST_RUSTFS_ENDPOINT") == "" {
+	if os.Getenv("TEST_DATABASE_URL") == "" || os.Getenv("TEST_OBJECT_STORE_ENDPOINT") == "" {
 		t.Skip("owned PostgreSQL and RustFS required")
 	}
 	store, e := repository.NewPostgresStore(os.Getenv("TEST_DATABASE_URL"))
@@ -23,7 +23,7 @@ func TestPostgresRustFSHelmProxyInterruptedClosureRestartAndOffline(t *testing.T
 		t.Fatal(e)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	objects, e := objectstore.NewRustFSStore(os.Getenv("TEST_RUSTFS_ENDPOINT"), os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY"), "helm-proxy-interruption-"+uuid.NewString())
+	objects, e := objectstore.NewS3StoreWithCredentials(os.Getenv("TEST_OBJECT_STORE_ENDPOINT"), os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY"), "helm-proxy-interruption-"+uuid.NewString())
 	if e != nil {
 		t.Fatal(e)
 	}

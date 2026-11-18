@@ -175,11 +175,7 @@ func pingPostgres(ctx context.Context, databaseURL string) error {
 }
 
 func checkObjectStore(ctx context.Context, cfg config.Config) error {
-	store, err := objectstore.NewRustFSStore(cfg.RustFSEndpoint, cfg.RustFSAccessKey, cfg.RustFSSecretKey, cfg.RustFSBucket)
-	if err != nil {
-		return err
-	}
-	return store.CheckBucket(ctx)
+	return objectstore.Check(ctx, cfg.ObjectStore)
 }
 
 func (r Runner) checkOIDC(ctx context.Context, cfg config.Config) Result {

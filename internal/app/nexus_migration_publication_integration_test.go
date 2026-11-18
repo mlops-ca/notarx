@@ -23,7 +23,7 @@ import (
 
 type nexusPGPublicationFixture struct {
 	storeA, storeB     *repository.PostgresStore
-	objectsA, objectsB *objectstore.RustFSStore
+	objectsA, objectsB *objectstore.S3Store
 	publication        *NexusMigrationPublication
 	repo               repository.HostedRepository
 	entry              nexusmigration.Entry
@@ -32,7 +32,7 @@ type nexusPGPublicationFixture struct {
 
 func newNexusPGPublicationFixture(t *testing.T, format repository.Format) nexusPGPublicationFixture {
 	t.Helper()
-	if os.Getenv("TEST_DATABASE_URL") == "" || os.Getenv("TEST_RUSTFS_ENDPOINT") == "" {
+	if os.Getenv("TEST_DATABASE_URL") == "" || os.Getenv("TEST_OBJECT_STORE_ENDPOINT") == "" {
 		t.Skip("isolated PostgreSQL and S3 environment required")
 	}
 	var f nexusPGPublicationFixture
@@ -48,14 +48,14 @@ func newNexusPGPublicationFixture(t *testing.T, format repository.Format) nexusP
 	}
 	t.Cleanup(func() { _ = f.storeB.Close() })
 	bucket := "nexus-publication-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:24]
-	f.objectsA, err = objectstore.NewRustFSStore(os.Getenv("TEST_RUSTFS_ENDPOINT"), os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY"), bucket)
+	f.objectsA, err = objectstore.NewS3StoreWithCredentials(os.Getenv("TEST_OBJECT_STORE_ENDPOINT"), os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY"), bucket)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err = f.objectsA.EnsureBucket(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	f.objectsB, err = objectstore.NewRustFSStore(os.Getenv("TEST_RUSTFS_ENDPOINT"), os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY"), bucket)
+	f.objectsB, err = objectstore.NewS3StoreWithCredentials(os.Getenv("TEST_OBJECT_STORE_ENDPOINT"), os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY"), bucket)
 	if err != nil {
 		t.Fatal(err)
 	}

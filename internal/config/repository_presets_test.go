@@ -4,10 +4,10 @@ import "testing"
 
 func TestRepositoryPresetsModeIsExplicitAndDefaultsToStandard(t *testing.T) {
 	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
-	t.Setenv("NOTARX_RUSTFS_ENDPOINT", "http://rustfs:9000")
-	t.Setenv("NOTARX_RUSTFS_BUCKET", "gateway-cache")
-	t.Setenv("NOTARX_RUSTFS_ACCESS_KEY", "rustfs-user")
-	t.Setenv("NOTARX_RUSTFS_SECRET_KEY", "rustfs-secret")
+	t.Setenv("NOTARX_OBJECT_STORE_ENDPOINT", "http://rustfs:9000")
+	t.Setenv("NOTARX_OBJECT_STORE_BUCKET", "gateway-cache")
+	t.Setenv("NOTARX_OBJECT_STORE_ACCESS_KEY", "rustfs-user")
+	t.Setenv("NOTARX_OBJECT_STORE_SECRET_KEY", "rustfs-secret")
 	t.Setenv("NOTARX_ADMIN_TOKEN", "admin-token")
 	t.Setenv("NOTARX_RESOLVER_TOKEN", "resolver-token")
 	for _, test := range []struct {

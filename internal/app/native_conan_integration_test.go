@@ -22,9 +22,9 @@ import (
 
 func TestPostgresRustFSConanPromotionSharesVisibleRevision(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	s3Endpoint := os.Getenv("TEST_RUSTFS_ENDPOINT")
-	accessKey := os.Getenv("TEST_RUSTFS_ACCESS_KEY")
-	secretKey := os.Getenv("TEST_RUSTFS_SECRET_KEY")
+	s3Endpoint := os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
+	accessKey := os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY")
+	secretKey := os.Getenv("TEST_OBJECT_STORE_SECRET_KEY")
 	if databaseURL == "" || s3Endpoint == "" || accessKey == "" || secretKey == "" {
 		t.Skip("PostgreSQL and S3 integration environment is required")
 	}
@@ -34,7 +34,7 @@ func TestPostgresRustFSConanPromotionSharesVisibleRevision(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	objects, err := objectstore.NewRustFSStore(s3Endpoint, accessKey, secretKey, "promotion-conan-"+strings.ReplaceAll(uuid.NewString(), "-", "")[:20])
+	objects, err := objectstore.NewS3StoreWithCredentials(s3Endpoint, accessKey, secretKey, "promotion-conan-"+strings.ReplaceAll(uuid.NewString(), "-", "")[:20])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,8 +84,8 @@ func TestPostgresRustFSConanPromotionSharesVisibleRevision(t *testing.T) {
 }
 
 func TestPostgresRustFSConanReplicationPublishesTargetOwnedRevision(t *testing.T) {
-	databaseURL, endpoint := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_RUSTFS_ENDPOINT")
-	accessKey, secretKey := os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY")
+	databaseURL, endpoint := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
+	accessKey, secretKey := os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY")
 	if databaseURL == "" || endpoint == "" || accessKey == "" || secretKey == "" {
 		t.Skip("PostgreSQL and S3 integration environment is required")
 	}
@@ -95,7 +95,7 @@ func TestPostgresRustFSConanReplicationPublishesTargetOwnedRevision(t *testing.T
 		t.Fatal(err)
 	}
 	defer store.Close()
-	objects, err := objectstore.NewRustFSStore(endpoint, accessKey, secretKey, "conan-replication-"+strings.ReplaceAll(uuid.NewString(), "-", "")[:20])
+	objects, err := objectstore.NewS3StoreWithCredentials(endpoint, accessKey, secretKey, "conan-replication-"+strings.ReplaceAll(uuid.NewString(), "-", "")[:20])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -284,9 +284,9 @@ func TestPostgresConanReferenceSearchProjection(t *testing.T) {
 
 func TestPostgresAndRustFSConanReclaimRetriesAndPreventsRestore(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	s3Endpoint := os.Getenv("TEST_RUSTFS_ENDPOINT")
-	accessKey := os.Getenv("TEST_RUSTFS_ACCESS_KEY")
-	secretKey := os.Getenv("TEST_RUSTFS_SECRET_KEY")
+	s3Endpoint := os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
+	accessKey := os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY")
+	secretKey := os.Getenv("TEST_OBJECT_STORE_SECRET_KEY")
 	if databaseURL == "" || s3Endpoint == "" || accessKey == "" || secretKey == "" {
 		t.Skip("PostgreSQL and S3 integration environment is required")
 	}
@@ -297,7 +297,7 @@ func TestPostgresAndRustFSConanReclaimRetriesAndPreventsRestore(t *testing.T) {
 	defer store.Close()
 	ctx := context.Background()
 	bucket := "conan-reclaim-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:20]
-	objects, err := objectstore.NewRustFSStore(s3Endpoint, accessKey, secretKey, bucket)
+	objects, err := objectstore.NewS3StoreWithCredentials(s3Endpoint, accessKey, secretKey, bucket)
 	if err != nil {
 		t.Fatal(err)
 	}

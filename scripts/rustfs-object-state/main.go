@@ -13,11 +13,11 @@ func main() {
 	if len(os.Args) != 3 || (os.Args[1] != "present" && os.Args[1] != "absent") {
 		fatal("usage: rustfs-object-state <present|absent> <object-key>")
 	}
-	store, err := objectstore.NewRustFSStore(
-		os.Getenv("NOTARX_RUSTFS_ENDPOINT"),
+	store, err := objectstore.NewS3StoreWithCredentials(
+		os.Getenv("NOTARX_OBJECT_STORE_ENDPOINT"),
 		os.Getenv("RUSTFS_ACCESS_KEY"),
 		os.Getenv("RUSTFS_SECRET_KEY"),
-		os.Getenv("NOTARX_RUSTFS_BUCKET"),
+		os.Getenv("NOTARX_OBJECT_STORE_BUCKET"),
 	)
 	if err != nil {
 		fatal("configure RustFS object check: %v", err)

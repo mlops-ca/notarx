@@ -22,8 +22,8 @@ func (s npmPostgresCollectionMarkFailure) MarkNPMObjectCollected(context.Context
 }
 
 func TestPostgresRustFSNPMReclaimFailureSurvivesRestart(t *testing.T) {
-	databaseURL, endpoint := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_RUSTFS_ENDPOINT")
-	access, secret := os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY")
+	databaseURL, endpoint := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
+	access, secret := os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY")
 	if databaseURL == "" || endpoint == "" || access == "" || secret == "" {
 		t.Skip("PostgreSQL and S3 integration environment is required")
 	}
@@ -34,7 +34,7 @@ func TestPostgresRustFSNPMReclaimFailureSurvivesRestart(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	bucket := "npm-reclaim-" + uuid.NewString()
-	objects, err := objectstore.NewRustFSStore(endpoint, access, secret, bucket)
+	objects, err := objectstore.NewS3StoreWithCredentials(endpoint, access, secret, bucket)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestPostgresRustFSNPMReclaimFailureSurvivesRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	objects, err = objectstore.NewRustFSStore(endpoint, access, secret, bucket)
+	objects, err = objectstore.NewS3StoreWithCredentials(endpoint, access, secret, bucket)
 	if err != nil {
 		t.Fatal(err)
 	}

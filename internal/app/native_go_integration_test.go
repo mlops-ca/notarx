@@ -139,9 +139,9 @@ func (s *blockingGoDeleteObjectStore) Delete(ctx context.Context, key string) er
 
 func TestPostgresRustFSGoProxyCacheIsVisibleAcrossGatewayInstances(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	endpoint := os.Getenv("TEST_RUSTFS_ENDPOINT")
-	accessKey := os.Getenv("TEST_RUSTFS_ACCESS_KEY")
-	secretKey := os.Getenv("TEST_RUSTFS_SECRET_KEY")
+	endpoint := os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
+	accessKey := os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY")
+	secretKey := os.Getenv("TEST_OBJECT_STORE_SECRET_KEY")
 	if databaseURL == "" || endpoint == "" || accessKey == "" || secretKey == "" {
 		t.Skip("PostgreSQL and S3 integration environment is required")
 	}
@@ -157,14 +157,14 @@ func TestPostgresRustFSGoProxyCacheIsVisibleAcrossGatewayInstances(t *testing.T)
 	}
 	defer storeB.Close()
 	bucket := "native-go-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:20]
-	objectsA, err := objectstore.NewRustFSStore(endpoint, accessKey, secretKey, bucket)
+	objectsA, err := objectstore.NewS3StoreWithCredentials(endpoint, accessKey, secretKey, bucket)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err = objectsA.EnsureBucket(ctx); err != nil {
 		t.Fatal(err)
 	}
-	objectsB, err := objectstore.NewRustFSStore(endpoint, accessKey, secretKey, bucket)
+	objectsB, err := objectstore.NewS3StoreWithCredentials(endpoint, accessKey, secretKey, bucket)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -295,9 +295,9 @@ func TestPostgresRustFSGoProxyCacheIsVisibleAcrossGatewayInstances(t *testing.T)
 
 func TestPostgresRustFSGoHostedPublicationIsAtomicAcrossGatewayInstances(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	endpoint := os.Getenv("TEST_RUSTFS_ENDPOINT")
-	accessKey := os.Getenv("TEST_RUSTFS_ACCESS_KEY")
-	secretKey := os.Getenv("TEST_RUSTFS_SECRET_KEY")
+	endpoint := os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
+	accessKey := os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY")
+	secretKey := os.Getenv("TEST_OBJECT_STORE_SECRET_KEY")
 	if databaseURL == "" || endpoint == "" || accessKey == "" || secretKey == "" {
 		t.Skip("PostgreSQL and S3 integration environment is required")
 	}
@@ -313,14 +313,14 @@ func TestPostgresRustFSGoHostedPublicationIsAtomicAcrossGatewayInstances(t *test
 	}
 	defer storeB.Close()
 	bucket := "native-go-hosted-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:20]
-	objectsA, err := objectstore.NewRustFSStore(endpoint, accessKey, secretKey, bucket)
+	objectsA, err := objectstore.NewS3StoreWithCredentials(endpoint, accessKey, secretKey, bucket)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err = objectsA.EnsureBucket(ctx); err != nil {
 		t.Fatal(err)
 	}
-	objectsB, err := objectstore.NewRustFSStore(endpoint, accessKey, secretKey, bucket)
+	objectsB, err := objectstore.NewS3StoreWithCredentials(endpoint, accessKey, secretKey, bucket)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -443,9 +443,9 @@ func TestPostgresRustFSGoHostedPublicationIsAtomicAcrossGatewayInstances(t *test
 
 func TestPostgresRustFSGoPromotionAndReplicationPublishCompleteSnapshotsAcrossGatewayInstances(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	endpoint := os.Getenv("TEST_RUSTFS_ENDPOINT")
-	accessKey := os.Getenv("TEST_RUSTFS_ACCESS_KEY")
-	secretKey := os.Getenv("TEST_RUSTFS_SECRET_KEY")
+	endpoint := os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
+	accessKey := os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY")
+	secretKey := os.Getenv("TEST_OBJECT_STORE_SECRET_KEY")
 	if databaseURL == "" || endpoint == "" || accessKey == "" || secretKey == "" {
 		t.Skip("PostgreSQL and S3 integration environment is required")
 	}
@@ -461,14 +461,14 @@ func TestPostgresRustFSGoPromotionAndReplicationPublishCompleteSnapshotsAcrossGa
 	}
 	defer storeB.Close()
 	bucket := "native-go-distribution-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:16]
-	objectsA, err := objectstore.NewRustFSStore(endpoint, accessKey, secretKey, bucket)
+	objectsA, err := objectstore.NewS3StoreWithCredentials(endpoint, accessKey, secretKey, bucket)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err = objectsA.EnsureBucket(ctx); err != nil {
 		t.Fatal(err)
 	}
-	objectsB, err := objectstore.NewRustFSStore(endpoint, accessKey, secretKey, bucket)
+	objectsB, err := objectstore.NewS3StoreWithCredentials(endpoint, accessKey, secretKey, bucket)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -799,9 +799,9 @@ func TestPostgresGoPromotionHeartbeatsAndFencesPublicationThroughCompletion(t *t
 
 func TestPostgresRustFSGoHostedLifecycleIsSerializedAcrossGatewayInstances(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	endpoint := os.Getenv("TEST_RUSTFS_ENDPOINT")
-	accessKey := os.Getenv("TEST_RUSTFS_ACCESS_KEY")
-	secretKey := os.Getenv("TEST_RUSTFS_SECRET_KEY")
+	endpoint := os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
+	accessKey := os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY")
+	secretKey := os.Getenv("TEST_OBJECT_STORE_SECRET_KEY")
 	if databaseURL == "" || endpoint == "" || accessKey == "" || secretKey == "" {
 		t.Skip("PostgreSQL and S3 integration environment is required")
 	}
@@ -817,14 +817,14 @@ func TestPostgresRustFSGoHostedLifecycleIsSerializedAcrossGatewayInstances(t *te
 	}
 	defer storeB.Close()
 	bucket := "native-go-lifecycle-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:20]
-	objectsA, err := objectstore.NewRustFSStore(endpoint, accessKey, secretKey, bucket)
+	objectsA, err := objectstore.NewS3StoreWithCredentials(endpoint, accessKey, secretKey, bucket)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err = objectsA.EnsureBucket(ctx); err != nil {
 		t.Fatal(err)
 	}
-	objectsB, err := objectstore.NewRustFSStore(endpoint, accessKey, secretKey, bucket)
+	objectsB, err := objectstore.NewS3StoreWithCredentials(endpoint, accessKey, secretKey, bucket)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1141,9 +1141,9 @@ func TestPostgresGoReclaimWaitsForNewestSharedObjectTombstone(t *testing.T) {
 
 func TestPostgresRustFSGoReclaimSerializesSharedTombstoneAndKeepsVisibleObject(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	endpoint := os.Getenv("TEST_RUSTFS_ENDPOINT")
-	accessKey := os.Getenv("TEST_RUSTFS_ACCESS_KEY")
-	secretKey := os.Getenv("TEST_RUSTFS_SECRET_KEY")
+	endpoint := os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
+	accessKey := os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY")
+	secretKey := os.Getenv("TEST_OBJECT_STORE_SECRET_KEY")
 	if databaseURL == "" || endpoint == "" || accessKey == "" || secretKey == "" {
 		t.Skip("PostgreSQL and S3 integration environment is required")
 	}
@@ -1159,7 +1159,7 @@ func TestPostgresRustFSGoReclaimSerializesSharedTombstoneAndKeepsVisibleObject(t
 	}
 	defer storeB.Close()
 	bucket := "go-shared-lock-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:16]
-	objects, err := objectstore.NewRustFSStore(endpoint, accessKey, secretKey, bucket)
+	objects, err := objectstore.NewS3StoreWithCredentials(endpoint, accessKey, secretKey, bucket)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1260,9 +1260,9 @@ func TestPostgresRustFSGoReclaimSerializesSharedTombstoneAndKeepsVisibleObject(t
 
 func TestPostgresRustFSGoReclaimFailsRestoreClosedAfterCollectedMarkFailure(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	endpoint := os.Getenv("TEST_RUSTFS_ENDPOINT")
-	accessKey := os.Getenv("TEST_RUSTFS_ACCESS_KEY")
-	secretKey := os.Getenv("TEST_RUSTFS_SECRET_KEY")
+	endpoint := os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
+	accessKey := os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY")
+	secretKey := os.Getenv("TEST_OBJECT_STORE_SECRET_KEY")
 	if databaseURL == "" || endpoint == "" || accessKey == "" || secretKey == "" {
 		t.Skip("PostgreSQL and S3 integration environment is required")
 	}
@@ -1278,7 +1278,7 @@ func TestPostgresRustFSGoReclaimFailsRestoreClosedAfterCollectedMarkFailure(t *t
 	}
 	defer storeB.Close()
 	bucket := "go-collecting-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:16]
-	objects, err := objectstore.NewRustFSStore(endpoint, accessKey, secretKey, bucket)
+	objects, err := objectstore.NewS3StoreWithCredentials(endpoint, accessKey, secretKey, bucket)
 	if err != nil {
 		t.Fatal(err)
 	}

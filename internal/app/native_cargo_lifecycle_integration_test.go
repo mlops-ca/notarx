@@ -20,9 +20,9 @@ import (
 
 func TestPostgresRustFSCargoTombstoneRestoreAndReclaim(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	endpoint := os.Getenv("TEST_RUSTFS_ENDPOINT")
-	accessKey := os.Getenv("TEST_RUSTFS_ACCESS_KEY")
-	secretKey := os.Getenv("TEST_RUSTFS_SECRET_KEY")
+	endpoint := os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
+	accessKey := os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY")
+	secretKey := os.Getenv("TEST_OBJECT_STORE_SECRET_KEY")
 	if databaseURL == "" || endpoint == "" || accessKey == "" || secretKey == "" {
 		t.Skip("PostgreSQL and RustFS integration environment is required")
 	}
@@ -38,14 +38,14 @@ func TestPostgresRustFSCargoTombstoneRestoreAndReclaim(t *testing.T) {
 	}
 	defer func() { _ = storeB.Close() }()
 	bucket := "cargo-life-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:20]
-	objectsA, err := objectstore.NewRustFSStore(endpoint, accessKey, secretKey, bucket)
+	objectsA, err := objectstore.NewS3StoreWithCredentials(endpoint, accessKey, secretKey, bucket)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := objectsA.EnsureBucket(ctx); err != nil {
 		t.Fatal(err)
 	}
-	objectsB, err := objectstore.NewRustFSStore(endpoint, accessKey, secretKey, bucket)
+	objectsB, err := objectstore.NewS3StoreWithCredentials(endpoint, accessKey, secretKey, bucket)
 	if err != nil {
 		t.Fatal(err)
 	}
