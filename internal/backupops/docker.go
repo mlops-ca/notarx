@@ -17,7 +17,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const postgresImage = "postgres:16-alpine"
+const postgresImage = "postgres:18-alpine"
 const rustfsImage = "rustfs/rustfs:1.0.0-beta.12@sha256:41fe89380f4120a337790c02af192c3fe7bb55c3edc2e6e9357b487b47c6ab21"
 
 var errCleanupIncomplete = errors.New("owned resource cleanup incomplete")
@@ -196,7 +196,7 @@ func NewTarget(ctx context.Context, spec TargetSpec) (_ *OwnedTarget, resultErr 
 			args = append(args, "--cap-add", "CHOWN", "--cap-add", "SETUID", "--cap-add", "SETGID", "--cap-add", "FOWNER", "--cap-add", "DAC_OVERRIDE")
 		}
 		if name == "postgres" {
-			args = append(args, "-p", "127.0.0.1::5432", "-v", spec.Project+"-pgdata:/var/lib/postgresql/data")
+			args = append(args, "-p", "127.0.0.1::5432", "-v", spec.Project+"-pgdata:/var/lib/postgresql")
 		}
 		if name == "rustfs" {
 			args = append(args, "-p", "127.0.0.1::9000", "-v", spec.Project+"-objects:/data")
@@ -330,7 +330,7 @@ func (t *OwnedTarget) checkResource(ctx context.Context, r ownedResource) error 
 			}
 			switch r.Name {
 			case t.spec.Project + "-postgres", t.spec.Project + "-rustfs":
-				suffix, destination := "pgdata", "/var/lib/postgresql/data"
+				suffix, destination := "pgdata", "/var/lib/postgresql"
 				if r.Name == t.spec.Project+"-rustfs" {
 					suffix, destination = "objects", "/data"
 				}
@@ -552,7 +552,7 @@ func describeBinary(path string) (string, int64, error) {
 func (d Docker) ValidateDump(ctx context.Context, r io.Reader) (resultErr error) {
 	owner := uuid.NewString()
 	name := "ag-dump-check-" + strings.ReplaceAll(owner, "-", "")
-	data, err := d.output(ctx, "create", "-i", "--name", name, "--label", "artifact-gateway.restore-owner="+owner, "--network", "none", "--read-only", "--tmpfs", "/var/lib/postgresql/data:rw,noexec,nosuid,size=1m", "--cap-drop", "ALL", postgresImage, "pg_restore", "--file=-", "--no-owner", "--no-privileges")
+	data, err := d.output(ctx, "create", "-i", "--name", name, "--label", "artifact-gateway.restore-owner="+owner, "--network", "none", "--read-only", "--tmpfs", "/var/lib/postgresql:rw,noexec,nosuid,size=1m", "--cap-drop", "ALL", postgresImage, "pg_restore", "--file=-", "--no-owner", "--no-privileges")
 	helper := &OwnedTarget{spec: TargetSpec{Docker: d}, owner: owner}
 	defer func() {
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)

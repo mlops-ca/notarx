@@ -97,7 +97,7 @@ PostgreSQL version, the date, who ran it and the outcome per row.
 | --- | --- | --- | --- | --- |
 | none recorded | | | | |
 
-Self-hosted `postgres:16-alpine` (multi-arch, including arm64) is the reference
+Self-hosted `postgres:18-alpine` (multi-arch, including arm64) is the reference
 and what the Compose stack and the Oracle Cloud reference deployment run. Cloud
 claims, for example for Amazon RDS or Oracle Cloud Database with PostgreSQL, stay
 out of this page until a row above is filled in.

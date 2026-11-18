@@ -189,7 +189,7 @@ try:
         with socket.socket() as sock:
             sock.bind(('127.0.0.1',0));return sock.getsockname()[1]
     pg_port=owned_port();rust_port=owned_port()
-    start(pg,['--env-file',str(pg_env),'--mount','type=volume,src='+volumes[0]+',dst=/var/lib/postgresql/data','-p','127.0.0.1:'+str(pg_port)+':5432','postgres:16-alpine','postgres','-c','shared_preload_libraries=pg_stat_statements'])
+    start(pg,['--env-file',str(pg_env),'--mount','type=volume,src='+volumes[0]+',dst=/var/lib/postgresql','-p','127.0.0.1:'+str(pg_port)+':5432','postgres:18-alpine','postgres','-c','shared_preload_libraries=pg_stat_statements'])
     start(rust,['--env-file',str(rust_env),'--mount','type=volume,src='+volumes[1]+',dst=/data','--mount','type=volume,src='+volumes[2]+',dst=/logs','-p','127.0.0.1:'+str(rust_port)+':9000',rust_image])
     deadline=time.monotonic()+45
     while time.monotonic()<deadline:
