@@ -73,6 +73,12 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: console/package-lock.json
+      - name: Stamp the version into this workspace (ADR 0024)
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          npm --prefix tools/openapi ci --ignore-scripts --no-audit --no-fund
+          ./scripts/stamp-version.sh "$VERSION"
       - name: Build this runner's archives natively
         env:
           VERSION: ${{ inputs.version }}
