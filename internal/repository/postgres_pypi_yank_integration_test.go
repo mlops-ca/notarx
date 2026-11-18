@@ -90,7 +90,7 @@ func TestPyPIYankPostgresCrossInstanceAndAuditRollback(t *testing.T) {
 		t.Fatalf("failed audit changed state=%+v %v", files, err)
 	}
 	var count int
-	if err = first.db.QueryRowContext(t.Context(), `SELECT count(*) FROM resolver_audit_log WHERE repository=$1 AND operation='pypi.yank'`, repo.Name).Scan(&count); err != nil || count != 1 {
+	if err = first.db.QueryRowContext(t.Context(), `SELECT count(*) FROM security_audit_log WHERE repository=$1 AND operation='pypi.yank'`, repo.Name).Scan(&count); err != nil || count != 1 {
 		t.Fatalf("audits=%d %v", count, err)
 	}
 }

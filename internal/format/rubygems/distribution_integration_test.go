@@ -87,9 +87,9 @@ func TestRubyGemsPostgresRustFSReplicationAuditRollbackAndLeaseFenceAfterWait(t 
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		_, _ = db.ExecContext(context.Background(), `DROP TRIGGER IF EXISTS `+trigger+` ON resolver_audit_log;DROP FUNCTION IF EXISTS `+trigger+`()`)
+		_, _ = db.ExecContext(context.Background(), `DROP TRIGGER IF EXISTS `+trigger+` ON security_audit_log;DROP FUNCTION IF EXISTS `+trigger+`()`)
 	})
-	if _, err = db.ExecContext(t.Context(), `CREATE TRIGGER `+trigger+` BEFORE INSERT ON resolver_audit_log FOR EACH ROW EXECUTE FUNCTION `+trigger+`() `); err != nil {
+	if _, err = db.ExecContext(t.Context(), `CREATE TRIGGER `+trigger+` BEFORE INSERT ON security_audit_log FOR EACH ROW EXECUTE FUNCTION `+trigger+`() `); err != nil {
 		t.Fatal(err)
 	}
 	j = distributionRun(t, f, j.ID)
@@ -103,7 +103,7 @@ func TestRubyGemsPostgresRustFSReplicationAuditRollbackAndLeaseFenceAfterWait(t 
 	if err != nil || len(audits) != 0 {
 		t.Fatal("publication audit escaped rollback", audits, err)
 	}
-	if _, err = db.ExecContext(t.Context(), `DROP TRIGGER `+trigger+` ON resolver_audit_log;DROP FUNCTION `+trigger+`() `); err != nil {
+	if _, err = db.ExecContext(t.Context(), `DROP TRIGGER `+trigger+` ON security_audit_log;DROP FUNCTION `+trigger+`() `); err != nil {
 		t.Fatal(err)
 	}
 	persisted, err := f.store.GetRubyGemsReplication(t.Context(), j.ID)

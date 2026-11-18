@@ -271,7 +271,7 @@ func TestPostgresNexusOCIMigrationUploadCrashAndSourceUnauthorized(t *testing.T)
 				t.Fatalf("recovered source root drifted: %+v %v", manifest, err)
 			}
 			var audits int
-			if err = f.db.QueryRow(`SELECT COUNT(*)FROM resolver_audit_log WHERE repository=$1 AND operation='nexus.migration.publish'`, f.repo.Name).Scan(&audits); err != nil || audits != 1 {
+			if err = f.db.QueryRow(`SELECT COUNT(*)FROM security_audit_log WHERE repository=$1 AND operation='nexus.migration.publish'`, f.repo.Name).Scan(&audits); err != nil || audits != 1 {
 				t.Fatalf("crash/replay duplicate audit=%d %v", audits, err)
 			}
 		})

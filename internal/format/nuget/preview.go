@@ -168,7 +168,10 @@ func (m *Module) servePreview(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if !replay {
-			_ = m.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: p.Actor, Repository: repo.Name, Format: string(repository.FormatNuGet), Resource: repo.ID, Operation: "nuget.preview.create", Outcome: repository.AuditResolved, Status: 201, OccurredAt: time.Now().UTC()})
+			if auditErr := m.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: p.Actor, Repository: repo.Name, Format: string(repository.FormatNuGet), Resource: repo.ID, Operation: "nuget.preview.create", Outcome: repository.AuditResolved, Status: 201, OccurredAt: time.Now().UTC()}); auditErr != nil {
+				m.problem(w, 500, "audit_failed")
+				return
+			}
 		}
 		w.Header().Set("Location", prefix+"/"+repo.ID)
 		writeJSON(w, r, 201, repositoryDTO(r, repo))
@@ -364,7 +367,10 @@ func (m *Module) previewCapacity(w http.ResponseWriter, r *http.Request, repo re
 		return
 	}
 	if r.Method == http.MethodPut {
-		_ = m.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: principal.Actor, Repository: repo.Name, Format: string(repository.FormatNuGet), Resource: repo.ID, Operation: "nuget.preview.quota.configure", Outcome: repository.AuditResolved, Status: 200, OccurredAt: time.Now().UTC()})
+		if auditErr := m.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: principal.Actor, Repository: repo.Name, Format: string(repository.FormatNuGet), Resource: repo.ID, Operation: "nuget.preview.quota.configure", Outcome: repository.AuditResolved, Status: 200, OccurredAt: time.Now().UTC()}); auditErr != nil {
+			m.problem(w, 500, "audit_failed")
+			return
+		}
 	}
 	writeJSON(w, r, 200, map[string]any{"repositoryId": repo.ID, "usedBytes": capacity.UsedBytes, "objectCount": capacity.ObjectCount, "quotaBytes": capacity.QuotaBytes})
 }

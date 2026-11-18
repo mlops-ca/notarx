@@ -146,7 +146,9 @@ func (h generatedRepositoryAPIAdapter) CreateWebhookSubscription(w http.Response
 		return
 	}
 	if h.audit != nil {
-		_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: created.ID, Operation: "webhook.subscription.create", Status: http.StatusCreated, CacheDisposition: "bypass"})
+		if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: created.ID, Operation: "webhook.subscription.create", Status: http.StatusCreated, CacheDisposition: "bypass"}) {
+			return
+		}
 	}
 	w.Header().Set("ETag", created.Version)
 	writeNativeMavenJSON(w, http.StatusCreated, webhookSubscriptionResponse(created))
@@ -228,7 +230,9 @@ func (h generatedRepositoryAPIAdapter) UpdateWebhookSubscription(w http.Response
 		return
 	}
 	if h.audit != nil {
-		_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: updated.ID, Operation: "webhook.subscription.update", Status: http.StatusOK, CacheDisposition: "bypass"})
+		if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: updated.ID, Operation: "webhook.subscription.update", Status: http.StatusOK, CacheDisposition: "bypass"}) {
+			return
+		}
 	}
 	w.Header().Set("ETag", updated.Version)
 	writeNativeMavenJSON(w, http.StatusOK, webhookSubscriptionResponse(updated))
@@ -295,7 +299,9 @@ func (h generatedRepositoryAPIAdapter) ReplayWebhookDelivery(w http.ResponseWrit
 		return
 	}
 	if h.audit != nil {
-		_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: value.ID, Operation: "webhook.delivery.replay", Status: http.StatusOK, CacheDisposition: "bypass"})
+		if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: value.ID, Operation: "webhook.delivery.replay", Status: http.StatusOK, CacheDisposition: "bypass"}) {
+			return
+		}
 	}
 	writeNativeMavenJSON(w, http.StatusOK, webhookDeliveryResponse(value))
 }

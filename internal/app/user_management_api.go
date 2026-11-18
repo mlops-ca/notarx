@@ -263,7 +263,9 @@ func (h identityManagementHandler) CreateUser(w http.ResponseWriter, r *http.Req
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "create user failed")
 		return
 	}
-	h.recordUserManagementAudit(r, user, "user.create", http.StatusCreated)
+	if !h.recordUserManagementAudit(w, r, user, "user.create", http.StatusCreated) {
+		return
+	}
 	writeNativeMavenJSON(w, http.StatusCreated, userResponse(user))
 }
 
@@ -356,7 +358,9 @@ func (h identityManagementHandler) UpdateUser(w http.ResponseWriter, r *http.Req
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "update user failed")
 		return
 	}
-	h.recordUserManagementAudit(r, updated, "user.update", http.StatusOK)
+	if !h.recordUserManagementAudit(w, r, updated, "user.update", http.StatusOK) {
+		return
+	}
 	writeNativeMavenJSON(w, http.StatusOK, userResponse(updated))
 }
 
@@ -385,7 +389,9 @@ func (h identityManagementHandler) DeleteUser(w http.ResponseWriter, r *http.Req
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "delete user failed")
 		return
 	}
-	h.recordUserManagementAudit(r, current, "user.delete", http.StatusNoContent)
+	if !h.recordUserManagementAudit(w, r, current, "user.delete", http.StatusNoContent) {
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -431,7 +437,9 @@ func (h identityManagementHandler) ResetUserPassword(w http.ResponseWriter, r *h
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "reset user password failed")
 		return
 	}
-	h.recordUserManagementAudit(r, updated, "user.password.reset", http.StatusOK)
+	if !h.recordUserManagementAudit(w, r, updated, "user.password.reset", http.StatusOK) {
+		return
+	}
 	writeNativeMavenJSON(w, http.StatusOK, userResponse(updated))
 }
 
@@ -452,7 +460,9 @@ func (h identityManagementHandler) RevokeUserSessions(w http.ResponseWriter, r *
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "revoke user sessions failed")
 		return
 	}
-	h.recordUserManagementAudit(r, user, "user.sessions.revoke", http.StatusOK)
+	if !h.recordUserManagementAudit(w, r, user, "user.sessions.revoke", http.StatusOK) {
+		return
+	}
 	writeNativeMavenJSON(w, http.StatusOK, userResponse(user))
 }
 
@@ -475,8 +485,10 @@ func (h identityManagementHandler) ListUserSessions(w http.ResponseWriter, r *ht
 	for _, session := range items {
 		response = append(response, userSessionResponse(session, principal.UserID == session.UserID && principal.SessionID == session.ID))
 	}
+	// Listing reads only: the audit stays best-effort so a transient audit failure
+	// does not withhold data that was not changed.
 	if user, getErr := h.users.GetUser(r.Context(), userID.String()); getErr == nil {
-		h.recordUserManagementAudit(r, user, "user.session.list", http.StatusOK)
+		h.bestEffortUserManagementAudit(r, user, "user.session.list", http.StatusOK)
 	}
 	writeNativeMavenJSON(w, http.StatusOK, adminopenapi.UserSessionList{Items: response})
 }
@@ -495,8 +507,14 @@ func (h identityManagementHandler) RevokeUserSession(w http.ResponseWriter, r *h
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "revoke user session failed")
 		return
 	}
-	if user, getErr := h.users.GetUser(r.Context(), userID.String()); getErr == nil {
-		h.recordUserManagementAudit(r, user, "user.session.revoke", http.StatusOK)
+	// The revocation is audited even when the user lookup fails; the audit only
+	// needs the user ID.
+	user, getErr := h.users.GetUser(r.Context(), userID.String())
+	if getErr != nil {
+		user = repository.User{ID: userID.String()}
+	}
+	if !h.recordUserManagementAudit(w, r, user, "user.session.revoke", http.StatusOK) {
+		return
 	}
 	writeNativeMavenJSON(w, http.StatusOK, userSessionResponse(session, principal.UserID == session.UserID && principal.SessionID == session.ID))
 }
@@ -558,7 +576,9 @@ func (h identityManagementHandler) CreateUserIdentity(w http.ResponseWriter, r *
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "create user identity failed")
 		return
 	}
-	h.recordUserIdentityAudit(r, identity, "user.identity.link", http.StatusCreated)
+	if !h.recordUserIdentityAudit(w, r, identity, "user.identity.link", http.StatusCreated) {
+		return
+	}
 	writeNativeMavenJSON(w, http.StatusCreated, userIdentityResponse(identity))
 }
 
@@ -574,37 +594,53 @@ func (h identityManagementHandler) DeleteUserIdentity(w http.ResponseWriter, r *
 		return
 	}
 	if h.audit != nil {
-		_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{
+		if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{
 			Actor: h.auditActor(r), Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(),
 			Format: "management", Resource: "users/" + userID + "/identities/" + identityID,
 			Operation: "user.identity.unlink", Status: http.StatusNoContent, CacheDisposition: "bypass",
-		})
+		}) {
+			return
+		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h identityManagementHandler) recordUserIdentityAudit(r *http.Request, identity repository.UserIdentity, operation string, status int) {
+func (h identityManagementHandler) recordUserIdentityAudit(w http.ResponseWriter, r *http.Request, identity repository.UserIdentity, operation string, status int) bool {
 	if h.audit == nil {
-		return
+		return true
 	}
-	_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{
+	if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{
 		Actor: h.auditActor(r), Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(),
 		Format: "management", Resource: "users/" + identity.UserID + "/identities/" + identity.ID,
 		Operation: operation, Status: status, CacheDisposition: "bypass",
-	})
+	}) {
+		return false
+	}
+	return true
 }
 
 func normalizeOIDCIssuerForAPI(value string) string {
 	return strings.TrimRight(strings.TrimSpace(value), "/")
 }
 
-func (h identityManagementHandler) recordUserManagementAudit(r *http.Request, user repository.User, operation string, status int) {
+func (h identityManagementHandler) recordUserManagementAudit(w http.ResponseWriter, r *http.Request, user repository.User, operation string, status int) bool {
 	if h.audit == nil {
-		return
+		return true
 	}
 	actor := "unknown"
 	if principal, ok := h.authenticator.Authenticate(r.Header.Get("Authorization")); ok {
 		actor = principal.Actor
 	}
-	_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: "users/" + user.ID, Operation: operation, Status: status, CacheDisposition: "bypass"})
+	if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{Actor: actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: "users/" + user.ID, Operation: operation, Status: status, CacheDisposition: "bypass"}) {
+		return false
+	}
+	return true
+}
+
+// bestEffortUserManagementAudit audits a read; a failure is not surfaced.
+func (h identityManagementHandler) bestEffortUserManagementAudit(r *http.Request, user repository.User, operation string, status int) {
+	if h.audit == nil {
+		return
+	}
+	_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: h.auditActor(r), Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: "users/" + user.ID, Operation: operation, Status: status, CacheDisposition: "bypass"})
 }

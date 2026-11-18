@@ -312,7 +312,7 @@ func testPyPIMigrationExistingObjects(t *testing.T) {
 				}
 			}
 			var audits int
-			if err := f.db.QueryRow(`SELECT count(*) FROM resolver_audit_log WHERE repository=$1 AND operation='publish'`, f.repo.Name).Scan(&audits); err != nil || audits != map[bool]int{true: 1, false: 0}[partial] {
+			if err := f.db.QueryRow(`SELECT count(*) FROM security_audit_log WHERE repository=$1 AND operation='publish'`, f.repo.Name).Scan(&audits); err != nil || audits != map[bool]int{true: 1, false: 0}[partial] {
 				t.Fatalf("publication audit count=%d %v", audits, err)
 			}
 			f.server.Close()

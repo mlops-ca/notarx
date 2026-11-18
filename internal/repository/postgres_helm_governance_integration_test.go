@@ -18,13 +18,13 @@ func TestPostgresHelmGovernanceAuditRollbackAndReopen(t *testing.T) {
 	store := newPostgresNuGetStore(t)
 	repo, p := seedHelmGovernance(t, store, RepositoryTypeProxy)
 	name := "helm_governance_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	query := fmt.Sprintf(`CREATE FUNCTION %s() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.repository='%s' AND NEW.actor='helm-governance-audit-failure' THEN RAISE EXCEPTION 'owned Helm audit failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER %s BEFORE INSERT ON resolver_audit_log FOR EACH ROW EXECUTE FUNCTION %s()`, name, repo.Name, name, name)
+	query := fmt.Sprintf(`CREATE FUNCTION %s() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.repository='%s' AND NEW.actor='helm-governance-audit-failure' THEN RAISE EXCEPTION 'owned Helm audit failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER %s BEFORE INSERT ON security_audit_log FOR EACH ROW EXECUTE FUNCTION %s()`, name, repo.Name, name, name)
 	if _, err := store.db.ExecContext(t.Context(), query); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
 		cleanup := newPostgresNuGetStore(t)
-		if _, err := cleanup.db.Exec(`DROP TRIGGER ` + name + ` ON resolver_audit_log; DROP FUNCTION ` + name + `()`); err != nil {
+		if _, err := cleanup.db.Exec(`DROP TRIGGER ` + name + ` ON security_audit_log; DROP FUNCTION ` + name + `()`); err != nil {
 			t.Error(err)
 		}
 	})

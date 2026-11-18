@@ -120,7 +120,7 @@ func TestAuditClassHelpers(t *testing.T) {
 	if AuditClassSync.rank() <= AuditClassAsync.rank() || AuditClass("").rank() != AuditClassAsync.rank() {
 		t.Fatal("rank")
 	}
-	if auditTable(AuditClassSync) != "security_audit_log" || auditTable("") != "resolver_audit_log" || auditTable(AuditClassAsync) != "resolver_audit_log" {
+	if AuditTable(AuditClassSync) != "security_audit_log" || AuditTable("") != "resolver_audit_log" || AuditTable(AuditClassAsync) != "resolver_audit_log" {
 		t.Fatal("auditTable")
 	}
 }

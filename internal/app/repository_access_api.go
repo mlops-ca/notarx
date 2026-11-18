@@ -367,7 +367,9 @@ func (h accessManagementHandler) CreateAuthorizationRole(w http.ResponseWriter, 
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "create authorization role failed")
 		return
 	}
-	h.recordAuthorizationAudit(r, "", "authorization-roles/"+role.ID, "authorization_role.create", http.StatusCreated)
+	if !h.recordAuthorizationAudit(w, r, "", "authorization-roles/"+role.ID, "authorization_role.create", http.StatusCreated) {
+		return
+	}
 	writeNativeMavenJSON(w, http.StatusCreated, authorizationRoleResponse(role))
 }
 
@@ -425,7 +427,9 @@ func (h accessManagementHandler) UpdateAuthorizationRole(w http.ResponseWriter, 
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "update authorization role failed")
 		return
 	}
-	h.recordAuthorizationAudit(r, "", "authorization-roles/"+role.ID, "authorization_role.update", http.StatusOK)
+	if !h.recordAuthorizationAudit(w, r, "", "authorization-roles/"+role.ID, "authorization_role.update", http.StatusOK) {
+		return
+	}
 	w.Header().Set("ETag", role.Version)
 	writeNativeMavenJSON(w, http.StatusOK, authorizationRoleResponse(role))
 }
@@ -443,7 +447,9 @@ func (h accessManagementHandler) DeleteAuthorizationRole(w http.ResponseWriter, 
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "delete authorization role failed")
 		return
 	}
-	h.recordAuthorizationAudit(r, "", "authorization-roles/"+roleID.String(), "authorization_role.delete", http.StatusNoContent)
+	if !h.recordAuthorizationAudit(w, r, "", "authorization-roles/"+roleID.String(), "authorization_role.delete", http.StatusNoContent) {
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -492,7 +498,9 @@ func (h accessManagementHandler) CreateAuthorizationTemplate(w http.ResponseWrit
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "create authorization template failed")
 		return
 	}
-	h.recordAuthorizationAudit(r, "", "authorization-templates/"+template.ID, "authorization_template.create", http.StatusCreated)
+	if !h.recordAuthorizationAudit(w, r, "", "authorization-templates/"+template.ID, "authorization_template.create", http.StatusCreated) {
+		return
+	}
 	writeNativeMavenJSON(w, http.StatusCreated, authorizationTemplateResponse(template))
 }
 
@@ -550,7 +558,9 @@ func (h accessManagementHandler) UpdateAuthorizationTemplate(w http.ResponseWrit
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "update authorization template failed")
 		return
 	}
-	h.recordAuthorizationAudit(r, "", "authorization-templates/"+template.ID, "authorization_template.update", http.StatusOK)
+	if !h.recordAuthorizationAudit(w, r, "", "authorization-templates/"+template.ID, "authorization_template.update", http.StatusOK) {
+		return
+	}
 	w.Header().Set("ETag", template.Version)
 	writeNativeMavenJSON(w, http.StatusOK, authorizationTemplateResponse(template))
 }
@@ -568,7 +578,9 @@ func (h accessManagementHandler) DeleteAuthorizationTemplate(w http.ResponseWrit
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "delete authorization template failed")
 		return
 	}
-	h.recordAuthorizationAudit(r, "", "authorization-templates/"+templateID.String(), "authorization_template.delete", http.StatusNoContent)
+	if !h.recordAuthorizationAudit(w, r, "", "authorization-templates/"+templateID.String(), "authorization_template.delete", http.StatusNoContent) {
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -613,7 +625,9 @@ func (h accessManagementHandler) ApplyAuthorizationTemplate(w http.ResponseWrite
 			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "apply authorization template failed")
 			return
 		}
-		h.recordAuthorizationAudit(r, repo.Name, "repositories/"+repo.ID+"/grants", "repository.grants.apply_template", http.StatusOK)
+		if !h.recordAuthorizationAudit(w, r, repo.Name, "repositories/"+repo.ID+"/grants", "repository.grants.apply_template", http.StatusOK) {
+			return
+		}
 		w.Header().Set("ETag", set.Version)
 		writeNativeMavenJSON(w, http.StatusOK, set.Grants)
 	})
@@ -641,7 +655,9 @@ func (h accessManagementHandler) ReplaceGrants(w http.ResponseWriter, r *http.Re
 			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "replace grants failed")
 			return
 		}
-		h.recordAuthorizationAudit(r, repo.Name, "repositories/"+repo.ID+"/grants", "repository.grants.replace", http.StatusOK)
+		if !h.recordAuthorizationAudit(w, r, repo.Name, "repositories/"+repo.ID+"/grants", "repository.grants.replace", http.StatusOK) {
+			return
+		}
 		w.Header().Set("ETag", set.Version)
 		writeNativeMavenJSON(w, http.StatusOK, set.Grants)
 	})
@@ -683,7 +699,9 @@ func (h accessManagementHandler) UpsertGrant(w http.ResponseWriter, r *http.Requ
 			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "upsert grant failed")
 			return
 		}
-		h.recordAuthorizationAudit(r, repo.Name, "repositories/"+repo.ID+"/grants", "repository.grants.upsert", http.StatusOK)
+		if !h.recordAuthorizationAudit(w, r, repo.Name, "repositories/"+repo.ID+"/grants", "repository.grants.upsert", http.StatusOK) {
+			return
+		}
 		w.Header().Set("ETag", set.Version)
 		writeNativeMavenJSON(w, http.StatusOK, set.Grants)
 	})
@@ -709,21 +727,26 @@ func (h accessManagementHandler) DeleteGrant(w http.ResponseWriter, r *http.Requ
 			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "delete grant failed")
 			return
 		}
-		h.recordAuthorizationAudit(r, repo.Name, "repositories/"+repo.ID+"/grants", "repository.grants.delete", http.StatusNoContent)
+		if !h.recordAuthorizationAudit(w, r, repo.Name, "repositories/"+repo.ID+"/grants", "repository.grants.delete", http.StatusNoContent) {
+			return
+		}
 		w.Header().Set("ETag", set.Version)
 		w.WriteHeader(http.StatusNoContent)
 	})
 }
 
-func (h accessManagementHandler) recordAuthorizationAudit(r *http.Request, repositoryName, resource, operation string, status int) {
+func (h accessManagementHandler) recordAuthorizationAudit(w http.ResponseWriter, r *http.Request, repositoryName, resource, operation string, status int) bool {
 	if h.audit == nil {
-		return
+		return true
 	}
-	_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{
+	if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{
 		GroupName: repositoryName, Repository: repositoryName,
 		Actor: h.auditActor(r), Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(),
 		Format: "management", Resource: resource, Operation: operation, Status: status, CacheDisposition: "bypass",
-	})
+	}) {
+		return false
+	}
+	return true
 }
 
 func validRepositoryGrants(grants []repository.RepositoryGrant, format repository.Format) bool {

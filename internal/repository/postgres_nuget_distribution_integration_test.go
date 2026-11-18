@@ -33,11 +33,11 @@ func TestPostgresNuGetReplicationAuditRollbackAndReopen(t *testing.T) {
 	if _, err = s.db.ExecContext(t.Context(), `CREATE FUNCTION `+name+`() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.operation='nuget.replication.item' AND NEW.actor='operator' AND NEW.repository='`+f.target.Name+`' THEN RAISE EXCEPTION 'owned NuGet replication audit failure'; END IF; RETURN NEW; END $$`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.db.ExecContext(t.Context(), `CREATE TRIGGER `+name+` BEFORE INSERT ON resolver_audit_log FOR EACH ROW EXECUTE FUNCTION `+name+`() `); err != nil {
+	if _, err = s.db.ExecContext(t.Context(), `CREATE TRIGGER `+name+` BEFORE INSERT ON security_audit_log FOR EACH ROW EXECUTE FUNCTION `+name+`() `); err != nil {
 		t.Fatal(err)
 	}
 	drop := func() {
-		_, _ = s.db.ExecContext(context.Background(), `DROP TRIGGER IF EXISTS `+name+` ON resolver_audit_log`)
+		_, _ = s.db.ExecContext(context.Background(), `DROP TRIGGER IF EXISTS `+name+` ON security_audit_log`)
 		_, _ = s.db.ExecContext(context.Background(), `DROP FUNCTION IF EXISTS `+name+`()`)
 	}
 	t.Cleanup(drop)
@@ -60,7 +60,7 @@ func TestPostgresNuGetReplicationAuditRollbackAndReopen(t *testing.T) {
 		t.Fatal(err)
 	}
 	var count int
-	if err = s.db.QueryRowContext(t.Context(), `SELECT count(*) FROM resolver_audit_log WHERE repository=$1 AND operation='nuget.replication.item'`, f.target.Name).Scan(&count); err != nil || count != 1 {
+	if err = s.db.QueryRowContext(t.Context(), `SELECT count(*) FROM security_audit_log WHERE repository=$1 AND operation='nuget.replication.item'`, f.target.Name).Scan(&count); err != nil || count != 1 {
 		t.Fatalf("transactional item audit=%d %v", count, err)
 	}
 }

@@ -143,13 +143,13 @@ func TestPostgresRustFSNexusOCIPublicationFenceAuditAndRestart(t *testing.T) {
 	}
 	trigger := "nexus_oci_audit_" + strings.ReplaceAll(uuid.NewString(), "-", "")
 	t.Cleanup(func() {
-		_, _ = store.db.ExecContext(context.Background(), `DROP TRIGGER IF EXISTS `+trigger+` ON resolver_audit_log`)
+		_, _ = store.db.ExecContext(context.Background(), `DROP TRIGGER IF EXISTS `+trigger+` ON security_audit_log`)
 		_, _ = store.db.ExecContext(context.Background(), `DROP FUNCTION IF EXISTS `+trigger+`()`)
 	})
 	if _, err = store.db.ExecContext(ctx, `CREATE FUNCTION `+trigger+`()RETURNS trigger AS $$BEGIN IF NEW.repository='`+repo.Name+`' AND NEW.operation='nexus.migration.publish' THEN RAISE EXCEPTION 'synthetic OCI audit unavailable'; END IF; RETURN NEW; END;$$ LANGUAGE plpgsql`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = store.db.ExecContext(ctx, `CREATE TRIGGER `+trigger+` BEFORE INSERT ON resolver_audit_log FOR EACH ROW EXECUTE FUNCTION `+trigger+`() `); err != nil {
+	if _, err = store.db.ExecContext(ctx, `CREATE TRIGGER `+trigger+` BEFORE INSERT ON security_audit_log FOR EACH ROW EXECUTE FUNCTION `+trigger+`() `); err != nil {
 		t.Fatal(err)
 	}
 	if err = p.Publish(locked, e); err == nil {
@@ -158,7 +158,7 @@ func TestPostgresRustFSNexusOCIPublicationFenceAuditAndRestart(t *testing.T) {
 	if state, err := p.Readback(ctx, e); err != nil || state != nexusmigration.Absent {
 		t.Fatalf("failed audit was visible: %s %v", state, err)
 	}
-	if _, err = store.db.ExecContext(ctx, `DROP TRIGGER `+trigger+` ON resolver_audit_log`); err != nil {
+	if _, err = store.db.ExecContext(ctx, `DROP TRIGGER `+trigger+` ON security_audit_log`); err != nil {
 		t.Fatal(err)
 	}
 	if err = p.Publish(locked, e); err != nil {
@@ -168,7 +168,7 @@ func TestPostgresRustFSNexusOCIPublicationFenceAuditAndRestart(t *testing.T) {
 		t.Fatalf("commit response loss replay=%v", err)
 	}
 	var audits int
-	if err = store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM resolver_audit_log WHERE repository=$1 AND actor=$2 AND operation='nexus.migration.publish'`, repo.Name, e.Actor).Scan(&audits); err != nil || audits != 1 {
+	if err = store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM security_audit_log WHERE repository=$1 AND actor=$2 AND operation='nexus.migration.publish'`, repo.Name, e.Actor).Scan(&audits); err != nil || audits != 1 {
 		t.Fatalf("atomic actual-actor publication audit=%d %v", audits, err)
 	}
 	release()

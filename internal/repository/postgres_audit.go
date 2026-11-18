@@ -57,9 +57,8 @@ type auditExecer interface {
 }
 
 // withAuditDefaults fills the request ids and the timestamp the caller left empty.
-// The class is not inferred here: the audit writer sets it from Durability, and
-// audits written inside a store transaction keep the table they always used
-// (an empty class means resolver_audit_log).
+// The class is not inferred here: the audit writer sets it from Durability and
+// insertAudit does the same for audits written inside a store transaction.
 func withAuditDefaults(ctx context.Context, audit AuditRecord) AuditRecord {
 	if ids, ok := requestcontext.FromContext(ctx); ok {
 		if audit.RequestID == "" {
@@ -80,6 +79,8 @@ func withAuditDefaults(ctx context.Context, audit AuditRecord) AuditRecord {
 // that audit a mutation inside their own transaction call it.
 func insertAudit(ctx context.Context, execer auditExecer, audit AuditRecord) error {
 	audit = withAuditDefaults(ctx, audit)
+	// ADR 0023 section 1: mutations are sync class and land in security_audit_log.
+	audit.Class = audit.Durability()
 	if err := insertAuditRow(ctx, execer, audit); err != nil {
 		return err
 	}
@@ -95,7 +96,7 @@ func insertAuditRow(ctx context.Context, execer auditExecer, audit AuditRecord) 
 		}
 		evidence = encoded
 	}
-	_, err := execer.ExecContext(ctx, `INSERT INTO `+auditTable(audit.Class)+` (group_name, repository, member_name, outcome, actor, occurred_at, format, resource, representation, member_type, upstream_host, operation, http_status, cache_disposition, bytes, authorization_source, authorization_reason, request_id, trace_id, evidence) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb)`, audit.GroupName, audit.Repository, audit.MemberName, audit.Outcome, audit.Actor, audit.OccurredAt, audit.Format, audit.Resource, audit.Representation, audit.MemberType, audit.UpstreamHost, audit.Operation, audit.Status, audit.CacheDisposition, audit.Bytes, audit.AuthorizationSource, audit.AuthorizationReason, audit.RequestID, audit.TraceID, evidence)
+	_, err := execer.ExecContext(ctx, `INSERT INTO `+AuditTable(audit.Class)+` (group_name, repository, member_name, outcome, actor, occurred_at, format, resource, representation, member_type, upstream_host, operation, http_status, cache_disposition, bytes, authorization_source, authorization_reason, request_id, trace_id, evidence) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb)`, audit.GroupName, audit.Repository, audit.MemberName, audit.Outcome, audit.Actor, audit.OccurredAt, audit.Format, audit.Resource, audit.Representation, audit.MemberType, audit.UpstreamHost, audit.Operation, audit.Status, audit.CacheDisposition, audit.Bytes, audit.AuthorizationSource, audit.AuthorizationReason, audit.RequestID, audit.TraceID, evidence)
 	return err
 }
 
@@ -141,7 +142,8 @@ func (s *PostgresStore) ListRepositoryRequestStatistics(ctx context.Context, now
 
 // auditTable maps a durability class to its table. Only these two constants are
 // ever interpolated into SQL.
-func auditTable(class AuditClass) string {
+// AuditTable is the audit table a record of the class is stored in.
+func AuditTable(class AuditClass) string {
 	if class == AuditClassSync {
 		return "security_audit_log"
 	}
@@ -222,7 +224,7 @@ func buildAuditPageQuery(query AuditQuery, now time.Time) (string, []any, int) {
 			where = append(where, "(occurred_at, id) "+operator+" ("+before+", "+beforeID+")")
 		}
 		branch := "SELECT '" + string(class) + "'::text AS audit_class, " + strconv.Itoa(class.rank()) + " AS class_rank, " + auditPageColumns +
-			" FROM " + auditTable(class) + " WHERE " + joinAnd(where) +
+			" FROM " + AuditTable(class) + " WHERE " + joinAnd(where) +
 			" ORDER BY occurred_at DESC, id DESC LIMIT " + limitPlaceholder
 		branches = append(branches, "("+branch+")")
 	}

@@ -298,7 +298,9 @@ func insertAudit(ctx context.Context, tx *sql.Tx, a repository.AuditRecord) erro
 		a.RequestID = ids.RequestID
 		a.TraceID = ids.TraceID
 	}
-	_, e = tx.ExecContext(ctx, `INSERT INTO resolver_audit_log(group_name,repository,member_name,outcome,actor,occurred_at,format,resource,representation,member_type,upstream_host,operation,http_status,cache_disposition,bytes,authorization_source,authorization_reason,request_id,trace_id,evidence)VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb)`, a.GroupName, a.Repository, a.MemberName, a.Outcome, a.Actor, a.OccurredAt, a.Format, a.Resource, a.Representation, a.MemberType, a.UpstreamHost, a.Operation, a.Status, a.CacheDisposition, a.Bytes, a.AuthorizationSource, a.AuthorizationReason, a.RequestID, a.TraceID, evidence)
+	// ADR 0023 section 1: mutations are sync class and land in security_audit_log.
+	a.Class = a.Durability()
+	_, e = tx.ExecContext(ctx, `INSERT INTO `+repository.AuditTable(a.Class)+`(group_name,repository,member_name,outcome,actor,occurred_at,format,resource,representation,member_type,upstream_host,operation,http_status,cache_disposition,bytes,authorization_source,authorization_reason,request_id,trace_id,evidence)VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb)`, a.GroupName, a.Repository, a.MemberName, a.Outcome, a.Actor, a.OccurredAt, a.Format, a.Resource, a.Representation, a.MemberType, a.UpstreamHost, a.Operation, a.Status, a.CacheDisposition, a.Bytes, a.AuthorizationSource, a.AuthorizationReason, a.RequestID, a.TraceID, evidence)
 	return e
 }
 

@@ -415,7 +415,9 @@ func (h generatedRepositoryAPIAdapter) ReplaceQuarantineReadPolicy(w http.Respon
 			if updated.Enabled {
 				state = "enabled"
 			}
-			_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{GroupName: repo.Name, Repository: repo.Name, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: "repositories/" + repo.ID + "/quarantine-read-policy", Operation: "quarantine_read_policy.replace", Status: http.StatusOK, CacheDisposition: "bypass", AuthorizationSource: "repository_admin", AuthorizationReason: state})
+			if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{GroupName: repo.Name, Repository: repo.Name, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: "repositories/" + repo.ID + "/quarantine-read-policy", Operation: "quarantine_read_policy.replace", Status: http.StatusOK, CacheDisposition: "bypass", AuthorizationSource: "repository_admin", AuthorizationReason: state}) {
+				return
+			}
 		}
 		w.Header().Set("ETag", updated.Version)
 		writeNativeMavenJSON(w, http.StatusOK, quarantineReadPolicyResponse(updated))
@@ -450,7 +452,9 @@ func (h generatedRepositoryAPIAdapter) ReplaceSecurityPolicy(w http.ResponseWrit
 			return
 		}
 		if h.audit != nil {
-			_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{GroupName: repo.Name, Repository: repo.Name, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: "repositories/" + repo.ID + "/security-policy", Operation: "security_policy.replace", Status: http.StatusOK, CacheDisposition: "bypass"})
+			if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{GroupName: repo.Name, Repository: repo.Name, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: "repositories/" + repo.ID + "/security-policy", Operation: "security_policy.replace", Status: http.StatusOK, CacheDisposition: "bypass"}) {
+				return
+			}
 		}
 		w.Header().Set("ETag", updated.Version)
 		writeNativeMavenJSON(w, http.StatusOK, securityPolicyResponse(updated))
@@ -695,7 +699,9 @@ func (h generatedRepositoryAPIAdapter) ReplaceRepositoryCapacity(w http.Response
 			return
 		}
 		if h.audit != nil {
-			_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{GroupName: repo.Name, Repository: repo.Name, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: "repositories/" + repo.ID + "/capacity", Operation: "capacity.configure", Status: http.StatusOK, CacheDisposition: "bypass"})
+			if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{GroupName: repo.Name, Repository: repo.Name, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: "repositories/" + repo.ID + "/capacity", Operation: "capacity.configure", Status: http.StatusOK, CacheDisposition: "bypass"}) {
+				return
+			}
 		}
 		writeNativeMavenJSON(w, http.StatusOK, capacity)
 	})

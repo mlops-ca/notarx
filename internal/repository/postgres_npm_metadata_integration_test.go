@@ -17,7 +17,7 @@ func TestPostgresNPMMetadataContract(t *testing.T) {
 		t.Fatalf("other instance lost committed tombstones: %#v %v", pkg, err)
 	}
 	var audits int
-	if err = second.db.QueryRow(`SELECT count(*) FROM resolver_audit_log WHERE repository=$1 AND operation IN ('npm.deprecate','npm.unpublish')`, repo.ID).Scan(&audits); err != nil || audits != 5 {
+	if err = second.db.QueryRow(`SELECT count(*) FROM security_audit_log WHERE repository=$1 AND operation IN ('npm.deprecate','npm.unpublish')`, repo.ID).Scan(&audits); err != nil || audits != 5 {
 		t.Fatalf("committed governance audits=%d %v", audits, err)
 	}
 }
@@ -87,12 +87,12 @@ func TestPostgresNPMMetadataAuditFailureRollsBack(t *testing.T) {
 	// The trigger fails only this fixture's actor, leaving unrelated audits
 	// and concurrent tests in the owned database untouched.
 	_, err = store.db.Exec(`CREATE FUNCTION npm_governance_reject_fixture_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.actor='npm-governance-reject-audit' THEN RAISE EXCEPTION 'fixture audit unavailable'; END IF; RETURN NEW; END $$;
-	 CREATE TRIGGER npm_governance_reject_fixture_audit BEFORE INSERT ON resolver_audit_log FOR EACH ROW EXECUTE FUNCTION npm_governance_reject_fixture_audit()`)
+	 CREATE TRIGGER npm_governance_reject_fixture_audit BEFORE INSERT ON security_audit_log FOR EACH ROW EXECUTE FUNCTION npm_governance_reject_fixture_audit()`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		_, _ = store.db.Exec(`DROP TRIGGER IF EXISTS npm_governance_reject_fixture_audit ON resolver_audit_log; DROP FUNCTION IF EXISTS npm_governance_reject_fixture_audit()`)
+		_, _ = store.db.Exec(`DROP TRIGGER IF EXISTS npm_governance_reject_fixture_audit ON security_audit_log; DROP FUNCTION IF EXISTS npm_governance_reject_fixture_audit()`)
 	})
 	for _, unpublish := range []bool{false, true} {
 		m := NPMMetadataMutation{RepositoryID: repo.ID, PackageName: name, ExpectedRevision: pkg.Revision, Deprecations: map[string]string{"1.0.0": "upgrade"}, Audit: npmDistTagMutation(repo.ID, name, "", "").Audit}

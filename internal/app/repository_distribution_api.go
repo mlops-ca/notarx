@@ -100,7 +100,9 @@ func (h generatedRepositoryAPIAdapter) CreateRepositoryPromotion(w http.Response
 				writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "enqueue promotion job failed")
 				return
 			}
-			_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{Repository: source.Name, GroupName: source.Name, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: request.Coordinate, Operation: "promote", Status: http.StatusAccepted})
+			if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{Repository: source.Name, GroupName: source.Name, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: request.Coordinate, Operation: "promote", Status: http.StatusAccepted}) {
+				return
+			}
 			writeNativeMavenJSON(w, http.StatusAccepted, lifecycleJobResponse(job))
 		})
 	})
@@ -274,7 +276,9 @@ func (h generatedRepositoryAPIAdapter) CreateRepositoryReplication(w http.Respon
 				writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "create replication plan failed")
 				return
 			}
-			_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{Repository: source.Name, GroupName: source.Name, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: request.Coordinate, Operation: "replicate", Status: http.StatusAccepted})
+			if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{Repository: source.Name, GroupName: source.Name, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: request.Coordinate, Operation: "replicate", Status: http.StatusAccepted}) {
+				return
+			}
 			writeNativeMavenJSON(w, http.StatusAccepted, toOpenAPIReplicationPlan(plan))
 		})
 	})
@@ -555,10 +559,12 @@ func (h generatedRepositoryAPIAdapter) RestoreRepositoryArtifact(w http.Response
 			return
 		}
 		if repo.Format == repository.FormatCargo && h.audit != nil {
-			_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{GroupName: repo.Name, Repository: repo.Name,
+			if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{GroupName: repo.Name, Repository: repo.Name,
 				Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(),
 				Format: "management", Resource: request.Coordinate, Operation: "artifact.restore",
-				Status: http.StatusNoContent, CacheDisposition: "bypass"})
+				Status: http.StatusNoContent, CacheDisposition: "bypass"}) {
+				return
+			}
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})

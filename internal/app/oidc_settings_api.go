@@ -71,11 +71,13 @@ func (h identityManagementHandler) ReplaceOIDCSettings(w http.ResponseWriter, r 
 		return
 	}
 	if h.audit != nil {
-		_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{
+		if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{
 			Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(),
 			Format: "management", Resource: "authentication/oidc", Operation: "authentication.oidc.configure",
 			Status: http.StatusOK, CacheDisposition: "bypass",
-		})
+		}) {
+			return
+		}
 	}
 	writeNativeMavenJSON(w, http.StatusOK, oidcSettingsResponse(settings))
 }
@@ -100,6 +102,8 @@ func (h identityManagementHandler) TestOIDCSettings(w http.ResponseWriter, r *ht
 		outcome = repository.AuditUpstreamError
 	}
 	if h.audit != nil {
+		// The test changes nothing: its audit stays best-effort so the admin still
+		// sees the real discovery outcome.
 		_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{
 			Actor: principal.Actor, Outcome: outcome, OccurredAt: time.Now().UTC(), Format: "management",
 			Resource: "authentication/oidc", Operation: "authentication.oidc.test", Status: status, CacheDisposition: "bypass",

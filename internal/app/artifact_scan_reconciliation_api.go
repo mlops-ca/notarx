@@ -111,12 +111,14 @@ func (h generatedRepositoryAPIAdapter) ReconcileRepositoryArtifactScans(w http.R
 				return
 			}
 		}
-		_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{
+		if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{
 			Repository: repo.Name, GroupName: repo.Name, Actor: principal.Actor,
 			Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management",
 			Resource: repo.Name, Operation: "artifact.scan.reconcile", Status: http.StatusOK,
 			CacheDisposition: "bypass",
-		})
+		}) {
+			return
+		}
 		writeNativeMavenJSON(w, http.StatusOK, result)
 	})
 }

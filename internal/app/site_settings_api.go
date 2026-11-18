@@ -75,11 +75,13 @@ func (h generatedRepositoryAPIAdapter) ReplaceSiteSettings(w http.ResponseWriter
 		return
 	}
 	if h.audit != nil {
-		_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{
+		if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{
 			Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(),
 			Format: "management", Resource: "site-settings", Operation: "site-settings.replace",
 			Status: http.StatusOK, CacheDisposition: "bypass",
-		})
+		}) {
+			return
+		}
 	}
 	w.Header().Set("ETag", settings.Version)
 	response, err := siteSettingsResponse(settings, themes)

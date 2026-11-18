@@ -96,12 +96,12 @@ func TestRubyGemsPostgresRustFSAtomicAuditInterruptionQuotaAndRestart(t *testing
 	if e != nil {
 		t.Fatal(e)
 	}
-	_, e = db.ExecContext(t.Context(), `CREATE TRIGGER `+name+` BEFORE INSERT ON resolver_audit_log FOR EACH ROW EXECUTE FUNCTION `+name+`()`)
+	_, e = db.ExecContext(t.Context(), `CREATE TRIGGER `+name+` BEFORE INSERT ON security_audit_log FOR EACH ROW EXECUTE FUNCTION `+name+`()`)
 	if e != nil {
 		t.Fatal(e)
 	}
 	defer func() {
-		_, _ = db.ExecContext(t.Context(), `DROP TRIGGER IF EXISTS `+name+` ON resolver_audit_log`)
+		_, _ = db.ExecContext(t.Context(), `DROP TRIGGER IF EXISTS `+name+` ON security_audit_log`)
 		_, _ = db.ExecContext(t.Context(), `DROP FUNCTION IF EXISTS `+name+`()`)
 	}()
 	if code := upload(module); code != 500 {
@@ -115,7 +115,7 @@ func TestRubyGemsPostgresRustFSAtomicAuditInterruptionQuotaAndRestart(t *testing
 	if e != nil || len(audits) != 0 {
 		t.Fatalf("failed transaction audit %v %v", audits, e)
 	}
-	if _, e = db.ExecContext(t.Context(), `DROP TRIGGER `+name+` ON resolver_audit_log`); e != nil {
+	if _, e = db.ExecContext(t.Context(), `DROP TRIGGER `+name+` ON security_audit_log`); e != nil {
 		t.Fatal(e)
 	}
 	if code := upload(module); code != 201 {
