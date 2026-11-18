@@ -1,0 +1,7 @@
+# Copy to terraform.tfvars (never commit it) and set your own values. This file
+# holds identifiers and a public key only; it never holds a secret.
+region           = "ca-toronto-1"
+tenancy_ocid     = "ocid1.tenancy.oc1..example"
+compartment_ocid = "ocid1.compartment.oc1..example"
+ssh_public_key   = "ssh-ed25519 AAAA... you@example"
+ssh_allowed_cidr = "203.0.113.7/32"
