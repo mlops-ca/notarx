@@ -6,13 +6,13 @@ RubyGems Hosted 是默认关闭的预览，管理入口为
 `/api/v2/previews/rubygems`，发布原始 `.gem` 并提供 RubyGems/Bundler 原生
 compact 索引、Marshal 4.8 legacy 索引和 zlib gemspec。它尚未加入正式格式
 档案、正式仓库目录、Console 创建选择器或安装预置，没有预览 `agctl` 命令。
-Hosted 切片由 [#459](https://github.com/mlops-ca/notarx/issues/459) 跟踪；
-原生 yank 与受控恢复由 [#462](https://github.com/mlops-ca/notarx/issues/462) 跟踪。
-独立隔离与释放由 [#468](https://github.com/mlops-ca/notarx/issues/468) 跟踪。
+Hosted 切片由 [#459](https://github.com/ccsert/artifact-gateway/issues/459) 跟踪；
+原生 yank 与受控恢复由 [#462](https://github.com/ccsert/artifact-gateway/issues/462) 跟踪。
+独立隔离与释放由 [#468](https://github.com/ccsert/artifact-gateway/issues/468) 跟踪。
 Proxy/Group、硬删除、Console、扫描、备份准入和
-Nexus 迁移仍由 [#293](https://github.com/mlops-ca/notarx/issues/293) 承接。
+Nexus 迁移仍由 [#293](https://github.com/ccsert/artifact-gateway/issues/293) 承接。
 
-[同安装 Hosted 持久复制](rubygems-replication-preview.zh-CN.md) 由 [#472](https://github.com/mlops-ca/notarx/issues/472) 跟踪，沿用默认关闭预览。
+[同安装 Hosted 持久复制](rubygems-replication-preview.zh-CN.md) 由 [#472](https://github.com/ccsert/artifact-gateway/issues/472) 跟踪，沿用默认关闭预览。
 
 ## 启用与创建
 

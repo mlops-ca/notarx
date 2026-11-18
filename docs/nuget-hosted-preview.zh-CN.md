@@ -6,7 +6,7 @@ NuGet Hosted 必须显式开启。它在 `/api/v2/previews/nuget` 下使用独�
 发布 DTO，原生协议入口为 `/nuget/{name}`。正式格式目录、正式仓库创建与公开
 目录、Console 格式选择器仍不公开 NuGet。独立启用的
 [Proxy/Group 预览](nuget-proxy-group-preview.zh-CN.md) 扩展原生读取。
-[#449](https://github.com/mlops-ca/notarx/issues/449) 治理子切片增加取消列出/重新列出、
+[#449](https://github.com/ccsert/artifact-gateway/issues/449) 治理子切片增加取消列出/重新列出、
 保留墓碑和隔离读取拦截。symbols 发布、签名校验、扫描、晋级/复制、保留策略、
 回收、Console 与完整治理准入仍由 #289 跟踪。
 预览 API 暂无 `agctl` 命令。

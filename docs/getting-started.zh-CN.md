@@ -19,7 +19,7 @@ Kafka、Elasticsearch、外部消息队列或服务发现组件。
 
 ## 安装已打包版本
 
-0.1.0 已在 [GitHub Releases](https://github.com/mlops-ca/notarx/releases/tag/v0.1.0)
+0.1.0 已在 [GitHub Releases](https://github.com/ccsert/artifact-gateway/releases/tag/v0.1.0)
 提供 Linux/macOS amd64/arm64 Gateway 归档、Console 静态包、已解析 OpenAPI 契约和
 校验和。解压前应验证 `SHA256SUMS`，并通过 `gateway version` 确认二进制内嵌的版本与
 Git Revision。

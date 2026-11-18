@@ -12,9 +12,10 @@ old='github.com/''ccsert/artifact-gateway'
 new='github.com/mlops-ca/notarx'
 
 # Files that must keep the upstream identity (attribution, history, ADRs).
+# Existing zh-CN content is frozen (ADR 0014) and is never rewritten.
 # Historical records (release notes, release evidence, pinned upstream release
 # URLs) describe artefacts that exist only under the upstream path.
-keep_re='^(LICENSE|NOTICE|docs/upstream\.md|CHANGELOG[^/]*|docs/adr/.*|\.github/release-notes/v[^/]*\.md|docs/release-records/.*|internal/backupops/testdata/published-native-provenance\.json|scripts/published-native-backup-test\.sh)$'
+keep_re='^(LICENSE|NOTICE|docs/upstream\.md|CHANGELOG[^/]*|docs/adr/.*|.*\.zh-CN\.md|\.github/release-notes/v[^/]*\.md|docs/release-records/.*|internal/backupops/testdata/published-native-provenance\.json|scripts/published-native-backup-test\.sh)$'
 
 changed=()
 while IFS= read -r -d '' path; do

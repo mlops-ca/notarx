@@ -4,11 +4,11 @@
 
 本批实现默认关闭的有限内置评估：仓库逻辑字节持续超限 → PostgreSQL 状态与
 不可变事件 → [已有 TLS 邮件通道](email-notification-delivery.zh-CN.md)。
-对应 [#237](https://github.com/mlops-ca/notarx/issues/237)，属于
-[#211](https://github.com/mlops-ca/notarx/issues/211)、
-[#212](https://github.com/mlops-ca/notarx/issues/212)、
-[#229](https://github.com/mlops-ca/notarx/issues/229) 与
-[#230](https://github.com/mlops-ca/notarx/issues/230) 的部分交付。
+对应 [#237](https://github.com/ccsert/artifact-gateway/issues/237)，属于
+[#211](https://github.com/ccsert/artifact-gateway/issues/211)、
+[#212](https://github.com/ccsert/artifact-gateway/issues/212)、
+[#229](https://github.com/ccsert/artifact-gateway/issues/229) 与
+[#230](https://github.com/ccsert/artifact-gateway/issues/230) 的部分交付。
 它不评估本地挂载或 5xx；S3/NAS 物理池容量仍为 unknown。平台管理员可在 Console
 **系统 → 配额告警**（`/system?tab=alerts`）管理规则并查看安全交付证据。
 

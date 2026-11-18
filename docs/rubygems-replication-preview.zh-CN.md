@@ -87,7 +87,7 @@ PostgreSQL/RustFS 事务测试，以及固定的官方 Ruby 3.4.4、RubyGems 3.6
 `ruby`/`java` 原包，只执行 `ruby` 变体，不声明 JRuby 运行时验证；同时记录资源所有权与清理回执。
 
 本切片不覆盖 Proxy/Group、promotion、跨安装复制、正式准入、扫描/GC、备份准入、Nexus
-迁移或生产部署。[父项 #293](https://github.com/mlops-ca/notarx/issues/293) 保持开放，
-[子项 #472](https://github.com/mlops-ca/notarx/issues/472) 仅交付此预览。本地
+迁移或生产部署。[父项 #293](https://github.com/ccsert/artifact-gateway/issues/293) 保持开放，
+[子项 #472](https://github.com/ccsert/artifact-gateway/issues/472) 仅交付此预览。本地
 fixture、CI、业务迁移和生产验收分开记录。原生客户端配置见
 [Hosted 预览指南](rubygems-hosted-preview.zh-CN.md)。

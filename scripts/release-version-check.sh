@@ -55,7 +55,7 @@ if [[ -n "$source_repository" && "$cli_module" != "github.com/$source_repository
   printf 'go.mod module %s does not match the source repository github.com/%s.\n' "$cli_module" "$source_repository" >&2
   exit 1
 fi
-for doc in docs/cli.md docs/cli.zh-CN.md; do
+for doc in docs/cli.md; do
   if ! grep -Fq "go install $cli_module/cmd/agctl@" "$doc"; then
     printf '%s must document the module install path %s/cmd/agctl.\n' "$doc" "$cli_module" >&2
     exit 1

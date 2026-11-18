@@ -79,17 +79,17 @@ curl --fail-with-body --show-error \
 
 ## 遗留实现的分阶段迁移
 
-父项 [#30](https://github.com/mlops-ca/notarx/issues/30) 固定对照如下：
+父项 [#30](https://github.com/ccsert/artifact-gateway/issues/30) 固定对照如下：
 
 - 阶段一开始时的主线基线：`eb302a1bdf3bb9f3cd0ba20a7dd30e0895362323`。
 - 保留的旧分支：`codex/apt-hosted-complete-20260818`，`02721dbf058599f54b4968032463885e0067b678`；实现提交 `7fec72de`，后接旧文档提交。
 
 | 旧实现范围 | 处理与当前契约 |
 | --- | --- |
-| export.go / archive.go / 导出 API | [#36](https://github.com/mlops-ca/notarx/issues/36)：保留确定性归档思路，适配现有包成员模型，补全流式失败、长度、归档结尾与包身份检查；Memory/PostgreSQL 增加按 snapshot ID 读取资产，无新迁移。 |
-| import.go / 签名信任恢复 | [#37](https://github.com/mlops-ca/notarx/issues/37)：同仓库精确恢复：独立备份摘要与公钥、规范签名索引校验、原子元数据、配额、幂等、并发及持久化对象回收。 |
-| lifecycle.go / snapshot.go / 持久化生命周期 | [#38](https://github.com/mlops-ca/notarx/issues/38)：单独移植删除、保留和恢复触发的新签名快照；不得覆盖主线已经使用的 000107/000108，需要时追加当时主线之后的迁移。 |
-| promotion.go / replication.go / scanner 与隔离适配 | [#39](https://github.com/mlops-ca/notarx/issues/39)：按当前扫描身份、准入和 Worker 契约分 PR；目标仓库必须重建并签名元数据，不能以源 Release 作为目标权威。 |
+| export.go / archive.go / 导出 API | [#36](https://github.com/ccsert/artifact-gateway/issues/36)：保留确定性归档思路，适配现有包成员模型，补全流式失败、长度、归档结尾与包身份检查；Memory/PostgreSQL 增加按 snapshot ID 读取资产，无新迁移。 |
+| import.go / 签名信任恢复 | [#37](https://github.com/ccsert/artifact-gateway/issues/37)：同仓库精确恢复：独立备份摘要与公钥、规范签名索引校验、原子元数据、配额、幂等、并发及持久化对象回收。 |
+| lifecycle.go / snapshot.go / 持久化生命周期 | [#38](https://github.com/ccsert/artifact-gateway/issues/38)：单独移植删除、保留和恢复触发的新签名快照；不得覆盖主线已经使用的 000107/000108，需要时追加当时主线之后的迁移。 |
+| promotion.go / replication.go / scanner 与隔离适配 | [#39](https://github.com/ccsert/artifact-gateway/issues/39)：按当前扫描身份、准入和 Worker 契约分 PR；目标仓库必须重建并签名元数据，不能以源 Release 作为目标权威。 |
 | 旧 OpenAPI、生成代码、文档与公开能力声明 | 以当前主线为准重新生成或重写。舍弃旧 Hosted release-candidate 公开声明，保留当前 H3/KMS/HSM 与 Group 聚合签名边界；不回退主线错误包装、Go/Maven 或 Console 修复。 |
 
 旧分支不会随第一阶段完成而删除。只有其有价值行为全部迁移或明确弃用，并记录恢复 SHA 后，才考虑清理。

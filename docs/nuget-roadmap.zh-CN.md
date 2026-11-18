@@ -42,7 +42,7 @@ N1 字节契约已实现：Gateway 能验证完整 `.nupkg` ZIP，读取根目�
 身份边界。固定官方客户端门禁覆盖私有 Basic/Bearer 源、完整传递依赖、上游 unlisted
 精确版本，以及断源和存储重启后的缓存重放。搜索在持久来源绑定前检查完整包 ID
 权限。本阶段不公开接纳该格式。
-[#449](https://github.com/mlops-ca/notarx/issues/449) 的
+[#449](https://github.com/ccsert/artifact-gateway/issues/449) 的
 [治理预览](nuget-hosted-preview.zh-CN.md#列出状态与保留治理) 已增加本地 Hosted
 取消列出/重新列出、保留墓碑和可选隔离读取拦截，并覆盖已校验 Proxy 缓存和固定
 Group 所有者。
