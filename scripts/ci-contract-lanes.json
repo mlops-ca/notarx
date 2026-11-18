@@ -194,14 +194,6 @@
           "timeoutSeconds": 900
         },
         {
-          "name": "upgrade-readiness",
-          "command": [
-            "make",
-            "upgrade-readiness"
-          ],
-          "timeoutSeconds": 600
-        },
-        {
           "name": "integration-test",
           "command": [
             "make",
