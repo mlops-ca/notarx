@@ -14,6 +14,7 @@ import { ErrorBanner } from "../../components/ui/Feedback";
 import { ConsoleTable } from "../../components/ui/ConsolePrimitives";
 import { Modal } from "../../components/ui/Modal";
 import { usePreferences } from "../../lib/preferences";
+import { clearable } from "../../lib/clearable";
 import { accessKeys } from "../../lib/query/keys";
 import { useInvalidateAccess } from "./accessQueries";
 import { ResourcePrefixEditor } from "./ResourcePrefixEditor";
@@ -178,7 +179,7 @@ export function TemplateEditorDialog({
             render: (_, grant) => (
               <AutoComplete
                 className="w-full"
-                allowClear
+                allowClear={clearable(t, t("access.principal2"))}
                 options={principalOptions}
                 value={grant.principal}
                 placeholder={t("access.chooseOrEnterAnActorEGUserRelease")}

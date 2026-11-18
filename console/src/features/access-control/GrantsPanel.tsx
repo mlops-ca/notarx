@@ -13,6 +13,7 @@ import {
   FilterField,
 } from "../../components/ui/ConsolePrimitives";
 import { usePreferences } from "../../lib/preferences";
+import { clearable } from "../../lib/clearable";
 import { grantRowKey } from "./grantDraft";
 import { scopeLabel, type GrantRow } from "./accessModel";
 import { Principal } from "./PrincipalLabel";
@@ -165,7 +166,7 @@ export function GrantsPanel({
       >
         <FilterField label={t("access.principal")} className="min-w-[260px]">
           <Input
-            allowClear
+            allowClear={clearable(t, t("access.principal"))}
             placeholder={t("access.usernameApiKeyOrActor")}
             value={principalFilter.value}
             onChange={(event) =>
@@ -175,7 +176,7 @@ export function GrantsPanel({
         </FilterField>
         <FilterField label={t("access.repository")} className="min-w-[220px]">
           <Input
-            allowClear
+            allowClear={clearable(t, t("access.repository"))}
             placeholder={t("access.repositoryName")}
             value={repoFilter}
             onChange={(event) => setRepoFilter(event.target.value)}

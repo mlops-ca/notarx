@@ -1,6 +1,7 @@
 import { AutoComplete, Input, Segmented, Select } from "antd";
 import type { Repository } from "../../client";
 import { usePreferences } from "../../lib/preferences";
+import { clearable } from "../../lib/clearable";
 
 type Format = Repository["format"];
 
@@ -124,7 +125,7 @@ export function ResourcePrefixEditor({
   ) => (
     <AutoComplete
       className="w-full font-mono"
-      allowClear
+      allowClear={clearable(t, placeholder)}
       maxLength={255}
       value={parts[0] ?? ""}
       options={examples.map((example) => ({ value: example }))}

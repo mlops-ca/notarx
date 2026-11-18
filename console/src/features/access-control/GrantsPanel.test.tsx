@@ -71,4 +71,33 @@ describe("GrantsPanel", () => {
     expect(screen.queryByText("maven-releases")).not.toBeInTheDocument();
     expect(screen.queryByText("custom-actor-releases")).not.toBeInTheDocument();
   });
+
+  it("gives every clear control of the filter bar a distinct accessible name", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/access"]}>
+        <PreferencesProvider>
+          <AntdProvider>
+            <GrantsPanel rows={rows} error={null} onRetry={() => {}} />
+          </AntdProvider>
+        </PreferencesProvider>
+      </MemoryRouter>,
+    );
+    await user.type(
+      screen.getByPlaceholderText("Username, API key, or actor"),
+      "sa",
+    );
+    await user.type(screen.getByPlaceholderText("Repository name"), "maven");
+    const names = screen
+      .getAllByRole("button")
+      .map(
+        (button) =>
+          button.getAttribute("aria-label") ?? button.textContent ?? "",
+      )
+      .filter((name) => name.startsWith("Clear"));
+    expect(names).toEqual(
+      expect.arrayContaining(["Clear: Principal", "Clear: Repository"]),
+    );
+    expect(new Set(names).size).toBe(names.length);
+  });
 });

@@ -19,6 +19,7 @@ import {
 } from "../../components/ui/ConsolePrimitives";
 import { formatDate } from "../../lib/format";
 import { usePreferences } from "../../lib/preferences";
+import { clearable } from "../../lib/clearable";
 import { UserCreateDialog } from "./users/UserCreateDialog";
 import { UserDetailsDrawer } from "./users/UserDetailsDrawer";
 import { isUserLocked, roleTone } from "./users/userPresentation";
@@ -260,7 +261,7 @@ export function UsersPage() {
           <>
             <FilterField label={t("identity.search")} className="w-[320px]">
               <Input
-                allowClear
+                allowClear={clearable(t, t("identity.search"))}
                 prefix={<SearchOutlined />}
                 placeholder={t("identity.searchUsernameDisplayNameOrEmail")}
                 value={searchInput}
@@ -269,7 +270,7 @@ export function UsersPage() {
             </FilterField>
             <FilterField label={t("identity.role")} className="w-[160px]">
               <Select<Role>
-                allowClear
+                allowClear={clearable(t, t("identity.role"))}
                 className="w-full"
                 placeholder={t("identity.allRoles")}
                 value={role}
@@ -289,7 +290,7 @@ export function UsersPage() {
               className="w-[170px]"
             >
               <Select<UserState>
-                allowClear
+                allowClear={clearable(t, t("identity.accountState"))}
                 className="w-full"
                 placeholder={t("identity.allStates")}
                 value={state}

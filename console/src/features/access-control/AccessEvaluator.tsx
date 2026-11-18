@@ -19,6 +19,7 @@ import { ErrorBanner, Notice, Spinner } from "../../components/ui/Feedback";
 import { FilterField } from "../../components/ui/ConsolePrimitives";
 import { useAuth } from "../../lib/auth";
 import { usePreferences } from "../../lib/preferences";
+import { clearable } from "../../lib/clearable";
 import { AccessDecisionSummary } from "./AccessDecisionSummary";
 import { evaluatorPrincipalChoices } from "./evaluatorPrincipals";
 import {
@@ -265,7 +266,7 @@ export function AccessEvaluator({
             <FilterField label={t("access.resourceOptional")}>
               <Input
                 className="font-mono"
-                allowClear
+                allowClear={clearable(t, t("access.resourceOptional"))}
                 placeholder={
                   resourcePlaceholder(selectedRepositoryChoice?.format) ||
                   t("access.blankEvaluatesRepositoryWideAccess")

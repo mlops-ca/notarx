@@ -12,6 +12,7 @@ import {
   MetricStrip,
 } from "../../components/ui/ConsolePrimitives";
 import { usePreferences } from "../../lib/preferences";
+import { clearable } from "../../lib/clearable";
 import { useFormatters } from "../../lib/useFormatters";
 
 import { ArtifactSearchMatchControl } from "../../components/ui/ArtifactSearchMatchControl";
@@ -150,7 +151,7 @@ export function SearchPage() {
           }
         />
         <Input.Search
-          allowClear
+          allowClear={clearable(t, t("search.search"))}
           enterButton={
             <Button type="primary" disabled={!query.trim()}>
               {t("search.search")}

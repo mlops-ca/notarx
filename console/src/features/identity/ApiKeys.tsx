@@ -19,6 +19,7 @@ import {
   MetricStrip,
 } from "../../components/ui/ConsolePrimitives";
 import { usePreferences } from "../../lib/preferences";
+import { clearable } from "../../lib/clearable";
 import { ApiKeyCreateDialog } from "./ApiKeyCreateDialog";
 import { useApiKeys, useInvalidateApiKeys } from "./apiKeyQueries";
 
@@ -210,7 +211,7 @@ export function ApiKeysPage() {
                 className="min-w-[280px]"
               >
                 <Input
-                  allowClear
+                  allowClear={clearable(t, t("identity.search"))}
                   prefix={<SearchOutlined />}
                   placeholder={t("identity.searchNamesOrRoles")}
                   value={filter}

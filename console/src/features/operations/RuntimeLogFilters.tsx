@@ -19,6 +19,7 @@ import {
 import type { Dayjs } from "dayjs";
 import { FilterField } from "../../components/ui/ConsolePrimitives";
 import { usePreferences } from "../../lib/preferences";
+import { clearable } from "../../lib/clearable";
 import type { LogQuery } from "./useRuntimeLogStream";
 import {
   customRuntimeLogWindow,
@@ -122,7 +123,7 @@ export function RuntimeLogFilters({
           <Input
             prefix={<SearchOutlined />}
             value={keyword}
-            allowClear
+            allowClear={clearable(t, t("operations.keyword"))}
             placeholder={t("operations.searchLogContent")}
             onChange={(event) => setKeyword(event.target.value)}
             onPressEnter={search}
@@ -178,7 +179,7 @@ export function RuntimeLogFilters({
                 setRange(value as [Dayjs, Dayjs] | null);
                 setWindowError(null);
               }}
-              allowClear
+              allowClear={clearable(t, t("operations.startAndEndLocalTime"))}
             />
           </FilterField>
           <span className="ag-runtime-log-hint">
@@ -199,7 +200,7 @@ export function RuntimeLogFilters({
         <FilterField label="Request ID">
           <Input
             value={requestId}
-            allowClear
+            allowClear={clearable(t, "Request ID")}
             placeholder={t("operations.findARequest")}
             onChange={(event) => setRequestId(event.target.value)}
             onPressEnter={search}
@@ -227,7 +228,7 @@ export function RuntimeLogFilters({
           <FilterField label={t("operations.instance")}>
             <Input
               value={instanceId}
-              allowClear
+              allowClear={clearable(t, t("operations.instance"))}
               placeholder={t("operations.currentProcess")}
               onChange={(event) => setInstanceId(event.target.value)}
               onPressEnter={search}
@@ -236,7 +237,7 @@ export function RuntimeLogFilters({
           <FilterField label="Trace ID">
             <Input
               value={traceId}
-              allowClear
+              allowClear={clearable(t, "Trace ID")}
               placeholder={t("operations.correlateATrace")}
               onChange={(event) => setTraceId(event.target.value)}
               onPressEnter={search}
