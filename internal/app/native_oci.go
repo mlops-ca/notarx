@@ -704,7 +704,7 @@ func (h nativeOCIHandler) manifest(w http.ResponseWriter, r *http.Request, repo 
 		if mediaType == "" {
 			mediaType = "application/vnd.oci.image.manifest.v1+json"
 		}
-		key := "native/oci/manifests/" + repo.ID + "/" + url.PathEscape(name) + "/" + strings.TrimPrefix(digest, "sha256:")
+		key := ociprotocol.ManifestObjectKey(repo.ID, name, digest)
 		releaseObject, err := h.store.LockOCIObject(r.Context(), key)
 		if err != nil {
 			writeOCIError(w, http.StatusServiceUnavailable, "UNKNOWN", "manifest coordination is unavailable")

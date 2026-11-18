@@ -32,6 +32,7 @@ agree with executable tests and the
 - [Architecture diagrams](architecture-diagrams.md) — system, deployment, publication, and Worker flows.
 - [Design system](../DESIGN.md) — Console visual language, components, layout, and interaction rules.
 - [Domain language](../CONTEXT.md) — canonical Repository, Artifact, lifecycle, and distribution terminology.
+- [Deploy on Oracle Cloud Always Free](deployment/oci-free-tier.md) — reference deployment on one Ampere A1 VM: Compose stack, runbook, backups and variants.
 - [Object storage configuration](object-storage.md) — drivers, `NOTARX_OBJECT_STORE_*` keys, checksum modes, and OCI settings.
 - [PostgreSQL capabilities](postgresql-capabilities.md) — locks, leases, queues, notifications, JSONB, search, observability, the code's PostgreSQL footprint, and the managed-PostgreSQL support matrix.
 - [Native Hosted contract](native-hosted-contract.md) — metadata authority, object lifecycle, transactions, and idempotency.

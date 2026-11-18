@@ -179,7 +179,9 @@ func nexusConanObjectKey(entry nexusmigration.Entry, asset nexusmigration.Asset)
 	if session == "" {
 		session = "unallocated"
 	}
-	return "native/conan/migration/" + entry.ID + "/" + session + "/" + asset.SHA256 + "/" + asset.TargetPath
+	prefix := "native/conan/migration/" + entry.ID + "/" + session + "/" + asset.SHA256 + "/"
+	// TargetPath is user controlled: encode segments every driver accepts.
+	return prefix + objectstore.SafeKeyPath(asset.TargetPath, objectstore.MaxKeyBytes-len(prefix))
 }
 
 func (p *NexusConanMigrationPublication) Stage(ctx context.Context, entry nexusmigration.Entry, asset nexusmigration.Asset, input io.ReadSeeker) error {

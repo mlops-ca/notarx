@@ -20,6 +20,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/backupmanifest"
+	"github.com/mlops-ca/notarx/internal/objectstore"
 )
 
 // Explicit opt-in: creates only randomly named, owned local Docker resources.
@@ -28,12 +29,35 @@ func TestLocalRecoveryIntegration(t *testing.T) {
 	if os.Getenv("BACKUPOPS_DOCKER_TEST") != "1" {
 		t.Skip("set BACKUPOPS_DOCKER_TEST=1 and BACKUPOPS_DOCKER_CONTEXT for real PG/S3 recovery")
 	}
+	// Source and target each run on both object drivers for the binary release;
+	// the OCI image release covers the two same-driver pairs.
+	pairs := map[string][][2]string{
+		"binary":    {{objectstore.DriverS3, objectstore.DriverS3}, {objectstore.DriverS3, objectstore.DriverFilesystem}, {objectstore.DriverFilesystem, objectstore.DriverS3}, {objectstore.DriverFilesystem, objectstore.DriverFilesystem}},
+		"oci-image": {{objectstore.DriverS3, objectstore.DriverS3}, {objectstore.DriverFilesystem, objectstore.DriverFilesystem}},
+	}
 	for _, profile := range []string{"binary", "oci-image"} {
-		t.Run(profile, func(t *testing.T) { runLocalRecoveryIntegration(t, profile) })
+		for _, pair := range pairs[profile] {
+			t.Run(profile+"/"+pair[0]+"-to-"+pair[1], func(t *testing.T) { runLocalRecoveryIntegration(t, profile, pair[0], pair[1]) })
+		}
 	}
 }
 
-func runLocalRecoveryIntegration(t *testing.T, profile string) {
+// fixtureObjects reads the objects of an owned target: the S3 bucket, or the
+// host object root opened read-only so a running Gateway is not disturbed.
+func fixtureObjects(t *testing.T, x *OwnedTarget) sourceObjects {
+	t.Helper()
+	if !x.spec.filesystem() {
+		return x.objects
+	}
+	objects, err := NewFilesystemObjects(FilesystemSettings{Root: x.objectRoot})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = objects.Close() })
+	return objects
+}
+
+func runLocalRecoveryIntegration(t *testing.T, profile, sourceDriver, targetDriver string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
 	defer cancel()
 	d := Docker{Context: os.Getenv("BACKUPOPS_DOCKER_CONTEXT")}
@@ -49,8 +73,8 @@ func runLocalRecoveryIntegration(t *testing.T, profile string) {
 	if profile == "oci-image" {
 		release = integrationOCIRelease(t, ctx, d, release)
 	}
-	spec := func() TargetSpec {
-		return TargetSpec{Project: "ag-restore-" + uuid.NewString()[:18], Docker: d, Release: release,
+	spec := func(driver string) TargetSpec {
+		return TargetSpec{ObjectDriver: driver, Project: "ag-restore-" + uuid.NewString()[:18], Docker: d, Release: release,
 			PostgresPassword: uuid.NewString(), AccessKey: "synthetic-test", SecretKey: uuid.NewString(), RPCSecret: uuid.NewString(),
 			AdminToken: uuid.NewString(), ResolverToken: uuid.NewString(), RuntimeEnvironment: map[string]string{"NOTARX_SETTINGS_ENCRYPTION_KEY": recoveryEmailKey}}
 	}
@@ -69,10 +93,10 @@ func runLocalRecoveryIntegration(t *testing.T, profile string) {
 		})
 		return x
 	}
-	source := create(spec())
-	sentinel := create(spec())
+	source := create(spec(sourceDriver))
+	sentinel := create(spec(sourceDriver))
 	migrateFixture(t, ctx, source.database, release.Directory)
-	legacy := create(spec())
+	legacy := create(spec(sourceDriver))
 	migrateFixture(t, ctx, legacy.database, release.Directory)
 	// A pre-Cargo (v0.4.2) installation has none of the native_cargo_* tables;
 	// the single baseline is reduced to that shape instead of truncating a chain.
@@ -115,7 +139,7 @@ func runLocalRecoveryIntegration(t *testing.T, profile string) {
 	}
 	marker := []byte("synthetic-sentinel-bytes")
 	sum, _, _ := hashReader(bytes.NewReader(marker))
-	if err = sentinel.objects.Put(ctx, "synthetic/sentinel", bytes.NewReader(marker), int64(len(marker)), sum); err != nil {
+	if err = sentinel.Put(ctx, "synthetic/sentinel", bytes.NewReader(marker), int64(len(marker)), sum); err != nil {
 		t.Fatal(err)
 	}
 	sentinelBefore, err := sentinel.Metadata(ctx)
@@ -185,12 +209,17 @@ func runLocalRecoveryIntegration(t *testing.T, profile string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s3Port, err := source.port(ctx, "rustfs", "9000/tcp")
-	if err != nil {
-		t.Fatal(err)
-	}
 	ss := SourceSpec{BackupID: "synthetic-recovery", ScopeID: "synthetic-local", InventoryDeclaredComplete: true, Release: release, Docker: d, Postgres: source.database,
-		S3: S3Settings{Endpoint: "http://127.0.0.1:" + s3Port, Bucket: "gateway-cache", AccessKey: source.spec.AccessKey, SecretKey: source.spec.SecretKey}, Writers: []WriterSpec{{ID: "synthetic-gateway", Kind: "docker-container", Reference: writerID}}}
+		Writers: []WriterSpec{{ID: "synthetic-gateway", Kind: "docker-container", Reference: writerID}}}
+	if sourceDriver == objectstore.DriverFilesystem {
+		ss.Filesystem = &FilesystemSettings{Root: source.objectRoot}
+	} else {
+		s3Port, portErr := source.port(ctx, "rustfs", "9000/tcp")
+		if portErr != nil {
+			t.Fatal(portErr)
+		}
+		ss.S3 = S3Settings{Endpoint: "http://127.0.0.1:" + s3Port, Bucket: "gateway-cache", AccessKey: source.spec.AccessKey, SecretKey: source.spec.SecretKey}
+	}
 	_ = pgPort
 	observed, err := newSource(ctx, ss)
 	if err != nil {
@@ -235,10 +264,10 @@ func runLocalRecoveryIntegration(t *testing.T, profile string) {
 	_ = auditConn.Close(ctx)
 	orphan := []byte("unreferenced-backup-bytes")
 	orphanDigest, _, _ := hashReader(bytes.NewReader(orphan))
-	if err = source.objects.Put(ctx, "synthetic/orphan-before-backup", bytes.NewReader(orphan), int64(len(orphan)), orphanDigest); err != nil {
+	if err = source.Put(ctx, "synthetic/orphan-before-backup", bytes.NewReader(orphan), int64(len(orphan)), orphanDigest); err != nil {
 		t.Fatal(err)
 	}
-	backupObjects := fixtureObjectFingerprint(t, ctx, source.objects)
+	backupObjects := fixtureObjectFingerprint(t, ctx, fixtureObjects(t, source))
 	bundle := filepath.Join(t.TempDir(), "bundle")
 	exported, code, _ := fixtureBackupCommand(t, ctx, "export", ss, bundle)
 	if code != 0 || exported.Status != "exported" || exported.VerifiedObjects != 3 || exported.VerifiedBytes != 54 || exported.Gateway == nil || !sameSoftware(*exported.Gateway, release.Identity) {
@@ -248,7 +277,7 @@ func runLocalRecoveryIntegration(t *testing.T, profile string) {
 	// restore never copies live source stores, because the later bytes stay absent.
 	mutation := []byte("post-backup-mutation")
 	mutationSum, _, _ := hashReader(bytes.NewReader(mutation))
-	if err = source.objects.Put(ctx, "synthetic/after-backup", bytes.NewReader(mutation), int64(len(mutation)), mutationSum); err != nil {
+	if err = source.Put(ctx, "synthetic/after-backup", bytes.NewReader(mutation), int64(len(mutation)), mutationSum); err != nil {
 		t.Fatal(err)
 	}
 	conn, err = source.database.connect(ctx)
@@ -260,12 +289,12 @@ func runLocalRecoveryIntegration(t *testing.T, profile string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sourceObjectsBefore := fixtureObjectFingerprint(t, ctx, source.objects)
+	sourceObjectsBefore := fixtureObjectFingerprint(t, ctx, fixtureObjects(t, source))
 	sourceBefore, err := source.Metadata(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	targetSpec := spec()
+	targetSpec := spec(targetDriver)
 	targetSpec.ResolverToken = source.spec.ResolverToken
 	targetSpec.ReaderToken = reader
 	targetSpec.DeniedToken = denied
@@ -285,7 +314,7 @@ func runLocalRecoveryIntegration(t *testing.T, profile string) {
 	if restored.Software != "verified" || restored.Database != "restored" || restored.GrantMetadata != "verified" || restored.GroupMetadata != "verified" || restored.AuditMetadata != "verified" || restored.Metadata != "verified" || restored.Objects != "verified" || restored.Readiness != "verified" || restored.Protocol != "verified" || restored.Authorization != "verified" || restored.VerifiedObjects != 3 || restored.VerifiedBytes != 54 || restored.Gateway == nil || !sameSoftware(*restored.Gateway, release.Identity) {
 		t.Fatalf("incomplete real recovery report: %+v", restored)
 	}
-	if fixtureObjectFingerprint(t, ctx, target.objects) != backupObjects {
+	if fixtureObjectFingerprint(t, ctx, fixtureObjects(t, target)) != backupObjects {
 		t.Fatal("restored full bucket differs from backup, including unreferenced bytes")
 	}
 	if profile == "oci-image" {
@@ -326,7 +355,7 @@ func runLocalRecoveryIntegration(t *testing.T, profile string) {
 	if err != nil || !absent {
 		t.Fatal("post-backup database mutation recovered")
 	}
-	if body, _, err := target.objects.Open(ctx, "synthetic/after-backup"); err == nil {
+	if body, _, err := fixtureObjects(t, target).Open(ctx, "synthetic/after-backup"); err == nil {
 		_ = body.Close()
 		t.Fatal("post-backup object recovered")
 	}
@@ -339,7 +368,7 @@ func runLocalRecoveryIntegration(t *testing.T, profile string) {
 	}
 	for _, scenario := range scenarios {
 		t.Run(scenario, func(t *testing.T) {
-			candidate := spec()
+			candidate := spec(targetDriver)
 			candidate.ResolverToken = targetSpec.ResolverToken
 			candidate.ReaderToken = reader
 			candidate.ReadChecks = targetSpec.ReadChecks
@@ -365,7 +394,16 @@ func runLocalRecoveryIntegration(t *testing.T, profile string) {
 			if strings.HasPrefix(scenario, "corrupt") || scenario == "unsupported manifest" {
 				input = filepath.Join(t.TempDir(), "damaged")
 				copyPrivateFixture(t, bundle, input)
+				// The first object file of the bundle: a per-object data file for
+				// s3-bytes-v1, a tar segment for fs-bytes-v1 (filesystem source).
 				path := "objects/000000000000.data"
+				if _, statErr := os.Stat(filepath.Join(input, path)); statErr != nil {
+					entries, readErr := os.ReadDir(filepath.Join(input, "objects"))
+					if readErr != nil || len(entries) == 0 {
+						t.Fatal("fixture bundle has no object files")
+					}
+					path = "objects/" + entries[0].Name()
+				}
 				if scenario == "corrupt dump" || scenario == "corrupt archive with matching digest" {
 					path = "database.dump"
 				}
@@ -414,7 +452,7 @@ func runLocalRecoveryIntegration(t *testing.T, profile string) {
 				t.Fatalf("unsafe acceptance: %+v", r)
 			}
 			if scenario != "existing source" && scenario != "existing sentinel" {
-				for _, entry := range []struct{ kind, suffix string }{{"container", "postgres"}, {"container", "rustfs"}, {"container", "gateway"}, {"volume", "pgdata"}, {"volume", "objects"}, {"network", "network"}} {
+				for _, entry := range candidate.resourceEntries() {
 					if _, e := d.output(ctx, entry.kind, "inspect", candidate.Project+"-"+entry.suffix); e == nil {
 						t.Fatal("failure retained target resource")
 					}
@@ -430,7 +468,7 @@ func runLocalRecoveryIntegration(t *testing.T, profile string) {
 			t.Fatal(err)
 		}
 	}
-	if fixtureObjectFingerprint(t, ctx, source.objects) != sourceObjectsBefore {
+	if fixtureObjectFingerprint(t, ctx, fixtureObjects(t, source)) != sourceObjectsBefore {
 		t.Fatal("source full-byte inventory changed by restore")
 	}
 	sourceAfter, err := source.Metadata(ctx)
@@ -441,7 +479,7 @@ func runLocalRecoveryIntegration(t *testing.T, profile string) {
 	if err != nil || !bytes.Equal(sentinelBefore, sentinelAfter) {
 		t.Fatal("sentinel metadata changed by restore")
 	}
-	checkBody, _, err := sentinel.objects.Open(ctx, "synthetic/sentinel")
+	checkBody, _, err := sentinel.Open(ctx, "synthetic/sentinel")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -450,8 +488,9 @@ func runLocalRecoveryIntegration(t *testing.T, profile string) {
 	if err != nil || actual != sum {
 		t.Fatal("sentinel bytes changed")
 	}
-	if err = source.objects.WalkObjects(ctx, func(key string, size int64) error {
-		b, n, e := source.objects.Open(ctx, key)
+	sourceReader := fixtureObjects(t, source)
+	if err = sourceReader.WalkObjects(ctx, func(key string, size int64) error {
+		b, n, e := sourceReader.Open(ctx, key)
 		if e != nil {
 			return e
 		}
@@ -603,7 +642,7 @@ func captureCreatedTarget(t *testing.T, ctx context.Context, s TargetSpec, stage
 		}
 	})
 	inspectionFailed := false
-	for _, entry := range []struct{ kind, suffix string }{{"network", "network"}, {"volume", "pgdata"}, {"volume", "objects"}, {"container", "postgres"}, {"container", "rustfs"}, {"container", "gateway"}} {
+	for _, entry := range s.resourceEntries() {
 		name := s.Project + "-" + entry.suffix
 		data, err := s.Docker.output(ctx, entry.kind, "inspect", name)
 		if err != nil {
@@ -642,25 +681,37 @@ func captureCreatedTarget(t *testing.T, ctx context.Context, s TargetSpec, stage
 		}
 		x.resources = append(x.resources, ownedResource{entry.kind, id, name})
 		if entry.kind == "container" && entry.suffix == "gateway" {
+			want := 0
 			if s.Release.Identity.Artifact.Kind == "binary" {
-				if len(item.Mounts) != 1 {
-					inspectionFailed = true
-					continue
-				}
-				m := item.Mounts[0]
-				dir := filepath.Dir(m.Source)
-				rel, err := filepath.Rel(stageRoot, dir)
-				info, statErr := os.Lstat(dir)
+				want++
+			}
+			if s.filesystem() {
+				want++
+			}
+			// An unexpected mount never yields a host cleanup path.
+			if len(item.Mounts) != want {
+				inspectionFailed = true
+				continue
+			}
+			for _, m := range item.Mounts {
 				// The mount cannot authorize deletion of an arbitrary host path.
 				// Only a real private direct child of our fresh TMPDIR is owned.
-				if m.Type != "bind" || m.RW || m.Destination != "/gateway" || filepath.Base(m.Source) != "gateway" || err != nil || strings.ContainsAny(rel, `/\`) || !strings.HasPrefix(rel, "ag-restore-release-") || statErr != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
-					inspectionFailed = true
-					continue
+				dir := m.Source
+				prefix := "ag-restore-objects-"
+				if m.Destination == "/gateway" {
+					dir, prefix = filepath.Dir(m.Source), "ag-restore-release-"
 				}
-				x.directory = dir
-			} else if len(item.Mounts) != 0 {
-				// OCI never derives a host cleanup path from an unexpected mount.
-				inspectionFailed = true
+				rel, err := filepath.Rel(stageRoot, dir)
+				info, statErr := os.Lstat(dir)
+				safe := err == nil && !strings.ContainsAny(rel, `/\`) && strings.HasPrefix(rel, prefix) && statErr == nil && info.IsDir() && info.Mode().Perm()&0077 == 0
+				switch {
+				case m.Destination == "/gateway" && m.Type == "bind" && !m.RW && filepath.Base(m.Source) == "gateway" && safe:
+					x.directory = dir
+				case m.Destination == fsObjectMount && m.Type == "bind" && m.RW && safe:
+					x.objectRoot = dir
+				default:
+					inspectionFailed = true
+				}
 			}
 		}
 	}
@@ -672,6 +723,9 @@ func captureCreatedTarget(t *testing.T, ctx context.Context, s TargetSpec, stage
 		t.Fatal(err)
 	}
 	x.database = Postgres{DSN: "postgres://gateway:" + escapePassword(s.PostgresPassword) + "@127.0.0.1:" + port + "/gateway?sslmode=disable", ToolsContainer: x.resourceID("container", s.Project+"-postgres"), DockerContext: s.Docker.Context}
+	if s.filesystem() {
+		return x
+	}
 	port, err = x.port(ctx, "rustfs", "9000/tcp")
 	if err != nil {
 		t.Fatal(err)
@@ -692,7 +746,7 @@ func (p Postgres) connectHealth(ctx context.Context) error {
 	return c.Ping(ctx)
 }
 
-func fixtureObjectFingerprint(t *testing.T, ctx context.Context, s *s3Objects) string {
+func fixtureObjectFingerprint(t *testing.T, ctx context.Context, s sourceObjects) string {
 	t.Helper()
 	var inventory strings.Builder
 	if err := s.WalkObjects(ctx, func(key string, size int64) error {

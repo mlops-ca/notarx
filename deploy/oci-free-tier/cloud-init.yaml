@@ -1,0 +1,129 @@
+#cloud-config
+# Provisioning for the OCI Always Free A1 reference deployment (ADR 0017).
+# Ubuntu 24.04 arm64. Paste it as the instance's cloud-init user data (or let
+# the optional OpenTofu module do it). It installs Docker, formats and mounts the
+# data volume at /srv/notarx, installs the systemd unit that runs Compose from
+# /opt/notarx and enables unattended security upgrades. It contains no secrets:
+# the environment file is created by hand afterwards (see the runbook).
+package_update: true
+package_upgrade: true
+packages:
+  - docker.io
+  - docker-compose-v2
+  - unattended-upgrades
+  - curl
+  - ca-certificates
+
+write_files:
+  - path: /etc/apt/apt.conf.d/20auto-upgrades
+    permissions: "0644"
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+      APT::Periodic::AutocleanInterval "7";
+
+  - path: /usr/local/sbin/notarx-prepare-volume
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+      # Formats the block volume once, mounts it at /srv/notarx and creates the
+      # data directories. Idempotent: a volume that already has a filesystem is
+      # never reformatted.
+      set -eu
+      device=${NOTARX_VOLUME_DEVICE:-/dev/oracleoci/oraclevdb}
+      for _ in $(seq 1 60); do
+        [ -b "$device" ] && break
+        sleep 2
+      done
+      [ -b "$device" ] || { echo "block volume $device did not appear" >&2; exit 1; }
+      if ! blkid "$device" >/dev/null 2>&1; then
+        mkfs.ext4 -L notarx "$device"
+      fi
+      mkdir -p /srv/notarx
+      grep -q '^LABEL=notarx ' /etc/fstab || echo 'LABEL=notarx /srv/notarx ext4 defaults,noatime,nofail 0 2' >> /etc/fstab
+      mountpoint -q /srv/notarx || mount /srv/notarx
+      mkdir -p /srv/notarx/postgres /srv/notarx/objects /srv/notarx/backups
+      # The gateway image runs as nonroot (65532) and keeps the object root private.
+      chown 65532:65532 /srv/notarx/objects
+      chmod 0700 /srv/notarx/objects /srv/notarx/backups
+
+  - path: /usr/local/sbin/notarx-backup
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+      # Nightly PostgreSQL dump into /srv/notarx/backups, 7 days kept. The object
+      # root is exported with the backup tooling (runbook, "Backups").
+      set -eu
+      cd /opt/notarx
+      stamp=$(date -u +%Y%m%dT%H%M%SZ)
+      target=/srv/notarx/backups/gateway-$stamp.dump
+      # A failed dump must not leave a partial file behind to fill the volume.
+      trap 'rm -f "$target.partial"' EXIT
+      docker compose exec -T postgres pg_dump -U gateway -d gateway --format=custom > "$target.partial"
+      mv "$target.partial" "$target"
+      find /srv/notarx/backups \( -name 'gateway-*.dump' -o -name 'gateway-*.dump.partial' \) -mtime +7 -delete
+
+  - path: /etc/systemd/system/notarx.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=notarx (Docker Compose)
+      Requires=docker.service
+      After=docker.service network-online.target
+      Wants=network-online.target
+      RequiresMountsFor=/srv/notarx
+      ConditionPathExists=/opt/notarx/.env
+      ConditionPathIsMountPoint=/srv/notarx
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      WorkingDirectory=/opt/notarx
+      ExecStart=/usr/bin/docker compose up -d --remove-orphans
+      ExecStop=/usr/bin/docker compose down
+      TimeoutStartSec=600
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /etc/systemd/system/notarx-backup.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=notarx nightly PostgreSQL dump
+      Requires=docker.service
+      RequiresMountsFor=/srv/notarx
+      ConditionPathExists=/opt/notarx/.env
+      ConditionPathIsMountPoint=/srv/notarx
+
+      [Service]
+      Type=oneshot
+      WorkingDirectory=/opt/notarx
+      ExecStart=/usr/local/sbin/notarx-backup
+
+  - path: /etc/systemd/system/notarx-backup.timer
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=notarx nightly PostgreSQL dump
+
+      [Timer]
+      OnCalendar=*-*-* 02:30:00
+      RandomizedDelaySec=15m
+      Persistent=true
+
+      [Install]
+      WantedBy=timers.target
+
+# One shell, stop at the first failure: if the data volume never appears, nothing
+# after it runs, so Compose can never fill the boot volume (the units also
+# require /srv/notarx to be a mount point).
+runcmd:
+  - |
+    set -eu
+    systemctl enable --now docker
+    /usr/local/sbin/notarx-prepare-volume
+    mkdir -p /opt/notarx
+    systemctl daemon-reload
+    systemctl enable notarx.service notarx-backup.timer
+    systemctl start notarx-backup.timer

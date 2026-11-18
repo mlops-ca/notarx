@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net/url"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -16,6 +15,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/nexussource"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/ocigraph"
+	ociprotocol "github.com/mlops-ca/notarx/internal/protocol/oci"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -75,7 +75,7 @@ func (p *NexusOCIMigrationPublication) NativeAssets(entry nexusmigration.Entry) 
 			if source.Kind != "manifests" || !ocigraph.IsManifest(asset.MediaType) && !ocigraph.IsIndex(asset.MediaType) {
 				return nil, nexusmigration.Failed("invalid_publication")
 			}
-			key = "native/oci/manifests/" + entry.TargetRepositoryID + "/" + url.PathEscape(name) + "/" + asset.SHA256
+			key = ociprotocol.ManifestObjectKey(entry.TargetRepositoryID, name, asset.SHA256)
 		} else if source.Kind != "blobs" || asset.TargetPath != "blobs/"+digest || ocigraph.IsManifest(asset.MediaType) || ocigraph.IsIndex(asset.MediaType) {
 			return nil, nexusmigration.Failed("invalid_publication")
 		}

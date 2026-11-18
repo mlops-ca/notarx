@@ -5,10 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
-	"strings"
 	"time"
 
+	ociprotocol "github.com/mlops-ca/notarx/internal/protocol/oci"
 	"github.com/mlops-ca/notarx/internal/replication"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -117,7 +116,7 @@ func (r OCIReplication) sourceManifest(ctx context.Context, repositoryID, source
 }
 
 func ociReplicationTargetObjectKey(repositoryID, name, digest string) string {
-	return "native/oci/manifests/" + repositoryID + "/" + url.PathEscape(name) + "/" + strings.TrimPrefix(digest, "sha256:")
+	return ociprotocol.ManifestObjectKey(repositoryID, name, digest)
 }
 
 func replicatedManifestBlobDigests(body []byte) []string {

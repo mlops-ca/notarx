@@ -15,7 +15,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/objectstore"
 )
+
+// fsObjectMount is where the restored filesystem-driver Gateway sees its
+// object root. The host directory behind it is a new private directory owned
+// by the invoking user, and the Gateway runs as that user.
+const fsObjectMount = "/srv/notarx/objects"
 
 // Pinned by digest like rustfsImage: the owned-resource checks assert the
 // image's declared volume layout (/var/lib/postgresql since Postgres 18).
@@ -122,6 +128,31 @@ type TargetSpec struct {
 	DeniedToken        string            `json:"deniedToken,omitempty"`
 	ReadChecks         []ReadCheck       `json:"readChecks,omitempty"`
 	RuntimeEnvironment map[string]string `json:"runtimeEnvironment,omitempty"`
+	// ObjectDriver selects the object store of the target: "s3" (default, a
+	// RustFS container and volume) or "filesystem" (a new private host
+	// directory mounted into the Gateway; no RustFS container).
+	ObjectDriver string `json:"objectDriver,omitempty"`
+}
+
+func (s TargetSpec) filesystem() bool { return s.ObjectDriver == objectstore.DriverFilesystem }
+
+type resourceEntry struct{ kind, suffix string }
+
+// resourceEntries lists every resource a target of this spec may own, for
+// existence checks before creation and after cleanup.
+func (s TargetSpec) resourceEntries() []resourceEntry {
+	if s.filesystem() {
+		return []resourceEntry{{"network", "network"}, {"volume", "pgdata"}, {"container", "postgres"}, {"container", "gateway"}}
+	}
+	return []resourceEntry{{"network", "network"}, {"volume", "pgdata"}, {"volume", "objects"}, {"container", "postgres"}, {"container", "rustfs"}, {"container", "gateway"}}
+}
+
+// ownedResourceCount is the number of resources NewTarget creates.
+func (s TargetSpec) ownedResourceCount() int {
+	if s.filesystem() {
+		return 3
+	}
+	return 5
 }
 
 type ownedResource struct{ Kind, ID, Name string }
@@ -136,11 +167,28 @@ type OwnedTarget struct {
 	objects   *s3Objects
 	directory string
 	checked   bool
+	// Filesystem driver: the host object root bind-mounted into the Gateway and
+	// the store used to restore bytes into it until the Gateway starts.
+	objectRoot string
+	rootID     string
+	fsStore    *objectstore.FileStore
 }
 
 func validateTargetSpec(spec TargetSpec) error {
-	if !resourceName.MatchString(spec.Project) || !strings.HasPrefix(spec.Project, "ag-restore-") || len(spec.Project) > 42 || spec.PostgresPassword == "" || spec.AccessKey == "" || spec.SecretKey == "" || spec.RPCSecret == "" || spec.AdminToken == "" || spec.ResolverToken == "" || len(spec.SecretKey) < 8 || len(spec.RPCSecret) < 32 || spec.SecretKey == spec.RPCSecret || validateReadChecks(spec) != nil {
+	if !resourceName.MatchString(spec.Project) || !strings.HasPrefix(spec.Project, "ag-restore-") || len(spec.Project) > 42 || spec.PostgresPassword == "" || spec.AdminToken == "" || spec.ResolverToken == "" || validateReadChecks(spec) != nil {
 		return errors.New("explicit isolated target settings required")
+	}
+	switch spec.ObjectDriver {
+	case "", objectstore.DriverS3:
+		if spec.AccessKey == "" || spec.SecretKey == "" || spec.RPCSecret == "" || len(spec.SecretKey) < 8 || len(spec.RPCSecret) < 32 || spec.SecretKey == spec.RPCSecret {
+			return errors.New("explicit isolated target settings required")
+		}
+	case objectstore.DriverFilesystem:
+		if spec.Release.legacyEnvironment() {
+			return errors.New("the filesystem object driver needs a release that supports it")
+		}
+	default:
+		return errors.New("unsupported object driver")
 	}
 	if artifact := spec.Release.Identity.Artifact; artifact != nil && artifact.Kind == "binary" {
 		if _, err := binaryRuntimeImage(artifact.Platform); err != nil {
@@ -171,7 +219,7 @@ func NewTarget(ctx context.Context, spec TargetSpec) (_ *OwnedTarget, resultErr 
 			}
 		}
 	}()
-	for _, entry := range []struct{ kind, suffix string }{{"network", "network"}, {"volume", "pgdata"}, {"volume", "objects"}, {"container", "postgres"}, {"container", "rustfs"}, {"container", "gateway"}} {
+	for _, entry := range spec.resourceEntries() {
 		name := spec.Project + "-" + entry.suffix
 		if _, err := d.output(ctx, entry.kind, "inspect", name); err == nil {
 			return nil, errors.New("target resource already exists")
@@ -181,7 +229,11 @@ func NewTarget(ctx context.Context, spec TargetSpec) (_ *OwnedTarget, resultErr 
 	if err = target.recordCreated(ctx, "network", spec.Project+"-network", data, err); err != nil {
 		return nil, err
 	}
-	for _, suffix := range []string{"pgdata", "objects"} {
+	volumes := []string{"pgdata", "objects"}
+	if spec.filesystem() {
+		volumes = []string{"pgdata"}
+	}
+	for _, suffix := range volumes {
 		name := spec.Project + "-" + suffix
 		data, err = d.output(ctx, "volume", "create", "--label", "artifact-gateway.restore-owner="+target.owner, name)
 		if err = target.recordCreated(ctx, "volume", name, data, err); err != nil {
@@ -224,22 +276,32 @@ func NewTarget(ctx context.Context, spec TargetSpec) (_ *OwnedTarget, resultErr 
 	if err = start("postgres", postgresImage, pgEnv, []string{"postgres", "-c", "shared_preload_libraries=pg_stat_statements"}); err != nil {
 		return nil, err
 	}
-	rustEnv := []string{"RUSTFS_ACCESS_KEY=" + spec.AccessKey, "RUSTFS_SECRET_KEY=" + spec.SecretKey, "RUSTFS_RPC_SECRET=" + spec.RPCSecret, "RUSTFS_CONSOLE_ENABLE=false", "RUSTFS_VOLUMES=/data", "RUSTFS_ADDRESS=0.0.0.0:9000"}
-	if err = start("rustfs", rustfsImage, rustEnv, []string{"rustfs"}); err != nil {
-		return nil, err
+	if spec.filesystem() {
+		// A new private directory owned by this user is the object root; the
+		// restored Gateway mounts it and runs as the same user.
+		if target.objectRoot, err = os.MkdirTemp("", "ag-restore-objects-"); err != nil {
+			return nil, errors.New("object root unavailable")
+		}
+	} else {
+		rustEnv := []string{"RUSTFS_ACCESS_KEY=" + spec.AccessKey, "RUSTFS_SECRET_KEY=" + spec.SecretKey, "RUSTFS_RPC_SECRET=" + spec.RPCSecret, "RUSTFS_CONSOLE_ENABLE=false", "RUSTFS_VOLUMES=/data", "RUSTFS_ADDRESS=0.0.0.0:9000"}
+		if err = start("rustfs", rustfsImage, rustEnv, []string{"rustfs"}); err != nil {
+			return nil, err
+		}
 	}
 	pgPort, err := target.port(ctx, "postgres", "5432/tcp")
 	if err != nil {
 		return nil, err
 	}
-	s3Port, err := target.port(ctx, "rustfs", "9000/tcp")
-	if err != nil {
-		return nil, err
-	}
 	target.database = Postgres{DSN: fmt.Sprintf("postgres://gateway:%s@127.0.0.1:%s/gateway?sslmode=disable", escapePassword(spec.PostgresPassword), pgPort), ToolsContainer: target.resourceID("container", spec.Project+"-postgres"), DockerContext: d.Context}
-	target.objects, err = newS3(S3Settings{Endpoint: "http://127.0.0.1:" + s3Port, Bucket: "gateway-cache", AccessKey: spec.AccessKey, SecretKey: spec.SecretKey})
-	if err != nil {
-		return nil, err
+	if !spec.filesystem() {
+		s3Port, portErr := target.port(ctx, "rustfs", "9000/tcp")
+		if portErr != nil {
+			return nil, portErr
+		}
+		target.objects, err = newS3(S3Settings{Endpoint: "http://127.0.0.1:" + s3Port, Bucket: "gateway-cache", AccessKey: spec.AccessKey, SecretKey: spec.SecretKey})
+		if err != nil {
+			return nil, err
+		}
 	}
 	deadline := time.Now().Add(60 * time.Second)
 	for {
@@ -248,7 +310,10 @@ func NewTarget(ctx context.Context, spec TargetSpec) (_ *OwnedTarget, resultErr 
 		}
 		attemptCtx, attemptCancel := context.WithTimeout(ctx, 3*time.Second)
 		pgReady := target.database.Empty(attemptCtx)
-		objectsReady := target.objects.store.EnsureBucket(attemptCtx)
+		var objectsReady error
+		if target.objects != nil {
+			objectsReady = target.objects.store.EnsureBucket(attemptCtx)
+		}
 		attemptCancel()
 		if pgReady == nil && objectsReady == nil {
 			break
@@ -340,12 +405,23 @@ func (t *OwnedTarget) checkResource(ctx context.Context, r ownedResource) error 
 					return errors.New("target mount changed")
 				}
 			case t.spec.Project + "-gateway":
+				want := 0
 				if t.spec.Release.Identity.Artifact != nil && t.spec.Release.Identity.Artifact.Kind == "binary" {
-					if len(item.Mounts) != 1 || item.Mounts[0].Type != "bind" || item.Mounts[0].Destination != "/gateway" || item.Mounts[0].RW || filepath.Clean(item.Mounts[0].Source) != filepath.Join(t.directory, "gateway") {
+					want++
+				}
+				if t.spec.filesystem() {
+					want++
+				}
+				if len(item.Mounts) != want {
+					return errors.New("unexpected runtime mount")
+				}
+				for _, mount := range item.Mounts {
+					switch {
+					case mount.Type == "bind" && mount.Destination == "/gateway" && !mount.RW && t.directory != "" && filepath.Clean(mount.Source) == filepath.Join(t.directory, "gateway"):
+					case t.spec.filesystem() && mount.Type == "bind" && mount.Destination == fsObjectMount && mount.RW && t.objectRoot != "" && filepath.Clean(mount.Source) == t.objectRoot:
+					default:
 						return errors.New("runtime mount changed")
 					}
-				} else if len(item.Mounts) != 0 {
-					return errors.New("unexpected runtime mount")
 				}
 			default:
 				return errors.New("unknown target service")
@@ -394,7 +470,7 @@ func (t *OwnedTarget) port(ctx context.Context, service, port string) (string, e
 	return bindings[0].HostPort, nil
 }
 func (t *OwnedTarget) CheckEmpty(ctx context.Context) error {
-	if len(t.resources) != 5 {
+	if len(t.resources) != t.spec.ownedResourceCount() {
 		return errors.New("target ownership incomplete")
 	}
 	for _, r := range t.resources {
@@ -402,7 +478,7 @@ func (t *OwnedTarget) CheckEmpty(ctx context.Context) error {
 			return errors.New("target ownership changed")
 		}
 	}
-	if t.database.Empty(ctx) != nil || t.objects.Empty(ctx) != nil {
+	if t.database.Empty(ctx) != nil || t.objectsEmpty(ctx) != nil {
 		return errors.New("target not empty")
 	}
 	t.checked = true
@@ -420,10 +496,84 @@ func (t *OwnedTarget) Put(ctx context.Context, key string, r io.ReadSeeker, size
 	if !t.checked || t.checkOwned(ctx) != nil {
 		return errors.New("target not checked")
 	}
+	if t.spec.filesystem() {
+		store, err := t.openFilesystem()
+		if err != nil {
+			return err
+		}
+		return store.PutVerifiedReader(ctx, key, r, size, digest)
+	}
 	return t.objects.Put(ctx, key, r, size, digest)
 }
 func (t *OwnedTarget) Open(ctx context.Context, key string) (io.ReadCloser, int64, error) {
+	if t.spec.filesystem() {
+		store, err := t.openFilesystem()
+		if err != nil {
+			return nil, 0, err
+		}
+		return store.Open(ctx, key)
+	}
 	return t.objects.Open(ctx, key)
+}
+
+// SetObjectRootID makes the new filesystem root carry the identity recorded in
+// the restored database. It must run before the first object is written.
+func (t *OwnedTarget) SetObjectRootID(rootID string) error {
+	if !t.spec.filesystem() {
+		// An S3 target has no root to identify: nothing to carry over.
+		return nil
+	}
+	if t.fsStore != nil {
+		return errors.New("object root is already initialised")
+	}
+	t.rootID = rootID
+	_, err := t.openFilesystem()
+	return err
+}
+
+// openFilesystem opens (initialising on first use) the host object root.
+func (t *OwnedTarget) openFilesystem() (*objectstore.FileStore, error) {
+	if t.fsStore != nil {
+		return t.fsStore, nil
+	}
+	if t.objectRoot == "" {
+		return nil, errors.New("object root unavailable")
+	}
+	cfg := objectstore.Defaults()
+	cfg.Driver, cfg.FSRoot = objectstore.DriverFilesystem, t.objectRoot
+	var store *objectstore.FileStore
+	var err error
+	if t.rootID != "" {
+		store, err = objectstore.NewFileStoreWithRootID(cfg, t.rootID)
+	} else {
+		store, err = objectstore.NewFileStore(cfg)
+	}
+	if err != nil {
+		return nil, errors.New("object root unavailable")
+	}
+	t.fsStore = store
+	return store, nil
+}
+
+// closeFilesystem releases the host handle so the Gateway can take the root.
+func (t *OwnedTarget) closeFilesystem() error {
+	if t.fsStore == nil {
+		return nil
+	}
+	err := t.fsStore.Close()
+	t.fsStore = nil
+	return err
+}
+
+func (t *OwnedTarget) objectsEmpty(ctx context.Context) error {
+	if !t.spec.filesystem() {
+		return t.objects.Empty(ctx)
+	}
+	entries, err := os.ReadDir(t.objectRoot)
+	if t.objectRoot == "" || err != nil || len(entries) != 0 {
+		return errors.New("object root not empty")
+	}
+	return nil
 }
 
 // Cleanup refuses foreign or replaced resources; it never runs project-wide
@@ -444,8 +594,14 @@ func (t *OwnedTarget) Cleanup(ctx context.Context) error {
 			problems = append(problems, err)
 		}
 	}
-	if t.directory != "" {
-		if err := os.RemoveAll(t.directory); err != nil {
+	if err := t.closeFilesystem(); err != nil {
+		problems = append(problems, errors.New("object root close failed"))
+	}
+	for _, directory := range []string{t.directory, t.objectRoot} {
+		if directory == "" {
+			continue
+		}
+		if err := os.RemoveAll(directory); err != nil {
 			problems = append(problems, errors.New("private stage cleanup failed"))
 		}
 	}
@@ -469,6 +625,9 @@ func (t *OwnedTarget) StartGateway(ctx context.Context) (string, error) {
 		if t.checkResource(ctx, r) != nil {
 			return "", errors.New("target ownership changed")
 		}
+	}
+	if err := t.closeFilesystem(); err != nil {
+		return "", errors.New("object root unavailable")
 	}
 	args := []string{"create", "--name", spec.Project + "-gateway", "--network", spec.Project + "-network", "--label", "artifact-gateway.restore-owner=" + t.owner, "-p", "127.0.0.1::8080", "--read-only", "--tmpfs", "/tmp:rw,noexec,nosuid,size=256m,mode=1777", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true"}
 	if g := spec.Release.Identity; g.Artifact != nil && g.Artifact.Kind == "binary" {
@@ -503,7 +662,17 @@ func (t *OwnedTarget) StartGateway(ctx context.Context) (string, error) {
 		}
 		args = append(args, "--mount", "type=bind,source="+filepath.Join(directory, "gateway")+",target=/gateway,readonly", "--entrypoint", "/gateway")
 	}
-	environment := []string{"NOTARX_DATABASE_URL=postgres://gateway:" + escapePassword(spec.PostgresPassword) + "@postgres:5432/gateway?sslmode=disable", "NOTARX_OBJECT_STORE_ENDPOINT=http://rustfs:9000", "NOTARX_OBJECT_STORE_AUTO_CREATE_BUCKET=true", "NOTARX_OBJECT_STORE_BUCKET=gateway-cache", "NOTARX_OBJECT_STORE_ACCESS_KEY=" + spec.AccessKey, "NOTARX_OBJECT_STORE_SECRET_KEY=" + spec.SecretKey, "NOTARX_ADMIN_TOKEN=" + spec.AdminToken, "NOTARX_RESOLVER_TOKEN=" + spec.ResolverToken, "NOTARX_NODE_ROLES=api", "NOTARX_INSTANCE_ID=" + spec.Project, "NOTARX_LOG_BUFFER_LINES=1000"}
+	objectEnvironment := []string{"NOTARX_OBJECT_STORE_ENDPOINT=http://rustfs:9000", "NOTARX_OBJECT_STORE_AUTO_CREATE_BUCKET=true", "NOTARX_OBJECT_STORE_BUCKET=gateway-cache", "NOTARX_OBJECT_STORE_ACCESS_KEY=" + spec.AccessKey, "NOTARX_OBJECT_STORE_SECRET_KEY=" + spec.SecretKey}
+	if spec.filesystem() {
+		if t.objectRoot == "" {
+			return "", errors.New("object root unavailable")
+		}
+		// The Gateway runs as the user that owns the root, so it can write it.
+		args = append(args, "--user", fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()), "--mount", "type=bind,source="+t.objectRoot+",target="+fsObjectMount)
+		objectEnvironment = []string{"NOTARX_OBJECT_STORE_DRIVER=" + objectstore.DriverFilesystem, "NOTARX_OBJECT_STORE_FS_ROOT=" + fsObjectMount}
+	}
+	environment := append([]string{"NOTARX_DATABASE_URL=postgres://gateway:" + escapePassword(spec.PostgresPassword) + "@postgres:5432/gateway?sslmode=disable"}, objectEnvironment...)
+	environment = append(environment, "NOTARX_ADMIN_TOKEN="+spec.AdminToken, "NOTARX_RESOLVER_TOKEN="+spec.ResolverToken, "NOTARX_NODE_ROLES=api", "NOTARX_INSTANCE_ID="+spec.Project, "NOTARX_LOG_BUFFER_LINES=1000")
 	legacyEnv := spec.Release.legacyEnvironment()
 	for i, e := range environment {
 		key, value, _ := strings.Cut(e, "=")

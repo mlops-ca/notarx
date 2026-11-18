@@ -17,7 +17,7 @@ CLI_LDFLAGS = -s -w -X github.com/mlops-ca/notarx/internal/buildinfo.injectedVer
 .PHONY: i18n-release-check i18n-tooling-test help dev-bootstrap dev dev-status dev-down local-dev-test rustfs-only-check kubernetes-local-check kubernetes-local-up kubernetes-local-status kubernetes-local-verify kubernetes-local-down reference-scanner-smoke cargo-contract openapi-dependency-test openapi-tools-ready console-codegen-ready raw-e2e conan-e2e native-maven-e2e native-oci-e2e native-raw-e2e native-npm-e2e native-pypi-e2e native-go-e2e native-apt-e2e apt-signer-rotation-e2e readiness-e2e resolver-rotation-e2e service-account-rotation-e2e oci-performance-e2e performance-baseline cache-operations-e2e backup-restore-readiness backup-transfer-test upgrade-readiness release-readiness-check release-version-check stamp-version-test release-plan-test release-artifacts release-artifacts-test packages-signing-drill packages-environments-test docs-check commit-policy-check preflight migration-check evidence up down test api-contract cli-contract-check cli-test cli-e2e cli-runtime-e2e integration-test integration-down lint spellcheck vet race coverage dependency-audit fmt cli-build build docker-build docker-test console-docker-build cli-docker-build migrate backup-drill restore-drill console-build console-typecheck console-check console-test console-api-check console-e2e console-visual console-visual-update openapi-bundle openapi-generate-admin openapi-check
 
 help:
-	@printf '%s\n' 'Targets: native-rubygems-e2e, native-helm-e2e, native-oci-discovery-e2e, nexus-migration-client-e2e, nexus-inventory-scan-e2e, native-nuget-e2e, nexus-oci-migration-e2e, nexus-conan-migration-e2e, nexus-npm-migration-e2e, nexus-pypi-migration-e2e, private-upstream-auth-e2e, private-upstream-formats-e2e, dev-bootstrap, dev, dev-status, dev-down, kubernetes-local-check, kubernetes-local-up, kubernetes-local-status, kubernetes-local-verify, kubernetes-local-down, reference-scanner-smoke, cargo-contract, up, down, test, api-contract, cli-contract-check, cli-test, cli-e2e, cli-runtime-e2e, integration-test, integration-down, lint, spellcheck, vet, race, coverage, dependency-audit, fmt, cli-build, build, docker-build, docker-test, console-docker-build, cli-docker-build, migrate, backup-drill, restore-drill, preflight, migration-check, evidence, raw-e2e, conan-e2e, native-maven-e2e, native-oci-e2e, native-raw-e2e, native-npm-e2e, native-pypi-e2e, native-go-e2e, native-apt-e2e, apt-signer-rotation-e2e, readiness-e2e, resolver-rotation-e2e, service-account-rotation-e2e, oci-performance-e2e, performance-baseline, cache-operations-e2e, backup-restore-readiness, backup-transfer-test, published-native-backup-test, upgrade-readiness, release-readiness-check, release-version-check, stamp-version-test, release-plan-test, release-artifacts, release-artifacts-test, packages-signing-drill, packages-environments-test, docs-check, commit-policy-check, console-build, console-typecheck, console-check, console-test, i18n-release-check, i18n-tooling-test, console-api-check, console-e2e, console-visual, console-visual-update, openapi-bundle, openapi-generate-admin, openapi-check, native-build-check'
+	@printf '%s\n' 'Targets: native-rubygems-e2e, native-helm-e2e, native-oci-discovery-e2e, nexus-migration-client-e2e, nexus-inventory-scan-e2e, native-nuget-e2e, nexus-oci-migration-e2e, nexus-conan-migration-e2e, nexus-npm-migration-e2e, nexus-pypi-migration-e2e, private-upstream-auth-e2e, private-upstream-formats-e2e, dev-bootstrap, dev, dev-status, dev-down, kubernetes-local-check, kubernetes-local-up, kubernetes-local-status, kubernetes-local-verify, kubernetes-local-down, reference-scanner-smoke, cargo-contract, up, down, test, api-contract, cli-contract-check, cli-test, cli-e2e, cli-runtime-e2e, integration-test, integration-down, lint, spellcheck, vet, race, coverage, dependency-audit, fmt, cli-build, build, docker-build, docker-test, console-docker-build, cli-docker-build, migrate, backup-drill, restore-drill, preflight, migration-check, evidence, raw-e2e, conan-e2e, native-maven-e2e, native-oci-e2e, native-raw-e2e, native-npm-e2e, native-pypi-e2e, native-go-e2e, native-apt-e2e, apt-signer-rotation-e2e, readiness-e2e, resolver-rotation-e2e, service-account-rotation-e2e, oci-performance-e2e, performance-baseline, cache-operations-e2e, backup-restore-readiness, backup-transfer-test, published-native-backup-test, oci-free-tier-check, oci-free-tier-images-check, oci-free-tier-smoke, oci-free-tier-tofu-check, upgrade-readiness, release-readiness-check, release-version-check, stamp-version-test, release-plan-test, release-artifacts, release-artifacts-test, packages-signing-drill, packages-environments-test, docs-check, commit-policy-check, console-build, console-typecheck, console-check, console-test, i18n-release-check, i18n-tooling-test, console-api-check, console-e2e, console-visual, console-visual-update, openapi-bundle, openapi-generate-admin, openapi-check, native-build-check'
 
 dev-bootstrap:
 	@./scripts/local-dev.sh bootstrap-env
@@ -394,7 +394,25 @@ packages-environments-test:
 
 # Explicit opt-in real transfer fixture; no server .env or existing data targets.
 backup-transfer-test:
-	@BACKUPOPS_DOCKER_TEST=1 BACKUPOPS_DOCKER_CONTEXT="$$(docker context show)" go test -v -count=1 ./internal/backupops -run '^(TestLocalRecoveryIntegration|TestLocalReleaseUpgrade|TestFilesystemExport.*|TestEmptyFilesystemExportAndRestore|TestRestoreFilesystemObjects.*|TestBackupCLIRestoresObjects.*)$$'
+	@BACKUPOPS_DOCKER_TEST=1 BACKUPOPS_DOCKER_CONTEXT="$$(docker context show)" go test -v -count=1 -timeout 60m ./internal/backupops -run '^(TestLocalRecoveryIntegration|TestLocalReleaseUpgrade|TestFilesystemExport.*|TestEmptyFilesystemExportAndRestore|TestRestoreFilesystemObjects.*|TestBackupCLIRestoresObjects.*)$$'
+
+.PHONY: oci-free-tier-check oci-free-tier-images-check oci-free-tier-smoke oci-free-tier-tofu-check
+# Reference deployment for one OCI Always Free A1 VM (ADR 0017, deploy/oci-free-tier).
+# The check needs docker compose and PyYAML; the images check needs buildx and the
+# network; the smoke starts the stack, so it needs the images (docs/deployment/oci-free-tier.md).
+oci-free-tier-check:
+	@python3 ./scripts/oci-free-tier-check-test.py
+	@./scripts/oci-free-tier-config-check.sh
+
+oci-free-tier-images-check:
+	@./scripts/oci-free-tier-images-check.sh
+
+oci-free-tier-smoke:
+	@./scripts/oci-free-tier-smoke.sh
+
+# OpenTofu module (optional): needs tofu and tflint on the PATH and the registry.
+oci-free-tier-tofu-check:
+	@./scripts/oci-free-tier-tofu-check.sh
 
 .PHONY: published-native-backup-test
 published-native-backup-test:

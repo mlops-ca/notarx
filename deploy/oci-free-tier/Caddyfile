@@ -1,0 +1,39 @@
+# Automatic TLS for the DNS name in NOTARX_DOMAIN (ADR 0017). Ports 80 and 443
+# are the only ones the OCI security list opens.
+{
+	email {$NOTARX_ACME_EMAIL}
+}
+
+{$NOTARX_DOMAIN} {
+	encode zstd gzip
+
+	# Operational endpoints are not public. A `handle` block, because `respond`
+	# directives run after every `handle` and the catch-all below would win.
+	@private path /metrics /metrics/*
+	handle @private {
+		respond 404
+	}
+
+	# Artifact and management protocols go straight to notarx. Keep this list in
+	# step with deploy/kubernetes/console/default.conf and the format routes.
+	@gateway path /api /api/* /auth /auth/* /v2 /v2/* /raw/* /repository/* /maven/* /conan/* /npm/* /pypi/* /go/* /apt/* /cargo/* /nuget/* /helm/* /rubygems/* /livez /readyz /healthz
+	handle @gateway {
+		reverse_proxy notarx:8080 {
+			flush_interval -1
+			transport http {
+				response_header_timeout 1h
+			}
+		}
+	}
+
+	# Everything else is the Console.
+	handle {
+		reverse_proxy notarx-console:8080
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		-Server
+	}
+}

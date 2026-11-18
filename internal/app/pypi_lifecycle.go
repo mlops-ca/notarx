@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/ids"
+	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/replication"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -275,7 +276,7 @@ func (r PyPIReplication) publish(ctx context.Context, plan repository.Replicatio
 		var checkpoint repository.ReplicationCheckpoint
 		found := false
 		for _, candidate := range checkpoints {
-			if candidate.SourceObjectKey == sourceFiles[index].ObjectKey && candidate.Digest == sourceFiles[index].Digest && candidate.Size == sourceFiles[index].Size && strings.HasSuffix(candidate.ObjectKey, "/"+sourceFiles[index].Filename) {
+			if candidate.SourceObjectKey == sourceFiles[index].ObjectKey && candidate.Digest == sourceFiles[index].Digest && candidate.Size == sourceFiles[index].Size && strings.HasSuffix(candidate.ObjectKey, "/"+objectstore.SafeKeySegment(sourceFiles[index].Filename)) {
 				checkpoint, found = candidate, true
 				break
 			}
@@ -300,7 +301,7 @@ func pypiReplicationSnapshotMatches(files []repository.PyPIFile, checkpoints []r
 	for _, file := range files {
 		found := false
 		for index, checkpoint := range checkpoints {
-			if !matched[index] && checkpoint.SourceObjectKey == file.ObjectKey && checkpoint.Digest == file.Digest && checkpoint.Size == file.Size && strings.HasSuffix(checkpoint.ObjectKey, "/"+file.Filename) {
+			if !matched[index] && checkpoint.SourceObjectKey == file.ObjectKey && checkpoint.Digest == file.Digest && checkpoint.Size == file.Size && strings.HasSuffix(checkpoint.ObjectKey, "/"+objectstore.SafeKeySegment(file.Filename)) {
 				matched[index] = true
 				found = true
 				break
@@ -314,5 +315,5 @@ func pypiReplicationSnapshotMatches(files []repository.PyPIFile, checkpoints []r
 }
 
 func pypiReplicationTargetObjectKey(repositoryID, filename, digest string) string {
-	return "native/pypi/replication/" + repositoryID + "/" + strings.TrimPrefix(digest, "sha256:") + "/" + filename
+	return "native/pypi/replication/" + repositoryID + "/" + strings.TrimPrefix(digest, "sha256:") + "/" + objectstore.SafeKeySegment(filename)
 }
