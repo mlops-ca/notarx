@@ -87,7 +87,7 @@ The image options below apply to that historical helper and
 Image inputs must be registry references ending in `@sha256:<64 lowercase hex>`
 or an already loaded local `sha256:<64 lowercase hex>` image ID. Mutable tags are
 rejected. Before starting the rehearsal, the helper checks image revision/version
-labels and the actual `gateway version` output. The candidate's mounted migration,
+labels and the actual `notarx version` output. The candidate's mounted migration,
 theme, Compose, and startup files must match `GATEWAY_READINESS_REF`.
 
 A local container assembled from checksum-verified distribution binaries is a

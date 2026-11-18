@@ -8,7 +8,7 @@ already published v0.5.0 binaries. It uses the existing operations preflight
 entry point, independently of the planned `notarxctl` CLI.
 
 ```sh
-gateway preflight capacity --input plan.json --format json
+notarx preflight capacity --input plan.json --format json
 ```
 
 The command reads one regular JSON file (maximum 8 MiB), writes a JSON report to

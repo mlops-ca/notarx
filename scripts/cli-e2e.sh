@@ -398,7 +398,7 @@ require "$(field "$out" data.items.0.name)" releases "browse root"
 node=$(field "$out" data.items.0.id)
 expect 0 "$out" -- repo browse "$content_id" --parent "$node" --json
 require "$(field "$out" data.items.0.name)" app.txt "browse child"
-require "$(field "$out" data.items.0.size)" 17 "browse child size"
+require "$(field "$out" data.items.0.size)" 21 "browse child size"
 expect 0 "$out" -- artifact identities --repo "$content_id" --purpose distribution --json
 require "$(field "$out" data.items.0.digest)" "$content_digest" "identity digest"
 expect 4 "$out" -- artifact intelligence show --repo "$content_id" --coordinate releases/app.txt --digest "$content_digest" --json

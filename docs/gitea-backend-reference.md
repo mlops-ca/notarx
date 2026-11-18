@@ -111,9 +111,9 @@ substitute for those production records.
 The preflight foundation is available in the Gateway binary:
 
 ```sh
-gateway preflight list
-gateway preflight run --format json
-gateway preflight run --check postgres --check object_store --format json
+notarx preflight list
+notarx preflight run --format json
+notarx preflight run --check postgres --check object_store --format json
 ```
 
 `make preflight` runs the command in the existing Compose Gateway environment;

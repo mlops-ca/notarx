@@ -25,7 +25,7 @@ func runCapacity(ctx context.Context, args []string, stdout, stderr io.Writer) i
 	format := flags.String("format", "json", "output format: json")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
-			_, _ = fmt.Fprintln(stdout, "usage: gateway preflight capacity --input plan.json [--format json]")
+			_, _ = fmt.Fprintln(stdout, "usage: notarx preflight capacity --input plan.json [--format json]")
 			return 0
 		}
 		_, _ = fmt.Fprintln(stderr, "invalid capacity preflight arguments")

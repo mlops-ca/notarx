@@ -13,7 +13,7 @@ import (
 
 func RunCLI(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
-		_, _ = fmt.Fprintln(stdout, "usage: gateway preflight <list|run|capacity|backup> [--check name] [--input file.json] [--format json]")
+		_, _ = fmt.Fprintln(stdout, "usage: notarx preflight <list|run|capacity|backup> [--check name] [--input file.json] [--format json]")
 		return 0
 	}
 	switch args[0] {

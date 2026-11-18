@@ -10,7 +10,7 @@ import (
 
 func RunCLI(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
-		_, _ = fmt.Fprintln(stdout, "usage: gateway evidence collect --gateway-url URL --output DIR [--revision REV] [--image DIGEST]")
+		_, _ = fmt.Fprintln(stdout, "usage: notarx evidence collect --gateway-url URL --output DIR [--revision REV] [--image DIGEST]")
 		return 0
 	}
 	if args[0] != "collect" {
