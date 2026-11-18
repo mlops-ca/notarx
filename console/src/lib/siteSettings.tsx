@@ -18,13 +18,8 @@ export const defaultSiteSettings: SiteSettings = {
   siteName: "Artifact Gateway",
   logoUrl: "",
   brandMark: "AG",
-  enabledThemeIds: [
-    "gateway-dark",
-    "gateway-light",
-    "aerok-dark",
-    "aerok-light",
-  ],
-  defaultThemeId: "gateway-dark",
+  enabledThemeIds: ["notarx-dark", "notarx-light"],
+  defaultThemeId: "notarx-dark",
   availableThemes: defaultConsoleThemes,
   updatedAt: "1970-01-01T00:00:00Z",
 };

@@ -68,7 +68,7 @@
         { "id": "adr-repository-visibility", "title": { "en": "ADR 0029: Repository Visibility: Public and Private Feeds" }, "en": "docs/adr/0029-repository-visibility-public-private-feeds.md" },
         { "id": "adr-sbom-vulnerability-scanning", "title": { "en": "ADR 0030: SBOM Generation and Vulnerability Scanning" }, "en": "docs/adr/0030-sbom-generation-and-vulnerability-scanning.md" },
         { "id": "upstream-record", "title": { "en": "Upstream fork point and cherry-pick record" }, "en": "docs/upstream.md" },
-        { "id": "brand-assets", "title": { "en": "notarx brand assets" }, "en": "docs/assets/brand/README.md" }
+        { "id": "brand-assets", "title": { "en": "notarx brand assets" }, "en": "docs/brand-assets.md" }
       ]
     },
     {

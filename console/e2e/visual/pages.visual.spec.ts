@@ -227,7 +227,7 @@ const surfaces: Surface[] = [
   },
 ];
 
-const themes = ["gateway-dark", "gateway-light"] as const;
+const themes = ["notarx-dark", "notarx-light"] as const;
 
 for (const theme of themes) {
   test.describe(theme, () => {

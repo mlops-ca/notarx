@@ -221,4 +221,5 @@ placeholder, or Console option alone is not considered protocol support.
 ## License
 
 Artifact Gateway is available under the [MIT License](LICENSE). Third-party
-components and assets remain subject to their respective license terms.
+components and assets remain subject to their respective license terms. The
+name and logo are covered by the [trademark policy](TRADEMARKS.md).

@@ -1,11 +1,11 @@
 import { expect, test } from "@playwright/test";
 import { authenticateAsAdmin } from "./support/auth";
 
-test("Gateway Dark projects the v2 shell and menu palette", async ({
+test("notarx Dark projects the v2 shell and menu palette", async ({
   page,
 }, testInfo) => {
   await page.addInitScript(() => {
-    localStorage.setItem("ag.console.theme.id", "gateway-dark");
+    localStorage.setItem("ag.console.theme.id", "notarx-dark");
     localStorage.setItem("ag.console.theme", "dark");
   });
   await authenticateAsAdmin(page);
@@ -13,7 +13,7 @@ test("Gateway Dark projects the v2 shell and menu palette", async ({
   await page.goto("/site-settings");
   await expect(page.locator("html")).toHaveAttribute(
     "data-theme-id",
-    "gateway-dark",
+    "notarx-dark",
   );
   await expect(page.getByRole("heading", { name: "站点设置" })).toBeVisible();
 
@@ -49,31 +49,31 @@ test("Gateway Dark projects the v2 shell and menu palette", async ({
   });
 
   expect(palette).toEqual({
-    themeID: "gateway-dark",
-    sider: "rgb(12, 12, 15)",
+    themeID: "notarx-dark",
+    sider: "rgb(14, 16, 12)",
     menu: "rgba(0, 0, 0, 0)",
     selectedBackground: "rgba(0, 0, 0, 0)",
     selectedBackgroundImage:
-      "linear-gradient(90deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.06))",
-    selectedColor: "rgb(250, 250, 250)",
+      "linear-gradient(90deg, rgba(236, 235, 227, 0.06), rgba(236, 235, 227, 0.06))",
+    selectedColor: "rgb(246, 245, 238)",
     indicatorBackgroundImage:
-      "linear-gradient(rgb(34, 211, 238), rgb(34, 211, 238))",
-    surface: "rgba(17, 17, 20, 0.82)",
-    actionSoft: "rgba(255, 255, 255, 0.08)",
+      "linear-gradient(rgb(200, 241, 53), rgb(200, 241, 53))",
+    surface: "rgba(22, 24, 18, 0.9)",
+    actionSoft: "rgba(200, 241, 53, 0.12)",
   });
   if (process.env.CAPTURE_THEME_EVIDENCE === "1") {
     await page.screenshot({
-      path: testInfo.outputPath("gateway-dark-restored.png"),
+      path: testInfo.outputPath("notarx-dark-restored.png"),
       fullPage: true,
     });
   }
 });
 
-test("Gateway Light projects the v2 shell and menu palette", async ({
+test("notarx Light projects the v2 shell and menu palette", async ({
   page,
 }, testInfo) => {
   await page.addInitScript(() => {
-    localStorage.setItem("ag.console.theme.id", "gateway-light");
+    localStorage.setItem("ag.console.theme.id", "notarx-light");
     localStorage.setItem("ag.console.theme", "light");
   });
   await authenticateAsAdmin(page);
@@ -81,7 +81,7 @@ test("Gateway Light projects the v2 shell and menu palette", async ({
   await page.goto("/site-settings");
   await expect(page.locator("html")).toHaveAttribute(
     "data-theme-id",
-    "gateway-light",
+    "notarx-light",
   );
   await expect(page.getByRole("heading", { name: "站点设置" })).toBeVisible();
 
@@ -117,45 +117,44 @@ test("Gateway Light projects the v2 shell and menu palette", async ({
   });
 
   expect(palette).toEqual({
-    themeID: "gateway-light",
-    sider: "rgb(251, 251, 252)",
+    themeID: "notarx-light",
+    sider: "rgb(241, 240, 232)",
     menu: "rgba(0, 0, 0, 0)",
     selectedBackground: "rgba(0, 0, 0, 0)",
     selectedBackgroundImage:
-      "linear-gradient(90deg, rgba(24, 24, 27, 0.05), rgba(24, 24, 27, 0.05))",
-    selectedColor: "rgb(9, 9, 11)",
-    indicatorBackgroundImage:
-      "linear-gradient(rgb(14, 116, 144), rgb(14, 116, 144))",
-    surface: "rgba(255, 255, 255, 0.9)",
-    actionSoft: "rgba(24, 24, 27, 0.06)",
+      "linear-gradient(90deg, rgba(18, 20, 14, 0.06), rgba(18, 20, 14, 0.06))",
+    selectedColor: "rgb(18, 20, 14)",
+    indicatorBackgroundImage: "linear-gradient(rgb(63, 92, 0), rgb(63, 92, 0))",
+    surface: "rgba(246, 245, 238, 0.9)",
+    actionSoft: "rgba(18, 20, 14, 0.08)",
   });
   if (process.env.CAPTURE_THEME_EVIDENCE === "1") {
     await page.screenshot({
-      path: testInfo.outputPath("gateway-light-restored.png"),
+      path: testInfo.outputPath("notarx-light-restored.png"),
       fullPage: true,
     });
   }
 });
 
-test("switching back from an extension theme restores Gateway Dark exactly", async ({
+test("switching back from notarx Light restores notarx Dark exactly", async ({
   page,
 }) => {
   await page.addInitScript(() => {
-    localStorage.setItem("ag.console.theme.id", "aerok-dark");
-    localStorage.setItem("ag.console.theme", "dark");
+    localStorage.setItem("ag.console.theme.id", "notarx-light");
+    localStorage.setItem("ag.console.theme", "light");
   });
   await authenticateAsAdmin(page);
 
   await page.goto("/site-settings");
   await expect(page.locator("html")).toHaveAttribute(
     "data-theme-id",
-    "aerok-dark",
+    "notarx-light",
   );
-  await page.getByRole("button", { name: /选择主题.*Aerok Dark/ }).click();
-  await page.getByRole("menuitem", { name: /Gateway Dark/ }).click();
+  await page.getByRole("button", { name: /notarx Light/ }).click();
+  await page.getByRole("menuitem", { name: /notarx Dark/ }).click();
   await expect(page.locator("html")).toHaveAttribute(
     "data-theme-id",
-    "gateway-dark",
+    "notarx-dark",
   );
 
   await expect
@@ -196,18 +195,16 @@ test("switching back from an extension theme restores Gateway Dark exactly", asy
       menu: "rgba(0, 0, 0, 0)",
       selectedBackground: "rgba(0, 0, 0, 0)",
       selectedBackgroundImage:
-        "linear-gradient(90deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.06))",
-      selectedColor: "rgb(250, 250, 250)",
+        "linear-gradient(90deg, rgba(236, 235, 227, 0.06), rgba(236, 235, 227, 0.06))",
+      selectedColor: "rgb(246, 245, 238)",
       indicatorBackgroundImage:
-        "linear-gradient(rgb(34, 211, 238), rgb(34, 211, 238))",
+        "linear-gradient(rgb(200, 241, 53), rgb(200, 241, 53))",
     });
 });
 
 const semanticThemeCases = [
-  ["gateway-dark", "#fafafa"],
-  ["gateway-light", "#09090b"],
-  ["aerok-dark", "#3258d0"],
-  ["aerok-light", "#26499d"],
+  ["notarx-dark", "#c8f135"],
+  ["notarx-light", "#1d2018"],
 ] as const;
 
 for (const [themeID, expectedAction] of semanticThemeCases) {

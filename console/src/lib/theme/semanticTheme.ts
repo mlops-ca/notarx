@@ -19,7 +19,7 @@ export type {
 
 const consoleComponentInvariants: NonNullable<ThemeConfig["components"]> = {
   Button: {
-    borderRadius: 8,
+    borderRadius: 2,
     controlHeight: 34,
     fontWeight: 500,
   },
@@ -27,33 +27,33 @@ const consoleComponentInvariants: NonNullable<ThemeConfig["components"]> = {
     headerBg: "transparent",
   },
   Input: {
-    borderRadius: 8,
+    borderRadius: 2,
   },
   Menu: {
     collapsedWidth: 80,
-    itemBorderRadius: 8,
+    itemBorderRadius: 2,
     itemHeight: 38,
     itemMarginBlock: 3,
     itemMarginInline: 4,
   },
   Modal: {
-    borderRadiusLG: 14,
+    borderRadiusLG: 2,
     headerBg: "transparent",
   },
   Tooltip: {
-    borderRadius: 6,
+    borderRadius: 2,
   },
 };
 
 const consoleTokenInvariants: NonNullable<ThemeConfig["token"]> = {
-  borderRadius: 8,
-  borderRadiusLG: 12,
-  borderRadiusSM: 6,
+  borderRadius: 2,
+  borderRadiusLG: 2,
+  borderRadiusSM: 2,
   controlHeight: 34,
   fontFamily:
-    "'Geist Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif",
+    "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
   fontFamilyCode:
-    "'Geist Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace",
+    "'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace",
   fontSize: 14,
   motionDurationMid: "0.18s",
   motionEaseOut: "cubic-bezier(0.16, 1, 0.3, 1)",
@@ -233,6 +233,7 @@ function buildBaseThemeConfig(theme: ConsoleTheme): ThemeConfig {
 function buildConsoleComponents(
   token: ResolvedAntDesignToken,
   roles: ConsoleThemeRoles,
+  dark: boolean,
 ): NonNullable<ThemeConfig["components"]> {
   return {
     ...consoleComponentInvariants,
@@ -248,6 +249,13 @@ function buildConsoleComponents(
       colorPrimaryHover: roles.action.hover,
       colorPrimaryActive: roles.action.active,
       primaryShadow: roles.action.shadow,
+      // Ant Design lightens the danger hover on light surfaces, which can fall
+      // below AA text contrast. Move away from the surface instead.
+      ...(dark
+        ? {}
+        : {
+            colorErrorHover: mix(roles.status.danger.foreground, 85, "#000000"),
+          }),
     },
     Empty: {
       colorTextDisabled: roles.content.disabled,
@@ -301,7 +309,7 @@ export function resolveConsoleTheme(theme: ConsoleTheme): ResolvedConsoleTheme {
   const roles = buildSemanticRoles(theme, token);
   const antDesign: ThemeConfig = {
     ...base,
-    components: buildConsoleComponents(token, roles),
+    components: buildConsoleComponents(token, roles, theme.mode === "dark"),
   };
   return {
     id: theme.id,

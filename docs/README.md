@@ -68,7 +68,7 @@ agree with executable tests and the
 - [ADR 0029: Repository Visibility: Public and Private Feeds](adr/0029-repository-visibility-public-private-feeds.md)
 - [ADR 0030: SBOM Generation and Vulnerability Scanning](adr/0030-sbom-generation-and-vulnerability-scanning.md)
 - [Upstream fork point and cherry-pick record](upstream.md) — fork origin, cherry-pick procedure, and picked/declined upstream commits.
-- [notarx brand assets](assets/brand/README.md) — mark, lockups, icons, colour tokens.
+- [notarx brand assets](brand-assets.md) — mark, lockups, icons, colour tokens.
 
 ## Protocols and formats
 
