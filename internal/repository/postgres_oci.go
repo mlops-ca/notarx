@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/mlops-ca/notarx/internal/capacity"
 	"strings"
 	"time"
 )
@@ -98,7 +99,8 @@ func (s *PostgresStore) CompleteOCIUpload(ctx context.Context, id string, blob O
 	if err = tx.QueryRowContext(ctx, `SELECT digest,object_key,size FROM native_oci_blobs WHERE digest=$1`, blob.Digest).Scan(&blob.Digest, &blob.ObjectKey, &blob.Size); err != nil {
 		return OCIBlob{}, err
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO native_oci_repository_blobs (repository_id,digest) VALUES ($1,$2) ON CONFLICT DO NOTHING`, repositoryID, blob.Digest); err != nil {
+	referencedSize, referenced, err := ociReferenceBlob(ctx, tx, repositoryID, blob.Digest)
+	if err != nil {
 		return OCIBlob{}, err
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE native_oci_object_intents SET claimed_at=now() WHERE object_key=$1 AND claimed_at IS NULL`, blob.ObjectKey); err != nil {
@@ -106,6 +108,11 @@ func (s *PostgresStore) CompleteOCIUpload(ctx context.Context, id string, blob O
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE native_oci_uploads SET state='completed' WHERE id=$1::uuid`, id); err != nil {
 		return OCIBlob{}, err
+	}
+	if referenced {
+		if err = capacity.Reserve(ctx, tx, repositoryID, referencedSize, 1); err != nil {
+			return OCIBlob{}, err
+		}
 	}
 	return blob, tx.Commit()
 }
@@ -225,8 +232,21 @@ func (s *PostgresStore) MountOCIBlob(ctx context.Context, repositoryID, digest s
 	if err != nil {
 		return v, err
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO native_oci_repository_blobs (repository_id,digest) VALUES ($1,$2) ON CONFLICT DO NOTHING`, repositoryID, digest)
-	return v, err
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return v, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	size, added, err := ociReferenceBlob(ctx, tx, repositoryID, digest)
+	if err != nil {
+		return v, err
+	}
+	if added {
+		if err = capacity.Reserve(ctx, tx, repositoryID, size, 1); err != nil {
+			return v, err
+		}
+	}
+	return v, tx.Commit()
 }
 func (s *PostgresStore) MountOCIBlobFrom(ctx context.Context, repositoryID, sourceRepositoryID, digest string) (OCIBlob, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -246,8 +266,14 @@ func (s *PostgresStore) MountOCIBlobFrom(ctx context.Context, repositoryID, sour
 	if err != nil {
 		return OCIBlob{}, err
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO native_oci_repository_blobs (repository_id,digest) VALUES ($1,$2) ON CONFLICT DO NOTHING`, repositoryID, digest); err != nil {
+	size, added, err := ociReferenceBlob(ctx, tx, repositoryID, digest)
+	if err != nil {
 		return OCIBlob{}, err
+	}
+	if added {
+		if err = capacity.Reserve(ctx, tx, repositoryID, size, 1); err != nil {
+			return OCIBlob{}, err
+		}
 	}
 	if err = tx.Commit(); err != nil {
 		return OCIBlob{}, err
@@ -268,7 +294,8 @@ func (s *PostgresStore) PutOCIManifest(ctx context.Context, v OCIManifest, refer
 		return v, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err = tx.ExecContext(ctx, `INSERT INTO native_oci_manifests (repository_id,name,digest,object_key,media_type,size,subject_digest,artifact_type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (repository_id,name,digest) DO NOTHING`, v.RepositoryID, v.Name, v.Digest, v.ObjectKey, v.MediaType, v.Size, nullableString(v.SubjectDigest), v.ArtifactType); err != nil {
+	insertedManifest, err := tx.ExecContext(ctx, `INSERT INTO native_oci_manifests (repository_id,name,digest,object_key,media_type,size,subject_digest,artifact_type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (repository_id,name,digest) DO NOTHING`, v.RepositoryID, v.Name, v.Digest, v.ObjectKey, v.MediaType, v.Size, nullableString(v.SubjectDigest), v.ArtifactType)
+	if err != nil {
 		return v, err
 	}
 	if !strings.HasPrefix(reference, "sha256:") {
@@ -278,6 +305,11 @@ func (s *PostgresStore) PutOCIManifest(ctx context.Context, v OCIManifest, refer
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE native_oci_object_intents SET claimed_at=now() WHERE object_key=$1 AND claimed_at IS NULL`, v.ObjectKey); err != nil {
 		return v, err
+	}
+	if added, _ := insertedManifest.RowsAffected(); added == 1 {
+		if err = capacity.Reserve(ctx, tx, v.RepositoryID, v.Size, 1); err != nil {
+			return v, err
+		}
 	}
 	return v, tx.Commit()
 }
@@ -310,6 +342,7 @@ func (s *PostgresStore) PublishReplicatedOCIManifest(ctx context.Context, public
 	if !errors.Is(err, sql.ErrNoRows) {
 		return OCIManifest{}, err
 	}
+	var replicated usageDelta
 	for _, digest := range publication.BlobDigests {
 		var present bool
 		if err = tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM native_oci_repository_blobs WHERE repository_id=$1::uuid AND digest=$2)`, publication.SourceRepositoryID, digest).Scan(&present); err != nil {
@@ -318,8 +351,12 @@ func (s *PostgresStore) PublishReplicatedOCIManifest(ctx context.Context, public
 		if !present {
 			return OCIManifest{}, ErrNotFound
 		}
-		if _, err = tx.ExecContext(ctx, `INSERT INTO native_oci_repository_blobs (repository_id,digest) VALUES ($1,$2) ON CONFLICT DO NOTHING`, publication.TargetRepositoryID, digest); err != nil {
-			return OCIManifest{}, err
+		size, added, refErr := ociReferenceBlob(ctx, tx, publication.TargetRepositoryID, digest)
+		if refErr != nil {
+			return OCIManifest{}, refErr
+		}
+		if added {
+			replicated.add(publication.TargetRepositoryID, size, 1)
 		}
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO native_oci_object_intents (object_key,repository_id,digest,size) VALUES ($1,$2,$3,$4) ON CONFLICT (object_key) DO UPDATE SET repository_id=COALESCE(native_oci_object_intents.repository_id,EXCLUDED.repository_id)`, publication.Manifest.ObjectKey, publication.TargetRepositoryID, publication.Manifest.Digest, publication.Manifest.Size); err != nil {
@@ -329,6 +366,10 @@ func (s *PostgresStore) PublishReplicatedOCIManifest(ctx context.Context, public
 		return OCIManifest{}, err
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE native_oci_object_intents SET claimed_at=now() WHERE object_key=$1 AND claimed_at IS NULL`, publication.Manifest.ObjectKey); err != nil {
+		return OCIManifest{}, err
+	}
+	replicated.add(publication.Manifest.RepositoryID, publication.Manifest.Size, 1)
+	if err = replicated.reserve(ctx, tx); err != nil {
 		return OCIManifest{}, err
 	}
 	return publication.Manifest, tx.Commit()
@@ -454,6 +495,12 @@ func (s *PostgresStore) DeleteOCIManifest(ctx context.Context, repositoryID, nam
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	var deletedSize int64
+	if err = tx.QueryRowContext(ctx, `SELECT size FROM native_oci_manifests WHERE repository_id=$1::uuid AND name=$2 AND digest=$3 FOR UPDATE`, repositoryID, name, digest).Scan(&deletedSize); errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	} else if err != nil {
+		return err
+	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO native_oci_manifest_tombstones (repository_id,name,digest,object_key,media_type,size,subject_digest,artifact_type,tags,deleted_at)
 		SELECT m.repository_id,m.name,m.digest,m.object_key,m.media_type,m.size,m.subject_digest,m.artifact_type,COALESCE(array_agg(t.tag ORDER BY t.tag) FILTER (WHERE t.tag IS NOT NULL),'{}'::text[]),now()
 		FROM native_oci_manifests m LEFT JOIN native_oci_tags t ON t.repository_id=m.repository_id AND t.name=m.name AND t.digest=m.digest
@@ -477,6 +524,10 @@ func (s *PostgresStore) DeleteOCIManifest(ctx context.Context, repositoryID, nam
 	}
 	if n, _ := result.RowsAffected(); n != 1 {
 		return ErrNotFound
+	}
+	// The deleted manifest leaves the usage; its blob references stay until the blobs are reclaimed.
+	if err = capacity.Reserve(ctx, tx, repositoryID, -deletedSize, -1); err != nil {
+		return err
 	}
 	return tx.Commit()
 }
@@ -542,7 +593,8 @@ func (s *PostgresStore) RestoreOCIManifest(ctx context.Context, repositoryID, na
 	if collected {
 		return OCIManifest{}, ErrDisabled
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO native_oci_manifests (repository_id,name,digest,object_key,media_type,size,subject_digest,artifact_type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (repository_id,name,digest) DO NOTHING`, repositoryID, manifest.Name, manifest.Digest, manifest.ObjectKey, manifest.MediaType, manifest.Size, nullableString(manifest.SubjectDigest), manifest.ArtifactType); err != nil {
+	restoredManifest, err := tx.ExecContext(ctx, `INSERT INTO native_oci_manifests (repository_id,name,digest,object_key,media_type,size,subject_digest,artifact_type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (repository_id,name,digest) DO NOTHING`, repositoryID, manifest.Name, manifest.Digest, manifest.ObjectKey, manifest.MediaType, manifest.Size, nullableString(manifest.SubjectDigest), manifest.ArtifactType)
+	if err != nil {
 		return OCIManifest{}, err
 	}
 	for _, tag := range tags {
@@ -558,6 +610,11 @@ func (s *PostgresStore) RestoreOCIManifest(ctx context.Context, repositoryID, na
 	}
 	if _, err = tx.ExecContext(ctx, `DELETE FROM artifact_tombstones WHERE repository_id=$1::uuid AND format='oci' AND coordinate=$2`, repositoryID, coordinate); err != nil {
 		return OCIManifest{}, err
+	}
+	if added, _ := restoredManifest.RowsAffected(); added == 1 {
+		if err = capacity.Reserve(ctx, tx, repositoryID, manifest.Size, 1); err != nil {
+			return OCIManifest{}, err
+		}
 	}
 	if err = tx.Commit(); err != nil {
 		return OCIManifest{}, err

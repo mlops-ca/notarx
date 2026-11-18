@@ -39,6 +39,7 @@ type counterEquality struct {
 var counterEqualityCases = map[string]counterEquality{
 	"raw":   {repoFormat: FormatRaw, run: rawCounterEquality, edge: rawCounterEdge},
 	"go":    {repoFormat: FormatGo, run: goCounterEquality, edge: goCounterEdge},
+	"oci":   {repoFormat: FormatOCI, run: ociCounterEquality, edge: ociCounterEdge},
 	"helm":  {repoFormat: FormatHelm, run: helmCounterEquality, edge: helmCounterEdge},
 	"nuget": {repoFormat: FormatNuGet, run: nugetCounterEquality, edge: nugetCounterEdge},
 	"apt":   {repoFormat: FormatAPT, run: aptCounterEquality, edge: aptCounterEdge},
@@ -841,6 +842,116 @@ func nugetCounterEdge(t *testing.T, ctx context.Context, store *PostgresStore, r
 		go func() {
 			defer wg.Done()
 			switch err := nugetPublish(ctx, store, repo, "Edge", "1.0."+strconv.Itoa(index), size); {
+			case err == nil:
+				acc.Add(1)
+			case IsQuotaExceeded(err):
+				rej.Add(1)
+			default:
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	return acc.Load(), rej.Load()
+}
+
+// ociUploadBlob uploads a new blob into the repository through an upload session.
+func ociUploadBlob(ctx context.Context, store *PostgresStore, repo HostedRepository, size int64) (OCIBlob, error) {
+	digest := uniqueDigest()
+	upload, err := store.CreateOCIUpload(ctx, OCIUpload{ID: uuid.NewString(), RepositoryID: repo.ID, Name: "app", ObjectKey: "native/oci/uploads/" + uuid.NewString(), State: "open", ExpiresAt: time.Now().UTC().Add(time.Hour)})
+	if err != nil {
+		return OCIBlob{}, err
+	}
+	return store.CompleteOCIUpload(ctx, upload.ID, OCIBlob{Digest: digest, ObjectKey: "native/oci/blobs/" + strings.TrimPrefix(digest, "sha256:"), Size: size})
+}
+
+func ociManifestFixture(repo HostedRepository, name string, size int64) OCIManifest {
+	digest := uniqueDigest()
+	return OCIManifest{RepositoryID: repo.ID, Name: name, Digest: digest, ObjectKey: "native/oci/manifests/" + strings.TrimPrefix(digest, "sha256:"), MediaType: "application/vnd.oci.image.manifest.v1+json", Size: size}
+}
+
+func ociCounterEquality(t *testing.T, ctx context.Context, store *PostgresStore, repo HostedRepository, check func(string)) {
+	other := counterTestRepository(t, store, FormatOCI)
+	otherCheck := func(step string) { assertCounterEqualsUsage(t, store, other, step) }
+	blob, err := ociUploadBlob(ctx, store, repo, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("upload a blob")
+	// Uploading the same blob again into the same repository is a re-reference and counts once.
+	upload, err := store.CreateOCIUpload(ctx, OCIUpload{ID: uuid.NewString(), RepositoryID: repo.ID, Name: "app", ObjectKey: "native/oci/uploads/" + uuid.NewString(), State: "open", ExpiresAt: time.Now().UTC().Add(time.Hour)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.CompleteOCIUpload(ctx, upload.ID, blob); err != nil {
+		t.Fatal(err)
+	}
+	check("upload the same blob again")
+	if _, err = store.MountOCIBlobFrom(ctx, other.ID, repo.ID, blob.Digest); err != nil {
+		t.Fatal(err)
+	}
+	otherCheck("mount the blob into a second repository")
+	if _, err = store.MountOCIBlobFrom(ctx, other.ID, repo.ID, blob.Digest); err != nil {
+		t.Fatal(err)
+	}
+	otherCheck("mount the blob again")
+	if _, err = store.MountOCIBlob(ctx, repo.ID, blob.Digest); err != nil {
+		t.Fatal(err)
+	}
+	check("mount an already referenced blob")
+	manifest := ociManifestFixture(repo, "app", 30)
+	for _, reference := range []string{"v1", "latest", manifest.Digest} {
+		if _, err = store.PutOCIManifest(ctx, manifest, reference); err != nil {
+			t.Fatal(err)
+		}
+		check("put the manifest as " + reference)
+	}
+	second := ociManifestFixture(repo, "app", 45)
+	if _, err = store.PutOCIManifest(ctx, second, "v2"); err != nil {
+		t.Fatal(err)
+	}
+	check("put a second manifest")
+	if err = store.DeleteOCIManifest(ctx, repo.ID, "app", manifest.Digest); err != nil {
+		t.Fatal(err)
+	}
+	check("delete the first manifest")
+	if _, err = store.RestoreOCIManifest(ctx, repo.ID, "app", manifest.Digest); err != nil {
+		t.Fatal(err)
+	}
+	check("restore the first manifest")
+	// Replication copies the manifest and its blob references into another repository.
+	target := counterTestRepository(t, store, FormatOCI)
+	replicated := manifest
+	replicated.RepositoryID = target.ID
+	replicated.ObjectKey = "native/oci/manifests/" + uuid.NewString()
+	if _, err = store.PublishReplicatedOCIManifest(ctx, OCIReplicationPublication{SourceRepositoryID: repo.ID, TargetRepositoryID: target.ID, Manifest: replicated, SourceObjectKey: manifest.ObjectKey, BlobDigests: []string{blob.Digest}}); err != nil {
+		t.Fatal(err)
+	}
+	assertCounterEqualsUsage(t, store, target, "replicate a manifest and its blob")
+	var used int64
+	if err = store.db.QueryRow(`SELECT bytes FROM repository_usage_counters WHERE repository_id=$1::uuid`, repo.ID).Scan(&used); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.ReplaceRepositoryCapacityQuota(ctx, repo.ID, used); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = ociUploadBlob(ctx, store, repo, 1); !IsQuotaExceeded(err) {
+		t.Fatalf("upload over quota = %v, want quota exceeded", err)
+	}
+	if _, err = store.PutOCIManifest(ctx, ociManifestFixture(repo, "app", 1), "v3"); !IsQuotaExceeded(err) {
+		t.Fatalf("manifest over quota = %v, want quota exceeded", err)
+	}
+	check("rejected writes over quota")
+}
+
+func ociCounterEdge(t *testing.T, ctx context.Context, store *PostgresStore, repo HostedRepository, size int64, workers int) (accepted, rejected int64) {
+	var acc, rej atomic.Int64
+	var wg sync.WaitGroup
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			switch _, err := ociUploadBlob(ctx, store, repo, size); {
 			case err == nil:
 				acc.Add(1)
 			case IsQuotaExceeded(err):

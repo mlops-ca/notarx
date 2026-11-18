@@ -23,7 +23,7 @@ const (
 var registry = []FormatCoverage{
 	{Format: "raw", Covered: true, Enforcement: byTrigger},
 	{Format: "maven", Enforcement: byTrigger},
-	{Format: "oci", Enforcement: byTrigger},
+	{Format: "oci", Covered: true, Enforcement: byTrigger},
 	{Format: "conan", Enforcement: byTrigger},
 	{Format: "npm", Covered: true, Enforcement: byTrigger},
 	{Format: "pypi", Covered: true, Enforcement: byTrigger},
