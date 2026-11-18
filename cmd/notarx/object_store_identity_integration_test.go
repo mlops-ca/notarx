@@ -132,7 +132,8 @@ func TestRootLockLossIsDetected(t *testing.T) {
 		t.Fatal(err)
 	}
 	select {
-	case <-lost:
+	case err := <-lost:
+		t.Logf("lock loss reported: %v", err)
 	case <-time.After(10 * time.Second):
 		t.Fatal("the lost root lock was not reported")
 	}

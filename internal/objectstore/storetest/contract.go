@@ -488,7 +488,7 @@ func notFound(t *testing.T, store objectstore.Store) {
 func unusualKeys(t *testing.T, store objectstore.Store) {
 	keys := []string{
 		"unusual/with space/and  double",
-		"unusual/ünï-cödé/日本",
+		"unusual/ünï-cödé/ελληνικά",
 		"unusual/percent%41/plus+sign/equals=amp&at@tilde~",
 		"unusual/semi;colon,comma!bang'quote(paren)*star",
 		"unusual/dots.in.name/trailing.dot.",

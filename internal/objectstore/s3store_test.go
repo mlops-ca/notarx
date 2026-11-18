@@ -100,17 +100,18 @@ func TestS3ClientAddressingStyle(t *testing.T) {
 	if got := pathStub.recorded()[0].path; got != "/notarx-bucket/a/b.bin" {
 		t.Fatalf("path-style request path = %q", got)
 	}
-	// Virtual-hosted addressing moves the bucket into the host name, so the
-	// path no longer carries it. The stub address is an IP, which the SDK
-	// always addresses path-style, so assert the explicit setting through a
-	// localhost name instead.
-	hostStub := newS3Stub(t, nil)
-	cfg = stubConfig(hostStub)
-	cfg.Endpoint = strings.Replace(hostStub.server.URL, "127.0.0.1", "localhost", 1)
-	cfg.PathStyle = false
-	putOnce(t, cfg)
-	if got := hostStub.recorded()[0].path; got != "/a/b.bin" {
-		t.Fatalf("virtual-hosted request path = %q, want bucket moved to the host", got)
+	// Virtual-hosted addressing puts the bucket in the host name, which would need
+	// DNS for a name under the stub's address, so assert the client's setting
+	// instead of sending a request.
+	for _, pathStyle := range []bool{true, false} {
+		cfg.PathStyle = pathStyle
+		client, err := NewS3Client(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := client.Options().UsePathStyle; got != pathStyle {
+			t.Fatalf("PathStyle=%t produced UsePathStyle=%t", pathStyle, got)
+		}
 	}
 }
 

@@ -147,8 +147,8 @@ func TestIdentityGuardWatchReportsALostLock(t *testing.T) {
 	lost := make(chan error, 2)
 	guard.Watch(context.Background(), 5*time.Millisecond, func(err error) { lost <- err })
 	select {
-	case <-lost:
-		t.Fatal("reported a lost lock while it was held")
+	case err := <-lost:
+		t.Fatalf("reported a lost lock while it was held: %v", err)
 	case <-time.After(30 * time.Millisecond):
 	}
 	db.lock.alive.Store(false)
