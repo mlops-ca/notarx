@@ -61,14 +61,21 @@ for entry in "${extra_allow[@]}"; do specs+=(":(exclude)${entry%%$'\t'*}"); done
 
 cd "$root"
 # Line-level exemptions, applied after the search:
-#  - lines with CJK text: existing zh-CN strings are frozen (ADR 0014);
+#  - frozen zh-CN text (ADR 0014): a quoted string that contains CJK text is
+#    dropped before matching, and a CJK line without quotes (prose) is skipped;
+#    any other string on the same line is still checked;
 #  - the link target of ADR 0007, whose file name keeps the old CLI name;
 #  - the literal upstream trailer that cherry-picks carry (ADR 0013).
 found=$(git grep -InE -e "$pattern" -- "${specs[@]}" | PATTERN="$pattern" perl -CSD -ne '
   use utf8;
   my ($path, $line, $text) = split(/:/, $_, 3);
-  next if $text =~ /\p{Han}/;
   my $t = $text;
+  if ($t =~ /\p{Han}/) {
+    next unless $t =~ /["\x27\x60]/;
+    $t =~ s/"[^"]*\p{Han}[^"]*"//g;
+    $t =~ s/\x27[^\x27]*\p{Han}[^\x27]*\x27//g;
+    $t =~ s/\x60[^\x60]*\p{Han}[^\x60]*\x60//g;
+  }
   $t =~ s{adr/0007-agctl-cli-shape}{}g;
   $t =~ s{Upstream: ccsert/artifact-gateway\@}{}g;
   next unless $t =~ /$ENV{PATTERN}/;

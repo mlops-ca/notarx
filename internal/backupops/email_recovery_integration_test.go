@@ -60,9 +60,9 @@ func recoverySQL(t *testing.T, ctx context.Context, p Postgres, sql string, args
 	}
 }
 
-// seedRecoveryEmail seeds through the source notarx, so a published release
+// seedRecoveryEmail seeds through the source instance, so a published release
 // that predates the en-CA, fr-CA and zh-CN locale tags (ADR 0014) is sent the
-// bare en tag it accepts; the restored notarx is that same release.
+// bare en tag it accepts; the restored instance is that same release.
 func seedRecoveryEmail(t *testing.T, ctx context.Context, source *OwnedTarget, endpoint, liveRepo, cancelledRepo, locale string) recoveryEmail {
 	t.Helper()
 	t.Setenv(secrets.KeyEnv, recoveryEmailKey)

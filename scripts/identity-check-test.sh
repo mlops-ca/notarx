@@ -97,10 +97,15 @@ done < <("$check" --list-extra)
 
 # Frozen zh-CN text and the two literal exemptions.
 new_repo line-exemptions
-plant console/messages.ts "$(printf '\xe6\x97\xa5 ')ag""ctl"
+plant console/messages.ts "  key: \"$(printf '\xe6\x97\xa5 ')ag""ctl\","
+plant docs/prose.md "$(printf '\xe6\x97\xa5 ')ag""ctl"
 plant docs/links.md 'See [ADR 0007](adr/0007-ag''ctl-cli-shape.md).'
 plant CONTRIBUTING.md 'Upstream: cc''sert/artifact''-gateway@<sha>'
 expect_pass 'CJK lines, the ADR 0007 link and the trailer literal are exempt'
+
+new_repo cjk-string-does-not-hide-its-neighbours
+plant docs/site-map.json "{ \"zh-CN\": \"$(printf '\xe6\x97\xa5 ')ag""ctl\", \"en\": \"run ag""ctl\" }"
+expect_fail 'a CJK string does not hide another string on the line' 'docs/site-map.json'
 
 new_repo link-is-not-a-blanket
 plant docs/links.md 'See [ADR 0007](adr/0007-ag''ctl-cli-shape.md) and run ag''ctl.'

@@ -237,7 +237,7 @@ func runLocalRecoveryIntegration(t *testing.T, profile, sourceDriver, targetDriv
 		t.Fatal(e)
 	}
 	// Management mutations and authenticated denials are sync-class (security_audit_log);
-	// reads are async-class (resolver_audit_log, flushed when the notarx stops). Both
+	// reads are async-class (resolver_audit_log, flushed when notarx stops). Both
 	// tables are history that a restore must preserve.
 	auditMax, auditBefore := map[string]int64{}, map[string]string{}
 	var auditEvidence int64

@@ -311,7 +311,7 @@ expect_http 204 GET "$notarx_url/readyz" "$private_dir/readyz.out"
 
 printf '%s\n' 'Measuring the shipped stripped Linux binaries and the runtime image...'
 printf 'component,os,arch,form,bytes,mib\n' >"$output_dir/artifact-sizes.csv"
-# The binaries are copied out of the runtime image the notarx was built into, so
+# The binaries are copied out of the runtime image notarx was built into, so
 # they are the shipped bytes of the image's own (native) architecture; nothing is
 # cross-compiled (ADR 0016).
 notarx_image="${project}-notarx"

@@ -138,7 +138,7 @@ jobs:
         run: make oci-free-tier-tofu-check
 
   # Builds the Compose images CI consumes once per run. Contract lanes and the
-  # notarx-backed Console E2E load them instead of each rebuilding from source
+  # Console E2E against notarx load them instead of each rebuilding from source
   # (docs/ci.md). Each leg is native to its runner (ADR 0016): amd64 images build
   # on ubuntu-24.04 and arm64 images on ubuntu-24.04-arm, and the artifact name
   # carries the runner architecture so the two sets never clash.
@@ -319,10 +319,10 @@ jobs:
           path: console/test-results/
           retention-days: 7
 
-  # Gateway-backed Console and CLI E2E: runs when the notarx or the Console
+  # notarx-backed Console and CLI E2E: runs when notarx or the Console
   # changed, since both execute the real stack. The Playwright suite is split
   # into three parallel shards (every spec lands in exactly one) and the
-  # CLI E2E runs as its own lane against its own notarx. A console-only change
+  # CLI E2E runs as its own lane against its own notarx instance. A console-only change
   # that touches nothing but spec files runs just those specs (docs/ci.md).
   console-e2e:
     name: console-e2e (${{ matrix.name }})
@@ -415,7 +415,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: Run notarxctl CLI E2E against the same notarx
+      - name: Run notarxctl CLI E2E against the same instance
         if: matrix.shard == ''
         env:
           CLI_E2E_SERVER: http://127.0.0.1:18080

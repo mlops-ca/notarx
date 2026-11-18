@@ -1,7 +1,8 @@
 aadsts
 aerok
 affordances
-notarxctl's
+agctl
+agctl's
 ajson
 alertable
 algs
