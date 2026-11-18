@@ -248,7 +248,7 @@ func CheckNewStrings(result Result, allow map[string]int) []string {
 
 // LoweredNewStrings is Lowered for the uuid.NewString() counts.
 func LoweredNewStrings(result Result, allow map[string]int) (map[string]int, error) {
-	return Lowered(Result{Casts: result.NewStrings}, allow)
+	return lowerCounts(result.NewStrings, allow, "uuid.NewString() call(s)")
 }
 
 // FormatNewStringAllowlist renders the uuid.NewString() counts in the allowlist file format.
@@ -268,10 +268,15 @@ func FormatNewStringAllowlist(counts map[string]int) string {
 // count and files without violations are dropped. It reports an error when any
 // count grew or a new file appeared, because the ratchet never goes up.
 func Lowered(result Result, allow map[string]int) (map[string]int, error) {
+	return lowerCounts(result.Casts, allow, "text-cast comparison(s)")
+}
+
+// lowerCounts keeps each file's current count and refuses to raise any of them.
+func lowerCounts(counts, allow map[string]int, what string) (map[string]int, error) {
 	next := map[string]int{}
-	for file, actual := range result.Casts {
+	for file, actual := range counts {
 		if actual > allow[file] {
-			return nil, fmt.Errorf("%s has %d violations, allowlist permits %d: fix the code instead of raising the allowlist", file, actual, allow[file])
+			return nil, fmt.Errorf("%s has %d %s, allowlist permits %d: fix the code instead of raising the allowlist", file, actual, what, allow[file])
 		}
 		next[file] = actual
 	}

@@ -8,6 +8,10 @@ name: Release dry run
 # digest and SBOM artifact hand-off. Nothing is published: images are loaded
 # locally, never pushed, tagged or attested, and artifacts expire after one day.
 #
+# Not covered, because a pull request has no registry to push to: push-by-digest,
+# the pull back by digest, the tag merge and the attestations. Those first run on
+# main (mainline-images) and on a release.
+#
 # The workflow runs only when a file it exercises changes (it cannot be a required
 # check) and on demand through workflow_dispatch.
 on:
@@ -20,8 +24,11 @@ on:
       - scripts/build-release-artifacts.sh
       - scripts/write-release-checksums.sh
       - scripts/stamp-version.sh
-      - Dockerfile
-      - Dockerfile.console
+      - .github/actions/**
+      - Dockerfile*
+      - go.mod
+      - go.sum
+      - .nvmrc
   workflow_dispatch:
 
 permissions:

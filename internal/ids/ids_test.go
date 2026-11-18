@@ -42,3 +42,23 @@ func TestNewIsUnique(t *testing.T) {
 		seen[id] = true
 	}
 }
+
+func TestValidAcceptsOnlyCanonicalForm(t *testing.T) {
+	for _, ok := range []string{New(), "11111111-1111-4111-8111-111111111111", "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA"} {
+		if !Valid(ok) {
+			t.Errorf("Valid(%q) = false", ok)
+		}
+	}
+	for _, bad := range []string{
+		"", "not-a-uuid", "12345", "11111111-1111-4111-8111",
+		"urn:uuid:11111111-1111-4111-8111-111111111111",
+		"{11111111-1111-4111-8111-111111111111}",
+		"11111111111141118111111111111111",
+		"11111111-1111-4111-8111-11111111111g",
+		"' OR 1=1",
+	} {
+		if Valid(bad) {
+			t.Errorf("Valid(%q) = true", bad)
+		}
+	}
+}

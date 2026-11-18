@@ -94,7 +94,7 @@ func (m *Module) servePreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, prefix+"/"), "/")
-	if _, e := uuid.Parse(parts[0]); e != nil {
+	if !ids.Valid(parts[0]) {
 		m.problem(w, 404, "not_found")
 		return
 	}

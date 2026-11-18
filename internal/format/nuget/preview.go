@@ -179,7 +179,7 @@ func (m *Module) servePreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	parts := strings.Split(strings.TrimPrefix(tail, "/"), "/")
-	if _, err := uuid.Parse(parts[0]); err != nil {
+	if !ids.Valid(parts[0]) {
 		m.problem(w, 404, "not_found")
 		return
 	}
@@ -262,7 +262,7 @@ func (m *Module) servePreview(w http.ResponseWriter, r *http.Request) {
 		m.problem(w, 404, "not_found")
 		return
 	}
-	if _, err := uuid.Parse(parts[2]); err != nil {
+	if !ids.Valid(parts[2]) {
 		m.problem(w, 404, "not_found")
 		return
 	}

@@ -218,6 +218,7 @@ the Dockerfiles) and on demand through `workflow_dispatch`. It calls
 `image-build.yml` with `dry-run: true`: each image is built natively and loaded
 locally, the labels and version are checked, the SBOM is scanned, and the digest and
 SBOM artifacts are handed to `image-manifest`, which validates them. Nothing signs in,
-pushes, tags or attests. It is path filtered, so it is not a required check and not
+pushes, tags or attests, so push-by-digest, the pull back by digest, the tag merge and
+the attestations are not rehearsed; they first run on `main` and on a release. It is path filtered, so it is not a required check and not
 part of `ci-ok`. `release.yml` itself (tag verification and `publish-release`) is not
 callable and is still first exercised by a real release.

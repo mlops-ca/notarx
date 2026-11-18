@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/ids"
 	dist "github.com/mlops-ca/notarx/internal/nugetdistribution"
 	nugetprotocol "github.com/mlops-ca/notarx/internal/protocol/nuget"
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -138,7 +138,7 @@ func (m *Module) previewReplication(w http.ResponseWriter, r *http.Request, p au
 		return
 	}
 	parts := strings.Split(strings.TrimPrefix(tail, "/"), "/")
-	if _, err := uuid.Parse(parts[0]); err != nil {
+	if !ids.Valid(parts[0]) {
 		m.problem(w, 404, "not_found")
 		return
 	}

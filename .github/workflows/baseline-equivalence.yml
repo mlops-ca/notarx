@@ -53,18 +53,14 @@ jobs:
     # (docs/postgresql-capabilities.md), so the proof also runs on its pinned image.
     strategy:
       fail-fast: false
+      # Four explicit legs (two architectures x two PostgreSQL majors); the workflow
+      # is temporary, so the extra runner minutes are bounded.
       matrix:
-        arch: [linux/amd64, linux/arm64]
-        pg: ["18", "16"]
         include:
-          - arch: linux/amd64
-            runner: ubuntu-24.04
-          - arch: linux/arm64
-            runner: ubuntu-24.04-arm
-          - pg: "18"
-            pg-image: postgres:18-alpine@sha256:b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015
-          - pg: "16"
-            pg-image: postgres:16-alpine@sha256:81e77a4833487b8132fe4b00bedd39dc3f74b8641e387f19312a48f7de218c2e
+          - {arch: linux/amd64, runner: ubuntu-24.04, pg: "18", pg-image: "postgres:18-alpine@sha256:b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015"}
+          - {arch: linux/amd64, runner: ubuntu-24.04, pg: "16", pg-image: "postgres:16-alpine@sha256:81e77a4833487b8132fe4b00bedd39dc3f74b8641e387f19312a48f7de218c2e"}
+          - {arch: linux/arm64, runner: ubuntu-24.04-arm, pg: "18", pg-image: "postgres:18-alpine@sha256:b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015"}
+          - {arch: linux/arm64, runner: ubuntu-24.04-arm, pg: "16", pg-image: "postgres:16-alpine@sha256:81e77a4833487b8132fe4b00bedd39dc3f74b8641e387f19312a48f7de218c2e"}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     steps:

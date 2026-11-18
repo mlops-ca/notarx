@@ -38,16 +38,16 @@ func validLifecycleRequest(r LifecycleRequest) bool {
 	if !repository.ValidAPTPublicationScope(r.Suite) {
 		return false
 	}
-	if _, err := uuid.Parse(r.ExpectedSnapshotID); err != nil {
+	if !ids.Valid(r.ExpectedSnapshotID) {
 		return false
 	}
-	for _, ids := range [][]string{r.PublicationSessionIDs, r.DeletionIDs} {
-		if len(ids) > 10000 {
+	for _, list := range [][]string{r.PublicationSessionIDs, r.DeletionIDs} {
+		if len(list) > 10000 {
 			return false
 		}
 		seen := make(map[string]bool)
-		for _, id := range ids {
-			if _, err := uuid.Parse(id); err != nil || seen[id] {
+		for _, id := range list {
+			if !ids.Valid(id) || seen[id] {
 				return false
 			}
 			seen[id] = true

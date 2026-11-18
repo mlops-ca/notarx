@@ -55,12 +55,6 @@ func (h nativeConanPublishHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	if strings.HasPrefix(r.URL.Path, "/api/v2/conan-publish-sessions/") {
 		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v2/conan-publish-sessions/"), "/")
 		id := strings.TrimSuffix(parts[0], ":commit")
-		// The store binds the session id as a uuid; a malformed id is a missing
-		// session, not a database error (ADR 0023 section 4).
-		if _, err := uuid.Parse(id); err != nil {
-			writeHostedProblem(w, http.StatusNotFound, "not_found", "Conan publish session not found")
-			return
-		}
 		if len(parts) == 1 && strings.HasSuffix(parts[0], ":commit") && r.Method == http.MethodPost {
 			h.withSession(w, r, id, RepositoryWrite, func(principal Principal, session repository.ConanPublishSession) {
 				h.commit(w, r, session, principal.Actor)
@@ -187,6 +181,12 @@ func (h nativeConanPublishHandler) commit(w http.ResponseWriter, r *http.Request
 }
 
 func (h nativeConanPublishHandler) withSession(w http.ResponseWriter, r *http.Request, id string, operation RepositoryOperation, next func(Principal, repository.ConanPublishSession)) {
+	// The store binds the session id as a uuid; a malformed id is a missing
+	// session, not a database error (ADR 0023 section 4).
+	if !ids.Valid(id) {
+		writeHostedProblem(w, http.StatusNotFound, "not_found", "Conan publish session not found")
+		return
+	}
 	session, err := h.store.GetConanPublishSession(r.Context(), id)
 	if errors.Is(err, repository.ErrNotFound) {
 		writeHostedProblem(w, http.StatusNotFound, "not_found", "Conan publish session not found")

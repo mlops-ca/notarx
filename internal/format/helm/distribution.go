@@ -11,7 +11,6 @@ import (
 	dist "github.com/mlops-ca/notarx/internal/helmdistribution"
 	"github.com/mlops-ca/notarx/internal/ids"
 
-	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -122,7 +121,7 @@ func (m *Module) previewReplication(w http.ResponseWriter, r *http.Request, p au
 		return
 	}
 	parts := strings.Split(strings.TrimPrefix(tail, "/"), "/")
-	if _, err := uuid.Parse(parts[0]); err != nil {
+	if !ids.Valid(parts[0]) {
 		m.problem(w, 404, "not_found")
 		return
 	}

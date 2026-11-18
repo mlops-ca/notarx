@@ -139,8 +139,8 @@ func TestCheckNewStringsRatchet(t *testing.T) {
 	if err != nil || len(next) != 1 || next["a.go"] != 1 {
 		t.Fatalf("next = %v, err = %v", next, err)
 	}
-	if _, err := LoweredNewStrings(Result{NewStrings: map[string]int{"new.go": 1}}, map[string]int{}); err == nil {
-		t.Fatal("a new file with uuid.NewString() must not be absorbed by -update")
+	if _, err := LoweredNewStrings(Result{NewStrings: map[string]int{"new.go": 1}}, map[string]int{}); err == nil || !strings.Contains(err.Error(), "uuid.NewString() call(s)") {
+		t.Fatalf("a new file with uuid.NewString() must not be absorbed by -update, and must name the rule: %v", err)
 	}
 	if !strings.Contains(FormatNewStringAllowlist(map[string]int{"a.go": 2}), "a.go 2\n") {
 		t.Error("FormatNewStringAllowlist lost an entry")

@@ -244,7 +244,7 @@ func (m *Module) previewGroups(w http.ResponseWriter, r *http.Request, p authori
 		return
 	}
 	parts := strings.Split(strings.TrimPrefix(tail, "/"), "/")
-	if _, err := uuid.Parse(parts[0]); err != nil {
+	if !ids.Valid(parts[0]) {
 		m.problem(w, 404, "not_found")
 		return
 	}
@@ -393,7 +393,7 @@ func (m *Module) configuredGroup(ctx context.Context, input groupInput) (reposit
 	group := repository.HostedGroup{Name: input.Name, Format: repository.FormatNuGet, AnonymousRead: input.AnonymousRead, Members: []repository.GroupMember{}}
 	seen := map[string]bool{}
 	for index, id := range input.Members {
-		if _, err := uuid.Parse(id); err != nil || seen[id] {
+		if !ids.Valid(id) || seen[id] {
 			return group, repository.ErrInvalidNuGetPublication
 		}
 		seen[id] = true

@@ -12,7 +12,6 @@ import (
 	"github.com/mlops-ca/notarx/internal/ids"
 	dist "github.com/mlops-ca/notarx/internal/rubygemsdistribution"
 
-	"github.com/google/uuid"
 	protocol "github.com/mlops-ca/notarx/internal/protocol/rubygems"
 	"github.com/mlops-ca/notarx/internal/repository"
 	domain "github.com/mlops-ca/notarx/internal/rubygemspublication"
@@ -131,7 +130,7 @@ func (m *Module) previewReplication(w http.ResponseWriter, r *http.Request, p au
 		return
 	}
 	parts := strings.Split(strings.TrimPrefix(tail, "/"), "/")
-	if _, err := uuid.Parse(parts[0]); err != nil {
+	if !ids.Valid(parts[0]) {
 		m.problem(w, 404, "not_found")
 		return
 	}

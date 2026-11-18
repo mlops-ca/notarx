@@ -8,8 +8,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/ids"
 	helmprotocol "github.com/mlops-ca/notarx/internal/protocol/helm"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -161,7 +161,7 @@ func (m *Module) snapshotAsset(w http.ResponseWriter, r *http.Request, view repo
 		m.problem(w, 404, "not_found")
 		return
 	}
-	if _, e := uuid.Parse(parts[0]); e != nil {
+	if !ids.Valid(parts[0]) {
 		m.problem(w, 404, "not_found")
 		return
 	}
