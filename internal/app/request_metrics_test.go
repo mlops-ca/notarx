@@ -14,6 +14,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/auditwriter"
 	"github.com/mlops-ca/notarx/internal/database"
 	"github.com/mlops-ca/notarx/internal/partitions"
+	"github.com/mlops-ca/notarx/internal/retention"
 )
 
 func TestPartitionMetricsExposeDefaultPartitionRows(t *testing.T) {
@@ -255,5 +256,30 @@ func TestDatabaseMetricsIgnoreUnboundedPoolLabels(t *testing.T) {
 	metrics.Handler(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
 	if strings.Contains(response.Body.String(), "repository-name") {
 		t.Fatal("database metrics exposed an unbounded pool label")
+	}
+}
+
+func TestRetentionMetricsExposeDeletedRowsAndLag(t *testing.T) {
+	metrics := (&Metrics{}).WithRetentionStats(func() []retention.TableStat {
+		return []retention.TableStat{{Table: "lifecycle_jobs", Deleted: 12, LagSeconds: 3600}, {Table: "user_sessions"}}
+	})
+	recorder := httptest.NewRecorder()
+	metrics.Handler(recorder, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	body := recorder.Body.String()
+	for _, want := range []string{
+		"# TYPE notarx_retention_deleted_rows_total counter",
+		"# TYPE notarx_retention_lag_seconds gauge",
+		`notarx_retention_deleted_rows_total{table="lifecycle_jobs"} 12`,
+		`notarx_retention_lag_seconds{table="lifecycle_jobs"} 3600`,
+		`notarx_retention_deleted_rows_total{table="user_sessions"} 0`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("metrics lack %q", want)
+		}
+	}
+	empty := httptest.NewRecorder()
+	(&Metrics{}).Handler(empty, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if strings.Contains(empty.Body.String(), "notarx_retention") {
+		t.Fatal("retention metrics must be absent when no janitor is configured")
 	}
 }

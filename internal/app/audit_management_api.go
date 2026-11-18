@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
 	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/retention"
 )
 
 // The audit log stays a platform operation, including for a repository
@@ -215,7 +216,7 @@ func (h generatedRepositoryAPIAdapter) ExecuteAuditRetention(w http.ResponseWrit
 		writeHostedProblem(w, http.StatusConflict, "retention_disabled", "audit retention is disabled")
 		return
 	}
-	job, _, err := (AuditRetentionWorker{Store: h.auditRetention}).Enqueue(r.Context(), string(params.IdempotencyKey), 1000)
+	job, _, err := (AuditRetentionWorker{Store: h.auditRetention}).Enqueue(r.Context(), string(params.IdempotencyKey), retention.DefaultBatch)
 	if errors.Is(err, repository.ErrIdempotencyConflict) {
 		writeHostedProblem(w, http.StatusConflict, "idempotency_conflict", "Idempotency-Key conflicts with an existing audit cleanup job")
 		return

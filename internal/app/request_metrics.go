@@ -13,6 +13,7 @@ import (
 	"github.com/felixge/httpsnoop"
 	"github.com/mlops-ca/notarx/internal/auditwriter"
 	"github.com/mlops-ca/notarx/internal/partitions"
+	"github.com/mlops-ca/notarx/internal/retention"
 )
 
 type requestClass uint8
@@ -67,6 +68,29 @@ func (m *Metrics) writePartitionMetrics(w io.Writer) {
 		label := "table=\"" + escapeMetricLabel(stat.Table) + "\""
 		_, _ = io.WriteString(w, "notarx_partition_default_rows{"+label+"} "+itoa(stat.DefaultRows)+"\n")
 		_, _ = io.WriteString(w, "notarx_partitions{"+label+"} "+itoa(int64(stat.Partitions))+"\n")
+	}
+}
+
+// RetentionStatsFunc reports the retention janitor's per-table counters
+// (internal/retention).
+type RetentionStatsFunc func() []retention.TableStat
+
+// WithRetentionStats exports notarx_retention_deleted_rows_total{table} and
+// notarx_retention_lag_seconds{table} (ADR 0023 section 2).
+func (m *Metrics) WithRetentionStats(stats RetentionStatsFunc) *Metrics {
+	m.retentionStats = stats
+	return m
+}
+
+func (m *Metrics) writeRetentionMetrics(w io.Writer) {
+	if m.retentionStats == nil {
+		return
+	}
+	_, _ = io.WriteString(w, "# TYPE notarx_retention_deleted_rows_total counter\n# TYPE notarx_retention_lag_seconds gauge\n")
+	for _, stat := range m.retentionStats() {
+		label := "table=\"" + escapeMetricLabel(stat.Table) + "\""
+		_, _ = io.WriteString(w, "notarx_retention_deleted_rows_total{"+label+"} "+itoa(stat.Deleted)+"\n")
+		_, _ = io.WriteString(w, "notarx_retention_lag_seconds{"+label+"} "+strconv.FormatFloat(stat.LagSeconds, 'f', 0, 64)+"\n")
 	}
 }
 

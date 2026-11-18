@@ -20,6 +20,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/localcapacity"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/retention"
 )
 
 // NodeRole controls which parts of the Gateway runtime are enabled. The
@@ -114,6 +115,9 @@ type Config struct {
 	// PartitionAhead is the number of future partition periods the partition
 	// manager creates beyond the current one (ADR 0023 section 2).
 	PartitionAhead int
+	// Retention configures the retention janitor (ADR 0023 section 2): the profile,
+	// the per-table overrides and the run budget.
+	Retention retention.Config
 	// Audit writer (ADR 0023 section 1). Modes are "queue"|"sync" (denials) and
 	// "async"|"sync" (reads); intervals are Go durations or whole seconds.
 	AuditBufferSize             int
@@ -220,6 +224,7 @@ func Load() (Config, error) {
 		RuntimeNodeRetention:            7 * 24 * time.Hour,
 		RuntimeNodePruneInterval:        time.Hour,
 		PartitionAhead:                  3,
+		Retention:                       retention.DefaultConfig(),
 		AuditBufferSize:                 65536,
 		AuditBatchSize:                  1000,
 		AuditFlushInterval:              time.Second,
@@ -544,6 +549,11 @@ func Load() (Config, error) {
 		return Config{}, err
 	} else {
 		cfg.PartitionAhead = ahead
+	}
+	if loaded, err := retention.LoadConfig(os.LookupEnv); err != nil {
+		return Config{}, err
+	} else {
+		cfg.Retention = loaded
 	}
 	if err := loadAuditWriterConfig(&cfg); err != nil {
 		return Config{}, err

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/retention"
 )
 
 type scheduledTaskExecutionStore interface {
@@ -83,7 +84,7 @@ func (s ScheduledTaskScheduler) dispatch(ctx context.Context, task repository.Sc
 		}
 		if dispatchErr == nil {
 			var job repository.AuditCleanupJob
-			job, _, dispatchErr = (AuditRetentionWorker{Store: s.Store}).Enqueue(ctx, key, 1000)
+			job, _, dispatchErr = (AuditRetentionWorker{Store: s.Store}).Enqueue(ctx, key, retention.DefaultBatch)
 			targetKind, targetID = "audit-cleanup", job.ID
 		}
 	default:
