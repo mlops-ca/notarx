@@ -36,7 +36,7 @@ func backupInput(t *testing.T) (string, []byte) {
 		SchemaVersion: 1, BackupID: "synthetic-backup", State: "complete", StartedAt: start, CompletedAt: start.Add(time.Minute),
 		Gateway:  backupmanifest.GatewayIdentity{Version: "synthetic-v1", Revision: strings.Repeat("a", 40), ImageDigest: "sha256:" + strings.Repeat("b", 64)},
 		Database: backupmanifest.DatabaseExport{Format: "pg-custom-v1", File: write("database.dump", "synthetic-not-a-restorable-dump")},
-		Schema:   backupmanifest.SchemaExport{Format: "gateway-migrations-tsv-v1", File: write("migrations.tsv", "filename\tsha256\n000000_synthetic.sql\t"+strings.Repeat("c", 64)+"\n")},
+		Schema:   backupmanifest.SchemaExport{Format: "notarx-migrations-tsv-v1", File: write("migrations.tsv", "filename\tsha256\n000000_synthetic.sql\t"+strings.Repeat("c", 64)+"\n")},
 		Objects:  backupmanifest.ObjectExport{Format: "s3-bytes-v1", Inventory: write("objects.jsonl", ""), Count: &zero, Bytes: &zero},
 		Writers:  backupmanifest.WriterEvidence{ScopeID: "synthetic-scope", InventoryDeclaredComplete: true, Writers: []backupmanifest.Writer{{ID: "synthetic-api", StopConfirmed: true, StoppedAt: start, ConfirmedThrough: start.Add(time.Minute)}}},
 	}

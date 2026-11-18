@@ -303,7 +303,7 @@ titles, and complete site-map coverage. See the
 
 Migrations are append-only and are applied before Gateway nodes start. The
 database records both migration filenames and SHA-256 checksums in
-`artifact_gateway_schema_migrations`. Validate a migration with:
+`notarx_schema_migrations`. Validate a migration with:
 
 ```sh
 make integration-test

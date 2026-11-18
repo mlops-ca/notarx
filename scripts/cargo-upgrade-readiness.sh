@@ -113,7 +113,7 @@ identity_state=$(psql "SELECT digest||'|'||metadata_digest FROM native_cargo_ide
 }
 assert_install "$source_name" base
 assert_install "$group_name" base
-baseline_migrations=$(psql "SELECT count(*) FROM artifact_gateway_schema_migrations WHERE filename IN ('000131_cargo_tombstone_reclaim.sql','000132_cargo_distribution.sql')")
+baseline_migrations=$(psql "SELECT count(*) FROM notarx_schema_migrations WHERE filename IN ('000131_cargo_tombstone_reclaim.sql','000132_cargo_distribution.sql')")
 [[ "$baseline_migrations" == 1 ]] || { printf '%s\n' 'Base database does not have the expected pre-distribution schema.' >&2; exit 1; }
 
 "${old_compose[@]}" stop gateway
@@ -121,7 +121,7 @@ baseline_migrations=$(psql "SELECT count(*) FROM artifact_gateway_schema_migrati
   --build-arg "REVISION=$current_revision" gateway
 "${current_compose[@]}" up -d --no-build --wait
 
-upgraded_migrations=$(psql "SELECT count(*) FROM artifact_gateway_schema_migrations WHERE filename IN ('000131_cargo_tombstone_reclaim.sql','000132_cargo_distribution.sql')")
+upgraded_migrations=$(psql "SELECT count(*) FROM notarx_schema_migrations WHERE filename IN ('000131_cargo_tombstone_reclaim.sql','000132_cargo_distribution.sql')")
 [[ "$upgraded_migrations" == 2 ]] || { printf '%s\n' 'Forward migration did not reach Cargo distribution schema.' >&2; exit 1; }
 "${current_compose[@]}" run --rm --no-deps migrate >"$workspace/migration-replay.log" 2>&1 || {
   cat "$workspace/migration-replay.log" >&2; exit 1;

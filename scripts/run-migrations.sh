@@ -24,7 +24,7 @@ file_sha256() {
 }
 
 run_psql <<'SQL'
-CREATE TABLE IF NOT EXISTS artifact_gateway_schema_migrations (
+CREATE TABLE IF NOT EXISTS notarx_schema_migrations (
     filename TEXT PRIMARY KEY,
     checksum TEXT NOT NULL,
     applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -43,7 +43,7 @@ for migration in "$migration_dir"/*.sql; do
   checksum=$(file_sha256 "$migration")
   recorded_checksum=$(run_psql -At -v migration_name="$filename" <<'SQL'
 SELECT checksum
-FROM artifact_gateway_schema_migrations
+FROM notarx_schema_migrations
 WHERE filename = :'migration_name';
 SQL
   )
@@ -60,6 +60,6 @@ SQL
   printf 'Applying migration %s.\n' "$filename"
   {
     sed '/-- +goose Down/,$d' "$migration"
-    printf "\nINSERT INTO artifact_gateway_schema_migrations (filename, checksum) VALUES ('%s', '%s');\n" "$filename" "$checksum"
+    printf "\nINSERT INTO notarx_schema_migrations (filename, checksum) VALUES ('%s', '%s');\n" "$filename" "$checksum"
   } | run_psql --single-transaction
 done

@@ -529,7 +529,7 @@ func migrateFixture(t *testing.T, ctx context.Context, p Postgres, releaseDir st
 		t.Fatal(err)
 	}
 	defer func() { _ = conn.Close(ctx) }()
-	if _, err = conn.Exec(ctx, "CREATE TABLE artifact_gateway_schema_migrations(filename text PRIMARY KEY,checksum text NOT NULL,applied_at timestamptz NOT NULL DEFAULT now())"); err != nil {
+	if _, err = conn.Exec(ctx, "CREATE TABLE notarx_schema_migrations(filename text PRIMARY KEY,checksum text NOT NULL,applied_at timestamptz NOT NULL DEFAULT now())"); err != nil {
 		t.Fatal(err)
 	}
 	entries, err := os.ReadDir(filepath.Join(releaseDir, "migrations"))
@@ -551,7 +551,7 @@ func migrateFixture(t *testing.T, ctx context.Context, p Postgres, releaseDir st
 			t.Fatal(err)
 		}
 		if _, err = tx.Exec(ctx, up); err == nil {
-			_, err = tx.Exec(ctx, "INSERT INTO artifact_gateway_schema_migrations(filename,checksum) VALUES($1,$2)", e.Name(), hex.EncodeToString(h[:]))
+			_, err = tx.Exec(ctx, "INSERT INTO notarx_schema_migrations(filename,checksum) VALUES($1,$2)", e.Name(), hex.EncodeToString(h[:]))
 		}
 		if err != nil {
 			_ = tx.Rollback(ctx)
