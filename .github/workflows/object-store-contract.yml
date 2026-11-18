@@ -1,0 +1,75 @@
+name: Object store contract
+
+# Runs the shared object store contract suite (internal/objectstore/storetest,
+# ADR 0017) against the S3 driver on each S3-compatible service the project
+# supports: RustFS (the reference) and MinIO. The suite also runs against the
+# in-memory store and RustFS inside make test and make integration-test.
+#
+# MinIO no longer publishes container images, so it is built from the pinned
+# upstream source revision with the Go toolchain of the repository.
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  GOPROXY: https://proxy.golang.org|direct
+  # RustFS image pinned by digest, the same one compose.integration.yml uses.
+  RUSTFS_IMAGE: rustfs/rustfs:1.0.0-beta.12@sha256:41fe89380f4120a337790c02af192c3fe7bb55c3edc2e6e9357b487b47c6ab21
+  MINIO_VERSION: v0.0.0-20260212201848-7aac2a2c5b7c
+
+jobs:
+  contract:
+    name: object-store-contract (${{ matrix.backend }}, ${{ matrix.mode }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { backend: rustfs, mode: when_required }
+          - { backend: minio, mode: when_required }
+          - { backend: minio, mode: when_supported }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Start RustFS
+        if: matrix.backend == 'rustfs'
+        run: |
+          docker run --detach --name object-store --publish 127.0.0.1:19000:9000 \
+            --env RUSTFS_VOLUMES=/data --env RUSTFS_ADDRESS=0.0.0.0:9000 --env RUSTFS_CONSOLE_ENABLE=false \
+            --env RUSTFS_ACCESS_KEY=contract-access --env RUSTFS_SECRET_KEY=contract-secret-password \
+            --env RUSTFS_RPC_SECRET=contract-rustfs-independent-rpc-secret \
+            --volume "$PWD/scripts/run-rustfs.sh:/usr/local/bin/run-rustfs:ro" \
+            --entrypoint /bin/sh "$RUSTFS_IMAGE" /usr/local/bin/run-rustfs
+          for attempt in $(seq 1 60); do
+            curl --fail --silent http://127.0.0.1:19000/health >/dev/null && exit 0
+            sleep 1
+          done
+          docker logs object-store
+          exit 1
+      - name: Build and start MinIO
+        if: matrix.backend == 'minio'
+        run: |
+          GOBIN="$RUNNER_TEMP/bin" go install "github.com/minio/minio@$MINIO_VERSION"
+          mkdir -p "$RUNNER_TEMP/minio-data"
+          MINIO_ROOT_USER=contract-access MINIO_ROOT_PASSWORD=contract-secret-password \
+            nohup "$RUNNER_TEMP/bin/minio" server "$RUNNER_TEMP/minio-data" --address 127.0.0.1:19000 --console-address 127.0.0.1:19001 \
+            >"$RUNNER_TEMP/minio.log" 2>&1 &
+          for attempt in $(seq 1 60); do
+            curl --fail --silent http://127.0.0.1:19000/minio/health/ready >/dev/null && exit 0
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/minio.log"
+          exit 1
+      - name: Run the contract suite against the S3 driver
+        env:
+          TEST_OBJECT_STORE_ENDPOINT: http://127.0.0.1:19000
+          TEST_OBJECT_STORE_ACCESS_KEY: contract-access
+          TEST_OBJECT_STORE_SECRET_KEY: contract-secret-password
+          TEST_OBJECT_STORE_CHECKSUM_MODE: ${{ matrix.mode }}
+        run: go test -count=1 -tags integration -run '^TestS3StoreContract$' -v ./internal/objectstore

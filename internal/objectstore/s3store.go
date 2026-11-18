@@ -3,6 +3,8 @@ package objectstore
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -20,7 +22,7 @@ import (
 // digestMetadataKey is the user-metadata key that carries the verified SHA-256.
 const digestMetadataKey = "notarx-sha256"
 
-// S3Store is the S3-compatible driver: RustFS, MinIO, AWS S3 and OCI Object
+// S3Store is the S3-compatible driver: RustFS, other S3-compatible services, AWS S3 and OCI Object
 // Storage through its S3 compatibility API.
 type S3Store struct {
 	client *s3.Client
@@ -146,6 +148,9 @@ func (s *S3Store) OpenRange(ctx context.Context, key string, offset, length int6
 }
 
 func (s *S3Store) PutReader(ctx context.Context, key string, value io.Reader, size int64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	body, cleanup, err := seekableObjectReader(value, size)
 	if err != nil {
 		return err
@@ -158,14 +163,24 @@ func (s *S3Store) PutReader(ctx context.Context, key string, value io.Reader, si
 }
 
 func (s *S3Store) PutVerifiedReader(ctx context.Context, key string, value io.Reader, size int64, digest string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	want, err := parseDigest(digest)
+	if err != nil {
+		return err
+	}
 	body, cleanup, err := seekableObjectReader(value, size)
 	if err != nil {
 		return err
 	}
 	defer cleanup()
+	if err = verifyDigest(body, want); err != nil {
+		return err
+	}
 	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket: aws.String(s.bucket), Key: aws.String(key), Body: body, ContentLength: aws.Int64(size), ContentType: aws.String("application/octet-stream"),
-		Metadata: map[string]string{digestMetadataKey: digest},
+		Metadata: map[string]string{digestMetadataKey: digestPrefix + want},
 	})
 	return err
 }
@@ -175,6 +190,13 @@ func seekableObjectReader(value io.Reader, size int64) (io.ReadSeeker, func(), e
 		return nil, func() {}, errors.New("object size is invalid")
 	}
 	if seeker, ok := value.(io.ReadSeeker); ok {
+		remaining, err := remainingBytes(seeker)
+		if err != nil {
+			return nil, func() {}, err
+		}
+		if remaining != size {
+			return nil, func() {}, ErrSizeMismatch
+		}
 		return seeker, func() {}, nil
 	}
 	spool, err := os.CreateTemp("", "notarx-object-*")
@@ -199,13 +221,50 @@ func seekableObjectReader(value io.Reader, size int64) (io.ReadSeeker, func(), e
 	}
 	if written != size {
 		cleanup()
-		return nil, func() {}, fmt.Errorf("object reader size mismatch: got %d want %d", written, size)
+		return nil, func() {}, fmt.Errorf("%w: got %d want %d", ErrSizeMismatch, written, size)
 	}
 	if _, err = spool.Seek(0, io.SeekStart); err != nil {
 		cleanup()
 		return nil, func() {}, err
 	}
 	return spool, cleanup, nil
+}
+
+// remainingBytes returns how many bytes are left from the current offset and
+// leaves the offset where it was.
+func remainingBytes(seeker io.Seeker) (int64, error) {
+	current, err := seeker.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return 0, err
+	}
+	end, err := seeker.Seek(0, io.SeekEnd)
+	if err != nil {
+		return 0, err
+	}
+	if _, err = seeker.Seek(current, io.SeekStart); err != nil {
+		return 0, err
+	}
+	return end - current, nil
+}
+
+// verifyDigest hashes the remaining bytes of body and rewinds it, so a
+// mismatch is detected before anything is uploaded.
+func verifyDigest(body io.ReadSeeker, wantHex string) error {
+	start, err := body.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return err
+	}
+	hasher := sha256.New()
+	if _, err = io.Copy(hasher, body); err != nil {
+		return err
+	}
+	if _, err = body.Seek(start, io.SeekStart); err != nil {
+		return err
+	}
+	if hex.EncodeToString(hasher.Sum(nil)) != wantHex {
+		return ErrDigestMismatch
+	}
+	return nil
 }
 
 func (s *S3Store) SetVerifiedDigest(ctx context.Context, key, digest string) error {

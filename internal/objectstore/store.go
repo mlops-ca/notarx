@@ -9,12 +9,24 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"sort"
 	"strings"
 	"sync"
 )
 
 // ErrNotFound is returned when a requested object is absent.
 var ErrNotFound = errors.New("object not found")
+
+// ErrSizeMismatch is returned when a reader does not yield exactly the
+// declared number of bytes.
+var ErrSizeMismatch = errors.New("object size does not match the declared size")
+
+// ErrDigestMismatch is returned when the bytes of a verified write do not hash
+// to the supplied SHA-256 digest. Nothing is stored in that case.
+var ErrDigestMismatch = errors.New("object digest does not match the supplied digest")
+
+// Digests are written "sha256:<64 lowercase hex characters>".
+const digestPrefix = "sha256:"
 
 // Store is deliberately small so publication ordering can be tested without
 // a running object-store service.
@@ -36,96 +48,181 @@ type Info struct {
 	Digest string
 }
 
+// parseDigest returns the lowercase hex of a "sha256:<hex>" digest.
+func parseDigest(digest string) (string, error) {
+	hexPart, ok := strings.CutPrefix(digest, digestPrefix)
+	if !ok || len(hexPart) != sha256.Size*2 {
+		return "", errors.New("object digest must be sha256:<64 hex characters>")
+	}
+	decoded, err := hex.DecodeString(hexPart)
+	if err != nil {
+		return "", errors.New("object digest must be sha256:<64 hex characters>")
+	}
+	return hex.EncodeToString(decoded), nil
+}
+
+// MemoryStore is the in-process Store used by tests. It follows the same
+// contract as the other drivers (see storetest.RunContract): verified writes
+// check size and digest, listings are lexicographic, and every call honours
+// context cancellation.
 type MemoryStore struct {
 	mu      sync.RWMutex
-	objects map[string][]byte
+	objects map[string]memoryObject
+}
+
+type memoryObject struct {
+	data   []byte
+	digest string // empty until a verified write or SetVerifiedDigest
 }
 
 func NewMemoryStore() *MemoryStore {
-	return &MemoryStore{objects: make(map[string][]byte)}
+	return &MemoryStore{objects: make(map[string]memoryObject)}
 }
 
-func (s *MemoryStore) Get(_ context.Context, key string) ([]byte, error) {
+func (s *MemoryStore) lookup(ctx context.Context, key string) (memoryObject, error) {
+	if err := ctx.Err(); err != nil {
+		return memoryObject{}, err
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	value, ok := s.objects[key]
+	object, ok := s.objects[key]
 	if !ok {
-		return nil, ErrNotFound
+		return memoryObject{}, ErrNotFound
 	}
-	return append([]byte(nil), value...), nil
+	return object, nil
 }
 
-func (s *MemoryStore) Put(_ context.Context, key string, value []byte) error {
+func (s *MemoryStore) Get(ctx context.Context, key string) ([]byte, error) {
+	object, err := s.lookup(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	return append([]byte(nil), object.data...), nil
+}
+
+func (s *MemoryStore) Put(ctx context.Context, key string, value []byte) error {
+	return s.store(ctx, key, append([]byte(nil), value...), "")
+}
+
+func (s *MemoryStore) store(ctx context.Context, key string, data []byte, digest string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.objects[key] = append([]byte(nil), value...)
+	// A write always allocates a fresh backing slice. A reader can safely
+	// retain this immutable snapshot across replacement or deletion.
+	s.objects[key] = memoryObject{data: data, digest: digest}
 	return nil
 }
 
 func (s *MemoryStore) Open(ctx context.Context, key string) (io.ReadCloser, int64, error) {
-	if err := ctx.Err(); err != nil {
+	object, err := s.lookup(ctx, key)
+	if err != nil {
 		return nil, 0, err
 	}
-	s.mu.RLock()
-	value, ok := s.objects[key]
-	s.mu.RUnlock()
-	if !ok {
-		return nil, 0, ErrNotFound
-	}
-	// Put always allocates a fresh backing slice. A reader can safely retain
-	// this immutable snapshot across replacement/deletion without copying the
-	// entire object, including when serving small ranges of a large object.
-	return io.NopCloser(bytes.NewReader(value)), int64(len(value)), nil
+	return io.NopCloser(bytes.NewReader(object.data)), int64(len(object.data)), nil
 }
 
+// Stat reports the recorded digest. An object written without one reports the
+// SHA-256 of its bytes, which an S3 object lacking metadata would not.
 func (s *MemoryStore) Stat(ctx context.Context, key string) (Info, error) {
-	value, err := s.Get(ctx, key)
+	object, err := s.lookup(ctx, key)
 	if err != nil {
 		return Info{}, err
 	}
-	sum := sha256.Sum256(value)
-	return Info{Size: int64(len(value)), Digest: "sha256:" + hex.EncodeToString(sum[:])}, nil
+	digest := object.digest
+	if digest == "" {
+		sum := sha256.Sum256(object.data)
+		digest = digestPrefix + hex.EncodeToString(sum[:])
+	}
+	return Info{Size: int64(len(object.data)), Digest: digest}, nil
 }
 
 func (s *MemoryStore) OpenRange(ctx context.Context, key string, offset, length int64) (io.ReadCloser, int64, error) {
-	if err := ctx.Err(); err != nil {
+	object, err := s.lookup(ctx, key)
+	if err != nil {
 		return nil, 0, err
 	}
-	s.mu.RLock()
-	value, ok := s.objects[key]
-	s.mu.RUnlock()
-	if !ok {
-		return nil, 0, ErrNotFound
-	}
-	size := int64(len(value))
+	size := int64(len(object.data))
 	if offset < 0 || length < 0 || offset > size || length > size-offset {
 		return nil, 0, errors.New("object range is out of bounds")
 	}
-	return io.NopCloser(bytes.NewReader(value[offset : offset+length])), size, nil
+	return io.NopCloser(bytes.NewReader(object.data[offset : offset+length])), size, nil
 }
 
-func (s *MemoryStore) PutReader(ctx context.Context, key string, value io.Reader, _ int64) error {
-	data, err := io.ReadAll(value)
+func readExactly(value io.Reader, size int64) ([]byte, error) {
+	if size < 0 {
+		return nil, errors.New("object size is invalid")
+	}
+	data, err := io.ReadAll(io.LimitReader(value, size+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) != size {
+		return nil, ErrSizeMismatch
+	}
+	return data, nil
+}
+
+func (s *MemoryStore) PutReader(ctx context.Context, key string, value io.Reader, size int64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	data, err := readExactly(value, size)
 	if err != nil {
 		return err
 	}
-	return s.Put(ctx, key, data)
+	return s.store(ctx, key, data, "")
 }
 
-func (s *MemoryStore) PutVerifiedReader(ctx context.Context, key string, value io.Reader, size int64, _ string) error {
-	return s.PutReader(ctx, key, value, size)
+func (s *MemoryStore) PutVerifiedReader(ctx context.Context, key string, value io.Reader, size int64, digest string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	want, err := parseDigest(digest)
+	if err != nil {
+		return err
+	}
+	data, err := readExactly(value, size)
+	if err != nil {
+		return err
+	}
+	if sum := sha256.Sum256(data); hex.EncodeToString(sum[:]) != want {
+		return ErrDigestMismatch
+	}
+	return s.store(ctx, key, data, digestPrefix+want)
 }
 
-func (*MemoryStore) SetVerifiedDigest(context.Context, string, string) error { return nil }
+func (s *MemoryStore) SetVerifiedDigest(ctx context.Context, key, digest string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	object, ok := s.objects[key]
+	if !ok {
+		return ErrNotFound
+	}
+	object.digest = digest
+	s.objects[key] = object
+	return nil
+}
 
-func (s *MemoryStore) Delete(_ context.Context, key string) error {
+func (s *MemoryStore) Delete(ctx context.Context, key string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.objects, key)
 	return nil
 }
 
-func (s *MemoryStore) List(_ context.Context, prefix string) ([]string, error) {
+func (s *MemoryStore) List(ctx context.Context, prefix string) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	keys := make([]string, 0)
@@ -134,5 +231,6 @@ func (s *MemoryStore) List(_ context.Context, prefix string) ([]string, error) {
 			keys = append(keys, key)
 		}
 	}
+	sort.Strings(keys)
 	return keys, nil
 }
