@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -177,5 +178,29 @@ func TestTrigramCheckIsListedAndSelectable(t *testing.T) {
 func TestProbeTrigramReportsConnectionFailure(t *testing.T) {
 	if _, err := probeTrigram(context.Background(), "postgres://nobody@127.0.0.1:1/none?connect_timeout=1"); err == nil {
 		t.Fatal("expected a connection error")
+	}
+}
+
+// scripts/run-migrations.sh runs the same pg_trgm classification before its
+// first statement; the two copies must not drift.
+func TestTrigramSQLMatchesMigrationRunner(t *testing.T) {
+	script, err := os.ReadFile("../../scripts/run-migrations.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const start = "trigram_state=$(run_psql -At <<'SQL'\n"
+	text := string(script)
+	begin := strings.Index(text, start)
+	if begin < 0 {
+		t.Fatal("run-migrations.sh lost its pg_trgm classification")
+	}
+	rest := text[begin+len(start):]
+	end := strings.Index(rest, "\nSQL\n")
+	if end < 0 {
+		t.Fatal("run-migrations.sh pg_trgm classification is not terminated")
+	}
+	normalize := func(sql string) string { return strings.Join(strings.Fields(strings.TrimSuffix(strings.TrimSpace(sql), ";")), " ") }
+	if got, want := normalize(rest[:end]), normalize(trigramStateSQL); got != want {
+		t.Fatalf("pg_trgm SQL differs between run-migrations.sh and internal/preflight/trigram.go\nscript: %s\ngo:     %s", got, want)
 	}
 }

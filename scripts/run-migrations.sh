@@ -59,6 +59,23 @@ CREATE TABLE IF NOT EXISTS notarx_schema_migrations (
 );
 SQL
 
+# notarx has no upgrade path from other schemas (ADR 0013): refuse a database that
+# holds tables but no notarx ledger rows, instead of failing mid-baseline with a
+# confusing SQL error.
+foreign_tables=$(run_psql -At <<'SQL'
+SELECT count(*)
+FROM pg_tables t
+WHERE t.schemaname = 'public'
+  AND t.tablename <> 'notarx_schema_migrations'
+  AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = (quote_ident(t.schemaname) || '.' || quote_ident(t.tablename))::regclass AND d.deptype = 'e')
+  AND NOT EXISTS (SELECT 1 FROM notarx_schema_migrations);
+SQL
+)
+if [ "$foreign_tables" != 0 ]; then
+  printf 'Database %s already holds %s table(s) but no notarx migration ledger. Upgrading from another schema is not supported; use an empty database or restore a notarx backup.\n' "$pg_database" "$foreign_tables" >&2
+  exit 1
+fi
+
 for migration in "$migration_dir"/*.sql; do
   filename=${migration##*/}
   case "$filename" in

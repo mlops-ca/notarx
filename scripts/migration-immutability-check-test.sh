@@ -87,6 +87,31 @@ mkdir -p "$repo/migrations" && : >"$repo/migrations/.keep"
 commit "empty"
 expect_fail "empty directory" "holds no *.sql files"
 
+new_repo badname_then_good
+printf 'SELECT 2;\n' >"$repo/migrations/000002_BadName.sql"
+printf 'SELECT 3;\n' >"$repo/migrations/000003_fine.sql"
+commit "bad then good"
+output=$("$check" --root "$repo" 2>&1) && { echo "FAIL badname_then_good: expected failure" >&2; exit 1; }
+if [[ "$output" == *"gap before"* ]]; then
+  printf 'FAIL one bad name cascaded into a gap error\n%s\n' "$output" >&2
+  exit 1
+fi
+passed=$((passed + 1))
+printf 'ok   %s\n' "a bad name does not cascade into gap errors"
+
+new_repo duplicate_then_next
+printf 'SELECT 2;\n' >"$repo/migrations/000002_one.sql"
+printf 'SELECT 2;\n' >"$repo/migrations/000002_two.sql"
+printf 'SELECT 3;\n' >"$repo/migrations/000003_next.sql"
+commit "dup then next"
+output=$("$check" --root "$repo" 2>&1) && { echo "FAIL duplicate_then_next: expected failure" >&2; exit 1; }
+if [[ "$output" == *"gap before"* || "$output" == *"out of sequence"* ]]; then
+  printf 'FAIL a duplicate prefix cascaded\n%s\n' "$output" >&2
+  exit 1
+fi
+passed=$((passed + 1))
+printf 'ok   %s\n' "a duplicate prefix does not cascade"
+
 # --- immutability ---
 new_repo nightly_only
 tag v0.1.0-nightly.1
@@ -155,5 +180,21 @@ tag v0.1.0
 printf -- '-- edited\n' >>"$repo/migrations/000001_baseline.sql"
 commit "edit after the first stable tag"
 expect_fail "enforcing once a stable tag exists" "changed since v0.1.0"
+
+# A shallow clone that lacks the tags must not silently disable the guard.
+new_repo shallow_source
+tag v0.1.0
+shallow=$work/shallow_clone
+git clone -q --depth 1 --no-tags "file://$repo" "$shallow"
+repo=$shallow
+expect_fail "shallow clone without tags" "shallow clone"
+
+# A tree that is not a git checkout still gets the sequencing rules and says so.
+new_repo not_a_checkout
+rm -rf "$repo/.git"
+out=$("$check" --root "$repo" 2>&1) || { printf 'FAIL not a checkout: %s\n' "$out" >&2; exit 1; }
+[[ "$out" == *"SKIPPED the immutability check"* ]] || { printf 'FAIL not a checkout: no notice\n%s\n' "$out" >&2; exit 1; }
+passed=$((passed + 1))
+printf 'ok   %s\n' "a tree without .git skips immutability loudly"
 
 printf 'migration-immutability-check fixtures passed (%s scenarios).\n' "$passed"

@@ -130,7 +130,9 @@ fixtures.
 
 The temporary `baseline-equivalence` workflow
 (`.github/workflows/baseline-equivalence.yml`, ADR 0015 slice 3) runs on pull
-requests that touch the baseline, the runner or the baseline tooling. On linux/amd64
+requests that touch `migrations/000001_baseline.sql` or the baseline tooling
+(an ordinary `000002+` migration does not trigger it; the script refuses a source
+chain that is only the baseline itself). On linux/amd64
 and linux/arm64 native runners it proves `migrations/000001_baseline.sql`
 equivalent to the migration chain at the pull request base (schema dump, data dump,
 catalogs, no PUBLIC privileges), then runs `make integration-test` and the

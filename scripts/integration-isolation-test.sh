@@ -29,6 +29,10 @@ if [[ "$1" == port ]]; then
   esac
   exit 0
 fi
+if [[ "$*" == *"PGDATABASE=gateway_foreign_schema_test"* && "$*" == *migrate* ]]; then
+  printf 'Database gateway_foreign_schema_test already holds 1 table(s) but no notarx migration ledger.\n' >&2
+  exit 1
+fi
 if [[ "$*" == *--volume* ]]; then
   printf 'Applied migration drift probe has changed\n' >&2
   # Match the real runner's migration filename in the diagnostic.

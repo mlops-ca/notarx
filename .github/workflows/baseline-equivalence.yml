@@ -11,8 +11,9 @@ name: Baseline equivalence
 on:
   pull_request:
     paths:
-      - migrations/**
-      - migrations-next/**
+      # Only a change of the baseline itself (cut-over, re-squash) or of its
+      # tooling needs the proof; an ordinary 000002+ migration does not.
+      - migrations/000001_baseline.sql
       - scripts/baseline-*.sh
       - scripts/run-migrations.sh
       - internal/tools/baselinefmt/**

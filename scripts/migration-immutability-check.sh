@@ -54,8 +54,10 @@ while IFS= read -r path; do
   count=$((count + 1))
   if [[ ! "$name" =~ $name_pattern ]]; then
     fail "$name does not match NNNNNN_<snake_case>.sql"
-    continue
   fi
+  # A file with a parsable prefix still occupies its number, so one bad name
+  # does not cascade into misleading gap errors for its neighbours.
+  [[ "$name" =~ ^[0-9]{6}_ ]] || continue
   prefix=${name:0:6}
   number=$((10#$prefix))
   if [[ "$prefix" == "$previous" ]]; then
@@ -79,23 +81,33 @@ fi
 
 # --- Immutability ------------------------------------------------------------
 stable_pattern='^v[0-9]+\.[0-9]+\.[0-9]+$'
-tag=$(git -C "$root" tag --list 'v*' | grep -E "$stable_pattern" | sort -V | tail -n 1 || true)
-if [[ -z "$tag" ]]; then
-  printf 'migration-check: no stable release tag yet; released files are not frozen\n'
+if [[ ! -e "$root/.git" ]]; then
+  printf 'migration-check: SKIPPED the immutability check: %s is not a git checkout\n' "$root"
 else
-  released=0
-  while IFS= read -r path; do
-    [[ -n "$path" ]] || continue
-    released=$((released + 1))
-    if ! git -C "$root" diff --quiet "$tag" -- "$path"; then
-      if [[ -e "$root/$path" ]]; then
-        fail "$path changed since $tag; released migrations are immutable (add a new migration instead)"
-      else
-        fail "$path was removed since $tag; released migrations are immutable"
-      fi
+  tag=$(git -C "$root" tag --list 'v*' | grep -E "$stable_pattern" | sort -V | tail -n 1 || true)
+  if [[ -z "$tag" ]]; then
+    if [[ "$(git -C "$root" rev-parse --is-shallow-repository)" == true ]]; then
+      # A shallow clone without tags cannot tell "no release yet" from "tags not
+      # fetched", and silently passing would disable the guard.
+      fail "shallow clone: release tags may be missing; run 'git fetch --tags --unshallow' (or clone with full history)"
+    else
+      printf 'migration-check: no stable release tag yet; released files are not frozen\n'
     fi
-  done < <(git -C "$root" ls-tree -r --name-only "$tag" -- "$dir/" | grep -E '\.sql$' || true)
-  printf 'migration-check: %s released files at %s checked\n' "$released" "$tag"
+  else
+    released=0
+    while IFS= read -r path; do
+      [[ -n "$path" ]] || continue
+      released=$((released + 1))
+      if ! git -C "$root" diff --quiet "$tag" -- "$path"; then
+        if [[ -e "$root/$path" ]]; then
+          fail "$path changed since $tag; released migrations are immutable (add a new migration instead)"
+        else
+          fail "$path was removed since $tag; released migrations are immutable"
+        fi
+      fi
+    done < <(git -C "$root" ls-tree -r --name-only "$tag" -- "$dir/" | grep -E '\.sql$' || true)
+    printf 'migration-check: %s released files at %s checked\n' "$released" "$tag"
+  fi
 fi
 
 if [[ "$failures" -ne 0 ]]; then

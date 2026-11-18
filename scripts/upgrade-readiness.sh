@@ -28,7 +28,12 @@ done
 if [[ -z "$tag" ]]; then
   tag=$(git tag --list 'v*' | grep -E "$stable_pattern" | sort -V | tail -n 1 || true)
   if [[ -z "$tag" ]]; then
-    printf 'upgrade-readiness: no stable notarx release tag yet; nothing to upgrade from.\n'
+    if [[ "$(git rev-parse --is-shallow-repository)" == true ]]; then
+      # A shallow clone may simply lack the tags; do not pass vacuously.
+      printf 'upgrade-readiness: shallow clone without release tags; run git fetch --tags --unshallow.\n' >&2
+      exit 1
+    fi
+    printf 'upgrade-readiness: no stable notarx release tag exists; nothing to upgrade from (not a pass of the upgrade gate).\n'
     exit 0
   fi
 fi

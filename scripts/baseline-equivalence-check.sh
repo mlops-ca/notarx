@@ -61,6 +61,11 @@ chain=$baseline_work/source/$source_dir
 chain_files=$(find "$chain" -maxdepth 1 -name '*.sql' | wc -l | tr -d ' ')
 [[ "$chain_files" -gt 0 ]] || baseline_fail "No *.sql files in $source_dir at $source_ref."
 cp "$baseline" "$baseline_work/candidate/000001_baseline.sql"
+# Comparing the baseline with itself proves nothing: refuse a source chain that is
+# only this very file (for example the base of a pull request after the cut-over).
+if [[ "$chain_files" -eq 1 ]] && cmp -s "$chain"/*.sql "$baseline_work/candidate/000001_baseline.sql"; then
+  baseline_fail "The source chain at $source_ref:$source_dir is the baseline itself; pass --source-ref/--source-dir of the chain it replaces."
+fi
 
 baseline_start_server chain_a baseline_b chain_a2
 baseline_migrate chain_a "$chain"
