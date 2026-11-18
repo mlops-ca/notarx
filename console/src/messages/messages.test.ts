@@ -126,12 +126,11 @@ describe("message dictionaries", () => {
     }
   });
 
-  it("keep fr-CA the same keys as en-CA, with the same placeholders, once it exists", async () => {
+  it("keep fr-CA the same keys as en-CA, with the same placeholders", async () => {
     for (const { name, en, fr } of await featureDictionaries()) {
-      // Scaffolding may be empty until the dictionary lands.
-      if (!fr || Object.keys(fr).length === 0) continue;
-      expect(Object.keys(fr).sort(), name).toEqual(Object.keys(en).sort());
-      for (const [key, message] of Object.entries(fr)) {
+      expect(fr, `${name}: fr-CA dictionary is missing`).toBeDefined();
+      expect(Object.keys(fr!).sort(), name).toEqual(Object.keys(en).sort());
+      for (const [key, message] of Object.entries(fr!)) {
         expect(message.trim(), key).not.toBe("");
         expect(placeholders(message), key).toEqual(placeholders(en[key]));
       }
@@ -165,6 +164,18 @@ describe("message dictionaries", () => {
     expect(frCAStyleIssues("l’artefact")).toEqual([]);
     expect(frCAStyleIssues("«Dépôt»")).toHaveLength(1);
     expect(frCAStyleIssues(`«${nb}Dépôt${nb}»`)).toEqual([]);
+  });
+
+  it("record every fr-CA key in the review sidecar", () => {
+    const sidecar = JSON.parse(
+      readFileSync(join(messagesDir, ".review", "fr-CA.json"), "utf8"),
+    ) as { keys: Record<string, string>; critical: string[] };
+    expect(Object.keys(sidecar.keys).sort()).toEqual(Object.keys(enCA).sort());
+    for (const [key, status] of Object.entries(sidecar.keys)) {
+      expect(["draft", "reviewed"], key).toContain(status);
+    }
+    for (const key of sidecar.critical)
+      expect(key in sidecar.keys, key).toBe(true);
   });
 
   it("never define one key in two dictionaries", async () => {

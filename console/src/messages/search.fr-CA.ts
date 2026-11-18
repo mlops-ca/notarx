@@ -1,5 +1,80 @@
 import type { searchEnCA } from "./search.en-CA";
 
-// fr-CA scaffolding (ADR 0014): empty until the dictionary lands; the total
-// Record type and the completeness test come with the strings.
-export const searchFrCA: Partial<Record<keyof typeof searchEnCA, string>> = {};
+export const searchFrCA: Record<keyof typeof searchEnCA, string> = {
+  "search.artifactCoordinate": "Artefact / coordonnée",
+  "search.sHA256Match": "Correspondance SHA-256",
+  "search.coordinateMatch": "Correspondance de coordonnée",
+  "search.expanded": "Développé",
+  "search.collapsed": "Réduit",
+  "search.repository": "Dépôt",
+  "search.format": "Format",
+  "search.versionsSize": "Versions / taille",
+  "search.versions": "{length} versions",
+  "search.security": "Sécurité",
+  "search.updated": "Mis à jour",
+  "search.actions": "Actions",
+  "search.collapseDetails": "Masquer les détails",
+  "search.expandDetails": "Afficher les détails",
+  "search.collapse": "Réduire",
+  "search.expand": "Développer",
+  "search.openExactRepositoryLocation":
+    "Ouvrir l’emplacement exact dans le dépôt",
+  "search.openInRepository": "Ouvrir {coordinate} dans le dépôt",
+  "search.artifactDetail": "Détail de l’artefact",
+  "search.versionsAndBuilds": "Versions et builds",
+  "search.selectAVersionToViewItsPOMDigest":
+    "Sélectionnez une version pour afficher son POM, son digest et les détails de sa publication",
+  "search.openLatestVersion": "Ouvrir la dernière version",
+  "search.publisherNotRecorded": "Éditeur non enregistré",
+  "search.noDigest": "Aucun digest",
+  "search.noDigest2": "Aucun digest",
+  "search.open": "Ouvrir {coordinate}",
+  "search.publisher": "Éditeur",
+  "search.notRecorded": "Non enregistré",
+  "search.published": "Publié",
+  "search.size": "Taille",
+  "search.matchedBy": "Trouvé par",
+  "search.sHA256Digest": "Digest SHA-256",
+  "search.artifactCoordinate2": "Coordonnée de l’artefact",
+  "search.openThisVersionInRepository": "Ouvrir cette version dans le dépôt",
+  "search.contentType": "Type de contenu",
+  "search.exactMatch": "Correspondance exacte",
+  "search.checksum": "Somme de contrôle",
+  "search.openInRepository2": "Ouvrir dans le dépôt",
+  "search.artifactSearchFailed": "La recherche d’artefacts a échoué",
+  "search.globalSearch": "Recherche globale",
+  "search.searchingAllRepositoriesFor":
+    "Recherche de «\u00a0{q}\u00a0» dans tous les dépôts",
+  "search.searchArtifactCoordinatesPackageNamesPathsReferencesAnd":
+    "Recherchez des coordonnées d’artefacts, des noms de paquets, des chemins, des références et des digests SHA-256 dans les dépôts",
+  "search.search": "Rechercher",
+  "search.enterACoordinatePackagePathKeywordOrSHA":
+    "Saisissez une coordonnée, un paquet, un mot-clé de chemin ou un digest SHA-256…",
+  "search.enterAKeywordToSearch":
+    "Saisissez un mot-clé pour lancer la recherche",
+  "search.supportsMavenCoordinatesNpmPackagesPyPIProjectsGo":
+    "Prend en charge les coordonnées Maven, les paquets npm, les projets PyPI, les modules Go, les images OCI, les références Conan, les chemins Raw et les digests SHA-256 complets",
+  "search.searchingRepositories": "Recherche dans {searchedRepos} dépôts…",
+  "search.loading": "Chargement…",
+  "search.noMatchingArtifacts": "Aucun artefact correspondant",
+  "search.noResultsForAcrossRepositories":
+    "Aucun résultat pour «\u00a0{q}\u00a0» dans {searchedRepos} dépôts",
+  "search.results": "Résultats",
+  "search.versionsOrFiles": "{length} versions ou fichiers",
+  "search.repositoriesSearched": "Dépôts recherchés",
+  "search.onlyRepositoriesReadableByTheCurrentIdentity":
+    "Seulement les dépôts lisibles par l’identité actuelle",
+  "search.matchMode": "Mode de correspondance",
+  "search.exactSHA256": "SHA-256 exact",
+  "search.literalContains": "Contient littéralement",
+  "search.coordinatePrefix": "Préfixe de coordonnée",
+  "search.includesOlderVisibleVersions":
+    "Inclut les versions visibles plus anciennes",
+  "search.inputIsValidatedByFormat": "La saisie est validée selon le format",
+  "search.pagination": "Pagination",
+  "search.moreAvailable": "Plus de résultats disponibles",
+  "search.complete": "Complet",
+  "search.loadingMorePreservesCurrentResults":
+    "Le chargement de résultats supplémentaires conserve les résultats actuels",
+  "search.endOfResults": "Fin des résultats",
+};

@@ -340,7 +340,8 @@ describe("PreferenceControls", () => {
     await user.click(screen.getByRole("button", { name: "Language" }));
     await user.click(await screen.findByRole("menuitem", { name: "French" }));
 
-    expect(screen.getByRole("button", { name: "Language" })).toHaveTextContent(
+    // The button is named in the language just chosen.
+    expect(screen.getByRole("button", { name: "Langue" })).toHaveTextContent(
       "FR",
     );
     expect(localStorage.getItem("ag.console.locale")).toBe("fr-CA");

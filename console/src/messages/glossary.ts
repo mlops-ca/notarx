@@ -55,6 +55,15 @@ const frCATerms: Record<string, { label: string; avoid?: readonly string[] }> =
     "Service account": { label: "compte de service" },
     Grant: { label: "autorisation", avoid: ["subvention"] },
     "Audit event": { label: "événement d’audit" },
+    "Hosted repository": { label: "dépôt hébergé" },
+    Asset: { label: "ressource" },
+    Publication: { label: "publication" },
+    Replication: { label: "réplication" },
+    "Retention policy": { label: "politique de conservation" },
+    Credential: { label: "justificatif d’identité" },
+    "API key": { label: "clé d’API" },
+    Audit: { label: "audit" },
+    "Webhook delivery": { label: "livraison de webhook" },
   };
 
 /** Terms in en-CA that have no zh-CN counterpart. */

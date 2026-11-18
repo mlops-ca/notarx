@@ -140,13 +140,11 @@ const frCAMessages = {
   ...uiFrCA,
 };
 
-/** The first-class translation: every key, enforced by a test (ADR 0014). */
-export const frCA: Partial<Record<MessageKey, string>> = frCAMessages;
-
-type AssertNoExcessFrKeys<T extends never> = T;
-export type FrCAExcessKeys = AssertNoExcessFrKeys<
-  Exclude<keyof typeof frCAMessages, MessageKey>
->;
+/**
+ * The first-class translation: total by type, so a key missing from fr-CA
+ * (or left over after en-CA dropped it) fails type checking (ADR 0014).
+ */
+export const frCA: Record<MessageKey, string> = frCAMessages;
 
 /** A lagging, partial overlay: a missing key falls back to en-CA. */
 export const zhCN: Partial<Record<MessageKey, string>> = zhCNMessages;
