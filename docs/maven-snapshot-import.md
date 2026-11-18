@@ -107,7 +107,7 @@ issues, PRs and the Git repository.
    same v0.7.0 revision. Upgrading from v0.6.1/schema `000140` applies
    `000141` (import checkpoints) and `000142` (publication takeover) through the
    existing migration workflow. **Do not import into a
-   mixed old/new revision deployment.** An old binary does not honor import
+   mixed old/new revision deployment.** An old binary does not honour import
    reservations or the preserved selectors. Schema addition alone is insufficient.
    Do not run old binaries against the expanded database or attempt down migrations.
    Rollback requires the validated, paired **pre-upgrade** PostgreSQL/S3 snapshot
@@ -300,7 +300,7 @@ new metadata/alias/checksum, and all fixed historical GET/HEAD/checksum URLs.
 Keep retention off: once any GAV is writable, Repository retention enable is
 refused. Both old retention workers recheck version/enabled/receipt inside the
 delete transaction. Explicit administrator deletion, quarantine and permissions
-retain their existing behavior; a hidden selected path does not fall back to a
+retain their existing behaviour; a hidden selected path does not fall back to a
 sibling. A paired backup restore is the rollback mechanism, not deleting receipts.
 
 ## Reproducible checks

@@ -136,7 +136,7 @@ sealed` through restore).
   output, every listed file must exist with that digest; mismatch is
   `422 checksum_mismatch`), computes the manifest digest, freezes properties, and
   sets `sealed`. Sealing twice is idempotent and returns the same digest. No file
-  may be added or removed after seal; the row lock serialises seal against
+  may be added or removed after seal; the row lock serializes seal against
   concurrent uploads.
 - `seal_mode = idle`: a sweep seals open versions with no write for
   `NOTARX_GENERIC_AUTOSEAL_IDLE` (default 300s, minimum 60s). It exists for
@@ -180,7 +180,7 @@ native_raw_versions(
   INDEX (repository_id, state, sealed_at) )             -- retention, idle sweep
 native_raw_version_properties(
   version_id UUID NOT NULL REFERENCES native_raw_versions(id) ON DELETE CASCADE,
-  repository_id UUID NOT NULL,             -- denormalised for the index
+  repository_id UUID NOT NULL,             -- denormalized for the index
   prop_key VARCHAR(64), prop_value VARCHAR(256),   -- `key` is reserved in MySQL
   PRIMARY KEY (version_id, prop_key),
   INDEX (repository_id, prop_key, prop_value) )
@@ -206,7 +206,7 @@ Every sealed version has a derived manifest, never stored as an object:
  "properties":{...sorted keys}}
 ```
 
-serialised canonically (sorted keys, no insignificant whitespace, UTF-8). The
+serialized canonically (sorted keys, no insignificant whitespace, UTF-8). The
 version digest is `sha256` of that byte string and is the `digest` used by
 promotion pinning, events and provenance (ADR 0021): a release set is identified
 by `(name@version, manifest_digest)`, so any file or property difference yields a
@@ -351,7 +351,7 @@ Versioned and path Raw repositories follow ADR 0029 repository visibility; the R
 - **Digest trust.** `manifest_digest` is always recomputed server-side from the
   stored file digests, never taken from a client; an expected list or checksums
   file only adds a check.
-- **No cross-version leakage.** Promotion and import authorise on source read and
+- **No cross-version leakage.** Promotion and import authorize on source read and
   target write per ADR 0021; the missing-blob rule of the import API applies per
   file.
 - **Properties are untrusted.** Bounded size and charset, escaped in the console,
@@ -372,9 +372,9 @@ Versioned and path Raw repositories follow ADR 0029 repository visibility; the R
   determinism for convenience. A version that is never sealed is readable but
   cannot be promoted, replicated or matched by a rule.
 - `latest` is by seal time, not semver, because a stored sortable semver key
-  would need a normalised column and breaks for non-semver versions; clients may
+  would need a normalized column and breaks for non-semver versions; clients may
   sort the listing. Seal-time ordering is the v1 decision; if semver ordering is requested later it
-  is added as an additive opt-in per-repository normalised column, without changing the default.
+  is added as an additive opt-in per-repository normalized column, without changing the default.
 - ADR 0021 gains a concrete `scope: release` definition for Raw versioned
   repositories and a narrow property matcher; other formats still promote per
   coordinate.
@@ -414,7 +414,7 @@ Every slice is one PR and passes `make test`, `make lint` (includes `architectur
 3b. **Version write API: create, properties, seal.** Milestone: Formats.
    Scope: `PUT .../versions/{version}`, `PUT .../properties`, `POST ...:seal` (expected file list, `checksumsFile`, idempotency), audit rows, properties validation.
    - [ ] `checksumsFile` mismatch is 422; seal twice returns the same digest; seal freezes properties, limits enforced.
-   - [ ] Seal serialises against concurrent upload (race test); permission tests per role (write).
+   - [ ] Seal serializes against concurrent upload (race test); permission tests per role (write).
    - [ ] `make openapi-check`, `make cli-contract-check`, `make test`, `make lint`
    - Depends on: slices 2, 3a.
 4. **Governance, scanning, tombstone and retention by version.** Milestone: Formats.
@@ -473,4 +473,4 @@ Every slice is one PR and passes `make test`, `make lint` (includes `architectur
 
 **Q2 — Should an open version older than a TTL be auto-tombstoned or only reported?** Decision: report only (metric, list filter, console badge); no auto-tombstone, and publishers that never seal use `seal_mode=idle`. Tombstone burns the identifier permanently, so automating it could block a slow upload, while open versions are already isolated from consumers.
 
-**Q3 — Is per-file DELETE in an open version acceptable to compliance users, or offer a strict mode?** Decision: open-version DELETE stays the default, and a `raw_strict` flag fixed at repository creation makes open versions create-only, enforced in the same store-level guard as the layout rule. Immutability is claimed at seal, and the guard already centralises the layout rule, so strict mode is one more condition.
+**Q3 — Is per-file DELETE in an open version acceptable to compliance users, or offer a strict mode?** Decision: open-version DELETE stays the default, and a `raw_strict` flag fixed at repository creation makes open versions create-only, enforced in the same store-level guard as the layout rule. Immutability is claimed at seal, and the guard already centralizes the layout rule, so strict mode is one more condition.

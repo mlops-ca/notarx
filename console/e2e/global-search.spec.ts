@@ -38,12 +38,12 @@ test("contains search resets cursors on mode changes and clear, including a shar
     page.getByText("releases/alpha.bin", { exact: true }),
   ).toBeVisible();
   expect(requests[0].get("match")).toBe("contains");
-  await page.getByRole("button", { name: "加载更多", exact: true }).click();
+  await page.getByRole("button", { name: "Load more", exact: true }).click();
   await expect(
     page.getByText("releases/alpha-2.bin", { exact: true }),
   ).toBeVisible();
   expect(requests[1].get("pageToken")).toBe("contains-page-2");
-  await page.getByText("前缀", { exact: true }).click();
+  await page.getByText("Prefix", { exact: true }).click();
   await expect.poll(() => requests.length).toBe(3);
   expect(requests[2].get("match")).toBe("prefix");
   expect(requests[2].has("pageToken")).toBe(false);
@@ -53,7 +53,7 @@ test("contains search resets cursors on mode changes and clear, including a shar
   await expect(page).toHaveURL(/match=prefix/);
   await page.getByRole("searchbox").fill("");
   await expect(
-    page.getByText("输入关键词开始搜索", { exact: true }),
+    page.getByText("Enter a keyword to search", { exact: true }),
   ).toBeVisible();
   await expect(page).toHaveURL(/match=prefix/);
   expect(requests).toHaveLength(3);
@@ -102,10 +102,10 @@ test("public contains search appends server pages and isolates mode query keys",
   await page.goto("/browse?repository=public-contains&q=alpha&match=contains");
   await expect(page.getByText("alpha.bin", { exact: true })).toBeVisible();
   expect(requests[0].get("match")).toBe("contains");
-  await page.getByRole("button", { name: "加载更多", exact: true }).click();
+  await page.getByRole("button", { name: "Load more", exact: true }).click();
   await expect(page.getByText("alpha-2.bin", { exact: true })).toBeVisible();
   expect(requests[1].get("pageToken")).toBe("public-next");
-  await page.getByText("前缀", { exact: true }).click();
+  await page.getByText("Prefix", { exact: true }).click();
   await expect.poll(() => requests.length).toBe(3);
   expect(requests[2].get("match")).toBe("prefix");
   expect(requests[2].has("pageToken")).toBe(false);
@@ -189,7 +189,7 @@ test("global Maven search groups versions and preserves an exact deep link", asy
   await expect(
     page.getByText("com.example:demo", { exact: true }),
   ).toBeVisible();
-  await expect(page.getByText("2 个版本", { exact: true })).toBeVisible();
+  await expect(page.getByText("2 versions", { exact: true })).toBeVisible();
 
   const repositoryLink = page.getByRole("link", {
     name: "maven-hosted",
@@ -201,8 +201,10 @@ test("global Maven search groups versions and preserves an exact deep link", asy
     "com.example:demo:2.0.0",
   );
 
-  await page.getByRole("button", { name: "展开 com.example:demo" }).click();
-  await expect(page.getByText("版本与构建", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Expand com.example:demo" }).click();
+  await expect(
+    page.getByText("Versions and builds", { exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByRole("button", { name: /1\.0\.0/ }).first(),
   ).toBeVisible();

@@ -1,5 +1,5 @@
 import type { MigrationSource, MigrationSourceStats } from "../../client";
-import type { MigrationMessageKey } from "../../messages/migration.zh-CN";
+import type { MigrationMessageKey } from "../../messages/migration.en-CA";
 import { LocalizedError, type Translator } from "../../messages/translate";
 import { formatBytes } from "../../lib/format";
 

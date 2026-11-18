@@ -57,7 +57,7 @@ function Harness() {
   return (
     <>
       <button type="button" onClick={() => setOpen(true)}>
-        解析顺序
+        Resolution order
       </button>
       {open && (
         <GroupResolutionDialog
@@ -91,17 +91,27 @@ describe("GroupResolutionDialog", () => {
     const user = userEvent.setup();
     getResolution.mockResolvedValue({ data: plan } as never);
     showDialog();
-    await user.click(screen.getByRole("button", { name: "解析顺序" }));
+    await user.click(screen.getByRole("button", { name: "Resolution order" }));
     const rows = await screen.findAllByTestId("resolution-member");
     expect(
       within(rows[0]).getByRole("link", { name: "hosted-from-server" }),
     ).toHaveAttribute("href", `/repositories/${plan.members[0].repositoryId}`);
-    expect(within(rows[0]).getByText("配置位置 4")).toBeInTheDocument();
-    expect(within(rows[1]).getByText("配置位置 1")).toBeInTheDocument();
     expect(
-      screen.getByText("1 个配置成员当前未参与解析。"),
+      within(rows[0]).getByText("Configured position 4"),
     ).toBeInTheDocument();
-    expect(screen.getByText(/这里展示候选顺序/)).toBeInTheDocument();
+    expect(
+      within(rows[1]).getByText("Configured position 1"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "1 configured member(s) are currently excluded from resolution.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Hosted members come first; members of the same type follow their configured positions\. These are candidates, while actual hits depend on the artifact, read permissions and protocol rules\./,
+      ),
+    ).toBeInTheDocument();
     expect(getResolution).toHaveBeenCalledWith({
       path: { groupId: group.id },
       signal: expect.any(AbortSignal),
@@ -114,12 +124,12 @@ describe("GroupResolutionDialog", () => {
       .mockRejectedValueOnce(new Error("resolution unavailable"))
       .mockResolvedValueOnce({ data: plan } as never);
     showDialog();
-    await user.click(screen.getByRole("button", { name: "解析顺序" }));
+    await user.click(screen.getByRole("button", { name: "Resolution order" }));
     expect(
       await screen.findByText("resolution unavailable"),
     ).toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /重试/ }));
+    await user.click(screen.getByRole("button", { name: /Retry/ }));
     expect(await screen.findByText("hosted-from-server")).toBeInTheDocument();
   });
 
@@ -129,9 +139,9 @@ describe("GroupResolutionDialog", () => {
       .mockResolvedValueOnce({ data: plan } as never)
       .mockRejectedValueOnce(new Error("refresh unavailable"));
     showDialog();
-    await user.click(screen.getByRole("button", { name: "解析顺序" }));
+    await user.click(screen.getByRole("button", { name: "Resolution order" }));
     await screen.findByText("hosted-from-server");
-    await user.click(screen.getByRole("button", { name: /刷新/ }));
+    await user.click(screen.getByRole("button", { name: /Refresh/ }));
     expect(await screen.findByText("refresh unavailable")).toBeInTheDocument();
     expect(screen.getByText("hosted-from-server")).toBeInTheDocument();
   });
@@ -142,8 +152,8 @@ describe("GroupResolutionDialog", () => {
       data: { ...plan, members: [] },
     } as never);
     showDialog();
-    await user.click(screen.getByRole("button", { name: "解析顺序" }));
-    expect(await screen.findByText("暂无可参与解析的成员")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Resolution order" }));
+    expect(await screen.findByText("No eligible members")).toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
@@ -159,9 +169,9 @@ describe("GroupResolutionDialog", () => {
       )
       .mockResolvedValueOnce({ data: plan } as never);
     showDialog();
-    await user.click(screen.getByRole("button", { name: "解析顺序" }));
-    await user.click(screen.getByRole("button", { name: "关闭" }));
-    await user.click(screen.getByRole("button", { name: "解析顺序" }));
+    await user.click(screen.getByRole("button", { name: "Resolution order" }));
+    await user.click(screen.getAllByRole("button", { name: "Close" })[0]);
+    await user.click(screen.getByRole("button", { name: "Resolution order" }));
     await screen.findByText("hosted-from-server");
     finish?.({ data: { ...plan, members: [] } } as never);
     await waitFor(() =>

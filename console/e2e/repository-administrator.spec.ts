@@ -140,14 +140,14 @@ async function mockTieredRepository(
 }
 
 const managementTabs = [
-  "访问授权",
-  "保留策略",
-  "安全准入",
-  "容量",
-  "晋升 / 复制",
-  "生命周期任务",
-  "墓碑",
-  "基本设置",
+  "Access grants",
+  "Retention",
+  "Security admission",
+  "Capacity",
+  "Promote / replicate",
+  "Lifecycle jobs",
+  "Tombstones",
+  "General",
 ];
 
 test("a repository administrator manages its repository without platform navigation", async ({
@@ -166,21 +166,30 @@ test("a repository administrator manages its repository without platform navigat
   // Management lives in the governance, distribution and settings groups;
   // without a write grant the artifacts group offers no publication.
   expect(await repositoryNavigationState(page)).toEqual({
-    groups: ["制品", "治理与安全", "分发", "设置"],
-    tasks: ["浏览", "使用统计"],
+    groups: ["Artifacts", "Governance", "Distribution", "Settings"],
+    tasks: ["Browse", "Usage"],
   });
 
-  for (const platformLink of ["访问控制", "API 密钥", "用户", "审计日志"]) {
+  for (const platformLink of [
+    "Access control",
+    "API keys",
+    "User",
+    "Audit log",
+  ]) {
     await expect(
       page.getByRole("link", { name: platformLink, exact: true }),
     ).toHaveCount(0);
   }
-  await expect(page.getByRole("button", { name: /新建仓库/ })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: /New repository/ }),
+  ).toHaveCount(0);
 
-  await openRepositoryTask(page, "治理与安全", "访问授权");
+  await openRepositoryTask(page, "Governance", "Access grants");
   await expect(page).toHaveURL(/\?tab=grants$/);
-  await expect(page.getByText("暂无授权规则", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: /添加授权/ })).toBeVisible();
+  await expect(
+    page.getByText("No access grants", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: /Add grant/ })).toBeVisible();
 });
 
 test("a reader keeps only the read surfaces and cannot reach a management tab by URL", async ({
@@ -192,7 +201,7 @@ test("a reader keeps only the read surfaces and cannot reach a management tab by
   await page.goto(`/repositories/${repositoryId}?tab=settings`);
 
   await expect(
-    page.getByRole("tab", { name: "制品", exact: true }),
+    page.getByRole("tab", { name: "Artifacts", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
   await expect(page).not.toHaveURL(/tab=settings/);
   for (const label of managementTabs) {
@@ -200,10 +209,10 @@ test("a reader keeps only the read surfaces and cannot reach a management tab by
       page.getByRole("tab", { name: label, exact: true }),
     ).toHaveCount(0);
   }
-  await expect(page.getByRole("tab", { name: "使用统计" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Usage" })).toBeVisible();
   expect(await repositoryNavigationState(page)).toEqual({
-    groups: ["制品"],
-    tasks: ["浏览", "使用统计"],
+    groups: ["Artifacts"],
+    tasks: ["Browse", "Usage"],
   });
 });
 
@@ -229,11 +238,13 @@ test("a member without grants is told where repository access comes from", async
 
   await expect(
     page.getByText(
-      "你还没有任何仓库授权。仓库权限由平台管理员按仓库分配；请联系管理员为你的账号授权。",
+      "You have no repository grants yet. A platform administrator assigns access repository by repository; ask one to grant yours.",
       { exact: true },
     ),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: /新建仓库/ })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: /New repository/ }),
+  ).toHaveCount(0);
 });
 
 test("a platform administrator keeps every tab without repository grants", async ({
@@ -245,9 +256,9 @@ test("a platform administrator keeps every tab without repository grants", async
   await page.goto(`/repositories/${repositoryId}`);
 
   expect((await repositoryNavigationState(page)).groups).toEqual([
-    "制品",
-    "治理与安全",
-    "分发",
-    "设置",
+    "Artifacts",
+    "Governance",
+    "Distribution",
+    "Settings",
   ]);
 });

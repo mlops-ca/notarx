@@ -30,7 +30,7 @@ afterEach(() => {
 describe("RepositorySettingsTab", () => {
   it("labels the egress protocol in the active locale", async () => {
     const user = userEvent.setup();
-    localStorage.setItem("ag.console.locale", "en-US");
+    localStorage.setItem("ag.console.locale", "en-CA");
 
     render(
       <PreferencesProvider>

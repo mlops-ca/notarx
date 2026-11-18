@@ -111,7 +111,9 @@ describe("PublicBrowsePage APT browse", () => {
     );
     fireEvent.click(await screen.findByRole("link", { name: /nuget-public/ }));
     expect(
-      await screen.findByText("当前 Console 尚未支持 nuget 格式"),
+      await screen.findByText(
+        "This Console does not support the nuget format yet",
+      ),
     ).toBeInTheDocument();
     expect(mockSearchRepositoryArtifacts).not.toHaveBeenCalled();
   });
@@ -145,12 +147,18 @@ describe("PublicBrowsePage APT browse", () => {
       </MemoryRouter>,
     );
     expect(
-      await screen.findByText("当前 Console 尚未支持 nuget 格式"),
+      await screen.findByText(
+        "This Console does not support the nuget format yet",
+      ),
     ).toBeInTheDocument();
     expect(mockSearchRepositoryArtifacts).not.toHaveBeenCalled();
-    expect(screen.queryByText("Raw 仓库地址")).not.toBeInTheDocument();
     expect(
-      screen.queryByPlaceholderText("坐标、路径或名称前缀（可选）"),
+      screen.queryByText("Raw repository address"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByPlaceholderText(
+        "Coordinate, path, or name prefix (optional)",
+      ),
     ).not.toBeInTheDocument();
   });
 
@@ -172,7 +180,9 @@ describe("PublicBrowsePage APT browse", () => {
       </MemoryRouter>,
     );
 
-    const title = await screen.findByText("暂无公开仓库", { exact: true });
+    const title = await screen.findByText("No public repositories", {
+      exact: true,
+    });
     expect(document.querySelector(".ag-public-browse-page")).toHaveClass(
       "w-full",
       "max-w-[1440px]",
@@ -183,7 +193,7 @@ describe("PublicBrowsePage APT browse", () => {
     expect(title.closest(".ant-empty")).toHaveClass("ag-empty-state");
     expect(title.closest(".ant-empty")?.querySelector("img")).toBeNull();
     expect(
-      screen.queryByPlaceholderText("搜索仓库名称或格式"),
+      screen.queryByPlaceholderText("Search repository name or format"),
     ).not.toBeInTheDocument();
     expect(screen.getAllByText("0", { selector: ".text-2xl" })).toHaveLength(2);
   });
@@ -208,10 +218,10 @@ describe("PublicBrowsePage APT browse", () => {
     );
 
     expect(
-      await screen.findByRole("link", { name: "进入管理端" }),
+      await screen.findByRole("link", { name: "Open management console" }),
     ).toHaveAttribute("href", "/");
     expect(
-      screen.queryByRole("link", { name: "管理登录" }),
+      screen.queryByRole("link", { name: "Management sign in" }),
     ).not.toBeInTheDocument();
   });
 
@@ -265,11 +275,11 @@ describe("PublicBrowsePage APT browse", () => {
       </MemoryRouter>,
     );
 
-    expect((await screen.findAllByText("APT 路径")).length).toBeGreaterThan(0);
-    expect(await screen.findByText("仓库元数据")).toBeInTheDocument();
-    expect(screen.getAllByText("首次缓存").length).toBeGreaterThan(0);
-    expect(screen.getByText("上游地址")).toBeInTheDocument();
-    expect(screen.getByText("注册 APT 软件源")).toBeInTheDocument();
+    expect((await screen.findAllByText("APT path")).length).toBeGreaterThan(0);
+    expect(await screen.findByText("Repository metadata")).toBeInTheDocument();
+    expect(screen.getAllByText("First cached").length).toBeGreaterThan(0);
+    expect(screen.getByText("Upstream URL")).toBeInTheDocument();
+    expect(screen.getByText("Register an APT source")).toBeInTheDocument();
     expect(mockSearchRepositoryArtifacts).toHaveBeenCalledWith({
       path: { repositoryId },
       query: { q: undefined, pageSize: 100, match: "contains" },
@@ -319,16 +329,20 @@ describe("PublicBrowsePage APT browse", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: "查找并使用可信的公开制品",
+        name: "Discover and consume trusted public artifacts",
       }),
     ).toBeInTheDocument();
-    expect(screen.getByText("公开只读")).toBeInTheDocument();
+    expect(screen.getByText("Public read-only")).toBeInTheDocument();
     // The catalog lands a scheduler tick after the static introduction.
-    expect(await screen.findByText(/3 个公开来源/)).toBeInTheDocument();
-    expect(screen.getByText(/3 种制品格式/)).toBeInTheDocument();
-    expect(screen.getByText("管理操作需要登录")).toBeInTheDocument();
+    expect(await screen.findByText(/3 public sources/)).toBeInTheDocument();
+    expect(screen.getByText(/3 artifact formats/)).toBeInTheDocument();
+    expect(
+      screen.getByText("Management actions require sign-in"),
+    ).toBeInTheDocument();
 
-    const search = screen.getByPlaceholderText("搜索仓库名称或格式");
+    const search = screen.getByPlaceholderText(
+      "Search repository name or format",
+    );
     fireEvent.change(search, { target: { value: "maven" } });
     expect(screen.getByText("maven-public")).toBeInTheDocument();
     expect(screen.queryByText("platform-images")).not.toBeInTheDocument();
@@ -341,9 +355,8 @@ describe("PublicBrowsePage APT browse", () => {
 
   it("shows and searches Raw files by their readable path", async () => {
     const repositoryId = "33333333-3333-4333-8333-333333333333";
-    const readable = "ChatGPT Image 2026年8月19日 (2).png";
-    const canonical =
-      "ChatGPT%20Image%202026%E5%B9%B48%E6%9C%8819%E6%97%A5%20%282%29.png";
+    const readable = "Écran capturé 2026-08-19 (2).png";
+    const canonical = "%C3%89cran%20captur%C3%A9%202026-08-19%20%282%29.png";
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -390,7 +403,7 @@ describe("PublicBrowsePage APT browse", () => {
 
     expect(await screen.findByText(readable)).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: `复制 ${readable}` }),
+      screen.getByRole("button", { name: `Copy ${readable}` }),
     ).toBeInTheDocument();
     expect(screen.queryByText(canonical)).not.toBeInTheDocument();
     expect(mockSearchRepositoryArtifacts).toHaveBeenLastCalledWith({

@@ -7,9 +7,9 @@ import type {
   NexusMigrationScanFailure,
 } from "../../client";
 import { LocalizedError, type Translator } from "../../messages/translate";
-import type { NexusBatchMessageKey } from "../../messages/nexus-batch.zh-CN";
-import type { NexusScheduleMessageKey } from "../../messages/nexus-schedule.zh-CN";
-import type { MigrationMessageKey } from "../../messages/migration.zh-CN";
+import type { NexusBatchMessageKey } from "../../messages/nexus-batch.en-CA";
+import type { NexusScheduleMessageKey } from "../../messages/nexus-schedule.en-CA";
+import type { MigrationMessageKey } from "../../messages/migration.en-CA";
 
 export type BatchDraft = {
   sourceId: string;

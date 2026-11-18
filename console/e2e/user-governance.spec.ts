@@ -51,15 +51,17 @@ test("mandatory password change keeps the restricted session in memory", async (
   await page.goto("/login");
   const config = (await (await oidcConfig).json()) as { enabled: boolean };
   if (config.enabled) {
-    await expect(page.getByText("企业登录", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("Enterprise SSO", { exact: true }),
+    ).toBeVisible();
   }
   const passwordMode = page.getByRole("radio", {
-    name: /账号密码/,
+    name: /Username & Password/,
   });
-  await page.getByText("账号密码", { exact: true }).click();
+  await page.getByText("Username & Password", { exact: true }).click();
   await expect(passwordMode).toBeChecked();
-  await page.getByLabel("用户名", { exact: true }).fill(username);
-  const passwordInput = page.getByLabel("密码", { exact: true });
+  await page.getByLabel("Username", { exact: true }).fill(username);
+  const passwordInput = page.getByLabel("Password", { exact: true });
   await passwordInput.fill(temporaryPassword);
 
   const [loginResponse] = await Promise.all([
@@ -78,13 +80,17 @@ test("mandatory password change keeps the restricted session in memory", async (
   };
   expect(restricted.mustChangePassword).toBe(true);
 
-  await expect(page.getByText("更新初始密码", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Change initial password", { exact: true }),
+  ).toBeVisible();
   expect(
     await page.evaluate(() => localStorage.getItem("ag.console.token")),
   ).toBeNull();
 
-  await page.getByLabel("新密码", { exact: true }).fill(personalPassword);
-  const confirmPassword = page.getByLabel("确认新密码", { exact: true });
+  await page.getByLabel("New password", { exact: true }).fill(personalPassword);
+  const confirmPassword = page.getByLabel("Confirm new password", {
+    exact: true,
+  });
   await confirmPassword.fill(personalPassword);
   const [passwordResponse] = await Promise.all([
     page.waitForResponse(

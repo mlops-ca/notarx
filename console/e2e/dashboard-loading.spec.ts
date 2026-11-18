@@ -42,11 +42,10 @@ for (const width of [1440, 390]) {
   }, info) => {
     await page.setViewportSize({ width, height: 1000 });
     const errors = await setup(page);
-    const en = width === 390;
-    await page.addInitScript((en) => {
-      localStorage.setItem("ag.console.theme", en ? "light" : "dark");
-      localStorage.setItem("ag.console.locale", en ? "en-US" : "zh-CN");
-    }, en);
+    await page.addInitScript(() => {
+      localStorage.setItem("ag.console.theme", "light");
+      localStorage.setItem("ag.console.locale", "en-CA");
+    });
     await page.route("**/api/v2/groups**", (route) =>
       route.fulfill({ json: { items: [] } }),
     );
@@ -88,14 +87,14 @@ for (const width of [1440, 390]) {
     });
     await expect(rows).toHaveCount(3);
     await expect(rows.nth(0).locator(".ag-activity-actor")).toHaveText(
-      en ? "Anonymous" : "匿名",
+      "Anonymous",
     );
     await expect(rows.nth(0).locator(".ag-activity-actor")).toHaveAttribute(
       "title",
       "anonymous",
     );
     await expect(rows.nth(1).locator(".ag-activity-actor")).toHaveText(
-      en ? "Not recorded" : "未记录",
+      "Not recorded",
     );
     await expect(rows.nth(1)).toContainText("future.operation");
     await expect(rows.nth(1)).toContainText("future_outcome");
@@ -104,7 +103,7 @@ for (const width of [1440, 390]) {
     await expect(rows.nth(2)).toHaveAttribute("data-denied", "true");
     await expect(
       auditCard.getByRole("link", {
-        name: en ? "View all →" : "查看全部 →",
+        name: "View all →",
         exact: true,
       }),
     ).toHaveAttribute("href", "/audits");
@@ -149,16 +148,16 @@ for (const width of [1440, 390]) {
     await page.getByTestId("storage-by-format-chart").scrollIntoViewIfNeeded();
     await expect(page.getByTestId("ant-design-pie-ready")).toBeVisible();
     await expect(
-      page.getByText("正在加载分组…", { exact: true }),
+      page.getByText("Loading groups…", { exact: true }),
     ).toBeVisible();
     await expect(
-      page.getByText("正在加载审计事件…", { exact: true }),
+      page.getByText("Loading audit events…", { exact: true }),
     ).toBeVisible();
     const stack = page.locator(".ag-page-stack").filter({
-      has: page.getByRole("heading", { name: "总览", exact: true }),
+      has: page.getByRole("heading", { name: "Overview", exact: true }),
     });
     const metrics = await stack
-      .getByRole("group", { name: "页面摘要" })
+      .getByRole("group", { name: "Page summary" })
       .boundingBox();
     const primary = await stack
       .locator(":scope > .ag-page-primary")
@@ -195,7 +194,9 @@ for (const width of [1440, 390]) {
       });
     }
     release();
-    await expect(page.getByText("暂无审计记录", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("No audit records", { exact: true }),
+    ).toBeVisible();
   });
 }
 
@@ -228,8 +229,8 @@ test("a failed groups source preserves storage and retries only groups", async (
   await expect(page.getByText("synthetic groups unavailable")).toBeVisible();
   await page.getByTestId("storage-by-format-chart").scrollIntoViewIfNeeded();
   await expect(page.getByTestId("ant-design-pie-ready")).toBeVisible();
-  await page.getByRole("button", { name: /重试/ }).click();
-  await expect(page.getByText("共 0 个成员引用")).toBeVisible();
+  await page.getByRole("button", { name: /Retry/ }).click();
+  await expect(page.getByText("0 member references")).toBeVisible();
   expect({ groups, overview, audits }).toEqual({
     groups: 3,
     overview: 1,

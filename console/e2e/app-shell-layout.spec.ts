@@ -66,7 +66,7 @@ test("desktop navigation collapses within one aligned and stable rail", async ({
   await mockDefaultSiteSettings(page);
   await page.addInitScript(() => {
     localStorage.setItem("ag.console.theme", "dark");
-    localStorage.setItem("ag.console.locale", "zh-CN");
+    localStorage.setItem("ag.console.locale", "en-CA");
     localStorage.removeItem("ag:sider-collapsed");
   });
   await page.goto("/search");
@@ -79,7 +79,7 @@ test("desktop navigation collapses within one aligned and stable rail", async ({
   expect(expanded.groupCount).toBe(3);
   expect(expanded.itemCount).toBeGreaterThan(8);
 
-  await page.getByRole("button", { name: "收起导航" }).click();
+  await page.getByRole("button", { name: "Collapse navigation" }).click();
   await expect(sider).toHaveAttribute("data-collapsed", "true");
 
   const motionSamples = await sider.evaluate(async (element) => {
@@ -150,7 +150,7 @@ test("desktop navigation collapses within one aligned and stable rail", async ({
     });
   }
 
-  await page.getByRole("button", { name: "展开导航" }).click();
+  await page.getByRole("button", { name: "Expand navigation" }).click();
   await expect
     .poll(async () => (await shellGeometry(page)).siderWidth)
     .toBe(224);
@@ -162,7 +162,7 @@ test("desktop navigation collapses within one aligned and stable rail", async ({
 
   await page.getByRole("button", { name: /notarx Dark/ }).click();
   await page.getByRole("menuitem", { name: /notarx Light/ }).click();
-  await page.getByRole("button", { name: "收起导航" }).click();
+  await page.getByRole("button", { name: "Collapse navigation" }).click();
   await expect
     .poll(async () => (await shellGeometry(page)).siderWidth)
     .toBe(80);
@@ -186,7 +186,7 @@ for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.addInitScript(() =>
-      localStorage.setItem("ag.console.locale", "zh-CN"),
+      localStorage.setItem("ag.console.locale", "en-CA"),
     );
     const gateway = await mockGateway(page, { authenticated: true });
     await page.goto("/repositories");
@@ -236,7 +236,7 @@ for (const width of [1440, 390]) {
       },
     );
     await page.keyboard.press("ControlOrMeta+k");
-    const input = page.getByRole("combobox", { name: "命令面板" });
+    const input = page.getByRole("combobox", { name: "Command palette" });
     const alert = page.getByRole("alert");
     await expect(alert).toContainText("Repository list unavailable");
     const errorBounds = await alert.boundingBox();
@@ -248,7 +248,7 @@ for (const width of [1440, 390]) {
         fullPage: true,
       });
     }
-    await page.getByRole("button", { name: /重\s*试/ }).click();
+    await page.getByRole("button", { name: /Retry/ }).click();
     await expect(alert).toHaveCount(0);
     await expect.poll(() => tokens).toEqual([null, null, null, "opaque-next"]);
     await input.press("ArrowDown");
@@ -305,21 +305,21 @@ test("mobile navigation stays closed on a history return after its footer link",
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.addInitScript(() =>
-    localStorage.setItem("ag.console.locale", "zh-CN"),
+    localStorage.setItem("ag.console.locale", "en-CA"),
   );
   const gateway = await mockGateway(page, { authenticated: true });
   await page.goto("/repositories");
   await expect(page.getByText("cargo-hosted", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "打开导航" }).click();
+  await page.getByRole("button", { name: "Open navigation" }).click();
   const drawer = page.getByRole("dialog");
   await expect(drawer).toBeVisible();
-  await drawer.getByRole("link", { name: /当前节点/ }).click();
+  await drawer.getByRole("link", { name: /Connected node/ }).click();
   await expect(page).toHaveURL(/\/system\?tab=diagnostics$/);
   await expect(drawer).toBeHidden();
   await page.goBack();
   await expect(page).toHaveURL(/\/repositories$/);
   await expect(drawer).toBeHidden();
-  await page.getByRole("button", { name: "打开导航" }).click();
+  await page.getByRole("button", { name: "Open navigation" }).click();
   await expect(drawer).toBeVisible();
   const bounds = await drawer.boundingBox();
   expect(bounds!.x).toBeGreaterThanOrEqual(0);

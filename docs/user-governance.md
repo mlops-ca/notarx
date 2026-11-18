@@ -36,7 +36,7 @@ process longer inputs safely.
 
 All `/api/v2/users` operations require an administrator identity.
 
-| Operation | Behavior |
+| Operation | Behaviour |
 | --- | --- |
 | `GET /users` | Server-side search by username, display name, or email; role/state filters; offset pagination |
 | `POST /users` | Creates a profile, role, initial password, and optional mandatory password change |
@@ -66,7 +66,7 @@ Administrators can link and unlink identities explicitly. Runtime OIDC settings
 can also enable just-in-time provisioning, select its default role, and allow a
 verified `email` claim to link an existing account. Email linking requires
 `email_verified=true` and rejects ambiguous matches. With JIT disabled, an
-unlinked subject retains the legacy external-principal behavior and is not
+unlinked subject retains the legacy external-principal behaviour and is not
 silently attached to a local account.
 
 ## Lockout Policy
@@ -119,5 +119,5 @@ OIDC back-channel logout and identity-provider-initiated logout are not yet
 supported. Unlinked external OIDC principals retain stateless browser sessions
 and therefore do not appear in a local account's session inventory. Signed
 sessions issued before server-side session identifiers were introduced remain
-compatible until their normal expiry, but still honor account state and session
+compatible until their normal expiry, but still honour account state and session
 version checks.

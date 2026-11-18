@@ -52,11 +52,13 @@ it("shows an unavailable format instead of an empty repository", async () => {
       </PreferencesProvider>
     </TestQueryProvider>,
   );
-  expect(await screen.findByText("制品浏览功能未启用")).toBeInTheDocument();
   expect(
-    screen.getByText("当前 Console 尚未支持 nuget 格式"),
+    await screen.findByText("Artifact browser is unavailable"),
   ).toBeInTheDocument();
-  expect(screen.queryByText("暂无制品")).not.toBeInTheDocument();
+  expect(
+    screen.getByText("This Console does not support the nuget format yet"),
+  ).toBeInTheDocument();
+  expect(screen.queryByText("No artifacts")).not.toBeInTheDocument();
   expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
   expect(mockSearchRepositoryArtifacts).not.toHaveBeenCalled();
 });
@@ -98,7 +100,7 @@ it("does not retain another repository's rows while its next scope is loading", 
   );
   expect(screen.queryByText("private/alpha.deb")).not.toBeInTheDocument();
   await act(async () => answer({ data: { items: [] } } as never));
-  expect(await screen.findByText("暂无制品")).toBeInTheDocument();
+  expect(await screen.findByText("No artifacts")).toBeInTheDocument();
 });
 
 it("drops retained rows when the identity cache is cleared", async () => {
@@ -129,7 +131,7 @@ it("drops retained rows when the identity cache is cleared", async () => {
   );
   expect(screen.queryByText("private/alpha.deb")).not.toBeInTheDocument();
   await act(async () => answer({ data: { items: [] } } as never));
-  await screen.findByText("暂无制品");
+  await screen.findByText("No artifacts");
 });
 
 it("searches repository path fragments with contains", async () => {
@@ -144,9 +146,9 @@ it("searches repository path fragments with contains", async () => {
       </PreferencesProvider>
     </TestQueryProvider>,
   );
-  await screen.findByText("暂无制品");
+  await screen.findByText("No artifacts");
   await user.type(screen.getByRole("searchbox"), "hello");
-  await user.click(screen.getByRole("button", { name: /^搜\s*索$/ }));
+  await user.click(screen.getByRole("button", { name: /^Search$/ }));
   await waitFor(() =>
     expect(mockSearchRepositoryArtifacts).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -186,14 +188,14 @@ it("keeps the last successful rows and retry after a same-repository search fail
   fireEvent.change(screen.getByRole("searchbox"), {
     target: { value: "beta" },
   });
-  fireEvent.click(screen.getByRole("button", { name: /^搜\s*索$/ }));
+  fireEvent.click(screen.getByRole("button", { name: /^Search$/ }));
   await screen.findByText("search failed");
   expect(screen.getByText("pool/alpha.deb")).toBeInTheDocument();
-  expect(screen.queryByText("暂无制品")).not.toBeInTheDocument();
+  expect(screen.queryByText("No artifacts")).not.toBeInTheDocument();
   expect(
-    screen.queryByRole("button", { name: "加载更多" }),
+    screen.queryByRole("button", { name: "Load more" }),
   ).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: /重试/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Retry/ }));
   await screen.findByText("pool/beta.deb");
   expect(screen.queryByText("pool/alpha.deb")).not.toBeInTheDocument();
   expect(mockSearchRepositoryArtifacts.mock.calls[2][0]?.query).toEqual({
@@ -230,9 +232,9 @@ it("retains every visible page through a failed first-page refresh and recovers 
     </TestQueryProvider>,
   );
   await screen.findByText("pool/alpha.deb");
-  fireEvent.click(screen.getByRole("button", { name: "加载更多" }));
+  fireEvent.click(screen.getByRole("button", { name: "Load more" }));
   await screen.findByText("pool/alpha-2.deb");
-  fireEvent.click(screen.getByRole("button", { name: /^搜\s*索$/ }));
+  fireEvent.click(screen.getByRole("button", { name: /^Search$/ }));
   await waitFor(() =>
     expect(mockSearchRepositoryArtifacts).toHaveBeenCalledTimes(3),
   );
@@ -244,7 +246,7 @@ it("retains every visible page through a failed first-page refresh and recovers 
   await screen.findByText("refresh failed");
   expect(screen.getByText("pool/alpha.deb")).toBeInTheDocument();
   expect(screen.getByText("pool/alpha-2.deb")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: /重试/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Retry/ }));
   await screen.findByText("pool/reloaded.deb");
   expect(screen.queryByText("pool/alpha.deb")).not.toBeInTheDocument();
   expect(screen.queryByText("pool/alpha-2.deb")).not.toBeInTheDocument();
@@ -279,7 +281,7 @@ it("continues the submitted query even while a different keyword is only a draft
   fireEvent.change(screen.getByRole("searchbox"), {
     target: { value: "beta" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "加载更多" }));
+  fireEvent.click(screen.getByRole("button", { name: "Load more" }));
   await screen.findByText("pool/alpha-2.deb");
   expect(mockSearchRepositoryArtifacts.mock.calls[1][0]?.query).toEqual({
     q: "pool/alpha",
@@ -320,7 +322,7 @@ describe("RepositoryArtifactsTab APT browse", () => {
 
     expect(await screen.findByText(path)).toBeInTheDocument();
     expect(
-      screen.getByPlaceholderText("按 dists/ 或 pool/ 路径过滤…"),
+      screen.getByPlaceholderText("Filter by dists/ or pool/ path…"),
     ).toBeInTheDocument();
     expect(mockSearchRepositoryArtifacts).toHaveBeenCalledWith({
       signal: expect.any(AbortSignal),
@@ -329,9 +331,9 @@ describe("RepositoryArtifactsTab APT browse", () => {
     });
 
     await user.click(screen.getByText(path));
-    expect(await screen.findByText("软件包对象")).toBeInTheDocument();
-    expect(screen.getByText("上游地址")).toBeInTheDocument();
-    expect(screen.queryByText("删除文件")).not.toBeInTheDocument();
+    expect(await screen.findByText("Package object")).toBeInTheDocument();
+    expect(screen.getByText("Upstream URL")).toBeInTheDocument();
+    expect(screen.queryByText("Delete file")).not.toBeInTheDocument();
   });
 
   it("presents only the current hosted signed snapshot as published content", async () => {
@@ -370,11 +372,11 @@ describe("RepositoryArtifactsTab APT browse", () => {
 
     expect(await screen.findByText(path)).toBeInTheDocument();
     await user.click(screen.getByText(path));
-    expect((await screen.findAllByText("已发布")).length).toBeGreaterThan(0);
-    expect(screen.getByText("APT 资产类型")).toBeInTheDocument();
-    expect(screen.queryByText("首次缓存")).not.toBeInTheDocument();
-    expect(screen.queryByText("上游地址")).not.toBeInTheDocument();
-    expect(screen.queryByText("最近缓存")).not.toBeInTheDocument();
+    expect((await screen.findAllByText("Published")).length).toBeGreaterThan(0);
+    expect(screen.getByText("APT asset type")).toBeInTheDocument();
+    expect(screen.queryByText("First cached")).not.toBeInTheDocument();
+    expect(screen.queryByText("Upstream URL")).not.toBeInTheDocument();
+    expect(screen.queryByText("Last cached")).not.toBeInTheDocument();
   });
 });
 
@@ -409,7 +411,7 @@ describe("RepositoryArtifactsTab Raw browse", () => {
         },
       }),
     );
-    expect(screen.getByPlaceholderText("搜索 GAV 坐标…")).toHaveValue(
+    expect(screen.getByPlaceholderText("Search GAV coordinates…")).toHaveValue(
       coordinate,
     );
   });
@@ -450,16 +452,16 @@ describe("RepositoryArtifactsTab Raw browse", () => {
       </TestQueryProvider>,
     );
 
-    await user.click(screen.getByText("目录"));
-    expect(await screen.findByText("制品目录")).toBeInTheDocument();
+    await user.click(screen.getByText("Directory"));
+    expect(await screen.findByText("Artifact directory")).toBeInTheDocument();
     expect(screen.getByText("docs")).toBeInTheDocument();
     expect(mockBrowseRepository).toHaveBeenCalledWith({
       path: { repositoryId: rawRepository.id },
       query: { pageSize: 50 },
     });
 
-    await user.click(screen.getByText("列表"));
-    expect(screen.getByPlaceholderText("搜索路径…")).toBeInTheDocument();
+    await user.click(screen.getByText("List"));
+    expect(screen.getByPlaceholderText("Search paths…")).toBeInTheDocument();
   });
 
   it("does not offer Raw upload without repository write access", async () => {
@@ -480,17 +482,19 @@ describe("RepositoryArtifactsTab Raw browse", () => {
         </PreferencesProvider>
       </TestQueryProvider>,
     );
-    expect(await screen.findByPlaceholderText("搜索路径…")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "上传" }),
+      await screen.findByPlaceholderText("Search paths…"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Upload" }),
     ).not.toBeInTheDocument();
   });
 
   it("shows a readable file path while preserving the canonical coordinate", async () => {
     const user = userEvent.setup();
     const encodedPath =
-      "ChatGPT%20Image%202026%E5%B9%B48%E6%9C%8819%E6%97%A5%2013_56_07%20%282%29.png";
-    const readablePath = "ChatGPT Image 2026年8月19日 13_56_07 (2).png";
+      "%C3%89cran%20captur%C3%A9%202026-08-19%2013_56_07%20%282%29.png";
+    const readablePath = "Écran capturé 2026-08-19 13_56_07 (2).png";
     const rawRepository: Repository = {
       ...repository,
       id: "33333333-3333-4333-8333-333333333333",
@@ -529,8 +533,8 @@ describe("RepositoryArtifactsTab Raw browse", () => {
     await user.click(screen.getByText(readablePath));
     expect(await screen.findByText("image/png")).toBeInTheDocument();
 
-    await user.type(screen.getByPlaceholderText("搜索路径…"), readablePath);
-    await user.click(screen.getByRole("button", { name: /搜\s*索/ }));
+    await user.type(screen.getByPlaceholderText("Search paths…"), readablePath);
+    await user.click(screen.getByRole("button", { name: /Search/ }));
     await waitFor(() =>
       expect(mockSearchRepositoryArtifacts).toHaveBeenLastCalledWith({
         signal: expect.any(AbortSignal),
@@ -634,9 +638,9 @@ it("opens the directory for Raw Proxy and keeps cached assets read-only", async 
   );
   await screen.findByDisplayValue(asset.coordinate);
   expect(
-    screen.queryByRole("button", { name: "删除文件" }),
+    screen.queryByRole("button", { name: "Delete file" }),
   ).not.toBeInTheDocument();
-  await user.click(screen.getByText("目录"));
+  await user.click(screen.getByText("Directory"));
   expect(await screen.findByText("readme.txt")).toBeInTheDocument();
-  expect(screen.getByText("只显示已缓存资产")).toBeInTheDocument();
+  expect(screen.getByText("Cached assets only")).toBeInTheDocument();
 });

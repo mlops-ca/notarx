@@ -1,5 +1,4 @@
-import type { NexusBatchMessageKey } from "./nexus-batch.zh-CN";
-export const nexusBatchEnUS: Record<NexusBatchMessageKey, string> = {
+export const nexusBatchEnCA = {
   "nexusBatch.sourceView": "Connections and mappings",
   "nexusBatch.batchView": "Batches and acceptance",
   "nexusBatch.title": "Nexus migration batches",
@@ -204,3 +203,5 @@ export const nexusBatchEnUS: Record<NexusBatchMessageKey, string> = {
   "nexusBatch.unsupportedReason":
     "The entry does not meet its native format's complete migration requirements. It remains unsupported and needs separate handling.",
 };
+
+export type NexusBatchMessageKey = keyof typeof nexusBatchEnCA;

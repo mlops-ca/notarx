@@ -205,7 +205,7 @@ test enforces the avoid lists per locale.
 ### Documentation policy
 
 - English (`en-CA` spelling) is the only mandatory documentation language.
-  Step 0 (landed) made zh-CN twins optional; slice 7 generalises
+  Step 0 (landed) made zh-CN twins optional; slice 7 generalizes
   `scripts/docs-i18n-check.mjs` to a locale table
   `{ "fr-CA": {suffix: ".fr-CA.md", required: core}, "zh-CN": {suffix:
   ".zh-CN.md", required: none} }`.
@@ -224,7 +224,7 @@ test enforces the avoid lists per locale.
   expectations are replaced; the unsuffixed `.md` route stays the English one; the site-map slot for the en-CA route and title keeps the key `en`, because renaming it would rewrite every frozen zh-CN title line); `title` needs `en-CA` for every item, `fr-CA` for
   core items, and zh-CN is optional. The language switcher lists only locales
   that exist for the current page. Route prefixes are `/fr-CA/` and `/zh-CN/`.
-- The CJK body check generalises to a per-locale sanity check (fr-CA body must
+- The CJK body check generalizes to a per-locale sanity check (fr-CA body must
   contain French stop-words and no more than 30 percent of prose lines identical to
   the English source, with fenced code, tables and URLs excluded), which catches
   copied files.
@@ -423,7 +423,7 @@ working tree and needs no slice.
 
 ## Resolved questions
 
-**Q1 — Who reviews fr-CA, and must critical keys be reviewed by a Québec-based speaker.** Decision: fr-CA review is an automated LLM review step (Claude, Mistral or Cohere, configurable) that checks strings against the OQLF-aligned glossary and flags issues on the PR; `critical` keys must pass it and a maintainer approves the PR, with no human Québec reviewer requirement. This keeps review continuous and cheap while the glossary sidecar still centralises terminology.
+**Q1 — Who reviews fr-CA, and must critical keys be reviewed by a Québec-based speaker.** Decision: fr-CA review is an automated LLM review step (Claude, Mistral or Cohere, configurable) that checks strings against the OQLF-aligned glossary and flags issues on the PR; `critical` keys must pass it and a maintainer approves the PR, with no human Québec reviewer requirement. This keeps review continuous and cheap while the glossary sidecar still centralizes terminology.
 
 **Q2 — Apply en-CA spelling to the Console or keep copy spelling-neutral.** Decision: keep en-CA spelling and add a cspell `en-CA` dictionary to CI. Cherry-picked upstream copy needs manual touch anyway and the lint flags it mechanically.
 

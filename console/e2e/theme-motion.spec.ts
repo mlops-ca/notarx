@@ -66,8 +66,8 @@ test("reduced motion switches the complete palette atomically", async ({
   await page.emulateMedia({ reducedMotion: "reduce" });
   await mockThemeSurface(page);
   await page.goto("/login");
-  await page.getByPlaceholder("输入用户名").fill("theme-motion-qa");
-  await page.getByPlaceholder("输入密码").fill("local-only");
+  await page.getByPlaceholder("Enter your username").fill("theme-motion-qa");
+  await page.getByPlaceholder("Enter your password").fill("local-only");
   const expected = resolveConsoleTheme(
     defaultConsoleThemes.find((theme) => theme.id === "notarx-light")!,
   ).cssVariables;
@@ -267,7 +267,7 @@ test("a single native theme choice commits when its visual capture fails", async
       return start(options);
     };
   });
-  await page.getByRole("button", { name: /选择主题/ }).click();
+  await page.getByRole("button", { name: /Choose theme/ }).click();
   await page.getByRole("menuitem", { name: /notarx Light/ }).click();
   await expect(page.locator("html")).toHaveAttribute(
     "data-theme-id",
@@ -330,7 +330,7 @@ test("a single theme choice survives SPA navigation before its capture update", 
       return transition;
     };
   });
-  await page.getByRole("button", { name: /选择主题/ }).click();
+  await page.getByRole("button", { name: /Choose theme/ }).click();
   await page.getByRole("menuitem", { name: /notarx Light/ }).click();
   await page.locator('a[href="/repositories"]').first().dispatchEvent("click");
   await expect(page).toHaveURL(/\/repositories$/);
@@ -367,7 +367,7 @@ test("a single theme choice survives document navigation before its capture upda
       return transition;
     };
   });
-  await page.getByRole("button", { name: /选择主题/ }).click();
+  await page.getByRole("button", { name: /Choose theme/ }).click();
   await page.getByRole("menuitem", { name: /notarx Light/ }).click();
   const beforeNavigation = await page.evaluate(() => ({
     captures: window.__singleThemeCaptureCallsQA,

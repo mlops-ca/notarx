@@ -74,7 +74,7 @@ async function shell(page: Page, member = false) {
   }
 }
 
-for (const locale of ["zh-CN", "en-US"]) {
+for (const locale of ["en-CA"]) {
   test(`local mount capacity has bounded desktop/mobile geometry (${locale})`, async ({
     page,
   }, info) => {
@@ -98,18 +98,10 @@ for (const locale of ["zh-CN", "en-US"]) {
       await expect(card).toBeVisible();
       await expect(card.getByText("0 B", { exact: true })).toBeVisible();
       await expect(
-        card.getByText(
-          locale === "en-US"
-            ? "Remote filesystem; capacity unknown"
-            : "远端文件系统，容量未知",
-        ),
+        card.getByText("Remote filesystem; capacity unknown"),
       ).toBeVisible();
       await expect(
-        card.getByText(
-          locale === "en-US"
-            ? "Refresh timed out; capacity unknown"
-            : "刷新超时，容量未知",
-        ),
+        card.getByText("Refresh timed out; capacity unknown"),
       ).toBeVisible();
       const geometry = await page
         .locator(".ag-system-diagnostics")
@@ -177,17 +169,21 @@ test("repeat refresh is bounded; unavailable refresh preserves snapshot and perm
   await page.goto("/system?tab=diagnostics");
   await expect(page.locator(".ag-local-capacity-card")).toBeVisible();
   const before = calls;
-  await page.getByRole("button", { name: "刷新诊断" }).evaluate((button) => {
-    (button as HTMLButtonElement).click();
-    (button as HTMLButtonElement).click();
-  });
+  await page
+    .getByRole("button", { name: "Refresh diagnostics" })
+    .evaluate((button) => {
+      (button as HTMLButtonElement).click();
+      (button as HTMLButtonElement).click();
+    });
   await expect.poll(() => calls).toBe(before + 1);
   mode = "failed";
-  await page.getByRole("button", { name: "刷新诊断" }).click();
-  await expect(page.getByText("刷新失败，仍显示旧诊断快照")).toBeVisible();
+  await page.getByRole("button", { name: "Refresh diagnostics" }).click();
+  await expect(
+    page.getByText("Refresh failed; showing the previous diagnostic snapshot"),
+  ).toBeVisible();
   await expect(page.locator(".ag-local-capacity-card")).toBeVisible();
   mode = "forbidden";
-  await page.getByRole("button", { name: "刷新诊断" }).click();
+  await page.getByRole("button", { name: "Refresh diagnostics" }).click();
   await expect(page.getByText("Synthetic refresh refusal")).toBeVisible();
   await expect(page.locator(".ag-local-capacity-card")).toHaveCount(0);
 });
@@ -201,8 +197,8 @@ test("member cannot open system capacity diagnostics", async ({ page }) => {
   });
   await page.goto("/system?tab=diagnostics");
   await expect(page.locator(".ag-local-capacity-card")).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "本地挂载容量" })).toHaveCount(
-    0,
-  );
+  await expect(
+    page.getByRole("heading", { name: "Local mount capacity" }),
+  ).toHaveCount(0);
   expect(queried).toBe(false);
 });

@@ -8,6 +8,7 @@ import { Button, Dropdown, Space } from "antd";
 import { useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { usePreferences, type AppLocale } from "../../lib/preferences";
+import { SUPPORTED_LOCALES } from "../../messages/locales";
 
 export function PreferenceControls({ compact = false }: { compact?: boolean }) {
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
@@ -86,8 +87,9 @@ export function PreferenceControls({ compact = false }: { compact?: boolean }) {
           selectable: true,
           selectedKeys: [locale],
           items: [
-            { key: "zh-CN", label: t("common.language.zh") },
-            { key: "en-US", label: t("common.language.en") },
+            ...SUPPORTED_LOCALES.filter(({ ready }) => ready).map(
+              ({ tag, labelKey }) => ({ key: tag, label: t(labelKey) }),
+            ),
           ],
           onClick: ({ key }) => setLocale(key as AppLocale),
         }}

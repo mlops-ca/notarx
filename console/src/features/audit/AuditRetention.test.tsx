@@ -42,17 +42,21 @@ describe("AuditRetentionPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("策略设置")).toBeInTheDocument();
-    expect(screen.getByText("清理任务（0）")).toBeInTheDocument();
-    expect(screen.queryByText("清理说明")).not.toBeInTheDocument();
+    expect(await screen.findByText("Policy settings")).toBeInTheDocument();
+    expect(screen.getByText("Cleanup jobs (0)")).toBeInTheDocument();
+    expect(screen.queryByText("Cleanup note")).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("group", { name: "页面摘要" }),
+      screen.queryByRole("group", { name: "Page summary" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "保存策略" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save policy" })).toBeDisabled();
 
-    await user.click(screen.getByRole("switch", { name: /切换自动清理/ }));
+    await user.click(
+      screen.getByRole("switch", { name: /Toggle automatic cleanup/ }),
+    );
 
-    expect(screen.getByRole("button", { name: "保存策略" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "立即执行清理" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save policy" })).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Run cleanup now" }),
+    ).toBeDisabled();
   });
 });

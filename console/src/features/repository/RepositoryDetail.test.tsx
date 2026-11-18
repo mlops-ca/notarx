@@ -32,13 +32,13 @@ vi.mock("../../lib/auth", () => ({
 const scanningTab = vi.hoisted(() => ({
   render: vi.fn((props: unknown) => {
     void props;
-    return "扫描工作区已加载";
+    return "Scan workspace loaded";
   }),
 }));
 const artifactsTab = vi.hoisted(() => ({
   render: vi.fn((props: unknown) => {
     void props;
-    return "制品视图已加载";
+    return "Artifact view loaded";
   }),
 }));
 
@@ -80,7 +80,9 @@ afterEach(() => {
  * role checks still see every surface a user can reach.
  */
 async function collectTasks(user: ReturnType<typeof userEvent.setup>) {
-  const navigation = screen.getByRole("navigation", { name: "仓库任务" });
+  const navigation = screen.getByRole("navigation", {
+    name: "Repository tasks",
+  });
   // The access answer arrives after the repository; wait for the groups.
   const groupList = (await within(navigation).findAllByRole("tablist"))[0];
   const groups = within(groupList)
@@ -167,18 +169,23 @@ describe("RepositoryDetailPage scanning deep link", () => {
     );
 
     expect(
-      await screen.findByRole("tab", { name: "制品扫描", selected: true }),
+      await screen.findByRole("tab", {
+        name: "Scanning",
+        selected: true,
+      }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("tab", { name: "治理与安全", selected: true }),
+      screen.getByRole("tab", { name: "Governance", selected: true }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("navigation", { name: "仓库任务" }),
+      screen.getByRole("navigation", { name: "Repository tasks" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("tab", { name: "策略与安全" }),
+      screen.queryByRole("tab", { name: "Policy and security" }),
     ).not.toBeInTheDocument();
-    expect(await screen.findByText("扫描工作区已加载")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Scan workspace loaded"),
+    ).toBeInTheDocument();
     await waitFor(() => expect(scanningTab.render).toHaveBeenCalled());
     expect(scanningTab.render.mock.calls.at(-1)?.[0]).toMatchObject({
       repo: repository,
@@ -189,10 +196,16 @@ describe("RepositoryDetailPage scanning deep link", () => {
     });
 
     expect(await collectTasks(userEvent.setup())).toEqual({
-      制品: ["浏览", "使用统计", "发布"],
-      治理与安全: ["访问授权", "保留策略", "制品扫描", "安全准入", "墓碑"],
-      分发: ["晋升 / 复制"],
-      设置: ["基本设置", "容量", "生命周期任务"],
+      Artifacts: ["Browse", "Usage", "Publish"],
+      Governance: [
+        "Access grants",
+        "Retention",
+        "Scanning",
+        "Security admission",
+        "Tombstones",
+      ],
+      Distribution: ["Promote / replicate"],
+      Settings: ["General", "Capacity", "Lifecycle jobs"],
     });
   });
 });
@@ -247,13 +260,17 @@ describe("RepositoryDetailPage cached refresh", () => {
       </TestQueryProvider>,
     );
 
-    await user.click(await screen.findByRole("button", { name: "保存更改" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Save changes" }),
+    );
     expect(
       await screen.findByText("Repository refresh unavailable"),
     ).toBeVisible();
     expect(screen.getByRole("heading", { name: "cached-maven" })).toBeVisible();
-    expect(screen.getByRole("navigation", { name: "仓库任务" })).toBeVisible();
-    await user.click(screen.getByRole("button", { name: /重试/ }));
+    expect(
+      screen.getByRole("navigation", { name: "Repository tasks" }),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: /Retry/ }));
     await waitFor(() =>
       expect(
         screen.queryByText("Repository refresh unavailable"),
@@ -334,16 +351,18 @@ describe("RepositoryDetailPage role-scoped tabs", () => {
   it("offers a member with a write grant the read and write surfaces of that repository", async () => {
     auth.identity = { administrator: false, role: "member" };
     renderRole(true, "maven", "artifacts");
-    expect(await screen.findByText("制品视图已加载")).toBeInTheDocument();
+    expect(await screen.findByText("Artifact view loaded")).toBeInTheDocument();
     // The read-gated surfaces come from the same access answer, so a write grant
     // also reaches usage; nothing that needs administration does.
     expect(
-      await screen.findByRole("tab", { name: "使用统计" }),
+      await screen.findByRole("tab", { name: "Usage" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "发布" })).toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: "设置" })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Publish" })).toBeInTheDocument();
     expect(
-      screen.queryByRole("tab", { name: "访问授权" }),
+      screen.queryByRole("tab", { name: "Settings" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("tab", { name: "Access grants" }),
     ).not.toBeInTheDocument();
     expect(artifactsTab.render.mock.calls.at(-1)?.[0]).toMatchObject({
       canWrite: true,
@@ -353,12 +372,16 @@ describe("RepositoryDetailPage role-scoped tabs", () => {
   it("keeps a member without write authority on the read-only surfaces", async () => {
     auth.identity = { administrator: false, role: "member" };
     renderRole(false, "maven", "artifacts");
-    expect(await screen.findByText("制品视图已加载")).toBeInTheDocument();
+    expect(await screen.findByText("Artifact view loaded")).toBeInTheDocument();
     expect(
-      await screen.findByRole("tab", { name: "使用统计" }),
+      await screen.findByRole("tab", { name: "Usage" }),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: "发布" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: "设置" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("tab", { name: "Publish" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("tab", { name: "Settings" }),
+    ).not.toBeInTheDocument();
     expect(artifactsTab.render.mock.calls.at(-1)?.[0]).toMatchObject({
       canWrite: false,
     });
@@ -367,14 +390,19 @@ describe("RepositoryDetailPage role-scoped tabs", () => {
   it("offers a repository administrator the management surfaces of its own repository", async () => {
     auth.identity = { administrator: false, role: "member" };
     renderRole(false, "maven", "artifacts", { admin: true });
-    expect(await screen.findByText("制品视图已加载")).toBeInTheDocument();
+    expect(await screen.findByText("Artifact view loaded")).toBeInTheDocument();
     // Scanning needs the independent intelligence scope, so it stays hidden even
     // for a repository administrator.
     expect(await collectTasks(userEvent.setup())).toEqual({
-      制品: ["浏览", "使用统计"],
-      治理与安全: ["访问授权", "保留策略", "安全准入", "墓碑"],
-      分发: ["晋升 / 复制"],
-      设置: ["基本设置", "容量", "生命周期任务"],
+      Artifacts: ["Browse", "Usage"],
+      Governance: [
+        "Access grants",
+        "Retention",
+        "Security admission",
+        "Tombstones",
+      ],
+      Distribution: ["Promote / replicate"],
+      Settings: ["General", "Capacity", "Lifecycle jobs"],
     });
   });
 
@@ -383,7 +411,7 @@ describe("RepositoryDetailPage role-scoped tabs", () => {
     // navigation must wait instead of failing the whole page.
     auth.identity = { administrator: false, role: "member" };
     renderRole(false, "maven", "artifacts", {}, true);
-    expect(await screen.findByText("制品视图已加载")).toBeInTheDocument();
+    expect(await screen.findByText("Artifact view loaded")).toBeInTheDocument();
     expect(screen.queryByRole("tab")).not.toBeInTheDocument();
   });
 
@@ -391,10 +419,10 @@ describe("RepositoryDetailPage role-scoped tabs", () => {
     auth.identity = { administrator: false, role: "member" };
     renderRole(true, "oci", "publish");
     expect(
-      await screen.findByRole("tab", { name: "发布", selected: true }),
+      await screen.findByRole("tab", { name: "Publish", selected: true }),
     ).toBeInTheDocument();
     expect(
-      await screen.findByText("通过 Docker 或 Podman 发布"),
+      await screen.findByText("Publish with Docker or Podman"),
     ).toBeInTheDocument();
     expect(screen.getByText(/docker push/)).toBeInTheDocument();
   });
@@ -467,13 +495,13 @@ describe("RepositoryDetailPage Go lifecycle surfaces", () => {
       </TestQueryProvider>,
     );
 
-    await screen.findByRole("tab", { name: "治理与安全" });
+    await screen.findByRole("tab", { name: "Governance" });
     const tasks = await collectTasks(userEvent.setup());
-    expect(tasks["治理与安全"]).toEqual(
-      expect.arrayContaining(["保留策略", "安全准入", "墓碑"]),
+    expect(tasks["Governance"]).toEqual(
+      expect.arrayContaining(["Retention", "Security admission", "Tombstones"]),
     );
-    expect(tasks["分发"]).toEqual(["晋升 / 复制"]);
-    expect(tasks["设置"]).toContain("生命周期任务");
+    expect(tasks["Distribution"]).toEqual(["Promote / replicate"]);
+    expect(tasks["Settings"]).toContain("Lifecycle jobs");
   });
 });
 
@@ -507,10 +535,13 @@ describe("RepositorySettingsTab upstream authentication", () => {
       </TestQueryProvider>,
     );
 
-    expect(screen.getByText("上游认证")).toBeInTheDocument();
-    await user.click(screen.getByRole("radio", { name: /Bearer 令牌/ }));
-    await user.type(screen.getByLabelText("上游令牌"), "ghp_upstream_token");
-    await user.click(screen.getByRole("button", { name: "保存更改" }));
+    expect(screen.getByText("Upstream authentication")).toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: /Bearer token/ }));
+    await user.type(
+      screen.getByLabelText("Upstream token"),
+      "ghp_upstream_token",
+    );
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() =>
       expect(mockUpdateRepository).toHaveBeenCalledWith(
@@ -545,7 +576,9 @@ describe("RepositorySettingsTab upstream authentication", () => {
       </TestQueryProvider>,
     );
 
-    expect(screen.queryByText("上游认证")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Upstream authentication"),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -576,10 +609,12 @@ describe("RepositorySettingsTab Maven publication policy", () => {
       </TestQueryProvider>,
     );
 
-    const strictSwitch = screen.getByRole("switch", { name: "严格发布" });
+    const strictSwitch = screen.getByRole("switch", {
+      name: "Strict publication",
+    });
     expect(strictSwitch).not.toBeChecked();
     await user.click(strictSwitch);
-    await user.click(screen.getByRole("button", { name: "保存更改" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() =>
       expect(mockUpdateRepository).toHaveBeenCalledWith(

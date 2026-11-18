@@ -8,9 +8,9 @@ import {
 } from "./rawPath";
 
 describe("Raw path presentation", () => {
-  const readable = "ChatGPT Image 2026年8月19日 13_56_07 (2).png";
+  const readable = "Écran capturé 2026-08-19 13_56_07 (2).png";
   const canonical =
-    "ChatGPT%20Image%202026%E5%B9%B48%E6%9C%8819%E6%97%A5%2013_56_07%20%282%29.png";
+    "%C3%89cran%20captur%C3%A9%202026-08-19%2013_56_07%20%282%29.png";
 
   it("keeps the canonical wire path separate from the readable name", () => {
     expect(encodeRawPath(readable)).toBe(canonical);
@@ -39,7 +39,7 @@ describe("Raw path presentation", () => {
   });
 
   it("rejects invisible path controls while keeping ordinary Unicode", () => {
-    expect(containsDisallowedRawPathCharacters("中文 (2).png")).toBe(false);
+    expect(containsDisallowedRawPathCharacters("Chinese (2).png")).toBe(false);
     expect(containsDisallowedRawPathCharacters("report\u0000.png")).toBe(true);
     expect(containsDisallowedRawPathCharacters("report\u202e.png")).toBe(true);
   });

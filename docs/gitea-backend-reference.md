@@ -22,12 +22,12 @@ Artifact Gateway already has the core runtime needed for OCI, Maven, Raw, and
 Conan reads:
 
 - PostgreSQL metadata and S3-compatible object storage (RustFS in the bundled baseline);
-- protocol-owned cache and maintenance behavior, composed in `internal/app`;
+- protocol-owned cache and maintenance behaviour, composed in `internal/app`;
 - configured proxy allowlists, quotas, OIDC validation, repository grants,
   audit records, metrics, readiness, and asynchronous cache collection;
 - isolated integration, protocol, upgrade, and backup/restore release gates.
 
-The local gates prove code behavior in an isolated Docker environment. They do
+The local gates prove code behaviour in an isolated Docker environment. They do
 not prove that a deployed instance has correct credentials, external
 dependencies, TLS termination, policy configuration, or recoverability within
 the stated RPO/RTO. That is the remaining back-end risk.
@@ -99,7 +99,7 @@ to release and that its recovery objectives can be evidenced.
 The command package may depend on `internal/config`, repository/object-store
 constructors, and HTTP clients. It must not import protocol handlers or mutate
 their stores. `internal/app` remains the composition root. Protocol caches and
-their lifecycle behavior remain in their owning `internal/protocol` packages.
+their lifecycle behaviour remain in their owning `internal/protocol` packages.
 
 Production access, operator credential source, evidence retention location,
 and the isolated-drill marker are deployment decisions. They must be supplied

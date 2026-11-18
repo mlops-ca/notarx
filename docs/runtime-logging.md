@@ -46,7 +46,7 @@ The private session directory is exclusively managed by its output instance; adm
 
 Gateway runtime events are newline-delimited JSON on stdout. Each record has `time`, `level`, `msg`, `instanceId`, `sessionId`, `component`, `operation`, `requestId`, and `traceId`. A process event without request context has empty correlation IDs. HTTP access events add `method`, the server-registered route template (or `unmatched`), request class, status, and duration in milliseconds. The template is captured at router dispatch, independent of a handler changing `r.Pattern`. Request classes follow the canonical protocol root, including when metrics are not configured. Retired `/repository/<name>/...` aliases are unmatched and classified as `other`; a repository name never determines the class. Raw URL paths, resolved parameter values, query strings, request bodies, `Authorization`, and `Cookie` are never access-log fields. Attributes named like secrets, credentials, tokens, bodies, URLs, queries, or errors are redacted before output.
 
-Runtime logging has an explicit output lifecycle: writes, flushes, and closes are serialized, and close attempts both cleanup callbacks once even if flush fails. The default stdout and memory buffer are borrowed destinations: close is a no-op that does not wait for writes, flush, sync, or close stdout. Configured runtime errors and graceful shutdown finish existing HTTP and resource cleanup before closing log output. Worker cancellation remains context-based; resource-owning destinations will need their own bounded cleanup and delivery behavior.
+Runtime logging has an explicit output lifecycle: writes, flushes, and closes are serialized, and close attempts both cleanup callbacks once even if flush fails. The default stdout and memory buffer are borrowed destinations: close is a no-op that does not wait for writes, flush, sync, or close stdout. Configured runtime errors and graceful shutdown finish existing HTTP and resource cleanup before closing log output. Worker cancellation remains context-based; resource-owning destinations will need their own bounded cleanup and delivery behaviour.
 
 Each HTTP response carries `X-Request-ID` and `X-Trace-ID`. A safe client request ID can be reused; an absent or unsafe ID is replaced with a generated ID. The same IDs are stored on audit records written during that request, including management operations. Audit rows remain in PostgreSQL as operation evidence; runtime JSON is not written to a business table. Lifecycle job claim, completion, and failure events use the job ID as `requestId`. Webhook delivery attempts use the delivery ID. Operators can locate these worker events from the corresponding job or delivery record.
 
@@ -103,9 +103,9 @@ repository authorization denials do not acquire an upstream reason. When GET
 cache lock release/coordination supersedes an upstream error with 503, the
 upstream reason is omitted. Uninstrumented checksum/cache/coordination failures
 also omit the pair: absence does not imply success. HEAD continues its existing
-behavior of ignoring body-close errors. Limited access collection still records
+behaviour of ignoring body-close errors. Limited access collection still records
 5xx and slow requests; a fast 403 reason is visible only in full mode. No new
-metric labels, collector dependency, alert evaluation or email behavior is added.
+metric labels, collector dependency, alert evaluation or email behaviour is added.
 
 Every successful page includes `source`: the INFO collection floor, actual
 limited/full access mode and slow threshold, buffer capacity, 16 KiB line

@@ -54,7 +54,7 @@ it("cancels an old query, ignores its late answer, and retries an identical quer
   );
   await waitFor(() => expect(searchArtifacts).toHaveBeenCalledTimes(1));
   const signal = vi.mocked(searchArtifacts).mock.calls[0][0]?.signal;
-  fireEvent.click(screen.getByRole("radio", { name: "前缀" }));
+  fireEvent.click(screen.getByRole("radio", { name: "Prefix" }));
   await waitFor(() => expect(searchArtifacts).toHaveBeenCalledTimes(2));
   expect(signal?.aborted).toBe(true);
   await act(async () =>
@@ -75,7 +75,7 @@ it("cancels an old query, ignores its late answer, and retries an identical quer
   );
   expect(screen.queryByText("old-alpha.bin")).not.toBeInTheDocument();
   // The search box ignores Enter while a search is loading.
-  expect(await screen.findByText("没有匹配的制品")).toBeInTheDocument();
+  expect(await screen.findByText("No matching artifacts")).toBeInTheDocument();
   fireEvent.keyDown(screen.getByRole("searchbox"), {
     key: "Enter",
     code: "Enter",
@@ -118,12 +118,12 @@ it("retains the first page after a rejected continuation and releases its loadin
     </MemoryRouter>,
   );
   await screen.findByText("alpha.bin");
-  fireEvent.click(screen.getByRole("button", { name: "加载更多" }));
+  fireEvent.click(screen.getByRole("button", { name: "Load more" }));
   expect(
     await screen.findByText("continuation unavailable"),
   ).toBeInTheDocument();
   expect(screen.getByText("alpha.bin")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "加载更多" }));
+  fireEvent.click(screen.getByRole("button", { name: "Load more" }));
   expect(await screen.findByText("alpha-2.bin")).toBeInTheDocument();
   expect(vi.mocked(searchArtifacts).mock.calls[2][0]?.query).toEqual({
     q: "alpha",
@@ -167,7 +167,7 @@ it("retains existing results and cursor after an identical search refresh reject
   });
   expect(await screen.findByText("refresh unavailable")).toBeInTheDocument();
   expect(screen.getByText("alpha.bin")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "加载更多" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "Load more" })).toBeEnabled();
 });
 
 it("requests literal contains matching by default", async () => {
@@ -218,7 +218,9 @@ it("shows unavailable detail for a search hit from a newer server format", async
   );
   await userEvent.setup().click(await screen.findByText("Widget:1.0"));
   expect(
-    await screen.findByText("当前 Console 尚未支持 nuget 格式"),
+    await screen.findByText(
+      "This Console does not support the nuget format yet",
+    ),
   ).toBeInTheDocument();
 });
 

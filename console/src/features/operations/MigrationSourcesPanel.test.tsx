@@ -78,9 +78,11 @@ describe("migration source observations", () => {
   it("renders one initial error and sanitizes transport messages", async () => {
     list.mockRejectedValue(new Error("password=never-render-this"));
     show("");
-    await screen.findByText(/请求未完成/);
+    await screen.findByText(/request did not complete/);
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
-    expect(screen.queryByText("尚未配置迁移源")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("No migration sources configured"),
+    ).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent("never-render-this");
   });
   it("keeps loaded sources on refresh failure and supports retry", async () => {
@@ -94,14 +96,18 @@ describe("migration source observations", () => {
       } as never);
     show("");
     await screen.findByRole("button", { name: /Build Nexus/ });
-    await userEvent.click(screen.getByRole("button", { name: "刷新源" }));
-    await screen.findByText(/请求未完成/);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Refresh source" }),
+    );
+    await screen.findByText(/request did not complete/);
     expect(
       screen.getByRole("button", { name: /Build Nexus/ }),
     ).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /重试/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Retry/ }));
     await waitFor(() =>
-      expect(screen.queryByText(/请求未完成/)).not.toBeInTheDocument(),
+      expect(
+        screen.queryByText(/request did not complete/),
+      ).not.toBeInTheDocument(),
     );
   });
   it("loads a source deep link separately from list pagination", async () => {
@@ -113,12 +119,12 @@ describe("migration source observations", () => {
         data: { items: [migrationSource], nextCursor: "" },
       } as never);
     show();
-    await screen.findByRole("button", { name: "运行预检" });
+    await screen.findByRole("button", { name: "Run preflight" });
     expect(detail).toHaveBeenCalledWith(
       expect.objectContaining({ path: { sourceId: migrationSource.id } }),
     );
     await userEvent.click(
-      screen.getByRole("button", { name: "加载更多迁移源" }),
+      screen.getByRole("button", { name: "Load more migration sources" }),
     );
     await waitFor(() =>
       expect(list).toHaveBeenCalledWith(
@@ -134,29 +140,33 @@ describe("migration source observations", () => {
   it("discovers only explicitly selected supported Hosted repositories", async () => {
     show();
     await userEvent.click(
-      await screen.findByRole("button", { name: "运行预检" }),
+      await screen.findByRole("button", { name: "Run preflight" }),
     );
     expect(
-      await screen.findByRole("checkbox", { name: "选择 snapshots" }),
+      await screen.findByRole("checkbox", { name: "Select snapshots" }),
     ).toBeDisabled();
     await userEvent.click(
-      screen.getByRole("checkbox", { name: "选择 releases" }),
+      screen.getByRole("checkbox", { name: "Select releases" }),
     );
     await userEvent.click(
-      screen.getByRole("checkbox", { name: "选择 central" }),
+      screen.getByRole("checkbox", { name: "Select central" }),
     );
     await userEvent.click(
-      screen.getByRole("button", { name: "发现选中 Hosted 内容（1）" }),
+      screen.getByRole("button", {
+        name: "Discover selected Hosted content (1)",
+      }),
     );
     const result = await screen.findByRole("region", {
-      name: "源资产发现结果",
+      name: "Source asset discovery",
     });
-    await within(result).findByText(/2 个源资产/);
+    await within(result).findByText(/2 source assets/);
     expect(discover).toHaveBeenCalledWith(
       expect.objectContaining({ body: { repositories: ["releases"] } }),
     );
-    expect(result).toHaveTextContent("未下载或校验任何字节");
-    expect(result).toHaveTextContent("共享或无法归属单一发布版本");
+    expect(result).toHaveTextContent("No bytes have");
+    expect(result).toHaveTextContent(
+      "Shared Maven metadata or paths without a single release version",
+    );
     expect(result).not.toHaveTextContent("100%");
   });
   it("preserves the previous discovery on a failed reread without partial success", async () => {
@@ -171,26 +181,30 @@ describe("migration source observations", () => {
       } as never);
     show();
     await userEvent.click(
-      await screen.findByRole("button", { name: "运行预检" }),
+      await screen.findByRole("button", { name: "Run preflight" }),
     );
     await userEvent.click(
-      await screen.findByRole("checkbox", { name: "选择 releases" }),
+      await screen.findByRole("checkbox", { name: "Select releases" }),
     );
     await userEvent.click(
-      screen.getByRole("button", { name: "发现选中 Hosted 内容（1）" }),
+      screen.getByRole("button", {
+        name: "Discover selected Hosted content (1)",
+      }),
     );
     const result = await screen.findByRole("region", {
-      name: "源资产发现结果",
+      name: "Source asset discovery",
     });
-    await within(result).findByText(/2 个源资产/);
+    await within(result).findByText(/2 source assets/);
     await userEvent.click(
-      screen.getByRole("button", { name: "发现选中 Hosted 内容（1）" }),
+      screen.getByRole("button", {
+        name: "Discover selected Hosted content (1)",
+      }),
     );
     expect(await within(result).findByRole("alert")).toHaveTextContent(
-      "安全读取预算",
+      "safety budget",
     );
-    expect(result).toHaveTextContent("保留上次成功结果");
-    expect(result).toHaveTextContent("2 个源资产");
+    expect(result).toHaveTextContent("Keeping the last successful result");
+    expect(result).toHaveTextContent("2 source assets");
     expect(result).not.toHaveTextContent("secret");
   });
   it("previews an npm Hosted mapping using its native format", async () => {
@@ -204,16 +218,18 @@ describe("migration source observations", () => {
     } as never);
     show();
     await userEvent.click(
-      await screen.findByRole("button", { name: "运行预检" }),
+      await screen.findByRole("button", { name: "Run preflight" }),
     );
     await userEvent.click(
-      await screen.findByRole("checkbox", { name: "选择 releases" }),
+      await screen.findByRole("checkbox", { name: "Select releases" }),
     );
     await userEvent.type(
-      screen.getByRole("textbox", { name: "releases 的目标名称" }),
+      screen.getByRole("textbox", { name: "Target name for releases" }),
       "native-npm",
     );
-    await userEvent.click(screen.getByRole("button", { name: "预览显式映射" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Preview explicit mappings" }),
+    );
     await waitFor(() =>
       expect(preview).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -234,20 +250,26 @@ describe("migration source observations", () => {
   it("builds explicit multi-repository mappings with source Group order", async () => {
     show();
     await userEvent.click(
-      await screen.findByRole("button", { name: "运行预检" }),
+      await screen.findByRole("button", { name: "Run preflight" }),
     );
     for (const name of ["public", "central", "releases"]) {
       await userEvent.click(
-        await screen.findByRole("checkbox", { name: `选择 ${name}` }),
+        await screen.findByRole("checkbox", { name: `Select ${name}` }),
       );
       await userEvent.type(
-        screen.getByRole("textbox", { name: `${name} 的目标名称` }),
+        screen.getByRole("textbox", { name: `Target name for ${name}` }),
         `native-${name}`,
       );
     }
-    await userEvent.click(screen.getByRole("button", { name: "预览显式映射" }));
-    const result = await screen.findByRole("region", { name: "映射预览结果" });
-    await within(result).findByText(/所选映射通过当前校验/);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Preview explicit mappings" }),
+    );
+    const result = await screen.findByRole("region", {
+      name: "Mapping preview results",
+    });
+    await within(result).findByText(
+      /Selected mappings pass current validation\. No targets have been created and no content has migrated\./,
+    );
     expect(preview).toHaveBeenCalledWith(
       expect.objectContaining({
         body: {
@@ -276,11 +298,11 @@ describe("migration source observations", () => {
       }),
     );
     await userEvent.type(
-      screen.getByRole("textbox", { name: "releases 的目标名称" }),
+      screen.getByRole("textbox", { name: "Target name for releases" }),
       "-changed",
     );
     expect(
-      screen.queryByRole("region", { name: "映射预览结果" }),
+      screen.queryByRole("region", { name: "Mapping preview results" }),
     ).not.toBeInTheDocument();
   });
   it("rejects a response from a changed connection version", async () => {
@@ -289,11 +311,11 @@ describe("migration source observations", () => {
     } as never);
     show();
     await userEvent.click(
-      await screen.findByRole("button", { name: "运行预检" }),
+      await screen.findByRole("button", { name: "Run preflight" }),
     );
-    await screen.findByText(/源连接版本已变化/);
+    await screen.findByText(/source connection version changed/);
     expect(
-      screen.queryByRole("checkbox", { name: "选择 releases" }),
+      screen.queryByRole("checkbox", { name: "Select releases" }),
     ).not.toBeInTheDocument();
   });
   it("removes a previous observation when administrator access is refused", async () => {
@@ -304,16 +326,22 @@ describe("migration source observations", () => {
       } as never);
     show();
     await userEvent.click(
-      await screen.findByRole("button", { name: "运行预检" }),
+      await screen.findByRole("button", { name: "Run preflight" }),
     );
-    await screen.findByRole("checkbox", { name: "选择 releases" });
+    await screen.findByRole("checkbox", { name: "Select releases" });
     expect(
-      screen.getAllByText("可读取源配置和资产元数据；尚未迁移内容。").length,
+      screen.getAllByText(
+        "Source configuration and asset metadata are readable. No content has migrated.",
+      ).length,
     ).toBe(2);
-    await userEvent.click(screen.getByRole("button", { name: "运行预检" }));
-    await screen.findByText(/没有读取或管理此迁移源的权限/);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Run preflight" }),
+    );
+    await screen.findByText(
+      /This migration source requires a platform administrator identity\./,
+    );
     expect(
-      screen.queryByRole("checkbox", { name: "选择 releases" }),
+      screen.queryByRole("checkbox", { name: "Select releases" }),
     ).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent("hidden-role-detail");
   });
@@ -341,7 +369,7 @@ describe("migration source observations", () => {
     );
     show();
     await userEvent.click(
-      await screen.findByRole("button", { name: "运行预检" }),
+      await screen.findByRole("button", { name: "Run preflight" }),
     );
     const signal = preflight.mock.calls[0][0].signal;
     await userEvent.click(
@@ -351,7 +379,7 @@ describe("migration source observations", () => {
     expect(signal?.aborted).toBe(true);
     finish({ data: migrationPreflight });
     expect(
-      screen.queryByRole("checkbox", { name: "选择 releases" }),
+      screen.queryByRole("checkbox", { name: "Select releases" }),
     ).not.toBeInTheDocument();
   });
   it("uses If-Match for deletion and retains the source on a stale version", async () => {
@@ -360,14 +388,16 @@ describe("migration source observations", () => {
     } as never);
     show();
     await userEvent.click(
-      await screen.findByRole("button", { name: "删除源" }),
+      await screen.findByRole("button", { name: "Delete source" }),
     );
-    const dialog = await screen.findByRole("dialog", { name: "删除迁移源？" });
+    const dialog = await screen.findByRole("dialog", {
+      name: "Delete migration source?",
+    });
     await userEvent.click(
-      within(dialog).getByRole("button", { name: "删除源" }),
+      within(dialog).getByRole("button", { name: "Delete source" }),
     );
     expect(await within(dialog).findByRole("alert")).toHaveTextContent(
-      "源连接已被其他操作更新",
+      "Another operation updated this connection",
     );
     expect(vi.mocked(deleteMigrationSource)).toHaveBeenCalledWith({
       path: { sourceId: migrationSource.id },

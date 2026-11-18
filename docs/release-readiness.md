@@ -57,7 +57,7 @@ that the original v0.6.0 verifier accepted its trimpath bytes.
 `make test` includes the isolated `dev/dev-status/dev-down` public CLI boundary
 tests. The commands exercise native protocol fixtures, persistent metadata,
 dependency readiness, token rotation, performance, Console contract/build/browser
-behavior, upgrade, and restore behavior. Record
+behaviour, upgrade, and restore behaviour. Record
 their output, Git revision, operator, UTC start/end, and any deviation in the
 [release record](release-record-template.md). Do not include bearer tokens,
 storage credentials, or unredacted upstream URLs in that record.
@@ -137,12 +137,12 @@ and any registry access failure separately.
       PostgreSQL is stopped and `204` after each is restored.
 - [ ] `make cache-operations-e2e` verifies cache collection is administrator-only,
       succeeds for an administrator, and increases the successful-run count.
-      Its deterministic retention behavior is covered by
+      Its deterministic retention behaviour is covered by
       `internal/app/cache_maintenance_test.go`.
 - [ ] `make openapi-check`, `make console-typecheck`, `make console-check`,
       `make console-test`, `make console-build`, and `make console-e2e` verify
       the generated `/api/v2` management client, lint/format/accessibility
-      rules, component behavior and coverage, the Console production build,
+      rules, component behaviour and coverage, the Console production build,
       and an authenticated administrator dashboard session through the Console
       API proxy.
 - [ ] Maven retention maintenance runs outside request handling, preserves the
@@ -190,7 +190,7 @@ and any registry access failure separately.
       protocol surface and RustFS. It also
       verifies restored Raw cache content, artifact quarantine state and reason,
       Conan Group state, Repository grant version/content, and the Native Raw
-      authorization denial/allow behavior. Run `make backup-drill`
+      authorization denial/allow behaviour. Run `make backup-drill`
       against the release environment only after the isolated rehearsal passes.
 - [ ] `make native-apt-e2e` proves exact recovery of an immutable signed APT
       snapshot in addition to the broader backup rehearsal: signing-state

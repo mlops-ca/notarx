@@ -85,22 +85,26 @@ for (const width of [1440, 1024]) {
     await page.goto(`/repositories/${repositoryId}?tab=usage`);
     await expect(page.getByText("files/widget-000.zip")).toBeVisible();
     await expect(page.locator("tbody tr.ant-table-row")).toHaveCount(20);
-    await expect(page.getByText("第 1-20 项，共 235 项")).toBeVisible();
+    await expect(page.getByText("1-20 of 235 items")).toBeVisible();
     await page.locator(".ant-pagination-item-2").click();
     await expect(page.getByText("files/widget-020.zip")).toBeVisible();
     expect(queries.at(-1)).toBe("?limit=20&offset=20");
-    const search = page.getByRole("searchbox", { name: "搜索制品地址" });
+    const search = page.getByRole("searchbox", {
+      name: "Search artifact address",
+    });
     await search.fill("widget-23");
     await search.press("Enter");
-    await expect(page.getByText("第 1-5 项，共 5 项")).toBeVisible();
-    await expect(page.getByText(/全仓库：235 个地址/)).toBeVisible();
+    await expect(page.getByText("1-5 of 5 items")).toBeVisible();
+    await expect(
+      page.getByText(/Whole repository: 235 addresses/),
+    ).toBeVisible();
     expect(queries.at(-1)).toBe("?limit=20&offset=0&q=widget-23");
     await search.fill("");
     await search.press("Enter");
     await expect(page.locator("tbody tr.ant-table-row")).toHaveCount(20);
     const countBefore = queries.length;
     await page.getByRole("combobox").last().click();
-    await page.getByTitle("50 条/页").click();
+    await page.getByTitle("50 / page").click();
     await expect(page.locator("tbody tr.ant-table-row")).toHaveCount(50);
     expect(queries.length).toBe(countBefore + 1);
     expect(queries.at(-1)).toBe("?limit=50&offset=0");

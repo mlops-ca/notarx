@@ -656,7 +656,7 @@ export async function mockConsole(page: Page) {
             maxAttempts: 3,
             progressCurrent: 42,
             progressTotal: 100,
-            progressMessage: "复制层 42/100",
+            progressMessage: "Copy layer 42/100",
           },
         },
         {
@@ -701,7 +701,7 @@ export async function mockConsole(page: Page) {
         {
           id: "task-001",
           name: "docker-release retention",
-          description: "每小时清理过期制品",
+          description: "Hourly cleanup of expired artifacts",
           kind: "repository-retention",
           repositoryId: "rep-oci-001",
           intervalMinutes: 60,
@@ -716,7 +716,7 @@ export async function mockConsole(page: Page) {
         {
           id: "task-002",
           name: "audit cleanup",
-          description: "每日清理过期审计记录",
+          description: "Daily cleanup of expired audit records",
           kind: "audit-retention",
           intervalMinutes: 1440,
           enabled: false,

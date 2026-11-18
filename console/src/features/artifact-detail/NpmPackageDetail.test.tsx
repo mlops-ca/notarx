@@ -126,9 +126,9 @@ describe("NpmPackageDetail", () => {
     );
 
     expect(await screen.findByText("Proxy")).toBeInTheDocument();
-    expect(screen.getByText("仅元数据")).toBeInTheDocument();
-    expect(screen.getByText("下载后统计")).toBeInTheDocument();
-    expect(screen.getByText("下载后计算")).toBeInTheDocument();
+    expect(screen.getByText("Metadata only")).toBeInTheDocument();
+    expect(screen.getByText("Available after download")).toBeInTheDocument();
+    expect(screen.getByText("Computed after download")).toBeInTheDocument();
   });
 
   it("sends the active bearer token when reading a private package", async () => {

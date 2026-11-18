@@ -9,7 +9,7 @@ plan promotes them to the authorization source for hosted repositories without
 changing the authentication mechanisms or protocol-level error contracts.
 
 The rollout is deliberately incremental. A repository must retain the current
-static-policy behavior until an operator explicitly manages its grant set.
+static-policy behaviour until an operator explicitly manages its grant set.
 
 ## Authorization Model
 
@@ -67,9 +67,9 @@ Role and template management is administrator-only.
 
 Until a repository has a managed grant set, legacy patterns remain in force:
 
-- every protocol retains its current pre-grant authorization behavior; Maven
+- every protocol retains its current pre-grant authorization behaviour; Maven
   and group/proxy read paths continue to use their static patterns, while
-  Native Raw retains its existing authenticated-principal behavior;
+  Native Raw retains its existing authenticated-principal behaviour;
 - static maps retain their present wildcard semantics where they already apply;
 - an absent reader map denies an unmatched caller, unless
   `NOTARX_LEGACY_READ_DEFAULT=allow` restores the pre-0.4 posture.
@@ -120,8 +120,8 @@ a member name, Group name, path, or endpoint.
 
 Conan already carries this explicit binding. OCI, Maven, and Raw legacy Group
 members do not yet persist it and therefore retain their legacy static-policy
-behavior until the binding and per-candidate enforcement rollout is complete.
-This is intentional compatibility behavior, not an authorization fallback for
+behaviour until the binding and per-candidate enforcement rollout is complete.
+This is intentional compatibility behaviour, not an authorization fallback for
 an explicitly bound member.
 
 The target candidate algorithm is shared by all formats:
@@ -131,7 +131,7 @@ The target candidate algorithm is shared by all formats:
 | Anonymous and not enabled by the existing Group/member policy | Exclude before authorization and cache lookup. |
 | Authenticated, explicitly bound, managed grant allows read | Candidate is eligible; inspect only that candidate's cache and then its source. |
 | Authenticated, explicitly bound, managed grant denies or lookup fails | Audit the bounded decision, increment grant-denial metrics, and skip the candidate. |
-| Authenticated, unbound legacy member | Apply the format's existing static-policy behavior unchanged. |
+| Authenticated, unbound legacy member | Apply the format's existing static-policy behaviour unchanged. |
 
 If an authenticated request exhausts candidates solely because explicitly bound
 members were denied, it returns the format's existing access-denied response,
@@ -141,7 +141,7 @@ in the client response. A positive or negative cache entry is eligible only
 after its recorded source member has passed the same candidate authorization
 check. Authorization denials and failures are never cached.
 
-| Format | Current bound-member behavior | Target terminal denial |
+| Format | Current bound-member behaviour | Target terminal denial |
 | --- | --- | --- |
 | OCI Group | Legacy group-level static policy only | Registry `403 DENIED` response |
 | Maven Group | Legacy group-level static policy only | Existing Maven `403` response |
@@ -162,7 +162,7 @@ Authorization denial must preserve the protocol's established response:
 - Maven and Raw return their current Basic authentication challenge/status.
 - OCI retains its Registry Bearer `WWW-Authenticate` challenge and status.
 - Management routes retain `application/problem+json` and their existing
-  unauthenticated `access_denied` behavior.
+  unauthenticated `access_denied` behaviour.
 
 The evaluator's source and reason are recorded in the audit log for
 authorization denials on Maven, OCI, Raw, and Conan, legacy and native, and on

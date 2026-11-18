@@ -50,8 +50,8 @@ const packages = ["artifact-gateway-runtime", "artifact-gateway-console"].map(
 );
 
 for (const [width, theme, locale] of [
-  [1440, "dark", "zh-CN"],
-  [390, "light", "en-US"],
+  [1440, "dark", "en-CA"],
+  [390, "light", "en-CA"],
 ] as const) {
   test(`APT preview, apply and distribution at ${width}px ${theme}`, async ({
     page,
@@ -172,10 +172,9 @@ for (const [width, theme, locale] of [
       }
       return route.fulfill({ json: repo });
     });
-    const en = locale === "en-US";
     await page.goto(`/repositories/${repositoryId}?tab=apt-snapshots`);
     await expect(
-      page.getByText(en ? "Current snapshot #4" : "当前快照 #4", {
+      page.getByText("Current snapshot #4", {
         exact: true,
       }),
     ).toBeVisible();
@@ -204,7 +203,7 @@ for (const [width, theme, locale] of [
     });
     await page
       .getByRole("button", {
-        name: en ? "Preview retention" : "预览保留清理",
+        name: "Preview retention",
         exact: true,
       })
       .click();
@@ -222,7 +221,7 @@ for (const [width, theme, locale] of [
       fullPage: false,
     });
     const applyButton = dialog.getByRole("button", {
-      name: en ? "Apply and sign new snapshot" : "应用并签署新快照",
+      name: "Apply and sign new snapshot",
       exact: true,
     });
     for (const interaction of ["rest", "hover", "focus"] as const) {
@@ -278,15 +277,12 @@ for (const [width, theme, locale] of [
     }
     await dialog
       .getByRole("button", {
-        name: en ? "Apply and sign new snapshot" : "应用并签署新快照",
+        name: "Apply and sign new snapshot",
         exact: true,
       })
       .click();
     await expect(
-      page.getByText(
-        en ? "Published stable snapshot #5" : "已发布 stable 快照 #5",
-        { exact: true },
-      ),
+      page.getByText("Published stable snapshot #5", { exact: true }),
     ).toBeVisible();
     expect(applied).toEqual([
       {
@@ -303,7 +299,7 @@ for (const [width, theme, locale] of [
     ]);
     await page
       .getByRole("tab", {
-        name: en ? "Promote / replicate" : "晋升 / 复制",
+        name: "Promote / replicate",
         exact: true,
       })
       .click();
@@ -323,9 +319,7 @@ for (const [width, theme, locale] of [
         },
       );
     };
-    await openPicker(
-      en ? "Search and select a source artifact" : "搜索并选择源制品",
-    );
+    await openPicker("Search and select a source artifact");
     await page
       .getByText("artifact-gateway-console 1.2.3 · amd64", { exact: true })
       .click();
@@ -334,11 +328,11 @@ for (const [width, theme, locale] of [
         .locator(".ag-distribution")
         .getByTitle("artifact-gateway-console 1.2.3 · amd64", { exact: true }),
     ).toBeVisible();
-    await openPicker(en ? "Select target repository" : "选择目标仓库");
+    await openPicker("Select target repository");
     await page.getByText("debian-production", { exact: true }).click();
     await page
       .getByRole("textbox", {
-        name: en ? "Target suite" : "目标发行套件",
+        name: "Target suite",
         exact: true,
       })
       .fill("bookworm");
@@ -352,15 +346,12 @@ for (const [width, theme, locale] of [
     });
     await page
       .locator(".ag-distribution")
-      .getByRole("button", { name: en ? "Replicate" : /复\s*制/, exact: true })
+      .getByRole("button", { name: "Replicate", exact: true })
       .click();
     await expect(
-      page.getByText(
-        en
-          ? "Replication plan created. Track its progress below."
-          : "复制计划已创建，下方查看进度",
-        { exact: true },
-      ),
+      page.getByText("Replication plan created. Track its progress below.", {
+        exact: true,
+      }),
     ).toBeVisible();
     expect(replications).toEqual([
       {

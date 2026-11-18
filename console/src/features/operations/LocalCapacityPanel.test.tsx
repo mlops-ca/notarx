@@ -49,14 +49,28 @@ describe("LocalCapacityPanel", () => {
       </PreferencesProvider>,
     );
     expect(
-      screen.getByRole("heading", { name: "本地挂载容量" }),
+      screen.getByRole("heading", { name: "Local mount capacity" }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/当前进程的挂载视角/)).toBeInTheDocument();
-    expect(screen.getByText(/不代表 S3 或 NAS 后端物理池/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /This process's mount view is not the S3 or NAS backend physical pool or a Repository logical quota\. Do not add shared aliases' capacity\./,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /This process's mount view is not the S3 or NAS backend physical pool or a Repository logical quota\. Do not add shared aliases' capacity\./,
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("0 B")).toBeInTheDocument();
-    expect(screen.getByText("远端文件系统，容量未知")).toBeInTheDocument();
-    expect(screen.getByText("刷新超时，容量未知")).toBeInTheDocument();
-    expect(screen.getByText(/与日志共享可见文件系统/)).toBeInTheDocument();
+    expect(
+      screen.getByText("Remote filesystem; capacity unknown"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Refresh timed out; capacity unknown"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Shares the visible filesystem with Logs/),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/999999|976/)).not.toBeInTheDocument();
   });
 
@@ -67,7 +81,9 @@ describe("LocalCapacityPanel", () => {
       </PreferencesProvider>,
     );
     expect(
-      screen.getByText("此节点未提供本地容量观察，容量未知"),
+      screen.getByText(
+        "This node does not report local capacity; capacity unknown",
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByText("0 B")).not.toBeInTheDocument();
   });

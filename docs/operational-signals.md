@@ -184,7 +184,7 @@ freshness, actual boundaries, safe integers and concurrency. Real loopback HTTP
 requests pass through the existing instrumentation to prove 5xx/4xx counting and
 probe exclusion; actual administrator diagnostics responses are validated against
 generated OpenAPI. Console tests cover bilingual desktop/mobile geometry,
-data states, browser expiry and refresh/authorization behavior.
+data states, browser expiry and refresh/authorization behaviour.
 
 These tests do not validate a production mount, NAS/S3 physical capacity,
 quota enforcement, alert policies, expected deployment instances, or

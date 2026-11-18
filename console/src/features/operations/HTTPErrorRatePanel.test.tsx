@@ -45,27 +45,35 @@ describe("HTTPErrorRatePanel", () => {
   it("rejects a delayed response at receipt and a future sample clock", () => {
     vi.setSystemTime(new Date("2026-10-03T12:05:31Z"));
     const view = render(panel(snapshot));
-    expect(screen.getByText("样本已过期，比例未知")).toBeInTheDocument();
+    expect(
+      screen.getByText("Sample is stale; ratio unknown"),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("http-error-rate-ratio")).toHaveTextContent("—");
     vi.setSystemTime(new Date("2026-10-03T12:04:59Z"));
     view.rerender(panel({ ...snapshot }));
-    expect(screen.getByText("采样时钟异常，比例未知")).toBeInTheDocument();
+    expect(
+      screen.getByText("Invalid sample clock; ratio unknown"),
+    ).toBeInTheDocument();
   });
   it("shows safe counts, node, actual window and true zero without a health judgment", () => {
     render(panel({ ...snapshot, errors: 0, ratio: 0 }));
     expect(screen.getByTestId("http-error-rate-ratio")).toHaveTextContent("0%");
     expect(screen.getByText("20")).toBeInTheDocument();
     expect(screen.getByText(/synthetic-node/)).toBeInTheDocument();
-    expect(screen.getByText(/此比例不表示服务健康/)).toBeInTheDocument();
-    expect(screen.getByText(/300s/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /This process's business HTTP: 1xx–5xx requests, with 5xx counted as errors\. Includes management API; excludes health and metrics probes\. The ratio is not a health judgment or an alert\./,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/300s/)[0]).toBeInTheDocument();
   });
 
   it.each([
-    ["warming_up", "窗口预热，数据不足", 20],
-    ["low_sample", "少于 20 个请求，数据不足", 19],
-    ["no_traffic", "窗口内无请求，比例未知", 0],
-    ["session_changed", "进程会话已切换，窗口重新预热", 1],
-    ["counter_reset", "计数器已重置，窗口重新预热", 1],
+    ["warming_up", "Window warming up; insufficient data", 20],
+    ["low_sample", "Fewer than 20 requests; insufficient data", 19],
+    ["no_traffic", "No requests in the window; ratio unknown", 0],
+    ["session_changed", "Process session changed; window warming up again", 1],
+    ["counter_reset", "Counter reset; window warming up again", 1],
   ] as const)(
     "keeps safe counts and hides the ratio for %s",
     (reason, message, requests) => {
@@ -97,11 +105,13 @@ describe("HTTPErrorRatePanel", () => {
       vi.advanceTimersByTime(31_000);
     });
     expect(screen.getByTestId("http-error-rate-ratio")).toHaveTextContent("—");
-    expect(screen.getByText("旧快照总请求")).toBeInTheDocument();
+    expect(screen.getByText("Previous snapshot requests")).toBeInTheDocument();
     expect(screen.getByText("20")).toBeInTheDocument();
     // A repeated response with an old sample stays stale, even after receipt resets.
     view.rerender(panel({ ...snapshot, checkedAt: "2026-10-03T12:05:31Z" }));
-    expect(screen.getByText("样本已过期，比例未知")).toBeInTheDocument();
+    expect(
+      screen.getByText("Sample is stale; ratio unknown"),
+    ).toBeInTheDocument();
   });
 
   it("rejects unsafe or inconsistent values and does not round a positive ratio to zero", () => {
@@ -117,7 +127,9 @@ describe("HTTPErrorRatePanel", () => {
       "<0.01%",
     );
     view.rerender(panel());
-    expect(screen.getByText("样本未报告或无效，比例未知")).toBeInTheDocument();
+    expect(
+      screen.getByText("Sample unavailable or invalid; ratio unknown"),
+    ).toBeInTheDocument();
     expect(screen.queryByText("0%")).not.toBeInTheDocument();
   });
 });

@@ -236,6 +236,15 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      # make lint runs the en-CA spell check, which needs the Console tools.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: console/package-lock.json
+      - run: npm ci --ignore-scripts --no-audit --no-fund --timing --loglevel=http
+        timeout-minutes: 10
+        working-directory: console
       - name: Run Go lint
         run: make lint
       - name: Run Go vet

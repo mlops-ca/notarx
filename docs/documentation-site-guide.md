@@ -63,7 +63,7 @@ status codes, compatibility limits, security boundaries, evidence scope, and
 whether a capability is released, previewed, planned, or historical.
 
 Do not publish a locale stub that only links to the other language. English
-(en-CA spelling) is the source: when it changes behavior, update the fr-CA
+(en-CA spelling) is the source: when it changes behaviour, update the fr-CA
 companion in the same change when the page is in the core set, and treat
 zh-CN as frozen.
 

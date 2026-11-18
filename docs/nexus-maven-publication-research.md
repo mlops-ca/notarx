@@ -87,7 +87,7 @@ each PUT. Neither side defines an expected-asset declaration followed by a
 single GAV visibility switch.
 
 Nexus [Deployment Policy](https://help.sonatype.com/en/configurable-repository-fields.html#deployment-policy)
-controls redeploy, overwrite, or read-only behavior; it is not a coordinate
+controls redeploy, overwrite, or read-only behaviour; it is not a coordinate
 completeness transaction.
 
 The trade-off is zero-change client compatibility versus partial-coordinate
@@ -158,7 +158,7 @@ Two coherent higher-level models remain available:
 
 1. Ordinary Hosted compatibility plus optional atomic mode: direct PUT for
    zero-change clients; strict mode for teams that accept a plugin or wrapper.
-2. Isolated Hosted plus promotion: publish through standard Maven behavior to
+2. Isolated Hosted plus promotion: publish through standard Maven behaviour to
    a development Hosted Repository, validate in CI, then promote the complete
    coordinate or build to the production Hosted Repository consumed by a
    production Group. This resembles Nexus 3 Pro Staging.

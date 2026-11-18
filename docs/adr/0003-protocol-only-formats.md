@@ -5,7 +5,7 @@
 Status: accepted
 
 Artifact Gateway normally admits a format only after Hosted, Proxy, Group, and
-artifact lifecycle behavior are executable. Some ecosystems intentionally
+artifact lifecycle behaviour are executable. Some ecosystems intentionally
 standardize distribution but have no repository publication protocol. Go
 Modules are the first such case: `GOPROXY` defines immutable reads, while module
 authors publish through version-control systems rather than uploading to a

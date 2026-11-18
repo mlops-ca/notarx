@@ -155,10 +155,10 @@ test("repository list exposes one cursor pagination control", async ({
 
   await page.goto("/repositories");
   await expect(page.getByText("repository-025", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "加载更多" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Load more" })).toBeVisible();
   await expect(page.locator(".ant-pagination")).toHaveCount(0);
 
-  await page.getByRole("button", { name: "加载更多" }).click();
+  await page.getByRole("button", { name: "Load more" }).click();
   await expect(page.getByText("repository-101", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "加载更多" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Load more" })).toHaveCount(0);
 });

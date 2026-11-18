@@ -60,7 +60,7 @@ are never the source of truth; polling recovers from missed notifications.
 state, metrics, polling, and notification semantics for migrated lifecycle job
 workers. Domain workers retain only their job-specific implementation. Worker
 migration is incremental so each tracer slice preserves the existing durable
-job contract and recovery behavior.
+job contract and recovery behaviour.
 
 Deployment constraints and topology examples live in
 `docs/distributed-deployment.md`.
@@ -86,7 +86,7 @@ Deployment constraints and topology examples live in
 Protocol packages own wire compatibility and format-specific coordinates.
 Application handlers authorize requests and orchestrate domain interfaces;
 they must not recreate protocol rules. Repository implementations own
-transactional persistence but not HTTP response behavior.
+transactional persistence but not HTTP response behaviour.
 
 ## Explicit HTTP composition
 
@@ -156,7 +156,7 @@ Management API evolution must pass `make openapi-check`; ADR 0009 permits
 breaking changes when server and consumers move together. Historical management
 APIs and URL paths are not frozen. Current OpenAPI source and generated bundles
 must agree, and protocol contracts plus real-client E2E verify package-standard
-behavior at the configured endpoints. Generated files are committed so reviewers
+behaviour at the configured endpoints. Generated files are committed so reviewers
 can see the exact client and server impact of a change.
 
 ## Consistency and failure model
@@ -173,10 +173,10 @@ can see the exact client and server impact of a change.
 
 ## Change rules
 
-1. Add behavior through the owning domain or protocol boundary, not directly
+1. Add behaviour through the owning domain or protocol boundary, not directly
    in an unrelated HTTP handler.
 2. Make schema changes with forward-only migrations.
 3. Preserve immutable published coordinates and content digests.
 4. Keep retries idempotent and fence writes from expired workers.
 5. Evolve external APIs through OpenAPI first.
-6. Prove database locking and object-store behavior with integration tests.
+6. Prove database locking and object-store behaviour with integration tests.

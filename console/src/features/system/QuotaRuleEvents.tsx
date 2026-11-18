@@ -10,6 +10,7 @@ import {
   Notice,
 } from "../../components/ui/Feedback";
 import { usePreferences } from "../../lib/preferences";
+import { useFormatters } from "../../lib/useFormatters";
 import {
   percent,
   quotaLabel,
@@ -25,7 +26,8 @@ export function QuotaEvents({
   ruleId: string;
   onAuthBlocked: (error: unknown) => void;
 }) {
-  const { t } = usePreferences();
+  const { t, locale } = usePreferences();
+  const { formatDateTime } = useFormatters();
   const events = useQuotaSnapshot(
     async (signal) =>
       quotaResult(
@@ -92,8 +94,7 @@ export function QuotaEvents({
                       {quotaLabel(event.scenario, t)}
                     </Badge>
                     <span className="text-xs text-fg-tertiary">
-                      #{event.sequence} ·{" "}
-                      {new Date(event.occurredAt).toLocaleString()}
+                      #{event.sequence} · {formatDateTime(event.occurredAt)}
                     </span>
                   </div>
                   <Badge>
@@ -104,9 +105,10 @@ export function QuotaEvents({
                   </Badge>
                 </div>
                 <p className="break-words text-sm text-fg-secondary">
-                  {t("system.eventSample")}: {sampleBytes(event.usedBytes, t)} /{" "}
-                  {sampleBytes(event.quotaBytes, t)} · {t("system.sampled")}{" "}
-                  {new Date(event.sampleAt).toLocaleString()}
+                  {t("system.eventSample")}:{" "}
+                  {sampleBytes(event.usedBytes, t, locale)} /{" "}
+                  {sampleBytes(event.quotaBytes, t, locale)} ·{" "}
+                  {t("system.sampled")} {formatDateTime(event.sampleAt)}
                 </p>
                 <p className="text-xs text-fg-tertiary">
                   {t("system.eventThresholds")}:{" "}
@@ -114,7 +116,7 @@ export function QuotaEvents({
                   {percent(event.policy.criticalBasisPoints)} /{" "}
                   {percent(event.policy.recoveryBelowBasisPoints)} ·{" "}
                   {t("system.evidenceSince")}{" "}
-                  {new Date(event.evidenceSince).toLocaleString()}
+                  {formatDateTime(event.evidenceSince)}
                 </p>
                 {event.deliveryErrorCode && (
                   <p className="text-xs text-fg-tertiary">
@@ -163,6 +165,7 @@ function QuotaDelivery({
   onAuthBlocked: (error: unknown) => void;
 }) {
   const { t } = usePreferences();
+  const { formatDateTime } = useFormatters();
   const delivery = useQuotaSnapshot(
     async (signal) =>
       quotaResult(await getEmailDelivery({ path: { deliveryId }, signal })),
@@ -219,13 +222,12 @@ function QuotaDelivery({
       )}
       {item.nextAttemptAt && (
         <p className="text-xs text-fg-tertiary">
-          {t("system.nextAttempt")}:{" "}
-          {new Date(item.nextAttemptAt).toLocaleString()}
+          {t("system.nextAttempt")}: {formatDateTime(item.nextAttemptAt)}
         </p>
       )}
       {item.acceptedAt && (
         <p className="text-xs text-fg-tertiary">
-          {t("system.acceptedAt")}: {new Date(item.acceptedAt).toLocaleString()}
+          {t("system.acceptedAt")}: {formatDateTime(item.acceptedAt)}
         </p>
       )}
       <p className="text-xs text-fg-tertiary">

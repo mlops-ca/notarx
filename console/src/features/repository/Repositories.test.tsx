@@ -100,13 +100,17 @@ describe("RepositoriesPage role-scoped catalog", () => {
       </TestQueryProvider>,
     );
     await user.click(
-      await screen.findByRole("button", { name: "retry-delete 的更多操作" }),
+      await screen.findByRole("button", {
+        name: "More actions for retry-delete",
+      }),
     );
-    await user.click(await screen.findByRole("menuitem", { name: "删除仓库" }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Delete repository" }),
+    );
     const dialog = await screen.findByRole("dialog");
-    await user.click(within(dialog).getByRole("button", { name: /^删\s*除$/ }));
+    await user.click(within(dialog).getByRole("button", { name: /^Delete$/ }));
     expect(await screen.findByText("Deletion unavailable")).toBeVisible();
-    const retry = within(dialog).getByRole("button", { name: /^删\s*除$/ });
+    const retry = within(dialog).getByRole("button", { name: /^Delete$/ });
     await waitFor(() => {
       expect(retry).toBeEnabled();
       expect(retry).not.toHaveClass("ant-btn-loading");
@@ -115,7 +119,7 @@ describe("RepositoriesPage role-scoped catalog", () => {
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
-    expect(await screen.findByText("暂无仓库")).toBeVisible();
+    expect(await screen.findByText("No repositories")).toBeVisible();
     expect(screen.queryByText("Deletion unavailable")).not.toBeInTheDocument();
     expect(vi.mocked(deleteRepository)).toHaveBeenCalledTimes(2);
   });
@@ -152,10 +156,10 @@ describe("RepositoriesPage role-scoped catalog", () => {
       "/repositories/11111111-1111-4111-8111-111111111111",
     );
     expect(
-      screen.queryByRole("button", { name: "新建仓库" }),
+      screen.queryByRole("button", { name: "New repository" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /release-files 的更多操作/ }),
+      screen.queryByRole("button", { name: /More actions for release-files/ }),
     ).not.toBeInTheDocument();
     expect(vi.mocked(listRepositoryCapacities)).not.toHaveBeenCalled();
     expect(vi.mocked(listFormatProfiles)).not.toHaveBeenCalled();
@@ -178,16 +182,16 @@ describe("RepositoriesPage role-scoped catalog", () => {
 
     expect(
       await screen.findByText(
-        "你还没有任何仓库授权。仓库权限由平台管理员按仓库分配；请联系管理员为你的账号授权。",
+        "You have no repository grants yet. A platform administrator assigns access repository by repository; ask one to grant yours.",
       ),
     ).toBeInTheDocument();
     expect(
       screen.queryByText(
-        "仓库是制品格式与策略的边界；创建后即可发布、代理和治理制品。",
+        "A repository defines a format and policy boundary for publishing, proxying, and governing artifacts.",
       ),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "新建仓库" }),
+      screen.queryByRole("button", { name: "New repository" }),
     ).not.toBeInTheDocument();
   });
 
@@ -221,12 +225,14 @@ describe("RepositoriesPage role-scoped catalog", () => {
       </TestQueryProvider>,
     );
 
-    await user.click(await screen.findByRole("button", { name: /新建仓库/ }));
+    await user.click(
+      await screen.findByRole("button", { name: /New repository/ }),
+    );
     await user.type(
-      screen.getByRole("textbox", { name: "仓库名称" }),
+      screen.getByRole("textbox", { name: "Repository name" }),
       "release-files",
     );
-    await user.click(screen.getByRole("button", { name: /创\s*建/ }));
+    await user.click(screen.getByRole("button", { name: /Create/ }));
 
     clickMask();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -280,11 +286,15 @@ describe("RepositoriesPage role-scoped catalog", () => {
     );
 
     await user.click(
-      await screen.findByRole("button", { name: "release-files 的更多操作" }),
+      await screen.findByRole("button", {
+        name: "More actions for release-files",
+      }),
     );
-    await user.click(await screen.findByRole("menuitem", { name: "删除仓库" }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Delete repository" }),
+    );
     const dialog = await screen.findByRole("dialog");
-    await user.click(within(dialog).getByRole("button", { name: /^删\s*除$/ }));
+    await user.click(within(dialog).getByRole("button", { name: /^Delete$/ }));
 
     expect(await screen.findByText("network down")).toBeInTheDocument();
     // The rejection released `deleting`, so the dialog is dismissible again.

@@ -32,9 +32,9 @@ describe("APTAssetDetail", () => {
       </TestQueryProvider>,
     );
 
-    expect(screen.getByText("首次缓存")).toBeInTheDocument();
-    expect(screen.getByText("软件包对象")).toBeInTheDocument();
-    expect(screen.getByText("最近缓存")).toBeInTheDocument();
+    expect(screen.getByText("First cached")).toBeInTheDocument();
+    expect(screen.getByText("Package object")).toBeInTheDocument();
+    expect(screen.getByText("Last cached")).toBeInTheDocument();
     expect(
       screen.getByText("application/vnd.debian.binary-package"),
     ).toBeInTheDocument();
@@ -42,7 +42,7 @@ describe("APTAssetDetail", () => {
       screen.getByRole("link", { name: /hello_2.10_amd64.deb/ }),
     ).toHaveAttribute("href", `https://deb.example.test/debian/${path}`);
 
-    await user.click(screen.getByText("使用方法"));
+    await user.click(screen.getByText("Usage"));
     expect(
       await screen.findByText(
         `curl -fsSL ${window.location.origin}/apt/debian/${path} -o package`,

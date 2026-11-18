@@ -30,7 +30,7 @@ schedule and no remote target.
   hand-written `switch` (lines 66-92). Bytes are reused, not copied
   (ADR 0002; OCI `MountOCIBlobFrom` in
   `internal/protocol/oci/promotion.go`), which only works inside one
-  installation and is authorised against a source repository.
+  installation and is authorized against a source repository.
 - **Policy timing.** `EvaluateRepositorySecurityPolicy` runs at request
   time (`repository_distribution_api.go:57`) and in the policy dry run
   (`repository_policy_api.go:519`). The promotion worker does not
@@ -212,7 +212,7 @@ evaluator inputs).
 installation, push bytes to a remote one. Move and overwrite are not offered;
 sources are never mutated.
 
-Authorisation of rule changes (confused-deputy guard):
+Authorization of rule changes (confused-deputy guard):
 
 - Creating or updating a rule requires `RepositoryAdmin` on source and
   target (the existing `RA x 2` shape, `docs/cli-command-map.md:251`)
@@ -221,8 +221,8 @@ Authorisation of rule changes (confused-deputy guard):
   administrator of that service account. The service account must be unable
   to do more through the rule than its creator could do directly.
 - Execution runs as `run_as_service_account_id`, and source-read plus
-  target-write are re-authorised at every evaluation (same durable
-  re-authorisation as the preview replication jobs). A revoked account parks
+  target-write are re-authorized at every evaluation (same durable
+  re-authorization as the preview replication jobs). A revoked account parks
   the rule with state `authorization_lost` and emits
   `promotion.failed`.
 - A rule is also parked in state `paused` (reason `target_became_public`) when its target
@@ -270,7 +270,7 @@ calls the shared `PromotionService.Request`.
 `PromotionService` is extracted from the handler at
 `repository_distribution_api.go:25-106` and is the only path to
 promotion, for manual API, rules and batches alike; it runs quarantine,
-admission policy, authorisation and writes provenance. The promotion job
+admission policy, authorization and writes provenance. The promotion job
 re-evaluates the target admission policy and quarantine immediately before
 publish, so a policy tightened between enqueue and execution refuses the job
 (new behaviour, with a test).
@@ -318,7 +318,7 @@ is appended, never rewritten. Console shows it on the artifact detail page;
 Rules with `approval: {required: 1..3, expiresAfter: "168h", allowSelfApproval: false}`
 create the row in `pending_approval` and emit
 `promotion.pending_approval`. Approve/reject needs `RepositoryAdmin`
-on the target (group principals from ADR 0018 count) and is re-authorised at
+on the target (group principals from ADR 0018 count) and is re-authorized at
 approval time. Approvers must be distinct. For manual promotions they must
 differ from the requester unless `allowSelfApproval`. For rule-initiated
 promotions the requester is the service account, so that check is vacuous;
@@ -379,7 +379,7 @@ permission `ImportWrite` on the target repository):
    Everything else is listed as missing and must be uploaded; the response
    never distinguishes "exists elsewhere" from "unknown", so a caller cannot
    publish or probe a blob it does not hold (no cross-repository read by
-   digest; same authorisation rule as OCI mount-from).
+   digest; same authorization rule as OCI mount-from).
 2. `PUT /imports/{importId}/blobs/{sha256}` streams one blob; the server
    hashes while streaming into a staging key, and rejects on digest or size
    mismatch before anything becomes visible.
@@ -408,7 +408,7 @@ Coordinates containing `@` stay rejected as today.
 
 The sender is a new `lifecycle_jobs` kind `remote_push` reusing the
 `replication.Worker` checkpoint, lease and quarantine-fence machinery
-with a remote `Destination`. Failure handling: 4xx policy, authorisation
+with a remote `Destination`. Failure handling: 4xx policy, authorization
 or immutability responses are terminal (`failed` with the remote reasons);
 5xx, timeouts and network errors are retryable with exponential backoff and
 a max attempt count (`NOTARX_REMOTE_PUSH_MAX_ATTEMPTS`). If a timeout hits
@@ -451,7 +451,7 @@ preview in ADR 0026 slices 6 and 18 (slice 18 removes `supportsAPTDistributionPr
 
 `POST /promotion-batches` takes up to 100 `(coordinate, digest)`
 items (the preview batch limit) plus target. Admission is all-or-nothing:
-every item passes quarantine, policy and authorisation before any is queued;
+every item passes quarantine, policy and authorization before any is queued;
 execution is per item and idempotent, and the batch state aggregates
 (`completed`, `partially_failed`). A rule may set
 `scope: "release"` with a format-defined grouping; versioned Raw repositories define it as
@@ -491,13 +491,13 @@ matched artifacts with a per-condition verdict and never enqueues.
 ## Security considerations
 
 - Rules are privilege-bearing: they run as a named service account, are
-  authorised on both repositories at create time and at every run, and the
+  authorized on both repositories at create time and at every run, and the
   creator cannot select a service account more privileged than themselves.
   Every promotion is audited with the rule id and version.
 - A rule never bypasses admission policy, quarantine, or immutability;
   conditions only add gates. Policy and quarantine are re-evaluated inside the
   promotion job at publish, not only at request time.
-- Approvals are bound to the rule version and re-authorised at approval time;
+- Approvals are bound to the rule version and re-authorized at approval time;
   rule creators and editors cannot approve their own rule's promotions.
 - Remote import verifies sha256 and size on every blob, commits only after
   full verification, and re-runs the receiver's policy; the sender's evidence
@@ -670,4 +670,4 @@ depend on ADR 0015 slice 4 (cut-over) and use numbered migrations.
 
 **Q3 — Should the receiver accept signed sender evidence instead of the binary `trust_evidence` flag?** Decision: Keep the binary flag for 0.2; signed evidence is planned as DSSE/in-toto statements verified against the pinned sender issuer key (ADR 0020), after which `trust_evidence` means "verified signature required". It is additive and the sender's JWKS already provides the verification root.
 
-**Q4 — Should approvals support time-bounded delegation or an external approval webhook?** Decision: Stay in-product for 0.2; delegation is done with documented temporary grants, and an external approval callback is revisited only on a design-partner request, modeled as an additional approver that still records an in-product approval row. This matches GitHub environments, where third-party approval is a preview add-on.
+**Q4 — Should approvals support time-bounded delegation or an external approval webhook?** Decision: Stay in-product for 0.2; delegation is done with documented temporary grants, and an external approval callback is revisited only on a design-partner request, modelled as an additional approver that still records an in-product approval row. This matches GitHub environments, where third-party approval is a preview add-on.

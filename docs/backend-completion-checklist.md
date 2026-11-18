@@ -9,7 +9,7 @@ goal. It intentionally excludes frontend work.
 
 - Do not introduce a new `/conan/v3` route family. Conan Hosted work should
   extend the existing Conan backend surface with clear Hosted-vs-Group
-  resolution, while preserving current Conan read-through behavior.
+  resolution, while preserving current Conan read-through behaviour.
 
 ## Lifecycle Foundation
 
@@ -29,7 +29,7 @@ goal. It intentionally excludes frontend work.
 - [x] Maven browse/search projection.
 - [x] Maven publication companion hardening and black-box fixture coverage.
 - [x] Raw object listing.
-- [x] Raw checksum metadata and checksum sidecar behavior.
+- [x] Raw checksum metadata and checksum sidecar behaviour.
 - [x] Raw resumable upload support.
 - [x] Conan Hosted publish/session flow.
 - [x] Conan Hosted metadata/file read flow.
@@ -49,7 +49,7 @@ goal. It intentionally excludes frontend work.
 
 - [x] Maven immutable promotion API and worker, including HTTP retry and PostgreSQL/RustFS evidence.
 - [x] OCI, Raw, and Conan immutable promotion API and worker, including
-  authorization, idempotency, audit records, retry behavior, HTTP black-box,
+  authorization, idempotency, audit records, retry behaviour, HTTP black-box,
   and PostgreSQL/RustFS evidence.
 - [x] Replication planning model.
 - [x] Checkpointed replication worker with persisted checkpoints, retry, resume,

@@ -60,10 +60,10 @@ describe("ArtifactQuarantinePanel", () => {
     mockGetQuarantine.mockResolvedValue({ data: quarantine() } as never);
     renderPanel(false);
 
-    expect(await screen.findByText("制品已隔离")).toBeInTheDocument();
+    expect(await screen.findByText("Artifact quarantined")).toBeInTheDocument();
     expect(mockGetQuarantine).toHaveBeenCalledOnce();
     expect(
-      screen.queryByRole("button", { name: /解\s*除\s*隔\s*离/ }),
+      screen.queryByRole("button", { name: /Release/ }),
     ).not.toBeInTheDocument();
   });
 
@@ -88,13 +88,16 @@ describe("ArtifactQuarantinePanel", () => {
 
     renderPanel();
 
-    await user.click(
-      await screen.findByRole("button", { name: /隔\s*离\s*制\s*品/ }),
-    );
-    const confirm = screen.getByRole("button", { name: /确\s*认\s*隔\s*离/ });
+    await user.click(await screen.findByRole("button", { name: /Quarantine/ }));
+    const confirm = screen
+      .getAllByRole("button", { name: /Quarantine/ })
+      .at(-1)!;
     expect(confirm).toBeDisabled();
 
-    await user.type(screen.getByLabelText("隔离原因"), "  critical CVE  ");
+    await user.type(
+      screen.getByLabelText("Quarantine reason"),
+      "  critical CVE  ",
+    );
     await user.click(confirm);
 
     await waitFor(() =>
@@ -106,7 +109,7 @@ describe("ArtifactQuarantinePanel", () => {
       }),
     );
     await waitFor(() => expect(mockGetQuarantine).toHaveBeenCalledTimes(2));
-    expect(await screen.findByText("制品已隔离")).toBeInTheDocument();
+    expect(await screen.findByText("Artifact quarantined")).toBeInTheDocument();
   });
 
   it("uses the current version and keeps transition errors inside the modal", async () => {
@@ -124,10 +127,15 @@ describe("ArtifactQuarantinePanel", () => {
 
     renderPanel();
 
-    expect(await screen.findByText("制品已隔离")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /解\s*除\s*隔\s*离/ }));
-    await user.type(screen.getByLabelText("解除原因"), "review completed");
-    await user.click(screen.getByRole("button", { name: /确\s*认\s*解\s*除/ }));
+    expect(await screen.findByText("Artifact quarantined")).toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: /Release/ }).at(0)!);
+    await user.type(
+      screen.getByLabelText("Release reason"),
+      "review completed",
+    );
+    await user.click(
+      screen.getAllByRole("button", { name: /Release/ }).at(-1)!,
+    );
 
     await waitFor(() =>
       expect(mockReplaceQuarantine).toHaveBeenCalledWith(
@@ -137,7 +145,7 @@ describe("ArtifactQuarantinePanel", () => {
         }),
       ),
     );
-    expect(await screen.findByText("请求出错")).toBeInTheDocument();
+    expect(await screen.findByText("Request failed")).toBeInTheDocument();
     expect(screen.getByText("quarantine version changed")).toBeInTheDocument();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });

@@ -106,7 +106,7 @@ Gateway validates the complete set, POM identity, session owner, capacity, and i
 
 The strict endpoint returns `409 publication_commit_disabled` when the repository uses default direct mode; those PUTs are already visible and must not be presented as staged.
 
-### Retry and failure behavior
+### Retry and failure behaviour
 
 - Commit requires an `Idempotency-Key` of at most 128 characters.
 - Retries reuse the same key and asset set; asset-name ordering is ignored.

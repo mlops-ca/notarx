@@ -239,7 +239,7 @@ with their audit. A current same-state request rechecks authority but changes
 neither version nor audit. GET/PUT return `version` and `enabled`. A package-only
 administrator grant cannot configure the repository-wide policy.
 
-With `enabled:false`, quarantine alone preserves prior native read behavior.
+With `enabled:false`, quarantine alone preserves prior native read behaviour.
 With `enabled:true`, every compact names/versions/info and legacy
 specs/latest/prerelease index omits quarantined identities; quick gemspec and
 original package GET/HEAD return 404 before ETag/304 or Range processing. Policy
@@ -271,7 +271,7 @@ The gate verifies pinned
 [specification serialization](https://github.com/rubygems/rubygems/blob/v3.6.7/lib/rubygems/specification.rb),
 [push host construction](https://github.com/rubygems/rubygems/blob/v3.6.7/lib/rubygems/gemcutter_utilities.rb),
 and [compact-index parsing](https://github.com/rubygems/rubygems/blob/v3.6.7/bundler/lib/bundler/compact_index_client/parser.rb)
-from official sources against recorded SHA-256 values. Protocol behavior also
+from official sources against recorded SHA-256 values. Protocol behaviour also
 follows the official [push API](https://guides.rubygems.org/rubygems-org-api/).
 
 The gate builds the real Gateway binary, starts owned PostgreSQL/RustFS,

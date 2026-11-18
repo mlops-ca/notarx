@@ -81,7 +81,7 @@ const surfaces: Surface[] = [
     name: "login",
     path: "/login",
     authenticated: false,
-    ready: (page) => page.getByRole("button", { name: /登录|Sign in/ }),
+    ready: (page) => page.getByRole("button", { name: /Sign in|Sign in/ }),
   },
   {
     name: "public-browse",
@@ -143,7 +143,7 @@ const surfaces: Surface[] = [
   {
     name: "migration-sources",
     path: `/operations?tab=migrations&source=${migrationSource.id}`,
-    ready: (page) => page.getByText("尚未运行预检", { exact: true }),
+    ready: (page) => page.getByText("Preflight has not run", { exact: true }),
   },
   {
     name: "migration-batches",
@@ -151,7 +151,11 @@ const surfaces: Surface[] = [
     ready: (page) =>
       page.getByRole("heading", { name: "native-raw · raw", exact: true }),
     prepare: async (page) => {
-      await expect(page.getByText(/库存尚未完整加载/)).toHaveCount(0);
+      await expect(
+        page.getByText(
+          /Inventory is not fully loaded or scanning is not sealed\. This report is not complete inventory acceptance\./,
+        ),
+      ).toHaveCount(0);
     },
   },
   {
@@ -161,13 +165,17 @@ const surfaces: Surface[] = [
     ready: (page) =>
       page.getByRole("heading", { name: "native-raw · raw", exact: true }),
     prepare: async (page) => {
-      await expect(page.getByText(/库存尚未完整加载/)).toHaveCount(0);
+      await expect(
+        page.getByText(
+          /Inventory is not fully loaded or scanning is not sealed\. This report is not complete inventory acceptance\./,
+        ),
+      ).toHaveCount(0);
     },
   },
   {
     name: "migration-sources-mobile",
     path: `/operations?tab=migrations&source=${migrationSource.id}`,
-    ready: (page) => page.getByText("尚未运行预检", { exact: true }),
+    ready: (page) => page.getByText("Preflight has not run", { exact: true }),
     mobile: true,
   },
   {
@@ -183,7 +191,9 @@ const surfaces: Surface[] = [
       // The overview stays visible behind the palette; let its plot settle.
       await waitForStoragePlot(page);
       await page.keyboard.press("ControlOrMeta+k");
-      await page.getByRole("combobox", { name: "命令面板" }).fill("maven");
+      await page
+        .getByRole("combobox", { name: "Command palette" })
+        .fill("maven");
       await expect(
         page.getByRole("option", { name: /maven-central/ }),
       ).toBeVisible();
@@ -200,7 +210,7 @@ const surfaces: Surface[] = [
     path: "/login",
     authenticated: false,
     mobile: true,
-    ready: (page) => page.getByRole("button", { name: /登录|Sign in/ }),
+    ready: (page) => page.getByRole("button", { name: /Sign in|Sign in/ }),
   },
   {
     name: "public-browse-mobile",
@@ -218,7 +228,7 @@ const surfaces: Surface[] = [
   {
     name: "site-settings",
     path: "/site-settings",
-    ready: (page) => page.getByText("站点名称").first(),
+    ready: (page) => page.getByText("Site name").first(),
   },
   {
     name: "authentication",
@@ -238,7 +248,7 @@ for (const theme of themes) {
         await page.clock.setFixedTime(new Date(FIXED_NOW));
         await page.addInitScript((themeId) => {
           localStorage.setItem("ag.console.theme.id", themeId);
-          localStorage.setItem("ag.console.locale", "zh-CN");
+          localStorage.setItem("ag.console.locale", "en-CA");
         }, theme);
         const gateway = await mockGateway(page, {
           authenticated: surface.authenticated ?? true,

@@ -29,7 +29,7 @@ splitting domain dependencies, and are not a prerequisite for #280.
 operations once, declares its store ports, and has an independent constructor.
 The generated `ServerInterface` assertion rejects missing or duplicate methods.
 Generated routing and parameter binding stay at the HTTP edge. The first slice does
-not change OpenAPI, Console or agctl behavior and introduces no second API.
+not change OpenAPI, Console or agctl behaviour and introduces no second API.
 
 `managementScope` contains only repository lookup, an explicit anonymous-policy
 reader, audit recording, authentication, authorization and denial metrics. It

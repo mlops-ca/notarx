@@ -109,14 +109,20 @@ export function safeQuotaError(error: unknown, t: Translate): string {
 export function percent(value: number) {
   return `${value / 100}%`;
 }
-export function sampleBytes(value: number | undefined, t: Translate) {
+export function sampleBytes(
+  value: number | undefined,
+  t: Translate,
+  locale: string,
+) {
   if (value === undefined || !Number.isFinite(value) || value < 0)
     return t("system.unknown");
   const approximate = !Number.isSafeInteger(value);
   const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"];
   const unit =
     value === 0 ? 0 : Math.min(6, Math.floor(Math.log(value) / Math.log(1024)));
-  return `${approximate ? "≈ " : ""}${(value / 1024 ** unit).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${units[unit]}`;
+  return `${approximate ? "≈ " : ""}${new Intl.NumberFormat(locale, {
+    maximumFractionDigits: 2,
+  }).format(value / 1024 ** unit)} ${units[unit]}`;
 }
 
 export type PolicyDraft = Record<keyof RepositoryQuotaAlertPolicy, string>;

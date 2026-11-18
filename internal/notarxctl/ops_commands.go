@@ -329,7 +329,7 @@ func addDiagnosticChecks(ctx context.Context, client *apiClient, report *statusR
 	if len(nodes.Issues) > 0 {
 		codes := make([]string, 0, len(nodes.Issues))
 		for _, issue := range nodes.Issues {
-			codes = append(codes, issue.Code)
+			codes = append(codes, string(issue.Code))
 		}
 		nodeDetail += "; issues: " + strings.Join(codes, ", ")
 	}

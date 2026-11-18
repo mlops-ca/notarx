@@ -83,13 +83,15 @@ describe("independent dashboard requests", () => {
     });
     try {
       renderDashboard();
-      const title = await screen.findByText("仓库活动暂时无法显示");
+      const title = await screen.findByText(
+        "Repository activity is unavailable",
+      );
       const section = title.closest('[role="alert"]') as HTMLElement;
-      fireEvent.click(within(section).getByRole("button", { name: /重试/ }));
+      fireEvent.click(within(section).getByRole("button", { name: /Retry/ }));
       expect(await screen.findByText("synthetic-raw")).toBeVisible();
       expect(await screen.findByTestId("storage-chart")).toBeVisible();
-      expect(screen.getByText("总请求量")).toBeVisible();
-      expect(screen.getByText("暂无审计记录")).toBeVisible();
+      expect(screen.getByText("Total requests")).toBeVisible();
+      expect(screen.getByText("No audit records")).toBeVisible();
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
       expect(api.getOverviewStatistics).toHaveBeenCalledTimes(2);
       expect(api.listAudits).toHaveBeenCalledTimes(1);
@@ -112,12 +114,12 @@ describe("independent dashboard requests", () => {
         .mockReturnValueOnce(statistics.promise);
       try {
         renderDashboard();
-        const title = await screen.findByText("运行统计暂时无法显示");
+        const title = await screen.findByText("Runtime summary is unavailable");
         const section = title.closest('[role="alert"]') as HTMLElement;
         expect(screen.getByText("synthetic-raw")).toBeVisible();
-        expect(screen.getByText("暂无审计记录")).toBeVisible();
+        expect(screen.getByText("No audit records")).toBeVisible();
         error.mockClear();
-        fireEvent.click(within(section).getByRole("button", { name: /重试/ }));
+        fireEvent.click(within(section).getByRole("button", { name: /Retry/ }));
         expect(api.listGroups).toHaveBeenCalledTimes(2);
         expect(api.getOverviewStatistics).toHaveBeenCalledTimes(2);
         await act(async () => {
@@ -126,15 +128,17 @@ describe("independent dashboard requests", () => {
           else groups.resolve({ data: { items: [] } });
         });
         expect(error).not.toHaveBeenCalled();
-        expect(screen.getByText("运行统计暂时无法显示")).toBeVisible();
+        expect(
+          screen.getByText("Runtime summary is unavailable"),
+        ).toBeVisible();
         expect(screen.getByText("synthetic-raw")).toBeVisible();
-        expect(screen.getByText("暂无审计记录")).toBeVisible();
+        expect(screen.getByText("No audit records")).toBeVisible();
         await act(async () => {
           if (first === "statistics") groups.resolve({ data: { items: [] } });
           else statistics.resolve({ data: { ...snapshot } });
         });
-        expect(await screen.findByText("共 0 个成员引用")).toBeVisible();
-        expect(screen.getByText("总请求量")).toBeVisible();
+        expect(await screen.findByText("0 member references")).toBeVisible();
+        expect(screen.getByText("Total requests")).toBeVisible();
         expect(screen.queryByRole("alert")).not.toBeInTheDocument();
         expect(error).not.toHaveBeenCalled();
         expect(api.listAudits).toHaveBeenCalledTimes(1);
@@ -165,12 +169,12 @@ describe("independent dashboard requests", () => {
     api.getOverviewStatistics.mockResolvedValue({ data: malformed });
     try {
       renderDashboard();
-      expect(await screen.findByText("暂无审计记录")).toBeVisible();
-      expect(screen.getByRole("heading", { name: "总览" })).toBeVisible();
+      expect(await screen.findByText("No audit records")).toBeVisible();
+      expect(screen.getByRole("heading", { name: "Overview" })).toBeVisible();
       expect(screen.getAllByRole("alert").length).toBeGreaterThan(0);
       expect(
         screen
-          .getAllByRole("link", { name: "查看全部 →" })
+          .getAllByRole("link", { name: "View all →" })
           .map((link) => link.getAttribute("href")),
       ).toContain("/audits");
     } finally {
@@ -184,8 +188,8 @@ describe("independent dashboard requests", () => {
     renderDashboard();
     expect(await screen.findByTestId("storage-chart")).toBeVisible();
     expect(screen.getByText("synthetic-raw")).toBeVisible();
-    expect(screen.getByText("正在加载分组…")).toBeVisible();
-    expect(screen.getByText("正在加载审计事件…")).toBeVisible();
+    expect(screen.getByText("Loading groups…")).toBeVisible();
+    expect(screen.getByText("Loading audit events…")).toBeVisible();
   });
 
   it("keeps storage visible and retries only the failed groups request", async () => {
@@ -195,8 +199,8 @@ describe("independent dashboard requests", () => {
     renderDashboard();
     expect(await screen.findByTestId("storage-chart")).toBeVisible();
     expect(screen.getByText("synthetic group failure")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: /重试/ }));
-    expect(await screen.findByText("共 0 个成员引用")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: /Retry/ }));
+    expect(await screen.findByText("0 member references")).toBeVisible();
     expect(api.listGroups).toHaveBeenCalledTimes(2);
     expect(api.listAudits).toHaveBeenCalledTimes(1);
     expect(api.getOverviewStatistics).toHaveBeenCalledTimes(1);
@@ -208,9 +212,9 @@ describe("independent dashboard requests", () => {
     );
     renderDashboard();
     expect(await screen.findByText("synthetic capacity failure")).toBeVisible();
-    expect(screen.getByText("暂无审计记录")).toBeVisible();
+    expect(screen.getByText("No audit records")).toBeVisible();
     expect(screen.queryByTestId("storage-chart")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /重试/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Retry/ }));
     expect(await screen.findByTestId("storage-chart")).toBeVisible();
     expect(api.listAudits).toHaveBeenCalledTimes(1);
   });
@@ -235,8 +239,8 @@ describe("independent dashboard requests", () => {
     api.listAudits.mockResolvedValue({ error: "404 page not found" });
     renderDashboard();
     expect(await screen.findByTestId("storage-chart")).toBeVisible();
-    expect(screen.getByText("共 0 个成员引用")).toBeVisible();
-    expect(screen.getByText("暂无审计记录")).toBeVisible();
+    expect(screen.getByText("0 member references")).toBeVisible();
+    expect(screen.getByText("No audit records")).toBeVisible();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });

@@ -122,7 +122,9 @@ describe("access control read recovery", () => {
         },
       } as never);
       access("/access?tab=evaluate");
-      expect(await screen.findByText("此区域暂时无法显示")).toBeVisible();
+      expect(
+        await screen.findByText("This section is unavailable"),
+      ).toBeVisible();
       const errorsBefore = vi.mocked(console.error).mock.calls.length;
       let finish: (value: unknown) => void = () => {};
       repositories.mockImplementation(
@@ -144,12 +146,12 @@ describe("access control read recovery", () => {
           },
         }) as never;
       });
-      fireEvent.click(screen.getByRole("button", { name: /重试/ }));
+      fireEvent.click(screen.getByRole("button", { name: /Retry/ }));
       await waitFor(() => expect(repositories).toHaveBeenCalledTimes(2));
       await act(async () => {
         await new Promise((resolve) => setTimeout(resolve, 25));
       });
-      expect(screen.getByText("此区域暂时无法显示")).toBeVisible();
+      expect(screen.getByText("This section is unavailable")).toBeVisible();
       expect(vi.mocked(console.error).mock.calls.length).toBe(errorsBefore);
       await act(async () => {
         finish(
@@ -158,7 +160,9 @@ describe("access control read recovery", () => {
             : new Error("Synthetic directory refresh failed"),
         );
       });
-      expect(screen.getByRole("tab", { name: "策略与模板" })).toBeVisible();
+      expect(
+        screen.getByRole("tab", { name: "Policies & templates" }),
+      ).toBeVisible();
       expect(screen.queryByTestId("route-error")).not.toBeInTheDocument();
     },
   );
@@ -175,7 +179,7 @@ describe("access control read recovery", () => {
     expect(await screen.findByText("Synthetic refresh failed")).toBeVisible();
     expect(screen.getByRole("link", { name: repository.name })).toBeVisible();
     grants.mockResolvedValue({ data: [grant] } as never);
-    fireEvent.click(screen.getByRole("button", { name: /重试/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Retry/ }));
     await waitFor(() =>
       expect(
         screen.queryByText("Synthetic refresh failed"),
@@ -189,10 +193,14 @@ describe("access control read recovery", () => {
       data: [{ ...grant, resourcePrefix: { malformed: true } }],
     } as never);
     access();
-    expect(await screen.findByText("此区域暂时无法显示")).toBeVisible();
-    expect(screen.getByRole("tab", { name: "权限检查" })).toBeVisible();
+    expect(
+      await screen.findByText("This section is unavailable"),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("tab", { name: "Access evaluation" }),
+    ).toBeVisible();
     grants.mockResolvedValue({ data: [grant] } as never);
-    fireEvent.click(screen.getByRole("button", { name: /重试/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Retry/ }));
     expect(
       await screen.findByRole("link", { name: repository.name }),
     ).toBeVisible();
@@ -203,8 +211,10 @@ describe("access control read recovery", () => {
   it("contains malformed grant metrics while policy navigation remains usable", async () => {
     grants.mockResolvedValue({ data: [{ ...grant, scopes: null }] } as never);
     access("/access?tab=policies");
-    expect(await screen.findByText("公开访问边界")).toBeVisible();
-    expect(await screen.findByText("此区域暂时无法显示")).toBeVisible();
+    expect(await screen.findByText("Public access boundary")).toBeVisible();
+    expect(
+      await screen.findByText("This section is unavailable"),
+    ).toBeVisible();
     expect(screen.queryByTestId("route-error")).not.toBeInTheDocument();
   });
 
@@ -212,16 +222,18 @@ describe("access control read recovery", () => {
     repositories.mockResolvedValue({ data: { items: [null] } } as never);
     access("/access?tab=evaluate");
     expect(
-      await screen.findByRole("combobox", { name: "授权主体" }),
+      await screen.findByRole("combobox", { name: "Principal" }),
     ).toBeVisible();
-    expect(screen.getByRole("tab", { name: "策略与模板" })).toBeVisible();
+    expect(
+      screen.getByRole("tab", { name: "Policies & templates" }),
+    ).toBeVisible();
     expect(screen.queryByTestId("route-error")).not.toBeInTheDocument();
     repositories.mockResolvedValue({ data: { items: [repository] } } as never);
-    fireEvent.click(await screen.findByRole("button", { name: /重试/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Retry/ }));
     await waitFor(() => expect(repositories).toHaveBeenCalledTimes(2));
     await waitFor(() =>
       expect(
-        screen.queryByRole("button", { name: /重试/ }),
+        screen.queryByRole("button", { name: /Retry/ }),
       ).not.toBeInTheDocument(),
     );
   });

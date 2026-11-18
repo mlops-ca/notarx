@@ -91,7 +91,7 @@ describe("OperationsPage job history", () => {
 
     expect(await screen.findByText("releases")).toBeInTheDocument();
     expect(mockListLifecycleJobs).toHaveBeenCalledTimes(1);
-    expect(screen.queryByText("加载任务状态…")).not.toBeInTheDocument();
+    expect(screen.queryByText("Loading job status…")).not.toBeInTheDocument();
   });
 
   it("queues a pending job and re-reads the history", async () => {
@@ -103,7 +103,9 @@ describe("OperationsPage job history", () => {
 
     renderPage("/operations?tab=jobs");
     await userEvent.click(
-      await screen.findByRole("button", { name: "立即加入执行队列" }),
+      await screen.findByRole("button", {
+        name: "Queue for immediate execution",
+      }),
     );
 
     await waitFor(() =>
@@ -113,7 +115,7 @@ describe("OperationsPage job history", () => {
     );
     await waitFor(() =>
       expect(
-        screen.queryByRole("button", { name: "立即加入执行队列" }),
+        screen.queryByRole("button", { name: "Queue for immediate execution" }),
       ).not.toBeInTheDocument(),
     );
     expect(mockListLifecycleJobs).toHaveBeenCalledTimes(2);
@@ -125,7 +127,7 @@ describe("OperationsPage job history", () => {
 
     renderPage("/operations?tab=webhooks");
 
-    await screen.findByRole("tab", { name: "执行记录" });
+    await screen.findByRole("tab", { name: "Job history" });
     expect(mockListLifecycleJobs).not.toHaveBeenCalled();
   });
 
@@ -148,11 +150,11 @@ describe("OperationsPage job history", () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     renderPage("/operations?tab=jobs");
-    await userEvent.click(await screen.findByRole("button", { name: /重试/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /Retry/ }));
 
     expect(await screen.findByText("releases")).toBeInTheDocument();
     expect(mockListLifecycleJobs).toHaveBeenCalledTimes(2);
     expect(mockListAuditRetentionJobs).toHaveBeenCalledTimes(2);
-    expect(screen.queryByText("请求出错")).not.toBeInTheDocument();
+    expect(screen.queryByText("Request failed")).not.toBeInTheDocument();
   });
 });

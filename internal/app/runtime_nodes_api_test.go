@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
+	"unicode"
 
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -91,17 +93,56 @@ func TestRuntimeNodeHealthIdentifiesMixedBuildAndLegacyNodes(t *testing.T) {
 		{InstanceId: "legacy", SessionId: "legacy-session", Roles: []string{"worker"}, Status: adminopenapi.RuntimeNodeStatusStale},
 		{InstanceId: "retired", SessionId: "retired-session", Roles: []string{"worker"}, Status: adminopenapi.RuntimeNodeStatusOffline},
 	})
-	issues := make(map[string][]string)
+	issues := make(map[adminopenapi.RuntimeNodeHealthIssueCode][]string)
 	for _, issue := range health.Issues {
 		if issue.AffectedNodes != nil {
 			issues[issue.Code] = *issue.AffectedNodes
 		}
 	}
-	if got := issues["mixed_build"]; len(got) != 2 || got[0] != "api-old" || got[1] != "worker-new" {
+	if got := issues[adminopenapi.RuntimeNodeIssueMixedBuild]; len(got) != 2 || got[0] != "api-old" || got[1] != "worker-new" {
 		t.Fatalf("mixed builds=%#v", issues)
 	}
-	if got := issues["build_identity_unknown"]; len(got) != 1 || got[0] != "legacy-session" {
+	if got := issues[adminopenapi.RuntimeNodeIssueBuildIdentityUnknown]; len(got) != 1 || got[0] != "legacy-session" {
 		t.Fatalf("legacy builds=%#v", issues)
+	}
+}
+
+// Server diagnostics carry a stable code and an English message; the Console
+// localizes by code (ADR 0014).
+func TestRuntimeNodeHealthMessagesAreEnglishWithStableCodes(t *testing.T) {
+	v1, v2, revision1, revision2 := "v0.4.2", "v0.4.3", "abc123", "def456"
+	nodes := []adminopenapi.RuntimeNode{
+		{InstanceId: "dup", SessionId: "s1", Roles: []string{"worker"}, Status: adminopenapi.RuntimeNodeStatusOnline, Version: &v1, Revision: &revision1},
+		{InstanceId: "dup", SessionId: "s2", Roles: []string{"worker"}, Status: adminopenapi.RuntimeNodeStatusOnline, Version: &v2, Revision: &revision2},
+		{InstanceId: "old", SessionId: "s3", Roles: []string{"worker"}, Status: adminopenapi.RuntimeNodeStatusOnline},
+		{InstanceId: "stale", SessionId: "s4", Roles: []string{"worker"}, Status: adminopenapi.RuntimeNodeStatusStale},
+	}
+	want := []adminopenapi.RuntimeNodeHealthIssueCode{
+		adminopenapi.RuntimeNodeIssueApiUnavailable, adminopenapi.RuntimeNodeIssueSchedulerUnavailable, adminopenapi.RuntimeNodeIssueDuplicateInstanceId,
+		adminopenapi.RuntimeNodeIssueStaleNodes, adminopenapi.RuntimeNodeIssueBuildIdentityUnknown, adminopenapi.RuntimeNodeIssueMixedBuild,
+	}
+	seen := map[adminopenapi.RuntimeNodeHealthIssueCode]bool{}
+	for _, issue := range runtimeNodeHealth(nodes).Issues {
+		seen[issue.Code] = true
+		if !issue.Code.Valid() {
+			t.Fatalf("issue code %q is not in the OpenAPI enum", issue.Code)
+		}
+		if strings.TrimSpace(issue.Message) == "" {
+			t.Fatalf("issue %q has no message", issue.Code)
+		}
+		for _, r := range issue.Message {
+			if r > unicode.MaxASCII {
+				t.Fatalf("issue %q message %q is not English text", issue.Code, issue.Message)
+			}
+		}
+	}
+	for _, code := range want {
+		if !seen[code] {
+			t.Fatalf("missing issue %q in %#v", code, seen)
+		}
+	}
+	if empty := runtimeNodeHealth(nil); len(empty.Issues) == 0 || empty.Issues[0].Code != adminopenapi.RuntimeNodeIssueApiUnavailable {
+		t.Fatalf("no nodes must report api_unavailable first: %#v", empty.Issues)
 	}
 }
 

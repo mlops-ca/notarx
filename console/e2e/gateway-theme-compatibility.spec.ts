@@ -15,7 +15,9 @@ test("notarx Dark projects the v2 shell and menu palette", async ({
     "data-theme-id",
     "notarx-dark",
   );
-  await expect(page.getByRole("heading", { name: "站点设置" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Site settings" }),
+  ).toBeVisible();
 
   const palette = await page.evaluate(() => {
     const style = (selector: string) => {
@@ -83,7 +85,9 @@ test("notarx Light projects the v2 shell and menu palette", async ({
     "data-theme-id",
     "notarx-light",
   );
-  await expect(page.getByRole("heading", { name: "站点设置" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Site settings" }),
+  ).toBeVisible();
 
   const palette = await page.evaluate(() => {
     const style = (selector: string) => {
@@ -229,7 +233,9 @@ for (const [themeID, expectedAction] of semanticThemeCases) {
       "data-theme-id",
       themeID,
     );
-    await expect(page.getByRole("heading", { name: "站点设置" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Site settings" }),
+    ).toBeVisible();
 
     const contract = await page.evaluate(() => {
       const root = document.documentElement;

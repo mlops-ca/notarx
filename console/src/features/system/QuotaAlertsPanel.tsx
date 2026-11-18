@@ -19,6 +19,7 @@ import { Card } from "../../components/ui/Layout";
 import { useAuth } from "../../lib/auth";
 import { platformCapabilities } from "../../lib/authorization";
 import { usePreferences } from "../../lib/preferences";
+import { useFormatters } from "../../lib/useFormatters";
 import { percent, quotaLabel, safeQuotaError } from "./quotaAlertPresentation";
 import { quotaResult, useQuotaSnapshot } from "./useQuotaSnapshot";
 import { QuotaRuleEditor } from "./QuotaRuleEditor";
@@ -38,6 +39,7 @@ export function QuotaAlertsPanel() {
 
 function AuthorizedQuotaAlerts() {
   const { t } = usePreferences();
+  const { formatDateTime } = useFormatters();
   const [selected, setSelected] = useState<string>();
   const [editor, setEditor] = useState<{ rule?: RepositoryQuotaAlertRule }>();
   const [saved, setSaved] = useState<false | "saved" | "deleted">(false);
@@ -141,7 +143,7 @@ function AuthorizedQuotaAlerts() {
       )}
       {snapshot.readAt && (
         <p className="text-xs text-fg-tertiary">
-          {t("system.readAt")}: {new Date(snapshot.readAt).toLocaleString()}
+          {t("system.readAt")}: {formatDateTime(snapshot.readAt)}
         </p>
       )}
       {saved && (

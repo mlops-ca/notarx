@@ -70,13 +70,13 @@ describe("CopyableValue", () => {
     });
     renderCopyableValue();
 
-    await user.click(screen.getByRole("button", { name: "复制" }));
+    await user.click(screen.getByRole("button", { name: "Copy" }));
 
     expect(writeText).toHaveBeenCalledWith("sha256:verified");
     expect(
-      await screen.findByRole("button", { name: "已复制" }),
+      await screen.findByRole("button", { name: "Copied" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("已复制到剪贴板");
+    expect(screen.getByRole("status")).toHaveTextContent("Copied to clipboard");
   });
 
   it("shows actionable feedback when clipboard access fails", async () => {
@@ -87,10 +87,12 @@ describe("CopyableValue", () => {
     });
     renderCopyableValue();
 
-    await user.click(screen.getByRole("button", { name: "复制" }));
+    await user.click(screen.getByRole("button", { name: "Copy" }));
 
     expect(
-      await screen.findByText("复制失败，请手动选择并复制该值。"),
+      await screen.findByText(
+        "Copy failed. Select and copy the value manually.",
+      ),
     ).toBeInTheDocument();
   });
 });

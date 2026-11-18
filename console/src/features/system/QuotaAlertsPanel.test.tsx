@@ -126,18 +126,22 @@ it("keeps a password-change denial across cancel/back and clears it only after a
   });
   mount();
   await userEvent.click(
-    await screen.findByRole("button", { name: "查看 Synthetic Raw" }),
+    await screen.findByRole("button", { name: "View Synthetic Raw" }),
   );
-  await userEvent.click(screen.getByRole("button", { name: "启用规则" }));
-  await userEvent.click(screen.getByRole("button", { name: "确认启用" }));
-  expect(await screen.findByText(/必须先修改密码/)).toBeInTheDocument();
-  await userEvent.click(screen.getByRole("button", { name: "取消" }));
-  expect(screen.getByRole("button", { name: "编辑规则" })).toBeDisabled();
-  await userEvent.click(screen.getByRole("button", { name: "返回规则列表" }));
-  expect(screen.getByRole("button", { name: "创建规则" })).toBeDisabled();
-  await userEvent.click(screen.getByRole("button", { name: "刷新" }));
+  await userEvent.click(screen.getByRole("button", { name: "Enable rule" }));
+  await userEvent.click(screen.getByRole("button", { name: "Confirm enable" }));
+  expect(
+    await screen.findByText(
+      /Change your password before returning to this page\./,
+    ),
+  ).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(screen.getByRole("button", { name: "Edit rule" })).toBeDisabled();
+  await userEvent.click(screen.getByRole("button", { name: "Back to rules" }));
+  expect(screen.getByRole("button", { name: "Create rule" })).toBeDisabled();
+  await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
   await waitFor(() =>
-    expect(screen.getByRole("button", { name: "创建规则" })).toBeEnabled(),
+    expect(screen.getByRole("button", { name: "Create rule" })).toBeEnabled(),
   );
   expect(mocks.updateRepositoryQuotaAlertRule).toHaveBeenCalledTimes(1);
 });
@@ -174,28 +178,30 @@ it("keeps a loaded repository page and selection while refreshing alert rules", 
   );
   mount();
   await userEvent.click(
-    await screen.findByRole("button", { name: "创建规则" }),
+    await screen.findByRole("button", { name: "Create rule" }),
   );
-  await userEvent.click(screen.getByRole("button", { name: "加载更多仓库" }));
-  await userEvent.click(screen.getByRole("combobox", { name: "仓库" }));
+  await userEvent.click(
+    screen.getByRole("button", { name: "Load more repositories" }),
+  );
+  await userEvent.click(screen.getByRole("combobox", { name: "Repository" }));
   await userEvent.click(
     await screen.findByRole("option", { name: "Second page repository" }),
   );
-  await userEvent.click(screen.getByRole("button", { name: "刷新" }));
+  await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
   await waitFor(() =>
     expect(mocks.listRepositoryQuotaAlertRules).toHaveBeenCalledTimes(2),
   );
   await waitFor(() =>
-    expect(screen.getByRole("button", { name: "刷新" })).not.toHaveClass(
+    expect(screen.getByRole("button", { name: "Refresh" })).not.toHaveClass(
       "ant-btn-loading",
     ),
   );
-  await userEvent.click(screen.getByRole("combobox", { name: "仓库" }));
+  await userEvent.click(screen.getByRole("combobox", { name: "Repository" }));
   expect(
     await screen.findByRole("option", { name: "Second page repository" }),
   ).toBeInTheDocument();
   expect(
-    screen.getByRole("combobox", { name: "仓库" }).closest(".ant-select"),
+    screen.getByRole("combobox", { name: "Repository" }).closest(".ant-select"),
   ).toHaveTextContent("Second page repository");
 });
 
@@ -210,12 +216,12 @@ it("ignores an older read that resolves after a newer refresh", async () => {
         finish = resolve;
       }),
   );
-  await userEvent.click(screen.getByRole("button", { name: "刷新" }));
+  await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
   mocks.listRepositoryQuotaAlertRules.mockResolvedValue({ data: [] });
   await act(async () => {
     document.dispatchEvent(new Event("visibilitychange"));
   });
-  expect(await screen.findByText("尚无配额告警规则")).toBeInTheDocument();
+  expect(await screen.findByText("No quota alert rules")).toBeInTheDocument();
   await act(async () => {
     finish?.({ data: [rule] });
   });
@@ -228,28 +234,28 @@ it("holds a root read authorization denial through automatic recovery until an e
   mocks.listRepositoryQuotaAlertRules.mockResolvedValue({
     error: { code: "access_denied" },
   });
-  await userEvent.click(screen.getByRole("button", { name: "刷新" }));
-  await screen.findByText(/上次读取的数据/);
+  await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
+  await screen.findByText(/previously read data/);
   mocks.listRepositoryQuotaAlertRules.mockResolvedValue({ data: [rule] });
   await act(async () => {
     document.dispatchEvent(new Event("visibilitychange"));
   });
   await waitFor(() =>
-    expect(screen.queryByText(/上次读取的数据/)).not.toBeInTheDocument(),
+    expect(screen.queryByText(/previously read data/)).not.toBeInTheDocument(),
   );
-  expect(screen.getByRole("button", { name: "创建规则" })).toBeDisabled();
-  await userEvent.click(screen.getByRole("button", { name: "刷新" }));
+  expect(screen.getByRole("button", { name: "Create rule" })).toBeDisabled();
+  await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
   await waitFor(() =>
-    expect(screen.getByRole("button", { name: "创建规则" })).toBeEnabled(),
+    expect(screen.getByRole("button", { name: "Create rule" })).toBeEnabled(),
   );
 });
 
 it("does not let a pending explicit refresh clear a newer event authorization denial", async () => {
   mount();
   await userEvent.click(
-    await screen.findByRole("button", { name: "查看 Synthetic Raw" }),
+    await screen.findByRole("button", { name: "View Synthetic Raw" }),
   );
-  await screen.findByText("尚无告警事件");
+  await screen.findByText("No alert events yet");
   let finish:
     ((value: { data: RepositoryQuotaAlertRule[] }) => void) | undefined;
   mocks.listRepositoryQuotaAlertRules.mockImplementationOnce(
@@ -258,26 +264,26 @@ it("does not let a pending explicit refresh clear a newer event authorization de
         finish = resolve;
       }),
   );
-  await userEvent.click(screen.getByRole("button", { name: "刷新" }));
+  await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
   mocks.listRepositoryQuotaAlertEvents.mockResolvedValue({
     error: { code: "access_denied" },
   });
-  await userEvent.click(screen.getByRole("button", { name: "刷新事件" }));
+  await userEvent.click(screen.getByRole("button", { name: "Refresh events" }));
   await waitFor(() =>
-    expect(screen.getByRole("button", { name: "编辑规则" })).toBeDisabled(),
+    expect(screen.getByRole("button", { name: "Edit rule" })).toBeDisabled(),
   );
   await act(async () => {
     finish?.({ data: [rule] });
   });
   await waitFor(() =>
-    expect(screen.getByRole("button", { name: "刷新" })).not.toHaveClass(
+    expect(screen.getByRole("button", { name: "Refresh" })).not.toHaveClass(
       "ant-btn-loading",
     ),
   );
-  expect(screen.getByRole("button", { name: "编辑规则" })).toBeDisabled();
-  await userEvent.click(screen.getByRole("button", { name: "刷新" }));
+  expect(screen.getByRole("button", { name: "Edit rule" })).toBeDisabled();
+  await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
   await waitFor(() =>
-    expect(screen.getByRole("button", { name: "编辑规则" })).toBeEnabled(),
+    expect(screen.getByRole("button", { name: "Edit rule" })).toBeEnabled(),
   );
 });
 
@@ -291,10 +297,10 @@ it("locks duplicate submissions and ignores a late mutation after leaving the pa
   );
   const view = mount();
   await userEvent.click(
-    await screen.findByRole("button", { name: "查看 Synthetic Raw" }),
+    await screen.findByRole("button", { name: "View Synthetic Raw" }),
   );
-  await userEvent.click(screen.getByRole("button", { name: "编辑规则" }));
-  const button = screen.getByRole("button", { name: "保存规则" });
+  await userEvent.click(screen.getByRole("button", { name: "Edit rule" }));
+  const button = screen.getByRole("button", { name: "Save rule" });
   act(() => {
     fireEvent.click(button);
     fireEvent.click(button);
@@ -303,12 +309,12 @@ it("locks duplicate submissions and ignores a late mutation after leaving the pa
   view.unmount();
   mocks.listRepositoryQuotaAlertRules.mockResolvedValue({ data: [] });
   mount();
-  await screen.findByText("尚无配额告警规则");
+  await screen.findByText("No quota alert rules");
   await act(async () => {
     finish?.({ data: rule });
   });
-  expect(screen.queryByText("规则已保存")).not.toBeInTheDocument();
-  expect(screen.getByText("尚无配额告警规则")).toBeInTheDocument();
+  expect(screen.queryByText("Rule saved")).not.toBeInTheDocument();
+  expect(screen.getByText("No quota alert rules")).toBeInTheDocument();
 });
 
 describe("quota alerts read boundary", () => {
@@ -316,10 +322,14 @@ describe("quota alerts read boundary", () => {
     mount();
     expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
     expect(await screen.findByText("Synthetic Raw")).toBeInTheDocument();
-    expect(screen.getByText("严重")).toBeInTheDocument();
-    expect(screen.getByText("样本陈旧")).toBeInTheDocument();
-    expect(screen.getByText(/邮件通道未开启/)).toBeInTheDocument();
-    expect(screen.getByText(/不表示 S3、NAS/)).toBeInTheDocument();
+    expect(screen.getByText("Critical")).toBeInTheDocument();
+    expect(screen.getByText("Sample stale")).toBeInTheDocument();
+    expect(screen.getByText(/Email channel disabled/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Observes logical repository usage, not the physical capacity of S3, NAS, or local mounts\./,
+      ),
+    ).toBeInTheDocument();
     expect(mocks.createRepositoryQuotaAlertRule).not.toHaveBeenCalled();
   });
   it("has one initial error state and never echoes unsafe error detail", async () => {
@@ -327,7 +337,9 @@ describe("quota alerts read boundary", () => {
       new Error("smtp-password-sensitive-marker"),
     );
     mount();
-    expect(await screen.findByRole("alert")).toHaveTextContent("请求失败");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Request failed",
+    );
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.queryByText(/sensitive-marker/)).not.toBeInTheDocument();
   });
@@ -337,8 +349,8 @@ describe("quota alerts read boundary", () => {
     mocks.listRepositoryQuotaAlertRules.mockResolvedValue({
       error: { code: "internal_error", message: "unsafe" },
     });
-    await userEvent.click(screen.getByRole("button", { name: "刷新" }));
-    expect(await screen.findByText(/上次读取的数据/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(await screen.findByText(/previously read data/)).toBeInTheDocument();
     expect(screen.getByText("Synthetic Raw")).toBeInTheDocument();
   });
   it("does not request administrator data for a member", async () => {
@@ -348,7 +360,9 @@ describe("quota alerts read boundary", () => {
       role: "member",
     };
     mount();
-    expect(screen.getByText("仅平台管理员可管理配额告警")).toBeInTheDocument();
+    expect(
+      screen.getByText("Only platform administrators can manage quota alerts"),
+    ).toBeInTheDocument();
     await waitFor(() =>
       expect(mocks.listRepositoryQuotaAlertRules).not.toHaveBeenCalled(),
     );
@@ -357,20 +371,24 @@ describe("quota alerts read boundary", () => {
     mocks.listRepositoryQuotaAlertRules.mockResolvedValue({ data: [] });
     mocks.listEmailTargets.mockResolvedValue({ data: [] });
     mount();
-    expect(await screen.findByText("尚无配额告警规则")).toBeInTheDocument();
-    expect(screen.getByText(/“邮件通知”页签新建目标/)).toBeInTheDocument();
+    expect(await screen.findByText("No quota alert rules")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Create a target in the System runtime Email notifications tab, then return here to configure a rule\./,
+      ),
+    ).toBeInTheDocument();
   });
 });
 
 async function fillPolicy() {
   for (const [label, value] of [
-    ["警告阈值（%）", "80.01"],
-    ["严重阈值（%）", "95"],
-    ["恢复阈值（%）", "75"],
-    ["警告持续时间（秒）", "120"],
-    ["严重持续时间（秒）", "30"],
-    ["恢复持续时间（秒）", "300"],
-    ["最大样本年龄（秒）", "60"],
+    ["Warning threshold (%)", "80.01"],
+    ["Critical threshold (%)", "95"],
+    ["Recovery threshold (%)", "75"],
+    ["Warning hold duration (seconds)", "120"],
+    ["Critical hold duration (seconds)", "30"],
+    ["Recovery hold duration (seconds)", "300"],
+    ["Maximum sample age (seconds)", "60"],
   ])
     await userEvent.type(screen.getByRole("textbox", { name: label }), value);
 }
@@ -380,21 +398,25 @@ describe("quota alerts explicit writes", () => {
     mocks.createRepositoryQuotaAlertRule.mockResolvedValue({ data: rule });
     mount();
     await userEvent.click(
-      await screen.findByRole("button", { name: "创建规则" }),
+      await screen.findByRole("button", { name: "Create rule" }),
     );
-    expect(screen.getByRole("textbox", { name: "警告阈值（%）" })).toHaveValue(
-      "",
-    );
-    await userEvent.click(screen.getByRole("combobox", { name: "仓库" }));
+    expect(
+      screen.getByRole("textbox", { name: "Warning threshold (%)" }),
+    ).toHaveValue("");
+    await userEvent.click(screen.getByRole("combobox", { name: "Repository" }));
     await userEvent.click(
       await screen.findByRole("option", { name: "Synthetic Raw" }),
     );
-    await userEvent.click(screen.getByRole("combobox", { name: "邮件目标" }));
+    await userEvent.click(
+      screen.getByRole("combobox", { name: "Email target" }),
+    );
     await userEvent.click(
       await screen.findByRole("option", { name: /Synthetic operations/ }),
     );
     await fillPolicy();
-    await userEvent.click(screen.getByRole("button", { name: "创建停用规则" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Create disabled rule" }),
+    );
     await waitFor(() =>
       expect(mocks.createRepositoryQuotaAlertRule).toHaveBeenCalledTimes(1),
     );
@@ -404,25 +426,29 @@ describe("quota alerts explicit writes", () => {
       enabled: false,
       policy: { ...policy, warningBasisPoints: 8001 },
     });
-    expect(await screen.findByText("规则已保存")).toBeInTheDocument();
+    expect(await screen.findByText("Rule saved")).toBeInTheDocument();
   });
   it("validates threshold ordering without silently rounding invalid precision", async () => {
     mocks.listRepositoryQuotaAlertRules.mockResolvedValue({ data: [] });
     mount();
     await userEvent.click(
-      await screen.findByRole("button", { name: "创建规则" }),
+      await screen.findByRole("button", { name: "Create rule" }),
     );
     await fillPolicy();
     await userEvent.type(
-      screen.getByRole("textbox", { name: "警告阈值（%）" }),
+      screen.getByRole("textbox", { name: "Warning threshold (%)" }),
       "1",
     );
-    await userEvent.click(screen.getByRole("button", { name: "创建停用规则" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Create disabled rule" }),
+    );
     expect(
-      screen.getByRole("textbox", { name: "警告阈值（%）" }),
-    ).toHaveAccessibleDescription(/最多两位小数/);
+      screen.getByRole("textbox", { name: "Warning threshold (%)" }),
+    ).toHaveAccessibleDescription(
+      /Enter a percentage above 0 and at most 100, with up to two decimals\./,
+    );
     expect(mocks.createRepositoryQuotaAlertRule).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole("button", { name: "取消" }));
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
   it("preserves edit input after a CAS conflict and does not claim success", async () => {
@@ -431,23 +457,27 @@ describe("quota alerts explicit writes", () => {
     });
     mount();
     await userEvent.click(
-      await screen.findByRole("button", { name: "查看 Synthetic Raw" }),
+      await screen.findByRole("button", { name: "View Synthetic Raw" }),
     );
-    await userEvent.click(screen.getByRole("button", { name: "编辑规则" }));
-    const field = screen.getByRole("textbox", { name: "警告阈值（%）" });
+    await userEvent.click(screen.getByRole("button", { name: "Edit rule" }));
+    const field = screen.getByRole("textbox", {
+      name: "Warning threshold (%)",
+    });
     await userEvent.clear(field);
     await userEvent.type(field, "81.25");
-    await userEvent.click(screen.getByRole("button", { name: "保存规则" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save rule" }));
     expect(
-      await screen.findByText(/规则已被其他管理员修改/),
+      await screen.findByText(
+        /Another administrator changed this rule\. Go back, refresh, and edit again; the newer configuration was not overwritten\./,
+      ),
     ).toBeInTheDocument();
     expect(field).toHaveValue("81.25");
     expect(
       mocks.updateRepositoryQuotaAlertRule.mock.calls[0][0].headers,
     ).toEqual({ "If-Match": "rule-v1" });
-    expect(screen.queryByText("规则已保存")).not.toBeInTheDocument();
+    expect(screen.queryByText("Rule saved")).not.toBeInTheDocument();
     expect(screen.queryByText(/sensitive-marker/)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "保存规则" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save rule" })).toBeDisabled();
   });
 });
 
@@ -500,15 +530,23 @@ describe("quota alert evidence and control", () => {
     });
     mount();
     await userEvent.click(
-      await screen.findByRole("button", { name: "查看 Synthetic Raw" }),
+      await screen.findByRole("button", { name: "View Synthetic Raw" }),
     );
-    expect(await screen.findByText("SMTP 服务器已接受")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "查看交付详情" }));
-    expect(await screen.findByText(/可能重复/)).toBeInTheDocument();
-    expect(screen.getByText(/不表示收件箱已送达/)).toBeInTheDocument();
-    expect(screen.getByText(/历史样本/)).toHaveTextContent("0 B");
     expect(
-      screen.queryByRole("button", { name: /发送|重放/ }),
+      await screen.findByText("Accepted by SMTP server"),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "View delivery details" }),
+    );
+    expect(await screen.findByText(/Possible duplicate/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /SMTP accepted only means the server accepted the message; it does not confirm inbox delivery\./,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Historical sample/)).toHaveTextContent("0 B");
+    expect(
+      screen.queryByRole("button", { name: /Send|Replay/ }),
     ).not.toBeInTheDocument();
   });
   it("cannot enable when email encryption is unavailable", async () => {
@@ -517,9 +555,9 @@ describe("quota alert evidence and control", () => {
     });
     mount();
     await userEvent.click(
-      await screen.findByRole("button", { name: "查看 Synthetic Raw" }),
+      await screen.findByRole("button", { name: "View Synthetic Raw" }),
     );
-    expect(screen.getByRole("button", { name: "启用规则" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Enable rule" })).toBeDisabled();
     expect(mocks.updateRepositoryQuotaAlertRule).not.toHaveBeenCalled();
   });
   it("requires purpose and target confirmation before enabling and uses CAS", async () => {
@@ -531,15 +569,21 @@ describe("quota alert evidence and control", () => {
     });
     mount();
     await userEvent.click(
-      await screen.findByRole("button", { name: "查看 Synthetic Raw" }),
+      await screen.findByRole("button", { name: "View Synthetic Raw" }),
     );
-    await userEvent.click(screen.getByRole("button", { name: "启用规则" }));
-    expect(screen.getByText(/后续真实超限事件/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Enable rule" }));
+    expect(
+      screen.getByText(
+        /Enabling may send email to this target for future real quota events\. Previously unqueued events are not caught up, and no test email is sent\./,
+      ),
+    ).toBeInTheDocument();
     expect(
       screen.getAllByText(/Synthetic operations/, { selector: "p" }),
     ).toHaveLength(2);
     expect(mocks.updateRepositoryQuotaAlertRule).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole("button", { name: "确认启用" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Confirm enable" }),
+    );
     await waitFor(() =>
       expect(mocks.updateRepositoryQuotaAlertRule).toHaveBeenCalledTimes(1),
     );
@@ -553,14 +597,20 @@ describe("quota alert evidence and control", () => {
     });
     mount();
     await userEvent.click(
-      await screen.findByRole("button", { name: "查看 Synthetic Raw" }),
+      await screen.findByRole("button", { name: "View Synthetic Raw" }),
     );
-    await userEvent.click(screen.getByRole("button", { name: "删除规则" }));
-    expect(screen.getByText(/保留历史，不会生成恢复事件/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "取消" }));
+    await userEvent.click(screen.getByRole("button", { name: "Delete rule" }));
+    expect(
+      screen.getByText(
+        /Deletion stops new evaluations and retains history without generating a recovery event\. Unclaimed automatic deliveries are cancelled; a claimed delivery may finish once\./,
+      ),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(mocks.deleteRepositoryQuotaAlertRule).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole("button", { name: "删除规则" }));
-    await userEvent.click(screen.getByRole("button", { name: "确认删除" }));
+    await userEvent.click(screen.getByRole("button", { name: "Delete rule" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Confirm delete" }),
+    );
     await waitFor(() =>
       expect(mocks.deleteRepositoryQuotaAlertRule).toHaveBeenCalledTimes(1),
     );
@@ -570,35 +620,32 @@ describe("quota alert evidence and control", () => {
   });
 });
 
-it.each(["zh-CN", "en-US"])(
+it.each(["en-CA"])(
   "associates quota errors with controls and focuses the first selection in %s",
   async (locale) => {
     localStorage.setItem("ag.console.locale", locale);
-    const zh = locale === "zh-CN";
     mount();
     await userEvent.click(
       await screen.findByRole("button", {
-        name: zh ? "创建规则" : "Create rule",
+        name: "Create rule",
       }),
     );
     await userEvent.click(
       screen.getByRole("button", {
-        name: zh ? "创建停用规则" : "Create disabled rule",
+        name: "Create disabled rule",
       }),
     );
     const repository = screen.getByRole("combobox", {
-      name: zh ? "仓库" : "Repository",
+      name: "Repository",
     });
     expect(repository).toHaveFocus();
     expect(repository).toHaveAttribute("aria-invalid", "true");
-    expect(repository).toHaveAccessibleDescription(
-      zh ? /请选择仓库/ : /Choose a repository/,
-    );
+    expect(repository).toHaveAccessibleDescription(/Choose a repository/);
     const duration = screen.getByRole("textbox", {
-      name: zh ? "警告持续时间（秒）" : "Warning hold duration (seconds)",
+      name: "Warning hold duration (seconds)",
     });
     expect(duration).toHaveAttribute("aria-invalid", "true");
-    expect(duration).toHaveAccessibleDescription(zh ? /1–86400/ : /1–86400/);
+    expect(duration).toHaveAccessibleDescription(/1–86400/);
     await userEvent.type(duration, "120");
     expect(duration).not.toHaveAttribute("aria-invalid", "true");
     expect(mocks.createRepositoryQuotaAlertRule).not.toHaveBeenCalled();
@@ -606,23 +653,35 @@ it.each(["zh-CN", "en-US"])(
 );
 
 it.each([
-  ["警告阈值（%）", "80.001", /最多两位小数/],
-  ["严重阈值（%）", "79", /警告阈值必须低于严重阈值/],
-  ["恢复阈值（%）", "80", /恢复阈值必须低于警告阈值/],
-  ["警告持续时间（秒）", "0", /1–86400/],
-  ["最大样本年龄（秒）", "29", /30–3600/],
+  [
+    "Warning threshold (%)",
+    "80.001",
+    /Enter a percentage above 0 and at most 100, with up to two decimals\./,
+  ],
+  [
+    "Critical threshold (%)",
+    "79",
+    /Warning must be below the critical threshold\./,
+  ],
+  [
+    "Recovery threshold (%)",
+    "80",
+    /Recovery must be below the warning threshold\./,
+  ],
+  ["Warning hold duration (seconds)", "0", /1–86400/],
+  ["Maximum sample age (seconds)", "29", /30–3600/],
 ])(
   "reports the %s constraint at the related field without saving",
   async (label, value, description) => {
     mount();
     await userEvent.click(
-      await screen.findByRole("button", { name: "查看 Synthetic Raw" }),
+      await screen.findByRole("button", { name: "View Synthetic Raw" }),
     );
-    await userEvent.click(screen.getByRole("button", { name: "编辑规则" }));
+    await userEvent.click(screen.getByRole("button", { name: "Edit rule" }));
     const field = screen.getByRole("textbox", { name: label });
     await userEvent.clear(field);
     await userEvent.type(field, value);
-    await userEvent.click(screen.getByRole("button", { name: "保存规则" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save rule" }));
     expect(field).toHaveAttribute("aria-invalid", "true");
     expect(field).toHaveAccessibleDescription(description);
     expect(mocks.updateRepositoryQuotaAlertRule).not.toHaveBeenCalled();
@@ -668,9 +727,11 @@ it("reports a failed repository page in the editor and reads it again on request
   );
   mount();
   await userEvent.click(
-    await screen.findByRole("button", { name: "创建规则" }),
+    await screen.findByRole("button", { name: "Create rule" }),
   );
-  await userEvent.click(screen.getByRole("button", { name: "加载更多仓库" }));
+  await userEvent.click(
+    screen.getByRole("button", { name: "Load more repositories" }),
+  );
   // The failure is local to the editor; the panel stays writable.
   await waitFor(() =>
     expect(
@@ -680,11 +741,15 @@ it("reports a failed repository page in the editor and reads it again on request
     ).toHaveLength(1),
   );
   expect(
-    await screen.findByText("请求失败。请检查连接并刷新后重试。"),
+    await screen.findByText(
+      "Request failed. Check the connection and refresh before retrying.",
+    ),
   ).toBeInTheDocument();
   failPage = false;
-  await userEvent.click(screen.getByRole("button", { name: "加载更多仓库" }));
-  await userEvent.click(screen.getByRole("combobox", { name: "仓库" }));
+  await userEvent.click(
+    screen.getByRole("button", { name: "Load more repositories" }),
+  );
+  await userEvent.click(screen.getByRole("combobox", { name: "Repository" }));
   expect(
     await screen.findByRole("option", { name: "Second page repository" }),
   ).toBeInTheDocument();
@@ -716,31 +781,37 @@ it("keeps the editor's loaded catalogue, selection and draft across a panel refr
   mocks.createRepositoryQuotaAlertRule.mockResolvedValue({ data: rule });
   mount();
   await userEvent.click(
-    await screen.findByRole("button", { name: "创建规则" }),
+    await screen.findByRole("button", { name: "Create rule" }),
   );
-  await userEvent.click(screen.getByRole("button", { name: "加载更多仓库" }));
-  const picker = screen.getByRole("combobox", { name: "仓库" });
+  await userEvent.click(
+    screen.getByRole("button", { name: "Load more repositories" }),
+  );
+  const picker = screen.getByRole("combobox", { name: "Repository" });
   await userEvent.click(picker);
   await userEvent.click(
     await screen.findByRole("option", { name: "Second page repository" }),
   );
-  await userEvent.click(screen.getByRole("combobox", { name: "邮件目标" }));
+  await userEvent.click(screen.getByRole("combobox", { name: "Email target" }));
   await userEvent.click(
     await screen.findByRole("option", { name: /Synthetic operations/ }),
   );
   await fillPolicy();
   refreshed = true;
-  await userEvent.click(screen.getByRole("button", { name: "刷新" }));
+  await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
   await waitFor(() =>
-    expect(screen.getByRole("button", { name: "创建停用规则" })).toBeEnabled(),
+    expect(
+      screen.getByRole("button", { name: "Create disabled rule" }),
+    ).toBeEnabled(),
   );
   expect(picker.closest(".ant-select")).toHaveTextContent(
     "Second page repository",
   );
-  expect(screen.getByRole("textbox", { name: "警告阈值（%）" })).toHaveValue(
-    "80.01",
+  expect(
+    screen.getByRole("textbox", { name: "Warning threshold (%)" }),
+  ).toHaveValue("80.01");
+  await userEvent.click(
+    screen.getByRole("button", { name: "Load more repositories" }),
   );
-  await userEvent.click(screen.getByRole("button", { name: "加载更多仓库" }));
   await waitFor(() =>
     expect(mocks.listRepositories).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -748,7 +819,9 @@ it("keeps the editor's loaded catalogue, selection and draft across a panel refr
       }),
     ),
   );
-  await userEvent.click(screen.getByRole("button", { name: "创建停用规则" }));
+  await userEvent.click(
+    screen.getByRole("button", { name: "Create disabled rule" }),
+  );
   await waitFor(() =>
     expect(mocks.createRepositoryQuotaAlertRule).toHaveBeenCalledTimes(1),
   );

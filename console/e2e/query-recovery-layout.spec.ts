@@ -38,10 +38,7 @@ async function setup(page: Page, width: number) {
   await page.setViewportSize({ width, height: 1000 });
   await authenticateAsAdmin(page);
   await page.addInitScript((width) => {
-    localStorage.setItem(
-      "ag.console.locale",
-      width === 390 ? "en-US" : "zh-CN",
-    );
+    localStorage.setItem("ag.console.locale", "en-CA");
     localStorage.setItem("ag.console.theme", width === 390 ? "light" : "dark");
   }, width);
   await page.route("**/api/v2/site-settings", (route) =>
@@ -111,7 +108,6 @@ function expectOnlyMockHttpErrors(errors: string[], statuses: number[]) {
 }
 
 for (const width of [1440, 390]) {
-  const en = width === 390;
   test(`malformed overview stays local and one Retry restores shared sections at ${width}px`, async ({
     page,
   }, info) => {
@@ -131,17 +127,15 @@ for (const width of [1440, 390]) {
     );
     await page.goto("/");
     const activity = page.getByRole("alert").filter({
-      hasText: en
-        ? "Repository activity is unavailable"
-        : "仓库活动暂时无法显示",
+      hasText: "Repository activity is unavailable",
     });
     await expect(activity).toBeVisible();
     await expect(
-      page.getByText(en ? "No audit records" : "暂无审计记录", { exact: true }),
+      page.getByText("No audit records", { exact: true }),
     ).toBeVisible();
     await expect(
       page.getByRole("heading", {
-        name: en ? "Overview" : "总览",
+        name: "Overview",
         exact: true,
       }),
     ).toBeVisible();
@@ -155,12 +149,12 @@ for (const width of [1440, 390]) {
       );
     }
     errors.consoleErrors.length = 0;
-    await activity.getByRole("button", { name: en ? "Retry" : "重试" }).click();
+    await activity.getByRole("button", { name: "Retry" }).click();
     await expect(
       page.getByRole("link", { name: repository.name, exact: true }),
     ).toBeVisible();
     await expect(
-      page.getByRole("group", { name: en ? "Page summary" : "页面摘要" }),
+      page.getByRole("group", { name: "Page summary" }),
     ).toBeVisible();
     await page.getByTestId("storage-by-format-chart").scrollIntoViewIfNeeded();
     await expect(page.getByTestId("ant-design-pie-ready")).toBeVisible();
@@ -209,14 +203,14 @@ for (const width of [1440, 390]) {
     });
     await page.goto("/");
     const summary = page.getByRole("alert").filter({
-      hasText: en ? "Runtime summary is unavailable" : "运行统计暂时无法显示",
+      hasText: "Runtime summary is unavailable",
     });
     await expect(summary).toBeVisible();
     await expect(
       page.getByRole("link", { name: repository.name, exact: true }),
     ).toBeVisible();
     await expect(
-      page.getByText(en ? "No audit records" : "暂无审计记录", { exact: true }),
+      page.getByText("No audit records", { exact: true }),
     ).toBeVisible();
     await geometry(page);
     await capture(page, info, "groups-malformed");
@@ -236,7 +230,7 @@ for (const width of [1440, 390]) {
       );
     }
     errors.consoleErrors.length = 0;
-    await summary.getByRole("button", { name: en ? "Retry" : "重试" }).click();
+    await summary.getByRole("button", { name: "Retry" }).click();
     try {
       await expect(
         page.getByRole("link", {
@@ -251,12 +245,12 @@ for (const width of [1440, 390]) {
       releaseGroups();
     }
     await expect(
-      page.getByText(en ? "0 member references" : "共 0 个成员引用", {
+      page.getByText("0 member references", {
         exact: true,
       }),
     ).toBeVisible();
     await expect(
-      page.getByRole("group", { name: en ? "Page summary" : "页面摘要" }),
+      page.getByRole("group", { name: "Page summary" }),
     ).toBeVisible();
     await expect(page.getByRole("alert")).toHaveCount(0);
     expect(groupsReads).toBe(2);
@@ -314,9 +308,7 @@ for (const width of [1440, 390]) {
       });
     });
     await page.goto(`/repositories/${repository.id}?tab=settings`);
-    await page
-      .getByRole("button", { name: en ? "Save changes" : "保存更改" })
-      .click();
+    await page.getByRole("button", { name: "Save changes" }).click();
     const warning = page
       .getByRole("alert")
       .filter({ hasText: "Synthetic refresh unavailable" });
@@ -327,13 +319,13 @@ for (const width of [1440, 390]) {
     ).toBeVisible();
     await expect(
       page.getByRole("navigation", {
-        name: en ? "Repository tasks" : "仓库任务",
+        name: "Repository tasks",
       }),
     ).toBeVisible();
     await geometry(page);
     await capture(page, info, "detail-refresh-failed");
     state = "recovered";
-    await warning.getByRole("button", { name: en ? "Retry" : "重试" }).click();
+    await warning.getByRole("button", { name: "Retry" }).click();
     await expect(warning).toHaveCount(0);
     await expect(
       page.getByRole("heading", { name: repository.name, exact: true }),
@@ -383,18 +375,14 @@ for (const width of [1440, 390]) {
     await page.goto("/repositories");
     await page
       .getByRole("button", {
-        name: en
-          ? `More actions for ${repository.name}`
-          : `${repository.name} 的更多操作`,
+        name: `More actions for ${repository.name}`,
       })
       .click();
-    await page
-      .getByRole("menuitem", { name: en ? "Delete repository" : "删除仓库" })
-      .click();
+    await page.getByRole("menuitem", { name: "Delete repository" }).click();
     const dialog = page.getByRole("dialog");
     await waitForModalOpen(dialog);
     const confirm = dialog.getByRole("button", {
-      name: en ? /Delete$/ : /删\s*除$/,
+      name: /Delete$/,
     });
     await confirm.click();
     await expect(
@@ -405,7 +393,7 @@ for (const width of [1440, 390]) {
     await confirm.click();
     await expect(dialog).toHaveCount(0);
     await expect(
-      page.getByText(en ? "No repositories" : "暂无仓库", { exact: true }),
+      page.getByText("No repositories", { exact: true }),
     ).toBeVisible();
     await expect(page.getByText("Synthetic deletion unavailable")).toHaveCount(
       0,

@@ -1,6 +1,4 @@
-import type { IdentityMessageKey } from "./identity.zh-CN";
-
-export const identityEnUS: Record<IdentityMessageKey, string> = {
+export const identityEnCA = {
   "identity.copyToken": "Copy token",
   "identity.copied": "Copied",
   "identity.newKey": "New key",
@@ -339,3 +337,5 @@ export const identityEnUS: Record<IdentityMessageKey, string> = {
   "identity.viewGrants": "View repository grants",
   "identity.viewRecentAudits": "View recent audits",
 };
+
+export type IdentityMessageKey = keyof typeof identityEnCA;

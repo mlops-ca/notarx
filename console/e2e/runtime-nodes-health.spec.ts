@@ -95,34 +95,43 @@ test("operations survives legacy runtime node null arrays", async ({
   );
 
   await page.goto("/operations");
-  await expect(page.getByRole("heading", { name: "任务中心" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Operations" })).toBeVisible();
   if (process.env.CAPTURE_LAYOUT_EVIDENCE === "1") {
     await page.screenshot({
       path: testInfo.outputPath("operations-tables.png"),
     });
   }
-  await page.getByRole("link", { name: "系统运行" }).click();
-  await expect(page.getByRole("heading", { name: "系统运行" })).toBeVisible();
-  await expectTabGutter(page, ".ag-compact-tabs", ".ag-page-stack");
-  await expect(page.getByRole("tab", { name: "系统诊断" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
-  await expect(page.getByRole("heading", { name: "构建信息" })).toBeVisible();
+  await page.getByRole("link", { name: "System Runtime" }).click();
   await expect(
-    page.getByRole("heading", { name: "运行身份", exact: true }),
+    page.getByRole("heading", { name: "System Runtime" }),
   ).toBeVisible();
-  await expect(page.getByRole("heading", { name: "运行节点" })).toBeVisible();
+  await expectTabGutter(page, ".ag-compact-tabs", ".ag-page-stack");
+  await expect(
+    page.getByRole("tab", { name: "System diagnostics" }),
+  ).toHaveAttribute("aria-selected", "true");
+  await expect(
+    page.getByRole("heading", { name: "Build information" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Runtime identity", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Runtime nodes" }),
+  ).toBeVisible();
   await expect(page.getByText("legacy-worker", { exact: true })).toBeVisible();
-  await expect(page.getByText("版本未知", { exact: true })).toBeVisible();
-  await expect(page.getByText("无格式 Worker", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Version unknown", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("No format worker", { exact: true }),
+  ).toBeVisible();
   const backgroundQueues = page
-    .getByRole("heading", { name: "后台队列" })
+    .getByRole("heading", { name: "Background queues" })
     .locator(
       "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' ag-card ')][1]",
     );
   const runtimeNodes = page
-    .getByRole("heading", { name: "运行节点" })
+    .getByRole("heading", { name: "Runtime nodes" })
     .locator(
       "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' ag-card ')][1]",
     );
@@ -244,7 +253,8 @@ test("connected version links to diagnostics and reports a rolling upgrade", asy
             {
               code: "mixed_build",
               severity: "warning",
-              message: "在线节点运行不同的版本或修订号，可能正在滚动升级",
+              message:
+                "Online nodes run different versions or revisions; a rolling upgrade may be in progress",
               affectedNodes: ["session-new", "session-old"],
             },
           ],
@@ -255,18 +265,21 @@ test("connected version links to diagnostics and reports a rolling upgrade", asy
   await page.goto("/repositories");
   await page
     .locator(".ag-sider-desktop")
-    .getByRole("link", { name: /当前节点 · v0.4.3 · def456/ })
+    .getByRole("link", { name: /Connected node · v0.4.3 · def456/ })
     .click();
   await expect(page).toHaveURL(/\/system\?tab=diagnostics$/);
-  await expect(page.getByRole("tab", { name: "系统诊断" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
-  await expect(page.getByText("当前连接节点", { exact: true })).toBeVisible();
   await expect(
-    page.getByText("涉及会话: session-new, session-old"),
+    page.getByRole("tab", { name: "System diagnostics" }),
+  ).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByText("Connected node", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Sessions: session-new, session-old"),
   ).toBeVisible();
-  await expect(page.getByText(/无法判断当前构建是否为最新版本/)).toBeVisible();
+  await expect(
+    page.getByText(
+      /No release source is configured, so the latest version cannot be determined\./,
+    ),
+  ).toBeVisible();
   await expect
     .poll(() =>
       page.evaluate(
@@ -281,7 +294,9 @@ test("connected version links to diagnostics and reports a rolling upgrade", asy
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.getByRole("heading", { name: "运行节点" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Runtime nodes" }),
+  ).toBeVisible();
   await expect
     .poll(() =>
       page.evaluate(
@@ -295,11 +310,11 @@ test("connected version links to diagnostics and reports a rolling upgrade", asy
     path: testInfo.outputPath("runtime-version-mobile.png"),
     fullPage: true,
   });
-  await page.getByRole("button", { name: "打开导航" }).click();
+  await page.getByRole("button", { name: "Open navigation" }).click();
   await expect(
     page
       .locator(".ag-mobile-nav-drawer")
-      .getByRole("link", { name: /当前节点 · v0.4.3 · def456/ }),
+      .getByRole("link", { name: /Connected node · v0.4.3 · def456/ }),
   ).toBeVisible();
   expect(pageErrors).toEqual([]);
   expect(unmockedRequests).toEqual([]);
@@ -327,7 +342,7 @@ test("job history uses one compact and consistent detail path", async ({
             completedAt: "2026-08-08T08:02:00Z",
             attempts: 3,
             maxAttempts: 3,
-            lastError: "目标仓库拒绝了晋级请求",
+            lastError: "The target repository rejected the promotion request",
           },
         },
         {
@@ -354,12 +369,17 @@ test("job history uses one compact and consistent detail path", async ({
   );
 
   await page.goto("/operations");
-  await page.getByRole("tab", { name: "执行记录" }).click();
+  await expect(async () => {
+    await page.getByRole("tab", { name: "Job history", exact: true }).click();
+    await expect(
+      page.getByRole("tab", { name: "Job history", exact: true }),
+    ).toHaveAttribute("aria-selected", "true", { timeout: 1000 });
+  }).toPass();
 
   const table = page.locator(".ag-operation-desktop-table");
   await expect(table).toBeVisible();
   await expect(table.locator(".ant-table-row-expand-icon")).toHaveCount(0);
-  const detailButtons = table.getByRole("button", { name: "查看任务详情" });
+  const detailButtons = table.getByRole("button", { name: "View job details" });
   await expect(detailButtons).toHaveCount(2);
   await expect
     .poll(() =>
@@ -371,7 +391,9 @@ test("job history uses one compact and consistent detail path", async ({
   await detailButtons.nth(1).click();
   await expect(detailButtons.nth(1)).toHaveAttribute("aria-expanded", "true");
   await expect(
-    table.getByText("此任务没有报告额外的执行详情。", { exact: true }),
+    table.getByText("This job did not report additional execution details.", {
+      exact: true,
+    }),
   ).toBeVisible();
 });
 
@@ -398,7 +420,7 @@ test("job history keeps the record path compact on mobile", async ({
             completedAt: "2026-08-08T08:02:00Z",
             attempts: 3,
             maxAttempts: 3,
-            lastError: "目标仓库拒绝了晋级请求",
+            lastError: "The target repository rejected the promotion request",
           },
         },
       ],
@@ -412,15 +434,27 @@ test("job history keeps the record path compact on mobile", async ({
   );
 
   await page.goto("/operations");
-  await page.getByRole("tab", { name: "执行记录" }).click();
+  await expect(async () => {
+    await page.getByRole("tab", { name: "Job history", exact: true }).click();
+    await expect(
+      page.getByRole("tab", { name: "Job history", exact: true }),
+    ).toHaveAttribute("aria-selected", "true", { timeout: 1000 });
+  }).toPass();
 
-  await expect(page.getByRole("heading", { name: "执行记录" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Job history" }),
+  ).toBeVisible();
   const mobileList = page.locator(".ag-operation-mobile-list");
   await expect(mobileList).toBeVisible();
   await expect(
-    mobileList.getByText("目标仓库拒绝了晋级请求", { exact: true }),
+    mobileList.getByText(
+      "The target repository rejected the promotion request",
+      { exact: true },
+    ),
   ).toBeVisible();
-  await expect(page.getByRole("heading", { name: "运行节点" })).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Runtime nodes" }),
+  ).toHaveCount(0);
   await expect
     .poll(() =>
       page.evaluate(() =>

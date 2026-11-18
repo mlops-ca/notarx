@@ -138,7 +138,9 @@ function sider() {
 }
 
 async function openAccountMenu(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(within(sider()).getByRole("button", { name: /^账户菜单/ }));
+  await user.click(
+    within(sider()).getByRole("button", { name: /^Account menu/ }),
+  );
 }
 
 afterEach(() => {
@@ -152,10 +154,10 @@ describe("AppLayout", () => {
 
     renderLayout("/repositories");
 
-    expect(await screen.findByText("正在加载…")).toBeInTheDocument();
+    expect(await screen.findByText("Loading…")).toBeInTheDocument();
     expect(screen.queryByText("repository catalog")).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("link", { name: /仓库/ }),
+      screen.queryByRole("link", { name: /Repositories/ }),
     ).not.toBeInTheDocument();
   });
 
@@ -192,9 +194,11 @@ describe("AppLayout", () => {
     renderLayout("/repositories");
 
     expect(await screen.findByText("repository catalog")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /仓库/ })).toBeInTheDocument();
     expect(
-      screen.queryByRole("link", { name: /用户/ }),
+      screen.getByRole("link", { name: /Repositories/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /User/ }),
     ).not.toBeInTheDocument();
   });
 
@@ -236,7 +240,7 @@ describe("AppLayout", () => {
 
     expect(await screen.findByText("repository detail")).toBeInTheDocument();
     expect(
-      screen.queryByRole("link", { name: /用户/ }),
+      screen.queryByRole("link", { name: /User/ }),
     ).not.toBeInTheDocument();
   });
 
@@ -282,14 +286,16 @@ describe("AppLayout", () => {
     renderLayout("/repositories");
 
     expect(
-      await screen.findByRole("heading", { name: "等待管理员授权" }),
+      await screen.findByRole("heading", {
+        name: "Awaiting administrator approval",
+      }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "检查授权状态" }),
+      screen.getByRole("button", { name: "Check access" }),
     ).toBeInTheDocument();
     expect(screen.queryByText("repository catalog")).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("link", { name: /仓库/ }),
+      screen.queryByRole("link", { name: /Repositories/ }),
     ).not.toBeInTheDocument();
   });
 
@@ -299,17 +305,19 @@ describe("AppLayout", () => {
 
     expect(await screen.findByText("repository catalog")).toBeInTheDocument();
     expect(
-      within(sider()).getByRole("link", { name: /仓库/ }),
+      within(sider()).getByRole("link", { name: /Repositories/ }),
     ).toBeInTheDocument();
 
     await user.click(
-      within(sider()).getByRole("button", { name: "搜索或跳转…" }),
+      within(sider()).getByRole("button", { name: "Search or jump to…" }),
     );
-    const palette = await screen.findByRole("combobox", { name: "命令面板" });
+    const palette = await screen.findByRole("combobox", {
+      name: "Command palette",
+    });
     await user.type(palette, " release/widget ");
     expect(
       screen.getByRole("option", {
-        name: /在所有仓库中搜索制品“release\/widget”/,
+        name: /Search artifacts for “release\/widget”/,
       }),
     ).toHaveAttribute("aria-selected", "true");
     await user.keyboard("{Enter}");
@@ -317,23 +325,25 @@ describe("AppLayout", () => {
       "/search?q=release%2Fwidget",
     );
 
-    await user.click(screen.getByRole("button", { name: "收起导航" }));
+    await user.click(
+      screen.getByRole("button", { name: "Collapse navigation" }),
+    );
     expect(window.localStorage.getItem("ag:sider-collapsed")).toBe("1");
     const desktopSider =
       document.querySelector<HTMLElement>(".ag-sider-desktop");
     expect(desktopSider).toHaveAttribute("data-collapsed", "true");
-    expect(within(desktopSider!).getByText("运行")).toBeInTheDocument();
+    expect(within(desktopSider!).getByText("Runtime")).toBeInTheDocument();
     expect(
       within(desktopSider!).getByText("Artifact Gateway"),
     ).toBeInTheDocument();
     expect(
       within(desktopSider!).getByRole("link", {
-        name: /当前节点 · v0.4.3 · abc123/,
+        name: /Connected node · v0.4.3 · abc123/,
       }),
     ).toBeInTheDocument();
 
     await openAccountMenu(user);
-    await user.click(await screen.findByRole("menuitem", { name: /退出/ }));
+    await user.click(await screen.findByRole("menuitem", { name: /Sign out/ }));
     expect(auth.clearToken).toHaveBeenCalledOnce();
   });
 
@@ -343,7 +353,9 @@ describe("AppLayout", () => {
 
     await screen.findByTestId("location");
     await user.keyboard("{Meta>}k{/Meta}");
-    const palette = await screen.findByRole("combobox", { name: "命令面板" });
+    const palette = await screen.findByRole("combobox", {
+      name: "Command palette",
+    });
     await user.type(palette, "release");
     const option = await screen.findByRole("option", {
       name: /release-files/,
@@ -366,10 +378,10 @@ describe("AppLayout", () => {
     renderLayout("/repositories");
 
     const account = await within(sider()).findByRole("button", {
-      name: "账户菜单: user:alice",
+      name: "Account menu: user:alice",
     });
-    expect(account).toHaveTextContent("管理员 · 账号登录");
-    expect(within(sider()).queryByText("已配置 Token")).toBeNull();
+    expect(account).toHaveTextContent("Administrator · Password sign-in");
+    expect(within(sider()).queryByText("Token configured")).toBeNull();
   });
 
   it("opens diagnostics from the connected build version", async () => {
@@ -379,7 +391,7 @@ describe("AppLayout", () => {
     const desktopSider =
       document.querySelector<HTMLElement>(".ag-sider-desktop");
     const versionLink = await within(desktopSider!).findByRole("link", {
-      name: /当前节点 · v0.4.3 · abc123/,
+      name: /Connected node · v0.4.3 · abc123/,
     });
     await user.click(versionLink);
     expect(await screen.findByTestId("location")).toHaveTextContent(
@@ -393,20 +405,22 @@ describe("AppLayout", () => {
 
     await openAccountMenu(user);
     await user.click(
-      await screen.findByRole("menuitem", { name: /已配置 Token/ }),
+      await screen.findByRole("menuitem", { name: /Token configured/ }),
     );
-    const dialog = await screen.findByRole("dialog", { name: "API 访问令牌" });
+    const dialog = await screen.findByRole("dialog", {
+      name: "API access token",
+    });
     const input = within(dialog).getByRole("textbox");
     expect(input).toHaveValue("operator-token");
 
     await user.clear(input);
     await user.paste("   ");
     expect(
-      within(dialog).getByRole("button", { name: /^保\s*存$/ }),
+      within(dialog).getByRole("button", { name: /^Save$/ }),
     ).toBeDisabled();
     await user.paste("valid-token");
     expect(
-      within(dialog).getByRole("button", { name: /^保\s*存$/ }),
+      within(dialog).getByRole("button", { name: /^Save$/ }),
     ).toBeEnabled();
   });
 
@@ -416,30 +430,32 @@ describe("AppLayout", () => {
 
     await openAccountMenu(user);
     await user.click(
-      await screen.findByRole("menuitem", { name: /已配置 Token/ }),
+      await screen.findByRole("menuitem", { name: /Token configured/ }),
     );
-    const dialog = await screen.findByRole("dialog", { name: "API 访问令牌" });
+    const dialog = await screen.findByRole("dialog", {
+      name: "API access token",
+    });
     const input = within(dialog).getByRole("textbox");
     expect(input).toHaveValue("operator-token");
 
     await user.clear(input);
     await user.paste("unsaved-token");
     expect(input).toHaveValue("unsaved-token");
-    await user.click(within(dialog).getByRole("button", { name: /^取\s*消$/ }));
+    await user.click(within(dialog).getByRole("button", { name: /^Cancel$/ }));
     await waitFor(() => expect(dialog).not.toBeVisible());
     expect(auth.setToken).not.toHaveBeenCalled();
     expect(auth.clearToken).not.toHaveBeenCalled();
 
     await openAccountMenu(user);
     await user.click(
-      await screen.findByRole("menuitem", { name: /已配置 Token/ }),
+      await screen.findByRole("menuitem", { name: /Token configured/ }),
     );
     const reopened = await screen.findByRole("dialog", {
-      name: "API 访问令牌",
+      name: "API access token",
     });
     expect(within(reopened).getByRole("textbox")).toHaveValue("operator-token");
     await user.click(
-      within(reopened).getByRole("button", { name: "清除令牌" }),
+      within(reopened).getByRole("button", { name: "Clear token" }),
     );
     expect(auth.clearToken).toHaveBeenCalledOnce();
     expect(auth.setToken).not.toHaveBeenCalled();
@@ -458,12 +474,14 @@ describe("AppLayout", () => {
     renderLayout("/repositories");
 
     expect(await screen.findByText("repository catalog")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "收起导航" }));
+    await user.click(
+      screen.getByRole("button", { name: "Collapse navigation" }),
+    );
     expect(document.querySelector(".ag-sider-desktop")).toHaveAttribute(
       "data-collapsed",
       "true",
     );
-    await user.click(screen.getByRole("button", { name: "展开导航" }));
+    await user.click(screen.getByRole("button", { name: "Expand navigation" }));
     expect(document.querySelector(".ag-sider-desktop")).toHaveAttribute(
       "data-collapsed",
       "false",
@@ -474,9 +492,9 @@ describe("AppLayout", () => {
     const user = userEvent.setup();
     renderLayout("/repositories");
 
-    await user.click(screen.getByRole("button", { name: "打开导航" }));
+    await user.click(screen.getByRole("button", { name: "Open navigation" }));
     const drawer = await screen.findByRole("dialog");
-    await user.click(within(drawer).getByRole("link", { name: /搜索/ }));
+    await user.click(within(drawer).getByRole("link", { name: /Search/ }));
 
     expect(await screen.findByTestId("location")).toHaveTextContent("/search");
     await waitFor(() => expect(drawer).not.toBeVisible());
@@ -497,10 +515,12 @@ describe("AppLayout", () => {
         </PreferencesProvider>
       </TestQueryProvider>,
     );
-    await user.click(screen.getByRole("button", { name: "打开导航" }));
+    await user.click(screen.getByRole("button", { name: "Open navigation" }));
     const drawer = await screen.findByRole("dialog");
     await user.click(
-      within(drawer).getByRole("link", { name: /当前节点 · v0.4.3 · abc123/ }),
+      within(drawer).getByRole("link", {
+        name: /Connected node · v0.4.3 · abc123/,
+      }),
     );
     expect(screen.getByTestId("location")).toHaveTextContent(
       "/system?tab=diagnostics",
@@ -509,7 +529,7 @@ describe("AppLayout", () => {
     await user.click(screen.getByRole("button", { name: "Back" }));
     expect(screen.getByTestId("location")).toHaveTextContent("/repositories");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "打开导航" }));
+    await user.click(screen.getByRole("button", { name: "Open navigation" }));
     expect(await screen.findByRole("dialog")).toBeVisible();
   });
 
@@ -517,14 +537,14 @@ describe("AppLayout", () => {
     const user = userEvent.setup();
     renderLayout("/repositories");
 
-    await user.click(screen.getByRole("button", { name: "打开导航" }));
+    await user.click(screen.getByRole("button", { name: "Open navigation" }));
 
     const drawer = await screen.findByRole("dialog");
     expect(
-      within(drawer).getByRole("link", { name: /仓库/ }),
+      within(drawer).getByRole("link", { name: /Repositories/ }),
     ).toBeInTheDocument();
     expect(
-      within(drawer).getByRole("button", { name: "关闭导航" }),
+      within(drawer).getByRole("button", { name: "Close navigation" }),
     ).toBeInTheDocument();
 
     await user.keyboard("{Escape}");

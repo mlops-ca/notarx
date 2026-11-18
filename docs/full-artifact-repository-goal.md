@@ -43,7 +43,7 @@ V1 is done when all of the following are true:
 1. **Finish lifecycle foundation.** Add the reclaim worker to the completed
    tombstone and lifecycle-job store; migrate Raw and Maven deletion/reclaim
    onto the same contract; define Conan's native artifact state model.
-2. **Complete native format behavior.** Finish OCI catalog/referrers and
+2. **Complete native format behaviour.** Finish OCI catalog/referrers and
    browsing; Raw listing, checksums, and resumable uploads; Maven browse/search
    and publication companion; Conan Hosted publication, deletion, metadata,
    search, and lifecycle.
@@ -57,7 +57,7 @@ V1 is done when all of the following are true:
 
 ## Current Checkpoint
 
-The V1 backend work packages are complete: lifecycle, format behavior,
+The V1 backend work packages are complete: lifecycle, format behaviour,
 management APIs, distribution, and operational controls are tracked as complete
 in the [Backend Completion Checklist](backend-completion-checklist.md). The
 checkpoint covers the initial four-format V1 scope. It does not close the
@@ -99,7 +99,7 @@ acceptance criteria.
 
 ## Current Format Expansion
 
-Cargo is now admitted with Hosted, Proxy and Group behavior; the current
+Cargo is now admitted with Hosted, Proxy and Group behaviour; the current
 [protocol matrix](protocol-compatibility.md) describes its supported scope and
 limits. The old Cargo-candidate ordering no longer schedules implementation.
 

@@ -1,6 +1,4 @@
-import type { SystemMessageKey } from "./system.zh-CN";
-
-export const systemEnUS: Record<SystemMessageKey, string> = {
+export const systemEnCA = {
   "system.notFiring": "Not firing",
   "system.warning": "Warning",
   "system.critical": "Critical",
@@ -391,3 +389,5 @@ export const systemEnUS: Record<SystemMessageKey, string> = {
   "system.theTargetIsDisabledSavingRetainsThisState":
     "The target is disabled; saving retains this state and sends no test.",
 };
+
+export type SystemMessageKey = keyof typeof systemEnCA;

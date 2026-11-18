@@ -85,7 +85,7 @@ keeps its behaviour until then; the lift is slice 18 here).
 
 | Gate | Closure |
 | --- | --- |
-| G1 Production signer custody | Generalised signer contract and a KMS/HSM-backed `notarx-signer` adapter (below); key-recovery drill documented and run. |
+| G1 Production signer custody | Generalized signer contract and a KMS/HSM-backed `notarx-signer` adapter (below); key-recovery drill documented and run. |
 | G2 Scheduled retention | Executor driven by the existing `RetentionPolicy` (below). |
 | G3 Anonymous Hosted reads | Black-box conformance suite (below; slice 17). |
 | G4 `Packages.xz` and truthful Release | `.xz` index, by-hash for it, configurable `Origin`/`Label`/`Description` (default `notarx`). |

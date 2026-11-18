@@ -91,10 +91,10 @@ async function mockPoliciesTab(page: Page) {
 
 async function openTemplateEditor(page: Page, rules: number) {
   await page.goto("/access?tab=policies");
-  await page.getByRole("button", { name: /新建模板/ }).click();
+  await page.getByRole("button", { name: /New template/ }).click();
   const dialog = page.locator(".ant-modal").first();
   await expect(dialog).toBeVisible();
-  const addRule = dialog.getByRole("button", { name: /添加规则/ });
+  const addRule = dialog.getByRole("button", { name: /Add rule/ });
   for (let index = 1; index < rules; index += 1) {
     await addRule.click();
   }

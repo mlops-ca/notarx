@@ -20,10 +20,7 @@ const grant = {
 async function setup(page: Page, width: number) {
   await page.setViewportSize({ width, height: 1000 });
   await page.addInitScript((width) => {
-    localStorage.setItem(
-      "ag.console.locale",
-      width === 390 ? "en-US" : "zh-CN",
-    );
+    localStorage.setItem("ag.console.locale", "en-CA");
     localStorage.setItem("ag.console.theme", width === 390 ? "light" : "dark");
     localStorage.setItem("ag.console.token", "synthetic-review-token");
   }, width);
@@ -80,7 +77,7 @@ async function geometry(
   ).toBeLessThanOrEqual(0);
   const boxes = await page
     .getByRole("heading", {
-      name: en ? "Access control" : "访问控制",
+      name: "Access control",
       exact: true,
     })
     .evaluate((el) => {
@@ -113,8 +110,8 @@ async function geometry(
 
 for (const width of [1440, 390]) {
   const en = width === 390;
-  const retry = en ? /Retry/ : /重\s*试/;
-  const fallback = en ? "This section is unavailable" : "此区域暂时无法显示";
+  const retry = /Retry/;
+  const fallback = "This section is unavailable";
   test(`access keeps cached grants after refresh failure at ${width}px`, async ({
     page,
   }, info) => {
@@ -138,12 +135,10 @@ for (const width of [1440, 390]) {
       await page
         .getByRole("button", { name: "Open navigation", exact: true })
         .click();
-    await page
-      .getByRole("link", { name: en ? "API Keys" : "API 密钥", exact: true })
-      .click();
+    await page.getByRole("link", { name: "API Keys", exact: true }).click();
     await expect(
       page.getByRole("heading", {
-        name: en ? "API keys" : "API 密钥",
+        name: "API keys",
         exact: true,
       }),
     ).toBeVisible();
@@ -154,7 +149,7 @@ for (const width of [1440, 390]) {
         .click();
     await page
       .getByRole("link", {
-        name: en ? "Access Control" : "访问控制",
+        name: "Access Control",
         exact: true,
       })
       .click();
@@ -195,7 +190,7 @@ for (const width of [1440, 390]) {
     await expect(page.getByText(fallback, { exact: true })).toBeVisible();
     await expect(
       page.getByRole("tab", {
-        name: en ? "Access evaluation" : "权限检查",
+        name: "Access evaluation",
         exact: true,
       }),
     ).toBeVisible();
@@ -228,7 +223,7 @@ for (const width of [1440, 390]) {
     await expect(page.getByText(fallback, { exact: true })).toBeVisible();
     await expect(
       page.getByRole("heading", {
-        name: en ? "Public access boundary" : "公开访问边界",
+        name: "Public access boundary",
         exact: true,
       }),
     ).toBeVisible();
@@ -257,7 +252,7 @@ for (const width of [1440, 390]) {
     ).toBeVisible();
     await expect(
       page.getByRole("combobox", {
-        name: en ? "Principal" : "授权主体",
+        name: "Principal",
         exact: true,
       }),
     ).toBeVisible();

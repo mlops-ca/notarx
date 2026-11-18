@@ -99,7 +99,7 @@ Overrides in `.env` are reflected by `make dev-status`.
 Use Hosted for artifacts published into Gateway, Proxy for an allowlisted
 upstream, and Group to expose ordered Hosted and Proxy members through one
 client endpoint. The [protocol compatibility baseline](protocol-compatibility.md)
-records format-specific behavior and limitations.
+records format-specific behaviour and limitations.
 
 ## Daily commands
 

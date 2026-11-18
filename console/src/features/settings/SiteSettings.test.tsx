@@ -118,7 +118,7 @@ describe("SiteSettingsPage", () => {
     mockGetSiteSettings.mockResolvedValue({ data: initial } as never);
     const user = userEvent.setup();
     renderPage();
-    const name = await screen.findByLabelText("站点名称");
+    const name = await screen.findByLabelText("Site name");
     await user.clear(name);
     await user.type(name, "Unsaved brand");
     mockGetSiteSettings.mockResolvedValue({
@@ -126,15 +126,15 @@ describe("SiteSettingsPage", () => {
     } as never);
     await queryClient.refetchQueries({ queryKey: siteKeys.settings() });
     await screen.findByText("settings unavailable");
-    expect(screen.getByLabelText("站点名称")).toHaveValue("Unsaved brand");
+    expect(screen.getByLabelText("Site name")).toHaveValue("Unsaved brand");
     mockGetSiteSettings.mockResolvedValue({ data: initial } as never);
-    await user.click(screen.getByRole("button", { name: /重试/ }));
+    await user.click(screen.getByRole("button", { name: /Retry/ }));
     await waitFor(() =>
       expect(
         screen.queryByText("settings unavailable"),
       ).not.toBeInTheDocument(),
     );
-    expect(screen.getByLabelText("站点名称")).toHaveValue("Unsaved brand");
+    expect(screen.getByLabelText("Site name")).toHaveValue("Unsaved brand");
   });
 
   it("saves a versioned identity and applies it to the whole Console", async () => {
@@ -145,13 +145,13 @@ describe("SiteSettingsPage", () => {
     const user = userEvent.setup();
     renderPage();
 
-    const name = await screen.findByLabelText("站点名称");
+    const name = await screen.findByLabelText("Site name");
     expect(screen.getByTestId("global-site-name")).toHaveTextContent(
       "Artifact Gateway",
     );
     await user.clear(name);
     await user.type(name, "Acme Packages");
-    await user.click(screen.getByRole("button", { name: "保存并应用" }));
+    await user.click(screen.getByRole("button", { name: "Save and apply" }));
 
     await waitFor(() =>
       expect(mockReplaceSiteSettings).toHaveBeenCalledWith({
@@ -187,7 +187,7 @@ describe("SiteSettingsPage", () => {
     await user.click(
       await screen.findByRole("checkbox", { name: /notarx Dark/ }),
     );
-    await user.click(screen.getByRole("button", { name: "保存并应用" }));
+    await user.click(screen.getByRole("button", { name: "Save and apply" }));
 
     await waitFor(() =>
       expect(mockReplaceSiteSettings).toHaveBeenCalledWith({
@@ -209,9 +209,9 @@ describe("SiteSettingsPage", () => {
     } as never);
     renderPage();
 
-    expect(await screen.findByText("请求出错")).toBeInTheDocument();
-    expect(screen.queryByText("加载中…")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /重试/ })).toBeInTheDocument();
+    expect(await screen.findByText("Request failed")).toBeInTheDocument();
+    expect(screen.queryByText("Loading…")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Retry/ })).toBeInTheDocument();
   });
 
   it("validates, previews, installs, and stages an uploaded theme for enabling", async () => {
@@ -233,7 +233,7 @@ describe("SiteSettingsPage", () => {
     const user = userEvent.setup();
     const { container } = renderPage();
 
-    await screen.findByText("Console 主题");
+    await screen.findByText("Console themes");
     const input = container.querySelector<HTMLInputElement>(
       'input[type="file"][accept*="json"]',
     );
@@ -245,13 +245,17 @@ describe("SiteSettingsPage", () => {
     );
     await user.upload(input!, file);
 
-    expect(await screen.findByText("校验通过，可以安装")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Validation passed; ready to install"),
+    ).toBeInTheDocument();
     expect(screen.getByText("A quiet violet workspace")).toBeInTheDocument();
     expect(mockValidateConsoleThemePackage).toHaveBeenCalledWith({
       body: uploadedThemePackage,
     });
 
-    await user.click(screen.getByRole("button", { name: "安装并启用" }));
+    await user.click(
+      screen.getByRole("button", { name: "Install and enable" }),
+    );
     await waitFor(() =>
       expect(mockInstallConsoleThemePackage).toHaveBeenCalledWith({
         body: uploadedThemePackage,
@@ -261,7 +265,7 @@ describe("SiteSettingsPage", () => {
       await screen.findByRole("checkbox", { name: /Twilight Lab/ }),
     ).toBeChecked();
 
-    await user.click(screen.getByRole("button", { name: "保存并应用" }));
+    await user.click(screen.getByRole("button", { name: "Save and apply" }));
     await waitFor(() =>
       expect(mockReplaceSiteSettings).toHaveBeenCalledWith({
         body: {
@@ -298,7 +302,7 @@ describe("SiteSettingsPage", () => {
     const user = userEvent.setup();
     const { container } = renderPage();
 
-    await screen.findByText("Console 主题");
+    await screen.findByText("Console themes");
     const input = container.querySelector<HTMLInputElement>(
       'input[type="file"][accept*="json"]',
     );
@@ -310,7 +314,9 @@ describe("SiteSettingsPage", () => {
         { type: "application/json" },
       ),
     );
-    await user.click(await screen.findByRole("button", { name: "确认替换" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Replace theme" }),
+    );
 
     await waitFor(() =>
       expect(mockReplaceConsoleThemePackage).toHaveBeenCalledWith({
@@ -333,13 +339,13 @@ describe("SiteSettingsPage", () => {
     renderPage();
 
     await screen.findByRole("checkbox", { name: /Twilight Lab/ });
-    await user.click(screen.getByRole("button", { name: "删除" }));
-    const popoverTitle = await screen.findByText("删除这个上传主题？");
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    const popoverTitle = await screen.findByText("Delete this uploaded theme?");
     const popover = popoverTitle.closest(".ant-popover");
     expect(popover).not.toBeNull();
     await user.click(
       within(popover as HTMLElement).getByRole("button", {
-        name: /删\s*除/,
+        name: /Delete/,
       }),
     );
 

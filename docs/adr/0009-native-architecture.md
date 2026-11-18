@@ -20,7 +20,7 @@ decision in #380. Native package protocols remain standards compliant.
 - Management handlers live by domain, own HTTP/auth/audit orchestration, and
   use generated OpenAPI types only at the HTTP boundary. OpenAPI sources change
   first; server, Console and agctl move together in each breaking slice.
-- Format modules own coordinates and wire behavior. They may consume shared
+- Format modules own coordinates and wire behaviour. They may consume shared
   protocol identity helpers and domain interfaces, but cannot depend on another
   format, the HTTP composition root, or PostgreSQL implementations.
 - Domain records and store interfaces separate from SQL implementations under
@@ -43,7 +43,7 @@ authorization, idempotency, leases/fencing and reclamation safety remain require
 
 1. Establish this ADR and dependency gate (#277), decide test persistence (#278),
    then explicit composition (#279), domain handlers (#280), format modules
-   (#281), persistence separation (#282), and shared HTTP behavior (#283).
+   (#281), persistence separation (#282), and shared HTTP behaviour (#283).
 2. In parallel with that ordering, scope #269 into source discovery/preflight and
    explicit repository mapping, durable manifests/checkpoints (#205), verified
    bytes (#204), then Console controls. Shared files merge sequentially.

@@ -11,7 +11,7 @@ commitment.
 Artifact Gateway has a strong protocol and persistence foundation, explicit
 contracts, broad automated gates, and unusually detailed lifecycle semantics
 for a project at this stage. Its primary risk is no longer missing basic
-repository behavior; it is the cost of changing several large application and
+repository behaviour; it is the cost of changing several large application and
 Console modules safely while the feature surface continues to grow.
 
 | Dimension | Assessment | Evidence and interpretation |
@@ -59,7 +59,7 @@ The quality program has started, but it is not complete:
   `console/src/lib/publicRepositoryUsage.ts` boundary. Tests cover all eight
   formats without coupling them to browser state or the page component.
 - Together these slices reduce `PublicBrowse.tsx` from 2,705 to 2,534 lines
-  without changing its route or visible behavior. The page is still a hotspot;
+  without changing its route or visible behaviour. The page is still a hotspot;
   Maven/Conan display sections and remaining format projections are the next
   seams.
 
@@ -114,7 +114,7 @@ Current hotspots include:
 
 These files are not automatically defective, but their size makes independent
 review, narrow tests, and future ownership harder. Refactors should preserve
-public behavior and move one seam at a time; a one-shot package rewrite would
+public behaviour and move one seam at a time; a one-shot package rewrite would
 create more risk than it removes.
 
 ### 2. Coverage floors protect regression, not completion
@@ -165,13 +165,13 @@ evidence, and research notes. `docs/site-map.json` provides framework-neutral
 navigation, while `make docs-check` rejects missing pairs, one-way language
 links, untranslated Chinese stubs, duplicate routes, and incomplete coverage.
 
-The remaining risk is synchronization rather than initial coverage. Behavior,
+The remaining risk is synchronization rather than initial coverage. Behaviour,
 commands, compatibility limits, and preview status must change in both locales
 within the same review.
 
 ### 4. Release evidence is broader than one default test target
 
-`make test` protects shared local behavior, while full protocol E2E,
+`make test` protects shared local behaviour, while full protocol E2E,
 integration, browser, performance, rotation, upgrade, and recovery gates are
 separate targets. The release checklist must continue to point to exact CI
 evidence rather than treating one green command as full release proof. The
@@ -183,13 +183,13 @@ traffic, and sustained soak before it can become a release threshold.
 
 1. **Keep onboarding executable.** Treat `make dev-bootstrap`, the bilingual
    quick start, and documentation links as tested interfaces.
-2. **Continue splitting `PublicBrowse.tsx` without redesigning behavior.** The
+2. **Continue splitting `PublicBrowse.tsx` without redesigning behaviour.** The
    pure browse model, shared primitives, OCI reader, and repository usage
    generator now have focused seams; extract Maven/Conan display sections next
    while retaining browser regression coverage for search, filters, deep links,
    and responsive states.
 3. **Partition repository records by domain.** Move types mechanically before
-   changing persistence or behavior; keep public repository interfaces stable.
+   changing persistence or behaviour; keep public repository interfaces stable.
 4. **Deepen native protocol modules.** Separate HTTP parsing/response shaping
    from Hosted/Proxy/Group application services one format at a time.
 5. **Harden the large-object byte plane.** Add deployment-level temporary

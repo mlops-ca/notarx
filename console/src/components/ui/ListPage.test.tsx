@@ -16,8 +16,11 @@ import { useUrlFilters } from "./useUrlFilters";
 afterEach(() => cleanup());
 
 const copy = {
-  empty: { title: "暂无密钥", hint: "创建一个密钥" },
-  unavailable: { title: "分组不可用", hint: "后端未提供分组接口" },
+  empty: { title: "No keys yet", hint: "Create a key" },
+  unavailable: {
+    title: "GroupUnreachable",
+    hint: "The backend does not provide a groups endpoint",
+  },
 };
 
 function renderStates(props: {
@@ -27,7 +30,7 @@ function renderStates(props: {
 }) {
   return render(
     <PreferencesProvider>
-      <ListPage title="API 密钥">
+      <ListPage title="API keys">
         <ListStates
           rows={props.rows}
           loading={props.loading}
@@ -36,7 +39,7 @@ function renderStates(props: {
           empty={copy.empty}
           unavailable={copy.unavailable}
         >
-          <p>表格</p>
+          <p>Table</p>
         </ListStates>
       </ListPage>
     </PreferencesProvider>,
@@ -47,9 +50,9 @@ describe("ListStates", () => {
   it("shows the spinner until the first read answers", () => {
     renderStates({ rows: null });
     expect(
-      screen.getByRole("heading", { name: "API 密钥" }),
+      screen.getByRole("heading", { name: "API keys" }),
     ).toBeInTheDocument();
-    expect(screen.queryByText("表格")).toBeNull();
+    expect(screen.queryByText("Table")).toBeNull();
     expect(screen.queryByText(copy.empty.title)).toBeNull();
   });
 
@@ -69,7 +72,7 @@ describe("ListStates", () => {
   it("keeps rows on screen under a later failure", () => {
     renderStates({ rows: [1], error: new Error("refresh failed") });
     expect(screen.getByText("refresh failed")).toBeInTheDocument();
-    expect(screen.getByText("表格")).toBeInTheDocument();
+    expect(screen.getByText("Table")).toBeInTheDocument();
   });
 });
 
@@ -82,21 +85,21 @@ describe("FilterCard", () => {
         <FilterCard
           active={false}
           onClear={onClear}
-          filters={<span>筛选</span>}
+          filters={<span>Filters</span>}
         >
-          <p>表格</p>
+          <p>Table</p>
         </FilterCard>
       </PreferencesProvider>,
     );
-    expect(screen.queryByRole("button", { name: "清除筛选" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Clear filters" })).toBeNull();
     rerender(
       <PreferencesProvider>
-        <FilterCard active onClear={onClear} filters={<span>筛选</span>}>
-          <p>表格</p>
+        <FilterCard active onClear={onClear} filters={<span>Filters</span>}>
+          <p>Table</p>
         </FilterCard>
       </PreferencesProvider>,
     );
-    await user.click(screen.getByRole("button", { name: "清除筛选" }));
+    await user.click(screen.getByRole("button", { name: "Clear filters" }));
     expect(onClear).toHaveBeenCalledTimes(1);
   });
 });

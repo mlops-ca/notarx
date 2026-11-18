@@ -88,8 +88,10 @@ describe("public browse section recovery", () => {
     expect(
       await screen.findByText("Invalid public repository catalog response"),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "管理登录" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /重试/ }));
+    expect(
+      screen.getByRole("link", { name: "Management sign in" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Retry/ }));
     expect(await screen.findByText("public-source")).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledTimes(2);
   });
@@ -103,9 +105,11 @@ describe("public browse section recovery", () => {
     expect(
       await screen.findByText("Invalid public artifact search response"),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "管理登录" })).toBeInTheDocument();
-    expect(screen.getByText("注册 Raw 源地址")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /重试/ }));
+    expect(
+      screen.getByRole("link", { name: "Management sign in" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Register a Raw source")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Retry/ }));
     expect(await screen.findByText("lib.tgz")).toBeInTheDocument();
     expect(search).toHaveBeenCalledTimes(2);
   });
@@ -127,12 +131,18 @@ describe("public browse section recovery", () => {
       .mockResolvedValueOnce(catalog());
     browse();
 
-    expect(await screen.findByText("此区域暂时无法显示")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "管理登录" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /重试/ }));
+    expect(
+      await screen.findByText("This section is unavailable"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Management sign in" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Retry/ }));
     expect(await screen.findByText("public-source")).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledTimes(2);
-    expect(screen.queryByText("此区域暂时无法显示")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("This section is unavailable"),
+    ).not.toBeInTheDocument();
   });
 
   it("contains a broken artifact answer and retries the actual source", async () => {
@@ -142,10 +152,14 @@ describe("public browse section recovery", () => {
       .mockResolvedValueOnce({ data: { items: [artifact] } } as never);
     browse(`/browse?repository=${repository.id}`);
 
-    expect(await screen.findByText("此区域暂时无法显示")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "管理登录" })).toBeInTheDocument();
-    expect(screen.getByText("注册 Raw 源地址")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /重试/ }));
+    expect(
+      await screen.findByText("This section is unavailable"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Management sign in" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Register a Raw source")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Retry/ }));
     expect(await screen.findByText("lib.tgz")).toBeInTheDocument();
     expect(search).toHaveBeenCalledTimes(2);
   });
@@ -166,7 +180,7 @@ describe("public browse section recovery", () => {
       );
     browse(`/browse?repository=${repository.id}`);
     expect(await screen.findByText(/reading 'coordinate'/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /重试/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Retry/ }));
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledTimes(2);
       expect(search).toHaveBeenCalledTimes(2);
@@ -175,12 +189,14 @@ describe("public browse section recovery", () => {
 
     expect(screen.getByText(/reading 'coordinate'/)).toBeInTheDocument();
     expect(
-      screen.queryByText("读取公开仓库失败 (503)"),
+      screen.queryByText("Failed to read public repositories (503)"),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "管理登录" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Management sign in" }),
+    ).toBeInTheDocument();
     await act(async () => complete?.());
     expect(
-      await screen.findByText("读取公开仓库失败 (503)"),
+      await screen.findByText("Failed to read public repositories (503)"),
     ).toBeInTheDocument();
   });
 
@@ -206,7 +222,7 @@ describe("public browse section recovery", () => {
     expect(
       await screen.findByText("digest.slice is not a function"),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /重试/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Retry/ }));
     await waitFor(() => expect(search).toHaveBeenCalledTimes(4));
     await act(async () => {});
 
@@ -214,7 +230,7 @@ describe("public browse section recovery", () => {
       screen.getByText("digest.slice is not a function"),
     ).toBeInTheDocument();
     expect(screen.queryByText("lookup offline")).not.toBeInTheDocument();
-    expect(screen.getByText("注册 Raw 源地址")).toBeInTheDocument();
+    expect(screen.getByText("Register a Raw source")).toBeInTheDocument();
     await act(async () => complete?.());
     expect(await screen.findByText("lookup offline")).toBeInTheDocument();
   });
@@ -230,15 +246,15 @@ describe("public browse section recovery", () => {
 
     await act(() => client.refetchQueries({ queryKey: publicKeys.catalog() }));
     expect(
-      await screen.findByText("读取公开仓库失败 (503)"),
+      await screen.findByText("Failed to read public repositories (503)"),
     ).toBeInTheDocument();
     expect(screen.getByText("public-source")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /重试/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Retry/ }));
     expect(await screen.findByText("public-source")).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledTimes(3);
     await waitFor(() =>
       expect(
-        screen.queryByText("读取公开仓库失败 (503)"),
+        screen.queryByText("Failed to read public repositories (503)"),
       ).not.toBeInTheDocument(),
     );
   });
@@ -261,7 +277,7 @@ describe("public browse section recovery", () => {
     );
     expect(await screen.findByText("offline")).toBeInTheDocument();
     expect(screen.getByText("lib.tgz")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /重试/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Retry/ }));
     expect(await screen.findByText("lib.tgz")).toBeInTheDocument();
     expect(search).toHaveBeenCalledTimes(3);
     await waitFor(() =>

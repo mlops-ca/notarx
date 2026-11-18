@@ -15,7 +15,7 @@ several unrelated paths:
 - global CSS received a flat set of `--ag-*` variables;
 - Gateway Dark and Gateway Light had a second compatibility variable table;
 - `styles.css` contained another dark/light bootstrap palette and route-level
-  color literals.
+  colour literals.
 
 The result looked themed but did not behave as a system. The primary accent was
 also reused for text selection, ordinary section icons, neutral empty states,
@@ -23,7 +23,7 @@ decorative glows, and generic lifecycle metadata. Changing a theme therefore
 changed too many unrelated visual signals, while a CSS-only fix could easily
 drift from Ant Design components.
 
-The design system already says the signal color is rare. The implementation
+The design system already says the signal colour is rare. The implementation
 needs an enforceable contract that makes that rule local, testable, and
 extensible without exposing arbitrary CSS through the server API.
 
@@ -33,20 +33,20 @@ extensible without exposing arbitrary CSS through the server API.
 
 Custom Console CSS could read generated `--ag-ant-*` variables. This minimizes
 one projection layer, but it couples product-specific UI to Ant Design's token
-names and generation behavior. It also does not define product roles such as
+names and generation behaviour. It also does not define product roles such as
 text selection, shell chrome, navigation location, or identity artwork, and it
 cannot provide a complete pre-React bootstrap palette.
 
 ### 2. Put a complete CSS-variable map in every Theme Package
 
 The server could accept all Ant Design tokens and every Console CSS variable.
-This gives package authors maximum control, but it creates two color systems,
+This gives package authors maximum control, but it creates two colour systems,
 expands the untrusted configuration surface, makes schema evolution expensive,
 and lets a theme accidentally change geometry or operational meaning.
 
 ### 3. Resolve one semantic projection in the Console
 
-The server package remains a constrained color input. The Console resolves it
+The server package remains a constrained colour input. The Console resolves it
 through the selected Ant Design algorithm, then projects the resolved tokens
 into a typed set of product roles. Ant Design component tokens and custom CSS
 variables are both built from those roles. A single runtime applies the whole
@@ -58,7 +58,7 @@ the other approaches lack. It is the selected design.
 ## Decision
 
 Theme Package schema version 1 remains the external contract. It continues to
-accept stable color seed/alias tokens and cannot change typography, density,
+accept stable colour seed/alias tokens and cannot change typography, density,
 spacing, component geometry, or arbitrary CSS. The package schema does not
 change. Administrator-managed packages add management resources and persistent
 storage without widening the package's executable surface.
@@ -89,8 +89,8 @@ typed role overrides, not an unstructured CSS-variable map.
 
 The CSS bootstrap palette exists only to prevent an unthemed first paint while
 site settings load. It uses the same semantic variable names, supports both
-color modes, and is completely overwritten by the runtime projection. It is
-not a fifth source of theme behavior.
+colour modes, and is completely overwritten by the runtime projection. It is
+not a fifth source of theme behaviour.
 
 ## Package ownership and lifecycle
 
@@ -129,9 +129,9 @@ changes protected by their own version.
 | Status | Functional operational state | success, warning, danger, info with foreground, soft background, border |
 | Visualization | Data encoding without operational-state meaning | stable categorical palette, primary/secondary trends, unknown-category fallback |
 | Identity | The product/site mark only | gradient stops, foreground, outline, glow |
-| Effect | Non-color structure | structural/elevated shadow, scrollbar, radii |
+| Effect | Non-colour structure | structural/elevated shadow, scrollbar, radii |
 
-Component geometry remains a Console invariant. Component colors are derived
+Component geometry remains a Console invariant. Component colours are derived
 from roles: ordinary hover is neutral, selected navigation uses the navigation
 role, input focus uses the focus role, and status components use only their
 matching status family.
@@ -156,18 +156,18 @@ It is not allowed for:
 - success, warning, danger, or informational state.
 
 Text selection is derived from foreground and container neutrals, not from
-`colorPrimary`. Its foreground stays the normal high-contrast content color.
-Status colors always retain their functional meaning and are accompanied by
+`colorPrimary`. Its foreground stays the normal high-contrast content colour.
+Status colours always retain their functional meaning and are accompanied by
 text, an icon, or both.
 
 Data visualization uses a separate stable categorical palette and does not
 borrow Action or Status roles. Chart axes, labels, and surfaces follow the
 selected mode while category identity stays recognizable across themes. This
-prevents one color from meaning both an operational state and an artifact
+prevents one colour from meaning both an operational state and an artifact
 format on the same page.
 The eight artifact formats share one format-to-Visualization-slot mapping
 across charts, badges, and public-catalog marks. Unknown formats use the
-neutral fallback instead of borrowing an operational status color.
+neutral fallback instead of borrowing an operational status colour.
 
 ## Precedence and compatibility
 
@@ -178,18 +178,18 @@ Resolution order is fixed:
 3. Console semantic roles are derived from the complete token map;
 4. typed built-in compatibility overrides preserve intentional Gateway shell
    characteristics;
-5. Console component geometry invariants and semantic component colors produce
+5. Console component geometry invariants and semantic component colours produce
    the final `ThemeConfig`;
 6. the complete CSS-variable projection is applied atomically.
 
 Every projection is complete, so switching themes cannot retain a stale value
 from the previous theme. Reduced-motion continues to skip spatial theme
-transitions while applying the same final colors.
+transitions while applying the same final colours.
 
 Theme motion uses a trigger-anchored 240 ms radial reveal: the old document
 snapshot stays opaque while a circular clip expands the new snapshot from the
 theme selector. Browsers without View Transitions, and users requesting reduced
-motion, receive the same atomic commit without descendant-by-descendant color
+motion, receive the same atomic commit without descendant-by-descendant colour
 interpolation. Neutral empty states use small semantic icons and useful copy
 rather than theme-specific decorative illustrations.
 
@@ -197,13 +197,13 @@ rather than theme-specific decorative illustrations.
 
 - Custom CSS must consume semantic `--ag-*` roles; it must not read generated
   Ant Design variables or introduce a package-specific selector.
-- A new literal color in component CSS requires either an identity asset reason
+- A new literal colour in component CSS requires either an identity asset reason
   or a new reviewed semantic role.
 - Application components must not use hue utilities such as `text-cyan-*` or
   `bg-rose-*`, or pass preset hue names such as `blue` and `green` to Ant
   Design components. Status uses semantic status names; categories use
   Visualization.
-- Primary color usage must name one of the allowed accent-budget purposes.
+- Primary colour usage must name one of the allowed accent-budget purposes.
 - Existing generic `brand`, `text`, `surface`, and status aliases are migrated
   to their explicit role names.
 - Theme Package schema version 2 is considered only when a real package cannot
@@ -215,7 +215,7 @@ rather than theme-specific decorative illustrations.
 A theme-system change is complete only when:
 
 - all four built-in themes resolve the complete role contract;
-- text selection is neutral and distinct from the primary action color;
+- text selection is neutral and distinct from the primary action colour;
 - Ant Design and custom CSS change in the same theme commit;
 - no stale variables remain after repeated theme switching;
 - lint, type checking, unit tests, Ant Design checks, formatting, and build pass;
@@ -228,10 +228,10 @@ A theme-system change is complete only when:
 
 ## Consequences
 
-Theme behavior becomes a deep, testable module instead of a collection of
+Theme behaviour becomes a deep, testable module instead of a collection of
 selectors. Adding a component now requires choosing a semantic role, which is
 intentional friction against accent sprawl. The bootstrap palette still
 duplicates two fallback values for first paint, but it no longer contains
-independent behavior and is covered by contract tests. Theme authors retain
-wide color freedom while the Console keeps ownership of hierarchy, semantics,
+independent behaviour and is covered by contract tests. Theme authors retain
+wide colour freedom while the Console keeps ownership of hierarchy, semantics,
 accessibility, and geometry.

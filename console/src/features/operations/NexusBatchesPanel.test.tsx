@@ -103,8 +103,12 @@ describe("real batch read/control states", () => {
   it("shows exactly one initial error branch and sanitizes unknown transport text", async () => {
     list.mockRejectedValue(new Error("password=never-show"));
     show("");
-    await screen.findByText(/批次请求未完成/);
-    expect(screen.queryByText("尚无迁移批次")).not.toBeInTheDocument();
+    await screen.findByText(
+      /The batch request did not complete\. Read current server state before retrying\. No source credentials or upstream response body are displayed\./,
+    );
+    expect(
+      screen.queryByText("No migration batches yet"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent("never-show");
   });
@@ -113,15 +117,19 @@ describe("real batch read/control states", () => {
       data: { ...nexusBatch, totalBytes: null, scanComplete: false },
     } as never);
     show();
-    await screen.findByText("未知；完整清单尚未封存");
+    await screen.findByText("Unknown; complete manifest is not sealed");
     expect(
-      screen.getByText("本批次 target-only 冷客户端验收：未验证"),
+      screen.getByText(
+        "Target-only cold-client acceptance for this batch: unverified",
+      ),
     ).toBeInTheDocument();
     list.mockRejectedValue(new Error("private-upstream"));
     await userEvent.click(
-      screen.getAllByRole("button", { name: "刷新批次" })[0],
+      screen.getAllByRole("button", { name: "Refresh batches" })[0],
     );
-    await screen.findByText(/批次请求未完成/);
+    await screen.findByText(
+      /The batch request did not complete\. Read current server state before retrying\. No source credentials or upstream response body are displayed\./,
+    );
     expect(
       screen.getByRole("heading", { name: nexusBatch.id }),
     ).toBeInTheDocument();
@@ -137,17 +145,29 @@ describe("real batch read/control states", () => {
         }) as never,
     );
     show();
-    await screen.findByText("已加载 1 / 2 个计划条目");
-    expect(screen.getByText(/库存尚未完整加载/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "读取完整库存" }));
-    await screen.findByText("已加载 2 / 2 个计划条目");
+    await screen.findByText("Loaded 1 / 2 planned entries");
+    expect(
+      screen.getByText(
+        /Inventory is not fully loaded or scanning is not sealed\. This report is not complete inventory acceptance\./,
+      ),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Read complete inventory" }),
+    );
+    await screen.findByText("Loaded 2 / 2 planned entries");
     await waitFor(() =>
-      expect(screen.queryByText(/库存尚未完整加载/)).not.toBeInTheDocument(),
+      expect(
+        screen.queryByText(
+          /Inventory is not fully loaded or scanning is not sealed\. This report is not complete inventory acceptance\./,
+        ),
+      ).not.toBeInTheDocument(),
     );
     expect(entries).toHaveBeenCalledWith(
       expect.objectContaining({ query: { limit: 100, cursor: "next-page" } }),
     );
-    await userEvent.click(screen.getAllByRole("button", { name: "展开行" })[0]);
+    await userEvent.click(
+      screen.getAllByRole("button", { name: "Expand row" })[0],
+    );
     expect(
       screen.getByText(nexusEntries[0].assets[0].sha256),
     ).toBeInTheDocument();
@@ -166,16 +186,16 @@ describe("real batch read/control states", () => {
     });
     show();
     await userEvent.click(
-      await screen.findByRole("button", { name: "暂停批次" }),
+      await screen.findByRole("button", { name: "Pause batch" }),
     );
-    await screen.findByRole("button", { name: "恢复批次" });
+    await screen.findByRole("button", { name: "Resume batch" });
     expect(vi.mocked(pauseNexusMigrationBatch)).toHaveBeenCalledWith(
       expect.objectContaining({
         path: { batchId: nexusBatch.id },
         headers: { "If-Match": "7", "Idempotency-Key": expect.any(String) },
       }),
     );
-    expect(screen.getByText("批次版本 12")).toBeInTheDocument();
+    expect(screen.getByText("Batch version 12")).toBeInTheDocument();
   });
   it("keeps the identical control request key on uncertain retry and never renders an upstream error", async () => {
     detail.mockResolvedValue({
@@ -186,10 +206,12 @@ describe("real batch read/control states", () => {
     );
     show();
     await userEvent.click(
-      await screen.findByRole("button", { name: "暂停批次" }),
+      await screen.findByRole("button", { name: "Pause batch" }),
     );
-    await screen.findByText(/提交结果尚未确认/);
-    await userEvent.click(screen.getByRole("button", { name: "暂停批次" }));
+    await screen.findByText(
+      /The submission outcome is unconfirmed\. Refresh batches first\. Retrying unchanged inputs reuses the same request to avoid duplicate creation or control\./,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Pause batch" }));
     await waitFor(() =>
       expect(pauseNexusMigrationBatch).toHaveBeenCalledTimes(2),
     );
@@ -211,35 +233,46 @@ describe("real batch read/control states", () => {
       return { error: { status: 412 } } as never;
     });
     show();
-    await user.click(await screen.findByRole("button", { name: "恢复批次" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Resume batch" }),
+    );
     // rc-util uses a fixed ID in jsdom; table pagination also owns that ID.
     // The real-browser gate checks the dialog's actual accessible title.
     const dialog = screen.getByRole("dialog");
-    const submit = within(dialog).getByRole("button", { name: "恢复批次" });
+    const submit = within(dialog).getByRole("button", { name: "Resume batch" });
     expect(submit).toBeDisabled();
     for (const label of [
-      "存储池可用字节",
-      "下载峰值字节",
-      "上传峰值字节",
-      "备份峰值字节",
-      "恢复峰值字节",
-      "保留余量字节",
+      "Free storage-pool bytes",
+      "Peak download bytes",
+      "Peak upload bytes",
+      "Peak backup bytes",
+      "Peak restore bytes",
+      "Headroom bytes",
     ]) {
       const input = evidenceInput(dialog, label);
       expect(input).toHaveValue("");
-      await user.type(input, label === "存储池可用字节" ? "1000000" : "0");
+      await user.type(
+        input,
+        label === "Free storage-pool bytes" ? "1000000" : "0",
+      );
     }
     // Timestamps are whole observations; paste them without replaying every key.
-    await user.click(evidenceInput(dialog, "容量观察时间（含时区）"));
+    await user.click(
+      evidenceInput(dialog, "Capacity observation time (with time zone)"),
+    );
     await user.paste(new Date(Date.now() - 1000).toISOString());
-    await user.click(evidenceInput(dialog, "证据有效截止时间（含时区）"));
+    await user.click(
+      evidenceInput(dialog, "Evidence expiry time (with time zone)"),
+    );
     await user.paste(new Date(Date.now() + 600_000).toISOString());
     await user.click(submit);
-    await screen.findByText(/批次已被后台或其他管理员更新/);
+    await screen.findByText(
+      /A worker or another administrator updated the batch\. A server read was attempted; select the operation again and check the new version\. Writes are never automatically resent\./,
+    );
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
-    expect(screen.getByText("批次版本 9")).toBeInTheDocument();
+    expect(screen.getByText("Batch version 9")).toBeInTheDocument();
     expect(resumeNexusMigrationBatch).toHaveBeenCalledTimes(1);
     expect(resumeNexusMigrationBatch).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -265,12 +298,12 @@ describe("real batch read/control states", () => {
     } as never);
     const rendered = show();
     await userEvent.click(
-      await screen.findByRole("button", { name: "取消批次" }),
+      await screen.findByRole("button", { name: "Cancel batch" }),
     );
     const dialog = screen.getByRole("dialog");
     expect(cancelNexusMigrationBatch).not.toHaveBeenCalled();
     await userEvent.click(
-      within(dialog).getByRole("button", { name: "取消批次" }),
+      within(dialog).getByRole("button", { name: "Cancel batch" }),
     );
     await waitFor(() =>
       expect(cancelNexusMigrationBatch).toHaveBeenCalledTimes(1),
@@ -300,7 +333,7 @@ describe("real batch read/control states", () => {
     } as never);
     show();
     const table = await screen.findByRole("table");
-    expect(within(table).getAllByText("待处理")).toHaveLength(2);
+    expect(within(table).getAllByText("Pending")).toHaveLength(2);
     const before = entries.mock.calls.length;
     detail.mockResolvedValue({
       data: {
@@ -316,13 +349,13 @@ describe("real batch read/control states", () => {
       },
     } as never);
     await userEvent.click(
-      screen.getAllByRole("button", { name: "刷新批次" })[1],
+      screen.getAllByRole("button", { name: "Refresh batches" })[1],
     );
     await waitFor(() =>
-      expect(within(table).getByText("已发布")).toBeInTheDocument(),
+      expect(within(table).getByText("Published")).toBeInTheDocument(),
     );
     expect(entries.mock.calls.length).toBeGreaterThan(before);
-    expect(screen.getByText("批次版本 7")).toBeInTheDocument();
+    expect(screen.getByText("Batch version 7")).toBeInTheDocument();
   });
   it("retries a failed unsealed scan in the same batch with fresh evidence rather than pretending it was ready", async () => {
     const user = userEvent.setup();
@@ -351,32 +384,40 @@ describe("real batch read/control states", () => {
     });
     show();
     await user.click(
-      await screen.findByRole("button", { name: "重试可重试失败项" }),
+      await screen.findByRole("button", {
+        name: "Retry eligible failed entries",
+      }),
     );
     const dialog = screen.getByRole("dialog");
     expect(
-      within(dialog).getByText(/扫描未封存时会在原批次完整重扫/),
+      within(dialog).getByText(
+        /An unsealed scan restarts full scanning in the same batch/,
+      ),
     ).toBeInTheDocument();
     const submit = within(dialog).getByRole("button", {
-      name: "重试可重试失败项",
+      name: "Retry eligible failed entries",
     });
     expect(submit).toBeDisabled();
     for (const label of [
-      "存储池可用字节",
-      "下载峰值字节",
-      "上传峰值字节",
-      "备份峰值字节",
-      "恢复峰值字节",
-      "保留余量字节",
+      "Free storage-pool bytes",
+      "Peak download bytes",
+      "Peak upload bytes",
+      "Peak backup bytes",
+      "Peak restore bytes",
+      "Headroom bytes",
     ])
       await user.type(
         evidenceInput(dialog, label),
-        label === "存储池可用字节" ? "1000000" : "0",
+        label === "Free storage-pool bytes" ? "1000000" : "0",
       );
     // Timestamps are whole observations; paste them without replaying every key.
-    await user.click(evidenceInput(dialog, "容量观察时间（含时区）"));
+    await user.click(
+      evidenceInput(dialog, "Capacity observation time (with time zone)"),
+    );
     await user.paste(new Date(Date.now() - 1000).toISOString());
-    await user.click(evidenceInput(dialog, "证据有效截止时间（含时区）"));
+    await user.click(
+      evidenceInput(dialog, "Evidence expiry time (with time zone)"),
+    );
     await user.paste(new Date(Date.now() + 600000).toISOString());
     await user.click(submit);
     await waitFor(() =>
@@ -387,8 +428,10 @@ describe("real batch read/control states", () => {
       path: { batchId: failed.id },
       headers: { "If-Match": "7", "Idempotency-Key": expect.any(String) },
     });
-    expect(screen.getByText("未知；完整清单尚未封存")).toBeInTheDocument();
-    expect(screen.getByText("批次版本 8")).toBeInTheDocument();
+    expect(
+      screen.getByText("Unknown; complete manifest is not sealed"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Batch version 8")).toBeInTheDocument();
   });
   it("polls active entries independently from the immutable CAS version", async () => {
     detail.mockResolvedValue({
@@ -402,12 +445,12 @@ describe("real batch read/control states", () => {
     } as never);
     show();
     const table = await screen.findByRole("table");
-    expect(within(table).getAllByText("待处理")).toHaveLength(2);
+    expect(within(table).getAllByText("Pending")).toHaveLength(2);
     await waitFor(
-      () => expect(within(table).getAllByText("已发布")).toHaveLength(2),
+      () => expect(within(table).getAllByText("Published")).toHaveLength(2),
       { timeout: 8000 },
     );
-    expect(screen.getByText("批次版本 7")).toBeInTheDocument();
+    expect(screen.getByText("Batch version 7")).toBeInTheDocument();
   }, 10_000);
   it("shows precise durable scan failure scope without promoting an unsealed manifest or leaking arbitrary codes", async () => {
     const failure = { ...nexusScanFailure, code: "password=upstream-body" };
@@ -424,7 +467,7 @@ describe("real batch read/control states", () => {
     entries.mockResolvedValue({ data: { items: [], nextCursor: "" } } as never);
     show();
     const diagnostic = await screen.findByRole("region", {
-      name: "最近的持久扫描失败定位",
+      name: "Most recent durable scan failure",
     });
     expect(
       within(diagnostic).getByText(failure.sourcePath),
@@ -434,15 +477,17 @@ describe("real batch read/control states", () => {
       within(diagnostic).getByText("releases, raw-source"),
     ).toBeInTheDocument();
     expect(
-      within(diagnostic).getByText("打开源资产校验流"),
+      within(diagnostic).getByText("Open source verification stream"),
     ).toBeInTheDocument();
     expect(
       within(diagnostic).getByText("unclassified_failure"),
     ).toBeInTheDocument();
-    expect(screen.getByText("未知；完整清单尚未封存")).toBeInTheDocument();
+    expect(
+      screen.getByText("Unknown; complete manifest is not sealed"),
+    ).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent("upstream-body");
     expect(
-      screen.getByRole("button", { name: "重试可重试失败项" }),
+      screen.getByRole("button", { name: "Retry eligible failed entries" }),
     ).toBeEnabled();
   });
   it("retains the real source_missing scan code in the view and export while distinguishing asset changes from connection versions", async () => {
@@ -472,12 +517,14 @@ describe("real batch read/control states", () => {
     entries.mockResolvedValue({ data: { items: [], nextCursor: "" } } as never);
     show();
     const diagnostic = await screen.findByRole("region", {
-      name: "最近的持久扫描失败定位",
+      name: "Most recent durable scan failure",
     });
     expect(within(diagnostic).getByText("source_missing")).toBeInTheDocument();
-    expect(within(diagnostic).getByText("源读取时缺失")).toBeInTheDocument();
+    expect(
+      within(diagnostic).getByText("Source missing during read"),
+    ).toBeInTheDocument();
     await userEvent.click(
-      screen.getByRole("button", { name: "导出当前观察报告" }),
+      screen.getByRole("button", { name: "Export current observation report" }),
     );
     await waitFor(() => expect(report).toHaveBeenCalled());
     expect(report.mock.results[0].value.lastScanFailure?.code).toBe(
@@ -517,9 +564,13 @@ describe("real batch read/control states", () => {
           }) as never,
       );
       show();
-      await screen.findByRole("heading", { name: "迁移验收观察报告" });
+      await screen.findByRole("heading", {
+        name: "Migration acceptance observation report",
+      });
       await userEvent.click(
-        screen.getByRole("button", { name: "导出当前观察报告" }),
+        screen.getByRole("button", {
+          name: "Export current observation report",
+        }),
       );
       await waitFor(() => expect(report).toHaveBeenCalled());
       expect(report.mock.calls[0][3]).toContainEqual({
@@ -564,7 +615,7 @@ describe("real batch read/control states", () => {
       data: { items: [nexusEntries[0]], nextCursor: "still-more" },
     } as never);
     await userEvent.click(
-      screen.getByRole("button", { name: "导出当前观察报告" }),
+      screen.getByRole("button", { name: "Export current observation report" }),
     );
     await waitFor(() => expect(report).toHaveBeenCalled());
     const [batch, inventory, complete, , times] = report.mock.calls[0];
@@ -581,14 +632,18 @@ describe("real batch read/control states", () => {
     await screen.findByRole("heading", { name: nexusBatch.id });
     detail.mockResolvedValue({ error: { status: 403 } } as never);
     await userEvent.click(
-      screen.getAllByRole("button", { name: "刷新批次" })[1],
+      screen.getAllByRole("button", { name: "Refresh batches" })[1],
     );
-    await screen.findByText(/请使用平台管理员身份/);
+    await screen.findByText(
+      /This migration source requires a platform administrator identity\./,
+    );
     expect(
       screen.queryByRole("heading", { name: nexusBatch.id }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "导出当前观察报告" }),
+      screen.queryByRole("button", {
+        name: "Export current observation report",
+      }),
     ).not.toBeInTheDocument();
   });
 });

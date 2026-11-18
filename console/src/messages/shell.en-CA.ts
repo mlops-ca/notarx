@@ -1,12 +1,11 @@
-import type { ShellMessageKey } from "./shell.zh-CN";
-
-export const shellEnUS: Record<ShellMessageKey, string> = {
+export const shellEnCA = {
   "common.cancel": "Cancel",
   "common.loading": "Loading…",
   "common.theme.select": "Choose theme",
   "common.theme.current": "Current theme: {name}",
   "common.language": "Language",
-  "common.language.zh": "中文",
+  "common.language.zh": "Chinese",
+  "common.language.fr": "French",
   "common.language.en": "English",
   "palette.title": "Command palette",
   "palette.trigger": "Search or jump to…",
@@ -121,3 +120,5 @@ export const shellEnUS: Record<ShellMessageKey, string> = {
   "auth.usernamePlaceholder": "Enter your username",
   "auth.passwordPlaceholder": "Enter your password",
 };
+
+export type ShellMessageKey = keyof typeof shellEnCA;

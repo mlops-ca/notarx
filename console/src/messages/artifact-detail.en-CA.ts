@@ -1,6 +1,4 @@
-import type { ArtifactDetailMessageKey } from "./artifact-detail.zh-CN";
-
-export const artifactDetailEnUS: Record<ArtifactDetailMessageKey, string> = {
+export const artifactDetailEnCA = {
   "artifactDetail.yankState": "Yank state",
   "artifactDetail.yanked": "Yanked",
   "artifactDetail.notYanked": "Available for selection",
@@ -242,3 +240,5 @@ export const artifactDetailEnUS: Record<ArtifactDetailMessageKey, string> = {
   "artifactDetail.untagged": "Untagged",
   "artifactDetail.untaggedDigest": "Untagged · {digest}",
 };
+
+export type ArtifactDetailMessageKey = keyof typeof artifactDetailEnCA;

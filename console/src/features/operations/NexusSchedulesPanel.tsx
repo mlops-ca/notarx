@@ -20,6 +20,7 @@ import {
 import { Card, Field, Pagination } from "../../components/ui/Layout";
 import { Badge } from "../../components/ui/Badge";
 import { usePreferences } from "../../lib/preferences";
+import { useFormatters } from "../../lib/useFormatters";
 import {
   batchReadDenied,
   batchReason,
@@ -298,6 +299,7 @@ function ScheduleCard({
   reconcile: () => Promise<void>;
 }) {
   const { t } = usePreferences();
+  const { formatDateTime } = useFormatters();
   const client = useQueryClient();
   const command = useBatchCommand();
   const [observation, setObservation] = useState<"capacity" | "resume" | null>(
@@ -361,7 +363,7 @@ function ScheduleCard({
             <dt>{t("nexusSchedule.nextRun")}</dt>
             <dd>
               {plan.nextRunAt
-                ? new Date(plan.nextRunAt).toLocaleString()
+                ? formatDateTime(plan.nextRunAt)
                 : t("nexusSchedule.noNext")}
             </dd>
           </div>
@@ -369,7 +371,7 @@ function ScheduleCard({
             <dt>{t("nexusSchedule.lastSuccessful")}</dt>
             <dd>
               {plan.lastSuccessfulAt
-                ? new Date(plan.lastSuccessfulAt).toLocaleString()
+                ? formatDateTime(plan.lastSuccessfulAt)
                 : t("nexusSchedule.never")}
             </dd>
           </div>

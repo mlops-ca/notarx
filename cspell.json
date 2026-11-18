@@ -1,0 +1,86 @@
+{
+  "version": "0.2",
+  "language": "en-CA",
+  "import": [
+    "@cspell/dict-en-ca/cspell-ext.json"
+  ],
+  "dictionaryDefinitions": [
+    {
+      "name": "project-words",
+      "path": "./.cspell/project-words.txt",
+      "addWords": false
+    }
+  ],
+  "dictionaries": [
+    "project-words",
+    "!en_us"
+  ],
+  "ignorePaths": [
+    "**/*.zh-CN.md",
+    "**/*.zh-CN.ts",
+    "**/node_modules/**",
+    "CHANGELOG.md",
+    "DESIGN.md"
+  ],
+  "flagWords": [
+    "color",
+    "colors",
+    "colored",
+    "coloring",
+    "colorful",
+    "colorize",
+    "colorless",
+    "behavior",
+    "behaviors",
+    "behavioral",
+    "favorite",
+    "favorites",
+    "favor",
+    "favors",
+    "favored",
+    "honor",
+    "honors",
+    "honored",
+    "neighbor",
+    "neighbors",
+    "neighboring",
+    "labor",
+    "flavor",
+    "flavors",
+    "harbor",
+    "humor",
+    "rumor",
+    "vapor",
+    "endeavor",
+    "parlor",
+    "candor",
+    "odor",
+    "tumor",
+    "vigor",
+    "rigor",
+    "valor",
+    "center",
+    "centers",
+    "centered",
+    "centering",
+    "centerline",
+    "theater",
+    "theaters",
+    "fiber",
+    "fibers",
+    "liter",
+    "liters",
+    "caliber",
+    "defense",
+    "defenses",
+    "offense",
+    "offenses",
+    "pretense",
+    "analyse",
+    "analysed"
+  ],
+  "ignoreRegExpList": [
+    "<[^>]+>",
+    "`[^`\\n]*`"
+  ]
+}

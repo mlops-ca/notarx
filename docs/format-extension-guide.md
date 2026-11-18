@@ -19,7 +19,7 @@ for every declared capability:
    whose ecosystem has no publication protocol may instead follow
    `docs/adr/0003-protocol-only-formats.md` and declare only Proxy and Group.
 4. Implement Proxy caching and Group resolution with format-specific cache keys,
-   negative caching, upstream protection, and ordered member behavior.
+   negative caching, upstream protection, and ordered member behaviour.
 5. Add management browse/search projections and stable artifact/version deep
    links. Global search must be able to return a directly addressable result.
 6. Implement logical deletion, tombstones, restore, retention, delayed reclaim,
@@ -27,14 +27,14 @@ for every declared capability:
    Protocol-only formats must omit unsupported lifecycle operations rather than
    exposing placeholders.
 7. Apply repository grants, anonymous-read gates, audit fields, bounded metrics,
-   worker-format filtering, capacity, quota, backup, and recovery behavior.
+   worker-format filtering, capacity, quota, backup, and recovery behaviour.
 8. Extend OpenAPI, generated Go/TypeScript clients, Console selectors, protocol
    compatibility documentation, unit/integration tests, and a black-box client
    fixture.
 
 Do not add a format to `Format`, `FormatProfile`, or the Console while one of
 these requirements is represented only by a placeholder handler. A development
-branch may stage the work, but the admitted profile must describe behavior that
+branch may stage the work, but the admitted profile must describe behaviour that
 is executable in the same revision.
 
 ## Capability Rules
@@ -43,14 +43,14 @@ is executable in the same revision.
 - `GroupSupported` controls Group creation; it does not imply that arbitrary
   repositories can be mixed. Every member must still be active and match the
   Group format.
-- `AnonymousRead` means the protocol can honor the global and repository/Group
+- `AnonymousRead` means the protocol can honour the global and repository/Group
   anonymous policy. It does not enable anonymous access by default.
 - `PublicationScanning` means Hosted publications expose canonical immutable
   assets to automatic scanning and bounded scan reconciliation. It does not
   enable scanning by itself; scanner configuration and repository policy still
   apply.
 - `HostedOperations` and `ProxyOperations` must match executable management and
-  protocol behavior. `GET /repositories/{id}/capabilities` is derived from the
+  protocol behaviour. `GET /repositories/{id}/capabilities` is derived from the
   same profile and must not maintain a separate list.
 
 The profile helpers return defensive copies. Consumers should use
@@ -73,4 +73,4 @@ make console-build
 
 It also adds a protocol-native end-to-end fixture and persistent PostgreSQL/S3
 integration coverage for publish, resolve, delete, restore, retention, reclaim,
-promotion, replication, and upgrade/rollback behavior.
+promotion, replication, and upgrade/rollback behaviour.

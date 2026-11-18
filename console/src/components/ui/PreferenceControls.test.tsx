@@ -133,7 +133,7 @@ describe("PreferenceControls", () => {
           <PreferenceControls />
         </PreferencesProvider>,
       );
-      await user.click(screen.getByRole("button", { name: /选择主题/ }));
+      await user.click(screen.getByRole("button", { name: /Choose theme/ }));
       await user.click(
         await screen.findByRole("menuitem", { name: /notarx Light/ }),
       );
@@ -233,7 +233,7 @@ describe("PreferenceControls", () => {
           <PreferenceControls />
         </PreferencesProvider>,
       );
-      await user.click(screen.getByRole("button", { name: /选择主题/ }));
+      await user.click(screen.getByRole("button", { name: /Choose theme/ }));
       await user.click(
         await screen.findByRole("menuitem", { name: /notarx Light/ }),
       );
@@ -284,7 +284,7 @@ describe("PreferenceControls", () => {
           <PreferenceControls />
         </PreferencesProvider>,
       );
-      await user.click(screen.getByRole("button", { name: /选择主题/ }));
+      await user.click(screen.getByRole("button", { name: /Choose theme/ }));
       await user.click(
         await screen.findByRole("menuitem", { name: /notarx Light/ }),
       );
@@ -317,10 +317,10 @@ describe("PreferenceControls", () => {
       </PreferencesProvider>,
     );
 
-    await user.click(screen.getByRole("button", { name: "语言" }));
+    await user.click(screen.getByRole("button", { name: "Language" }));
 
     expect(
-      await screen.findByRole("menuitem", { name: "中文" }),
+      await screen.findByRole("menuitem", { name: "Chinese" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("menuitem", { name: "English" }),
@@ -332,6 +332,6 @@ describe("PreferenceControls", () => {
     expect(screen.getByRole("button", { name: "Language" })).toHaveTextContent(
       "EN",
     );
-    expect(localStorage.getItem("ag.console.locale")).toBe("en-US");
+    expect(localStorage.getItem("ag.console.locale")).toBe("en-CA");
   });
 });

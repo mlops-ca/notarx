@@ -142,7 +142,7 @@ The env bootstrap becomes optional seeding of one OIDC provider (`NOTARX_OIDC_*`
 keys, slug `default`) when the table is empty, to keep the Keycloak dev fixture
 and e2e simple; there is no ongoing env-versus-database merge.
 
-`user_identities` is generalised: `kind IN ('oidc','saml')`, a new
+`user_identities` is generalized: `kind IN ('oidc','saml')`, a new
 `provider_id UUID NOT NULL REFERENCES identity_providers(id)`, and exactly one
 row per `(provider_id, user_id)`:
 
@@ -171,12 +171,12 @@ Routes (browser, public, rate limited):
 `GET /auth/idp` (enabled providers only for the chooser: slug, display name,
 kind; disabled providers are never revealed),
 `GET /auth/oidc/{slug}/login|callback` (the existing `/auth/oidc/login|callback`
-flow parameterised by slug; the handler method is `start`, the route stays
+flow parameterized by slug; the handler method is `start`, the route stays
 `login`),
 `GET /auth/saml/{slug}/login`, `POST /auth/saml/{slug}/acs`,
 `GET /auth/saml/{slug}/metadata` (SP metadata). These root-mounted routes are specified in
 `api/openapi/protocols/saml.yaml` and `api/openapi/protocols/oidc-login.yaml`.
-Management API (relative to `/api/v2`; admin only, OpenAPI-first, optimistic
+Management API (relative to `/api/v2`; admin only, OpenAPI-first, optimiztic
 `ETag` like `oidc_settings`): `/authentication/providers`
 CRUD, `:test`, `:import-metadata`, plus SCIM token management below. The old
 `/authentication/oidc` operations are removed, not aliased.
@@ -464,7 +464,7 @@ first), then the rest of ADR 0019.
    `purpose` still bound as AAD; [ ] ring is consumed only through `KeySource`. Dependencies: ADR 0013 slice 4 (env rename),
    ADR 0015 cut-over slice. ADR 0020 slice 1 depends on this slice.
 2. **Provider registry schema and OIDC port.** Scope: migration (`identity_providers`,
-   generalised `user_identities`, `user_sessions.kind`, nullable `user_sessions.idp_session_id`,
+   generalized `user_identities`, `user_sessions.kind`, nullable `user_sessions.idp_session_id`,
    `users.disabled_reason`, copy of `oidc_settings`), `internal/identity` store, `OIDCRuntime` rewritten per
    provider on the `internal/jose` verifier, env seed,
    `api/openapi/management/authentication.yaml` provider CRUD,
@@ -503,7 +503,7 @@ first), then the rest of ADR 0019.
    task. Acceptance: [ ] SSRF tests for private ranges and redirects; [ ] two-cert
    rollover test; [ ] `make openapi-check`. Dependencies: ADR 0018 slice 4.
 6. **SCIM server.** Scope: `api/openapi/protocols/scim.yaml`, `/scim/v2/*`, token
-   table and admin API, filters, PATCH normaliser, audit events. Acceptance: [ ]
+   table and admin API, filters, PATCH normalizer, audit events. Acceptance: [ ]
    golden Entra ID (flag on and off) and Okta provisioning transcripts pass; [ ]
    deactivate revokes sessions and tokens; [ ] admin accounts untouchable; [ ]
    local conflict `409`; [ ] scim_only first-login binding by `externalId`;

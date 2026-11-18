@@ -1,6 +1,4 @@
-import type { RepositoryMessageKey } from "./repository.zh-CN";
-
-export const repositoryEnUS: Record<RepositoryMessageKey, string> = {
+export const repositoryEnCA = {
   "repository.aptFirstTitle": "Publish the first signed snapshot",
   "repository.aptFirstManagementAfterPublish":
     "After the first publication, manage visible packages here.",
@@ -1110,3 +1108,5 @@ export const repositoryEnUS: Record<RepositoryMessageKey, string> = {
   "repository.copyRepositoryId": "Copy repository ID",
   "repository.deleteRepositoryAction": "Delete repository",
 };
+
+export type RepositoryMessageKey = keyof typeof repositoryEnCA;

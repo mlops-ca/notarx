@@ -1,6 +1,4 @@
-import type { PublicBrowseMessageKey } from "./public-browse.zh-CN";
-
-export const publicBrowseEnUS: Record<PublicBrowseMessageKey, string> = {
+export const publicBrowseEnCA = {
   "public.browseTitle": "Public Artifact Browser",
   "public.managementLogin": "Management sign in",
   "public.managementConsole": "Open management console",
@@ -155,3 +153,5 @@ export const publicBrowseEnUS: Record<PublicBrowseMessageKey, string> = {
   "publicBrowse.failedToReadConanRevisions": "Failed to read Conan revisions",
   "publicBrowse.untaggedDigest": "Untagged · {digest}",
 };
+
+export type PublicBrowseMessageKey = keyof typeof publicBrowseEnCA;

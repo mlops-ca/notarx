@@ -38,8 +38,10 @@ test("audit log starts with filters and keeps the page controls at both widths",
   await page.goto("/audits");
   const header = page.locator(".ag-page-header");
   const card = page.locator(".ag-page-stack > .ag-card").first();
-  await expect(card.getByRole("button", { name: "刷新" })).toBeVisible();
-  await expect(page.getByRole("group", { name: "页面摘要" })).toHaveCount(0);
+  await expect(card.getByRole("button", { name: "Refresh" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Page summary" })).toHaveCount(
+    0,
+  );
   expect(await gap(header, card)).toBeGreaterThanOrEqual(23);
   expect(await gap(header, card)).toBeLessThanOrEqual(25);
   await noOverflow(page);
@@ -81,11 +83,13 @@ test("audit retention has one policy form and preserves cleanup actions", async 
   const header = page.locator(".ag-page-header");
   const cards = page.locator(".ag-page-stack > .ag-card");
   await expect(cards).toHaveCount(2);
-  await expect(page.getByText("策略设置")).toBeVisible();
-  await expect(page.getByText("清理说明")).toHaveCount(0);
-  await expect(page.getByRole("group", { name: "页面摘要" })).toHaveCount(0);
+  await expect(page.getByText("Policy settings")).toBeVisible();
+  await expect(page.getByText("Cleanup note")).toHaveCount(0);
+  await expect(page.getByRole("group", { name: "Page summary" })).toHaveCount(
+    0,
+  );
   await expect(
-    page.getByRole("button", { name: "立即执行清理" }),
+    page.getByRole("button", { name: "Run cleanup now" }),
   ).toBeEnabled();
   expect(await gap(header, cards.first())).toBeGreaterThanOrEqual(23);
   expect(await gap(header, cards.first())).toBeLessThanOrEqual(25);

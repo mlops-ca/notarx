@@ -90,7 +90,7 @@ describe("RepositoryScanningTab", () => {
     );
     expect(
       await screen.findByText(
-        "仅显示最近 100 条生命周期任务中的扫描任务；不是全部扫描历史。",
+        "Shows scans among the latest 100 lifecycle jobs; this is not the complete scan history.",
       ),
     ).toBeVisible();
     await waitFor(() =>
@@ -99,7 +99,7 @@ describe("RepositoryScanningTab", () => {
       ),
     );
     expect(container.querySelector(".ant-pagination")).toBeNull();
-    expect(screen.queryByText(/共 26 项/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/of 26 items/)).not.toBeInTheDocument();
   });
 
   it("searches, selects, and queues a repository artifact without manual identity input", async () => {
@@ -150,9 +150,11 @@ describe("RepositoryScanningTab", () => {
       </TestQueryProvider>,
     );
 
-    expect(await screen.findByText("选择并扫描不可变制品")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Select and scan an immutable artifact"),
+    ).toBeInTheDocument();
     const artifactPicker = await screen.findByRole("combobox", {
-      name: "搜索并选择制品",
+      name: "Search and select an artifact",
     });
     await waitFor(() =>
       expect(mockListArtifactIdentities).toHaveBeenCalledTimes(1),
@@ -169,7 +171,7 @@ describe("RepositoryScanningTab", () => {
     expect(visibleOption).not.toBeNull();
     await user.click(visibleOption!);
     expect(await screen.findByText(digest)).toBeInTheDocument();
-    const submitScan = screen.getByRole("button", { name: "提交扫描" });
+    const submitScan = screen.getByRole("button", { name: "Queue scan" });
     expect(submitScan).toBeEnabled();
     await user.click(submitScan);
 
@@ -179,7 +181,7 @@ describe("RepositoryScanningTab", () => {
       headers: { "Idempotency-Key": expect.stringMatching(/^manual-scan:/) },
       body: { coordinate: "@team/widget@1.2.3", digest },
     });
-    expect(await screen.findByText("扫描任务已提交")).toBeInTheDocument();
+    expect(await screen.findByText("Scan job queued")).toBeInTheDocument();
     expect(screen.getAllByText("scan-job-1")).not.toHaveLength(0);
     expect(screen.getAllByText("@team/widget@1.2.3")).not.toHaveLength(0);
   });
@@ -204,7 +206,7 @@ describe("RepositoryScanningTab", () => {
     );
 
     const artifactPicker = await screen.findByRole("combobox", {
-      name: "搜索并选择制品",
+      name: "Search and select an artifact",
     });
     await user.click(artifactPicker);
     await user.type(artifactPicker, "widget");
@@ -255,15 +257,15 @@ describe("RepositoryScanningTab", () => {
     );
 
     await user.click(
-      await screen.findByRole("button", { name: "高级手动输入" }),
+      await screen.findByRole("button", { name: "Advanced manual input" }),
     );
-    fireEvent.change(screen.getByLabelText("制品坐标"), {
+    fireEvent.change(screen.getByLabelText("Artifact coordinate"), {
       target: { value: "@team/legacy@0.9.0" },
     });
-    fireEvent.change(screen.getByLabelText("SHA-256 摘要"), {
+    fireEvent.change(screen.getByLabelText("SHA-256 digest"), {
       target: { value: digest },
     });
-    await user.click(screen.getByRole("button", { name: "提交扫描" }));
+    await user.click(screen.getByRole("button", { name: "Queue scan" }));
 
     await waitFor(() => expect(mockCreateScan).toHaveBeenCalledTimes(1));
     expect(mockCreateScan).toHaveBeenCalledWith({
@@ -296,11 +298,13 @@ describe("RepositoryScanningTab", () => {
     );
 
     expect(
-      await screen.findByText("当前仓库未配置可用扫描器"),
+      await screen.findByText("No scanner is configured for this repository"),
     ).toBeInTheDocument();
     expect(screen.getByText("NOTARX_SCANNER_ENDPOINT")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "提交扫描" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "对账历史制品" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Queue scan" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Reconcile historical artifacts" }),
+    ).toBeDisabled();
     expect(mockReconcileScans).not.toHaveBeenCalled();
   });
 
@@ -334,7 +338,9 @@ describe("RepositoryScanningTab", () => {
     );
 
     await user.click(
-      await screen.findByRole("button", { name: "对账历史制品" }),
+      await screen.findByRole("button", {
+        name: "Reconcile historical artifacts",
+      }),
     );
 
     await waitFor(() => expect(mockReconcileScans).toHaveBeenCalledTimes(1));
@@ -343,7 +349,7 @@ describe("RepositoryScanningTab", () => {
       query: { limit: 500 },
     });
     expect(
-      await screen.findByText("已检查 7 个制品，补入 3 个，重试 1 个"),
+      await screen.findByText("Inspected 7 artifacts, queued 3, retried 1"),
     ).toBeInTheDocument();
   });
 
@@ -363,9 +369,9 @@ describe("RepositoryScanningTab", () => {
       </TestQueryProvider>,
     );
 
-    expect(await screen.findByText("请求出错")).toBeInTheDocument();
+    expect(await screen.findByText("Request failed")).toBeInTheDocument();
     expect(
-      screen.queryByText("当前仓库未配置可用扫描器"),
+      screen.queryByText("No scanner is configured for this repository"),
     ).not.toBeInTheDocument();
     expect(mockListJobs).not.toHaveBeenCalled();
   });
@@ -387,11 +393,15 @@ describe("RepositoryScanningTab", () => {
     );
 
     expect(
-      await screen.findByText("当前身份没有制品扫描权限"),
+      await screen.findByText("This identity cannot manage artifact scans"),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "提交扫描" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "对账历史制品" })).toBeDisabled();
-    expect(screen.getByText("最近任务仅对仓库管理员可见")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Queue scan" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Reconcile historical artifacts" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText("Recent jobs are visible to repository administrators"),
+    ).toBeInTheDocument();
     expect(mockListJobs).not.toHaveBeenCalled();
   });
 
@@ -413,14 +423,14 @@ describe("RepositoryScanningTab", () => {
     );
 
     await user.click(
-      await screen.findByRole("button", { name: "高级手动输入" }),
+      await screen.findByRole("button", { name: "Advanced manual input" }),
     );
 
-    expect(await screen.findByLabelText("制品坐标")).toHaveAttribute(
+    expect(await screen.findByLabelText("Artifact coordinate")).toHaveAttribute(
       "placeholder",
       "team/widget",
     );
-    expect(screen.getByLabelText("SHA-256 摘要")).toHaveAttribute(
+    expect(screen.getByLabelText("SHA-256 digest")).toHaveAttribute(
       "placeholder",
       "sha256:…",
     );
@@ -428,7 +438,7 @@ describe("RepositoryScanningTab", () => {
 
   it("localizes the coordinate placeholder for formats without a canonical example", async () => {
     const user = userEvent.setup();
-    localStorage.setItem("ag.console.locale", "en-US");
+    localStorage.setItem("ag.console.locale", "en-CA");
     mockListJobs.mockResolvedValue({ data: [] } as never);
 
     render(

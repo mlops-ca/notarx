@@ -81,8 +81,9 @@ func ApplyContext(ctx context.Context, client *http.Client, proxy *repository.Eg
 			return nil, err
 		}
 		if useEgressProxy {
-			// 走 HTTP(S)_PROXY 时，由代理服务器负责 DNS 解析与 outbound 连接，
-			// IP-pinning 既不必要也会绕过代理，因此改用标准代理 Transport。
+			// With HTTP(S)_PROXY the proxy server resolves DNS and makes the outbound
+			// connection, so IP pinning is unnecessary and would bypass the proxy;
+			// use the standard proxy Transport instead.
 			return EnvironmentClient(client, hooks), nil
 		}
 		return pinnedClientContext(ctx, client, u, hooks)
@@ -234,7 +235,8 @@ func customClient(ctx context.Context, client *http.Client, proxy *repository.Eg
 		custom := base.Clone()
 		custom.Proxy = nil
 		if proxy.RemoteDNS {
-			// socks5h 语义：主机名交给代理解析，适用于本地 DNS 不可达上游的网络。
+			// socks5h semantics: hand the hostname to the proxy to resolve, for networks
+			// where local DNS cannot reach the upstream.
 			custom.DialContext = contextDialer.DialContext
 		} else {
 			custom.DialContext = socksLocalResolveDialer(upstream, hooks, contextDialer)

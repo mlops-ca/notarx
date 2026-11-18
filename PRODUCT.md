@@ -38,7 +38,7 @@ High-risk operations remain auditable, retryable, idempotent, and recoverable.
 ## Positioning
 
 The immutable governance identity is `Repository + format + canonical
-coordinate + SHA-256 digest`. Artifact Gateway centers native protocol traffic,
+coordinate + SHA-256 digest`. Artifact Gateway centres native protocol traffic,
 explicit Hosted/Proxy/Group models, and database-backed lifecycle workflows. It
 is not a transparent rewriting proxy, generic object browser, or vulnerability
 scanner; external scanners contribute intelligence only through versioned contracts.
@@ -99,7 +99,7 @@ scanner; external scanners contribute intelligence only through versioned contra
 - `CONTEXT.md` defines domain language and ownership.
 - `README.md` and `ARCHITECTURE.md` define runtime and deployment boundaries.
 - Lifecycle and Native Hosted contracts define visibility and object rules.
-- Protocol compatibility records implemented behavior and explicit limits.
+- Protocol compatibility records implemented behaviour and explicit limits.
 - Service Account and Console documents define machine identity and task models.
 - Release readiness defines protocol, Console, upgrade, and recovery gates.
 - `api/openapi/` and generated clients are the machine-readable management contract.

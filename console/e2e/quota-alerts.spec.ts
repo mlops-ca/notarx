@@ -36,7 +36,7 @@ const rule: RepositoryQuotaAlertRule = {
 
 async function fixture(
   page: Page,
-  locale = "zh-CN",
+  locale = "en-CA",
   theme = "dark",
   empty = false,
 ) {
@@ -234,7 +234,7 @@ async function capture(page: Page, path: string) {
 }
 
 for (const width of [1440, 390, 320])
-  for (const locale of ["zh-CN", "en-US"])
+  for (const locale of ["en-CA"])
     for (const theme of ["dark", "light"]) {
       test(`quota state, editor and evidence fit ${width} ${locale} ${theme}`, async ({
         page,
@@ -253,51 +253,40 @@ for (const width of [1440, 390, 320])
         });
         await expect(
           page.getByRole("button", {
-            name:
-              locale === "zh-CN" ? "查看 Synthetic Raw" : "View Synthetic Raw",
+            name: "View Synthetic Raw",
           }),
         ).toBeVisible();
         await geometry(page);
         await page
           .getByRole("button", {
-            name:
-              locale === "zh-CN" ? "查看 Synthetic Raw" : "View Synthetic Raw",
+            name: "View Synthetic Raw",
           })
           .click();
         await expect(
-          page.getByText(
-            locale === "zh-CN"
-              ? "SMTP 服务器已接受"
-              : "Accepted by SMTP server",
-            { exact: true },
-          ),
+          page.getByText("Accepted by SMTP server", { exact: true }),
         ).toBeVisible();
         await geometry(page);
         await page
           .getByRole("button", {
-            name: locale === "zh-CN" ? "查看交付详情" : "View delivery details",
+            name: "View delivery details",
           })
           .click();
         await expect(
-          page.getByText(
-            locale === "zh-CN" ? "可能重复" : "Possible duplicate",
-            { exact: true },
-          ),
+          page.getByText("Possible duplicate", { exact: true }),
         ).toBeVisible();
         await expect(
           page.getByRole("button", {
-            name: locale === "zh-CN" ? "启用规则" : "Enable rule",
+            name: "Enable rule",
           }),
         ).toBeDisabled();
         await page
           .getByRole("button", {
-            name: locale === "zh-CN" ? "编辑规则" : "Edit rule",
+            name: "Edit rule",
           })
           .click();
         await expect(
           page.getByRole("textbox", {
-            name:
-              locale === "zh-CN" ? "警告阈值（%）" : "Warning threshold (%)",
+            name: "Warning threshold (%)",
           }),
         ).toHaveValue("80");
         await geometry(page);
@@ -308,7 +297,7 @@ for (const width of [1440, 390, 320])
           );
         await page
           .getByRole("button", {
-            name: locale === "zh-CN" ? "取消" : "Cancel",
+            name: "Cancel",
             exact: true,
           })
           .click();
@@ -333,30 +322,34 @@ for (const width of [1440, 390, 320])
 test("creation is explicit, disabled, and persists exact policy; deletion retains history", async ({
   page,
 }) => {
-  const writes = await fixture(page, "zh-CN", "dark", true);
+  const writes = await fixture(page, "en-CA", "dark", true);
   await page.goto("/system?tab=alerts");
-  await page.getByRole("button", { name: "创建规则" }).click();
+  await page.getByRole("button", { name: "Create rule" }).click();
   await expect(
-    page.getByRole("textbox", { name: "警告阈值（%）" }),
+    page.getByRole("textbox", { name: "Warning threshold (%)" }),
   ).toHaveValue("");
-  await page.getByRole("combobox", { name: "仓库", exact: true }).click();
+  await page.getByRole("combobox", { name: "Repository", exact: true }).click();
   await page
     .getByRole("option", { name: "Synthetic Raw", exact: true })
     .click();
-  await page.getByRole("combobox", { name: "邮件目标", exact: true }).click();
+  await page
+    .getByRole("combobox", { name: "Email target", exact: true })
+    .click();
   await page.getByRole("option", { name: /Synthetic operations/ }).click();
   for (const [label, value] of [
-    ["警告阈值（%）", "80.01"],
-    ["严重阈值（%）", "95"],
-    ["恢复阈值（%）", "75"],
-    ["警告持续时间（秒）", "120"],
-    ["严重持续时间（秒）", "30"],
-    ["恢复持续时间（秒）", "300"],
-    ["最大样本年龄（秒）", "60"],
+    ["Warning threshold (%)", "80.01"],
+    ["Critical threshold (%)", "95"],
+    ["Recovery threshold (%)", "75"],
+    ["Warning hold duration (seconds)", "120"],
+    ["Critical hold duration (seconds)", "30"],
+    ["Recovery hold duration (seconds)", "300"],
+    ["Maximum sample age (seconds)", "60"],
   ])
     await page.getByRole("textbox", { name: label, exact: true }).fill(value);
-  await page.getByRole("button", { name: "创建停用规则", exact: true }).click();
-  await expect(page.getByText("规则已保存", { exact: true })).toBeVisible();
+  await page
+    .getByRole("button", { name: "Create disabled rule", exact: true })
+    .click();
+  await expect(page.getByText("Rule saved", { exact: true })).toBeVisible();
   expect(writes).toEqual([
     {
       method: "POST",
@@ -369,17 +362,19 @@ test("creation is explicit, disabled, and persists exact policy; deletion retain
       },
     },
   ]);
-  await page.getByRole("button", { name: "删除规则" }).click();
-  await page.getByRole("button", { name: "取消", exact: true }).click();
+  await page.getByRole("button", { name: "Delete rule" }).click();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
   expect(writes).toHaveLength(1);
-  await page.getByRole("button", { name: "删除规则" }).click();
-  await page.getByRole("button", { name: "确认删除", exact: true }).click();
+  await page.getByRole("button", { name: "Delete rule" }).click();
+  await page
+    .getByRole("button", { name: "Confirm delete", exact: true })
+    .click();
   await expect(
-    page.getByText("规则已删除，历史仍可查看", { exact: true }),
+    page.getByText("Rule deleted; history remains available", { exact: true }),
   ).toBeVisible();
   expect(writes[1]).toMatchObject({ method: "DELETE", version: "rule-v2" });
   await expect(
-    page.getByRole("button", { name: "查看交付详情" }),
+    page.getByRole("button", { name: "View delivery details" }),
   ).toBeVisible();
 });
 
@@ -397,7 +392,9 @@ test("a forced password gate has no form and filters unsafe response messages", 
     }),
   );
   await page.goto("/system?tab=alerts");
-  await expect(page.getByText(/必须先修改密码/)).toBeVisible();
+  await expect(
+    page.getByText(/Change your password before returning to this page\./),
+  ).toBeVisible();
   await expect(page.getByRole("textbox")).toHaveCount(0);
   await expect(page.getByText(/sensitive-marker/)).toHaveCount(0);
 });
@@ -414,7 +411,7 @@ test("polling pauses when hidden, refreshes on return, and stops outside the ale
   });
   await page.goto("/system?tab=alerts");
   await expect(
-    page.getByRole("button", { name: "查看 Synthetic Raw" }),
+    page.getByRole("button", { name: "View Synthetic Raw" }),
   ).toBeVisible();
   expect(reads).toBe(1);
   await page.evaluate(() => {
@@ -434,12 +431,12 @@ test("polling pauses when hidden, refreshes on return, and stops outside the ale
     document.dispatchEvent(new Event("visibilitychange"));
   });
   await expect.poll(() => reads).toBe(2);
-  await page.getByRole("tab", { name: "运行日志", exact: true }).click();
+  await page.getByRole("tab", { name: "Runtime logs", exact: true }).click();
   await page.clock.fastForward(90000);
   expect(reads).toBe(2);
 });
 
-for (const locale of ["zh-CN", "en-US"]) {
+for (const locale of ["en-CA"]) {
   test(`desktop quota field errors focus selections and expose precise constraints ${locale}`, async ({
     page,
   }) => {
@@ -449,38 +446,33 @@ for (const locale of ["zh-CN", "en-US"]) {
     );
     const writes = await fixture(page, locale, "dark");
     await page.goto("/system?tab=alerts");
-    const zh = locale === "zh-CN";
     await page
       .getByRole("button", {
-        name: zh ? "创建规则" : "Create rule",
+        name: "Create rule",
         exact: true,
       })
       .click();
     const save = page.getByRole("button", {
-      name: zh ? "创建停用规则" : "Create disabled rule",
+      name: "Create disabled rule",
       exact: true,
     });
     await save.focus();
     await page.keyboard.press("Enter");
     const repository = page.getByRole("combobox", {
-      name: zh ? "仓库" : "Repository",
+      name: "Repository",
       exact: true,
     });
     await expect(repository).toBeFocused();
     await expect(repository).toHaveAttribute("aria-invalid", "true");
-    await expect(repository).toHaveAccessibleDescription(
-      zh ? /请选择仓库/ : /Choose a repository/,
-    );
+    await expect(repository).toHaveAccessibleDescription(/Choose a repository/);
     const warning = page.getByRole("textbox", {
-      name: zh ? "警告阈值（%）" : "Warning threshold (%)",
+      name: "Warning threshold (%)",
       exact: true,
     });
     await warning.fill("80.001");
-    await expect(warning).toHaveAccessibleDescription(
-      zh ? /最多两位小数/ : /up to two decimals/,
-    );
+    await expect(warning).toHaveAccessibleDescription(/up to two decimals/);
     const duration = page.getByRole("textbox", {
-      name: zh ? "警告持续时间（秒）" : "Warning hold duration (seconds)",
+      name: "Warning hold duration (seconds)",
       exact: true,
     });
     await duration.fill("120");

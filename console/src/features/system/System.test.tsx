@@ -28,7 +28,7 @@ it("opens quota alerts through the System route tab", () => {
     </MemoryRouter>,
   );
   expect(
-    screen.getByRole("tab", { name: "配额告警", selected: true }),
+    screen.getByRole("tab", { name: "Quota alerts", selected: true }),
   ).toBeInTheDocument();
   expect(screen.queryByText("diagnostics fixture")).not.toBeInTheDocument();
 });

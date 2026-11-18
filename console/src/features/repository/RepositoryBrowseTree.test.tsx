@@ -95,7 +95,7 @@ describe("RepositoryBrowseTree", () => {
     expect(screen.getAllByText("0 B")).toHaveLength(2);
     expect(screen.getByText("text/plain")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "在列表中查看" }));
+    await user.click(screen.getByRole("button", { name: "Open in list" }));
     expect(onOpenInList).toHaveBeenCalledWith(
       expect.objectContaining({
         coordinate: "docs/release%20notes.txt",
@@ -131,7 +131,7 @@ describe("RepositoryBrowseTree", () => {
     );
 
     expect(await screen.findByText("packages")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /刷新/ }));
+    await user.click(screen.getByRole("button", { name: /Refresh/ }));
 
     expect(
       await screen.findByText("temporary browse failure"),
@@ -157,11 +157,15 @@ describe("RepositoryBrowseTree", () => {
     expect(
       await screen.findByText("initial browse failure"),
     ).toBeInTheDocument();
-    expect(screen.queryByText("制品目录")).not.toBeInTheDocument();
-    expect(screen.queryByText("暂无可浏览制品")).not.toBeInTheDocument();
+    expect(screen.queryByText("Artifact directory")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("No browseable artifacts"),
+    ).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /重试/ }));
-    expect(await screen.findByText("暂无可浏览制品")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Retry/ }));
+    expect(
+      await screen.findByText("No browseable artifacts"),
+    ).toBeInTheDocument();
     expect(mockBrowseRepository).toHaveBeenCalledTimes(2);
   });
 
@@ -203,11 +207,11 @@ describe("RepositoryBrowseTree", () => {
     );
 
     expect(await screen.findByText("docs")).toBeInTheDocument();
-    await user.click(screen.getByText("加载更多"));
+    await user.click(screen.getByText("Load more"));
 
     expect(await screen.findByText("packages")).toBeInTheDocument();
     expect(screen.getByText("docs")).toBeInTheDocument();
-    expect(screen.queryByText("加载更多")).not.toBeInTheDocument();
+    expect(screen.queryByText("Load more")).not.toBeInTheDocument();
     expect(mockBrowseRepository).toHaveBeenNthCalledWith(2, {
       path: { repositoryId: repository.id },
       query: {
@@ -252,7 +256,7 @@ describe("Proxy directory recovery", () => {
     );
     await user.click(await screen.findByText("org.example"));
     expect(await screen.findByText("child unavailable")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /重试/ }));
+    await user.click(screen.getByRole("button", { name: /Retry/ }));
     expect(await screen.findByText("widget")).toBeInTheDocument();
     expect(mockBrowseRepository).toHaveBeenNthCalledWith(3, {
       path: { repositoryId: proxy.id },
@@ -280,10 +284,10 @@ describe("Proxy directory recovery", () => {
         <RepositoryBrowseTree repo={proxy} onOpenInList={vi.fn()} />
       </PreferencesProvider>,
     );
-    await user.click(await screen.findByText("加载更多"));
+    await user.click(await screen.findByText("Load more"));
     expect(await screen.findByText("page unavailable")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /重试/ }));
-    await user.dblClick(screen.getByText("加载更多"));
+    await user.click(screen.getByRole("button", { name: /Retry/ }));
+    await user.dblClick(screen.getByText("Load more"));
     expect(mockBrowseRepository).toHaveBeenCalledTimes(3);
     finish?.({
       data: { items: [{ ...root, id: "second", name: "org.second" }] },
@@ -308,7 +312,7 @@ describe("Proxy directory recovery", () => {
     );
     await user.click(await screen.findByText("org.example"));
     expect(await screen.findByText("widget")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /刷新/ }));
+    await user.click(screen.getByRole("button", { name: /Refresh/ }));
     await waitFor(() =>
       expect(screen.queryByText("widget")).not.toBeInTheDocument(),
     );
@@ -354,7 +358,7 @@ describe("Proxy directory recovery", () => {
       data: { items: [{ ...child, id: "other-child", name: "other-widget" }] },
     } as never);
     expect(await screen.findByText("other-widget")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /重试/ }));
+    await user.click(screen.getByRole("button", { name: /Retry/ }));
     expect(await screen.findByText("widget")).toBeInTheDocument();
     expect(mockBrowseRepository).toHaveBeenNthCalledWith(4, {
       path: { repositoryId: proxy.id },
@@ -388,13 +392,13 @@ describe("Proxy directory recovery", () => {
     );
     await user.click(await screen.findByText(asset.name));
     expect(
-      within(screen.getByRole("complementary", { name: "节点详情" })).getByText(
-        "maven-proxy",
-      ),
+      within(
+        screen.getByRole("complementary", { name: "Node details" }),
+      ).getByText("maven-proxy"),
     ).toBeInTheDocument();
-    expect(screen.getByText("已缓存")).toBeInTheDocument();
+    expect(screen.getByText("Cached")).toBeInTheDocument();
     expect(screen.getByText(asset.path)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "在列表中查看" }));
+    await user.click(screen.getByRole("button", { name: "Open in list" }));
     expect(open).toHaveBeenCalledWith(asset);
   });
 });
@@ -462,8 +466,8 @@ it("uses Group browse and retains conflicting source identities and scope-aware 
     "href",
     "/repositories/proxy-id",
   );
-  expect(screen.getByText("缓存范围 · group")).toBeInTheDocument();
+  expect(screen.getByText("Cache scope · group")).toBeInTheDocument();
   expect(
-    screen.queryByRole("button", { name: "在列表中查看" }),
+    screen.queryByRole("button", { name: "Open in list" }),
   ).not.toBeInTheDocument();
 });

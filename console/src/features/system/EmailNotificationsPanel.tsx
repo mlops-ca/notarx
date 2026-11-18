@@ -17,6 +17,7 @@ import {
 import { useAuth } from "../../lib/auth";
 import { platformCapabilities } from "../../lib/authorization";
 import { usePreferences } from "../../lib/preferences";
+import { useFormatters } from "../../lib/useFormatters";
 import { quotaResult, useQuotaSnapshot } from "./useQuotaSnapshot";
 import { safeEmailError } from "./emailPresentation";
 import { isQuotaAuthError, quotaLabel } from "./quotaAlertPresentation";
@@ -42,6 +43,7 @@ export function EmailNotificationsPanel() {
 }
 function AuthorizedEmailNotifications() {
   const { t } = usePreferences();
+  const { formatDateTime } = useFormatters();
   const [editor, setEditor] = useState<{ target?: EmailTarget }>();
   const [confirmation, setConfirmation] = useState<{
     target: EmailTarget;
@@ -278,8 +280,8 @@ function AuthorizedEmailNotifications() {
           <EmailDeliveryResults deliveries={deliveries} targets={targets} />
           {snapshot.readAt && (
             <p className="text-xs text-fg-tertiary">
-              {t("system.readAt")}: {new Date(snapshot.readAt).toLocaleString()}{" "}
-              · {t("system.refreshesEvery30SecondsWhileVisible")}
+              {t("system.readAt")}: {formatDateTime(snapshot.readAt)} ·{" "}
+              {t("system.refreshesEvery30SecondsWhileVisible")}
             </p>
           )}
         </>

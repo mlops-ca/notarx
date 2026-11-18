@@ -1,6 +1,4 @@
-import type { FormatsMessageKey } from "./formats.zh-CN";
-
-export const formatsEnUS: Record<FormatsMessageKey, string> = {
+export const formatsEnCA = {
   "formats.ociDiscovery": "OCI catalog and attached artifacts",
   "formats.ociCatalogCoverage":
     "The native Catalog lists authorized image names and sources, and reports upstream coverage. The cache below is not a complete inventory.",
@@ -44,3 +42,5 @@ export const formatsEnUS: Record<FormatsMessageKey, string> = {
   "formats.filterByProjectNameKeyword": "Filter by project name keyword…",
   "formats.filterByModulePathKeyword": "Filter by module path keyword…",
 };
+
+export type FormatsMessageKey = keyof typeof formatsEnCA;

@@ -125,10 +125,10 @@ it.each([401, 403])(
       } as never);
     const fetchMock = mount();
     await userEvent.click(
-      await screen.findByRole("button", { name: /检\s*查/ }),
+      await screen.findByRole("button", { name: /Evaluate/ }),
     );
     await screen.findByText("alice-evaluation");
-    await userEvent.click(screen.getByRole("button", { name: /检\s*查/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Evaluate/ }));
     if (status === 401) {
       await screen.findByText("Signed out");
       expect(localStorage.getItem("ag.console.token")).toBeNull();
@@ -156,7 +156,9 @@ it("cancels an evaluation and drops its late answer when the identity changes", 
     });
   });
   mount();
-  await userEvent.click(await screen.findByRole("button", { name: /检\s*查/ }));
+  await userEvent.click(
+    await screen.findByRole("button", { name: /Evaluate/ }),
+  );
   await waitFor(() =>
     expect(getRepositoryEffectiveAccess).toHaveBeenCalledTimes(1),
   );

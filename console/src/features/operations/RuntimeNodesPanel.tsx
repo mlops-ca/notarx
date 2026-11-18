@@ -4,6 +4,7 @@ import { Alert, Button, Tooltip } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { RuntimeNode } from "../../client";
 import { formatDate } from "../../lib/format";
+import { runtimeIssueText } from "./runtimeNodeIssues";
 import { FormatBadge, StateBadge } from "../../components/ui/Badge";
 import { EmptyState, ErrorBanner, Loading } from "../../components/ui/Feedback";
 import { Card, CardHeader } from "../../components/ui/Layout";
@@ -188,7 +189,7 @@ export function RuntimeNodesPanel({
                     <span className="font-mono text-xs text-fg-tertiary">
                       {issue.code}
                     </span>
-                    <span className="ml-2">{issue.message}</span>
+                    <span className="ml-2">{runtimeIssueText(issue, t)}</span>
                     {issue.affectedNodes?.length ? (
                       <div className="break-all font-mono text-xs text-fg-tertiary">
                         {t("operations.sessions")}:{" "}

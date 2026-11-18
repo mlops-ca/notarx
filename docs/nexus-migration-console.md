@@ -156,5 +156,5 @@ proxy against that Gateway, and use `PLAYWRIGHT_EXTERNAL_SERVER=1` plus the actu
 approved TLS/egress policy and independently controlled worker. The gate refuses
 an unowned project, explicitly measures its test RustFS `/data` pool for test
 evidence, and never supplies such measurements for product users. It exercises
-real API/PG/object bytes and worker behavior; fixture observations are not real
+real API/PG/object bytes and worker behaviour; fixture observations are not real
 Nexus inventory, remote CI, production cutover or an operator's cold-client proof.

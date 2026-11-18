@@ -240,31 +240,31 @@ for (const width of [1440, 390])
       await page.goto(
         `/repositories/${repositoryId}?artifact=${project}&version=1.0`,
       );
-      const panel = page.getByRole("region", { name: "撤回状态" });
-      await expect(panel.getByText("已撤回 0 / 2 个文件")).toBeVisible();
-      await panel.getByRole("button", { name: "管理撤回" }).click();
+      const panel = page.getByRole("region", { name: "Yank state" });
+      await expect(panel.getByText("0 / 2 files yanked")).toBeVisible();
+      await panel.getByRole("button", { name: "Manage yanking" }).click();
       const dialog = page.getByRole("dialog");
       await waitForModalOpen(dialog);
       await page
-        .getByLabel("撤回原因（可选）")
+        .getByLabel("Yank reason (optional)")
         .fill("ABI regression <text> & " + "details ".repeat(30));
       const scope = page.getByRole("combobox", {
-        name: "操作范围",
+        name: "Scope",
         exact: true,
       });
       await scope.fill(files[0].filename);
       await scope.press("ArrowDown");
       await scope.press("Enter");
-      await page.getByRole("button", { name: "确认撤回" }).click();
+      await page.getByRole("button", { name: "Confirm yank" }).click();
       await expect(dialog).toBeHidden();
-      await expect(panel.getByText("已撤回 1 / 2 个文件")).toBeVisible();
+      await expect(panel.getByText("1 / 2 files yanked")).toBeVisible();
       await expect(
-        page.locator(".ag-pypi-detail").getByText("已撤回", { exact: true }),
+        page.locator(".ag-pypi-detail").getByText("Yanked", { exact: true }),
       ).toBeVisible();
       await expect(
         page
           .locator(".ag-pypi-detail")
-          .getByText("可正常选择", { exact: true }),
+          .getByText("Available for selection", { exact: true }),
       ).toBeVisible();
       expect(writes[0].filename).toBe(files[0].filename);
       const geometry = await panel.evaluate((element) => {
@@ -288,13 +288,16 @@ for (const width of [1440, 390])
         path: testInfo.outputPath(`pypi-yank-${theme}-${width}.png`),
         fullPage: true,
       });
-      await panel.getByRole("button", { name: "管理撤回" }).click();
-      const action = page.getByRole("combobox", { name: "操作", exact: true });
+      await panel.getByRole("button", { name: "Manage yanking" }).click();
+      const action = page.getByRole("combobox", {
+        name: "Action",
+        exact: true,
+      });
       await action.click();
       await action.press("ArrowDown");
       await action.press("Enter");
-      await page.getByRole("button", { name: "确认恢复" }).click();
-      await expect(panel.getByText("已撤回 0 / 2 个文件")).toBeVisible();
+      await page.getByRole("button", { name: "Confirm restore" }).click();
+      await expect(panel.getByText("0 / 2 files yanked")).toBeVisible();
       expect(writes[1]).toEqual({ yanked: false });
       expect(failures).toEqual([]);
     });
@@ -308,9 +311,11 @@ test("a PyPI reader sees file state without mutation controls", async ({
     `/repositories/${repositoryId}?artifact=${project}&version=1.0`,
   );
   await expect(
-    page.locator(".ag-pypi-detail").getByText("可正常选择"),
+    page.locator(".ag-pypi-detail").getByText("Available for selection"),
   ).toHaveCount(2);
-  await expect(page.getByRole("button", { name: "管理撤回" })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Manage yanking" }),
+  ).toHaveCount(0);
   expect(writes).toEqual([]);
   expect(failures).toEqual([]);
 });

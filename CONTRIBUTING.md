@@ -36,11 +36,11 @@ Compose stack without deleting its PostgreSQL and RustFS volumes.
 
 ## Change workflow
 
-1. Keep a change focused on one behavior or engineering concern.
+1. Keep a change focused on one behaviour or engineering concern.
 2. Add or update tests at the public boundary affected by the change.
 3. Update the OpenAPI source before generated clients or server interfaces.
 4. Add a migration for schema changes; never edit an applied migration.
-5. Describe user-visible behavior changes in the pull request title (a
+5. Describe user-visible behaviour changes in the pull request title (a
    Conventional Commit subject); `CHANGELOG.md` is generated from it at release
    time and is not edited by hand.
 6. Run the smallest relevant check while developing, then the required checks
@@ -87,12 +87,12 @@ policy in ADR 0014, not this file.
 ## Issue-to-merge traceability
 
 Track each user-visible change or defect in a GitHub Issue with the observed
-problem, intended behavior, explicit scope, acceptance criteria, and dependencies.
+problem, intended behaviour, explicit scope, acceptance criteria, and dependencies.
 Keep each Issue small enough to validate and merge independently; split unrelated
 protocol or cache semantics into linked follow-up Issues.
 
 Use a branch such as `codex/issue-24-group-resolution`. Link the Issue in the PR
-body with `Closes #24`, describe the final behavior, and record commands and
+body with `Closes #24`, describe the final behaviour, and record commands and
 results against the PR head SHA. Merge only after the required checks pass for
 that SHA. Record the PR, merge SHA, and remaining limitations in the Issue, then
 remove the merged feature branch after checking that no worktree still uses it.
@@ -111,9 +111,9 @@ exactly that workstream.
 
 | Axis | Labels | Meaning |
 | --- | --- | --- |
-| Type | `type: feature`, `type: bug`, `type: design`, `type: docs`, `type: chore` | `feature` extends user-visible capability; `bug` is behavior contradicting the intended outcome or the contract; `design` produces a decision recorded in an ADR or document rather than code; `docs` changes documentation only; `chore` covers CI, dependencies, refactors, and tooling with no behavior change. |
+| Type | `type: feature`, `type: bug`, `type: design`, `type: docs`, `type: chore` | `feature` extends user-visible capability; `bug` is behaviour contradicting the intended outcome or the contract; `design` produces a decision recorded in an ADR or document rather than code; `docs` changes documentation only; `chore` covers CI, dependencies, refactors, and tooling with no behaviour change. |
 | Area | `area: console`, `area: api`, `area: cli`, `area: auth`, `area: audit`, `area: platform`, `area: ops` | `console` is the web UI; `api` is the management contract, its OpenAPI sources, and generated clients; `cli` is `notarxctl`; `auth` covers identity, authorization, accounts, and service credentials; `audit` covers audit records, retention, and forensics; `platform` is the server-side data plane — artifacts and repositories, lifecycle and retention, promotion and replication, capacity, cache, quarantine, scanning; `ops` covers deployment, runtime, diagnostics, logs, backup, and upgrade. |
-| Format | `format: maven`, `format: oci`, `format: npm`, `format: pypi`, `format: go`, `format: apt`, `format: conan`, `format: cargo`, `format: nuget`, `format: raw` | Orthogonal to area; applied to Issues about one protocol's behavior. |
+| Format | `format: maven`, `format: oci`, `format: npm`, `format: pypi`, `format: go`, `format: apt`, `format: conan`, `format: cargo`, `format: nuget`, `format: raw` | Orthogonal to area; applied to Issues about one protocol's behaviour. |
 
 Titles start with the area: `Console:`, `API:` and `CLI:` for the technical
 surfaces, and `Auth:`, `Audit:`, `Platform:` or `Ops:` for the domains,
@@ -125,7 +125,7 @@ out-of-scope; a series keeps a parent Issue whose body lists its children as a
 task list. Keep one Issue per independently mergeable change and reference it
 with `Closes #N`. The issue forms under `.github/ISSUE_TEMPLATE/` use type-specific
 fields for these elements and apply the type label; add the applicable area and
-format labels when filing. For bugs, expected behavior and contract evidence
+format labels when filing. For bugs, expected behaviour and contract evidence
 define acceptance, and impact states scope and exclusions. For designs,
 problem/constraints state scope and exclusions, and the decision with its
 recorded outcome defines acceptance. Feature forms name these elements directly.
@@ -165,6 +165,13 @@ make console-check
 make console-test
 make console-build
 ```
+
+`make lint` also runs `make spellcheck`, which checks the Console messages and
+the English documentation against the Canadian English (`en-CA`) dictionary
+(`colour`, `-ize`); `make architecture-check` rejects CJK text in non-test Go
+files, because servers return English messages with stable codes and the
+Console localizes by code (ADR 0014). Install the Console dependencies first
+(`npm --prefix console ci`); project terms go in `.cspell/project-words.txt`.
 
 `make coverage` enforces both the repository-wide Go baseline and stricter
 floors for stable security, lifecycle, replication, and scanning packages.
@@ -207,7 +214,7 @@ architecture comes from the CI artifacts, not from a local `--platform` build.
 Run `make native-build-check` after touching a Dockerfile, the Makefile, `scripts/`
 or a workflow; see [native builds](docs/native-builds.md).
 
-Run `make test` before submitting a change that affects shared backend behavior.
+Run `make test` before submitting a change that affects shared backend behaviour.
 Run `make docs-check` when changing Markdown entry points, capability claims,
 or local assets; it validates local documentation references and the
 documentation site map.
@@ -289,16 +296,16 @@ titles, and complete site-map coverage. See the
 
 ## Test expectations
 
-- Test externally observable behavior through an HTTP, storage, protocol, or
+- Test externally observable behaviour through an HTTP, storage, protocol, or
   exported package interface.
-- Prefer one focused behavior per test and use known literal expectations.
+- Prefer one focused behaviour per test and use known literal expectations.
 - Add a regression test before fixing a defect when a stable public boundary is
   available.
 - Do not couple tests to private helper calls merely to increase coverage.
 - Do not narrow coverage collection to a small allowlist of well-tested files;
   exclusions must be generated code, fixtures, or test infrastructure.
 - Use integration tests for PostgreSQL transaction, migration, locking, and
-  object-store behavior that the in-memory stores cannot prove.
+  object-store behaviour that the in-memory stores cannot prove.
 
 ## Database migrations
 
@@ -317,7 +324,7 @@ and verifies that a second run is a no-op.
 
 Rules (ADR 0015):
 
-- The schema starts from `migrations/000001_baseline.sql`, a normalised
+- The schema starts from `migrations/000001_baseline.sql`, a normalized
   `pg_dump`. Never edit it in place; schema changes are new files
   `000002_<snake_case>.sql`, `000003_...`, with a unique, gap-free 6-digit
   prefix.

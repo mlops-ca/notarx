@@ -52,7 +52,9 @@ async function openServiceAccounts(page: Page) {
   });
 
   await page.goto("/service-accounts");
-  await expect(page.getByRole("heading", { name: "服务账号" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Service account" }),
+  ).toBeVisible();
   await expect(page.getByText("jenkins-blue", { exact: true })).toBeVisible();
 }
 
@@ -79,7 +81,7 @@ test("service accounts keep desktop page surfaces and columns separated", async 
   await openServiceAccounts(page);
 
   const info = page.locator(".ant-alert").filter({
-    hasText: "机器身份与凭据分离",
+    hasText: "Machine identity is separate from credentials",
   });
   const metrics = page.locator(".ag-metric-strip");
   const workspace = page.locator(".ag-service-account-workspace");

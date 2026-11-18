@@ -100,7 +100,7 @@ Object storage:
 
 1. **Keep a single S3 client with fixed parameters.** Works for RustFS/MinIO
    only; blocks OCI and any real-region AWS bucket.
-2. **Generalise the S3 client and add a filesystem driver behind the existing
+2. **Generalize the S3 client and add a filesystem driver behind the existing
    port.** Small surface (the port has ten methods), keeps one wire protocol for
    remote stores, gives single-node installs a dependency-free backend.
 3. **Use OCI native Object Storage SDK for OCI.** Avoids compat quirks but adds
@@ -255,7 +255,7 @@ shared network filesystems.
   lexicographic order (the backup walker in `internal/backupops/s3.go:39-62`
   already requires ordered listings) and skips `tmp/` and `meta/`.
 - Concurrency: same-key concurrent Puts last-writer-wins, as in S3; callers
-  already serialise by advisory lock plus content digest.
+  already serialize by advisory lock plus content digest.
 - Single-node enforcement: a table `object_store_identity(singleton, driver,
   root_id)` is written at first boot; a gateway whose `.notarx-root` ID does not
   match (second node, restored volume, wrong mount) refuses to start. The gateway
@@ -357,7 +357,7 @@ Always Free A1 allowance):
 
 ## Implementation slices
 
-1. **S3 driver generalisation and config rename.**
+1. **S3 driver generalization and config rename.**
    Scope: `internal/objectstore` (`S3Store`, `Config`, `Open`, driver registry),
    `internal/config/config.go`, `internal/backupops/s3.go`, `compose.yml`,
    `deploy/kubernetes`, docs and `.env` samples, all `TEST_RUSTFS_*` readers.

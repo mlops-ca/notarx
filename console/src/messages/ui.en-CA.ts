@@ -1,6 +1,4 @@
-import type { UiMessageKey } from "./ui.zh-CN";
-
-export const uiEnUS: Record<UiMessageKey, string> = {
+export const uiEnCA = {
   "ui.loadMore": "Load more",
   "ui.loading": "Loading…",
   "ui.theConnectedGatewayDoesNotExposeThisEndpoint":
@@ -64,3 +62,5 @@ export const uiEnUS: Record<UiMessageKey, string> = {
   "ui.clearFilters": "Clear filters",
   "ui.quotaUsage": "{used} of {quota} used ({percent}%)",
 };
+
+export type UiMessageKey = keyof typeof uiEnCA;

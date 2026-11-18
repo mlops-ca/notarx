@@ -27,14 +27,14 @@ test("a direct link to job history loads the jobs", async ({ page }) => {
   await page.goto("/operations?tab=jobs");
 
   await jobs;
-  await expect(page.getByRole("tab", { name: "执行记录" })).toHaveAttribute(
+  await expect(page.getByRole("tab", { name: "Job history" })).toHaveAttribute(
     "aria-selected",
     "true",
   );
-  await expect(page.getByText("加载任务状态…")).toHaveCount(0);
+  await expect(page.getByText("Loading job status…")).toHaveCount(0);
   await expect(
     page
-      .getByText("没有匹配的任务")
+      .getByText("No matching jobs")
       .or(page.locator(".ag-operation-desktop-table .ant-table-row").first()),
   ).toBeVisible();
 });
@@ -85,16 +85,16 @@ test("a scheduled task is created, paused, run, and deleted", async ({
     expect(enable.ok()).toBeTruthy();
 
     await page.goto("/operations?tab=schedules");
-    await page.getByRole("button", { name: /新建计划/ }).click();
-    const dialog = page.getByRole("dialog", { name: "新建计划任务" });
+    await page.getByRole("button", { name: /New schedule/ }).click();
+    const dialog = page.getByRole("dialog", { name: "New scheduled task" });
     await waitForModalOpen(dialog);
-    await dialog.getByPlaceholder("例如：每日清理快照").fill(name);
+    await dialog.getByPlaceholder("e.g. Daily snapshot cleanup").fill(name);
     await dialog.getByRole("combobox").nth(1).click();
     await page
       .locator(".ant-select-item-option")
       .filter({ hasText: repositoryName })
       .click();
-    await dialog.getByRole("button", { name: /^创\s*建$/ }).click();
+    await dialog.getByRole("button", { name: /^Create$/ }).click();
     await expect(dialog).toBeHidden();
     await expect
       .poll(async () => (await stored())?.kind)
@@ -102,12 +102,12 @@ test("a scheduled task is created, paused, run, and deleted", async ({
     expect((await stored())?.repositoryId).toBe(repository.id);
 
     const row = page.getByRole("row").filter({ hasText: name });
-    await row.getByRole("switch", { name: "启用计划任务" }).click();
+    await row.getByRole("switch", { name: "Enable scheduled task" }).click();
     await expect.poll(async () => (await stored())?.enabled).toBe(false);
 
     // A manual run is recorded in the task's dispatch history.
-    await row.getByRole("button", { name: "投递历史" }).click();
-    const runButton = row.getByRole("button", { name: "立即执行" });
+    await row.getByRole("button", { name: "Dispatch history" }).click();
+    const runButton = row.getByRole("button", { name: "Run now" });
     await expect(runButton).not.toHaveClass(/ant-btn-loading/);
     const dispatch = page.waitForResponse(
       (response) =>
@@ -123,13 +123,15 @@ test("a scheduled task is created, paused, run, and deleted", async ({
       trigger: "manual",
       state: "submitted",
     });
-    await expect(page.getByText("手动", { exact: true }).first()).toBeVisible();
+    await expect(
+      page.getByText("Manual", { exact: true }).first(),
+    ).toBeVisible();
 
-    await row.getByRole("button", { name: `${name} 的更多操作` }).click();
-    await page.getByRole("menuitem", { name: "删除计划" }).click();
+    await row.getByRole("button", { name: `More actions for ${name}` }).click();
+    await page.getByRole("menuitem", { name: "Delete schedule" }).click();
     await page
       .getByRole("dialog")
-      .getByRole("button", { name: /^删\s*除$/ })
+      .getByRole("button", { name: /^Delete$/ })
       .click();
     await expect(row).toHaveCount(0);
     expect(await stored()).toBeUndefined();
@@ -167,15 +169,15 @@ test("a webhook subscription is created and paused", async ({
   };
 
   await page.goto("/operations?tab=webhooks");
-  await page.getByRole("button", { name: "新建订阅" }).click();
-  const dialog = page.getByRole("dialog", { name: "新建 Webhook 订阅" });
+  await page.getByRole("button", { name: "New subscription" }).click();
+  const dialog = page.getByRole("dialog", { name: "New webhook subscription" });
   await waitForModalOpen(dialog);
-  await dialog.getByPlaceholder("例如：安全自动化").fill(name);
+  await dialog.getByPlaceholder("e.g. Security automation").fill(name);
   await dialog
     .getByPlaceholder("https://hooks.example.com/artifacts")
     .fill("https://hooks.example.test/artifacts");
-  await dialog.getByPlaceholder("至少 32 个字符").fill("s".repeat(40));
-  await dialog.getByRole("button", { name: "创建" }).click();
+  await dialog.getByPlaceholder("At least 32 characters").fill("s".repeat(40));
+  await dialog.getByRole("button", { name: "Create" }).click();
   // Signing secrets are stored encrypted; a Gateway started without
   // NOTARX_SETTINGS_ENCRYPTION_KEY refuses them with a stable code.
   const refused = dialog.getByText("encryption_key_unavailable");
@@ -192,7 +194,7 @@ test("a webhook subscription is created and paused", async ({
   await page
     .getByRole("row")
     .filter({ hasText: name })
-    .getByRole("switch", { name: "启用 Webhook 订阅" })
+    .getByRole("switch", { name: "Enable webhook subscription" })
     .click();
   await expect.poll(async () => (await stored())?.enabled).toBe(false);
 });

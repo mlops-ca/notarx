@@ -34,7 +34,7 @@ describe("RuntimeLogsPanel", () => {
         </MemoryRouter>,
       );
       expect(await screen.findByRole("alert")).toHaveTextContent(
-        "日志查询失败，请检查连接后重试。",
+        "Log query failed. Check the connection and retry.",
       );
       expect(screen.getByRole("alert")).not.toHaveTextContent(
         /Bad Gateway|Service Unavailable|upstream transport failure/,
@@ -58,7 +58,7 @@ describe("RuntimeLogsPanel", () => {
       </MemoryRouter>,
     );
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Console 与 Gateway 版本可能不一致",
+      "The Console and Gateway versions may not match",
     );
   });
 
@@ -104,13 +104,19 @@ describe("RuntimeLogsPanel", () => {
       </MemoryRouter>,
     );
     expect(await screen.findByText("worker failed")).toBeInTheDocument();
-    expect(screen.getByText(/仅查询当前进程的内存日志/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Search this process’s in-memory logs; restart clears them\./,
+      ),
+    ).toBeInTheDocument();
     expect(mockListRuntimeLogs).toHaveBeenCalledWith(
       expect.objectContaining({
         query: expect.objectContaining({ requestId: "job-1" }),
       }),
     );
-    await userEvent.click(screen.getByRole("button", { name: /加载更早日志/ }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /Load older logs/ }),
+    );
     await waitFor(() =>
       expect(mockListRuntimeLogs).toHaveBeenLastCalledWith(
         expect.objectContaining({
@@ -122,7 +128,9 @@ describe("RuntimeLogsPanel", () => {
       ),
     );
     expect(screen.getByText("worker failed")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /加载更早日志/ })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Load older logs/ }),
+    ).toBeNull();
   });
 
   it("does not show pagination for an empty result", async () => {
@@ -143,8 +151,12 @@ describe("RuntimeLogsPanel", () => {
         </PreferencesProvider>
       </MemoryRouter>,
     );
-    expect(await screen.findByText("当前范围内没有日志")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /加载更早日志/ })).toBeNull();
+    expect(
+      await screen.findByText("No logs in this range"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Load older logs/ }),
+    ).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
   });
 });

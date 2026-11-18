@@ -151,6 +151,6 @@ describe("public OCI reader", () => {
         },
         fetchAdapter,
       ),
-    ).rejects.toThrow("读取 OCI manifest 失败 (404)");
+    ).rejects.toThrow("Failed to read the OCI manifest (404)");
   });
 });

@@ -61,7 +61,9 @@ function show(workspace = false) {
             <MemoryRouter
               initialEntries={[`/operations?source=${migrationSource.id}`]}
             >
-              <Link to="/operations?source=second">另一源深链</Link>
+              <Link to="/operations?source=second">
+                Another source deep link
+              </Link>
               {workspace ? (
                 <NexusMigrationWorkspace />
               ) : (
@@ -113,11 +115,15 @@ describe("cached source authorization boundary", () => {
       it(`hides all cached source facts and open controls after ${query} refetch ${status}`, async () => {
         const { client } = show();
         await screen.findByRole("heading", { name: migrationSource.name });
-        await userEvent.click(screen.getByRole("button", { name: "运行预检" }));
-        await screen.findByRole("checkbox", { name: "选择 releases" });
+        await userEvent.click(
+          screen.getByRole("button", { name: "Run preflight" }),
+        );
+        await screen.findByRole("checkbox", { name: "Select releases" });
         const editing = status === 401;
         await userEvent.click(
-          screen.getByRole("button", { name: editing ? "编辑源" : "删除源" }),
+          screen.getByRole("button", {
+            name: editing ? "Edit source" : "Delete source",
+          }),
         );
         await screen.findByRole("dialog");
         (query === "list" ? list : detail).mockResolvedValue({
@@ -132,19 +138,26 @@ describe("cached source authorization boundary", () => {
             exact: true,
           });
         });
-        await screen.findAllByText(/没有读取或管理此迁移源的权限/);
+        await screen.findAllByText(
+          /This migration source requires a platform administrator identity\./,
+        );
         expect(document.body).not.toHaveTextContent(migrationSource.name);
         expect(document.body).not.toHaveTextContent(migrationSource.baseUrl);
         expect(
           screen.queryByDisplayValue(migrationSource.baseUrl),
         ).not.toBeInTheDocument();
         expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-        for (const name of ["添加迁移源", "编辑源", "删除源", "运行预检"])
+        for (const name of [
+          "Add migration source",
+          "Edit source",
+          "Delete source",
+          "Run preflight",
+        ])
           expect(
             screen.queryByRole("button", { name }),
           ).not.toBeInTheDocument();
         expect(
-          screen.queryByRole("checkbox", { name: "选择 releases" }),
+          screen.queryByRole("checkbox", { name: "Select releases" }),
         ).not.toBeInTheDocument();
         expect(document.body).not.toHaveTextContent(
           "never-show-private-denial",
@@ -155,7 +168,9 @@ describe("cached source authorization boundary", () => {
     it(`retains authorized observations and an open editor after temporary ${query} 500`, async () => {
       const { client } = show();
       await screen.findByRole("heading", { name: migrationSource.name });
-      await userEvent.click(screen.getByRole("button", { name: "编辑源" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Edit source" }),
+      );
       (query === "list" ? list : detail).mockResolvedValue({
         error: { status: 500, message: "never-show-private-error" },
       } as never);
@@ -168,7 +183,7 @@ describe("cached source authorization boundary", () => {
           exact: true,
         });
       });
-      await screen.findByText(/请求未完成/);
+      await screen.findByText(/request did not complete/);
       expect(
         screen.getByRole("heading", { name: migrationSource.name }),
       ).toBeInTheDocument();
@@ -189,7 +204,9 @@ describe("cached source authorization boundary", () => {
         exact: true,
       });
     });
-    await screen.findAllByText(/没有读取或管理此迁移源的权限/);
+    await screen.findAllByText(
+      /This migration source requires a platform administrator identity\./,
+    );
     await act(async () => {
       client.setQueryData(migrationKeys.detail(migrationSource.id), {
         ...migrationSource,
@@ -214,22 +231,34 @@ describe("cached source authorization boundary", () => {
         exact: true,
       });
     });
-    await screen.findByText(/没有读取或管理此迁移源的权限/);
-    await userEvent.click(screen.getByRole("link", { name: "另一源深链" }));
+    await screen.findByText(
+      /This migration source requires a platform administrator identity\./,
+    );
+    await userEvent.click(
+      screen.getByRole("link", { name: "Another source deep link" }),
+    );
     expect(detail).not.toHaveBeenCalledWith(
       expect.objectContaining({ path: { sourceId: "second" } }),
     );
-    await userEvent.click(screen.getByRole("button", { name: "批次与验收" }));
     await userEvent.click(
-      await screen.findByRole("button", { name: "创建迁移批次" }),
+      screen.getByRole("button", { name: "Batches and acceptance" }),
     );
-    await screen.findByText(/没有读取或管理此迁移源的权限/);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Create migration batch" }),
+    );
+    await screen.findByText(
+      /This migration source requires a platform administrator identity\./,
+    );
     expect(
-      screen.queryByRole("combobox", { name: "已保存的迁移源" }),
+      screen.queryByRole("combobox", { name: "Saved migration source" }),
     ).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "连接与映射" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Connections and mappings" }),
+    );
     remount();
-    await screen.findByText(/没有读取或管理此迁移源的权限/);
+    await screen.findByText(
+      /This migration source requires a platform administrator identity\./,
+    );
     expect(document.body).not.toHaveTextContent(migrationSource.name);
     expect(document.body).not.toHaveTextContent(migrationSource.baseUrl);
   });
@@ -244,9 +273,11 @@ describe("cached source authorization boundary", () => {
     );
     const { client } = show();
     await userEvent.click(
-      await screen.findByRole("button", { name: "编辑源" }),
+      await screen.findByRole("button", { name: "Edit source" }),
     );
-    await userEvent.click(screen.getByRole("button", { name: "保存迁移源" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save migration source" }),
+    );
     await waitFor(() => expect(updateMigrationSource).toHaveBeenCalledTimes(1));
     list.mockResolvedValue({ error: { status: 403 } } as never);
     await act(async () => {
@@ -255,7 +286,9 @@ describe("cached source authorization boundary", () => {
         exact: true,
       });
     });
-    await screen.findByText(/没有读取或管理此迁移源的权限/);
+    await screen.findByText(
+      /This migration source requires a platform administrator identity\./,
+    );
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     await act(async () => {
       finish({
@@ -269,7 +302,7 @@ describe("cached source authorization boundary", () => {
     expect(document.body).not.toHaveTextContent("Late saved private metadata");
     expect(document.body).not.toHaveTextContent(migrationSource.baseUrl);
     expect(
-      screen.queryByRole("button", { name: "编辑源" }),
+      screen.queryByRole("button", { name: "Edit source" }),
     ).not.toBeInTheDocument();
   });
 
@@ -297,7 +330,9 @@ describe("cached source authorization boundary", () => {
         exact: true,
       });
     });
-    await screen.findByText(/没有读取或管理此迁移源的权限/);
+    await screen.findByText(
+      /This migration source requires a platform administrator identity\./,
+    );
     await act(async () => {
       finish({ data: { ...migrationSource, name: "Late revoked metadata" } });
       await oldRead;
@@ -310,10 +345,10 @@ describe("cached source authorization boundary", () => {
           recover = resolve;
         }) as never,
     );
-    await userEvent.click(screen.getByRole("button", { name: /重试/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Retry/ }));
     expect(document.body).not.toHaveTextContent(migrationSource.name);
     expect(
-      screen.queryByRole("button", { name: "添加迁移源" }),
+      screen.queryByRole("button", { name: "Add migration source" }),
     ).not.toBeInTheDocument();
     detail.mockResolvedValue({
       data: { ...migrationSource, name: "Fresh authorized metadata" },
@@ -329,7 +364,7 @@ describe("cached source authorization boundary", () => {
     await screen.findByRole("heading", { name: "Fresh authorized metadata" });
     expect(document.body).not.toHaveTextContent("Late revoked metadata");
     expect(
-      screen.queryByRole("checkbox", { name: "选择 releases" }),
+      screen.queryByRole("checkbox", { name: "Select releases" }),
     ).not.toBeInTheDocument();
   });
 
@@ -337,24 +372,26 @@ describe("cached source authorization boundary", () => {
     it(`closes the complete protected observation and mapping subtree after ${operation} refuses access`, async () => {
       show();
       await userEvent.click(
-        await screen.findByRole("button", { name: "运行预检" }),
+        await screen.findByRole("button", { name: "Run preflight" }),
       );
       await userEvent.click(
-        await screen.findByRole("checkbox", { name: "选择 releases" }),
+        await screen.findByRole("checkbox", { name: "Select releases" }),
       );
       await userEvent.type(
-        screen.getByRole("textbox", { name: "releases 的目标名称" }),
+        screen.getByRole("textbox", { name: "Target name for releases" }),
         "native-releases",
       );
       await userEvent.click(
-        screen.getByRole("button", { name: "发现选中 Hosted 内容（1）" }),
+        screen.getByRole("button", {
+          name: "Discover selected Hosted content (1)",
+        }),
       );
-      await screen.findByText(/2 个源资产/);
+      await screen.findByText(/2 source assets/);
       await userEvent.click(
-        screen.getByRole("button", { name: "预览显式映射" }),
+        screen.getByRole("button", { name: "Preview explicit mappings" }),
       );
       await screen.findByRole("button", {
-        name: "使用 1 个 Hosted 映射创建批次",
+        name: "Create a batch with 1 Hosted mappings",
       });
       const mocked =
         operation === "preflight"
@@ -369,22 +406,26 @@ describe("cached source authorization boundary", () => {
         screen.getByRole("button", {
           name:
             operation === "preflight"
-              ? "运行预检"
+              ? "Run preflight"
               : operation === "discovery"
-                ? "发现选中 Hosted 内容（1）"
-                : "预览显式映射",
+                ? "Discover selected Hosted content (1)"
+                : "Preview explicit mappings",
         }),
       );
-      await screen.findByText(/没有读取或管理此迁移源的权限/);
+      await screen.findByText(
+        /This migration source requires a platform administrator identity\./,
+      );
       expect(document.body).not.toHaveTextContent(migrationSource.baseUrl);
       expect(
-        screen.queryByRole("button", { name: /Hosted 映射创建批次/ }),
+        screen.queryByRole("button", {
+          name: /Create a batch with .+ Hosted mappings/,
+        }),
       ).not.toBeInTheDocument();
       expect(
-        screen.queryByRole("region", { name: "源资产发现结果" }),
+        screen.queryByRole("region", { name: "Source asset discovery" }),
       ).not.toBeInTheDocument();
       expect(
-        screen.queryByRole("checkbox", { name: "选择 releases" }),
+        screen.queryByRole("checkbox", { name: "Select releases" }),
       ).not.toBeInTheDocument();
       expect(document.body).not.toHaveTextContent("do-not-echo");
     });

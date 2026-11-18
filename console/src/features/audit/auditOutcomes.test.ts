@@ -6,29 +6,32 @@ import {
   auditOutcomeTone,
 } from "./auditOutcomes";
 
-const zh = createTranslator("zh-CN");
-const en = createTranslator("en-US");
+const en = createTranslator("en-CA");
 
 describe("auditOutcomeLabel", () => {
   it("labels every outcome the gateway records, in both languages", () => {
     const samples: [string, string, string][] = [
-      ["resolved", "已放行", "Resolved"],
-      ["access_denied", "访问被拒", "Access denied"],
-      ["internal_preferred", "命中内部副本", "Internal copy preferred"],
-      ["not_found", "未找到", "Not found"],
-      ["group_disabled", "分组已停用", "Group disabled"],
-      ["proxy_denied", "代理拒绝", "Proxy denied"],
-      ["upstream_error", "上游错误", "Upstream error"],
-      ["storage_error", "存储错误", "Storage error"],
+      ["resolved", "Resolved", "Resolved"],
+      ["access_denied", "Access denied", "Access denied"],
+      [
+        "internal_preferred",
+        "Internal copy preferred",
+        "Internal copy preferred",
+      ],
+      ["not_found", "Not found", "Not found"],
+      ["group_disabled", "Group disabled", "Group disabled"],
+      ["proxy_denied", "Proxy denied", "Proxy denied"],
+      ["upstream_error", "Upstream error", "Upstream error"],
+      ["storage_error", "Storage error", "Storage error"],
     ];
     for (const [code, chinese, english] of samples) {
-      expect(auditOutcomeLabel(code, zh)).toBe(chinese);
+      expect(auditOutcomeLabel(code, en)).toBe(chinese);
       expect(auditOutcomeLabel(code, en)).toBe(english);
     }
   });
 
   it("keeps an unknown outcome readable by showing the code itself", () => {
-    expect(auditOutcomeLabel("future_outcome", zh)).toBe("future_outcome");
+    expect(auditOutcomeLabel("future_outcome", en)).toBe("future_outcome");
   });
 });
 

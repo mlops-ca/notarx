@@ -45,6 +45,23 @@ export default tseslint.config(
       "react-hooks/set-state-in-effect": "off",
       "react-hooks/purity": "off",
       "react-refresh/only-export-components": "off",
+      // Numbers and dates follow the Console language (ADR 0014): format them
+      // with useFormatters() or pass the locale; the browser default is not it.
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "CallExpression[callee.property.name=/^toLocale(Date|Time)?String$/][arguments.length=0]",
+          message:
+            "Pass the Console locale to toLocale*String, or use useFormatters().",
+        },
+        {
+          selector:
+            "CallExpression[callee.property.name=/^toLocale(Date|Time)?String$/][arguments.0.type='Identifier'][arguments.0.name='undefined']",
+          message:
+            "Pass the Console locale to toLocale*String, or use useFormatters().",
+        },
+      ],
     },
   },
 );

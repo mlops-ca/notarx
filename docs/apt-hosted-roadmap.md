@@ -59,7 +59,7 @@ The H1 management sequence is deliberately pre-visibility:
 - Store immutable package bytes under a content-addressed object key and model
   suites, components, architectures, package revisions, and repository
   snapshots explicitly in PostgreSQL.
-- Specify duplicate-version behavior, idempotency, quota reservation, audit
+- Specify duplicate-version behaviour, idempotency, quota reservation, audit
   evidence, and recovery after an interrupted upload.
 - Establish the signing boundary: Gateway requests signatures from a narrow
   signer interface; application nodes do not expose or distribute private keys.
@@ -103,7 +103,7 @@ signer is an H2 acceptance fixture, not a production key-custody system.
   until H3.
 - Serve `dists/` metadata and `pool/` packages with native `GET`, `HEAD`, ranges,
   conditional responses, repository grants, anonymous policy, capacity,
-  search, and Console browse behavior.
+  search, and Console browse behaviour.
 - Add a black-box Debian container gate that performs `apt-get update`, package
   download, and installation against the Gateway, then repeats the install with
   the object store or signer unavailable where cached immutable state permits.
@@ -133,7 +133,7 @@ PostgreSQL and RustFS, publishes a later snapshot, restores the earlier signed
 snapshot, verifies its complete evidence and object digests, and installs from
 it with the signer offline. A second gate now uses independently networked,
 CA-verified HTTPS signers and real Debian clients to prove old-key, overlap,
-new-key, rejection, and retirement behavior. Managed KMS/HSM custody and key
+new-key, rejection, and retirement behaviour. Managed KMS/HSM custody and key
 recovery and
 deployment-specific alert installation remain before H3 can pass.
 

@@ -21,23 +21,23 @@ it("uses the shared total, page sizes and end placement, resetting size changes"
       />
     </PreferencesProvider>,
   );
-  expect(screen.getByText("第 1-20 项，共 120 项")).toBeVisible();
+  expect(screen.getByText("1-20 of 120 items")).toBeVisible();
   expect(container.querySelector(".ant-table-pagination-end")).not.toBeNull();
   await user.click(screen.getByTitle("2"));
-  expect(screen.getByText("第 21-40 项，共 120 项")).toBeVisible();
+  expect(screen.getByText("21-40 of 120 items")).toBeVisible();
   await user.click(screen.getByRole("combobox"));
   await user.click(screen.getByTitle("50 / page"));
-  expect(screen.getByText("第 1-50 项，共 120 项")).toBeVisible();
+  expect(screen.getByText("1-50 of 120 items")).toBeVisible();
   expect(container.querySelectorAll("tbody tr.ant-table-row")).toHaveLength(50);
 });
 
 it("keeps cursor totals unknown and its explicit log action intact", () => {
   const { container } = render(
     <PreferencesProvider>
-      <Pagination hasMore onMore={() => {}} label="加载更早日志" />
+      <Pagination hasMore onMore={() => {}} label="Load older logs" />
     </PreferencesProvider>,
   );
-  expect(screen.getByRole("button", { name: /加载更早日志/ })).toBeVisible();
+  expect(screen.getByRole("button", { name: /Load older logs/ })).toBeVisible();
   expect(container.querySelector(".ag-pagination-footer")).not.toBeNull();
-  expect(screen.queryByText(/共.*项/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/of \d+ items/)).not.toBeInTheDocument();
 });

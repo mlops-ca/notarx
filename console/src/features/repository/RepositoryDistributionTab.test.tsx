@@ -108,12 +108,13 @@ describe("RepositoryDistributionTab", () => {
         </TestQueryProvider>,
       );
 
-      await screen.findByText("暂无复制计划");
-      await user.click(screen.getByRole("button", { name: "高级手动输入" }));
-      expect(screen.getByRole("textbox", { name: "制品坐标" })).toHaveAttribute(
-        "placeholder",
-        placeholder,
+      await screen.findByText("No replication plans");
+      await user.click(
+        screen.getByRole("button", { name: "Advanced manual input" }),
       );
+      expect(
+        screen.getByRole("textbox", { name: "Artifact coordinate" }),
+      ).toHaveAttribute("placeholder", placeholder);
     },
   );
 
@@ -141,19 +142,22 @@ describe("RepositoryDistributionTab", () => {
       </TestQueryProvider>,
     );
 
-    await screen.findByText("暂无复制计划");
-    await user.click(screen.getByRole("button", { name: "高级手动输入" }));
+    await screen.findByText("No replication plans");
+    await user.click(
+      screen.getByRole("button", { name: "Advanced manual input" }),
+    );
     await user.type(
-      screen.getByRole("textbox", { name: "制品坐标" }),
+      screen.getByRole("textbox", { name: "Artifact coordinate" }),
       coordinate,
     );
-    await user.type(
-      screen.getByRole("textbox", { name: "摘要 digest" }),
-      digestA,
+    await user.type(screen.getByRole("textbox", { name: "Digest" }), digestA);
+    await user.click(
+      screen.getByRole("combobox", { name: "Select target repository" }),
     );
-    await user.click(screen.getByRole("combobox", { name: "选择目标仓库" }));
     await user.click(await screen.findByText("releases"));
-    await user.click(screen.getByRole("button", { name: "评估准入" }));
+    await user.click(
+      screen.getByRole("button", { name: "Evaluate admission" }),
+    );
 
     await waitFor(() => expect(mockEvaluateSecurityPolicy).toHaveBeenCalled());
     expect(mockEvaluateSecurityPolicy).toHaveBeenCalledWith({
@@ -164,8 +168,10 @@ describe("RepositoryDistributionTab", () => {
         digest: digestA,
       },
     });
-    expect(await screen.findByText("安全策略允许晋升")).toBeInTheDocument();
-    expect(screen.getByText("策略版本: 3")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Security policy allows promotion"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Policy version: 3")).toBeInTheDocument();
   });
 
   it("promotes a selected artifact without exposing incompatible targets", async () => {
@@ -184,7 +190,7 @@ describe("RepositoryDistributionTab", () => {
       </TestQueryProvider>,
     );
 
-    await screen.findByText("暂无复制计划");
+    await screen.findByText("No replication plans");
     await waitFor(() =>
       expect(mockListArtifactIdentities).toHaveBeenCalledWith({
         path: { repositoryId: source.id },
@@ -193,18 +199,22 @@ describe("RepositoryDistributionTab", () => {
       }),
     );
     await user.click(
-      screen.getByRole("combobox", { name: "搜索并选择源制品" }),
+      screen.getByRole("combobox", {
+        name: "Search and select a source artifact",
+      }),
     );
     await user.click(
       await screen.findByText(coordinate, {
         selector: ".ant-select-item-option-content *",
       }),
     );
-    await user.click(screen.getByRole("combobox", { name: "选择目标仓库" }));
+    await user.click(
+      screen.getByRole("combobox", { name: "Select target repository" }),
+    );
     expect(await screen.findByText("releases")).toBeInTheDocument();
     expect(screen.queryByText("central-proxy")).not.toBeInTheDocument();
     await user.click(screen.getByText("releases"));
-    await user.click(screen.getByRole("button", { name: /晋\s*升/ }));
+    await user.click(screen.getByRole("button", { name: /Promote/ }));
 
     await waitFor(() => expect(mockCreatePromotion).toHaveBeenCalledTimes(1));
     expect(mockCreatePromotion).toHaveBeenCalledWith({
@@ -218,7 +228,7 @@ describe("RepositoryDistributionTab", () => {
     });
     expect(
       await screen.findByText(
-        "晋升任务已提交，请在目标仓库的「生命周期任务」查看进度",
+        "Promotion submitted. Track it on the target repository's Lifecycle jobs tab.",
       ),
     ).toBeInTheDocument();
   });
@@ -247,34 +257,46 @@ describe("RepositoryDistributionTab", () => {
       </TestQueryProvider>,
     );
 
-    await screen.findByText("暂无复制计划");
+    await screen.findByText("No replication plans");
     await user.click(
-      screen.getByRole("combobox", { name: "搜索并选择源制品" }),
+      screen.getByRole("combobox", {
+        name: "Search and select a source artifact",
+      }),
     );
     await user.click(
       await screen.findByText(coordinate, {
         selector: ".ant-select-item-option-content *",
       }),
     );
-    await user.click(screen.getByRole("combobox", { name: "选择目标仓库" }));
+    await user.click(
+      screen.getByRole("combobox", { name: "Select target repository" }),
+    );
     await user.click(await screen.findByText("releases"));
-    await user.click(screen.getByRole("button", { name: "评估准入" }));
+    await user.click(
+      screen.getByRole("button", { name: "Evaluate admission" }),
+    );
 
     expect(
-      await screen.findByText("制品已隔离，无法晋升或复制"),
+      await screen.findByText(
+        "Artifact is quarantined and cannot be promoted or replicated",
+      ),
     ).toBeInTheDocument();
     // Quarantine is an ongoing state an operation can lift, not a system error.
     const quarantineAlert = screen
-      .getByText("制品已隔离，无法晋升或复制")
+      .getByText("Artifact is quarantined and cannot be promoted or replicated")
       .closest(".ant-alert");
     expect(quarantineAlert).toHaveClass("ant-alert-warning");
     expect(quarantineAlert).not.toHaveClass("ant-alert-error");
     expect(
-      screen.getByText("请先在制品详情中解除隔离，然后重新评估准入。"),
+      screen.getByText(
+        "Release the artifact from its details, then evaluate admission again.",
+      ),
     ).toBeInTheDocument();
-    expect(screen.getByText("制品已隔离；请先解除隔离")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /晋\s*升/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /复\s*制/ })).toBeDisabled();
+    expect(
+      screen.getByText("Artifact is quarantined; release it first"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Promote/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Replicate/ })).toBeDisabled();
   });
 
   it("keeps ordinary security policy rejection scoped to promotion", async () => {
@@ -313,29 +335,39 @@ describe("RepositoryDistributionTab", () => {
       </TestQueryProvider>,
     );
 
-    await screen.findByText("暂无复制计划");
+    await screen.findByText("No replication plans");
     await user.click(
-      screen.getByRole("combobox", { name: "搜索并选择源制品" }),
+      screen.getByRole("combobox", {
+        name: "Search and select a source artifact",
+      }),
     );
     await user.click(
       await screen.findByText(coordinate, {
         selector: ".ant-select-item-option-content *",
       }),
     );
-    await user.click(screen.getByRole("combobox", { name: "选择目标仓库" }));
+    await user.click(
+      screen.getByRole("combobox", { name: "Select target repository" }),
+    );
     await user.click(await screen.findByText("releases"));
-    await user.click(screen.getByRole("button", { name: "评估准入" }));
+    await user.click(
+      screen.getByRole("button", { name: "Evaluate admission" }),
+    );
 
-    expect(await screen.findByText("安全策略阻止晋升")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Security policy blocks promotion"),
+    ).toBeInTheDocument();
     // A policy judgment is a warning; only a failed request reads as an error.
     const policyAlert = screen
-      .getByText("安全策略阻止晋升")
+      .getByText("Security policy blocks promotion")
       .closest(".ant-alert");
     expect(policyAlert).toHaveClass("ant-alert-warning");
     expect(policyAlert).not.toHaveClass("ant-alert-error");
-    expect(screen.getByText("缺少已验证签名")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /晋\s*升/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /复\s*制/ })).toBeEnabled();
+    expect(
+      screen.getByText("A verified signature is required"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Promote/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Replicate/ })).toBeEnabled();
   });
 });
 
@@ -379,22 +411,28 @@ it("uses visible APT packages and requires the target suite, preserving an uncer
       </PreferencesProvider>
     </TestQueryProvider>,
   );
-  await screen.findByText("暂无复制计划");
+  await screen.findByText("No replication plans");
   expect(mockListArtifactIdentities).not.toHaveBeenCalled();
-  await user.click(screen.getByRole("combobox", { name: "搜索并选择源制品" }));
+  await user.click(
+    screen.getByRole("combobox", {
+      name: "Search and select a source artifact",
+    }),
+  );
   await user.click(await screen.findByText("widget 1.0 · amd64"));
-  await user.click(screen.getByRole("combobox", { name: "选择目标仓库" }));
+  await user.click(
+    screen.getByRole("combobox", { name: "Select target repository" }),
+  );
   await user.click(await screen.findByText("releases"));
-  expect(screen.getByRole("button", { name: /晋\s*升/ })).toBeDisabled();
+  expect(screen.getByRole("button", { name: /Promote/ })).toBeDisabled();
   await user.type(
-    screen.getByRole("textbox", { name: "目标发行套件" }),
+    screen.getByRole("textbox", { name: "Target suite" }),
     "bookworm",
   );
-  await user.click(screen.getByRole("button", { name: /晋\s*升/ }));
+  await user.click(screen.getByRole("button", { name: /Promote/ }));
   await screen.findByText("connection lost");
-  await user.click(screen.getByRole("button", { name: /晋\s*升/ }));
+  await user.click(screen.getByRole("button", { name: /Promote/ }));
   await screen.findByText(
-    "晋升任务已提交，请在目标仓库的「生命周期任务」查看进度",
+    "Promotion submitted. Track it on the target repository's Lifecycle jobs tab.",
   );
   const calls = mockCreatePromotion.mock.calls;
   expect(calls).toHaveLength(2);
@@ -451,11 +489,11 @@ it("opens a plan's progress, reports a failed read with Retry, and reads again",
     </TestQueryProvider>,
   );
 
-  await user.click(await screen.findByRole("button", { name: /进\s*度/ }));
+  await user.click(await screen.findByRole("button", { name: /Progress/ }));
   expect(await screen.findByText("detail unavailable")).toBeVisible();
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
-  await user.click(screen.getByRole("button", { name: /重\s*试/ }));
+  await user.click(screen.getByRole("button", { name: /Retry/ }));
   expect(await screen.findByRole("dialog")).toBeInTheDocument();
   expect(await screen.findByText("maven/widget-1.2.3.jar")).toBeInTheDocument();
   expect(screen.queryByText("detail unavailable")).not.toBeInTheDocument();
@@ -474,13 +512,13 @@ it("opens a plan's progress, reports a failed read with Retry, and reads again",
   vi.mocked(getRepositoryReplication).mockResolvedValueOnce({
     error: { status: 503, message: "Reopened progress unavailable" },
   } as never);
-  await user.click(screen.getByRole("button", { name: /进\s*度/ }));
+  await user.click(screen.getByRole("button", { name: /Progress/ }));
   const reopened = within(await screen.findByRole("dialog"));
   expect(
     await reopened.findByText("Reopened progress unavailable"),
   ).toBeInTheDocument();
   expect(reopened.getByText("maven/widget-1.2.3.jar")).toBeInTheDocument();
-  await user.click(reopened.getByRole("button", { name: /重\s*试/ }));
+  await user.click(reopened.getByRole("button", { name: /Retry/ }));
   await waitFor(() =>
     expect(
       reopened.queryByText("Reopened progress unavailable"),
@@ -536,12 +574,12 @@ it.each(["loaded", "pending"])(
         </PreferencesProvider>
       </TestQueryProvider>,
     );
-    await user.click(await screen.findByRole("button", { name: /取\s*消/ }));
-    await user.click(screen.getByRole("button", { name: "确认取消" }));
+    await user.click(await screen.findByRole("button", { name: /Cancel/ }));
+    await user.click(screen.getByRole("button", { name: "Cancel plan" }));
     await waitFor(() =>
       expect(deleteRepositoryReplication).toHaveBeenCalledTimes(1),
     );
-    await user.click(screen.getByRole("button", { name: /进\s*度/ }));
+    await user.click(screen.getByRole("button", { name: /Progress/ }));
     if (readState === "loaded") await screen.findByRole("dialog");
     else await waitFor(() => expect(finishDetail).toBeDefined());
     cancelled = true;

@@ -87,7 +87,7 @@ for (const width of [1440, 390]) {
     await authenticateAsAdmin(page);
     await page.goto("/groups");
     const trigger = page.getByRole("button", {
-      name: "release-group 的更多操作",
+      name: "More actions for release-group",
     });
     await expect(trigger).toBeVisible();
     const metric = await page.locator(".ag-metric-strip").boundingBox();
@@ -96,16 +96,16 @@ for (const width of [1440, 390]) {
     expect(pageGap).toBeGreaterThanOrEqual(24);
     expect(pageGap).toBeLessThanOrEqual(26);
     await trigger.click();
-    await page.getByRole("menuitem", { name: "解析顺序" }).click();
+    await page.getByRole("menuitem", { name: "Resolution order" }).click();
     const dialog = page.getByRole("dialog", {
-      name: "解析顺序：release-group",
+      name: "Resolution order: release-group",
     });
     const rows = dialog.getByTestId("resolution-member");
     await expect(rows).toHaveCount(12);
     await expect(rows.first().getByRole("link")).toHaveText(
       members[0].repositoryName,
     );
-    await expect(rows.first().getByText("配置位置 7")).toBeVisible();
+    await expect(rows.first().getByText("Configured position 7")).toBeVisible();
     const body = dialog.locator(".ag-group-resolution");
     // Read both rectangles in one browser frame. A transform can be "none"
     // before rc-motion starts its enter phase, so a one-off CSS check can race
@@ -152,9 +152,9 @@ for (const width of [1440, 390]) {
     await rows.last().scrollIntoViewIfNeeded();
     await expect(rows.last().getByRole("link")).toBeInViewport();
     await expect(
-      dialog.getByRole("button", { name: "关闭", exact: true }),
+      dialog.getByRole("button", { name: "Close", exact: true }).last(),
     ).toBeInViewport();
-    await dialog.getByRole("button", { name: "刷新", exact: true }).click();
+    await dialog.getByRole("button", { name: "Refresh", exact: true }).click();
     await expect.poll(() => inspected).toBe(2);
     // Make the closing phase observable before checking focus restoration.
     await page.emulateMedia({ reducedMotion: "no-preference" });
@@ -171,13 +171,13 @@ for (const width of [1440, 390]) {
     );
     await page.emulateMedia({ reducedMotion: "reduce" });
     await trigger.click();
-    const deleteItem = page.getByRole("menuitem", { name: "删除分组" });
+    const deleteItem = page.getByRole("menuitem", { name: "Delete group" });
     await deleteItem.focus();
     await deleteItem.press("Enter");
-    const confirmation = page.getByRole("dialog", { name: "删除分组" });
+    const confirmation = page.getByRole("dialog", { name: "Delete group" });
     await expect(confirmation).toBeVisible();
     await confirmation
-      .getByRole("button", { name: "取消", exact: true })
+      .getByRole("button", { name: "Cancel", exact: true })
       .click();
     await expect(confirmation).not.toBeVisible();
     await expect(trigger).toBeFocused();

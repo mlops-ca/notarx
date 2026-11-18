@@ -22,7 +22,7 @@ const publication: AuditRecord = {
   },
 };
 
-function detail(record: AuditRecord, locale: "zh-CN" | "en-US" = "zh-CN") {
+function detail(record: AuditRecord, locale: "en-CA" = "en-CA") {
   render(
     <MemoryRouter>
       <AuditRecordDetail record={record} t={createTranslator(locale)} />
@@ -33,8 +33,7 @@ function detail(record: AuditRecord, locale: "zh-CN" | "en-US" = "zh-CN") {
 afterEach(cleanup);
 
 it.each([
-  ["zh-CN", "发布会话", "发布状态", "已提交"],
-  ["en-US", "Publication session", "Publication state", "Committed"],
+  ["en-CA", "Publication session", "Publication state", "Committed"],
 ] as const)(
   "links Conan publication evidence in %s",
   (locale, session, state, committed) => {
@@ -58,8 +57,8 @@ it.each([
 ])("does not read publication evidence outside Conan publish: %j", (scope) => {
   detail({ ...publication, ...scope });
   expect(screen.queryByText(sessionId)).not.toBeInTheDocument();
-  expect(screen.queryByText("发布会话")).not.toBeInTheDocument();
-  expect(screen.queryByText("已提交")).not.toBeInTheDocument();
+  expect(screen.queryByText("Publication session")).not.toBeInTheDocument();
+  expect(screen.queryByText("Committed")).not.toBeInTheDocument();
 });
 
 it.each([
@@ -75,11 +74,11 @@ it.each([
 ])("keeps malformed publication evidence unavailable: %j", (evidence) => {
   // Network JSON is not guaranteed to match the generated TypeScript shape.
   detail(JSON.parse(JSON.stringify({ ...publication, evidence })));
-  const session = screen.getByText("发布会话").parentElement!;
-  const state = screen.getByText("发布状态").parentElement!;
+  const session = screen.getByText("Publication session").parentElement!;
+  const state = screen.getByText("Publication state").parentElement!;
   expect(session).toHaveTextContent("—");
   expect(state).toHaveTextContent("—");
-  expect(screen.queryByText("已提交")).not.toBeInTheDocument();
+  expect(screen.queryByText("Committed")).not.toBeInTheDocument();
   expect(screen.queryByText("bad<session>")).not.toBeInTheDocument();
 });
 
@@ -95,7 +94,9 @@ it.each([undefined, null, 42, ["committed"], "open", "unknown", "<script>"])(
       ),
     );
     expect(screen.getByText(sessionId)).toBeVisible();
-    expect(screen.getByText("发布状态").parentElement).toHaveTextContent("—");
-    expect(screen.queryByText("已提交")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Publication state").parentElement,
+    ).toHaveTextContent("—");
+    expect(screen.queryByText("Committed")).not.toBeInTheDocument();
   },
 );

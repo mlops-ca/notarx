@@ -17,7 +17,7 @@ explicit Hosted and Proxy Repositories, then switch clients after validation.
 4. Keep anonymous access disabled while validating authenticated reads. If
    public reads are required, enable the global policy, Group policy, and each
    member Repository policy deliberately.
-5. Compare protocol reads, cache behavior, audit records, and ordering against
+5. Compare protocol reads, cache behaviour, audit records, and ordering against
    the Legacy Group. Switch client URLs only after those checks pass.
 6. Retain the Legacy Group until all clients have moved. Deleting a V2 Group
    never deletes its member Repositories or Artifact bytes.
@@ -57,7 +57,7 @@ candidate changes, Range/conditional reads, failure recovery, and grant isolatio
 - A V2 Group is an ordered view and owns no Artifact or cache bytes.
 - Capacity is reported as member contributions, not Group-owned storage.
 - Repository grants apply to explicitly bound V2 members. Unbound Legacy
-  members retain their legacy static-policy behavior until migrated.
+  members retain their legacy static-policy behaviour until migrated.
 - Do not migrate by copying cache objects or altering a Legacy Group's rows.
   Proxy cache warms naturally from client reads and orphan collection reclaims
   unreferenced bytes on its normal schedule.

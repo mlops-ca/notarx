@@ -105,12 +105,12 @@ test("a repository grant is created, edited from Access Control, and removed", a
 
   await page.goto(`/repositories/${repositoryId}?tab=grants`);
   await page
-    .getByRole("button", { name: /添加授权/ })
+    .getByRole("button", { name: /Add grant/ })
     .first()
     .click();
-  const dialog = page.getByRole("dialog", { name: "添加授权" });
+  const dialog = page.getByRole("dialog", { name: "Add grant" });
   await waitForModalOpen(dialog);
-  await dialog.getByRole("combobox", { name: "授权主体" }).click();
+  await dialog.getByRole("combobox", { name: "Principal" }).click();
   await page.keyboard.type(grantAccountName);
   // Rich option labels: Ant Design names the accessible option by its value,
   // so pick the visible row that shows the account name.
@@ -118,12 +118,12 @@ test("a repository grant is created, edited from Access Control, and removed", a
     .locator(".ant-select-item-option")
     .filter({ hasText: grantAccountName })
     .click();
-  await dialog.getByRole("combobox", { name: "权限级别" }).click();
+  await dialog.getByRole("combobox", { name: "Permission" }).click();
   await page
     .locator(".ant-select-item-option")
-    .filter({ hasText: "读取 · 浏览 / 拉取" })
+    .filter({ hasText: "Read · browse / pull" })
     .click();
-  await dialog.getByRole("button", { name: /^保\s*存$/ }).click();
+  await dialog.getByRole("button", { name: /^Save$/ }).click();
   await expect(dialog).toBeHidden();
   await expect
     .poll(async () => (await grantsFor(request, principal))[0]?.scopes)
@@ -133,27 +133,27 @@ test("a repository grant is created, edited from Access Control, and removed", a
   await page.goto("/access");
   const row = page.getByRole("row").filter({ hasText: repositoryName });
   await expect(row).toBeVisible();
-  await row.getByRole("link", { name: /编辑/ }).click();
+  await row.getByRole("link", { name: /Edit/ }).click();
   await expect(page).toHaveURL(new RegExp(`/repositories/${repositoryId}`));
 
   const grantRow = page.getByRole("row").filter({ hasText: grantAccountName });
-  await grantRow.getByRole("button", { name: /^编\s*辑$/ }).click();
-  const editor = page.getByRole("dialog", { name: "编辑授权" });
+  await grantRow.getByRole("button", { name: /^Edit$/ }).click();
+  const editor = page.getByRole("dialog", { name: "Edit grant" });
   await waitForModalOpen(editor);
-  await editor.getByRole("combobox", { name: "权限级别" }).click();
+  await editor.getByRole("combobox", { name: "Permission" }).click();
   await page
     .locator(".ant-select-item-option")
-    .filter({ hasText: "写入 · 发布 / 编辑" })
+    .filter({ hasText: "Write · publish / edit" })
     .click();
-  await editor.getByRole("button", { name: /^保\s*存$/ }).click();
+  await editor.getByRole("button", { name: /^Save$/ }).click();
   await expect(editor).toBeHidden();
   await expect
     .poll(async () => (await grantsFor(request, principal))[0]?.scopes)
     .toContain("repositories:write");
 
-  await grantRow.getByRole("button", { name: "移除该行授权" }).click();
+  await grantRow.getByRole("button", { name: "Remove this grant row" }).click();
   await page
-    .getByRole("button", { name: /^移\s*除$/ })
+    .getByRole("button", { name: /^Remove$/ })
     .last()
     .click();
   await expect
@@ -175,30 +175,30 @@ test("a service account credential is issued, rotated, and revoked", async ({
 
   await page.goto("/service-accounts");
   await page
-    .getByRole("button", { name: /新建服务账号/ })
+    .getByRole("button", { name: /New service account/ })
     .first()
     .click();
-  const create = page.getByRole("dialog", { name: "新建服务账号" });
+  const create = page.getByRole("dialog", { name: "New service account" });
   await waitForModalOpen(create);
-  await create.getByLabel("账号名称").fill(accountName);
-  await create.getByRole("button", { name: /^创\s*建$/ }).click();
+  await create.getByLabel("Account name").fill(accountName);
+  await create.getByRole("button", { name: /^Create$/ }).click();
   await expect(create).toBeHidden();
   await expect(page.getByText(accountName).first()).toBeVisible();
 
   const issue = async (credentialName: string) => {
-    await page.getByRole("button", { name: /签发新凭据/ }).click();
-    const dialog = page.getByRole("dialog", { name: "签发新凭据" });
+    await page.getByRole("button", { name: /Issue credential/ }).click();
+    const dialog = page.getByRole("dialog", { name: "Issue credential" });
     await waitForModalOpen(dialog);
-    await dialog.getByLabel("凭据名称").fill(credentialName);
-    await dialog.getByRole("button", { name: /^签\s*发$/ }).click();
+    await dialog.getByLabel("Credential name").fill(credentialName);
+    await dialog.getByRole("button", { name: /^Issue$/ }).click();
     const reveal = page.getByRole("dialog", {
-      name: "凭据已签发：立即保存 Token",
+      name: "Credential issued: save the token",
     });
     const plaintext = (
       await reveal.locator(".break-all").first().textContent()
     )?.trim();
     expect(plaintext).toBeTruthy();
-    await reveal.getByRole("button", { name: "我已安全保存" }).click();
+    await reveal.getByRole("button", { name: "I stored it securely" }).click();
     await expect(reveal).toBeHidden();
     return plaintext!;
   };
@@ -215,11 +215,11 @@ test("a service account credential is issued, rotated, and revoked", async ({
   await page
     .getByRole("row")
     .filter({ hasText: `first-${suffix}` })
-    .getByRole("button", { name: /吊销/ })
+    .getByRole("button", { name: /Revoke/ })
     .click();
   await page
-    .getByRole("dialog", { name: "吊销凭据" })
-    .getByRole("button", { name: /确认吊销/ })
+    .getByRole("dialog", { name: "Revoke credential" })
+    .getByRole("button", { name: /Revoke/ })
     .click();
   await expect.poll(() => identityStatus(request, first)).toBe(401);
   expect(await identityStatus(request, second)).toBe(200);
@@ -234,27 +234,27 @@ test("an API key is created, authenticates, and is revoked", async ({
 
   await page.goto("/keys");
   await page
-    .getByRole("button", { name: /新建密钥/ })
+    .getByRole("button", { name: /New key/ })
     .first()
     .click();
-  const create = page.getByRole("dialog", { name: "新建 API 密钥" });
+  const create = page.getByRole("dialog", { name: "New API key" });
   await waitForModalOpen(create);
-  await create.getByLabel("密钥名称").fill(keyName);
-  await create.getByRole("button", { name: /^创\s*建$/ }).click();
+  await create.getByLabel("Key name").fill(keyName);
+  await create.getByRole("button", { name: /^Create$/ }).click();
   const reveal = page.getByRole("dialog", {
-    name: "密钥已创建：请立即保存 Token",
+    name: "API key created: save the token now",
   });
   const plaintext = (
     await reveal.locator(".break-all").first().textContent()
   )?.trim();
   expect(plaintext).toBeTruthy();
-  await reveal.getByRole("button", { name: "我已保存" }).click();
+  await reveal.getByRole("button", { name: "I saved it" }).click();
   expect(await identityStatus(request, plaintext!)).toBe(200);
 
-  await page.getByRole("button", { name: `吊销密钥 ${keyName}` }).click();
+  await page.getByRole("button", { name: `Revoke key ${keyName}` }).click();
   await page
-    .getByRole("dialog", { name: "吊销 API 密钥" })
-    .getByRole("button", { name: /^吊\s*销$/ })
+    .getByRole("dialog", { name: "Revoke API key" })
+    .getByRole("button", { name: /^Revoke$/ })
     .click();
   await expect.poll(() => identityStatus(request, plaintext!)).toBe(401);
 });
@@ -276,19 +276,21 @@ test("a custom role feeds a template that is applied to a repository", async ({
   };
 
   await page.goto("/access?tab=policies");
-  await page.getByRole("button", { name: /新建角色/ }).click();
-  const roleDialog = page.getByRole("dialog", { name: "新建授权角色" });
+  await page.getByRole("button", { name: /New role/ }).click();
+  const roleDialog = page.getByRole("dialog", {
+    name: "New authorization role",
+  });
   await waitForModalOpen(roleDialog);
-  await roleDialog.getByLabel("角色名称").fill(roleName);
-  await roleDialog.getByLabel("仓库权限").click();
+  await roleDialog.getByLabel("Role name").fill(roleName);
+  await roleDialog.getByLabel("Permissions").click();
   await page
     .locator(".ant-select-item-option")
-    .filter({ hasText: "写入" })
+    .filter({ hasText: "Write" })
     .click();
   // A multiple select keeps its list open over the footer; close it first.
-  await roleDialog.getByLabel("角色名称").click();
+  await roleDialog.getByLabel("Role name").click();
   await expect(page.locator(".ant-select-dropdown:visible")).toHaveCount(0);
-  await roleDialog.getByRole("button", { name: /^保\s*存$/ }).click();
+  await roleDialog.getByRole("button", { name: /^Save$/ }).click();
   await expect(roleDialog).toBeHidden();
   await expect
     .poll(
@@ -298,23 +300,27 @@ test("a custom role feeds a template that is applied to a repository", async ({
 
   // The template editor reads the same roles list, so the new role is offered
   // without reloading the page.
-  await page.getByRole("button", { name: /新建模板/ }).click();
-  const editor = page.getByRole("dialog", { name: "新建授权模板" });
+  await page.getByRole("button", { name: /New template/ }).click();
+  const editor = page.getByRole("dialog", {
+    name: "New authorization template",
+  });
   await waitForModalOpen(editor);
-  await editor.getByPlaceholder("模板名称").fill(templateName);
+  await editor.getByPlaceholder("Template name").fill(templateName);
   await editor.getByRole("combobox").first().fill(principal);
-  await editor.getByText("自定义权限").click();
+  await editor.getByText("Custom permissions").click();
   await page
     .locator(".ant-select-item-option")
     .filter({ hasText: roleName })
     .click();
-  await editor.getByRole("button", { name: /^保\s*存$/ }).click();
+  await editor.getByRole("button", { name: /^Save$/ }).click();
   await expect(editor).toBeHidden();
   const templateRow = page.getByRole("row").filter({ hasText: templateName });
   await expect(templateRow).toBeVisible();
 
-  await templateRow.getByRole("button", { name: /应\s*用/ }).click();
-  const apply = page.getByRole("dialog", { name: "应用授权模板" });
+  await templateRow.getByRole("button", { name: /Apply/ }).click();
+  const apply = page.getByRole("dialog", {
+    name: "Apply authorization template",
+  });
   await waitForModalOpen(apply);
   await apply.getByRole("combobox").click();
   await page.keyboard.type(repositoryName);
@@ -322,7 +328,7 @@ test("a custom role feeds a template that is applied to a repository", async ({
     .locator(".ant-select-item-option")
     .filter({ hasText: repositoryName })
     .click();
-  await apply.getByRole("button", { name: /^应\s*用$/ }).click();
+  await apply.getByRole("button", { name: /^Apply$/ }).click();
   await expect(apply).toBeHidden();
   await expect
     .poll(async () => (await grantsFor(request, principal))[0]?.scopes)
@@ -331,15 +337,15 @@ test("a custom role feeds a template that is applied to a repository", async ({
     );
 
   // Applying refreshes the cross-repository list on the grants tab.
-  await page.getByRole("tab", { name: /授权记录/ }).click();
+  await page.getByRole("tab", { name: /Grants/ }).click();
   await expect(
     page.getByRole("row").filter({ hasText: repositoryName }),
   ).toBeVisible();
 
-  await page.getByRole("tab", { name: /策略与模板/ }).click();
-  await templateRow.getByRole("button", { name: "删除模板" }).click();
+  await page.getByRole("tab", { name: /Policies & templates/ }).click();
+  await templateRow.getByRole("button", { name: "Delete template" }).click();
   await page
-    .getByRole("button", { name: /^删\s*除$/ })
+    .getByRole("button", { name: /^Delete$/ })
     .last()
     .click();
   await expect(templateRow).toHaveCount(0);
@@ -350,10 +356,10 @@ test("a custom role feeds a template that is applied to a repository", async ({
   await page
     .getByRole("row")
     .filter({ hasText: roleName })
-    .getByRole("button", { name: "删除角色" })
+    .getByRole("button", { name: "Delete role" })
     .click();
   await page
-    .getByRole("button", { name: /^删\s*除$/ })
+    .getByRole("button", { name: /^Delete$/ })
     .last()
     .click();
   await expect(page.getByRole("row").filter({ hasText: roleName })).toHaveCount(
@@ -384,12 +390,14 @@ test("the user drawer saves a profile and adds, narrows, and removes a repositor
 
   await page.goto("/users");
   await page.getByText(username, { exact: true }).click();
-  const drawer = page.getByRole("dialog").filter({ hasText: "仓库授权" });
+  const drawer = page
+    .getByRole("dialog")
+    .filter({ hasText: "Repository access" });
 
   // A profile save shows in the list behind the drawer without a reload.
   const renamed = `Drawer renamed ${suffix}`;
-  await drawer.getByLabel("显示名").fill(renamed);
-  await drawer.getByRole("button", { name: /保存更改/ }).click();
+  await drawer.getByLabel("Display name").fill(renamed);
+  await drawer.getByRole("button", { name: /Save changes/ }).click();
   await expect(
     page.getByRole("row").filter({ hasText: username }),
   ).toContainText(renamed);
@@ -400,9 +408,9 @@ test("the user drawer saves a profile and adds, narrows, and removes a repositor
   expect(((await profile.json()) as { displayName: string }).displayName).toBe(
     renamed,
   );
-  await drawer.getByRole("button", { name: /添加授权/ }).click();
+  await drawer.getByRole("button", { name: /Add grant/ }).click();
 
-  const editor = page.getByRole("dialog", { name: "添加仓库授权" });
+  const editor = page.getByRole("dialog", { name: "Add repository grant" });
   await waitForModalOpen(editor);
   await editor.getByRole("combobox").first().click();
   await page.keyboard.type(repositoryName);
@@ -411,25 +419,25 @@ test("the user drawer saves a profile and adds, narrows, and removes a repositor
     .filter({ hasText: repositoryName })
     .click();
   await expect(
-    editor.getByRole("combobox", { name: "权限级别" }),
+    editor.getByRole("combobox", { name: "Permission" }),
   ).toBeVisible();
-  await editor.getByRole("button", { name: /^保\s*存$/ }).click();
+  await editor.getByRole("button", { name: /^Save$/ }).click();
   await expect(editor).toBeHidden();
   await expect
     .poll(async () => (await grantsFor(request, principal)).length)
     .toBe(1);
   const row = drawer.getByRole("listitem").filter({ hasText: repositoryName });
-  await expect(row).toContainText("整个仓库");
+  await expect(row).toContainText("Entire repository");
 
   // Narrowing the scope moves the entry: the repository-wide row goes and
   // exactly one prefixed row remains.
-  await row.getByRole("button", { name: "编辑该条授权" }).click();
-  const edit = page.getByRole("dialog", { name: "编辑仓库授权" });
+  await row.getByRole("button", { name: "Edit this grant" }).click();
+  const edit = page.getByRole("dialog", { name: "Edit repository grant" });
   await waitForModalOpen(edit);
-  await edit.getByText("限定范围", { exact: true }).click();
+  await edit.getByText("Limit by prefix", { exact: true }).click();
   // The prefix field is the dialog's last combobox (an AutoComplete).
   await edit.getByRole("combobox").last().fill("releases/");
-  await edit.getByRole("button", { name: /^保\s*存$/ }).click();
+  await edit.getByRole("button", { name: /^Save$/ }).click();
   await expect(edit).toBeHidden();
   await expect
     .poll(async () =>
@@ -440,15 +448,15 @@ test("the user drawer saves a profile and adds, narrows, and removes a repositor
     .toEqual(["releases/"]);
   await expect(row).toContainText("releases/");
 
-  await row.getByRole("button", { name: "移除仓库授权" }).click();
+  await row.getByRole("button", { name: "Remove repository grant" }).click();
   // Move onto the open confirmation the way a pointer would, so the trigger's
   // tooltip closes instead of covering the confirm button.
   const confirmation = page.locator(".ant-popconfirm:visible");
-  await confirmation.getByText("移除该用户的仓库授权？").hover();
+  await confirmation.getByText("Remove this user's grant?").hover();
   await expect(
-    page.getByRole("tooltip", { name: "移除仓库授权" }),
+    page.getByRole("tooltip", { name: "Remove repository grant" }),
   ).toBeHidden();
-  await confirmation.getByRole("button", { name: /^移\s*除$/ }).click();
+  await confirmation.getByRole("button", { name: /^Remove$/ }).click();
   await expect
     .poll(async () => (await grantsFor(request, principal)).length)
     .toBe(0);

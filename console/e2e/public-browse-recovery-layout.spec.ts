@@ -17,10 +17,7 @@ const artifact = {
 async function setup(page: Page, width: number) {
   await page.setViewportSize({ width, height: 1000 });
   await page.addInitScript((width) => {
-    localStorage.setItem(
-      "ag.console.locale",
-      width === 390 ? "en-US" : "zh-CN",
-    );
+    localStorage.setItem("ag.console.locale", "en-CA");
     localStorage.setItem("ag.console.theme", width === 390 ? "light" : "dark");
   }, width);
   await page.route("**/auth/session", (route) =>
@@ -156,7 +153,7 @@ test("public Retry waits for catalog, search and deep-link lookup after an early
     errors.consoleErrors.length = 0;
     const initialReads = { ...reads };
     attempt = 1;
-    await page.getByRole("button", { name: "重试" }).click();
+    await page.getByRole("button", { name: "Retry" }).click();
     await expect
       .poll(() => reads)
       .toEqual({
@@ -176,20 +173,24 @@ test("public Retry waits for catalog, search and deep-link lookup after an early
     await expect(
       page.getByText("digest.slice is not a function"),
     ).toBeVisible();
-    await expect(page.getByText("读取公开仓库失败 (401)")).toHaveCount(0);
+    await expect(
+      page.getByText("Failed to read public repositories (401)"),
+    ).toHaveCount(0);
     expect(
       errors.consoleErrors.filter((message) =>
         message.startsWith("Console section failed"),
       ),
     ).toEqual([]);
     await expect(
-      page.getByText("注册 Raw 源地址", { exact: true }),
+      page.getByText("Register a Raw source", { exact: true }),
     ).toBeVisible();
     releaseLookup?.();
-    await expect(page.getByText("读取公开仓库失败 (401)")).toBeVisible();
+    await expect(
+      page.getByText("Failed to read public repositories (401)"),
+    ).toBeVisible();
     errors.consoleErrors.length = 0;
     attempt = 2;
-    await page.getByRole("button", { name: "重试" }).click();
+    await page.getByRole("button", { name: "Retry" }).click();
     await expect(
       page.getByText(target.coordinate, { exact: true }).first(),
     ).toBeVisible();
@@ -204,8 +205,6 @@ test("public Retry waits for catalog, search and deep-link lookup after an early
 });
 
 for (const width of [1440, 390]) {
-  const en = width === 390;
-
   test(`public catalog render Retry refreshes its source at ${width}px`, async ({
     page,
   }, info) => {
@@ -228,13 +227,10 @@ for (const width of [1440, 390]) {
     });
     await page.goto("/browse");
     await expect(
-      page.getByText(
-        en ? "This section is unavailable" : "此区域暂时无法显示",
-        { exact: true },
-      ),
+      page.getByText("This section is unavailable", { exact: true }),
     ).toBeVisible();
     await expect(
-      page.getByRole("link", { name: en ? "Management sign in" : "管理登录" }),
+      page.getByRole("link", { name: "Management sign in" }),
     ).toBeVisible();
     expect(errors.pageErrors).toEqual([]);
     expect(errors.consoleErrors.length).toBeGreaterThan(0);
@@ -248,7 +244,7 @@ for (const width of [1440, 390]) {
     errors.consoleErrors.length = 0;
     const beforeRetry = reads;
     broken = false;
-    await page.getByRole("button", { name: en ? "Retry" : "重试" }).click();
+    await page.getByRole("button", { name: "Retry" }).click();
     await expect(
       page.getByText(repository.name, { exact: true }),
     ).toBeVisible();
@@ -275,18 +271,15 @@ for (const width of [1440, 390]) {
     );
     await page.goto(`/browse?repository=${repository.id}`);
     await expect(
-      page.getByText(
-        en ? "This section is unavailable" : "此区域暂时无法显示",
-        { exact: true },
-      ),
+      page.getByText("This section is unavailable", { exact: true }),
     ).toBeVisible();
     await expect(
-      page.getByText(en ? "Register a Raw source" : "注册 Raw 源地址", {
+      page.getByText("Register a Raw source", {
         exact: true,
       }),
     ).toBeVisible();
     await expect(
-      page.getByRole("link", { name: en ? "Management sign in" : "管理登录" }),
+      page.getByRole("link", { name: "Management sign in" }),
     ).toBeVisible();
     expect(errors.pageErrors).toEqual([]);
     expect(errors.consoleErrors.length).toBeGreaterThan(0);
@@ -300,7 +293,7 @@ for (const width of [1440, 390]) {
     await geometry(page);
     await capture(page, info, "artifacts-contained");
     errors.consoleErrors.length = 0;
-    await page.getByRole("button", { name: en ? "Retry" : "重试" }).click();
+    await page.getByRole("button", { name: "Retry" }).click();
     await expect(
       page.getByText(artifact.coordinate, { exact: true }),
     ).toBeVisible();
@@ -339,12 +332,8 @@ for (const width of [1440, 390]) {
     ).toBeVisible();
     await page.clock.fastForward(31_000);
     fail = true;
-    await page
-      .getByRole("button", { name: en ? "Public repositories" : "公开仓库" })
-      .click();
-    await page
-      .getByRole("link", { name: en ? "Open repository" : "进入仓库" })
-      .click();
+    await page.getByRole("button", { name: "Public repositories" }).click();
+    await page.getByRole("link", { name: "Open repository" }).click();
     await page.clock.fastForward(1500);
     await expect(
       page.getByText("synthetic refresh failed", { exact: true }),
@@ -376,7 +365,7 @@ for (const width of [1440, 390]) {
     errors.consoleErrors.length = 0;
     fail = false;
     const beforeRetry = reads;
-    await page.getByRole("button", { name: en ? "Retry" : "重试" }).click();
+    await page.getByRole("button", { name: "Retry" }).click();
     await expect(page.getByRole("alert")).toHaveCount(0);
     expect(reads).toBe(beforeRetry + 1);
     await expect(

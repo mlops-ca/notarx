@@ -14,10 +14,10 @@ OPENAPI_BUNDLE := api/openapi/native-hosted-v1.json
 VERSION ?= $(shell tr -d '[:space:]' < VERSION)
 CLI_REVISION ?= $(shell git rev-parse --verify HEAD 2>/dev/null || printf 'unknown')
 CLI_LDFLAGS = -s -w -X github.com/mlops-ca/notarx/internal/buildinfo.injectedVersion=$(VERSION) -X github.com/mlops-ca/notarx/internal/buildinfo.injectedRevision=$(CLI_REVISION)
-.PHONY: help dev-bootstrap dev dev-status dev-down local-dev-test rustfs-only-check kubernetes-local-check kubernetes-local-up kubernetes-local-status kubernetes-local-verify kubernetes-local-down reference-scanner-smoke cargo-contract openapi-dependency-test openapi-tools-ready console-codegen-ready raw-e2e conan-e2e native-maven-e2e native-oci-e2e native-raw-e2e native-npm-e2e native-pypi-e2e native-go-e2e native-apt-e2e apt-signer-rotation-e2e readiness-e2e resolver-rotation-e2e service-account-rotation-e2e oci-performance-e2e performance-baseline cache-operations-e2e backup-restore-readiness backup-transfer-test upgrade-readiness release-readiness-check release-version-check stamp-version-test release-plan-test release-artifacts release-artifacts-test packages-signing-drill packages-environments-test docs-check commit-policy-check preflight migration-check evidence up down test api-contract cli-contract-check cli-test cli-e2e cli-runtime-e2e integration-test integration-down lint vet race coverage dependency-audit fmt cli-build build docker-build docker-test console-docker-build cli-docker-build migrate backup-drill restore-drill console-build console-typecheck console-check console-test console-api-check console-e2e console-visual console-visual-update openapi-bundle openapi-generate-admin openapi-check
+.PHONY: help dev-bootstrap dev dev-status dev-down local-dev-test rustfs-only-check kubernetes-local-check kubernetes-local-up kubernetes-local-status kubernetes-local-verify kubernetes-local-down reference-scanner-smoke cargo-contract openapi-dependency-test openapi-tools-ready console-codegen-ready raw-e2e conan-e2e native-maven-e2e native-oci-e2e native-raw-e2e native-npm-e2e native-pypi-e2e native-go-e2e native-apt-e2e apt-signer-rotation-e2e readiness-e2e resolver-rotation-e2e service-account-rotation-e2e oci-performance-e2e performance-baseline cache-operations-e2e backup-restore-readiness backup-transfer-test upgrade-readiness release-readiness-check release-version-check stamp-version-test release-plan-test release-artifacts release-artifacts-test packages-signing-drill packages-environments-test docs-check commit-policy-check preflight migration-check evidence up down test api-contract cli-contract-check cli-test cli-e2e cli-runtime-e2e integration-test integration-down lint spellcheck vet race coverage dependency-audit fmt cli-build build docker-build docker-test console-docker-build cli-docker-build migrate backup-drill restore-drill console-build console-typecheck console-check console-test console-api-check console-e2e console-visual console-visual-update openapi-bundle openapi-generate-admin openapi-check
 
 help:
-	@printf '%s\n' 'Targets: native-rubygems-e2e, native-helm-e2e, native-oci-discovery-e2e, nexus-migration-client-e2e, nexus-inventory-scan-e2e, native-nuget-e2e, nexus-oci-migration-e2e, nexus-conan-migration-e2e, nexus-npm-migration-e2e, nexus-pypi-migration-e2e, private-upstream-auth-e2e, private-upstream-formats-e2e, dev-bootstrap, dev, dev-status, dev-down, kubernetes-local-check, kubernetes-local-up, kubernetes-local-status, kubernetes-local-verify, kubernetes-local-down, reference-scanner-smoke, cargo-contract, up, down, test, api-contract, cli-contract-check, cli-test, cli-e2e, cli-runtime-e2e, integration-test, integration-down, lint, vet, race, coverage, dependency-audit, fmt, cli-build, build, docker-build, docker-test, console-docker-build, cli-docker-build, migrate, backup-drill, restore-drill, preflight, migration-check, evidence, raw-e2e, conan-e2e, native-maven-e2e, native-oci-e2e, native-raw-e2e, native-npm-e2e, native-pypi-e2e, native-go-e2e, native-apt-e2e, apt-signer-rotation-e2e, readiness-e2e, resolver-rotation-e2e, service-account-rotation-e2e, oci-performance-e2e, performance-baseline, cache-operations-e2e, backup-restore-readiness, backup-transfer-test, published-native-backup-test, upgrade-readiness, release-readiness-check, release-version-check, stamp-version-test, release-plan-test, release-artifacts, release-artifacts-test, packages-signing-drill, packages-environments-test, docs-check, commit-policy-check, console-build, console-typecheck, console-check, console-test, console-api-check, console-e2e, console-visual, console-visual-update, openapi-bundle, openapi-generate-admin, openapi-check, native-build-check'
+	@printf '%s\n' 'Targets: native-rubygems-e2e, native-helm-e2e, native-oci-discovery-e2e, nexus-migration-client-e2e, nexus-inventory-scan-e2e, native-nuget-e2e, nexus-oci-migration-e2e, nexus-conan-migration-e2e, nexus-npm-migration-e2e, nexus-pypi-migration-e2e, private-upstream-auth-e2e, private-upstream-formats-e2e, dev-bootstrap, dev, dev-status, dev-down, kubernetes-local-check, kubernetes-local-up, kubernetes-local-status, kubernetes-local-verify, kubernetes-local-down, reference-scanner-smoke, cargo-contract, up, down, test, api-contract, cli-contract-check, cli-test, cli-e2e, cli-runtime-e2e, integration-test, integration-down, lint, spellcheck, vet, race, coverage, dependency-audit, fmt, cli-build, build, docker-build, docker-test, console-docker-build, cli-docker-build, migrate, backup-drill, restore-drill, preflight, migration-check, evidence, raw-e2e, conan-e2e, native-maven-e2e, native-oci-e2e, native-raw-e2e, native-npm-e2e, native-pypi-e2e, native-go-e2e, native-apt-e2e, apt-signer-rotation-e2e, readiness-e2e, resolver-rotation-e2e, service-account-rotation-e2e, oci-performance-e2e, performance-baseline, cache-operations-e2e, backup-restore-readiness, backup-transfer-test, published-native-backup-test, upgrade-readiness, release-readiness-check, release-version-check, stamp-version-test, release-plan-test, release-artifacts, release-artifacts-test, packages-signing-drill, packages-environments-test, docs-check, commit-policy-check, console-build, console-typecheck, console-check, console-test, console-api-check, console-e2e, console-visual, console-visual-update, openapi-bundle, openapi-generate-admin, openapi-check, native-build-check'
 
 dev-bootstrap:
 	@./scripts/local-dev.sh bootstrap-env
@@ -214,14 +214,19 @@ integration-down:
 	@docker volume create artifact-gateway-go-build >/dev/null
 	@docker compose --env-file /dev/null --project-name artifact-gateway-integration -f compose.integration.yml down -v --remove-orphans
 
+spellcheck:
+	@./scripts/spellcheck.sh
+
 architecture-check:
 	@go run ./tools/architecture
 	@go test ./tools/architecture
+	@python3 scripts/check-no-cjk-go.py
+	@python3 -B -m unittest discover -s scripts/tests -p test_check_no_cjk_go.py
 
 architecture-metrics:
 	@go run ./tools/architecture -metrics
 
-lint: architecture-check commit-policy-check
+lint: architecture-check commit-policy-check spellcheck
 	@docker run --rm -v "$(CURDIR):/src" -w /src $(LINT_IMAGE) golangci-lint run
 
 vet:
@@ -377,7 +382,7 @@ backup-transfer-test:
 published-native-backup-test:
 	@./scripts/published-native-backup-test.sh --recovery
 
-.PHONY: architecture-check architecture-metrics native-build-check
+.PHONY: architecture-check architecture-metrics spellcheck native-build-check
 
 # ADR 0016: no cross-compilation or emulation anywhere. The guard is self-tested
 # against negative fixtures first, then run over the tree (also part of preflight).

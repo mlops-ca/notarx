@@ -10,7 +10,7 @@ function Calendar() {
   const { setLocale } = usePreferences();
   return (
     <>
-      <button onClick={() => setLocale("en-US")}>English</button>
+      <button onClick={() => setLocale("en-CA")}>English</button>
       <button onClick={() => setLocale("zh-CN")}>Chinese</button>
       <DatePicker defaultValue={dayjs("2026-10-14")} />
     </>

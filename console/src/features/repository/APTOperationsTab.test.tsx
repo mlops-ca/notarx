@@ -142,28 +142,34 @@ afterEach(() => {
 describe("APT snapshot operations", () => {
   it("does not fetch administrator-only data for members", () => {
     mount(false);
-    expect(screen.getByText("需要仓库管理权限")).toBeInTheDocument();
+    expect(
+      screen.getByText("Repository administrator access required"),
+    ).toBeInTheDocument();
     expect(getAptLifecycleState).not.toHaveBeenCalled();
   });
   it("reviews exact retention candidates and reuses the key after a lost response", async () => {
     const user = userEvent.setup();
     mount();
-    await screen.findByText("当前快照 #2");
+    await screen.findByText("Current snapshot #2");
     vi.mocked(applyAptLifecycle).mockRejectedValueOnce(
       new Error("connection lost"),
     );
-    await user.click(screen.getByRole("button", { name: "预览保留清理" }));
+    await user.click(screen.getByRole("button", { name: "Preview retention" }));
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText(/移除 1 个/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Remove 1/)).toBeInTheDocument();
     expect(applyAptLifecycle).not.toHaveBeenCalled();
     await user.click(
-      within(dialog).getByRole("button", { name: "应用并签署新快照" }),
+      within(dialog).getByRole("button", {
+        name: "Apply and sign new snapshot",
+      }),
     );
     await within(dialog).findByText("connection lost");
     await user.click(
-      within(dialog).getByRole("button", { name: "应用并签署新快照" }),
+      within(dialog).getByRole("button", {
+        name: "Apply and sign new snapshot",
+      }),
     );
-    await screen.findByText("已发布 stable 快照 #3");
+    await screen.findByText("Published stable snapshot #3");
     const calls = vi.mocked(applyAptLifecycle).mock.calls;
     expect(calls).toHaveLength(2);
     expect(calls[0][0]).toEqual(calls[1][0]);
@@ -180,9 +186,9 @@ describe("APT snapshot operations", () => {
   it("previews a selected package deletion and invalidates a conflicted preview", async () => {
     const user = userEvent.setup();
     mount();
-    await screen.findByText("当前快照 #2");
+    await screen.findByText("Current snapshot #2");
     await user.click(screen.getAllByRole("checkbox")[1]);
-    await user.click(screen.getByRole("button", { name: "预览删除" }));
+    await user.click(screen.getByRole("button", { name: "Preview deletion" }));
     expect(previewAptLifecycle).toHaveBeenCalledWith(
       expect.objectContaining({
         body: {
@@ -197,9 +203,13 @@ describe("APT snapshot operations", () => {
       error: { status: 409, code: "snapshot_conflict" },
     } as never);
     await user.click(
-      await screen.findByRole("button", { name: "应用并签署新快照" }),
+      await screen.findByRole("button", {
+        name: "Apply and sign new snapshot",
+      }),
     );
-    await screen.findByText(/快照或候选集已变化/);
+    await screen.findByText(
+      /The snapshot or candidates changed, or governance blocked a member\. Refresh and preview again; no automatic retry was made\./,
+    );
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
@@ -208,9 +218,9 @@ describe("APT snapshot operations", () => {
   it("previews recovery by deletion ID and disables expired records", async () => {
     const user = userEvent.setup();
     mount();
-    await screen.findByText("当前快照 #2");
-    await user.click(screen.getByRole("tab", { name: "恢复记录 (2)" }));
-    const buttons = screen.getAllByRole("button", { name: "预览恢复" });
+    await screen.findByText("Current snapshot #2");
+    await user.click(screen.getByRole("tab", { name: "Recovery (2)" }));
+    const buttons = screen.getAllByRole("button", { name: "Preview recovery" });
     expect(buttons[1]).toBeDisabled();
     vi.mocked(previewAptLifecycle).mockResolvedValueOnce({
       data: {
@@ -232,47 +242,53 @@ describe("APT snapshot operations", () => {
       }),
     );
     await user.click(
-      await screen.findByRole("button", { name: "应用并签署新快照" }),
+      await screen.findByRole("button", {
+        name: "Apply and sign new snapshot",
+      }),
     );
-    await screen.findByText("已发布 stable 快照 #3");
+    await screen.findByText("Published stable snapshot #3");
   });
   it("disables empty retention plans and clears failed preview loading", async () => {
     const user = userEvent.setup();
     mount();
-    await screen.findByText("当前快照 #2");
+    await screen.findByText("Current snapshot #2");
     vi.mocked(previewAptLifecycle).mockRejectedValueOnce(
       new Error("preview failed"),
     );
-    await user.click(screen.getByRole("button", { name: "预览保留清理" }));
+    await user.click(screen.getByRole("button", { name: "Preview retention" }));
     await screen.findByText("preview failed");
     vi.mocked(previewAptLifecycle).mockResolvedValueOnce({
       data: { ...plan, removeSessionIds: [] },
     } as never);
-    await user.click(screen.getByRole("button", { name: "预览保留清理" }));
+    await user.click(screen.getByRole("button", { name: "Preview retention" }));
     expect(
-      await screen.findByRole("button", { name: "应用并签署新快照" }),
+      await screen.findByRole("button", {
+        name: "Apply and sign new snapshot",
+      }),
     ).toBeDisabled();
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", {
-        name: /取\s*消/,
+        name: /Cancel/,
       }),
     );
   });
   it("keeps stale snapshot evidence but disables actions after a refresh failure", async () => {
     const user = userEvent.setup();
     mount();
-    await screen.findByText("当前快照 #2");
+    await screen.findByText("Current snapshot #2");
     vi.mocked(getAptLifecycleState).mockRejectedValueOnce(
       new Error("refresh failed"),
     );
-    await user.click(screen.getByRole("button", { name: "刷新快照" }));
+    await user.click(screen.getByRole("button", { name: "Refresh snapshots" }));
     await screen.findByText("refresh failed");
-    expect(screen.getByText("当前快照 #2")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "预览保留清理" })).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: /重\s*试/ }));
+    expect(screen.getByText("Current snapshot #2")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Preview retention" }),
+    ).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: /Retry/ }));
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: "预览保留清理" }),
+        screen.getByRole("button", { name: "Preview retention" }),
       ).toBeEnabled(),
     );
   });
@@ -286,11 +302,11 @@ describe("APT snapshot operations", () => {
     );
     const user = userEvent.setup();
     mount();
-    const input = screen.getByRole("searchbox", { name: "发行套件" });
+    const input = screen.getByRole("searchbox", { name: "Suite" });
     await user.clear(input);
     await user.type(input, "bookworm");
-    await user.click(screen.getByRole("button", { name: /查\s*看/ }));
-    await screen.findByText("当前快照 #2");
+    await user.click(screen.getByRole("button", { name: /View/ }));
+    await screen.findByText("Current snapshot #2");
     await act(async () =>
       resolve({
         data: {
@@ -299,21 +315,23 @@ describe("APT snapshot operations", () => {
         },
       } as never),
     );
-    expect(screen.queryByText("当前快照 #99")).not.toBeInTheDocument();
+    expect(screen.queryByText("Current snapshot #99")).not.toBeInTheDocument();
   });
   it("requires confirmation to prune retired references and protects the visible snapshot", async () => {
     const user = userEvent.setup();
     mount();
-    await screen.findByText("当前快照 #2");
-    await user.click(screen.getByRole("tab", { name: "快照历史 (2)" }));
-    const buttons = screen.getAllByRole("button", { name: "清理引用" });
+    await screen.findByText("Current snapshot #2");
+    await user.click(screen.getByRole("tab", { name: "Snapshots (2)" }));
+    const buttons = screen.getAllByRole("button", { name: "Prune references" });
     expect(buttons[0]).toBeDisabled();
     await user.click(buttons[1]);
     expect(pruneAptSnapshots).not.toHaveBeenCalled();
     await user.click(
-      screen.getAllByRole("button", { name: "清理引用" }).at(-1)!,
+      screen.getAllByRole("button", { name: "Prune references" }).at(-1)!,
     );
-    await screen.findByText("快照引用已清理；无引用对象由后台异步回收。");
+    await screen.findByText(
+      "Snapshot references pruned; unreferenced objects are reclaimed asynchronously.",
+    );
     expect(pruneAptSnapshots).toHaveBeenCalledWith({
       path: { repositoryId: repo.id },
       body: { snapshotIds: ["snapshot-old"] },
@@ -339,8 +357,8 @@ it("does not accept a retired StrictMode mount request after a later refresh", a
       </TestQueryProvider>
     </StrictMode>,
   );
-  await screen.findByText("当前快照 #2");
-  await user.click(screen.getByRole("button", { name: "刷新快照" }));
+  await screen.findByText("Current snapshot #2");
+  await user.click(screen.getByRole("button", { name: "Refresh snapshots" }));
   await waitFor(() => expect(getAptLifecycleState).toHaveBeenCalledTimes(3));
   await act(async () =>
     resolve({
@@ -350,7 +368,7 @@ it("does not accept a retired StrictMode mount request after a later refresh", a
       },
     } as never),
   );
-  expect(screen.queryByText("当前快照 #99")).not.toBeInTheDocument();
+  expect(screen.queryByText("Current snapshot #99")).not.toBeInTheDocument();
 });
 
 // The Gateway exports a visible or retired snapshot and restores it only
@@ -407,10 +425,10 @@ describe("APT disaster-recovery archive", () => {
     } as never);
     const user = userEvent.setup();
     mount();
-    await screen.findByText("当前快照 #2");
-    await user.click(screen.getByRole("tab", { name: "灾备归档" }));
+    await screen.findByText("Current snapshot #2");
+    await user.click(screen.getByRole("tab", { name: "Disaster recovery" }));
     const exportButtons = await screen.findAllByRole("button", {
-      name: "导出归档",
+      name: "Export archive",
     });
     expect(exportButtons).toHaveLength(2);
     await user.click(exportButtons[0]);
@@ -425,15 +443,19 @@ describe("APT disaster-recovery archive", () => {
   it("restores only with an archive file and a well-formed independent receipt", async () => {
     const user = userEvent.setup();
     const { container } = mount();
-    await screen.findByText("当前快照 #2");
-    await user.click(screen.getByRole("tab", { name: "灾备归档" }));
+    await screen.findByText("Current snapshot #2");
+    await user.click(screen.getByRole("tab", { name: "Disaster recovery" }));
     const receiptField = screen.getByRole("textbox", {
-      name: "备份回执 (sha256)",
+      name: "Backup receipt (sha256)",
     });
-    expect(screen.getByRole("button", { name: "恢复归档" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Restore archive" }),
+    ).toBeDisabled();
 
     await user.type(receiptField, "sha256:nothex");
-    expect(screen.getByRole("button", { name: "恢复归档" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Restore archive" }),
+    ).toBeDisabled();
 
     await user.clear(receiptField);
     await user.paste(validReceipt);
@@ -446,14 +468,16 @@ describe("APT disaster-recovery archive", () => {
       }),
     );
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "恢复归档" })).toBeEnabled(),
+      expect(
+        screen.getByRole("button", { name: "Restore archive" }),
+      ).toBeEnabled(),
     );
 
-    await user.click(screen.getByRole("button", { name: "恢复归档" }));
+    await user.click(screen.getByRole("button", { name: "Restore archive" }));
     await user.click(
-      screen.getAllByRole("button", { name: "恢复归档" }).at(-1)!,
+      screen.getAllByRole("button", { name: "Restore archive" }).at(-1)!,
     );
-    await screen.findByText("已从归档恢复 stable 快照 #4");
+    await screen.findByText("Restored stable snapshot #4 from the archive");
     const call = vi.mocked(restoreAptRepositorySnapshot).mock.calls[0]?.[0];
     expect(call?.path).toEqual({ repositoryId: repo.id });
     expect(call?.headers).toEqual({

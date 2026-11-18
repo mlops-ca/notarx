@@ -125,12 +125,12 @@ describe("UserRepositoryAccessPanel", () => {
       renderPanel(accountUsername);
 
       await userEvent.click(
-        await screen.findByRole("button", { name: "移除仓库授权" }),
+        await screen.findByRole("button", { name: "Remove repository grant" }),
       );
       await waitFor(() => {
         expect(
           screen.getByText(
-            `移除后，${accountUsername} 在「artifacts」上的全部仓库授权都会被删除，其他用户不受影响。`,
+            `After removal, every repository grant for ${accountUsername} on "artifacts" is deleted. Other users are unaffected.`,
           ),
         ).toBeVisible();
       });
@@ -159,7 +159,7 @@ describe("UserRepositoryAccessPanel", () => {
     renderPanel();
 
     expect(await screen.findByText("artifacts")).toBeInTheDocument();
-    expect(screen.getByText("读取 + 写入")).toBeInTheDocument();
+    expect(screen.getByText("Read + write")).toBeInTheDocument();
     expect(screen.getByText("releases/")).toBeInTheDocument();
     expect(screen.queryByText("icons")).not.toBeInTheDocument();
     expect(mockListRepositoryGrants).toHaveBeenCalledTimes(1);
@@ -180,10 +180,10 @@ describe("UserRepositoryAccessPanel", () => {
     expect(screen.getByText("snapshots/")).toBeInTheDocument();
     expect(screen.getAllByText("artifacts")).toHaveLength(2);
     expect(
-      screen.getAllByRole("button", { name: "编辑该条授权" }),
+      screen.getAllByRole("button", { name: "Edit this grant" }),
     ).toHaveLength(2);
     expect(
-      screen.getAllByRole("button", { name: "移除仓库授权" }),
+      screen.getAllByRole("button", { name: "Remove repository grant" }),
     ).toHaveLength(2);
   });
 
@@ -191,15 +191,17 @@ describe("UserRepositoryAccessPanel", () => {
     mockListRepositoryGrants.mockResolvedValue({ data: [] } as never);
     mockOkSources();
     const { unmount } = renderPanel();
-    expect(await screen.findByText("该用户暂无仓库授权")).toBeInTheDocument();
+    expect(
+      await screen.findByText("This user has no repository grants"),
+    ).toBeInTheDocument();
     unmount();
 
     mockListRepositoryGrants.mockResolvedValue({
       error: new Error("boom"),
     } as never);
     renderPanel();
-    expect(await screen.findByText("请求出错")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /重\s*试/ })).toBeInTheDocument();
+    expect(await screen.findByText("Request failed")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Retry/ })).toBeInTheDocument();
   });
 
   it("adds a grant through the single-grant upsert, without the repository's set", async () => {
@@ -213,11 +215,11 @@ describe("UserRepositoryAccessPanel", () => {
     const user = userEvent.setup();
     renderPanel();
 
-    await user.click(await screen.findByRole("button", { name: /添加授权/ }));
+    await user.click(await screen.findByRole("button", { name: /Add grant/ }));
     await user.click(screen.getByRole("combobox"));
     await user.click(await screen.findByText("artifacts · raw"));
-    expect(await screen.findByText("读取 · 浏览 / 拉取")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /^保\s*存$/ }));
+    expect(await screen.findByText("Read · browse / pull")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Save$/ }));
 
     await waitFor(() => {
       expect(mockUpsertGrant).toHaveBeenCalledTimes(1);
@@ -232,7 +234,9 @@ describe("UserRepositoryAccessPanel", () => {
     });
     // The repository's other grants are never read back into a submission.
     expect(mockDeleteGrant).not.toHaveBeenCalled();
-    expect(await screen.findByText("仓库授权已保存")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Repository grant saved"),
+    ).toBeInTheDocument();
   });
 
   it("prefills the acted-on row and updates it in place when the prefix is unchanged", async () => {
@@ -249,11 +253,13 @@ describe("UserRepositoryAccessPanel", () => {
     renderPanel();
 
     expect(await screen.findByText("releases/")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "编辑该条授权" }));
+    await user.click(screen.getByRole("button", { name: "Edit this grant" }));
 
-    expect(await screen.findByText("写入 · 发布 / 编辑")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Write · publish / edit"),
+    ).toBeInTheDocument();
     expect(screen.getByDisplayValue("releases/")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /^保\s*存$/ }));
+    await user.click(screen.getByRole("button", { name: /^Save$/ }));
 
     await waitFor(() => {
       expect(mockUpsertGrant).toHaveBeenCalledWith({
@@ -287,13 +293,13 @@ describe("UserRepositoryAccessPanel", () => {
 
     expect(await screen.findByText("releases/")).toBeInTheDocument();
     await user.click(
-      screen.getAllByRole("button", { name: "编辑该条授权" })[0],
+      screen.getAllByRole("button", { name: "Edit this grant" })[0],
     );
     const prefixInput = await screen.findByDisplayValue("releases/");
     // One change event replaces the whole prefix; clearing first would unmount
     // the prefix fields while the value is empty.
     fireEvent.change(prefixInput, { target: { value: "stable/" } });
-    await user.click(screen.getByRole("button", { name: /^保\s*存$/ }));
+    await user.click(screen.getByRole("button", { name: /^Save$/ }));
 
     // The old row goes first, or the edit would fork one grant into two and a
     // failure would leave the grant wider than asked for; the account's
@@ -335,14 +341,14 @@ describe("UserRepositoryAccessPanel", () => {
     renderPanel();
 
     expect(await screen.findByText("releases/")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "编辑该条授权" }));
+    await user.click(screen.getByRole("button", { name: "Edit this grant" }));
     const prefixInput = await screen.findByDisplayValue("releases/");
     fireEvent.change(prefixInput, { target: { value: "stable/" } });
-    await user.click(screen.getByRole("button", { name: /^保\s*存$/ }));
+    await user.click(screen.getByRole("button", { name: /^Save$/ }));
 
     expect(
       await screen.findByText(
-        "原资源范围的授权删除失败，新授权未保存，请重试。",
+        "The previous resource scope could not be removed, so the new grant was not saved. Please retry.",
       ),
     ).toBeInTheDocument();
     expect(mockUpsertGrant).not.toHaveBeenCalled();
@@ -360,11 +366,11 @@ describe("UserRepositoryAccessPanel", () => {
     const user = userEvent.setup();
     renderPanel();
 
-    await user.click(await screen.findByRole("button", { name: /添加授权/ }));
+    await user.click(await screen.findByRole("button", { name: /Add grant/ }));
     await user.click(screen.getByRole("combobox"));
     await user.click(await screen.findByText("artifacts · raw"));
-    await screen.findByText("读取 · 浏览 / 拉取");
-    await user.click(screen.getByRole("button", { name: /^保\s*存$/ }));
+    await screen.findByText("Read · browse / pull");
+    await user.click(screen.getByRole("button", { name: /^Save$/ }));
 
     expect(await screen.findByText("upsert failed")).toBeInTheDocument();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -388,9 +394,9 @@ describe("UserRepositoryAccessPanel", () => {
 
     expect(await screen.findByText("releases/")).toBeInTheDocument();
     await user.click(
-      screen.getAllByRole("button", { name: "移除仓库授权" })[0],
+      screen.getAllByRole("button", { name: "Remove repository grant" })[0],
     );
-    await user.click(await screen.findByRole("button", { name: /^移\s*除$/ }));
+    await user.click(await screen.findByRole("button", { name: /^Remove$/ }));
 
     await waitFor(() => {
       expect(mockDeleteGrant).toHaveBeenCalledTimes(2);
@@ -405,7 +411,9 @@ describe("UserRepositoryAccessPanel", () => {
     });
     // The other principal's entry is never deleted or resubmitted.
     expect(mockUpsertGrant).not.toHaveBeenCalled();
-    expect(await screen.findByText("仓库授权已移除")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Repository grant removed"),
+    ).toBeInTheDocument();
   });
 
   it("tolerates rows a concurrent removal already deleted", async () => {
@@ -430,15 +438,17 @@ describe("UserRepositoryAccessPanel", () => {
 
     expect(await screen.findByText("releases/")).toBeInTheDocument();
     await user.click(
-      screen.getAllByRole("button", { name: "移除仓库授权" })[0],
+      screen.getAllByRole("button", { name: "Remove repository grant" })[0],
     );
-    await user.click(await screen.findByRole("button", { name: /^移\s*除$/ }));
+    await user.click(await screen.findByRole("button", { name: /^Remove$/ }));
 
     // The already-gone row is skipped and the remaining row is still removed.
     await waitFor(() => {
       expect(mockDeleteGrant).toHaveBeenCalledTimes(2);
     });
-    expect(await screen.findByText("仓库授权已移除")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Repository grant removed"),
+    ).toBeInTheDocument();
   });
 
   it("warns before an edit moves the entry onto a prefix that already exists", async () => {
@@ -458,11 +468,13 @@ describe("UserRepositoryAccessPanel", () => {
 
     expect(await screen.findByText("releases/")).toBeInTheDocument();
     await user.click(
-      screen.getAllByRole("button", { name: "编辑该条授权" })[0],
+      screen.getAllByRole("button", { name: "Edit this grant" })[0],
     );
 
     expect(
-      screen.queryByText("该用户在此资源范围已有授权，保存将替换原有规则。"),
+      screen.queryByText(
+        "This user already holds a grant at this resource scope; saving replaces it.",
+      ),
     ).not.toBeInTheDocument();
 
     // One change event replaces the whole prefix; clearing first would unmount
@@ -473,7 +485,7 @@ describe("UserRepositoryAccessPanel", () => {
 
     expect(
       await screen.findByText(
-        "该用户在此资源范围已有授权，保存将替换原有规则。",
+        "This user already holds a grant at this resource scope; saving replaces it.",
       ),
     ).toBeInTheDocument();
   });

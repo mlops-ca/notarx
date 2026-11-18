@@ -73,7 +73,7 @@ describe("protocol detail reads", () => {
       <CargoCrateDetail repoName="cargo" crateName="first" />,
     );
     await userEvent.click(
-      await screen.findByRole("button", { name: /下载 \.crate/ }),
+      await screen.findByRole("button", { name: /Download \.crate/ }),
     );
     expect(await screen.findByText("HTTP 410")).toBeVisible();
     rerender(ui("second"));
@@ -136,7 +136,7 @@ describe("protocol detail reads", () => {
       await screen.findAllByText(/503/);
       expect(screen.getByRole("combobox")).toBeVisible();
       fail = false;
-      await userEvent.click(screen.getByRole("button", { name: /重\s*试/ }));
+      await userEvent.click(screen.getByRole("button", { name: /Retry/ }));
       await waitFor(() =>
         expect(screen.queryByText(/503/)).not.toBeInTheDocument(),
       );
@@ -190,7 +190,9 @@ describe("protocol detail reads", () => {
     const { onAuthFailure } = renderWithClient(
       <NpmPackageDetail repoName="npm" packageName="private-widget" />,
     );
-    expect(await screen.findByText("读取 npm 包失败 (403)")).toBeVisible();
+    expect(
+      await screen.findByText("Failed to load npm package (403)"),
+    ).toBeVisible();
     // A refusal is final: no second request, and the session stays.
     expect(
       fetchMock.mock.calls.filter(([input]) => input !== "/auth/session"),
@@ -198,7 +200,7 @@ describe("protocol detail reads", () => {
     expect(onAuthFailure).not.toHaveBeenCalled();
 
     refuse = false;
-    await userEvent.click(screen.getByRole("button", { name: /重\s*试/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Retry/ }));
     expect(await screen.findByText("private-widget@1.0.0")).toBeVisible();
   });
 
@@ -212,7 +214,9 @@ describe("protocol detail reads", () => {
       });
 
     renderWithClient(<NpmPackageDetail repoName="npm" packageName="widget" />);
-    expect(await screen.findByText("读取 npm 包失败 (503)")).toBeVisible();
+    expect(
+      await screen.findByText("Failed to load npm package (503)"),
+    ).toBeVisible();
     expect(
       fetchMock.mock.calls.filter(([input]) => input !== "/auth/session"),
     ).toHaveLength(2);
@@ -230,7 +234,9 @@ describe("protocol detail reads", () => {
     renderWithClient(
       <GoModuleDetail repoName="go" modulePath="example.com/widget" />,
     );
-    expect(await screen.findByText("读取版本信息失败 (404)")).toBeVisible();
+    expect(
+      await screen.findByText("Failed to load version info (404)"),
+    ).toBeVisible();
     // The digest is optional evidence: its failure adds no error of its own.
     expect(screen.getAllByText(/v1\.1\.0/).length).toBeGreaterThan(0);
   });
@@ -249,7 +255,7 @@ describe("protocol detail reads", () => {
 
     renderWithClient(<CargoCrateDetail repoName="cargo" crateName="demo" />);
     await user.click(
-      await screen.findByRole("button", { name: /下载 \.crate/ }),
+      await screen.findByRole("button", { name: /Download \.crate/ }),
     );
     expect(await screen.findByText("HTTP 410")).toBeVisible();
     expect(screen.getAllByText(/1\.0\.0/).length).toBeGreaterThan(0);

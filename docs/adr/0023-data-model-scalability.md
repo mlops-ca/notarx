@@ -21,7 +21,7 @@ estimate until slice 17 produces numbers.
   secondary indexes: `000002`, `000049`, `000064` BRIN, `000073`, `000134`; the
   `000049` and BRIN indexes are subsumed by `000073`) and upserts
   `artifact_usage_stats` (`postgres_artifact_usage.go`). At 1k req/s that is 1k
-  commits/s, and every download of one popular artifact serialises on one row.
+  commits/s, and every download of one popular artifact serializes on one row.
   `FindActiveAPIKeyByHash` (`postgres_api_keys.go:42`) runs `UPDATE api_keys SET
   last_used_at=now()` per request, so one CI key is a 1k writes/s hot row.
 - **Retention.** `audit_retention_policy` defaults to `enabled=false, keep_days=0`
@@ -39,7 +39,7 @@ estimate until slice 17 produces numbers.
   replaced in `000076`, `000080`, `000081`, `000090`, `000110`, `000126`,
   `000131`) runs `SELECT ... FOR UPDATE` on the quota row and then `SUM()`s the
   whole repository from `AFTER INSERT OR UPDATE ... FOR EACH ROW` triggers:
-  O(assets) per inserted row, serialised per repository.
+  O(assets) per inserted row, serialized per repository.
 - **Untyped keys.** About 600 non-test queries compare `col::text = $n` on uuid
   columns (604 by `grep -rn '::text *= *\$' internal`, for example
   `postgres_lifecycle.go:30,44,96`), which defeats the btree on `lifecycle_jobs`,
@@ -426,7 +426,7 @@ workload issuers, trust policies and JWKS (ADR 0019), signing-key sets (ADR 0020
 quarantine state, and the verified-token result keyed by `sha256(token)` until
 `min(exp, TTL)`.
 
-- **Revocation SLO.** Any change to authorisation-relevant state (key revoked,
+- **Revocation SLO.** Any change to authorization-relevant state (key revoked,
   user disabled, grant removed, group membership changed, policy disabled,
   quarantine) is effective on every node within `NOTARX_AUTHZ_CACHE_TTL`
   (default 5s, validated range 1s to 30s, or `0` which disables every cache for
@@ -716,7 +716,7 @@ v0.1.0 land after the cut-over and before ADR 0015 slice 7 (re-squash).
     - [ ] validation moved to Go with tests for each dropped CHECK
     - [ ] `make test`, `make lint`, `make integration-test`
     - Depends on: slice 4.
-11. **Externalise large payloads.** Milestone: Data scale.
+11. **Externalize large payloads.** Milestone: Data scale.
     - Scope: `internal/objectstore` meta namespace, writers and readers for the payload kinds of section 9, mark-and-sweep job, `NOTARX_INLINE_MAX_BYTES`.
     - [ ] payload above and below the threshold round-trips on filesystem and S3 drivers (ADR 0017 contract suite)
     - [ ] sweep never deletes referenced objects (race test with concurrent publish)

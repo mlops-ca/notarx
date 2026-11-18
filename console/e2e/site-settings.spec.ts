@@ -128,7 +128,9 @@ test("site identity and theme transition stay coordinated across desktop and mob
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/site-settings");
-  await expect(page.getByRole("heading", { name: "站点设置" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Site settings" }),
+  ).toBeVisible();
   await expect(page.locator(".ag-sider-desktop")).toContainText("Forge Harbor");
 
   const desktopGeometry = await page
@@ -196,7 +198,7 @@ test("site identity and theme transition stay coordinated across desktop and mob
   ).toBeLessThanOrEqual(1);
   expect(desktopGeometry.horizontalOverflow).toBeLessThanOrEqual(0);
 
-  await page.getByLabel("站点名称").fill("Forge Harbor preview");
+  await page.getByLabel("Site name").fill("Forge Harbor preview");
   await page.getByRole("button", { name: /notarx Dark/ }).click();
   await page.getByRole("menuitem", { name: /notarx Light/ }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
@@ -225,16 +227,16 @@ test("site identity and theme transition stay coordinated across desktop and mob
     transitionState.commit?.primaryRoleBackground,
   );
 
-  const siteName = page.getByLabel("站点名称");
-  const brandMark = page.getByLabel("品牌标识");
+  const siteName = page.getByLabel("Site name");
+  const brandMark = page.getByLabel("Brand mark");
   await siteName.fill("Acme Packages");
   await brandMark.fill("AC");
-  await page.getByRole("button", { name: "保存并应用" }).click();
+  await page.getByRole("button", { name: "Save and apply" }).click();
   await expect(page.locator(".ag-sider-desktop")).toContainText(
     "Acme Packages",
   );
   await expect(page).toHaveTitle("Acme Packages Console");
-  await expect(page.getByText("站点设置已生效")).toBeVisible();
+  await expect(page.getByText("Site settings are live")).toBeVisible();
 
   if (process.env.CAPTURE_LAYOUT_EVIDENCE === "1") {
     await page.screenshot({
@@ -245,7 +247,9 @@ test("site identity and theme transition stay coordinated across desktop and mob
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
-  await expect(page.getByRole("heading", { name: "站点设置" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Site settings" }),
+  ).toBeVisible();
   const mobileGeometry = await page
     .locator(".ag-site-settings-workspace")
     .evaluate((workspace) => {

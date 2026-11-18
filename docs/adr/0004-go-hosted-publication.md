@@ -70,7 +70,7 @@ cross-host redirects. Every other format and Repository type rejects
 Update (2026-10-20): #423/#424 extend the same protected `upstreamAuth` model
 to Maven and OCI Proxy repositories. The earlier Go-only admission statement
 above describes its original delivery. Current supported schemes, bound OCI
-issuer behavior, rotation/clear and credential-bound cache semantics are in
+issuer behaviour, rotation/clear and credential-bound cache semantics are in
 [Proxy egress and upstream authentication](../proxy-egress-design.md#protected-maven-and-oci-upstreams).
 Go follows the same destination binding rule: changing the endpoint while
 retaining Basic/Bearer authentication requires an explicit fresh secret or

@@ -7,7 +7,7 @@ identity, publication, retrieval and verification, audit) and platform
 management (identity and authority, repositories and Groups, data governance,
 configuration policy, logs/audit/diagnostics/capacity, alerts and
 notifications, asynchronous operations and local entry points). Resource
-commands, HTTP/JSON behavior, credentials, and permissions exist once; agents
+commands, HTTP/JSON behaviour, credentials, and permissions exist once; agents
 use the same introspection for both views.
 
 This page classifies the full contract; it does not describe the installed
@@ -55,7 +55,7 @@ must be rejected truthfully, and the CLI adds no authorization:
   where impersonating another subject needs platform admin.
 - A: platform admin; R/W/RA/RI: the repository's
   repositories:read/write/admin/intelligence (the server keeps its existing
-  platform-admin behavior).
+  platform-admin behaviour).
 - R*: the read authorization of the repository/Group browse helper plus an
   explicitly configured anonymous read branch; it must not be anonymous by
   default.
@@ -77,7 +77,7 @@ operationId, known literal expectations, and a real isolated Gateway E2E — not
 just an HTTP 200:
 
 - Q: exact schema/fields/visibility, real pagination range and cursor, empty
-  results and permission denial, honoring the #125 partial-result/unknown
+  results and permission denial, honouring the #125 partial-result/unknown
   contract.
 - W: read state/audit back through existing read entry points after a change;
   no permission, wrong input, dangerous confirmations, and client-plan dry-run

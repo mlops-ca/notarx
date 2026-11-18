@@ -1,6 +1,4 @@
-import type { LibMessageKey } from "./lib.zh-CN";
-
-export const libEnUS: Record<LibMessageKey, string> = {
+export const libEnCA = {
   "lib.mavenRepositoryURL": "Maven repository URL",
   "lib.oCIRegistryAddress": "OCI registry address",
   "lib.dockerRegistrySetup": "Docker registry setup",
@@ -31,3 +29,5 @@ export const libEnUS: Record<LibMessageKey, string> = {
   "lib.failedToReadOciManifestStatus":
     "Failed to read the OCI manifest ({status})",
 };
+
+export type LibMessageKey = keyof typeof libEnCA;

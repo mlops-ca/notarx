@@ -1,16 +1,17 @@
 # Runtime log outputs and history design
 
+<!-- cspell:disable-next-line -->
 [简体中文](runtime-log-product-design.zh-CN.md) | [Current logging behavior](runtime-logging.md) | [Documentation index](README.md)
 
 > Status: output direction agreed on 2026-10-01: optional **files and OTLP Logs**, with stdout preserved. This document separates that direction from the remaining history/query decisions tracked by [#151](https://github.com/mlops-ca/notarx/issues/151) and [#152](https://github.com/mlops-ca/notarx/issues/152). File output is implemented in [#194](https://github.com/mlops-ca/notarx/pull/194); optional OTLP/HTTP protobuf configuration and delivery bounds are documented in [runtime logging](runtime-logging.md). Neither output adds Console history or completes multi-node/restart deployment acceptance. No log backend or collector product is selected here.
 
-## 1. Current behavior and shared events
+## 1. Current behaviour and shared events
 
 Administrators need to identify which API or Worker process failed, follow a request or job, and retain evidence across restarts. Runtime events support troubleshooting; audit records remain operation evidence in PostgreSQL with their own retention policy.
 
 `internal/operationalog/logger.go` emits one redacted JSON object per line. The shared fields are `time`, `level`, `msg`, `instanceId`, `sessionId`, `component`, `operation`, `requestId`, and `traceId`. Request and job correlation already use these fields. The three destinations share that source and redaction boundary; an output must preserve structured groups and ordinary attributes. No additional `eventId`, source taxonomy, global sequence, or truncation rule is required by the output batches.
 
-`cmd/notarx/main.go` owns output cleanup after existing HTTP and business-resource cleanup. The default stdout and process-local buffer are borrowed destinations: closing output is a no-op for them. Resource-owning outputs supply their own flush/close behavior; repeated close is safe, and one cleanup error does not skip the other callback.
+`cmd/notarx/main.go` owns output cleanup after existing HTTP and business-resource cleanup. The default stdout and process-local buffer are borrowed destinations: closing output is a no-op for them. Resource-owning outputs supply their own flush/close behaviour; repeated close is safe, and one cleanup error does not skip the other callback.
 
 `internal/app/runtime_logs_api.go` still serves `GET /api/v2/runtime/logs` from memory only. It returns `scope=local`, `instanceId`, `sessionId`, and a process-local `beforeSequence` cursor. Only platform administrators may query; accounts required to change their password are denied before buffer availability is evaluated. A disabled buffer or a different requested instance returns 503. Restart clears the buffer. Its 16 KiB line limit is a buffer admission limit, not a universal event-size or text-truncation policy.
 
@@ -35,13 +36,13 @@ Both modes are off by default and may be enabled independently or together. Stdo
 | --- | --- | --- |
 | Files | Gateway writes the same redacted NDJSON to a deployment-provided writable directory; it owns only its private session files. | Saved bytes remain after process restart on a durable volume, but the Console has no file-history reader yet. |
 | OTLP Logs | Gateway exports structured records through OTLP/HTTP protobuf to a configured receiver, with bounded admission/retries, safe diagnostics and explicit protocol cleanup budgets. | OTLP is an export protocol. Receiver storage, retention and search are separate capabilities; an export endpoint is not a query endpoint. |
-| Stdout/local buffer | Existing default behavior and Docker/node rotation continue. | The buffer is temporary and per process; container rotation is not retained cluster search. |
+| Stdout/local buffer | Existing default behaviour and Docker/node rotation continue. | The buffer is temporary and per process; container rotation is not retained cluster search. |
 
-The repository does not bundle Loki, Alloy, or a log database as the baseline. A deployment may use an existing receiver or observability platform. A future Gateway search adapter needs evidence for that backend's read API, authentication, pagination, retention and failure behavior before selection. Write and query credentials remain separate, server-side configuration.
+The repository does not bundle Loki, Alloy, or a log database as the baseline. A deployment may use an existing receiver or observability platform. A future Gateway search adapter needs evidence for that backend's read API, authentication, pagination, retention and failure behaviour before selection. Write and query credentials remain separate, server-side configuration.
 
 ## 3. File rotation and retention boundary
 
-See [runtime logging](runtime-logging.md) for the authoritative file configuration and failure behavior. The configurable starting defaults are 100 MiB per segment, 10 sealed backups and 7 days for sealed-segment age. They are conservative values, not measurements of this deployment's capacity.
+See [runtime logging](runtime-logging.md) for the authoritative file configuration and failure behaviour. The configurable starting defaults are 100 MiB per segment, 10 sealed backups and 7 days for sealed-segment age. They are conservative values, not measurements of this deployment's capacity.
 
 Each output creates a private `gateway-*` session directory with a complete-line `active.ndjson` file and numbered sealed segments. Rotation happens before adding a complete event would exceed the configured limit. Successful writes call Sync; partial-write rollback failure stops further writes to the damaged segment. Normal exit flushes/closes output after runtime resource cleanup. Synchronous file writes may delay callers; Sync is not a zero-loss guarantee for power failure, SIGKILL or filesystem directory-entry recovery.
 
@@ -53,9 +54,9 @@ File-history work must decide whether to read active files or only sealed segmen
 
 ## 4. OTLP delivery and failure validation
 
-OTLP Logs configuration must remain separate from existing trace-export configuration and must leave tracing behavior unchanged. Endpoint, TLS trust and optional headers are server-side configuration. Credentials and raw receiver errors must not enter log attributes, fallback messages, query responses or the browser.
+OTLP Logs configuration must remain separate from existing trace-export configuration and must leave tracing behaviour unchanged. Endpoint, TLS trust and optional headers are server-side configuration. Credentials and raw receiver errors must not enter log attributes, fallback messages, query responses or the browser.
 
-The independent OTLP batch must verify protocol-native timestamp/severity/body, core fields, groups and correlation attributes using a synthetic local receiver. Export admission is distinct from receiver acknowledgement and durable storage. Queue capacity, overflow behavior, retryable/permanent failures, partial success and shutdown deadlines need explicit tests and documentation; an asynchronous acknowledgement cannot be described as guaranteed delivery.
+The independent OTLP batch must verify protocol-native timestamp/severity/body, core fields, groups and correlation attributes using a synthetic local receiver. Export admission is distinct from receiver acknowledgement and durable storage. Queue capacity, overflow behaviour, retryable/permanent failures, partial success and shutdown deadlines need explicit tests and documentation; an asynchronous acknowledgement cannot be described as guaranteed delivery.
 
 Failures in one optional destination must leave the existing stdout/buffer path usable and must not skip another configured destination. Failure reporting uses independent stderr, redacted messages and bounded reporting frequency, avoiding recursion through the failed log output. Enabled-output initialization errors fail startup before business resources open; runtime delivery errors do not silently change the existing process exit policy. No persistent retry journal or cross-output delivery transaction is promised.
 
@@ -71,7 +72,7 @@ The current `GET /api/v2/runtime/logs` endpoint and administrator/password-chang
 
 A history cursor must carry stable source/session/segment/offset identity and a deterministic tie-break. It cannot reuse the memory buffer's `sequence` across restarts. Specify truncated tails, corrupt lines, replaced or missing segments, expired cursors, files deleted during paging, read budgets and snapshot boundaries. External paging similarly needs backend-specific stable ordering and duplicate/boundary handling.
 
-Before implementing a history API, update OpenAPI and define bounds for time ranges, page size, execution time and administrator rate limits. Backend addresses, credentials and raw query languages stay server-side. New routes, response fields, timeouts, retention promises and cross-node behavior remain decisions for that contract rather than claims made by this document.
+Before implementing a history API, update OpenAPI and define bounds for time ranges, page size, execution time and administrator rate limits. Backend addresses, credentials and raw query languages stay server-side. New routes, response fields, timeouts, retention promises and cross-node behaviour remain decisions for that contract rather than claims made by this document.
 
 ## 6. Future Console experience and security
 
@@ -84,7 +85,7 @@ Check platform-administrator authorization and forced-password-change status on 
 ## 7. Delivery and acceptance
 
 1. Merge the independently reviewed line/attribute, sensitive-group, query-permission and lifecycle batches. Verify each new head and combined main rather than inheriting older green CI.
-2. Validate optional file rotation/retention/failure behavior and OTLP protocol/queue/TLS/retry/shutdown behavior separately, while preserving stdout and existing query semantics.
+2. Validate optional file rotation/retention/failure behaviour and OTLP protocol/queue/TLS/retry/shutdown behaviour separately, while preserving stdout and existing query semantics.
 3. Resolve the history-source, cross-session ownership/retention and external-search decisions above. Then implement the OpenAPI, reader/query adapter and Console capabilities in small verifiable batches.
 4. Perform deployment acceptance with persistent mounts and at least two API nodes plus a dedicated Worker: correlate request/job events, restart processes, read retained evidence, exercise outages and expiry, and reconcile gaps under measured load. Local synthetic tests and CI do not satisfy this acceptance.
 

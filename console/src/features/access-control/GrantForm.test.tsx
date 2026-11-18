@@ -17,22 +17,22 @@ vi.mock("../../client", () => ({
 }));
 
 const principalChoices: PrincipalOption[] = [
-  { value: "user:alice", label: "用户 · alice", detail: "全局角色 member" },
+  { value: "user:alice", label: "User · alice", detail: "Global role member" },
   {
     value: "api-key:key-1",
     label: "API Key · deploy",
-    detail: "全局角色 admin",
+    detail: "Global role admin",
   },
   {
     value: "service-account:sa-1",
-    label: "服务账号 · release-bot",
-    detail: "无全局角色，由仓库授权决定",
+    label: "Service account · release-bot",
+    detail: "No global role; repository grants decide",
   },
 ];
 
 const releaseRole: AuthorizationRole = {
   id: "role-release",
-  name: "发布机器人",
+  name: "Release publisher",
   scopes: ["repositories:read", "repositories:write"],
   version: "1",
   createdAt: "2026-08-18T00:00:00Z",
@@ -83,16 +83,16 @@ describe("GrantForm", () => {
   it("labels every field where the administrator reads it", () => {
     renderForm(draft());
 
-    expect(screen.getByText("授权主体")).toBeInTheDocument();
-    expect(screen.getByText("权限级别")).toBeInTheDocument();
-    expect(screen.getByText("资源范围")).toBeInTheDocument();
-    expect(screen.getByText("本规则授予")).toBeInTheDocument();
+    expect(screen.getByText("Principal")).toBeInTheDocument();
+    expect(screen.getByText("Permission")).toBeInTheDocument();
+    expect(screen.getByText("Resource scope")).toBeInTheDocument();
+    expect(screen.getByText("Granted by this rule")).toBeInTheDocument();
     // Each visible label is also the control's accessible name.
     expect(
-      screen.getByRole("combobox", { name: "授权主体" }),
+      screen.getByRole("combobox", { name: "Principal" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("combobox", { name: "权限级别" }),
+      screen.getByRole("combobox", { name: "Permission" }),
     ).toBeInTheDocument();
   });
 
@@ -100,12 +100,14 @@ describe("GrantForm", () => {
     const user = userEvent.setup();
     renderForm(draft({ principal: "" }));
 
-    await user.click(screen.getByRole("combobox", { name: "授权主体" }));
+    await user.click(screen.getByRole("combobox", { name: "Principal" }));
 
-    expect(screen.getByText(/用户 · alice/)).toBeInTheDocument();
+    expect(screen.getByText(/User · alice/)).toBeInTheDocument();
     expect(screen.getByText(/API Key · deploy/)).toBeInTheDocument();
-    expect(screen.getByText(/服务账号 · release-bot/)).toBeInTheDocument();
-    expect(screen.getByText(/OIDC \/ 自定义 actor/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Service account · release-bot/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/OIDC \/ custom actor/)).toBeInTheDocument();
   });
 
   it("names principal options for screen readers by their readable label", async () => {
@@ -113,11 +115,11 @@ describe("GrantForm", () => {
     renderForm(draft({ principal: "" }));
     // Searching leaves the service account as the announced option.
     await user.type(
-      screen.getByRole("combobox", { name: "授权主体" }),
+      screen.getByRole("combobox", { name: "Principal" }),
       "release",
     );
     expect(
-      screen.getByRole("option", { name: /^服务账号 · release-bot/ }),
+      screen.getByRole("option", { name: /^Service account · release-bot/ }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("option", { name: /service-account:/ }),
@@ -128,7 +130,7 @@ describe("GrantForm", () => {
     renderForm(draft(), [], { lockPrincipal: true });
 
     expect(
-      screen.queryByRole("combobox", { name: "授权主体" }),
+      screen.queryByRole("combobox", { name: "Principal" }),
     ).not.toBeInTheDocument();
     expect(screen.getByText("user:alice")).toBeInTheDocument();
   });
@@ -137,8 +139,8 @@ describe("GrantForm", () => {
     const user = userEvent.setup();
     const { onChange } = renderForm(draft(), [releaseRole]);
 
-    await user.click(screen.getByRole("combobox", { name: "权限级别" }));
-    await user.click(screen.getByText("发布机器人"));
+    await user.click(screen.getByRole("combobox", { name: "Permission" }));
+    await user.click(screen.getByText("Release publisher"));
 
     const next = lastChange(onChange);
     expect(next?.scopes).toEqual(["repositories:read", "repositories:write"]);
@@ -153,8 +155,8 @@ describe("GrantForm", () => {
       releaseRole,
     ]);
 
-    await user.click(screen.getByRole("combobox", { name: "权限级别" }));
-    await user.click(screen.getByText("写入 · 发布 / 编辑"));
+    await user.click(screen.getByRole("combobox", { name: "Permission" }));
+    await user.click(screen.getByText("Write · publish / edit"));
 
     const next = lastChange(onChange);
     expect(next?.scopes).toEqual(["repositories:write"]);
@@ -166,7 +168,7 @@ describe("GrantForm", () => {
     const user = userEvent.setup();
     const { onChange } = renderForm(draft({ resourcePrefix: "" }));
 
-    await user.click(screen.getByText("限定范围"));
+    await user.click(screen.getByText("Limit by prefix"));
 
     expect(lastChange(onChange)?.resourcePrefix).toBe("releases/");
   });

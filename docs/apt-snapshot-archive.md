@@ -92,7 +92,7 @@ Parent [#30](https://github.com/mlops-ca/notarx/issues/30) uses these fixed refe
 | promotion.go / replication.go / scanning and quarantine | [#39](https://github.com/mlops-ca/notarx/issues/39): separate PRs against current scan identity, admission, and Worker contracts. Rebuild and sign destination metadata instead of copying the source Release as destination authority. |
 | Old OpenAPI, generated code, docs, and public capability claims | Regenerate or rewrite against current mainline. Discard the old public Hosted release-candidate claim; preserve H3/KMS/HSM and Group aggregate-signing boundaries. Do not revert current error wrapping, Go/Maven, or Console fixes. |
 
-Completing stage one does not delete the old branch. Cleanup requires migration or explicit retirement of every valuable behavior and a recorded recovery SHA.
+Completing stage one does not delete the old branch. Cleanup requires migration or explicit retirement of every valuable behaviour and a recorded recovery SHA.
 
 ## Validation Entrypoints
 

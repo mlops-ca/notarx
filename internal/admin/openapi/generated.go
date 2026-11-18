@@ -4292,6 +4292,39 @@ func (e RuntimeNodeHealthStatus) Valid() bool {
 	}
 }
 
+// Defines values for RuntimeNodeHealthIssueCode.
+const (
+	RuntimeNodeIssueApiUnavailable       RuntimeNodeHealthIssueCode = "api_unavailable"
+	RuntimeNodeIssueBuildIdentityUnknown RuntimeNodeHealthIssueCode = "build_identity_unknown"
+	RuntimeNodeIssueDuplicateInstanceId  RuntimeNodeHealthIssueCode = "duplicate_instance_id"
+	RuntimeNodeIssueMixedBuild           RuntimeNodeHealthIssueCode = "mixed_build"
+	RuntimeNodeIssueSchedulerUnavailable RuntimeNodeHealthIssueCode = "scheduler_unavailable"
+	RuntimeNodeIssueStaleNodes           RuntimeNodeHealthIssueCode = "stale_nodes"
+	RuntimeNodeIssueWorkerUnavailable    RuntimeNodeHealthIssueCode = "worker_unavailable"
+)
+
+// Valid indicates whether the value is a known member of the RuntimeNodeHealthIssueCode enum.
+func (e RuntimeNodeHealthIssueCode) Valid() bool {
+	switch e {
+	case RuntimeNodeIssueApiUnavailable:
+		return true
+	case RuntimeNodeIssueBuildIdentityUnknown:
+		return true
+	case RuntimeNodeIssueDuplicateInstanceId:
+		return true
+	case RuntimeNodeIssueMixedBuild:
+		return true
+	case RuntimeNodeIssueSchedulerUnavailable:
+		return true
+	case RuntimeNodeIssueStaleNodes:
+		return true
+	case RuntimeNodeIssueWorkerUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RuntimeNodeHealthIssueSeverity.
 const (
 	RuntimeNodeHealthIssueSeverityError   RuntimeNodeHealthIssueSeverity = "error"
@@ -8618,11 +8651,18 @@ type RuntimeNodeHealthStatus string
 // RuntimeNodeHealthIssue defines model for RuntimeNodeHealthIssue.
 type RuntimeNodeHealthIssue struct {
 	// AffectedNodes Session IDs of nodes involved in this issue.
-	AffectedNodes *[]string                      `json:"affectedNodes,omitempty"`
-	Code          string                         `json:"code"`
-	Message       string                         `json:"message"`
-	Severity      RuntimeNodeHealthIssueSeverity `json:"severity"`
+	AffectedNodes *[]string `json:"affectedNodes,omitempty"`
+
+	// Code Stable issue code. The Console localizes by code and falls back to the English message for a code it does not know; new codes may be added, so clients must tolerate values outside this list.
+	Code RuntimeNodeHealthIssueCode `json:"code"`
+
+	// Message English text for logs and for clients that do not know the code; the server does not localize it.
+	Message  string                         `json:"message"`
+	Severity RuntimeNodeHealthIssueSeverity `json:"severity"`
 }
+
+// RuntimeNodeHealthIssueCode Stable issue code. The Console localizes by code and falls back to the English message for a code it does not know; new codes may be added, so clients must tolerate values outside this list.
+type RuntimeNodeHealthIssueCode string
 
 // RuntimeNodeHealthIssueSeverity defines model for RuntimeNodeHealthIssue.Severity.
 type RuntimeNodeHealthIssueSeverity string

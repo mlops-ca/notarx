@@ -55,19 +55,19 @@ describe("RawUploadDialog", () => {
       </PreferencesProvider>,
     );
 
-    await user.click(screen.getByRole("button", { name: /上传$/ }));
+    await user.click(screen.getByRole("button", { name: /Upload$/ }));
     const dialog = screen.getByRole("dialog");
     const fileInput =
       document.querySelector<HTMLInputElement>('input[type="file"]');
     expect(fileInput).not.toBeNull();
-    const fileName = "ChatGPT Image 2026年8月19日 13_56_07 (1).png";
+    const fileName = "Écran capturé 2026-08-19 13_56_07 (1).png";
     const file = new File(["image"], fileName, { type: "image/png" });
     await user.upload(fileInput!, file);
-    await user.click(within(dialog).getByRole("button", { name: /上\s*传/ }));
+    await user.click(within(dialog).getByRole("button", { name: /Upload/ }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
     expect(fetchMock).toHaveBeenCalledWith(
-      "/raw/raw-releases/ChatGPT%20Image%202026%E5%B9%B48%E6%9C%8819%E6%97%A5%2013_56_07%20%281%29.png",
+      "/raw/raw-releases/%C3%89cran%20captur%C3%A9%202026-08-19%2013_56_07%20%281%29.png",
       expect.objectContaining({ method: "PUT", body: file }),
     );
   });
@@ -82,22 +82,24 @@ describe("RawUploadDialog", () => {
       </PreferencesProvider>,
     );
 
-    await user.click(screen.getByRole("button", { name: /上传$/ }));
+    await user.click(screen.getByRole("button", { name: /Upload$/ }));
     const dialog = screen.getByRole("dialog");
     const fileInput =
       document.querySelector<HTMLInputElement>('input[type="file"]');
     expect(fileInput).not.toBeNull();
     await user.upload(fileInput!, new File(["image"], "image.png"));
-    await user.clear(within(dialog).getByRole("textbox", { name: "目标路径" }));
+    await user.clear(
+      within(dialog).getByRole("textbox", { name: "Target path" }),
+    );
     await user.type(
-      within(dialog).getByRole("textbox", { name: "目标路径" }),
+      within(dialog).getByRole("textbox", { name: "Target path" }),
       "releases/../image.png",
     );
-    await user.click(within(dialog).getByRole("button", { name: /上\s*传/ }));
+    await user.click(within(dialog).getByRole("button", { name: /Upload/ }));
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(
-      await within(dialog).findByText(/目标路径无效.*不能使用.*\.\..*路径段/),
+      await within(dialog).findByText(/Invalid target path.*dot-dot/),
     ).toBeInTheDocument();
   });
 
@@ -113,15 +115,17 @@ describe("RawUploadDialog", () => {
       </PreferencesProvider>,
     );
 
-    await user.click(screen.getByRole("button", { name: /上传$/ }));
+    await user.click(screen.getByRole("button", { name: /Upload$/ }));
     const dialog = screen.getByRole("dialog");
     const fileInput =
       document.querySelector<HTMLInputElement>('input[type="file"]');
     await user.upload(fileInput!, new File(["image"], "image.png"));
-    const pathInput = within(dialog).getByRole("textbox", { name: "目标路径" });
+    const pathInput = within(dialog).getByRole("textbox", {
+      name: "Target path",
+    });
     await user.clear(pathInput);
     await user.type(pathInput, "/rust/omz-tui-source-v0.1.0-dev.tar.gz");
-    await user.click(within(dialog).getByRole("button", { name: /上\s*传/ }));
+    await user.click(within(dialog).getByRole("button", { name: /Upload/ }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
     expect(fetchMock).toHaveBeenCalledWith(
@@ -142,16 +146,18 @@ describe("RawUploadDialog", () => {
       </PreferencesProvider>,
     );
 
-    await user.click(screen.getByRole("button", { name: /上传$/ }));
+    await user.click(screen.getByRole("button", { name: /Upload$/ }));
     const dialog = screen.getByRole("dialog");
     const fileInput =
       document.querySelector<HTMLInputElement>('input[type="file"]');
     const file = new File(["image"], "image.png");
     await user.upload(fileInput!, file);
-    const pathInput = within(dialog).getByRole("textbox", { name: "目标路径" });
+    const pathInput = within(dialog).getByRole("textbox", {
+      name: "Target path",
+    });
     await user.clear(pathInput);
     await user.type(pathInput, " release/image.png ");
-    await user.click(within(dialog).getByRole("button", { name: /上\s*传/ }));
+    await user.click(within(dialog).getByRole("button", { name: /Upload/ }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
     expect(fetchMock).toHaveBeenCalledWith(
@@ -172,20 +178,22 @@ describe("RawUploadDialog", () => {
       </PreferencesProvider>,
     );
 
-    await user.click(screen.getByRole("button", { name: /上传$/ }));
+    await user.click(screen.getByRole("button", { name: /Upload$/ }));
     const dialog = screen.getByRole("dialog");
     const fileInput =
       document.querySelector<HTMLInputElement>('input[type="file"]');
     expect(fileInput).not.toBeNull();
     await user.upload(fileInput!, new File(["image"], "image.png"));
-    await user.click(within(dialog).getByRole("button", { name: /上\s*传/ }));
+    await user.click(within(dialog).getByRole("button", { name: /Upload/ }));
 
     expect(
       await within(dialog).findByText(
-        /上传失败.*目标路径不符合 Raw 路径规则.*支持中文、空格和括号/,
+        /Upload failed.*does not follow the Raw path rules.*Unicode, spaces, and parentheses/,
       ),
     ).toBeInTheDocument();
-    expect(within(dialog).getByText("Raw 文件上传失败")).toBeInTheDocument();
+    expect(
+      within(dialog).getByText("Raw file upload failed"),
+    ).toBeInTheDocument();
     expect(
       within(dialog).queryByText(/invalid raw path/),
     ).not.toBeInTheDocument();
@@ -207,13 +215,13 @@ describe("RawUploadDialog", () => {
       </PreferencesProvider>,
     );
 
-    await user.click(screen.getByRole("button", { name: /上传$/ }));
+    await user.click(screen.getByRole("button", { name: /Upload$/ }));
     const dialog = screen.getByRole("dialog");
     const fileInput =
       document.querySelector<HTMLInputElement>('input[type="file"]');
     expect(fileInput).not.toBeNull();
     await user.upload(fileInput!, new File(["image"], "release.png"));
-    await user.click(within(dialog).getByRole("button", { name: /上\s*传/ }));
+    await user.click(within(dialog).getByRole("button", { name: /Upload/ }));
 
     clickMask();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -221,7 +229,7 @@ describe("RawUploadDialog", () => {
     settle(new Response("storage offline", { status: 503 }));
     expect(
       await within(screen.getByRole("dialog")).findByText(
-        /上传失败 \(503\): storage offline/,
+        /Upload failed \(503\): storage offline/,
       ),
     ).toBeInTheDocument();
 

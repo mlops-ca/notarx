@@ -29,7 +29,7 @@ format pages.
 
 ### P0: enterprise security and identity
 
-The review called for richer IdP role mapping and session/logout behavior;
+The review called for richer IdP role mapping and session/logout behaviour;
 path-aware selectors, role templates, permission explanation, credential
 expiry and last-use evidence; and observable baselines for password rotation,
 JWKS/issuer configuration, CSRF, SSRF, upload limits, and archive expansion.
@@ -55,7 +55,7 @@ ranges, cursor pagination, saved queries, and server-side CSV export.
    generated-client formatting step to prevent OpenAPI drift.
 2. Moved audit outcome, format, operation, and actor filters into OpenAPI,
    Memory/PostgreSQL stores, and the management API.
-3. Added a global Console Jobs center for lifecycle and audit-retention work,
+3. Added a global Console Jobs centre for lifecycle and audit-retention work,
    with failure detail and state/kind/repository filters.
 4. Extended retention from Maven to OCI, Conan, and Raw with format-aware
    candidates, cursor dry-runs, `If-Match`, and one worker path.
@@ -74,5 +74,5 @@ dry-run reason summaries and export.
 The review prioritized API-key expiry/last-used, OIDC role mapping, and a
 permission explainer; then server-side global search and real cursor paging;
 then broader Webhook events, email, SBOM/scan display, and more task types.
-It explicitly rejected unsafe hard deletion or unaudited background behavior
+It explicitly rejected unsafe hard deletion or unaudited background behaviour
 merely to imitate Nexus.

@@ -84,7 +84,7 @@ it.each([false, true])(
     const audience = await screen.findByDisplayValue("gateway-api");
     await user.clear(audience);
     await user.type(audience, "admin-private-audience");
-    await user.click(screen.getByRole("button", { name: /保存并应用/ }));
+    await user.click(screen.getByRole("button", { name: /Save and apply/ }));
     await waitFor(() => expect(replaceOidcSettings).toHaveBeenCalledTimes(1));
     auth.token = "";
     auth.identity = null;
@@ -128,7 +128,7 @@ it("retains an OIDC draft after a failed background 5xx read", async () => {
   });
   await screen.findByText("read unavailable");
   vi.mocked(getOidcSettings).mockResolvedValue({ data: saved } as never);
-  await user.click(screen.getByRole("button", { name: /重试/ }));
+  await user.click(screen.getByRole("button", { name: /Retry/ }));
   await waitFor(() =>
     expect(queryClient.getQueryState(oidcKey)?.error).toBeNull(),
   );

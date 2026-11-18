@@ -53,7 +53,7 @@ describe("SearchableVersionSelect", () => {
 
     render(
       <PreferencesProvider>
-        <MetadataItem label="摘要" value="sha256:abc" mono />
+        <MetadataItem label="Digest" value="sha256:abc" mono />
         <UsageSnippetBlock
           snippet={{ label: "Maven URL", code: "https://gateway.test/maven" }}
           copied={false}
@@ -66,7 +66,7 @@ describe("SearchableVersionSelect", () => {
       "title",
       "sha256:abc",
     );
-    await user.click(screen.getByRole("button", { name: "复制 Maven URL" }));
+    await user.click(screen.getByRole("button", { name: "Copy Maven URL" }));
     expect(onCopy).toHaveBeenCalledTimes(1);
   });
 });

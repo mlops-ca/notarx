@@ -25,6 +25,8 @@ test("administrator dashboard loads management data through the Console proxy", 
   );
   await page.goto("/");
   await statistics;
-  await expect(page.getByRole("heading", { name: "总览" })).toBeVisible();
-  await expect(page.getByText("仓库总数")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
+  await expect(
+    page.getByLabel("Page summary").getByText("Repositories"),
+  ).toBeVisible();
 });

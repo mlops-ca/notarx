@@ -1,6 +1,4 @@
-import type { SearchMessageKey } from "./search.zh-CN";
-
-export const searchEnUS: Record<SearchMessageKey, string> = {
+export const searchEnCA = {
   "search.artifactCoordinate": "Artifact / coordinate",
   "search.sHA256Match": "SHA-256 match",
   "search.coordinateMatch": "Coordinate match",
@@ -74,3 +72,5 @@ export const searchEnUS: Record<SearchMessageKey, string> = {
     "Loading more preserves current results",
   "search.endOfResults": "End of results",
 };
+
+export type SearchMessageKey = keyof typeof searchEnCA;

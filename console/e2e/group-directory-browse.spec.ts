@@ -155,12 +155,12 @@ for (const [width, theme] of [
     await tree.getByText("pipeline-sdk", { exact: true }).click();
     await tree.getByText("2.4.0", { exact: true }).click();
     await tree.getByText(asset.name, { exact: true }).click();
-    const inspector = page.getByRole("complementary", { name: "节点详情" });
+    const inspector = page.getByRole("complementary", { name: "Node details" });
     await expect(
-      inspector.getByRole("heading", { name: "本地来源 2" }),
+      inspector.getByRole("heading", { name: "Local sources 2" }),
     ).toBeVisible();
     await expect(
-      inspector.getByText("缓存范围 · maven-public", { exact: true }),
+      inspector.getByText("Cache scope · maven-public", { exact: true }),
     ).toBeVisible();
     await expect(
       inspector.getByRole("link", { name: sources[0].repositoryName }),
@@ -170,7 +170,7 @@ for (const [width, theme] of [
     ).toHaveAttribute("href", `/repositories/${proxyId}`);
     await expect(
       page
-        .getByRole("region", { name: "可见成员候选顺序" })
+        .getByRole("region", { name: "Visible member candidate order" })
         .getByRole("link", { name: "maven-central" }),
     ).toBeVisible();
     const [context, directory, left, right] = await Promise.all([
@@ -196,7 +196,7 @@ for (const [width, theme] of [
       fullPage: true,
     });
     failRefresh = true;
-    await page.getByRole("button", { name: "刷新", exact: true }).click();
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
     await expect(
       page.getByText("Navigation changed. Refresh the directory."),
     ).toBeVisible();
@@ -204,15 +204,19 @@ for (const [width, theme] of [
       inspector.getByRole("link", { name: sources[0].repositoryName }),
     ).toBeVisible();
     failRefresh = false;
-    await page.getByRole("button", { name: "刷新", exact: true }).click();
-    await expect(inspector.getByText("从目录中选择一项")).toBeVisible();
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
+    await expect(
+      inspector.getByText("Select an item in the directory"),
+    ).toBeVisible();
     await tree.getByText("com.aerok.platform", { exact: true }).click();
-    await page.getByRole("button", { name: "收起全部目录" }).click();
+    await page
+      .getByRole("button", { name: "Collapse all directories" })
+      .click();
     await expect(
       tree.getByText("pipeline-sdk", { exact: true }),
     ).not.toBeVisible();
     // Keyboard expansion remains native to the Tree, including reduced motion.
-    await page.getByRole("tree", { name: "制品目录树" }).focus();
+    await page.getByRole("tree", { name: "Artifact directory tree" }).focus();
     await page.keyboard.press("Home");
     await page.keyboard.press("ArrowRight");
     await expect(tree.getByText("pipeline-sdk", { exact: true })).toBeVisible();

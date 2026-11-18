@@ -114,7 +114,7 @@ compose files change) that BuildKit skips for image builds.
 
 CI does not fetch an upstream tag or run `upgrade-readiness`: ADR 0015 has no
 upgrade path from upstream. `scripts/upgrade-readiness.sh` (kept, with its make
-target) is parameterised on stable notarx release tags and reports a no-op until
+target) is parameterized on stable notarx release tags and reports a no-op until
 one exists; re-add the CI step once a second notarx release exists.
 `make backup-transfer-test` (lane `core-backup`) runs the same upgrade properties
 against the baseline plus a synthetic `000002` migration meanwhile.

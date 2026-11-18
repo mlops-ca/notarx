@@ -18,7 +18,7 @@ async function setup(page: Page, width: number, theme: string) {
   await page.setViewportSize({ width, height: 1000 });
   await authenticateAsAdmin(page);
   await page.addInitScript((theme) => {
-    localStorage.setItem("ag.console.locale", "zh-CN");
+    localStorage.setItem("ag.console.locale", "en-CA");
     localStorage.setItem("ag.console.theme.id", theme);
   }, theme);
   await page.route("**/api/v2/site-settings", (route) =>
@@ -144,13 +144,17 @@ for (const theme of ["notarx-dark", "notarx-light"])
         `/operations?tab=migrations&view=batches&batch=${nexusBatch.id}`,
       );
       await expect(
-        page.getByRole("heading", { name: "迁移验收观察报告" }),
+        page.getByRole("heading", {
+          name: "Migration acceptance observation report",
+        }),
       ).toBeVisible();
       await expect(
-        page.getByText("本批次 target-only 冷客户端验收：未验证"),
+        page.getByText(
+          "Target-only cold-client acceptance for this batch: unverified",
+        ),
       ).toBeVisible();
       await page
-        .getByRole("button", { name: "展开行", exact: true })
+        .getByRole("button", { name: "Expand row", exact: true })
         .first()
         .click();
       await expect(
@@ -159,17 +163,19 @@ for (const theme of ["notarx-dark", "notarx-light"])
       await geometry(page, width);
       await capture(page, info, "batch-report");
       await page
-        .getByRole("button", { name: "重新扫描并追平", exact: true })
+        .getByRole("button", { name: "Rescan and catch up", exact: true })
         .click();
-      await page.getByRole("button", { name: "运行预检", exact: true }).click();
+      await page
+        .getByRole("button", { name: "Run preflight", exact: true })
+        .click();
       await expect(
-        page.getByRole("combobox", { name: "releases 的目标仓库" }),
+        page.getByRole("combobox", { name: "Target repository for releases" }),
       ).toBeVisible();
       await expect(
-        page.getByRole("button", { name: "应用映射并创建批次" }),
+        page.getByRole("button", { name: "Apply mappings and create batch" }),
       ).toBeDisabled();
       await expect(
-        page.getByRole("textbox", { name: "存储池可用字节" }),
+        page.getByRole("textbox", { name: "Free storage-pool bytes" }),
       ).toHaveValue("");
       await geometry(page, width);
       await capture(page, info, "batch-capacity");
@@ -250,7 +256,9 @@ for (const theme of ["notarx-dark", "notarx-light"])
         page.getByRole("heading", { name: "native-cpp · conan" }),
       ).toBeVisible();
       const download = page.waitForEvent("download");
-      await page.getByRole("button", { name: "导出当前观察报告" }).click();
+      await page
+        .getByRole("button", { name: "Export current observation report" })
+        .click();
       const artifact = await download;
       const stream = await artifact.createReadStream();
       const chunks = [];
@@ -271,15 +279,17 @@ for (const theme of ["notarx-dark", "notarx-light"])
       await geometry(page, width);
       await capture(page, info, "native-format-report");
       await page
-        .getByRole("button", { name: "重新扫描并追平", exact: true })
+        .getByRole("button", { name: "Rescan and catch up", exact: true })
         .click();
-      await page.getByRole("button", { name: "运行预检", exact: true }).click();
+      await page
+        .getByRole("button", { name: "Run preflight", exact: true })
+        .click();
       for (const name of ["releases", "raw-source", "images", "cpp"])
         await expect(
-          page.getByRole("combobox", { name: `${name} 的目标仓库` }),
+          page.getByRole("combobox", { name: `Target repository for ${name}` }),
         ).toBeVisible();
       await expect(
-        page.getByRole("button", { name: "应用映射并创建批次" }),
+        page.getByRole("button", { name: "Apply mappings and create batch" }),
       ).toBeDisabled();
       await geometry(page, width);
       await capture(page, info, "native-format-mapping");
@@ -298,16 +308,26 @@ test("batch initial failures, empty state and unknown scan totals preserve read 
     }),
   );
   await page.goto("/operations?tab=migrations&view=batches");
-  await expect(page.getByText(/批次请求未完成/)).toBeVisible();
+  await expect(
+    page.getByText(
+      /The batch request did not complete\. Read current server state before retrying\. No source credentials or upstream response body are displayed\./,
+    ),
+  ).toBeVisible();
   await expect(page.getByRole("status")).toHaveCount(0);
-  await expect(page.getByText("尚无迁移批次", { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByText("No migration batches yet", { exact: true }),
+  ).toHaveCount(0);
   await expect(page.locator("body")).not.toContainText("secret-never-render");
   await geometry(page, 1440);
   await page.route("**/api/v2/migrations/nexus/batches?**", (route) =>
     route.fulfill({ json: { items: [], nextCursor: "" } }),
   );
-  await page.getByRole("button", { name: "刷新批次", exact: true }).click();
-  await expect(page.getByText("尚无迁移批次", { exact: true })).toBeVisible();
+  await page
+    .getByRole("button", { name: "Refresh batches", exact: true })
+    .click();
+  await expect(
+    page.getByText("No migration batches yet", { exact: true }),
+  ).toBeVisible();
   await geometry(page, 1440);
   await page.route(
     `**/api/v2/migrations/nexus/batches/${nexusBatch.id}`,
@@ -324,7 +344,7 @@ test("batch initial failures, empty state and unknown scan totals preserve read 
   );
   await page.goto(`/operations?tab=migrations&batch=${nexusBatch.id}`);
   await expect(
-    page.getByText("未知；完整清单尚未封存", { exact: true }),
+    page.getByText("Unknown; complete manifest is not sealed", { exact: true }),
   ).toBeVisible();
   expect(errors.pageErrors).toEqual([]);
   expect(
@@ -396,7 +416,7 @@ for (const width of [1440, 390])
       `/operations?tab=migrations&view=batches&batch=${nexusBatch.id}`,
     );
     const diagnostic = page.getByRole("region", {
-      name: "最近的持久扫描失败定位",
+      name: "Most recent durable scan failure",
       exact: true,
     });
     await expect(
@@ -406,23 +426,34 @@ for (const width of [1440, 390])
       diagnostic.getByText(nexusScanFailure.sourcePath, { exact: true }),
     ).toBeVisible();
     await expect(
-      page.getByText("未知；完整清单尚未封存", { exact: true }),
+      page.getByText("Unknown; complete manifest is not sealed", {
+        exact: true,
+      }),
     ).toBeVisible();
     await geometry(page, width);
     await capture(page, info, "scan-diagnosis");
     await page
-      .getByRole("button", { name: "重试可重试失败项", exact: true })
+      .getByRole("button", {
+        name: "Retry eligible failed entries",
+        exact: true,
+      })
       .click();
     const dialog = page.getByRole("dialog", {
-      name: "重试可重试失败项",
+      name: "Retry eligible failed entries",
       exact: true,
     });
     await waitForModalOpen(dialog);
     await expect(
-      dialog.getByRole("textbox", { name: "存储池可用字节", exact: true }),
+      dialog.getByRole("textbox", {
+        name: "Free storage-pool bytes",
+        exact: true,
+      }),
     ).toHaveValue("");
     await expect(
-      dialog.getByRole("button", { name: "重试可重试失败项", exact: true }),
+      dialog.getByRole("button", {
+        name: "Retry eligible failed entries",
+        exact: true,
+      }),
     ).toBeDisabled();
     await geometry(page, width);
     await capture(page, info, "retry-unknown-capacity");

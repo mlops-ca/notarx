@@ -20096,7 +20096,26 @@
         ],
         "properties": {
           "code": {
-            "type": "string"
+            "type": "string",
+            "description": "Stable issue code. The Console localizes by code and falls back to the English message for a code it does not know; new codes may be added, so clients must tolerate values outside this list.",
+            "enum": [
+              "api_unavailable",
+              "scheduler_unavailable",
+              "worker_unavailable",
+              "duplicate_instance_id",
+              "stale_nodes",
+              "build_identity_unknown",
+              "mixed_build"
+            ],
+            "x-enum-varnames": [
+              "RuntimeNodeIssueApiUnavailable",
+              "RuntimeNodeIssueSchedulerUnavailable",
+              "RuntimeNodeIssueWorkerUnavailable",
+              "RuntimeNodeIssueDuplicateInstanceId",
+              "RuntimeNodeIssueStaleNodes",
+              "RuntimeNodeIssueBuildIdentityUnknown",
+              "RuntimeNodeIssueMixedBuild"
+            ]
           },
           "severity": {
             "type": "string",
@@ -20106,7 +20125,8 @@
             ]
           },
           "message": {
-            "type": "string"
+            "type": "string",
+            "description": "English text for logs and for clients that do not know the code; the server does not localize it."
           },
           "affectedNodes": {
             "type": "array",
