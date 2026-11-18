@@ -73,20 +73,21 @@ func runLocalRecoveryIntegration(t *testing.T, profile string) {
 	sentinel := create(spec())
 	migrateFixture(t, ctx, source.database, release.Directory)
 	legacy := create(spec())
-	legacyDir := t.TempDir()
-	copyPrivateFixture(t, filepath.Join(release.Directory, "migrations"), filepath.Join(legacyDir, "migrations"))
-	entries, e := os.ReadDir(filepath.Join(legacyDir, "migrations"))
+	migrateFixture(t, ctx, legacy.database, release.Directory)
+	// A pre-Cargo (v0.4.2) installation has none of the native_cargo_* tables;
+	// the single baseline is reduced to that shape instead of truncating a chain.
+	legacyConn, e := legacy.database.connect(ctx)
 	if e != nil {
 		t.Fatal(e)
 	}
-	for _, entry := range entries {
-		if entry.Name() > "000124_remove_legacy_roles.sql" {
-			if e = os.Remove(filepath.Join(legacyDir, "migrations", entry.Name())); e != nil {
-				t.Fatal(e)
-			}
-		}
+	_, e = legacyConn.Exec(ctx, `DO $$ DECLARE t text; BEGIN
+		FOR t IN SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename LIKE 'native\_cargo\_%' LOOP
+			EXECUTE format('DROP TABLE public.%I CASCADE', t);
+		END LOOP; END $$`)
+	_ = legacyConn.Close(ctx)
+	if e != nil {
+		t.Fatal(e)
 	}
-	migrateFixture(t, ctx, legacy.database, legacyDir)
 	if e = legacy.database.WalkReferences(ctx, func(string) error { t.Fatal("empty v0.4.2 reference"); return nil }); e != nil {
 		t.Fatal(e)
 	}
