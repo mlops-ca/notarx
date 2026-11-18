@@ -16,15 +16,62 @@ export const rootDocuments = [
   'CHANGELOG.md',
 ];
 
-export function chinesePathFor(englishPath) {
-  return englishPath.replace(/\.md$/u, '.zh-CN.md');
+// ADR 0014, Documentation policy: English (en-CA spelling) is the only mandatory
+// language. Localized companions are driven by this table. `required` lists the
+// English documents that must have a companion; `enforceRequired` switches that
+// requirement on (fr-CA core documents land in a later slice, issue 37, which
+// flips it). Existing companions are always structure-checked.
+export const coreDocuments = [
+  'README.md',
+  'docs/README.md',
+  'docs/getting-started.md',
+  'SECURITY.md',
+  'CONTRIBUTING.md',
+];
+
+// The en-CA route is the unsuffixed .md file. Its site-map slot keeps the legacy
+// key `en`: renaming it would rewrite every zh-CN title line, and zh-CN content
+// is frozen by the owner (2026-11-18).
+export const referenceLocale = { tag: 'en-CA', key: 'en' };
+
+export const frenchStopWords = new Set(
+  (
+    'le la les des du et est un une pour dans que qui avec sur aux ce ces pas ne vous nous ' +
+    'sont par ou se sa ses leur plus ont être peut sans ainsi entre chaque'
+  ).split(' '),
+);
+export const minFrenchStopWords = 10;
+export const minFrenchStopWordDensity = 0.1;
+export const maxIdenticalProseRatio = 0.3;
+export const minChineseCharacters = 20;
+
+export const localeTable = {
+  'fr-CA': {
+    suffix: '.fr-CA.md',
+    key: 'fr-CA',
+    required: coreDocuments,
+    enforceRequired: false,
+    checkBody: checkFrenchBody,
+  },
+  'zh-CN': {
+    suffix: '.zh-CN.md',
+    key: 'zh-CN',
+    required: [],
+    enforceRequired: true,
+    checkBody: checkChineseBody,
+  },
+};
+
+export function localePathFor(englishPath, locale) {
+  return englishPath.replace(/\.md$/u, locale.suffix);
 }
 
-export function discoverEnglishDocuments(markdownFiles) {
+export function discoverEnglishDocuments(markdownFiles, table = localeTable) {
+  const suffixes = Object.values(table).map((locale) => locale.suffix);
   return markdownFiles
     .filter(
       (file) =>
-        !file.endsWith('.zh-CN.md') &&
+        !suffixes.some((suffix) => file.endsWith(suffix)) &&
         (file.startsWith('docs/') || rootDocuments.includes(file)),
     )
     .sort();
@@ -38,31 +85,87 @@ export function hasLocalTarget(document, target) {
   );
 }
 
-export function findPairIssues(repoRoot, englishDocuments, readFile = (file) => readFileSync(file, 'utf8')) {
+// Prose lines exclude fenced code, table rows and URLs, so commands, tables and
+// links that legitimately stay identical across locales are not counted.
+export function proseLines(document) {
+  const lines = [];
+  let fence = null;
+  for (const raw of document.split('\n')) {
+    const trimmed = raw.trim();
+    const marker = /^(```|~~~)/u.exec(trimmed);
+    if (marker) {
+      if (fence === null) fence = marker[1];
+      else if (marker[1] === fence) fence = null;
+      continue;
+    }
+    if (fence !== null || trimmed.startsWith('|')) continue;
+    const text = trimmed
+      .replace(/\]\([^)]*\)/gu, '')
+      .replace(/[[\]]/gu, '')
+      .replace(/(?:https?|ftp):\/\/\S+/gu, '')
+      .replace(/<[^>]*>/gu, '')
+      .trim();
+    if (/\p{L}/u.test(text)) lines.push(text.toLowerCase());
+  }
+  return lines;
+}
+
+export function checkFrenchBody(frenchPath, french, english) {
+  const issues = [];
+  const frenchLines = proseLines(french);
+  const words = frenchLines.join(' ').match(/\p{L}+/gu) ?? [];
+  const hits = words.filter((word) => frenchStopWords.has(word)).length;
+  if (hits < minFrenchStopWords || hits / Math.max(words.length, 1) < minFrenchStopWordDensity) {
+    issues.push(`${frenchPath}: French body is missing or too short (needs French prose)`);
+  }
+  const englishLines = new Set(proseLines(english));
+  const identical = frenchLines.filter((line) => englishLines.has(line)).length;
+  if (frenchLines.length > 0 && identical / frenchLines.length > maxIdenticalProseRatio) {
+    issues.push(
+      `${frenchPath}: more than ${Math.round(maxIdenticalProseRatio * 100)} percent of prose lines are identical to the English source`,
+    );
+  }
+  return issues;
+}
+
+export function checkChineseBody(chinesePath, chinese) {
+  const characters = chinese.match(/[\u3400-\u9fff]/gu) ?? [];
+  return characters.length < minChineseCharacters
+    ? [`${chinesePath}: Chinese body is missing or too short`]
+    : [];
+}
+
+export function findPairIssues(
+  repoRoot,
+  englishDocuments,
+  readFile = (file) => readFileSync(file, 'utf8'),
+  table = localeTable,
+) {
   const issues = [];
   for (const englishPath of englishDocuments) {
-    const chinesePath = chinesePathFor(englishPath);
-    const absoluteEnglish = path.join(repoRoot, englishPath);
-    const absoluteChinese = path.join(repoRoot, chinesePath);
-    // ADR 0014: English is the reference language and a Simplified Chinese
-    // companion is optional. When one exists it must still be a real
-    // translation with reciprocal language links.
-    if (!existsSync(absoluteChinese)) continue;
+    for (const [tag, locale] of Object.entries(table)) {
+      const localizedPath = localePathFor(englishPath, locale);
+      const absoluteEnglish = path.join(repoRoot, englishPath);
+      const absoluteLocalized = path.join(repoRoot, localizedPath);
+      if (!existsSync(absoluteLocalized)) {
+        // A missing companion is silent unless the locale requires it.
+        if (locale.enforceRequired && locale.required.includes(englishPath)) {
+          issues.push(`${localizedPath}: required ${tag} companion of ${englishPath} is missing`);
+        }
+        continue;
+      }
+      const english = readFile(absoluteEnglish);
+      const localized = readFile(absoluteLocalized);
+      issues.push(...locale.checkBody(localizedPath, localized, english));
 
-    const english = readFile(absoluteEnglish);
-    const chinese = readFile(absoluteChinese);
-    const chineseCharacters = chinese.match(/[\u3400-\u9fff]/gu) ?? [];
-    if (chineseCharacters.length < 20) {
-      issues.push(`${chinesePath}: Chinese body is missing or too short`);
-    }
-
-    const chineseTarget = path.basename(chinesePath);
-    const englishTarget = path.basename(englishPath);
-    if (!hasLocalTarget(english, chineseTarget)) {
-      issues.push(`${englishPath}: missing language link to ${chineseTarget}`);
-    }
-    if (!hasLocalTarget(chinese, englishTarget)) {
-      issues.push(`${chinesePath}: missing language link to ${englishTarget}`);
+      const localizedTarget = path.basename(localizedPath);
+      const englishTarget = path.basename(englishPath);
+      if (!hasLocalTarget(english, localizedTarget)) {
+        issues.push(`${englishPath}: missing language link to ${localizedTarget}`);
+      }
+      if (!hasLocalTarget(localized, englishTarget)) {
+        issues.push(`${localizedPath}: missing language link to ${englishTarget}`);
+      }
     }
   }
   return issues;
@@ -72,49 +175,78 @@ export function flattenSiteMap(siteMap) {
   return siteMap.sections.flatMap((section) => section.items);
 }
 
-export function findSiteMapIssues(siteMap, englishDocuments, chineseDocuments = undefined) {
+// The language switcher of a page lists only locales whose companion exists, so
+// it is derived from the locales the site-map item actually carries.
+export function switcherLocales(item, table = localeTable) {
+  return [referenceLocale.tag, ...Object.keys(table).filter((tag) => item[table[tag].key])];
+}
+
+// existingByLocale maps a locale tag to the set of companion files on disk.
+export function findSiteMapIssues(
+  siteMap,
+  englishDocuments,
+  existingByLocale = undefined,
+  table = localeTable,
+) {
   const issues = [];
+  const expectedLocales = [referenceLocale.tag, ...Object.keys(table)];
   if (siteMap.version !== 1) issues.push('site-map.json: version must be 1');
-  if (siteMap.defaultLocale !== 'en') issues.push('site-map.json: defaultLocale must be en');
-  if (JSON.stringify(siteMap.locales) !== JSON.stringify(['en', 'zh-CN'])) {
-    issues.push('site-map.json: locales must be [en, zh-CN]');
+  if (siteMap.defaultLocale !== referenceLocale.tag) {
+    issues.push(`site-map.json: defaultLocale must be ${referenceLocale.tag}`);
+  }
+  if (siteMap.localeKeys?.[referenceLocale.tag] !== referenceLocale.key) {
+    issues.push(`site-map.json: localeKeys must map ${referenceLocale.tag} to ${referenceLocale.key}`);
+  }
+  if (JSON.stringify(siteMap.locales) !== JSON.stringify(expectedLocales)) {
+    issues.push(`site-map.json: locales must be [${expectedLocales.join(', ')}]`);
   }
 
   const items = flattenSiteMap(siteMap);
   const ids = new Set();
   const englishPaths = new Set();
-  const chinesePaths = new Set();
+  const localizedPaths = Object.fromEntries(Object.keys(table).map((tag) => [tag, new Set()]));
   for (const item of items) {
     if (!item.id || ids.has(item.id)) issues.push(`site-map.json: duplicate or empty id ${item.id ?? ''}`);
     ids.add(item.id);
-    if (!item.title?.en) {
-      issues.push(`site-map.json: ${item.id} requires an English title`);
+    const referencePath = item[referenceLocale.key];
+    if (!item.title?.[referenceLocale.key]) {
+      issues.push(`site-map.json: ${item.id} requires an ${referenceLocale.tag} title`);
     }
-    if (item['zh-CN'] && !item.title?.['zh-CN']) {
-      issues.push(`site-map.json: ${item.id} requires a Chinese title for its Chinese companion`);
-    }
-    if (englishPaths.has(item.en)) issues.push(`site-map.json: duplicate English path ${item.en}`);
-    if (item['zh-CN'] && chinesePaths.has(item['zh-CN'])) {
-      issues.push(`site-map.json: duplicate Chinese path ${item['zh-CN']}`);
-    }
-    englishPaths.add(item.en);
-    if (item['zh-CN']) chinesePaths.add(item['zh-CN']);
-    if (item['zh-CN'] && item['zh-CN'] !== chinesePathFor(item.en)) {
-      issues.push(`site-map.json: ${item.id} has a non-conventional language pair`);
+    if (englishPaths.has(referencePath)) issues.push(`site-map.json: duplicate ${referenceLocale.tag} path ${referencePath}`);
+    englishPaths.add(referencePath);
+
+    for (const [tag, locale] of Object.entries(table)) {
+      const listed = item[locale.key];
+      const mustList = locale.enforceRequired && locale.required.includes(referencePath);
+      if (mustList && !listed) {
+        issues.push(`site-map.json: ${item.id} must list its required ${tag} companion`);
+      }
+      if (!listed) continue;
+      if (!item.title?.[locale.key]) {
+        issues.push(`site-map.json: ${item.id} requires a ${tag} title for its ${tag} companion`);
+      }
+      if (localizedPaths[tag].has(listed)) issues.push(`site-map.json: duplicate ${tag} path ${listed}`);
+      localizedPaths[tag].add(listed);
+      if (listed !== localePathFor(referencePath, locale)) {
+        issues.push(`site-map.json: ${item.id} has a non-conventional ${tag} language pair`);
+      }
     }
   }
 
   for (const englishPath of englishDocuments) {
     if (!englishPaths.has(englishPath)) issues.push(`site-map.json: missing ${englishPath}`);
   }
-  if (chineseDocuments) {
+  if (existingByLocale) {
     for (const item of items) {
-      const companion = chinesePathFor(item.en);
-      if (chineseDocuments.has(companion) && item['zh-CN'] !== companion) {
-        issues.push(`site-map.json: ${item.id} must list its existing Chinese companion ${companion}`);
-      }
-      if (item['zh-CN'] && !chineseDocuments.has(item['zh-CN'])) {
-        issues.push(`site-map.json: ${item.id} lists missing ${item['zh-CN']}`);
+      for (const [tag, locale] of Object.entries(table)) {
+        const existing = existingByLocale[tag] ?? new Set();
+        const companion = localePathFor(item[referenceLocale.key], locale);
+        if (existing.has(companion) && item[locale.key] !== companion) {
+          issues.push(`site-map.json: ${item.id} must list its existing ${tag} companion ${companion}`);
+        }
+        if (item[locale.key] && !existing.has(item[locale.key])) {
+          issues.push(`site-map.json: ${item.id} lists missing ${item[locale.key]}`);
+        }
       }
     }
   }
@@ -141,7 +273,12 @@ function main() {
     ...findSiteMapIssues(
       siteMap,
       englishDocuments,
-      new Set(markdownFiles.filter((file) => file.endsWith('.zh-CN.md'))),
+      Object.fromEntries(
+        Object.entries(localeTable).map(([tag, locale]) => [
+          tag,
+          new Set(markdownFiles.filter((file) => file.endsWith(locale.suffix))),
+        ]),
+      ),
     ),
   ];
   if (markdownFiles.some((file) => file.endsWith('.en.md'))) {

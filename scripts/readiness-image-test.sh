@@ -22,7 +22,7 @@ docker() {
         *revision*) printf '%s\n' "$label_revision" ;;
         *version*) printf '%s\n' "$label_version" ;;
       esac ;;
-    'run --rm') printf 'artifact-gateway %s (revision %s, go test)\n' "$binary_version" "$binary_revision" ;;
+    'run --rm') printf 'notarx %s (revision %s, go test)\n' "$binary_version" "$binary_revision" ;;
     'image tag') ;;
     *) printf 'Unexpected Docker call: %s\n' "$*" >&2; return 1 ;;
   esac
