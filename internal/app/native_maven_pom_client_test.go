@@ -47,7 +47,7 @@ func TestMavenClientHostedPOMCompatibilityColdCache(t *testing.T) {
 	defer cancel()
 	// Plugin and unrelated dependencies come from a hermetic in-process Central
 	// fixture (recorded responses under testdata/maven-central-fixture), never the
-	// network. See mavenCentralFixture for how to re-record it.
+	// network. See startMavenCentralFixture for how to re-record it.
 	central := startMavenCentralFixture(t)
 	endpoint := central.URL + "/maven2"
 	upstreamURL, err := url.Parse(endpoint)

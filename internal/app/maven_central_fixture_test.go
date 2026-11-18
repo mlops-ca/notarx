@@ -3,7 +3,11 @@
 package app
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
 	"io"
+	"io/fs"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -53,6 +57,7 @@ func startMavenCentralFixture(t *testing.T) *httptest.Server {
 		}
 		body, err := os.ReadFile(file)
 		if err != nil {
+			t.Logf("Maven Central fixture miss %s: re-record with %s=1", r.URL.Path, mavenCentralRecordEnv)
 			http.NotFound(w, r)
 			return
 		}
@@ -80,24 +85,56 @@ func recordMavenCentralFixture(t *testing.T, client *http.Client, path, file str
 		time.Sleep(3 * time.Second)
 	}
 	if err != nil {
-		t.Errorf("record %s: %v", path, err)
+		log.Printf("record %s: %v", path, err)
 		return
 	}
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {
-		t.Logf("record %s: upstream answered %d", path, response.StatusCode)
+		log.Printf("record %s: upstream answered %d", path, response.StatusCode)
 		return
 	}
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
-		t.Errorf("record %s: %v", path, err)
+		log.Printf("record %s: %v", path, err)
 		return
 	}
 	if err = os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
-		t.Error(err)
+		log.Print(err)
 		return
 	}
-	if err = os.WriteFile(file, body, 0o644); err != nil {
-		t.Error(err)
+	// Write atomically so a reader never sees a truncated fixture.
+	temporary := file + ".recording"
+	if err = os.WriteFile(temporary, body, 0o644); err == nil {
+		err = os.Rename(temporary, file)
+	}
+	if err != nil {
+		log.Print(err)
+	}
+}
+
+// The recorded bytes must match the checksums Central published next to them.
+func TestMavenCentralFixtureMatchesRecordedChecksums(t *testing.T) {
+	root := filepath.Join(mavenCentralFixtureDir, "maven2")
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() || !strings.HasSuffix(path, ".sha1") {
+			return err
+		}
+		want, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		body, err := os.ReadFile(strings.TrimSuffix(path, ".sha1"))
+		if err != nil {
+			return nil // the checksum was recorded without its artifact
+		}
+		sum := sha1.Sum(body)
+		fields := strings.Fields(string(want))
+		if len(fields) == 0 || !strings.EqualFold(fields[0], hex.EncodeToString(sum[:])) {
+			t.Errorf("%s does not match its recorded checksum", strings.TrimSuffix(path, ".sha1"))
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }

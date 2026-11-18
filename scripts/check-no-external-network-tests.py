@@ -3,9 +3,9 @@
 
 No CI test may depend on an external service (issue #333): tests serve what they
 need from an in-process or loopback fixture. A URL literal to a public host in a
-test file is either a dial target (forbidden) or test data. Test data that is
-never dialed is allowed by listing the file in scripts/external-network-test-baseline.txt,
-one "path host" pair per line. The baseline may only shrink: an entry that no
+test file is either a dial target (forbidden) or test data. Existing mentions are allowed by listing the file in scripts/external-network-test-baseline.txt,
+one "path host" pair per line. Baselined pairs are NOT proven to be data: review them
+when touching those files. The check enforces no new file/host pairs, and the baseline may only shrink: an entry that no
 longer matches is reported so it gets removed.
 """
 import pathlib
@@ -15,7 +15,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 BASELINE = ROOT / 'scripts' / 'external-network-test-baseline.txt'
 URL = re.compile(r'https?://([A-Za-z0-9][A-Za-z0-9.-]*)')
-LOCAL_SUFFIXES = ('.test', '.example', '.invalid', '.local', '.internal', '.localhost', '.svc', '.cluster.local')
+LOCAL_SUFFIXES = ('.example.com', '.example.org', '.example.net', '.test', '.example', '.invalid', '.local', '.internal', '.localhost', '.svc', '.cluster.local')
 LOCAL_HOSTS = {'localhost', 'example.com', 'example.org', 'example.net', 'registry', 'gateway'}
 
 
@@ -23,7 +23,7 @@ def local(host):
     host = host.lower().rstrip('.')
     if host in LOCAL_HOSTS or host.endswith(LOCAL_SUFFIXES) or '.' not in host:
         return True
-    return bool(re.fullmatch(r'(127|10)(\.\d+){3}|192\.168(\.\d+){2}|0\.0\.0\.0', host))
+    return bool(re.fullmatch(r'(127|10)(\.\d+){3}|192\.168(\.\d+){2}|172\.(1[6-9]|2\d|3[01])(\.\d+){2}|169\.254(\.\d+){2}|0\.0\.0\.0', host))
 
 
 def findings():
