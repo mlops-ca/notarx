@@ -153,9 +153,10 @@ func quotaHTTPTransitionsDeliverActualTLSMIME(t *testing.T, locale string) {
 					t.Fatal(e)
 				}
 				data, _ := io.ReadAll(part)
+				// zh-CN has no bundle, so it renders the en-CA text.
 				label := "logical quota"
-				if locale == "zh-CN" {
-					label = "逻辑配额"
+				if locale == "fr-CA" {
+					label = "Quota logique"
 				}
 				if !strings.Contains(string(data), repo.Name) || !strings.Contains(string(data), event.ID) || !strings.Contains(string(data), label) {
 					t.Fatalf("actual MIME omitted evidence: %s", data)
