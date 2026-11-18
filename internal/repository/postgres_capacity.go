@@ -4,121 +4,62 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
+
+	"github.com/mlops-ca/notarx/internal/capacity"
 )
 
-const repositoryCapacityRecordsQuery = `WITH usage AS (
-	SELECT a.repository_id,COALESCE(SUM(o.size),0)::bigint AS used_bytes,COUNT(*)::bigint AS object_count
-	FROM native_raw_assets a JOIN native_raw_objects o ON o.digest=a.digest GROUP BY a.repository_id
-	UNION ALL
-	SELECT repository_id,COALESCE(SUM(size),0)::bigint,COUNT(*)::bigint
-	FROM (
-		-- A path may match multiple visible coordinates/builds; count each asset once.
-		SELECT DISTINCT a.repository_id,a.path,a.size
-		FROM native_maven_assets a
-		CROSS JOIN LATERAL unnest(string_to_array(a.path,'/')) WITH ORDINALITY AS segments(part,depth)
-		JOIN (
-			SELECT DISTINCT repository_id,
-				replace(split_part(coordinate,':',1),'.','/') || '/' || split_part(coordinate,':',2) || '/' || split_part(coordinate,':',3) || '/' AS prefix
-			FROM native_maven_artifacts WHERE state='visible'
-		) m ON m.repository_id=a.repository_id
-			AND m.prefix=array_to_string((string_to_array(a.path,'/'))[1:depth::int],'/') || '/'
-		WHERE depth<cardinality(string_to_array(a.path,'/'))
-	) maven_objects GROUP BY repository_id
-	UNION ALL
-	SELECT repository_id,COALESCE(SUM(size),0)::bigint,COUNT(*)::bigint FROM (
-		SELECT repository_id,size FROM native_oci_manifests
-		UNION ALL
-		SELECT rb.repository_id,b.size FROM native_oci_repository_blobs rb JOIN native_oci_blobs b ON b.digest=rb.digest
-	) oci_objects GROUP BY repository_id
-	UNION ALL
-	SELECT a.repository_id,COALESCE(SUM(a.size),0)::bigint,COUNT(*)::bigint
-	FROM native_conan_assets a
-	JOIN native_conan_recipe_revisions r ON r.repository_id=a.repository_id AND r.reference=a.reference AND r.revision=a.recipe_revision
-	LEFT JOIN native_conan_package_revisions p ON p.repository_id=a.repository_id AND p.reference=a.reference AND p.recipe_revision=a.recipe_revision AND p.package_id=a.package_id AND p.revision=a.package_revision
-	WHERE r.state='visible' AND (a.package_id='' OR p.state='visible') GROUP BY a.repository_id
-	UNION ALL
-	SELECT repository_id,COALESCE(SUM(size),0)::bigint,COUNT(*)::bigint
-	FROM native_npm_versions WHERE object_key<>'' GROUP BY repository_id
-	UNION ALL
-	SELECT repository_id,COALESCE(SUM(size),0)::bigint,COUNT(*)::bigint
-	FROM native_pypi_files WHERE object_key<>'' AND state='visible' GROUP BY repository_id
-	UNION ALL
-	SELECT repository_id,COALESCE(SUM(size),0)::bigint,COUNT(*)::bigint
-	FROM native_go_assets WHERE collected_at IS NULL GROUP BY repository_id
-	UNION ALL
-	SELECT repository_id,COALESCE(SUM(size),0)::bigint,COUNT(*)::bigint
-	FROM native_cargo_publications WHERE collected_at IS NULL GROUP BY repository_id
-	UNION ALL
-	SELECT repository_id,COALESCE(SUM(size),0)::bigint,COUNT(*)::bigint
-	FROM native_nuget_publications GROUP BY repository_id
-	UNION ALL
-	SELECT repository_id,COALESCE(SUM(size+provenance_size),0)::bigint,SUM(1+CASE WHEN provenance_size>0 THEN 1 ELSE 0 END)::bigint
-	FROM native_helm_publications GROUP BY repository_id
-	UNION ALL
-	SELECT repository_id,COALESCE(SUM(size),0)::bigint,COUNT(*)::bigint
-	FROM native_apt_assets GROUP BY repository_id
-	UNION ALL
-	SELECT repository_id,COALESCE(SUM(size),0)::bigint,COUNT(*)::bigint
-	FROM native_apt_package_revisions GROUP BY repository_id
-	UNION ALL
-	SELECT repository_id,COALESCE(SUM(size),0)::bigint,COUNT(*)::bigint FROM (
-		SELECT s.repository_id,a.object_key,MAX(a.size)::bigint AS size
-		FROM native_apt_repository_snapshots s
-		JOIN native_apt_snapshot_assets a ON a.snapshot_id=s.id
-		WHERE s.state='visible' AND a.path LIKE 'dists/%'
-		GROUP BY s.repository_id,a.object_key
-	) apt_snapshot_objects GROUP BY repository_id
-), totals AS (
-	SELECT repository_id,SUM(used_bytes)::bigint AS used_bytes,SUM(object_count)::bigint AS object_count
-	FROM usage GROUP BY repository_id
-)
-SELECT h.id::text,h.name,h.format,h.repo_type,h.endpoint,h.state,
-	COALESCE(q.quota_bytes,0),COALESCE(t.used_bytes,0),COALESCE(t.object_count,0)
+// repositoryCapacityRecordsQuery lists every repository's quota and usage ordered by
+// id. Covered formats (internal/capacity registry) read their counter row, so the
+// overview is O(repositories); formats still pending aggregate the asset tables.
+var repositoryCapacityRecordsQuery = buildRepositoryCapacityRecordsQuery(capacity.CoveredFormats(), capacity.AllCovered())
+
+func buildRepositoryCapacityRecordsQuery(covered []string, all bool) string {
+	const head = `SELECT h.id::text,h.name,h.format,h.repo_type,h.endpoint,h.state,
+	COALESCE(q.quota_bytes,0),`
+	const tail = `
 FROM hosted_repositories h
 LEFT JOIN repository_capacity_quotas q ON q.repository_id=h.id
+LEFT JOIN repository_usage_counters c ON c.repository_id=h.id`
+	if all {
+		return head + `COALESCE(c.bytes,0),COALESCE(c.objects,0)` + tail + `
+ORDER BY h.id`
+	}
+	list := "''"
+	if len(covered) > 0 {
+		list = "'" + strings.Join(covered, "','") + "'"
+	}
+	return capacity.UsageCTE + head + `
+	CASE WHEN h.format IN (` + list + `) THEN COALESCE(c.bytes,0) ELSE COALESCE(t.used_bytes,0) END,
+	CASE WHEN h.format IN (` + list + `) THEN COALESCE(c.objects,0) ELSE COALESCE(t.object_count,0) END` + tail + `
 LEFT JOIN totals t ON t.repository_id=h.id
 ORDER BY h.id`
+}
 
 func (s *PostgresStore) GetRepositoryCapacity(ctx context.Context, id string) (RepositoryCapacity, error) {
-	var capacity RepositoryCapacity
-	err := s.db.QueryRowContext(ctx, `SELECT format,COALESCE((SELECT quota_bytes FROM repository_capacity_quotas WHERE repository_id=h.id),0) FROM hosted_repositories h WHERE id=$1::uuid`, id).Scan(&capacity.Format, &capacity.QuotaBytes)
+	var current RepositoryCapacity
+	err := s.db.QueryRowContext(ctx, `SELECT format,COALESCE((SELECT quota_bytes FROM repository_capacity_quotas WHERE repository_id=h.id),0) FROM hosted_repositories h WHERE id=$1::uuid`, id).Scan(&current.Format, &current.QuotaBytes)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RepositoryCapacity{}, ErrNotFound
 	}
 	if err != nil {
 		return RepositoryCapacity{}, err
 	}
-	capacity.RepositoryID = id
-	query := map[Format]string{
-		FormatRaw: `SELECT COALESCE(SUM(o.size),0),COUNT(*) FROM native_raw_assets a JOIN native_raw_objects o ON o.digest=a.digest WHERE a.repository_id=$1::uuid`,
-		FormatMaven: `SELECT COALESCE(SUM(a.size),0),COUNT(*)
-            FROM native_maven_assets a
-            WHERE a.repository_id=$1::uuid
-              AND EXISTS (
-                  SELECT 1 FROM native_maven_artifacts m
-                  WHERE m.repository_id=a.repository_id AND m.state='visible'
-                    AND left(a.path, length(replace(split_part(m.coordinate, ':', 1), '.', '/') || '/' || split_part(m.coordinate, ':', 2) || '/' || split_part(m.coordinate, ':', 3) || '/')) = replace(split_part(m.coordinate, ':', 1), '.', '/') || '/' || split_part(m.coordinate, ':', 2) || '/' || split_part(m.coordinate, ':', 3) || '/'
-              )`,
-		FormatOCI:   `SELECT COALESCE((SELECT SUM(size) FROM native_oci_manifests WHERE repository_id=$1::uuid),0)+COALESCE((SELECT SUM(b.size) FROM native_oci_repository_blobs rb JOIN native_oci_blobs b ON b.digest=rb.digest WHERE rb.repository_id=$1::uuid),0), (SELECT COUNT(*) FROM native_oci_manifests WHERE repository_id=$1::uuid)+(SELECT COUNT(*) FROM native_oci_repository_blobs WHERE repository_id=$1::uuid)`,
-		FormatConan: `SELECT COALESCE(SUM(a.size),0),COUNT(*) FROM native_conan_assets a JOIN native_conan_recipe_revisions r ON r.repository_id=a.repository_id AND r.reference=a.reference AND r.revision=a.recipe_revision LEFT JOIN native_conan_package_revisions p ON p.repository_id=a.repository_id AND p.reference=a.reference AND p.recipe_revision=a.recipe_revision AND p.package_id=a.package_id AND p.revision=a.package_revision WHERE a.repository_id=$1::uuid AND r.state='visible' AND (a.package_id='' OR p.state='visible')`,
-		FormatNPM:   `SELECT COALESCE(SUM(size),0),COUNT(*) FROM native_npm_versions WHERE repository_id=$1::uuid AND object_key<>''`,
-		FormatPyPI:  `SELECT COALESCE(SUM(size),0),COUNT(*) FROM native_pypi_files WHERE repository_id=$1::uuid AND object_key<>'' AND state='visible'`,
-		FormatGo:    `SELECT COALESCE(SUM(size),0),COUNT(*) FROM native_go_assets WHERE repository_id=$1::uuid AND collected_at IS NULL`,
-		FormatCargo: `SELECT COALESCE(SUM(size),0),COUNT(*) FROM native_cargo_publications WHERE repository_id=$1::uuid AND collected_at IS NULL`,
-		FormatHelm:  `SELECT COALESCE(SUM(size+provenance_size),0),COALESCE(SUM(1+CASE WHEN provenance_size>0 THEN 1 ELSE 0 END),0) FROM native_helm_publications WHERE repository_id=$1::uuid`,
-		FormatNuGet: `SELECT COALESCE(SUM(size),0),COUNT(*) FROM native_nuget_publications WHERE repository_id=$1::uuid`,
-		FormatAPT: `SELECT
-			COALESCE((SELECT SUM(size) FROM native_apt_assets WHERE repository_id=$1::uuid),0)+
-			COALESCE((SELECT SUM(size) FROM native_apt_package_revisions WHERE repository_id=$1::uuid),0)+
-			COALESCE((SELECT SUM(size) FROM (SELECT MAX(a.size)::bigint AS size FROM native_apt_snapshot_assets a JOIN native_apt_repository_snapshots s ON s.id=a.snapshot_id WHERE a.repository_id=$1::uuid AND s.state='visible' AND a.path LIKE 'dists/%' GROUP BY a.object_key) generated),0),
-			(SELECT COUNT(*) FROM native_apt_assets WHERE repository_id=$1::uuid)+
-			(SELECT COUNT(*) FROM native_apt_package_revisions WHERE repository_id=$1::uuid)+
-			(SELECT COUNT(*) FROM (SELECT a.object_key FROM native_apt_snapshot_assets a JOIN native_apt_repository_snapshots s ON s.id=a.snapshot_id WHERE a.repository_id=$1::uuid AND s.state='visible' AND a.path LIKE 'dists/%' GROUP BY a.object_key) generated)`,
-	}[capacity.Format]
-	if err = s.db.QueryRowContext(ctx, query, id).Scan(&capacity.UsedBytes, &capacity.ObjectCount); err != nil {
+	current.RepositoryID = id
+	if capacity.Covered(string(current.Format)) {
+		// A covered format reads its counter, like the overview and the quota alerts do; a
+		// repository that never reserved has no row and no usage.
+		err = s.db.QueryRowContext(ctx, `SELECT bytes,objects FROM repository_usage_counters WHERE repository_id=$1::uuid`, id).Scan(&current.UsedBytes, &current.ObjectCount)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return RepositoryCapacity{}, err
+		}
+		return current, nil
+	}
+	query, _ := capacity.UsageQuery(string(current.Format))
+	if err = s.db.QueryRowContext(ctx, query, id).Scan(&current.UsedBytes, &current.ObjectCount); err != nil {
 		return RepositoryCapacity{}, err
 	}
-	return capacity, nil
+	return current, nil
 }
 
 func (s *PostgresStore) ListRepositoryCapacityRecords(ctx context.Context) ([]RepositoryCapacityRecord, error) {
@@ -171,6 +112,9 @@ func (s *PostgresStore) ReplaceRepositoryCapacityQuota(ctx context.Context, id s
 	}
 	if rows, _ := result.RowsAffected(); rows == 0 {
 		return RepositoryCapacity{}, ErrNotFound
+	}
+	if err = capacity.SetQuota(ctx, tx, repositoryID, quota); err != nil {
+		return RepositoryCapacity{}, err
 	}
 	if err = tx.Commit(); err != nil {
 		return RepositoryCapacity{}, err

@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	counters "github.com/mlops-ca/notarx/internal/capacity"
 	protocol "github.com/mlops-ca/notarx/internal/protocol/rubygems"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/requestcontext"
@@ -193,6 +194,10 @@ func (s *Store) Commit(ctx context.Context, id, actor string) (domain.Publicatio
 	if e = insertAudit(ctx, tx, domain.Audit(p, name)); e != nil {
 		return domain.Publication{}, false, e
 	}
+	// A committed gem counts once, for its size (ADR 0023 section 3).
+	if e = counters.Reserve(ctx, tx, in.RepositoryID, in.Size, 1); e != nil {
+		return domain.Publication{}, false, e
+	}
 	return p, false, tx.Commit()
 }
 func (s *Store) Get(ctx context.Context, repo, fullName string) (domain.Publication, error) {
@@ -277,6 +282,10 @@ func (s *Store) SetQuota(ctx context.Context, repo, actor string, quota int64) (
 	}
 	_, e = tx.ExecContext(ctx, `INSERT INTO native_rubygems_quotas(repository_id,quota_bytes)VALUES($1,$2) ON CONFLICT(repository_id) DO UPDATE SET quota_bytes=EXCLUDED.quota_bytes`, repo, quota)
 	if e != nil {
+		return c, e
+	}
+	// The counter row carries a copy of the quota so Reserve needs one row.
+	if e = counters.SetQuota(ctx, tx, repo, quota); e != nil {
 		return c, e
 	}
 	e = insertAudit(ctx, tx, repository.AuditRecord{Actor: actor, Repository: name, GroupName: name, Format: "rubygems", Resource: repo, Operation: "rubygems.quota.configure", Outcome: repository.AuditResolved, Status: 200, OccurredAt: time.Now().UTC()})

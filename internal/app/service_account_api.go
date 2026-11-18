@@ -106,20 +106,18 @@ func (h identityManagementHandler) CreateServiceAccount(w http.ResponseWriter, r
 		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "service account name or description is invalid")
 		return
 	}
+	accountID := ids.New()
 	account, err := h.serviceAccounts.CreateServiceAccount(r.Context(), repository.ServiceAccount{
-		ID:          ids.New(),
+		ID:          accountID,
 		Name:        name,
 		Description: description,
-	})
+	}, h.auditRecords(r, "service-accounts/"+accountID, "service_account.create", http.StatusCreated)...)
 	if errors.Is(err, repository.ErrNameExists) {
 		writeHostedProblem(w, http.StatusConflict, "name_exists", "service account name already exists")
 		return
 	}
 	if err != nil {
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "create service account failed")
-		return
-	}
-	if !h.recordServiceAccountAudit(w, r, "service-accounts/"+account.ID, "service_account.create", http.StatusCreated) {
 		return
 	}
 	writeNativeMavenJSON(w, http.StatusCreated, serviceAccountResponse(account))
@@ -153,7 +151,7 @@ func (h identityManagementHandler) UpdateServiceAccount(w http.ResponseWriter, r
 		}
 		update.State = &state
 	}
-	account, err := h.serviceAccounts.UpdateServiceAccount(r.Context(), update, string(params.IfMatch))
+	account, err := h.serviceAccounts.UpdateServiceAccount(r.Context(), update, string(params.IfMatch), h.auditRecords(r, "service-accounts/"+update.ID, "service_account.update", http.StatusOK)...)
 	if errors.Is(err, repository.ErrNotFound) {
 		writeHostedProblem(w, http.StatusNotFound, "not_found", "service account not found")
 		return
@@ -164,9 +162,6 @@ func (h identityManagementHandler) UpdateServiceAccount(w http.ResponseWriter, r
 	}
 	if err != nil {
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "update service account failed")
-		return
-	}
-	if !h.recordServiceAccountAudit(w, r, "service-accounts/"+account.ID, "service_account.update", http.StatusOK) {
 		return
 	}
 	writeNativeMavenJSON(w, http.StatusOK, serviceAccountResponse(account))
@@ -244,14 +239,15 @@ func (h identityManagementHandler) CreateServiceAccountCredential(w http.Respons
 		return
 	}
 	token := "agc_" + base64.RawURLEncoding.EncodeToString(raw)
+	credentialID := ids.New()
 	credential, err := h.serviceAccounts.CreateServiceAccountCredential(r.Context(), repository.APIKey{
-		ID:               ids.New(),
+		ID:               credentialID,
 		ServiceAccountID: serviceAccountID.String(),
 		Name:             name,
 		SecretHash:       authorization.HashAPIKey(token),
 		Roles:            []string{},
 		ExpiresAt:        &expiresAt,
-	})
+	}, h.auditRecords(r, "service-accounts/"+serviceAccountID.String()+"/credentials/"+credentialID, "service_account.credential.create", http.StatusCreated)...)
 	if errors.Is(err, repository.ErrNotFound) {
 		writeHostedProblem(w, http.StatusNotFound, "not_found", "service account not found")
 		return
@@ -265,9 +261,6 @@ func (h identityManagementHandler) CreateServiceAccountCredential(w http.Respons
 		return
 	}
 	response := serviceAccountCredentialResponse(credential)
-	if !h.recordServiceAccountAudit(w, r, "service-accounts/"+serviceAccountID.String()+"/credentials/"+credential.ID, "service_account.credential.create", http.StatusCreated) {
-		return
-	}
 	writeNativeMavenJSON(w, http.StatusCreated, adminopenapi.CreatedServiceAccountCredential{
 		Id:               response.Id,
 		ServiceAccountId: response.ServiceAccountId,
@@ -284,7 +277,7 @@ func (h identityManagementHandler) RevokeServiceAccountCredential(w http.Respons
 	if _, ok := h.authorize(w, r); !ok {
 		return
 	}
-	credential, err := h.serviceAccounts.RevokeServiceAccountCredential(r.Context(), serviceAccountID.String(), credentialID.String())
+	credential, err := h.serviceAccounts.RevokeServiceAccountCredential(r.Context(), serviceAccountID.String(), credentialID.String(), h.auditRecords(r, "service-accounts/"+serviceAccountID.String()+"/credentials/"+credentialID.String(), "service_account.credential.revoke", http.StatusOK)...)
 	if errors.Is(err, repository.ErrNotFound) {
 		writeHostedProblem(w, http.StatusNotFound, "not_found", "service account credential not found")
 		return
@@ -293,29 +286,7 @@ func (h identityManagementHandler) RevokeServiceAccountCredential(w http.Respons
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "revoke service account credential failed")
 		return
 	}
-	if !h.recordServiceAccountAudit(w, r, "service-accounts/"+serviceAccountID.String()+"/credentials/"+credential.ID, "service_account.credential.revoke", http.StatusOK) {
-		return
-	}
 	writeNativeMavenJSON(w, http.StatusOK, serviceAccountCredentialResponse(credential))
-}
-
-func (h identityManagementHandler) recordServiceAccountAudit(w http.ResponseWriter, r *http.Request, resource, operation string, status int) bool {
-	if h.audit == nil {
-		return true
-	}
-	if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{
-		Actor:            h.auditActor(r),
-		Outcome:          repository.AuditResolved,
-		OccurredAt:       time.Now().UTC(),
-		Format:           "management",
-		Resource:         resource,
-		Operation:        operation,
-		Status:           status,
-		CacheDisposition: "bypass",
-	}) {
-		return false
-	}
-	return true
 }
 
 func serviceAccountResponse(account repository.ServiceAccount) adminopenapi.ServiceAccount {

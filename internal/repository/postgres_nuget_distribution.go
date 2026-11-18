@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/mlops-ca/notarx/internal/capacity"
 	"sort"
 	"strings"
 	"time"
@@ -490,6 +491,9 @@ func (s *PostgresStore) CompleteNuGetReplicationItem(ctx context.Context, lease 
 			return dist.Job{}, err
 		}
 		if err = insertAudit(ctx, tx, nuGetPublicationAudit(target, a.Target.Name)); err != nil {
+			return dist.Job{}, err
+		}
+		if err = capacity.Reserve(ctx, tx, target.RepositoryID, target.Size, 1); err != nil {
 			return dist.Job{}, err
 		}
 		item.Result = "published"

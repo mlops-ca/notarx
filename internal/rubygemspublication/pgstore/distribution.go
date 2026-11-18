@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	counters "github.com/mlops-ca/notarx/internal/capacity"
 	"sort"
 	"strings"
 	"time"
@@ -458,6 +459,9 @@ func (s *Store) CompleteRubyGemsReplicationItem(ctx context.Context, lease dist.
 			return dist.Job{}, err
 		}
 		if err = insertAudit(ctx, tx, domain.Audit(domain.Visible(session), a.Target.Name)); err != nil {
+			return dist.Job{}, err
+		}
+		if err = counters.Reserve(ctx, tx, session.RepositoryID, session.Size, 1); err != nil {
 			return dist.Job{}, err
 		}
 		item.Result = "published"

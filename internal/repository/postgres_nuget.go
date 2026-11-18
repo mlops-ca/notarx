@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/mlops-ca/notarx/internal/capacity"
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/jsonmeta"
@@ -212,6 +213,10 @@ func (s *PostgresStore) CommitNuGetPublication(ctx context.Context, id, actor st
 		return NuGetPublication{}, false, err
 	}
 	if err = insertAudit(ctx, tx, nuGetPublicationAudit(p, name)); err != nil {
+		return NuGetPublication{}, false, err
+	}
+	// A committed package counts once, for its size (ADR 0023 section 3).
+	if err = capacity.Reserve(ctx, tx, p.RepositoryID, p.Size, 1); err != nil {
 		return NuGetPublication{}, false, err
 	}
 	return p, false, tx.Commit()

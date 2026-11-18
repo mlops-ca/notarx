@@ -33,26 +33,31 @@ type UserUpdate struct {
 
 // UserStore persists local user accounts. SecretHash is a bcrypt hash; it is
 // never returned by the management surface (handlers project to a safe shape).
+// Mutating methods take the audit of the change as a trailing optional argument and
+// write it in the same transaction (ADR 0023 section 1, see runAudited).
 type UserStore interface {
-	CreateUser(context.Context, User) (User, error)
+	CreateUser(context.Context, User, ...AuditRecord) (User, error)
 	ListUsers(context.Context, UserListQuery) (UserPage, error)
 	GetUser(context.Context, string) (User, error)
 	GetUserByName(context.Context, string) (User, error)
-	UpdateUser(context.Context, UserUpdate, string) (User, error)
-	DeleteUser(context.Context, string) error
-	RecordUserLoginSuccess(context.Context, string, time.Time) (User, error)
-	RecordUserLoginFailure(context.Context, string, time.Time, int, time.Duration) (User, error)
-	UpdateUserPassword(context.Context, string, string, string, bool) (User, error)
-	RevokeUserSessions(context.Context, string, string) (User, error)
+	UpdateUser(context.Context, UserUpdate, string, ...AuditRecord) (User, error)
+	DeleteUser(context.Context, string, ...AuditRecord) error
+	RecordUserLoginSuccess(context.Context, string, time.Time, ...AuditRecord) (User, error)
+	RecordUserLoginFailure(context.Context, string, time.Time, int, time.Duration, ...AuditRecord) (User, error)
+	UpdateUserPassword(context.Context, string, string, string, bool, ...AuditRecord) (User, error)
+	RevokeUserSessions(context.Context, string, string, ...AuditRecord) (User, error)
 }
 
-func (s *MemoryStore) CreateUser(_ context.Context, user User) (User, error) {
+func (s *MemoryStore) CreateUser(ctx context.Context, user User, audit ...AuditRecord) (User, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, existing := range s.users {
 		if strings.EqualFold(existing.Name, user.Name) {
 			return User{}, ErrNameExists
 		}
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return User{}, err
 	}
 	user.State = UserActive
 	user.CreatedAt = time.Now().UTC()
@@ -119,7 +124,7 @@ func (s *MemoryStore) GetUserByName(_ context.Context, name string) (User, error
 	return User{}, ErrNotFound
 }
 
-func (s *MemoryStore) UpdateUser(_ context.Context, update UserUpdate, expectedVersion string) (User, error) {
+func (s *MemoryStore) UpdateUser(ctx context.Context, update UserUpdate, expectedVersion string, audit ...AuditRecord) (User, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	current, ok := s.users[update.ID]
@@ -131,6 +136,9 @@ func (s *MemoryStore) UpdateUser(_ context.Context, update UserUpdate, expectedV
 	}
 	if removesLastActiveAdmin(current, update.Role, update.State) && !hasOtherActiveAdmin(s.users, current.ID) {
 		return User{}, ErrLastActiveAdmin
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return User{}, err
 	}
 	if update.Role != nil {
 		current.Role = *update.Role
@@ -153,7 +161,7 @@ func (s *MemoryStore) UpdateUser(_ context.Context, update UserUpdate, expectedV
 	return current, nil
 }
 
-func (s *MemoryStore) DeleteUser(_ context.Context, id string) error {
+func (s *MemoryStore) DeleteUser(ctx context.Context, id string, audit ...AuditRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	user, ok := s.users[id]
@@ -162,6 +170,9 @@ func (s *MemoryStore) DeleteUser(_ context.Context, id string) error {
 	}
 	if user.Role == "admin" && user.State == UserActive && !hasOtherActiveAdmin(s.users, user.ID) {
 		return ErrLastActiveAdmin
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return err
 	}
 	delete(s.users, id)
 	for identityID, identity := range s.userIdentities {
@@ -200,12 +211,15 @@ func hasOtherActiveAdmin(users map[string]User, excludedID string) bool {
 	return false
 }
 
-func (s *MemoryStore) RecordUserLoginSuccess(_ context.Context, id string, occurredAt time.Time) (User, error) {
+func (s *MemoryStore) RecordUserLoginSuccess(ctx context.Context, id string, occurredAt time.Time, audit ...AuditRecord) (User, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	user, ok := s.users[id]
 	if !ok {
 		return User{}, ErrNotFound
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return User{}, err
 	}
 	user.LastLoginAt = timePointer(occurredAt.UTC())
 	user.FailedLoginAttempts = 0
@@ -216,12 +230,15 @@ func (s *MemoryStore) RecordUserLoginSuccess(_ context.Context, id string, occur
 	return user, nil
 }
 
-func (s *MemoryStore) RecordUserLoginFailure(_ context.Context, id string, occurredAt time.Time, maxAttempts int, lockout time.Duration) (User, error) {
+func (s *MemoryStore) RecordUserLoginFailure(ctx context.Context, id string, occurredAt time.Time, maxAttempts int, lockout time.Duration, audit ...AuditRecord) (User, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	user, ok := s.users[id]
 	if !ok {
 		return User{}, ErrNotFound
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return User{}, err
 	}
 	user.FailedLoginAttempts++
 	if maxAttempts > 0 && user.FailedLoginAttempts >= maxAttempts && lockout > 0 {
@@ -234,7 +251,7 @@ func (s *MemoryStore) RecordUserLoginFailure(_ context.Context, id string, occur
 	return user, nil
 }
 
-func (s *MemoryStore) UpdateUserPassword(_ context.Context, id, secretHash, expectedVersion string, mustChange bool) (User, error) {
+func (s *MemoryStore) UpdateUserPassword(ctx context.Context, id, secretHash, expectedVersion string, mustChange bool, audit ...AuditRecord) (User, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	user, ok := s.users[id]
@@ -243,6 +260,9 @@ func (s *MemoryStore) UpdateUserPassword(_ context.Context, id, secretHash, expe
 	}
 	if user.Version != expectedVersion {
 		return User{}, ErrVersionConflict
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return User{}, err
 	}
 	user.SecretHash = secretHash
 	user.PasswordChangedAt = timePointer(time.Now().UTC())
@@ -258,7 +278,7 @@ func (s *MemoryStore) UpdateUserPassword(_ context.Context, id, secretHash, expe
 	return user, nil
 }
 
-func (s *MemoryStore) RevokeUserSessions(_ context.Context, id, expectedVersion string) (User, error) {
+func (s *MemoryStore) RevokeUserSessions(ctx context.Context, id, expectedVersion string, audit ...AuditRecord) (User, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	user, ok := s.users[id]
@@ -267,6 +287,9 @@ func (s *MemoryStore) RevokeUserSessions(_ context.Context, id, expectedVersion 
 	}
 	if user.Version != expectedVersion {
 		return User{}, ErrVersionConflict
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return User{}, err
 	}
 	user.SessionVersion++
 	user.Version = nextHostedGroupVersion(user.Version)

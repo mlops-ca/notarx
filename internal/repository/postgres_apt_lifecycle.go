@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/mlops-ca/notarx/internal/capacity"
 	"time"
 
 	"github.com/google/uuid"
@@ -248,8 +249,15 @@ func purgeAPTDeletedPackagesTx(ctx context.Context, tx *sql.Tx, repoID string, n
 		if _, err = tx.ExecContext(ctx, `DELETE FROM native_apt_publication_sessions WHERE package_revision_id=$1`, d.Revision.ID); err != nil {
 			return err
 		}
-		if _, err = tx.ExecContext(ctx, `DELETE FROM native_apt_package_revisions WHERE id=$1`, d.Revision.ID); err != nil {
+		removed, err := tx.ExecContext(ctx, `DELETE FROM native_apt_package_revisions WHERE id=$1`, d.Revision.ID)
+		if err != nil {
 			return err
+		}
+		if rows, _ := removed.RowsAffected(); rows == 1 {
+			// A purged revision leaves the usage.
+			if err = capacity.Reserve(ctx, tx, repoID, -d.Revision.Size, -1); err != nil {
+				return err
+			}
 		}
 		d.PurgedAt = now
 		if err = writeAPTDeletion(ctx, tx, d); err != nil {

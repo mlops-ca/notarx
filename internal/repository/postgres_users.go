@@ -24,20 +24,22 @@ func scanUser(row interface{ Scan(...any) error }, user *User) error {
 	)
 }
 
-func (s *PostgresStore) CreateUser(ctx context.Context, user User) (User, error) {
+func (s *PostgresStore) CreateUser(ctx context.Context, user User, audit ...AuditRecord) (User, error) {
 	var passwordChangedAt *time.Time
 	if user.SecretHash != "" {
 		now := time.Now().UTC()
 		passwordChangedAt = &now
 	}
-	err := scanUser(s.db.QueryRowContext(ctx, `INSERT INTO users (id, name, display_name, email, description, secret_hash, role, must_change_password, password_changed_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING `+userColumns, user.ID, user.Name, user.DisplayName, user.Email, user.Description, user.SecretHash, user.Role, user.MustChangePassword, passwordChangedAt), &user)
-	if isUnique(err) {
-		return User{}, ErrNameExists
-	}
-	if err != nil {
-		return User{}, err
-	}
-	return user, nil
+	return runAudited(ctx, s, audit, func(q sqlRunner) (User, error) {
+		err := scanUser(q.QueryRowContext(ctx, `INSERT INTO users (id, name, display_name, email, description, secret_hash, role, must_change_password, password_changed_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING `+userColumns, user.ID, user.Name, user.DisplayName, user.Email, user.Description, user.SecretHash, user.Role, user.MustChangePassword, passwordChangedAt), &user)
+		if isUnique(err) {
+			return User{}, ErrNameExists
+		}
+		if err != nil {
+			return User{}, err
+		}
+		return user, nil
+	})
 }
 
 func (s *PostgresStore) ListUsers(ctx context.Context, query UserListQuery) (UserPage, error) {
@@ -73,8 +75,14 @@ func (s *PostgresStore) ListUsers(ctx context.Context, query UserListQuery) (Use
 }
 
 func (s *PostgresStore) GetUser(ctx context.Context, id string) (User, error) {
+	return getUserOn(ctx, s.db, id)
+}
+
+// getUserOn reads a user on the pool or inside a transaction, so a lookup that runs inside an
+// audited mutation does not take a second pooled connection while the transaction holds one.
+func getUserOn(ctx context.Context, q sqlRunner, id string) (User, error) {
 	var user User
-	err := scanUser(s.db.QueryRowContext(ctx, `SELECT `+userColumns+` FROM users WHERE id=$1::uuid`, id), &user)
+	err := scanUser(q.QueryRowContext(ctx, `SELECT `+userColumns+` FROM users WHERE id=$1::uuid`, id), &user)
 	if errors.Is(err, sql.ErrNoRows) {
 		return User{}, ErrNotFound
 	}
@@ -96,7 +104,7 @@ func (s *PostgresStore) GetUserByName(ctx context.Context, name string) (User, e
 	return user, nil
 }
 
-func (s *PostgresStore) UpdateUser(ctx context.Context, update UserUpdate, expectedVersion string) (User, error) {
+func (s *PostgresStore) UpdateUser(ctx context.Context, update UserUpdate, expectedVersion string, audit ...AuditRecord) (User, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return User{}, err
@@ -141,6 +149,9 @@ func (s *PostgresStore) UpdateUser(ctx context.Context, update UserUpdate, expec
 	if err != nil {
 		return User{}, err
 	}
+	if err = insertAudits(ctx, tx, audit); err != nil {
+		return User{}, err
+	}
 	if err = tx.Commit(); err != nil {
 		return User{}, err
 	}
@@ -154,7 +165,7 @@ func stringValue(value *string) string {
 	return *value
 }
 
-func (s *PostgresStore) DeleteUser(ctx context.Context, id string) error {
+func (s *PostgresStore) DeleteUser(ctx context.Context, id string, audit ...AuditRecord) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -183,56 +194,67 @@ func (s *PostgresStore) DeleteUser(ctx context.Context, id string) error {
 	if _, err = tx.ExecContext(ctx, `DELETE FROM users WHERE id=$1::uuid`, id); err != nil {
 		return err
 	}
+	if err = insertAudits(ctx, tx, audit); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
-func (s *PostgresStore) RecordUserLoginSuccess(ctx context.Context, id string, occurredAt time.Time) (User, error) {
-	var user User
-	err := scanUser(s.db.QueryRowContext(ctx, `UPDATE users SET last_login_at=$2, failed_login_attempts=0, locked_until=NULL, version=version+1, updated_at=$2 WHERE id=$1::uuid RETURNING `+userColumns, id, occurredAt.UTC()), &user)
-	if errors.Is(err, sql.ErrNoRows) {
-		return User{}, ErrNotFound
-	}
-	return user, err
+func (s *PostgresStore) RecordUserLoginSuccess(ctx context.Context, id string, occurredAt time.Time, audit ...AuditRecord) (User, error) {
+	return runAudited(ctx, s, audit, func(q sqlRunner) (User, error) {
+		var user User
+		err := scanUser(q.QueryRowContext(ctx, `UPDATE users SET last_login_at=$2, failed_login_attempts=0, locked_until=NULL, version=version+1, updated_at=$2 WHERE id=$1::uuid RETURNING `+userColumns, id, occurredAt.UTC()), &user)
+		if errors.Is(err, sql.ErrNoRows) {
+			return User{}, ErrNotFound
+		}
+		return user, err
+	})
 }
 
-func (s *PostgresStore) RecordUserLoginFailure(ctx context.Context, id string, occurredAt time.Time, maxAttempts int, lockout time.Duration) (User, error) {
-	var user User
-	lockedUntil := occurredAt.UTC().Add(lockout)
-	err := scanUser(s.db.QueryRowContext(ctx, `UPDATE users SET failed_login_attempts=failed_login_attempts+1, locked_until=CASE WHEN $3>0 AND failed_login_attempts+1 >= $3 AND $4 THEN $5 ELSE locked_until END, version=version+1, updated_at=$2 WHERE id=$1::uuid RETURNING `+userColumns, id, occurredAt.UTC(), maxAttempts, lockout > 0, lockedUntil), &user)
-	if errors.Is(err, sql.ErrNoRows) {
-		return User{}, ErrNotFound
-	}
-	return user, err
+func (s *PostgresStore) RecordUserLoginFailure(ctx context.Context, id string, occurredAt time.Time, maxAttempts int, lockout time.Duration, audit ...AuditRecord) (User, error) {
+	return runAudited(ctx, s, audit, func(q sqlRunner) (User, error) {
+		var user User
+		lockedUntil := occurredAt.UTC().Add(lockout)
+		err := scanUser(q.QueryRowContext(ctx, `UPDATE users SET failed_login_attempts=failed_login_attempts+1, locked_until=CASE WHEN $3>0 AND failed_login_attempts+1 >= $3 AND $4 THEN $5 ELSE locked_until END, version=version+1, updated_at=$2 WHERE id=$1::uuid RETURNING `+userColumns, id, occurredAt.UTC(), maxAttempts, lockout > 0, lockedUntil), &user)
+		if errors.Is(err, sql.ErrNoRows) {
+			return User{}, ErrNotFound
+		}
+		return user, err
+	})
 }
 
-func (s *PostgresStore) UpdateUserPassword(ctx context.Context, id, secretHash, expectedVersion string, mustChange bool) (User, error) {
-	var user User
-	err := scanUser(s.db.QueryRowContext(ctx, `WITH updated_user AS (
+func (s *PostgresStore) UpdateUserPassword(ctx context.Context, id, secretHash, expectedVersion string, mustChange bool, audit ...AuditRecord) (User, error) {
+	return runAudited(ctx, s, audit, func(q sqlRunner) (User, error) {
+		var user User
+		err := scanUser(q.QueryRowContext(ctx, `WITH updated_user AS (
 		UPDATE users SET secret_hash=$2, password_changed_at=now(), must_change_password=$3, session_version=session_version+1, failed_login_attempts=0, locked_until=NULL, version=version+1, updated_at=now() WHERE id=$1::uuid AND version=$4::text::bigint RETURNING *
 	), revoked_sessions AS (
 		UPDATE user_sessions SET revoked_at=now() WHERE user_id=(SELECT id FROM updated_user) AND revoked_at IS NULL
 	) SELECT `+userColumns+` FROM updated_user`, id, secretHash, mustChange, expectedVersion), &user)
-	if errors.Is(err, sql.ErrNoRows) {
-		if _, getErr := s.GetUser(ctx, id); errors.Is(getErr, ErrNotFound) {
-			return User{}, ErrNotFound
+		if errors.Is(err, sql.ErrNoRows) {
+			if _, getErr := getUserOn(ctx, q, id); errors.Is(getErr, ErrNotFound) {
+				return User{}, ErrNotFound
+			}
+			return User{}, ErrVersionConflict
 		}
-		return User{}, ErrVersionConflict
-	}
-	return user, err
+		return user, err
+	})
 }
 
-func (s *PostgresStore) RevokeUserSessions(ctx context.Context, id, expectedVersion string) (User, error) {
-	var user User
-	err := scanUser(s.db.QueryRowContext(ctx, `WITH updated_user AS (
+func (s *PostgresStore) RevokeUserSessions(ctx context.Context, id, expectedVersion string, audit ...AuditRecord) (User, error) {
+	return runAudited(ctx, s, audit, func(q sqlRunner) (User, error) {
+		var user User
+		err := scanUser(q.QueryRowContext(ctx, `WITH updated_user AS (
 		UPDATE users SET session_version=session_version+1, version=version+1, updated_at=now() WHERE id=$1::uuid AND version=$2::text::bigint RETURNING *
 	), revoked_sessions AS (
 		UPDATE user_sessions SET revoked_at=now() WHERE user_id=(SELECT id FROM updated_user) AND revoked_at IS NULL
 	) SELECT `+userColumns+` FROM updated_user`, id, expectedVersion), &user)
-	if errors.Is(err, sql.ErrNoRows) {
-		if _, getErr := s.GetUser(ctx, id); errors.Is(getErr, ErrNotFound) {
-			return User{}, ErrNotFound
+		if errors.Is(err, sql.ErrNoRows) {
+			if _, getErr := getUserOn(ctx, q, id); errors.Is(getErr, ErrNotFound) {
+				return User{}, ErrNotFound
+			}
+			return User{}, ErrVersionConflict
 		}
-		return User{}, ErrVersionConflict
-	}
-	return user, err
+		return user, err
+	})
 }

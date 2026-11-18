@@ -48,16 +48,17 @@ func userLoginHandler(users repository.UserStore, audit userLoginAuditStore, aut
 		}
 		if !authorization.VerifyPassword(user.SecretHash, body.Password) {
 			maxAttempts, lockout := localAuthPolicy(authenticator)
+			// The attempt counter and lockout never depend on the audit store: a denial changes
+			// nothing a failed audit could roll back, and an attacker must not escape the lockout
+			// while audit writes fail. The denial audit stays best effort.
 			_, _ = users.RecordUserLoginFailure(r.Context(), user.ID, now, maxAttempts, lockout)
 			recordUserLoginAudit(r, audit, body.Username, repository.AuditAccessDenied, http.StatusUnauthorized, "invalid credentials")
 			writeHostedProblem(w, http.StatusUnauthorized, "access_denied", "invalid credentials")
 			return
 		}
-		user, err = users.RecordUserLoginSuccess(r.Context(), user.ID, now)
-		if err != nil {
-			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "login failed")
-			return
-		}
+		// The session exists before the success is recorded, so a session that cannot be created
+		// never leaves an "authenticated" audit behind; when recording fails (including its audit)
+		// the unused session is revoked and no token is issued.
 		sessionID := newUserSessionID()
 		if authenticator.UserSessions != nil {
 			if _, err := authenticator.UserSessions.CreateUserSession(r.Context(), repository.UserSession{
@@ -69,8 +70,16 @@ func userLoginHandler(users repository.UserStore, audit userLoginAuditStore, aut
 				return
 			}
 		}
+		loggedIn, err := users.RecordUserLoginSuccess(r.Context(), user.ID, now, userAuditRecords(r, audit, user.Name, "auth/login", "user.login", repository.AuditResolved, http.StatusOK, "authenticated")...)
+		if err != nil {
+			if authenticator.UserSessions != nil {
+				_, _ = authenticator.UserSessions.RevokeUserSession(context.WithoutCancel(r.Context()), user.ID, sessionID)
+			}
+			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "login failed")
+			return
+		}
+		user = loggedIn
 		token := authenticator.IssueUserSessionWithID(user.ID, sessionID, user.SessionVersion)
-		recordUserLoginAudit(r, audit, user.Name, repository.AuditResolved, http.StatusOK, "authenticated")
 		writeNativeMavenJSON(w, http.StatusOK, map[string]any{"token": token, "username": user.Name, "displayName": user.DisplayName, "role": user.Role, "mustChangePassword": user.MustChangePassword})
 	}
 }
@@ -118,15 +127,23 @@ func recordUserLoginAudit(r *http.Request, audit userLoginAuditStore, username s
 }
 
 func recordUserAudit(r *http.Request, audit userLoginAuditStore, username, resource, operation string, outcome repository.AuditOutcome, status int, reason string) {
-	if audit == nil {
-		return
+	for _, record := range userAuditRecords(r, audit, username, resource, operation, outcome, status, reason) {
+		_ = audit.RecordAudit(r.Context(), record)
 	}
-	_ = audit.RecordAudit(r.Context(), repository.AuditRecord{
+}
+
+// userAuditRecords is the audit a user store method writes in the transaction of the
+// change it records (ADR 0023 section 1), or none when audit is not configured.
+func userAuditRecords(_ *http.Request, audit userLoginAuditStore, username, resource, operation string, outcome repository.AuditOutcome, status int, reason string) []repository.AuditRecord {
+	if audit == nil {
+		return nil
+	}
+	return []repository.AuditRecord{{
 		Actor: "user:" + strings.TrimSpace(username), Outcome: outcome,
 		OccurredAt: time.Now().UTC(), Format: "management", Resource: resource,
 		Operation: operation, Status: status, CacheDisposition: "bypass",
 		AuthorizationSource: "local_password", AuthorizationReason: reason,
-	})
+	}}
 }
 
 func userChangePasswordHandler(users repository.UserStore, audit userLoginAuditStore, authenticator Authenticator) http.HandlerFunc {
@@ -167,7 +184,7 @@ func userChangePasswordHandler(users repository.UserStore, audit userLoginAuditS
 			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "hash password failed")
 			return
 		}
-		updated, err := users.UpdateUserPassword(r.Context(), user.ID, hash, user.Version, false)
+		_, err = users.UpdateUserPassword(r.Context(), user.ID, hash, user.Version, false, userAuditRecords(r, audit, user.Name, "auth/change-password", "user.password.change", repository.AuditResolved, http.StatusNoContent, "password changed")...)
 		if errors.Is(err, repository.ErrVersionConflict) {
 			writeHostedProblem(w, http.StatusPreconditionFailed, "version_conflict", "user changed concurrently; retry login")
 			return
@@ -176,7 +193,6 @@ func userChangePasswordHandler(users repository.UserStore, audit userLoginAuditS
 			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "change password failed")
 			return
 		}
-		recordUserAudit(r, audit, updated.Name, "auth/change-password", "user.password.change", repository.AuditResolved, http.StatusNoContent, "password changed")
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

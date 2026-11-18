@@ -32,6 +32,7 @@ type MemoryStore struct {
 	rawGroups              map[string]Group
 	conanGroups            map[string]Group
 	Audits                 []AuditRecord
+	auditFault             func(AuditRecord) error
 	artifactUsage          map[string]ArtifactUsageStat
 	auditRetentionPolicy   AuditRetentionPolicy
 	publicAccessPolicy     PublicAccessPolicy

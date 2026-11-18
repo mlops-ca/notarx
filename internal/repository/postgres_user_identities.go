@@ -45,33 +45,38 @@ func (s *PostgresStore) ListUserIdentities(ctx context.Context, userID string) (
 	return items, rows.Err()
 }
 
-func (s *PostgresStore) CreateUserIdentity(ctx context.Context, identity UserIdentity) (UserIdentity, error) {
-	if _, err := s.GetUser(ctx, identity.UserID); err != nil {
-		return UserIdentity{}, err
-	}
-	identity = normalizeUserIdentity(identity)
-	if identity.ID == "" {
-		identity.ID = ids.New()
-	}
-	err := scanUserIdentity(s.db.QueryRowContext(ctx, `INSERT INTO user_identities (id,user_id,kind,issuer,subject,email,display_name,email_verified) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING `+userIdentityColumns,
-		identity.ID, identity.UserID, identity.Kind, identity.Issuer, identity.Subject,
-		identity.Email, identity.DisplayName, identity.EmailVerified,
-	), &identity)
-	if isUnique(err) {
-		return UserIdentity{}, ErrIdentityExists
-	}
-	return identity, err
+func (s *PostgresStore) CreateUserIdentity(ctx context.Context, identity UserIdentity, audit ...AuditRecord) (UserIdentity, error) {
+	return runAudited(ctx, s, audit, func(q sqlRunner) (UserIdentity, error) {
+		if _, err := getUserOn(ctx, q, identity.UserID); err != nil {
+			return UserIdentity{}, err
+		}
+		identity = normalizeUserIdentity(identity)
+		if identity.ID == "" {
+			identity.ID = ids.New()
+		}
+		err := scanUserIdentity(q.QueryRowContext(ctx, `INSERT INTO user_identities (id,user_id,kind,issuer,subject,email,display_name,email_verified) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING `+userIdentityColumns,
+			identity.ID, identity.UserID, identity.Kind, identity.Issuer, identity.Subject,
+			identity.Email, identity.DisplayName, identity.EmailVerified,
+		), &identity)
+		if isUnique(err) {
+			return UserIdentity{}, ErrIdentityExists
+		}
+		return identity, err
+	})
 }
 
-func (s *PostgresStore) DeleteUserIdentity(ctx context.Context, userID, identityID string) error {
-	result, err := s.db.ExecContext(ctx, `DELETE FROM user_identities WHERE id=$1::uuid AND user_id=$2::uuid`, identityID, userID)
-	if err != nil {
-		return err
-	}
-	if affected, _ := result.RowsAffected(); affected == 0 {
-		return ErrNotFound
-	}
-	return nil
+func (s *PostgresStore) DeleteUserIdentity(ctx context.Context, userID, identityID string, audit ...AuditRecord) error {
+	_, err := runAudited(ctx, s, audit, func(q sqlRunner) (struct{}, error) {
+		result, err := q.ExecContext(ctx, `DELETE FROM user_identities WHERE id=$1::uuid AND user_id=$2::uuid`, identityID, userID)
+		if err != nil {
+			return struct{}{}, err
+		}
+		if affected, _ := result.RowsAffected(); affected == 0 {
+			return struct{}{}, ErrNotFound
+		}
+		return struct{}{}, nil
+	})
+	return err
 }
 
 func (s *PostgresStore) GetUserByOIDCIdentity(ctx context.Context, issuer, subject string) (User, UserIdentity, error) {

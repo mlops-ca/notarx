@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/testsupport"
 )
 
 func TestPostgresAPTSignedSnapshotVisibilityAndAuditCommitAtomically(t *testing.T) {
@@ -168,19 +169,10 @@ func TestPostgresLatestVisibleAPTSnapshotIsRepositoryWide(t *testing.T) {
 
 // failAuditsFor makes every insert into security_audit_log by the actor on the
 // repository fail until the test ends, so a test can prove a mutation rolls back
-// with its audit. (Invalid UTF-8 no longer fails: audit text is sanitised.)
+// with its audit.
 func failAuditsFor(t *testing.T, store *PostgresStore, repositoryName, actor string) {
 	t.Helper()
-	name := "fail_audit_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	query := fmt.Sprintf(`CREATE FUNCTION %s() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.repository='%s' AND NEW.actor='%s' THEN RAISE EXCEPTION 'fixture audit failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER %s BEFORE INSERT ON security_audit_log FOR EACH ROW EXECUTE FUNCTION %s()`, name, strings.ReplaceAll(repositoryName, "'", "''"), strings.ReplaceAll(actor, "'", "''"), name, name)
-	if _, err := store.db.ExecContext(t.Context(), query); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if _, err := store.db.Exec(`DROP TRIGGER ` + name + ` ON security_audit_log; DROP FUNCTION ` + name + `()`); err != nil {
-			t.Error(err)
-		}
-	})
+	testsupport.FailSecurityAudits(t, store.db, repositoryName, actor)
 }
 
 func newPostgresAPTHostedFixture(t *testing.T) (context.Context, *PostgresStore, HostedRepository) {

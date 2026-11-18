@@ -20,24 +20,26 @@ func scanServiceAccount(row interface{ Scan(...any) error }, account *ServiceAcc
 	)
 }
 
-func (s *PostgresStore) CreateServiceAccount(ctx context.Context, account ServiceAccount) (ServiceAccount, error) {
-	err := scanServiceAccount(
-		s.db.QueryRowContext(
-			ctx,
-			`INSERT INTO service_accounts (id, name, description) VALUES ($1,$2,$3) RETURNING `+serviceAccountColumns,
-			account.ID,
-			account.Name,
-			account.Description,
-		),
-		&account,
-	)
-	if isUnique(err) {
-		return ServiceAccount{}, ErrNameExists
-	}
-	if err != nil {
-		return ServiceAccount{}, err
-	}
-	return account, nil
+func (s *PostgresStore) CreateServiceAccount(ctx context.Context, account ServiceAccount, audit ...AuditRecord) (ServiceAccount, error) {
+	return runAudited(ctx, s, audit, func(q sqlRunner) (ServiceAccount, error) {
+		err := scanServiceAccount(
+			q.QueryRowContext(
+				ctx,
+				`INSERT INTO service_accounts (id, name, description) VALUES ($1,$2,$3) RETURNING `+serviceAccountColumns,
+				account.ID,
+				account.Name,
+				account.Description,
+			),
+			&account,
+		)
+		if isUnique(err) {
+			return ServiceAccount{}, ErrNameExists
+		}
+		if err != nil {
+			return ServiceAccount{}, err
+		}
+		return account, nil
+	})
 }
 
 func (s *PostgresStore) ListServiceAccounts(ctx context.Context, limit int, afterID string) ([]ServiceAccount, error) {
@@ -58,9 +60,14 @@ func (s *PostgresStore) ListServiceAccounts(ctx context.Context, limit int, afte
 }
 
 func (s *PostgresStore) GetServiceAccount(ctx context.Context, id string) (ServiceAccount, error) {
+	return getServiceAccountOn(ctx, s.db, id)
+}
+
+// getServiceAccountOn reads a service account on the pool or inside a transaction (see getUserOn).
+func getServiceAccountOn(ctx context.Context, q sqlRunner, id string) (ServiceAccount, error) {
 	var account ServiceAccount
 	err := scanServiceAccount(
-		s.db.QueryRowContext(ctx, `SELECT `+serviceAccountColumns+` FROM service_accounts WHERE id=$1::uuid`, id),
+		q.QueryRowContext(ctx, `SELECT `+serviceAccountColumns+` FROM service_accounts WHERE id=$1::uuid`, id),
 		&account,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -72,69 +79,73 @@ func (s *PostgresStore) GetServiceAccount(ctx context.Context, id string) (Servi
 	return account, nil
 }
 
-func (s *PostgresStore) UpdateServiceAccount(ctx context.Context, update ServiceAccountUpdate, expectedVersion string) (ServiceAccount, error) {
-	var account ServiceAccount
-	description := ""
-	if update.Description != nil {
-		description = *update.Description
-	}
-	state := ServiceAccountState("")
-	if update.State != nil {
-		state = *update.State
-	}
-	err := scanServiceAccount(
-		s.db.QueryRowContext(ctx, `UPDATE service_accounts SET description=CASE WHEN $2 THEN $3 ELSE description END, state=CASE WHEN $4 THEN $5 ELSE state END, updated_at=now(), version=version+1 WHERE id=$1::uuid AND version=$6::text::bigint RETURNING `+serviceAccountColumns,
-			update.ID,
-			update.Description != nil,
-			description,
-			update.State != nil,
-			state,
-			expectedVersion,
-		),
-		&account,
-	)
-	if errors.Is(err, sql.ErrNoRows) {
-		if _, getErr := s.GetServiceAccount(ctx, update.ID); errors.Is(getErr, ErrNotFound) {
-			return ServiceAccount{}, ErrNotFound
+func (s *PostgresStore) UpdateServiceAccount(ctx context.Context, update ServiceAccountUpdate, expectedVersion string, audit ...AuditRecord) (ServiceAccount, error) {
+	return runAudited(ctx, s, audit, func(q sqlRunner) (ServiceAccount, error) {
+		var account ServiceAccount
+		description := ""
+		if update.Description != nil {
+			description = *update.Description
 		}
-		return ServiceAccount{}, ErrVersionConflict
-	}
-	if err != nil {
-		return ServiceAccount{}, err
-	}
-	return account, nil
+		state := ServiceAccountState("")
+		if update.State != nil {
+			state = *update.State
+		}
+		err := scanServiceAccount(
+			q.QueryRowContext(ctx, `UPDATE service_accounts SET description=CASE WHEN $2 THEN $3 ELSE description END, state=CASE WHEN $4 THEN $5 ELSE state END, updated_at=now(), version=version+1 WHERE id=$1::uuid AND version=$6::text::bigint RETURNING `+serviceAccountColumns,
+				update.ID,
+				update.Description != nil,
+				description,
+				update.State != nil,
+				state,
+				expectedVersion,
+			),
+			&account,
+		)
+		if errors.Is(err, sql.ErrNoRows) {
+			if _, getErr := getServiceAccountOn(ctx, q, update.ID); errors.Is(getErr, ErrNotFound) {
+				return ServiceAccount{}, ErrNotFound
+			}
+			return ServiceAccount{}, ErrVersionConflict
+		}
+		if err != nil {
+			return ServiceAccount{}, err
+		}
+		return account, nil
+	})
 }
 
-func (s *PostgresStore) CreateServiceAccountCredential(ctx context.Context, credential APIKey) (APIKey, error) {
-	err := s.db.QueryRowContext(
-		ctx,
-		`INSERT INTO api_keys (id, service_account_id, name, secret_hash, roles, expires_at)
+func (s *PostgresStore) CreateServiceAccountCredential(ctx context.Context, credential APIKey, audit ...AuditRecord) (APIKey, error) {
+	return runAudited(ctx, s, audit, func(q sqlRunner) (APIKey, error) {
+		err := q.QueryRowContext(
+			ctx,
+			`INSERT INTO api_keys (id, service_account_id, name, secret_hash, roles, expires_at)
 		 SELECT $1, id, $3, $4, $5, $6 FROM service_accounts WHERE id=$2::uuid AND state='active'
 		 RETURNING created_at`,
-		credential.ID,
-		credential.ServiceAccountID,
-		credential.Name,
-		credential.SecretHash,
-		credential.Roles,
-		credential.ExpiresAt,
-	).Scan(&credential.CreatedAt)
-	if errors.Is(err, sql.ErrNoRows) {
-		account, getErr := s.GetServiceAccount(ctx, credential.ServiceAccountID)
-		if errors.Is(getErr, ErrNotFound) {
-			return APIKey{}, ErrNotFound
+			credential.ID,
+			credential.ServiceAccountID,
+			credential.Name,
+			credential.SecretHash,
+			credential.Roles,
+			credential.ExpiresAt,
+		).Scan(&credential.CreatedAt)
+		if errors.Is(err, sql.ErrNoRows) {
+			account, getErr := getServiceAccountOn(ctx, q, credential.ServiceAccountID)
+			if errors.Is(getErr, ErrNotFound) {
+				return APIKey{}, ErrNotFound
+			}
+			if getErr != nil {
+				return APIKey{}, getErr
+			}
+			if account.State != ServiceAccountActive {
+				return APIKey{}, ErrServiceAccountDisabled
+			}
+			return APIKey{}, ErrVersionConflict
 		}
-		if getErr != nil {
-			return APIKey{}, getErr
+		if err != nil {
+			return APIKey{}, err
 		}
-		if account.State != ServiceAccountActive {
-			return APIKey{}, ErrServiceAccountDisabled
-		}
-		return APIKey{}, ErrVersionConflict
-	}
-	if err != nil {
-		return APIKey{}, err
-	}
-	return credential, nil
+		return credential, nil
+	})
 }
 
 func (s *PostgresStore) ListServiceAccountCredentials(ctx context.Context, accountID string, limit int, afterID string) ([]APIKey, error) {
@@ -161,18 +172,20 @@ func (s *PostgresStore) ListServiceAccountCredentials(ctx context.Context, accou
 	return credentials, rows.Err()
 }
 
-func (s *PostgresStore) RevokeServiceAccountCredential(ctx context.Context, accountID, credentialID string) (APIKey, error) {
-	var key APIKey
-	var roles []byte
-	err := s.db.QueryRowContext(ctx, `UPDATE api_keys SET revoked_at=COALESCE(revoked_at, now()) WHERE id=$1::uuid AND service_account_id=$2::uuid RETURNING id::text, service_account_id::text, name, array_to_json(roles), created_at, revoked_at, expires_at, last_used_at`, credentialID, accountID).Scan(&key.ID, &key.ServiceAccountID, &key.Name, &roles, &key.CreatedAt, &key.RevokedAt, &key.ExpiresAt, &key.LastUsedAt)
-	if errors.Is(err, sql.ErrNoRows) {
-		return APIKey{}, ErrNotFound
-	}
-	if err != nil {
-		return APIKey{}, err
-	}
-	if err := scanAPIKeyRoles(roles, &key); err != nil {
-		return APIKey{}, err
-	}
-	return key, nil
+func (s *PostgresStore) RevokeServiceAccountCredential(ctx context.Context, accountID, credentialID string, audit ...AuditRecord) (APIKey, error) {
+	return runAudited(ctx, s, audit, func(q sqlRunner) (APIKey, error) {
+		var key APIKey
+		var roles []byte
+		err := q.QueryRowContext(ctx, `UPDATE api_keys SET revoked_at=COALESCE(revoked_at, now()) WHERE id=$1::uuid AND service_account_id=$2::uuid RETURNING id::text, service_account_id::text, name, array_to_json(roles), created_at, revoked_at, expires_at, last_used_at`, credentialID, accountID).Scan(&key.ID, &key.ServiceAccountID, &key.Name, &roles, &key.CreatedAt, &key.RevokedAt, &key.ExpiresAt, &key.LastUsedAt)
+		if errors.Is(err, sql.ErrNoRows) {
+			return APIKey{}, ErrNotFound
+		}
+		if err != nil {
+			return APIKey{}, err
+		}
+		if err := scanAPIKeyRoles(roles, &key); err != nil {
+			return APIKey{}, err
+		}
+		return key, nil
+	})
 }

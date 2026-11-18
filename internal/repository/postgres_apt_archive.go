@@ -217,11 +217,15 @@ func (s *PostgresStore) CommitAPTArchiveRestore(ctx context.Context, plan APTArc
 		if err != nil {
 			return APTRepositorySnapshot{}, err
 		}
+		var restored usageDelta
 		for _, p := range plan.Packages {
 			r := p.Revision
-			_, err = tx.ExecContext(ctx, `INSERT INTO native_apt_package_revisions(id,repository_id,package_name,version,architecture,canonical_identity,digest,object_key,size,object_name,publisher,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(repository_id,canonical_identity) DO NOTHING`, r.ID, r.RepositoryID, r.Package, r.Version, r.Architecture, r.CanonicalIdentity, r.Digest, r.ObjectKey, r.Size, r.ObjectName, r.Publisher, r.CreatedAt)
+			insertedRevision, err := tx.ExecContext(ctx, `INSERT INTO native_apt_package_revisions(id,repository_id,package_name,version,architecture,canonical_identity,digest,object_key,size,object_name,publisher,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(repository_id,canonical_identity) DO NOTHING`, r.ID, r.RepositoryID, r.Package, r.Version, r.Architecture, r.CanonicalIdentity, r.Digest, r.ObjectKey, r.Size, r.ObjectName, r.Publisher, r.CreatedAt)
 			if err != nil {
 				return APTRepositorySnapshot{}, err
+			}
+			if inserted, _ := insertedRevision.RowsAffected(); inserted == 1 {
+				restored.add(r.RepositoryID, r.Size, 1)
 			}
 			var current APTPackageRevision
 			if err = scanAPTPackageRevision(tx.QueryRowContext(ctx, `SELECT `+aptPackageRevisionColumns+` FROM native_apt_package_revisions WHERE repository_id=$1 AND canonical_identity=$2`, r.RepositoryID, r.CanonicalIdentity), &current); err != nil {
@@ -243,6 +247,9 @@ func (s *PostgresStore) CommitAPTArchiveRestore(ctx context.Context, plan APTArc
 		published, publishErr := publishAPTRepositorySnapshotTx(ctx, tx, snapshot, plan.Assets, release, audit)
 		if publishErr != nil {
 			return APTRepositorySnapshot{}, publishErr
+		}
+		if err = restored.reserve(ctx, tx); err != nil {
+			return APTRepositorySnapshot{}, err
 		}
 		_, err = tx.ExecContext(ctx, `UPDATE native_apt_repository_snapshots SET created_at=$2,published_at=$3 WHERE id=$1`, snapshot.ID, snapshot.CreatedAt, snapshot.PublishedAt)
 		if err != nil {

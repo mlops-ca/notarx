@@ -8,13 +8,16 @@ import (
 	"time"
 )
 
-func (s *MemoryStore) CreateServiceAccount(_ context.Context, account ServiceAccount) (ServiceAccount, error) {
+func (s *MemoryStore) CreateServiceAccount(ctx context.Context, account ServiceAccount, audit ...AuditRecord) (ServiceAccount, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, existing := range s.serviceAccounts {
 		if strings.EqualFold(existing.Name, account.Name) {
 			return ServiceAccount{}, ErrNameExists
 		}
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return ServiceAccount{}, err
 	}
 	now := time.Now().UTC()
 	account.State = ServiceAccountActive
@@ -25,7 +28,7 @@ func (s *MemoryStore) CreateServiceAccount(_ context.Context, account ServiceAcc
 	return account, nil
 }
 
-func (s *MemoryStore) CreateServiceAccountCredential(_ context.Context, credential APIKey) (APIKey, error) {
+func (s *MemoryStore) CreateServiceAccountCredential(ctx context.Context, credential APIKey, audit ...AuditRecord) (APIKey, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	account, ok := s.serviceAccounts[credential.ServiceAccountID]
@@ -37,6 +40,9 @@ func (s *MemoryStore) CreateServiceAccountCredential(_ context.Context, credenti
 	}
 	if _, exists := s.apiKeys[credential.ID]; exists {
 		return APIKey{}, ErrNameExists
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return APIKey{}, err
 	}
 	credential.CreatedAt = time.Now().UTC()
 	credential.Roles = append([]string(nil), credential.Roles...)
@@ -70,7 +76,7 @@ func (s *MemoryStore) GetServiceAccount(_ context.Context, id string) (ServiceAc
 	return account, nil
 }
 
-func (s *MemoryStore) UpdateServiceAccount(_ context.Context, update ServiceAccountUpdate, expectedVersion string) (ServiceAccount, error) {
+func (s *MemoryStore) UpdateServiceAccount(ctx context.Context, update ServiceAccountUpdate, expectedVersion string, audit ...AuditRecord) (ServiceAccount, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	account, ok := s.serviceAccounts[update.ID]
@@ -79,6 +85,9 @@ func (s *MemoryStore) UpdateServiceAccount(_ context.Context, update ServiceAcco
 	}
 	if account.Version != expectedVersion {
 		return ServiceAccount{}, ErrVersionConflict
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return ServiceAccount{}, err
 	}
 	if update.Description != nil {
 		account.Description = *update.Description
@@ -118,12 +127,15 @@ func (s *MemoryStore) ListServiceAccountCredentials(_ context.Context, accountID
 	return credentials, nil
 }
 
-func (s *MemoryStore) RevokeServiceAccountCredential(_ context.Context, accountID, credentialID string) (APIKey, error) {
+func (s *MemoryStore) RevokeServiceAccountCredential(ctx context.Context, accountID, credentialID string, audit ...AuditRecord) (APIKey, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	key, ok := s.apiKeys[credentialID]
 	if !ok || key.ServiceAccountID != accountID {
 		return APIKey{}, ErrNotFound
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return APIKey{}, err
 	}
 	if key.RevokedAt == nil {
 		now := time.Now().UTC()

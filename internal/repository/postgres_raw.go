@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"time"
+
+	"github.com/mlops-ca/notarx/internal/capacity"
 )
 
 const rawUploadColumns = "id::text,repository_id::text,path,object_key,byte_offset,state,expires_at,collected_at"
@@ -93,7 +95,8 @@ func (s *PostgresStore) CompleteRawUploadIf(ctx context.Context, id string, asse
 	if _, err = tx.ExecContext(ctx, `INSERT INTO native_raw_objects (digest,repository_id,object_key,size) VALUES ($1,$2,$3,$4) ON CONFLICT (digest) DO UPDATE SET repository_id=EXCLUDED.repository_id,collected_at=NULL`, asset.Digest, asset.RepositoryID, asset.ObjectKey, asset.Size); err != nil {
 		return asset, err
 	}
-	if current, replaceErr := replaceRawAssetIf(ctx, tx, asset, condition); replaceErr != nil {
+	current, delta, replaceErr := replaceRawAssetIf(ctx, tx, asset, condition)
+	if replaceErr != nil {
 		if errors.Is(replaceErr, ErrPreconditionFailed) {
 			return current, replaceErr
 		}
@@ -101,6 +104,9 @@ func (s *PostgresStore) CompleteRawUploadIf(ctx context.Context, id string, asse
 	}
 	asset.UpdatedAt = time.Now().UTC()
 	if _, err = tx.ExecContext(ctx, `UPDATE native_raw_uploads SET state='completed' WHERE id=$1::uuid`, id); err != nil {
+		return asset, err
+	}
+	if err = delta.reserve(ctx, tx, asset.RepositoryID); err != nil {
 		return asset, err
 	}
 	return asset, tx.Commit()
@@ -192,14 +198,43 @@ func (s *PostgresStore) PutRawAssetIf(ctx context.Context, v RawAsset, condition
 	if err = tx.QueryRowContext(ctx, `SELECT object_key,size FROM native_raw_objects WHERE digest=$1`, v.Digest).Scan(&v.ObjectKey, &v.Size); err != nil {
 		return v, err
 	}
-	if current, replaceErr := replaceRawAssetIf(ctx, tx, v, condition); replaceErr != nil {
+	current, delta, replaceErr := replaceRawAssetIf(ctx, tx, v, condition)
+	if replaceErr != nil {
 		if errors.Is(replaceErr, ErrPreconditionFailed) {
 			return current, replaceErr
 		}
 		return v, replaceErr
 	}
 	v.UpdatedAt = time.Now().UTC()
+	if err = delta.reserve(ctx, tx, v.RepositoryID); err != nil {
+		return v, err
+	}
 	return v, tx.Commit()
+}
+
+// rawUsageDelta is the change one writer makes to a repository's usage counter.
+type rawUsageDelta struct{ bytes, objects int64 }
+
+// reserve applies the delta with capacity.Reserve as the last statement of the transaction.
+func (d rawUsageDelta) reserve(ctx context.Context, tx *sql.Tx, repositoryID string) error {
+	if d == (rawUsageDelta{}) {
+		return nil
+	}
+	return capacity.Reserve(ctx, tx, repositoryID, d.bytes, d.objects)
+}
+
+// lockRawPath serialises writers of one path, including the first insert of an absent
+// path, so the usage delta computed from the previous reference is exact. It returns
+// the size the path counted before the write (0 and false when absent).
+func lockRawPath(ctx context.Context, tx *sql.Tx, repositoryID, path string) (size int64, exists bool, err error) {
+	if err = lockUsagePath(ctx, tx, "raw:"+repositoryID+":"+path); err != nil {
+		return 0, false, err
+	}
+	err = tx.QueryRowContext(ctx, `SELECT o.size FROM native_raw_assets a JOIN native_raw_objects o ON o.digest=a.digest WHERE a.repository_id=$1::uuid AND a.path=$2`, repositoryID, path).Scan(&size)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, false, nil
+	}
+	return size, err == nil, err
 }
 
 // replaceRawAssetIf points the path at asset inside tx. A conditional write
@@ -207,7 +242,29 @@ func (s *PostgresStore) PutRawAssetIf(ctx context.Context, v RawAsset, condition
 // writer either waits for this transaction or is evaluated against its result.
 // An absent path is created with ON CONFLICT DO NOTHING; losing that race
 // re-evaluates the condition against the reference the winner committed.
-func replaceRawAssetIf(ctx context.Context, tx *sql.Tx, asset RawAsset, condition RawWriteCondition) (RawAsset, error) {
+// It returns the usage delta (new object minus replaced object) for the caller to
+// reserve before commit (ADR 0023 section 3).
+func replaceRawAssetIf(ctx context.Context, tx *sql.Tx, asset RawAsset, condition RawWriteCondition) (RawAsset, rawUsageDelta, error) {
+	previousSize, existed, err := lockRawPath(ctx, tx, asset.RepositoryID, asset.Path)
+	if err != nil {
+		return RawAsset{}, rawUsageDelta{}, err
+	}
+	var newSize int64
+	if err = tx.QueryRowContext(ctx, `SELECT size FROM native_raw_objects WHERE digest=$1`, asset.Digest).Scan(&newSize); err != nil {
+		return RawAsset{}, rawUsageDelta{}, err
+	}
+	delta := rawUsageDelta{bytes: newSize - previousSize}
+	if !existed {
+		delta.objects = 1
+	}
+	current, err := replaceRawAssetRow(ctx, tx, asset, condition)
+	if err != nil {
+		return current, rawUsageDelta{}, err
+	}
+	return current, delta, nil
+}
+
+func replaceRawAssetRow(ctx context.Context, tx *sql.Tx, asset RawAsset, condition RawWriteCondition) (RawAsset, error) {
 	if condition.Unconditional() {
 		_, err := tx.ExecContext(ctx, `INSERT INTO native_raw_assets (repository_id,path,digest,content_type) VALUES ($1,$2,$3,$4) ON CONFLICT (repository_id,path) DO UPDATE SET digest=EXCLUDED.digest,content_type=EXCLUDED.content_type,updated_at=now()`, asset.RepositoryID, asset.Path, asset.Digest, asset.ContentType)
 		return RawAsset{}, err
@@ -278,6 +335,9 @@ func (s *PostgresStore) DeleteRawAsset(ctx context.Context, repositoryID, path s
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if _, _, err = lockRawPath(ctx, tx, repositoryID, path); err != nil {
+		return err
+	}
 	var asset RawAsset
 	err = tx.QueryRowContext(ctx, `SELECT a.repository_id::text,a.path,a.digest,o.object_key,o.size,a.content_type,a.updated_at FROM native_raw_assets a JOIN native_raw_objects o ON o.digest=a.digest WHERE a.repository_id=$1::uuid AND a.path=$2 FOR UPDATE`, repositoryID, path).Scan(&asset.RepositoryID, &asset.Path, &asset.Digest, &asset.ObjectKey, &asset.Size, &asset.ContentType, &asset.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -298,6 +358,9 @@ func (s *PostgresStore) DeleteRawAsset(ctx context.Context, repositoryID, path s
 	if _, err = tx.ExecContext(ctx, `DELETE FROM native_raw_assets WHERE repository_id=$1::uuid AND path=$2`, repositoryID, path); err != nil {
 		return err
 	}
+	if err = capacity.Reserve(ctx, tx, repositoryID, -asset.Size, -1); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -307,6 +370,9 @@ func (s *PostgresStore) RestoreRawAsset(ctx context.Context, repositoryID, path 
 		return RawAsset{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if _, _, err = lockRawPath(ctx, tx, repositoryID, path); err != nil {
+		return RawAsset{}, err
+	}
 	var asset RawAsset
 	err = tx.QueryRowContext(ctx, `SELECT t.repository_id::text,t.path,t.digest,o.object_key,o.size,t.content_type,t.deleted_at FROM native_raw_asset_tombstones t JOIN native_raw_objects o ON o.digest=t.digest WHERE t.repository_id=$1::uuid AND t.path=$2 AND o.collected_at IS NULL FOR UPDATE`, repositoryID, path).Scan(&asset.RepositoryID, &asset.Path, &asset.Digest, &asset.ObjectKey, &asset.Size, &asset.ContentType, &asset.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -332,6 +398,9 @@ func (s *PostgresStore) RestoreRawAsset(ctx context.Context, repositoryID, path 
 		return RawAsset{}, err
 	}
 	asset.UpdatedAt = time.Now().UTC()
+	if err = capacity.Reserve(ctx, tx, repositoryID, asset.Size, 1); err != nil {
+		return RawAsset{}, err
+	}
 	return asset, tx.Commit()
 }
 func (s *PostgresStore) ListUnreferencedRawObjects(ctx context.Context, before time.Time, limit int) ([]RawObject, error) {

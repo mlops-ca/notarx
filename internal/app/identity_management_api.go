@@ -10,18 +10,18 @@ import (
 // Identity management does not receive authentication lookups, login mutation,
 // session creation, or expiry jobs merely because their records share a store.
 type identityUserStore interface {
-	CreateUser(context.Context, repository.User) (repository.User, error)
+	CreateUser(context.Context, repository.User, ...repository.AuditRecord) (repository.User, error)
 	ListUsers(context.Context, repository.UserListQuery) (repository.UserPage, error)
 	GetUser(context.Context, string) (repository.User, error)
-	UpdateUser(context.Context, repository.UserUpdate, string) (repository.User, error)
-	DeleteUser(context.Context, string) error
-	UpdateUserPassword(context.Context, string, string, string, bool) (repository.User, error)
-	RevokeUserSessions(context.Context, string, string) (repository.User, error)
+	UpdateUser(context.Context, repository.UserUpdate, string, ...repository.AuditRecord) (repository.User, error)
+	DeleteUser(context.Context, string, ...repository.AuditRecord) error
+	UpdateUserPassword(context.Context, string, string, string, bool, ...repository.AuditRecord) (repository.User, error)
+	RevokeUserSessions(context.Context, string, string, ...repository.AuditRecord) (repository.User, error)
 	ListUserSessions(context.Context, string, bool) ([]repository.UserSession, error)
-	RevokeUserSession(context.Context, string, string) (repository.UserSession, error)
+	RevokeUserSession(context.Context, string, string, ...repository.AuditRecord) (repository.UserSession, error)
 	ListUserIdentities(context.Context, string) ([]repository.UserIdentity, error)
-	CreateUserIdentity(context.Context, repository.UserIdentity) (repository.UserIdentity, error)
-	DeleteUserIdentity(context.Context, string, string) error
+	CreateUserIdentity(context.Context, repository.UserIdentity, ...repository.AuditRecord) (repository.UserIdentity, error)
+	DeleteUserIdentity(context.Context, string, string, ...repository.AuditRecord) error
 }
 
 type identityAPIKeyStore interface {
@@ -31,12 +31,12 @@ type identityAPIKeyStore interface {
 }
 
 type identityServiceAccountStore interface {
-	CreateServiceAccount(context.Context, repository.ServiceAccount) (repository.ServiceAccount, error)
+	CreateServiceAccount(context.Context, repository.ServiceAccount, ...repository.AuditRecord) (repository.ServiceAccount, error)
 	ListServiceAccounts(context.Context, int, string) ([]repository.ServiceAccount, error)
-	UpdateServiceAccount(context.Context, repository.ServiceAccountUpdate, string) (repository.ServiceAccount, error)
-	CreateServiceAccountCredential(context.Context, repository.APIKey) (repository.APIKey, error)
+	UpdateServiceAccount(context.Context, repository.ServiceAccountUpdate, string, ...repository.AuditRecord) (repository.ServiceAccount, error)
+	CreateServiceAccountCredential(context.Context, repository.APIKey, ...repository.AuditRecord) (repository.APIKey, error)
 	ListServiceAccountCredentials(context.Context, string, int, string) ([]repository.APIKey, error)
-	RevokeServiceAccountCredential(context.Context, string, string) (repository.APIKey, error)
+	RevokeServiceAccountCredential(context.Context, string, string, ...repository.AuditRecord) (repository.APIKey, error)
 }
 
 type identityOIDCSettings interface {

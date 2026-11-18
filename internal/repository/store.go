@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"github.com/mlops-ca/notarx/internal/capacity"
 )
 
 var (
@@ -13,7 +15,7 @@ var (
 	ErrIdempotencyConflict           = errors.New("idempotency key conflicts with request")
 	ErrVersionConflict               = errors.New("resource version conflicts with current state")
 	ErrLastActiveAdmin               = errors.New("last active administrator cannot be removed")
-	ErrQuotaExceeded                 = errors.New("repository capacity quota exceeded")
+	ErrQuotaExceeded                 = capacity.ErrQuotaExceeded
 	ErrUpstreamChanged               = errors.New("upstream immutable artifact metadata changed")
 	ErrInvalidGoModulePublication    = errors.New("go module publication is invalid")
 	ErrInvalidCargoIdentity          = errors.New("cargo identity reservation is invalid")
@@ -98,8 +100,8 @@ type WebhookStore interface {
 // are informational claims refreshed at successful sign-in.
 type UserIdentityStore interface {
 	ListUserIdentities(context.Context, string) ([]UserIdentity, error)
-	CreateUserIdentity(context.Context, UserIdentity) (UserIdentity, error)
-	DeleteUserIdentity(context.Context, string, string) error
+	CreateUserIdentity(context.Context, UserIdentity, ...AuditRecord) (UserIdentity, error)
+	DeleteUserIdentity(context.Context, string, string, ...AuditRecord) error
 	GetUserByOIDCIdentity(context.Context, string, string) (User, UserIdentity, error)
 	ResolveOIDCIdentity(context.Context, OIDCIdentityProvision) (User, UserIdentity, bool, error)
 }
@@ -110,7 +112,7 @@ type UserSessionStore interface {
 	CreateUserSession(context.Context, UserSession) (UserSession, error)
 	GetUserSession(context.Context, string, string) (UserSession, error)
 	ListUserSessions(context.Context, string, bool) ([]UserSession, error)
-	RevokeUserSession(context.Context, string, string) (UserSession, error)
+	RevokeUserSession(context.Context, string, string, ...AuditRecord) (UserSession, error)
 	RevokeAllUserSessionRecords(context.Context, string, time.Time) error
 	PruneExpiredUserSessions(context.Context, time.Time, int) (int, error)
 }

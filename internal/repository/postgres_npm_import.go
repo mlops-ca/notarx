@@ -62,6 +62,7 @@ func (s *PostgresStore) PublishNPMImport(ctx context.Context, c NPMImportClosure
 		oldVersions[v.Version] = v
 	}
 	changed := false
+	var delta usageDelta
 	for _, v := range c.Versions {
 		var blocked bool
 		err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM artifact_tombstones WHERE repository_id=$1::uuid AND format='npm' AND coordinate=$2) OR EXISTS(SELECT 1 FROM artifact_quarantines WHERE repository_id=$1::uuid AND format='npm' AND coordinate=$2 AND digest=$3 AND state='quarantined')`, c.RepositoryID, c.PackageName+"@"+v.Version, v.Digest).Scan(&blocked)
@@ -84,6 +85,9 @@ func (s *PostgresStore) PublishNPMImport(ctx context.Context, c NPMImportClosure
 		if err != nil {
 			return err
 		}
+		if v.ObjectKey != "" {
+			delta.add(c.RepositoryID, v.Size, 1)
+		}
 		changed = true
 	}
 	for tag, version := range c.DistTags {
@@ -100,6 +104,9 @@ func (s *PostgresStore) PublishNPMImport(ctx context.Context, c NPMImportClosure
 		if err = insertAudit(ctx, tx, npmImportAudit(c, repoName)); err != nil {
 			return err
 		}
+	}
+	if err = delta.reserve(ctx, tx); err != nil {
+		return err
 	}
 	return tx.Commit()
 }

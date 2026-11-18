@@ -59,6 +59,7 @@ func (s *PostgresStore) PublishOCIImportClosure(ctx context.Context, c OCIImport
 		return err
 	}
 	changed := false
+	var imported usageDelta
 	for _, m := range c.Manifests {
 		var blocked bool
 		err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM artifact_tombstones WHERE repository_id=$1::uuid AND format='oci' AND coordinate=$2)`, c.RepositoryID, c.Name+"@"+m.Digest).Scan(&blocked)
@@ -97,6 +98,9 @@ func (s *PostgresStore) PublishOCIImportClosure(ctx context.Context, c OCIImport
 			return insertErr
 		}
 		n, _ := result.RowsAffected()
+		if n > 0 {
+			imported.add(c.RepositoryID, m.Size, 1)
+		}
 		changed = changed || n > 0
 	}
 	for _, b := range c.Blobs {
@@ -121,6 +125,9 @@ func (s *PostgresStore) PublishOCIImportClosure(ctx context.Context, c OCIImport
 			return insertErr
 		}
 		n, _ := result.RowsAffected()
+		if n > 0 {
+			imported.add(c.RepositoryID, b.Size, 1)
+		}
 		changed = changed || n > 0
 	}
 	if c.Reference != c.RootDigest {
@@ -147,6 +154,9 @@ func (s *PostgresStore) PublishOCIImportClosure(ctx context.Context, c OCIImport
 		if err = insertAudit(ctx, tx, ociImportAudit(c, repoName)); err != nil {
 			return err
 		}
+	}
+	if err = imported.reserve(ctx, tx); err != nil {
+		return err
 	}
 	return tx.Commit()
 }

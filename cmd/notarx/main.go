@@ -19,6 +19,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/authorization"
 	"github.com/mlops-ca/notarx/internal/backupops"
 	"github.com/mlops-ca/notarx/internal/buildinfo"
+	"github.com/mlops-ca/notarx/internal/capacity"
 	"github.com/mlops-ca/notarx/internal/config"
 	"github.com/mlops-ca/notarx/internal/consoletheme"
 	"github.com/mlops-ca/notarx/internal/database"
@@ -338,6 +339,11 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 	}
 	metrics.WithRetentionStats(retentionJanitor.Stats)
 	go retentionJanitor.Run(runtimeContext, retention.DefaultInterval)
+	// The quota reconciler recomputes each repository's usage counter and corrects
+	// drift (ADR 0023 section 3); concurrent runs on several nodes are safe.
+	quotaReconciler := capacity.NewReconciler(databasePool, cfg.QuotaReconcileInterval, slog.Default())
+	metrics.WithQuotaDriftStats(quotaReconciler.Stats)
+	go quotaReconciler.Run(runtimeContext)
 	// Losing the root lock means another process could write the same root.
 	rootLost := make(chan error, 1)
 	identityGuard.Watch(runtimeContext, 15*time.Second, func(err error) { rootLost <- err })

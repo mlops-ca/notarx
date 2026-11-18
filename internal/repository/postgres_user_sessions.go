@@ -69,13 +69,15 @@ func (s *PostgresStore) ListUserSessions(ctx context.Context, userID string, inc
 	return items, rows.Err()
 }
 
-func (s *PostgresStore) RevokeUserSession(ctx context.Context, userID, sessionID string) (UserSession, error) {
-	var session UserSession
-	err := scanUserSession(s.db.QueryRowContext(ctx, `UPDATE user_sessions SET revoked_at=COALESCE(revoked_at,now()) WHERE id=$1::uuid AND user_id=$2::uuid RETURNING `+userSessionColumns, sessionID, userID), &session)
-	if errors.Is(err, sql.ErrNoRows) {
-		return UserSession{}, ErrNotFound
-	}
-	return session, err
+func (s *PostgresStore) RevokeUserSession(ctx context.Context, userID, sessionID string, audit ...AuditRecord) (UserSession, error) {
+	return runAudited(ctx, s, audit, func(q sqlRunner) (UserSession, error) {
+		var session UserSession
+		err := scanUserSession(q.QueryRowContext(ctx, `UPDATE user_sessions SET revoked_at=COALESCE(revoked_at,now()) WHERE id=$1::uuid AND user_id=$2::uuid RETURNING `+userSessionColumns, sessionID, userID), &session)
+		if errors.Is(err, sql.ErrNoRows) {
+			return UserSession{}, ErrNotFound
+		}
+		return session, err
+	})
 }
 
 func (s *PostgresStore) RevokeAllUserSessionRecords(ctx context.Context, userID string, occurredAt time.Time) error {
