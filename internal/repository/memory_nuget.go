@@ -80,6 +80,10 @@ func (s *MemoryStore) ReserveNuGetPublication(ctx context.Context, in NuGetSessi
 	}
 	in.CreatedAt = time.Now().UTC()
 	in.State = "reserved"
+	// An unstaged session reads back as {} from PostgreSQL (jsonb column default).
+	if len(in.MetadataJSON) == 0 {
+		in.MetadataJSON = []byte("{}")
+	}
 	in.ObjectKey = nuGetSessionObjectKey(in)
 	if s.nugetSessions == nil {
 		s.nugetSessions = map[string]NuGetSession{}

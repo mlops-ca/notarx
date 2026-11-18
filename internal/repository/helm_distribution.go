@@ -7,7 +7,6 @@ import (
 	"time"
 
 	dist "github.com/mlops-ca/notarx/internal/helmdistribution"
-
 	"github.com/mlops-ca/notarx/internal/jsonmeta"
 )
 

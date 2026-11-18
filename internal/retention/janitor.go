@@ -75,6 +75,8 @@ type Janitor struct {
 
 	mu    sync.Mutex
 	stats map[string]*TableStat
+	// leasedAt is when the lease was last taken or renewed by this node.
+	leasedAt time.Time
 }
 
 // New validates the registry and fills option defaults.
@@ -185,6 +187,7 @@ func (j *Janitor) RunOnce(ctx context.Context) (Report, error) {
 		return report, nil
 	}
 	report.Leader = true
+	j.leasedAt = j.opts.Now()
 	defer func() {
 		releaseContext, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
@@ -244,7 +247,11 @@ func (j *Janitor) prune(ctx context.Context, entry Entry, keep time.Duration) (i
 			return total, err
 		}
 		began := j.opts.Now()
-		result, err := j.db.ExecContext(ctx, statement, cutoff, batch)
+		// A batch that outlives half the lease is cancelled, so a statement never keeps
+		// running after another node could have taken the lease over.
+		batchContext, cancel := context.WithTimeout(ctx, j.opts.LeaseTTL/2)
+		result, err := j.db.ExecContext(batchContext, statement, cutoff, batch)
+		cancel()
 		if err != nil {
 			return total, err
 		}
@@ -366,7 +373,12 @@ RETURNING lease_owner`, leaseTaskID, leaseTaskName, j.opts.Owner, j.opts.LeaseTT
 	return owner == j.opts.Owner, nil
 }
 
+// renew extends the lease once a quarter of its time to live has passed, so small
+// batches do not pay an upsert each; it fails if another node holds the lease now.
 func (j *Janitor) renew(ctx context.Context) error {
+	if j.opts.Now().Sub(j.leasedAt) < j.opts.LeaseTTL/4 {
+		return nil
+	}
 	held, err := j.acquire(ctx)
 	if err != nil {
 		return err
@@ -374,6 +386,7 @@ func (j *Janitor) renew(ctx context.Context) error {
 	if !held {
 		return errLeaseLost
 	}
+	j.leasedAt = j.opts.Now()
 	return nil
 }
 

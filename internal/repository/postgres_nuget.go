@@ -5,8 +5,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"github.com/mlops-ca/notarx/internal/jsonmeta"
 	"time"
+
+	"github.com/mlops-ca/notarx/internal/jsonmeta"
 )
 
 const nuGetSessionColumns = `id::text,repository_id::text,package_id,version,digest,size,actor,state,object_key,metadata_json,nuspec,created_at,expires_at,committed_at,collected_at,source_version,source_url,registration_url`

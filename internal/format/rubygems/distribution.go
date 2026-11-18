@@ -3,7 +3,6 @@ package rubygems
 import (
 	"context"
 	"errors"
-	"github.com/mlops-ca/notarx/internal/jsonmeta"
 	"net/http"
 	"reflect"
 	"strings"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/mlops-ca/notarx/internal/authorization"
 	"github.com/mlops-ca/notarx/internal/ids"
+	"github.com/mlops-ca/notarx/internal/jsonmeta"
 	dist "github.com/mlops-ca/notarx/internal/rubygemsdistribution"
 
 	protocol "github.com/mlops-ca/notarx/internal/protocol/rubygems"

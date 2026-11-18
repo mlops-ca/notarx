@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/database"
+	"github.com/mlops-ca/notarx/internal/repository/explaincheck"
 	"github.com/mlops-ca/notarx/internal/testsupport"
 )
 
@@ -32,6 +33,41 @@ func openDB(t *testing.T) *sql.DB {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
+	return db
+}
+
+// scratchSchema returns a one-connection pool whose search_path is a private schema holding
+// empty copies (columns, defaults, CHECK constraints and indexes, no foreign keys) of the tables the
+// janitor entries and their terminal predicates read, plus scheduled_tasks for the lease.
+// The fixtures therefore never touch rows other tests rely on.
+func scratchSchema(t *testing.T) *sql.DB {
+	t.Helper()
+	db := openDB(t)
+	db.SetMaxOpenConns(1)
+	token := make([]byte, 4)
+	if _, err := rand.Read(token); err != nil {
+		t.Fatal(err)
+	}
+	schema := "rj_scratch_" + hex.EncodeToString(token)
+	if _, err := db.ExecContext(t.Context(), "CREATE SCHEMA "+schema); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = db.ExecContext(context.Background(), "DROP SCHEMA IF EXISTS "+schema+" CASCADE") })
+	tables := map[string]bool{"scheduled_tasks": true, "replication_plans": true, "repository_quota_alert_events": true, "nexus_migration_batches": true}
+	for _, entry := range DefaultRegistry() {
+		if !entry.PartitionedOnPostgres && !entry.Optional {
+			tables[entry.Table] = true
+		}
+	}
+	for table := range tables {
+		statement := fmt.Sprintf("CREATE TABLE %s.%s (LIKE public.%s INCLUDING DEFAULTS INCLUDING CONSTRAINTS INCLUDING INDEXES)", schema, table, table)
+		if _, err := db.ExecContext(t.Context(), statement); err != nil {
+			t.Fatalf("%s: %v", statement, err)
+		}
+	}
+	if _, err := db.ExecContext(t.Context(), "SET search_path = "+schema); err != nil {
+		t.Fatal(err)
+	}
 	return db
 }
 
@@ -346,14 +382,10 @@ func fixtures() map[string]fixture {
 // TestEveryRegistryEntryDeletesOnlyTerminalExpiredRows inserts, per entry, one
 // expired terminal row, one fresh terminal row and (where the predicate can differ)
 // one expired non-terminal row, runs the janitor and expects only the first to go.
-// Foreign keys are disabled for the session so the rows need no parents.
+// The rows go into a private schema of table copies (scratchSchema).
 func TestCheckpointsGoWithCompletedPlansAndDeliveriesStayWhileAnEventPointsAtThem(t *testing.T) {
-	db := openDB(t)
-	db.SetMaxOpenConns(1)
+	db := scratchSchema(t)
 	ctx := t.Context()
-	if _, err := db.ExecContext(ctx, "SET session_replication_role = replica"); err != nil {
-		t.Skipf("replica role needs a superuser: %v", err)
-	}
 	var completed, running, delivery string
 	if err := db.QueryRowContext(ctx, "SELECT gen_random_uuid()::text, gen_random_uuid()::text, gen_random_uuid()::text").Scan(&completed, &running, &delivery); err != nil {
 		t.Fatal(err)
@@ -362,7 +394,7 @@ func TestCheckpointsGoWithCompletedPlansAndDeliveriesStayWhileAnEventPointsAtThe
 		if _, err := db.ExecContext(ctx, "INSERT INTO replication_plans (id,source_repository_id,target_repository_id,format,idempotency_key,state,completed_at) VALUES ($1::uuid,gen_random_uuid(),gen_random_uuid(),'raw',md5(random()::text),$2,now())", plan, state); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := db.ExecContext(ctx, "INSERT INTO replication_checkpoints (plan_id,object_key,digest,size,byte_offset,state,attempts,last_error,verified_at,updated_at,source_object_key) VALUES ($1::uuid,'k','sha256:'||repeat('a',64),1,0,'pending',0,'',NULL,now() - interval '1 hour','s')", plan); err != nil {
+		if _, err := db.ExecContext(ctx, "INSERT INTO replication_checkpoints (plan_id,object_key,digest,size,byte_offset,state,attempts,last_error,verified_at,updated_at,source_object_key) VALUES ($1::uuid,'k','sha256:'||repeat('a',64),1,0,'pending',0,'',NULL,now() - interval '2 hours','s')", plan); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -385,12 +417,7 @@ func TestCheckpointsGoWithCompletedPlansAndDeliveriesStayWhileAnEventPointsAtThe
 }
 
 func TestEveryRegistryEntryDeletesOnlyTerminalExpiredRows(t *testing.T) {
-	// A pool of one connection keeps the replica role (foreign keys off) for the janitor too.
-	single := openDB(t)
-	single.SetMaxOpenConns(1)
-	if _, err := single.ExecContext(t.Context(), "SET session_replication_role = replica"); err != nil {
-		t.Fatal(err)
-	}
+	single := scratchSchema(t)
 	cfg := DefaultConfig()
 	covered := map[string]bool{}
 	for _, entry := range DefaultRegistry() {
@@ -474,5 +501,45 @@ func insertRow(t *testing.T, db *sql.DB, table, timeColumn, timeValue string, ov
 	statement := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", table, strings.Join(columns, ","), strings.Join(literals, ","))
 	if _, err := db.ExecContext(t.Context(), statement); err != nil {
 		t.Fatalf("%s: %v", statement, err)
+	}
+}
+
+// TestBatchSelectionsAreServedByAnIndex plans the inner SELECT of every entry's batch
+// delete with sequential scans discouraged: the oldest-first scan must be able to use an
+// index, whichever the planner prefers for the table size. The entries that have a
+// dedicated *_retention_idx must scan that index.
+func TestBatchSelectionsAreServedByAnIndex(t *testing.T) {
+	db := openDB(t)
+	existing := map[string]string{
+		"user_sessions": "user_sessions_expiry_idx",
+		// The planner drives this entry from the completed plans, then reads their checkpoints.
+		"replication_checkpoints":            "replication_plans_retention_idx",
+		"hosted_repository_idempotency":      "hosted_repository_idempotency_expires_at_idx",
+		"native_apt_publication_idempotency": "native_apt_publication_idempotency_expiry_idx",
+		"native_maven_publish_idempotency":   "native_maven_publish_idempotency_expires_at_idx",
+	}
+	for _, entry := range DefaultRegistry() {
+		if entry.PartitionedOnPostgres || entry.Optional {
+			continue
+		}
+		t.Run(entry.Name(), func(t *testing.T) {
+			want, ok := existing[entry.Table]
+			if !ok {
+				want = entry.Table + "_retention_idx"
+			}
+			query := fmt.Sprintf("SELECT ctid FROM %s WHERE (%s) AND %s < $1 ORDER BY %s LIMIT $2", entry.Table, entry.Terminal, entry.TimeColumn, entry.TimeColumn)
+			tx, err := db.BeginTx(t.Context(), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = tx.Rollback() }()
+			plan, err := explaincheck.Plan(t.Context(), tx, query, time.Now(), 10)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !plan.UsesIndex(want) {
+				t.Fatalf("plan scans %v, want %s", plan.Indexes(), want)
+			}
+		})
 	}
 }

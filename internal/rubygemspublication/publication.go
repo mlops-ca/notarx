@@ -8,11 +8,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"github.com/mlops-ca/notarx/internal/jsonmeta"
 	"strconv"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/jsonmeta"
 	protocol "github.com/mlops-ca/notarx/internal/protocol/rubygems"
 	"github.com/mlops-ca/notarx/internal/repository"
 )

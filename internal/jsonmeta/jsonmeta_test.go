@@ -22,6 +22,24 @@ func TestValidateObjectReplacesTheDroppedChecks(t *testing.T) {
 	}
 }
 
+func TestNULAndNumberNormalization(t *testing.T) {
+	if err := ValidateObject([]byte(`{"a":"x\u0000y"}`), 0); !errors.Is(err, ErrInvalid) {
+		t.Errorf("a NUL escape was accepted: %v", err)
+	}
+	if err := ValidateObject([]byte(`{"a":"x\\u0000y"}`), 0); err != nil {
+		t.Errorf("an escaped backslash followed by u0000 is legal: %v", err)
+	}
+	if err := ValidateSize([]byte(`["\u0000"]`), 0); !errors.Is(err, ErrInvalid) {
+		t.Errorf("ValidateSize accepted a NUL: %v", err)
+	}
+	if !Equal([]byte(`{"n":1e2,"m":1.50}`), []byte(`{"n":100,"m":1.5}`)) {
+		t.Error("numbers must compare by value, as jsonb canonicalizes them")
+	}
+	if Equal([]byte(`{"n":1}`), []byte(`{"n":"1"}`)) {
+		t.Error("a number is not its string form")
+	}
+}
+
 func TestValidateSize(t *testing.T) {
 	if err := ValidateSize([]byte(`[1,2]`), 10); err != nil {
 		t.Fatal(err)

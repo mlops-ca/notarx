@@ -3,7 +3,6 @@ package rubygems
 import (
 	"bytes"
 	"context"
-	"github.com/mlops-ca/notarx/internal/jsonmeta"
 	"io"
 	"mime"
 	"net/http"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/jsonmeta"
 	protocol "github.com/mlops-ca/notarx/internal/protocol/rubygems"
 	"github.com/mlops-ca/notarx/internal/repository"
 	domain "github.com/mlops-ca/notarx/internal/rubygemspublication"

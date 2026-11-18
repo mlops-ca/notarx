@@ -9,12 +9,9 @@ import (
 	"github.com/mlops-ca/notarx/internal/retention"
 )
 
-// baselinePolicyDays and baselinePolicyVersion identify an audit_retention_policy row
-// nobody has edited: the baseline default is enabled with 90 days at version 1.
-const (
-	baselinePolicyDays    = 90
-	baselinePolicyVersion = "1"
-)
+// baselinePolicyVersion identifies an audit_retention_policy row nobody has edited: every
+// edit bumps the version, so version 1 is the baseline (enabled, 90 days).
+const baselinePolicyVersion = "1"
 
 // auditPolicyReader is the part of the store the override needs.
 type auditPolicyReader interface {
@@ -27,7 +24,9 @@ type auditPolicyReader interface {
 // profile (7 days) and NOTARX_RETENTION_RESOLVER_AUDIT_LOG apply. security_audit_log is
 // not affected by the policy: its retention is the janitor configuration alone
 // (730 days standard, 90 free tier, NOTARX_RETENTION_SECURITY_AUDIT_LOG). A table
-// switched off with the value "off" is kept forever (retention 0).
+// switched off with the value "off" is kept forever (retention 0). A disabled policy
+// defers to the same configuration; set NOTARX_RETENTION_RESOLVER_AUDIT_LOG=off to keep
+// the table forever.
 func auditRetentionFor(policies auditPolicyReader, cfg retention.Config) func(context.Context, partitions.Spec) (time.Duration, error) {
 	return func(ctx context.Context, spec partitions.Spec) (time.Duration, error) {
 		if spec.Table == "resolver_audit_log" {
@@ -35,7 +34,7 @@ func auditRetentionFor(policies auditPolicyReader, cfg retention.Config) func(co
 			if err != nil {
 				return 0, err
 			}
-			edited := policy.Enabled && policy.KeepDays > 0 && !(policy.KeepDays == baselinePolicyDays && policy.Version == baselinePolicyVersion)
+			edited := policy.Enabled && policy.KeepDays > 0 && policy.Version != baselinePolicyVersion
 			if edited {
 				return time.Duration(policy.KeepDays) * 24 * time.Hour, nil
 			}

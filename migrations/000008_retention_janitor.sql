@@ -6,7 +6,7 @@
 -- (kind 'retention-janitor', never enabled, hidden from the task list API like the
 -- partition manager's row). The audit retention policy now defaults to
 -- enabled with 90 days, and the 1000 row cap on audit_cleanup_jobs.batch_size is
--- lifted so the legacy cleanup job can use the janitor batch size (2000).
+-- raised to 50000 so the legacy cleanup job can use the janitor batch size (2000).
 -- Partial indexes serve the janitor's oldest-first terminal-row scans.
 --
 -- MySQL (ADR 0022): there is no migrations/mysql directory yet, so no twin is
@@ -31,7 +31,7 @@ UPDATE public.audit_retention_policy SET enabled = true, keep_days = 90
  WHERE version = 1 AND NOT enabled AND keep_days = 0;
 
 ALTER TABLE public.audit_cleanup_jobs DROP CONSTRAINT audit_cleanup_jobs_batch_size_check;
-ALTER TABLE public.audit_cleanup_jobs ADD CONSTRAINT audit_cleanup_jobs_batch_size_check CHECK (batch_size >= 1);
+ALTER TABLE public.audit_cleanup_jobs ADD CONSTRAINT audit_cleanup_jobs_batch_size_check CHECK (batch_size >= 1 AND batch_size <= 50000);
 
 CREATE INDEX lifecycle_jobs_retention_idx ON public.lifecycle_jobs USING btree (completed_at)
     WHERE state IN ('completed', 'failed', 'cancelled');

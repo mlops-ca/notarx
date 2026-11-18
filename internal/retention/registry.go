@@ -23,8 +23,13 @@ import (
 
 const day = 24 * time.Hour
 
-// DefaultBatch is the number of rows deleted per statement.
-const DefaultBatch = 2000
+// DefaultBatch is the number of rows deleted per statement. MaxBatch bounds a batch size
+// taken from a stored job so one statement can never hold locks and write WAL for an
+// unbounded number of rows.
+const (
+	DefaultBatch = 2000
+	MaxBatch     = 50000
+)
 
 // Entry describes how one class of rows of one table is pruned.
 type Entry struct {
@@ -110,9 +115,9 @@ func DefaultRegistry() []Entry {
 		{Table: "lifecycle_jobs", Label: "lifecycle_jobs_done", TimeColumn: "completed_at", Terminal: "state IN ('completed','cancelled')", KeyColumns: []string{"id"}, Standard: 7 * day, FreeTier: 1 * day},
 		{Table: "lifecycle_jobs", Label: "lifecycle_jobs_failed", TimeColumn: "completed_at", Terminal: "state = 'failed'", KeyColumns: []string{"id"}, Standard: 30 * day, FreeTier: 7 * day},
 		{Table: "replication_plans", TimeColumn: "completed_at", Terminal: "state IN ('completed','failed','cancelled')", KeyColumns: []string{"id"}, Standard: 30 * day, FreeTier: 7 * day},
-		// Checkpoints are deleted when their plan completes; the plan row keeps the
-		// high-water mark (digest, coordinate and state).
-		{Table: "replication_checkpoints", TimeColumn: "updated_at", Terminal: "EXISTS (SELECT 1 FROM replication_plans p WHERE p.id = replication_checkpoints.plan_id AND p.state = 'completed')", KeyColumns: []string{"plan_id", "object_key"}},
+		// Checkpoints are deleted an hour after their plan completes; the plan row keeps
+		// the high-water mark (digest, coordinate and state).
+		{Table: "replication_checkpoints", TimeColumn: "updated_at", Terminal: "EXISTS (SELECT 1 FROM replication_plans p WHERE p.id = replication_checkpoints.plan_id AND p.state = 'completed')", KeyColumns: []string{"plan_id", "object_key"}, Standard: 1 * time.Hour, FreeTier: 1 * time.Hour},
 		{Table: "cache_tasks", TimeColumn: "completed_at", Terminal: "completed_at IS NOT NULL", KeyColumns: []string{"id"}, Standard: 3 * day, FreeTier: 1 * day},
 		{Table: "audit_cleanup_jobs", TimeColumn: "completed_at", Terminal: "state IN ('completed','failed')", KeyColumns: []string{"id"}, Standard: 30 * day, FreeTier: 7 * day},
 		{Table: "scheduled_task_runs", TimeColumn: "created_at", Terminal: "state IN ('submitted','failed')", KeyColumns: []string{"id"}, Standard: 30 * day, FreeTier: 7 * day},

@@ -12,7 +12,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"reflect"
+	"strings"
 )
 
 // ErrInvalid wraps every validation failure.
@@ -28,6 +30,9 @@ func ValidateObject(raw []byte, maxBytes int) error {
 	if len(trimmed) == 0 || trimmed[0] != '{' || !json.Valid(trimmed) {
 		return fmt.Errorf("%w: not a JSON object", ErrInvalid)
 	}
+	if document, ok := decode(trimmed); !ok || containsNUL(document) {
+		return fmt.Errorf("%w: a string holds U+0000, which jsonb cannot store", ErrInvalid)
+	}
 	return nil
 }
 
@@ -36,21 +41,26 @@ func ValidateSize(raw []byte, maxBytes int) error {
 	if maxBytes > 0 && len(raw) > maxBytes {
 		return fmt.Errorf("%w: %d bytes exceeds the %d byte limit", ErrInvalid, len(raw), maxBytes)
 	}
-	if !json.Valid(raw) {
+	document, ok := decode(raw)
+	if !ok {
 		return fmt.Errorf("%w: not valid JSON", ErrInvalid)
+	}
+	if containsNUL(document) {
+		return fmt.Errorf("%w: a string holds U+0000, which jsonb cannot store", ErrInvalid)
 	}
 	return nil
 }
 
-// Equal reports whether a and b are the same JSON document, ignoring key order and
-// whitespace. Invalid JSON is never equal.
+// Equal reports whether a and b are the same JSON document, ignoring key order,
+// whitespace and the spelling of numbers (jsonb stores 1e2 as 100). Invalid JSON is
+// never equal.
 func Equal(a, b []byte) bool {
 	left, ok := decode(a)
 	if !ok {
 		return false
 	}
 	right, ok := decode(b)
-	return ok && reflect.DeepEqual(left, right)
+	return ok && equalValue(left, right)
 }
 
 func decode(raw []byte) (any, bool) {
@@ -64,4 +74,64 @@ func decode(raw []byte) (any, bool) {
 		return nil, false
 	}
 	return value, true
+}
+
+func equalValue(a, b any) bool {
+	switch x := a.(type) {
+	case map[string]any:
+		y, ok := b.(map[string]any)
+		if !ok || len(x) != len(y) {
+			return false
+		}
+		for key, value := range x {
+			other, present := y[key]
+			if !present || !equalValue(value, other) {
+				return false
+			}
+		}
+		return true
+	case []any:
+		y, ok := b.([]any)
+		if !ok || len(x) != len(y) {
+			return false
+		}
+		for i := range x {
+			if !equalValue(x[i], y[i]) {
+				return false
+			}
+		}
+		return true
+	case json.Number:
+		y, ok := b.(json.Number)
+		if !ok {
+			return false
+		}
+		left, okLeft := new(big.Rat).SetString(x.String())
+		right, okRight := new(big.Rat).SetString(y.String())
+		return okLeft && okRight && left.Cmp(right) == 0
+	default:
+		return reflect.DeepEqual(a, b)
+	}
+}
+
+// containsNUL reports whether any string or key in the decoded document holds U+0000,
+// which jsonb rejects.
+func containsNUL(value any) bool {
+	switch x := value.(type) {
+	case string:
+		return strings.ContainsRune(x, 0)
+	case map[string]any:
+		for key, item := range x {
+			if strings.ContainsRune(key, 0) || containsNUL(item) {
+				return true
+			}
+		}
+	case []any:
+		for _, item := range x {
+			if containsNUL(item) {
+				return true
+			}
+		}
+	}
+	return false
 }

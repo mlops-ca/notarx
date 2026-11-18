@@ -22,6 +22,8 @@ func (w AuditRetentionWorker) Enqueue(ctx context.Context, key string, batchSize
 	}
 	if batchSize <= 0 {
 		batchSize = retention.DefaultBatch
+	} else if batchSize > retention.MaxBatch {
+		batchSize = retention.MaxBatch
 	}
 	return w.Store.EnqueueAuditCleanupJob(ctx, repository.AuditCleanupJob{ID: ids.New(), IdempotencyKey: key, PolicyVersion: p.Version, CutoffAt: time.Now().UTC().AddDate(0, 0, -p.KeepDays), BatchSize: batchSize})
 }
@@ -43,6 +45,8 @@ func (w AuditRetentionWorker) RunJobs(ctx context.Context, limit int) error {
 		batchSize := j.BatchSize
 		if batchSize <= 0 {
 			batchSize = retention.DefaultBatch
+		} else if batchSize > retention.MaxBatch {
+			batchSize = retention.MaxBatch
 		}
 		deleted := 0
 		for {

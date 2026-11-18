@@ -102,11 +102,12 @@ func TestSecurityAuditIsIndependentOfResolverAudit(t *testing.T) {
 
 func TestLoadConfigOverrides(t *testing.T) {
 	cfg, err := LoadConfig(lookupFrom(map[string]string{
-		"NOTARX_RETENTION_PROFILE":            "FreeTier",
-		"NOTARX_RETENTION_LIFECYCLE_JOBS":     "36h",
-		"NOTARX_RETENTION_WEBHOOK_DELIVERIES": "off",
-		"NOTARX_RETENTION_USER_SESSIONS":      "",
-		"NOTARX_RETENTION_RUN_BUDGET":         "5s",
+		"NOTARX_RETENTION_PROFILE":               "FreeTier",
+		"NOTARX_RETENTION_LIFECYCLE_JOBS":        "36h",
+		"NOTARX_RETENTION_WEBHOOK_DELIVERIES":    "off",
+		"NOTARX_RETENTION_USER_SESSIONS":         "",
+		"NOTARX_RETENTION_LIFECYCLE_JOBS_FAILED": "10d",
+		"NOTARX_RETENTION_RUN_BUDGET":            "5s",
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -118,8 +119,12 @@ func TestLoadConfigOverrides(t *testing.T) {
 		keep, on := cfg.Keep(entry)
 		switch entry.Table {
 		case "lifecycle_jobs":
-			if !on || keep != 36*time.Hour {
-				t.Errorf("%s: override should apply to every entry of the table, got %v %v", entry.Name(), keep, on)
+			want := 36 * time.Hour
+			if entry.Name() == "lifecycle_jobs_failed" {
+				want = 10 * day // the label key wins over the table key
+			}
+			if !on || keep != want {
+				t.Errorf("%s: keep = %v (on %v), want %v", entry.Name(), keep, on, want)
 			}
 		case "webhook_deliveries":
 			if on {

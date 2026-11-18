@@ -27,7 +27,7 @@ const (
 	DefaultRunBudget = 60 * time.Second
 )
 
-// Override replaces the keep time of every entry of one table.
+// Override replaces the keep time of an entry (by label) or of every entry of a table.
 type Override struct {
 	// Off disables the table.
 	Off  bool
@@ -79,8 +79,9 @@ func ParseProfile(value string) (Profile, error) {
 	return "", fmt.Errorf("%s must be standard or freetier, got %q", ProfileEnv, value)
 }
 
-// LoadConfig reads the profile, the run budget and the per-table overrides for
-// every table of the registry from lookup (os.LookupEnv in production).
+// LoadConfig reads the profile, the run budget and the overrides for every table and
+// every entry label of the registry from lookup (os.LookupEnv in production). A label
+// override such as NOTARX_RETENTION_WEBHOOK_DELIVERIES_DEAD wins over the table key.
 func LoadConfig(lookup func(string) (string, bool)) (Config, error) {
 	cfg := DefaultConfig()
 	if value, ok := lookup(ProfileEnv); ok {
@@ -97,21 +98,26 @@ func LoadConfig(lookup func(string) (string, bool)) (Config, error) {
 		}
 		cfg.RunBudget = budget
 	}
+	keys := map[string]bool{}
 	for _, entry := range DefaultRegistry() {
-		name := EnvName(entry.Table)
+		keys[entry.Table] = true
+		keys[entry.Name()] = true
+	}
+	for key := range keys {
+		name := EnvName(key)
 		value, ok := lookup(name)
-		if _, seen := cfg.Overrides[entry.Table]; !ok || seen || strings.TrimSpace(value) == "" {
+		if !ok || strings.TrimSpace(value) == "" {
 			continue
 		}
 		if strings.EqualFold(strings.TrimSpace(value), "off") {
-			cfg.Overrides[entry.Table] = Override{Off: true}
+			cfg.Overrides[key] = Override{Off: true}
 			continue
 		}
 		keep, err := ParseDuration(value)
 		if err != nil {
 			return Config{}, fmt.Errorf("%s: %w", name, err)
 		}
-		cfg.Overrides[entry.Table] = Override{Keep: keep}
+		cfg.Overrides[key] = Override{Keep: keep}
 	}
 	return cfg, nil
 }
@@ -119,11 +125,13 @@ func LoadConfig(lookup func(string) (string, bool)) (Config, error) {
 // Keep returns the keep time of an entry under the configuration, and false when
 // the table is switched off.
 func (c Config) Keep(e Entry) (time.Duration, bool) {
-	if o, ok := c.Overrides[e.Table]; ok {
-		if o.Off {
-			return 0, false
+	for _, key := range []string{e.Name(), e.Table} {
+		if o, ok := c.Overrides[key]; ok {
+			if o.Off {
+				return 0, false
+			}
+			return o.Keep, true
 		}
-		return o.Keep, true
 	}
 	if c.Profile == FreeTier {
 		return e.FreeTier, true

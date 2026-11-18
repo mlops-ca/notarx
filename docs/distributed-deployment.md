@@ -168,7 +168,7 @@ newer record) and the provenance tables `artifact_promotions`,
 | `webhook_deliveries` | succeeded 14 d, dead 90 d | 3 d, 30 d |
 | `lifecycle_jobs` | completed or cancelled 7 d, failed 30 d | 1 d, 7 d |
 | `replication_plans` | terminal 30 d | 7 d |
-| `replication_checkpoints` | removed once the plan completed | same |
+| `replication_checkpoints` | removed 1 h after the plan completed | same |
 | `cache_tasks`, `audit_cleanup_jobs`, `scheduled_task_runs` | 3 d, 30 d, 30 d | 1 d, 7 d, 7 d |
 | `user_sessions` | expired + 7 d | expired + 1 d |
 | `runtime_node_sessions` | stopped + 7 d | stopped + 1 d |
@@ -185,7 +185,9 @@ NOTARX_RETENTION_SECURITY_AUDIT_LOG=1095d
 ```
 
 `NOTARX_RETENTION_<TABLE>` (the table name in upper case) overrides the keep time of
-every row class of that table; `off` disables pruning of the table. The security
+every row class of that table, and `NOTARX_RETENTION_<LABEL>` (for example
+`NOTARX_RETENTION_WEBHOOK_DELIVERIES_DEAD` or `NOTARX_RETENTION_LIFECYCLE_JOBS_FAILED`) overrides one
+class and wins over the table key; `off` disables pruning of the table or class. The security
 audit table is independent of the resolver audit table. The console-editable audit
 retention policy overrides `resolver_audit_log` once an administrator has edited
 it; the baseline policy is now enabled with 90 days, and the 1000 row cap of audit
