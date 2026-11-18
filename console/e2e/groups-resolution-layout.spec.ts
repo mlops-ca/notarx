@@ -33,7 +33,7 @@ for (const width of [1440, 390]) {
             logoUrl: "",
             brandMark: "AG",
             enabledThemeIds: defaultConsoleThemes.map((theme) => theme.id),
-            defaultThemeId: "gateway-dark",
+            defaultThemeId: "notarx-dark",
             availableThemes: defaultConsoleThemes,
           },
         });

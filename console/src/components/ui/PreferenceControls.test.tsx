@@ -47,7 +47,7 @@ describe("PreferenceControls", () => {
       );
 
       const themeButton = screen.getByRole("button", {
-        name: /Choose theme.*Gateway Dark/,
+        name: /notarx Dark/,
       });
       vi.spyOn(themeButton, "getBoundingClientRect").mockReturnValue({
         x: 900,
@@ -63,7 +63,7 @@ describe("PreferenceControls", () => {
 
       await user.click(themeButton);
       await user.click(
-        await screen.findByRole("menuitem", { name: /Aerok Light/ }),
+        await screen.findByRole("menuitem", { name: /notarx Light/ }),
       );
 
       expect(transitionCalls).toBe(1);
@@ -80,7 +80,7 @@ describe("PreferenceControls", () => {
       expect(document.documentElement).toHaveAttribute("data-theme", "light");
       expect(document.documentElement).toHaveAttribute(
         "data-theme-id",
-        "aerok-light",
+        "notarx-light",
       );
       expect(document.documentElement).not.toHaveAttribute(
         "data-theme-transition",
@@ -97,9 +97,9 @@ describe("PreferenceControls", () => {
         ),
       ).toBe("");
       expect(localStorage.getItem("ag.console.theme")).toBe("light");
-      expect(localStorage.getItem("ag.console.theme.id")).toBe("aerok-light");
+      expect(localStorage.getItem("ag.console.theme.id")).toBe("notarx-light");
       expect(
-        screen.getByRole("button", { name: /Choose theme.*Aerok Light/ }),
+        screen.getByRole("button", { name: /notarx Light/ }),
       ).toBeInTheDocument();
     } finally {
       Object.defineProperty(document, "startViewTransition", {
@@ -135,13 +135,13 @@ describe("PreferenceControls", () => {
       );
       await user.click(screen.getByRole("button", { name: /Choose theme/ }));
       await user.click(
-        await screen.findByRole("menuitem", { name: /Gateway Light/ }),
+        await screen.findByRole("menuitem", { name: /notarx Light/ }),
       );
-      expect(localStorage.getItem("ag.console.theme.id")).toBe("gateway-light");
+      expect(localStorage.getItem("ag.console.theme.id")).toBe("notarx-light");
       expect(localStorage.getItem("ag.console.theme")).toBe("light");
       expect(document.documentElement).toHaveAttribute(
         "data-theme-id",
-        "gateway-dark",
+        "notarx-dark",
       );
       await act(async () => {
         await update();
@@ -149,7 +149,7 @@ describe("PreferenceControls", () => {
       });
       expect(document.documentElement).toHaveAttribute(
         "data-theme-id",
-        "gateway-light",
+        "notarx-light",
       );
       expect(document.documentElement).not.toHaveAttribute(
         "data-theme-transition",
@@ -180,11 +180,9 @@ describe("PreferenceControls", () => {
         </PreferencesProvider>,
       );
 
-      await user.click(
-        screen.getByRole("button", { name: /Choose theme.*Gateway Dark/ }),
-      );
+      await user.click(screen.getByRole("button", { name: /notarx Dark/ }));
       const lightTheme = await screen.findByRole("menuitem", {
-        name: /Gateway Light/,
+        name: /notarx Light/,
       });
       animationFrameSpy = vi
         .spyOn(window, "requestAnimationFrame")
@@ -208,7 +206,7 @@ describe("PreferenceControls", () => {
         ),
       );
       expect(
-        screen.getByRole("button", { name: /Choose theme.*Gateway Light/ }),
+        screen.getByRole("button", { name: /notarx Light/ }),
       ).toBeInTheDocument();
     } finally {
       animationFrameSpy?.mockRestore();
@@ -237,13 +235,13 @@ describe("PreferenceControls", () => {
       );
       await user.click(screen.getByRole("button", { name: /Choose theme/ }));
       await user.click(
-        await screen.findByRole("menuitem", { name: /Gateway Light/ }),
+        await screen.findByRole("menuitem", { name: /notarx Light/ }),
       );
       expect(document.documentElement).toHaveAttribute(
         "data-theme-id",
-        "gateway-light",
+        "notarx-light",
       );
-      expect(localStorage.getItem("ag.console.theme.id")).toBe("gateway-light");
+      expect(localStorage.getItem("ag.console.theme.id")).toBe("notarx-light");
       expect(document.documentElement).not.toHaveAttribute(
         "data-theme-transition",
       );
@@ -288,7 +286,7 @@ describe("PreferenceControls", () => {
       );
       await user.click(screen.getByRole("button", { name: /Choose theme/ }));
       await user.click(
-        await screen.findByRole("menuitem", { name: /Gateway Light/ }),
+        await screen.findByRole("menuitem", { name: /notarx Light/ }),
       );
       const failure = new Error("Snapshot update failed");
       rejectReady(failure);
@@ -301,7 +299,7 @@ describe("PreferenceControls", () => {
       );
       expect(document.documentElement).toHaveAttribute(
         "data-theme-id",
-        "gateway-light",
+        "notarx-light",
       );
     } finally {
       Object.defineProperty(document, "startViewTransition", {

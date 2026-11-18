@@ -8,8 +8,8 @@ description: Use when creating, splitting, or triaging Artifact Gateway GitHub i
 Write an issue so a developer or an agent can pick it up without a follow-up
 conversation. Classification vocabulary: `CONTRIBUTING.md` → "Issue
 classification" (authoritative) and `gh label list` (live). Section structure:
-`.github/ISSUE_TEMPLATE/` forms. Issue text is written in Chinese, matching the
-existing corpus.
+`.github/ISSUE_TEMPLATE/` forms. Issue text is written in English (Canadian
+spelling, ADR 0014).
 
 Stay within the user's authorized scope. Read-only triage returns findings and
 links; a draft request returns a draft. Comment or create only when the request
@@ -17,7 +17,7 @@ authorizes that action, without asking again for authorization already given.
 
 ## Steps
 
-1. **查重（search first）.** `gh issue list --state all --search "<keywords>"`,
+1. **Search first (duplicates).** `gh issue list --state all --search "<keywords>"`,
    then scan open series and roadmaps. Reuse an existing home; when an update is
    authorized, comment there rather than create a duplicate — the log-viewer ask duplicated an existing
    series this way: the duplicate was closed and its non-overlapping content
@@ -43,7 +43,7 @@ authorizes that action, without asking again for authorization already given.
 4. **Create when authorized.** `gh issue create --label "type: …" --label "area: …"`
    for Issues with a primary area; omit the area flag for the process/tooling
    exception above. The
-   title is `<area>: <结论>` — the finding or required outcome, not the task
+   title is `<area>: <outcome>` — the finding or required outcome, not the task
    ("Console: the audit strip counts only the loaded page"). A series gets a
    parent issue whose body lists children as a task list, with per-child
    dependencies and a same-file ordering note: two issues that edit one file

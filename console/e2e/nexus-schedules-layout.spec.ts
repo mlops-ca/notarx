@@ -97,7 +97,7 @@ async function geometry(page: Page) {
   }
 }
 
-for (const theme of ["gateway-dark", "gateway-light"])
+for (const theme of ["notarx-dark", "notarx-light"])
   for (const width of [1440, 390]) {
     test(`recurring plan and explicit capacity keep geometry at ${width}px ${theme}`, async ({
       page,
@@ -160,7 +160,7 @@ for (const theme of ["gateway-dark", "gateway-light"])
 test("stopped and blocked plans show durable boundaries without dispatching", async ({
   page,
 }) => {
-  const errors = await setup(page, 390, "gateway-dark");
+  const errors = await setup(page, 390, "notarx-dark");
   await page.route("**/api/v2/migrations/nexus/schedules**", (route) =>
     route.fulfill({
       json: {

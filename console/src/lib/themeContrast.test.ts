@@ -41,16 +41,16 @@ function contrast(foreground: Rgba, background: Rgba) {
   return (high + 0.05) / (low + 0.05);
 }
 
-// WCAG AA for body text (#319) in the default Gateway themes. Extension
+// WCAG AA for body text (#319) in the default notarx themes. Extension
 // packages own their palettes; disabled text is exempt by definition.
 const gatewayThemes = defaultConsoleThemes.filter((theme) =>
-  theme.id.startsWith("gateway-"),
+  theme.id.startsWith("notarx-"),
 );
 
-it("covers both Gateway themes", () => {
+it("covers both notarx themes", () => {
   expect(gatewayThemes.map((theme) => theme.id).sort()).toEqual([
-    "gateway-dark",
-    "gateway-light",
+    "notarx-dark",
+    "notarx-light",
   ]);
 });
 

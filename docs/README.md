@@ -68,7 +68,7 @@ agree with executable tests and the
 - [ADR 0029: Repository Visibility: Public and Private Feeds](adr/0029-repository-visibility-public-private-feeds.md)
 - [ADR 0030: SBOM Generation and Vulnerability Scanning](adr/0030-sbom-generation-and-vulnerability-scanning.md)
 - [Upstream fork point and cherry-pick record](upstream.md) — fork origin, cherry-pick procedure, and picked/declined upstream commits.
-- [notarx brand assets](assets/brand/README.md) — mark, lockups, icons, colour tokens.
+- [notarx brand assets](brand-assets.md) — mark, lockups, icons, colour tokens.
 
 ## Protocols and formats
 
@@ -134,7 +134,7 @@ agree with executable tests and the
 - [Release record template](release-record-template.md) — evidence, approval, and rollback fields.
 - [Preparation record: 2026-08-11](release-records/2026-08-11-d738d4ed.md) — historical local candidate evidence, not production approval.
 - [Candidate record: 2026-09-08](release-records/2026-09-08-cb59b227.md) — fixed Group candidate, distribution upgrade/restore evidence, and remaining registry access gate.
-- [Changelog](../CHANGELOG.md) — user-visible work collected under `Unreleased`.
+- [Changelog](../CHANGELOG.md) — stable releases, generated from conventional commits.
 
 ## Strategy and reference
 

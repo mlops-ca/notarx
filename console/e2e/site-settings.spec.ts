@@ -114,13 +114,8 @@ test("site identity and theme transition stay coordinated across desktop and mob
     siteName: "Forge Harbor",
     logoUrl: "",
     brandMark: "FH",
-    enabledThemeIds: [
-      "gateway-dark",
-      "gateway-light",
-      "aerok-dark",
-      "aerok-light",
-    ],
-    defaultThemeId: "gateway-dark",
+    enabledThemeIds: ["notarx-dark", "notarx-light"],
+    defaultThemeId: "notarx-dark",
     availableThemes: defaultConsoleThemes,
     updatedAt: "2026-08-19T05:00:00Z",
   });
@@ -204,10 +199,8 @@ test("site identity and theme transition stay coordinated across desktop and mob
   expect(desktopGeometry.horizontalOverflow).toBeLessThanOrEqual(0);
 
   await page.getByLabel("Site name").fill("Forge Harbor preview");
-  await page
-    .getByRole("button", { name: /Choose theme.*Gateway Dark/ })
-    .click();
-  await page.getByRole("menuitem", { name: /Aerok Light/ }).click();
+  await page.getByRole("button", { name: /notarx Dark/ }).click();
+  await page.getByRole("menuitem", { name: /notarx Light/ }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await expect
     .poll(() =>
@@ -221,8 +214,8 @@ test("site identity and theme transition stay coordinated across desktop and mob
   expect(transitionState.calls).toBe(1);
   expect(transitionState.commit).toMatchObject({
     theme: "light",
-    bodyBackground: "rgb(245, 245, 245)",
-    primaryBackground: "rgb(38, 73, 157)",
+    bodyBackground: "rgb(237, 236, 227)",
+    primaryBackground: "rgb(29, 32, 24)",
   });
   expect(transitionState.commit?.bodyBackground).toBe(
     transitionState.commit?.canvasRoleBackground,

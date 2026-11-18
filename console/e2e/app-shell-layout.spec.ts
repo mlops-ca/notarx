@@ -160,10 +160,8 @@ test("desktop navigation collapses within one aligned and stable rail", async ({
   expect(restored.itemCount).toBe(expanded.itemCount);
   expect(Math.abs(restored.selectedTop - expanded.selectedTop)).toBeLessThan(1);
 
-  await page
-    .getByRole("button", { name: /Choose theme.*Gateway Dark/ })
-    .click();
-  await page.getByRole("menuitem", { name: /Gateway Light/ }).click();
+  await page.getByRole("button", { name: /notarx Dark/ }).click();
+  await page.getByRole("menuitem", { name: /notarx Light/ }).click();
   await page.getByRole("button", { name: "Collapse navigation" }).click();
   await expect
     .poll(async () => (await shellGeometry(page)).siderWidth)

@@ -10,7 +10,7 @@ import { mockConsole } from "./mock";
 
 const OUT = "/tmp/ag-audit";
 
-const themes = [{ id: "gateway-dark" }, { id: "gateway-light" }];
+const themes = [{ id: "notarx-dark" }, { id: "notarx-light" }];
 
 const PAGES: Array<{ name: string; path: string; themeIds?: string[] }> = [
   { name: "login", path: "/login" },
@@ -94,12 +94,12 @@ for (const theme of themes) {
   });
 }
 
-test("capture public browse [gateway-dark desktop]", async ({ page }) => {
+test("capture public browse [notarx-dark desktop]", async ({ page }) => {
   await mockConsole(page);
   await page.addInitScript(() => {
     localStorage.removeItem("ag.console.token");
     localStorage.removeItem("ag.console.role");
-    localStorage.setItem("ag.console.theme.id", "gateway-dark");
+    localStorage.setItem("ag.console.theme.id", "notarx-dark");
   });
   await page.route("**/auth/session", (route) =>
     route.fulfill({ json: { authenticated: false } }),
@@ -108,7 +108,7 @@ test("capture public browse [gateway-dark desktop]", async ({ page }) => {
   await page.goto("/browse", { waitUntil: "networkidle" });
   await page.waitForTimeout(600);
   await page.screenshot({
-    path: `${OUT}/gateway-dark-desktop-public-browse.png`,
+    path: `${OUT}/notarx-dark-desktop-public-browse.png`,
     fullPage: true,
   });
 });

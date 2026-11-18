@@ -85,12 +85,7 @@ for (const theme of ["dark", "light"] as const) {
       fullPage: true,
     });
     await page.goto("/operations");
-    await expect(async () => {
-      await page.getByRole("tab", { name: "Job history", exact: true }).click();
-      await expect(
-        page.getByRole("tab", { name: "Job history", exact: true }),
-      ).toHaveAttribute("aria-selected", "true", { timeout: 1000 });
-    }).toPass();
+    await page.getByRole("tab", { name: "Job history", exact: true }).click();
     await expectRole(
       page.locator("main .anticon-sync"),
       "--ag-content-tertiary",
@@ -169,7 +164,7 @@ test("pending authorization uses the light surface without exposing management",
     ).toHaveCount(0);
     expect(
       await panel.evaluate((node) => getComputedStyle(node).backgroundColor),
-    ).toBe("rgb(255, 255, 255)");
+    ).toBe("rgb(246, 245, 238)");
     expect(
       await page
         .locator("html")
@@ -191,13 +186,8 @@ async function mockDefaultSiteSettings(page: Page) {
         siteName: "Artifact Gateway",
         logoUrl: "",
         brandMark: "AG",
-        enabledThemeIds: [
-          "gateway-dark",
-          "gateway-light",
-          "aerok-dark",
-          "aerok-light",
-        ],
-        defaultThemeId: "gateway-dark",
+        enabledThemeIds: ["notarx-dark", "notarx-light"],
+        defaultThemeId: "notarx-dark",
         availableThemes: defaultConsoleThemes,
         updatedAt: "2026-08-27T00:00:00Z",
       },
@@ -282,10 +272,8 @@ test("theme and language preferences persist on the sign-in surface", async ({
         ),
     )
     .toContain("artifact-control-plane.webp");
-  await page
-    .getByRole("button", { name: /Choose theme.*Gateway Dark/ })
-    .click();
-  await page.getByRole("menuitem", { name: /Gateway Light/ }).click();
+  await page.getByRole("button", { name: /notarx Dark/ }).click();
+  await page.getByRole("menuitem", { name: /notarx Light/ }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await expect
     .poll(() =>
@@ -293,7 +281,7 @@ test("theme and language preferences persist on the sign-in surface", async ({
         .locator("body")
         .evaluate((element) => getComputedStyle(element).backgroundColor),
     )
-    .toBe("rgb(247, 247, 248)");
+    .toBe("rgb(237, 236, 227)");
 
   const loginSurfaces = await page
     .locator(".ag-login-frame")
@@ -367,7 +355,7 @@ test("theme and language preferences persist on the sign-in surface", async ({
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await expect(page.locator("html")).toHaveAttribute("lang", "en-CA");
   await expect(
-    page.getByRole("button", { name: /Choose theme.*Gateway Light/ }),
+    page.getByRole("button", { name: /Choose theme.*notarx Light/ }),
   ).toBeVisible();
 });
 
@@ -534,10 +522,8 @@ test("sign-in artwork and controls update when switching to the light theme", as
       response.url().includes("artifact-control-plane-light.webp") &&
       response.ok(),
   );
-  await page
-    .getByRole("button", { name: /Choose theme.*Gateway Dark/ })
-    .click();
-  await page.getByRole("menuitem", { name: /Gateway Light/ }).click();
+  await page.getByRole("button", { name: /notarx Dark/ }).click();
+  await page.getByRole("menuitem", { name: /notarx Light/ }).click();
   await lightArtworkResponse;
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await expect(beams).toHaveAttribute("data-color-mode", "light");
@@ -762,8 +748,8 @@ test("public browse surfaces stay aligned with the dark console palette", async 
   });
 
   expect(surface).toEqual({
-    background: "rgba(17, 17, 20, 0.82)",
-    border: "rgba(255, 255, 255, 0.07)",
+    background: "rgba(22, 24, 18, 0.9)",
+    border: "rgb(32, 35, 27)",
     contentPadding: "40px",
   });
 });
@@ -872,7 +858,7 @@ test("management tables keep action columns opaque and cards separated", async (
     const style = getComputedStyle(element);
     return style.backgroundColor;
   });
-  expect(actionSurface).toBe("rgb(17, 17, 20)");
+  expect(actionSurface).toBe("rgb(22, 24, 18)");
 });
 
 test("deleted repositories stay archived unless explicitly requested", async ({

@@ -17,11 +17,34 @@ five classes. Heavy jobs run only when their class changed.
 A path that matches no class also runs everything, so a new top-level directory
 cannot silently skip a job. Pushes to `main`, tags and unresolvable ranges run
 everything, including the mainline asset and image publication jobs.
-`pr-title` (Conventional Commit title, ADR 0024) runs on every pull request.
+The `pr-title` check (Conventional Commit title, ADR 0024, `.github/workflows/pr-title.yml`) is a separate workflow that runs when a pull request is opened, edited, synchronized or reopened, so editing a title re-checks it without re-running CI. It is not part of `ci-ok`; require it in branch protection next to `ci-ok`.
 
-Code directories are matched before Markdown, so a `.md` fixture under `internal/` is Go, not docs. A docs-only pull request therefore runs `changes`, `pr-title`, `docs` and
-`ci-ok`. A Go-only pull request skips `console` (unit, build, visual) but still runs `console-e2e`; a console-only pull request
+Code directories are matched before Markdown, so a `.md` fixture under `internal/` is Go, not docs. A docs-only pull request therefore runs `changes`, `docs` and
+`ci-ok` (plus the separate `pr-title` workflow). A Go-only pull request skips `console` (unit, build, visual) but still runs `console-e2e`; a console-only pull request
 skips every contract lane.
+
+## Console E2E sharding and spec selection
+
+`console-e2e` is a matrix of four jobs. Shards `1`, `2` and `3` each start the
+shared prebuilt gateway images and run `playwright test --shard=i/3`, so every
+spec runs in exactly one shard; the fourth entry, `cli`, runs the `notarxctl` CLI
+E2E against its own gateway instead of serializing it behind the Playwright
+suite. Each matrix entry carries its own shard fraction, so add or renumber entries together. Each
+shard uploads a Playwright blob report; `console-e2e-report` merges them with
+`playwright merge-reports` into one HTML report artifact (`console-e2e-report`),
+(it runs when every shard passed; failed shards upload their own blob report and traces) (`console-e2e-traces-<shard>`).
+`ci-ok` requires the matrix result (every shard) and, when all shards passed, `console-e2e-report`.
+
+The `changes` job also runs `scripts/ci-e2e-select.sh`. When every changed path is
+an existing top-level `console/e2e/*.spec.ts` file, only those specs run (still
+spread over the shards; a shard left without a spec passes and uploads no blob). Any other path (Console
+sources, `e2e/support`, fixtures, a deleted spec, Go, CI files) or an
+unresolvable range is uncertain and runs the full suite. No spec is skipped on
+`main`, tags or any non-selected change.
+
+The `console` job (unit tests, build, mocked visual baseline) and `console-e2e`
+do not duplicate work: the visual config only matches `e2e/visual`, which the
+behaviour config ignores, and the contract lanes never run Playwright.
 
 ## The ci-ok gate
 
@@ -83,3 +106,15 @@ has no upgrade path from upstream, and
 tags. Re-add the step once a notarx release tag exists.
 
 Run `bash scripts/ci-changes-test.sh` to check the classifier fixtures.
+
+## Release plan
+
+`scripts/release-plan.sh` is the one place a release version is computed (ADR 0024).
+It is read-only and prints `skip`, `channel`, `version`, `core`, `sha` and `previous`.
+The bump comes from git-cliff, pinned in `scripts/git-cliff.version` and installed
+with a checksum check by `scripts/install-git-cliff.sh`; `cliff.toml` holds the
+0.x rules. `scripts/release-required-checks.txt` is the single list of check names
+that must be green on a commit before it is released. `make release-plan-test`
+runs the plan against fixture repositories and fails if git-cliff's bump behaviour
+deviates from the pinned expectations. Wiring the plan into the release workflow is
+a later slice of ADR 0024.

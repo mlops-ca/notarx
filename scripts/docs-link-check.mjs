@@ -46,6 +46,9 @@ export function findBrokenDocumentLinks(repoRoot, markdownFiles, readFile) {
         continue;
       }
       if (!existsSync(resolved)) {
+        // zh-CN is optional and frozen (ADR 0014): a companion may link to a
+        // zh-CN page whose twin was dropped, for example CHANGELOG.zh-CN.md.
+        if (relativeFile.endsWith('.zh-CN.md') && resolved.endsWith('.zh-CN.md')) continue;
         broken.push({ file: relativeFile, target: rawTarget, reason: 'missing target' });
         continue;
       }

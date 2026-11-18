@@ -1459,7 +1459,7 @@ test("a quarantined artifact reads as an ongoing state in both themes", async ({
   for (const mode of ["dark", "light"] as const) {
     if (mode === "light") {
       await page.getByRole("button", { name: /Choose theme/ }).click();
-      await page.getByRole("menuitem", { name: /Gateway Light/ }).click();
+      await page.getByRole("menuitem", { name: /notarx Light/ }).click();
       await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
       await testInfo.attach("quarantine-single-light-events.json", {
         body: JSON.stringify(
@@ -1545,7 +1545,7 @@ test("a blocked admission reads as a policy judgment in both themes", async ({
   for (const mode of ["dark", "light"] as const) {
     if (mode === "light") {
       await page.getByRole("button", { name: /Choose theme/ }).click();
-      await page.getByRole("menuitem", { name: /Gateway Light/ }).click();
+      await page.getByRole("menuitem", { name: /notarx Light/ }).click();
       await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     }
     await page.goto(`/repositories/${repositoryId}?tab=distribute`);
@@ -1607,7 +1607,7 @@ for (const delayedMotion of [false, true]) {
           await page.getByRole("button", { name: /Choose theme/ }).click();
           await page
             .getByRole("menuitem", {
-              name: mode === "dark" ? /Gateway Dark/ : /Gateway Light/,
+              name: mode === "dark" ? /notarx Dark/ : /notarx Light/,
             })
             .click();
         }

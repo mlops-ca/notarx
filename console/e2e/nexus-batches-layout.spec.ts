@@ -134,7 +134,7 @@ async function capture(page: Page, info: TestInfo, name: string) {
       animations: "disabled",
     });
 }
-for (const theme of ["gateway-dark", "gateway-light"])
+for (const theme of ["notarx-dark", "notarx-light"])
   for (const width of [1440, 390]) {
     test(`batch report and explicit capacity preserve geometry at ${width}px ${theme}`, async ({
       page,
@@ -300,7 +300,7 @@ for (const theme of ["gateway-dark", "gateway-light"])
 test("batch initial failures, empty state and unknown scan totals preserve read truth", async ({
   page,
 }) => {
-  const errors = await setup(page, 1440, "gateway-dark");
+  const errors = await setup(page, 1440, "notarx-dark");
   await page.route("**/api/v2/migrations/nexus/batches?**", (route) =>
     route.fulfill({
       status: 503,
@@ -388,7 +388,7 @@ for (const width of [1440, 390])
     const errors = await setup(
       page,
       width,
-      width === 1440 ? "gateway-dark" : "gateway-light",
+      width === 1440 ? "notarx-dark" : "notarx-light",
     );
     await page.route(
       `**/api/v2/migrations/nexus/batches/${nexusBatch.id}`,

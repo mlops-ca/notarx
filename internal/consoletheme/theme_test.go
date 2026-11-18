@@ -12,22 +12,14 @@ func TestBuiltinsAreValidAndComplete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Builtins() error = %v", err)
 	}
-	if len(themes) != 4 {
-		t.Fatalf("len(Builtins()) = %d, want 4", len(themes))
+	if len(themes) != 2 {
+		t.Fatalf("len(Builtins()) = %d, want 2", len(themes))
 	}
 	modes := map[Mode]bool{}
 	for _, theme := range themes {
 		modes[theme.Mode] = true
 		if err := theme.Validate(); err != nil {
 			t.Fatalf("theme %q is invalid: %v", theme.ID, err)
-		}
-		if theme.ID == "aerok-dark" {
-			if theme.Token.ColorBgLayout != "#090D16" || theme.Token.ColorBgContainer != "#121722" || theme.Token.ColorBgElevated != "#1B2230" {
-				t.Fatalf("Aerok Dark surface ladder is incomplete: %#v", theme.Token)
-			}
-			if theme.Token.ColorTextSecondary == "" || theme.Token.ColorFillContentHover == "" || theme.Token.ColorBorderSecondary == "" {
-				t.Fatalf("Aerok Dark semantic aliases are incomplete: %#v", theme.Token)
-			}
 		}
 	}
 	if !modes[ModeDark] || !modes[ModeLight] {
@@ -121,13 +113,13 @@ func TestRegistryHotLoadsExternalThemesAndRejectsBuiltinReplacement(t *testing.T
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
-	if len(themes) != 5 {
-		t.Fatalf("len(List()) = %d, want 5", len(themes))
+	if len(themes) != 3 {
+		t.Fatalf("len(List()) = %d, want 3", len(themes))
 	}
 	if theme, ok, err := registry.Find("customer-blue"); err != nil || !ok || theme.Name != "Customer Blue" {
 		t.Fatalf("Find(customer-blue) = %#v, %v, %v", theme, ok, err)
 	}
-	duplicate := strings.Replace(external, `"id":"customer-blue"`, `"id":"aerok-dark"`, 1)
+	duplicate := strings.Replace(external, `"id":"customer-blue"`, `"id":"notarx-dark"`, 1)
 	if err := os.WriteFile(filepath.Join(directory, "duplicate.theme.json"), []byte(duplicate), 0o600); err != nil {
 		t.Fatal(err)
 	}

@@ -10,8 +10,8 @@ const identity = {
 const themes = [
   {
     schemaVersion: 1,
-    id: "gateway-dark",
-    name: "Gateway Dark",
+    id: "notarx-dark",
+    name: "notarx Dark",
     description: "dark",
     mode: "dark",
     token: {
@@ -26,8 +26,8 @@ const themes = [
   },
   {
     schemaVersion: 1,
-    id: "gateway-light",
-    name: "Gateway Light",
+    id: "notarx-light",
+    name: "notarx Light",
     description: "light",
     mode: "light",
     token: {
@@ -490,8 +490,8 @@ export async function mockConsole(page: Page) {
         siteName: "Artifact Gateway",
         logoUrl: "",
         brandMark: "AG",
-        enabledThemeIds: ["gateway-dark", "gateway-light"],
-        defaultThemeId: "gateway-dark",
+        enabledThemeIds: ["notarx-dark", "notarx-light"],
+        defaultThemeId: "notarx-dark",
         availableThemes: themes,
         updatedAt: "2026-08-27T00:00:00Z",
       },

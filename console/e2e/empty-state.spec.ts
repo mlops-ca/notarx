@@ -93,13 +93,8 @@ async function mockDefaultSiteSettings(page: Page) {
         siteName: "Artifact Gateway",
         logoUrl: "",
         brandMark: "AG",
-        enabledThemeIds: [
-          "gateway-dark",
-          "gateway-light",
-          "aerok-dark",
-          "aerok-light",
-        ],
-        defaultThemeId: "gateway-dark",
+        enabledThemeIds: ["notarx-dark", "notarx-light"],
+        defaultThemeId: "notarx-dark",
         availableThemes: defaultConsoleThemes,
         updatedAt: "2026-08-27T00:00:00Z",
       },
@@ -170,10 +165,8 @@ test("public catalog empty state stays quiet and responsive", async ({
     });
   }
 
-  await page
-    .getByRole("button", { name: /Choose theme.*Gateway Dark/ })
-    .click();
-  await page.getByRole("menuitem", { name: /Gateway Light/ }).click();
+  await page.getByRole("button", { name: /notarx Dark/ }).click();
+  await page.getByRole("menuitem", { name: /notarx Light/ }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   const lightIconColors = await icon.evaluate((node) => {
     const style = getComputedStyle(node);
@@ -228,10 +221,8 @@ test("repository first-use state leads directly to creation", async ({
     page.getByRole("dialog", { name: "New repository" }),
   ).toBeHidden();
 
-  await page
-    .getByRole("button", { name: /Choose theme.*Gateway Dark/ })
-    .click();
-  await page.getByRole("menuitem", { name: /Gateway Light/ }).click();
+  await page.getByRole("button", { name: /notarx Dark/ }).click();
+  await page.getByRole("menuitem", { name: /notarx Light/ }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await expect(icon).toBeVisible();
 

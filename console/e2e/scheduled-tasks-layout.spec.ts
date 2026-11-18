@@ -2,8 +2,8 @@ import { expect, test } from "@playwright/test";
 import { mockGateway } from "./visual/mockGateway";
 import { repositoryPage, scheduledTasks } from "./visual/fixtures";
 
-for (const locale of ["en-CA"] as const) {
-  for (const theme of ["gateway-dark", "gateway-light"] as const) {
+for (const locale of ["zh-CN", "en-CA"] as const) {
+  for (const theme of ["notarx-dark", "notarx-light"] as const) {
     test(`scheduled task columns and actions fit at desktop width (${locale}, ${theme})`, async ({
       page,
     }) => {

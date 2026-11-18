@@ -31,7 +31,7 @@ async function mockThemeSurface(page: Page) {
         logoUrl: "",
         brandMark: "AG",
         enabledThemeIds: defaultConsoleThemes.map((theme) => theme.id),
-        defaultThemeId: "gateway-dark",
+        defaultThemeId: "notarx-dark",
         availableThemes: defaultConsoleThemes,
         updatedAt: "2026-08-27T00:00:00Z",
       },
@@ -69,7 +69,7 @@ test("reduced motion switches the complete palette atomically", async ({
   await page.getByPlaceholder("Enter your username").fill("theme-motion-qa");
   await page.getByPlaceholder("Enter your password").fill("local-only");
   const expected = resolveConsoleTheme(
-    defaultConsoleThemes.find((theme) => theme.id === "gateway-light")!,
+    defaultConsoleThemes.find((theme) => theme.id === "notarx-light")!,
   ).cssVariables;
   await page.evaluate((variableNames) => {
     window.__themeMotionQA = { transitionCalls: 0, instantCommits: [] };
@@ -104,10 +104,10 @@ test("reduced motion switches the complete palette atomically", async ({
     });
   }, Object.keys(expected));
 
-  await chooseThemeImmediately(page, "Gateway Light");
+  await chooseThemeImmediately(page, "notarx Light");
   await expect(page.locator("html")).toHaveAttribute(
     "data-theme-id",
-    "gateway-light",
+    "notarx-light",
   );
   await expect
     .poll(() => page.locator("html").getAttribute("data-theme-transition"))
@@ -116,11 +116,11 @@ test("reduced motion switches the complete palette atomically", async ({
   const trace = await page.evaluate(() => window.__themeMotionQA);
   expect(trace.transitionCalls).toBe(0);
   const commit = trace.instantCommits?.find(
-    (candidate) => candidate.themeId === "gateway-light",
+    (candidate) => candidate.themeId === "notarx-light",
   );
   expect(commit).toBeDefined();
   expect(normalizeValues(commit!.variables)).toEqual(normalizeValues(expected));
-  expect(commit!.primaryButtonBackground).toBe("rgb(9, 9, 11)");
+  expect(commit!.primaryButtonBackground).toBe("rgb(29, 32, 24)");
   expect(commit!.transitionProperty).toBe("none");
   expect(commit!.transitionDuration).toBe("0s");
 });
@@ -164,12 +164,12 @@ test("rapid theme choices cancel stale reveals and leave one complete contract",
   // Dispatch directly so the next choice arrives while the previous browser
   // reveal still owns the document snapshot; actionability waits intentionally
   // wait behind that pseudo-element and would no longer exercise cancellation.
-  await chooseThemeImmediately(page, "Gateway Light");
-  await chooseThemeImmediately(page, "Aerok Dark");
-  await chooseThemeImmediately(page, "Aerok Light");
+  await chooseThemeImmediately(page, "notarx Light");
+  await chooseThemeImmediately(page, "notarx Dark");
+  await chooseThemeImmediately(page, "notarx Light");
   await expect(page.locator("html")).toHaveAttribute(
     "data-theme-id",
-    "aerok-light",
+    "notarx-light",
   );
   await page.evaluate(() => window.__finishThemeTransitionQA?.());
   await expect
@@ -177,7 +177,7 @@ test("rapid theme choices cancel stale reveals and leave one complete contract",
     .toBeNull();
 
   const expected = resolveConsoleTheme(
-    defaultConsoleThemes.find((theme) => theme.id === "aerok-light")!,
+    defaultConsoleThemes.find((theme) => theme.id === "notarx-light")!,
   ).cssVariables;
   const actual = await page.locator("html").evaluate((root, names) => {
     const element = root as HTMLElement;
@@ -200,8 +200,7 @@ test("rapid theme choices cancel stale reveals and leave one complete contract",
 });
 
 for (const [lastChoice, expectedID] of [
-  ["Aerok Dark", "aerok-dark"],
-  ["Gateway Dark", "gateway-dark"],
+  ["notarx Dark", "notarx-dark"],
 ] as const) {
   test(`a skipped theme snapshot cannot replace a newer choice of ${lastChoice}`, async ({
     page,
@@ -227,12 +226,12 @@ for (const [lastChoice, expectedID] of [
 
     // skipTransition() still schedules the old update callback. Deliver the
     // callbacks in their native FIFO order after the newer choice is accepted.
-    await chooseThemeImmediately(page, "Gateway Light");
+    await chooseThemeImmediately(page, "notarx Light");
     await chooseThemeImmediately(page, lastChoice);
     await page.evaluate(() => window.__runThemeSnapshotQA?.(0));
     await expect(page.locator("html")).toHaveAttribute(
       "data-theme-id",
-      "gateway-dark",
+      "notarx-dark",
     );
     await page.evaluate(() => window.__runThemeSnapshotQA?.(1));
     await expect(page.locator("html")).toHaveAttribute(
@@ -269,10 +268,10 @@ test("a single native theme choice commits when its visual capture fails", async
     };
   });
   await page.getByRole("button", { name: /Choose theme/ }).click();
-  await page.getByRole("menuitem", { name: /Gateway Light/ }).click();
+  await page.getByRole("menuitem", { name: /notarx Light/ }).click();
   await expect(page.locator("html")).toHaveAttribute(
     "data-theme-id",
-    "gateway-light",
+    "notarx-light",
   );
   expect(await page.evaluate(() => window.__singleThemeCaptureCallsQA)).toBe(1);
   await expect
@@ -280,9 +279,9 @@ test("a single native theme choice commits when its visual capture fails", async
     .toBeNull();
   expect(
     await page.evaluate(() => localStorage.getItem("ag.console.theme.id")),
-  ).toBe("gateway-light");
+  ).toBe("notarx-light");
   const expected = resolveConsoleTheme(
-    defaultConsoleThemes.find((theme) => theme.id === "gateway-light")!,
+    defaultConsoleThemes.find((theme) => theme.id === "notarx-light")!,
   ).cssVariables;
   const actual = await page
     .locator("html")
@@ -332,13 +331,13 @@ test("a single theme choice survives SPA navigation before its capture update", 
     };
   });
   await page.getByRole("button", { name: /Choose theme/ }).click();
-  await page.getByRole("menuitem", { name: /Gateway Light/ }).click();
+  await page.getByRole("menuitem", { name: /notarx Light/ }).click();
   await page.locator('a[href="/repositories"]').first().dispatchEvent("click");
   await expect(page).toHaveURL(/\/repositories$/);
   await page.evaluate(() => window.__releaseSingleThemeCaptureQA?.());
   await expect(page.locator("html")).toHaveAttribute(
     "data-theme-id",
-    "gateway-light",
+    "notarx-light",
   );
   expect(await page.evaluate(() => window.__singleThemeCaptureCallsQA)).toBe(1);
   await expect
@@ -346,7 +345,7 @@ test("a single theme choice survives SPA navigation before its capture update", 
     .toBeNull();
   expect(
     await page.evaluate(() => localStorage.getItem("ag.console.theme.id")),
-  ).toBe("gateway-light");
+  ).toBe("notarx-light");
 });
 
 test("a single theme choice survives document navigation before its capture update", async ({
@@ -369,7 +368,7 @@ test("a single theme choice survives document navigation before its capture upda
     };
   });
   await page.getByRole("button", { name: /Choose theme/ }).click();
-  await page.getByRole("menuitem", { name: /Gateway Light/ }).click();
+  await page.getByRole("menuitem", { name: /notarx Light/ }).click();
   const beforeNavigation = await page.evaluate(() => ({
     captures: window.__singleThemeCaptureCallsQA,
     storedThemeId: localStorage.getItem("ag.console.theme.id"),
@@ -384,11 +383,11 @@ test("a single theme choice survives document navigation before its capture upda
   // destroys this document before its optional visual snapshot can commit.
   await page.goto("/login?navigation-before-capture=1");
   await expect(
-    page.getByRole("button", { name: /Choose theme.*Gateway Light/ }),
+    page.getByRole("button", { name: /notarx Light/ }),
   ).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute(
     "data-theme-id",
-    "gateway-light",
+    "notarx-light",
   );
 });
 
@@ -423,15 +422,15 @@ test("native skipped snapshots preserve a newer choice of the current theme", as
     await item.waitFor({ state: "attached" });
     await item.dispatchEvent("click");
   };
-  await chooseWhileCapturing("Gateway Light");
-  await chooseWhileCapturing("Gateway Dark");
+  await chooseWhileCapturing("notarx Light");
+  await chooseWhileCapturing("notarx Dark");
   await page.evaluate(() => window.__releaseNativeThemeCaptureQA?.(0));
   await expect
     .poll(() => page.evaluate(() => window.__nativeThemeUpdatesQA))
     .toEqual([0]);
   await expect(page.locator("html")).toHaveAttribute(
     "data-theme-id",
-    "gateway-dark",
+    "notarx-dark",
   );
   await page.evaluate(() => window.__releaseNativeThemeCaptureQA?.(1));
   await expect
@@ -439,7 +438,7 @@ test("native skipped snapshots preserve a newer choice of the current theme", as
     .toEqual([0, 1]);
   await expect(page.locator("html")).toHaveAttribute(
     "data-theme-id",
-    "gateway-dark",
+    "notarx-dark",
   );
   await expect
     .poll(() => page.locator("html").getAttribute("data-theme-transition"))

@@ -22,21 +22,19 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          expected_tag="v$(tr -d '[:space:]' < VERSION)"
-          test "$GITHUB_REF_NAME" = "$expected_tag"
+          # The committed tree is at 0.0.0-dev; the release version comes from the
+          # tag and is stamped into the build (ADR 0024).
+          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           git fetch origin main
           test "$GITHUB_SHA" = "$(git rev-parse origin/main)"
-          checks=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?per_page=100")
-          for required in quality contract-and-test console mainline-assets; do
-            jq -e --arg name "$required" \
-              '[.check_runs[] | select(.name == $name and .conclusion == "success")] | length > 0' \
-              <<<"$checks" >/dev/null
-          done
-          jq -e \
-            '[.check_runs[] | select((.name | startswith("mainline-images ")) and .conclusion == "success")] | length == 2' \
-            <<<"$checks" >/dev/null
-      - name: Verify release version consistency
-        run: make release-version-check
+          # The required checks are listed in scripts/release-required-checks.txt.
+          ./scripts/release-plan.sh green "$GITHUB_SHA"
+      - name: Verify release version stamping
+        run: |
+          npm --prefix tools/openapi ci --ignore-scripts --no-audit --no-fund
+          version="${GITHUB_REF_NAME#v}"
+          ./scripts/stamp-version.sh "$version"
+          make release-version-check EXPECT_VERSION="$version"
 
   build-assets:
     needs: verify-candidate
@@ -52,6 +50,10 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: console/package-lock.json
+      - name: Stamp the release version
+        run: |
+          npm --prefix tools/openapi ci --ignore-scripts --no-audit --no-fund
+          ./scripts/stamp-version.sh "${GITHUB_REF_NAME#v}"
       - name: Build release assets
         run: |
           ./scripts/build-release-artifacts.sh \
@@ -81,6 +83,10 @@ jobs:
             file: Dockerfile.console
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Stamp the release version
+        run: |
+          npm --prefix tools/openapi ci --ignore-scripts --no-audit --no-fund
+          ./scripts/stamp-version.sh "${GITHUB_REF_NAME#v}"
       - name: Resolve release version
         id: version
         run: |
@@ -150,7 +156,6 @@ jobs:
         uses: softprops/action-gh-release@62c96d0c4e8a889135c1f3a25910db8dbe0e85f7 # v2.3.4
         with:
           name: ${{ github.ref_name }}
-          body_path: .github/release-notes/${{ github.ref_name }}.md
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: dist/*

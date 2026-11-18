@@ -8,17 +8,17 @@ func TestMemorySiteSettingsVersionedReplacement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if current.Version != "1" || current.SiteName != "Artifact Gateway" || current.BrandMark != "AG" || current.DefaultThemeID != "gateway-dark" || len(current.EnabledThemeIDs) != 4 {
+	if current.Version != "1" || current.SiteName != "Artifact Gateway" || current.BrandMark != "AG" || current.DefaultThemeID != "notarx-dark" || len(current.EnabledThemeIDs) != 2 {
 		t.Fatalf("defaults = %#v", current)
 	}
 
 	replaced, err := store.ReplaceSiteSettings(t.Context(), SiteSettings{
-		SiteName: "Acme Packages", BrandMark: "AC", EnabledThemeIDs: []string{"aerok-light"}, DefaultThemeID: "aerok-light",
+		SiteName: "Acme Packages", BrandMark: "AC", EnabledThemeIDs: []string{"notarx-light"}, DefaultThemeID: "notarx-light",
 	}, current.Version)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if replaced.Version != "2" || replaced.SiteName != "Acme Packages" || replaced.DefaultThemeID != "aerok-light" {
+	if replaced.Version != "2" || replaced.SiteName != "Acme Packages" || replaced.DefaultThemeID != "notarx-light" {
 		t.Fatalf("replaced = %#v", replaced)
 	}
 	if _, err := store.ReplaceSiteSettings(t.Context(), replaced, current.Version); err != ErrVersionConflict {

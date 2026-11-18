@@ -108,9 +108,18 @@ function storedThemeId(themes: ConsoleTheme[], defaultThemeId: string): string {
     const legacyMode = localStorage.getItem(THEME_MODE_KEY);
     if (legacyMode === "dark" || legacyMode === "light") {
       const legacyTheme =
-        themes.find((theme) => theme.id === `gateway-${legacyMode}`) ??
+        themes.find((theme) => theme.id === `notarx-${legacyMode}`) ??
         themes.find((theme) => theme.mode === legacyMode);
       if (legacyTheme) return legacyTheme.id;
+    }
+    // The built-in default follows the system colour scheme (dark if it
+    // is unspecified); a deployment-chosen default is kept as configured.
+    if (defaultThemeId === "notarx-dark" || defaultThemeId === "notarx-light") {
+      const system = window.matchMedia?.("(prefers-color-scheme: light)")
+        .matches
+        ? "notarx-light"
+        : "notarx-dark";
+      if (themes.some((theme) => theme.id === system)) return system;
     }
     return (
       themes.find((theme) => theme.id === defaultThemeId)?.id ??

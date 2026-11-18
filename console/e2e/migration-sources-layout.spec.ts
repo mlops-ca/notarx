@@ -17,7 +17,7 @@ async function setup(page: Page, width: number) {
     localStorage.setItem("ag.console.locale", "en-CA");
     localStorage.setItem(
       "ag.console.theme.id",
-      width === 390 ? "gateway-light" : "gateway-dark",
+      width === 390 ? "notarx-light" : "notarx-dark",
     );
   }, width);
   await page.route("**/api/v2/site-settings", (route) =>

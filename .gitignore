@@ -14,6 +14,7 @@ tools/openapi/node_modules/
 console/dist/
 console/test-results/
 console/playwright-report/
+console/blob-report/
 console/coverage/
 console/.playwright-cli/
 console/*.tsbuildinfo

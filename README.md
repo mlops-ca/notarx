@@ -212,7 +212,8 @@ make build
 Protocol, persistence, Console, and deployment changes have additional focused
 gates. Generated OpenAPI clients and server contracts must not be edited by
 hand. Read [CONTRIBUTING.md](CONTRIBUTING.md) before changing code, and record
-user-visible behaviour under `Unreleased` in [CHANGELOG.md](CHANGELOG.md).
+user-visible behaviour in the pull request title; [CHANGELOG.md](CHANGELOG.md)
+is generated from it at release time.
 
 New package ecosystems must pass the admission rules in the
 [format extension guide](docs/format-extension-guide.md). Adding an enum, route
@@ -221,4 +222,5 @@ placeholder, or Console option alone is not considered protocol support.
 ## License
 
 Artifact Gateway is available under the [MIT License](LICENSE). Third-party
-components and assets remain subject to their respective license terms.
+components and assets remain subject to their respective license terms. The
+name and logo are covered by the [trademark policy](TRADEMARKS.md).

@@ -40,7 +40,9 @@ Compose stack without deleting its PostgreSQL and RustFS volumes.
 2. Add or update tests at the public boundary affected by the change.
 3. Update the OpenAPI source before generated clients or server interfaces.
 4. Add a migration for schema changes; never edit an applied migration.
-5. Record user-visible behaviour changes under `Unreleased` in `CHANGELOG.md`.
+5. Describe user-visible behaviour changes in the pull request title (a
+   Conventional Commit subject); `CHANGELOG.md` is generated from it at release
+   time and is not edited by hand.
 6. Run the smallest relevant check while developing, then the required checks
    below before committing.
 
@@ -74,6 +76,14 @@ through `make console-build`. None of these flows requires the Ant Design CLI.
 Other audit decisions remain in `scripts/npm-audit-policy.mjs`; new advisories,
 invalid reports, registry failures, and expired exceptions fail dependency audit.
 
+## Language
+
+Issues, pull requests, commit messages, code comments and documentation are
+written in English (Canadian spelling, as set by
+[ADR 0014](docs/adr/0014-locale-policy.md)). Do not file issues or PRs in other
+languages. Product locales and translated documentation follow the locale
+policy in ADR 0014, not this file.
+
 ## Issue-to-merge traceability
 
 Track each user-visible change or defect in a GitHub Issue with the observed
@@ -106,9 +116,8 @@ exactly that workstream.
 | Format | `format: maven`, `format: oci`, `format: npm`, `format: pypi`, `format: go`, `format: apt`, `format: conan`, `format: cargo`, `format: nuget`, `format: raw` | Orthogonal to area; applied to Issues about one protocol's behaviour. |
 
 Titles start with the area: `Console:`, `API:` and `CLI:` for the technical
-surfaces, and the Chinese area word (`授权:`, `审计:`, `平台:`, `运维:`) for the
-domains, followed by the finding or the required outcome rather than the
-activity. Meta work that spans areas (process, tooling) may omit the area word
+surfaces, and `Auth:`, `Audit:`, `Platform:` or `Ops:` for the domains,
+followed by the finding or the required outcome rather than the activity. Meta work that spans areas (process, tooling) may omit the area word
 and the area label.
 
 Every Issue states its background, scope, acceptance criteria, and an explicit
@@ -200,8 +209,8 @@ when deleting the namespace and its local PVC data is intended.
 
 Run `make test` before submitting a change that affects shared backend behaviour.
 Run `make docs-check` when changing Markdown entry points, capability claims,
-or local assets; it enforces bilingual entry-point links and validates local
-documentation references.
+or local assets; it validates local documentation references and the
+documentation site map.
 The CI workflow is the final source of truth for the complete required matrix.
 
 ### Contract lanes and performance evidence
@@ -310,17 +319,37 @@ normal development stack. Use `make integration-down` to clean that test project
 
 ## Commit messages
 
-Use an imperative Conventional Commit subject:
+Pull requests are squash-merged, so the pull request title becomes the commit
+subject. Use an imperative Conventional Commit subject,
+`type(scope)!: subject`:
 
 ```text
-feat(search): add checksum lookup
+feat(oci): add range reads for blobs
 fix(console): preserve selected artifact version
 test(storage): cover expired worker leases
 docs: describe clustered runtime roles
 ```
 
+The types, the releasing types (`feat`, `fix`, `perf`, `revert`; a `!` or a
+`BREAKING CHANGE:` footer also releases) and the allowed scopes live in
+`.github/commit-policy.json`, the single source of the policy
+([ADR 0024](docs/adr/0024-release-versioning-and-conventional-commits.md)). A scope is
+optional, several may be listed separated by commas (`feat(oci,npm): ...`), and
+adding one is a one-line change to that file. The `pr-title` workflow checks the
+title when a pull request is opened, edited or updated; run
+`TITLE='feat(oci): x' make commit-policy-check` to check one locally.
+`fix(security)` and `fix(deps)` release a patch; Dependabot titles follow the
+policy through `.github/dependabot.yml`.
+
 Choose the narrowest useful scope. Keep generated output in the same commit as
-the contract or source change that produced it.
+the contract or source change that produced it. A change to the Trivy pin or the
+scanner image is `build(scanner)` and requires a reviewer from `CODEOWNERS`
+([ADR 0030](docs/adr/0030-sbom-generation-and-vulnerability-scanning.md)).
+
+A commit that cherry-picks work from the upstream project carries an
+`Upstream:` trailer naming the upstream commit, for example
+`Upstream: ccsert/artifact-gateway@<sha>`; see
+[docs/upstream.md](docs/upstream.md).
 
 ## Contribution license
 

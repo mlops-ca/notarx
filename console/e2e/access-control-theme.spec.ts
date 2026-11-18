@@ -24,13 +24,8 @@ async function mockAccessControl(page: Page) {
         siteName: "Artifact Gateway",
         logoUrl: "",
         brandMark: "AG",
-        enabledThemeIds: [
-          "gateway-dark",
-          "gateway-light",
-          "aerok-dark",
-          "aerok-light",
-        ],
-        defaultThemeId: "gateway-dark",
+        enabledThemeIds: ["notarx-dark", "notarx-light"],
+        defaultThemeId: "notarx-dark",
         availableThemes: defaultConsoleThemes,
       },
     }),
@@ -138,7 +133,7 @@ test("compact public access controls use coherent light and dark themes", async 
   await page.goto("/access?tab=policies");
   const card = await expectCompactBoundary(page, 220);
   const heading = card.getByRole("heading", { name: "Public access boundary" });
-  await expect(heading).toHaveCSS("color", "rgb(9, 9, 11)");
+  await expect(heading).toHaveCSS("color", "rgb(18, 20, 14)");
   const navigation = await page.locator(".ag-sider-desktop").boundingBox();
   const cardBox = await card.boundingBox();
   expect(navigation).not.toBeNull();
@@ -150,12 +145,10 @@ test("compact public access controls use coherent light and dark themes", async 
     path: testInfo.outputPath("access-control-light-viewport.png"),
   });
 
-  await page
-    .getByRole("button", { name: /Choose theme.*Gateway Light/ })
-    .click();
-  await page.getByRole("menuitem", { name: /Gateway Dark/ }).click();
+  await page.getByRole("button", { name: /notarx Light/ }).click();
+  await page.getByRole("menuitem", { name: /notarx Dark/ }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await expect(heading).toHaveCSS("color", "rgb(250, 250, 250)");
+  await expect(heading).toHaveCSS("color", "rgb(246, 245, 238)");
   await expectCompactBoundary(page, 220);
   expect(runtimeErrors).toEqual([]);
   await page.screenshot({

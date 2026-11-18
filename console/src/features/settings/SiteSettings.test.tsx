@@ -50,13 +50,8 @@ const initial: SiteSettings = {
   siteName: "Artifact Gateway",
   logoUrl: "",
   brandMark: "AG",
-  enabledThemeIds: [
-    "gateway-dark",
-    "gateway-light",
-    "aerok-dark",
-    "aerok-light",
-  ],
-  defaultThemeId: "gateway-dark",
+  enabledThemeIds: ["notarx-dark", "notarx-light"],
+  defaultThemeId: "notarx-dark",
   availableThemes: defaultConsoleThemes,
   updatedAt: "2026-08-19T01:00:00Z",
 };
@@ -164,13 +159,8 @@ describe("SiteSettingsPage", () => {
           siteName: "Acme Packages",
           logoUrl: "",
           brandMark: "AG",
-          enabledThemeIds: [
-            "gateway-dark",
-            "gateway-light",
-            "aerok-dark",
-            "aerok-light",
-          ],
-          defaultThemeId: "gateway-dark",
+          enabledThemeIds: ["notarx-dark", "notarx-light"],
+          defaultThemeId: "notarx-dark",
         },
         headers: { "If-Match": "3" },
       }),
@@ -187,16 +177,16 @@ describe("SiteSettingsPage", () => {
       data: {
         ...initial,
         version: "4",
-        enabledThemeIds: ["aerok-light"],
-        defaultThemeId: "aerok-light",
+        enabledThemeIds: ["notarx-light"],
+        defaultThemeId: "notarx-light",
       },
     } as never);
     const user = userEvent.setup();
     renderPage();
 
-    for (const name of [/Gateway Dark/, /Gateway Light/, /Aerok Dark/]) {
-      await user.click(await screen.findByRole("checkbox", { name }));
-    }
+    await user.click(
+      await screen.findByRole("checkbox", { name: /notarx Dark/ }),
+    );
     await user.click(screen.getByRole("button", { name: "Save and apply" }));
 
     await waitFor(() =>
@@ -205,8 +195,8 @@ describe("SiteSettingsPage", () => {
           siteName: "Artifact Gateway",
           logoUrl: "",
           brandMark: "AG",
-          enabledThemeIds: ["aerok-light"],
-          defaultThemeId: "aerok-light",
+          enabledThemeIds: ["notarx-light"],
+          defaultThemeId: "notarx-light",
         },
         headers: { "If-Match": "3" },
       }),
@@ -283,7 +273,7 @@ describe("SiteSettingsPage", () => {
           logoUrl: "",
           brandMark: "AG",
           enabledThemeIds: [...initial.enabledThemeIds, uploadedTheme.id],
-          defaultThemeId: "gateway-dark",
+          defaultThemeId: "notarx-dark",
         },
         headers: { "If-Match": "3" },
       }),
