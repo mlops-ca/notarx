@@ -216,6 +216,26 @@ jobs:
           name: console-visual-diff
           path: console/test-results/
           retention-days: 7
+
+  # Gateway-backed Console and CLI E2E: runs when the gateway or the Console
+  # changed, since both execute the real stack.
+  console-e2e:
+    needs: changes
+    if: needs.changes.outputs.go == 'true' || needs.changes.outputs.console == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: console/package-lock.json
+      - run: npm ci --timing --loglevel=http
+        timeout-minutes: 10
+        working-directory: console
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+        working-directory: console
       - name: Start gateway for Console E2E
         env:
           GATEWAY_ENV_FILE: ${{ runner.temp }}/artifact-gateway.env
@@ -276,19 +296,36 @@ jobs:
   # skipped by change detection, fails on any failure or cancellation.
   ci-ok:
     if: always()
-    needs: [changes, pr-title, docs, quality, console, contract-core, contract-native, contract-and-test]
+    needs: [changes, pr-title, docs, quality, console, console-e2e, contract-core, contract-native, contract-and-test]
     runs-on: ubuntu-latest
     steps:
       - name: Require every needed job to succeed or be skipped
         env:
           NEEDS: ${{ toJSON(needs) }}
+          GO: ${{ needs.changes.outputs.go }}
+          CONSOLE: ${{ needs.changes.outputs.console }}
+          DOCS: ${{ needs.changes.outputs.docs }}
         run: |
           echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
           echo "$NEEDS" | jq -e '[.[] | select(.result != "success" and .result != "skipped")] | length == 0' >/dev/null
+          # A skip is legitimate only when change detection turned the job off;
+          # a job skipped because something upstream failed must not pass.
+          e2e=false
+          if [[ "$GO" == true || "$CONSOLE" == true ]]; then e2e=true; fi
+          status=0
+          for pair in quality:$GO contract-core:$GO contract-native:$GO contract-and-test:$GO console:$CONSOLE console-e2e:$e2e docs:$DOCS; do
+            job=${pair%%:*} class=${pair##*:}
+            result=$(echo "$NEEDS" | jq -r --arg job "$job" '.[$job].result')
+            if [[ "$class" == true && "$result" != success ]]; then
+              echo "::error::$job was required by change detection but its result is $result"
+              status=1
+            fi
+          done
+          exit $status
 
   mainline-assets:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [contract-and-test, quality, console]
+    needs: [contract-and-test, quality, console, console-e2e]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -320,7 +357,7 @@ jobs:
 
   mainline-images:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [contract-and-test, quality, console]
+    needs: [contract-and-test, quality, console, console-e2e]
     runs-on: ubuntu-latest
     permissions:
       contents: read

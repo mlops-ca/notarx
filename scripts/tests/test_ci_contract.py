@@ -774,7 +774,7 @@ class ContractGateTests(unittest.TestCase):
         workflow = (ROOT / '.github/workflows/ci.yml').read_text()
         self.assertIn('    needs: [contract-core, contract-native]', workflow)
         self.assertIn('  contract-and-test:\n    if: always()', workflow)
-        self.assertEqual(workflow.count('    needs: [contract-and-test, quality, console]'), 2)
+        self.assertEqual(workflow.count('    needs: [contract-and-test, quality, console, console-e2e]'), 2)
         collector = workflow.split('      - name: Preserve complete job logs', 1)[1].split('      - name:', 1)[0]
         self.assertIn('CI_CONTRACT_NEEDS: ${{ toJSON(needs) }}', collector)
         native = workflow.split('  contract-native:', 1)[1].split('  contract-and-test:', 1)[0]

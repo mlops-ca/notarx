@@ -7,8 +7,8 @@ CI 只运行变更所需的作业。`.github/workflows/ci.yml` 中的 `changes` 
 
 | 类别 | 路径 | 启用的作业 |
 | --- | --- | --- |
-| `go` | `*.go`、`go.mod`、`go.sum`、`migrations/`、`internal/`、`cmd/`、`contracts/`、`examples/`、`api/` | `quality`、`contract-core`、`contract-native`、`contract-and-test` |
-| `console` | `console/`、`api/`（生成的客户端） | `console`（单元测试、构建、视觉、E2E） |
+| `go` | `*.go`、`go.mod`、`go.sum`、`migrations/`、`internal/`、`cmd/`、`contracts/`、`examples/`、`api/`，以及 `release-version-check` 读取的文件（`CHANGELOG*.md`、`docs/cli*.md`、`VERSION`） | `quality`、`contract-core`、`contract-native`、`contract-and-test`，以及 `console-e2e`（它运行真实网关） |
+| `console` | `console/`、`api/`（生成的客户端） | `console`（单元测试、构建、视觉）与 `console-e2e` |
 | `docs` | `docs/`、`*.md`、`LICENSE`、`NOTICE` | `docs`（中英文对应、链接、能力声明） |
 | `images` | `Dockerfile*`、`compose*.yml`、`deploy/` | 所有执行产品的作业（含 `go` 与 `console`） |
 | `ci` | `.github/`、`Makefile`、`scripts/` | 全部 |
@@ -18,7 +18,7 @@ CI 只运行变更所需的作业。`.github/workflows/ci.yml` 中的 `changes` 
 `pr-title`（Conventional Commit 标题，ADR 0024）在每个拉取请求上运行。
 
 因此仅文档的拉取请求只运行 `changes`、`pr-title`、`docs` 与 `ci-ok`；仅 Go 的拉取请求跳过
-`console`；仅控制台的拉取请求跳过所有契约通道。
+`console`（单元、构建、视觉）但仍运行 `console-e2e`；仅控制台的拉取请求跳过所有契约通道。
 
 ## ci-ok 门禁
 
