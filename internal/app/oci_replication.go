@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/mlops-ca/notarx/internal/objectstore"
 	"net/url"
 	"strings"
 	"time"
@@ -117,7 +118,11 @@ func (r OCIReplication) sourceManifest(ctx context.Context, repositoryID, source
 }
 
 func ociReplicationTargetObjectKey(repositoryID, name, digest string) string {
-	return "native/oci/manifests/" + repositoryID + "/" + url.PathEscape(name) + "/" + strings.TrimPrefix(digest, "sha256:")
+	segment := url.PathEscape(name)
+	if !objectstore.KeySegmentUsable(segment) {
+		segment = objectstore.SafeKeySegment(name)
+	}
+	return "native/oci/manifests/" + repositoryID + "/" + segment + "/" + strings.TrimPrefix(digest, "sha256:")
 }
 
 func replicatedManifestBlobDigests(body []byte) []string {

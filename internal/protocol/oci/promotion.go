@@ -111,7 +111,7 @@ func (m NativePromotion) run(ctx context.Context, job repository.LifecycleJob) e
 			return m.fail(ctx, job, "source OCI blob is unavailable")
 		}
 	}
-	key := "native/oci/manifests/" + job.RepositoryID + "/" + p.Name + "/" + strings.TrimPrefix(p.Digest, "sha256:")
+	key := "native/oci/manifests/" + job.RepositoryID + "/" + objectstore.SafeKeyPath(p.Name, 700) + "/" + strings.TrimPrefix(p.Digest, "sha256:")
 	if err = m.Store.StageOCIObjectIntent(ctx, repository.OCIObjectIntent{RepositoryID: job.RepositoryID, ObjectKey: key, Digest: p.Digest, Size: int64(len(body))}); err != nil {
 		return m.fail(ctx, job, "stage target OCI manifest failed")
 	}
