@@ -348,8 +348,8 @@ def check(render_only, evidence=None, fixture_subnets=None):
 
         try:
             run(["go", "build", "-o", str(notarxctl), "./cmd/notarxctl"])
-            if os.environ.get("NOTARX_COMPOSE_BUILD_FLAG", "--build") == "--build":
-                run(compose + ["build", "gateway"])
+            # Builds the per-project fixture image this check names itself.
+            run(compose + ["build", "gateway"])
             run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
                  "-subj", "/CN=smtp.example.test", "-addext", "subjectAltName=DNS:smtp.example.test",
                  "-keyout", str(sink / "key.pem"), "-out", str(sink / "cert.pem")])
