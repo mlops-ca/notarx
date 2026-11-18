@@ -157,7 +157,8 @@ func TestWriterAggregatesUsageAndRollups(t *testing.T) {
 		if err = rows.Scan(&outcome, &requests); err != nil {
 			t.Fatal(err)
 		}
-		got[outcome] = requests
+		// One row per hour bucket: the second flush can fall into the next hour.
+		got[outcome] += requests
 	}
 	if got[repository.OutcomeAllowed] != 1005 || got[repository.OutcomeUnauthenticated] != 1 {
 		t.Fatalf("rollup by outcome: %+v", got)
