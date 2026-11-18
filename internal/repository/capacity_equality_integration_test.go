@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -33,10 +34,11 @@ type counterEquality struct {
 // counterEqualityCases lists the covered formats' tests; add a case when a format's
 // registry entry becomes covered.
 var counterEqualityCases = map[string]counterEquality{
-	"raw":  {repoFormat: FormatRaw, run: rawCounterEquality, edge: rawCounterEdge},
-	"go":   {repoFormat: FormatGo, run: goCounterEquality, edge: goCounterEdge},
-	"npm":  {repoFormat: FormatNPM, run: npmCounterEquality, edge: npmCounterEdge},
-	"pypi": {repoFormat: FormatPyPI, run: pypiCounterEquality, edge: pypiCounterEdge},
+	"raw":   {repoFormat: FormatRaw, run: rawCounterEquality, edge: rawCounterEdge},
+	"go":    {repoFormat: FormatGo, run: goCounterEquality, edge: goCounterEdge},
+	"cargo": {repoFormat: FormatCargo, run: cargoCounterEquality, edge: cargoCounterEdge},
+	"npm":   {repoFormat: FormatNPM, run: npmCounterEquality, edge: npmCounterEdge},
+	"pypi":  {repoFormat: FormatPyPI, run: pypiCounterEquality, edge: pypiCounterEdge},
 }
 
 // assertCounterEqualsUsage fails when the repository's counter differs from the
@@ -461,6 +463,86 @@ func npmCounterEdge(t *testing.T, ctx context.Context, store *PostgresStore, rep
 		go func() {
 			defer wg.Done()
 			switch _, err := store.PublishNPMVersion(ctx, npmFixture(repo, "edge", "1.0."+string(rune('a'+index)), size), map[string]string{}); {
+			case err == nil:
+				acc.Add(1)
+			case IsQuotaExceeded(err):
+				rej.Add(1)
+			default:
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	return acc.Load(), rej.Load()
+}
+
+// cargoCommit publishes one crate version and returns the publication it committed.
+func cargoCommit(t *testing.T, ctx context.Context, store *PostgresStore, repo HostedRepository, name, version string, size int64) (CargoPublication, error) {
+	t.Helper()
+	claim := CargoIdentityClaim{RepositoryID: repo.ID, Name: name, Version: version, Digest: uniqueDigest(), MetadataDigest: uniqueDigest()}
+	reservation, _, err := store.ReserveCargoIdentity(ctx, claim)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publication := cargoTestPublication(t, claim, reservation, size)
+	_, _, err = store.CommitCargoPublication(ctx, publication)
+	return publication, err
+}
+
+func cargoCounterEquality(t *testing.T, ctx context.Context, store *PostgresStore, repo HostedRepository, check func(string)) {
+	first, err := cargoCommit(t, ctx, store, repo, "demo-crate", "1.0.0", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("publish 1.0.0")
+	if _, err = cargoCommit(t, ctx, store, repo, "demo-crate", "1.1.0", 20); err != nil {
+		t.Fatal(err)
+	}
+	check("publish 1.1.0")
+	if _, _, err = store.CommitCargoPublication(ctx, first); err != nil {
+		t.Fatalf("replay of 1.0.0: %v", err)
+	}
+	check("replay 1.0.0")
+	if _, _, err = store.SetCargoYanked(ctx, repo.ID, "demo-crate", "1.1.0", true); err != nil {
+		t.Fatal(err)
+	}
+	check("yank 1.1.0")
+	if _, err = store.TombstoneCargoPublication(ctx, repo.ID, "demo-crate", "1.0.0"); err != nil {
+		t.Fatal(err)
+	}
+	check("tombstone 1.0.0 (bytes stay until collected)")
+	if err = store.MarkCargoObjectCollecting(ctx, first.ObjectKey); err != nil {
+		t.Fatal(err)
+	}
+	if err = store.MarkCargoObjectCollected(ctx, first.ObjectKey); err != nil {
+		t.Fatal(err)
+	}
+	check("collect 1.0.0")
+	if _, err = cargoCommit(t, ctx, store, repo, "demo-crate", "2.0.0", 5); err != nil {
+		t.Fatal(err)
+	}
+	check("publish 2.0.0 after collection")
+	var used int64
+	if err = store.db.QueryRow(`SELECT bytes FROM repository_usage_counters WHERE repository_id=$1::uuid`, repo.ID).Scan(&used); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.ReplaceRepositoryCapacityQuota(ctx, repo.ID, used); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = cargoCommit(t, ctx, store, repo, "demo-crate", "3.0.0", 1); !IsQuotaExceeded(err) {
+		t.Fatalf("publish over quota = %v, want quota exceeded", err)
+	}
+	check("rejected publish over quota")
+}
+
+func cargoCounterEdge(t *testing.T, ctx context.Context, store *PostgresStore, repo HostedRepository, size int64, workers int) (accepted, rejected int64) {
+	var acc, rej atomic.Int64
+	var wg sync.WaitGroup
+	for index := range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			switch _, err := cargoCommit(t, ctx, store, repo, "edge-crate", "1.0."+strconv.Itoa(index), size); {
 			case err == nil:
 				acc.Add(1)
 			case IsQuotaExceeded(err):

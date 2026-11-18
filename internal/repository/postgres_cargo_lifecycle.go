@@ -197,21 +197,42 @@ func (s *PostgresStore) MarkCargoObjectCollecting(ctx context.Context, objectKey
 }
 
 func (s *PostgresStore) MarkCargoObjectCollected(ctx context.Context, objectKey string) error {
-	result, err := s.db.ExecContext(ctx, `UPDATE native_cargo_publications p SET collecting_at=NULL,collected_at=now()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	rows, err := tx.QueryContext(ctx, `UPDATE native_cargo_publications p SET collecting_at=NULL,collected_at=now()
 		FROM native_cargo_identity_reservations r,native_cargo_names n
 		WHERE p.object_key=$1 AND p.collected_at IS NULL AND r.repository_id=p.repository_id AND r.collision_key=p.collision_key
 		  AND r.version_key=p.version_key AND n.repository_id=p.repository_id AND n.collision_key=p.collision_key
 		  AND EXISTS (SELECT 1 FROM artifact_tombstones t WHERE t.repository_id=p.repository_id AND t.format='cargo'
-		    AND t.coordinate=n.name || '@' || r.version)`, objectKey)
+		    AND t.coordinate=n.name || '@' || r.version)
+		RETURNING p.repository_id::text,p.size`, objectKey)
 	if err != nil {
 		return err
 	}
-	count, err := result.RowsAffected()
-	if err != nil {
+	var delta usageDelta
+	count := 0
+	for rows.Next() {
+		var repositoryID string
+		var size int64
+		if err = rows.Scan(&repositoryID, &size); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		// A collected publication leaves the repository's usage.
+		delta.add(repositoryID, -size, -1)
+		count++
+	}
+	if err = errors.Join(rows.Err(), rows.Close()); err != nil {
 		return err
 	}
 	if count == 0 {
 		return ErrNotFound
 	}
-	return nil
+	if err = delta.reserve(ctx, tx); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/mlops-ca/notarx/internal/capacity"
 
 	"github.com/mlops-ca/notarx/internal/protocol/cargo"
 )
@@ -134,16 +135,6 @@ func (s *PostgresStore) CommitCargoPublication(ctx context.Context, incoming Car
 			return CargoPublication{}, false, err
 		}
 	}
-	var quota, used int64
-	err = tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT quota_bytes FROM repository_capacity_quotas WHERE repository_id=h.id),0),
-		COALESCE((SELECT SUM(size) FROM native_cargo_publications WHERE repository_id=h.id AND collected_at IS NULL),0)
-		FROM hosted_repositories h WHERE h.id=$1::uuid`, publication.RepositoryID).Scan(&quota, &used)
-	if err != nil {
-		return CargoPublication{}, false, err
-	}
-	if quota > 0 && (used >= quota || publication.Size > quota-used) {
-		return CargoPublication{}, false, ErrQuotaExceeded
-	}
 	err = tx.QueryRowContext(ctx, `INSERT INTO native_cargo_publications
 		(repository_id,collision_key,version_key,object_key,size,index_row,description,publisher,published_at,yanked)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING created_at,yanked,updated_at`, publication.RepositoryID,
@@ -157,6 +148,10 @@ func (s *PostgresStore) CommitCargoPublication(ctx context.Context, incoming Car
 		return CargoPublication{}, false, ErrCargoPublicationConflict
 	}
 	if err != nil {
+		return CargoPublication{}, false, err
+	}
+	// The quota is enforced by the counter, not by summing the repository's publications.
+	if err = capacity.Reserve(ctx, tx, publication.RepositoryID, publication.Size, 1); err != nil {
 		return CargoPublication{}, false, err
 	}
 	if err = tx.Commit(); err != nil {
