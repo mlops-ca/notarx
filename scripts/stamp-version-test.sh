@@ -13,7 +13,7 @@ if [[ ! -x tools/openapi/node_modules/.bin/redocly ]]; then
 fi
 
 copy="$workdir/tree"
-mkdir -p "$copy/scripts" "$copy/console" "$copy/tools/openapi" "$copy/cmd/agctl" "$copy/docs"
+mkdir -p "$copy/scripts" "$copy/console" "$copy/tools/openapi" "$copy/cmd/notarxctl" "$copy/docs"
 cp VERSION go.mod "$copy/"
 cp -R api "$copy/api"
 cp console/package.json console/package-lock.json "$copy/console/"
@@ -75,7 +75,7 @@ if STAMP_ROOT="$copy" bash "$root/scripts/stamp-version.sh" v0.3.0 >/dev/null 2>
 fi
 
 # A binary built with the stamped value reports it.
-go build -ldflags "-X github.com/mlops-ca/notarx/internal/buildinfo.injectedVersion=$version" -o "$workdir/gateway" ./cmd/gateway
-"$workdir/gateway" version | grep -F "$version" >/dev/null || fail 'the built binary does not report the stamped version'
+go build -ldflags "-X github.com/mlops-ca/notarx/internal/buildinfo.injectedVersion=$version" -o "$workdir/notarx" ./cmd/notarx
+"$workdir/notarx" version | grep -F "$version" >/dev/null || fail 'the built binary does not report the stamped version'
 
 printf '%s\n' 'stamp-version-test passed.'
