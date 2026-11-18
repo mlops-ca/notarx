@@ -102,9 +102,9 @@ credentials = json.loads((work / 'credentials.json').read_text())
 env = dict(os.environ)
 env.update({
     'TEST_DATABASE_URL': 'postgres://gateway:' + credentials['password'] + '@' + sys.argv[2] + '/gateway_test?sslmode=disable',
-    'TEST_RUSTFS_ENDPOINT': 'http://' + sys.argv[3],
-    'TEST_RUSTFS_ACCESS_KEY': credentials['access'],
-    'TEST_RUSTFS_SECRET_KEY': credentials['secret'],
+    'TEST_OBJECT_STORE_ENDPOINT': 'http://' + sys.argv[3],
+    'TEST_OBJECT_STORE_ACCESS_KEY': credentials['access'],
+    'TEST_OBJECT_STORE_SECRET_KEY': credentials['secret'],
     'MIGRATION_CRANE_BIN': str(work / 'crane'),
 })
 evidence = pathlib.Path(sys.argv[4])

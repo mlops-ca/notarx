@@ -20,6 +20,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/localcapacity"
 	"github.com/mlops-ca/notarx/internal/nexusmigration"
 	"github.com/mlops-ca/notarx/internal/nexussource"
+	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/operationalog"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/scanning"
@@ -98,7 +99,7 @@ func NewDependencies(cfg config.Config) Dependencies {
 	return Dependencies{
 		checkers: []Checker{
 			postgresChecker{databaseURL: cfg.DatabaseURL},
-			httpChecker{url: rustFSEndpointURL(cfg.RustFSEndpoint)},
+			objectStoreChecker(cfg.ObjectStore),
 		},
 		Email:          cfg.Email,
 		BuildVersion:   build.Version,
@@ -212,6 +213,24 @@ func (h httpChecker) Check(ctx context.Context) error {
 	return nil
 }
 
-func rustFSEndpointURL(endpoint string) string {
+// objectStoreChecker builds the readiness probe for the configured driver.
+func objectStoreChecker(cfg objectstore.Config) Checker {
+	if cfg.Driver == objectstore.DriverFilesystem {
+		return filesystemChecker{cfg: cfg}
+	}
+	return httpChecker{url: objectStoreEndpointURL(cfg.Endpoint)}
+}
+
+// filesystemChecker is readiness for the filesystem driver: the root must exist
+// with a valid marker. Free space is a metric, not a readiness condition: below
+// the reserve writes fail with insufficient storage while reads and deletes keep
+// working.
+type filesystemChecker struct{ cfg objectstore.Config }
+
+func (c filesystemChecker) Check(ctx context.Context) error {
+	return objectstore.CheckReadiness(ctx, c.cfg)
+}
+
+func objectStoreEndpointURL(endpoint string) string {
 	return strings.TrimRight(endpoint, "/") + "/"
 }

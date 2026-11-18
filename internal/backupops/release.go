@@ -60,6 +60,14 @@ func (r Release) legacyEnvironment() bool {
 // legacy release reads. It exists only to run historical releases in recovery
 // tests; the notarx loader never reads the pre-fork names.
 func legacyEnvironmentKey(key string) string {
+	// The object store keys were renamed by ADR 0017; a release from before
+	// that reads the original RustFS names, which carry no OBJECT_STORE prefix.
+	if suffix, ok := strings.CutPrefix(key, "NOTARX_OBJECT_STORE_"); ok {
+		switch suffix {
+		case "ENDPOINT", "BUCKET", "ACCESS_KEY", "SECRET_KEY":
+			return "GATEWAY" + "_RUSTFS_" + suffix
+		}
+	}
 	return "GATEWAY" + "_" + strings.TrimPrefix(key, "NOTARX_")
 }
 

@@ -27,7 +27,7 @@ func (s restoreCommitHookStore) CommitAPTArchiveRestore(ctx context.Context, p r
 }
 
 func TestPostgresRustFSArchiveRestoreAcrossInstancesAndFailedAttemptReclamation(t *testing.T) {
-	if os.Getenv("TEST_DATABASE_URL") == "" || os.Getenv("TEST_RUSTFS_ENDPOINT") == "" {
+	if os.Getenv("TEST_DATABASE_URL") == "" || os.Getenv("TEST_OBJECT_STORE_ENDPOINT") == "" {
 		t.Skip("PostgreSQL/RustFS required")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
@@ -46,7 +46,7 @@ func TestPostgresRustFSArchiveRestoreAcrossInstancesAndFailedAttemptReclamation(
 	if err != nil {
 		t.Fatal(err)
 	}
-	objects, err := objectstore.NewRustFSStore(os.Getenv("TEST_RUSTFS_ENDPOINT"), os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY"), "apt-restore-"+strings.ReplaceAll(uuid.NewString(), "-", "")[:20])
+	objects, err := objectstore.NewS3StoreWithCredentials(os.Getenv("TEST_OBJECT_STORE_ENDPOINT"), os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY"), "apt-restore-"+strings.ReplaceAll(uuid.NewString(), "-", "")[:20])
 	if err != nil {
 		t.Fatal(err)
 	}

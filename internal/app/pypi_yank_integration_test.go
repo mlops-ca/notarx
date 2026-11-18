@@ -26,9 +26,9 @@ type pypiYankBackup struct {
 	Objects    map[string][]byte
 }
 
-func pypiYankDurableFixture(t *testing.T, bucket string) (*repository.PostgresStore, *objectstore.RustFSStore) {
+func pypiYankDurableFixture(t *testing.T, bucket string) (*repository.PostgresStore, *objectstore.S3Store) {
 	t.Helper()
-	if os.Getenv("TEST_DATABASE_URL") == "" || os.Getenv("TEST_RUSTFS_ENDPOINT") == "" {
+	if os.Getenv("TEST_DATABASE_URL") == "" || os.Getenv("TEST_OBJECT_STORE_ENDPOINT") == "" {
 		t.Skip("isolated PostgreSQL/RustFS environment is required")
 	}
 	store, err := repository.NewPostgresStore(os.Getenv("TEST_DATABASE_URL"))
@@ -36,7 +36,7 @@ func pypiYankDurableFixture(t *testing.T, bucket string) (*repository.PostgresSt
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	objects, err := objectstore.NewRustFSStore(os.Getenv("TEST_RUSTFS_ENDPOINT"), os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY"), bucket)
+	objects, err := objectstore.NewS3StoreWithCredentials(os.Getenv("TEST_OBJECT_STORE_ENDPOINT"), os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY"), bucket)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -67,7 +67,7 @@ Explicit negative v1 object totals are invalid, rather than missing evidence.
 | `gateway` | `version`, 40 lowercase hex `revision`, full `imageDigest: sha256:<64 lowercase hex digits>`. These identify declared software, not proven compatibility. |
 | `database` | `format: pg-custom-v1` and `file` reference to dump bytes. No connection, dump parsing or restore is performed. |
 | `schema` | `format: notarx-migrations-tsv-v1` and `file` reference to the native migration ledger representation below. |
-| `objects` | `format: s3-bytes-v1`, an `inventory` file reference, and nonnegative int64 `count` and `bytes` matching the streamed inventory. RustFS physical tar is a different profile and returns unknown. |
+| `objects` | `format: s3-bytes-v1` or `fs-bytes-v1`, an `inventory` file reference, and nonnegative int64 `count` and `bytes` matching the streamed inventory. `fs-bytes-v1` also carries `segments` and an optional `rootId` (below). RustFS physical tar is a different profile and returns unknown. |
 | `writers` | `scopeId`, explicit `inventoryDeclaredComplete`, and nonempty `writers` declarations described below. |
 
 `backupId`, software `version`, scope and writer IDs contain 1–128 ASCII
@@ -93,6 +93,38 @@ Keys are nonempty, at most 4096 UTF-8 bytes, without NUL, CR or LF. Each
 ```json
 {"key":"synthetic/a","file":{"path":"objects/one.bin","size":3,"sha256":"sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"}}
 ```
+
+### The `fs-bytes-v1` object format
+
+The filesystem object driver (ADR 0017) exports its objects as a few large tar
+segments instead of one file per object, so copying a bundle to a
+request-metered object store costs requests in proportion to size divided by
+segment size (256 MiB by default), not to the object count. `objects` then also
+holds:
+
+- `segments`: the tar segments in order, each `{path, size, sha256}` with a
+  `path` of the form `objects/segment-NNNNNN.tar` (six digits). Every segment is
+  hashed whole during verification. A segment holds at least one object; an object
+  larger than the segment size gets a segment of its own.
+- `rootId` (optional, UUID): the filesystem root ID at export time. A restore
+  writes it into the new root so the restored database's recorded object store
+  identity still matches.
+
+Each inventory line then describes one object inside a segment: `file.path` is the
+segment, `file.size` and `file.sha256` are the object's own size and digest, and
+`offset` is where the object's bytes start inside the segment (an ordinary tar
+entry named by the key, so the segment can also be unpacked with `tar`):
+
+```json
+{"key":"native/raw/sha256/ab/abcd","file":{"path":"objects/segment-000001.tar","size":3,"sha256":"sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"},"offset":512}
+```
+
+Verification requires the segment to be declared, offsets of one segment to
+increase without overlap and stay inside it (at least 512, after a tar header),
+and segments to be used in order. The per-object digest is syntax-checked here and
+compared with the restored bytes during a restore; the segment digest already
+covers every byte. `s3-bytes-v1` inventories must not carry `offset`,
+`segments` or `rootId`.
 
 Ledger and inventory files are each limited to 64 MiB, with lines shorter than
 64 KiB. Object files use fixed-size read buffers. Cancellation is checked

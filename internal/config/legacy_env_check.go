@@ -32,7 +32,9 @@ func RefuseLegacyEnv(environ []string) error {
 	var found []string
 	for _, entry := range environ {
 		name, _, _ := strings.Cut(entry, "=")
-		if replacement, ok := legacyEnvNames[name]; ok {
+		if replacement, ok := renamedObjectStoreEnv[name]; ok {
+			found = append(found, fmt.Sprintf("%s was renamed to %s", name, replacement))
+		} else if replacement, ok := legacyEnvNames[name]; ok {
 			found = append(found, fmt.Sprintf("%s was renamed to %s", name, replacement))
 		}
 	}

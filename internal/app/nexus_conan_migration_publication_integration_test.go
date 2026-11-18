@@ -23,7 +23,7 @@ type nexusConanPGFixture struct {
 	databaseURL string
 	db          *sql.DB
 	store       *repository.PostgresStore
-	objects     *objectstore.RustFSStore
+	objects     *objectstore.S3Store
 	repo        repository.HostedRepository
 	entries     []nexusmigration.Entry
 	bodies      map[string][]byte
@@ -31,7 +31,7 @@ type nexusConanPGFixture struct {
 
 func newNexusConanPGFixture(t *testing.T) nexusConanPGFixture {
 	t.Helper()
-	databaseURL, endpoint := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_RUSTFS_ENDPOINT")
+	databaseURL, endpoint := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
 	if databaseURL == "" || endpoint == "" {
 		t.Skip("isolated PostgreSQL and RustFS required")
 	}
@@ -48,7 +48,7 @@ func newNexusConanPGFixture(t *testing.T) nexusConanPGFixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	objects, err := objectstore.NewRustFSStore(endpoint, os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY"), "conan-migrate-"+strings.ReplaceAll(uuid.NewString(), "-", ""))
+	objects, err := objectstore.NewS3StoreWithCredentials(endpoint, os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY"), "conan-migrate-"+strings.ReplaceAll(uuid.NewString(), "-", ""))
 	if err != nil {
 		t.Fatal(err)
 	}

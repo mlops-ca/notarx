@@ -14,7 +14,7 @@ import (
 )
 
 func TestPostgresRustFSHelmGovernanceHTTPRestartAndCorruptClosure(t *testing.T) {
-	if os.Getenv("TEST_DATABASE_URL") == "" || os.Getenv("TEST_RUSTFS_ENDPOINT") == "" {
+	if os.Getenv("TEST_DATABASE_URL") == "" || os.Getenv("TEST_OBJECT_STORE_ENDPOINT") == "" {
 		t.Skip("owned PostgreSQL and RustFS are required")
 	}
 	store, err := repository.NewPostgresStore(os.Getenv("TEST_DATABASE_URL"))
@@ -22,7 +22,7 @@ func TestPostgresRustFSHelmGovernanceHTTPRestartAndCorruptClosure(t *testing.T) 
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	objects, err := objectstore.NewRustFSStore(os.Getenv("TEST_RUSTFS_ENDPOINT"), os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY"), "helm-governance-"+uuid.NewString())
+	objects, err := objectstore.NewS3StoreWithCredentials(os.Getenv("TEST_OBJECT_STORE_ENDPOINT"), os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY"), "helm-governance-"+uuid.NewString())
 	if err != nil {
 		t.Fatal(err)
 	}

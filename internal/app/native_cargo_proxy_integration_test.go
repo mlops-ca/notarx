@@ -23,9 +23,9 @@ import (
 
 func TestPostgresRustFSCargoProxyOfflineRestart(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	endpoint := os.Getenv("TEST_RUSTFS_ENDPOINT")
-	accessKey := os.Getenv("TEST_RUSTFS_ACCESS_KEY")
-	secretKey := os.Getenv("TEST_RUSTFS_SECRET_KEY")
+	endpoint := os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
+	accessKey := os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY")
+	secretKey := os.Getenv("TEST_OBJECT_STORE_SECRET_KEY")
 	if databaseURL == "" || endpoint == "" || accessKey == "" || secretKey == "" {
 		t.Skip("PostgreSQL and RustFS integration environment is required")
 	}
@@ -36,7 +36,7 @@ func TestPostgresRustFSCargoProxyOfflineRestart(t *testing.T) {
 	}
 	defer func() { _ = storeA.Close() }()
 	bucket := "cargo-proxy-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:20]
-	objectsA, err := objectstore.NewRustFSStore(endpoint, accessKey, secretKey, bucket)
+	objectsA, err := objectstore.NewS3StoreWithCredentials(endpoint, accessKey, secretKey, bucket)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func TestPostgresRustFSCargoProxyOfflineRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = storeB.Close() }()
-	objectsB, err := objectstore.NewRustFSStore(endpoint, accessKey, secretKey, bucket)
+	objectsB, err := objectstore.NewS3StoreWithCredentials(endpoint, accessKey, secretKey, bucket)
 	if err != nil {
 		t.Fatal(err)
 	}

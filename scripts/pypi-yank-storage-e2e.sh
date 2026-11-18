@@ -43,7 +43,7 @@ trap cleanup EXIT
 postgres_address=$("${compose[@]}" port postgres 5432)
 rustfs_address=$("${compose[@]}" port rustfs 9000)
 export TEST_DATABASE_URL="postgres://gateway:integration-password@${postgres_address}/gateway_test?sslmode=disable"
-export TEST_RUSTFS_ENDPOINT="http://${rustfs_address}" TEST_RUSTFS_ACCESS_KEY=integration-rustfs TEST_RUSTFS_SECRET_KEY=integration-password
+export TEST_OBJECT_STORE_ENDPOINT="http://${rustfs_address}" TEST_OBJECT_STORE_ACCESS_KEY=integration-rustfs TEST_OBJECT_STORE_SECRET_KEY=integration-password
 NOTARX_PYPI_BACKUP_MANIFEST="$temporary/manifest.json" \
   go test -v -count=1 -p=1 -tags=integration ./internal/repository ./internal/app \
   -run '^TestPyPIYankPostgres|^TestPostgresRustFSPyPIPublication|^TestPyPIYankFile|^TestPyPIYankRevision|^TestPyPIYankAuthorization'

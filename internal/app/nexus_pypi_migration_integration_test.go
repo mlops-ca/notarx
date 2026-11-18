@@ -220,7 +220,7 @@ type pypiMigrationPG struct {
 	t                                                       *testing.T
 	db                                                      *sql.DB
 	store                                                   *repository.PostgresStore
-	objects                                                 *objectstore.RustFSStore
+	objects                                                 *objectstore.S3Store
 	repo                                                    repository.HostedRepository
 	source                                                  *nexussource.Service
 	created                                                 nexussource.Source
@@ -233,7 +233,7 @@ type pypiMigrationPG struct {
 
 func newPyPIMigrationPG(t *testing.T) *pypiMigrationPG {
 	t.Helper()
-	databaseURL, endpoint := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_RUSTFS_ENDPOINT")
+	databaseURL, endpoint := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
 	if databaseURL == "" || endpoint == "" {
 		if os.Getenv("PYPI_MIGRATION_REQUIRED") == "1" {
 			t.Fatal("mandatory PyPI proof needs owned PostgreSQL/RustFS")
@@ -254,7 +254,7 @@ func newPyPIMigrationPG(t *testing.T) *pypiMigrationPG {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	objects, err := objectstore.NewRustFSStore(endpoint, os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY"), "pypi-migration-"+strings.ReplaceAll(uuid.NewString(), "-", ""))
+	objects, err := objectstore.NewS3StoreWithCredentials(endpoint, os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY"), "pypi-migration-"+strings.ReplaceAll(uuid.NewString(), "-", ""))
 	if err != nil {
 		t.Fatal(err)
 	}

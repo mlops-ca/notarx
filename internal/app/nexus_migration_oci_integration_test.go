@@ -26,9 +26,9 @@ type ownedNexusOCIStore struct {
 	jobs map[string]string
 }
 
-func newNexusOCIIntegrationFixture(t *testing.T) (*ownedNexusOCIStore, *objectstore.RustFSStore) {
+func newNexusOCIIntegrationFixture(t *testing.T) (*ownedNexusOCIStore, *objectstore.S3Store) {
 	t.Helper()
-	connection, endpoint := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_RUSTFS_ENDPOINT")
+	connection, endpoint := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
 	if connection == "" || endpoint == "" {
 		t.Skip("owned PostgreSQL and RustFS required")
 	}
@@ -45,7 +45,7 @@ func newNexusOCIIntegrationFixture(t *testing.T) (*ownedNexusOCIStore, *objectst
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	objects, err := objectstore.NewRustFSStore(endpoint, os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY"), "nexus-oci-"+strings.ReplaceAll(uuid.NewString(), "-", "")[:20])
+	objects, err := objectstore.NewS3StoreWithCredentials(endpoint, os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY"), "nexus-oci-"+strings.ReplaceAll(uuid.NewString(), "-", "")[:20])
 	if err != nil {
 		t.Fatal(err)
 	}

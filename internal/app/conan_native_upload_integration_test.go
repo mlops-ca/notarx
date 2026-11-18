@@ -17,8 +17,8 @@ import (
 )
 
 func TestPostgresRustFSConanNativeClientRestartAndColdInstall(t *testing.T) {
-	databaseURL, endpoint := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_RUSTFS_ENDPOINT")
-	access, secret := os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY")
+	databaseURL, endpoint := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
+	access, secret := os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY")
 	if databaseURL == "" || endpoint == "" || access == "" || secret == "" || os.Getenv("CONAN_BINARY") == "" {
 		if os.Getenv("CONAN_PERSISTENCE_REQUIRED") == "1" {
 			t.Fatal("pinned Conan client, PostgreSQL and S3 environment are required")
@@ -35,7 +35,7 @@ func TestPostgresRustFSConanNativeClientRestartAndColdInstall(t *testing.T) {
 		}
 		current = store
 		t.Cleanup(func() { _ = store.Close() })
-		objects, err := objectstore.NewRustFSStore(endpoint, access, secret, bucket)
+		objects, err := objectstore.NewS3StoreWithCredentials(endpoint, access, secret, bucket)
 		if err != nil {
 			t.Fatal(err)
 		}

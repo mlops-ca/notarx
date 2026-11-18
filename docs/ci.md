@@ -8,7 +8,7 @@ five classes. Heavy jobs run only when their class changed.
 
 | Class | Paths | Jobs it enables |
 | --- | --- | --- |
-| `go` | `*.go`, `go.mod`, `go.sum`, `migrations/`, `internal/`, `cmd/`, `contracts/`, `examples/`, `api/`, plus the files `release-version-check` reads (`CHANGELOG*.md`, `docs/cli*.md`, `VERSION`) | `quality`, `contract-plan`, `contract`, `contract-and-test`, and `console-e2e` (it runs the real gateway) |
+| `go` | `*.go`, `go.mod`, `go.sum`, `migrations/`, `internal/`, `cmd/`, `contracts/`, `examples/`, `api/`, plus the files `release-version-check` reads (`CHANGELOG*.md`, `docs/cli*.md`, `VERSION`) | `quality`, `object-store-contract`, `contract-plan`, `contract`, `contract-and-test`, and `console-e2e` (it runs the real gateway) |
 | `console` | `console/`, `api/` (the generated client) | `console` (unit tests, build, visual) and `console-e2e` |
 | `docs` | `docs/`, `*.md`, `LICENSE`, `NOTICE` | `docs` (i18n twins, links, capability claims) |
 | `images` | `Dockerfile*`, `compose*.yml`, `deploy/` | everything that executes the product (`go` and `console` too) |
@@ -117,7 +117,32 @@ upgrade path from upstream. `scripts/upgrade-readiness.sh` (kept, with its make
 target) is parameterized on stable notarx release tags and reports a no-op until
 one exists; re-add the CI step once a second notarx release exists.
 `make backup-transfer-test` (lane `core-backup`) runs the same upgrade properties
-against the baseline plus a synthetic `000002` migration meanwhile.
+against the real migrations and a synthetic `000004` migration meanwhile.
+
+## Object store contract
+
+`object-store-contract` (`.github/workflows/object-store-contract.yml`, called from
+`ci.yml` with the `go` class) runs the shared object store contract
+(`internal/objectstore/storetest`, ADR 0017) against the S3 driver on RustFS
+and on a second S3-compatible implementation, once per checksum mode where the
+service supports it. The same suite runs against the in-memory store in
+`make test` and against RustFS in `make integration-test`; the
+`./internal/objectstore` coverage floor in `scripts/coverage-packages.txt` is set
+so it fails if the suite stops running. The second service has no published
+container image, so the job builds it from a pinned upstream revision with the
+repository Go toolchain; bump `MINIO_VERSION` in the workflow to move it.
+`scripts/rustfs-only-contract-test.sh` exempts that one workflow file.
+
+## OCI live run
+
+`oci-live` (`.github/workflows/oci-live.yml`) is separate from `ci.yml` and is not
+part of `ci-ok`. It runs the object store contract against Oracle Cloud Object
+Storage with the `ocilive` build tag (see [object storage](object-storage.md)).
+Triggers are pushes to `main` that touch `internal/objectstore/`, a weekly schedule
+and a manual dispatch, in this repository only; never `pull_request` or
+`pull_request_target`, so untrusted code cannot reach the secrets. The job detects
+the `OCI_OBJECT_STORE_*` secrets in a first step and skips every other step, with a
+notice, when they are absent.
 
 ## Migration checks
 

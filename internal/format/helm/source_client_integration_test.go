@@ -49,7 +49,7 @@ func (c helmOwnedUpstream) FetchHelm(ctx context.Context, repo repository.Hosted
 }
 func TestHelmFixedOfficialCLIProxyGroupFrozenSourceOfflinePostgresRustFSRestart(t *testing.T) {
 	binary, dsn := os.Getenv("HELM_TEST_BINARY"), os.Getenv("TEST_DATABASE_URL")
-	if binary == "" || dsn == "" || os.Getenv("TEST_RUSTFS_ENDPOINT") == "" {
+	if binary == "" || dsn == "" || os.Getenv("TEST_OBJECT_STORE_ENDPOINT") == "" {
 		t.Skip("owned fixed Helm, PostgreSQL and RustFS required")
 	}
 	t.Setenv(secrets.KeyEnv, strings.Repeat("3", 64))
@@ -177,7 +177,7 @@ func TestHelmFixedOfficialCLIProxyGroupFrozenSourceOfflinePostgresRustFSRestart(
 		t.Fatal(e)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	objects, e := objectstore.NewRustFSStore(os.Getenv("TEST_RUSTFS_ENDPOINT"), os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY"), "helm-proxy-"+uuid.NewString())
+	objects, e := objectstore.NewS3StoreWithCredentials(os.Getenv("TEST_OBJECT_STORE_ENDPOINT"), os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY"), "helm-proxy-"+uuid.NewString())
 	if e != nil {
 		t.Fatal(e)
 	}

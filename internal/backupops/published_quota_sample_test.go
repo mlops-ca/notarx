@@ -77,8 +77,8 @@ func samplePublishedRecoveryQuota(t *testing.T, ctx context.Context, source *Own
 	}()
 	environment := []string{
 		"NOTARX_DATABASE_URL=postgres://gateway:" + escapePassword(source.spec.PostgresPassword) + "@postgres:5432/gateway?sslmode=disable",
-		"NOTARX_RUSTFS_ENDPOINT=http://rustfs:9000", "NOTARX_RUSTFS_BUCKET=gateway-cache",
-		"NOTARX_RUSTFS_ACCESS_KEY=" + source.spec.AccessKey, "NOTARX_RUSTFS_SECRET_KEY=" + source.spec.SecretKey,
+		"NOTARX_OBJECT_STORE_ENDPOINT=http://rustfs:9000", "NOTARX_OBJECT_STORE_AUTO_CREATE_BUCKET=true", "NOTARX_OBJECT_STORE_BUCKET=gateway-cache",
+		"NOTARX_OBJECT_STORE_ACCESS_KEY=" + source.spec.AccessKey, "NOTARX_OBJECT_STORE_SECRET_KEY=" + source.spec.SecretKey,
 		"NOTARX_ADMIN_TOKEN=" + source.spec.AdminToken, "NOTARX_RESOLVER_TOKEN=" + source.spec.ResolverToken,
 		"NOTARX_NODE_ROLES=scheduler", "NOTARX_LISTEN_ADDRESS=:0", "NOTARX_INSTANCE_ID=" + name,
 		"NOTARX_SETTINGS_ENCRYPTION_KEY=" + recoveryEmailKey, "NOTARX_EMAIL_CONFIG_FILE=/quota-mail.json",

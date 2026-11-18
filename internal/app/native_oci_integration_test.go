@@ -26,9 +26,9 @@ import (
 
 func TestPostgresRustFSOCIPromotionCopiesManifestAndMountsBlob(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	endpoint := os.Getenv("TEST_RUSTFS_ENDPOINT")
-	accessKey := os.Getenv("TEST_RUSTFS_ACCESS_KEY")
-	secretKey := os.Getenv("TEST_RUSTFS_SECRET_KEY")
+	endpoint := os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
+	accessKey := os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY")
+	secretKey := os.Getenv("TEST_OBJECT_STORE_SECRET_KEY")
 	if databaseURL == "" || endpoint == "" || accessKey == "" || secretKey == "" {
 		t.Skip("PostgreSQL and S3 integration environment is required")
 	}
@@ -38,7 +38,7 @@ func TestPostgresRustFSOCIPromotionCopiesManifestAndMountsBlob(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	objects, err := objectstore.NewRustFSStore(endpoint, accessKey, secretKey, "promotion-oci-"+strings.ReplaceAll(uuid.NewString(), "-", "")[:20])
+	objects, err := objectstore.NewS3StoreWithCredentials(endpoint, accessKey, secretKey, "promotion-oci-"+strings.ReplaceAll(uuid.NewString(), "-", "")[:20])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,9 +108,9 @@ func TestPostgresRustFSOCIPromotionCopiesManifestAndMountsBlob(t *testing.T) {
 
 func TestPostgresRustFSOCIReplicationPublishesTargetOwnedManifest(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	endpoint := os.Getenv("TEST_RUSTFS_ENDPOINT")
-	accessKey := os.Getenv("TEST_RUSTFS_ACCESS_KEY")
-	secretKey := os.Getenv("TEST_RUSTFS_SECRET_KEY")
+	endpoint := os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
+	accessKey := os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY")
+	secretKey := os.Getenv("TEST_OBJECT_STORE_SECRET_KEY")
 	if databaseURL == "" || endpoint == "" || accessKey == "" || secretKey == "" {
 		t.Skip("PostgreSQL and S3 integration environment is required")
 	}
@@ -120,7 +120,7 @@ func TestPostgresRustFSOCIReplicationPublishesTargetOwnedManifest(t *testing.T) 
 		t.Fatal(err)
 	}
 	defer store.Close()
-	objects, err := objectstore.NewRustFSStore(endpoint, accessKey, secretKey, "replication-oci-"+strings.ReplaceAll(uuid.NewString(), "-", "")[:20])
+	objects, err := objectstore.NewS3StoreWithCredentials(endpoint, accessKey, secretKey, "replication-oci-"+strings.ReplaceAll(uuid.NewString(), "-", "")[:20])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -342,9 +342,9 @@ func TestPostgresLifecycleJobsAreIdempotentAndClaimedOnce(t *testing.T) {
 
 func TestNativeOCIHostedHTTPAcrossPostgresAndRustFSGatewayInstances(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	s3Endpoint := os.Getenv("TEST_RUSTFS_ENDPOINT")
-	accessKey := os.Getenv("TEST_RUSTFS_ACCESS_KEY")
-	secretKey := os.Getenv("TEST_RUSTFS_SECRET_KEY")
+	s3Endpoint := os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
+	accessKey := os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY")
+	secretKey := os.Getenv("TEST_OBJECT_STORE_SECRET_KEY")
 	if databaseURL == "" || s3Endpoint == "" || accessKey == "" || secretKey == "" {
 		t.Skip("PostgreSQL and S3 integration environment is required")
 	}
@@ -359,14 +359,14 @@ func TestNativeOCIHostedHTTPAcrossPostgresAndRustFSGatewayInstances(t *testing.T
 	}
 	defer storeB.Close()
 	bucket := "native-oci-http-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:20]
-	objectsA, err := objectstore.NewRustFSStore(s3Endpoint, accessKey, secretKey, bucket)
+	objectsA, err := objectstore.NewS3StoreWithCredentials(s3Endpoint, accessKey, secretKey, bucket)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err = objectsA.EnsureBucket(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	objectsB, err := objectstore.NewRustFSStore(s3Endpoint, accessKey, secretKey, bucket)
+	objectsB, err := objectstore.NewS3StoreWithCredentials(s3Endpoint, accessKey, secretKey, bucket)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -438,9 +438,9 @@ func TestNativeOCIHostedHTTPAcrossPostgresAndRustFSGatewayInstances(t *testing.T
 
 func TestNativeOCIReferrersAndCatalogAcrossPostgresAndRustFSGatewayInstances(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	s3Endpoint := os.Getenv("TEST_RUSTFS_ENDPOINT")
-	accessKey := os.Getenv("TEST_RUSTFS_ACCESS_KEY")
-	secretKey := os.Getenv("TEST_RUSTFS_SECRET_KEY")
+	s3Endpoint := os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
+	accessKey := os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY")
+	secretKey := os.Getenv("TEST_OBJECT_STORE_SECRET_KEY")
 	if databaseURL == "" || s3Endpoint == "" || accessKey == "" || secretKey == "" {
 		t.Skip("PostgreSQL and S3 integration environment is required")
 	}
@@ -455,14 +455,14 @@ func TestNativeOCIReferrersAndCatalogAcrossPostgresAndRustFSGatewayInstances(t *
 	}
 	defer storeB.Close()
 	bucket := "native-oci-referrers-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:20]
-	objectsA, err := objectstore.NewRustFSStore(s3Endpoint, accessKey, secretKey, bucket)
+	objectsA, err := objectstore.NewS3StoreWithCredentials(s3Endpoint, accessKey, secretKey, bucket)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err = objectsA.EnsureBucket(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	objectsB, err := objectstore.NewRustFSStore(s3Endpoint, accessKey, secretKey, bucket)
+	objectsB, err := objectstore.NewS3StoreWithCredentials(s3Endpoint, accessKey, secretKey, bucket)
 	if err != nil {
 		t.Fatal(err)
 	}

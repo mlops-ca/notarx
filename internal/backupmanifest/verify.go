@@ -72,15 +72,44 @@ type SchemaExport struct {
 	Format string `json:"format"`
 	File   File   `json:"file"`
 }
+
+// Object formats. s3-bytes-v1 stores one file per object under objects/.
+// fs-bytes-v1 (ADR 0017) packs objects into a few tar segments so that a
+// filesystem backup sent to a request-metered object store costs requests in
+// proportion to size/segment size, not to the object count.
+const (
+	FormatS3Bytes = "s3-bytes-v1"
+	FormatFSBytes = "fs-bytes-v1"
+)
+
+// DefaultSegmentBytes is the target size of one fs-bytes-v1 tar segment.
+const DefaultSegmentBytes int64 = 256 << 20
+
+// MaxSegments bounds the segment list a manifest may declare.
+const MaxSegments = 1 << 20
+
 type ObjectExport struct {
 	Format    string `json:"format"`
 	Inventory File   `json:"inventory"`
 	Count     *int64 `json:"count"`
 	Bytes     *int64 `json:"bytes"`
+	// Segments lists the tar segments of an fs-bytes-v1 export, in order, with
+	// the size and SHA-256 of each whole segment. It is absent for s3-bytes-v1.
+	Segments []File `json:"segments,omitempty"`
+	// RootID is the filesystem driver's root ID at export time (fs-bytes-v1
+	// only). A restore writes it back into the new root so the restored
+	// database's recorded object store identity still matches.
+	RootID string `json:"rootId,omitempty"`
 }
+
+// Object is one line of the inventory. For s3-bytes-v1 File is the object's own
+// file. For fs-bytes-v1 File.Path names the tar segment that holds the object,
+// File.Size and File.SHA256 describe the object's bytes (not the segment's), and
+// Offset is where those bytes start inside the segment.
 type Object struct {
-	Key  string `json:"key"`
-	File File   `json:"file"`
+	Key    string `json:"key"`
+	File   File   `json:"file"`
+	Offset *int64 `json:"offset,omitempty"`
 }
 
 // These are operator declarations, not authenticated process/fencing evidence.
@@ -114,6 +143,8 @@ type Report struct {
 var identity = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:+-]{0,127}$`)
 var revision = regexp.MustCompile(`^[a-f0-9]{40}$`)
 var hash = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
+var rootIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+var segmentPath = regexp.MustCompile(`^objects/segment-[0-9]{6}\.tar$`)
 var migrationName = regexp.MustCompile(`^[0-9]{6}_[A-Za-z0-9_]+\.sql$`)
 
 // Verify reads only a private local directory. Even verified bytes and complete
@@ -174,17 +205,43 @@ func Verify(ctx context.Context, directory string, m Manifest) Report {
 		return fileFailure(r, ctx, why)
 	}
 	r.VerifiedMigrations = migrations
+	segments := map[string]File{}
+	if m.Objects.Format == FormatFSBytes {
+		// Every segment is verified whole before the inventory is read.
+		previousSegment := ""
+		for _, segment := range m.Objects.Segments {
+			if !segmentPath.MatchString(segment.Path) || segment.Path <= previousSegment {
+				return reason(r, Invalid, "object_segments_invalid")
+			}
+			previousSegment = segment.Path
+			if why := verifyFile(ctx, root, segment, 0, nil); why != "" {
+				return fileFailure(r, ctx, why)
+			}
+			segments[segment.Path] = segment
+		}
+	}
+	segmentEnd := map[string]int64{}
+	lastSegment := ""
 	parseInventory := func(reader io.Reader) string {
 		scanner := lines(reader)
 		previous := ""
 		for scanner.Scan() {
 			var object Object
-			if opsjson.Decode(scanner.Bytes(), &object) != nil || !validKey(object.Key) || object.Key <= previous || !strings.HasPrefix(object.File.Path, "objects/") {
+			if opsjson.Decode(scanner.Bytes(), &object) != nil || !validKey(object.Key) || object.Key <= previous {
 				return "object_inventory_invalid"
 			}
 			previous = object.Key
-			if why := verifyFile(ctx, root, object.File, 0, nil); why != "" {
-				return why
+			if m.Objects.Format == FormatFSBytes {
+				if why := checkSegmentObject(object, segments, segmentEnd, &lastSegment); why != "" {
+					return why
+				}
+			} else {
+				if object.Offset != nil || !strings.HasPrefix(object.File.Path, "objects/") {
+					return "object_inventory_invalid"
+				}
+				if why := verifyFile(ctx, root, object.File, 0, nil); why != "" {
+					return why
+				}
 			}
 			if r.VerifiedObjects == math.MaxInt64 || *object.File.Size > math.MaxInt64-r.VerifiedObjectBytes {
 				return "object_totals_overflow"
@@ -211,6 +268,30 @@ func Verify(ctx context.Context, directory string, m Manifest) Report {
 	return r
 }
 
+// checkSegmentObject validates one fs-bytes-v1 inventory line against the
+// declared segments: the segment exists, entries of a segment appear in offset
+// order without overlap and stay inside the segment, segments are used in
+// order, and the object's digest is well formed. The object digest itself is
+// checked when the object is restored, against the bytes written to the target;
+// the segment digest already covers every byte read here.
+func checkSegmentObject(object Object, segments map[string]File, end map[string]int64, last *string) string {
+	segment, ok := segments[object.File.Path]
+	if !ok || object.Offset == nil || object.File.Size == nil || *object.File.Size < 0 || !hash.MatchString(object.File.SHA256) {
+		return "object_inventory_invalid"
+	}
+	if object.File.Path < *last {
+		return "object_inventory_invalid"
+	}
+	*last = object.File.Path
+	offset, size := *object.Offset, *object.File.Size
+	// A tar entry's data starts after at least one 512-byte header block.
+	if offset < 512 || offset < end[object.File.Path] || size > *segment.Size-offset {
+		return "object_inventory_invalid"
+	}
+	end[object.File.Path] = offset + size
+	return ""
+}
+
 func validate(m Manifest, now time.Time) (Status, string) {
 	if m.SchemaVersion != 1 && m.SchemaVersion != 2 {
 		return Unknown, "manifest_version_unsupported"
@@ -224,8 +305,14 @@ func validate(m Manifest, now time.Time) (Status, string) {
 	if m.StartedAt.IsZero() || !m.CompletedAt.After(m.StartedAt) || m.CompletedAt.After(now) {
 		return Unknown, "backup_interval_unknown"
 	}
-	if m.Database.Format != "pg-custom-v1" || m.Schema.Format != "notarx-migrations-tsv-v1" || m.Objects.Format != "s3-bytes-v1" {
+	if m.Database.Format != "pg-custom-v1" || m.Schema.Format != "notarx-migrations-tsv-v1" || (m.Objects.Format != FormatS3Bytes && m.Objects.Format != FormatFSBytes) {
 		return Unknown, "export_or_schema_format_unsupported"
+	}
+	if (m.Objects.Format == FormatS3Bytes && (len(m.Objects.Segments) != 0 || m.Objects.RootID != "")) || len(m.Objects.Segments) > MaxSegments {
+		return Invalid, "object_segments_invalid"
+	}
+	if m.Objects.RootID != "" && !rootIDPattern.MatchString(m.Objects.RootID) {
+		return Invalid, "object_root_id_invalid"
 	}
 	if (m.Objects.Count != nil && *m.Objects.Count < 0) || (m.Objects.Bytes != nil && *m.Objects.Bytes < 0) {
 		return Invalid, "artifact_quantities_invalid"

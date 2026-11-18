@@ -23,7 +23,7 @@ import (
 
 type nexusPGPublicationFixture struct {
 	storeA, storeB     *repository.PostgresStore
-	objectsA, objectsB *objectstore.RustFSStore
+	objectsA, objectsB *objectstore.S3Store
 	publication        *NexusMigrationPublication
 	repo               repository.HostedRepository
 	entry              nexusmigration.Entry
@@ -32,7 +32,7 @@ type nexusPGPublicationFixture struct {
 
 func newNexusPGPublicationFixture(t *testing.T, format repository.Format) nexusPGPublicationFixture {
 	t.Helper()
-	if os.Getenv("TEST_DATABASE_URL") == "" || os.Getenv("TEST_RUSTFS_ENDPOINT") == "" {
+	if os.Getenv("TEST_DATABASE_URL") == "" || os.Getenv("TEST_OBJECT_STORE_ENDPOINT") == "" {
 		t.Skip("isolated PostgreSQL and S3 environment required")
 	}
 	var f nexusPGPublicationFixture
@@ -48,14 +48,14 @@ func newNexusPGPublicationFixture(t *testing.T, format repository.Format) nexusP
 	}
 	t.Cleanup(func() { _ = f.storeB.Close() })
 	bucket := "nexus-publication-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:24]
-	f.objectsA, err = objectstore.NewRustFSStore(os.Getenv("TEST_RUSTFS_ENDPOINT"), os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY"), bucket)
+	f.objectsA, err = objectstore.NewS3StoreWithCredentials(os.Getenv("TEST_OBJECT_STORE_ENDPOINT"), os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY"), bucket)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err = f.objectsA.EnsureBucket(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	f.objectsB, err = objectstore.NewRustFSStore(os.Getenv("TEST_RUSTFS_ENDPOINT"), os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY"), bucket)
+	f.objectsB, err = objectstore.NewS3StoreWithCredentials(os.Getenv("TEST_OBJECT_STORE_ENDPOINT"), os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY"), bucket)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -365,7 +365,12 @@ func TestPostgresRustFSNexusPublicationMavenSidecarQuotaAndWrongTargetBytes(t *t
 	key, digest := "native/maven/sha256/"+asset.SHA256, "sha256:"+asset.SHA256
 	// Keep the length and verified-digest metadata correct while replacing the
 	// actual S3 payload. Readback must hash bytes rather than trusting HEAD.
-	if err = f.objectsB.PutVerifiedReader(ctx, key, bytes.NewReader(bytes.Repeat([]byte("x"), int(asset.Size))), asset.Size, digest); err != nil {
+	// PutVerifiedReader now refuses bytes that do not match the digest, so plant
+	// the payload plainly and attach the (now wrong) digest afterwards.
+	if err = f.objectsB.PutReader(ctx, key, bytes.NewReader(bytes.Repeat([]byte("x"), int(asset.Size))), asset.Size); err != nil {
+		t.Fatal(err)
+	}
+	if err = f.objectsB.SetVerifiedDigest(ctx, key, digest); err != nil {
 		t.Fatal(err)
 	}
 	info, err := f.objectsB.Stat(ctx, key)

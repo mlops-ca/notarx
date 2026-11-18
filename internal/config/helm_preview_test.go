@@ -3,7 +3,7 @@ package config
 import "testing"
 
 func TestHelmPreviewRequiresExplicitTrueConfiguration(t *testing.T) {
-	for key, value := range map[string]string{"NOTARX_DATABASE_URL": "postgres://gateway:owned@localhost/gateway", "NOTARX_RUSTFS_ENDPOINT": "http://localhost:9000", "NOTARX_RUSTFS_BUCKET": "owned-helm", "NOTARX_RUSTFS_ACCESS_KEY": "owned", "NOTARX_RUSTFS_SECRET_KEY": "owned-secret", "NOTARX_ADMIN_TOKEN": "owned-admin", "NOTARX_RESOLVER_TOKEN": "owned-reader"} {
+	for key, value := range map[string]string{"NOTARX_DATABASE_URL": "postgres://gateway:owned@localhost/gateway", "NOTARX_OBJECT_STORE_ENDPOINT": "http://localhost:9000", "NOTARX_OBJECT_STORE_BUCKET": "owned-helm", "NOTARX_OBJECT_STORE_ACCESS_KEY": "owned", "NOTARX_OBJECT_STORE_SECRET_KEY": "owned-secret", "NOTARX_ADMIN_TOKEN": "owned-admin", "NOTARX_RESOLVER_TOKEN": "owned-reader"} {
 		t.Setenv(key, value)
 	}
 	for _, input := range []string{"", "false", "true", "yes", "1"} {

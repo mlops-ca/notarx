@@ -48,8 +48,8 @@ func (s gatedOCIUploadObjects) PutReader(ctx context.Context, key string, reader
 }
 
 func TestPostgresRustFSOCIConcurrentHTTPUploadsKeepMetadataAvailable(t *testing.T) {
-	url, endpoint := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_RUSTFS_ENDPOINT")
-	accessKey, secretKey := os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY")
+	url, endpoint := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
+	accessKey, secretKey := os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY")
 	if url == "" || endpoint == "" || accessKey == "" || secretKey == "" {
 		t.Skip("PostgreSQL and S3 integration environment is required")
 	}
@@ -77,7 +77,7 @@ func TestPostgresRustFSOCIConcurrentHTTPUploadsKeepMetadataAvailable(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	objects, err := objectstore.NewRustFSStore(endpoint, accessKey, secretKey, "oci-pool-"+strings.ReplaceAll(uuid.NewString(), "-", ""))
+	objects, err := objectstore.NewS3StoreWithCredentials(endpoint, accessKey, secretKey, "oci-pool-"+strings.ReplaceAll(uuid.NewString(), "-", ""))
 	if err != nil {
 		t.Fatal(err)
 	}

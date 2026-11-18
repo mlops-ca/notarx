@@ -177,6 +177,13 @@ jobs:
           echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
           echo "$NEEDS" | jq -e '[.[] | select(.result != "success")] | length == 0' >/dev/null
 
+  # The shared object store contract against each supported S3-compatible service
+  # (ADR 0017: RustFS and a second implementation). Runs with the Go class; needs no built images.
+  object-store-contract:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    uses: ./.github/workflows/object-store-contract.yml
+
   quality:
     needs: changes
     if: needs.changes.outputs.go == 'true'
@@ -450,7 +457,7 @@ jobs:
   # skipped by change detection, fails on any failure or cancellation.
   ci-ok:
     if: always()
-    needs: [changes, no-chinese, docs, quality, quality-arm64, console, console-e2e, console-e2e-report, image-test-stages, build-images, contract-plan, contract, contract-and-test]
+    needs: [changes, no-chinese, docs, quality, quality-arm64, console, console-e2e, console-e2e-report, image-test-stages, build-images, object-store-contract, contract-plan, contract, contract-and-test]
     runs-on: ubuntu-24.04
     steps:
       - name: Require every needed job to succeed or be skipped
@@ -472,7 +479,7 @@ jobs:
           report=false
           if [[ "$e2e" == true && $(echo "$NEEDS" | jq -r '.["console-e2e"].result') == success ]]; then report=true; fi
           status=0
-          for pair in quality:$GO quality-arm64:$GO contract-plan:$GO contract:$GO contract-and-test:$GO console:$CONSOLE console-e2e:$e2e console-e2e-report:$report build-images:$e2e docs:$DOCS image-test-stages:$IMAGES; do
+          for pair in quality:$GO quality-arm64:$GO object-store-contract:$GO contract-plan:$GO contract:$GO contract-and-test:$GO console:$CONSOLE console-e2e:$e2e console-e2e-report:$report build-images:$e2e docs:$DOCS image-test-stages:$IMAGES; do
             job=${pair%%:*} class=${pair##*:}
             result=$(echo "$NEEDS" | jq -r --arg job "$job" '.[$job].result')
             if [[ "$class" == true && "$result" != success ]]; then

@@ -19,8 +19,8 @@ import (
 )
 
 func TestPostgresRustFSConanCollectionFencesSharedRestoreAndRetries(t *testing.T) {
-	databaseURL, endpoint := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_RUSTFS_ENDPOINT")
-	accessKey, secretKey := os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY")
+	databaseURL, endpoint := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
+	accessKey, secretKey := os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY")
 	if databaseURL == "" || endpoint == "" || accessKey == "" || secretKey == "" {
 		t.Skip("owned PostgreSQL and RustFS integration environment is required")
 	}
@@ -35,7 +35,7 @@ func TestPostgresRustFSConanCollectionFencesSharedRestoreAndRetries(t *testing.T
 			t.Fatal(err)
 		}
 		t.Cleanup(func() { _ = db.Close() })
-		objects, err := objectstore.NewRustFSStore(endpoint, accessKey, secretKey, "conan-collection-"+strings.ReplaceAll(uuid.NewString(), "-", "")[:20])
+		objects, err := objectstore.NewS3StoreWithCredentials(endpoint, accessKey, secretKey, "conan-collection-"+strings.ReplaceAll(uuid.NewString(), "-", "")[:20])
 		if err != nil {
 			t.Fatal(err)
 		}

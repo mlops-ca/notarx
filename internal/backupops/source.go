@@ -28,11 +28,22 @@ type SourceSpec struct {
 	Release                   Release      `json:"release"`
 	Postgres                  Postgres     `json:"postgres"`
 	S3                        S3Settings   `json:"s3"`
-	Docker                    Docker       `json:"docker"`
+	// Filesystem selects the filesystem object driver instead of S3 (set
+	// exactly one of the two).
+	Filesystem *FilesystemSettings `json:"filesystem,omitempty"`
+	Docker     Docker              `json:"docker"`
 }
+
+// sourceObjects is the object half of a frozen source: an S3 bucket or a
+// filesystem root.
+type sourceObjects interface {
+	WalkObjects(context.Context, func(string, int64) error) error
+	Open(context.Context, string) (io.ReadCloser, int64, error)
+}
+
 type observedSource struct {
 	spec    SourceSpec
-	objects *s3Objects
+	objects sourceObjects
 }
 
 func newSource(ctx context.Context, spec SourceSpec) (*observedSource, error) {
@@ -79,6 +90,16 @@ func newSource(ctx context.Context, spec SourceSpec) (*observedSource, error) {
 		if validatePGContainer(ctx, spec.Docker, spec.Postgres) != nil {
 			return nil, errors.New("source PG tools do not identify the configured database")
 		}
+	}
+	if spec.Filesystem != nil {
+		if spec.S3 != (S3Settings{}) {
+			return nil, errors.New("set either S3 or filesystem object settings, not both")
+		}
+		objects, err := NewFilesystemObjects(*spec.Filesystem)
+		if err != nil {
+			return nil, err
+		}
+		return &observedSource{spec: spec, objects: objects}, nil
 	}
 	objects, err := newS3(spec.S3)
 	if err != nil {
@@ -180,6 +201,31 @@ func (s *observedSource) Metadata(ctx context.Context) ([]byte, error) {
 func (s *observedSource) WalkObjects(ctx context.Context, visit func(string, int64) error) error {
 	return s.objects.WalkObjects(ctx, visit)
 }
+
+// ObjectFormat reports the bundle format the source's objects are exported in.
+func (s *observedSource) ObjectFormat() string {
+	if f, ok := s.objects.(ObjectFormatSource); ok {
+		return f.ObjectFormat()
+	}
+	return "s3-bytes-v1"
+}
+
+// SegmentBytes forwards the filesystem segment size.
+func (s *observedSource) SegmentBytes() int64 {
+	if f, ok := s.objects.(segmentBytesSource); ok {
+		return f.SegmentBytes()
+	}
+	return 0
+}
+
+// RootID is the filesystem root identity, empty for S3.
+func (s *observedSource) RootID() string {
+	if f, ok := s.objects.(interface{ RootID() string }); ok {
+		return f.RootID()
+	}
+	return ""
+}
+
 func (s *observedSource) WalkReferences(ctx context.Context, visit func(string) error) error {
 	return s.spec.Postgres.WalkReferences(ctx, visit)
 }

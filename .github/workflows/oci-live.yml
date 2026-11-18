@@ -1,0 +1,65 @@
+name: OCI live
+
+# Runs the object store contract and the capability probe against Oracle Cloud
+# Infrastructure Object Storage through its S3 compatibility API (ADR 0017,
+# slice 5). The result is gating for the OCI reference deployment: a CopyObject
+# REPLACE failure selects the streaming fallback, and a multipart failure the
+# fallback cannot cover opens a follow-up ADR for a native driver.
+#
+# It never runs for pull requests, forks or untrusted code: only pushes to main,
+# a weekly schedule and a manual dispatch, and only in this repository. It needs
+# the repository secrets below; without them the job reports that and succeeds.
+# Every case writes under a throw-away random prefix in a pre-created bucket and
+# removes what it wrote.
+on:
+  push:
+    branches: [main]
+    paths:
+      - internal/objectstore/**
+      - .github/workflows/oci-live.yml
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oci-live
+  cancel-in-progress: false
+
+env:
+  GOPROXY: https://proxy.golang.org|direct
+
+jobs:
+  live:
+    name: oci-live
+    if: github.repository == 'mlops-ca/notarx' && github.event_name != 'pull_request' && github.event_name != 'pull_request_target'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      OCI_OBJECT_STORE_ENDPOINT: ${{ secrets.OCI_OBJECT_STORE_ENDPOINT }}
+      OCI_OBJECT_STORE_REGION: ${{ secrets.OCI_OBJECT_STORE_REGION }}
+      OCI_OBJECT_STORE_BUCKET: ${{ secrets.OCI_OBJECT_STORE_BUCKET }}
+      OCI_OBJECT_STORE_ACCESS_KEY: ${{ secrets.OCI_OBJECT_STORE_ACCESS_KEY }}
+      OCI_OBJECT_STORE_SECRET_KEY: ${{ secrets.OCI_OBJECT_STORE_SECRET_KEY }}
+    steps:
+      - name: Check for the OCI secrets
+        id: secrets
+        run: |
+          if [ -n "$OCI_OBJECT_STORE_ENDPOINT" ] && [ -n "$OCI_OBJECT_STORE_REGION" ] && [ -n "$OCI_OBJECT_STORE_BUCKET" ] && [ -n "$OCI_OBJECT_STORE_ACCESS_KEY" ] && [ -n "$OCI_OBJECT_STORE_SECRET_KEY" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::The OCI_OBJECT_STORE_* repository secrets are not configured; the live OCI run is skipped."
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.secrets.outputs.present == 'true'
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        if: steps.secrets.outputs.present == 'true'
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Run the OCI live suite
+        if: steps.secrets.outputs.present == 'true'
+        run: go test -count=1 -tags ocilive -v -timeout 25m -run '^TestOCI' ./internal/objectstore

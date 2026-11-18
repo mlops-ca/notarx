@@ -185,8 +185,8 @@ go_asset_digest() {
 }
 assert_rustfs_object_state() {
   local state=$1 object_key=$2
-  NOTARX_RUSTFS_ENDPOINT="http://127.0.0.1:$rustfs_api_port" \
-    NOTARX_RUSTFS_BUCKET="${NOTARX_RUSTFS_BUCKET:-gateway-cache}" \
+  NOTARX_OBJECT_STORE_ENDPOINT="http://127.0.0.1:$rustfs_api_port" \
+    NOTARX_OBJECT_STORE_BUCKET="${NOTARX_OBJECT_STORE_BUCKET:-gateway-cache}" \
     RUSTFS_ACCESS_KEY="$RUSTFS_ACCESS_KEY" RUSTFS_SECRET_KEY="$RUSTFS_SECRET_KEY" \
     go run ./scripts/rustfs-object-state "$state" "$object_key"
 }

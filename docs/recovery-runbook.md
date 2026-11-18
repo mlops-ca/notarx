@@ -37,7 +37,8 @@ The source spec contains these explicit fields:
 | `writers` | Nonempty array of `{id, kind, reference}`. `docker-container` requires the full 64-digit container ID; `systemd-unit` requires an explicit `.service` unit. Each must be inactive/stopped with the same observed stop identity before and after transfer. |
 | `docker.context` | Named local Unix-socket context for Docker writers, OCI images or container PG tools. Remote Docker is refused; inherited `DOCKER_*`/`COMPOSE_*` cannot redirect subprocesses. |
 | `postgres` | `dsn` is an explicit `postgres://user:password@127.0.0.1:port/database?sslmode=disable` URL (`localhost` also accepted). No service files, defaults or additional URL options. Optional `toolsContainer` must identify the running PG container with that exact loopback binding; otherwise local `pg_dump` is used. |
-| `s3` | Explicit `endpoint`, `bucket`, `accessKey`, `secretKey`. Export uses S3 LIST/GET, never physical RustFS paths or multipart ETags as byte digests. |
+| `s3` | Explicit `endpoint`, `bucket`, `accessKey`, `secretKey`, and optionally `region`, `pathStyle` (boolean) and `checksumMode` for Oracle Cloud and AWS (defaults: `us-east-1`, path-style, `when_required`). Export uses S3 LIST/GET, never physical RustFS paths or multipart ETags as byte digests. |
+| `filesystem` | Instead of `s3`, for a gateway on the filesystem object driver: `{root, segmentBytes}`. `root` is the absolute object root of the stopped gateway, opened read-only; `segmentBytes` defaults to 256 MiB. Objects are exported as `fs-bytes-v1` tar segments. Set exactly one of `s3` and `filesystem`. |
 | `release` | Operator-approved local `directory`, `identity` and, for OCI, `imageReference`, as described below. |
 
 Release `directory` contains the exact `migrations/*.sql` files for the recorded
@@ -255,6 +256,33 @@ The physical `restore-drill.sh` restarts its original Gateway container. If an
 operator customized it with mail roles/configuration, disable/drain mail first
 and explicitly review/authorize re-enabling it after recovery.
 
+### Filesystem object driver
+
+A gateway on `NOTARX_OBJECT_STORE_DRIVER=filesystem` is exported with the
+`filesystem` source field above. The bundle holds `database.dump`, the migration
+ledger and `objects/segment-NNNNNN.tar` segments, so a nightly copy to Oracle
+Cloud Object Storage is a handful of large objects (the free allowance is 50,000
+requests a month); the request count scales with size / segment size.
+
+`gateway backup restore-objects --bundle <dir> --root <absolute new root>`
+restores the objects of a verified bundle (either object format) into a new or
+empty filesystem root: it checks every segment, writes each object through the
+filesystem driver, reads it back and compares size and SHA-256, and writes the
+exported root ID into the new root. Restore the PostgreSQL dump with
+`pg_restore` separately. The database's recorded object store identity then
+matches the restored root and the gateway starts; a root restored without the
+database, or the reverse, is refused at start-up. On any failure everything the
+command created in the root is removed.
+
+The compose-based `scripts/backup-drill.sh` and `scripts/restore-drill.sh` also
+support the filesystem driver: set `NOTARX_OBJECT_STORE_DRIVER=filesystem`,
+`NOTARX_OBJECT_STORE_FS_ROOT` to the host directory, and `NOTARX_COMPOSE_FILE` to
+a Compose file whose `gateway` service runs on the filesystem driver (the
+repository's `compose.yml` runs on S3 and is refused). Run them as the Gateway's
+user or root, since the root is mode 0700. They stop the gateway, write
+`objects-fs.tar` (the root without `tmp/`, marker included) next to the dump, and a
+restore replaces the root's contents from it.
+
 ## Pinned physical drill
 
 Run this drill from a workstation with Docker Desktop, a configured `.env`, and
@@ -311,7 +339,7 @@ physical drill. Validator unknown results must not be treated as backup success.
 
 ## Safety
 
-`restore-drill.sh` overwrites the running PostgreSQL database and RustFS data.
+`restore-drill.sh` overwrites the running PostgreSQL database and RustFS data (or, with the filesystem driver, the contents of the object root).
 Run it only against an isolated drill environment after preserving any data that
 must be retained. It stops Gateway while the two stores are restored to avoid
 new metadata pointing to objects from the interrupted state. The object archive

@@ -501,7 +501,7 @@ func (t *OwnedTarget) StartGateway(ctx context.Context) (string, error) {
 		}
 		args = append(args, "--mount", "type=bind,source="+filepath.Join(directory, "gateway")+",target=/gateway,readonly", "--entrypoint", "/gateway")
 	}
-	environment := []string{"NOTARX_DATABASE_URL=postgres://gateway:" + escapePassword(spec.PostgresPassword) + "@postgres:5432/gateway?sslmode=disable", "NOTARX_RUSTFS_ENDPOINT=http://rustfs:9000", "NOTARX_RUSTFS_BUCKET=gateway-cache", "NOTARX_RUSTFS_ACCESS_KEY=" + spec.AccessKey, "NOTARX_RUSTFS_SECRET_KEY=" + spec.SecretKey, "NOTARX_ADMIN_TOKEN=" + spec.AdminToken, "NOTARX_RESOLVER_TOKEN=" + spec.ResolverToken, "NOTARX_NODE_ROLES=api", "NOTARX_INSTANCE_ID=" + spec.Project, "NOTARX_LOG_BUFFER_LINES=1000"}
+	environment := []string{"NOTARX_DATABASE_URL=postgres://gateway:" + escapePassword(spec.PostgresPassword) + "@postgres:5432/gateway?sslmode=disable", "NOTARX_OBJECT_STORE_ENDPOINT=http://rustfs:9000", "NOTARX_OBJECT_STORE_AUTO_CREATE_BUCKET=true", "NOTARX_OBJECT_STORE_BUCKET=gateway-cache", "NOTARX_OBJECT_STORE_ACCESS_KEY=" + spec.AccessKey, "NOTARX_OBJECT_STORE_SECRET_KEY=" + spec.SecretKey, "NOTARX_ADMIN_TOKEN=" + spec.AdminToken, "NOTARX_RESOLVER_TOKEN=" + spec.ResolverToken, "NOTARX_NODE_ROLES=api", "NOTARX_INSTANCE_ID=" + spec.Project, "NOTARX_LOG_BUFFER_LINES=1000"}
 	legacyEnv := spec.Release.legacyEnvironment()
 	for i, e := range environment {
 		key, value, _ := strings.Cut(e, "=")

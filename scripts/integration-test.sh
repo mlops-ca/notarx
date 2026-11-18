@@ -24,7 +24,7 @@ cleanup
 postgres_address=$("${compose[@]}" port postgres 5432)
 rustfs_address=$("${compose[@]}" port rustfs 9000)
 TEST_DATABASE_URL="postgres://gateway:integration-password@${postgres_address}/gateway_test?sslmode=disable" \
-TEST_RUSTFS_ENDPOINT="http://${rustfs_address}" \
-TEST_RUSTFS_ACCESS_KEY=integration-rustfs \
-TEST_RUSTFS_SECRET_KEY=integration-password \
+TEST_OBJECT_STORE_ENDPOINT="http://${rustfs_address}" \
+TEST_OBJECT_STORE_ACCESS_KEY=integration-rustfs \
+TEST_OBJECT_STORE_SECRET_KEY=integration-password \
 CARGO_REQUIRED=1 go test -count=1 -tags=integration ./internal/app -run '^TestPostgresRustFSCargoProxyOfficialOfflineReplay$'

@@ -123,7 +123,7 @@ func RunCLI(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintln(stderr, "existing target credential references unavailable")
 		return 2
 	}
-	objects, err := objectstore.NewRustFSStore(spec.S3Endpoint, access, secret, spec.S3Bucket)
+	objects, err := objectstore.NewS3StoreWithCredentials(spec.S3Endpoint, access, secret, spec.S3Bucket)
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, "invalid target object store spec")
 		return 2

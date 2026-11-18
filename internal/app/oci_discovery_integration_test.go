@@ -20,7 +20,7 @@ import (
 
 type postgresDiscoveryFixture struct {
 	store   *repository.PostgresStore
-	objects *objectstore.RustFSStore
+	objects *objectstore.S3Store
 	control *PostgresCacheControlStore
 }
 
@@ -127,7 +127,7 @@ func TestPostgresRustFSOCIDiscoveryPrincipalAuthorityPartition(t *testing.T) {
 
 func newPostgresDiscoveryFixture(t *testing.T) *postgresDiscoveryFixture {
 	t.Helper()
-	for _, key := range []string{"TEST_DATABASE_URL", "TEST_RUSTFS_ENDPOINT", "TEST_RUSTFS_ACCESS_KEY", "TEST_RUSTFS_SECRET_KEY"} {
+	for _, key := range []string{"TEST_DATABASE_URL", "TEST_OBJECT_STORE_ENDPOINT", "TEST_OBJECT_STORE_ACCESS_KEY", "TEST_OBJECT_STORE_SECRET_KEY"} {
 		if os.Getenv(key) == "" {
 			if os.Getenv("OCI_DISCOVERY_REQUIRED") == "1" {
 				t.Fatalf("owned %s is required", key)
@@ -135,7 +135,7 @@ func newPostgresDiscoveryFixture(t *testing.T) *postgresDiscoveryFixture {
 			t.Skip("isolated PostgreSQL and RustFS are required")
 		}
 	}
-	objects, err := objectstore.NewRustFSStore(os.Getenv("TEST_RUSTFS_ENDPOINT"), os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY"), "oci-discovery-"+strings.ReplaceAll(uuid.NewString(), "-", ""))
+	objects, err := objectstore.NewS3StoreWithCredentials(os.Getenv("TEST_OBJECT_STORE_ENDPOINT"), os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY"), "oci-discovery-"+strings.ReplaceAll(uuid.NewString(), "-", ""))
 	if err != nil {
 		t.Fatal(err)
 	}

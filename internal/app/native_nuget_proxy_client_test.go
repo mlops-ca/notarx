@@ -65,7 +65,7 @@ func startNuGetProxyGatewayContainer(t *testing.T, c nugetOfficialClient, bucket
 	if c.sharedHostNetwork {
 		listenHost = "127.0.0.1"
 	}
-	env := []string{"NOTARX_DATABASE_URL=" + hostURL(os.Getenv("TEST_DATABASE_URL")), "NOTARX_RUSTFS_ENDPOINT=" + hostURL(os.Getenv("TEST_RUSTFS_ENDPOINT")), "NOTARX_RUSTFS_ACCESS_KEY=" + os.Getenv("TEST_RUSTFS_ACCESS_KEY"), "NOTARX_RUSTFS_SECRET_KEY=" + os.Getenv("TEST_RUSTFS_SECRET_KEY"), "NOTARX_RUSTFS_BUCKET=" + bucket, "NOTARX_ADMIN_TOKEN=" + c.admin, "NOTARX_ADMIN_ACTOR=nuget-gate-operator", "NOTARX_RESOLVER_TOKEN=" + c.reader, "NOTARX_RESOLVER_ACTOR=nuget-gate-reader", "NOTARX_NUGET_PREVIEW_ENABLED=true", "NOTARX_NODE_ROLES=api", "NOTARX_LISTEN_ADDRESS=" + net.JoinHostPort(listenHost, port), "NOTARX_ACCESS_LOG=limited", "HOME=/work/gateway-home", "HTTP_PROXY=", "http_proxy="}
+	env := []string{"NOTARX_DATABASE_URL=" + hostURL(os.Getenv("TEST_DATABASE_URL")), "NOTARX_OBJECT_STORE_ENDPOINT=" + hostURL(os.Getenv("TEST_OBJECT_STORE_ENDPOINT")), "NOTARX_OBJECT_STORE_ACCESS_KEY=" + os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), "NOTARX_OBJECT_STORE_SECRET_KEY=" + os.Getenv("TEST_OBJECT_STORE_SECRET_KEY"), "NOTARX_OBJECT_STORE_AUTO_CREATE_BUCKET=true", "NOTARX_OBJECT_STORE_BUCKET=" + bucket, "NOTARX_ADMIN_TOKEN=" + c.admin, "NOTARX_ADMIN_ACTOR=nuget-gate-operator", "NOTARX_RESOLVER_TOKEN=" + c.reader, "NOTARX_RESOLVER_ACTOR=nuget-gate-reader", "NOTARX_NUGET_PREVIEW_ENABLED=true", "NOTARX_NODE_ROLES=api", "NOTARX_LISTEN_ADDRESS=" + net.JoinHostPort(listenHost, port), "NOTARX_ACCESS_LOG=limited", "HOME=/work/gateway-home", "HTTP_PROXY=", "http_proxy="}
 	env = append(env, extraEnv...)
 	if err = os.MkdirAll(filepath.Join(c.work, "gateway-home"), 0700); err != nil {
 		t.Fatal(err)
@@ -368,7 +368,7 @@ func (f *nugetOwnedSource) close() {
 }
 
 func TestNativeNuGetRealDotnetPrivateProxyGroupRestore(t *testing.T) {
-	for _, key := range []string{"NUGET_NOTARX_LINUX_BIN", "NUGET_DOTNET_IMAGE", "NUGET_COMPOSE_PROJECT", "NUGET_EVIDENCE_DIR", "TEST_DATABASE_URL", "TEST_RUSTFS_ENDPOINT"} {
+	for _, key := range []string{"NUGET_NOTARX_LINUX_BIN", "NUGET_DOTNET_IMAGE", "NUGET_COMPOSE_PROJECT", "NUGET_EVIDENCE_DIR", "TEST_DATABASE_URL", "TEST_OBJECT_STORE_ENDPOINT"} {
 		if os.Getenv(key) == "" {
 			t.Skip("owned native-nuget-e2e fixture is required")
 		}
@@ -470,7 +470,7 @@ func TestNativeNuGetRealDotnetPrivateProxyGroupRestore(t *testing.T) {
 				if p.Digest != "sha256:"+hex.EncodeToString(sum[:]) || p.Size != int64(len(expected)) || p.SourceVersion != source.Version || !strings.HasPrefix(p.SourceURL, "https://private.nuget-gate.test/") {
 					t.Fatal("proxy immutable identity or bound source changed")
 				}
-				objects, err := objectstore.NewRustFSStore(os.Getenv("TEST_RUSTFS_ENDPOINT"), os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY"), bucket)
+				objects, err := objectstore.NewS3StoreWithCredentials(os.Getenv("TEST_OBJECT_STORE_ENDPOINT"), os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY"), bucket)
 				if err != nil {
 					t.Fatal(err)
 				}

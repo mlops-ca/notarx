@@ -27,7 +27,7 @@ import (
 type durableFixture struct {
 	module  *Module
 	store   *repository.PostgresStore
-	objects *objectstore.RustFSStore
+	objects *objectstore.S3Store
 	repo    repository.HostedRepository
 }
 
@@ -40,7 +40,7 @@ func digestFor(body []byte) string {
 
 func newDurableFixture(t *testing.T) durableFixture {
 	t.Helper()
-	if os.Getenv("TEST_DATABASE_URL") == "" || os.Getenv("TEST_RUSTFS_ENDPOINT") == "" {
+	if os.Getenv("TEST_DATABASE_URL") == "" || os.Getenv("TEST_OBJECT_STORE_ENDPOINT") == "" {
 		t.Skip("owned PostgreSQL and RustFS are required")
 	}
 	store, err := repository.NewPostgresStore(os.Getenv("TEST_DATABASE_URL"))
@@ -48,7 +48,7 @@ func newDurableFixture(t *testing.T) durableFixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	objects, err := objectstore.NewRustFSStore(os.Getenv("TEST_RUSTFS_ENDPOINT"), os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY"), nugetIntegrationBucket)
+	objects, err := objectstore.NewS3StoreWithCredentials(os.Getenv("TEST_OBJECT_STORE_ENDPOINT"), os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY"), nugetIntegrationBucket)
 	if err != nil {
 		t.Fatal(err)
 	}

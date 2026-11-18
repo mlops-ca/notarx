@@ -57,9 +57,9 @@ started=1
 postgres_address=$("${compose[@]}" port postgres 5432)
 rustfs_address=$("${compose[@]}" port rustfs 9000)
 export TEST_DATABASE_URL="postgres://gateway:integration-password@${postgres_address}/gateway_test?sslmode=disable"
-export TEST_RUSTFS_ENDPOINT="http://${rustfs_address}"
-export TEST_RUSTFS_ACCESS_KEY=integration-rustfs
-export TEST_RUSTFS_SECRET_KEY=integration-password
+export TEST_OBJECT_STORE_ENDPOINT="http://${rustfs_address}"
+export TEST_OBJECT_STORE_ACCESS_KEY=integration-rustfs
+export TEST_OBJECT_STORE_SECRET_KEY=integration-password
 export TEST_CONAN_COMPOSE_PROJECT="$project"
 export TEST_CONAN_COMPOSE_FILE="$repo_root/compose.integration.yml"
 export TEST_CONAN_COMPOSE_OVERRIDE="$workdir/compose.conan.yml"

@@ -146,7 +146,7 @@ func TestPostgresMigrationTargetOnlyRawClient(t *testing.T) {
 
 func requireMigrationClientServices(t *testing.T) {
 	t.Helper()
-	for _, key := range []string{"TEST_DATABASE_URL", "TEST_RUSTFS_ENDPOINT", "TEST_RUSTFS_ACCESS_KEY", "TEST_RUSTFS_SECRET_KEY"} {
+	for _, key := range []string{"TEST_DATABASE_URL", "TEST_OBJECT_STORE_ENDPOINT", "TEST_OBJECT_STORE_ACCESS_KEY", "TEST_OBJECT_STORE_SECRET_KEY"} {
 		if os.Getenv(key) == "" {
 			t.Fatalf("mandatory migration client gate requires isolated %s; use make nexus-migration-client-e2e", key)
 		}

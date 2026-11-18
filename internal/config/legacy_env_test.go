@@ -95,10 +95,28 @@ func TestLoadIgnoresKubernetesServiceLinkVariables(t *testing.T) {
 func setValidNativeEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("NOTARX_DATABASE_URL", "postgres://notarx:password@db:5432/notarx")
-	t.Setenv("NOTARX_RUSTFS_ENDPOINT", "http://rustfs:9000")
-	t.Setenv("NOTARX_RUSTFS_BUCKET", "notarx-cache")
-	t.Setenv("NOTARX_RUSTFS_ACCESS_KEY", "rustfs-user")
-	t.Setenv("NOTARX_RUSTFS_SECRET_KEY", "rustfs-secret")
+	t.Setenv("NOTARX_OBJECT_STORE_ENDPOINT", "http://rustfs:9000")
+	t.Setenv("NOTARX_OBJECT_STORE_BUCKET", "notarx-cache")
+	t.Setenv("NOTARX_OBJECT_STORE_ACCESS_KEY", "rustfs-user")
+	t.Setenv("NOTARX_OBJECT_STORE_SECRET_KEY", "rustfs-secret")
 	t.Setenv("NOTARX_ADMIN_TOKEN", "admin-token")
 	t.Setenv("NOTARX_RESOLVER_TOKEN", "resolver-token")
+}
+
+func TestRefuseLegacyEnvNamesObjectStoreReplacements(t *testing.T) {
+	for legacy, replacement := range renamedObjectStoreEnv {
+		if !strings.HasPrefix(replacement, "NOTARX_OBJECT_STORE_") {
+			t.Fatalf("%s -> %s is not an object store key", legacy, replacement)
+		}
+		err := RefuseLegacyEnv([]string{legacy + "=secret-value"})
+		if err == nil || !strings.Contains(err.Error(), legacy+" was renamed to "+replacement) {
+			t.Fatalf("RefuseLegacyEnv(%s) = %v, want replacement %s", legacy, err, replacement)
+		}
+		if strings.Contains(err.Error(), "secret-value") {
+			t.Fatalf("RefuseLegacyEnv(%s) leaked the value", legacy)
+		}
+	}
+	if len(renamedObjectStoreEnv) != 8 {
+		t.Fatalf("renamedObjectStoreEnv has %d entries, want 8", len(renamedObjectStoreEnv))
+	}
 }

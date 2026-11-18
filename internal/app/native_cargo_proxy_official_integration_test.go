@@ -27,8 +27,8 @@ import (
 // restart. The second client has no local registry cache and the upstream is
 // closed, so every successful byte must come from PostgreSQL and RustFS.
 func TestPostgresRustFSCargoProxyOfficialOfflineReplay(t *testing.T) {
-	databaseURL, endpoint := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_RUSTFS_ENDPOINT")
-	accessKey, secretKey := os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY")
+	databaseURL, endpoint := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
+	accessKey, secretKey := os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY")
 	if databaseURL == "" || endpoint == "" || accessKey == "" || secretKey == "" {
 		t.Skip("PostgreSQL and RustFS integration environment is required")
 	}
@@ -94,7 +94,7 @@ func TestPostgresRustFSCargoProxyOfficialOfflineReplay(t *testing.T) {
 	}
 	defer func() { _ = storeA.Close() }()
 	bucket := "cargo-official-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:20]
-	objectsA, err := objectstore.NewRustFSStore(endpoint, accessKey, secretKey, bucket)
+	objectsA, err := objectstore.NewS3StoreWithCredentials(endpoint, accessKey, secretKey, bucket)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +170,7 @@ func TestPostgresRustFSCargoProxyOfficialOfflineReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = storeB.Close() }()
-	objectsB, err := objectstore.NewRustFSStore(endpoint, accessKey, secretKey, bucket)
+	objectsB, err := objectstore.NewS3StoreWithCredentials(endpoint, accessKey, secretKey, bucket)
 	if err != nil {
 		t.Fatal(err)
 	}

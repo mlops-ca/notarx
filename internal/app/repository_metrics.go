@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/aptpublication"
+	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -81,6 +82,8 @@ type Metrics struct {
 	aptSigningDurationCount        atomic.Uint64
 	aptSigningDurationNanos        atomic.Uint64
 
+	objectStoreCapacity ObjectStoreCapacityFunc
+
 	mu           sync.RWMutex
 	repositories map[string]RepositoryMetrics
 	now          func() time.Time
@@ -101,6 +104,36 @@ var aptSigningDurationBounds = [...]time.Duration{
 	2500 * time.Millisecond, 5 * time.Second, 10 * time.Second, 30 * time.Second,
 }
 var aptSigningDurationLabels = [...]string{"0.1", "0.25", "0.5", "1", "2.5", "5", "10", "30"}
+
+// ObjectStoreCapacityFunc reads the free space of the filesystem object store.
+type ObjectStoreCapacityFunc func() (objectstore.Capacity, error)
+
+// WithObjectStoreCapacity exposes the filesystem driver's free space, total
+// space and write reserve as gauges. The function runs on each scrape.
+func (m *Metrics) WithObjectStoreCapacity(capacity ObjectStoreCapacityFunc) *Metrics {
+	m.objectStoreCapacity = capacity
+	return m
+}
+
+func (m *Metrics) writeObjectStoreMetrics(w http.ResponseWriter) {
+	if m.objectStoreCapacity == nil {
+		return
+	}
+	capacity, err := m.objectStoreCapacity()
+	if err != nil {
+		_, _ = w.Write([]byte("# TYPE notarx_object_store_capacity_measurable gauge\nnotarx_object_store_capacity_measurable{driver=\"filesystem\"} 0\n"))
+		return
+	}
+	below := int64(0)
+	if capacity.BelowReserve() {
+		below = 1
+	}
+	_, _ = w.Write([]byte("# TYPE notarx_object_store_capacity_measurable gauge\nnotarx_object_store_capacity_measurable{driver=\"filesystem\"} 1\n" +
+		"# TYPE notarx_object_store_total_bytes gauge\nnotarx_object_store_total_bytes{driver=\"filesystem\"} " + itoa(capacity.TotalBytes) + "\n" +
+		"# TYPE notarx_object_store_free_bytes gauge\nnotarx_object_store_free_bytes{driver=\"filesystem\"} " + itoa(capacity.FreeBytes) + "\n" +
+		"# TYPE notarx_object_store_reserve_bytes gauge\nnotarx_object_store_reserve_bytes{driver=\"filesystem\"} " + itoa(capacity.ReserveBytes) + "\n" +
+		"# TYPE notarx_object_store_below_reserve gauge\nnotarx_object_store_below_reserve{driver=\"filesystem\"} " + itoa(below) + "\n"))
+}
 
 // WithNodeIdentity adds bounded deployment labels to metrics. The values are
 // configured once at startup and never come from request paths.
@@ -503,6 +536,7 @@ func (m *Metrics) Handler(w http.ResponseWriter, _ *http.Request) {
 	m.writeRuntimeMetrics(w)
 	m.writeDatabaseMetrics(w)
 	m.writePartitionMetrics(w)
+	m.writeObjectStoreMetrics(w)
 	m.writeAPTSigningMetrics(w)
 	_, _ = w.Write([]byte("# TYPE notarx_cache_quota_rejections_total counter\nnotarx_cache_quota_rejections_total " + utoa(m.cacheQuotaDenied.Load()) + "\n# TYPE notarx_anonymous_reads_total counter\nnotarx_anonymous_reads_total " + utoa(m.anonymousReads.Load()) + "\n"))
 	_, _ = w.Write([]byte("# TYPE notarx_repository_authorization_denials_total counter\n"))

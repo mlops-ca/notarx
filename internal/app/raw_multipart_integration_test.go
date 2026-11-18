@@ -23,8 +23,8 @@ import (
 )
 
 func TestRawMultipartAcrossPostgresRustFSRestartAndStoppedUpstream(t *testing.T) {
-	databaseURL, endpoint := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_RUSTFS_ENDPOINT")
-	if databaseURL == "" || endpoint == "" || os.Getenv("TEST_RUSTFS_ACCESS_KEY") == "" || os.Getenv("TEST_RUSTFS_SECRET_KEY") == "" {
+	databaseURL, endpoint := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_OBJECT_STORE_ENDPOINT")
+	if databaseURL == "" || endpoint == "" || os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY") == "" || os.Getenv("TEST_OBJECT_STORE_SECRET_KEY") == "" {
 		t.Skip("PostgreSQL and S3 integration environment is required")
 	}
 	ctx := context.Background()
@@ -58,7 +58,7 @@ func TestRawMultipartAcrossPostgresRustFSRestartAndStoppedUpstream(t *testing.T)
 			t.Fatal(err)
 		}
 		t.Cleanup(func() { _ = store.Close() })
-		objects, err := objectstore.NewRustFSStore(endpoint, os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY"), bucket)
+		objects, err := objectstore.NewS3StoreWithCredentials(endpoint, os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY"), bucket)
 		if err != nil {
 			t.Fatal(err)
 		}

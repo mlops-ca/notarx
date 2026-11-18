@@ -23,7 +23,7 @@ import (
 )
 
 func TestNativeNuGetRealDotnetHostedReplicationAndSourceIndependentRestore(t *testing.T) {
-	for _, key := range []string{"NUGET_NOTARX_BIN", "NUGET_DOTNET_IMAGE", "NUGET_COMPOSE_PROJECT", "NUGET_EVIDENCE_DIR", "TEST_DATABASE_URL", "TEST_RUSTFS_ENDPOINT"} {
+	for _, key := range []string{"NUGET_NOTARX_BIN", "NUGET_DOTNET_IMAGE", "NUGET_COMPOSE_PROJECT", "NUGET_EVIDENCE_DIR", "TEST_DATABASE_URL", "TEST_OBJECT_STORE_ENDPOINT"} {
 		if os.Getenv(key) == "" {
 			t.Skip("owned native-nuget-e2e fixture is required")
 		}
@@ -79,7 +79,7 @@ func TestNativeNuGetRealDotnetHostedReplicationAndSourceIndependentRestore(t *te
 		t.Fatal(err)
 	}
 	defer func() { _ = store.Close() }()
-	objects, err := objectstore.NewRustFSStore(os.Getenv("TEST_RUSTFS_ENDPOINT"), os.Getenv("TEST_RUSTFS_ACCESS_KEY"), os.Getenv("TEST_RUSTFS_SECRET_KEY"), bucket)
+	objects, err := objectstore.NewS3StoreWithCredentials(os.Getenv("TEST_OBJECT_STORE_ENDPOINT"), os.Getenv("TEST_OBJECT_STORE_ACCESS_KEY"), os.Getenv("TEST_OBJECT_STORE_SECRET_KEY"), bucket)
 	if err != nil {
 		t.Fatal(err)
 	}

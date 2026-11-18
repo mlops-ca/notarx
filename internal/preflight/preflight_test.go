@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/mlops-ca/notarx/internal/config"
+	"github.com/mlops-ca/notarx/internal/objectstore"
 )
 
 func TestRunnerReportsSelectedChecksInStableOrder(t *testing.T) {
@@ -94,10 +95,10 @@ func TestRunnerChecksOIDCJWKS(t *testing.T) {
 func TestCLIConfigurationFailureIsRedacted(t *testing.T) {
 	secret := "do-not-log-this-database-secret"
 	t.Setenv("NOTARX_DATABASE_URL", secret)
-	t.Setenv("NOTARX_RUSTFS_ENDPOINT", "http://rustfs:9000")
-	t.Setenv("NOTARX_RUSTFS_BUCKET", "gateway-cache")
-	t.Setenv("NOTARX_RUSTFS_ACCESS_KEY", "access-key")
-	t.Setenv("NOTARX_RUSTFS_SECRET_KEY", "object-store-secret")
+	t.Setenv("NOTARX_OBJECT_STORE_ENDPOINT", "http://rustfs:9000")
+	t.Setenv("NOTARX_OBJECT_STORE_BUCKET", "gateway-cache")
+	t.Setenv("NOTARX_OBJECT_STORE_ACCESS_KEY", "access-key")
+	t.Setenv("NOTARX_OBJECT_STORE_SECRET_KEY", "object-store-secret")
 	t.Setenv("NOTARX_ADMIN_TOKEN", "admin-token")
 	t.Setenv("NOTARX_RESOLVER_TOKEN", "resolver-token")
 
@@ -120,11 +121,8 @@ func TestCLIConfigurationFailureIsRedacted(t *testing.T) {
 
 func testConfig() config.Config {
 	return config.Config{
-		DatabaseURL:     "postgres://gateway:password@db/gateway",
-		RustFSEndpoint:  "http://rustfs:9000",
-		RustFSBucket:    "gateway-cache",
-		RustFSAccessKey: "access-key",
-		RustFSSecretKey: "secret-key",
+		DatabaseURL: "postgres://gateway:password@db/gateway",
+		ObjectStore: objectstore.Config{Driver: objectstore.DriverS3, Endpoint: "http://rustfs:9000", Bucket: "gateway-cache", AccessKey: "access-key", SecretKey: "secret-key", Region: "us-east-1", PathStyle: true, ChecksumMode: objectstore.ChecksumWhenRequired},
 	}
 }
 
@@ -199,7 +197,9 @@ func TestTrigramSQLMatchesMigrationRunner(t *testing.T) {
 	if end < 0 {
 		t.Fatal("run-migrations.sh pg_trgm classification is not terminated")
 	}
-	normalize := func(sql string) string { return strings.Join(strings.Fields(strings.TrimSuffix(strings.TrimSpace(sql), ";")), " ") }
+	normalize := func(sql string) string {
+		return strings.Join(strings.Fields(strings.TrimSuffix(strings.TrimSpace(sql), ";")), " ")
+	}
 	if got, want := normalize(rest[:end]), normalize(trigramStateSQL); got != want {
 		t.Fatalf("pg_trgm SQL differs between run-migrations.sh and internal/preflight/trigram.go\nscript: %s\ngo:     %s", got, want)
 	}
