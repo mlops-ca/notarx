@@ -26,6 +26,14 @@ import (
 	testsupport "github.com/mlops-ca/notarx/internal/testsupport/snapshotfixture"
 )
 
+// The default lifecycle plugin versions depend on the installed Maven, so they are
+// pinned to the versions recorded in the Central fixture.
+const mavenLifecyclePlugins = `<plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-resources-plugin</artifactId><version>3.4.0</version></plugin>` +
+	`<plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.15.0</version></plugin>` +
+	`<plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId><version>3.5.4</version></plugin>` +
+	`<plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-jar-plugin</artifactId><version>3.5.0</version></plugin>` +
+	`<plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-deploy-plugin</artifactId><version>3.1.4</version></plugin>`
+
 func TestMavenClientSnapshotHistoryTakeoverAndDeploy(t *testing.T) {
 	if _, err := exec.LookPath("mvn"); err != nil {
 		t.Fatal("mandatory Maven client gate requires mvn")
@@ -73,7 +81,7 @@ func TestMavenClientSnapshotHistoryTakeoverAndDeploy(t *testing.T) {
 		}
 	}
 	write(settings, `<settings><mirrors>`+mavenfixture.MirrorXML(central.URL)+`</mirrors><proxies>`+mavenfixture.BlockedProxiesXML()+`</proxies><servers><server><id>synthetic-snapshots</id><username>maven</username><password>resolver-secret</password></server></servers></settings>`)
-	write(pom, fmt.Sprintf(`<project><modelVersion>4.0.0</modelVersion><groupId>org.example</groupId><artifactId>widget</artifactId><version>1.0-SNAPSHOT</version><distributionManagement><snapshotRepository><id>synthetic-snapshots</id><url>%s/repository/maven/%s</url></snapshotRepository></distributionManagement><build><plugins><plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-deploy-plugin</artifactId><version>3.1.4</version></plugin></plugins></build></project>`, server.URL, f.repo.Name))
+	write(pom, fmt.Sprintf(`<project><modelVersion>4.0.0</modelVersion><groupId>org.example</groupId><artifactId>widget</artifactId><version>1.0-SNAPSHOT</version><distributionManagement><snapshotRepository><id>synthetic-snapshots</id><url>%s/repository/maven/%s</url></snapshotRepository></distributionManagement><build><plugins>`+mavenLifecyclePlugins+`</plugins></build></project>`, server.URL, f.repo.Name))
 	marker := filepath.Join(root, "src/main/resources/marker.txt")
 	write(marker, "first client build")
 	run := func(args ...string) error {
