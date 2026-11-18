@@ -64,7 +64,7 @@ services:
       - ./scripts/run-rustfs.sh:/usr/local/bin/run-rustfs:ro
 
   rustfs-ready:
-    image: curlimages/curl:8.14.1
+    image: curlimages/curl:8.23.0
     depends_on:
       rustfs:
         condition: service_started
