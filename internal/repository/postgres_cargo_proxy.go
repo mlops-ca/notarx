@@ -11,7 +11,7 @@ import (
 func (s *PostgresStore) GetCargoProxyConfig(ctx context.Context, repositoryID string) (CargoProxyConfig, error) {
 	var value CargoProxyConfig
 	err := s.db.QueryRowContext(ctx, `SELECT repository_id::text,download_template,search_api,fetched_at,expires_at,source_version
-		FROM native_cargo_proxy_configs WHERE repository_id::text=$1`, repositoryID).
+		FROM native_cargo_proxy_configs WHERE repository_id=$1::uuid`, repositoryID).
 		Scan(&value.RepositoryID, &value.DownloadTemplate, &value.SearchAPI, &value.FetchedAt, &value.ExpiresAt, &value.SourceVersion)
 	if errors.Is(err, sql.ErrNoRows) {
 		return CargoProxyConfig{}, ErrNotFound
@@ -34,7 +34,7 @@ func (s *PostgresStore) PutCargoProxyConfig(ctx context.Context, value CargoProx
 	result, err := tx.ExecContext(ctx, `INSERT INTO native_cargo_proxy_configs
 		(repository_id,download_template,search_api,fetched_at,expires_at,source_version)
 		SELECT id,$2,$3,$4,$5,$6 FROM hosted_repositories
-		WHERE id::text=$1 AND format='cargo' AND repo_type='proxy' AND state='active'
+		WHERE id=$1::uuid AND format='cargo' AND repo_type='proxy' AND state='active'
 		ON CONFLICT (repository_id) DO UPDATE SET download_template=EXCLUDED.download_template,
 		search_api=EXCLUDED.search_api,fetched_at=EXCLUDED.fetched_at,expires_at=EXCLUDED.expires_at,source_version=EXCLUDED.source_version`,
 		value.RepositoryID, value.DownloadTemplate, value.SearchAPI, value.FetchedAt, value.ExpiresAt, value.SourceVersion)
@@ -55,7 +55,7 @@ func (s *PostgresStore) GetCargoProxyIndex(ctx context.Context, repositoryID, na
 	var value CargoProxyIndex
 	err = scanCargoProxyIndex(s.db.QueryRowContext(ctx, `SELECT repository_id::text,name,body,status,upstream_etag,
 		upstream_modified,fetched_at,expires_at,source_version FROM native_cargo_proxy_indexes
-		WHERE repository_id::text=$1 AND collision_key=$2`, repositoryID, identity.CollisionKey), &value)
+		WHERE repository_id=$1::uuid AND collision_key=$2`, repositoryID, identity.CollisionKey), &value)
 	if errors.Is(err, sql.ErrNoRows) {
 		return CargoProxyIndex{}, ErrNotFound
 	}
@@ -81,7 +81,7 @@ func (s *PostgresStore) PutCargoProxyIndex(ctx context.Context, value CargoProxy
 	var current CargoProxyIndex
 	err = scanCargoProxyIndex(tx.QueryRowContext(ctx, `SELECT repository_id::text,name,body,status,upstream_etag,
 		upstream_modified,fetched_at,expires_at,source_version FROM native_cargo_proxy_indexes
-		WHERE repository_id::text=$1 AND collision_key=$2 FOR UPDATE`, value.RepositoryID, identity.CollisionKey), &current)
+		WHERE repository_id=$1::uuid AND collision_key=$2 FOR UPDATE`, value.RepositoryID, identity.CollisionKey), &current)
 	var previous *CargoProxyIndex
 	if err == nil {
 		previous = &current
@@ -96,7 +96,7 @@ func (s *PostgresStore) PutCargoProxyIndex(ctx context.Context, value CargoProxy
 	}
 	if value.Status == 200 {
 		rows, err := tx.QueryContext(ctx, `SELECT version,checksum FROM native_cargo_proxy_crates
-			WHERE repository_id::text=$1 AND collision_key=$2`, value.RepositoryID, identity.CollisionKey)
+			WHERE repository_id=$1::uuid AND collision_key=$2`, value.RepositoryID, identity.CollisionKey)
 		if err != nil {
 			return err
 		}
@@ -139,7 +139,7 @@ func (s *PostgresStore) GetCargoProxyCrate(ctx context.Context, repositoryID, na
 	}
 	var value CargoProxyCrate
 	err = s.db.QueryRowContext(ctx, `SELECT repository_id::text,name,version,checksum,object_key,size,cached_at,source_version
-		FROM native_cargo_proxy_crates WHERE repository_id::text=$1 AND collision_key=$2 AND version_key=$3`,
+		FROM native_cargo_proxy_crates WHERE repository_id=$1::uuid AND collision_key=$2 AND version_key=$3`,
 		repositoryID, identity.CollisionKey, identity.VersionKey).
 		Scan(&value.RepositoryID, &value.Name, &value.Version, &value.Checksum, &value.ObjectKey, &value.Size, &value.CachedAt, &value.SourceVersion)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -167,7 +167,7 @@ func (s *PostgresStore) PutCargoProxyCrate(ctx context.Context, value CargoProxy
 	var index CargoProxyIndex
 	err = scanCargoProxyIndex(tx.QueryRowContext(ctx, `SELECT repository_id::text,name,body,status,upstream_etag,
 		upstream_modified,fetched_at,expires_at,source_version FROM native_cargo_proxy_indexes
-		WHERE repository_id::text=$1 AND collision_key=$2 FOR UPDATE`, value.RepositoryID, identity.CollisionKey), &index)
+		WHERE repository_id=$1::uuid AND collision_key=$2 FOR UPDATE`, value.RepositoryID, identity.CollisionKey), &index)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -180,7 +180,7 @@ func (s *PostgresStore) PutCargoProxyCrate(ctx context.Context, value CargoProxy
 	var checksum string
 	var size int64
 	err = tx.QueryRowContext(ctx, `SELECT checksum,size FROM native_cargo_proxy_crates
-		WHERE repository_id::text=$1 AND collision_key=$2 AND version_key=$3 FOR UPDATE`,
+		WHERE repository_id=$1::uuid AND collision_key=$2 AND version_key=$3 FOR UPDATE`,
 		value.RepositoryID, identity.CollisionKey, identity.VersionKey).Scan(&checksum, &size)
 	if err == nil && (checksum != value.Checksum || size != value.Size) {
 		return ErrUpstreamChanged
@@ -210,7 +210,7 @@ func lockActiveCargoProxyRepository(ctx context.Context, tx *sql.Tx, repositoryI
 	var repoType RepositoryType
 	var state RepositoryState
 	err := tx.QueryRowContext(ctx, `SELECT format,repo_type,state FROM hosted_repositories
-		WHERE id::text=$1 FOR UPDATE`, repositoryID).Scan(&format, &repoType, &state)
+		WHERE id=$1::uuid FOR UPDATE`, repositoryID).Scan(&format, &repoType, &state)
 	if errors.Is(err, sql.ErrNoRows) || err == nil && (format != FormatCargo || repoType != RepositoryTypeProxy || state != RepositoryActive) {
 		return ErrNotFound
 	}

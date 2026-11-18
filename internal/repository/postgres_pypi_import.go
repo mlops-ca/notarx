@@ -16,12 +16,12 @@ func CheckPyPIImportActorTx(ctx context.Context, tx *sql.Tx, actor, kind, ownerI
 	}
 	switch {
 	case (kind == "local_session" || kind == "oidc") && strings.HasPrefix(actor, "user:"):
-		err := tx.QueryRowContext(ctx, `SELECT role='admin' AND state='active' AND NOT must_change_password FROM users WHERE lower(name)=lower($1) AND id::text=$2 FOR SHARE`, strings.TrimPrefix(actor, "user:"), ownerID).Scan(&allowed)
+		err := tx.QueryRowContext(ctx, `SELECT role='admin' AND state='active' AND NOT must_change_password FROM users WHERE lower(name)=lower($1) AND id=$2::uuid FOR SHARE`, strings.TrimPrefix(actor, "user:"), ownerID).Scan(&allowed)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
 	case kind == "api_key" && actor == "api-key:"+ownerID:
-		err := tx.QueryRowContext(ctx, `SELECT roles @> ARRAY['admin']::text[] AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>clock_timestamp()) AND service_account_id IS NULL FROM api_keys WHERE id::text=$1 FOR SHARE`, strings.TrimPrefix(actor, "api-key:")).Scan(&allowed)
+		err := tx.QueryRowContext(ctx, `SELECT roles @> ARRAY['admin']::text[] AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>clock_timestamp()) AND service_account_id IS NULL FROM api_keys WHERE id=$1::uuid FOR SHARE`, strings.TrimPrefix(actor, "api-key:")).Scan(&allowed)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
@@ -78,7 +78,7 @@ func (s *PostgresStore) PublishPyPIImport(ctx context.Context, c PyPIImportClosu
 		return err
 	}
 	var repoName string
-	err = tx.QueryRowContext(ctx, `SELECT name FROM hosted_repositories WHERE id::text=$1 AND format='pypi' AND repo_type='hosted' AND state='active' FOR UPDATE`, c.RepositoryID).Scan(&repoName)
+	err = tx.QueryRowContext(ctx, `SELECT name FROM hosted_repositories WHERE id=$1::uuid AND format='pypi' AND repo_type='hosted' AND state='active' FOR UPDATE`, c.RepositoryID).Scan(&repoName)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrDisabled
 	}
@@ -88,7 +88,7 @@ func (s *PostgresStore) PublishPyPIImport(ctx context.Context, c PyPIImportClosu
 	changed := false
 	for _, f := range c.Files {
 		var blocked bool
-		err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM artifact_tombstones WHERE repository_id::text=$1 AND format='pypi' AND coordinate=$2) OR EXISTS(SELECT 1 FROM artifact_quarantines WHERE repository_id::text=$1 AND format='pypi' AND coordinate=$2 AND digest=$3 AND state='quarantined')`, c.RepositoryID, coordinate, f.Digest).Scan(&blocked)
+		err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM artifact_tombstones WHERE repository_id=$1::uuid AND format='pypi' AND coordinate=$2) OR EXISTS(SELECT 1 FROM artifact_quarantines WHERE repository_id=$1::uuid AND format='pypi' AND coordinate=$2 AND digest=$3 AND state='quarantined')`, c.RepositoryID, coordinate, f.Digest).Scan(&blocked)
 		if err != nil {
 			return err
 		}
@@ -96,7 +96,7 @@ func (s *PostgresStore) PublishPyPIImport(ctx context.Context, c PyPIImportClosu
 			return ErrArtifactQuarantined
 		}
 		var old PyPIFile
-		err = scanPyPIFile(tx.QueryRowContext(ctx, `SELECT `+pypiFileColumns+` FROM native_pypi_files WHERE repository_id::text=$1 AND filename=$2 FOR UPDATE`, c.RepositoryID, f.Filename), &old)
+		err = scanPyPIFile(tx.QueryRowContext(ctx, `SELECT `+pypiFileColumns+` FROM native_pypi_files WHERE repository_id=$1::uuid AND filename=$2 FOR UPDATE`, c.RepositoryID, f.Filename), &old)
 		if err == nil {
 			if !PyPIImportFileMatches(old, f) {
 				return ErrNameExists

@@ -13,7 +13,7 @@ func (s *PostgresStore) listPostgresCargoBrowseNodes(ctx context.Context, reposi
 	switch parent.Kind {
 	case "":
 		rows, err := s.db.QueryContext(ctx, `SELECT n.collision_key,n.name FROM native_cargo_names n
-			WHERE n.repository_id::text=$1 AND n.collision_key>$2
+			WHERE n.repository_id=$1::uuid AND n.collision_key>$2
 			AND EXISTS (SELECT 1 FROM native_cargo_publications p
 				JOIN native_cargo_identity_reservations r USING (repository_id,collision_key,version_key)
 				WHERE p.repository_id=n.repository_id AND p.collision_key=n.collision_key AND p.collected_at IS NULL
@@ -43,7 +43,7 @@ func (s *PostgresStore) listPostgresCargoBrowseNodes(ctx context.Context, reposi
 			FROM native_cargo_publications p JOIN native_cargo_identity_reservations r
 			USING (repository_id,collision_key,version_key)
 			JOIN native_cargo_names n USING (repository_id,collision_key)
-			WHERE p.repository_id::text=$1 AND p.collision_key=$2 AND p.version_key>$3 AND p.collected_at IS NULL
+			WHERE p.repository_id=$1::uuid AND p.collision_key=$2 AND p.version_key>$3 AND p.collected_at IS NULL
 			  AND NOT EXISTS (SELECT 1 FROM artifact_tombstones t WHERE t.repository_id=p.repository_id
 			    AND t.format='cargo' AND t.coordinate=n.name || '@' || r.version)
 			ORDER BY p.version_key LIMIT $4`, repositoryID, identity.CollisionKey, after, limit)

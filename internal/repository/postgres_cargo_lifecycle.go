@@ -16,7 +16,7 @@ func (s *PostgresStore) cargoObjectKey(ctx context.Context, repositoryID, name, 
 	}
 	var key string
 	err = s.db.QueryRowContext(ctx, `SELECT object_key FROM native_cargo_publications
-		WHERE repository_id::text=$1 AND collision_key=$2 AND version_key=$3`,
+		WHERE repository_id=$1::uuid AND collision_key=$2 AND version_key=$3`,
 		repositoryID, identity.CollisionKey, identity.VersionKey).Scan(&key)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", ErrNotFound
@@ -44,7 +44,7 @@ func (s *PostgresStore) TombstoneCargoPublication(ctx context.Context, repositor
 	err = scanCargoPublication(tx.QueryRowContext(ctx, `SELECT `+cargoPublicationColumns+`
 		FROM native_cargo_publications p JOIN native_cargo_identity_reservations r
 		USING (repository_id,collision_key,version_key) JOIN native_cargo_names n USING (repository_id,collision_key)
-		WHERE p.repository_id::text=$1 AND p.collision_key=$2 AND p.version_key=$3 AND p.collected_at IS NULL
+		WHERE p.repository_id=$1::uuid AND p.collision_key=$2 AND p.version_key=$3 AND p.collected_at IS NULL
 		FOR UPDATE OF p`, repositoryID, identity.CollisionKey, identity.VersionKey), &publication)
 	if errors.Is(err, sql.ErrNoRows) {
 		return CargoPublication{}, ErrNotFound
@@ -96,7 +96,7 @@ func (s *PostgresStore) RestoreCargoPublication(ctx context.Context, repositoryI
 		FROM native_cargo_publications p JOIN native_cargo_identity_reservations r
 		USING (repository_id,collision_key,version_key) JOIN native_cargo_names n USING (repository_id,collision_key)
 		JOIN artifact_tombstones t ON t.repository_id=p.repository_id AND t.format='cargo' AND t.coordinate=n.name || '@' || r.version
-		WHERE p.repository_id::text=$1 AND p.collision_key=$2 AND p.version_key=$3
+		WHERE p.repository_id=$1::uuid AND p.collision_key=$2 AND p.version_key=$3
 		FOR UPDATE OF p,t`, repositoryID, identity.CollisionKey, identity.VersionKey), &publication)
 	if errors.Is(err, sql.ErrNoRows) {
 		return CargoPublication{}, ErrNotFound
@@ -108,7 +108,7 @@ func (s *PostgresStore) RestoreCargoPublication(ctx context.Context, repositoryI
 		return CargoPublication{}, ErrDisabled
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM artifact_tombstones
-		WHERE repository_id::text=$1 AND format='cargo' AND coordinate=$2`, repositoryID,
+		WHERE repository_id=$1::uuid AND format='cargo' AND coordinate=$2`, repositoryID,
 		cargoPublicationCoordinate(publication.Name, publication.Version)); err != nil {
 		return CargoPublication{}, err
 	}

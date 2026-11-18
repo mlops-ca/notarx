@@ -19,7 +19,7 @@ func (s *PostgresStore) ReserveCargoIdentity(ctx context.Context, claim CargoIde
 	}
 	defer func() { _ = tx.Rollback() }()
 	var exists bool
-	if err = tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM hosted_repositories WHERE id::text=$1)`, claim.RepositoryID).Scan(&exists); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM hosted_repositories WHERE id=$1::uuid)`, claim.RepositoryID).Scan(&exists); err != nil {
 		return CargoIdentityReservation{}, false, err
 	}
 	if !exists {
@@ -33,7 +33,7 @@ func (s *PostgresStore) ReserveCargoIdentity(ctx context.Context, claim CargoIde
 	}
 	var storedName string
 	if err = tx.QueryRowContext(ctx, `SELECT name FROM native_cargo_names
-		WHERE repository_id::text=$1 AND collision_key=$2 FOR UPDATE`,
+		WHERE repository_id=$1::uuid AND collision_key=$2 FOR UPDATE`,
 		claim.RepositoryID, reservation.CollisionKey).Scan(&storedName); err != nil {
 		return CargoIdentityReservation{}, false, err
 	}
@@ -53,7 +53,7 @@ func (s *PostgresStore) ReserveCargoIdentity(ctx context.Context, claim CargoIde
 	}
 	var storedVersion, storedDigest, storedMetadataDigest string
 	if err = tx.QueryRowContext(ctx, `SELECT version,digest,metadata_digest,created_at FROM native_cargo_identity_reservations
-		WHERE repository_id::text=$1 AND collision_key=$2 AND version_key=$3 FOR UPDATE`,
+		WHERE repository_id=$1::uuid AND collision_key=$2 AND version_key=$3 FOR UPDATE`,
 		claim.RepositoryID, reservation.CollisionKey, reservation.VersionKey).
 		Scan(&storedVersion, &storedDigest, &storedMetadataDigest, &reservation.CreatedAt); err != nil {
 		return CargoIdentityReservation{}, false, err
@@ -80,7 +80,7 @@ func (s *PostgresStore) GetCargoIdentityReservation(ctx context.Context, reposit
 	err = s.db.QueryRowContext(ctx, `SELECT n.name,n.normalized_name,v.version,v.digest,v.metadata_digest,v.created_at
 		FROM native_cargo_identity_reservations v
 		JOIN native_cargo_names n USING (repository_id,collision_key)
-		WHERE v.repository_id::text=$1 AND v.collision_key=$2 AND v.version_key=$3`,
+		WHERE v.repository_id=$1::uuid AND v.collision_key=$2 AND v.version_key=$3`,
 		repositoryID, normalized.CollisionKey, normalized.VersionKey).
 		Scan(&item.Name, &item.NormalizedName, &item.Version, &item.Digest, &item.MetadataDigest, &item.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {

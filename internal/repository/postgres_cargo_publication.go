@@ -24,7 +24,7 @@ func (s *PostgresStore) CommitCargoPublication(ctx context.Context, incoming Car
 	var format Format
 	var repoType RepositoryType
 	var state RepositoryState
-	err = tx.QueryRowContext(ctx, `SELECT format,repo_type,state FROM hosted_repositories WHERE id::text=$1 FOR UPDATE`, publication.RepositoryID).
+	err = tx.QueryRowContext(ctx, `SELECT format,repo_type,state FROM hosted_repositories WHERE id=$1::uuid FOR UPDATE`, publication.RepositoryID).
 		Scan(&format, &repoType, &state)
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && (format != FormatCargo || repoType != RepositoryTypeHosted || state != RepositoryActive)) {
 		return CargoPublication{}, false, ErrNotFound
@@ -36,7 +36,7 @@ func (s *PostgresStore) CommitCargoPublication(ctx context.Context, incoming Car
 	err = tx.QueryRowContext(ctx, `SELECT n.name,r.version,r.digest,r.metadata_digest,r.created_at
 		FROM native_cargo_identity_reservations r
 		JOIN native_cargo_names n USING (repository_id,collision_key)
-		WHERE r.repository_id::text=$1 AND r.collision_key=$2 AND r.version_key=$3 FOR UPDATE OF r`,
+		WHERE r.repository_id=$1::uuid AND r.collision_key=$2 AND r.version_key=$3 FOR UPDATE OF r`,
 		publication.RepositoryID, normalized.CollisionKey, normalized.VersionKey).
 		Scan(&reservation.Name, &reservation.Version, &reservation.Digest, &reservation.MetadataDigest, &reservation.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -52,14 +52,14 @@ func (s *PostgresStore) CommitCargoPublication(ctx context.Context, incoming Car
 	err = scanCargoPublication(tx.QueryRowContext(ctx, `SELECT `+cargoPublicationColumns+`
 		FROM native_cargo_publications p JOIN native_cargo_identity_reservations r
 		USING (repository_id,collision_key,version_key) JOIN native_cargo_names n USING (repository_id,collision_key)
-		WHERE p.repository_id::text=$1 AND p.collision_key=$2 AND p.version_key=$3 FOR UPDATE OF p`,
+		WHERE p.repository_id=$1::uuid AND p.collision_key=$2 AND p.version_key=$3 FOR UPDATE OF p`,
 		publication.RepositoryID, normalized.CollisionKey, normalized.VersionKey), &existing)
 	if err == nil {
 		if !existing.CollectedAt.IsZero() {
 			return CargoPublication{}, false, ErrCargoPublicationConflict
 		}
 		var tombstoned bool
-		if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM artifact_tombstones WHERE repository_id::text=$1 AND format='cargo' AND coordinate=$2)`,
+		if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM artifact_tombstones WHERE repository_id=$1::uuid AND format='cargo' AND coordinate=$2)`,
 			publication.RepositoryID, cargoPublicationCoordinate(existing.Name, existing.Version)).Scan(&tombstoned); err != nil {
 			return CargoPublication{}, false, err
 		}
@@ -81,7 +81,7 @@ func (s *PostgresStore) CommitCargoPublication(ctx context.Context, incoming Car
 	// before the Hosted version becomes visible.
 	groupRows, err := tx.QueryContext(ctx, `SELECT g.id::text FROM hosted_groups g
 		JOIN hosted_group_members m ON m.group_id=g.id
-		WHERE m.repository_id::text=$1 AND g.format='cargo' ORDER BY g.id FOR UPDATE OF g`, publication.RepositoryID)
+		WHERE m.repository_id=$1::uuid AND g.format='cargo' ORDER BY g.id FOR UPDATE OF g`, publication.RepositoryID)
 	if err != nil {
 		return CargoPublication{}, false, err
 	}
@@ -102,7 +102,7 @@ func (s *PostgresStore) CommitCargoPublication(ctx context.Context, incoming Car
 	for _, groupID := range groupIDs {
 		var owner CargoGroupVersion
 		err := tx.QueryRowContext(ctx, `SELECT group_id::text,source_repository_id::text,name,version,checksum,index_row
-			FROM native_cargo_group_versions WHERE group_id::text=$1 AND collision_key=$2 AND version_key=$3`,
+			FROM native_cargo_group_versions WHERE group_id=$1::uuid AND collision_key=$2 AND version_key=$3`,
 			groupID, normalized.CollisionKey, normalized.VersionKey).
 			Scan(&owner.GroupID, &owner.SourceRepositoryID, &owner.Name, &owner.Version, &owner.Checksum, &owner.IndexRow)
 		if err == nil && !cargoGroupPublicationCompatible(owner, publication) {
@@ -111,7 +111,7 @@ func (s *PostgresStore) CommitCargoPublication(ctx context.Context, incoming Car
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return CargoPublication{}, false, err
 		}
-		memberRows, err := tx.QueryContext(ctx, `SELECT repository_id::text FROM hosted_group_members WHERE group_id::text=$1`, groupID)
+		memberRows, err := tx.QueryContext(ctx, `SELECT repository_id::text FROM hosted_group_members WHERE group_id=$1::uuid`, groupID)
 		if err != nil {
 			return CargoPublication{}, false, err
 		}
@@ -137,7 +137,7 @@ func (s *PostgresStore) CommitCargoPublication(ctx context.Context, incoming Car
 	var quota, used int64
 	err = tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT quota_bytes FROM repository_capacity_quotas WHERE repository_id=h.id),0),
 		COALESCE((SELECT SUM(size) FROM native_cargo_publications WHERE repository_id=h.id AND collected_at IS NULL),0)
-		FROM hosted_repositories h WHERE h.id::text=$1`, publication.RepositoryID).Scan(&quota, &used)
+		FROM hosted_repositories h WHERE h.id=$1::uuid`, publication.RepositoryID).Scan(&quota, &used)
 	if err != nil {
 		return CargoPublication{}, false, err
 	}
@@ -174,7 +174,7 @@ func (s *PostgresStore) GetCargoPublication(ctx context.Context, repositoryID, n
 	err = scanCargoPublication(s.db.QueryRowContext(ctx, `SELECT `+cargoPublicationColumns+`
 		FROM native_cargo_publications p JOIN native_cargo_identity_reservations r
 		USING (repository_id,collision_key,version_key) JOIN native_cargo_names n USING (repository_id,collision_key)
-		WHERE p.repository_id::text=$1 AND p.collision_key=$2 AND p.version_key=$3
+		WHERE p.repository_id=$1::uuid AND p.collision_key=$2 AND p.version_key=$3
 		  AND p.collected_at IS NULL AND NOT EXISTS (SELECT 1 FROM artifact_tombstones t
 		    WHERE t.repository_id=p.repository_id AND t.format='cargo' AND t.coordinate=n.name || '@' || r.version)`,
 		repositoryID, identity.CollisionKey, identity.VersionKey), &publication)
@@ -192,7 +192,7 @@ func (s *PostgresStore) ListCargoPublications(ctx context.Context, repositoryID,
 	rows, err := s.db.QueryContext(ctx, `SELECT `+cargoPublicationColumns+`
 		FROM native_cargo_publications p JOIN native_cargo_identity_reservations r
 		USING (repository_id,collision_key,version_key) JOIN native_cargo_names n USING (repository_id,collision_key)
-		WHERE p.repository_id::text=$1 AND p.collision_key=$2 AND p.collected_at IS NULL
+		WHERE p.repository_id=$1::uuid AND p.collision_key=$2 AND p.collected_at IS NULL
 		  AND NOT EXISTS (SELECT 1 FROM artifact_tombstones t
 		    WHERE t.repository_id=p.repository_id AND t.format='cargo' AND t.coordinate=n.name || '@' || r.version)
 		ORDER BY p.version_key`, repositoryID, identity.CollisionKey)
@@ -230,7 +230,7 @@ func (s *PostgresStore) SetCargoYanked(ctx context.Context, repositoryID, name, 
 	var format Format
 	var repoType RepositoryType
 	var state RepositoryState
-	err = tx.QueryRowContext(ctx, `SELECT format,repo_type,state FROM hosted_repositories WHERE id::text=$1 FOR UPDATE`, repositoryID).
+	err = tx.QueryRowContext(ctx, `SELECT format,repo_type,state FROM hosted_repositories WHERE id=$1::uuid FOR UPDATE`, repositoryID).
 		Scan(&format, &repoType, &state)
 	if errors.Is(err, sql.ErrNoRows) || err == nil && (format != FormatCargo || repoType != RepositoryTypeHosted || state != RepositoryActive) {
 		return CargoPublication{}, false, ErrNotFound
@@ -242,7 +242,7 @@ func (s *PostgresStore) SetCargoYanked(ctx context.Context, repositoryID, name, 
 	err = scanCargoPublication(tx.QueryRowContext(ctx, `SELECT `+cargoPublicationColumns+`
 		FROM native_cargo_publications p JOIN native_cargo_identity_reservations r
 		USING (repository_id,collision_key,version_key) JOIN native_cargo_names n USING (repository_id,collision_key)
-		WHERE p.repository_id::text=$1 AND p.collision_key=$2 AND p.version_key=$3 AND p.collected_at IS NULL
+		WHERE p.repository_id=$1::uuid AND p.collision_key=$2 AND p.version_key=$3 AND p.collected_at IS NULL
 		  AND NOT EXISTS (SELECT 1 FROM artifact_tombstones t
 		    WHERE t.repository_id=p.repository_id AND t.format='cargo' AND t.coordinate=n.name || '@' || r.version)
 		FOR UPDATE OF p`,
@@ -256,7 +256,7 @@ func (s *PostgresStore) SetCargoYanked(ctx context.Context, repositoryID, name, 
 	changed := publication.Yanked != yanked
 	if changed {
 		err = tx.QueryRowContext(ctx, `UPDATE native_cargo_publications SET yanked=$4,updated_at=now()
-			WHERE repository_id::text=$1 AND collision_key=$2 AND version_key=$3 RETURNING yanked,updated_at`,
+			WHERE repository_id=$1::uuid AND collision_key=$2 AND version_key=$3 RETURNING yanked,updated_at`,
 			repositoryID, identity.CollisionKey, identity.VersionKey, yanked).Scan(&publication.Yanked, &publication.UpdatedAt)
 		if err != nil {
 			return CargoPublication{}, false, err
