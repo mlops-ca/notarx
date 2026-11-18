@@ -37,7 +37,7 @@ func (c *pomCompatUpstream) FetchMaven(ctx context.Context, method string, membe
 
 // An empty Maven local repository must consume the unchanged Hosted POMs,
 // resolve their parents and a real transitive dependency tree. Plugin and
-// unrelated dependencies use a public Central proxy, never the user's cache.
+// unrelated dependencies use a recorded Central fixture, never the network.
 func TestMavenClientHostedPOMCompatibilityColdCache(t *testing.T) {
 	mvn, err := exec.LookPath("mvn")
 	if err != nil {
@@ -45,14 +45,14 @@ func TestMavenClientHostedPOMCompatibilityColdCache(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	endpoint := os.Getenv("MAVEN_POM_COMPAT_UPSTREAM")
-	if endpoint == "" {
-		endpoint = "https://repo.maven.apache.org/maven2"
-	}
+	// Plugin and unrelated dependencies come from a hermetic in-process Central
+	// fixture (recorded responses under testdata/maven-central-fixture), never the
+	// network. See startMavenCentralFixture for how to re-record it.
+	central := startMavenCentralFixture(t)
+	endpoint := central.URL + "/maven2"
 	upstreamURL, err := url.Parse(endpoint)
-	if err != nil || upstreamURL.Scheme != "https" || upstreamURL.User != nil || upstreamURL.RawQuery != "" || upstreamURL.Fragment != "" ||
-		(upstreamURL.Host != "repo.maven.apache.org" && upstreamURL.Host != "maven-central.storage-download.googleapis.com") || upstreamURL.Path != "/maven2" {
-		t.Fatal("POM client upstream must be a credential-free public Maven Central endpoint")
+	if err != nil {
+		t.Fatal(err)
 	}
 	store := repository.NewMemoryStore()
 	hosted, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "deploys", Format: repository.FormatMaven})
@@ -73,7 +73,7 @@ func TestMavenClientHostedPOMCompatibilityColdCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	upstream := &pomCompatUpstream{fetched: make(map[string]int)}
+	upstream := &pomCompatUpstream{UpstreamClient: UpstreamClient{HTTPClient: central.Client(), AllowHTTPForTesting: true}, fetched: make(map[string]int)}
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator(), Storage: ObjectStores{repository.FormatMaven: objectstore.NewMemoryStore()}, Caches: GatewayCaches{OCI: NewDefaultOCICache(objectstore.NewMemoryStore(), nil), Maven: NewDefaultMavenCache(objectstore.NewMemoryStore(), []string{upstreamURL.Host})}, Upstream: upstream})
 	server := httptest.NewServer(handler)
 	defer server.Close()

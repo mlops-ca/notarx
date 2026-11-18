@@ -184,8 +184,7 @@ def run_lane(args):
             if command == ['make', 'native-maven-e2e']:
                 settings = work / 'maven-central-settings.xml'
                 settings.write_text('<settings><mirrors><mirror><id>public-central-fixture</id><mirrorOf>central</mirrorOf><url>https://maven-central.storage-download.googleapis.com/maven2</url></mirror></mirrors></settings>\n')
-                env.update(MAVEN_ARGS='--global-settings ' + str(settings),
-                           MAVEN_POM_COMPAT_UPSTREAM='https://maven-central.storage-download.googleapis.com/maven2')
+                env.update(MAVEN_ARGS='--global-settings ' + str(settings))
             print('Contract lane ' + args.lane + ': ' + step['name'], flush=True)
             result = run_command(command, output / 'logs' / f'{index:02d}.log', env, step.get('timeoutSeconds'))
             result['name'] = step['name']

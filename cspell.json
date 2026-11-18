@@ -20,7 +20,8 @@
     "**/*.zh-CN.ts",
     "**/node_modules/**",
     "CHANGELOG.md",
-    "DESIGN.md"
+    "DESIGN.md",
+    "internal/app/testdata/maven-central-fixture/**"
   ],
   "flagWords": [
     "color",
