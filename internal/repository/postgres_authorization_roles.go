@@ -7,7 +7,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 )
 
 const authorizationRoleColumns = `id::text,name,description,array_to_json(scopes),version::text,created_at,updated_at`
@@ -25,7 +25,7 @@ func scanAuthorizationRole(scanner interface{ Scan(...any) error }) (Authorizati
 }
 
 func (s *PostgresStore) CreateAuthorizationRole(ctx context.Context, role AuthorizationRole) (AuthorizationRole, error) {
-	role.ID = uuid.NewString()
+	role.ID = ids.New()
 	role.Name = strings.TrimSpace(role.Name)
 	created, err := scanAuthorizationRole(s.db.QueryRowContext(ctx, `INSERT INTO authorization_roles (id,name,description,scopes) VALUES ($1,$2,$3,$4) RETURNING `+authorizationRoleColumns, role.ID, role.Name, role.Description, role.Scopes))
 	if isUnique(err) {
@@ -52,7 +52,7 @@ func (s *PostgresStore) ListAuthorizationRoles(ctx context.Context) ([]Authoriza
 }
 
 func (s *PostgresStore) GetAuthorizationRole(ctx context.Context, id string) (AuthorizationRole, error) {
-	role, err := scanAuthorizationRole(s.db.QueryRowContext(ctx, `SELECT `+authorizationRoleColumns+` FROM authorization_roles WHERE id::text=$1`, id))
+	role, err := scanAuthorizationRole(s.db.QueryRowContext(ctx, `SELECT `+authorizationRoleColumns+` FROM authorization_roles WHERE id=$1::uuid`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return AuthorizationRole{}, ErrNotFound
 	}
@@ -61,10 +61,10 @@ func (s *PostgresStore) GetAuthorizationRole(ctx context.Context, id string) (Au
 
 func (s *PostgresStore) UpdateAuthorizationRole(ctx context.Context, role AuthorizationRole, expectedVersion string) (AuthorizationRole, error) {
 	role.Name = strings.TrimSpace(role.Name)
-	updated, err := scanAuthorizationRole(s.db.QueryRowContext(ctx, `UPDATE authorization_roles SET name=$1,description=$2,scopes=$3,version=version+1,updated_at=now() WHERE id::text=$4 AND version::text=$5 RETURNING `+authorizationRoleColumns, role.Name, role.Description, role.Scopes, role.ID, expectedVersion))
+	updated, err := scanAuthorizationRole(s.db.QueryRowContext(ctx, `UPDATE authorization_roles SET name=$1,description=$2,scopes=$3,version=version+1,updated_at=now() WHERE id=$4::uuid AND version=$5::text::bigint RETURNING `+authorizationRoleColumns, role.Name, role.Description, role.Scopes, role.ID, expectedVersion))
 	if errors.Is(err, sql.ErrNoRows) {
 		var exists bool
-		if queryErr := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM authorization_roles WHERE id::text=$1)`, role.ID).Scan(&exists); queryErr != nil {
+		if queryErr := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM authorization_roles WHERE id=$1::uuid)`, role.ID).Scan(&exists); queryErr != nil {
 			return AuthorizationRole{}, queryErr
 		}
 		if !exists {
@@ -79,7 +79,7 @@ func (s *PostgresStore) UpdateAuthorizationRole(ctx context.Context, role Author
 }
 
 func (s *PostgresStore) DeleteAuthorizationRole(ctx context.Context, id string) error {
-	result, err := s.db.ExecContext(ctx, `DELETE FROM authorization_roles WHERE id::text=$1`, id)
+	result, err := s.db.ExecContext(ctx, `DELETE FROM authorization_roles WHERE id=$1::uuid`, id)
 	if err != nil {
 		return err
 	}

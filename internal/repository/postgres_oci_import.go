@@ -51,7 +51,7 @@ func (s *PostgresStore) PublishOCIImportClosure(ctx context.Context, c OCIImport
 		return err
 	}
 	var repoName string
-	err = tx.QueryRowContext(ctx, `SELECT name FROM hosted_repositories WHERE id::text=$1 AND format='oci' AND repo_type='hosted' AND state='active' FOR SHARE`, c.RepositoryID).Scan(&repoName)
+	err = tx.QueryRowContext(ctx, `SELECT name FROM hosted_repositories WHERE id=$1::uuid AND format='oci' AND repo_type='hosted' AND state='active' FOR SHARE`, c.RepositoryID).Scan(&repoName)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrDisabled
 	}
@@ -61,14 +61,14 @@ func (s *PostgresStore) PublishOCIImportClosure(ctx context.Context, c OCIImport
 	changed := false
 	for _, m := range c.Manifests {
 		var blocked bool
-		err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM artifact_tombstones WHERE repository_id::text=$1 AND format='oci' AND coordinate=$2)`, c.RepositoryID, c.Name+"@"+m.Digest).Scan(&blocked)
+		err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM artifact_tombstones WHERE repository_id=$1::uuid AND format='oci' AND coordinate=$2)`, c.RepositoryID, c.Name+"@"+m.Digest).Scan(&blocked)
 		if err != nil {
 			return err
 		}
 		if blocked {
 			return ErrNameExists
 		}
-		err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM artifact_quarantines WHERE repository_id::text=$1 AND format='oci' AND coordinate=$2 AND digest=$3 AND state='quarantined')`, c.RepositoryID, c.Name, m.Digest).Scan(&blocked)
+		err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM artifact_quarantines WHERE repository_id=$1::uuid AND format='oci' AND coordinate=$2 AND digest=$3 AND state='quarantined')`, c.RepositoryID, c.Name, m.Digest).Scan(&blocked)
 		if err != nil {
 			return err
 		}
@@ -76,7 +76,7 @@ func (s *PostgresStore) PublishOCIImportClosure(ctx context.Context, c OCIImport
 			return ErrArtifactQuarantined
 		}
 		var old OCIManifest
-		err = tx.QueryRowContext(ctx, `SELECT object_key,size,media_type FROM native_oci_manifests WHERE repository_id::text=$1 AND name=$2 AND digest=$3 FOR SHARE`, c.RepositoryID, c.Name, m.Digest).Scan(&old.ObjectKey, &old.Size, &old.MediaType)
+		err = tx.QueryRowContext(ctx, `SELECT object_key,size,media_type FROM native_oci_manifests WHERE repository_id=$1::uuid AND name=$2 AND digest=$3 FOR SHARE`, c.RepositoryID, c.Name, m.Digest).Scan(&old.ObjectKey, &old.Size, &old.MediaType)
 		if err == nil {
 			if old.ObjectKey != m.ObjectKey || old.Size != m.Size || old.MediaType != m.MediaType {
 				return ErrNameExists
@@ -131,7 +131,7 @@ func (s *PostgresStore) PublishOCIImportClosure(ctx context.Context, c OCIImport
 		n, _ := result.RowsAffected()
 		changed = changed || n > 0
 		var current string
-		if err = tx.QueryRowContext(ctx, `SELECT digest FROM native_oci_tags WHERE repository_id::text=$1 AND name=$2 AND tag=$3 FOR UPDATE`, c.RepositoryID, c.Name, c.Reference).Scan(&current); err != nil {
+		if err = tx.QueryRowContext(ctx, `SELECT digest FROM native_oci_tags WHERE repository_id=$1::uuid AND name=$2 AND tag=$3 FOR UPDATE`, c.RepositoryID, c.Name, c.Reference).Scan(&current); err != nil {
 			return err
 		}
 		if current != c.RootDigest {

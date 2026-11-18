@@ -74,7 +74,7 @@ func (s *PostgresStore) ListUsers(ctx context.Context, query UserListQuery) (Use
 
 func (s *PostgresStore) GetUser(ctx context.Context, id string) (User, error) {
 	var user User
-	err := scanUser(s.db.QueryRowContext(ctx, `SELECT `+userColumns+` FROM users WHERE id::text=$1`, id), &user)
+	err := scanUser(s.db.QueryRowContext(ctx, `SELECT `+userColumns+` FROM users WHERE id=$1::uuid`, id), &user)
 	if errors.Is(err, sql.ErrNoRows) {
 		return User{}, ErrNotFound
 	}
@@ -106,7 +106,7 @@ func (s *PostgresStore) UpdateUser(ctx context.Context, update UserUpdate, expec
 		return User{}, err
 	}
 	var current User
-	err = scanUser(tx.QueryRowContext(ctx, `SELECT `+userColumns+` FROM users WHERE id::text=$1 FOR UPDATE`, update.ID), &current)
+	err = scanUser(tx.QueryRowContext(ctx, `SELECT `+userColumns+` FROM users WHERE id=$1::uuid FOR UPDATE`, update.ID), &current)
 	if errors.Is(err, sql.ErrNoRows) {
 		return User{}, ErrNotFound
 	}
@@ -126,7 +126,7 @@ func (s *PostgresStore) UpdateUser(ctx context.Context, update UserUpdate, expec
 		}
 	}
 	var updated User
-	err = scanUser(tx.QueryRowContext(ctx, `UPDATE users SET role=CASE WHEN $2 THEN $3 ELSE role END, state=CASE WHEN $4 THEN $5 ELSE state END, display_name=CASE WHEN $6 THEN $7 ELSE display_name END, email=CASE WHEN $8 THEN $9 ELSE email END, description=CASE WHEN $10 THEN $11 ELSE description END, version=version+1, updated_at=now() WHERE id::text=$1 AND version::text=$12 RETURNING `+userColumns,
+	err = scanUser(tx.QueryRowContext(ctx, `UPDATE users SET role=CASE WHEN $2 THEN $3 ELSE role END, state=CASE WHEN $4 THEN $5 ELSE state END, display_name=CASE WHEN $6 THEN $7 ELSE display_name END, email=CASE WHEN $8 THEN $9 ELSE email END, description=CASE WHEN $10 THEN $11 ELSE description END, version=version+1, updated_at=now() WHERE id=$1::uuid AND version=$12::text::bigint RETURNING `+userColumns,
 		update.ID,
 		update.Role != nil, stringValue(update.Role),
 		update.State != nil, stringValue(update.State),
@@ -164,7 +164,7 @@ func (s *PostgresStore) DeleteUser(ctx context.Context, id string) error {
 		return err
 	}
 	var current User
-	err = scanUser(tx.QueryRowContext(ctx, `SELECT `+userColumns+` FROM users WHERE id::text=$1 FOR UPDATE`, id), &current)
+	err = scanUser(tx.QueryRowContext(ctx, `SELECT `+userColumns+` FROM users WHERE id=$1::uuid FOR UPDATE`, id), &current)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -180,7 +180,7 @@ func (s *PostgresStore) DeleteUser(ctx context.Context, id string) error {
 			return ErrLastActiveAdmin
 		}
 	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM users WHERE id::text=$1`, id); err != nil {
+	if _, err = tx.ExecContext(ctx, `DELETE FROM users WHERE id=$1::uuid`, id); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -188,7 +188,7 @@ func (s *PostgresStore) DeleteUser(ctx context.Context, id string) error {
 
 func (s *PostgresStore) RecordUserLoginSuccess(ctx context.Context, id string, occurredAt time.Time) (User, error) {
 	var user User
-	err := scanUser(s.db.QueryRowContext(ctx, `UPDATE users SET last_login_at=$2, failed_login_attempts=0, locked_until=NULL, version=version+1, updated_at=$2 WHERE id::text=$1 RETURNING `+userColumns, id, occurredAt.UTC()), &user)
+	err := scanUser(s.db.QueryRowContext(ctx, `UPDATE users SET last_login_at=$2, failed_login_attempts=0, locked_until=NULL, version=version+1, updated_at=$2 WHERE id=$1::uuid RETURNING `+userColumns, id, occurredAt.UTC()), &user)
 	if errors.Is(err, sql.ErrNoRows) {
 		return User{}, ErrNotFound
 	}
@@ -198,7 +198,7 @@ func (s *PostgresStore) RecordUserLoginSuccess(ctx context.Context, id string, o
 func (s *PostgresStore) RecordUserLoginFailure(ctx context.Context, id string, occurredAt time.Time, maxAttempts int, lockout time.Duration) (User, error) {
 	var user User
 	lockedUntil := occurredAt.UTC().Add(lockout)
-	err := scanUser(s.db.QueryRowContext(ctx, `UPDATE users SET failed_login_attempts=failed_login_attempts+1, locked_until=CASE WHEN $3>0 AND failed_login_attempts+1 >= $3 AND $4 THEN $5 ELSE locked_until END, version=version+1, updated_at=$2 WHERE id::text=$1 RETURNING `+userColumns, id, occurredAt.UTC(), maxAttempts, lockout > 0, lockedUntil), &user)
+	err := scanUser(s.db.QueryRowContext(ctx, `UPDATE users SET failed_login_attempts=failed_login_attempts+1, locked_until=CASE WHEN $3>0 AND failed_login_attempts+1 >= $3 AND $4 THEN $5 ELSE locked_until END, version=version+1, updated_at=$2 WHERE id=$1::uuid RETURNING `+userColumns, id, occurredAt.UTC(), maxAttempts, lockout > 0, lockedUntil), &user)
 	if errors.Is(err, sql.ErrNoRows) {
 		return User{}, ErrNotFound
 	}
@@ -208,7 +208,7 @@ func (s *PostgresStore) RecordUserLoginFailure(ctx context.Context, id string, o
 func (s *PostgresStore) UpdateUserPassword(ctx context.Context, id, secretHash, expectedVersion string, mustChange bool) (User, error) {
 	var user User
 	err := scanUser(s.db.QueryRowContext(ctx, `WITH updated_user AS (
-		UPDATE users SET secret_hash=$2, password_changed_at=now(), must_change_password=$3, session_version=session_version+1, failed_login_attempts=0, locked_until=NULL, version=version+1, updated_at=now() WHERE id::text=$1 AND version::text=$4 RETURNING *
+		UPDATE users SET secret_hash=$2, password_changed_at=now(), must_change_password=$3, session_version=session_version+1, failed_login_attempts=0, locked_until=NULL, version=version+1, updated_at=now() WHERE id=$1::uuid AND version=$4::text::bigint RETURNING *
 	), revoked_sessions AS (
 		UPDATE user_sessions SET revoked_at=now() WHERE user_id=(SELECT id FROM updated_user) AND revoked_at IS NULL
 	) SELECT `+userColumns+` FROM updated_user`, id, secretHash, mustChange, expectedVersion), &user)
@@ -224,7 +224,7 @@ func (s *PostgresStore) UpdateUserPassword(ctx context.Context, id, secretHash, 
 func (s *PostgresStore) RevokeUserSessions(ctx context.Context, id, expectedVersion string) (User, error) {
 	var user User
 	err := scanUser(s.db.QueryRowContext(ctx, `WITH updated_user AS (
-		UPDATE users SET session_version=session_version+1, version=version+1, updated_at=now() WHERE id::text=$1 AND version::text=$2 RETURNING *
+		UPDATE users SET session_version=session_version+1, version=version+1, updated_at=now() WHERE id=$1::uuid AND version=$2::text::bigint RETURNING *
 	), revoked_sessions AS (
 		UPDATE user_sessions SET revoked_at=now() WHERE user_id=(SELECT id FROM updated_user) AND revoked_at IS NULL
 	) SELECT `+userColumns+` FROM updated_user`, id, expectedVersion), &user)

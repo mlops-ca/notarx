@@ -53,7 +53,7 @@ func (s *PostgresStore) LockOCIObject(ctx context.Context, objectKey string) (fu
 }
 func (s *PostgresStore) GetOCIUpload(ctx context.Context, id string) (OCIUpload, error) {
 	var v OCIUpload
-	err := scanOCIUpload(s.db.QueryRowContext(ctx, `SELECT `+ociUploadColumns+` FROM native_oci_uploads WHERE id::text=$1`, id), &v)
+	err := scanOCIUpload(s.db.QueryRowContext(ctx, `SELECT `+ociUploadColumns+` FROM native_oci_uploads WHERE id=$1::uuid`, id), &v)
 	if errors.Is(err, sql.ErrNoRows) {
 		return OCIUpload{}, ErrNotFound
 	}
@@ -61,7 +61,7 @@ func (s *PostgresStore) GetOCIUpload(ctx context.Context, id string) (OCIUpload,
 }
 func (s *PostgresStore) UpdateOCIUpload(ctx context.Context, id string, offset int64) (OCIUpload, error) {
 	var v OCIUpload
-	err := s.db.QueryRowContext(ctx, `UPDATE native_oci_uploads SET byte_offset=$2 WHERE id::text=$1 AND state='open' AND expires_at > now() RETURNING id::text,repository_id::text,name,object_key,byte_offset,state,expires_at`, id, offset).Scan(&v.ID, &v.RepositoryID, &v.Name, &v.ObjectKey, &v.Offset, &v.State, &v.ExpiresAt)
+	err := s.db.QueryRowContext(ctx, `UPDATE native_oci_uploads SET byte_offset=$2 WHERE id=$1::uuid AND state='open' AND expires_at > now() RETURNING id::text,repository_id::text,name,object_key,byte_offset,state,expires_at`, id, offset).Scan(&v.ID, &v.RepositoryID, &v.Name, &v.ObjectKey, &v.Offset, &v.State, &v.ExpiresAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return OCIUpload{}, ErrNotFound
 	}
@@ -71,7 +71,7 @@ func (s *PostgresStore) CancelOCIUpload(ctx context.Context, id string) (OCIUplo
 	var v OCIUpload
 	err := scanOCIUpload(s.db.QueryRowContext(ctx, `UPDATE native_oci_uploads
         SET state='expired', collected_at=now()
-        WHERE id::text=$1 AND state='open'
+        WHERE id=$1::uuid AND state='open'
 		RETURNING `+ociUploadColumns, id), &v)
 	if errors.Is(err, sql.ErrNoRows) {
 		return OCIUpload{}, ErrNotFound
@@ -85,7 +85,7 @@ func (s *PostgresStore) CompleteOCIUpload(ctx context.Context, id string, blob O
 	}
 	defer func() { _ = tx.Rollback() }()
 	var repositoryID string
-	err = tx.QueryRowContext(ctx, `SELECT repository_id::text FROM native_oci_uploads WHERE id::text=$1 AND state='open' AND expires_at > now() FOR UPDATE`, id).Scan(&repositoryID)
+	err = tx.QueryRowContext(ctx, `SELECT repository_id::text FROM native_oci_uploads WHERE id=$1::uuid AND state='open' AND expires_at > now() FOR UPDATE`, id).Scan(&repositoryID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return OCIBlob{}, ErrNotFound
 	}
@@ -104,7 +104,7 @@ func (s *PostgresStore) CompleteOCIUpload(ctx context.Context, id string, blob O
 	if _, err = tx.ExecContext(ctx, `UPDATE native_oci_object_intents SET claimed_at=now() WHERE object_key=$1 AND claimed_at IS NULL`, blob.ObjectKey); err != nil {
 		return OCIBlob{}, err
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE native_oci_uploads SET state='completed' WHERE id::text=$1`, id); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE native_oci_uploads SET state='completed' WHERE id=$1::uuid`, id); err != nil {
 		return OCIBlob{}, err
 	}
 	return blob, tx.Commit()
@@ -166,7 +166,7 @@ func prefixedOCIUploadColumns(prefix string) string {
 	return prefix + ".id::text," + prefix + ".repository_id::text," + prefix + ".name," + prefix + ".object_key," + prefix + ".byte_offset," + prefix + ".state," + prefix + ".expires_at," + prefix + ".collected_at"
 }
 func (s *PostgresStore) MarkOCIUploadCollected(ctx context.Context, id string) error {
-	result, err := s.db.ExecContext(ctx, `UPDATE native_oci_uploads SET collected_at=now() WHERE id::text=$1 AND state='expired' AND collected_at IS NULL`, id)
+	result, err := s.db.ExecContext(ctx, `UPDATE native_oci_uploads SET collected_at=now() WHERE id=$1::uuid AND state='expired' AND collected_at IS NULL`, id)
 	if err != nil {
 		return err
 	}
@@ -238,7 +238,7 @@ func (s *PostgresStore) MountOCIBlobFrom(ctx context.Context, repositoryID, sour
 	err = tx.QueryRowContext(ctx, `SELECT b.digest,b.object_key,b.size
         FROM native_oci_blobs b
         JOIN native_oci_repository_blobs source ON source.digest=b.digest
-        WHERE source.repository_id::text=$1 AND b.digest=$2
+        WHERE source.repository_id=$1::uuid AND b.digest=$2
         FOR SHARE`, sourceRepositoryID, digest).Scan(&v.Digest, &v.ObjectKey, &v.Size)
 	if errors.Is(err, sql.ErrNoRows) {
 		return OCIBlob{}, ErrNotFound
@@ -256,7 +256,7 @@ func (s *PostgresStore) MountOCIBlobFrom(ctx context.Context, repositoryID, sour
 }
 func (s *PostgresStore) GetOCIBlob(ctx context.Context, repositoryID, digest string) (OCIBlob, error) {
 	var v OCIBlob
-	err := s.db.QueryRowContext(ctx, `SELECT b.digest,b.object_key,b.size FROM native_oci_blobs b JOIN native_oci_repository_blobs rb ON rb.digest=b.digest WHERE rb.repository_id::text=$1 AND b.digest=$2`, repositoryID, digest).Scan(&v.Digest, &v.ObjectKey, &v.Size)
+	err := s.db.QueryRowContext(ctx, `SELECT b.digest,b.object_key,b.size FROM native_oci_blobs b JOIN native_oci_repository_blobs rb ON rb.digest=b.digest WHERE rb.repository_id=$1::uuid AND b.digest=$2`, repositoryID, digest).Scan(&v.Digest, &v.ObjectKey, &v.Size)
 	if errors.Is(err, sql.ErrNoRows) {
 		return v, ErrNotFound
 	}
@@ -289,7 +289,7 @@ func (s *PostgresStore) PublishReplicatedOCIManifest(ctx context.Context, public
 	}
 	defer func() { _ = tx.Rollback() }()
 	var source OCIManifest
-	err = tx.QueryRowContext(ctx, `SELECT repository_id::text,name,digest,object_key,media_type,size,COALESCE(subject_digest,''),artifact_type FROM native_oci_manifests WHERE repository_id::text=$1 AND name=$2 AND digest=$3 FOR SHARE`, publication.SourceRepositoryID, publication.Manifest.Name, publication.Manifest.Digest).Scan(&source.RepositoryID, &source.Name, &source.Digest, &source.ObjectKey, &source.MediaType, &source.Size, &source.SubjectDigest, &source.ArtifactType)
+	err = tx.QueryRowContext(ctx, `SELECT repository_id::text,name,digest,object_key,media_type,size,COALESCE(subject_digest,''),artifact_type FROM native_oci_manifests WHERE repository_id=$1::uuid AND name=$2 AND digest=$3 FOR SHARE`, publication.SourceRepositoryID, publication.Manifest.Name, publication.Manifest.Digest).Scan(&source.RepositoryID, &source.Name, &source.Digest, &source.ObjectKey, &source.MediaType, &source.Size, &source.SubjectDigest, &source.ArtifactType)
 	if errors.Is(err, sql.ErrNoRows) {
 		return OCIManifest{}, ErrNotFound
 	}
@@ -300,7 +300,7 @@ func (s *PostgresStore) PublishReplicatedOCIManifest(ctx context.Context, public
 		return OCIManifest{}, ErrNotFound
 	}
 	var existing OCIManifest
-	err = tx.QueryRowContext(ctx, `SELECT repository_id::text,name,digest,object_key,media_type,size,COALESCE(subject_digest,''),artifact_type FROM native_oci_manifests WHERE repository_id::text=$1 AND name=$2 AND digest=$3 FOR SHARE`, publication.TargetRepositoryID, publication.Manifest.Name, publication.Manifest.Digest).Scan(&existing.RepositoryID, &existing.Name, &existing.Digest, &existing.ObjectKey, &existing.MediaType, &existing.Size, &existing.SubjectDigest, &existing.ArtifactType)
+	err = tx.QueryRowContext(ctx, `SELECT repository_id::text,name,digest,object_key,media_type,size,COALESCE(subject_digest,''),artifact_type FROM native_oci_manifests WHERE repository_id=$1::uuid AND name=$2 AND digest=$3 FOR SHARE`, publication.TargetRepositoryID, publication.Manifest.Name, publication.Manifest.Digest).Scan(&existing.RepositoryID, &existing.Name, &existing.Digest, &existing.ObjectKey, &existing.MediaType, &existing.Size, &existing.SubjectDigest, &existing.ArtifactType)
 	if err == nil {
 		if existing.ObjectKey != publication.Manifest.ObjectKey {
 			return OCIManifest{}, ErrNameExists
@@ -312,7 +312,7 @@ func (s *PostgresStore) PublishReplicatedOCIManifest(ctx context.Context, public
 	}
 	for _, digest := range publication.BlobDigests {
 		var present bool
-		if err = tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM native_oci_repository_blobs WHERE repository_id::text=$1 AND digest=$2)`, publication.SourceRepositoryID, digest).Scan(&present); err != nil {
+		if err = tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM native_oci_repository_blobs WHERE repository_id=$1::uuid AND digest=$2)`, publication.SourceRepositoryID, digest).Scan(&present); err != nil {
 			return OCIManifest{}, err
 		}
 		if !present {
@@ -335,10 +335,10 @@ func (s *PostgresStore) PublishReplicatedOCIManifest(ctx context.Context, public
 }
 func (s *PostgresStore) GetOCIManifest(ctx context.Context, repositoryID, name, reference string) (OCIManifest, error) {
 	var v OCIManifest
-	query := `SELECT repository_id::text,name,digest,object_key,media_type,size,COALESCE(subject_digest,''),artifact_type FROM native_oci_manifests WHERE repository_id::text=$1 AND name=$2 AND digest=$3`
+	query := `SELECT repository_id::text,name,digest,object_key,media_type,size,COALESCE(subject_digest,''),artifact_type FROM native_oci_manifests WHERE repository_id=$1::uuid AND name=$2 AND digest=$3`
 	args := []any{repositoryID, name, reference}
 	if !strings.HasPrefix(reference, "sha256:") {
-		query = `SELECT m.repository_id::text,m.name,m.digest,m.object_key,m.media_type,m.size,COALESCE(m.subject_digest,''),m.artifact_type FROM native_oci_tags t JOIN native_oci_manifests m ON (m.repository_id=t.repository_id AND m.name=t.name AND m.digest=t.digest) WHERE t.repository_id::text=$1 AND t.name=$2 AND t.tag=$3`
+		query = `SELECT m.repository_id::text,m.name,m.digest,m.object_key,m.media_type,m.size,COALESCE(m.subject_digest,''),m.artifact_type FROM native_oci_tags t JOIN native_oci_manifests m ON (m.repository_id=t.repository_id AND m.name=t.name AND m.digest=t.digest) WHERE t.repository_id=$1::uuid AND t.name=$2 AND t.tag=$3`
 	}
 	err := s.db.QueryRowContext(ctx, query, args...).Scan(&v.RepositoryID, &v.Name, &v.Digest, &v.ObjectKey, &v.MediaType, &v.Size, &v.SubjectDigest, &v.ArtifactType)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -347,7 +347,7 @@ func (s *PostgresStore) GetOCIManifest(ctx context.Context, repositoryID, name, 
 	return v, err
 }
 func (s *PostgresStore) ListOCIReferrers(ctx context.Context, repositoryID, name, subject string, limit int, after string) ([]OCIManifest, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT repository_id::text,name,digest,object_key,media_type,size,COALESCE(subject_digest,''),artifact_type FROM native_oci_manifests WHERE repository_id::text=$1 AND name=$2 AND subject_digest=$3 AND digest>$4 ORDER BY digest LIMIT $5`, repositoryID, name, subject, after, limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT repository_id::text,name,digest,object_key,media_type,size,COALESCE(subject_digest,''),artifact_type FROM native_oci_manifests WHERE repository_id=$1::uuid AND name=$2 AND subject_digest=$3 AND digest>$4 ORDER BY digest LIMIT $5`, repositoryID, name, subject, after, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -370,7 +370,7 @@ func (s *PostgresStore) ListOCIManifests(ctx context.Context, repositoryID, name
 	rows, err := s.db.QueryContext(ctx, `SELECT m.repository_id::text,m.name,m.digest,m.object_key,m.media_type,m.size,m.created_at,COALESCE(m.subject_digest,''),m.artifact_type,COALESCE(array_to_json(array_agg(t.tag ORDER BY t.tag) FILTER (WHERE t.tag IS NOT NULL)),'[]'::json)
 		FROM native_oci_manifests m
 		LEFT JOIN native_oci_tags t ON t.repository_id=m.repository_id AND t.name=m.name AND t.digest=m.digest
-		WHERE m.repository_id::text=$1 AND m.name=$2 AND m.digest>$3
+		WHERE m.repository_id=$1::uuid AND m.name=$2 AND m.digest>$3
 		GROUP BY m.repository_id,m.name,m.digest,m.object_key,m.media_type,m.size,m.created_at,m.subject_digest,m.artifact_type
 		ORDER BY m.digest LIMIT $4`, repositoryID, name, after, limit)
 	if err != nil {
@@ -422,7 +422,7 @@ func (s *PostgresStore) ListOCITags(ctx context.Context, repositoryID, name stri
 		limit = 100
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT tag FROM native_oci_tags
-        WHERE repository_id::text=$1 AND name=$2 AND ($3='' OR tag > $3)
+        WHERE repository_id=$1::uuid AND name=$2 AND ($3='' OR tag > $3)
         ORDER BY tag LIMIT $4`, repositoryID, name, after, limit)
 	if err != nil {
 		return nil, err
@@ -439,7 +439,7 @@ func (s *PostgresStore) ListOCITags(ctx context.Context, repositoryID, name stri
 	return tags, rows.Err()
 }
 func (s *PostgresStore) DeleteOCITag(ctx context.Context, repositoryID, name, tag string) error {
-	result, err := s.db.ExecContext(ctx, `DELETE FROM native_oci_tags WHERE repository_id::text=$1 AND name=$2 AND tag=$3`, repositoryID, name, tag)
+	result, err := s.db.ExecContext(ctx, `DELETE FROM native_oci_tags WHERE repository_id=$1::uuid AND name=$2 AND tag=$3`, repositoryID, name, tag)
 	if err != nil {
 		return err
 	}
@@ -457,21 +457,21 @@ func (s *PostgresStore) DeleteOCIManifest(ctx context.Context, repositoryID, nam
 	if _, err = tx.ExecContext(ctx, `INSERT INTO native_oci_manifest_tombstones (repository_id,name,digest,object_key,media_type,size,subject_digest,artifact_type,tags,deleted_at)
 		SELECT m.repository_id,m.name,m.digest,m.object_key,m.media_type,m.size,m.subject_digest,m.artifact_type,COALESCE(array_agg(t.tag ORDER BY t.tag) FILTER (WHERE t.tag IS NOT NULL),'{}'::text[]),now()
 		FROM native_oci_manifests m LEFT JOIN native_oci_tags t ON t.repository_id=m.repository_id AND t.name=m.name AND t.digest=m.digest
-		WHERE m.repository_id::text=$1 AND m.name=$2 AND m.digest=$3
+		WHERE m.repository_id=$1::uuid AND m.name=$2 AND m.digest=$3
 		GROUP BY m.repository_id,m.name,m.digest,m.object_key,m.media_type,m.size,m.subject_digest,m.artifact_type
 		ON CONFLICT (repository_id,name,digest) DO UPDATE SET object_key=EXCLUDED.object_key,media_type=EXCLUDED.media_type,size=EXCLUDED.size,subject_digest=EXCLUDED.subject_digest,artifact_type=EXCLUDED.artifact_type,tags=EXCLUDED.tags,deleted_at=EXCLUDED.deleted_at`, repositoryID, name, digest); err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM native_oci_tags WHERE repository_id::text=$1 AND name=$2 AND digest=$3`, repositoryID, name, digest); err != nil {
+	if _, err = tx.ExecContext(ctx, `DELETE FROM native_oci_tags WHERE repository_id=$1::uuid AND name=$2 AND digest=$3`, repositoryID, name, digest); err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO native_oci_object_intents (object_key,repository_id,digest,size,created_at,claimed_at,collected_at) SELECT object_key,repository_id,digest,size,now(),NULL,NULL FROM native_oci_manifests WHERE repository_id::text=$1 AND name=$2 AND digest=$3 ON CONFLICT (object_key) DO UPDATE SET repository_id=EXCLUDED.repository_id,claimed_at=NULL,collected_at=NULL,created_at=EXCLUDED.created_at`, repositoryID, name, digest); err != nil {
+	if _, err = tx.ExecContext(ctx, `INSERT INTO native_oci_object_intents (object_key,repository_id,digest,size,created_at,claimed_at,collected_at) SELECT object_key,repository_id,digest,size,now(),NULL,NULL FROM native_oci_manifests WHERE repository_id=$1::uuid AND name=$2 AND digest=$3 ON CONFLICT (object_key) DO UPDATE SET repository_id=EXCLUDED.repository_id,claimed_at=NULL,collected_at=NULL,created_at=EXCLUDED.created_at`, repositoryID, name, digest); err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO artifact_tombstones (repository_id,format,coordinate,digest) SELECT repository_id,'oci',name || '@' || digest,digest FROM native_oci_manifests WHERE repository_id::text=$1 AND name=$2 AND digest=$3 ON CONFLICT DO NOTHING`, repositoryID, name, digest); err != nil {
+	if _, err = tx.ExecContext(ctx, `INSERT INTO artifact_tombstones (repository_id,format,coordinate,digest) SELECT repository_id,'oci',name || '@' || digest,digest FROM native_oci_manifests WHERE repository_id=$1::uuid AND name=$2 AND digest=$3 ON CONFLICT DO NOTHING`, repositoryID, name, digest); err != nil {
 		return err
 	}
-	result, err := tx.ExecContext(ctx, `DELETE FROM native_oci_manifests WHERE repository_id::text=$1 AND name=$2 AND digest=$3`, repositoryID, name, digest)
+	result, err := tx.ExecContext(ctx, `DELETE FROM native_oci_manifests WHERE repository_id=$1::uuid AND name=$2 AND digest=$3`, repositoryID, name, digest)
 	if err != nil {
 		return err
 	}
@@ -486,12 +486,12 @@ func (s *PostgresStore) RestoreOCIManifest(ctx context.Context, repositoryID, na
 	var manifest OCIManifest
 	var tagsJSON []byte
 	err := s.db.QueryRowContext(ctx, `SELECT repository_id::text,name,digest,object_key,media_type,size,COALESCE(subject_digest,''),artifact_type,array_to_json(tags)
-		FROM native_oci_manifest_tombstones WHERE repository_id::text=$1 AND name=$2 AND digest=$3`, repositoryID, name, digest).Scan(
+		FROM native_oci_manifest_tombstones WHERE repository_id=$1::uuid AND name=$2 AND digest=$3`, repositoryID, name, digest).Scan(
 		&manifest.RepositoryID, &manifest.Name, &manifest.Digest, &manifest.ObjectKey, &manifest.MediaType, &manifest.Size, &manifest.SubjectDigest, &manifest.ArtifactType, &tagsJSON)
 	if errors.Is(err, sql.ErrNoRows) {
 		// Tombstones created before native_oci_manifest_tombstones existed can
 		// still be restored while their object intent has not been collected.
-		rows, queryErr := s.db.QueryContext(ctx, `SELECT object_key,size FROM native_oci_object_intents WHERE repository_id::text=$1 AND digest=$2 AND collected_at IS NULL ORDER BY created_at LIMIT 2`, repositoryID, digest)
+		rows, queryErr := s.db.QueryContext(ctx, `SELECT object_key,size FROM native_oci_object_intents WHERE repository_id=$1::uuid AND digest=$2 AND collected_at IS NULL ORDER BY created_at LIMIT 2`, repositoryID, digest)
 		if queryErr != nil {
 			return OCIManifest{}, queryErr
 		}
@@ -532,7 +532,7 @@ func (s *PostgresStore) RestoreOCIManifest(ctx context.Context, repositoryID, na
 	}
 	defer func() { _ = tx.Rollback() }()
 	var collected bool
-	err = tx.QueryRowContext(ctx, `SELECT collected_at IS NOT NULL FROM native_oci_object_intents WHERE repository_id::text=$1 AND object_key=$2 AND digest=$3 FOR UPDATE`, repositoryID, manifest.ObjectKey, digest).Scan(&collected)
+	err = tx.QueryRowContext(ctx, `SELECT collected_at IS NOT NULL FROM native_oci_object_intents WHERE repository_id=$1::uuid AND object_key=$2 AND digest=$3 FOR UPDATE`, repositoryID, manifest.ObjectKey, digest).Scan(&collected)
 	if errors.Is(err, sql.ErrNoRows) {
 		return OCIManifest{}, ErrNotFound
 	}
@@ -550,13 +550,13 @@ func (s *PostgresStore) RestoreOCIManifest(ctx context.Context, repositoryID, na
 			return OCIManifest{}, err
 		}
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE native_oci_object_intents SET claimed_at=now() WHERE repository_id::text=$1 AND object_key=$2 AND digest=$3 AND collected_at IS NULL`, repositoryID, manifest.ObjectKey, digest); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE native_oci_object_intents SET claimed_at=now() WHERE repository_id=$1::uuid AND object_key=$2 AND digest=$3 AND collected_at IS NULL`, repositoryID, manifest.ObjectKey, digest); err != nil {
 		return OCIManifest{}, err
 	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM native_oci_manifest_tombstones WHERE repository_id::text=$1 AND name=$2 AND digest=$3`, repositoryID, name, digest); err != nil {
+	if _, err = tx.ExecContext(ctx, `DELETE FROM native_oci_manifest_tombstones WHERE repository_id=$1::uuid AND name=$2 AND digest=$3`, repositoryID, name, digest); err != nil {
 		return OCIManifest{}, err
 	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM artifact_tombstones WHERE repository_id::text=$1 AND format='oci' AND coordinate=$2`, repositoryID, coordinate); err != nil {
+	if _, err = tx.ExecContext(ctx, `DELETE FROM artifact_tombstones WHERE repository_id=$1::uuid AND format='oci' AND coordinate=$2`, repositoryID, coordinate); err != nil {
 		return OCIManifest{}, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -567,7 +567,7 @@ func (s *PostgresStore) RestoreOCIManifest(ctx context.Context, repositoryID, na
 
 func (s *PostgresStore) GetArtifactTombstone(ctx context.Context, repositoryID string, format Format, coordinate string) (ArtifactTombstone, error) {
 	var tombstone ArtifactTombstone
-	err := s.db.QueryRowContext(ctx, `SELECT repository_id::text,format,coordinate,digest,tombstoned_at FROM artifact_tombstones WHERE repository_id::text=$1 AND format=$2 AND coordinate=$3`, repositoryID, format, coordinate).Scan(&tombstone.RepositoryID, &tombstone.Format, &tombstone.Coordinate, &tombstone.Digest, &tombstone.TombstonedAt)
+	err := s.db.QueryRowContext(ctx, `SELECT repository_id::text,format,coordinate,digest,tombstoned_at FROM artifact_tombstones WHERE repository_id=$1::uuid AND format=$2 AND coordinate=$3`, repositoryID, format, coordinate).Scan(&tombstone.RepositoryID, &tombstone.Format, &tombstone.Coordinate, &tombstone.Digest, &tombstone.TombstonedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ArtifactTombstone{}, ErrNotFound
 	}
@@ -575,7 +575,7 @@ func (s *PostgresStore) GetArtifactTombstone(ctx context.Context, repositoryID s
 }
 
 func (s *PostgresStore) ListArtifactTombstones(ctx context.Context, repositoryID string, format Format, prefix string, limit int, after string) ([]ArtifactTombstone, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT repository_id::text,format,coordinate,digest,tombstoned_at FROM artifact_tombstones WHERE repository_id::text=$1 AND format=$2 AND ($3='' OR left(coordinate,length($3))=$3) AND coordinate>$4 ORDER BY coordinate LIMIT $5`, repositoryID, format, prefix, after, limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT repository_id::text,format,coordinate,digest,tombstoned_at FROM artifact_tombstones WHERE repository_id=$1::uuid AND format=$2 AND ($3='' OR left(coordinate,length($3))=$3) AND coordinate>$4 ORDER BY coordinate LIMIT $5`, repositoryID, format, prefix, after, limit)
 	if err != nil {
 		return nil, err
 	}

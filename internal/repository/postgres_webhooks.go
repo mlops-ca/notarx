@@ -7,7 +7,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 )
 
 const webhookSubscriptionColumns = `id::text,name,endpoint_url,secret_ciphertext,event_types,enabled,version::text,created_at,updated_at`
@@ -63,7 +63,7 @@ func (s *PostgresStore) ListWebhookSubscriptions(ctx context.Context) ([]Webhook
 }
 
 func (s *PostgresStore) GetWebhookSubscription(ctx context.Context, id string) (WebhookSubscription, error) {
-	value, err := scanWebhookSubscription(s.db.QueryRowContext(ctx, `SELECT `+webhookSubscriptionColumns+` FROM webhook_subscriptions WHERE id::text=$1`, id))
+	value, err := scanWebhookSubscription(s.db.QueryRowContext(ctx, `SELECT `+webhookSubscriptionColumns+` FROM webhook_subscriptions WHERE id=$1::uuid`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return WebhookSubscription{}, ErrNotFound
 	}
@@ -77,7 +77,7 @@ func (s *PostgresStore) UpdateWebhookSubscription(ctx context.Context, value Web
 	}
 	updated, err := scanWebhookSubscription(s.db.QueryRowContext(ctx, `UPDATE webhook_subscriptions
 SET name=$2,endpoint_url=$3,secret_ciphertext=$4,event_types=$5::jsonb,enabled=$6,version=version+1,updated_at=now()
-WHERE id::text=$1 AND version::text=$7 RETURNING `+webhookSubscriptionColumns,
+WHERE id=$1::uuid AND version=$7::text::bigint RETURNING `+webhookSubscriptionColumns,
 		value.ID, value.Name, value.EndpointURL, value.SecretCiphertext, eventTypes, value.Enabled, expectedVersion))
 	if isUnique(err) {
 		return WebhookSubscription{}, ErrWebhookSubscriptionNameExists
@@ -86,7 +86,7 @@ WHERE id::text=$1 AND version::text=$7 RETURNING `+webhookSubscriptionColumns,
 		return updated, err
 	}
 	var exists bool
-	if queryErr := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM webhook_subscriptions WHERE id::text=$1)`, value.ID).Scan(&exists); queryErr != nil {
+	if queryErr := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM webhook_subscriptions WHERE id=$1::uuid)`, value.ID).Scan(&exists); queryErr != nil {
 		return WebhookSubscription{}, queryErr
 	}
 	if exists {
@@ -97,7 +97,7 @@ WHERE id::text=$1 AND version::text=$7 RETURNING `+webhookSubscriptionColumns,
 
 func (s *PostgresStore) EnqueueWebhookEvent(ctx context.Context, event WebhookEvent) (WebhookEvent, error) {
 	if event.ID == "" {
-		event.ID = uuid.NewString()
+		event.ID = ids.New()
 	}
 	if event.OccurredAt.IsZero() {
 		event.OccurredAt = time.Now().UTC()
@@ -162,7 +162,7 @@ func (s *PostgresStore) ListWebhookDeliveries(ctx context.Context, query Webhook
 		limit = 100
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT `+webhookDeliveryColumns+` FROM webhook_deliveries d JOIN webhook_events e ON e.id=d.event_id
-WHERE ($1='' OR d.subscription_id::text=$1) AND ($2='' OR d.state=$2) ORDER BY d.created_at DESC,d.id DESC LIMIT $3`, query.SubscriptionID, query.State, limit)
+WHERE ($1='' OR d.subscription_id=$1::uuid) AND ($2='' OR d.state=$2) ORDER BY d.created_at DESC,d.id DESC LIMIT $3`, query.SubscriptionID, query.State, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -179,7 +179,7 @@ WHERE ($1='' OR d.subscription_id::text=$1) AND ($2='' OR d.state=$2) ORDER BY d
 }
 
 func (s *PostgresStore) GetWebhookDelivery(ctx context.Context, id string) (WebhookDelivery, error) {
-	value, err := scanWebhookDelivery(s.db.QueryRowContext(ctx, `SELECT `+webhookDeliveryColumns+` FROM webhook_deliveries d JOIN webhook_events e ON e.id=d.event_id WHERE d.id::text=$1`, id))
+	value, err := scanWebhookDelivery(s.db.QueryRowContext(ctx, `SELECT `+webhookDeliveryColumns+` FROM webhook_deliveries d JOIN webhook_events e ON e.id=d.event_id WHERE d.id=$1::uuid`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return WebhookDelivery{}, ErrNotFound
 	}
@@ -246,7 +246,7 @@ ORDER BY d.created_at,d.id`, owner, lease.String(), limit)
 func (s *PostgresStore) CompleteWebhookDelivery(ctx context.Context, id, leaseToken string, status int, _ time.Time) error {
 	result, err := s.db.ExecContext(ctx, `WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS now)
 UPDATE webhook_deliveries SET state='succeeded',next_attempt_at=NULL,lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,last_status=$3,last_error='',delivered_at=clock.now,updated_at=clock.now
-FROM clock WHERE id::text=$1 AND state='delivering' AND lease_token::text=$2 AND lease_expires_at>clock.now`, id, leaseToken, status)
+FROM clock WHERE id=$1::uuid AND state='delivering' AND lease_token=$2::uuid AND lease_expires_at>clock.now`, id, leaseToken, status)
 	if err != nil {
 		return err
 	}
@@ -265,7 +265,7 @@ func (s *PostgresStore) FailWebhookDelivery(ctx context.Context, id, leaseToken 
 UPDATE webhook_deliveries SET state=CASE WHEN $3 OR attempts>=8 THEN 'dead' ELSE 'retrying' END,
     next_attempt_at=CASE WHEN $3 OR attempts>=8 THEN NULL ELSE clock.now+$4::interval END,
     lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,last_status=NULLIF($5,0),last_error=$6,updated_at=clock.now
-FROM clock WHERE id::text=$1 AND state='delivering' AND lease_token::text=$2 AND lease_expires_at>clock.now`, id, leaseToken, dead, retryDelay.String(), status, message)
+FROM clock WHERE id=$1::uuid AND state='delivering' AND lease_token=$2::uuid AND lease_expires_at>clock.now`, id, leaseToken, dead, retryDelay.String(), status, message)
 	if err != nil {
 		return err
 	}
@@ -278,14 +278,14 @@ FROM clock WHERE id::text=$1 AND state='delivering' AND lease_token::text=$2 AND
 func (s *PostgresStore) ReplayWebhookDelivery(ctx context.Context, id string, _ time.Time) (WebhookDelivery, error) {
 	value, err := scanWebhookDelivery(s.db.QueryRowContext(ctx, `WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS now), replayed AS (
 UPDATE webhook_deliveries SET state='pending',attempts=0,next_attempt_at=clock.now,lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,last_status=NULL,last_error='',delivered_at=NULL,updated_at=clock.now
-FROM clock WHERE id::text=$1 AND state='dead' RETURNING webhook_deliveries.*)
+FROM clock WHERE id=$1::uuid AND state='dead' RETURNING webhook_deliveries.*)
 SELECT d.id::text,d.event_id::text,e.event_type,d.subscription_id::text,d.state,d.attempts,d.next_attempt_at,d.lease_owner,d.lease_token::text,d.lease_expires_at,d.last_status,d.last_error,d.created_at,d.updated_at,d.delivered_at
 FROM replayed d JOIN webhook_events e ON e.id=d.event_id`, id))
 	if !errors.Is(err, sql.ErrNoRows) {
 		return value, err
 	}
 	var exists bool
-	if queryErr := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM webhook_deliveries WHERE id::text=$1)`, id).Scan(&exists); queryErr != nil {
+	if queryErr := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM webhook_deliveries WHERE id=$1::uuid)`, id).Scan(&exists); queryErr != nil {
 		return WebhookDelivery{}, queryErr
 	}
 	if exists {

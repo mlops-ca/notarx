@@ -81,7 +81,7 @@ ORDER BY h.id`
 
 func (s *PostgresStore) GetRepositoryCapacity(ctx context.Context, id string) (RepositoryCapacity, error) {
 	var capacity RepositoryCapacity
-	err := s.db.QueryRowContext(ctx, `SELECT format,COALESCE((SELECT quota_bytes FROM repository_capacity_quotas WHERE repository_id=h.id),0) FROM hosted_repositories h WHERE id::text=$1`, id).Scan(&capacity.Format, &capacity.QuotaBytes)
+	err := s.db.QueryRowContext(ctx, `SELECT format,COALESCE((SELECT quota_bytes FROM repository_capacity_quotas WHERE repository_id=h.id),0) FROM hosted_repositories h WHERE id=$1::uuid`, id).Scan(&capacity.Format, &capacity.QuotaBytes)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RepositoryCapacity{}, ErrNotFound
 	}
@@ -90,30 +90,30 @@ func (s *PostgresStore) GetRepositoryCapacity(ctx context.Context, id string) (R
 	}
 	capacity.RepositoryID = id
 	query := map[Format]string{
-		FormatRaw: `SELECT COALESCE(SUM(o.size),0),COUNT(*) FROM native_raw_assets a JOIN native_raw_objects o ON o.digest=a.digest WHERE a.repository_id::text=$1`,
+		FormatRaw: `SELECT COALESCE(SUM(o.size),0),COUNT(*) FROM native_raw_assets a JOIN native_raw_objects o ON o.digest=a.digest WHERE a.repository_id=$1::uuid`,
 		FormatMaven: `SELECT COALESCE(SUM(a.size),0),COUNT(*)
             FROM native_maven_assets a
-            WHERE a.repository_id::text=$1
+            WHERE a.repository_id=$1::uuid
               AND EXISTS (
                   SELECT 1 FROM native_maven_artifacts m
                   WHERE m.repository_id=a.repository_id AND m.state='visible'
                     AND left(a.path, length(replace(split_part(m.coordinate, ':', 1), '.', '/') || '/' || split_part(m.coordinate, ':', 2) || '/' || split_part(m.coordinate, ':', 3) || '/')) = replace(split_part(m.coordinate, ':', 1), '.', '/') || '/' || split_part(m.coordinate, ':', 2) || '/' || split_part(m.coordinate, ':', 3) || '/'
               )`,
-		FormatOCI:   `SELECT COALESCE((SELECT SUM(size) FROM native_oci_manifests WHERE repository_id::text=$1),0)+COALESCE((SELECT SUM(b.size) FROM native_oci_repository_blobs rb JOIN native_oci_blobs b ON b.digest=rb.digest WHERE rb.repository_id::text=$1),0), (SELECT COUNT(*) FROM native_oci_manifests WHERE repository_id::text=$1)+(SELECT COUNT(*) FROM native_oci_repository_blobs WHERE repository_id::text=$1)`,
-		FormatConan: `SELECT COALESCE(SUM(a.size),0),COUNT(*) FROM native_conan_assets a JOIN native_conan_recipe_revisions r ON r.repository_id=a.repository_id AND r.reference=a.reference AND r.revision=a.recipe_revision LEFT JOIN native_conan_package_revisions p ON p.repository_id=a.repository_id AND p.reference=a.reference AND p.recipe_revision=a.recipe_revision AND p.package_id=a.package_id AND p.revision=a.package_revision WHERE a.repository_id::text=$1 AND r.state='visible' AND (a.package_id='' OR p.state='visible')`,
-		FormatNPM:   `SELECT COALESCE(SUM(size),0),COUNT(*) FROM native_npm_versions WHERE repository_id::text=$1 AND object_key<>''`,
-		FormatPyPI:  `SELECT COALESCE(SUM(size),0),COUNT(*) FROM native_pypi_files WHERE repository_id::text=$1 AND object_key<>'' AND state='visible'`,
-		FormatGo:    `SELECT COALESCE(SUM(size),0),COUNT(*) FROM native_go_assets WHERE repository_id::text=$1 AND collected_at IS NULL`,
-		FormatCargo: `SELECT COALESCE(SUM(size),0),COUNT(*) FROM native_cargo_publications WHERE repository_id::text=$1 AND collected_at IS NULL`,
-		FormatHelm:  `SELECT COALESCE(SUM(size+provenance_size),0),COALESCE(SUM(1+CASE WHEN provenance_size>0 THEN 1 ELSE 0 END),0) FROM native_helm_publications WHERE repository_id::text=$1`,
-		FormatNuGet: `SELECT COALESCE(SUM(size),0),COUNT(*) FROM native_nuget_publications WHERE repository_id::text=$1`,
+		FormatOCI:   `SELECT COALESCE((SELECT SUM(size) FROM native_oci_manifests WHERE repository_id=$1::uuid),0)+COALESCE((SELECT SUM(b.size) FROM native_oci_repository_blobs rb JOIN native_oci_blobs b ON b.digest=rb.digest WHERE rb.repository_id=$1::uuid),0), (SELECT COUNT(*) FROM native_oci_manifests WHERE repository_id=$1::uuid)+(SELECT COUNT(*) FROM native_oci_repository_blobs WHERE repository_id=$1::uuid)`,
+		FormatConan: `SELECT COALESCE(SUM(a.size),0),COUNT(*) FROM native_conan_assets a JOIN native_conan_recipe_revisions r ON r.repository_id=a.repository_id AND r.reference=a.reference AND r.revision=a.recipe_revision LEFT JOIN native_conan_package_revisions p ON p.repository_id=a.repository_id AND p.reference=a.reference AND p.recipe_revision=a.recipe_revision AND p.package_id=a.package_id AND p.revision=a.package_revision WHERE a.repository_id=$1::uuid AND r.state='visible' AND (a.package_id='' OR p.state='visible')`,
+		FormatNPM:   `SELECT COALESCE(SUM(size),0),COUNT(*) FROM native_npm_versions WHERE repository_id=$1::uuid AND object_key<>''`,
+		FormatPyPI:  `SELECT COALESCE(SUM(size),0),COUNT(*) FROM native_pypi_files WHERE repository_id=$1::uuid AND object_key<>'' AND state='visible'`,
+		FormatGo:    `SELECT COALESCE(SUM(size),0),COUNT(*) FROM native_go_assets WHERE repository_id=$1::uuid AND collected_at IS NULL`,
+		FormatCargo: `SELECT COALESCE(SUM(size),0),COUNT(*) FROM native_cargo_publications WHERE repository_id=$1::uuid AND collected_at IS NULL`,
+		FormatHelm:  `SELECT COALESCE(SUM(size+provenance_size),0),COALESCE(SUM(1+CASE WHEN provenance_size>0 THEN 1 ELSE 0 END),0) FROM native_helm_publications WHERE repository_id=$1::uuid`,
+		FormatNuGet: `SELECT COALESCE(SUM(size),0),COUNT(*) FROM native_nuget_publications WHERE repository_id=$1::uuid`,
 		FormatAPT: `SELECT
-			COALESCE((SELECT SUM(size) FROM native_apt_assets WHERE repository_id::text=$1),0)+
-			COALESCE((SELECT SUM(size) FROM native_apt_package_revisions WHERE repository_id::text=$1),0)+
-			COALESCE((SELECT SUM(size) FROM (SELECT MAX(a.size)::bigint AS size FROM native_apt_snapshot_assets a JOIN native_apt_repository_snapshots s ON s.id=a.snapshot_id WHERE a.repository_id::text=$1 AND s.state='visible' AND a.path LIKE 'dists/%' GROUP BY a.object_key) generated),0),
-			(SELECT COUNT(*) FROM native_apt_assets WHERE repository_id::text=$1)+
-			(SELECT COUNT(*) FROM native_apt_package_revisions WHERE repository_id::text=$1)+
-			(SELECT COUNT(*) FROM (SELECT a.object_key FROM native_apt_snapshot_assets a JOIN native_apt_repository_snapshots s ON s.id=a.snapshot_id WHERE a.repository_id::text=$1 AND s.state='visible' AND a.path LIKE 'dists/%' GROUP BY a.object_key) generated)`,
+			COALESCE((SELECT SUM(size) FROM native_apt_assets WHERE repository_id=$1::uuid),0)+
+			COALESCE((SELECT SUM(size) FROM native_apt_package_revisions WHERE repository_id=$1::uuid),0)+
+			COALESCE((SELECT SUM(size) FROM (SELECT MAX(a.size)::bigint AS size FROM native_apt_snapshot_assets a JOIN native_apt_repository_snapshots s ON s.id=a.snapshot_id WHERE a.repository_id=$1::uuid AND s.state='visible' AND a.path LIKE 'dists/%' GROUP BY a.object_key) generated),0),
+			(SELECT COUNT(*) FROM native_apt_assets WHERE repository_id=$1::uuid)+
+			(SELECT COUNT(*) FROM native_apt_package_revisions WHERE repository_id=$1::uuid)+
+			(SELECT COUNT(*) FROM (SELECT a.object_key FROM native_apt_snapshot_assets a JOIN native_apt_repository_snapshots s ON s.id=a.snapshot_id WHERE a.repository_id=$1::uuid AND s.state='visible' AND a.path LIKE 'dists/%' GROUP BY a.object_key) generated)`,
 	}[capacity.Format]
 	if err = s.db.QueryRowContext(ctx, query, id).Scan(&capacity.UsedBytes, &capacity.ObjectCount); err != nil {
 		return RepositoryCapacity{}, err
@@ -160,7 +160,7 @@ func (s *PostgresStore) ReplaceRepositoryCapacityQuota(ctx context.Context, id s
 	}
 	defer func() { _ = tx.Rollback() }()
 	var repositoryID string
-	if err = tx.QueryRowContext(ctx, `SELECT id::text FROM hosted_repositories WHERE id::text=$1 FOR UPDATE`, id).Scan(&repositoryID); errors.Is(err, sql.ErrNoRows) {
+	if err = tx.QueryRowContext(ctx, `SELECT id::text FROM hosted_repositories WHERE id=$1::uuid FOR UPDATE`, id).Scan(&repositoryID); errors.Is(err, sql.ErrNoRows) {
 		return RepositoryCapacity{}, ErrNotFound
 	} else if err != nil {
 		return RepositoryCapacity{}, err

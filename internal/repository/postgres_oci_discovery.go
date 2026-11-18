@@ -102,7 +102,7 @@ func (s *PostgresStore) GetOCIDiscoverySnapshot(ctx context.Context, id, owner s
 	}
 	defer func() { _ = tx.Rollback() }()
 	var data []byte
-	err = tx.QueryRowContext(ctx, `SELECT payload FROM oci_discovery_snapshots WHERE id::text=$1 AND owner=$2 AND expires_at>clock_timestamp()`, id, owner).Scan(&data)
+	err = tx.QueryRowContext(ctx, `SELECT payload FROM oci_discovery_snapshots WHERE id=$1::uuid AND owner=$2 AND expires_at>clock_timestamp()`, id, owner).Scan(&data)
 	if errors.Is(err, sql.ErrNoRows) {
 		return discovery.Snapshot{}, discovery.ErrNotFound
 	}

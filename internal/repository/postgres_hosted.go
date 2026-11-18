@@ -69,7 +69,7 @@ func (s *PostgresStore) CreateHostedRepositoryIdempotently(ctx context.Context, 
 		if storedPayload != payload {
 			return HostedRepository{}, false, ErrIdempotencyConflict
 		}
-		err = scanHostedRepository(tx.QueryRowContext(ctx, `SELECT `+hostedRepositoryColumns+` FROM hosted_repositories WHERE id::text=$1`, repositoryID), &repo)
+		err = scanHostedRepository(tx.QueryRowContext(ctx, getHostedRepositoryQuery, repositoryID), &repo)
 		if err != nil {
 			return HostedRepository{}, false, err
 		}
@@ -101,6 +101,8 @@ func (s *PostgresStore) CreateHostedRepositoryIdempotently(ctx context.Context, 
 // hostedRepositoryColumns is the canonical projection for hosted_repositories
 // reads. allowed_hosts is projected through array_to_json so it scans into
 // []byte and decodes into []string without a pq dependency.
+const getHostedRepositoryQuery = `SELECT ` + hostedRepositoryColumns + ` FROM hosted_repositories WHERE id=$1::uuid`
+
 const hostedRepositoryColumns = `id::text, name, format, repo_type, endpoint, array_to_json(allowed_hosts), anonymous_read, maven_strict_publication, state, version::text, created_at, egress_proxy, upstream_auth, oci_bearer`
 
 // marshalEgressProxy encodes the egress proxy configuration for the JSONB
@@ -184,14 +186,14 @@ func (s *PostgresStore) ListHostedRepositories(ctx context.Context, limit int, a
 	}
 	if after != "" {
 		var exists bool
-		if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM hosted_repositories WHERE id::text=$1)`, after).Scan(&exists); err != nil {
+		if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM hosted_repositories WHERE id=$1::uuid)`, after).Scan(&exists); err != nil {
 			return nil, "", err
 		}
 		if !exists {
 			return nil, "", ErrNotFound
 		}
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT `+hostedRepositoryColumns+` FROM hosted_repositories WHERE ($1 = '' OR id::text > $1) ORDER BY id LIMIT $2`, after, limit+1)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+hostedRepositoryColumns+` FROM hosted_repositories WHERE ($1 = '' OR id > NULLIF($1, '')::uuid) ORDER BY id LIMIT $2`, after, limit+1)
 	if err != nil {
 		return nil, "", err
 	}
@@ -229,7 +231,7 @@ func (s *PostgresStore) GetHostedRepositoryByName(ctx context.Context, name stri
 
 func (s *PostgresStore) GetHostedRepository(ctx context.Context, id string) (HostedRepository, error) {
 	var repo HostedRepository
-	err := scanHostedRepository(s.db.QueryRowContext(ctx, `SELECT `+hostedRepositoryColumns+` FROM hosted_repositories WHERE id::text=$1`, id), &repo)
+	err := scanHostedRepository(s.db.QueryRowContext(ctx, getHostedRepositoryQuery, id), &repo)
 	if errors.Is(err, sql.ErrNoRows) {
 		return HostedRepository{}, ErrNotFound
 	}
@@ -241,12 +243,12 @@ func (s *PostgresStore) GetHostedRepository(ctx context.Context, id string) (Hos
 
 func (s *PostgresStore) DisableHostedRepository(ctx context.Context, id string) (HostedRepository, error) {
 	var repo HostedRepository
-	err := scanHostedRepository(s.db.QueryRowContext(ctx, `UPDATE hosted_repositories SET state='deleting', version=version+1 WHERE id::text=$1 AND state='active' RETURNING `+hostedRepositoryColumns, id), &repo)
+	err := scanHostedRepository(s.db.QueryRowContext(ctx, `UPDATE hosted_repositories SET state='deleting', version=version+1 WHERE id=$1::uuid AND state='active' RETURNING `+hostedRepositoryColumns, id), &repo)
 	if errors.Is(err, sql.ErrNoRows) {
 		// Deletion is an asynchronous lifecycle transition. Treat a retry for an
 		// already deleting repository as successful so clients can safely retry
 		// after a timeout or page refresh.
-		stateErr := scanHostedRepository(s.db.QueryRowContext(ctx, `SELECT `+hostedRepositoryColumns+` FROM hosted_repositories WHERE id::text=$1 AND state='deleting'`, id), &repo)
+		stateErr := scanHostedRepository(s.db.QueryRowContext(ctx, `SELECT `+hostedRepositoryColumns+` FROM hosted_repositories WHERE id=$1::uuid AND state='deleting'`, id), &repo)
 		if stateErr == nil {
 			return repo, nil
 		}
@@ -263,9 +265,9 @@ func (s *PostgresStore) DisableHostedRepository(ctx context.Context, id string) 
 
 func (s *PostgresStore) FinalizeHostedRepositoryDeletion(ctx context.Context, id string) (HostedRepository, error) {
 	var repo HostedRepository
-	err := scanHostedRepository(s.db.QueryRowContext(ctx, `UPDATE hosted_repositories SET state='deleted', version=version+1 WHERE id::text=$1 AND state='deleting' RETURNING `+hostedRepositoryColumns, id), &repo)
+	err := scanHostedRepository(s.db.QueryRowContext(ctx, `UPDATE hosted_repositories SET state='deleted', version=version+1 WHERE id=$1::uuid AND state='deleting' RETURNING `+hostedRepositoryColumns, id), &repo)
 	if errors.Is(err, sql.ErrNoRows) {
-		err = scanHostedRepository(s.db.QueryRowContext(ctx, `SELECT `+hostedRepositoryColumns+` FROM hosted_repositories WHERE id::text=$1`, id), &repo)
+		err = scanHostedRepository(s.db.QueryRowContext(ctx, getHostedRepositoryQuery, id), &repo)
 		if errors.Is(err, sql.ErrNoRows) {
 			return HostedRepository{}, ErrNotFound
 		}
@@ -297,7 +299,7 @@ func (s *PostgresStore) UpdateHostedRepository(ctx context.Context, repo HostedR
 		return HostedRepository{}, err
 	}
 	var updated HostedRepository
-	err = scanHostedRepository(s.db.QueryRowContext(ctx, `UPDATE hosted_repositories SET endpoint=$2, allowed_hosts=COALESCE($3::text[], '{}'::text[]), anonymous_read=$4, maven_strict_publication=$5, version=version+1, egress_proxy=$7, upstream_auth=$8, oci_bearer=$9 WHERE id::text=$1 AND state='active' AND version::text=$6 RETURNING `+hostedRepositoryColumns, repo.ID, repo.Endpoint, repo.AllowedHosts, repo.AnonymousRead, repo.MavenStrictPublication, expectedVersion, egressProxy, upstreamAuth, ociBearer), &updated)
+	err = scanHostedRepository(s.db.QueryRowContext(ctx, `UPDATE hosted_repositories SET endpoint=$2, allowed_hosts=COALESCE($3::text[], '{}'::text[]), anonymous_read=$4, maven_strict_publication=$5, version=version+1, egress_proxy=$7, upstream_auth=$8, oci_bearer=$9 WHERE id=$1::uuid AND state='active' AND version=$6::text::bigint RETURNING `+hostedRepositoryColumns, repo.ID, repo.Endpoint, repo.AllowedHosts, repo.AnonymousRead, repo.MavenStrictPublication, expectedVersion, egressProxy, upstreamAuth, ociBearer), &updated)
 	if errors.Is(err, sql.ErrNoRows) {
 		if _, getErr := s.GetHostedRepository(ctx, repo.ID); errors.Is(getErr, ErrNotFound) {
 			return HostedRepository{}, ErrNotFound
@@ -313,7 +315,7 @@ func (s *PostgresStore) UpdateHostedRepository(ctx context.Context, repo HostedR
 func scanHostedGroupMembers(ctx context.Context, query interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 }, group *HostedGroup) error {
-	rows, err := query.QueryContext(ctx, `SELECT repository_id::text, position FROM hosted_group_members WHERE group_id::text=$1 ORDER BY position`, group.ID)
+	rows, err := query.QueryContext(ctx, `SELECT repository_id::text, position FROM hosted_group_members WHERE group_id=$1::uuid ORDER BY position`, group.ID)
 	if err != nil {
 		return err
 	}
@@ -334,7 +336,7 @@ func (s *PostgresStore) getHostedGroup(ctx context.Context, query interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 }, id string) (HostedGroup, error) {
 	var group HostedGroup
-	err := query.QueryRowContext(ctx, `SELECT id::text, name, format, anonymous_read, version::text FROM hosted_groups WHERE id::text=$1`, id).Scan(&group.ID, &group.Name, &group.Format, &group.AnonymousRead, &group.Version)
+	err := query.QueryRowContext(ctx, `SELECT id::text, name, format, anonymous_read, version::text FROM hosted_groups WHERE id=$1::uuid`, id).Scan(&group.ID, &group.Name, &group.Format, &group.AnonymousRead, &group.Version)
 	if errors.Is(err, sql.ErrNoRows) {
 		return HostedGroup{}, ErrNotFound
 	}
@@ -413,7 +415,7 @@ func (s *PostgresStore) ListHostedGroups(ctx context.Context, limit int, after s
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id::text, name, format, anonymous_read, version::text FROM hosted_groups WHERE ($1='' OR id::text>$1) ORDER BY id LIMIT $2`, after, limit+1)
+	rows, err := s.db.QueryContext(ctx, `SELECT id::text, name, format, anonymous_read, version::text FROM hosted_groups WHERE ($1='' OR id>NULLIF($1,'')::uuid) ORDER BY id LIMIT $2`, after, limit+1)
 	if err != nil {
 		return nil, "", err
 	}
@@ -480,7 +482,7 @@ func (s *PostgresStore) replaceHostedGroup(ctx context.Context, id, name string,
 		query += `, name=$3, format=$4, anonymous_read=$5`
 		args = []any{id, expectedVersion, name, format, anonymousRead}
 	}
-	query += ` WHERE id::text=$1 AND version::text=$2 RETURNING id::text,name,format,anonymous_read,version::text`
+	query += ` WHERE id=$1::uuid AND version=$2::text::bigint RETURNING id::text,name,format,anonymous_read,version::text`
 	var group HostedGroup
 	err = tx.QueryRowContext(ctx, query, args...).Scan(&group.ID, &group.Name, &group.Format, &group.AnonymousRead, &group.Version)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -497,7 +499,7 @@ func (s *PostgresStore) replaceHostedGroup(ctx context.Context, id, name string,
 			return HostedGroup{}, err
 		}
 	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM hosted_group_members WHERE group_id::text=$1`, id); err != nil {
+	if _, err = tx.ExecContext(ctx, `DELETE FROM hosted_group_members WHERE group_id=$1::uuid`, id); err != nil {
 		return HostedGroup{}, err
 	}
 	for _, member := range members {
@@ -523,7 +525,7 @@ func (s *PostgresStore) ReplaceHostedGroupMembers(ctx context.Context, id string
 	return s.replaceHostedGroup(ctx, id, current.Name, current.Format, current.AnonymousRead, members, expectedVersion, false)
 }
 func (s *PostgresStore) DeleteHostedGroup(ctx context.Context, id string) error {
-	result, err := s.db.ExecContext(ctx, `DELETE FROM hosted_groups WHERE id::text=$1`, id)
+	result, err := s.db.ExecContext(ctx, `DELETE FROM hosted_groups WHERE id=$1::uuid`, id)
 	if err != nil {
 		return err
 	}
@@ -540,7 +542,7 @@ func (s *PostgresStore) DeleteHostedGroup(ctx context.Context, id string) error 
 func loadRepositoryGrants(ctx context.Context, query interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 }, repositoryID, version string) (RepositoryGrantSet, error) {
-	rows, err := query.QueryContext(ctx, `SELECT principal, array_to_json(scopes), resource_prefix FROM repository_grants WHERE repository_id::text=$1 ORDER BY principal, resource_prefix`, repositoryID)
+	rows, err := query.QueryContext(ctx, `SELECT principal, array_to_json(scopes), resource_prefix FROM repository_grants WHERE repository_id=$1::uuid ORDER BY principal, resource_prefix`, repositoryID)
 	if err != nil {
 		return RepositoryGrantSet{}, err
 	}
@@ -562,14 +564,14 @@ func loadRepositoryGrants(ctx context.Context, query interface {
 
 func (s *PostgresStore) GetRepositoryGrants(ctx context.Context, repositoryID string) (RepositoryGrantSet, error) {
 	var exists bool
-	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM hosted_repositories WHERE id::text=$1)`, repositoryID).Scan(&exists); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM hosted_repositories WHERE id=$1::uuid)`, repositoryID).Scan(&exists); err != nil {
 		return RepositoryGrantSet{}, err
 	}
 	if !exists {
 		return RepositoryGrantSet{}, ErrNotFound
 	}
 	var version string
-	err := s.db.QueryRowContext(ctx, `SELECT version::text FROM repository_grant_sets WHERE repository_id::text=$1`, repositoryID).Scan(&version)
+	err := s.db.QueryRowContext(ctx, `SELECT version::text FROM repository_grant_sets WHERE repository_id=$1::uuid`, repositoryID).Scan(&version)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RepositoryGrantSet{Version: "1", Grants: []RepositoryGrant{}}, nil
 	}
@@ -610,7 +612,7 @@ func (s *PostgresStore) ReplaceRepositoryGrants(ctx context.Context, repositoryI
 	}
 	defer func() { _ = tx.Rollback() }()
 	var exists bool
-	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM hosted_repositories WHERE id::text=$1)`, repositoryID).Scan(&exists); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM hosted_repositories WHERE id=$1::uuid)`, repositoryID).Scan(&exists); err != nil {
 		return RepositoryGrantSet{}, err
 	}
 	if !exists {
@@ -620,14 +622,14 @@ func (s *PostgresStore) ReplaceRepositoryGrants(ctx context.Context, repositoryI
 		return RepositoryGrantSet{}, err
 	}
 	var version string
-	err = tx.QueryRowContext(ctx, `UPDATE repository_grant_sets SET version=version+1 WHERE repository_id::text=$1 AND version::text=$2 RETURNING version::text`, repositoryID, expectedVersion).Scan(&version)
+	err = tx.QueryRowContext(ctx, `UPDATE repository_grant_sets SET version=version+1 WHERE repository_id=$1::uuid AND version=$2::text::bigint RETURNING version::text`, repositoryID, expectedVersion).Scan(&version)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RepositoryGrantSet{}, ErrVersionConflict
 	}
 	if err != nil {
 		return RepositoryGrantSet{}, err
 	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM repository_grants WHERE repository_id::text=$1`, repositoryID); err != nil {
+	if _, err = tx.ExecContext(ctx, `DELETE FROM repository_grants WHERE repository_id=$1::uuid`, repositoryID); err != nil {
 		return RepositoryGrantSet{}, err
 	}
 	for _, grant := range grants {
@@ -648,7 +650,7 @@ func (s *PostgresStore) UpsertRepositoryGrant(ctx context.Context, repositoryID 
 	}
 	defer func() { _ = tx.Rollback() }()
 	var exists bool
-	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM hosted_repositories WHERE id::text=$1)`, repositoryID).Scan(&exists); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM hosted_repositories WHERE id=$1::uuid)`, repositoryID).Scan(&exists); err != nil {
 		return RepositoryGrantSet{}, err
 	}
 	if !exists {
@@ -662,7 +664,7 @@ func (s *PostgresStore) UpsertRepositoryGrant(ctx context.Context, repositoryID 
 		return RepositoryGrantSet{}, err
 	}
 	var version string
-	if err = tx.QueryRowContext(ctx, `UPDATE repository_grant_sets SET version=version+1 WHERE repository_id::text=$1 RETURNING version::text`, repositoryID).Scan(&version); err != nil {
+	if err = tx.QueryRowContext(ctx, `UPDATE repository_grant_sets SET version=version+1 WHERE repository_id=$1::uuid RETURNING version::text`, repositoryID).Scan(&version); err != nil {
 		return RepositoryGrantSet{}, err
 	}
 	set, err := loadRepositoryGrants(ctx, tx, repositoryID, version)
@@ -682,13 +684,13 @@ func (s *PostgresStore) DeleteRepositoryGrant(ctx context.Context, repositoryID,
 	}
 	defer func() { _ = tx.Rollback() }()
 	var exists bool
-	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM hosted_repositories WHERE id::text=$1)`, repositoryID).Scan(&exists); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM hosted_repositories WHERE id=$1::uuid)`, repositoryID).Scan(&exists); err != nil {
 		return RepositoryGrantSet{}, err
 	}
 	if !exists {
 		return RepositoryGrantSet{}, ErrNotFound
 	}
-	result, err := tx.ExecContext(ctx, `DELETE FROM repository_grants WHERE repository_id::text=$1 AND principal=$2 AND resource_prefix=$3`, repositoryID, principal, resourcePrefix)
+	result, err := tx.ExecContext(ctx, `DELETE FROM repository_grants WHERE repository_id=$1::uuid AND principal=$2 AND resource_prefix=$3`, repositoryID, principal, resourcePrefix)
 	if err != nil {
 		return RepositoryGrantSet{}, err
 	}
@@ -700,7 +702,7 @@ func (s *PostgresStore) DeleteRepositoryGrant(ctx context.Context, repositoryID,
 		return RepositoryGrantSet{}, ErrNotFound
 	}
 	var version string
-	if err = tx.QueryRowContext(ctx, `UPDATE repository_grant_sets SET version=version+1 WHERE repository_id::text=$1 RETURNING version::text`, repositoryID).Scan(&version); err != nil {
+	if err = tx.QueryRowContext(ctx, `UPDATE repository_grant_sets SET version=version+1 WHERE repository_id=$1::uuid RETURNING version::text`, repositoryID).Scan(&version); err != nil {
 		return RepositoryGrantSet{}, err
 	}
 	set, err := loadRepositoryGrants(ctx, tx, repositoryID, version)
@@ -715,7 +717,7 @@ func (s *PostgresStore) DeleteRepositoryGrant(ctx context.Context, repositoryID,
 
 func (s *PostgresStore) GetRepositoryRetentionPolicy(ctx context.Context, repositoryID string) (RepositoryRetentionPolicy, error) {
 	var exists bool
-	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM hosted_repositories WHERE id::text=$1)`, repositoryID).Scan(&exists); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM hosted_repositories WHERE id=$1::uuid)`, repositoryID).Scan(&exists); err != nil {
 		return RepositoryRetentionPolicy{}, err
 	}
 	if !exists {
@@ -723,7 +725,7 @@ func (s *PostgresStore) GetRepositoryRetentionPolicy(ctx context.Context, reposi
 	}
 	policy := defaultRepositoryRetentionPolicy()
 	var coordinatePatterns, protectedPatterns []byte
-	err := s.db.QueryRowContext(ctx, `SELECT version::text,enabled,keep_days,snapshot_keep_days,minimum_versions,maximum_versions,keep_downloaded_days,array_to_json(coordinate_patterns),array_to_json(protected_patterns) FROM repository_retention_policies WHERE repository_id::text=$1`, repositoryID).Scan(&policy.Version, &policy.Enabled, &policy.KeepDays, &policy.SnapshotKeepDays, &policy.MinimumVersions, &policy.MaximumVersions, &policy.KeepDownloadedDays, &coordinatePatterns, &protectedPatterns)
+	err := s.db.QueryRowContext(ctx, `SELECT version::text,enabled,keep_days,snapshot_keep_days,minimum_versions,maximum_versions,keep_downloaded_days,array_to_json(coordinate_patterns),array_to_json(protected_patterns) FROM repository_retention_policies WHERE repository_id=$1::uuid`, repositoryID).Scan(&policy.Version, &policy.Enabled, &policy.KeepDays, &policy.SnapshotKeepDays, &policy.MinimumVersions, &policy.MaximumVersions, &policy.KeepDownloadedDays, &coordinatePatterns, &protectedPatterns)
 	if errors.Is(err, sql.ErrNoRows) {
 		return policy, nil
 	}
@@ -755,7 +757,7 @@ func (s *PostgresStore) ReplaceRepositoryRetentionPolicy(ctx context.Context, re
 	}
 	defer func() { _ = tx.Rollback() }()
 	var repoID string
-	if err = tx.QueryRowContext(ctx, `SELECT id::text FROM hosted_repositories WHERE id::text=$1 FOR UPDATE`, repositoryID).Scan(&repoID); errors.Is(err, sql.ErrNoRows) {
+	if err = tx.QueryRowContext(ctx, `SELECT id::text FROM hosted_repositories WHERE id=$1::uuid FOR UPDATE`, repositoryID).Scan(&repoID); errors.Is(err, sql.ErrNoRows) {
 		return RepositoryRetentionPolicy{}, ErrNotFound
 	} else if err != nil {
 		return RepositoryRetentionPolicy{}, err
@@ -774,7 +776,7 @@ func (s *PostgresStore) ReplaceRepositoryRetentionPolicy(ctx context.Context, re
 	if _, err = tx.ExecContext(ctx, `INSERT INTO repository_retention_policies (repository_id,version,enabled,keep_days,snapshot_keep_days,minimum_versions,maximum_versions,coordinate_patterns,protected_patterns) VALUES ($1,1,false,30,30,1,0,'{}','{}') ON CONFLICT DO NOTHING`, repositoryID); err != nil {
 		return RepositoryRetentionPolicy{}, err
 	}
-	err = tx.QueryRowContext(ctx, `UPDATE repository_retention_policies SET version=version+1,enabled=$3,keep_days=$4,snapshot_keep_days=$5,minimum_versions=$6,maximum_versions=$7,keep_downloaded_days=$8,coordinate_patterns=COALESCE($9::text[],'{}'),protected_patterns=COALESCE($10::text[],'{}') WHERE repository_id::text=$1 AND version::text=$2 RETURNING version::text`, repositoryID, expectedVersion, policy.Enabled, policy.KeepDays, policy.SnapshotKeepDays, policy.MinimumVersions, policy.MaximumVersions, policy.KeepDownloadedDays, policy.CoordinatePatterns, policy.ProtectedPatterns).Scan(&policy.Version)
+	err = tx.QueryRowContext(ctx, `UPDATE repository_retention_policies SET version=version+1,enabled=$3,keep_days=$4,snapshot_keep_days=$5,minimum_versions=$6,maximum_versions=$7,keep_downloaded_days=$8,coordinate_patterns=COALESCE($9::text[],'{}'),protected_patterns=COALESCE($10::text[],'{}') WHERE repository_id=$1::uuid AND version=$2::text::bigint RETURNING version::text`, repositoryID, expectedVersion, policy.Enabled, policy.KeepDays, policy.SnapshotKeepDays, policy.MinimumVersions, policy.MaximumVersions, policy.KeepDownloadedDays, policy.CoordinatePatterns, policy.ProtectedPatterns).Scan(&policy.Version)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RepositoryRetentionPolicy{}, ErrVersionConflict
 	}
