@@ -85,7 +85,9 @@ describe("CommandPalette language commands", () => {
     const { input } = renderPalette();
     await user.click(input);
     expect(
-      screen.getByRole("option", { name: /Switch language to Français/ }),
+      await screen.findByRole("option", {
+        name: /Switch language to Français/,
+      }),
     ).toBeInTheDocument();
     expect(
       screen.getAllByRole("option", { name: /Switch language to / }),
@@ -100,10 +102,15 @@ describe("CommandPalette language commands", () => {
     const { input, onClose } = renderPalette();
     await user.click(input);
     await user.click(
-      screen.getByRole("option", { name: /Switch language to Français/ }),
+      await screen.findByRole("option", {
+        name: /Switch language to Français/,
+      }),
     );
     expect(onClose).toHaveBeenCalled();
-    expect(window.localStorage.getItem("ag.console.locale")).toBe("fr-CA");
+    // The choice is stored once the French table has loaded.
+    await waitFor(() =>
+      expect(window.localStorage.getItem("ag.console.locale")).toBe("fr-CA"),
+    );
   });
 });
 

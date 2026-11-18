@@ -1,7 +1,9 @@
 import type { MessageKey } from "../messages";
-import { detectLocale } from "../messages/locales";
+import { DEFAULT_LOCALE, detectLocale } from "../messages/locales";
 import {
   createTranslator,
+  isMessagesLoaded,
+  loadMessages,
   type MessageLocale,
   type MessageVariables,
 } from "../messages/translate";
@@ -168,7 +170,14 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   const [themeId, setThemeIdState] = useState(() =>
     storedThemeId(availableThemes, settings.defaultThemeId),
   );
-  const [locale, setLocaleState] = useState<AppLocale>(storedLocale);
+  // The language on screen. A table that is not loaded yet leaves the previous
+  // language (en-CA at start) in place until its chunk arrives (ADR 0014), so a
+  // screen is never half in one language; a failed fetch keeps it.
+  const [locale, setLocaleState] = useState<AppLocale>(() => {
+    const detected = storedLocale();
+    return isMessagesLoaded(detected) ? detected : DEFAULT_LOCALE;
+  });
+  const localeRequest = useRef(0);
   const activeThemeTransition = useRef<ThemeViewTransition | null>(null);
   const themeCommitSequence = useRef(0);
   const requestedThemeId = useRef(themeId);
@@ -304,14 +313,40 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   );
   // Only a choice the reader makes is stored; a detected language is not, so
   // a later change of the browser's languages still applies.
-  const setLocale = useCallback((nextLocale: AppLocale) => {
-    setLocaleState(nextLocale);
-    try {
-      localStorage.setItem(LOCALE_KEY, nextLocale);
-    } catch {
-      // Preferences still work for this session when storage is unavailable.
-    }
-  }, []);
+  const switchLocale = useCallback(
+    (nextLocale: AppLocale, persist: boolean) => {
+      const request = ++localeRequest.current;
+      const commit = () => {
+        // A later request supersedes an earlier one still fetching.
+        if (localeRequest.current !== request) return;
+        setLocaleState(nextLocale);
+        if (!persist) return;
+        try {
+          localStorage.setItem(LOCALE_KEY, nextLocale);
+        } catch {
+          // Preferences still work for this session when storage is unavailable.
+        }
+      };
+      if (isMessagesLoaded(nextLocale)) {
+        commit();
+        return;
+      }
+      loadMessages(nextLocale).then(commit, (error: unknown) => {
+        // Offline or a stale deploy: stay in the current language and store
+        // nothing, so the next visit asks again.
+        console.error(`Console messages for ${nextLocale} did not load`, error);
+      });
+    },
+    [],
+  );
+  const setLocale = useCallback(
+    (nextLocale: AppLocale) => switchLocale(nextLocale, true),
+    [switchLocale],
+  );
+  useEffect(() => {
+    const detected = storedLocale();
+    if (!isMessagesLoaded(detected)) switchLocale(detected, false);
+  }, [switchLocale]);
   const toggleColorMode = useCallback(() => {
     const opposite = availableThemes.find((theme) => theme.mode !== colorMode);
     if (opposite) {
