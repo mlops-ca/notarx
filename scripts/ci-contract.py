@@ -136,11 +136,25 @@ def run_command(command, log, env, timeout=None):
             'processGroup': proc.pid, 'remainingLiveGroupMembers': []}
 
 
-def matrix():
-    """The GitHub Actions matrix: one entry per lane, straight from the plan."""
-    return {'include': [{'lane': name, 'timeout': lane['timeoutMinutes'],
-                         **{need: need in lane['needs'] for need in TOOL_NEEDS}}
-                        for name, lane in PLAN['lanes'].items()]}
+RUNNERS = {'amd64': 'ubuntu-24.04', 'arm64': 'ubuntu-24.04-arm'}
+SCOPES = ('pull-request', 'mainline')
+
+
+def matrix(scope='mainline'):
+    """The GitHub Actions matrix, straight from the plan (ADR 0016).
+
+    Every lane runs on amd64. A lane also runs natively on arm64 when its
+    `arm64` tier is `pull-request` (every pull request) or the scope is
+    `mainline` (pushes to main: the remaining lanes join). Nothing is emulated.
+    """
+    def entry(name, lane, arch):
+        return {'lane': name, 'timeout': lane['timeoutMinutes'], 'arch': arch, 'runner': RUNNERS[arch],
+                **{need: need in lane['needs'] for need in TOOL_NEEDS}}
+
+    include = [entry(name, lane, 'amd64') for name, lane in PLAN['lanes'].items()]
+    include += [entry(name, lane, 'arm64') for name, lane in PLAN['lanes'].items()
+                if scope == 'mainline' or lane['arm64'] == 'pull-request']
+    return {'include': include}
 
 
 def run_lane(args):
@@ -195,7 +209,8 @@ def main():
     lane.add_argument('--keep-going', action='store_true')
     commands.add_parser('openapi-fresh')
     commands.add_parser('list')
-    commands.add_parser('matrix')
+    plan_matrix = commands.add_parser('matrix')
+    plan_matrix.add_argument('--scope', choices=SCOPES, default='mainline')
     args = parser.parse_args()
     if args.command == 'run':
         return run_lane(args)
@@ -204,7 +219,7 @@ def main():
     elif args.command == 'list':
         print('\n'.join(LANES))
     else:
-        print(json.dumps(matrix()))
+        print(json.dumps(matrix(args.scope)))
     return 0
 
 

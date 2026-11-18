@@ -93,12 +93,13 @@ jobs:
 
   # Builds the Compose images CI consumes once per run. Contract lanes and the
   # gateway-backed Console E2E load them instead of each rebuilding from source
-  # (docs/ci.md). Each leg is native to its runner (ADR 0016); the artifact name
-  # carries the runner architecture so an arm64 leg can be added without clashes.
+  # (docs/ci.md). Each leg is native to its runner (ADR 0016): amd64 images build
+  # on ubuntu-24.04 and arm64 images on ubuntu-24.04-arm, and the artifact name
+  # carries the runner architecture so the two sets never clash.
   build-images:
     needs: changes
     if: needs.changes.outputs.go == 'true' || needs.changes.outputs.console == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
@@ -106,9 +107,19 @@ jobs:
           - name: gateway
             file: Dockerfile
             tag: notarx-gateway:local
+            runner: ubuntu-24.04
           - name: apt-signer
             file: Dockerfile.apt-signer
             tag: notarx-reference-apt-signer:local
+            runner: ubuntu-24.04
+          - name: gateway
+            file: Dockerfile
+            tag: notarx-gateway:local
+            runner: ubuntu-24.04-arm
+          - name: apt-signer
+            file: Dockerfile.apt-signer
+            tag: notarx-reference-apt-signer:local
+            runner: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
@@ -119,8 +130,8 @@ jobs:
           file: ${{ matrix.file }}
           tags: ${{ matrix.tag }}
           outputs: type=docker,dest=${{ runner.temp }}/${{ matrix.name }}.tar
-          cache-from: type=gha,scope=ci-${{ matrix.name }}
-          cache-to: type=gha,mode=max,scope=ci-${{ matrix.name }}
+          cache-from: type=gha,scope=ci-${{ matrix.name }}-${{ runner.arch }}
+          cache-to: type=gha,mode=max,scope=ci-${{ matrix.name }}-${{ runner.arch }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: image-${{ runner.arch }}-${{ matrix.name }}
@@ -138,8 +149,13 @@ jobs:
       matrix: ${{ steps.plan.outputs.matrix }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Every lane runs on amd64. The arm64 legs (ADR 0016) are the core lanes and
+      # the native-format smoke subset on every pull request, and every lane on
+      # pushes to main (the tiers live in scripts/ci-contract-lanes.json).
       - id: plan
-        run: echo "matrix=$(python3 scripts/ci-contract.py matrix)" >> "$GITHUB_OUTPUT"
+        env:
+          SCOPE: ${{ github.event_name == 'pull_request' && 'pull-request' || 'mainline' }}
+        run: echo "matrix=$(python3 scripts/ci-contract.py matrix --scope "$SCOPE")" >> "$GITHUB_OUTPUT"
 
   contract:
     needs: [contract-plan, build-images]
@@ -153,6 +169,7 @@ jobs:
       rust: ${{ matrix.rust }}
       node: ${{ matrix.node }}
       npm: ${{ matrix.npm }}
+      runner: ${{ matrix.runner }}
 
   # Stable check name required by the release gate (ADR 0024): every contract
   # lane succeeded. Skipped only when change detection skipped the lanes.
@@ -193,6 +210,8 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund --timing --loglevel=http
         timeout-minutes: 10
         working-directory: tools/openapi
+      - name: Verify the native-build rules (no cross-compilation, no emulation)
+        run: make native-build-check
       - name: Run Go lint
         run: make lint
       - name: Run Go vet
@@ -207,6 +226,26 @@ jobs:
         run: make coverage
       - name: Audit dependencies
         run: make dependency-audit
+  # The same Go checks natively on arm64 (ADR 0016). make test runs on arm64 in
+  # the core lanes of the contract matrix. The coverage floor, dependency audit
+  # and packaging checks are architecture independent and stay on amd64 only.
+  quality-arm64:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Run Go lint
+        run: make lint
+      - name: Run Go vet
+        run: make vet
+      - name: Run race detector
+        run: make race
+
   console:
     needs: changes
     if: needs.changes.outputs.console == 'true'
@@ -405,7 +444,7 @@ jobs:
   # skipped by change detection, fails on any failure or cancellation.
   ci-ok:
     if: always()
-    needs: [changes, no-chinese, docs, quality, console, console-e2e, console-e2e-report, image-test-stages, build-images, contract-plan, contract, contract-and-test]
+    needs: [changes, no-chinese, docs, quality, quality-arm64, console, console-e2e, console-e2e-report, image-test-stages, build-images, contract-plan, contract, contract-and-test]
     runs-on: ubuntu-24.04
     steps:
       - name: Require every needed job to succeed or be skipped
@@ -427,7 +466,7 @@ jobs:
           report=false
           if [[ "$e2e" == true && $(echo "$NEEDS" | jq -r '.["console-e2e"].result') == success ]]; then report=true; fi
           status=0
-          for pair in quality:$GO contract-plan:$GO contract:$GO contract-and-test:$GO console:$CONSOLE console-e2e:$e2e console-e2e-report:$report build-images:$e2e docs:$DOCS image-test-stages:$IMAGES; do
+          for pair in quality:$GO quality-arm64:$GO contract-plan:$GO contract:$GO contract-and-test:$GO console:$CONSOLE console-e2e:$e2e console-e2e-report:$report build-images:$e2e docs:$DOCS image-test-stages:$IMAGES; do
             job=${pair%%:*} class=${pair##*:}
             result=$(echo "$NEEDS" | jq -r --arg job "$job" '.[$job].result')
             if [[ "$class" == true && "$result" != success ]]; then
@@ -437,91 +476,52 @@ jobs:
           done
           exit $status
 
-  mainline-assets:
+  # Mainline publication (ADR 0016): both jobs call the reusable workflows that the
+  # ADR 0024 release pipeline also calls. Archives build natively on four runners;
+  # each image builds natively per architecture and is merged afterwards.
+  mainline-plan:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [contract-and-test, quality, console, console-e2e]
     runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      tags: ${{ steps.plan.outputs.tags }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
-        with:
-          go-version-file: go.mod
-          cache: true
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: console/package-lock.json
-      - name: Build mainline distribution assets
-        id: build
+      - id: plan
         run: |
-          version="$(tr -d '[:space:]' < VERSION)-main.${GITHUB_SHA::12}"
-          ./scripts/build-release-artifacts.sh \
-            --version "$version" \
-            --revision "$GITHUB_SHA" \
-            --output dist
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-      - name: Upload mainline distribution assets
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: artifact-gateway-${{ steps.build.outputs.version }}
-          path: dist/
-          if-no-files-found: error
-          retention-days: 30
+          echo "version=$(tr -d '[:space:]' < VERSION)-main.${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+          {
+            echo 'tags<<EOF'
+            echo main
+            echo "main-sha-${GITHUB_SHA::12}"
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+
+  mainline-assets:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [mainline-plan, contract-and-test, quality, console, console-e2e]
+    uses: ./.github/workflows/release-archives.yml
+    with:
+      version: ${{ needs.mainline-plan.outputs.version }}
+      sha: ${{ github.sha }}
+      assets-artifact: artifact-gateway-${{ needs.mainline-plan.outputs.version }}
 
   mainline-images:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [contract-and-test, quality, console, console-e2e]
-    runs-on: ubuntu-24.04
+    needs: [mainline-plan, contract-and-test, quality, console, console-e2e]
     permissions:
       contents: read
       packages: write
-    strategy:
-      matrix:
-        include:
-          - image: artifact-gateway
-            file: Dockerfile
-          - image: artifact-gateway-console
-            file: Dockerfile.console
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Resolve mainline version
-        id: version
-        run: |
-          echo "value=$(tr -d '[:space:]' < VERSION)-main.${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
-          echo "short_sha=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
-      - name: Sign in to GitHub Container Registry
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
-      - name: Generate image metadata
-        id: metadata
-        uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5.8.0
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
-          tags: |
-            type=raw,value=main
-            type=raw,value=main-sha-${{ steps.version.outputs.short_sha }}
-      - name: Confirm this run still owns the main tip
-        run: |
-          git fetch origin main
-          test "$GITHUB_SHA" = "$(git rev-parse origin/main)"
-      - name: Build and publish mainline image
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
-        with:
-          context: .
-          file: ${{ matrix.file }}
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: ${{ steps.metadata.outputs.tags }}
-          build-args: |
-            VERSION=${{ steps.version.outputs.value }}
-            REVISION=${{ github.sha }}
-            SOURCE=${{ github.server_url }}/${{ github.repository }}
-          cache-from: type=gha,scope=${{ matrix.image }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
-          provenance: mode=max
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/image-build.yml
+    with:
+      version: ${{ needs.mainline-plan.outputs.version }}
+      sha: ${{ github.sha }}
+      tags: ${{ needs.mainline-plan.outputs.tags }}
+      require-main-tip: true
+      # The single list of published images (ADR 0016): adding one is one entry here
+      # (and its release-gate check).
+      images: >-
+        [{"image": "notarx", "file": "Dockerfile", "version-command": true},
+        {"image": "notarx-console", "file": "Dockerfile.console", "version-command": false}]

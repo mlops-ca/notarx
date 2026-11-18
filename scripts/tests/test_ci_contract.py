@@ -217,6 +217,7 @@ class PlanTests(unittest.TestCase):
             with self.subTest(lane=name):
                 self.assertRegex(name, r'^[a-z][a-z0-9-]*$')
                 self.assertTrue(lane['steps'])
+                self.assertIn(lane['arm64'], ci.SCOPES)
                 self.assertGreater(lane['timeoutMinutes'], 0)
                 self.assertLessEqual(lane['timeoutMinutes'], 60)
                 self.assertLessEqual(set(lane['needs']), set(ci.TOOL_NEEDS))
@@ -242,13 +243,35 @@ class PlanTests(unittest.TestCase):
         self.assertNotIn('Prepare pinned Go modules', steps)  # the workflow warms modules once
 
     def test_matrix_is_generated_from_the_plan(self):
-        matrix = json.loads(subprocess.check_output([sys.executable, str(ROOT / 'scripts/ci-contract.py'), 'matrix']))
-        self.assertEqual([e['lane'] for e in matrix['include']], list(ci.PLAN['lanes']))
-        for entry in matrix['include']:
-            lane = ci.PLAN['lanes'][entry['lane']]
-            self.assertEqual(entry['timeout'], lane['timeoutMinutes'])
-            for need in ci.TOOL_NEEDS:
-                self.assertEqual(entry[need], need in lane['needs'])
+        def generate(*args):
+            return json.loads(subprocess.check_output(
+                [sys.executable, str(ROOT / 'scripts/ci-contract.py'), 'matrix', *args]))['include']
+
+        for include in (generate(), generate('--scope', 'mainline'), generate('--scope', 'pull-request')):
+            amd64 = [e for e in include if e['arch'] == 'amd64']
+            self.assertEqual([e['lane'] for e in amd64], list(ci.PLAN['lanes']))
+            for entry in include:
+                lane = ci.PLAN['lanes'][entry['lane']]
+                self.assertEqual(entry['timeout'], lane['timeoutMinutes'])
+                self.assertEqual(entry['runner'], ci.RUNNERS[entry['arch']])
+                for need in ci.TOOL_NEEDS:
+                    self.assertEqual(entry[need], need in lane['needs'])
+
+    def test_arm64_legs_follow_the_plan_tiers(self):
+        mainline = [e['lane'] for e in json.loads(subprocess.check_output(
+            [sys.executable, str(ROOT / 'scripts/ci-contract.py'), 'matrix', '--scope', 'mainline']))['include']
+            if e['arch'] == 'arm64']
+        self.assertEqual(mainline, list(ci.PLAN['lanes']))
+        pull_request = [e['lane'] for e in json.loads(subprocess.check_output(
+            [sys.executable, str(ROOT / 'scripts/ci-contract.py'), 'matrix', '--scope', 'pull-request']))['include']
+            if e['arch'] == 'arm64']
+        # ADR 0016: every core lane plus the native-format smoke subset on each pull request.
+        self.assertEqual(pull_request, ['core-checks', 'core-email', 'core-native-e2e', 'core-backup',
+                                        'six-format-auth', 'oci-discovery'])
+        self.assertEqual({lane['arm64'] for lane in ci.PLAN['lanes'].values()}, {'pull-request', 'mainline'})
+        self.assertEqual({e['runner'] for e in json.loads(subprocess.check_output(
+            [sys.executable, str(ROOT / 'scripts/ci-contract.py'), 'matrix']))['include']},
+            {'ubuntu-24.04', 'ubuntu-24.04-arm'})
 
     def test_workflows_name_no_lane_and_pin_no_upstream(self):
         for path in ('ci.yml', 'contract-lane.yml'):
@@ -258,6 +281,7 @@ class PlanTests(unittest.TestCase):
             self.assertNotIn('ccsert', text)
         lane_workflow = (ROOT / '.github/workflows/contract-lane.yml').read_text()
         self.assertIn('timeout-minutes: ${{ inputs.timeout }}', lane_workflow)
+        self.assertIn('runs-on: ${{ inputs.runner }}', lane_workflow)
         self.assertNotIn('ubuntu-latest', lane_workflow)
         self.assertNotIn('fetch-depth', lane_workflow)  # default shallow checkout
         self.assertFalse((ROOT / '.github/workflows/contract-benchmark.yml').exists())
@@ -265,7 +289,12 @@ class PlanTests(unittest.TestCase):
     def test_workflow_keeps_stable_release_gate_names(self):
         workflow = (ROOT / '.github/workflows/ci.yml').read_text()
         self.assertIn('  contract-and-test:\n    if: always()', workflow)
-        self.assertEqual(workflow.count('    needs: [contract-and-test, quality, console, console-e2e]'), 2)
+        # mainline-assets and mainline-images call the reusable workflows (ADR 0016) and
+        # wait for the same gates; mainline-plan only computes the stamped version.
+        self.assertEqual(workflow.count('    needs: [mainline-plan, contract-and-test, quality, console, console-e2e]'), 2)
+        self.assertIn('uses: ./.github/workflows/release-archives.yml', workflow)
+        self.assertIn('uses: ./.github/workflows/image-build.yml', workflow)
+        self.assertNotIn('platforms: linux/amd64,linux/arm64', workflow)
         self.assertNotIn('continue-on-error', workflow)
         self.assertIn('fromJSON(needs.contract-plan.outputs.matrix)', workflow)
 
