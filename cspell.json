@@ -18,6 +18,8 @@
   "ignorePaths": [
     "**/*.zh-CN.md",
     "**/*.zh-CN.ts",
+    "**/*.fr-CA.md",
+    "**/*.fr-CA.ts",
     "**/node_modules/**",
     "CHANGELOG.md",
     "DESIGN.md",

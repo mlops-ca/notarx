@@ -1,6 +1,6 @@
 # Security Policy
 
-[简体中文](SECURITY.zh-CN.md) | [Documentation index](docs/README.md)
+[Français](SECURITY.fr-CA.md) | [简体中文](SECURITY.zh-CN.md) | [Documentation index](docs/README.md)
 
 Artifact Gateway handles authentication credentials, repository permissions,
 untrusted package metadata, and executable artifact bytes. Security reports

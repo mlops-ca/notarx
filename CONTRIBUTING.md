@@ -1,6 +1,6 @@
 # Contributing to Artifact Gateway
 
-[简体中文](CONTRIBUTING.zh-CN.md)
+[Français](CONTRIBUTING.fr-CA.md) · [简体中文](CONTRIBUTING.zh-CN.md)
 
 Artifact Gateway is currently developed by its core team. This guide records
 the engineering workflow used inside the repository so changes remain
@@ -278,6 +278,23 @@ issues on the pull request; the provider is set with `I18N_REVIEW_PROVIDER`
 are marked in `console/src/messages/.review/fr-CA.json`, and a release candidate
 fails `make i18n-release-check` while any fr-CA key is `draft` or a `critical`
 key has not passed the review. zh-CN has no release gate.
+
+The review is `.github/workflows/i18n-review.yml`, which runs
+`scripts/i18n-review.mjs` on pull requests that touch `*.fr-CA.ts`,
+`*.fr-CA.md` or `console/src/messages/glossary.ts`. Only the changed strings
+(with their en-CA text) or the prose of the changed fr-CA documents, the
+glossary and the writing rules are sent to the provider, never repository data.
+Set the repository variable `I18N_REVIEW_PROVIDER` to `anthropic`, `mistral`
+or `cohere` and add its key as the secret `ANTHROPIC_API_KEY`,
+`MISTRAL_API_KEY` or `COHERE_API_KEY`; an unknown value fails with a clear
+error. Findings (glossary avoid-terms, France-French wording, typography, meaning
+drift from en-CA) appear as check annotations and a pull request comment, and the
+check fails when a `critical` key has a finding. Keys that pass are recorded as
+`reviewed` in the sidecar, which the workflow commits to the pull request
+branch. Fork pull requests get no secrets, so a maintainer runs the workflow with
+`workflow_dispatch` and the pull request number; the result is posted as the
+`i18n-review` commit status. The script that holds the key always comes from the
+base revision, and the head is only read as data.
 
 Add every English document, and each companion that exists, to
 `docs/site-map.json` under one of the six stable sections. The map is the framework-neutral navigation contract for a future

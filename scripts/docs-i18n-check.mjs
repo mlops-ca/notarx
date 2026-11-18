@@ -19,8 +19,8 @@ export const rootDocuments = [
 // ADR 0014, Documentation policy: English (en-CA spelling) is the only mandatory
 // language. Localized companions are driven by this table. `required` lists the
 // English documents that must have a companion; `enforceRequired` switches that
-// requirement on (fr-CA core documents land in a later slice, issue 37, which
-// flips it). Existing companions are always structure-checked.
+// requirement on (the fr-CA core documents exist since issue 37). Existing
+// companions are always structure-checked.
 export const coreDocuments = [
   'README.md',
   'docs/README.md',
@@ -50,7 +50,7 @@ export const localeTable = {
     suffix: '.fr-CA.md',
     key: 'fr-CA',
     required: coreDocuments,
-    enforceRequired: false,
+    enforceRequired: true,
     checkBody: checkFrenchBody,
   },
   'zh-CN': {
