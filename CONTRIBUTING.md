@@ -324,7 +324,7 @@ and verifies that a second run is a no-op.
 
 Rules (ADR 0015):
 
-- The schema starts from `migrations/000001_baseline.sql`, a normalised
+- The schema starts from `migrations/000001_baseline.sql`, a normalized
   `pg_dump`. Never edit it in place; schema changes are new files
   `000002_<snake_case>.sql`, `000003_...`, with a unique, gap-free 6-digit
   prefix.
