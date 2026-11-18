@@ -15,11 +15,11 @@ mkdir -p "$workdir/public-assets"
 for version in 0.5.0 0.6.0; do
   curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
     --retry 2 --connect-timeout 10 --max-time 120 \
-    "https://github.com/mlops-ca/notarx/releases/download/v$version/artifact-gateway_${version}_linux_amd64.tar.gz" \
+    "https://github.com/ccsert/artifact-gateway/releases/download/v$version/artifact-gateway_${version}_linux_amd64.tar.gz" \
     --output "$workdir/public-assets/artifact-gateway_${version}_linux_amd64.tar.gz"
   curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
     --retry 2 --connect-timeout 10 --max-time 120 \
-    "https://github.com/mlops-ca/notarx/releases/download/v$version/SHA256SUMS" \
+    "https://github.com/ccsert/artifact-gateway/releases/download/v$version/SHA256SUMS" \
     --output "$workdir/public-assets/v${version//./}-SHA256SUMS"
 done
 python3 - "$workdir" <<'PY'
