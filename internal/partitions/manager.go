@@ -32,8 +32,17 @@ type Options struct {
 	Ahead int
 	// Owner identifies this node in the lease row.
 	Owner string
-	// LeaseTTL bounds how long a crashed runner blocks the others.
+	// LeaseTTL bounds how long a crashed runner blocks the others. The lease is
+	// renewed before every step, so it only has to outlast the longest single
+	// statement.
 	LeaseTTL time.Duration
+	// RetentionFor overrides Spec.Retention, for example from an operator-set
+	// policy. An error skips the drop for that table in this run.
+	RetentionFor func(ctx context.Context, spec Spec) (time.Duration, error)
+	// ObserveInterval and RetryInterval drive Run: every node refreshes Stats each
+	// ObserveInterval, and a failed or skipped maintenance pass is retried after
+	// RetryInterval instead of waiting for the full interval.
+	ObserveInterval, RetryInterval time.Duration
 	// LockTimeout is the lock_timeout applied to DROP TABLE and ATTACH.
 	LockTimeout time.Duration
 	// Attempts and Backoff retry a DROP or ATTACH that hit the lock timeout.
@@ -69,6 +78,10 @@ type Manager struct {
 
 	mu    sync.Mutex
 	stats map[string]TableStat
+
+	// afterDefaultCheck is a test hook run between the DEFAULT-partition check and
+	// the create, to reproduce a row arriving in that window.
+	afterDefaultCheck func(Spec)
 }
 
 // New validates the registry and fills option defaults.
@@ -95,7 +108,13 @@ func New(db *sql.DB, specs []Spec, opts Options) (*Manager, error) {
 		opts.Owner = fmt.Sprintf("%s/%d", host, os.Getpid())
 	}
 	if opts.LeaseTTL <= 0 {
-		opts.LeaseTTL = 2 * time.Minute
+		opts.LeaseTTL = 10 * time.Minute
+	}
+	if opts.ObserveInterval <= 0 {
+		opts.ObserveInterval = time.Minute
+	}
+	if opts.RetryInterval <= 0 {
+		opts.RetryInterval = time.Minute
 	}
 	if opts.LockTimeout <= 0 {
 		opts.LockTimeout = 2 * time.Second
@@ -130,24 +149,67 @@ func (m *Manager) Stats() []TableStat {
 	return stats
 }
 
-// Run calls Maintain every interval until ctx ends. A failed run is logged and
-// retried on the next tick; the DEFAULT partitions keep inserts working meanwhile.
+// Run calls Maintain every interval until ctx ends, refreshes Stats on every node
+// each ObserveInterval (only the lease holder maintains, but every node exports the
+// metrics), and retries a failed pass after RetryInterval. The DEFAULT partitions
+// keep inserts working in the meantime.
 func (m *Manager) Run(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
 		interval = DefaultInterval
 	}
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
+	maintain := time.NewTimer(interval)
+	observe := time.NewTicker(m.opts.ObserveInterval)
+	defer maintain.Stop()
+	defer observe.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
-			if _, err := m.Maintain(ctx); err != nil && ctx.Err() == nil {
-				m.opts.Logger.Error("partition maintenance failed", "error", err)
+		case <-observe.C:
+			if err := m.Observe(ctx); err != nil && ctx.Err() == nil {
+				m.opts.Logger.Error("partition observation failed", "error", err)
 			}
+		case <-maintain.C:
+			next := interval
+			if report, err := m.Maintain(ctx); err != nil {
+				if ctx.Err() != nil {
+					return
+				}
+				m.opts.Logger.Error("partition maintenance failed", "error", err)
+				next = m.opts.RetryInterval
+			} else if !report.Leader {
+				// Another node maintains; check again soon in case it died.
+				next = min(interval, m.opts.LeaseTTL)
+			}
+			maintain.Reset(next)
 		}
 	}
+}
+
+// Observe refreshes Stats without taking the lease; it only reads.
+func (m *Manager) Observe(ctx context.Context) error {
+	var errs []error
+	for _, spec := range m.specs {
+		if err := m.observe(ctx, spec); err != nil {
+			errs = append(errs, fmt.Errorf("%s: observe: %w", spec.Table, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// errLeaseLost stops a pass whose lease another node took over.
+var errLeaseLost = errors.New("partitions: lease lost")
+
+// renew extends the lease before a step; it fails if another node holds it now.
+func (m *Manager) renew(ctx context.Context) error {
+	held, err := m.acquire(ctx)
+	if err != nil {
+		return err
+	}
+	if !held {
+		return errLeaseLost
+	}
+	return nil
 }
 
 // Maintain runs one maintenance pass if this node wins the lease. It continues
@@ -170,6 +232,9 @@ func (m *Manager) Maintain(ctx context.Context) (Report, error) {
 	}()
 	var errs []error
 	for _, spec := range m.specs {
+		if err := m.renew(ctx); err != nil {
+			return report, errors.Join(append(errs, err)...)
+		}
 		if err := m.ensure(ctx, spec, &report); err != nil {
 			errs = append(errs, fmt.Errorf("%s: ensure partitions: %w", spec.Table, err))
 		}
@@ -219,20 +284,30 @@ func (m *Manager) ensure(ctx context.Context, spec Spec, report *Report) error {
 		if have[name] {
 			continue
 		}
+		if err := m.renew(ctx); err != nil {
+			return errors.Join(append(errs, err)...)
+		}
 		end := spec.Granularity.Next(start)
 		pending, err := m.defaultHasRows(ctx, spec, start, end)
 		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
+		if m.afterDefaultCheck != nil {
+			m.afterDefaultCheck(spec)
+		}
 		if !pending {
 			err = m.inLockedTx(ctx, fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s PARTITION OF %s FOR VALUES FROM (%s) TO (%s)`, quote(name), quote(spec.Table), boundLiteral(start), boundLiteral(end)))
-			if err != nil {
-				errs = append(errs, fmt.Errorf("create %s: %w", name, err))
+			// A row can reach the DEFAULT partition between the check and the create;
+			// PostgreSQL then refuses the create, and the move path handles it.
+			if !hasCode(err, []string{sqlCheckViolation}) {
+				if err != nil {
+					errs = append(errs, fmt.Errorf("create %s: %w", name, err))
+					continue
+				}
+				report.Created = append(report.Created, name)
 				continue
 			}
-			report.Created = append(report.Created, name)
-			continue
 		}
 		moved, err := m.attachWithRows(ctx, spec, name, start, end)
 		if err != nil {
@@ -263,6 +338,12 @@ func (m *Manager) attachWithRows(ctx context.Context, spec Spec, name string, st
 		if err = m.setLockTimeout(ctx, tx); err != nil {
 			return err
 		}
+		// Keep new rows out of the DEFAULT partition until the attach commits (the
+		// attach needs this lock anyway); otherwise a row inserted after the DELETE
+		// below would violate the partition constraint and fail the attach.
+		if _, err = tx.ExecContext(ctx, `LOCK TABLE `+quote(spec.DefaultName())+` IN ACCESS EXCLUSIVE MODE`); err != nil {
+			return err
+		}
 		if _, err = tx.ExecContext(ctx, fmt.Sprintf(`CREATE TABLE %s (LIKE %s INCLUDING ALL)`, quote(name), quote(spec.Table))); err != nil {
 			return err
 		}
@@ -278,7 +359,7 @@ func (m *Manager) attachWithRows(ctx context.Context, spec Spec, name string, st
 			return err
 		}
 		return tx.Commit()
-	}, sqlLockNotAvailable, sqlCheckViolation)
+	}, sqlLockNotAvailable)
 	return moved, err
 }
 
@@ -320,19 +401,29 @@ WHERE p.oid=$1::regclass ORDER BY c.relname`, quote(spec.Table))
 
 // drop removes partitions whose whole range is older than the retention.
 func (m *Manager) drop(ctx context.Context, spec Spec, report *Report) error {
-	if spec.Retention <= 0 {
+	retention := spec.Retention
+	if m.opts.RetentionFor != nil {
+		var err error
+		if retention, err = m.opts.RetentionFor(ctx, spec); err != nil {
+			return fmt.Errorf("resolve retention: %w", err)
+		}
+	}
+	if retention <= 0 {
 		return nil
 	}
 	children, err := m.children(ctx, spec)
 	if err != nil {
 		return err
 	}
-	cutoff := m.opts.Now().UTC().Add(-spec.Retention)
+	cutoff := m.opts.Now().UTC().Add(-retention)
 	sort.Slice(children, func(i, j int) bool { return children[i].from.Before(children[j].from) })
 	var errs []error
 	for _, c := range children {
 		if c.to.After(cutoff) || !strings.HasPrefix(c.name, spec.Table+"_p") {
 			continue
+		}
+		if err := m.renew(ctx); err != nil {
+			return errors.Join(append(errs, err)...)
 		}
 		// The drop briefly takes ACCESS EXCLUSIVE on the parent; lock_timeout keeps a
 		// lock queue from stalling readers. DETACH CONCURRENTLY is not used: it cannot

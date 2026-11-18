@@ -6,8 +6,9 @@
 //     text with a parameter (`col::text = $1`, `$1::text = col`, or `id::text` after
 //     WHERE). Such comparisons defeat the btree on uuid columns. Existing
 //     violations are recorded per file in an allowlist that may only shrink.
-//   - `uuid.New()` is forbidden outside internal/ids so every new identifier is a
-//     UUIDv7 created by ids.New.
+//   - `uuid.New()` and `uuid.NewRandom()` (random UUIDv4), also under an import alias,
+//     are forbidden outside internal/ids so every new identifier is a UUIDv7
+//     created by ids.New. Existing `uuid.NewString()` calls are not covered yet.
 package sqllint
 
 import (
@@ -27,6 +28,8 @@ import (
 
 // IDsPackage is the only package allowed to call uuid.New directly.
 const IDsPackage = "internal/ids"
+
+const uuidImportPath = "github.com/google/uuid"
 
 var (
 	castComparison = regexp.MustCompile(`::text\s*=\s*\$\d|\$\d+::text\s*=`)
@@ -100,6 +103,17 @@ func Scan(root string) (Result, error) {
 		if err != nil {
 			return err
 		}
+		// The local names under which github.com/google/uuid is imported.
+		uuidNames := map[string]bool{}
+		for _, spec := range file.Imports {
+			if path, err := strconv.Unquote(spec.Path.Value); err == nil && path == uuidImportPath {
+				name := "uuid"
+				if spec.Name != nil {
+					name = spec.Name.Name
+				}
+				uuidNames[name] = true
+			}
+		}
 		ast.Inspect(file, func(node ast.Node) bool {
 			switch n := node.(type) {
 			case *ast.BasicLit:
@@ -115,8 +129,8 @@ func Scan(root string) (Result, error) {
 				if inIDs {
 					return true
 				}
-				if sel, ok := n.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "New" {
-					if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "uuid" {
+				if sel, ok := n.Fun.(*ast.SelectorExpr); ok && (sel.Sel.Name == "New" || sel.Sel.Name == "NewRandom") {
+					if pkg, ok := sel.X.(*ast.Ident); ok && uuidNames[pkg.Name] {
 						result.UUIDNew = append(result.UUIDNew, set.Position(n.Pos()).String())
 					}
 				}
@@ -179,7 +193,7 @@ func FormatAllowlist(counts map[string]int) string {
 func Check(result Result, allow map[string]int) []string {
 	var problems []string
 	for _, position := range result.UUIDNew {
-		problems = append(problems, position+": uuid.New() is forbidden outside "+IDsPackage+"; use ids.New() (ADR 0023 section 4)")
+		problems = append(problems, position+": uuid.New() and uuid.NewRandom() are forbidden outside "+IDsPackage+"; use ids.New() (ADR 0023 section 4)")
 	}
 	for _, file := range sortedKeys(result.Casts) {
 		actual, allowed := result.Casts[file], allow[file]

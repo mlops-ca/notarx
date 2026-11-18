@@ -277,3 +277,110 @@ func TestManagerDropBacksOffOnLockTimeoutThenSucceeds(t *testing.T) {
 		t.Fatalf("drop after the lock is released: %+v, %v", report, err)
 	}
 }
+
+func TestManagerRetentionOverrideAndFailure(t *testing.T) {
+	db := openDB(t)
+	spec := scratch(t, db, 24*time.Hour)
+	old := time.Date(2035, 1, 1, 0, 0, 0, 0, time.UTC)
+	if _, err := db.ExecContext(t.Context(), fmt.Sprintf(`CREATE TABLE %s PARTITION OF %s FOR VALUES FROM (%s) TO (%s)`, spec.Name(old), spec.Table, boundLiteral(old), boundLiteral(spec.Granularity.Next(old)))); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2035, 6, 1, 0, 0, 0, 0, time.UTC)
+	options := func(retention func(context.Context, Spec) (time.Duration, error)) *Manager {
+		m, err := New(db, []Spec{spec}, Options{Owner: "node-a", Now: func() time.Time { return now }, RetentionFor: retention})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return m
+	}
+	// An operator policy longer than the default keeps the partition.
+	report, err := options(func(context.Context, Spec) (time.Duration, error) { return 400 * 24 * time.Hour, nil }).Maintain(t.Context())
+	if err != nil || len(report.Dropped) != 0 {
+		t.Fatalf("a 400 day policy must keep a five month old partition: %+v, %v", report, err)
+	}
+	// A failing resolver skips the drop and reports the error.
+	report, err = options(func(context.Context, Spec) (time.Duration, error) { return 0, fmt.Errorf("policy unavailable") }).Maintain(t.Context())
+	if err == nil || !strings.Contains(err.Error(), "policy unavailable") || len(report.Dropped) != 0 {
+		t.Fatalf("a failing policy lookup must not drop: %+v, %v", report, err)
+	}
+	// The registry default (24h) applies without an override.
+	report, err = options(nil).Maintain(t.Context())
+	if err != nil || len(report.Dropped) != 1 {
+		t.Fatalf("default retention drop: %+v, %v", report, err)
+	}
+}
+
+func TestManagerFallsBackToMoveWhenRowArrivesAfterDefaultCheck(t *testing.T) {
+	db := openDB(t)
+	spec := scratch(t, db, 0)
+	now := time.Date(2036, 2, 10, 0, 0, 0, 0, time.UTC)
+	m := newManager(t, db, "node-a", now, spec)
+	inserted := false
+	m.afterDefaultCheck = func(s Spec) {
+		if inserted {
+			return
+		}
+		inserted = true
+		if _, err := db.ExecContext(t.Context(), `INSERT INTO `+s.Table+`(occurred_at,payload) VALUES ($1,'late')`, now.Add(time.Hour)); err != nil {
+			t.Error(err)
+		}
+	}
+	report, err := m.Maintain(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := spec.Name(time.Date(2036, 2, 1, 0, 0, 0, 0, time.UTC))
+	if report.Moved[name] != 1 {
+		t.Fatalf("the late row must be moved into %s: %+v", name, report)
+	}
+	if stats := m.Stats(); stats[0].DefaultRows != 0 || stats[0].Partitions != 4 {
+		t.Fatalf("stats = %+v", stats)
+	}
+}
+
+func TestRunObservesOnEveryNodeAndTakesOverWhenLeaseExpires(t *testing.T) {
+	db := openDB(t)
+	spec := scratch(t, db, 0)
+	now := time.Date(2037, 4, 4, 0, 0, 0, 0, time.UTC)
+	// Another node holds the lease and rows sit in the DEFAULT partition.
+	if _, err := db.ExecContext(t.Context(), `INSERT INTO scheduled_tasks (id,name,description,kind,interval_seconds,enabled,next_run_at,lease_owner,lease_until) VALUES ($1::uuid,$2,'','partition-manager',21600,false,now(),'node-held',now()+interval '1 hour') ON CONFLICT (id) DO UPDATE SET lease_owner='node-held',lease_until=now()+interval '1 hour'`, leaseTaskID, leaseTaskName); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = db.ExecContext(context.Background(), `UPDATE scheduled_tasks SET lease_owner='',lease_until=NULL WHERE id=$1::uuid`, leaseTaskID)
+	})
+	for i := 0; i < 2; i++ {
+		if _, err := db.ExecContext(t.Context(), `INSERT INTO `+spec.Table+`(occurred_at) VALUES ($1)`, now.Add(time.Duration(i)*time.Hour)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m, err := New(db, []Spec{spec}, Options{Owner: "node-a", Now: func() time.Time { return now }, ObserveInterval: 20 * time.Millisecond, RetryInterval: 20 * time.Millisecond, LeaseTTL: 50 * time.Millisecond})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() { m.Run(ctx, 40*time.Millisecond); close(done) }()
+	defer func() { cancel(); <-done }()
+
+	eventually := func(what string, check func() bool) {
+		t.Helper()
+		deadline := time.Now().Add(10 * time.Second)
+		for !check() {
+			if time.Now().After(deadline) {
+				t.Fatalf("timed out waiting for %s; stats %+v", what, m.Stats())
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	// Not the leader, yet the node still reports the DEFAULT partition backlog.
+	eventually("default rows to be observed by a non-leader", func() bool { return m.Stats()[0].DefaultRows == 2 })
+	if got := partitionNames(t, m, spec); len(got) != 0 {
+		t.Fatalf("a non-leader created partitions: %v", got)
+	}
+	// Once the other node's lease expires this node takes over and drains it.
+	if _, err = db.ExecContext(t.Context(), `UPDATE scheduled_tasks SET lease_until=now()-interval '1 second' WHERE id=$1::uuid`, leaseTaskID); err != nil {
+		t.Fatal(err)
+	}
+	eventually("takeover and default partition drain", func() bool { s := m.Stats()[0]; return s.DefaultRows == 0 && s.Partitions == 4 })
+}

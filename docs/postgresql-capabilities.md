@@ -169,6 +169,10 @@ Each has a `DEFAULT` partition, three indexes (the primary key,
   TABLE`, retried with backoff. `DETACH PARTITION ... CONCURRENTLY` is not used: it
   cannot run in a transaction block and is refused while a `DEFAULT` partition
   exists.
+- An enabled audit retention policy (`keepDays`) overrides the 90 days of
+  `resolver_audit_log`; `security_audit_log` keeps its registry default.
+  Every node refreshes the two gauges each minute, and a failed pass is retried
+  after a minute.
 - One node at a time runs the work. The runner is elected by a lease row in
   `scheduled_tasks` (kind `partition-manager`, never enabled, hidden from the task
   API); no session advisory lock is held, so it works behind a connection pool in transaction mode.

@@ -284,16 +284,24 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 	// DEFAULT partitions keep audit inserts working.
 	partitionManager, err := partitions.New(databasePool, partitions.DefaultRegistry(), partitions.Options{
 		Ahead: cfg.PartitionAhead, Owner: cfg.InstanceID + "/" + runtimeSessionID, Logger: slog.Default(),
+		RetentionFor: auditRetentionFor(store),
 	})
 	if err != nil {
 		slog.Error("configure partition manager", "error", err)
 		return 1
 	}
 	metrics.WithPartitionStats(partitionManager.Stats)
-	if report, err := partitionManager.Maintain(runtimeContext); err != nil {
+	// The start-up pass is bounded so a locked table cannot hold the node out of
+	// service; Run retries a failed pass after a minute.
+	startupContext, stopStartup := context.WithTimeout(runtimeContext, 30*time.Second)
+	if report, err := partitionManager.Maintain(startupContext); err != nil {
 		slog.Error("partition maintenance at start-up failed", "error", err)
 	} else if report.Leader {
 		slog.Info("partition maintenance at start-up", "created", report.Created, "dropped", report.Dropped, "moved_default_rows", report.Moved)
+	}
+	stopStartup()
+	if err := partitionManager.Observe(runtimeContext); err != nil {
+		slog.Error("partition observation at start-up failed", "error", err)
 	}
 	go partitionManager.Run(runtimeContext, partitions.DefaultInterval)
 	startAPI := cfg.HasRole(config.NodeRoleAPI)

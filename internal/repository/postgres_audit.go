@@ -80,9 +80,14 @@ func (s *PostgresStore) ListRepositoryRequestStatistics(ctx context.Context, now
 		COUNT(*) FILTER (WHERE outcome IN ('access_denied', 'proxy_denied', 'denied') AND occurred_at >= $1::timestamptz - INTERVAL '1 day'),
 		COUNT(*) FILTER (WHERE outcome IN ('access_denied', 'proxy_denied', 'denied') AND occurred_at >= $1::timestamptz - INTERVAL '7 days'),
 		COUNT(*) FILTER (WHERE outcome IN ('access_denied', 'proxy_denied', 'denied'))
-		FROM resolver_audit_log
+		FROM (
+		  SELECT repository, format, outcome, occurred_at FROM resolver_audit_log
+		  WHERE occurred_at >= $1::timestamptz - INTERVAL '30 days' AND occurred_at <= $1
+		  UNION ALL
+		  SELECT repository, format, outcome, occurred_at FROM security_audit_log
+		  WHERE occurred_at >= $1::timestamptz - INTERVAL '30 days' AND occurred_at <= $1
+		) audit
 		WHERE repository <> '' AND format IS DISTINCT FROM 'management'
-		  AND occurred_at >= $1::timestamptz - INTERVAL '30 days' AND occurred_at <= $1
 		GROUP BY repository ORDER BY repository`, now.UTC())
 	if err != nil {
 		return nil, err

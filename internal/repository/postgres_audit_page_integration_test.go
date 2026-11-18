@@ -234,3 +234,35 @@ func TestPartitionManagerLeaseRowIsHiddenFromScheduledTasks(t *testing.T) {
 		}
 	}
 }
+
+func TestPostgresRepositoryRequestStatisticsCountBothAuditTables(t *testing.T) {
+	store := openAuditPageStore(t)
+	ctx := context.Background()
+	repo := "audit-stats-" + uuid.NewString()
+	now := time.Now().UTC().Truncate(time.Second)
+	for _, record := range []AuditRecord{
+		{Class: AuditClassAsync, Repository: repo, Outcome: AuditResolved, Actor: "a", Format: "raw", OccurredAt: now.Add(-time.Minute)},
+		{Class: AuditClassSync, Repository: repo, Outcome: AuditAccessDenied, Actor: "a", Format: "raw", OccurredAt: now.Add(-2 * time.Minute)},
+	} {
+		if err := store.RecordAudit(ctx, record); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Cleanup(func() {
+		_, _ = store.db.ExecContext(context.Background(), `DELETE FROM resolver_audit_log WHERE repository=$1`, repo)
+		_, _ = store.db.ExecContext(context.Background(), `DELETE FROM security_audit_log WHERE repository=$1`, repo)
+	})
+	statistics, err := store.ListRepositoryRequestStatistics(ctx, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range statistics {
+		if item.Repository == repo {
+			if item.Requests.OneDay != 2 || item.Denied.OneDay != 1 || item.Requests.ThirtyDays != 2 {
+				t.Fatalf("statistics must include the security table: %+v", item)
+			}
+			return
+		}
+	}
+	t.Fatalf("repository %s missing from %+v", repo, statistics)
+}

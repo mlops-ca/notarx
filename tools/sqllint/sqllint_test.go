@@ -46,8 +46,11 @@ func TestScanFindsCastsAndUUIDNew(t *testing.T) {
 		}
 	}
 	write("internal/a/a.go", "package a\nimport \"github.com/google/uuid\"\nvar q = `SELECT 1 FROM t WHERE x::text=$1`\nvar u = uuid.New()\nvar ok = uuid.NewString()\n")
-	write("internal/a/a_test.go", "package a\nvar q = `SELECT 1 FROM t WHERE x::text=$1`\nvar u = uuid.New()\n")
-	write("internal/ids/ids.go", "package ids\nvar u = uuid.New()\n")
+	write("internal/a/a_test.go", "package a\nimport \"github.com/google/uuid\"\nvar q = `SELECT 1 FROM t WHERE x::text=$1`\nvar u = uuid.New()\n")
+	write("internal/ids/ids.go", "package ids\nimport \"github.com/google/uuid\"\nvar u = uuid.New()\n")
+	write("internal/c/c.go", "package c\nimport guuid \"github.com/google/uuid\"\nvar a = guuid.New()\nvar b, _ = guuid.NewRandom()\nvar ok = guuid.NewString()\n")
+	// Not the uuid package: a local identifier named uuid must not trip the rule.
+	write("internal/d/d.go", "package d\nvar uuid = struct{ New func() int }{}\nvar x = uuid.New()\n")
 	result, err := Scan(root)
 	if err != nil {
 		t.Fatal(err)
@@ -55,7 +58,7 @@ func TestScanFindsCastsAndUUIDNew(t *testing.T) {
 	if result.Casts["internal/a/a.go"] != 1 || len(result.Casts) != 1 {
 		t.Fatalf("casts = %v", result.Casts)
 	}
-	want := []string{"internal/a/a.go:4:9", "internal/a/a_test.go:3:9"}
+	want := []string{"internal/a/a.go:4:9", "internal/a/a_test.go:4:9", "internal/c/c.go:3:9", "internal/c/c.go:4:12"}
 	if strings.Join(result.UUIDNew, ",") != strings.Join(want, ",") {
 		t.Fatalf("uuid.New positions = %v, want %v", result.UUIDNew, want)
 	}
@@ -88,7 +91,7 @@ func TestCheckRatchet(t *testing.T) {
 	result := Result{Casts: map[string]int{"a.go": 2, "b.go": 1, "c.go": 4}, UUIDNew: []string{"internal/x/x.go:1:1"}}
 	allow := map[string]int{"a.go": 2, "b.go": 3, "c.go": 1, "gone.go": 2}
 	problems := strings.Join(Check(result, allow), "\n")
-	for _, want := range []string{"uuid.New() is forbidden", "c.go: 4 text-cast", "b.go: allowlist permits 3 but only 1", "gone.go: allowlist entry has no remaining"} {
+	for _, want := range []string{"are forbidden outside internal/ids", "c.go: 4 text-cast", "b.go: allowlist permits 3 but only 1", "gone.go: allowlist entry has no remaining"} {
 		if !strings.Contains(problems, want) {
 			t.Errorf("missing %q in:\n%s", want, problems)
 		}
