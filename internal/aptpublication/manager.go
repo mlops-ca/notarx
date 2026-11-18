@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	aptprotocol "github.com/mlops-ca/notarx/internal/protocol/apt"
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -71,7 +71,7 @@ func (m *Manager) CreateSession(ctx context.Context, input CreateSessionInput) (
 		return repository.APTPublicationSession{}, false, repository.ErrNotFound
 	}
 	if input.ID == "" {
-		input.ID = uuid.NewString()
+		input.ID = ids.New()
 	}
 	if input.ExpiresAt.IsZero() {
 		input.ExpiresAt = time.Now().UTC().Add(time.Hour)
@@ -186,7 +186,7 @@ func (m *Manager) uploadPackage(ctx context.Context, sessionID, objectName strin
 		return repository.APTPackageRevision{}, fmt.Errorf("store Debian package: %w", err)
 	}
 	revision := repository.APTPackageRevision{
-		ID: uuid.NewString(), RepositoryID: session.RepositoryID,
+		ID: ids.New(), RepositoryID: session.RepositoryID,
 		Package: metadata.Package, Version: metadata.Version, Architecture: metadata.Architecture,
 		CanonicalIdentity: metadata.CanonicalIdentity, Digest: session.DeclaredDigest,
 		ObjectKey: objectKey, Size: written, ObjectName: session.ObjectName, Publisher: session.Publisher,

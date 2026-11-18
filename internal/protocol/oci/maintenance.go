@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -54,7 +54,7 @@ func (m NativeMaintenance) EnqueueReclaimJobs(ctx context.Context, before time.T
 			return err
 		}
 		if _, _, err := m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{
-			ID:             uuid.NewString(),
+			ID:             ids.New(),
 			RepositoryID:   intent.RepositoryID,
 			Kind:           repository.LifecycleJobReclaim,
 			IdempotencyKey: "oci-object:" + intent.ObjectKey,
@@ -201,7 +201,7 @@ func (m NativeMaintenance) Schedule(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if _, _, err = m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: uuid.NewString(), RepositoryID: upload.RepositoryID, Kind: repository.LifecycleJobReclaim, IdempotencyKey: "oci-upload:" + upload.ID, Payload: payload}); err != nil {
+		if _, _, err = m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: ids.New(), RepositoryID: upload.RepositoryID, Kind: repository.LifecycleJobReclaim, IdempotencyKey: "oci-upload:" + upload.ID, Payload: payload}); err != nil {
 			return err
 		}
 	}

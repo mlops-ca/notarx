@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 )
 
 // EnqueueArtifactScanJob creates an idempotent scan request for one immutable
@@ -43,7 +43,7 @@ func EnqueueArtifactScanJobLocked(ctx context.Context, store LifecycleJobStore, 
 		return LifecycleJob{}, false, lookupErr
 	}
 	return store.EnqueueLifecycleJob(ctx, LifecycleJob{
-		ID: uuid.NewString(), RepositoryID: repositoryID, Kind: LifecycleJobScan,
+		ID: ids.New(), RepositoryID: repositoryID, Kind: LifecycleJobScan,
 		IdempotencyKey: idempotencyKey, Payload: body,
 	})
 }

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	conanprotocol "github.com/mlops-ca/notarx/internal/protocol/conan"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -104,7 +105,7 @@ func (h nativeConanPublishHandler) create(w http.ResponseWriter, r *http.Request
 		writeHostedProblem(w, http.StatusNotImplemented, "not_supported", "Conan publication capability is unavailable")
 		return
 	}
-	session, err := h.store.CreateConanPublishSession(r.Context(), repository.ConanPublishSession{ID: uuid.NewString(), RepositoryID: repo.ID, Publisher: principal.Actor, Kind: body.Kind, Reference: body.Reference, RecipeRevision: body.RecipeRevision, PackageID: body.PackageID, PackageRevision: body.PackageRevision, State: "open", Objects: body.Objects, ExpiresAt: time.Now().UTC().Add(time.Hour)})
+	session, err := h.store.CreateConanPublishSession(r.Context(), repository.ConanPublishSession{ID: ids.New(), RepositoryID: repo.ID, Publisher: principal.Actor, Kind: body.Kind, Reference: body.Reference, RecipeRevision: body.RecipeRevision, PackageID: body.PackageID, PackageRevision: body.PackageRevision, State: "open", Objects: body.Objects, ExpiresAt: time.Now().UTC().Add(time.Hour)})
 	if err != nil {
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "create Conan publish session failed")
 		return

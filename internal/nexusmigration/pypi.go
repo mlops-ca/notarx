@@ -13,7 +13,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/nexussource"
 	pypi "github.com/mlops-ca/notarx/internal/protocol/pypi"
 )
@@ -177,7 +177,7 @@ func (s *Service) planPyPIEntries(ctx context.Context, b Batch, sourceRepo, targ
 					}
 					*budget -= int64(len(observed.Body))
 				}
-				entry = &Entry{ID: uuid.NewString(), BatchID: b.ID, SourceRepository: sourceRepo, TargetRepositoryID: targetRepo, Format: "pypi", Identity: name + "@" + d.Version, State: "pending", Assets: []Asset{metadata}}
+				entry = &Entry{ID: ids.New(), BatchID: b.ID, SourceRepository: sourceRepo, TargetRepositoryID: targetRepo, Format: "pypi", Identity: name + "@" + d.Version, State: "pending", Assets: []Asset{metadata}}
 				versions[d.Version] = entry
 			}
 			a := Asset{SourcePath: item.Path, TargetPath: file.Filename, Size: item.Size, SHA256: file.SHA256, Validator: content.Validator, MediaType: "application/octet-stream"}

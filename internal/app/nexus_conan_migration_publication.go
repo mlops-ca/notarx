@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/nexusmigration"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -153,7 +154,7 @@ func (p *NexusConanMigrationPublication) Begin(ctx context.Context, entry nexusm
 			return "", nexusmigration.Failed("native_session_unavailable")
 		}
 	}
-	expected.ID = uuid.NewString()
+	expected.ID = ids.New()
 	session, err := p.store.CreateConanPublishSession(ctx, expected)
 	if err != nil || !sameNexusConanSession(session, expected) {
 		return "", nexusmigration.Failed("native_session_unavailable")

@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
 	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
@@ -73,7 +74,7 @@ func (h identityManagementHandler) CreateApiKey(w http.ResponseWriter, r *http.R
 		return
 	}
 	token := "agk_" + base64.RawURLEncoding.EncodeToString(raw)
-	key, err := h.apiKeys.CreateAPIKey(r.Context(), repository.APIKey{ID: uuid.NewString(), Name: strings.TrimSpace(request.Name), SecretHash: authorization.HashAPIKey(token), Roles: roles, ExpiresAt: &expiresAt})
+	key, err := h.apiKeys.CreateAPIKey(r.Context(), repository.APIKey{ID: ids.New(), Name: strings.TrimSpace(request.Name), SecretHash: authorization.HashAPIKey(token), Roles: roles, ExpiresAt: &expiresAt})
 	if err != nil {
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "create API key failed")
 		return
@@ -253,7 +254,7 @@ func (h identityManagementHandler) CreateUser(w http.ResponseWriter, r *http.Req
 		return
 	}
 	mustChange := request.MustChangePassword != nil && *request.MustChangePassword
-	user, err := h.users.CreateUser(r.Context(), repository.User{ID: uuid.NewString(), Name: name, DisplayName: displayName, Email: email, Description: description, SecretHash: hash, Role: string(request.Role), MustChangePassword: mustChange})
+	user, err := h.users.CreateUser(r.Context(), repository.User{ID: ids.New(), Name: name, DisplayName: displayName, Email: email, Description: description, SecretHash: hash, Role: string(request.Role), MustChangePassword: mustChange})
 	if errors.Is(err, repository.ErrNameExists) {
 		writeHostedProblem(w, http.StatusConflict, "version_conflict", "user name already exists")
 		return
@@ -542,7 +543,7 @@ func (h identityManagementHandler) CreateUserIdentity(w http.ResponseWriter, r *
 		return
 	}
 	identity, err := h.users.CreateUserIdentity(r.Context(), repository.UserIdentity{
-		ID: uuid.NewString(), UserID: userID, Kind: repository.UserIdentityOIDC,
+		ID: ids.New(), UserID: userID, Kind: repository.UserIdentityOIDC,
 		Issuer: issuer, Subject: strings.TrimSpace(request.Subject),
 	})
 	if errors.Is(err, repository.ErrNotFound) {

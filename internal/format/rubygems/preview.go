@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -79,7 +80,7 @@ func (m *Module) servePreview(w http.ResponseWriter, r *http.Request) {
 		}
 		data, _ := json.Marshal(in)
 		sum := sha256.Sum256(data)
-		repo, _, e := m.repos.CreateHostedRepositoryIdempotently(r.Context(), repository.HostedRepository{ID: uuid.NewString(), Name: in.Name, Format: repository.FormatRubyGems, Type: repository.RepositoryTypeHosted, AnonymousRead: in.AnonymousRead}, p.Actor, "rubygems-preview:"+key, hex.EncodeToString(sum[:]))
+		repo, _, e := m.repos.CreateHostedRepositoryIdempotently(r.Context(), repository.HostedRepository{ID: ids.New(), Name: in.Name, Format: repository.FormatRubyGems, Type: repository.RepositoryTypeHosted, AnonymousRead: in.AnonymousRead}, p.Actor, "rubygems-preview:"+key, hex.EncodeToString(sum[:]))
 		if e != nil {
 			m.failure(w, e)
 			return

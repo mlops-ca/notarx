@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 )
 
 const userIdentityColumns = `id::text,user_id::text,kind,issuer,subject,email,display_name,email_verified,last_login_at,created_at,updated_at`
@@ -51,7 +51,7 @@ func (s *PostgresStore) CreateUserIdentity(ctx context.Context, identity UserIde
 	}
 	identity = normalizeUserIdentity(identity)
 	if identity.ID == "" {
-		identity.ID = uuid.NewString()
+		identity.ID = ids.New()
 	}
 	err := scanUserIdentity(s.db.QueryRowContext(ctx, `INSERT INTO user_identities (id,user_id,kind,issuer,subject,email,display_name,email_verified) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING `+userIdentityColumns,
 		identity.ID, identity.UserID, identity.Kind, identity.Issuer, identity.Subject,
@@ -157,7 +157,7 @@ func (s *PostgresStore) ResolveOIDCIdentity(ctx context.Context, provision OIDCI
 			return User{}, UserIdentity{}, false, err
 		}
 		user = User{
-			ID: uuid.NewString(), Name: name, DisplayName: strings.TrimSpace(provision.DisplayName),
+			ID: ids.New(), Name: name, DisplayName: strings.TrimSpace(provision.DisplayName),
 			Email: strings.TrimSpace(provision.Email), Role: role, State: UserActive,
 			LastLoginAt: timePointer(now), SessionVersion: 1,
 		}
@@ -185,7 +185,7 @@ func (s *PostgresStore) ResolveOIDCIdentity(ctx context.Context, provision OIDCI
 	}
 
 	identity = refreshUserIdentity(UserIdentity{
-		ID: uuid.NewString(), UserID: user.ID, Kind: UserIdentityOIDC,
+		ID: ids.New(), UserID: user.ID, Kind: UserIdentityOIDC,
 		Issuer: provision.Issuer, Subject: provision.Subject, CreatedAt: now,
 	}, provision, now)
 	err = scanUserIdentity(tx.QueryRowContext(ctx, `INSERT INTO user_identities (id,user_id,kind,issuer,subject,email,display_name,email_verified,last_login_at,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10) RETURNING `+userIdentityColumns,

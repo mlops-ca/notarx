@@ -5,7 +5,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 )
 
 func (s *MemoryStore) BeginConanNativeSession(ctx context.Context, incoming ConanPublishSession) (ConanPublishSession, error) {
@@ -29,7 +29,7 @@ func (s *MemoryStore) BeginConanNativeSession(ctx context.Context, incoming Cona
 		session.State = "expired"
 		s.conanSessions[id] = session
 	}
-	incoming.ID, incoming.Native, incoming.Version = uuid.NewString(), true, 1
+	incoming.ID, incoming.Native, incoming.Version = ids.New(), true, 1
 	incoming.State, incoming.ExpiresAt, incoming.Objects = "open", now.Add(time.Hour), make([]MavenDeclaredObject, 0)
 	uploads := make(map[string]string)
 	recipe := s.conanRecipes[conanRecipeKey(incoming.RepositoryID, incoming.Reference, incoming.RecipeRevision)]

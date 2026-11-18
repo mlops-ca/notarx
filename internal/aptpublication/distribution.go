@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/lifecycle"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/replication"
@@ -56,7 +57,7 @@ func (d Distribution) EnqueuePromotion(ctx context.Context, targetID, key string
 	if err != nil {
 		return repository.LifecycleJob{}, false, err
 	}
-	return d.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: uuid.NewString(), RepositoryID: targetID, Kind: repository.LifecycleJobPromotion, IdempotencyKey: key, Payload: body})
+	return d.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: ids.New(), RepositoryID: targetID, Kind: repository.LifecycleJobPromotion, IdempotencyKey: key, Payload: body})
 }
 func validPromotionPayload(p PromotionPayload) bool {
 	return p.Format == repository.FormatAPT && p.SourceRepositoryID != "" && repository.ValidAPTArtifactCoordinate(p.Coordinate) && repository.ValidAPTSHA256Digest(p.Digest) && repository.ValidAPTPublicationScope(p.TargetSuite) && p.Actor != "" && len(p.Actor) <= 512
@@ -250,7 +251,7 @@ func (d Distribution) publish(ctx context.Context, operation, workID, leaseToken
 		return repository.ErrVersionConflict
 	}
 	commit := repository.APTDistributionCommit{ID: commandID, RequestDigest: requestDigest, Operation: operation, WorkID: workID, LeaseToken: leaseToken, BaseSnapshotID: baseID, SessionID: session.ID, Source: source}
-	_, err = d.Publisher.Publish(objectCtx, PublishSnapshotInput{ID: uuid.NewString(), RepositoryID: targetID, Suite: p.TargetSuite, Sequence: sequence + 1, SessionIDs: sessions, Actor: p.Actor, CreatedAt: time.Now().UTC(), distribution: &commit, indexScopes: scopes})
+	_, err = d.Publisher.Publish(objectCtx, PublishSnapshotInput{ID: ids.New(), RepositoryID: targetID, Suite: p.TargetSuite, Sequence: sequence + 1, SessionIDs: sessions, Actor: p.Actor, CreatedAt: time.Now().UTC(), distribution: &commit, indexScopes: scopes})
 	if err != nil {
 		return fmt.Errorf("publish target APT snapshot: %w", err)
 	}

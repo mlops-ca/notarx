@@ -1,0 +1,34 @@
+# Ratchet for ADR 0023 section 4: uuid.NewString() (random UUIDv4) in non-test files.
+# Convert row identifiers to ids.New(); counts may only decrease, remove a file at zero.
+# Calls that are not row identifiers (lease tokens, trace ids, temporary names) may stay.
+# Regenerate lower counts with: go run ./tools/sqllint/cmd -update
+internal/app/conan_native_upload.go 1
+internal/app/native_conan_publish.go 1
+internal/app/postgres_cache_task_queue.go 2
+internal/app/raw.go 2
+internal/app/scheduled_tasks_api.go 1
+internal/app/user_login.go 1
+internal/backupops/docker.go 2
+internal/format/helm/preview.go 1
+internal/format/helm/preview_sources.go 1
+internal/format/nuget/preview.go 1
+internal/format/nuget/preview_sources.go 1
+internal/format/raw/route.go 2
+internal/format/rubygems/preview.go 1
+internal/nexusmigration/pgstore/schedules.go 1
+internal/nexusmigration/pgstore/store.go 1
+internal/notarxctl/alert_commands.go 1
+internal/objectstore/filestore.go 2
+internal/objectstore/s3_multipart.go 1
+internal/objectstore/storetest/s3.go 2
+internal/protocol/maven/maintenance.go 1
+internal/repository/memory_email.go 1
+internal/repository/memory_helm_distribution.go 1
+internal/repository/memory_lifecycle.go 1
+internal/repository/memory_nuget_distribution.go 1
+internal/repository/memory_replication.go 1
+internal/repository/memory_webhooks.go 1
+internal/repository/postgres_email.go 1
+internal/requestcontext/correlation.go 2
+internal/rubygemspublication/memory_distribution.go 1
+internal/testsupport/rubygemsfixture/distribution_contract.go 4

@@ -8,7 +8,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repositorypreset"
 )
 
@@ -53,9 +53,9 @@ func (s *Store) Initialize(ctx context.Context) (repositorypreset.Result, error)
 		result.State = "skipped_existing"
 	} else {
 		catalog := repositorypreset.Standard()
-		ids := make(map[string]string, len(catalog.Repositories))
+		idByName := make(map[string]string, len(catalog.Repositories))
 		for _, repo := range catalog.Repositories {
-			id := uuid.NewString()
+			id := ids.New()
 			var egress any
 			if repo.EgressProxy != nil {
 				encoded, err := json.Marshal(repo.EgressProxy)
@@ -70,16 +70,16 @@ func (s *Store) Initialize(ctx context.Context) (repositorypreset.Result, error)
 				id, repo.Name, repo.Format, repo.Type, repo.Endpoint, repo.AllowedHosts, egress); err != nil {
 				return result, fmt.Errorf("create preset repository: %w", err)
 			}
-			ids[repo.Name] = id
+			idByName[repo.Name] = id
 		}
 		for _, group := range catalog.Groups {
-			id := uuid.NewString()
+			id := ids.New()
 			if _, err := tx.ExecContext(ctx, `INSERT INTO hosted_groups (id,name,format,anonymous_read)
 				VALUES ($1,$2,$3,false)`, id, group.Name, group.Format); err != nil {
 				return result, fmt.Errorf("create preset group: %w", err)
 			}
 			for position, name := range group.Members {
-				memberID, ok := ids[name]
+				memberID, ok := idByName[name]
 				if !ok {
 					return result, errors.New("preset group member is missing")
 				}

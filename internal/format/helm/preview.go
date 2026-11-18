@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/ids"
 	helmprotocol "github.com/mlops-ca/notarx/internal/protocol/helm"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -271,6 +272,6 @@ func (m *Module) capacity(w http.ResponseWriter, r *http.Request, repo repositor
 }
 
 func withRepositoryID(in repository.HostedRepository) repository.HostedRepository {
-	in.ID = uuid.NewString()
+	in.ID = ids.New()
 	return in
 }

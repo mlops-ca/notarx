@@ -6,7 +6,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 )
 
 func (s *MemoryStore) CreateUserSession(_ context.Context, session UserSession) (UserSession, error) {
@@ -16,7 +16,7 @@ func (s *MemoryStore) CreateUserSession(_ context.Context, session UserSession) 
 		return UserSession{}, ErrNotFound
 	}
 	if session.ID == "" {
-		session.ID = uuid.NewString()
+		session.ID = ids.New()
 	}
 	if session.CreatedAt.IsZero() {
 		session.CreatedAt = time.Now().UTC()

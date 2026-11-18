@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -57,7 +57,7 @@ func (m NativeCargoMaintenance) EnqueueReclaimJobs(ctx context.Context, before t
 		if err != nil {
 			return err
 		}
-		_, _, err = m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: uuid.NewString(), RepositoryID: object.RepositoryID,
+		_, _, err = m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: ids.New(), RepositoryID: object.RepositoryID,
 			Kind: repository.LifecycleJobReclaim, IdempotencyKey: repository.CargoTombstoneReclaimKey(object.ObjectKey, object.TombstonedAt), Payload: payload})
 		if err != nil && !errors.Is(err, repository.ErrIdempotencyConflict) {
 			return err

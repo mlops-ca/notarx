@@ -19,6 +19,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 )
 
 // Filesystem driver layout (ADR 0017). Everything below one root directory so
@@ -213,7 +214,7 @@ func (s *FileStore) readRootID(wantRootID string) error {
 	if errors.Is(err, fs.ErrNotExist) {
 		s.rootID, s.pendingMarker = wantRootID, true
 		if s.rootID == "" {
-			s.rootID = uuid.NewString()
+			s.rootID = ids.New()
 		}
 		return nil
 	}

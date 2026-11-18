@@ -11,7 +11,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/nexussource"
 	npmprotocol "github.com/mlops-ca/notarx/internal/protocol/npm"
 )
@@ -129,7 +129,7 @@ func (s *Service) planNPMEntries(ctx context.Context, b Batch, sourceRepo, targe
 		if metadata.Validator == "" {
 			metadata.Validator = "sha256:" + metadata.SHA256
 		}
-		entry := Entry{ID: uuid.NewString(), BatchID: b.ID, SourceRepository: sourceRepo, TargetRepositoryID: targetRepo, Format: "npm", Identity: name, State: "pending", Assets: []Asset{metadata}}
+		entry := Entry{ID: ids.New(), BatchID: b.ID, SourceRepository: sourceRepo, TargetRepositoryID: targetRepo, Format: "npm", Identity: name, State: "pending", Assets: []Asset{metadata}}
 		versions := make([]string, 0, len(doc.Versions))
 		for version := range doc.Versions {
 			versions = append(versions, version)

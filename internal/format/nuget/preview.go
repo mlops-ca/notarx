@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/ids"
 	nugetprotocol "github.com/mlops-ca/notarx/internal/protocol/nuget"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/uploadspool"
@@ -160,7 +161,7 @@ func (m *Module) servePreview(w http.ResponseWriter, r *http.Request) {
 		defer release()
 		body, _ := json.Marshal(input)
 		sum := sha256.Sum256(body)
-		configured.ID = uuid.NewString()
+		configured.ID = ids.New()
 		repo, replay, err := m.repos.CreateHostedRepositoryIdempotently(ctx, configured, p.Actor, "nuget-preview:"+key, hex.EncodeToString(sum[:]))
 		if err != nil {
 			m.failure(w, err)

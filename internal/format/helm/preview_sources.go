@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/ids"
 	helmprotocol "github.com/mlops-ca/notarx/internal/protocol/helm"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/secrets"
@@ -226,7 +227,7 @@ func (m *Module) previewGroups(w http.ResponseWriter, r *http.Request, p authori
 		}
 		body, _ := json.Marshal(input)
 		sum := sha256.Sum256(body)
-		group.ID = uuid.NewString()
+		group.ID = ids.New()
 		group, replay, err := m.groups.CreateHostedGroupIdempotently(ctx, group, p.Actor, "helm-preview:"+key, hex.EncodeToString(sum[:]))
 		if err != nil {
 			m.failure(w, err)

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -45,7 +45,7 @@ func (m NativeNPMMaintenance) EnqueueReclaimJobs(ctx context.Context, before tim
 	}
 	for _, object := range objects {
 		payload, _ := json.Marshal(npmReclaimPayload{Format: repository.FormatNPM, ObjectKey: object.ObjectKey})
-		if _, _, err = m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: uuid.NewString(), RepositoryID: object.RepositoryID, Kind: repository.LifecycleJobReclaim, IdempotencyKey: "npm-object:" + object.ObjectKey, Payload: payload}); err != nil {
+		if _, _, err = m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: ids.New(), RepositoryID: object.RepositoryID, Kind: repository.LifecycleJobReclaim, IdempotencyKey: "npm-object:" + object.ObjectKey, Payload: payload}); err != nil {
 			return err
 		}
 	}

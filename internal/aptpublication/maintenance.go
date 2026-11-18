@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/lifecycle"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -73,7 +73,7 @@ func (m Maintenance) Schedule(ctx context.Context) error {
 			return marshalErr
 		}
 		if _, _, err = m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{
-			ID: uuid.NewString(), RepositoryID: item.RepositoryID, Kind: repository.LifecycleJobReclaim,
+			ID: ids.New(), RepositoryID: item.RepositoryID, Kind: repository.LifecycleJobReclaim,
 			IdempotencyKey: "apt-publication:" + item.SessionID, Payload: payload,
 		}); err != nil {
 			return err
@@ -91,7 +91,7 @@ func (m Maintenance) Schedule(ctx context.Context) error {
 		if marshalErr != nil {
 			return marshalErr
 		}
-		if _, _, err = m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: uuid.NewString(), RepositoryID: d.RepositoryID, Kind: repository.LifecycleJobReclaim, IdempotencyKey: "apt-deletion:" + d.ID, Payload: payload}); err != nil {
+		if _, _, err = m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: ids.New(), RepositoryID: d.RepositoryID, Kind: repository.LifecycleJobReclaim, IdempotencyKey: "apt-deletion:" + d.ID, Payload: payload}); err != nil {
 			return err
 		}
 		if err = m.Store.MarkAPTDeletionObjectScheduled(ctx, d.ID); err != nil {
@@ -108,7 +108,7 @@ func (m Maintenance) Schedule(ctx context.Context) error {
 			return marshalErr
 		}
 		if _, _, err = m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{
-			ID: uuid.NewString(), RepositoryID: item.RepositoryID, Kind: repository.LifecycleJobReclaim,
+			ID: ids.New(), RepositoryID: item.RepositoryID, Kind: repository.LifecycleJobReclaim,
 			IdempotencyKey: "apt-snapshot:" + item.SnapshotID + ":" + item.ObjectKey, Payload: payload,
 		}); err != nil {
 			return err
@@ -126,7 +126,7 @@ func (m Maintenance) Schedule(ctx context.Context) error {
 		if marshalErr != nil {
 			return marshalErr
 		}
-		if _, _, err = m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: uuid.NewString(), RepositoryID: item.RepositoryID, Kind: repository.LifecycleJobReclaim, IdempotencyKey: "apt-restore:" + item.RestoreID + ":" + item.ObjectKey, Payload: payload}); err != nil {
+		if _, _, err = m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: ids.New(), RepositoryID: item.RepositoryID, Kind: repository.LifecycleJobReclaim, IdempotencyKey: "apt-restore:" + item.RestoreID + ":" + item.ObjectKey, Payload: payload}); err != nil {
 			return err
 		}
 		if err = m.Store.MarkAPTArchiveObjectScheduled(ctx, item.RestoreID, item.ObjectKey); err != nil {

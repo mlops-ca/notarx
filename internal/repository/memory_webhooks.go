@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 )
 
 func artifactQuarantineWebhookEvent(value ArtifactQuarantine) WebhookEvent {
@@ -18,7 +19,7 @@ func artifactQuarantineWebhookEvent(value ArtifactQuarantine) WebhookEvent {
 		RepositoryID: value.RepositoryID, Format: value.Format, Coordinate: value.Coordinate,
 		Digest: value.Digest, State: value.State, Reason: value.Reason, Actor: value.UpdatedBy, Version: value.Version,
 	})
-	return WebhookEvent{ID: uuid.NewString(), Type: eventType, OccurredAt: value.UpdatedAt, Data: data}
+	return WebhookEvent{ID: ids.New(), Type: eventType, OccurredAt: value.UpdatedAt, Data: data}
 }
 
 func cloneWebhookSubscription(value WebhookSubscription) WebhookSubscription {
@@ -107,7 +108,7 @@ func (s *MemoryStore) EnqueueWebhookEvent(_ context.Context, event WebhookEvent)
 
 func (s *MemoryStore) enqueueWebhookEventLocked(event WebhookEvent) WebhookEvent {
 	if event.ID == "" {
-		event.ID = uuid.NewString()
+		event.ID = ids.New()
 	}
 	if event.OccurredAt.IsZero() {
 		event.OccurredAt = time.Now().UTC()
@@ -118,7 +119,7 @@ func (s *MemoryStore) enqueueWebhookEventLocked(event WebhookEvent) WebhookEvent
 			continue
 		}
 		now := event.OccurredAt
-		delivery := WebhookDelivery{ID: uuid.NewString(), EventID: event.ID, EventType: event.Type, SubscriptionID: subscription.ID, State: WebhookDeliveryPending, NextAttemptAt: now, CreatedAt: now, UpdatedAt: now}
+		delivery := WebhookDelivery{ID: ids.New(), EventID: event.ID, EventType: event.Type, SubscriptionID: subscription.ID, State: WebhookDeliveryPending, NextAttemptAt: now, CreatedAt: now, UpdatedAt: now}
 		s.webhookDeliveries[delivery.ID] = delivery
 	}
 	return cloneWebhookEvent(event)

@@ -19,6 +19,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/ids"
 	helmprotocol "github.com/mlops-ca/notarx/internal/protocol/helm"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/uploadspool"
@@ -374,7 +375,7 @@ func (m *Module) proxyChart(ctx context.Context, repo repository.HostedRepositor
 			return prior, errIntegrity
 		}
 	}
-	in := repository.HelmSession{ID: uuid.NewString(), RepositoryID: repo.ID, SourceVersion: repo.Version, Name: entry.Name, Version: entry.Version, Digest: chart.Digest(), Size: chart.Size(), Actor: "helm-proxy", MetadataJSON: inspection.MetadataJSON, ChartYAML: inspection.ChartYAML, ExpiresAt: time.Now().UTC().Add(time.Hour)}
+	in := repository.HelmSession{ID: ids.New(), RepositoryID: repo.ID, SourceVersion: repo.Version, Name: entry.Name, Version: entry.Version, Digest: chart.Digest(), Size: chart.Size(), Actor: "helm-proxy", MetadataJSON: inspection.MetadataJSON, ChartYAML: inspection.ChartYAML, ExpiresAt: time.Now().UTC().Add(time.Hour)}
 	if prov != nil {
 		in.ProvenanceDigest, in.ProvenanceSize = prov.Digest(), prov.Size()
 	}

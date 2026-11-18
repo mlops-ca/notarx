@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 )
 
 func cloneMavenImport(v MavenSnapshotImport) MavenSnapshotImport {
@@ -83,7 +84,7 @@ func (s *MemoryStore) BeginMavenSnapshotImport(_ context.Context, p MavenSnapsho
 		}
 		return cloneMavenImport(v), nil
 	}
-	v := MavenSnapshotImport{RepositoryID: p.RepositoryID, Coordinate: p.Coordinate, TargetID: p.TargetID, TargetBinding: p.TargetBinding, SourceID: p.SourceID, ManifestDigest: p.ManifestDigest, PlanDigest: mavenImportDigest(p), SessionID: uuid.NewString(), Actor: p.Actor, State: "staged", Metadata: p.Metadata, Aliases: p.Aliases, CreatedAt: time.Now().UTC()}
+	v := MavenSnapshotImport{RepositoryID: p.RepositoryID, Coordinate: p.Coordinate, TargetID: p.TargetID, TargetBinding: p.TargetBinding, SourceID: p.SourceID, ManifestDigest: p.ManifestDigest, PlanDigest: mavenImportDigest(p), SessionID: ids.New(), Actor: p.Actor, State: "staged", Metadata: p.Metadata, Aliases: p.Aliases, CreatedAt: time.Now().UTC()}
 	objects := make([]MavenDeclaredObject, 0, len(p.Assets))
 	for _, a := range p.Assets {
 		objects = append(objects, MavenDeclaredObject{Name: strings.TrimPrefix(a.Path, mavenArtifactPathPrefix(p.Coordinate)), Digest: a.Digest, Size: a.Size})

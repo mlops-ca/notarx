@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 )
 
 func cargoPromotionWebhookEvent(job LifecycleJob) (WebhookEvent, bool) {
@@ -29,7 +29,7 @@ func cargoPromotionWebhookEvent(job LifecycleJob) (WebhookEvent, bool) {
 		Coordinate: payload.Name + "@" + payload.Version, Digest: payload.Digest,
 		State: string(job.State), Attempts: job.Attempts,
 	})
-	return WebhookEvent{ID: uuid.NewString(), Type: eventType, OccurredAt: job.CompletedAt, Data: data}, true
+	return WebhookEvent{ID: ids.New(), Type: eventType, OccurredAt: job.CompletedAt, Data: data}, true
 }
 
 func cargoReplicationWebhookEvent(plan ReplicationPlan) (WebhookEvent, bool) {
@@ -49,5 +49,5 @@ func cargoReplicationWebhookEvent(plan ReplicationPlan) (WebhookEvent, bool) {
 	if occurred.IsZero() {
 		occurred = time.Now().UTC()
 	}
-	return WebhookEvent{ID: uuid.NewString(), Type: eventType, OccurredAt: occurred, Data: data}, true
+	return WebhookEvent{ID: ids.New(), Type: eventType, OccurredAt: occurred, Data: data}, true
 }

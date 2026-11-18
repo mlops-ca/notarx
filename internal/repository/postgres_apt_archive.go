@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 )
 
 func loadAPTArchiveState(ctx context.Context, tx *sql.Tx, plan APTArchiveRestorePlan) (aptArchiveRestoreState, error) {
@@ -230,7 +230,7 @@ func (s *PostgresStore) CommitAPTArchiveRestore(ctx context.Context, plan APTArc
 			if !sameAPTArchiveRevision(current, r) {
 				return APTRepositorySnapshot{}, ErrAPTPackageConflict
 			}
-			sessionID := uuid.NewString()
+			sessionID := ids.New()
 			_, err = tx.ExecContext(ctx, `INSERT INTO native_apt_publication_sessions(id,repository_id,suite,component,publisher,object_name,declared_digest,declared_size,expected_identity,object_key,package_revision_id,state,expires_at,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'staged',clock_timestamp()+interval '24 hours',$12)`, sessionID, r.RepositoryID, snapshot.Suite, p.Component, r.Publisher, r.ObjectName, r.Digest, r.Size, r.CanonicalIdentity, r.ObjectKey, current.ID, r.CreatedAt)
 			if err != nil {
 				return APTRepositorySnapshot{}, err

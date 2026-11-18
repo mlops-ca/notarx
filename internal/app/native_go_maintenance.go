@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -58,7 +58,7 @@ func (m NativeGoMaintenance) EnqueueReclaimJobs(ctx context.Context, before time
 	for _, object := range objects {
 		payload, _ := json.Marshal(goReclaimPayload{Format: repository.FormatGo, ObjectKey: object.ObjectKey, Tombstone: true, TombstonedAt: object.TombstonedAt})
 		key := "go-tombstone-object:" + object.ObjectKey + ":" + object.TombstonedAt.UTC().Format(time.RFC3339Nano)
-		if _, _, err = m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: uuid.NewString(), RepositoryID: object.RepositoryID, Kind: repository.LifecycleJobReclaim, IdempotencyKey: key, Payload: payload}); err != nil && !errors.Is(err, repository.ErrIdempotencyConflict) {
+		if _, _, err = m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: ids.New(), RepositoryID: object.RepositoryID, Kind: repository.LifecycleJobReclaim, IdempotencyKey: key, Payload: payload}); err != nil && !errors.Is(err, repository.ErrIdempotencyConflict) {
 			return err
 		}
 	}

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -59,7 +59,7 @@ func (m NativeConanMaintenance) enqueueReclaimJob(ctx context.Context, object re
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		job, replayed, err := m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: uuid.NewString(), RepositoryID: object.RepositoryID, Kind: repository.LifecycleJobReclaim, IdempotencyKey: key, Payload: payload})
+		job, replayed, err := m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: ids.New(), RepositoryID: object.RepositoryID, Kind: repository.LifecycleJobReclaim, IdempotencyKey: key, Payload: payload})
 		if err != nil {
 			return err
 		}

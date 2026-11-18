@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 )
 
 const scheduledTaskDispatchPendingError = "dispatch interrupted before submission"
@@ -19,7 +19,7 @@ func (s *MemoryStore) CreateScheduledTask(_ context.Context, task ScheduledTask)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if task.ID == "" {
-		task.ID = uuid.NewString()
+		task.ID = ids.New()
 	}
 	if task.Version == "" {
 		task.Version = "1"
@@ -133,7 +133,7 @@ func (s *MemoryStore) ClaimDueScheduledTasks(_ context.Context, now time.Time, l
 		task.LastRunAt = now
 		task.NextRunAt = now.Add(time.Duration(task.IntervalSeconds) * time.Second)
 		task.UpdatedAt = now
-		run := ScheduledTaskRun{ID: uuid.NewString(), TaskID: task.ID, Trigger: "scheduled", State: ScheduledTaskFailed, ScheduledAt: now, CreatedAt: now, LastError: scheduledTaskDispatchPendingError}
+		run := ScheduledTaskRun{ID: ids.New(), TaskID: task.ID, Trigger: "scheduled", State: ScheduledTaskFailed, ScheduledAt: now, CreatedAt: now, LastError: scheduledTaskDispatchPendingError}
 		task.LastRunID, task.LastRunState, task.LastError = run.ID, ScheduledTaskFailed, run.LastError
 		s.scheduledTasks[task.ID] = task
 		s.scheduledTaskRuns[run.ID] = run
@@ -150,7 +150,7 @@ func (s *MemoryStore) CreateScheduledTaskRun(_ context.Context, taskID, trigger 
 		return ScheduledTaskRun{}, ErrNotFound
 	}
 	now = now.UTC()
-	run := ScheduledTaskRun{ID: uuid.NewString(), TaskID: taskID, Trigger: trigger, State: ScheduledTaskFailed, ScheduledAt: now, CreatedAt: now, LastError: scheduledTaskDispatchPendingError}
+	run := ScheduledTaskRun{ID: ids.New(), TaskID: taskID, Trigger: trigger, State: ScheduledTaskFailed, ScheduledAt: now, CreatedAt: now, LastError: scheduledTaskDispatchPendingError}
 	task.LastRunAt, task.LastRunID, task.LastRunState, task.LastError, task.UpdatedAt = now, run.ID, ScheduledTaskFailed, run.LastError, now
 	s.scheduledTasks[taskID], s.scheduledTaskRuns[run.ID] = task, run
 	return run, nil

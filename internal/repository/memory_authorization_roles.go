@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 )
 
 func cloneAuthorizationRole(role AuthorizationRole) AuthorizationRole {
@@ -28,7 +28,7 @@ func (s *MemoryStore) CreateAuthorizationRole(_ context.Context, role Authorizat
 	}
 	now := time.Now().UTC()
 	if role.ID == "" {
-		role.ID = uuid.NewString()
+		role.ID = ids.New()
 	}
 	role.Name = name
 	role.Version = "1"

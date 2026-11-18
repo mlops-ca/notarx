@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
 	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
@@ -106,7 +107,7 @@ func (h identityManagementHandler) CreateServiceAccount(w http.ResponseWriter, r
 		return
 	}
 	account, err := h.serviceAccounts.CreateServiceAccount(r.Context(), repository.ServiceAccount{
-		ID:          uuid.NewString(),
+		ID:          ids.New(),
 		Name:        name,
 		Description: description,
 	})
@@ -240,7 +241,7 @@ func (h identityManagementHandler) CreateServiceAccountCredential(w http.Respons
 	}
 	token := "agc_" + base64.RawURLEncoding.EncodeToString(raw)
 	credential, err := h.serviceAccounts.CreateServiceAccountCredential(r.Context(), repository.APIKey{
-		ID:               uuid.NewString(),
+		ID:               ids.New(),
 		ServiceAccountID: serviceAccountID.String(),
 		Name:             name,
 		SecretHash:       authorization.HashAPIKey(token),

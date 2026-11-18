@@ -9,6 +9,7 @@ import (
 
 	"github.com/mlops-ca/notarx/internal/authorization"
 	dist "github.com/mlops-ca/notarx/internal/helmdistribution"
+	"github.com/mlops-ca/notarx/internal/ids"
 
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -251,7 +252,7 @@ func (m *Module) ReplicateHelmItem(ctx context.Context, job dist.Job, item dist.
 		return err
 	}
 	session := publicationSession(source)
-	session.ID = uuid.NewString()
+	session.ID = ids.New()
 	session.RepositoryID = job.TargetRepositoryID
 	session.Actor = job.Actor
 	session.ExpiresAt = time.Now().UTC().Add(time.Hour)

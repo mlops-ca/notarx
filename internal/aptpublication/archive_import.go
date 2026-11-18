@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -57,12 +57,12 @@ func (i *SnapshotArchiveImporter) Import(ctx context.Context, repositoryID, expe
 		return repository.APTRepositorySnapshot{}, repository.ErrNotFound
 	}
 	snapshot, assets := snapshotArchiveRepositoryView(archive.manifest)
-	plan := repository.APTArchiveRestorePlan{ID: uuid.NewString(), ArchiveDigest: archive.digest, Snapshot: snapshot, Assets: assets, Packages: make([]repository.APTArchivePackage, 0, len(archive.manifest.Packages))}
+	plan := repository.APTArchiveRestorePlan{ID: ids.New(), ArchiveDigest: archive.digest, Snapshot: snapshot, Assets: assets, Packages: make([]repository.APTArchivePackage, 0, len(archive.manifest.Packages))}
 	revisionIDs := make(map[string]string)
 	for _, p := range archive.manifest.Packages {
 		id := revisionIDs[p.CanonicalIdentity]
 		if id == "" {
-			id = uuid.NewString()
+			id = ids.New()
 			revisionIDs[p.CanonicalIdentity] = id
 		}
 		createdAt, _ := time.Parse(time.RFC3339Nano, p.CreatedAt)

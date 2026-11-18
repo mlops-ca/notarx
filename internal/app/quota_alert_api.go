@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/google/uuid"
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/quotaalert"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"io"
@@ -194,7 +195,7 @@ func (h generatedRepositoryAPIAdapter) CreateRepositoryQuotaAlertRule(w http.Res
 	if quotaProblem(w, err) {
 		return
 	}
-	v, err := h.quotaAlerts.CreateRepositoryQuotaAlertRule(r.Context(), repository.RepositoryQuotaAlertRule{ID: uuid.NewString(), RepositoryID: in.RepositoryID.String(), TargetID: target.ID, TargetVersion: target.Version, Enabled: in.Enabled, Policy: in.Policy})
+	v, err := h.quotaAlerts.CreateRepositoryQuotaAlertRule(r.Context(), repository.RepositoryQuotaAlertRule{ID: ids.New(), RepositoryID: in.RepositoryID.String(), TargetID: target.ID, TargetVersion: target.Version, Enabled: in.Enabled, Policy: in.Policy})
 	if quotaProblem(w, err) {
 		return
 	}

@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/felixge/httpsnoop"
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/protocol/cargo"
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -385,7 +385,7 @@ func (h nativeCargoHandler) ensureObject(ctx context.Context, source io.ReaderAt
 	if err != nil {
 		return false, err
 	}
-	jobID := uuid.NewString()
+	jobID := ids.New()
 	if _, _, err = h.store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{
 		ID: jobID, RepositoryID: publication.RepositoryID, Kind: repository.LifecycleJobReclaim,
 		IdempotencyKey: "cargo-publication-object:" + jobID, Payload: payload,

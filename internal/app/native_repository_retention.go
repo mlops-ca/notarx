@@ -9,9 +9,9 @@ import (
 	"sort"
 	"time"
 
-	"github.com/google/uuid"
 	formatmodule "github.com/mlops-ca/notarx/internal/format"
 	rawformat "github.com/mlops-ca/notarx/internal/format/raw"
+	"github.com/mlops-ca/notarx/internal/ids"
 	mavenprotocol "github.com/mlops-ca/notarx/internal/protocol/maven"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -129,7 +129,7 @@ func (m NativeRepositoryRetention) EnqueueRepository(ctx context.Context, reposi
 	if err != nil {
 		return repository.LifecycleJob{}, false, err
 	}
-	return m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: uuid.NewString(), RepositoryID: repositoryID, Kind: repository.LifecycleJobRetention, IdempotencyKey: idempotencyKey, Payload: payload})
+	return m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: ids.New(), RepositoryID: repositoryID, Kind: repository.LifecycleJobRetention, IdempotencyKey: idempotencyKey, Payload: payload})
 }
 
 func (m NativeRepositoryRetention) RunJobs(ctx context.Context, limit int) error {

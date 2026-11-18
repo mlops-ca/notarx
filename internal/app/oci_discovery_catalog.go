@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	discovery "github.com/mlops-ca/notarx/internal/ocidiscovery"
 	"github.com/mlops-ca/notarx/internal/ocigraph"
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -331,7 +331,7 @@ func (h nativeOCIHandler) catalogViews(ctx context.Context) ([]ociCatalogView, b
 }
 
 func (h nativeOCIHandler) collectCatalog(ctx context.Context, principal Principal) (discovery.Snapshot, error) {
-	snapshot := discovery.Snapshot{ID: uuid.NewString(), Owner: discoveryOwner(principal, true), Actor: principal.Actor, Kind: "catalog", Entries: []discovery.CatalogEntry{}, Coverage: []discovery.Coverage{}, ExpiresAt: time.Now().UTC().Add(discovery.SnapshotTTL)}
+	snapshot := discovery.Snapshot{ID: ids.New(), Owner: discoveryOwner(principal, true), Actor: principal.Actor, Kind: "catalog", Entries: []discovery.CatalogEntry{}, Coverage: []discovery.Coverage{}, ExpiresAt: time.Now().UTC().Add(discovery.SnapshotTTL)}
 	views, truncated, err := h.catalogViews(ctx)
 	if err != nil {
 		return snapshot, err

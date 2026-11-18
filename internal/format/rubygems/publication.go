@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/ids"
 	protocol "github.com/mlops-ca/notarx/internal/protocol/rubygems"
 	"github.com/mlops-ca/notarx/internal/repository"
 	domain "github.com/mlops-ca/notarx/internal/rubygemspublication"
@@ -46,7 +46,7 @@ func (m *Module) push(w http.ResponseWriter, r *http.Request, repo repository.Ho
 		return
 	}
 	defer release()
-	in := domain.Session{ID: uuid.NewString(), RepositoryID: repo.ID, Name: meta.Name, Version: meta.Version, Platform: meta.Platform, Digest: spool.Digest(), Size: spool.Size(), Actor: p.Actor, MetadataJSON: inspection.MetadataJSON, MetadataYAML: inspection.MetadataYAML, ExpiresAt: time.Now().UTC().Add(time.Hour)}
+	in := domain.Session{ID: ids.New(), RepositoryID: repo.ID, Name: meta.Name, Version: meta.Version, Platform: meta.Platform, Digest: spool.Digest(), Size: spool.Size(), Actor: p.Actor, MetadataJSON: inspection.MetadataJSON, MetadataYAML: inspection.MetadataYAML, ExpiresAt: time.Now().UTC().Add(time.Hour)}
 	session, _, e := m.store.Reserve(ctx, in)
 	if e != nil {
 		m.failure(w, e)

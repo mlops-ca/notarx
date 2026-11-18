@@ -16,9 +16,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/authorization"
 	"github.com/mlops-ca/notarx/internal/cache"
+	"github.com/mlops-ca/notarx/internal/ids"
 	rawprotocol "github.com/mlops-ca/notarx/internal/protocol/raw"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/uploadspool"
@@ -186,7 +186,7 @@ func (h *Module) protocolPrincipal(r *http.Request) (authorization.Principal, bo
 }
 
 func (h *Module) startUpload(w http.ResponseWriter, r *http.Request, repo repository.HostedRepository, path string) {
-	id := uuid.NewString()
+	id := ids.New()
 	upload := repository.RawUpload{ID: id, RepositoryID: repo.ID, Path: path, ObjectKey: "native/raw/uploads/" + id, State: "open", ExpiresAt: time.Now().UTC().Add(time.Hour)}
 	if _, err := h.store.CreateRawUpload(r.Context(), upload); err != nil {
 		http.Error(w, "create raw upload failed", 500)

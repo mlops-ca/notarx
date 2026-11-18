@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/replication"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -38,7 +38,7 @@ func (m NativeGoPromotion) Enqueue(ctx context.Context, targetID, key string, pa
 		return repository.LifecycleJob{}, false, err
 	}
 	return m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{
-		ID: uuid.NewString(), RepositoryID: targetID, Kind: repository.LifecycleJobPromotion, IdempotencyKey: key, Payload: body,
+		ID: ids.New(), RepositoryID: targetID, Kind: repository.LifecycleJobPromotion, IdempotencyKey: key, Payload: body,
 	})
 }
 

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/ids"
 	dist "github.com/mlops-ca/notarx/internal/rubygemsdistribution"
 
 	"github.com/google/uuid"
@@ -256,7 +257,7 @@ func (m *Module) ReplicateRubyGemsItem(ctx context.Context, job dist.Job, item d
 	if err = m.distribution.AuthorizeRubyGemsReplicationItem(ctx, job.Lease, item.Index, check); err != nil {
 		return err
 	}
-	session := domain.Session{ID: uuid.NewString(), RepositoryID: job.TargetRepositoryID, Name: source.Name, Version: source.Version, Platform: source.Platform, Digest: source.Digest, Size: source.Size, Actor: job.Actor, MetadataJSON: source.MetadataJSON, MetadataYAML: source.MetadataYAML, ExpiresAt: time.Now().UTC().Add(time.Hour)}
+	session := domain.Session{ID: ids.New(), RepositoryID: job.TargetRepositoryID, Name: source.Name, Version: source.Version, Platform: source.Platform, Digest: source.Digest, Size: source.Size, Actor: job.Actor, MetadataJSON: source.MetadataJSON, MetadataYAML: source.MetadataYAML, ExpiresAt: time.Now().UTC().Add(time.Hour)}
 	session, _, err = m.store.Reserve(ctx, session)
 	if err != nil {
 		return replicationStorageError(err)

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/replication"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -36,7 +36,7 @@ func (m NativePyPIPromotion) Enqueue(ctx context.Context, targetID, key string, 
 	if err != nil {
 		return repository.LifecycleJob{}, false, err
 	}
-	return m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: uuid.NewString(), RepositoryID: targetID, Kind: repository.LifecycleJobPromotion, IdempotencyKey: key, Payload: body})
+	return m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: ids.New(), RepositoryID: targetID, Kind: repository.LifecycleJobPromotion, IdempotencyKey: key, Payload: body})
 }
 
 func (m NativePyPIPromotion) RunJobs(ctx context.Context, limit int) error {

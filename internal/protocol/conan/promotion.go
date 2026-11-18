@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -32,7 +32,7 @@ func (m NativePromotion) Enqueue(ctx context.Context, target, key string, p Prom
 	if err != nil {
 		return repository.LifecycleJob{}, false, err
 	}
-	return m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: uuid.NewString(), RepositoryID: target, Kind: repository.LifecycleJobPromotion, IdempotencyKey: key, Payload: body})
+	return m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: ids.New(), RepositoryID: target, Kind: repository.LifecycleJobPromotion, IdempotencyKey: key, Payload: body})
 }
 func (m NativePromotion) RunJobs(ctx context.Context, limit int) error {
 	jobs, err := m.Store.ClaimLifecycleJobsByKindAndFormat(ctx, repository.LifecycleJobPromotion, repository.FormatConan, limit)

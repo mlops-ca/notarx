@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 )
 
 const mavenImportColumns = `repository_id::text,coordinate,target_id,target_binding,source_id,manifest_digest,plan_digest,session_id::text,actor,state,metadata,aliases,created_at,takeover_key,takeover_actor,taken_over_at,current_build_number,current_aliases`
@@ -172,7 +173,7 @@ func (s *PostgresStore) BeginMavenSnapshotImport(ctx context.Context, p MavenSna
 			_, err = tx.ExecContext(ctx, `UPDATE native_maven_publish_sessions SET state='open',expires_at=now()+interval '24 hours' WHERE id=$1`, v.SessionID)
 		}
 	} else {
-		v = MavenSnapshotImport{RepositoryID: p.RepositoryID, Coordinate: p.Coordinate, TargetID: p.TargetID, TargetBinding: p.TargetBinding, SourceID: p.SourceID, ManifestDigest: p.ManifestDigest, PlanDigest: mavenImportDigest(p), SessionID: uuid.NewString(), Actor: p.Actor, State: "staged", Metadata: p.Metadata, Aliases: p.Aliases, CreatedAt: time.Now().UTC()}
+		v = MavenSnapshotImport{RepositoryID: p.RepositoryID, Coordinate: p.Coordinate, TargetID: p.TargetID, TargetBinding: p.TargetBinding, SourceID: p.SourceID, ManifestDigest: p.ManifestDigest, PlanDigest: mavenImportDigest(p), SessionID: ids.New(), Actor: p.Actor, State: "staged", Metadata: p.Metadata, Aliases: p.Aliases, CreatedAt: time.Now().UTC()}
 		objects := []MavenDeclaredObject{}
 		for _, a := range p.Assets {
 			objects = append(objects, MavenDeclaredObject{Name: strings.TrimPrefix(a.Path, mavenArtifactPathPrefix(p.Coordinate)), Digest: a.Digest, Size: a.Size})

@@ -14,6 +14,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/aptpublication"
 	formatmodule "github.com/mlops-ca/notarx/internal/format"
 	rawformat "github.com/mlops-ca/notarx/internal/format/raw"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	conanprotocol "github.com/mlops-ca/notarx/internal/protocol/conan"
 	mavenprotocol "github.com/mlops-ca/notarx/internal/protocol/maven"
@@ -264,7 +265,7 @@ func (h generatedRepositoryAPIAdapter) CreateRepositoryReplication(w http.Respon
 					return
 				}
 			}
-			plan, _, err := h.replication.CreateReplicationPlan(r.Context(), repository.ReplicationPlan{ID: uuid.NewString(), SourceRepositoryID: source.ID, TargetRepositoryID: target.ID, Format: format, APTTargetSuite: aptDistributionSuite(request.AptTargetSuite), Coordinate: request.Coordinate, Digest: request.Digest, IdempotencyKey: string(params.IdempotencyKey)}, checkpoints)
+			plan, _, err := h.replication.CreateReplicationPlan(r.Context(), repository.ReplicationPlan{ID: ids.New(), SourceRepositoryID: source.ID, TargetRepositoryID: target.ID, Format: format, APTTargetSuite: aptDistributionSuite(request.AptTargetSuite), Coordinate: request.Coordinate, Digest: request.Digest, IdempotencyKey: string(params.IdempotencyKey)}, checkpoints)
 			if errors.Is(err, repository.ErrIdempotencyConflict) {
 				writeHostedProblem(w, http.StatusConflict, "idempotency_conflict", "Idempotency-Key conflicts with an existing replication plan")
 				return

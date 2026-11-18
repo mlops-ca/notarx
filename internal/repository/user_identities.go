@@ -9,7 +9,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 )
 
 func (s *MemoryStore) ListUserIdentities(_ context.Context, userID string) ([]UserIdentity, error) {
@@ -49,7 +49,7 @@ func (s *MemoryStore) CreateUserIdentity(_ context.Context, identity UserIdentit
 		}
 	}
 	if identity.ID == "" {
-		identity.ID = uuid.NewString()
+		identity.ID = ids.New()
 	}
 	now := time.Now().UTC()
 	identity.CreatedAt = now
@@ -155,7 +155,7 @@ func (s *MemoryStore) ResolveOIDCIdentity(_ context.Context, provision OIDCIdent
 		s.users[user.ID] = user
 	}
 	identity := refreshUserIdentity(UserIdentity{
-		ID: uuid.NewString(), UserID: user.ID, Kind: UserIdentityOIDC,
+		ID: ids.New(), UserID: user.ID, Kind: UserIdentityOIDC,
 		Issuer: provision.Issuer, Subject: provision.Subject, CreatedAt: now,
 	}, provision, now)
 	s.userIdentities[identity.ID] = identity
@@ -204,7 +204,7 @@ func newOIDCProvisionedUser(provision OIDCIdentityProvision, existing map[string
 	role := provisionedUserRole(provision.Role, provision.DefaultRole)
 	name := provisionedUsername(provision.PreferredUsername, provision.Email, provision.Issuer, provision.Subject, existing)
 	return User{
-		ID: uuid.NewString(), Name: name, DisplayName: strings.TrimSpace(provision.DisplayName),
+		ID: ids.New(), Name: name, DisplayName: strings.TrimSpace(provision.DisplayName),
 		Email: strings.TrimSpace(provision.Email), Role: role, State: UserActive,
 		LastLoginAt: timePointer(now), SessionVersion: 1,
 		CreatedAt: now, UpdatedAt: now, Version: "1",
