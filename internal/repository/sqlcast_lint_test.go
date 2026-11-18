@@ -7,21 +7,12 @@ import (
 	"github.com/mlops-ca/notarx/tools/sqllint"
 )
 
-// TestSQLTypedKeyLint runs the ADR 0023 section 4 ratchet in make test: no new
-// col::text = $n comparison, counts in tools/sqllint/allowlist.txt only shrink,
+// TestSQLTypedKeyLint runs the ADR 0023 section 4 ratchet in make test: no
+// col::text = $n comparison (no allowlist),
 // uuid.New() stays inside internal/ids, and uuid.NewString() counts in
 // tools/sqllint/allowlist-uuid.txt only shrink.
 func TestSQLTypedKeyLint(t *testing.T) {
 	result, err := sqllint.Scan("../..")
-	if err != nil {
-		t.Fatal(err)
-	}
-	file, err := os.Open("../../tools/sqllint/allowlist.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = file.Close() }()
-	allow, err := sqllint.ParseAllowlist(file)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +25,7 @@ func TestSQLTypedKeyLint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, problem := range sqllint.Check(result, allow) {
+	for _, problem := range sqllint.Check(result) {
 		t.Error(problem)
 	}
 	for _, problem := range sqllint.CheckNewStrings(result, uuidAllow) {

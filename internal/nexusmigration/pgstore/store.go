@@ -99,7 +99,7 @@ func (s *Store) Create(ctx context.Context, b m.Batch, key, hash string) (m.Batc
 	return s.Get(ctx, b.ID)
 }
 func (s *Store) Get(ctx context.Context, id string) (m.Batch, error) {
-	b, err := scanBatch(s.db.QueryRowContext(ctx, `SELECT `+batchColumns+` FROM nexus_migration_batches b WHERE b.id::text=$1`, id))
+	b, err := scanBatch(s.db.QueryRowContext(ctx, `SELECT `+batchColumns+` FROM nexus_migration_batches b WHERE b.id=$1::uuid`, id))
 	if err == nil {
 		err = s.totals(ctx, &b)
 	}
@@ -181,7 +181,7 @@ func scanEntry(row scanner) (m.Entry, error) {
 	return e, nil
 }
 func (s *Store) Entries(ctx context.Context, id string, limit int, cursor string) ([]m.Entry, string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+entryColumns+` FROM nexus_migration_entries WHERE batch_id::text=$1 AND ($2='' OR id>NULLIF($2,'')::uuid) ORDER BY id LIMIT $3`, id, cursor, limit+1)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+entryColumns+` FROM nexus_migration_entries WHERE batch_id=$1::uuid AND ($2='' OR id>NULLIF($2,'')::uuid) ORDER BY id LIMIT $3`, id, cursor, limit+1)
 	if err != nil {
 		return nil, "", err
 	}
@@ -247,7 +247,7 @@ func (s *Store) Control(ctx context.Context, id, expected, actor, key, action, h
 	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('nexus-migration-lease:'||$1,0))`, id); err != nil {
 		return m.Batch{}, err
 	}
-	b, err := scanBatch(tx.QueryRowContext(ctx, `SELECT `+batchColumns+` FROM nexus_migration_batches b WHERE b.id::text=$1 FOR UPDATE`, id))
+	b, err := scanBatch(tx.QueryRowContext(ctx, `SELECT `+batchColumns+` FROM nexus_migration_batches b WHERE b.id=$1::uuid FOR UPDATE`, id))
 	if err != nil {
 		return b, err
 	}
@@ -347,15 +347,15 @@ func (s *Store) Claim(ctx context.Context, formats []string) (m.Batch, error) {
 	}
 	// Recovery owns the same fence as scan receipts and native publication. A
 	// partial scan resumes its private checkpoint; it never becomes ready.
-	_, err := s.db.ExecContext(ctx, `WITH expired AS (SELECT id FROM nexus_migration_batches WHERE lease_token<>'' AND lease_expires_at<=clock_timestamp() AND pg_try_advisory_xact_lock(hashtextextended('nexus-migration-lease:'||id::text,0)) FOR UPDATE SKIP LOCKED) UPDATE nexus_migration_batches b SET state=CASE WHEN b.cancel_requested THEN 'cancelled' WHEN b.pause_requested THEN 'paused' WHEN NOT b.scan_complete THEN 'scanning' ELSE 'ready' END,lease_token='',lease_expires_at=NULL,last_error=b.last_error,version=version+1,updated_at=clock_timestamp() FROM expired WHERE b.id=expired.id`)
+	_, err := s.db.ExecContext(ctx, `WITH expired AS (SELECT id FROM nexus_migration_batches WHERE lease_token<>'' AND lease_expires_at<=clock_timestamp() AND pg_try_advisory_xact_lock(hashtextextended(concat('nexus-migration-lease:',id),0)) FOR UPDATE SKIP LOCKED) UPDATE nexus_migration_batches b SET state=CASE WHEN b.cancel_requested THEN 'cancelled' WHEN b.pause_requested THEN 'paused' WHEN NOT b.scan_complete THEN 'scanning' ELSE 'ready' END,lease_token='',lease_expires_at=NULL,last_error=b.last_error,version=version+1,updated_at=clock_timestamp() FROM expired WHERE b.id=expired.id`)
 	if err != nil {
 		return m.Batch{}, err
 	}
 	// A batch is claimed only by a node admitting all of its target formats.
-	return scanBatch(s.db.QueryRowContext(ctx, `WITH candidate AS (SELECT b.id FROM nexus_migration_batches b WHERE b.state IN ('scanning','ready') AND b.lease_token='' AND NOT b.pause_requested AND NOT b.cancel_requested AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(b.request->'mappings') mp JOIN hosted_repositories r ON r.id::text=mp->>'targetRepositoryId' WHERE NOT (r.format=ANY($1))) ORDER BY b.created_at FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE nexus_migration_batches b SET state='running',lease_token=$2,lease_epoch=lease_epoch+1,lease_expires_at=clock_timestamp()+interval '2 minutes',version=version+1,updated_at=clock_timestamp() FROM candidate WHERE b.id=candidate.id RETURNING `+batchColumns, formats, uuid.NewString()))
+	return scanBatch(s.db.QueryRowContext(ctx, `WITH candidate AS (SELECT b.id FROM nexus_migration_batches b WHERE b.state IN ('scanning','ready') AND b.lease_token='' AND NOT b.pause_requested AND NOT b.cancel_requested AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(b.request->'mappings') mp JOIN hosted_repositories r ON r.id=(mp->>'targetRepositoryId')::uuid WHERE NOT (r.format=ANY($1))) ORDER BY b.created_at FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE nexus_migration_batches b SET state='running',lease_token=$2,lease_epoch=lease_epoch+1,lease_expires_at=clock_timestamp()+interval '2 minutes',version=version+1,updated_at=clock_timestamp() FROM candidate WHERE b.id=candidate.id RETURNING `+batchColumns, formats, uuid.NewString()))
 }
 func (s *Store) Renew(ctx context.Context, id, token string) error {
-	result, err := s.db.ExecContext(ctx, `UPDATE nexus_migration_batches SET lease_expires_at=clock_timestamp()+interval '2 minutes' WHERE id::text=$1 AND lease_token=$2 AND lease_expires_at>clock_timestamp() AND state IN ('running','pausing') AND NOT cancel_requested`, id, token)
+	result, err := s.db.ExecContext(ctx, `UPDATE nexus_migration_batches SET lease_expires_at=clock_timestamp()+interval '2 minutes' WHERE id=$1::uuid AND lease_token=$2 AND lease_expires_at>clock_timestamp() AND state IN ('running','pausing') AND NOT cancel_requested`, id, token)
 	return changed(result, err)
 }
 func changed(result sql.Result, err error) error {
@@ -373,7 +373,7 @@ func changed(result sql.Result, err error) error {
 }
 func validLease(ctx context.Context, tx *sql.Tx, id, token string) error {
 	var ok bool
-	err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM nexus_migration_batches WHERE id::text=$1 AND lease_token=$2 AND lease_expires_at>clock_timestamp() AND state IN ('running','pausing'))`, id, token).Scan(&ok)
+	err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM nexus_migration_batches WHERE id=$1::uuid AND lease_token=$2 AND lease_expires_at>clock_timestamp() AND state IN ('running','pausing'))`, id, token).Scan(&ok)
 	if err != nil {
 		return err
 	}
@@ -403,20 +403,20 @@ func (s *Store) Seal(ctx context.Context, b m.Batch, entries []m.Entry, hash str
 			return err
 		}
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE nexus_migration_batches SET manifest_sha256=$3,scan_complete=true,metadata_discovered=$4,entry_count=$5,total_bytes=$6,last_scan_failure=NULL,version=version+1,updated_at=clock_timestamp() WHERE id::text=$1 AND lease_token=$2 AND lease_expires_at>clock_timestamp() AND NOT scan_complete`, b.ID, b.LeaseToken, hash, metadata, len(entries), total)
+	result, err := tx.ExecContext(ctx, `UPDATE nexus_migration_batches SET manifest_sha256=$3,scan_complete=true,metadata_discovered=$4,entry_count=$5,total_bytes=$6,last_scan_failure=NULL,version=version+1,updated_at=clock_timestamp() WHERE id=$1::uuid AND lease_token=$2 AND lease_expires_at>clock_timestamp() AND NOT scan_complete`, b.ID, b.LeaseToken, hash, metadata, len(entries), total)
 	if err = changed(result, err); err != nil {
 		return err
 	}
 	return tx.Commit()
 }
 func (s *Store) Checkpoint(ctx context.Context, e m.Entry, token string) error {
-	result, err := s.db.ExecContext(ctx, `UPDATE nexus_migration_entries e SET state=$4,assets=$5,session_id=$6,attempts=$7,verified_bytes=$8,visible_identities=$9,last_error=$10,updated_at=clock_timestamp() FROM nexus_migration_batches b WHERE e.batch_id=b.id AND e.id::text=$1 AND b.id::text=$2 AND b.lease_token=$3 AND b.lease_expires_at>clock_timestamp() AND b.state IN ('running','pausing') AND NOT (e.format='pypi' AND e.state='committed' AND $4 NOT IN ('committed','skipped')) AND (SELECT jsonb_agg(a-'uploaded'-'verified') FROM jsonb_array_elements(e.assets) a)=(SELECT jsonb_agg(a-'uploaded'-'verified') FROM jsonb_array_elements($5::jsonb) a)`, e.ID, e.BatchID, token, e.State, encodeAssets(e.Assets), e.SessionID, e.Attempts, e.VerifiedBytes, e.VisibleIdentities, e.LastError)
+	result, err := s.db.ExecContext(ctx, `UPDATE nexus_migration_entries e SET state=$4,assets=$5,session_id=$6,attempts=$7,verified_bytes=$8,visible_identities=$9,last_error=$10,updated_at=clock_timestamp() FROM nexus_migration_batches b WHERE e.batch_id=b.id AND e.id=$1::uuid AND b.id=$2::uuid AND b.lease_token=$3 AND b.lease_expires_at>clock_timestamp() AND b.state IN ('running','pausing') AND NOT (e.format='pypi' AND e.state='committed' AND $4 NOT IN ('committed','skipped')) AND (SELECT jsonb_agg(a-'uploaded'-'verified') FROM jsonb_array_elements(e.assets) a)=(SELECT jsonb_agg(a-'uploaded'-'verified') FROM jsonb_array_elements($5::jsonb) a)`, e.ID, e.BatchID, token, e.State, encodeAssets(e.Assets), e.SessionID, e.Attempts, e.VerifiedBytes, e.VisibleIdentities, e.LastError)
 	if err == nil && e.Format == "pypi" && e.State != "committed" && e.State != "skipped" {
 		if n, countErr := result.RowsAffected(); countErr == nil && n == 0 {
 			// A commit may succeed even when its acknowledgement is lost. Revalidation
 			// checkpoints and the error path cannot erase the atomically committed receipt.
 			var committed bool
-			checkErr := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM nexus_migration_entries e JOIN nexus_migration_batches b ON b.id=e.batch_id WHERE e.id::text=$1 AND b.id::text=$2 AND b.lease_token=$3 AND b.lease_expires_at>clock_timestamp() AND b.state IN ('running','pausing') AND e.format='pypi' AND e.state='committed' AND (SELECT jsonb_agg(a-'uploaded'-'verified') FROM jsonb_array_elements(e.assets) a)=(SELECT jsonb_agg(a-'uploaded'-'verified') FROM jsonb_array_elements($4::jsonb) a))`, e.ID, e.BatchID, token, encodeAssets(e.Assets)).Scan(&committed)
+			checkErr := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM nexus_migration_entries e JOIN nexus_migration_batches b ON b.id=e.batch_id WHERE e.id=$1::uuid AND b.id=$2::uuid AND b.lease_token=$3 AND b.lease_expires_at>clock_timestamp() AND b.state IN ('running','pausing') AND e.format='pypi' AND e.state='committed' AND (SELECT jsonb_agg(a-'uploaded'-'verified') FROM jsonb_array_elements(e.assets) a)=(SELECT jsonb_agg(a-'uploaded'-'verified') FROM jsonb_array_elements($4::jsonb) a))`, e.ID, e.BatchID, token, encodeAssets(e.Assets)).Scan(&committed)
 			if checkErr != nil {
 				return checkErr
 			}
@@ -431,7 +431,7 @@ func (s *Store) AddTransferred(ctx context.Context, id, batch, token string, n i
 	if n < 0 {
 		return m.Failed("invalid_request")
 	}
-	result, err := s.db.ExecContext(ctx, `UPDATE nexus_migration_entries e SET transferred_bytes=e.transferred_bytes+$4,updated_at=clock_timestamp() FROM nexus_migration_batches b WHERE e.batch_id=b.id AND e.id::text=$1 AND b.id::text=$2 AND b.lease_token=$3 AND b.lease_expires_at>clock_timestamp() AND b.state IN ('running','pausing')`, id, batch, token, n)
+	result, err := s.db.ExecContext(ctx, `UPDATE nexus_migration_entries e SET transferred_bytes=e.transferred_bytes+$4,updated_at=clock_timestamp() FROM nexus_migration_batches b WHERE e.batch_id=b.id AND e.id=$1::uuid AND b.id=$2::uuid AND b.lease_token=$3 AND b.lease_expires_at>clock_timestamp() AND b.state IN ('running','pausing')`, id, batch, token, n)
 	return changed(result, err)
 }
 func (s *Store) PublicationContext(ctx context.Context, id, token string) context.Context {
@@ -443,7 +443,7 @@ func (s *Store) PublicationContext(ctx context.Context, id, token string) contex
 		}
 		var valid bool
 		var sourceID, sourceVersion string
-		err := tx.QueryRowContext(ctx, `SELECT lease_token=$2 AND lease_expires_at>clock_timestamp() AND state IN ('running','pausing') AND NOT cancel_requested,source_id::text,source_version FROM nexus_migration_batches WHERE id::text=$1 FOR UPDATE`, id, token).Scan(&valid, &sourceID, &sourceVersion)
+		err := tx.QueryRowContext(ctx, `SELECT lease_token=$2 AND lease_expires_at>clock_timestamp() AND state IN ('running','pausing') AND NOT cancel_requested,source_id::text,source_version FROM nexus_migration_batches WHERE id=$1::uuid FOR UPDATE`, id, token).Scan(&valid, &sourceID, &sourceVersion)
 		if err != nil {
 			return err
 		}
@@ -458,7 +458,7 @@ func (s *Store) PublicationContext(ctx context.Context, id, token string) contex
 	})
 }
 func (s *Store) Finish(ctx context.Context, id, token, state, message string) error {
-	result, err := s.db.ExecContext(ctx, `UPDATE nexus_migration_batches SET state=CASE WHEN cancel_requested THEN 'cancelled' WHEN pause_requested THEN 'paused' ELSE $3 END,lease_token='',lease_expires_at=NULL,last_error=$4,version=version+1,updated_at=clock_timestamp() WHERE id::text=$1 AND lease_token=$2 AND lease_expires_at>clock_timestamp()`, id, token, state, message)
+	result, err := s.db.ExecContext(ctx, `UPDATE nexus_migration_batches SET state=CASE WHEN cancel_requested THEN 'cancelled' WHEN pause_requested THEN 'paused' ELSE $3 END,lease_token='',lease_expires_at=NULL,last_error=$4,version=version+1,updated_at=clock_timestamp() WHERE id=$1::uuid AND lease_token=$2 AND lease_expires_at>clock_timestamp()`, id, token, state, message)
 	return changed(result, err)
 }
 
@@ -487,7 +487,7 @@ func (s *Store) BeginEntry(ctx context.Context, e m.Entry, token string) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 	var valid, pause, cancel bool
-	err = tx.QueryRowContext(ctx, `SELECT lease_token=$2 AND lease_expires_at>clock_timestamp() AND state IN ('running','pausing'),pause_requested,cancel_requested FROM nexus_migration_batches WHERE id::text=$1 FOR UPDATE`, e.BatchID, token).Scan(&valid, &pause, &cancel)
+	err = tx.QueryRowContext(ctx, `SELECT lease_token=$2 AND lease_expires_at>clock_timestamp() AND state IN ('running','pausing'),pause_requested,cancel_requested FROM nexus_migration_batches WHERE id=$1::uuid FOR UPDATE`, e.BatchID, token).Scan(&valid, &pause, &cancel)
 	if err != nil {
 		return err
 	}
@@ -497,7 +497,7 @@ func (s *Store) BeginEntry(ctx context.Context, e m.Entry, token string) error {
 	if pause || cancel {
 		return m.ErrStopped
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE nexus_migration_entries SET attempts=$2,updated_at=clock_timestamp() WHERE id::text=$1 AND batch_id::text=$3`, e.ID, e.Attempts, e.BatchID)
+	result, err := tx.ExecContext(ctx, `UPDATE nexus_migration_entries SET attempts=$2,updated_at=clock_timestamp() WHERE id=$1::uuid AND batch_id=$3::uuid`, e.ID, e.Attempts, e.BatchID)
 	if err = changed(result, err); err != nil {
 		return err
 	}
@@ -508,19 +508,19 @@ func (s *Store) RecordScanProgress(ctx context.Context, id, token string, metada
 	if metadata < 0 || bytes < 0 {
 		return m.Failed("invalid_request")
 	}
-	result, err := s.db.ExecContext(ctx, `UPDATE nexus_migration_batches SET metadata_discovered=GREATEST(metadata_discovered,$3),source_verification_bytes=source_verification_bytes+$4,updated_at=clock_timestamp() WHERE id::text=$1 AND lease_token=$2 AND lease_expires_at>clock_timestamp() AND state IN ('running','pausing')`, id, token, metadata, bytes)
+	result, err := s.db.ExecContext(ctx, `UPDATE nexus_migration_batches SET metadata_discovered=GREATEST(metadata_discovered,$3),source_verification_bytes=source_verification_bytes+$4,updated_at=clock_timestamp() WHERE id=$1::uuid AND lease_token=$2 AND lease_expires_at>clock_timestamp() AND state IN ('running','pausing')`, id, token, metadata, bytes)
 	return changed(result, err)
 }
 
 func (s *Store) RecordScanFailure(ctx context.Context, id, token string, failure m.ScanFailure) error {
-	result, err := s.db.ExecContext(ctx, `UPDATE nexus_migration_batches SET last_scan_failure=$3,version=version+1,updated_at=clock_timestamp() WHERE id::text=$1 AND lease_token=$2 AND lease_expires_at>clock_timestamp() AND state IN ('running','pausing') AND NOT scan_complete`, id, token, mustJSON(failure))
+	result, err := s.db.ExecContext(ctx, `UPDATE nexus_migration_batches SET last_scan_failure=$3,version=version+1,updated_at=clock_timestamp() WHERE id=$1::uuid AND lease_token=$2 AND lease_expires_at>clock_timestamp() AND state IN ('running','pausing') AND NOT scan_complete`, id, token, mustJSON(failure))
 	return changed(result, err)
 }
 
 func (s *Store) ReplayControl(ctx context.Context, id, actor, key, action, hash string) (m.Batch, bool, error) {
 	var storedAction, storedHash string
 	var raw []byte
-	err := s.db.QueryRowContext(ctx, `SELECT operation,request_hash,response FROM nexus_migration_controls WHERE batch_id::text=$1 AND actor=$2 AND idempotency_key=$3`, id, actor, key).Scan(&storedAction, &storedHash, &raw)
+	err := s.db.QueryRowContext(ctx, `SELECT operation,request_hash,response FROM nexus_migration_controls WHERE batch_id=$1::uuid AND actor=$2 AND idempotency_key=$3`, id, actor, key).Scan(&storedAction, &storedHash, &raw)
 	if errors.Is(err, sql.ErrNoRows) {
 		return m.Batch{}, false, nil
 	}

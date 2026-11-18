@@ -21,7 +21,7 @@ func scanArtifactQuarantine(scanner interface{ Scan(...any) error }) (ArtifactQu
 }
 
 func (s *PostgresStore) GetArtifactQuarantine(ctx context.Context, repositoryID string, format Format, coordinate, digest string) (ArtifactQuarantine, error) {
-	value, err := scanArtifactQuarantine(s.db.QueryRowContext(ctx, `SELECT `+artifactQuarantineColumns+` FROM artifact_quarantines WHERE repository_id::text=$1 AND format=$2 AND coordinate=$3 AND digest=$4`, repositoryID, format, coordinate, digest))
+	value, err := scanArtifactQuarantine(s.db.QueryRowContext(ctx, `SELECT `+artifactQuarantineColumns+` FROM artifact_quarantines WHERE repository_id=$1::uuid AND format=$2 AND coordinate=$3 AND digest=$4`, repositoryID, format, coordinate, digest))
 	if errors.Is(err, sql.ErrNoRows) {
 		return ArtifactQuarantine{}, ErrNotFound
 	}
@@ -81,7 +81,7 @@ RETURNING `+artifactQuarantineColumns, value.RepositoryID, value.Format, value.C
 SET state=$6,reason=$7,updated_by=$8,version=version+1,updated_at=now(),
     quarantined_at=CASE WHEN $6='quarantined' AND state<>'quarantined' THEN now() ELSE quarantined_at END,
     released_at=CASE WHEN $6='released' THEN now() ELSE NULL END
-WHERE repository_id::text=$1 AND format=$2 AND coordinate=$3 AND digest=$4 AND version::text=$5
+WHERE repository_id=$1::uuid AND format=$2 AND coordinate=$3 AND digest=$4 AND version=$5::text::bigint
 RETURNING `+artifactQuarantineColumns, value.RepositoryID, value.Format, value.Coordinate, value.Digest, expectedVersion, value.State, value.Reason, value.UpdatedBy))
 	if !errors.Is(err, sql.ErrNoRows) {
 		if err != nil {
@@ -96,7 +96,7 @@ RETURNING `+artifactQuarantineColumns, value.RepositoryID, value.Format, value.C
 		return updated, nil
 	}
 	var exists bool
-	if queryErr := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM artifact_quarantines WHERE repository_id::text=$1 AND format=$2 AND coordinate=$3 AND digest=$4)`, value.RepositoryID, value.Format, value.Coordinate, value.Digest).Scan(&exists); queryErr != nil {
+	if queryErr := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM artifact_quarantines WHERE repository_id=$1::uuid AND format=$2 AND coordinate=$3 AND digest=$4)`, value.RepositoryID, value.Format, value.Coordinate, value.Digest).Scan(&exists); queryErr != nil {
 		return ArtifactQuarantine{}, queryErr
 	}
 	if exists {

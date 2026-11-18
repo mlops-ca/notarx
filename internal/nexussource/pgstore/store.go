@@ -29,7 +29,7 @@ func (s *Store) Create(ctx context.Context, v nexussource.Source) (nexussource.S
 	return scan(s.db.QueryRowContext(ctx, `INSERT INTO nexus_migration_sources(id,name,base_url,credential_ciphertext) VALUES($1,$2,$3,$4) RETURNING `+columns, v.ID, v.Name, v.BaseURL, v.CredentialCiphertext))
 }
 func (s *Store) Get(ctx context.Context, id string) (nexussource.Source, error) {
-	return scan(s.db.QueryRowContext(ctx, `SELECT `+columns+` FROM nexus_migration_sources WHERE id::text=$1`, id))
+	return scan(s.db.QueryRowContext(ctx, `SELECT `+columns+` FROM nexus_migration_sources WHERE id=$1::uuid`, id))
 }
 func (s *Store) List(ctx context.Context, limit int, cursor string) ([]nexussource.Source, string, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT `+columns+` FROM nexus_migration_sources WHERE ($1='' OR id > NULLIF($1,'')::uuid) ORDER BY id LIMIT $2`, cursor, limit+1)
@@ -56,12 +56,12 @@ func (s *Store) List(ctx context.Context, limit int, cursor string) ([]nexussour
 	return out, next, nil
 }
 func (s *Store) Update(ctx context.Context, v nexussource.Source, expected string) (nexussource.Source, error) {
-	out, err := scan(s.db.QueryRowContext(ctx, `UPDATE nexus_migration_sources SET name=$2,base_url=$3,credential_ciphertext=$4,version=version+1,updated_at=clock_timestamp() WHERE id::text=$1 AND version::text=$5 RETURNING `+columns, v.ID, v.Name, v.BaseURL, v.CredentialCiphertext, expected))
+	out, err := scan(s.db.QueryRowContext(ctx, `UPDATE nexus_migration_sources SET name=$2,base_url=$3,credential_ciphertext=$4,version=version+1,updated_at=clock_timestamp() WHERE id=$1::uuid AND version=$5::text::bigint RETURNING `+columns, v.ID, v.Name, v.BaseURL, v.CredentialCiphertext, expected))
 	return out, s.classify(ctx, v.ID, err)
 }
 func (s *Store) Delete(ctx context.Context, id, expected string) error {
 	var deleted string
-	err := s.db.QueryRowContext(ctx, `DELETE FROM nexus_migration_sources WHERE id::text=$1 AND version::text=$2 RETURNING id::text`, id, expected).Scan(&deleted)
+	err := s.db.QueryRowContext(ctx, `DELETE FROM nexus_migration_sources WHERE id=$1::uuid AND version=$2::text::bigint RETURNING id::text`, id, expected).Scan(&deleted)
 	if errors.Is(err, sql.ErrNoRows) {
 		err = nexussource.ErrNotFound
 	}

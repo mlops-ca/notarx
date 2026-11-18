@@ -10,6 +10,7 @@ import (
 
 	"github.com/mlops-ca/notarx/internal/authorization"
 	"github.com/mlops-ca/notarx/internal/ids"
+	"github.com/mlops-ca/notarx/internal/jsonmeta"
 	protocol "github.com/mlops-ca/notarx/internal/protocol/rubygems"
 	"github.com/mlops-ca/notarx/internal/repository"
 	domain "github.com/mlops-ca/notarx/internal/rubygemspublication"
@@ -68,7 +69,7 @@ func (m *Module) push(w http.ResponseWriter, r *http.Request, repo repository.Ho
 	}
 	defer func() { _ = verified.Close() }()
 	actual, e := protocol.Inspect(verified.Reader())
-	if e != nil || !bytes.Equal(actual.MetadataJSON, session.MetadataJSON) || !bytes.Equal(actual.MetadataYAML, session.MetadataYAML) {
+	if e != nil || !jsonmeta.Equal(actual.MetadataJSON, session.MetadataJSON) || !bytes.Equal(actual.MetadataYAML, session.MetadataYAML) {
 		m.failure(w, errIntegrity)
 		return
 	}

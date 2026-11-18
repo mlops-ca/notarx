@@ -79,7 +79,7 @@ func TestAllowlistRoundTripAndErrors(t *testing.T) {
 	if err != nil || allow["internal/a.go"] != 3 || allow["internal/b.go"] != 1 {
 		t.Fatalf("allow = %v, err = %v", allow, err)
 	}
-	again, err := ParseAllowlist(strings.NewReader(FormatAllowlist(allow)))
+	again, err := ParseAllowlist(strings.NewReader(FormatNewStringAllowlist(allow)))
 	if err != nil || len(again) != 2 || again["internal/a.go"] != 3 {
 		t.Fatalf("round trip = %v, err = %v", again, err)
 	}
@@ -90,36 +90,16 @@ func TestAllowlistRoundTripAndErrors(t *testing.T) {
 	}
 }
 
-func TestCheckRatchet(t *testing.T) {
-	result := Result{Casts: map[string]int{"a.go": 2, "b.go": 1, "c.go": 4}, UUIDNew: []string{"internal/x/x.go:1:1"}}
-	allow := map[string]int{"a.go": 2, "b.go": 3, "c.go": 1, "gone.go": 2}
-	problems := strings.Join(Check(result, allow), "\n")
-	for _, want := range []string{"are forbidden outside internal/ids", "c.go: 4 text-cast", "b.go: allowlist permits 3 but only 1", "gone.go: allowlist entry has no remaining"} {
+func TestCheckHasNoCastAllowlist(t *testing.T) {
+	result := Result{Casts: map[string]int{"a.go": 2, "c.go": 4}, UUIDNew: []string{"internal/x/x.go:1:1"}}
+	problems := strings.Join(Check(result), "\n")
+	for _, want := range []string{"are forbidden outside internal/ids", "a.go: 2 text-cast", "c.go: 4 text-cast"} {
 		if !strings.Contains(problems, want) {
 			t.Errorf("missing %q in:\n%s", want, problems)
 		}
 	}
-	if strings.Contains(problems, "a.go:") {
-		t.Errorf("a.go is at its allowance and must not be reported:\n%s", problems)
-	}
-	if got := Check(Result{Casts: map[string]int{"a.go": 1}}, map[string]int{"a.go": 1}); len(got) != 0 {
+	if got := Check(Result{}); len(got) != 0 {
 		t.Errorf("clean state reported %v", got)
-	}
-	if got := Check(Result{Casts: map[string]int{"new.go": 1}}, map[string]int{}); len(got) != 1 {
-		t.Errorf("a new violating file must be reported, got %v", got)
-	}
-}
-
-func TestLowered(t *testing.T) {
-	next, err := Lowered(Result{Casts: map[string]int{"a.go": 1}}, map[string]int{"a.go": 3, "b.go": 2})
-	if err != nil || len(next) != 1 || next["a.go"] != 1 {
-		t.Fatalf("next = %v, err = %v", next, err)
-	}
-	if _, err := Lowered(Result{Casts: map[string]int{"a.go": 4}}, map[string]int{"a.go": 3}); err == nil {
-		t.Fatal("raising a count must fail")
-	}
-	if _, err := Lowered(Result{Casts: map[string]int{"new.go": 1}}, map[string]int{}); err == nil {
-		t.Fatal("adding a file must fail")
 	}
 }
 

@@ -17,6 +17,7 @@ type Metrics struct {
 	httpRequests                   requestMetrics
 	databaseStats                  []namedDatabaseStats
 	partitionStats                 PartitionStatsFunc
+	retentionStats                 RetentionStatsFunc
 	auditStats                     AuditWriterStatsFunc
 	resolved                       atomic.Uint64
 	failed                         atomic.Uint64
@@ -537,6 +538,7 @@ func (m *Metrics) Handler(w http.ResponseWriter, _ *http.Request) {
 	m.writeRuntimeMetrics(w)
 	m.writeDatabaseMetrics(w)
 	m.writePartitionMetrics(w)
+	m.writeRetentionMetrics(w)
 	m.writeAuditWriterMetrics(w)
 	m.writeObjectStoreMetrics(w)
 	m.writeAPTSigningMetrics(w)

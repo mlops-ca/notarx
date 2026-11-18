@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/jsonmeta"
 )
 
 // FormatNuGet is an internal preview identity. It is deliberately not
@@ -77,7 +78,7 @@ func validNuGetStaging(in NuGetSession) bool {
 	var meta struct{ ID, Version string }
 	return validNuGetSession(in) && len(in.Nuspec) > 0 && len(in.Nuspec) <= 1<<20 && len(in.MetadataJSON) <= 256<<10 &&
 		(in.SourceVersion == "" && in.SourceURL == "" && in.RegistrationURL == "" || sourceVersionValid(in.SourceVersion) && len(in.SourceURL) > 0 && len(in.SourceURL) <= 4096 && len(in.RegistrationURL) > 0 && len(in.RegistrationURL) <= 4096) &&
-		json.Unmarshal(in.MetadataJSON, &meta) == nil && strings.EqualFold(meta.ID, in.PackageID) && strings.EqualFold(meta.Version, in.Version)
+		jsonmeta.ValidateObject(in.MetadataJSON, MaxMetadataJSONBytes) == nil && json.Unmarshal(in.MetadataJSON, &meta) == nil && strings.EqualFold(meta.ID, in.PackageID) && strings.EqualFold(meta.Version, in.Version)
 }
 
 func nuGetSessionObjectKey(in NuGetSession) string {

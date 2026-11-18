@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { PreferencesProvider, usePreferences } from "../lib/preferences";
 import {
@@ -144,7 +144,8 @@ describe("PreferencesProvider locale detection", () => {
     vi.spyOn(navigator, "languages", "get").mockReturnValue(["zh-TW", "zh-CN"]);
     render(createElement(PreferencesProvider, null, createElement(Probe)));
     expect(await screen.findByText("zh-CN")).toBeInTheDocument();
-    expect(document.documentElement.lang).toBe("zh-CN");
+    // The language attribute is set by a passive effect after the first paint.
+    await waitFor(() => expect(document.documentElement.lang).toBe("zh-CN"));
     // A detected language is not a choice: a later browser change still applies.
     expect(localStorage.getItem("ag.console.locale")).toBeNull();
   });
@@ -153,7 +154,8 @@ describe("PreferencesProvider locale detection", () => {
     vi.spyOn(navigator, "languages", "get").mockReturnValue(["fr-FR", "fr"]);
     render(createElement(PreferencesProvider, null, createElement(Probe)));
     expect(await screen.findByText("fr-CA")).toBeInTheDocument();
-    expect(document.documentElement.lang).toBe("fr-CA");
+    // The language attribute is set by a passive effect after the first paint.
+    await waitFor(() => expect(document.documentElement.lang).toBe("fr-CA"));
   });
 
   it("lets the stored choice win and drops the retired US English value", async () => {

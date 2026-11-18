@@ -92,7 +92,7 @@ func putConanRecipeRevisionTx(ctx context.Context, tx *sql.Tx, revision ConanRec
 	if !errors.Is(err, sql.ErrNoRows) {
 		return ConanRecipeRevision{}, err
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO native_conan_recipe_revisions (repository_id,reference,revision,digest,state) VALUES ($1,$2,$3,$4,'visible')`, revision.RepositoryID, revision.Reference, revision.Revision, revision.Digest); err != nil {
+	if _, err = tx.ExecContext(ctx, `INSERT INTO native_conan_recipe_revisions (repository_id,reference,revision,digest,state,publisher) VALUES ($1,$2,$3,$4,'visible',COALESCE((SELECT s.publisher FROM native_conan_publish_sessions s WHERE s.repository_id=$1 AND s.reference=$2 AND s.state IN ('open','committed') ORDER BY s.expires_at DESC LIMIT 1),''))`, revision.RepositoryID, revision.Reference, revision.Revision, revision.Digest); err != nil {
 		return ConanRecipeRevision{}, err
 	}
 	for _, asset := range assets {
@@ -258,7 +258,7 @@ func (s *PostgresStore) PublishReplicatedConanRevision(ctx context.Context, publ
 			return ConanRecipeRevision{}, err
 		}
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO native_conan_recipe_revisions (repository_id,reference,revision,digest,state) VALUES ($1,$2,$3,$4,'visible')`, publication.Recipe.RepositoryID, publication.Recipe.Reference, publication.Recipe.Revision, publication.Recipe.Digest); err != nil {
+	if _, err = tx.ExecContext(ctx, `INSERT INTO native_conan_recipe_revisions (repository_id,reference,revision,digest,state,publisher) VALUES ($1,$2,$3,$4,'visible',COALESCE((SELECT s.publisher FROM native_conan_publish_sessions s WHERE s.repository_id=$1 AND s.reference=$2 AND s.state IN ('open','committed') ORDER BY s.expires_at DESC LIMIT 1),''))`, publication.Recipe.RepositoryID, publication.Recipe.Reference, publication.Recipe.Revision, publication.Recipe.Digest); err != nil {
 		return ConanRecipeRevision{}, err
 	}
 	for _, pkg := range publication.Packages {
@@ -325,7 +325,7 @@ func (s *PostgresStore) PromoteConanRecipeRevision(ctx context.Context, p ConanP
 	if err != nil {
 		return ConanRecipeRevision{}, err
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO native_conan_recipe_revisions(repository_id,reference,revision,digest,state) VALUES($1,$2,$3,$4,'visible')`, p.TargetRepositoryID, p.Reference, p.Revision, p.Digest); err != nil {
+	if _, err = tx.ExecContext(ctx, `INSERT INTO native_conan_recipe_revisions (repository_id,reference,revision,digest,state,publisher) VALUES ($1,$2,$3,$4,'visible',COALESCE((SELECT s.publisher FROM native_conan_publish_sessions s WHERE s.repository_id=$1 AND s.reference=$2 AND s.state IN ('open','committed') ORDER BY s.expires_at DESC LIMIT 1),''))`, p.TargetRepositoryID, p.Reference, p.Revision, p.Digest); err != nil {
 		return ConanRecipeRevision{}, err
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO native_conan_package_revisions(repository_id,reference,recipe_revision,package_id,revision,digest,state) SELECT $1,reference,recipe_revision,package_id,revision,digest,'visible' FROM native_conan_package_revisions WHERE repository_id=$2::uuid AND reference=$3 AND recipe_revision=$4 AND state='visible'`, p.TargetRepositoryID, p.SourceRepositoryID, p.Reference, p.Revision); err != nil {
@@ -360,14 +360,9 @@ func (s *PostgresStore) GetConanPackageRevision(ctx context.Context, repositoryI
 }
 
 func (s *PostgresStore) SearchConanReferences(ctx context.Context, repositoryID, prefix string, limit int, after string, matches ...ArtifactSearchMatch) ([]ConanReference, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT r.reference, COALESCE(p.publisher,'')
-		FROM (SELECT DISTINCT reference FROM native_conan_recipe_revisions WHERE repository_id=$1::uuid AND state='visible' AND `+searchTextSQL("reference", "$2", matches)+` AND reference > $3 ORDER BY reference LIMIT $4) r
-		LEFT JOIN LATERAL (
-			SELECT s.publisher FROM native_conan_publish_sessions s
-			WHERE s.repository_id=$1::uuid AND s.reference=r.reference AND s.state='committed'
-			ORDER BY s.expires_at DESC LIMIT 1
-		) p ON true
-		ORDER BY r.reference`, repositoryID, searchTextPattern(prefix, matches), after, limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT ON (reference) reference, publisher
+		FROM native_conan_recipe_revisions WHERE repository_id=$1::uuid AND state='visible' AND `+searchTextSQL("reference", "$2", matches)+` AND reference > $3
+		ORDER BY reference, created_at DESC LIMIT $4`, repositoryID, searchTextPattern(prefix, matches), after, limit)
 	if err != nil {
 		return nil, err
 	}

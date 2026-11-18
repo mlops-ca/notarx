@@ -10,6 +10,7 @@ import (
 
 	"github.com/mlops-ca/notarx/internal/authorization"
 	"github.com/mlops-ca/notarx/internal/ids"
+	"github.com/mlops-ca/notarx/internal/jsonmeta"
 	dist "github.com/mlops-ca/notarx/internal/rubygemsdistribution"
 
 	protocol "github.com/mlops-ca/notarx/internal/protocol/rubygems"
@@ -245,7 +246,7 @@ func (m *Module) ReplicateRubyGemsItem(ctx context.Context, job dist.Job, item d
 	}
 	defer func() { _ = bytes.Close() }()
 	actual, err := protocol.Inspect(bytes.Reader())
-	if err != nil || !reflect.DeepEqual(actual.MetadataJSON, source.MetadataJSON) || !reflect.DeepEqual(actual.MetadataYAML, source.MetadataYAML) {
+	if err != nil || !jsonmeta.Equal(actual.MetadataJSON, source.MetadataJSON) || !reflect.DeepEqual(actual.MetadataYAML, source.MetadataYAML) {
 		return errIntegrity
 	}
 	ctx, release, err := m.store.Lock(ctx, job.TargetRepositoryID, domain.Identity(item.Name, item.Version, item.Platform))

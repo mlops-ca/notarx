@@ -41,7 +41,7 @@ func (s *PostgresStore) CreateReplicationPlan(ctx context.Context, plan Replicat
 	}
 
 	var existing ReplicationPlan
-	if err = scanReplicationPlan(tx.QueryRowContext(ctx, `SELECT id::text,source_repository_id::text,target_repository_id::text,format,coordinate,digest,idempotency_key,state,created_at,started_at,completed_at,last_error,next_attempt_at,lease_expires_at,lease_token,attempts,max_attempts,apt_target_suite FROM replication_plans WHERE target_repository_id::text=$1 AND idempotency_key=$2 FOR UPDATE`, plan.TargetRepositoryID, plan.IdempotencyKey), &existing); err != nil {
+	if err = scanReplicationPlan(tx.QueryRowContext(ctx, `SELECT id::text,source_repository_id::text,target_repository_id::text,format,coordinate,digest,idempotency_key,state,created_at,started_at,completed_at,last_error,next_attempt_at,lease_expires_at,lease_token,attempts,max_attempts,apt_target_suite FROM replication_plans WHERE target_repository_id=$1::uuid AND idempotency_key=$2 FOR UPDATE`, plan.TargetRepositoryID, plan.IdempotencyKey), &existing); err != nil {
 		return ReplicationPlan{}, false, err
 	}
 	existingChecks, err := listReplicationCheckpoints(ctx, tx, existing.ID)
@@ -56,7 +56,7 @@ func (s *PostgresStore) CreateReplicationPlan(ctx context.Context, plan Replicat
 	}
 	if replayablePark {
 		if refreshablePyPIReplay {
-			if _, err = tx.ExecContext(ctx, `DELETE FROM replication_checkpoints WHERE plan_id::text=$1`, existing.ID); err != nil {
+			if _, err = tx.ExecContext(ctx, `DELETE FROM replication_checkpoints WHERE plan_id=$1::uuid`, existing.ID); err != nil {
 				return ReplicationPlan{}, false, err
 			}
 			for _, checkpoint := range checkpoints {
@@ -73,7 +73,7 @@ func (s *PostgresStore) CreateReplicationPlan(ctx context.Context, plan Replicat
 		if err = scanReplicationPlan(tx.QueryRowContext(ctx, `
 			UPDATE replication_plans
 			SET state='pending',started_at=NULL,completed_at=NULL,last_error='',next_attempt_at=now(),lease_expires_at=NULL,lease_token=NULL
-			WHERE id::text=$1 AND state='failed' AND last_error=$2 AND next_attempt_at IS NULL AND attempts < max_attempts
+			WHERE id=$1::uuid AND state='failed' AND last_error=$2 AND next_attempt_at IS NULL AND attempts < max_attempts
 			RETURNING id::text,source_repository_id::text,target_repository_id::text,format,coordinate,digest,idempotency_key,state,created_at,started_at,completed_at,last_error,next_attempt_at,lease_expires_at,lease_token,attempts,max_attempts,apt_target_suite`, existing.ID, existing.LastError), &requeued); err != nil {
 			return ReplicationPlan{}, false, err
 		}
@@ -126,7 +126,7 @@ func (s *PostgresStore) ListReplicationPlans(ctx context.Context, repositoryID s
 	if limit <= 0 || limit > 100 {
 		limit = 100
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id::text,source_repository_id::text,target_repository_id::text,format,coordinate,digest,idempotency_key,state,created_at,started_at,completed_at,last_error,next_attempt_at,lease_expires_at,lease_token,attempts,max_attempts,apt_target_suite FROM replication_plans WHERE source_repository_id::text=$1 OR target_repository_id::text=$1 ORDER BY created_at DESC LIMIT $2`, repositoryID, limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT id::text,source_repository_id::text,target_repository_id::text,format,coordinate,digest,idempotency_key,state,created_at,started_at,completed_at,last_error,next_attempt_at,lease_expires_at,lease_token,attempts,max_attempts,apt_target_suite FROM replication_plans WHERE source_repository_id=$1::uuid OR target_repository_id=$1::uuid ORDER BY created_at DESC LIMIT $2`, repositoryID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +144,7 @@ func (s *PostgresStore) ListReplicationPlans(ctx context.Context, repositoryID s
 
 func (s *PostgresStore) GetReplicationPlan(ctx context.Context, repositoryID, id string) (ReplicationPlan, error) {
 	var plan ReplicationPlan
-	err := scanReplicationPlan(s.db.QueryRowContext(ctx, `SELECT id::text,source_repository_id::text,target_repository_id::text,format,coordinate,digest,idempotency_key,state,created_at,started_at,completed_at,last_error,next_attempt_at,lease_expires_at,lease_token,attempts,max_attempts,apt_target_suite FROM replication_plans WHERE id::text=$1 AND (source_repository_id::text=$2 OR target_repository_id::text=$2)`, id, repositoryID), &plan)
+	err := scanReplicationPlan(s.db.QueryRowContext(ctx, `SELECT id::text,source_repository_id::text,target_repository_id::text,format,coordinate,digest,idempotency_key,state,created_at,started_at,completed_at,last_error,next_attempt_at,lease_expires_at,lease_token,attempts,max_attempts,apt_target_suite FROM replication_plans WHERE id=$1::uuid AND (source_repository_id=$2::uuid OR target_repository_id=$2::uuid)`, id, repositoryID), &plan)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ReplicationPlan{}, ErrNotFound
 	}
@@ -153,7 +153,7 @@ func (s *PostgresStore) GetReplicationPlan(ctx context.Context, repositoryID, id
 
 func (s *PostgresStore) ListReplicationCheckpoints(ctx context.Context, planID string) ([]ReplicationCheckpoint, error) {
 	var exists bool
-	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM replication_plans WHERE id::text=$1)`, planID).Scan(&exists); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM replication_plans WHERE id=$1::uuid)`, planID).Scan(&exists); err != nil {
 		return nil, err
 	}
 	if !exists {
@@ -168,7 +168,7 @@ func (s *PostgresStore) UpdateReplicationCheckpointWithLease(ctx context.Context
 		UPDATE replication_checkpoints c
 		SET byte_offset=$4,state=$5,attempts=$6,last_error=$7,verified_at=$8,updated_at=now()
 		FROM replication_plans p
-		WHERE c.plan_id=p.id AND c.plan_id::text=$1 AND c.object_key=$2 AND p.state='running' AND p.lease_token=$3 AND p.lease_expires_at>now()`,
+		WHERE c.plan_id=p.id AND c.plan_id=$1::uuid AND c.object_key=$2 AND p.state='running' AND p.lease_token=$3 AND p.lease_expires_at>now()`,
 		checkpoint.PlanID, checkpoint.ObjectKey, leaseToken, checkpoint.ByteOffset, checkpoint.State, checkpoint.Attempts, checkpoint.LastError, nullableReplicationTime(checkpoint.VerifiedAt))
 	if err != nil {
 		return err
@@ -176,14 +176,14 @@ func (s *PostgresStore) UpdateReplicationCheckpointWithLease(ctx context.Context
 	if count, _ := result.RowsAffected(); count != 1 {
 		return ErrNotFound
 	}
-	if _, err := s.db.ExecContext(ctx, `UPDATE replication_plans SET lease_expires_at=now()+interval '10 minutes' WHERE id::text=$1 AND lease_token=$2`, checkpoint.PlanID, leaseToken); err != nil {
+	if _, err := s.db.ExecContext(ctx, `UPDATE replication_plans SET lease_expires_at=now()+interval '10 minutes' WHERE id=$1::uuid AND lease_token=$2`, checkpoint.PlanID, leaseToken); err != nil {
 		return err
 	}
 	return nil
 }
 
 func (s *PostgresStore) RenewReplicationPlanLease(ctx context.Context, id, leaseToken string) error {
-	result, err := s.db.ExecContext(ctx, `UPDATE replication_plans SET lease_expires_at=clock_timestamp()+interval '10 minutes' WHERE id::text=$1 AND state='running' AND lease_token=$2 AND lease_expires_at>clock_timestamp()`, id, leaseToken)
+	result, err := s.db.ExecContext(ctx, `UPDATE replication_plans SET lease_expires_at=clock_timestamp()+interval '10 minutes' WHERE id=$1::uuid AND state='running' AND lease_token=$2 AND lease_expires_at>clock_timestamp()`, id, leaseToken)
 	if err != nil {
 		return err
 	}
@@ -199,7 +199,7 @@ func (s *PostgresStore) LockReplicationPlanLease(ctx context.Context, id, leaseT
 		return nil, err
 	}
 	var valid bool
-	if err = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM replication_plans WHERE id::text=$1 AND state='running' AND lease_token=$2 AND lease_expires_at>clock_timestamp())`, id, leaseToken).Scan(&valid); err != nil {
+	if err = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM replication_plans WHERE id=$1::uuid AND state='running' AND lease_token=$2 AND lease_expires_at>clock_timestamp())`, id, leaseToken).Scan(&valid); err != nil {
 		release()
 		return nil, err
 	}
@@ -219,7 +219,7 @@ func (s *PostgresStore) FailReplicationPlanWithLease(ctx context.Context, id, me
 }
 
 func (s *PostgresStore) ParkReplicationPlanWithLease(ctx context.Context, id, message, leaseToken string) error {
-	result, err := s.db.ExecContext(ctx, `UPDATE replication_plans SET state='failed',completed_at=now(),last_error=$3,lease_expires_at=NULL,lease_token=NULL,next_attempt_at=NULL,attempts=GREATEST(attempts-1,0) WHERE id::text=$1 AND state='running' AND lease_token=$2 AND lease_expires_at>now()`, id, leaseToken, message)
+	result, err := s.db.ExecContext(ctx, `UPDATE replication_plans SET state='failed',completed_at=now(),last_error=$3,lease_expires_at=NULL,lease_token=NULL,next_attempt_at=NULL,attempts=GREATEST(attempts-1,0) WHERE id=$1::uuid AND state='running' AND lease_token=$2 AND lease_expires_at>now()`, id, leaseToken, message)
 	if err != nil {
 		return err
 	}
@@ -231,7 +231,7 @@ func (s *PostgresStore) ParkReplicationPlanWithLease(ctx context.Context, id, me
 
 func (s *PostgresStore) finishReplicationPlan(ctx context.Context, id, state, message, leaseToken string) error {
 	if state == "failed" {
-		result, err := s.db.ExecContext(ctx, `UPDATE replication_plans SET state='failed',completed_at=now(),last_error=$3,lease_expires_at=NULL,lease_token=NULL,next_attempt_at=CASE WHEN attempts < max_attempts THEN now() ELSE NULL END WHERE id::text=$1 AND state='running' AND lease_token=$2 AND lease_expires_at>now()`, id, leaseToken, message)
+		result, err := s.db.ExecContext(ctx, `UPDATE replication_plans SET state='failed',completed_at=now(),last_error=$3,lease_expires_at=NULL,lease_token=NULL,next_attempt_at=CASE WHEN attempts < max_attempts THEN now() ELSE NULL END WHERE id=$1::uuid AND state='running' AND lease_token=$2 AND lease_expires_at>now()`, id, leaseToken, message)
 		if err != nil {
 			return err
 		}
@@ -240,7 +240,7 @@ func (s *PostgresStore) finishReplicationPlan(ctx context.Context, id, state, me
 		}
 		return nil
 	}
-	result, err := s.db.ExecContext(ctx, `UPDATE replication_plans SET state=$2,completed_at=now(),last_error=$3,lease_expires_at=NULL,lease_token=NULL,next_attempt_at=NULL WHERE id::text=$1 AND state='running' AND lease_token=$4 AND lease_expires_at>now()`, id, state, message, leaseToken)
+	result, err := s.db.ExecContext(ctx, `UPDATE replication_plans SET state=$2,completed_at=now(),last_error=$3,lease_expires_at=NULL,lease_token=NULL,next_attempt_at=NULL WHERE id=$1::uuid AND state='running' AND lease_token=$4 AND lease_expires_at>now()`, id, state, message, leaseToken)
 	if err != nil {
 		return err
 	}
@@ -254,7 +254,7 @@ func (s *PostgresStore) RecoverExpiredReplicationPlans(ctx context.Context, befo
 	result, err := s.db.ExecContext(ctx, `WITH candidates AS (
 		SELECT id FROM replication_plans
 		WHERE state='running' AND lease_expires_at IS NOT NULL AND lease_expires_at <= $1
-		AND pg_try_advisory_xact_lock(hashtextextended('replication-plan-lease:' || id::text, 0))
+		AND pg_try_advisory_xact_lock(hashtextextended(concat('replication-plan-lease:', id), 0))
 		FOR UPDATE SKIP LOCKED
 	) UPDATE replication_plans p SET state='failed',last_error='replication worker lease expired',lease_expires_at=NULL,lease_token=NULL,next_attempt_at=CASE WHEN attempts < max_attempts THEN $1 ELSE NULL END
 	FROM candidates WHERE p.id=candidates.id`, before)
@@ -270,7 +270,7 @@ func (s *PostgresStore) RecoverExpiredReplicationPlans(ctx context.Context, befo
 // the caller is expected to have checked the state, so any zero-row result
 // (missing or not pending/failed) is reported as ErrNotFound.
 func (s *PostgresStore) CancelReplicationPlan(ctx context.Context, repositoryID, id string) error {
-	result, err := s.db.ExecContext(ctx, `UPDATE replication_plans SET state='cancelled',completed_at=now(),last_error='' WHERE id::text=$1 AND (source_repository_id::text=$2 OR target_repository_id::text=$2) AND state IN ('pending','failed')`, id, repositoryID)
+	result, err := s.db.ExecContext(ctx, `UPDATE replication_plans SET state='cancelled',completed_at=now(),last_error='' WHERE id=$1::uuid AND (source_repository_id=$2::uuid OR target_repository_id=$2::uuid) AND state IN ('pending','failed')`, id, repositoryID)
 	if err != nil {
 		return err
 	}
@@ -324,7 +324,7 @@ type replicationCheckpointQuery interface {
 }
 
 func listReplicationCheckpoints(ctx context.Context, query replicationCheckpointQuery, planID string) ([]ReplicationCheckpoint, error) {
-	rows, err := query.QueryContext(ctx, `SELECT plan_id::text,source_object_key,object_key,digest,size,byte_offset,state,attempts,last_error,verified_at,updated_at FROM replication_checkpoints WHERE plan_id::text=$1 ORDER BY object_key`, planID)
+	rows, err := query.QueryContext(ctx, `SELECT plan_id::text,source_object_key,object_key,digest,size,byte_offset,state,attempts,last_error,verified_at,updated_at FROM replication_checkpoints WHERE plan_id=$1::uuid ORDER BY object_key`, planID)
 	if err != nil {
 		return nil, err
 	}

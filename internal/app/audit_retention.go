@@ -6,6 +6,7 @@ import (
 
 	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/retention"
 )
 
 type AuditRetentionMetrics interface{ RecordAuditRetentionCleanup(string, int) }
@@ -19,8 +20,10 @@ func (w AuditRetentionWorker) Enqueue(ctx context.Context, key string, batchSize
 	if err != nil {
 		return repository.AuditCleanupJob{}, false, err
 	}
-	if batchSize <= 0 || batchSize > 1000 {
-		batchSize = 1000
+	if batchSize <= 0 {
+		batchSize = retention.DefaultBatch
+	} else if batchSize > retention.MaxBatch {
+		batchSize = retention.MaxBatch
 	}
 	return w.Store.EnqueueAuditCleanupJob(ctx, repository.AuditCleanupJob{ID: ids.New(), IdempotencyKey: key, PolicyVersion: p.Version, CutoffAt: time.Now().UTC().AddDate(0, 0, -p.KeepDays), BatchSize: batchSize})
 }
@@ -40,8 +43,10 @@ func (w AuditRetentionWorker) RunJobs(ctx context.Context, limit int) error {
 			continue
 		}
 		batchSize := j.BatchSize
-		if batchSize <= 0 || batchSize > 1000 {
-			batchSize = 1000
+		if batchSize <= 0 {
+			batchSize = retention.DefaultBatch
+		} else if batchSize > retention.MaxBatch {
+			batchSize = retention.MaxBatch
 		}
 		deleted := 0
 		for {

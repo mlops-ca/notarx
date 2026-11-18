@@ -6,6 +6,8 @@ import (
 	"database/sql"
 	"errors"
 	"time"
+
+	"github.com/mlops-ca/notarx/internal/jsonmeta"
 )
 
 const nuGetSessionColumns = `id::text,repository_id::text,package_id,version,digest,size,actor,state,object_key,metadata_json,nuspec,created_at,expires_at,committed_at,collected_at,source_version,source_url,registration_url`
@@ -158,7 +160,7 @@ func (s *PostgresStore) StageNuGetPublication(ctx context.Context, in NuGetSessi
 	if prior.State != "reserved" && prior.State != "staged" {
 		return NuGetSession{}, ErrNuGetSessionState
 	}
-	if prior.State == "staged" && (!bytes.Equal(prior.MetadataJSON, in.MetadataJSON) || !bytes.Equal(prior.Nuspec, in.Nuspec) || prior.SourceURL != in.SourceURL || prior.RegistrationURL != in.RegistrationURL) {
+	if prior.State == "staged" && (!jsonmeta.Equal(prior.MetadataJSON, in.MetadataJSON) || !bytes.Equal(prior.Nuspec, in.Nuspec) || prior.SourceURL != in.SourceURL || prior.RegistrationURL != in.RegistrationURL) {
 		return NuGetSession{}, ErrNuGetPublicationConflict
 	}
 	prior, err = scanNuGetSession(tx.QueryRowContext(ctx, `UPDATE native_nuget_publication_sessions SET state='staged',metadata_json=$2,nuspec=$3,source_url=$4,registration_url=$5 WHERE id=$1::uuid RETURNING `+nuGetSessionColumns, in.ID, string(in.MetadataJSON), in.Nuspec, in.SourceURL, in.RegistrationURL))

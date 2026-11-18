@@ -22,7 +22,7 @@ func (s *PostgresStore) CreateEmailTarget(ctx context.Context, v EmailTarget) (E
 	return scanEmailTarget(s.db.QueryRowContext(ctx, `INSERT INTO email_targets(id,name,locale,recipient_ciphertext,enabled) VALUES ($1,$2,$3,$4,$5) RETURNING `+emailTargetColumns, v.ID, v.Name, v.Locale, v.RecipientCiphertext, v.Enabled))
 }
 func (s *PostgresStore) GetEmailTarget(ctx context.Context, id string) (EmailTarget, error) {
-	return scanEmailTarget(s.db.QueryRowContext(ctx, `SELECT `+emailTargetColumns+` FROM email_targets WHERE id::text=$1`, id))
+	return scanEmailTarget(s.db.QueryRowContext(ctx, `SELECT `+emailTargetColumns+` FROM email_targets WHERE id=$1::uuid`, id))
 }
 func (s *PostgresStore) ListEmailTargets(ctx context.Context) ([]EmailTarget, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT `+emailTargetColumns+` FROM email_targets ORDER BY id`)
@@ -41,7 +41,7 @@ func (s *PostgresStore) ListEmailTargets(ctx context.Context) ([]EmailTarget, er
 	return out, rows.Err()
 }
 func (s *PostgresStore) UpdateEmailTarget(ctx context.Context, v EmailTarget, version string) (EmailTarget, error) {
-	out, err := scanEmailTarget(s.db.QueryRowContext(ctx, `UPDATE email_targets SET name=$2,locale=$3,recipient_ciphertext=$4,enabled=$5,version=version+1,updated_at=clock_timestamp() WHERE id::text=$1 AND version::text=$6 RETURNING `+emailTargetColumns, v.ID, v.Name, v.Locale, v.RecipientCiphertext, v.Enabled, version))
+	out, err := scanEmailTarget(s.db.QueryRowContext(ctx, `UPDATE email_targets SET name=$2,locale=$3,recipient_ciphertext=$4,enabled=$5,version=version+1,updated_at=clock_timestamp() WHERE id=$1::uuid AND version=$6::text::bigint RETURNING `+emailTargetColumns, v.ID, v.Name, v.Locale, v.RecipientCiphertext, v.Enabled, version))
 	if errors.Is(err, ErrNotFound) {
 		if _, e := s.GetEmailTarget(ctx, v.ID); e == nil {
 			err = ErrVersionConflict
@@ -103,7 +103,7 @@ func (s *PostgresStore) EnqueueEmailTest(ctx context.Context, r EmailTestRequest
 	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(15112,229)`); err != nil {
 		return EmailDelivery{}, err
 	}
-	existing, e := scanEmailDelivery(tx.QueryRowContext(ctx, `SELECT `+emailDeliveryColumns+` FROM email_test_deliveries WHERE request_key::text=$1`, r.RequestKey))
+	existing, e := scanEmailDelivery(tx.QueryRowContext(ctx, `SELECT `+emailDeliveryColumns+` FROM email_test_deliveries WHERE request_key=$1::uuid`, r.RequestKey))
 	if e == nil {
 		if !emailSameRequest(existing, r) {
 			return EmailDelivery{}, ErrEmailIdempotencyConflict
@@ -113,7 +113,7 @@ func (s *PostgresStore) EnqueueEmailTest(ctx context.Context, r EmailTestRequest
 	if !errors.Is(e, ErrNotFound) {
 		return EmailDelivery{}, e
 	}
-	target, err := scanEmailTarget(tx.QueryRowContext(ctx, `SELECT `+emailTargetColumns+` FROM email_targets WHERE id::text=$1 FOR SHARE`, r.TargetID))
+	target, err := scanEmailTarget(tx.QueryRowContext(ctx, `SELECT `+emailTargetColumns+` FROM email_targets WHERE id=$1::uuid FOR SHARE`, r.TargetID))
 	if err != nil {
 		return EmailDelivery{}, err
 	}
@@ -136,7 +136,7 @@ func (s *PostgresStore) EnqueueEmailTest(ctx context.Context, r EmailTestRequest
 	return v, tx.Commit()
 }
 func (s *PostgresStore) GetEmailDelivery(ctx context.Context, id string) (EmailDelivery, error) {
-	return scanEmailDelivery(s.db.QueryRowContext(ctx, `SELECT `+emailDeliveryColumns+` FROM email_test_deliveries WHERE id::text=$1`, id))
+	return scanEmailDelivery(s.db.QueryRowContext(ctx, `SELECT `+emailDeliveryColumns+` FROM email_test_deliveries WHERE id=$1::uuid`, id))
 }
 func (s *PostgresStore) ListEmailDeliveries(ctx context.Context, limit int) ([]EmailDelivery, error) {
 	if limit <= 0 || limit > 100 {
@@ -195,7 +195,7 @@ func (s *PostgresStore) FinishEmailDelivery(ctx context.Context, id, token strin
 	result.Code = emailSafeErrorCode(result.Code)
 	done, err := s.db.ExecContext(ctx, `WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS now)
  UPDATE email_test_deliveries SET state=CASE WHEN $3='' THEN 'accepted' WHEN automatic_cancellation_code<>'' OR $4 OR attempts>=8 THEN 'dead' ELSE 'retrying' END,error_code=CASE WHEN $3<>'' AND automatic_cancellation_code<>'' THEN automatic_cancellation_code ELSE $3 END,possible_duplicate=possible_duplicate OR $5,accepted_at=CASE WHEN $3='' THEN clock.now ELSE accepted_at END,
- next_attempt_at=clock.now+LEAST(3600,5*power(2,GREATEST(0,attempts-1))) * interval '1 second',lease_owner='',lease_token=NULL,lease_expires_at=NULL,updated_at=clock.now,version=version+1 FROM clock WHERE id::text=$1 AND lease_token::text=$2 AND state='delivering' AND lease_expires_at>clock.now`, id, token, result.Code, result.Permanent, result.OutcomeUnknown)
+ next_attempt_at=clock.now+LEAST(3600,5*power(2,GREATEST(0,attempts-1))) * interval '1 second',lease_owner='',lease_token=NULL,lease_expires_at=NULL,updated_at=clock.now,version=version+1 FROM clock WHERE id=$1::uuid AND lease_token=$2::uuid AND state='delivering' AND lease_expires_at>clock.now`, id, token, result.Code, result.Permanent, result.OutcomeUnknown)
 	if err != nil {
 		return err
 	}
@@ -214,7 +214,7 @@ func (s *PostgresStore) ReplayEmailDelivery(ctx context.Context, id, version str
 	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(15112,229)`); err != nil {
 		return EmailDelivery{}, err
 	}
-	v, err := scanEmailDelivery(tx.QueryRowContext(ctx, `SELECT `+emailDeliveryColumns+` FROM email_test_deliveries WHERE id::text=$1 FOR UPDATE`, id))
+	v, err := scanEmailDelivery(tx.QueryRowContext(ctx, `SELECT `+emailDeliveryColumns+` FROM email_test_deliveries WHERE id=$1::uuid FOR UPDATE`, id))
 	if err != nil {
 		return EmailDelivery{}, err
 	}
@@ -224,7 +224,7 @@ func (s *PostgresStore) ReplayEmailDelivery(ctx context.Context, id, version str
 	if v.State != "dead" {
 		return EmailDelivery{}, ErrEmailInvalidState
 	}
-	target, err := scanEmailTarget(tx.QueryRowContext(ctx, `SELECT `+emailTargetColumns+` FROM email_targets WHERE id::text=$1 FOR SHARE`, v.TargetID))
+	target, err := scanEmailTarget(tx.QueryRowContext(ctx, `SELECT `+emailTargetColumns+` FROM email_targets WHERE id=$1::uuid FOR SHARE`, v.TargetID))
 	if err != nil {
 		return EmailDelivery{}, err
 	}
@@ -237,7 +237,7 @@ func (s *PostgresStore) ReplayEmailDelivery(ctx context.Context, id, version str
 	if err = emailRatePostgres(ctx, tx); err != nil {
 		return EmailDelivery{}, err
 	}
-	v, err = scanEmailDelivery(tx.QueryRowContext(ctx, `UPDATE email_test_deliveries SET automatic_cancellation_code='',state='pending',attempts=0,error_code='',lease_owner='',lease_token=NULL,lease_expires_at=NULL,next_attempt_at=clock_timestamp(),updated_at=clock_timestamp(),version=version+1 WHERE id::text=$1 RETURNING `+emailDeliveryColumns, id))
+	v, err = scanEmailDelivery(tx.QueryRowContext(ctx, `UPDATE email_test_deliveries SET automatic_cancellation_code='',state='pending',attempts=0,error_code='',lease_owner='',lease_token=NULL,lease_expires_at=NULL,next_attempt_at=clock_timestamp(),updated_at=clock_timestamp(),version=version+1 WHERE id=$1::uuid RETURNING `+emailDeliveryColumns, id))
 	if err != nil {
 		return EmailDelivery{}, err
 	}

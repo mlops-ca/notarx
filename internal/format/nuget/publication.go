@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/authorization"
 	"github.com/mlops-ca/notarx/internal/ids"
+	"github.com/mlops-ca/notarx/internal/jsonmeta"
 	nugetprotocol "github.com/mlops-ca/notarx/internal/protocol/nuget"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/uploadspool"
@@ -150,7 +151,7 @@ func (m *Module) commit(ctx context.Context, session repository.NuGetSession, ac
 	if err != nil {
 		return repository.NuGetPublication{}, err
 	}
-	if string(encoded) != string(session.MetadataJSON) || string(nuspec) != string(session.Nuspec) {
+	if !jsonmeta.Equal(encoded, session.MetadataJSON) || string(nuspec) != string(session.Nuspec) {
 		return repository.NuGetPublication{}, repository.ErrNuGetPublicationConflict
 	}
 	if committed {
@@ -158,7 +159,7 @@ func (m *Module) commit(ctx context.Context, session repository.NuGetSession, ac
 		if err != nil {
 			return repository.NuGetPublication{}, err
 		}
-		if publication.Digest != session.Digest || publication.Size != session.Size || publication.ObjectKey != session.ObjectKey || string(publication.MetadataJSON) != string(encoded) || string(publication.Nuspec) != string(nuspec) {
+		if publication.Digest != session.Digest || publication.Size != session.Size || publication.ObjectKey != session.ObjectKey || !jsonmeta.Equal(publication.MetadataJSON, encoded) || string(publication.Nuspec) != string(nuspec) {
 			return repository.NuGetPublication{}, repository.ErrNuGetPublicationConflict
 		}
 		return publication, nil

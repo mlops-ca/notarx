@@ -13,7 +13,7 @@ func checkProxySourceVersion(ctx context.Context, tx *sql.Tx, repositoryID, vers
 		return ErrVersionConflict
 	}
 	var current string
-	if err := tx.QueryRowContext(ctx, `SELECT version::text FROM hosted_repositories WHERE id::text=$1 AND repo_type='proxy' AND state='active' FOR SHARE`, repositoryID).Scan(&current); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT version::text FROM hosted_repositories WHERE id=$1::uuid AND repo_type='proxy' AND state='active' FOR SHARE`, repositoryID).Scan(&current); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}

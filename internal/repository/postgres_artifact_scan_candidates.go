@@ -17,7 +17,7 @@ func (s *PostgresStore) ListArtifactScanCandidates(ctx context.Context, reposito
 	rows, err := s.db.QueryContext(ctx, `SELECT candidates.coordinate,candidates.digest,candidates.published_at FROM (`+query+`) candidates
 		LEFT JOIN LATERAL (
 			SELECT state FROM lifecycle_jobs
-			WHERE repository_id::text=$1 AND kind='scan'
+			WHERE repository_id=$1::uuid AND kind='scan'
 			  AND payload->>'format'=$3 AND payload->>'coordinate'=candidates.coordinate AND payload->>'digest'=candidates.digest
 			ORDER BY created_at DESC,id DESC LIMIT 1
 		) latest_scan ON true

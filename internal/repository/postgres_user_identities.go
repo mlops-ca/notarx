@@ -29,7 +29,7 @@ func (s *PostgresStore) ListUserIdentities(ctx context.Context, userID string) (
 	if _, err := s.GetUser(ctx, userID); err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT `+userIdentityColumns+` FROM user_identities WHERE user_id::text=$1 ORDER BY created_at,id`, userID)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+userIdentityColumns+` FROM user_identities WHERE user_id=$1::uuid ORDER BY created_at,id`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +64,7 @@ func (s *PostgresStore) CreateUserIdentity(ctx context.Context, identity UserIde
 }
 
 func (s *PostgresStore) DeleteUserIdentity(ctx context.Context, userID, identityID string) error {
-	result, err := s.db.ExecContext(ctx, `DELETE FROM user_identities WHERE id::text=$1 AND user_id::text=$2`, identityID, userID)
+	result, err := s.db.ExecContext(ctx, `DELETE FROM user_identities WHERE id=$1::uuid AND user_id=$2::uuid`, identityID, userID)
 	if err != nil {
 		return err
 	}

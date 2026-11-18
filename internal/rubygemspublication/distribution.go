@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/jsonmeta"
 	"github.com/mlops-ca/notarx/internal/repository"
 	dist "github.com/mlops-ca/notarx/internal/rubygemsdistribution"
 )
@@ -17,7 +18,7 @@ func ReplicationSource(p Publication, item dist.Item) error {
 	return nil
 }
 func ReplicationSession(source Publication, s Session, target string) error {
-	if s.RepositoryID != target || s.Name != source.Name || s.Version != source.Version || s.Platform != source.Platform || s.Digest != source.Digest || s.Size != source.Size || s.Governance.Yanked || s.Governance.Quarantined || !bytes.Equal(s.MetadataJSON, source.MetadataJSON) || !bytes.Equal(s.MetadataYAML, source.MetadataYAML) {
+	if s.RepositoryID != target || s.Name != source.Name || s.Version != source.Version || s.Platform != source.Platform || s.Digest != source.Digest || s.Size != source.Size || s.Governance.Yanked || s.Governance.Quarantined || !jsonmeta.Equal(s.MetadataJSON, source.MetadataJSON) || !bytes.Equal(s.MetadataYAML, source.MetadataYAML) {
 		return dist.ErrTargetBlocked
 	}
 	return nil

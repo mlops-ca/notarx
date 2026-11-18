@@ -147,6 +147,57 @@ Every node starts the partition manager for the audit tables. One node at a time
 see [PostgreSQL capabilities](postgresql-capabilities.md#partitioned-audit-tables).
 Alert when `notarx_partition_default_rows` is not zero.
 
+## Retention
+
+Every append-only or churning table is bounded by default (ADR 0023 section 2).
+The audit tables are pruned by dropping partitions (above); every other table is
+pruned by the retention janitor: one node at a time (a lease row in
+`scheduled_tasks`, kind `retention-janitor`) deletes terminal rows older than the
+keep time in batches of 2000, using `FOR UPDATE SKIP LOCKED` on PostgreSQL, and
+sleeps `max(100ms, 2 x batch time)` between batches. A table's loop stops after
+`NOTARX_RETENTION_RUN_BUDGET` (default `60s`) except `user_sessions`, which loops
+until drained. Rows still in use (pending, running, retrying, or referenced by a
+newer record) and the provenance tables `artifact_promotions`,
+`artifact_usage_stats` and `artifact_intelligence` are never deleted.
+
+| Table | Standard | Free tier |
+| --- | --- | --- |
+| `resolver_audit_log` (partition drop) | 90 d | 7 d |
+| `security_audit_log` (partition drop) | 730 d | 90 d |
+| `repository_request_rollup` | 400 d | 400 d |
+| `webhook_deliveries` | succeeded 14 d, dead 90 d | 3 d, 30 d |
+| `lifecycle_jobs` | completed or cancelled 7 d, failed 30 d | 1 d, 7 d |
+| `replication_plans` | terminal 30 d | 7 d |
+| `replication_checkpoints` | removed 1 h after the plan completed | same |
+| `cache_tasks`, `audit_cleanup_jobs`, `scheduled_task_runs` | 3 d, 30 d, 30 d | 1 d, 7 d, 7 d |
+| `user_sessions` | expired + 7 d | expired + 1 d |
+| `runtime_node_sessions` | stopped + 7 d | stopped + 1 d |
+| `repository_quota_alert_events`, `email_test_deliveries` | 365 d, 7 d | 30 d, 1 d |
+| `nexus_migration_entries` | batch finished + 30 d | + 7 d |
+| idempotency tables | `expires_at` + 1 d | same |
+| `workload_jti_seen`, `saml_assertion_ids`, `saml_request_state` | `expires_at` | same |
+
+```env
+NOTARX_RETENTION_PROFILE=standard        # or freetier (the ADR 0017 reference stack)
+NOTARX_RETENTION_RUN_BUDGET=60s
+NOTARX_RETENTION_LIFECYCLE_JOBS=720h     # a table override: Go duration, 30d, or off
+NOTARX_RETENTION_SECURITY_AUDIT_LOG=1095d
+```
+
+`NOTARX_RETENTION_<TABLE>` (the table name in upper case) overrides the keep time of
+every row class of that table, and `NOTARX_RETENTION_<LABEL>` (for example
+`NOTARX_RETENTION_WEBHOOK_DELIVERIES_DEAD` or `NOTARX_RETENTION_LIFECYCLE_JOBS_FAILED`) overrides one
+class and wins over the table key; `off` disables pruning of the table or class. The security
+audit table is independent of the resolver audit table. The console-editable audit
+retention policy overrides `resolver_audit_log` once an administrator has edited
+it; the baseline policy is now enabled with 90 days, and the 1000 row cap of audit
+cleanup jobs is lifted. Tables created by ADRs 0018 to 0021 and 0027
+(`promotion_evaluations`, `domain_events`, import sessions, `hf_refs`) join the
+registry in the slice that creates them. Tombstone tables are not pruned yet.
+Metrics: `notarx_retention_deleted_rows_total{table}` and
+`notarx_retention_lag_seconds{table}` (how far past its keep time the oldest eligible
+row is; alert when it keeps growing).
+
 ## Audit durability and capacity
 
 Audit is written in tiers (ADR 0023 section 1); the guarantees are not uniform.

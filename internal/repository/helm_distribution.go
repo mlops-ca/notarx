@@ -7,6 +7,7 @@ import (
 	"time"
 
 	dist "github.com/mlops-ca/notarx/internal/helmdistribution"
+	"github.com/mlops-ca/notarx/internal/jsonmeta"
 )
 
 func helmReplicationSource(p HelmPublication, item dist.Item) error {
@@ -17,14 +18,14 @@ func helmReplicationSource(p HelmPublication, item dist.Item) error {
 }
 func helmReplicationSession(source HelmPublication, session HelmSession, target string) error {
 	if session.RepositoryID != target || session.SourceVersion != "" || session.Name != source.Name || session.Version != source.Version || session.Digest != source.Digest || session.Size != source.Size || session.ProvenanceDigest != source.ProvenanceDigest || session.ProvenanceSize != source.ProvenanceSize ||
-		!bytes.Equal(source.MetadataJSON, session.MetadataJSON) || !bytes.Equal(source.ChartYAML, session.ChartYAML) {
+		!jsonmeta.Equal(source.MetadataJSON, session.MetadataJSON) || !bytes.Equal(source.ChartYAML, session.ChartYAML) {
 		return dist.ErrTargetBlocked
 	}
 	return nil
 }
 func helmReplicationExisting(source, target HelmPublication) error {
 	if target.Digest != source.Digest || target.Size != source.Size || target.ProvenanceDigest != source.ProvenanceDigest || target.ProvenanceSize != source.ProvenanceSize || target.Governance.Tombstoned || target.Governance.Quarantined ||
-		!bytes.Equal(source.MetadataJSON, target.MetadataJSON) || !bytes.Equal(source.ChartYAML, target.ChartYAML) {
+		!jsonmeta.Equal(source.MetadataJSON, target.MetadataJSON) || !bytes.Equal(source.ChartYAML, target.ChartYAML) {
 		return dist.ErrTargetBlocked
 	}
 	return nil

@@ -38,6 +38,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/partitions"
 	"github.com/mlops-ca/notarx/internal/preflight"
 	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/retention"
 	rubydist "github.com/mlops-ca/notarx/internal/rubygemsdistribution"
 	rubygemspg "github.com/mlops-ca/notarx/internal/rubygemspublication/pgstore"
 	"github.com/mlops-ca/notarx/internal/scanning"
@@ -308,7 +309,7 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 	// DEFAULT partitions keep audit inserts working.
 	partitionManager, err := partitions.New(databasePool, partitions.DefaultRegistry(), partitions.Options{
 		Ahead: cfg.PartitionAhead, Owner: cfg.InstanceID + "/" + runtimeSessionID, Logger: slog.Default(),
-		RetentionFor: auditRetentionFor(store),
+		RetentionFor: auditRetentionFor(store, cfg.Retention),
 	})
 	if err != nil {
 		slog.Error("configure partition manager", "error", err)
@@ -328,6 +329,15 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 		slog.Error("partition observation at start-up failed", "error", err)
 	}
 	go partitionManager.Run(runtimeContext, partitions.DefaultInterval)
+	// The retention janitor prunes every other append-only or churning table in
+	// throttled batches; one node at a time runs a pass (lease row).
+	retentionJanitor, err := retention.New(databasePool, cfg.Retention, retention.Options{Owner: cfg.InstanceID + "/" + runtimeSessionID, Logger: slog.Default()})
+	if err != nil {
+		slog.Error("configure retention janitor", "error", err)
+		return 1
+	}
+	metrics.WithRetentionStats(retentionJanitor.Stats)
+	go retentionJanitor.Run(runtimeContext, retention.DefaultInterval)
 	// Losing the root lock means another process could write the same root.
 	rootLost := make(chan error, 1)
 	identityGuard.Watch(runtimeContext, 15*time.Second, func(err error) { rootLost <- err })

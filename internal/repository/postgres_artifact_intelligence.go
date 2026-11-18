@@ -75,7 +75,7 @@ func marshalArtifactIntelligence(value ArtifactIntelligence) (any, any, any, any
 }
 
 func (s *PostgresStore) GetArtifactIntelligence(ctx context.Context, repositoryID string, format Format, coordinate, digest string) (ArtifactIntelligence, error) {
-	value, err := scanArtifactIntelligence(s.db.QueryRowContext(ctx, `SELECT `+artifactIntelligenceColumns+` FROM artifact_intelligence WHERE repository_id::text=$1 AND format=$2 AND coordinate=$3 AND digest=$4`, repositoryID, format, coordinate, digest))
+	value, err := scanArtifactIntelligence(s.db.QueryRowContext(ctx, `SELECT `+artifactIntelligenceColumns+` FROM artifact_intelligence WHERE repository_id=$1::uuid AND format=$2 AND coordinate=$3 AND digest=$4`, repositoryID, format, coordinate, digest))
 	if errors.Is(err, sql.ErrNoRows) {
 		return ArtifactIntelligence{}, ErrNotFound
 	}
@@ -90,7 +90,7 @@ func (s *PostgresStore) ReplaceArtifactIntelligence(ctx context.Context, value A
 	query := `INSERT INTO artifact_intelligence (repository_id,format,coordinate,digest,signatures,sboms,provenance,licenses,vulnerability,version,updated_by)
 VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,1,$10)
 ON CONFLICT (repository_id,format,coordinate,digest) DO UPDATE SET signatures=$5::jsonb,sboms=$6::jsonb,provenance=$7::jsonb,licenses=$8::jsonb,vulnerability=$9::jsonb,version=artifact_intelligence.version+1,updated_by=$10,updated_at=now()
-WHERE artifact_intelligence.version::text=$11
+WHERE artifact_intelligence.version=$11::text::bigint
 RETURNING ` + artifactIntelligenceColumns
 	if expectedVersion == "" {
 		expectedVersion = "0"
@@ -98,7 +98,7 @@ RETURNING ` + artifactIntelligenceColumns
 	result, err := scanArtifactIntelligence(s.db.QueryRowContext(ctx, query, value.RepositoryID, value.Format, value.Coordinate, value.Digest, signatures, sboms, provenance, licenses, vulnerability, value.UpdatedBy, expectedVersion))
 	if errors.Is(err, sql.ErrNoRows) {
 		var exists bool
-		if queryErr := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM artifact_intelligence WHERE repository_id::text=$1 AND format=$2 AND coordinate=$3 AND digest=$4)`, value.RepositoryID, value.Format, value.Coordinate, value.Digest).Scan(&exists); queryErr != nil {
+		if queryErr := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM artifact_intelligence WHERE repository_id=$1::uuid AND format=$2 AND coordinate=$3 AND digest=$4)`, value.RepositoryID, value.Format, value.Coordinate, value.Digest).Scan(&exists); queryErr != nil {
 			return ArtifactIntelligence{}, queryErr
 		}
 		if exists {

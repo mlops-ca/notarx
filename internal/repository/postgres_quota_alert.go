@@ -13,7 +13,7 @@ func (s *PostgresStore) ListRepositoryQuotaAlertEvents(ctx context.Context, id s
 	if _, err := s.GetRepositoryQuotaAlertRule(ctx, id); err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT e.snapshot,e.target_id::text,e.target_version::text,COALESCE(e.delivery_id::text,''),e.notification_code,COALESCE(d.state,''),COALESCE(d.error_code,'') FROM repository_quota_alert_events e LEFT JOIN email_test_deliveries d ON d.id=e.delivery_id WHERE e.rule_id::text=$1 ORDER BY e.sequence DESC LIMIT 50`, id)
+	rows, err := s.db.QueryContext(ctx, `SELECT e.snapshot,e.target_id::text,e.target_version::text,COALESCE(e.delivery_id::text,''),e.notification_code,COALESCE(d.state,''),COALESCE(d.error_code,'') FROM repository_quota_alert_events e LEFT JOIN email_test_deliveries d ON d.id=e.delivery_id WHERE e.rule_id=$1::uuid ORDER BY e.sequence DESC LIMIT 50`, id)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +60,7 @@ func scanQuotaRule(row interface{ Scan(...any) error }) (RepositoryQuotaAlertRul
 }
 
 func (s *PostgresStore) GetRepositoryQuotaAlertRule(ctx context.Context, id string) (RepositoryQuotaAlertRule, error) {
-	return scanQuotaRule(s.db.QueryRowContext(ctx, `SELECT `+quotaRuleColumns+` FROM repository_quota_alert_rules WHERE id::text=$1`, id))
+	return scanQuotaRule(s.db.QueryRowContext(ctx, `SELECT `+quotaRuleColumns+` FROM repository_quota_alert_rules WHERE id=$1::uuid`, id))
 }
 func (s *PostgresStore) UpdateRepositoryQuotaAlertRule(ctx context.Context, v RepositoryQuotaAlertRule, version string) (RepositoryQuotaAlertRule, error) {
 	if err := v.Policy.Validate(); err != nil {
@@ -71,7 +71,7 @@ func (s *PostgresStore) UpdateRepositoryQuotaAlertRule(ctx context.Context, v Re
 		return v, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	old, err := scanQuotaRule(tx.QueryRowContext(ctx, `SELECT `+quotaRuleColumns+` FROM repository_quota_alert_rules WHERE id::text=$1 FOR UPDATE`, v.ID))
+	old, err := scanQuotaRule(tx.QueryRowContext(ctx, `SELECT `+quotaRuleColumns+` FROM repository_quota_alert_rules WHERE id=$1::uuid FOR UPDATE`, v.ID))
 	if err != nil {
 		return v, err
 	}
@@ -84,7 +84,7 @@ func (s *PostgresStore) UpdateRepositoryQuotaAlertRule(ctx context.Context, v Re
 	if old.RepositoryID != v.RepositoryID {
 		return old, ErrQuotaAlertScopeImmutable
 	}
-	target, err := scanEmailTarget(tx.QueryRowContext(ctx, `SELECT `+emailTargetColumns+` FROM email_targets WHERE id::text=$1 FOR SHARE`, v.TargetID))
+	target, err := scanEmailTarget(tx.QueryRowContext(ctx, `SELECT `+emailTargetColumns+` FROM email_targets WHERE id=$1::uuid FOR SHARE`, v.TargetID))
 	if err != nil {
 		return old, err
 	}
@@ -103,7 +103,7 @@ func (s *PostgresStore) UpdateRepositoryQuotaAlertRule(ctx context.Context, v Re
 	}
 	policy, _ := json.Marshal(v.Policy)
 	state, _ := json.Marshal(quotaalert.Reset(old.State, quality))
-	out, err := scanQuotaRule(tx.QueryRowContext(ctx, `UPDATE repository_quota_alert_rules SET target_id=$2,target_version=$3,enabled=$4,policy=$5,state=$6,version=version+1,state_version=state_version+1,updated_at=clock_timestamp(),next_evaluate_at=clock_timestamp() WHERE id::text=$1 RETURNING `+quotaRuleColumns, v.ID, v.TargetID, v.TargetVersion, v.Enabled, policy, state))
+	out, err := scanQuotaRule(tx.QueryRowContext(ctx, `UPDATE repository_quota_alert_rules SET target_id=$2,target_version=$3,enabled=$4,policy=$5,state=$6,version=version+1,state_version=state_version+1,updated_at=clock_timestamp(),next_evaluate_at=clock_timestamp() WHERE id=$1::uuid RETURNING `+quotaRuleColumns, v.ID, v.TargetID, v.TargetVersion, v.Enabled, policy, state))
 	if err != nil {
 		return old, err
 	}
@@ -122,7 +122,7 @@ func (s *PostgresStore) DeleteRepositoryQuotaAlertRule(ctx context.Context, id, 
 		return RepositoryQuotaAlertRule{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	old, err := scanQuotaRule(tx.QueryRowContext(ctx, `SELECT `+quotaRuleColumns+` FROM repository_quota_alert_rules WHERE id::text=$1 FOR UPDATE`, id))
+	old, err := scanQuotaRule(tx.QueryRowContext(ctx, `SELECT `+quotaRuleColumns+` FROM repository_quota_alert_rules WHERE id=$1::uuid FOR UPDATE`, id))
 	if err != nil {
 		return old, err
 	}
@@ -133,7 +133,7 @@ func (s *PostgresStore) DeleteRepositoryQuotaAlertRule(ctx context.Context, id, 
 		return old, nil
 	}
 	state, _ := json.Marshal(quotaalert.Reset(old.State, "deleted"))
-	out, err := scanQuotaRule(tx.QueryRowContext(ctx, `UPDATE repository_quota_alert_rules SET enabled=false,deleted=true,state=$2,version=version+1,state_version=state_version+1,updated_at=clock_timestamp() WHERE id::text=$1 RETURNING `+quotaRuleColumns, id, state))
+	out, err := scanQuotaRule(tx.QueryRowContext(ctx, `UPDATE repository_quota_alert_rules SET enabled=false,deleted=true,state=$2,version=version+1,state_version=state_version+1,updated_at=clock_timestamp() WHERE id=$1::uuid RETURNING `+quotaRuleColumns, id, state))
 	if err != nil {
 		return old, err
 	}
@@ -156,7 +156,7 @@ func (s *PostgresStore) CreateRepositoryQuotaAlertRule(ctx context.Context, v Re
 		return v, err
 	}
 	var repoState string
-	if err = tx.QueryRowContext(ctx, `SELECT state FROM hosted_repositories WHERE id::text=$1 FOR SHARE`, v.RepositoryID).Scan(&repoState); errors.Is(err, sql.ErrNoRows) {
+	if err = tx.QueryRowContext(ctx, `SELECT state FROM hosted_repositories WHERE id=$1::uuid FOR SHARE`, v.RepositoryID).Scan(&repoState); errors.Is(err, sql.ErrNoRows) {
 		return v, ErrNotFound
 	}
 	if err != nil {
@@ -165,7 +165,7 @@ func (s *PostgresStore) CreateRepositoryQuotaAlertRule(ctx context.Context, v Re
 	if repoState != "active" {
 		return v, ErrDisabled
 	}
-	target, err := scanEmailTarget(tx.QueryRowContext(ctx, `SELECT `+emailTargetColumns+` FROM email_targets WHERE id::text=$1 FOR SHARE`, v.TargetID))
+	target, err := scanEmailTarget(tx.QueryRowContext(ctx, `SELECT `+emailTargetColumns+` FROM email_targets WHERE id=$1::uuid FOR SHARE`, v.TargetID))
 	if err != nil {
 		return v, err
 	}

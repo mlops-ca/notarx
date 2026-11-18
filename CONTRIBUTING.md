@@ -347,11 +347,10 @@ Rules (ADR 0023 section 4), enforced by `make lint` (`sqllint-check`, which runs
   `uuid.Parse` at the API boundary and answer 400 or 404 there; do not let it
   reach a store query as a free-form string. Identifiers the server issued or
   read from the database are already valid.
-- Existing violations are counted per file in `tools/sqllint/allowlist.txt` and
-  `tools/sqllint/allowlist-uuid.txt`. The
-  counts may only decrease: a new violation, or a count that is higher than the
-  file, fails the lint, and a count that is now too high fails it too, so run
-  `go run ./tools/sqllint/cmd -update` after removing casts.
+- The text-cast rule has no allowlist: any violation fails the lint. Existing
+  `uuid.NewString()` calls are counted per file in `tools/sqllint/allowlist-uuid.txt`.
+  Those counts may only decrease: a higher count fails the lint, and a count that is now too
+  high fails it too, so run `go run ./tools/sqllint/cmd -update` after converting calls.
 
 ## Database migrations
 

@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/ids"
+	"github.com/mlops-ca/notarx/internal/jsonmeta"
 	helmprotocol "github.com/mlops-ca/notarx/internal/protocol/helm"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/uploadspool"
@@ -179,7 +180,7 @@ func (m *Module) verify(ctx context.Context, in repository.HelmSession) (*upload
 		return nil, nil, err
 	}
 	inspection, err := helmprotocol.Inspect(chart.Reader())
-	if err != nil || inspection.Metadata.Name != in.Name || inspection.Metadata.Version != in.Version || !bytes.Equal(inspection.MetadataJSON, in.MetadataJSON) || !bytes.Equal(inspection.ChartYAML, in.ChartYAML) {
+	if err != nil || inspection.Metadata.Name != in.Name || inspection.Metadata.Version != in.Version || !jsonmeta.Equal(inspection.MetadataJSON, in.MetadataJSON) || !bytes.Equal(inspection.ChartYAML, in.ChartYAML) {
 		_ = chart.Close()
 		return nil, nil, errIntegrity
 	}
@@ -224,7 +225,7 @@ func (m *Module) commit(ctx context.Context, in repository.HelmSession, actor st
 		if e != nil {
 			return p, e
 		}
-		if p.SessionID != in.ID || p.ObjectKey != in.ObjectKey || p.Digest != in.Digest || p.Size != in.Size || p.ProvenanceKey != in.ProvenanceKey || p.ProvenanceDigest != in.ProvenanceDigest || p.ProvenanceSize != in.ProvenanceSize || !bytes.Equal(p.MetadataJSON, in.MetadataJSON) || !bytes.Equal(p.ChartYAML, in.ChartYAML) {
+		if p.SessionID != in.ID || p.ObjectKey != in.ObjectKey || p.Digest != in.Digest || p.Size != in.Size || p.ProvenanceKey != in.ProvenanceKey || p.ProvenanceDigest != in.ProvenanceDigest || p.ProvenanceSize != in.ProvenanceSize || !jsonmeta.Equal(p.MetadataJSON, in.MetadataJSON) || !bytes.Equal(p.ChartYAML, in.ChartYAML) {
 			return repository.HelmPublication{}, errIntegrity
 		}
 		return p, nil
