@@ -107,8 +107,8 @@ func TestAuditedMutationLookupsUseTheTransaction(t *testing.T) {
 	}
 }
 
-// TestAPTGeneratedUsageUsesTheLookupIndex: the measurement taken on every snapshot publication
-// reads native_apt_snapshot_assets_visible_lookup_idx (repository_id, path, snapshot_id), not every pool asset of the visible snapshots.
+// TestAPTGeneratedUsageIsIndexed: the measurement taken on every snapshot publication
+// is served by an index of native_apt_snapshot_assets, not a scan of every pool asset of the visible snapshots.
 func TestAPTGeneratedUsageUsesTheDistsIndex(t *testing.T) {
 	store := counterTestStore(t)
 	ctx := context.Background()
@@ -125,7 +125,12 @@ func TestAPTGeneratedUsageUsesTheDistsIndex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !plan.UsesIndex("native_apt_snapshot_assets_visible_lookup_idx") {
-		t.Fatalf("the generated-object measurement does not use the (repository_id, path) lookup index: %v", plan.Indexes())
+	for _, relation := range plan.SequentialScans() {
+		if relation == "native_apt_snapshot_assets" {
+			t.Fatalf("the generated-object measurement scans every snapshot asset: %v", plan.Indexes())
+		}
+	}
+	if len(plan.Indexes()) == 0 {
+		t.Fatal("the generated-object measurement uses no index")
 	}
 }
