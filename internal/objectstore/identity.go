@@ -39,6 +39,19 @@ var ErrIdentityMismatch = errors.New("the database is bound to a different objec
 // ErrRootLocked means another gateway process already holds this root.
 var ErrRootLocked = errors.New("another gateway process holds this object store root")
 
+// ErrLockLost is wrapped by RootLock.Alive when the lock is definitely gone (the
+// session ended or the lock is no longer held). Any other Alive error is treated
+// as possibly transient: the watcher gives up only after several in a row.
+var ErrLockLost = errors.New("object store root lock lost")
+
+// lockCheckFailures is how many consecutive failed (not definitive) lock checks
+// the watcher tolerates before reporting the lock lost.
+const lockCheckFailures = 3
+
+// activator is implemented by stores whose root stays unchanged until the
+// database binding is verified (the filesystem driver opened through Open).
+type activator interface{ Activate() error }
+
 // IdentityGuard keeps the root lock for the life of the process.
 type IdentityGuard struct {
 	lock RootLock
@@ -71,12 +84,22 @@ func VerifyIdentity(ctx context.Context, store Store, database IdentityDatabase)
 	if !acquired {
 		return nil, ErrRootLocked
 	}
+	// Only now, bound to the database and holding the lock, may the root change:
+	// the layout, the root marker and the sweep of abandoned writes.
+	if toActivate, ok := store.(activator); ok {
+		if err = toActivate.Activate(); err != nil {
+			lock.Release()
+			return nil, fmt.Errorf("prepare object store root: %w", err)
+		}
+	}
 	return &IdentityGuard{lock: lock, stop: make(chan struct{})}, nil
 }
 
 // Watch checks the lock every interval until ctx ends or Close is called and
-// calls lost once, with the cause, when the lock is gone. A gateway that has
-// lost it must stop writing.
+// calls lost once, with the cause, when the lock is gone: at once when the
+// check says so definitively (ErrLockLost), after three failed checks in a row
+// otherwise, so a brief database hiccup does not stop the gateway. A gateway
+// that has lost the lock must stop writing.
 func (g *IdentityGuard) Watch(ctx context.Context, interval time.Duration, lost func(error)) {
 	if g == nil {
 		return
@@ -84,6 +107,7 @@ func (g *IdentityGuard) Watch(ctx context.Context, interval time.Duration, lost 
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
+		failures := 0
 		for {
 			select {
 			case <-ctx.Done():
@@ -94,9 +118,20 @@ func (g *IdentityGuard) Watch(ctx context.Context, interval time.Duration, lost 
 				checkCtx, cancel := context.WithTimeout(ctx, interval)
 				err := g.lock.Alive(checkCtx)
 				cancel()
-				if err != nil && ctx.Err() == nil {
+				switch {
+				case err == nil:
+					failures = 0
+				case ctx.Err() != nil:
+					return
+				case errors.Is(err, ErrLockLost):
 					lost(err)
 					return
+				default:
+					failures++
+					if failures >= lockCheckFailures {
+						lost(err)
+						return
+					}
 				}
 			}
 		}

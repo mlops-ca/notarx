@@ -275,8 +275,11 @@ database, or the reverse, is refused at start-up. On any failure everything the
 command created in the root is removed.
 
 The compose-based `scripts/backup-drill.sh` and `scripts/restore-drill.sh` also
-support the filesystem driver: set `NOTARX_OBJECT_STORE_DRIVER=filesystem` and
-`NOTARX_OBJECT_STORE_FS_ROOT` to the host directory. They stop the gateway, write
+support the filesystem driver: set `NOTARX_OBJECT_STORE_DRIVER=filesystem`,
+`NOTARX_OBJECT_STORE_FS_ROOT` to the host directory, and `NOTARX_COMPOSE_FILE` to
+a Compose file whose `gateway` service runs on the filesystem driver (the
+repository's `compose.yml` runs on S3 and is refused). Run them as the Gateway's
+user or root, since the root is mode 0700. They stop the gateway, write
 `objects-fs.tar` (the root without `tmp/`, marker included) next to the dump, and a
 restore replaces the root's contents from it.
 

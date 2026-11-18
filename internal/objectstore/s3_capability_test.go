@@ -5,8 +5,10 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 func smallMultipartConfig(f *fakeS3) Config {
@@ -340,8 +342,8 @@ func TestCopyRejectedClassifiesProviderAnswers(t *testing.T) {
 		t.Fatal("a missing object changed the mode")
 	}
 	for _, err := range []error{nil, errors.New("connection reset")} {
-		if copyRejected(err) {
-			t.Fatalf("copyRejected(%v) = true", err)
+		if copyUnsupported(err) || copyRefused(err) {
+			t.Fatalf("a transport error is not a refusal: %v", err)
 		}
 	}
 }
@@ -363,5 +365,123 @@ func TestCopyModeFallsBackWhenTheServiceRefusesLater(t *testing.T) {
 	}
 	if info, err := store.Stat(ctx, "k"); err != nil || info.Digest != digestOf(body) {
 		t.Fatalf("Stat = %#v %v", info, err)
+	}
+}
+
+func TestRefusedCopyStreamsOneObjectAndKeepsCopyMode(t *testing.T) {
+	f := newFakeS3(t)
+	store := f.store(f.config())
+	ctx := context.Background()
+	body := []byte("one object the service will not copy")
+	if err := store.Put(ctx, "big", body); err != nil {
+		t.Fatal(err)
+	}
+	// A 400 InvalidRequest is how a service refuses, for example, a source over
+	// its single-copy size limit: this object is streamed, other objects can
+	// still be copied, and the process does not give up on CopyObject.
+	f.copyStatus, f.copyCode = http.StatusBadRequest, "InvalidRequest"
+	if err := store.SetVerifiedDigest(ctx, "big", digestOf(body)); err != nil {
+		t.Fatalf("SetVerifiedDigest = %v", err)
+	}
+	if store.DigestMode() != DigestModeCopy {
+		t.Fatal("a refusal of one request switched the whole store to streaming")
+	}
+	if info, err := store.Stat(ctx, "big"); err != nil || info.Digest != digestOf(body) {
+		t.Fatalf("Stat = %#v %v", info, err)
+	}
+	f.copyStatus = 0
+	attempts := f.count("CopyObject")
+	if err := store.Put(ctx, "small", []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetVerifiedDigest(ctx, "small", digestOf([]byte("x"))); err != nil {
+		t.Fatal(err)
+	}
+	if f.count("CopyObject") != attempts+1 {
+		t.Fatal("the next object did not use CopyObject again")
+	}
+}
+
+func TestCopyClassification(t *testing.T) {
+	f := newFakeS3(t)
+	store := f.store(f.config())
+	ctx := context.Background()
+	if err := store.Put(ctx, "k", []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	for name, tc := range map[string]struct {
+		status int
+		code   string
+		sticky bool
+		stream bool
+	}{
+		"not implemented":    {http.StatusNotImplemented, "NotImplemented", true, true},
+		"method not allowed": {http.StatusMethodNotAllowed, "MethodNotAllowed", true, true},
+		"invalid argument":   {http.StatusBadRequest, "InvalidArgument", false, true},
+		"access denied":      {http.StatusForbidden, "AccessDenied", false, false},
+		"server error":       {http.StatusInternalServerError, "InternalError", false, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fresh := f.store(f.config())
+			f.copyStatus, f.copyCode = tc.status, tc.code
+			err := fresh.SetVerifiedDigest(ctx, "k", digestOf([]byte("x")))
+			if (err == nil) != tc.stream {
+				t.Fatalf("SetVerifiedDigest error = %v, want fallback %t", err, tc.stream)
+			}
+			if sticky := fresh.DigestMode() == DigestModeStream; sticky != tc.sticky {
+				t.Fatalf("sticky streaming = %t, want %t", sticky, tc.sticky)
+			}
+		})
+	}
+	f.copyStatus = 0
+}
+
+func TestSetVerifiedDigestRejectsMalformedDigests(t *testing.T) {
+	f := newFakeS3(t)
+	store := f.store(f.config())
+	if err := store.Put(context.Background(), "k", []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	for _, digest := range []string{"", "abc", "sha256:", "sha256:zz", "sha256:" + strings.Repeat("a", 63), ":" + strings.Repeat("a", 64), "sha256-" + strings.Repeat("a", 64)} {
+		if err := store.SetVerifiedDigest(context.Background(), "k", digest); err == nil {
+			t.Errorf("SetVerifiedDigest accepted %q", digest)
+		}
+	}
+	if f.count("CopyObject") != 0 {
+		t.Fatal("a malformed digest reached CopyObject")
+	}
+}
+
+func TestProbeSweepsStaleProbeObjectsOnly(t *testing.T) {
+	f := newFakeS3(t)
+	f.mu.Lock()
+	f.objects[ProbePrefix+"stale"] = &fakeObject{body: []byte("x"), modified: time.Now().Add(-3 * time.Hour)}
+	f.objects[ProbePrefix+"recent"] = &fakeObject{body: []byte("x"), modified: time.Now().Add(-time.Minute)}
+	f.objects["native/real/object"] = &fakeObject{body: []byte("keep"), modified: time.Now().Add(-48 * time.Hour)}
+	f.mu.Unlock()
+	f.store(f.config()).ProbeDigestMode(context.Background())
+	if f.object(ProbePrefix+"stale") != nil {
+		t.Fatal("a stale probe object survived")
+	}
+	if f.object(ProbePrefix+"recent") == nil {
+		t.Fatal("a recent probe object (another process may be probing) was removed")
+	}
+	if f.object("native/real/object") == nil {
+		t.Fatal("an artifact object was removed")
+	}
+}
+
+func TestValidDigestSyntax(t *testing.T) {
+	good := []string{"sha256:" + strings.Repeat("a", 64), "sha512:" + strings.Repeat("0", 128), "blake3:" + strings.Repeat("f", 32)}
+	bad := []string{"", "sha256", "sha256:" + strings.Repeat("a", 63), "sha256:" + strings.Repeat("a", 66), "sha512:xyz", ":" + strings.Repeat("a", 64), "sha256:" + strings.Repeat("g", 64), "x:" + strings.Repeat("a", 31)}
+	for _, digest := range good {
+		if err := validDigestSyntax(digest); err != nil {
+			t.Errorf("validDigestSyntax(%q) = %v", digest, err)
+		}
+	}
+	for _, digest := range bad {
+		if err := validDigestSyntax(digest); err == nil {
+			t.Errorf("validDigestSyntax(%q) accepted", digest)
+		}
 	}
 }

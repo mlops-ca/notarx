@@ -221,12 +221,15 @@ func objectStoreChecker(cfg objectstore.Config) Checker {
 	return httpChecker{url: objectStoreEndpointURL(cfg.Endpoint)}
 }
 
-// filesystemChecker is readiness for the filesystem driver: the root must
-// exist with a valid marker and its free space must be above the reserve, the
-// point at which writes start to fail with insufficient storage.
+// filesystemChecker is readiness for the filesystem driver: the root must exist
+// with a valid marker. Free space is a metric, not a readiness condition: below
+// the reserve writes fail with insufficient storage while reads and deletes keep
+// working.
 type filesystemChecker struct{ cfg objectstore.Config }
 
-func (c filesystemChecker) Check(ctx context.Context) error { return objectstore.Check(ctx, c.cfg) }
+func (c filesystemChecker) Check(ctx context.Context) error {
+	return objectstore.CheckReadiness(ctx, c.cfg)
+}
 
 func objectStoreEndpointURL(endpoint string) string {
 	return strings.TrimRight(endpoint, "/") + "/"

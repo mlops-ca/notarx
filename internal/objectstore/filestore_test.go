@@ -659,3 +659,217 @@ func TestFileStoreUnsupportedConfigFailsOpen(t *testing.T) {
 		t.Fatal("Open accepted an unknown driver")
 	}
 }
+
+func TestFileStoreDeletePrunesEmptyDirectoriesAndFreesTheName(t *testing.T) {
+	cfg := testFileConfig(t)
+	store := openTestFileStore(t, cfg)
+	ctx := context.Background()
+	data := []byte("x")
+	if err := store.PutVerifiedReader(ctx, "a/b/c", bytes.NewReader(data), 1, digestOf(data)); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Put(ctx, "a/keep", data); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Delete(ctx, "a/b/c"); err != nil {
+		t.Fatal(err)
+	}
+	for _, dir := range []string{"data/a/b", "meta/a/b"} {
+		if _, err := os.Stat(filepath.Join(cfg.FSRoot, dir)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("%s survived Delete: %v", dir, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(cfg.FSRoot, "data/a")); err != nil {
+		t.Fatalf("a directory with content was pruned: %v", err)
+	}
+	// Once everything under a/ is gone the name "a" is free for a file again.
+	if err := store.Delete(ctx, "a/keep"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(cfg.FSRoot, "data/a")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("an emptied top directory survived: %v", err)
+	}
+	if err := store.Put(ctx, "a", data); err != nil {
+		t.Fatalf("Put(a) after the directory chain was emptied: %v", err)
+	}
+	// An empty directory left behind by a crash does not block the key either.
+	if err := os.MkdirAll(filepath.Join(cfg.FSRoot, "data/left/over"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Put(ctx, "left", data); err == nil {
+		t.Log("a non-empty directory chain was replaced")
+	}
+	if err := os.MkdirAll(filepath.Join(cfg.FSRoot, "data/empty-dir"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Put(ctx, "empty-dir", data); err != nil {
+		t.Fatalf("Put over an empty directory: %v", err)
+	}
+	if got, err := store.Get(ctx, "empty-dir"); err != nil || !bytes.Equal(got, data) {
+		t.Fatalf("Get = %q %v", got, err)
+	}
+}
+
+func TestFileStoreSurvivesPutsAndDeletesInOneDirectory(t *testing.T) {
+	cfg := testFileConfig(t)
+	store := openTestFileStore(t, cfg)
+	ctx := context.Background()
+	var group sync.WaitGroup
+	errs := make(chan error, 400)
+	for worker := range 8 {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			for round := range 25 {
+				key := fmt.Sprintf("shared/dir/w%d/obj%d", worker%2, round%3)
+				data := []byte(fmt.Sprintf("%d-%d", worker, round))
+				if err := store.PutVerifiedReader(ctx, key, bytes.NewReader(data), int64(len(data)), digestOf(data)); err != nil {
+					errs <- err
+				}
+				if err := store.Delete(ctx, fmt.Sprintf("shared/dir/w%d/obj%d", (worker+1)%2, (round+1)%3)); err != nil {
+					errs <- err
+				}
+			}
+		}()
+	}
+	group.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatalf("concurrent put/delete in a shared directory failed: %v", err)
+	}
+}
+
+func TestFileStoreRefusesMalformedDigests(t *testing.T) {
+	store := openTestFileStore(t, testFileConfig(t))
+	ctx := context.Background()
+	if err := store.Put(ctx, "k", []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	for _, digest := range []string{"", "abc", "sha256:zz", "sha256:" + strings.Repeat("a", 63)} {
+		if err := store.SetVerifiedDigest(ctx, "k", digest); err == nil {
+			t.Errorf("SetVerifiedDigest accepted %q", digest)
+		}
+	}
+	if info, err := store.Stat(ctx, "k"); err != nil || info.Digest != "" {
+		t.Fatalf("a refused digest was recorded: %#v %v", info, err)
+	}
+	// A digest of another algorithm cannot be re-verified but is well formed.
+	sha512 := "sha512:" + strings.Repeat("0", 128)
+	if err := store.SetVerifiedDigest(ctx, "k", sha512); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := store.Stat(ctx, "k"); err != nil || info.Digest != sha512 {
+		t.Fatalf("Stat = %#v %v", info, err)
+	}
+}
+
+func TestRegistryOpenLeavesTheRootUntouchedUntilActivated(t *testing.T) {
+	cfg := testFileConfig(t)
+	// A previous run left an abandoned write behind in an initialised root.
+	first := openTestFileStore(t, cfg)
+	_ = first.Close()
+	stale := filepath.Join(cfg.FSRoot, "tmp", "very-long-upload")
+	if err := os.WriteFile(stale, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-5 * time.Hour)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := Open(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := opened.(*FileStore)
+	t.Cleanup(func() { _ = store.Close() })
+	if _, statErr := os.Stat(stale); statErr != nil {
+		t.Fatalf("Open removed another process's abandoned-looking write before the root was verified: %v", statErr)
+	}
+	if err = store.Put(context.Background(), "k", []byte("x")); !errors.Is(err, ErrNotActivated) {
+		t.Fatalf("Put before Activate = %v, want ErrNotActivated", err)
+	}
+	if err = store.Delete(context.Background(), "k"); !errors.Is(err, ErrNotActivated) {
+		t.Fatalf("Delete before Activate = %v, want ErrNotActivated", err)
+	}
+	if err = store.Activate(); err != nil {
+		t.Fatal(err)
+	}
+	if _, statErr := os.Stat(stale); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("Activate did not sweep the stale write: %v", statErr)
+	}
+	if err = store.Put(context.Background(), "k", []byte("x")); err != nil {
+		t.Fatalf("Put after Activate: %v", err)
+	}
+	if err = store.Activate(); err != nil {
+		t.Fatalf("Activate is idempotent: %v", err)
+	}
+}
+
+func TestRegistryOpenOfAnEmptyRootWritesNothingUntilActivated(t *testing.T) {
+	cfg := testFileConfig(t)
+	opened, err := Open(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := opened.(*FileStore)
+	t.Cleanup(func() { _ = store.Close() })
+	if entries, readErr := os.ReadDir(cfg.FSRoot); readErr != nil || len(entries) != 0 {
+		t.Fatalf("an unactivated open of an empty root wrote %d entries (%v)", len(entries), readErr)
+	}
+	candidate := store.RootID()
+	if candidate == "" {
+		t.Fatal("no candidate root ID")
+	}
+	if err = store.Activate(); err != nil {
+		t.Fatal(err)
+	}
+	marker, readErr := os.ReadFile(filepath.Join(cfg.FSRoot, ".notarx-root"))
+	if readErr != nil || strings.TrimSpace(string(marker)) != candidate {
+		t.Fatalf("marker = %q %v, want the candidate %s", marker, readErr, candidate)
+	}
+}
+
+func TestCheckAndCheckReadinessForTheFilesystemDriver(t *testing.T) {
+	cfg := testFileConfig(t)
+	ctx := context.Background()
+	// Before the first start the root does not exist yet: preflight accepts it
+	// when the parent exists, readiness of a running gateway does not.
+	if err := Check(ctx, cfg); err != nil {
+		t.Fatalf("Check before the first start: %v", err)
+	}
+	if err := CheckReadiness(ctx, cfg); err == nil {
+		t.Fatal("CheckReadiness accepted a missing root")
+	}
+	missingParent := cfg
+	missingParent.FSRoot = filepath.Join(t.TempDir(), "no", "such", "parent", "objects")
+	if err := Check(ctx, missingParent); err == nil {
+		t.Fatal("Check accepted a root whose parent does not exist")
+	}
+	store := openTestFileStore(t, cfg)
+	_ = store
+	if err := CheckReadiness(ctx, cfg); err != nil {
+		t.Fatalf("CheckReadiness of an initialised root: %v", err)
+	}
+	// Below the reserve, writes fail and preflight fails, but a running node
+	// stays ready: reads and the deletes that free space must keep working.
+	tight := cfg
+	tight.FSReserveBytes = 1 << 60
+	if _, err := store.Capacity(); err != nil {
+		t.Skipf("capacity is not measurable here: %v", err)
+	}
+	if err := Check(ctx, tight); !errors.Is(err, ErrInsufficientStorage) {
+		t.Fatalf("Check below the reserve = %v", err)
+	}
+	if err := CheckReadiness(ctx, tight); err != nil {
+		t.Fatalf("CheckReadiness below the reserve = %v, want ready", err)
+	}
+	if err := os.WriteFile(filepath.Join(cfg.FSRoot, ".notarx-root"), []byte("garbage"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := CheckReadiness(ctx, cfg); err == nil {
+		t.Fatal("CheckReadiness accepted a corrupt marker")
+	}
+	if err := CheckReadiness(ctx, Defaults()); err != nil {
+		t.Fatalf("CheckReadiness for s3 is the HTTP check's job: %v", err)
+	}
+}

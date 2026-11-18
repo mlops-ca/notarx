@@ -106,6 +106,29 @@ func (s *S3Store) upload(ctx context.Context, key string, body io.ReadSeeker, si
 	return err
 }
 
+// ProbePrefix is the key prefix of the capability probe's throw-away objects.
+// Tools that enumerate a bucket (the backup walker) skip it.
+const ProbePrefix = ".notarx-probe/"
+
+// staleProbeAge is how old a probe object must be before the next start-up
+// removes it: it is the remains of a process that crashed mid-probe.
+const staleProbeAge = time.Hour
+
+// sweepProbes deletes probe objects an earlier process left behind. It is best
+// effort and looks at one listing page.
+func (s *S3Store) sweepProbes(ctx context.Context) {
+	page, err := s.client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{Bucket: aws.String(s.bucket), Prefix: aws.String(ProbePrefix), MaxKeys: aws.Int32(100)})
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-staleProbeAge)
+	for _, object := range page.Contents {
+		if object.LastModified != nil && object.LastModified.Before(cutoff) {
+			_, _ = s.client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(s.bucket), Key: object.Key})
+		}
+	}
+}
+
 // DigestMode reports how SetVerifiedDigest attaches a digest: DigestModeCopy
 // (CopyObject replacing the metadata) or DigestModeStream (the object is read,
 // its digest re-verified, and it is written again), which costs extra egress.
@@ -117,6 +140,9 @@ func (s *S3Store) DigestMode() string {
 }
 
 func (s *S3Store) SetVerifiedDigest(ctx context.Context, key, digest string) error {
+	if err := validDigestSyntax(digest); err != nil {
+		return err
+	}
 	if s.digestMode.Load() == digestModeStream {
 		return s.restamp(ctx, key, digest)
 	}
@@ -128,10 +154,16 @@ func (s *S3Store) SetVerifiedDigest(ctx context.Context, key, digest string) err
 		return err
 	}
 	if err = s.copyDigest(ctx, key, digest, info); err != nil {
-		if !copyRejected(err) {
+		switch {
+		case copyUnsupported(err):
+			// The service has no such operation: stop trying for this process.
+			s.useStreamMode("copy_unsupported")
+		case copyRefused(err):
+			// The service refused this request (for example a source above the
+			// single-copy size limit) but may accept others: stream this object only.
+		default:
 			return err
 		}
-		s.useStreamMode("copy_rejected")
 		return s.restamp(ctx, key, digest)
 	}
 	return nil
@@ -204,30 +236,48 @@ func (s *S3Store) restamp(ctx context.Context, key, digest string) error {
 	})
 }
 
-// copyRejected reports whether the service answered a CopyObject with a refusal
-// that means "not supported here" (as opposed to missing object, denied access
-// or a network failure), which selects the streaming fallback.
-func copyRejected(err error) bool {
+// copyUnsupported reports whether the service answered a CopyObject as an
+// operation it does not implement (as opposed to a missing object, denied
+// access, throttling or a network failure). That selects the streaming mode for
+// the life of the process.
+func copyUnsupported(err error) bool {
 	if err == nil || s3NotFound(err) {
 		return false
 	}
 	var apiError smithy.APIError
 	if errors.As(err, &apiError) {
 		switch apiError.ErrorCode() {
-		case "NotImplemented", "XNotImplemented", "InvalidRequest", "InvalidArgument", "MethodNotAllowed", "UnsupportedOperation", "InvalidDirective", "MalformedXML":
+		case "NotImplemented", "XNotImplemented", "MethodNotAllowed", "UnsupportedOperation":
 			return true
-		case "AccessDenied", "SlowDown", "ServiceUnavailable", "InternalError", "RequestTimeout", "ThrottlingException":
-			return false
 		}
 	}
 	var responseError *smithyhttp.ResponseError
 	if errors.As(err, &responseError) {
 		switch responseError.HTTPStatusCode() {
-		case 400, 405, 501:
+		case 405, 501:
 			return true
 		}
 	}
 	return false
+}
+
+// copyRefused reports whether the service rejected this one CopyObject request
+// as malformed or unacceptable (a 400, for example for a source over the
+// single-copy size limit) while possibly accepting others. The object is
+// streamed, but the copy mode is kept.
+func copyRefused(err error) bool {
+	if err == nil || s3NotFound(err) || copyUnsupported(err) {
+		return false
+	}
+	var apiError smithy.APIError
+	if errors.As(err, &apiError) {
+		switch apiError.ErrorCode() {
+		case "InvalidRequest", "InvalidArgument", "InvalidDirective", "MalformedXML", "EntityTooLarge", "InvalidCopySource":
+			return true
+		}
+	}
+	var responseError *smithyhttp.ResponseError
+	return errors.As(err, &responseError) && responseError.HTTPStatusCode() == 400
 }
 
 // ProbeDigestMode decides, once at start-up, whether CopyObject with the REPLACE
@@ -238,7 +288,8 @@ func copyRejected(err error) bool {
 func (s *S3Store) ProbeDigestMode(ctx context.Context) string {
 	probeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	key := ".notarx-probe/" + uuid.NewString()
+	s.sweepProbes(probeCtx)
+	key := ProbePrefix + uuid.NewString()
 	payload := []byte("notarx capability probe")
 	sum := sha256.Sum256(payload)
 	digest := digestPrefix + hex.EncodeToString(sum[:])
@@ -270,7 +321,9 @@ func (s *S3Store) ProbeDigestMode(ctx context.Context) string {
 		} else if headErr == nil {
 			s.digestMode.Store(digestModeCopyOK)
 		}
-	case copyRejected(copyErr):
+	case copyUnsupported(copyErr) || copyRefused(copyErr):
+		// A one-byte probe object cannot hit a size limit, so any refusal here
+		// means the REPLACE directive does not work on this service.
 		s.useStreamMode("copy_rejected")
 	}
 	mode := s.DigestMode()

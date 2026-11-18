@@ -61,6 +61,23 @@ func parseDigest(digest string) (string, error) {
 	return hex.EncodeToString(decoded), nil
 }
 
+// validDigestSyntax accepts "<algorithm>:<hex>" for SetVerifiedDigest: a sha256
+// digest must be exactly 64 hex characters; other algorithms (an OCI manifest
+// may be sha512) need only be well-formed, since only sha256 can be re-verified.
+func validDigestSyntax(digest string) error {
+	algorithm, hexPart, ok := strings.Cut(digest, ":")
+	if !ok || algorithm == "" || len(hexPart) < 32 || len(hexPart)%2 != 0 {
+		return errors.New("object digest must be <algorithm>:<hex>")
+	}
+	if _, err := hex.DecodeString(hexPart); err != nil {
+		return errors.New("object digest must be <algorithm>:<hex>")
+	}
+	if algorithm == "sha256" && len(hexPart) != sha256.Size*2 {
+		return errors.New("object digest must be sha256:<64 hex characters>")
+	}
+	return nil
+}
+
 // MemoryStore is the in-process Store used by tests. It follows the same
 // contract as the other drivers (see storetest.RunContract): verified writes
 // check size and digest, listings are lexicographic, and every call honours
@@ -196,6 +213,9 @@ func (s *MemoryStore) PutVerifiedReader(ctx context.Context, key string, value i
 
 func (s *MemoryStore) SetVerifiedDigest(ctx context.Context, key, digest string) error {
 	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := validDigestSyntax(digest); err != nil {
 		return err
 	}
 	s.mu.Lock()

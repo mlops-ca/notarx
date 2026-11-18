@@ -4,12 +4,18 @@ set -euo pipefail
 environment_file=${NOTARX_ENV_FILE:-.env}
 backup_dir=${1:?usage: scripts/restore-drill.sh <backup-directory>}
 object_driver=${NOTARX_OBJECT_STORE_DRIVER:-s3}
-compose=(docker compose --env-file "$environment_file" -f compose.yml)
+compose_file=${NOTARX_COMPOSE_FILE:-compose.yml}
+compose=(docker compose --env-file "$environment_file" -f "$compose_file")
 
 case "$object_driver" in
   s3) ;;
   filesystem)
     fs_root=${NOTARX_OBJECT_STORE_FS_ROOT:?set NOTARX_OBJECT_STORE_FS_ROOT to the filesystem object root}
+    [[ -r "$fs_root" && -w "$fs_root" && -x "$fs_root" ]] || { printf '%s\n' "$fs_root is not readable and writable by this user; run the restore as the Gateway's user or root." >&2; exit 1; }
+    if ! "${compose[@]}" config 2>/dev/null | grep -Eq 'NOTARX_OBJECT_STORE_DRIVER: "?filesystem"?'; then
+      printf '%s\n' "$compose_file does not configure the gateway service with NOTARX_OBJECT_STORE_DRIVER=filesystem." >&2
+      exit 1
+    fi
     test -f "$backup_dir/objects-fs.tar" || { printf '%s\n' "$backup_dir has no objects-fs.tar; was it made with NOTARX_OBJECT_STORE_DRIVER=filesystem?" >&2; exit 1; }
     ;;
   *) printf 'Unsupported NOTARX_OBJECT_STORE_DRIVER %s (use s3 or filesystem).\n' "$object_driver" >&2; exit 1 ;;

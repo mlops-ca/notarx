@@ -57,10 +57,19 @@ var ErrInvalidKey = errors.New("object key is not valid for the filesystem drive
 func init() { Register(DriverFilesystem, openFilesystem) }
 
 // checkFilesystem verifies, without creating or changing anything, that the
-// root exists, has the expected layout and a valid marker (when it has been
-// initialised) and has free space above the reserve.
-func checkFilesystem(cfg Config) error {
+// root has a valid marker (when it has been initialised). Preflight (before the
+// first start) accepts a root that does not exist yet when its parent does, since
+// the gateway creates it, and also requires free space above the reserve; the
+// readiness probe of a running gateway requires the root and ignores free space.
+func checkFilesystem(cfg Config, preflight bool) error {
 	info, err := os.Stat(cfg.FSRoot)
+	if errors.Is(err, fs.ErrNotExist) && preflight {
+		parent, parentErr := os.Stat(path.Dir(cfg.FSRoot))
+		if parentErr != nil || !parent.IsDir() {
+			return errors.New("object store filesystem root and its parent directory do not exist")
+		}
+		return nil
+	}
 	if err != nil || !info.IsDir() {
 		return errors.New("object store filesystem root does not exist or is not a directory")
 	}
@@ -69,6 +78,9 @@ func checkFilesystem(cfg Config) error {
 			return errors.New("object store root marker is not a valid root ID")
 		}
 	}
+	if !preflight {
+		return nil
+	}
 	probe := &FileStore{rootPath: cfg.FSRoot, reserve: cfg.FSReserveBytes}
 	if capacity, capErr := probe.Capacity(); capErr == nil && capacity.BelowReserve() {
 		return ErrInsufficientStorage
@@ -76,7 +88,11 @@ func checkFilesystem(cfg Config) error {
 	return nil
 }
 
-func openFilesystem(_ context.Context, cfg Config) (Store, error) { return NewFileStore(cfg) }
+// openFilesystem is the registry opener. It leaves the root unchanged until
+// Activate (VerifyIdentity calls it), see ErrNotActivated.
+func openFilesystem(_ context.Context, cfg Config) (Store, error) {
+	return newFileStore(cfg, time.Now, "", false)
+}
 
 // FileStore is the single-node filesystem driver. It is not for multiple nodes
 // and not for shared network filesystems.
@@ -87,6 +103,15 @@ type FileStore struct {
 	fsync    bool
 	reserve  int64
 	now      func() time.Time
+	// active is true once the root layout, the root marker and the stale-write
+	// sweep are in place (Activate). A store opened for single-node enforcement
+	// stays inactive, and refuses writes, until the database binding is verified
+	// and the root lock is held, so that a process that is about to be refused
+	// cannot change the root.
+	active bool
+	// pendingMarker is true while the root has no marker yet and rootID is a
+	// candidate that Activate will write.
+	pendingMarker bool
 	// readOnly stores refuse every write; the backup tooling uses one to read a
 	// frozen source without touching it.
 	readOnly bool
@@ -98,9 +123,11 @@ type FileStore struct {
 
 // NewFileStore opens (creating on first use) the root directory named by
 // cfg.FSRoot, validates its layout and removes temporary files left by a
-// crash. It performs no database work; see VerifyIdentity.
+// crash, so the store is ready to write. It performs no database work; the
+// gateway opens the store through Open instead, which defers the changes to
+// the root until VerifyIdentity has bound it to the database.
 func NewFileStore(cfg Config) (*FileStore, error) {
-	return newFileStore(cfg, time.Now, "")
+	return newFileStore(cfg, time.Now, "", true)
 }
 
 // NewFileStoreWithRootID is NewFileStore for restoring a backup: a root that has
@@ -111,10 +138,10 @@ func NewFileStoreWithRootID(cfg Config, rootID string) (*FileStore, error) {
 	if _, err := uuid.Parse(rootID); err != nil {
 		return nil, errors.New("object store root ID is not valid")
 	}
-	return newFileStore(cfg, time.Now, rootID)
+	return newFileStore(cfg, time.Now, rootID, true)
 }
 
-func newFileStore(cfg Config, now func() time.Time, rootID string) (*FileStore, error) {
+func newFileStore(cfg Config, now func() time.Time, rootID string, activate bool) (*FileStore, error) {
 	cfg = cfg.withDefaults()
 	if err := cfg.validateFilesystem(); err != nil {
 		return nil, err
@@ -130,9 +157,15 @@ func newFileStore(cfg Config, now func() time.Time, rootID string) (*FileStore, 
 		return nil, fmt.Errorf("open object store root: %w", err)
 	}
 	store := &FileStore{rootPath: cfg.FSRoot, root: root, fsync: cfg.FSFsync, reserve: cfg.FSReserveBytes, now: now}
-	if err = store.initialize(rootID); err != nil {
+	if err = store.readRootID(rootID); err != nil {
 		_ = root.Close()
 		return nil, err
+	}
+	if activate {
+		if err = store.Activate(); err != nil {
+			_ = root.Close()
+			return nil, err
+		}
 	}
 	return store, nil
 }
@@ -173,7 +206,44 @@ func OpenFileStoreReadOnly(rootPath string) (*FileStore, error) {
 	return store, nil
 }
 
-func (s *FileStore) initialize(wantRootID string) error {
+// readRootID reads the root marker, or, when there is none yet, picks the
+// candidate ID (wantRootID, or a new random one) that Activate will write.
+func (s *FileStore) readRootID(wantRootID string) error {
+	content, err := s.root.ReadFile(fsRootMarker)
+	if errors.Is(err, fs.ErrNotExist) {
+		s.rootID, s.pendingMarker = wantRootID, true
+		if s.rootID == "" {
+			s.rootID = uuid.NewString()
+		}
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read root marker: %w", err)
+	}
+	id := strings.TrimSpace(string(content))
+	if _, parseErr := uuid.Parse(id); parseErr != nil {
+		return errors.New("object store root marker is not a valid root ID")
+	}
+	if wantRootID != "" && id != wantRootID {
+		return errors.New("object store root already has a different root ID")
+	}
+	s.rootID = id
+	return nil
+}
+
+// ErrNotActivated is returned by a write to a store whose root has not been
+// activated yet.
+var ErrNotActivated = errors.New("object store root is not activated")
+
+// Activate makes the root ready to write: the layout directories, the root
+// marker (when the root has none yet) and the removal of temporary files left
+// by a crash. It is idempotent. The gateway calls it through VerifyIdentity
+// once the database binding is verified and the root lock is held; stores
+// opened with NewFileStore are activated already.
+func (s *FileStore) Activate() error {
+	if s.active || s.readOnly {
+		return nil
+	}
 	for _, dir := range []string{fsDataDir, fsMetaDir, fsTmpDir} {
 		if err := s.root.Mkdir(dir, 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
 			return fmt.Errorf("create %s directory: %w", dir, err)
@@ -183,57 +253,58 @@ func (s *FileStore) initialize(wantRootID string) error {
 			return fmt.Errorf("object store %s entry is not a directory", dir)
 		}
 	}
-	id, err := s.loadOrCreateRootID(wantRootID)
-	if err != nil {
+	if s.pendingMarker {
+		if err := s.writeMarker(); err != nil {
+			return err
+		}
+		s.pendingMarker = false
+	}
+	if err := s.removeStaleTmp(); err != nil {
 		return err
 	}
-	if wantRootID != "" && id != wantRootID {
-		return errors.New("object store root already has a different root ID")
-	}
-	s.rootID = id
-	return s.removeStaleTmp()
+	s.active = true
+	return nil
 }
 
-func (s *FileStore) loadOrCreateRootID(wantRootID string) (string, error) {
-	content, err := s.root.ReadFile(fsRootMarker)
-	if errors.Is(err, fs.ErrNotExist) {
-		id := wantRootID
-		if id == "" {
-			id = uuid.NewString()
+// writeMarker creates the root marker with the candidate ID.
+func (s *FileStore) writeMarker() error {
+	file, err := s.root.OpenFile(fsRootMarker, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if errors.Is(err, fs.ErrExist) {
+		// Another process created it first; it must agree with the ID we hold.
+		content, readErr := s.root.ReadFile(fsRootMarker)
+		if readErr != nil || strings.TrimSpace(string(content)) != s.rootID {
+			return errors.New("object store root already has a different root ID")
 		}
-		file, createErr := s.root.OpenFile(fsRootMarker, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-		if errors.Is(createErr, fs.ErrExist) {
-			return s.loadOrCreateRootID(wantRootID) // another process created it first
-		}
-		if createErr != nil {
-			return "", fmt.Errorf("create root marker: %w", createErr)
-		}
-		_, writeErr := file.WriteString(id + "\n")
-		if writeErr == nil && s.fsync {
-			writeErr = file.Sync()
-		}
-		if closeErr := file.Close(); writeErr == nil {
-			writeErr = closeErr
-		}
-		if writeErr != nil {
-			_ = s.root.Remove(fsRootMarker)
-			return "", fmt.Errorf("write root marker: %w", writeErr)
-		}
-		if s.fsync {
-			if syncErr := s.syncDir("."); syncErr != nil {
-				return "", syncErr
-			}
-		}
-		return id, nil
+		return nil
 	}
 	if err != nil {
-		return "", fmt.Errorf("read root marker: %w", err)
+		return fmt.Errorf("create root marker: %w", err)
 	}
-	id := strings.TrimSpace(string(content))
-	if _, parseErr := uuid.Parse(id); parseErr != nil {
-		return "", errors.New("object store root marker is not a valid root ID")
+	_, writeErr := file.WriteString(s.rootID + "\n")
+	if writeErr == nil && s.fsync {
+		writeErr = file.Sync()
 	}
-	return id, nil
+	if closeErr := file.Close(); writeErr == nil {
+		writeErr = closeErr
+	}
+	if writeErr != nil {
+		_ = s.root.Remove(fsRootMarker)
+		return fmt.Errorf("write root marker: %w", writeErr)
+	}
+	if s.fsync {
+		return s.syncDir(".")
+	}
+	return nil
+}
+
+func (s *FileStore) requireActive() error {
+	if s.readOnly {
+		return ErrReadOnly
+	}
+	if !s.active {
+		return ErrNotActivated
+	}
+	return nil
 }
 
 // removeStaleTmp deletes temporary files older than one hour: the remains of
@@ -362,7 +433,11 @@ func (s *FileStore) mkdirAll(rel string) error {
 			}
 		case errors.Is(err, fs.ErrExist):
 			info, statErr := s.root.Lstat(current)
-			if statErr != nil || !info.IsDir() {
+			if statErr != nil {
+				// Pruned again between Mkdir and Lstat: the caller retries.
+				return statErr
+			}
+			if !info.IsDir() {
 				return fmt.Errorf("%w: %q is not a directory", ErrInvalidKey, current)
 			}
 		default:
@@ -441,8 +516,8 @@ func (s *FileStore) PutVerifiedReader(ctx context.Context, key string, value io.
 // so a crash can never pair new bytes with an old digest. The per-key lock
 // makes same-key writers last-writer-wins with bytes and digest from one writer.
 func (s *FileStore) write(ctx context.Context, key string, value io.Reader, size int64, wantHex string) error {
-	if s.readOnly {
-		return ErrReadOnly
+	if err := s.requireActive(); err != nil {
+		return err
 	}
 	if err := ctx.Err(); err != nil {
 		return err
@@ -494,10 +569,7 @@ func (s *FileStore) write(ctx context.Context, key string, value io.Reader, size
 	if err = inject("sidecar-removed"); err != nil {
 		return err
 	}
-	if err = s.mkdirAll(path.Dir(dataPath(key))); err != nil {
-		return err
-	}
-	if err = s.root.Rename(tmpName, dataPath(key)); err != nil {
+	if err = s.renameInto(tmpName, dataPath(key)); err != nil {
 		return fmt.Errorf("commit object: %w", err)
 	}
 	if err = inject("renamed"); err != nil {
@@ -547,13 +619,56 @@ func (s *FileStore) stream(ctx context.Context, tmpName string, value io.Reader,
 	return hasher.Sum(nil), nil
 }
 
+// renameInto moves tmpName to dst, creating the parent directories first. A
+// concurrent Delete of a sibling may prune a directory between the two steps,
+// so a vanished directory is created again a few times. An empty directory
+// left where the object should go (by an earlier Delete or a crash) is
+// removed; a directory with content makes the rename fail, as it must.
+func (s *FileStore) renameInto(tmpName, dst string) error {
+	var err error
+	for attempt := 0; attempt < 6; attempt++ {
+		if err = s.mkdirAll(path.Dir(dst)); err == nil {
+			if info, statErr := s.root.Lstat(dst); statErr == nil && info.IsDir() {
+				_ = s.root.Remove(dst)
+			}
+			err = s.root.Rename(tmpName, dst)
+		}
+		if err == nil || !directoryVanished(err) {
+			return err
+		}
+	}
+	return err
+}
+
+// directoryVanished reports the error of an operation whose parent directory
+// was removed by a concurrent Delete's pruning: ENOENT on Linux, and EINVAL from
+// renameat on macOS.
+func directoryVanished(err error) bool {
+	return errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.EINVAL)
+}
+
+// pruneEmptyDirs removes the directories that Delete left empty, from the
+// deepest up to (not including) base. It stops at the first directory that is
+// not empty and is best effort: an error only means a directory stays.
+func (s *FileStore) pruneEmptyDirs(base, rel string) {
+	for dir := path.Dir(rel); dir != base && dir != "." && dir != "/"; dir = path.Dir(dir) {
+		if err := s.root.Remove(dir); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return
+		}
+	}
+}
+
 func (s *FileStore) removeSidecar(key string) error {
 	err := s.root.Remove(sidecarPath(key))
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
 	if err == nil && s.fsync {
-		return s.syncDir(path.Dir(sidecarPath(key)))
+		// The directory may have been pruned by a concurrent Delete of its last
+		// sibling; then there is nothing left to flush.
+		if syncErr := s.syncDir(path.Dir(sidecarPath(key))); syncErr != nil && !directoryVanished(syncErr) {
+			return syncErr
+		}
 	}
 	return nil
 }
@@ -596,13 +711,10 @@ func (s *FileStore) writeSidecar(key, digest string, inject func(string) error) 
 	if err = step("digest-written"); err != nil {
 		return err
 	}
-	if err = s.mkdirAll(path.Dir(sidecarPath(key))); err != nil {
-		return err
-	}
 	if err = s.checkNoSymlinks(sidecarPath(key)); err != nil {
 		return err
 	}
-	if err = s.root.Rename(tmpName, sidecarPath(key)); err != nil {
+	if err = s.renameInto(tmpName, sidecarPath(key)); err != nil {
 		return fmt.Errorf("commit digest: %w", err)
 	}
 	if err = step("digest-renamed"); err != nil {
@@ -698,21 +810,24 @@ func (s *FileStore) readSidecar(key string) string {
 		return ""
 	}
 	digest := strings.TrimSpace(string(content))
-	if _, parseErr := parseDigest(digest); parseErr != nil {
+	if validDigestSyntax(digest) != nil {
 		return ""
 	}
 	return digest
 }
 
 func (s *FileStore) SetVerifiedDigest(ctx context.Context, key, digest string) error {
-	if s.readOnly {
-		return ErrReadOnly
+	if err := s.requireActive(); err != nil {
+		return err
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if err := validateFileKey(key); err != nil {
 		return ErrNotFound
+	}
+	if err := validDigestSyntax(digest); err != nil {
+		return err
 	}
 	lock := s.lockFor(key)
 	lock.Lock()
@@ -726,8 +841,8 @@ func (s *FileStore) SetVerifiedDigest(ctx context.Context, key, digest string) e
 }
 
 func (s *FileStore) Delete(ctx context.Context, key string) error {
-	if s.readOnly {
-		return ErrReadOnly
+	if err := s.requireActive(); err != nil {
+		return err
 	}
 	if err := ctx.Err(); err != nil {
 		return err
@@ -750,6 +865,10 @@ func (s *FileStore) Delete(ctx context.Context, key string) error {
 	if err := s.root.Remove(dataPath(key)); err != nil && !errors.Is(err, fs.ErrNotExist) && !errors.Is(err, syscall.ENOTDIR) {
 		return err
 	}
+	// An emptied directory chain would otherwise accumulate and could block a
+	// later key that equals one of its directory names.
+	s.pruneEmptyDirs(fsDataDir, dataPath(key))
+	s.pruneEmptyDirs(fsMetaDir, sidecarPath(key))
 	if s.fsync {
 		if err := s.syncDir(path.Dir(dataPath(key))); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return err

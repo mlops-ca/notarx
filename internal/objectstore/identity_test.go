@@ -3,7 +3,11 @@ package objectstore
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -175,4 +179,83 @@ func TestIdentityGuardWatchStopsOnCloseAndContext(t *testing.T) {
 		t.Fatalf("watcher reported after its context ended: %d", calls.Load())
 	}
 	guard.Close()
+}
+
+func TestVerifyIdentityLeavesTheRootAloneWhenItRefuses(t *testing.T) {
+	cfg := testFileConfig(t)
+	opened, err := Open(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := opened.(*FileStore)
+	t.Cleanup(func() { _ = store.Close() })
+	other := StoredIdentity{Driver: DriverFilesystem, RootID: "00000000-0000-4000-8000-000000000000"}
+	if _, err = VerifyIdentity(context.Background(), store, &fakeIdentityDB{stored: &other}); !errors.Is(err, ErrIdentityMismatch) {
+		t.Fatalf("mismatch: %v", err)
+	}
+	if _, err = VerifyIdentity(context.Background(), store, &fakeIdentityDB{lockTaken: true}); !errors.Is(err, ErrRootLocked) {
+		t.Fatalf("locked: %v", err)
+	}
+	if entries, readErr := os.ReadDir(cfg.FSRoot); readErr != nil || len(entries) != 0 {
+		t.Fatalf("a refused start wrote %d entries into the root (%v)", len(entries), readErr)
+	}
+	guard, err := VerifyIdentity(context.Background(), store, &fakeIdentityDB{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer guard.Close()
+	for _, entry := range []string{".notarx-root", "data", "meta", "tmp"} {
+		if _, statErr := os.Stat(filepath.Join(cfg.FSRoot, entry)); statErr != nil {
+			t.Fatalf("an accepted start did not prepare %s: %v", entry, statErr)
+		}
+	}
+}
+
+type flakyLock struct {
+	mu       sync.Mutex
+	results  []error
+	checks   int
+	released atomic.Int32
+}
+
+func (l *flakyLock) Alive(context.Context) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	defer func() { l.checks++ }()
+	if l.checks < len(l.results) {
+		return l.results[l.checks]
+	}
+	return nil
+}
+func (l *flakyLock) Release() { l.released.Add(1) }
+
+func watchResult(t *testing.T, results []error, wait time.Duration) (lostWith error, lostCalled bool) {
+	t.Helper()
+	guard := &IdentityGuard{lock: &flakyLock{results: results}, stop: make(chan struct{})}
+	defer guard.Close()
+	lost := make(chan error, 1)
+	guard.Watch(context.Background(), 5*time.Millisecond, func(err error) { lost <- err })
+	select {
+	case err := <-lost:
+		return err, true
+	case <-time.After(wait):
+		return nil, false
+	}
+}
+
+func TestWatchToleratesTransientCheckFailures(t *testing.T) {
+	transient := errors.New("database hiccup")
+	if err, called := watchResult(t, []error{transient, transient, nil, transient, transient, nil}, 150*time.Millisecond); called {
+		t.Fatalf("two failures in a row, then recovery, reported the lock lost: %v", err)
+	}
+	if err, called := watchResult(t, []error{transient, transient, transient}, 2*time.Second); !called || !errors.Is(err, transient) {
+		t.Fatalf("three failures in a row were not reported (%v, %t)", err, called)
+	}
+}
+
+func TestWatchReportsADefinitiveLossAtOnce(t *testing.T) {
+	err, called := watchResult(t, []error{fmt.Errorf("%w: session ended", ErrLockLost)}, 2*time.Second)
+	if !called || !errors.Is(err, ErrLockLost) {
+		t.Fatalf("a definitive loss was not reported at once (%v, %t)", err, called)
+	}
 }

@@ -2,6 +2,10 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"database/sql/driver"
+	"errors"
+	"fmt"
 
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -20,5 +24,20 @@ func (i objectStoreIdentity) LockRoot(ctx context.Context, rootID string) (objec
 	if err != nil || !acquired {
 		return nil, acquired, err
 	}
-	return lock, true, nil
+	return rootLock{lock}, true, nil
+}
+
+// rootLock reports a definitively lost lock (the session is gone, or no longer
+// holds the advisory lock) as objectstore.ErrLockLost; other errors from the
+// check are left for the watcher to treat as possibly transient.
+type rootLock struct {
+	*repository.ObjectStoreRootLock
+}
+
+func (l rootLock) Alive(ctx context.Context) error {
+	err := l.ObjectStoreRootLock.Alive(ctx)
+	if errors.Is(err, repository.ErrObjectStoreRootLockLost) || errors.Is(err, sql.ErrConnDone) || errors.Is(err, driver.ErrBadConn) {
+		return fmt.Errorf("%w: %v", objectstore.ErrLockLost, err)
+	}
+	return err
 }

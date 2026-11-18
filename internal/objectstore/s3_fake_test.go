@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // fakeS3 is a small in-memory S3 service for the store tests: objects with
@@ -34,6 +35,8 @@ type fakeS3 struct {
 	ignoreCopyReplace bool // CopyObject succeeds but keeps the old metadata
 	denyWrites        bool // PutObject answers 403 AccessDenied
 	failPart          int  // UploadPart number that answers 500, 0 for none
+	copyStatus        int  // when set, CopyObject answers this status with copyCode
+	copyCode          string
 	copySources       []string
 }
 
@@ -41,6 +44,7 @@ type fakeObject struct {
 	body     []byte
 	metadata map[string]string
 	headers  http.Header
+	modified time.Time
 }
 
 type fakeUpload struct {
@@ -131,6 +135,23 @@ func (f *fakeS3) handle(w http.ResponseWriter, r *http.Request) {
 	}
 	f.calls = append(f.calls, label+" "+key)
 
+	if key == "" && query.Get("list-type") == "2" {
+		prefix := query.Get("prefix")
+		keys := make([]string, 0, len(f.objects))
+		for name := range f.objects {
+			if strings.HasPrefix(name, prefix) {
+				keys = append(keys, name)
+			}
+		}
+		sort.Strings(keys)
+		w.Header().Set("Content-Type", "application/xml")
+		_, _ = fmt.Fprintf(w, "<ListBucketResult><Name>%s</Name><Prefix>%s</Prefix><KeyCount>%d</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated>", f.bucket, prefix, len(keys))
+		for _, name := range keys {
+			_, _ = fmt.Fprintf(w, "<Contents><Key>%s</Key><LastModified>%s</LastModified><Size>%d</Size></Contents>", name, f.objects[name].modified.UTC().Format("2006-01-02T15:04:05.000Z"), len(f.objects[name].body))
+		}
+		_, _ = io.WriteString(w, "</ListBucketResult>")
+		return
+	}
 	if key == "" { // bucket operations
 		w.WriteHeader(http.StatusOK)
 		return
@@ -141,7 +162,7 @@ func (f *fakeS3) handle(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusForbidden, "AccessDenied")
 			return
 		}
-		f.objects[key] = &fakeObject{body: body, metadata: userMetadata(r.Header), headers: r.Header.Clone()}
+		f.objects[key] = &fakeObject{body: body, metadata: userMetadata(r.Header), headers: r.Header.Clone(), modified: time.Now()}
 		w.Header().Set("ETag", `"`+fmt.Sprintf("%x", md5.Sum(body))+`"`)
 		w.WriteHeader(http.StatusOK)
 	case "CopyObject":
@@ -151,12 +172,16 @@ func (f *fakeS3) handle(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotImplemented, "NotImplemented")
 			return
 		}
+		if f.copyStatus != 0 {
+			writeError(w, f.copyStatus, f.copyCode)
+			return
+		}
 		original, ok := f.objects[strings.TrimPrefix(source, f.bucket+"/")]
 		if !ok {
 			writeError(w, http.StatusNotFound, "NoSuchKey")
 			return
 		}
-		copied := &fakeObject{body: original.body, metadata: original.metadata, headers: original.headers}
+		copied := &fakeObject{body: original.body, metadata: original.metadata, headers: original.headers, modified: time.Now()}
 		if strings.EqualFold(r.Header.Get("x-amz-metadata-directive"), "REPLACE") && !f.ignoreCopyReplace {
 			copied.metadata = userMetadata(r.Header)
 		}

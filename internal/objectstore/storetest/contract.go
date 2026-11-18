@@ -244,6 +244,16 @@ func invalidDigest(t *testing.T, store objectstore.Store) {
 			t.Errorf("PutVerifiedReader accepted malformed digest %q", digest)
 		}
 	}
+	// SetVerifiedDigest refuses them too and leaves the object as it was.
+	mustPut(t, store, "contract/invalid-digest-target", data)
+	for _, digest := range []string{"", "abc", "sha256:zz", "sha256:" + strings.Repeat("a", 63), strings.TrimPrefix(Digest(data), "sha256:")} {
+		if err := store.SetVerifiedDigest(ctx(t), "contract/invalid-digest-target", digest); err == nil {
+			t.Errorf("SetVerifiedDigest accepted malformed digest %q", digest)
+		}
+	}
+	if info, err := store.Stat(ctx(t), "contract/invalid-digest-target"); err != nil || (info.Digest != "" && info.Digest != Digest(data)) {
+		t.Errorf("a refused digest changed the object: %#v %v", info, err)
+	}
 }
 
 func putVerifiedAndStat(t *testing.T, store objectstore.Store) {

@@ -19,7 +19,7 @@ The former RustFS-prefixed names (under the old `GATEWAY_` prefix and the interi
 | `NOTARX_OBJECT_STORE_ACCESS_KEY`, `NOTARX_OBJECT_STORE_SECRET_KEY` | required for `s3` | Static credentials. |
 | `NOTARX_OBJECT_STORE_PATH_STYLE` | `true` | Path-style addressing. Use `false` for virtual-hosted services. |
 | `NOTARX_OBJECT_STORE_CHECKSUM_MODE` | `when_required` | `when_required` or `when_supported`; maps to the SDK request checksum calculation and response checksum validation. |
-| `NOTARX_OBJECT_STORE_AUTO_CREATE_BUCKET` | `false` | When `true` the gateway creates a missing bucket at start-up. Otherwise it only checks that the bucket exists. The Compose stack sets `true`; production deployments pre-create the bucket. |
+| `NOTARX_OBJECT_STORE_AUTO_CREATE_BUCKET` | `false` (`true` in the Compose and Kubernetes manifests of this repository) | When `true` the gateway creates a missing bucket at start-up. Otherwise it only checks that the bucket exists. The Compose stack sets `true`; production deployments pre-create the bucket. |
 | `NOTARX_OBJECT_STORE_MULTIPART_THRESHOLD` | `268435456` (256 MiB) | Objects larger than this are uploaded in parts through the SDK transfer manager. |
 | `NOTARX_OBJECT_STORE_MULTIPART_PART_SIZE` | `16777216` (16 MiB) | Part size, between 5 MiB and 5 GiB, and not larger than the threshold. At 16 MiB the largest object is just under 156 GiB, which keeps the part count below the 10,000-part limit; a larger object is refused with an error that says to raise the part size. |
 | `NOTARX_OBJECT_STORE_FS_ROOT` | required for `filesystem` | Absolute directory for the filesystem driver. |
@@ -44,7 +44,13 @@ streaming fallback: it reads the object, re-verifies that its bytes hash to the
 digest, and writes it again with the digest attached. That costs extra egress and
 is sticky for the life of the process. A refusal that appears only later, at use,
 falls back the same way. A probe that cannot run (for example, read-only
-credentials) leaves the default, copy, in place.
+credentials) leaves the default, copy, in place. A refusal of one request (a
+`400`, for example a source above the service's single-copy size limit) streams that
+object only and keeps copy mode; only an operation the service does not implement
+(`501`, `405`) switches the process to streaming for good. The probe object lives
+under `.notarx-probe/` and is deleted at once; probe objects an earlier crashed
+process left behind are removed at the next start once an hour old, and the backup
+tool ignores that prefix.
 
 Objects above the multipart threshold are uploaded with the SDK transfer manager
 at the configured part size; the part count stays below 10,000 for every object up
@@ -83,7 +89,9 @@ Layout under `NOTARX_OBJECT_STORE_FS_ROOT` (mode 0700, one filesystem so that
 | `tmp/` | in-flight writes |
 | `.notarx-root` | random root ID |
 
-Keys follow the usual object key rules and also may not contain `..`, empty
+Keys follow the usual object key rules (see
+[#319](https://github.com/mlops-ca/notarx/issues/319) for key builders that still
+embed user-controlled path segments) and also may not contain `..`, empty
 segments, segments that start with a dot, control characters or backslashes, and
 may not begin with the reserved top-level segments `tmp` or `meta`. Symbolic
 links are never followed. A key cannot also be the directory part of another key.
@@ -98,20 +106,34 @@ unverified. Writes to one key are last-writer-wins.
 
 ### Single-node identity
 
-On first start the gateway records the driver and the root ID in the
-`object_store_identity` table. A gateway whose root ID differs (a second node, a
+The gateway opens the root read-only in effect: it creates the layout, writes
+the marker and removes abandoned writes only after the database binding is
+verified and the root lock is held, so a node that is about to be refused (wrong
+volume, second process) changes nothing. On first start the gateway records the
+driver and the root ID in the `object_store_identity` table. A gateway whose root ID differs (a second node, a
 restored volume, a wrong mount) refuses to start. The gateway also holds a
 PostgreSQL session advisory lock keyed on the root ID, so a second process cannot
 share the root, and it stops if it loses that lock. To move to a new volume,
-restore the database and the object root from the same backup.
+restore the database and the object root from the same backup
+(`gateway backup restore-objects` writes the original root ID into the new root).
+If the process dies in the instant between recording the identity and writing the
+marker on a first start, the next start is refused as a mismatch: delete the
+`object_store_identity` row, which is safe only while the object root is empty.
+A brief database failure does not stop the gateway: the lock is checked every
+15 seconds and the gateway stops after three failed checks in a row, or at once
+when the session is known to be gone.
 
 ### Capacity
 
 The gateway exposes free space on the readiness probe and as metrics:
 `notarx_object_store_total_bytes`, `notarx_object_store_free_bytes`,
 `notarx_object_store_reserve_bytes` and `notarx_object_store_below_reserve`.
-Readiness fails, and writes fail with `objectstore.ErrInsufficientStorage`, while
-free space is under the reserve.
+While free space is under the reserve, writes fail with
+`objectstore.ErrInsufficientStorage` and `notarx_object_store_below_reserve` is 1.
+Readiness does not fail: reads and the deletes that free space must keep working,
+so the node stays in rotation. Readiness checks that the root exists with a valid
+marker; preflight (before the first start) also requires free space above the
+reserve.
 
 ## Integration tests
 

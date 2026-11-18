@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/url"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -68,6 +69,9 @@ func (s *s3Objects) WalkObjects(ctx context.Context, visit func(string, int64) e
 		}
 		for _, object := range page.Contents {
 			key := aws.ToString(object.Key)
+			if strings.HasPrefix(key, objectstore.ProbePrefix) {
+				continue // the store's own start-up probe objects are not artifact bytes
+			}
 			if key == "" || key <= previous || object.Size == nil {
 				return errors.New("object listing unordered or invalid")
 			}

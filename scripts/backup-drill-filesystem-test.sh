@@ -15,10 +15,12 @@ cat >"$workdir/bin/docker" <<'SH'
 printf 'docker %s\n' "$*" >>"$DRILL_LOG"
 [[ "$1" == compose ]] || exit 0
 shift
-while [[ "$1" != ps && "$1" != stop && "$1" != exec && "$1" != port && "$1" != run && "$1" != logs ]]; do shift; done
+while [[ "$1" != ps && "$1" != config && "$1" != stop && "$1" != exec && "$1" != port && "$1" != run && "$1" != logs ]]; do shift; done
 case "$1" in
   ps) printf 'container-%s\n' "${@: -1}" ;;
   exec) printf 'FAKE-PG-DUMP\n' ;;
+  config)
+    if [[ -n "${DRILL_NO_FS_CONFIG:-}" ]]; then printf 'services:\n  gateway:\n    environment:\n      NOTARX_OBJECT_STORE_ENDPOINT: http://rustfs:9000\n'; else printf 'services:\n  gateway:\n    environment:\n      NOTARX_OBJECT_STORE_DRIVER: filesystem\n'; fi ;;
   port) printf '127.0.0.1:18999\n' ;;
 esac
 exit 0
@@ -76,6 +78,13 @@ if "$root/scripts/restore-drill.sh" "$backup" >/dev/null 2>&1; then
   echo 'restore-drill accepted a corrupted archive' >&2; exit 1
 fi
 test "$(cat "$fs_root/keep")" = 'keep me'
+
+# The Compose project must really run the Gateway on the filesystem driver.
+export DRILL_NO_FS_CONFIG=1
+if "$root/scripts/backup-drill.sh" "$workdir/b4" >/dev/null 2>&1; then
+  echo 'backup-drill accepted a Compose project that is not on the filesystem driver' >&2; exit 1
+fi
+unset DRILL_NO_FS_CONFIG
 
 # Preconditions fail early.
 if NOTARX_OBJECT_STORE_FS_ROOT="$workdir/nothing" "$root/scripts/backup-drill.sh" "$workdir/b2" >/dev/null 2>&1; then

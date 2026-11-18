@@ -33,6 +33,10 @@ func (s *PostgresStore) ClaimObjectStoreIdentity(ctx context.Context, identity O
 	return stored, err
 }
 
+// ErrObjectStoreRootLockLost is returned by Alive when the session no longer
+// holds the lock, which is definitive: it never comes back on its own.
+var ErrObjectStoreRootLockLost = errors.New("object store root lock is no longer held")
+
 // ObjectStoreRootLock is a session-level advisory lock on one object store
 // root ID. It lives on a dedicated connection for as long as the gateway runs,
 // so two processes cannot share one root.
@@ -70,7 +74,7 @@ func (l *ObjectStoreRootLock) Alive(ctx context.Context) error {
 		return err
 	}
 	if !held {
-		return errors.New("object store root lock is no longer held")
+		return ErrObjectStoreRootLockLost
 	}
 	return nil
 }

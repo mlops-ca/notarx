@@ -6,7 +6,8 @@ backup_dir=${1:-.artifacts/backup-drill/$(date -u +%Y%m%dT%H%M%SZ)}
 # The object store the Gateway runs on (ADR 0017): s3 (the Compose RustFS) or
 # filesystem, whose root directory on this host is NOTARX_OBJECT_STORE_FS_ROOT.
 object_driver=${NOTARX_OBJECT_STORE_DRIVER:-s3}
-compose=(docker compose --env-file "$environment_file" -f compose.yml)
+compose_file=${NOTARX_COMPOSE_FILE:-compose.yml}
+compose=(docker compose --env-file "$environment_file" -f "$compose_file")
 mkdir -p "$backup_dir"
 
 case "$object_driver" in
@@ -14,6 +15,16 @@ case "$object_driver" in
   filesystem)
     fs_root=${NOTARX_OBJECT_STORE_FS_ROOT:?set NOTARX_OBJECT_STORE_FS_ROOT to the filesystem object root}
     test -f "$fs_root/.notarx-root" || { printf '%s\n' "$fs_root is not an initialised filesystem object root." >&2; exit 1; }
+    # The root is owned by the Gateway's user with mode 0700: run this as that
+    # user (or root) so the archive can read it.
+    [[ -r "$fs_root" && -x "$fs_root" ]] || { printf '%s\n' "$fs_root is not readable by this user." >&2; exit 1; }
+    # The scripts only back up what the Gateway really uses: its Compose service
+    # must be configured for the filesystem driver (compose.yml itself runs on S3;
+    # set NOTARX_COMPOSE_FILE to a Compose file whose gateway service uses it).
+    if ! "${compose[@]}" config 2>/dev/null | grep -Eq 'NOTARX_OBJECT_STORE_DRIVER: "?filesystem"?'; then
+      printf '%s\n' "$compose_file does not configure the gateway service with NOTARX_OBJECT_STORE_DRIVER=filesystem." >&2
+      exit 1
+    fi
     ;;
   *) printf 'Unsupported NOTARX_OBJECT_STORE_DRIVER %s (use s3 or filesystem).\n' "$object_driver" >&2; exit 1 ;;
 esac

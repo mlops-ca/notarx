@@ -231,10 +231,22 @@ func Check(ctx context.Context, cfg Config) error {
 	return store.CheckBucket(ctx)
 }
 
+// CheckReadiness is the readiness probe of a running gateway: for the
+// filesystem driver the root must exist with a valid marker. It does not look at
+// free space: below the reserve writes fail and a metric says so, but reads and
+// deletes (which free space) must keep working, so the node stays in rotation.
+func CheckReadiness(_ context.Context, cfg Config) error {
+	cfg = cfg.withDefaults()
+	if cfg.Driver != DriverFilesystem {
+		return nil
+	}
+	return checkFilesystem(cfg, false)
+}
+
 func checkDriver(_ context.Context, cfg Config) error {
 	switch cfg.Driver {
 	case DriverFilesystem:
-		return checkFilesystem(cfg)
+		return checkFilesystem(cfg, true)
 	default:
 		return unknownDriverError(cfg.Driver)
 	}
