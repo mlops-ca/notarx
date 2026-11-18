@@ -162,7 +162,7 @@ func FormatAllowlist(counts map[string]int) string {
 	var b strings.Builder
 	b.WriteString("# Ratchet for ADR 0023 section 4: SQL literals that compare a text-cast column with a\n")
 	b.WriteString("# parameter. Counts may only decrease; remove a file when it reaches zero.\n")
-	b.WriteString("# Regenerate lower counts with: go run ./tools/sqllint -update\n")
+	b.WriteString("# Regenerate lower counts with: go run ./tools/sqllint/cmd -update\n")
 	for _, file := range sortedKeys(counts) {
 		fmt.Fprintf(&b, "%s %d\n", file, counts[file])
 	}
@@ -181,12 +181,12 @@ func Check(result Result, allow map[string]int) []string {
 		case actual > allowed:
 			problems = append(problems, fmt.Sprintf("%s: %d text-cast comparison(s), allowlist permits %d; bind uuid parameters as uuid.UUID or $n::uuid instead of col::text = $n", file, actual, allowed))
 		case actual < allowed:
-			problems = append(problems, fmt.Sprintf("%s: allowlist permits %d but only %d remain; lower it with go run ./tools/sqllint -update", file, allowed, actual))
+			problems = append(problems, fmt.Sprintf("%s: allowlist permits %d but only %d remain; lower it with go run ./tools/sqllint/cmd -update", file, allowed, actual))
 		}
 	}
 	for _, file := range sortedKeys(allow) {
 		if _, ok := result.Casts[file]; !ok {
-			problems = append(problems, fmt.Sprintf("%s: allowlist entry has no remaining violations; remove it with go run ./tools/sqllint -update", file))
+			problems = append(problems, fmt.Sprintf("%s: allowlist entry has no remaining violations; remove it with go run ./tools/sqllint/cmd -update", file))
 		}
 	}
 	return problems

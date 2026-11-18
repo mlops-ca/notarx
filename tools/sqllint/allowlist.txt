@@ -1,6 +1,6 @@
 # Ratchet for ADR 0023 section 4: SQL literals that compare a text-cast column with a
 # parameter. Counts may only decrease; remove a file when it reaches zero.
-# Regenerate lower counts with: go run ./tools/sqllint -update
+# Regenerate lower counts with: go run ./tools/sqllint/cmd -update
 internal/app/postgres_cache_task_queue.go 1
 internal/nexusmigration/pgstore/inventory.go 5
 internal/nexusmigration/pgstore/pypi_publication.go 4
@@ -26,8 +26,6 @@ internal/repository/postgres_cargo_identity.go 4
 internal/repository/postgres_cargo_lifecycle.go 4
 internal/repository/postgres_cargo_proxy.go 9
 internal/repository/postgres_cargo_publication.go 13
-internal/repository/postgres_conan_native.go 30
-internal/repository/postgres_conan_sessions.go 2
 internal/repository/postgres_email.go 11
 internal/repository/postgres_go.go 16
 internal/repository/postgres_helm.go 15

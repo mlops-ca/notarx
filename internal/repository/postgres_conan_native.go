@@ -82,7 +82,7 @@ func putConanRecipeRevisionTx(ctx context.Context, tx *sql.Tx, revision ConanRec
 	}
 	var err error
 	var existing ConanRecipeRevision
-	err = scanConanRecipeRevision(tx.QueryRowContext(ctx, `SELECT repository_id::text,reference,revision,digest,state,created_at FROM native_conan_recipe_revisions WHERE repository_id::text=$1 AND reference=$2 AND revision=$3 FOR SHARE`, revision.RepositoryID, revision.Reference, revision.Revision), &existing)
+	err = scanConanRecipeRevision(tx.QueryRowContext(ctx, `SELECT repository_id::text,reference,revision,digest,state,created_at FROM native_conan_recipe_revisions WHERE repository_id=$1::uuid AND reference=$2 AND revision=$3 FOR SHARE`, revision.RepositoryID, revision.Reference, revision.Revision), &existing)
 	if err == nil {
 		if existing.Digest != revision.Digest || existing.State != "visible" {
 			return ConanRecipeRevision{}, ErrNameExists
@@ -103,7 +103,7 @@ func putConanRecipeRevisionTx(ctx context.Context, tx *sql.Tx, revision ConanRec
 			return ConanRecipeRevision{}, err
 		}
 	}
-	if err = scanConanRecipeRevision(tx.QueryRowContext(ctx, `SELECT repository_id::text,reference,revision,digest,state,created_at FROM native_conan_recipe_revisions WHERE repository_id::text=$1 AND reference=$2 AND revision=$3`, revision.RepositoryID, revision.Reference, revision.Revision), &revision); err != nil {
+	if err = scanConanRecipeRevision(tx.QueryRowContext(ctx, `SELECT repository_id::text,reference,revision,digest,state,created_at FROM native_conan_recipe_revisions WHERE repository_id=$1::uuid AND reference=$2 AND revision=$3`, revision.RepositoryID, revision.Reference, revision.Revision), &revision); err != nil {
 		return ConanRecipeRevision{}, err
 	}
 	return revision, nil
@@ -131,7 +131,7 @@ func putConanPackageRevisionTx(ctx context.Context, tx *sql.Tx, revision ConanPa
 	}
 	var err error
 	var recipeState string
-	if err = tx.QueryRowContext(ctx, `SELECT state FROM native_conan_recipe_revisions WHERE repository_id::text=$1 AND reference=$2 AND revision=$3 FOR SHARE`, revision.RepositoryID, revision.Reference, revision.RecipeRevision).Scan(&recipeState); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT state FROM native_conan_recipe_revisions WHERE repository_id=$1::uuid AND reference=$2 AND revision=$3 FOR SHARE`, revision.RepositoryID, revision.Reference, revision.RecipeRevision).Scan(&recipeState); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ConanPackageRevision{}, ErrNotFound
 		}
@@ -141,7 +141,7 @@ func putConanPackageRevisionTx(ctx context.Context, tx *sql.Tx, revision ConanPa
 		return ConanPackageRevision{}, ErrDisabled
 	}
 	var existing ConanPackageRevision
-	err = scanConanPackageRevision(tx.QueryRowContext(ctx, `SELECT repository_id::text,reference,recipe_revision,package_id,revision,digest,state,created_at FROM native_conan_package_revisions WHERE repository_id::text=$1 AND reference=$2 AND recipe_revision=$3 AND package_id=$4 AND revision=$5 FOR SHARE`, revision.RepositoryID, revision.Reference, revision.RecipeRevision, revision.PackageID, revision.Revision), &existing)
+	err = scanConanPackageRevision(tx.QueryRowContext(ctx, `SELECT repository_id::text,reference,recipe_revision,package_id,revision,digest,state,created_at FROM native_conan_package_revisions WHERE repository_id=$1::uuid AND reference=$2 AND recipe_revision=$3 AND package_id=$4 AND revision=$5 FOR SHARE`, revision.RepositoryID, revision.Reference, revision.RecipeRevision, revision.PackageID, revision.Revision), &existing)
 	if err == nil {
 		if existing.Digest != revision.Digest || existing.State != "visible" {
 			return ConanPackageRevision{}, ErrNameExists
@@ -162,7 +162,7 @@ func putConanPackageRevisionTx(ctx context.Context, tx *sql.Tx, revision ConanPa
 			return ConanPackageRevision{}, err
 		}
 	}
-	if err = scanConanPackageRevision(tx.QueryRowContext(ctx, `SELECT repository_id::text,reference,recipe_revision,package_id,revision,digest,state,created_at FROM native_conan_package_revisions WHERE repository_id::text=$1 AND reference=$2 AND recipe_revision=$3 AND package_id=$4 AND revision=$5`, revision.RepositoryID, revision.Reference, revision.RecipeRevision, revision.PackageID, revision.Revision), &revision); err != nil {
+	if err = scanConanPackageRevision(tx.QueryRowContext(ctx, `SELECT repository_id::text,reference,recipe_revision,package_id,revision,digest,state,created_at FROM native_conan_package_revisions WHERE repository_id=$1::uuid AND reference=$2 AND recipe_revision=$3 AND package_id=$4 AND revision=$5`, revision.RepositoryID, revision.Reference, revision.RecipeRevision, revision.PackageID, revision.Revision), &revision); err != nil {
 		return ConanPackageRevision{}, err
 	}
 	return revision, nil
@@ -200,7 +200,7 @@ func (s *PostgresStore) PublishReplicatedConanRevision(ctx context.Context, publ
 		}
 	}
 	var source ConanRecipeRevision
-	err = scanConanRecipeRevision(tx.QueryRowContext(ctx, `SELECT repository_id::text,reference,revision,digest,state,created_at FROM native_conan_recipe_revisions WHERE repository_id::text=$1 AND reference=$2 AND revision=$3 AND digest=$4 AND state='visible' FOR SHARE`, publication.SourceRepositoryID, publication.Recipe.Reference, publication.Recipe.Revision, publication.Recipe.Digest), &source)
+	err = scanConanRecipeRevision(tx.QueryRowContext(ctx, `SELECT repository_id::text,reference,revision,digest,state,created_at FROM native_conan_recipe_revisions WHERE repository_id=$1::uuid AND reference=$2 AND revision=$3 AND digest=$4 AND state='visible' FOR SHARE`, publication.SourceRepositoryID, publication.Recipe.Reference, publication.Recipe.Revision, publication.Recipe.Digest), &source)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ConanRecipeRevision{}, ErrNotFound
 	}
@@ -209,7 +209,7 @@ func (s *PostgresStore) PublishReplicatedConanRevision(ctx context.Context, publ
 	}
 	for _, pkg := range publication.Packages {
 		var visible bool
-		if err = tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM native_conan_package_revisions WHERE repository_id::text=$1 AND reference=$2 AND recipe_revision=$3 AND package_id=$4 AND revision=$5 AND digest=$6 AND state='visible')`, publication.SourceRepositoryID, pkg.Reference, pkg.RecipeRevision, pkg.PackageID, pkg.Revision, pkg.Digest).Scan(&visible); err != nil {
+		if err = tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM native_conan_package_revisions WHERE repository_id=$1::uuid AND reference=$2 AND recipe_revision=$3 AND package_id=$4 AND revision=$5 AND digest=$6 AND state='visible')`, publication.SourceRepositoryID, pkg.Reference, pkg.RecipeRevision, pkg.PackageID, pkg.Revision, pkg.Digest).Scan(&visible); err != nil {
 			return ConanRecipeRevision{}, err
 		}
 		if !visible {
@@ -217,7 +217,7 @@ func (s *PostgresStore) PublishReplicatedConanRevision(ctx context.Context, publ
 		}
 	}
 	var sourcePackageCount int
-	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM native_conan_package_revisions WHERE repository_id::text=$1 AND reference=$2 AND recipe_revision=$3 AND state='visible'`, publication.SourceRepositoryID, publication.Recipe.Reference, publication.Recipe.Revision).Scan(&sourcePackageCount); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM native_conan_package_revisions WHERE repository_id=$1::uuid AND reference=$2 AND recipe_revision=$3 AND state='visible'`, publication.SourceRepositoryID, publication.Recipe.Reference, publication.Recipe.Revision).Scan(&sourcePackageCount); err != nil {
 		return ConanRecipeRevision{}, err
 	}
 	if sourcePackageCount != len(publication.Packages) {
@@ -225,7 +225,7 @@ func (s *PostgresStore) PublishReplicatedConanRevision(ctx context.Context, publ
 	}
 	for _, asset := range publication.SourceAssets {
 		var matched bool
-		if err = tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM native_conan_assets WHERE repository_id::text=$1 AND reference=$2 AND recipe_revision=$3 AND package_id=$4 AND package_revision=$5 AND path=$6 AND object_key=$7 AND digest=$8 AND size=$9)`, publication.SourceRepositoryID, asset.Reference, asset.RecipeRevision, asset.PackageID, asset.PackageRevision, asset.Path, asset.ObjectKey, asset.Digest, asset.Size).Scan(&matched); err != nil {
+		if err = tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM native_conan_assets WHERE repository_id=$1::uuid AND reference=$2 AND recipe_revision=$3 AND package_id=$4 AND package_revision=$5 AND path=$6 AND object_key=$7 AND digest=$8 AND size=$9)`, publication.SourceRepositoryID, asset.Reference, asset.RecipeRevision, asset.PackageID, asset.PackageRevision, asset.Path, asset.ObjectKey, asset.Digest, asset.Size).Scan(&matched); err != nil {
 			return ConanRecipeRevision{}, err
 		}
 		if !matched {
@@ -233,7 +233,7 @@ func (s *PostgresStore) PublishReplicatedConanRevision(ctx context.Context, publ
 		}
 	}
 	var existing ConanRecipeRevision
-	err = scanConanRecipeRevision(tx.QueryRowContext(ctx, `SELECT repository_id::text,reference,revision,digest,state,created_at FROM native_conan_recipe_revisions WHERE repository_id::text=$1 AND reference=$2 AND revision=$3 FOR SHARE`, publication.Recipe.RepositoryID, publication.Recipe.Reference, publication.Recipe.Revision), &existing)
+	err = scanConanRecipeRevision(tx.QueryRowContext(ctx, `SELECT repository_id::text,reference,revision,digest,state,created_at FROM native_conan_recipe_revisions WHERE repository_id=$1::uuid AND reference=$2 AND revision=$3 FOR SHARE`, publication.Recipe.RepositoryID, publication.Recipe.Reference, publication.Recipe.Revision), &existing)
 	if err == nil {
 		if existing.Digest != publication.Recipe.Digest || existing.State != "visible" {
 			return ConanRecipeRevision{}, ErrNameExists
@@ -271,7 +271,7 @@ func (s *PostgresStore) PublishReplicatedConanRevision(ctx context.Context, publ
 			return ConanRecipeRevision{}, err
 		}
 	}
-	if err = scanConanRecipeRevision(tx.QueryRowContext(ctx, `SELECT repository_id::text,reference,revision,digest,state,created_at FROM native_conan_recipe_revisions WHERE repository_id::text=$1 AND reference=$2 AND revision=$3`, publication.Recipe.RepositoryID, publication.Recipe.Reference, publication.Recipe.Revision), &publication.Recipe); err != nil {
+	if err = scanConanRecipeRevision(tx.QueryRowContext(ctx, `SELECT repository_id::text,reference,revision,digest,state,created_at FROM native_conan_recipe_revisions WHERE repository_id=$1::uuid AND reference=$2 AND revision=$3`, publication.Recipe.RepositoryID, publication.Recipe.Reference, publication.Recipe.Revision), &publication.Recipe); err != nil {
 		return ConanRecipeRevision{}, err
 	}
 	return publication.Recipe, tx.Commit()
@@ -318,7 +318,7 @@ func (s *PostgresStore) PromoteConanRecipeRevision(ctx context.Context, p ConanP
 		return ConanRecipeRevision{}, err
 	}
 	var out ConanRecipeRevision
-	err = scanConanRecipeRevision(tx.QueryRowContext(ctx, `SELECT repository_id::text,reference,revision,digest,state,created_at FROM native_conan_recipe_revisions WHERE repository_id::text=$1 AND reference=$2 AND revision=$3 AND digest=$4 AND state='visible' FOR SHARE`, p.SourceRepositoryID, p.Reference, p.Revision, p.Digest), &out)
+	err = scanConanRecipeRevision(tx.QueryRowContext(ctx, `SELECT repository_id::text,reference,revision,digest,state,created_at FROM native_conan_recipe_revisions WHERE repository_id=$1::uuid AND reference=$2 AND revision=$3 AND digest=$4 AND state='visible' FOR SHARE`, p.SourceRepositoryID, p.Reference, p.Revision, p.Digest), &out)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ConanRecipeRevision{}, ErrNotFound
 	}
@@ -328,10 +328,10 @@ func (s *PostgresStore) PromoteConanRecipeRevision(ctx context.Context, p ConanP
 	if _, err = tx.ExecContext(ctx, `INSERT INTO native_conan_recipe_revisions(repository_id,reference,revision,digest,state) VALUES($1,$2,$3,$4,'visible')`, p.TargetRepositoryID, p.Reference, p.Revision, p.Digest); err != nil {
 		return ConanRecipeRevision{}, err
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO native_conan_package_revisions(repository_id,reference,recipe_revision,package_id,revision,digest,state) SELECT $1,reference,recipe_revision,package_id,revision,digest,'visible' FROM native_conan_package_revisions WHERE repository_id::text=$2 AND reference=$3 AND recipe_revision=$4 AND state='visible'`, p.TargetRepositoryID, p.SourceRepositoryID, p.Reference, p.Revision); err != nil {
+	if _, err = tx.ExecContext(ctx, `INSERT INTO native_conan_package_revisions(repository_id,reference,recipe_revision,package_id,revision,digest,state) SELECT $1,reference,recipe_revision,package_id,revision,digest,'visible' FROM native_conan_package_revisions WHERE repository_id=$2::uuid AND reference=$3 AND recipe_revision=$4 AND state='visible'`, p.TargetRepositoryID, p.SourceRepositoryID, p.Reference, p.Revision); err != nil {
 		return ConanRecipeRevision{}, err
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO native_conan_assets(repository_id,reference,recipe_revision,package_id,package_revision,path,object_key,digest,size) SELECT $1,a.reference,a.recipe_revision,a.package_id,a.package_revision,a.path,a.object_key,a.digest,a.size FROM native_conan_assets a WHERE a.repository_id::text=$2 AND a.reference=$3 AND a.recipe_revision=$4 AND (a.package_id='' OR EXISTS(SELECT 1 FROM native_conan_package_revisions p WHERE p.repository_id=a.repository_id AND p.reference=a.reference AND p.recipe_revision=a.recipe_revision AND p.package_id=a.package_id AND p.revision=a.package_revision AND p.state='visible'))`, p.TargetRepositoryID, p.SourceRepositoryID, p.Reference, p.Revision); err != nil {
+	if _, err = tx.ExecContext(ctx, `INSERT INTO native_conan_assets(repository_id,reference,recipe_revision,package_id,package_revision,path,object_key,digest,size) SELECT $1,a.reference,a.recipe_revision,a.package_id,a.package_revision,a.path,a.object_key,a.digest,a.size FROM native_conan_assets a WHERE a.repository_id=$2::uuid AND a.reference=$3 AND a.recipe_revision=$4 AND (a.package_id='' OR EXISTS(SELECT 1 FROM native_conan_package_revisions p WHERE p.repository_id=a.repository_id AND p.reference=a.reference AND p.recipe_revision=a.recipe_revision AND p.package_id=a.package_id AND p.revision=a.package_revision AND p.state='visible'))`, p.TargetRepositoryID, p.SourceRepositoryID, p.Reference, p.Revision); err != nil {
 		return ConanRecipeRevision{}, err
 	}
 	out.RepositoryID = p.TargetRepositoryID
@@ -343,7 +343,7 @@ func (s *PostgresStore) PromoteConanRecipeRevision(ctx context.Context, p ConanP
 
 func (s *PostgresStore) GetConanRecipeRevision(ctx context.Context, repositoryID, reference, revision string) (ConanRecipeRevision, error) {
 	var item ConanRecipeRevision
-	err := scanConanRecipeRevision(s.db.QueryRowContext(ctx, `SELECT repository_id::text,reference,revision,digest,state,created_at FROM native_conan_recipe_revisions WHERE repository_id::text=$1 AND reference=$2 AND revision=$3`, repositoryID, reference, revision), &item)
+	err := scanConanRecipeRevision(s.db.QueryRowContext(ctx, `SELECT repository_id::text,reference,revision,digest,state,created_at FROM native_conan_recipe_revisions WHERE repository_id=$1::uuid AND reference=$2 AND revision=$3`, repositoryID, reference, revision), &item)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ConanRecipeRevision{}, ErrNotFound
 	}
@@ -352,7 +352,7 @@ func (s *PostgresStore) GetConanRecipeRevision(ctx context.Context, repositoryID
 
 func (s *PostgresStore) GetConanPackageRevision(ctx context.Context, repositoryID, reference, recipeRevision, packageID, revision string) (ConanPackageRevision, error) {
 	var item ConanPackageRevision
-	err := scanConanPackageRevision(s.db.QueryRowContext(ctx, `SELECT repository_id::text,reference,recipe_revision,package_id,revision,digest,state,created_at FROM native_conan_package_revisions WHERE repository_id::text=$1 AND reference=$2 AND recipe_revision=$3 AND package_id=$4 AND revision=$5`, repositoryID, reference, recipeRevision, packageID, revision), &item)
+	err := scanConanPackageRevision(s.db.QueryRowContext(ctx, `SELECT repository_id::text,reference,recipe_revision,package_id,revision,digest,state,created_at FROM native_conan_package_revisions WHERE repository_id=$1::uuid AND reference=$2 AND recipe_revision=$3 AND package_id=$4 AND revision=$5`, repositoryID, reference, recipeRevision, packageID, revision), &item)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ConanPackageRevision{}, ErrNotFound
 	}
@@ -384,7 +384,7 @@ func (s *PostgresStore) SearchConanReferences(ctx context.Context, repositoryID,
 }
 
 func (s *PostgresStore) ListConanRecipeRevisions(ctx context.Context, repositoryID, reference string) ([]ConanRecipeRevision, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT repository_id::text,reference,revision,digest,state,created_at FROM native_conan_recipe_revisions WHERE repository_id::text=$1 AND reference=$2 AND state='visible' ORDER BY created_at DESC`, repositoryID, reference)
+	rows, err := s.db.QueryContext(ctx, `SELECT repository_id::text,reference,revision,digest,state,created_at FROM native_conan_recipe_revisions WHERE repository_id=$1::uuid AND reference=$2 AND state='visible' ORDER BY created_at DESC`, repositoryID, reference)
 	if err != nil {
 		return nil, err
 	}
@@ -401,7 +401,7 @@ func (s *PostgresStore) ListConanRecipeRevisions(ctx context.Context, repository
 }
 
 func (s *PostgresStore) SearchConanRecipeRevisions(ctx context.Context, repositoryID, reference, query string, limit int, after string) ([]ConanRecipeRevision, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT repository_id::text,reference,revision,digest,state,created_at FROM native_conan_recipe_revisions WHERE repository_id::text=$1 AND reference=$2 AND state='visible' AND revision>$3 AND ($4='' OR revision ILIKE '%' || $4 || '%' ESCAPE '\' OR digest ILIKE '%' || $4 || '%' ESCAPE '\') ORDER BY revision LIMIT $5`, repositoryID, reference, after, escapeLikePrefix(query), limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT repository_id::text,reference,revision,digest,state,created_at FROM native_conan_recipe_revisions WHERE repository_id=$1::uuid AND reference=$2 AND state='visible' AND revision>$3 AND ($4='' OR revision ILIKE '%' || $4 || '%' ESCAPE '\' OR digest ILIKE '%' || $4 || '%' ESCAPE '\') ORDER BY revision LIMIT $5`, repositoryID, reference, after, escapeLikePrefix(query), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -418,7 +418,7 @@ func (s *PostgresStore) SearchConanRecipeRevisions(ctx context.Context, reposito
 }
 
 func (s *PostgresStore) ListConanPackageRevisions(ctx context.Context, repositoryID, reference, recipeRevision, packageID string) ([]ConanPackageRevision, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT repository_id::text,reference,recipe_revision,package_id,revision,digest,state,created_at FROM native_conan_package_revisions WHERE repository_id::text=$1 AND reference=$2 AND recipe_revision=$3 AND package_id=$4 AND state='visible' ORDER BY created_at DESC`, repositoryID, reference, recipeRevision, packageID)
+	rows, err := s.db.QueryContext(ctx, `SELECT repository_id::text,reference,recipe_revision,package_id,revision,digest,state,created_at FROM native_conan_package_revisions WHERE repository_id=$1::uuid AND reference=$2 AND recipe_revision=$3 AND package_id=$4 AND state='visible' ORDER BY created_at DESC`, repositoryID, reference, recipeRevision, packageID)
 	if err != nil {
 		return nil, err
 	}
@@ -434,7 +434,7 @@ func (s *PostgresStore) ListConanPackageRevisions(ctx context.Context, repositor
 	return out, rows.Err()
 }
 func (s *PostgresStore) ListConanPackageIDs(ctx context.Context, repositoryID, reference, recipeRevision string) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT package_id FROM native_conan_package_revisions WHERE repository_id::text=$1 AND reference=$2 AND recipe_revision=$3 AND state='visible' ORDER BY package_id`, repositoryID, reference, recipeRevision)
+	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT package_id FROM native_conan_package_revisions WHERE repository_id=$1::uuid AND reference=$2 AND recipe_revision=$3 AND state='visible' ORDER BY package_id`, repositoryID, reference, recipeRevision)
 	if err != nil {
 		return nil, err
 	}
@@ -459,7 +459,7 @@ func (s *PostgresStore) ListConanPackageAssets(ctx context.Context, repositoryID
 }
 
 func (s *PostgresStore) listConanAssets(ctx context.Context, repositoryID, reference, recipeRevision, packageID, packageRevision string) ([]ConanAsset, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT repository_id::text,reference,recipe_revision,package_id,package_revision,path,object_key,digest,size FROM native_conan_assets WHERE repository_id::text=$1 AND reference=$2 AND recipe_revision=$3 AND package_id=$4 AND package_revision=$5 ORDER BY path`, repositoryID, reference, recipeRevision, packageID, packageRevision)
+	rows, err := s.db.QueryContext(ctx, `SELECT repository_id::text,reference,recipe_revision,package_id,package_revision,path,object_key,digest,size FROM native_conan_assets WHERE repository_id=$1::uuid AND reference=$2 AND recipe_revision=$3 AND package_id=$4 AND package_revision=$5 ORDER BY path`, repositoryID, reference, recipeRevision, packageID, packageRevision)
 	if err != nil {
 		return nil, err
 	}
@@ -485,7 +485,7 @@ func (s *PostgresStore) GetConanPackageAsset(ctx context.Context, repositoryID, 
 
 func (s *PostgresStore) getConanAsset(ctx context.Context, repositoryID, reference, recipeRevision, packageID, packageRevision, path string) (ConanAsset, error) {
 	var asset ConanAsset
-	err := scanConanAsset(s.db.QueryRowContext(ctx, `SELECT repository_id::text,reference,recipe_revision,package_id,package_revision,path,object_key,digest,size FROM native_conan_assets WHERE repository_id::text=$1 AND reference=$2 AND recipe_revision=$3 AND package_id=$4 AND package_revision=$5 AND path=$6`, repositoryID, reference, recipeRevision, packageID, packageRevision, path), &asset)
+	err := scanConanAsset(s.db.QueryRowContext(ctx, `SELECT repository_id::text,reference,recipe_revision,package_id,package_revision,path,object_key,digest,size FROM native_conan_assets WHERE repository_id=$1::uuid AND reference=$2 AND recipe_revision=$3 AND package_id=$4 AND package_revision=$5 AND path=$6`, repositoryID, reference, recipeRevision, packageID, packageRevision, path), &asset)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ConanAsset{}, ErrNotFound
 	}
@@ -502,14 +502,14 @@ func (s *PostgresStore) TombstoneConanRecipeRevision(ctx context.Context, reposi
 	if err = lockConanRepositoriesTx(ctx, tx, repositoryID); err != nil {
 		return item, err
 	}
-	err = scanConanRecipeRevision(tx.QueryRowContext(ctx, `UPDATE native_conan_recipe_revisions SET state='deleted' WHERE repository_id::text=$1 AND reference=$2 AND revision=$3 RETURNING repository_id::text,reference,revision,digest,state,created_at`, repositoryID, reference, revision), &item)
+	err = scanConanRecipeRevision(tx.QueryRowContext(ctx, `UPDATE native_conan_recipe_revisions SET state='deleted' WHERE repository_id=$1::uuid AND reference=$2 AND revision=$3 RETURNING repository_id::text,reference,revision,digest,state,created_at`, repositoryID, reference, revision), &item)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ConanRecipeRevision{}, ErrNotFound
 	}
 	if err != nil {
 		return item, err
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE native_conan_package_revisions SET state='deleted' WHERE repository_id::text=$1 AND reference=$2 AND recipe_revision=$3`, repositoryID, reference, revision); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE native_conan_package_revisions SET state='deleted' WHERE repository_id=$1::uuid AND reference=$2 AND recipe_revision=$3`, repositoryID, reference, revision); err != nil {
 		return item, err
 	}
 	coordinate := reference + "#" + revision
@@ -529,7 +529,7 @@ func (s *PostgresStore) TombstoneConanPackageRevision(ctx context.Context, repos
 	if err = lockConanRepositoriesTx(ctx, tx, repositoryID); err != nil {
 		return item, err
 	}
-	err = scanConanPackageRevision(tx.QueryRowContext(ctx, `UPDATE native_conan_package_revisions SET state='deleted' WHERE repository_id::text=$1 AND reference=$2 AND recipe_revision=$3 AND package_id=$4 AND revision=$5 RETURNING repository_id::text,reference,recipe_revision,package_id,revision,digest,state,created_at`, repositoryID, reference, recipeRevision, packageID, revision), &item)
+	err = scanConanPackageRevision(tx.QueryRowContext(ctx, `UPDATE native_conan_package_revisions SET state='deleted' WHERE repository_id=$1::uuid AND reference=$2 AND recipe_revision=$3 AND package_id=$4 AND revision=$5 RETURNING repository_id::text,reference,recipe_revision,package_id,revision,digest,state,created_at`, repositoryID, reference, recipeRevision, packageID, revision), &item)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ConanPackageRevision{}, ErrNotFound
 	}
@@ -556,7 +556,7 @@ func (s *PostgresStore) RestoreConanRecipeRevision(ctx context.Context, reposito
 	if _, err = lockConanRevisionObjectsTx(ctx, tx, repositoryID, reference, revision); err != nil {
 		return item, err
 	}
-	err = scanConanRecipeRevision(tx.QueryRowContext(ctx, `UPDATE native_conan_recipe_revisions r SET state='visible' WHERE r.repository_id::text=$1 AND r.reference=$2 AND r.revision=$3 AND r.state='deleted' AND NOT EXISTS (SELECT 1 FROM native_conan_assets a LEFT JOIN native_conan_object_intents i ON i.object_key=a.object_key WHERE a.repository_id=r.repository_id AND a.reference=r.reference AND a.recipe_revision=r.revision AND a.package_id='' AND (i.object_key IS NULL OR i.collecting_at IS NOT NULL OR i.collected_at IS NOT NULL)) RETURNING repository_id::text,reference,revision,digest,state,created_at`, repositoryID, reference, revision), &item)
+	err = scanConanRecipeRevision(tx.QueryRowContext(ctx, `UPDATE native_conan_recipe_revisions r SET state='visible' WHERE r.repository_id=$1::uuid AND r.reference=$2 AND r.revision=$3 AND r.state='deleted' AND NOT EXISTS (SELECT 1 FROM native_conan_assets a LEFT JOIN native_conan_object_intents i ON i.object_key=a.object_key WHERE a.repository_id=r.repository_id AND a.reference=r.reference AND a.recipe_revision=r.revision AND a.package_id='' AND (i.object_key IS NULL OR i.collecting_at IS NOT NULL OR i.collected_at IS NOT NULL)) RETURNING repository_id::text,reference,revision,digest,state,created_at`, repositoryID, reference, revision), &item)
 	if errors.Is(err, sql.ErrNoRows) {
 		return item, ErrNotFound
 	}
@@ -564,7 +564,7 @@ func (s *PostgresStore) RestoreConanRecipeRevision(ctx context.Context, reposito
 		return item, err
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE native_conan_package_revisions p SET state='visible'
-		WHERE p.repository_id::text=$1 AND p.reference=$2 AND p.recipe_revision=$3 AND p.state='deleted'
+		WHERE p.repository_id=$1::uuid AND p.reference=$2 AND p.recipe_revision=$3 AND p.state='deleted'
 		AND NOT EXISTS (
 			SELECT 1 FROM artifact_tombstones t
 			WHERE t.repository_id=p.repository_id AND t.format='conan'
@@ -577,7 +577,7 @@ func (s *PostgresStore) RestoreConanRecipeRevision(ctx context.Context, reposito
 		)`, repositoryID, reference, revision); err != nil {
 		return item, err
 	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM artifact_tombstones WHERE repository_id::text=$1 AND format='conan' AND coordinate=$2`, repositoryID, reference+"#"+revision); err != nil {
+	if _, err = tx.ExecContext(ctx, `DELETE FROM artifact_tombstones WHERE repository_id=$1::uuid AND format='conan' AND coordinate=$2`, repositoryID, reference+"#"+revision); err != nil {
 		return item, err
 	}
 	return item, tx.Commit()
@@ -595,7 +595,7 @@ func (s *PostgresStore) RestoreConanPackageRevision(ctx context.Context, reposit
 	if _, err = lockConanRevisionObjectsTx(ctx, tx, repositoryID, reference, recipeRevision); err != nil {
 		return item, err
 	}
-	err = scanConanPackageRevision(tx.QueryRowContext(ctx, `UPDATE native_conan_package_revisions p SET state='visible' WHERE p.repository_id::text=$1 AND p.reference=$2 AND p.recipe_revision=$3 AND p.package_id=$4 AND p.revision=$5 AND p.state='deleted' AND EXISTS (SELECT 1 FROM native_conan_recipe_revisions r WHERE r.repository_id=p.repository_id AND r.reference=p.reference AND r.revision=p.recipe_revision AND r.state='visible') AND NOT EXISTS (SELECT 1 FROM native_conan_assets a LEFT JOIN native_conan_object_intents i ON i.object_key=a.object_key WHERE a.repository_id=p.repository_id AND a.reference=p.reference AND a.recipe_revision=p.recipe_revision AND a.package_id=p.package_id AND a.package_revision=p.revision AND (i.object_key IS NULL OR i.collecting_at IS NOT NULL OR i.collected_at IS NOT NULL)) RETURNING repository_id::text,reference,recipe_revision,package_id,revision,digest,state,created_at`, repositoryID, reference, recipeRevision, packageID, revision), &item)
+	err = scanConanPackageRevision(tx.QueryRowContext(ctx, `UPDATE native_conan_package_revisions p SET state='visible' WHERE p.repository_id=$1::uuid AND p.reference=$2 AND p.recipe_revision=$3 AND p.package_id=$4 AND p.revision=$5 AND p.state='deleted' AND EXISTS (SELECT 1 FROM native_conan_recipe_revisions r WHERE r.repository_id=p.repository_id AND r.reference=p.reference AND r.revision=p.recipe_revision AND r.state='visible') AND NOT EXISTS (SELECT 1 FROM native_conan_assets a LEFT JOIN native_conan_object_intents i ON i.object_key=a.object_key WHERE a.repository_id=p.repository_id AND a.reference=p.reference AND a.recipe_revision=p.recipe_revision AND a.package_id=p.package_id AND a.package_revision=p.revision AND (i.object_key IS NULL OR i.collecting_at IS NOT NULL OR i.collected_at IS NOT NULL)) RETURNING repository_id::text,reference,recipe_revision,package_id,revision,digest,state,created_at`, repositoryID, reference, recipeRevision, packageID, revision), &item)
 	if errors.Is(err, sql.ErrNoRows) {
 		return item, ErrNotFound
 	}
@@ -603,7 +603,7 @@ func (s *PostgresStore) RestoreConanPackageRevision(ctx context.Context, reposit
 		return item, err
 	}
 	coordinate := reference + "#" + recipeRevision + "/" + packageID + "#" + revision
-	if _, err = tx.ExecContext(ctx, `DELETE FROM artifact_tombstones WHERE repository_id::text=$1 AND format='conan' AND coordinate=$2`, repositoryID, coordinate); err != nil {
+	if _, err = tx.ExecContext(ctx, `DELETE FROM artifact_tombstones WHERE repository_id=$1::uuid AND format='conan' AND coordinate=$2`, repositoryID, coordinate); err != nil {
 		return item, err
 	}
 	return item, tx.Commit()

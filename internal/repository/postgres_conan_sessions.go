@@ -23,7 +23,7 @@ func (s *PostgresStore) CreateConanPublishSession(ctx context.Context, session C
 func (s *PostgresStore) GetConanPublishSession(ctx context.Context, id string) (ConanPublishSession, error) {
 	var session ConanPublishSession
 	var objects []byte
-	err := s.db.QueryRowContext(ctx, `SELECT `+conanSessionColumns+` FROM native_conan_publish_sessions WHERE id::text=$1`, id).Scan(&session.ID, &session.RepositoryID, &session.Publisher, &session.Kind, &session.Reference, &session.RecipeRevision, &session.PackageID, &session.PackageRevision, &session.State, &session.ExpiresAt, &objects, &session.Native, &session.Version)
+	err := s.db.QueryRowContext(ctx, `SELECT `+conanSessionColumns+` FROM native_conan_publish_sessions WHERE id=$1::uuid`, id).Scan(&session.ID, &session.RepositoryID, &session.Publisher, &session.Kind, &session.Reference, &session.RecipeRevision, &session.PackageID, &session.PackageRevision, &session.State, &session.ExpiresAt, &objects, &session.Native, &session.Version)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ConanPublishSession{}, ErrNotFound
 	}
@@ -37,7 +37,7 @@ func (s *PostgresStore) GetConanPublishSession(ctx context.Context, id string) (
 }
 
 func (s *PostgresStore) ListConanPublishUploads(ctx context.Context, sessionID string) (map[string]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT object_name,object_key FROM native_conan_publish_uploads WHERE session_id::text=$1`, sessionID)
+	rows, err := s.db.QueryContext(ctx, `SELECT object_name,object_key FROM native_conan_publish_uploads WHERE session_id=$1::uuid`, sessionID)
 	if err != nil {
 		return nil, err
 	}
