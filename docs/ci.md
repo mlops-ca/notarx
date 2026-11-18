@@ -51,6 +51,26 @@ generation. npm timeouts live in `console/.npmrc` and `tools/openapi/.npmrc`.
 Jobs run on `ubuntu-24.04` with a per-lane `timeout-minutes` from the plan.
 A failing lane uploads its step logs and raw reports.
 
+## Shared images
+
+`build-images` builds the gateway and reference apt signer images once per run
+(one parallel matrix leg each, BuildKit layers cached in the GitHub Actions
+cache; the reference scanner has no CI consumer, so it is not built here) and uploads each as a tarball artifact named
+`image-<runner arch>-<image>`. Every contract lane and `console-e2e` downloads
+the artifacts for its own runner architecture and `docker load`s them, so no job
+rebuilds an image from source. `compose.yml` names the images
+(`notarx-gateway:local`, `notarx-reference-apt-signer:local`,
+`notarx-reference-scanner:local`; override with `NOTARX_GATEWAY_IMAGE`,
+`NOTARX_APT_SIGNER_IMAGE`, `NOTARX_SCANNER_IMAGE`). Lanes set
+`NOTARX_COMPOSE_BUILD_FLAG=--no-build`; the e2e scripts use it in place of
+`--build`, and unset (local runs) they still build from source. Scripts that
+build with their own version arguments (`backup-restore-readiness`,
+`historical-upgrade-readiness`, `cargo-upgrade-readiness`,
+`performance-baseline`) keep a per-project image name so they never touch the
+shared tag. `ci-ok` requires `build-images` whenever `go` or `console`
+changed. Running lanes natively on arm64 is part of ADR 0016 slice 5: the
+artifact name already carries the architecture.
+
 The Dockerfiles no longer run `go test` while building an image: the suite runs
 once in `core-checks` (`make test`) and `quality`. The tests live in an opt-in
 `test` stage (`make docker-test`, run by `image-test-stages` when Dockerfiles or

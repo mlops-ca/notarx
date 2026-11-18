@@ -6,6 +6,9 @@ x-local-dev:
 
 services:
   gateway:
+    # CI builds this once and loads it into every lane (docs/ci.md); locally
+    # `build` below produces the same tag.
+    image: ${NOTARX_GATEWAY_IMAGE:-notarx-gateway:local}
     build: .
     depends_on:
       postgres:
@@ -119,6 +122,7 @@ services:
 
   reference-scanner:
     profiles: ["scanner"]
+    image: ${NOTARX_SCANNER_IMAGE:-notarx-reference-scanner:local}
     build:
       context: .
       dockerfile: Dockerfile.scanner
@@ -163,6 +167,7 @@ services:
 
   reference-apt-signer:
     profiles: ["apt-signer"]
+    image: ${NOTARX_APT_SIGNER_IMAGE:-notarx-reference-apt-signer:local}
     build:
       context: .
       dockerfile: Dockerfile.apt-signer

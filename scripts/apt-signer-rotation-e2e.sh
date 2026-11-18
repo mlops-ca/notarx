@@ -70,7 +70,9 @@ write_environment() {
 
 write_environment reference-apt-signer-old aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 compose=(docker compose --env-file "$env_file" -p "$project" -f compose.yml -f deploy/compose/apt-signer-rotation.yml --profile apt-signer-rotation)
-"${compose[@]}" build reference-apt-signer-old reference-apt-signer-next reference-apt-signer-old-keygen reference-apt-signer-next-keygen reference-apt-signer-tls-init
+if [[ "${NOTARX_COMPOSE_BUILD_FLAG---build}" == --build ]]; then
+  "${compose[@]}" build reference-apt-signer-old reference-apt-signer-next reference-apt-signer-old-keygen reference-apt-signer-next-keygen reference-apt-signer-tls-init
+fi
 "${compose[@]}" run --rm --no-deps -T reference-apt-signer-tls-init
 "${compose[@]}" run --rm --no-deps -T reference-apt-signer-old-keygen >"$workdir/old.asc"
 "${compose[@]}" run --rm --no-deps -T reference-apt-signer-next-keygen >"$workdir/next.asc"
@@ -108,7 +110,7 @@ next_fingerprint=${fingerprints##*,}
 
 install -m 0644 "$workdir/old.asc" "$workdir/trusted-public-keys.asc"
 write_environment reference-apt-signer-old "$old_fingerprint"
-"${compose[@]}" up -d --build --wait gateway
+"${compose[@]}" up -d ${NOTARX_COMPOSE_BUILD_FLAG---build} --wait gateway
 
 refresh_gateway_url() {
   local published_port

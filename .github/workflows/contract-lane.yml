@@ -32,8 +32,17 @@ jobs:
     timeout-minutes: ${{ inputs.timeout }}
     env:
       GOPROXY: https://proxy.golang.org|direct
+      # Compose uses the images built once by ci.yml instead of rebuilding them.
+      NOTARX_COMPOSE_BUILD_FLAG: --no-build
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: image-${{ runner.arch }}-*
+          path: ${{ runner.temp }}/images
+          merge-multiple: true
+      - name: Load the prebuilt images
+        run: for image in "$RUNNER_TEMP"/images/*.tar; do docker load --input "$image"; done
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod

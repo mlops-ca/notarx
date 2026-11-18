@@ -116,7 +116,7 @@ run_quality() {
 
 run_contract_lane() {
   local lane=$1
-  local evidence="output/ci-contract-local/${lane}-$-${RANDOM}"
+  local evidence="output/ci-contract-local/${lane}-$$-${RANDOM}"
   local args=(run "$lane" --local --output "$evidence")
   if [[ $keep_going -eq 1 ]]; then args+=(--keep-going); fi
   run "contract lane: $lane" python3 scripts/ci-contract.py "${args[@]}" </dev/null

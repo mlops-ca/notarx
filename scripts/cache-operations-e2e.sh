@@ -11,7 +11,7 @@ trap 'compose down -v --remove-orphans >/dev/null 2>&1 || true; rm -f "$isolated
 source "$isolated"
 base="http://127.0.0.1:${gateway_port}"
 status() { curl --silent --show-error --output "$2" --write-out '%{http_code}' "$1" "${@:3}"; }
-compose up -d --build --wait
+compose up -d ${NOTARX_COMPOSE_BUILD_FLAG---build} --wait
 tmp=$(mktemp); trap 'compose down -v --remove-orphans >/dev/null 2>&1 || true; rm -f "$isolated" "$tmp"' EXIT
 code=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' -H "Authorization: Bearer $GATEWAY_RESOLVER_TOKEN" "$base/api/v1/operations/cache")
 [[ "$code" == 403 ]] || { printf 'resolver cache status HTTP %s, want 403\n' "$code" >&2; exit 1; }

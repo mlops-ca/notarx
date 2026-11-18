@@ -124,7 +124,7 @@ PY2
   oidc_issuer="http://127.0.0.1:1/cli-e2e-oidc-${RANDOM}"
   printf 'GATEWAY_OIDC_ISSUER=%s\nGATEWAY_OIDC_AUDIENCE=notarxctl-cli-e2e\nGATEWAY_OIDC_JWKS_URL=%s/jwks\n' \
     "$oidc_issuer" "$oidc_issuer" >>"$workdir/gateway.env"
-  compose up -d --build --wait
+  compose up -d ${NOTARX_COMPOSE_BUILD_FLAG---build} --wait
   server="http://127.0.0.1:${gateway_port}"
 fi
 

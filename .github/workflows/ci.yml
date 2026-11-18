@@ -56,6 +56,17 @@ jobs:
             exit 1
           fi
 
+  # Owner rule: no Chinese content may be added anywhere (zh-CN deletions are
+  # allowed). Runs on every pull request, not only when docs changed.
+  no-chinese:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+      - run: python3 scripts/check-no-chinese.py
+
   docs:
     needs: changes
     if: needs.changes.outputs.docs == 'true'
@@ -64,9 +75,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 2
-      - name: No Chinese content added (owner rule; zh-CN deletions are allowed)
-        if: github.event_name == 'pull_request'
-        run: python3 scripts/check-no-chinese.py
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
@@ -87,6 +95,43 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: make docker-test
 
+  # Builds the Compose images CI consumes once per run. Contract lanes and the
+  # gateway-backed Console E2E load them instead of each rebuilding from source
+  # (docs/ci.md). Each leg is native to its runner (ADR 0016); the artifact name
+  # carries the runner architecture so an arm64 leg can be added without clashes.
+  build-images:
+    needs: changes
+    if: needs.changes.outputs.go == 'true' || needs.changes.outputs.console == 'true'
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: gateway
+            file: Dockerfile
+            tag: notarx-gateway:local
+          - name: apt-signer
+            file: Dockerfile.apt-signer
+            tag: notarx-reference-apt-signer:local
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      - name: Build the image and export it as a tarball
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          tags: ${{ matrix.tag }}
+          outputs: type=docker,dest=${{ runner.temp }}/${{ matrix.name }}.tar
+          cache-from: type=gha,scope=ci-${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=ci-${{ matrix.name }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: image-${{ runner.arch }}-${{ matrix.name }}
+          path: ${{ runner.temp }}/${{ matrix.name }}.tar
+          retention-days: 1
+          if-no-files-found: error
+
   # The lane plan (scripts/ci-contract-lanes.json) is the single source for
   # lane names, tool needs and timeouts; the matrix below is generated from it.
   contract-plan:
@@ -101,7 +146,7 @@ jobs:
         run: echo "matrix=$(python3 scripts/ci-contract.py matrix)" >> "$GITHUB_OUTPUT"
 
   contract:
-    needs: contract-plan
+    needs: [contract-plan, build-images]
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.contract-plan.outputs.matrix) }}
@@ -213,7 +258,7 @@ jobs:
   # Gateway-backed Console and CLI E2E: runs when the gateway or the Console
   # changed, since both execute the real stack.
   console-e2e:
-    needs: changes
+    needs: [changes, build-images]
     if: needs.changes.outputs.go == 'true' || needs.changes.outputs.console == 'true'
     runs-on: ubuntu-24.04
     steps:
@@ -231,6 +276,13 @@ jobs:
       - name: Install browser
         run: npx playwright install --with-deps chromium
         working-directory: console
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: image-${{ runner.arch }}-*
+          path: ${{ runner.temp }}/images
+          merge-multiple: true
+      - name: Load the prebuilt images
+        run: for image in "$RUNNER_TEMP"/images/*.tar; do docker load --input "$image"; done
       - name: Start gateway for Console E2E
         env:
           GATEWAY_ENV_FILE: ${{ runner.temp }}/artifact-gateway.env
@@ -249,7 +301,7 @@ jobs:
           GATEWAY_OIDC_AUDIENCE=ci-cli-e2e
           GATEWAY_OIDC_JWKS_URL=http://127.0.0.1:1/ci-cli-e2e/jwks
           EOF
-          docker compose --env-file "$GATEWAY_ENV_FILE" -f compose.yml up --build --wait --remove-orphans
+          docker compose --env-file "$GATEWAY_ENV_FILE" -f compose.yml up --no-build --wait --remove-orphans
       - name: Run console E2E
         id: console-e2e
         env:
@@ -291,7 +343,7 @@ jobs:
   # skipped by change detection, fails on any failure or cancellation.
   ci-ok:
     if: always()
-    needs: [changes, pr-title, docs, quality, console, console-e2e, image-test-stages, contract-plan, contract, contract-and-test]
+    needs: [changes, pr-title, no-chinese, docs, quality, console, console-e2e, image-test-stages, build-images, contract-plan, contract, contract-and-test]
     runs-on: ubuntu-24.04
     steps:
       - name: Require every needed job to succeed or be skipped
@@ -309,7 +361,7 @@ jobs:
           e2e=false
           if [[ "$GO" == true || "$CONSOLE" == true ]]; then e2e=true; fi
           status=0
-          for pair in quality:$GO contract-plan:$GO contract:$GO contract-and-test:$GO console:$CONSOLE console-e2e:$e2e docs:$DOCS image-test-stages:$IMAGES; do
+          for pair in quality:$GO contract-plan:$GO contract:$GO contract-and-test:$GO console:$CONSOLE console-e2e:$e2e build-images:$e2e docs:$DOCS image-test-stages:$IMAGES; do
             job=${pair%%:*} class=${pair##*:}
             result=$(echo "$NEEDS" | jq -r --arg job "$job" '.[$job].result')
             if [[ "$class" == true && "$result" != success ]]; then

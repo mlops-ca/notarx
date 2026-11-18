@@ -53,10 +53,17 @@ def line_issues(diff_text):
     issues, current, removed, added = [], None, set(), []
     exempt = {path for path, sha in allowed() if blob(path) == sha}
 
+    in_hunk = False
     for line in diff_text.splitlines():
-        if line.startswith('+++ '):
+        # File headers sit between "diff --git" and the first hunk; inside a
+        # hunk a line that starts with "++ " or "-- " is content, not a header.
+        if line.startswith('diff --git '):
+            in_hunk = False
+        elif line.startswith('@@'):
+            in_hunk = True
+        elif not in_hunk and line.startswith('+++ '):
             current = line[4:].removeprefix('b/')
-        elif line.startswith('--- '):
+        elif not in_hunk and line.startswith('--- '):
             continue
         elif line.startswith('-'):
             removed.update(CJK_RUN.findall(line))
@@ -70,9 +77,9 @@ def line_issues(diff_text):
 
 def main(argv):
     span = argv[1:3] if len(argv) >= 3 else ['HEAD^1', 'HEAD']
-    names = subprocess.check_output(['git', 'diff', '--name-status', '--no-renames', *span], text=True)
+    names = subprocess.check_output(['git', '-c', 'core.quotepath=off', 'diff', '--name-status', '--no-renames', *span], text=True)
     entries = [tuple(row.split('\t', 1)) for row in names.splitlines() if row]
-    diff = subprocess.check_output(['git', 'diff', '--no-renames', '--unified=0', *span], text=True)
+    diff = subprocess.check_output(['git', '-c', 'core.quotepath=off', 'diff', '--no-renames', '--unified=0', *span], text=True)
     issues = path_issues(entries) + line_issues(diff)
     for issue in issues:
         print(issue, file=sys.stderr)

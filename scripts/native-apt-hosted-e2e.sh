@@ -59,7 +59,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-"${compose[@]}" up -d --build --wait gateway reference-apt-signer
+"${compose[@]}" up -d ${NOTARX_COMPOSE_BUILD_FLAG---build} --wait gateway reference-apt-signer
 
 refresh_gateway_url() {
   local published_port
