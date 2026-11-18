@@ -1,6 +1,6 @@
 # CI path classes and the ci-ok gate
 
-[简体中文](ci.zh-CN.md) | [Documentation index](README.md)
+[Documentation index](README.md)
 
 CI runs only what a change needs. The `changes` job in `.github/workflows/ci.yml`
 runs `scripts/ci-changes.sh` over the files a pull request touches and exposes

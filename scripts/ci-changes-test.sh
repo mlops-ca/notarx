@@ -14,7 +14,7 @@ check() { # <expected go,console,docs,ci,images> <paths...>
 }
 
 check false,false,true,false,false docs/adr/0016-x.md README.md
-check false,false,true,false,false LICENSE docs/ci.zh-CN.md
+check false,false,true,false,false LICENSE docs/ci.md
 check true,false,false,false,false internal/foo/bar.go migrations/001.sql
 check false,true,false,false,false console/src/App.tsx
 check true,true,false,false,false api/openapi/management.yaml

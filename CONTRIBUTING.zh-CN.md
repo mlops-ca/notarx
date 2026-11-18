@@ -167,20 +167,78 @@ CI workflow 为最终事实来源。
 
 ### 契约 lane 与性能证据
 
-`scripts/ci-contract-lanes.json` 是契约 lane 的唯一来源：名称与顺序、每条 lane 所需工具（`rust`、`node`、`npm`）、
-作业与步骤超时，以及失败时的产物。`scripts/ci-contract.py matrix` 把它转换为 `ci.yml` 传给可复用
-`contract-lane.yml` 的矩阵，因此两个工作流都不出现具体 lane 名称。新增或调整 lane 只需修改该 JSON。
+`contract-and-test` 保持稳定的 required 汇总门禁。`contract-core` 与十条原生
+lane 独立启动；原生 matrix 使用 `fail-fast: false`，最多同时调度三个 job。
+主线制品仍等待汇总、quality 和 Console。汇总拒绝失败、跳过、取消、缺失、
+过期或损坏的结果。同一 run/head 的定向重跑可复用较早 attempt 的成功工件，
+但保留其原 attempt；较新的失败不能回退为较早的成功。
 
-`contract` 作业并行运行，`fail-fast: false`。稳定的 `contract-and-test` 检查（发布门禁引用，ADR 0024）要求所有 lane 成功；
-发布仍等待它、quality 与 Console。原先串行的 `core` lane 已拆为 `core-checks`、`core-email`、`core-native-e2e`
-与 `core-backup`，之后是各原生 lane。每条 lane 只安装它声明需要的工具链，版本分别来自 `go.mod`、
-`rust-toolchain.toml` 与 `.nvmrc`；npm 的重试与超时设置位于 `console/.npmrc` 与 `tools/openapi/.npmrc`。
+可编辑的目标和超时清单为 `scripts/ci-contract-lanes.json`：
 
-`./scripts/ci-local.sh --lane inventory` 单独执行一条 lane；`--job contract` 执行全部 lane 并附加本地 CLI 栈检查。
-本地 OpenAPI 新鲜度检查会重新生成并比较文件哈希，使未提交的生成变更保持可审查。lane 运行器的控制测试用
-`python3 -B -m unittest discover -s scripts/tests -p test_ci_contract.py` 执行。失败的 lane 会上传
-`contract-<lane>-<attempt>`，包含各步骤日志与原始生产者报告。CI 不再运行上游 `upgrade-readiness` 步骤
-（ADR 0015，[#39](https://github.com/mlops-ca/notarx/issues/39)）。
+| lane | 既有目标 | 目标时间上限 |
+| --- | --- | --- |
+| migration-clients | `nexus-migration-client-e2e` | 10 分钟 |
+| inventory | `nexus-inventory-scan-e2e` | 10 分钟 |
+| nuget | `native-nuget-e2e` | 15 分钟 |
+| oci-migration | `nexus-oci-migration-e2e` | 10 分钟 |
+| maven-oci-auth | `private-upstream-auth-e2e` | 10 分钟 |
+| six-format-auth | `private-upstream-formats-e2e` | 15 分钟 |
+| oci-discovery | `native-oci-discovery-e2e` | 15 分钟 |
+| npm-migration | `nexus-npm-migration-e2e` | 15 分钟 |
+| helm | `native-helm-e2e` | 15 分钟 |
+| rubygems | `native-rubygems-e2e` | 15 分钟 |
+
+每条原生 lane 先执行限时五分钟的 `go mod download`，单独保存准备日志，防止首次下载诊断混入原脚本严格解析的 JSONL 测试流。两组冷缓存性能对照均从空的私有 Go 缓存开始，并将该准备耗时计入关键路径；构建与协议客户端缓存保留原有行为。
+
+核心保留其它既有目标，包括发布备份 15 分钟、升级 10 分钟的检查。
+`./scripts/ci-local.sh --lane inventory` 单独执行一条 lane；`--job contract`
+执行核心、全部十条 lane，以及原来额外的本地 CLI 栈检查。本地 OpenAPI
+新鲜度通过再生成和文件摘要比较验证，允许审查未提交的生成改动。编排控制测试：
+`python3 -B -m unittest discover -s scripts/tests -p test_ci_contract.py`。
+
+每条 lane 即使在环境准备时失败，也上传 `contract-<lane>-<attempt>`。
+只有 bootstrap 的工件代表失败，不能冒充测试完成。证据保留 head/tree、业务
+文件摘要、原始命令和超时、case 事件、producer 原始文件、计时及清理结果。
+客户端沿用已有自有 fixture 目录；包装层删除自己创建的临时目录，不删除其它
+任务资源。专用 GitHub runner 另记录容器、卷和网络的执行前后差异；本地保留
+fixture 自有清理报告，不把其它并行开发者资源当作自己所有。
+`contract-aggregate-<attempt>` 另保存包含准备阶段的完整 GitHub job 日志。
+只有该采集器增加只读 `actions: read`，发布写权限保持原样。
+
+完整日志采集继续使用 120 秒预算。GitHub 可能先发布 runner 的完整日志，
+稍后才更新 job 外层状态。仅当当前 attempt 的外层仍为 `in_progress` 且尚无
+结论时，contract 采集器可组合调度器确认成功的依赖结果、精确的 head/run/job
+身份、成功的 runner 收尾步骤和与之匹配的完整原始日志，形成独立完成证据。
+该例外还要求已核查的 Runner 2.338.0 最终日志对象：HTTPS 200 `BlockBlob`，
+提供方声明的长度、内容摘要和发布时间均匹配，且原始输出覆盖每个未跳过的
+机器步骤。其它版本、可追加对象或完整性证据缺失时，仍须等待原始终态。
+日志清单记录该依据，并保留原始 job 状态和时间戳。
+结果缺失或矛盾、日志不完整、身份变化仍使汇总失败。
+继承旧 attempt 的 job 仍须有原始 completed/success 结果；性能对照继续
+要求真实终态和时间戳。
+
+仅专用 GitHub core lane 在执行原目标前创建两个原本不存在的集成 Go 缓存卷；
+已有缓存会被拒绝使用。它记录随机 owner、run、attempt 标签和创建凭据，finally
+重新核对凭据后仅删除自己创建的两个卷；create 应答丢失或清理错误仍使 lane
+失败。本机运行不认领、不删除这些缓存。未知新增卷（含匿名卷）继续报错。
+每个 core step 保存前后资源清单，以及用于归属的卷标识、标签/选项和容器标识、
+标签/挂载白名单字段；诊断工件不包含容器环境变量、命令或参数。
+
+`contract-benchmark.yml` 进入默认分支后，执行
+`gh workflow run contract-benchmark.yml --ref main`。它在同一提交调用两组相同
+的六条 lane：串行 matrix 限一槽，并行 matrix 最多三槽；两组均使用全新私有
+Go 缓存和相同固定客户端，各自经过严格汇总。
+`benchmarkOrder` 将此对照固定为原有六条原生 lane；新增 OCI 发现、npm 迁移、Helm 与 RubyGems lane 仍在
+日常 CI 与本地契约中强制执行，但不计入这项六 lane 性能声明。最终报告读取已结束的 job 元数据，
+记录 checkout/setup、执行、工件上传、清理、汇总、排队及实际获分配并发数。
+业务文件摘要、缓存条件、runner 架构或 CPU/内存等级不一致时拒绝对照。
+所有 lane 与汇总工件必须来自当前 run attempt；定向重跑保留的早先成功任务
+不能证明性能，因为等待重跑的间隔不属于执行时间。须重跑全部任务采集新的
+可比样本。普通正确性汇总仍可保留原始来源信息并复用较早的成功工件。
+实际至少两个并发 runner，且六 lane 关键路径缩短至少 25%，才构成成功的性能
+证据。样本不可比或只有一槽时性能仍未证明；功能正确不等于已经加速。旧完整
+contract 与新汇总的 wall time 另行报告，并注明各自真实缓存条件。该性能
+工作流不发布发行资产或镜像。
 
 ## 文档约定
 
