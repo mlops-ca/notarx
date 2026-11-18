@@ -215,6 +215,9 @@ func (h repositoryManagementHandler) CreateGroup(w http.ResponseWriter, r *http.
 	if !h.authorizeGroupMembership(w, r, principal, group.Name, group.Members) {
 		return
 	}
+	if h.rejectVisibilityConflict(w, r, principal, group) {
+		return
+	}
 	group.ID = ids.New()
 	payload, _ := json.Marshal(struct {
 		Name       string                   `json:"name"`
