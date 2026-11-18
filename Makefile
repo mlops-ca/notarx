@@ -223,10 +223,14 @@ architecture-check:
 	@python3 scripts/check-no-cjk-go.py
 	@python3 -B -m unittest discover -s scripts/tests -p test_check_no_cjk_go.py
 
+sqllint-check:
+	@go run ./tools/sqllint/cmd
+	@go test ./tools/sqllint/...
+
 architecture-metrics:
 	@go run ./tools/architecture -metrics
 
-lint: architecture-check commit-policy-check spellcheck
+lint: architecture-check sqllint-check commit-policy-check spellcheck
 	@docker run --rm -v "$(CURDIR):/src" -w /src $(LINT_IMAGE) golangci-lint run
 
 vet:
@@ -382,7 +386,7 @@ backup-transfer-test:
 published-native-backup-test:
 	@./scripts/published-native-backup-test.sh --recovery
 
-.PHONY: architecture-check architecture-metrics spellcheck native-build-check
+.PHONY: architecture-check sqllint-check architecture-metrics spellcheck native-build-check
 
 # ADR 0016: no cross-compilation or emulation anywhere. The guard is self-tested
 # against negative fixtures first, then run over the tree (also part of preflight).

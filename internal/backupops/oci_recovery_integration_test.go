@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand/v2"
 	"net/http"
 	"os"
 	"os/exec"
@@ -44,7 +45,7 @@ func integrationOCIRelease(t *testing.T, ctx context.Context, d Docker, release 
 	}
 	f := &registryFixture{docker: d, host: host, config: t.TempDir(), helpers: t.TempDir(), owner: uuid.NewString()}
 	f.name = "ag-oci-fixture-" + strings.ReplaceAll(f.owner, "-", "")
-	f.endpoint = fmt.Sprintf("127.0.0.1:%d", 49152+uuid.New().ID()%16384)
+	f.endpoint = fmt.Sprintf("127.0.0.1:%d", 49152+rand.IntN(16384))
 	f.imageTag = f.endpoint + "/" + f.name + ":fixture"
 	f.marker = filepath.Join(f.helpers, "invoked")
 	config, err := json.Marshal(map[string]any{"auths": map[string]any{f.endpoint: map[string]any{}, "gcr.io": map[string]any{}, "https://index.docker.io/v1/": map[string]any{}}})
