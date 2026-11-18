@@ -70,7 +70,9 @@ func (h generatedRepositoryAPIAdapter) CreateEmailTarget(w http.ResponseWriter, 
 	if emailProblem(w, err) {
 		return
 	}
-	h.emailAudit(r, principal, out.ID, "email.target.create", 201)
+	if !h.emailAudit(w, r, principal, out.ID, "email.target.create", 201) {
+		return
+	}
 	w.Header().Set("ETag", out.Version)
 	writeNativeMavenJSON(w, 201, emailTargetResponse(out))
 }
@@ -102,10 +104,14 @@ func emailTargetInput(w http.ResponseWriter, input adminopenapi.EmailTargetInput
 	}
 	return true
 }
-func (h generatedRepositoryAPIAdapter) emailAudit(r *http.Request, p Principal, id, operation string, status int) {
+func (h generatedRepositoryAPIAdapter) emailAudit(w http.ResponseWriter, r *http.Request, p Principal, id, operation string, status int) bool {
 	if h.audit != nil {
-		_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: p.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: id, Operation: operation, Status: status, CacheDisposition: "bypass"})
+		if auditErr := h.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: p.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: id, Operation: operation, Status: status, CacheDisposition: "bypass"}); auditErr != nil {
+			writeHostedProblem(w, http.StatusInternalServerError, "audit_failed", "audit record could not be written")
+			return false
+		}
 	}
+	return true
 }
 func emailProblem(w http.ResponseWriter, err error) bool {
 	if err == nil {
@@ -176,7 +182,9 @@ func (h generatedRepositoryAPIAdapter) UpdateEmailTarget(w http.ResponseWriter, 
 	if emailProblem(w, err) {
 		return
 	}
-	h.emailAudit(r, p, out.ID, "email.target.update", 200)
+	if !h.emailAudit(w, r, p, out.ID, "email.target.update", 200) {
+		return
+	}
 	w.Header().Set("ETag", out.Version)
 	writeNativeMavenJSON(w, 200, emailTargetResponse(out))
 }
@@ -274,7 +282,9 @@ func (h generatedRepositoryAPIAdapter) TestEmailNotification(w http.ResponseWrit
 	if emailProblem(w, err) {
 		return
 	}
-	h.emailAudit(r, p, v.ID, "email.test.enqueue", 202)
+	if !h.emailAudit(w, r, p, v.ID, "email.test.enqueue", 202) {
+		return
+	}
 	w.Header().Set("ETag", v.Version)
 	writeNativeMavenJSON(w, 202, emailDeliveryResponse(v))
 }
@@ -320,7 +330,9 @@ func (h generatedRepositoryAPIAdapter) ReplayEmailDelivery(w http.ResponseWriter
 	if emailProblem(w, err) {
 		return
 	}
-	h.emailAudit(r, p, v.ID, "email.delivery.replay", 200)
+	if !h.emailAudit(w, r, p, v.ID, "email.delivery.replay", 200) {
+		return
+	}
 	w.Header().Set("ETag", v.Version)
 	writeNativeMavenJSON(w, 200, emailDeliveryResponse(v))
 }

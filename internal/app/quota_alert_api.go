@@ -159,7 +159,9 @@ func (h generatedRepositoryAPIAdapter) UpdateRepositoryQuotaAlertRule(w http.Res
 		return
 	}
 	if v.Version != params.IfMatch {
-		h.emailAudit(r, p, v.ID, "quota.rule.update", 200)
+		if !h.emailAudit(w, r, p, v.ID, "quota.rule.update", 200) {
+			return
+		}
 	}
 	w.Header().Set("ETag", v.Version)
 	writeNativeMavenJSON(w, 200, quotaRuleResponse(v))
@@ -174,7 +176,9 @@ func (h generatedRepositoryAPIAdapter) DeleteRepositoryQuotaAlertRule(w http.Res
 		return
 	}
 	if v.Version != params.IfMatch {
-		h.emailAudit(r, p, v.ID, "quota.rule.delete", 204)
+		if !h.emailAudit(w, r, p, v.ID, "quota.rule.delete", 204) {
+			return
+		}
 	}
 	w.Header().Set("ETag", v.Version)
 	w.WriteHeader(204)
@@ -199,7 +203,9 @@ func (h generatedRepositoryAPIAdapter) CreateRepositoryQuotaAlertRule(w http.Res
 	if quotaProblem(w, err) {
 		return
 	}
-	h.emailAudit(r, principal, v.ID, "quota.rule.create", 201)
+	if !h.emailAudit(w, r, principal, v.ID, "quota.rule.create", 201) {
+		return
+	}
 	w.Header().Set("ETag", v.Version)
 	writeNativeMavenJSON(w, 201, quotaRuleResponse(v))
 }

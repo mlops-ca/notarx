@@ -84,17 +84,17 @@ func TestRubyGemsPostgresRustFSGovernanceAtomicAuditAndRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() {
-		_, _ = db.ExecContext(t.Context(), `DROP TRIGGER IF EXISTS `+trigger+` ON resolver_audit_log`)
+		_, _ = db.ExecContext(t.Context(), `DROP TRIGGER IF EXISTS `+trigger+` ON security_audit_log`)
 		_, _ = db.ExecContext(t.Context(), `DROP FUNCTION IF EXISTS `+trigger+`()`)
 	}()
 	enableFailure := func() {
-		_, err := db.ExecContext(t.Context(), `CREATE TRIGGER `+trigger+` BEFORE INSERT ON resolver_audit_log FOR EACH ROW EXECUTE FUNCTION `+trigger+`()`)
+		_, err := db.ExecContext(t.Context(), `CREATE TRIGGER `+trigger+` BEFORE INSERT ON security_audit_log FOR EACH ROW EXECUTE FUNCTION `+trigger+`()`)
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
 	disableFailure := func() {
-		_, err := db.ExecContext(t.Context(), `DROP TRIGGER `+trigger+` ON resolver_audit_log`)
+		_, err := db.ExecContext(t.Context(), `DROP TRIGGER `+trigger+` ON security_audit_log`)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -167,7 +167,10 @@ func (m *Module) replacePreviewRepository(w http.ResponseWriter, r *http.Request
 		m.failure(w, err)
 		return
 	}
-	_ = m.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: p.Actor, Repository: repo.Name, Format: "nuget", Resource: repo.ID, Operation: "nuget.preview.configure", Outcome: repository.AuditResolved, Status: 200, OccurredAt: time.Now().UTC(), Evidence: map[string]string{"version": next.Version}})
+	if auditErr := m.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: p.Actor, Repository: repo.Name, Format: "nuget", Resource: repo.ID, Operation: "nuget.preview.configure", Outcome: repository.AuditResolved, Status: 200, OccurredAt: time.Now().UTC(), Evidence: map[string]string{"version": next.Version}}); auditErr != nil {
+		m.problem(w, 500, "audit_failed")
+		return
+	}
 	writeJSON(w, r, 200, repositoryDTO(r, next))
 }
 
@@ -234,7 +237,10 @@ func (m *Module) previewGroups(w http.ResponseWriter, r *http.Request, p authori
 			return
 		}
 		if !replay {
-			_ = m.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: p.Actor, Repository: group.Name, GroupName: group.Name, Format: "nuget", Resource: group.ID, Operation: "nuget.preview.group.create", Outcome: repository.AuditResolved, Status: 201, OccurredAt: time.Now().UTC()})
+			if auditErr := m.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: p.Actor, Repository: group.Name, GroupName: group.Name, Format: "nuget", Resource: group.ID, Operation: "nuget.preview.group.create", Outcome: repository.AuditResolved, Status: 201, OccurredAt: time.Now().UTC()}); auditErr != nil {
+				m.problem(w, 500, "audit_failed")
+				return
+			}
 		}
 		writeJSON(w, r, 201, groupDTO(r, group))
 		return
@@ -278,7 +284,10 @@ func (m *Module) previewGroups(w http.ResponseWriter, r *http.Request, p authori
 			m.failure(w, err)
 			return
 		}
-		_ = m.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: p.Actor, Repository: group.Name, GroupName: group.Name, Format: "nuget", Resource: group.ID, Operation: "nuget.preview.group.configure", Outcome: repository.AuditResolved, Status: 200, OccurredAt: time.Now().UTC(), Evidence: map[string]string{"version": next.Version}})
+		if auditErr := m.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: p.Actor, Repository: group.Name, GroupName: group.Name, Format: "nuget", Resource: group.ID, Operation: "nuget.preview.group.configure", Outcome: repository.AuditResolved, Status: 200, OccurredAt: time.Now().UTC(), Evidence: map[string]string{"version": next.Version}}); auditErr != nil {
+			m.problem(w, 500, "audit_failed")
+			return
+		}
 		writeJSON(w, r, 200, groupDTO(r, next))
 		return
 	}
@@ -383,7 +392,10 @@ func (m *Module) revalidatePreviewSource(w http.ResponseWriter, r *http.Request,
 		m.failure(w, err)
 		return
 	}
-	_ = m.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: p.Actor, Repository: group.Name, GroupName: group.Name, Format: "nuget", Resource: id + "@" + version, Operation: "nuget.preview.source.revalidate", Outcome: repository.AuditResolved, Status: 200, OccurredAt: time.Now().UTC(), Evidence: map[string]string{"repositoryId": source.ID, "repositoryVersion": source.Version, "digest": confirmed.Digest}})
+	if auditErr := m.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: p.Actor, Repository: group.Name, GroupName: group.Name, Format: "nuget", Resource: id + "@" + version, Operation: "nuget.preview.source.revalidate", Outcome: repository.AuditResolved, Status: 200, OccurredAt: time.Now().UTC(), Evidence: map[string]string{"repositoryId": source.ID, "repositoryVersion": source.Version, "digest": confirmed.Digest}}); auditErr != nil {
+		m.problem(w, 500, "audit_failed")
+		return
+	}
 	writeJSON(w, r, 200, map[string]any{"groupId": group.ID, "packageId": id, "version": version, "repositoryId": confirmed.RepositoryID, "repositoryVersion": confirmed.RepositoryVersion, "digest": confirmed.Digest, "size": confirmed.Size})
 }
 func (m *Module) configuredGroup(ctx context.Context, input groupInput) (repository.HostedGroup, error) {

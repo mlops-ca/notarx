@@ -210,10 +210,10 @@ func TestRubyGemsPostgresRustFSQuarantinePolicyAndRelease(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() {
-		_, _ = db.ExecContext(t.Context(), `DROP TRIGGER IF EXISTS `+trigger+` ON resolver_audit_log`)
+		_, _ = db.ExecContext(t.Context(), `DROP TRIGGER IF EXISTS `+trigger+` ON security_audit_log`)
 		_, _ = db.ExecContext(t.Context(), `DROP FUNCTION IF EXISTS `+trigger+`()`)
 	}()
-	if _, err = db.ExecContext(t.Context(), `CREATE TRIGGER `+trigger+` BEFORE INSERT ON resolver_audit_log FOR EACH ROW EXECUTE FUNCTION `+trigger+`()`); err != nil {
+	if _, err = db.ExecContext(t.Context(), `CREATE TRIGGER `+trigger+` BEFORE INSERT ON security_audit_log FOR EACH ROW EXECUTE FUNCTION `+trigger+`()`); err != nil {
 		t.Fatal(err)
 	}
 	governanceChange(t, m.Preview(), repo.ID, p.Name, p.Version, p.Platform, p.Digest, "2", "release", "Bearer owned-admin", 500)
@@ -224,11 +224,11 @@ func TestRubyGemsPostgresRustFSQuarantinePolicyAndRelease(t *testing.T) {
 	// Clear the preparation quarantine, then prove a failed quarantine audit does
 	// not introduce a restriction either.
 	if stable.Governance.Quarantined {
-		if _, err = db.ExecContext(t.Context(), `ALTER TABLE resolver_audit_log DISABLE TRIGGER `+trigger); err != nil {
+		if _, err = db.ExecContext(t.Context(), `ALTER TABLE security_audit_log DISABLE TRIGGER `+trigger); err != nil {
 			t.Fatal(err)
 		}
 		governanceChange(t, m.Preview(), repo.ID, stable.Name, stable.Version, stable.Platform, stable.Digest, stable.Governance.Version, "release", "Bearer owned-admin", 200)
-		if _, err = db.ExecContext(t.Context(), `ALTER TABLE resolver_audit_log ENABLE TRIGGER `+trigger); err != nil {
+		if _, err = db.ExecContext(t.Context(), `ALTER TABLE security_audit_log ENABLE TRIGGER `+trigger); err != nil {
 			t.Fatal(err)
 		}
 		stable, err = store.GetRetained(t.Context(), repo.ID, stable.Name, stable.Version, stable.Platform)

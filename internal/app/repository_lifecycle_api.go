@@ -155,7 +155,10 @@ func (h generatedRepositoryAPIAdapter) controlRepositoryLifecycleJob(w http.Resp
 			return
 		}
 		if h.audit != nil {
-			_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{Repository: repo.Name, GroupName: repo.Name, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: "lifecycle-jobs/" + job.ID, Operation: operation, Status: http.StatusOK, CacheDisposition: "bypass"})
+			if auditErr := h.audit.RecordAudit(r.Context(), repository.AuditRecord{Repository: repo.Name, GroupName: repo.Name, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: "lifecycle-jobs/" + job.ID, Operation: operation, Status: http.StatusOK, CacheDisposition: "bypass"}); auditErr != nil {
+				writeHostedProblem(w, http.StatusInternalServerError, "audit_failed", "audit record could not be written")
+				return
+			}
 		}
 		writeNativeMavenJSON(w, http.StatusOK, lifecycleJobResponse(job))
 	})
@@ -265,7 +268,10 @@ func (h generatedRepositoryAPIAdapter) TombstoneRepositoryArtifact(w http.Respon
 			return
 		}
 		if h.audit != nil {
-			_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{GroupName: repo.Name, Repository: repo.Name, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: request.Coordinate, Operation: "artifact.tombstone", Status: http.StatusNoContent, CacheDisposition: "bypass"})
+			if auditErr := h.audit.RecordAudit(r.Context(), repository.AuditRecord{GroupName: repo.Name, Repository: repo.Name, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: request.Coordinate, Operation: "artifact.tombstone", Status: http.StatusNoContent, CacheDisposition: "bypass"}); auditErr != nil {
+				writeHostedProblem(w, http.StatusInternalServerError, "audit_failed", "audit record could not be written")
+				return
+			}
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})

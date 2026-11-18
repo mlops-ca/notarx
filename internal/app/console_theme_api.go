@@ -205,7 +205,9 @@ func (h generatedRepositoryAPIAdapter) InstallConsoleThemePackage(w http.Respons
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "serialize Console theme failed")
 		return
 	}
-	h.recordConsoleThemeAudit(r.Context(), principal, theme.ID, "console-theme.install", http.StatusCreated)
+	if !h.recordConsoleThemeAudit(w, r.Context(), principal, theme.ID, "console-theme.install", http.StatusCreated) {
+		return
+	}
 	w.Header().Set("ETag", stored.Version)
 	writeNativeMavenJSON(w, http.StatusCreated, response)
 }
@@ -245,7 +247,9 @@ func (h generatedRepositoryAPIAdapter) ReplaceConsoleThemePackage(w http.Respons
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "serialize Console theme failed")
 		return
 	}
-	h.recordConsoleThemeAudit(r.Context(), principal, theme.ID, "console-theme.replace", http.StatusOK)
+	if !h.recordConsoleThemeAudit(w, r.Context(), principal, theme.ID, "console-theme.replace", http.StatusOK) {
+		return
+	}
 	w.Header().Set("ETag", stored.Version)
 	writeNativeMavenJSON(w, http.StatusOK, response)
 }
@@ -286,17 +290,23 @@ func (h generatedRepositoryAPIAdapter) DeleteConsoleThemePackage(w http.Response
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "delete Console theme failed")
 		return
 	}
-	h.recordConsoleThemeAudit(r.Context(), principal, themeID, "console-theme.delete", http.StatusNoContent)
+	if !h.recordConsoleThemeAudit(w, r.Context(), principal, themeID, "console-theme.delete", http.StatusNoContent) {
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h generatedRepositoryAPIAdapter) recordConsoleThemeAudit(ctx context.Context, principal Principal, themeID, operation string, status int) {
+func (h generatedRepositoryAPIAdapter) recordConsoleThemeAudit(w http.ResponseWriter, ctx context.Context, principal Principal, themeID, operation string, status int) bool {
 	if h.audit == nil {
-		return
+		return true
 	}
-	_ = h.audit.RecordAudit(ctx, repository.AuditRecord{
+	if auditErr := h.audit.RecordAudit(ctx, repository.AuditRecord{
 		Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(),
 		Format: "management", Resource: "console-theme:" + themeID, Operation: operation,
 		Status: status, CacheDisposition: "bypass",
-	})
+	}); auditErr != nil {
+		writeHostedProblem(w, http.StatusInternalServerError, "audit_failed", "audit record could not be written")
+		return false
+	}
+	return true
 }

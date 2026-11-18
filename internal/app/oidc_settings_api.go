@@ -71,11 +71,14 @@ func (h identityManagementHandler) ReplaceOIDCSettings(w http.ResponseWriter, r 
 		return
 	}
 	if h.audit != nil {
-		_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{
+		if auditErr := h.audit.RecordAudit(r.Context(), repository.AuditRecord{
 			Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(),
 			Format: "management", Resource: "authentication/oidc", Operation: "authentication.oidc.configure",
 			Status: http.StatusOK, CacheDisposition: "bypass",
-		})
+		}); auditErr != nil {
+			writeHostedProblem(w, http.StatusInternalServerError, "audit_failed", "audit record could not be written")
+			return
+		}
 	}
 	writeNativeMavenJSON(w, http.StatusOK, oidcSettingsResponse(settings))
 }
@@ -100,10 +103,13 @@ func (h identityManagementHandler) TestOIDCSettings(w http.ResponseWriter, r *ht
 		outcome = repository.AuditUpstreamError
 	}
 	if h.audit != nil {
-		_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{
+		if auditErr := h.audit.RecordAudit(r.Context(), repository.AuditRecord{
 			Actor: principal.Actor, Outcome: outcome, OccurredAt: time.Now().UTC(), Format: "management",
 			Resource: "authentication/oidc", Operation: "authentication.oidc.test", Status: status, CacheDisposition: "bypass",
-		})
+		}); auditErr != nil {
+			writeHostedProblem(w, http.StatusInternalServerError, "audit_failed", "audit record could not be written")
+			return
+		}
 	}
 	if err != nil {
 		message := "OIDC provider discovery failed"

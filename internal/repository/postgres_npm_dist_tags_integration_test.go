@@ -49,7 +49,7 @@ func TestPostgresNPMDistTagContract(t *testing.T) {
 	var audited, unchanged int
 	if err := store.db.QueryRowContext(context.Background(), `
 		SELECT count(*), count(*) FILTER (WHERE evidence->>'changed'='false')
-		FROM resolver_audit_log WHERE repository=$1 AND operation='npm.dist-tag.set' AND evidence->>'distTag'='beta'`, repo.ID).Scan(&audited, &unchanged); err != nil {
+		FROM security_audit_log WHERE repository=$1 AND operation='npm.dist-tag.set' AND evidence->>'distTag'='beta'`, repo.ID).Scan(&audited, &unchanged); err != nil {
 		t.Fatal(err)
 	}
 	if audited != 5 || unchanged != 1 {
@@ -97,10 +97,10 @@ func TestPostgresNPMDistTagConcurrentMovesOfOneTag(t *testing.T) {
 	var lastVersion string
 	var audited int
 	if err = first.db.QueryRowContext(ctx, `
-		SELECT (SELECT evidence->>'version' FROM resolver_audit_log
+		SELECT (SELECT evidence->>'version' FROM security_audit_log
 		        WHERE repository=$1 AND operation='npm.dist-tag.set' AND evidence->>'distTag'='beta'
 		        ORDER BY id DESC LIMIT 1),
-		       (SELECT count(*) FROM resolver_audit_log
+		       (SELECT count(*) FROM security_audit_log
 		        WHERE repository=$1 AND operation='npm.dist-tag.set' AND evidence->>'distTag'='beta')`,
 		repo.ID).Scan(&lastVersion, &audited); err != nil {
 		t.Fatal(err)
@@ -111,7 +111,7 @@ func TestPostgresNPMDistTagConcurrentMovesOfOneTag(t *testing.T) {
 	// Each committed move saw the previous commit's target: the chain of
 	// previous→version pairs has no gap, which a lost update would leave.
 	rows, err := first.db.QueryContext(ctx, `
-		SELECT evidence->>'previous', evidence->>'version', evidence->>'changed' FROM resolver_audit_log
+		SELECT evidence->>'previous', evidence->>'version', evidence->>'changed' FROM security_audit_log
 		WHERE repository=$1 AND operation='npm.dist-tag.set' AND evidence->>'distTag'='beta' ORDER BY id`, repo.ID)
 	if err != nil {
 		t.Fatal(err)

@@ -24,7 +24,7 @@ func (h generatedRepositoryAPIAdapter) ReconcileRepositoryArtifactIntelligence(w
 			jobIDs = append(jobIDs, job.ID)
 		}
 		if h.audit != nil {
-			_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{
+			if auditErr := h.audit.RecordAudit(r.Context(), repository.AuditRecord{
 				Repository:       repo.Name,
 				GroupName:        repo.Name,
 				Actor:            principal.Actor,
@@ -35,7 +35,10 @@ func (h generatedRepositoryAPIAdapter) ReconcileRepositoryArtifactIntelligence(w
 				Operation:        "lifecycle.intelligence_reconcile",
 				Status:           http.StatusOK,
 				CacheDisposition: "bypass",
-			})
+			}); auditErr != nil {
+				writeHostedProblem(w, http.StatusInternalServerError, "audit_failed", "audit record could not be written")
+				return
+			}
 		}
 		writeNativeMavenJSON(w, http.StatusOK, adminopenapi.LifecycleJobReconciliation{
 			RepositoryId:   repositoryID,

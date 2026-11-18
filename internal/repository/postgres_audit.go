@@ -57,9 +57,8 @@ type auditExecer interface {
 }
 
 // withAuditDefaults fills the request ids and the timestamp the caller left empty.
-// The class is not inferred here: the audit writer sets it from Durability, and
-// audits written inside a store transaction keep the table they always used
-// (an empty class means resolver_audit_log).
+// The class is not inferred here: the audit writer sets it from Durability and
+// insertAudit does the same for audits written inside a store transaction.
 func withAuditDefaults(ctx context.Context, audit AuditRecord) AuditRecord {
 	if ids, ok := requestcontext.FromContext(ctx); ok {
 		if audit.RequestID == "" {
@@ -80,6 +79,8 @@ func withAuditDefaults(ctx context.Context, audit AuditRecord) AuditRecord {
 // that audit a mutation inside their own transaction call it.
 func insertAudit(ctx context.Context, execer auditExecer, audit AuditRecord) error {
 	audit = withAuditDefaults(ctx, audit)
+	// ADR 0023 section 1: mutations are sync class and land in security_audit_log.
+	audit.Class = audit.Durability()
 	if err := insertAuditRow(ctx, execer, audit); err != nil {
 		return err
 	}

@@ -106,7 +106,9 @@ func (h generatedRepositoryAPIAdapter) CreateScheduledTask(w http.ResponseWriter
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "create scheduled task failed")
 		return
 	}
-	h.auditScheduledTask(r, principal, created, "scheduled_task.create", http.StatusCreated)
+	if !h.auditScheduledTask(w, r, principal, created, "scheduled_task.create", http.StatusCreated) {
+		return
+	}
 	writeNativeMavenJSON(w, http.StatusCreated, scheduledTaskResponse(created))
 }
 
@@ -179,7 +181,9 @@ func (h generatedRepositoryAPIAdapter) UpdateScheduledTask(w http.ResponseWriter
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "update scheduled task failed")
 		return
 	}
-	h.auditScheduledTask(r, principal, updated, "scheduled_task.update", http.StatusOK)
+	if !h.auditScheduledTask(w, r, principal, updated, "scheduled_task.update", http.StatusOK) {
+		return
+	}
 	writeNativeMavenJSON(w, http.StatusOK, scheduledTaskResponse(updated))
 }
 
@@ -204,7 +208,9 @@ func (h generatedRepositoryAPIAdapter) DeleteScheduledTask(w http.ResponseWriter
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "delete scheduled task failed")
 		return
 	}
-	h.auditScheduledTask(r, principal, task, "scheduled_task.delete", http.StatusNoContent)
+	if !h.auditScheduledTask(w, r, principal, task, "scheduled_task.delete", http.StatusNoContent) {
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -227,11 +233,15 @@ func (h generatedRepositoryAPIAdapter) RunScheduledTask(w http.ResponseWriter, r
 	}
 	run, err := (ScheduledTaskScheduler{Store: h.sessions.store}).RunNow(r.Context(), task.ID)
 	if err != nil {
-		h.auditScheduledTask(r, principal, task, "scheduled_task.run_failed", http.StatusConflict)
+		if !h.auditScheduledTask(w, r, principal, task, "scheduled_task.run_failed", http.StatusConflict) {
+			return
+		}
 		writeHostedProblem(w, http.StatusConflict, "dispatch_failed", truncateScheduledTaskError(err.Error()))
 		return
 	}
-	h.auditScheduledTask(r, principal, task, "scheduled_task.run", http.StatusAccepted)
+	if !h.auditScheduledTask(w, r, principal, task, "scheduled_task.run", http.StatusAccepted) {
+		return
+	}
 	writeNativeMavenJSON(w, http.StatusAccepted, scheduledTaskRunResponse(run))
 }
 
@@ -373,9 +383,9 @@ func scheduledTaskRunResponse(run repository.ScheduledTaskRun) adminopenapi.Sche
 	return item
 }
 
-func (h generatedRepositoryAPIAdapter) auditScheduledTask(r *http.Request, principal Principal, task repository.ScheduledTask, operation string, status int) {
+func (h generatedRepositoryAPIAdapter) auditScheduledTask(w http.ResponseWriter, r *http.Request, principal Principal, task repository.ScheduledTask, operation string, status int) bool {
 	if h.audit == nil {
-		return
+		return true
 	}
 	repositoryName := "global"
 	if task.RepositoryID != "" {
@@ -383,5 +393,9 @@ func (h generatedRepositoryAPIAdapter) auditScheduledTask(r *http.Request, princ
 			repositoryName = repo.Name
 		}
 	}
-	_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{Repository: repositoryName, GroupName: repositoryName, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: "scheduled-tasks/" + task.ID, Operation: operation, Status: status, CacheDisposition: "bypass"})
+	if auditErr := h.audit.RecordAudit(r.Context(), repository.AuditRecord{Repository: repositoryName, GroupName: repositoryName, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: "scheduled-tasks/" + task.ID, Operation: operation, Status: status, CacheDisposition: "bypass"}); auditErr != nil {
+		writeHostedProblem(w, http.StatusInternalServerError, "audit_failed", "audit record could not be written")
+		return false
+	}
+	return true
 }

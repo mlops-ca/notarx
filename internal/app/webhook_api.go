@@ -146,7 +146,10 @@ func (h generatedRepositoryAPIAdapter) CreateWebhookSubscription(w http.Response
 		return
 	}
 	if h.audit != nil {
-		_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: created.ID, Operation: "webhook.subscription.create", Status: http.StatusCreated, CacheDisposition: "bypass"})
+		if auditErr := h.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: created.ID, Operation: "webhook.subscription.create", Status: http.StatusCreated, CacheDisposition: "bypass"}); auditErr != nil {
+			writeHostedProblem(w, http.StatusInternalServerError, "audit_failed", "audit record could not be written")
+			return
+		}
 	}
 	w.Header().Set("ETag", created.Version)
 	writeNativeMavenJSON(w, http.StatusCreated, webhookSubscriptionResponse(created))
@@ -228,7 +231,10 @@ func (h generatedRepositoryAPIAdapter) UpdateWebhookSubscription(w http.Response
 		return
 	}
 	if h.audit != nil {
-		_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: updated.ID, Operation: "webhook.subscription.update", Status: http.StatusOK, CacheDisposition: "bypass"})
+		if auditErr := h.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: updated.ID, Operation: "webhook.subscription.update", Status: http.StatusOK, CacheDisposition: "bypass"}); auditErr != nil {
+			writeHostedProblem(w, http.StatusInternalServerError, "audit_failed", "audit record could not be written")
+			return
+		}
 	}
 	w.Header().Set("ETag", updated.Version)
 	writeNativeMavenJSON(w, http.StatusOK, webhookSubscriptionResponse(updated))
@@ -295,7 +301,10 @@ func (h generatedRepositoryAPIAdapter) ReplayWebhookDelivery(w http.ResponseWrit
 		return
 	}
 	if h.audit != nil {
-		_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: value.ID, Operation: "webhook.delivery.replay", Status: http.StatusOK, CacheDisposition: "bypass"})
+		if auditErr := h.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: value.ID, Operation: "webhook.delivery.replay", Status: http.StatusOK, CacheDisposition: "bypass"}); auditErr != nil {
+			writeHostedProblem(w, http.StatusInternalServerError, "audit_failed", "audit record could not be written")
+			return
+		}
 	}
 	writeNativeMavenJSON(w, http.StatusOK, webhookDeliveryResponse(value))
 }

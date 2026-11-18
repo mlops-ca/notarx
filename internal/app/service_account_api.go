@@ -119,7 +119,9 @@ func (h identityManagementHandler) CreateServiceAccount(w http.ResponseWriter, r
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "create service account failed")
 		return
 	}
-	h.recordServiceAccountAudit(r, "service-accounts/"+account.ID, "service_account.create", http.StatusCreated)
+	if !h.recordServiceAccountAudit(w, r, "service-accounts/"+account.ID, "service_account.create", http.StatusCreated) {
+		return
+	}
 	writeNativeMavenJSON(w, http.StatusCreated, serviceAccountResponse(account))
 }
 
@@ -164,7 +166,9 @@ func (h identityManagementHandler) UpdateServiceAccount(w http.ResponseWriter, r
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "update service account failed")
 		return
 	}
-	h.recordServiceAccountAudit(r, "service-accounts/"+account.ID, "service_account.update", http.StatusOK)
+	if !h.recordServiceAccountAudit(w, r, "service-accounts/"+account.ID, "service_account.update", http.StatusOK) {
+		return
+	}
 	writeNativeMavenJSON(w, http.StatusOK, serviceAccountResponse(account))
 }
 
@@ -261,7 +265,9 @@ func (h identityManagementHandler) CreateServiceAccountCredential(w http.Respons
 		return
 	}
 	response := serviceAccountCredentialResponse(credential)
-	h.recordServiceAccountAudit(r, "service-accounts/"+serviceAccountID.String()+"/credentials/"+credential.ID, "service_account.credential.create", http.StatusCreated)
+	if !h.recordServiceAccountAudit(w, r, "service-accounts/"+serviceAccountID.String()+"/credentials/"+credential.ID, "service_account.credential.create", http.StatusCreated) {
+		return
+	}
 	writeNativeMavenJSON(w, http.StatusCreated, adminopenapi.CreatedServiceAccountCredential{
 		Id:               response.Id,
 		ServiceAccountId: response.ServiceAccountId,
@@ -287,15 +293,17 @@ func (h identityManagementHandler) RevokeServiceAccountCredential(w http.Respons
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "revoke service account credential failed")
 		return
 	}
-	h.recordServiceAccountAudit(r, "service-accounts/"+serviceAccountID.String()+"/credentials/"+credential.ID, "service_account.credential.revoke", http.StatusOK)
+	if !h.recordServiceAccountAudit(w, r, "service-accounts/"+serviceAccountID.String()+"/credentials/"+credential.ID, "service_account.credential.revoke", http.StatusOK) {
+		return
+	}
 	writeNativeMavenJSON(w, http.StatusOK, serviceAccountCredentialResponse(credential))
 }
 
-func (h identityManagementHandler) recordServiceAccountAudit(r *http.Request, resource, operation string, status int) {
+func (h identityManagementHandler) recordServiceAccountAudit(w http.ResponseWriter, r *http.Request, resource, operation string, status int) bool {
 	if h.audit == nil {
-		return
+		return true
 	}
-	_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{
+	if auditErr := h.audit.RecordAudit(r.Context(), repository.AuditRecord{
 		Actor:            h.auditActor(r),
 		Outcome:          repository.AuditResolved,
 		OccurredAt:       time.Now().UTC(),
@@ -304,7 +312,11 @@ func (h identityManagementHandler) recordServiceAccountAudit(r *http.Request, re
 		Operation:        operation,
 		Status:           status,
 		CacheDisposition: "bypass",
-	})
+	}); auditErr != nil {
+		writeHostedProblem(w, http.StatusInternalServerError, "audit_failed", "audit record could not be written")
+		return false
+	}
+	return true
 }
 
 func serviceAccountResponse(account repository.ServiceAccount) adminopenapi.ServiceAccount {

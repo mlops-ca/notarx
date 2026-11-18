@@ -133,13 +133,16 @@ func (h generatedRepositoryAPIAdapter) ReplaceArtifactQuarantine(w http.Response
 			if state == repository.ArtifactQuarantineStateReleased {
 				operation = "artifact.release"
 			}
-			_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{
+			if auditErr := h.audit.RecordAudit(r.Context(), repository.AuditRecord{
 				GroupName: repo.Name, Repository: repo.Name, Actor: principal.Actor,
 				Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(),
 				Format: string(repo.Format), Resource: coordinate, Representation: digest,
 				Operation: operation, Status: http.StatusOK, AuthorizationReason: reason,
 				CacheDisposition: "bypass",
-			})
+			}); auditErr != nil {
+				writeHostedProblem(w, http.StatusInternalServerError, "audit_failed", "audit record could not be written")
+				return
+			}
 		}
 		writeArtifactQuarantine(w, updated)
 	})
