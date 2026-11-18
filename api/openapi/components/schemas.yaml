@@ -3939,6 +3939,7 @@ AuditPage:
   type: object
   required:
   - items
+  - completeness
   properties:
     items:
       type: array
@@ -3946,6 +3947,15 @@ AuditPage:
         "$ref": "#/AuditRecord"
     nextPageToken:
       type: string
+    completeness:
+      type: string
+      enum: [best_effort_reads, complete]
+      description: >-
+        Completeness of read audit. best_effort_reads (the default) means security
+        evidence (sync class) is complete but read and download audit (async class)
+        is buffered per node, so a trailing interval is lost on a crash and records
+        are dropped when the buffer is full. complete means NOTARX_AUDIT_READ_MODE=sync
+        and every read is committed before the response.
 
 APTLifecycleRequest:
   type: object

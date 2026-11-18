@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/auditwriter"
 	"github.com/mlops-ca/notarx/internal/database"
 	"github.com/mlops-ca/notarx/internal/partitions"
 )
@@ -36,6 +37,36 @@ func TestPartitionMetricsExposeDefaultPartitionRows(t *testing.T) {
 	(&Metrics{}).Handler(empty, httptest.NewRequest(http.MethodGet, "/metrics", nil))
 	if strings.Contains(empty.Body.String(), "notarx_partition_default_rows") {
 		t.Fatal("partition metrics must be absent when no manager is configured")
+	}
+}
+
+func TestAuditWriterMetrics(t *testing.T) {
+	var stats auditwriter.Stats
+	stats.BufferDepth, stats.DroppedRead, stats.DroppedSecurity, stats.FlushErrors, stats.FlushCount = 7, 3, 2, 1, 4
+	stats.FlushSecondsSum = 0.5
+	stats.FlushSecondsBucket[0] = 4
+	metrics := (&Metrics{}).WithAuditWriterStats(func() auditwriter.Stats { return stats })
+	response := httptest.NewRecorder()
+	metrics.Handler(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	body := response.Body.String()
+	for _, expected := range []string{
+		"notarx_audit_buffer_depth 7",
+		`notarx_audit_dropped_total{class="read",reason="buffer_full"} 3`,
+		`notarx_audit_dropped_total{class="security",reason="overload"} 2`,
+		"notarx_audit_flush_errors_total 1",
+		`notarx_audit_flush_seconds_bucket{le="0.005"} 4`,
+		`notarx_audit_flush_seconds_bucket{le="+Inf"} 4`,
+		"notarx_audit_flush_seconds_sum 0.5",
+		"notarx_audit_flush_seconds_count 4",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("metrics missing %q\n%s", expected, body)
+		}
+	}
+	empty := httptest.NewRecorder()
+	(&Metrics{}).Handler(empty, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if strings.Contains(empty.Body.String(), "notarx_audit_buffer_depth") {
+		t.Fatal("audit writer metrics must be absent when no writer is configured")
 	}
 }
 

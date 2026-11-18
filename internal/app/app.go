@@ -31,25 +31,28 @@ type Checker interface {
 }
 
 type Dependencies struct {
-	MigrationService              *nexusmigration.Service
-	MigrationSchedules            *nexusmigration.ScheduleService
-	SourceService                 *nexussource.Service
-	checkers                      []Checker
-	BuildVersion                  string
-	BuildRevision                 string
-	BuildModified                 bool
-	BuildGoVersion                string
-	Runtime                       DiagnosticRuntime
-	AccessLog                     AccessLogOptions
-	LogBuffer                     *operationalog.Buffer
-	LocalCapacity                 *localcapacity.Observer
-	HTTPErrorRate                 *httperrorrate.Observer
-	Email                         emailnotification.Config
-	EmailDefaultLocale            string
-	CargoUpstreamClient           *http.Client
-	APTArchiveTrust               aptpublication.SnapshotArchiveTrustVerifier
-	APTSigner                     aptpublication.Signer
-	APTSigning                    APTSigningRuntime
+	MigrationService    *nexusmigration.Service
+	MigrationSchedules  *nexusmigration.ScheduleService
+	SourceService       *nexussource.Service
+	checkers            []Checker
+	BuildVersion        string
+	BuildRevision       string
+	BuildModified       bool
+	BuildGoVersion      string
+	Runtime             DiagnosticRuntime
+	AccessLog           AccessLogOptions
+	LogBuffer           *operationalog.Buffer
+	LocalCapacity       *localcapacity.Observer
+	HTTPErrorRate       *httperrorrate.Observer
+	Email               emailnotification.Config
+	EmailDefaultLocale  string
+	CargoUpstreamClient *http.Client
+	APTArchiveTrust     aptpublication.SnapshotArchiveTrustVerifier
+	APTSigner           aptpublication.Signer
+	APTSigning          APTSigningRuntime
+	// AuditReadSync is NOTARX_AUDIT_READ_MODE=sync: audit pages then report completeness
+	// "complete" instead of "best_effort_reads".
+	AuditReadSync                 bool
 	NPMMetadataTTL                time.Duration
 	NPMNegativeTTL                time.Duration
 	NPMBreakerTTL                 time.Duration

@@ -147,6 +147,60 @@ Every node starts the partition manager for the audit tables. One node at a time
 see [PostgreSQL capabilities](postgresql-capabilities.md#partitioned-audit-tables).
 Alert when `notarx_partition_default_rows` is not zero.
 
+## Audit durability and capacity
+
+Audit is written in tiers (ADR 0023 section 1); the guarantees are not uniform.
+
+| Class | Records | Guarantee |
+| --- | --- | --- |
+| sync | management mutations, publish, delete, quarantine, release, promotion, token mint, settings, retention and key operations | committed before the response; if the audit insert fails the change fails (fail closed); never queued, never dropped; stored in `security_audit_log` (kept 730 days by default) |
+| sync, denial | authorization denials for an authenticated principal | committed insert bounded by `NOTARX_AUDIT_SYNC_MAX_INFLIGHT`; when exhausted the record queues for up to 250 ms and is then dropped and counted in `notarx_audit_dropped_total{class="security"}` |
+| async | successful reads and downloads, cache hits and misses, group resolution, anonymous 401 and 403 | buffered in the node and flushed in batches; stored in `resolver_audit_log` (kept 90 days by default) |
+
+Read and download audit is therefore best-effort evidence of access, not a
+complete log. A crash, `SIGKILL` or node loss loses the records still in the
+buffer: about one flush interval at steady state (about 1000 records at 1000
+requests per second) and, while the database is down or slow, up to
+`NOTARX_AUDIT_BUFFER_SIZE` records (about one minute at 1000 requests per
+second), after which new records are dropped. Nothing is spooled to disk. Usage
+counters and request rollups are aggregated in memory and flushed every
+`NOTARX_USAGE_FLUSH_INTERVAL`, so they are approximate by up to one interval per
+node and are not billing-grade. The audit API reports this in the
+`completeness` field of `GET /api/v2/audits/page`: `best_effort_reads`, or
+`complete` when `NOTARX_AUDIT_READ_MODE=sync`.
+
+```env
+NOTARX_AUDIT_BUFFER_SIZE=65536
+NOTARX_AUDIT_BATCH_SIZE=1000
+NOTARX_AUDIT_FLUSH_INTERVAL=1s
+NOTARX_AUDIT_SYNC_MAX_INFLIGHT=64
+NOTARX_AUDIT_DENIAL_MODE=queue
+NOTARX_AUDIT_READ_MODE=async
+NOTARX_USAGE_FLUSH_INTERVAL=5s
+NOTARX_SHUTDOWN_FLUSH_TIMEOUT=10s
+```
+
+- `NOTARX_AUDIT_DENIAL_MODE=sync` blocks a denied request until its record is
+  committed instead of dropping it: every authenticated denial is durable, and
+  a flood of denials applies backpressure to the requests.
+- `NOTARX_AUDIT_READ_MODE=sync` is the supported answer for installations whose
+  compliance regime requires a complete read audit. It costs one database commit
+  per request, so the audit insert rate becomes the throughput ceiling of every
+  node: size the database for the peak request rate of all nodes combined, keep
+  `NOTARX_AUDIT_SYNC_MAX_INFLIGHT` at or below the pool size, and expect read latency
+  to include the commit. Usage counters and rollups still flush every interval.
+- On `SIGTERM` the node stops accepting audit after the HTTP server has drained and
+  flushes within `NOTARX_SHUTDOWN_FLUSH_TIMEOUT`; records still buffered after that
+  are lost and logged.
+- Alert on `notarx_audit_dropped_total{class="security"}` above zero, on any
+  sustained increase of `notarx_audit_dropped_total{class="read"}` and of
+  `notarx_audit_flush_errors_total`, and on `notarx_audit_buffer_depth` close to
+  `NOTARX_AUDIT_BUFFER_SIZE`. `notarx_audit_flush_seconds` is the flush latency histogram.
+
+Repository request statistics and the overview read hourly rollups
+(`repository_request_rollup`, kept 400 days) with the outcome `allowed` or a
+denial reason, so they no longer scan the audit tables.
+
 `GET /api/v2/runtime/nodes` returns the node inventory and cluster-health
 summary, including missing API/Scheduler/Worker roles, duplicate instance IDs,
 and stale heartbeats. This is operational visibility only; task leases remain

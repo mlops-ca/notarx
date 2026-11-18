@@ -457,12 +457,27 @@ func TestAdminCanPageAuditsWithScopedCursor(t *testing.T) {
 	var first struct {
 		Items         []repository.AuditRecord `json:"items"`
 		NextPageToken string                   `json:"nextPageToken"`
+		Completeness  string                   `json:"completeness"`
 	}
 	if err := json.NewDecoder(response.Body).Decode(&first); err != nil {
 		t.Fatal(err)
 	}
 	if len(first.Items) != 1 || first.Items[0].OccurredAt != base.Add(2*time.Minute) || first.NextPageToken == "" {
 		t.Fatalf("first page=%#v", first)
+	}
+	if first.Completeness != "best_effort_reads" {
+		t.Fatalf("read audit is best-effort unless NOTARX_AUDIT_READ_MODE=sync: completeness=%q", first.Completeness)
+	}
+	syncHandler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{AuditReadSync: true}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
+	syncRequest := httptest.NewRequest(http.MethodGet, "/api/v2/audits/page?repository=team/app&pageSize=1", nil)
+	authorize(syncRequest, "admin-secret")
+	syncResponse := httptest.NewRecorder()
+	syncHandler.ServeHTTP(syncResponse, syncRequest)
+	var complete struct {
+		Completeness string `json:"completeness"`
+	}
+	if err := json.NewDecoder(syncResponse.Body).Decode(&complete); err != nil || complete.Completeness != "complete" {
+		t.Fatalf("sync read mode must report complete: %q %v", complete.Completeness, err)
 	}
 
 	request = httptest.NewRequest(http.MethodGet, "/api/v2/audits/page?repository=team/app&pageSize=1&from=2026-08-08T10:01:00Z&pageToken="+url.QueryEscape(first.NextPageToken), nil)

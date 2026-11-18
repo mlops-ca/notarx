@@ -19,14 +19,14 @@ func (s *PostgresStore) QueryArtifactUsage(ctx context.Context, repository strin
 	// Aggregate in SQL without returning every address to the application.
 	err = tx.QueryRowContext(ctx, `SELECT COALESCE(SUM(download_count), 0), COALESCE(SUM(total_bytes), 0), COUNT(*),
 		COUNT(*) FILTER (WHERE strpos(resource, $2) > 0)
-		FROM artifact_usage_stats WHERE repository = $1`, repository, query.Query).
+		FROM artifact_usage_stats WHERE repository_id = (SELECT id FROM (`+repositoryNames+`) n WHERE n.name = $1)`, repository, query.Query).
 		Scan(&page.Totals.DownloadCount, &page.Totals.TotalBytes, &page.Totals.Resources, &page.TotalCount)
 	if err != nil {
 		return page, err
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT repository, format, resource, download_count, total_bytes, first_downloaded_at, last_downloaded_at, last_actor
-		FROM artifact_usage_stats WHERE repository = $1 AND strpos(resource, $2) > 0
-		ORDER BY resource COLLATE "C" ASC, format COLLATE "C" ASC LIMIT $3 OFFSET $4`, repository, query.Query, query.Limit, query.Offset)
+	rows, err := tx.QueryContext(ctx, usageSelect+` FROM artifact_usage_stats s JOIN (`+repositoryNames+`) n ON n.id = s.repository_id
+		WHERE n.name = $1 AND strpos(s.resource, $2) > 0
+		ORDER BY s.resource COLLATE "C" ASC, s.format COLLATE "C" ASC LIMIT $3 OFFSET $4`, repository, query.Query, query.Limit, query.Offset)
 	if err != nil {
 		return page, err
 	}
@@ -47,37 +47,28 @@ func (s *PostgresStore) QueryArtifactUsage(ctx context.Context, repository strin
 	return page, tx.Commit()
 }
 
-const artifactUsageUpsertSQL = `INSERT INTO artifact_usage_stats
-	(repository, format, resource, download_count, total_bytes, first_downloaded_at, last_downloaded_at, last_actor)
-VALUES ($1, $2, $3, 1, $4, $5, $5, $6)
-ON CONFLICT (repository, format, resource) DO UPDATE SET
-	download_count = artifact_usage_stats.download_count + 1,
-	total_bytes = artifact_usage_stats.total_bytes + EXCLUDED.total_bytes,
-	first_downloaded_at = LEAST(artifact_usage_stats.first_downloaded_at, EXCLUDED.first_downloaded_at),
-	last_downloaded_at = GREATEST(artifact_usage_stats.last_downloaded_at, EXCLUDED.last_downloaded_at),
-	last_actor = CASE WHEN EXCLUDED.last_downloaded_at >= artifact_usage_stats.last_downloaded_at
-		THEN EXCLUDED.last_actor ELSE artifact_usage_stats.last_actor END`
+// usageSelect projects one usage row with the repository name read back from the id.
+const usageSelect = `SELECT n.name, s.format, s.resource, s.download_count, s.total_bytes, s.first_downloaded_at, s.last_downloaded_at, s.last_actor`
 
-// RecordArtifactUsage folds one download increment into the durable
-// aggregate. RecordAudit calls it for download audits; tests and seeds may
-// call it directly.
+// RecordArtifactUsage folds one download increment into the durable aggregate
+// immediately. The audit writer aggregates in memory and flushes through
+// FlushUsage; tests and seeds may call this directly. An unknown repository
+// records nothing.
 func (s *PostgresStore) RecordArtifactUsage(ctx context.Context, stat ArtifactUsageStat) error {
 	if stat.LastDownloadedAt.IsZero() {
 		stat.LastDownloadedAt = time.Now().UTC()
 	}
-	_, err := s.db.ExecContext(ctx, artifactUsageUpsertSQL,
-		stat.Repository, stat.Format, stat.Resource, stat.TotalBytes, stat.LastDownloadedAt, stat.LastActor)
-	return err
+	return s.FlushUsage(ctx, UsageBatch{Usage: []UsageDelta{{Repository: stat.Repository, Format: stat.Format, Resource: stat.Resource,
+		Downloads: 1, Bytes: stat.TotalBytes, First: stat.LastDownloadedAt, Last: stat.LastDownloadedAt, LastActor: stat.LastActor}}})
 }
 
 func (s *PostgresStore) ListArtifactUsage(ctx context.Context, repository string, limit int) ([]ArtifactUsageStat, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT repository, format, resource, download_count, total_bytes, first_downloaded_at, last_downloaded_at, last_actor
-		FROM artifact_usage_stats
-		WHERE ($1 = '' OR repository = $1)
-		ORDER BY download_count DESC, resource ASC
+	rows, err := s.db.QueryContext(ctx, usageSelect+` FROM artifact_usage_stats s JOIN (`+repositoryNames+`) n ON n.id = s.repository_id
+		WHERE ($1 = '' OR n.name = $1)
+		ORDER BY s.download_count DESC, s.resource ASC
 		LIMIT $2`, repository, limit)
 	if err != nil {
 		return nil, err
@@ -95,8 +86,7 @@ func (s *PostgresStore) ListArtifactUsage(ctx context.Context, repository string
 }
 
 func (s *PostgresStore) WalkArtifactUsage(ctx context.Context, repository string, visit func(ArtifactUsageStat) error) error {
-	rows, err := s.db.QueryContext(ctx, `SELECT repository, format, resource, download_count, total_bytes, first_downloaded_at, last_downloaded_at, last_actor
-		FROM artifact_usage_stats WHERE repository = $1`, repository)
+	rows, err := s.db.QueryContext(ctx, usageSelect+` FROM artifact_usage_stats s JOIN (`+repositoryNames+`) n ON n.id = s.repository_id WHERE n.name = $1`, repository)
 	if err != nil {
 		return err
 	}
@@ -115,9 +105,9 @@ func (s *PostgresStore) WalkArtifactUsage(ctx context.Context, repository string
 
 func (s *PostgresStore) ArtifactUsageTotals(ctx context.Context, repository string) (ArtifactUsageTotals, error) {
 	var totals ArtifactUsageTotals
-	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(download_count), 0), COALESCE(SUM(total_bytes), 0), COUNT(*)
-		FROM artifact_usage_stats
-		WHERE ($1 = '' OR repository = $1)`, repository).
+	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(s.download_count), 0), COALESCE(SUM(s.total_bytes), 0), COUNT(*)
+		FROM artifact_usage_stats s
+		WHERE ($1 = '' OR s.repository_id = (SELECT id FROM (`+repositoryNames+`) n WHERE n.name = $1))`, repository).
 		Scan(&totals.DownloadCount, &totals.TotalBytes, &totals.Resources)
 	return totals, err
 }

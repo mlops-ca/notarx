@@ -208,6 +208,12 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 		return 1
 	}
 	defer func() { _ = store.Close() }()
+	auditWriter := startAuditWriter(cfg, store)
+	defer func() {
+		if err := stopAuditWriter(auditWriter, store, cfg.ShutdownFlushTimeout); err != nil {
+			slog.Error("audit writer shutdown flush", "error", err)
+		}
+	}()
 	// A single-node store (filesystem) is bound to this database: refuse a
 	// second node, a restored volume or a wrong mount, and keep the root locked.
 	identityGuard, err := objectstore.VerifyIdentity(context.Background(), objectStore, objectStoreIdentity{store})
@@ -239,6 +245,7 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 		AdminSubjects: cfg.OIDCAdminSubjects, Roles: cfg.OIDCRoles,
 	})
 	dependencies.OIDCRuntime = oidcRuntime
+	dependencies.AuditReadSync = cfg.AuditReadMode == "sync"
 	coordinatorPool, err := database.OpenPostgres(cfg.DatabaseURL, cfg.DatabaseCoordinatorPool)
 	if err != nil {
 		slog.Error("open PostgreSQL cache coordinator pool", "error", err)
@@ -277,7 +284,8 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 		WithDatabasePoolStats("artifact-locks", artifactLockPool.Stats).
 		WithDatabasePoolStats("coordinator", coordinatorPool.Stats).
 		WithDatabasePoolStats("notifications", notificationPool.Stats).
-		WithNodeIdentity(cfg.InstanceID, nodeRoleStrings(cfg.NodeRoles))
+		WithNodeIdentity(cfg.InstanceID, nodeRoleStrings(cfg.NodeRoles)).
+		WithAuditWriterStats(auditWriter.Stats)
 	if fileStore, ok := objectStore.(*objectstore.FileStore); ok {
 		metrics = metrics.WithObjectStoreCapacity(fileStore.Capacity)
 	}

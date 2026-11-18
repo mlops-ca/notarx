@@ -159,6 +159,7 @@ export const auditPage = {
       requestId: "req-c02e51f9",
     },
   ],
+  completeness: "best_effort_reads",
 } satisfies ListAuditPageResponses[200];
 
 export const recentAudits = auditPage.items satisfies ListAuditsResponses[200];

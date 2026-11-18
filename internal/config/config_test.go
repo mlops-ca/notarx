@@ -148,6 +148,55 @@ func TestLoadRejectsInvalidRawSpoolLimit(t *testing.T) {
 	}
 }
 
+func TestLoadAuditWriterSettings(t *testing.T) {
+	setCompleteConfiguration(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.AuditBufferSize != 65536 || cfg.AuditBatchSize != 1000 || cfg.AuditFlushInterval != time.Second || cfg.AuditSyncMaxInflight != 64 ||
+		cfg.AuditDenialMode != "queue" || cfg.AuditReadMode != "async" || cfg.UsageFlushInterval != 5*time.Second || cfg.ShutdownFlushTimeout != 10*time.Second {
+		t.Fatalf("defaults: %+v", cfg)
+	}
+	t.Setenv("NOTARX_AUDIT_BUFFER_SIZE", "128")
+	t.Setenv("NOTARX_AUDIT_BATCH_SIZE", "16")
+	t.Setenv("NOTARX_AUDIT_FLUSH_INTERVAL", "250ms")
+	t.Setenv("NOTARX_AUDIT_SYNC_MAX_INFLIGHT", "8")
+	t.Setenv("NOTARX_AUDIT_DENIAL_MODE", "sync")
+	t.Setenv("NOTARX_AUDIT_READ_MODE", "SYNC")
+	t.Setenv("NOTARX_USAGE_FLUSH_INTERVAL", "2")
+	t.Setenv("NOTARX_SHUTDOWN_FLUSH_TIMEOUT", "30s")
+	if cfg, err = Load(); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.AuditBufferSize != 128 || cfg.AuditBatchSize != 16 || cfg.AuditFlushInterval != 250*time.Millisecond || cfg.AuditSyncMaxInflight != 8 ||
+		cfg.AuditDenialMode != "sync" || cfg.AuditReadMode != "sync" || cfg.UsageFlushInterval != 2*time.Second || cfg.ShutdownFlushTimeout != 30*time.Second {
+		t.Fatalf("overrides: %+v", cfg)
+	}
+}
+
+func TestLoadRejectsInvalidAuditWriterSettings(t *testing.T) {
+	for name, value := range map[string]string{
+		"NOTARX_AUDIT_BUFFER_SIZE": "0", "NOTARX_AUDIT_BATCH_SIZE": "x", "NOTARX_AUDIT_FLUSH_INTERVAL": "-1s",
+		"NOTARX_AUDIT_DENIAL_MODE": "drop", "NOTARX_AUDIT_READ_MODE": "never", "NOTARX_USAGE_FLUSH_INTERVAL": "0",
+		"NOTARX_SHUTDOWN_FLUSH_TIMEOUT": "soon", "NOTARX_AUDIT_SYNC_MAX_INFLIGHT": "-3",
+	} {
+		t.Run(name, func(t *testing.T) {
+			setCompleteConfiguration(t)
+			t.Setenv(name, value)
+			if _, err := Load(); err == nil {
+				t.Fatalf("%s=%s must be rejected", name, value)
+			}
+		})
+	}
+	setCompleteConfiguration(t)
+	t.Setenv("NOTARX_AUDIT_BUFFER_SIZE", "10")
+	t.Setenv("NOTARX_AUDIT_BATCH_SIZE", "20")
+	if _, err := Load(); err == nil {
+		t.Fatal("a batch larger than the buffer must be rejected")
+	}
+}
+
 func TestLoadRejectsInvalidPartitionAhead(t *testing.T) {
 	for _, value := range []string{"0", "-1", "many"} {
 		setCompleteConfiguration(t)

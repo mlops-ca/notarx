@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sync/atomic"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/mlops-ca/notarx/internal/database"
@@ -15,6 +16,19 @@ type PostgresStore struct {
 	ownsDB     bool
 	ownsLockDB bool
 	notifier   *postgresNotifier
+	// auditRecorder, when set, receives every RecordAudit call (internal/auditwriter).
+	auditRecorder atomic.Pointer[AuditRecorder]
+}
+
+// SetAuditRecorder routes RecordAudit through recorder, the tiered audit writer
+// (ADR 0023 section 1). The recorder writes back through the AuditBatchStore
+// methods, never through RecordAudit. Passing nil restores direct writes.
+func (s *PostgresStore) SetAuditRecorder(recorder AuditRecorder) {
+	if recorder == nil {
+		s.auditRecorder.Store(nil)
+		return
+	}
+	s.auditRecorder.Store(&recorder)
 }
 
 func NewPostgresStore(databaseURL string) (*PostgresStore, error) {

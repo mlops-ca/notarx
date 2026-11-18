@@ -111,7 +111,17 @@ type Config struct {
 	RuntimeNodePruneInterval        time.Duration
 	// PartitionAhead is the number of future partition periods the partition
 	// manager creates beyond the current one (ADR 0023 section 2).
-	PartitionAhead              int
+	PartitionAhead int
+	// Audit writer (ADR 0023 section 1). Modes are "queue"|"sync" (denials) and
+	// "async"|"sync" (reads); intervals are Go durations or whole seconds.
+	AuditBufferSize             int
+	AuditBatchSize              int
+	AuditFlushInterval          time.Duration
+	AuditSyncMaxInflight        int
+	AuditDenialMode             string
+	AuditReadMode               string
+	UsageFlushInterval          time.Duration
+	ShutdownFlushTimeout        time.Duration
 	DatabaseURL                 string
 	DatabasePool                database.PoolConfig
 	DatabaseCoordinatorPool     database.PoolConfig
@@ -203,6 +213,14 @@ func Load() (Config, error) {
 		RuntimeNodeRetention:            7 * 24 * time.Hour,
 		RuntimeNodePruneInterval:        time.Hour,
 		PartitionAhead:                  3,
+		AuditBufferSize:                 65536,
+		AuditBatchSize:                  1000,
+		AuditFlushInterval:              time.Second,
+		AuditSyncMaxInflight:            64,
+		AuditDenialMode:                 "queue",
+		AuditReadMode:                   "async",
+		UsageFlushInterval:              5 * time.Second,
+		ShutdownFlushTimeout:            10 * time.Second,
 		DatabaseURL:                     os.Getenv("NOTARX_DATABASE_URL"),
 		DatabasePool:                    database.DefaultPoolConfig(),
 		DatabaseCoordinatorPool:         database.DefaultCoordinatorPoolConfig(),
@@ -519,6 +537,9 @@ func Load() (Config, error) {
 		return Config{}, err
 	} else {
 		cfg.PartitionAhead = ahead
+	}
+	if err := loadAuditWriterConfig(&cfg); err != nil {
+		return Config{}, err
 	}
 	if cfg.MigrationStoragePoolID != "" && !regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`).MatchString(cfg.MigrationStoragePoolID) {
 		return Config{}, fmt.Errorf("invalid migration storage pool ID")

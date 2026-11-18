@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/felixge/httpsnoop"
+	"github.com/mlops-ca/notarx/internal/auditwriter"
 	"github.com/mlops-ca/notarx/internal/partitions"
 )
 
@@ -67,6 +68,36 @@ func (m *Metrics) writePartitionMetrics(w io.Writer) {
 		_, _ = io.WriteString(w, "notarx_partition_default_rows{"+label+"} "+itoa(stat.DefaultRows)+"\n")
 		_, _ = io.WriteString(w, "notarx_partitions{"+label+"} "+itoa(int64(stat.Partitions))+"\n")
 	}
+}
+
+// AuditWriterStatsFunc reports the audit writer's counters (internal/auditwriter).
+type AuditWriterStatsFunc func() auditwriter.Stats
+
+// WithAuditWriterStats exports the audit writer metrics of ADR 0023 section 1:
+// notarx_audit_buffer_depth, notarx_audit_dropped_total{class,reason},
+// notarx_audit_flush_seconds and notarx_audit_flush_errors_total.
+func (m *Metrics) WithAuditWriterStats(stats AuditWriterStatsFunc) *Metrics {
+	m.auditStats = stats
+	return m
+}
+
+func (m *Metrics) writeAuditWriterMetrics(w io.Writer) {
+	if m.auditStats == nil {
+		return
+	}
+	stats := m.auditStats()
+	_, _ = io.WriteString(w, "# TYPE notarx_audit_buffer_depth gauge\nnotarx_audit_buffer_depth "+itoa(stats.BufferDepth)+"\n")
+	_, _ = io.WriteString(w, "# TYPE notarx_audit_dropped_total counter\n")
+	_, _ = io.WriteString(w, "notarx_audit_dropped_total{class=\"read\",reason=\"buffer_full\"} "+utoa(stats.DroppedRead)+"\n")
+	_, _ = io.WriteString(w, "notarx_audit_dropped_total{class=\"security\",reason=\"overload\"} "+utoa(stats.DroppedSecurity)+"\n")
+	_, _ = io.WriteString(w, "notarx_audit_dropped_total{class=\"usage\",reason=\"key_cap\"} "+utoa(stats.DroppedUsage)+"\n")
+	_, _ = io.WriteString(w, "# TYPE notarx_audit_flush_errors_total counter\nnotarx_audit_flush_errors_total "+utoa(stats.FlushErrors)+"\n")
+	_, _ = io.WriteString(w, "# TYPE notarx_audit_flush_seconds histogram\n")
+	for i, bound := range auditwriter.FlushBuckets {
+		_, _ = io.WriteString(w, "notarx_audit_flush_seconds_bucket{le=\""+strconv.FormatFloat(bound, 'f', -1, 64)+"\"} "+utoa(stats.FlushSecondsBucket[i])+"\n")
+	}
+	_, _ = io.WriteString(w, "notarx_audit_flush_seconds_bucket{le=\"+Inf\"} "+utoa(stats.FlushCount)+"\n")
+	_, _ = io.WriteString(w, "notarx_audit_flush_seconds_sum "+strconv.FormatFloat(stats.FlushSecondsSum, 'f', -1, 64)+"\nnotarx_audit_flush_seconds_count "+utoa(stats.FlushCount)+"\n")
 }
 
 type namedDatabaseStats struct {
