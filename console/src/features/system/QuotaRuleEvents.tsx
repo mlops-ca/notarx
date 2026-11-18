@@ -10,6 +10,7 @@ import {
   Notice,
 } from "../../components/ui/Feedback";
 import { usePreferences } from "../../lib/preferences";
+import { emailLocaleLabel } from "./emailPresentation";
 import { useFormatters } from "../../lib/useFormatters";
 import {
   percent,
@@ -232,7 +233,7 @@ function QuotaDelivery({
       )}
       <p className="text-xs text-fg-tertiary">
         {t("system.template")}: {item.templateVersion} ·{" "}
-        {item.locale === "en" ? "English" : "中文"}
+        {emailLocaleLabel(item.locale, t)}
       </p>
     </section>
   );

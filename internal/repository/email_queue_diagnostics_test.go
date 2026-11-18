@@ -44,7 +44,7 @@ func emailDiagnosticsFixture(now time.Time) []EmailDelivery {
 		v.Version = "1"
 		v.TargetVersion = "1"
 		v.Scenario = "warning"
-		v.Locale = "en"
+		v.Locale = "en-CA"
 		v.TemplateVersion = "2"
 		v.RecipientCiphertext = "private-cipher"
 		v.From = "private@example.test"

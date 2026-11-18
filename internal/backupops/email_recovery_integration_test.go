@@ -65,7 +65,7 @@ func seedRecoveryEmail(t *testing.T, ctx context.Context, source *OwnedTarget, e
 	t.Setenv(secrets.KeyEnv, recoveryEmailKey)
 	s := recoveryStore(t, source.database)
 	data, _ := fixtureHTTP(t, ctx, endpoint, "POST", "/api/v2/email-targets", source.spec.AdminToken,
-		[]byte(`{"name":"Synthetic recovery","locale":"en","recipient":"`+recoveryRecipient+`","enabled":true}`), 201, "")
+		[]byte(`{"name":"Synthetic recovery","locale":"en-CA","recipient":"`+recoveryRecipient+`","enabled":true}`), 201, "")
 	var identity struct{ ID string }
 	if json.Unmarshal(data, &identity) != nil || identity.ID == "" {
 		t.Fatal("email target identity missing")

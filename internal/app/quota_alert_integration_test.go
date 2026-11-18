@@ -26,7 +26,7 @@ import (
 )
 
 func TestPostgresQuotaHTTPTransitionsDeliverActualTLSMIME(t *testing.T) {
-	for _, locale := range []string{"en", "zh-CN"} {
+	for _, locale := range []string{"en-CA", "fr-CA", "zh-CN"} {
 		t.Run(locale, func(t *testing.T) { quotaHTTPTransitionsDeliverActualTLSMIME(t, locale) })
 	}
 }

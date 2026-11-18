@@ -22,6 +22,7 @@ import {
   useFormValidationFocus,
 } from "../../components/ui/formFeedback";
 import { usePreferences } from "../../lib/preferences";
+import { emailLocaleLabel } from "./emailPresentation";
 import {
   parsePolicy,
   policyDraft,
@@ -268,7 +269,7 @@ export function QuotaRuleEditor({
                     rule?.enabled &&
                     (!target.enabled || !target.recipientConfigured),
                   ),
-                  label: `${target.name} · ${target.locale === "en" ? "English" : "中文"} · ${target.enabled && target.recipientConfigured ? t("system.ready") : t("system.notReady")}`,
+                  label: `${target.name} · ${emailLocaleLabel(target.locale, t)} · ${target.enabled && target.recipientConfigured ? t("system.ready") : t("system.notReady")}`,
                 }))}
               />
             </Field>

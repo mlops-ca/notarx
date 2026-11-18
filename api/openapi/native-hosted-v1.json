@@ -17447,7 +17447,8 @@
           "locale": {
             "type": "string",
             "enum": [
-              "en",
+              "en-CA",
+              "fr-CA",
               "zh-CN"
             ]
           },
@@ -17518,7 +17519,8 @@
           "locale": {
             "type": "string",
             "enum": [
-              "en",
+              "en-CA",
+              "fr-CA",
               "zh-CN"
             ]
           },
@@ -17563,7 +17565,8 @@
           "locale": {
             "type": "string",
             "enum": [
-              "en",
+              "en-CA",
+              "fr-CA",
               "zh-CN"
             ]
           },
@@ -17789,7 +17792,8 @@
           "locale": {
             "type": "string",
             "enum": [
-              "en",
+              "en-CA",
+              "fr-CA",
               "zh-CN"
             ]
           }

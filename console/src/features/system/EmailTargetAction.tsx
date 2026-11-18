@@ -11,7 +11,11 @@ import { ErrorBanner, Notice } from "../../components/ui/Feedback";
 import { usePreferences } from "../../lib/preferences";
 import { useQuotaAction } from "./useQuotaAction";
 import { quotaResult } from "./useQuotaSnapshot";
-import { emailConflict, safeEmailError } from "./emailPresentation";
+import {
+  emailConflict,
+  emailLocaleLabel,
+  safeEmailError,
+} from "./emailPresentation";
 import { quotaLabel } from "./quotaAlertPresentation";
 
 export function EmailTargetAction({
@@ -68,7 +72,7 @@ export function EmailTargetAction({
               {t("system.emailLanguageAndRecipient")}
             </dt>
             <dd>
-              {target.locale === "en" ? "English" : "简体中文"} ·{" "}
+              {emailLocaleLabel(target.locale, t)} ·{" "}
               {t("system.oneConfiguredRecipientTheAddressCannotBeRead")}
             </dd>
           </dl>

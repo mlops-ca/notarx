@@ -16,7 +16,7 @@ func quotaMailFixture() quotaalert.Event {
 func TestQuotaVersionedMIMEPreservesSemanticEvidenceAndSafeHTML(t *testing.T) {
 	e := quotaMailFixture()
 	cfg := Config{From: "synthetic@example.test", ConsoleOrigin: "https://console.example.invalid"}
-	for _, locale := range []string{"en", "zh-CN"} {
+	for _, locale := range []string{"en-CA", "fr-CA", "zh-CN"} {
 		for _, scenario := range []string{"warning", "critical", "resolved"} {
 			v := e
 			v.Scenario = scenario
@@ -53,14 +53,14 @@ func TestQuotaMailRejectsMalformedEvidenceAndHeaderInjection(t *testing.T) {
 	for _, mutate := range []func(*quotaalert.Event){func(v *quotaalert.Event) { v.RepositoryName = "name\r\nBcc: hidden" }, func(v *quotaalert.Event) { v.ID = "not-a-uuid" }, func(v *quotaalert.Event) { v.RuleVersion = "0" }, func(v *quotaalert.Event) { v.QuotaBytes = 0 }, func(v *quotaalert.Event) { v.UsedBytes = -1 }, func(v *quotaalert.Event) { v.UsedBytes = 1 }, func(v *quotaalert.Event) { v.EvidenceSince = v.SampleAt }, func(v *quotaalert.Event) { v.SampleAt = v.OccurredAt.Add(time.Second) }, func(v *quotaalert.Event) { v.Scenario = "custom" }} {
 		v := e
 		mutate(&v)
-		if _, err := MIMEQuota(cfg, "recipient@example.test", v, "en", "quota-1"); err == nil {
+		if _, err := MIMEQuota(cfg, "recipient@example.test", v, "en-CA", "quota-1"); err == nil {
 			t.Fatal("malformed quota evidence rendered")
 		}
 	}
-	if _, err := MIMEQuota(cfg, "recipient@example.test", e, "en", "quota-unknown"); err == nil {
+	if _, err := MIMEQuota(cfg, "recipient@example.test", e, "en-CA", "quota-unknown"); err == nil {
 		t.Fatal("unavailable version silently rendered")
 	}
-	if _, err := MIMEQuota(cfg, "recipient@example.test\r\nBcc: hidden", e, "en", "quota-1"); err == nil {
+	if _, err := MIMEQuota(cfg, "recipient@example.test\r\nBcc: hidden", e, "en-CA", "quota-1"); err == nil {
 		t.Fatal("recipient header injection")
 	}
 }

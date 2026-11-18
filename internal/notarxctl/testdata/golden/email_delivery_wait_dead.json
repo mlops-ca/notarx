@@ -8,7 +8,7 @@
     "eventId": "00000000-0000-4000-f000-000000000001",
     "id": "00000000-0000-4000-f000-0000000000d1",
     "kind": "test",
-    "locale": "en",
+    "locale": "en-CA",
     "possibleDuplicate": true,
     "scenario": "warning",
     "state": "dead",

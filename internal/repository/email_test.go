@@ -13,7 +13,7 @@ func TestEmailTestQueueIsIdempotentAndFencesWorkers(t *testing.T) {
 func exerciseEmailQueue(t *testing.T, s EmailStore) {
 	t.Helper()
 	ctx := context.Background()
-	target, err := s.CreateEmailTarget(ctx, EmailTarget{ID: uuid.NewString(), Name: "Synthetic", Locale: "en", RecipientCiphertext: "synthetic-ciphertext", Enabled: true})
+	target, err := s.CreateEmailTarget(ctx, EmailTarget{ID: uuid.NewString(), Name: "Synthetic", Locale: "en-CA", RecipientCiphertext: "synthetic-ciphertext", Enabled: true})
 	if err != nil {
 		t.Fatal(err)
 	}

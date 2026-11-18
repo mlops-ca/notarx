@@ -72,7 +72,7 @@ func renderSyntheticVersion(scenario, locale, eventID string, occurred time.Time
 	if version != "1" && version != "2" {
 		return Preview{}, ErrInvalidMessage
 	}
-	if locale != "en" && locale != "zh-CN" {
+	if locale != "en-CA" && locale != "fr-CA" && locale != "zh-CN" {
 		return Preview{}, ErrInvalidMessage
 	}
 	v := view{Locale: locale, Percent: "12%", Amount: "30.72 / 256 GiB", Color: "#b45309", Tint: "#fff7ed"}

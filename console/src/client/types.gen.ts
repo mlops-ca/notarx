@@ -2291,7 +2291,7 @@ export type EmailDelivery = {
   targetId: string;
   targetVersion: string;
   scenario: "warning" | "critical" | "resolved";
-  locale: "en" | "zh-CN";
+  locale: "en-CA" | "fr-CA" | "zh-CN";
   templateVersion: string;
   state: "pending" | "delivering" | "retrying" | "accepted" | "dead";
   attempts: number;
@@ -2307,7 +2307,7 @@ export type EmailDelivery = {
 export type EmailTarget = {
   id: string;
   name: string;
-  locale: "en" | "zh-CN";
+  locale: "en-CA" | "fr-CA" | "zh-CN";
   enabled: boolean;
   recipientConfigured: boolean;
   version: string;
@@ -2319,7 +2319,7 @@ export type EmailTargetList = Array<EmailTarget>;
 
 export type EmailTargetInput = {
   name: string;
-  locale: "en" | "zh-CN";
+  locale: "en-CA" | "fr-CA" | "zh-CN";
   enabled?: boolean;
 };
 
@@ -2383,7 +2383,7 @@ export type EmailDeliveryList = Array<EmailDelivery>;
 
 export type EmailPreviewInput = {
   scenario: "warning" | "critical" | "resolved";
-  locale: "en" | "zh-CN";
+  locale: "en-CA" | "fr-CA" | "zh-CN";
 };
 
 export type EmailPreview = {
@@ -3829,7 +3829,7 @@ export type MigrationSourceInputWritable = {
 
 export type EmailTargetInputWritable = {
   name: string;
-  locale: "en" | "zh-CN";
+  locale: "en-CA" | "fr-CA" | "zh-CN";
   enabled?: boolean;
   /**
    * Required at creation. Omit on update to retain the encrypted recipient.

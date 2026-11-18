@@ -35,7 +35,7 @@ func quotaPostgresFixture(t *testing.T) (*PostgresStore, RepositoryQuotaAlertRul
 	if err != nil {
 		t.Fatal(err)
 	}
-	target, err := s.CreateEmailTarget(ctx, EmailTarget{ID: uuid.NewString(), Name: "Synthetic", Locale: "en", Enabled: true, RecipientCiphertext: "synthetic-cipher"})
+	target, err := s.CreateEmailTarget(ctx, EmailTarget{ID: uuid.NewString(), Name: "Synthetic", Locale: "en-CA", Enabled: true, RecipientCiphertext: "synthetic-cipher"})
 	if err != nil {
 		t.Fatal(err)
 	}

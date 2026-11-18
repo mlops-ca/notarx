@@ -27,7 +27,7 @@ EmailPreviewInput:
   required: [scenario, locale]
   properties:
     scenario: {type: string, enum: [warning, critical, resolved]}
-    locale: {type: string, enum: [en, zh-CN]}
+    locale: {type: string, enum: [en-CA, fr-CA, zh-CN]}
 EmailPreview:
   type: object
   additionalProperties: false
@@ -337,7 +337,7 @@ EmailTargetInput:
   required: [name, locale]
   properties:
     name: {type: string, minLength: 1, maxLength: 128}
-    locale: {type: string, enum: [en, zh-CN]}
+    locale: {type: string, enum: [en-CA, fr-CA, zh-CN]}
     enabled: {type: boolean, default: false}
     recipient: {type: string, maxLength: 254, writeOnly: true, description: Required at creation. Omit on update to retain the encrypted recipient.}
 EmailTarget:
@@ -347,7 +347,7 @@ EmailTarget:
   properties:
     id: {type: string, format: uuid}
     name: {type: string}
-    locale: {type: string, enum: [en, zh-CN]}
+    locale: {type: string, enum: [en-CA, fr-CA, zh-CN]}
     enabled: {type: boolean}
     recipientConfigured: {type: boolean}
     version: {type: string}
@@ -378,7 +378,7 @@ EmailDelivery:
     targetId: {type: string, format: uuid}
     targetVersion: {type: string}
     scenario: {type: string, enum: [warning, critical, resolved]}
-    locale: {type: string, enum: [en, zh-CN]}
+    locale: {type: string, enum: [en-CA, fr-CA, zh-CN]}
     templateVersion: {type: string}
     state: {type: string, enum: [pending, delivering, retrying, accepted, dead]}
     attempts: {type: integer}

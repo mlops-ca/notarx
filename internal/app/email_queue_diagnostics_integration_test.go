@@ -35,7 +35,7 @@ func TestPostgresEmailQueueDiagnosticsHidesLegacyFailures(t *testing.T) {
 	}
 	defer func() { _ = s.Close() }()
 	ctx := context.Background()
-	target, err := s.CreateEmailTarget(ctx, repository.EmailTarget{ID: uuid.NewString(), Name: "secret-recipient@example.test", Enabled: true, Locale: "en", RecipientCiphertext: "secret-ciphertext"})
+	target, err := s.CreateEmailTarget(ctx, repository.EmailTarget{ID: uuid.NewString(), Name: "secret-recipient@example.test", Enabled: true, Locale: "en-CA", RecipientCiphertext: "secret-ciphertext"})
 	if err != nil {
 		t.Fatal(err)
 	}

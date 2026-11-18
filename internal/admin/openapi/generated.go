@@ -1240,14 +1240,17 @@ func (e EmailDeliveryKind) Valid() bool {
 
 // Defines values for EmailDeliveryLocale.
 const (
-	EmailDeliveryLocaleEn   EmailDeliveryLocale = "en"
+	EmailDeliveryLocaleEnCA EmailDeliveryLocale = "en-CA"
+	EmailDeliveryLocaleFrCA EmailDeliveryLocale = "fr-CA"
 	EmailDeliveryLocaleZhCN EmailDeliveryLocale = "zh-CN"
 )
 
 // Valid indicates whether the value is a known member of the EmailDeliveryLocale enum.
 func (e EmailDeliveryLocale) Valid() bool {
 	switch e {
-	case EmailDeliveryLocaleEn:
+	case EmailDeliveryLocaleEnCA:
+		return true
+	case EmailDeliveryLocaleFrCA:
 		return true
 	case EmailDeliveryLocaleZhCN:
 		return true
@@ -1306,14 +1309,17 @@ func (e EmailDeliveryState) Valid() bool {
 
 // Defines values for EmailPreviewInputLocale.
 const (
-	EmailPreviewInputLocaleEn   EmailPreviewInputLocale = "en"
+	EmailPreviewInputLocaleEnCA EmailPreviewInputLocale = "en-CA"
+	EmailPreviewInputLocaleFrCA EmailPreviewInputLocale = "fr-CA"
 	EmailPreviewInputLocaleZhCN EmailPreviewInputLocale = "zh-CN"
 )
 
 // Valid indicates whether the value is a known member of the EmailPreviewInputLocale enum.
 func (e EmailPreviewInputLocale) Valid() bool {
 	switch e {
-	case EmailPreviewInputLocaleEn:
+	case EmailPreviewInputLocaleEnCA:
+		return true
+	case EmailPreviewInputLocaleFrCA:
 		return true
 	case EmailPreviewInputLocaleZhCN:
 		return true
@@ -1429,14 +1435,17 @@ func (e EmailQueueFailureClassCategory) Valid() bool {
 
 // Defines values for EmailTargetLocale.
 const (
-	EmailTargetLocaleEn   EmailTargetLocale = "en"
+	EmailTargetLocaleEnCA EmailTargetLocale = "en-CA"
+	EmailTargetLocaleFrCA EmailTargetLocale = "fr-CA"
 	EmailTargetLocaleZhCN EmailTargetLocale = "zh-CN"
 )
 
 // Valid indicates whether the value is a known member of the EmailTargetLocale enum.
 func (e EmailTargetLocale) Valid() bool {
 	switch e {
-	case EmailTargetLocaleEn:
+	case EmailTargetLocaleEnCA:
+		return true
+	case EmailTargetLocaleFrCA:
 		return true
 	case EmailTargetLocaleZhCN:
 		return true
@@ -1447,14 +1456,17 @@ func (e EmailTargetLocale) Valid() bool {
 
 // Defines values for EmailTargetInputLocale.
 const (
-	EmailTargetInputLocaleEn   EmailTargetInputLocale = "en"
+	EmailTargetInputLocaleEnCA EmailTargetInputLocale = "en-CA"
+	EmailTargetInputLocaleFrCA EmailTargetInputLocale = "fr-CA"
 	EmailTargetInputLocaleZhCN EmailTargetInputLocale = "zh-CN"
 )
 
 // Valid indicates whether the value is a known member of the EmailTargetInputLocale enum.
 func (e EmailTargetInputLocale) Valid() bool {
 	switch e {
-	case EmailTargetInputLocaleEn:
+	case EmailTargetInputLocaleEnCA:
+		return true
+	case EmailTargetInputLocaleFrCA:
 		return true
 	case EmailTargetInputLocaleZhCN:
 		return true

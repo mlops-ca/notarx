@@ -19,7 +19,7 @@ import { platformCapabilities } from "../../lib/authorization";
 import { usePreferences } from "../../lib/preferences";
 import { useFormatters } from "../../lib/useFormatters";
 import { quotaResult, useQuotaSnapshot } from "./useQuotaSnapshot";
-import { safeEmailError } from "./emailPresentation";
+import { emailLocaleLabel, safeEmailError } from "./emailPresentation";
 import { isQuotaAuthError, quotaLabel } from "./quotaAlertPresentation";
 import { QuotaBadge } from "./QuotaBadge";
 import { EmailTargetEditor } from "./EmailTargetEditor";
@@ -213,7 +213,7 @@ function AuthorizedEmailNotifications() {
                       </QuotaBadge>
                     </div>
                     <p className="text-xs text-fg-tertiary">
-                      {target.locale === "en" ? "English" : "简体中文"} ·{" "}
+                      {emailLocaleLabel(target.locale, t)} ·{" "}
                       {target.recipientConfigured
                         ? t("system.recipientConfiguredWriteOnly")
                         : t("system.recipientNotConfigured")}

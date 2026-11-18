@@ -45,7 +45,7 @@ func TestQuotaEventAPIKeepsExactLargeByteCounts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	target, err := s.CreateEmailTarget(ctx, repository.EmailTarget{ID: uuid.NewString(), Name: "Synthetic", Locale: "en", Enabled: true, RecipientCiphertext: "private"})
+	target, err := s.CreateEmailTarget(ctx, repository.EmailTarget{ID: uuid.NewString(), Name: "Synthetic", Locale: "en-CA", Enabled: true, RecipientCiphertext: "private"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +125,7 @@ func TestQuotaRuleActivationNeedsEncryptionAndEnabledTarget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	target, err := s.CreateEmailTarget(ctx, repository.EmailTarget{ID: uuid.NewString(), Name: "Synthetic", Locale: "en", RecipientCiphertext: "private"})
+	target, err := s.CreateEmailTarget(ctx, repository.EmailTarget{ID: uuid.NewString(), Name: "Synthetic", Locale: "en-CA", RecipientCiphertext: "private"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +147,7 @@ func TestQuotaRuleActivationNeedsEncryptionAndEnabledTarget(t *testing.T) {
 func TestQuotaRuleFiniteCountAndUniqueScope(t *testing.T) {
 	s := repository.NewMemoryStore()
 	ctx := context.Background()
-	target, err := s.CreateEmailTarget(ctx, repository.EmailTarget{ID: uuid.NewString(), Name: "Synthetic", Locale: "en", RecipientCiphertext: "private"})
+	target, err := s.CreateEmailTarget(ctx, repository.EmailTarget{ID: uuid.NewString(), Name: "Synthetic", Locale: "en-CA", RecipientCiphertext: "private"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +183,7 @@ func TestAdministratorCreatesExplicitQuotaRuleDisabledWithoutSMTP(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	target, err := store.CreateEmailTarget(context.Background(), repository.EmailTarget{ID: uuid.NewString(), Name: "Synthetic", Locale: "en", RecipientCiphertext: "private-marker"})
+	target, err := store.CreateEmailTarget(context.Background(), repository.EmailTarget{ID: uuid.NewString(), Name: "Synthetic", Locale: "en-CA", RecipientCiphertext: "private-marker"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -225,7 +225,7 @@ func quotaFixture(t *testing.T) (http.Handler, string, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	target, err := store.CreateEmailTarget(ctx, repository.EmailTarget{ID: uuid.NewString(), Name: "Synthetic", Locale: "en", RecipientCiphertext: "private-marker"})
+	target, err := store.CreateEmailTarget(ctx, repository.EmailTarget{ID: uuid.NewString(), Name: "Synthetic", Locale: "en-CA", RecipientCiphertext: "private-marker"})
 	if err != nil {
 		t.Fatal(err)
 	}

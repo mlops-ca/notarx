@@ -8,7 +8,7 @@ import (
 )
 
 func RenderQuota(e quotaalert.Event, locale, origin, version string) (Preview, error) {
-	if version != quotaalert.TemplateVersion || e.Validate() != nil || (locale != "en" && locale != "zh-CN") {
+	if version != quotaalert.TemplateVersion || e.Validate() != nil || (locale != "en-CA" && locale != "fr-CA" && locale != "zh-CN") {
 		return Preview{}, ErrInvalidMessage
 	}
 	link, err := ConsoleURL(origin)

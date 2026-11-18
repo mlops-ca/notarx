@@ -40,7 +40,7 @@ func TestAdministratorCanPreviewWarningEmailWithoutSMTP(t *testing.T) {
 func TestEmailTargetsRequireAdministratorAndHideRecipient(t *testing.T) {
 	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", "01234567890123456789012345678901")
 	h := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: repository.NewMemoryStore(), Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
-	r := httptest.NewRequest(http.MethodPost, "/api/v2/email-targets", strings.NewReader(`{"name":"Operations","recipient":"private@example.test","locale":"en"}`))
+	r := httptest.NewRequest(http.MethodPost, "/api/v2/email-targets", strings.NewReader(`{"name":"Operations","recipient":"private@example.test","locale":"en-CA"}`))
 	authorize(r, "admin-secret")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
@@ -63,7 +63,7 @@ func TestEmailTargetsRequireAdministratorAndHideRecipient(t *testing.T) {
 func TestAdministratorEmailTestEnqueuesOnceAndDoesNotSendInHTTP(t *testing.T) {
 	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", "01234567890123456789012345678901")
 	store := repository.NewMemoryStore()
-	target, err := store.CreateEmailTarget(context.Background(), repository.EmailTarget{ID: uuid.NewString(), Name: "Synthetic", Locale: "en", RecipientCiphertext: "synthetic", Enabled: true})
+	target, err := store.CreateEmailTarget(context.Background(), repository.EmailTarget{ID: uuid.NewString(), Name: "Synthetic", Locale: "en-CA", RecipientCiphertext: "synthetic", Enabled: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestEmailIdempotencyRetainsV1DescriptorAcrossTemplateUpgrade(t *testing.T) 
 	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", "01234567890123456789012345678901")
 	s := repository.NewMemoryStore()
 	ctx := context.Background()
-	target, err := s.CreateEmailTarget(ctx, repository.EmailTarget{ID: uuid.NewString(), Name: "Synthetic", Locale: "en", Enabled: true, RecipientCiphertext: "synthetic"})
+	target, err := s.CreateEmailTarget(ctx, repository.EmailTarget{ID: uuid.NewString(), Name: "Synthetic", Locale: "en-CA", Enabled: true, RecipientCiphertext: "synthetic"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,12 +198,12 @@ func TestEmailTargetCASValidationMissingKeyAndDeadReplay(t *testing.T) {
 		h.ServeHTTP(w, r)
 		return w
 	}
-	for _, body := range []string{`{"name":"a","locale":"en","recipient":"a@example.test\r\nBcc: other@example.test"}`, `{"name":"a","locale":"en","recipient":"a@example.test","extra":"secret"}`, `{"name":"a","locale":"en"}`} {
+	for _, body := range []string{`{"name":"a","locale":"en-CA","recipient":"a@example.test\r\nBcc: other@example.test"}`, `{"name":"a","locale":"en-CA","recipient":"a@example.test","extra":"secret"}`, `{"name":"a","locale":"en-CA"}`} {
 		if w := request("POST", "/api/v2/email-targets", body, "", ""); w.Code != 400 {
 			t.Fatal("unsafe target accepted")
 		}
 	}
-	created := request("POST", "/api/v2/email-targets", `{"name":"Ops","locale":"en","recipient":"private@example.test","enabled":true}`, "", "")
+	created := request("POST", "/api/v2/email-targets", `{"name":"Ops","locale":"en-CA","recipient":"private@example.test","enabled":true}`, "", "")
 	if created.Code != 201 {
 		t.Fatal("target create failed")
 	}
