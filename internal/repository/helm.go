@@ -12,6 +12,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/jsonmeta"
 )
 
 // FormatHelm identifies an opt-in traditional HTTP preview. It is intentionally absent
@@ -69,11 +70,11 @@ func validHelmSession(in HelmSession) bool {
 		digestOK(in.Digest) && in.Size > 0 && in.Size <= 64<<20 && in.ProvenanceSize >= 0 && in.ProvenanceSize <= 1<<20 &&
 		((in.ProvenanceSize == 0 && in.ProvenanceDigest == "") || (in.ProvenanceSize > 0 && digestOK(in.ProvenanceDigest))) &&
 		len(in.ChartYAML) > 0 && len(in.ChartYAML) <= 1<<20 && len(in.MetadataJSON) > 0 && len(in.MetadataJSON) <= 256<<10 &&
-		json.Unmarshal(in.MetadataJSON, &meta) == nil && meta.Name == in.Name && meta.Version == in.Version &&
+		jsonmeta.ValidateObject(in.MetadataJSON, MaxMetadataJSONBytes) == nil && json.Unmarshal(in.MetadataJSON, &meta) == nil && meta.Name == in.Name && meta.Version == in.Version &&
 		in.Actor != "" && len(in.Actor) <= 512 && !strings.ContainsAny(in.Actor, "\x00\r\n") && !in.ExpiresAt.IsZero()
 }
 func helmSessionSame(a, b HelmSession) bool {
-	return a.RepositoryID == b.RepositoryID && a.Name == b.Name && a.Version == b.Version && a.Digest == b.Digest && a.Size == b.Size && a.ProvenanceDigest == b.ProvenanceDigest && a.ProvenanceSize == b.ProvenanceSize && bytes.Equal(a.MetadataJSON, b.MetadataJSON) && bytes.Equal(a.ChartYAML, b.ChartYAML)
+	return a.RepositoryID == b.RepositoryID && a.Name == b.Name && a.Version == b.Version && a.Digest == b.Digest && a.Size == b.Size && a.ProvenanceDigest == b.ProvenanceDigest && a.ProvenanceSize == b.ProvenanceSize && jsonmeta.Equal(a.MetadataJSON, b.MetadataJSON) && bytes.Equal(a.ChartYAML, b.ChartYAML)
 }
 func helmObjectKeys(in HelmSession) (string, string) {
 	base := "native/helm/" + in.RepositoryID + "/sessions/" + in.ID + "/"

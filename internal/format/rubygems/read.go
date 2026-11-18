@@ -1,11 +1,11 @@
 package rubygems
 
 import (
-	"bytes"
 	"crypto/md5" // Compact-index ETag is a transport checksum, not package identity.
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/mlops-ca/notarx/internal/jsonmeta"
 	"io"
 	"net/http"
 	"strconv"
@@ -24,7 +24,7 @@ func metadata(p domain.Publication) (protocol.Metadata, error) {
 		return m, errIntegrity
 	}
 	encoded, _ := json.Marshal(m)
-	if !bytes.Equal(encoded, p.MetadataJSON) {
+	if !jsonmeta.Equal(encoded, p.MetadataJSON) {
 		return m, errIntegrity
 	}
 	return m, nil

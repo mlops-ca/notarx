@@ -3,6 +3,7 @@ package rubygems
 import (
 	"bytes"
 	"context"
+	"github.com/mlops-ca/notarx/internal/jsonmeta"
 	"io"
 	"mime"
 	"net/http"
@@ -46,7 +47,7 @@ func (m *Module) verifyRetained(ctx context.Context, p domain.Publication) error
 	}
 	defer func() { _ = spool.Close() }()
 	in, err := protocol.Inspect(spool.Reader())
-	if err != nil || in.Metadata.Name != p.Name || in.Metadata.Version != p.Version || in.Metadata.Platform != p.Platform || !bytes.Equal(in.MetadataJSON, p.MetadataJSON) || !bytes.Equal(in.MetadataYAML, p.MetadataYAML) {
+	if err != nil || in.Metadata.Name != p.Name || in.Metadata.Version != p.Version || in.Metadata.Platform != p.Platform || !jsonmeta.Equal(in.MetadataJSON, p.MetadataJSON) || !bytes.Equal(in.MetadataYAML, p.MetadataYAML) {
 		return errIntegrity
 	}
 	return nil

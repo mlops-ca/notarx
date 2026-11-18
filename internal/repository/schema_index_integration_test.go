@@ -173,3 +173,50 @@ func TestHotTablesCarryVacuumSettings(t *testing.T) {
 		}
 	}
 }
+
+// TestPayloadShapeMigration pins the jsonb columns, the dropped CHECK constraints and
+// the body reference columns of ADR 0023 section 9.
+func TestPayloadShapeMigration(t *testing.T) {
+	db := integrationDB(t)
+	for _, table := range []string{"native_helm_publication_sessions", "native_helm_publications", "native_nuget_publication_sessions", "native_nuget_publications", "native_rubygems_sessions"} {
+		var dataType string
+		if err := db.QueryRowContext(t.Context(), "SELECT data_type FROM information_schema.columns WHERE table_name=$1 AND column_name='metadata_json'", table).Scan(&dataType); err != nil || dataType != "jsonb" {
+			t.Errorf("%s.metadata_json is %q (%v), want jsonb", table, dataType, err)
+		}
+	}
+	var leftovers []string
+	rows, err := db.QueryContext(t.Context(), `SELECT conrelid::regclass::text || '.' || conname FROM pg_constraint
+ WHERE contype = 'c' AND (pg_get_constraintdef(oid) ~ 'metadata_json' OR pg_get_constraintdef(oid) ~ 'octet_length\(\(payload\)::text\)') ORDER BY 1`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			t.Fatal(err)
+		}
+		leftovers = append(leftovers, name)
+	}
+	if len(leftovers) > 0 {
+		t.Errorf("CHECK constraints that Go validation replaced are still present: %v", leftovers)
+	}
+	for _, table := range []string{"native_npm_versions", "native_helm_publications", "native_nuget_publications", "native_nuget_source_documents", "native_helm_source_documents", "native_cargo_proxy_indexes", "oci_discovery_snapshots"} {
+		var n int
+		if err := db.QueryRowContext(t.Context(), "SELECT count(*) FROM information_schema.columns WHERE table_name=$1 AND column_name IN ('body_digest','body_size','body_key')", table).Scan(&n); err != nil || n != 3 {
+			t.Errorf("%s has %d of the 3 body reference columns (%v)", table, n, err)
+		}
+	}
+	// A partial reference is rejected by the *_body_ref_check constraint.
+	tx, err := db.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(t.Context(), "SET LOCAL session_replication_role = replica"); err != nil {
+		t.Skipf("replica role needs a superuser: %v", err)
+	}
+	if _, err := tx.ExecContext(t.Context(), "INSERT INTO oci_discovery_snapshots(id,owner,kind,payload,expires_at,body_key) VALUES (gen_random_uuid(),'o','k','{}',now(),'meta/sha256/aa')"); err == nil {
+		t.Error("a body_key without digest and size was accepted")
+	}
+}

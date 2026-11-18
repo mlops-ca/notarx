@@ -1,12 +1,12 @@
 package helm
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/mlops-ca/notarx/internal/jsonmeta"
 	"io"
 	"net"
 	"net/http"
@@ -361,7 +361,7 @@ func (m *Module) proxyChart(ctx context.Context, repo repository.HostedRepositor
 		return prior, errIntegrity
 	}
 	inspection, e := helmprotocol.Inspect(chart.Reader())
-	if e != nil || inspection.Metadata.Name != entry.Name || inspection.Metadata.Version != entry.Version || !bytes.Equal(inspection.MetadataJSON, entry.MetadataJSON) {
+	if e != nil || inspection.Metadata.Name != entry.Name || inspection.Metadata.Version != entry.Version || !jsonmeta.Equal(inspection.MetadataJSON, entry.MetadataJSON) {
 		return prior, errIntegrity
 	}
 	prov, e := fetch(entry.URL+".prov", helmprotocol.MaxProvenanceBytes, true)

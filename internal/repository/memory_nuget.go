@@ -5,6 +5,8 @@ import (
 	"context"
 	"sort"
 	"time"
+
+	"github.com/mlops-ca/notarx/internal/jsonmeta"
 )
 
 func (s *MemoryStore) activeNuGetRepositoryLocked(id string) (HostedRepository, error) {
@@ -127,7 +129,7 @@ func (s *MemoryStore) StageNuGetPublication(ctx context.Context, in NuGetSession
 	if prior.State != "reserved" && prior.State != "staged" {
 		return NuGetSession{}, ErrNuGetSessionState
 	}
-	if prior.State == "staged" && (!bytes.Equal(prior.Nuspec, in.Nuspec) || !bytes.Equal(prior.MetadataJSON, in.MetadataJSON) || prior.SourceURL != in.SourceURL || prior.RegistrationURL != in.RegistrationURL) {
+	if prior.State == "staged" && (!bytes.Equal(prior.Nuspec, in.Nuspec) || !jsonmeta.Equal(prior.MetadataJSON, in.MetadataJSON) || prior.SourceURL != in.SourceURL || prior.RegistrationURL != in.RegistrationURL) {
 		return NuGetSession{}, ErrNuGetPublicationConflict
 	}
 	prior.Nuspec = append([]byte(nil), in.Nuspec...)

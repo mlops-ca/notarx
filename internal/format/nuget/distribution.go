@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/mlops-ca/notarx/internal/jsonmeta"
 	"net/http"
 	"strconv"
 	"strings"
@@ -246,7 +247,7 @@ func replicationMetadataMatches(meta packageMetadata, nuspec []byte, stored []by
 	}
 	meta.Listed = listing.Listed
 	encoded, err := json.Marshal(meta)
-	return err == nil && bytes.Equal(encoded, stored) && bytes.Equal(nuspec, original)
+	return err == nil && jsonmeta.Equal(encoded, stored) && bytes.Equal(nuspec, original)
 }
 func (m *Module) ReplicateNuGetItem(ctx context.Context, job dist.Job, item dist.Item) error {
 	// The exported transfer seam cannot turn a caller-mutated job snapshot

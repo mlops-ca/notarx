@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/mlops-ca/notarx/internal/jsonmeta"
 	"strconv"
 	"time"
 
@@ -80,6 +81,9 @@ func ValidInput(in Session) bool {
 	if _, e := uuid.Parse(in.RepositoryID); e != nil {
 		return false
 	}
+	if jsonmeta.ValidateObject(in.MetadataJSON, 256<<10) != nil {
+		return false
+	}
 	if in.Size < 1 || in.Size > protocol.MaxGemBytes || len(in.Digest) != 71 || in.Digest[:7] != "sha256:" || in.Actor == "" || len(in.Actor) > 256 {
 		return false
 	}
@@ -91,10 +95,10 @@ func ValidInput(in Session) bool {
 		return false
 	}
 	encoded, _ := json.Marshal(m)
-	return bytes.Equal(encoded, in.MetadataJSON)
+	return jsonmeta.Equal(encoded, in.MetadataJSON)
 }
 func Same(a, b Session) bool {
-	return a.RepositoryID == b.RepositoryID && a.Name == b.Name && a.Version == b.Version && a.Platform == b.Platform && a.Digest == b.Digest && a.Size == b.Size && bytes.Equal(a.MetadataJSON, b.MetadataJSON) && bytes.Equal(a.MetadataYAML, b.MetadataYAML)
+	return a.RepositoryID == b.RepositoryID && a.Name == b.Name && a.Version == b.Version && a.Platform == b.Platform && a.Digest == b.Digest && a.Size == b.Size && jsonmeta.Equal(a.MetadataJSON, b.MetadataJSON) && bytes.Equal(a.MetadataYAML, b.MetadataYAML)
 }
 func Audit(p Publication, repo string) repository.AuditRecord {
 	return repository.AuditRecord{Actor: p.Publisher, Repository: repo, GroupName: repo, Format: "rubygems", Resource: p.FullName(), Operation: "rubygems.publish", Outcome: repository.AuditResolved, Status: 201, Bytes: p.Size, OccurredAt: p.PublishedAt, Evidence: map[string]string{"digest": p.Digest, "size": strconv.FormatInt(p.Size, 10), "name": p.Name, "version": p.Version, "platform": p.Platform, "sessionId": p.SessionID}}
