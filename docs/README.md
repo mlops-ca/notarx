@@ -33,7 +33,7 @@ agree with executable tests and the
 - [Design system](../DESIGN.md) — Console visual language, components, layout, and interaction rules.
 - [Domain language](../CONTEXT.md) — canonical Repository, Artifact, lifecycle, and distribution terminology.
 - [Object storage configuration](object-storage.md) — drivers, `NOTARX_OBJECT_STORE_*` keys, checksum modes, and OCI settings.
-- [PostgreSQL capabilities](postgresql-capabilities.md) — locks, leases, queues, notifications, JSONB, search, and observability.
+- [PostgreSQL capabilities](postgresql-capabilities.md) — locks, leases, queues, notifications, JSONB, search, observability, the code's PostgreSQL footprint, and the managed-PostgreSQL support matrix.
 - [Native Hosted contract](native-hosted-contract.md) — metadata authority, object lifecycle, transactions, and idempotency.
 - [V2 contract](v2-contract.md) — historical Raw, Conan 2, anonymous-policy, and migration context.
 - [Artifact lifecycle contract](artifact-lifecycle-contract.md) — visibility, Tombstone, restore, collection, promotion, and replication.

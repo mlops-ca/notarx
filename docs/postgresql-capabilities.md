@@ -9,9 +9,10 @@ jobs, leases, locks, and runtime-node state all treat PostgreSQL as the source
 of truth.
 
 “Lightweight” does not mean PostgreSQL is the only storage system. Verified
-immutable artifact bytes remain in S3-compatible object storage; the local
-stack bundles RustFS. Redis, Kafka, Elasticsearch, and a separate message queue
-are not required.
+immutable artifact bytes remain in an object store: S3-compatible object storage
+(the local stack bundles RustFS) or, on a single node, the filesystem driver; see
+[object storage configuration](object-storage.md). Redis, Kafka, Elasticsearch,
+and a separate message queue are not required.
 
 ## PostgreSQL-native or PostgreSQL-bound capabilities
 
@@ -34,6 +35,72 @@ semantics.
 | `DISTINCT ON`, `LATERAL`, and views | Builds the format-neutral `artifact_search_projection` and selects latest visible records | Performs format projection and version folding in PostgreSQL while authorization remains in the application |
 | `pg_stat_statements` | Observes query calls, total/mean execution time, and returned rows | Tunes from real workload evidence rather than static guesses |
 | `gen_random_uuid`, `TIMESTAMPTZ`, intervals | Lease tokens, schedule run IDs, expiry, and retry timing | Creates fencing identity and database-consistent time inside claim statements |
+
+## How far the code is bound to PostgreSQL
+
+PostgreSQL 16 or later is the reference database and the only one supported in
+v0.1.0 (ADR 0017). The binding goes well beyond SQL syntax, and there is no
+dialect layer: the `*Store` interfaces in `internal/repository/store.go` are a
+seam, but every implementation is raw PostgreSQL SQL. Counts from the tree on
+2026-11-18, by `grep` over non-test Go files under `internal/` and over
+`migrations/` (indicative, not a guarantee):
+
+| Dependency | Count |
+| --- | --- |
+| Advisory-lock calls (`pg_advisory_*`, `pg_try_advisory_*`) | about 41 lines in 26 files, wrapped by `internal/repository/postgres_advisory_lock.go` and used by `internal/cache/coordinator.go` |
+| `FOR UPDATE SKIP LOCKED` work-queue claims | about 27 sites in 21 files |
+| `LISTEN` and `pg_notify` | listener in `internal/database/notification.go`, `pg_notify` in `internal/app/postgres_cache_task_queue.go`, notify triggers in the baseline |
+| `CREATE TRIGGER` statements | 23 in `migrations/000001_baseline.sql` |
+| `gin_trgm_ops` (`pg_trgm`) indexes | 13 in the baseline |
+| `ON CONFLICT` / `RETURNING` | about 113 / 146 |
+| `::` casts | about 1,400 |
+| `DISTINCT ON` / `ILIKE` | 3 / 6 |
+| `pg_stat_statements` | preloaded by the Compose files and the isolated backup target; no Go code reads it |
+
+Migrations are a single baseline plus numbered migrations (ADR 0015), applied by
+`scripts/run-migrations.sh`.
+
+### Criteria for revisiting the single-database decision
+
+An ADR proposing a second database is accepted only when all of these hold:
+
+1. there is a concrete, funded user population that cannot run PostgreSQL;
+2. a dialect abstraction keeps advisory-lock, queue-claim and notify semantics
+   provably equivalent, and the existing PostgreSQL integration suite is re-run
+   against it;
+3. a named maintainer owns the extra test matrix.
+
+Without these, SQLite and Oracle requests are declined. ADR 0022 meets them for
+MySQL only (the funded population is the Oracle Cloud free tier).
+
+## Managed PostgreSQL support matrix
+
+A managed PostgreSQL service is supported through `NOTARX_DATABASE_URL` when it
+meets every row. Providers that cannot meet every row are unsupported.
+
+| Requirement | Why | Failure mode |
+| --- | --- | --- |
+| PostgreSQL 16 or later | the only tested version | unsupported |
+| `CREATE EXTENSION pg_trgm` allowed | GIN trigram indexes in the baseline | the baseline fails; unsupported |
+| `pg_stat_statements` (optional) | created in a guarded block by the baseline (ADR 0015); no Go code reads it | statement statistics unavailable; the migration still succeeds |
+| Session-level connections (direct, or a pooler in session mode) | session advisory locks and `LISTEN/NOTIFY` | locks and notifications are lost behind a transaction-mode pooler; unsupported |
+| Row triggers and PL/pgSQL | 23 triggers, including capacity enforcement | unsupported |
+| The role may `CREATE` in the target schema | the migration runner | unsupported |
+
+### Verified providers
+
+No managed provider is listed as supported until it has been tested against every
+row of the matrix and the result is recorded here, with the provider, the
+PostgreSQL version, the date, who ran it and the outcome per row.
+
+| Provider | PostgreSQL | Date | Verified by | Result |
+| --- | --- | --- | --- | --- |
+| none recorded | | | | |
+
+Self-hosted `postgres:16-alpine` (multi-arch, including arm64) is the reference
+and what the Compose stack and the Oracle Cloud reference deployment run. Cloud
+claims, for example for Amazon RDS or Oracle Cloud Database with PostgreSQL, stay
+out of this page until a row above is filled in.
 
 ## Coordination model
 
