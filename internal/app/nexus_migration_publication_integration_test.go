@@ -365,7 +365,12 @@ func TestPostgresRustFSNexusPublicationMavenSidecarQuotaAndWrongTargetBytes(t *t
 	key, digest := "native/maven/sha256/"+asset.SHA256, "sha256:"+asset.SHA256
 	// Keep the length and verified-digest metadata correct while replacing the
 	// actual S3 payload. Readback must hash bytes rather than trusting HEAD.
-	if err = f.objectsB.PutVerifiedReader(ctx, key, bytes.NewReader(bytes.Repeat([]byte("x"), int(asset.Size))), asset.Size, digest); err != nil {
+	// PutVerifiedReader now refuses bytes that do not match the digest, so plant
+	// the payload plainly and attach the (now wrong) digest afterwards.
+	if err = f.objectsB.PutReader(ctx, key, bytes.NewReader(bytes.Repeat([]byte("x"), int(asset.Size))), asset.Size); err != nil {
+		t.Fatal(err)
+	}
+	if err = f.objectsB.SetVerifiedDigest(ctx, key, digest); err != nil {
 		t.Fatal(err)
 	}
 	info, err := f.objectsB.Stat(ctx, key)
