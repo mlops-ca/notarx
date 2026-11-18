@@ -1,0 +1,5 @@
+# One-off exemptions for the guard: "<path> <git blob sha>". A path is exempt only
+# while its content is exactly that blob, so a later edit is flagged again.
+# These two files were restored to their content at 9e6d2c81 (undoing agent edits).
+docs/README.zh-CN.md 4d299f383de27fea33a2c0e9f10e31303fd1112c
+docs/adr/0008-go-module-path.zh-CN.md d857d0848844122a0290e6aeae0a86e1ea97b394

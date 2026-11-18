@@ -11,23 +11,42 @@ change is the pull request merge commit against its first parent:
 import re
 import subprocess
 import sys
+from pathlib import Path
 
+ALLOW = Path(__file__).with_suffix('.allow')
 CJK = re.compile('[\u3400-\u9fff\uf900-\ufaff]')
 ZH_PATH = re.compile(r'(^|/)(zh-CN|zh_CN)(/|\.)|\.zh-CN\.|[-_.]zh-CN$', re.I)
 
 
+def allowed():
+    """Exact (path, blob) pairs from scripts/check-no-chinese.allow."""
+    try:
+        rows = open(ALLOW).read().splitlines()
+    except FileNotFoundError:
+        return set()
+    return {tuple(row.split()) for row in rows if row.strip() and not row.startswith('#')}
+
+
+def blob(path):
+    result = subprocess.run(['git', 'rev-parse', 'HEAD:' + path], capture_output=True, text=True)
+    return result.stdout.strip()
+
+
 def path_issues(entries):
     """entries: (status, path) pairs from git diff --name-status."""
+    exempt = allowed()
     return [f'{path}: zh-CN files must not be added or modified'
-            for status, path in entries if status[0] != 'D' and ZH_PATH.search(path)]
+            for status, path in entries
+            if status[0] != 'D' and ZH_PATH.search(path) and (path, blob(path)) not in exempt]
 
 
 def line_issues(diff_text):
     issues, current = [], None
+    exempt = {path for path, sha in allowed() if blob(path) == sha}
     for line in diff_text.splitlines():
         if line.startswith('+++ '):
             current = line[4:].removeprefix('b/')
-        elif line.startswith('+') and CJK.search(line):
+        elif line.startswith('+') and CJK.search(line) and current not in exempt:
             issues.append(f'{current}: added line contains Chinese text')
     return sorted(set(issues))
 
