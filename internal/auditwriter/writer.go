@@ -518,9 +518,9 @@ func (w *Writer) usageLoop() {
 	for {
 		select {
 		case <-ticker.C:
-			w.flushUsage(context.Background())
+			_ = w.flushUsage(context.Background())
 		case <-w.usageWake:
-			w.flushUsage(context.Background())
+			_ = w.flushUsage(context.Background())
 		case <-prune.C:
 			w.pruneRollups(context.Background())
 		case <-w.stop:

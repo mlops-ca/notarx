@@ -177,7 +177,8 @@ func TestWriterAggregatesUsageAndRollups(t *testing.T) {
 	t.Fatalf("repository missing from %+v", statistics)
 }
 
-// A request path with a NUL byte or invalid UTF-8 cannot make an audit statement fail.
+// A request path with a NUL byte or invalid UTF-8 is rejected by PostgreSQL. The writer
+// drops and counts those records and still writes the rest of the batch.
 func TestHostileTextCannotStallTheFlush(t *testing.T) {
 	f := openFixture(t, auditwriter.Config{})
 	ctx := context.Background()
@@ -189,11 +190,11 @@ func TestHostileTextCannotStallTheFlush(t *testing.T) {
 	if err := f.writer.FlushNow(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if n := f.count(t, "resolver_audit_log"); n != 3 {
-		t.Fatalf("flushed %d of 3 records", n)
+	if n := f.count(t, "resolver_audit_log"); n != 1 {
+		t.Fatalf("flushed %d records, want the one valid record", n)
 	}
-	if stats := f.writer.Stats(); stats.DroppedInvalid != 0 || stats.FlushErrors != 0 {
-		t.Fatalf("%+v", stats)
+	if stats := f.writer.Stats(); stats.DroppedInvalid != 2 {
+		t.Fatalf("the two rejected records must be counted: %+v", stats)
 	}
 }
 

@@ -113,7 +113,13 @@ response=$(curl --silent --show-error "$gateway_url/raw/$group/release/app.txt")
 [[ "$response" == 'raw release artifact' ]] || { printf 'Raw cached GET returned %q after upstream shutdown\n' "$response" >&2; exit 1; }
 expect_status 403 "$(admin_status "$gateway_url/raw/$denied_group/release/app.txt")" 'Raw Proxy allowlist denial'
 
-audits=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$gateway_url/api/v1/audits?group=$group")
+# Read audit is buffered per node and flushed every NOTARX_AUDIT_FLUSH_INTERVAL (1s by
+# default), so wait for the last request of this scenario to appear.
+for _ in $(seq 1 30); do
+  audits=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$gateway_url/api/v1/audits?group=$group")
+  grep -Eq '"Outcome":"not_found".*"CacheDisposition":"hit"' <<<"$audits" && break
+  sleep 1
+done
 grep -Eq '"Format":"raw"' <<<"$audits" || { printf '%s\n' 'Raw audit format was not recorded.' >&2; exit 1; }
 grep -Eq '"Actor":"anonymous"' <<<"$audits" || { printf '%s\n' 'Raw anonymous audit actor was not recorded.' >&2; exit 1; }
 grep -Eq '"CacheDisposition":"hit"' <<<"$audits" || { printf '%s\n' 'Raw cache-hit audit was not recorded.' >&2; exit 1; }

@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/requestcontext"
@@ -73,25 +72,7 @@ func withAuditDefaults(ctx context.Context, audit AuditRecord) AuditRecord {
 	if audit.OccurredAt.IsZero() {
 		audit.OccurredAt = time.Now().UTC()
 	}
-	return sanitizeAudit(audit)
-}
-
-// cleanText removes what a PostgreSQL text value cannot hold (NUL) and replaces invalid
-// UTF-8, so a hostile request path cannot make an audit statement fail.
-func cleanText(value string) string {
-	if strings.IndexByte(value, 0) >= 0 {
-		value = strings.ReplaceAll(value, "\x00", "")
-	}
-	return strings.ToValidUTF8(value, "\uFFFD")
-}
-
-func sanitizeAudit(a AuditRecord) AuditRecord {
-	a.GroupName, a.Repository, a.MemberName, a.Actor = cleanText(a.GroupName), cleanText(a.Repository), cleanText(a.MemberName), cleanText(a.Actor)
-	a.Format, a.Resource, a.Representation, a.MemberType = cleanText(a.Format), cleanText(a.Resource), cleanText(a.Representation), cleanText(a.MemberType)
-	a.UpstreamHost, a.Operation, a.CacheDisposition = cleanText(a.UpstreamHost), cleanText(a.Operation), cleanText(a.CacheDisposition)
-	a.AuthorizationSource, a.AuthorizationReason, a.RequestID, a.TraceID = cleanText(a.AuthorizationSource), cleanText(a.AuthorizationReason), cleanText(a.RequestID), cleanText(a.TraceID)
-	a.Outcome = AuditOutcome(cleanText(string(a.Outcome)))
-	return a
+	return audit
 }
 
 // insertAudit writes the audit row and, in the same transaction when execer is one,

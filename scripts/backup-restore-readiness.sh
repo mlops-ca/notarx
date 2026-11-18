@@ -618,7 +618,13 @@ status=$(curl --silent --show-error --output "$grant_response" --write-out '%{ht
 [[ "$status" == 200 && $(<"$grant_response") == 'grant restore artifact' ]] || {
   printf 'Restored managed grant allow returned HTTP %s: %s\n' "$status" "$(<"$grant_response")" >&2; exit 1;
 }
-audits=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$gateway_url/api/v1/audits?limit=500")
+# Read audit is buffered per node and flushed every NOTARX_AUDIT_FLUSH_INTERVAL (1s by
+# default), so wait for the read just made to appear.
+for _ in $(seq 1 30); do
+  audits=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$gateway_url/api/v1/audits?limit=500")
+  grep -Fq '"Actor":"recovery-reader"' <<<"$audits" && break
+  sleep 1
+done
 grep -Fq '"Format":"raw"' <<<"$audits" || { printf '%s\n' 'Restored Raw audit is unavailable.' >&2; exit 1; }
 grep -Fq '"Format":"conan"' <<<"$audits" || { printf '%s\n' 'Restored Conan audit is unavailable.' >&2; exit 1; }
 grep -Fq '"Actor":"recovery-denied"' <<<"$audits" || { printf '%s\n' 'Restored Repository grant denial audit is unavailable.' >&2; exit 1; }
