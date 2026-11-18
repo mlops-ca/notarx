@@ -10,17 +10,22 @@ export function AntdProvider({ children }: { children: ReactNode }) {
     locale === "en-CA" ? antdEnCA : undefined,
   );
 
-  // The locale objects load on demand (ADR 0014): the bundle carries only the
-  // reference locale until a reader picks another. The previous language stays
-  // on screen for the moment the next one loads.
+  // The antd and dayjs locale objects load on demand (ADR 0014), so the bundle
+  // does not carry all three; the message tables are bundled. While one loads,
+  // or when its chunk cannot be fetched (offline, stale deploy), the previous
+  // antd locale stays and the messages still switch: widgets keep working in
+  // the old language rather than failing.
   useEffect(() => {
     let current = true;
     const info = localeInfo(locale);
-    void info.load().then((loaded) => {
-      if (!current) return;
-      dayjs.locale(info.dayjs);
-      setAntd(loaded);
-    });
+    info
+      .load()
+      .then((loaded) => {
+        if (!current) return;
+        dayjs.locale(info.dayjs);
+        setAntd(loaded);
+      })
+      .catch(() => undefined);
     return () => {
       current = false;
     };

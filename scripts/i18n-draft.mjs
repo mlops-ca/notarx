@@ -14,7 +14,7 @@
 // console/src/messages/.review/fr-CA.json; the release check fails while any
 // stays a draft. zh-CN has no sidecar and no release gate.
 import { spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import {
   LOCALES, defaultMessagesDir, dictionaryPath, escape, featureNames, isCritical,
   placeholders, readDictionary, readSidecar, syncSidecar, writeSidecar,
@@ -115,10 +115,27 @@ export function appendEntries(source, entries, marker) {
   return body + separator + lines.join("") + source.slice(close);
 }
 
+const camel = (name) => name.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+const SUFFIX = { "fr-CA": "FrCA", "zh-CN": "ZhCN" };
+
+/** The file a new feature dictionary starts from: fr-CA is a total Record, zh-CN a Partial one. */
+export function skeleton(feature, locale) {
+  const reference = camel(feature) + "EnCA";
+  const type = locale === "fr-CA" ? "Record" : "Partial<Record";
+  const close = locale === "fr-CA" ? "" : ">";
+  return (
+    'import type { ' + reference + ' } from "./' + feature + '.en-CA";\n\n' +
+    "export const " + camel(feature) + SUFFIX[locale] + ": " + type + "<keyof typeof " + reference + ", string>" + close + " = {\n};\n"
+  );
+}
+
 /**
- * Drafts the keys a locale lacks. Returns what changed; writes the dictionaries
- * and, for fr-CA, the sidecar unless dryRun. A key the model cannot answer
- * safely (fr-CA only) gets the en-CA text under a TODO(fr-CA) marker, as a draft.
+ * Drafts the keys a locale lacks. Each batch is written (and, for fr-CA,
+ * recorded as a draft in the sidecar) as soon as it is accepted, so a model
+ * that fails later leaves the earlier batches recorded, never unrecorded. A
+ * feature with no dictionary file for the locale gets one from `skeleton`. A
+ * key the model cannot answer safely (fr-CA only) gets the en-CA text under a
+ * TODO(fr-CA) marker, as a draft.
  */
 export async function draftMissing({
   dir = defaultMessagesDir, locale, model, features, limit = Infinity, batch = 40, dryRun = false,
@@ -132,33 +149,38 @@ export async function draftMissing({
     const have = readDictionary(path);
     const missing = Object.entries(en).filter(([key]) => !(key in have)).slice(0, remaining);
     if (missing.length === 0) continue;
-    let source = readFileSync(path, "utf8");
+    let source = existsSync(path) ? readFileSync(path, "utf8") : skeleton(feature, locale);
     for (let i = 0; i < missing.length; i += batch) {
       const asked = Object.fromEntries(missing.slice(i, i + batch));
       const answers = await model.draft(buildPrompt(locale, asked, dir), asked);
       const { accepted, rejected } = acceptDrafts(asked, answers);
       source = appendEntries(source, accepted);
-      result.drafted.push(...Object.keys(accepted));
       if (locale === "fr-CA" && rejected.length) {
         source = appendEntries(source, Object.fromEntries(rejected.map((key) => [key, asked[key]])), "TODO(fr-CA)");
-        result.todo.push(...rejected);
       }
+      if (!dryRun) {
+        writeFileSync(path, source);
+        if (locale === "fr-CA") recordDrafts(dir, [...Object.keys(accepted), ...rejected], en);
+      }
+      result.drafted.push(...Object.keys(accepted));
+      if (locale === "fr-CA") result.todo.push(...rejected);
     }
     remaining -= missing.length;
     result.files.push(path);
-    if (!dryRun) writeFileSync(path, source);
     if (remaining <= 0) break;
   }
-  if (locale === "fr-CA" && !dryRun && (result.drafted.length || result.todo.length)) {
-    const sidecar = readSidecar(dir);
-    const reference = Object.assign({}, ...(features ?? featureNames(dir)).map((f) => readDictionary(dictionaryPath(dir, f, "en-CA"))));
-    for (const key of [...result.drafted, ...result.todo]) {
-      sidecar.keys[key] = "draft";
-      if (isCritical(key, reference[key] ?? "")) sidecar.critical.push(key);
-    }
-    writeSidecar(dir, sidecar);
-  }
   return result;
+}
+
+/** Records keys as drafts in the sidecar; the destructive-action ones also become critical. */
+function recordDrafts(dir, keys, reference) {
+  const sidecar = readSidecar(dir);
+  for (const key of keys) {
+    sidecar.keys[key] = "draft";
+    delete sidecar.reviewed[key];
+    if (isCritical(key, reference[key] ?? "")) sidecar.critical.push(key);
+  }
+  writeSidecar(dir, sidecar);
 }
 
 function parse(argv) {

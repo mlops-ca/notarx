@@ -6,7 +6,7 @@
 export function frCAStyleIssues(message: string): string[] {
   const prose = message.replace(/\{[^{}]+\}/g, "").replace(/`[^`]*`/g, "");
   const issues: string[] = [];
-  if (/\be-?mail\b/i.test(prose)) {
+  if (/\be-?mails?\b/i.test(prose)) {
     issues.push("use courriel, not e-mail or email");
   }
   if (/ [:?!;]/.test(prose)) {

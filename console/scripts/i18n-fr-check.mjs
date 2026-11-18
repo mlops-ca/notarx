@@ -25,17 +25,8 @@ const ph = (m) =>
     .map((x) => x[1])
     .sort()
     .join(",");
-function style(message) {
-  const prose = message.replace(/\{[^{}]+\}/g, "").replace(/`[^`]*`/g, "");
-  const issues = [];
-  if (/\be-?mail\b/i.test(prose)) issues.push("use courriel");
-  if (/ [:?!;]/.test(prose)) issues.push("regular space before : ? ! ;");
-  if (/\p{L}'\p{L}/u.test(prose))
-    issues.push("straight apostrophe between letters (use ’)");
-  if (/«(?!\u00a0)|(?<!\u00a0)»/.test(prose))
-    issues.push("guillemets need no-break spaces");
-  return issues;
-}
+// The writing rules are the ones messages.test.ts enforces (src/messages/frCAStyle.ts).
+const style = load("src/messages/frCAStyle.ts");
 let bad = 0;
 for (const name of process.argv.slice(2)) {
   const en = load("src/messages/" + name + ".en-CA.ts");

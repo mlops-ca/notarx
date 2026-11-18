@@ -153,6 +153,8 @@ describe("message dictionaries", () => {
     const nb = "\u00a0";
     expect(frCAStyleIssues("Envoyer un e-mail")).toHaveLength(1);
     expect(frCAStyleIssues("Envoyer un email")).toHaveLength(1);
+    expect(frCAStyleIssues("Envoyer des emails")).toHaveLength(1);
+    expect(frCAStyleIssues("Les e-mails partent")).toHaveLength(1);
     expect(frCAStyleIssues("Envoyer un courriel")).toEqual([]);
     expect(frCAStyleIssues("Envoyer un `email` {email}")).toEqual([]);
     expect(frCAStyleIssues("Supprimer ?")).toHaveLength(1);
