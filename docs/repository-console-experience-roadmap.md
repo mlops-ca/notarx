@@ -37,7 +37,7 @@ Progress update 2026-07-31:
 - Maven Proxy now supports forced refresh from upstream, upstream health/circuit
   status, and negative-cache clearing from the Repository detail surface.
 - V2 Repository and Group management now include `anonymousRead`; native OCI,
-  Maven, and Raw protocol reads honor Repository policy, and V2 Groups only
+  Maven, and Raw protocol reads honour Repository policy, and V2 Groups only
   expose anonymous members whose backing Repository also allows anonymous read.
 - Deletion UX now covers OCI tag unlink, Maven version tombstones, Raw path
   deletion, and selected Conan package revision tombstones.
@@ -112,7 +112,7 @@ enabled or adapted by repository type.
 | Access | Repository grants and anonymous read policy | Repository grants and anonymous read policy | Group/member anonymous read policy and inherited repository grants |
 | Storage | Hosted object bytes, tombstones, retention, reclaimable bytes | Cache bytes, live/expired/negative entries, quota, reclaimable bytes | Member contribution summary; no owned bytes |
 | Operations | Publish, delete/tombstone, restore, promotion, replication, retention | Warm, refresh, invalidate, upstream health, cache cleanup | Resolution diagnostics, member ordering, conflict inspection |
-| Settings | Format policy, retention, capacity, publication controls | Endpoint, allowed hosts, TTLs, egress, cache policy | Member order, member policy, anonymous behavior |
+| Settings | Format policy, retention, capacity, publication controls | Endpoint, allowed hosts, TTLs, egress, cache policy | Member order, member policy, anonymous behaviour |
 
 ## Concepts To Show In The UI
 
@@ -173,7 +173,7 @@ Current issue: Proxy cache listings expose every cached path as a top-level row,
 including `.sha1`, `.sha256`, `.md5`, and `.asc` sidecars. This is hard to scan
 and does not match Maven operator expectations.
 
-Target behavior:
+Target behaviour:
 
 - Group cache entries as `groupId:artifactId -> version -> assets`.
 - Default list row is one Maven version, for example
@@ -334,7 +334,7 @@ Required API additions:
 - Effective-access endpoint that explains why anonymous is allowed or denied.
 - Audit records must include anonymous access source and decision reason.
 
-### UI Behavior
+### UI Behaviour
 
 - If anonymous browse is enabled, public browse pages can load read-only without
   a token.

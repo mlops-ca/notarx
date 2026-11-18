@@ -92,6 +92,6 @@ Move remaining contracts domain by domain alongside #280–#282:
 Memory and PostgreSQL must run the same expectations for every migrated
 contract. Retire memory per domain when its maintenance cost outweighs the
 fixture benefit; record that decision and update callers in the same slice.
-No new production-only behavior belongs in memory merely to avoid a database
+No new production-only behaviour belongs in memory merely to avoid a database
 test. Existing append-only schema, immutable bytes and lease/fencing rules stay
 in force.

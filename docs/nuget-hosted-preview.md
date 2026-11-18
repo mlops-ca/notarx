@@ -94,7 +94,7 @@ Hosted `PackagePublish/2.0.0` supports standard
 same path to relist. Both require package-level write permission, return 204
 for the desired state and reject a tombstoned version with 404. The official
 `dotnet nuget delete ID VERSION --source SOURCE --api-key CREDENTIAL` command
-uses this unlist behavior. Unlisted packages disappear from search and
+uses this unlist behaviour. Unlisted packages disappear from search and
 autocomplete. Registration retains the version with `listed:false`, and the
 flat-container directory retains it; exact GET/HEAD, nuspec, SHA-512, ranges and
 conditional downloads continue to work. Replaying a push never relists it.

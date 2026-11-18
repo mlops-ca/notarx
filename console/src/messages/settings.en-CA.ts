@@ -1,6 +1,4 @@
-import type { SettingsMessageKey } from "./settings.zh-CN";
-
-export const settingsEnUS: Record<SettingsMessageKey, string> = {
+export const settingsEnCA = {
   "settings.requiredWhenOIDCIsEnabled": "Required when OIDC is enabled",
   "settings.clientIDAndRedirectURLMustBeConfigured":
     "Client ID and Redirect URL must be configured together",
@@ -170,10 +168,12 @@ export const settingsEnUS: Record<SettingsMessageKey, string> = {
     "Use a same-origin path, HTTPS URL, or upload a PNG, JPEG, or WebP up to 192 KiB. A square image with a transparent background works best.",
   "settings.consoleThemes": "Console themes",
   "settings.enableTheThemesUsersMayChooseAndSelect":
-    "Enable the themes users may choose and select the default for first-time visitors. All theme colors are resolved from Ant Design tokens.",
+    "Enable the themes users may choose and select the default for first-time visitors. All theme colours are resolved from Ant Design tokens.",
   "settings.uploadThemePackage": "Upload theme package",
   "settings.uploadAThemePackageV1MatchingThemesConsole":
-    "Upload a Theme Package v1 matching themes/console-theme.schema.json to install it dynamically. Packages contain bounded color tokens only—no CSS, scripts, or external assets. Operator directory themes remain available through gateway theme commands.",
+    "Upload a Theme Package v1 matching themes/console-theme.schema.json to install it dynamically. Packages contain bounded colour tokens only—no CSS, scripts, or external assets. Operator directory themes remain available through gateway theme commands.",
   "settings.discardChanges": "Discard changes",
   "settings.logoUrlPlaceholder": "/assets/logo.webp or https://…",
 };
+
+export type SettingsMessageKey = keyof typeof settingsEnCA;

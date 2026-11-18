@@ -92,7 +92,7 @@ The owner deferred all OpenPGP signing for the first releases. Until a later ame
 - The ADR 0026 notarx-hosted feeds still require repository signing, so they wait for signing to return.
 
 Option 3 for apt and yum, with option 1 as the canonical artifact store and option 2
-as a documented fallback mirror. Option 4 is realised as a second, equal-trust source: ADR 0026
+as a documented fallback mirror. Option 4 is realized as a second, equal-trust source: ADR 0026
 Part D publishes the same packages to public notarx feeds at `feeds.mlops.ca` (nightly first,
 stable after the ADR 0026 promotion criteria; Milestone Public feeds, requiring ADR 0029 public
 visibility), and `packages.mlops.ca` on R2 remains the bootstrap and fallback source.
@@ -161,7 +161,7 @@ with no way to report a failed schema change atomically and may run during an
 unattended upgrade. `postinst` only runs `systemctl daemon-reload` and prints
 `run: notarx-migrate, then: systemctl enable --now notarx`. `notarx-migrate` reads
 `NOTARX_DATABASE_URL` from `notarx.env`, passes it to the unchanged runner, and
-refuses to run if the ledger records a checksum that differs (ADR 0015 behavior).
+refuses to run if the ledger records a checksum that differs (ADR 0015 behaviour).
 On upgrade, `postinst` does not restart the service when the packaged baseline or
 migration set differs from the applied ledger; it prints a warning instead
 (`systemctl try-restart` happens only when `notarx-migrate --check` exits 0). A

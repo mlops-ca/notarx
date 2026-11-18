@@ -1,6 +1,4 @@
-import type { NexusScheduleMessageKey } from "./nexus-schedule.zh-CN";
-
-export const nexusScheduleEnUS: Record<NexusScheduleMessageKey, string> = {
+export const nexusScheduleEnCA = {
   "nexusSchedule.title": "Recurring migration plans",
   "nexusSchedule.new": "Create recurring plan",
   "nexusSchedule.refresh": "Refresh plans",
@@ -56,3 +54,5 @@ export const nexusScheduleEnUS: Record<NexusScheduleMessageKey, string> = {
   "nexusSchedule.policyChanged":
     "The policy changed. Create a new plan based on a new successful batch.",
 };
+
+export type NexusScheduleMessageKey = keyof typeof nexusScheduleEnCA;

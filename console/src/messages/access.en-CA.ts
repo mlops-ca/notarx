@@ -1,6 +1,4 @@
-import type { AccessMessageKey } from "./access.zh-CN";
-
-export const accessEnUS: Record<AccessMessageKey, string> = {
+export const accessEnCA = {
   "access.accessControl": "Access control",
   "access.evaluateEffectivePermissionsAndReviewAnonymousAndRepositoryAccess":
     "Evaluate effective permissions and review anonymous and repository access rules",
@@ -272,3 +270,5 @@ export const accessEnUS: Record<AccessMessageKey, string> = {
   "access.grantedByThisRule": "Granted by this rule",
   "access.resourceScope": "Resource scope",
 };
+
+export type AccessMessageKey = keyof typeof accessEnCA;

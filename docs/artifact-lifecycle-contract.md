@@ -83,7 +83,7 @@ Migration `000032_artifact_lifecycle.sql` adds two additive records:
 ## OCI Slice
 
 `DELETE /v2/{repository}/{name}/manifests/{digest}` retains its current
-Registry V2 response and reader behavior. In the same PostgreSQL transaction it
+Registry V2 response and reader behaviour. In the same PostgreSQL transaction it
 removes tag references, writes an OCI Artifact Tombstone, releases the object
 intent for delayed collection, and removes the manifest metadata. Subsequent
 digest or tag reads remain `404`; the tombstone is management/lifecycle state,

@@ -185,7 +185,7 @@ Nightly (`schedule`, default branch only):
 1. `S` = latest tag matching `^v[0-9]+\.[0-9]+\.[0-9]+$`. `core` =
    `git cliff --bumped-version --tag-pattern '^v[0-9]+\.[0-9]+\.[0-9]+$'` since `S`
    (the pattern hides nightly tags from git-cliff); `0.1.0` if no `S`. The output is
-   normalised (prefix stripped) by the script and checked by fixtures.
+   normalized (prefix stripped) by the script and checked by fixtures.
 2. `sha` = the newest first-parent commit of `main` (looking back at most 10) whose
    required check runs are green. The required names are read from
    `scripts/release-required-checks.txt`, the single list that replaces the hard-coded

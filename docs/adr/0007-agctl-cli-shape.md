@@ -79,9 +79,9 @@ at 1 and only changes on a breaking change. Human output goes to stdout;
 diagnostics go to stderr; `--verbose` prints request method and URL with
 credentials redacted — the token never reaches any writer.
 
-**Client behavior.** A thin HTTP wrapper over the management API: bearer
+**Client behaviour.** A thin HTTP wrapper over the management API: bearer
 authentication, one overall timeout, and retries only for idempotent requests
-on transport failures, 429, and 502/503/504, with exponential backoff honoring
+on transport failures, 429, and 502/503/504, with exponential backoff honouring
 `Retry-After`. Writes are never retried without endpoint-declared idempotency.
 Server problem documents are parsed into the error envelope, and the request
 id is surfaced for support.

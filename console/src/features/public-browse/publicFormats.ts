@@ -1,5 +1,5 @@
 import type { Translate } from "../../lib/preferences";
-import type { PublicBrowseMessageKey } from "../../messages/public-browse.zh-CN";
+import type { PublicBrowseMessageKey } from "../../messages/public-browse.en-CA";
 import type { PublicRepositoryFormat } from "../../lib/publicRepositoryUsage";
 
 export const PUBLIC_FORMAT_ORDER: PublicRepositoryFormat[] = [

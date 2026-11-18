@@ -8,7 +8,7 @@ and does not allow a scanner to mutate repository state directly.
 
 The adapter is enabled at process startup with `NOTARX_SCANNER_ENDPOINT`.
 Administrators can enqueue a scan for an immutable artifact; a `scan` worker
-resolves protocol-owned assets, streams them to the adapter, and optimistically
+resolves protocol-owned assets, streams them to the adapter, and optimiztically
 merges scanner-owned fields into stored artifact intelligence. Hosted
 repositories can also opt in to asynchronous scan scheduling after each new
 publication.
@@ -399,5 +399,5 @@ Operators can use the bundled Trivy reference adapter or provide another
 contract-compatible HTTPS scanner. Scan scheduling remains asynchronous and
 best effort, so a scan or enqueue failure never rolls back a successful
 publication. Results do not automatically quarantine an artifact or change
-repository-read behavior. Governed runtime scanner configuration and finding-
+repository-read behaviour. Governed runtime scanner configuration and finding-
 driven automatic quarantine remain separate follow-up slices.

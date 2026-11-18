@@ -1,4 +1,5 @@
 import type { MessageKey } from "../messages";
+import { detectLocale } from "../messages/locales";
 import {
   createTranslator,
   type MessageLocale,
@@ -122,11 +123,17 @@ function storedThemeId(themes: ConsoleTheme[], defaultThemeId: string): string {
 }
 
 function storedLocale(): AppLocale {
+  let stored: string | null = null;
   try {
-    return localStorage.getItem(LOCALE_KEY) === "en-US" ? "en-US" : "zh-CN";
+    stored = localStorage.getItem(LOCALE_KEY);
   } catch {
-    return "zh-CN";
+    // Without storage the browser's languages still decide.
   }
+  const languages =
+    typeof navigator === "undefined"
+      ? []
+      : (navigator.languages ?? [navigator.language]);
+  return detectLocale(stored, languages);
 }
 
 function persistThemePreference(theme: Pick<ConsoleTheme, "id" | "mode">) {

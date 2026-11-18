@@ -1,4 +1,4 @@
-import type { AccessMessageKey } from "../../messages/access.zh-CN";
+import type { AccessMessageKey } from "../../messages/access.en-CA";
 import type { ApiKey, Repository } from "../../client";
 import type { BadgeTone } from "../../components/ui/Badge";
 

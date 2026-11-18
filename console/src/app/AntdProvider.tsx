@@ -1,9 +1,7 @@
 import { App as AntdApp, ConfigProvider } from "antd";
-import enUS from "antd/locale/en_US";
-import zhCN from "antd/locale/zh_CN";
-import "dayjs/locale/zh-cn";
 import type { ReactNode } from "react";
 import { usePreferences } from "../lib/preferences";
+import { localeInfo } from "../messages/locales";
 
 export function AntdProvider({ children }: { children: ReactNode }) {
   const { locale, resolvedTheme } = usePreferences();
@@ -14,7 +12,7 @@ export function AntdProvider({ children }: { children: ReactNode }) {
       // inserted between the two characters of a label like 删除.
       button={{ autoInsertSpace: false }}
       componentSize="medium"
-      locale={locale === "zh-CN" ? zhCN : enUS}
+      locale={localeInfo(locale).antd}
       theme={resolvedTheme.antDesign}
       variant="outlined"
     >

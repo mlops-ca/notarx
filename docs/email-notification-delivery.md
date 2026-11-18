@@ -232,7 +232,7 @@ as a passing default container integration test.
 All endpoints require a platform administrator and reject forced-password-change
 sessions. Responses use `Cache-Control: no-store`.
 
-| Endpoint | Behavior |
+| Endpoint | Behaviour |
 | --- | --- |
 | `POST /api/v2/email-notifications:preview` | Offline fixed `scenario` and `locale`; returns subject, HTML, text and template version; never sends |
 | `GET /api/v2/email-notifications` | Safe readiness (`ready`, `email_disabled`, `encryption_key_unavailable`) |
@@ -335,7 +335,7 @@ is not exactly-once delivery.
 
 The HTML uses escaped semantic values, inline critical styles, presentation
 tables, a 600px maximum width and narrow-screen/dark-mode enhancements. Each
-severity has text and color; multipart/alternative contains equivalent UTF-8
+severity has text and colour; multipart/alternative contains equivalent UTF-8
 plain text and HTML. There are no external images, fonts, tracking pixels or
 attachments. Template version 1 must remain available for queued replay.
 Terminal history remains in PostgreSQL; retention/archival policy is follow-up

@@ -1,6 +1,4 @@
-import type { DashboardMessageKey } from "./dashboard.zh-CN";
-
-export const dashboardEnUS: Record<DashboardMessageKey, string> = {
+export const dashboardEnCA = {
   "dashboard.access": "Access",
   "dashboard.anonymous": "Anonymous",
   "dashboard.notRecorded": "Not recorded",
@@ -60,3 +58,5 @@ export const dashboardEnUS: Record<DashboardMessageKey, string> = {
   "dashboard.largestRepository": "Largest: {name} · {size}",
   "dashboard.formatsCovered": "{count} formats",
 };
+
+export type DashboardMessageKey = keyof typeof dashboardEnCA;

@@ -18,7 +18,7 @@ row (migration `000055`), a boolean `anonymous_read` on `hosted_repositories` an
 `Member.Anonymous` set from the repository flag in
 `internal/app/hosted_group_resolver.go`. There is no "any logged-in user" tier:
 a user without a grant is denied on a repository meant for the whole
-organisation (ADR 0006 grants are a separate axis).
+organization (ADR 0006 grants are a separate axis).
 
 **No choke point.** The decision is re-implemented per handler
 (`anonymousHostedRepositoryReadAllowed`, `anonymousHostedGroupReadAllowed`,

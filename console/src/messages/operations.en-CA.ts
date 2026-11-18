@@ -1,6 +1,4 @@
-import type { OperationsMessageKey } from "./operations.zh-CN";
-
-export const operationsEnUS: Record<OperationsMessageKey, string> = {
+export const operationsEnCA = {
   "operations.artifactRetention": "Artifact retention",
   "operations.artifactPromotion": "Artifact promotion",
   "operations.repositoryReplication": "Repository replication",
@@ -454,3 +452,5 @@ export const operationsEnUS: Record<OperationsMessageKey, string> = {
   "operations.deleteScheduledTaskNamed": "Delete the scheduled task {name}?",
   "operations.paused": "Paused",
 };
+
+export type OperationsMessageKey = keyof typeof operationsEnCA;

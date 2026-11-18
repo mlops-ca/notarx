@@ -57,7 +57,7 @@ repository, at most 100 total rules including retained soft-deleted history.
 Recipients, SMTP, credentials, object paths and log contents are absent from
 rule/event responses.
 
-| API | Behavior |
+| API | Behaviour |
 | --- | --- |
 | `GET/POST /api/v2/repository-quota-alert-rules` | List / create disabled by default |
 | `GET/PUT /api/v2/repository-quota-alert-rules/{ruleId}` | State / configuration CAS with `If-Match` |
@@ -154,7 +154,7 @@ apply. Accepted means SMTP relay acceptance, not inbox delivery. Disconnect afte
 DATA or restart can duplicate mail; delivery is not exactly-once. From, Console
 origin, encrypted recipient, locale and event evidence are immutable on retries.
 
-Version `quota-1` supplies bilingual warning/critical/resolved text/color styles,
+Version `quota-1` supplies bilingual warning/critical/resolved text/colour styles,
 responsive HTML, equivalent plain text and fixed Outlook wrappers. No external
 images, fonts, tracking pixels or attachments. Only a validated HTTPS origin
 produces the fixed diagnostics link. New synthetic previews use version 2;

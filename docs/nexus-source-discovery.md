@@ -194,7 +194,7 @@ operator-owned exact-host/private-address allowlist; neither TLS nor private
 network enforcement is bypassed. This fixture gate does not prove real Nexus
 inventory completeness, byte migration, remote CI or production readiness.
 
-Source API behavior follows Sonatype's official
+Source API behaviour follows Sonatype's official
 [Repositories API](https://help.sonatype.com/en/repositories-api.html),
 [Assets API](https://help.sonatype.com/en/assets-api.html) and
 [pagination](https://help.sonatype.com/en/pagination.html). The metadata/byte

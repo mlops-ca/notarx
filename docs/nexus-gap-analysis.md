@@ -275,7 +275,7 @@ credentials; downloadable log/database bundles remain future work.
 Single-artifact deletion is only surfaced for OCI tags
 (`console/src/features/artifact-detail/OciImageDetail.tsx:151`); Maven, Conan, and Raw
 artifact rows have no delete button. There is no UI download button, no
-component tagging or starring, no favorites, and no per-row rich
+component tagging or starring, no favourites, and no per-row rich
 asset-attribute view (checksum, size). Lifecycle download counts are no longer
 missing (repository Usage tab), but they are not yet merged into artifact rows. Tombstones can be restored
 (`console/src/features/repository/RepositoryDetail.tsx` Tombstones tab) but cannot be
@@ -368,11 +368,11 @@ referenced commits.
   This is a stopgap for "no storage-growth history" until a metrics
   time-series endpoint exists. (`f0abdd12`)
 - **API key roles — first RBAC slice (P0/P3).** A coarse global `Role`
-  (reader/writer/admin) on the principal is honored by the authorizer and the
+  (reader/writer/admin) on the principal is honoured by the authorizer and the
   legacy Authenticator methods before per-repository grants, so API keys can be
   issued with bounded scope instead of always `admin`. Reader grants read,
   writer grants read+write, admin grants all; the empty role leaves existing
-  behavior unchanged. Includes OpenAPI enum values, a create-key role picker,
+  behaviour unchanged. Includes OpenAPI enum values, a create-key role picker,
   and authorization + end-to-end tests. (`01651d84`)
 - **Replication cancel (P3).** `DELETE /api/v2/repositories/{id}/replications/{planId}`
   moves a pending or failed replication plan to a terminal `cancelled` state so

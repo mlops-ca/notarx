@@ -1,4 +1,4 @@
-import type { AccessMessageKey } from "../../messages/access.zh-CN";
+import type { AccessMessageKey } from "../../messages/access.en-CA";
 import { useMemo, useState } from "react";
 import { Button, Dropdown, Popconfirm, Space, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";

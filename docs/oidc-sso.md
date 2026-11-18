@@ -68,7 +68,7 @@ account's current role and security state. Disabling the account, requiring a
 password change, or incrementing its session version therefore takes effect on
 the next authenticated request. Linked browser sessions additionally require an
 active, unexpired server-side session record. An unlinked identity continues to
-use the external-principal behavior and a stateless browser session when JIT
+use the external-principal behaviour and a stateless browser session when JIT
 provisioning is disabled.
 
 ### Register users before granting access

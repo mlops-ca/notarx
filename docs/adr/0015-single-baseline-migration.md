@@ -81,9 +81,9 @@ longer serves that fork:
 2. **Hand-write one baseline from the Go store code.** Smallest file, but the
    schema is the product of 173 steps; hand reconstruction will drift silently
    (defaults, partial indexes, check constraints, trigger functions).
-3. **Generate the baseline from the old chain with `pg_dump`, normalise, then
+3. **Generate the baseline from the old chain with `pg_dump`, normalize, then
    review and prove equivalence once.** Fidelity comes from PostgreSQL itself;
-   reviewability comes from a deterministic normaliser and a curated seed
+   reviewability comes from a deterministic normalizer and a curated seed
    section. The one-off proof removes the old chain afterwards.
 4. **Squash but keep the old ledger table name and filenames** to stay
    restore-compatible with upstream backups. Rejected: ADR 0013 states there is
@@ -97,7 +97,7 @@ Option 3.
 
 ### Layout and naming
 
-- ADR 0022 later moves this file to `migrations/postgres/` and adds a MySQL baseline in `migrations/mysql/`, generated from a neutral catalogue introspected from this baseline after the re-squash (slice 7); the PostgreSQL baseline stays the normalised `pg_dump`.
+- ADR 0022 later moves this file to `migrations/postgres/` and adds a MySQL baseline in `migrations/mysql/`, generated from a neutral catalogue introspected from this baseline after the re-squash (slice 7); the PostgreSQL baseline stays the normalized `pg_dump`.
 - `migrations/` contains exactly one file at the cut-over:
   `000001_baseline.sql`. After the cut-over, new schema changes are ordinary
   numbered migrations (`000002` onwards); the baseline is never edited in
@@ -133,7 +133,7 @@ then removed):
 2. `pg_dump --schema-only --no-owner --no-privileges --no-comments
    --no-tablespaces --no-publications --no-subscriptions` into one file.
    The equivalence proof uses exactly the same flags.
-3. Normalise deterministically (a Go program under `internal/tools/baselinefmt`
+3. Normalize deterministically (a Go program under `internal/tools/baselinefmt`
    or an awk script with tests): strip `SET`/`SELECT pg_catalog.set_config`
    preamble, the `\restrict` and `\unrestrict` psql meta-commands (recent
    `pg_dump` releases emit both with a random key; the runner pipes the file into
@@ -174,8 +174,8 @@ then removed):
 ### Equivalence proof (run at the cut-over and again at the re-squash)
 
 `scripts/baseline-equivalence-check.sh` runs in a temporary CI job on the
-migration PR. Because the baseline is a normalised dump of the source chain, the
-proof mainly validates the normaliser and the hand-written seed section; schema
+migration PR. Because the baseline is a normalized dump of the source chain, the
+proof mainly validates the normalizer and the hand-written seed section; schema
 fidelity itself comes from `pg_dump`, and the independent check is the existing
 Go integration suite and format e2e lanes running against B.
 
@@ -194,7 +194,7 @@ Go integration suite and format e2e lanes running against B.
   (`pg_sequences`) and `pg_class.reloptions`.
 - The existing Go integration suite and the format e2e lanes then run against B.
 
-The script and its workflow are parameterised on the source chain and kept
+The script and its workflow are parameterized on the source chain and kept
 until the re-squash PR has merged; the re-squash slice deletes them. The old
 173-file chain remains reachable in git history (the last upstream-derived commit
 before the cut-over, to be recorded in the PR description).
@@ -252,7 +252,7 @@ before the cut-over, to be recorded in the PR description).
 - Upgrade scripts that name upstream refs (`historical-upgrade-readiness.sh`
   default `v0.1.0`, `cargo-upgrade-readiness.sh` ledger names,
   `member-role-*`, `apt-lifecycle-upgrade-check.sh`) are deleted or
-  re-pointed; `upgrade-readiness.sh` is kept, parameterised on notarx release
+  re-pointed; `upgrade-readiness.sh` is kept, parameterized on notarx release
   tags, and becomes meaningful at 0.2.0.
 
 ## Security considerations
@@ -262,7 +262,7 @@ before the cut-over, to be recorded in the PR description).
   generated at build time), checksummed by the runner, and covered by the
   immutability check after the tag. The pinned `pg_dump` image digest keeps the
   generator reproducible.
-- Normalisation drops `ALTER ... OWNER` and `GRANT`. The deployment keeps its
+- Normalization drops `ALTER ... OWNER` and `GRANT`. The deployment keeps its
   separate migration and runtime roles; the baseline must not grant to
   `PUBLIC`. The equivalence script asserts `has_table_privilege('public', ...)`
   is false for all tables.
@@ -270,7 +270,7 @@ before the cut-over, to be recorded in the PR description).
   (anonymous read disabled). The seed review checks the column defaults, not
   only the row's existence.
 - No secret or tenant data may be in the dump; schema-only dumps contain none,
-  and the normaliser fails if it sees `COPY` or `INSERT` outside the seed block.
+  and the normalizer fails if it sees `COPY` or `INSERT` outside the seed block.
 
 ## Consequences
 
@@ -302,15 +302,15 @@ before the cut-over, to be recorded in the PR description).
    - [ ] `grep -r artifact_gateway_schema_migrations` returns nothing outside
      history notes.
    - Depends on: ADR 0013 slice 4 (environment prefix).
-2. **Baseline generator and normaliser**
+2. **Baseline generator and normalizer**
    - Scope: `scripts/baseline-generate.sh` (source chain and pinned
-     `pg_dump` image digest as parameters), normaliser (Go package with tests
+     `pg_dump` image digest as parameters), normalizer (Go package with tests
      under `internal/tools/`, subject to the repository's architecture-check rules),
      generated `migrations/000001_baseline.sql` staged alongside the old files
      under a non-applied directory `migrations-next/`.
-   - [ ] Normaliser unit tests with golden pg_dump fixtures (preamble, comments,
+   - [ ] Normalizer unit tests with golden pg_dump fixtures (preamble, comments,
      ownership, `COPY` rejection).
-   - [ ] Normaliser strips `\restrict` and `\unrestrict`; `pg_trgm` is
+   - [ ] Normalizer strips `\restrict` and `\unrestrict`; `pg_trgm` is
      required and `pg_stat_statements` is created in a guarded block.
    - [ ] Seed section contains only the four singleton rows; column defaults
      reviewed in the PR description against `internal/repositorypreset/pgstore`,
@@ -319,7 +319,7 @@ before the cut-over, to be recorded in the PR description).
    - Depends on: slice 1.
 3. **Equivalence proof**
    - Scope: `scripts/baseline-equivalence-check.sh`, a temporary workflow
-     `.github/workflows/baseline-equivalence.yml`, both parameterised on the
+     `.github/workflows/baseline-equivalence.yml`, both parameterized on the
      source chain.
    - [ ] Job passes on `linux/amd64` and `linux/arm64` native runners (the temporary workflow names the runner labels itself; no dependency on ADR 0016) with
      an empty schema diff (no column-order exemption), equal data dumps of all

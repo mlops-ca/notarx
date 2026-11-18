@@ -1,6 +1,4 @@
-import type { MigrationMessageKey } from "./migration.zh-CN";
-
-export const migrationEnUS: Record<MigrationMessageKey, string> = {
+export const migrationEnCA = {
   "migration.tab": "Migration sources",
   "migration.sources": "Nexus migration sources",
   "migration.scope": "Connect a source and preview its scope",
@@ -139,3 +137,5 @@ export const migrationEnUS: Record<MigrationMessageKey, string> = {
     "The existing Group needs explicit configuration.",
   "migration.reasonMembersOnly": "Only a Group may have members.",
 };
+
+export type MigrationMessageKey = keyof typeof migrationEnCA;

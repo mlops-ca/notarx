@@ -65,7 +65,7 @@ historical versions. Conan distribution results intentionally expose recipe
 revisions only because the recipe and its package closure are the atomic unit.
 Clients must not derive these identities from browse projections.
 
-## Promotion behavior
+## Promotion behaviour
 
 Promotion evaluates the target policy immediately before enqueueing the
 promotion job. A disabled policy returns `policy_disabled` and allows the
@@ -198,7 +198,7 @@ identity as policy-owned and does not fall through to a lower-priority Hosted
 or Proxy member for the same identity.
 
 Releasing the quarantine restores reads immediately. Disabling the read policy
-restores the legacy behavior without changing quarantine records.
+restores the legacy behaviour without changing quarantine records.
 
 For a gradual rollout, keep the policy disabled while scanners begin writing
 artifact intelligence, use the evaluation endpoint from CI, then enable the

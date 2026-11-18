@@ -93,7 +93,7 @@ Sealed values are stored as TEXT.
 
 `NOTARX_ISSUER_URL` defaults to `NOTARX_PUBLIC_URL` (owned by ADR 0013's env
 table); set it only to override. Startup validation requires `https`, no query
-or fragment, no trailing slash (normalised), and rejects an empty result while
+or fragment, no trailing slash (normalized), and rejects an empty result while
 issuance is enabled. Plain `http` is accepted only for loopback hosts
 (`localhost`, `127.0.0.1`, `::1`) and logs a warning; there is no separate
 environment switch. Startup also rejects an issuer URL equal to an issuer

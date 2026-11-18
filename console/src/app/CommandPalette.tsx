@@ -143,7 +143,7 @@ export function CommandPalette({
       group: "actions",
       label: locale === "zh-CN" ? "Switch to English" : "切换到中文",
       icon: <GlobalOutlined />,
-      run: () => setLocale(locale === "zh-CN" ? "en-US" : "zh-CN"),
+      run: () => setLocale(locale === "zh-CN" ? "en-CA" : "zh-CN"),
     };
     const signOut: Command = {
       id: "action:sign-out",

@@ -54,7 +54,7 @@ All JSON field names are ASCII; values preserve valid Unicode. Duplicate fields
 trailing JSON, fractional/out-of-range integer quantities and root `null` are
 rejected. The manifest is limited to 8 MiB. Missing quantities remain unknown;
 only explicit zero represents an empty object set or zero-byte object. A single
-ASCII field case variant retains the existing decoder's behavior; two names
+ASCII field case variant retains the existing decoder's behaviour; two names
 mapping to the same field are rejected. The integer version envelope is read
 before v1 body rules, so unsupported versions with future fields/body types
 remain unknown. Common JSON syntax/ambiguity and size limits still apply.

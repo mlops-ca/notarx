@@ -72,7 +72,7 @@ agree with executable tests and the
 
 ## Protocols and formats
 
-- [Protocol compatibility](protocol-compatibility.md) — implemented behavior and explicit limits by format.
+- [Protocol compatibility](protocol-compatibility.md) — implemented behaviour and explicit limits by format.
 - [OCI Catalog and Referrers](oci-discovery.md) — authorized enumeration, coverage, verified closures and stable source bindings.
 - [Conan 2 native publication](conan-native-publication.md) — canonical remote, manifest visibility and client acceptance.
 - [PyPI file yanking](pypi-yank.md) — file selection, atomic management, pip and recovery evidence.
@@ -96,7 +96,7 @@ agree with executable tests and the
 - [NuGet durable replication preview](nuget-replication-preview.md) — fixed Hosted plans, fenced workers, verified target-owned packages and exact item retry.
 - [RubyGems Hosted preview](rubygems-hosted-preview.md) — default-off native publication, compact/legacy dependency indexes and verified original gems.
 - [RubyGems Hosted replication preview](rubygems-replication-preview.md) — default-off durable plans, immutable variants, fenced publication and cold client verification.
-- [Legacy Group migration](legacy-group-migration.md) — compatibility behavior and migration guidance.
+- [Legacy Group migration](legacy-group-migration.md) — compatibility behaviour and migration guidance.
 - [Gitea backend reference](gitea-backend-reference.md) — preflight and evidence-loop design reference.
 
 ## Operations and security
@@ -112,7 +112,7 @@ agree with executable tests and the
 - [Offline backup manifest verification](backup-manifest-verification.md) — private local byte verification and explicitly unproven snapshot consistency.
 - [Anonymous access operations](anonymous-access-operations.md) — default-deny global, Group, and Repository gates.
 - [Local user governance](user-governance.md) — accounts, sessions, lockout, OIDC linkage, and audit.
-- [OIDC browser SSO](oidc-sso.md) — Code + PKCE, runtime configuration, role mapping, and session behavior.
+- [OIDC browser SSO](oidc-sso.md) — Code + PKCE, runtime configuration, role mapping, and session behaviour.
 - [Keycloak on Kubernetes](oidc-keycloak-k8s.md) — real browser callback acceptance.
 - [Repository Grant authorization](repository-grant-authorization-plan.md) — scoped runtime decisions and rollout.
 - [Service Account operations](service-account-operations.md) — stable machine principals and zero-downtime rotation.
@@ -142,7 +142,7 @@ agree with executable tests and the
 - [Full repository roadmap](full-artifact-repository-roadmap.md) — architecture sequence and current status.
 - [Nexus gap analysis](nexus-gap-analysis.md) — current cross-product capability and experience comparison.
 - [Nexus gap review, 2026-08](nexus-gap-review-2026-08.md) — historical point-in-time review.
-- [Nexus Maven publication research](nexus-maven-publication-research.md) — primary-source direct versus staging behavior.
+- [Nexus Maven publication research](nexus-maven-publication-research.md) — primary-source direct versus staging behaviour.
 - [Repository Console roadmap](repository-console-experience-roadmap.md) — browse, capacity, Proxy operations, and policy experience.
 - [OpenAPI governance](openapi-governance-plan.md) — source, generation, runtime, and review boundaries.
 
@@ -151,5 +151,5 @@ agree with executable tests and the
 - English uses unsuffixed `.md`; Simplified Chinese uses `.zh-CN.md`.
 - Every page pair links both ways and appears once in `site-map.json` with localized titles.
 - Both locales preserve commands, routes, status codes, compatibility limits, security boundaries, and delivery status.
-- Research, preview, historical evidence, and roadmap work stay explicitly labeled.
+- Research, preview, historical evidence, and roadmap work stay explicitly labelled.
 - Run `make docs-check` before submitting documentation changes.

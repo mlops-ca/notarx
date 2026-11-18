@@ -11,7 +11,7 @@ Status: implemented (2026-08-06). Migration `000070_egress_proxy.sql`, the
 ## Problem
 
 At the time of this proposal, only the Raw proxy path had explicit egress handling
-(`internal/app/raw.go`): it honors `http.ProxyFromEnvironment`, and when no
+(`internal/app/raw.go`): it honours `http.ProxyFromEnvironment`, and when no
 environment proxy applies it pins the dial to DNS answers that passed the
 private-address check. OCI, Maven, and Conan upstream fetches fall back to
 the default transport. Consequences:
@@ -20,7 +20,7 @@ the default transport. Consequences:
   One gateway instance cannot route `maven-central` through a corporate
   HTTP proxy while reaching an internal OCI registry directly.
 - SOCKS5 is unsupported: `http.ProxyFromEnvironment` only handles HTTP
-  proxies, and `ALL_PROXY` socks5 URLs are not honored by the standard
+  proxies, and `ALL_PROXY` socks5 URLs are not honoured by the standard
   library transport.
 - SSRF hardening is asymmetric. The private-address check and DNS pinning
   exist only for Raw; the other formats rely on host allowlists alone.
@@ -32,7 +32,7 @@ the default transport. Consequences:
 
 - Per-Proxy-Repository egress configuration managed through the V2
   management API and the Console Settings tab.
-- Support `direct`, `environment` (current behavior), and `custom` modes;
+- Support `direct`, `environment` (current behaviour), and `custom` modes;
   `custom` supports `http` (CONNECT) and `socks5` (remote DNS, a.k.a.
   socks5h) protocols with optional username/password authentication.
 - One shared egress transport factory used by all four formats.
@@ -70,7 +70,7 @@ optional `egressProxy` object:
 ```
 
 - `mode`: `direct` | `environment` | `custom`. Default `environment`
-  preserves current behavior.
+  preserves current behaviour.
 - `protocol`: `http` | `socks5` (custom mode only).
 - `password`: decided — **encrypted at rest**. The API accepts a plaintext
   password over TLS, the server encrypts it with AES-256-GCM using a key
@@ -110,11 +110,11 @@ type Config struct {
 func (c Config) WrapTransport(base *http.Transport) (*http.Transport, error)
 ```
 
-Behavior:
+Behaviour:
 
 - `direct`: clone base, set `Proxy = nil`, keep the Raw-style DNS
   resolution + private-address check + pinned dial for the upstream host.
-- `environment`: current behavior — `Proxy = http.ProxyFromEnvironment`,
+- `environment`: current behaviour — `Proxy = http.ProxyFromEnvironment`,
   clear local dial hooks, delegate DNS to the proxy.
 - `custom` + `http`: `Proxy = http.ProxyURL(...)` with optional
   `Proxy-Authorization` basic auth; CONNECT targets remain the allowlisted

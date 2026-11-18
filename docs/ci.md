@@ -78,7 +78,7 @@ compose files change) that BuildKit skips for image builds.
 
 CI does not fetch the upstream v0.5.0 tag or run `upgrade-readiness`: ADR 0015
 has no upgrade path from upstream, and
-[#39](https://github.com/mlops-ca/notarx/issues/39) re-parameterises
+[#39](https://github.com/mlops-ca/notarx/issues/39) re-parameterizes
 `scripts/upgrade-readiness.sh` (kept, with its make target) on notarx release
 tags. Re-add the step once a notarx release tag exists.
 

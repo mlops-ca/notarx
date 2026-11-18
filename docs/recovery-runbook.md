@@ -45,7 +45,7 @@ applied ledger. Binary releases also contain `gateway`; identity uses
 `{version, revision, artifact:{kind:"binary", sha256:"sha256:...", platform:"linux/arm64"}}`
 (or `linux/amd64`). Full executable bytes, Go module/platform and every migration
 checksum must agree. Without `nativeArchive`, static injected version/revision
-must also agree, retaining strict legacy behavior. OCI uses
+must also agree, retaining strict legacy behaviour. OCI uses
 `kind:"oci-image"`, the approved manifest digest in `artifact.sha256`, and a
 digest-pinned `imageReference`; the image must already be local, its RepoDigest,
 platform and OCI version/revision labels must agree. Bundle contents never

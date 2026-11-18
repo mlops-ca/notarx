@@ -1,6 +1,4 @@
-import type { GroupsMessageKey } from "./groups.zh-CN";
-
-export const groupsEnUS: Record<GroupsMessageKey, string> = {
+export const groupsEnCA = {
   "groups.available": "Available ({length})",
   "groups.allAdded": "All added",
   "groups.configuredOrderWithinEachType":
@@ -99,3 +97,5 @@ export const groupsEnUS: Record<GroupsMessageKey, string> = {
   "groups.moreActionsFor": "More actions for {name}",
   "groups.deleteGroupAction": "Delete group",
 };
+
+export type GroupsMessageKey = keyof typeof groupsEnCA;

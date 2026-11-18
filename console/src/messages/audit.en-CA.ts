@@ -1,6 +1,4 @@
-import type { AuditMessageKey } from "./audit.zh-CN";
-
-export const auditEnUS: Record<AuditMessageKey, string> = {
+export const auditEnCA = {
   "audit.readGET": "Read (GET)",
   "audit.probeHEAD": "Probe (HEAD)",
   "audit.uploadPUT": "Upload (PUT)",
@@ -208,3 +206,5 @@ export const auditEnUS: Record<AuditMessageKey, string> = {
   "audit.csvRequestId": "Request ID",
   "audit.csvTraceId": "Trace ID",
 };
+
+export type AuditMessageKey = keyof typeof auditEnCA;

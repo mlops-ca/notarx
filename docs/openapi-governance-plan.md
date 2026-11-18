@@ -76,7 +76,7 @@ operations with an equivalent handler:
 
 Adding a deferred path to `management-runtime.yaml` requires first adding the
 corresponding domain aggregate, persistence operations in both memory and
-Postgres stores, authorization behavior, and a handler-level contract test.
+Postgres stores, authorization behaviour, and a handler-level contract test.
 The generated wrapper then owns route and parameter binding; it must not be
 used to publish an unsupported route.
 
@@ -90,7 +90,7 @@ feature tests remain responsible for domain scenarios and authorization
 branches outside that matrix.
 
 Protocol APIs are not handler-generated. OCI Registry V2, Raw, Maven, and
-Conan behavior is defined first by official specifications and ecosystem client
+Conan behaviour is defined first by official specifications and ecosystem client
 expectations. `api/openapi/protocols/*.yaml` contains the Gateway overlay and
 the compatibility matrix records the normative references and executable gates.
 OpenAPI documents the exposed Gateway surface; focused handler/contract tests

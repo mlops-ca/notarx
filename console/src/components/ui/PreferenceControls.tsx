@@ -8,6 +8,7 @@ import { Button, Dropdown, Space } from "antd";
 import { useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { usePreferences, type AppLocale } from "../../lib/preferences";
+import { SUPPORTED_LOCALES } from "../../messages/locales";
 
 export function PreferenceControls({ compact = false }: { compact?: boolean }) {
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
@@ -86,8 +87,15 @@ export function PreferenceControls({ compact = false }: { compact?: boolean }) {
           selectable: true,
           selectedKeys: [locale],
           items: [
-            { key: "zh-CN", label: t("common.language.zh") },
-            { key: "en-US", label: t("common.language.en") },
+            ...SUPPORTED_LOCALES
+              // fr-CA joins the picker when its dictionaries land.
+              .filter(({ tag }) => tag !== "fr-CA")
+              .map(({ tag }) => ({
+                key: tag,
+                label: t(
+                  tag === "zh-CN" ? "common.language.zh" : "common.language.en",
+                ),
+              })),
           ],
           onClick: ({ key }) => setLocale(key as AppLocale),
         }}

@@ -117,7 +117,7 @@ Each version may appear only once for a crate, ignoring SemVer build metadata.
 After insertion, an index row is immutable except for its `yanked` field.
 These are Cargo's
 [registry-index requirements](https://doc.rust-lang.org/cargo/reference/registry-index.html),
-not Gitea-specific behavior.
+not Gitea-specific behaviour.
 
 The Web API operations needed for the initial Artifact Gateway profile are:
 
@@ -140,7 +140,7 @@ visible.
 
 The current Cargo documentation says `auth-required: true` covers all API,
 download, and sparse-index requests, while the Web API table still labels
-search as unauthenticated. Therefore private `cargo search` behavior must be an
+search as unauthenticated. Therefore private `cargo search` behaviour must be an
 official-client acceptance case, not an assumption encoded only from one of
 those descriptions
 ([registry index authentication](https://doc.rust-lang.org/cargo/reference/registry-index.html),
@@ -367,7 +367,7 @@ and exact retries. The reservation is not a completed publication or a visible
 sparse-index row.
 
 - Freeze the sparse-only route, canonical identity, collision policy, publish
-  framing limits, Cargo error envelope, and private-auth behavior.
+  framing limits, Cargo error envelope, and private-auth behaviour.
 - Add a bounded `.crate` reader and publish-metadata-to-index translator without
   adding Cargo to the public format catalog.
 - Generate fixtures only with the official `cargo package` and `cargo publish`
@@ -399,7 +399,7 @@ downloads a yanked version.
 ### C2: checksum-preserving Proxy
 
 - Implement sparse upstream fetch, checksum-gated `.crate` caching,
-  conditional/negative cache behavior, redirect and egress protection,
+  conditional/negative cache behaviour, redirect and egress protection,
   authenticated upstreams, and sanitized diagnostics.
 - Prove a dedicated crates.io Proxy as an exact Cargo source replacement; keep
   mixed private Groups configured as alternate registries.

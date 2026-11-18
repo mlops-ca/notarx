@@ -97,7 +97,7 @@ dependency-confusion boundaries.
   over the package plus its owned metadata.
 - Resolve `.nupkg` assets for manual and publication scanning; retain SBOM,
   license, vulnerability, signature, and provenance evidence without claiming
-  unsupported scanner behavior.
+  unsupported scanner behaviour.
 - Apply quarantine admission and optional read enforcement to the normalized
   package identity across direct and Group reads.
 - Extend backup/restore, metrics, audit, webhooks, upgrade compatibility,
@@ -112,4 +112,4 @@ the format catalog advertise NuGet as a supported repository type.
 Keep the #287 Hosted and #288 Proxy/Group previews behind explicit enablement;
 lifecycle, Console and public admission remain under #289. APT Hosted
 admission continues on its own roadmap. The existing parser stays covered;
-capability discovery must not advertise unfinished NuGet repository behavior.
+capability discovery must not advertise unfinished NuGet repository behaviour.
