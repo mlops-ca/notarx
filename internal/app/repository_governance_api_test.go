@@ -621,7 +621,7 @@ func TestAnonymousRepositoryBrowseAllowsReadOnlyQueries(t *testing.T) {
 
 func TestGroupManagementAnonymousReadPolicyDefaultsAndUpdates(t *testing.T) {
 	store := repository.NewMemoryStore()
-	repo, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{ID: uuid.NewString(), Name: "group-policy-repo", Format: repository.FormatRaw})
+	repo, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{ID: uuid.NewString(), Name: "group-policy-repo", Format: repository.FormatRaw, Visibility: repository.VisibilityPublic})
 	if err != nil {
 		t.Fatal(err)
 	}
