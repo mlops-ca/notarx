@@ -212,7 +212,16 @@ func runLocalRecoveryIntegration(t *testing.T, profile string) {
 	// tables are history that a restore must preserve.
 	auditMax, auditBefore := map[string]int64{}, map[string]string{}
 	var auditEvidence int64
-	for _, table := range []string{"security_audit_log", "resolver_audit_log"} {
+	tables := []string{"resolver_audit_log"}
+	var hasSecurity bool
+	// Published releases before the partitioned audit tables have no security_audit_log.
+	if e = auditConn.QueryRow(ctx, "SELECT to_regclass('public.security_audit_log') IS NOT NULL").Scan(&hasSecurity); e != nil {
+		t.Fatal(e)
+	}
+	if hasSecurity {
+		tables = append(tables, "security_audit_log")
+	}
+	for _, table := range tables {
 		var max int64
 		var before string
 		if e = auditConn.QueryRow(ctx, "SELECT COALESCE(max(id),0),COALESCE(jsonb_agg(to_jsonb(a) ORDER BY id)::text,'[]') FROM "+table+" a").Scan(&max, &before); e != nil {
