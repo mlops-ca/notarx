@@ -8,16 +8,23 @@ other management writes always require authentication.
 
 ## Enablement
 
-An anonymous read is allowed only when every applicable gate is enabled:
+Every Repository and Group has a `visibility` (ADR 0029), an ordered value:
+`private` (the default, principals with a grant or admin authority),
+`authenticated` (any valid non-anonymous identity may read; writes still need
+a grant) and `public` (anyone may read). An anonymous read is allowed only when
+every applicable gate is open:
 
-1. An administrator enables the global policy with `PUT
-   /api/v2/anonymous-access-policy` using `If-Match`.
-2. The addressed Repository or Group has `anonymousRead: true`.
-3. For a Group, the resolved member Repository also has `anonymousRead: true`.
+1. An administrator enables the global gate with `PUT
+   /api/v2/public-access-policy` using `If-Match`.
+2. The addressed Repository or Group has `visibility: public`.
+3. For a Group, the Group's visibility is a ceiling: the resolved member list is
+   computed per request from the members whose own visibility admits the caller.
 
-Enabling the global policy does not expose any existing Repository or Group by
-itself. Disabling it immediately denies all anonymous reads, including targets
-whose local policy remains enabled.
+Enabling the global gate does not expose any existing Repository or Group by
+itself. While it is disabled, `public` behaves as `authenticated`: the gate
+never widens access, and all anonymous reads are denied, including targets
+marked `public`. A request for a non-public name from an anonymous caller is
+answered exactly like a name that does not exist.
 
 An authenticated operator or scoped user can review its own effective decision
 through `GET /api/v2/repositories/{repositoryId}/effective-access`, and an
@@ -45,6 +52,56 @@ The unauthenticated `/browse` catalog presents only effective public targets.
 Its repository search, format filters, source-type guidance, and read-only
 notices are discovery features; publishing, grants, and administration still
 require an authenticated management identity.
+
+The `authenticated` tier is an identity-level allowance: any valid non-anonymous
+identity may read, unless it has its own grant entry on that repository, which then decides (a
+prefix-scoped grant stays scoped). An account-state block always applies. Writes always need a grant.
+
+## Group visibility
+
+A Group is a visibility ceiling. For each caller the resolved member list is
+computed per request from the members whose own visibility admits that caller;
+nothing derived is stored, and a member's visibility is always its repository's
+own (a proxy member included). Reading a repository directly uses that
+repository's visibility only.
+
+`NOTARX_GROUP_VISIBILITY_MODE` selects how writes are checked:
+
+- `strict` (the default) refuses a group more visible than its least visible
+  member, and refuses lowering a repository below a group that contains it, with
+  `409 visibility_conflict`. The response lists the offending member
+  repositories the caller may administer. The Console shows the same message.
+- `lenient` keeps the computed filtering only: members above the caller's class
+  are silently invisible. It exists to migrate existing layouts and is not a
+  recommended steady state.
+
+Legacy protocol-specific Groups (OCI, Maven, Raw, Conan) carry no per-member
+visibility: a legacy Group marked anonymous resolves every member for an
+anonymous caller. Migrate to V2 Groups, which bind members to repositories, when
+members need different visibility.
+
+## Existence and denial shaping
+
+For an anonymous caller a private repository or group and a name that does not
+exist produce the same response: `401` with the format's challenge, the same
+body and headers. An authenticated caller without read access receives the
+`404` of a missing resource. `internal/access` is the only package that decides
+reads, and `make architecture-check` fails when other code reads visibility or the
+public-access policy. The conformance harness (`internal/app/access_conformance_test.go`)
+drives every format in [the protocol compatibility baseline](protocol-compatibility.md)
+with anonymous, authenticated and granted callers, the gate on and off, and asserts
+that a private name and an absent one are byte-identical.
+
+## OCI anonymous pulls
+
+A public repository can be pulled two ways. A client may send an unauthenticated
+`GET` or `HEAD` directly, as ORAS does first. Docker, containerd and Podman follow
+the standard flow: `GET /v2/` answers `401` with a bearer challenge, the client asks
+`/auth/token` with no credentials and a `repository:NAME:pull` scope, and the token
+endpoint returns an anonymous token. That token is the same for every name and
+carries no authority; a request bearing it is served exactly as an anonymous
+request, so it reads only what an anonymous caller may read and never writes. A
+token request that asks for `push` or names no scope still needs credentials.
 
 ## Client Examples
 

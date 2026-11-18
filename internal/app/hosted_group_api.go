@@ -215,13 +215,16 @@ func (h repositoryManagementHandler) CreateGroup(w http.ResponseWriter, r *http.
 	if !h.authorizeGroupMembership(w, r, principal, group.Name, group.Members) {
 		return
 	}
+	if h.rejectVisibilityConflict(w, r, principal, group) {
+		return
+	}
 	group.ID = ids.New()
 	payload, _ := json.Marshal(struct {
-		Name          string                   `json:"name"`
-		Format        repository.Format        `json:"format"`
-		AnonymousRead bool                     `json:"anonymousRead"`
-		Members       []repository.GroupMember `json:"members"`
-	}{group.Name, group.Format, group.AnonymousRead, group.Members})
+		Name       string                   `json:"name"`
+		Format     repository.Format        `json:"format"`
+		Visibility repository.Visibility    `json:"visibility"`
+		Members    []repository.GroupMember `json:"members"`
+	}{group.Name, group.Format, repository.NormalizeVisibility(group.Visibility), group.Members})
 	digest := sha256.Sum256(payload)
 	created, _, err := h.groups.CreateHostedGroupIdempotently(r.Context(), group, principal.Actor, string(params.IdempotencyKey), base64.RawURLEncoding.EncodeToString(digest[:]))
 	if errors.Is(err, repository.ErrIdempotencyConflict) {
@@ -330,6 +333,9 @@ func (h repositoryManagementHandler) ReplaceGroup(w http.ResponseWriter, r *http
 	if !h.authorizeGroupMembership(w, r, principal, group.Name, append(append([]repository.GroupMember{}, current.Members...), group.Members...)) {
 		return
 	}
+	if h.rejectVisibilityConflict(w, r, principal, group) {
+		return
+	}
 	group.ID = id.String()
 	updated, err := h.groups.ReplaceHostedGroup(r.Context(), group, string(params.IfMatch))
 	h.writeGroupMutation(w, updated, err)
@@ -359,6 +365,9 @@ func (h repositoryManagementHandler) ReplaceGroupMembers(w http.ResponseWriter, 
 	// A membership change needs authority over the members it keeps or drops as
 	// well as the ones it adds.
 	if !h.authorizeGroupMembership(w, r, principal, group.Name, append(append([]repository.GroupMember{}, group.Members...), members...)) {
+		return
+	}
+	if h.rejectVisibilityConflict(w, r, principal, repository.HostedGroup{Name: group.Name, Format: group.Format, Visibility: group.Visibility, Members: members}) {
 		return
 	}
 	updated, err := h.groups.ReplaceHostedGroupMembers(r.Context(), id.String(), members, string(params.IfMatch))
@@ -393,7 +402,7 @@ func (h repositoryManagementHandler) writeGroupMutation(w http.ResponseWriter, g
 
 func (h repositoryManagementHandler) validHostedGroup(r *http.Request, group repository.HostedGroup) bool {
 	profile, supported := repository.FormatProfileFor(group.Format)
-	if !hostedRepositoryName.MatchString(group.Name) || group.Format == repository.FormatConan && group.Name == "v2" || !supported || !profile.GroupSupported || len(group.Members) == 0 {
+	if !hostedRepositoryName.MatchString(group.Name) || group.Format == repository.FormatConan && group.Name == "v2" || !supported || !profile.GroupSupported || len(group.Members) == 0 || !repository.NormalizeVisibility(group.Visibility).Valid() {
 		return false
 	}
 	seen := map[string]bool{}

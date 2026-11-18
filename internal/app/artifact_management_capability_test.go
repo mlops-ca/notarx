@@ -186,11 +186,11 @@ func TestArtifactManagementMissingCapabilitiesAreBoundedAndAuthorized(t *testing
 func TestArtifactManagementMissingSearchAndBrowseNeverBecomeEmptySuccess(t *testing.T) {
 	ctx := context.Background()
 	store := repository.NewMemoryStore()
-	repo, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "cap-maven", Format: repository.FormatMaven, AnonymousRead: true})
+	repo, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "cap-maven", Format: repository.FormatMaven, Visibility: repository.VisibilityPublic})
 	if err != nil {
 		t.Fatal(err)
 	}
-	group, _, err := store.CreateHostedGroupIdempotently(ctx, repository.HostedGroup{ID: uuid.NewString(), Name: "cap-group", Format: repository.FormatMaven, AnonymousRead: true, Members: []repository.GroupMember{{RepositoryID: repo.ID, Position: 0}}}, "alice", "cap-group", "cap-group-fingerprint")
+	group, _, err := store.CreateHostedGroupIdempotently(ctx, repository.HostedGroup{ID: uuid.NewString(), Name: "cap-group", Format: repository.FormatMaven, Visibility: repository.VisibilityPublic, Members: []repository.GroupMember{{RepositoryID: repo.ID, Position: 0}}}, "alice", "cap-group", "cap-group-fingerprint")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +217,12 @@ func TestArtifactManagementMissingSearchAndBrowseNeverBecomeEmptySuccess(t *test
 			}
 		})
 	}
-	// The global query continues to hide repositories this caller cannot read.
+	// The global query continues to hide repositories this caller cannot read; a
+	// public repository is readable by any identity (ADR 0029), so it goes private.
+	repo.Visibility = repository.VisibilityPrivate
+	if _, err := store.UpdateHostedRepository(ctx, repo, repo.Version); err != nil {
+		t.Fatal(err)
+	}
 	request := httptest.NewRequest(http.MethodGet, "/api/v2/artifact-search?q=com.example&format=maven", nil)
 	authorize(request, auth.IssueToken("user:ungranted"))
 	response := httptest.NewRecorder()
@@ -302,11 +307,11 @@ func TestArtifactManagementGroupSearchPreservesAccountGatesWithoutCapabilities(t
 	domain := newArtifactManagementHandler(artifactManagementOptions{Scope: newManagementScope(store, store, store, &managementAuditFixture{}, auth, nil), Repositories: store, Groups: store, Grants: store})
 	server := adminopenapi.HandlerWithOptions(managementServer{artifactManagementHandler: domain}, adminopenapi.StdHTTPServerOptions{BaseURL: "/api/v2", BaseRouter: openAPIServeMux{mux: http.NewServeMux()}})
 	for _, format := range []repository.Format{repository.FormatMaven, repository.FormatConan} {
-		repo, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "group-cap-" + string(format), Format: format, AnonymousRead: true})
+		repo, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "group-cap-" + string(format), Format: format, Visibility: repository.VisibilityPublic})
 		if err != nil {
 			t.Fatal(err)
 		}
-		group, _, err := store.CreateHostedGroupIdempotently(ctx, repository.HostedGroup{ID: uuid.NewString(), Name: "group-cap-all-" + string(format), Format: format, AnonymousRead: true, Members: []repository.GroupMember{{RepositoryID: repo.ID, Position: 0}}}, "admin", string(format), "group-cap-fingerprint")
+		group, _, err := store.CreateHostedGroupIdempotently(ctx, repository.HostedGroup{ID: uuid.NewString(), Name: "group-cap-all-" + string(format), Format: format, Visibility: repository.VisibilityPublic, Members: []repository.GroupMember{{RepositoryID: repo.ID, Position: 0}}}, "admin", string(format), "group-cap-fingerprint")
 		if err != nil {
 			t.Fatal(err)
 		}

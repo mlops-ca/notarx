@@ -46,9 +46,7 @@ NuGetPreviewRepositoryCreate:
     name:
       type: string
       pattern: ^[a-z0-9][a-z0-9-]{0,62}$
-    anonymousRead:
-      type: boolean
-      default: false
+    visibility: {"$ref": "./schemas.yaml#/Visibility"}
     type:
       type: string
       enum: [hosted, proxy]
@@ -147,9 +145,7 @@ NuGetPreviewRepositoryReplace:
     name:
       type: string
       pattern: ^[a-z0-9][a-z0-9-]{0,62}$
-    anonymousRead:
-      type: boolean
-      default: false
+    visibility: {"$ref": "./schemas.yaml#/Visibility"}
     type:
       type: string
       enum: [hosted, proxy]
@@ -182,9 +178,7 @@ NuGetPreviewGroupInput:
     name:
       type: string
       pattern: ^[a-z0-9][a-z0-9-]{0,62}$
-    anonymousRead:
-      type: boolean
-      default: false
+    visibility: {"$ref": "./schemas.yaml#/Visibility"}
     members:
       type: array
       minItems: 1
@@ -213,8 +207,7 @@ NuGetPreviewGroup:
       const: true
     version:
       type: string
-    anonymousRead:
-      type: boolean
+    visibility: {"$ref": "./schemas.yaml#/Visibility"}
     members:
       type: array
       items:

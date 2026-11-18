@@ -56,7 +56,7 @@ const repository: Repository = {
   name: "releases",
   format: "raw",
   type: "hosted",
-  anonymousRead: false,
+  visibility: "private",
   mavenStrictPublication: false,
   state: "active",
   version: "1",

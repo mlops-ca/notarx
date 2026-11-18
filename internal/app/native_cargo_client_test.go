@@ -128,7 +128,7 @@ func TestNativeCargoOfficialClientHostedFlow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	repo.AnonymousRead = true
+	repo.Visibility = repository.VisibilityPublic
 	if _, err := store.UpdateHostedRepository(context.Background(), repo, repo.Version); err != nil {
 		t.Fatal(err)
 	}

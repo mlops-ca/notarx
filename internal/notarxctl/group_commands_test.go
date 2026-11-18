@@ -24,12 +24,12 @@ type fakeMember struct {
 }
 
 type fakeGroup struct {
-	ID            string       `json:"id"`
-	Name          string       `json:"name"`
-	Format        string       `json:"format"`
-	AnonymousRead bool         `json:"anonymousRead"`
-	Members       []fakeMember `json:"members"`
-	Version       string       `json:"version"`
+	ID         string       `json:"id"`
+	Name       string       `json:"name"`
+	Format     string       `json:"format"`
+	Visibility string       `json:"visibility"`
+	Members    []fakeMember `json:"members"`
+	Version    string       `json:"version"`
 }
 
 // fakeGroupAPI stands in for the Group endpoints with the server semantics
@@ -66,10 +66,11 @@ func newFakeGroupAPI(t *testing.T) *fakeGroupAPI {
 
 func (api *fakeGroupAPI) addLocked(name, format string, members ...string) *fakeGroup {
 	group := &fakeGroup{
-		ID:      fmt.Sprintf("00000000-0000-4000-9000-%012d", len(api.groups)+1),
-		Name:    name,
-		Format:  format,
-		Version: "1",
+		ID:         fmt.Sprintf("00000000-0000-4000-9000-%012d", len(api.groups)+1),
+		Name:       name,
+		Format:     format,
+		Version:    "1",
+		Visibility: "private",
 	}
 	for index, member := range members {
 		group.Members = append(group.Members, fakeMember{RepositoryID: member, Position: index})
@@ -181,7 +182,7 @@ func (api *fakeGroupAPI) handle(w http.ResponseWriter, r *http.Request) {
 		}
 		var replacement fakeGroup
 		_ = json.Unmarshal(body, &replacement)
-		group.Name, group.AnonymousRead, group.Members = replacement.Name, replacement.AnonymousRead, replacement.Members
+		group.Name, group.Visibility, group.Members = replacement.Name, replacement.Visibility, replacement.Members
 		group.Version = bump(group.Version)
 		api.answerWrite(w, http.StatusOK, group)
 	case sub == "members" && r.Method == http.MethodPut:
@@ -275,7 +276,7 @@ func (api *fakeGroupAPI) create(w http.ResponseWriter, r *http.Request, body []b
 		}
 		api.idempotency[key] = string(body)
 		group = api.addLocked(request.Name, request.Format)
-		group.AnonymousRead = request.AnonymousRead
+		group.Visibility = request.Visibility
 		group.Members = request.Members
 	}
 	api.answerWrite(w, http.StatusCreated, group)
@@ -402,7 +403,7 @@ func TestGroupCreateUnknownOutcomeKeepsKey(t *testing.T) {
 func TestGroupCreateDryRunSubmitsNothing(t *testing.T) {
 	api := newFakeGroupAPI(t)
 	code, stdout, _ := runCLI(t, "group", "create", "npm-all", "--format", "npm", "--member", memberA, "--member", memberB,
-		"--anonymous-read", "--idempotency-key", "notarxctl-fixed-key", "--dry-run", "--json")
+		"--visibility", "public", "--idempotency-key", "notarxctl-fixed-key", "--dry-run", "--json")
 	if code != ExitOK {
 		t.Fatalf("exit = %d, stdout = %s", code, stdout)
 	}
@@ -415,7 +416,7 @@ func TestGroupCreateDryRunSubmitsNothing(t *testing.T) {
 func TestGroupUpdateReplacesWholeGroupConditionally(t *testing.T) {
 	api := newFakeGroupAPI(t)
 	group := api.add("npm-all", "npm", memberA, memberB)
-	code, stdout, stderr := runCLI(t, "group", "update", group.ID, "--name", "npm-public", "--anonymous-read", "--json")
+	code, stdout, stderr := runCLI(t, "group", "update", group.ID, "--name", "npm-public", "--visibility", "public", "--json")
 	if code != ExitOK {
 		t.Fatalf("exit = %d, stdout = %s, stderr = %s", code, stdout, stderr)
 	}
@@ -440,7 +441,7 @@ func TestGroupUpdateIncompleteResponseIsUnknown(t *testing.T) {
 	group := api.add("npm-all", "npm", memberA)
 	body := `{}`
 	api.writeBody = &body
-	code, stdout, _ := runCLI(t, "group", "update", group.ID, "--anonymous-read", "--json")
+	code, stdout, _ := runCLI(t, "group", "update", group.ID, "--visibility", "public", "--json")
 	envelope := decodeEnvelope(t, stdout)
 	var data unknownOutcome
 	_ = json.Unmarshal(envelope.Data, &data)
@@ -458,7 +459,7 @@ func TestGroupUpdateRequiresAChange(t *testing.T) {
 	for _, args := range [][]string{
 		{"group", "update", group.ID},
 		{"group", "update", group.ID, "--name", "Bad_Name"},
-		{"group", "update", group.ID, "--anonymous-read", "--if-match", ""},
+		{"group", "update", group.ID, "--visibility", "public", "--if-match", ""},
 	} {
 		if code, _, _ := runCLI(t, args...); code != ExitUsage {
 			t.Fatalf("%v exit = %d, want %d", args, code, ExitUsage)

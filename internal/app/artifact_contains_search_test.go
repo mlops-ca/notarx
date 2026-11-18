@@ -230,12 +230,12 @@ func verifyContainsSearchBoundaries(t *testing.T, store GatewayStore) {
 		})
 	}
 	// Anonymous repository/group reads still obey both policy and member grants.
-	public, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "public-boundary-" + uuid.NewString(), Format: repository.FormatRaw, AnonymousRead: true})
+	public, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "public-boundary-" + uuid.NewString(), Format: repository.FormatRaw, Visibility: repository.VisibilityPublic})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		public.AnonymousRead = false
+		public.Visibility = repository.VisibilityPrivate
 		if _, err := store.UpdateHostedRepository(context.Background(), public, public.Version); err != nil {
 			t.Errorf("disable fixture anonymous read: %v", err)
 		}
@@ -243,15 +243,15 @@ func verifyContainsSearchBoundaries(t *testing.T, store GatewayStore) {
 	if _, err = store.PutRawAsset(ctx, repository.RawAsset{RepositoryID: public.ID, Path: "public/alpha.bin", Digest: digest, ObjectKey: "boundary/" + repo.ID, Size: 7}); err != nil {
 		t.Fatal(err)
 	}
-	group, _, err := store.CreateHostedGroupIdempotently(ctx, repository.HostedGroup{ID: uuid.NewString(), Name: "public-boundary-group-" + uuid.NewString(), Format: repository.FormatRaw, AnonymousRead: true, Members: []repository.GroupMember{{RepositoryID: public.ID, Position: 0}, {RepositoryID: private.ID, Position: 1}}}, "fixture", uuid.NewString(), "boundary")
+	group, _, err := store.CreateHostedGroupIdempotently(ctx, repository.HostedGroup{ID: uuid.NewString(), Name: "public-boundary-group-" + uuid.NewString(), Format: repository.FormatRaw, Visibility: repository.VisibilityPublic, Members: []repository.GroupMember{{RepositoryID: public.ID, Position: 0}, {RepositoryID: private.ID, Position: 1}}}, "fixture", uuid.NewString(), "boundary")
 	if err != nil {
 		t.Fatal(err)
 	}
-	policy, err := store.GetAnonymousAccessPolicy(ctx)
+	policy, err := store.GetPublicAccessPolicy(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	enabled, err := store.ReplaceAnonymousAccessPolicy(ctx, repository.AnonymousAccessPolicy{Enabled: true}, policy.Version)
+	enabled, err := store.ReplacePublicAccessPolicy(ctx, repository.PublicAccessPolicy{Enabled: true}, policy.Version)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +261,7 @@ func verifyContainsSearchBoundaries(t *testing.T, store GatewayStore) {
 			t.Fatalf("anonymous contains=%+v", v)
 		}
 	}
-	if _, err = store.ReplaceAnonymousAccessPolicy(ctx, policy, enabled.Version); err != nil {
+	if _, err = store.ReplacePublicAccessPolicy(ctx, policy, enabled.Version); err != nil {
 		t.Fatal(err)
 	}
 	// Revoking repository authority invalidates a continuation without leaking data.

@@ -22,7 +22,7 @@ func TestRubyGemsPreviewContractSeparatesWorkerPlacementFromFormalAdmission(t *t
 	}
 	create := operation(t, spec, "/previews/rubygems/repositories", "POST")
 	input := create.RequestBody.Value.Content["application/json"].Schema.Value
-	if err := input.VisitJSON(map[string]any{"name": "owned-gems", "anonymousRead": false}); err != nil {
+	if err := input.VisitJSON(map[string]any{"name": "owned-gems", "visibility": "private"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := input.VisitJSON(map[string]any{"name": "owned-gems", "type": "proxy"}); err == nil {

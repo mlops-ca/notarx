@@ -19,7 +19,7 @@ const (
 	repositoryGrantsPath  = managementPrefix + "/repository-grants"
 	rolesPath             = managementPrefix + "/authorization-roles"
 	templatesPath         = managementPrefix + "/authorization-templates"
-	anonymousPolicyPath   = managementPrefix + "/anonymous-access-policy"
+	publicPolicyPath      = managementPrefix + "/public-access-policy"
 	maxGrantPrincipal     = 512
 	maxGrantResourcePrefx = 255
 )
@@ -788,52 +788,52 @@ func renderAccess(w io.Writer, access adminopenapi.RepositoryEffectiveAccess, de
 		decision := decisions[permission]
 		table = append(table, []string{permission, yesNo(decision.Allowed), decision.Source, decision.Reason})
 	}
-	table = append(table, []string{"anonymous read", yesNo(access.AnonymousRead.Allowed), access.AnonymousRead.Source, access.AnonymousRead.Reason})
+	table = append(table, []string{"anonymous access", yesNo(access.AnonymousAccess.Allowed), access.AnonymousAccess.Source, access.AnonymousAccess.Reason})
 	return writeColumns(w, table)
 }
 
-func accessAnonymousShowCommand() command {
+func accessPublicShowCommand() command {
 	return command{
-		name:     "access anonymous show",
-		synopsis: "show the platform switch for anonymous reads",
-		usage:    "notarxctl access anonymous show [--json]",
+		name:     "access public show",
+		synopsis: "show the platform gate for public visibility",
+		usage:    "notarxctl access public show [--json]",
 		meta: commandMeta{
 			Resource: "authorization", Scenarios: []string{"admin"}, Stage: "m1",
-			Endpoints: []string{"GET " + anonymousPolicyPath}, MinimumRole: "platform admin",
-			OutputSchema: "AnonymousAccessPolicy", DryRun: "unsupported", Retry: true,
+			Endpoints: []string{"GET " + publicPolicyPath}, MinimumRole: "platform admin",
+			OutputSchema: "PublicAccessPolicy", DryRun: "unsupported", Retry: true,
 		},
-		run: documentCommand[adminopenapi.AnonymousAccessPolicy]{
-			request: func(*commandContext) (string, url.Values, error) { return anonymousPolicyPath, nil, nil },
-			render:  renderAnonymousPolicy,
+		run: documentCommand[adminopenapi.PublicAccessPolicy]{
+			request: func(*commandContext) (string, url.Values, error) { return publicPolicyPath, nil, nil },
+			render:  renderPublicPolicy,
 		}.run,
 	}
 }
 
-func renderAnonymousPolicy(w io.Writer, policy adminopenapi.AnonymousAccessPolicy) error {
-	_, err := fmt.Fprintf(w, "anonymous reads: %s (version %s)\nrepositories and Groups still need their own anonymous read setting\n", map[bool]string{true: "enabled", false: "disabled"}[policy.Enabled], policy.Version)
+func renderPublicPolicy(w io.Writer, policy adminopenapi.PublicAccessPolicy) error {
+	_, err := fmt.Fprintf(w, "public access: %s (version %s)\nrepositories and Groups still need their own public visibility\n", map[bool]string{true: "enabled", false: "disabled"}[policy.Enabled], policy.Version)
 	return err
 }
 
-func accessAnonymousSetCommand() command {
+func accessPublicSetCommand() command {
 	var enabled bool
 	var ifMatch string
 	return command{
-		name:     "access anonymous set",
-		synopsis: "turn the platform switch for anonymous reads on or off (conditional on its version)",
-		usage:    "notarxctl access anonymous set --enabled=true|false [--if-match VERSION] [--yes] [--dry-run] [--json]",
+		name:     "access public set",
+		synopsis: "turn the platform gate for public visibility on or off (conditional on its version)",
+		usage:    "notarxctl access public set --enabled=true|false [--if-match VERSION] [--yes] [--dry-run] [--json]",
 		setFlags: func(fs *flag.FlagSet) {
-			fs.BoolVar(&enabled, "enabled", false, "allow anonymous reads where a repository or Group also allows them")
+			fs.BoolVar(&enabled, "enabled", false, "allow public visibility where a repository or Group is marked public")
 			fs.StringVar(&ifMatch, "if-match", "", "apply only if the policy is still at this version (default: the version read just before)")
 		},
 		meta: commandMeta{
 			Resource:     "authorization",
 			Scenarios:    []string{"admin"},
 			Stage:        "m1",
-			Endpoints:    []string{"PUT " + anonymousPolicyPath, "GET " + anonymousPolicyPath},
+			Endpoints:    []string{"PUT " + publicPolicyPath, "GET " + publicPolicyPath},
 			Mutating:     true,
 			MinimumRole:  "platform admin",
-			InputSchema:  "AnonymousAccessPolicy",
-			OutputSchema: "AnonymousAccessPolicy",
+			InputSchema:  "PublicAccessPolicy",
+			OutputSchema: "PublicAccessPolicy",
 			DryRun:       "client-plan",
 		},
 		run: func(ctx context.Context, env *commandContext) error {
@@ -841,29 +841,29 @@ func accessAnonymousSetCommand() command {
 				return &UsageError{Message: "missing required flag --enabled", Hint: "pass --enabled=true or --enabled=false"}
 			}
 			if env.flagSet["if-match"] && strings.TrimSpace(ifMatch) == "" {
-				return &UsageError{Message: "--if-match cannot be empty", Hint: "pass the version from notarxctl access anonymous show"}
+				return &UsageError{Message: "--if-match cannot be empty", Hint: "pass the version from notarxctl access public show"}
 			}
 			// Enabling widens who can read; it needs explicit confirmation.
 			if enabled && !env.globals.dryRun && !env.globals.yes {
-				return &UsageError{Message: "enabling anonymous reads needs --yes", Hint: "anonymous reads then apply to every repository and Group that allows them; re-run with --yes"}
+				return &UsageError{Message: "enabling public access needs --yes", Hint: "anonymous reads then apply to every repository and Group marked public; re-run with --yes"}
 			}
 			client, err := env.client()
 			if err != nil {
 				return err
 			}
-			var current *adminopenapi.AnonymousAccessPolicy
+			var current *adminopenapi.PublicAccessPolicy
 			if ifMatch == "" {
-				var policy adminopenapi.AnonymousAccessPolicy
-				if err := client.getJSON(ctx, anonymousPolicyPath, nil, &policy); err != nil {
+				var policy adminopenapi.PublicAccessPolicy
+				if err := client.getJSON(ctx, publicPolicyPath, nil, &policy); err != nil {
 					return err
 				}
 				current = &policy
 				ifMatch = policy.Version
 			}
-			body := adminopenapi.AnonymousAccessPolicy{Version: ifMatch, Enabled: enabled}
+			body := adminopenapi.PublicAccessPolicy{Version: ifMatch, Enabled: enabled}
 			if env.globals.dryRun {
 				plan := writePlan{
-					Mode: "client-plan", Method: http.MethodPut, Path: anonymousPolicyPath,
+					Mode: "client-plan", Method: http.MethodPut, Path: publicPolicyPath,
 					Headers: map[string]string{"If-Match": ifMatch}, Body: body,
 					Verified:    []string{"--enabled is given"},
 					NotVerified: []string{"caller permission (platform admin)", "that the version still matches when the policy is sent"},
@@ -879,8 +879,8 @@ func accessAnonymousSetCommand() command {
 				return err
 			}
 			// Conditional and therefore not retried.
-			var policy adminopenapi.AnonymousAccessPolicy
-			response, err := client.sendJSON(ctx, http.MethodPut, anonymousPolicyPath, requestOptions{body: encoded, header: http.Header{"If-Match": {ifMatch}}}, &policy)
+			var policy adminopenapi.PublicAccessPolicy
+			response, err := client.sendJSON(ctx, http.MethodPut, publicPolicyPath, requestOptions{body: encoded, header: http.Header{"If-Match": {ifMatch}}}, &policy)
 			if err == nil {
 				// A bool's zero value cannot distinguish a confirmed false from
 				// a missing/null enabled field in a truncated success response.
@@ -888,21 +888,21 @@ func accessAnonymousSetCommand() command {
 					Enabled *bool `json:"enabled"`
 				}
 				if json.Unmarshal(response.Body, &fields) != nil || fields.Enabled == nil || policy.Version == "" || policy.Enabled != enabled {
-					err = incompleteResponse(response, client, "anonymous access policy")
+					err = incompleteResponse(response, client, "public access policy")
 				}
 			}
 			if err != nil {
 				var api *APIError
 				if errors.As(err, &api) && api.HTTPStatus == http.StatusPreconditionFailed {
-					api.Hint = fmt.Sprintf("the policy changed since version %s and was not replaced; run notarxctl access anonymous show and retry", ifMatch)
+					api.Hint = fmt.Sprintf("the policy changed since version %s and was not replaced; run notarxctl access public show and retry", ifMatch)
 				}
 				if outcomeUnknown(err) {
-					return unknownOutcomeError(err, unknownOutcome{Operation: "access anonymous set", ReadBack: "notarxctl access anonymous show"},
-						fmt.Sprintf("the policy may have been changed; run notarxctl access anonymous show and compare its version with %s before retrying", ifMatch))
+					return unknownOutcomeError(err, unknownOutcome{Operation: "access public set", ReadBack: "notarxctl access public show"},
+						fmt.Sprintf("the policy may have been changed; run notarxctl access public show and compare its version with %s before retrying", ifMatch))
 				}
 				return err
 			}
-			return env.render(policy, nil, func(w io.Writer) error { return renderAnonymousPolicy(w, policy) })
+			return env.render(policy, nil, func(w io.Writer) error { return renderPublicPolicy(w, policy) })
 		},
 	}
 }

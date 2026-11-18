@@ -60,7 +60,9 @@
       "observability",
       "deploy",
       "signer",
-      "scanner"
+      "scanner",
+      "access",
+      "repository"
     ],
     "meta": [
       "deps",

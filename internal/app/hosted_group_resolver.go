@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/access"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -153,8 +154,8 @@ func (r v2GroupResolver) resolveMembers(ctx context.Context, group repository.Ho
 			OCIBearer:         repo.OCIBearer,
 			UpstreamAuth:      repo.UpstreamAuth,
 			RepositoryVersion: repo.Version,
-			Anonymous:         repo.AnonymousRead,
 		}
+		resolved = access.BindMember(resolved, repo)
 		switch repo.Type {
 		case repository.RepositoryTypeProxy:
 			resolved.Type = repository.MemberProxy

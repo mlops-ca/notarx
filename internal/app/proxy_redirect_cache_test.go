@@ -144,7 +144,7 @@ func newRedirectCacheGateway(t *testing.T, format repository.Format, route strin
 	proxy, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{
 		ID: "redirect-cache-proxy", Name: "redirect-cache-proxy", Format: format,
 		Type: repository.RepositoryTypeProxy, Endpoint: "https://" + redirectOrigin,
-		AllowedHosts: []string{redirectOrigin, redirectCDN}, AnonymousRead: true,
+		AllowedHosts: []string{redirectOrigin, redirectCDN}, Visibility: repository.VisibilityPublic,
 		EgressProxy: &repository.EgressProxy{Mode: repository.EgressProxyModeDirect},
 	})
 	if err != nil {
@@ -153,7 +153,7 @@ func newRedirectCacheGateway(t *testing.T, format repository.Format, route strin
 	name := proxy.Name
 	if route == "group" {
 		group, _, err := store.CreateHostedGroupIdempotently(context.Background(), repository.HostedGroup{
-			ID: "redirect-cache-group", Name: "redirect-cache-group", Format: format, AnonymousRead: true,
+			ID: "redirect-cache-group", Name: "redirect-cache-group", Format: format, Visibility: repository.VisibilityPublic,
 			Members: []repository.GroupMember{{RepositoryID: proxy.ID}},
 		}, "fixture", "redirect-cache-group", "fixture")
 		if err != nil {

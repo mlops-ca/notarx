@@ -42,7 +42,7 @@ then filter each chart. Downloads and uploads check the full chart name.
 Read credentials support Bearer or HTTP Basic with the Gateway credential as
 password. The Basic username cannot select an actor. Management uploads use
 Bearer authentication. Explicit invalid/revoked credentials always fail.
-Creation is private by default; anonymous reads require both an explicit `anonymousRead:true` and the enabled global policy. Group anonymous reads additionally require every member to allow anonymous reads.
+Creation is private by default; anonymous reads require both an explicit `visibility:"public"` and the enabled global gate. A Group is a visibility ceiling: anonymous callers see only members that are themselves public.
 
 ## Publish a complete closure
 
@@ -164,7 +164,7 @@ toward the repository quota. Pending closures use the existing one-hour expiry
 and collector. Source metadata is not an admitted artifact identity.
 
 Create a Group with `POST /api/v2/previews/helm/groups` and
-`{name,members:[repositoryId,...],anonymousRead?}`. The 1–32 direct Hosted/Proxy
+`{name,members:[repositoryId,...],visibility?}`. The 1–32 direct Hosted/Proxy
 members are ordered; nested Groups, duplicates and cycles are rejected. PUT on
 `/groups/{id}` replaces the order with a required current `version`; GET reads it.
 The same caller must pass every current member's read boundary before discovery.

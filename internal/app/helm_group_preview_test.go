@@ -13,19 +13,19 @@ func TestHelmGroupPreviewStaysOutsideFormalDiscoveryAndDeepLinks(t *testing.T) {
 	o := explicitGatewayOptions()
 	store := o.Store.(*repository.MemoryStore)
 	o.HelmPreviewEnabled, o.HelmStore, o.HelmGovernance, o.HelmSources, o.HelmObjects = true, store, store, store, objectstore.NewMemoryStore()
-	if _, err := store.ReplaceAnonymousAccessPolicy(t.Context(), repository.AnonymousAccessPolicy{Enabled: true}, "1"); err != nil {
+	if _, err := store.ReplacePublicAccessPolicy(t.Context(), repository.PublicAccessPolicy{Enabled: true}, "1"); err != nil {
 		t.Fatal(err)
 	}
 	h, err := NewGatewayHandler(o)
 	if err != nil {
 		t.Fatal(err)
 	}
-	w := nugetGatewayRequest(t, h, "POST", "/api/v2/previews/helm/repositories", `{"name":"helm-group-member","anonymousRead":true}`, true)
+	w := nugetGatewayRequest(t, h, "POST", "/api/v2/previews/helm/repositories", `{"name":"helm-group-member","visibility":"public"}`, true)
 	var member struct{ ID string }
 	if w.Code != 201 || json.Unmarshal(w.Body.Bytes(), &member) != nil || member.ID == "" {
 		t.Fatalf("Hosted preview: %d %s", w.Code, w.Body.String())
 	}
-	w = nugetGatewayRequest(t, h, "POST", "/api/v2/previews/helm/groups", `{"name":"helm-group","anonymousRead":true,"members":["`+member.ID+`"]}`, true)
+	w = nugetGatewayRequest(t, h, "POST", "/api/v2/previews/helm/groups", `{"name":"helm-group","visibility":"public","members":["`+member.ID+`"]}`, true)
 	var group struct{ ID string }
 	if w.Code != 201 || json.Unmarshal(w.Body.Bytes(), &group) != nil || group.ID == "" {
 		t.Fatalf("Group preview: %d %s", w.Code, w.Body.String())

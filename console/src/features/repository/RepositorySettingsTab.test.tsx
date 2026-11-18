@@ -15,7 +15,7 @@ const proxyRepository: Repository = {
   name: "central-proxy",
   format: "maven",
   type: "proxy",
-  anonymousRead: false,
+  visibility: "private",
   mavenStrictPublication: false,
   state: "active",
   version: "1",

@@ -4,13 +4,21 @@ import { MoreOutlined } from "@ant-design/icons";
 import { Button, Dropdown } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { Link } from "react-router-dom";
-import type { Group } from "../../client";
+import type { Group, Visibility } from "../../client";
 import { Badge, FormatBadge } from "../../components/ui/Badge";
 import { CopyableValue } from "../../components/ui/ConsolePrimitives";
 import { formatDescriptor, supportsDirectoryBrowse } from "../../formats";
 
 /** A dialog a group row opens; the page renders the one that is active. */
 export type GroupAction = "members" | "resolution" | "capacity" | "settings";
+
+function visibilityText(t: Translate, visibility: Visibility): string {
+  return {
+    private: t("repository.visibilityPrivate"),
+    authenticated: t("repository.visibilityAuthenticated"),
+    public: t("repository.visibilityPublic"),
+  }[visibility];
+}
 
 /** The group table: name and endpoint, format, access, members and actions. */
 export function groupColumns({
@@ -57,12 +65,12 @@ export function groupColumns({
     },
     {
       title: t("groups.access"),
-      dataIndex: "anonymousRead",
-      key: "anonymousRead",
+      dataIndex: "visibility",
+      key: "visibility",
       width: 140,
-      render: (anonymousRead: boolean) => (
-        <Badge tone={anonymousRead ? "success" : "neutral"}>
-          {anonymousRead ? t("groups.anonymousRead") : t("groups.private")}
+      render: (visibility: Visibility) => (
+        <Badge tone={visibility === "public" ? "success" : "neutral"}>
+          {visibilityText(t, visibility)}
         </Badge>
       ),
     },
@@ -85,7 +93,7 @@ export function groupColumns({
                 >
                   {member.position + 1}. {repoName(member.repositoryId)} ·{" "}
                   {repository?.type ?? t("groups.unknown")} ·{" "}
-                  {repository?.anonymousRead ? "anon" : "private"}
+                  {repository ? visibilityText(t, repository.visibility) : ""}
                 </span>
               );
             })}

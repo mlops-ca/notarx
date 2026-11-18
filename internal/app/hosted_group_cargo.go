@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/felixge/httpsnoop"
+	"github.com/mlops-ca/notarx/internal/access"
 	"github.com/mlops-ca/notarx/internal/protocol/cargo"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/upstreamauth"
@@ -36,7 +37,7 @@ func (h v2GroupCargoHandler) serve(w http.ResponseWriter, r *http.Request, resol
 	}
 	principal, authenticated := h.native.principal(r)
 	if !authenticated {
-		if !group.AnonymousRead || !anonymousAccessAllowed(r.Context(), resolver.groups) {
+		if !anonymousGroupAllowed(r.Context(), resolver.groups, group, r.Method) {
 			h.native.challenge(w, http.StatusUnauthorized)
 			return
 		}
@@ -49,7 +50,7 @@ func (h v2GroupCargoHandler) serve(w http.ResponseWriter, r *http.Request, resol
 	}
 	allMembers := members
 	if isAnonymous(principal) {
-		members = anonymousHostedGroupMembers(group, members)
+		members = anonymousGroupMembers(r.Context(), resolver.groups, group, members)
 	}
 	members, denied := resolver.authorizeRepositoryMembers(r.Context(), principal, group.Name, repository.FormatCargo, route.name, members, RepositoryRead)
 	if denied && len(members) == 0 {
@@ -62,12 +63,10 @@ func (h v2GroupCargoHandler) serve(w http.ResponseWriter, r *http.Request, resol
 	}
 	switch route.kind {
 	case "config":
-		public := group.AnonymousRead
-		for _, member := range allMembers {
-			public = public && member.Anonymous
-		}
+		// The config is public only when the group and every member are.
+		public := access.AnonymousGroupFullyPublic(r.Context(), resolver.groups, group, allMembers)
 		h.native.config(w, r, repository.HostedRepository{Name: group.Name, Format: repository.FormatCargo,
-			State: repository.RepositoryActive, AnonymousRead: public})
+			State: repository.RepositoryActive, Visibility: cargoConfigVisibility(public)})
 	case "index":
 		versions, err := h.reconcileIndex(r, resolver, group, members, route.name)
 		if denied && errors.Is(err, repository.ErrUpstreamChanged) {
@@ -422,4 +421,11 @@ func (h v2GroupCargoHandler) search(w http.ResponseWriter, r *http.Request, reso
 		_, _ = w.Write(body)
 	}
 	resolver.auditResolution(r.Context(), group, repository.FormatCargo, query, strings.ToLower(r.Method), actor, repository.AuditResolved, http.StatusOK)
+}
+
+func cargoConfigVisibility(public bool) repository.Visibility {
+	if public {
+		return repository.VisibilityPublic
+	}
+	return repository.VisibilityPrivate
 }

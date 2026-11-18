@@ -482,7 +482,7 @@ func TestV2GroupNPMColdTarballMetadataFailuresAuditMemberExactlyOnce(t *testing.
 func TestV2GroupNPMAnonymousReadExcludesPrivateMembers(t *testing.T) {
 	store := repository.NewMemoryStore()
 	public, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{
-		ID: "npm-public", Name: "npm-public", Format: repository.FormatNPM, AnonymousRead: true,
+		ID: "npm-public", Name: "npm-public", Format: repository.FormatNPM, Visibility: repository.VisibilityPublic,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -503,7 +503,7 @@ func TestV2GroupNPMAnonymousReadExcludesPrivateMembers(t *testing.T) {
 		repository.GroupMember{RepositoryID: public.ID, Position: 0},
 		repository.GroupMember{RepositoryID: private.ID, Position: 1},
 	)
-	group.AnonymousRead = true
+	group.Visibility = repository.VisibilityPublic
 	if _, err = store.ReplaceHostedGroup(context.Background(), group, group.Version); err != nil {
 		t.Fatal(err)
 	}
@@ -878,7 +878,7 @@ func TestV2GroupOCIManifestFallsBackToProxy(t *testing.T) {
 func TestV2GroupOCIAnonymousTagListAggregatesAnonymousMembers(t *testing.T) {
 	store := repository.NewMemoryStore()
 	objects := objectstore.NewMemoryStore()
-	public, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{ID: "oci-public", Name: "oci-public", Format: repository.FormatOCI, AnonymousRead: true})
+	public, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{ID: "oci-public", Name: "oci-public", Format: repository.FormatOCI, Visibility: repository.VisibilityPublic})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -906,7 +906,7 @@ func TestV2GroupOCIAnonymousTagListAggregatesAnonymousMembers(t *testing.T) {
 		}
 	}
 	group, _, err := store.CreateHostedGroupIdempotently(context.Background(), repository.HostedGroup{
-		ID: "group-public", Name: "public-group", Format: repository.FormatOCI, AnonymousRead: true,
+		ID: "group-public", Name: "public-group", Format: repository.FormatOCI, Visibility: repository.VisibilityPublic,
 		Members: []repository.GroupMember{{RepositoryID: public.ID, Position: 0}, {RepositoryID: private.ID, Position: 1}},
 	}, "test", "public-group", "public-group")
 	if err != nil {

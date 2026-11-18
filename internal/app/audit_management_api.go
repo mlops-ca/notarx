@@ -128,43 +128,43 @@ func (h generatedRepositoryAPIAdapter) ListAuditPage(w http.ResponseWriter, r *h
 	writeNativeMavenJSON(w, http.StatusOK, response)
 }
 
-func (h generatedRepositoryAPIAdapter) GetAnonymousAccessPolicy(w http.ResponseWriter, r *http.Request) {
+func (h generatedRepositoryAPIAdapter) GetPublicAccessPolicy(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.authorize(w, r); !ok {
 		return
 	}
-	policy, err := h.anonymousAccess.GetAnonymousAccessPolicy(r.Context())
+	policy, err := h.publicAccess.GetPublicAccessPolicy(r.Context())
 	if err != nil {
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "get anonymous access policy failed")
 		return
 	}
-	writeNativeMavenJSON(w, http.StatusOK, anonymousAccessPolicyResponse(policy))
+	writeNativeMavenJSON(w, http.StatusOK, publicAccessPolicyResponse(policy))
 }
 
-func (h generatedRepositoryAPIAdapter) ReplaceAnonymousAccessPolicy(w http.ResponseWriter, r *http.Request, params adminopenapi.ReplaceAnonymousAccessPolicyParams) {
+func (h generatedRepositoryAPIAdapter) ReplacePublicAccessPolicy(w http.ResponseWriter, r *http.Request, params adminopenapi.ReplacePublicAccessPolicyParams) {
 	if _, ok := h.authorize(w, r); !ok {
 		return
 	}
-	var request adminopenapi.AnonymousAccessPolicy
+	var request adminopenapi.PublicAccessPolicy
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&request); err != nil || request.Version == "" {
 		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "version and enabled are required")
 		return
 	}
-	policy, err := h.anonymousAccess.ReplaceAnonymousAccessPolicy(r.Context(), repository.AnonymousAccessPolicy{Enabled: request.Enabled}, string(params.IfMatch))
+	policy, err := h.publicAccess.ReplacePublicAccessPolicy(r.Context(), repository.PublicAccessPolicy{Enabled: request.Enabled}, string(params.IfMatch))
 	if errors.Is(err, repository.ErrVersionConflict) {
 		writeHostedProblem(w, http.StatusPreconditionFailed, "version_conflict", "If-Match does not match current version")
 		return
 	}
 	if err != nil {
-		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "replace anonymous access policy failed")
+		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "replace public access policy failed")
 		return
 	}
-	writeNativeMavenJSON(w, http.StatusOK, anonymousAccessPolicyResponse(policy))
+	writeNativeMavenJSON(w, http.StatusOK, publicAccessPolicyResponse(policy))
 }
 
-func anonymousAccessPolicyResponse(policy repository.AnonymousAccessPolicy) adminopenapi.AnonymousAccessPolicy {
-	return adminopenapi.AnonymousAccessPolicy{Enabled: policy.Enabled, Version: policy.Version}
+func publicAccessPolicyResponse(policy repository.PublicAccessPolicy) adminopenapi.PublicAccessPolicy {
+	return adminopenapi.PublicAccessPolicy{Enabled: policy.Enabled, Version: policy.Version}
 }
 
 func (h generatedRepositoryAPIAdapter) GetAuditRetentionPolicy(w http.ResponseWriter, r *http.Request) {

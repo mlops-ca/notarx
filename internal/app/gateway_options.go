@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/mlops-ca/notarx/internal/access"
 	helmformat "github.com/mlops-ca/notarx/internal/format/helm"
 	nugetformat "github.com/mlops-ca/notarx/internal/format/nuget"
 	helmdist "github.com/mlops-ca/notarx/internal/helmdistribution"
@@ -57,6 +58,9 @@ type GatewayOptions struct {
 	NPMRestore        repository.NPMRestoreStore
 	OCIDiscoveryStore ocidiscovery.Store
 	Storage           ObjectStores
+	// GroupVisibilityMode is how group visibility invariants are enforced on
+	// writes: strict (the zero value) or lenient (ADR 0029).
+	GroupVisibilityMode access.GroupMode
 	// Preview formats stay outside the admitted format catalog. Their persistent
 	// ports are supplied explicitly, never inferred from Store.
 	HelmPreviewEnabled     bool

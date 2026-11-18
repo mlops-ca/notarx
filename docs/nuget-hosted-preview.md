@@ -27,7 +27,7 @@ Runtime diagnostics and node listings report this collector under
 
 An administrator creates a repository through
 `POST /api/v2/previews/nuget/repositories` with a JSON body such as
-`{"name":"dotnet-internal","anonymousRead":false}`. The receipt contains the
+`{"name":"dotnet-internal","visibility": "private"}`. The receipt contains the
 repository ID, `preview:true` and its absolute `sourceUrl`. Replaying the same
 `Idempotency-Key` as the same actor returns that repository; changing its body
 returns 409. Keep the receipt: preview repositories do not appear in the formal

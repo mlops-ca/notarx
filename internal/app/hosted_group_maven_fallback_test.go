@@ -302,12 +302,12 @@ func TestV2GroupMavenCacheSeparatesAnonymousCandidates(t *testing.T) {
 	f := newGroupMavenFixture(t, nil, 200, 200)
 	enableAnonymousAccess(t, f.store)
 	repo := f.repos[1]
-	repo.AnonymousRead = true
+	repo.Visibility = repository.VisibilityPublic
 	if _, err := f.store.UpdateHostedRepository(context.Background(), repo, repo.Version); err != nil {
 		t.Fatal(err)
 	}
 	group := f.group
-	group.AnonymousRead = true
+	group.Visibility = repository.VisibilityPublic
 	if _, err := f.store.ReplaceHostedGroup(context.Background(), group, group.Version); err != nil {
 		t.Fatal(err)
 	}

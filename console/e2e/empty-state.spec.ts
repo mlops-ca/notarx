@@ -75,7 +75,7 @@ async function mockFormatProfiles(page: Page) {
             format: "oci",
             repositoryTypes: ["hosted", "proxy"],
             groupSupported: true,
-            anonymousRead: true,
+            visibility: "public",
             hostedOperations: ["read", "publish", "browse"],
             proxyOperations: ["read", "browse"],
           },

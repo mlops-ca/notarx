@@ -48,7 +48,7 @@ async function setup(page: Page, width: number) {
   await page.route("**/api/v2/repository-grants", (route) =>
     route.fulfill({ json: [grant] }),
   );
-  await page.route("**/api/v2/anonymous-access-policy", (route) =>
+  await page.route("**/api/v2/public-access-policy", (route) =>
     route.fulfill({ json: { enabled: false, version: "1" } }),
   );
   for (const name of ["authorization-roles", "authorization-templates"])

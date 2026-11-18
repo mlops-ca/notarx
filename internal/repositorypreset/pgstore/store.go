@@ -65,8 +65,8 @@ func (s *Store) Initialize(ctx context.Context) (repositorypreset.Result, error)
 				egress = string(encoded)
 			}
 			if _, err := tx.ExecContext(ctx, `INSERT INTO hosted_repositories
-				(id, name, format, repo_type, endpoint, allowed_hosts, anonymous_read, egress_proxy)
-				VALUES ($1,$2,$3,$4,$5,COALESCE($6::text[],'{}'::text[]),false,$7)`,
+				(id, name, format, repo_type, endpoint, allowed_hosts, visibility, egress_proxy)
+				VALUES ($1,$2,$3,$4,$5,COALESCE($6::text[],'{}'::text[]),'private',$7)`,
 				id, repo.Name, repo.Format, repo.Type, repo.Endpoint, repo.AllowedHosts, egress); err != nil {
 				return result, fmt.Errorf("create preset repository: %w", err)
 			}
@@ -74,8 +74,8 @@ func (s *Store) Initialize(ctx context.Context) (repositorypreset.Result, error)
 		}
 		for _, group := range catalog.Groups {
 			id := ids.New()
-			if _, err := tx.ExecContext(ctx, `INSERT INTO hosted_groups (id,name,format,anonymous_read)
-				VALUES ($1,$2,$3,false)`, id, group.Name, group.Format); err != nil {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO hosted_groups (id,name,format,visibility)
+				VALUES ($1,$2,$3,'private')`, id, group.Name, group.Format); err != nil {
 				return result, fmt.Errorf("create preset group: %w", err)
 			}
 			for position, name := range group.Members {

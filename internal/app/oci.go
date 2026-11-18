@@ -105,7 +105,7 @@ func (h OCIHandler) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 	}
 	h.Resolver.Metrics.recordRequest(repositoryName)
 	principal, ok := h.Authenticator.Authenticate(request.Header.Get("Authorization"))
-	if !ok && h.anonymousOCIAllowed(request.Context(), groupName) {
+	if !ok && h.anonymousGroupRead(request.Context(), groupName, request.Method) {
 		principal = Principal{Actor: "anonymous"}
 		ok = true
 	}
@@ -763,10 +763,80 @@ func (h OCIHandler) Token(w http.ResponseWriter, request *http.Request) {
 	}
 	principal, authenticated := h.Authenticator.Authenticate(request.Header.Get("Authorization"))
 	if !authenticated {
+		// A client that sent no credentials and asks only to pull gets an
+		// anonymous token, the same for every name, so it reveals nothing about
+		// which repositories exist or are public. What the token may read is
+		// decided on each read by internal/access.
+		if request.Header.Get("Authorization") == "" && ociPullOnlyScopes(request.URL.Query()["scope"]) {
+			token := h.Authenticator.IssueAnonymousToken()
+			if token != "" {
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("Cache-Control", "no-store")
+				_ = json.NewEncoder(w).Encode(map[string]any{"token": token, "access_token": token, "expires_in": 300, "issued_at": time.Now().UTC().Format(time.RFC3339)})
+				return
+			}
+		}
 		writeOCIChallenge(w, request)
 		return
 	}
 	token := h.Authenticator.IssuePrincipalToken(principal)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"token": token, "access_token": token, "expires_in": 300, "issued_at": time.Now().UTC().Format(time.RFC3339)})
+}
+
+// ociPullOnlyScopes reports whether a token request names at least one scope
+// and every scope asks only to pull a repository.
+func ociPullOnlyScopes(scopes []string) bool {
+	seen := false
+	for _, scope := range scopes {
+		for _, one := range strings.Fields(scope) {
+			kind, rest, ok := strings.Cut(one, ":")
+			if !ok || kind != "repository" {
+				return false
+			}
+			index := strings.LastIndex(rest, ":")
+			if index < 0 || rest[index+1:] != "pull" || !validOCIScopeName(rest[:index]) {
+				return false
+			}
+			seen = true
+		}
+	}
+	return seen
+}
+
+// anonymousBearerHandler serves a request carrying an anonymous pull token
+// exactly as the anonymous request it is: the Authorization header is removed
+// before any handler sees it, so no handler can mistake the token for an
+// identity and every decision runs as the anonymous class.
+type anonymousBearerHandler struct {
+	auth Authenticator
+	next http.Handler
+}
+
+func (h anonymousBearerHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if h.auth.IsAnonymousToken(r.Header.Get("Authorization")) {
+		stripped := r.Clone(r.Context())
+		stripped.Header.Del("Authorization")
+		r = stripped
+	}
+	h.next.ServeHTTP(w, r)
+}
+
+// validOCIScopeName accepts only repository names a registry could serve:
+// lowercase path components of letters, digits and . _ - separated by slashes.
+func validOCIScopeName(name string) bool {
+	if name == "" || len(name) > 255 {
+		return false
+	}
+	for _, component := range strings.Split(name, "/") {
+		if component == "" || component == "." || component == ".." {
+			return false
+		}
+		for _, r := range component {
+			if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '.' && r != '_' && r != '-' {
+				return false
+			}
+		}
+	}
+	return true
 }

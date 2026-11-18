@@ -4,7 +4,7 @@ HelmPreviewRepositoryCreate:
   required: [name]
   properties:
     name: {type: string, pattern: '^[a-z0-9][a-z0-9-]{0,62}$'}
-    anonymousRead: {type: boolean, default: false}
+    visibility: {"$ref": "./schemas.yaml#/Visibility"}
     type: {type: string, enum: [hosted, proxy], default: hosted}
     endpoint: {type: string, format: uri, description: "Explicit HTTPS index.yaml URL required for a Proxy"}
     allowedHosts:
@@ -22,7 +22,7 @@ HelmPreviewRepositoryReplace:
   properties:
     name: {type: string, pattern: '^[a-z0-9][a-z0-9-]{0,62}$'}
     version: {type: string, minLength: 1}
-    anonymousRead: {type: boolean, default: false}
+    visibility: {"$ref": "./schemas.yaml#/Visibility"}
     type: {type: string, enum: [hosted, proxy], default: hosted}
     endpoint: {type: string, format: uri, description: "Explicit HTTPS index.yaml URL required for a Proxy"}
     allowedHosts:
@@ -55,7 +55,7 @@ HelmPreviewGroupInput:
   required: [name, members]
   properties:
     name: {type: string, pattern: '^[a-z0-9][a-z0-9-]{0,62}$'}
-    anonymousRead: {type: boolean, default: false}
+    visibility: {"$ref": "./schemas.yaml#/Visibility"}
     version: {type: string, minLength: 1, description: "Required for replacement and compared atomically"}
     members:
       type: array
@@ -72,14 +72,14 @@ HelmPreviewGroupReplace:
 HelmPreviewGroup:
   type: object
   additionalProperties: false
-  required: [id, name, format, preview, version, anonymousRead, members, sourceUrl]
+  required: [id, name, format, preview, version, visibility, members, sourceUrl]
   properties:
     id: {type: string, format: uuid}
     name: {type: string}
     format: {type: string, enum: [helm]}
     preview: {type: boolean, const: true}
     version: {type: string}
-    anonymousRead: {type: boolean}
+    visibility: {"$ref": "./schemas.yaml#/Visibility"}
     members:
       type: array
       items: {type: string, format: uuid}
@@ -100,7 +100,7 @@ HelmPreviewSource:
 HelmPreviewRepository:
   type: object
   additionalProperties: false
-  required: [id, name, format, type, preview, version, anonymousRead, sourceUrl, provenanceTrust, upstreamAuth]
+  required: [id, name, format, type, preview, version, visibility, sourceUrl, provenanceTrust, upstreamAuth]
   properties:
     id: {type: string, format: uuid}
     name: {type: string}
@@ -108,7 +108,7 @@ HelmPreviewRepository:
     type: {type: string, enum: [hosted, proxy]}
     preview: {type: boolean, const: true}
     version: {type: string}
-    anonymousRead: {type: boolean}
+    visibility: {"$ref": "./schemas.yaml#/Visibility"}
     endpoint: {type: string, format: uri}
     allowedHosts:
       type: array

@@ -18,6 +18,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ProtonMail/go-crypto/openpgp"
+	"github.com/ProtonMail/go-crypto/openpgp/packet"
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/app"
 	"github.com/mlops-ca/notarx/internal/authorization"
@@ -27,8 +29,6 @@ import (
 	"github.com/mlops-ca/notarx/internal/secrets"
 	"github.com/mlops-ca/notarx/internal/upstreamauth"
 	"go.yaml.in/yaml/v3"
-	"github.com/ProtonMail/go-crypto/openpgp"
-	"github.com/ProtonMail/go-crypto/openpgp/packet"
 )
 
 type helmOwnedUpstream struct{ client *http.Client }

@@ -54,6 +54,11 @@ export const groupsEnCA = {
   "groups.access": "Access",
   "groups.anonymousRead": "Anonymous read",
   "groups.private": "Private",
+  "groups.publicGroups": "Public groups",
+  "groups.visibilityConflict":
+    "A group cannot be more visible than its least visible member ({members}). Lower the group's visibility or raise the member's first.",
+  "groups.visibilityCeilingHelp":
+    "A group is a visibility ceiling: callers see only the members whose own visibility admits them.",
   "groups.membersConfiguredOrder": "Members (configured order)",
   "groups.unknown": "unknown",
   "groups.noMembers": "No members",

@@ -333,11 +333,11 @@ AuditRetentionPolicy:
   content:
     application/json:
       schema: {"$ref": "../components/schemas.yaml#/AuditRetentionPolicy"}
-AnonymousAccessPolicy:
-  description: Global anonymous protocol-read policy
+PublicAccessPolicy:
+  description: Global public-access gate
   content:
     application/json:
-      schema: {"$ref": "../components/schemas.yaml#/AnonymousAccessPolicy"}
+      schema: {"$ref": "../components/schemas.yaml#/PublicAccessPolicy"}
 SiteSettings:
   description: Deployment-wide public Console name and brand assets
   headers:

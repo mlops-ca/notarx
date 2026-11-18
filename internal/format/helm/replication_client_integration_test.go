@@ -19,6 +19,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ProtonMail/go-crypto/openpgp"
+	"github.com/ProtonMail/go-crypto/openpgp/packet"
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/app"
 	"github.com/mlops-ca/notarx/internal/authorization"
@@ -26,8 +28,6 @@ import (
 	dist "github.com/mlops-ca/notarx/internal/helmdistribution"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
-	"github.com/ProtonMail/go-crypto/openpgp"
-	"github.com/ProtonMail/go-crypto/openpgp/packet"
 )
 
 func TestHelmFixedOfficialCLIReplicatedClosureTargetOnlyColdRestart(t *testing.T) {

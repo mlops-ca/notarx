@@ -9,7 +9,6 @@
       "Idempotency-Key": "notarxctl-fixed-key"
     },
     "body": {
-      "anonymousRead": true,
       "format": "npm",
       "members": [
         {
@@ -21,7 +20,8 @@
           "repositoryId": "00000000-0000-4000-8000-00000000000b"
         }
       ],
-      "name": "npm-all"
+      "name": "npm-all",
+      "visibility": "public"
     },
     "current": null,
     "verified": [

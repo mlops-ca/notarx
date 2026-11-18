@@ -289,7 +289,7 @@ func formatProfileResponse(profile repository.FormatProfile) adminopenapi.Format
 		Format:           adminopenapi.Format(profile.Format),
 		RepositoryTypes:  repositoryTypes,
 		GroupSupported:   profile.GroupSupported,
-		AnonymousRead:    profile.AnonymousRead,
+		PublicVisibility: profile.PublicVisibility,
 		HostedOperations: hostedOperations,
 		ProxyOperations:  proxyOperations,
 		OciDiscovery:     discovery,

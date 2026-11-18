@@ -29,8 +29,8 @@ type postgresDiscoveryFixture struct {
 // policy row is modified in an integration database used by other packages.
 type ociAnonymousPostgresFixture struct{ *repository.PostgresStore }
 
-func (*ociAnonymousPostgresFixture) GetAnonymousAccessPolicy(context.Context) (repository.AnonymousAccessPolicy, error) {
-	return repository.AnonymousAccessPolicy{Enabled: true, Version: "1"}, nil
+func (*ociAnonymousPostgresFixture) GetPublicAccessPolicy(context.Context) (repository.PublicAccessPolicy, error) {
+	return repository.PublicAccessPolicy{Enabled: true, Version: "1"}, nil
 }
 
 func TestPostgresRustFSOCIDiscoveryExplicitCredentialsNeverBecomeAnonymous(t *testing.T) {

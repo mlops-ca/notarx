@@ -22,6 +22,14 @@ explicit Hosted and Proxy Repositories, then switch clients after validation.
 6. Retain the Legacy Group until all clients have moved. Deleting a V2 Group
    never deletes its member Repositories or Artifact bytes.
 
+## Upgrade of per-member anonymous flags
+
+Legacy Group members no longer carry an anonymous flag (migration `000007`). So
+that an upgrade never widens access, a Legacy Group stays anonymous only when it
+was anonymous and every one of its members was; a mixed Group becomes private and
+an operator re-enables it deliberately, or moves to a V2 Group whose members bind
+to repositories with their own visibility.
+
 ## Boundaries
 
 ### Maven resolution and cache compatibility
@@ -90,5 +98,6 @@ per-repository grant, there is nothing to do. Otherwise:
 
 An administrator, a global read role, and this repository's own grants are
 unaffected because they never used the fallback. Anonymous access is unaffected
-because it is governed by the repository's own anonymous-read setting. A pending
+because it is governed by the repository's own visibility setting (a Legacy Group
+marked anonymous resolves all its members; see [Group visibility](anonymous-access-operations.md#group-visibility)). A pending
 or password-change account is refused under every posture.

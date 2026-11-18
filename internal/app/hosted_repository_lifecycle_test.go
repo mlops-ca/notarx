@@ -859,7 +859,7 @@ func TestConanRevisionManagementListsAndTombstonesSelectedRevisions(t *testing.T
 	ctx := context.Background()
 	store := repository.NewMemoryStore()
 	enableAnonymousAccess(t, store)
-	repo, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "conan-revisions", Format: repository.FormatConan, AnonymousRead: true})
+	repo, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "conan-revisions", Format: repository.FormatConan, Visibility: repository.VisibilityPublic})
 	if err != nil {
 		t.Fatal(err)
 	}

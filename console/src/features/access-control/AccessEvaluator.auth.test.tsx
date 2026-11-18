@@ -22,7 +22,7 @@ const repository = {
   format: "raw",
   state: "active",
   version: "1",
-  anonymousRead: false,
+  visibility: "private",
   mavenStrictPublication: false,
 } satisfies Repository;
 const decision = {
@@ -42,7 +42,8 @@ function answer(actor = "alice-evaluation"): RepositoryEffectiveAccess {
       role: "admin",
       administrator: true,
     },
-    anonymousRead: decision,
+    visibility: "private",
+    anonymousAccess: decision,
     permissions: {
       read: decision,
       write: decision,

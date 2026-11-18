@@ -64,7 +64,9 @@ var supportedWorkerKinds = map[string]struct{}{
 }
 
 type Config struct {
-	RepositoryPresetsMode           string
+	RepositoryPresetsMode string
+	// GroupVisibilityMode is the validated NOTARX_GROUP_VISIBILITY_MODE: strict or lenient.
+	GroupVisibilityMode             string
 	HelmPreviewEnabled              bool
 	NuGetPreviewEnabled             bool
 	RubyGemsPreviewEnabled          bool
@@ -181,8 +183,13 @@ func Load() (Config, error) {
 	if presetsErr != nil {
 		return Config{}, presetsErr
 	}
+	groupVisibilityMode, groupVisibilityErr := loadGroupVisibilityMode()
+	if groupVisibilityErr != nil {
+		return Config{}, groupVisibilityErr
+	}
 	cfg := Config{
 		RepositoryPresetsMode:           presetsMode,
+		GroupVisibilityMode:             groupVisibilityMode,
 		MigrationStoragePoolID:          strings.TrimSpace(os.Getenv("NOTARX_MIGRATION_STORAGE_POOL_ID")),
 		ListenAddress:                   value("NOTARX_LISTEN_ADDRESS", ":8080"),
 		ConsoleThemeDir:                 strings.TrimSpace(os.Getenv("NOTARX_CONSOLE_THEME_DIR")),

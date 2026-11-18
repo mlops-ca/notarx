@@ -56,8 +56,8 @@ func TestAuthorizationWritesRejectMissingRequiredFields(t *testing.T) {
 	for _, body := range []string{`{"version":"2"}`, `{"version":"2","enabled":null}`} {
 		t.Run("anonymous_"+body, func(t *testing.T) {
 			api := newRouteAPI(t, "")
-			api.on("PUT", anonymousPolicyPath, 200, body)
-			code, stdout, _ := runCLI(t, "access", "anonymous", "set", "--enabled=false", "--if-match", "1", "--json")
+			api.on("PUT", publicPolicyPath, 200, body)
+			code, stdout, _ := runCLI(t, "access", "public", "set", "--enabled=false", "--if-match", "1", "--json")
 			var result unknownOutcome
 			_ = json.Unmarshal(decodeEnvelope(t, stdout).Data, &result)
 			if code == ExitOK || result.Outcome != "unknown" || api.count("PUT") != 1 {

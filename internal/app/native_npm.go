@@ -158,7 +158,7 @@ func (h nativeNPMHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) bool
 
 	// `npm whoami` validates credentials before any repository access, so it
 	// only reports the caller's own Gateway principal subject and never
-	// consults repository authorization or anonymous-read policy.
+	// consults repository authorization or visibility policy.
 	if route.Kind == npmprotocol.RouteWhoami {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -185,7 +185,7 @@ func (h nativeNPMHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) bool
 		anonymousMethod := r.Method
 		if route.Kind == npmprotocol.RouteAuditBulk || route.Kind == npmprotocol.RouteAuditQuick {
 			// npm install sends audit reads as POST requests. They do not mutate
-			// repository state and follow the repository's anonymous-read policy.
+			// repository state and follow the repository's visibility policy.
 			anonymousMethod = http.MethodGet
 		}
 		if operation == RepositoryRead && anonymousHostedRepositoryReadAllowed(r.Context(), h.store, repo, anonymousMethod) {

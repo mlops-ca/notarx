@@ -26,7 +26,7 @@ for every declared capability:
    promotion, and checkpointed replication before declaring those operations.
    Protocol-only formats must omit unsupported lifecycle operations rather than
    exposing placeholders.
-7. Apply repository grants, anonymous-read gates, audit fields, bounded metrics,
+7. Apply repository grants, visibility checks through `internal/access`, audit fields, bounded metrics,
    worker-format filtering, capacity, quota, backup, and recovery behaviour.
 8. Extend OpenAPI, generated Go/TypeScript clients, Console selectors, protocol
    compatibility documentation, unit/integration tests, and a black-box client
@@ -43,8 +43,8 @@ is executable in the same revision.
 - `GroupSupported` controls Group creation; it does not imply that arbitrary
   repositories can be mixed. Every member must still be active and match the
   Group format.
-- `AnonymousRead` means the protocol can honour the global and repository/Group
-  anonymous policy. It does not enable anonymous access by default.
+- `PublicVisibility` means the protocol can honour the public visibility tier and
+  the global public-access gate. It does not enable anonymous access by default.
 - `PublicationScanning` means Hosted publications expose canonical immutable
   assets to automatic scanning and bounded scan reconciliation. It does not
   enable scanning by itself; scanner configuration and repository policy still

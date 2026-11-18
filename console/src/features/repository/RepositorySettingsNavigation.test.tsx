@@ -35,7 +35,7 @@ it.each(["go", "maven", "oci"] as const)(
       type: "proxy",
       state: "active",
       version: "1",
-      anonymousRead: false,
+      visibility: "private",
       mavenStrictPublication: false,
       endpoint: "https://first.example.test",
       allowedHosts: ["first.example.test"],

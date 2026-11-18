@@ -78,7 +78,7 @@ matching previous-release software, then rolls forward. This gate does not
 validate an old binary against an expanded database, down migrations, every
 protocol/provider, or published images. Until a second release exists,
 `make backup-transfer-test` runs the same properties against the baseline plus a
-synthetic `000006` migration (`TestLocalReleaseUpgrade`). That target also proves
+synthetic `000008` migration (`TestLocalReleaseUpgrade`). That target also proves
 new outbox recovery semantics for both binary and OCI software profiles, with an
 owned TLS sink.
 

@@ -430,7 +430,7 @@ by ID (`notarxctl repo list` shows it).
 - `notarxctl repo show ID` prints one repository; credentials of proxy settings
   are reported only as configured.
 - `notarxctl repo create NAME --format FORMAT [--type hosted|proxy] [--endpoint
-  URL] [--allowed-host HOST]… [--anonymous-read]
+  URL] [--allowed-host HOST]… [--visibility private|authenticated|public]
   [--maven-strict-publication]` creates a repository (platform admin). Every
   create sends an `Idempotency-Key`, and retries of the same call reuse it, so
   a lost response never creates a second repository. When the outcome stays
@@ -439,7 +439,7 @@ by ID (`notarxctl repo list` shows it).
   with a different request is refused with exit 7. Upstream credentials,
   egress proxies, and OCI bearer exchange are not exposed by this command yet;
   use the Console or the API for them.
-- `notarxctl repo update ID [--anonymous-read=true|false]
+- `notarxctl repo update ID [--visibility private|authenticated|public]
   [--maven-strict-publication=true|false] [--endpoint URL] [--allowed-host
   HOST]…` sends only the given settings as a conditional `PATCH`. `If-Match`
   is `--if-match VERSION` or, without it, the version read just before the
@@ -487,11 +487,11 @@ the Group did not exist, so a Group it only partly administers stays hidden.
   names, and how many members it excludes as missing, inactive, or of another
   format. It does not query artifacts or decide any reader's access.
 - `notarxctl group create NAME --format FORMAT --member REPOSITORY_ID…
-  [--anonymous-read]` creates a Group; the order of `--member` is the
+  [--visibility private|authenticated|public]` creates a Group; the order of `--member` is the
   configured position. Like `repo create`, every create sends an
   `Idempotency-Key` that retries reuse, and an unknown outcome prints the key
   for `--idempotency-key`.
-- `notarxctl group update ID [--name NAME] [--anonymous-read=true|false]` reads
+- `notarxctl group update ID [--name NAME] [--visibility private|authenticated|public]` reads
   the Group and sends it back whole (`PUT`) with the change, keeping its
   format and members; `If-Match` is `--if-match VERSION` or the version just
   read, and a 412 (exit 7) overwrites nothing. Change members with
@@ -716,8 +716,8 @@ grants; applying a template remains a separate, explicit operation.
   administrator; `--role` simulates that actor's global role. A caller with
   no read or intelligence authority gets 404 (exit 4), hiding the repository's
   existence; `--require` exits 6 when a returned decision denies permission.
-- `notarxctl access anonymous show` reads the platform switch for anonymous
-  reads; `notarxctl access anonymous set --enabled=true|false` replaces it
+- `notarxctl access public show` reads the platform switch for anonymous
+  reads; `notarxctl access public set --enabled=true|false` replaces it
   conditional on `--if-match` or the version just read, and is never
   retried. Enabling needs `--yes`, because it applies to every repository
   and Group that allows anonymous reads.

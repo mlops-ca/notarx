@@ -104,7 +104,7 @@ func TestRubyGemsAnonymousRequiresBothPoliciesAndExplicitInvalidKeyNeverFallsBac
 	if w := push(f, gem(t, "owned", "1.0.0", "ruby", "fixture")); w.Code != 201 {
 		t.Fatal(w.Code)
 	}
-	f.repo.AnonymousRead = true
+	f.repo.Visibility = repository.VisibilityPublic
 	var e error
 	f.repo, e = f.repos.UpdateHostedRepository(t.Context(), f.repo, "1")
 	if e != nil {
@@ -114,7 +114,7 @@ func TestRubyGemsAnonymousRequiresBothPoliciesAndExplicitInvalidKeyNeverFallsBac
 	if w := request(f.module, "GET", path, nil, ""); w.Code != 401 {
 		t.Fatalf("global disabled %d", w.Code)
 	}
-	if _, e = f.repos.ReplaceAnonymousAccessPolicy(t.Context(), repository.AnonymousAccessPolicy{Enabled: true}, "1"); e != nil {
+	if _, e = f.repos.ReplacePublicAccessPolicy(t.Context(), repository.PublicAccessPolicy{Enabled: true}, "1"); e != nil {
 		t.Fatal(e)
 	}
 	if w := request(f.module, "GET", path, nil, ""); w.Code != 200 {

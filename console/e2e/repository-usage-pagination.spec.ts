@@ -77,7 +77,7 @@ for (const width of [1440, 1024]) {
           type: "hosted",
           state: "active",
           version: "1",
-          anonymousRead: false,
+          visibility: "private",
           mavenStrictPublication: false,
         },
       });

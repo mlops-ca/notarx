@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/access"
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
 	"github.com/mlops-ca/notarx/internal/egress"
 	"github.com/mlops-ca/notarx/internal/ids"
@@ -28,29 +29,30 @@ type hostedRepositoryAPIHandler struct {
 	store         repository.HostedRepositoryStore
 	groups        repository.HostedGroupStore
 	authenticator Authenticator
+	groupMode     access.GroupMode
 }
 
 type createHostedRepositoryRequest struct {
-	Name                   string               `json:"name"`
-	Format                 repository.Format    `json:"format"`
-	Type                   string               `json:"type,omitempty"`
-	Endpoint               string               `json:"endpoint,omitempty"`
-	AllowedHosts           []string             `json:"allowedHosts,omitempty"`
-	EgressProxy            *egressProxyRequest  `json:"egressProxy,omitempty"`
-	UpstreamAuth           *upstreamAuthRequest `json:"upstreamAuth,omitempty"`
-	OCIBearer              json.RawMessage      `json:"ociBearer,omitempty"`
-	AnonymousRead          bool                 `json:"anonymousRead,omitempty"`
-	MavenStrictPublication bool                 `json:"mavenStrictPublication,omitempty"`
+	Name                   string                `json:"name"`
+	Format                 repository.Format     `json:"format"`
+	Type                   string                `json:"type,omitempty"`
+	Endpoint               string                `json:"endpoint,omitempty"`
+	AllowedHosts           []string              `json:"allowedHosts,omitempty"`
+	EgressProxy            *egressProxyRequest   `json:"egressProxy,omitempty"`
+	UpstreamAuth           *upstreamAuthRequest  `json:"upstreamAuth,omitempty"`
+	OCIBearer              json.RawMessage       `json:"ociBearer,omitempty"`
+	Visibility             repository.Visibility `json:"visibility,omitempty"`
+	MavenStrictPublication bool                  `json:"mavenStrictPublication,omitempty"`
 }
 
 type updateHostedRepositoryRequest struct {
-	Endpoint               *string              `json:"endpoint,omitempty"`
-	AllowedHosts           []string             `json:"allowedHosts,omitempty"`
-	EgressProxy            *egressProxyRequest  `json:"egressProxy,omitempty"`
-	UpstreamAuth           *upstreamAuthRequest `json:"upstreamAuth,omitempty"`
-	OCIBearer              json.RawMessage      `json:"ociBearer,omitempty"`
-	AnonymousRead          *bool                `json:"anonymousRead,omitempty"`
-	MavenStrictPublication *bool                `json:"mavenStrictPublication,omitempty"`
+	Endpoint               *string                `json:"endpoint,omitempty"`
+	AllowedHosts           []string               `json:"allowedHosts,omitempty"`
+	EgressProxy            *egressProxyRequest    `json:"egressProxy,omitempty"`
+	UpstreamAuth           *upstreamAuthRequest   `json:"upstreamAuth,omitempty"`
+	OCIBearer              json.RawMessage        `json:"ociBearer,omitempty"`
+	Visibility             *repository.Visibility `json:"visibility,omitempty"`
+	MavenStrictPublication *bool                  `json:"mavenStrictPublication,omitempty"`
 }
 
 type repositoryPage struct {
@@ -211,7 +213,7 @@ func (h hostedRepositoryAPIHandler) authenticateManagementRequest(w http.Respons
 	}
 	if parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v2/groups/"), "/"); strings.HasPrefix(r.URL.Path, "/api/v2/groups/") && len(parts) == 2 && parts[1] == "browse" {
 		group, err := h.groups.GetHostedGroup(r.Context(), parts[0])
-		if err == nil && group.AnonymousRead && anonymousAccessAllowed(r.Context(), h.groups) {
+		if err == nil && anonymousGroupAllowed(r.Context(), h.groups, group, r.Method) {
 			return anonymousPrincipal(), true
 		}
 		return h.authenticate(w, r)
@@ -311,7 +313,7 @@ func (h hostedRepositoryAPIHandler) createWithIdempotencyKey(w http.ResponseWrit
 	}
 	payload, _ := json.Marshal(request)
 	digest := sha256.Sum256(payload)
-	repo, _, err := h.store.CreateHostedRepositoryIdempotently(r.Context(), repository.HostedRepository{ID: ids.New(), Name: request.Name, Format: request.Format, Type: repoType, Endpoint: request.Endpoint, AllowedHosts: request.AllowedHosts, EgressProxy: egressProxy, UpstreamAuth: upstreamAuth, OCIBearer: ociBearer, AnonymousRead: request.AnonymousRead, MavenStrictPublication: request.MavenStrictPublication}, principal.Actor, key, base64.RawURLEncoding.EncodeToString(digest[:]))
+	repo, _, err := h.store.CreateHostedRepositoryIdempotently(r.Context(), repository.HostedRepository{ID: ids.New(), Name: request.Name, Format: request.Format, Type: repoType, Endpoint: request.Endpoint, AllowedHosts: request.AllowedHosts, EgressProxy: egressProxy, UpstreamAuth: upstreamAuth, OCIBearer: ociBearer, Visibility: repository.NormalizeVisibility(request.Visibility), MavenStrictPublication: request.MavenStrictPublication}, principal.Actor, key, base64.RawURLEncoding.EncodeToString(digest[:]))
 	if errors.Is(err, repository.ErrIdempotencyConflict) {
 		writeHostedProblem(w, http.StatusConflict, "idempotency_conflict", "Idempotency-Key was already used with a different request")
 		return
@@ -430,8 +432,7 @@ func (h hostedRepositoryAPIHandler) disable(w http.ResponseWriter, r *http.Reque
 }
 
 // update applies mutable management policy and proxy configuration. Protocol
-// handlers do not consume anonymousRead yet, so this only changes management
-// state until the protocol slice is implemented.
+// handlers consume visibility through internal/access.
 func (h hostedRepositoryAPIHandler) update(w http.ResponseWriter, r *http.Request, repo repository.HostedRepository, ifMatch string) {
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
 	decoder.DisallowUnknownFields()
@@ -440,15 +441,19 @@ func (h hostedRepositoryAPIHandler) update(w http.ResponseWriter, r *http.Reques
 		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "repository update body must be valid")
 		return
 	}
-	updatedRepo := repository.HostedRepository{ID: repo.ID, Endpoint: repo.Endpoint, AllowedHosts: append([]string(nil), repo.AllowedHosts...), EgressProxy: repo.EgressProxy, UpstreamAuth: repo.UpstreamAuth, OCIBearer: repo.OCIBearer, AnonymousRead: repo.AnonymousRead, MavenStrictPublication: repo.MavenStrictPublication}
+	updatedRepo := repository.HostedRepository{ID: repo.ID, Endpoint: repo.Endpoint, AllowedHosts: append([]string(nil), repo.AllowedHosts...), EgressProxy: repo.EgressProxy, UpstreamAuth: repo.UpstreamAuth, OCIBearer: repo.OCIBearer, Visibility: repo.Visibility, MavenStrictPublication: repo.MavenStrictPublication}
 	ociBearer, err := resolveOCIBearer(request.OCIBearer, repo.OCIBearer, repo.Format, repo.Type)
 	if err != nil {
 		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
 	updatedRepo.OCIBearer = ociBearer
-	if request.AnonymousRead != nil {
-		updatedRepo.AnonymousRead = *request.AnonymousRead
+	if request.Visibility != nil {
+		if !request.Visibility.Valid() {
+			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "visibility must be private, authenticated or public")
+			return
+		}
+		updatedRepo.Visibility = *request.Visibility
 	}
 	if request.MavenStrictPublication != nil {
 		if repo.Format != repository.FormatMaven || repo.Type != repository.RepositoryTypeHosted {
@@ -516,13 +521,19 @@ func (h hostedRepositoryAPIHandler) update(w http.ResponseWriter, r *http.Reques
 		}
 	} else {
 		if request.Endpoint != nil || request.AllowedHosts != nil || request.EgressProxy != nil || request.UpstreamAuth != nil || request.OCIBearer != nil {
-			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "hosted repositories only support anonymousRead and Maven publication policy updates")
+			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "hosted repositories only support visibility and Maven publication policy updates")
 			return
 		}
-		if request.AnonymousRead == nil && request.MavenStrictPublication == nil {
+		if request.Visibility == nil && request.MavenStrictPublication == nil {
 			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "an editable hosted repository setting is required")
 			return
 		}
+	}
+	// The lowering check runs last, after every 400 and after the version check, so
+	// a stale or malformed request keeps its own status. A stale If-Match falls
+	// through to the store, which answers 412.
+	if request.Visibility != nil && ifMatch == repo.Version && h.rejectLoweringBelowGroups(w, r, repo, *request.Visibility) {
+		return
 	}
 	updated, err := h.store.UpdateHostedRepository(r.Context(), updatedRepo, ifMatch)
 	if errors.Is(err, repository.ErrNotFound) {
@@ -543,6 +554,9 @@ func (h hostedRepositoryAPIHandler) update(w http.ResponseWriter, r *http.Reques
 }
 
 func validHostedRepository(request createHostedRepositoryRequest) bool {
+	if !repository.NormalizeVisibility(request.Visibility).Valid() {
+		return false
+	}
 	if !hostedRepositoryName.MatchString(request.Name) || request.Format == repository.FormatConan && request.Name == "v2" {
 		return false
 	}

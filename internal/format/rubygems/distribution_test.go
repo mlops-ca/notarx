@@ -33,7 +33,7 @@ type distributionRepos interface {
 	repository.UserSessionStore
 	repository.ServiceAccountStore
 	repository.AuditStore
-	repository.AnonymousAccessPolicyStore
+	repository.PublicAccessPolicyStore
 }
 type distributionFixture struct {
 	module         *Module

@@ -73,7 +73,7 @@ func renderGroup(w io.Writer, group adminopenapi.Group) error {
 		{"id", group.Id.String()},
 		{"name", group.Name},
 		{"format", string(group.Format)},
-		{"anonymous read", yesNo(group.AnonymousRead)},
+		{"visibility", string(group.Visibility)},
 		{"version", group.Version},
 	}
 	for _, line := range lines {
@@ -219,17 +219,17 @@ func groupShowCommand() command {
 func groupCreateCommand() command {
 	var format, idempotencyKey string
 	var members stringList
-	var anonymousRead bool
+	var visibility string
 	return command{
 		name:        "group create",
 		synopsis:    "create a Group from repositories in resolution order",
-		usage:       "notarxctl group create NAME --format FORMAT --member REPOSITORY_ID... [--anonymous-read] [--idempotency-key KEY] [--dry-run] [--json]",
+		usage:       "notarxctl group create NAME --format FORMAT --member REPOSITORY_ID... [--visibility private|authenticated|public] [--idempotency-key KEY] [--dry-run] [--json]",
 		positionals: 1,
 		argsUsage:   "NAME",
 		setFlags: func(fs *flag.FlagSet) {
 			fs.StringVar(&format, "format", "", "Group format; every member must have it")
 			fs.Var(&members, "member", "member repository ID (repeatable; the order given is the configured position)")
-			fs.BoolVar(&anonymousRead, "anonymous-read", false, "allow unauthenticated protocol reads where effective policy permits")
+			fs.StringVar(&visibility, "visibility", "", "read visibility: private (default), authenticated or public")
 			fs.StringVar(&idempotencyKey, "idempotency-key", "", "reuse the key of an earlier attempt whose outcome was unknown (default: a new key)")
 		},
 		meta: commandMeta{
@@ -261,8 +261,12 @@ func groupCreateCommand() command {
 				return err
 			}
 			request.Members = list
-			if env.flagSet["anonymous-read"] {
-				request.AnonymousRead = &anonymousRead
+			if env.flagSet["visibility"] {
+				value, err := parseVisibility(visibility)
+				if err != nil {
+					return err
+				}
+				request.Visibility = &value
 			}
 			key, err := resolveIdempotencyKey(env, idempotencyKey)
 			if err != nil {
@@ -329,16 +333,16 @@ func resolveIdempotencyKey(env *commandContext, value string) (string, error) {
 
 func groupUpdateCommand() command {
 	var name, ifMatch string
-	var anonymousRead bool
+	var visibility string
 	return command{
 		name:        "group update",
-		synopsis:    "rename a Group or change its anonymous read policy (conditional on its version)",
-		usage:       "notarxctl group update ID [--name NAME] [--anonymous-read=true|false] [--if-match VERSION] [--dry-run] [--json]",
+		synopsis:    "rename a Group or change its visibility (conditional on its version)",
+		usage:       "notarxctl group update ID [--name NAME] [--visibility private|authenticated|public] [--if-match VERSION] [--dry-run] [--json]",
 		positionals: 1,
 		argsUsage:   "ID",
 		setFlags: func(fs *flag.FlagSet) {
 			fs.StringVar(&name, "name", "", "new Group name")
-			fs.BoolVar(&anonymousRead, "anonymous-read", false, "set the anonymous read policy")
+			fs.StringVar(&visibility, "visibility", "", "read visibility: private, authenticated or public")
 			fs.StringVar(&ifMatch, "if-match", "", "apply only if the Group is still at this version (default: the version read just before the update)")
 		},
 		meta: commandMeta{
@@ -354,8 +358,8 @@ func groupUpdateCommand() command {
 		},
 		run: func(ctx context.Context, env *commandContext) error {
 			id := env.args[0]
-			if !env.flagSet["name"] && !env.flagSet["anonymous-read"] {
-				return &UsageError{Message: "nothing to update", Hint: "pass --name or --anonymous-read; change members with notarxctl group members set"}
+			if !env.flagSet["name"] && !env.flagSet["visibility"] {
+				return &UsageError{Message: "nothing to update", Hint: "pass --name or --visibility; change members with notarxctl group members set"}
 			}
 			if env.flagSet["name"] && !repositoryNamePattern.MatchString(name) {
 				return &UsageError{Message: fmt.Sprintf("invalid Group name %q", name), Hint: "use 1-63 lowercase letters, digits, and inner hyphens"}
@@ -382,8 +386,12 @@ func groupUpdateCommand() command {
 			if env.flagSet["name"] {
 				replacement.Name = name
 			}
-			if env.flagSet["anonymous-read"] {
-				replacement.AnonymousRead = anonymousRead
+			if env.flagSet["visibility"] {
+				value, err := parseVisibility(visibility)
+				if err != nil {
+					return err
+				}
+				replacement.Visibility = value
 			}
 			if env.globals.dryRun {
 				plan := writePlan{

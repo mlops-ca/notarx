@@ -127,9 +127,13 @@ export function RepositorySummary({
             <span>{repo.type ?? "hosted"}</span>
             <span aria-hidden="true">·</span>
             <span>
-              {repo.anonymousRead
-                ? t("repository.anonymousReads")
-                : t("repository.privateReads")}
+              {
+                {
+                  private: t("repository.privateReads"),
+                  authenticated: t("repository.visibilityAuthenticatedReads"),
+                  public: t("repository.anonymousReads"),
+                }[repo.visibility]
+              }
             </span>
             <span aria-hidden="true">·</span>
             <span className="font-mono">ID {repo.id}</span>
@@ -152,7 +156,7 @@ export function RepositorySummary({
         </div>
       </div>
       <div className="mt-2 flex items-center gap-4 text-xs">
-        {repo.anonymousRead && (
+        {repo.visibility === "public" && (
           <Link
             to={`/browse?repository=${encodeURIComponent(repo.id)}`}
             className="font-medium text-[var(--ag-link)] hover:text-[var(--ag-link-hover)]"

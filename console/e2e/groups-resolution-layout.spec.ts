@@ -58,7 +58,7 @@ for (const width of [1440, 390]) {
                 id: groupId,
                 name: "release-group",
                 format: "raw",
-                anonymousRead: false,
+                visibility: "private",
                 version: "1",
                 members: members.map((member) => ({
                   repositoryId: member.repositoryId,

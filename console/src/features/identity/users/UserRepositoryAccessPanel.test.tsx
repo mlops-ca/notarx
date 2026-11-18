@@ -49,7 +49,7 @@ const artifacts = {
   version: "3",
   repositoryTypes: ["hosted"],
   groupSupported: false,
-  anonymousRead: false,
+  visibility: "private",
 };
 
 const icons = { ...artifacts, id: iconsId, name: "icons", format: "oci" };

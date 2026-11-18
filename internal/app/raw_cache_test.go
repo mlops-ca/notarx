@@ -257,7 +257,7 @@ func TestRawProxyTLSE2ESafelyPinsDialedAddressAndCaches(t *testing.T) {
 	store := repository.NewMemoryStore()
 	enableAnonymousAccess(t, store)
 	_, _ = store.CreateRawGroup(context.Background(), repository.Group{Name: "downloads", Members: []repository.Member{{Name: "proxy", Type: repository.MemberProxy, Endpoint: endpoint, AllowedHosts: []string{"example.com"}}}})
-	_, _ = store.CreateRawGroup(context.Background(), repository.Group{Name: "public", Anonymous: true, Members: []repository.Member{{Name: "proxy", Type: repository.MemberProxy, Endpoint: endpoint, AllowedHosts: []string{"example.com"}, Anonymous: true}}})
+	_, _ = store.CreateRawGroup(context.Background(), repository.Group{Name: "public", Anonymous: true, Members: []repository.Member{{Name: "proxy", Type: repository.MemberProxy, Endpoint: endpoint, AllowedHosts: []string{"example.com"}}}})
 	cache := NewRawCache(objectstore.NewMemoryStore(), time.Hour, time.Hour, []string{"example.com"})
 	gateway := httptest.NewServer(RawHandler{Store: store, Authenticator: testAuthenticator(), Client: UpstreamClient{HTTPClient: upstream.Client()}, Metrics: &Metrics{}, Cache: cache})
 	defer gateway.Close()

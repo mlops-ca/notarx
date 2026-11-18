@@ -58,7 +58,7 @@ func (h v2GroupNPMHandler) serve(w http.ResponseWriter, r *http.Request, resolve
 		if route.Kind == npmprotocol.RouteAuditBulk || route.Kind == npmprotocol.RouteAuditQuick {
 			anonymousMethod = http.MethodGet
 		}
-		if group.AnonymousRead && anonymousReadMethod(anonymousMethod) && anonymousAccessAllowed(r.Context(), resolver.groups) {
+		if anonymousGroupAllowed(r.Context(), resolver.groups, group, anonymousMethod) {
 			principal = anonymousPrincipal()
 		} else {
 			h.native.challenge(w, http.StatusUnauthorized, "authentication required")
@@ -72,7 +72,7 @@ func (h v2GroupNPMHandler) serve(w http.ResponseWriter, r *http.Request, resolve
 		return
 	}
 	if isAnonymous(principal) {
-		members = anonymousHostedGroupMembers(group, members)
+		members = anonymousGroupMembers(r.Context(), resolver.groups, group, members)
 	}
 	operation := RepositoryRead
 	if route.Kind == npmprotocol.RouteDistTags && route.Tag != "" && isNPMWriteMethod(r.Method) {

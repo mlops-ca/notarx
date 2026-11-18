@@ -30,8 +30,8 @@ func conanHandshakeKind(r *http.Request) string {
 }
 
 type conanHandshakeScope struct {
-	ID, Name      string
-	AnonymousRead bool
+	ID, Name   string
+	PublicRead bool
 }
 
 func (h ConanHandler) serveNativeConanHandshake(w http.ResponseWriter, r *http.Request) bool {
@@ -43,14 +43,14 @@ func (h ConanHandler) serveNativeConanHandshake(w http.ResponseWriter, r *http.R
 		return false
 	}
 	principal, authenticated := h.authenticate(r)
-	h.serveConanHandshake(w, r, conanHandshakeScope{ID: repo.ID, Name: repo.Name, AnonymousRead: h.anonymousConanAllowed(r.Context(), repo.Name)}, principal, authenticated)
+	h.serveConanHandshake(w, r, conanHandshakeScope{ID: repo.ID, Name: repo.Name, PublicRead: anonymousHostedRepositoryReadAllowed(r.Context(), h.Store, repo, r.Method)}, principal, authenticated)
 	return true
 }
 
 func (h ConanHandler) serveConanHandshake(w http.ResponseWriter, r *http.Request, scope conanHandshakeScope, principal Principal, authenticated bool) {
 	kind := conanHandshakeKind(r)
 	w.Header().Set("Cache-Control", "no-store")
-	if !authenticated && kind == "ping" && r.Header.Get("Authorization") == "" && scope.AnonymousRead {
+	if !authenticated && kind == "ping" && r.Header.Get("Authorization") == "" && scope.PublicRead {
 		w.Header().Set("X-Conan-Server-Capabilities", "revisions")
 		w.WriteHeader(http.StatusOK)
 		return

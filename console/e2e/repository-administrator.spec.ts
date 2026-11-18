@@ -17,7 +17,7 @@ const repository = {
   name: "release-files",
   format: "raw",
   type: "hosted",
-  anonymousRead: false,
+  visibility: "private",
   mavenStrictPublication: false,
   state: "active",
   version: "1",
@@ -97,7 +97,8 @@ async function mockTieredRepository(
           },
           resource: "",
           simulated: false,
-          anonymousRead: decision(false),
+          visibility: "private",
+          anonymousAccess: decision(false),
           permissions: {
             read: decision(granted.read === true),
             write: decision(granted.write === true),

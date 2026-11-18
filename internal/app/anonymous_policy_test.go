@@ -13,22 +13,21 @@ import (
 
 func enableAnonymousAccess(t *testing.T, store *repository.MemoryStore) {
 	t.Helper()
-	policy, err := store.GetAnonymousAccessPolicy(context.Background())
+	policy, err := store.GetPublicAccessPolicy(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.ReplaceAnonymousAccessPolicy(context.Background(), repository.AnonymousAccessPolicy{Enabled: true}, policy.Version); err != nil {
+	if _, err := store.ReplacePublicAccessPolicy(context.Background(), repository.PublicAccessPolicy{Enabled: true}, policy.Version); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestAnonymousPolicyRequiresGroupAndMember(t *testing.T) {
+func TestAnonymousPolicyRequiresEnabledAnonymousGroup(t *testing.T) {
 	store := repository.NewMemoryStore()
 	groups := []repository.Group{
-		{Name: "disabled", Anonymous: true, Members: []repository.Member{{Name: "hosted", Type: repository.MemberHosted, Anonymous: true}}},
-		{Name: "private", Members: []repository.Member{{Name: "hosted", Type: repository.MemberHosted, Anonymous: true}}},
-		{Name: "partial", Anonymous: true, Members: []repository.Member{{Name: "hosted", Type: repository.MemberHosted}}},
-		{Name: "public", Anonymous: true, Members: []repository.Member{{Name: "hosted", Type: repository.MemberHosted, Anonymous: true}}},
+		{Name: "disabled", Anonymous: true, Members: []repository.Member{{Name: "hosted", Type: repository.MemberHosted}}},
+		{Name: "private", Members: []repository.Member{{Name: "hosted", Type: repository.MemberHosted}}},
+		{Name: "public", Anonymous: true, Members: []repository.Member{{Name: "hosted", Type: repository.MemberHosted}}},
 	}
 	for _, group := range groups {
 		if _, err := store.CreateGroup(context.Background(), group); err != nil {
@@ -39,15 +38,15 @@ func TestAnonymousPolicyRequiresGroupAndMember(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := OCIHandler{Resolver: Resolver{Store: store}}
-	if h.anonymousOCIAllowed(context.Background(), "public") {
+	if h.anonymousGroupRead(context.Background(), "public", http.MethodGet) {
 		t.Fatal("anonymous reads allowed while global policy is disabled")
 	}
 	enableAnonymousAccess(t, store)
 	for _, tc := range []struct {
 		group string
 		want  bool
-	}{{"disabled", false}, {"private", false}, {"partial", false}, {"public", true}} {
-		if got := h.anonymousOCIAllowed(context.Background(), tc.group); got != tc.want {
+	}{{"disabled", false}, {"private", false}, {"public", true}} {
+		if got := h.anonymousGroupRead(context.Background(), tc.group, http.MethodGet); got != tc.want {
 			t.Errorf("group %s: got %v want %v", tc.group, got, tc.want)
 		}
 	}
@@ -55,7 +54,7 @@ func TestAnonymousPolicyRequiresGroupAndMember(t *testing.T) {
 
 func TestAnonymousHostedRepositoryReadRequiresGlobalPolicy(t *testing.T) {
 	store := repository.NewMemoryStore()
-	repo := repository.HostedRepository{State: repository.RepositoryActive, AnonymousRead: true}
+	repo := repository.HostedRepository{State: repository.RepositoryActive, Visibility: repository.VisibilityPublic}
 	if anonymousHostedRepositoryReadAllowed(context.Background(), store, repo, http.MethodGet) {
 		t.Fatal("repository policy bypassed disabled global policy")
 	}
@@ -126,10 +125,10 @@ func TestAnonymousPolicyAuditReasonValuesAreStable(t *testing.T) {
 
 func TestAnonymousConanPolicyNeverAllowsWrites(t *testing.T) {
 	store := repository.NewMemoryStore()
-	if _, err := store.ReplaceAnonymousAccessPolicy(context.Background(), repository.AnonymousAccessPolicy{Enabled: true}, "1"); err != nil {
+	if _, err := store.ReplacePublicAccessPolicy(context.Background(), repository.PublicAccessPolicy{Enabled: true}, "1"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.CreateConanGroup(context.Background(), repository.Group{Name: "public", Anonymous: true, Members: []repository.Member{{Name: "hosted", Type: repository.MemberHosted, Anonymous: true}}}); err != nil {
+	if _, err := store.CreateConanGroup(context.Background(), repository.Group{Name: "public", Anonymous: true, Members: []repository.Member{{Name: "hosted", Type: repository.MemberHosted}}}); err != nil {
 		t.Fatal(err)
 	}
 	h := ConanHandler{Store: store, Authenticator: testAuthenticator(), Cache: NewConanCache(objectstore.NewMemoryStore())}

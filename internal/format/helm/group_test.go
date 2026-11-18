@@ -180,24 +180,24 @@ func TestHelmFrozenSourceAuditMatchesResponseStatusBytesAndAnonymousActor(t *tes
 	if e = f.objects.PutVerifiedReader(t.Context(), p.ObjectKey, bytes.NewReader(chart), int64(len(chart)), p.Digest); e != nil {
 		t.Fatal(e)
 	}
-	proxy.AnonymousRead = true
+	proxy.Visibility = repository.VisibilityPublic
 	proxy, e = f.store.UpdateHostedRepository(t.Context(), proxy, proxy.Version)
 	if e != nil {
 		t.Fatal(e)
 	}
-	g.AnonymousRead = true
+	g.Visibility = repository.VisibilityPublic
 	g, e = f.store.ReplaceHostedGroup(t.Context(), g, g.Version)
 	if e != nil {
 		t.Fatal(e)
 	}
 	// A new view explicitly binds the rotated source version for this anonymous case.
 	anonymous := createHelmGroup(t, f, "anonymous", proxy.ID)
-	anonymous.AnonymousRead = true
+	anonymous.Visibility = repository.VisibilityPublic
 	anonymous, e = f.store.ReplaceHostedGroup(t.Context(), anonymous, anonymous.Version)
 	if e != nil {
 		t.Fatal(e)
 	}
-	if _, e = f.store.ReplaceAnonymousAccessPolicy(t.Context(), repository.AnonymousAccessPolicy{Enabled: true}, "1"); e != nil {
+	if _, e = f.store.ReplacePublicAccessPolicy(t.Context(), repository.PublicAccessPolicy{Enabled: true}, "1"); e != nil {
 		t.Fatal(e)
 	}
 	anonymousPath := indexChartURL(t, request(t, f.module, "GET", "/helm/anonymous/index.yaml", nil, nil), "owned")

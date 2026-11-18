@@ -36,9 +36,6 @@ func (r Resolver) ResolveOCIMembers(ctx context.Context, groupName, repositoryNa
 	}
 	var hosted, proxy []repository.Member
 	for _, member := range group.Members {
-		if actor == "anonymous" && !member.Anonymous {
-			continue
-		}
 		if !r.Adapter.Available(ctx, member, repositoryName) {
 			continue
 		}

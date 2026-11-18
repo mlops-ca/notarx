@@ -198,7 +198,7 @@ func TestNativeCargoHostedPublishSparseIndexAndDownload(t *testing.T) {
 		t.Fatalf("recovery job deleted a committed crate: %v", err)
 	}
 	updated := repo
-	updated.AnonymousRead = true
+	updated.Visibility = repository.VisibilityPublic
 	if _, err := store.UpdateHostedRepository(ctx, updated, repo.Version); err != nil {
 		t.Fatal(err)
 	}

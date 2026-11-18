@@ -59,7 +59,7 @@ func (h artifactManagementHandler) searchHostedGroupArtifacts(w http.ResponseWri
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "resolve group members failed")
 		return
 	}
-	members = anonymousHostedGroupMembers(group, members)
+	members = anonymousGroupMembers(r.Context(), h.anonymousPolicy, group, members)
 	byIdentity := make(map[artifactIdentity]adminopenapi.ArtifactSummary)
 	higherPriority := make([]repository.HostedRepository, 0, len(members))
 	npmAuthority := make(map[string]repository.NPMPackage)
@@ -360,7 +360,7 @@ func (h artifactManagementHandler) listHostedGroupConanRecipeRevisions(w http.Re
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "resolve group members failed")
 		return
 	}
-	members = anonymousHostedGroupMembers(group, members)
+	members = anonymousGroupMembers(r.Context(), h.anonymousPolicy, group, members)
 	byRevision := make(map[string]repository.ConanRecipeRevision)
 	for _, member := range members {
 		if member.Type != repository.MemberHosted {

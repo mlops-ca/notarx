@@ -19,7 +19,7 @@ function repository(id: string): Repository {
     name: id,
     format: "raw",
     type: "hosted",
-    anonymousRead: false,
+    visibility: "private",
     mavenStrictPublication: false,
     state: "active",
     version: "1",

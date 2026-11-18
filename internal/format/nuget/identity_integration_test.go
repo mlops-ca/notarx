@@ -44,10 +44,10 @@ func TestPostgresRustFSNuGetCredentialRotationAndRevocation(t *testing.T) {
 	// Keep global PostgreSQL settings untouched in the shared integration DB.
 	// This explicit policy port enables anonymous reads for this test's own repo.
 	anonymous := repository.NewMemoryStore()
-	if _, err = anonymous.ReplaceAnonymousAccessPolicy(ctx, repository.AnonymousAccessPolicy{Enabled: true}, "1"); err != nil {
+	if _, err = anonymous.ReplacePublicAccessPolicy(ctx, repository.PublicAccessPolicy{Enabled: true}, "1"); err != nil {
 		t.Fatal(err)
 	}
-	f.repo.AnonymousRead = true
+	f.repo.Visibility = repository.VisibilityPublic
 	if f.repo, err = store.UpdateHostedRepository(ctx, f.repo, f.repo.Version); err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,9 @@ func TestPostgresRustFSNuGetCredentialRotationAndRevocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertAccess("grant removed", green, 403, 403)
+	// The repository is public (ADR 0029): an identity without a grant still reads
+	// it through the visibility tier, but publication needs the grant.
+	assertAccess("grant removed", green, 200, 403)
 	if _, err = store.ReplaceRepositoryGrants(ctx, f.repo.ID, grants, set.Version); err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +192,7 @@ func TestPostgresRustFSNuGetCredentialRotationAndRevocation(t *testing.T) {
 			t.Fatal("rotated credential changed the stable audit principal")
 		}
 	}
-	if publicationAudits != 1 || deniedAudits < 4 {
+	if publicationAudits != 1 || deniedAudits < 3 {
 		t.Fatal("native publication or scoped denial audit missing")
 	}
 }

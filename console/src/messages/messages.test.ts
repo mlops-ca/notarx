@@ -227,8 +227,24 @@ describe("message dictionaries", () => {
     const prefixes = [...source.matchAll(/`([a-zA-Z]+\.[A-Za-z.]*)\$\{/g)].map(
       (match) => match[1],
     );
+    // Keys retired by ADR 0029 (the anonymous-read switch became the visibility
+    // selector). They stay in en-CA, fr-CA and the frozen zh-CN catalog, which
+    // must remain a subset of en-CA (owner order 2026-11-18, ADR 0014).
+    const retired = new Set([
+      "repository.allowAnonymousReads",
+      "repository.whenEnabledProtocolGETHEADRequestsCanRead",
+      "groups.allowAnonymousReads",
+      "groups.anonymousRequestsResolveAMemberOnlyWhenBoth",
+      "groups.allowAnonymousGroupReads",
+      "groups.eachMemberRepositoryMustAlsoAllowAnonymousReads",
+      "groups.anonymousRead",
+      "groups.private",
+      "groups.anonymousReadable",
+      "groups.memberRepositoriesMustAllowAnonymousReads",
+    ]);
     const unused = Object.keys(enCA).filter(
       (key) =>
+        !retired.has(key) &&
         !source.includes(`"${key}"`) &&
         !prefixes.some((prefix) => key.startsWith(prefix)),
     );

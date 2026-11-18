@@ -34,7 +34,7 @@ type MemoryStore struct {
 	Audits                 []AuditRecord
 	artifactUsage          map[string]ArtifactUsageStat
 	auditRetentionPolicy   AuditRetentionPolicy
-	anonymousAccessPolicy  AnonymousAccessPolicy
+	publicAccessPolicy     PublicAccessPolicy
 	siteSettings           SiteSettings
 	consoleThemePackages   map[string]ConsoleThemePackage
 	oidcSettings           *OIDCSettings

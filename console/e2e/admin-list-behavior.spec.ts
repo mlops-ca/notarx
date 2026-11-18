@@ -122,7 +122,7 @@ test("repository list exposes one cursor pagination control", async ({
             format: "oci",
             repositoryTypes: ["hosted", "proxy"],
             groupSupported: true,
-            anonymousRead: true,
+            visibility: "public",
             hostedOperations: ["read", "publish", "browse"],
             proxyOperations: ["read", "browse"],
           },

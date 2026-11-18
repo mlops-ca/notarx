@@ -73,7 +73,9 @@ export function GroupsPage() {
     (total, group) => total + (group.members?.length ?? 0),
     0,
   );
-  const publicGroups = groups.filter((group) => group.anonymousRead).length;
+  const publicGroups = groups.filter(
+    (group) => group.visibility === "public",
+  ).length;
   // Closing a dialog returns focus to what opened it: the row's button, or
   // its More actions button when the dialog came from the row menu.
   const [action, setAction] = useState<{
@@ -158,10 +160,10 @@ export function GroupsPage() {
               hint: t("groups.memberReferences", { memberCount }),
             },
             {
-              label: t("groups.anonymousReadable"),
+              label: t("groups.publicGroups"),
               value: publicGroups,
               hint: publicGroups
-                ? t("groups.memberRepositoriesMustAllowAnonymousReads")
+                ? t("groups.visibilityCeilingHelp")
                 : t("groups.allEntryPointsArePrivate"),
               tone: publicGroups ? "success" : "default",
             },

@@ -45,7 +45,7 @@ describe("Cargo Hosted artifact view", () => {
       name: "cargo-internal",
       format: "cargo" as Repository["format"],
       type: "hosted",
-      anonymousRead: false,
+      visibility: "private",
       mavenStrictPublication: false,
       state: "active",
       version: "1",

@@ -89,7 +89,7 @@ export function AccessDecisionSummary({
   const decisions = [
     {
       label: t("access.anonymousReads"),
-      decision: access.anonymousRead,
+      decision: access.anonymousAccess,
     },
     { label: t("access.scopeRead"), decision: access.permissions.read },
     { label: t("access.scopeWrite"), decision: access.permissions.write },

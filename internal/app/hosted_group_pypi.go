@@ -30,7 +30,7 @@ func (h v2GroupPyPIHandler) serve(w http.ResponseWriter, r *http.Request, resolv
 	}
 	principal, authenticated := h.native.protocolPrincipal(r)
 	if !authenticated {
-		if group.AnonymousRead && anonymousReadMethod(r.Method) && anonymousAccessAllowed(r.Context(), resolver.groups) {
+		if anonymousGroupAllowed(r.Context(), resolver.groups, group, r.Method) {
 			principal = anonymousPrincipal()
 		} else {
 			h.native.challenge(w, http.StatusUnauthorized, "authentication required")
@@ -43,7 +43,7 @@ func (h v2GroupPyPIHandler) serve(w http.ResponseWriter, r *http.Request, resolv
 		return
 	}
 	if isAnonymous(principal) {
-		members = anonymousHostedGroupMembers(group, members)
+		members = anonymousGroupMembers(r.Context(), resolver.groups, group, members)
 	}
 	resource := route.project
 	if resource == "" {

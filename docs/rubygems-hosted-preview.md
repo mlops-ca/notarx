@@ -39,7 +39,7 @@ Authorization: Bearer <local administrator credential>
 Idempotency-Key: <stable request identifier>
 Content-Type: application/json
 
-{"name":"ruby-internal","anonymousRead":false}
+{"name":"ruby-internal","visibility": "private"}
 ```
 
 The receipt includes `id`, `preview:true`, `sourceUrl`, `pushHost` and

@@ -544,10 +544,10 @@ func printUsage(w io.Writer) {
 var groupSynopses = map[string]string{
 	"auth":                  "authenticate, inspect the caller, and end the local session",
 	"config":                "manage local profiles in ~/.config/notarxctl/config.yaml",
-	"access":                "explain effective access and manage the anonymous read switch",
+	"access":                "explain effective access and manage the public access gate",
 	"api-key":               "list, create, and revoke platform API keys (secrets go only to --secret-output)",
 	"credential":            "list, issue, and revoke service account credentials (secrets go only to --secret-output)",
-	"access anonymous":      "read or set the platform switch for anonymous reads",
+	"access public":         "read or set the platform gate for public visibility",
 	"artifact":              "search, browse, inspect, and delete artifacts",
 	"artifact intelligence": "read artifact intelligence records",
 	"artifact quarantine":   "read artifact quarantine records",

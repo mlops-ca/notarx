@@ -245,22 +245,22 @@ require "$(field "$out" error.code)" version_conflict "duplicate name code"
 
 # Update: dry-run changes nothing, a real update bumps the version, and a
 # stale If-Match fails with 412 without overwriting.
-expect 0 "$out" -- repo update "$repo_id" --anonymous-read=true --dry-run --json
+expect 0 "$out" -- repo update "$repo_id" --visibility public --dry-run --json
 require "$(field "$out" data.headers.If-Match)" "$version" "update dry-run If-Match"
 expect 0 "$out" -- repo show "$repo_id" --json
 require "$(field "$out" data.version)" "$version" "version after update dry-run"
-require "$(field "$out" data.anonymousRead)" false "anonymousRead after update dry-run"
-expect 0 "$out" -- repo update "$repo_id" --anonymous-read=true --json
-require "$(field "$out" data.anonymousRead)" true "updated anonymousRead"
+require "$(field "$out" data.visibility)" private "visibility after update dry-run"
+expect 0 "$out" -- repo update "$repo_id" --visibility public --json
+require "$(field "$out" data.visibility)" public "updated visibility"
 updated_version=$(field "$out" data.version)
 [[ "$updated_version" != "$version" ]] || {
   printf '%s\n' 'update did not change the repository version' >&2
   exit 1
 }
-expect 7 "$out" -- repo update "$repo_id" --anonymous-read=false --if-match "$version" --json
+expect 7 "$out" -- repo update "$repo_id" --visibility private --if-match "$version" --json
 require "$(field "$out" error.httpStatus)" 412 "stale If-Match status"
 expect 0 "$out" -- repo show "$repo_id" --json
-require "$(field "$out" data.anonymousRead)" true "anonymousRead after 412"
+require "$(field "$out" data.visibility)" public "visibility after 412"
 require "$(field "$out" data.version)" "$updated_version" "version after 412"
 # A hosted repository refuses proxy settings on the server side (400).
 expect 1 "$out" -- repo update "$repo_id" --endpoint https://registry.npmjs.org/ --json
@@ -290,7 +290,7 @@ PY
 # inspect members and resolution order, rename with a stale If-Match that
 # never overwrites, reorder members, and delete without touching members.
 member="cli-e2e-npm-member-${suffix}"
-expect 0 "$out" -- repo create "$member" --format npm --json
+expect 0 "$out" -- repo create "$member" --format npm --visibility public --json
 member_id=$(field "$out" data.id)
 group="cli-e2e-group-${suffix}"
 expect 0 "$out" -- group create "$group" --format npm --member "$repo_id" --member "$member_id" --dry-run --json
@@ -323,9 +323,9 @@ require "$(field "$out" data.excludedMemberCount)" 0 "excluded members"
 expect 0 "$out" -- group update "$group_id" --name "${group}-renamed" --dry-run --json
 expect 0 "$out" -- group show "$group_id" --json
 require "$(field "$out" data.name)" "$group" "name after update dry-run"
-expect 0 "$out" -- group update "$group_id" --name "${group}-renamed" --anonymous-read=true --json
+expect 0 "$out" -- group update "$group_id" --name "${group}-renamed" --visibility public --json
 require "$(field "$out" data.name)" "${group}-renamed" "renamed Group"
-require "$(field "$out" data.anonymousRead)" true "Group anonymousRead"
+require "$(field "$out" data.visibility)" public "Group visibility"
 require "$(field "$out" data.members.1.repositoryId)" "$member_id" "members kept by the update"
 renamed_version=$(field "$out" data.version)
 expect 7 "$out" -- group update "$group_id" --name "${group}-stale" --if-match "$group_version" --json
@@ -680,15 +680,15 @@ expect 0 "$out" -- template delete "$template_id" --yes --json
 
 # The anonymous switch is shared with every other check on this Gateway: it is
 # read, re-set to its own value, and refused on a stale version, never flipped.
-expect 0 "$out" -- access anonymous show --json
+expect 0 "$out" -- access public show --json
 anonymous_enabled=$(field "$out" data.enabled)
 anonymous_version=$(field "$out" data.version)
-expect 0 "$out" -- access anonymous set --enabled="$anonymous_enabled" --yes --dry-run --json
-expect 0 "$out" -- access anonymous show --json
+expect 0 "$out" -- access public set --enabled="$anonymous_enabled" --yes --dry-run --json
+expect 0 "$out" -- access public show --json
 require "$(field "$out" data.version)" "$anonymous_version" "anonymous version after dry-run"
-expect 0 "$out" -- access anonymous set --enabled="$anonymous_enabled" --yes --json
-expect 7 "$out" -- access anonymous set --enabled="$anonymous_enabled" --yes --if-match "$anonymous_version" --json
-expect 0 "$out" -- access anonymous show --json
+expect 0 "$out" -- access public set --enabled="$anonymous_enabled" --yes --json
+expect 7 "$out" -- access public set --enabled="$anonymous_enabled" --yes --if-match "$anonymous_version" --json
+expect 0 "$out" -- access public show --json
 require "$(field "$out" data.enabled)" "$anonymous_enabled" "anonymous switch unchanged"
 
 # Runtime logs (#135): one page, then a bounded stream that ends on its budget.

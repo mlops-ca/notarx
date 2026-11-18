@@ -6,13 +6,11 @@ RubyGemsPreviewRepositoryInput:
     name:
       type: string
       pattern: '^[a-z0-9][a-z0-9-]{0,62}$'
-    anonymousRead:
-      type: boolean
-      default: false
+    visibility: {"$ref": "./schemas.yaml#/Visibility"}
 RubyGemsPreviewRepository:
   type: object
   additionalProperties: false
-  required: [id, name, format, type, preview, version, anonymousRead, sourceUrl, pushHost, publicationUrl]
+  required: [id, name, format, type, preview, version, visibility, sourceUrl, pushHost, publicationUrl]
   properties:
     id: {type: string, format: uuid}
     name: {type: string}
@@ -20,7 +18,7 @@ RubyGemsPreviewRepository:
     type: {type: string, enum: [hosted]}
     preview: {type: boolean, enum: [true]}
     version: {type: string}
-    anonymousRead: {type: boolean}
+    visibility: {"$ref": "./schemas.yaml#/Visibility"}
     sourceUrl: {type: string}
     pushHost:
       type: string

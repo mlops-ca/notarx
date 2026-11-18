@@ -5,7 +5,7 @@
   "gatewayStoreMembers": [
     "repository.APIKeyStore",
     "repository.APTArtifactStore",
-    "repository.AnonymousAccessPolicyStore",
+    "repository.PublicAccessPolicyStore",
     "repository.ArtifactBrowseStore",
     "repository.ArtifactIntelligenceStore",
     "repository.ArtifactQuarantineStore",
@@ -59,8 +59,8 @@
     "internal/repository.APIKeyStore.ListAPIKeys func(context.Context) ([]APIKey, error)",
     "internal/repository.APIKeyStore.RevokeAPIKey func(context.Context, string) (APIKey, error)",
     "internal/repository.APTArtifactStore.GetAPTScanAsset func(context.Context, string, string, string) (APTSnapshotAsset, error)",
-    "internal/repository.AnonymousAccessPolicyStore.GetAnonymousAccessPolicy func(context.Context) (AnonymousAccessPolicy, error)",
-    "internal/repository.AnonymousAccessPolicyStore.ReplaceAnonymousAccessPolicy func(context.Context, AnonymousAccessPolicy, string) (AnonymousAccessPolicy, error)",
+    "internal/repository.PublicAccessPolicyStore.GetPublicAccessPolicy func(context.Context) (PublicAccessPolicy, error)",
+    "internal/repository.PublicAccessPolicyStore.ReplacePublicAccessPolicy func(context.Context, PublicAccessPolicy, string) (PublicAccessPolicy, error)",
     "internal/repository.ArtifactBrowseStore.ListArtifactBrowseNodes func(context.Context, string, Format, ArtifactBrowseParent, int, string) ([]ArtifactBrowseNode, error)",
     "internal/repository.ArtifactBrowseStore.ListGroupArtifactBrowseNodes func(context.Context, string, Format, ArtifactBrowseParent, int, string) ([]ArtifactBrowseNode, error)",
     "internal/repository.ArtifactIntelligenceStore.GetArtifactIntelligence func(context.Context, string, Format, string, string) (ArtifactIntelligence, error)",
@@ -486,5 +486,15 @@
     "internal/repository.WebhookStore.ListWebhookSubscriptions func(context.Context) ([]WebhookSubscription, error)",
     "internal/repository.WebhookStore.ReplayWebhookDelivery func(context.Context, string, time.Time) (WebhookDelivery, error)",
     "internal/repository.WebhookStore.UpdateWebhookSubscription func(context.Context, WebhookSubscription, string) (WebhookSubscription, error)"
+  ],
+  "visibilityAccessors": [
+    "internal/app/audit_management_api.go",
+    "internal/app/hosted_group_api.go",
+    "internal/app/hosted_repository_api.go",
+    "internal/app/repository_access_api.go",
+    "internal/format/helm/preview.go",
+    "internal/format/helm/preview_sources.go",
+    "internal/format/nuget/preview_sources.go",
+    "internal/format/rubygems/preview.go"
   ]
 }

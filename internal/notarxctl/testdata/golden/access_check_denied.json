@@ -17,7 +17,8 @@
     },
     "resource": "",
     "simulated": false,
-    "anonymousRead": {
+    "visibility": "private",
+    "anonymousAccess": {
       "allowed": false,
       "source": "policy",
       "reason": "disabled"

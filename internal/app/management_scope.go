@@ -14,7 +14,7 @@ type managementRepositoryReader interface {
 }
 
 type managementAnonymousPolicyReader interface {
-	GetAnonymousAccessPolicy(context.Context) (repository.AnonymousAccessPolicy, error)
+	GetPublicAccessPolicy(context.Context) (repository.PublicAccessPolicy, error)
 }
 
 type managementAuditRecorder interface {

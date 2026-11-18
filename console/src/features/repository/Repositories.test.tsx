@@ -43,7 +43,7 @@ const profiles: FormatProfile[] = [
     format: "oci",
     repositoryTypes: ["hosted", "proxy"],
     groupSupported: true,
-    anonymousRead: true,
+    publicVisibility: true,
     hostedOperations: ["read", "publish"],
     proxyOperations: ["read"],
   },

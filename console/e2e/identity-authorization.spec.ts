@@ -43,7 +43,7 @@ test("a member sees the repository catalog without administrator navigation", as
             name: "readable-releases",
             format: "raw",
             type: "hosted",
-            anonymousRead: false,
+            visibility: "private",
             mavenStrictPublication: false,
             state: "active",
             version: "1",

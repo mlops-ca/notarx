@@ -4,44 +4,44 @@
   "data": {
     "items": [
       {
-        "anonymousRead": false,
         "format": "raw",
         "id": "00000000-0000-4000-8000-000000000001",
         "mavenStrictPublication": false,
         "name": "repo-0",
         "state": "active",
         "type": "hosted",
-        "version": "1"
+        "version": "1",
+        "visibility": "private"
       },
       {
-        "anonymousRead": false,
         "format": "raw",
         "id": "00000000-0000-4000-8000-000000000002",
         "mavenStrictPublication": false,
         "name": "repo-1",
         "state": "active",
         "type": "hosted",
-        "version": "1"
+        "version": "1",
+        "visibility": "private"
       },
       {
-        "anonymousRead": false,
         "format": "raw",
         "id": "00000000-0000-4000-8000-000000000003",
         "mavenStrictPublication": false,
         "name": "repo-2",
         "state": "active",
         "type": "hosted",
-        "version": "1"
+        "version": "1",
+        "visibility": "private"
       },
       {
-        "anonymousRead": false,
         "format": "raw",
         "id": "00000000-0000-4000-8000-000000000004",
         "mavenStrictPublication": false,
         "name": "repo-3",
         "state": "active",
         "type": "hosted",
-        "version": "1"
+        "version": "1",
+        "visibility": "private"
       }
     ],
     "nextCursor": "cursor-4"

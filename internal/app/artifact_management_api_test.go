@@ -24,7 +24,7 @@ type artifactAnonymousPolicyPort struct {
 func TestArtifactManagementDomainRawReadsWithoutNativePublisher(t *testing.T) {
 	ctx := context.Background()
 	store := repository.NewMemoryStore()
-	repo, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "domain-visible", Format: repository.FormatRaw, AnonymousRead: true})
+	repo, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "domain-visible", Format: repository.FormatRaw, Visibility: repository.VisibilityPublic})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func TestArtifactManagementDomainRawReadsWithoutNativePublisher(t *testing.T) {
 	if _, err := store.ReplaceRepositoryGrants(ctx, repo.ID, []repository.RepositoryGrant{{Principal: "artifact-reader", Scopes: []string{"repositories:read"}}}, "1"); err != nil {
 		t.Fatal(err)
 	}
-	group, _, err := store.CreateHostedGroupIdempotently(ctx, repository.HostedGroup{ID: uuid.NewString(), Name: "domain-group", Format: repository.FormatRaw, AnonymousRead: true, Members: []repository.GroupMember{{RepositoryID: repo.ID, Position: 0}}}, "alice", "domain-group", "domain-group-fingerprint")
+	group, _, err := store.CreateHostedGroupIdempotently(ctx, repository.HostedGroup{ID: uuid.NewString(), Name: "domain-group", Format: repository.FormatRaw, Visibility: repository.VisibilityPublic, Members: []repository.GroupMember{{RepositoryID: repo.ID, Position: 0}}}, "alice", "domain-group", "domain-group-fingerprint")
 	if err != nil {
 		t.Fatal(err)
 	}

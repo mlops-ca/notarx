@@ -216,16 +216,16 @@ func TestPostgresRustFSNuGetProxyGroupLocalCredentialRevocation(t *testing.T) {
 	f := newDurableFixture(t)
 	body := packageFixture(t, "Acme.Identity", "1.0.0", "")
 	feed := newTestFeed(t, body)
-	proxy, err := f.store.CreateHostedRepository(t.Context(), repository.HostedRepository{ID: uuid.NewString(), Name: "nuget-identity-" + uuid.NewString(), Format: repository.FormatNuGet, Type: repository.RepositoryTypeProxy, Endpoint: feed.server.URL + "/not-nuget-org/discover.json", AnonymousRead: true})
+	proxy, err := f.store.CreateHostedRepository(t.Context(), repository.HostedRepository{ID: uuid.NewString(), Name: "nuget-identity-" + uuid.NewString(), Format: repository.FormatNuGet, Type: repository.RepositoryTypeProxy, Endpoint: feed.server.URL + "/not-nuget-org/discover.json", Visibility: repository.VisibilityPublic})
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.repo.AnonymousRead = true
+	f.repo.Visibility = repository.VisibilityPublic
 	f.repo, err = f.store.UpdateHostedRepository(t.Context(), f.repo, f.repo.Version)
 	if err != nil {
 		t.Fatal(err)
 	}
-	group, _, err := f.store.CreateHostedGroupIdempotently(t.Context(), repository.HostedGroup{ID: uuid.NewString(), Name: "nuget-auth-group-" + uuid.NewString(), Format: repository.FormatNuGet, AnonymousRead: true, Members: []repository.GroupMember{{RepositoryID: proxy.ID, Position: 0}, {RepositoryID: f.repo.ID, Position: 1}}}, "operator", uuid.NewString(), "fixture")
+	group, _, err := f.store.CreateHostedGroupIdempotently(t.Context(), repository.HostedGroup{ID: uuid.NewString(), Name: "nuget-auth-group-" + uuid.NewString(), Format: repository.FormatNuGet, Visibility: repository.VisibilityPublic, Members: []repository.GroupMember{{RepositoryID: proxy.ID, Position: 0}, {RepositoryID: f.repo.ID, Position: 1}}}, "operator", uuid.NewString(), "fixture")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,7 +256,7 @@ func TestPostgresRustFSNuGetProxyGroupLocalCredentialRevocation(t *testing.T) {
 	// Only the global anonymous toggle is an isolated test port. Identity,
 	// credentials, grants, member configuration and authority all use real PG.
 	policy := repository.NewMemoryStore()
-	if _, err = policy.ReplaceAnonymousAccessPolicy(t.Context(), repository.AnonymousAccessPolicy{Enabled: true}, "1"); err != nil {
+	if _, err = policy.ReplacePublicAccessPolicy(t.Context(), repository.PublicAccessPolicy{Enabled: true}, "1"); err != nil {
 		t.Fatal(err)
 	}
 	newServer := func() *httptest.Server {
@@ -321,7 +321,9 @@ func TestPostgresRustFSNuGetProxyGroupLocalCredentialRevocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assert(green, 403)
+	// The proxy is public (ADR 0029): an identity without a grant still reads it
+	// through the visibility tier.
+	assert(green, 200)
 	if _, err = store.ReplaceRepositoryGrants(t.Context(), proxy.ID, grants, set.Version); err != nil {
 		t.Fatal(err)
 	}

@@ -150,7 +150,7 @@ type GatewayStore interface {
 	repository.RawStore
 	repository.ConanStore
 	repository.HostedRepositoryStore
-	repository.AnonymousAccessPolicyStore
+	repository.PublicAccessPolicyStore
 	repository.SiteSettingsStore
 	repository.ConsoleThemeStore
 	repository.OIDCSettingsStore
@@ -320,7 +320,7 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	mux.Handle("/api/v1/conan/groups", conanAPI)
 	mux.Handle("/api/v1/conan/groups/", conanAPI)
 	nativeObjects := options.Storage[repository.FormatMaven]
-	nativeMaven := newNativeMavenHandler(store, nativeObjects, authenticator).withMetrics(metrics).withProxy(mavenClient, mavenCache).withPublicationScanner(publicationScanner)
+	nativeMaven := newNativeMavenHandler(store, nativeObjects, authenticator).withGroupVisibilityMode(options.GroupVisibilityMode).withMetrics(metrics).withProxy(mavenClient, mavenCache).withPublicationScanner(publicationScanner)
 	mavenProxyOperations := mavenProxyOperationsHandler{store: store, authenticator: authenticator, authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator}, client: mavenClient, cache: mavenCache, maintenance: maintenance}
 	proxyCacheBrowse := proxyCacheBrowseHandler{store: store, entriesStore: store, audit: store, maintenance: maintenance, authenticator: authenticator, authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator}}
 	nativeConanObjects := options.Storage[repository.FormatConan]
@@ -356,13 +356,13 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 		aptSnapshotPublisher = aptpublication.NewPublisher(store, nativeAPTObjects, dependencies.APTSigner).WithMetrics(metrics).WithPublicationScanner(publicationScanner)
 	}
 	publishRouter := nativePublishRouter{maven: nativeMaven, conan: nativeConanPublish}
-	hostedRepositories := hostedRepositoryAPIHandler{store: store, groups: store, authenticator: authenticator}
+	hostedRepositories := hostedRepositoryAPIHandler{store: store, groups: store, authenticator: authenticator, groupMode: options.GroupVisibilityMode}
 	var searchProjection repository.ArtifactSearchStore
 	if candidate, ok := any(store).(repository.ArtifactSearchStore); ok {
 		searchProjection = candidate
 	}
 	scope := newManagementScope(store, store, store, store, authenticator, metrics)
-	repositoriesAPI := newRepositoryManagementHandler(repositoryManagementOptions{Scope: scope, Repositories: store, Groups: store, Capacities: store, Maintenance: maintenance, ArtifactScanner: dependencies.ArtifactScanner, ArtifactScanFormats: dependencies.ArtifactScannerFormats})
+	repositoriesAPI := newRepositoryManagementHandler(repositoryManagementOptions{GroupVisibilityMode: options.GroupVisibilityMode, Scope: scope, Repositories: store, Groups: store, Capacities: store, Maintenance: maintenance, ArtifactScanner: dependencies.ArtifactScanner, ArtifactScanFormats: dependencies.ArtifactScannerFormats})
 	identities, _ := any(store).(repository.ArtifactIdentityStore)
 	artifactsAPI := newArtifactManagementHandler(artifactManagementOptions{
 		Scope: scope, Repositories: store, Groups: store, Grants: store,
@@ -380,7 +380,7 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 		identityOIDC = dependencies.OIDCRuntime
 	}
 	identityAPI := newIdentityManagementHandler(identityManagementOptions{Scope: scope, Users: store, APIKeys: store, ServiceAccounts: store, OIDC: identityOIDC})
-	legacyAPI := generatedRepositoryAPIAdapter{BatchAdapter: migrationapi.New(dependencies.MigrationService, authenticator, store).WithSchedules(dependencies.MigrationSchedules), Adapter: sourceapi.New(dependencies.SourceService, authenticator, store), managementScope: scope, store: store, sessions: nativeMaven, npmRestore: options.NPMRestore, aptPublication: aptPublication, aptSnapshotPublisher: aptSnapshotPublisher, aptSnapshotImporter: aptSnapshotImporter, aptSnapshotExporter: aptpublication.SnapshotArchiveExporter{Store: store, Objects: nativeAPTObjects}, aptPublications: store, retentionPolicies: store, securityPolicies: store, quarantineReadPolicies: store, capacities: store, tombstones: store, intelligence: store, quarantine: store, lifecycleJobs: store, auditRetention: store, anonymousAccess: store, siteSettings: store, consoleThemePackages: store, consoleThemes: dependencies.ConsoleThemes, replication: store, oci: store, cargo: store, conan: store, audit: store, maintenance: maintenance, searchProjection: searchProjection, runtimeNodes: store, scheduledTasks: store, webhooks: store, emailTargets: store, quotaAlerts: store, queueStats: store, diagnostics: dependencies, objects: options.Storage, logBuffer: dependencies.LogBuffer, artifactScanner: dependencies.ArtifactScanner, artifactScanFormats: dependencies.ArtifactScannerFormats}
+	legacyAPI := generatedRepositoryAPIAdapter{BatchAdapter: migrationapi.New(dependencies.MigrationService, authenticator, store).WithSchedules(dependencies.MigrationSchedules), Adapter: sourceapi.New(dependencies.SourceService, authenticator, store), managementScope: scope, store: store, sessions: nativeMaven, npmRestore: options.NPMRestore, aptPublication: aptPublication, aptSnapshotPublisher: aptSnapshotPublisher, aptSnapshotImporter: aptSnapshotImporter, aptSnapshotExporter: aptpublication.SnapshotArchiveExporter{Store: store, Objects: nativeAPTObjects}, aptPublications: store, retentionPolicies: store, securityPolicies: store, quarantineReadPolicies: store, capacities: store, tombstones: store, intelligence: store, quarantine: store, lifecycleJobs: store, auditRetention: store, publicAccess: store, siteSettings: store, consoleThemePackages: store, consoleThemes: dependencies.ConsoleThemes, replication: store, oci: store, cargo: store, conan: store, audit: store, maintenance: maintenance, searchProjection: searchProjection, runtimeNodes: store, scheduledTasks: store, webhooks: store, emailTargets: store, quotaAlerts: store, queueStats: store, diagnostics: dependencies, objects: options.Storage, logBuffer: dependencies.LogBuffer, artifactScanner: dependencies.ArtifactScanner, artifactScanFormats: dependencies.ArtifactScannerFormats}
 	adminopenapi.HandlerWithOptions(managementServer{Boundary: helmapi.New(helmPreview), Adapter: nugetapi.New(nugetPreview), RubyGemsBoundary: rubygemsapi.New(rubyGemsPreview), repositoryManagementHandler: repositoriesAPI, artifactManagementHandler: artifactsAPI, accessManagementHandler: accessAPI, identityManagementHandler: identityAPI, pypiYankManagementHandler: pypiYankAPI, generatedRepositoryAPIAdapter: legacyAPI}, adminopenapi.StdHTTPServerOptions{
 		BaseURL:    "/api/v2",
 		BaseRouter: openAPIServeMux{mux: mux, authorize: hostedRepositories.authenticateManagementRequest},
@@ -408,7 +408,7 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 			}
 			oci.ServeHTTP(w, r)
 		})}
-	mux.Handle("/v2/", hostedRepositoryGuard{store: store, authenticator: authenticator, format: repository.FormatOCI, next: ociGroupRouter})
+	mux.Handle("/v2/", anonymousBearerHandler{auth: authenticator, next: hostedRepositoryGuard{store: store, authenticator: authenticator, format: repository.FormatOCI, next: ociGroupRouter}})
 	mavenLegacy := MavenHandler{Store: store, Repositories: store, Authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator}, Authenticator: authenticator, Client: mavenClient, Metrics: metrics, Cache: mavenCache}
 	mavenGroupRouter := v2GroupRouter{format: repository.FormatMaven, groups: store, repos: store, audit: store, auth: authenticator,
 		authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator},
@@ -427,30 +427,45 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	npmGroupRouter := v2GroupRouter{format: repository.FormatNPM, groups: store, repos: store, audit: store, auth: authenticator,
 		authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator},
 		npm:        &v2GroupNPMHandler{native: &nativeNPM},
-		next: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !nativeNPM.ServeHTTP(w, r) {
-				http.NotFound(w, r)
-			}
-		})}
+		next: anonymousAbsentShaper{format: repository.FormatNPM, repos: store,
+			challenge: func(w http.ResponseWriter, _ *http.Request) {
+				nativeNPM.challenge(w, http.StatusUnauthorized, "authentication required")
+			},
+			next: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if !nativeNPM.ServeHTTP(w, r) {
+					http.NotFound(w, r)
+				}
+			})}}
 	mux.Handle("/npm/", npmGroupRouter)
 	pypiGroupRouter := v2GroupRouter{format: repository.FormatPyPI, groups: store, repos: store, audit: store, auth: authenticator,
 		authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator},
 		pypi:       &v2GroupPyPIHandler{native: &nativePyPI},
-		next:       nativePyPI}
+		next: anonymousAbsentShaper{format: repository.FormatPyPI, repos: store, next: nativePyPI,
+			challenge: func(w http.ResponseWriter, _ *http.Request) {
+				nativePyPI.challenge(w, http.StatusUnauthorized, "authentication required")
+			}}}
 	mux.Handle("/pypi/", pypiGroupRouter)
 	goGroupRouter := v2GroupRouter{format: repository.FormatGo, groups: store, repos: store, audit: store, auth: authenticator,
 		authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator},
 		goModules:  &v2GroupGoHandler{native: &nativeGo},
-		next:       nativeGo}
+		next: anonymousAbsentShaper{format: repository.FormatGo, repos: store, next: nativeGo,
+			challenge: func(w http.ResponseWriter, _ *http.Request) {
+				nativeGo.challenge(w, http.StatusUnauthorized, "authentication required")
+			}}}
 	mux.Handle("/go/", goGroupRouter)
 	cargoGroupRouter := v2GroupRouter{format: repository.FormatCargo, groups: store, repos: store, audit: store, auth: authenticator,
 		authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator},
-		cargo:      &v2GroupCargoHandler{native: &nativeCargo, owners: store}, next: nativeCargo}
+		cargo:      &v2GroupCargoHandler{native: &nativeCargo, owners: store},
+		next: anonymousAbsentShaper{format: repository.FormatCargo, repos: store, next: nativeCargo,
+			challenge: func(w http.ResponseWriter, _ *http.Request) { nativeCargo.challenge(w, http.StatusUnauthorized) }}}
 	mux.Handle("/cargo/", cargoGroupRouter)
 	aptGroupRouter := v2GroupRouter{format: repository.FormatAPT, groups: store, repos: store, audit: store, auth: authenticator,
 		authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator},
 		apt:        &v2GroupAPTHandler{native: &nativeAPT},
-		next:       nativeAPT}
+		next: anonymousAbsentShaper{format: repository.FormatAPT, repos: store, next: nativeAPT,
+			challenge: func(w http.ResponseWriter, _ *http.Request) {
+				nativeAPT.challenge(w, http.StatusUnauthorized, "authentication required")
+			}}}
 	mux.Handle("/apt/", aptGroupRouter)
 	conan := ConanHandler{Store: store, NativeStore: store, Repositories: store, Authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator}, Authenticator: authenticator, Client: conanClient, Metrics: metrics, Cache: conanCache, NativeObjects: nativeConanObjects, ReadPolicies: store, Quarantine: store}
 	conan.Publications, conan.PublicationScanner = options.ConanPublications, &publicationScanner

@@ -13,7 +13,7 @@ import (
 type rawModuleGroupRuntime struct {
 	resolver v2GroupResolver
 	policy   interface {
-		GetAnonymousAccessPolicy(context.Context) (repository.AnonymousAccessPolicy, error)
+		GetPublicAccessPolicy(context.Context) (repository.PublicAccessPolicy, error)
 	}
 }
 
@@ -26,9 +26,7 @@ func (r rawModuleGroupRuntime) AuthorizeMembers(ctx context.Context, p Principal
 func (r rawModuleGroupRuntime) AuditResolution(ctx context.Context, group repository.HostedGroup, f repository.Format, path, operation, actor string, outcome repository.AuditOutcome, status int) {
 	r.resolver.auditResolution(ctx, group, f, path, operation, actor, outcome, status)
 }
-func (r rawModuleGroupRuntime) AnonymousAllowed(ctx context.Context) bool {
-	return anonymousAccessAllowed(ctx, r.policy)
-}
+func (r rawModuleGroupRuntime) Gate() any { return r.policy }
 
 type rawModuleMetrics struct{ metrics *Metrics }
 

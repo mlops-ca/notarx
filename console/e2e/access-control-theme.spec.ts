@@ -33,7 +33,7 @@ async function mockAccessControl(page: Page) {
   await page.route("**/api/v2/repository-grants**", (route) =>
     route.fulfill({ json: [] }),
   );
-  await page.route("**/api/v2/anonymous-access-policy**", (route) =>
+  await page.route("**/api/v2/public-access-policy**", (route) =>
     route.fulfill({ json: { enabled: true, version: "7" } }),
   );
   await page.route("**/api/v2/users**", (route) =>
@@ -55,7 +55,7 @@ async function mockAccessControl(page: Page) {
             format: "raw",
             type: "hosted",
             state: "active",
-            anonymousRead: true,
+            visibility: "public",
           },
         ],
       },

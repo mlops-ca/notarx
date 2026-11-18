@@ -17,7 +17,7 @@ func TestPublicRepositoryCatalogExposesOnlyAnonymousRepositories(t *testing.T) {
 	if _, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{ID: uuid.NewString(), Name: "private", Format: repository.FormatRaw}); err != nil {
 		t.Fatal(err)
 	}
-	public, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{ID: uuid.NewString(), Name: "public", Format: repository.FormatMaven, AnonymousRead: true})
+	public, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{ID: uuid.NewString(), Name: "public", Format: repository.FormatMaven, Visibility: repository.VisibilityPublic})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestPublicRepositoryCatalogExposesOnlyAnonymousRepositories(t *testing.T) {
 
 func TestPublicRepositoryCatalogExposesAnonymousGroupsWithAnonymousMembers(t *testing.T) {
 	store := repository.NewMemoryStore()
-	public, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{ID: uuid.NewString(), Name: "public-member", Format: repository.FormatOCI, AnonymousRead: true})
+	public, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{ID: uuid.NewString(), Name: "public-member", Format: repository.FormatOCI, Visibility: repository.VisibilityPublic})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,14 +52,14 @@ func TestPublicRepositoryCatalogExposesAnonymousGroupsWithAnonymousMembers(t *te
 		t.Fatal(err)
 	}
 	visible, _, err := store.CreateHostedGroupIdempotently(context.Background(), repository.HostedGroup{
-		ID: uuid.NewString(), Name: "public-group", Format: repository.FormatOCI, AnonymousRead: true,
+		ID: uuid.NewString(), Name: "public-group", Format: repository.FormatOCI, Visibility: repository.VisibilityPublic,
 		Members: []repository.GroupMember{{RepositoryID: public.ID, Position: 0}},
 	}, "test", "visible-group", "visible-group")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := store.CreateHostedGroupIdempotently(context.Background(), repository.HostedGroup{
-		ID: uuid.NewString(), Name: "no-public-members", Format: repository.FormatOCI, AnonymousRead: true,
+		ID: uuid.NewString(), Name: "no-public-members", Format: repository.FormatOCI, Visibility: repository.VisibilityPublic,
 		Members: []repository.GroupMember{{RepositoryID: private.ID, Position: 0}},
 	}, "test", "hidden-group", "hidden-group"); err != nil {
 		t.Fatal(err)

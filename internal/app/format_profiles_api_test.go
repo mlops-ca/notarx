@@ -55,7 +55,7 @@ func TestFormatProfilesAPINeedsAnAuthenticatedCallerAndReturnsCapabilities(t *te
 		} else if item.OciDiscovery != nil {
 			t.Errorf("OCI discovery leaked into %q", item.Format)
 		}
-		if !item.AnonymousRead {
+		if !item.PublicVisibility {
 			t.Errorf("incomplete profile: %#v", item)
 		}
 		if item.Format == adminopenapi.Format("apt") {

@@ -110,11 +110,11 @@ func TestPostgresPresetsConcurrentInitializationAndAdministratorLifecycle(t *tes
 	wg.Wait()
 	var hosted, proxies, groups, members, anonymous int
 	if err := db.QueryRow(`SELECT count(*) FILTER (WHERE repo_type='hosted'),
-		count(*) FILTER (WHERE repo_type='proxy'), count(*) FILTER (WHERE anonymous_read)
+		count(*) FILTER (WHERE repo_type='proxy'), count(*) FILTER (WHERE visibility <> 'private')
 		FROM hosted_repositories`).Scan(&hosted, &proxies, &anonymous); err != nil || hosted != 8 || proxies != 5 || anonymous != 0 {
 		t.Fatalf("hosted=%d proxy=%d anonymous=%d err=%v", hosted, proxies, anonymous, err)
 	}
-	if err := db.QueryRow(`SELECT count(*),count(*) FILTER (WHERE anonymous_read) FROM hosted_groups`).Scan(&groups, &anonymous); err != nil || groups != 5 || anonymous != 0 {
+	if err := db.QueryRow(`SELECT count(*),count(*) FILTER (WHERE visibility <> 'private') FROM hosted_groups`).Scan(&groups, &anonymous); err != nil || groups != 5 || anonymous != 0 {
 		t.Fatalf("groups=%d anonymous=%d err=%v", groups, anonymous, err)
 	}
 	if err := db.QueryRow(`SELECT count(*) FROM hosted_group_members`).Scan(&members); err != nil || members != 10 {
@@ -126,12 +126,12 @@ func TestPostgresPresetsConcurrentInitializationAndAdministratorLifecycle(t *tes
 	}
 	defer func() { _ = store.Close() }()
 	group, err := store.GetHostedGroupByName(context.Background(), "npm-all")
-	if err != nil || len(group.Members) != 2 || group.AnonymousRead {
+	if err != nil || len(group.Members) != 2 || group.Visibility == repository.VisibilityPublic {
 		t.Fatalf("group=%+v err=%v", group, err)
 	}
 	for position, expected := range []string{"npm-hosted", "npmjs"} {
 		member, err := store.GetHostedRepository(context.Background(), group.Members[position].RepositoryID)
-		if err != nil || member.Name != expected || member.AnonymousRead {
+		if err != nil || member.Name != expected || member.Visibility == repository.VisibilityPublic {
 			t.Fatalf("member=%+v err=%v", member, err)
 		}
 	}

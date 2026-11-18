@@ -8,14 +8,14 @@
     "headers": {},
     "body": null,
     "current": {
-      "anonymousRead": false,
       "format": "npm",
       "id": "00000000-0000-4000-8000-000000000001",
       "mavenStrictPublication": false,
       "name": "npm-hosted",
       "state": "active",
       "type": "hosted",
-      "version": "1"
+      "version": "1",
+      "visibility": "private"
     },
     "verified": [
       "the repository exists and is readable",

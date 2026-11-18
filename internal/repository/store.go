@@ -49,9 +49,9 @@ type HostedRepositoryStore interface {
 	UpdateHostedRepository(context.Context, HostedRepository, string) (HostedRepository, error)
 }
 
-type AnonymousAccessPolicyStore interface {
-	GetAnonymousAccessPolicy(context.Context) (AnonymousAccessPolicy, error)
-	ReplaceAnonymousAccessPolicy(context.Context, AnonymousAccessPolicy, string) (AnonymousAccessPolicy, error)
+type PublicAccessPolicyStore interface {
+	GetPublicAccessPolicy(context.Context) (PublicAccessPolicy, error)
+	ReplacePublicAccessPolicy(context.Context, PublicAccessPolicy, string) (PublicAccessPolicy, error)
 }
 
 type SiteSettingsStore interface {

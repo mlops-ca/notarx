@@ -10,13 +10,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/access"
 	"github.com/mlops-ca/notarx/internal/authorization"
 	nugetprotocol "github.com/mlops-ca/notarx/internal/protocol/nuget"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func groupRepository(group repository.HostedGroup) repository.HostedRepository {
-	return repository.HostedRepository{ID: group.ID, Name: group.Name, Format: repository.FormatNuGet, Type: repository.RepositoryTypeProxy, State: repository.RepositoryActive, AnonymousRead: group.AnonymousRead, Version: group.Version}
+	return group.AsRepository(repository.FormatNuGet)
 }
 func (m *Module) groupMembers(ctx context.Context, group repository.HostedGroup) ([]repository.HostedRepository, error) {
 	if m.sources == nil || m.groups == nil || len(group.Members) == 0 || len(group.Members) > 32 {
@@ -42,13 +43,8 @@ func (m *Module) groupMembers(ctx context.Context, group repository.HostedGroup)
 func (m *Module) authorizeGroup(w http.ResponseWriter, r *http.Request, group repository.HostedGroup, members []repository.HostedRepository, resource string, collection bool) (authorization.Principal, bool) {
 	p, ok := m.principal(r)
 	if !ok {
-		if r.Header.Get("Authorization") != "" || r.Header.Get("X-NuGet-ApiKey") != "" || !group.AnonymousRead || m.anonymous == nil {
+		if r.Header.Get("Authorization") != "" || r.Header.Get("X-NuGet-ApiKey") != "" || !access.AnonymousGroupRead(r.Context(), m.anonymous, group, r.Method) {
 			w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway NuGet"`)
-			m.problem(w, 401, "authentication_required")
-			return p, false
-		}
-		policy, err := m.anonymous.GetAnonymousAccessPolicy(r.Context())
-		if err != nil || !policy.Enabled {
 			m.problem(w, 401, "authentication_required")
 			return p, false
 		}

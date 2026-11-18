@@ -34,7 +34,7 @@ const routes: Record<string, Json> = {
   },
   "/api/v2/runtime/nodes": fixtures.runtimeNodes,
   "/api/v2/diagnostics": fixtures.diagnostics,
-  "/api/v2/anonymous-access-policy": fixtures.anonymousAccessPolicy,
+  "/api/v2/public-access-policy": fixtures.anonymousAccessPolicy,
   "/api/v2/api-keys": fixtures.apiKeys,
   "/api/v2/repository-grants": fixtures.repositoryGrants,
   "/api/v2/service-accounts": fixtures.serviceAccounts,

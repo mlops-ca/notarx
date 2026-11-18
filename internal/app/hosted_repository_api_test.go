@@ -637,7 +637,7 @@ func TestNativeRepositoryGuardAllowsAnonymousReadPolicyAndDeniesDisabledProtocol
 	enableAnonymousAccess(t, store)
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
 	for _, format := range []repository.Format{repository.FormatRaw, repository.FormatOCI, repository.FormatMaven} {
-		repo, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{ID: uuid.NewString(), Name: string(format) + "-native", Format: format, AnonymousRead: true})
+		repo, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{ID: uuid.NewString(), Name: string(format) + "-native", Format: format, Visibility: repository.VisibilityPublic})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -761,24 +761,24 @@ func TestRepositoryManagementAnonymousReadPolicyDefaultsAndUpdates(t *testing.T)
 	}
 
 	private := create(`{"name":"private-hosted","format":"raw"}`, "private-hosted")
-	if private.AnonymousRead {
-		t.Fatalf("anonymousRead defaulted to true: %#v", private)
+	if private.Visibility == repository.VisibilityPublic {
+		t.Fatalf("visibility defaulted to public: %#v", private)
 	}
-	public := create(`{"name":"public-hosted","format":"raw","anonymousRead":true}`, "public-hosted")
-	if !public.AnonymousRead {
-		t.Fatalf("anonymousRead was not returned on create: %#v", public)
+	public := create(`{"name":"public-hosted","format":"raw","visibility":"public"}`, "public-hosted")
+	if public.Visibility != repository.VisibilityPublic {
+		t.Fatalf("visibility was not returned on create: %#v", public)
 	}
 
-	patch := httptest.NewRequest(http.MethodPatch, "/api/v2/repositories/"+private.ID, strings.NewReader(`{"anonymousRead":true}`))
+	patch := httptest.NewRequest(http.MethodPatch, "/api/v2/repositories/"+private.ID, strings.NewReader(`{"visibility":"public"}`))
 	authorize(patch, "admin-secret")
 	patch.Header.Set("If-Match", "1")
 	patched := httptest.NewRecorder()
 	handler.ServeHTTP(patched, patch)
-	if patched.Code != http.StatusOK || !strings.Contains(patched.Body.String(), `"anonymousRead":true`) || patched.Header().Get("ETag") != "2" {
+	if patched.Code != http.StatusOK || !strings.Contains(patched.Body.String(), `"visibility":"public"`) || patched.Header().Get("ETag") != "2" {
 		t.Fatalf("patch=%d etag=%q body=%s", patched.Code, patched.Header().Get("ETag"), patched.Body.String())
 	}
 	stored, err := store.GetHostedRepository(context.Background(), private.ID)
-	if err != nil || !stored.AnonymousRead {
+	if err != nil || stored.Visibility != repository.VisibilityPublic {
 		t.Fatalf("stored=%#v err=%v", stored, err)
 	}
 }

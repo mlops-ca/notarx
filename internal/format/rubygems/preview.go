@@ -31,7 +31,7 @@ func jsonResponse(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 func repositoryDTO(r repository.HostedRepository) any {
-	return map[string]any{"id": r.ID, "name": r.Name, "format": "rubygems", "type": "hosted", "preview": true, "version": r.Version, "anonymousRead": r.AnonymousRead, "sourceUrl": "/rubygems/" + r.Name + "/", "pushHost": "/rubygems/" + r.Name, "publicationUrl": "/rubygems/" + r.Name + "/api/v1/gems"}
+	return map[string]any{"id": r.ID, "name": r.Name, "format": "rubygems", "type": "hosted", "preview": true, "version": r.Version, "visibility": r.Visibility, "sourceUrl": "/rubygems/" + r.Name + "/", "pushHost": "/rubygems/" + r.Name, "publicationUrl": "/rubygems/" + r.Name + "/api/v1/gems"}
 }
 func (m *Module) servePreview(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != path.Clean(r.URL.Path) || r.URL.RawQuery != "" || strings.ContainsAny(r.URL.Path, "\\\x00\r\n") {
@@ -63,10 +63,10 @@ func (m *Module) servePreview(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var in struct {
-			Name          string `json:"name"`
-			AnonymousRead bool   `json:"anonymousRead"`
+			Name       string                `json:"name"`
+			Visibility repository.Visibility `json:"visibility"`
 		}
-		if !decode(w, r, &in) || !repositoryName.MatchString(in.Name) {
+		if !decode(w, r, &in) || !repositoryName.MatchString(in.Name) || !repository.NormalizeVisibility(in.Visibility).Valid() {
 			m.problem(w, 400, "invalid_repository")
 			return
 		}
@@ -80,7 +80,7 @@ func (m *Module) servePreview(w http.ResponseWriter, r *http.Request) {
 		}
 		data, _ := json.Marshal(in)
 		sum := sha256.Sum256(data)
-		repo, _, e := m.repos.CreateHostedRepositoryIdempotently(r.Context(), repository.HostedRepository{ID: ids.New(), Name: in.Name, Format: repository.FormatRubyGems, Type: repository.RepositoryTypeHosted, AnonymousRead: in.AnonymousRead}, p.Actor, "rubygems-preview:"+key, hex.EncodeToString(sum[:]))
+		repo, _, e := m.repos.CreateHostedRepositoryIdempotently(r.Context(), repository.HostedRepository{ID: ids.New(), Name: in.Name, Format: repository.FormatRubyGems, Type: repository.RepositoryTypeHosted, Visibility: repository.NormalizeVisibility(in.Visibility)}, p.Actor, "rubygems-preview:"+key, hex.EncodeToString(sum[:]))
 		if e != nil {
 			m.failure(w, e)
 			return

@@ -51,7 +51,7 @@ type HostedRepository struct {
 	EgressProxy            *EgressProxy    `json:"egressProxy,omitempty"`
 	UpstreamAuth           *UpstreamAuth   `json:"upstreamAuth,omitempty"`
 	OCIBearer              *OCIBearer      `json:"ociBearer,omitempty"`
-	AnonymousRead          bool            `json:"anonymousRead"`
+	Visibility             Visibility      `json:"visibility"`
 	MavenStrictPublication bool            `json:"mavenStrictPublication"`
 	State                  RepositoryState `json:"state"`
 	Version                string          `json:"version"`
@@ -192,12 +192,14 @@ func normalizeHostedRepository(repo HostedRepository) HostedRepository {
 	if repo.AllowedHosts == nil {
 		repo.AllowedHosts = []string{}
 	}
+	repo.Visibility = NormalizeVisibility(repo.Visibility)
 	return repo
 }
 
-// AnonymousAccessPolicy controls whether any unauthenticated protocol read may
-// be admitted. Repository and Group anonymous settings remain required gates.
-type AnonymousAccessPolicy struct {
+// PublicAccessPolicy is the instance kill switch for public visibility (ADR
+// 0029). While it is disabled, a repository or group marked public behaves as
+// authenticated; the gate never widens access.
+type PublicAccessPolicy struct {
 	Enabled bool   `json:"enabled"`
 	Version string `json:"version"`
 }
@@ -238,12 +240,19 @@ type RepositoryRequestStatistics struct {
 }
 
 type HostedGroup struct {
-	ID            string        `json:"id"`
-	Name          string        `json:"name"`
-	Format        Format        `json:"format"`
-	AnonymousRead bool          `json:"anonymousRead"`
-	Members       []GroupMember `json:"members"`
-	Version       string        `json:"version"`
+	ID         string        `json:"id"`
+	Name       string        `json:"name"`
+	Format     Format        `json:"format"`
+	Visibility Visibility    `json:"visibility"`
+	Members    []GroupMember `json:"members"`
+	Version    string        `json:"version"`
+}
+
+// AsRepository projects a group onto the repository shape that authorization
+// and audit code takes, so a group is authorized like a proxy repository of its
+// format. The projection keeps the group's visibility.
+func (g HostedGroup) AsRepository(format Format) HostedRepository {
+	return HostedRepository{ID: g.ID, Name: g.Name, Version: g.Version, Format: format, Type: RepositoryTypeProxy, State: RepositoryActive, Visibility: g.Visibility}
 }
 
 type GroupMember struct {
@@ -1272,7 +1281,6 @@ type Member struct {
 	Type         MemberType   `json:"type"`
 	Endpoint     string       `json:"endpoint"`
 	Position     int          `json:"position"`
-	Anonymous    bool         `json:"anonymous"`
 	AllowedHosts []string     `json:"allowedHosts,omitempty"`
 	EgressProxy  *EgressProxy `json:"egressProxy,omitempty"`
 	// OCIBearer is projected from V2 repository configuration at runtime. It is
@@ -1283,6 +1291,10 @@ type Member struct {
 	UpstreamAuth      *UpstreamAuth `json:"-"`
 	RepositoryVersion string        `json:"-"`
 	RepositoryID      string        `json:"repositoryId,omitempty"`
+	// Visibility is the visibility of the member repository, projected per
+	// request by access.BindMember so a group decision can filter members. It is
+	// derived, never stored (ADR 0029).
+	Visibility Visibility `json:"-"`
 }
 
 type Group struct {

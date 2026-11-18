@@ -78,7 +78,7 @@ async function mockPoliciesTab(page: Page) {
   await page.route("**/api/v2/repository-grants**", (route) =>
     route.fulfill({ json: [] }),
   );
-  await page.route("**/api/v2/anonymous-access-policy**", (route) =>
+  await page.route("**/api/v2/public-access-policy**", (route) =>
     route.fulfill({ json: { enabled: false, version: "1" } }),
   );
   await page.route("**/api/v2/authorization-roles**", (route) =>

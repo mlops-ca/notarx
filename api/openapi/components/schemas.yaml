@@ -38,7 +38,7 @@ FormatProfile:
   - format
   - repositoryTypes
   - groupSupported
-  - anonymousRead
+  - publicVisibility
   - hostedOperations
   - proxyOperations
   properties:
@@ -54,8 +54,9 @@ FormatProfile:
         - proxy
     groupSupported:
       type: boolean
-    anonymousRead:
+    publicVisibility:
       type: boolean
+      description: True when the format supports the public visibility tier.
     hostedOperations:
       type: array
       uniqueItems: true
@@ -1149,7 +1150,7 @@ Repository:
   - id
   - name
   - format
-  - anonymousRead
+  - visibility
   - mavenStrictPublication
   - state
   - version
@@ -1173,9 +1174,8 @@ Repository:
       type: array
       items:
         type: string
-    anonymousRead:
-      type: boolean
-      description: Anonymous read policy. Defaults to false and permits unauthenticated protocol GET/HEAD where effective policy allows it.
+    visibility:
+      "$ref": "#/Visibility"
     mavenStrictPublication:
       type: boolean
       default: false
@@ -1223,10 +1223,8 @@ CreateRepository:
         type: string
       description: Hosts the proxy may egress to. Required for raw, conan,
         and npm proxies. npm tarball redirects are limited to this list.
-    anonymousRead:
-      type: boolean
-      default: false
-      description: Anonymous read policy. Defaults to false and permits unauthenticated protocol GET/HEAD where effective policy allows it.
+    visibility:
+      "$ref": "#/Visibility"
     mavenStrictPublication:
       type: boolean
       default: false
@@ -1239,7 +1237,7 @@ CreateRepository:
       "$ref": "#/OCIBearer"
 UpdateRepository:
   type: object
-  description: Editable repository management policy and proxy configuration. Hosted repositories accept anonymousRead updates and Maven Hosted repositories also accept mavenStrictPublication updates; name, format, and type are immutable after creation.
+  description: Editable repository management policy and proxy configuration. Hosted repositories accept visibility updates and Maven Hosted repositories also accept mavenStrictPublication updates; name, format, and type are immutable after creation.
   additionalProperties: false
   properties:
     endpoint:
@@ -1251,9 +1249,8 @@ UpdateRepository:
         type: string
       description: Hosts the proxy may egress to. Required for raw, conan,
         and npm proxies. npm tarball redirects are limited to this list.
-    anonymousRead:
-      type: boolean
-      description: Anonymous read policy. Defaults to false and permits unauthenticated protocol GET/HEAD where effective policy allows it.
+    visibility:
+      "$ref": "#/Visibility"
     mavenStrictPublication:
       type: boolean
       description: Maven Hosted only. False publishes successful standard PUTs directly; true requires a Gateway coordinate commit before reads can resolve the uploaded coordinate.
@@ -1269,7 +1266,7 @@ Group:
   - id
   - name
   - format
-  - anonymousRead
+  - visibility
   - members
   - version
   properties:
@@ -1280,9 +1277,8 @@ Group:
       type: string
     format:
       "$ref": "#/Format"
-    anonymousRead:
-      type: boolean
-      description: Anonymous read policy. Defaults to false and permits unauthenticated protocol GET/HEAD where effective policy allows it.
+    visibility:
+      "$ref": "#/Visibility"
     members:
       "$ref": "#/MemberList"
     version:
@@ -1299,10 +1295,8 @@ CreateGroup:
       type: string
     format:
       "$ref": "#/Format"
-    anonymousRead:
-      type: boolean
-      default: false
-      description: Anonymous read policy. Defaults to false and permits unauthenticated protocol GET/HEAD where effective policy allows it.
+    visibility:
+      "$ref": "#/Visibility"
     members:
       "$ref": "#/MemberList"
 Member:
@@ -1681,7 +1675,7 @@ CurrentIdentity:
     oidc: {"$ref": "#/OIDCIdentityDetails"}
 RepositoryEffectiveAccess:
   type: object
-  required: [actor, identity, repository, resource, simulated, anonymousRead, permissions]
+  required: [actor, identity, repository, resource, simulated, visibility, anonymousAccess, permissions]
   properties:
     actor: {type: string}
     identity: {"$ref": "#/CurrentIdentity"}
@@ -1704,7 +1698,8 @@ RepositoryEffectiveAccess:
         state:
           type: string
           enum: [active, deleting, deleted]
-    anonymousRead: {"$ref": "#/EffectiveAccessDecision"}
+    visibility: {"$ref": "#/Visibility"}
+    anonymousAccess: {"$ref": "#/EffectiveAccessDecision"}
     permissions: {"$ref": "#/EffectiveAccessPermissions"}
 RetentionDryRun:
   type: object
@@ -1975,7 +1970,7 @@ AuditRetentionPolicy:
     version: {type: string}
     enabled: {type: boolean}
     keepDays: {type: integer, minimum: 0, maximum: 36500}
-AnonymousAccessPolicy:
+PublicAccessPolicy:
   type: object
   required: [version, enabled]
   additionalProperties: false
@@ -1983,7 +1978,11 @@ AnonymousAccessPolicy:
     version: {type: string}
     enabled:
       type: boolean
-      description: Permits unauthenticated protocol reads only when the Repository or Group policy also allows them.
+      description: Instance kill switch for public visibility. When false, repositories and groups marked public behave as authenticated; the gate never widens access.
+Visibility:
+  type: string
+  enum: [private, authenticated, public]
+  description: Read visibility ceiling, ordered private < authenticated < public. private admits principals with a grant, authenticated admits any non-anonymous identity, public admits anyone while the global public-access gate is enabled (otherwise public behaves as authenticated). Omitted on create means private.
 SiteSettings:
   type: object
   required: [version, siteName, logoUrl, brandMark, enabledThemeIds, defaultThemeId, availableThemes, updatedAt]
@@ -3583,10 +3582,23 @@ Problem:
       - untrusted_archive
       - snapshot_corrupt
       - internal_error
+      - visibility_conflict
     message:
       type: string
     requestId:
       type: string
+    members:
+      type: array
+      description: Present on visibility_conflict (ADR 0029, strict group mode). The member repositories whose visibility is below the group's, limited to those the caller may administer.
+      items:
+        "$ref": "#/VisibilityConflictMember"
+VisibilityConflictMember:
+  type: object
+  required: [repositoryId, name, visibility]
+  properties:
+    repositoryId: {type: string, format: uuid}
+    name: {type: string}
+    visibility: {"$ref": "#/Visibility"}
 CreateAPTPublicationSession:
   type: object
   additionalProperties: false

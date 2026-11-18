@@ -11,7 +11,7 @@ groups:
         "$ref": "../components/responses.yaml#/GroupList"
   post:
     operationId: createGroup
-    description: A hosted group references repositories, so the platform tier and the administrators of every repository it references may manage it. The refusal names the member that is out of bounds.
+    description: A hosted group references repositories, so the platform tier and the administrators of every repository it references may manage it. The refusal names the member that is out of bounds. In strict mode (NOTARX_GROUP_VISIBILITY_MODE) a group more visible than its least visible member is refused with 409 visibility_conflict.
     parameters:
     - "$ref": "../components/parameters.yaml#/IdempotencyKey"
     requestBody:
@@ -50,6 +50,8 @@ groups_groupId:
     responses:
       '200':
         "$ref": "../components/responses.yaml#/Group"
+      '409':
+        "$ref": "../components/responses.yaml#/Problem"
       '412':
         "$ref": "../components/responses.yaml#/Problem"
   delete:
@@ -83,6 +85,8 @@ groups_groupId_members:
     responses:
       '200':
         "$ref": "../components/responses.yaml#/Group"
+      '409':
+        "$ref": "../components/responses.yaml#/Problem"
       '412':
         "$ref": "../components/responses.yaml#/Problem"
     x-gateway-memberConstraints:

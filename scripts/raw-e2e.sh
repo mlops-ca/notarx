@@ -34,7 +34,7 @@ cleanup() {
   if [[ -n "$anonymous_policy_version" && "$anonymous_policy_enabled" != "true" ]]; then
     curl --silent --output /dev/null --write-out '' -X PUT \
       -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" -H 'Content-Type: application/json' -H "If-Match: $anonymous_policy_version" \
-      --data "{\"version\":\"$anonymous_policy_version\",\"enabled\":false}" "$gateway_url/api/v2/anonymous-access-policy" || true
+      --data "{\"version\":\"$anonymous_policy_version\",\"enabled\":false}" "$gateway_url/api/v2/public-access-policy" || true
   fi
   rm -rf "$workdir"
   exit "$status"
@@ -54,8 +54,8 @@ done
 create_group() {
   local name=$1 anonymous=$2 member_type=$3 endpoint=$4 hosts=${5:-[]}
   local payload status
-  payload=$(printf '{"name":"%s","anonymous":%s,"cacheQuotaBytes":1048576,"members":[{"name":"fixture","type":"%s","endpoint":"%s","position":0,"anonymous":%s,"allowedHosts":%s}]}' \
-    "$name" "$anonymous" "$member_type" "$endpoint" "$anonymous" "$hosts")
+  payload=$(printf '{"name":"%s","anonymous":%s,"cacheQuotaBytes":1048576,"members":[{"name":"fixture","type":"%s","endpoint":"%s","position":0,"allowedHosts":%s}]}' \
+    "$name" "$anonymous" "$member_type" "$endpoint" "$hosts")
   status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
     -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" -H 'Content-Type: application/json' \
     --data "$payload" "$gateway_url/api/v1/raw/groups")
@@ -78,12 +78,12 @@ admin_status() {
 
 enable_anonymous_access() {
   local policy response
-  policy=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$gateway_url/api/v2/anonymous-access-policy")
+  policy=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$gateway_url/api/v2/public-access-policy")
   read -r anonymous_policy_version anonymous_policy_enabled < <(python3 -c 'import json, sys; policy = json.load(sys.stdin); print(policy["version"], str(policy["enabled"]).lower())' <<<"$policy")
   [[ "$anonymous_policy_enabled" == "true" ]] && return
   response=$(curl --silent --show-error --fail -X PUT \
     -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" -H 'Content-Type: application/json' -H "If-Match: $anonymous_policy_version" \
-    --data "{\"version\":\"$anonymous_policy_version\",\"enabled\":true}" "$gateway_url/api/v2/anonymous-access-policy")
+    --data "{\"version\":\"$anonymous_policy_version\",\"enabled\":true}" "$gateway_url/api/v2/public-access-policy")
   anonymous_policy_version=$(python3 -c 'import json, sys; print(json.load(sys.stdin)["version"])' <<<"$response")
 }
 

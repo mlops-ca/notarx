@@ -41,7 +41,7 @@ func groupDirectoryRequest(t *testing.T, handler http.Handler, token, id, parent
 
 func newBrowseGroup(t *testing.T, store GatewayStore, format repository.Format, repos ...repository.HostedRepository) repository.HostedGroup {
 	t.Helper()
-	group := repository.HostedGroup{ID: uuid.NewString(), Name: "browse-" + uuid.NewString(), Format: format, AnonymousRead: true}
+	group := repository.HostedGroup{ID: uuid.NewString(), Name: "browse-" + uuid.NewString(), Format: format, Visibility: repository.VisibilityPublic}
 	for i, repo := range repos {
 		group.Members = append(group.Members, repository.GroupMember{RepositoryID: repo.ID, Position: i})
 	}
@@ -58,7 +58,7 @@ func TestGroupDirectoryMergesContributionsAndInvalidatesNavigation(t *testing.T)
 	auth := testAuthenticator()
 	repos := make([]repository.HostedRepository, 3)
 	for i := range repos {
-		repo, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "raw-" + strconv.Itoa(i), Format: repository.FormatRaw, AnonymousRead: i < 2})
+		repo, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "raw-" + strconv.Itoa(i), Format: repository.FormatRaw, Visibility: repository.VisibilityPrivate})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -122,6 +122,17 @@ func TestGroupDirectoryMergesContributionsAndInvalidatesNavigation(t *testing.T)
 	res, _ = groupDirectoryRequest(t, handler, "", group.ID, "", "", 50)
 	if res.Code != 401 {
 		t.Fatalf("anonymous global gate: %d", res.Code)
+	}
+	// Anonymous callers read only the members that are themselves public.
+	for _, repo := range repos[:2] {
+		current, getErr := store.GetHostedRepository(ctx, repo.ID)
+		if getErr != nil {
+			t.Fatal(getErr)
+		}
+		current.Visibility = repository.VisibilityPublic
+		if _, updateErr := store.UpdateHostedRepository(ctx, current, current.Version); updateErr != nil {
+			t.Fatal(updateErr)
+		}
 	}
 	enableAnonymousAccess(t, store)
 	res, anonymous := groupDirectoryRequest(t, handler, "", group.ID, "", "", 50)

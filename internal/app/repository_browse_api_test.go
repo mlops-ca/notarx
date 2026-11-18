@@ -144,7 +144,7 @@ func TestRepositoryBrowseProjectsRawPathsWithoutClientReconstruction(t *testing.
 	ctx := context.Background()
 	store := repository.NewMemoryStore()
 	repo, err := store.CreateHostedRepository(ctx, repository.HostedRepository{
-		ID: uuid.NewString(), Name: "raw-releases", Format: repository.FormatRaw, AnonymousRead: true,
+		ID: uuid.NewString(), Name: "raw-releases", Format: repository.FormatRaw, Visibility: repository.VisibilityPublic,
 	})
 	if err != nil {
 		t.Fatal(err)

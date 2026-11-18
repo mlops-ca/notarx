@@ -11,7 +11,7 @@ it("offers a registered publish guide without changing a page's format list", ()
     name: "raw",
     format: "raw",
     type: "hosted",
-    anonymousRead: false,
+    visibility: "private",
     mavenStrictPublication: false,
     state: "active",
     version: "1",

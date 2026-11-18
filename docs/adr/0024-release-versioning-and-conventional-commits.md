@@ -147,7 +147,9 @@ the version policy, commit policy and repository governance.
     (`internal/nexus*`, `internal/snapshotimport`), `notification`
     (`internal/emailnotification`, `internal/quotaalert`), `config`, `i18n`, `brand`,
     `observability`, `deploy`, `signer` (`cmd/notarx-signer`, `internal/signer`, ADR 0026),
-    `scanner` (`cmd/notarx-scanner`, the Trivy pin and its image, ADR 0030);
+    `scanner` (`cmd/notarx-scanner`, the Trivy pin and its image, ADR 0030),
+    `access` (`internal/access`, ADR 0029), `repository` (`internal/repository`, the
+    repository and group model);
   - meta: `deps`, `docs`, `ci`, `release`, `security`, `repo`.
 - The policy lives in one file, `.github/commit-policy.json` (types, releasing types,
   scopes). `scripts/commit-policy-check.mjs` (tested like the other `scripts/*.mjs`)
