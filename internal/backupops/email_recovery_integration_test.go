@@ -123,7 +123,12 @@ func seedRecoveryEmail(t *testing.T, ctx context.Context, source *OwnedTarget, e
 				quota = 16
 			}
 		}
-		if _, err = s.ReplaceRepositoryCapacityQuota(ctx, repoID, quota); err != nil {
+		if source.spec.Release.NativeArchive != nil {
+			// A published release's schema predates repository_usage_counters (ADR 0023 section 3),
+			// which the current quota API also writes; seed the table that release's own quota API
+			// writes, since that release samples and restores this fixture.
+			recoverySQL(t, ctx, source.database, `INSERT INTO repository_capacity_quotas(repository_id,quota_bytes) VALUES ($1::uuid,$2) ON CONFLICT(repository_id) DO UPDATE SET quota_bytes=EXCLUDED.quota_bytes`, repoID, quota)
+		} else if _, err = s.ReplaceRepositoryCapacityQuota(ctx, repoID, quota); err != nil {
 			t.Fatal(err)
 		}
 		r, e := s.CreateRepositoryQuotaAlertRule(ctx, repository.RepositoryQuotaAlertRule{ID: uuid.NewString(), RepositoryID: repoID, TargetID: target.ID, TargetVersion: target.Version, Enabled: true, Policy: policy})
