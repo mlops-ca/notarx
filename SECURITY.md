@@ -32,6 +32,18 @@ tests and a fix, and coordinate disclosure after operators have a practical
 upgrade path. Acknowledgement and remediation timelines are not published yet
 because the project has not started a public support program.
 
+## Package signing key
+
+The native apt and yum repositories at `packages.mlops.ca` are signed by the OpenPGP key
+`notarx packages <packages@mlops.ca>` (RSA 4096 certify-only primary kept offline, RSA 4096
+signing subkeys with a two-year validity). The key ceremony, custody, rotation and revocation
+procedures are in [docs/release/packages-signing.md](docs/release/packages-signing.md).
+Verify `https://packages.mlops.ca/gpg.key` against the fingerprint below before trusting it.
+
+Primary key fingerprint: pending the production key ceremony (the key has not been minted yet).
+The ceremony checklist requires this line to be replaced with the 40-character fingerprint in the
+same change that publishes `gpg.key`.
+
 ## Current security baseline
 
 - Production traffic must terminate TLS at the Gateway or a trusted reverse

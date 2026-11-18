@@ -82,6 +82,7 @@
         { "id": "maven-publication", "title": { "en": "Maven Hosted publication", "zh-CN": "Maven Hosted 发布" }, "en": "docs/maven-hosted-publication.md", "zh-CN": "docs/maven-hosted-publication.zh-CN.md" },
         { "id": "npm-version-governance", "title": { "en": "npm version governance", "zh-CN": "npm 版本治理" }, "en": "docs/npm-version-governance.md", "zh-CN": "docs/npm-version-governance.zh-CN.md" },
         { "id": "apt-proxy", "title": { "en": "APT Proxy and Group", "zh-CN": "APT Proxy 与 Group" }, "en": "docs/apt-proxy.md", "zh-CN": "docs/apt-proxy.zh-CN.md" },
+        { "id": "packages-signing", "title": { "en": "Package signing key ceremony and environments" }, "en": "docs/release/packages-signing.md" },
         { "id": "apt-hosted-signing", "title": { "en": "APT Hosted signing", "zh-CN": "APT Hosted 签名" }, "en": "docs/apt-hosted-signing.md", "zh-CN": "docs/apt-hosted-signing.zh-CN.md" },
         { "id": "apt-first-publication", "title": { "en": "APT first publication", "zh-CN": "APT 首次发布" }, "en": "docs/apt-first-publication.md", "zh-CN": "docs/apt-first-publication.zh-CN.md" },
         { "id": "apt-snapshot-archive", "title": { "en": "APT snapshot archives", "zh-CN": "APT 快照归档" }, "en": "docs/apt-snapshot-archive.md", "zh-CN": "docs/apt-snapshot-archive.zh-CN.md" },

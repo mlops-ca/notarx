@@ -11,6 +11,8 @@ their meaning.
 
 ## Unreleased
 
+- Document the package signing key ceremony, custody, rotation and revocation (`docs/release/packages-signing.md`), add `scripts/check-packages-environments.sh` to verify the `packages-signing` and `packages-publish` environments, and a staging-key revocation and rotation drill (`make packages-signing-drill`) (#151, ADR 0025 slice 4).
+
 - Update `golang.org/x/net` to v0.62.0 and its required Go module dependencies to address GO-2026-6860 (#474), which is reachable through PyPI Simple HTML parsing. Dependency audit remains required.
 
 - agctl adds administrator-only role/template catalogue create, update and delete (#134). Updates preserve unspecified fields, use `If-Match` and return current/proposed content after a 412 without overwriting. Explicit confirmation, read-only plans, non-retried writes and unknown-result read-back keep catalogue changes separate from account roles and existing repository grants. Deletion reflects the existing API's lack of conditional versions.

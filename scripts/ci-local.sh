@@ -103,6 +103,7 @@ run_quality() {
   run "go lint" make lint
   run "go vet" make vet
   run "release version and artifact builder" make release-version-check release-artifacts-test
+  run "package signing drill and environment checks" make packages-signing-drill packages-environments-test
   run "race detector" make race
   run "coverage floor" make coverage
   run "dependency audit" make dependency-audit
