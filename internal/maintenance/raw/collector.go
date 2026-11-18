@@ -249,7 +249,7 @@ func (c Collector) StartWorker(ctx context.Context, interval time.Duration) {
 	}
 	go func() {
 		_ = c.RunReclaimJobs(ctx, 100)
-		wake := notificationWake(ctx, c.Store, "artifact_gateway_lifecycle_jobs")
+		wake := notificationWake(ctx, c.Store, "notarx_lifecycle_jobs")
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {

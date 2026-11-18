@@ -93,11 +93,11 @@ func TestValidVersionUsesStrictSemVer(t *testing.T) {
 }
 
 func TestValidPublishAttachmentNameSupportsNPMScopedKey(t *testing.T) {
-	if !ValidPublishAttachmentName("@artifact-gateway/npm-demo-2.0.0.tgz", "@artifact-gateway/npm-demo", "2.0.0") {
+	if !ValidPublishAttachmentName("@notarx/npm-demo-2.0.0.tgz", "@notarx/npm-demo", "2.0.0") {
 		t.Fatal("npm scoped attachment key was rejected")
 	}
-	for _, name := range []string{"@other/npm-demo-2.0.0.tgz", "@artifact-gateway/../npm-demo-2.0.0.tgz"} {
-		if ValidPublishAttachmentName(name, "@artifact-gateway/npm-demo", "2.0.0") {
+	for _, name := range []string{"@other/npm-demo-2.0.0.tgz", "@notarx/../npm-demo-2.0.0.tgz"} {
+		if ValidPublishAttachmentName(name, "@notarx/npm-demo", "2.0.0") {
 			t.Fatalf("invalid scoped attachment %q was accepted", name)
 		}
 	}

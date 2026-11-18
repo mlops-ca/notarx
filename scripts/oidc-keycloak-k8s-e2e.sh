@@ -2,9 +2,9 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-namespace=${OIDC_K8S_NAMESPACE:-artifact-gateway-oidc-test}
-image=${OIDC_TEST_IMAGE:-artifact-gateway:oidc-test}
-gateway_port=${OIDC_TEST_NOTARX_PORT:-18080}
+namespace=${OIDC_K8S_NAMESPACE:-notarx-oidc-test}
+image=${OIDC_TEST_IMAGE:-notarx:oidc-test}
+notarx_port=${OIDC_TEST_NOTARX_PORT:-18080}
 keycloak_port=${OIDC_TEST_KEYCLOAK_PORT:-8081}
 console_port=${OIDC_TEST_CONSOLE_PORT:-4173}
 keep_namespace=${OIDC_TEST_KEEP_NAMESPACE:-0}
@@ -37,7 +37,7 @@ require_command curl
 require_command jq
 require_command npm
 
-for port in "$gateway_port" "$keycloak_port" "$console_port"; do
+for port in "$notarx_port" "$keycloak_port" "$console_port"; do
   if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
     printf 'local port %s is already in use; set the corresponding OIDC_TEST_*_PORT variable.\n' "$port" >&2
     exit 1
@@ -48,9 +48,9 @@ docker build -t "$image" "$root"
 
 kubectl create namespace "$namespace" --dry-run=client -o yaml | kubectl apply -f -
 sed "s/127\\.0\\.0\\.1:4173/127.0.0.1:${console_port}/g" \
-  "$root/deploy/oidc-test/artifact-gateway-realm.json" >"$work_dir/artifact-gateway-realm.json"
+  "$root/deploy/oidc-test/notarx-realm.json" >"$work_dir/notarx-realm.json"
 kubectl -n "$namespace" create configmap ag-oidc-keycloak-realm \
-  --from-file=artifact-gateway-realm.json="$work_dir/artifact-gateway-realm.json" \
+  --from-file=notarx-realm.json="$work_dir/notarx-realm.json" \
   --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n "$namespace" create configmap ag-oidc-test-config \
   --from-literal="NOTARX_OIDC_REDIRECT_URL=http://127.0.0.1:${console_port}/auth/oidc/callback" \
@@ -65,24 +65,24 @@ kubectl kustomize "$root/deploy/oidc-test" \
 
 kubectl -n "$namespace" rollout status deployment/postgres --timeout=180s
 kubectl -n "$namespace" rollout status deployment/rustfs --timeout=180s
-kubectl -n "$namespace" rollout status deployment/gateway --timeout=300s
+kubectl -n "$namespace" rollout status deployment/notarx --timeout=300s
 
-kubectl -n "$namespace" port-forward service/notarx "$gateway_port":8080 >"$work_dir/gateway-port-forward.log" 2>&1 &
+kubectl -n "$namespace" port-forward service/notarx "$notarx_port":8080 >"$work_dir/notarx-port-forward.log" 2>&1 &
 processes+=("$!")
 kubectl -n "$namespace" port-forward service/keycloak "$keycloak_port":"$keycloak_port" >"$work_dir/keycloak-port-forward.log" 2>&1 &
 processes+=("$!")
 
-until curl --silent --show-error --fail "http://127.0.0.1:${gateway_port}/readyz" >/dev/null; do sleep 1; done
-until curl --silent --show-error --fail "http://127.0.0.1:${keycloak_port}/realms/artifact-gateway/.well-known/openid-configuration" >/dev/null; do sleep 1; done
+until curl --silent --show-error --fail "http://127.0.0.1:${notarx_port}/readyz" >/dev/null; do sleep 1; done
+until curl --silent --show-error --fail "http://127.0.0.1:${keycloak_port}/realms/notarx/.well-known/openid-configuration" >/dev/null; do sleep 1; done
 
 oidc_settings=$(jq -n \
-  --arg issuer "http://127.0.0.1:${keycloak_port}/realms/artifact-gateway" \
+  --arg issuer "http://127.0.0.1:${keycloak_port}/realms/notarx" \
   --arg redirect "http://127.0.0.1:${console_port}/auth/oidc/callback" \
   '{
     enabled: true,
     issuer: $issuer,
-    audience: "artifact-gateway-api",
-    clientId: "artifact-gateway-console",
+    audience: "notarx-api",
+    clientId: "notarx-console",
     redirectUrl: $redirect,
     scopes: ["openid", "profile", "email"],
     adminSubjects: [],
@@ -92,26 +92,26 @@ oidc_settings=$(jq -n \
   }')
 curl --silent --show-error --fail-with-body \
   -X PUT \
-  -H "Authorization: Bearer gateway-oidc-test-admin-token" \
+  -H "Authorization: Bearer notarx-oidc-test-admin-token" \
   -H "Content-Type: application/json" \
   -H "If-Match: 0" \
   --data "$oidc_settings" \
-  "http://127.0.0.1:${gateway_port}/api/v2/authentication/oidc" \
+  "http://127.0.0.1:${notarx_port}/api/v2/authentication/oidc" \
   | jq -e '.source == "database" and .version == "1" and .enabled == true' >/dev/null
 curl --silent --show-error --fail-with-body \
   -X POST \
-  -H "Authorization: Bearer gateway-oidc-test-admin-token" \
-  "http://127.0.0.1:${gateway_port}/api/v2/authentication/oidc:test" \
+  -H "Authorization: Bearer notarx-oidc-test-admin-token" \
+  "http://127.0.0.1:${notarx_port}/api/v2/authentication/oidc:test" \
   | jq -e '.reachable == true' >/dev/null
 
-VITE_NOTARX_PROXY_TARGET="http://127.0.0.1:${gateway_port}" \
+VITE_NOTARX_PROXY_TARGET="http://127.0.0.1:${notarx_port}" \
   npm --prefix "$root/console" run dev -- --host 127.0.0.1 --port "$console_port" >"$work_dir/console.log" 2>&1 &
 processes+=("$!")
 until curl --silent --show-error --fail "http://127.0.0.1:${console_port}" >/dev/null; do sleep 1; done
 
 KEYCLOAK_OIDC_E2E=1 \
-KEYCLOAK_OIDC_USERNAME=gateway-admin \
-KEYCLOAK_OIDC_PASSWORD=gateway-oidc-test-password \
+KEYCLOAK_OIDC_USERNAME=notarx-admin \
+KEYCLOAK_OIDC_PASSWORD=notarx-oidc-test-password \
 KEYCLOAK_OIDC_PORT="$keycloak_port" \
 PLAYWRIGHT_EXTERNAL_SERVER=1 \
 PLAYWRIGHT_PORT="$console_port" \

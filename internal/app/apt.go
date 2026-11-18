@@ -16,7 +16,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/upstreamauth"
 )
 
-const aptProxyUserAgent = "apt/2 Artifact-Gateway/1.0"
+const aptProxyUserAgent = "apt/2 notarx/1.0"
 
 // APTClient is intentionally separate from the generic raw client. APT
 // metadata and .deb bytes must be cached verbatim, including Release files

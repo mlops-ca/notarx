@@ -457,7 +457,7 @@ func (p *Prepared) Reader(ctx context.Context, a repository.MavenAsset) (io.Read
 		return nil, errors.New("source_unavailable")
 	}
 	defer func() { _ = source.Close() }()
-	spool, err := os.CreateTemp("", "artifact-gateway-snapshot-import-*")
+	spool, err := os.CreateTemp("", "notarx-snapshot-import-*")
 	if err != nil {
 		return nil, errors.New("source_spool_unavailable")
 	}

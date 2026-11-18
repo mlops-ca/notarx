@@ -54,7 +54,7 @@ jobs:
     with:
       version: ${{ needs.plan.outputs.version }}
       sha: ${{ github.sha }}
-      assets-artifact: dry-run-gateway-${{ needs.plan.outputs.version }}
+      assets-artifact: dry-run-notarx-${{ needs.plan.outputs.version }}
       retention-days: 1
 
   images:

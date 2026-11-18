@@ -10,7 +10,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
-const jobNotificationChannel = "artifact_gateway_lifecycle_jobs"
+const jobNotificationChannel = "notarx_lifecycle_jobs"
 
 // Store is the narrow persistence seam required to execute lifecycle jobs.
 type Store interface {

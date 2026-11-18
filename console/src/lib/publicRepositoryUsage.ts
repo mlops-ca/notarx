@@ -84,7 +84,7 @@ export function publicRepositoryUsage({
       },
       {
         label: t("lib.searchAndInstallACrate"),
-        code: "cargo search <crate> --registry gateway\ncargo add <crate> --registry gateway\ncargo install <crate> --registry gateway",
+        code: "cargo search <crate> --registry notarx\ncargo add <crate> --registry notarx\ncargo install <crate> --registry notarx",
       },
     ];
   }

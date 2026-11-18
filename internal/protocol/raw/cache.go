@@ -86,7 +86,7 @@ func StageContent(reader io.Reader, maxBytes int64) (CachedContent, error) {
 	if maxBytes < 0 {
 		return CachedContent{}, ErrObjectTooLarge
 	}
-	file, err := os.CreateTemp("", "artifact-gateway-raw-*")
+	file, err := os.CreateTemp("", "notarx-raw-*")
 	if err != nil {
 		return CachedContent{}, err
 	}

@@ -148,7 +148,7 @@ func (s *Service) planNPMEntries(ctx context.Context, b Batch, sourceRepo, targe
 			if err != nil {
 				return nil, err
 			}
-			spool, err := os.CreateTemp("", "artifact-gateway-npm-scan-*")
+			spool, err := os.CreateTemp("", "notarx-npm-scan-*")
 			if err != nil {
 				_ = content.Body.Close()
 				return nil, Failed("temporary_storage_unavailable")

@@ -81,7 +81,7 @@ func TestWebhookDeliveryWorkerSignsRetriesAndCompletes(t *testing.T) {
 	_, _ = mac.Write([]byte(timestamp + "."))
 	_, _ = mac.Write(body)
 	wantSignature := "v1=" + hex.EncodeToString(mac.Sum(nil))
-	if header.Get("X-Artifact-Gateway-Event-ID") != event.ID || header.Get("X-Artifact-Gateway-Event-Type") != string(event.Type) || header.Get("X-Artifact-Gateway-Timestamp") != timestamp || header.Get("X-Artifact-Gateway-Signature") != wantSignature {
+	if header.Get("X-Notarx-Event-ID") != event.ID || header.Get("X-Notarx-Event-Type") != string(event.Type) || header.Get("X-Notarx-Timestamp") != timestamp || header.Get("X-Notarx-Signature") != wantSignature {
 		t.Fatalf("headers=%v want signature=%q", header, wantSignature)
 	}
 	if !strings.Contains(string(body), `"id":"`+event.ID+`"`) || !strings.Contains(string(body), `"data":{"repositoryId":"repo-1","state":"quarantined"}`) {
@@ -106,7 +106,7 @@ func TestWebhookDeliveryWorkerSendsCargoPromotionOutcome(t *testing.T) {
 	var receivedType string
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedBody, _ = io.ReadAll(r.Body)
-		receivedType = r.Header.Get("X-Artifact-Gateway-Event-Type")
+		receivedType = r.Header.Get("X-Notarx-Event-Type")
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer server.Close()

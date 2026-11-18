@@ -51,7 +51,7 @@ case "$command_name" in
       exec "$REAL_KUBECTL" "$@"
     elif [[ "${1:-}" == "apply" && "${2:-}" == "-f" && "${3:-}" == "-" ]]; then
       cat >/dev/null
-    elif [[ " $* " == *" get secret artifact-gateway-secrets "* ]]; then
+    elif [[ " $* " == *" get secret notarx-secrets "* ]]; then
       case "$*" in
         *POSTGRES_PASSWORD*) value=${FAKE_K8S_POSTGRES_PASSWORD:-} ;;
         *RUSTFS_ACCESS_KEY*) value=${FAKE_K8S_RUSTFS_ACCESS_KEY:-} ;;
@@ -70,7 +70,7 @@ case "$command_name" in
       [[ "${FAKE_K8S_LEGACY_MINIO:-0}" == "1" ]]
     elif [[ " $* " == *" get persistentvolumeclaim data-minio-0 "* ]]; then
       [[ "${FAKE_K8S_LEGACY_MINIO_PVC:-0}" == "1" ]]
-    elif [[ " $* " == *" get service artifact-gateway-console "* || " $* " == *" get service artifact-gateway-ingress "* ]]; then
+    elif [[ " $* " == *" get service notarx-console "* || " $* " == *" get service notarx-ingress "* ]]; then
       exit 1
     else
       exit 0

@@ -279,7 +279,7 @@ func (e *proxyFetchError) Unwrap() error { return e.cause }
 // Proxy redirects may carry signed download queries, so use a safe span that
 // preserves trace propagation without recording targets or original messages.
 func doProxyHTTP(client *http.Client, request *http.Request) (*http.Response, error) {
-	ctx, span := otel.Tracer("artifact-gateway.proxy").Start(request.Context(), "proxy.upstream", trace.WithSpanKind(trace.SpanKindClient))
+	ctx, span := otel.Tracer("notarx.proxy").Start(request.Context(), "proxy.upstream", trace.WithSpanKind(trace.SpanKindClient))
 	defer span.End()
 	request = request.Clone(ctx)
 	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(request.Header))

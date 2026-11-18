@@ -1,6 +1,6 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: artifact-gateway-local
+namespace: notarx-local
 resources:
   - namespace.yaml
   - ../../base
@@ -8,15 +8,15 @@ resources:
   - infrastructure.yaml
   - ingress.yaml
 patches:
-  - path: gateway-patch.yaml
+  - path: notarx-patch.yaml
   - path: console-patch.yaml
 images:
-  - name: artifact-gateway
-    newName: artifact-gateway
+  - name: notarx
+    newName: notarx
     newTag: k8s-local
-  - name: artifact-gateway-console
-    newName: artifact-gateway-console
+  - name: notarx-console
+    newName: notarx-console
     newTag: k8s-local
-  - name: artifact-gateway-apt-signer
-    newName: artifact-gateway-apt-signer
+  - name: notarx-apt-signer
+    newName: notarx-apt-signer
     newTag: k8s-local

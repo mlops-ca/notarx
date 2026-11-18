@@ -1,14 +1,14 @@
-name: artifact-gateway
+name: notarx
 
 x-local-dev:
-  gateway-port: ${NOTARX_HTTP_PORT:-8080}
+  notarx-port: ${NOTARX_HTTP_PORT:-8080}
   console-port: ${NOTARX_CONSOLE_PORT:-4173}
 
 services:
-  gateway:
+  notarx:
     # CI builds this once and loads it into every lane (docs/ci.md); locally
     # `build` below produces the same tag.
-    image: ${NOTARX_IMAGE:-notarx-gateway:local}
+    image: ${NOTARX_IMAGE:-notarx:local}
     build: .
     depends_on:
       postgres:
@@ -25,7 +25,7 @@ services:
       NOTARX_HELM_PREVIEW_ENABLED: ${NOTARX_HELM_PREVIEW_ENABLED:-false}
       NOTARX_NUGET_PREVIEW_ENABLED: ${NOTARX_NUGET_PREVIEW_ENABLED:-false}
       NOTARX_RUBYGEMS_PREVIEW_ENABLED: ${NOTARX_RUBYGEMS_PREVIEW_ENABLED:-false}
-      NOTARX_INSTANCE_ID: ${NOTARX_INSTANCE_ID:-gateway-local}
+      NOTARX_INSTANCE_ID: ${NOTARX_INSTANCE_ID:-notarx-local}
       NOTARX_PUBLIC_URL: ${NOTARX_PUBLIC_URL:-}
       NOTARX_ACCESS_LOG: ${NOTARX_ACCESS_LOG:-limited}
       NOTARX_ACCESS_LOG_SLOW_MS: ${NOTARX_ACCESS_LOG_SLOW_MS:-1000}
@@ -50,7 +50,7 @@ services:
       NOTARX_APT_SIGNER_TRUSTED_FINGERPRINTS: ${NOTARX_APT_SIGNER_TRUSTED_FINGERPRINTS:-}
       NOTARX_APT_SIGNER_TRUSTED_PUBLIC_KEYS_FILE: ${NOTARX_APT_SIGNER_TRUSTED_PUBLIC_KEYS_FILE:-}
       NOTARX_APT_SIGNER_TLS_CA_FILE: ${NOTARX_APT_SIGNER_TLS_CA_FILE:-}
-      NOTARX_DATABASE_URL: postgres://gateway:${NOTARX_POSTGRES_PASSWORD:?set NOTARX_POSTGRES_PASSWORD in .env}@postgres:5432/gateway?sslmode=disable
+      NOTARX_DATABASE_URL: postgres://notarx:${NOTARX_POSTGRES_PASSWORD:?set NOTARX_POSTGRES_PASSWORD in .env}@postgres:5432/notarx?sslmode=disable
       NOTARX_DATABASE_MAX_OPEN_CONNS: ${NOTARX_DATABASE_MAX_OPEN_CONNS:-32}
       NOTARX_DATABASE_MAX_IDLE_CONNS: ${NOTARX_DATABASE_MAX_IDLE_CONNS:-8}
       NOTARX_DATABASE_COORDINATOR_MAX_OPEN_CONNS: ${NOTARX_DATABASE_COORDINATOR_MAX_OPEN_CONNS:-8}
@@ -60,7 +60,7 @@ services:
       NOTARX_DATABASE_CONN_MAX_LIFETIME: ${NOTARX_DATABASE_CONN_MAX_LIFETIME:-30m}
       NOTARX_DATABASE_CONN_MAX_IDLE_TIME: ${NOTARX_DATABASE_CONN_MAX_IDLE_TIME:-5m}
       NOTARX_OBJECT_STORE_ENDPOINT: http://rustfs:9000
-      NOTARX_OBJECT_STORE_BUCKET: gateway-cache
+      NOTARX_OBJECT_STORE_BUCKET: notarx-cache
       # Compose bootstraps its own RustFS; production deployments pre-create the bucket and leave this false.
       NOTARX_OBJECT_STORE_AUTO_CREATE_BUCKET: "true"
       NOTARX_OBJECT_STORE_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:?set RUSTFS_ACCESS_KEY in .env}
@@ -118,7 +118,7 @@ services:
     volumes:
       - ./themes:/themes:ro
     healthcheck:
-      test: ["CMD", "/gateway-healthcheck"]
+      test: ["CMD", "/notarx-healthcheck"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -130,11 +130,11 @@ services:
       context: .
       dockerfile: Dockerfile.scanner
     depends_on:
-      gateway:
+      notarx:
         condition: service_healthy
     # The sidecar shares only Gateway's network namespace and binds loopback.
     # Artifact bytes and an optional bearer token never traverse a Docker network.
-    network_mode: "service:gateway"
+    network_mode: "service:notarx"
     environment:
       REFERENCE_SCANNER_LISTEN_ADDRESS: 127.0.0.1:18082
       REFERENCE_SCANNER_TOKEN: ${NOTARX_SCANNER_TOKEN:-}
@@ -160,8 +160,8 @@ services:
     tmpfs:
       - /tmp:size=1610612736,mode=1777
     volumes:
-      - gateway-trivy-cache:/var/cache/trivy
-      - gateway-scanner-sboms:/var/lib/reference-scanner/sboms
+      - notarx-trivy-cache:/var/cache/trivy
+      - notarx-scanner-sboms:/var/lib/reference-scanner/sboms
     healthcheck:
       test: ["CMD", "/usr/local/bin/reference-scanner-healthcheck"]
       interval: 10s
@@ -175,11 +175,11 @@ services:
       context: .
       dockerfile: Dockerfile.apt-signer
     depends_on:
-      gateway:
+      notarx:
         condition: service_healthy
     # Private keys remain in this container and the signer binds only the
     # loopback interface shared with Gateway's network namespace.
-    network_mode: "service:gateway"
+    network_mode: "service:notarx"
     environment:
       REFERENCE_APT_SIGNER_LISTEN_ADDRESS: 127.0.0.1:18083
       REFERENCE_APT_SIGNER_TOKEN: ${NOTARX_APT_SIGNER_TOKEN:-}
@@ -195,7 +195,7 @@ services:
     mem_limit: 256m
     cpus: 1.0
     volumes:
-      - gateway-apt-signer:/var/lib/reference-apt-signer
+      - notarx-apt-signer:/var/lib/reference-apt-signer
     healthcheck:
       test: ["CMD", "/usr/local/bin/reference-apt-signer-healthcheck"]
       interval: 10s
@@ -206,18 +206,18 @@ services:
     image: postgres:18-alpine
     command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements"]
     environment:
-      POSTGRES_DB: gateway
-      POSTGRES_USER: gateway
+      POSTGRES_DB: notarx
+      POSTGRES_USER: notarx
       POSTGRES_PASSWORD: ${NOTARX_POSTGRES_PASSWORD:?set NOTARX_POSTGRES_PASSWORD in .env}
     ports:
       - "127.0.0.1:${NOTARX_POSTGRES_PORT:-5432}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U gateway -d gateway"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U notarx -d notarx"]
       interval: 5s
       timeout: 3s
       retries: 10
     volumes:
-      - gateway-postgres:/var/lib/postgresql
+      - notarx-postgres:/var/lib/postgresql
 
   migrate:
     image: postgres:18-alpine
@@ -245,7 +245,7 @@ services:
       - "127.0.0.1:${RUSTFS_API_PORT:-9000}:9000"
       - "127.0.0.1:${RUSTFS_CONSOLE_PORT:-9001}:9001"
     volumes:
-      - gateway-rustfs:/data
+      - notarx-rustfs:/data
       - ./scripts/run-rustfs.sh:/usr/local/bin/run-rustfs:ro
 
   rustfs-ready:
@@ -257,8 +257,8 @@ services:
     command: ["for attempt in $$(seq 1 30); do curl --fail --silent --max-time 2 http://rustfs:9000/health > /dev/null && exit 0; sleep 1; done; echo 'RustFS readiness deadline exceeded after 30 attempts.' >&2; exit 1"]
 
 volumes:
-  gateway-postgres:
-  gateway-rustfs:
-  gateway-trivy-cache:
-  gateway-scanner-sboms:
-  gateway-apt-signer:
+  notarx-postgres:
+  notarx-rustfs:
+  notarx-trivy-cache:
+  notarx-scanner-sboms:
+  notarx-apt-signer:

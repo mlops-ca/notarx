@@ -71,7 +71,7 @@ and the client binary only — the release workflow still publishes the Gateway
 and Console images, so build it locally at the version you need:
 
 ```sh
-make cli-docker-build                                     # docker build -f Dockerfile.agctl -t notarxctl:dev .
+make cli-docker-build                                     # docker build -f Dockerfile.notarxctl -t notarxctl:dev .
 docker run --rm notarxctl:dev version
 docker run --rm -e NOTARXCTL_SERVER=https://gateway.example.com -e NOTARXCTL_TOKEN="$NOTARX_TOKEN" \
   notarxctl:dev info

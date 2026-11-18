@@ -1,6 +1,6 @@
 # Sourced by native-apt-hosted-e2e.sh after restoring the original signed backup.
 # Every database mutation below targets that script's isolated Compose project.
-lifecycle_url="$gateway_url/api/v2/repositories/$repository_id/apt"
+lifecycle_url="$notarx_url/api/v2/repositories/$repository_id/apt"
 lifecycle_request="$workdir/lifecycle-request.json"
 python3 - "$snapshot_id" "$session_id" >"$lifecycle_request" <<'PY'
 import json,sys
@@ -32,19 +32,19 @@ cmp "$workdir/lifecycle-empty.json" "$workdir/lifecycle-replay.json"
 # Fresh clients accept a fully signed empty index; cached clients still fetch
 # the immutable package and by-hash bytes from the retired snapshot.
 "${curl_request[@]}" --fail --user "resolver:$resolver_token" \
-  "$gateway_url/apt/apt-hosted-e2e/pool/main/a/artifact-gateway-e2e/artifact-gateway-e2e_1.0.0-1_all.deb" >"$workdir/lifecycle-old-package.deb"
+  "$notarx_url/apt/apt-hosted-e2e/pool/main/n/notarx-e2e/notarx-e2e_1.0.0-1_all.deb" >"$workdir/lifecycle-old-package.deb"
 cmp "$package_file" "$workdir/lifecycle-old-package.deb"
-docker run --rm --network "$gateway_network" \
-  --env "APT_E2E_RESOLVER_TOKEN=$resolver_token" --volume "$public_key:/keys/artifact-gateway.asc:ro" \
+docker run --rm --network "$notarx_network" \
+  --env "APT_E2E_RESOLVER_TOKEN=$resolver_token" --volume "$public_key:/keys/notarx.asc:ro" \
   "$debian_image" /bin/sh -ec '
     rm -f /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources
     install -d -m 0755 /etc/apt/keyrings /etc/apt/auth.conf.d
-    install -m 0644 /keys/artifact-gateway.asc /etc/apt/keyrings/artifact-gateway.asc
-    printf "machine http://gateway:8080/apt/apt-hosted-e2e\nlogin resolver\npassword %s\n" "$APT_E2E_RESOLVER_TOKEN" > /etc/apt/auth.conf.d/artifact-gateway.conf
-    chmod 0600 /etc/apt/auth.conf.d/artifact-gateway.conf
-    printf "%s\n" "deb [arch=all signed-by=/etc/apt/keyrings/artifact-gateway.asc] http://gateway:8080/apt/apt-hosted-e2e stable main" > /etc/apt/sources.list.d/artifact-gateway.list
+    install -m 0644 /keys/notarx.asc /etc/apt/keyrings/notarx.asc
+    printf "machine http://notarx:8080/apt/apt-hosted-e2e\nlogin resolver\npassword %s\n" "$APT_E2E_RESOLVER_TOKEN" > /etc/apt/auth.conf.d/notarx.conf
+    chmod 0600 /etc/apt/auth.conf.d/notarx.conf
+    printf "%s\n" "deb [arch=all signed-by=/etc/apt/keyrings/notarx.asc] http://notarx:8080/apt/apt-hosted-e2e stable main" > /etc/apt/sources.list.d/notarx.list
     apt-get -o Acquire::Retries=0 update
-    test -z "$(apt-cache policy artifact-gateway-e2e)"
+    test -z "$(apt-cache policy notarx-e2e)"
   '
 
 lifecycle_state >"$workdir/lifecycle-state.json"
@@ -60,11 +60,11 @@ apt_install
 
 # Publish a second version, then retain the newest upload. Time aging is done
 # only in this throwaway test database, never through a production API flag.
-package_v2="$workdir/artifact-gateway-e2e_2.0.0-1_all.deb"
+package_v2="$workdir/notarx-e2e_2.0.0-1_all.deb"
 docker run --rm --volume "$workdir:/work" "$debian_image" /bin/sh -ec '
-  dpkg-deb -R /work/artifact-gateway-e2e_1.0.0-1_all.deb /tmp/package
+  dpkg-deb -R /work/notarx-e2e_1.0.0-1_all.deb /tmp/package
   sed -i "s/Version: 1.0.0-1/Version: 2.0.0-1/" /tmp/package/DEBIAN/control
-  dpkg-deb --build --root-owner-group /tmp/package /work/artifact-gateway-e2e_2.0.0-1_all.deb >/dev/null
+  dpkg-deb --build --root-owner-group /tmp/package /work/notarx-e2e_2.0.0-1_all.deb >/dev/null
 '
 python3 - "$package_v2" >"$workdir/lifecycle-v2-session-request.json" <<'PY'
 import hashlib,json,os,sys
@@ -82,7 +82,7 @@ snapshot=json.load(open(sys.argv[1]))
 print(json.dumps({'suite':'stable','sequence':snapshot['sequence']+1,'publicationSessionIds':sys.argv[2:]}))
 PY
 lifecycle_post snapshots apt-e2e-two-versions "$workdir/lifecycle-two-versions.json" >"$workdir/lifecycle-two-versions-result.json"
-"${compose[@]}" exec -T postgres psql -X -U gateway -d gateway -v ON_ERROR_STOP=1 -v "session=$session_id" <<'SQL'
+"${compose[@]}" exec -T postgres psql -X -U notarx -d notarx -v ON_ERROR_STOP=1 -v "session=$session_id" <<'SQL'
 UPDATE native_apt_package_revisions SET created_at=clock_timestamp()-interval '2 days'
 WHERE id=(SELECT package_revision_id FROM native_apt_publication_sessions WHERE id=:'session'::uuid);
 SQL

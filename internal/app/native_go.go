@@ -878,7 +878,7 @@ func validateGoAsset(modulePath, version, kind string, data []byte) (time.Time, 
 		}
 		return time.Time{}, nil
 	case "zip":
-		file, err := os.CreateTemp("", "artifact-gateway-go-*.zip")
+		file, err := os.CreateTemp("", "notarx-go-*.zip")
 		if err != nil {
 			return time.Time{}, err
 		}

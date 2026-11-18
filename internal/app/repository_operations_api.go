@@ -59,7 +59,7 @@ type RepositoryOperationsStatus struct {
 	Repository   string                 `json:"repository"`
 	Metrics      RepositoryMetrics      `json:"metrics"`
 	HitRate      float64                `json:"hit_rate"`
-	GatewayCache CacheMaintenanceStatus `json:"gateway_cache"`
+	GatewayCache CacheMaintenanceStatus `json:"notarx_cache"`
 }
 
 type repositoryOperationsHandler struct {

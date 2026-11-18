@@ -10,8 +10,8 @@ cleanup() {
 trap cleanup EXIT
 
 "${compose[@]}" config --quiet
-gateway_id=$("${compose[@]}" ps -q gateway)
-[[ -n "$gateway_id" && $(docker inspect --format '{{.State.Health.Status}}' "$gateway_id") == healthy ]] || {
+notarx_id=$("${compose[@]}" ps -q notarx)
+[[ -n "$notarx_id" && $(docker inspect --format '{{.State.Health.Status}}' "$notarx_id") == healthy ]] || {
   printf 'Start the base development stack with make dev before this smoke check.\n' >&2
   exit 1
 }

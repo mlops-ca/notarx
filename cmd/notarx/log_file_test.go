@@ -70,7 +70,7 @@ func TestRuntimeFileOutputClosesAfterConfiguredRuntimeCleanup(t *testing.T) {
 	if err != nil || code != 7 {
 		t.Fatalf("exit = %d, %v", code, err)
 	}
-	files, err := filepath.Glob(filepath.Join(cfg.LogFileDirectory, "gateway-*", "active.ndjson"))
+	files, err := filepath.Glob(filepath.Join(cfg.LogFileDirectory, "notarx-*", "active.ndjson"))
 	if err != nil || len(files) != 1 {
 		t.Fatalf("runtime file = %v, %v", files, err)
 	}

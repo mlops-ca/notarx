@@ -12,7 +12,7 @@ case "$endpoint" in
   unix://*) ;;
   *) printf 'Private upstream acceptance requires a local Docker Unix socket.\n' >&2; exit 1 ;;
 esac
-project="artifact-gateway-private-auth-${BASHPID}-${RANDOM}"
+project="notarx-private-auth-${BASHPID}-${RANDOM}"
 workdir=$(mktemp -d)
 evidence="$root/output/private-upstream-auth-e2e/$project"
 mkdir -p "$evidence" "$workdir/bin"
@@ -120,7 +120,7 @@ started=1
 postgres_address=$("${compose[@]}" port postgres 5432)
 rustfs_address=$("${compose[@]}" port rustfs 9000)
 test_exit=0
-if ! TEST_DATABASE_URL="postgres://gateway:integration-password@${postgres_address}/gateway_test?sslmode=disable" \
+if ! TEST_DATABASE_URL="postgres://notarx:integration-password@${postgres_address}/notarx_test?sslmode=disable" \
 TEST_OBJECT_STORE_ENDPOINT="http://${rustfs_address}" \
 TEST_OBJECT_STORE_ACCESS_KEY=integration-rustfs \
 TEST_OBJECT_STORE_SECRET_KEY=integration-password \

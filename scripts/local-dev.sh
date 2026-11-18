@@ -7,7 +7,7 @@ environment_template="$repo_root/.env.example"
 state_dir=${NOTARX_DEV_STATE_DIR:-$repo_root/.local-dev}
 console_pid_file="$state_dir/console.pid"
 console_log_file="$state_dir/console.log"
-console_label="com.artifact-gateway.console.$(printf '%s' "$repo_root" | cksum | awk '{print $1}')"
+console_label="com.notarx.console.$(printf '%s' "$repo_root" | cksum | awk '{print $1}')"
 
 read_local_dev_value() {
   local name=$1
@@ -165,7 +165,7 @@ if [[ -f "$environment_file" ]] && command -v docker >/dev/null 2>&1; then
       awk '
         $0 == "x-local-dev:" { local_dev = 1; next }
         local_dev && /^[^[:space:]]/ { exit }
-        local_dev && ($1 == "gateway-port:" || $1 == "console-port:") {
+        local_dev && ($1 == "notarx-port:" || $1 == "console-port:") {
           name = $1
           sub(/-port:$/, "", name)
           value = $2
@@ -176,11 +176,11 @@ if [[ -f "$environment_file" ]] && command -v docker >/dev/null 2>&1; then
   )
 fi
 
-gateway_port=${NOTARX_HTTP_PORT:-$(read_local_dev_value gateway)}
-gateway_port=${gateway_port:-8080}
+notarx_port=${NOTARX_HTTP_PORT:-$(read_local_dev_value notarx)}
+notarx_port=${notarx_port:-8080}
 console_port=${NOTARX_CONSOLE_PORT:-$(read_local_dev_value console)}
 console_port=${console_port:-4173}
-gateway_url="http://127.0.0.1:${gateway_port}"
+notarx_url="http://127.0.0.1:${notarx_port}"
 console_url="http://127.0.0.1:${console_port}"
 
 http_status() {
@@ -198,7 +198,7 @@ check_endpoint() {
 }
 
 refuse_legacy_minio_in_place() {
-	local project=${COMPOSE_PROJECT_NAME:-artifact-gateway}
+	local project=${COMPOSE_PROJECT_NAME:-notarx}
 	local old_volume="${project}_gateway-minio"
 	local legacy_container
   legacy_container=$(docker ps -aq \
@@ -249,12 +249,12 @@ start_console() {
   mkdir -p "$state_dir"
   if [[ $(uname -s) == Darwin ]]; then
     launchctl submit -l "$console_label" -o "$console_log_file" -e "$console_log_file" -- \
-      /usr/bin/env VITE_NOTARX_PROXY_TARGET="$gateway_url" \
+      /usr/bin/env VITE_NOTARX_PROXY_TARGET="$notarx_url" \
       "$node_binary" "$repo_root/console/node_modules/.bin/vite" "$repo_root/console" --host 127.0.0.1 --port "$console_port" --strictPort
     return
   fi
 
-  VITE_NOTARX_PROXY_TARGET="$gateway_url" nohup \
+  VITE_NOTARX_PROXY_TARGET="$notarx_url" nohup \
     "$node_binary" "$repo_root/console/node_modules/.bin/vite" "$repo_root/console" --host 127.0.0.1 --port "$console_port" --strictPort >"$console_log_file" 2>&1 </dev/null &
   local pid=$!
   local start_time
@@ -341,8 +341,8 @@ status() {
 
   check_endpoint Console "$console_url/" 200 || failed=1
   check_endpoint 'Console API' "$console_url/api/v2/public/repositories" 200 || failed=1
-  check_endpoint 'Gateway livez' "$gateway_url/livez" 204 || failed=1
-  check_endpoint 'Gateway readyz' "$gateway_url/readyz" 204 || failed=1
+  check_endpoint 'Gateway livez' "$notarx_url/livez" 204 || failed=1
+  check_endpoint 'Gateway readyz' "$notarx_url/readyz" 204 || failed=1
 
   return "$failed"
 }

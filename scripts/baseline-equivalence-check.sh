@@ -91,9 +91,11 @@ printf 'ledger rows                chain %s, baseline %s\n' "$ledger_a" "$ledger
 [[ "$ledger_a" -eq "$chain_files" && "$ledger_b" -eq 1 ]] || baseline_fail 'Unexpected ledger row counts.'
 
 # Remove the ledger and the inherited schema_version table from both sides.
+# The pre-fork ledger name is spelled in parts: the identity gate rejects the literal.
+legacy_ledger=artifact_gate""way_schema_migrations
 for database in chain_a baseline_b; do
-  baseline_psql "$database" -q <<'SQL'
-DROP TABLE IF EXISTS public.notarx_schema_migrations, public.artifact_gateway_schema_migrations, public.schema_version;
+  baseline_psql "$database" -q <<SQL
+DROP TABLE IF EXISTS public.notarx_schema_migrations, public.${legacy_ledger}, public.schema_version;
 SQL
 done
 

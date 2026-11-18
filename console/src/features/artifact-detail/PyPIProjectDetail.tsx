@@ -23,7 +23,7 @@ import { usePyPIProject, type PyPIFile } from "./protocolDetailQueries";
 import { PyPIYankPanel } from "./PyPIYankPanel";
 
 function fileVersion(file: PyPIFile): string {
-  return file["_artifact-gateway"]?.version ?? "";
+  return file["_notarx"]?.version ?? "";
 }
 
 function fileDigest(file: PyPIFile): string | undefined {
@@ -64,7 +64,7 @@ export function PyPIProjectDetail({
     for (const file of document?.files ?? []) {
       const version = fileVersion(file);
       if (!version) continue;
-      const createdAt = file["_artifact-gateway"]?.["created-at"] ?? "";
+      const createdAt = file["_notarx"]?.["created-at"] ?? "";
       if (createdAt > (byVersion.get(version) ?? ""))
         byVersion.set(version, createdAt);
     }
@@ -106,13 +106,13 @@ export function PyPIProjectDetail({
     (file) => fileVersion(file) === selectedVersion,
   );
   const selectedDigest = selectedFiles.map(fileDigest).find(Boolean);
-  const latestMetadata = selectedFiles[0]?.["_artifact-gateway"];
+  const latestMetadata = selectedFiles[0]?.["_notarx"];
   const totalSize = selectedFiles.reduce(
-    (total, file) => total + (file["_artifact-gateway"]?.size ?? 0),
+    (total, file) => total + (file["_notarx"]?.size ?? 0),
     0,
   );
   const cachedCount = selectedFiles.filter(
-    (file) => file["_artifact-gateway"]?.cached,
+    (file) => file["_notarx"]?.cached,
   ).length;
   const snippets = pypiUsage(repoName, project, selectedVersion);
   const columns: TableProps<PyPIFile>["columns"] = [
@@ -132,9 +132,7 @@ export function PyPIProjectDetail({
       key: "type",
       width: 130,
       render: (_, file) => (
-        <Tag variant="filled">
-          {file["_artifact-gateway"]?.["file-type"] || "sdist"}
-        </Tag>
+        <Tag variant="filled">{file["_notarx"]?.["file-type"] || "sdist"}</Tag>
       ),
     },
     {
@@ -144,7 +142,7 @@ export function PyPIProjectDetail({
       render: (_, file) => (
         <span className="font-mono text-xs text-fg-tertiary">
           {file["requires-python"] ||
-            file["_artifact-gateway"]?.["python-version"] ||
+            file["_notarx"]?.["python-version"] ||
             "—"}
         </span>
       ),
@@ -155,8 +153,8 @@ export function PyPIProjectDetail({
       width: 110,
       render: (_, file) => (
         <span className="text-xs text-fg-tertiary">
-          {file["_artifact-gateway"]?.cached
-            ? formatBytes(file["_artifact-gateway"]?.size)
+          {file["_notarx"]?.cached
+            ? formatBytes(file["_notarx"]?.size)
             : t("artifactDetail.afterDownload")}
         </span>
       ),

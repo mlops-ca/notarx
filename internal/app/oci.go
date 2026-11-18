@@ -604,7 +604,7 @@ func verifyOCIResponse(response *http.Response, reference string) (CachedOCICont
 		}
 		return CachedOCIContent{Digest: expectedDigest}, nil
 	}
-	file, err := os.CreateTemp("", "artifact-gateway-oci-*")
+	file, err := os.CreateTemp("", "notarx-oci-*")
 	if err != nil {
 		return CachedOCIContent{}, err
 	}
@@ -743,7 +743,7 @@ func writeOCIChallenge(w http.ResponseWriter, request *http.Request) {
 		realm = "https://" + request.Host + "/auth/token"
 	}
 	w.Header().Set("Docker-Distribution-API-Version", "registry/2.0")
-	w.Header().Set("WWW-Authenticate", `Bearer realm="`+realm+`",service="artifact-gateway"`)
+	w.Header().Set("WWW-Authenticate", `Bearer realm="`+realm+`",service="notarx"`)
 	writeOCIError(w, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required")
 }
 

@@ -48,7 +48,7 @@ class NativeProducerStartupTest(unittest.TestCase):
                     attempts.append(args)
                     if "pg_isready" in args and "-h" not in args:
                         return subprocess.CompletedProcess(args, 0, "Unix socket accepting connections\n", "")
-                    expected = {"-h": "127.0.0.1", "-U": "gateway", "-d": "gateway_test"}
+                    expected = {"-h": "127.0.0.1", "-U": "notarx", "-d": "notarx_test"}
                     authenticated_tcp = "psql" in args and all(
                         flag in args and args[args.index(flag) + 1] == value
                         for flag, value in expected.items())
@@ -67,7 +67,7 @@ class NativeProducerStartupTest(unittest.TestCase):
                 self.assertGreaterEqual(len(attempts), 3)
 
     def test_compose_postgres_healthchecks_reject_unix_only_server(self):
-        for name, database in (("compose.integration.yml", "gateway_test"), ("compose.yml", "gateway")):
+        for name, database in (("compose.integration.yml", "notarx_test"), ("compose.yml", "notarx")):
             with self.subTest(compose=name):
                 text = (ROOT / name).read_text()
                 healthcheck = re.search(r'test: (\["CMD-SHELL", "pg_isready[^\n]+\])', text)
@@ -77,7 +77,7 @@ class NativeProducerStartupTest(unittest.TestCase):
                 # observes the TCP server used by dependent migrate services.
                 self.assertIn("-h", args, "healthcheck accepts the Unix-only init server")
                 self.assertEqual(args[args.index("-h") + 1], "127.0.0.1")
-                self.assertEqual(args[args.index("-U") + 1], "gateway")
+                self.assertEqual(args[args.index("-U") + 1], "notarx")
                 self.assertEqual(args[args.index("-d") + 1], database)
 
     def command_scope(self, evidence, script=SCRIPT):
@@ -243,7 +243,7 @@ statefile=root/'docker-state.json'
 state=json.loads(statefile.read_text()) if statefile.exists() else {'containers':{},'network':None}
 if args==['context','show']:
     run=next((root/'repo/output/native-rubygems-e2e').iterdir()).name
-    label={'com.artifact-gateway.rubygems-e2e.run':run}
+    label={'com.notarx.rubygems-e2e.run':run}
     client=run+'-cli-cancellation-probe'
     state={'containers':{client:label},'network':{'Name':run+'-net','Labels':label}}
     statefile.write_text(json.dumps(state))

@@ -22,7 +22,7 @@ func (c UpstreamClient) FetchCargo(ctx context.Context, repo repository.HostedRe
 	if err != nil {
 		return nil, errors.New("invalid Cargo upstream request")
 	}
-	req.Header.Set("User-Agent", "Cargo/1.0 Artifact-Gateway/1.0")
+	req.Header.Set("User-Agent", "Cargo/1.0 notarx/1.0")
 	for _, name := range []string{"If-None-Match", "If-Modified-Since"} {
 		if v := headers.Get(name); v != "" {
 			req.Header.Set(name, v)

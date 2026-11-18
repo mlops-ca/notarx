@@ -271,7 +271,7 @@ func (p *NexusPyPIMigrationPublication) verifyFile(ctx context.Context, e nexusm
 		return nexusmigration.Failed("target_bytes_mismatch")
 	}
 	defer func() { _ = input.Close() }()
-	spool, err := os.CreateTemp("", "artifact-gateway-pypi-verify-*")
+	spool, err := os.CreateTemp("", "notarx-pypi-verify-*")
 	if err != nil {
 		return nexusmigration.Failed("temporary_storage_unavailable")
 	}

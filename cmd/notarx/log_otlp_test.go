@@ -91,7 +91,7 @@ func TestRuntimeFileAndOTLPOutputIncludeResourceCleanupWithoutChangingExitCode(t
 	if code != 7 || err != nil || fallback.Len() != 0 {
 		t.Fatalf("runtime exit=%d cleanup=%v fallback=%q", code, err, fallback.String())
 	}
-	files, err := filepath.Glob(filepath.Join(cfg.LogFileDirectory, "gateway-*", "active.ndjson"))
+	files, err := filepath.Glob(filepath.Join(cfg.LogFileDirectory, "notarx-*", "active.ndjson"))
 	if err != nil || len(files) != 1 {
 		t.Fatalf("runtime files=%v error=%v", files, err)
 	}

@@ -1,27 +1,27 @@
 FROM golang:1.27.4-alpine@sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280 AS build
 WORKDIR /src
 COPY go.mod go.sum ./
-RUN --mount=type=cache,id=artifact-gateway-go-mod,target=/go/pkg/mod,sharing=locked \
+RUN --mount=type=cache,id=notarx-go-mod,target=/go/pkg/mod,sharing=locked \
     go mod download
 COPY . .
-RUN --mount=type=cache,id=artifact-gateway-go-mod,target=/go/pkg/mod,sharing=locked \
-    --mount=type=cache,id=artifact-gateway-go-build,target=/root/.cache/go-build,sharing=locked \
+RUN --mount=type=cache,id=notarx-go-mod,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,id=notarx-go-build,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /reference-apt-signer ./cmd/reference-apt-signer
-RUN --mount=type=cache,id=artifact-gateway-go-mod,target=/go/pkg/mod,sharing=locked \
-    --mount=type=cache,id=artifact-gateway-go-build,target=/root/.cache/go-build,sharing=locked \
+RUN --mount=type=cache,id=notarx-go-mod,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,id=notarx-go-build,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /reference-apt-signer-healthcheck ./cmd/reference-apt-signer-healthcheck
-RUN --mount=type=cache,id=artifact-gateway-go-mod,target=/go/pkg/mod,sharing=locked \
-    --mount=type=cache,id=artifact-gateway-go-build,target=/root/.cache/go-build,sharing=locked \
+RUN --mount=type=cache,id=notarx-go-mod,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,id=notarx-go-build,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /reference-apt-signer-keygen ./cmd/reference-apt-signer-keygen
-RUN --mount=type=cache,id=artifact-gateway-go-mod,target=/go/pkg/mod,sharing=locked \
-    --mount=type=cache,id=artifact-gateway-go-build,target=/root/.cache/go-build,sharing=locked \
+RUN --mount=type=cache,id=notarx-go-mod,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,id=notarx-go-build,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /reference-apt-signer-tls-init ./cmd/reference-apt-signer-tls-init
 RUN mkdir -p /var/lib/reference-apt-signer /var/lib/reference-apt-signer-tls
 
 # Opt-in test stage (`docker build --target test`); the image build skips it.
 FROM build AS test
-RUN --mount=type=cache,id=artifact-gateway-go-mod,target=/go/pkg/mod,sharing=locked \
-    --mount=type=cache,id=artifact-gateway-go-build,target=/root/.cache/go-build,sharing=locked \
+RUN --mount=type=cache,id=notarx-go-mod,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,id=notarx-go-build,target=/root/.cache/go-build,sharing=locked \
     go test ./cmd/reference-apt-signer ./cmd/reference-apt-signer-healthcheck ./cmd/reference-apt-signer-keygen ./cmd/reference-apt-signer-tls-init ./internal/refaptsigner
 
 FROM gcr.io/distroless/static-debian12:nonroot

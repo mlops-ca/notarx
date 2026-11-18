@@ -34,18 +34,18 @@ func TestOIDCAuthenticatorValidatesRS256ClaimsAndRepositoryAccess(t *testing.T) 
 		RepositoryReaders: map[string][]string{"ci-user": {"team/*"}},
 		OIDC: NewOIDCValidator(OIDCConfig{
 			Issuer:        "https://issuer.example.test",
-			Audience:      "artifact-gateway",
+			Audience:      "notarx",
 			JWKSURL:       server.URL,
 			AdminSubjects: []string{"gateway-admin"},
 		}),
 	}
-	token := signedOIDCToken(t, privateKey, keyID, "https://issuer.example.test", "artifact-gateway", "ci-user", time.Now().Add(time.Minute))
+	token := signedOIDCToken(t, privateKey, keyID, "https://issuer.example.test", "notarx", "ci-user", time.Now().Add(time.Minute))
 	principal, ok := authenticator.Authenticate("Bearer " + token)
 	if !ok || principal.Actor != "ci-user" || principal.Admin || principal.AuthenticationKind != "oidc" || !authenticator.CanReadRepository(principal, "team/app") || authenticator.CanReadRepository(principal, "other/app") {
 		t.Fatalf("principal = %#v, authenticated=%t", principal, ok)
 	}
 
-	adminToken := signedOIDCToken(t, privateKey, keyID, "https://issuer.example.test", "artifact-gateway", "gateway-admin", time.Now().Add(time.Minute))
+	adminToken := signedOIDCToken(t, privateKey, keyID, "https://issuer.example.test", "notarx", "gateway-admin", time.Now().Add(time.Minute))
 	admin, ok := authenticator.Authenticate("Bearer " + adminToken)
 	if !ok || !admin.Admin || !admin.OIDCAdminSubject || admin.Role != RoleAdmin {
 		t.Fatalf("admin = %#v, authenticated=%t", admin, ok)
@@ -78,13 +78,13 @@ func TestOIDCBearerIdentityUsesBoundLocalAccountRoleAndState(t *testing.T) {
 	}
 	authenticator := Authenticator{
 		OIDC: NewOIDCValidator(OIDCConfig{
-			Issuer: "https://issuer.example.test", Audience: "artifact-gateway", JWKSURL: server.URL,
+			Issuer: "https://issuer.example.test", Audience: "notarx", JWKSURL: server.URL,
 			Roles: OIDCRoleMapping{Admin: []string{"provider-admin-role"}},
 		}),
 		Users: store, UserIdentities: store,
 	}
 	token := signedOIDCTokenWithRoles(
-		t, privateKey, keyID, "https://issuer.example.test", "artifact-gateway", "provider-admin",
+		t, privateKey, keyID, "https://issuer.example.test", "notarx", "provider-admin",
 		time.Now().Add(time.Minute), []string{"provider-admin-role"},
 	)
 	principal, ok := authenticator.Authenticate("Bearer " + token)
@@ -124,12 +124,12 @@ func TestOIDCAuthenticatorRejectsInvalidClaimsAndSignatures(t *testing.T) {
 		_, _ = w.Write(jwks)
 	}))
 	defer server.Close()
-	authenticator := Authenticator{OIDC: NewOIDCValidator(OIDCConfig{Issuer: "https://issuer.example.test", Audience: "artifact-gateway", JWKSURL: server.URL})}
+	authenticator := Authenticator{OIDC: NewOIDCValidator(OIDCConfig{Issuer: "https://issuer.example.test", Audience: "notarx", JWKSURL: server.URL})}
 
 	for _, token := range []string{
-		signedOIDCToken(t, privateKey, keyID, "https://wrong-issuer.example.test", "artifact-gateway", "ci-user", time.Now().Add(time.Minute)),
+		signedOIDCToken(t, privateKey, keyID, "https://wrong-issuer.example.test", "notarx", "ci-user", time.Now().Add(time.Minute)),
 		signedOIDCToken(t, privateKey, keyID, "https://issuer.example.test", "other-audience", "ci-user", time.Now().Add(time.Minute)),
-		signedOIDCToken(t, privateKey, keyID, "https://issuer.example.test", "artifact-gateway", "ci-user", time.Now().Add(-time.Minute)),
+		signedOIDCToken(t, privateKey, keyID, "https://issuer.example.test", "notarx", "ci-user", time.Now().Add(-time.Minute)),
 		"eyJhbGciOiJSUzI1NiIsImtpZCI6ImdhdGV3YXktdGVzdC1rZXkifQ.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlLnRlc3QiLCJzdWIiOiJjaS11c2VyIiwiYXVkIjoiYXJ0aWZhY3QtZ2F0ZXdheSIsImV4cCI6MjAwMDAwMDAwMH0.invalid",
 	} {
 		if _, ok := authenticator.Authenticate("Bearer " + token); ok {
@@ -149,7 +149,7 @@ func TestOIDCAuthenticatorMapsRealmRolesByHighestPrivilege(t *testing.T) {
 	}))
 	defer server.Close()
 	authenticator := Authenticator{OIDC: NewOIDCValidator(OIDCConfig{
-		Issuer: "https://issuer.example.test", Audience: "artifact-gateway", JWKSURL: server.URL,
+		Issuer: "https://issuer.example.test", Audience: "notarx", JWKSURL: server.URL,
 		Roles: OIDCRoleMapping{Member: []string{" gateway-member "}, Admin: []string{"gateway-admin"}},
 	})}
 
@@ -166,7 +166,7 @@ func TestOIDCAuthenticatorMapsRealmRolesByHighestPrivilege(t *testing.T) {
 		{name: "unmapped", roles: []string{"other"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			token := signedOIDCTokenWithRoles(t, privateKey, keyID, "https://issuer.example.test", "artifact-gateway", "ci-user", time.Now().Add(time.Minute), tc.roles)
+			token := signedOIDCTokenWithRoles(t, privateKey, keyID, "https://issuer.example.test", "notarx", "ci-user", time.Now().Add(time.Minute), tc.roles)
 			principal, ok := authenticator.Authenticate("Bearer " + token)
 			if !ok || principal.AuthenticationKind != "oidc" || principal.Role != tc.want || principal.Admin != tc.admin || len(principal.OIDCRoleMappings) != tc.matches {
 				t.Fatalf("principal=%#v authenticated=%t", principal, ok)
@@ -196,8 +196,8 @@ func TestOIDCAuthenticatorDiscoversJWKS(t *testing.T) {
 	// The request host is the test server, so discovery can derive its JWKS URI
 	// without closing over the server before it has been assigned.
 	issuer := server.URL
-	token := signedOIDCToken(t, privateKey, keyID, issuer, "artifact-gateway", "ci-user", time.Now().Add(time.Minute))
-	authenticator := Authenticator{OIDC: NewOIDCValidator(OIDCConfig{Issuer: issuer, Audience: "artifact-gateway"})}
+	token := signedOIDCToken(t, privateKey, keyID, issuer, "notarx", "ci-user", time.Now().Add(time.Minute))
+	authenticator := Authenticator{OIDC: NewOIDCValidator(OIDCConfig{Issuer: issuer, Audience: "notarx"})}
 	if principal, ok := authenticator.Authenticate("Bearer " + token); !ok || principal.Actor != "ci-user" {
 		t.Fatalf("principal=%#v authenticated=%t", principal, ok)
 	}
@@ -223,10 +223,10 @@ func TestOIDCSubjectIsRecordedForDeniedRepositoryRead(t *testing.T) {
 	}
 	authenticator := Authenticator{
 		RepositoryReaders: map[string][]string{"ci-user": {"team/allowed/*"}},
-		OIDC:              NewOIDCValidator(OIDCConfig{Issuer: "https://issuer.example.test", Audience: "artifact-gateway", JWKSURL: server.URL}),
+		OIDC:              NewOIDCValidator(OIDCConfig{Issuer: "https://issuer.example.test", Audience: "notarx", JWKSURL: server.URL}),
 	}
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, Adapter: TestAdapter{}, Authenticator: authenticator})
-	token := signedOIDCToken(t, privateKey, keyID, "https://issuer.example.test", "artifact-gateway", "ci-user", time.Now().Add(time.Minute))
+	token := signedOIDCToken(t, privateKey, keyID, "https://issuer.example.test", "notarx", "ci-user", time.Now().Add(time.Minute))
 	request := httptest.NewRequest(http.MethodGet, "/v2/team/denied/manifests/latest", nil)
 	authorize(request, token)
 	response := httptest.NewRecorder()

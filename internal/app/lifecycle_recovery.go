@@ -26,7 +26,7 @@ func (r LifecycleJobRecovery) Start(ctx context.Context, interval time.Duration)
 	}
 	go func() {
 		_, _ = r.Run(ctx)
-		wake := notificationWake(ctx, r.Store, "artifact_gateway_lifecycle_jobs")
+		wake := notificationWake(ctx, r.Store, "notarx_lifecycle_jobs")
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {

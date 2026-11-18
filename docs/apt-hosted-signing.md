@@ -23,7 +23,7 @@ NOTARX_APT_SIGNER_TIMEOUT=15s
 
 Then start the normal local stack. The signer shares Gateway's network
 namespace, listens only on loopback, and stores its RSA private key in the
-`gateway-apt-signer` volume mounted only into the signer container. Gateway
+`notarx-apt-signer` volume mounted only into the signer container. Gateway
 receives signed bytes and public identity only; it never reads the private key.
 
 The signer public key is available inside the shared network at

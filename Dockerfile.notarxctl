@@ -3,11 +3,11 @@ ARG VERSION=dev
 ARG REVISION=unknown
 WORKDIR /src
 COPY go.mod go.sum ./
-RUN --mount=type=cache,id=artifact-gateway-go-mod,target=/go/pkg/mod,sharing=locked \
+RUN --mount=type=cache,id=notarx-go-mod,target=/go/pkg/mod,sharing=locked \
     go mod download
 COPY . .
-RUN --mount=type=cache,id=artifact-gateway-go-mod,target=/go/pkg/mod,sharing=locked \
-    --mount=type=cache,id=artifact-gateway-go-build,target=/root/.cache/go-build,sharing=locked \
+RUN --mount=type=cache,id=notarx-go-mod,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,id=notarx-go-build,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 go build -trimpath -buildvcs=false \
     -ldflags="-s -w -X github.com/mlops-ca/notarx/internal/buildinfo.injectedVersion=$VERSION -X github.com/mlops-ca/notarx/internal/buildinfo.injectedRevision=$REVISION" \
     -o /notarxctl ./cmd/notarxctl

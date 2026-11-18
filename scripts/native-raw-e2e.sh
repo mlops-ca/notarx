@@ -11,8 +11,8 @@ port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); pr
 base="http://127.0.0.1:${port}"; workdir=$(mktemp -d); pid=""
 cleanup() { local status=$?; [[ -z "$pid" ]] || { kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; }; rm -rf "$workdir"; trap - EXIT; exit "$status"; }; trap cleanup EXIT
 go build -o "$workdir/native-raw-fixture" ./cmd/native-raw-fixture
-LISTEN_ADDR="127.0.0.1:${port}" "$workdir/native-raw-fixture" >"$workdir/gateway.log" 2>&1 & pid=$!
-until curl --silent --show-error --fail "$base/livez" >/dev/null; do kill -0 "$pid" 2>/dev/null || { cat "$workdir/gateway.log" >&2; exit 1; }; sleep 0.1; done
+LISTEN_ADDR="127.0.0.1:${port}" "$workdir/native-raw-fixture" >"$workdir/notarx.log" 2>&1 & pid=$!
+until curl --silent --show-error --fail "$base/livez" >/dev/null; do kill -0 "$pid" 2>/dev/null || { cat "$workdir/notarx.log" >&2; exit 1; }; sleep 0.1; done
 token=$(curl --silent --show-error --fail --user fixture:fixture-secret "$base/auth/token" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p'); test -n "$token"
 auth=(-H "Authorization: Bearer $token")
 status() { curl --silent --show-error --output "$workdir/response" --write-out '%{http_code}' "$@"; }

@@ -27,7 +27,7 @@ type Spool struct {
 }
 
 func New() (*Spool, error) {
-	file, err := os.CreateTemp("", "artifact-gateway-upload-*")
+	file, err := os.CreateTemp("", "notarx-upload-*")
 	if err != nil {
 		return nil, err
 	}

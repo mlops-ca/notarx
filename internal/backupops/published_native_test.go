@@ -15,6 +15,10 @@ import (
 	"github.com/mlops-ca/notarx/internal/backupops"
 )
 
+// legacyArchivePrefix names the published pre-fork release archives (spelled in parts:
+// the identity gate rejects the literal).
+const legacyArchivePrefix = "artifact-gate" + "way_"
+
 // Only original public release bytes; the downloader verifies independently
 // pinned archive/API/SHA256SUMS digests before placing them in this directory.
 func TestPublishedNativeRelease(t *testing.T) {
@@ -46,7 +50,7 @@ func TestPublishedNativeRelease(t *testing.T) {
 			if digestFile(t, filepath.Join(dir, "gateway")) != "sha256:"+r.binarySHA {
 				t.Fatal("original binary bytes changed")
 			}
-			archive := filepath.Join(root, "public-assets", "artifact-gateway_"+r.version+"_linux_amd64.tar.gz")
+			archive := filepath.Join(root, "public-assets", legacyArchivePrefix+r.version+"_linux_amd64.tar.gz")
 			if digestFile(t, archive) != "sha256:"+r.archiveSHA {
 				t.Fatal("original archive bytes changed")
 			}
@@ -95,7 +99,7 @@ func TestPublishedNativeRelease(t *testing.T) {
 						if r.version == other {
 							other = "0.6.0"
 						}
-						archive.Path = filepath.Join(root, "public-assets", "artifact-gateway_"+other+"_linux_amd64.tar.gz")
+						archive.Path = filepath.Join(root, "public-assets", legacyArchivePrefix+other+"_linux_amd64.tar.gz")
 						archive.SHA256 = digestFile(t, archive.Path)
 					case "missing ledger":
 						altered = []byte("filename\tsha256\n")

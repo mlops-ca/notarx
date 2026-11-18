@@ -60,9 +60,9 @@ func recoverySQL(t *testing.T, ctx context.Context, p Postgres, sql string, args
 	}
 }
 
-// seedRecoveryEmail seeds through the source gateway, so a published release
+// seedRecoveryEmail seeds through the source instance, so a published release
 // that predates the en-CA, fr-CA and zh-CN locale tags (ADR 0014) is sent the
-// bare en tag it accepts; the restored gateway is that same release.
+// bare en tag it accepts; the restored instance is that same release.
 func seedRecoveryEmail(t *testing.T, ctx context.Context, source *OwnedTarget, endpoint, liveRepo, cancelledRepo, locale string) recoveryEmail {
 	t.Helper()
 	t.Setenv(secrets.KeyEnv, recoveryEmailKey)
@@ -80,7 +80,7 @@ func seedRecoveryEmail(t *testing.T, ctx context.Context, source *OwnedTarget, e
 	f := recoveryEmail{Target: target, IDs: map[string]string{}, Deliveries: map[string]repository.EmailDelivery{}}
 	enqueue := func(label string) repository.EmailDelivery {
 		t.Helper()
-		v, e := s.EnqueueEmailTest(ctx, repository.EmailTestRequest{ID: uuid.NewString(), EventID: uuid.NewString(), RequestKey: uuid.NewString(), TargetID: target.ID, TargetVersion: target.Version, Scenario: "warning", TemplateVersion: "1", From: "gateway@example.test", ConsoleOrigin: "https://console.example.invalid"})
+		v, e := s.EnqueueEmailTest(ctx, repository.EmailTestRequest{ID: uuid.NewString(), EventID: uuid.NewString(), RequestKey: uuid.NewString(), TargetID: target.ID, TargetVersion: target.Version, Scenario: "warning", TemplateVersion: "1", From: "notarx@example.test", ConsoleOrigin: "https://console.example.invalid"})
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -130,7 +130,7 @@ func seedRecoveryEmail(t *testing.T, ctx context.Context, source *OwnedTarget, e
 		if e != nil {
 			t.Fatal(e)
 		}
-		cfg := repository.QuotaAlertMailConfig{Enabled: true, From: "gateway@example.test", ConsoleOrigin: "https://console.example.invalid"}
+		cfg := repository.QuotaAlertMailConfig{Enabled: true, From: "notarx@example.test", ConsoleOrigin: "https://console.example.invalid"}
 		sampleQuota := func() {
 			t.Helper()
 			if source.spec.Release.NativeArchive != nil {
@@ -239,7 +239,7 @@ func verifyRecoveryEmail(t *testing.T, ctx context.Context, target *OwnedTarget,
 	if _, e = s.EnqueueEmailTest(ctx, request); !errors.Is(e, repository.ErrEmailRateLimited) {
 		t.Fatal("restored request ledger lost rate boundary")
 	}
-	gatewayID := target.resourceID("container", target.spec.Project+"-gateway")
+	gatewayID := target.resourceID("container", target.spec.Project+"-notarx")
 	inspect, e := target.spec.Docker.output(ctx, "container", "inspect", gatewayID)
 	var containers []struct{ Config struct{ Env []string } }
 	if e != nil || json.Unmarshal(inspect, &containers) != nil || len(containers) != 1 {
@@ -319,7 +319,7 @@ func verifyRecoveryEmail(t *testing.T, ctx context.Context, target *OwnedTarget,
 	}
 	// Restore always starts API-only, with no SMTP configuration or worker role.
 	fixture := testsupport.NewSMTPFixture(t, true)
-	config := emailnotification.Config{Enabled: true, Host: "smtp.example.test", Port: 465, Mode: "implicit_tls", From: "gateway@example.test", ConsoleOrigin: "https://console.example.invalid", ApprovedIPs: []string{"192.0.2.10"}, CAFile: fixture.CAFile}
+	config := emailnotification.Config{Enabled: true, Host: "smtp.example.test", Port: 465, Mode: "implicit_tls", From: "notarx@example.test", ConsoleOrigin: "https://console.example.invalid", ApprovedIPs: []string{"192.0.2.10"}, CAFile: fixture.CAFile}
 	sender := emailnotification.Sender{Config: config, LookupHost: func(context.Context, string) ([]string, error) { return []string{"192.0.2.10"}, nil }, DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, network, fixture.Address)
 	}}
@@ -483,8 +483,13 @@ func recoveryMessageID(t *testing.T, data []byte) string {
 		t.Fatal("actual TLS MIME identity missing")
 	}
 	id := message.Header.Get("Message-ID")
-	if !strings.HasPrefix(id, "<") || !strings.HasSuffix(id, "@artifact-gateway.invalid>") {
-		t.Fatal("actual TLS Message-ID invalid")
+	// A published pre-fork release signs its messages with the upstream domain
+	// (spelled in parts: the identity gate rejects the literal).
+	for _, domain := range []string{"@notarx.invalid>", "@artifact" + "-gateway.invalid>"} {
+		if strings.HasPrefix(id, "<") && strings.HasSuffix(id, domain) {
+			return strings.TrimSuffix(strings.TrimPrefix(id, "<"), domain)
+		}
 	}
-	return strings.TrimSuffix(strings.TrimPrefix(id, "<"), "@artifact-gateway.invalid>")
+	t.Fatal("actual TLS Message-ID invalid")
+	return ""
 }

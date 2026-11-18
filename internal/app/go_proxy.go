@@ -11,7 +11,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
-const goProxyUserAgent = "Go-http-client/2.0 Artifact-Gateway/1.0"
+const goProxyUserAgent = "Go-http-client/2.0 notarx/1.0"
 
 type GoClient interface {
 	FetchGo(context.Context, string, repository.HostedRepository, string, http.Header) (*http.Response, error)

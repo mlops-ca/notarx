@@ -12,7 +12,7 @@ evidence=root/'output/native-rubygems-e2e'/run_id;evidence.mkdir(parents=True)
 work=pathlib.Path(tempfile.mkdtemp(prefix=run_id+'-'));work.chmod(0o700)
 env=dict(os.environ);containers=[];volumes=[];network=run_id+'-net';exit_code=1
 cancelled_signal=None;cleaning=False;cleanup_deadline=None;active_processes={};process_receipts=[];cleanup_errors=[]
-label='com.artifact-gateway.rubygems-e2e.run='+run_id
+label='com.notarx.rubygems-e2e.run='+run_id
 image='ruby:3.4.4-alpine@sha256:81096866ac15f906adc79867da3ed97a2aa271d6149363e216a174701345c53b'
 rust_image='rustfs/rustfs:1.0.0-beta.12@sha256:41fe89380f4120a337790c02af192c3fe7bb55c3edc2e6e9357b487b47c6ab21'
 required={
@@ -182,7 +182,7 @@ try:
     command([*network_args,network],timeout=30);password=secrets.token_hex(24);access='ruby'+secrets.token_hex(8);secret=secrets.token_hex(24)
     for suffix in ('pg','rust','logs'):
         name=run_id+'-'+suffix+'-data';volumes.append(name);command(['docker','volume','create','--label',label,name])
-    pg_env=work/'pg.env';pg_env.write_text('POSTGRES_DB=gateway_test\nPOSTGRES_USER=gateway\nPOSTGRES_PASSWORD='+password+'\nPGPASSWORD='+password+'\n')
+    pg_env=work/'pg.env';pg_env.write_text('POSTGRES_DB=notarx_test\nPOSTGRES_USER=notarx\nPOSTGRES_PASSWORD='+password+'\nPGPASSWORD='+password+'\n')
     rust_env=work/'rust.env';rust_env.write_text('RUSTFS_VOLUMES=/data\nRUSTFS_ADDRESS=0.0.0.0:9000\nRUSTFS_CONSOLE_ENABLE=false\nRUSTFS_ACCESS_KEY='+access+'\nRUSTFS_SECRET_KEY='+secret+'\nRUSTFS_RPC_SECRET='+secrets.token_hex(32)+'\n')
     pg=run_id+'-pg';rust=run_id+'-rustfs'
     def owned_port():
@@ -195,7 +195,7 @@ try:
     while time.monotonic()<deadline:
         remaining=deadline-time.monotonic()
         if remaining<=0:raise RuntimeError('Owned PostgreSQL readiness failed')
-        ready=command(['docker','exec',pg,'psql','-X','-h','127.0.0.1','-U','gateway','-d','gateway_test','-v','ON_ERROR_STOP=1','-Atqc','SELECT 1'],check=False,timeout=remaining)
+        ready=command(['docker','exec',pg,'psql','-X','-h','127.0.0.1','-U','notarx','-d','notarx_test','-v','ON_ERROR_STOP=1','-Atqc','SELECT 1'],check=False,timeout=remaining)
         if time.monotonic()>=deadline:raise RuntimeError('Owned PostgreSQL readiness failed')
         if ready.returncode==0 and ready.stdout.strip()=='1':break
         time.sleep(min(0.2,max(0,deadline-time.monotonic())))
@@ -206,11 +206,11 @@ try:
         if r.returncode==0:break
         time.sleep(0.2)
     else:raise RuntimeError('Owned RustFS readiness failed')
-    command(['docker','cp',str(root/'migrations'),pg+':/migrations']);migration=(root/'scripts/run-migrations.sh').read_text();migration_args=['docker','exec','-i','--env','PGHOST=127.0.0.1','--env','PGUSER=gateway','--env','PGDATABASE=gateway_test',pg,'sh'];command(migration_args,input=migration,output='migrations-first.log');command(migration_args,input=migration,output='migrations-noop.log')
-    env.update(TEST_DATABASE_URL='postgres://gateway:'+password+'@'+pg_address+'/gateway_test?sslmode=disable',TEST_OBJECT_STORE_ENDPOINT='http://'+rust_address,TEST_OBJECT_STORE_ACCESS_KEY=access,TEST_OBJECT_STORE_SECRET_KEY=secret,RUBYGEMS_TEST_IMAGE=image,RUBYGEMS_OWNED_EVIDENCE_DIR=str(evidence),RUBYGEMS_OWNED_PROJECT=run_id,RUBYGEMS_OWNED_RESTART_CONTAINERS=pg+','+rust,NOTARX_REPOSITORY_PRESETS='none')
-    command(['go','build','-o',str(work/'gateway'),'./cmd/notarx'],output='gateway-build.log')
-    env['RUBYGEMS_NOTARX_BIN']=str(work/'gateway')
-    write('gateway-binary.json',{'sha256':hashlib.sha256((work/'gateway').read_bytes()).hexdigest(),'build':'real cmd/notarx from recorded source snapshot','runtime':'production config/composition with explicit RubyGems preview flag'})
+    command(['docker','cp',str(root/'migrations'),pg+':/migrations']);migration=(root/'scripts/run-migrations.sh').read_text();migration_args=['docker','exec','-i','--env','PGHOST=127.0.0.1','--env','PGUSER=notarx','--env','PGDATABASE=notarx_test',pg,'sh'];command(migration_args,input=migration,output='migrations-first.log');command(migration_args,input=migration,output='migrations-noop.log')
+    env.update(TEST_DATABASE_URL='postgres://notarx:'+password+'@'+pg_address+'/notarx_test?sslmode=disable',TEST_OBJECT_STORE_ENDPOINT='http://'+rust_address,TEST_OBJECT_STORE_ACCESS_KEY=access,TEST_OBJECT_STORE_SECRET_KEY=secret,RUBYGEMS_TEST_IMAGE=image,RUBYGEMS_OWNED_EVIDENCE_DIR=str(evidence),RUBYGEMS_OWNED_PROJECT=run_id,RUBYGEMS_OWNED_RESTART_CONTAINERS=pg+','+rust,NOTARX_REPOSITORY_PRESETS='none')
+    command(['go','build','-o',str(work/'notarx'),'./cmd/notarx'],output='notarx-build.log')
+    env['RUBYGEMS_NOTARX_BIN']=str(work/'notarx')
+    write('notarx-binary.json',{'sha256':hashlib.sha256((work/'notarx').read_bytes()).hexdigest(),'build':'real cmd/notarx from recorded source snapshot','runtime':'production config/composition with explicit RubyGems preview flag'})
     result=command(['go','test','-json','-count=1','-p','1','-race','-tags=integration','./internal/protocol/rubygems','./internal/rubygemspublication/...','./internal/rubygemsdistribution','./internal/format/rubygems','-run','RubyGem','-timeout','600s'],output='results.jsonl',check=False)
     events=[]
     for line in (evidence/'results.jsonl').read_text().splitlines():

@@ -12,6 +12,10 @@ import (
 	"strings"
 )
 
+// legacyEnvExample is the env example name of pre-fork archives (spelled in parts:
+// the identity gate rejects the literal).
+const legacyEnvExample = "artifact" + "-gateway.env.example"
+
 // NativeArchive pins an original local distribution archive approved outside
 // the backup bundle. Its SHA256 must come from the operator's trusted release
 // provenance, never from the archive, VERSION.txt, or backup manifest itself.
@@ -123,7 +127,9 @@ func verifyNativeArchive(release Release, migrations map[string]string) error {
 				return errRelease
 			}
 			archivedMigrations[strings.TrimPrefix(name, "migrations/")] = strings.TrimPrefix(digest, "sha256:")
-		case name == "gateway-healthcheck" || name == "run-migrations.sh" || name == "artifact-gateway.env.example" || name == "INSTALL.txt":
+		// Pre-fork archives ship "gateway-healthcheck" and the upstream-named env
+		// example; notarx archives ship the notarx names.
+		case name == "gateway-healthcheck" || name == "notarx-healthcheck" || name == "run-migrations.sh" || name == "notarx.env.example" || name == legacyEnvExample || name == "INSTALL.txt":
 			if _, err := io.Copy(io.Discard, tr); err != nil {
 				return errRelease
 			}

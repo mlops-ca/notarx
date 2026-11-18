@@ -58,11 +58,11 @@ func TestNativeCargoOfficialClientHostedFlow(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write(filepath.Join(packageDir, "Cargo.toml"), "[package]\nname = \"gateway-official-cargo\"\nversion = \"0.2.0\"\nedition = \"2024\"\nlicense = \"MIT\"\ndescription = \"Gateway official Cargo client fixture\"\n")
+	write(filepath.Join(packageDir, "Cargo.toml"), "[package]\nname = \"notarx-official-cargo\"\nversion = \"0.2.0\"\nedition = \"2024\"\nlicense = \"MIT\"\ndescription = \"Gateway official Cargo client fixture\"\n")
 	write(filepath.Join(packageDir, "src", "lib.rs"), "pub fn answer() -> u8 { 42 }\n")
-	write(filepath.Join(packageDir, "src", "main.rs"), "fn main() { println!(\"{}\", gateway_official_cargo::answer()); }\n")
+	write(filepath.Join(packageDir, "src", "main.rs"), "fn main() { println!(\"{}\", notarx_official_cargo::answer()); }\n")
 	write(filepath.Join(consumerDir, "Cargo.toml"), "[package]\nname = \"cargo-gateway-consumer\"\nversion = \"0.1.0\"\nedition = \"2024\"\n")
-	write(filepath.Join(consumerDir, "src", "main.rs"), "fn main() { println!(\"{}\", gateway_official_cargo::answer()); }\n")
+	write(filepath.Join(consumerDir, "src", "main.rs"), "fn main() { println!(\"{}\", notarx_official_cargo::answer()); }\n")
 	environment := append(os.Environ(), "CARGO_HOME="+home, "CARGO_TARGET_DIR="+filepath.Join(t.TempDir(), "target"),
 		"CARGO_REGISTRIES_FIXTURE_TOKEN=admin-secret", "HTTP_PROXY=", "HTTPS_PROXY=", "ALL_PROXY=", "NO_PROXY=127.0.0.1,localhost")
 	runWithEnvironment := func(env []string, dir string, args ...string) {
@@ -78,11 +78,11 @@ func TestNativeCargoOfficialClientHostedFlow(t *testing.T) {
 	}
 	run := func(dir string, args ...string) { runWithEnvironment(environment, dir, args...) }
 	run(packageDir, "publish", "--registry", "fixture", "--allow-dirty", "--no-verify")
-	run(consumerDir, "add", "gateway-official-cargo", "--registry", "fixture")
+	run(consumerDir, "add", "notarx-official-cargo", "--registry", "fixture")
 	run(consumerDir, "check")
-	run(consumerDir, "install", "gateway-official-cargo", "--registry", "fixture", "--root", filepath.Join(t.TempDir(), "install"))
-	run(packageDir, "search", "gateway-official-cargo", "--registry", "fixture")
-	run(packageDir, "yank", "gateway-official-cargo@0.2.0", "--registry", "fixture")
+	run(consumerDir, "install", "notarx-official-cargo", "--registry", "fixture", "--root", filepath.Join(t.TempDir(), "install"))
+	run(packageDir, "search", "notarx-official-cargo", "--registry", "fixture")
+	run(packageDir, "yank", "notarx-official-cargo@0.2.0", "--registry", "fixture")
 	run(consumerDir, "check", "--locked")
 	yankedHome := t.TempDir()
 	write(filepath.Join(yankedHome, "config.toml"), config)
@@ -122,7 +122,7 @@ func TestNativeCargoOfficialClientHostedFlow(t *testing.T) {
 			t.Fatalf("new resolution selected yanked version: err=%v output=%s", err, output)
 		}
 	}
-	run(packageDir, "yank", "gateway-official-cargo@0.2.0", "--undo", "--registry", "fixture")
+	run(packageDir, "yank", "notarx-official-cargo@0.2.0", "--undo", "--registry", "fixture")
 
 	repo, err := store.GetHostedRepositoryByName(context.Background(), "cargo-official")
 	if err != nil {
@@ -142,14 +142,14 @@ func TestNativeCargoOfficialClientHostedFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 	write(filepath.Join(publicConsumer, "Cargo.toml"), "[package]\nname = \"cargo-gateway-public-consumer\"\nversion = \"0.1.0\"\nedition = \"2024\"\n")
-	write(filepath.Join(publicConsumer, "src", "main.rs"), "fn main() { println!(\"{}\", gateway_official_cargo::answer()); }\n")
+	write(filepath.Join(publicConsumer, "src", "main.rs"), "fn main() { println!(\"{}\", notarx_official_cargo::answer()); }\n")
 	publicEnvironment := append(os.Environ(), "CARGO_HOME="+publicHome, "CARGO_TARGET_DIR="+filepath.Join(t.TempDir(), "public-target"),
 		"CARGO_REGISTRIES_FIXTURE_TOKEN=", "HTTP_PROXY=", "HTTPS_PROXY=", "ALL_PROXY=", "NO_PROXY=127.0.0.1,localhost")
-	runWithEnvironment(publicEnvironment, publicConsumer, "search", "gateway-official-cargo", "--registry", "fixture")
-	runWithEnvironment(publicEnvironment, publicConsumer, "add", "gateway-official-cargo", "--registry", "fixture")
+	runWithEnvironment(publicEnvironment, publicConsumer, "search", "notarx-official-cargo", "--registry", "fixture")
+	runWithEnvironment(publicEnvironment, publicConsumer, "add", "notarx-official-cargo", "--registry", "fixture")
 	runWithEnvironment(publicEnvironment, publicConsumer, "check")
-	runWithEnvironment(publicEnvironment, publicConsumer, "install", "gateway-official-cargo", "--registry", "fixture", "--root", filepath.Join(t.TempDir(), "public-install"))
-	if _, err := store.TombstoneCargoPublication(context.Background(), repo.ID, "gateway-official-cargo", "0.2.0"); err != nil {
+	runWithEnvironment(publicEnvironment, publicConsumer, "install", "notarx-official-cargo", "--registry", "fixture", "--root", filepath.Join(t.TempDir(), "public-install"))
+	if _, err := store.TombstoneCargoPublication(context.Background(), repo.ID, "notarx-official-cargo", "0.2.0"); err != nil {
 		t.Fatal(err)
 	}
 	blockedHome := t.TempDir()
@@ -157,22 +157,22 @@ func TestNativeCargoOfficialClientHostedFlow(t *testing.T) {
 	blockedEnvironment := append(os.Environ(), "CARGO_HOME="+blockedHome, "CARGO_TARGET_DIR="+filepath.Join(t.TempDir(), "blocked-target"),
 		"CARGO_REGISTRIES_FIXTURE_TOKEN=", "HTTP_PROXY=", "HTTPS_PROXY=", "ALL_PROXY=", "NO_PROXY=127.0.0.1,localhost")
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	blocked := exec.CommandContext(ctx, cargoPath, "install", "gateway-official-cargo", "--registry", "fixture", "--root", filepath.Join(t.TempDir(), "blocked-install"))
+	blocked := exec.CommandContext(ctx, cargoPath, "install", "notarx-official-cargo", "--registry", "fixture", "--root", filepath.Join(t.TempDir(), "blocked-install"))
 	blocked.Dir, blocked.Env = publicConsumer, blockedEnvironment
 	blockedOutput, blockedErr := blocked.CombinedOutput()
 	cancel()
 	if blockedErr == nil {
 		t.Fatalf("official Cargo installed a tombstoned crate: %s", blockedOutput)
 	}
-	if _, err := store.RestoreCargoPublication(context.Background(), repo.ID, "gateway-official-cargo", "0.2.0"); err != nil {
+	if _, err := store.RestoreCargoPublication(context.Background(), repo.ID, "notarx-official-cargo", "0.2.0"); err != nil {
 		t.Fatal(err)
 	}
 	restoredHome := t.TempDir()
 	write(filepath.Join(restoredHome, "config.toml"), config)
 	restoredEnvironment := append(os.Environ(), "CARGO_HOME="+restoredHome, "CARGO_TARGET_DIR="+filepath.Join(t.TempDir(), "restored-target"),
 		"CARGO_REGISTRIES_FIXTURE_TOKEN=", "HTTP_PROXY=", "HTTPS_PROXY=", "ALL_PROXY=", "NO_PROXY=127.0.0.1,localhost")
-	runWithEnvironment(restoredEnvironment, publicConsumer, "install", "gateway-official-cargo", "--registry", "fixture", "--root", filepath.Join(t.TempDir(), "restored-install"))
-	publication, err := store.GetCargoPublication(context.Background(), repo.ID, "gateway-official-cargo", "0.2.0")
+	runWithEnvironment(restoredEnvironment, publicConsumer, "install", "notarx-official-cargo", "--registry", "fixture", "--root", filepath.Join(t.TempDir(), "restored-install"))
+	publication, err := store.GetCargoPublication(context.Background(), repo.ID, "notarx-official-cargo", "0.2.0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -220,7 +220,7 @@ func TestNativeCargoOfficialClientHostedFlow(t *testing.T) {
 		write(filepath.Join(targetHome, "config.toml"), "[registries."+target.registry+"]\nindex = \"sparse+"+server.URL+"/cargo/"+target.repo.Name+"/\"\ncredential-provider = \"cargo:token\"\n")
 		targetEnvironment := append(os.Environ(), "CARGO_HOME="+targetHome, "CARGO_TARGET_DIR="+filepath.Join(t.TempDir(), "distribution-target"),
 			"CARGO_REGISTRIES_"+strings.ToUpper(target.registry)+"_TOKEN=admin-secret", "HTTP_PROXY=", "HTTPS_PROXY=", "ALL_PROXY=", "NO_PROXY=127.0.0.1,localhost")
-		runWithEnvironment(targetEnvironment, publicConsumer, "install", "gateway-official-cargo", "--registry", target.registry,
+		runWithEnvironment(targetEnvironment, publicConsumer, "install", "notarx-official-cargo", "--registry", target.registry,
 			"--root", filepath.Join(t.TempDir(), "distribution-install"))
 	}
 }

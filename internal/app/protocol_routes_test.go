@@ -360,10 +360,10 @@ func TestCanonicalRepositoryRoutesPreservesPyPISimpleReads(t *testing.T) {
 		t.Fatal(err)
 	}
 	objects := objectstore.NewMemoryStore()
-	file := publishPyPITestFile(t, store, objects, repo, "gateway-widget", "1.2.3")
+	file := publishPyPITestFile(t, store, objects, repo, "notarx-widget", "1.2.3")
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator(), Storage: ObjectStores{repository.FormatPyPI: objects}})
 
-	simple := httptest.NewRequest(http.MethodGet, "/pypi/python/simple/gateway-widget/", nil)
+	simple := httptest.NewRequest(http.MethodGet, "/pypi/python/simple/notarx-widget/", nil)
 	authorize(simple, "resolver-secret")
 	simpleResponse := httptest.NewRecorder()
 	handler.ServeHTTP(simpleResponse, simple)
@@ -379,19 +379,19 @@ func TestCanonicalRepositoryRoutesAcceptsPyPITwineLegacyUpload(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	wheel := pypiFixtureWheel(t, "gateway_widget", "1.2.3")
+	wheel := pypiFixtureWheel(t, "notarx_widget", "1.2.3")
 	sum := sha256.Sum256(wheel)
 	body := new(bytes.Buffer)
 	writer := multipart.NewWriter(body)
 	for key, value := range map[string]string{
-		":action": "file_upload", "name": "gateway-widget", "version": "1.2.3",
+		":action": "file_upload", "name": "notarx-widget", "version": "1.2.3",
 		"filetype": "bdist_wheel", "pyversion": "py3", "sha256_digest": hex.EncodeToString(sum[:]),
 	} {
 		if err := writer.WriteField(key, value); err != nil {
 			t.Fatal(err)
 		}
 	}
-	part, err := writer.CreateFormFile("content", "gateway_widget-1.2.3-py3-none-any.whl")
+	part, err := writer.CreateFormFile("content", "notarx_widget-1.2.3-py3-none-any.whl")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -435,10 +435,10 @@ func TestCanonicalRepositoryRoutesResolvesPyPIGroups(t *testing.T) {
 		repository.GroupMember{RepositoryID: repo.ID, Position: 0},
 	)
 	objects := objectstore.NewMemoryStore()
-	file := publishPyPITestFile(t, store, objects, repo, "gateway-widget", "1.2.3")
+	file := publishPyPITestFile(t, store, objects, repo, "notarx-widget", "1.2.3")
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator(), Storage: ObjectStores{repository.FormatPyPI: objects}})
 
-	simple := httptest.NewRequest(http.MethodGet, "/pypi/python-all/simple/gateway-widget/", nil)
+	simple := httptest.NewRequest(http.MethodGet, "/pypi/python-all/simple/notarx-widget/", nil)
 	authorize(simple, "resolver-secret")
 	simpleResponse := httptest.NewRecorder()
 	handler.ServeHTTP(simpleResponse, simple)

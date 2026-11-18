@@ -103,8 +103,8 @@ func (h ConanHandler) uploadNativeConan(w http.ResponseWriter, r *http.Request) 
 		writeConanPublicationError(w, err)
 		return
 	}
-	w.Header().Set("X-Artifact-Gateway-Publish-Session", session.ID)
-	w.Header().Set("X-Artifact-Gateway-Publish-State", session.State)
+	w.Header().Set("X-Notarx-Publish-Session", session.ID)
+	w.Header().Set("X-Notarx-Publish-State", session.State)
 	if p.File != conanprotocol.ManifestName {
 		w.WriteHeader(http.StatusCreated)
 		return
@@ -127,7 +127,7 @@ func (h ConanHandler) uploadNativeConan(w http.ResponseWriter, r *http.Request) 
 	if h.PublicationScanner != nil {
 		_ = h.PublicationScanner.Schedule(r.Context(), repo, conanSessionCoordinate(committed), digest, principal.Actor)
 	}
-	w.Header().Set("X-Artifact-Gateway-Publish-State", committed.State)
+	w.Header().Set("X-Notarx-Publish-State", committed.State)
 	w.WriteHeader(http.StatusCreated)
 }
 

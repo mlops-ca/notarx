@@ -22,7 +22,7 @@ workdir=$(mktemp -d)
 upstream_pid=""
 proxy_pid=""
 integration_started=0
-integration_project="artifact-gateway-npm-clients-$$"
+integration_project="notarx-npm-clients-$$"
 integration_compose=(docker compose --env-file /dev/null --project-name "$integration_project" -f compose.integration.yml)
 
 cleanup() {
@@ -119,7 +119,7 @@ mkdir "$scoped"
 (
   cd "$scoped"
   npm init -y >/dev/null
-  npm pkg set name='@artifact-gateway/npm-fixture' version='2.0.0' description='Scoped notarx npm fixture' license='Apache-2.0'
+  npm pkg set name='@notarx/npm-fixture' version='2.0.0' description='Scoped notarx npm fixture' license='Apache-2.0'
   npm_config_userconfig="$auth_config" npm publish --registry="$registry_url" --tag=latest --access=public
 )
 
@@ -239,10 +239,10 @@ dist_tag_round() {
   fi
 }
 dist_tag_round ag-npm-fixture 1.0.0 1.1.0 beta
-dist_tag_round @artifact-gateway/npm-fixture 2.0.0 2.1.0 stable
+dist_tag_round @notarx/npm-fixture 2.0.0 2.1.0 stable
 # Numeric prefixes are ordinary tags unless the whole name is a SemVer range.
 dist_tag_round ag-npm-fixture 1.0.0 1.1.0 2026-release
-dist_tag_round @artifact-gateway/npm-fixture 2.0.0 2.1.0 v1-release
+dist_tag_round @notarx/npm-fixture 2.0.0 2.1.0 v1-release
 if npm_config_userconfig="$auth_config" npm dist-tag add ag-npm-fixture@9.9.9 beta --registry="$registry_url" >"$workdir/dist-tag-missing.log" 2>&1; then
   printf 'npm dist-tag accepted an unpublished version\n' >&2
   exit 1
@@ -290,14 +290,14 @@ mkdir "$lockfile_install"
   npm init -y >/dev/null
   npm pkg set \
     dependencies.ag-npm-fixture='1.0.0' \
-    'dependencies.@artifact-gateway/npm-fixture'='2.0.0' \
+    'dependencies.@notarx/npm-fixture'='2.0.0' \
     'dependencies.@types/json-schema'='7.0.15'
   npm_config_cache="$workdir/npm-cache-lock" npm_config_userconfig="$anonymous_config" npm install \
     --package-lock-only --registry="$group_registry_url" --ignore-scripts --no-audit --no-fund
   node -e '
     const lock=require("./package-lock.json");
     const registry=process.argv[1];
-    for (const name of ["ag-npm-fixture", "@artifact-gateway/npm-fixture", "@types/json-schema"]) {
+    for (const name of ["ag-npm-fixture", "@notarx/npm-fixture", "@types/json-schema"]) {
       const resolved=lock.packages[`node_modules/${name}`]?.resolved;
       if (!resolved?.startsWith(registry)) throw new Error(`${name} did not lock to Group: ${resolved}`);
     }
@@ -323,7 +323,7 @@ done
   cd "$lockfile_install"
   npm_config_cache="$workdir/npm-cache-ci-online" npm_config_userconfig="$anonymous_config" npm ci \
     --registry="$group_registry_url" --ignore-scripts --no-audit --no-fund
-  node -e 'for (const [name,version] of Object.entries({"ag-npm-fixture":"1.0.0","@artifact-gateway/npm-fixture":"2.0.0","@types/json-schema":"7.0.15"})) { const actual=require(`./node_modules/${name}/package.json`).version; if(actual!==version) process.exit(1) }'
+  node -e 'for (const [name,version] of Object.entries({"ag-npm-fixture":"1.0.0","@notarx/npm-fixture":"2.0.0","@types/json-schema":"7.0.15"})) { const actual=require(`./node_modules/${name}/package.json`).version; if(actual!==version) process.exit(1) }'
 )
 
 private_package="$workdir/private-package"
@@ -340,8 +340,8 @@ mkdir "$install_dir"
 (
   cd "$install_dir"
   npm init -y >/dev/null
-  npm_config_cache="$workdir/npm-cache-online" npm_config_userconfig="$anonymous_config" npm install 'ag-npm-private-fixture@3.0.0' 'ag-npm-fixture@1.0.0' '@artifact-gateway/npm-fixture@2.0.0' --registry="$group_registry_url" --ignore-scripts
-  node -e 'for (const [name,version] of Object.entries({"ag-npm-private-fixture":"3.0.0","ag-npm-fixture":"1.0.0","@artifact-gateway/npm-fixture":"2.0.0"})) { const actual=require(`./node_modules/${name}/package.json`).version; if(actual!==version) process.exit(1) }'
+  npm_config_cache="$workdir/npm-cache-online" npm_config_userconfig="$anonymous_config" npm install 'ag-npm-private-fixture@3.0.0' 'ag-npm-fixture@1.0.0' '@notarx/npm-fixture@2.0.0' --registry="$group_registry_url" --ignore-scripts
+  node -e 'for (const [name,version] of Object.entries({"ag-npm-private-fixture":"3.0.0","ag-npm-fixture":"1.0.0","@notarx/npm-fixture":"2.0.0"})) { const actual=require(`./node_modules/${name}/package.json`).version; if(actual!==version) process.exit(1) }'
 )
 
 kill "$upstream_pid"
@@ -353,7 +353,7 @@ rm -rf "$lockfile_install/node_modules"
   cd "$lockfile_install"
   npm_config_cache="$workdir/npm-cache-ci-offline" npm_config_userconfig="$anonymous_config" npm ci \
     --registry="$group_registry_url" --ignore-scripts --no-audit --no-fund
-  node -e 'for (const [name,version] of Object.entries({"ag-npm-fixture":"1.0.0","@artifact-gateway/npm-fixture":"2.0.0","@types/json-schema":"7.0.15"})) { const actual=require(`./node_modules/${name}/package.json`).version; if(actual!==version) process.exit(1) }'
+  node -e 'for (const [name,version] of Object.entries({"ag-npm-fixture":"1.0.0","@notarx/npm-fixture":"2.0.0","@types/json-schema":"7.0.15"})) { const actual=require(`./node_modules/${name}/package.json`).version; if(actual!==version) process.exit(1) }'
 )
 
 offline_install="$workdir/offline-install"
@@ -361,8 +361,8 @@ mkdir "$offline_install"
 (
   cd "$offline_install"
   npm init -y >/dev/null
-  npm_config_cache="$workdir/npm-cache-offline" npm_config_userconfig="$anonymous_config" npm install 'ag-npm-private-fixture@3.0.0' 'ag-npm-fixture@1.0.0' '@artifact-gateway/npm-fixture@2.0.0' --registry="$group_registry_url" --ignore-scripts
-  node -e 'for (const [name,version] of Object.entries({"ag-npm-private-fixture":"3.0.0","ag-npm-fixture":"1.0.0","@artifact-gateway/npm-fixture":"2.0.0"})) { const actual=require(`./node_modules/${name}/package.json`).version; if(actual!==version) process.exit(1) }'
+  npm_config_cache="$workdir/npm-cache-offline" npm_config_userconfig="$anonymous_config" npm install 'ag-npm-private-fixture@3.0.0' 'ag-npm-fixture@1.0.0' '@notarx/npm-fixture@2.0.0' --registry="$group_registry_url" --ignore-scripts
+  node -e 'for (const [name,version] of Object.entries({"ag-npm-private-fixture":"3.0.0","ag-npm-fixture":"1.0.0","@notarx/npm-fixture":"2.0.0"})) { const actual=require(`./node_modules/${name}/package.json`).version; if(actual!==version) process.exit(1) }'
 )
 
 printf 'Native npm Hosted (with dist-tag add/ls/rm), Proxy, Group, and cold package-lock online/offline npm ci E2E passed through native npm repository roots at %s\n' "$proxy_url"
@@ -376,7 +376,7 @@ integration_started=1
 "${integration_compose[@]}" run --rm --no-deps migrate
 postgres_address=$("${integration_compose[@]}" port postgres 5432)
 rustfs_address=$("${integration_compose[@]}" port rustfs 9000)
-if ! TEST_DATABASE_URL="postgres://gateway:integration-password@${postgres_address}/gateway_test?sslmode=disable" \
+if ! TEST_DATABASE_URL="postgres://notarx:integration-password@${postgres_address}/notarx_test?sslmode=disable" \
   TEST_OBJECT_STORE_ENDPOINT="http://${rustfs_address}" \
   TEST_OBJECT_STORE_ACCESS_KEY=integration-rustfs TEST_OBJECT_STORE_SECRET_KEY=integration-password \
   NPM_CLIENT_NODE="$(command -v node)" NPM_CLIENT_JS="$workdir/npm-client/package/bin/npm-cli.js" \

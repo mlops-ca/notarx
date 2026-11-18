@@ -297,15 +297,15 @@ retention; that twin is written with the ADR 0022 store slices.
 
 `scripts/run-migrations.sh` applies migrations in checksum order. Changes to
 startup settings such as `shared_preload_libraries` require a PostgreSQL restart
-or container rebuild, never deletion of the `gateway-postgres` data volume.
+or container rebuild, never deletion of the `notarx-postgres` data volume.
 
 ### Upgrading an existing Compose stack from PostgreSQL 16 to 18
 
 PostgreSQL 18 images store the cluster under `/var/lib/postgresql/18/docker` and
-the Compose volume is mounted at `/var/lib/postgresql`. A `gateway-postgres`
+the Compose volume is mounted at `/var/lib/postgresql`. A `notarx-postgres`
 volume created by the 16 image keeps its cluster in `data/`, which the 18 image
 ignores, so the stack would start with an empty database. Before pulling this
 change, dump with the old stack (`docker compose exec -T postgres pg_dump -U
-gateway -d gateway --format=custom > gateway.dump`), run `docker compose down
+notarx -d notarx --format=custom > notarx.dump`), run `docker compose down
 --volumes`, start the new stack, and restore with `pg_restore` (or recreate the
 stack from a verified backup). The volume is never reused across majors in place.

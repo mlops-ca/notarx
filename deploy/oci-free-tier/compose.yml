@@ -20,15 +20,15 @@ services:
     command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements"]
     restart: unless-stopped
     environment:
-      POSTGRES_DB: gateway
-      POSTGRES_USER: gateway
+      POSTGRES_DB: notarx
+      POSTGRES_USER: notarx
       POSTGRES_PASSWORD: ${NOTARX_POSTGRES_PASSWORD:?set NOTARX_POSTGRES_PASSWORD in .env}
     volumes:
       - ${NOTARX_DATA_DIR:-/srv/notarx}/postgres:/var/lib/postgresql
     networks: [backend]
     mem_limit: 3g
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U gateway -d gateway"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U notarx -d notarx"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -61,7 +61,7 @@ services:
       NOTARX_NODE_ROLES: standalone
       NOTARX_INSTANCE_ID: ${NOTARX_INSTANCE_ID:-oci-free-tier}
       NOTARX_PUBLIC_URL: https://${NOTARX_DOMAIN:?set NOTARX_DOMAIN in .env}
-      NOTARX_DATABASE_URL: postgres://gateway:${NOTARX_POSTGRES_PASSWORD:?set NOTARX_POSTGRES_PASSWORD in .env}@postgres:5432/gateway?sslmode=disable
+      NOTARX_DATABASE_URL: postgres://notarx:${NOTARX_POSTGRES_PASSWORD:?set NOTARX_POSTGRES_PASSWORD in .env}@postgres:5432/notarx?sslmode=disable
       # The filesystem driver is the primary store; OCI Object Storage only holds backups.
       NOTARX_OBJECT_STORE_DRIVER: filesystem
       NOTARX_OBJECT_STORE_FS_ROOT: /srv/notarx/objects
@@ -90,7 +90,7 @@ services:
         max-size: 10m
         max-file: "5"
     healthcheck:
-      test: ["CMD", "/gateway-healthcheck"]
+      test: ["CMD", "/notarx-healthcheck"]
       interval: 5s
       timeout: 3s
       retries: 10

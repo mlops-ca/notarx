@@ -11,6 +11,7 @@ request merge commit against its first parent:
     python3 scripts/check-no-chinese.py BASE HEAD  # diff BASE..HEAD
 """
 import re
+from collections import Counter
 import subprocess
 import sys
 from pathlib import Path
@@ -74,10 +75,14 @@ def line_issues(diff_text):
     """Flag added lines with Chinese text that no removed line of the change had.
 
     Editing the non-Chinese part of a line (for example an English title next
-    to a frozen zh-CN title) or moving a file re-adds the same Chinese text;
-    that adds no new Chinese content, so it is allowed.
+    to a frozen zh-CN title), moving a line inside a file or moving a file
+    re-adds the same Chinese text; that adds no new Chinese content, so it is
+    allowed. The match is exact on the ordered Chinese runs of a line and is
+    consumed one for one: a removed line licenses one added line, so deleting
+    different Chinese text elsewhere in the change cannot pay for new text, and
+    runs from removed lines cannot be recombined into a new sentence.
     """
-    issues, current, removed, added = [], None, set(), []
+    issues, current, removed, added = [], None, Counter(), []
     exempt = {path for path, sha in allowed() if blob(path) == sha}
 
     in_hunk = False
@@ -93,11 +98,15 @@ def line_issues(diff_text):
         elif not in_hunk and line.startswith('--- '):
             continue
         elif line.startswith('-'):
-            removed.update(CJK_RUN.findall(line))
+            if CJK.search(line):
+                removed[tuple(CJK_RUN.findall(line))] += 1
         elif line.startswith('+') and CJK.search(line) and current not in exempt:
             added.append((current, line))
     for path, line in added:
-        if not all(run in removed for run in CJK_RUN.findall(line)):
+        signature = tuple(CJK_RUN.findall(line))
+        if removed[signature] > 0:
+            removed[signature] -= 1
+        else:
             issues.append(f'{path}: added line contains Chinese text')
     return sorted(set(issues))
 

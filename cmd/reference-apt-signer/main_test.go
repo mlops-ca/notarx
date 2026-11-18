@@ -16,7 +16,7 @@ func TestLoadConfigUsesPrivateBoundedDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	if config.ListenAddress != "127.0.0.1:18083" || config.KeyFile != "/var/lib/reference-apt-signer/apt-release-private.gpg" ||
-		config.Name != "notarx Local APT" || config.Email != "apt-release@artifact-gateway.local" ||
+		config.Name != "notarx Local APT" || config.Email != "apt-release@notarx.local" ||
 		config.RSABits != 4096 || config.MaxReleaseBytes != 16<<20 {
 		t.Fatalf("config=%#v", config)
 	}

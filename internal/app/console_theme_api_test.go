@@ -47,7 +47,7 @@ func (s *catalogLockObservingStore) DeleteConsoleThemePackage(ctx context.Contex
 }
 
 const acmeDarkTheme = `{
-  "$schema":"https://artifact-gateway.local/schemas/console-theme-v1.json",
+  "$schema":"https://notarx.local/schemas/console-theme-v1.json",
   "schemaVersion":1,
   "id":"acme-dark",
   "name":"Acme Dark",

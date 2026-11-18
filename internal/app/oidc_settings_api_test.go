@@ -27,7 +27,7 @@ func TestOIDCRuntimeSupportsBearerOnlyBootstrap(t *testing.T) {
 	defer provider.Close()
 
 	runtime := NewOIDCRuntime(repository.NewMemoryStore(), OIDCRuntimeConfig{
-		Enabled: true, Issuer: provider.URL, Audience: "artifact-gateway-api",
+		Enabled: true, Issuer: provider.URL, Audience: "notarx-api",
 	})
 	settings, err := runtime.Settings(t.Context())
 	if err != nil || !settings.Enabled || settings.ClientID != "" || settings.RedirectURL != "" {
@@ -48,21 +48,21 @@ func TestOIDCRuntimeSupportsBearerOnlyBootstrap(t *testing.T) {
 
 func TestOIDCSettingsRequireCompleteBrowserConfiguration(t *testing.T) {
 	_, err := normalizeOIDCSettingsUpdate(OIDCSettingsUpdate{
-		Enabled: true, Issuer: "https://identity.example.test", Audience: "artifact-gateway-api",
-		ClientID: "artifact-gateway-console",
+		Enabled: true, Issuer: "https://identity.example.test", Audience: "notarx-api",
+		ClientID: "notarx-console",
 	})
 	if err == nil || !strings.Contains(err.Error(), "clientId and redirectUrl") {
 		t.Fatalf("partial browser configuration err=%v", err)
 	}
 
 	settings, err := normalizeOIDCSettingsUpdate(OIDCSettingsUpdate{
-		Enabled: true, Issuer: "https://identity.example.test", Audience: "artifact-gateway-api",
+		Enabled: true, Issuer: "https://identity.example.test", Audience: "notarx-api",
 	})
 	if err != nil || !settings.Enabled {
 		t.Fatalf("bearer-only settings=%#v err=%v", settings, err)
 	}
 	pending, err := normalizeOIDCSettingsUpdate(OIDCSettingsUpdate{
-		Enabled: true, Issuer: "https://identity.example.test", Audience: "artifact-gateway-api",
+		Enabled: true, Issuer: "https://identity.example.test", Audience: "notarx-api",
 		ProvisioningMode: "jit", JITDefaultRole: "none",
 	})
 	if err != nil || pending.ProvisioningMode != "jit" || pending.JITDefaultRole != "none" {
@@ -103,7 +103,7 @@ func TestOIDCSettingsCanMoveFromEnvironmentToRuntimeStorage(t *testing.T) {
 		t.Fatalf("initial=%d body=%s", initialResponse.Code, initialResponse.Body.String())
 	}
 
-	body := `{"enabled":true,"issuer":"` + provider.URL + `","audience":"artifact-gateway-api","clientId":"artifact-gateway-console","clientSecret":"runtime-secret","redirectUrl":"http://localhost:4173/auth/oidc/callback","scopes":["openid","profile"],"adminSubjects":[],"memberRoles":["artifact-member"],"adminRoles":["artifact-admin"]}`
+	body := `{"enabled":true,"issuer":"` + provider.URL + `","audience":"notarx-api","clientId":"notarx-console","clientSecret":"runtime-secret","redirectUrl":"http://localhost:4173/auth/oidc/callback","scopes":["openid","profile"],"adminSubjects":[],"memberRoles":["artifact-member"],"adminRoles":["artifact-admin"]}`
 	replace := httptest.NewRequest(http.MethodPut, "/api/v2/authentication/oidc", strings.NewReader(body))
 	replace.Header.Set("If-Match", "0")
 	authorize(replace, "admin-secret")

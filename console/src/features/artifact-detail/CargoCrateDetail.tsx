@@ -87,7 +87,7 @@ function CargoCrateContent({
   const manifestSnippet = useMemo(
     () => ({
       label: "Cargo.toml",
-      code: `[dependencies]\n${crateName} = { version = "${selectedVersion}", registry = "gateway" }`,
+      code: `[dependencies]\n${crateName} = { version = "${selectedVersion}", registry = "notarx" }`,
     }),
     [crateName, selectedVersion],
   );

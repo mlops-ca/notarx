@@ -13,7 +13,7 @@ done
 docker_endpoint=${DOCKER_HOST:-$(docker context inspect "$(docker context show)" --format '{{.Endpoints.docker.Host}}')}
 case "$docker_endpoint" in unix://*) ;; *) printf 'NuGet gate requires a local Docker socket\n' >&2; exit 1 ;; esac
 work=$(mktemp -d)
-project="artifact-gateway-nuget-$$-$RANDOM"
+project="notarx-nuget-$$-$RANDOM"
 evidence="$repo_root/output/native-nuget-e2e/$project"
 mkdir -p "$evidence" "$work/docker"
 printf '{"auths":{}}\n' > "$work/docker/config.json"
@@ -100,20 +100,20 @@ hashes={name:hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() for nam
 (evidence/'source.json').write_text(json.dumps({'head':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(),'dirty':bool(subprocess.check_output(['git','status','--porcelain'])),'fileHashes':hashes},indent=2)+'\n')
 PY
 docker pull --platform "$platform" "$sdk_image" >"$evidence/dotnet-pull.log" 2>&1
-go build -o "$work/gateway" ./cmd/notarx
-# The SDK container runs on the Docker server's own platform, so the Linux gateway
+go build -o "$work/notarx" ./cmd/notarx
+# The SDK container runs on the Docker server's own platform, so the Linux notarx
 # is built natively inside a pinned Go container (no cross-compilation).
 go_image=$(sed -n 's/^GO_IMAGE := //p' Makefile)
 if [[ -z "$go_image" ]]; then
-  printf '%s\n' 'GO_IMAGE is not defined in the Makefile; cannot build the Linux gateway natively.' >&2
+  printf '%s\n' 'GO_IMAGE is not defined in the Makefile; cannot build the Linux notarx natively.' >&2
   exit 1
 fi
-docker run --rm --platform "$platform" -v "$PWD:/src:ro" -v "$work:/out" -v artifact-gateway-go-mod:/go/pkg/mod -w /src \
-  -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false "$go_image" go build -o /out/gateway-linux ./cmd/notarx
-python3 - "$work/gateway" "$sdk_image" "$evidence/tool-provenance.json" <<'PY'
+docker run --rm --platform "$platform" -v "$PWD:/src:ro" -v "$work:/out" -v notarx-go-mod:/go/pkg/mod -w /src \
+  -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false "$go_image" go build -o /out/notarx-linux ./cmd/notarx
+python3 - "$work/notarx" "$sdk_image" "$evidence/tool-provenance.json" <<'PY'
 import hashlib,json,pathlib,subprocess,sys
 p=pathlib.Path(sys.argv[3]);data=json.loads(p.read_text())
-data.update({'mode':'official-container','runtimeImageID':subprocess.check_output(['docker','image','inspect',sys.argv[2],'--format','{{.Id}}'],text=True).strip(),'gatewayBinarySHA256':hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest(),'proxyGroupGatewayRuntime':'linux-sdk-container','proxyGroupGatewayBinarySHA256':hashlib.sha256((pathlib.Path(sys.argv[1]).parent/'gateway-linux').read_bytes()).hexdigest(),'goVersion':subprocess.check_output(['go','version'],text=True).strip()})
+data.update({'mode':'official-container','runtimeImageID':subprocess.check_output(['docker','image','inspect',sys.argv[2],'--format','{{.Id}}'],text=True).strip(),'gatewayBinarySHA256':hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest(),'proxyGroupGatewayRuntime':'linux-sdk-container','proxyGroupGatewayBinarySHA256':hashlib.sha256((pathlib.Path(sys.argv[1]).parent/'notarx-linux').read_bytes()).hexdigest(),'goVersion':subprocess.check_output(['go','version'],text=True).strip()})
 p.write_text(json.dumps(data,indent=2)+'\n')
 PY
 started=1
@@ -127,7 +127,7 @@ python3 - "$work" "$evidence" "$postgres_address" "$rustfs_address" "$sdk_image"
 import hashlib,json,os,pathlib,subprocess,sys
 work,evidence=map(pathlib.Path,sys.argv[1:3]);credentials=json.loads((work/'credentials.json').read_text())
 env=dict(os.environ)
-env.update({'TEST_DATABASE_URL':'postgres://gateway:'+credentials['password']+'@'+sys.argv[3]+'/gateway_test?sslmode=disable','TEST_OBJECT_STORE_ENDPOINT':'http://'+sys.argv[4],'TEST_OBJECT_STORE_ACCESS_KEY':credentials['access'],'TEST_OBJECT_STORE_SECRET_KEY':credentials['secret'],'NUGET_NOTARX_BIN':str(work/'gateway'),'NUGET_NOTARX_LINUX_BIN':str(work/'gateway-linux'),'NUGET_DOTNET_IMAGE':sys.argv[5],'NUGET_COMPOSE_PROJECT':sys.argv[6],'NUGET_EVIDENCE_DIR':str(evidence)})
+env.update({'TEST_DATABASE_URL':'postgres://notarx:'+credentials['password']+'@'+sys.argv[3]+'/notarx_test?sslmode=disable','TEST_OBJECT_STORE_ENDPOINT':'http://'+sys.argv[4],'TEST_OBJECT_STORE_ACCESS_KEY':credentials['access'],'TEST_OBJECT_STORE_SECRET_KEY':credentials['secret'],'NUGET_NOTARX_BIN':str(work/'notarx'),'NUGET_NOTARX_LINUX_BIN':str(work/'notarx-linux'),'NUGET_DOTNET_IMAGE':sys.argv[5],'NUGET_COMPOSE_PROJECT':sys.argv[6],'NUGET_EVIDENCE_DIR':str(evidence)})
 with (evidence/'results.jsonl').open('w') as output:
     result=subprocess.run(['go','test','-json','-count=1','-p','1','-tags=integration,nugetclient','./internal/protocol/nuget','./internal/repository','./internal/format/nuget','./internal/app','./internal/backupops','-run','^Test(NuGet|PostgresNuGet|PostgresRustFSNuGet|NativeNuGetRealDotnet)','-timeout','1200s'],env=env,stdout=output,stderr=subprocess.STDOUT)
 events=[]

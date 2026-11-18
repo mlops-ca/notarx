@@ -74,9 +74,7 @@
     ]
   },
   "scopeAliases": {
-    "cmd/agctl": "cli",
     "cmd/notarxctl": "cli",
-    "cmd/gateway": "server",
     "cmd/notarx": "server",
     "cmd/healthcheck": "server",
     "cmd/maven-fixture-mirror": "maven",

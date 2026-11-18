@@ -264,7 +264,7 @@ func TestAccessConformanceOCIAnonymousPullFlows(t *testing.T) {
 		return response
 	}
 	token := func(userAgent, scope string) (int, string) {
-		response := do(userAgent, http.MethodGet, "/auth/token?service=artifact-gateway&scope="+scope, "")
+		response := do(userAgent, http.MethodGet, "/auth/token?service=notarx&scope="+scope, "")
 		var body struct {
 			Token string `json:"token"`
 		}

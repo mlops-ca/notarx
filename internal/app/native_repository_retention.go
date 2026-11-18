@@ -667,7 +667,7 @@ func (m NativeRepositoryRetention) StartWorker(ctx context.Context, interval tim
 	}
 	go func() {
 		_ = m.RunJobs(ctx, 200)
-		wake := notificationWake(ctx, m.Store, "artifact_gateway_lifecycle_jobs")
+		wake := notificationWake(ctx, m.Store, "notarx_lifecycle_jobs")
 		jobInterval := time.Minute
 		if interval < jobInterval {
 			jobInterval = interval

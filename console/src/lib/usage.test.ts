@@ -91,14 +91,14 @@ describe("npm usage", () => {
 
 describe("PyPI usage", () => {
   it("builds exact pip and requirements snippets", () => {
-    const snippets = pypiUsage("python", "gateway-widget", "2.0.0");
+    const snippets = pypiUsage("python", "notarx-widget", "2.0.0");
     expect(snippets[0].code).toContain(
-      "pip install gateway-widget==2.0.0 --index-url",
+      "pip install notarx-widget==2.0.0 --index-url",
     );
-    expect(snippets[1].code).toContain("gateway-widget==2.0.0");
+    expect(snippets[1].code).toContain("notarx-widget==2.0.0");
     expect(
-      usageFor(t, "pypi", "python", "gateway-widget", "1.0.0")[0].code,
-    ).toContain("gateway-widget==1.0.0");
+      usageFor(t, "pypi", "python", "notarx-widget", "1.0.0")[0].code,
+    ).toContain("notarx-widget==1.0.0");
     expect(pypiIndexURL("python-all")).toBe(
       `${window.location.origin}/pypi/python-all/simple/`,
     );

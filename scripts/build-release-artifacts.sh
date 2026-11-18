@@ -140,17 +140,17 @@ for target in "${targets[@]}"; do
   stage="$workdir/notarx_${version}_${goos}_${goarch}"
   mkdir -p "$stage"
   CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "$ldflags" -o "$stage/notarx" ./cmd/notarx
-  CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "$ldflags" -o "$stage/gateway-healthcheck" ./cmd/healthcheck
+  CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "$ldflags" -o "$stage/notarx-healthcheck" ./cmd/healthcheck
   cp -R "$root/migrations" "$stage/migrations"
   cp "$root/scripts/run-migrations.sh" "$stage/run-migrations.sh"
-  cp "$root/.env.example" "$stage/artifact-gateway.env.example"
+  cp "$root/.env.example" "$stage/notarx.env.example"
   chmod +x "$stage/run-migrations.sh"
   printf 'version=%s\nrevision=%s\ntarget=%s/%s\n' "$version" "$revision" "$goos" "$goarch" > "$stage/VERSION.txt"
   printf '%s\n' \
     'notarx installation materials' \
     '' \
     '1. Verify SHA256SUMS before extracting this archive.' \
-    '2. Configure PostgreSQL and S3-compatible object storage using artifact-gateway.env.example.' \
+    '2. Configure PostgreSQL and S3-compatible object storage using notarx.env.example.' \
     '3. Install PostgreSQL psql, export PGHOST/PGUSER/PGDATABASE/PGPASSWORD, then run:' \
     '   MIGRATION_DIR=./migrations ./run-migrations.sh' \
     '4. Export the required NOTARX_* variables and start ./notarx.' \
@@ -202,18 +202,18 @@ done
 if [[ "$skip_console" -eq 0 ]]; then
   npm --prefix "$root/console" ci --ignore-scripts --no-audit --no-fund
   npm --prefix "$root/console" run build
-  console_stage="$workdir/artifact-gateway-console_${version}_web"
+  console_stage="$workdir/notarx-console_${version}_web"
   mkdir -p "$console_stage"
   cp -R "$root/console/dist/." "$console_stage/"
   printf 'version=%s\nrevision=%s\n' "$version" "$revision" > "$console_stage/VERSION.txt"
-  create_tar_gz "$console_stage" "$output/artifact-gateway-console_${version}_web.tar.gz"
+  create_tar_gz "$console_stage" "$output/notarx-console_${version}_web.tar.gz"
 
-  openapi_stage="$workdir/artifact-gateway-openapi_${version}"
+  openapi_stage="$workdir/notarx-openapi_${version}"
   mkdir -p "$openapi_stage"
   cp "$root/api/openapi/native-hosted-v1.json" "$openapi_stage/"
   cp "$root/api/openapi/management-runtime-v1.json" "$openapi_stage/"
   printf 'version=%s\nrevision=%s\n' "$version" "$revision" > "$openapi_stage/VERSION.txt"
-  create_tar_gz "$openapi_stage" "$output/artifact-gateway-openapi_${version}.tar.gz"
+  create_tar_gz "$openapi_stage" "$output/notarx-openapi_${version}.tar.gz"
 fi
 
 bash "$root/scripts/write-release-checksums.sh" "$output"

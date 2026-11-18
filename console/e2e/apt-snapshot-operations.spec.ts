@@ -28,26 +28,24 @@ const snapshot = {
   createdAt: "2026-09-08T10:00:00Z",
   publishedAt: "2026-09-08T10:00:00Z",
 };
-const packages = ["artifact-gateway-runtime", "artifact-gateway-console"].map(
-  (name, index) => ({
-    publicationSessionId: `session-${index}`,
-    component: "main",
-    poolPath: `pool/main/a/${name}/${name}_1.2.3_amd64.deb`,
-    revision: {
-      id: `revision-${index}`,
-      repositoryId,
-      package: name,
-      version: "1.2.3",
-      architecture: "amd64",
-      canonicalIdentity: `${name}@1.2.3#amd64`,
-      digest: `sha256:${String(index).repeat(64)}`,
-      size: 4096,
-      objectName: `native/apt/${index}`,
-      publisher: "operator",
-      createdAt: "2026-08-01T00:00:00Z",
-    },
-  }),
-);
+const packages = ["notarx-runtime", "notarx-console"].map((name, index) => ({
+  publicationSessionId: `session-${index}`,
+  component: "main",
+  poolPath: `pool/main/a/${name}/${name}_1.2.3_amd64.deb`,
+  revision: {
+    id: `revision-${index}`,
+    repositoryId,
+    package: name,
+    version: "1.2.3",
+    architecture: "amd64",
+    canonicalIdentity: `${name}@1.2.3#amd64`,
+    digest: `sha256:${String(index).repeat(64)}`,
+    size: 4096,
+    objectName: `native/apt/${index}`,
+    publisher: "operator",
+    createdAt: "2026-08-01T00:00:00Z",
+  },
+}));
 
 for (const [width, theme, locale] of [
   [1440, "dark", "en-CA"],
@@ -321,12 +319,12 @@ for (const [width, theme, locale] of [
     };
     await openPicker("Search and select a source artifact");
     await page
-      .getByText("artifact-gateway-console 1.2.3 · amd64", { exact: true })
+      .getByText("notarx-console 1.2.3 · amd64", { exact: true })
       .click();
     await expect(
       page
         .locator(".ag-distribution")
-        .getByTitle("artifact-gateway-console 1.2.3 · amd64", { exact: true }),
+        .getByTitle("notarx-console 1.2.3 · amd64", { exact: true }),
     ).toBeVisible();
     await openPicker("Select target repository");
     await page.getByText("debian-production", { exact: true }).click();

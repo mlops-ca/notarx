@@ -17,7 +17,7 @@ def require(condition, message):
 
 
 def check():
-    project = "artifact-gateway-cli-runtime-" + uuid.uuid4().hex[:12]
+    project = "notarx-cli-runtime-" + uuid.uuid4().hex[:12]
     environment = {k: os.environ[k] for k in (
         "PATH", "HOME", "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG"
     ) if k in os.environ}
@@ -51,8 +51,8 @@ def check():
         override = work / "ports.yml"
         override.write_text("services:\n" + "".join(
             "  " + service + ":\n    ports: !override " +
-            ('["127.0.0.1::8080"]' if service == "gateway" else "[]") + "\n"
-            for service in ("gateway", "postgres", "rustfs")))
+            ('["127.0.0.1::8080"]' if service == "notarx" else "[]") + "\n"
+            for service in ("notarx", "postgres", "rustfs")))
         compose = ["docker", "compose", "--env-file", str(environment_file),
                    "--project-name", project, "-f", str(ROOT / "compose.yml"), "-f", str(override)]
         started = False
@@ -67,10 +67,10 @@ def check():
             require(result.returncode == 0, "fixture command failed: " + " ".join(args[:2]) + "\n" + diagnostic[-3000:])
             return result.stdout
 
-        def gateway(*extra):
+        def notarx(*extra):
             nonlocal base_url
-            run(compose + ["up", "-d", "--no-build", "--wait", "--wait-timeout", "90", *extra, "gateway"])
-            base_url = "http://" + run(compose + ["port", "gateway", "8080"]).strip()
+            run(compose + ["up", "-d", "--no-build", "--wait", "--wait-timeout", "90", *extra, "notarx"])
+            base_url = "http://" + run(compose + ["port", "notarx", "8080"]).strip()
 
         def ctl(*args, expected=0, token=None, stdin=None, stream=False):
             result = subprocess.run([str(cli), *args, "--json"], cwd=work,
@@ -95,9 +95,9 @@ def check():
         try:
             run(["go", "build", "-o", str(cli), "./cmd/notarxctl"])
             if os.environ.get("NOTARX_COMPOSE_BUILD_FLAG", "--build") == "--build":
-                run(compose + ["build", "gateway"])
+                run(compose + ["build", "notarx"])
             started = True
-            gateway()
+            notarx()
             require(readiness(ctl("status")["data"]) == "healthy", "fresh Gateway is not ready")
             member = values["NOTARX_RESOLVER_TOKEN"]
             ctl("runtime", "logs", token=member, expected=6)
@@ -125,7 +125,7 @@ def check():
             before = ctl("runtime", "logs")["meta"]["scope"]
             require(before["scope"] == "local" and before["instanceId"] and before["sessionId"], "runtime scope is incomplete")
             cursor = before["afterCursor"]
-            gateway("--no-deps", "--force-recreate")
+            notarx("--no-deps", "--force-recreate")
             after = ctl("runtime", "logs")["meta"]["scope"]
             require(after["instanceId"] == before["instanceId"] and after["sessionId"] != before["sessionId"], "restart retained the old session")
             events = ctl("runtime", "logs", "--after-cursor", cursor, "--follow", "--duration", "3s", expected=7, stream=True)
@@ -143,7 +143,7 @@ def check():
 
             values["NOTARX_LOG_BUFFER_LINES"] = "0"
             write_environment()
-            gateway("--no-deps", "--force-recreate")
+            notarx("--no-deps", "--force-recreate")
             disabled = ctl("runtime", "logs", expected=1)
             require(disabled["error"]["httpStatus"] == 503 and disabled["error"]["code"] == "log_buffer_unavailable", "disabled logs became an empty successful collection")
             require(readiness(ctl("status")["data"]) == "healthy", "disabled optional logs changed readiness")

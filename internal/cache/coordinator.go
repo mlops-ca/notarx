@@ -76,7 +76,7 @@ func (c *PostgresCoordinator) Acquire(ctx context.Context, key string, _ time.Du
 		return "", false, err
 	}
 	locked := false
-	lockKey := "artifact-gateway:cache:" + key
+	lockKey := "notarx:cache:" + key
 	err = conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock(hashtextextended($1, 0))`, lockKey).Scan(&locked)
 	if err != nil || !locked {
 		_ = conn.Close()

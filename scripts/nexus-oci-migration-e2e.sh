@@ -9,7 +9,7 @@ for binary in docker go curl python3 tar uname; do
 done
 
 work=$(mktemp -d)
-project="artifact-gateway-oci-migration-$$-$RANDOM"
+project="notarx-oci-migration-$$-$RANDOM"
 evidence="$repo_root/output/nexus-oci-migration-e2e/$project"
 mkdir -p "$evidence"
 compose=(docker compose --env-file /dev/null --project-name "$project" -f compose.integration.yml -f "$work/compose.json")
@@ -101,7 +101,7 @@ work = pathlib.Path(sys.argv[1])
 credentials = json.loads((work / 'credentials.json').read_text())
 env = dict(os.environ)
 env.update({
-    'TEST_DATABASE_URL': 'postgres://gateway:' + credentials['password'] + '@' + sys.argv[2] + '/gateway_test?sslmode=disable',
+    'TEST_DATABASE_URL': 'postgres://notarx:' + credentials['password'] + '@' + sys.argv[2] + '/notarx_test?sslmode=disable',
     'TEST_OBJECT_STORE_ENDPOINT': 'http://' + sys.argv[3],
     'TEST_OBJECT_STORE_ACCESS_KEY': credentials['access'],
     'TEST_OBJECT_STORE_SECRET_KEY': credentials['secret'],

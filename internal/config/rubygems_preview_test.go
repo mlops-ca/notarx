@@ -4,7 +4,7 @@ import "testing"
 
 func TestRubyGemsPreviewRequiresExplicitEnablementAndHonorsWorkerFilters(t *testing.T) {
 	for key, value := range map[string]string{
-		"NOTARX_DATABASE_URL":            "postgres://gateway:owned@localhost/gateway",
+		"NOTARX_DATABASE_URL":            "postgres://notarx:owned@localhost/notarx",
 		"NOTARX_OBJECT_STORE_ENDPOINT":   "http://localhost:9000",
 		"NOTARX_OBJECT_STORE_BUCKET":     "owned-rubygems",
 		"NOTARX_OBJECT_STORE_ACCESS_KEY": "owned",

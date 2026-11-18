@@ -27,13 +27,13 @@ free_port() {
   python3 -c 'import socket; listener = socket.socket(); listener.bind(("127.0.0.1", 0)); print(listener.getsockname()[1]); listener.close()'
 }
 
-gateway_port=$(free_port)
+notarx_port=$(free_port)
 rustfs_api_port=$(free_port)
 rustfs_console_port=$(free_port)
-project="artifact-gateway-backup-${RANDOM}-${RANDOM}"
+project="notarx-backup-${RANDOM}-${RANDOM}"
 # Keep the per-project image name this script tags and inspects; the shared
 # prebuilt tag is for lanes that run the unmodified source build.
-export NOTARX_IMAGE="$project-gateway:latest"
+export NOTARX_IMAGE="$project-notarx:latest"
 isolated_environment=$(mktemp)
 grant_headers=$(mktemp)
 grant_response=$(mktemp)
@@ -49,7 +49,7 @@ fs_override=$(mktemp)
 fs_compose=$(mktemp)
 
 awk -F= '$1 != "NOTARX_HTTP_PORT" && $1 != "NOTARX_POSTGRES_PORT" && $1 != "RUSTFS_API_PORT" && $1 != "RUSTFS_CONSOLE_PORT" { print }' "$environment_file" >"$isolated_environment"
-printf 'NOTARX_HTTP_PORT=%s\nNOTARX_POSTGRES_PORT=%s\nRUSTFS_API_PORT=%s\nRUSTFS_CONSOLE_PORT=%s\n' "$gateway_port" "$(free_port)" "$rustfs_api_port" "$rustfs_console_port" >>"$isolated_environment"
+printf 'NOTARX_HTTP_PORT=%s\nNOTARX_POSTGRES_PORT=%s\nRUSTFS_API_PORT=%s\nRUSTFS_CONSOLE_PORT=%s\n' "$notarx_port" "$(free_port)" "$rustfs_api_port" "$rustfs_console_port" >>"$isolated_environment"
 
 compose() {
   COMPOSE_PROJECT_NAME="$project" docker compose --env-file "$isolated_environment" -f compose.yml "$@"
@@ -74,33 +74,33 @@ cleanup() {
 trap cleanup EXIT
 
 if [[ -n "$candidate_image" ]]; then
-  readiness_load_image "$candidate_image" "$current_revision" "$current_version" "$project-gateway:latest"
+  readiness_load_image "$candidate_image" "$current_revision" "$current_version" "$project-notarx:latest"
 else
-  compose build --build-arg "VERSION=$current_version" --build-arg "REVISION=$current_revision" gateway
+  compose build --build-arg "VERSION=$current_version" --build-arg "REVISION=$current_revision" notarx
 fi
 compose up -d --no-build --wait
 # shellcheck disable=SC1090
 source "$isolated_environment"
-gateway_url="http://localhost:${NOTARX_HTTP_PORT}"
-gateway_token() {
-  curl --silent --show-error --fail --user "$1:$NOTARX_RESOLVER_TOKEN" "$gateway_url/auth/token" |
+notarx_url="http://localhost:${NOTARX_HTTP_PORT}"
+notarx_token() {
+  curl --silent --show-error --fail --user "$1:$NOTARX_RESOLVER_TOKEN" "$notarx_url/auth/token" |
     python3 -c 'import json, sys; print(json.load(sys.stdin)["token"])'
 }
 create_hosted_repository() {
   local format=$1 name=$2 key=$3 visibility=${4:-private} response
   response=$(curl --silent --show-error --fail \
     -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" -H 'Content-Type: application/json' -H "Idempotency-Key: $key" \
-    --data "$(printf '{\"name\":\"%s\",\"format\":\"%s\",\"visibility\":\"%s\"}' "$name" "$format" "$visibility")" "$gateway_url/api/v2/repositories")
+    --data "$(printf '{\"name\":\"%s\",\"format\":\"%s\",\"visibility\":\"%s\"}' "$name" "$format" "$visibility")" "$notarx_url/api/v2/repositories")
   python3 -c 'import json, sys; print(json.load(sys.stdin)["id"])' <<<"$response"
 }
 enqueue_idempotently() {
   local path=$1 key=$2 payload=$3 first replay
   first=$(curl --silent --show-error --fail \
     -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" -H 'Content-Type: application/json' -H "Idempotency-Key: $key" \
-    --data "$payload" "$gateway_url$path") || return 1
+    --data "$payload" "$notarx_url$path") || return 1
   replay=$(curl --silent --show-error --fail \
     -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" -H 'Content-Type: application/json' -H "Idempotency-Key: $key" \
-    --data "$payload" "$gateway_url$path") || return 1
+    --data "$payload" "$notarx_url$path") || return 1
   # A replay returns the same durable operation at its current state. Workers
   # may advance it between requests, so mutable progress fields can differ.
   python3 - "$path" "$first" "$replay" <<'PY'
@@ -124,7 +124,7 @@ replication_completed() {
   # interval plus object-store and database publication time.
   for _ in $(seq 1 90); do
     detail=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" \
-      "$gateway_url/api/v2/repositories/$repository_id/replications/$plan_id") || return 1
+      "$notarx_url/api/v2/repositories/$repository_id/replications/$plan_id") || return 1
     if python3 -c 'import json, sys; plan=json.load(sys.stdin); sys.exit(not (plan["state"] == "completed" and plan["checkpoints"] and all(checkpoint["state"] == "verified" for checkpoint in plan["checkpoints"])))' <<<"$detail"; then
       return 0
     fi
@@ -136,7 +136,7 @@ replication_completed() {
 assert_restored_replication_completion() {
   local repository_id=$1 plan_id=$2 detail
   detail=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" \
-    "$gateway_url/api/v2/repositories/$repository_id/replications/$plan_id") || return 1
+    "$notarx_url/api/v2/repositories/$repository_id/replications/$plan_id") || return 1
   python3 -c 'import json, sys; plan=json.load(sys.stdin); sys.exit(not (plan["state"] == "completed" and plan["checkpoints"] and all(checkpoint["state"] == "verified" for checkpoint in plan["checkpoints"])))' <<<"$detail" || {
     printf 'Restored replication plan %s lost completion or checkpoint evidence.\n' "$plan_id" >&2
     return 1
@@ -146,7 +146,7 @@ assert_go_module_download() {
   local repository_name=$1 module_path=$2 version=$3 cache_name=$4 output
   mkdir -p "$go_workspace/$cache_name/mod" "$go_workspace/$cache_name/build"
   if ! output=$(cd "$go_workspace" && \
-    GOPROXY="$gateway_url/go/$repository_name" GOSUMDB=off GONOSUMDB='*' GONOPROXY=none \
+    GOPROXY="$notarx_url/go/$repository_name" GOSUMDB=off GONOSUMDB='*' GONOPROXY=none \
       GOMODCACHE="$go_workspace/$cache_name/mod" GOCACHE="$go_workspace/$cache_name/build" \
       go mod download -json "$module_path@$version" 2>&1); then
     printf 'Go module download failed for %s@%s after repository recovery:\n%s\n' "$module_path" "$version" "$output" >&2
@@ -179,7 +179,7 @@ publish_go_module() {
   local repository_name=$1 module_path=$2 version=$3 archive=$4 expected_status=${5:-201} status
   status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
     --request PUT -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" --data-binary "@$archive" \
-    "$gateway_url/go/$repository_name/$module_path/@v/$version.zip")
+    "$notarx_url/go/$repository_name/$module_path/@v/$version.zip")
   [[ "$status" == "$expected_status" ]] || {
     printf 'Publishing Go module %s@%s returned HTTP %s.\n' "$module_path" "$version" "$status" >&2
     return 1
@@ -188,12 +188,12 @@ publish_go_module() {
 go_asset_digest() {
   local repository_name=$1 module_path=$2 version=$3 kind=$4
   curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" \
-    "$gateway_url/go/$repository_name/$module_path/@v/$version.$kind" | shasum -a 256 | awk '{print $1}'
+    "$notarx_url/go/$repository_name/$module_path/@v/$version.$kind" | shasum -a 256 | awk '{print $1}'
 }
 assert_rustfs_object_state() {
   local state=$1 object_key=$2
   NOTARX_OBJECT_STORE_ENDPOINT="http://127.0.0.1:$rustfs_api_port" \
-    NOTARX_OBJECT_STORE_BUCKET="${NOTARX_OBJECT_STORE_BUCKET:-gateway-cache}" \
+    NOTARX_OBJECT_STORE_BUCKET="${NOTARX_OBJECT_STORE_BUCKET:-notarx-cache}" \
     RUSTFS_ACCESS_KEY="$RUSTFS_ACCESS_KEY" RUSTFS_SECRET_KEY="$RUSTFS_SECRET_KEY" \
     go run ./scripts/rustfs-object-state "$state" "$object_key"
 }
@@ -201,24 +201,24 @@ cargo_index_path='ca/rg/cargo-recovery-fixture'
 cargo_name='cargo-recovery-fixture'
 cargo_version='1.0.0'
 cargo_psql() {
-  compose exec -T postgres psql -X -A -t -v ON_ERROR_STOP=1 -U gateway -d gateway -c "$1"
+  compose exec -T postgres psql -X -A -t -v ON_ERROR_STOP=1 -U notarx -d notarx -c "$1"
 }
 cargo_archive_digest() {
   local repository_name=$1
   curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" \
-    "$gateway_url/cargo/$repository_name/api/v1/crates/$cargo_name/$cargo_version/download" |
+    "$notarx_url/cargo/$repository_name/api/v1/crates/$cargo_name/$cargo_version/download" |
     shasum -a 256 | awk '{print $1}'
 }
 cargo_index_row() {
   local repository_name=$1
   curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" \
-    "$gateway_url/cargo/$repository_name/$cargo_index_path"
+    "$notarx_url/cargo/$repository_name/$cargo_index_path"
 }
 assert_cargo_install() {
   local repository_name=$1 stage=${2:-before} home="$cargo_workspace/home-${2:-before}-$1" output="$cargo_workspace/install-${2:-before}-$1"
   mkdir -p "$home"
   printf '[registries.recovery]\nindex = "sparse+%s/cargo/%s/"\ncredential-provider = "cargo:token"\n' \
-    "$gateway_url" "$repository_name" >"$home/config.toml"
+    "$notarx_url" "$repository_name" >"$home/config.toml"
   CARGO_HOME="$home" CARGO_TARGET_DIR="$cargo_workspace/target-$stage-$1" \
     CARGO_REGISTRIES_RECOVERY_TOKEN="$NOTARX_ADMIN_TOKEN" HTTP_PROXY='' HTTPS_PROXY='' ALL_PROXY='' \
     NO_PROXY=127.0.0.1,localhost cargo install "$cargo_name" --registry recovery --root "$output" >/dev/null
@@ -228,7 +228,7 @@ promotion_completed() {
   local repository_id=$1 job_id=$2 detail
   for _ in $(seq 1 90); do
     detail=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" \
-      "$gateway_url/api/v2/repositories/$repository_id/lifecycle-jobs") || return 1
+      "$notarx_url/api/v2/repositories/$repository_id/lifecycle-jobs") || return 1
     if python3 -c 'import json,sys; jobs=json.load(sys.stdin); wanted=sys.argv[1]; sys.exit(not any(job["id"]==wanted and job["state"]=="completed" for job in jobs))' "$job_id" <<<"$detail"; then
       return 0
     fi
@@ -253,24 +253,24 @@ go_version="v1.0.0"
 create_repository=$(printf '{"name":"%s","format":"raw"}' "$grant_repository")
 repository=$(curl --silent --show-error --fail \
   -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" -H 'Content-Type: application/json' \
-  -H "Idempotency-Key: grant-restore-${run_id}" --data "$create_repository" "$gateway_url/api/v2/repositories")
+  -H "Idempotency-Key: grant-restore-${run_id}" --data "$create_repository" "$notarx_url/api/v2/repositories")
 repository_id=$(python3 -c 'import json, sys; print(json.load(sys.stdin)["id"])' <<<"$repository")
 [[ -n "$repository_id" ]] || { printf '%s\n' 'Creating grant recovery Repository returned no ID.' >&2; exit 1; }
 status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-  -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$gateway_url/api/v2/repositories/$repository_id")
+  -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$notarx_url/api/v2/repositories/$repository_id")
 [[ "$status" == 200 ]] || { printf 'Created grant recovery Repository %s lookup returned HTTP %s.\n' "$repository_id" "$status" >&2; exit 1; }
 
-writer_token=$(gateway_token recovery-writer)
-reader_token=$(gateway_token recovery-reader)
-denied_token=$(gateway_token recovery-denied)
+writer_token=$(notarx_token recovery-writer)
+reader_token=$(notarx_token recovery-reader)
+denied_token=$(notarx_token recovery-denied)
 status=$(curl --silent --show-error --write-out '%{http_code}' \
   --request PUT -H "Authorization: Bearer $writer_token" --data-binary 'grant restore artifact' \
-  "$gateway_url/raw/$grant_repository/releases/app.txt")
+  "$notarx_url/raw/$grant_repository/releases/app.txt")
 [[ "$status" == 201 ]] || { printf 'Writing grant recovery Raw object returned HTTP %s.\n' "$status" >&2; exit 1; }
 replication_target=$(curl --silent --show-error --fail \
   -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" -H 'Content-Type: application/json' \
   -H "Idempotency-Key: replication-target-${run_id}" \
-  --data "$(printf '{\"name\":\"%s\",\"format\":\"raw\"}' "$replication_target_repository")" "$gateway_url/api/v2/repositories")
+  --data "$(printf '{\"name\":\"%s\",\"format\":\"raw\"}' "$replication_target_repository")" "$notarx_url/api/v2/repositories")
 replication_target_id=$(python3 -c 'import json, sys; print(json.load(sys.stdin)["id"])' <<<"$replication_target")
 raw_digest="sha256:$(printf '%s' 'grant restore artifact' | shasum -a 256 | awk '{print $1}')"
 replication_plan_id=$(enqueue_idempotently "/api/v2/repositories/$repository_id/replications" "replication-plan-${run_id}" "$(printf '{\"targetRepositoryId\":\"%s\",\"coordinate\":\"releases/app.txt\",\"digest\":\"%s\"}' "$replication_target_id" "$raw_digest")")
@@ -278,7 +278,7 @@ replication_plan_id=$(enqueue_idempotently "/api/v2/repositories/$repository_id/
 promotion_target=$(curl --silent --show-error --fail \
   -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" -H 'Content-Type: application/json' \
   -H "Idempotency-Key: promotion-target-${run_id}" \
-  --data "$(printf '{\"name\":\"%s\",\"format\":\"raw\"}' "$promotion_target_repository")" "$gateway_url/api/v2/repositories")
+  --data "$(printf '{\"name\":\"%s\",\"format\":\"raw\"}' "$promotion_target_repository")" "$notarx_url/api/v2/repositories")
 promotion_target_id=$(python3 -c 'import json, sys; print(json.load(sys.stdin)["id"])' <<<"$promotion_target")
 promotion_job_id=$(enqueue_idempotently "/api/v2/repositories/$repository_id/promotions" "promotion-job-${run_id}" "$(printf '{\"targetRepositoryId\":\"%s\",\"coordinate\":\"releases/app.txt\",\"digest\":\"%s\"}' "$promotion_target_id" "$raw_digest")")
 [[ -n "$promotion_job_id" ]] || { printf '%s\n' 'Promotion recovery job returned no ID.' >&2; exit 1; }
@@ -289,17 +289,17 @@ oci_source_id=$(create_hosted_repository oci "$oci_source_repository" "oci-sourc
 oci_body='backup restore oci artifact'
 oci_digest="sha256:$(printf '%s' "$oci_body" | shasum -a 256 | awk '{print $1}')"
 status=$(curl --silent --show-error --output /dev/null --dump-header "$oci_headers" --write-out '%{http_code}' \
-  -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" --request POST "$gateway_url/v2/$oci_source_repository/team/widget/blobs/uploads/")
+  -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" --request POST "$notarx_url/v2/$oci_source_repository/team/widget/blobs/uploads/")
 [[ "$status" == 202 ]] || { printf 'Creating OCI upload returned HTTP %s.\n' "$status" >&2; exit 1; }
 oci_location=$(tr -d '\r' <"$oci_headers" | awk 'tolower($1)=="location:" {print $2}')
 [[ -n "$oci_location" ]] || { printf '%s\n' 'Creating OCI upload returned no Location header.' >&2; exit 1; }
 status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-  -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" --request PUT --data-binary "$oci_body" "$gateway_url$oci_location?digest=$oci_digest")
+  -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" --request PUT --data-binary "$oci_body" "$notarx_url$oci_location?digest=$oci_digest")
 [[ "$status" == 201 ]] || { printf 'Completing OCI upload returned HTTP %s.\n' "$status" >&2; exit 1; }
 oci_manifest=$(printf '{"schemaVersion":2,"config":{"mediaType":"application/vnd.oci.image.config.v1+json","digest":"%s","size":%s},"layers":[]}' "$oci_digest" "${#oci_body}")
 status=$(curl --silent --show-error --output /dev/null --dump-header "$oci_headers" --write-out '%{http_code}' \
   -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" -H 'Content-Type: application/vnd.oci.image.manifest.v1+json' \
-  --request PUT --data-binary "$oci_manifest" "$gateway_url/v2/$oci_source_repository/team/widget/manifests/backup")
+  --request PUT --data-binary "$oci_manifest" "$notarx_url/v2/$oci_source_repository/team/widget/manifests/backup")
 [[ "$status" == 201 ]] || { printf 'Publishing OCI manifest returned HTTP %s.\n' "$status" >&2; exit 1; }
 oci_manifest_digest=$(tr -d '\r' <"$oci_headers" | awk 'tolower($1)=="docker-content-digest:" {print $2}')
 [[ -n "$oci_manifest_digest" ]] || { printf '%s\n' 'Publishing OCI manifest returned no digest.' >&2; exit 1; }
@@ -310,14 +310,14 @@ maven_name='restore-1.0.0.pom'
 maven_body='<project><modelVersion>4.0.0</modelVersion><groupId>org.example</groupId><artifactId>restore</artifactId><version>1.0.0</version></project>'
 maven_digest="sha256:$(printf '%s' "$maven_body" | shasum -a 256 | awk '{print $1}')"
 maven_session=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" -H 'Content-Type: application/json' -H "Idempotency-Key: maven-session-${run_id}" \
-  --data "$(printf '{\"format\":\"maven\",\"coordinate\":\"%s\",\"pomObject\":\"%s\",\"objects\":[{\"name\":\"%s\",\"digest\":\"%s\",\"size\":%s}]}' "$maven_coordinate" "$maven_name" "$maven_name" "$maven_digest" "${#maven_body}")" "$gateway_url/api/v2/repositories/$maven_source_id/publish-sessions")
+  --data "$(printf '{\"format\":\"maven\",\"coordinate\":\"%s\",\"pomObject\":\"%s\",\"objects\":[{\"name\":\"%s\",\"digest\":\"%s\",\"size\":%s}]}' "$maven_coordinate" "$maven_name" "$maven_name" "$maven_digest" "${#maven_body}")" "$notarx_url/api/v2/repositories/$maven_source_id/publish-sessions")
 maven_session_id=$(python3 -c 'import json, sys; data=json.load(sys.stdin); print(data.get("ID", data.get("id", "")))' <<<"$maven_session")
 [[ -n "$maven_session_id" ]] || { printf '%s\n' 'Creating Maven publish session returned no ID.' >&2; exit 1; }
 status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-  -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" --request PUT --data-binary "$maven_body" "$gateway_url/api/v2/publish-sessions/$maven_session_id/objects/$maven_name")
+  -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" --request PUT --data-binary "$maven_body" "$notarx_url/api/v2/publish-sessions/$maven_session_id/objects/$maven_name")
 [[ "$status" == 204 ]] || { printf 'Uploading Maven object returned HTTP %s.\n' "$status" >&2; exit 1; }
 status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-  -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" --request POST "$gateway_url/api/v2/publish-sessions/$maven_session_id:commit")
+  -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" --request POST "$notarx_url/api/v2/publish-sessions/$maven_session_id:commit")
 [[ "$status" == 200 ]] || { printf 'Committing Maven publication returned HTTP %s.\n' "$status" >&2; exit 1; }
 
 conan_source_id=$(create_hosted_repository conan "$conan_source_repository" "conan-source-${run_id}")
@@ -344,16 +344,16 @@ PY
 conan_revision=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["revision"])' "$conan_workspace/identity.json")
 conan_digest=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["digest"])' "$conan_workspace/identity.json")
 conan_session=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" -H 'Content-Type: application/json' \
-  --data-binary "@$conan_workspace/declaration.json" "$gateway_url/api/v2/repositories/$conan_source_id/conan-publish-sessions")
+  --data-binary "@$conan_workspace/declaration.json" "$notarx_url/api/v2/repositories/$conan_source_id/conan-publish-sessions")
 conan_session_id=$(python3 -c 'import json, sys; data=json.load(sys.stdin); print(data.get("ID", data.get("id", "")))' <<<"$conan_session")
 [[ -n "$conan_session_id" ]] || { printf '%s\n' 'Creating Conan publish session returned no ID.' >&2; exit 1; }
 for conan_name in conanfile.py conanmanifest.txt; do
   status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-    -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" --request PUT --data-binary "@$conan_workspace/$conan_name" "$gateway_url/api/v2/conan-publish-sessions/$conan_session_id/objects/$conan_name")
+    -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" --request PUT --data-binary "@$conan_workspace/$conan_name" "$notarx_url/api/v2/conan-publish-sessions/$conan_session_id/objects/$conan_name")
   [[ "$status" == 204 ]] || { printf 'Uploading Conan object %s returned HTTP %s.\n' "$conan_name" "$status" >&2; exit 1; }
 done
 status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-  -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" --request POST "$gateway_url/api/v2/conan-publish-sessions/$conan_session_id:commit")
+  -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" --request POST "$notarx_url/api/v2/conan-publish-sessions/$conan_session_id:commit")
 [[ "$status" == 200 ]] || { printf 'Committing Conan publication returned HTTP %s.\n' "$status" >&2; exit 1; }
 
 go_source_id=$(create_hosted_repository go "$go_source_repository" "go-source-${run_id}" public)
@@ -364,7 +364,7 @@ go_info_digest=$(go_asset_digest "$go_source_repository" "$go_module_path" "$go_
 go_mod_digest=$(go_asset_digest "$go_source_repository" "$go_module_path" "$go_version" mod)
 go_zip_digest=$(go_asset_digest "$go_source_repository" "$go_module_path" "$go_version" zip)
 go_lifecycle_jobs=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" \
-  "$gateway_url/api/v2/repositories/$go_source_id/lifecycle-jobs")
+  "$notarx_url/api/v2/repositories/$go_source_id/lifecycle-jobs")
 go_reclaim_job_ids=$(python3 -c '
 import json
 import sys
@@ -409,7 +409,7 @@ description = "notarx backup and restore fixture"
 CARGO_TOML
 printf 'fn main() { println!("Cargo recovery fixture"); }\n' >"$cargo_workspace/package/src/main.rs"
 printf '[registries.recovery]\nindex = "sparse+%s/cargo/%s/"\ncredential-provider = "cargo:token"\n' \
-  "$gateway_url" "$cargo_source_repository" >"$cargo_workspace/publish-home/config.toml"
+  "$notarx_url" "$cargo_source_repository" >"$cargo_workspace/publish-home/config.toml"
 (cd "$cargo_workspace/package" && CARGO_HOME="$cargo_workspace/publish-home" \
   CARGO_REGISTRIES_RECOVERY_TOKEN="$NOTARX_ADMIN_TOKEN" HTTP_PROXY='' HTTPS_PROXY='' ALL_PROXY='' \
   NO_PROXY=127.0.0.1,localhost cargo publish --registry recovery --allow-dirty --no-verify) >/dev/null
@@ -456,37 +456,37 @@ conan_promotion_job_id=$(enqueue_idempotently "/api/v2/repositories/$conan_sourc
 grant_payload='[{"principal":"recovery-reader","scopes":["repositories:read"]}]'
 status=$(curl --silent --show-error --write-out '%{http_code}' \
   --request PUT -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" -H 'Content-Type: application/json' -H 'If-Match: 1' \
-  --data "$grant_payload" --output "$grant_response" "$gateway_url/api/v2/repositories/$repository_id/grants")
+  --data "$grant_payload" --output "$grant_response" "$notarx_url/api/v2/repositories/$repository_id/grants")
 [[ "$status" == 200 ]] || { printf 'Replacing grant recovery Repository grants for %s returned HTTP %s: %s\n' "$repository_id" "$status" "$(<"$grant_response")" >&2; exit 1; }
 configured_grants=$(curl --silent --show-error --fail --dump-header "$grant_headers" \
-  -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$gateway_url/api/v2/repositories/$repository_id/grants")
+  -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$notarx_url/api/v2/repositories/$repository_id/grants")
 tr -d '\r' <"$grant_headers" | grep -qi '^etag: 2$' || { printf '%s\n' 'Configured Repository grants did not receive version 2.' >&2; exit 1; }
 grep -Fq '"principal":"recovery-reader"' <<<"$configured_grants" || { printf '%s\n' 'Configured Repository grants did not retain recovery-reader.' >&2; exit 1; }
 status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-  -H "Authorization: Bearer $denied_token" "$gateway_url/raw/$grant_repository/releases/app.txt")
+  -H "Authorization: Bearer $denied_token" "$notarx_url/raw/$grant_repository/releases/app.txt")
 [[ "$status" == 401 ]] || { printf 'Managed grant denial before backup returned HTTP %s.\n' "$status" >&2; exit 1; }
-metrics=$(curl --silent --show-error --fail "$gateway_url/metrics")
+metrics=$(curl --silent --show-error --fail "$notarx_url/metrics")
 grep -Fq 'notarx_repository_authorization_denials_total{format="raw",authorization_source="repository_grants",authorization_reason="scope_not_granted"} 1' <<<"$metrics" || {
   printf '%s\n' 'Managed grant denial metric is unavailable or has unexpected labels.' >&2; exit 1;
 }
 status=$(curl --silent --show-error --output "$grant_response" --write-out '%{http_code}' \
-  -H "Authorization: Bearer $reader_token" "$gateway_url/raw/$grant_repository/releases/app.txt")
+  -H "Authorization: Bearer $reader_token" "$notarx_url/raw/$grant_repository/releases/app.txt")
 [[ "$status" == 200 && $(<"$grant_response") == 'grant restore artifact' ]] || {
   printf 'Managed grant allow before backup returned HTTP %s: %s\n' "$status" "$(<"$grant_response")" >&2; exit 1;
 }
-anonymous_policy=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$gateway_url/api/v2/public-access-policy")
+anonymous_policy=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$notarx_url/api/v2/public-access-policy")
 anonymous_policy_version=$(python3 -c 'import json, sys; print(json.load(sys.stdin)["version"])' <<<"$anonymous_policy")
 curl --silent --show-error --fail -X PUT \
   -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" -H 'Content-Type: application/json' -H "If-Match: $anonymous_policy_version" \
-  --data "{\"version\":\"$anonymous_policy_version\",\"enabled\":true}" "$gateway_url/api/v2/public-access-policy" >/dev/null
+  --data "{\"version\":\"$anonymous_policy_version\",\"enabled\":true}" "$notarx_url/api/v2/public-access-policy" >/dev/null
 assert_go_module_download "$go_source_repository" "$go_module_path" "$go_version" pre-backup
 conan_payload=$(printf '{"name":"%s","anonymous":true,"cacheQuotaBytes":1048576,"members":[{"name":"fixture","type":"hosted","endpoint":"http://host.docker.internal:9","position":0}]}' "$conan_group")
 status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
   -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" -H 'Content-Type: application/json' \
-  --data "$conan_payload" "$gateway_url/api/v1/conan/groups")
+  --data "$conan_payload" "$notarx_url/api/v1/conan/groups")
 [[ "$status" == 201 ]] || { printf 'Creating recovery Conan Group returned HTTP %s.\n' "$status" >&2; exit 1; }
 status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-  "$gateway_url/conan/$conan_group/v2/conans/pkg/1.0/user/stable/revisions")
+  "$notarx_url/conan/$conan_group/v2/conans/pkg/1.0/user/stable/revisions")
 [[ "$status" == 502 ]] || { printf 'Recovery Conan audit request returned HTTP %s.\n' "$status" >&2; exit 1; }
 
 for replication in \
@@ -499,7 +499,7 @@ for replication in \
   replication_completed "$target_id" "$plan_id"
 done
 
-quarantine_url="$gateway_url/api/v2/repositories/$repository_id/artifact-quarantine?coordinate=releases/app.txt&digest=$raw_digest"
+quarantine_url="$notarx_url/api/v2/repositories/$repository_id/artifact-quarantine?coordinate=releases/app.txt&digest=$raw_digest"
 quarantine_response=$(curl --silent --show-error --fail --request PUT \
   -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" -H 'Content-Type: application/json' -H 'If-Match: 0' \
   --data '{"state":"quarantined","reason":"backup restore verification"}' "$quarantine_url")
@@ -507,7 +507,7 @@ grep -Fq '"state":"quarantined"' <<<"$quarantine_response" || { printf '%s\n' 'C
 
 group_recovery_fixture() {
   NOTARX_ADMIN_TOKEN="$NOTARX_ADMIN_TOKEN" NOTARX_RESOLVER_TOKEN="$NOTARX_RESOLVER_TOKEN" \
-    python3 "$repo_root/scripts/group-recovery-fixture.py" "$1" "$gateway_url" "$go_workspace/group-recovery.json"
+    python3 "$repo_root/scripts/group-recovery-fixture.py" "$1" "$notarx_url" "$go_workspace/group-recovery.json"
 }
 group_recovery_fixture seed
 COMPOSE_PROJECT_NAME="$project" NOTARX_ENV_FILE="$isolated_environment" ./scripts/backup-drill.sh "$backup_dir"
@@ -526,7 +526,7 @@ assert_rustfs_object_state present "$go_mutation_object_key"
 mutation_payload=$(printf '{"name":"post-restore-%s","anonymous":false,"cacheQuotaBytes":1048576,"members":[{"name":"fixture","type":"hosted","endpoint":"http://host.docker.internal:9","position":0}]}' "$run_id")
 status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
   -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" -H 'Content-Type: application/json' \
-  --data "$mutation_payload" "$gateway_url/api/v1/raw/groups")
+  --data "$mutation_payload" "$notarx_url/api/v1/raw/groups")
 [[ "$status" == 201 ]] || { printf 'Creating post-backup mutation returned HTTP %s.\n' "$status" >&2; exit 1; }
 COMPOSE_PROJECT_NAME="$project" NOTARX_ENV_FILE="$isolated_environment" ./scripts/restore-drill.sh "$backup_dir"
 group_recovery_fixture verify
@@ -543,7 +543,7 @@ restored_cargo_owner=$(cargo_psql "SELECT source_repository_id FROM native_cargo
 restored_cargo_members=$(cargo_psql "SELECT string_agg(repository_id::text, ',' ORDER BY position) FROM hosted_group_members WHERE group_id='$cargo_group_id'")
 [[ "$restored_cargo_members" == "$cargo_source_id,$cargo_other_id" ]] || { printf '%s\n' 'Restored Cargo Group member order changed.' >&2; exit 1; }
 restored_cargo_jobs=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" \
-  "$gateway_url/api/v2/repositories/$cargo_promotion_id/lifecycle-jobs")
+  "$notarx_url/api/v2/repositories/$cargo_promotion_id/lifecycle-jobs")
 python3 -c 'import json,sys; wanted=sys.argv[1]; jobs=json.load(sys.stdin); sys.exit(not any(job["id"]==wanted and job["state"]=="completed" for job in jobs))' \
   "$cargo_promotion_job_id" <<<"$restored_cargo_jobs" || { printf '%s\n' 'Restored Cargo promotion job lost completion state.' >&2; exit 1; }
 assert_restored_replication_completion "$cargo_replication_id" "$cargo_replication_plan_id"
@@ -551,13 +551,13 @@ assert_restored_replication_completion "$cargo_replication_id" "$cargo_replicati
 for format in raw conan; do
   group_var="${format}_group"
   status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-    -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$gateway_url/api/v1/$format/groups/${!group_var}")
+    -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$notarx_url/api/v1/$format/groups/${!group_var}")
   [[ "$status" == 200 ]] || { printf 'Restored %s Group returned HTTP %s.\n' "$format" "$status" >&2; exit 1; }
 done
 status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-  -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$gateway_url/api/v1/raw/groups/post-restore-$run_id")
+  -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$notarx_url/api/v1/raw/groups/post-restore-$run_id")
 [[ "$status" == 404 ]] || { printf 'Post-backup Raw Group survived restore with HTTP %s.\n' "$status" >&2; exit 1; }
-[[ $(curl --silent --show-error "$gateway_url/raw/$raw_group/release/app.txt") == 'raw release artifact' ]] || { printf '%s\n' 'Restored Raw cache content is unavailable.' >&2; exit 1; }
+[[ $(curl --silent --show-error "$notarx_url/raw/$raw_group/release/app.txt") == 'raw release artifact' ]] || { printf '%s\n' 'Restored Raw cache content is unavailable.' >&2; exit 1; }
 assert_go_module_download "$go_source_repository" "$go_module_path" "$go_version" post-restore
 for go_asset in "info:$go_info_digest" "mod:$go_mod_digest" "zip:$go_zip_digest"; do
   kind=${go_asset%%:*}
@@ -570,11 +570,11 @@ for go_asset in "info:$go_info_digest" "mod:$go_mod_digest" "zip:$go_zip_digest"
 done
 status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
   -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" \
-  "$gateway_url/go/$go_source_repository/$go_module_path/@v/$go_mutation_version.info")
+  "$notarx_url/go/$go_source_repository/$go_module_path/@v/$go_mutation_version.info")
 [[ "$status" == 404 ]] || { printf 'Post-backup Go mutation survived restore with HTTP %s.\n' "$status" >&2; exit 1; }
 assert_rustfs_object_state absent "$go_mutation_object_key"
 restored_go_jobs=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" \
-  "$gateway_url/api/v2/repositories/$go_source_id/lifecycle-jobs")
+  "$notarx_url/api/v2/repositories/$go_source_id/lifecycle-jobs")
 python3 -c '
 import json
 import sys
@@ -586,17 +586,17 @@ if missing:
     raise SystemExit(f"restored Go lifecycle jobs are missing: {missing}")
 ' "$go_reclaim_job_ids" <<<"$restored_go_jobs"
 restored_grants=$(curl --silent --show-error --fail --dump-header "$grant_headers" \
-  -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$gateway_url/api/v2/repositories/$repository_id/grants")
+  -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$notarx_url/api/v2/repositories/$repository_id/grants")
 tr -d '\r' <"$grant_headers" | grep -qi '^etag: 2$' || { printf '%s\n' 'Restored Repository grants did not retain version 2.' >&2; exit 1; }
 grep -Fq '"principal":"recovery-reader"' <<<"$restored_grants" || { printf '%s\n' 'Restored Repository grants did not retain recovery-reader.' >&2; exit 1; }
 restored_quarantine=$(curl --silent --show-error --fail \
   -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$quarantine_url")
 grep -Fq '"state":"quarantined"' <<<"$restored_quarantine" || { printf '%s\n' 'Restored artifact quarantine state is unavailable.' >&2; exit 1; }
 grep -Fq '"reason":"backup restore verification"' <<<"$restored_quarantine" || { printf '%s\n' 'Restored artifact quarantine reason is unavailable.' >&2; exit 1; }
-restored_replications=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$gateway_url/api/v2/repositories/$replication_target_id/replications")
+restored_replications=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$notarx_url/api/v2/repositories/$replication_target_id/replications")
 grep -Fq "\"id\":\"$replication_plan_id\"" <<<"$restored_replications" || { printf '%s\n' 'Restored replication plan is unavailable.' >&2; exit 1; }
 assert_restored_replication_completion "$replication_target_id" "$replication_plan_id"
-restored_lifecycle_jobs=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$gateway_url/api/v2/repositories/$promotion_target_id/lifecycle-jobs")
+restored_lifecycle_jobs=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$notarx_url/api/v2/repositories/$promotion_target_id/lifecycle-jobs")
 grep -Fq "\"id\":\"$promotion_job_id\"" <<<"$restored_lifecycle_jobs" || { printf '%s\n' 'Restored promotion lifecycle job is unavailable.' >&2; exit 1; }
 for replication in \
   "$oci_replication_target_id:$oci_replication_plan_id" \
@@ -604,7 +604,7 @@ for replication in \
   "$conan_replication_target_id:$conan_replication_plan_id"; do
   target_id=${replication%%:*}
   plan_id=${replication#*:}
-  restored_replications=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$gateway_url/api/v2/repositories/$target_id/replications")
+  restored_replications=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$notarx_url/api/v2/repositories/$target_id/replications")
   grep -Fq "\"id\":\"$plan_id\"" <<<"$restored_replications" || { printf 'Restored replication plan %s is unavailable.\n' "$plan_id" >&2; exit 1; }
   assert_restored_replication_completion "$target_id" "$plan_id"
 done
@@ -614,21 +614,21 @@ for promotion in \
   "$conan_promotion_target_id:$conan_promotion_job_id"; do
   target_id=${promotion%%:*}
   job_id=${promotion#*:}
-  restored_lifecycle_jobs=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$gateway_url/api/v2/repositories/$target_id/lifecycle-jobs")
+  restored_lifecycle_jobs=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$notarx_url/api/v2/repositories/$target_id/lifecycle-jobs")
   grep -Fq "\"id\":\"$job_id\"" <<<"$restored_lifecycle_jobs" || { printf 'Restored promotion job %s is unavailable.\n' "$job_id" >&2; exit 1; }
 done
 status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-  -H "Authorization: Bearer $denied_token" "$gateway_url/raw/$grant_repository/releases/app.txt")
+  -H "Authorization: Bearer $denied_token" "$notarx_url/raw/$grant_repository/releases/app.txt")
 [[ "$status" == 401 ]] || { printf 'Managed grant denial after restore returned HTTP %s.\n' "$status" >&2; exit 1; }
 status=$(curl --silent --show-error --output "$grant_response" --write-out '%{http_code}' \
-  -H "Authorization: Bearer $reader_token" "$gateway_url/raw/$grant_repository/releases/app.txt")
+  -H "Authorization: Bearer $reader_token" "$notarx_url/raw/$grant_repository/releases/app.txt")
 [[ "$status" == 200 && $(<"$grant_response") == 'grant restore artifact' ]] || {
   printf 'Restored managed grant allow returned HTTP %s: %s\n' "$status" "$(<"$grant_response")" >&2; exit 1;
 }
 # Read audit is buffered per node and flushed every NOTARX_AUDIT_FLUSH_INTERVAL (1s by
 # default), so wait for the read just made to appear.
 for _ in $(seq 1 30); do
-  audits=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$gateway_url/api/v1/audits?limit=500")
+  audits=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$notarx_url/api/v1/audits?limit=500")
   grep -Fq '"Actor":"recovery-reader"' <<<"$audits" && break
   sleep 1
 done
@@ -644,7 +644,7 @@ grep -Fq '"AuthorizationSource":"repository_grants"' <<<"$audits" || { printf '%
 # restored database must match the restored root marker for it to become ready.
 cat >"$fs_override" <<YAML
 services:
-  gateway:
+  notarx:
     user: "$(id -u):$(id -g)"
     environment:
       NOTARX_OBJECT_STORE_DRIVER: filesystem
@@ -654,11 +654,11 @@ services:
 YAML
 compose -f "$fs_override" config >"$fs_compose"
 COMPOSE_PROJECT_NAME="$project" docker compose --env-file "$isolated_environment" -f "$fs_compose" \
-  up -d --no-build --no-deps --force-recreate --wait gateway
+  up -d --no-build --no-deps --force-recreate --wait notarx
 fs_wait_ready() {
   local status=000
   for _ in $(seq 1 80); do
-    status=$(curl --noproxy '*' --silent --output /dev/null --write-out '%{http_code}' --max-time 2 "$gateway_url/readyz" 2>/dev/null || true)
+    status=$(curl --noproxy '*' --silent --output /dev/null --write-out '%{http_code}' --max-time 2 "$notarx_url/readyz" 2>/dev/null || true)
     [[ "$status" == 204 ]] && return 0
     sleep 0.25
   done
@@ -669,12 +669,12 @@ fs_put() {
   local name=$1 body=$2 status
   status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
     --request PUT -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" --data-binary "$body" \
-    "$gateway_url/raw/$fs_repository/$name")
+    "$notarx_url/raw/$fs_repository/$name")
   [[ "$status" == 201 ]] || { printf 'Writing filesystem recovery Raw object %s returned HTTP %s.\n' "$name" "$status" >&2; return 1; }
 }
 fs_get() {
   curl --silent --show-error --output "$grant_response" --write-out '%{http_code}' \
-    -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$gateway_url/raw/$fs_repository/$1"
+    -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$notarx_url/raw/$fs_repository/$1"
 }
 fs_wait_ready
 test -f "$fs_root/.notarx-root" || { printf '%s\n' 'The filesystem Gateway did not initialise its object root.' >&2; exit 1; }

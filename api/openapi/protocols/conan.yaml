@@ -185,9 +185,9 @@ conan_recipe_file:
       '201':
         description: File staged, or complete validated revision committed
         headers:
-          X-Artifact-Gateway-Publish-Session:
+          X-Notarx-Publish-Session:
             schema: {type: string, format: uuid}
-          X-Artifact-Gateway-Publish-State:
+          X-Notarx-Publish-State:
             schema: {type: string, enum: [open, committed]}
       '400':
         description: Invalid route, checksum assertion, incomplete or oversized body
@@ -276,9 +276,9 @@ conan_package_file:
       '201':
         description: File staged, or complete validated revision committed
         headers:
-          X-Artifact-Gateway-Publish-Session:
+          X-Notarx-Publish-Session:
             schema: {type: string, format: uuid}
-          X-Artifact-Gateway-Publish-State:
+          X-Notarx-Publish-State:
             schema: {type: string, enum: [open, committed]}
       '400':
         description: Invalid route, checksum assertion, incomplete or oversized body

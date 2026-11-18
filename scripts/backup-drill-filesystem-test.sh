@@ -20,7 +20,7 @@ case "$1" in
   ps) printf 'container-%s\n' "${@: -1}" ;;
   exec) printf 'FAKE-PG-DUMP\n' ;;
   config)
-    if [[ -n "${DRILL_NO_FS_CONFIG:-}" ]]; then printf 'services:\n  gateway:\n    environment:\n      NOTARX_OBJECT_STORE_ENDPOINT: http://rustfs:9000\n'; else printf 'services:\n  gateway:\n    environment:\n      NOTARX_OBJECT_STORE_DRIVER: filesystem\n'; fi ;;
+    if [[ -n "${DRILL_NO_FS_CONFIG:-}" ]]; then printf 'services:\n  notarx:\n    environment:\n      NOTARX_OBJECT_STORE_ENDPOINT: http://rustfs:9000\n'; else printf 'services:\n  notarx:\n    environment:\n      NOTARX_OBJECT_STORE_DRIVER: filesystem\n'; fi ;;
   port) printf '127.0.0.1:18999\n' ;;
 esac
 exit 0
@@ -51,12 +51,12 @@ if tar -tf "$backup/objects-fs.tar" | grep -F 'in-flight' >/dev/null; then
   echo 'backup-drill archived the abandoned tmp/ write' >&2; exit 1
 fi
 grep -F 'objects-fs.tar' "$backup/SHA256SUMS" >/dev/null
-grep -F 'gateway.dump' "$backup/SHA256SUMS" >/dev/null
+grep -F 'notarx.dump' "$backup/SHA256SUMS" >/dev/null
 if grep -F 'rustfs' "$DRILL_LOG" >/dev/null; then
   echo 'the filesystem drill touched RustFS' >&2; exit 1
 fi
-grep -F 'compose --env-file' "$DRILL_LOG" | grep -F 'stop gateway' >/dev/null
-grep -F 'docker start container-gateway' "$DRILL_LOG" >/dev/null
+grep -F 'compose --env-file' "$DRILL_LOG" | grep -F 'stop notarx' >/dev/null
+grep -F 'docker start container-notarx' "$DRILL_LOG" >/dev/null
 
 # Damage the root, then restore it from the archive.
 rm -rf "$fs_root/data" "$fs_root/meta"

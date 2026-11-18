@@ -5,7 +5,7 @@ Optional. It creates the OCI resources of the runbook
 do not click through the console. The runbook lists the same steps by hand.
 
 What it creates, in one compartment: a VCN with one public subnet and internet
-gateway; a security list that opens 22 from one CIDR, and 80 and 443; one
+notarx; a security list that opens 22 from one CIDR, and 80 and 443; one
 VM.Standard.A1.Flex instance (2 OCPU, 12 GB by default, Ubuntu 24.04 arm64) that runs
 `../cloud-init.yaml`; a block volume and its attachment; a private
 Object Storage bucket for backups; an IAM user and group with a policy that lets them

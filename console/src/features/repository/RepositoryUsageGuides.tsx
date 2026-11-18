@@ -146,13 +146,13 @@ export function CargoPublishGuide({ repoName }: { repoName: string }) {
         <RepositorySnippetBlock
           label={t("repository.publishAndRead")}
           code={
-            "cargo publish --registry gateway\ncargo search <crate> --registry gateway\ncargo add <crate> --registry gateway\ncargo install <crate> --registry gateway"
+            "cargo publish --registry notarx\ncargo search <crate> --registry notarx\ncargo add <crate> --registry notarx\ncargo install <crate> --registry notarx"
           }
         />
         <RepositorySnippetBlock
           label={t("repository.yankAndRestoreAVersion")}
           code={
-            "cargo yank <crate>@<version> --registry gateway\ncargo yank --undo <crate>@<version> --registry gateway"
+            "cargo yank <crate>@<version> --registry notarx\ncargo yank --undo <crate>@<version> --registry notarx"
           }
         />
       </div>

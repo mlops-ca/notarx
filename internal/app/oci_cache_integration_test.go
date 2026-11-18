@@ -90,7 +90,7 @@ func TestPostgresCacheCoordinatorCloseReleasesBorrowedAdvisoryLocks(t *testing.T
 		t.Fatal(err)
 	}
 	defer func() { _ = verifier.Close() }()
-	lockKey := "artifact-gateway:cache:" + key
+	lockKey := "notarx:cache:" + key
 	var acquired bool
 	if err := verifier.QueryRow(`SELECT pg_try_advisory_lock(hashtextextended($1, 0))`, lockKey).Scan(&acquired); err != nil || !acquired {
 		t.Fatalf("advisory lock remained after Close(): acquired=%t err=%v", acquired, err)

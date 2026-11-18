@@ -67,7 +67,7 @@ puts JSON.generate(Dir["/fixtures/*.gem"].sort.map do |path|
     {name: File.basename(path, ".gem"), accepted: false, errorClass: error.class.name, error: error.message}
   end
 end)`
-	cmd := exec.CommandContext(ctx, "docker", "run", "--rm", "--name", container, "--label", "com.artifact-gateway.rubygems-e2e.run="+os.Getenv("RUBYGEMS_OWNED_PROJECT"), "--network", "none", "--user", strconv.Itoa(os.Getuid())+":"+strconv.Itoa(os.Getgid()), "--mount", "type=bind,src="+root+",dst=/fixtures,readonly", image, "ruby", "-e", probe)
+	cmd := exec.CommandContext(ctx, "docker", "run", "--rm", "--name", container, "--label", "com.notarx.rubygems-e2e.run="+os.Getenv("RUBYGEMS_OWNED_PROJECT"), "--network", "none", "--user", strconv.Itoa(os.Getuid())+":"+strconv.Itoa(os.Getgid()), "--mount", "type=bind,src="+root+",dst=/fixtures,readonly", image, "ruby", "-e", probe)
 	output, err := cmd.Output()
 	if ctx.Err() != nil {
 		cleanup, stop := context.WithTimeout(context.Background(), 10*time.Second)

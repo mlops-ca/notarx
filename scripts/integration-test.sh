@@ -4,14 +4,14 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root"
 
-compose=(docker compose --env-file /dev/null --project-name artifact-gateway-integration -f compose.integration.yml)
+compose=(docker compose --env-file /dev/null --project-name notarx-integration -f compose.integration.yml)
 cleanup() {
   "${compose[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
-docker volume create artifact-gateway-go-mod >/dev/null
-docker volume create artifact-gateway-go-build >/dev/null
+docker volume create notarx-go-mod >/dev/null
+docker volume create notarx-go-build >/dev/null
 cleanup
 "${compose[@]}" up -d --wait postgres rustfs
 "${compose[@]}" run --rm --no-deps rustfs-ready
@@ -23,7 +23,7 @@ cleanup
 # the host against the same migrated PostgreSQL and RustFS services.
 postgres_address=$("${compose[@]}" port postgres 5432)
 rustfs_address=$("${compose[@]}" port rustfs 9000)
-TEST_DATABASE_URL="postgres://gateway:integration-password@${postgres_address}/gateway_test?sslmode=disable" \
+TEST_DATABASE_URL="postgres://notarx:integration-password@${postgres_address}/notarx_test?sslmode=disable" \
 TEST_OBJECT_STORE_ENDPOINT="http://${rustfs_address}" \
 TEST_OBJECT_STORE_ACCESS_KEY=integration-rustfs \
 TEST_OBJECT_STORE_SECRET_KEY=integration-password \

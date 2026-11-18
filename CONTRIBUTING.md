@@ -393,7 +393,7 @@ highest tag matching `^v[0-9]+\.[0-9]+\.[0-9]+$`; nightly pre-releases are
 ignored) differs from that tag. It needs the tags, so use a full clone.
 `bash scripts/migration-immutability-check-test.sh` runs its fixtures.
 
-Integration lifecycle commands explicitly use the `artifact-gateway-integration`
+Integration lifecycle commands explicitly use the `notarx-integration`
 Compose project and `/dev/null` as the environment file. They ignore the checkout
 `.env` and an exported `COMPOSE_PROJECT_NAME`, so test cleanup cannot select the
 normal development stack. Use `make integration-down` to clean that test project.
@@ -431,6 +431,15 @@ A commit that cherry-picks work from the upstream project carries an
 `Upstream:` trailer naming the upstream commit, for example
 `Upstream: ccsert/artifact-gateway@<sha>`; see
 [docs/upstream.md](docs/upstream.md).
+
+`make lint` runs `scripts/identity-check.sh`, the identity gate of
+[ADR 0013](docs/adr/0013-notarx-fork-charter.md). It fails when the upstream
+owner or product name, the old environment prefix, the old CLI name or the old
+metric and ledger prefix appears in a tracked file. The allow-list is the one in the
+ADR plus a short documented list of legacy cases (the legacy environment refusal
+list and the recovery code that verifies pre-fork releases); each entry in the
+script carries its reason. Lines with frozen zh-CN text are not checked.
+`scripts/identity-check-test.sh` (part of `make test`) holds the fixtures.
 
 ## Contribution license
 

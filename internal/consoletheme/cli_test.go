@@ -12,7 +12,7 @@ import (
 func TestCLIValidatesInstallsAndListsTheme(t *testing.T) {
 	directory := t.TempDir()
 	source := filepath.Join(t.TempDir(), "customer.theme.json")
-	data := `{"$schema":"https://artifact-gateway.local/schemas/console-theme-v1.json","schemaVersion":1,"id":"customer-blue","name":"Customer Blue","mode":"light","token":{"colorPrimary":"#123456","colorSuccess":"#17803d","colorWarning":"#a15c00","colorError":"#b42318","colorInfo":"#026aa2","colorTextBase":"#101828","colorBgBase":"#ffffff"}}`
+	data := `{"$schema":"https://notarx.local/schemas/console-theme-v1.json","schemaVersion":1,"id":"customer-blue","name":"Customer Blue","mode":"light","token":{"colorPrimary":"#123456","colorSuccess":"#17803d","colorWarning":"#a15c00","colorError":"#b42318","colorInfo":"#026aa2","colorTextBase":"#101828","colorBgBase":"#ffffff"}}`
 	if err := os.WriteFile(source, []byte(data), 0o600); err != nil {
 		t.Fatal(err)
 	}

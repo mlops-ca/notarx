@@ -27,8 +27,8 @@ func (o BackgroundOperationQueueObserver) Start(ctx context.Context, interval ti
 	}
 	go func() {
 		_ = o.Run(ctx)
-		lifecycleWake := notificationWake(ctx, o.Store, "artifact_gateway_lifecycle_jobs")
-		replicationWake := notificationWake(ctx, o.Store, "artifact_gateway_replication_plans")
+		lifecycleWake := notificationWake(ctx, o.Store, "notarx_lifecycle_jobs")
+		replicationWake := notificationWake(ctx, o.Store, "notarx_replication_plans")
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {

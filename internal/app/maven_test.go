@@ -51,7 +51,7 @@ func (c *countingMavenClient) Members() []string {
 
 func TestUpstreamMavenClientSendsMavenUserAgent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if ua := r.Header.Get("User-Agent"); !strings.Contains(ua, "Apache-Maven/") || !strings.Contains(ua, "Artifact-Gateway/") {
+		if ua := r.Header.Get("User-Agent"); !strings.Contains(ua, "Apache-Maven/") || !strings.Contains(ua, "notarx/") {
 			t.Fatalf("User-Agent = %q", ua)
 		}
 		w.WriteHeader(http.StatusOK)
@@ -328,8 +328,8 @@ func TestMavenSignalsAndAuditsAnInternalCoordinateConflict(t *testing.T) {
 	request.SetBasicAuth("maven", "resolver-secret")
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusOK || response.Body.String() != "internal" || response.Header().Get("X-Artifact-Gateway-Conflict") != "internal-preferred" {
-		t.Fatalf("response=%d header=%q body=%q", response.Code, response.Header().Get("X-Artifact-Gateway-Conflict"), response.Body.String())
+	if response.Code != http.StatusOK || response.Body.String() != "internal" || response.Header().Get("X-Notarx-Conflict") != "internal-preferred" {
+		t.Fatalf("response=%d header=%q body=%q", response.Code, response.Header().Get("X-Notarx-Conflict"), response.Body.String())
 	}
 	if len(store.Audits) != 2 || store.Audits[0].Outcome != repository.AuditInternalPreferred || store.Audits[0].MemberName != "proxy" || store.Audits[1].Outcome != repository.AuditResolved || store.Audits[1].MemberName != "hosted" {
 		t.Fatalf("audits = %#v", store.Audits)
@@ -506,7 +506,7 @@ func TestMavenForwardsConditionalRequestsAndDisabledGroupsAreAudited(t *testing.
 	request.SetBasicAuth("maven", "resolver-secret")
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusNotModified || response.Header().Get("ETag") != `"cached"` || response.Header().Get("X-Artifact-Gateway-Conflict") != "internal-preferred" || len(store.Audits) != 2 || store.Audits[0].Outcome != repository.AuditInternalPreferred || store.Audits[1].Outcome != repository.AuditResolved {
+	if response.Code != http.StatusNotModified || response.Header().Get("ETag") != `"cached"` || response.Header().Get("X-Notarx-Conflict") != "internal-preferred" || len(store.Audits) != 2 || store.Audits[0].Outcome != repository.AuditInternalPreferred || store.Audits[1].Outcome != repository.AuditResolved {
 		t.Fatalf("response=%d headers=%v audits=%#v", response.Code, response.Header(), store.Audits)
 	}
 	if err := store.DisableMavenGroup(context.Background(), "engineering"); err != nil {

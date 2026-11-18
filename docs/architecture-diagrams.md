@@ -8,7 +8,7 @@ reviewable source of truth for architecture relationships.
 
 ## Visual system overview
 
-![notarx lightweight system architecture](assets/artifact-gateway-system-architecture.png)
+![notarx lightweight system architecture](assets/notarx-system-architecture.png)
 
 ## System and storage boundaries
 
@@ -38,7 +38,7 @@ storage is a separate byte plane; the local stack provides it with RustFS.
 
 ## Compact standalone and split-role deployment
 
-![notarx standalone and distributed deployment topology](assets/artifact-gateway-deployment-topology.png)
+![notarx standalone and distributed deployment topology](assets/notarx-deployment-topology.png)
 
 ```mermaid
 flowchart TB

@@ -3,12 +3,12 @@ kind: Service
 metadata:
   name: notarx
   labels:
-    app.kubernetes.io/name: artifact-gateway
-    app.kubernetes.io/component: gateway
+    app.kubernetes.io/name: notarx
+    app.kubernetes.io/component: notarx
 spec:
   selector:
-    app.kubernetes.io/name: artifact-gateway
-    app.kubernetes.io/component: gateway
+    app.kubernetes.io/name: notarx
+    app.kubernetes.io/component: notarx
   ports:
     - name: http
       port: 8080
@@ -17,21 +17,21 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: artifact-gateway
+  name: notarx
   labels:
-    app.kubernetes.io/name: artifact-gateway
-    app.kubernetes.io/component: gateway
+    app.kubernetes.io/name: notarx
+    app.kubernetes.io/component: notarx
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: artifact-gateway
-      app.kubernetes.io/component: gateway
+      app.kubernetes.io/name: notarx
+      app.kubernetes.io/component: notarx
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: artifact-gateway
-        app.kubernetes.io/component: gateway
+        app.kubernetes.io/name: notarx
+        app.kubernetes.io/component: notarx
     spec:
       enableServiceLinks: false
       automountServiceAccountToken: false
@@ -41,14 +41,14 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-        - name: gateway
-          image: artifact-gateway:latest
+        - name: notarx
+          image: notarx:latest
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:
-                name: artifact-gateway-config
+                name: notarx-config
             - secretRef:
-                name: artifact-gateway-secrets
+                name: notarx-secrets
           env:
             - name: NOTARX_INSTANCE_ID
               valueFrom:

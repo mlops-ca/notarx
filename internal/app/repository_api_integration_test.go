@@ -310,7 +310,7 @@ func TestPostgresHTTPIntegration(t *testing.T) {
 	mavenRequest.SetBasicAuth("integration", "resolver-secret")
 	mavenResponse := httptest.NewRecorder()
 	handler.ServeHTTP(mavenResponse, mavenRequest)
-	if mavenResponse.Code != http.StatusOK || mavenResponse.Header().Get("X-Artifact-Gateway-Conflict") != "internal-preferred" || mavenResponse.Body.String() != "artifact" {
+	if mavenResponse.Code != http.StatusOK || mavenResponse.Header().Get("X-Notarx-Conflict") != "internal-preferred" || mavenResponse.Body.String() != "artifact" {
 		t.Fatalf("Maven response = %d headers=%v body=%q", mavenResponse.Code, mavenResponse.Header(), mavenResponse.Body.String())
 	}
 	var conflictCount, resolvedCount int

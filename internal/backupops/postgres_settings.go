@@ -49,7 +49,7 @@ func (p Postgres) config() (*pgx.ConnConfig, error) {
 	cfg.Fallbacks = nil
 	cfg.TLSConfig = nil
 	cfg.ConnectTimeout = 5 * time.Second
-	cfg.RuntimeParams = map[string]string{"timezone": "UTC", "application_name": "artifact-gateway-backup"}
+	cfg.RuntimeParams = map[string]string{"timezone": "UTC", "application_name": "notarx-backup"}
 	return cfg, nil
 }
 func (p Postgres) connect(ctx context.Context) (*pgx.Conn, error) {

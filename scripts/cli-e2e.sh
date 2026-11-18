@@ -52,14 +52,14 @@ compose() {
   if [[ -f "$workdir/network.json" ]]; then
     network_options=(-f "$workdir/network.json")
   fi
-  COMPOSE_PROJECT_NAME="$project" docker compose --env-file "$workdir/gateway.env" -f compose.yml "${network_options[@]}" "$@"
+  COMPOSE_PROJECT_NAME="$project" docker compose --env-file "$workdir/notarx.env" -f compose.yml "${network_options[@]}" "$@"
 }
 
 cleanup() {
   local status=$?
   if [[ -n "$project" ]]; then
     if [[ "$status" != 0 ]]; then
-      compose logs gateway 2>/dev/null | tail -n 80 >&2 || true
+      compose logs notarx 2>/dev/null | tail -n 80 >&2 || true
     fi
     compose down -v --remove-orphans >/dev/null 2>&1 || true
   fi
@@ -88,7 +88,7 @@ else
     printf '%s\n' 'CLI E2E requires a configured environment file (NOTARX_ENV_FILE or .env).' >&2
     exit 1
   }
-  project="artifact-gateway-cli-${RANDOM}-${RANDOM}"
+  project="notarx-cli-${RANDOM}-${RANDOM}"
   if [[ -n "${CLI_E2E_NETWORK_SUBNET:-}" ]]; then
     python3 - "$CLI_E2E_NETWORK_SUBNET" "$workdir/network.json" <<'PY2'
 import ipaddress
@@ -103,7 +103,7 @@ with open(sys.argv[2], "w", encoding="utf-8") as stream:
     json.dump({"networks": {"default": {"ipam": {"config": [{"subnet": str(network)}]}}}}, stream)
 PY2
   fi
-  gateway_port=$(free_port)
+  notarx_port=$(free_port)
   admin_token="cli-e2e-admin-${RANDOM}-${RANDOM}"
   resolver_token="cli-e2e-resolver-${RANDOM}-${RANDOM}"
   awk -F= '
@@ -114,18 +114,18 @@ PY2
     $1 != "NOTARX_ADMIN_TOKEN" &&
     $1 != "NOTARX_RESOLVER_TOKEN" &&
     $1 !~ /^NOTARX_OIDC_/ { print }
-  ' "$env_file" >"$workdir/gateway.env"
+  ' "$env_file" >"$workdir/notarx.env"
   printf 'NOTARX_HTTP_PORT=%s\nNOTARX_POSTGRES_PORT=%s\nRUSTFS_API_PORT=%s\nRUSTFS_CONSOLE_PORT=%s\nNOTARX_ADMIN_TOKEN=%s\nNOTARX_RESOLVER_TOKEN=%s\n' \
-    "$gateway_port" "$(free_port)" "$(free_port)" "$(free_port)" \
-    "$admin_token" "$resolver_token" >>"$workdir/gateway.env"
+    "$notarx_port" "$(free_port)" "$(free_port)" "$(free_port)" \
+    "$admin_token" "$resolver_token" >>"$workdir/notarx.env"
   # A synthetic OIDC issuer for the identity-link checks. Nothing listens on
   # it: linking only compares the issuer, and opaque bearer tokens are
   # rejected as JWTs before any key fetch.
   oidc_issuer="http://127.0.0.1:1/cli-e2e-oidc-${RANDOM}"
   printf 'NOTARX_OIDC_ISSUER=%s\nNOTARX_OIDC_AUDIENCE=notarxctl-cli-e2e\nNOTARX_OIDC_JWKS_URL=%s/jwks\n' \
-    "$oidc_issuer" "$oidc_issuer" >>"$workdir/gateway.env"
+    "$oidc_issuer" "$oidc_issuer" >>"$workdir/notarx.env"
   compose up -d ${NOTARX_COMPOSE_BUILD_FLAG---build} --wait
-  server="http://127.0.0.1:${gateway_port}"
+  server="http://127.0.0.1:${notarx_port}"
 fi
 
 # Match the canonical issuer returned by configuration and identity writes.

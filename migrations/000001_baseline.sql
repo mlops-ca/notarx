@@ -21,19 +21,6 @@ END
 $$;
 
 --
--- Name: artifact_gateway_notify_queue(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.artifact_gateway_notify_queue() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-    PERFORM pg_notify(TG_ARGV[0], COALESCE(NEW.id::text, 'wake'));
-    RETURN NEW;
-END;
-$$;
-
---
 -- Name: assert_apt_repository_capacity_trigger(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -189,6 +176,19 @@ BEGIN
     SELECT gen_random_uuid(),event_id,id,'pending',clock.now,clock.now,clock.now
     FROM webhook_subscriptions CROSS JOIN (SELECT clock_timestamp() AS now) AS clock
     WHERE enabled=true AND event_types ? event_type;
+END;
+$$;
+
+--
+-- Name: notarx_notify_queue(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.notarx_notify_queue() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    PERFORM pg_notify(TG_ARGV[0], COALESCE(NEW.id::text, 'wake'));
+    RETURN NEW;
 END;
 $$;
 
@@ -5270,13 +5270,13 @@ CREATE TRIGGER apt_asset_capacity_check AFTER INSERT OR UPDATE ON public.native_
 -- Name: audit_cleanup_jobs audit_cleanup_jobs_notify_insert; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER audit_cleanup_jobs_notify_insert AFTER INSERT ON public.audit_cleanup_jobs FOR EACH ROW WHEN ((new.state = 'pending'::text)) EXECUTE FUNCTION public.artifact_gateway_notify_queue('artifact_gateway_audit_cleanup');
+CREATE TRIGGER audit_cleanup_jobs_notify_insert AFTER INSERT ON public.audit_cleanup_jobs FOR EACH ROW WHEN ((new.state = 'pending'::text)) EXECUTE FUNCTION public.notarx_notify_queue('notarx_audit_cleanup');
 
 --
 -- Name: audit_cleanup_jobs audit_cleanup_jobs_notify_update; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER audit_cleanup_jobs_notify_update AFTER UPDATE OF state ON public.audit_cleanup_jobs FOR EACH ROW WHEN (((new.state = 'pending'::text) AND (old.state IS DISTINCT FROM new.state))) EXECUTE FUNCTION public.artifact_gateway_notify_queue('artifact_gateway_audit_cleanup');
+CREATE TRIGGER audit_cleanup_jobs_notify_update AFTER UPDATE OF state ON public.audit_cleanup_jobs FOR EACH ROW WHEN (((new.state = 'pending'::text) AND (old.state IS DISTINCT FROM new.state))) EXECUTE FUNCTION public.notarx_notify_queue('notarx_audit_cleanup');
 
 --
 -- Name: lifecycle_jobs cargo_promotion_state_webhook_after_update; Type: TRIGGER; Schema: public; Owner: -
@@ -5324,19 +5324,19 @@ CREATE TRIGGER go_asset_capacity_check AFTER INSERT OR UPDATE ON public.native_g
 -- Name: hosted_repositories hosted_repositories_deletion_notify; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER hosted_repositories_deletion_notify AFTER UPDATE OF state ON public.hosted_repositories FOR EACH ROW WHEN ((new.state = 'deleting'::text)) EXECUTE FUNCTION public.artifact_gateway_notify_queue('artifact_gateway_repository_deletions');
+CREATE TRIGGER hosted_repositories_deletion_notify AFTER UPDATE OF state ON public.hosted_repositories FOR EACH ROW WHEN ((new.state = 'deleting'::text)) EXECUTE FUNCTION public.notarx_notify_queue('notarx_repository_deletions');
 
 --
 -- Name: lifecycle_jobs lifecycle_jobs_notify_insert; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER lifecycle_jobs_notify_insert AFTER INSERT ON public.lifecycle_jobs FOR EACH ROW WHEN ((new.state = ANY (ARRAY['pending'::text, 'retrying'::text]))) EXECUTE FUNCTION public.artifact_gateway_notify_queue('artifact_gateway_lifecycle_jobs');
+CREATE TRIGGER lifecycle_jobs_notify_insert AFTER INSERT ON public.lifecycle_jobs FOR EACH ROW WHEN ((new.state = ANY (ARRAY['pending'::text, 'retrying'::text]))) EXECUTE FUNCTION public.notarx_notify_queue('notarx_lifecycle_jobs');
 
 --
 -- Name: lifecycle_jobs lifecycle_jobs_notify_update; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER lifecycle_jobs_notify_update AFTER UPDATE OF state, next_attempt_at ON public.lifecycle_jobs FOR EACH ROW WHEN (((new.state = ANY (ARRAY['pending'::text, 'retrying'::text])) AND (old.state IS DISTINCT FROM new.state))) EXECUTE FUNCTION public.artifact_gateway_notify_queue('artifact_gateway_lifecycle_jobs');
+CREATE TRIGGER lifecycle_jobs_notify_update AFTER UPDATE OF state, next_attempt_at ON public.lifecycle_jobs FOR EACH ROW WHEN (((new.state = ANY (ARRAY['pending'::text, 'retrying'::text])) AND (old.state IS DISTINCT FROM new.state))) EXECUTE FUNCTION public.notarx_notify_queue('notarx_lifecycle_jobs');
 
 --
 -- Name: native_maven_artifacts maven_artifact_capacity_check; Type: TRIGGER; Schema: public; Owner: -
@@ -5384,13 +5384,13 @@ CREATE TRIGGER raw_asset_capacity_check AFTER INSERT OR UPDATE ON public.native_
 -- Name: replication_plans replication_plans_notify_insert; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER replication_plans_notify_insert AFTER INSERT ON public.replication_plans FOR EACH ROW WHEN ((new.state = ANY (ARRAY['pending'::text, 'failed'::text]))) EXECUTE FUNCTION public.artifact_gateway_notify_queue('artifact_gateway_replication_plans');
+CREATE TRIGGER replication_plans_notify_insert AFTER INSERT ON public.replication_plans FOR EACH ROW WHEN ((new.state = ANY (ARRAY['pending'::text, 'failed'::text]))) EXECUTE FUNCTION public.notarx_notify_queue('notarx_replication_plans');
 
 --
 -- Name: replication_plans replication_plans_notify_update; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER replication_plans_notify_update AFTER UPDATE OF state, next_attempt_at ON public.replication_plans FOR EACH ROW WHEN (((new.state = 'pending'::text) AND (old.state IS DISTINCT FROM new.state))) EXECUTE FUNCTION public.artifact_gateway_notify_queue('artifact_gateway_replication_plans');
+CREATE TRIGGER replication_plans_notify_update AFTER UPDATE OF state, next_attempt_at ON public.replication_plans FOR EACH ROW WHEN (((new.state = 'pending'::text) AND (old.state IS DISTINCT FROM new.state))) EXECUTE FUNCTION public.notarx_notify_queue('notarx_replication_plans');
 
 --
 -- Name: repository_capacity_quotas repository_capacity_quota_check; Type: TRIGGER; Schema: public; Owner: -

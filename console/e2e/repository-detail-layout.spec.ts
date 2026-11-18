@@ -374,7 +374,7 @@ test("Cargo publish guide stays readable at desktop and mobile widths", async ({
     });
     await expect(guide).toBeVisible();
     await expect(
-      page.getByText("cargo publish --registry gateway", { exact: false }),
+      page.getByText("cargo publish --registry notarx", { exact: false }),
     ).toBeVisible();
     const explanationBox = await guide.locator("..").boundingBox();
     const snippetsBox = await page
@@ -1607,7 +1607,7 @@ for (const delayedMotion of [false, true]) {
         await page.goto(`/repositories/${repositoryId}?tab=grants`);
         if (
           (await page.locator("html").getAttribute("data-theme-id")) !==
-          `gateway-${mode}`
+          `notarx-${mode}`
         ) {
           await page.getByRole("button", { name: /Choose theme/ }).click();
           await page

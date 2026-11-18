@@ -689,7 +689,7 @@ test("OIDC, password, and token sign-in modes share a stable layout", async ({
     route.fulfill({
       json: {
         enabled: true,
-        issuer: "https://identity.example.test/realms/artifact-gateway",
+        issuer: "https://identity.example.test/realms/notarx",
       },
     }),
   );

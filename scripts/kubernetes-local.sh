@@ -2,16 +2,16 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-namespace=artifact-gateway-local
+namespace=notarx-local
 overlay="$root/deploy/kubernetes/overlays/local"
-gateway_image=artifact-gateway:k8s-local
-console_image=artifact-gateway-console:k8s-local
-apt_signer_image=artifact-gateway-apt-signer:k8s-local
+notarx_image=notarx:k8s-local
+console_image=notarx-console:k8s-local
+apt_signer_image=notarx-apt-signer:k8s-local
 console_port=18081
 console_url="http://127.0.0.1:${console_port}"
 ingress_port=80
-ingress_url="http://artifact-gateway.localhost"
-local_no_proxy='artifact-gateway.localhost,127.0.0.1,localhost'
+ingress_url="http://notarx.localhost"
+local_no_proxy='notarx.localhost,127.0.0.1,localhost'
 
 postgres_password=${K8S_LOCAL_POSTGRES_PASSWORD:-}
 rustfs_access_key=${K8S_LOCAL_RUSTFS_ACCESS_KEY:-}
@@ -28,7 +28,7 @@ effective_secret_value() {
     printf '%s' "$configured_value"
     return
   fi
-  encoded=$(kubectl -n "$namespace" get secret artifact-gateway-secrets \
+  encoded=$(kubectl -n "$namespace" get secret notarx-secrets \
     -o "jsonpath={.data.${key}}" 2>/dev/null || true)
   if [[ -n "$encoded" ]]; then
     printf '%s' "$encoded" | base64 --decode
@@ -38,7 +38,7 @@ effective_secret_value() {
 }
 
 effective_admin_token() {
-  effective_secret_value "$admin_token" NOTARX_ADMIN_TOKEN local-gateway-admin-token
+  effective_secret_value "$admin_token" NOTARX_ADMIN_TOKEN local-notarx-admin-token
 }
 
 usage() {
@@ -116,7 +116,7 @@ refuse_legacy_minio_in_place() {
 }
 
 require_ingress_port() {
-  if kubectl -n "$namespace" get service artifact-gateway-ingress >/dev/null 2>&1; then
+  if kubectl -n "$namespace" get service notarx-ingress >/dev/null 2>&1; then
     return
   fi
   if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"$ingress_port" -sTCP:LISTEN >/dev/null 2>&1; then
@@ -133,7 +133,7 @@ build_images() {
   if [[ "${K8S_LOCAL_SKIP_BUILD:-0}" == "1" ]]; then
     return
   fi
-  docker build -t "$gateway_image" "$root"
+  docker build -t "$notarx_image" "$root"
   docker build -f "$root/Dockerfile.console" -t "$console_image" "$root"
   docker build -f "$root/Dockerfile.apt-signer" -t "$apt_signer_image" "$root"
 }
@@ -151,18 +151,18 @@ apply_runtime_inputs() {
     "$rustfs_rpc_secret" RUSTFS_RPC_SECRET local-rustfs-rpc-secret-0123456789)
   configured_admin_token=$(effective_admin_token)
   configured_resolver_token=$(effective_secret_value \
-    "$resolver_token" NOTARX_RESOLVER_TOKEN local-gateway-resolver-token)
+    "$resolver_token" NOTARX_RESOLVER_TOKEN local-notarx-resolver-token)
   configured_settings_key=$(effective_secret_value \
     "$settings_key" NOTARX_SETTINGS_ENCRYPTION_KEY 0123456789abcdef0123456789abcdef)
   configured_apt_signer_token=$(effective_secret_value \
     "$apt_signer_token" NOTARX_APT_SIGNER_TOKEN local-reference-apt-signer-token-0001)
   kubectl create namespace "$namespace" --dry-run=client -o yaml | kubectl apply -f -
-  kubectl -n "$namespace" create secret generic artifact-gateway-secrets \
+  kubectl -n "$namespace" create secret generic notarx-secrets \
     --from-literal=POSTGRES_PASSWORD="$configured_postgres_password" \
     --from-literal=RUSTFS_ACCESS_KEY="$configured_rustfs_access_key" \
     --from-literal=RUSTFS_SECRET_KEY="$configured_rustfs_secret_key" \
     --from-literal=RUSTFS_RPC_SECRET="$configured_rustfs_rpc_secret" \
-    --from-literal=NOTARX_DATABASE_URL="postgres://gateway:${configured_postgres_password}@postgres:5432/gateway?sslmode=disable" \
+    --from-literal=NOTARX_DATABASE_URL="postgres://notarx:${configured_postgres_password}@postgres:5432/notarx?sslmode=disable" \
     --from-literal=NOTARX_OBJECT_STORE_ACCESS_KEY="$configured_rustfs_access_key" \
     --from-literal=NOTARX_OBJECT_STORE_SECRET_KEY="$configured_rustfs_secret_key" \
     --from-literal=NOTARX_ADMIN_TOKEN="$configured_admin_token" \
@@ -170,7 +170,7 @@ apply_runtime_inputs() {
     --from-literal=NOTARX_SETTINGS_ENCRYPTION_KEY="$configured_settings_key" \
     --from-literal=NOTARX_APT_SIGNER_TOKEN="$configured_apt_signer_token" \
     --dry-run=client -o yaml | kubectl apply -f -
-  kubectl -n "$namespace" create configmap artifact-gateway-migrations \
+  kubectl -n "$namespace" create configmap notarx-migrations \
     --from-file="$root/migrations" \
     --from-file=run-migrations.sh="$root/scripts/run-migrations.sh" \
     --dry-run=client -o yaml | kubectl apply -f -
@@ -216,9 +216,9 @@ up() {
   kubectl apply -k "$overlay"
   kubectl -n "$namespace" rollout status statefulset/postgres --timeout=180s
   kubectl -n "$namespace" rollout status statefulset/rustfs --timeout=180s
-  kubectl -n "$namespace" rollout status deployment/artifact-gateway --timeout=300s
-  kubectl -n "$namespace" rollout status deployment/artifact-gateway-console --timeout=180s
-  kubectl -n "$namespace" rollout status deployment/artifact-gateway-ingress --timeout=180s
+  kubectl -n "$namespace" rollout status deployment/notarx --timeout=300s
+  kubectl -n "$namespace" rollout status deployment/notarx-console --timeout=180s
+  kubectl -n "$namespace" rollout status deployment/notarx-ingress --timeout=180s
   wait_for_http "$ingress_url/readyz"
   wait_for_http "$ingress_url/"
   local configured_admin_token
@@ -272,8 +272,8 @@ verify_persistence() {
     -X PUT --data-binary "$body" \
     --path-as-is "$ingress_url/raw/$repository_name/smoke/persistence%3Bencoded.txt" >/dev/null
 
-  kubectl -n "$namespace" rollout restart deployment/artifact-gateway
-  kubectl -n "$namespace" rollout status deployment/artifact-gateway --timeout=300s
+  kubectl -n "$namespace" rollout restart deployment/notarx
+  kubectl -n "$namespace" rollout status deployment/notarx --timeout=300s
   wait_for_http "$ingress_url/readyz"
 
   curl --noproxy "$local_no_proxy" --connect-timeout 3 --max-time 15 \
@@ -318,9 +318,9 @@ verify_persistence() {
 down() {
   require_command kubectl
   require_local_context
-  kubectl delete ingressclass artifact-gateway-local --ignore-not-found
-  kubectl delete clusterrolebinding artifact-gateway-local-ingress-class-reader --ignore-not-found
-  kubectl delete clusterrole artifact-gateway-local-ingress-class-reader --ignore-not-found
+  kubectl delete ingressclass notarx-local --ignore-not-found
+  kubectl delete clusterrolebinding notarx-local-ingress-class-reader --ignore-not-found
+  kubectl delete clusterrole notarx-local-ingress-class-reader --ignore-not-found
   kubectl delete namespace "$namespace" --ignore-not-found
 }
 

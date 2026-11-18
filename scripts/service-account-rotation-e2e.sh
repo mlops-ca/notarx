@@ -21,10 +21,10 @@ free_port() {
   python3 -c 'import socket; listener = socket.socket(); listener.bind(("127.0.0.1", 0)); print(listener.getsockname()[1]); listener.close()'
 }
 
-project="artifact-gateway-service-account-${RANDOM}-${RANDOM}"
+project="notarx-service-account-${RANDOM}-${RANDOM}"
 workdir=$(mktemp -d)
-isolated_env="$workdir/gateway.env"
-gateway_port=$(free_port)
+isolated_env="$workdir/notarx.env"
+notarx_port=$(free_port)
 admin_token="service-account-gate-admin-${RANDOM}-${RANDOM}"
 
 awk -F= '
@@ -36,7 +36,7 @@ awk -F= '
   $1 != "NOTARX_RESOLVER_TOKEN" { print }
 ' "$env_file" >"$isolated_env"
 printf 'NOTARX_HTTP_PORT=%s\nNOTARX_POSTGRES_PORT=%s\nRUSTFS_API_PORT=%s\nRUSTFS_CONSOLE_PORT=%s\nNOTARX_ADMIN_TOKEN=%s\nNOTARX_RESOLVER_TOKEN=%s\n' \
-  "$gateway_port" "$(free_port)" "$(free_port)" "$(free_port)" \
+  "$notarx_port" "$(free_port)" "$(free_port)" "$(free_port)" \
   "$admin_token" "service-account-gate-resolver-${RANDOM}-${RANDOM}" >>"$isolated_env"
 
 compose() {
@@ -52,7 +52,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-base="http://127.0.0.1:${gateway_port}"
+base="http://127.0.0.1:${notarx_port}"
 
 json_field() {
   local file=$1 field=$2

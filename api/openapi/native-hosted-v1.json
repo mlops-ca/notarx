@@ -4360,13 +4360,13 @@
           "201": {
             "description": "File staged, or complete validated revision committed",
             "headers": {
-              "X-Artifact-Gateway-Publish-Session": {
+              "X-Notarx-Publish-Session": {
                 "schema": {
                   "type": "string",
                   "format": "uuid"
                 }
               },
-              "X-Artifact-Gateway-Publish-State": {
+              "X-Notarx-Publish-State": {
                 "schema": {
                   "type": "string",
                   "enum": [
@@ -4538,13 +4538,13 @@
           "201": {
             "description": "File staged, or complete validated revision committed",
             "headers": {
-              "X-Artifact-Gateway-Publish-Session": {
+              "X-Notarx-Publish-Session": {
                 "schema": {
                   "type": "string",
                   "format": "uuid"
                 }
               },
-              "X-Artifact-Gateway-Publish-State": {
+              "X-Notarx-Publish-State": {
                 "schema": {
                   "type": "string",
                   "enum": [
@@ -11206,7 +11206,7 @@
       },
       "x-gateway-catchAll": "modulePath",
       "x-gateway-visibility": "all_three_representations_committed_together",
-      "x-gateway-publication": "gateway_specific_single_zip_put"
+      "x-gateway-publication": "notarx_specific_single_zip_put"
     },
     "/cargo/{repository}/{path}": {
       "servers": [

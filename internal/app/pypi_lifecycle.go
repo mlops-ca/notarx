@@ -245,7 +245,7 @@ func (r PyPIReplication) Start(ctx context.Context, interval time.Duration) {
 	}
 	go func() {
 		_ = r.RunJobs(ctx, 100)
-		wake := notificationWake(ctx, r.Store, "artifact_gateway_replication_plans")
+		wake := notificationWake(ctx, r.Store, "notarx_replication_plans")
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {

@@ -205,7 +205,7 @@ func (h *handler) serveScan(response http.ResponseWriter, request *http.Request)
 	request.Body = http.MaxBytesReader(response, request.Body, maximumBody)
 	reader := multipart.NewReader(request.Body, parameters["boundary"])
 
-	root, err := os.MkdirTemp(h.tempDir, "artifact-gateway-scan-")
+	root, err := os.MkdirTemp(h.tempDir, "notarx-scan-")
 	if err != nil {
 		writeError(response, http.StatusServiceUnavailable, "scanner_unavailable")
 		return

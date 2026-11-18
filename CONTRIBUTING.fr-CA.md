@@ -455,7 +455,7 @@ donc un clone complet. `bash scripts/migration-immutability-check-test.sh` exéc
 ses bancs d’essai.
 
 Les commandes de cycle de vie de l’intégration utilisent explicitement le projet
-Compose `artifact-gateway-integration` et `/dev/null` comme fichier
+Compose `notarx-integration` et `/dev/null` comme fichier
 d’environnement. Elles ignorent le `.env` de la copie de travail et tout
 `COMPOSE_PROJECT_NAME` exporté; le nettoyage des tests ne peut donc pas
 sélectionner la pile de développement normale. Utilisez

@@ -3,7 +3,7 @@ set -eu
 
 # Read-only smoke check for local PostgreSQL capabilities introduced by the
 # observability/search migrations.
-docker compose exec -T postgres psql -X -U gateway -d gateway -v ON_ERROR_STOP=1 <<'SQL'
+docker compose exec -T postgres psql -X -U notarx -d notarx -v ON_ERROR_STOP=1 <<'SQL'
 SELECT current_setting('server_version') AS server_version,
        current_setting('shared_preload_libraries') AS shared_preload_libraries;
 

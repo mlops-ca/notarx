@@ -201,7 +201,7 @@ func runLocalRecoveryIntegration(t *testing.T, profile, sourceDriver, targetDriv
 		emailFixture = seedRecoveryEmail(t, ctx, source, url, repos[0].ID, repos[1].ID, emailLocale)
 	}
 	// Flush audit/runtime writes before recording the offline boundary.
-	writerID := source.resourceID("container", source.spec.Project+"-gateway")
+	writerID := source.resourceID("container", source.spec.Project+"-notarx")
 	if _, err = d.output(ctx, "stop", writerID); err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +210,7 @@ func runLocalRecoveryIntegration(t *testing.T, profile, sourceDriver, targetDriv
 		t.Fatal(err)
 	}
 	ss := SourceSpec{BackupID: "synthetic-recovery", ScopeID: "synthetic-local", InventoryDeclaredComplete: true, Release: release, Docker: d, Postgres: source.database,
-		Writers: []WriterSpec{{ID: "synthetic-gateway", Kind: "docker-container", Reference: writerID}}}
+		Writers: []WriterSpec{{ID: "synthetic-notarx", Kind: "docker-container", Reference: writerID}}}
 	if sourceDriver == objectstore.DriverFilesystem {
 		ss.Filesystem = &FilesystemSettings{Root: source.objectRoot}
 	} else {
@@ -218,7 +218,7 @@ func runLocalRecoveryIntegration(t *testing.T, profile, sourceDriver, targetDriv
 		if portErr != nil {
 			t.Fatal(portErr)
 		}
-		ss.S3 = S3Settings{Endpoint: "http://127.0.0.1:" + s3Port, Bucket: "gateway-cache", AccessKey: source.spec.AccessKey, SecretKey: source.spec.SecretKey}
+		ss.S3 = S3Settings{Endpoint: "http://127.0.0.1:" + s3Port, Bucket: "notarx-cache", AccessKey: source.spec.AccessKey, SecretKey: source.spec.SecretKey}
 	}
 	_ = pgPort
 	observed, err := newSource(ctx, ss)
@@ -237,7 +237,7 @@ func runLocalRecoveryIntegration(t *testing.T, profile, sourceDriver, targetDriv
 		t.Fatal(e)
 	}
 	// Management mutations and authenticated denials are sync-class (security_audit_log);
-	// reads are async-class (resolver_audit_log, flushed when the gateway stops). Both
+	// reads are async-class (resolver_audit_log, flushed when notarx stops). Both
 	// tables are history that a restore must preserve.
 	auditMax, auditBefore := map[string]int64{}, map[string]string{}
 	var auditEvidence int64
@@ -321,7 +321,7 @@ func runLocalRecoveryIntegration(t *testing.T, profile, sourceDriver, targetDriv
 		verifyFixtureGatewayImage(t, ctx, target, release)
 		verifyOCIIdentityRejections(t, ctx, d, bundle, targetSpec, ss)
 	}
-	port, err := target.port(ctx, "gateway", "8080/tcp")
+	port, err := target.port(ctx, "notarx", "8080/tcp")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -362,7 +362,7 @@ func runLocalRecoveryIntegration(t *testing.T, profile, sourceDriver, targetDriv
 	if profile != "published-0.5.0" {
 		verifyRecoveryEmail(t, ctx, target, url, denied, emailFixture, bundle)
 	}
-	scenarios := []string{"existing source", "existing sentinel", "wrong release", "corrupt object", "corrupt dump", "corrupt archive with matching digest", "unsupported manifest", "semantic failure", "postgres start failure", "gateway start failure", "lost create response"}
+	scenarios := []string{"existing source", "existing sentinel", "wrong release", "corrupt object", "corrupt dump", "corrupt archive with matching digest", "unsupported manifest", "semantic failure", "postgres start failure", "notarx start failure", "lost create response"}
 	if release.NativeArchive != nil {
 		scenarios = append(scenarios, "wrong native archive", "missing native archive")
 	}
@@ -441,7 +441,7 @@ func runLocalRecoveryIntegration(t *testing.T, profile, sourceDriver, targetDriv
 					t.Fatal(err)
 				}
 			}
-			if scenario == "postgres start failure" || scenario == "gateway start failure" || scenario == "lost create response" {
+			if scenario == "postgres start failure" || scenario == "notarx start failure" || scenario == "lost create response" {
 				injectDockerFailure(t, candidate, scenario)
 			}
 			r, err := RestoreNew(ctx, input, candidate)
@@ -664,9 +664,9 @@ func captureCreatedTarget(t *testing.T, ctx context.Context, s TargetSpec, stage
 			continue
 		}
 		item := items[0]
-		owner := item.Labels["artifact-gateway.restore-owner"]
+		owner := item.Labels["notarx.restore-owner"]
 		if entry.kind == "container" {
-			owner = item.Config.Labels["artifact-gateway.restore-owner"]
+			owner = item.Config.Labels["notarx.restore-owner"]
 		}
 		if entry.kind == "network" && strings.TrimPrefix(item.Name, "/") == name {
 			x.owner = owner
@@ -680,7 +680,7 @@ func captureCreatedTarget(t *testing.T, ctx context.Context, s TargetSpec, stage
 			id = item.Name
 		}
 		x.resources = append(x.resources, ownedResource{entry.kind, id, name})
-		if entry.kind == "container" && entry.suffix == "gateway" {
+		if entry.kind == "container" && entry.suffix == "notarx" {
 			want := 0
 			if s.Release.Identity.Artifact.Kind == "binary" {
 				want++
@@ -698,14 +698,14 @@ func captureCreatedTarget(t *testing.T, ctx context.Context, s TargetSpec, stage
 				// Only a real private direct child of our fresh TMPDIR is owned.
 				dir := m.Source
 				prefix := "ag-restore-objects-"
-				if m.Destination == "/gateway" {
+				if m.Destination == "/notarx" {
 					dir, prefix = filepath.Dir(m.Source), "ag-restore-release-"
 				}
 				rel, err := filepath.Rel(stageRoot, dir)
 				info, statErr := os.Lstat(dir)
 				safe := err == nil && !strings.ContainsAny(rel, `/\`) && strings.HasPrefix(rel, prefix) && statErr == nil && info.IsDir() && info.Mode().Perm()&0077 == 0
 				switch {
-				case m.Destination == "/gateway" && m.Type == "bind" && !m.RW && filepath.Base(m.Source) == "gateway" && safe:
+				case m.Destination == "/notarx" && m.Type == "bind" && !m.RW && filepath.Base(m.Source) == "notarx" && safe:
 					x.directory = dir
 				case m.Destination == fsObjectMount && m.Type == "bind" && m.RW && safe:
 					x.objectRoot = dir
@@ -722,7 +722,7 @@ func captureCreatedTarget(t *testing.T, ctx context.Context, s TargetSpec, stage
 	if err != nil {
 		t.Fatal(err)
 	}
-	x.database = Postgres{DSN: "postgres://gateway:" + escapePassword(s.PostgresPassword) + "@127.0.0.1:" + port + "/gateway?sslmode=disable", ToolsContainer: x.resourceID("container", s.Project+"-postgres"), DockerContext: s.Docker.Context}
+	x.database = Postgres{DSN: "postgres://notarx:" + escapePassword(s.PostgresPassword) + "@127.0.0.1:" + port + "/notarx?sslmode=disable", ToolsContainer: x.resourceID("container", s.Project+"-postgres"), DockerContext: s.Docker.Context}
 	if s.filesystem() {
 		return x
 	}
@@ -730,7 +730,7 @@ func captureCreatedTarget(t *testing.T, ctx context.Context, s TargetSpec, stage
 	if err != nil {
 		t.Fatal(err)
 	}
-	x.objects, err = newS3(S3Settings{Endpoint: "http://127.0.0.1:" + port, Bucket: "gateway-cache", AccessKey: s.AccessKey, SecretKey: s.SecretKey})
+	x.objects, err = newS3(S3Settings{Endpoint: "http://127.0.0.1:" + port, Bucket: "notarx-cache", AccessKey: s.AccessKey, SecretKey: s.SecretKey})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -782,8 +782,8 @@ func injectDockerFailure(t *testing.T, spec TargetSpec, scenario string) {
 	}
 	quote := func(v string) string { return "'" + strings.ReplaceAll(v, "'", "'\"'\"'") + "'" }
 	suffix := "postgres"
-	if scenario == "gateway start failure" {
-		suffix = "gateway"
+	if scenario == "notarx start failure" {
+		suffix = "notarx"
 	}
 	name := spec.Project + "-" + suffix
 	script := "#!/bin/sh\n"

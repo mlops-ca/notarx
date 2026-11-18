@@ -79,7 +79,7 @@ test('reports an injected contract operation with the classification hint', () =
 });
 
 test('detects drift against an injected contract file', () => {
-  const root = mkdtempSync(path.join(tmpdir(), 'artifact-gateway-cli-contract-'));
+  const root = mkdtempSync(path.join(tmpdir(), 'notarx-cli-contract-'));
   try {
     const contractPath = path.join(root, 'management-runtime-v1.json');
     writeFileSync(

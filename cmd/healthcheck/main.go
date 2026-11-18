@@ -12,7 +12,7 @@ import (
 func main() {
 	if len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version") {
 		build := buildinfo.Read()
-		fmt.Printf("artifact-gateway-healthcheck %s (revision %s, %s)\n", build.Version, build.Revision, build.GoVersion)
+		fmt.Printf("notarx-healthcheck %s (revision %s, %s)\n", build.Version, build.Revision, build.GoVersion)
 		return
 	}
 	client := http.Client{Timeout: 2 * time.Second}

@@ -12,7 +12,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/upstreamauth"
 )
 
-const pypiProxyUserAgent = "pip/26 Artifact-Gateway/1.0"
+const pypiProxyUserAgent = "pip/26 notarx/1.0"
 
 type PyPIClient interface {
 	FetchPyPI(context.Context, string, repository.HostedRepository, string, http.Header) (*http.Response, error)

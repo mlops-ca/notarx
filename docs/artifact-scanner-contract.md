@@ -66,14 +66,14 @@ The sidecar accepts no command flags from a request. It materializes each asset
 under a private temporary root after rechecking its declared size and SHA-256,
 runs fixed `trivy filesystem` vulnerability/license analysis, and converts the
 same native report to CycloneDX. The CycloneDX document is content-addressed,
-persisted in the capacity-bounded `gateway-scanner-sboms` volume, and available
+persisted in the capacity-bounded `notarx-scanner-sboms` volume, and available
 to Gateway-side consumers from the Bearer-protected internal SBOM URL recorded
 by the Gateway. The adapter does not expose SBOM bytes on a host port. The
 Gateway also receives bounded license evidence and a
 vulnerability summary plus up to 200 detailed findings. A result that would
 exceed the Gateway's default response bound automatically falls back to the
 complete severity summary. Trivy's database cache is kept in the
-`gateway-trivy-cache` volume so routine restarts do not redownload it. Database
+`notarx-trivy-cache` volume so routine restarts do not redownload it. Database
 downloads use the configured `NOTARX_EGRESS_PROXY` when present. The 10-minute
 Gateway timeout shown above also covers the first database download; later
 scans normally reuse the cache.

@@ -129,11 +129,11 @@ func deliverWebhook(ctx context.Context, factory WebhookClientFactory, claim rep
 		return 0, "webhook endpoint is invalid", true
 	}
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("User-Agent", "Artifact-Gateway-Webhook/1.0")
-	request.Header.Set("X-Artifact-Gateway-Event-ID", claim.Event.ID)
-	request.Header.Set("X-Artifact-Gateway-Event-Type", string(claim.Event.Type))
-	request.Header.Set("X-Artifact-Gateway-Timestamp", timestamp)
-	request.Header.Set("X-Artifact-Gateway-Signature", "v1="+hex.EncodeToString(mac.Sum(nil)))
+	request.Header.Set("User-Agent", "Notarx-Webhook/1.0")
+	request.Header.Set("X-Notarx-Event-ID", claim.Event.ID)
+	request.Header.Set("X-Notarx-Event-Type", string(claim.Event.Type))
+	request.Header.Set("X-Notarx-Timestamp", timestamp)
+	request.Header.Set("X-Notarx-Signature", "v1="+hex.EncodeToString(mac.Sum(nil)))
 	client, err := factory(claim.Subscription.EndpointURL)
 	if err != nil {
 		return 0, "webhook endpoint validation failed", false

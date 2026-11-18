@@ -43,7 +43,7 @@ write_files:
       grep -q '^LABEL=notarx ' /etc/fstab || echo 'LABEL=notarx /srv/notarx ext4 defaults,noatime,nofail 0 2' >> /etc/fstab
       mountpoint -q /srv/notarx || mount /srv/notarx
       mkdir -p /srv/notarx/postgres /srv/notarx/objects /srv/notarx/backups
-      # The gateway image runs as nonroot (65532) and keeps the object root private.
+      # The notarx image runs as nonroot (65532) and keeps the object root private.
       chown 65532:65532 /srv/notarx/objects
       chmod 0700 /srv/notarx/objects /srv/notarx/backups
 
@@ -56,12 +56,12 @@ write_files:
       set -eu
       cd /opt/notarx
       stamp=$(date -u +%Y%m%dT%H%M%SZ)
-      target=/srv/notarx/backups/gateway-$stamp.dump
+      target=/srv/notarx/backups/notarx-$stamp.dump
       # A failed dump must not leave a partial file behind to fill the volume.
       trap 'rm -f "$target.partial"' EXIT
-      docker compose exec -T postgres pg_dump -U gateway -d gateway --format=custom > "$target.partial"
+      docker compose exec -T postgres pg_dump -U notarx -d notarx --format=custom > "$target.partial"
       mv "$target.partial" "$target"
-      find /srv/notarx/backups \( -name 'gateway-*.dump' -o -name 'gateway-*.dump.partial' \) -mtime +7 -delete
+      find /srv/notarx/backups \( -name 'notarx-*.dump' -o -name 'notarx-*.dump.partial' \) -mtime +7 -delete
 
   - path: /etc/systemd/system/notarx.service
     permissions: "0644"

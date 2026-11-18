@@ -138,14 +138,17 @@ func (s *observedSource) ObserveFrozen(ctx context.Context) (string, error) {
 			}
 			entry := entries[0]
 			if g := s.spec.Release.Identity; g.Artifact != nil && g.Artifact.Kind == "binary" {
-				found := false
+				// The restore tooling mounts the binary at /notarx; writers started by
+				// pre-fork tooling mounted it at /gateway.
+				found, entrypoint := false, ""
 				for _, mount := range entry.Mounts {
-					if mount.Destination == "/gateway" && mount.Type == "bind" && !mount.RW {
+					if (mount.Destination == "/notarx" || mount.Destination == "/gateway") && mount.Type == "bind" && !mount.RW {
 						sum, _, err := describeBinary(mount.Source)
 						found = err == nil && sum == g.Artifact.SHA256
+						entrypoint = mount.Destination
 					}
 				}
-				if !found || len(entry.Config.Entrypoint) != 1 || entry.Config.Entrypoint[0] != "/gateway" {
+				if !found || len(entry.Config.Entrypoint) != 1 || entry.Config.Entrypoint[0] != entrypoint {
 					return "", errRelease
 				}
 			} else if !s.spec.Release.observedImage || entry.Image != s.spec.Release.imageID {

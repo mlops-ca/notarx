@@ -54,6 +54,41 @@ class NoChineseGuardTests(unittest.TestCase):
                 f'+++ x\n+{HAN}\n')
         self.assertEqual(guard.line_issues(diff), ['a.md: added line contains Chinese text'])
 
+    def _diff(self, removed, added, path='docs/a.md'):
+        body = ''.join(f'-{line}\n' for line in removed) + ''.join(f'+{line}\n' for line in added)
+        return (f'diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -1,2 +1,2 @@\n' + body)
+
+    def test_moving_chinese_text_inside_a_file_passes(self):
+        other = '\u6240\u6709\u6587\u672c'
+        diff = self._diff([f'first {HAN}', f'second {other}'], [f'second {other}', f'first {HAN}'])
+        self.assertEqual(guard.line_issues(diff), [])
+
+    def test_editing_the_non_chinese_part_of_a_line_passes(self):
+        self.assertEqual(guard.line_issues(self._diff([f'title: {HAN}'], [f'title (en): {HAN}'])), [])
+
+    def test_moving_chinese_text_to_another_file_passes(self):
+        diff = (self._diff([f'x {HAN}'], [], 'docs/a.md') + self._diff([], [f'x {HAN}'], 'docs/b.md'))
+        self.assertEqual(guard.line_issues(diff), [])
+
+    def test_swapping_for_different_chinese_text_fails(self):
+        other = '\u5168\u65b0\u6587\u672c'
+        diff = self._diff([f'x {HAN}'], [f'x {other}'])
+        self.assertEqual(guard.line_issues(diff), ['docs/a.md: added line contains Chinese text'])
+
+    def test_deleting_different_chinese_text_elsewhere_does_not_pay_for_new_text(self):
+        other = '\u5168\u65b0\u6587\u672c'
+        diff = self._diff([f'old {HAN}'], [], 'docs/a.md') + self._diff([], [f'new {other}'], 'docs/b.md')
+        self.assertEqual(guard.line_issues(diff), ['docs/b.md: added line contains Chinese text'])
+
+    def test_one_removed_line_licenses_one_added_line(self):
+        diff = self._diff([f'x {HAN}'], [f'x {HAN}', f'y {HAN}'])
+        self.assertEqual(guard.line_issues(diff), ['docs/a.md: added line contains Chinese text'])
+
+    def test_removed_runs_cannot_be_recombined_into_a_new_line(self):
+        other = '\u6240\u6709\u6587\u672c'
+        diff = self._diff([f'a {HAN}', f'b {other}'], [f'{HAN} and {other}'])
+        self.assertEqual(guard.line_issues(diff), ['docs/a.md: added line contains Chinese text'])
+
 
 if __name__ == '__main__':
     unittest.main()

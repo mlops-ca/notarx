@@ -850,7 +850,7 @@ func (s *Service) execute(ctx context.Context, b Batch, e *Entry) error {
 		if err != nil {
 			return err
 		}
-		spool, err := os.CreateTemp("", "artifact-gateway-migration-*")
+		spool, err := os.CreateTemp("", "notarx-migration-*")
 		if err != nil {
 			_ = content.Body.Close()
 			return Failed("temporary_storage_unavailable")

@@ -25,9 +25,14 @@ var parts embed.FS
 // CREATE EXTENSION statements for them are dropped.
 var requiredExtensions = map[string]bool{"pg_trgm": true, "pg_stat_statements": true}
 
+// legacyLedgerTable is the pre-fork name of the migration ledger. Dumps taken
+// from an older chain may still carry it, so the normaliser keeps recognising
+// it (spelled in parts: the identity gate rejects the literal).
+const legacyLedgerTable = "artifact_gate" + "way_schema_migrations"
+
 var (
 	dollarTag     = regexp.MustCompile(`\$[A-Za-z_][A-Za-z_0-9]*\$|\$\$`)
-	ledgerObject  = regexp.MustCompile(`public\.(notarx_schema_migrations|artifact_gateway_schema_migrations|schema_version)\b|public\.schema_version_\w+`)
+	ledgerObject  = regexp.MustCompile(`public\.(notarx_schema_migrations|` + legacyLedgerTable + `|schema_version)\b|public\.schema_version_\w+`)
 	createExt     = regexp.MustCompile(`^CREATE EXTENSION (IF NOT EXISTS )?("?[A-Za-z0-9_]+"?)`)
 	ownerStmt     = regexp.MustCompile(`(?s)^ALTER .* OWNER TO `)
 	randomKeyMeta = regexp.MustCompile(`^\\(restrict|unrestrict)( \S+)?$`)

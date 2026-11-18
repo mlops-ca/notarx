@@ -32,9 +32,9 @@ The Console offers the same workflow without curl. A repository administrator op
 
 - `GET /api/v2/repositories/{repositoryId}/apt/snapshots/{snapshotId}/archive` requires `repositories:admin`. Ordinary members and anonymous callers cannot download archives.
 - Only `visible` and `retired` snapshots can be exported. Cross-repository requests return 404; unpublished states or corrupt objects return 409. Archives include management metadata and package contents, so responses use `Cache-Control: private, no-store`.
-- The media type is `application/vnd.artifact-gateway.apt-snapshot.v1+tar`. Responses include a download filename and exact `Content-Length`. All objects and Release references are checked before headers are sent; a streaming failure aborts the HTTP response. Clients must check download completion and run archive verification.
+- The media type is `application/vnd.notarx.apt-snapshot.v1+tar`. Responses include a download filename and exact `Content-Length`. All objects and Release references are checked before headers are sent; a streaming failure aborts the HTTP response. Clients must check download completion and run archive verification.
 - The first tar entry is `manifest.json`, followed by sorted, deduplicated `objects/sha256/<hex>` entries. Repeated exports of an unchanged snapshot state are byte-identical. A visible-to-retired transition changes the manifest state while preserving package and signature assets.
-- The manifest schema is `artifact-gateway.dev/apt-snapshot-export/v1`. It includes snapshot identity and signing evidence, package identity/publisher/timestamps, and protocol-path digests and sizes. It excludes internal object-store keys, signer credentials, and private keys.
+- The manifest schema is `notarx.dev/apt-snapshot-export/v1`. It includes snapshot identity and signing evidence, package identity/publisher/timestamps, and protocol-path digests and sizes. It excludes internal object-store keys, signer credentials, and private keys.
 - Verification rejects non-regular files, unknown/duplicate/missing objects, unsorted objects, size/digest mismatches, unknown schemas/fields, invalid package identities, missing indexes, truncated endings, and trailing data. Limits are a 128 MiB manifest, 10,000 packages, 50,016 assets, and 50,000 distinct objects. Objects are at most 1 GiB; Release/InRelease are at most 16 MiB and Release.gpg is at most 1 MiB.
 
 ## Trusted Same-Repository Restore
@@ -55,7 +55,7 @@ Restore is disabled by default. Fingerprints and keyring must match exactly; pri
 curl --fail-with-body --show-error \
   --request POST \
   --header "Authorization: Bearer $NOTARX_ADMIN_TOKEN" \
-  --header 'Content-Type: application/vnd.artifact-gateway.apt-snapshot.v1+tar' \
+  --header 'Content-Type: application/vnd.notarx.apt-snapshot.v1+tar' \
   --header "X-Artifact-Archive-Digest: $EXPECTED_ARCHIVE_DIGEST" \
   --data-binary @snapshot.tar \
   "$NOTARX_URL/api/v2/repositories/$REPOSITORY_ID/apt/snapshots/restore"

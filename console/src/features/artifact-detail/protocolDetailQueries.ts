@@ -105,7 +105,7 @@ export interface PyPIFile {
   hashes: { sha256?: string };
   yanked?: boolean | string;
   "requires-python"?: string;
-  "_artifact-gateway"?: {
+  _notarx?: {
     version?: string;
     size?: number;
     publisher?: string;

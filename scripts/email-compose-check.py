@@ -87,7 +87,7 @@ def lost_response_proxy(upstream, path, http):
 
 
 def check(render_only, evidence=None, fixture_subnets=None):
-    project = "artifact-gateway-email-check-" + uuid.uuid4().hex[:12]
+    project = "notarx-email-check-" + uuid.uuid4().hex[:12]
     # Compose interpolation accepts only these generated values, never checkout
     # .env, exported deployment credentials, roles, ports or COMPOSE_PROJECT_NAME.
     env = {k: os.environ[k] for k in (
@@ -155,43 +155,43 @@ def check(render_only, evidence=None, fixture_subnets=None):
             return result.stdout
 
         baseline = json.loads(run(base + ["config", "--format", "json"]))
-        require("NOTARX_EMAIL_CONFIG_FILE" not in baseline["services"]["gateway"]["environment"],
+        require("NOTARX_EMAIL_CONFIG_FILE" not in baseline["services"]["notarx"]["environment"],
                 "default Compose unexpectedly enables email")
-        require("gateway-email-worker" not in baseline["services"], "default adds worker")
+        require("notarx-email-worker" not in baseline["services"], "default adds worker")
         checks.append("default Compose stays disconnected/disabled")
         private_key = "NOTARX_MIGRATION_SOURCE_PRIVATE_ENDPOINTS"
-        require(baseline["services"]["gateway"]["environment"].get(private_key, "") == "",
+        require(baseline["services"]["notarx"]["environment"].get(private_key, "") == "",
                 "default Compose unexpectedly approves private migration sources")
         values[private_key] = "nexus.example.test=10.20.30.0/24"
         environment_file.write_text("".join(k + "=" + v + "\n" for k, v in values.items()))
         configured = json.loads(run(base + ["config", "--format", "json"]))
-        require(configured["services"]["gateway"]["environment"].get(private_key) == values[private_key],
+        require(configured["services"]["notarx"]["environment"].get(private_key) == values[private_key],
                 "Compose drops the operator migration-source allowlist")
         checks.append("private migration sources default denied; explicit operator allowlist reaches Gateway")
         compose = base + ["-f", str(ROOT / "compose.email.yml"), "--profile", "email-roles"]
         rendered = json.loads(run(compose + ["config", "--format", "json"]))
-        for name, role in (("gateway", "api"), ("gateway-scheduler", "scheduler"),
-                           ("gateway-email-worker", "worker")):
+        for name, role in (("notarx", "api"), ("notarx-scheduler", "scheduler"),
+                           ("notarx-email-worker", "worker")):
             node = rendered["services"][name]
             require(node["environment"]["NOTARX_NODE_ROLES"] == role, "role drift")
             require(node["environment"]["NOTARX_SETTINGS_ENCRYPTION_KEY"] == key, "key drift")
             require(node["environment"].get(private_key) == values[private_key], "migration-source allowlist drift")
-            require(node["environment"]["NOTARX_EMAIL_CONFIG_FILE"] == "/etc/gateway-email/relay.json", "config drift")
-            mount = next(v for v in node["volumes"] if v["target"] == "/etc/gateway-email")
+            require(node["environment"]["NOTARX_EMAIL_CONFIG_FILE"] == "/etc/notarx-email/relay.json", "config drift")
+            mount = next(v for v in node["volumes"] if v["target"] == "/etc/notarx-email")
             # Compose's canonical JSON may omit a false create_host_path value.
             # The overlay explicitly sets false; still reject a rendered true.
             require(mount["read_only"] and
                     mount.get("bind", {}).get("create_host_path", False) is False,
                     "unsafe mount")
             require(mount["source"] == str(config), "mount drift")
-            if name != "gateway":
+            if name != "notarx":
                 require(not node.get("ports"), "background role publishes host ports")
                 require("migrate" in node["depends_on"], "role lost migration dependency")
-        require(rendered["services"]["gateway-email-worker"]["environment"]["NOTARX_WORKER_KINDS"] == "email", "worker kind drift")
+        require(rendered["services"]["notarx-email-worker"]["environment"]["NOTARX_WORKER_KINDS"] == "email", "worker kind drift")
         checks.append("all three roles share read-only config and key; background ports absent")
         image = project + ":fixture"
         override = work / "fixture.json"
-        nodes = ("gateway", "gateway-scheduler", "gateway-email-worker")
+        nodes = ("notarx", "notarx-scheduler", "notarx-email-worker")
         model = {
             "services": {n: {"image": image, "ports": []} for n in nodes},
             "networks": {"default": {"internal": True}, "ingress": {}},
@@ -214,7 +214,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
                 (evidence / "owned-subnets.json").write_text(json.dumps([str(net) for net in fixture_subnets], indent=2) + "\n")
         # Only the API has a second bridge for its ephemeral loopback host port.
         # SMTP/PG/S3 and background roles remain on the internal network only.
-        model["services"]["gateway"]["networks"] = {"default": {}, "ingress": {}}
+        model["services"]["notarx"]["networks"] = {"default": {}, "ingress": {}}
         # !override/!reset need YAML; generated fixture JSON is augmented below
         # in a YAML override so base published ports cannot be accidentally kept.
         model["services"]["smtp"] = {
@@ -227,7 +227,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
         ports = work / "ports.yml"
         ports.write_text("services:\n" + "".join(
             "  " + n + ":\n    ports: !override " +
-            ('["127.0.0.1::8080"]' if n == "gateway" else "[]") + "\n"
+            ('["127.0.0.1::8080"]' if n == "notarx" else "[]") + "\n"
             for n in (*nodes, "postgres", "rustfs")))
         compose += ["-f", str(override), "-f", str(ports)]
         if render_only:
@@ -278,7 +278,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
             nonlocal started, base_url
             started = True
             run(compose + ["up", "-d", "--no-build", "--wait", "--wait-timeout", "90", *services])
-            address = run(compose + ["port", "gateway", "8080"]).strip()
+            address = run(compose + ["port", "notarx", "8080"]).strip()
             base_url = "http://" + address
 
         def api(method, path, body=None, status=200, headers=None):
@@ -302,9 +302,9 @@ def check(render_only, evidence=None, fixture_subnets=None):
 
         def relay(enabled=True):
             cfg = {"enabled": enabled, "host": "smtp.example.test", "port": 465,
-                   "mode": "implicit_tls", "from": "synthetic-gateway@example.test",
-                   "approvedIPs": [smtp_ip], "caFile": "/etc/gateway-email/ca.pem",
-                   "authFile": "/etc/gateway-email/auth.json",
+                   "mode": "implicit_tls", "from": "synthetic-notarx@example.test",
+                   "approvedIPs": [smtp_ip], "caFile": "/etc/notarx-email/ca.pem",
+                   "authFile": "/etc/notarx-email/auth.json",
                    "consoleOrigin": "https://console.example.invalid"}
             (config / "relay.json").write_text(json.dumps(cfg))
             (config / "relay.json").chmod(0o644)
@@ -320,16 +320,16 @@ def check(render_only, evidence=None, fixture_subnets=None):
         def restart(*services):
             nonlocal base_url
             run(compose + ["up", "-d", "--no-build", "--force-recreate", "--wait", "--wait-timeout", "90", *services])
-            if "gateway" in services:
-                base_url = "http://" + run(compose + ["port", "gateway", "8080"]).strip()
+            if "notarx" in services:
+                base_url = "http://" + run(compose + ["port", "notarx", "8080"]).strip()
 
         def mismatch(service, additions):
             nonlocal base_url
             path = work / (service + "-mismatch.json")
             path.write_text(json.dumps({"services": {service: {"environment": additions}}}))
             run(compose + ["-f", str(path), "up", "-d", "--no-build", "--force-recreate", "--wait", "--wait-timeout", "90", service])
-            if service == "gateway":
-                base_url = "http://" + run(compose + ["port", "gateway", "8080"]).strip()
+            if service == "notarx":
+                base_url = "http://" + run(compose + ["port", "notarx", "8080"]).strip()
 
         def rule(name, target):
             repo = api("POST", "/api/v2/repositories", {"name": name, "format": "raw", "type": "hosted"}, 201, {"Idempotency-Key": str(uuid.uuid4())})
@@ -349,7 +349,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
         try:
             run(["go", "build", "-o", str(notarxctl), "./cmd/notarxctl"])
             # Builds the per-project fixture image this check names itself.
-            run(compose + ["build", "gateway"])
+            run(compose + ["build", "notarx"])
             run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
                  "-subj", "/CN=smtp.example.test", "-addext", "subjectAltName=DNS:smtp.example.test",
                  "-keyout", str(sink / "key.pem"), "-out", str(sink / "cert.pem")])
@@ -370,7 +370,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
             smtp_id = run(compose + ["ps", "-q", "smtp"]).strip()
             smtp_ip = run(["docker", "inspect", "--format", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", smtp_id]).strip()
             relay(False)
-            start("gateway")
+            start("notarx")
             require(ctl("email", "capability")["data"] == {"enabled": False, "reason": "email_disabled"}, "disabled channel reports ready")
             target = api("POST", "/api/v2/email-targets", {"name": "Owned synthetic", "recipient": "synthetic-recipient@example.test", "locale": "en-CA", "enabled": True}, 201)
             require(explicit(target, status=503)["code"] == "email_disabled", "disabled test accepted")
@@ -381,7 +381,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
 
             # Invalid config and permissive auth fail offline, before HTTP starts.
             (config / "relay.json").write_text('{"enabled":true,"private-marker":"redacted"}')
-            result = subprocess.run(compose + ["run", "--rm", "--no-deps", "gateway"], cwd=ROOT, env=env, capture_output=True, text=True)
+            result = subprocess.run(compose + ["run", "--rm", "--no-deps", "notarx"], cwd=ROOT, env=env, capture_output=True, text=True)
             require(result.returncode != 0 and "invalid configuration" in result.stdout + result.stderr, "invalid config did not fail closed: " + (result.stdout + result.stderr)[-2000:])
             require("private-marker" not in result.stdout + result.stderr, "config field leaked")
             relay()
@@ -389,22 +389,22 @@ def check(render_only, evidence=None, fixture_subnets=None):
             public_auth.write_text(json.dumps(auth))
             public_auth.chmod(0o644)
             invalid_auth = json.loads((config / "relay.json").read_text())
-            invalid_auth["authFile"] = "/etc/gateway-email/public-auth.json"
+            invalid_auth["authFile"] = "/etc/notarx-email/public-auth.json"
             (config / "relay.json").write_text(json.dumps(invalid_auth))
-            result = subprocess.run(compose + ["run", "--rm", "--no-deps", "gateway"], cwd=ROOT, env=env, capture_output=True, text=True)
+            result = subprocess.run(compose + ["run", "--rm", "--no-deps", "notarx"], cwd=ROOT, env=env, capture_output=True, text=True)
             require(result.returncode != 0 and "invalid configuration" in result.stdout + result.stderr, "public auth file accepted")
             public_auth.unlink()
             relay()
             checks.append("malformed config and non-private auth fail startup with fixed safe error")
-            restart("gateway")
+            restart("notarx")
             require(ctl("email", "capability")["data"]["reason"] == "ready", "valid API config unavailable")
-            mismatch("gateway", {"NOTARX_SETTINGS_ENCRYPTION_KEY": ""})
+            mismatch("notarx", {"NOTARX_SETTINGS_ENCRYPTION_KEY": ""})
             require(ctl("email", "capability")["data"] == {"enabled": False, "reason": "encryption_key_unavailable"}, "missing API encryption key reported ready")
             no_key = ctl("email", "test", "--target", target["id"], "--scenario", "warning", "--yes", expected=1)
             require(no_key["error"]["code"] == "encryption_key_unavailable" and not no_key.get("data"), "missing API key was not a definite refusal")
             require(not ctl("email", "delivery", "list")["data"]["items"] and not attempts(), "unready channel queued or sent mail")
             checks.append("notarxctl: missing API settings key is unavailable and refuses before queue insertion")
-            restart("gateway")
+            restart("notarx")
             pending = ctl("email", "test", "--target", target["id"], "--scenario", "warning", "--yes")["data"]
             time.sleep(6)
             pending_read = ctl("email", "delivery", "show", pending["id"])["data"]
@@ -414,16 +414,16 @@ def check(render_only, evidence=None, fixture_subnets=None):
             require(ctl("email", "delivery", "show", pending["id"])["data"] == pending_read, "stopping a wait cancelled or changed the queued delivery")
             checks.append("notarxctl: API-only ready queues with zero attempts; bounded wait exits 8 and leaves delivery unchanged")
 
-            mismatch("gateway-email-worker", {"NOTARX_EMAIL_CONFIG_FILE": ""})
+            mismatch("notarx-email-worker", {"NOTARX_EMAIL_CONFIG_FILE": ""})
             time.sleep(6)
             require(ctl("email", "delivery", "show", pending["id"])["data"]["attempts"] == 0 and not attempts(), "unconfigured worker claimed")
-            mismatch("gateway-email-worker", {"NOTARX_SETTINGS_ENCRYPTION_KEY": secrets.token_hex(32)})
+            mismatch("notarx-email-worker", {"NOTARX_SETTINGS_ENCRYPTION_KEY": secrets.token_hex(32)})
             failed_key = eventually(lambda: (d if (d := delivery(pending["id"])).get("errorCode") == "encryption_key_unavailable" else None), "mismatched worker key")
             require(failed_key["state"] == "retrying" and not attempts(), "bad key contacted SMTP")
             checks.append("concurrent ready API / absent worker config / different worker key never sends")
-            restart("gateway-email-worker")
+            restart("notarx-email-worker")
             # A second actual worker shares the contract and PostgreSQL fencing.
-            run(compose + ["run", "-d", "--no-deps", "--name", project + "-second-worker", "gateway-email-worker"])
+            run(compose + ["run", "-d", "--no-deps", "--name", project + "-second-worker", "notarx-email-worker"])
             second_worker = True
             accepted = eventually(lambda: (d if (d := delivery(pending["id"]))["state"] == "accepted" else None), "corrected workers accept MIME")
             require(accepted["attempts"] > 1 and attempts() == ["250"], "concurrent workers duplicated SMTP")
@@ -436,21 +436,21 @@ def check(render_only, evidence=None, fixture_subnets=None):
             (sink / "rcpt-code").write_text("250")
             checks.append("corrected concurrent workers accept one MIME; RCPT 550 is dead with safe code")
 
-            mismatch("gateway-scheduler", {"NOTARX_EMAIL_CONFIG_FILE": ""})
+            mismatch("notarx-scheduler", {"NOTARX_EMAIL_CONFIG_FILE": ""})
             missing_rule = rule("owned-missing-scheduler", target)
             missing = eventually(lambda: events(missing_rule), "disabled scheduler event")
             require(len(missing) == 1 and missing[0]["notificationCode"] == "email_disabled" and not missing[0].get("deliveryId"), "scheduler mismatch secretly queued")
-            restart("gateway-scheduler")
+            restart("notarx-scheduler")
             good_rule = rule("owned-wired-scheduler", target)
             good = eventually(lambda: (e if (e := events(good_rule)) and e[0].get("deliveryState") == "accepted" else None), "wired scheduler quota MIME")
             require(good[0]["notificationCode"] == "queued", "configured scheduler did not queue")
             require(len(events(missing_rule)) == 1 and events(missing_rule)[0]["notificationCode"] == "email_disabled", "scheduler correction backfilled suppressed event")
             checks.append("API-ready / disabled scheduler persists email_disabled; correction does not backfill; shared scheduler delivers quota warning")
 
-            run(compose + ["stop", "gateway-scheduler", "gateway-email-worker"])
+            run(compose + ["stop", "notarx-scheduler", "notarx-email-worker"])
             run(["docker", "rm", "-f", project + "-second-worker"])
             second_worker = False
-            mismatch("gateway", {"NOTARX_NODE_ROLES": "standalone"})
+            mismatch("notarx", {"NOTARX_NODE_ROLES": "standalone"})
             standalone = explicit(target, "resolved")
             eventually(lambda: delivery(standalone["id"])["state"] == "accepted", "standalone MIME")
             messages = list(sink.glob("*.eml"))
@@ -458,7 +458,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
             for path in messages:
                 raw = path.read_bytes()
                 message = BytesParser(policy=policy.default).parsebytes(raw)
-                require(message["To"] == "synthetic-recipient@example.test" and message["From"] == "synthetic-gateway@example.test", "wrong synthetic envelope headers")
+                require(message["To"] == "synthetic-recipient@example.test" and message["From"] == "synthetic-notarx@example.test", "wrong synthetic envelope headers")
                 require(message.get_content_type() == "multipart/alternative", "missing MIME alternatives")
                 parts = list(message.iter_parts())
                 require([p.get_content_type() for p in parts] == ["text/plain", "text/html"], "wrong MIME types")
@@ -469,8 +469,8 @@ def check(render_only, evidence=None, fixture_subnets=None):
 
             # notarxctl (#336) drives the same channel. Its input is private and
             # every invocation checks both output streams for synthetic secrets.
-            mismatch("gateway", {"NOTARX_NODE_ROLES": "api"})
-            start("gateway-email-worker")
+            mismatch("notarx", {"NOTARX_NODE_ROLES": "api"})
+            start("notarx-email-worker")
             require(ctl("email", "capability")["data"] == {"enabled": True, "reason": "ready"}, "notarxctl capability is not ready")
             failed_wait = ctl("email", "delivery", "wait", dead["id"], "--timeout", "10s", expected=1)
             require(not failed_wait["ok"] and failed_wait["error"]["code"] == "delivery_failed" and failed_wait["error"]["httpStatus"] is None, "notarxctl dead wait reported success or a server refusal")
@@ -608,7 +608,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
 
             # A request reaches PostgreSQL, but no HTTP reply reaches notarxctl.
             # Recovery reuses the original key/version even after target edit.
-            run(compose + ["stop", "gateway-email-worker"])
+            run(compose + ["stop", "notarx-email-worker"])
             unknown_key = str(uuid.uuid4())
             before_unknown = ctl("email", "delivery", "list", "--limit", "100")["data"]["items"]
             with lost_response_proxy(base_url, "/api/v2/email-notifications:test", http) as (proxy_url, committed):
@@ -639,14 +639,14 @@ def check(render_only, evidence=None, fixture_subnets=None):
             require(conflicting["error"]["code"] == "idempotency_conflict" and
                     len(ctl("email", "delivery", "list", "--limit", "100")["data"]["items"]) == len(after_unknown),
                     "key reuse with a different scenario queued another test")
-            start("gateway-email-worker")
+            start("notarx-email-worker")
             superseded = ctl("email", "delivery", "wait", recovered["id"], "--timeout", "30s", expected=1)["data"]
             require(superseded["errorCode"] == "target_changed", "worker sent an obsolete target binding")
             checks.append("notarxctl: HTTP reply lost after real commit reports unknown; original key/version recovers one row after target edit; mismatched key scenario and stale versions exit 7")
 
             # Replay is a conditional, non-idempotent write. Its lost reply must
             # be read back rather than automatically submitted a second time.
-            run(compose + ["stop", "gateway-email-worker"])
+            run(compose + ["stop", "notarx-email-worker"])
             with lost_response_proxy(base_url, "/api/v2/email-deliveries/" + dead["id"] + ":replay", http) as (proxy_url, replayed):
                 unknown_replay = ctl("email", "delivery", "replay", dead["id"], "--yes", "--if-match", dead["version"],
                                      "--timeout", "2s", server=proxy_url, expected=8)
@@ -656,7 +656,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
             require(replay_pending["state"] == "pending" and replay_pending["version"] != dead["version"] and
                     replay_pending["attempts"] == 0, "replay read-back did not preserve the committed pending record")
             ctl("email", "delivery", "replay", dead["id"], "--yes", "--if-match", dead["version"], expected=7)
-            start("gateway-email-worker")
+            start("notarx-email-worker")
             ctl("email", "delivery", "wait", dead["id"], "--timeout", "30s")
             checks.append("notarxctl: replay response loss reports unknown after exactly one write; show recovers pending and stale replay conflicts")
 
@@ -688,7 +688,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
             require(not timeline_rule["enabled"] and not ctl("quota-alert", "events", timeline_rule["id"])["data"]["items"],
                     "disabled timeline rule emitted an event")
             ctl("quota-alert", "update", timeline_rule["id"], "--enabled=true", "--yes")
-            start("gateway-scheduler")
+            start("notarx-scheduler")
 
             def timeline_events():
                 return ctl("quota-alert", "events", timeline_rule["id"])["data"]["items"]
@@ -701,7 +701,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
             api("PUT", "/raw/owned-notarxctl-timeline/critical.txt", b"x" * 80, 201, {"Content-Type": "application/octet-stream"})
             critical = eventually(lambda: scenario_record("critical"), "CLI quota critical at production cadence")
             ctl("email", "delivery", "wait", critical["deliveryId"], "--timeout", "30s")
-            run(compose + ["stop", "gateway-scheduler"])
+            run(compose + ["stop", "notarx-scheduler"])
             stale = eventually(lambda: (r if (r := ctl("quota-alert", "show", timeline_rule["id"])["data"])["state"]["dataState"] == "stale" else None), "real quota sample expires after scheduler stops", 45)
             require(stale["state"]["severity"] == "critical" and stale["state"]["phase"] == "firing" and
                     len(timeline_events()) == 2, "stale capacity was converted to healthy or resolved")
@@ -711,7 +711,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
             # so recovery follows the same quota and actual logical usage.
             api("DELETE", "/raw/owned-notarxctl-timeline/critical.txt", status=204)
             api("DELETE", "/raw/owned-notarxctl-timeline/synthetic.txt", status=204)
-            start("gateway-scheduler")
+            start("notarx-scheduler")
             resolved = eventually(lambda: scenario_record("resolved"), "CLI quota resolves after fresh recovery samples")
             ctl("email", "delivery", "wait", resolved["deliveryId"], "--timeout", "30s")
             ordered = sorted(timeline_events(), key=lambda row: row["sequence"])
@@ -724,7 +724,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
             checks.append("notarxctl: real warning→critical→resolved episode and accepted deliveries; stopped scheduler becomes stale without false recovery; fresh samples recover at unchanged 15s cadence")
 
             # A rule pins its target version, even when that target is edited.
-            run(compose + ["stop", "gateway-scheduler"])
+            run(compose + ["stop", "notarx-scheduler"])
             binding_repo = ctl("repo", "create", "owned-notarxctl-binding", "--format", "raw")["data"]
             api("PUT", "/api/v2/repositories/" + binding_repo["id"] + "/capacity", {"quotaBytes": 1000})
             api("PUT", "/raw/owned-notarxctl-binding/synthetic.txt", b"x" * 900, 201, {"Content-Type": "application/octet-stream"})
@@ -732,7 +732,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
             pinned = ctl("quota-alert", "update", pinned["id"], "--enabled=true", "--yes")["data"]
             updated_target = ctl("email", "target", "update", notarxctl_target["id"], "--name", "new bound target version")["data"]
             before_binding = len(ctl("email", "delivery", "list", "--limit", "100")["data"]["items"])
-            start("gateway-scheduler")
+            start("notarx-scheduler")
             suppressed = eventually(lambda: ctl("quota-alert", "events", pinned["id"])["data"]["items"], "old target binding suppresses quota mail")
             require(suppressed[0]["notificationCode"] == "target_changed" and not suppressed[0].get("deliveryId") and
                     suppressed[0]["targetVersion"] == pinned["targetVersion"] and

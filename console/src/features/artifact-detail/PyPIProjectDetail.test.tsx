@@ -42,13 +42,13 @@ describe("PyPIProjectDetail", () => {
       if (input === "/auth/session") return new Response(null, { status: 401 });
       return new Response(
         JSON.stringify({
-          name: "gateway-widget",
+          name: "notarx-widget",
           files: [
             {
-              filename: "gateway_widget-1.0.0-py3-none-any.whl",
-              url: "../../packages/gateway_widget-1.0.0-py3-none-any.whl",
+              filename: "notarx_widget-1.0.0-py3-none-any.whl",
+              url: "../../packages/notarx_widget-1.0.0-py3-none-any.whl",
               hashes: { sha256: "a".repeat(64) },
-              "_artifact-gateway": {
+              _notarx: {
                 version: "1.0.0",
                 size: 1024,
                 publisher: "release-bot",
@@ -58,11 +58,11 @@ describe("PyPIProjectDetail", () => {
               },
             },
             {
-              filename: "gateway_widget-2.0.0-py3-none-any.whl",
-              url: "../../packages/gateway_widget-2.0.0-py3-none-any.whl",
+              filename: "notarx_widget-2.0.0-py3-none-any.whl",
+              url: "../../packages/notarx_widget-2.0.0-py3-none-any.whl",
               hashes: { sha256: "b".repeat(64) },
               "requires-python": ">=3.11",
-              "_artifact-gateway": {
+              _notarx: {
                 version: "2.0.0",
                 size: 2048,
                 publisher: "next-bot",
@@ -72,10 +72,10 @@ describe("PyPIProjectDetail", () => {
               },
             },
             {
-              filename: "gateway_widget-2.0.0.tar.gz",
-              url: "../../packages/gateway_widget-2.0.0.tar.gz",
+              filename: "notarx_widget-2.0.0.tar.gz",
+              url: "../../packages/notarx_widget-2.0.0.tar.gz",
               hashes: { sha256: "c".repeat(64) },
-              "_artifact-gateway": {
+              _notarx: {
                 version: "2.0.0",
                 size: 4096,
                 publisher: "next-bot",
@@ -100,7 +100,7 @@ describe("PyPIProjectDetail", () => {
             <PyPIProjectDetail
               repositoryId="repo-1"
               repoName="python"
-              project="gateway-widget"
+              project="notarx-widget"
               initialVersion="2.0.0"
               canQuarantine
             />
@@ -109,25 +109,23 @@ describe("PyPIProjectDetail", () => {
       </AuthProvider>,
     );
 
+    expect(await screen.findByText("notarx-widget==2.0.0")).toBeInTheDocument();
     expect(
-      await screen.findByText("gateway-widget==2.0.0"),
+      screen.getByText("notarx_widget-2.0.0-py3-none-any.whl"),
     ).toBeInTheDocument();
+    expect(screen.getByText("notarx_widget-2.0.0.tar.gz")).toBeInTheDocument();
     expect(
-      screen.getByText("gateway_widget-2.0.0-py3-none-any.whl"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("gateway_widget-2.0.0.tar.gz")).toBeInTheDocument();
-    expect(
-      screen.queryByText("gateway_widget-1.0.0-py3-none-any.whl"),
+      screen.queryByText("notarx_widget-1.0.0-py3-none-any.whl"),
     ).not.toBeInTheDocument();
     expect(screen.getAllByTestId("pypi-quarantine-control")).toHaveLength(2);
     expect(
       screen.getByText(
-        `gateway_widget-2.0.0-py3-none-any.whl|sha256:${"b".repeat(64)}|true`,
+        `notarx_widget-2.0.0-py3-none-any.whl|sha256:${"b".repeat(64)}|true`,
       ),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        `gateway_widget-2.0.0.tar.gz|sha256:${"c".repeat(64)}|true`,
+        `notarx_widget-2.0.0.tar.gz|sha256:${"c".repeat(64)}|true`,
       ),
     ).toBeInTheDocument();
   });

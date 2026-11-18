@@ -14,7 +14,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/upstreamauth"
 )
 
-const npmProxyUserAgent = "npm/11 Artifact-Gateway/1.0"
+const npmProxyUserAgent = "npm/11 notarx/1.0"
 
 var errNPMUpstreamCircuitOpen = fmt.Errorf("npm upstream circuit is open")
 

@@ -39,7 +39,7 @@ func TestSnapshotArchiveExporterProducesPortableDigestVerifiedArchive(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if manifest.SchemaVersion != "artifact-gateway.dev/apt-snapshot-export/v1" || manifest.Snapshot.ID != snapshot.ID ||
+	if manifest.SchemaVersion != "notarx.dev/apt-snapshot-export/v1" || manifest.Snapshot.ID != snapshot.ID ||
 		manifest.Snapshot.RepositoryID != repo.ID || manifest.Snapshot.ReleaseDigest != snapshot.ReleaseDigest ||
 		len(manifest.Packages) != 1 || manifest.Packages[0].CanonicalIdentity != "widget@1:2.0-3#amd64" || len(manifest.Assets) < 8 {
 		t.Fatalf("manifest=%#v", manifest)

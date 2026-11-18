@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test";
 
 const enabled = process.env.KEYCLOAK_OIDC_E2E === "1";
-const username = process.env.KEYCLOAK_OIDC_USERNAME ?? "gateway-admin";
+const username = process.env.KEYCLOAK_OIDC_USERNAME ?? "notarx-admin";
 const password =
-  process.env.KEYCLOAK_OIDC_PASSWORD ?? "gateway-oidc-test-password";
+  process.env.KEYCLOAK_OIDC_PASSWORD ?? "notarx-oidc-test-password";
 const consolePort = process.env.PLAYWRIGHT_PORT ?? "4173";
 const keycloakPort = process.env.KEYCLOAK_OIDC_PORT ?? "8081";
 
@@ -19,7 +19,7 @@ test.describe("Keycloak OIDC browser sign-in", () => {
     await signIn.click();
 
     await expect(page).toHaveURL(
-      new RegExp(`127\\.0\\.0\\.1:${keycloakPort}/realms/artifact-gateway`),
+      new RegExp(`127\\.0\\.0\\.1:${keycloakPort}/realms/notarx`),
     );
     await page.locator("#username").fill(username);
     await page.locator("#password").fill(password);
