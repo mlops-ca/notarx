@@ -40,7 +40,9 @@ Compose stack without deleting its PostgreSQL and RustFS volumes.
 2. Add or update tests at the public boundary affected by the change.
 3. Update the OpenAPI source before generated clients or server interfaces.
 4. Add a migration for schema changes; never edit an applied migration.
-5. Record user-visible behavior changes under `Unreleased` in `CHANGELOG.md`.
+5. Describe user-visible behavior changes in the pull request title (a
+   Conventional Commit subject); `CHANGELOG.md` is generated from it at release
+   time and is not edited by hand.
 6. Run the smallest relevant check while developing, then the required checks
    below before committing.
 

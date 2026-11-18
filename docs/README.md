@@ -134,7 +134,7 @@ agree with executable tests and the
 - [Release record template](release-record-template.md) — evidence, approval, and rollback fields.
 - [Preparation record: 2026-08-11](release-records/2026-08-11-d738d4ed.md) — historical local candidate evidence, not production approval.
 - [Candidate record: 2026-09-08](release-records/2026-09-08-cb59b227.md) — fixed Group candidate, distribution upgrade/restore evidence, and remaining registry access gate.
-- [Changelog](../CHANGELOG.md) — user-visible work collected under `Unreleased`.
+- [Changelog](../CHANGELOG.md) — stable releases, generated from conventional commits.
 
 ## Strategy and reference
 

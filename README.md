@@ -212,7 +212,8 @@ make build
 Protocol, persistence, Console, and deployment changes have additional focused
 gates. Generated OpenAPI clients and server contracts must not be edited by
 hand. Read [CONTRIBUTING.md](CONTRIBUTING.md) before changing code, and record
-user-visible behavior under `Unreleased` in [CHANGELOG.md](CHANGELOG.md).
+user-visible behavior in the pull request title; [CHANGELOG.md](CHANGELOG.md)
+is generated from it at release time.
 
 New package ecosystems must pass the admission rules in the
 [format extension guide](docs/format-extension-guide.md). Adding an enum, route

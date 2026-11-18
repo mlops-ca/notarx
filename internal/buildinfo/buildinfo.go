@@ -3,6 +3,7 @@ package buildinfo
 import (
 	"runtime"
 	"runtime/debug"
+	"strings"
 )
 
 var (
@@ -15,6 +16,37 @@ type Info struct {
 	Revision  string
 	Modified  bool
 	GoVersion string
+}
+
+// Core returns the SemVer core (MAJOR.MINOR.PATCH) of the reported version,
+// dropping a leading "v", any pre-release suffix such as "-nightly.2" or
+// "-dev", and build metadata. It returns "" when the version is not SemVer,
+// for example the "dev" fallback of an unstamped build.
+func (i Info) Core() string {
+	return Core(i.Version)
+}
+
+// Core returns the SemVer core of version; see Info.Core.
+func Core(version string) string {
+	version = strings.TrimPrefix(version, "v")
+	if cut := strings.IndexAny(version, "-+"); cut >= 0 {
+		version = version[:cut]
+	}
+	parts := strings.Split(version, ".")
+	if len(parts) != 3 {
+		return ""
+	}
+	for _, part := range parts {
+		if part == "" || (len(part) > 1 && part[0] == '0') {
+			return ""
+		}
+		for _, r := range part {
+			if r < '0' || r > '9' {
+				return ""
+			}
+		}
+	}
+	return version
 }
 
 func Read() Info {

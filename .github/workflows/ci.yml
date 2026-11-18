@@ -212,7 +212,7 @@ jobs:
       - name: Run Go vet
         run: make vet
       - name: Verify release version and artifact builder
-        run: make release-version-check release-artifacts-test
+        run: make release-version-check stamp-version-test release-artifacts-test
       - name: Verify package signing runbook and environment checks
         run: make packages-signing-drill packages-environments-test
       - name: Run race detector

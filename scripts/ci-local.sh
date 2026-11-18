@@ -102,7 +102,7 @@ run_quality() {
   run "npm lockfile sources" node scripts/npm-lockfile-check.mjs
   run "go lint" make lint
   run "go vet" make vet
-  run "release version and artifact builder" make release-version-check release-artifacts-test
+  run "release version and artifact builder" make release-version-check stamp-version-test release-artifacts-test
   if command -v gpg >/dev/null 2>&1; then
     run "package signing drill and environment checks" make packages-signing-drill packages-environments-test
   else
