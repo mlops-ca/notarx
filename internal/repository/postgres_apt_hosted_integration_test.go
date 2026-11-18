@@ -172,7 +172,7 @@ func TestPostgresLatestVisibleAPTSnapshotIsRepositoryWide(t *testing.T) {
 func failAuditsFor(t *testing.T, store *PostgresStore, repositoryName, actor string) {
 	t.Helper()
 	name := "fail_audit_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	query := fmt.Sprintf(`CREATE FUNCTION %s() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.repository='%s' AND NEW.actor='%s' THEN RAISE EXCEPTION 'fixture audit failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER %s BEFORE INSERT ON security_audit_log FOR EACH ROW EXECUTE FUNCTION %s()`, name, repositoryName, actor, name, name)
+	query := fmt.Sprintf(`CREATE FUNCTION %s() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.repository='%s' AND NEW.actor='%s' THEN RAISE EXCEPTION 'fixture audit failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER %s BEFORE INSERT ON security_audit_log FOR EACH ROW EXECUTE FUNCTION %s()`, name, strings.ReplaceAll(repositoryName, "'", "''"), strings.ReplaceAll(actor, "'", "''"), name, name)
 	if _, err := store.db.ExecContext(t.Context(), query); err != nil {
 		t.Fatal(err)
 	}

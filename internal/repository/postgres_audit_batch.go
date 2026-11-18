@@ -120,7 +120,8 @@ ON CONFLICT (repository_id, bucket_start, outcome) DO UPDATE SET
 
 func flushUsage(ctx context.Context, execer auditExecer, batch UsageBatch) error {
 	if n := len(batch.Usage); n > 0 {
-		usage := append([]UsageDelta(nil), batch.Usage...)
+		usage := sanitizedUsage(batch.Usage)
+		n = len(usage)
 		sort.Slice(usage, func(i, j int) bool {
 			if usage[i].Repository != usage[j].Repository {
 				return usage[i].Repository < usage[j].Repository
@@ -134,7 +135,7 @@ func flushUsage(ctx context.Context, execer auditExecer, batch UsageBatch) error
 		downloads, size := make([]int64, n), make([]int64, n)
 		first, last := make([]time.Time, n), make([]time.Time, n)
 		for i, u := range usage {
-			repo[i], format[i], resource[i], actor[i] = SanitizeAuditText(u.Repository), SanitizeAuditText(u.Format), SanitizeAuditText(u.Resource), SanitizeAuditText(u.LastActor)
+			repo[i], format[i], resource[i], actor[i] = u.Repository, u.Format, u.Resource, u.LastActor
 			downloads[i], size[i] = u.Downloads, u.Bytes
 			first[i], last[i] = u.First, u.Last
 			if first[i].IsZero() {
@@ -148,17 +149,66 @@ func flushUsage(ctx context.Context, execer auditExecer, batch UsageBatch) error
 			return err
 		}
 	}
-	if n := len(batch.Rollups); n > 0 {
+	if rollups := sanitizedRollups(batch.Rollups); len(rollups) > 0 {
+		n := len(rollups)
 		repo, bucket, outcome := make([]string, n), make([]time.Time, n), make([]int16, n)
 		requests, size := make([]int64, n), make([]int64, n)
-		for i, r := range batch.Rollups {
-			repo[i], bucket[i], outcome[i], requests[i], size[i] = SanitizeAuditText(r.Repository), r.BucketStart, int16(r.Outcome), r.Requests, r.Bytes
+		for i, r := range rollups {
+			repo[i], bucket[i], outcome[i], requests[i], size[i] = r.Repository, r.BucketStart, int16(r.Outcome), r.Requests, r.Bytes
 		}
 		if _, err := execer.ExecContext(ctx, rollupFlushSQL, repo, bucket, outcome, requests, size); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// sanitizedUsage rewrites hostile text in the keys, then merges deltas that became
+// equal, so one INSERT ... ON CONFLICT never sees a key twice and the sort that
+// fixes the lock order runs on the strings the database receives.
+func sanitizedUsage(in []UsageDelta) []UsageDelta {
+	merged := make(map[[3]string]*UsageDelta, len(in))
+	out := make([]UsageDelta, 0, len(in))
+	for _, u := range in {
+		u.Repository, u.Format, u.Resource, u.LastActor = SanitizeAuditText(u.Repository), SanitizeAuditText(u.Format), SanitizeAuditText(u.Resource), SanitizeAuditText(u.LastActor)
+		key := [3]string{u.Repository, u.Format, u.Resource}
+		if existing, ok := merged[key]; ok {
+			existing.Downloads += u.Downloads
+			existing.Bytes += u.Bytes
+			if !u.First.IsZero() && (existing.First.IsZero() || u.First.Before(existing.First)) {
+				existing.First = u.First
+			}
+			if !u.Last.Before(existing.Last) {
+				existing.Last, existing.LastActor = u.Last, u.LastActor
+			}
+			continue
+		}
+		out = append(out, u)
+		merged[key] = &out[len(out)-1]
+	}
+	return out
+}
+
+func sanitizedRollups(in []RollupDelta) []RollupDelta {
+	type key struct {
+		repository string
+		bucket     time.Time
+		outcome    int16
+	}
+	merged := make(map[key]*RollupDelta, len(in))
+	out := make([]RollupDelta, 0, len(in))
+	for _, r := range in {
+		r.Repository = SanitizeAuditText(r.Repository)
+		k := key{r.Repository, r.BucketStart, int16(r.Outcome)}
+		if existing, ok := merged[k]; ok {
+			existing.Requests += r.Requests
+			existing.Bytes += r.Bytes
+			continue
+		}
+		out = append(out, r)
+		merged[k] = &out[len(out)-1]
+	}
+	return out
 }
 
 // PruneRequestRollups deletes rollup buckets that start before the cutoff.

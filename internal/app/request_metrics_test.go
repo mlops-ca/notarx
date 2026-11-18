@@ -43,7 +43,7 @@ func TestPartitionMetricsExposeDefaultPartitionRows(t *testing.T) {
 func TestAuditWriterMetrics(t *testing.T) {
 	var stats auditwriter.Stats
 	stats.BufferDepth, stats.DroppedRead, stats.DroppedSecurity, stats.FlushErrors, stats.FlushCount = 7, 3, 2, 1, 4
-	stats.FlushSecondsSum = 0.5
+	stats.FlushSecondsSum, stats.Sanitized = 0.5, 6
 	stats.FlushSecondsBucket[0] = 4
 	metrics := (&Metrics{}).WithAuditWriterStats(func() auditwriter.Stats { return stats })
 	response := httptest.NewRecorder()
@@ -53,6 +53,7 @@ func TestAuditWriterMetrics(t *testing.T) {
 		"notarx_audit_buffer_depth 7",
 		`notarx_audit_dropped_total{class="read",reason="buffer_full"} 3`,
 		`notarx_audit_dropped_total{class="security",reason="overload"} 2`,
+		"notarx_audit_sanitized_total 6",
 		"notarx_audit_flush_errors_total 1",
 		`notarx_audit_flush_seconds_bucket{le="0.005"} 4`,
 		`notarx_audit_flush_seconds_bucket{le="+Inf"} 4`,
