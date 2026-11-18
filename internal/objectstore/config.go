@@ -50,12 +50,18 @@ type Config struct {
 	// writes that would dip below it fail with ErrInsufficientStorage. Zero
 	// disables the check.
 	FSReserveBytes int64
+	// MultipartThreshold is the object size above which the s3 driver uploads
+	// in parts, and MultipartPartSize the size of each part. Zero selects the
+	// defaults (256 MiB and 16 MiB).
+	MultipartThreshold int64
+	MultipartPartSize  int64
 }
 
 // Defaults returns the documented defaults: s3 driver, us-east-1, path-style,
 // when_required checksums, no bucket auto-creation, fsync on commit.
 func Defaults() Config {
-	return Config{Driver: DriverS3, Region: DefaultRegion, PathStyle: true, ChecksumMode: ChecksumWhenRequired, FSFsync: true, FSReserveBytes: DefaultFSReserveBytes}
+	return Config{Driver: DriverS3, Region: DefaultRegion, PathStyle: true, ChecksumMode: ChecksumWhenRequired, FSFsync: true, FSReserveBytes: DefaultFSReserveBytes,
+		MultipartThreshold: DefaultMultipartThreshold, MultipartPartSize: DefaultMultipartPartSize}
 }
 
 // withDefaults fills the string settings a caller left empty. Booleans are not
@@ -69,6 +75,12 @@ func (c Config) withDefaults() Config {
 	}
 	if c.ChecksumMode == "" {
 		c.ChecksumMode = ChecksumWhenRequired
+	}
+	if c.MultipartThreshold == 0 {
+		c.MultipartThreshold = DefaultMultipartThreshold
+	}
+	if c.MultipartPartSize == 0 {
+		c.MultipartPartSize = DefaultMultipartPartSize
 	}
 	return c
 }
@@ -102,6 +114,12 @@ func (c Config) validateS3() error {
 	case ChecksumWhenRequired, ChecksumWhenSupported:
 	default:
 		return fmt.Errorf("object store checksum mode %q is invalid: use %s or %s", c.ChecksumMode, ChecksumWhenRequired, ChecksumWhenSupported)
+	}
+	if c.MultipartPartSize < MinMultipartPartSize || c.MultipartPartSize > MaxMultipartPartSize {
+		return fmt.Errorf("object store multipart part size must be between %d and %d bytes", MinMultipartPartSize, MaxMultipartPartSize)
+	}
+	if c.MultipartThreshold < c.MultipartPartSize {
+		return errors.New("object store multipart threshold must not be smaller than the part size")
 	}
 	return nil
 }
@@ -235,5 +253,7 @@ func openS3(ctx context.Context, cfg Config) (Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("prepare object store bucket: %w", err)
 	}
+	// Decide once how digests are attached; the chosen mode is logged.
+	store.ProbeDigestMode(ctx)
 	return store, nil
 }

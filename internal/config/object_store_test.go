@@ -12,7 +12,7 @@ func clearObjectStoreEnv(t *testing.T) {
 	for _, name := range []string{
 		envObjectStoreDriver, envObjectStoreEndpoint, envObjectStoreBucket, envObjectStoreRegion,
 		envObjectStoreAccessKey, envObjectStoreSecretKey, envObjectStorePathStyle, envObjectStoreChecksumMode,
-		envObjectStoreAutoCreateBucket, envObjectStoreFSRoot, envObjectStoreFSFsync, envObjectStoreFSReserveBytes,
+		envObjectStoreAutoCreateBucket, envObjectStoreFSRoot, envObjectStoreFSFsync, envObjectStoreFSReserveBytes, envObjectStoreMultipartThreshold, envObjectStoreMultipartPartSize,
 	} {
 		t.Setenv(name, "")
 	}
@@ -165,5 +165,43 @@ func TestLoadAcceptsFilesystemDriverWithoutS3Keys(t *testing.T) {
 	cfg, err := Load()
 	if err != nil || cfg.ObjectStore.Driver != "filesystem" {
 		t.Fatalf("Load() = %#v, %v", cfg.ObjectStore, err)
+	}
+}
+
+func TestLoadObjectStoreMultipartKeys(t *testing.T) {
+	setS3Env(t)
+	cfg, err := loadObjectStore()
+	if err != nil || cfg.MultipartThreshold != 256<<20 || cfg.MultipartPartSize != 16<<20 {
+		t.Fatalf("defaults = %d %d, %v; want 256 MiB and 16 MiB", cfg.MultipartThreshold, cfg.MultipartPartSize, err)
+	}
+	t.Setenv(envObjectStoreMultipartThreshold, "104857600")
+	t.Setenv(envObjectStoreMultipartPartSize, "8388608")
+	cfg, err = loadObjectStore()
+	if err != nil || cfg.MultipartThreshold != 100<<20 || cfg.MultipartPartSize != 8<<20 {
+		t.Fatalf("overrides = %d %d, %v", cfg.MultipartThreshold, cfg.MultipartPartSize, err)
+	}
+}
+
+func TestLoadObjectStoreRejectsInvalidMultipartKeys(t *testing.T) {
+	cases := map[string]struct {
+		set  map[string]string
+		want string
+	}{
+		"threshold not a number":    {map[string]string{envObjectStoreMultipartThreshold: "256MiB"}, "NOTARX_OBJECT_STORE_MULTIPART_THRESHOLD must be a positive number of bytes"},
+		"threshold zero":            {map[string]string{envObjectStoreMultipartThreshold: "0"}, "NOTARX_OBJECT_STORE_MULTIPART_THRESHOLD must be a positive number of bytes"},
+		"part size negative":        {map[string]string{envObjectStoreMultipartPartSize: "-5"}, "NOTARX_OBJECT_STORE_MULTIPART_PART_SIZE must be a positive number of bytes"},
+		"part size below minimum":   {map[string]string{envObjectStoreMultipartPartSize: "1048576"}, "multipart part size"},
+		"threshold below part size": {map[string]string{envObjectStoreMultipartThreshold: "6291456", envObjectStoreMultipartPartSize: "16777216"}, "threshold"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			setS3Env(t)
+			for key, value := range tc.set {
+				t.Setenv(key, value)
+			}
+			if _, err := loadObjectStore(); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want it to contain %q", err, tc.want)
+			}
+		})
 	}
 }

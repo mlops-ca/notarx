@@ -14,18 +14,20 @@ import (
 // Object store environment keys (ADR 0017). They replace the former RustFS
 // names (GATEWAY_ and NOTARX_ prefixed), which startup refuses (see RefuseLegacyEnv).
 const (
-	envObjectStoreDriver           = "NOTARX_OBJECT_STORE_DRIVER"
-	envObjectStoreEndpoint         = "NOTARX_OBJECT_STORE_ENDPOINT"
-	envObjectStoreBucket           = "NOTARX_OBJECT_STORE_BUCKET"
-	envObjectStoreRegion           = "NOTARX_OBJECT_STORE_REGION"
-	envObjectStoreAccessKey        = "NOTARX_OBJECT_STORE_ACCESS_KEY"
-	envObjectStoreSecretKey        = "NOTARX_OBJECT_STORE_SECRET_KEY"
-	envObjectStorePathStyle        = "NOTARX_OBJECT_STORE_PATH_STYLE"
-	envObjectStoreChecksumMode     = "NOTARX_OBJECT_STORE_CHECKSUM_MODE"
-	envObjectStoreAutoCreateBucket = "NOTARX_OBJECT_STORE_AUTO_CREATE_BUCKET"
-	envObjectStoreFSRoot           = "NOTARX_OBJECT_STORE_FS_ROOT"
-	envObjectStoreFSFsync          = "NOTARX_OBJECT_STORE_FS_FSYNC"
-	envObjectStoreFSReserveBytes   = "NOTARX_OBJECT_STORE_FS_RESERVE_BYTES"
+	envObjectStoreDriver             = "NOTARX_OBJECT_STORE_DRIVER"
+	envObjectStoreEndpoint           = "NOTARX_OBJECT_STORE_ENDPOINT"
+	envObjectStoreBucket             = "NOTARX_OBJECT_STORE_BUCKET"
+	envObjectStoreRegion             = "NOTARX_OBJECT_STORE_REGION"
+	envObjectStoreAccessKey          = "NOTARX_OBJECT_STORE_ACCESS_KEY"
+	envObjectStoreSecretKey          = "NOTARX_OBJECT_STORE_SECRET_KEY"
+	envObjectStorePathStyle          = "NOTARX_OBJECT_STORE_PATH_STYLE"
+	envObjectStoreChecksumMode       = "NOTARX_OBJECT_STORE_CHECKSUM_MODE"
+	envObjectStoreAutoCreateBucket   = "NOTARX_OBJECT_STORE_AUTO_CREATE_BUCKET"
+	envObjectStoreFSRoot             = "NOTARX_OBJECT_STORE_FS_ROOT"
+	envObjectStoreFSFsync            = "NOTARX_OBJECT_STORE_FS_FSYNC"
+	envObjectStoreFSReserveBytes     = "NOTARX_OBJECT_STORE_FS_RESERVE_BYTES"
+	envObjectStoreMultipartThreshold = "NOTARX_OBJECT_STORE_MULTIPART_THRESHOLD"
+	envObjectStoreMultipartPartSize  = "NOTARX_OBJECT_STORE_MULTIPART_PART_SIZE"
 )
 
 // loadObjectStore reads and validates the NOTARX_OBJECT_STORE_* keys.
@@ -58,6 +60,12 @@ func loadObjectStore() (objectstore.Config, error) {
 		}
 		cfg.FSReserveBytes = reserve
 	}
+	if cfg.MultipartThreshold, err = byteSizeEnv(envObjectStoreMultipartThreshold, cfg.MultipartThreshold); err != nil {
+		return objectstore.Config{}, err
+	}
+	if cfg.MultipartPartSize, err = byteSizeEnv(envObjectStoreMultipartPartSize, cfg.MultipartPartSize); err != nil {
+		return objectstore.Config{}, err
+	}
 	cfg.Endpoint = strings.TrimSpace(os.Getenv(envObjectStoreEndpoint))
 	cfg.Bucket = strings.TrimSpace(os.Getenv(envObjectStoreBucket))
 	cfg.Region = value(envObjectStoreRegion, cfg.Region)
@@ -86,6 +94,19 @@ func loadObjectStore() (objectstore.Config, error) {
 		cfg.FSRoot = filepath.Clean(cfg.FSRoot)
 	}
 	return cfg, nil
+}
+
+// byteSizeEnv parses a positive size in bytes.
+func byteSizeEnv(name string, fallback int64) (int64, error) {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return fallback, nil
+	}
+	value, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || value <= 0 {
+		return 0, fmt.Errorf("%s must be a positive number of bytes", name)
+	}
+	return value, nil
 }
 
 // boolEnv parses a strict true/false environment value.

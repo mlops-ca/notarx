@@ -20,6 +20,8 @@ The former RustFS-prefixed names (under the old `GATEWAY_` prefix and the interi
 | `NOTARX_OBJECT_STORE_PATH_STYLE` | `true` | Path-style addressing. Use `false` for virtual-hosted services. |
 | `NOTARX_OBJECT_STORE_CHECKSUM_MODE` | `when_required` | `when_required` or `when_supported`; maps to the SDK request checksum calculation and response checksum validation. |
 | `NOTARX_OBJECT_STORE_AUTO_CREATE_BUCKET` | `false` | When `true` the gateway creates a missing bucket at start-up. Otherwise it only checks that the bucket exists. The Compose stack sets `true`; production deployments pre-create the bucket. |
+| `NOTARX_OBJECT_STORE_MULTIPART_THRESHOLD` | `268435456` (256 MiB) | Objects larger than this are uploaded in parts through the SDK transfer manager. |
+| `NOTARX_OBJECT_STORE_MULTIPART_PART_SIZE` | `16777216` (16 MiB) | Part size, between 5 MiB and 5 GiB, and not larger than the threshold. At 16 MiB the largest object is just under 156 GiB, which keeps the part count below the 10,000-part limit; a larger object is refused with an error that says to raise the part size. |
 | `NOTARX_OBJECT_STORE_FS_ROOT` | required for `filesystem` | Absolute directory for the filesystem driver. |
 | `NOTARX_OBJECT_STORE_FS_FSYNC` | `true` | Flush files and parent directories on commit. |
 | `NOTARX_OBJECT_STORE_FS_RESERVE_BYTES` | `1073741824` | Free space the filesystem driver keeps back. A write that would leave less fails with an insufficient-storage error and readiness fails. `0` disables the check. |
@@ -28,6 +30,41 @@ Integrity does not depend on the checksum mode: the gateway computes and
 verifies the SHA-256 of every verified object itself. `when_required` removes
 the client-side CRC headers and trailers that several S3-compatible services
 reject.
+
+## Digest attachment and multipart on S3-compatible services
+
+`SetVerifiedDigest` attaches the verified SHA-256 to an existing object. The
+driver tries `CopyObject` with the `REPLACE` metadata directive, which rewrites the
+metadata on the service without moving the bytes. At start-up it probes that
+with a throw-away object whose key contains a slash (the copy source is the
+path-escaped `bucket/key`, which encodes `/` as `%2F`), deletes the probe object,
+and logs the chosen mode once (`object store digest mode`). If the service refuses
+the copy, or accepts it but ignores the new metadata, the driver switches to the
+streaming fallback: it reads the object, re-verifies that its bytes hash to the
+digest, and writes it again with the digest attached. That costs extra egress and
+is sticky for the life of the process. A refusal that appears only later, at use,
+falls back the same way. A probe that cannot run (for example, read-only
+credentials) leaves the default, copy, in place.
+
+Objects above the multipart threshold are uploaded with the SDK transfer manager
+at the configured part size; the part count stays below 10,000 for every object up
+to `9,999 × part size`. The limits a provider enforces are confirmed by the live
+OCI run below, not hard-coded.
+
+### Live run against Oracle Cloud Object Storage
+
+The `oci-live` workflow (`.github/workflows/oci-live.yml`) runs the object store
+contract, the digest probe and a multipart upload at the default part size against
+OCI Object Storage, in both checksum modes (so single-part `aws-chunked` uploads
+and multipart uploads are both covered, and keys with slashes go through
+`CopyObject`). It is gating for the OCI reference deployment: a `CopyObject` `REPLACE`
+failure selects the streaming fallback, and a failure the fallback cannot cover
+opens a follow-up ADR for a native driver. It never runs for pull requests or
+forks. It needs the repository secrets `OCI_OBJECT_STORE_ENDPOINT`,
+`OCI_OBJECT_STORE_REGION`, `OCI_OBJECT_STORE_BUCKET` (a pre-created bucket),
+`OCI_OBJECT_STORE_ACCESS_KEY` and `OCI_OBJECT_STORE_SECRET_KEY`; without them it
+reports that and succeeds. Every case writes under a throw-away prefix and removes
+what it wrote. Locally: `go test -tags ocilive -run '^TestOCI' ./internal/objectstore`.
 
 ## Filesystem driver
 

@@ -8,13 +8,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"strings"
+	"sync/atomic"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 	smithyhttp "github.com/aws/smithy-go/transport/http"
 )
@@ -27,6 +27,14 @@ const digestMetadataKey = "notarx-sha256"
 type S3Store struct {
 	client *s3.Client
 	bucket string
+	// threshold and partSize configure multipart upload; uploader is nil for a
+	// zero-value store, which only the identity tests construct.
+	threshold int64
+	partSize  int64
+	uploader  *transfermanager.Client
+	// digestMode records how SetVerifiedDigest attaches a digest: copy (the
+	// metadata-replacing CopyObject) or stream (read, re-verify and overwrite).
+	digestMode atomic.Int32
 }
 
 // NewS3Store builds the S3-compatible driver from validated configuration.
@@ -40,7 +48,9 @@ func NewS3Store(cfg Config) (*S3Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &S3Store{client: client, bucket: cfg.Bucket}, nil
+	store := &S3Store{client: client, bucket: cfg.Bucket, threshold: cfg.MultipartThreshold, partSize: cfg.MultipartPartSize}
+	store.uploader = newUploader(client, cfg)
+	return store, nil
 }
 
 // NewS3StoreWithCredentials is the convenience constructor for tools and tests
@@ -156,10 +166,7 @@ func (s *S3Store) PutReader(ctx context.Context, key string, value io.Reader, si
 		return err
 	}
 	defer cleanup()
-	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket: aws.String(s.bucket), Key: aws.String(key), Body: body, ContentLength: aws.Int64(size), ContentType: aws.String("application/octet-stream"),
-	})
-	return err
+	return s.upload(ctx, key, body, size, uploadHeaders{ContentType: aws.String("application/octet-stream")})
 }
 
 func (s *S3Store) PutVerifiedReader(ctx context.Context, key string, value io.Reader, size int64, digest string) error {
@@ -178,11 +185,10 @@ func (s *S3Store) PutVerifiedReader(ctx context.Context, key string, value io.Re
 	if err = verifyDigest(body, want); err != nil {
 		return err
 	}
-	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket: aws.String(s.bucket), Key: aws.String(key), Body: body, ContentLength: aws.Int64(size), ContentType: aws.String("application/octet-stream"),
-		Metadata: map[string]string{digestMetadataKey: digestPrefix + want},
+	return s.upload(ctx, key, body, size, uploadHeaders{
+		ContentType: aws.String("application/octet-stream"),
+		Metadata:    map[string]string{digestMetadataKey: digestPrefix + want},
 	})
-	return err
 }
 
 func seekableObjectReader(value io.Reader, size int64) (io.ReadSeeker, func(), error) {
@@ -265,28 +271,6 @@ func verifyDigest(body io.ReadSeeker, wantHex string) error {
 		return ErrDigestMismatch
 	}
 	return nil
-}
-
-func (s *S3Store) SetVerifiedDigest(ctx context.Context, key, digest string) error {
-	info, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)})
-	if err != nil {
-		if s3NotFound(err) {
-			return ErrNotFound
-		}
-		return err
-	}
-	metadata := make(map[string]string, len(info.Metadata)+1)
-	for name, value := range info.Metadata {
-		metadata[name] = value
-	}
-	metadata[digestMetadataKey] = digest
-	_, err = s.client.CopyObject(ctx, &s3.CopyObjectInput{
-		Bucket: aws.String(s.bucket), Key: aws.String(key), CopySource: aws.String(url.PathEscape(s.bucket + "/" + key)),
-		MetadataDirective: types.MetadataDirectiveReplace, Metadata: metadata,
-		CacheControl: info.CacheControl, ContentDisposition: info.ContentDisposition, ContentEncoding: info.ContentEncoding,
-		ContentLanguage: info.ContentLanguage, ContentType: info.ContentType,
-	})
-	return err
 }
 
 func (s *S3Store) Delete(ctx context.Context, key string) error {

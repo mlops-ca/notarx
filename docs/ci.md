@@ -133,6 +133,17 @@ container image, so the job builds it from a pinned upstream revision with the
 repository Go toolchain; bump `MINIO_VERSION` in the workflow to move it.
 `scripts/rustfs-only-contract-test.sh` exempts that one workflow file.
 
+## OCI live run
+
+`oci-live` (`.github/workflows/oci-live.yml`) is separate from `ci.yml` and is not
+part of `ci-ok`. It runs the object store contract against Oracle Cloud Object
+Storage with the `ocilive` build tag (see [object storage](object-storage.md)).
+Triggers are pushes to `main` that touch `internal/objectstore/`, a weekly schedule
+and a manual dispatch, in this repository only; never `pull_request` or
+`pull_request_target`, so untrusted code cannot reach the secrets. The job detects
+the `OCI_OBJECT_STORE_*` secrets in a first step and skips every other step, with a
+notice, when they are absent.
+
 ## Migration checks
 
 The `quality` job runs `make migration-check`

@@ -44,6 +44,7 @@ func RunContract(t *testing.T, factory Factory) {
 		{"PutGetRoundTrip", putGetRoundTrip},
 		{"EmptyObject", emptyObject},
 		{"BinaryContent", binaryContent},
+		{"LargeObject", largeObject},
 		{"PutOverwritesExistingObject", putOverwrites},
 		{"SizeMismatch", sizeMismatch},
 		{"DigestMismatchIsRejected", digestMismatch},
@@ -150,6 +151,35 @@ func binaryContent(t *testing.T, store objectstore.Store) {
 	mustPut(t, store, "contract/binary", want)
 	if got := mustGet(t, store, "contract/binary"); !bytes.Equal(got, want) {
 		t.Fatalf("binary content differs (%d bytes, want %d)", len(got), len(want))
+	}
+}
+
+// largeObject is big enough to cross a lowered multipart threshold (the S3
+// integration runs set one) and to need several buffers on every driver.
+func largeObject(t *testing.T, store objectstore.Store) {
+	want := make([]byte, 12<<20+321)
+	state := uint32(1)
+	for i := range want {
+		state = state*1664525 + 1013904223
+		want[i] = byte(state >> 24)
+	}
+	digest := Digest(want)
+	if err := store.PutVerifiedReader(ctx(t), "contract/large", bytes.NewReader(want), int64(len(want)), digest); err != nil {
+		t.Fatalf("PutVerifiedReader(large): %v", err)
+	}
+	info, err := store.Stat(ctx(t), "contract/large")
+	if err != nil || info.Size != int64(len(want)) || info.Digest != digest {
+		t.Fatalf("Stat = %#v, %v", info, err)
+	}
+	reader, size, err := store.OpenRange(ctx(t), "contract/large", 5<<20-7, 4096)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := readAll(t, reader); size != int64(len(want)) || !bytes.Equal(got, want[5<<20-7:5<<20-7+4096]) {
+		t.Fatalf("range across a part boundary differs (size %d)", size)
+	}
+	if got := mustGet(t, store, "contract/large"); !bytes.Equal(got, want) {
+		t.Fatal("large object differs after the round trip")
 	}
 }
 

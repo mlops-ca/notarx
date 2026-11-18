@@ -13,7 +13,8 @@ import (
 )
 
 // ConfigFromEnv reads an S3 driver configuration from <prefix>ENDPOINT,
-// ACCESS_KEY, SECRET_KEY, BUCKET, REGION, PATH_STYLE and CHECKSUM_MODE
+// ACCESS_KEY, SECRET_KEY, BUCKET, REGION, PATH_STYLE, CHECKSUM_MODE,
+// MULTIPART_THRESHOLD and MULTIPART_PART_SIZE
 // (for example the prefix TEST_OBJECT_STORE_). It returns false when the
 // endpoint or credentials are unset so a test can skip. A missing bucket gets
 // a unique name and the bucket is created on open; a given bucket must exist.
@@ -35,6 +36,16 @@ func ConfigFromEnv(prefix string) (objectstore.Config, bool) {
 	}
 	if mode := os.Getenv(prefix + "CHECKSUM_MODE"); mode != "" {
 		cfg.ChecksumMode = mode
+	}
+	if raw := os.Getenv(prefix + "MULTIPART_THRESHOLD"); raw != "" {
+		if parsed, err := strconv.ParseInt(raw, 10, 64); err == nil {
+			cfg.MultipartThreshold = parsed
+		}
+	}
+	if raw := os.Getenv(prefix + "MULTIPART_PART_SIZE"); raw != "" {
+		if parsed, err := strconv.ParseInt(raw, 10, 64); err == nil {
+			cfg.MultipartPartSize = parsed
+		}
 	}
 	cfg.Bucket = os.Getenv(prefix + "BUCKET")
 	if cfg.Bucket == "" {
