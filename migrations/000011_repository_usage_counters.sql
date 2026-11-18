@@ -97,8 +97,3 @@ SELECT h.id, COALESCE(t.used_bytes, 0), COALESCE(t.object_count, 0), NULLIF(q.qu
   LEFT JOIN totals t ON t.repository_id = h.id
   LEFT JOIN public.repository_capacity_quotas q ON q.repository_id = h.id;
 
--- The generated objects of a visible APT snapshot (dists/ files) are measured on every snapshot
--- publication and by the reconciler. A snapshot holds one asset row per package, so without a
--- partial index the measurement would scan every pool asset of every visible snapshot.
-CREATE INDEX native_apt_snapshot_assets_dists_idx ON public.native_apt_snapshot_assets USING btree (snapshot_id, object_key) INCLUDE (size)
-    WHERE path LIKE 'dists/%';

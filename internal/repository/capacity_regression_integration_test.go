@@ -107,8 +107,8 @@ func TestAuditedMutationLookupsUseTheTransaction(t *testing.T) {
 	}
 }
 
-// TestAPTGeneratedUsageUsesTheDistsIndex: the measurement taken on every snapshot publication
-// reads the partial index, not every pool asset of the visible snapshots.
+// TestAPTGeneratedUsageUsesTheLookupIndex: the measurement taken on every snapshot publication
+// reads native_apt_snapshot_assets_visible_lookup_idx (repository_id, path, snapshot_id), not every pool asset of the visible snapshots.
 func TestAPTGeneratedUsageUsesTheDistsIndex(t *testing.T) {
 	store := counterTestStore(t)
 	ctx := context.Background()
@@ -125,7 +125,7 @@ func TestAPTGeneratedUsageUsesTheDistsIndex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !plan.UsesIndex("native_apt_snapshot_assets_dists_idx") {
-		t.Fatalf("the generated-object measurement does not use the dists partial index: %v", plan.Indexes())
+	if !plan.UsesIndex("native_apt_snapshot_assets_visible_lookup_idx") {
+		t.Fatalf("the generated-object measurement does not use the (repository_id, path) lookup index: %v", plan.Indexes())
 	}
 }
