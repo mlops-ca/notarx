@@ -74,6 +74,14 @@ through `make console-build`. None of these flows requires the Ant Design CLI.
 Other audit decisions remain in `scripts/npm-audit-policy.mjs`; new advisories,
 invalid reports, registry failures, and expired exceptions fail dependency audit.
 
+## Language
+
+Issues, pull requests, commit messages, code comments and documentation are
+written in English (Canadian spelling, as set by
+[ADR 0014](docs/adr/0014-locale-policy.md)). Do not file issues or PRs in other
+languages. Product locales and translated documentation follow the locale
+policy in ADR 0014, not this file.
+
 ## Issue-to-merge traceability
 
 Track each user-visible change or defect in a GitHub Issue with the observed
@@ -106,9 +114,8 @@ exactly that workstream.
 | Format | `format: maven`, `format: oci`, `format: npm`, `format: pypi`, `format: go`, `format: apt`, `format: conan`, `format: cargo`, `format: nuget`, `format: raw` | Orthogonal to area; applied to Issues about one protocol's behavior. |
 
 Titles start with the area: `Console:`, `API:` and `CLI:` for the technical
-surfaces, and the Chinese area word (`授权:`, `审计:`, `平台:`, `运维:`) for the
-domains, followed by the finding or the required outcome rather than the
-activity. Meta work that spans areas (process, tooling) may omit the area word
+surfaces, and `Auth:`, `Audit:`, `Platform:` or `Ops:` for the domains,
+followed by the finding or the required outcome rather than the activity. Meta work that spans areas (process, tooling) may omit the area word
 and the area label.
 
 Every Issue states its background, scope, acceptance criteria, and an explicit
@@ -193,8 +200,8 @@ when deleting the namespace and its local PVC data is intended.
 
 Run `make test` before submitting a change that affects shared backend behavior.
 Run `make docs-check` when changing Markdown entry points, capability claims,
-or local assets; it enforces bilingual entry-point links and validates local
-documentation references.
+or local assets; it validates local documentation references and the
+documentation site map.
 The CI workflow is the final source of truth for the complete required matrix.
 
 ### Contract lanes and performance evidence
@@ -314,6 +321,11 @@ docs: describe clustered runtime roles
 
 Choose the narrowest useful scope. Keep generated output in the same commit as
 the contract or source change that produced it.
+
+A commit that cherry-picks work from the upstream project carries an
+`Upstream:` trailer naming the upstream commit, for example
+`Upstream: ccsert/artifact-gateway@<sha>`; see
+[docs/upstream.md](docs/upstream.md).
 
 ## Contribution license
 
