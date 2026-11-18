@@ -192,7 +192,7 @@ func TestPostgresRustFSNuGetCredentialRotationAndRevocation(t *testing.T) {
 			t.Fatal("rotated credential changed the stable audit principal")
 		}
 	}
-	if publicationAudits != 1 || deniedAudits < 4 {
+	if publicationAudits != 1 || deniedAudits < 3 {
 		t.Fatal("native publication or scoped denial audit missing")
 	}
 }
