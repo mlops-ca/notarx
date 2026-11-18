@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/mlops-ca/notarx/internal/capacity"
 	"slices"
 	"sort"
 	"time"
@@ -111,6 +112,7 @@ func (s *PostgresStore) PublishGoModule(ctx context.Context, incoming GoModulePu
 	if err != nil {
 		return GoModuleVersion{}, false, err
 	}
+	var delta usageDelta
 	for _, asset := range publication.Assets {
 		_, err = tx.ExecContext(ctx, `INSERT INTO native_go_assets
 			(repository_id,module_path,version,kind,digest,object_key,size,source_url,cached_at,created_at)
@@ -125,6 +127,10 @@ func (s *PostgresStore) PublishGoModule(ctx context.Context, incoming GoModulePu
 		if err != nil {
 			return GoModuleVersion{}, false, err
 		}
+		delta.add(asset.RepositoryID, asset.Size, 1)
+	}
+	if err = delta.reserve(ctx, tx); err != nil {
+		return GoModuleVersion{}, false, err
 	}
 	if err = tx.Commit(); err != nil {
 		return GoModuleVersion{}, false, err
@@ -414,12 +420,18 @@ func (s *PostgresStore) restoreGoModuleVersionLocked(ctx context.Context, reposi
 func (s *PostgresStore) CacheGoModuleAsset(ctx context.Context, asset GoModuleAsset) (GoModuleAsset, error) {
 	incoming := asset
 	var stored GoModuleAsset
-	err := scanGoModuleAsset(s.db.QueryRowContext(ctx, `INSERT INTO native_go_assets
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return GoModuleAsset{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var inserted bool
+	err = scanGoModuleAsset(scanPlus{row: tx.QueryRowContext(ctx, `INSERT INTO native_go_assets
 		(repository_id,module_path,version,kind,digest,object_key,size,source_url,cached_at)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,now())
 		ON CONFLICT (repository_id,module_path,version,kind) DO UPDATE SET cached_at=native_go_assets.cached_at
-		RETURNING `+goModuleAssetColumns,
-		incoming.RepositoryID, incoming.Module, incoming.Version, incoming.Kind, incoming.Digest, incoming.ObjectKey, incoming.Size, incoming.SourceURL), &stored)
+		RETURNING `+goModuleAssetColumns+`,(xmax = 0)`,
+		incoming.RepositoryID, incoming.Module, incoming.Version, incoming.Kind, incoming.Digest, incoming.ObjectKey, incoming.Size, incoming.SourceURL), extra: []any{&inserted}}, &stored)
 	if isUnique(err) {
 		return GoModuleAsset{}, ErrUpstreamChanged
 	}
@@ -431,6 +443,15 @@ func (s *PostgresStore) CacheGoModuleAsset(ctx context.Context, asset GoModuleAs
 	}
 	if stored.Digest != incoming.Digest || stored.ObjectKey != incoming.ObjectKey || stored.Size != incoming.Size || stored.SourceURL != incoming.SourceURL {
 		return GoModuleAsset{}, ErrUpstreamChanged
+	}
+	// An asset cached again counts once; a conflicting insert reserved nothing.
+	if inserted {
+		if err = capacity.Reserve(ctx, tx, incoming.RepositoryID, incoming.Size, 1); err != nil {
+			return GoModuleAsset{}, err
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		return GoModuleAsset{}, err
 	}
 	return stored, nil
 }
@@ -526,21 +547,42 @@ func (s *PostgresStore) MarkGoModuleObjectCollecting(ctx context.Context, object
 }
 
 func (s *PostgresStore) MarkGoModuleObjectCollected(ctx context.Context, objectKey string) error {
-	result, err := s.db.ExecContext(ctx, `UPDATE native_go_assets a SET collecting_at=NULL,collected_at=now()
-		WHERE a.object_key=$1 AND a.collected_at IS NULL
-		  AND EXISTS (SELECT 1 FROM artifact_tombstones t
-			WHERE t.repository_id=a.repository_id AND t.format='go' AND t.coordinate=a.module_path || '@' || a.version)`, objectKey)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	count, err := result.RowsAffected()
+	defer func() { _ = tx.Rollback() }()
+	rows, err := tx.QueryContext(ctx, `UPDATE native_go_assets a SET collecting_at=NULL,collected_at=now()
+		WHERE a.object_key=$1 AND a.collected_at IS NULL
+		  AND EXISTS (SELECT 1 FROM artifact_tombstones t
+			WHERE t.repository_id=a.repository_id AND t.format='go' AND t.coordinate=a.module_path || '@' || a.version)
+		RETURNING a.repository_id::text,a.size`, objectKey)
 	if err != nil {
+		return err
+	}
+	var delta usageDelta
+	count := 0
+	for rows.Next() {
+		var repositoryID string
+		var size int64
+		if err = rows.Scan(&repositoryID, &size); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		// A collected asset leaves the repository's usage.
+		delta.add(repositoryID, -size, -1)
+		count++
+	}
+	if err = errors.Join(rows.Err(), rows.Close()); err != nil {
 		return err
 	}
 	if count == 0 {
 		return ErrNotFound
 	}
-	return nil
+	if err = delta.reserve(ctx, tx); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 const goModuleVersionColumns = `repository_id::text,module_path,version,published_at,publisher,cached_at,created_at`

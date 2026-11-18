@@ -21,13 +21,13 @@ const (
 // registry lists every hosted format (ADR 0023 section 3). A format that lands
 // without an entry fails the registry test, so a new format cannot be unbounded.
 var registry = []FormatCoverage{
-	{Format: "raw", Enforcement: byTrigger},
+	{Format: "raw", Covered: true, Enforcement: byTrigger},
 	{Format: "maven", Enforcement: byTrigger},
 	{Format: "oci", Enforcement: byTrigger},
 	{Format: "conan", Enforcement: byTrigger},
 	{Format: "npm", Enforcement: byTrigger},
 	{Format: "pypi", Enforcement: byTrigger},
-	{Format: "go", Enforcement: byTrigger},
+	{Format: "go", Covered: true, Enforcement: byTrigger},
 	{Format: "apt", Enforcement: byTrigger},
 	{Format: "cargo", Enforcement: byTrigger},
 	{Format: "helm", Enforcement: bySessionStore},
