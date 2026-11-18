@@ -380,7 +380,7 @@ func rustFSNotFound(err error) bool {
 
 func digestMetadata(metadata map[string]string) string {
 	for key, value := range metadata {
-		if strings.EqualFold(key, "Artifact-Gateway-Sha256") || strings.EqualFold(key, "X-Amz-Meta-Artifact-Gateway-Sha256") {
+		if strings.EqualFold(key, "Notarx-Sha256") || strings.EqualFold(key, "X-Amz-Meta-Notarx-Sha256") {
 			return value
 		}
 	}

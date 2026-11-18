@@ -48,6 +48,10 @@ func main() {
 		fmt.Printf("notarx %s (revision %s, %s)\n", build.Version, build.Revision, build.GoVersion)
 		return
 	}
+	if err := config.RefuseLegacyEnv(os.Environ()); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	if len(os.Args) > 1 && os.Args[1] == "snapshot-import" {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		code := snapshotimport.RunCLI(ctx, os.Args[2:], os.Stdout, os.Stderr)

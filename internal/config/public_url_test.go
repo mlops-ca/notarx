@@ -18,8 +18,12 @@ func TestParsePublicURLAccepts(t *testing.T) {
 		{"http://[::1]:8080", "http://[::1]:8080"},
 	} {
 		got, err := ParsePublicURL(tc.raw)
-		if err != nil || got != tc.want {
-			t.Errorf("ParsePublicURL(%q) = %q, %v; want %q", tc.raw, got, err, tc.want)
+		gotString := ""
+		if got != nil {
+			gotString = got.String()
+		}
+		if err != nil || gotString != tc.want || (tc.want == "") != (got == nil) {
+			t.Errorf("ParsePublicURL(%q) = %q, %v; want %q", tc.raw, gotString, err, tc.want)
 		}
 	}
 }
@@ -48,7 +52,7 @@ func TestParsePublicURLRejects(t *testing.T) {
 		"https://notarx.example.com:port",
 	} {
 		if got, err := ParsePublicURL(raw); err == nil {
-			t.Errorf("ParsePublicURL(%q) = %q, nil; want error", raw, got)
+			t.Errorf("ParsePublicURL(%q) = %v, nil; want error", raw, got)
 		} else if !strings.Contains(err.Error(), PublicURLEnv) {
 			t.Errorf("ParsePublicURL(%q) error %q does not name %s", raw, err, PublicURLEnv)
 		}

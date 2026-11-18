@@ -210,10 +210,8 @@ spec:
               value: openid profile email
             - name: NOTARX_OIDC_ADMIN_ROLES
               value: artifact-admin
-            - name: NOTARX_OIDC_WRITER_ROLES
-              value: artifact-writer
-            - name: NOTARX_OIDC_READER_ROLES
-              value: artifact-reader
+            - name: NOTARX_OIDC_MEMBER_ROLES
+              value: artifact-writer,artifact-reader
           ports:
             - containerPort: 8080
           readinessProbe:

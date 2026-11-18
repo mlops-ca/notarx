@@ -15,6 +15,11 @@ ref=${1:-${LEGACY_ENV_REF:-b35c4a53}}
 legacy_prefix="GATEWAY""_"
 new_prefix="NOTARX""_"
 
+git cat-file -e "$ref^{commit}" 2>/dev/null || {
+  echo "git ref $ref is not available; fetch full history or pass an existing ref" >&2
+  exit 1
+}
+
 names=$(git grep -ohE "${legacy_prefix}[A-Z0-9_]*[A-Z0-9]" "$ref" -- 'cmd/*.go' 'internal/*.go' ':!*_test.go' | sort -u)
 if [[ -z "$names" ]]; then
   echo "no legacy environment names found at $ref" >&2

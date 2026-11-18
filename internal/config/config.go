@@ -158,7 +158,7 @@ type Config struct {
 	OTELSamplingRatio               float64
 
 	// publicURL is the validated NOTARX_PUBLIC_URL; read it through PublicURL.
-	publicURL string
+	publicURL *url.URL
 }
 
 func Load() (Config, error) {
@@ -532,12 +532,7 @@ func secureOrLoopbackHTTP(parsed *url.URL) bool {
 	if parsed.Scheme != "http" {
 		return false
 	}
-	switch parsed.Hostname() {
-	case "localhost", "127.0.0.1", "::1":
-		return true
-	default:
-		return false
-	}
+	return isLoopbackHost(parsed.Hostname())
 }
 
 func configureScanner(cfg *Config) error {
