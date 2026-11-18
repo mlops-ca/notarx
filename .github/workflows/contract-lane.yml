@@ -47,6 +47,10 @@ jobs:
               out.write('CI_CONTRACT_EVIDENCE=' + str(path) + '\n')
           PY
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # scripts/tests/test_ci_contract.py reads the baseline workflow with
+          # git show, so the core lane needs history.
+          fetch-depth: 0
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
