@@ -15,7 +15,7 @@ import type {
   Repository,
 } from "../../client";
 import { EmptyState, ErrorBanner, Loading } from "../../components/ui/Feedback";
-import { formatBytes } from "../../lib/format";
+import { useFormatters } from "../../lib/useFormatters";
 import { usePreferences } from "../../lib/preferences";
 
 import {
@@ -40,6 +40,7 @@ export function RepositoryBrowseTree({
   onGroupRefresh?: (page: GroupBrowsePage) => void;
   onOpenInList: (node: BrowseNode) => void;
 }) {
+  const { formatBytes } = useFormatters();
   const { t } = usePreferences();
   const requestVersion = useRef(0);
   const pending = useRef(new Map<string, Promise<void>>());
@@ -95,7 +96,7 @@ export function RepositoryBrowseTree({
         )}
       </span>
     ),
-    [t],
+    [formatBytes, t],
   );
 
   const toTreeNodes = useCallback(

@@ -11,6 +11,7 @@ import { QuotaBadge as Badge } from "./QuotaBadge";
 import { Card, CardHeader } from "../../components/ui/Layout";
 import { ErrorBanner } from "../../components/ui/Feedback";
 import { usePreferences } from "../../lib/preferences";
+import { emailLocaleLabel } from "./emailPresentation";
 import { useFormatters } from "../../lib/useFormatters";
 import {
   percent,
@@ -74,11 +75,7 @@ export function QuotaRuleDetail({
           </h3>
           <p className="break-words text-sm text-fg-secondary">
             {repositoryName} · {target?.name ?? rule.targetId} ·{" "}
-            {target?.locale === "en"
-              ? "English"
-              : target?.locale === "zh-CN"
-                ? "中文"
-                : t("system.localeUnknown")}
+            {emailLocaleLabel(target?.locale, t)}
           </p>
           <p className="text-sm text-fg-secondary">
             {confirmation.kind === "enable"
@@ -252,13 +249,7 @@ export function QuotaRuleDetail({
           <div className="grid gap-2 border-t border-line pt-4">
             <p className="break-words text-sm text-fg-secondary">
               {t("system.notificationTarget")}: {target?.name ?? rule.targetId}{" "}
-              ·{" "}
-              {target?.locale === "en"
-                ? "English"
-                : target?.locale === "zh-CN"
-                  ? "中文"
-                  : t("system.localeUnknown")}{" "}
-              ·{" "}
+              · {emailLocaleLabel(target?.locale, t)} ·{" "}
               {target?.recipientConfigured
                 ? t("system.recipientConfigured")
                 : t("system.recipientMissingOrTargetUnavailable")}

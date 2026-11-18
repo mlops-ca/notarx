@@ -11,7 +11,8 @@ import { AccessDecisionSummary } from "../access-control/AccessDecisionSummary";
 import { FormatBadge, StateBadge } from "../../components/ui/Badge";
 import { IdentitySummary } from "../identity/IdentitySummary";
 import { Card } from "../../components/ui/Layout";
-import { formatBytes, formatNumber } from "../../lib/format";
+import { formatNumber } from "../../lib/format";
+import { useFormatters } from "../../lib/useFormatters";
 import { usePreferences } from "../../lib/preferences";
 import { CopyButton } from "./RepositoryUsageGuides";
 
@@ -103,6 +104,7 @@ export function RepositorySummary({
   capacity: RepositoryCapacity | null;
   onOpenCapacity?: () => void;
 }) {
+  const { formatBytes } = useFormatters();
   const { t } = usePreferences();
   const protocolPath = `${window.location.origin}/${repo.format}/${repo.name}`;
 

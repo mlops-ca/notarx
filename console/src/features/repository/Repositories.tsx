@@ -10,7 +10,8 @@ import type { Repository, Format, FormatProfile } from "../../client";
 import { PageHeader, Card, Pagination } from "../../components/ui/Layout";
 import { Loading, ErrorBanner, EmptyState } from "../../components/ui/Feedback";
 import { ConfirmDialog } from "../../components/ui/Modal";
-import { formatBytes, formatNumber } from "../../lib/format";
+import { formatNumber } from "../../lib/format";
+import { useFormatters } from "../../lib/useFormatters";
 import {
   ConsoleTable,
   FilterBar,
@@ -32,6 +33,7 @@ import { repositoryListColumns } from "./repositoryListColumns";
 import { repositoryFormats } from "../../lib/formatProfiles";
 
 export function RepositoriesPage() {
+  const { formatBytes } = useFormatters();
   const { locale, t } = usePreferences();
   const { identity } = useAuth();
   const isAdmin = platformCapabilities(identity).platformAdmin;

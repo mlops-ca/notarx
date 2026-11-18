@@ -26,7 +26,7 @@ func TestPostgresQuotaRuleReopensWithExplicitDisabledPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	target, err := first.CreateEmailTarget(ctx, EmailTarget{ID: uuid.NewString(), Name: "Synthetic", Locale: "en", RecipientCiphertext: "synthetic"})
+	target, err := first.CreateEmailTarget(ctx, EmailTarget{ID: uuid.NewString(), Name: "Synthetic", Locale: "en-CA", RecipientCiphertext: "synthetic"})
 	if err != nil {
 		t.Fatal(err)
 	}

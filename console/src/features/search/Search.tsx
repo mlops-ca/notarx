@@ -12,6 +12,7 @@ import {
   MetricStrip,
 } from "../../components/ui/ConsolePrimitives";
 import { usePreferences } from "../../lib/preferences";
+import { useFormatters } from "../../lib/useFormatters";
 
 import { ArtifactSearchMatchControl } from "../../components/ui/ArtifactSearchMatchControl";
 
@@ -31,6 +32,7 @@ export { artifactTarget, artifactVersionSizeLabel } from "./searchModel";
 
 export function SearchPage() {
   const { locale, t } = usePreferences();
+  const { formatBytes } = useFormatters();
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const q = (params.get("q") ?? "").trim();
@@ -110,6 +112,7 @@ export function SearchPage() {
 
   const columns = searchColumns({
     expandedRow,
+    formatBytes,
     locale,
     openHit,
     setRowExpanded,

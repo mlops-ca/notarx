@@ -9,7 +9,8 @@ import type {
 import { Card, CardHeader } from "../../components/ui/Layout";
 import { Loading, ErrorBanner, EmptyState } from "../../components/ui/Feedback";
 import { FormatBadge } from "../../components/ui/Badge";
-import { formatBytes, formatNumber } from "../../lib/format";
+import { formatNumber } from "../../lib/format";
+import { useFormatters } from "../../lib/useFormatters";
 import {
   ConsoleTable,
   MetricStrip,
@@ -33,6 +34,7 @@ export function DashboardMetrics({
   groupsResource: DashboardResource<Group[]>;
   window: StatisticsWindow;
 }) {
+  const { formatBytes } = useFormatters();
   const { locale, t } = usePreferences();
   const statistics = statisticsResource.data;
   const groups = groupsResource.data;
@@ -118,6 +120,7 @@ export function RepositoryActivity({
   statisticsResource: DashboardResource<OverviewStatistics>;
   window: StatisticsWindow;
 }) {
+  const { formatBytes } = useFormatters();
   const { locale, t } = usePreferences();
   const statistics = statisticsResource.data;
   const rankedRepositories = statistics

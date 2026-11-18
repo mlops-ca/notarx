@@ -16,6 +16,7 @@ import {
 } from "../../components/ui/Feedback";
 import { ConsoleTable } from "../../components/ui/ConsolePrimitives";
 import { usePreferences } from "../../lib/preferences";
+import { useFormatters } from "../../lib/useFormatters";
 import { useAccessRepositories } from "../access-control/accessQueries";
 import { auditOperationLabel } from "./auditOperations";
 import { auditOutcomeLabel } from "./auditOutcomes";
@@ -45,6 +46,7 @@ function distinct(values: (string | undefined)[], sort = true) {
 
 export function AuditsPage() {
   const { locale, t } = usePreferences();
+  const { formatBytes } = useFormatters();
   const queryClient = useQueryClient();
   // `?actor=` opens the log filtered to one principal (linked from a
   // service account); a later change of that parameter starts over.
@@ -219,7 +221,7 @@ export function AuditsPage() {
           <ConsoleTable<AuditTableRow>
             rowKey="key"
             dataSource={tableRows}
-            columns={auditColumns(t, locale)}
+            columns={auditColumns(t, locale, formatBytes)}
             pagination={false}
             scroll={{
               x: 1080,

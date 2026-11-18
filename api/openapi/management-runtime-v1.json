@@ -19157,7 +19157,8 @@
           "locale": {
             "type": "string",
             "enum": [
-              "en",
+              "en-CA",
+              "fr-CA",
               "zh-CN"
             ]
           },
@@ -19228,7 +19229,8 @@
           "locale": {
             "type": "string",
             "enum": [
-              "en",
+              "en-CA",
+              "fr-CA",
               "zh-CN"
             ]
           },
@@ -19261,8 +19263,7 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "name",
-          "locale"
+          "name"
         ],
         "properties": {
           "name": {
@@ -19273,9 +19274,11 @@
           "locale": {
             "type": "string",
             "enum": [
-              "en",
+              "en-CA",
+              "fr-CA",
               "zh-CN"
-            ]
+            ],
+            "description": "Omit at creation to use the installation default (NOTARX_EMAIL_DEFAULT_LOCALE; en-CA when unset). Omit on update to keep the current locale."
           },
           "enabled": {
             "type": "boolean",
@@ -19499,7 +19502,8 @@
           "locale": {
             "type": "string",
             "enum": [
-              "en",
+              "en-CA",
+              "fr-CA",
               "zh-CN"
             ]
           }

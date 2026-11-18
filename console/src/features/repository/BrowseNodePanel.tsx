@@ -3,7 +3,8 @@ import { ArrowUpOutlined, FolderOpenOutlined } from "@ant-design/icons";
 import { Button } from "antd";
 import type { BrowseNode, BrowseSource, Repository } from "../../client";
 import { Badge } from "../../components/ui/Badge";
-import { formatBytes, formatDate, shortDigest } from "../../lib/format";
+import { formatDate, shortDigest } from "../../lib/format";
+import { useFormatters } from "../../lib/useFormatters";
 import { usePreferences } from "../../lib/preferences";
 import { artifactCoordinateForDisplay, formatDescriptor } from "../../formats";
 import { CopyButton } from "./RepositoryUsageGuides";
@@ -22,6 +23,7 @@ export function BrowseNodePanel({
   selected: BrowseNode | null;
   onOpenInList: (node: BrowseNode) => void;
 }) {
+  const { formatBytes } = useFormatters();
   const { t } = usePreferences();
   return (
     <aside
@@ -204,6 +206,7 @@ function SourceRow({
   source: BrowseSource;
   groupName: string;
 }) {
+  const { formatBytes } = useFormatters();
   const { t } = usePreferences();
   return (
     <li>

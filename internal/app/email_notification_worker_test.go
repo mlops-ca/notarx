@@ -33,7 +33,7 @@ func TestEmailWorkerDoesNotUseDatabaseWallClockAsLocalDeadline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	target, err := store.CreateEmailTarget(ctx, repository.EmailTarget{ID: id, Name: "Synthetic", Locale: "en", RecipientCiphertext: cipher, Enabled: true})
+	target, err := store.CreateEmailTarget(ctx, repository.EmailTarget{ID: id, Name: "Synthetic", Locale: "en-CA", RecipientCiphertext: cipher, Enabled: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func TestEmailWorkerKeepsMIMEFromAndConsoleSnapshotAcrossConfigChange(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	target, err := store.CreateEmailTarget(ctx, repository.EmailTarget{ID: id, Name: "Synthetic", Locale: "en", RecipientCiphertext: cipher, Enabled: true})
+	target, err := store.CreateEmailTarget(ctx, repository.EmailTarget{ID: id, Name: "Synthetic", Locale: "en-CA", RecipientCiphertext: cipher, Enabled: true})
 	if err != nil {
 		t.Fatal(err)
 	}

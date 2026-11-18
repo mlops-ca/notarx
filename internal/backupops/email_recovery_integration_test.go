@@ -60,12 +60,15 @@ func recoverySQL(t *testing.T, ctx context.Context, p Postgres, sql string, args
 	}
 }
 
-func seedRecoveryEmail(t *testing.T, ctx context.Context, source *OwnedTarget, endpoint, liveRepo, cancelledRepo string) recoveryEmail {
+// seedRecoveryEmail seeds through the source gateway, so a published release
+// that predates the en-CA, fr-CA and zh-CN locale tags (ADR 0014) is sent the
+// bare en tag it accepts; the restored gateway is that same release.
+func seedRecoveryEmail(t *testing.T, ctx context.Context, source *OwnedTarget, endpoint, liveRepo, cancelledRepo, locale string) recoveryEmail {
 	t.Helper()
 	t.Setenv(secrets.KeyEnv, recoveryEmailKey)
 	s := recoveryStore(t, source.database)
 	data, _ := fixtureHTTP(t, ctx, endpoint, "POST", "/api/v2/email-targets", source.spec.AdminToken,
-		[]byte(`{"name":"Synthetic recovery","locale":"en","recipient":"`+recoveryRecipient+`","enabled":true}`), 201, "")
+		[]byte(`{"name":"Synthetic recovery","locale":"`+locale+`","recipient":"`+recoveryRecipient+`","enabled":true}`), 201, "")
 	var identity struct{ ID string }
 	if json.Unmarshal(data, &identity) != nil || identity.ID == "" {
 		t.Fatal("email target identity missing")
@@ -297,6 +300,22 @@ func verifyRecoveryEmail(t *testing.T, ctx context.Context, target *OwnedTarget,
 		}
 		assertRecoverySafeAPI(t, path, data, f)
 		fixtureHTTP(t, ctx, endpoint, "GET", path, denied, nil, 403, "")
+	}
+	// A release that predates the locale tags restored the bare en tag. The
+	// worker below is the current code, so apply the migration an operator runs
+	// when upgrading (ADR 0014): it maps en to en-CA.
+	if restored.Locale == "en" {
+		migration, e := os.ReadFile("../../migrations/000004_email_locale_tags.sql")
+		if e != nil {
+			t.Fatal(e)
+		}
+		recoverySQL(t, ctx, target.database, string(migration))
+		// The fixture mirrors what the migration did, so later comparisons hold.
+		f.Target.Locale = "en-CA"
+		for id, delivery := range f.Deliveries {
+			delivery.Locale = "en-CA"
+			f.Deliveries[id] = delivery
+		}
 	}
 	// Restore always starts API-only, with no SMTP configuration or worker role.
 	fixture := testsupport.NewSMTPFixture(t, true)

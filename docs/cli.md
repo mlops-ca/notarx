@@ -875,7 +875,7 @@ These second-batch (M2) commands need a platform administrator.
   email (`ready`, `email_disabled`, `encryption_key_unavailable`). Ready means
   configured, not that mail reaches an inbox.
 - `notarxctl email target list|show` never show recipients, only
-  `recipientConfigured`. `notarxctl email target create NAME --locale en|zh-CN
+  `recipientConfigured`. `notarxctl email target create NAME [--locale en-CA|fr-CA|zh-CN]
   (--recipient-stdin | --recipient-file FILE) [--enabled]` reads the address
   only from bounded stdin or a private (mode 0600) file and redacts it
   everywhere, including plans. `notarxctl email target update ID` changes the

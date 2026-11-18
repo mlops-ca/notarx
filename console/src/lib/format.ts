@@ -1,12 +1,3 @@
-export function formatBytes(bytes: number | undefined): string {
-  if (bytes === undefined || bytes === null || Number.isNaN(bytes)) return "—";
-  if (bytes === 0) return "0 B";
-  const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
-  const exp = Math.min(Math.floor(Math.log2(bytes) / 10), units.length - 1);
-  const value = bytes / 2 ** (exp * 10);
-  return `${value >= 100 ? value.toFixed(0) : value.toFixed(1)} ${units[exp]}`;
-}
-
 export function formatDate(iso: string | undefined, locale?: string): string {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -42,14 +33,14 @@ const DATE_TIME_OPTIONS: Intl.DateTimeFormatOptions = {
   second: "numeric",
 };
 
-const BYTE_UNITS = [
-  "byte",
-  "kilobyte",
-  "megabyte",
-  "gigabyte",
-  "terabyte",
-  "petabyte",
-] as const;
+/** Binary (IEC) storage units; the symbols come per language, the numbers from Intl. */
+const BINARY_UNIT_SYMBOLS = {
+  en: ["B", "KiB", "MiB", "GiB", "TiB", "PiB"],
+  fr: ["o", "Kio", "Mio", "Gio", "Tio", "Pio"],
+} as const;
+
+/** A byte-size formatter: binary units, "—" for a missing or invalid size. */
+export type FormatBytes = (bytes: number | undefined) => string;
 
 /** The Intl formatters, bound to one locale tag (see `useFormatters`). */
 export interface Formatters {
@@ -76,27 +67,27 @@ export interface Formatters {
     options?: Intl.NumberFormatOptions,
   ): string;
   /**
-   * A byte size in decimal SI units; the separators and unit names come from
-   * Intl (`1.5 GB` in en-CA, `1,5 Go` in fr-CA). The module-level
-   * `formatBytes` keeps its binary KiB units for the existing tables; use one
-   * system per screen.
+   * A storage size in IEC binary units (1 KiB is 1024 bytes; Kio, Mio in
+   * fr-CA). The digits and separators come from Intl and the symbols from the
+   * language, so one convention serves every table, meter and chart.
    */
-  formatBytes(bytes: number | undefined): string;
+  formatBytes: FormatBytes;
 }
 
 /** Builds the formatters for a locale tag; `useFormatters` memoizes it per locale. */
 export function createFormatters(locale: string): Formatters {
   const number = new Intl.NumberFormat(locale);
   const dateTime = new Intl.DateTimeFormat(locale, DATE_TIME_OPTIONS);
-  const bytes = BYTE_UNITS.map(
-    (unit) =>
-      new Intl.NumberFormat(locale, {
-        style: "unit",
-        unit,
-        unitDisplay: "short",
-        maximumFractionDigits: 1,
-      }),
-  );
+  const symbols = BINARY_UNIT_SYMBOLS[locale.startsWith("fr") ? "fr" : "en"];
+  const space = locale.startsWith("fr") ? "\u202f" : " ";
+  // One decimal below 100 and none from 100 up, as the Console tables always showed.
+  const sizes = [
+    new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }),
+    new Intl.NumberFormat(locale, {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    }),
+  ];
   return {
     locale,
     number,
@@ -123,22 +114,25 @@ export function createFormatters(locale: string): Formatters {
     },
     formatBytes(size) {
       if (size === undefined || size === null || Number.isNaN(size)) return "—";
-      const last = BYTE_UNITS.length - 1;
+      const last = symbols.length - 1;
       let exponent =
         size === 0
           ? 0
           : Math.max(
               0,
-              Math.min(Math.floor(Math.log10(Math.abs(size)) / 3), last),
+              Math.min(Math.floor(Math.log2(Math.abs(size)) / 10), last),
             );
-      // A value that rounds up to 1000 belongs to the next unit (1000 kB is 1 MB).
+      // A value that rounds up to 1024 belongs to the next unit (1024 KiB is 1 MiB).
       if (
         exponent < last &&
-        Math.abs(Math.round((size / 1000 ** exponent) * 10) / 10) >= 1000
+        Math.abs(Math.round(size / 1024 ** exponent)) >= 1024
       ) {
         exponent += 1;
       }
-      return bytes[exponent].format(size / 1000 ** exponent);
+      if (size === 0) return `0${space}${symbols[0]}`;
+      const value = size / 1024 ** exponent;
+      const digits = Math.abs(value) >= 100 ? 0 : 1;
+      return `${sizes[digits].format(value)}${space}${symbols[exponent]}`;
     },
   };
 }

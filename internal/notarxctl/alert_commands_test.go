@@ -28,11 +28,11 @@ func ruleJSON(enabled bool, version string) string {
 }
 
 func targetJSON(name string, enabled bool, version string) string {
-	return `{"id":"` + targetID + `","name":"` + name + `","locale":"en","enabled":` + map[bool]string{true: "true", false: "false"}[enabled] + `,"recipientConfigured":true,"version":"` + version + `","createdAt":"2026-10-15T08:00:00Z","updatedAt":"2026-10-15T08:00:00Z"}`
+	return `{"id":"` + targetID + `","name":"` + name + `","locale":"en-CA","enabled":` + map[bool]string{true: "true", false: "false"}[enabled] + `,"recipientConfigured":true,"version":"` + version + `","createdAt":"2026-10-15T08:00:00Z","updatedAt":"2026-10-15T08:00:00Z"}`
 }
 
 func deliveryJSON(state, version string) string {
-	return `{"id":"` + deliveryID + `","eventId":"` + ruleID + `","targetId":"` + targetID + `","targetVersion":"1","scenario":"warning","locale":"en","templateVersion":"t1","state":"` + state + `","attempts":1,"possibleDuplicate":false,"version":"` + version + `","createdAt":"2026-10-15T08:00:00Z","updatedAt":"2026-10-15T08:00:00Z","kind":"test"}`
+	return `{"id":"` + deliveryID + `","eventId":"` + ruleID + `","targetId":"` + targetID + `","targetVersion":"1","scenario":"warning","locale":"en-CA","templateVersion":"t1","state":"` + state + `","attempts":1,"possibleDuplicate":false,"version":"` + version + `","createdAt":"2026-10-15T08:00:00Z","updatedAt":"2026-10-15T08:00:00Z","kind":"test"}`
 }
 
 var policyArgs = []string{"--warning-bp", "8500", "--critical-bp", "9500", "--recovery-below-bp", "8000", "--warning-for", "10m", "--critical-for", "5m", "--recovery-for", "10m", "--max-sample-age", "10m"}
@@ -107,23 +107,23 @@ func TestEmailTargetRecipientStaysPrivate(t *testing.T) {
 	_ = os.WriteFile(public, []byte(recipient+"\n"), 0o644)
 	_ = os.WriteFile(private, []byte(recipient+"\n"), 0o600)
 	expectUsage(t, api,
-		[]string{"email", "target", "create", "ops", "--locale", "en"},
+		[]string{"email", "target", "create", "ops", "--locale", "en-CA"},
 		[]string{"email", "target", "create", "ops", "--locale", "fr", "--recipient-file", private},
-		[]string{"email", "target", "create", "ops", "--locale", "en", "--recipient-file", public},
+		[]string{"email", "target", "create", "ops", "--locale", "en-CA", "--recipient-file", public},
 	)
-	code, stdout, stderr := runCLIStdin(t, recipient+"\n", "email", "target", "create", "ops", "--locale", "en", "--recipient-stdin", "--dry-run")
+	code, stdout, stderr := runCLIStdin(t, recipient+"\n", "email", "target", "create", "ops", "--locale", "en-CA", "--recipient-stdin", "--dry-run")
 	noSecret(t, recipient, stdout, stderr)
 	if code != ExitOK || len(api.recorded()) != 0 {
 		t.Fatalf("exit = %d, stdout = %s", code, stdout)
 	}
 	api.onETag("POST", "/api/v2/email-targets", 201, targetJSON("ops", false, "1"), "1")
-	code, stdout, stderr = runCLI(t, "email", "target", "create", "ops", "--locale", "en", "--recipient-file", private, "--verbose", "--json")
+	code, stdout, stderr = runCLI(t, "email", "target", "create", "ops", "--locale", "en-CA", "--recipient-file", private, "--verbose", "--json")
 	noSecret(t, recipient, stdout, stderr)
 	if code != ExitOK || !strings.Contains(api.recorded()[0].Body, `"recipient":"`+recipient+`"`) || !strings.Contains(api.recorded()[0].Body, `"enabled":false`) {
 		t.Fatalf("exit = %d, body = %s", code, api.recorded()[0].Body)
 	}
 	api.on("POST", "/api/v2/email-targets", 400, `{"code":"invalid_request","message":"`+recipient+` is invalid"}`)
-	_, stdout, stderr = runCLI(t, "email", "target", "create", "ops", "--locale", "en", "--recipient-file", private, "--json")
+	_, stdout, stderr = runCLI(t, "email", "target", "create", "ops", "--locale", "en-CA", "--recipient-file", private, "--json")
 	noSecret(t, recipient, stdout, stderr)
 }
 
@@ -137,7 +137,7 @@ func TestEmailTargetUpdateKeepsEnabled(t *testing.T) {
 		t.Fatalf("exit = %d, stdout = %s", code, stdout)
 	}
 	put := api.recorded()[1]
-	if put.IfMatch != "3" || put.Body != `{"enabled":true,"locale":"en","name":"ops-team"}` {
+	if put.IfMatch != "3" || put.Body != `{"enabled":true,"locale":"en-CA","name":"ops-team"}` {
 		t.Fatalf("a rename must keep the target enabled and its recipient untouched: %+v", put)
 	}
 }
@@ -148,12 +148,12 @@ func TestEmailPreviewWritesNewFiles(t *testing.T) {
 	existing := filepath.Join(dir, "existing.html")
 	_ = os.WriteFile(existing, []byte("keep"), 0o644)
 	expectUsage(t, api,
-		[]string{"email", "preview", "--scenario", "outage", "--locale", "en"},
-		[]string{"email", "preview", "--scenario", "warning", "--locale", "en", "--html-output", existing},
+		[]string{"email", "preview", "--scenario", "outage", "--locale", "en-CA"},
+		[]string{"email", "preview", "--scenario", "warning", "--locale", "en-CA", "--html-output", existing},
 	)
 	api.on("POST", "/api/v2/email-notifications:preview", 200, `{"subject":"Quota warning","html":"<p>warning</p>","text":"warning","templateVersion":"t1"}`)
 	html, text := filepath.Join(dir, "p.html"), filepath.Join(dir, "p.txt")
-	code, stdout, _ := runCLI(t, "email", "preview", "--scenario", "warning", "--locale", "en", "--html-output", html, "--text-output", text)
+	code, stdout, _ := runCLI(t, "email", "preview", "--scenario", "warning", "--locale", "en-CA", "--html-output", html, "--text-output", text)
 	gotHTML, _ := os.ReadFile(html)
 	gotText, _ := os.ReadFile(text)
 	if code != ExitOK || string(gotHTML) != "<p>warning</p>" || string(gotText) != "warning" || !strings.Contains(stdout, "Quota warning") {
@@ -161,7 +161,7 @@ func TestEmailPreviewWritesNewFiles(t *testing.T) {
 	}
 	same := filepath.Join(dir, "same.out")
 	posts := api.count("POST")
-	if code, _, _ = runCLI(t, "email", "preview", "--scenario", "warning", "--locale", "en", "--html-output", same, "--text-output", filepath.Join(dir, ".", "same.out")); code != ExitUsage || api.count("POST") != posts {
+	if code, _, _ = runCLI(t, "email", "preview", "--scenario", "warning", "--locale", "en-CA", "--html-output", same, "--text-output", filepath.Join(dir, ".", "same.out")); code != ExitUsage || api.count("POST") != posts {
 		t.Fatalf("one path for both parts is a usage error before the request: exit = %d", code)
 	}
 	if _, err := os.Stat(same); !os.IsNotExist(err) {

@@ -9,7 +9,8 @@ import {
   isNotFound,
 } from "../../components/ui/Feedback";
 import { Field } from "../../components/ui/Layout";
-import { formatBytes, formatNumber } from "../../lib/format";
+import { formatNumber } from "../../lib/format";
+import { useFormatters } from "../../lib/useFormatters";
 import { usePreferences } from "../../lib/preferences";
 import { RepositoryFeatureUnavailable } from "./RepositoryFeatureUnavailable";
 import { MetricStrip } from "../../components/ui/ConsolePrimitives";
@@ -22,6 +23,7 @@ export function RepositoryCapacityTab({ repo }: { repo: Repository }) {
 }
 
 function RepositoryCapacityContent({ repo }: { repo: Repository }) {
+  const { formatBytes } = useFormatters();
   const { resolvedTheme, t } = usePreferences();
   const queryClient = useQueryClient();
   const capacityQuery = useRepositoryCapacity(repo.id);

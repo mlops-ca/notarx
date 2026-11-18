@@ -62,7 +62,7 @@ func (h generatedRepositoryAPIAdapter) CreateEmailTarget(w http.ResponseWriter, 
 		return
 	}
 	v := repository.EmailTarget{ID: uuid.NewString()}
-	if !emailTargetInput(w, input, &v) {
+	if !emailTargetInput(w, input, &v, h.emailDefaultLocale()) {
 		return
 	}
 	out, err := h.emailTargets.CreateEmailTarget(r.Context(), v)
@@ -73,14 +73,19 @@ func (h generatedRepositoryAPIAdapter) CreateEmailTarget(w http.ResponseWriter, 
 	w.Header().Set("ETag", out.Version)
 	writeNativeMavenJSON(w, 201, emailTargetResponse(out))
 }
-func emailTargetInput(w http.ResponseWriter, input adminopenapi.EmailTargetInput, v *repository.EmailTarget) bool {
+func emailTargetInput(w http.ResponseWriter, input adminopenapi.EmailTargetInput, v *repository.EmailTarget, defaultLocale string) bool {
 	name := strings.TrimSpace(input.Name)
-	if name == "" || utf8.RuneCountInString(name) > 128 || strings.ContainsAny(name, "\r\n\x00") || !input.Locale.Valid() {
+	if name == "" || utf8.RuneCountInString(name) > 128 || strings.ContainsAny(name, "\r\n\x00") || (input.Locale != nil && !input.Locale.Valid()) {
 		writeHostedProblem(w, 400, "invalid_request", "email target is invalid")
 		return false
 	}
 	v.Name = name
-	v.Locale = string(input.Locale)
+	switch {
+	case input.Locale != nil:
+		v.Locale = string(*input.Locale)
+	case v.Locale == "":
+		v.Locale = defaultLocale
+	}
 	v.Enabled = input.Enabled != nil && *input.Enabled
 	if input.Recipient != nil {
 		if emailnotification.ValidAddress(*input.Recipient) != nil {
@@ -163,7 +168,7 @@ func (h generatedRepositoryAPIAdapter) UpdateEmailTarget(w http.ResponseWriter, 
 		return
 	}
 	var input adminopenapi.EmailTargetInput
-	if !emailInput(w, r, &input) || !emailTargetInput(w, input, &v) {
+	if !emailInput(w, r, &input) || !emailTargetInput(w, input, &v, h.emailDefaultLocale()) {
 		return
 	}
 	out, err := h.emailTargets.UpdateEmailTarget(r.Context(), v, string(params.IfMatch))
@@ -173,6 +178,15 @@ func (h generatedRepositoryAPIAdapter) UpdateEmailTarget(w http.ResponseWriter, 
 	h.emailAudit(r, p, out.ID, "email.target.update", 200)
 	w.Header().Set("ETag", out.Version)
 	writeNativeMavenJSON(w, 200, emailTargetResponse(out))
+}
+
+// emailDefaultLocale is the locale of a new target that names none
+// (NOTARX_EMAIL_DEFAULT_LOCALE); an unset or unknown value reads as en-CA.
+func (h generatedRepositoryAPIAdapter) emailDefaultLocale() string {
+	if emailnotification.ValidLocale(h.diagnostics.EmailDefaultLocale) {
+		return h.diagnostics.EmailDefaultLocale
+	}
+	return emailnotification.DefaultLocale
 }
 func (h generatedRepositoryAPIAdapter) emailAuthorize(w http.ResponseWriter, r *http.Request) (Principal, bool) {
 	w.Header().Set("Cache-Control", "no-store")

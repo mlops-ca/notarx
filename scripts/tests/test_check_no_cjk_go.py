@@ -51,11 +51,9 @@ class CheckNoCJKGo(unittest.TestCase):
             self.assertEqual(check.allowed(root), set())
             self.assertEqual(len(check.findings(root)), 1)
 
-    def test_the_repository_lists_only_the_email_bodies(self):
-        self.assertEqual(
-            check.allowed(SCRIPT.parent.parent),
-            {'internal/emailnotification/template.go', 'internal/emailnotification/quota.go'},
-        )
+    def test_the_repository_exempts_nothing(self):
+        # The email bodies moved into the embedded locale bundles (ADR 0014 slice 7).
+        self.assertEqual(check.allowed(SCRIPT.parent.parent), set())
 
     def test_the_repository_is_clean(self):
         self.assertEqual(check.findings(SCRIPT.parent.parent), [])

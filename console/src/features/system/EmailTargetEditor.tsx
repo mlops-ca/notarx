@@ -13,6 +13,7 @@ import {
   useFormValidationFocus,
 } from "../../components/ui/formFeedback";
 import { usePreferences } from "../../lib/preferences";
+import { SUPPORTED_LOCALES } from "../../messages/locales";
 import { useQuotaAction } from "./useQuotaAction";
 import { quotaKeys } from "../../lib/query/keys";
 import { isQuotaAuthError } from "./quotaAlertPresentation";
@@ -40,8 +41,8 @@ export function EmailTargetEditor({
   const { t, locale: uiLocale } = usePreferences();
   const [current, setCurrent] = useState(target);
   const [name, setName] = useState(target?.name ?? "");
-  const [locale, setLocale] = useState<"en" | "zh-CN">(
-    target?.locale ?? (uiLocale === "zh-CN" ? "zh-CN" : "en"),
+  const [locale, setLocale] = useState<EmailTarget["locale"]>(
+    target?.locale ?? uiLocale,
   );
   const [recipient, setRecipient] = useState("");
   const baseId = useId();
@@ -161,10 +162,10 @@ export function EmailTargetEditor({
               value={locale}
               disabled={action.busy || reload.busy}
               onChange={setLocale}
-              options={[
-                { value: "zh-CN", label: "简体中文" },
-                { value: "en", label: "English" },
-              ]}
+              options={SUPPORTED_LOCALES.map((item) => ({
+                value: item.tag,
+                label: t(item.labelKey),
+              }))}
             />
           </Field>
           <Field

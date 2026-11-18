@@ -44,8 +44,8 @@ type Preview struct {
 }
 type detail struct{ Label, Value string }
 type view struct {
-	Locale, Status, Color, Tint, Title, Summary, Percent, Amount, ActionLabel, Action, Note, Footer, URL, Subject string
-	Details                                                                                                       []detail
+	Locale, Status, Color, Tint, Title, Summary, Percent, Amount, ActionLabel, Action, Note, Footer, URL, Subject, CTA, Sep string
+	Details                                                                                                                 []detail
 }
 
 // ConsoleURL accepts only an explicit HTTPS origin. Request Host is never used.
@@ -72,33 +72,22 @@ func renderSyntheticVersion(scenario, locale, eventID string, occurred time.Time
 	if version != "1" && version != "2" {
 		return Preview{}, ErrInvalidMessage
 	}
-	if locale != "en" && locale != "zh-CN" {
+	if !ValidLocale(locale) {
 		return Preview{}, ErrInvalidMessage
 	}
-	v := view{Locale: locale, Percent: "12%", Amount: "30.72 / 256 GiB", Color: "#b45309", Tint: "#fff7ed"}
+	l := newLocalizer(locale)
+	v := view{Locale: locale, Percent: "12%", Amount: "30.72 / 256 GiB", Color: "#b45309", Tint: "#fff7ed", CTA: l.text("cta.diagnostics"), ActionLabel: l.text("label.action"), Sep: l.text("detail.separator")}
 	v.URL, _ = ConsoleURL(origin)
 	if origin != "" && v.URL == "" {
 		return Preview{}, ErrInvalidMessage
 	}
-	if locale == "zh-CN" {
-		v.Status = "警告"
-		v.Title = "临时挂载的可用空间偏低"
-		v.Summary = "合成测试：可用比例低于 15%，持续 5 分钟。"
-		v.ActionLabel = "建议行动"
-		v.Action = "检查空间趋势与在途任务，按运维流程处理。"
-		v.Note = "本地挂载观测不表示 S3 或 NAS 后端池容量。"
-		v.Footer = "管理员测试邮件 · 数据为合成样例 · 尚未启用容量告警评估"
-		v.Details = []detail{{"观测范围", "示例节点 A · temporary"}, {"数据来源", "合成的有效挂载采样"}, {"恢复条件", "可用比例 > 20%，持续 3 分钟"}, {"事件时间", occurred.UTC().Format("2006-01-02 15:04:05 UTC")}, {"事件 ID", eventID}}
-	} else {
-		v.Status = "Warning"
-		v.Title = "Temporary mount is running low on space"
-		v.Summary = "Synthetic test: available space below 15% for 5 minutes."
-		v.ActionLabel = "Suggested action"
-		v.Action = "Review space trends and in-flight tasks, then follow the operations procedure."
-		v.Note = "A local mount observation does not describe the S3 or NAS backend pool."
-		v.Footer = "Administrator test email · Synthetic data · Capacity evaluation is not enabled"
-		v.Details = []detail{{"Scope", "Example node A · temporary"}, {"Source", "Synthetic valid mount sample"}, {"Recovery condition", "Available space > 20% for 3 minutes"}, {"Event time", occurred.UTC().Format("2006-01-02 15:04:05 UTC")}, {"Event ID", eventID}}
-	}
+	v.Status = l.text("status.warning")
+	v.Title = l.text("synthetic.title.warning")
+	v.Summary = l.text("synthetic.summary.warning")
+	v.Action = l.text("synthetic.action")
+	v.Note = l.text("synthetic.note")
+	v.Footer = l.text("synthetic.footer.v1")
+	v.Details = []detail{{l.text("synthetic.detail.scope"), l.text("synthetic.detail.scopeValue")}, {l.text("synthetic.detail.source"), l.text("synthetic.detail.sourceValue")}, {l.text("synthetic.detail.recovery"), l.text("synthetic.detail.recoveryValue")}, {l.text("detail.eventTime"), occurred.UTC().Format("2006-01-02 15:04:05 UTC")}, {l.text("detail.eventId"), eventID}}
 	switch scenario {
 	case "warning":
 	case "critical":
@@ -106,37 +95,22 @@ func renderSyntheticVersion(scenario, locale, eventID string, occurred time.Time
 		v.Amount = "10.24 / 256 GiB"
 		v.Color = "#b91c1c"
 		v.Tint = "#fef2f2"
-		if locale == "zh-CN" {
-			v.Status = "严重"
-			v.Summary = "合成测试：可用比例低于 5%，持续 2 分钟。"
-		} else {
-			v.Status = "Critical"
-			v.Summary = "Synthetic test: available space below 5% for 2 minutes."
-		}
+		v.Status = l.text("status.critical")
+		v.Summary = l.text("synthetic.summary.critical")
 	case "resolved":
 		v.Percent = "26%"
 		v.Amount = "66.56 / 256 GiB"
 		v.Color = "#047857"
 		v.Tint = "#ecfdf5"
-		if locale == "zh-CN" {
-			v.Status = "恢复"
-			v.Title = "临时挂载空间已恢复"
-			v.Summary = "合成测试：可用比例高于 20%，持续 3 分钟。"
-		} else {
-			v.Status = "Resolved"
-			v.Title = "Temporary mount space has recovered"
-			v.Summary = "Synthetic test: available space above 20% for 3 minutes."
-		}
+		v.Status = l.text("status.resolved")
+		v.Title = l.text("synthetic.title.resolved")
+		v.Summary = l.text("synthetic.summary.resolved")
 	default:
 		return Preview{}, ErrInvalidMessage
 	}
-	v.Subject = "[Artifact Gateway] " + v.Status + " · " + v.Title
+	v.Subject = l.text("subjectPrefix") + " " + v.Status + " · " + v.Title
 	if version == "2" {
-		if locale == "zh-CN" {
-			v.Footer = "管理员测试邮件 · 合成样例，非实际告警"
-		} else {
-			v.Footer = "Administrator test email · Synthetic example, not an actual alert"
-		}
+		v.Footer = l.text("synthetic.footer.v2")
 	}
 	return renderView(v, version)
 }
@@ -153,7 +127,7 @@ func renderView(v view, version string) (Preview, error) {
 	var plain strings.Builder
 	fmt.Fprintf(&plain, "%s\n\n%s\n%s\n%s\n\n", v.Subject, v.Summary, v.Percent, v.Amount)
 	for _, d := range v.Details {
-		fmt.Fprintf(&plain, "%s: %s\n", d.Label, d.Value)
+		fmt.Fprintf(&plain, "%s%s%s\n", d.Label, v.Sep, d.Value)
 	}
 	fmt.Fprintf(&plain, "\n%s\n%s\n\n%s\n", v.ActionLabel, v.Action, v.Note)
 	if v.URL != "" {

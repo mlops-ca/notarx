@@ -18,6 +18,23 @@ class NoChineseGuardTests(unittest.TestCase):
                 with self.subTest(status=status, path=path):
                     self.assertEqual(len(guard.path_issues([(status, path)])), 1)
 
+    def test_zh_cn_file_diff_that_only_removes_lines_passes(self):
+        entries = [('M', 'console/src/messages/ui.zh-CN.ts'), ('M', 'docs/ci.zh-CN.md')]
+        self.assertEqual(guard.path_issues(entries, {}), [])
+        self.assertEqual(guard.path_issues(entries, {'docs/other.md': 3}), [])
+
+    def test_zh_cn_file_diff_that_adds_or_changes_lines_fails(self):
+        entries = [('M', 'console/src/messages/ui.zh-CN.ts')]
+        self.assertEqual(len(guard.path_issues(entries, {'console/src/messages/ui.zh-CN.ts': 1})), 1)
+        self.assertEqual(len(guard.path_issues([('A', 'console/src/messages/new.zh-CN.ts')], {})), 1)
+
+    def test_added_line_counts_separates_files_and_ignores_headers(self):
+        diff = ('diff --git a/a.zh-CN.ts b/a.zh-CN.ts\n--- a/a.zh-CN.ts\n+++ b/a.zh-CN.ts\n@@ -2,2 +2,0 @@\n'
+                '-  one: "1",\n-  two: "2",\n'
+                'diff --git a/b.zh-CN.ts b/b.zh-CN.ts\n--- a/b.zh-CN.ts\n+++ b/b.zh-CN.ts\n@@ -1 +1 @@\n'
+                f'-  x: "{HAN}",\n+  x: "{HAN}!",\n')
+        self.assertEqual(guard.added_line_counts(diff), {'b.zh-CN.ts': 1})
+
     def test_deleting_zh_cn_files_is_allowed(self):
         self.assertEqual(guard.path_issues([('D', 'docs/ci.zh-CN.md'), ('D', 'console/src/locales/zh-CN/app.json')]), [])
 

@@ -170,7 +170,11 @@ func runLocalRecoveryIntegration(t *testing.T, profile string) {
 	api("GET", "/raw/recovery-group/releases/candidate.txt", denied, nil, 403, "")
 	var emailFixture recoveryEmail
 	if profile != "published-0.5.0" {
-		emailFixture = seedRecoveryEmail(t, ctx, source, url, repos[0].ID, repos[1].ID)
+		emailLocale := "en-CA"
+		if strings.HasPrefix(profile, "published-") {
+			emailLocale = "en"
+		}
+		emailFixture = seedRecoveryEmail(t, ctx, source, url, repos[0].ID, repos[1].ID, emailLocale)
 	}
 	// Flush audit/runtime writes before recording the offline boundary.
 	writerID := source.resourceID("container", source.spec.Project+"-gateway")

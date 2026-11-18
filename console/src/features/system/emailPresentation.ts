@@ -1,4 +1,6 @@
 import type { MessageKey } from "../../messages";
+import type { MessageLocale } from "../../messages/translate";
+import { SUPPORTED_LOCALES } from "../../messages/locales";
 import type { Translate } from "../../lib/preferences";
 
 export function emailTargetErrors(
@@ -137,7 +139,7 @@ export function safeEmailError(
 /** Defense in depth for API HTML: rebuild a finite inert mail layout before sandboxing. */
 export function emailPreviewDocument(
   html: string,
-  locale: "en" | "zh-CN" = "en",
+  locale: MessageLocale = "en-CA",
 ) {
   // Template contents are inert fragments, including their resource elements.
   // DOMParser documents may fetch images before a later filtering pass.
@@ -214,5 +216,11 @@ export function emailPreviewDocument(
   };
   source.content.childNodes.forEach((node) => copy(node, output.body));
   // This policy is first, before all supplied styles. No scripts, URLs, forms or nested frames.
-  return `<!doctype html><html lang="${locale === "zh-CN" ? "zh-CN" : "en"}"><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src 'none'; font-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif">${output.body.innerHTML}</body></html>`;
+  return `<!doctype html><html lang="${locale}"><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src 'none'; font-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif">${output.body.innerHTML}</body></html>`;
+}
+
+/** The language name of an email locale tag; unknown tags read as unknown. */
+export function emailLocaleLabel(locale: string | undefined, t: Translate) {
+  const info = SUPPORTED_LOCALES.find((item) => item.tag === locale);
+  return info ? t(info.labelKey) : t("system.localeUnknown");
 }

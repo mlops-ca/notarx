@@ -17,7 +17,7 @@ import {
   Notice,
 } from "../../components/ui/Feedback";
 import { Field } from "../../components/ui/Layout";
-import { formatBytes } from "../../lib/format";
+import { useFormatters } from "../../lib/useFormatters";
 import { usePreferences } from "../../lib/preferences";
 import {
   assertSourceSnapshot,
@@ -38,6 +38,7 @@ export function MigrationRepositoryPlanning({
   preflight: MigrationSourcePreflight;
   onPlanBatch?: (draft: BatchDraft) => void;
 }) {
+  const { formatBytes } = useFormatters();
   const { t } = usePreferences();
   const [selected, setSelected] = useState<string[]>([]);
   const [targets, setTargets] = useState<Record<string, string>>({});
@@ -108,7 +109,7 @@ export function MigrationRepositoryPlanning({
         {t("migration.visibleScope", { version: preflight.sourceVersion })}
       </p>
       <p className="text-xs text-fg-tertiary">
-        {observation(preflight.stats, t)}
+        {observation(preflight.stats, t, formatBytes)}
       </p>
       {preflight.repositories.length === 0 ? (
         <EmptyState compact title={t("migration.noRepositories")} />
@@ -287,7 +288,7 @@ export function MigrationRepositoryPlanning({
                 })}
               </p>
               <p className="text-xs text-fg-tertiary">
-                {observation(discovery.data.stats, t)}
+                {observation(discovery.data.stats, t, formatBytes)}
               </p>
               <ConsoleTable
                 dataSource={discovery.data.assets}
@@ -434,7 +435,7 @@ export function MigrationRepositoryPlanning({
                   </div>
                 )}
               <p className="text-xs text-fg-tertiary">
-                {observation(preview.data.stats, t)}
+                {observation(preview.data.stats, t, formatBytes)}
               </p>
               <ul className="ag-migration-repositories">
                 {preview.data.mappings.map((mapping) => (

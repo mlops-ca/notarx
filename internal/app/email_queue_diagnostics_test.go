@@ -42,7 +42,7 @@ func TestEmailQueueDiagnosticsForcedPasswordAndCancellation(t *testing.T) {
 func TestEmailQueueDiagnosticsReadOnlyAuthorizationAndEvidence(t *testing.T) {
 	s := repository.NewMemoryStore()
 	ctx := context.Background()
-	target, err := s.CreateEmailTarget(ctx, repository.EmailTarget{ID: uuid.NewString(), Enabled: true, RecipientCiphertext: "private-recipient-ciphertext", Locale: "en"})
+	target, err := s.CreateEmailTarget(ctx, repository.EmailTarget{ID: uuid.NewString(), Enabled: true, RecipientCiphertext: "private-recipient-ciphertext", Locale: "en-CA"})
 	if err != nil {
 		t.Fatal(err)
 	}

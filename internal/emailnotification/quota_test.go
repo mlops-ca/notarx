@@ -16,7 +16,7 @@ func quotaMailFixture() quotaalert.Event {
 func TestQuotaVersionedMIMEPreservesSemanticEvidenceAndSafeHTML(t *testing.T) {
 	e := quotaMailFixture()
 	cfg := Config{From: "synthetic@example.test", ConsoleOrigin: "https://console.example.invalid"}
-	for _, locale := range []string{"en", "zh-CN"} {
+	for _, locale := range []string{"en-CA", "fr-CA", "zh-CN"} {
 		for _, scenario := range []string{"warning", "critical", "resolved"} {
 			v := e
 			v.Scenario = scenario
@@ -26,11 +26,15 @@ func TestQuotaVersionedMIMEPreservesSemanticEvidenceAndSafeHTML(t *testing.T) {
 			if scenario == "resolved" {
 				v.UsedBytes = 790
 			}
+			unit := "bytes"
+			if locale == "fr-CA" {
+				unit = "octets"
+			}
 			p, err := RenderQuota(v, locale, cfg.ConsoleOrigin, "quota-1")
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !strings.Contains(p.HTML, "&lt;demo&gt;") || strings.Contains(p.HTML, "synthetic <demo>") || !strings.Contains(p.Text, "880 / 1000 bytes") && scenario == "warning" || !strings.Contains(p.Text, v.EpisodeID) || !strings.Contains(p.Text, "UTC") {
+			if !strings.Contains(p.HTML, "&lt;demo&gt;") || strings.Contains(p.HTML, "synthetic <demo>") || !strings.Contains(p.Text, "880 / 1000 "+unit) && scenario == "warning" || !strings.Contains(p.Text, v.EpisodeID) || !strings.Contains(p.Text, "UTC") {
 				t.Fatal("quota evidence/escaping mismatch")
 			}
 			if strings.Contains(p.HTML, "<img") || strings.Contains(p.HTML, "<script") || strings.Contains(p.HTML, "@import") {
@@ -53,20 +57,20 @@ func TestQuotaMailRejectsMalformedEvidenceAndHeaderInjection(t *testing.T) {
 	for _, mutate := range []func(*quotaalert.Event){func(v *quotaalert.Event) { v.RepositoryName = "name\r\nBcc: hidden" }, func(v *quotaalert.Event) { v.ID = "not-a-uuid" }, func(v *quotaalert.Event) { v.RuleVersion = "0" }, func(v *quotaalert.Event) { v.QuotaBytes = 0 }, func(v *quotaalert.Event) { v.UsedBytes = -1 }, func(v *quotaalert.Event) { v.UsedBytes = 1 }, func(v *quotaalert.Event) { v.EvidenceSince = v.SampleAt }, func(v *quotaalert.Event) { v.SampleAt = v.OccurredAt.Add(time.Second) }, func(v *quotaalert.Event) { v.Scenario = "custom" }} {
 		v := e
 		mutate(&v)
-		if _, err := MIMEQuota(cfg, "recipient@example.test", v, "en", "quota-1"); err == nil {
+		if _, err := MIMEQuota(cfg, "recipient@example.test", v, "en-CA", "quota-1"); err == nil {
 			t.Fatal("malformed quota evidence rendered")
 		}
 	}
-	if _, err := MIMEQuota(cfg, "recipient@example.test", e, "en", "quota-unknown"); err == nil {
+	if _, err := MIMEQuota(cfg, "recipient@example.test", e, "en-CA", "quota-unknown"); err == nil {
 		t.Fatal("unavailable version silently rendered")
 	}
-	if _, err := MIMEQuota(cfg, "recipient@example.test\r\nBcc: hidden", e, "en", "quota-1"); err == nil {
+	if _, err := MIMEQuota(cfg, "recipient@example.test\r\nBcc: hidden", e, "en-CA", "quota-1"); err == nil {
 		t.Fatal("recipient header injection")
 	}
 }
 func TestLegacySyntheticV1FooterIsRetained(t *testing.T) {
-	p, err := renderSyntheticVersion("warning", "zh-CN", "synthetic", time.Now(), "", "1")
-	if err != nil || !strings.Contains(p.Text, "尚未启用容量告警评估") || p.TemplateVersion != "1" {
+	p, err := renderSyntheticVersion("warning", "en-CA", "synthetic", time.Now(), "", "1")
+	if err != nil || !strings.Contains(p.Text, "Capacity evaluation is not enabled") || p.TemplateVersion != "1" {
 		t.Fatal("legacy descriptor changed on replay")
 	}
 }

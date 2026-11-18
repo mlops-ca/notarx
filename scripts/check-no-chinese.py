@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Fail a change that adds or modifies Chinese content (owner rule, 2026-11-18).
 
-Flags added or modified zh-CN files (*.zh-CN.md and zh-CN locale files) and any
-added line that contains Chinese characters. Deletions stay allowed. In CI the
-change is the pull request merge commit against its first parent:
+Flags added zh-CN files (*.zh-CN.md and zh-CN locale files), zh-CN files whose
+diff adds any line, and any added line that contains Chinese characters.
+Deletions stay allowed, including a diff that only removes lines from an
+existing zh-CN file (key pruning, ADR 0014). In CI the change is the pull
+request merge commit against its first parent:
 
     python3 scripts/check-no-chinese.py            # diff HEAD^1..HEAD
     python3 scripts/check-no-chinese.py BASE HEAD  # diff BASE..HEAD
@@ -21,7 +23,7 @@ ZH_PATH = re.compile(r'(^|/)(zh-CN|zh_CN)(/|\.)|\.zh-CN\.|[-_.]zh-CN$', re.I)
 def allowed():
     """Exact (path, blob) pairs from scripts/check-no-chinese.allow."""
     try:
-        rows = open(ALLOW).read().splitlines()
+        rows = ALLOW.read_text().splitlines()
     except FileNotFoundError:
         return set()
     return {tuple(row.split()) for row in rows if row.strip() and not row.startswith('#')}
@@ -32,12 +34,37 @@ def blob(path):
     return result.stdout.strip()
 
 
-def path_issues(entries):
-    """entries: (status, path) pairs from git diff --name-status."""
+def path_issues(entries, added_lines=None):
+    """entries: (status, path) pairs from git diff --name-status.
+
+    added_lines maps a path to its count of added lines (see added_line_counts).
+    A modified zh-CN file passes when the diff only removes lines from it; when
+    the map is not given every modification is flagged.
+    """
     exempt = allowed()
-    return [f'{path}: zh-CN files must not be added or modified'
-            for status, path in entries
-            if status[0] != 'D' and ZH_PATH.search(path) and (path, blob(path)) not in exempt]
+    issues = []
+    for status, path in entries:
+        if status[0] == 'D' or not ZH_PATH.search(path) or (path, blob(path)) in exempt:
+            continue
+        if status[0] == 'M' and added_lines is not None and not added_lines.get(path, 0):
+            continue
+        issues.append(f'{path}: zh-CN files must not be added or modified')
+    return issues
+
+
+def added_line_counts(diff_text):
+    """Added line count per file of a unified diff."""
+    counts, current, in_hunk = {}, None, False
+    for line in diff_text.splitlines():
+        if line.startswith('diff --git '):
+            in_hunk = False
+        elif line.startswith('@@'):
+            in_hunk = True
+        elif not in_hunk and line.startswith('+++ '):
+            current = line[4:].removeprefix('b/')
+        elif in_hunk and line.startswith('+') and current:
+            counts[current] = counts.get(current, 0) + 1
+    return counts
 
 
 CJK_RUN = re.compile('[\u3400-\u9fff\uf900-\ufaff]+')
@@ -80,7 +107,7 @@ def main(argv):
     names = subprocess.check_output(['git', '-c', 'core.quotepath=off', 'diff', '--name-status', '--no-renames', *span], text=True)
     entries = [tuple(row.split('\t', 1)) for row in names.splitlines() if row]
     diff = subprocess.check_output(['git', '-c', 'core.quotepath=off', 'diff', '--no-renames', '--unified=0', *span], text=True)
-    issues = path_issues(entries) + line_issues(diff)
+    issues = path_issues(entries, added_line_counts(diff)) + line_issues(diff)
     for issue in issues:
         print(issue, file=sys.stderr)
     return 1 if issues else 0

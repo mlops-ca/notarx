@@ -1,0 +1,6 @@
+# fr-CA strings and documents are reviewed by an automated LLM step and approved
+# by a maintainer (ADR 0014, "Translation workflow"). The maintainers are the
+# fr-CA reviewer group; there is no Quebec-based human reviewer requirement.
+*.fr-CA.ts @kharkevich @olgakharkevich
+*.fr-CA.md @kharkevich @olgakharkevich
+/console/src/messages/.review/ @kharkevich @olgakharkevich

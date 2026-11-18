@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { enCA, zhCN, type MessageKey } from ".";
+import { enCA, frCA, zhCN, type MessageKey } from ".";
 import {
   LOCALE_FALLBACK,
   LocalizedError,
@@ -44,9 +44,13 @@ describe("createTranslator fallback", () => {
     );
   });
 
-  it("serves en-CA directly and has no runtime fallback for fr-CA", () => {
+  it("serves en-CA directly and fr-CA from its own total table", () => {
     expect(createTranslator("en-CA")(retry)).toBe(enCA[retry]);
-    expect(createTranslator("fr-CA")(retry)).toBe(enCA[retry]);
+    expect(createTranslator("fr-CA")(retry)).toBe(frCA[retry]);
+    expect(createTranslator("fr-CA")(retry)).not.toBe(enCA[retry]);
+    expect(createTranslator("fr-CA")(disable, { name: "Ops" })).toContain(
+      "Ops",
+    );
   });
 });
 

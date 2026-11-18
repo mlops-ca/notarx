@@ -79,6 +79,34 @@ afterEach(() => {
   else Reflect.deleteProperty(Element.prototype, "scrollIntoView");
 });
 
+describe("CommandPalette language commands", () => {
+  it("offers one switch command per other ready locale, naming each language in its own", async () => {
+    const user = userEvent.setup();
+    const { input } = renderPalette();
+    await user.click(input);
+    expect(
+      screen.getByRole("option", { name: /Switch language to Français/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("option", { name: /Switch language to / }),
+    ).toHaveLength(2);
+    expect(
+      screen.queryByRole("option", { name: /Switch language to English/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("switches the Console language from a command", async () => {
+    const user = userEvent.setup();
+    const { input, onClose } = renderPalette();
+    await user.click(input);
+    await user.click(
+      screen.getByRole("option", { name: /Switch language to Français/ }),
+    );
+    expect(onClose).toHaveBeenCalled();
+    expect(window.localStorage.getItem("ag.console.locale")).toBe("fr-CA");
+  });
+});
+
 describe("CommandPalette recovery and keyboard boundaries", () => {
   it("finds and opens a repository beyond the first API page", async () => {
     list

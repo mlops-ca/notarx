@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "antd";
 import { CopyOutlined, DownloadOutlined } from "@ant-design/icons";
-import { formatBytes, formatDate } from "../../lib/format";
+import { formatDate } from "../../lib/format";
+import { useFormatters } from "../../lib/useFormatters";
 import { usePreferences } from "../../lib/preferences";
 import { goUsage } from "../../lib/usage";
 import { ArtifactIntelligencePanel } from "./ArtifactIntelligencePanel";
@@ -42,6 +43,7 @@ export function GoModuleDetail({
   onVersionChange?: (version: string) => void;
   canQuarantine?: boolean;
 }) {
+  const { formatBytes } = useFormatters();
   const { locale, t } = usePreferences();
   const versionsQuery = useGoModuleVersions(repoName, modulePath);
   const versionList = versionsQuery.data;

@@ -1,4 +1,4 @@
-import { formatBytes } from "../../lib/format";
+import { useFormatters } from "../../lib/useFormatters";
 import { usePreferences } from "../../lib/preferences";
 
 /** Usage above these shares of the quota reads as warning, then danger. */
@@ -17,6 +17,7 @@ export function UsageMeter({
   usedBytes: number;
   quotaBytes: number;
 }) {
+  const { formatBytes } = useFormatters();
   const { t } = usePreferences();
   if (quotaBytes <= 0) {
     return (

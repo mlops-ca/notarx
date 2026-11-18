@@ -16,6 +16,7 @@ export const shellEnCA = {
   "palette.actions": "Actions",
   "palette.searchArtifacts": "Search artifacts for “{query}”",
   "palette.toggleTheme": "Toggle dark / light",
+  "palette.switchLanguage": "Switch language to {language}",
   "account.menu": "Account menu",
   "account.kind.static_admin": "Admin token",
   "account.kind.static_resolver": "Resolver token",

@@ -16,7 +16,7 @@ func TestQuotaEvaluationPersistsTransitionsAndMailSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	target, err := s.CreateEmailTarget(ctx, EmailTarget{ID: uuid.NewString(), Name: "Synthetic", Locale: "en", Enabled: true, RecipientCiphertext: "cipher-snapshot"})
+	target, err := s.CreateEmailTarget(ctx, EmailTarget{ID: uuid.NewString(), Name: "Synthetic", Locale: "en-CA", Enabled: true, RecipientCiphertext: "cipher-snapshot"})
 	if err != nil {
 		t.Fatal(err)
 	}

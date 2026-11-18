@@ -14,6 +14,7 @@ import { ErrorBanner } from "../../components/ui/Feedback";
 import { StateBadge } from "../../components/ui/Badge";
 import { formatDate } from "../../lib/format";
 import { usePreferences } from "../../lib/preferences";
+import { useFormatters } from "../../lib/useFormatters";
 import { ConsoleTable } from "../../components/ui/ConsolePrimitives";
 import { stagedFileColumns, type StagedFile } from "./mavenPublishColumns";
 
@@ -36,6 +37,7 @@ export function MavenPublishWizard({
 }) {
   const { token } = useAuth();
   const { locale, t } = usePreferences();
+  const { formatBytes } = useFormatters();
   const [step, setStep] = useState<Step>("declare");
   const [coordinate, setCoordinate] = useState("");
   const [pomObject, setPomObject] = useState("");
@@ -186,7 +188,11 @@ export function MavenPublishWizard({
     return Upload.LIST_IGNORE;
   };
   const currentStep = step === "declare" ? 0 : step === "upload" ? 1 : 2;
-  const { stagedColumns, uploadColumns } = stagedFileColumns(t, removeFile);
+  const { stagedColumns, uploadColumns } = stagedFileColumns(
+    t,
+    removeFile,
+    formatBytes,
+  );
 
   return (
     <div className="space-y-5">

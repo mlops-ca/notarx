@@ -1,7 +1,7 @@
 import type { MigrationSource, MigrationSourceStats } from "../../client";
 import type { MigrationMessageKey } from "../../messages/migration.en-CA";
 import { LocalizedError, type Translator } from "../../messages/translate";
-import { formatBytes } from "../../lib/format";
+import { type FormatBytes } from "../../lib/format";
 
 const failures: Record<string, MigrationMessageKey> = {
   invalid_request: "migration.invalidSource",
@@ -113,7 +113,11 @@ export function migrationReason(reason: string, t: Translator): string {
   );
 }
 
-export function observation(stats: MigrationSourceStats, t: Translator) {
+export function observation(
+  stats: MigrationSourceStats,
+  t: Translator,
+  formatBytes: FormatBytes,
+) {
   return t("migration.observation", {
     requests: stats.requests,
     pages: stats.pages,

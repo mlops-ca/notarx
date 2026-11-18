@@ -106,7 +106,7 @@ it("creates disabled without sending and clears the sensitive value on cancel", 
   expect(mocks.createEmailTarget.mock.calls[0][0].body).toEqual({
     name: "Synthetic",
     recipient: "a@example.test",
-    locale: "en",
+    locale: "en-CA",
     enabled: false,
   });
   expect(mocks.testEmailNotification).not.toHaveBeenCalled();

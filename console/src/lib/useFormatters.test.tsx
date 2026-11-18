@@ -12,9 +12,9 @@ const instant = "2026-10-14T15:04:05Z";
 
 describe("createFormatters", () => {
   it.each([
-    ["en-CA", "1,234,567.5", "1.5 GB", "a, b and c"],
-    ["fr-CA", "1 234 567,5", "1,5 Go", "a, b et c"],
-    ["zh-CN", "1,234,567.5", "1.5 GB", undefined],
+    ["en-CA", "1,234,567.5", "1.4 GiB", "a, b and c"],
+    ["fr-CA", "1 234 567,5", "1,4 Gio", "a, b et c"],
+    ["zh-CN", "1,234,567.5", "1.4 GiB", undefined],
   ])(
     "formats numbers, bytes and lists for %s",
     (locale, number, bytes, list) => {
@@ -57,13 +57,19 @@ describe("createFormatters", () => {
 
   it("scales byte sizes and marks missing or invalid values", () => {
     const en = createFormatters("en-CA");
-    expect(en.formatBytes(0)).toBe("0 bytes");
-    expect(plain(en.formatBytes(999))).toBe("999 bytes");
-    expect(plain(en.formatBytes(1500))).toBe("1.5 kB");
-    // A value that rounds up to 1000 moves to the next unit.
-    expect(plain(en.formatBytes(999_999))).toBe("1 MB");
-    expect(plain(en.formatBytes(999_949))).toBe("999.9 kB");
-    expect(plain(en.formatBytes(999_950_000))).toBe("1 GB");
+    const fr = createFormatters("fr-CA");
+    expect(en.formatBytes(0)).toBe("0 B");
+    expect(plain(en.formatBytes(999))).toBe("999 B");
+    expect(plain(en.formatBytes(1024))).toBe("1.0 KiB");
+    expect(plain(en.formatBytes(1536))).toBe("1.5 KiB");
+    expect(plain(en.formatBytes(150 * 1024))).toBe("150 KiB");
+    expect(plain(fr.formatBytes(1536))).toBe("1,5 Kio");
+    expect(plain(fr.formatBytes(512))).toBe("512 o");
+    // A value that rounds up to 1024 moves to the next unit.
+    expect(plain(en.formatBytes(1024 * 1024 - 1))).toBe("1.0 MiB");
+    expect(plain(en.formatBytes(1024 * 1023.4))).toBe("1,023 KiB");
+    expect(plain(en.formatBytes(1024 * 1023.6))).toBe("1.0 MiB");
+    expect(plain(en.formatBytes(1024 ** 3 * 256))).toBe("256 GiB");
     expect(en.formatBytes(undefined)).toBe("—");
     expect(en.formatBytes(Number.NaN)).toBe("—");
     expect(en.formatDateTime(undefined)).toBe("—");

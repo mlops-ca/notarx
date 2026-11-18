@@ -35,7 +35,7 @@ func quotaPostgresFixture(t *testing.T) (*PostgresStore, RepositoryQuotaAlertRul
 	if err != nil {
 		t.Fatal(err)
 	}
-	target, err := s.CreateEmailTarget(ctx, EmailTarget{ID: uuid.NewString(), Name: "Synthetic", Locale: "en", Enabled: true, RecipientCiphertext: "synthetic-cipher"})
+	target, err := s.CreateEmailTarget(ctx, EmailTarget{ID: uuid.NewString(), Name: "Synthetic", Locale: "en-CA", Enabled: true, RecipientCiphertext: "synthetic-cipher"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,7 @@ func TestPostgresQuotaQueueFullRetainsDeadReplayableDelivery(t *testing.T) {
 	s, r, cfg := quotaPostgresFixture(t)
 	ctx := context.Background()
 	// Synthetic active deliveries exercise the shared global cap without real SMTP.
-	if _, err := s.db.Exec(`INSERT INTO email_test_deliveries(id,event_id,request_key,target_id,target_version,scenario,locale,template_version,recipient_ciphertext,from_address,console_origin) SELECT gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),$1,1,'warning','en','1','synthetic','synthetic@example.test','' FROM generate_series(1,1000)`, r.TargetID); err != nil {
+	if _, err := s.db.Exec(`INSERT INTO email_test_deliveries(id,event_id,request_key,target_id,target_version,scenario,locale,template_version,recipient_ciphertext,from_address,console_origin) SELECT gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),$1,1,'warning','en-CA','1','synthetic','synthetic@example.test','' FROM generate_series(1,1000)`, r.TargetID); err != nil {
 		t.Fatal(err)
 	}
 	quotaPGSample(t, s, r, cfg, 880)

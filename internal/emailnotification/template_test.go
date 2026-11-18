@@ -14,13 +14,13 @@ import (
 
 func TestSyntheticPreviewDoesNotClaimQuotaEvaluationIsDisabled(t *testing.T) {
 	p, err := Render("warning", "zh-CN", "synthetic", time.Now(), "")
-	if err != nil || strings.Contains(p.Text, "尚未启用容量告警评估") || p.TemplateVersion != "2" {
+	if err != nil || strings.Contains(p.Text, "Capacity evaluation is not enabled") || p.TemplateVersion != "2" {
 		t.Fatalf("obsolete synthetic footer: %s %s %v", p.TemplateVersion, p.Text, err)
 	}
 }
 
 func TestVersionedMIMEContainsEquivalentTextAndEscapedHTML(t *testing.T) {
-	for _, locale := range []string{"en", "zh-CN"} {
+	for _, locale := range []string{"en-CA", "fr-CA", "zh-CN"} {
 		for _, scenario := range []string{"warning", "critical", "resolved"} {
 			t.Run(locale+"/"+scenario, func(t *testing.T) {
 				id := "1d8a5d8c-327d-4c33-a6f2-776f1a52bd45"
@@ -69,7 +69,7 @@ func TestVersionedMIMEContainsEquivalentTextAndEscapedHTML(t *testing.T) {
 			})
 		}
 	}
-	p, err := Render("warning", "en", "<img src=x onerror=evil>", time.Now(), "")
+	p, err := Render("warning", "en-CA", "<img src=x onerror=evil>", time.Now(), "")
 	if err != nil || strings.Contains(p.HTML, "<img") {
 		t.Fatal("template did not escape semantic value")
 	}
@@ -88,7 +88,7 @@ func TestMailInputRejectsHeaderAndLinkInjection(t *testing.T) {
 }
 
 func TestRendererRetainsFixedOutlookWrapper(t *testing.T) {
-	p, err := Render("warning", "en", "synthetic", time.Now(), "")
+	p, err := Render("warning", "en-CA", "synthetic", time.Now(), "")
 	if err != nil || !strings.Contains(p.HTML, `<!--[if mso]><table role="presentation" width="600"`) || !strings.Contains(p.HTML, `<!--[if mso]></td></tr></table><![endif]-->`) {
 		t.Fatal("Outlook fallback lost during escaped rendering")
 	}

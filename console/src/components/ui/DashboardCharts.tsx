@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { formatBytes } from "../../lib/format";
+import { useFormatters } from "../../lib/useFormatters";
 import { artifactFormatVisualizationSlot } from "../../lib/artifactFormatVisuals";
 import { usePreferences } from "../../lib/preferences";
 import {
@@ -163,6 +163,7 @@ export function StorageByFormatChart({
   bytesByFormat: Record<string, number> | null;
   totalBytes: number | null;
 }) {
+  const { formatBytes } = useFormatters();
   const { colorMode, resolvedTheme, t } = usePreferences();
   const chartData = bytesByFormat ? buildStorageChartData(bytesByFormat) : [];
   const palette = resolvedTheme.roles.visualization.categorical;

@@ -9,6 +9,7 @@
     "typecheck": "tsc -b --pretty false",
     "lint": "eslint . --max-warnings 0",
     "format:check": "prettier --check .",
+    "i18n:prune:check": "node scripts/i18n-prune.mjs --check",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "generate:api": "openapi-ts -f hey-api.config.ts && prettier --ignore-path /dev/null --write src/client/types.gen.ts",

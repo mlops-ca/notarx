@@ -46,7 +46,7 @@ func TestPostgresEmailConcurrentLimitRestartExhaustionAndReplay(t *testing.T) {
 	if _, err = first.db.Exec(`TRUNCATE repository_quota_alert_events,email_test_deliveries,repository_quota_alert_rules,email_targets,email_test_requests`); err != nil {
 		t.Fatal(err)
 	}
-	target, err := first.CreateEmailTarget(ctx, EmailTarget{ID: uuid.NewString(), Name: "Synthetic", Locale: "en", RecipientCiphertext: "immutable", Enabled: true})
+	target, err := first.CreateEmailTarget(ctx, EmailTarget{ID: uuid.NewString(), Name: "Synthetic", Locale: "en-CA", RecipientCiphertext: "immutable", Enabled: true})
 	if err != nil {
 		t.Fatal(err)
 	}

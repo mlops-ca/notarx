@@ -8,6 +8,7 @@ import {
 import { Card, CardHeader, Field } from "../../components/ui/Layout";
 import { EmptyState, ErrorBanner } from "../../components/ui/Feedback";
 import { usePreferences } from "../../lib/preferences";
+import { SUPPORTED_LOCALES } from "../../messages/locales";
 import { useQuotaAction } from "./useQuotaAction";
 import { quotaResult } from "./useQuotaSnapshot";
 import { emailPreviewDocument, safeEmailError } from "./emailPresentation";
@@ -24,9 +25,7 @@ export function EmailTemplatePreview({
   const { t, locale: uiLocale, colorMode } = usePreferences();
   const [scenario, setScenario] =
     useState<EmailPreviewInput["scenario"]>("warning");
-  const [locale, setLocale] = useState<EmailPreviewInput["locale"]>(
-    uiLocale === "zh-CN" ? "zh-CN" : "en",
-  );
+  const [locale, setLocale] = useState<EmailPreviewInput["locale"]>(uiLocale);
   const [preview, setPreview] = useState<EmailPreview>();
   const [format, setFormat] = useState("html");
   const action = useQuotaAction(onAuthBlocked);
@@ -62,10 +61,10 @@ export function EmailTemplatePreview({
                 setLocale(v);
                 setPreview(undefined);
               }}
-              options={[
-                { value: "zh-CN", label: "简体中文" },
-                { value: "en", label: "English" },
-              ]}
+              options={SUPPORTED_LOCALES.map((item) => ({
+                value: item.tag,
+                label: t(item.labelKey),
+              }))}
             />
           </Field>
         </div>

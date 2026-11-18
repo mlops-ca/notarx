@@ -153,8 +153,8 @@ func TestPostgresEmailConsoleBrowserTLS(t *testing.T) {
 		if e != nil {
 			t.Fatal(e)
 		}
-		if !strings.Contains(string(body), "合成") {
-			t.Fatal("MIME lost synthetic Chinese semantics")
+		if !strings.Contains(string(body), "Synthetic") {
+			t.Fatal("MIME lost synthetic semantics")
 		}
 		count++
 	}

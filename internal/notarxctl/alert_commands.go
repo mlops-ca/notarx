@@ -607,7 +607,7 @@ func (r *recipientInput) register(fs *flag.FlagSet) {
 func (r recipientInput) given() bool { return r.stdin || r.file != "" }
 
 func (r recipientInput) read(env *commandContext) (string, error) {
-	hint := `pass it privately, for example: printf '%s\n' "$ALERT_RECIPIENT" | notarxctl email target create NAME --locale en --recipient-stdin`
+	hint := `pass it privately, for example: printf '%s\n' "$ALERT_RECIPIENT" | notarxctl email target create NAME --locale en-CA --recipient-stdin`
 	if r.stdin && r.file != "" {
 		return "", &UsageError{Message: "pass only one of --recipient-stdin or --recipient-file", Hint: hint}
 	}
@@ -655,7 +655,7 @@ func sendEmailTarget(ctx context.Context, client *apiClient, method, path string
 	}
 	var target adminopenapi.EmailTarget
 	response, err := client.sendJSON(ctx, method, path, requestOptions{body: encoded, header: header}, &target)
-	if err == nil && (!completeEmailTarget(target) || target.Name != body.Name || target.Locale != adminopenapi.EmailTargetLocale(body.Locale) ||
+	if err == nil && (!completeEmailTarget(target) || target.Name != body.Name || (body.Locale != nil && target.Locale != adminopenapi.EmailTargetLocale(*body.Locale)) ||
 		(body.Enabled != nil && target.Enabled != *body.Enabled) || (body.Recipient != nil && !target.RecipientConfigured)) {
 		err = incompleteResponse(response, client, "email target")
 	}
@@ -715,11 +715,11 @@ func emailTargetCreateCommand() command {
 	return command{
 		name:        "email target create",
 		synopsis:    "create an email target; the recipient comes only from stdin or a private file",
-		usage:       "notarxctl email target create NAME --locale en|zh-CN (--recipient-stdin | --recipient-file FILE) [--enabled] [--dry-run] [--json]",
+		usage:       "notarxctl email target create NAME [--locale en-CA|fr-CA|zh-CN] (--recipient-stdin | --recipient-file FILE) [--enabled] [--dry-run] [--json]",
 		positionals: 1,
 		argsUsage:   "NAME",
 		setFlags: func(fs *flag.FlagSet) {
-			fs.StringVar(&locale, "locale", "", "message language: en or zh-CN")
+			fs.StringVar(&locale, "locale", "", "message language: en-CA, fr-CA or zh-CN (default: the installation default)")
 			fs.BoolVar(&enabled, "enabled", false, "enable the target (default: disabled)")
 			recipient.register(fs)
 		},
@@ -731,10 +731,10 @@ func emailTargetCreateCommand() command {
 		run: func(ctx context.Context, env *commandContext) error {
 			name := strings.TrimSpace(env.args[0])
 			if name == "" || utf8.RuneCountInString(name) > 128 {
-				return &UsageError{Message: "the target name must be 1-128 characters", Hint: "for example notarxctl email target create ops --locale en --recipient-stdin"}
+				return &UsageError{Message: "the target name must be 1-128 characters", Hint: "for example notarxctl email target create ops --locale en-CA --recipient-stdin"}
 			}
-			if !adminopenapi.EmailTargetInputLocale(locale).Valid() {
-				return &UsageError{Message: "--locale must be en or zh-CN", Hint: "messages are rendered in this language"}
+			if locale != "" && !adminopenapi.EmailTargetInputLocale(locale).Valid() {
+				return &UsageError{Message: "--locale must be en-CA, fr-CA or zh-CN", Hint: "messages are rendered in this language"}
 			}
 			if !recipient.given() {
 				return &UsageError{Message: "a target needs a recipient from --recipient-stdin or --recipient-file", Hint: "the address is never passed on the command line"}
@@ -743,7 +743,11 @@ func emailTargetCreateCommand() command {
 			if err != nil {
 				return err
 			}
-			body := adminopenapi.EmailTargetInput{Name: name, Locale: adminopenapi.EmailTargetInputLocale(locale), Enabled: &enabled, Recipient: &address}
+			body := adminopenapi.EmailTargetInput{Name: name, Enabled: &enabled, Recipient: &address}
+			if locale != "" {
+				chosen := adminopenapi.EmailTargetInputLocale(locale)
+				body.Locale = &chosen
+			}
 			if env.globals.dryRun {
 				shown := body
 				placeholder := recipientPlaceholder
@@ -777,12 +781,12 @@ func emailTargetUpdateCommand() command {
 	return command{
 		name:        "email target update",
 		synopsis:    "rename, relocalize, enable, disable, or re-address an email target (conditional on its version)",
-		usage:       "notarxctl email target update ID [--name NAME] [--locale en|zh-CN] [--enabled=true|false] [--recipient-stdin | --recipient-file FILE] [--if-match VERSION] [--dry-run] [--json]",
+		usage:       "notarxctl email target update ID [--name NAME] [--locale en-CA|fr-CA|zh-CN] [--enabled=true|false] [--recipient-stdin | --recipient-file FILE] [--if-match VERSION] [--dry-run] [--json]",
 		positionals: 1,
 		argsUsage:   "ID",
 		setFlags: func(fs *flag.FlagSet) {
 			fs.StringVar(&name, "name", "", "new name")
-			fs.StringVar(&locale, "locale", "", "new language: en or zh-CN")
+			fs.StringVar(&locale, "locale", "", "new language: en-CA, fr-CA or zh-CN")
 			fs.BoolVar(&enabled, "enabled", false, "enable or disable the target")
 			fs.StringVar(&ifMatch, "if-match", "", "apply only if the target is still at this version (default: the version read just before)")
 			recipient.register(fs)
@@ -798,7 +802,7 @@ func emailTargetUpdateCommand() command {
 				return &UsageError{Message: "nothing to update", Hint: "pass --name, --locale, --enabled, or a new recipient"}
 			}
 			if env.flagSet["locale"] && !adminopenapi.EmailTargetInputLocale(locale).Valid() {
-				return &UsageError{Message: "--locale must be en or zh-CN", Hint: "messages are rendered in this language"}
+				return &UsageError{Message: "--locale must be en-CA, fr-CA or zh-CN", Hint: "messages are rendered in this language"}
 			}
 			if env.flagSet["name"] && (strings.TrimSpace(name) == "" || utf8.RuneCountInString(strings.TrimSpace(name)) > 128) {
 				return &UsageError{Message: "--name must be 1-128 characters", Hint: "pass a short name"}
@@ -830,7 +834,8 @@ func emailTargetUpdateCommand() command {
 					ifMatch = current.Version
 				}
 			}
-			body := adminopenapi.EmailTargetInput{Name: current.Name, Locale: adminopenapi.EmailTargetInputLocale(current.Locale), Recipient: address}
+			currentLocale := adminopenapi.EmailTargetInputLocale(current.Locale)
+			body := adminopenapi.EmailTargetInput{Name: current.Name, Locale: &currentLocale, Recipient: address}
 			next := current.Enabled
 			if env.flagSet["enabled"] {
 				next = enabled
@@ -840,7 +845,8 @@ func emailTargetUpdateCommand() command {
 				body.Name = strings.TrimSpace(name)
 			}
 			if env.flagSet["locale"] {
-				body.Locale = adminopenapi.EmailTargetInputLocale(locale)
+				chosen := adminopenapi.EmailTargetInputLocale(locale)
+				body.Locale = &chosen
 			}
 			if env.globals.dryRun {
 				shown := body
@@ -879,10 +885,10 @@ func emailPreviewCommand() command {
 	return command{
 		name:     "email preview",
 		synopsis: "render a synthetic alert email without queueing anything",
-		usage:    "notarxctl email preview --scenario warning|critical|resolved --locale en|zh-CN [--html-output FILE] [--text-output FILE] [--json]",
+		usage:    "notarxctl email preview --scenario warning|critical|resolved --locale en-CA|fr-CA|zh-CN [--html-output FILE] [--text-output FILE] [--json]",
 		setFlags: func(fs *flag.FlagSet) {
 			fs.StringVar(&scenario, "scenario", "", "warning, critical, or resolved")
-			fs.StringVar(&locale, "locale", "", "en or zh-CN")
+			fs.StringVar(&locale, "locale", "", "en-CA, fr-CA or zh-CN")
 			fs.StringVar(&htmlOutput, "html-output", "", "write the HTML part to this new file")
 			fs.StringVar(&textOutput, "text-output", "", "write the plain-text part to this new file")
 		},
@@ -893,7 +899,7 @@ func emailPreviewCommand() command {
 		},
 		run: func(ctx context.Context, env *commandContext) error {
 			if !adminopenapi.EmailPreviewInputScenario(scenario).Valid() || !adminopenapi.EmailPreviewInputLocale(locale).Valid() {
-				return &UsageError{Message: "--scenario must be warning, critical, or resolved and --locale en or zh-CN", Hint: "previews render fixed synthetic data"}
+				return &UsageError{Message: "--scenario must be warning, critical, or resolved and --locale en-CA, fr-CA or zh-CN", Hint: "previews render fixed synthetic data"}
 			}
 			if htmlOutput != "" && textOutput != "" {
 				html, _ := filepath.Abs(htmlOutput)

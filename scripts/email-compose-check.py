@@ -372,7 +372,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
             relay(False)
             start("gateway")
             require(ctl("email", "capability")["data"] == {"enabled": False, "reason": "email_disabled"}, "disabled channel reports ready")
-            target = api("POST", "/api/v2/email-targets", {"name": "Owned synthetic", "recipient": "synthetic-recipient@example.test", "locale": "en", "enabled": True}, 201)
+            target = api("POST", "/api/v2/email-targets", {"name": "Owned synthetic", "recipient": "synthetic-recipient@example.test", "locale": "en-CA", "enabled": True}, 201)
             require(explicit(target, status=503)["code"] == "email_disabled", "disabled test accepted")
             disabled = ctl("email", "test", "--target", target["id"], "--scenario", "warning", "--yes", expected=1)
             require(disabled["error"]["code"] == "email_disabled" and not disabled.get("data"), "fresh disabled test was not a definite refusal")
@@ -532,17 +532,17 @@ def check(render_only, evidence=None, fixture_subnets=None):
             ctl("quota-alert", "create", "--repo", quota_repo["id"], "--target", notarxctl_target["id"], *policy_args, "--dry-run")
             ctl("quota-alert", "update", created["id"], "--warning-bp", "8900", "--dry-run")
             ctl("quota-alert", "delete", created["id"], "--dry-run")
-            ctl("email", "target", "create", "dry-run target", "--locale", "en", "--recipient-file", str(recipient_file), "--dry-run")
+            ctl("email", "target", "create", "dry-run target", "--locale", "en-CA", "--recipient-file", str(recipient_file), "--dry-run")
             ctl("email", "target", "update", notarxctl_target["id"], "--name", "dry-run name", "--recipient-file", str(recipient_file), "--dry-run")
             ctl("email", "delivery", "replay", dead["id"], "--dry-run")
             ctl("email", "delivery", "replay", dead["id"], expected=2)
             ctl("quota-alert", "delete", created["id"], expected=2)
             ctl("quota-alert", "update", created["id"], "--enabled=true", expected=2)
-            ctl("email", "target", "create", "missing recipient", "--locale", "en", expected=2)
+            ctl("email", "target", "create", "missing recipient", "--locale", "en-CA", expected=2)
             public_recipient = work / "public-recipient"
             public_recipient.write_text(recipient + "\n")
             public_recipient.chmod(0o644)
-            ctl("email", "target", "create", "public recipient", "--locale", "en", "--recipient-file", str(public_recipient), expected=2)
+            ctl("email", "target", "create", "public recipient", "--locale", "en-CA", "--recipient-file", str(public_recipient), expected=2)
             ctl("email", "delivery", "list", "--limit", "101", expected=2)
             require(ctl("quota-alert", "list")["data"]["items"] == before_rules and
                     ctl("email", "target", "list")["data"]["items"] == before_targets and
@@ -571,9 +571,9 @@ def check(render_only, evidence=None, fixture_subnets=None):
                 ("quota-alert", "delete", created["id"], "--yes", "--if-match", raised["version"]),
                 ("quota-alert", "events", created["id"]), ("email", "capability"),
                 ("email", "target", "list"), ("email", "target", "show", notarxctl_target["id"]),
-                ("email", "target", "create", "forbidden target", "--locale", "en", "--recipient-file", str(recipient_file)),
+                ("email", "target", "create", "forbidden target", "--locale", "en-CA", "--recipient-file", str(recipient_file)),
                 ("email", "target", "update", notarxctl_target["id"], "--name", "forbidden change"),
-                ("email", "preview", "--scenario", "warning", "--locale", "en"),
+                ("email", "preview", "--scenario", "warning", "--locale", "en-CA"),
                 ("email", "test", "--target", notarxctl_target["id"], "--scenario", "warning", "--yes", "--if-match", renamed["version"]),
                 ("email", "delivery", "list"), ("email", "delivery", "show", queued["id"]),
                 ("email", "delivery", "replay", dead["id"], "--yes", "--if-match", dead["version"]),

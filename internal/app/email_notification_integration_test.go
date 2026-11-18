@@ -164,7 +164,7 @@ func TestPostgresAdministratorEmailReopensAndDeliversActualTLSMIME(t *testing.T)
 			t.Fatal(e)
 		}
 		body, e := io.ReadAll(part)
-		if e != nil || !strings.HasPrefix(part.Header.Get("Content-Type"), kind) || !bytes.Contains(body, []byte("12%")) || !bytes.Contains(body, []byte("警告")) {
+		if e != nil || !strings.HasPrefix(part.Header.Get("Content-Type"), kind) || !bytes.Contains(body, []byte("12%")) || !bytes.Contains(body, []byte("Warning")) {
 			t.Fatal("actual TLS MIME missing localized HTML/text")
 		}
 	}

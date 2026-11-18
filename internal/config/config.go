@@ -71,6 +71,7 @@ type Config struct {
 	MigrationSourcePrivateEndpoints map[string][]netip.Prefix
 	MigrationStoragePoolID          string
 	Email                           emailnotification.Config
+	EmailDefaultLocale              string
 	ListenAddress                   string
 	ConsoleThemeDir                 string
 	NodeRoles                       []NodeRole
@@ -304,6 +305,9 @@ func Load() (Config, error) {
 	cfg.LocalCapacityMounts = capacityMounts
 	cfg.Email, err = emailnotification.Load(strings.TrimSpace(os.Getenv("NOTARX_EMAIL_CONFIG_FILE")))
 	if err != nil {
+		return Config{}, err
+	}
+	if cfg.EmailDefaultLocale, err = emailnotification.ParseDefaultLocale(os.Getenv("NOTARX_EMAIL_DEFAULT_LOCALE")); err != nil {
 		return Config{}, err
 	}
 	if err := configureOTLPLogs(&cfg); err != nil {
