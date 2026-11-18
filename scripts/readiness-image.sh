@@ -24,7 +24,7 @@ readiness_load_image() {
     return 1
   }
   identity=$(docker run --rm "$image" version) || return 1
-  [[ "$identity" == "artifact-gateway $expected_version (revision $expected_revision,"* ]] || {
+  [[ "$identity" == "notarx $expected_version (revision $expected_revision,"* ]] || {
     printf 'Readiness image binary identity mismatch: %s\n' "$identity" >&2
     return 1
   }

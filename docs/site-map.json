@@ -2,6 +2,7 @@
   "version": 1,
   "defaultLocale": "en-CA",
   "locales": ["en-CA", "fr-CA", "zh-CN"],
+  "localeKeys": { "en-CA": "en" },
   "sections": [
     {
       "id": "start",

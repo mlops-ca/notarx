@@ -143,7 +143,8 @@ test('fr-CA identical-line check ignores code, tables and URLs', () => {
   const french = `${shared}\n${frenchProse}${frenchProse.replace('Ce guide', 'Un guide')}`;
   assert.deepEqual(checkFrenchBody('x.fr-CA.md', french, english), []);
   assert.deepEqual(proseLines(shared), []);
-  assert.deepEqual(proseLines('See [the docs](https://example.com/x) now'), ['see [the docs] now']);
+  assert.deepEqual(proseLines('See [the docs](https://example.com/x) now'), ['see the docs now']);
+  assert.deepEqual(proseLines('[a](x.md) [b](y.md)'), ['a b']);
 });
 
 function siteMap(items, overrides = {}) {
@@ -151,6 +152,7 @@ function siteMap(items, overrides = {}) {
     version: 1,
     defaultLocale: 'en-CA',
     locales: ['en-CA', 'fr-CA', 'zh-CN'],
+    localeKeys: { 'en-CA': 'en' },
     sections: [{ id: 'start', title: { en: 'Start' }, items }],
     ...overrides,
   };
@@ -161,11 +163,12 @@ test('requires the locale table in the site map', () => {
   assert.deepEqual(findSiteMapIssues(siteMap([guide]), ['docs/guide.md']), []);
   assert.deepEqual(
     findSiteMapIssues(
-      siteMap([guide], { defaultLocale: 'en', locales: ['en', 'zh-CN'] }),
+      siteMap([guide], { defaultLocale: 'en', locales: ['en', 'zh-CN'], localeKeys: {} }),
       ['docs/guide.md'],
     ),
     [
       'site-map.json: defaultLocale must be en-CA',
+      'site-map.json: localeKeys must map en-CA to en',
       'site-map.json: locales must be [en-CA, fr-CA, zh-CN]',
     ],
   );

@@ -40,8 +40,8 @@ same section order as the site map.
   `SECURITY.fr-CA.md`.
 - Every localized page links to the English page and to the documentation index.
 - `.en.md` is rejected to avoid two English route conventions.
-- The site-map slot for the en-CA route and title keeps the key `en`; the
-  fr-CA and zh-CN slots use their tags.
+- The site-map slot for the en-CA route and title keeps the key `en`, declared
+  in `localeKeys` for adapters; the fr-CA and zh-CN slots use their tags.
 
 **Language switcher.** A page's switcher lists only the locales that exist for
 that page: en-CA always, plus each locale whose companion file is listed in the

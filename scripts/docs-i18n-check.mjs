@@ -41,6 +41,7 @@ export const frenchStopWords = new Set(
   ).split(' '),
 );
 export const minFrenchStopWords = 10;
+export const minFrenchStopWordDensity = 0.1;
 export const maxIdenticalProseRatio = 0.3;
 export const minChineseCharacters = 20;
 
@@ -99,7 +100,8 @@ export function proseLines(document) {
     }
     if (fence !== null || trimmed.startsWith('|')) continue;
     const text = trimmed
-      .replace(/\]\([^)]*\)/gu, ']')
+      .replace(/\]\([^)]*\)/gu, '')
+      .replace(/[[\]]/gu, '')
       .replace(/(?:https?|ftp):\/\/\S+/gu, '')
       .replace(/<[^>]*>/gu, '')
       .trim();
@@ -113,7 +115,7 @@ export function checkFrenchBody(frenchPath, french, english) {
   const frenchLines = proseLines(french);
   const words = frenchLines.join(' ').match(/\p{L}+/gu) ?? [];
   const hits = words.filter((word) => frenchStopWords.has(word)).length;
-  if (hits < minFrenchStopWords) {
+  if (hits < minFrenchStopWords || hits / Math.max(words.length, 1) < minFrenchStopWordDensity) {
     issues.push(`${frenchPath}: French body is missing or too short (needs French prose)`);
   }
   const englishLines = new Set(proseLines(english));
@@ -191,6 +193,9 @@ export function findSiteMapIssues(
   if (siteMap.version !== 1) issues.push('site-map.json: version must be 1');
   if (siteMap.defaultLocale !== referenceLocale.tag) {
     issues.push(`site-map.json: defaultLocale must be ${referenceLocale.tag}`);
+  }
+  if (siteMap.localeKeys?.[referenceLocale.tag] !== referenceLocale.key) {
+    issues.push(`site-map.json: localeKeys must map ${referenceLocale.tag} to ${referenceLocale.key}`);
   }
   if (JSON.stringify(siteMap.locales) !== JSON.stringify(expectedLocales)) {
     issues.push(`site-map.json: locales must be [${expectedLocales.join(', ')}]`);
