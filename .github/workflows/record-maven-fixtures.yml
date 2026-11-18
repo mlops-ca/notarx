@@ -33,6 +33,8 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Download the Go modules
+        run: go mod download
       - name: Build the Maven and Gradle toolchain image
         run: docker build --tag maven-fixture-recorder .github/maven-fixture-recorder
       - name: Record the fixtures in the container
