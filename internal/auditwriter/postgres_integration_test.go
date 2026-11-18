@@ -205,7 +205,7 @@ func TestHostileTextCannotStallTheFlush(t *testing.T) {
 		t.Fatalf("resource stored as %q (%v), want the sanitised form", stored, err)
 	}
 	var evidence string
-	if err := f.db.QueryRow(`SELECT evidence->>'k\uFFFDey' FROM resolver_audit_log WHERE repository=$1 AND resource='fine'`, f.repo).Scan(&evidence); err != nil || evidence != "v\uFFFDal\uFFFDue" {
+	if err := f.db.QueryRow(`SELECT evidence->>$2 FROM resolver_audit_log WHERE repository=$1 AND resource='fine'`, f.repo, "k\uFFFDey").Scan(&evidence); err != nil || evidence != "v\uFFFDal\uFFFDue" {
 		t.Fatalf("evidence stored as %q (%v)", evidence, err)
 	}
 }
