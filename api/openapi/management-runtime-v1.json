@@ -6940,6 +6940,18 @@
             }
           },
           {
+            "name": "class",
+            "in": "query",
+            "description": "Restricts the page to one audit class. Without it the page merges security (sync) and read (async) records by occurredAt. Pass from to bound the scanned time window; without it the last 90 days of async and 730 days of sync records are searched.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "sync",
+                "async"
+              ]
+            }
+          },
+          {
             "name": "from",
             "in": "query",
             "description": "Inclusive lower bound for occurredAt.",
@@ -16323,6 +16335,14 @@
           },
           "traceId": {
             "type": "string"
+          },
+          "class": {
+            "type": "string",
+            "enum": [
+              "sync",
+              "async"
+            ],
+            "description": "Durability class and storage of the record. sync is security evidence (security_audit_log, kept 730 days by default); async is read and download audit (resolver_audit_log, kept 90 days by default)."
           }
         }
       },

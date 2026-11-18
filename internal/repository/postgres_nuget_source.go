@@ -8,7 +8,7 @@ import (
 
 func (s *PostgresStore) GetNuGetSourceDocument(ctx context.Context, repo, version, url string) (NuGetSourceDocument, error) {
 	var out NuGetSourceDocument
-	err := s.db.QueryRowContext(ctx, `SELECT d.repository_id::text,d.source_version,d.url,d.status,d.body,d.digest,d.etag,d.last_modified,d.fetched_at,d.expires_at FROM native_nuget_source_documents d JOIN hosted_repositories h ON h.id=d.repository_id WHERE d.repository_id::text=$1 AND d.source_version=$2 AND d.url=$3 AND h.format='nuget' AND h.repo_type='proxy' AND h.state='active' AND h.version::text=d.source_version`, repo, version, url).Scan(&out.RepositoryID, &out.SourceVersion, &out.URL, &out.Status, &out.Body, &out.Digest, &out.ETag, &out.LastModified, &out.FetchedAt, &out.ExpiresAt)
+	err := s.db.QueryRowContext(ctx, `SELECT d.repository_id::text,d.source_version,d.url,d.status,d.body,d.digest,d.etag,d.last_modified,d.fetched_at,d.expires_at FROM native_nuget_source_documents d JOIN hosted_repositories h ON h.id=d.repository_id WHERE d.repository_id=$1::uuid AND d.source_version=$2 AND d.url=$3 AND h.format='nuget' AND h.repo_type='proxy' AND h.state='active' AND h.version::text=d.source_version`, repo, version, url).Scan(&out.RepositoryID, &out.SourceVersion, &out.URL, &out.Status, &out.Body, &out.Digest, &out.ETag, &out.LastModified, &out.FetchedAt, &out.ExpiresAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		err = ErrNotFound
 	}
@@ -23,11 +23,11 @@ func (s *PostgresStore) PutNuGetSourceDocument(ctx context.Context, in NuGetSour
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err = tx.ExecContext(ctx, `DELETE FROM native_nuget_source_documents WHERE repository_id::text=$1 AND source_version<>$2`, in.RepositoryID, in.SourceVersion); err != nil {
+	if _, err = tx.ExecContext(ctx, `DELETE FROM native_nuget_source_documents WHERE repository_id=$1::uuid AND source_version<>$2`, in.RepositoryID, in.SourceVersion); err != nil {
 		return err
 	}
 	var count, total int64
-	if err = tx.QueryRowContext(ctx, `SELECT count(*),COALESCE(SUM(octet_length(body)),0) FROM native_nuget_source_documents WHERE repository_id::text=$1 AND url<>$2`, in.RepositoryID, in.URL).Scan(&count, &total); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT count(*),COALESCE(SUM(octet_length(body)),0) FROM native_nuget_source_documents WHERE repository_id=$1::uuid AND url<>$2`, in.RepositoryID, in.URL).Scan(&count, &total); err != nil {
 		return err
 	}
 	if count >= 4096 || total+int64(len(in.Body)) > 64<<20 {
@@ -52,7 +52,7 @@ func scanNuGetAuthority(row nuGetScanner) (NuGetGroupAuthority, error) {
 }
 func checkNuGetAuthorityOwner(ctx context.Context, tx *sql.Tx, in NuGetGroupAuthority) error {
 	var version string
-	err := tx.QueryRowContext(ctx, `SELECT h.version::text FROM hosted_repositories h WHERE h.id::text=$1 AND h.format='nuget' AND h.state='active' AND EXISTS(SELECT 1 FROM hosted_group_members m WHERE m.group_id::text=$2 AND m.repository_id=h.id) FOR SHARE`, in.RepositoryID, in.GroupID).Scan(&version)
+	err := tx.QueryRowContext(ctx, `SELECT h.version::text FROM hosted_repositories h WHERE h.id=$1::uuid AND h.format='nuget' AND h.state='active' AND EXISTS(SELECT 1 FROM hosted_group_members m WHERE m.group_id=$2::uuid AND m.repository_id=h.id) FOR SHARE`, in.RepositoryID, in.GroupID).Scan(&version)
 	if errors.Is(err, sql.ErrNoRows) || err == nil && version != in.RepositoryVersion {
 		return ErrNuGetSourceChanged
 	}
@@ -68,7 +68,7 @@ func (s *PostgresStore) BindNuGetGroupAuthority(ctx context.Context, expected st
 	}
 	defer func() { _ = tx.Rollback() }()
 	var version string
-	err = tx.QueryRowContext(ctx, `SELECT version::text FROM hosted_groups WHERE id::text=$1 AND format='nuget' FOR UPDATE`, in.GroupID).Scan(&version)
+	err = tx.QueryRowContext(ctx, `SELECT version::text FROM hosted_groups WHERE id=$1::uuid AND format='nuget' FOR UPDATE`, in.GroupID).Scan(&version)
 	if errors.Is(err, sql.ErrNoRows) {
 		return NuGetGroupAuthority{}, ErrNotFound
 	}
@@ -78,7 +78,7 @@ func (s *PostgresStore) BindNuGetGroupAuthority(ctx context.Context, expected st
 	if version != expected {
 		return NuGetGroupAuthority{}, ErrVersionConflict
 	}
-	prior, err := scanNuGetAuthority(tx.QueryRowContext(ctx, `SELECT `+nuGetAuthorityColumns+` FROM native_nuget_group_authorities WHERE group_id::text=$1 AND package_id=$2 AND version=$3`, in.GroupID, in.PackageID, in.Version))
+	prior, err := scanNuGetAuthority(tx.QueryRowContext(ctx, `SELECT `+nuGetAuthorityColumns+` FROM native_nuget_group_authorities WHERE group_id=$1::uuid AND package_id=$2 AND version=$3`, in.GroupID, in.PackageID, in.Version))
 	if err == nil {
 		if err = checkNuGetAuthorityOwner(ctx, tx, prior); err != nil {
 			return NuGetGroupAuthority{}, err
@@ -88,7 +88,7 @@ func (s *PostgresStore) BindNuGetGroupAuthority(ctx context.Context, expected st
 				return NuGetGroupAuthority{}, ErrNuGetPublicationConflict
 			}
 			prior.Digest, prior.Size = in.Digest, in.Size
-			if _, err = tx.ExecContext(ctx, `UPDATE native_nuget_group_authorities SET digest=$4,size=$5 WHERE group_id::text=$1 AND package_id=$2 AND version=$3`, in.GroupID, in.PackageID, in.Version, in.Digest, in.Size); err != nil {
+			if _, err = tx.ExecContext(ctx, `UPDATE native_nuget_group_authorities SET digest=$4,size=$5 WHERE group_id=$1::uuid AND package_id=$2 AND version=$3`, in.GroupID, in.PackageID, in.Version, in.Digest, in.Size); err != nil {
 				return NuGetGroupAuthority{}, err
 			}
 		}
@@ -107,7 +107,7 @@ func (s *PostgresStore) BindNuGetGroupAuthority(ctx context.Context, expected st
 	return in, tx.Commit()
 }
 func (s *PostgresStore) GetNuGetGroupAuthority(ctx context.Context, group, id, version string) (NuGetGroupAuthority, error) {
-	return scanNuGetAuthority(s.db.QueryRowContext(ctx, `SELECT `+nuGetAuthorityColumns+` FROM native_nuget_group_authorities WHERE group_id::text=$1 AND package_id=$2 AND version=$3`, group, id, version))
+	return scanNuGetAuthority(s.db.QueryRowContext(ctx, `SELECT `+nuGetAuthorityColumns+` FROM native_nuget_group_authorities WHERE group_id=$1::uuid AND package_id=$2 AND version=$3`, group, id, version))
 }
 
 func (s *PostgresStore) RevalidateNuGetGroupAuthority(ctx context.Context, groupVersion, priorVersion string, in NuGetGroupAuthority) (NuGetGroupAuthority, error) {
@@ -120,7 +120,7 @@ func (s *PostgresStore) RevalidateNuGetGroupAuthority(ctx context.Context, group
 	}
 	defer func() { _ = tx.Rollback() }()
 	var current string
-	err = tx.QueryRowContext(ctx, `SELECT version::text FROM hosted_groups WHERE id::text=$1 AND format='nuget' FOR UPDATE`, in.GroupID).Scan(&current)
+	err = tx.QueryRowContext(ctx, `SELECT version::text FROM hosted_groups WHERE id=$1::uuid AND format='nuget' FOR UPDATE`, in.GroupID).Scan(&current)
 	if errors.Is(err, sql.ErrNoRows) {
 		return NuGetGroupAuthority{}, ErrNotFound
 	}
@@ -130,7 +130,7 @@ func (s *PostgresStore) RevalidateNuGetGroupAuthority(ctx context.Context, group
 	if current != groupVersion {
 		return NuGetGroupAuthority{}, ErrVersionConflict
 	}
-	prior, err := scanNuGetAuthority(tx.QueryRowContext(ctx, `SELECT `+nuGetAuthorityColumns+` FROM native_nuget_group_authorities WHERE group_id::text=$1 AND package_id=$2 AND version=$3`, in.GroupID, in.PackageID, in.Version))
+	prior, err := scanNuGetAuthority(tx.QueryRowContext(ctx, `SELECT `+nuGetAuthorityColumns+` FROM native_nuget_group_authorities WHERE group_id=$1::uuid AND package_id=$2 AND version=$3`, in.GroupID, in.PackageID, in.Version))
 	if err != nil {
 		return NuGetGroupAuthority{}, err
 	}
@@ -143,7 +143,7 @@ func (s *PostgresStore) RevalidateNuGetGroupAuthority(ctx context.Context, group
 	if err = checkNuGetAuthorityOwner(ctx, tx, in); err != nil {
 		return NuGetGroupAuthority{}, err
 	}
-	prior, err = scanNuGetAuthority(tx.QueryRowContext(ctx, `UPDATE native_nuget_group_authorities SET repository_version=$4 WHERE group_id::text=$1 AND package_id=$2 AND version=$3 RETURNING `+nuGetAuthorityColumns, in.GroupID, in.PackageID, in.Version, in.RepositoryVersion))
+	prior, err = scanNuGetAuthority(tx.QueryRowContext(ctx, `UPDATE native_nuget_group_authorities SET repository_version=$4 WHERE group_id=$1::uuid AND package_id=$2 AND version=$3 RETURNING `+nuGetAuthorityColumns, in.GroupID, in.PackageID, in.Version, in.RepositoryVersion))
 	if err != nil {
 		return NuGetGroupAuthority{}, err
 	}

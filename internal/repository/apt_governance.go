@@ -49,7 +49,7 @@ func (s *PostgresStore) GetAPTScanAsset(ctx context.Context, repoID, coordinate,
 	var asset APTSnapshotAsset
 	err := scanAPTSnapshotAsset(s.db.QueryRowContext(ctx, `SELECT `+aptSnapshotAssetColumns+`
  FROM native_apt_snapshot_assets a JOIN native_apt_repository_snapshots s ON s.id=a.snapshot_id
- WHERE a.repository_id::text=$1 AND a.path=$2 AND a.digest=$3 AND s.state='visible'
+ WHERE a.repository_id=$1::uuid AND a.path=$2 AND a.digest=$3 AND s.state='visible'
  AND a.content_type='application/vnd.debian.binary-package' ORDER BY s.published_at DESC,s.id LIMIT 1`, repoID, coordinate, digest), &asset)
 	if err == sql.ErrNoRows {
 		return APTSnapshotAsset{}, ErrNotFound

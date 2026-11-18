@@ -107,55 +107,58 @@ type Config struct {
 	APTSignerTLSRootCertificates    []byte
 	RuntimeNodeRetention            time.Duration
 	RuntimeNodePruneInterval        time.Duration
-	DatabaseURL                     string
-	DatabasePool                    database.PoolConfig
-	DatabaseCoordinatorPool         database.PoolConfig
-	DatabaseArtifactLockPool        database.PoolConfig
-	RustFSEndpoint                  string
-	RustFSBucket                    string
-	RustFSAccessKey                 string
-	RustFSSecretKey                 string
-	OCIProxyAllowedHosts            []string
-	MavenProxyAllowedHosts          []string
-	RawProxyAllowedHosts            []string
-	RawCacheMaxObjectBytes          int64
-	RawCacheMaxConcurrentSpools     int
-	ConanCacheMaxObjectBytes        int64
-	OCICacheTTL                     time.Duration
-	MavenCacheTTL                   time.Duration
-	MavenMetadataCacheTTL           time.Duration
-	MavenNegativeCacheTTL           time.Duration
-	NPMMetadataCacheTTL             time.Duration
-	NPMNegativeCacheTTL             time.Duration
-	NPMProxyBreakerTTL              time.Duration
-	RawCacheTTL                     time.Duration
-	ConanCacheTTL                   time.Duration
-	AdminToken                      string
-	ResolverToken                   string
-	ConanTokenSecret                string
-	AdminActor                      string
-	ResolverActor                   string
-	LocalAuthMaxFailedAttempts      int
-	LocalAuthLockoutDuration        time.Duration
-	RepositoryReaders               map[string][]string
-	LegacyReadPermissive            bool
-	RepositoryCacheQuotas           map[string]int64
-	OIDCIssuer                      string
-	OIDCAudience                    string
-	OIDCJWKSURL                     string
-	OIDCClientID                    string
-	OIDCClientSecret                string
-	OIDCRedirectURL                 string
-	OIDCScopes                      []string
-	OIDCAdminSubjects               []string
-	OIDCRoles                       authorization.OIDCRoleMapping
-	OTLPHTTPEndpoint                string
-	OTLPLogsEndpoint                string
-	OTLPLogsHeaders                 map[string]string
-	OTLPLogsQueueSize               int
-	OTLPLogsTimeout                 time.Duration
-	OTLPLogsShutdownTimeout         time.Duration
-	OTELSamplingRatio               float64
+	// PartitionAhead is the number of future partition periods the partition
+	// manager creates beyond the current one (ADR 0023 section 2).
+	PartitionAhead              int
+	DatabaseURL                 string
+	DatabasePool                database.PoolConfig
+	DatabaseCoordinatorPool     database.PoolConfig
+	DatabaseArtifactLockPool    database.PoolConfig
+	RustFSEndpoint              string
+	RustFSBucket                string
+	RustFSAccessKey             string
+	RustFSSecretKey             string
+	OCIProxyAllowedHosts        []string
+	MavenProxyAllowedHosts      []string
+	RawProxyAllowedHosts        []string
+	RawCacheMaxObjectBytes      int64
+	RawCacheMaxConcurrentSpools int
+	ConanCacheMaxObjectBytes    int64
+	OCICacheTTL                 time.Duration
+	MavenCacheTTL               time.Duration
+	MavenMetadataCacheTTL       time.Duration
+	MavenNegativeCacheTTL       time.Duration
+	NPMMetadataCacheTTL         time.Duration
+	NPMNegativeCacheTTL         time.Duration
+	NPMProxyBreakerTTL          time.Duration
+	RawCacheTTL                 time.Duration
+	ConanCacheTTL               time.Duration
+	AdminToken                  string
+	ResolverToken               string
+	ConanTokenSecret            string
+	AdminActor                  string
+	ResolverActor               string
+	LocalAuthMaxFailedAttempts  int
+	LocalAuthLockoutDuration    time.Duration
+	RepositoryReaders           map[string][]string
+	LegacyReadPermissive        bool
+	RepositoryCacheQuotas       map[string]int64
+	OIDCIssuer                  string
+	OIDCAudience                string
+	OIDCJWKSURL                 string
+	OIDCClientID                string
+	OIDCClientSecret            string
+	OIDCRedirectURL             string
+	OIDCScopes                  []string
+	OIDCAdminSubjects           []string
+	OIDCRoles                   authorization.OIDCRoleMapping
+	OTLPHTTPEndpoint            string
+	OTLPLogsEndpoint            string
+	OTLPLogsHeaders             map[string]string
+	OTLPLogsQueueSize           int
+	OTLPLogsTimeout             time.Duration
+	OTLPLogsShutdownTimeout     time.Duration
+	OTELSamplingRatio           float64
 
 	// publicURL is the validated NOTARX_PUBLIC_URL; read it through PublicURL.
 	publicURL *url.URL
@@ -200,6 +203,7 @@ func Load() (Config, error) {
 		APTSignerTLSCAFile:              strings.TrimSpace(os.Getenv("NOTARX_APT_SIGNER_TLS_CA_FILE")),
 		RuntimeNodeRetention:            7 * 24 * time.Hour,
 		RuntimeNodePruneInterval:        time.Hour,
+		PartitionAhead:                  3,
 		DatabaseURL:                     os.Getenv("NOTARX_DATABASE_URL"),
 		DatabasePool:                    database.DefaultPoolConfig(),
 		DatabaseCoordinatorPool:         database.DefaultCoordinatorPoolConfig(),
@@ -510,6 +514,11 @@ func Load() (Config, error) {
 		return Config{}, err
 	} else {
 		cfg.RuntimeNodePruneInterval = interval
+	}
+	if ahead, err := positiveIntEnv("NOTARX_PARTITION_AHEAD", cfg.PartitionAhead, false); err != nil {
+		return Config{}, err
+	} else {
+		cfg.PartitionAhead = ahead
 	}
 	if cfg.MigrationStoragePoolID != "" && !regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`).MatchString(cfg.MigrationStoragePoolID) {
 		return Config{}, fmt.Errorf("invalid migration storage pool ID")

@@ -79,6 +79,15 @@ audits_page:
       description: Exact actor or principal filter.
       schema:
         type: string
+    - name: class
+      in: query
+      description: Restricts the page to one audit class. Without it the page merges
+        security (sync) and read (async) records by occurredAt. Pass from to bound the
+        scanned time window; without it the last 90 days of async and 730 days of sync
+        records are searched.
+      schema:
+        type: string
+        enum: [sync, async]
     - name: from
       in: query
       description: Inclusive lower bound for occurredAt.

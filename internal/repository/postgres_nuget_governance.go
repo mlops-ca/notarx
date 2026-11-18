@@ -22,7 +22,7 @@ func (s *PostgresStore) TransitionNuGetGovernance(ctx context.Context, in NuGetG
 		return NuGetPublication{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	p, err := scanNuGetPublication(tx.QueryRowContext(ctx, `SELECT `+nuGetPublicationColumns+` FROM native_nuget_publications WHERE session_id::text=$1 FOR UPDATE`, before.SessionID))
+	p, err := scanNuGetPublication(tx.QueryRowContext(ctx, `SELECT `+nuGetPublicationColumns+` FROM native_nuget_publications WHERE session_id=$1::uuid FOR UPDATE`, before.SessionID))
 	if err != nil {
 		return NuGetPublication{}, err
 	}
@@ -32,7 +32,7 @@ func (s *PostgresStore) TransitionNuGetGovernance(ctx context.Context, in NuGetG
 	}
 	if changed {
 		g := p.Governance
-		if _, err = tx.ExecContext(ctx, `UPDATE native_nuget_publications SET governance_version=$2,listed=$3,tombstoned=$4,quarantined=$5,governance_updated_at=$6,governance_updated_by=$7,governance_reason=$8 WHERE session_id::text=$1`, p.SessionID, g.Version, g.Listed, g.Tombstoned, g.Quarantined, g.UpdatedAt, g.UpdatedBy, g.Reason); err != nil {
+		if _, err = tx.ExecContext(ctx, `UPDATE native_nuget_publications SET governance_version=$2,listed=$3,tombstoned=$4,quarantined=$5,governance_updated_at=$6,governance_updated_by=$7,governance_reason=$8 WHERE session_id=$1::uuid`, p.SessionID, g.Version, g.Listed, g.Tombstoned, g.Quarantined, g.UpdatedAt, g.UpdatedBy, g.Reason); err != nil {
 			return NuGetPublication{}, err
 		}
 		if err = insertAudit(ctx, tx, nuGetGovernanceAudit(p, in, name)); err != nil {
@@ -62,7 +62,7 @@ func (s *PostgresStore) ReplaceNuGetQuarantineReadPolicy(ctx context.Context, id
 	if _, err = tx.ExecContext(ctx, `INSERT INTO repository_quarantine_read_policies(repository_id,version,enabled) VALUES($1,1,false) ON CONFLICT DO NOTHING`, id); err != nil {
 		return RepositoryQuarantineReadPolicy{}, err
 	}
-	err = tx.QueryRowContext(ctx, `UPDATE repository_quarantine_read_policies SET version=version+1,enabled=$3 WHERE repository_id::text=$1 AND version::text=$2 RETURNING version::text`, id, expectedVersion, policy.Enabled).Scan(&policy.Version)
+	err = tx.QueryRowContext(ctx, `UPDATE repository_quarantine_read_policies SET version=version+1,enabled=$3 WHERE repository_id=$1::uuid AND version=$2::text::bigint RETURNING version::text`, id, expectedVersion, policy.Enabled).Scan(&policy.Version)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RepositoryQuarantineReadPolicy{}, ErrVersionConflict
 	}

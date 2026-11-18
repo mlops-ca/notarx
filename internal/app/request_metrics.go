@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/felixge/httpsnoop"
+	"github.com/mlops-ca/notarx/internal/partitions"
 )
 
 type requestClass uint8
@@ -43,6 +44,30 @@ type requestMetrics struct {
 }
 
 type DatabaseStatsFunc func() sql.DBStats
+
+// PartitionStatsFunc reports the partition manager's last observation of each
+// managed table (internal/partitions).
+type PartitionStatsFunc func() []partitions.TableStat
+
+// WithPartitionStats exports notarx_partition_default_rows, which must stay zero:
+// a row in a DEFAULT partition means the partition manager is not keeping up.
+func (m *Metrics) WithPartitionStats(stats PartitionStatsFunc) *Metrics {
+	m.partitionStats = stats
+	return m
+}
+
+func (m *Metrics) writePartitionMetrics(w io.Writer) {
+	if m.partitionStats == nil {
+		return
+	}
+	stats := m.partitionStats()
+	_, _ = io.WriteString(w, "# TYPE notarx_partition_default_rows gauge\n# TYPE notarx_partitions gauge\n")
+	for _, stat := range stats {
+		label := "table=\"" + escapeMetricLabel(stat.Table) + "\""
+		_, _ = io.WriteString(w, "notarx_partition_default_rows{"+label+"} "+itoa(stat.DefaultRows)+"\n")
+		_, _ = io.WriteString(w, "notarx_partitions{"+label+"} "+itoa(int64(stat.Partitions))+"\n")
+	}
+}
 
 type namedDatabaseStats struct {
 	pool  string

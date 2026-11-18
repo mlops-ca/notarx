@@ -491,6 +491,73 @@ func TestAdminCanPageAuditsWithScopedCursor(t *testing.T) {
 	}
 }
 
+func TestAdminAuditPageMergesClassesAndFiltersByClass(t *testing.T) {
+	store := repository.NewMemoryStore()
+	base := time.Date(2026, 8, 8, 10, 0, 0, 0, time.UTC)
+	for index, class := range []repository.AuditClass{repository.AuditClassAsync, repository.AuditClassSync, repository.AuditClassAsync, repository.AuditClassSync} {
+		_ = store.RecordAudit(context.Background(), repository.AuditRecord{
+			Class: class, GroupName: "engineering", Repository: "team/app", Actor: "build", Outcome: repository.AuditResolved,
+			OccurredAt: base.Add(time.Duration(index) * time.Minute),
+		})
+	}
+	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
+	get := func(query string) (int, string) {
+		request := httptest.NewRequest(http.MethodGet, "/api/v2/audits/page?"+query, nil)
+		authorize(request, "admin-secret")
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		return response.Code, response.Body.String()
+	}
+	type page struct {
+		Items []struct {
+			Class string `json:"class"`
+		} `json:"items"`
+		NextPageToken string `json:"nextPageToken"`
+	}
+	decode := func(body string) page {
+		var p page
+		if err := json.Unmarshal([]byte(body), &p); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+
+	// Merged, two at a time: all four records, classes reported per record.
+	code, body := get("repository=team/app&pageSize=2")
+	if code != http.StatusOK {
+		t.Fatalf("status = %d %s", code, body)
+	}
+	first := decode(body)
+	if len(first.Items) != 2 || first.Items[0].Class != "sync" || first.NextPageToken == "" {
+		t.Fatalf("first merged page = %+v", first)
+	}
+	code, body = get("repository=team/app&pageSize=2&pageToken=" + url.QueryEscape(first.NextPageToken))
+	second := decode(body)
+	if code != http.StatusOK || len(second.Items) != 2 || second.NextPageToken != "" {
+		t.Fatalf("second merged page = %d %+v", code, second)
+	}
+
+	code, body = get("repository=team/app&class=sync")
+	if only := decode(body); code != http.StatusOK || len(only.Items) != 2 || only.Items[0].Class != "sync" || only.Items[1].Class != "sync" {
+		t.Fatalf("class=sync = %d %s", code, body)
+	}
+	if code, body = get("repository=team/app&class=async"); !strings.Contains(body, `"class":"async"`) || strings.Contains(body, `"class":"sync"`) {
+		t.Fatalf("class=async = %d %s", code, body)
+	}
+	if code, body = get("class=other"); code != http.StatusBadRequest {
+		t.Fatalf("invalid class = %d %s", code, body)
+	}
+	// A token is scoped to the class filter it was issued for.
+	code, body = get("repository=team/app&class=sync&pageSize=1")
+	token := decode(body).NextPageToken
+	if code != http.StatusOK || token == "" {
+		t.Fatalf("class page = %d %s", code, body)
+	}
+	if code, body = get("repository=team/app&class=async&pageSize=1&pageToken=" + url.QueryEscape(token)); code != http.StatusBadRequest || !strings.Contains(body, "invalid_page_token") {
+		t.Fatalf("token reused across classes = %d %s", code, body)
+	}
+}
+
 func TestResolverFailsWhenAuditCannotBeRecorded(t *testing.T) {
 	store := repository.NewMemoryStore()
 	_, _ = store.CreateGroup(context.Background(), repository.Group{Name: "group", Members: []repository.Member{{Name: "one", Type: repository.MemberHosted, Endpoint: "test://available", Position: 0}}})

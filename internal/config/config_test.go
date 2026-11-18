@@ -93,6 +93,9 @@ func TestLoadAcceptsNativeConfiguration(t *testing.T) {
 	if cfg.InstanceID == "" || !cfg.WorkerEnabled("maven", "promotion") || !cfg.WorkerEnabled("apt", "reclaim") {
 		t.Fatalf("runtime config = instance %q roles %#v formats %#v kinds %#v", cfg.InstanceID, cfg.NodeRoles, cfg.WorkerFormats, cfg.WorkerKinds)
 	}
+	if cfg.PartitionAhead != 3 {
+		t.Fatalf("default partition ahead = %d, want 3", cfg.PartitionAhead)
+	}
 	if cfg.RuntimeNodeRetention != 7*24*time.Hour || cfg.RuntimeNodePruneInterval != time.Hour {
 		t.Fatalf("runtime node cleanup defaults = retention %s interval %s", cfg.RuntimeNodeRetention, cfg.RuntimeNodePruneInterval)
 	}
@@ -145,6 +148,16 @@ func TestLoadRejectsInvalidRawSpoolLimit(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsInvalidPartitionAhead(t *testing.T) {
+	for _, value := range []string{"0", "-1", "many"} {
+		setCompleteConfiguration(t)
+		t.Setenv("NOTARX_PARTITION_AHEAD", value)
+		if _, err := Load(); err == nil {
+			t.Fatalf("Load() accepted NOTARX_PARTITION_AHEAD=%q", value)
+		}
+	}
+}
+
 func TestLoadSupportsDedicatedAPTReclaimWorker(t *testing.T) {
 	setCompleteConfiguration(t)
 	t.Setenv("NOTARX_NODE_ROLES", "worker")
@@ -182,6 +195,7 @@ func TestLoadParsesClusterNodeRolesAndWorkerFilters(t *testing.T) {
 	t.Setenv("NOTARX_WORKER_KINDS", "Replication,reclaim,replication")
 	t.Setenv("NOTARX_RUNTIME_NODE_RETENTION", "48h")
 	t.Setenv("NOTARX_RUNTIME_NODE_PRUNE_INTERVAL", "900")
+	t.Setenv("NOTARX_PARTITION_AHEAD", "5")
 
 	cfg, err := Load()
 	if err != nil {
@@ -192,6 +206,9 @@ func TestLoadParsesClusterNodeRolesAndWorkerFilters(t *testing.T) {
 	}
 	if len(cfg.WorkerFormats) != 2 || len(cfg.WorkerKinds) != 2 || !cfg.WorkerEnabled("oci", "replication") || !cfg.WorkerEnabled("raw", "reclaim") || cfg.WorkerEnabled("maven", "reclaim") || cfg.WorkerEnabled("oci", "promotion") {
 		t.Fatalf("worker filters formats=%#v kinds=%#v", cfg.WorkerFormats, cfg.WorkerKinds)
+	}
+	if cfg.PartitionAhead != 5 {
+		t.Fatalf("partition ahead = %d, want 5", cfg.PartitionAhead)
 	}
 	if cfg.RuntimeNodeRetention != 48*time.Hour || cfg.RuntimeNodePruneInterval != 15*time.Minute {
 		t.Fatalf("runtime node cleanup = retention %s interval %s", cfg.RuntimeNodeRetention, cfg.RuntimeNodePruneInterval)

@@ -141,6 +141,12 @@ NOTARX_RUNTIME_NODE_RETENTION=168h
 NOTARX_RUNTIME_NODE_PRUNE_INTERVAL=1h
 ```
 
+Every node starts the partition manager for the audit tables. One node at a time
+(elected through a lease row in `scheduled_tasks`) creates the current month and
+`NOTARX_PARTITION_AHEAD` future months (default `3`) and drops expired partitions;
+see [PostgreSQL capabilities](postgresql-capabilities.md#partitioned-audit-tables).
+Alert when `notarx_partition_default_rows` is not zero.
+
 `GET /api/v2/runtime/nodes` returns the node inventory and cluster-health
 summary, including missing API/Scheduler/Worker roles, duplicate instance IDs,
 and stale heartbeats. This is operational visibility only; task leases remain

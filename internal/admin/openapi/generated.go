@@ -404,6 +404,24 @@ func (e AuditCleanupJobState) Valid() bool {
 	}
 }
 
+// Defines values for AuditRecordClass.
+const (
+	AuditRecordClassAsync AuditRecordClass = "async"
+	AuditRecordClassSync  AuditRecordClass = "sync"
+)
+
+// Valid indicates whether the value is a known member of the AuditRecordClass enum.
+func (e AuditRecordClass) Valid() bool {
+	switch e {
+	case AuditRecordClassAsync:
+		return true
+	case AuditRecordClassSync:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AuthenticationKind.
 const (
 	AuthenticationKindApiKey                   AuthenticationKind = "api_key"
@@ -4736,6 +4754,24 @@ func (e SearchArtifactsParamsMatch) Valid() bool {
 	}
 }
 
+// Defines values for ListAuditPageParamsClass.
+const (
+	ListAuditPageParamsClassAsync ListAuditPageParamsClass = "async"
+	ListAuditPageParamsClassSync  ListAuditPageParamsClass = "sync"
+)
+
+// Valid indicates whether the value is a known member of the ListAuditPageParamsClass enum.
+func (e ListAuditPageParamsClass) Valid() bool {
+	switch e {
+	case ListAuditPageParamsClassAsync:
+		return true
+	case ListAuditPageParamsClassSync:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SearchRepositoryArtifactsParamsMatch.
 const (
 	SearchRepositoryArtifactsParamsMatchContains SearchRepositoryArtifactsParamsMatch = "contains"
@@ -5351,6 +5387,9 @@ type AuditRecord struct {
 	Bytes               *int64  `json:"bytes,omitempty"`
 	CacheDisposition    *string `json:"cacheDisposition,omitempty"`
 
+	// Class Durability class and storage of the record. sync is security evidence (security_audit_log, kept 730 days by default); async is read and download audit (resolver_audit_log, kept 90 days by default).
+	Class *AuditRecordClass `json:"class,omitempty"`
+
 	// Evidence Optional immutable, operation-specific evidence. Keys and values are bounded strings; consumers must accept future keys.
 	Evidence       *map[string]string `json:"evidence,omitempty"`
 	Format         *string            `json:"format,omitempty"`
@@ -5368,6 +5407,9 @@ type AuditRecord struct {
 	TraceId        *string            `json:"traceId,omitempty"`
 	UpstreamHost   *string            `json:"upstreamHost,omitempty"`
 }
+
+// AuditRecordClass Durability class and storage of the record. sync is security evidence (security_audit_log, kept 730 days by default); async is read and download audit (resolver_audit_log, kept 90 days by default).
+type AuditRecordClass string
 
 // AuditRetentionPolicy defines model for AuditRetentionPolicy.
 type AuditRetentionPolicy struct {
@@ -9192,6 +9234,9 @@ type ListAuditPageParams struct {
 	// Actor Exact actor or principal filter.
 	Actor *string `form:"actor,omitempty" json:"actor,omitempty"`
 
+	// Class Restricts the page to one audit class. Without it the page merges security (sync) and read (async) records by occurredAt. Pass from to bound the scanned time window; without it the last 90 days of async and 730 days of sync records are searched.
+	Class *ListAuditPageParamsClass `form:"class,omitempty" json:"class,omitempty"`
+
 	// From Inclusive lower bound for occurredAt.
 	From *time.Time `form:"from,omitempty" json:"from,omitempty"`
 
@@ -9200,6 +9245,9 @@ type ListAuditPageParams struct {
 	PageSize  *PageSize  `form:"pageSize,omitempty" json:"pageSize,omitempty"`
 	PageToken *PageToken `form:"pageToken,omitempty" json:"pageToken,omitempty"`
 }
+
+// ListAuditPageParamsClass defines parameters for ListAuditPage.
+type ListAuditPageParamsClass string
 
 // ReplaceOIDCSettingsParams defines parameters for ReplaceOIDCSettings.
 type ReplaceOIDCSettingsParams struct {
@@ -12172,6 +12220,19 @@ func (siw *ServerInterfaceWrapper) ListAuditPage(w http.ResponseWriter, r *http.
 			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "actor"})
 		} else {
 			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "actor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "class" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "class", r.URL.Query(), &params.Class, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "class"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "class", Err: err})
 		}
 		return
 	}

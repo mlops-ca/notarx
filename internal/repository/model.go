@@ -1307,10 +1307,45 @@ const (
 	AuditProxyDenied       AuditOutcome = "proxy_denied"
 )
 
+// AuditClass is the durability class of an audit record (ADR 0023 section 1). It
+// also names the table that stores the record: sync-class records live in
+// security_audit_log and async-class records in resolver_audit_log.
+type AuditClass string
+
+const (
+	// AuditClassSync marks evidence of a security decision or state change.
+	AuditClassSync AuditClass = "sync"
+	// AuditClassAsync marks high-volume reads and downloads. It is the default.
+	AuditClassAsync AuditClass = "async"
+)
+
+// Valid reports whether c is one of the two classes.
+func (c AuditClass) Valid() bool { return c == AuditClassSync || c == AuditClassAsync }
+
+// effective maps the zero value to the default class.
+func (c AuditClass) effective() AuditClass {
+	if c == "" {
+		return AuditClassAsync
+	}
+	return c
+}
+
+// rank orders the classes inside a merged page when two records share both
+// occurred_at and id, which two independent tables can produce.
+func (c AuditClass) rank() int {
+	if c.effective() == AuditClassSync {
+		return 1
+	}
+	return 0
+}
+
 type AuditRecord struct {
 	// ID is an internal stable tie-breaker for cursor pagination. It is never
 	// serialized as part of the public audit representation.
-	ID                                                                                      int64 `json:"-"`
+	ID int64 `json:"-"`
+	// Class selects the audit table on write; an empty class means async. Reads
+	// report the class of the table the record came from.
+	Class                                                                                   AuditClass `json:",omitempty"`
 	GroupName                                                                               string
 	Repository                                                                              string
 	MemberName                                                                              string
@@ -1332,16 +1367,20 @@ type AuditQuery struct {
 	Format     string
 	Operation  string
 	Actor      string
-	Limit      int
-	From       time.Time
-	To         time.Time
-	Before     AuditCursor
+	// Class restricts the page to one table; empty merges both.
+	Class  AuditClass
+	Limit  int
+	From   time.Time
+	To     time.Time
+	Before AuditCursor
 }
 
 // AuditCursor identifies the last item in a descending audit page.
 type AuditCursor struct {
 	OccurredAt time.Time
 	ID         int64
+	// Class completes the keyset: ids come from one sequence per table.
+	Class AuditClass
 }
 
 // AuditPage is the storage-level result for cursor-paginated audit queries.

@@ -15,6 +15,7 @@ import (
 type Metrics struct {
 	httpRequests                   requestMetrics
 	databaseStats                  []namedDatabaseStats
+	partitionStats                 PartitionStatsFunc
 	resolved                       atomic.Uint64
 	failed                         atomic.Uint64
 	ociCacheHit                    atomic.Uint64
@@ -501,6 +502,7 @@ func (m *Metrics) Handler(w http.ResponseWriter, _ *http.Request) {
 	m.writeHTTPMetrics(w)
 	m.writeRuntimeMetrics(w)
 	m.writeDatabaseMetrics(w)
+	m.writePartitionMetrics(w)
 	m.writeAPTSigningMetrics(w)
 	_, _ = w.Write([]byte("# TYPE notarx_cache_quota_rejections_total counter\nnotarx_cache_quota_rejections_total " + utoa(m.cacheQuotaDenied.Load()) + "\n# TYPE notarx_anonymous_reads_total counter\nnotarx_anonymous_reads_total " + utoa(m.anonymousReads.Load()) + "\n"))
 	_, _ = w.Write([]byte("# TYPE notarx_repository_authorization_denials_total counter\n"))

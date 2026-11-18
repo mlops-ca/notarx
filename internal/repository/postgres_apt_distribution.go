@@ -24,9 +24,9 @@ func (s *PostgresStore) CommitAPTDistributionSnapshot(ctx context.Context, d APT
 	var workID string
 	switch d.Operation {
 	case "promote":
-		err = tx.QueryRowContext(ctx, `SELECT id::text FROM lifecycle_jobs WHERE id::text=$1 AND repository_id=$2 AND kind='promotion' AND state='running' AND lease_token=$3 AND lease_expires_at>clock_timestamp() AND payload->>'format'='apt' AND payload->>'sourceRepositoryId'=$4 AND payload->>'coordinate'=$5 AND payload->>'digest'=$6 AND payload->>'aptTargetSuite'=$7 FOR UPDATE`, d.WorkID, snapshot.RepositoryID, d.LeaseToken, d.Source.RepositoryID, d.Source.Path, d.Source.Digest, snapshot.Suite).Scan(&workID)
+		err = tx.QueryRowContext(ctx, `SELECT id::text FROM lifecycle_jobs WHERE id=$1::uuid AND repository_id=$2 AND kind='promotion' AND state='running' AND lease_token=$3 AND lease_expires_at>clock_timestamp() AND payload->>'format'='apt' AND payload->>'sourceRepositoryId'=$4 AND payload->>'coordinate'=$5 AND payload->>'digest'=$6 AND payload->>'aptTargetSuite'=$7 FOR UPDATE`, d.WorkID, snapshot.RepositoryID, d.LeaseToken, d.Source.RepositoryID, d.Source.Path, d.Source.Digest, snapshot.Suite).Scan(&workID)
 	case "replicate":
-		err = tx.QueryRowContext(ctx, `SELECT id::text FROM replication_plans WHERE id::text=$1 AND target_repository_id=$2 AND state='running' AND lease_token=$3 AND lease_expires_at>clock_timestamp() AND source_repository_id=$4 AND format='apt' AND coordinate=$5 AND digest=$6 AND apt_target_suite=$7 FOR UPDATE`, d.WorkID, snapshot.RepositoryID, d.LeaseToken, d.Source.RepositoryID, d.Source.Path, d.Source.Digest, snapshot.Suite).Scan(&workID)
+		err = tx.QueryRowContext(ctx, `SELECT id::text FROM replication_plans WHERE id=$1::uuid AND target_repository_id=$2 AND state='running' AND lease_token=$3 AND lease_expires_at>clock_timestamp() AND source_repository_id=$4 AND format='apt' AND coordinate=$5 AND digest=$6 AND apt_target_suite=$7 FOR UPDATE`, d.WorkID, snapshot.RepositoryID, d.LeaseToken, d.Source.RepositoryID, d.Source.Path, d.Source.Digest, snapshot.Suite).Scan(&workID)
 	default:
 		return APTRepositorySnapshot{}, ErrDisabled
 	}

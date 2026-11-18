@@ -149,6 +149,48 @@ WHERE datname = current_database()
 ORDER BY backend_start;
 ```
 
+## Partitioned audit tables
+
+`resolver_audit_log` (async-class audit: reads, downloads, group resolution) and
+`security_audit_log` (sync-class audit: security decisions and state changes) are
+native range-partitioned tables, monthly by `occurred_at`, with the primary key
+`(occurred_at, id)` and no foreign key pointing into them (ADR 0023 section 2).
+Each has a `DEFAULT` partition, three indexes (the primary key,
+`(repository, occurred_at DESC)` and `(actor, occurred_at DESC)`) and a nullable
+`repository_id` beside the historical repository name. The default retention is
+90 days for `resolver_audit_log` and 730 days for `security_audit_log`.
+
+`internal/partitions` keeps them current without `pg_partman` or `pg_cron`:
+
+- At start-up, before the node reports ready, and then every six hours it creates
+  the current partition plus `NOTARX_PARTITION_AHEAD` (default 3) future ones with
+  `CREATE TABLE IF NOT EXISTS ... PARTITION OF`, and drops partitions whose whole
+  range is older than the table's retention with `SET LOCAL lock_timeout='2s'; DROP
+  TABLE`, retried with backoff. `DETACH PARTITION ... CONCURRENTLY` is not used: it
+  cannot run in a transaction block and is refused while a `DEFAULT` partition
+  exists.
+- An enabled audit retention policy (`keepDays`) overrides the 90 days of
+  `resolver_audit_log`; `security_audit_log` keeps its registry default.
+  Every node refreshes the two gauges each minute, and a failed pass is retried
+  after a minute.
+- One node at a time runs the work. The runner is elected by a lease row in
+  `scheduled_tasks` (kind `partition-manager`, never enabled, hidden from the task
+  API); no session advisory lock is held, so it works behind a connection pool in transaction mode.
+- A period whose range already has rows in the `DEFAULT` partition cannot be
+  created directly. The manager creates the partition standalone, moves the rows
+  with `DELETE ... RETURNING` into it and attaches it in one transaction.
+- `notarx_partition_default_rows{table}` must be 0; a non-zero value means the
+  manager is not keeping up and should alert. `notarx_partitions{table}` is the
+  number of bounded partitions.
+
+The audit list API (`GET /api/v2/audits/page`) returns one keyset page merged
+across both tables by `(occurred_at, id)` and accepts `class=sync|async` to read
+one table. Without `from` it searches the table's default retention window, so the
+planner can prune partitions; pass `from` and `to` to bound large scans.
+
+MySQL (ADR 0022) uses plain tables with an `AUTO_INCREMENT` key and batched
+retention; that twin is written with the ADR 0022 store slices.
+
 ## Explicitly not used
 
 - **RLS:** tables do not yet share a tenant ID or consistent session tenant
@@ -165,6 +207,7 @@ ORDER BY backend_start;
 
 | Area | Primary implementation |
 | --- | --- |
+| Partitioned audit tables | `internal/partitions`, `migrations/000002_partitioned_audit_logs.sql`, `internal/repository/postgres_audit.go` |
 | Advisory locks | `internal/cache/coordinator.go`, `internal/repository/postgres_advisory_lock.go`, `postgres_{oci,raw,maven,npm}.go` |
 | `SKIP LOCKED` and leases | `internal/repository/postgres_lifecycle.go`, `postgres_replication.go`, `postgres_webhooks.go`, `postgres_scheduled_tasks.go` |
 | `LISTEN/NOTIFY` | `internal/database/notification.go`, notification triggers in `migrations/000001_baseline.sql` |

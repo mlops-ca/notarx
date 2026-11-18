@@ -51,7 +51,7 @@ func (s *PostgresStore) nuGetTransaction(ctx context.Context, repo, sourceVersio
 	var name string
 	var repoType RepositoryType
 	var version string
-	err = tx.QueryRowContext(ctx, `SELECT name,repo_type,version::text FROM hosted_repositories WHERE id::text=$1 AND format='nuget' AND state='active' FOR UPDATE`, repo).Scan(&name, &repoType, &version)
+	err = tx.QueryRowContext(ctx, `SELECT name,repo_type,version::text FROM hosted_repositories WHERE id=$1::uuid AND format='nuget' AND state='active' FOR UPDATE`, repo).Scan(&name, &repoType, &version)
 	if err != nil {
 		_ = tx.Rollback()
 		if errors.Is(err, sql.ErrNoRows) {
@@ -68,7 +68,7 @@ func (s *PostgresStore) nuGetTransaction(ctx context.Context, repo, sourceVersio
 
 func nuGetQuota(ctx context.Context, tx *sql.Tx, repo string, extra int64) error {
 	var quota int64
-	err := tx.QueryRowContext(ctx, `SELECT quota_bytes FROM repository_capacity_quotas WHERE repository_id::text=$1 FOR UPDATE`, repo).Scan(&quota)
+	err := tx.QueryRowContext(ctx, `SELECT quota_bytes FROM repository_capacity_quotas WHERE repository_id=$1::uuid FOR UPDATE`, repo).Scan(&quota)
 	if errors.Is(err, sql.ErrNoRows) || err == nil && quota == 0 {
 		return nil
 	}
@@ -76,7 +76,7 @@ func nuGetQuota(ctx context.Context, tx *sql.Tx, repo string, extra int64) error
 		return err
 	}
 	var used int64
-	err = tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT SUM(size) FROM native_nuget_publications WHERE repository_id::text=$1),0)+COALESCE((SELECT SUM(size) FROM native_nuget_publication_sessions WHERE repository_id::text=$1 AND state IN ('reserved','staged') AND expires_at>now()),0)`, repo).Scan(&used)
+	err = tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT SUM(size) FROM native_nuget_publications WHERE repository_id=$1::uuid),0)+COALESCE((SELECT SUM(size) FROM native_nuget_publication_sessions WHERE repository_id=$1::uuid AND state IN ('reserved','staged') AND expires_at>now()),0)`, repo).Scan(&used)
 	if err != nil {
 		return err
 	}
@@ -95,10 +95,10 @@ func (s *PostgresStore) ReserveNuGetPublication(ctx context.Context, in NuGetSes
 		return NuGetSession{}, false, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err = tx.ExecContext(ctx, `UPDATE native_nuget_publication_sessions SET state='expired' WHERE repository_id::text=$1 AND state IN ('reserved','staged') AND expires_at<=now()`, in.RepositoryID); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE native_nuget_publication_sessions SET state='expired' WHERE repository_id=$1::uuid AND state IN ('reserved','staged') AND expires_at<=now()`, in.RepositoryID); err != nil {
 		return NuGetSession{}, false, err
 	}
-	prior, err := scanNuGetSession(tx.QueryRowContext(ctx, `SELECT `+nuGetSessionColumns+` FROM native_nuget_publication_sessions WHERE id::text=$1`, in.ID))
+	prior, err := scanNuGetSession(tx.QueryRowContext(ctx, `SELECT `+nuGetSessionColumns+` FROM native_nuget_publication_sessions WHERE id=$1::uuid`, in.ID))
 	if err == nil {
 		if !nuGetSessionSame(prior, in) || prior.Actor != in.Actor {
 			return NuGetSession{}, false, ErrIdempotencyConflict
@@ -111,7 +111,7 @@ func (s *PostgresStore) ReserveNuGetPublication(ctx context.Context, in NuGetSes
 	if !errors.Is(err, ErrNotFound) {
 		return NuGetSession{}, false, err
 	}
-	prior, err = scanNuGetSession(tx.QueryRowContext(ctx, `SELECT `+nuGetSessionColumns+` FROM native_nuget_publication_sessions WHERE repository_id::text=$1 AND package_id=$2 AND version=$3 AND source_version=$4 AND state IN ('reserved','staged','committed')`, in.RepositoryID, in.PackageID, in.Version, in.SourceVersion))
+	prior, err = scanNuGetSession(tx.QueryRowContext(ctx, `SELECT `+nuGetSessionColumns+` FROM native_nuget_publication_sessions WHERE repository_id=$1::uuid AND package_id=$2 AND version=$3 AND source_version=$4 AND state IN ('reserved','staged','committed')`, in.RepositoryID, in.PackageID, in.Version, in.SourceVersion))
 	if err == nil {
 		if !nuGetSessionSame(prior, in) || prior.State != "committed" && prior.Actor != in.Actor {
 			return NuGetSession{}, false, ErrNuGetPublicationConflict
@@ -133,7 +133,7 @@ func (s *PostgresStore) ReserveNuGetPublication(ctx context.Context, in NuGetSes
 }
 
 func (s *PostgresStore) GetNuGetSession(ctx context.Context, id string) (NuGetSession, error) {
-	return scanNuGetSession(s.db.QueryRowContext(ctx, `SELECT `+nuGetSessionColumns+` FROM native_nuget_publication_sessions WHERE id::text=$1 AND EXISTS(SELECT 1 FROM hosted_repositories h WHERE h.id=repository_id AND h.format='nuget' AND h.state='active')`, id))
+	return scanNuGetSession(s.db.QueryRowContext(ctx, `SELECT `+nuGetSessionColumns+` FROM native_nuget_publication_sessions WHERE id=$1::uuid AND EXISTS(SELECT 1 FROM hosted_repositories h WHERE h.id=repository_id AND h.format='nuget' AND h.state='active')`, id))
 }
 
 func (s *PostgresStore) StageNuGetPublication(ctx context.Context, in NuGetSession) (NuGetSession, error) {
@@ -145,7 +145,7 @@ func (s *PostgresStore) StageNuGetPublication(ctx context.Context, in NuGetSessi
 		return NuGetSession{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	prior, err := scanNuGetSession(tx.QueryRowContext(ctx, `SELECT `+nuGetSessionColumns+` FROM native_nuget_publication_sessions WHERE id::text=$1 FOR UPDATE`, in.ID))
+	prior, err := scanNuGetSession(tx.QueryRowContext(ctx, `SELECT `+nuGetSessionColumns+` FROM native_nuget_publication_sessions WHERE id=$1::uuid FOR UPDATE`, in.ID))
 	if err != nil {
 		return NuGetSession{}, err
 	}
@@ -161,7 +161,7 @@ func (s *PostgresStore) StageNuGetPublication(ctx context.Context, in NuGetSessi
 	if prior.State == "staged" && (!bytes.Equal(prior.MetadataJSON, in.MetadataJSON) || !bytes.Equal(prior.Nuspec, in.Nuspec) || prior.SourceURL != in.SourceURL || prior.RegistrationURL != in.RegistrationURL) {
 		return NuGetSession{}, ErrNuGetPublicationConflict
 	}
-	prior, err = scanNuGetSession(tx.QueryRowContext(ctx, `UPDATE native_nuget_publication_sessions SET state='staged',metadata_json=$2,nuspec=$3,source_url=$4,registration_url=$5 WHERE id::text=$1 RETURNING `+nuGetSessionColumns, in.ID, string(in.MetadataJSON), in.Nuspec, in.SourceURL, in.RegistrationURL))
+	prior, err = scanNuGetSession(tx.QueryRowContext(ctx, `UPDATE native_nuget_publication_sessions SET state='staged',metadata_json=$2,nuspec=$3,source_url=$4,registration_url=$5 WHERE id=$1::uuid RETURNING `+nuGetSessionColumns, in.ID, string(in.MetadataJSON), in.Nuspec, in.SourceURL, in.RegistrationURL))
 	if err != nil {
 		return NuGetSession{}, err
 	}
@@ -178,7 +178,7 @@ func (s *PostgresStore) CommitNuGetPublication(ctx context.Context, id, actor st
 		return NuGetPublication{}, false, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	session, err := scanNuGetSession(tx.QueryRowContext(ctx, `SELECT `+nuGetSessionColumns+` FROM native_nuget_publication_sessions WHERE id::text=$1 FOR UPDATE`, id))
+	session, err := scanNuGetSession(tx.QueryRowContext(ctx, `SELECT `+nuGetSessionColumns+` FROM native_nuget_publication_sessions WHERE id=$1::uuid FOR UPDATE`, id))
 	if err != nil {
 		return NuGetPublication{}, false, err
 	}
@@ -186,7 +186,7 @@ func (s *PostgresStore) CommitNuGetPublication(ctx context.Context, id, actor st
 		return NuGetPublication{}, false, ErrNuGetPublicationConflict
 	}
 	if session.State == "committed" {
-		p, err := scanNuGetPublication(tx.QueryRowContext(ctx, `SELECT `+nuGetPublicationColumns+` FROM native_nuget_publications WHERE session_id::text=$1`, id))
+		p, err := scanNuGetPublication(tx.QueryRowContext(ctx, `SELECT `+nuGetPublicationColumns+` FROM native_nuget_publications WHERE session_id=$1::uuid`, id))
 		if err != nil {
 			return NuGetPublication{}, false, err
 		}
@@ -202,10 +202,10 @@ func (s *PostgresStore) CommitNuGetPublication(ctx context.Context, id, actor st
 		return NuGetPublication{}, false, err
 	}
 	var published time.Time
-	if err = tx.QueryRowContext(ctx, `UPDATE native_nuget_publication_sessions SET state='committed',committed_at=now() WHERE id::text=$1 RETURNING committed_at`, id).Scan(&published); err != nil {
+	if err = tx.QueryRowContext(ctx, `UPDATE native_nuget_publication_sessions SET state='committed',committed_at=now() WHERE id=$1::uuid RETURNING committed_at`, id).Scan(&published); err != nil {
 		return NuGetPublication{}, false, err
 	}
-	p, err := scanNuGetPublication(tx.QueryRowContext(ctx, `INSERT INTO native_nuget_publications(repository_id,package_id,version,session_id,digest,object_key,size,metadata_json,nuspec,publisher,published_at,source_version,source_url,registration_url,listed)SELECT repository_id,package_id,version,id,digest,object_key,size,metadata_json,nuspec,actor,committed_at,source_version,source_url,registration_url,COALESCE((metadata_json::jsonb->>'listed')::boolean,true) FROM native_nuget_publication_sessions WHERE id::text=$1 RETURNING `+nuGetPublicationColumns, id))
+	p, err := scanNuGetPublication(tx.QueryRowContext(ctx, `INSERT INTO native_nuget_publications(repository_id,package_id,version,session_id,digest,object_key,size,metadata_json,nuspec,publisher,published_at,source_version,source_url,registration_url,listed)SELECT repository_id,package_id,version,id,digest,object_key,size,metadata_json,nuspec,actor,committed_at,source_version,source_url,registration_url,COALESCE((metadata_json::jsonb->>'listed')::boolean,true) FROM native_nuget_publication_sessions WHERE id=$1::uuid RETURNING `+nuGetPublicationColumns, id))
 	if err != nil {
 		return NuGetPublication{}, false, err
 	}
@@ -216,7 +216,7 @@ func (s *PostgresStore) CommitNuGetPublication(ctx context.Context, id, actor st
 }
 
 func (s *PostgresStore) GetNuGetPublication(ctx context.Context, repo, id, version string) (NuGetPublication, error) {
-	return scanNuGetPublication(s.db.QueryRowContext(ctx, `SELECT `+nuGetPublicationColumns+` FROM native_nuget_publications WHERE repository_id::text=$1 AND package_id=$2 AND version=$3 AND EXISTS(SELECT 1 FROM hosted_repositories h WHERE h.id=repository_id AND h.format='nuget' AND h.state='active' AND source_version=CASE WHEN h.repo_type='proxy' THEN h.version::text ELSE '' END)`, repo, id, version))
+	return scanNuGetPublication(s.db.QueryRowContext(ctx, `SELECT `+nuGetPublicationColumns+` FROM native_nuget_publications WHERE repository_id=$1::uuid AND package_id=$2 AND version=$3 AND EXISTS(SELECT 1 FROM hosted_repositories h WHERE h.id=repository_id AND h.format='nuget' AND h.state='active' AND source_version=CASE WHEN h.repo_type='proxy' THEN h.version::text ELSE '' END)`, repo, id, version))
 }
 
 func (s *PostgresStore) ListNuGetPublications(ctx context.Context, repo, id string, limit int, after string) ([]NuGetPublication, error) {
@@ -224,13 +224,13 @@ func (s *PostgresStore) ListNuGetPublications(ctx context.Context, repo, id stri
 		limit = 64
 	}
 	var exists bool
-	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM hosted_repositories WHERE id::text=$1 AND format='nuget' AND state='active')`, repo).Scan(&exists); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM hosted_repositories WHERE id=$1::uuid AND format='nuget' AND state='active')`, repo).Scan(&exists); err != nil {
 		return nil, err
 	}
 	if !exists {
 		return nil, ErrNotFound
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT repository_id::text,package_id,version,session_id::text,digest,object_key,size,metadata_json,''::bytea,publisher,published_at,source_version,source_url,registration_url,`+nuGetGovernanceColumns+` FROM native_nuget_publications WHERE repository_id::text=$1 AND ($2='' OR package_id=$2) AND (package_id||'@'||version) COLLATE "C">$3 AND EXISTS(SELECT 1 FROM hosted_repositories h WHERE h.id=repository_id AND h.state='active' AND source_version=CASE WHEN h.repo_type='proxy' THEN h.version::text ELSE '' END) ORDER BY (package_id||'@'||version) COLLATE "C" LIMIT $4`, repo, id, after, limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT repository_id::text,package_id,version,session_id::text,digest,object_key,size,metadata_json,''::bytea,publisher,published_at,source_version,source_url,registration_url,`+nuGetGovernanceColumns+` FROM native_nuget_publications WHERE repository_id=$1::uuid AND ($2='' OR package_id=$2) AND (package_id||'@'||version) COLLATE "C">$3 AND EXISTS(SELECT 1 FROM hosted_repositories h WHERE h.id=repository_id AND h.state='active' AND source_version=CASE WHEN h.repo_type='proxy' THEN h.version::text ELSE '' END) ORDER BY (package_id||'@'||version) COLLATE "C" LIMIT $4`, repo, id, after, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -267,7 +267,7 @@ func (s *PostgresStore) ExpireNuGetSessions(ctx context.Context, now time.Time, 
 }
 
 func (s *PostgresStore) MarkNuGetSessionCollected(ctx context.Context, id, key string) error {
-	result, err := s.db.ExecContext(ctx, `UPDATE native_nuget_publication_sessions SET collected_at=COALESCE(collected_at,now()) WHERE id::text=$1 AND object_key=$2 AND state='expired'`, id, key)
+	result, err := s.db.ExecContext(ctx, `UPDATE native_nuget_publication_sessions SET collected_at=COALESCE(collected_at,now()) WHERE id=$1::uuid AND object_key=$2 AND state='expired'`, id, key)
 	if err != nil {
 		return err
 	}

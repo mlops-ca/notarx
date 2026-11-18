@@ -15247,6 +15247,14 @@
           },
           "traceId": {
             "type": "string"
+          },
+          "class": {
+            "type": "string",
+            "enum": [
+              "sync",
+              "async"
+            ],
+            "description": "Durability class and storage of the record. sync is security evidence (security_audit_log, kept 730 days by default); async is read and download audit (resolver_audit_log, kept 90 days by default)."
           }
         }
       },

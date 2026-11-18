@@ -13,7 +13,7 @@ func (s *PostgresStore) LockAPTObject(ctx context.Context, objectKey string) (fu
 
 func (s *PostgresStore) GetAPTAsset(ctx context.Context, repositoryID, path string) (APTAsset, error) {
 	var asset APTAsset
-	err := scanAPTAsset(s.db.QueryRowContext(ctx, `SELECT `+aptAssetColumns+` FROM native_apt_assets WHERE repository_id::text=$1 AND path=$2`, repositoryID, path), &asset)
+	err := scanAPTAsset(s.db.QueryRowContext(ctx, `SELECT `+aptAssetColumns+` FROM native_apt_assets WHERE repository_id=$1::uuid AND path=$2`, repositoryID, path), &asset)
 	if errors.Is(err, sql.ErrNoRows) {
 		return APTAsset{}, ErrNotFound
 	}

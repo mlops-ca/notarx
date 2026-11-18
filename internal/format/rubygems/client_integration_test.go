@@ -264,8 +264,18 @@ func TestRubyGemsFixedOfficialClientColdTransitiveInstallAndRestart(t *testing.T
 		if e != nil {
 			t.Fatal(e)
 		}
-		if e = objects.EnsureBucket(t.Context()); e != nil {
-			t.Fatal(e)
+		// RustFS answers /health before its S3 layer is ready after a restart and
+		// returns 503 on HeadBucket in between, so wait for the bucket call itself.
+		bucketDeadline := time.Now().Add(30 * time.Second)
+		for {
+			e = objects.EnsureBucket(t.Context())
+			if e == nil {
+				break
+			}
+			if time.Now().After(bucketDeadline) {
+				t.Fatal(e)
+			}
+			time.Sleep(250 * time.Millisecond)
 		}
 		var backend string
 		stopGateway, backend = startRealRubyGateway(t, admin, reader, bucket, evidence, replicationWorkerEnabled)

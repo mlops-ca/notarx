@@ -20,7 +20,7 @@ func (s *PostgresStore) ReconcileCargoGroupIndex(ctx context.Context, groupID, n
 	}
 	defer func() { _ = tx.Rollback() }()
 	var format Format
-	err = tx.QueryRowContext(ctx, `SELECT format FROM hosted_groups WHERE id::text=$1 FOR UPDATE`, groupID).Scan(&format)
+	err = tx.QueryRowContext(ctx, `SELECT format FROM hosted_groups WHERE id=$1::uuid FOR UPDATE`, groupID).Scan(&format)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -32,7 +32,7 @@ func (s *PostgresStore) ReconcileCargoGroupIndex(ctx context.Context, groupID, n
 	}
 	memberRows, err := tx.QueryContext(ctx, `SELECT r.id::text FROM hosted_group_members m
 		JOIN hosted_repositories r ON r.id=m.repository_id
-		WHERE m.group_id::text=$1 AND r.format='cargo' AND r.state='active'`, groupID)
+		WHERE m.group_id=$1::uuid AND r.format='cargo' AND r.state='active'`, groupID)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +51,7 @@ func (s *PostgresStore) ReconcileCargoGroupIndex(ctx context.Context, groupID, n
 		return nil, err
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT group_id::text,source_repository_id::text,name,version,checksum,index_row
-		FROM native_cargo_group_versions WHERE group_id::text=$1 AND collision_key=$2 FOR UPDATE`, groupID, identity.CollisionKey)
+		FROM native_cargo_group_versions WHERE group_id=$1::uuid AND collision_key=$2 FOR UPDATE`, groupID, identity.CollisionKey)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +101,7 @@ func (s *PostgresStore) GetCargoGroupVersion(ctx context.Context, groupID, name,
 	}
 	var value CargoGroupVersion
 	err = s.db.QueryRowContext(ctx, `SELECT group_id::text,source_repository_id::text,name,version,checksum,index_row
-		FROM native_cargo_group_versions WHERE group_id::text=$1 AND collision_key=$2 AND version_key=$3`,
+		FROM native_cargo_group_versions WHERE group_id=$1::uuid AND collision_key=$2 AND version_key=$3`,
 		groupID, identity.CollisionKey, identity.VersionKey).
 		Scan(&value.GroupID, &value.SourceRepositoryID, &value.Name, &value.Version, &value.Checksum, &value.IndexRow)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -116,7 +116,7 @@ func (s *PostgresStore) ListCargoGroupVersions(ctx context.Context, groupID, nam
 		return nil, ErrInvalidCargoIdentity
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT group_id::text,source_repository_id::text,name,version,checksum,index_row
-		FROM native_cargo_group_versions WHERE group_id::text=$1 AND collision_key=$2 ORDER BY version_key`, groupID, identity.CollisionKey)
+		FROM native_cargo_group_versions WHERE group_id=$1::uuid AND collision_key=$2 ORDER BY version_key`, groupID, identity.CollisionKey)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +149,7 @@ func lockCargoGroupRepositories(ctx context.Context, tx *sql.Tx, memberSets ...[
 	sort.Strings(ids)
 	for _, id := range ids {
 		var found string
-		if err := tx.QueryRowContext(ctx, `SELECT id::text FROM hosted_repositories WHERE id::text=$1 FOR UPDATE`, id).Scan(&found); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT id::text FROM hosted_repositories WHERE id=$1::uuid FOR UPDATE`, id).Scan(&found); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return ErrNotFound
 			}
@@ -162,7 +162,7 @@ func lockCargoGroupRepositories(ctx context.Context, tx *sql.Tx, memberSets ...[
 func preflightPostgresCargoGroupMembers(ctx context.Context, tx *sql.Tx, groupID string, members []GroupMember, additional ...cargoGroupKnownIndex) error {
 	preflight := newCargoGroupPreflight(groupID)
 	ownerRows, err := tx.QueryContext(ctx, `SELECT group_id::text,source_repository_id::text,name,version,checksum,index_row
-		FROM native_cargo_group_versions WHERE group_id::text=$1`, groupID)
+		FROM native_cargo_group_versions WHERE group_id=$1::uuid`, groupID)
 	if err != nil {
 		return err
 	}
@@ -184,8 +184,8 @@ func preflightPostgresCargoGroupMembers(ctx context.Context, tx *sql.Tx, groupID
 	}
 	for _, member := range members {
 		for _, query := range []string{
-			`SELECT index_row FROM native_cargo_publications WHERE repository_id::text=$1`,
-			`SELECT body FROM native_cargo_proxy_indexes WHERE repository_id::text=$1 AND status=200`,
+			`SELECT index_row FROM native_cargo_publications WHERE repository_id=$1::uuid`,
+			`SELECT body FROM native_cargo_proxy_indexes WHERE repository_id=$1::uuid AND status=200`,
 		} {
 			rows, err := tx.QueryContext(ctx, query, member.RepositoryID)
 			if err != nil {

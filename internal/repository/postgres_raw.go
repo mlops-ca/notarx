@@ -44,7 +44,7 @@ func (s *PostgresStore) LockRawUpload(ctx context.Context, id string) (func(), e
 }
 func (s *PostgresStore) GetRawUpload(ctx context.Context, id string) (RawUpload, error) {
 	var v RawUpload
-	err := scanRawUpload(s.db.QueryRowContext(ctx, `SELECT `+rawUploadColumns+` FROM native_raw_uploads WHERE id::text=$1`, id), &v)
+	err := scanRawUpload(s.db.QueryRowContext(ctx, `SELECT `+rawUploadColumns+` FROM native_raw_uploads WHERE id=$1::uuid`, id), &v)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RawUpload{}, ErrNotFound
 	}
@@ -52,7 +52,7 @@ func (s *PostgresStore) GetRawUpload(ctx context.Context, id string) (RawUpload,
 }
 func (s *PostgresStore) UpdateRawUpload(ctx context.Context, id string, offset int64) (RawUpload, error) {
 	var v RawUpload
-	err := scanRawUpload(s.db.QueryRowContext(ctx, `UPDATE native_raw_uploads SET byte_offset=$2 WHERE id::text=$1 AND state='open' AND expires_at>now() RETURNING `+rawUploadColumns, id, offset), &v)
+	err := scanRawUpload(s.db.QueryRowContext(ctx, `UPDATE native_raw_uploads SET byte_offset=$2 WHERE id=$1::uuid AND state='open' AND expires_at>now() RETURNING `+rawUploadColumns, id, offset), &v)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RawUpload{}, ErrNotFound
 	}
@@ -60,7 +60,7 @@ func (s *PostgresStore) UpdateRawUpload(ctx context.Context, id string, offset i
 }
 func (s *PostgresStore) CancelRawUpload(ctx context.Context, id string) (RawUpload, error) {
 	var v RawUpload
-	err := scanRawUpload(s.db.QueryRowContext(ctx, `UPDATE native_raw_uploads SET state='cancelled' WHERE id::text=$1 AND state='open' RETURNING `+rawUploadColumns, id), &v)
+	err := scanRawUpload(s.db.QueryRowContext(ctx, `UPDATE native_raw_uploads SET state='cancelled' WHERE id=$1::uuid AND state='open' RETURNING `+rawUploadColumns, id), &v)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RawUpload{}, ErrNotFound
 	}
@@ -80,7 +80,7 @@ func (s *PostgresStore) CompleteRawUploadIf(ctx context.Context, id string, asse
 	}
 	defer func() { _ = tx.Rollback() }()
 	var repoID, path string
-	err = tx.QueryRowContext(ctx, `SELECT repository_id::text,path FROM native_raw_uploads WHERE id::text=$1 AND state='open' AND expires_at>now() FOR UPDATE`, id).Scan(&repoID, &path)
+	err = tx.QueryRowContext(ctx, `SELECT repository_id::text,path FROM native_raw_uploads WHERE id=$1::uuid AND state='open' AND expires_at>now() FOR UPDATE`, id).Scan(&repoID, &path)
 	if errors.Is(err, sql.ErrNoRows) {
 		return asset, ErrNotFound
 	}
@@ -100,7 +100,7 @@ func (s *PostgresStore) CompleteRawUploadIf(ctx context.Context, id string, asse
 		return asset, replaceErr
 	}
 	asset.UpdatedAt = time.Now().UTC()
-	if _, err = tx.ExecContext(ctx, `UPDATE native_raw_uploads SET state='completed' WHERE id::text=$1`, id); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE native_raw_uploads SET state='completed' WHERE id=$1::uuid`, id); err != nil {
 		return asset, err
 	}
 	return asset, tx.Commit()
@@ -161,7 +161,7 @@ func (s *PostgresStore) ListUncollectedRawUploads(ctx context.Context, limit int
 }
 
 func (s *PostgresStore) MarkRawUploadCollected(ctx context.Context, id string) error {
-	result, err := s.db.ExecContext(ctx, `UPDATE native_raw_uploads SET collected_at=now() WHERE id::text=$1 AND state IN ('completed','cancelled') AND collected_at IS NULL`, id)
+	result, err := s.db.ExecContext(ctx, `UPDATE native_raw_uploads SET collected_at=now() WHERE id=$1::uuid AND state IN ('completed','cancelled') AND collected_at IS NULL`, id)
 	if err != nil {
 		return err
 	}
@@ -247,7 +247,7 @@ func (s *PostgresStore) LockRawObject(ctx context.Context, digest string) (func(
 }
 func (s *PostgresStore) GetRawAsset(ctx context.Context, repositoryID, path string) (RawAsset, error) {
 	var v RawAsset
-	err := s.db.QueryRowContext(ctx, `SELECT a.repository_id::text,a.path,a.digest,o.object_key,o.size,a.content_type,a.updated_at FROM native_raw_assets a JOIN native_raw_objects o ON o.digest=a.digest WHERE a.repository_id::text=$1 AND a.path=$2`, repositoryID, path).Scan(&v.RepositoryID, &v.Path, &v.Digest, &v.ObjectKey, &v.Size, &v.ContentType, &v.UpdatedAt)
+	err := s.db.QueryRowContext(ctx, `SELECT a.repository_id::text,a.path,a.digest,o.object_key,o.size,a.content_type,a.updated_at FROM native_raw_assets a JOIN native_raw_objects o ON o.digest=a.digest WHERE a.repository_id=$1::uuid AND a.path=$2`, repositoryID, path).Scan(&v.RepositoryID, &v.Path, &v.Digest, &v.ObjectKey, &v.Size, &v.ContentType, &v.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return v, ErrNotFound
 	}
@@ -279,7 +279,7 @@ func (s *PostgresStore) DeleteRawAsset(ctx context.Context, repositoryID, path s
 	}
 	defer func() { _ = tx.Rollback() }()
 	var asset RawAsset
-	err = tx.QueryRowContext(ctx, `SELECT a.repository_id::text,a.path,a.digest,o.object_key,o.size,a.content_type,a.updated_at FROM native_raw_assets a JOIN native_raw_objects o ON o.digest=a.digest WHERE a.repository_id::text=$1 AND a.path=$2 FOR UPDATE`, repositoryID, path).Scan(&asset.RepositoryID, &asset.Path, &asset.Digest, &asset.ObjectKey, &asset.Size, &asset.ContentType, &asset.UpdatedAt)
+	err = tx.QueryRowContext(ctx, `SELECT a.repository_id::text,a.path,a.digest,o.object_key,o.size,a.content_type,a.updated_at FROM native_raw_assets a JOIN native_raw_objects o ON o.digest=a.digest WHERE a.repository_id=$1::uuid AND a.path=$2 FOR UPDATE`, repositoryID, path).Scan(&asset.RepositoryID, &asset.Path, &asset.Digest, &asset.ObjectKey, &asset.Size, &asset.ContentType, &asset.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -295,7 +295,7 @@ func (s *PostgresStore) DeleteRawAsset(ctx context.Context, repositoryID, path s
 	if _, err = tx.ExecContext(ctx, `UPDATE native_raw_objects SET created_at=now(),collected_at=NULL WHERE digest=$1`, asset.Digest); err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM native_raw_assets WHERE repository_id::text=$1 AND path=$2`, repositoryID, path); err != nil {
+	if _, err = tx.ExecContext(ctx, `DELETE FROM native_raw_assets WHERE repository_id=$1::uuid AND path=$2`, repositoryID, path); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -308,7 +308,7 @@ func (s *PostgresStore) RestoreRawAsset(ctx context.Context, repositoryID, path 
 	}
 	defer func() { _ = tx.Rollback() }()
 	var asset RawAsset
-	err = tx.QueryRowContext(ctx, `SELECT t.repository_id::text,t.path,t.digest,o.object_key,o.size,t.content_type,t.deleted_at FROM native_raw_asset_tombstones t JOIN native_raw_objects o ON o.digest=t.digest WHERE t.repository_id::text=$1 AND t.path=$2 AND o.collected_at IS NULL FOR UPDATE`, repositoryID, path).Scan(&asset.RepositoryID, &asset.Path, &asset.Digest, &asset.ObjectKey, &asset.Size, &asset.ContentType, &asset.UpdatedAt)
+	err = tx.QueryRowContext(ctx, `SELECT t.repository_id::text,t.path,t.digest,o.object_key,o.size,t.content_type,t.deleted_at FROM native_raw_asset_tombstones t JOIN native_raw_objects o ON o.digest=t.digest WHERE t.repository_id=$1::uuid AND t.path=$2 AND o.collected_at IS NULL FOR UPDATE`, repositoryID, path).Scan(&asset.RepositoryID, &asset.Path, &asset.Digest, &asset.ObjectKey, &asset.Size, &asset.ContentType, &asset.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RawAsset{}, ErrNotFound
 	}
@@ -316,7 +316,7 @@ func (s *PostgresStore) RestoreRawAsset(ctx context.Context, repositoryID, path 
 		return RawAsset{}, err
 	}
 	var exists bool
-	if err = tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM native_raw_assets WHERE repository_id::text=$1 AND path=$2)`, repositoryID, path).Scan(&exists); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM native_raw_assets WHERE repository_id=$1::uuid AND path=$2)`, repositoryID, path).Scan(&exists); err != nil {
 		return RawAsset{}, err
 	}
 	if exists {
@@ -325,10 +325,10 @@ func (s *PostgresStore) RestoreRawAsset(ctx context.Context, repositoryID, path 
 	if _, err = tx.ExecContext(ctx, `INSERT INTO native_raw_assets (repository_id,path,digest,content_type,updated_at) VALUES ($1,$2,$3,$4,now())`, repositoryID, path, asset.Digest, asset.ContentType); err != nil {
 		return RawAsset{}, err
 	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM native_raw_asset_tombstones WHERE repository_id::text=$1 AND path=$2`, repositoryID, path); err != nil {
+	if _, err = tx.ExecContext(ctx, `DELETE FROM native_raw_asset_tombstones WHERE repository_id=$1::uuid AND path=$2`, repositoryID, path); err != nil {
 		return RawAsset{}, err
 	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM artifact_tombstones WHERE repository_id::text=$1 AND format='raw' AND coordinate=$2`, repositoryID, path); err != nil {
+	if _, err = tx.ExecContext(ctx, `DELETE FROM artifact_tombstones WHERE repository_id=$1::uuid AND format='raw' AND coordinate=$2`, repositoryID, path); err != nil {
 		return RawAsset{}, err
 	}
 	asset.UpdatedAt = time.Now().UTC()

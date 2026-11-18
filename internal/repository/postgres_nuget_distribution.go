@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	dist "github.com/mlops-ca/notarx/internal/nugetdistribution"
 )
 
@@ -27,7 +27,7 @@ func loadNuGetReplication(ctx context.Context, q nuGetReplicationQuery, id strin
 	}
 	var j dist.Job
 	var until sql.NullTime
-	err := q.QueryRowContext(ctx, `SELECT `+nuGetReplicationColumns+` FROM native_nuget_replication_jobs WHERE id::text=$1`+suffix, id).Scan(&j.ID, &j.PlanDigest, &j.SourceRepositoryID, &j.TargetRepositoryID, &j.Actor, &j.ActorKind, &j.CredentialID, &j.Version, &j.State, &j.Lease.Owner, &j.Lease.Token, &j.Lease.Fence, &until, &j.CreatedAt, &j.UpdatedAt)
+	err := q.QueryRowContext(ctx, `SELECT `+nuGetReplicationColumns+` FROM native_nuget_replication_jobs WHERE id=$1::uuid`+suffix, id).Scan(&j.ID, &j.PlanDigest, &j.SourceRepositoryID, &j.TargetRepositoryID, &j.Actor, &j.ActorKind, &j.CredentialID, &j.Version, &j.State, &j.Lease.Owner, &j.Lease.Token, &j.Lease.Fence, &until, &j.CreatedAt, &j.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return j, dist.ErrNotFound
 	}
@@ -38,7 +38,7 @@ func loadNuGetReplication(ctx context.Context, q nuGetReplicationQuery, id strin
 	if until.Valid {
 		j.Lease.Until = until.Time
 	}
-	rows, err := q.QueryContext(ctx, `SELECT item_index,package_id,version,digest,size,source_governance_version::text,state,attempts,code,COALESCE(target_session_id::text,''),result,listed,completed_at FROM native_nuget_replication_items WHERE job_id::text=$1 ORDER BY item_index`, id)
+	rows, err := q.QueryContext(ctx, `SELECT item_index,package_id,version,digest,size,source_governance_version::text,state,attempts,code,COALESCE(target_session_id::text,''),result,listed,completed_at FROM native_nuget_replication_items WHERE job_id=$1::uuid ORDER BY item_index`, id)
 	if err != nil {
 		return j, err
 	}
@@ -101,7 +101,7 @@ func nuGetReplicationActorTx(ctx context.Context, tx *sql.Tx, j dist.Job, a *dis
 			account = strings.TrimPrefix(j.Actor, "service-account:")
 			credential = j.CredentialID
 			var state string
-			err := tx.QueryRowContext(ctx, `SELECT state FROM service_accounts WHERE id::text=$1 FOR SHARE`, account).Scan(&state)
+			err := tx.QueryRowContext(ctx, `SELECT state FROM service_accounts WHERE id=$1::uuid FOR SHARE`, account).Scan(&state)
 			if errors.Is(err, sql.ErrNoRows) {
 				return nil
 			}
@@ -114,7 +114,7 @@ func nuGetReplicationActorTx(ctx context.Context, tx *sql.Tx, j dist.Job, a *dis
 		}
 		var roles []byte
 		var revoked, expires sql.NullTime
-		err := tx.QueryRowContext(ctx, `SELECT array_to_json(roles),revoked_at,expires_at FROM api_keys WHERE id::text=$1 AND COALESCE(service_account_id::text,'')=$2 FOR SHARE`, credential, account).Scan(&roles, &revoked, &expires)
+		err := tx.QueryRowContext(ctx, `SELECT array_to_json(roles),revoked_at,expires_at FROM api_keys WHERE id=$1::uuid AND COALESCE(service_account_id::text,'')=$2 FOR SHARE`, credential, account).Scan(&roles, &revoked, &expires)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
 		}
@@ -139,7 +139,7 @@ func nuGetReplicationAuthorityTx(ctx context.Context, tx *sql.Tx, j dist.Job) (d
 	sort.Strings(ids)
 	for _, id := range ids {
 		var repo HostedRepository
-		err := tx.QueryRowContext(ctx, `SELECT id::text,name,format,repo_type,state FROM hosted_repositories WHERE id::text=$1 FOR UPDATE`, id).Scan(&repo.ID, &repo.Name, &repo.Format, &repo.Type, &repo.State)
+		err := tx.QueryRowContext(ctx, `SELECT id::text,name,format,repo_type,state FROM hosted_repositories WHERE id=$1::uuid FOR UPDATE`, id).Scan(&repo.ID, &repo.Name, &repo.Format, &repo.Type, &repo.State)
 		if errors.Is(err, sql.ErrNoRows) {
 			return a, dist.ErrNotFound
 		}
@@ -155,7 +155,7 @@ func nuGetReplicationAuthorityTx(ctx context.Context, tx *sql.Tx, j dist.Job) (d
 			return a, err
 		}
 		var version string
-		if err = tx.QueryRowContext(ctx, `SELECT version::text FROM repository_grant_sets WHERE repository_id::text=$1 FOR SHARE`, id).Scan(&version); err != nil {
+		if err = tx.QueryRowContext(ctx, `SELECT version::text FROM repository_grant_sets WHERE repository_id=$1::uuid FOR SHARE`, id).Scan(&version); err != nil {
 			return a, err
 		}
 		set, err := loadRepositoryGrants(ctx, tx, id, version)
@@ -179,7 +179,7 @@ func nuGetReplicationSourceTx(ctx context.Context, tx *sql.Tx, j dist.Job, index
 		return NuGetPublication{}, dist.ErrInvalid
 	}
 	i := j.Items[index]
-	p, err := scanNuGetPublication(tx.QueryRowContext(ctx, `SELECT `+nuGetPublicationColumns+` FROM native_nuget_publications WHERE repository_id::text=$1 AND package_id=$2 AND version=$3 FOR SHARE`, j.SourceRepositoryID, i.PackageID, i.Version))
+	p, err := scanNuGetPublication(tx.QueryRowContext(ctx, `SELECT `+nuGetPublicationColumns+` FROM native_nuget_publications WHERE repository_id=$1::uuid AND package_id=$2 AND version=$3 FOR SHARE`, j.SourceRepositoryID, i.PackageID, i.Version))
 	if errors.Is(err, ErrNotFound) {
 		return p, dist.ErrSourceChanged
 	}
@@ -190,7 +190,7 @@ func nuGetReplicationSourceTx(ctx context.Context, tx *sql.Tx, j dist.Job, index
 }
 func saveNuGetReplicationItem(ctx context.Context, tx *sql.Tx, j dist.Job, index int) error {
 	i := j.Items[index]
-	_, err := tx.ExecContext(ctx, `UPDATE native_nuget_replication_items SET state=$3,attempts=$4,code=$5,target_session_id=NULLIF($6,'')::uuid,result=$7,listed=$8,completed_at=$9 WHERE job_id::text=$1 AND item_index=$2`, j.ID, index, i.State, i.Attempts, i.Code, i.TargetSessionID, i.Result, i.Listed, i.CompletedAt)
+	_, err := tx.ExecContext(ctx, `UPDATE native_nuget_replication_items SET state=$3,attempts=$4,code=$5,target_session_id=NULLIF($6,'')::uuid,result=$7,listed=$8,completed_at=$9 WHERE job_id=$1::uuid AND item_index=$2`, j.ID, index, i.State, i.Attempts, i.Code, i.TargetSessionID, i.Result, i.Listed, i.CompletedAt)
 	return err
 }
 func saveNuGetReplicationProgress(ctx context.Context, tx *sql.Tx, j dist.Job, lease dist.Lease, validUntil time.Time) error {
@@ -198,7 +198,7 @@ func saveNuGetReplicationProgress(ctx context.Context, tx *sql.Tx, j dist.Job, l
 	if !validUntil.IsZero() {
 		expiry = validUntil
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE native_nuget_replication_jobs SET version=version+1,updated_at=clock_timestamp() WHERE id::text=$1 AND state='running' AND lease_owner=$2 AND lease_token=$3 AND lease_fence=$4 AND lease_until>clock_timestamp() AND ($5::timestamptz IS NULL OR $5>clock_timestamp())`, j.ID, lease.Owner, lease.Token, lease.Fence, expiry)
+	result, err := tx.ExecContext(ctx, `UPDATE native_nuget_replication_jobs SET version=version+1,updated_at=clock_timestamp() WHERE id=$1::uuid AND state='running' AND lease_owner=$2 AND lease_token=$3 AND lease_fence=$4 AND lease_until>clock_timestamp() AND ($5::timestamptz IS NULL OR $5>clock_timestamp())`, j.ID, lease.Owner, lease.Token, lease.Fence, expiry)
 	if err != nil {
 		return err
 	}
@@ -249,7 +249,7 @@ func (s *PostgresStore) CreateNuGetReplication(ctx context.Context, j dist.Job, 
 			return dist.Job{}, false, err
 		}
 		var exists bool
-		if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM native_nuget_publications WHERE repository_id::text=$1 AND package_id=$2 AND version=$3)`, j.TargetRepositoryID, item.PackageID, item.Version).Scan(&exists); err != nil {
+		if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM native_nuget_publications WHERE repository_id=$1::uuid AND package_id=$2 AND version=$3)`, j.TargetRepositoryID, item.PackageID, item.Version).Scan(&exists); err != nil {
 			return dist.Job{}, false, err
 		}
 		if !exists {
@@ -311,7 +311,7 @@ func (s *PostgresStore) RetryNuGetReplication(ctx context.Context, id, expected 
 		return dist.Job{}, false, err
 	}
 	var prior string
-	err = tx.QueryRowContext(ctx, `SELECT payload_digest FROM native_nuget_replication_retries WHERE job_id::text=$1 AND request_key=$2`, id, key).Scan(&prior)
+	err = tx.QueryRowContext(ctx, `SELECT payload_digest FROM native_nuget_replication_retries WHERE job_id=$1::uuid AND request_key=$2`, id, key).Scan(&prior)
 	if err == nil {
 		if prior != digest {
 			return dist.Job{}, false, dist.ErrConflict
@@ -325,7 +325,7 @@ func (s *PostgresStore) RetryNuGetReplication(ctx context.Context, id, expected 
 	if err != nil {
 		return dist.Job{}, false, err
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE native_nuget_replication_jobs SET state='queued',version=version+1,lease_owner='',lease_token='',lease_until=NULL,updated_at=clock_timestamp() WHERE id::text=$1`, id); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE native_nuget_replication_jobs SET state='queued',version=version+1,lease_owner='',lease_token='',lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1::uuid`, id); err != nil {
 		return dist.Job{}, false, err
 	}
 	for _, index := range indexes {
@@ -362,10 +362,10 @@ func (s *PostgresStore) ClaimNuGetReplication(ctx context.Context, owner string,
 	if err != nil {
 		return dist.Job{}, err
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE native_nuget_replication_jobs SET state='running',version=version+1,lease_owner=$2,lease_token=$3,lease_fence=lease_fence+1,lease_until=clock_timestamp()+$4::bigint*interval '1 millisecond',updated_at=clock_timestamp() WHERE id::text=$1`, id, owner, uuid.NewString(), d.Milliseconds()); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE native_nuget_replication_jobs SET state='running',version=version+1,lease_owner=$2,lease_token=$3,lease_fence=lease_fence+1,lease_until=clock_timestamp()+$4::bigint*interval '1 millisecond',updated_at=clock_timestamp() WHERE id=$1::uuid`, id, owner, ids.New(), d.Milliseconds()); err != nil {
 		return dist.Job{}, err
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE native_nuget_replication_items SET state='pending' WHERE job_id::text=$1 AND state='running'`, id); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE native_nuget_replication_items SET state='pending' WHERE job_id=$1::uuid AND state='running'`, id); err != nil {
 		return dist.Job{}, err
 	}
 	j, err := loadNuGetReplication(ctx, tx, id, false)
@@ -379,7 +379,7 @@ func (s *PostgresStore) RenewNuGetReplication(ctx context.Context, lease dist.Le
 		return dist.Lease{}, dist.ErrInvalid
 	}
 	var until time.Time
-	err := s.db.QueryRowContext(ctx, `UPDATE native_nuget_replication_jobs SET lease_until=clock_timestamp()+$5::bigint*interval '1 millisecond' WHERE id::text=$1 AND state='running' AND lease_owner=$2 AND lease_token=$3 AND lease_fence=$4 AND lease_until>clock_timestamp() RETURNING lease_until`, lease.JobID, lease.Owner, lease.Token, lease.Fence, d.Milliseconds()).Scan(&until)
+	err := s.db.QueryRowContext(ctx, `UPDATE native_nuget_replication_jobs SET lease_until=clock_timestamp()+$5::bigint*interval '1 millisecond' WHERE id=$1::uuid AND state='running' AND lease_owner=$2 AND lease_token=$3 AND lease_fence=$4 AND lease_until>clock_timestamp() RETURNING lease_until`, lease.JobID, lease.Owner, lease.Token, lease.Fence, d.Milliseconds()).Scan(&until)
 	if errors.Is(err, sql.ErrNoRows) {
 		return dist.Lease{}, dist.ErrLeaseLost
 	}
@@ -403,7 +403,7 @@ func (s *PostgresStore) BindNuGetReplicationSession(ctx context.Context, lease d
 	if err != nil {
 		return dist.Job{}, err
 	}
-	session, err := scanNuGetSession(tx.QueryRowContext(ctx, `SELECT `+nuGetSessionColumns+` FROM native_nuget_publication_sessions WHERE id::text=$1 FOR SHARE`, sessionID))
+	session, err := scanNuGetSession(tx.QueryRowContext(ctx, `SELECT `+nuGetSessionColumns+` FROM native_nuget_publication_sessions WHERE id=$1::uuid FOR SHARE`, sessionID))
 	if err != nil {
 		return dist.Job{}, err
 	}
@@ -456,14 +456,14 @@ func (s *PostgresStore) CompleteNuGetReplicationItem(ctx context.Context, lease 
 	if item.State != "running" || item.TargetSessionID != proof.SessionID {
 		return dist.Job{}, dist.ErrConflict
 	}
-	session, err := scanNuGetSession(tx.QueryRowContext(ctx, `SELECT `+nuGetSessionColumns+` FROM native_nuget_publication_sessions WHERE id::text=$1 FOR UPDATE`, proof.SessionID))
+	session, err := scanNuGetSession(tx.QueryRowContext(ctx, `SELECT `+nuGetSessionColumns+` FROM native_nuget_publication_sessions WHERE id=$1::uuid FOR UPDATE`, proof.SessionID))
 	if err != nil {
 		return dist.Job{}, err
 	}
 	if session.RepositoryID != j.TargetRepositoryID {
 		return dist.Job{}, dist.ErrTargetBlocked
 	}
-	target, err := scanNuGetPublication(tx.QueryRowContext(ctx, `SELECT `+nuGetPublicationColumns+` FROM native_nuget_publications WHERE repository_id::text=$1 AND package_id=$2 AND version=$3 FOR UPDATE`, j.TargetRepositoryID, item.PackageID, item.Version))
+	target, err := scanNuGetPublication(tx.QueryRowContext(ctx, `SELECT `+nuGetPublicationColumns+` FROM native_nuget_publications WHERE repository_id=$1::uuid AND package_id=$2 AND version=$3 FOR UPDATE`, j.TargetRepositoryID, item.PackageID, item.Version))
 	if err == nil {
 		if err = nuGetReplicationExisting(source, target); err != nil {
 			return dist.Job{}, err
@@ -482,10 +482,10 @@ func (s *PostgresStore) CompleteNuGetReplicationItem(ctx context.Context, lease 
 		if err = nuGetQuota(ctx, tx, j.TargetRepositoryID, 0); err != nil {
 			return dist.Job{}, err
 		}
-		if _, err = tx.ExecContext(ctx, `UPDATE native_nuget_publication_sessions SET state='committed',committed_at=clock_timestamp() WHERE id::text=$1`, session.ID); err != nil {
+		if _, err = tx.ExecContext(ctx, `UPDATE native_nuget_publication_sessions SET state='committed',committed_at=clock_timestamp() WHERE id=$1::uuid`, session.ID); err != nil {
 			return dist.Job{}, err
 		}
-		target, err = scanNuGetPublication(tx.QueryRowContext(ctx, `INSERT INTO native_nuget_publications(repository_id,package_id,version,session_id,digest,object_key,size,metadata_json,nuspec,publisher,published_at,source_version,source_url,registration_url,listed) SELECT repository_id,package_id,version,id,digest,object_key,size,metadata_json,nuspec,actor,committed_at,source_version,source_url,registration_url,COALESCE((metadata_json::jsonb->>'listed')::boolean,true) FROM native_nuget_publication_sessions WHERE id::text=$1 RETURNING `+nuGetPublicationColumns, session.ID))
+		target, err = scanNuGetPublication(tx.QueryRowContext(ctx, `INSERT INTO native_nuget_publications(repository_id,package_id,version,session_id,digest,object_key,size,metadata_json,nuspec,publisher,published_at,source_version,source_url,registration_url,listed) SELECT repository_id,package_id,version,id,digest,object_key,size,metadata_json,nuspec,actor,committed_at,source_version,source_url,registration_url,COALESCE((metadata_json::jsonb->>'listed')::boolean,true) FROM native_nuget_publication_sessions WHERE id=$1::uuid RETURNING `+nuGetPublicationColumns, session.ID))
 		if err != nil {
 			return dist.Job{}, err
 		}
@@ -548,7 +548,7 @@ func (s *PostgresStore) FailNuGetReplicationItem(ctx context.Context, lease dist
 		return err
 	}
 	var name string
-	if err = tx.QueryRowContext(ctx, `SELECT name FROM hosted_repositories WHERE id::text=$1`, j.TargetRepositoryID).Scan(&name); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT name FROM hosted_repositories WHERE id=$1::uuid`, j.TargetRepositoryID).Scan(&name); err != nil {
 		return err
 	}
 	if err = insertAudit(ctx, tx, nuGetReplicationAudit(j, name, "item", dist.FailureStatus(code), &item)); err != nil {
@@ -574,11 +574,11 @@ func (s *PostgresStore) FinishNuGetReplication(ctx context.Context, lease dist.L
 	if err = saveNuGetReplicationProgress(ctx, tx, j, lease, time.Time{}); err != nil {
 		return dist.Job{}, err
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE native_nuget_replication_jobs SET state=$2,lease_owner='',lease_token='',lease_until=NULL WHERE id::text=$1`, j.ID, j.State); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE native_nuget_replication_jobs SET state=$2,lease_owner='',lease_token='',lease_until=NULL WHERE id=$1::uuid`, j.ID, j.State); err != nil {
 		return dist.Job{}, err
 	}
 	var name string
-	if err = tx.QueryRowContext(ctx, `SELECT name FROM hosted_repositories WHERE id::text=$1`, j.TargetRepositoryID).Scan(&name); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT name FROM hosted_repositories WHERE id=$1::uuid`, j.TargetRepositoryID).Scan(&name); err != nil {
 		return dist.Job{}, err
 	}
 	j.Version = dist.NextVersion(j.Version)

@@ -307,6 +307,30 @@ titles, and complete site-map coverage. See the
 - Use integration tests for PostgreSQL transaction, migration, locking, and
   object-store behaviour that the in-memory stores cannot prove.
 
+## Typed keys and identifiers
+
+Rules (ADR 0023 section 4), enforced by `make lint` (`sqllint-check`, which runs
+`go run ./tools/sqllint/cmd`) and by `TestSQLTypedKeyLint` in `make test`:
+
+- Never compare a uuid column cast to text with a parameter
+  (`col::text = $1`, `$1::text = col`, `id::text` after `WHERE`): it defeats the
+  btree index. Bind the parameter as `uuid.UUID` or `$n::uuid` and scan uuid
+  columns into `uuid.UUID` or select them with `col::text` only in the select list.
+- Create new identifiers with `ids.New()` (`internal/ids`, UUIDv7), never with
+  `uuid.New()`. The lint rejects `uuid.New()` and `uuid.NewRandom()` (also under an
+  import alias) anywhere in `internal/` outside `internal/ids`. New code in a file you touch should also prefer `ids.New()` to
+  `uuid.NewString()`. Nothing may depend on identifier order.
+- `$n::uuid` raises SQLSTATE 22P02 for a string that is not a uuid, where
+  `col::text = $n` used to match nothing. Parse an identifier that comes from a
+  client (a path segment, a query parameter or a request body) with
+  `uuid.Parse` at the API boundary and answer 400 or 404 there; do not let it
+  reach a store query as a free-form string. Identifiers the server issued or
+  read from the database are already valid.
+- Existing violations are counted per file in `tools/sqllint/allowlist.txt`. The
+  counts may only decrease: a new violation, or a count that is higher than the
+  file, fails the lint, and a count that is now too high fails it too, so run
+  `go run ./tools/sqllint/cmd -update` after removing casts.
+
 ## Database migrations
 
 Migrations are forward-only and are applied before Gateway nodes start. The

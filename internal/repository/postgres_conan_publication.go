@@ -8,7 +8,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 )
 
 const conanSessionColumns = `id::text,repository_id::text,publisher,kind,reference,recipe_revision,package_id,package_revision,state,expires_at,objects,native,version`
@@ -75,7 +75,7 @@ func (s *PostgresStore) BeginConanNativeSession(ctx context.Context, incoming Co
 	if !errors.Is(err, ErrNotFound) {
 		return ConanPublishSession{}, err
 	}
-	incoming.ID, incoming.Native, incoming.Version = uuid.NewString(), true, 1
+	incoming.ID, incoming.Native, incoming.Version = ids.New(), true, 1
 	incoming.State, incoming.ExpiresAt, incoming.Objects = "open", time.Now().UTC().Add(time.Hour), make([]MavenDeclaredObject, 0)
 	// Seed only a newly created session, under the publication locks. An open
 	// session's uploads must never be overwritten by retry snapshot repair.

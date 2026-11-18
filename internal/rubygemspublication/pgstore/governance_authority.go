@@ -20,16 +20,16 @@ func governanceAuthorityTx(ctx context.Context, tx *sql.Tx, c domain.GovernanceC
 	if in.Actor != c.Actor {
 		return a, domain.ErrAccessDenied
 	}
-	if err := tx.QueryRowContext(ctx, `SELECT id::text,name,format,repo_type,state FROM hosted_repositories WHERE id::text=$1`, c.RepositoryID).Scan(&a.Repository.ID, &a.Repository.Name, &a.Repository.Format, &a.Repository.Type, &a.Repository.State); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT id::text,name,format,repo_type,state FROM hosted_repositories WHERE id=$1::uuid`, c.RepositoryID).Scan(&a.Repository.ID, &a.Repository.Name, &a.Repository.Format, &a.Repository.Type, &a.Repository.State); err != nil {
 		return a, err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO repository_grant_sets(repository_id,version) VALUES($1,1) ON CONFLICT DO NOTHING`, c.RepositoryID); err != nil {
 		return a, err
 	}
-	if err := tx.QueryRowContext(ctx, `SELECT version::text FROM repository_grant_sets WHERE repository_id::text=$1 FOR SHARE`, c.RepositoryID).Scan(&a.Grants.Version); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT version::text FROM repository_grant_sets WHERE repository_id=$1::uuid FOR SHARE`, c.RepositoryID).Scan(&a.Grants.Version); err != nil {
 		return a, err
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT principal,array_to_json(scopes),resource_prefix FROM repository_grants WHERE repository_id::text=$1 ORDER BY principal,resource_prefix`, c.RepositoryID)
+	rows, err := tx.QueryContext(ctx, `SELECT principal,array_to_json(scopes),resource_prefix FROM repository_grants WHERE repository_id=$1::uuid ORDER BY principal,resource_prefix`, c.RepositoryID)
 	if err != nil {
 		return a, err
 	}
@@ -75,7 +75,7 @@ func governanceAuthorityTx(ctx context.Context, tx *sql.Tx, c domain.GovernanceC
 		if in.SessionID != "" {
 			var revoked sql.NullTime
 			var expiry sql.NullTime
-			err = tx.QueryRowContext(ctx, `SELECT revoked_at,expires_at FROM user_sessions WHERE user_id::text=$1 AND id::text=$2 FOR SHARE`, id, in.SessionID).Scan(&revoked, &expiry)
+			err = tx.QueryRowContext(ctx, `SELECT revoked_at,expires_at FROM user_sessions WHERE user_id=$1::uuid AND id=$2::uuid FOR SHARE`, id, in.SessionID).Scan(&revoked, &expiry)
 			if errors.Is(err, sql.ErrNoRows) {
 				a.Active = false
 				return a, nil
@@ -98,7 +98,7 @@ func governanceAuthorityTx(ctx context.Context, tx *sql.Tx, c domain.GovernanceC
 			credential = in.CredentialID
 			account = strings.TrimPrefix(in.Actor, "service-account:")
 			var state string
-			err = tx.QueryRowContext(ctx, `SELECT state FROM service_accounts WHERE id::text=$1 FOR SHARE`, account).Scan(&state)
+			err = tx.QueryRowContext(ctx, `SELECT state FROM service_accounts WHERE id=$1::uuid FOR SHARE`, account).Scan(&state)
 			if errors.Is(err, sql.ErrNoRows) {
 				return a, nil
 			}
@@ -113,7 +113,7 @@ func governanceAuthorityTx(ctx context.Context, tx *sql.Tx, c domain.GovernanceC
 		}
 		var roles []byte
 		var revoked, expires sql.NullTime
-		err = tx.QueryRowContext(ctx, `SELECT array_to_json(roles),revoked_at,expires_at FROM api_keys WHERE id::text=$1 AND COALESCE(service_account_id::text,'')=$2 FOR SHARE`, credential, account).Scan(&roles, &revoked, &expires)
+		err = tx.QueryRowContext(ctx, `SELECT array_to_json(roles),revoked_at,expires_at FROM api_keys WHERE id=$1::uuid AND COALESCE(service_account_id::text,'')=$2 FOR SHARE`, credential, account).Scan(&roles, &revoked, &expires)
 		if errors.Is(err, sql.ErrNoRows) {
 			return a, nil
 		}

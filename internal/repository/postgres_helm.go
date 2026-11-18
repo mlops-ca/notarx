@@ -45,7 +45,7 @@ func (s *PostgresStore) helmTransaction(ctx context.Context, repo string) (*sql.
 		return nil, "", err
 	}
 	var name string
-	err = tx.QueryRowContext(ctx, `SELECT name FROM hosted_repositories WHERE id::text=$1 AND format='helm' AND repo_type='hosted' AND state='active' FOR UPDATE`, repo).Scan(&name)
+	err = tx.QueryRowContext(ctx, `SELECT name FROM hosted_repositories WHERE id=$1::uuid AND format='helm' AND repo_type='hosted' AND state='active' FOR UPDATE`, repo).Scan(&name)
 	if err != nil {
 		_ = tx.Rollback()
 		if errors.Is(err, sql.ErrNoRows) {
@@ -57,7 +57,7 @@ func (s *PostgresStore) helmTransaction(ctx context.Context, repo string) (*sql.
 }
 func helmQuota(ctx context.Context, tx *sql.Tx, repo string, extra int64) error {
 	var quota int64
-	err := tx.QueryRowContext(ctx, `SELECT quota_bytes FROM repository_capacity_quotas WHERE repository_id::text=$1 FOR UPDATE`, repo).Scan(&quota)
+	err := tx.QueryRowContext(ctx, `SELECT quota_bytes FROM repository_capacity_quotas WHERE repository_id=$1::uuid FOR UPDATE`, repo).Scan(&quota)
 	if errors.Is(err, sql.ErrNoRows) || err == nil && quota == 0 {
 		return nil
 	}
@@ -65,7 +65,7 @@ func helmQuota(ctx context.Context, tx *sql.Tx, repo string, extra int64) error 
 		return err
 	}
 	var used int64
-	err = tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT SUM(size+provenance_size) FROM native_helm_publications WHERE repository_id::text=$1),0)+COALESCE((SELECT SUM(size+provenance_size) FROM native_helm_publication_sessions WHERE repository_id::text=$1 AND state='pending' AND expires_at>now()),0)`, repo).Scan(&used)
+	err = tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT SUM(size+provenance_size) FROM native_helm_publications WHERE repository_id=$1::uuid),0)+COALESCE((SELECT SUM(size+provenance_size) FROM native_helm_publication_sessions WHERE repository_id=$1::uuid AND state='pending' AND expires_at>now()),0)`, repo).Scan(&used)
 	if err != nil {
 		return err
 	}
@@ -83,10 +83,10 @@ func (s *PostgresStore) ReserveHelmPublication(ctx context.Context, in HelmSessi
 		return HelmSession{}, false, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err = tx.ExecContext(ctx, `UPDATE native_helm_publication_sessions SET state='expired' WHERE repository_id::text=$1 AND state='pending' AND (expires_at<=now() OR source_version<>$2)`, in.RepositoryID, in.SourceVersion); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE native_helm_publication_sessions SET state='expired' WHERE repository_id=$1::uuid AND state='pending' AND (expires_at<=now() OR source_version<>$2)`, in.RepositoryID, in.SourceVersion); err != nil {
 		return HelmSession{}, false, err
 	}
-	prior, err := scanHelmSession(tx.QueryRowContext(ctx, `SELECT `+helmSessionColumns+` FROM native_helm_publication_sessions WHERE id::text=$1`, in.ID))
+	prior, err := scanHelmSession(tx.QueryRowContext(ctx, `SELECT `+helmSessionColumns+` FROM native_helm_publication_sessions WHERE id=$1::uuid`, in.ID))
 	if err == nil {
 		if !helmSessionSame(prior, in) || prior.Actor != in.Actor {
 			return HelmSession{}, false, ErrIdempotencyConflict
@@ -99,7 +99,7 @@ func (s *PostgresStore) ReserveHelmPublication(ctx context.Context, in HelmSessi
 	if !errors.Is(err, ErrNotFound) {
 		return HelmSession{}, false, err
 	}
-	prior, err = scanHelmSession(tx.QueryRowContext(ctx, `SELECT `+helmSessionColumns+` FROM native_helm_publication_sessions WHERE repository_id::text=$1 AND name=$2 AND version=$3 AND state IN ('pending','committed')`, in.RepositoryID, in.Name, in.Version))
+	prior, err = scanHelmSession(tx.QueryRowContext(ctx, `SELECT `+helmSessionColumns+` FROM native_helm_publication_sessions WHERE repository_id=$1::uuid AND name=$2 AND version=$3 AND state IN ('pending','committed')`, in.RepositoryID, in.Name, in.Version))
 	if err == nil {
 		if !helmSessionSame(prior, in) || prior.State != "committed" && prior.Actor != in.Actor {
 			return HelmSession{}, false, ErrHelmPublicationConflict
@@ -120,7 +120,7 @@ func (s *PostgresStore) ReserveHelmPublication(ctx context.Context, in HelmSessi
 	return in, false, tx.Commit()
 }
 func (s *PostgresStore) GetHelmSession(ctx context.Context, id string) (HelmSession, error) {
-	return scanHelmSession(s.db.QueryRowContext(ctx, `SELECT `+helmSessionColumns+` FROM native_helm_publication_sessions WHERE id::text=$1`, id))
+	return scanHelmSession(s.db.QueryRowContext(ctx, `SELECT `+helmSessionColumns+` FROM native_helm_publication_sessions WHERE id=$1::uuid`, id))
 }
 func (s *PostgresStore) CommitHelmPublication(ctx context.Context, id, actor string) (HelmPublication, bool, error) {
 	before, err := s.GetHelmSession(ctx, id)
@@ -132,7 +132,7 @@ func (s *PostgresStore) CommitHelmPublication(ctx context.Context, id, actor str
 		return HelmPublication{}, false, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	in, err := scanHelmSession(tx.QueryRowContext(ctx, `SELECT `+helmSessionColumns+` FROM native_helm_publication_sessions WHERE id::text=$1 FOR UPDATE`, id))
+	in, err := scanHelmSession(tx.QueryRowContext(ctx, `SELECT `+helmSessionColumns+` FROM native_helm_publication_sessions WHERE id=$1::uuid FOR UPDATE`, id))
 	if err != nil {
 		return HelmPublication{}, false, err
 	}
@@ -140,7 +140,7 @@ func (s *PostgresStore) CommitHelmPublication(ctx context.Context, id, actor str
 		return HelmPublication{}, false, ErrHelmPublicationConflict
 	}
 	if in.State == "committed" {
-		p, e := scanHelmPublication(tx.QueryRowContext(ctx, `SELECT `+helmPublicationColumns+` FROM native_helm_publications WHERE session_id::text=$1`, id))
+		p, e := scanHelmPublication(tx.QueryRowContext(ctx, `SELECT `+helmPublicationColumns+` FROM native_helm_publications WHERE session_id=$1::uuid`, id))
 		if e != nil {
 			return HelmPublication{}, false, e
 		}
@@ -155,10 +155,10 @@ func (s *PostgresStore) CommitHelmPublication(ctx context.Context, id, actor str
 	if err = helmQuota(ctx, tx, in.RepositoryID, 0); err != nil {
 		return HelmPublication{}, false, err
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE native_helm_publication_sessions SET state='committed',committed_at=now() WHERE id::text=$1`, id); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE native_helm_publication_sessions SET state='committed',committed_at=now() WHERE id=$1::uuid`, id); err != nil {
 		return HelmPublication{}, false, err
 	}
-	p, err := scanHelmPublication(tx.QueryRowContext(ctx, `INSERT INTO native_helm_publications(repository_id,name,version,session_id,digest,object_key,size,provenance_digest,provenance_key,provenance_size,metadata_json,chart_yaml,publisher,published_at) SELECT repository_id,name,version,id,digest,object_key,size,provenance_digest,provenance_key,provenance_size,metadata_json,chart_yaml,actor,committed_at FROM native_helm_publication_sessions WHERE id::text=$1 RETURNING `+helmPublicationColumns, id))
+	p, err := scanHelmPublication(tx.QueryRowContext(ctx, `INSERT INTO native_helm_publications(repository_id,name,version,session_id,digest,object_key,size,provenance_digest,provenance_key,provenance_size,metadata_json,chart_yaml,publisher,published_at) SELECT repository_id,name,version,id,digest,object_key,size,provenance_digest,provenance_key,provenance_size,metadata_json,chart_yaml,actor,committed_at FROM native_helm_publication_sessions WHERE id=$1::uuid RETURNING `+helmPublicationColumns, id))
 	if err != nil {
 		return HelmPublication{}, false, err
 	}
@@ -168,7 +168,7 @@ func (s *PostgresStore) CommitHelmPublication(ctx context.Context, id, actor str
 	return p, false, tx.Commit()
 }
 func (s *PostgresStore) GetHelmPublication(ctx context.Context, repo, name, version string) (HelmPublication, error) {
-	return scanHelmPublication(s.db.QueryRowContext(ctx, `SELECT `+helmPublicationColumns+` FROM native_helm_publications WHERE repository_id::text=$1 AND name=$2 AND version=$3 AND EXISTS(SELECT 1 FROM hosted_repositories h WHERE h.id=repository_id AND h.format='helm' AND h.repo_type IN ('hosted','proxy') AND h.state='active')`, repo, name, version))
+	return scanHelmPublication(s.db.QueryRowContext(ctx, `SELECT `+helmPublicationColumns+` FROM native_helm_publications WHERE repository_id=$1::uuid AND name=$2 AND version=$3 AND EXISTS(SELECT 1 FROM hosted_repositories h WHERE h.id=repository_id AND h.format='helm' AND h.repo_type IN ('hosted','proxy') AND h.state='active')`, repo, name, version))
 }
 func (s *PostgresStore) ListHelmPublications(ctx context.Context, repo string, limit int) ([]HelmPublication, error) {
 	if limit < 1 || limit > 4097 {
@@ -176,7 +176,7 @@ func (s *PostgresStore) ListHelmPublications(ctx context.Context, repo string, l
 	}
 	// One statement owns the complete bounded index snapshot. No page-by-page
 	// reads can mix concurrent commits into a partially constructed index.
-	rows, err := s.db.QueryContext(ctx, `SELECT `+helmPublicationColumns+` FROM native_helm_publications WHERE repository_id::text=$1 AND EXISTS(SELECT 1 FROM hosted_repositories h WHERE h.id=repository_id AND h.format='helm' AND h.repo_type IN ('hosted','proxy') AND h.state='active') ORDER BY name COLLATE "C",version COLLATE "C" LIMIT $2`, repo, limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+helmPublicationColumns+` FROM native_helm_publications WHERE repository_id=$1::uuid AND EXISTS(SELECT 1 FROM hosted_repositories h WHERE h.id=repository_id AND h.format='helm' AND h.repo_type IN ('hosted','proxy') AND h.state='active') ORDER BY name COLLATE "C",version COLLATE "C" LIMIT $2`, repo, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -211,7 +211,7 @@ func (s *PostgresStore) ExpireHelmSessions(ctx context.Context, now time.Time, l
 	return out, rows.Err()
 }
 func (s *PostgresStore) MarkHelmSessionCollected(ctx context.Context, id, key string) error {
-	result, err := s.db.ExecContext(ctx, `UPDATE native_helm_publication_sessions SET collected_at=COALESCE(collected_at,now()) WHERE id::text=$1 AND object_key=$2 AND state='expired'`, id, key)
+	result, err := s.db.ExecContext(ctx, `UPDATE native_helm_publication_sessions SET collected_at=COALESCE(collected_at,now()) WHERE id=$1::uuid AND object_key=$2 AND state='expired'`, id, key)
 	if err != nil {
 		return err
 	}
