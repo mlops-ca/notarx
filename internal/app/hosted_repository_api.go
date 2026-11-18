@@ -126,10 +126,13 @@ type tombstonePageCursor struct {
 
 type auditPageCursor struct {
 	Endpoint, GroupName, Repository, Outcome, Format, Operation, Actor string
-	From, To                                                           time.Time
-	OccurredAt                                                         time.Time
-	ID                                                                 int64
-	ExpiresAt                                                          int64
+	// Class is the class filter of the page; RecordClass is the class of the last
+	// record, which completes the keyset because each table has its own id sequence.
+	Class, RecordClass string
+	From, To           time.Time
+	OccurredAt         time.Time
+	ID                 int64
+	ExpiresAt          int64
 }
 
 func (h hostedRepositoryAPIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {

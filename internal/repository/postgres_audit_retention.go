@@ -109,7 +109,7 @@ func (s *PostgresStore) finishAuditCleanupJob(ctx context.Context, id string, st
 	return nil
 }
 func (s *PostgresStore) DeleteAuditsBefore(ctx context.Context, cutoff time.Time, limit int) (int, error) {
-	r, err := s.db.ExecContext(ctx, `WITH candidates AS (SELECT id FROM resolver_audit_log WHERE occurred_at < $1 ORDER BY occurred_at,id FOR UPDATE SKIP LOCKED LIMIT $2) DELETE FROM resolver_audit_log WHERE id IN (SELECT id FROM candidates)`, cutoff, limit)
+	r, err := s.db.ExecContext(ctx, `WITH candidates AS (SELECT occurred_at,id FROM resolver_audit_log WHERE occurred_at < $1 ORDER BY occurred_at,id FOR UPDATE SKIP LOCKED LIMIT $2) DELETE FROM resolver_audit_log a USING candidates c WHERE a.occurred_at=c.occurred_at AND a.id=c.id`, cutoff, limit)
 	if err != nil {
 		return 0, err
 	}

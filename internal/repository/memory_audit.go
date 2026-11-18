@@ -159,7 +159,12 @@ func (s *MemoryStore) ListAuditPage(_ context.Context, query AuditQuery) (AuditP
 		if !query.To.IsZero() && record.OccurredAt.After(query.To) {
 			continue
 		}
-		if !query.Before.OccurredAt.IsZero() && (record.OccurredAt.After(query.Before.OccurredAt) || (record.OccurredAt.Equal(query.Before.OccurredAt) && record.ID >= query.Before.ID)) {
+		record.Class = record.Class.effective()
+		if query.Class.Valid() && record.Class != query.Class {
+			continue
+		}
+		if !query.Before.OccurredAt.IsZero() && (record.OccurredAt.After(query.Before.OccurredAt) ||
+			(record.OccurredAt.Equal(query.Before.OccurredAt) && (record.ID > query.Before.ID || (record.ID == query.Before.ID && record.Class.rank() >= query.Before.Class.rank())))) {
 			continue
 		}
 		if query.GroupName != "" && record.GroupName != query.GroupName {
@@ -185,6 +190,9 @@ func (s *MemoryStore) ListAuditPage(_ context.Context, query AuditQuery) (AuditP
 	}
 	sort.SliceStable(records, func(i, j int) bool {
 		if records[i].OccurredAt.Equal(records[j].OccurredAt) {
+			if records[i].ID == records[j].ID {
+				return records[i].Class.rank() > records[j].Class.rank()
+			}
 			return records[i].ID > records[j].ID
 		}
 		return records[i].OccurredAt.After(records[j].OccurredAt)
@@ -193,7 +201,7 @@ func (s *MemoryStore) ListAuditPage(_ context.Context, query AuditQuery) (AuditP
 	if len(records) > limit {
 		last := records[limit-1]
 		page.Items = records[:limit]
-		page.Next = &AuditCursor{OccurredAt: last.OccurredAt, ID: last.ID}
+		page.Next = &AuditCursor{OccurredAt: last.OccurredAt, ID: last.ID, Class: last.Class}
 	}
 	return page, nil
 }

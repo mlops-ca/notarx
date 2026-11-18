@@ -88,15 +88,22 @@ func (h generatedRepositoryAPIAdapter) ListAuditPage(w http.ResponseWriter, r *h
 		Format: auditString(params.Format), Operation: auditString(params.Operation), Actor: auditString(params.Actor), Limit: pageSize,
 		From: from, To: to,
 	}
+	if params.Class != nil {
+		query.Class = repository.AuditClass(*params.Class)
+		if !query.Class.Valid() {
+			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "class must be sync or async")
+			return
+		}
+	}
 	if token := auditToken(params.PageToken); token != "" {
 		var cursor auditPageCursor
 		if decodeSignedCursor(h.authenticator.AdminToken, token, &cursor) != nil || cursor.Endpoint != "audits" || time.Now().UTC().Unix() >= cursor.ExpiresAt ||
 			cursor.GroupName != query.GroupName || cursor.Repository != query.Repository || cursor.Outcome != query.Outcome || cursor.Format != query.Format ||
-			cursor.Operation != query.Operation || cursor.Actor != query.Actor || !cursor.From.Equal(query.From) || !cursor.To.Equal(query.To) || cursor.OccurredAt.IsZero() || cursor.ID <= 0 {
+			cursor.Operation != query.Operation || cursor.Actor != query.Actor || cursor.Class != string(query.Class) || !repository.AuditClass(cursor.RecordClass).Valid() || !cursor.From.Equal(query.From) || !cursor.To.Equal(query.To) || cursor.OccurredAt.IsZero() || cursor.ID <= 0 {
 			writeHostedProblem(w, http.StatusBadRequest, "invalid_page_token", "page token is invalid or expired")
 			return
 		}
-		query.Before = repository.AuditCursor{OccurredAt: cursor.OccurredAt, ID: cursor.ID}
+		query.Before = repository.AuditCursor{OccurredAt: cursor.OccurredAt, ID: cursor.ID, Class: repository.AuditClass(cursor.RecordClass)}
 	}
 	pageStore, ok := h.audit.(repository.AuditPageStore)
 	if !ok {
@@ -270,6 +277,7 @@ type auditResponse struct {
 	Evidence            map[string]string       `json:"evidence,omitempty"`
 	RequestID           string                  `json:"requestId,omitempty"`
 	TraceID             string                  `json:"traceId,omitempty"`
+	Class               repository.AuditClass   `json:"class,omitempty"`
 }
 
 type auditPageResponse struct {
@@ -294,8 +302,8 @@ func auditToken(value *adminopenapi.PageToken) string {
 func (h generatedRepositoryAPIAdapter) encodeAuditCursor(query repository.AuditQuery, cursor repository.AuditCursor) string {
 	return encodeSignedCursor(h.authenticator.AdminToken, auditPageCursor{
 		Endpoint: "audits", GroupName: query.GroupName, Repository: query.Repository, Outcome: query.Outcome,
-		Format: query.Format, Operation: query.Operation, Actor: query.Actor, From: query.From, To: query.To,
-		OccurredAt: cursor.OccurredAt, ID: cursor.ID, ExpiresAt: time.Now().UTC().Add(15 * time.Minute).Unix(),
+		Format: query.Format, Operation: query.Operation, Actor: query.Actor, Class: string(query.Class), From: query.From, To: query.To,
+		OccurredAt: cursor.OccurredAt, ID: cursor.ID, RecordClass: string(cursor.Class), ExpiresAt: time.Now().UTC().Add(15 * time.Minute).Unix(),
 	})
 }
 
@@ -304,6 +312,6 @@ func auditResponseFromRecord(audit repository.AuditRecord) auditResponse {
 		GroupName: audit.GroupName, Repository: audit.Repository, MemberName: audit.MemberName, Outcome: audit.Outcome, Actor: audit.Actor, OccurredAt: audit.OccurredAt,
 		Format: audit.Format, Resource: audit.Resource, Representation: audit.Representation, MemberType: audit.MemberType, UpstreamHost: audit.UpstreamHost,
 		Operation: audit.Operation, CacheDisposition: audit.CacheDisposition, AuthorizationSource: audit.AuthorizationSource, AuthorizationReason: audit.AuthorizationReason,
-		Evidence: audit.Evidence, RequestID: audit.RequestID, TraceID: audit.TraceID, Status: audit.Status, Bytes: audit.Bytes,
+		Evidence: audit.Evidence, RequestID: audit.RequestID, TraceID: audit.TraceID, Status: audit.Status, Bytes: audit.Bytes, Class: audit.Class,
 	}
 }

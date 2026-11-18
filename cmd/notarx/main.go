@@ -34,6 +34,7 @@ import (
 	dist "github.com/mlops-ca/notarx/internal/nugetdistribution"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/operationalog"
+	"github.com/mlops-ca/notarx/internal/partitions"
 	"github.com/mlops-ca/notarx/internal/preflight"
 	"github.com/mlops-ca/notarx/internal/repository"
 	rubydist "github.com/mlops-ca/notarx/internal/rubygemsdistribution"
@@ -278,6 +279,23 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 	dependencies.MigrationSchedules = nexusmigration.NewSchedules(migrationLedger, dependencies.MigrationService)
 	runtimeContext, stopRuntime := signalContext()
 	defer stopRuntime()
+	// Partitions exist before this node reports ready; one node at a time runs the
+	// work (lease row), and a failure is logged rather than fatal because the
+	// DEFAULT partitions keep audit inserts working.
+	partitionManager, err := partitions.New(databasePool, partitions.DefaultRegistry(), partitions.Options{
+		Ahead: cfg.PartitionAhead, Owner: cfg.InstanceID + "/" + runtimeSessionID, Logger: slog.Default(),
+	})
+	if err != nil {
+		slog.Error("configure partition manager", "error", err)
+		return 1
+	}
+	metrics.WithPartitionStats(partitionManager.Stats)
+	if report, err := partitionManager.Maintain(runtimeContext); err != nil {
+		slog.Error("partition maintenance at start-up failed", "error", err)
+	} else if report.Leader {
+		slog.Info("partition maintenance at start-up", "created", report.Created, "dropped", report.Dropped, "moved_default_rows", report.Moved)
+	}
+	go partitionManager.Run(runtimeContext, partitions.DefaultInterval)
 	startAPI := cfg.HasRole(config.NodeRoleAPI)
 	if startAPI {
 		observer, done := metrics.StartHTTPErrorRateSampling(runtimeContext, cfg.InstanceID, runtimeSessionID)

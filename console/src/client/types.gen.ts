@@ -1602,6 +1602,10 @@ export type AuditRecord = {
   };
   requestId?: string;
   traceId?: string;
+  /**
+   * Durability class and storage of the record. sync is security evidence (security_audit_log, kept 730 days by default); async is read and download audit (resolver_audit_log, kept 90 days by default).
+   */
+  class?: "sync" | "async";
 };
 
 export type AuditList = Array<AuditRecord>;
@@ -10488,6 +10492,10 @@ export type ListAuditPageData = {
      * Exact actor or principal filter.
      */
     actor?: string;
+    /**
+     * Restricts the page to one audit class. Without it the page merges security (sync) and read (async) records by occurredAt. Pass from to bound the scanned time window; without it the last 90 days of async and 730 days of sync records are searched.
+     */
+    class?: "sync" | "async";
     /**
      * Inclusive lower bound for occurredAt.
      */

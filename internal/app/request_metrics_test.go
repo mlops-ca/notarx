@@ -12,7 +12,32 @@ import (
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/database"
+	"github.com/mlops-ca/notarx/internal/partitions"
 )
+
+func TestPartitionMetricsExposeDefaultPartitionRows(t *testing.T) {
+	metrics := (&Metrics{}).WithPartitionStats(func() []partitions.TableStat {
+		return []partitions.TableStat{{Table: "resolver_audit_log", DefaultRows: 2, Partitions: 4}, {Table: "security_audit_log", Partitions: 4}}
+	})
+	response := httptest.NewRecorder()
+	metrics.Handler(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	body := response.Body.String()
+	for _, expected := range []string{
+		"# TYPE notarx_partition_default_rows gauge",
+		`notarx_partition_default_rows{table="resolver_audit_log"} 2`,
+		`notarx_partition_default_rows{table="security_audit_log"} 0`,
+		`notarx_partitions{table="security_audit_log"} 4`,
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("metrics missing %q\n%s", expected, body)
+		}
+	}
+	empty := httptest.NewRecorder()
+	(&Metrics{}).Handler(empty, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if strings.Contains(empty.Body.String(), "notarx_partition_default_rows") {
+		t.Fatal("partition metrics must be absent when no manager is configured")
+	}
+}
 
 func TestHTTPMetricsRecordBoundedClassStatusAndLatency(t *testing.T) {
 	metrics := &Metrics{}

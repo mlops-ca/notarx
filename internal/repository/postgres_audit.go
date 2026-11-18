@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"strconv"
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/requestcontext"
@@ -48,7 +49,7 @@ func insertAudit(ctx context.Context, execer auditExecer, audit AuditRecord) err
 		}
 		evidence = encoded
 	}
-	_, err := execer.ExecContext(ctx, `INSERT INTO resolver_audit_log (group_name, repository, member_name, outcome, actor, occurred_at, format, resource, representation, member_type, upstream_host, operation, http_status, cache_disposition, bytes, authorization_source, authorization_reason, request_id, trace_id, evidence) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb)`, audit.GroupName, audit.Repository, audit.MemberName, audit.Outcome, audit.Actor, audit.OccurredAt, audit.Format, audit.Resource, audit.Representation, audit.MemberType, audit.UpstreamHost, audit.Operation, audit.Status, audit.CacheDisposition, audit.Bytes, audit.AuthorizationSource, audit.AuthorizationReason, audit.RequestID, audit.TraceID, evidence)
+	_, err := execer.ExecContext(ctx, `INSERT INTO `+auditTable(audit.Class)+` (group_name, repository, member_name, outcome, actor, occurred_at, format, resource, representation, member_type, upstream_host, operation, http_status, cache_disposition, bytes, authorization_source, authorization_reason, request_id, trace_id, evidence) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb)`, audit.GroupName, audit.Repository, audit.MemberName, audit.Outcome, audit.Actor, audit.OccurredAt, audit.Format, audit.Resource, audit.Representation, audit.MemberType, audit.UpstreamHost, audit.Operation, audit.Status, audit.CacheDisposition, audit.Bytes, audit.AuthorizationSource, audit.AuthorizationReason, audit.RequestID, audit.TraceID, evidence)
 	if err != nil {
 		return err
 	}
@@ -100,35 +101,112 @@ func (s *PostgresStore) ListRepositoryRequestStatistics(ctx context.Context, now
 	return result, rows.Err()
 }
 
-func (s *PostgresStore) ListAuditPage(ctx context.Context, query AuditQuery) (AuditPage, error) {
+// auditTable maps a durability class to its table. Only these two constants are
+// ever interpolated into SQL.
+func auditTable(class AuditClass) string {
+	if class == AuditClassSync {
+		return "security_audit_log"
+	}
+	return "resolver_audit_log"
+}
+
+// auditClassWindow is the default lower time bound of a page that supplies no
+// From: the table's default retention, so older rows no longer exist and the bound
+// only lets the planner prune partitions (ADR 0023 section 2).
+func auditClassWindow(class AuditClass) time.Duration {
+	if class == AuditClassSync {
+		return 730 * 24 * time.Hour
+	}
+	return 90 * 24 * time.Hour
+}
+
+const auditPageColumns = `id, group_name, repository, member_name, outcome, actor, occurred_at,
+		COALESCE(format, ''), COALESCE(resource, ''), COALESCE(representation, ''), COALESCE(member_type, ''), COALESCE(upstream_host, ''), COALESCE(operation, ''),
+		COALESCE(http_status, 0), COALESCE(cache_disposition, ''), COALESCE(bytes, 0), COALESCE(authorization_source, ''), COALESCE(authorization_reason, ''), COALESCE(request_id, ''), COALESCE(trace_id, ''), COALESCE(evidence, '{}'::jsonb)`
+
+// buildAuditPageQuery assembles the page statement from the filters that were
+// supplied only, so every predicate can use an index and partition pruning
+// applies. Each requested table contributes one ordered, limited branch; two
+// branches are merged by (occurred_at, id, class rank), which is the keyset.
+func buildAuditPageQuery(query AuditQuery, now time.Time) (string, []any, int) {
 	limit := query.Limit
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	var from any
-	if !query.From.IsZero() {
-		from = query.From
+	var args []any
+	add := func(value any) string {
+		args = append(args, value)
+		return "$" + strconv.Itoa(len(args))
 	}
-	var to any
+	var conditions []string
+	for _, filter := range []struct {
+		column, value string
+	}{
+		{"group_name", query.GroupName}, {"repository", query.Repository}, {"outcome", query.Outcome},
+		{"format", query.Format}, {"operation", query.Operation}, {"actor", query.Actor},
+	} {
+		if filter.value != "" {
+			conditions = append(conditions, filter.column+" = "+add(filter.value))
+		}
+	}
 	if !query.To.IsZero() {
-		to = query.To
+		conditions = append(conditions, "occurred_at <= "+add(query.To))
 	}
-	var before any
+	var before, beforeID string
 	if !query.Before.OccurredAt.IsZero() {
-		before = query.Before.OccurredAt
+		before, beforeID = add(query.Before.OccurredAt), add(query.Before.ID)
+		// The plain bound lets the planner prune; the row comparison is the keyset.
+		conditions = append(conditions, "occurred_at <= "+before)
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id, group_name, repository, member_name, outcome, actor, occurred_at,
-		COALESCE(format, ''), COALESCE(resource, ''), COALESCE(representation, ''), COALESCE(member_type, ''), COALESCE(upstream_host, ''), COALESCE(operation, ''),
-		COALESCE(http_status, 0), COALESCE(cache_disposition, ''), COALESCE(bytes, 0), COALESCE(authorization_source, ''), COALESCE(authorization_reason, ''), COALESCE(request_id, ''), COALESCE(trace_id, ''), COALESCE(evidence, '{}'::jsonb)
-		FROM resolver_audit_log
-		WHERE ($1 = '' OR group_name = $1) AND ($2 = '' OR repository = $2)
-		  AND ($3 = '' OR outcome = $3) AND ($4 = '' OR format = $4)
-		  AND ($5 = '' OR operation = $5) AND ($6 = '' OR actor = $6)
-		  AND ($7::timestamptz IS NULL OR occurred_at >= $7)
-		  AND ($8::timestamptz IS NULL OR occurred_at <= $8)
-		  AND ($9::timestamptz IS NULL OR occurred_at < $9 OR (occurred_at = $9 AND id < $10))
-		ORDER BY occurred_at DESC, id DESC
-		LIMIT $11`, query.GroupName, query.Repository, query.Outcome, query.Format, query.Operation, query.Actor, from, to, before, query.Before.ID, limit+1)
+	var explicitFrom string
+	if !query.From.IsZero() {
+		explicitFrom = add(query.From)
+	}
+	classes := []AuditClass{AuditClassSync, AuditClassAsync}
+	if query.Class.Valid() {
+		classes = []AuditClass{query.Class}
+	}
+	limitPlaceholder := add(limit + 1)
+	branches := make([]string, 0, len(classes))
+	for _, class := range classes {
+		where := append([]string(nil), conditions...)
+		from := explicitFrom
+		if from == "" {
+			from = add(now.Add(-auditClassWindow(class)))
+		}
+		where = append(where, "occurred_at >= "+from)
+		if before != "" {
+			// A record of a lower class rank may share the cursor's (occurred_at, id).
+			operator := "<"
+			if class.rank() < query.Before.Class.rank() {
+				operator = "<="
+			}
+			where = append(where, "(occurred_at, id) "+operator+" ("+before+", "+beforeID+")")
+		}
+		branch := "SELECT '" + string(class) + "'::text AS audit_class, " + strconv.Itoa(class.rank()) + " AS class_rank, " + auditPageColumns +
+			" FROM " + auditTable(class) + " WHERE " + joinAnd(where) +
+			" ORDER BY occurred_at DESC, id DESC LIMIT " + limitPlaceholder
+		branches = append(branches, "("+branch+")")
+	}
+	if len(branches) == 1 {
+		return branches[0], args, limit
+	}
+	return "SELECT * FROM (" + branches[0] + " UNION ALL " + branches[1] + ") merged ORDER BY occurred_at DESC, id DESC, class_rank DESC LIMIT " + limitPlaceholder, args, limit
+}
+
+func joinAnd(conditions []string) string {
+	result := conditions[0]
+	for _, condition := range conditions[1:] {
+		result += " AND " + condition
+	}
+	return result
+}
+
+// ListAuditPage returns one keyset page, newest first, merged across
+// security_audit_log and resolver_audit_log unless query.Class selects one.
+func (s *PostgresStore) ListAuditPage(ctx context.Context, query AuditQuery) (AuditPage, error) {
+	statement, args, limit := buildAuditPageQuery(query, time.Now().UTC())
+	rows, err := s.db.QueryContext(ctx, statement, args...)
 	if err != nil {
 		return AuditPage{}, err
 	}
@@ -136,10 +214,13 @@ func (s *PostgresStore) ListAuditPage(ctx context.Context, query AuditQuery) (Au
 	page := AuditPage{Items: make([]AuditRecord, 0, limit)}
 	for rows.Next() {
 		var audit AuditRecord
+		var class string
+		var rank int
 		var evidence []byte
-		if err := rows.Scan(&audit.ID, &audit.GroupName, &audit.Repository, &audit.MemberName, &audit.Outcome, &audit.Actor, &audit.OccurredAt, &audit.Format, &audit.Resource, &audit.Representation, &audit.MemberType, &audit.UpstreamHost, &audit.Operation, &audit.Status, &audit.CacheDisposition, &audit.Bytes, &audit.AuthorizationSource, &audit.AuthorizationReason, &audit.RequestID, &audit.TraceID, &evidence); err != nil {
+		if err := rows.Scan(&class, &rank, &audit.ID, &audit.GroupName, &audit.Repository, &audit.MemberName, &audit.Outcome, &audit.Actor, &audit.OccurredAt, &audit.Format, &audit.Resource, &audit.Representation, &audit.MemberType, &audit.UpstreamHost, &audit.Operation, &audit.Status, &audit.CacheDisposition, &audit.Bytes, &audit.AuthorizationSource, &audit.AuthorizationReason, &audit.RequestID, &audit.TraceID, &evidence); err != nil {
 			return AuditPage{}, err
 		}
+		audit.Class = AuditClass(class)
 		if err := json.Unmarshal(evidence, &audit.Evidence); err != nil {
 			return AuditPage{}, err
 		}
@@ -151,7 +232,7 @@ func (s *PostgresStore) ListAuditPage(ctx context.Context, query AuditQuery) (Au
 	if len(page.Items) > limit {
 		last := page.Items[limit-1]
 		page.Items = page.Items[:limit]
-		page.Next = &AuditCursor{OccurredAt: last.OccurredAt, ID: last.ID}
+		page.Next = &AuditCursor{OccurredAt: last.OccurredAt, ID: last.ID, Class: last.Class}
 	}
 	return page, nil
 }
