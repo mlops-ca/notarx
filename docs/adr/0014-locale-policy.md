@@ -142,8 +142,10 @@ Locale tags are BCP 47 and exact (`en-CA`, `fr-CA`, `zh-CN`). The legacy tags
   returns `Intl.NumberFormat`, `DateTimeFormat`, `RelativeTimeFormat` and
   `ListFormat` bound to the active tag. A lint rule (`no-restricted-syntax` on
   `.toLocaleString(` and `.toLocaleDateString(` without a locale argument)
-  replaces ad hoc calls. Byte sizes keep SI units; the decimal separator and the
-  narrow no-break space before units come from `Intl` (`1,5 Go` in fr-CA).
+  replaces ad hoc calls. Byte sizes use IEC binary units (amended 2026-11-18, issue #304: one
+  `formatBytes`, the one in `useFormatters`, so tables, meters and quotas agree
+  with the GiB quotas operators set); the decimal separator comes from `Intl`
+  and the symbols from the language (`1,5 Kio` in fr-CA, `1.5 KiB` in en-CA).
   Plurals use `Intl.PluralRules`: one key
   per plural form, and `fr-CA` needs the `one` form to cover 0 and 1.
 - **antd and dayjs.** antd ships no `en_CA` locale (its list has `en_GB`,

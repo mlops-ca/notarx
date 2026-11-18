@@ -1,5 +1,6 @@
 import { Badge } from "../../components/ui/Badge";
-import { formatBytes, shortDigest } from "../../lib/format";
+import { shortDigest } from "../../lib/format";
+import { useFormatters } from "../../lib/useFormatters";
 import { usePreferences } from "../../lib/preferences";
 import { mavenUsage } from "../../lib/usage";
 import {
@@ -43,6 +44,7 @@ export function ProxyMavenCacheDetail({
   repoName: string;
   meta: ArtifactRow;
 }) {
+  const { formatBytes } = useFormatters();
   const { t } = usePreferences();
   const parsed = meta.files?.[0]
     ? parseMavenCachePath(meta.files[0].path)

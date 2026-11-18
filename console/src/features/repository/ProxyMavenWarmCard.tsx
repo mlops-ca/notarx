@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button, Input } from "antd";
 import { refreshProxyCache } from "../../client";
-import { formatBytes } from "../../lib/format";
+import { useFormatters } from "../../lib/useFormatters";
 import { usePreferences } from "../../lib/preferences";
 
 import { mavenWarmPath } from "./proxyMavenPaths";
@@ -19,6 +19,7 @@ export function ProxyMavenWarmCard({
   token: string;
   onWarmed: () => void;
 }) {
+  const { formatBytes } = useFormatters();
   const { t } = usePreferences();
   const refreshHealth = useInvalidateProxyHealth(repoId);
   const [warmInput, setWarmInput] = useState(

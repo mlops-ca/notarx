@@ -9,7 +9,8 @@ import type {
   ArtifactIdentityPurpose,
   Repository,
 } from "../../client";
-import { formatBytes, formatDate, shortDigest } from "../../lib/format";
+import { formatDate, shortDigest } from "../../lib/format";
+import { useFormatters } from "../../lib/useFormatters";
 import { usePreferences } from "../../lib/preferences";
 import {
   artifactCoordinateForDisplay,
@@ -66,6 +67,7 @@ export function RepositoryArtifactSelect({
     option: RepositoryArtifactIdentity,
   ) => RepositoryArtifactStatus | undefined;
 }) {
+  const { formatBytes } = useFormatters();
   const { t } = usePreferences();
   const [query, setQuery] = useState("");
   const searchTimer = useRef<number | undefined>(undefined);

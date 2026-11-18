@@ -13,6 +13,7 @@ import { formatViews } from "../../formats/views";
 import { useAuth } from "../../lib/auth";
 import { formatNumber } from "../../lib/format";
 import { usePreferences } from "../../lib/preferences";
+import { useFormatters } from "../../lib/useFormatters";
 import { ArtifactViewSwitch } from "./ArtifactViewSwitch";
 import { RepositoryFeatureUnavailable } from "./RepositoryFeatureUnavailable";
 import { RepositoryBrowseTree } from "./RepositoryBrowseTree";
@@ -54,6 +55,7 @@ export function RepositoryArtifactsTab({
 }) {
   const { token } = useAuth();
   const { t } = usePreferences();
+  const { formatBytes } = useFormatters();
   const descriptor = formatDescriptor(repo.format);
   const [q, setQ] = useState(
     artifactCoordinateForDisplay(repo.format, artifactTarget),
@@ -150,6 +152,7 @@ export function RepositoryArtifactsTab({
       Boolean(q) &&
       !proxyMaven);
   const columns = artifactColumns({
+    formatBytes,
     descriptor,
     repo,
     proxyMaven,

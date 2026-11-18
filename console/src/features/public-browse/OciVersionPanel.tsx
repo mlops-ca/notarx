@@ -5,7 +5,8 @@ import {
   SearchableVersionSelect,
   UsageSnippetBlock,
 } from "../../components/ui/PublicBrowsePrimitives";
-import { formatBytes, formatDate } from "../../lib/format";
+import { formatDate } from "../../lib/format";
+import { useFormatters } from "../../lib/useFormatters";
 import { usePreferences } from "../../lib/preferences";
 import type { UsageSnippet } from "../../lib/usage";
 import { VERSION_PAGE_SIZE } from "./constants";
@@ -29,6 +30,7 @@ export function OciVersionPanel({
   onCopyPageLink: (href: string) => unknown;
   onCopyUsage: (snippet: UsageSnippet) => unknown;
 }) {
+  const { formatBytes } = useFormatters();
   const { locale, t } = usePreferences();
   const loadOciTags = onLoadOciTags;
   const loadOciManifest = onLoadOciManifest;

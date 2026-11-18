@@ -18,6 +18,7 @@ import {
 import { Modal } from "../../components/ui/Modal";
 import { formatDate } from "../../lib/format";
 import { usePreferences } from "../../lib/preferences";
+import { useFormatters } from "../../lib/useFormatters";
 import { ConsoleTable } from "../../components/ui/ConsolePrimitives";
 import { formatDescriptor } from "../../formats";
 
@@ -40,6 +41,7 @@ export function RepositoryDistributionTab({
   disabled?: boolean;
 }) {
   const { t } = usePreferences();
+  const { formatBytes } = useFormatters();
   const queryClient = useQueryClient();
   // APT promotes and replicates into a named distribution suite.
   const suiteTarget = Boolean(formatDescriptor(repo.format)?.distributionSuite);
@@ -100,7 +102,7 @@ export function RepositoryDistributionTab({
     showDetail,
     t,
   });
-  const checkpointColumns = replicationCheckpointColumns(t);
+  const checkpointColumns = replicationCheckpointColumns(t, formatBytes);
 
   return (
     <div className="ag-page-stack ag-distribution">

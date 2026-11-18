@@ -7,7 +7,7 @@ import { Link } from "react-router-dom";
 import type { GlobalArtifactSearchHit } from "../../client";
 import { Badge, FormatBadge } from "../../components/ui/Badge";
 import { ArtifactSecurityBadge } from "../artifact-detail/ArtifactSecurityBadge";
-import { formatDate } from "../../lib/format";
+import { formatDate, type FormatBytes } from "../../lib/format";
 import { CopyableValue } from "../../components/ui/ConsolePrimitives";
 
 import {
@@ -21,12 +21,14 @@ import {
 /** Search result columns: artifact, repository, match, size, time, action. */
 export function searchColumns({
   expandedRow,
+  formatBytes,
   locale,
   openHit,
   setRowExpanded,
   t,
 }: {
   expandedRow: string | null;
+  formatBytes: FormatBytes;
   locale: string;
   openHit: (hit: GlobalArtifactSearchHit) => void;
   setRowExpanded: (tableRow: SearchTableRow, next: boolean) => void;
@@ -109,7 +111,7 @@ export function searchColumns({
         <span className="text-xs text-fg-secondary">
           {isMavenGroup(tableRow.row)
             ? t("search.versions", { length: tableRow.row.hits.length })
-            : artifactVersionSizeLabel(tableRow.row)}
+            : artifactVersionSizeLabel(tableRow.row, formatBytes)}
         </span>
       ),
     },

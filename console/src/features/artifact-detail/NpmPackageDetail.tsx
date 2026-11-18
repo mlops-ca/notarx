@@ -8,7 +8,8 @@ import {
   UsageSnippetBlock,
 } from "../../components/ui/PublicBrowsePrimitives";
 import { usePreferences } from "../../lib/preferences";
-import { formatBytes, formatDate, shortDigest } from "../../lib/format";
+import { formatDate, shortDigest } from "../../lib/format";
+import { useFormatters } from "../../lib/useFormatters";
 import { npmUsage } from "../../lib/usage";
 import { ArtifactIntelligencePanel } from "./ArtifactIntelligencePanel";
 import { ArtifactScanStatus } from "./ArtifactScanStatus";
@@ -43,6 +44,7 @@ export function NpmPackageDetail({
   canUnpublish?: boolean;
   onUnpublished?: () => void;
 }) {
+  const { formatBytes } = useFormatters();
   const { locale, t } = usePreferences();
   const packumentQuery = useNpmPackument(repoName, packageName);
   const packument = packumentQuery.data ?? null;

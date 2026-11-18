@@ -5,6 +5,7 @@ import { RepositoryTypeBadge } from "../../components/ui/Badge";
 import { Modal } from "../../components/ui/Modal";
 import { ConsoleTable } from "../../components/ui/ConsolePrimitives";
 import { usePreferences } from "../../lib/preferences";
+import { useFormatters } from "../../lib/useFormatters";
 import { useGroupCapacity } from "./groupQueries";
 
 /** A group's capacity across its member repositories. */
@@ -19,12 +20,11 @@ export function CapacityDialog({
   onClose: () => void;
   afterClose: () => void;
 }) {
+  const { formatBytes } = useFormatters();
   const { t } = usePreferences();
   const capacityQuery = useGroupCapacity(group.id, open);
   const capacity = capacityQuery.data ?? null;
   const error = capacityQuery.error;
-  const formatBytes = (value: number) =>
-    value < 1024 ? `${value} B` : `${(value / 1024 / 1024).toFixed(1)} MB`;
   const columns: ColumnsType<GroupCapacityMember> = [
     {
       title: t("groups.position"),

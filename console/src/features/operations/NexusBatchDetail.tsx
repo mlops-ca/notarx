@@ -14,7 +14,8 @@ import {
   Notice,
 } from "../../components/ui/Feedback";
 import { Card, Pagination } from "../../components/ui/Layout";
-import { formatBytes, formatDate } from "../../lib/format";
+import { formatDate } from "../../lib/format";
+import { useFormatters } from "../../lib/useFormatters";
 import { usePreferences } from "../../lib/preferences";
 import { LocalizedError } from "../../messages/translate";
 import {
@@ -44,6 +45,7 @@ export function NexusBatchDetail({
   refreshing: boolean;
   onRescan: () => void;
 }) {
+  const { formatBytes } = useFormatters();
   const { t, locale } = usePreferences();
   const client = useQueryClient();
   const pages = useEntryPages(batch.id, batch.version, batchActive(batch));

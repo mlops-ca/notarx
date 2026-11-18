@@ -1,6 +1,6 @@
 import { formatDescriptor, hasPackageVersions } from "../../formats";
 import type { GlobalArtifactSearchHit } from "../../client";
-import { formatBytes } from "../../lib/format";
+import { type FormatBytes } from "../../lib/format";
 import { mavenVersion } from "../../lib/usage";
 
 export const SEARCH_PAGE_SIZE = 100;
@@ -37,7 +37,10 @@ export function artifactTarget(hit: GlobalArtifactSearchHit): string {
   return `/repositories/${hit.repositoryId}?${params.toString()}`;
 }
 
-export function artifactVersionSizeLabel(hit: GlobalArtifactSearchHit): string {
+export function artifactVersionSizeLabel(
+  hit: GlobalArtifactSearchHit,
+  formatBytes: FormatBytes,
+): string {
   const size = formatBytes(hit.size);
   return hasPackageVersions(hit.format) && hit.version
     ? `${hit.version} · ${size}`

@@ -11,7 +11,8 @@ import { usePreferences } from "../../lib/preferences";
 import { ArtifactIntelligencePanel } from "./ArtifactIntelligencePanel";
 import { ArtifactQuarantinePanel } from "./ArtifactQuarantinePanel";
 import { ArtifactScanStatus } from "./ArtifactScanStatus";
-import { formatBytes, formatDate, shortDigest } from "../../lib/format";
+import { formatDate, shortDigest } from "../../lib/format";
+import { useFormatters } from "../../lib/useFormatters";
 import { pypiUsage } from "../../lib/usage";
 import {
   ConsoleTable,
@@ -51,6 +52,7 @@ export function PyPIProjectDetail({
   canQuarantine?: boolean;
   canWrite?: boolean;
 }) {
+  const { formatBytes } = useFormatters();
   const { locale, t } = usePreferences();
   const projectQuery = usePyPIProject(repoName, project);
   const document = projectQuery.data ?? null;

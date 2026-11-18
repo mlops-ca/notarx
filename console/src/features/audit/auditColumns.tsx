@@ -3,7 +3,7 @@ import type { ColumnsType } from "antd/es/table";
 import { Link } from "react-router-dom";
 import type { AuditRecord } from "../../client";
 import { FormatBadge, StatusText, statusTone } from "../../components/ui/Badge";
-import { formatBytes, formatDate } from "../../lib/format";
+import { formatDate, type FormatBytes } from "../../lib/format";
 import type { AppLocale } from "../../lib/preferences";
 import { auditOperationLabel } from "./auditOperations";
 import { auditOutcomeLabel, auditOutcomeTone } from "./auditOutcomes";
@@ -17,6 +17,7 @@ export type AuditTableRow = {
 export function auditColumns(
   t: Translate,
   locale: AppLocale,
+  formatBytes: FormatBytes,
 ): ColumnsType<AuditTableRow> {
   return [
     {

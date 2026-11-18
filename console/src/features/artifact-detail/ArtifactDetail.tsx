@@ -3,7 +3,8 @@ import { Button, Collapse, Select, Tooltip } from "antd";
 import { usageFor } from "../../lib/usage";
 import type { UsageSnippet } from "../../lib/usage";
 import { Badge } from "../../components/ui/Badge";
-import { formatBytes, formatDate, shortDigest } from "../../lib/format";
+import { formatDate, shortDigest } from "../../lib/format";
+import { useFormatters } from "../../lib/useFormatters";
 import { usePreferences } from "../../lib/preferences";
 import { ArtifactIntelligencePanel } from "./ArtifactIntelligencePanel";
 import { ArtifactScanStatus } from "./ArtifactScanStatus";
@@ -79,6 +80,7 @@ export function ArtifactDetailView({
   canQuarantine?: boolean;
   showQuarantine?: boolean;
 }) {
+  const { formatBytes } = useFormatters();
   const { locale, t } = usePreferences();
   const snippets = usageFor(t, format, repoName, meta.coordinate, tag);
 

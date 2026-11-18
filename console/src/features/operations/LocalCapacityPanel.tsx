@@ -6,7 +6,8 @@ import type {
 } from "../../client";
 import { Badge } from "../../components/ui/Badge";
 import { Card, CardHeader } from "../../components/ui/Layout";
-import { formatBytes, formatDate } from "../../lib/format";
+import { formatDate } from "../../lib/format";
+import { useFormatters } from "../../lib/useFormatters";
 import { usePreferences } from "../../lib/preferences";
 import "./operations.css";
 
@@ -35,6 +36,7 @@ export function LocalCapacityPanel({
 }: {
   capacity?: DiagnosticLocalCapacity;
 }) {
+  const { formatBytes } = useFormatters();
   const { t, locale } = usePreferences();
   return (
     <Card className="ag-local-capacity-card">

@@ -1,7 +1,8 @@
 import type { ColumnsType } from "antd/es/table";
 import { Badge } from "../../components/ui/Badge";
 import { ConsoleTable } from "../../components/ui/ConsolePrimitives";
-import { formatBytes, formatDate, shortDigest } from "../../lib/format";
+import { formatDate, shortDigest } from "../../lib/format";
+import { useFormatters } from "../../lib/useFormatters";
 import { usePreferences } from "../../lib/preferences";
 import type { OciConfig, OciDescriptor, OciManifest } from "./ociImageModel";
 
@@ -15,6 +16,7 @@ export function OciManifestView({
   config: OciConfig | null;
   manifestSize?: number;
 }) {
+  const { formatBytes } = useFormatters();
   const { locale, t } = usePreferences();
   const totalSize =
     (manifest.layers ?? []).reduce((n, l) => n + (l.size ?? 0), 0) +

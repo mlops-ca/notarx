@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GlobalArtifactSearchHit } from "../../client";
+import { createFormatters } from "../../lib/format";
 import { artifactTarget, artifactVersionSizeLabel } from "./Search";
 
 function hit(
@@ -63,16 +64,21 @@ describe("artifactTarget", () => {
   });
 });
 
+const { formatBytes } = createFormatters("en-CA");
+
 describe("artifactVersionSizeLabel", () => {
   it("shows the exact npm version together with its archive size", () => {
     expect(
       artifactVersionSizeLabel(
         hit({ format: "npm", version: "1.1.0", size: 294 }),
+        formatBytes,
       ),
     ).toBe("1.1.0 · 294 B");
   });
 
   it("keeps the compact size-only label for other formats", () => {
-    expect(artifactVersionSizeLabel(hit({ size: 1024 }))).toBe("1.0 KiB");
+    expect(artifactVersionSizeLabel(hit({ size: 1024 }), formatBytes)).toBe(
+      "1.0 KiB",
+    );
   });
 });

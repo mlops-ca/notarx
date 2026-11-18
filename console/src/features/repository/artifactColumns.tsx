@@ -3,7 +3,7 @@ import type { ColumnsType } from "antd/es/table";
 import type { Repository } from "../../client";
 import { Badge } from "../../components/ui/Badge";
 import type { FormatDescriptor } from "../../formats";
-import { formatBytes, formatDate, shortDigest } from "../../lib/format";
+import { formatDate, shortDigest, type FormatBytes } from "../../lib/format";
 import { decodeRawPathForDisplay } from "../../lib/rawPath";
 import { ArtifactSecurityBadge } from "../artifact-detail/ArtifactSecurityBadge";
 import type { ArtifactRow } from "./artifactRow";
@@ -19,12 +19,14 @@ export function artifactColumns({
   proxyMaven,
   showSecurityColumn,
   t,
+  formatBytes,
 }: {
   descriptor: FormatDescriptor | undefined;
   repo: Repository;
   proxyMaven: boolean;
   showSecurityColumn: boolean;
   t: Translate;
+  formatBytes: FormatBytes;
 }): ColumnsType<ArtifactRow> {
   const securityColumn: ColumnsType<ArtifactRow>[number] = {
     title: t("repository.security"),

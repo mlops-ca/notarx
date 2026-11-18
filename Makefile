@@ -90,6 +90,7 @@ console-typecheck:
 console-check:
 	@cd console && npm run lint
 	@cd console && npm run format:check
+	@cd console && npm run i18n:prune:check
 
 console-test:
 	@cd console && npm run test:coverage
@@ -223,6 +224,7 @@ architecture-check:
 	@go test ./tools/architecture
 	@python3 scripts/check-no-cjk-go.py
 	@python3 -B -m unittest discover -s scripts/tests -p test_check_no_cjk_go.py
+	@python3 -B -m unittest discover -s scripts/tests -p test_check_no_chinese.py
 
 sqllint-check:
 	@go run ./tools/sqllint/cmd

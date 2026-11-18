@@ -4,7 +4,8 @@ import { LinkOutlined } from "@ant-design/icons";
 import { Button, Descriptions, Space, Tooltip } from "antd";
 import type { GlobalArtifactSearchHit } from "../../client";
 import { Badge } from "../../components/ui/Badge";
-import { formatBytes, formatDate } from "../../lib/format";
+import { formatDate } from "../../lib/format";
+import { useFormatters } from "../../lib/useFormatters";
 import { MavenArtifactDetail } from "../artifact-detail/MavenArtifactDetail";
 import { CopyableValue } from "../../components/ui/ConsolePrimitives";
 import { usePreferences } from "../../lib/preferences";
@@ -27,6 +28,7 @@ export function SearchHitDetail({
   selectedVersion: string | null;
   setSelectedVersion: (key: string | null) => void;
 }) {
+  const { formatBytes } = useFormatters();
   const { locale, t } = usePreferences();
 
   const row = tableRow.row;

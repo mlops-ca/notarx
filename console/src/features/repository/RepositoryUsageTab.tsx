@@ -3,7 +3,8 @@ import { Button, Input, Tag, Tooltip } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { type ArtifactUsageStat, type Repository } from "../../client";
 import { EmptyState, ErrorBanner, Loading } from "../../components/ui/Feedback";
-import { formatBytes, formatDate, formatNumber } from "../../lib/format";
+import { formatDate, formatNumber } from "../../lib/format";
+import { useFormatters } from "../../lib/useFormatters";
 import { usePreferences } from "../../lib/preferences";
 import { ConsoleTable, FilterBar } from "../../components/ui/ConsolePrimitives";
 import { CONSOLE_PAGE_SIZE } from "../../components/ui/useConsolePagination";
@@ -16,6 +17,7 @@ export function RepositoryUsageTab({ repo }: { repo: Repository }) {
 }
 
 function RepositoryUsageContent({ repo }: { repo: Repository }) {
+  const { formatBytes } = useFormatters();
   const { t, locale } = usePreferences();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(CONSOLE_PAGE_SIZE);

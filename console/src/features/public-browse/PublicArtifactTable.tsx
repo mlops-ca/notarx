@@ -13,7 +13,8 @@ import {
 import { Button, Tooltip } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { ConsoleTable } from "../../components/ui/ConsolePrimitives";
-import { formatBytes, formatDate, shortDigest } from "../../lib/format";
+import { formatDate, shortDigest } from "../../lib/format";
+import { useFormatters } from "../../lib/useFormatters";
 import { usePreferences } from "../../lib/preferences";
 import type { UsageSnippet } from "../../lib/usage";
 import { PublicArtifactDetail } from "./PublicArtifactDetail";
@@ -71,6 +72,7 @@ export function PublicArtifactTable({
   onCopyPageLink: (href: string) => unknown;
   onCopyUsage: (snippet: UsageSnippet) => unknown;
 }) {
+  const { formatBytes } = useFormatters();
   const { locale, t } = usePreferences();
   const selectedRepository: PublicRepository | undefined = repository;
   const descriptor = formatDescriptor(selectedRepository?.format);

@@ -3,7 +3,7 @@ import { Button, Popconfirm, Space } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { ReplicationPlan, ReplicationPlanDetail } from "../../client";
 import { StateBadge } from "../../components/ui/Badge";
-import { formatBytes, formatDate, shortDigest } from "../../lib/format";
+import { formatDate, shortDigest, type FormatBytes } from "../../lib/format";
 
 /** Replication plans, with cancel and detail actions. */
 export function replicationPlanColumns({
@@ -112,7 +112,10 @@ export function replicationPlanColumns({
 }
 
 /** One plan's per-artifact checkpoints. */
-export function replicationCheckpointColumns(t: Translate) {
+export function replicationCheckpointColumns(
+  t: Translate,
+  formatBytes: FormatBytes,
+) {
   const columns: ColumnsType<ReplicationPlanDetail["checkpoints"][number]> = [
     {
       title: t("repository.object"),

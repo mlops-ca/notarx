@@ -2,7 +2,8 @@ import { DownOutlined, LinkOutlined, UpOutlined } from "@ant-design/icons";
 import { Button } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { ArtifactSummary } from "../../client";
-import { formatBytes, formatDate } from "../../lib/format";
+import { formatDate } from "../../lib/format";
+import { useFormatters } from "../../lib/useFormatters";
 import { usageFor, type UsageSnippet } from "../../lib/usage";
 import { usePreferences } from "../../lib/preferences";
 import {
@@ -58,6 +59,7 @@ export function MavenGroupTable({
   onCopyPageLink,
   onCopyUsage,
 }: MavenGroupTableProps) {
+  const { formatBytes } = useFormatters();
   const { locale, t } = usePreferences();
   const tableRows: MavenTableRow[] = groups.map((group) => {
     const latest = group.versions[0];

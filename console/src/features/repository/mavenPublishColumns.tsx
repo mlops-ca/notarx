@@ -3,7 +3,7 @@ import { DeleteOutlined } from "@ant-design/icons";
 import { Button } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { Badge } from "../../components/ui/Badge";
-import { formatBytes, shortDigest } from "../../lib/format";
+import { shortDigest, type FormatBytes } from "../../lib/format";
 
 export interface StagedFile {
   name: string;
@@ -20,6 +20,7 @@ export interface StagedFile {
 export function stagedFileColumns(
   t: Translate,
   removeFile: (name: string) => void,
+  formatBytes: FormatBytes,
 ): {
   stagedColumns: ColumnsType<StagedFile>;
   uploadColumns: ColumnsType<StagedFile>;
