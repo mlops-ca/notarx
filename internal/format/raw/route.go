@@ -31,7 +31,7 @@ func (h *Module) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if _, ok := h.protocolPrincipal(r); !ok && !h.anonymousRepositoryRead(r.Context(), repo, r.Method) {
-				w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Raw"`)
+				w.Header().Set("WWW-Authenticate", `Basic realm="notarx Raw"`)
 				http.Error(w, "authentication required", http.StatusUnauthorized)
 				return
 			}

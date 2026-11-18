@@ -46,7 +46,7 @@ services:
     environment:
       <<: *reference-apt-signer-environment
       REFERENCE_APT_SIGNER_KEY_FILE: /var/lib/reference-apt-signer/apt-release-private.gpg
-      REFERENCE_APT_SIGNER_NAME: Artifact Gateway Rotation Old
+      REFERENCE_APT_SIGNER_NAME: notarx Rotation Old
       REFERENCE_APT_SIGNER_EMAIL: apt-rotation-old@artifact-gateway.local
     volumes:
       - gateway-apt-signer-old:/var/lib/reference-apt-signer:ro
@@ -57,7 +57,7 @@ services:
     environment:
       <<: *reference-apt-signer-environment
       REFERENCE_APT_SIGNER_KEY_FILE: /var/lib/reference-apt-signer/apt-release-private.gpg
-      REFERENCE_APT_SIGNER_NAME: Artifact Gateway Rotation Next
+      REFERENCE_APT_SIGNER_NAME: notarx Rotation Next
       REFERENCE_APT_SIGNER_EMAIL: apt-rotation-next@artifact-gateway.local
     volumes:
       - gateway-apt-signer-next:/var/lib/reference-apt-signer:ro
@@ -95,7 +95,7 @@ services:
     entrypoint: ["/usr/local/bin/reference-apt-signer-keygen"]
     environment:
       REFERENCE_APT_SIGNER_KEY_FILE: /var/lib/reference-apt-signer/apt-release-private.gpg
-      REFERENCE_APT_SIGNER_NAME: Artifact Gateway Rotation Old
+      REFERENCE_APT_SIGNER_NAME: notarx Rotation Old
       REFERENCE_APT_SIGNER_EMAIL: apt-rotation-old@artifact-gateway.local
       REFERENCE_APT_SIGNER_RSA_BITS: ${REFERENCE_APT_SIGNER_RSA_BITS:-2048}
     security_opt:
@@ -115,7 +115,7 @@ services:
     entrypoint: ["/usr/local/bin/reference-apt-signer-keygen"]
     environment:
       REFERENCE_APT_SIGNER_KEY_FILE: /var/lib/reference-apt-signer/apt-release-private.gpg
-      REFERENCE_APT_SIGNER_NAME: Artifact Gateway Rotation Next
+      REFERENCE_APT_SIGNER_NAME: notarx Rotation Next
       REFERENCE_APT_SIGNER_EMAIL: apt-rotation-next@artifact-gateway.local
       REFERENCE_APT_SIGNER_RSA_BITS: ${REFERENCE_APT_SIGNER_RSA_BITS:-2048}
     security_opt:

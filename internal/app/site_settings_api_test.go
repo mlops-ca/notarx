@@ -15,7 +15,7 @@ func TestSiteSettingsArePubliclyReadableAndAdminVersioned(t *testing.T) {
 
 	read := httptest.NewRecorder()
 	handler.ServeHTTP(read, httptest.NewRequest(http.MethodGet, "/api/v2/site-settings", nil))
-	if read.Code != http.StatusOK || read.Header().Get("ETag") != "1" || !strings.Contains(read.Body.String(), `"siteName":"Artifact Gateway"`) || !strings.Contains(read.Body.String(), `"id":"notarx-dark"`) {
+	if read.Code != http.StatusOK || read.Header().Get("ETag") != "1" || !strings.Contains(read.Body.String(), `"siteName":"notarx"`) || !strings.Contains(read.Body.String(), `"id":"notarx-dark"`) {
 		t.Fatalf("public read=%d etag=%q body=%s", read.Code, read.Header().Get("ETag"), read.Body.String())
 	}
 

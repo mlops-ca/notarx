@@ -5,7 +5,7 @@
 Status: accepted
 
 The official `GOPROXY` protocol defines immutable reads but no upload
-operation. Artifact Gateway therefore keeps every read under the standard
+operation. notarx therefore keeps every read under the standard
 `/go/<repository>/<escaped-module>/@v/...` layout and defines one explicit
 Gateway publication extension for Hosted Repositories:
 

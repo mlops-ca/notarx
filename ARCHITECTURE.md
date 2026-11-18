@@ -1,10 +1,10 @@
-# Artifact Gateway Architecture
+# notarx Architecture
 
 [简体中文](ARCHITECTURE.zh-CN.md)
 
 The target architecture and breaking management API policy are defined in [ADR 0009](docs/adr/0009-native-architecture.md). `make architecture-check` prevents new reverse dependencies and aggregate store growth.
 
-Artifact Gateway is a repository manager for OCI, Raw, Maven, Conan 2, npm,
+notarx is a repository manager for OCI, Raw, Maven, Conan 2, npm,
 PyPI, Go modules, and APT. Full Hosted lifecycle is available for the first six
 formats. Go provides standard Proxy/Group reads, atomic Hosted publication, and
 format-aware tombstone/restore, retention, promotion, and replication. APT

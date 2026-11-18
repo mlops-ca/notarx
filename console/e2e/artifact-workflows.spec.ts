@@ -76,7 +76,7 @@ test.beforeAll(async ({ request }) => {
 
   const publish = await request.put(`/raw/${repositoryName}/${artifactPath}`, {
     headers: { ...authorization(), "Content-Type": "text/plain" },
-    data: "artifact gateway e2e payload",
+    data: "notarx e2e payload",
   });
   await expectOK(publish, "publish Raw artifact");
 });
@@ -253,7 +253,7 @@ test("a deleted artifact can be restored from the repository tombstone tab", asy
 
   const restored = await request.get(`/raw/${repositoryName}/${artifactPath}`);
   await expectOK(restored, "read restored Raw artifact anonymously");
-  expect(await restored.text()).toBe("artifact gateway e2e payload");
+  expect(await restored.text()).toBe("notarx e2e payload");
 });
 
 test("expired API keys are clearly distinguished from active and revoked keys", async ({

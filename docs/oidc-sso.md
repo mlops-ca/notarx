@@ -2,7 +2,7 @@
 
 [简体中文](oidc-sso.zh-CN.md) | [Documentation index](README.md)
 
-Artifact Gateway supports two OIDC credential paths:
+notarx supports two OIDC credential paths:
 
 - bearer validation for CI and API clients;
 - browser sign-in through Authorization Code + PKCE.
@@ -38,7 +38,7 @@ client secrets with AES-256-GCM. Responses expose only
 `clientSecretConfigured` and never return plaintext or ciphertext.
 
 The provider discovery document must contain matching `issuer`,
-`authorization_endpoint`, and `token_endpoint` values. Artifact Gateway never
+`authorization_endpoint`, and `token_endpoint` values. notarx never
 stores provider access or refresh tokens. After validating the ID token,
 issuer, audience, signature, expiry, state, and nonce, it creates a bounded
 12-hour HttpOnly `SameSite=Lax` Gateway session cookie.

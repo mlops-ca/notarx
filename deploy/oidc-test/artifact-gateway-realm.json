@@ -1,7 +1,7 @@
 {
   "realm": "artifact-gateway",
   "enabled": true,
-  "displayName": "Artifact Gateway OIDC Test",
+  "displayName": "notarx OIDC Test",
   "roles": {
     "realm": [
       { "name": "artifact-reader" },
@@ -12,7 +12,7 @@
   "clients": [
     {
       "clientId": "artifact-gateway-console",
-      "name": "Artifact Gateway Console",
+      "name": "notarx Console",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": true,

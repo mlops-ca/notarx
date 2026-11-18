@@ -57,7 +57,7 @@ func TestFrenchTypographyRules(t *testing.T) {
 func TestEveryLocaleRendersLocalizedPreviewAndQuota(t *testing.T) {
 	for _, locale := range Locales {
 		p, err := Render("critical", locale, "synthetic", time.Now(), "https://console.example.invalid")
-		if err != nil || !strings.Contains(p.HTML, `lang="`+locale+`"`) || !strings.Contains(p.Subject, "[Artifact Gateway]") {
+		if err != nil || !strings.Contains(p.HTML, `lang="`+locale+`"`) || !strings.Contains(p.Subject, "[notarx]") {
 			t.Fatalf("%s: %v %s", locale, err, p.Subject)
 		}
 	}

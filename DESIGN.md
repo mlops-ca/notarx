@@ -1,5 +1,5 @@
 ---
-name: Artifact Gateway Console
+name: notarx Console
 description: A refined, protocol-native engineering console for trusted artifact operations.
 colors:
   action-dark: "#fafafa"
@@ -132,7 +132,7 @@ components:
     typography: "{typography.technical}"
 ---
 
-# Design System: Artifact Gateway Console
+# Design System: notarx Console
 
 [简体中文](DESIGN.zh-CN.md) | [Documentation index](docs/README.md)
 
@@ -140,7 +140,7 @@ components:
 
 **Creative North Star: "The Refined Engineering Console"** (design language v2, [#319](https://github.com/mlops-ca/notarx/issues/319))
 
-Artifact Gateway Console should feel like the control surface for a system whose claims can be proved, built with the care of a well-made developer tool. The visual language is calm, precise, and generous: neutral layers separated by hairline borders, open spacing, and a single foreground-colored primary action. Real status, immutable identity, policy boundaries, and recoverable actions receive attention before decoration. The default dark theme is a quiet, near-black workspace rather than a glowing dashboard; the light theme preserves the same hierarchy instead of becoming a separate product.
+notarx Console should feel like the control surface for a system whose claims can be proved, built with the care of a well-made developer tool. The visual language is calm, precise, and generous: neutral layers separated by hairline borders, open spacing, and a single foreground-colored primary action. Real status, immutable identity, policy boundaries, and recoverable actions receive attention before decoration. The default dark theme is a quiet, near-black workspace rather than a glowing dashboard; the light theme preserves the same hierarchy instead of becoming a separate product.
 
 The [v2 design canvas](https://claude.ai/artifact/V5Hyr915rnoPv477jcc8Xr) shows the target dashboard, repository list, repository detail, command palette, and tokens.
 
@@ -308,7 +308,7 @@ Loading, error, empty, stale-data warning, and content are mutually exclusive fo
 
 ### Don't:
 
-- **Don't** turn the Console into a generic card-and-table admin template; expose Artifact Gateway's protocol, identity, trust, and lifecycle semantics.
+- **Don't** turn the Console into a generic card-and-table admin template; expose notarx's protocol, identity, trust, and lifecycle semantics.
 - **Don't** fabricate capacity, health, scan, vulnerability, release, or availability data.
 - **Don't** use `transition-all`, animate layout properties, or replay staggered page entrances during frequent administration.
 - **Don't** use low-contrast muted text for required guidance or encode state through color alone.

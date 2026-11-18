@@ -292,8 +292,10 @@ test("maximum branding values stay bounded from desktop through narrow zoom", as
   });
   page.on("pageerror", (error) => pageErrors.push(error.message));
 
-  const siteName =
-    "Artifact Gateway Regional Distribution Control Plane Node".padEnd(80, "X");
+  const siteName = "notarx Regional Distribution Control Plane Node".padEnd(
+    80,
+    "X",
+  );
   const themeName = "Enterprise Regional Operations Theme".padEnd(80, "Y");
   const availableThemes = defaultConsoleThemes.map((theme, index) =>
     index === 0 ? { ...theme, name: themeName } : theme,

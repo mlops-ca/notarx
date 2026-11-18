@@ -1,6 +1,6 @@
 ---
 name: notarxctl
-description: Use when operating an Artifact Gateway through its notarxctl command line — onboarding CI identities, publishing or finding artifacts, managing repositories, Groups, grants, users, and credentials, or reading audits, status, and logs — especially from scripts or agents that must act on exit codes and JSON instead of human text.
+description: Use when operating a notarx through its notarxctl command line — onboarding CI identities, publishing or finding artifacts, managing repositories, Groups, grants, users, and credentials, or reading audits, status, and logs — especially from scripts or agents that must act on exit codes and JSON instead of human text.
 ---
 
 # notarxctl

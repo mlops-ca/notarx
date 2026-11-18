@@ -7,7 +7,7 @@
 > [Nexus gap analysis](nexus-gap-analysis.md) for delivered work and remaining gaps.
 
 This review covered protocol backends, management APIs, lifecycle, storage,
-authorization, and the main Ant Design 6 Console journeys. Artifact Gateway
+authorization, and the main Ant Design 6 Console journeys. notarx
 already had a usable V1 across Hosted lifecycle, Proxy cache governance,
 anonymous reads, audit retention, promotion/replication, and the four original
 protocols. The remaining path to an enterprise experience was primarily

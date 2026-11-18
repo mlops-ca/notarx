@@ -89,7 +89,7 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if !authenticated {
 		h.audit(r.Context(), group, path, AuditEvent{Actor: "anonymous", Outcome: repository.AuditAccessDenied, Status: http.StatusUnauthorized, CacheDisposition: "bypass", Method: r.Method})
-		w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Raw"`)
+		w.Header().Set("WWW-Authenticate", `Basic realm="notarx Raw"`)
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}

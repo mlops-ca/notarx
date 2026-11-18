@@ -405,7 +405,7 @@ name = "cargo-recovery-fixture"
 version = "1.0.0"
 edition = "2024"
 license = "MIT"
-description = "Artifact Gateway backup and restore fixture"
+description = "notarx backup and restore fixture"
 CARGO_TOML
 printf 'fn main() { println!("Cargo recovery fixture"); }\n' >"$cargo_workspace/package/src/main.rs"
 printf '[registries.recovery]\nindex = "sparse+%s/cargo/%s/"\ncredential-provider = "cargo:token"\n' \

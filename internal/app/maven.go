@@ -94,7 +94,7 @@ func (h MavenHandler) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 			http.Error(w, "unable to record repository audit", http.StatusInternalServerError)
 			return
 		}
-		w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Maven"`)
+		w.Header().Set("WWW-Authenticate", `Basic realm="notarx Maven"`)
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}

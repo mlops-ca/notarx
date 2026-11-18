@@ -27,7 +27,7 @@ async function mockThemeSurface(page: Page) {
     route.fulfill({
       json: {
         version: "1",
-        siteName: "Artifact Gateway",
+        siteName: "notarx",
         logoUrl: "",
         brandMark: "AG",
         enabledThemeIds: defaultConsoleThemes.map((theme) => theme.id),

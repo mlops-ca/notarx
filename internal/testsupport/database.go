@@ -7,7 +7,7 @@ import (
 )
 
 // ValidateIsolatedDatabaseURL prevents integration tests from writing fixtures
-// into a development or operator-visible Artifact Gateway database.
+// into a development or operator-visible notarx database.
 func ValidateIsolatedDatabaseURL(raw string) error {
 	if strings.TrimSpace(raw) == "" {
 		return nil

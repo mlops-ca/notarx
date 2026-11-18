@@ -101,12 +101,10 @@ describe("ConsoleQueryProvider", () => {
         <SharedProbe />
       </ConsoleQueryProvider>,
     );
-    answer("Artifact Gateway");
+    answer("notarx");
 
     await waitFor(() =>
-      expect(screen.getByTestId("shared")).toHaveTextContent(
-        "Artifact Gateway",
-      ),
+      expect(screen.getByTestId("shared")).toHaveTextContent("notarx"),
     );
     expect(shared).toHaveBeenCalledTimes(1);
   });

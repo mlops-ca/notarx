@@ -2,7 +2,7 @@
   <img src="docs/assets/artifact-gateway-hero.png" alt="Artifact streams converging through one verification gateway into PostgreSQL metadata and immutable object storage" width="100%">
 </p>
 
-<h1 align="center">Artifact Gateway</h1>
+<h1 align="center">notarx</h1>
 
 <p align="center">
   A lightweight, protocol-native repository for verified software artifacts.
@@ -32,9 +32,9 @@
 > but pre-1.0 contracts can still evolve and it does not imply production
 > support commitments.
 
-## Why Artifact Gateway
+## Why notarx
 
-Artifact Gateway keeps the operational control plane intentionally small:
+notarx keeps the operational control plane intentionally small:
 
 - **One Gateway binary.** The same image can run as a compact standalone node
   or split into API, scheduler, and worker roles.
@@ -174,7 +174,7 @@ first-repository guidance, ports, lifecycle commands, and troubleshooting.
 
 ## Architecture at a glance
 
-![Artifact Gateway lightweight system architecture](docs/assets/artifact-gateway-system-architecture.png)
+![notarx lightweight system architecture](docs/assets/artifact-gateway-system-architecture.png)
 
 The default `standalone` role runs API, scheduler, and worker responsibilities
 in one process. Larger installations can split the same image by role without
@@ -222,6 +222,6 @@ placeholder, or Console option alone is not considered protocol support.
 
 ## License
 
-Artifact Gateway is available under the [MIT License](LICENSE). Third-party
+notarx is available under the [MIT License](LICENSE). Third-party
 components and assets remain subject to their respective license terms. The
 name and logo are covered by the [trademark policy](TRADEMARKS.md).

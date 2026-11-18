@@ -6,6 +6,7 @@ import { listGroups, listAudits, getOverviewStatistics } from "../../client";
 import type { Group, AuditRecord, OverviewStatistics } from "../../client";
 import { PageHeader } from "../../components/ui/Layout";
 import { ErrorBanner, isNotFound } from "../../components/ui/Feedback";
+import { productName } from "../../lib/brand";
 import { usePreferences } from "../../lib/preferences";
 import { useDashboardResource } from "./useDashboardResource";
 import { dashboardKeys } from "../../lib/query/keys";
@@ -71,7 +72,9 @@ export function DashboardPage() {
     <div className="ag-page-stack">
       <PageHeader
         title={t("dashboard.overview")}
-        description={t("dashboard.artifactGatewayRuntimeAtAGlance")}
+        description={t("dashboard.artifactGatewayRuntimeAtAGlance", {
+          productName,
+        })}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Segmented

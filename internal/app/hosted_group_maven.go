@@ -37,7 +37,7 @@ func (h v2GroupMavenHandler) serve(w http.ResponseWriter, r *http.Request, resol
 		if anonymousGroupAllowed(r.Context(), resolver.groups, group, r.Method) {
 			principal = anonymousPrincipal()
 		} else {
-			w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Maven"`)
+			w.Header().Set("WWW-Authenticate", `Basic realm="notarx Maven"`)
 			http.Error(w, "authentication required", http.StatusUnauthorized)
 			return
 		}
@@ -65,7 +65,7 @@ func (h v2GroupMavenHandler) serve(w http.ResponseWriter, r *http.Request, resol
 	}
 	if len(members) == 0 {
 		resolver.auditResolution(r.Context(), group, repository.FormatMaven, assetPath, strings.ToLower(r.Method), principal.Actor, repository.AuditAccessDenied, http.StatusUnauthorized)
-		w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Maven"`)
+		w.Header().Set("WWW-Authenticate", `Basic realm="notarx Maven"`)
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}

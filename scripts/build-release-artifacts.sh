@@ -147,7 +147,7 @@ for target in "${targets[@]}"; do
   chmod +x "$stage/run-migrations.sh"
   printf 'version=%s\nrevision=%s\ntarget=%s/%s\n' "$version" "$revision" "$goos" "$goarch" > "$stage/VERSION.txt"
   printf '%s\n' \
-    'Artifact Gateway installation materials' \
+    'notarx installation materials' \
     '' \
     '1. Verify SHA256SUMS before extracting this archive.' \
     '2. Configure PostgreSQL and S3-compatible object storage using artifact-gateway.env.example.' \
@@ -183,7 +183,7 @@ for target in "${targets[@]}"; do
   CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "$ldflags" -o "$notarxctl_stage/notarxctl" ./cmd/notarxctl
   printf 'version=%s\nrevision=%s\ntarget=%s/%s\n' "$version" "$revision" "$goos" "$goarch" > "$notarxctl_stage/VERSION.txt"
   printf '%s\n' \
-    'Artifact Gateway CLI installation materials' \
+    'notarx CLI installation materials' \
     '' \
     'This archive carries only the notarxctl client; server materials live in the' \
     'notarx_ archive of the same release.' \
@@ -218,4 +218,4 @@ fi
 
 bash "$root/scripts/write-release-checksums.sh" "$output"
 
-printf 'Built Artifact Gateway %s release artifacts in %s.\n' "$version" "$output"
+printf 'Built notarx %s release artifacts in %s.\n' "$version" "$output"

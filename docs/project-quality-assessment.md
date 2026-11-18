@@ -8,7 +8,7 @@ commitment.
 
 ## Executive assessment
 
-Artifact Gateway has a strong protocol and persistence foundation, explicit
+notarx has a strong protocol and persistence foundation, explicit
 contracts, broad automated gates, and unusually detailed lifecycle semantics
 for a project at this stage. Its primary risk is no longer missing basic
 repository behaviour; it is the cost of changing several large application and

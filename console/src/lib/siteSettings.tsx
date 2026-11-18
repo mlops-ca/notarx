@@ -10,12 +10,13 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getSiteSettings, type SiteSettings } from "../client";
 import { defaultConsoleThemes } from "./consoleTheme";
+import { productName } from "./brand";
 import { unwrap } from "./query/client";
 import { siteKeys } from "./query/keys";
 
 export const defaultSiteSettings: SiteSettings = {
   version: "1",
-  siteName: "Artifact Gateway",
+  siteName: productName,
   logoUrl: "",
   brandMark: "AG",
   enabledThemeIds: ["notarx-dark", "notarx-light"],

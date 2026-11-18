@@ -95,7 +95,7 @@ docker run --rm --volume "$workdir:/work" "$debian_image" /bin/sh -ec '
     "Package: artifact-gateway-e2e" \
     "Version: 1.0.0-1" \
     "Architecture: all" \
-    "Maintainer: Artifact Gateway E2E <apt-e2e@example.test>" \
+    "Maintainer: notarx E2E <apt-e2e@example.test>" \
     "Description: real APT Hosted installation gate" \
     > /tmp/artifact-gateway-e2e/DEBIAN/control
   printf "%s\n" "installed-from-artifact-gateway" > /tmp/artifact-gateway-e2e/usr/share/artifact-gateway-e2e/installed.txt

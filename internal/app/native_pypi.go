@@ -1018,7 +1018,7 @@ func (h nativePyPIHandler) protocolPrincipal(r *http.Request) (Principal, bool) 
 }
 
 func (h nativePyPIHandler) challenge(w http.ResponseWriter, status int, message string) {
-	w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway PyPI"`)
+	w.Header().Set("WWW-Authenticate", `Basic realm="notarx PyPI"`)
 	h.writeError(w, status, message)
 }
 

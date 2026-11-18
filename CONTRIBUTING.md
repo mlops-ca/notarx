@@ -1,8 +1,8 @@
-# Contributing to Artifact Gateway
+# Contributing to notarx
 
 [Français](CONTRIBUTING.fr-CA.md) · [简体中文](CONTRIBUTING.zh-CN.md)
 
-Artifact Gateway is currently developed by its core team. This guide records
+notarx is currently developed by its core team. This guide records
 the engineering workflow used inside the repository so changes remain
 reviewable and reproducible while the project is prepared for broader
 contribution.
@@ -435,6 +435,6 @@ A commit that cherry-picks work from the upstream project carries an
 
 ## Contribution license
 
-By submitting a contribution to Artifact Gateway, you agree that it is
+By submitting a contribution to notarx, you agree that it is
 licensed under the project's [MIT License](LICENSE), unless explicitly stated
 otherwise.

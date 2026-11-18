@@ -6,7 +6,7 @@ Status: current runtime contract.
 
 ## The default has no companion step
 
-Maven Hosted repositories publish successful standard Maven/Gradle uploads directly by default. Existing `mvn deploy` and Gradle `publish` pipelines can target Artifact Gateway without adding a Gateway-specific commit call.
+Maven Hosted repositories publish successful standard Maven/Gradle uploads directly by default. Existing `mvn deploy` and Gradle `publish` pipelines can target notarx without adding a Gateway-specific commit call.
 
 Strict publication remains available as a repository-level opt-in. It keeps all assets for one coordinate unreadable until a publisher explicitly commits the expected asset set.
 
@@ -47,7 +47,7 @@ The client may upload checksum sidecars and `maven-metadata.xml`; these requests
 ```mermaid
 sequenceDiagram
     participant Client as Maven / Gradle
-    participant GW as Artifact Gateway
+    participant GW as notarx
     participant PG as PostgreSQL
     participant OBJ as S3-compatible storage
     participant Reader as Consumer
@@ -129,7 +129,7 @@ The strict endpoint returns `409 publication_commit_disabled` when the repositor
 
 Nexus Repository 3 ordinary Maven Hosted uses direct per-request visibility and needs no finalize call. Nexus Repository Pro Staging is a different build workflow: CI tags components in one Hosted repository and moves or deletes matching components across separate Hosted repositories. Its isolation comes primarily from repository separation, Group composition, access policy, and promotion—not from a standard Maven coordinate commit.
 
-Artifact Gateway intentionally offers both choices in one Maven Hosted capability:
+notarx intentionally offers both choices in one Maven Hosted capability:
 
 - default direct mode minimizes Nexus migration cost;
 - optional strict mode gives stronger per-coordinate visibility when a team can support the additional publication action;

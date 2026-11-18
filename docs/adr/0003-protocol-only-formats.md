@@ -4,7 +4,7 @@
 
 Status: accepted
 
-Artifact Gateway normally admits a format only after Hosted, Proxy, Group, and
+notarx normally admits a format only after Hosted, Proxy, Group, and
 artifact lifecycle behaviour are executable. Some ecosystems intentionally
 standardize distribution but have no repository publication protocol. Go
 Modules are the first such case: `GOPROXY` defines immutable reads, while module
