@@ -292,6 +292,14 @@ func ReplicationStoreContract(t *testing.T, s ReplicationStore, source, target r
 	}
 }
 
+// PublicationExpiryWindow is how long the target session stays valid after Reserve.
+// The store validates the session before it audits, so the window must outlast the
+// Bind and pre-audit work of a slow, loaded runner (a 1s window let the pre-audit
+// check see an already expired session, so the audit was never entered and the
+// contract failed with "PG audit did not enter"). The audit hook then waits until
+// this expiry, so a larger window costs wall time but never correctness.
+const PublicationExpiryWindow = 5 * time.Second
+
 // ReplicationPublicationExpiryContract isolates publication expiry from lease or
 // actor expiry. crossExpiry must block a delegated audit past until, and prove
 // that the audit was entered before returning the completion result.
@@ -329,7 +337,7 @@ func ReplicationPublicationExpiryContract(t *testing.T, s ReplicationStore, audi
 	in.ID = uuid.NewString()
 	in.RepositoryID = target.ID
 	in.Actor = claim.Actor
-	in.ExpiresAt = time.Now().UTC().Add(time.Second)
+	in.ExpiresAt = time.Now().UTC().Add(PublicationExpiryWindow)
 	targetSession, _, err := s.Reserve(ctx, in)
 	if err != nil {
 		t.Fatal(err)
