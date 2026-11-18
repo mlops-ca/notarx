@@ -60,7 +60,7 @@ make kubernetes-local-up
 
 Set `K8S_LOCAL_SKIP_BUILD=1` to reuse images already loaded into the local
 cluster runtime. The helper refuses an unrecognized Kubernetes context. An
-operator may set `ARTIFACT_GATEWAY_ALLOW_NONLOCAL_K8S=1` only after explicitly
+operator may set `NOTARX_ALLOW_NONLOCAL_K8S=1` only after explicitly
 checking the target and adapting its image-loading and service-exposure behavior,
 but the local overlay remains unsuitable for production.
 
@@ -120,7 +120,7 @@ whose recorded checksums already match.
 
 The optional reference scanner is intentionally not part of this minimal
 overlay. Use Compose for its current smoke test, or add a dedicated scanner
-workload and configure `GATEWAY_ARTIFACT_SCANNER_URL` before assigning scan jobs
+workload and configure `NOTARX_ARTIFACT_SCANNER_URL` before assigning scan jobs
 to Kubernetes workers.
 
 ## Manifest workflow

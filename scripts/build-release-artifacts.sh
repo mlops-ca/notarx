@@ -155,7 +155,7 @@ for target in "${targets[@]}"; do
     '2. Configure PostgreSQL and S3-compatible object storage using artifact-gateway.env.example.' \
     '3. Install PostgreSQL psql, export PGHOST/PGUSER/PGDATABASE/PGPASSWORD, then run:' \
     '   MIGRATION_DIR=./migrations ./run-migrations.sh' \
-    '4. Export the required GATEWAY_* variables and start ./notarx.' \
+    '4. Export the required NOTARX_* variables and start ./notarx.' \
     '' \
     "Documentation: https://github.com/mlops-ca/notarx/blob/$revision/docs/getting-started.md" \
     > "$stage/INSTALL.txt"

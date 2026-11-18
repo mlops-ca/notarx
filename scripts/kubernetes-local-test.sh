@@ -110,7 +110,7 @@ assert_log 'kubectl -n artifact-gateway-local rollout status statefulset/postgre
 assert_log 'kubectl -n artifact-gateway-local rollout status statefulset/rustfs --timeout=180s'
 assert_log 'kubectl -n artifact-gateway-local rollout status deployment/artifact-gateway --timeout=300s'
 assert_log 'kubectl -n artifact-gateway-local rollout status deployment/artifact-gateway-ingress --timeout=180s'
-assert_log '--from-literal=GATEWAY_APT_SIGNER_TOKEN='
+assert_log '--from-literal=NOTARX_APT_SIGNER_TOKEN='
 grep -Fq 'Artifact Gateway Kubernetes stack is ready at http://artifact-gateway.localhost' "$workdir/stdout" || fail 'up did not report the Ingress endpoint'
 
 : >"$log"
@@ -127,10 +127,10 @@ assert_log '--from-literal=POSTGRES_PASSWORD=persisted-postgres-password'
 assert_log '--from-literal=RUSTFS_ACCESS_KEY=persisted-rustfs-user'
 assert_log '--from-literal=RUSTFS_SECRET_KEY=persisted-rustfs-password'
 assert_log '--from-literal=RUSTFS_RPC_SECRET=persisted-rustfs-independent-rpc-secret'
-assert_log '--from-literal=GATEWAY_ADMIN_TOKEN=persisted-admin-token'
-assert_log '--from-literal=GATEWAY_RESOLVER_TOKEN=persisted-resolver-token'
-assert_log '--from-literal=GATEWAY_SETTINGS_ENCRYPTION_KEY=abcdef0123456789abcdef0123456789'
-assert_log '--from-literal=GATEWAY_APT_SIGNER_TOKEN=persisted-apt-signer-token-0000001'
+assert_log '--from-literal=NOTARX_ADMIN_TOKEN=persisted-admin-token'
+assert_log '--from-literal=NOTARX_RESOLVER_TOKEN=persisted-resolver-token'
+assert_log '--from-literal=NOTARX_SETTINGS_ENCRYPTION_KEY=abcdef0123456789abcdef0123456789'
+assert_log '--from-literal=NOTARX_APT_SIGNER_TOKEN=persisted-apt-signer-token-0000001'
 
 : >"$log"
 run_expect 0 "$script" status

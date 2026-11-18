@@ -47,7 +47,7 @@ func TestPostgresRustFSPrivateProxyGradleOfficialClient(t *testing.T) {
 
 func privateGradleCredentialsContract(t *testing.T, gradle string, scheme repository.UpstreamAuthScheme, route string) {
 	t.Helper()
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
 	const firstSecret = "synthetic-gradle-source-v1"
 	const secondSecret = "synthetic-gradle-source-v2"
 	const wrongSecret = "synthetic-gradle-source-wrong"

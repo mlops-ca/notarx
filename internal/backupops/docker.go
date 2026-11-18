@@ -501,7 +501,7 @@ func (t *OwnedTarget) StartGateway(ctx context.Context) (string, error) {
 		}
 		args = append(args, "--mount", "type=bind,source="+filepath.Join(directory, "gateway")+",target=/gateway,readonly", "--entrypoint", "/gateway")
 	}
-	environment := []string{"GATEWAY_DATABASE_URL=postgres://gateway:" + escapePassword(spec.PostgresPassword) + "@postgres:5432/gateway?sslmode=disable", "GATEWAY_RUSTFS_ENDPOINT=http://rustfs:9000", "GATEWAY_RUSTFS_BUCKET=gateway-cache", "GATEWAY_RUSTFS_ACCESS_KEY=" + spec.AccessKey, "GATEWAY_RUSTFS_SECRET_KEY=" + spec.SecretKey, "GATEWAY_ADMIN_TOKEN=" + spec.AdminToken, "GATEWAY_RESOLVER_TOKEN=" + spec.ResolverToken, "GATEWAY_NODE_ROLES=api", "GATEWAY_INSTANCE_ID=" + spec.Project, "GATEWAY_LOG_BUFFER_LINES=1000"}
+	environment := []string{"NOTARX_DATABASE_URL=postgres://gateway:" + escapePassword(spec.PostgresPassword) + "@postgres:5432/gateway?sslmode=disable", "NOTARX_RUSTFS_ENDPOINT=http://rustfs:9000", "NOTARX_RUSTFS_BUCKET=gateway-cache", "NOTARX_RUSTFS_ACCESS_KEY=" + spec.AccessKey, "NOTARX_RUSTFS_SECRET_KEY=" + spec.SecretKey, "NOTARX_ADMIN_TOKEN=" + spec.AdminToken, "NOTARX_RESOLVER_TOKEN=" + spec.ResolverToken, "NOTARX_NODE_ROLES=api", "NOTARX_INSTANCE_ID=" + spec.Project, "NOTARX_LOG_BUFFER_LINES=1000"}
 	for _, e := range environment {
 		key, _, _ := strings.Cut(e, "=")
 		args = append(args, "--env", key)
@@ -573,7 +573,7 @@ func escapePassword(password string) string {
 
 func allowedRuntimeKey(key string) bool {
 	switch key {
-	case "GATEWAY_LEGACY_READ_DEFAULT", "GATEWAY_REPOSITORY_READERS", "GATEWAY_SETTINGS_ENCRYPTION_KEY", "GATEWAY_EGRESS_PROXY_KEY", "GATEWAY_OIDC_ISSUER", "GATEWAY_OIDC_AUDIENCE", "GATEWAY_OIDC_JWKS_URL", "GATEWAY_OIDC_CLIENT_ID", "GATEWAY_OIDC_CLIENT_SECRET", "GATEWAY_OIDC_REDIRECT_URL", "GATEWAY_OIDC_SCOPES", "GATEWAY_OIDC_ADMIN_SUBJECTS", "GATEWAY_OIDC_MEMBER_ROLES", "GATEWAY_OIDC_ADMIN_ROLES":
+	case "NOTARX_LEGACY_READ_DEFAULT", "NOTARX_REPOSITORY_READERS", "NOTARX_SETTINGS_ENCRYPTION_KEY", "NOTARX_EGRESS_PROXY_KEY", "NOTARX_OIDC_ISSUER", "NOTARX_OIDC_AUDIENCE", "NOTARX_OIDC_JWKS_URL", "NOTARX_OIDC_CLIENT_ID", "NOTARX_OIDC_CLIENT_SECRET", "NOTARX_OIDC_REDIRECT_URL", "NOTARX_OIDC_SCOPES", "NOTARX_OIDC_ADMIN_SUBJECTS", "NOTARX_OIDC_MEMBER_ROLES", "NOTARX_OIDC_ADMIN_ROLES":
 		return true
 	}
 	return false

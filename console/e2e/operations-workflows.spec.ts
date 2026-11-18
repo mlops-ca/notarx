@@ -6,9 +6,9 @@ import { waitForModalOpen } from "./support/motion";
  * when the page is opened directly on it.
  */
 
-const token = process.env.GATEWAY_ADMIN_TOKEN;
+const token = process.env.NOTARX_ADMIN_TOKEN;
 
-test.skip(!token, "GATEWAY_ADMIN_TOKEN is required for the operations gate");
+test.skip(!token, "NOTARX_ADMIN_TOKEN is required for the operations gate");
 
 async function authenticate(page: Page) {
   await page.addInitScript((accessToken) => {
@@ -177,14 +177,14 @@ test("a webhook subscription is created and paused", async ({
   await dialog.getByPlaceholder("至少 32 个字符").fill("s".repeat(40));
   await dialog.getByRole("button", { name: "创建" }).click();
   // Signing secrets are stored encrypted; a Gateway started without
-  // GATEWAY_SETTINGS_ENCRYPTION_KEY refuses them with a stable code.
+  // NOTARX_SETTINGS_ENCRYPTION_KEY refuses them with a stable code.
   const refused = dialog.getByText("encryption_key_unavailable");
   await expect(
     refused.or(page.getByRole("row").filter({ hasText: name })),
   ).toBeVisible();
   test.skip(
     await refused.isVisible(),
-    "The Gateway has no GATEWAY_SETTINGS_ENCRYPTION_KEY for webhook secrets.",
+    "The Gateway has no NOTARX_SETTINGS_ENCRYPTION_KEY for webhook secrets.",
   );
   await expect(dialog).toBeHidden();
   await expect.poll(async () => (await stored())?.enabled).toBe(true);

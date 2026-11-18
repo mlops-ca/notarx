@@ -89,10 +89,10 @@ func TestNativePyPIHostedUploadAndSimpleRead(t *testing.T) {
 }
 
 func TestNativePyPIRealTwineUploadAndPipDownload(t *testing.T) {
-	if os.Getenv("ARTIFACT_GATEWAY_PYPI_CLI_E2E") == "" {
-		t.Skip("set ARTIFACT_GATEWAY_PYPI_CLI_E2E=1 to run real twine/pip acceptance")
+	if os.Getenv("NOTARX_PYPI_CLI_E2E") == "" {
+		t.Skip("set NOTARX_PYPI_CLI_E2E=1 to run real twine/pip acceptance")
 	}
-	python := os.Getenv("ARTIFACT_GATEWAY_PYTHON")
+	python := os.Getenv("NOTARX_PYTHON")
 	if python == "" {
 		python = "python3"
 	}

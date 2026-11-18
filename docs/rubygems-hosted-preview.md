@@ -21,7 +21,7 @@ Apply the normal append-only migrations, including
 `000187_native_rubygems_yank_governance.sql` and
 `000188_native_rubygems_quarantine.sql`. Use the existing PostgreSQL and
 verified S3/RustFS runtime ports and set
-`GATEWAY_RUBYGEMS_PREVIEW_ENABLED=true`. The default is false; an invalid boolean
+`NOTARX_RUBYGEMS_PREVIEW_ENABLED=true`. The default is false; an invalid boolean
 fails startup. Publication persistence is an explicitly injected domain store,
 with a separate PostgreSQL adapter and advisory-lock pool.
 

@@ -116,7 +116,7 @@ Do not infer production latency or index usage from index existence. The real
 PostgreSQL regression `TestPostgresContainsSearchPlansAndCancellation` captures
 pgx's actual complete prepared SQL and runs `EXPLAIN (ANALYZE, BUFFERS, VERBOSE)`
 against fixed synthetic Raw inventory and Maven build history. Set
-`GATEWAY_SEARCH_PLAN_OUTPUT` to save every JSON plan; it never forces an index.
+`NOTARX_SEARCH_PLAN_OUTPUT` to save every JSON plan; it never forces an index.
 The companion HTTP probe-budget test includes global lookahead across three
 readable repositories. [Measured fixture report](reports/artifact-contains-search-2026-10-12.md).
 

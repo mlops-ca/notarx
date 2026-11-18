@@ -4,7 +4,7 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root"
 
-env_file=${GATEWAY_ENV_FILE:-.env}
+env_file=${NOTARX_ENV_FILE:-.env}
 test -f "$env_file" || {
   printf '%s\n' 'Service Account rotation E2E requires a configured environment file.' >&2
   exit 1
@@ -28,14 +28,14 @@ gateway_port=$(free_port)
 admin_token="service-account-gate-admin-${RANDOM}-${RANDOM}"
 
 awk -F= '
-  $1 != "GATEWAY_HTTP_PORT" &&
-  $1 != "GATEWAY_POSTGRES_PORT" &&
+  $1 != "NOTARX_HTTP_PORT" &&
+  $1 != "NOTARX_POSTGRES_PORT" &&
   $1 != "RUSTFS_API_PORT" &&
   $1 != "RUSTFS_CONSOLE_PORT" &&
-  $1 != "GATEWAY_ADMIN_TOKEN" &&
-  $1 != "GATEWAY_RESOLVER_TOKEN" { print }
+  $1 != "NOTARX_ADMIN_TOKEN" &&
+  $1 != "NOTARX_RESOLVER_TOKEN" { print }
 ' "$env_file" >"$isolated_env"
-printf 'GATEWAY_HTTP_PORT=%s\nGATEWAY_POSTGRES_PORT=%s\nRUSTFS_API_PORT=%s\nRUSTFS_CONSOLE_PORT=%s\nGATEWAY_ADMIN_TOKEN=%s\nGATEWAY_RESOLVER_TOKEN=%s\n' \
+printf 'NOTARX_HTTP_PORT=%s\nNOTARX_POSTGRES_PORT=%s\nRUSTFS_API_PORT=%s\nRUSTFS_CONSOLE_PORT=%s\nNOTARX_ADMIN_TOKEN=%s\nNOTARX_RESOLVER_TOKEN=%s\n' \
   "$gateway_port" "$(free_port)" "$(free_port)" "$(free_port)" \
   "$admin_token" "service-account-gate-resolver-${RANDOM}-${RANDOM}" >>"$isolated_env"
 

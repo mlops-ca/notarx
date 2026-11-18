@@ -1,5 +1,5 @@
 # go-proxy (go proxy) at http://gateway.test/gw
-# set ARTIFACT_GATEWAY_TOKEN to a credential with access to this repository
+# set NOTARX_TOKEN to a credential with access to this repository
 
 ## Go proxy
 go env -w GOPROXY=http://gateway.test/gw/go/go-proxy
@@ -7,4 +7,4 @@ go env -w GOPROXY=http://gateway.test/gw/go/go-proxy
 ## Go credentials — .netrc
 machine gateway.test
 login ci
-password ${ARTIFACT_GATEWAY_TOKEN}
+password ${NOTARX_TOKEN}

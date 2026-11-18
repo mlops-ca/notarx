@@ -179,37 +179,37 @@ spec:
             - configMapRef:
                 name: ag-oidc-test-config
           env:
-            - name: GATEWAY_LISTEN_ADDRESS
+            - name: NOTARX_LISTEN_ADDRESS
               value: :8080
-            - name: GATEWAY_DATABASE_URL
+            - name: NOTARX_DATABASE_URL
               value: postgres://gateway:gateway-oidc-test-db-password@postgres:5432/gateway?sslmode=disable
-            - name: GATEWAY_RUSTFS_ENDPOINT
+            - name: NOTARX_RUSTFS_ENDPOINT
               value: http://rustfs:9000
-            - name: GATEWAY_RUSTFS_BUCKET
+            - name: NOTARX_RUSTFS_BUCKET
               value: gateway-cache
-            - name: GATEWAY_RUSTFS_ACCESS_KEY
+            - name: NOTARX_RUSTFS_ACCESS_KEY
               value: gateway-oidc-test-rustfs
-            - name: GATEWAY_RUSTFS_SECRET_KEY
+            - name: NOTARX_RUSTFS_SECRET_KEY
               value: gateway-oidc-test-rustfs-password
-            - name: GATEWAY_ADMIN_TOKEN
+            - name: NOTARX_ADMIN_TOKEN
               value: gateway-oidc-test-admin-token
-            - name: GATEWAY_RESOLVER_TOKEN
+            - name: NOTARX_RESOLVER_TOKEN
               value: gateway-oidc-test-resolver-token
-            - name: GATEWAY_SETTINGS_ENCRYPTION_KEY
+            - name: NOTARX_SETTINGS_ENCRYPTION_KEY
               value: 0123456789abcdef0123456789abcdef
-            - name: GATEWAY_OIDC_ISSUER
+            - name: NOTARX_OIDC_ISSUER
               value: http://127.0.0.1:8081/realms/artifact-gateway
-            - name: GATEWAY_OIDC_AUDIENCE
+            - name: NOTARX_OIDC_AUDIENCE
               value: artifact-gateway-api
-            - name: GATEWAY_OIDC_CLIENT_ID
+            - name: NOTARX_OIDC_CLIENT_ID
               value: artifact-gateway-console
-            - name: GATEWAY_OIDC_SCOPES
+            - name: NOTARX_OIDC_SCOPES
               value: openid profile email
-            - name: GATEWAY_OIDC_ADMIN_ROLES
+            - name: NOTARX_OIDC_ADMIN_ROLES
               value: artifact-admin
-            - name: GATEWAY_OIDC_WRITER_ROLES
+            - name: NOTARX_OIDC_WRITER_ROLES
               value: artifact-writer
-            - name: GATEWAY_OIDC_READER_ROLES
+            - name: NOTARX_OIDC_READER_ROLES
               value: artifact-reader
           ports:
             - containerPort: 8080

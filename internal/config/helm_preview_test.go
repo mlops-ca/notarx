@@ -3,11 +3,11 @@ package config
 import "testing"
 
 func TestHelmPreviewRequiresExplicitTrueConfiguration(t *testing.T) {
-	for key, value := range map[string]string{"GATEWAY_DATABASE_URL": "postgres://gateway:owned@localhost/gateway", "GATEWAY_RUSTFS_ENDPOINT": "http://localhost:9000", "GATEWAY_RUSTFS_BUCKET": "owned-helm", "GATEWAY_RUSTFS_ACCESS_KEY": "owned", "GATEWAY_RUSTFS_SECRET_KEY": "owned-secret", "GATEWAY_ADMIN_TOKEN": "owned-admin", "GATEWAY_RESOLVER_TOKEN": "owned-reader"} {
+	for key, value := range map[string]string{"NOTARX_DATABASE_URL": "postgres://gateway:owned@localhost/gateway", "NOTARX_RUSTFS_ENDPOINT": "http://localhost:9000", "NOTARX_RUSTFS_BUCKET": "owned-helm", "NOTARX_RUSTFS_ACCESS_KEY": "owned", "NOTARX_RUSTFS_SECRET_KEY": "owned-secret", "NOTARX_ADMIN_TOKEN": "owned-admin", "NOTARX_RESOLVER_TOKEN": "owned-reader"} {
 		t.Setenv(key, value)
 	}
 	for _, input := range []string{"", "false", "true", "yes", "1"} {
-		t.Setenv("GATEWAY_HELM_PREVIEW_ENABLED", input)
+		t.Setenv("NOTARX_HELM_PREVIEW_ENABLED", input)
 		cfg, err := Load()
 		if input == "yes" || input == "1" {
 			if err == nil {
@@ -19,9 +19,9 @@ func TestHelmPreviewRequiresExplicitTrueConfiguration(t *testing.T) {
 			t.Fatalf("opt-in=%q enabled=%t error=%v", input, cfg.HelmPreviewEnabled, err)
 		}
 	}
-	t.Setenv("GATEWAY_WORKER_FORMATS", "helm")
+	t.Setenv("NOTARX_WORKER_FORMATS", "helm")
 	for _, enabled := range []string{"false", "true"} {
-		t.Setenv("GATEWAY_HELM_PREVIEW_ENABLED", enabled)
+		t.Setenv("NOTARX_HELM_PREVIEW_ENABLED", enabled)
 		_, err := Load()
 		if (err == nil) != (enabled == "true") {
 			t.Fatalf("preview worker format enabled=%s error=%v", enabled, err)

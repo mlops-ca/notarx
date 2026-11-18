@@ -245,10 +245,10 @@ func verifyRecoveryEmail(t *testing.T, ctx context.Context, target *OwnedTarget,
 	apiOnly := false
 	for _, env := range containers[0].Config.Env {
 		key, value, _ := strings.Cut(env, "=")
-		if key == "GATEWAY_NODE_ROLES" {
+		if key == "NOTARX_NODE_ROLES" {
 			apiOnly = value == "api"
 		}
-		if key == "GATEWAY_EMAIL_CONFIG_FILE" && value != "" {
+		if key == "NOTARX_EMAIL_CONFIG_FILE" && value != "" {
 			t.Fatal("restore enabled SMTP configuration")
 		}
 	}

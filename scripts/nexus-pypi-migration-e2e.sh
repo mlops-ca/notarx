@@ -161,7 +161,7 @@ bounded 60 "$workdir/venv/bin/python" -m pip --isolated install --disable-pip-ve
 export PYPI_MIGRATION_PYTHON="$workdir/venv/bin/python"
 export PYPI_MIGRATION_REQUIRED=1
 export PYPI_MIGRATION_EVIDENCE="$evidence"
-export GATEWAY_REPOSITORY_PRESETS=none
+export NOTARX_REPOSITORY_PRESETS=none
 "$PYPI_MIGRATION_PYTHON" -c 'import importlib.metadata; assert importlib.metadata.version("pip") == "26.2"; print("Official pip 26.2")' >"$evidence/client.txt"
 started=1
 bounded 90 "${compose[@]}" up -d --wait --wait-timeout 60 postgres rustfs >>"$evidence/setup.log" 2>&1

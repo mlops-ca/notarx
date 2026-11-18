@@ -1,5 +1,5 @@
 # cargo-hosted (cargo hosted) at http://gateway.test/gw
-# set ARTIFACT_GATEWAY_TOKEN to a credential with access to this repository
+# set NOTARX_TOKEN to a credential with access to this repository
 
 ## Cargo registry — .cargo/config.toml
 [registries.cargo-hosted]
@@ -7,7 +7,7 @@ index = "sparse+http://gateway.test/gw/cargo/cargo-hosted/"
 credential-provider = "cargo:token"
 
 ## sign in
-printf '%s' "$ARTIFACT_GATEWAY_TOKEN" | cargo login --registry cargo-hosted
+printf '%s' "$NOTARX_TOKEN" | cargo login --registry cargo-hosted
 
 ## publish
 cargo publish --registry cargo-hosted

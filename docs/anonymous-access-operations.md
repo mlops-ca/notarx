@@ -51,7 +51,7 @@ require an authenticated management identity.
 Authenticated Maven pull:
 
 ```sh
-curl -u resolver:$GATEWAY_RESOLVER_TOKEN \
+curl -u resolver:$NOTARX_RESOLVER_TOKEN \
   https://gateway.example.com/maven/releases/org/example/widget/1.0/widget-1.0.jar
 ```
 
@@ -64,7 +64,7 @@ curl https://gateway.example.com/maven/public/org/example/widget/1.0/widget-1.0.
 Authenticated Raw read:
 
 ```sh
-curl -H "Authorization: Bearer $GATEWAY_TOKEN" \
+curl -H "Authorization: Bearer $NOTARX_TOKEN" \
   https://gateway.example.com/raw/releases/widgets/widget.tar.gz
 ```
 

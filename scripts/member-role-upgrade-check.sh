@@ -98,7 +98,7 @@ INSERT INTO repository_grants(repository_id, principal, scopes, resource_prefix)
 SQL
 report_database_url="postgres://gateway:integration-password@127.0.0.1:5432/$probe_database"
 report_log="$probe_dir/report.log"
-if "${compose[@]}" exec -T postgres env GATEWAY_DATABASE_URL="$report_database_url" sh -s <"$root/scripts/member-role-migration-report.sh" >"$report_log" 2>&1; then
+if "${compose[@]}" exec -T postgres env NOTARX_DATABASE_URL="$report_database_url" sh -s <"$root/scripts/member-role-migration-report.sh" >"$report_log" 2>&1; then
   :
 else
   cat "$report_log" >&2

@@ -31,7 +31,7 @@ func TestLocalAlertReleaseUpgrade(t *testing.T) {
 	old := formalUpgradeRelease(t)
 	candidate := integrationRelease(t)
 	makeSpec := func(release Release) TargetSpec {
-		return TargetSpec{Project: "ag-restore-" + uuid.NewString()[:18], Docker: d, Release: release, PostgresPassword: uuid.NewString(), AccessKey: "synthetic-test", SecretKey: uuid.NewString(), RPCSecret: uuid.NewString(), AdminToken: uuid.NewString(), ResolverToken: uuid.NewString(), RuntimeEnvironment: map[string]string{"GATEWAY_SETTINGS_ENCRYPTION_KEY": recoveryEmailKey}}
+		return TargetSpec{Project: "ag-restore-" + uuid.NewString()[:18], Docker: d, Release: release, PostgresPassword: uuid.NewString(), AccessKey: "synthetic-test", SecretKey: uuid.NewString(), RPCSecret: uuid.NewString(), AdminToken: uuid.NewString(), ResolverToken: uuid.NewString(), RuntimeEnvironment: map[string]string{"NOTARX_SETTINGS_ENCRYPTION_KEY": recoveryEmailKey}}
 	}
 	source, err := NewTarget(ctx, makeSpec(old))
 	if err != nil {

@@ -130,9 +130,9 @@ operations endpoints. It creates `manifest.json` plus one redacted JSON record
 per endpoint:
 
 ```sh
-export GATEWAY_EVIDENCE_ADMIN_TOKEN='injected-at-runtime'
+export NOTARX_EVIDENCE_ADMIN_TOKEN='injected-at-runtime'
 make evidence \
-  GATEWAY_URL='https://gateway.example.test' \
+  NOTARX_URL='https://gateway.example.test' \
   EVIDENCE_OUTPUT='.artifacts/release-evidence/20260725T000000Z' \
   GIT_REVISION='candidate-revision' \
   IMAGE_DIGEST='registry.example/gateway@sha256:...'

@@ -59,7 +59,7 @@ Maven `settings.xml`:
 <server>
   <id>artifact-gateway</id>
   <username>jenkins</username>
-  <password>${env.ARTIFACT_GATEWAY_TOKEN}</password>
+  <password>${env.NOTARX_TOKEN}</password>
 </server>
 ```
 
@@ -67,7 +67,7 @@ npm project or user configuration should inject the token at runtime:
 
 ```ini
 registry=https://gateway.example.com/npm/npm-group/
-//gateway.example.com/npm/npm-group/:_authToken=${ARTIFACT_GATEWAY_TOKEN}
+//gateway.example.com/npm/npm-group/:_authToken=${NOTARX_TOKEN}
 always-auth=true
 ```
 
@@ -75,7 +75,7 @@ OCI clients exchange the same credential through the standard Registry token
 flow:
 
 ```sh
-printf '%s' "$ARTIFACT_GATEWAY_TOKEN" |
+printf '%s' "$NOTARX_TOKEN" |
   docker login gateway.example.com --username jenkins --password-stdin
 ```
 

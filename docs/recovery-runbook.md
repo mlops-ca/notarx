@@ -226,7 +226,7 @@ and dead rows stay terminal. Active leases and future retry deadlines block work
 expired unrevoked attempts retain possibleDuplicate, and stale tokens cannot
 finish a newer claim. Safe API reads and administrator denials are also checked.
 
-`GATEWAY_SETTINGS_ENCRYPTION_KEY` is an independent operational prerequisite.
+`NOTARX_SETTINGS_ENCRYPTION_KEY` is an independent operational prerequisite.
 Back up/escrow it separately under the operator's secret-management policy; the
 bundle stores encrypted recipient snapshots, never the encryption key, SMTP
 authentication files, or runtime configuration. Supply the original key through

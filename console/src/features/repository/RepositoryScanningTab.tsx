@@ -87,9 +87,9 @@ export function RepositoryScanningTab({
           description={
             <span>
               {t("repository.askAPlatformAdministratorToConfigure")}
-              <code>GATEWAY_SCANNER_ENDPOINT</code>
+              <code>NOTARX_SCANNER_ENDPOINT</code>
               {t("repository.and")}
-              <code>GATEWAY_SCANNER_FORMATS</code>
+              <code>NOTARX_SCANNER_FORMATS</code>
               {t("repository.inTheGatewayDeploymentAndEnableScanJobs")}
             </span>
           }

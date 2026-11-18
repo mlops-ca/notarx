@@ -41,7 +41,7 @@ func runCapacityInput(t *testing.T, input string, args ...string) (int, string, 
 }
 
 func TestCapacityCLIReturnsThreeBudgetOutcomesWithoutLoadingRuntimeConfig(t *testing.T) {
-	t.Setenv("GATEWAY_DATABASE_URL", "synthetic-invalid-config-marker")
+	t.Setenv("NOTARX_DATABASE_URL", "synthetic-invalid-config-marker")
 	cases := []struct {
 		name, input string
 		code        int

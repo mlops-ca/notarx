@@ -71,8 +71,8 @@ silently attached to a local account.
 
 ## Lockout Policy
 
-`GATEWAY_LOCAL_AUTH_MAX_FAILED_ATTEMPTS` controls consecutive failures before a
-temporary lock and defaults to `5`. `GATEWAY_LOCAL_AUTH_LOCKOUT_DURATION`
+`NOTARX_LOCAL_AUTH_MAX_FAILED_ATTEMPTS` controls consecutive failures before a
+temporary lock and defaults to `5`. `NOTARX_LOCAL_AUTH_LOCKOUT_DURATION`
 defaults to `15m`. The supported configuration bounds are 1 to 100 attempts and
 1 minute to 24 hours.
 
@@ -113,7 +113,7 @@ reads them out; it is read-only, so run it before the upgrade as an inventory an
 after it to confirm nothing is left. It needs the database to report on:
 
 ```sh
-GATEWAY_DATABASE_URL=postgres://gateway:...@host:5432/gateway make member-role-migration-report
+NOTARX_DATABASE_URL=postgres://gateway:...@host:5432/gateway make member-role-migration-report
 ```
 
 It prints four sections, each naming the identifier to act on:
@@ -123,7 +123,7 @@ It prints four sections, each naming the identifier to act on:
    materialized grant cannot reach further than the level it replaced.
 2. **Principals that reach repositories only through the legacy static
    patterns.** Each row is an actor and a repository whose access still comes
-   from `GATEWAY_REPOSITORY_READERS` or `GATEWAY_REPOSITORY_WRITERS` and which
+   from `NOTARX_REPOSITORY_READERS` or `NOTARX_REPOSITORY_WRITERS` and which
    holds no grant on that repository, with the number of decisions and the last
    one seen. Give it a grant, or keep its pattern.
 3. **Grants held by principals without a user row.** API keys and service

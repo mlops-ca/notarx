@@ -1,10 +1,10 @@
 import { expect, test } from "@playwright/test";
 
-const token = process.env.GATEWAY_ADMIN_TOKEN;
+const token = process.env.NOTARX_ADMIN_TOKEN;
 const authorization = { Authorization: `Bearer ${token!}` };
 let createdUserId = "";
 
-test.skip(!token, "GATEWAY_ADMIN_TOKEN is required for user governance E2E");
+test.skip(!token, "NOTARX_ADMIN_TOKEN is required for user governance E2E");
 
 test.afterEach(async ({ request }) => {
   if (!createdUserId) return;

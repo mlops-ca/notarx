@@ -4,7 +4,7 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root"
 
-minimum=${GATEWAY_MIN_COVERAGE:-40.0}
+minimum=${NOTARX_MIN_COVERAGE:-40.0}
 profile=$(mktemp)
 test_output=$(mktemp)
 trap 'rm -f "$profile" "$test_output"' EXIT

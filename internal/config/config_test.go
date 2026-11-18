@@ -20,51 +20,51 @@ import (
 )
 
 func TestLoadRejectsIncompleteConfiguration(t *testing.T) {
-	t.Setenv("GATEWAY_DATABASE_URL", "")
-	t.Setenv("GATEWAY_RUSTFS_ENDPOINT", "")
-	t.Setenv("GATEWAY_RUSTFS_BUCKET", "")
+	t.Setenv("NOTARX_DATABASE_URL", "")
+	t.Setenv("NOTARX_RUSTFS_ENDPOINT", "")
+	t.Setenv("NOTARX_RUSTFS_BUCKET", "")
 	if _, err := Load(); err == nil {
 		t.Fatal("Load() error = nil, want error")
 	}
 }
 
 func TestLoadDoesNotAcceptLegacyS3Configuration(t *testing.T) {
-	t.Setenv("GATEWAY_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
-	t.Setenv("GATEWAY_RUSTFS_ENDPOINT", "")
-	t.Setenv("GATEWAY_RUSTFS_BUCKET", "")
-	t.Setenv("GATEWAY_RUSTFS_ACCESS_KEY", "")
-	t.Setenv("GATEWAY_RUSTFS_SECRET_KEY", "")
-	t.Setenv("GATEWAY_S3_ENDPOINT", "http://legacy-object-store:9000")
-	t.Setenv("GATEWAY_S3_BUCKET", "gateway-cache")
-	t.Setenv("GATEWAY_S3_ACCESS_KEY", "legacy-access-key")
-	t.Setenv("GATEWAY_S3_SECRET_KEY", "legacy-secret-key")
-	t.Setenv("GATEWAY_ADMIN_TOKEN", "admin")
-	t.Setenv("GATEWAY_RESOLVER_TOKEN", "resolver")
+	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
+	t.Setenv("NOTARX_RUSTFS_ENDPOINT", "")
+	t.Setenv("NOTARX_RUSTFS_BUCKET", "")
+	t.Setenv("NOTARX_RUSTFS_ACCESS_KEY", "")
+	t.Setenv("NOTARX_RUSTFS_SECRET_KEY", "")
+	t.Setenv("NOTARX_S3_ENDPOINT", "http://legacy-object-store:9000")
+	t.Setenv("NOTARX_S3_BUCKET", "gateway-cache")
+	t.Setenv("NOTARX_S3_ACCESS_KEY", "legacy-access-key")
+	t.Setenv("NOTARX_S3_SECRET_KEY", "legacy-secret-key")
+	t.Setenv("NOTARX_ADMIN_TOKEN", "admin")
+	t.Setenv("NOTARX_RESOLVER_TOKEN", "resolver")
 	if _, err := Load(); err == nil {
-		t.Fatal("legacy GATEWAY_S3 configuration was accepted")
+		t.Fatal("legacy NOTARX_S3 configuration was accepted")
 	}
 }
 
 func TestLoadAcceptsNativeConfiguration(t *testing.T) {
-	t.Setenv("GATEWAY_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
-	t.Setenv("GATEWAY_RUSTFS_ENDPOINT", "http://rustfs:9000")
-	t.Setenv("GATEWAY_RUSTFS_BUCKET", "gateway-cache")
-	t.Setenv("GATEWAY_RUSTFS_ACCESS_KEY", "rustfs-user")
-	t.Setenv("GATEWAY_RUSTFS_SECRET_KEY", "rustfs-secret")
-	t.Setenv("GATEWAY_ADMIN_TOKEN", "admin-token")
-	t.Setenv("GATEWAY_RESOLVER_TOKEN", "resolver-token")
-	t.Setenv("GATEWAY_MAVEN_PROXY_ALLOWED_HOSTS", "repo.example, mirror.example ")
-	t.Setenv("GATEWAY_RAW_PROXY_ALLOWED_HOSTS", "raw.example, mirror.example ")
-	t.Setenv("GATEWAY_RAW_CACHE_MAX_OBJECT_BYTES", "12345")
-	t.Setenv("GATEWAY_RAW_CACHE_MAX_CONCURRENT_SPOOLS", "3")
-	t.Setenv("GATEWAY_NPM_METADATA_CACHE_TTL", "2m")
-	t.Setenv("GATEWAY_NPM_NEGATIVE_CACHE_TTL", "45s")
-	t.Setenv("GATEWAY_NPM_PROXY_BREAKER_TTL", "12s")
-	t.Setenv("GATEWAY_LOCAL_AUTH_MAX_FAILED_ATTEMPTS", "7")
-	t.Setenv("GATEWAY_LOCAL_AUTH_LOCKOUT_DURATION", "20m")
-	t.Setenv("GATEWAY_ACCESS_LOG", "full")
-	t.Setenv("GATEWAY_ACCESS_LOG_SLOW_MS", "2500")
-	t.Setenv("GATEWAY_LOG_BUFFER_LINES", "1200")
+	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
+	t.Setenv("NOTARX_RUSTFS_ENDPOINT", "http://rustfs:9000")
+	t.Setenv("NOTARX_RUSTFS_BUCKET", "gateway-cache")
+	t.Setenv("NOTARX_RUSTFS_ACCESS_KEY", "rustfs-user")
+	t.Setenv("NOTARX_RUSTFS_SECRET_KEY", "rustfs-secret")
+	t.Setenv("NOTARX_ADMIN_TOKEN", "admin-token")
+	t.Setenv("NOTARX_RESOLVER_TOKEN", "resolver-token")
+	t.Setenv("NOTARX_MAVEN_PROXY_ALLOWED_HOSTS", "repo.example, mirror.example ")
+	t.Setenv("NOTARX_RAW_PROXY_ALLOWED_HOSTS", "raw.example, mirror.example ")
+	t.Setenv("NOTARX_RAW_CACHE_MAX_OBJECT_BYTES", "12345")
+	t.Setenv("NOTARX_RAW_CACHE_MAX_CONCURRENT_SPOOLS", "3")
+	t.Setenv("NOTARX_NPM_METADATA_CACHE_TTL", "2m")
+	t.Setenv("NOTARX_NPM_NEGATIVE_CACHE_TTL", "45s")
+	t.Setenv("NOTARX_NPM_PROXY_BREAKER_TTL", "12s")
+	t.Setenv("NOTARX_LOCAL_AUTH_MAX_FAILED_ATTEMPTS", "7")
+	t.Setenv("NOTARX_LOCAL_AUTH_LOCKOUT_DURATION", "20m")
+	t.Setenv("NOTARX_ACCESS_LOG", "full")
+	t.Setenv("NOTARX_ACCESS_LOG_SLOW_MS", "2500")
+	t.Setenv("NOTARX_LOG_BUFFER_LINES", "1200")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
@@ -107,13 +107,13 @@ func TestLoadAcceptsNativeConfiguration(t *testing.T) {
 func TestLoadBoundsRuntimeLogBuffer(t *testing.T) {
 	for _, value := range []string{"-1", "5001", "many"} {
 		setCompleteConfiguration(t)
-		t.Setenv("GATEWAY_LOG_BUFFER_LINES", value)
+		t.Setenv("NOTARX_LOG_BUFFER_LINES", value)
 		if _, err := Load(); err == nil {
-			t.Fatalf("accepted GATEWAY_LOG_BUFFER_LINES=%q", value)
+			t.Fatalf("accepted NOTARX_LOG_BUFFER_LINES=%q", value)
 		}
 	}
 	setCompleteConfiguration(t)
-	t.Setenv("GATEWAY_LOG_BUFFER_LINES", "0")
+	t.Setenv("NOTARX_LOG_BUFFER_LINES", "0")
 	if cfg, err := Load(); err != nil || cfg.LogBufferLines != 0 {
 		t.Fatalf("disabled buffer = %d, %v", cfg.LogBufferLines, err)
 	}
@@ -126,8 +126,8 @@ func TestLoadRejectsUnsafeAccessLogPolicy(t *testing.T) {
 		{name: "unbounded slow threshold", mode: "limited", slow: "60001"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			t.Setenv("GATEWAY_ACCESS_LOG", test.mode)
-			t.Setenv("GATEWAY_ACCESS_LOG_SLOW_MS", test.slow)
+			t.Setenv("NOTARX_ACCESS_LOG", test.mode)
+			t.Setenv("NOTARX_ACCESS_LOG_SLOW_MS", test.slow)
 			if _, err := Load(); err == nil {
 				t.Fatal("invalid access log configuration accepted")
 			}
@@ -138,18 +138,18 @@ func TestLoadRejectsUnsafeAccessLogPolicy(t *testing.T) {
 func TestLoadRejectsInvalidRawSpoolLimit(t *testing.T) {
 	for _, value := range []string{"0", "-1", "many"} {
 		setCompleteConfiguration(t)
-		t.Setenv("GATEWAY_RAW_CACHE_MAX_CONCURRENT_SPOOLS", value)
+		t.Setenv("NOTARX_RAW_CACHE_MAX_CONCURRENT_SPOOLS", value)
 		if _, err := Load(); err == nil {
-			t.Fatalf("Load() accepted GATEWAY_RAW_CACHE_MAX_CONCURRENT_SPOOLS=%q", value)
+			t.Fatalf("Load() accepted NOTARX_RAW_CACHE_MAX_CONCURRENT_SPOOLS=%q", value)
 		}
 	}
 }
 
 func TestLoadSupportsDedicatedAPTReclaimWorker(t *testing.T) {
 	setCompleteConfiguration(t)
-	t.Setenv("GATEWAY_NODE_ROLES", "worker")
-	t.Setenv("GATEWAY_WORKER_FORMATS", "apt")
-	t.Setenv("GATEWAY_WORKER_KINDS", "reclaim")
+	t.Setenv("NOTARX_NODE_ROLES", "worker")
+	t.Setenv("NOTARX_WORKER_FORMATS", "apt")
+	t.Setenv("NOTARX_WORKER_KINDS", "reclaim")
 
 	cfg, err := Load()
 	if err != nil {
@@ -162,8 +162,8 @@ func TestLoadSupportsDedicatedAPTReclaimWorker(t *testing.T) {
 
 func TestLoadRejectsInvalidLocalAuthenticationPolicy(t *testing.T) {
 	for name, value := range map[string]string{
-		"GATEWAY_LOCAL_AUTH_MAX_FAILED_ATTEMPTS": "0",
-		"GATEWAY_LOCAL_AUTH_LOCKOUT_DURATION":    "30s",
+		"NOTARX_LOCAL_AUTH_MAX_FAILED_ATTEMPTS": "0",
+		"NOTARX_LOCAL_AUTH_LOCKOUT_DURATION":    "30s",
 	} {
 		setCompleteConfiguration(t)
 		t.Setenv(name, value)
@@ -176,12 +176,12 @@ func TestLoadRejectsInvalidLocalAuthenticationPolicy(t *testing.T) {
 
 func TestLoadParsesClusterNodeRolesAndWorkerFilters(t *testing.T) {
 	setCompleteConfiguration(t)
-	t.Setenv("GATEWAY_NODE_ROLES", "WORKER,worker")
-	t.Setenv("GATEWAY_INSTANCE_ID", "oci-worker-01")
-	t.Setenv("GATEWAY_WORKER_FORMATS", "OCI, raw,oci")
-	t.Setenv("GATEWAY_WORKER_KINDS", "Replication,reclaim,replication")
-	t.Setenv("GATEWAY_RUNTIME_NODE_RETENTION", "48h")
-	t.Setenv("GATEWAY_RUNTIME_NODE_PRUNE_INTERVAL", "900")
+	t.Setenv("NOTARX_NODE_ROLES", "WORKER,worker")
+	t.Setenv("NOTARX_INSTANCE_ID", "oci-worker-01")
+	t.Setenv("NOTARX_WORKER_FORMATS", "OCI, raw,oci")
+	t.Setenv("NOTARX_WORKER_KINDS", "Replication,reclaim,replication")
+	t.Setenv("NOTARX_RUNTIME_NODE_RETENTION", "48h")
+	t.Setenv("NOTARX_RUNTIME_NODE_PRUNE_INTERVAL", "900")
 
 	cfg, err := Load()
 	if err != nil {
@@ -200,9 +200,9 @@ func TestLoadParsesClusterNodeRolesAndWorkerFilters(t *testing.T) {
 
 func TestLoadSupportsDedicatedIntelligenceWorker(t *testing.T) {
 	setCompleteConfiguration(t)
-	t.Setenv("GATEWAY_NODE_ROLES", "worker")
-	t.Setenv("GATEWAY_WORKER_FORMATS", "maven,oci")
-	t.Setenv("GATEWAY_WORKER_KINDS", "intelligence")
+	t.Setenv("NOTARX_NODE_ROLES", "worker")
+	t.Setenv("NOTARX_WORKER_FORMATS", "maven,oci")
+	t.Setenv("NOTARX_WORKER_KINDS", "intelligence")
 
 	cfg, err := Load()
 	if err != nil {
@@ -218,9 +218,9 @@ func TestLoadSupportsDedicatedIntelligenceWorker(t *testing.T) {
 
 func TestLoadSupportsDedicatedWebhookWorker(t *testing.T) {
 	setCompleteConfiguration(t)
-	t.Setenv("GATEWAY_NODE_ROLES", "worker")
-	t.Setenv("GATEWAY_WORKER_FORMATS", "oci")
-	t.Setenv("GATEWAY_WORKER_KINDS", "webhook")
+	t.Setenv("NOTARX_NODE_ROLES", "worker")
+	t.Setenv("NOTARX_WORKER_FORMATS", "oci")
+	t.Setenv("NOTARX_WORKER_KINDS", "webhook")
 
 	cfg, err := Load()
 	if err != nil {
@@ -233,16 +233,16 @@ func TestLoadSupportsDedicatedWebhookWorker(t *testing.T) {
 
 func TestLoadConfiguresArtifactScanner(t *testing.T) {
 	setCompleteConfiguration(t)
-	t.Setenv("GATEWAY_SCANNER_ENDPOINT", "http://127.0.0.1:18082/v1/scan")
-	t.Setenv("GATEWAY_SCANNER_HEALTH_ENDPOINT", "http://127.0.0.1:18082/v1/health")
-	t.Setenv("GATEWAY_SCANNER_NAME", "trivy")
-	t.Setenv("GATEWAY_SCANNER_TOKEN", "scanner-token")
-	t.Setenv("GATEWAY_SCANNER_TIMEOUT", "90s")
-	t.Setenv("GATEWAY_SCANNER_HEALTH_TIMEOUT", "3s")
-	t.Setenv("GATEWAY_SCANNER_DATABASE_MAX_AGE", "12h")
-	t.Setenv("GATEWAY_SCANNER_MAX_RESPONSE_BYTES", "4096")
-	t.Setenv("GATEWAY_SCANNER_MAX_ARTIFACT_BYTES", "1000000")
-	t.Setenv("GATEWAY_SCANNER_FORMATS", "OCI,maven,go,oci")
+	t.Setenv("NOTARX_SCANNER_ENDPOINT", "http://127.0.0.1:18082/v1/scan")
+	t.Setenv("NOTARX_SCANNER_HEALTH_ENDPOINT", "http://127.0.0.1:18082/v1/health")
+	t.Setenv("NOTARX_SCANNER_NAME", "trivy")
+	t.Setenv("NOTARX_SCANNER_TOKEN", "scanner-token")
+	t.Setenv("NOTARX_SCANNER_TIMEOUT", "90s")
+	t.Setenv("NOTARX_SCANNER_HEALTH_TIMEOUT", "3s")
+	t.Setenv("NOTARX_SCANNER_DATABASE_MAX_AGE", "12h")
+	t.Setenv("NOTARX_SCANNER_MAX_RESPONSE_BYTES", "4096")
+	t.Setenv("NOTARX_SCANNER_MAX_ARTIFACT_BYTES", "1000000")
+	t.Setenv("NOTARX_SCANNER_FORMATS", "OCI,maven,go,oci")
 
 	cfg, err := Load()
 	if err != nil {
@@ -275,25 +275,25 @@ func TestLoadRejectsInvalidArtifactScannerConfiguration(t *testing.T) {
 			setCompleteConfiguration(t)
 			switch testCase.name {
 			case "insecure health endpoint":
-				t.Setenv("GATEWAY_SCANNER_ENDPOINT", "https://scanner.example.test/v1/scan")
-				t.Setenv("GATEWAY_SCANNER_HEALTH_ENDPOINT", testCase.value)
+				t.Setenv("NOTARX_SCANNER_ENDPOINT", "https://scanner.example.test/v1/scan")
+				t.Setenv("NOTARX_SCANNER_HEALTH_ENDPOINT", testCase.value)
 			case "unknown format":
-				t.Setenv("GATEWAY_SCANNER_ENDPOINT", "https://scanner.example.test/v1/scan")
-				t.Setenv("GATEWAY_SCANNER_FORMATS", testCase.value)
+				t.Setenv("NOTARX_SCANNER_ENDPOINT", "https://scanner.example.test/v1/scan")
+				t.Setenv("NOTARX_SCANNER_FORMATS", testCase.value)
 			case "short timeout":
-				t.Setenv("GATEWAY_SCANNER_ENDPOINT", "https://scanner.example.test/v1/scan")
-				t.Setenv("GATEWAY_SCANNER_TIMEOUT", testCase.value)
+				t.Setenv("NOTARX_SCANNER_ENDPOINT", "https://scanner.example.test/v1/scan")
+				t.Setenv("NOTARX_SCANNER_TIMEOUT", testCase.value)
 			case "long health timeout":
-				t.Setenv("GATEWAY_SCANNER_ENDPOINT", "https://scanner.example.test/v1/scan")
-				t.Setenv("GATEWAY_SCANNER_HEALTH_TIMEOUT", testCase.value)
+				t.Setenv("NOTARX_SCANNER_ENDPOINT", "https://scanner.example.test/v1/scan")
+				t.Setenv("NOTARX_SCANNER_HEALTH_TIMEOUT", testCase.value)
 			case "short database max age":
-				t.Setenv("GATEWAY_SCANNER_ENDPOINT", "https://scanner.example.test/v1/scan")
-				t.Setenv("GATEWAY_SCANNER_DATABASE_MAX_AGE", testCase.value)
+				t.Setenv("NOTARX_SCANNER_ENDPOINT", "https://scanner.example.test/v1/scan")
+				t.Setenv("NOTARX_SCANNER_DATABASE_MAX_AGE", testCase.value)
 			case "small response limit":
-				t.Setenv("GATEWAY_SCANNER_ENDPOINT", "https://scanner.example.test/v1/scan")
-				t.Setenv("GATEWAY_SCANNER_MAX_RESPONSE_BYTES", testCase.value)
+				t.Setenv("NOTARX_SCANNER_ENDPOINT", "https://scanner.example.test/v1/scan")
+				t.Setenv("NOTARX_SCANNER_MAX_RESPONSE_BYTES", testCase.value)
 			default:
-				t.Setenv("GATEWAY_SCANNER_ENDPOINT", testCase.value)
+				t.Setenv("NOTARX_SCANNER_ENDPOINT", testCase.value)
 			}
 			if _, err := Load(); err == nil {
 				t.Fatalf("Load() accepted invalid scanner configuration")
@@ -305,7 +305,7 @@ func TestLoadRejectsInvalidArtifactScannerConfiguration(t *testing.T) {
 func TestLoadRejectsScannerSettingsWithoutEndpoint(t *testing.T) {
 	setCompleteConfiguration(t)
 	secret := "scanner-secret-that-must-not-be-logged"
-	t.Setenv("GATEWAY_SCANNER_TOKEN", secret)
+	t.Setenv("NOTARX_SCANNER_TOKEN", secret)
 	if _, err := Load(); err == nil || strings.Contains(err.Error(), secret) {
 		t.Fatalf("Load() error=%v", err)
 	}
@@ -313,9 +313,9 @@ func TestLoadRejectsScannerSettingsWithoutEndpoint(t *testing.T) {
 
 func TestLoadConfiguresAPTReleaseSigner(t *testing.T) {
 	setCompleteConfiguration(t)
-	t.Setenv("GATEWAY_APT_SIGNER_ENDPOINT", "http://127.0.0.1:18083/v1/sign-release")
-	t.Setenv("GATEWAY_APT_SIGNER_TOKEN", strings.Repeat("s", 32))
-	t.Setenv("GATEWAY_APT_SIGNER_TIMEOUT", "12s")
+	t.Setenv("NOTARX_APT_SIGNER_ENDPOINT", "http://127.0.0.1:18083/v1/sign-release")
+	t.Setenv("NOTARX_APT_SIGNER_TOKEN", strings.Repeat("s", 32))
+	t.Setenv("NOTARX_APT_SIGNER_TIMEOUT", "12s")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -329,10 +329,10 @@ func TestLoadConfiguresAPTReleaseSigner(t *testing.T) {
 func TestLoadConfiguresRemoteAPTSignerRotationOverlap(t *testing.T) {
 	setCompleteConfiguration(t)
 	fingerprints, publicKeysFile := writeAPTSignerPublicKeyRing(t, 2)
-	t.Setenv("GATEWAY_APT_SIGNER_ENDPOINT", "https://signer.example.test/v1/sign-release")
-	t.Setenv("GATEWAY_APT_SIGNER_TOKEN", strings.Repeat("s", 32))
-	t.Setenv("GATEWAY_APT_SIGNER_TRUSTED_FINGERPRINTS", strings.ToUpper(strings.Join(fingerprints, ",")))
-	t.Setenv("GATEWAY_APT_SIGNER_TRUSTED_PUBLIC_KEYS_FILE", publicKeysFile)
+	t.Setenv("NOTARX_APT_SIGNER_ENDPOINT", "https://signer.example.test/v1/sign-release")
+	t.Setenv("NOTARX_APT_SIGNER_TOKEN", strings.Repeat("s", 32))
+	t.Setenv("NOTARX_APT_SIGNER_TRUSTED_FINGERPRINTS", strings.ToUpper(strings.Join(fingerprints, ",")))
+	t.Setenv("NOTARX_APT_SIGNER_TRUSTED_PUBLIC_KEYS_FILE", publicKeysFile)
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -351,11 +351,11 @@ func TestLoadConfiguresDedicatedAPTSignerTLSRoots(t *testing.T) {
 	if err := os.WriteFile(tlsRootsFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw}), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("GATEWAY_APT_SIGNER_ENDPOINT", "https://signer.example.test/v1/sign-release")
-	t.Setenv("GATEWAY_APT_SIGNER_TOKEN", strings.Repeat("s", 32))
-	t.Setenv("GATEWAY_APT_SIGNER_TRUSTED_FINGERPRINTS", fingerprints[0])
-	t.Setenv("GATEWAY_APT_SIGNER_TRUSTED_PUBLIC_KEYS_FILE", publicKeysFile)
-	t.Setenv("GATEWAY_APT_SIGNER_TLS_CA_FILE", tlsRootsFile)
+	t.Setenv("NOTARX_APT_SIGNER_ENDPOINT", "https://signer.example.test/v1/sign-release")
+	t.Setenv("NOTARX_APT_SIGNER_TOKEN", strings.Repeat("s", 32))
+	t.Setenv("NOTARX_APT_SIGNER_TRUSTED_FINGERPRINTS", fingerprints[0])
+	t.Setenv("NOTARX_APT_SIGNER_TRUSTED_PUBLIC_KEYS_FILE", publicKeysFile)
+	t.Setenv("NOTARX_APT_SIGNER_TLS_CA_FILE", tlsRootsFile)
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -375,10 +375,10 @@ func TestLoadRejectsUnreadableOrMismatchedAPTSignerPublicKeys(t *testing.T) {
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			setCompleteConfiguration(t)
-			t.Setenv("GATEWAY_APT_SIGNER_ENDPOINT", "https://signer.example.test/v1/sign-release")
-			t.Setenv("GATEWAY_APT_SIGNER_TOKEN", strings.Repeat("s", 32))
-			t.Setenv("GATEWAY_APT_SIGNER_TRUSTED_FINGERPRINTS", testCase.fingerprint)
-			t.Setenv("GATEWAY_APT_SIGNER_TRUSTED_PUBLIC_KEYS_FILE", testCase.path)
+			t.Setenv("NOTARX_APT_SIGNER_ENDPOINT", "https://signer.example.test/v1/sign-release")
+			t.Setenv("NOTARX_APT_SIGNER_TOKEN", strings.Repeat("s", 32))
+			t.Setenv("NOTARX_APT_SIGNER_TRUSTED_FINGERPRINTS", testCase.fingerprint)
+			t.Setenv("NOTARX_APT_SIGNER_TRUSTED_PUBLIC_KEYS_FILE", testCase.path)
 			if _, err := Load(); err == nil {
 				t.Fatal("Load() accepted an invalid trusted public-key policy")
 			}
@@ -430,9 +430,9 @@ func TestLoadRejectsInvalidAPTReleaseSignerConfiguration(t *testing.T) {
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			setCompleteConfiguration(t)
-			t.Setenv("GATEWAY_APT_SIGNER_ENDPOINT", testCase.endpoint)
-			t.Setenv("GATEWAY_APT_SIGNER_TOKEN", testCase.token)
-			t.Setenv("GATEWAY_APT_SIGNER_TIMEOUT", testCase.timeout)
+			t.Setenv("NOTARX_APT_SIGNER_ENDPOINT", testCase.endpoint)
+			t.Setenv("NOTARX_APT_SIGNER_TOKEN", testCase.token)
+			t.Setenv("NOTARX_APT_SIGNER_TIMEOUT", testCase.timeout)
 			if _, err := Load(); err == nil || strings.Contains(err.Error(), testCase.token) {
 				t.Fatalf("Load() error=%v", err)
 			}
@@ -443,10 +443,10 @@ func TestLoadRejectsInvalidAPTReleaseSignerConfiguration(t *testing.T) {
 		strings.Repeat("a", 40) + "," + strings.Repeat("b", 40) + "," + strings.Repeat("c", 40),
 	} {
 		setCompleteConfiguration(t)
-		t.Setenv("GATEWAY_APT_SIGNER_ENDPOINT", "https://signer.example.test/v1/sign-release")
-		t.Setenv("GATEWAY_APT_SIGNER_TOKEN", strings.Repeat("s", 32))
-		t.Setenv("GATEWAY_APT_SIGNER_TRUSTED_FINGERPRINTS", fingerprints)
-		t.Setenv("GATEWAY_APT_SIGNER_TRUSTED_PUBLIC_KEYS_FILE", "/run/secrets/apt-release-public-keys.asc")
+		t.Setenv("NOTARX_APT_SIGNER_ENDPOINT", "https://signer.example.test/v1/sign-release")
+		t.Setenv("NOTARX_APT_SIGNER_TOKEN", strings.Repeat("s", 32))
+		t.Setenv("NOTARX_APT_SIGNER_TRUSTED_FINGERPRINTS", fingerprints)
+		t.Setenv("NOTARX_APT_SIGNER_TRUSTED_PUBLIC_KEYS_FILE", "/run/secrets/apt-release-public-keys.asc")
 		if _, err := Load(); err == nil {
 			t.Fatalf("invalid trusted fingerprints accepted: %q", fingerprints)
 		}
@@ -456,9 +456,9 @@ func TestLoadRejectsInvalidAPTReleaseSignerConfiguration(t *testing.T) {
 func TestLoadRejectsUnknownClusterRoleOrWorkerFilter(t *testing.T) {
 	setCompleteConfiguration(t)
 	for name, value := range map[string]string{
-		"GATEWAY_NODE_ROLES":     "worker,unknown",
-		"GATEWAY_WORKER_FORMATS": "oci,unknown",
-		"GATEWAY_WORKER_KINDS":   "replication,unknown",
+		"NOTARX_NODE_ROLES":     "worker,unknown",
+		"NOTARX_WORKER_FORMATS": "oci,unknown",
+		"NOTARX_WORKER_KINDS":   "replication,unknown",
 	} {
 		t.Setenv(name, value)
 		if _, err := Load(); err == nil {
@@ -470,7 +470,7 @@ func TestLoadRejectsUnknownClusterRoleOrWorkerFilter(t *testing.T) {
 
 func TestLoadRejectsStandaloneRoleCombination(t *testing.T) {
 	setCompleteConfiguration(t)
-	t.Setenv("GATEWAY_NODE_ROLES", "standalone,worker")
+	t.Setenv("NOTARX_NODE_ROLES", "standalone,worker")
 	if _, err := Load(); err == nil {
 		t.Fatal("Load() accepted standalone role combination")
 	}
@@ -478,24 +478,24 @@ func TestLoadRejectsStandaloneRoleCombination(t *testing.T) {
 
 func setCompleteConfiguration(t *testing.T) {
 	t.Helper()
-	t.Setenv("GATEWAY_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
-	t.Setenv("GATEWAY_RUSTFS_ENDPOINT", "http://rustfs:9000")
-	t.Setenv("GATEWAY_RUSTFS_BUCKET", "gateway-cache")
-	t.Setenv("GATEWAY_RUSTFS_ACCESS_KEY", "rustfs-user")
-	t.Setenv("GATEWAY_RUSTFS_SECRET_KEY", "rustfs-secret")
-	t.Setenv("GATEWAY_ADMIN_TOKEN", "admin-token")
-	t.Setenv("GATEWAY_RESOLVER_TOKEN", "resolver-token")
+	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
+	t.Setenv("NOTARX_RUSTFS_ENDPOINT", "http://rustfs:9000")
+	t.Setenv("NOTARX_RUSTFS_BUCKET", "gateway-cache")
+	t.Setenv("NOTARX_RUSTFS_ACCESS_KEY", "rustfs-user")
+	t.Setenv("NOTARX_RUSTFS_SECRET_KEY", "rustfs-secret")
+	t.Setenv("NOTARX_ADMIN_TOKEN", "admin-token")
+	t.Setenv("NOTARX_RESOLVER_TOKEN", "resolver-token")
 }
 
 func TestLoadDoesNotIncludeDatabaseURLInValidationError(t *testing.T) {
 	secret := "not-a-url-password"
-	t.Setenv("GATEWAY_DATABASE_URL", secret)
-	t.Setenv("GATEWAY_RUSTFS_ENDPOINT", "http://rustfs:9000")
-	t.Setenv("GATEWAY_RUSTFS_BUCKET", "gateway-cache")
-	t.Setenv("GATEWAY_RUSTFS_ACCESS_KEY", "rustfs-user")
-	t.Setenv("GATEWAY_RUSTFS_SECRET_KEY", "rustfs-secret")
-	t.Setenv("GATEWAY_ADMIN_TOKEN", "admin-token")
-	t.Setenv("GATEWAY_RESOLVER_TOKEN", "resolver-token")
+	t.Setenv("NOTARX_DATABASE_URL", secret)
+	t.Setenv("NOTARX_RUSTFS_ENDPOINT", "http://rustfs:9000")
+	t.Setenv("NOTARX_RUSTFS_BUCKET", "gateway-cache")
+	t.Setenv("NOTARX_RUSTFS_ACCESS_KEY", "rustfs-user")
+	t.Setenv("NOTARX_RUSTFS_SECRET_KEY", "rustfs-secret")
+	t.Setenv("NOTARX_ADMIN_TOKEN", "admin-token")
+	t.Setenv("NOTARX_RESOLVER_TOKEN", "resolver-token")
 	_, err := Load()
 	if err == nil {
 		t.Fatal("Load() error = nil, want error")
@@ -535,19 +535,19 @@ func TestRepositoryCacheQuotasParsesPositiveByteLimits(t *testing.T) {
 }
 
 func TestLoadConfiguresOIDCWithHTTPSIssuerAndDiscoveryDefault(t *testing.T) {
-	t.Setenv("GATEWAY_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
-	t.Setenv("GATEWAY_RUSTFS_ENDPOINT", "http://rustfs:9000")
-	t.Setenv("GATEWAY_RUSTFS_BUCKET", "gateway-cache")
-	t.Setenv("GATEWAY_RUSTFS_ACCESS_KEY", "rustfs-user")
-	t.Setenv("GATEWAY_RUSTFS_SECRET_KEY", "rustfs-secret")
-	t.Setenv("GATEWAY_ADMIN_TOKEN", "admin-token")
-	t.Setenv("GATEWAY_RESOLVER_TOKEN", "resolver-token")
-	t.Setenv("GATEWAY_OIDC_ISSUER", "https://login.example.test/")
-	t.Setenv("GATEWAY_OIDC_AUDIENCE", "artifact-gateway")
-	t.Setenv("GATEWAY_OIDC_JWKS_URL", "")
-	t.Setenv("GATEWAY_OIDC_ADMIN_SUBJECTS", "ops-admin, release-admin ")
-	t.Setenv("GATEWAY_OIDC_MEMBER_ROLES", "artifact-member")
-	t.Setenv("GATEWAY_OIDC_ADMIN_ROLES", "artifact-admin")
+	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
+	t.Setenv("NOTARX_RUSTFS_ENDPOINT", "http://rustfs:9000")
+	t.Setenv("NOTARX_RUSTFS_BUCKET", "gateway-cache")
+	t.Setenv("NOTARX_RUSTFS_ACCESS_KEY", "rustfs-user")
+	t.Setenv("NOTARX_RUSTFS_SECRET_KEY", "rustfs-secret")
+	t.Setenv("NOTARX_ADMIN_TOKEN", "admin-token")
+	t.Setenv("NOTARX_RESOLVER_TOKEN", "resolver-token")
+	t.Setenv("NOTARX_OIDC_ISSUER", "https://login.example.test/")
+	t.Setenv("NOTARX_OIDC_AUDIENCE", "artifact-gateway")
+	t.Setenv("NOTARX_OIDC_JWKS_URL", "")
+	t.Setenv("NOTARX_OIDC_ADMIN_SUBJECTS", "ops-admin, release-admin ")
+	t.Setenv("NOTARX_OIDC_MEMBER_ROLES", "artifact-member")
+	t.Setenv("NOTARX_OIDC_ADMIN_ROLES", "artifact-admin")
 
 	cfg, err := Load()
 	if err != nil {
@@ -560,11 +560,11 @@ func TestLoadConfiguresOIDCWithHTTPSIssuerAndDiscoveryDefault(t *testing.T) {
 
 func TestLoadAllowsLoopbackHTTPForLocalOIDCTestProvider(t *testing.T) {
 	setCompleteConfiguration(t)
-	t.Setenv("GATEWAY_OIDC_ISSUER", "http://127.0.0.1:18081/realms/artifact-gateway")
-	t.Setenv("GATEWAY_OIDC_AUDIENCE", "artifact-gateway-api")
-	t.Setenv("GATEWAY_OIDC_JWKS_URL", "http://127.0.0.1:18081/realms/artifact-gateway/protocol/openid-connect/certs")
-	t.Setenv("GATEWAY_OIDC_CLIENT_ID", "artifact-gateway-console")
-	t.Setenv("GATEWAY_OIDC_REDIRECT_URL", "http://127.0.0.1:4173/auth/oidc/callback")
+	t.Setenv("NOTARX_OIDC_ISSUER", "http://127.0.0.1:18081/realms/artifact-gateway")
+	t.Setenv("NOTARX_OIDC_AUDIENCE", "artifact-gateway-api")
+	t.Setenv("NOTARX_OIDC_JWKS_URL", "http://127.0.0.1:18081/realms/artifact-gateway/protocol/openid-connect/certs")
+	t.Setenv("NOTARX_OIDC_CLIENT_ID", "artifact-gateway-console")
+	t.Setenv("NOTARX_OIDC_REDIRECT_URL", "http://127.0.0.1:4173/auth/oidc/callback")
 
 	if _, err := Load(); err != nil {
 		t.Fatalf("Load() error = %v", err)
@@ -573,23 +573,23 @@ func TestLoadAllowsLoopbackHTTPForLocalOIDCTestProvider(t *testing.T) {
 
 func TestLoadRejectsNonLoopbackHTTPOIDCIssuer(t *testing.T) {
 	setCompleteConfiguration(t)
-	t.Setenv("GATEWAY_OIDC_ISSUER", "http://keycloak.example.test/realms/artifact-gateway")
-	t.Setenv("GATEWAY_OIDC_AUDIENCE", "artifact-gateway-api")
+	t.Setenv("NOTARX_OIDC_ISSUER", "http://keycloak.example.test/realms/artifact-gateway")
+	t.Setenv("NOTARX_OIDC_AUDIENCE", "artifact-gateway-api")
 	if _, err := Load(); err == nil {
 		t.Fatal("Load() accepted a non-loopback HTTP OIDC issuer")
 	}
 }
 
 func TestLoadRejectsOIDCWithoutAudience(t *testing.T) {
-	t.Setenv("GATEWAY_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
-	t.Setenv("GATEWAY_RUSTFS_ENDPOINT", "http://rustfs:9000")
-	t.Setenv("GATEWAY_RUSTFS_BUCKET", "gateway-cache")
-	t.Setenv("GATEWAY_RUSTFS_ACCESS_KEY", "rustfs-user")
-	t.Setenv("GATEWAY_RUSTFS_SECRET_KEY", "rustfs-secret")
-	t.Setenv("GATEWAY_ADMIN_TOKEN", "admin-token")
-	t.Setenv("GATEWAY_RESOLVER_TOKEN", "resolver-token")
-	t.Setenv("GATEWAY_OIDC_ISSUER", "https://login.example.test")
-	t.Setenv("GATEWAY_OIDC_AUDIENCE", "")
+	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
+	t.Setenv("NOTARX_RUSTFS_ENDPOINT", "http://rustfs:9000")
+	t.Setenv("NOTARX_RUSTFS_BUCKET", "gateway-cache")
+	t.Setenv("NOTARX_RUSTFS_ACCESS_KEY", "rustfs-user")
+	t.Setenv("NOTARX_RUSTFS_SECRET_KEY", "rustfs-secret")
+	t.Setenv("NOTARX_ADMIN_TOKEN", "admin-token")
+	t.Setenv("NOTARX_RESOLVER_TOKEN", "resolver-token")
+	t.Setenv("NOTARX_OIDC_ISSUER", "https://login.example.test")
+	t.Setenv("NOTARX_OIDC_AUDIENCE", "")
 	if _, err := Load(); err == nil {
 		t.Fatal("Load() error = nil, want error")
 	}
@@ -597,12 +597,12 @@ func TestLoadRejectsOIDCWithoutAudience(t *testing.T) {
 
 func TestLoadConfiguresOIDCBrowserLogin(t *testing.T) {
 	setCompleteConfiguration(t)
-	t.Setenv("GATEWAY_OIDC_ISSUER", "https://login.example.test")
-	t.Setenv("GATEWAY_OIDC_AUDIENCE", "artifact-gateway")
-	t.Setenv("GATEWAY_OIDC_CLIENT_ID", "artifact-gateway-console")
-	t.Setenv("GATEWAY_OIDC_CLIENT_SECRET", "client-secret")
-	t.Setenv("GATEWAY_OIDC_REDIRECT_URL", "https://gateway.example.test/auth/oidc/callback")
-	t.Setenv("GATEWAY_OIDC_SCOPES", "openid profile,groups profile")
+	t.Setenv("NOTARX_OIDC_ISSUER", "https://login.example.test")
+	t.Setenv("NOTARX_OIDC_AUDIENCE", "artifact-gateway")
+	t.Setenv("NOTARX_OIDC_CLIENT_ID", "artifact-gateway-console")
+	t.Setenv("NOTARX_OIDC_CLIENT_SECRET", "client-secret")
+	t.Setenv("NOTARX_OIDC_REDIRECT_URL", "https://gateway.example.test/auth/oidc/callback")
+	t.Setenv("NOTARX_OIDC_SCOPES", "openid profile,groups profile")
 
 	cfg, err := Load()
 	if err != nil {
@@ -618,25 +618,25 @@ func TestLoadConfiguresOIDCBrowserLogin(t *testing.T) {
 
 func TestLoadRejectsInsecureOIDCBrowserRedirect(t *testing.T) {
 	setCompleteConfiguration(t)
-	t.Setenv("GATEWAY_OIDC_ISSUER", "https://login.example.test")
-	t.Setenv("GATEWAY_OIDC_AUDIENCE", "artifact-gateway")
-	t.Setenv("GATEWAY_OIDC_CLIENT_ID", "artifact-gateway-console")
-	t.Setenv("GATEWAY_OIDC_REDIRECT_URL", "http://gateway.example.test/auth/oidc/callback")
+	t.Setenv("NOTARX_OIDC_ISSUER", "https://login.example.test")
+	t.Setenv("NOTARX_OIDC_AUDIENCE", "artifact-gateway")
+	t.Setenv("NOTARX_OIDC_CLIENT_ID", "artifact-gateway-console")
+	t.Setenv("NOTARX_OIDC_REDIRECT_URL", "http://gateway.example.test/auth/oidc/callback")
 	if _, err := Load(); err == nil {
 		t.Fatal("Load() accepted a non-local HTTP OIDC redirect")
 	}
 }
 
 func TestLoadRejectsInvalidOTELSamplingRatio(t *testing.T) {
-	t.Setenv("GATEWAY_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
-	t.Setenv("GATEWAY_RUSTFS_ENDPOINT", "http://rustfs:9000")
-	t.Setenv("GATEWAY_RUSTFS_BUCKET", "gateway-cache")
-	t.Setenv("GATEWAY_RUSTFS_ACCESS_KEY", "rustfs-user")
-	t.Setenv("GATEWAY_RUSTFS_SECRET_KEY", "rustfs-secret")
-	t.Setenv("GATEWAY_ADMIN_TOKEN", "admin-token")
-	t.Setenv("GATEWAY_RESOLVER_TOKEN", "resolver-token")
+	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
+	t.Setenv("NOTARX_RUSTFS_ENDPOINT", "http://rustfs:9000")
+	t.Setenv("NOTARX_RUSTFS_BUCKET", "gateway-cache")
+	t.Setenv("NOTARX_RUSTFS_ACCESS_KEY", "rustfs-user")
+	t.Setenv("NOTARX_RUSTFS_SECRET_KEY", "rustfs-secret")
+	t.Setenv("NOTARX_ADMIN_TOKEN", "admin-token")
+	t.Setenv("NOTARX_RESOLVER_TOKEN", "resolver-token")
 	for _, ratio := range []string{"1.1", "NaN"} {
-		t.Setenv("GATEWAY_OTEL_SAMPLING_RATIO", ratio)
+		t.Setenv("NOTARX_OTEL_SAMPLING_RATIO", ratio)
 		if _, err := Load(); err == nil {
 			t.Fatalf("Load() error = nil for sampling ratio %q", ratio)
 		}
@@ -644,19 +644,19 @@ func TestLoadRejectsInvalidOTELSamplingRatio(t *testing.T) {
 }
 
 func TestLoadParsesCacheTTLs(t *testing.T) {
-	t.Setenv("GATEWAY_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
-	t.Setenv("GATEWAY_RUSTFS_ENDPOINT", "http://rustfs:9000")
-	t.Setenv("GATEWAY_RUSTFS_BUCKET", "gateway-cache")
-	t.Setenv("GATEWAY_RUSTFS_ACCESS_KEY", "rustfs-user")
-	t.Setenv("GATEWAY_RUSTFS_SECRET_KEY", "rustfs-secret")
-	t.Setenv("GATEWAY_ADMIN_TOKEN", "admin-token")
-	t.Setenv("GATEWAY_RESOLVER_TOKEN", "resolver-token")
-	t.Setenv("GATEWAY_OCI_CACHE_TTL", "30m")
-	t.Setenv("GATEWAY_MAVEN_CACHE_TTL", "900")
-	t.Setenv("GATEWAY_MAVEN_METADATA_CACHE_TTL", "20m")
-	t.Setenv("GATEWAY_MAVEN_NEGATIVE_CACHE_TTL", "120")
-	t.Setenv("GATEWAY_RAW_CACHE_TTL", "1h30m")
-	t.Setenv("GATEWAY_CONAN_CACHE_TTL", "")
+	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
+	t.Setenv("NOTARX_RUSTFS_ENDPOINT", "http://rustfs:9000")
+	t.Setenv("NOTARX_RUSTFS_BUCKET", "gateway-cache")
+	t.Setenv("NOTARX_RUSTFS_ACCESS_KEY", "rustfs-user")
+	t.Setenv("NOTARX_RUSTFS_SECRET_KEY", "rustfs-secret")
+	t.Setenv("NOTARX_ADMIN_TOKEN", "admin-token")
+	t.Setenv("NOTARX_RESOLVER_TOKEN", "resolver-token")
+	t.Setenv("NOTARX_OCI_CACHE_TTL", "30m")
+	t.Setenv("NOTARX_MAVEN_CACHE_TTL", "900")
+	t.Setenv("NOTARX_MAVEN_METADATA_CACHE_TTL", "20m")
+	t.Setenv("NOTARX_MAVEN_NEGATIVE_CACHE_TTL", "120")
+	t.Setenv("NOTARX_RAW_CACHE_TTL", "1h30m")
+	t.Setenv("NOTARX_CONAN_CACHE_TTL", "")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
@@ -682,16 +682,16 @@ func TestLoadParsesCacheTTLs(t *testing.T) {
 }
 
 func TestLoadUsesMavenCacheDefaultsSuitedToImmutableComponents(t *testing.T) {
-	t.Setenv("GATEWAY_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
-	t.Setenv("GATEWAY_RUSTFS_ENDPOINT", "http://rustfs:9000")
-	t.Setenv("GATEWAY_RUSTFS_BUCKET", "gateway-cache")
-	t.Setenv("GATEWAY_RUSTFS_ACCESS_KEY", "rustfs-user")
-	t.Setenv("GATEWAY_RUSTFS_SECRET_KEY", "rustfs-secret")
-	t.Setenv("GATEWAY_ADMIN_TOKEN", "admin-token")
-	t.Setenv("GATEWAY_RESOLVER_TOKEN", "resolver-token")
-	t.Setenv("GATEWAY_MAVEN_CACHE_TTL", "")
-	t.Setenv("GATEWAY_MAVEN_METADATA_CACHE_TTL", "")
-	t.Setenv("GATEWAY_MAVEN_NEGATIVE_CACHE_TTL", "")
+	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
+	t.Setenv("NOTARX_RUSTFS_ENDPOINT", "http://rustfs:9000")
+	t.Setenv("NOTARX_RUSTFS_BUCKET", "gateway-cache")
+	t.Setenv("NOTARX_RUSTFS_ACCESS_KEY", "rustfs-user")
+	t.Setenv("NOTARX_RUSTFS_SECRET_KEY", "rustfs-secret")
+	t.Setenv("NOTARX_ADMIN_TOKEN", "admin-token")
+	t.Setenv("NOTARX_RESOLVER_TOKEN", "resolver-token")
+	t.Setenv("NOTARX_MAVEN_CACHE_TTL", "")
+	t.Setenv("NOTARX_MAVEN_METADATA_CACHE_TTL", "")
+	t.Setenv("NOTARX_MAVEN_NEGATIVE_CACHE_TTL", "")
 
 	cfg, err := Load()
 	if err != nil {
@@ -703,21 +703,21 @@ func TestLoadUsesMavenCacheDefaultsSuitedToImmutableComponents(t *testing.T) {
 }
 
 func TestLoadConfiguresDatabasePool(t *testing.T) {
-	t.Setenv("GATEWAY_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
-	t.Setenv("GATEWAY_RUSTFS_ENDPOINT", "http://rustfs:9000")
-	t.Setenv("GATEWAY_RUSTFS_BUCKET", "gateway-cache")
-	t.Setenv("GATEWAY_RUSTFS_ACCESS_KEY", "rustfs-user")
-	t.Setenv("GATEWAY_RUSTFS_SECRET_KEY", "rustfs-secret")
-	t.Setenv("GATEWAY_ADMIN_TOKEN", "admin-token")
-	t.Setenv("GATEWAY_RESOLVER_TOKEN", "resolver-token")
-	t.Setenv("GATEWAY_DATABASE_MAX_OPEN_CONNS", "24")
-	t.Setenv("GATEWAY_DATABASE_MAX_IDLE_CONNS", "6")
-	t.Setenv("GATEWAY_DATABASE_COORDINATOR_MAX_OPEN_CONNS", "5")
-	t.Setenv("GATEWAY_DATABASE_COORDINATOR_MAX_IDLE_CONNS", "1")
-	t.Setenv("GATEWAY_DATABASE_ARTIFACT_LOCK_MAX_OPEN_CONNS", "3")
-	t.Setenv("GATEWAY_DATABASE_ARTIFACT_LOCK_MAX_IDLE_CONNS", "1")
-	t.Setenv("GATEWAY_DATABASE_CONN_MAX_LIFETIME", "20m")
-	t.Setenv("GATEWAY_DATABASE_CONN_MAX_IDLE_TIME", "2m")
+	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
+	t.Setenv("NOTARX_RUSTFS_ENDPOINT", "http://rustfs:9000")
+	t.Setenv("NOTARX_RUSTFS_BUCKET", "gateway-cache")
+	t.Setenv("NOTARX_RUSTFS_ACCESS_KEY", "rustfs-user")
+	t.Setenv("NOTARX_RUSTFS_SECRET_KEY", "rustfs-secret")
+	t.Setenv("NOTARX_ADMIN_TOKEN", "admin-token")
+	t.Setenv("NOTARX_RESOLVER_TOKEN", "resolver-token")
+	t.Setenv("NOTARX_DATABASE_MAX_OPEN_CONNS", "24")
+	t.Setenv("NOTARX_DATABASE_MAX_IDLE_CONNS", "6")
+	t.Setenv("NOTARX_DATABASE_COORDINATOR_MAX_OPEN_CONNS", "5")
+	t.Setenv("NOTARX_DATABASE_COORDINATOR_MAX_IDLE_CONNS", "1")
+	t.Setenv("NOTARX_DATABASE_ARTIFACT_LOCK_MAX_OPEN_CONNS", "3")
+	t.Setenv("NOTARX_DATABASE_ARTIFACT_LOCK_MAX_IDLE_CONNS", "1")
+	t.Setenv("NOTARX_DATABASE_CONN_MAX_LIFETIME", "20m")
+	t.Setenv("NOTARX_DATABASE_CONN_MAX_IDLE_TIME", "2m")
 
 	cfg, err := Load()
 	if err != nil {
@@ -735,59 +735,59 @@ func TestLoadConfiguresDatabasePool(t *testing.T) {
 }
 
 func TestLoadRejectsDatabaseIdleConnectionsAboveOpenLimit(t *testing.T) {
-	t.Setenv("GATEWAY_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
-	t.Setenv("GATEWAY_RUSTFS_ENDPOINT", "http://rustfs:9000")
-	t.Setenv("GATEWAY_RUSTFS_BUCKET", "gateway-cache")
-	t.Setenv("GATEWAY_RUSTFS_ACCESS_KEY", "rustfs-user")
-	t.Setenv("GATEWAY_RUSTFS_SECRET_KEY", "rustfs-secret")
-	t.Setenv("GATEWAY_ADMIN_TOKEN", "admin-token")
-	t.Setenv("GATEWAY_RESOLVER_TOKEN", "resolver-token")
-	t.Setenv("GATEWAY_DATABASE_MAX_OPEN_CONNS", "2")
-	t.Setenv("GATEWAY_DATABASE_MAX_IDLE_CONNS", "3")
+	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
+	t.Setenv("NOTARX_RUSTFS_ENDPOINT", "http://rustfs:9000")
+	t.Setenv("NOTARX_RUSTFS_BUCKET", "gateway-cache")
+	t.Setenv("NOTARX_RUSTFS_ACCESS_KEY", "rustfs-user")
+	t.Setenv("NOTARX_RUSTFS_SECRET_KEY", "rustfs-secret")
+	t.Setenv("NOTARX_ADMIN_TOKEN", "admin-token")
+	t.Setenv("NOTARX_RESOLVER_TOKEN", "resolver-token")
+	t.Setenv("NOTARX_DATABASE_MAX_OPEN_CONNS", "2")
+	t.Setenv("NOTARX_DATABASE_MAX_IDLE_CONNS", "3")
 	if _, err := Load(); err == nil {
 		t.Fatal("Load() error = nil, want database pool validation error")
 	}
 }
 
 func TestLoadRejectsCoordinatorIdleConnectionsAboveOpenLimit(t *testing.T) {
-	t.Setenv("GATEWAY_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
-	t.Setenv("GATEWAY_RUSTFS_ENDPOINT", "http://rustfs:9000")
-	t.Setenv("GATEWAY_RUSTFS_BUCKET", "gateway-cache")
-	t.Setenv("GATEWAY_RUSTFS_ACCESS_KEY", "rustfs-user")
-	t.Setenv("GATEWAY_RUSTFS_SECRET_KEY", "rustfs-secret")
-	t.Setenv("GATEWAY_ADMIN_TOKEN", "admin-token")
-	t.Setenv("GATEWAY_RESOLVER_TOKEN", "resolver-token")
-	t.Setenv("GATEWAY_DATABASE_COORDINATOR_MAX_OPEN_CONNS", "1")
-	t.Setenv("GATEWAY_DATABASE_COORDINATOR_MAX_IDLE_CONNS", "2")
+	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
+	t.Setenv("NOTARX_RUSTFS_ENDPOINT", "http://rustfs:9000")
+	t.Setenv("NOTARX_RUSTFS_BUCKET", "gateway-cache")
+	t.Setenv("NOTARX_RUSTFS_ACCESS_KEY", "rustfs-user")
+	t.Setenv("NOTARX_RUSTFS_SECRET_KEY", "rustfs-secret")
+	t.Setenv("NOTARX_ADMIN_TOKEN", "admin-token")
+	t.Setenv("NOTARX_RESOLVER_TOKEN", "resolver-token")
+	t.Setenv("NOTARX_DATABASE_COORDINATOR_MAX_OPEN_CONNS", "1")
+	t.Setenv("NOTARX_DATABASE_COORDINATOR_MAX_IDLE_CONNS", "2")
 	if _, err := Load(); err == nil {
 		t.Fatal("Load() error = nil, want database coordinator pool validation error")
 	}
 }
 
 func TestLoadRejectsArtifactLockIdleConnectionsAboveOpenLimit(t *testing.T) {
-	t.Setenv("GATEWAY_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
-	t.Setenv("GATEWAY_RUSTFS_ENDPOINT", "http://rustfs:9000")
-	t.Setenv("GATEWAY_RUSTFS_BUCKET", "gateway-cache")
-	t.Setenv("GATEWAY_RUSTFS_ACCESS_KEY", "rustfs-user")
-	t.Setenv("GATEWAY_RUSTFS_SECRET_KEY", "rustfs-secret")
-	t.Setenv("GATEWAY_ADMIN_TOKEN", "admin-token")
-	t.Setenv("GATEWAY_RESOLVER_TOKEN", "resolver-token")
-	t.Setenv("GATEWAY_DATABASE_ARTIFACT_LOCK_MAX_OPEN_CONNS", "1")
-	t.Setenv("GATEWAY_DATABASE_ARTIFACT_LOCK_MAX_IDLE_CONNS", "2")
+	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
+	t.Setenv("NOTARX_RUSTFS_ENDPOINT", "http://rustfs:9000")
+	t.Setenv("NOTARX_RUSTFS_BUCKET", "gateway-cache")
+	t.Setenv("NOTARX_RUSTFS_ACCESS_KEY", "rustfs-user")
+	t.Setenv("NOTARX_RUSTFS_SECRET_KEY", "rustfs-secret")
+	t.Setenv("NOTARX_ADMIN_TOKEN", "admin-token")
+	t.Setenv("NOTARX_RESOLVER_TOKEN", "resolver-token")
+	t.Setenv("NOTARX_DATABASE_ARTIFACT_LOCK_MAX_OPEN_CONNS", "1")
+	t.Setenv("NOTARX_DATABASE_ARTIFACT_LOCK_MAX_IDLE_CONNS", "2")
 	if _, err := Load(); err == nil {
 		t.Fatal("Load() error = nil, want database artifact lock pool validation error")
 	}
 }
 
 func TestLoadRejectsInvalidCacheTTL(t *testing.T) {
-	t.Setenv("GATEWAY_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
-	t.Setenv("GATEWAY_RUSTFS_ENDPOINT", "http://rustfs:9000")
-	t.Setenv("GATEWAY_RUSTFS_BUCKET", "gateway-cache")
-	t.Setenv("GATEWAY_RUSTFS_ACCESS_KEY", "rustfs-user")
-	t.Setenv("GATEWAY_RUSTFS_SECRET_KEY", "rustfs-secret")
-	t.Setenv("GATEWAY_ADMIN_TOKEN", "admin-token")
-	t.Setenv("GATEWAY_RESOLVER_TOKEN", "resolver-token")
-	for _, name := range []string{"GATEWAY_OCI_CACHE_TTL", "GATEWAY_MAVEN_CACHE_TTL", "GATEWAY_MAVEN_METADATA_CACHE_TTL", "GATEWAY_MAVEN_NEGATIVE_CACHE_TTL", "GATEWAY_RAW_CACHE_TTL", "GATEWAY_CONAN_CACHE_TTL"} {
+	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
+	t.Setenv("NOTARX_RUSTFS_ENDPOINT", "http://rustfs:9000")
+	t.Setenv("NOTARX_RUSTFS_BUCKET", "gateway-cache")
+	t.Setenv("NOTARX_RUSTFS_ACCESS_KEY", "rustfs-user")
+	t.Setenv("NOTARX_RUSTFS_SECRET_KEY", "rustfs-secret")
+	t.Setenv("NOTARX_ADMIN_TOKEN", "admin-token")
+	t.Setenv("NOTARX_RESOLVER_TOKEN", "resolver-token")
+	for _, name := range []string{"NOTARX_OCI_CACHE_TTL", "NOTARX_MAVEN_CACHE_TTL", "NOTARX_MAVEN_METADATA_CACHE_TTL", "NOTARX_MAVEN_NEGATIVE_CACHE_TTL", "NOTARX_RAW_CACHE_TTL", "NOTARX_CONAN_CACHE_TTL"} {
 		for _, value := range []string{"nope", "-5m", "0"} {
 			t.Setenv(name, value)
 			if _, err := Load(); err == nil {
@@ -801,21 +801,21 @@ func TestLoadRejectsInvalidCacheTTL(t *testing.T) {
 func TestAPTRestoreTrustIsIndependentAndRequiresCompletePublicKeyPolicy(t *testing.T) {
 	setCompleteConfiguration(t)
 	fingerprints, file := writeAPTSignerPublicKeyRing(t, 1)
-	t.Setenv("GATEWAY_APT_SIGNER_ENDPOINT", "")
-	t.Setenv("GATEWAY_APT_RESTORE_TRUSTED_FINGERPRINTS", strings.Join(fingerprints, ","))
+	t.Setenv("NOTARX_APT_SIGNER_ENDPOINT", "")
+	t.Setenv("NOTARX_APT_RESTORE_TRUSTED_FINGERPRINTS", strings.Join(fingerprints, ","))
 	if _, err := Load(); err == nil {
 		t.Fatal("accepted restore fingerprint without keyring")
 	}
-	t.Setenv("GATEWAY_APT_RESTORE_TRUSTED_PUBLIC_KEYS_FILE", file)
+	t.Setenv("NOTARX_APT_RESTORE_TRUSTED_PUBLIC_KEYS_FILE", file)
 	cfg, err := Load()
 	if err != nil || cfg.APTSignerEnabled() || len(cfg.APTRestoreTrustedPublicKeys) == 0 || len(cfg.APTRestoreTrustedFingerprints) != 1 {
 		t.Fatalf("restore-only configuration: %#v %v", cfg.APTRestoreTrustedFingerprints, err)
 	}
-	t.Setenv("GATEWAY_APT_RESTORE_TRUSTED_FINGERPRINTS", strings.Repeat("a", 40))
+	t.Setenv("NOTARX_APT_RESTORE_TRUSTED_FINGERPRINTS", strings.Repeat("a", 40))
 	if _, err = Load(); err == nil {
 		t.Fatal("accepted mismatched restore trust key")
 	}
-	t.Setenv("GATEWAY_APT_RESTORE_TRUSTED_FINGERPRINTS", "")
+	t.Setenv("NOTARX_APT_RESTORE_TRUSTED_FINGERPRINTS", "")
 	if _, err = Load(); err == nil {
 		t.Fatal("accepted keyring without fingerprints")
 	}
@@ -823,29 +823,29 @@ func TestAPTRestoreTrustIsIndependentAndRequiresCompletePublicKeyPolicy(t *testi
 
 func TestLoadSupportsDefaultOffDedicatedEmailWorker(t *testing.T) {
 	setCompleteConfiguration(t)
-	t.Setenv("GATEWAY_EMAIL_CONFIG_FILE", "")
-	t.Setenv("GATEWAY_NODE_ROLES", "worker")
-	t.Setenv("GATEWAY_WORKER_KINDS", "email")
+	t.Setenv("NOTARX_EMAIL_CONFIG_FILE", "")
+	t.Setenv("NOTARX_NODE_ROLES", "worker")
+	t.Setenv("NOTARX_WORKER_KINDS", "email")
 	cfg, err := Load()
 	if err != nil || cfg.Email.Enabled || !cfg.WorkerKindEnabled("email") || cfg.WorkerKindEnabled("webhook") {
 		t.Fatal("dedicated email worker configuration")
 	}
-	t.Setenv("GATEWAY_EMAIL_CONFIG_FILE", "/nonexistent/synthetic-relay.json")
+	t.Setenv("NOTARX_EMAIL_CONFIG_FILE", "/nonexistent/synthetic-relay.json")
 	if _, err = Load(); err == nil || strings.Contains(err.Error(), "nonexistent") {
 		t.Fatal("unsafe email config failure")
 	}
 }
 
 func TestConanTokenSecretIsOptionalAndSeparateFromLoginCredentials(t *testing.T) {
-	t.Setenv("GATEWAY_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
-	t.Setenv("GATEWAY_RUSTFS_ENDPOINT", "http://rustfs:9000")
-	t.Setenv("GATEWAY_RUSTFS_BUCKET", "gateway-cache")
-	t.Setenv("GATEWAY_RUSTFS_ACCESS_KEY", "rustfs-user")
-	t.Setenv("GATEWAY_RUSTFS_SECRET_KEY", "rustfs-secret")
-	t.Setenv("GATEWAY_ADMIN_TOKEN", strings.Repeat("a", 32))
-	t.Setenv("GATEWAY_RESOLVER_TOKEN", strings.Repeat("r", 32))
+	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
+	t.Setenv("NOTARX_RUSTFS_ENDPOINT", "http://rustfs:9000")
+	t.Setenv("NOTARX_RUSTFS_BUCKET", "gateway-cache")
+	t.Setenv("NOTARX_RUSTFS_ACCESS_KEY", "rustfs-user")
+	t.Setenv("NOTARX_RUSTFS_SECRET_KEY", "rustfs-secret")
+	t.Setenv("NOTARX_ADMIN_TOKEN", strings.Repeat("a", 32))
+	t.Setenv("NOTARX_RESOLVER_TOKEN", strings.Repeat("r", 32))
 	for _, secret := range []string{"", strings.Repeat("c", 32), "short", strings.Repeat("a", 32), strings.Repeat("r", 32)} {
-		t.Setenv("GATEWAY_CONAN_TOKEN_SECRET", secret)
+		t.Setenv("NOTARX_CONAN_TOKEN_SECRET", secret)
 		cfg, err := Load()
 		valid := secret == "" || secret == strings.Repeat("c", 32)
 		if valid && (err != nil || cfg.ConanTokenSecret != secret) {

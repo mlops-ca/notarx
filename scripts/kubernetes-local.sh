@@ -38,7 +38,7 @@ effective_secret_value() {
 }
 
 effective_admin_token() {
-  effective_secret_value "$admin_token" GATEWAY_ADMIN_TOKEN local-gateway-admin-token
+  effective_secret_value "$admin_token" NOTARX_ADMIN_TOKEN local-gateway-admin-token
 }
 
 usage() {
@@ -59,8 +59,8 @@ require_local_context() {
     docker-desktop)
       ;;
     *)
-      if [[ "${ARTIFACT_GATEWAY_ALLOW_NONLOCAL_K8S:-0}" != "1" ]]; then
-        printf 'refusing to mutate non-local Kubernetes context %s; set ARTIFACT_GATEWAY_ALLOW_NONLOCAL_K8S=1 only after verifying the target\n' "$context" >&2
+      if [[ "${NOTARX_ALLOW_NONLOCAL_K8S:-0}" != "1" ]]; then
+        printf 'refusing to mutate non-local Kubernetes context %s; set NOTARX_ALLOW_NONLOCAL_K8S=1 only after verifying the target\n' "$context" >&2
         exit 1
       fi
       ;;
@@ -72,13 +72,13 @@ validate_settings() {
   configured_postgres_password=$(effective_secret_value \
     "$postgres_password" POSTGRES_PASSWORD local-postgres-password)
   configured_settings_key=$(effective_secret_value \
-    "$settings_key" GATEWAY_SETTINGS_ENCRYPTION_KEY 0123456789abcdef0123456789abcdef)
+    "$settings_key" NOTARX_SETTINGS_ENCRYPTION_KEY 0123456789abcdef0123456789abcdef)
   configured_rustfs_secret_key=$(effective_secret_value \
     "$rustfs_secret_key" RUSTFS_SECRET_KEY local-rustfs-password)
   configured_rustfs_rpc_secret=$(effective_secret_value \
     "$rustfs_rpc_secret" RUSTFS_RPC_SECRET local-rustfs-rpc-secret-0123456789)
   configured_apt_signer_token=$(effective_secret_value \
-    "$apt_signer_token" GATEWAY_APT_SIGNER_TOKEN local-reference-apt-signer-token-0001)
+    "$apt_signer_token" NOTARX_APT_SIGNER_TOKEN local-reference-apt-signer-token-0001)
   if [[ ! "$configured_postgres_password" =~ ^[A-Za-z0-9._~-]+$ ]]; then
     printf 'K8S_LOCAL_POSTGRES_PASSWORD must contain only URL-safe unreserved characters\n' >&2
     exit 1
@@ -151,24 +151,24 @@ apply_runtime_inputs() {
     "$rustfs_rpc_secret" RUSTFS_RPC_SECRET local-rustfs-rpc-secret-0123456789)
   configured_admin_token=$(effective_admin_token)
   configured_resolver_token=$(effective_secret_value \
-    "$resolver_token" GATEWAY_RESOLVER_TOKEN local-gateway-resolver-token)
+    "$resolver_token" NOTARX_RESOLVER_TOKEN local-gateway-resolver-token)
   configured_settings_key=$(effective_secret_value \
-    "$settings_key" GATEWAY_SETTINGS_ENCRYPTION_KEY 0123456789abcdef0123456789abcdef)
+    "$settings_key" NOTARX_SETTINGS_ENCRYPTION_KEY 0123456789abcdef0123456789abcdef)
   configured_apt_signer_token=$(effective_secret_value \
-    "$apt_signer_token" GATEWAY_APT_SIGNER_TOKEN local-reference-apt-signer-token-0001)
+    "$apt_signer_token" NOTARX_APT_SIGNER_TOKEN local-reference-apt-signer-token-0001)
   kubectl create namespace "$namespace" --dry-run=client -o yaml | kubectl apply -f -
   kubectl -n "$namespace" create secret generic artifact-gateway-secrets \
     --from-literal=POSTGRES_PASSWORD="$configured_postgres_password" \
     --from-literal=RUSTFS_ACCESS_KEY="$configured_rustfs_access_key" \
     --from-literal=RUSTFS_SECRET_KEY="$configured_rustfs_secret_key" \
     --from-literal=RUSTFS_RPC_SECRET="$configured_rustfs_rpc_secret" \
-    --from-literal=GATEWAY_DATABASE_URL="postgres://gateway:${configured_postgres_password}@postgres:5432/gateway?sslmode=disable" \
-    --from-literal=GATEWAY_RUSTFS_ACCESS_KEY="$configured_rustfs_access_key" \
-    --from-literal=GATEWAY_RUSTFS_SECRET_KEY="$configured_rustfs_secret_key" \
-    --from-literal=GATEWAY_ADMIN_TOKEN="$configured_admin_token" \
-    --from-literal=GATEWAY_RESOLVER_TOKEN="$configured_resolver_token" \
-    --from-literal=GATEWAY_SETTINGS_ENCRYPTION_KEY="$configured_settings_key" \
-    --from-literal=GATEWAY_APT_SIGNER_TOKEN="$configured_apt_signer_token" \
+    --from-literal=NOTARX_DATABASE_URL="postgres://gateway:${configured_postgres_password}@postgres:5432/gateway?sslmode=disable" \
+    --from-literal=NOTARX_RUSTFS_ACCESS_KEY="$configured_rustfs_access_key" \
+    --from-literal=NOTARX_RUSTFS_SECRET_KEY="$configured_rustfs_secret_key" \
+    --from-literal=NOTARX_ADMIN_TOKEN="$configured_admin_token" \
+    --from-literal=NOTARX_RESOLVER_TOKEN="$configured_resolver_token" \
+    --from-literal=NOTARX_SETTINGS_ENCRYPTION_KEY="$configured_settings_key" \
+    --from-literal=NOTARX_APT_SIGNER_TOKEN="$configured_apt_signer_token" \
     --dry-run=client -o yaml | kubectl apply -f -
   kubectl -n "$namespace" create configmap artifact-gateway-migrations \
     --from-file="$root/migrations" \

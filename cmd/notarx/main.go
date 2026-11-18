@@ -389,8 +389,8 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 	if startAPI {
 		if len(cfg.RepositoryReaders) == 0 && cfg.LegacyReadPermissive {
 			slog.Warn("legacy repository reads are unrestricted without reader patterns",
-				"detail", "GATEWAY_REPOSITORY_READERS is empty and GATEWAY_LEGACY_READ_DEFAULT=allow, so any authenticated caller may read a legacy repository with no grant",
-				"change", "unset GATEWAY_LEGACY_READ_DEFAULT to deny unmatched readers once every reading actor has a reader pattern or a per-repository grant")
+				"detail", "NOTARX_REPOSITORY_READERS is empty and NOTARX_LEGACY_READ_DEFAULT=allow, so any authenticated caller may read a legacy repository with no grant",
+				"change", "unset NOTARX_LEGACY_READ_DEFAULT to deny unmatched readers once every reading actor has a reader pattern or a per-repository grant")
 		}
 		gatewayOptions := app.GatewayOptions{
 			Dependencies:      dependencies,

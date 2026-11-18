@@ -24,7 +24,7 @@ func goProxyBody(upstreamAuth string) string {
 }
 
 func TestRepositoryUpstreamAuthCreateRedactsAndEncrypts(t *testing.T) {
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
 	store := repository.NewMemoryStore()
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
 
@@ -63,7 +63,7 @@ func TestRepositoryUpstreamAuthCreateRedactsAndEncrypts(t *testing.T) {
 }
 
 func TestRepositoryUpstreamAuthUpdateKeepsClearsAndSwitchesScheme(t *testing.T) {
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
 	store := repository.NewMemoryStore()
 	repo, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{
 		ID:           uuid.NewString(),
@@ -133,7 +133,7 @@ func TestRepositoryUpstreamAuthUpdateKeepsClearsAndSwitchesScheme(t *testing.T) 
 }
 
 func TestRepositoryUpstreamAuthFormatAdmission(t *testing.T) {
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
 	store := repository.NewMemoryStore()
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
 
@@ -188,7 +188,7 @@ func TestRepositoryUpstreamAuthFormatAdmission(t *testing.T) {
 }
 
 func TestRepositoryUpstreamAuthValidation(t *testing.T) {
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
 	store := repository.NewMemoryStore()
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
 	post := func(body string) *httptest.ResponseRecorder {
@@ -219,7 +219,7 @@ func TestRepositoryUpstreamAuthValidation(t *testing.T) {
 }
 
 func TestRepositoryUpstreamAuthRequiresEncryptionKey(t *testing.T) {
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", "")
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", "")
 	store := repository.NewMemoryStore()
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
 	r := httptest.NewRequest(http.MethodPost, "/api/v2/repositories", strings.NewReader(goProxyBody(`{"scheme":"bearer","secret":"s3cret"}`)))
@@ -235,7 +235,7 @@ func TestRepositoryUpstreamAuthRequiresEncryptionKey(t *testing.T) {
 // TestRepositoryUpstreamAuthPurposeIsBound pins the AAD binding: a ciphertext
 // sealed for a different purpose must never open as an upstream credential.
 func TestRepositoryUpstreamAuthPurposeIsBound(t *testing.T) {
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
 	foreign, err := secrets.Seal("webhook-signing-secret", "s3cret")
 	if err != nil {
 		t.Fatal(err)

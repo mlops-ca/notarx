@@ -47,22 +47,22 @@ write_environment() {
   local service=$1 fingerprints=$2 temporary="$env_file.next"
   {
     printf '%s\n' \
-      'GATEWAY_HTTP_PORT=0' \
-      'GATEWAY_POSTGRES_PORT=0' \
+      'NOTARX_HTTP_PORT=0' \
+      'NOTARX_POSTGRES_PORT=0' \
       'RUSTFS_API_PORT=0' \
       'RUSTFS_CONSOLE_PORT=0' \
-      'GATEWAY_POSTGRES_PASSWORD=apt-rotation-postgres-password' \
+      'NOTARX_POSTGRES_PASSWORD=apt-rotation-postgres-password' \
       'RUSTFS_ACCESS_KEY=apt-rotation-access-key' \
       'RUSTFS_SECRET_KEY=apt-rotation-rustfs-secret-key-000001' \
       'RUSTFS_RPC_SECRET=apt-rotation-rustfs-rpc-secret-000001' \
-      "GATEWAY_ADMIN_TOKEN=$admin_token" \
-      "GATEWAY_RESOLVER_TOKEN=$resolver_token" \
-      "GATEWAY_APT_SIGNER_TOKEN=$signer_token" \
-      'GATEWAY_APT_SIGNER_TIMEOUT=30s' \
+      "NOTARX_ADMIN_TOKEN=$admin_token" \
+      "NOTARX_RESOLVER_TOKEN=$resolver_token" \
+      "NOTARX_APT_SIGNER_TOKEN=$signer_token" \
+      'NOTARX_APT_SIGNER_TIMEOUT=30s' \
       'REFERENCE_APT_SIGNER_RSA_BITS=2048' \
       "APT_SIGNER_ROTATION_DIR=$workdir" \
       "APT_SIGNER_ROTATION_SERVICE=$service" \
-      "GATEWAY_APT_SIGNER_TRUSTED_FINGERPRINTS=$fingerprints"
+      "NOTARX_APT_SIGNER_TRUSTED_FINGERPRINTS=$fingerprints"
   } >"$temporary"
   chmod 0600 "$temporary"
   mv "$temporary" "$env_file"

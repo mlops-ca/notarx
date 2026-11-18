@@ -29,10 +29,10 @@ active_paths=(
 )
 
 if command -v rg >/dev/null 2>&1; then
-  legacy_matches=$(rg --line-number --ignore-case --glob '!**/*_test.go' 'minio|GATEWAY_S3_|TEST_S3_|github.com/minio' "${active_paths[@]}" || true)
+  legacy_matches=$(rg --line-number --ignore-case --glob '!**/*_test.go' 'minio|NOTARX_S3_|TEST_S3_|github.com/minio' "${active_paths[@]}" || true)
 else
   legacy_matches=$(grep --recursive --line-number --ignore-case --extended-regexp --exclude='*_test.go' \
-    'minio|GATEWAY_S3_|TEST_S3_|github.com/minio' "${active_paths[@]}" || true)
+    'minio|NOTARX_S3_|TEST_S3_|github.com/minio' "${active_paths[@]}" || true)
 fi
 
 if [[ -n "$legacy_matches" ]]; then

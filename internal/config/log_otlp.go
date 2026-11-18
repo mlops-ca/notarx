@@ -13,39 +13,39 @@ import (
 )
 
 func configureOTLPLogs(cfg *Config) error {
-	cfg.OTLPLogsEndpoint = strings.TrimSpace(os.Getenv("GATEWAY_OTLP_LOGS_ENDPOINT"))
+	cfg.OTLPLogsEndpoint = strings.TrimSpace(os.Getenv("NOTARX_OTLP_LOGS_ENDPOINT"))
 	if cfg.OTLPLogsEndpoint != "" {
 		endpoint, err := url.Parse(cfg.OTLPLogsEndpoint)
 		if err != nil || endpoint.Hostname() == "" || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.User != nil || endpoint.RawQuery != "" || endpoint.ForceQuery || endpoint.Fragment != "" {
-			return fmt.Errorf("GATEWAY_OTLP_LOGS_ENDPOINT must be an HTTP(S) URL without credentials, query or fragment")
+			return fmt.Errorf("NOTARX_OTLP_LOGS_ENDPOINT must be an HTTP(S) URL without credentials, query or fragment")
 		}
 	}
 	cfg.OTLPLogsHeaders = make(map[string]string)
-	if raw := strings.TrimSpace(os.Getenv("GATEWAY_OTLP_LOGS_HEADERS")); raw != "" {
+	if raw := strings.TrimSpace(os.Getenv("NOTARX_OTLP_LOGS_HEADERS")); raw != "" {
 		if err := json.Unmarshal([]byte(raw), &cfg.OTLPLogsHeaders); err != nil || cfg.OTLPLogsHeaders == nil {
-			return fmt.Errorf("GATEWAY_OTLP_LOGS_HEADERS must be a JSON object of string values")
+			return fmt.Errorf("NOTARX_OTLP_LOGS_HEADERS must be a JSON object of string values")
 		}
 	}
 	for name, value := range cfg.OTLPLogsHeaders {
 		if !httpguts.ValidHeaderFieldName(name) || !httpguts.ValidHeaderFieldValue(value) || len(value) > 4096 {
-			return fmt.Errorf("GATEWAY_OTLP_LOGS_HEADERS contains an invalid header")
+			return fmt.Errorf("NOTARX_OTLP_LOGS_HEADERS contains an invalid header")
 		}
 		switch strings.ToLower(name) {
 		case "host", "content-type", "content-length", "content-encoding", "connection", "transfer-encoding":
-			return fmt.Errorf("GATEWAY_OTLP_LOGS_HEADERS contains a reserved header")
+			return fmt.Errorf("NOTARX_OTLP_LOGS_HEADERS contains a reserved header")
 		}
 	}
 	var err error
-	if cfg.OTLPLogsQueueSize, err = positiveIntEnv("GATEWAY_OTLP_LOGS_QUEUE_SIZE", 256, false); err != nil {
+	if cfg.OTLPLogsQueueSize, err = positiveIntEnv("NOTARX_OTLP_LOGS_QUEUE_SIZE", 256, false); err != nil {
 		return err
 	}
 	if cfg.OTLPLogsQueueSize > 1024 {
-		return fmt.Errorf("GATEWAY_OTLP_LOGS_QUEUE_SIZE must be at most 1024")
+		return fmt.Errorf("NOTARX_OTLP_LOGS_QUEUE_SIZE must be at most 1024")
 	}
-	if cfg.OTLPLogsTimeout, err = boundedLogDuration("GATEWAY_OTLP_LOGS_TIMEOUT", 3*time.Second, 30*time.Second); err != nil {
+	if cfg.OTLPLogsTimeout, err = boundedLogDuration("NOTARX_OTLP_LOGS_TIMEOUT", 3*time.Second, 30*time.Second); err != nil {
 		return err
 	}
-	cfg.OTLPLogsShutdownTimeout, err = boundedLogDuration("GATEWAY_OTLP_LOGS_SHUTDOWN_TIMEOUT", 5*time.Second, 10*time.Second)
+	cfg.OTLPLogsShutdownTimeout, err = boundedLogDuration("NOTARX_OTLP_LOGS_SHUTDOWN_TIMEOUT", 5*time.Second, 10*time.Second)
 	return err
 }
 

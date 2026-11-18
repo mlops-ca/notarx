@@ -174,7 +174,7 @@ class Fixture(ConanFile):
     def package(self):
         copy(self, "gateway.h", self.source_folder, os.path.join(self.package_folder, "include"))
 `
-	const header = "#define GATEWAY_UPLOAD 312\n"
+	const header = "#define NOTARX_UPLOAD 312\n"
 	for name, content := range map[string]string{"conanfile.py": recipe, "gateway.h": header, "LICENSE": "isolated Conan publication fixture\n"} {
 		if err = os.WriteFile(filepath.Join(work, name), []byte(content), 0600); err != nil {
 			t.Fatal(err)

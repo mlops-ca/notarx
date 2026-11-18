@@ -74,7 +74,7 @@ per-repository grant, there is nothing to do. Otherwise:
 1. Inventory the actors that read legacy repositories without a grant. They were
    relying on the removed fallback and now receive `403`.
 2. Give each one an exact repository name or a `prefix/*` pattern in
-   `GATEWAY_REPOSITORY_READERS`, or a per-repository grant. There is no
+   `NOTARX_REPOSITORY_READERS`, or a per-repository grant. There is no
    catch-all pattern, so every repository an actor needs has to be listed. A
    Group read can also be checked per member, and a member the actor cannot read
    on its own is skipped rather than served, so confirm the remaining reads with
@@ -83,7 +83,7 @@ per-repository grant, there is nothing to do. Otherwise:
    all, so an actor that has to reach one needs a per-repository grant for it
    rather than a reader pattern.
 3. Upgrade. Reads that still work are covered by an explicit policy.
-4. If the upgrade has to be staged instead, set `GATEWAY_LEGACY_READ_DEFAULT=allow`
+4. If the upgrade has to be staged instead, set `NOTARX_LEGACY_READ_DEFAULT=allow`
    to keep the old posture while steps 1 and 2 are completed, then unset it. The
    gateway logs a startup warning while it is set. The only recognized permissive
    value is `allow`, so a typo fails closed instead of widening access.

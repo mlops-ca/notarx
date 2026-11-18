@@ -277,10 +277,10 @@ preflight:
 	@docker compose --env-file .env -f compose.yml run --rm --no-deps gateway preflight run --format json
 
 evidence:
-	@test -n "$(GATEWAY_URL)" || { printf '%s\n' 'set GATEWAY_URL'; exit 2; }
+	@test -n "$(NOTARX_URL)" || { printf '%s\n' 'set NOTARX_URL'; exit 2; }
 	@test -n "$(EVIDENCE_OUTPUT)" || { printf '%s\n' 'set EVIDENCE_OUTPUT'; exit 2; }
-	@test -n "$$GATEWAY_EVIDENCE_ADMIN_TOKEN" || { printf '%s\n' 'set GATEWAY_EVIDENCE_ADMIN_TOKEN'; exit 2; }
-	@go run ./cmd/notarx evidence collect --gateway-url "$(GATEWAY_URL)" --output "$(EVIDENCE_OUTPUT)" --revision "$(GIT_REVISION)" --image "$(IMAGE_DIGEST)"
+	@test -n "$$NOTARX_EVIDENCE_ADMIN_TOKEN" || { printf '%s\n' 'set NOTARX_EVIDENCE_ADMIN_TOKEN'; exit 2; }
+	@go run ./cmd/notarx evidence collect --gateway-url "$(NOTARX_URL)" --output "$(EVIDENCE_OUTPUT)" --revision "$(GIT_REVISION)" --image "$(IMAGE_DIGEST)"
 
 raw-e2e:
 	@./scripts/raw-e2e.sh

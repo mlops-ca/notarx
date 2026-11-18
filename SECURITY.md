@@ -50,8 +50,8 @@ change that publishes `gpg.key`.
 - Production traffic must terminate TLS at the Gateway or a trusted reverse
   proxy. Plain HTTP examples in this repository are for local development.
 - Replace every placeholder secret in `.env.example` and Compose examples.
-- Keep `GATEWAY_ADMIN_TOKEN`, resolver tokens, API keys, database credentials,
-  object-store credentials, and `GATEWAY_EGRESS_PROXY_KEY` in a secret manager.
+- Keep `NOTARX_ADMIN_TOKEN`, resolver tokens, API keys, database credentials,
+  object-store credentials, and `NOTARX_EGRESS_PROXY_KEY` in a secret manager.
 - Use Service Accounts for CI and third-party applications. Bind Repository
   Grants to the stable account principal, rotate its one-time credentials with
   an overlap window, and disable the account to reject every credential during
@@ -59,7 +59,7 @@ change that publishes `gpg.key`.
 - Run database migrations as a separate deployment job and do not grant normal
   Gateway nodes schema-owner credentials.
 - Restrict Proxy upstream hosts and outbound network access. Per-repository
-  custom proxy passwords require `GATEWAY_EGRESS_PROXY_KEY`.
+  custom proxy passwords require `NOTARX_EGRESS_PROXY_KEY`.
 - Treat uploaded packages and metadata as untrusted input. Artifact Gateway
   does not provide malware scanning. Vulnerability, license, and SBOM analysis
   is available only when an operator explicitly enables the bundled reference

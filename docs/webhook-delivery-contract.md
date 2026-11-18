@@ -49,7 +49,7 @@ Webhook subscriptions are global administrator-managed resources. A
 subscription has a unique name, HTTPS endpoint, non-empty event-type filter,
 enabled flag, and optimistic-concurrency version. A 32-to-256-byte signing
 secret is accepted on write, encrypted with
-`GATEWAY_SETTINGS_ENCRYPTION_KEY`, and never returned. Responses expose only
+`NOTARX_SETTINGS_ENCRYPTION_KEY`, and never returned. Responses expose only
 `secretConfigured`.
 
 The endpoint must be an HTTPS URL without user information or a fragment.
@@ -115,5 +115,5 @@ Console Operations renders subscriptions and recent deliveries, including an
 explicit replay action for dead deliveries.
 
 Dedicated worker nodes may select only this workload with
-`GATEWAY_NODE_ROLES=worker GATEWAY_WORKER_KINDS=webhook`. Webhook delivery is a
-global job kind and ignores `GATEWAY_WORKER_FORMATS`.
+`NOTARX_NODE_ROLES=worker NOTARX_WORKER_KINDS=webhook`. Webhook delivery is a
+global job kind and ignores `NOTARX_WORKER_FORMATS`.

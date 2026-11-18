@@ -75,7 +75,7 @@ notarxctl access check --repo REPOSITORY_ID --actor service-account:ACCOUNT_ID -
 notarxctl repo connect REPOSITORY_ID --json
 ```
 
-Store `./ci-token` as a CI secret (`ARTIFACT_GATEWAY_TOKEN`) and delete the
+Store `./ci-token` as a CI secret (`NOTARX_TOKEN`) and delete the
 file. `repo connect` prints client configuration with the credential as a
 placeholder.
 

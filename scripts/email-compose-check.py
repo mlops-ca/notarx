@@ -116,25 +116,25 @@ def check(render_only, evidence=None, fixture_subnets=None):
         auth = {"username": "owned-synthetic", "password": secrets.token_hex(24)}
         recipient = "synthetic-recipient@example.test"
         values = {
-            "GATEWAY_POSTGRES_PASSWORD": secrets.token_hex(24),
-            "GATEWAY_ADMIN_TOKEN": admin,
-            "GATEWAY_RESOLVER_TOKEN": secrets.token_hex(24),
+            "NOTARX_POSTGRES_PASSWORD": secrets.token_hex(24),
+            "NOTARX_ADMIN_TOKEN": admin,
+            "NOTARX_RESOLVER_TOKEN": secrets.token_hex(24),
             "RUSTFS_ACCESS_KEY": "owned-" + secrets.token_hex(8),
             "RUSTFS_SECRET_KEY": secrets.token_hex(24),
             "RUSTFS_RPC_SECRET": secrets.token_hex(32),
-            "GATEWAY_SETTINGS_ENCRYPTION_KEY": key,
-            "GATEWAY_EMAIL_CONFIG_DIR": str(config),
-            "GATEWAY_NODE_ROLES": "api",
-            "GATEWAY_DATABASE_MAX_OPEN_CONNS": "8",
-            "GATEWAY_DATABASE_MAX_IDLE_CONNS": "2",
-            "GATEWAY_DATABASE_COORDINATOR_MAX_OPEN_CONNS": "2",
-            "GATEWAY_DATABASE_COORDINATOR_MAX_IDLE_CONNS": "1",
-            "GATEWAY_DATABASE_ARTIFACT_LOCK_MAX_OPEN_CONNS": "2",
-            "GATEWAY_DATABASE_ARTIFACT_LOCK_MAX_IDLE_CONNS": "1",
+            "NOTARX_SETTINGS_ENCRYPTION_KEY": key,
+            "NOTARX_EMAIL_CONFIG_DIR": str(config),
+            "NOTARX_NODE_ROLES": "api",
+            "NOTARX_DATABASE_MAX_OPEN_CONNS": "8",
+            "NOTARX_DATABASE_MAX_IDLE_CONNS": "2",
+            "NOTARX_DATABASE_COORDINATOR_MAX_OPEN_CONNS": "2",
+            "NOTARX_DATABASE_COORDINATOR_MAX_IDLE_CONNS": "1",
+            "NOTARX_DATABASE_ARTIFACT_LOCK_MAX_OPEN_CONNS": "2",
+            "NOTARX_DATABASE_ARTIFACT_LOCK_MAX_IDLE_CONNS": "1",
         }
         private_values = [recipient, auth["username"], auth["password"], key,
                           *[values[name] for name in (
-                              "GATEWAY_ADMIN_TOKEN", "GATEWAY_RESOLVER_TOKEN", "GATEWAY_POSTGRES_PASSWORD",
+                              "NOTARX_ADMIN_TOKEN", "NOTARX_RESOLVER_TOKEN", "NOTARX_POSTGRES_PASSWORD",
                               "RUSTFS_ACCESS_KEY", "RUSTFS_SECRET_KEY", "RUSTFS_RPC_SECRET")]]
         environment_file = work / "fixture.env"
         environment_file.write_text("".join(k + "=" + v + "\n" for k, v in values.items()))
@@ -155,11 +155,11 @@ def check(render_only, evidence=None, fixture_subnets=None):
             return result.stdout
 
         baseline = json.loads(run(base + ["config", "--format", "json"]))
-        require("GATEWAY_EMAIL_CONFIG_FILE" not in baseline["services"]["gateway"]["environment"],
+        require("NOTARX_EMAIL_CONFIG_FILE" not in baseline["services"]["gateway"]["environment"],
                 "default Compose unexpectedly enables email")
         require("gateway-email-worker" not in baseline["services"], "default adds worker")
         checks.append("default Compose stays disconnected/disabled")
-        private_key = "GATEWAY_MIGRATION_SOURCE_PRIVATE_ENDPOINTS"
+        private_key = "NOTARX_MIGRATION_SOURCE_PRIVATE_ENDPOINTS"
         require(baseline["services"]["gateway"]["environment"].get(private_key, "") == "",
                 "default Compose unexpectedly approves private migration sources")
         values[private_key] = "nexus.example.test=10.20.30.0/24"
@@ -173,10 +173,10 @@ def check(render_only, evidence=None, fixture_subnets=None):
         for name, role in (("gateway", "api"), ("gateway-scheduler", "scheduler"),
                            ("gateway-email-worker", "worker")):
             node = rendered["services"][name]
-            require(node["environment"]["GATEWAY_NODE_ROLES"] == role, "role drift")
-            require(node["environment"]["GATEWAY_SETTINGS_ENCRYPTION_KEY"] == key, "key drift")
+            require(node["environment"]["NOTARX_NODE_ROLES"] == role, "role drift")
+            require(node["environment"]["NOTARX_SETTINGS_ENCRYPTION_KEY"] == key, "key drift")
             require(node["environment"].get(private_key) == values[private_key], "migration-source allowlist drift")
-            require(node["environment"]["GATEWAY_EMAIL_CONFIG_FILE"] == "/etc/gateway-email/relay.json", "config drift")
+            require(node["environment"]["NOTARX_EMAIL_CONFIG_FILE"] == "/etc/gateway-email/relay.json", "config drift")
             mount = next(v for v in node["volumes"] if v["target"] == "/etc/gateway-email")
             # Compose's canonical JSON may omit a false create_host_path value.
             # The overlay explicitly sets false; still reject a rendered true.
@@ -187,7 +187,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
             if name != "gateway":
                 require(not node.get("ports"), "background role publishes host ports")
                 require("migrate" in node["depends_on"], "role lost migration dependency")
-        require(rendered["services"]["gateway-email-worker"]["environment"]["GATEWAY_WORKER_KINDS"] == "email", "worker kind drift")
+        require(rendered["services"]["gateway-email-worker"]["environment"]["NOTARX_WORKER_KINDS"] == "email", "worker kind drift")
         checks.append("all three roles share read-only config and key; background ports absent")
         image = project + ":fixture"
         override = work / "fixture.json"
@@ -294,7 +294,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
             with response:
                 content = response.read()
                 require(response.code == status, "unexpected HTTP status: " + method + " " + path + " " + str(response.code))
-                require(not any(s.encode() in content for s in (key, auth["password"], values["GATEWAY_POSTGRES_PASSWORD"])), "API leaked fixture secret")
+                require(not any(s.encode() in content for s in (key, auth["password"], values["NOTARX_POSTGRES_PASSWORD"])), "API leaked fixture secret")
                 return json.loads(content) if content else None
 
         def attempts():
@@ -398,7 +398,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
             checks.append("malformed config and non-private auth fail startup with fixed safe error")
             restart("gateway")
             require(ctl("email", "capability")["data"]["reason"] == "ready", "valid API config unavailable")
-            mismatch("gateway", {"GATEWAY_SETTINGS_ENCRYPTION_KEY": ""})
+            mismatch("gateway", {"NOTARX_SETTINGS_ENCRYPTION_KEY": ""})
             require(ctl("email", "capability")["data"] == {"enabled": False, "reason": "encryption_key_unavailable"}, "missing API encryption key reported ready")
             no_key = ctl("email", "test", "--target", target["id"], "--scenario", "warning", "--yes", expected=1)
             require(no_key["error"]["code"] == "encryption_key_unavailable" and not no_key.get("data"), "missing API key was not a definite refusal")
@@ -414,10 +414,10 @@ def check(render_only, evidence=None, fixture_subnets=None):
             require(ctl("email", "delivery", "show", pending["id"])["data"] == pending_read, "stopping a wait cancelled or changed the queued delivery")
             checks.append("notarxctl: API-only ready queues with zero attempts; bounded wait exits 8 and leaves delivery unchanged")
 
-            mismatch("gateway-email-worker", {"GATEWAY_EMAIL_CONFIG_FILE": ""})
+            mismatch("gateway-email-worker", {"NOTARX_EMAIL_CONFIG_FILE": ""})
             time.sleep(6)
             require(ctl("email", "delivery", "show", pending["id"])["data"]["attempts"] == 0 and not attempts(), "unconfigured worker claimed")
-            mismatch("gateway-email-worker", {"GATEWAY_SETTINGS_ENCRYPTION_KEY": secrets.token_hex(32)})
+            mismatch("gateway-email-worker", {"NOTARX_SETTINGS_ENCRYPTION_KEY": secrets.token_hex(32)})
             failed_key = eventually(lambda: (d if (d := delivery(pending["id"])).get("errorCode") == "encryption_key_unavailable" else None), "mismatched worker key")
             require(failed_key["state"] == "retrying" and not attempts(), "bad key contacted SMTP")
             checks.append("concurrent ready API / absent worker config / different worker key never sends")
@@ -436,7 +436,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
             (sink / "rcpt-code").write_text("250")
             checks.append("corrected concurrent workers accept one MIME; RCPT 550 is dead with safe code")
 
-            mismatch("gateway-scheduler", {"GATEWAY_EMAIL_CONFIG_FILE": ""})
+            mismatch("gateway-scheduler", {"NOTARX_EMAIL_CONFIG_FILE": ""})
             missing_rule = rule("owned-missing-scheduler", target)
             missing = eventually(lambda: events(missing_rule), "disabled scheduler event")
             require(len(missing) == 1 and missing[0]["notificationCode"] == "email_disabled" and not missing[0].get("deliveryId"), "scheduler mismatch secretly queued")
@@ -450,7 +450,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
             run(compose + ["stop", "gateway-scheduler", "gateway-email-worker"])
             run(["docker", "rm", "-f", project + "-second-worker"])
             second_worker = False
-            mismatch("gateway", {"GATEWAY_NODE_ROLES": "standalone"})
+            mismatch("gateway", {"NOTARX_NODE_ROLES": "standalone"})
             standalone = explicit(target, "resolved")
             eventually(lambda: delivery(standalone["id"])["state"] == "accepted", "standalone MIME")
             messages = list(sink.glob("*.eml"))
@@ -469,7 +469,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
 
             # notarxctl (#336) drives the same channel. Its input is private and
             # every invocation checks both output streams for synthetic secrets.
-            mismatch("gateway", {"GATEWAY_NODE_ROLES": "api"})
+            mismatch("gateway", {"NOTARX_NODE_ROLES": "api"})
             start("gateway-email-worker")
             require(ctl("email", "capability")["data"] == {"enabled": True, "reason": "ready"}, "notarxctl capability is not ready")
             failed_wait = ctl("email", "delivery", "wait", dead["id"], "--timeout", "10s", expected=1)

@@ -55,7 +55,7 @@ export function OCIPublishGuide({ repoName }: { repoName: string }) {
       <div className="space-y-3">
         <RepositorySnippetBlock
           label={t("repository.signInToRegistry")}
-          code={`printf '%s' "$ARTIFACT_GATEWAY_TOKEN" | docker login ${registry} --username publisher --password-stdin`}
+          code={`printf '%s' "$NOTARX_TOKEN" | docker login ${registry} --username publisher --password-stdin`}
         />
         <RepositorySnippetBlock
           label={t("repository.tagAndPush")}
@@ -69,7 +69,7 @@ export function OCIPublishGuide({ repoName }: { repoName: string }) {
 export function NpmPublishGuide({ repoName }: { repoName: string }) {
   const { t } = usePreferences();
   const registry = `${window.location.origin}/npm/${repoName}/`;
-  const authPath = `//${window.location.host}/npm/${repoName}/:_authToken=\${ARTIFACT_GATEWAY_TOKEN}`;
+  const authPath = `//${window.location.host}/npm/${repoName}/:_authToken=\${NOTARX_TOKEN}`;
   return (
     <div className="grid max-w-5xl gap-4 lg:grid-cols-2">
       <div>
@@ -114,7 +114,7 @@ export function PyPIPublishGuide({ repoName }: { repoName: string }) {
         />
         <RepositorySnippetBlock
           label=".pypirc"
-          code={`[distutils]\nindex-servers = ${repoName}\n\n[${repoName}]\nrepository = ${base}/legacy/\nusername = resolver\npassword = \${GATEWAY_RESOLVER_TOKEN}`}
+          code={`[distutils]\nindex-servers = ${repoName}\n\n[${repoName}]\nrepository = ${base}/legacy/\nusername = resolver\npassword = \${NOTARX_RESOLVER_TOKEN}`}
         />
         <RepositorySnippetBlock
           label={t("repository.publish")}
@@ -141,7 +141,7 @@ export function CargoPublishGuide({ repoName }: { repoName: string }) {
       <div className="space-y-3">
         <RepositorySnippetBlock
           label=".cargo/config.toml"
-          code={`[registries.gateway]\nindex = "${index}"\ncredential-provider = "cargo:token"`}
+          code={`[registries.notarx]\nindex = "${index}"\ncredential-provider = "cargo:token"`}
         />
         <RepositorySnippetBlock
           label={t("repository.publishAndRead")}

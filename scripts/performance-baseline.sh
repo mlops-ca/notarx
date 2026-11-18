@@ -36,29 +36,29 @@ if [[ ${#generated_ports[@]} != 6 ]]; then
   exit 1
 fi
 
-export GATEWAY_HTTP_PORT=${GATEWAY_PERF_GATEWAY_PORT:-${generated_ports[0]}}
-export GATEWAY_POSTGRES_PORT=${GATEWAY_PERF_POSTGRES_PORT:-${generated_ports[1]}}
-export RUSTFS_API_PORT=${GATEWAY_PERF_RUSTFS_PORT:-${generated_ports[2]}}
-export RUSTFS_CONSOLE_PORT=${GATEWAY_PERF_RUSTFS_CONSOLE_PORT:-${generated_ports[3]}}
-raw_upstream_port=${GATEWAY_PERF_RAW_UPSTREAM_PORT:-${generated_ports[4]}}
-raw_proxy_port=${GATEWAY_PERF_RAW_PROXY_PORT:-${generated_ports[5]}}
+export NOTARX_HTTP_PORT=${NOTARX_PERF_NOTARX_PORT:-${generated_ports[0]}}
+export NOTARX_POSTGRES_PORT=${NOTARX_PERF_POSTGRES_PORT:-${generated_ports[1]}}
+export RUSTFS_API_PORT=${NOTARX_PERF_RUSTFS_PORT:-${generated_ports[2]}}
+export RUSTFS_CONSOLE_PORT=${NOTARX_PERF_RUSTFS_CONSOLE_PORT:-${generated_ports[3]}}
+raw_upstream_port=${NOTARX_PERF_RAW_UPSTREAM_PORT:-${generated_ports[4]}}
+raw_proxy_port=${NOTARX_PERF_RAW_PROXY_PORT:-${generated_ports[5]}}
 
-ports=("$GATEWAY_HTTP_PORT" "$GATEWAY_POSTGRES_PORT" "$RUSTFS_API_PORT" "$RUSTFS_CONSOLE_PORT" "$raw_upstream_port" "$raw_proxy_port")
+ports=("$NOTARX_HTTP_PORT" "$NOTARX_POSTGRES_PORT" "$RUSTFS_API_PORT" "$RUSTFS_CONSOLE_PORT" "$raw_upstream_port" "$raw_proxy_port")
 if [[ $(printf '%s\n' "${ports[@]}" | sort -u | wc -l | tr -d ' ') != 6 ]]; then
   printf '%s\n' 'Performance baseline ports must be distinct.' >&2
   exit 1
 fi
 
-project=${GATEWAY_PERF_PROJECT:-artifact-gateway-perf-$(date -u +%Y%m%d%H%M%S)-$$}
+project=${NOTARX_PERF_PROJECT:-artifact-gateway-perf-$(date -u +%Y%m%d%H%M%S)-$$}
 # The baseline inspects the image Compose builds for this project.
-export NOTARX_GATEWAY_IMAGE="${project}-gateway"
+export NOTARX_NOTARX_IMAGE="${project}-gateway"
 if [[ ! "$project" =~ ^artifact-gateway-perf-[a-z0-9-]+$ ]]; then
-  printf 'GATEWAY_PERF_PROJECT must start with artifact-gateway-perf-: %s\n' "$project" >&2
+  printf 'NOTARX_PERF_PROJECT must start with artifact-gateway-perf-: %s\n' "$project" >&2
   exit 1
 fi
 
-if [[ -n ${GATEWAY_PERF_OUTPUT_DIR:-} ]]; then
-  output_dir=$GATEWAY_PERF_OUTPUT_DIR
+if [[ -n ${NOTARX_PERF_OUTPUT_DIR:-} ]]; then
+  output_dir=$NOTARX_PERF_OUTPUT_DIR
   mkdir -p "$output_dir"
 else
   output_dir=$(mktemp -d "${TMPDIR:-/tmp}/artifact-gateway-performance.XXXXXX")
@@ -115,15 +115,15 @@ random_hex() {
 admin_token="perf-admin-$(random_hex 24)"
 umask 077
 {
-  printf 'GATEWAY_POSTGRES_PASSWORD=%s\n' "$(random_hex 24)"
-  printf 'GATEWAY_ADMIN_TOKEN=%s\n' "$admin_token"
-  printf 'GATEWAY_RESOLVER_TOKEN=%s\n' "perf-resolver-$(random_hex 24)"
+  printf 'NOTARX_POSTGRES_PASSWORD=%s\n' "$(random_hex 24)"
+  printf 'NOTARX_ADMIN_TOKEN=%s\n' "$admin_token"
+  printf 'NOTARX_RESOLVER_TOKEN=%s\n' "perf-resolver-$(random_hex 24)"
   printf 'RUSTFS_ACCESS_KEY=%s\n' "perfaccess$(random_hex 8)"
   printf 'RUSTFS_SECRET_KEY=%s\n' "$(random_hex 24)"
   printf 'RUSTFS_RPC_SECRET=%s\n' "$(random_hex 24)"
-  printf 'GATEWAY_RAW_PROXY_ALLOWED_HOSTS=host.docker.internal\n'
-  printf 'GATEWAY_EGRESS_PROXY=http://host.docker.internal:%s\n' "$raw_proxy_port"
-  printf 'GATEWAY_PERF_CA_FILE=%s\n' "$upstream_cert"
+  printf 'NOTARX_RAW_PROXY_ALLOWED_HOSTS=host.docker.internal\n'
+  printf 'NOTARX_EGRESS_PROXY=http://host.docker.internal:%s\n' "$raw_proxy_port"
+  printf 'NOTARX_PERF_CA_FILE=%s\n' "$upstream_cert"
 } >"$env_file"
 
 mkdir -p "$upstream_dir"
@@ -142,7 +142,7 @@ printf '%s\n' \
   '      NO_PROXY: postgres,rustfs,127.0.0.1,localhost' \
   '      SSL_CERT_FILE: /tmp/artifact-gateway-performance-ca.crt' \
   '    volumes:' \
-  '      - "${GATEWAY_PERF_CA_FILE}:/tmp/artifact-gateway-performance-ca.crt:ro"' >"$compose_override"
+  '      - "${NOTARX_PERF_CA_FILE}:/tmp/artifact-gateway-performance-ca.crt:ro"' >"$compose_override"
 printf '%s\n' 'ok' >"$upstream_dir/healthz"
 python3 - "$raw_upstream_port" "$raw_proxy_port" "$upstream_dir" "$upstream_cert" "$upstream_key" >"$private_dir/raw-upstream.log" 2>&1 <<'PY' &
 import functools
@@ -208,22 +208,22 @@ curl --noproxy '*' --silent --show-error --fail --cacert "$upstream_cert" \
   --resolve "host.docker.internal:${raw_upstream_port}:127.0.0.1" \
   "https://host.docker.internal:${raw_upstream_port}/healthz" >/dev/null
 
-metadata_low_requests=${GATEWAY_PERF_METADATA_LOW_REQUESTS:-5000}
-metadata_mid_requests=${GATEWAY_PERF_METADATA_MID_REQUESTS:-30000}
-metadata_high_requests=${GATEWAY_PERF_METADATA_HIGH_REQUESTS:-300000}
-raw_low_requests=${GATEWAY_PERF_RAW_LOW_REQUESTS:-2000}
-raw_mid_requests=${GATEWAY_PERF_RAW_MID_REQUESTS:-20000}
-raw_high_requests=${GATEWAY_PERF_RAW_HIGH_REQUESTS:-40000}
-raw_large_requests=${GATEWAY_PERF_RAW_LARGE_REQUESTS:-32}
-raw_proxy_cold_requests=${GATEWAY_PERF_RAW_PROXY_COLD_REQUESTS:-8}
-raw_large_mib=${GATEWAY_PERF_RAW_LARGE_MIB:-64}
-low_concurrency=${GATEWAY_PERF_LOW_CONCURRENCY:-1}
-mid_concurrency=${GATEWAY_PERF_MID_CONCURRENCY:-32}
-high_concurrency=${GATEWAY_PERF_HIGH_CONCURRENCY:-128}
-large_concurrency=${GATEWAY_PERF_LARGE_CONCURRENCY:-8}
-raw_proxy_cold_concurrency=${GATEWAY_PERF_RAW_PROXY_COLD_CONCURRENCY:-8}
-idle_samples=${GATEWAY_PERF_IDLE_SAMPLES:-10}
-sample_interval=${GATEWAY_PERF_SAMPLE_INTERVAL_SECONDS:-1}
+metadata_low_requests=${NOTARX_PERF_METADATA_LOW_REQUESTS:-5000}
+metadata_mid_requests=${NOTARX_PERF_METADATA_MID_REQUESTS:-30000}
+metadata_high_requests=${NOTARX_PERF_METADATA_HIGH_REQUESTS:-300000}
+raw_low_requests=${NOTARX_PERF_RAW_LOW_REQUESTS:-2000}
+raw_mid_requests=${NOTARX_PERF_RAW_MID_REQUESTS:-20000}
+raw_high_requests=${NOTARX_PERF_RAW_HIGH_REQUESTS:-40000}
+raw_large_requests=${NOTARX_PERF_RAW_LARGE_REQUESTS:-32}
+raw_proxy_cold_requests=${NOTARX_PERF_RAW_PROXY_COLD_REQUESTS:-8}
+raw_large_mib=${NOTARX_PERF_RAW_LARGE_MIB:-64}
+low_concurrency=${NOTARX_PERF_LOW_CONCURRENCY:-1}
+mid_concurrency=${NOTARX_PERF_MID_CONCURRENCY:-32}
+high_concurrency=${NOTARX_PERF_HIGH_CONCURRENCY:-128}
+large_concurrency=${NOTARX_PERF_LARGE_CONCURRENCY:-8}
+raw_proxy_cold_concurrency=${NOTARX_PERF_RAW_PROXY_COLD_CONCURRENCY:-8}
+idle_samples=${NOTARX_PERF_IDLE_SAMPLES:-10}
+sample_interval=${NOTARX_PERF_SAMPLE_INTERVAL_SECONDS:-1}
 
 for count in \
   "$metadata_low_requests" "$metadata_mid_requests" "$metadata_high_requests" \
@@ -287,7 +287,7 @@ for container_id in "$gateway_id" "$postgres_id" "$rustfs_id"; do
   fi
 done
 
-gateway_url="http://127.0.0.1:${GATEWAY_HTTP_PORT}"
+gateway_url="http://127.0.0.1:${NOTARX_HTTP_PORT}"
 expect_http 204 GET "$gateway_url/livez" "$private_dir/livez.out"
 expect_http 204 GET "$gateway_url/readyz" "$private_dir/readyz.out"
 

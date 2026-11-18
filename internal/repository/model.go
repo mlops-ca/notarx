@@ -142,7 +142,7 @@ const (
 
 // UpstreamAuth is the per-Proxy-Repository credential presented to the
 // upstream registry. Secret holds AES-256-GCM ciphertext (base64) sealed with
-// GATEWAY_SETTINGS_ENCRYPTION_KEY, never plaintext; it is redacted from every
+// NOTARX_SETTINGS_ENCRYPTION_KEY, never plaintext; it is redacted from every
 // management API response, which carries CredentialsConfigured instead.
 type UpstreamAuth struct {
 	Scheme   UpstreamAuthScheme `json:"scheme"`

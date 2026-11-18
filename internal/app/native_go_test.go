@@ -798,8 +798,8 @@ func TestNativeGoGroupFiltersMembersByRepositoryGrant(t *testing.T) {
 }
 
 func TestNativeGoRealClientDownloadsThroughProxyAndOfflineCache(t *testing.T) {
-	if os.Getenv("ARTIFACT_GATEWAY_GO_CLI_E2E") == "" {
-		t.Skip("set ARTIFACT_GATEWAY_GO_CLI_E2E=1 to run the real Go client acceptance test")
+	if os.Getenv("NOTARX_GO_CLI_E2E") == "" {
+		t.Skip("set NOTARX_GO_CLI_E2E=1 to run the real Go client acceptance test")
 	}
 	const (
 		modulePath    = "example.com/Acme/widget"
@@ -880,8 +880,8 @@ func TestNativeGoRealClientDownloadsThroughProxyAndOfflineCache(t *testing.T) {
 }
 
 func TestNativeGoRealClientDownloadsHostedPublication(t *testing.T) {
-	if os.Getenv("ARTIFACT_GATEWAY_GO_CLI_E2E") == "" {
-		t.Skip("set ARTIFACT_GATEWAY_GO_CLI_E2E=1 to run the real Go client acceptance test")
+	if os.Getenv("NOTARX_GO_CLI_E2E") == "" {
+		t.Skip("set NOTARX_GO_CLI_E2E=1 to run the real Go client acceptance test")
 	}
 	const (
 		modulePath    = "example.com/Acme/hosted-client"

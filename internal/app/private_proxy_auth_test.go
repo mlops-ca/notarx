@@ -74,7 +74,7 @@ func privateProxyCredentialsContract(t *testing.T, tc privateProxyCase, backend 
 	t.Helper()
 	format, scheme, route, issuer := tc.format, tc.scheme, tc.route, tc.issuer
 	store, objects, cacheObjects := backend.store, backend.objects, backend.cache
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
 	const firstSecret = "synthetic-private-source-v1"
 	const secondSecret = "synthetic-private-source-v2"
 	var sourceAuth atomic.Value
@@ -305,7 +305,7 @@ func privateProxyCredentialsContract(t *testing.T, tc privateProxyCase, backend 
 }
 
 func TestPrivateProxyAPIAdmitsOnlyImplementedFormats(t *testing.T) {
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
 	for _, format := range []repository.Format{repository.FormatGo, repository.FormatMaven, repository.FormatOCI, repository.FormatNPM, repository.FormatPyPI, repository.FormatCargo, repository.FormatRaw, repository.FormatAPT, repository.FormatConan} {
 		t.Run(string(format), func(t *testing.T) {
 			store := repository.NewMemoryStore()

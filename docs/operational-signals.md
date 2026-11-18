@@ -28,12 +28,12 @@ contracts and freshness checks.
 
 ## Opt-in local-capacity diagnostics
 
-Set optional `GATEWAY_LOCAL_CAPACITY_MOUNTS` to a JSON object containing only
+Set optional `NOTARX_LOCAL_CAPACITY_MOUNTS` to a JSON object containing only
 `temporary`, `logs` and `backups`, each mapped to an explicit absolute directory
 in this process's namespace. For example, with synthetic paths:
 
 ```sh
-GATEWAY_LOCAL_CAPACITY_MOUNTS='{"temporary":"/explicit/temp","logs":"/explicit/logs","backups":"/explicit/backup"}'
+NOTARX_LOCAL_CAPACITY_MOUNTS='{"temporary":"/explicit/temp","logs":"/explicit/logs","backups":"/explicit/backup"}'
 ```
 
 The default is empty; no system temporary, log or backup directory is inferred.

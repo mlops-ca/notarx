@@ -40,7 +40,7 @@ conan_authenticate:
   - "$ref": "../components/parameters.yaml#/RepositoryName"
   get:
     operationId: authenticateConanRemote
-    description: Exchanges a local resolver or service-account credential for a five-minute repository-bound token. Requires independent GATEWAY_CONAN_TOKEN_SECRET; missing configuration returns 501. Tokens revalidate the source credential on every request.
+    description: Exchanges a local resolver or service-account credential for a five-minute repository-bound token. Requires independent NOTARX_CONAN_TOKEN_SECRET; missing configuration returns 501. Tokens revalidate the source credential on every request.
     security:
     - protocolBasicAuth: []
     - conanBearerAuth: []

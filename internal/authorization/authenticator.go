@@ -273,7 +273,7 @@ func (p Principal) RepositoryAccessBlocked() bool {
 // CanReadRepository reports whether the principal may read the named legacy
 // repository. An administrator, a global read role, or a matching reader
 // pattern qualifies. A deployment that configured no reader patterns at all
-// denies an otherwise-unmatched caller, and GATEWAY_LEGACY_READ_DEFAULT=allow
+// denies an otherwise-unmatched caller, and NOTARX_LEGACY_READ_DEFAULT=allow
 // restores the pre-0.4 posture that admitted it. A pending or password-change
 // account is never admitted, whatever the posture.
 func (a Authenticator) CanReadRepository(principal Principal, repositoryName string) bool {

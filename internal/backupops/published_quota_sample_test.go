@@ -76,12 +76,12 @@ func samplePublishedRecoveryQuota(t *testing.T, ctx context.Context, source *Own
 		}
 	}()
 	environment := []string{
-		"GATEWAY_DATABASE_URL=postgres://gateway:" + escapePassword(source.spec.PostgresPassword) + "@postgres:5432/gateway?sslmode=disable",
-		"GATEWAY_RUSTFS_ENDPOINT=http://rustfs:9000", "GATEWAY_RUSTFS_BUCKET=gateway-cache",
-		"GATEWAY_RUSTFS_ACCESS_KEY=" + source.spec.AccessKey, "GATEWAY_RUSTFS_SECRET_KEY=" + source.spec.SecretKey,
-		"GATEWAY_ADMIN_TOKEN=" + source.spec.AdminToken, "GATEWAY_RESOLVER_TOKEN=" + source.spec.ResolverToken,
-		"GATEWAY_NODE_ROLES=scheduler", "GATEWAY_LISTEN_ADDRESS=:0", "GATEWAY_INSTANCE_ID=" + name,
-		"GATEWAY_SETTINGS_ENCRYPTION_KEY=" + recoveryEmailKey, "GATEWAY_EMAIL_CONFIG_FILE=/quota-mail.json",
+		"NOTARX_DATABASE_URL=postgres://gateway:" + escapePassword(source.spec.PostgresPassword) + "@postgres:5432/gateway?sslmode=disable",
+		"NOTARX_RUSTFS_ENDPOINT=http://rustfs:9000", "NOTARX_RUSTFS_BUCKET=gateway-cache",
+		"NOTARX_RUSTFS_ACCESS_KEY=" + source.spec.AccessKey, "NOTARX_RUSTFS_SECRET_KEY=" + source.spec.SecretKey,
+		"NOTARX_ADMIN_TOKEN=" + source.spec.AdminToken, "NOTARX_RESOLVER_TOKEN=" + source.spec.ResolverToken,
+		"NOTARX_NODE_ROLES=scheduler", "NOTARX_LISTEN_ADDRESS=:0", "NOTARX_INSTANCE_ID=" + name,
+		"NOTARX_SETTINGS_ENCRYPTION_KEY=" + recoveryEmailKey, "NOTARX_EMAIL_CONFIG_FILE=/quota-mail.json",
 	}
 	args := []string{"create", "--name", name, "--network", source.spec.Project + "-network", "--label", "artifact-gateway.restore-owner=" + source.owner, "--label", "artifact-gateway.quota-sample=" + invocation, "--read-only", "--tmpfs", "/tmp:rw,noexec,nosuid,size=256m,mode=1777", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true", "--mount", "type=bind,source=" + binary + ",target=/gateway,readonly", "--mount", "type=bind,source=" + configPath + ",target=/quota-mail.json,readonly", "--entrypoint", "/gateway", "--platform", release.Identity.Artifact.Platform}
 	for _, value := range environment {

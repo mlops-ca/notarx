@@ -85,7 +85,7 @@ goal. It intentionally excludes frontend work.
 1. Go compatibility gaps are closed without weakening the current Hosted
    guarantees. Authenticated upstream Proxy credentials are complete for Go
    Proxy (a `none`/`basic`/`bearer` credential sealed with
-   `GATEWAY_SETTINGS_ENCRYPTION_KEY`, applied only to the Go Proxy upstream
+   `NOTARX_SETTINGS_ENCRYPTION_KEY`, applied only to the Go Proxy upstream
    fetch, stripped on cross-host redirects, and rejected with an explicit
    `400` outside Go Proxy), default-disabled quarantine-read enforcement is
    complete for Go Hosted and Go Groups, and Go Proxy repositories now mirror

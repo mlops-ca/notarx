@@ -4100,7 +4100,7 @@
       ],
       "get": {
         "operationId": "authenticateConanRemote",
-        "description": "Exchanges a local resolver or service-account credential for a five-minute repository-bound token. Requires independent GATEWAY_CONAN_TOKEN_SECRET; missing configuration returns 501. Tokens revalidate the source credential on every request.",
+        "description": "Exchanges a local resolver or service-account credential for a five-minute repository-bound token. Requires independent NOTARX_CONAN_TOKEN_SECRET; missing configuration returns 501. Tokens revalidate the source credential on every request.",
         "security": [
           {
             "protocolBasicAuth": []
@@ -5805,7 +5805,7 @@
     "/migration-sources": {
       "get": {
         "operationId": "listMigrationSources",
-        "description": "Administrator-only Nexus 3 read-only source. Credentials are encrypted using GATEWAY_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur.",
+        "description": "Administrator-only Nexus 3 read-only source. Credentials are encrypted using NOTARX_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur.",
         "parameters": [
           {
             "name": "limit",
@@ -5868,7 +5868,7 @@
       },
       "post": {
         "operationId": "createMigrationSource",
-        "description": "Administrator-only Nexus 3 read-only source. Credentials are encrypted using GATEWAY_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur.",
+        "description": "Administrator-only Nexus 3 read-only source. Credentials are encrypted using NOTARX_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur.",
         "parameters": [],
         "responses": {
           "201": {
@@ -5935,7 +5935,7 @@
       ],
       "get": {
         "operationId": "getMigrationSource",
-        "description": "Administrator-only Nexus 3 read-only source. Credentials are encrypted using GATEWAY_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur.",
+        "description": "Administrator-only Nexus 3 read-only source. Credentials are encrypted using NOTARX_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur.",
         "parameters": [],
         "responses": {
           "200": {
@@ -5979,7 +5979,7 @@
       },
       "put": {
         "operationId": "updateMigrationSource",
-        "description": "Administrator-only Nexus 3 read-only source. Credentials are encrypted using GATEWAY_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur. Omitted credentials retain the current encrypted value; clearCredentials removes it. Changing the source origin requires explicitly replacing or clearing configured credentials.",
+        "description": "Administrator-only Nexus 3 read-only source. Credentials are encrypted using NOTARX_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur. Omitted credentials retain the current encrypted value; clearCredentials removes it. Changing the source origin requires explicitly replacing or clearing configured credentials.",
         "parameters": [
           {
             "name": "If-Match",
@@ -6044,7 +6044,7 @@
       },
       "delete": {
         "operationId": "deleteMigrationSource",
-        "description": "Administrator-only Nexus 3 read-only source. Credentials are encrypted using GATEWAY_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur. Removes encrypted credentials and connection configuration.",
+        "description": "Administrator-only Nexus 3 read-only source. Credentials are encrypted using NOTARX_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur. Removes encrypted credentials and connection configuration.",
         "parameters": [
           {
             "name": "If-Match",
@@ -6105,7 +6105,7 @@
       ],
       "post": {
         "operationId": "preflightMigrationSource",
-        "description": "Administrator-only Nexus 3 read-only source. Credentials are encrypted using GATEWAY_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur. Fetches only credential-visible repositories and their supported read-only configuration. It does not prove global inventory completeness. A failed request is a problem response, never an empty success.",
+        "description": "Administrator-only Nexus 3 read-only source. Credentials are encrypted using NOTARX_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur. Fetches only credential-visible repositories and their supported read-only configuration. It does not prove global inventory completeness. A failed request is a problem response, never an empty success.",
         "parameters": [],
         "responses": {
           "200": {
@@ -6162,7 +6162,7 @@
       ],
       "post": {
         "operationId": "discoverMigrationSource",
-        "description": "Administrator-only Nexus 3 read-only source. Credentials are encrypted using GATEWAY_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur. Exhausts asset pagination for selected supported Hosted repositories with bounded requests (128), response bytes (16 MiB total, 2 MiB per response), repositories (500) and time (30 seconds). Cyclic tokens, untrusted download URLs and exhausted budgets fail explicitly without partial success. Proxy/Group/unknown formats and Maven SNAPSHOT repositories are explicitly unsupported for asset discovery. MIXED repositories return release-version paths; SNAPSHOT paths, shared metadata and unclassifiable Maven paths are listed explicitly in unsupportedAssets. Budgets count both supported and unsupported assets.",
+        "description": "Administrator-only Nexus 3 read-only source. Credentials are encrypted using NOTARX_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur. Exhausts asset pagination for selected supported Hosted repositories with bounded requests (128), response bytes (16 MiB total, 2 MiB per response), repositories (500) and time (30 seconds). Cyclic tokens, untrusted download URLs and exhausted budgets fail explicitly without partial success. Proxy/Group/unknown formats and Maven SNAPSHOT repositories are explicitly unsupported for asset discovery. MIXED repositories return release-version paths; SNAPSHOT paths, shared metadata and unclassifiable Maven paths are listed explicitly in unsupportedAssets. Budgets count both supported and unsupported assets.",
         "parameters": [],
         "responses": {
           "200": {
@@ -6229,7 +6229,7 @@
       ],
       "post": {
         "operationId": "previewMigrationSourceMapping",
-        "description": "Administrator-only Nexus 3 read-only source. Credentials are encrypted using GATEWAY_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur. Validates explicit native target names, formats/types, existing-name conflicts and ordered Group member mappings. Re-reads source configuration; performs no target writes. Permissions, credentials and source-specific fields require manual reconfiguration.",
+        "description": "Administrator-only Nexus 3 read-only source. Credentials are encrypted using NOTARX_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur. Validates explicit native target names, formats/types, existing-name conflicts and ordered Group member mappings. Re-reads source configuration; performs no target writes. Permissions, credentials and source-specific fields require manual reconfiguration.",
         "parameters": [],
         "responses": {
           "200": {

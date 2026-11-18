@@ -15,19 +15,19 @@ signer_token='apt-e2e-reference-signer-token-0001'
 chmod 0700 "$workdir"
 {
   printf '%s\n' \
-    'GATEWAY_HTTP_PORT=0' \
-    'GATEWAY_POSTGRES_PORT=0' \
+    'NOTARX_HTTP_PORT=0' \
+    'NOTARX_POSTGRES_PORT=0' \
     'RUSTFS_API_PORT=0' \
     'RUSTFS_CONSOLE_PORT=0' \
-    'GATEWAY_POSTGRES_PASSWORD=apt-e2e-postgres-password' \
+    'NOTARX_POSTGRES_PASSWORD=apt-e2e-postgres-password' \
     'RUSTFS_ACCESS_KEY=apt-e2e-access-key' \
     'RUSTFS_SECRET_KEY=apt-e2e-rustfs-secret-key-00000001' \
     'RUSTFS_RPC_SECRET=apt-e2e-rustfs-rpc-secret-00000001' \
-    "GATEWAY_ADMIN_TOKEN=$admin_token" \
-    "GATEWAY_RESOLVER_TOKEN=$resolver_token" \
-    'GATEWAY_APT_SIGNER_ENDPOINT=http://127.0.0.1:18083/v1/sign-release' \
-    "GATEWAY_APT_SIGNER_TOKEN=$signer_token" \
-    'GATEWAY_APT_SIGNER_TIMEOUT=30s' \
+    "NOTARX_ADMIN_TOKEN=$admin_token" \
+    "NOTARX_RESOLVER_TOKEN=$resolver_token" \
+    'NOTARX_APT_SIGNER_ENDPOINT=http://127.0.0.1:18083/v1/sign-release' \
+    "NOTARX_APT_SIGNER_TOKEN=$signer_token" \
+    'NOTARX_APT_SIGNER_TIMEOUT=30s' \
     'REFERENCE_APT_SIGNER_RSA_BITS=2048'
 } >"$env_file"
 chmod 0600 "$env_file"
@@ -128,7 +128,7 @@ repository_id=$(sed -n 's/.*"id":"\([^"]*\)".*/\1/p' "$repository_response")
 empty_backup_dir="$workdir/empty-backup"
 # Release the shared Gateway network namespace before restarting its owner.
 "${compose[@]}" stop reference-apt-signer >/dev/null
-COMPOSE_PROJECT_NAME="$project" GATEWAY_ENV_FILE="$env_file" \
+COMPOSE_PROJECT_NAME="$project" NOTARX_ENV_FILE="$env_file" \
   "$root/scripts/backup-drill.sh" "$empty_backup_dir"
 "${compose[@]}" up -d --force-recreate --wait reference-apt-signer >/dev/null
 wait_gateway_ready
@@ -358,7 +358,7 @@ printf '%s\n' "$archive_receipt" >"$workdir/original-archive.receipt"
 backup_dir="$workdir/backup"
 # Release the shared Gateway network namespace before restarting its owner.
 "${compose[@]}" stop reference-apt-signer >/dev/null
-COMPOSE_PROJECT_NAME="$project" GATEWAY_ENV_FILE="$env_file" \
+COMPOSE_PROJECT_NAME="$project" NOTARX_ENV_FILE="$env_file" \
   "$root/scripts/backup-drill.sh" "$backup_dir"
 "${compose[@]}" up -d --force-recreate --wait reference-apt-signer >/dev/null
 wait_gateway_ready
@@ -403,7 +403,7 @@ PYRETIRED
 
 # Release the shared Gateway network namespace before restarting its owner.
 "${compose[@]}" stop reference-apt-signer >/dev/null
-COMPOSE_PROJECT_NAME="$project" GATEWAY_ENV_FILE="$env_file" \
+COMPOSE_PROJECT_NAME="$project" NOTARX_ENV_FILE="$env_file" \
   "$root/scripts/restore-drill.sh" "$backup_dir"
 wait_gateway_ready
 restored_state="$workdir/restored-signing-state.json"
@@ -439,7 +439,7 @@ source "$root/scripts/native-apt-lifecycle-e2e.inc.sh"
 # Restore ONLY the empty baseline: the source packages, snapshots and objects are gone.
 # Release the shared Gateway network namespace before restarting its owner.
 "${compose[@]}" stop reference-apt-signer >/dev/null
-COMPOSE_PROJECT_NAME="$project" GATEWAY_ENV_FILE="$env_file" \
+COMPOSE_PROJECT_NAME="$project" NOTARX_ENV_FILE="$env_file" \
   "$root/scripts/restore-drill.sh" "$empty_backup_dir"
 wait_gateway_ready
 restore_override="$workdir/restore.compose.yml"
@@ -449,9 +449,9 @@ import json, sys
 from pathlib import Path
 Path(sys.argv[1]).write_text(json.dumps({"services":{"gateway":{
     "environment":{
-        "GATEWAY_APT_SIGNER_ENDPOINT":"", "GATEWAY_APT_SIGNER_TOKEN":"", "GATEWAY_APT_SIGNER_TIMEOUT":"",
-        "GATEWAY_APT_RESTORE_TRUSTED_FINGERPRINTS":sys.argv[3],
-        "GATEWAY_APT_RESTORE_TRUSTED_PUBLIC_KEYS_FILE":"/run/apt-restore.asc"},
+        "NOTARX_APT_SIGNER_ENDPOINT":"", "NOTARX_APT_SIGNER_TOKEN":"", "NOTARX_APT_SIGNER_TIMEOUT":"",
+        "NOTARX_APT_RESTORE_TRUSTED_FINGERPRINTS":sys.argv[3],
+        "NOTARX_APT_RESTORE_TRUSTED_PUBLIC_KEYS_FILE":"/run/apt-restore.asc"},
     "volumes":[sys.argv[2]+":/run/apt-restore.asc:ro"]}}}))
 PYRESTORECONFIG
 compose+=( -f "$restore_override" )

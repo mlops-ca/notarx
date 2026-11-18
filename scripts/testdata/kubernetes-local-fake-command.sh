@@ -57,10 +57,10 @@ case "$command_name" in
         *RUSTFS_ACCESS_KEY*) value=${FAKE_K8S_RUSTFS_ACCESS_KEY:-} ;;
         *RUSTFS_SECRET_KEY*) value=${FAKE_K8S_RUSTFS_SECRET_KEY:-} ;;
         *RUSTFS_RPC_SECRET*) value=${FAKE_K8S_RUSTFS_RPC_SECRET:-} ;;
-        *GATEWAY_ADMIN_TOKEN*) value=${FAKE_K8S_ADMIN_TOKEN:-} ;;
-        *GATEWAY_RESOLVER_TOKEN*) value=${FAKE_K8S_RESOLVER_TOKEN:-} ;;
-        *GATEWAY_SETTINGS_ENCRYPTION_KEY*) value=${FAKE_K8S_SETTINGS_KEY:-} ;;
-        *GATEWAY_APT_SIGNER_TOKEN*) value=${FAKE_K8S_APT_SIGNER_TOKEN:-} ;;
+        *NOTARX_ADMIN_TOKEN*) value=${FAKE_K8S_ADMIN_TOKEN:-} ;;
+        *NOTARX_RESOLVER_TOKEN*) value=${FAKE_K8S_RESOLVER_TOKEN:-} ;;
+        *NOTARX_SETTINGS_ENCRYPTION_KEY*) value=${FAKE_K8S_SETTINGS_KEY:-} ;;
+        *NOTARX_APT_SIGNER_TOKEN*) value=${FAKE_K8S_APT_SIGNER_TOKEN:-} ;;
         *) value= ;;
       esac
       if [[ -n "$value" ]]; then

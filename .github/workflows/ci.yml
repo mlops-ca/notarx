@@ -285,27 +285,27 @@ jobs:
         run: for image in "$RUNNER_TEMP"/images/*.tar; do docker load --input "$image"; done
       - name: Start gateway for Console E2E
         env:
-          GATEWAY_ENV_FILE: ${{ runner.temp }}/artifact-gateway.env
+          NOTARX_ENV_FILE: ${{ runner.temp }}/artifact-gateway.env
         run: |
-          cat > "$GATEWAY_ENV_FILE" <<'EOF'
-          GATEWAY_HTTP_PORT=18080
-          GATEWAY_POSTGRES_PASSWORD=ci-postgres-password
-          GATEWAY_ADMIN_TOKEN=ci-admin-token
-          GATEWAY_RESOLVER_TOKEN=ci-resolver-token
+          cat > "$NOTARX_ENV_FILE" <<'EOF'
+          NOTARX_HTTP_PORT=18080
+          NOTARX_POSTGRES_PASSWORD=ci-postgres-password
+          NOTARX_ADMIN_TOKEN=ci-admin-token
+          NOTARX_RESOLVER_TOKEN=ci-resolver-token
           RUSTFS_ACCESS_KEY=ci-rustfs-user
           RUSTFS_SECRET_KEY=ci-rustfs-password
           RUSTFS_RPC_SECRET=ci-rustfs-independent-rpc-secret-0001
           RUSTFS_API_PORT=19000
           RUSTFS_CONSOLE_PORT=19001
-          GATEWAY_OIDC_ISSUER=http://127.0.0.1:1/ci-cli-e2e
-          GATEWAY_OIDC_AUDIENCE=ci-cli-e2e
-          GATEWAY_OIDC_JWKS_URL=http://127.0.0.1:1/ci-cli-e2e/jwks
+          NOTARX_OIDC_ISSUER=http://127.0.0.1:1/ci-cli-e2e
+          NOTARX_OIDC_AUDIENCE=ci-cli-e2e
+          NOTARX_OIDC_JWKS_URL=http://127.0.0.1:1/ci-cli-e2e/jwks
           EOF
-          docker compose --env-file "$GATEWAY_ENV_FILE" -f compose.yml up --no-build --wait --remove-orphans
+          docker compose --env-file "$NOTARX_ENV_FILE" -f compose.yml up --no-build --wait --remove-orphans
       - name: Run console E2E
         id: console-e2e
         env:
-          GATEWAY_ENV_FILE: ${{ runner.temp }}/artifact-gateway.env
+          NOTARX_ENV_FILE: ${{ runner.temp }}/artifact-gateway.env
         run: make console-e2e
       - name: Upload Console E2E report and traces
         if: ${{ !cancelled() && (steps.console-e2e.outcome == 'success' || steps.console-e2e.outcome == 'failure') }}
@@ -331,10 +331,10 @@ jobs:
       - name: Stop gateway after Console E2E
         if: always()
         env:
-          GATEWAY_ENV_FILE: ${{ runner.temp }}/artifact-gateway.env
+          NOTARX_ENV_FILE: ${{ runner.temp }}/artifact-gateway.env
         run: |
-          if [ -f "$GATEWAY_ENV_FILE" ]; then
-            docker compose --env-file "$GATEWAY_ENV_FILE" -f compose.yml down -v --remove-orphans
+          if [ -f "$NOTARX_ENV_FILE" ]; then
+            docker compose --env-file "$NOTARX_ENV_FILE" -f compose.yml down -v --remove-orphans
           else
             echo "Gateway environment file was not created; nothing to clean up."
           fi

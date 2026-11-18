@@ -14,7 +14,7 @@ import (
 
 func sealedUpstreamSecret(t *testing.T, value string) string {
 	t.Helper()
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
 	sealed, err := secrets.Seal(upstreamAuthSecretPurpose, value)
 	if err != nil {
 		t.Fatal(err)
@@ -30,7 +30,7 @@ func goProxyRepo(endpoint string, auth *repository.UpstreamAuth) repository.Host
 }
 
 func TestFetchGoInjectsUpstreamCredentials(t *testing.T) {
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
 	cases := []struct {
 		name string
 		auth *repository.UpstreamAuth
@@ -77,7 +77,7 @@ func TestFetchGoInjectsUpstreamCredentials(t *testing.T) {
 // TestFetchGoStripsCredentialsOnCrossHostRedirect pins that a redirect to
 // another host — even an allow-listed one — never receives the credential.
 func TestFetchGoStripsCredentialsOnCrossHostRedirect(t *testing.T) {
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
 	var leaked string
 	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		leaked = r.Header.Get("Authorization")
@@ -112,7 +112,7 @@ func TestFetchGoStripsCredentialsOnCrossHostRedirect(t *testing.T) {
 // a hard failure. Silently falling back to an anonymous request would turn a
 // key-rotation mistake into unexplained upstream 401s.
 func TestFetchGoFailsWhenCredentialCannotBeDecrypted(t *testing.T) {
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
 	reached := false
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		reached = true

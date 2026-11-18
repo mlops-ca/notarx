@@ -26,7 +26,7 @@ export function ProxyMavenUsage({
     <server>
       <id>${repoName}</id>
       <username>resolver</username>
-      <password>\${env.GATEWAY_RESOLVER_TOKEN}</password>
+      <password>\${env.NOTARX_RESOLVER_TOKEN}</password>
     </server>
   </servers>
   <mirrors>
@@ -38,7 +38,7 @@ export function ProxyMavenUsage({
   </mirrors>
 </settings>`;
   const docker = `docker run --rm \\
-  -e GATEWAY_RESOLVER_TOKEN=<resolver-token> \\
+  -e NOTARX_RESOLVER_TOKEN=<resolver-token> \\
   -v "$PWD/settings.xml:/root/.m2/settings.xml:ro" \\
   -v "$PWD:/workspace" -w /workspace \\
   maven:3.9-eclipse-temurin-21 mvn dependency:go-offline`;

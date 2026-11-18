@@ -17,7 +17,7 @@ There is no `notarxctl` command for the preview API.
 
 Apply the append-only migrations with the normal migration runner and configure
 the existing PostgreSQL and verified S3/RustFS ports. Set
-`GATEWAY_NUGET_PREVIEW_ENABLED=true` on the API process. The default is false;
+`NOTARX_NUGET_PREVIEW_ENABLED=true` on the API process. The default is false;
 invalid boolean values fail startup. An API-only node does not start cleanup
 workers. Enable the same preview on a worker/standalone node with retention
 work enabled to collect expired uploads. A restrictive worker-format filter

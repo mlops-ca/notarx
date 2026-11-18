@@ -153,7 +153,7 @@ when no change is needed.
 Console dependencies when absent, and waits for both the API and Console.
 
 Open the Console at <http://127.0.0.1:4173>. Sign in with the
-`GATEWAY_ADMIN_TOKEN` stored in `.env`, then create a Hosted, Proxy, or Group
+`NOTARX_ADMIN_TOKEN` stored in `.env`, then create a Hosted, Proxy, or Group
 repository from the Repositories page.
 
 ```sh

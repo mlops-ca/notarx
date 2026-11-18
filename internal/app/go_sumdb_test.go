@@ -183,8 +183,8 @@ func TestNativeGoSumDBMirrorsOnlyAllowlistedChecksumDatabases(t *testing.T) {
 // fetch the lookup and tile bytes through the Go Proxy repository, and verify
 // the module ZIP and go.mod against the signed tree.
 func TestNativeGoRealClientVerifiesChecksumsThroughSumDBMirror(t *testing.T) {
-	if os.Getenv("ARTIFACT_GATEWAY_GO_CLI_E2E") == "" {
-		t.Skip("set ARTIFACT_GATEWAY_GO_CLI_E2E=1 to run the real Go client acceptance test")
+	if os.Getenv("NOTARX_GO_CLI_E2E") == "" {
+		t.Skip("set NOTARX_GO_CLI_E2E=1 to run the real Go client acceptance test")
 	}
 	t.Setenv("NO_PROXY", "127.0.0.1,localhost,example.com")
 	t.Setenv("no_proxy", "127.0.0.1,localhost,example.com")

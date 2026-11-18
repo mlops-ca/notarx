@@ -80,7 +80,7 @@ export function publicRepositoryUsage({
       { label: t("lib.cargoSparseIndex"), code: index },
       {
         label: ".cargo/config.toml",
-        code: `[registries.gateway]\nindex = "${index}"\ncredential-provider = "cargo:token"`,
+        code: `[registries.notarx]\nindex = "${index}"\ncredential-provider = "cargo:token"`,
       },
       {
         label: t("lib.searchAndInstallACrate"),

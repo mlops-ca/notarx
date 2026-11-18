@@ -93,7 +93,7 @@ check_openapi_fresh() {
 }
 
 gateway_ready() {
-  local port=${GATEWAY_HTTP_PORT:-8080}
+  local port=${NOTARX_HTTP_PORT:-8080}
   curl -sf "http://127.0.0.1:${port}/readyz" >/dev/null 2>&1
 }
 
@@ -145,7 +145,7 @@ run_console() {
     if gateway_ready; then
       run "console E2E" make console-e2e
     else
-      skip "console E2E" "gateway not ready on 127.0.0.1:${GATEWAY_HTTP_PORT:-8080}; start it with \`make dev-bootstrap && make dev\`"
+      skip "console E2E" "gateway not ready on 127.0.0.1:${NOTARX_HTTP_PORT:-8080}; start it with \`make dev-bootstrap && make dev\`"
     fi
   else
     skip "console E2E" "pass --with-console-e2e and start the gateway stack to include it"

@@ -19,7 +19,7 @@ func (s *quotaRoutingCapture) EvaluateNextRepositoryQuotaAlert(_ context.Context
 	return false, nil
 }
 func TestQuotaEvaluatorMissingEncryptionMarksRoutingUnavailable(t *testing.T) {
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", "")
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", "")
 	capture := &quotaRoutingCapture{}
 	_, err := (QuotaAlertEvaluator{Store: capture, Mail: repository.QuotaAlertMailConfig{Enabled: true, From: "synthetic@example.test"}}).Run(context.Background())
 	if err != nil || capture.calls != 1 || capture.mail.Enabled || capture.mail.UnavailableCode != "encryption_key_unavailable" {

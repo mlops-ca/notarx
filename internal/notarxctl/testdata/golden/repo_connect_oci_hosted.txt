@@ -1,8 +1,8 @@
 # oci-hosted (oci hosted) at http://gateway.test/gw
-# set ARTIFACT_GATEWAY_TOKEN to a credential with access to this repository
+# set NOTARX_TOKEN to a credential with access to this repository
 
 ## sign in
-printf '%s' "$ARTIFACT_GATEWAY_TOKEN" | docker login gateway.test --username ci --password-stdin
+printf '%s' "$NOTARX_TOKEN" | docker login gateway.test --username ci --password-stdin
 
 ## pull
 docker pull gateway.test/gw/oci-hosted/<image>:<tag>

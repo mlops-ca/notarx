@@ -24,22 +24,22 @@ def check():
     with tempfile.TemporaryDirectory(prefix=project + "-") as temporary:
         work = Path(temporary)
         values = {
-            "GATEWAY_POSTGRES_PASSWORD": secrets.token_hex(24),
-            "GATEWAY_ADMIN_TOKEN": secrets.token_hex(24),
-            "GATEWAY_RESOLVER_TOKEN": secrets.token_hex(24),
+            "NOTARX_POSTGRES_PASSWORD": secrets.token_hex(24),
+            "NOTARX_ADMIN_TOKEN": secrets.token_hex(24),
+            "NOTARX_RESOLVER_TOKEN": secrets.token_hex(24),
             "RUSTFS_ACCESS_KEY": "owned-" + secrets.token_hex(8),
             "RUSTFS_SECRET_KEY": secrets.token_hex(24),
             "RUSTFS_RPC_SECRET": secrets.token_hex(32),
-            "GATEWAY_DATABASE_MAX_OPEN_CONNS": "8",
-            "GATEWAY_DATABASE_MAX_IDLE_CONNS": "2",
-            "GATEWAY_DATABASE_COORDINATOR_MAX_OPEN_CONNS": "2",
-            "GATEWAY_DATABASE_COORDINATOR_MAX_IDLE_CONNS": "1",
-            "GATEWAY_DATABASE_ARTIFACT_LOCK_MAX_OPEN_CONNS": "2",
-            "GATEWAY_DATABASE_ARTIFACT_LOCK_MAX_IDLE_CONNS": "1",
-            "GATEWAY_LOG_BUFFER_LINES": "1000",
+            "NOTARX_DATABASE_MAX_OPEN_CONNS": "8",
+            "NOTARX_DATABASE_MAX_IDLE_CONNS": "2",
+            "NOTARX_DATABASE_COORDINATOR_MAX_OPEN_CONNS": "2",
+            "NOTARX_DATABASE_COORDINATOR_MAX_IDLE_CONNS": "1",
+            "NOTARX_DATABASE_ARTIFACT_LOCK_MAX_OPEN_CONNS": "2",
+            "NOTARX_DATABASE_ARTIFACT_LOCK_MAX_IDLE_CONNS": "1",
+            "NOTARX_LOG_BUFFER_LINES": "1000",
         }
         private_values = [values[k] for k in (
-            "GATEWAY_POSTGRES_PASSWORD", "GATEWAY_ADMIN_TOKEN", "GATEWAY_RESOLVER_TOKEN",
+            "NOTARX_POSTGRES_PASSWORD", "NOTARX_ADMIN_TOKEN", "NOTARX_RESOLVER_TOKEN",
             "RUSTFS_ACCESS_KEY", "RUSTFS_SECRET_KEY", "RUSTFS_RPC_SECRET")]
         environment_file = work / "fixture.env"
 
@@ -76,7 +76,7 @@ def check():
             result = subprocess.run([str(cli), *args, "--json"], cwd=work,
                                     input=stdin, capture_output=True, text=True, timeout=45,
                                     env={**environment, "HOME": str(work), "NOTARXCTL_SERVER": base_url,
-                                         "NOTARXCTL_TOKEN": token or values["GATEWAY_ADMIN_TOKEN"], "NOTARXCTL_PROFILE": ""})
+                                         "NOTARXCTL_TOKEN": token or values["NOTARX_ADMIN_TOKEN"], "NOTARXCTL_PROFILE": ""})
             require(not any(v in result.stdout + result.stderr for v in private_values), "notarxctl leaked a synthetic secret")
             require(result.returncode == expected,
                     "notarxctl " + " ".join(args) + " exited " + str(result.returncode) + ": " + result.stdout[-2000:] + result.stderr[-500:])
@@ -99,7 +99,7 @@ def check():
             started = True
             gateway()
             require(readiness(ctl("status")["data"]) == "healthy", "fresh Gateway is not ready")
-            member = values["GATEWAY_RESOLVER_TOKEN"]
+            member = values["NOTARX_RESOLVER_TOKEN"]
             ctl("runtime", "logs", token=member, expected=6)
             limited = ctl("status", token=member)["data"]
             require(limited["overall"] == "unknown", "a member's unread diagnostics became healthy")
@@ -141,7 +141,7 @@ def check():
             run(compose + ["up", "-d", "--no-build", "--wait", "postgres"])
             require(readiness(ctl("status")["data"]) == "healthy", "restored dependency stayed unhealthy")
 
-            values["GATEWAY_LOG_BUFFER_LINES"] = "0"
+            values["NOTARX_LOG_BUFFER_LINES"] = "0"
             write_environment()
             gateway("--no-deps", "--force-recreate")
             disabled = ctl("runtime", "logs", expected=1)

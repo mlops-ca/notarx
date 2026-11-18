@@ -28,7 +28,7 @@ the Group's canonical remote instead.
 
 ## Authentication and permissions
 
-Set `GATEWAY_CONAN_TOKEN_SECRET` to an independently generated secret of at least
+Set `NOTARX_CONAN_TOKEN_SECRET` to an independently generated secret of at least
 32 bytes, for example the output of `openssl rand -hex 32`. It must differ from
 the administrator and resolver login credentials. Keep it private and consistent
 across Gateway replicas. Empty configuration leaves other formats available but

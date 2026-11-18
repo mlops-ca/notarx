@@ -6,11 +6,11 @@ import {
 } from "@playwright/test";
 import { openRepositoryTask } from "./support/repositoryTasks";
 
-const token = process.env.GATEWAY_ADMIN_TOKEN;
+const token = process.env.NOTARX_ADMIN_TOKEN;
 
 test.skip(
   !token,
-  "GATEWAY_ADMIN_TOKEN is required for the artifact workflow browser gate",
+  "NOTARX_ADMIN_TOKEN is required for the artifact workflow browser gate",
 );
 test.describe.configure({ mode: "serial" });
 

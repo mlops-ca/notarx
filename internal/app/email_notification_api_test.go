@@ -38,7 +38,7 @@ func TestAdministratorCanPreviewWarningEmailWithoutSMTP(t *testing.T) {
 }
 
 func TestEmailTargetsRequireAdministratorAndHideRecipient(t *testing.T) {
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", "01234567890123456789012345678901")
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", "01234567890123456789012345678901")
 	h := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: repository.NewMemoryStore(), Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
 	r := httptest.NewRequest(http.MethodPost, "/api/v2/email-targets", strings.NewReader(`{"name":"Operations","recipient":"private@example.test","locale":"en"}`))
 	authorize(r, "admin-secret")
@@ -61,7 +61,7 @@ func TestEmailTargetsRequireAdministratorAndHideRecipient(t *testing.T) {
 }
 
 func TestAdministratorEmailTestEnqueuesOnceAndDoesNotSendInHTTP(t *testing.T) {
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", "01234567890123456789012345678901")
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", "01234567890123456789012345678901")
 	store := repository.NewMemoryStore()
 	target, err := store.CreateEmailTarget(context.Background(), repository.EmailTarget{ID: uuid.NewString(), Name: "Synthetic", Locale: "en", RecipientCiphertext: "synthetic", Enabled: true})
 	if err != nil {
@@ -134,7 +134,7 @@ func TestEmailManagementAuthorizationAndDisabledGate(t *testing.T) {
 }
 
 func TestEmailIdempotencyRetainsV1DescriptorAcrossTemplateUpgrade(t *testing.T) {
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", "01234567890123456789012345678901")
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", "01234567890123456789012345678901")
 	s := repository.NewMemoryStore()
 	ctx := context.Background()
 	target, err := s.CreateEmailTarget(ctx, repository.EmailTarget{ID: uuid.NewString(), Name: "Synthetic", Locale: "en", Enabled: true, RecipientCiphertext: "synthetic"})
@@ -185,7 +185,7 @@ func TestEmailManagementRejectsForcedPasswordChange(t *testing.T) {
 }
 
 func TestEmailTargetCASValidationMissingKeyAndDeadReplay(t *testing.T) {
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", "01234567890123456789012345678901")
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", "01234567890123456789012345678901")
 	store := repository.NewMemoryStore()
 	cfg := emailnotification.Config{Enabled: true, Host: "smtp.example.test", Port: 465, Mode: "implicit_tls", From: "gateway@example.test", ApprovedIPs: []string{"192.0.2.10"}}
 	h := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{Email: cfg}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
@@ -259,7 +259,7 @@ func TestEmailTargetCASValidationMissingKeyAndDeadReplay(t *testing.T) {
 	if request("GET", "/api/v2/email-deliveries?limit=0", "", "", "").Code != 400 || request("GET", "/api/v2/email-deliveries?limit=100", "", "", "").Code != 200 {
 		t.Fatal("delivery query bounds failed")
 	}
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", "")
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", "")
 	if w := request("GET", "/api/v2/email-notifications", "", "", ""); w.Code != 200 || !strings.Contains(w.Body.String(), "encryption_key_unavailable") {
 		t.Fatal("capability hid missing encryption key")
 	}

@@ -3,7 +3,7 @@
 [简体中文](nuget-proxy-group-preview.zh-CN.md) · [Hosted preview](nuget-hosted-preview.md) · [NuGet roadmap](nuget-roadmap.md)
 
 NuGet Hosted, Proxy and Group share the explicitly enabled NuGet preview. Set
-`GATEWAY_NUGET_PREVIEW_ENABLED=true` after applying the append-only migrations
+`NOTARX_NUGET_PREVIEW_ENABLED=true` after applying the append-only migrations
 with the standard runner. The default remains off. NuGet is absent from the
 formal format profiles, repository/Group catalog and Console selector. This
 stage has no `notarxctl` configuration commands. The [Hosted governance preview](nuget-hosted-preview.md#listing-and-retained-governance)

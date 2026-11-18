@@ -9,9 +9,9 @@
 # ash rather than bash, so it stays POSIX: no arrays, no [[ ]].
 set -euo pipefail
 
-database_url=${GATEWAY_DATABASE_URL:-}
+database_url=${NOTARX_DATABASE_URL:-}
 if [ -z "$database_url" ]; then
-  printf '%s\n' 'Set GATEWAY_DATABASE_URL to the database to report on.' >&2
+  printf '%s\n' 'Set NOTARX_DATABASE_URL to the database to report on.' >&2
   exit 1
 fi
 
@@ -48,7 +48,7 @@ printf '  %s\n' 'materialized grant cannot reach further than the level it repla
 printf '  %s\n' 'assigned role templates instead would list the grants whose scope exceeds the level here.'
 
 section '2. Principals that reach repositories only through the legacy static patterns' \
-  'add each actor to the repository grant list it still depends on, or keep its pattern in GATEWAY_REPOSITORY_READERS / GATEWAY_REPOSITORY_WRITERS' \
+  'add each actor to the repository grant list it still depends on, or keep its pattern in NOTARX_REPOSITORY_READERS / NOTARX_REPOSITORY_WRITERS' \
   "SELECT a.actor,
           a.repository,
           count(*) AS decisions,

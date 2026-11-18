@@ -52,7 +52,7 @@ func backupInput(t *testing.T) (string, []byte) {
 }
 
 func TestBackupCLISeparatesVerifiedBytesFromUnknownConsistency(t *testing.T) {
-	t.Setenv("GATEWAY_DATABASE_URL", "synthetic-invalid-config-marker")
+	t.Setenv("NOTARX_DATABASE_URL", "synthetic-invalid-config-marker")
 	path, data := backupInput(t)
 	var out, errOut bytes.Buffer
 	code := RunCLI(context.Background(), []string{"backup", "--input", path, "--format", "json"}, &out, &errOut)

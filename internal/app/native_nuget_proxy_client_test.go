@@ -43,7 +43,7 @@ import (
 
 func startNuGetProxyGatewayContainer(t *testing.T, c nugetOfficialClient, bucket, address string, extraEnv ...string) func() {
 	t.Helper()
-	binary, err := os.ReadFile(os.Getenv("NUGET_GATEWAY_LINUX_BIN"))
+	binary, err := os.ReadFile(os.Getenv("NUGET_NOTARX_LINUX_BIN"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func startNuGetProxyGatewayContainer(t *testing.T, c nugetOfficialClient, bucket
 	if c.sharedHostNetwork {
 		listenHost = "127.0.0.1"
 	}
-	env := []string{"GATEWAY_DATABASE_URL=" + hostURL(os.Getenv("TEST_DATABASE_URL")), "GATEWAY_RUSTFS_ENDPOINT=" + hostURL(os.Getenv("TEST_RUSTFS_ENDPOINT")), "GATEWAY_RUSTFS_ACCESS_KEY=" + os.Getenv("TEST_RUSTFS_ACCESS_KEY"), "GATEWAY_RUSTFS_SECRET_KEY=" + os.Getenv("TEST_RUSTFS_SECRET_KEY"), "GATEWAY_RUSTFS_BUCKET=" + bucket, "GATEWAY_ADMIN_TOKEN=" + c.admin, "GATEWAY_ADMIN_ACTOR=nuget-gate-operator", "GATEWAY_RESOLVER_TOKEN=" + c.reader, "GATEWAY_RESOLVER_ACTOR=nuget-gate-reader", "GATEWAY_NUGET_PREVIEW_ENABLED=true", "GATEWAY_NODE_ROLES=api", "GATEWAY_LISTEN_ADDRESS=" + net.JoinHostPort(listenHost, port), "GATEWAY_ACCESS_LOG=limited", "HOME=/work/gateway-home", "HTTP_PROXY=", "http_proxy="}
+	env := []string{"NOTARX_DATABASE_URL=" + hostURL(os.Getenv("TEST_DATABASE_URL")), "NOTARX_RUSTFS_ENDPOINT=" + hostURL(os.Getenv("TEST_RUSTFS_ENDPOINT")), "NOTARX_RUSTFS_ACCESS_KEY=" + os.Getenv("TEST_RUSTFS_ACCESS_KEY"), "NOTARX_RUSTFS_SECRET_KEY=" + os.Getenv("TEST_RUSTFS_SECRET_KEY"), "NOTARX_RUSTFS_BUCKET=" + bucket, "NOTARX_ADMIN_TOKEN=" + c.admin, "NOTARX_ADMIN_ACTOR=nuget-gate-operator", "NOTARX_RESOLVER_TOKEN=" + c.reader, "NOTARX_RESOLVER_ACTOR=nuget-gate-reader", "NOTARX_NUGET_PREVIEW_ENABLED=true", "NOTARX_NODE_ROLES=api", "NOTARX_LISTEN_ADDRESS=" + net.JoinHostPort(listenHost, port), "NOTARX_ACCESS_LOG=limited", "HOME=/work/gateway-home", "HTTP_PROXY=", "http_proxy="}
 	env = append(env, extraEnv...)
 	if err = os.MkdirAll(filepath.Join(c.work, "gateway-home"), 0700); err != nil {
 		t.Fatal(err)
@@ -368,7 +368,7 @@ func (f *nugetOwnedSource) close() {
 }
 
 func TestNativeNuGetRealDotnetPrivateProxyGroupRestore(t *testing.T) {
-	for _, key := range []string{"NUGET_GATEWAY_LINUX_BIN", "NUGET_DOTNET_IMAGE", "NUGET_COMPOSE_PROJECT", "NUGET_EVIDENCE_DIR", "TEST_DATABASE_URL", "TEST_RUSTFS_ENDPOINT"} {
+	for _, key := range []string{"NUGET_NOTARX_LINUX_BIN", "NUGET_DOTNET_IMAGE", "NUGET_COMPOSE_PROJECT", "NUGET_EVIDENCE_DIR", "TEST_DATABASE_URL", "TEST_RUSTFS_ENDPOINT"} {
 		if os.Getenv(key) == "" {
 			t.Skip("owned native-nuget-e2e fixture is required")
 		}
@@ -413,7 +413,7 @@ func TestNativeNuGetRealDotnetPrivateProxyGroupRestore(t *testing.T) {
 	_, port, _ := net.SplitHostPort(address)
 	host := "http://127.0.0.1:" + port
 	bucket := "nuget-proxy-client-" + uuid.NewString()
-	extra := []string{"GATEWAY_SETTINGS_ENCRYPTION_KEY=" + strings.Repeat("79", 32), "HTTPS_PROXY=" + strings.Replace(upstream.proxyURL, "127.0.0.1", "host.docker.internal", 1), "https_proxy=" + strings.Replace(upstream.proxyURL, "127.0.0.1", "host.docker.internal", 1), "NO_PROXY=127.0.0.1,localhost,host.docker.internal", "no_proxy=127.0.0.1,localhost,host.docker.internal", "SSL_CERT_FILE=/work/source-ca.pem"}
+	extra := []string{"NOTARX_SETTINGS_ENCRYPTION_KEY=" + strings.Repeat("79", 32), "HTTPS_PROXY=" + strings.Replace(upstream.proxyURL, "127.0.0.1", "host.docker.internal", 1), "https_proxy=" + strings.Replace(upstream.proxyURL, "127.0.0.1", "host.docker.internal", 1), "NO_PROXY=127.0.0.1,localhost,host.docker.internal", "no_proxy=127.0.0.1,localhost,host.docker.internal", "SSL_CERT_FILE=/work/source-ca.pem"}
 	stop := startNuGetProxyGatewayContainer(t, c, bucket, address, extra...)
 	var hosted struct{ ID, Name, SourceURL string }
 	nugetClientHTTP(t, host, c.admin, "POST", "/api/v2/previews/nuget/repositories", `{"name":"private-hosted-group"}`, 201, &hosted)

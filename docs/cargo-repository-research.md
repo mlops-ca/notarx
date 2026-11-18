@@ -152,7 +152,7 @@ Use one canonical sparse registry root per Repository or Group, with a trailing
 slash:
 
 ```toml
-[registries.gateway]
+[registries.notarx]
 index = "sparse+https://gateway.example/cargo/<repository>/"
 
 [registry]
@@ -164,7 +164,7 @@ committing credentials. Cargo sends the token value verbatim in the
 `Authorization` header. Since Artifact Gateway protocol tokens use the Bearer
 scheme, the Cargo token value is `Bearer <gateway-token>`, matching Gitea's
 documented private-registry configuration. With the built-in token provider,
-CI may inject `CARGO_REGISTRIES_GATEWAY_TOKEN`
+CI may inject `CARGO_REGISTRIES_NOTARX_TOKEN`
 ([Cargo registry authentication](https://doc.rust-lang.org/cargo/reference/registry-authentication.html),
 [Gitea credentials example](https://docs.gitea.com/usage/packages/cargo/#configuring-the-package-registry)).
 

@@ -19,7 +19,7 @@ def main():
     parser.add_argument("url")
     parser.add_argument("state", type=Path)
     args = parser.parse_args()
-    admin = "Bearer " + os.environ["GATEWAY_ADMIN_TOKEN"]
+    admin = "Bearer " + os.environ["NOTARX_ADMIN_TOKEN"]
 
     def request(
         method, path, body=None, *, authorization=admin, status=200, headers=None
@@ -126,7 +126,7 @@ def main():
 
     def token(actor):
         credentials = base64.b64encode(
-            f'{actor}:{os.environ["GATEWAY_RESOLVER_TOKEN"]}'.encode()
+            f'{actor}:{os.environ["NOTARX_RESOLVER_TOKEN"]}'.encode()
         ).decode()
         return (
             "Bearer "

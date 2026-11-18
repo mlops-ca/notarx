@@ -129,7 +129,7 @@ fi
 export NPM_CLIENT_NODE="$(command -v node)"
 export NPM_CLIENT_JS="$workdir/npm-client/package/bin/npm-cli.js"
 export NPM_MIGRATION_REQUIRED=1
-export GATEWAY_REPOSITORY_PRESETS=none
+export NOTARX_REPOSITORY_PRESETS=none
 export NPM_MIGRATION_EVIDENCE="$evidence"
 node --version >"$evidence/client.txt"
 npm --version >>"$evidence/client.txt"

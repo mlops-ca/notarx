@@ -10,8 +10,8 @@ Download a fixed snapshot ID as a repository administrator. Obtain the current I
 
 ```sh
 curl --fail --show-error \
-  --header "Authorization: Bearer $GATEWAY_ADMIN_TOKEN" \
-  "$GATEWAY_URL/api/v2/repositories/$REPOSITORY_ID/apt/snapshots/$SNAPSHOT_ID/archive" \
+  --header "Authorization: Bearer $NOTARX_ADMIN_TOKEN" \
+  "$NOTARX_URL/api/v2/repositories/$REPOSITORY_ID/apt/snapshots/$SNAPSHOT_ID/archive" \
   --output snapshot.tar
 gateway apt-snapshot verify snapshot.tar
 ```
@@ -44,21 +44,21 @@ Before storing a backup, run `gateway apt-snapshot verify snapshot.tar` and save
 Configure both settings on the recovering Gateway, using an operator-owned public-only keyring:
 
 ```sh
-GATEWAY_APT_RESTORE_TRUSTED_FINGERPRINTS=<trusted-primary-fingerprint>
-GATEWAY_APT_RESTORE_TRUSTED_PUBLIC_KEYS_FILE=/run/secrets/apt-restore-public-keys.asc
+NOTARX_APT_RESTORE_TRUSTED_FINGERPRINTS=<trusted-primary-fingerprint>
+NOTARX_APT_RESTORE_TRUSTED_PUBLIC_KEYS_FILE=/run/secrets/apt-restore-public-keys.asc
 ```
 
-Restore is disabled by default. Fingerprints and keyring must match exactly; private keys are rejected. Mount the file read-only in a Compose override when using containers. These settings are independent of `GATEWAY_APT_SIGNER_*`; no signer endpoint, token, private key, or signing RPC is needed. The existing RSA public-key policy and controlled rotation keyring limits apply.
+Restore is disabled by default. Fingerprints and keyring must match exactly; private keys are rejected. Mount the file read-only in a Compose override when using containers. These settings are independent of `NOTARX_APT_SIGNER_*`; no signer endpoint, token, private key, or signing RPC is needed. The existing RSA public-key policy and controlled rotation keyring limits apply.
 
 ```sh
 # EXPECTED_ARCHIVE_DIGEST comes from the independently saved backup record.
 curl --fail-with-body --show-error \
   --request POST \
-  --header "Authorization: Bearer $GATEWAY_ADMIN_TOKEN" \
+  --header "Authorization: Bearer $NOTARX_ADMIN_TOKEN" \
   --header 'Content-Type: application/vnd.artifact-gateway.apt-snapshot.v1+tar' \
   --header "X-Artifact-Archive-Digest: $EXPECTED_ARCHIVE_DIGEST" \
   --data-binary @snapshot.tar \
-  "$GATEWAY_URL/api/v2/repositories/$REPOSITORY_ID/apt/snapshots/restore"
+  "$NOTARX_URL/api/v2/repositories/$REPOSITORY_ID/apt/snapshots/restore"
 ```
 
 The target must already be an active APT Hosted repository with the **original repository UUID**; recreating its name with a new UUID is insufficient. Preserve repository configuration and authorization separately using the [recovery runbook](recovery-runbook.md).

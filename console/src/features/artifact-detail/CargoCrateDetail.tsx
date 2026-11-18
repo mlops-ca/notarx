@@ -80,7 +80,7 @@ function CargoCrateContent({
   const configSnippet = useMemo(
     () => ({
       label: ".cargo/config.toml",
-      code: `[registries.gateway]\nindex = "sparse+${window.location.origin}${base}/"`,
+      code: `[registries.notarx]\nindex = "sparse+${window.location.origin}${base}/"`,
     }),
     [base],
   );

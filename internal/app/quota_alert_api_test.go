@@ -132,12 +132,12 @@ func TestQuotaRuleActivationNeedsEncryptionAndEnabledTarget(t *testing.T) {
 	cfg := emailnotification.Config{Enabled: true, Host: "smtp.example.test", Port: 465, Mode: "implicit_tls", From: "synthetic@example.test", ApprovedIPs: []string{"192.0.2.10"}}
 	h := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{Email: cfg}, Store: s, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
 	body := fmt.Sprintf(`{"repositoryId":%q,"targetId":%q,"enabled":true,"policy":{"warningBasisPoints":8500,"criticalBasisPoints":9500,"recoveryBelowBasisPoints":8000,"warningForSeconds":300,"criticalForSeconds":120,"recoveryForSeconds":180,"maxSampleAgeSeconds":60}}`, repo.ID, target.ID)
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", "")
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", "")
 	w := quotaRequest(h, "POST", "/api/v2/repository-quota-alert-rules", body, "")
 	if w.Code != 503 || !strings.Contains(w.Body.String(), "encryption_key_unavailable") {
 		t.Fatalf("missing encryption activated rule: %d %s", w.Code, w.Body.String())
 	}
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", "01234567890123456789012345678901")
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", "01234567890123456789012345678901")
 	w = quotaRequest(h, "POST", "/api/v2/repository-quota-alert-rules", body, "")
 	if w.Code != 409 || !strings.Contains(w.Body.String(), "target_disabled") {
 		t.Fatalf("disabled target activated rule: %d %s", w.Code, w.Body.String())
