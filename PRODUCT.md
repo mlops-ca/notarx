@@ -122,8 +122,11 @@ stable-release commitments available for product claims.
 
 ## Accessibility and Inclusion
 
-- The Console and documentation support English and Simplified Chinese with
-  consistent domain meaning.
+- The Console and documentation use three locale tiers (ADR 0014) with
+  consistent domain meaning: en-CA is the reference, fr-CA is first-class (core
+  documents required, route prefix `/fr-CA/`), and zh-CN is community-maintained,
+  frozen at the upstream snapshot and optional (route prefix `/zh-CN/`). The
+  language switcher lists only the locales that exist for the page.
 - Management tasks support keyboard use, visible focus, semantic status, and
   `prefers-reduced-motion`.
 - Responsive layouts cover narrow screens and zoom without hiding core governance.

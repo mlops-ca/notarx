@@ -214,14 +214,14 @@ test enforces the avoid lists per locale.
   `CONTRIBUTING`. Everything else in French is optional but, when present, must
   link reciprocally and meet the length check.
 - **zh-CN:** existing twins stay and are checked for structure only when present.
-  A missing twin is silent (landed). A stale twin warning is a slice 7 option
-  implemented by comparing the English file's last git commit to the twin's
-  (warning only); if that proves noisy it is dropped and this ADR is amended.
+  A missing twin is silent (landed). The stale twin warning is dropped (amended
+  2026-11-18): zh-CN is frozen at the upstream snapshot with no assignee, so every
+  twin is stale by design and a git-commit comparison would only add noise.
   English documents no longer require a Chinese link, but a present twin keeps
   its reciprocal link and must be listed in `site-map.json`.
 - `docs/site-map.json` declares `locales: ["en-CA","fr-CA","zh-CN"]`,
   `defaultLocale: "en-CA"` (the checker's hard-coded `en` and `[en, zh-CN]`
-  expectations are replaced; the unsuffixed `.md` route stays the English one); `title` needs `en-CA` for every item, `fr-CA` for
+  expectations are replaced; the unsuffixed `.md` route stays the English one; the site-map slot for the en-CA route and title keeps the key `en`, because renaming it would rewrite every frozen zh-CN title line); `title` needs `en-CA` for every item, `fr-CA` for
   core items, and zh-CN is optional. The language switcher lists only locales
   that exist for the current page. Route prefixes are `/fr-CA/` and `/zh-CN/`.
 - The CJK body check generalises to a per-locale sanity check (fr-CA body must

@@ -227,24 +227,47 @@ producer reports. The upstream `upgrade-readiness` step is not run in CI (ADR
 
 ## Documentation conventions
 
-Every published Markdown document has an English canonical route and a
-Simplified Chinese companion. English uses the unsuffixed `.md` filename;
-Chinese uses `.zh-CN.md`. Both pages link to each other and to the localized
-documentation index.
+Every published Markdown document has an English (en-CA spelling) canonical
+route that uses the unsuffixed `.md` filename. Localized companions follow
+[ADR 0014](docs/adr/0014-locale-policy.md):
 
-Add every document pair to `docs/site-map.json` under one of the six stable
-sections. The map is the framework-neutral navigation contract for a future
+- **en-CA** is the reference locale and the only mandatory one.
+- **fr-CA** (`.fr-CA.md`, route prefix `/fr-CA/`) is first-class. The core set
+  `README`, `docs/README`, `docs/getting-started`, `SECURITY` and
+  `CONTRIBUTING` requires a French companion; other French pages are optional.
+- **zh-CN** (`.zh-CN.md`, route prefix `/zh-CN/`) is community-maintained. It is
+  frozen at the upstream snapshot: existing files stay and are structure-checked,
+  missing ones are silent, nobody is assigned, the Console falls back to en-CA,
+  and the prune tooling is kept. New zh-CN content is welcome from a community
+  contributor but is never required and never blocks a change.
+
+A companion links to its English page and to the documentation index, and the
+English page links back. The language switcher lists only the locales that
+exist for the page.
+
+fr-CA changes are reviewed by an automated LLM step rather than a Quebec-based
+human ([#257](https://github.com/mlops-ca/notarx/issues/257)). It checks changed
+fr-CA strings against the OQLF-aligned glossary and writing rules and flags
+issues on the pull request; the provider is set with `I18N_REVIEW_PROVIDER`
+(Claude, Mistral or Cohere). A maintainer still approves the pull request
+(CODEOWNERS routes `*.fr-CA.md` and `*.fr-CA.ts` to the maintainers). Drafts
+are marked in `console/src/messages/.review/fr-CA.json`, and a release candidate
+fails `make i18n-release-check` while any fr-CA key is `draft` or a `critical`
+key has not passed the review. zh-CN has no release gate.
+
+Add every English document, and each companion that exists, to
+`docs/site-map.json` under one of the six stable sections. The map is the framework-neutral navigation contract for a future
 Docusaurus, VitePress, or MkDocs site; do not maintain framework-specific
 frontmatter as a second navigation authority.
 
-Keep translated pages behaviorally equivalent. Configuration keys, routes,
+Keep translated pages behaviorally equivalent (fr-CA and any existing zh-CN). Configuration keys, routes,
 status codes, commands, compatibility limits, preview status, and security
 boundaries must not disappear in one locale. A short language stub or a link
 to the other language is not a translated body.
 
 Run `make docs-check` after adding, renaming, or moving a page. It validates
-local links, language pairs, reciprocal links, localized titles, and complete
-site-map coverage. See the
+local links, language pairs, reciprocal links, per-locale body checks, localized
+titles, and complete site-map coverage. See the
 [documentation site guide](docs/documentation-site-guide.md).
 
 ## Test expectations
