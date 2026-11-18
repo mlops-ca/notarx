@@ -101,6 +101,6 @@ describe("PreferencesProvider message loading", () => {
       expect(screen.getByTestId("locale")).toHaveTextContent("zh-CN"),
     );
     expect(localStorage.getItem("ag.console.locale")).toBe("zh-CN");
-    expect(document.documentElement.lang).toBe("zh-CN");
+    await waitFor(() => expect(document.documentElement.lang).toBe("zh-CN"));
   });
 });
