@@ -8,7 +8,7 @@ installation into independent target objects. It shares the default-disabled
 including `000190_native_rubygems_replication.sql`, before enabling it. API nodes
 create/read jobs; only worker nodes with `rubygems` in `GATEWAY_WORKER_FORMATS`
 and `replication` in `GATEWAY_WORKER_KINDS` execute them. No formal format profile,
-Console/agctl command or installation preset is added.
+Console/notarxctl command or installation preset is added.
 
 ## Pin exact server identities
 

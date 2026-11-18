@@ -6,7 +6,7 @@ NuGet Hosted, Proxy and Group share the explicitly enabled NuGet preview. Set
 `GATEWAY_NUGET_PREVIEW_ENABLED=true` after applying the append-only migrations
 with the standard runner. The default remains off. NuGet is absent from the
 formal format profiles, repository/Group catalog and Console selector. This
-stage has no `agctl` configuration commands. The [Hosted governance preview](nuget-hosted-preview.md#listing-and-retained-governance)
+stage has no `notarxctl` configuration commands. The [Hosted governance preview](nuget-hosted-preview.md#listing-and-retained-governance)
 also protects verified Proxy caches and pinned Group owners. Full governance and public admission
 remain tracked by [#289](https://github.com/mlops-ca/notarx/issues/289).
 

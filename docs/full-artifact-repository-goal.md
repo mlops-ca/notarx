@@ -75,7 +75,7 @@ delivered slice.
   executable admission checklist is maintained in
   [Artifact Format Extension Guide](format-extension-guide.md).
 - Management changes may break historical interfaces. Change OpenAPI sources,
-  server, Console and agctl together, describe the new contract, and remove
+  server, Console and notarxctl together, describe the new contract, and remove
   superseded implementations. Standard package protocol correctness and
   byte-integrity guarantees still apply.
 

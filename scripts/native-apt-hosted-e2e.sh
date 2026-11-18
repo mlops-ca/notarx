@@ -282,7 +282,7 @@ export_snapshot_archive() {
   local destination=$1
   "${curl_request[@]}" --fail --header "Authorization: Bearer $admin_token" \
     "$gateway_url/api/v2/repositories/$repository_id/apt/snapshots/$snapshot_id/archive" >"$destination"
-  "${compose[@]}" exec -T gateway /gateway apt-snapshot verify - <"$destination"
+  "${compose[@]}" exec -T gateway /notarx apt-snapshot verify - <"$destination"
 }
 
 install_snapshot_archive_offline() {

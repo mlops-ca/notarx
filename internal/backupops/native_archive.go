@@ -67,7 +67,7 @@ func verifyNativeArchive(release Release, migrations map[string]string) error {
 	tr := tar.NewReader(bounded)
 	seen := map[string]bool{}
 	archivedMigrations := map[string]string{}
-	binary, version := "", ""
+	binary, version, seenBinary := "", "", false
 	for {
 		h, err := tr.Next()
 		if err == io.EOF {
@@ -105,7 +105,11 @@ func verifyNativeArchive(release Release, migrations map[string]string) error {
 				return errRelease
 			}
 			version = string(body)
-		case name == "gateway":
+		case name == "notarx" || name == "gateway":
+			if seenBinary {
+				return errRelease
+			}
+			seenBinary = true
 			binary, _, err = hashReader(tr)
 			if err != nil {
 				return errRelease

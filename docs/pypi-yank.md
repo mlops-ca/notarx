@@ -90,4 +90,4 @@ promotion/replication and tombstone/restore. An actual `pg_dump` is restored int
 an empty database, and verified archive bytes are read through a fresh S3 bucket.
 This is isolated acceptance evidence, not a production restore or deployment.
 It adds no Warehouse JSON API, vulnerability database or private upstream auth.
-The command map records future agctl yank commands as planned.
+The command map records future notarxctl yank commands as planned.

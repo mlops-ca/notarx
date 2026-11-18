@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# agctl end-to-end check against a real Gateway (issues #127, #129, #130,
+# notarxctl end-to-end check against a real Gateway (issues #127, #129, #130,
 # #131, #132, #133, #134, #135 and #335).
 #
 # By default it boots an isolated Compose project from GATEWAY_ENV_FILE (or
@@ -122,7 +122,7 @@ PY2
   # it: linking only compares the issuer, and opaque bearer tokens are
   # rejected as JWTs before any key fetch.
   oidc_issuer="http://127.0.0.1:1/cli-e2e-oidc-${RANDOM}"
-  printf 'GATEWAY_OIDC_ISSUER=%s\nGATEWAY_OIDC_AUDIENCE=agctl-cli-e2e\nGATEWAY_OIDC_JWKS_URL=%s/jwks\n' \
+  printf 'GATEWAY_OIDC_ISSUER=%s\nGATEWAY_OIDC_AUDIENCE=notarxctl-cli-e2e\nGATEWAY_OIDC_JWKS_URL=%s/jwks\n' \
     "$oidc_issuer" "$oidc_issuer" >>"$workdir/gateway.env"
   compose up -d --build --wait
   server="http://127.0.0.1:${gateway_port}"
@@ -136,24 +136,24 @@ print(sys.argv[1].strip().rstrip("/"))
 PY2
 )
 
-go build -o "$workdir/agctl" ./cmd/agctl
+go build -o "$workdir/notarxctl" ./cmd/notarxctl
 
 # Every invocation runs without a profile file, with credentials only from
-# the environment, and with stdin closed: agctl must never prompt.
-agctl() {
-  HOME="$workdir/home" AGCTL_SERVER="$server" AGCTL_TOKEN="${cli_test_token:-$admin_token}" AGCTL_PROFILE="" \
-    "$workdir/agctl" "$@" </dev/null
+# the environment, and with stdin closed: notarxctl must never prompt.
+notarxctl() {
+  HOME="$workdir/home" NOTARXCTL_SERVER="$server" NOTARXCTL_TOKEN="${cli_test_token:-$admin_token}" NOTARXCTL_PROFILE="" \
+    "$workdir/notarxctl" "$@" </dev/null
 }
 
-# expect CODE OUTPUT -- ARGS...: run agctl, keep stdout in OUTPUT, and require
+# expect CODE OUTPUT -- ARGS...: run notarxctl, keep stdout in OUTPUT, and require
 # the exit code.
 expect() {
   local want=$1 output=$2
   shift 3
   local got=0
-  agctl "$@" >"$output" 2>"$workdir/stderr" || got=$?
+  notarxctl "$@" >"$output" 2>"$workdir/stderr" || got=$?
   if [[ "$got" != "$want" ]]; then
-    printf 'agctl %s exited %s; expected %s.\n' "$*" "$got" "$want" >&2
+    printf 'notarxctl %s exited %s; expected %s.\n' "$*" "$got" "$want" >&2
     cat "$output" "$workdir/stderr" >&2
     exit 1
   fi
@@ -209,8 +209,8 @@ require "$(field "$out" data.formats.status)" ok "agent introspection format cap
 
 # Exit-code matrix before any change.
 got=0
-HOME="$workdir/home" AGCTL_SERVER="$server" AGCTL_TOKEN="wrong-token" AGCTL_PROFILE="" \
-  "$workdir/agctl" repo list --json >"$out" 2>/dev/null </dev/null || got=$?
+HOME="$workdir/home" NOTARXCTL_SERVER="$server" NOTARXCTL_TOKEN="wrong-token" NOTARXCTL_PROFILE="" \
+  "$workdir/notarxctl" repo list --json >"$out" 2>/dev/null </dev/null || got=$?
 require "$got" 5 "wrong token exit code"
 require "$(field "$out" ok)" false "wrong token envelope"
 expect 4 "$out" -- repo show 00000000-0000-4000-8000-000000000000 --json
@@ -351,11 +351,11 @@ require "$(field "$out" data.state)" active "member kept after Group deletion"
 expect 0 "$out" -- repo delete "$member_id" --yes --json
 
 # Artifacts (#131): one Raw file and one Maven POM, published through the
-# native protocols, then read back through agctl.
+# native protocols, then read back through notarxctl.
 content_name="cli-e2e-raw-content-${suffix}"
 expect 0 "$out" -- repo create "$content_name" --format raw --json
 content_id=$(field "$out" data.id)
-printf 'agctl e2e payload' >"$workdir/app.txt"
+printf 'notarxctl e2e payload' >"$workdir/app.txt"
 content_digest="sha256:$(python3 -c 'import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$workdir/app.txt")"
 curl --silent --show-error --fail --output /dev/null -X PUT -H "Authorization: Bearer $admin_token" \
   --data-binary "@$workdir/app.txt" "$server/raw/$content_name/releases/app.txt"
@@ -398,7 +398,7 @@ require "$(field "$out" data.items.0.name)" releases "browse root"
 node=$(field "$out" data.items.0.id)
 expect 0 "$out" -- repo browse "$content_id" --parent "$node" --json
 require "$(field "$out" data.items.0.name)" app.txt "browse child"
-require "$(field "$out" data.items.0.size)" 17 "browse child size"
+require "$(field "$out" data.items.0.size)" 21 "browse child size"
 expect 0 "$out" -- artifact identities --repo "$content_id" --purpose distribution --json
 require "$(field "$out" data.items.0.digest)" "$content_digest" "identity digest"
 expect 4 "$out" -- artifact intelligence show --repo "$content_id" --coordinate releases/app.txt --digest "$content_digest" --json
@@ -415,7 +415,7 @@ require "$(field "$out" data.items.0.name)" releases "group browse root"
 maven_name="cli-e2e-maven-${suffix}"
 expect 0 "$out" -- repo create "$maven_name" --format maven --json
 maven_id=$(field "$out" data.id)
-# Exercise the deployment URL that agctl actually generates; a valid read
+# Exercise the deployment URL that notarxctl actually generates; a valid read
 # mount alone does not prove Maven clients can publish through the snippet.
 expect 0 "$out" -- repo connect "$maven_id" --json
 maven_deploy_url=$(python3 - "$out" <<'PY2'
@@ -429,13 +429,13 @@ deployment = next(row["content"] for row in snippets if row["label"] == "Maven d
 print(ET.fromstring(deployment).findtext("repository/url"))
 PY2
 )
-pom='<project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0</modelVersion><groupId>com.example.agctl</groupId><artifactId>e2e</artifactId><version>1.0.0</version><packaging>pom</packaging></project>'
+pom='<project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0</modelVersion><groupId>com.example.notarxctl</groupId><artifactId>e2e</artifactId><version>1.0.0</version><packaging>pom</packaging></project>'
 curl --silent --show-error --fail --output /dev/null -X PUT -H "Authorization: Bearer $admin_token" \
-  --data-binary "$pom" "${maven_deploy_url}com/example/agctl/e2e/1.0.0/e2e-1.0.0.pom"
-curl --silent --show-error --fail --max-time 10 --output "$workdir/connected.pom" -H "Authorization: Bearer $admin_token" "${maven_deploy_url}com/example/agctl/e2e/1.0.0/e2e-1.0.0.pom"
+  --data-binary "$pom" "${maven_deploy_url}com/example/notarxctl/e2e/1.0.0/e2e-1.0.0.pom"
+curl --silent --show-error --fail --max-time 10 --output "$workdir/connected.pom" -H "Authorization: Bearer $admin_token" "${maven_deploy_url}com/example/notarxctl/e2e/1.0.0/e2e-1.0.0.pom"
 require "$(cat "$workdir/connected.pom")" "$pom" "Maven snippet endpoint byte read-back"
 expect 0 "$out" -- maven coordinates --repo "$maven_id" --json
-require "$(field "$out" data.items.0.coordinate)" com.example.agctl:e2e:1.0.0 "Maven coordinate"
+require "$(field "$out" data.items.0.coordinate)" com.example.notarxctl:e2e:1.0.0 "Maven coordinate"
 expect 0 "$out" -- artifact list --repo "$maven_id" --json
 require "$(field "$out" meta.pagination.mode)" none "artifact list pagination"
 artifact_id=$(field "$out" data.items.0.id)
@@ -505,22 +505,22 @@ expect 0 "$out" -- oci images --repo "$oci_id" --json
 require "$(field "$out" data.items)" "[]" "empty OCI repository"
 
 # Conan's existing session API seeds isolated bytes; all four views and the
-# confirmed package-revision tombstone are exercised through this agctl build.
-HOME="$workdir/home" AGCTL_SERVER="$server" AGCTL_TOKEN="$admin_token" AGCTL_PROFILE="" \
+# confirmed package-revision tombstone are exercised through this notarxctl build.
+HOME="$workdir/home" NOTARXCTL_SERVER="$server" NOTARXCTL_TOKEN="$admin_token" NOTARXCTL_PROFILE="" \
   CLI_CONAN_E2E_RESOLVER_TOKEN="$resolver_token" \
-  python3 scripts/cli-conan-e2e.py "$workdir/agctl"
+  python3 scripts/cli-conan-e2e.py "$workdir/notarxctl"
 
 # A credential without repository permissions: refused for one repository
 # (exit 6), an empty global search rather than an error, and the refusal is
 # in the audit log under the request id the CLI reported.
 if [[ -n "$resolver_token" ]]; then
   got=0
-  HOME="$workdir/home" AGCTL_SERVER="$server" AGCTL_TOKEN="$resolver_token" AGCTL_PROFILE="" \
-    "$workdir/agctl" artifact search --repo "$content_id" --q releases/ --json >"$out" 2>/dev/null </dev/null || got=$?
+  HOME="$workdir/home" NOTARXCTL_SERVER="$server" NOTARXCTL_TOKEN="$resolver_token" NOTARXCTL_PROFILE="" \
+    "$workdir/notarxctl" artifact search --repo "$content_id" --q releases/ --json >"$out" 2>/dev/null </dev/null || got=$?
   require "$got" 6 "search without permission"
   denied_request=$(field "$out" error.requestId)
-  HOME="$workdir/home" AGCTL_SERVER="$server" AGCTL_TOKEN="$resolver_token" AGCTL_PROFILE="" \
-    "$workdir/agctl" artifact search --global --q app.txt --match contains --json >"$out" </dev/null
+  HOME="$workdir/home" NOTARXCTL_SERVER="$server" NOTARXCTL_TOKEN="$resolver_token" NOTARXCTL_PROFILE="" \
+    "$workdir/notarxctl" artifact search --global --q app.txt --match contains --json >"$out" </dev/null
   require "$(field "$out" data.items)" "[]" "global search without permission"
   expect 0 "$out" -- audit list --outcome access_denied --repository "$content_name" --page-size 200 --all --json
   python3 - "$out" "$denied_request" <<'PY2'
@@ -630,15 +630,15 @@ expect 6 "$out" -- access check --repo "$content_id" --actor "$principal" --role
 # pending/member/password-change refusal and removes its synthetic catalogue
 # entries and sessions. An isolated last local admin is removed by teardown.
 CLI_E2E_SERVER="$server" CLI_E2E_TOKEN="$admin_token" CLI_E2E_OWNED_PROJECT="$project" \
-  python3 scripts/cli-authorization-e2e.py "$workdir/agctl" "$suffix" "$content_id"
+  python3 scripts/cli-authorization-e2e.py "$workdir/notarxctl" "$suffix" "$content_id"
 
 # Concurrent writes to different principals preserve both rows. Each process
 # has separate result files; neither reads and replaces the whole grant set.
 concurrent_a="user:cli-e2e-a-${suffix}"
 concurrent_b="user:cli-e2e-b-${suffix}"
-agctl grant upsert --repo "$content_id" --principal "$concurrent_a" --scope repositories:read --json >"$workdir/grant-a.json" 2>"$workdir/grant-a.err" &
+notarxctl grant upsert --repo "$content_id" --principal "$concurrent_a" --scope repositories:read --json >"$workdir/grant-a.json" 2>"$workdir/grant-a.err" &
 grant_a_pid=$!
-agctl grant upsert --repo "$content_id" --principal "$concurrent_b" --scope repositories:write --json >"$workdir/grant-b.json" 2>"$workdir/grant-b.err" &
+notarxctl grant upsert --repo "$content_id" --principal "$concurrent_b" --scope repositories:write --json >"$workdir/grant-b.json" 2>"$workdir/grant-b.err" &
 grant_b_pid=$!
 wait "$grant_a_pid"
 wait "$grant_b_pid"
@@ -727,12 +727,12 @@ expect 0 "$out" -- runtime logs --after-cursor "$after_cursor" --follow --durati
 nosecret() {
   local secret=$1
   if grep -q -- "$secret" "$out" "$workdir/stderr"; then
-    printf '%s\n' 'a secret reached agctl output' >&2
+    printf '%s\n' 'a secret reached notarxctl output' >&2
     exit 1
   fi
 }
 account="cli-e2e-bot-${suffix}"
-expect 0 "$out" -- service-account create "$account" --description "agctl E2E" --json
+expect 0 "$out" -- service-account create "$account" --description "notarxctl E2E" --json
 account_id=$(field "$out" data.id)
 expect 0 "$out" -- service-account show "$account_id" --json
 require "$(field "$out" data.state)" active "service account state"
@@ -786,23 +786,23 @@ expect 0 "$out" -- grant upsert --repo "$ci_maven_id" --principal "service-accou
 cli_test_token=$new_token expect 0 "$out" -- access check --repo "$ci_maven_id" --require write --json
 cli_test_token=$new_token expect 6 "$out" -- grant list --repo "$ci_maven_id" --json
 mkdir -p "$workdir/ci-maven"
-printf '%s' '<project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0</modelVersion><groupId>com.example.agctl</groupId><artifactId>ci</artifactId><version>1.0.0</version></project>' >"$workdir/ci-maven/ci-1.0.0.pom"
+printf '%s' '<project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0</modelVersion><groupId>com.example.notarxctl</groupId><artifactId>ci</artifactId><version>1.0.0</version></project>' >"$workdir/ci-maven/ci-1.0.0.pom"
 printf '%s' 'owned CI publisher artifact' >"$workdir/ci-maven/ci-1.0.0.jar"
 ci_key="cli-e2e-ci-${suffix}"
-cli_test_token=$new_token expect 0 "$out" -- publish create --repo "$ci_maven_id" --coordinate com.example.agctl:ci:1.0.0 --pom "$workdir/ci-maven/ci-1.0.0.pom" --file "$workdir/ci-maven/ci-1.0.0.jar" --idempotency-key "$ci_key" --json
+cli_test_token=$new_token expect 0 "$out" -- publish create --repo "$ci_maven_id" --coordinate com.example.notarxctl:ci:1.0.0 --pom "$workdir/ci-maven/ci-1.0.0.pom" --file "$workdir/ci-maven/ci-1.0.0.jar" --idempotency-key "$ci_key" --json
 ci_session=$(field "$out" data.id)
 require "$(field "$out" data.state)" open "machine publisher session"
-cli_test_token=$new_token expect 0 "$out" -- publish create --repo "$ci_maven_id" --coordinate com.example.agctl:ci:1.0.0 --pom "$workdir/ci-maven/ci-1.0.0.pom" --file "$workdir/ci-maven/ci-1.0.0.jar" --idempotency-key "$ci_key" --json
+cli_test_token=$new_token expect 0 "$out" -- publish create --repo "$ci_maven_id" --coordinate com.example.notarxctl:ci:1.0.0 --pom "$workdir/ci-maven/ci-1.0.0.pom" --file "$workdir/ci-maven/ci-1.0.0.jar" --idempotency-key "$ci_key" --json
 require "$(field "$out" data.id)" "$ci_session" "same key replays the open session"
 cli_test_token=$new_token expect 0 "$out" -- publish upload "$ci_session" --file "$workdir/ci-maven/ci-1.0.0.pom" --file "$workdir/ci-maven/ci-1.0.0.jar" --json
 cli_test_token=$new_token expect 0 "$out" -- publish commit "$ci_session" --json
-require "$(field "$out" data.artifact.coordinate)" com.example.agctl:ci:1.0.0 "machine publisher commit"
+require "$(field "$out" data.artifact.coordinate)" com.example.notarxctl:ci:1.0.0 "machine publisher commit"
 cli_test_token=$new_token expect 0 "$out" -- publish status "$ci_session" --json
 require "$(field "$out" data.state)" committed "machine publisher terminal state"
-cli_test_token=$new_token expect 0 "$out" -- artifact search --repo "$ci_maven_id" --q com.example.agctl:ci:1.0.0 --json
-require "$(field "$out" data.items.0.coordinate)" com.example.agctl:ci:1.0.0 "machine publisher search"
+cli_test_token=$new_token expect 0 "$out" -- artifact search --repo "$ci_maven_id" --q com.example.notarxctl:ci:1.0.0 --json
+require "$(field "$out" data.items.0.coordinate)" com.example.notarxctl:ci:1.0.0 "machine publisher search"
 for object in ci-1.0.0.pom ci-1.0.0.jar; do
-  curl --silent --show-error --fail --max-time 10 --output "$workdir/ci-maven/read-$object" -H "Authorization: Bearer $new_token" "$server/repository/maven/$ci_maven/com/example/agctl/ci/1.0.0/$object"
+  curl --silent --show-error --fail --max-time 10 --output "$workdir/ci-maven/read-$object" -H "Authorization: Bearer $new_token" "$server/repository/maven/$ci_maven/com/example/notarxctl/ci/1.0.0/$object"
   cmp "$workdir/ci-maven/$object" "$workdir/ci-maven/read-$object"
 done
 expect 0 "$out" -- audit list --actor "service-account:$account_id" --repository "$ci_maven" --operation get --from "$grant_started" --all --json
@@ -812,17 +812,17 @@ import sys
 
 with open(sys.argv[1], encoding="utf-8") as stream:
     rows = json.load(stream)["data"]["items"]
-expected = {"com/example/agctl/ci/1.0.0/ci-1.0.0.pom", "com/example/agctl/ci/1.0.0/ci-1.0.0.jar"}
+expected = {"com/example/notarxctl/ci/1.0.0/ci-1.0.0.pom", "com/example/notarxctl/ci/1.0.0/ci-1.0.0.jar"}
 if {row["resource"] for row in rows if row["status"] == 200} != expected:
     raise SystemExit("the machine publisher's native read-back is absent from its audit scope")
 PY2
 expect 0 "$out" -- grant delete --repo "$ci_maven_id" --principal "service-account:$account_id" --yes --json
-cli_test_token=$new_token expect 6 "$out" -- publish create --repo "$ci_maven_id" --coordinate com.example.agctl:ci:1.0.0 --pom "$workdir/ci-maven/ci-1.0.0.pom" --file "$workdir/ci-maven/ci-1.0.0.jar" --idempotency-key "refused-$ci_key" --json
+cli_test_token=$new_token expect 6 "$out" -- publish create --repo "$ci_maven_id" --coordinate com.example.notarxctl:ci:1.0.0 --pom "$workdir/ci-maven/ci-1.0.0.pom" --file "$workdir/ci-maven/ci-1.0.0.jar" --idempotency-key "refused-$ci_key" --json
 require "$(field "$out" error.httpStatus)" 403 "publisher refuses after grant removal"
 expect 0 "$out" -- audit list --actor "service-account:$account_id" --repository "$ci_maven" --outcome access_denied --from "$grant_started" --all --json
 require "$(field "$out" data.items.0.status)" 403 "publisher refusal is audited"
-expect 0 "$out" -- artifact search --repo "$ci_maven_id" --q com.example.agctl:ci:1.0.0 --json
-require "$(field "$out" data.items.0.coordinate)" com.example.agctl:ci:1.0.0 "revocation keeps the committed artifact"
+expect 0 "$out" -- artifact search --repo "$ci_maven_id" --q com.example.notarxctl:ci:1.0.0 --json
+require "$(field "$out" data.items.0.coordinate)" com.example.notarxctl:ci:1.0.0 "revocation keeps the committed artifact"
 expect 0 "$out" -- repo delete "$ci_maven_id" --yes --json
 
 # Group reads follow Group writes (#359): administering every member lets the
@@ -1153,15 +1153,15 @@ expect 0 "$out" -- repo create "$maven_publish" --format maven --json
 maven_publish_id=$(field "$out" data.id)
 mkdir -p "$workdir/maven"
 for version in 2.0.0 2.0.1; do
-  printf '<project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0</modelVersion><groupId>com.example.agctl</groupId><artifactId>publish</artifactId><version>%s</version></project>' "$version" >"$workdir/maven/publish-$version.pom"
+  printf '<project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0</modelVersion><groupId>com.example.notarxctl</groupId><artifactId>publish</artifactId><version>%s</version></project>' "$version" >"$workdir/maven/publish-$version.pom"
   printf 'jar %s' "$version" >"$workdir/maven/publish-$version.jar"
 done
 maven_key="cli-e2e-maven-${suffix}"
-expect 0 "$out" -- publish maven --repo "$maven_publish_id" --coordinate com.example.agctl:publish:2.0.0 --pom "$workdir/maven/publish-2.0.0.pom" --file "$workdir/maven/publish-2.0.0.jar" --idempotency-key "$maven_key" --json
+expect 0 "$out" -- publish maven --repo "$maven_publish_id" --coordinate com.example.notarxctl:publish:2.0.0 --pom "$workdir/maven/publish-2.0.0.pom" --file "$workdir/maven/publish-2.0.0.jar" --idempotency-key "$maven_key" --json
 require "$(field "$out" data.state)" committed "maven publish"
-require "$(field "$out" data.artifact.coordinate)" com.example.agctl:publish:2.0.0 "published coordinate"
-expect 7 "$out" -- publish maven --repo "$maven_publish_id" --coordinate com.example.agctl:publish:2.0.0 --pom "$workdir/maven/publish-2.0.0.pom" --file "$workdir/maven/publish-2.0.0.jar" --idempotency-key "$maven_key" --json
-expect 0 "$out" -- publish create --repo "$maven_publish_id" --coordinate com.example.agctl:publish:2.0.1 --pom "$workdir/maven/publish-2.0.1.pom" --file "$workdir/maven/publish-2.0.1.jar" --json
+require "$(field "$out" data.artifact.coordinate)" com.example.notarxctl:publish:2.0.0 "published coordinate"
+expect 7 "$out" -- publish maven --repo "$maven_publish_id" --coordinate com.example.notarxctl:publish:2.0.0 --pom "$workdir/maven/publish-2.0.0.pom" --file "$workdir/maven/publish-2.0.0.jar" --idempotency-key "$maven_key" --json
+expect 0 "$out" -- publish create --repo "$maven_publish_id" --coordinate com.example.notarxctl:publish:2.0.1 --pom "$workdir/maven/publish-2.0.1.pom" --file "$workdir/maven/publish-2.0.1.jar" --json
 session_id=$(field "$out" data.id)
 require "$(field "$out" data.state)" open "new session"
 curl --silent --show-error --fail --output "$workdir/session.json" -H "Authorization: Bearer $admin_token" "$server/api/v2/publish-sessions/$session_id"
@@ -1169,7 +1169,7 @@ expect 0 "$out" -- publish upload "$session_id" --file "$workdir/maven/publish-2
 require "$(publish_counts)" "uploaded=2" "session upload"
 expect 0 "$out" -- publish upload "$session_id" --file "$workdir/maven/publish-2.0.1.jar" --json
 expect 0 "$out" -- publish commit "$session_id" --json
-require "$(field "$out" data.artifact.coordinate)" com.example.agctl:publish:2.0.1 "committed coordinate"
+require "$(field "$out" data.artifact.coordinate)" com.example.notarxctl:publish:2.0.1 "committed coordinate"
 expect 0 "$out" -- publish status "$session_id" --json
 require "$(field "$out" data.state)" committed "session state"
 expect 7 "$out" -- publish commit "$session_id" --json
@@ -1180,7 +1180,7 @@ import sys
 
 with open(sys.argv[1], encoding="utf-8") as stream:
     coordinates = sorted(item["coordinate"] for item in json.load(stream)["data"]["items"])
-if coordinates != ["com.example.agctl:publish:2.0.0", "com.example.agctl:publish:2.0.1"]:
+if coordinates != ["com.example.notarxctl:publish:2.0.0", "com.example.notarxctl:publish:2.0.1"]:
     raise SystemExit(f"published coordinates: {coordinates}")
 PY2
 
@@ -1189,8 +1189,8 @@ login_user="cli-e2e-login-${suffix}"
 expect 0 "$out" -- user create "$login_user" --role member --password-file "$secrets/password" --json
 login_user_id=$(field "$out" data.id)
 got=0
-HOME="$workdir/home" AGCTL_SERVER="$server" AGCTL_TOKEN="" AGCTL_PROFILE="" \
-  "$workdir/agctl" auth login --username "$login_user" --password-stdin --secret-output "$secrets/session" --verbose --json \
+HOME="$workdir/home" NOTARXCTL_SERVER="$server" NOTARXCTL_TOKEN="" NOTARXCTL_PROFILE="" \
+  "$workdir/notarxctl" auth login --username "$login_user" --password-stdin --secret-output "$secrets/session" --verbose --json \
   <"$secrets/password" >"$out" 2>"$workdir/stderr" || got=$?
 require "$got" 0 "login to a secret file"
 nosecret "$(cat "$secrets/session")"
@@ -1209,7 +1209,7 @@ overall=$(field "$out" data.overall)
   exit 1
 }
 got=0
-agctl status --strict --json >"$out" 2>/dev/null || got=$?
+notarxctl status --strict --json >"$out" 2>/dev/null || got=$?
 if [[ "$overall" == healthy ]]; then require "$got" 0 "strict healthy status"; else require "$got" 1 "strict degraded status"; fi
 expect 0 "$out" -- diagnostics --json
 expect 0 "$out" -- runtime nodes --json
@@ -1247,7 +1247,7 @@ second="cli-e2e-raw-${suffix}"
 expect 0 "$out" -- repo create "$second" --format raw --json
 second_id=$(field "$out" data.id)
 got=0
-agctl repo delete "$second_id" --yes --wait --timeout 1s --json >"$out" 2>"$workdir/stderr" || got=$?
+notarxctl repo delete "$second_id" --yes --wait --timeout 1s --json >"$out" 2>"$workdir/stderr" || got=$?
 if [[ "$got" == 8 ]]; then
   require "$(field "$out" error.code)" wait_timeout "wait timeout code"
   require "$(field "$out" data.id)" "$second_id" "wait timeout id"
@@ -1274,4 +1274,4 @@ expect 0 "$out" -- repo show "$repo_id" --json
 require "$(field "$out" data.state)" deleted "final state"
 expect 4 "$out" -- repo delete "$repo_id" --yes --json
 
-printf 'agctl CLI E2E passed against %s (repository %s)\n' "$server" "$repo_id"
+printf 'notarxctl CLI E2E passed against %s (repository %s)\n' "$server" "$repo_id"

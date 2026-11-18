@@ -43,7 +43,7 @@ agree with executable tests and the
 - [ADR 0004: Go Hosted publication](adr/0004-go-hosted-publication.md)
 - [ADR 0005: Console semantic theme system](adr/0005-console-semantic-theme-system.md)
 - [ADR 0006: account levels and per-repository authority](adr/0006-account-levels-and-repository-grants.md)
-- [ADR 0007: agctl CLI shape and cross-cutting contract](adr/0007-agctl-cli-shape.md)
+- [ADR 0007: notarxctl CLI shape and cross-cutting contract](adr/0007-agctl-cli-shape.md)
 - [ADR 0008: Go module path follows the source repository](adr/0008-go-module-path.md)
 - [ADR 0009: Native management architecture](adr/0009-native-architecture.md)
 - [ADR 0010: Memory store contracts](adr/0010-memory-store-contracts.md)
@@ -116,8 +116,8 @@ agree with executable tests and the
 - [Keycloak on Kubernetes](oidc-keycloak-k8s.md) — real browser callback acceptance.
 - [Repository Grant authorization](repository-grant-authorization-plan.md) — scoped runtime decisions and rollout.
 - [Service Account operations](service-account-operations.md) — stable machine principals and zero-downtime rotation.
-- [agctl CLI](cli.md) — client contract for CI, platform management, and agents: configuration precedence, exit codes, JSON envelope, and the current introspection commands.
-- [agctl command map](cli-command-map.md) — every management and native protocol operation classified as first-release, later, or explicitly not applicable, with permissions and acceptance codes; guarded by `make cli-contract-check`.
+- [notarxctl CLI](cli.md) — client contract for CI, platform management, and agents: configuration precedence, exit codes, JSON envelope, and the current introspection commands.
+- [notarxctl command map](cli-command-map.md) — every management and native protocol operation classified as first-release, later, or explicitly not applicable, with permissions and acceptance codes; guarded by `make cli-contract-check`.
 - [Security admission policy](security-admission-policy.md) — promotion evidence, Quarantine, and optional read enforcement.
 - [Artifact scanner contract](artifact-scanner-contract.md) — bounded external scanning, health, evidence, and reconciliation.
 - [Proxy egress design](proxy-egress-design.md) — direct, environment, HTTP, and SOCKS5 per-Repository routing.

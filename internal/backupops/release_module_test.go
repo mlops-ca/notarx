@@ -29,7 +29,7 @@ func TestReleaseModuleIdentityRemainsPairedAcrossNamespaceChange(t *testing.T) {
 		{name: "current missing linker identity", module: current},
 		{name: "legacy missing linker identity", module: legacy},
 		{name: "unrelated module with archive", module: unrelated, flagsModule: unrelated, archive: true},
-		{name: "current command with legacy main module", module: legacy, flagsModule: legacy, patchedField: "path", patchedValue: current + "/cmd/gateway", archive: true},
+		{name: "current command with legacy main module", module: legacy, flagsModule: legacy, patchedField: "path", patchedValue: current + "/cmd/notarx", archive: true},
 		{name: "legacy command with current main module", module: legacy, flagsModule: current, patchedField: "mod", patchedValue: current, archive: true},
 		{name: "current module with legacy linker namespace", module: current, flagsModule: legacy, archive: true},
 		{name: "legacy module with current linker namespace", module: legacy, flagsModule: current, archive: true},
@@ -37,10 +37,10 @@ func TestReleaseModuleIdentityRemainsPairedAcrossNamespaceChange(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			m, release, ledger := moduleIdentityRelease(t, tc.module, tc.flagsModule)
 			if tc.patchedField != "" {
-				path := filepath.Join(release.Directory, "gateway")
+				path := releaseFixtureBinary(release.Directory)
 				old := tc.module
 				if tc.patchedField == "path" {
-					old += "/cmd/gateway"
+					old += "/cmd/" + fixtureCommand(tc.module)
 				}
 				patchReleaseModuleField(t, path, tc.patchedField, old, tc.patchedValue)
 				m.Gateway.Artifact.SHA256 = digestFile(t, path)
@@ -56,6 +56,23 @@ func TestReleaseModuleIdentityRemainsPairedAcrossNamespaceChange(t *testing.T) {
 	}
 }
 
+// fixtureCommand is the server command and binary name of a module namespace:
+// the pre-fork module names it gateway, the current one notarx.
+func fixtureCommand(module string) string {
+	if module == "github.com/artifact-gateway/artifact-gateway" {
+		return "gateway"
+	}
+	return "notarx"
+}
+
+// releaseFixtureBinary returns the fixture binary inside a release directory.
+func releaseFixtureBinary(dir string) string {
+	if _, err := os.Stat(filepath.Join(dir, "notarx")); err == nil {
+		return filepath.Join(dir, "notarx")
+	}
+	return filepath.Join(dir, "gateway")
+}
+
 // moduleIdentityRelease builds a real, dependency-free Go command in the
 // requested namespace. Only its public build identity is used by VerifyRelease;
 // the fixture is never executed.
@@ -65,7 +82,7 @@ func moduleIdentityRelease(t *testing.T, module, flagsModule string) (backupmani
 	files := map[string]string{
 		"go.mod":                     "module " + module + "\n\ngo 1.26.0\n",
 		"internal/buildinfo/info.go": "package buildinfo\nvar injectedVersion = \"development\"\nvar injectedRevision = \"unknown\"\nfunc Identity() string { return injectedVersion + injectedRevision }\n",
-		"cmd/gateway/main.go":        "package main\nimport (\"fmt\"; \"" + module + "/internal/buildinfo\")\nfunc main() { fmt.Print(buildinfo.Identity()) }\n",
+		"cmd/" + fixtureCommand(module) + "/main.go": "package main\nimport (\"fmt\"; \"" + module + "/internal/buildinfo\")\nfunc main() { fmt.Print(buildinfo.Identity()) }\n",
 	}
 	for name, contents := range files {
 		path := filepath.Join(source, name)
@@ -76,21 +93,21 @@ func moduleIdentityRelease(t *testing.T, module, flagsModule string) (backupmani
 			t.Fatal(err)
 		}
 	}
-	args := []string{"build", "-buildvcs=false", "-o", filepath.Join(dir, "gateway")}
+	args := []string{"build", "-buildvcs=false", "-o", filepath.Join(dir, fixtureCommand(module))}
 	revision := strings.Repeat("a", 40)
 	if flagsModule != "" {
 		prefix := flagsModule + "/internal/buildinfo."
 		args = append(args, "-ldflags", "-X "+prefix+"injectedVersion=synthetic-v1 -X "+prefix+"injectedRevision="+revision)
 	}
-	args = append(args, "./cmd/gateway")
+	args = append(args, "./cmd/"+fixtureCommand(module))
 	cmd := exec.CommandContext(context.Background(), "go", args...)
 	cmd.Dir = source
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS=linux", "GOARCH=arm64", "GOWORK=off")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("build namespace fixture: %v %s", err, out)
 	}
-	bi, err := buildinfo.ReadFile(filepath.Join(dir, "gateway"))
-	if err != nil || bi.Main.Path != module || bi.Path != module+"/cmd/gateway" {
+	bi, err := buildinfo.ReadFile(filepath.Join(dir, fixtureCommand(module)))
+	if err != nil || bi.Main.Path != module || bi.Path != module+"/cmd/"+fixtureCommand(module) {
 		t.Fatalf("namespace fixture identity=%+v: %v", bi, err)
 	}
 	if err := os.Mkdir(filepath.Join(dir, "migrations"), 0700); err != nil {
@@ -99,7 +116,7 @@ func moduleIdentityRelease(t *testing.T, module, flagsModule string) (backupmani
 	if err := os.WriteFile(filepath.Join(dir, "migrations", "000001_synthetic.sql"), []byte("SELECT 1;\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	identity := backupmanifest.GatewayIdentity{Version: "synthetic-v1", Revision: revision, Artifact: &backupmanifest.SoftwareArtifact{Kind: "binary", SHA256: digestFile(t, filepath.Join(dir, "gateway")), Platform: "linux/arm64"}}
+	identity := backupmanifest.GatewayIdentity{Version: "synthetic-v1", Revision: revision, Artifact: &backupmanifest.SoftwareArtifact{Kind: "binary", SHA256: digestFile(t, filepath.Join(dir, fixtureCommand(module))), Platform: "linux/arm64"}}
 	ledger, _ := directoryLedger(t, dir)
 	return backupmanifest.Manifest{SchemaVersion: 2, Gateway: identity}, backupops.Release{Directory: dir, Identity: identity}, ledger
 }

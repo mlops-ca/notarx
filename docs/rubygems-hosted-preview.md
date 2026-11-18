@@ -6,7 +6,7 @@ RubyGems Hosted is a default-disabled preview under
 `/api/v2/previews/rubygems`. It publishes original `.gem` files and serves native
 RubyGems/Bundler compact indexes, legacy Marshal 4.8 indexes and zlib gemspecs.
 It is absent from the admitted format profiles, formal repository catalog,
-Console creation selector and installation presets. There is no preview `agctl`
+Console creation selector and installation presets. There is no preview `notarxctl`
 command. The Hosted slice is tracked by [#459](https://github.com/mlops-ca/notarx/issues/459);
 Native yank and controlled restore are tracked by
 [#462](https://github.com/mlops-ca/notarx/issues/462). Independent quarantine and release are tracked by

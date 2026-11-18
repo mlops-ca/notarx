@@ -36,7 +36,7 @@ func nativeEntries(t *testing.T, release backupops.Release) []nativeEntry {
 	return []nativeEntry{
 		{name: "./", kind: tar.TypeDir},
 		{name: "./VERSION.txt", body: "version=" + g.Version + "\nrevision=" + g.Revision + "\ntarget=" + g.Artifact.Platform + "\n"},
-		{name: "./gateway", body: read("gateway")},
+		{name: "./" + filepath.Base(releaseFixtureBinary(release.Directory)), body: read(filepath.Base(releaseFixtureBinary(release.Directory)))},
 		{name: "./migrations/", kind: tar.TypeDir},
 		{name: "./migrations/000001_synthetic.sql", body: read("migrations/000001_synthetic.sql")},
 	}
@@ -188,7 +188,7 @@ func TestArchiveNeverOverridesConflictingStaticOrModuleIdentity(t *testing.T) {
 		t.Fatal("archive overrode injected version")
 	}
 	m, release, ledger = binaryRelease(t)
-	p := filepath.Join(release.Directory, "gateway")
+	p := filepath.Join(release.Directory, "notarx")
 	body, err := os.ReadFile(p)
 	if err != nil {
 		t.Fatal(err)
@@ -240,7 +240,7 @@ func TestArchiveRejectsUnparsedRetainedLinkerIdentity(t *testing.T) {
 				flags = "-X " + version + " -X '" + prefix + "injectedRevision=" + strings.Repeat("b", 40) + "'"
 			}
 			m, release, ledger := binaryReleaseWithFlags(t, flags)
-			bi, err := buildinfo.ReadFile(filepath.Join(release.Directory, "gateway"))
+			bi, err := buildinfo.ReadFile(filepath.Join(release.Directory, "notarx"))
 			if err != nil {
 				t.Fatal(err)
 			}

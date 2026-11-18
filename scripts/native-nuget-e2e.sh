@@ -100,8 +100,8 @@ hashes={name:hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() for nam
 (evidence/'source.json').write_text(json.dumps({'head':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(),'dirty':bool(subprocess.check_output(['git','status','--porcelain'])),'fileHashes':hashes},indent=2)+'\n')
 PY
 docker pull --platform "$platform" "$sdk_image" >"$evidence/dotnet-pull.log" 2>&1
-go build -o "$work/gateway" ./cmd/gateway
-GOOS=linux GOARCH=${platform#linux/} CGO_ENABLED=0 go build -o "$work/gateway-linux" ./cmd/gateway
+go build -o "$work/gateway" ./cmd/notarx
+GOOS=linux GOARCH=${platform#linux/} CGO_ENABLED=0 go build -o "$work/gateway-linux" ./cmd/notarx
 python3 - "$work/gateway" "$sdk_image" "$evidence/tool-provenance.json" <<'PY'
 import hashlib,json,pathlib,subprocess,sys
 p=pathlib.Path(sys.argv[3]);data=json.loads(p.read_text())

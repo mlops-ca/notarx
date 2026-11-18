@@ -135,13 +135,13 @@ for target in "${targets[@]}"; do
   fi
   goos=${target%/*}
   goarch=${target#*/}
-  stage="$workdir/artifact-gateway_${version}_${goos}_${goarch}"
+  stage="$workdir/notarx_${version}_${goos}_${goarch}"
   mkdir -p "$stage"
   suffix=
   if [[ "$goos" == "windows" ]]; then
     suffix=.exe
   fi
-  CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -trimpath -buildvcs=false -ldflags "$ldflags" -o "$stage/gateway$suffix" ./cmd/gateway
+  CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -trimpath -buildvcs=false -ldflags "$ldflags" -o "$stage/notarx$suffix" ./cmd/notarx
   CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -trimpath -buildvcs=false -ldflags "$ldflags" -o "$stage/gateway-healthcheck$suffix" ./cmd/healthcheck
   cp -R "$root/migrations" "$stage/migrations"
   cp "$root/scripts/run-migrations.sh" "$stage/run-migrations.sh"
@@ -155,16 +155,16 @@ for target in "${targets[@]}"; do
     '2. Configure PostgreSQL and S3-compatible object storage using artifact-gateway.env.example.' \
     '3. Install PostgreSQL psql, export PGHOST/PGUSER/PGDATABASE/PGPASSWORD, then run:' \
     '   MIGRATION_DIR=./migrations ./run-migrations.sh' \
-    '4. Export the required GATEWAY_* variables and start ./gateway.' \
+    '4. Export the required GATEWAY_* variables and start ./notarx.' \
     '' \
     "Documentation: https://github.com/mlops-ca/notarx/blob/$revision/docs/getting-started.md" \
     > "$stage/INSTALL.txt"
 
   if [[ "$goos" == "windows" ]]; then
-    archive="$output/artifact-gateway_${version}_${goos}_${goarch}.zip"
+    archive="$output/notarx_${version}_${goos}_${goarch}.zip"
     create_zip "$stage" "$archive"
   else
-    archive="$output/artifact-gateway_${version}_${goos}_${goarch}.tar.gz"
+    archive="$output/notarx_${version}_${goos}_${goarch}.tar.gz"
     create_tar_gz "$stage" "$archive"
   fi
 
@@ -180,33 +180,33 @@ for target in "${targets[@]}"; do
       go test -count=1 ./internal/backupops -run '^TestBuiltNativeArchiveIdentity$'
   fi
 
-  # The CLI client ships as its own archive: agctl is the client for CI,
+  # The CLI client ships as its own archive: notarxctl is the client for CI,
   # platform management, and agents, so it must not be mixed into the server
   # archives whose INSTALL.txt and future native backup profile cover server
   # materials only. The version and revision are injected with the same
   # ldflags, and write-release-checksums.sh covers the new archives unchanged.
-  agctl_stage="$workdir/artifact-gateway-agctl_${version}_${goos}_${goarch}"
-  mkdir -p "$agctl_stage"
-  CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -trimpath -buildvcs=false -ldflags "$ldflags" -o "$agctl_stage/agctl$suffix" ./cmd/agctl
-  printf 'version=%s\nrevision=%s\ntarget=%s/%s\n' "$version" "$revision" "$goos" "$goarch" > "$agctl_stage/VERSION.txt"
+  notarxctl_stage="$workdir/notarxctl_${version}_${goos}_${goarch}"
+  mkdir -p "$notarxctl_stage"
+  CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -trimpath -buildvcs=false -ldflags "$ldflags" -o "$notarxctl_stage/notarxctl$suffix" ./cmd/notarxctl
+  printf 'version=%s\nrevision=%s\ntarget=%s/%s\n' "$version" "$revision" "$goos" "$goarch" > "$notarxctl_stage/VERSION.txt"
   printf '%s\n' \
     'Artifact Gateway CLI installation materials' \
     '' \
-    'This archive carries only the agctl client; server materials live in the' \
-    'artifact-gateway_ archive of the same release.' \
+    'This archive carries only the notarxctl client; server materials live in the' \
+    'notarx_ archive of the same release.' \
     '' \
     '1. Verify SHA256SUMS before extracting this archive.' \
-    '2. Run ./agctl version to confirm the client version and revision.' \
-    '3. Configure a profile in ~/.config/agctl/config.yaml (mode 0600) or export AGCTL_SERVER and AGCTL_TOKEN.' \
-    '4. Point the client at a deployment, for example ./agctl info --server https://gateway.example.com' \
+    '2. Run ./notarxctl version to confirm the client version and revision.' \
+    '3. Configure a profile in ~/.config/notarxctl/config.yaml (mode 0600) or export NOTARXCTL_SERVER and NOTARXCTL_TOKEN.' \
+    '4. Point the client at a deployment, for example ./notarxctl info --server https://gateway.example.com' \
     '' \
     "Documentation: https://github.com/mlops-ca/notarx/blob/$revision/docs/cli.md" \
-    > "$agctl_stage/INSTALL.txt"
+    > "$notarxctl_stage/INSTALL.txt"
 
   if [[ "$goos" == "windows" ]]; then
-    create_zip "$agctl_stage" "$output/artifact-gateway-agctl_${version}_${goos}_${goarch}.zip"
+    create_zip "$notarxctl_stage" "$output/notarxctl_${version}_${goos}_${goarch}.zip"
   else
-    create_tar_gz "$agctl_stage" "$output/artifact-gateway-agctl_${version}_${goos}_${goarch}.tar.gz"
+    create_tar_gz "$notarxctl_stage" "$output/notarxctl_${version}_${goos}_${goarch}.tar.gz"
   fi
 done
 

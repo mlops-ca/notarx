@@ -23,7 +23,7 @@ should be used. `kubectl` is only required for the Kubernetes workflow.
 Version 0.1.0 is available from [GitHub Releases](https://github.com/mlops-ca/notarx/releases/tag/v0.1.0)
 as Linux/macOS amd64/arm64 Gateway archives, a Console static bundle, resolved
 OpenAPI contracts, and checksums. Verify `SHA256SUMS` before unpacking and run
-`gateway version` to confirm the embedded version and Git revision.
+`notarx version` to confirm the embedded version and Git revision.
 
 Each Gateway archive also contains `migrations/`, `run-migrations.sh`, an
 environment example, and a compact installation guide. A binary installation

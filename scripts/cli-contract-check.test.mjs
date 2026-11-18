@@ -222,7 +222,7 @@ test('accepts an implemented row whose command is registered', () => {
     paths: { '/widgets': { get: { operationId: 'listWidgets' } } },
   });
   const englishMap = classification([
-    mapRow('GET', '/widgets', 'listWidgets', '`agctl widget list`', '#999', 'M1 implemented', 'A', 'Q'),
+    mapRow('GET', '/widgets', 'listWidgets', '`notarxctl widget list`', '#999', 'M1 implemented', 'A', 'Q'),
   ]);
   assert.deepEqual(
     findContractDrift({
@@ -310,7 +310,7 @@ test('checks a native protocol row against its own path, not /api/v2', () => {
 
 test('normalizes planned-command cells to registry names', () => {
   assert.equal(normalizedCommand('`config profile add NAME --server URL`'), 'config profile add');
-  assert.equal(normalizedCommand('agctl auth whoami'), 'auth whoami');
+  assert.equal(normalizedCommand('notarxctl auth whoami'), 'auth whoami');
   assert.equal(normalizedCommand('`publish upload <session>`'), 'publish upload');
   assert.equal(normalizedCommand(''), '');
 });

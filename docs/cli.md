@@ -1,8 +1,8 @@
-# agctl CLI
+# notarxctl CLI
 
 [简体中文](cli.zh-CN.md) · [Documentation index](README.md)
 
-`agctl` is the Gateway command line client for CI pipelines, platform
+`notarxctl` is the Gateway command line client for CI pipelines, platform
 management, and agents. It programs against the management API under
 `/api/v2` with a bearer credential. This checkout provides `version`, `info`,
 `commands`, `shell`, `auth login|logout|whoami|change-password`, and
@@ -13,7 +13,7 @@ client shape and its machine contract are recorded in
 
 ## Install
 
-`agctl` is a single client binary at the version the release pins in the
+`notarxctl` is a single client binary at the version the release pins in the
 `VERSION` file; CI pipelines, platform management, and agents all run the same
 build. It carries no server-side configuration or secrets: connection settings
 come from flags, environment variables, or the profile file described below.
@@ -24,33 +24,33 @@ The release builder in this checkout produces one client archive per platform
 next to the Gateway archives for a future release containing this batch:
 
 ```text
-artifact-gateway-agctl_<version>_linux_amd64.tar.gz
-artifact-gateway-agctl_<version>_linux_arm64.tar.gz
-artifact-gateway-agctl_<version>_darwin_amd64.tar.gz
-artifact-gateway-agctl_<version>_darwin_arm64.tar.gz
+notarxctl_<version>_linux_amd64.tar.gz
+notarxctl_<version>_linux_arm64.tar.gz
+notarxctl_<version>_darwin_amd64.tar.gz
+notarxctl_<version>_darwin_arm64.tar.gz
 ```
 
-A client archive holds only `agctl` plus `VERSION.txt` and `INSTALL.txt`; the
+A client archive holds only `notarxctl` plus `VERSION.txt` and `INSTALL.txt`; the
 server binary, healthcheck, migrations, and environment template stay in the
-`artifact-gateway_<version>_<goos>_<goarch>` archive. `SHA256SUMS` lists every
+`notarx_<version>_<goos>_<goarch>` archive. `SHA256SUMS` lists every
 archive of the release, so verify the download before extracting it:
 
 ```sh
 sha256sum -c SHA256SUMS --ignore-missing   # shasum -a 256 -c SHA256SUMS on macOS
-tar -xzf artifact-gateway-agctl_<version>_<goos>_<goarch>.tar.gz
-./agctl version
+tar -xzf notarxctl_<version>_<goos>_<goarch>.tar.gz
+./notarxctl version
 ```
 
-`agctl version` reports the client version and revision; compare both with the
+`notarxctl version` reports the client version and revision; compare both with the
 release tag before relying on the binary. Published `v0.9.0` includes only the
 CLI skeleton and local source build; it excludes this auth/profile/distribution
-batch and has no separate agctl archives. These archives require a subsequent
+batch and has no separate notarxctl archives. These archives require a subsequent
 release containing this batch; merging the code does not publish them.
 
 ### Go module install
 
 ```sh
-go install github.com/mlops-ca/notarx/cmd/agctl@<tag>
+go install github.com/mlops-ca/notarx/cmd/notarxctl@<tag>
 ```
 
 `<tag>` is a release tag (`v<VERSION>`) whose `go.mod` declares
@@ -59,41 +59,41 @@ go install github.com/mlops-ca/notarx/cmd/agctl@<tag>
 the earliest such tag; `v0.9.0` and older declare the previous, unresolvable
 path and cannot be installed this way. A module-mode install reports the tag as
 its version, but the Go toolchain records no VCS data for `pkg@version` builds,
-so `agctl version` shows the revision as `unknown`. Use a release archive or
+so `notarxctl version` shows the revision as `unknown`. Use a release archive or
 the image when you need the revision. Publishing an eligible tag and verifying
 a public GitHub install remain release acceptance work tracked in #347 and #128.
 
 ### Container image
 
-The client image is built from this checkout for pipelines that execute `agctl`
+The client image is built from this checkout for pipelines that execute `notarxctl`
 inside a job. It is a distroless static image with CA certificates, no shell,
 and the client binary only — the release workflow still publishes the Gateway
 and Console images, so build it locally at the version you need:
 
 ```sh
-make cli-docker-build                                     # docker build -f Dockerfile.agctl -t artifact-gateway-agctl:dev .
-docker run --rm artifact-gateway-agctl:dev version
-docker run --rm -e AGCTL_SERVER=https://gateway.example.com -e AGCTL_TOKEN="$GATEWAY_TOKEN" \
-  artifact-gateway-agctl:dev info
+make cli-docker-build                                     # docker build -f Dockerfile.agctl -t notarxctl:dev .
+docker run --rm notarxctl:dev version
+docker run --rm -e NOTARXCTL_SERVER=https://gateway.example.com -e NOTARXCTL_TOKEN="$GATEWAY_TOKEN" \
+  notarxctl:dev info
 ```
 
 `make cli-docker-build` passes the `VERSION` file value and the current Git
 revision as build arguments. A profile file works inside the image by mounting
 it under the nonroot home:
-`-e HOME=/home/nonroot -v "$HOME/.config/agctl/config.yaml:/home/nonroot/.config/agctl/config.yaml:ro"`.
+`-e HOME=/home/nonroot -v "$HOME/.config/notarxctl/config.yaml:/home/nonroot/.config/notarxctl/config.yaml:ro"`.
 
 ### Local build
 
 ```sh
-make cli-build                             # writes dist/agctl_<goos>_<goarch>
-dist/agctl_darwin_arm64 version
-dist/agctl_linux_amd64 info --server https://gateway.example.com --token "$GATEWAY_TOKEN"
+make cli-build                             # writes dist/notarxctl_<goos>_<goarch>
+dist/notarxctl_darwin_arm64 version
+dist/notarxctl_linux_amd64 info --server https://gateway.example.com --token "$GATEWAY_TOKEN"
 ```
 
 `make cli-build` cross-compiles linux and darwin for amd64 and arm64 with the
 local Go toolchain at the version declared in `go.mod`, and injects the
 `VERSION` file value and the current Git revision with the same `-ldflags` as
-the release archives. From a checkout, `go install ./cmd/agctl` installs the
+the release archives. From a checkout, `go install ./cmd/notarxctl` installs the
 same client into `$GOBIN`; without the injection it reports the development
 version instead of a release version.
 
@@ -102,8 +102,8 @@ version instead of a release version.
 Every setting resolves with fixed precedence:
 
 1. explicit flag (`--server`, `--token`, `--profile`);
-2. environment variable (`AGCTL_SERVER`, `AGCTL_TOKEN`, `AGCTL_PROFILE`);
-3. the selected profile in `~/.config/agctl/config.yaml`.
+2. environment variable (`NOTARXCTL_SERVER`, `NOTARXCTL_TOKEN`, `NOTARXCTL_PROFILE`);
+3. the selected profile in `~/.config/notarxctl/config.yaml`.
 
 A missing server on a command that needs one exits with code 2 before any
 request. `--server` is the Gateway root URL; management endpoints are
@@ -121,35 +121,35 @@ profiles:
     insecure: false
 ```
 
-Profile selection order: `--profile`, `AGCTL_PROFILE`, `current_profile`, the
+Profile selection order: `--profile`, `NOTARXCTL_PROFILE`, `current_profile`, the
 `default` profile, then a file that defines exactly one profile. The profile
-commands manage this file without hand-editing: `agctl config profile
+commands manage this file without hand-editing: `notarxctl config profile
 add|list|use|remove`; every write replaces the file atomically with mode 0600.
 
 A stored token is used only when the effective server matches its profile's
-target. Overriding `--server` or `AGCTL_SERVER` with a different target does
+target. Overriding `--server` or `NOTARXCTL_SERVER` with a different target does
 not reuse that token; supply the new target's credential explicitly through
-`--token` or `AGCTL_TOKEN`. Equivalent host/default-port spellings retain the
+`--token` or `NOTARXCTL_TOKEN`. Equivalent host/default-port spellings retain the
 binding; distinct IPv6 authorities, interface zones, and base-path case do not
 share credentials.
 
 ## Interactive shell
 
-`agctl shell` is an optional terminal frontend to the same `RunCLI` command
+`notarxctl shell` is an optional terminal frontend to the same `RunCLI` command
 registry used by scripts and agents. Both stdin and stdout must be TTYs;
 piped input or redirected output exits 2. Use ordinary commands for automation.
 The prompt shows the effective profile, redacted server URL, and repository.
 
 ```text
-agctl --profile production shell
-agctl [production | https://gateway.example.com | repo:]> use repo repository-id
-agctl [production | https://gateway.example.com | repo:repository-id]> artifact list
-agctl [production | https://gateway.example.com | repo:repository-id]> set json on
-agctl [production | https://gateway.example.com | repo:repository-id]> repo list
-agctl [production | https://gateway.example.com | repo:repository-id]> set dry-run on
-agctl [production | https://gateway.example.com | repo:repository-id]> set verbose on
-agctl [production | https://gateway.example.com | repo:repository-id]> use profile staging
-agctl [staging | https://staging.example.com | repo:]> exit
+notarxctl --profile production shell
+notarxctl [production | https://gateway.example.com | repo:]> use repo repository-id
+notarxctl [production | https://gateway.example.com | repo:repository-id]> artifact list
+notarxctl [production | https://gateway.example.com | repo:repository-id]> set json on
+notarxctl [production | https://gateway.example.com | repo:repository-id]> repo list
+notarxctl [production | https://gateway.example.com | repo:repository-id]> set dry-run on
+notarxctl [production | https://gateway.example.com | repo:repository-id]> set verbose on
+notarxctl [production | https://gateway.example.com | repo:repository-id]> use profile staging
+notarxctl [staging | https://staging.example.com | repo:]> exit
 ```
 
 - `use repo ID` supplies a default `--repo` only to commands declaring that
@@ -166,7 +166,7 @@ agctl [staging | https://staging.example.com | repo:]> exit
   the prompt and interactive notices are terminal UI, not a JSON stream.
 - Tab completes command words, `use profile` names, and `use repo` IDs from
   the current caller's authorized repository list (a bounded two-second read).
-- Up/down recall persistent command paths from `~/.config/agctl/history`.
+- Up/down recall persistent command paths from `~/.config/notarxctl/history`.
   History deliberately omits **all arguments**, including repository/profile
   selections, password/token flags, private bodies, and secret-output paths.
   It never records command output or once-only secrets. History is capped at
@@ -197,7 +197,7 @@ available. `--dry-run` previews only commands that support it.
 | --- | --- |
 | `--server URL` | Gateway root URL, for example `https://gateway.example.com` |
 | `--token TOKEN` | bearer token for the management API |
-| `--profile NAME` | profile from `~/.config/agctl/config.yaml` |
+| `--profile NAME` | profile from `~/.config/notarxctl/config.yaml` |
 | `--json` | emit the versioned JSON envelope instead of human text |
 | `-o table\|json` | output format (`--json` wins when both are given) |
 | `--timeout DURATION` | overall request timeout including retries (default `30s`) |
@@ -206,8 +206,8 @@ available. `--dry-run` previews only commands that support it.
 | `--dry-run` | plan a write without submitting it (write commands) |
 | `--yes` | assume yes for confirmations (write commands) |
 
-Global flags work before and after the command name: `agctl --json info` and
-`agctl info --json` are equivalent. `--dry-run` and `--yes` apply to write
+Global flags work before and after the command name: `notarxctl --json info` and
+`notarxctl info --json` are equivalent. `--dry-run` and `--yes` apply to write
 commands and are ignored by read-only ones. A write command that cannot plan
 without side effects rejects `--dry-run` with a usage error (exit 2) before
 any change; the command tree reports `dry-run: unsupported` for such commands.
@@ -216,7 +216,7 @@ any change; the command tree reports `dry-run: unsupported` for such commands.
 
 Human mode writes results to stdout and diagnostics to stderr. Commands never
 prompt: missing required input fails with exit code 2 before the first
-request, so `agctl` is safe in pipelines and agent loops.
+request, so `notarxctl` is safe in pipelines and agent loops.
 
 With `--json`, stdout carries exactly one document — also on failure:
 
@@ -245,7 +245,7 @@ With `--json`, stdout carries exactly one document — also on failure:
   `--secret-output`; `data` names the issued ID to revoke.
 - `error.httpStatus` is null for failures that never reached the server.
 - `error.code` `wait_timeout` marks a bounded `--wait` that ran out of time
-  (exit 8); the operation continues on the server. `agctl status` fails with
+  (exit 8); the operation continues on the server. `notarxctl status` fails with
   `unhealthy`, or under `--strict` with `degraded` or `unknown` (exit 1).
 - `email delivery wait` reports `delivery_failed` (exit 1) for a `dead`
   delivery. This local terminal result has `error.httpStatus: null`; `data`
@@ -305,12 +305,12 @@ neither are response bodies of failed authentication.
 
 ## Commands
 
-### `agctl version`
+### `notarxctl version`
 
 Prints the client version, revision, and Go version; `--json` data is
 `{version, revision, goVersion, modified}`.
 
-### `agctl info`
+### `notarxctl info`
 
 Probes the deployment and reports one line per source:
 
@@ -329,34 +329,34 @@ The `server` field is the effective endpoint with userinfo, query, and fragment
 removed. Failed probes preserve `code`, `requestId`, and an actionable `hint`
 when available; human output displays the same diagnostics.
 
-### `agctl commands`
+### `notarxctl commands`
 
-Prints the command tree. `agctl commands --json` returns, for every command,
+Prints the command tree. `notarxctl commands --json` returns, for every command,
 its usage, flags, and contract metadata: resource, scenario tags, delivery
 stage, real endpoints, whether it mutates state, minimum role, and its
 pagination, dry-run, retry, wait, and follow capabilities. Scripts and agents use
 this tree to discover what the installed client can do.
 
-### `agctl auth login`
+### `notarxctl auth login`
 
 Exchanges a local username and password for a session token (`POST
 /auth/login`) and stores the token in an explicitly selected profile. The
 password comes from bounded stdin (`--password-stdin`); missing, empty, or
 oversized input exits 2 before any request. Without `--profile` (or
-`AGCTL_PROFILE`) the command refuses to store the token unless
+`NOTARXCTL_PROFILE`) the command refuses to store the token unless
 `--secret-output FILE` names a new private file for it instead (the same
 rules as every one-time secret: checked before the request, mode 0600, never
 overwritten, never printed; `--profile` and `--secret-output` exclude each
 other). The client never prints a token. A profile already bound to a different server is refused before the
-request (`--server` or `AGCTL_SERVER` overrides included), and a profile
+request (`--server` or `NOTARXCTL_SERVER` overrides included), and a profile
 without a server is bound to the actual login target when the token is
 stored, so a token is never sent to the wrong deployment later. When the
 server reports `mustChangePassword`, the command stores the token, exits 0,
-and points at `agctl auth change-password`; it never changes the password
+and points at `notarxctl auth change-password`; it never changes the password
 automatically, and management endpoints answer 403 for such an account until
 the password is changed.
 
-### `agctl auth logout`
+### `notarxctl auth logout`
 
 Requests the server-side logout (`POST /auth/logout`) and removes the
 matching token from every profile that stores it. The endpoint answers 204
@@ -366,10 +366,10 @@ of assuming revocation: `credentialInvalidated` reports whether the
 credential still authenticates — a machine credential or static admin token
 is reported as still authenticating and must be revoked from its own
 management surface. `--local-only` skips the server call and only forgets the
-local credential. Tokens supplied through `--token` or `AGCTL_TOKEN` are
+local credential. Tokens supplied through `--token` or `NOTARXCTL_TOKEN` are
 never removed from anywhere.
 
-### `agctl auth whoami`
+### `notarxctl auth whoami`
 
 Shows the caller identity (`GET /api/v2/identity`) and one bounded page of
 readable repositories (`GET /api/v2/repositories`, `pageSize=200`). `--json`
@@ -378,27 +378,27 @@ names, truncated}}`; `truncated` is true when more repositories exist than
 the page or the sample of names shows. Missing credentials exit 5 before any
 request.
 
-### `agctl auth change-password`
+### `notarxctl auth change-password`
 
 Changes the caller's own password (`POST /auth/change-password`) using a local
 user session. Both passwords come from bounded stdin, one line each (current
 first, then new). On success the matching stored token is removed and a fresh
-`agctl auth login` is required; a rejected change keeps the stored token. The
+`notarxctl auth login` is required; a rejected change keeps the stored token. The
 endpoint only accepts local user sessions.
 
-### `agctl config profile`
+### `notarxctl config profile`
 
-Manages `~/.config/agctl/config.yaml` without hand-editing:
+Manages `~/.config/notarxctl/config.yaml` without hand-editing:
 
-- `agctl config profile add NAME --server URL [--token-stdin] [--insecure]`
+- `notarxctl config profile add NAME --server URL [--token-stdin] [--insecure]`
   creates or updates a profile; without `--server` an existing profile keeps
   its server, and `--token-stdin` reads one bounded secret line that is never
   echoed. Changing the server drops the stored token unless `--token-stdin`
   provides the new target's credential, so an old deployment's token is never
   sent to a new one;
-- `agctl config profile list` shows the profiles and which one is current;
-- `agctl config profile use NAME` sets `current_profile`;
-- `agctl config profile remove NAME` deletes a profile and unsets
+- `notarxctl config profile list` shows the profiles and which one is current;
+- `notarxctl config profile use NAME` sets `current_profile`;
+- `notarxctl config profile remove NAME` deletes a profile and unsets
   `current_profile` when it pointed at it.
 
 Writes serialize the full read/modify/replace transaction across processes on
@@ -411,24 +411,24 @@ output strips URL userinfo, query parameters, and fragments.
 The Windows lock implementation is compile-checked, but private profile
 persistence is not supported by the current POSIX permission validation:
 Windows file modes do not establish the required 0600 protection. Use file-less
-`--server`/`--token` or `AGCTL_SERVER`/`AGCTL_TOKEN` there; Windows profile runtime
+`--server`/`--token` or `NOTARXCTL_SERVER`/`NOTARXCTL_TOKEN` there; Windows profile runtime
 acceptance remains incomplete and is not claimed by this batch.
 
-### `agctl repo`
+### `notarxctl repo`
 
 Repository management over `/api/v2/repositories`. Repositories are addressed
-by ID (`agctl repo list` shows it).
+by ID (`notarxctl repo list` shows it).
 
-- `agctl repo list [--page-size N] [--cursor TOKEN]` reads one page (50 by
+- `notarxctl repo list [--page-size N] [--cursor TOKEN]` reads one page (50 by
   default, 1–200) of the repositories visible to the caller; an empty list is
   a success, not a permission error. `nextCursor` continues the listing with
   `--cursor`. `--all` follows cursors within `--max-pages` (default 20) and
   one overall `--timeout`; reaching the budget, or a failure after the first
   page, exits 3 with the items read, `complete: false`, and the cursor to
   continue from.
-- `agctl repo show ID` prints one repository; credentials of proxy settings
+- `notarxctl repo show ID` prints one repository; credentials of proxy settings
   are reported only as configured.
-- `agctl repo create NAME --format FORMAT [--type hosted|proxy] [--endpoint
+- `notarxctl repo create NAME --format FORMAT [--type hosted|proxy] [--endpoint
   URL] [--allowed-host HOST]… [--anonymous-read]
   [--maven-strict-publication]` creates a repository (platform admin). Every
   create sends an `Idempotency-Key`, and retries of the same call reuse it, so
@@ -438,7 +438,7 @@ by ID (`agctl repo list` shows it).
   with a different request is refused with exit 7. Upstream credentials,
   egress proxies, and OCI bearer exchange are not exposed by this command yet;
   use the Console or the API for them.
-- `agctl repo update ID [--anonymous-read=true|false]
+- `notarxctl repo update ID [--anonymous-read=true|false]
   [--maven-strict-publication=true|false] [--endpoint URL] [--allowed-host
   HOST]…` sends only the given settings as a conditional `PATCH`. `If-Match`
   is `--if-match VERSION` or, without it, the version read just before the
@@ -446,7 +446,7 @@ by ID (`agctl repo list` shows it).
   overwritten. The update is never retried automatically. Hosted repositories
   accept only anonymous read and Maven publication policy; the server refuses
   other settings (exit 1).
-- `agctl repo delete ID --yes [--wait]` requests the asynchronous deletion.
+- `notarxctl repo delete ID --yes [--wait]` requests the asynchronous deletion.
   Without `--yes` it exits 2 before any request. A 202 is acceptance, not
   completion: `data` is `{id, status: "accepted", repositoryState: null,
   terminal: false}`. Protocol access stops at once and the deletion worker,
@@ -464,7 +464,7 @@ repository (`update` reads its version, `delete` its state), and prints the
 request it would send with what was and was not checked. It never submits the
 write, so it cannot claim the server would accept it.
 
-### `agctl group`
+### `notarxctl group`
 
 Group management over `/api/v2/groups`. A Group references repositories of
 one format; the members' configured positions decide the resolution order
@@ -476,38 +476,38 @@ administers every repository a Group references may read it (`show`,
 for the members before and after the change. Any other caller gets 404, as if
 the Group did not exist, so a Group it only partly administers stays hidden.
 
-- `agctl group list [--page-size N] [--cursor TOKEN | --all [--max-pages
-  N]]` pages through Groups like `agctl repo list`.
-- `agctl group show ID` prints the Group and its members by configured
-  position; `agctl group members list ID` prints only the members
+- `notarxctl group list [--page-size N] [--cursor TOKEN | --all [--max-pages
+  N]]` pages through Groups like `notarxctl repo list`.
+- `notarxctl group show ID` prints the Group and its members by configured
+  position; `notarxctl group members list ID` prints only the members
   (`meta.pagination.mode` is `none`: the endpoint is not paginated).
-- `agctl group resolution ID` shows the order the protocol resolver reads the
+- `notarxctl group resolution ID` shows the order the protocol resolver reads the
   members in (hosted before proxy, then configured position) with repository
   names, and how many members it excludes as missing, inactive, or of another
   format. It does not query artifacts or decide any reader's access.
-- `agctl group create NAME --format FORMAT --member REPOSITORY_ID…
+- `notarxctl group create NAME --format FORMAT --member REPOSITORY_ID…
   [--anonymous-read]` creates a Group; the order of `--member` is the
   configured position. Like `repo create`, every create sends an
   `Idempotency-Key` that retries reuse, and an unknown outcome prints the key
   for `--idempotency-key`.
-- `agctl group update ID [--name NAME] [--anonymous-read=true|false]` reads
+- `notarxctl group update ID [--name NAME] [--anonymous-read=true|false]` reads
   the Group and sends it back whole (`PUT`) with the change, keeping its
   format and members; `If-Match` is `--if-match VERSION` or the version just
   read, and a 412 (exit 7) overwrites nothing. Change members with
-  `agctl group members set`.
-- `agctl group members set ID --member REPOSITORY_ID…` replaces the members
+  `notarxctl group members set`.
+- `notarxctl group members set ID --member REPOSITORY_ID…` replaces the members
   in the order given, conditional on `--if-match` or the version just read.
   The server returns the updated Group; an older server that returns a bare
   member list is followed by a read of the Group to report its new version.
   If that read
   fails or returns an incomplete Group, the command fails while retaining
   the confirmed member list and a read-back hint; it never repeats the write.
-- `agctl group delete ID --yes` deletes the Group; its member repositories
+- `notarxctl group delete ID --yes` deletes the Group; its member repositories
   are kept. Deletion is synchronous (`data` is `{id, deleted: true}`) and is
   never retried, because a repeat after a lost response would answer 404.
 
 `update`, `members set`, and `delete` are never retried automatically.
-`--dry-run` on the Group writes is a client plan, as for `agctl repo`.
+`--dry-run` on the Group writes is a client plan, as for `notarxctl repo`.
 
 ### Repository content and format views
 
@@ -516,37 +516,37 @@ caller may not read answers 403 (exit 6), while a global search filters to
 readable repositories and an empty result is a success. Repositories are
 addressed by ID with `--repo`.
 
-- `agctl artifact search --repo ID [--q TEXT]` searches one repository;
-  `agctl artifact search --global --q TEXT [--format FORMAT]` searches every
+- `notarxctl artifact search --repo ID [--q TEXT]` searches one repository;
+  `notarxctl artifact search --global --q TEXT [--format FORMAT]` searches every
   readable repository and reports `meta.scope.searchedRepositories`.
   `--match prefix|contains` selects the server's match mode (prefix when
   omitted). Both page with `--page-size`, `--cursor`, and `--all`.
-- `agctl artifact browse --repo ID [--parent NODE_ID]` (also
-  `agctl repo browse ID`) lists one level of the server's browse tree; node
-  IDs are opaque, signed, and expire. `agctl group browse ID` browses the
+- `notarxctl artifact browse --repo ID [--parent NODE_ID]` (also
+  `notarxctl repo browse ID`) lists one level of the server's browse tree; node
+  IDs are opaque, signed, and expire. `notarxctl group browse ID` browses the
   union of a Maven or Raw Group's readable members and reports the Group and
   its candidate members in `meta.scope`.
-- `agctl artifact identities --repo ID --purpose scan|distribution` lists the
+- `notarxctl artifact identities --repo ID --purpose scan|distribution` lists the
   canonical coordinate and digest pairs scanners or promotion accept. The
   endpoint has no cursor: `--limit` (1–200) bounds the window, and a full
   window may hide more.
-- `agctl artifact usage --repo ID [--limit N] [--offset N]` shows download
+- `notarxctl artifact usage --repo ID [--limit N] [--offset N]` shows download
   counts per resource in an offset window with the server's total.
-- `agctl artifact intelligence show` and `agctl artifact quarantine show`
+- `notarxctl artifact intelligence show` and `notarxctl artifact quarantine show`
   read the record of one `--coordinate` and `--digest`; 404 means none is
   recorded.
-- `agctl oci images|manifests` and `agctl maven coordinates` are the format
+- `notarxctl oci images|manifests` and `notarxctl maven coordinates` are the format
   views; `oci manifests` needs `--name IMAGE` and includes untagged
   manifests.
-- `agctl conan references --repo ID [--q PREFIX]` and `conan recipe-revisions
+- `notarxctl conan references --repo ID [--q PREFIX]` and `conan recipe-revisions
   --repo ID --reference NAME/VERSION/USER/CHANNEL [--q QUERY]` use server
   cursors and the same `--all` page/time budgets as search. Both views report
   the selected repository and filters in `meta.scope`.
-- `agctl conan package-ids --repo ID --reference NAME/VERSION/USER/CHANNEL
+- `notarxctl conan package-ids --repo ID --reference NAME/VERSION/USER/CHANNEL
   --recipe-revision REVISION` and `conan package-revisions` (also requiring
   `--package-id ID`) return the whole selected collection: pagination is
   `none`, with no invented cursor, page size, or total.
-- `agctl conan package-revision delete` requires those exact selectors,
+- `notarxctl conan package-revision delete` requires those exact selectors,
   `--revision REVISION`, and `--yes`. `--dry-run` only reads the selected
   revision and states what remains unverified. Success requires the server's
   HTTP 204 acknowledgement and a matching package list without that revision;
@@ -555,7 +555,7 @@ addressed by ID with `--repo`.
   permission in addition to the write permission needed for deletion. Repeating
   a tombstone is safe; absence alone does not prove a tombstone, and neither
   acknowledgement nor absence proves physical byte reclamation.
-- `agctl artifact list|show|delete --repo ID` cover the artifacts the Maven
+- `notarxctl artifact list|show|delete --repo ID` cover the artifacts the Maven
   hosted publication flow records; other formats answer 404. `list` returns
   every visible artifact at once (`meta.pagination.mode` is `none`). `show`
   adds the artifact's intelligence and quarantine records, each reported as
@@ -563,9 +563,9 @@ addressed by ID with `--repo`.
   when it was not read. `delete ARTIFACT_ID --repo ID --yes` tombstones the
   artifact (202; `serverState` is the server's deletion state); repeating it
   is accepted again, so the request is retried like other idempotent calls.
-- `agctl repo capabilities ID` lists the operations a hosted repository's
+- `notarxctl repo capabilities ID` lists the operations a hosted repository's
   format supports.
-- `agctl repo connect ID` prints client configuration for the repository's
+- `notarxctl repo connect ID` prints client configuration for the repository's
   format (`.npmrc`, `pip.conf` and `.pypirc`, Maven `settings.xml` and
   `pom.xml`, `GOPROXY` and `.netrc`, `docker login`, Raw `curl`, Conan
   remotes, APT `sources.list` and `auth.conf`, Cargo `config.toml`), with
@@ -581,14 +581,14 @@ addressed by ID with `--repo`.
 
 These commands read; none of them changes anything.
 
-- `agctl audit list [--actor A] [--operation O] [--outcome O] [--repository
+- `notarxctl audit list [--actor A] [--operation O] [--outcome O] [--repository
   R] [--group G] [--format F] [--from TIME] [--to TIME]` pages through the
   audit log with cursors (`--page-size`, `--cursor`, `--all`).
   `--bounded [--limit N]` instead reads one window of at most 500 records
   from `GET /audits`, which has no cursor and no time range. `--csv` prints
   RFC 4180 CSV with a header row. The log records authorization decisions,
   refusals, grant and template writes, and Group resolution rather than
-  every management write; an audit record carries the request id an `agctl`
+  every management write; an audit record carries the request id an `notarxctl`
   failure reports. `--follow` streams new records: audit records have no
   sequence, so each poll re-reads a two-minute lookback window and skips
   records it already delivered; without `--from` the stream starts now, with
@@ -599,7 +599,7 @@ These commands read; none of them changes anything.
   floor for restarting with the same filters; records can replay, including
   those sharing a timestamp, so consumers should deduplicate. Records arriving
   later than the two-minute lookback are outside this polling guarantee.
-- `agctl runtime logs [--level L] [--component C] [--request-id ID]
+- `notarxctl runtime logs [--level L] [--component C] [--request-id ID]
   [--trace-id ID] [--keyword TEXT] [--from TIME] [--to TIME | --window D]`
   reads one page (newest first, `--limit` up to 100) from the memory of the
   process that answers: the logs are local to one instance and session and
@@ -614,7 +614,7 @@ These commands read; none of them changes anything.
   follow. The cursor belongs to one process session, so a
   restart or another instance answering ends the stream with
   `scope_changed`. Overwritten unread entries are reported as a `gap`.
-- `agctl status` probes `/livez`, `/readyz`, and the diagnostics and prints
+- `notarxctl status` probes `/livez`, `/readyz`, and the diagnostics and prints
   one verdict per check: dependencies, runtime nodes (with their issue
   codes), scanner, and failed queue jobs. The overall result is the worst
   check — `unhealthy`, `degraded`, `unknown`, `healthy` — and the command
@@ -623,18 +623,18 @@ These commands read; none of them changes anything.
   diagnostics, those checks are `unknown`, never healthy.
   An unhealthy or unreachable scanner makes ordinary `status` fail;
   a stale scanner database remains degraded and fails with `--strict`.
-- `agctl diagnostics`, `agctl runtime nodes`, and `agctl overview show` print
+- `notarxctl diagnostics`, `notarxctl runtime nodes`, and `notarxctl overview show` print
   the server documents (JSON output passes them through unchanged, so new
   fields reach scripts) with a human summary. Diagnostics includes each
   local mount's status, reason, byte values, actual sample time and shared
   aliases, plus the observation scope and unit. Missing values remain unknown.
-- `agctl lifecycle-job list [--repo ID | --limit N]` reads the newest jobs of
+- `notarxctl lifecycle-job list [--repo ID | --limit N]` reads the newest jobs of
   one repository (at most 100), or a global window of at most 500 by default.
   The server limits the global window before filtering repository permissions:
   a short or empty result does not prove completeness. Both sources report
   `mode: bounded`; global completeness stays unknown, and a repository window
   is complete only when fewer than 100 jobs are returned.
-  `agctl lifecycle-job show JOB_ID` finds one job in the same window; a job
+  `notarxctl lifecycle-job show JOB_ID` finds one job in the same window; a job
   outside it answers exit 4 with the range that was searched.
   Running, retrying, and cancelling jobs is not part of this command family
   yet.
@@ -645,28 +645,28 @@ Grants are written one row at a time, keyed by principal and resource
 prefix; the whole-table replace endpoint is not exposed. Repositories are
 addressed by ID with `--repo`.
 
-- `agctl grant list --repo ID` prints a repository's grants and the grant
+- `notarxctl grant list --repo ID` prints a repository's grants and the grant
   set version (from `ETag`) that conditions `template apply`;
-  `agctl grant list --all-repositories` lists the grants on every repository
+  `notarxctl grant list --all-repositories` lists the grants on every repository
   the caller administers.
-- `agctl grant upsert --repo ID --principal P --scope S… [--resource-prefix
+- `notarxctl grant upsert --repo ID --principal P --scope S… [--resource-prefix
   X]` creates or replaces one grant and leaves the others untouched; the
   same row may be sent again, so the request is retried. The answer must
   contain the written row and the new version, or the outcome is unknown.
   `--dry-run` reads the current row and reports `create`, `replace`, or
   `unchanged`.
-- `agctl grant delete --repo ID --principal P [--resource-prefix X] --yes`
+- `notarxctl grant delete --repo ID --principal P [--resource-prefix X] --yes`
   removes one grant. It is not retried: a repeat answers 404, which is also
   what a grant that does not exist answers.
-- `agctl role list|show` and `agctl template list|show` read the catalogues
+- `notarxctl role list|show` and `notarxctl template list|show` read the catalogues
   (platform administrators).
-- `agctl role create NAME --scope SCOPE... [--description TEXT]` creates a
-  named repository scope set. `agctl role update ID [--name NAME]
+- `notarxctl role create NAME --scope SCOPE... [--description TEXT]` creates a
+  named repository scope set. `notarxctl role update ID [--name NAME]
   [--description TEXT] [--scope SCOPE...] --yes` preserves unspecified fields;
   supplying scopes replaces the complete scope set. `--description=` clears
   the description.
-- `agctl template create NAME --grants-file FILE [--description TEXT]` creates
-  a grant recipe. `agctl template update ID [--name NAME] [--description TEXT]
+- `notarxctl template create NAME --grants-file FILE [--description TEXT]` creates
+  a grant recipe. `notarxctl template update ID [--name NAME] [--description TEXT]
   [--grants-file FILE] --yes` preserves unspecified fields and replaces all
   recipe grants when the file is supplied. The file contains one JSON array
   of at most 500 unique principal/resource-prefix grants, with distinct valid
@@ -684,7 +684,7 @@ addressed by ID with `--repo`.
   for review; it never resubmits the write. If that read fails, `data.readBack`
   names the read command. `--dry-run` reads the current entry and reports the
   before/after content, version and catalogue-only scope without writing.
-- `agctl role delete ID --yes` and `agctl template delete ID --yes` delete a
+- `notarxctl role delete ID --yes` and `notarxctl template delete ID --yes` delete a
   catalogue entry. Their `--dry-run` reads the entry without deleting it.
   These existing API endpoints have no `If-Match` condition; the entry may
   change after the read, and `--if-match` is not accepted for deletion.
@@ -702,12 +702,12 @@ these commands do not edit the built-in account roles `none`, `member`, or
 editing or deleting either catalogue does not change existing repository
 grants; applying a template remains a separate, explicit operation.
 
-- `agctl template apply TEMPLATE_ID --repo ID --yes` replaces every grant of
+- `notarxctl template apply TEMPLATE_ID --repo ID --yes` replaces every grant of
   the repository with the template's, conditional on `--if-match` or the
   grant set version read just before; a 412 (exit 7) replaces nothing and the
   apply is never retried. `--dry-run` reads the grants and the template and
   lists every grant the apply would add, remove, change, and keep.
-- `agctl access check --repo ID [--actor A [--role member|admin]]
+- `notarxctl access check --repo ID [--actor A [--role member|admin]]
   [--resource PATH]` explains read, write, admin, intelligence, and
   anonymous read with the source and reason of each decision.
   `--require PERMISSION` (repeatable) exits 6 when one is not allowed, for
@@ -715,8 +715,8 @@ grants; applying a template remains a separate, explicit operation.
   administrator; `--role` simulates that actor's global role. A caller with
   no read or intelligence authority gets 404 (exit 4), hiding the repository's
   existence; `--require` exits 6 when a returned decision denies permission.
-- `agctl access anonymous show` reads the platform switch for anonymous
-  reads; `agctl access anonymous set --enabled=true|false` replaces it
+- `notarxctl access anonymous show` reads the platform switch for anonymous
+  reads; `notarxctl access anonymous set --enabled=true|false` replaces it
   conditional on `--if-match` or the version just read, and is never
   retried. Enabling needs `--yes`, because it applies to every repository
   and Group that allows anonymous reads.
@@ -724,25 +724,25 @@ grants; applying a template remains a separate, explicit operation.
 ### Least-privilege service-account check
 
 Use an existing active service account and its credential: credential issuance
-is tracked separately in #133. Set `AGCTL_SERVER`, `REPO_ID`,
+is tracked separately in #133. Set `NOTARXCTL_SERVER`, `REPO_ID`,
 `SERVICE_ACCOUNT_ID`, `ADMIN_TOKEN`, and `SERVICE_ACCOUNT_TOKEN` in the
 environment; only the administrator writes the grant. This example admits
 reads under `releases/` and leaves write authority denied:
 
 ```sh
-AGCTL_TOKEN="$ADMIN_TOKEN" agctl grant upsert --repo "$REPO_ID" \
+NOTARXCTL_TOKEN="$ADMIN_TOKEN" notarxctl grant upsert --repo "$REPO_ID" \
   --principal "service-account:$SERVICE_ACCOUNT_ID" \
   --resource-prefix releases/ --scope repositories:read
-AGCTL_TOKEN="$SERVICE_ACCOUNT_TOKEN" agctl access check --repo "$REPO_ID" \
+NOTARXCTL_TOKEN="$SERVICE_ACCOUNT_TOKEN" notarxctl access check --repo "$REPO_ID" \
   --resource releases/app.txt --require read --json
 # Expected exit 6: read authority reveals the resource, but write is denied.
-AGCTL_TOKEN="$SERVICE_ACCOUNT_TOKEN" agctl access check --repo "$REPO_ID" \
+NOTARXCTL_TOKEN="$SERVICE_ACCOUNT_TOKEN" notarxctl access check --repo "$REPO_ID" \
   --resource releases/app.txt --require write --json
-AGCTL_TOKEN="$ADMIN_TOKEN" agctl grant delete --repo "$REPO_ID" \
+NOTARXCTL_TOKEN="$ADMIN_TOKEN" notarxctl grant delete --repo "$REPO_ID" \
   --principal "service-account:$SERVICE_ACCOUNT_ID" \
   --resource-prefix releases/ --yes
 # Expected exit 4 after revocation, if this was the account's only authority.
-AGCTL_TOKEN="$SERVICE_ACCOUNT_TOKEN" agctl access check --repo "$REPO_ID" \
+NOTARXCTL_TOKEN="$SERVICE_ACCOUNT_TOKEN" notarxctl access check --repo "$REPO_ID" \
   --resource releases/app.txt --require read --json
 ```
 
@@ -753,20 +753,20 @@ Service accounts are the machine principals for CI
 carry one-time secrets: the server returns a secret only in the answer that
 issues it.
 
-- `agctl service-account list` pages through the accounts.
-  `agctl service-account show ID` finds one by reading the list, because
+- `notarxctl service-account list` pages through the accounts.
+  `notarxctl service-account show ID` finds one by reading the list, because
   there is no endpoint for a single account: it answers 404 (exit 4) only
   after reading the whole list, and exit 3 when `--max-pages` runs out first.
-- `agctl service-account create NAME [--description TEXT]` creates an
+- `notarxctl service-account create NAME [--description TEXT]` creates an
   account; it is not retried (the endpoint has no idempotency key, and a
   repeat answers 409 for the account it created).
-  `agctl service-account update ID [--description TEXT] [--state
+  `notarxctl service-account update ID [--description TEXT] [--state
   active|disabled]` is conditional on `--if-match` or the version read from
   the list; disabling stops every credential of the account.
-- `agctl credential list --service-account ID` and `agctl api-key list` never
+- `notarxctl credential list --service-account ID` and `notarxctl api-key list` never
   show secrets.
-- `agctl credential issue --service-account ID --name NAME --secret-output
-  FILE [--expires-in DURATION]` and `agctl api-key create NAME
+- `notarxctl credential issue --service-account ID --name NAME --secret-output
+  FILE [--expires-in DURATION]` and `notarxctl api-key create NAME
   --secret-output FILE [--role member|admin]…` write the secret only to
   `FILE`. Without `--secret-output` they exit 2 before any request. Before
   the request the destination must not exist (files and links alike are
@@ -779,13 +779,13 @@ issues it.
   exits 1 with `secret_not_delivered`, keeps the secret out of every message,
   and names the ID to revoke; it never issues another one automatically.
   `--dry-run` checks the destination and leaves nothing behind.
-- `agctl credential revoke CREDENTIAL_ID --service-account ID --yes` and
-  `agctl api-key revoke ID --yes` stop the secret at once. Revocation records
+- `notarxctl credential revoke CREDENTIAL_ID --service-account ID --yes` and
+  `notarxctl api-key revoke ID --yes` stop the secret at once. Revocation records
   its time once and answers the same record again, so it is retried; the
   record stays listed as revoked.
 
 Rotating a CI credential without downtime: issue the new credential to a new
-file, deploy it, confirm it works (for example with `agctl auth whoami`), then
+file, deploy it, confirm it works (for example with `notarxctl auth whoami`), then
 revoke the old one; the old secret then answers 401 (exit 5).
 
 ### Users and sessions
@@ -794,35 +794,35 @@ Local users have a global role (`none`, `member`, `admin`); `member` grants
 no repository access by itself — repository access comes from grants
 (`user:<name>`).
 
-- `agctl user list [--search TEXT] [--role R] [--state S] [--limit N]
+- `notarxctl user list [--search TEXT] [--role R] [--state S] [--limit N]
   [--offset N]` reads an offset window with the server's total;
-  `agctl user show ID` reads one user.
-- `agctl user create NAME --role R (--password-stdin | --password-file FILE)`
+  `notarxctl user show ID` reads one user.
+- `notarxctl user create NAME --role R (--password-stdin | --password-file FILE)`
   creates a user. Passwords come only from bounded stdin or the first line
   of a private regular file (no group or other permissions; use `chmod 600`),
   are checked locally (8 characters to 72 bytes), and never appear
   in output, plans (`--dry-run` shows a placeholder), errors, or verbose
   logs. Creation is not retried.
-- `agctl user update ID [--role R] [--state S] [--display-name …] [--email …]
-  [--description …]` and `agctl user reset-password ID (--password-stdin |
+- `notarxctl user update ID [--role R] [--state S] [--display-name …] [--email …]
+  [--description …]` and `notarxctl user reset-password ID (--password-stdin |
   --password-file FILE) [--must-change-password]` are conditional on
   `--if-match` or the version read just before; neither is retried. The
   server refuses to demote, disable, or delete the last active
   administrator (409, exit 7).
-- `agctl user delete ID --yes` deletes a user; disabling with
+- `notarxctl user delete ID --yes` deletes a user; disabling with
   `--state disabled` is the reversible alternative.
-- `agctl user sessions list ID [--include-inactive]` lists sign-in sessions.
-  `agctl user sessions revoke ID --session SESSION_ID --yes` ends one
+- `notarxctl user sessions list ID [--include-inactive]` lists sign-in sessions.
+  `notarxctl user sessions revoke ID --session SESSION_ID --yes` ends one
   session (retried: ending it twice is harmless); `--all` ends every session,
   conditional on the user's version and not retried. An ended session's
   token answers 401 at once.
-- `agctl user identities list|link|unlink ID` manage linked OIDC identities;
+- `notarxctl user identities list|link|unlink ID` manage linked OIDC identities;
   linking needs the issuer configured on the Gateway, and unlinking needs
   `--yes`.
 
 ### Publishing
 
-- `agctl publish raw SOURCE --repo ID [--to PATH_OR_PREFIX]` uploads a file,
+- `notarxctl publish raw SOURCE --repo ID [--to PATH_OR_PREFIX]` uploads a file,
   or every regular file of a directory tree (links are not followed), to a
   Raw hosted repository with `PUT /raw/{repository}/{path}`. Each object's
   SHA-256 is computed locally and sent as the `Digest` header, so the Gateway
@@ -835,9 +835,9 @@ no repository access by itself — repository access comes from grants
   segment escaped like Go's `url.PathEscape`, as search reports it), size,
   digest, and status; any `failed` or `unknown` object exits 3. A Raw PUT
   uses unconditional replacement in this CLI; native Raw HTTP also supports
-  conditional writes. Before a real Raw or Maven publication, agctl verifies
+  conditional writes. Before a real Raw or Maven publication, notarxctl verifies
   the target identity, active Hosted format and advertised publish capability.
-- `agctl publish raw SOURCE --repo ID --resumable [--chunk-size BYTES]`
+- `notarxctl publish raw SOURCE --repo ID --resumable [--chunk-size BYTES]`
   starts a native upload, sends offset-checked chunks (default 4 MiB, maximum
   16 MiB), and completes only with the full file SHA-256. Each item reports
   `uploadId`, last confirmed `uploadOffset`, and `readBack`; human output also
@@ -853,39 +853,39 @@ no repository access by itself — repository access comes from grants
   timing out or pressing Ctrl-C does not cancel or delete server uploads.
   Repository read permission is needed for discovery/status/read-back, and
   write permission is needed for upload.
-- `agctl publish maven --repo ID --coordinate G:A:V --pom FILE [--file
+- `notarxctl publish maven --repo ID --coordinate G:A:V --pom FILE [--file
   FILE]…` publishes one Maven coordinate through a publish session: it
   declares every file with its size and digest under an `Idempotency-Key`,
   uploads them, and commits. Re-running with the same `--idempotency-key`
   resumes the same open session; a committed session is never reused (exit
-  7). The steps are also separate commands: `agctl publish create`,
-  `agctl publish upload SESSION --file …`, `agctl publish commit SESSION`, and
-  `agctl publish status SESSION`. Uploads are content-addressed and retried;
+  7). The steps are also separate commands: `notarxctl publish create`,
+  `notarxctl publish upload SESSION --file …`, `notarxctl publish commit SESSION`, and
+  `notarxctl publish status SESSION`. Uploads are content-addressed and retried;
   the commit is not retried (a repeat answers 409), and a lost commit answer
   is settled by reading the session back: `committed` confirms it.
-- Other formats publish with their native clients; `agctl repo connect`
+- Other formats publish with their native clients; `notarxctl repo connect`
   prints their configuration.
 
 ### Quota alerts and email
 
 These second-batch (M2) commands need a platform administrator.
 
-- `agctl email capability` reports whether the answering process can queue
+- `notarxctl email capability` reports whether the answering process can queue
   email (`ready`, `email_disabled`, `encryption_key_unavailable`). Ready means
   configured, not that mail reaches an inbox.
-- `agctl email target list|show` never show recipients, only
-  `recipientConfigured`. `agctl email target create NAME --locale en|zh-CN
+- `notarxctl email target list|show` never show recipients, only
+  `recipientConfigured`. `notarxctl email target create NAME --locale en|zh-CN
   (--recipient-stdin | --recipient-file FILE) [--enabled]` reads the address
   only from bounded stdin or a private (mode 0600) file and redacts it
-  everywhere, including plans. `agctl email target update ID` changes the
+  everywhere, including plans. `notarxctl email target update ID` changes the
   name, locale, enabled state, or recipient conditional on the version read
   just before; fields not given are sent back as they are, because the
   endpoint treats an omitted `enabled` as disabled. Rules keep the target
   version they were bound to until updated.
-- `agctl email preview --scenario S --locale L [--html-output FILE]
+- `notarxctl email preview --scenario S --locale L [--html-output FILE]
   [--text-output FILE]` renders fixed synthetic data and queues nothing; the
   two parts must go to different files.
-- `agctl email test --target ID --scenario S --yes` queues one real test
+- `notarxctl email test --target ID --scenario S --yes` queues one real test
   email for the target's current version under an `Idempotency-Key` (a UUID;
   `--idempotency-key` reuses one, and the same key answers the same delivery,
   so the request is retried). The server matches a repeat by key, target,
@@ -893,27 +893,27 @@ These second-batch (M2) commands need a platform administrator.
   was sent with, and a later retry passes it back as
   `--idempotency-key K --if-match VERSION` instead of reading a newer one.
   Queued is not delivered:
-  `agctl email delivery wait ID [--timeout D]` polls until the relay accepted
+  `notarxctl email delivery wait ID [--timeout D]` polls until the relay accepted
   it (exit 0) or it is dead (exit 1, `delivery_failed`, with the actual record
   in `data`), and a timeout exits 8 with the delivery still queued —
   there is no cancel (`commands --json` reports `cancelSupported: false`).
   A wait accepts only a complete answer for the requested delivery ID.
-  `agctl email delivery list [--limit N]` reads the newest
+  `notarxctl email delivery list [--limit N]` reads the newest
   deliveries (at most 100, no cursor); `show` reads one, including attempts
-  and `possibleDuplicate`. `agctl email delivery replay ID --yes` queues a
+  and `possibleDuplicate`. `notarxctl email delivery replay ID --yes` queues a
   dead delivery again, conditional on its version and never retried.
-- `agctl quota-alert list|show|events` read rules, their state, and their
+- `notarxctl quota-alert list|show|events` read rules, their state, and their
   warning, critical, and resolved events with delivery state. Events are the
   newest 50-record window (`meta.pagination.mode: bounded`, `limit: 50`); a full
   window leaves completeness unknown, and there is no cursor for older history.
-  `agctl quota-alert create --repo ID --target ID` needs every threshold and
+  `notarxctl quota-alert create --repo ID --target ID` needs every threshold and
   duration (`--warning-bp`, `--critical-bp`, `--recovery-below-bp`,
   `--warning-for`, `--critical-for`, `--recovery-for`, `--max-sample-age`);
   there is no default policy, and a rule starts disabled unless
-  `--enabled --yes`. `agctl quota-alert update RULE_ID` changes thresholds,
+  `--enabled --yes`. `notarxctl quota-alert update RULE_ID` changes thresholds,
   target, or enabled state conditional on the version read just before,
   sending unchanged fields as they are; enabling needs `--yes`.
-  `agctl quota-alert delete RULE_ID --yes` deletes conditionally.
+  `notarxctl quota-alert delete RULE_ID --yes` deletes conditionally.
 - A 503 that names `email_disabled`, `encryption_key_unavailable`, or
   `queue_full` is a definite refusal (exit 1) only when no earlier attempt may
   already have queued the test. After a lost or uncertain earlier answer, the
@@ -923,19 +923,19 @@ These second-batch (M2) commands need a platform administrator.
 
 ### Agent skill
 
-`.agents/skills/agctl/SKILL.md` teaches agents the machine contract and the
+`.agents/skills/notarxctl/SKILL.md` teaches agents the machine contract and the
 CI and administration recipes. A unit test fails when the skill names a
 command, flag, or argument count the client does not have.
 
 ## Verification
 
-- `make cli-test` runs the command entry point and `internal/agctl` tests
+- `make cli-test` runs the command entry point and `internal/notarxctl` tests
   offline against in-process fakes (also run by CI and `ci-local`):
   command parsing, exit codes, redaction, and the JSON envelopes. Golden
-  envelopes live in `internal/agctl/testdata/golden/`; after an intended
-  output change, rewrite them with `go test ./internal/agctl/ -update` and
+  envelopes live in `internal/notarxctl/testdata/golden/`; after an intended
+  output change, rewrite them with `go test ./internal/notarxctl/ -update` and
   review the diff.
-- `make cli-e2e` builds `agctl` and runs it against a real, isolated Gateway:
+- `make cli-e2e` builds `notarxctl` and runs it against a real, isolated Gateway:
   it boots a Compose project from `GATEWAY_ENV_FILE` (or `.env`) on free
   ports and removes it afterwards. `CLI_E2E_NETWORK_SUBNET` optionally selects
   an unused RFC 1918 IPv4 /16 through /28 CIDR for that project's network when
@@ -1043,7 +1043,7 @@ command, flag, or argument count the client does not have.
 - A server's `Retry-After` delay is never shortened; the request timeout
   cancels the wait when the remaining budget is insufficient.
 - The configuration file must be mode 0600; commands refuse a lax file.
-- `agctl auth login` stores the session token only in an explicitly selected
+- `notarxctl auth login` stores the session token only in an explicitly selected
   profile and refuses before the request otherwise; passwords and tokens come
   from bounded stdin, are never echoed by `--json`, verbose output, or error
   rendering, and are registered for failure redaction.

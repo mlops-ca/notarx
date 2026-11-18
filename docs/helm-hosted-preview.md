@@ -287,7 +287,7 @@ The same mandatory client gate verifies target-only cold consumption after sourc
 removal and service restart.
 
 This preview does not expose Proxy/Group publication, Console creation/
-upload/browse, agctl commands, retention of visible charts, scanning,
+upload/browse, notarxctl commands, retention of visible charts, scanning,
 promotion, full backup/upgrade acceptance or Nexus
 Helm migration. These remain #292 or their migration dependencies. There is
 no production routing or source migration/cutover in this delivery.

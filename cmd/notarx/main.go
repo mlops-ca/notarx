@@ -1,0 +1,505 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/app"
+	"github.com/mlops-ca/notarx/internal/aptpublication"
+	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/backupops"
+	"github.com/mlops-ca/notarx/internal/buildinfo"
+	"github.com/mlops-ca/notarx/internal/config"
+	"github.com/mlops-ca/notarx/internal/consoletheme"
+	"github.com/mlops-ca/notarx/internal/database"
+	"github.com/mlops-ca/notarx/internal/evidence"
+	helmformat "github.com/mlops-ca/notarx/internal/format/helm"
+	nugetformat "github.com/mlops-ca/notarx/internal/format/nuget"
+	rubygemsformat "github.com/mlops-ca/notarx/internal/format/rubygems"
+	helmdist "github.com/mlops-ca/notarx/internal/helmdistribution"
+	"github.com/mlops-ca/notarx/internal/localcapacity"
+	"github.com/mlops-ca/notarx/internal/nexusmigration"
+	migrationpg "github.com/mlops-ca/notarx/internal/nexusmigration/pgstore"
+	"github.com/mlops-ca/notarx/internal/nexussource"
+	sourcepg "github.com/mlops-ca/notarx/internal/nexussource/pgstore"
+	dist "github.com/mlops-ca/notarx/internal/nugetdistribution"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/operationalog"
+	"github.com/mlops-ca/notarx/internal/preflight"
+	"github.com/mlops-ca/notarx/internal/repository"
+	rubydist "github.com/mlops-ca/notarx/internal/rubygemsdistribution"
+	rubygemspg "github.com/mlops-ca/notarx/internal/rubygemspublication/pgstore"
+	"github.com/mlops-ca/notarx/internal/scanning"
+	"github.com/mlops-ca/notarx/internal/snapshotimport"
+)
+
+func main() {
+	if len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version") {
+		build := buildinfo.Read()
+		fmt.Printf("notarx %s (revision %s, %s)\n", build.Version, build.Revision, build.GoVersion)
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "snapshot-import" {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		code := snapshotimport.RunCLI(ctx, os.Args[2:], os.Stdout, os.Stderr)
+		stop()
+		os.Exit(code)
+	}
+	if len(os.Args) > 1 && os.Args[1] == "backup" {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		code := backupops.RunCLI(ctx, os.Args[2:], os.Stdout, os.Stderr)
+		stop()
+		os.Exit(code)
+	}
+	if len(os.Args) > 1 && os.Args[1] == "preflight" {
+		os.Exit(preflight.RunCLI(context.Background(), os.Args[2:], os.Stdout, os.Stderr))
+	}
+	if len(os.Args) > 1 && os.Args[1] == "evidence" {
+		os.Exit(evidence.RunCLI(context.Background(), os.Args[2:], os.Stdout, os.Stderr))
+	}
+	if len(os.Args) > 1 && os.Args[1] == "theme" {
+		os.Exit(consoletheme.RunCLI(context.Background(), os.Args[2:], os.Stdout, os.Stderr))
+	}
+	if len(os.Args) > 1 && os.Args[1] == "apt-snapshot" {
+		os.Exit(aptpublication.RunArchiveCLI(context.Background(), os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
+	}
+	os.Exit(runGateway())
+}
+
+func runGateway() int {
+	runtimeSessionID := uuid.NewString()
+	slog.SetDefault(operationalog.NewLogger(os.Stdout, "unconfigured", runtimeSessionID))
+	cfg, err := config.Load()
+	if err != nil {
+		slog.Error("invalid configuration", "error", err)
+		return 1
+	}
+	logBuffer := operationalog.NewBuffer(cfg.LogBufferLines)
+	output := io.Writer(os.Stdout)
+	if logBuffer != nil {
+		output = io.MultiWriter(os.Stdout, logBuffer)
+	}
+	// The default stdout/buffer stay borrowed. A configured file owns its
+	// cleanup and receives the same JSON after the logger's shared redaction.
+	fallback := operationalog.NewLogger(os.Stderr, cfg.InstanceID, runtimeSessionID)
+	logOutput, err := newRuntimeLogOutput(cfg, runtimeSessionID, output, fallback)
+	if err != nil {
+		fallback.Error("initialize runtime log output", "error", err)
+		return 1
+	}
+	exitCode, cleanupErr := runWithLogOutput(logOutput, func() int {
+		slog.SetDefault(operationalog.NewLogger(logOutput, cfg.InstanceID, runtimeSessionID))
+		return runConfiguredGateway(cfg, runtimeSessionID, logBuffer)
+	})
+	if cleanupErr != nil {
+		// The managed output is already closed, so report through a borrowed
+		// fallback rather than recursively writing to the failed destination.
+		operationalog.NewLogger(os.Stderr, cfg.InstanceID, runtimeSessionID).Error("close runtime log output", "error", cleanupErr)
+	}
+	return exitCode
+}
+
+func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer *operationalog.Buffer) int {
+	dependencies := app.NewDependencies(cfg)
+	capacityObserver, err := localcapacity.New(cfg.LocalCapacityMounts, localcapacity.Options{})
+	if err != nil {
+		slog.Error("initialize local capacity observer", "error", err)
+		return 1
+	}
+	dependencies.LocalCapacity = capacityObserver
+	dependencies.Runtime.SessionID = runtimeSessionID
+	dependencies.LogBuffer = logBuffer
+	if _, err := dependencies.ConsoleThemes.List(); err != nil {
+		slog.Error("load Console themes", "error", err)
+		return 1
+	}
+	shutdownTracing, err := app.NewTracing(context.Background(), cfg)
+	if err != nil {
+		slog.Error("initialize tracing", "error", err)
+		return 1
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := shutdownTracing(ctx); err != nil {
+			slog.Error("shutdown tracing", "error", err)
+		}
+	}()
+	objectStore, err := objectstore.NewRustFSStore(cfg.RustFSEndpoint, cfg.RustFSAccessKey, cfg.RustFSSecretKey, cfg.RustFSBucket)
+	if err != nil {
+		slog.Error("create object store", "error", err)
+		return 1
+	}
+	if err := objectStore.EnsureBucket(context.Background()); err != nil {
+		slog.Error("ensure object-store bucket", "error", err)
+		return 1
+	}
+
+	if len(cfg.APTRestoreTrustedFingerprints) > 0 {
+		trust, err := aptpublication.NewTrustedSnapshotArchiveVerifier(cfg.APTRestoreTrustedFingerprints, cfg.APTRestoreTrustedPublicKeys)
+		if err != nil {
+			slog.Error("configure APT restore trust", "error", err)
+			return 1
+		}
+		dependencies.APTArchiveTrust = trust
+	}
+	if cfg.APTSignerEnabled() {
+		aptSigner, signerErr := aptpublication.NewHTTPSigner(aptpublication.HTTPSignerOptions{
+			Endpoint: cfg.APTSignerEndpoint, Token: cfg.APTSignerToken, Timeout: cfg.APTSignerTimeout,
+			TrustedFingerprints: cfg.APTSignerTrustedFingerprints, TrustedPublicKeys: cfg.APTSignerTrustedPublicKeys,
+			TLSRootCertificates: cfg.APTSignerTLSRootCertificates,
+		})
+		if signerErr != nil {
+			slog.Error("initialize APT Release signer", "error", signerErr)
+			return 1
+		}
+		dependencies.APTSigner = aptSigner
+	}
+	if cfg.ScannerEnabled() {
+		artifactScanner, scannerErr := scanning.NewHTTPScanner(scanning.HTTPOptions{
+			Name: cfg.ScannerName, Endpoint: cfg.ScannerEndpoint, HealthEndpoint: cfg.ScannerHealthEndpoint, Token: cfg.ScannerToken,
+			Timeout: cfg.ScannerTimeout, HealthTimeout: cfg.ScannerHealthTimeout, MaxResponseBytes: cfg.ScannerMaxResponseBytes,
+			MaxArtifactBytes: cfg.ScannerMaxArtifactBytes,
+		})
+		if scannerErr != nil {
+			slog.Error("initialize artifact scanner", "error", scannerErr)
+			return 1
+		}
+		dependencies.ArtifactScanner = artifactScanner
+		dependencies.ArtifactScannerName = cfg.ScannerName
+		dependencies.ArtifactScannerHealthTimeout = cfg.ScannerHealthTimeout
+		dependencies.ArtifactScannerDatabaseMaxAge = cfg.ScannerDatabaseMaxAge
+		for _, format := range cfg.ScannerFormats {
+			dependencies.ArtifactScannerFormats = append(dependencies.ArtifactScannerFormats, repository.Format(format))
+		}
+	}
+	databasePool, err := database.OpenPostgres(cfg.DatabaseURL, cfg.DatabasePool)
+	if err != nil {
+		slog.Error("open PostgreSQL connection pool", "error", err)
+		return 1
+	}
+	defer func() { _ = databasePool.Close() }()
+	dependencies = dependencies.WithDatabasePool(databasePool)
+	notificationPool, err := database.OpenPostgres(cfg.DatabaseURL, database.NotificationPoolConfig())
+	if err != nil {
+		slog.Error("open PostgreSQL notification pool", "error", err)
+		return 1
+	}
+	defer func() { _ = notificationPool.Close() }()
+	artifactLockPool, err := database.OpenPostgres(cfg.DatabaseURL, cfg.DatabaseArtifactLockPool)
+	if err != nil {
+		slog.Error("open PostgreSQL artifact lock pool", "error", err)
+		return 1
+	}
+	defer func() { _ = artifactLockPool.Close() }()
+	store, err := repository.NewPostgresStoreWithPools(databasePool, notificationPool, artifactLockPool)
+	if err != nil {
+		slog.Error("open repository store", "error", err)
+		return 1
+	}
+	defer func() { _ = store.Close() }()
+	if err := initializeRepositoryPresets(cfg, databasePool); err != nil {
+		slog.Error("initialize repository presets", "error", err)
+		return 1
+	}
+	dependencies.SourceService = nexussource.New(sourcepg.New(databasePool), store, nexussource.Options{PrivateEndpoints: cfg.MigrationSourcePrivateEndpoints})
+	if dependencies.ArtifactScanner != nil {
+		dependencies.ArtifactScanResolver = app.NewNativeArtifactScanResolver(store, objectStore)
+	}
+	oidcRuntime := app.NewOIDCRuntime(store, app.OIDCRuntimeConfig{
+		Enabled: cfg.OIDCIssuer != "" && cfg.OIDCAudience != "", Issuer: cfg.OIDCIssuer,
+		Audience: cfg.OIDCAudience, JWKSURL: cfg.OIDCJWKSURL, ClientID: cfg.OIDCClientID,
+		ClientSecret: cfg.OIDCClientSecret, RedirectURL: cfg.OIDCRedirectURL, Scopes: cfg.OIDCScopes,
+		AdminSubjects: cfg.OIDCAdminSubjects, Roles: cfg.OIDCRoles,
+	})
+	dependencies.OIDCRuntime = oidcRuntime
+	coordinatorPool, err := database.OpenPostgres(cfg.DatabaseURL, cfg.DatabaseCoordinatorPool)
+	if err != nil {
+		slog.Error("open PostgreSQL cache coordinator pool", "error", err)
+		return 1
+	}
+	defer func() { _ = coordinatorPool.Close() }()
+	coordinator, err := app.NewPostgresCacheCoordinatorWithPools(coordinatorPool, databasePool)
+	if err != nil {
+		slog.Error("open PostgreSQL cache coordinator", "error", err)
+		return 1
+	}
+	defer func() { _ = coordinator.Close() }()
+	dependencies.NPMMetadataTTL = cfg.NPMMetadataCacheTTL
+	dependencies.NPMNegativeTTL = cfg.NPMNegativeCacheTTL
+	dependencies.NPMBreakerTTL = cfg.NPMProxyBreakerTTL
+	dependencies.NPMProxyCoordinator = coordinator
+	cacheStore, err := app.NewPostgresCacheControlStoreWithDB(objectStore, databasePool)
+	if err != nil {
+		slog.Error("open PostgreSQL cache control store", "error", err)
+		return 1
+	}
+	defer func() { _ = cacheStore.Close() }()
+	taskQueue, err := app.NewPostgresCacheTaskQueueWithPools(databasePool, notificationPool)
+	if err != nil {
+		slog.Error("open PostgreSQL cache task queue", "error", err)
+		return 1
+	}
+	defer func() { _ = taskQueue.Close() }()
+	quota := app.NewCacheQuota(cacheStore, cfg.RepositoryCacheQuotas).WithCoordinator(coordinator)
+	ociCache := app.NewDefaultOCICache(cacheStore, cfg.OCIProxyAllowedHosts).WithCoordinator(coordinator).WithQuota(quota).WithTTL(cfg.OCICacheTTL)
+	rawCache := app.NewDefaultRawCache(cacheStore, cfg.RawProxyAllowedHosts).WithCoordinator(coordinator).WithQuota(quota).WithMaxObjectBytes(cfg.RawCacheMaxObjectBytes).WithMaxConcurrentSpools(cfg.RawCacheMaxConcurrentSpools).WithTTL(cfg.RawCacheTTL)
+	conanCache := app.NewDefaultConanCache(cacheStore, nil).WithCoordinator(coordinator).WithQuota(quota).WithMaxObjectBytes(cfg.ConanCacheMaxObjectBytes).WithTTL(cfg.ConanCacheTTL)
+	maintenance := app.NewCacheMaintenanceWithRaw(cacheStore, ociCache, rawCache).WithConan(conanCache)
+	metrics := (&app.Metrics{}).
+		WithDatabaseStats(databasePool.Stats).
+		WithDatabasePoolStats("artifact-locks", artifactLockPool.Stats).
+		WithDatabasePoolStats("coordinator", coordinatorPool.Stats).
+		WithDatabasePoolStats("notifications", notificationPool.Stats).
+		WithNodeIdentity(cfg.InstanceID, nodeRoleStrings(cfg.NodeRoles))
+	migrationTargetID := nexusmigration.TargetBinding(cfg.RustFSEndpoint, cfg.RustFSBucket)
+	migrationScanner := app.NewPublicationScanScheduler(store, dependencies.ArtifactScanner != nil, dependencies.ArtifactScannerFormats, metrics)
+	migrationPublication := app.NewNexusMigrationPublication(store, app.SharedObjectStores(objectStore), migrationTargetID, cfg.MigrationStoragePoolID).
+		WithPublicationScanner(migrationScanner).
+		WithOCI(app.NewNexusOCIMigrationPublication(store, objectStore).WithPublicationScanner(migrationScanner)).
+		WithConan(app.NewNexusConanMigrationPublication(store, store, objectStore).WithPublicationScanner(migrationScanner)).
+		WithNPM(app.NewNexusNPMMigrationPublication(store, objectStore).WithPublicationScanner(migrationScanner)).
+		WithPyPI(app.NewNexusPyPIMigrationPublication(store, objectStore).WithPublicationScanner(migrationScanner))
+	migrationLedger := migrationpg.New(databasePool)
+	dependencies.MigrationService = nexusmigration.New(migrationLedger, dependencies.SourceService, migrationPublication, nexusmigration.Options{TargetID: migrationTargetID, PoolID: cfg.MigrationStoragePoolID})
+	dependencies.MigrationSchedules = nexusmigration.NewSchedules(migrationLedger, dependencies.MigrationService)
+	runtimeContext, stopRuntime := signalContext()
+	defer stopRuntime()
+	startAPI := cfg.HasRole(config.NodeRoleAPI)
+	if startAPI {
+		observer, done := metrics.StartHTTPErrorRateSampling(runtimeContext, cfg.InstanceID, runtimeSessionID)
+		dependencies.HTTPErrorRate = observer
+		defer func() { stopRuntime(); <-done }()
+	}
+	slog.Info("gateway runtime configured", "instance_id", cfg.InstanceID, "roles", cfg.NodeRoles, "worker_formats", cfg.WorkerFormats, "worker_kinds", cfg.WorkerKinds, "scanner_enabled", cfg.ScannerEnabled(), "scanner_health_enabled", cfg.ScannerHealthEndpoint != "", "scanner_name", cfg.ScannerName, "scanner_formats", cfg.ScannerFormats, "scanner_database_max_age", cfg.ScannerDatabaseMaxAge, "apt_signer_enabled", cfg.APTSignerEnabled(), "apt_signer_trusted_fingerprint_count", len(cfg.APTSignerTrustedFingerprints), "raw_cache_max_object_bytes", cfg.RawCacheMaxObjectBytes, "raw_cache_max_concurrent_spools", cfg.RawCacheMaxConcurrentSpools)
+	heartbeat := &app.RuntimeNodeHeartbeat{
+		Store: store,
+		Node: repository.RuntimeNode{
+			InstanceID:    cfg.InstanceID,
+			SessionID:     runtimeSessionID,
+			BuildVersion:  dependencies.BuildVersion,
+			BuildRevision: dependencies.BuildRevision,
+			Roles:         nodeRoleStrings(cfg.NodeRoles),
+			WorkerFormats: append([]string(nil), cfg.WorkerFormats...),
+			WorkerKinds:   append([]string(nil), cfg.WorkerKinds...),
+		},
+		Retention:     cfg.RuntimeNodeRetention,
+		PruneInterval: cfg.RuntimeNodePruneInterval,
+	}
+	heartbeatDone := heartbeat.Start(runtimeContext, 10*time.Second)
+	var aptPublisher *aptpublication.Publisher
+	if dependencies.APTSigner != nil {
+		aptPublisher = aptpublication.NewPublisher(store, objectStore, dependencies.APTSigner).WithMetrics(metrics).WithPublicationScanner(app.NewPublicationScanScheduler(store, dependencies.ArtifactScanner != nil, dependencies.ArtifactScannerFormats, metrics))
+	}
+	var helmMaintenance *helmformat.Maintenance
+	var helmReplication *helmdist.Worker
+	if cfg.HelmPreviewEnabled {
+		helmMaintenance, err = helmformat.NewMaintenance(store, objectStore)
+		if err != nil {
+			slog.Error("configure Helm preview maintenance", "error", err)
+			return 1
+		}
+		authority := authorization.Authenticator{AdminToken: cfg.AdminToken, AdminActor: cfg.AdminActor, ResolverToken: cfg.ResolverToken, ResolverActor: cfg.ResolverActor, RepositoryReaders: cfg.RepositoryReaders, LegacyReadPermissive: cfg.LegacyReadPermissive}
+		module, setupErr := helmformat.New(helmformat.Options{Distribution: store, Store: store, Governance: store, Repositories: store, Objects: objectStore, Authenticator: authority, Authorizer: authorization.RepositoryAuthorizer{Grants: store, Legacy: authority}, Audit: store, Anonymous: store, Capacities: store})
+		if setupErr != nil {
+			slog.Error("configure Helm preview replication", "error", setupErr)
+			return 1
+		}
+		worker, setupErr := module.ReplicationWorker(cfg.InstanceID + "/" + runtimeSessionID)
+		if setupErr != nil {
+			slog.Error("configure Helm preview replication worker", "error", setupErr)
+			return 1
+		}
+		helmReplication = &worker
+	}
+	var nugetMaintenance *nugetformat.Maintenance
+	var nugetReplication *dist.Worker
+	if cfg.NuGetPreviewEnabled {
+		nugetMaintenance, err = nugetformat.NewMaintenance(store, objectStore)
+		if err != nil {
+			slog.Error("configure NuGet preview maintenance", "error", err)
+			return 1
+		}
+		authority := authorization.Authenticator{AdminToken: cfg.AdminToken, AdminActor: cfg.AdminActor, ResolverToken: cfg.ResolverToken, ResolverActor: cfg.ResolverActor, RepositoryReaders: cfg.RepositoryReaders, LegacyReadPermissive: cfg.LegacyReadPermissive}
+		module, setupErr := nugetformat.New(nugetformat.Options{Distribution: store, Store: store, Repositories: store, Objects: objectStore, Authenticator: authority, Authorizer: authorization.RepositoryAuthorizer{Grants: store, Legacy: authority}, Audit: store})
+		if setupErr != nil {
+			slog.Error("configure NuGet preview replication", "error", setupErr)
+			return 1
+		}
+		worker, setupErr := module.ReplicationWorker(cfg.InstanceID + "/" + runtimeSessionID)
+		if setupErr != nil {
+			slog.Error("configure NuGet preview replication worker", "error", setupErr)
+			return 1
+		}
+		nugetReplication = &worker
+	}
+	var rubyGemsReplication *rubydist.Worker
+	var rubyGemsStore *rubygemspg.Store
+	var rubyGemsMaintenance *rubygemsformat.Maintenance
+	if cfg.RubyGemsPreviewEnabled {
+		rubyGemsStore, err = rubygemspg.New(databasePool, artifactLockPool)
+		if err != nil {
+			slog.Error("configure RubyGems preview publication store", "error", err)
+			return 1
+		}
+		rubyGemsMaintenance, err = rubygemsformat.NewMaintenance(rubyGemsStore, objectStore)
+		if err != nil {
+			slog.Error("configure RubyGems preview maintenance", "error", err)
+			return 1
+		}
+
+		authority := authorization.Authenticator{AdminToken: cfg.AdminToken, AdminActor: cfg.AdminActor, ResolverToken: cfg.ResolverToken, ResolverActor: cfg.ResolverActor, RepositoryReaders: cfg.RepositoryReaders, LegacyReadPermissive: cfg.LegacyReadPermissive}
+		module, setupErr := rubygemsformat.New(rubygemsformat.Options{Store: rubyGemsStore, Distribution: rubyGemsStore, Repositories: store, Objects: objectStore, Authenticator: authority, Authorizer: authorization.RepositoryAuthorizer{Grants: store, Legacy: authority}, Audit: store, Anonymous: store})
+		if setupErr != nil {
+			slog.Error("configure RubyGems preview replication", "error", setupErr)
+			return 1
+		}
+		worker, setupErr := module.ReplicationWorker(cfg.InstanceID + "/" + runtimeSessionID)
+		if setupErr != nil {
+			slog.Error("configure RubyGems preview replication worker", "error", setupErr)
+			return 1
+		}
+		rubyGemsReplication = &worker
+	}
+	(backgroundRuntime{
+		store: store, objects: objectStore, taskQueue: taskQueue, maintenance: maintenance, metrics: metrics,
+		scanner: dependencies.ArtifactScanner, scanResolver: dependencies.ArtifactScanResolver,
+		scannerFormats:      dependencies.ArtifactScannerFormats,
+		workerSessionID:     runtimeSessionID,
+		aptPublisher:        aptPublisher,
+		migration:           dependencies.MigrationService,
+		migrationSchedules:  dependencies.MigrationSchedules,
+		nugetMaintenance:    nugetMaintenance,
+		nugetReplication:    nugetReplication,
+		helmMaintenance:     helmMaintenance,
+		helmReplication:     helmReplication,
+		rubyGemsMaintenance: rubyGemsMaintenance,
+		rubyGemsReplication: rubyGemsReplication,
+	}).Start(runtimeContext, cfg)
+	handler := http.Handler(app.NewOperationalHandler(dependencies, metrics))
+	if startAPI {
+		if len(cfg.RepositoryReaders) == 0 && cfg.LegacyReadPermissive {
+			slog.Warn("legacy repository reads are unrestricted without reader patterns",
+				"detail", "GATEWAY_REPOSITORY_READERS is empty and GATEWAY_LEGACY_READ_DEFAULT=allow, so any authenticated caller may read a legacy repository with no grant",
+				"change", "unset GATEWAY_LEGACY_READ_DEFAULT to deny unmatched readers once every reading actor has a reader pattern or a per-repository grant")
+		}
+		gatewayOptions := app.GatewayOptions{
+			Dependencies:      dependencies,
+			Store:             store,
+			ConanPublications: store,
+			NPMMetadata:       store,
+			NPMRestore:        store,
+			OCIDiscoveryStore: store,
+			Storage:           app.SharedObjectStores(objectStore),
+			Adapter:           app.TestAdapter{},
+			Authenticator: app.Authenticator{
+				AdminToken:           cfg.AdminToken,
+				ResolverToken:        cfg.ResolverToken,
+				ConanTokenSecret:     cfg.ConanTokenSecret,
+				AdminActor:           cfg.AdminActor,
+				ResolverActor:        cfg.ResolverActor,
+				LocalAuthMaxAttempts: cfg.LocalAuthMaxFailedAttempts,
+				LocalAuthLockout:     cfg.LocalAuthLockoutDuration,
+				RepositoryReaders:    cfg.RepositoryReaders,
+				LegacyReadPermissive: cfg.LegacyReadPermissive,
+				OIDCSource:           oidcRuntime,
+				APIKeys:              store,
+			},
+			Caches: app.GatewayCaches{
+				OCI: ociCache,
+				Maven: app.NewDefaultMavenCache(cacheStore, cfg.MavenProxyAllowedHosts).
+					WithCoordinator(coordinator).WithQuota(quota).
+					WithTTLs(cfg.MavenCacheTTL, cfg.MavenMetadataCacheTTL, cfg.MavenNegativeCacheTTL),
+				Raw:         rawCache,
+				Conan:       conanCache,
+				Maintenance: maintenance,
+			},
+			Metrics:  metrics,
+			Upstream: app.UpstreamClient{OCIBearerCache: app.NewOCIBearerTokenCache()},
+		}
+		if cfg.HelmPreviewEnabled {
+			gatewayOptions.HelmPreviewEnabled = true
+			gatewayOptions.HelmStore = store
+			gatewayOptions.HelmGovernance = store
+			gatewayOptions.HelmDistribution = store
+			gatewayOptions.HelmSources = store
+			gatewayOptions.HelmObjects = objectStore
+		}
+		if cfg.NuGetPreviewEnabled {
+			gatewayOptions.NuGetPreviewEnabled = true
+			gatewayOptions.NuGetStore = store
+			gatewayOptions.NuGetDistribution = store
+			gatewayOptions.NuGetSources = store
+			gatewayOptions.NuGetObjects = objectStore
+		}
+		if cfg.RubyGemsPreviewEnabled {
+			gatewayOptions.RubyGemsPreviewEnabled = true
+			gatewayOptions.RubyGemsStore = rubyGemsStore
+			gatewayOptions.RubyGemsDistribution = rubyGemsStore
+			gatewayOptions.RubyGemsObjects = objectStore
+		}
+		handler, err = app.NewGatewayHandler(gatewayOptions)
+		if err != nil {
+			slog.Error("configure Gateway HTTP handler", "error", err)
+			return 1
+		}
+	}
+	server := &http.Server{
+		Addr:              cfg.ListenAddress,
+		Handler:           metrics.Instrument(handler),
+		ReadHeaderTimeout: 5 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    1 << 20,
+	}
+
+	errs := make(chan error, 1)
+	go func() { errs <- server.ListenAndServe() }()
+
+	select {
+	case err := <-errs:
+		if !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("gateway stopped", "error", err)
+			return 1
+		}
+	case <-runtimeContext.Done():
+		select {
+		case <-heartbeatDone:
+		case <-time.After(time.Second):
+			slog.Warn("runtime node heartbeat did not stop before shutdown")
+		}
+		heartbeatContext, heartbeatCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		if err := heartbeat.Stop(heartbeatContext); err != nil {
+			slog.Warn("mark runtime node stopped", "error", err)
+		}
+		heartbeatCancel()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := server.Shutdown(ctx); err != nil {
+			slog.Error("graceful shutdown failed", "error", err)
+		}
+	}
+	return 0
+}
+
+func signalContext() (context.Context, context.CancelFunc) {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	go func() { <-ctx.Done(); stop() }()
+	return ctx, stop
+}
+
+func nodeRoleStrings(roles []config.NodeRole) []string {
+	values := make([]string, 0, len(roles))
+	for _, role := range roles {
+		values = append(values, string(role))
+	}
+	return values
+}

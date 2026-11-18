@@ -3,11 +3,11 @@
 [简体中文](backup-manifest-verification.zh-CN.md) | [Documentation index](README.md)
 
 This **Unreleased foundation** validates a private local bundle's bytes and
-operator declarations. It is separate from `agctl` and from the existing
+operator declarations. It is separate from `notarxctl` and from the existing
 [pinned RustFS physical backup drill](recovery-runbook.md).
 
 ```sh
-gateway preflight backup --input /private/backup/manifest.json --format json
+notarx preflight backup --input /private/backup/manifest.json --format json
 ```
 
 The command reads files, writes JSON to stdout, and exits. It does not load

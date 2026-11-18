@@ -316,7 +316,7 @@ real client command through protected refusal, takeover, HTTP interruption, fres
 rerun, two deployments, delayed metadata and fresh artifact resolution.
 
 ```sh
-go test ./internal/snapshotimport ./internal/repository ./internal/protocol/maven ./internal/app ./cmd/gateway
+go test ./internal/snapshotimport ./internal/repository ./internal/protocol/maven ./internal/app ./cmd/notarx
 make integration-test
 make native-maven-e2e
 make ci-local-full

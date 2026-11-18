@@ -155,7 +155,7 @@ also requires.
 
 ## Operational checks
 
-`gateway preflight` reports `oidc_enabled`, `oidc_browser_login_enabled`, and
+`notarx preflight` reports `oidc_enabled`, `oidc_browser_login_enabled`, and
 whether the runtime settings encryption key is configured. The Console can
 test the saved discovery document from the Authentication page. Runtime saves
 take effect immediately on the current node; other API nodes observe the new

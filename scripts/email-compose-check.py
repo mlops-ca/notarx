@@ -97,7 +97,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
     if evidence:
         evidence.mkdir(parents=True, exist_ok=False)
         sources = ("scripts/email-compose-check.py", "scripts/testdata/email-smtp-sink.py",
-                   "internal/agctl/alert_commands.go", "compose.yml", "compose.email.yml")
+                   "internal/notarxctl/alert_commands.go", "compose.yml", "compose.email.yml")
         (evidence / "source.json").write_text(json.dumps({
             "head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
             "sha256": {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in sources},
@@ -242,22 +242,22 @@ def check(render_only, evidence=None, fixture_subnets=None):
         started = False
         second_worker = False
         base_url = None
-        agctl = work / "agctl"
+        notarxctl = work / "notarxctl"
         recipient_file = work / "recipient"
         recipient_file.write_text(recipient + "\n")
         recipient_file.chmod(0o600)
         def ctl(*args, expected=0, token=None, server=None, stdin="", actor="admin", json_output=True):
             bounded = list(args) + ([] if "--timeout" in args else ["--timeout", "20s"])
             started_at = time.monotonic()
-            result = subprocess.run([str(agctl), *bounded, *(["--json"] if json_output else [])], cwd=work,
+            result = subprocess.run([str(notarxctl), *bounded, *(["--json"] if json_output else [])], cwd=work,
                 input=stdin, capture_output=True, text=True, timeout=90, env={
                     "PATH": os.environ.get("PATH", ""), "HOME": str(work),
-                    "AGCTL_SERVER": server or base_url, "AGCTL_TOKEN": admin if token is None else token,
-                    "AGCTL_PROFILE": "",
+                    "NOTARXCTL_SERVER": server or base_url, "NOTARXCTL_TOKEN": admin if token is None else token,
+                    "NOTARXCTL_PROFILE": "",
                 })
             output = result.stdout + result.stderr
             require(not any(value in output for value in private_values),
-                    "agctl printed a fixture secret or recipient")
+                    "notarxctl printed a fixture secret or recipient")
             if evidence:
                 with (evidence / "cli-cases.jsonl").open("a") as stream:
                     stream.write(json.dumps({"args": args, "actor": actor,
@@ -266,12 +266,12 @@ def check(render_only, evidence=None, fixture_subnets=None):
                         "elapsedSeconds": round(time.monotonic() - started_at, 3),
                         "stdout": result.stdout, "stderr": result.stderr}) + "\n")
             require(result.returncode == expected,
-                    "agctl " + " ".join(args) + " exited " + str(result.returncode) + ": " + output[-2000:])
+                    "notarxctl " + " ".join(args) + " exited " + str(result.returncode) + ": " + output[-2000:])
             if not json_output:
                 return output
             report = json.loads(result.stdout)
             require(report["schemaVersion"] == 1 and report["ok"] == (expected == 0),
-                    "agctl envelope disagrees with its exit code")
+                    "notarxctl envelope disagrees with its exit code")
             return report
 
         def start(*services):
@@ -347,7 +347,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
             return api("GET", "/api/v2/repository-quota-alert-rules/" + r["id"] + "/events")
 
         try:
-            run(["go", "build", "-o", str(agctl), "./cmd/agctl"])
+            run(["go", "build", "-o", str(notarxctl), "./cmd/notarxctl"])
             run(compose + ["build", "gateway"])
             run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
                  "-subj", "/CN=smtp.example.test", "-addext", "subjectAltName=DNS:smtp.example.test",
@@ -376,7 +376,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
             disabled = ctl("email", "test", "--target", target["id"], "--scenario", "warning", "--yes", expected=1)
             require(disabled["error"]["code"] == "email_disabled" and not disabled.get("data"), "fresh disabled test was not a definite refusal")
             require(not attempts(), "disabled channel attempted SMTP")
-            checks.append("API and agctl: disabled channel is a definite refusal and never contacts SMTP")
+            checks.append("API and notarxctl: disabled channel is a definite refusal and never contacts SMTP")
 
             # Invalid config and permissive auth fail offline, before HTTP starts.
             (config / "relay.json").write_text('{"enabled":true,"private-marker":"redacted"}')
@@ -402,7 +402,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
             no_key = ctl("email", "test", "--target", target["id"], "--scenario", "warning", "--yes", expected=1)
             require(no_key["error"]["code"] == "encryption_key_unavailable" and not no_key.get("data"), "missing API key was not a definite refusal")
             require(not ctl("email", "delivery", "list")["data"]["items"] and not attempts(), "unready channel queued or sent mail")
-            checks.append("agctl: missing API settings key is unavailable and refuses before queue insertion")
+            checks.append("notarxctl: missing API settings key is unavailable and refuses before queue insertion")
             restart("gateway")
             pending = ctl("email", "test", "--target", target["id"], "--scenario", "warning", "--yes")["data"]
             time.sleep(6)
@@ -411,7 +411,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
             timed_out = ctl("email", "delivery", "wait", pending["id"], "--timeout", "1s", expected=8)
             require(timed_out["error"]["code"] == "wait_timeout" and timed_out["data"]["state"] == "pending", "no-sender wait lost its last queued state")
             require(ctl("email", "delivery", "show", pending["id"])["data"] == pending_read, "stopping a wait cancelled or changed the queued delivery")
-            checks.append("agctl: API-only ready queues with zero attempts; bounded wait exits 8 and leaves delivery unchanged")
+            checks.append("notarxctl: API-only ready queues with zero attempts; bounded wait exits 8 and leaves delivery unchanged")
 
             mismatch("gateway-email-worker", {"GATEWAY_EMAIL_CONFIG_FILE": ""})
             time.sleep(6)
@@ -466,17 +466,17 @@ def check(render_only, evidence=None, fixture_subnets=None):
                 require("https://console.example.invalid/system?tab=diagnostics" in parts[1].get_content(), "configured origin missing")
             checks.append("standalone delivers; three real accepted messages contain HTML/plain and synthetic recipient")
 
-            # agctl (#336) drives the same channel. Its input is private and
+            # notarxctl (#336) drives the same channel. Its input is private and
             # every invocation checks both output streams for synthetic secrets.
             mismatch("gateway", {"GATEWAY_NODE_ROLES": "api"})
             start("gateway-email-worker")
-            require(ctl("email", "capability")["data"] == {"enabled": True, "reason": "ready"}, "agctl capability is not ready")
+            require(ctl("email", "capability")["data"] == {"enabled": True, "reason": "ready"}, "notarxctl capability is not ready")
             failed_wait = ctl("email", "delivery", "wait", dead["id"], "--timeout", "10s", expected=1)
-            require(not failed_wait["ok"] and failed_wait["error"]["code"] == "delivery_failed" and failed_wait["error"]["httpStatus"] is None, "agctl dead wait reported success or a server refusal")
+            require(not failed_wait["ok"] and failed_wait["error"]["code"] == "delivery_failed" and failed_wait["error"]["httpStatus"] is None, "notarxctl dead wait reported success or a server refusal")
             failed_record = failed_wait["data"]
-            require(failed_record == dead and failed_record["errorCode"] == "smtp_permanent_rejection", "agctl failure changed the actual dead delivery record")
-            require(ctl("email", "delivery", "show", dead["id"])["data"] == failed_record, "agctl wait mutated or replayed the dead delivery")
-            checks.append("agctl: SMTP 550 dead wait exits 1 with delivery_failed and the unchanged complete delivery record")
+            require(failed_record == dead and failed_record["errorCode"] == "smtp_permanent_rejection", "notarxctl failure changed the actual dead delivery record")
+            require(ctl("email", "delivery", "show", dead["id"])["data"] == failed_record, "notarxctl wait mutated or replayed the dead delivery")
+            checks.append("notarxctl: SMTP 550 dead wait exits 1 with delivery_failed and the unchanged complete delivery record")
             inventory = {item["name"]: item for item in ctl("commands")["data"]["items"]}
             names = ("quota-alert list", "quota-alert show", "quota-alert create", "quota-alert update",
                      "quota-alert delete", "quota-alert events", "email capability", "email target list",
@@ -488,36 +488,36 @@ def check(render_only, evidence=None, fixture_subnets=None):
             require(inventory["email delivery wait"]["meta"]["cancelSupported"] is False and
                     "email target delete" not in inventory and "email delivery cancel" not in inventory,
                     "introspection invented unsupported email operations")
-            agctl_target = ctl("email", "target", "create", "agctl synthetic", "--locale", "zh-CN", "--recipient-file", str(recipient_file))["data"]
-            require(agctl_target["recipientConfigured"] and not agctl_target["enabled"], "agctl target did not default disabled")
-            refused = ctl("email", "test", "--target", agctl_target["id"], "--scenario", "warning", "--yes", expected=7)
+            notarxctl_target = ctl("email", "target", "create", "notarxctl synthetic", "--locale", "zh-CN", "--recipient-file", str(recipient_file))["data"]
+            require(notarxctl_target["recipientConfigured"] and not notarxctl_target["enabled"], "notarxctl target did not default disabled")
+            refused = ctl("email", "test", "--target", notarxctl_target["id"], "--scenario", "warning", "--yes", expected=7)
             require(refused["error"]["code"] == "target_disabled", "disabled target accepted a test")
-            agctl_target = ctl("email", "target", "update", agctl_target["id"], "--enabled=true")["data"]
-            renamed = ctl("email", "target", "update", agctl_target["id"], "--name", "agctl renamed")["data"]
-            require(renamed["enabled"] and renamed["name"] == "agctl renamed", "a rename disabled the target")
-            ctl("email", "target", "update", agctl_target["id"], "--name", "stale", "--if-match", agctl_target["version"], expected=7)
-            require(ctl("email", "target", "show", agctl_target["id"])["data"] == renamed, "stale target write changed current configuration")
-            ctl("email", "target", "show", agctl_target["id"], "--verbose", json_output=False)
-            ctl("email", "target", "update", agctl_target["id"], "--name", "stale human output", "--if-match", agctl_target["version"],
+            notarxctl_target = ctl("email", "target", "update", notarxctl_target["id"], "--enabled=true")["data"]
+            renamed = ctl("email", "target", "update", notarxctl_target["id"], "--name", "notarxctl renamed")["data"]
+            require(renamed["enabled"] and renamed["name"] == "notarxctl renamed", "a rename disabled the target")
+            ctl("email", "target", "update", notarxctl_target["id"], "--name", "stale", "--if-match", notarxctl_target["version"], expected=7)
+            require(ctl("email", "target", "show", notarxctl_target["id"])["data"] == renamed, "stale target write changed current configuration")
+            ctl("email", "target", "show", notarxctl_target["id"], "--verbose", json_output=False)
+            ctl("email", "target", "update", notarxctl_target["id"], "--name", "stale human output", "--if-match", notarxctl_target["version"],
                 "--verbose", expected=7, json_output=False)
             before = len(ctl("email", "delivery", "list", "--limit", "100")["data"]["items"])
             ctl("email", "preview", "--scenario", "critical", "--locale", "zh-CN", "--html-output", str(work / "preview.html"), "--text-output", str(work / "preview.txt"))
             require((work / "preview.html").read_text().strip() and (work / "preview.txt").read_text().strip(), "empty preview files")
-            ctl("email", "test", "--target", agctl_target["id"], "--scenario", "warning", "--dry-run")
-            ctl("email", "test", "--target", agctl_target["id"], "--scenario", "warning", expected=2)
+            ctl("email", "test", "--target", notarxctl_target["id"], "--scenario", "warning", "--dry-run")
+            ctl("email", "test", "--target", notarxctl_target["id"], "--scenario", "warning", expected=2)
             require(len(ctl("email", "delivery", "list", "--limit", "100")["data"]["items"]) == before, "preview or plan queued a delivery")
             test_key = str(uuid.uuid4())
-            queued = ctl("email", "test", "--target", agctl_target["id"], "--scenario", "warning", "--yes", "--idempotency-key", test_key)["data"]
-            again = ctl("email", "test", "--target", agctl_target["id"], "--scenario", "warning", "--yes", "--idempotency-key", test_key)["data"]
+            queued = ctl("email", "test", "--target", notarxctl_target["id"], "--scenario", "warning", "--yes", "--idempotency-key", test_key)["data"]
+            again = ctl("email", "test", "--target", notarxctl_target["id"], "--scenario", "warning", "--yes", "--idempotency-key", test_key)["data"]
             require(again["id"] == queued["id"], "same idempotency key queued a second delivery")
             waited = ctl("email", "delivery", "wait", queued["id"], "--timeout", "60s")["data"]
-            require(waited["state"] == "accepted", "agctl test was not accepted")
-            require(len(list(sink.glob("*.eml"))) == 4, "agctl test did not deliver exactly one more MIME")
+            require(waited["state"] == "accepted", "notarxctl test was not accepted")
+            require(len(list(sink.glob("*.eml"))) == 4, "notarxctl test did not deliver exactly one more MIME")
             ctl("email", "delivery", "replay", queued["id"], "--yes", expected=7)
-            quota_repo = api("POST", "/api/v2/repositories", {"name": "owned-agctl-quota", "format": "raw", "type": "hosted"}, 201, {"Idempotency-Key": str(uuid.uuid4())})
+            quota_repo = api("POST", "/api/v2/repositories", {"name": "owned-notarxctl-quota", "format": "raw", "type": "hosted"}, 201, {"Idempotency-Key": str(uuid.uuid4())})
             policy_args = ["--warning-bp", "8500", "--critical-bp", "9500", "--recovery-below-bp", "8000", "--warning-for", "1s",
                            "--critical-for", "1s", "--recovery-for", "1s", "--max-sample-age", "60s"]
-            created = ctl("quota-alert", "create", "--repo", quota_repo["id"], "--target", agctl_target["id"], *policy_args)["data"]
+            created = ctl("quota-alert", "create", "--repo", quota_repo["id"], "--target", notarxctl_target["id"], *policy_args)["data"]
             require(not created["enabled"], "a new rule was enabled without --enabled")
             enabled = ctl("quota-alert", "update", created["id"], "--enabled=true", "--yes")["data"]
             raised = ctl("quota-alert", "update", created["id"], "--warning-bp", "8700")["data"]
@@ -528,11 +528,11 @@ def check(render_only, evidence=None, fixture_subnets=None):
             before_targets = ctl("email", "target", "list")["data"]["items"]
             before_deliveries = ctl("email", "delivery", "list", "--limit", "100")["data"]["items"]
             before_mime = len(list(sink.glob("*.eml")))
-            ctl("quota-alert", "create", "--repo", quota_repo["id"], "--target", agctl_target["id"], *policy_args, "--dry-run")
+            ctl("quota-alert", "create", "--repo", quota_repo["id"], "--target", notarxctl_target["id"], *policy_args, "--dry-run")
             ctl("quota-alert", "update", created["id"], "--warning-bp", "8900", "--dry-run")
             ctl("quota-alert", "delete", created["id"], "--dry-run")
             ctl("email", "target", "create", "dry-run target", "--locale", "en", "--recipient-file", str(recipient_file), "--dry-run")
-            ctl("email", "target", "update", agctl_target["id"], "--name", "dry-run name", "--recipient-file", str(recipient_file), "--dry-run")
+            ctl("email", "target", "update", notarxctl_target["id"], "--name", "dry-run name", "--recipient-file", str(recipient_file), "--dry-run")
             ctl("email", "delivery", "replay", dead["id"], "--dry-run")
             ctl("email", "delivery", "replay", dead["id"], expected=2)
             ctl("quota-alert", "delete", created["id"], expected=2)
@@ -554,7 +554,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
             ctl("quota-alert", "events", created["id"])
             ctl("quota-alert", "delete", created["id"], "--yes")
             require(ctl("quota-alert", "show", created["id"])["data"]["deleted"], "deleted rule still active")
-            checks.append("agctl: private recipient, rename keeps enabled, preview/plan queue nothing, keyed test delivers one MIME, replay refused, quota rule lifecycle")
+            checks.append("notarxctl: private recipient, rename keeps enabled, preview/plan queue nothing, keyed test delivers one MIME, replay refused, quota rule lifecycle")
 
             # All existing email/quota management operations are admin-only.
             # Local member/admin sessions are real; no forged principal headers.
@@ -565,15 +565,15 @@ def check(render_only, evidence=None, fixture_subnets=None):
             password_file.chmod(0o600)
             denied_commands = [
                 ("quota-alert", "list"), ("quota-alert", "show", created["id"]),
-                ("quota-alert", "create", "--repo", quota_repo["id"], "--target", agctl_target["id"], *policy_args),
+                ("quota-alert", "create", "--repo", quota_repo["id"], "--target", notarxctl_target["id"], *policy_args),
                 ("quota-alert", "update", created["id"], "--enabled=false"),
                 ("quota-alert", "delete", created["id"], "--yes", "--if-match", raised["version"]),
                 ("quota-alert", "events", created["id"]), ("email", "capability"),
-                ("email", "target", "list"), ("email", "target", "show", agctl_target["id"]),
+                ("email", "target", "list"), ("email", "target", "show", notarxctl_target["id"]),
                 ("email", "target", "create", "forbidden target", "--locale", "en", "--recipient-file", str(recipient_file)),
-                ("email", "target", "update", agctl_target["id"], "--name", "forbidden change"),
+                ("email", "target", "update", notarxctl_target["id"], "--name", "forbidden change"),
                 ("email", "preview", "--scenario", "warning", "--locale", "en"),
-                ("email", "test", "--target", agctl_target["id"], "--scenario", "warning", "--yes", "--if-match", renamed["version"]),
+                ("email", "test", "--target", notarxctl_target["id"], "--scenario", "warning", "--yes", "--if-match", renamed["version"]),
                 ("email", "delivery", "list"), ("email", "delivery", "show", queued["id"]),
                 ("email", "delivery", "replay", dead["id"], "--yes", "--if-match", dead["version"]),
                 ("email", "delivery", "wait", queued["id"], "--timeout", "1s"),
@@ -600,23 +600,23 @@ def check(render_only, evidence=None, fixture_subnets=None):
                 # preserve last_admin protection. The owned database volume is
                 # destroyed in finally, including this account and its session.
                 secret_file.unlink()
-            require(ctl("email", "target", "show", agctl_target["id"])["data"] == renamed and
+            require(ctl("email", "target", "show", notarxctl_target["id"])["data"] == renamed and
                     ctl("email", "delivery", "list", "--limit", "100")["data"]["items"] == before_deliveries,
                     "refused callers changed email configuration or deliveries")
-            checks.append("agctl: real member and must-change admin sessions refuse all 16 operations plus wait, without side effects")
+            checks.append("notarxctl: real member and must-change admin sessions refuse all 16 operations plus wait, without side effects")
 
-            # A request reaches PostgreSQL, but no HTTP reply reaches agctl.
+            # A request reaches PostgreSQL, but no HTTP reply reaches notarxctl.
             # Recovery reuses the original key/version even after target edit.
             run(compose + ["stop", "gateway-email-worker"])
             unknown_key = str(uuid.uuid4())
             before_unknown = ctl("email", "delivery", "list", "--limit", "100")["data"]["items"]
             with lost_response_proxy(base_url, "/api/v2/email-notifications:test", http) as (proxy_url, committed):
-                unknown = ctl("email", "test", "--target", agctl_target["id"], "--scenario", "critical", "--yes",
+                unknown = ctl("email", "test", "--target", notarxctl_target["id"], "--scenario", "critical", "--yes",
                               "--idempotency-key", unknown_key, "--if-match", renamed["version"],
                               "--timeout", "2s", server=proxy_url, expected=8)
             recovery = unknown["data"]
             require(recovery["outcome"] == "unknown" and recovery["idempotencyKey"] == unknown_key and
-                    recovery["version"] == renamed["version"] and recovery["readBack"] == "agctl email delivery list",
+                    recovery["version"] == renamed["version"] and recovery["readBack"] == "notarxctl email delivery list",
                     "HTTP timeout lost the safe email recovery contract")
             require(committed and all(row["status"] == 202 and row["cacheControl"] == "no-store" for row in committed),
                     "HTTP loss fixture did not commit a real uncached queue insertion")
@@ -625,15 +625,15 @@ def check(render_only, evidence=None, fixture_subnets=None):
             require(len(after_unknown) == len(before_unknown) + 1 and
                     all(row["delivery"]["id"] == lost_delivery["id"] for row in committed),
                     "lost reply or automatic retry created duplicate queue rows")
-            changed_target = ctl("email", "target", "update", agctl_target["id"], "--name", "agctl version changed")["data"]
-            stale_test = ctl("email", "test", "--target", agctl_target["id"], "--scenario", "resolved", "--yes",
+            changed_target = ctl("email", "target", "update", notarxctl_target["id"], "--name", "notarxctl version changed")["data"]
+            stale_test = ctl("email", "test", "--target", notarxctl_target["id"], "--scenario", "resolved", "--yes",
                              "--if-match", renamed["version"], expected=7)
             require(stale_test["error"]["code"] == "version_conflict", "stale target version queued a new test")
-            recovered = ctl("email", "test", "--target", agctl_target["id"], "--scenario", "critical", "--yes",
+            recovered = ctl("email", "test", "--target", notarxctl_target["id"], "--scenario", "critical", "--yes",
                             "--idempotency-key", unknown_key, "--if-match", renamed["version"])["data"]
             require(recovered["id"] == lost_delivery["id"] and recovered["targetVersion"] == renamed["version"],
                     "same-key recovery followed a newer target version")
-            conflicting = ctl("email", "test", "--target", agctl_target["id"], "--scenario", "resolved", "--yes",
+            conflicting = ctl("email", "test", "--target", notarxctl_target["id"], "--scenario", "resolved", "--yes",
                               "--idempotency-key", unknown_key, "--if-match", renamed["version"], expected=7)
             require(conflicting["error"]["code"] == "idempotency_conflict" and
                     len(ctl("email", "delivery", "list", "--limit", "100")["data"]["items"]) == len(after_unknown),
@@ -641,7 +641,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
             start("gateway-email-worker")
             superseded = ctl("email", "delivery", "wait", recovered["id"], "--timeout", "30s", expected=1)["data"]
             require(superseded["errorCode"] == "target_changed", "worker sent an obsolete target binding")
-            checks.append("agctl: HTTP reply lost after real commit reports unknown; original key/version recovers one row after target edit; mismatched key scenario and stale versions exit 7")
+            checks.append("notarxctl: HTTP reply lost after real commit reports unknown; original key/version recovers one row after target edit; mismatched key scenario and stale versions exit 7")
 
             # Replay is a conditional, non-idempotent write. Its lost reply must
             # be read back rather than automatically submitted a second time.
@@ -657,7 +657,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
             ctl("email", "delivery", "replay", dead["id"], "--yes", "--if-match", dead["version"], expected=7)
             start("gateway-email-worker")
             ctl("email", "delivery", "wait", dead["id"], "--timeout", "30s")
-            checks.append("agctl: replay response loss reports unknown after exactly one write; show recovers pending and stale replay conflicts")
+            checks.append("notarxctl: replay response loss reports unknown after exactly one write; show recovers pending and stale replay conflicts")
 
             # The relay stores DATA but loses the final acknowledgement. One
             # durable delivery can produce more than one received MIME.
@@ -673,15 +673,15 @@ def check(render_only, evidence=None, fixture_subnets=None):
             require(final_ambiguous["state"] == "accepted" and final_ambiguous["possibleDuplicate"] and
                     final_ambiguous["attempts"] >= 2 and len(list(sink.glob("*.eml"))) >= before_ambiguous + 2,
                     "accepted retry erased possible duplicate evidence")
-            checks.append("agctl: lost SMTP final reply preserves outcome_unknown/retrying and possibleDuplicate through accepted retry; duplicate MIME is observed")
+            checks.append("notarxctl: lost SMTP final reply preserves outcome_unknown/retrying and possibleDuplicate through accepted retry; duplicate MIME is observed")
 
             # No clock injection: use the production 15s scheduler cadence,
             # real logical capacity, and an actual sample-age gap above 30s.
             for baseline_rule in (missing_rule, good_rule):
                 ctl("quota-alert", "update", baseline_rule["id"], "--enabled=false")
-            quota_repo = ctl("repo", "create", "owned-agctl-timeline", "--format", "raw")["data"]
+            quota_repo = ctl("repo", "create", "owned-notarxctl-timeline", "--format", "raw")["data"]
             api("PUT", "/api/v2/repositories/" + quota_repo["id"] + "/capacity", {"quotaBytes": 1000})
-            api("PUT", "/raw/owned-agctl-timeline/synthetic.txt", b"x" * 900, 201, {"Content-Type": "application/octet-stream"})
+            api("PUT", "/raw/owned-notarxctl-timeline/synthetic.txt", b"x" * 900, 201, {"Content-Type": "application/octet-stream"})
             timeline_policy = policy_args[:-1] + ["30s"]
             timeline_rule = ctl("quota-alert", "create", "--repo", quota_repo["id"], "--target", target["id"], *timeline_policy)["data"]
             require(not timeline_rule["enabled"] and not ctl("quota-alert", "events", timeline_rule["id"])["data"]["items"],
@@ -697,7 +697,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
 
             warning = eventually(lambda: scenario_record("warning"), "CLI quota warning at production cadence")
             ctl("email", "delivery", "wait", warning["deliveryId"], "--timeout", "30s")
-            api("PUT", "/raw/owned-agctl-timeline/critical.txt", b"x" * 80, 201, {"Content-Type": "application/octet-stream"})
+            api("PUT", "/raw/owned-notarxctl-timeline/critical.txt", b"x" * 80, 201, {"Content-Type": "application/octet-stream"})
             critical = eventually(lambda: scenario_record("critical"), "CLI quota critical at production cadence")
             ctl("email", "delivery", "wait", critical["deliveryId"], "--timeout", "30s")
             run(compose + ["stop", "gateway-scheduler"])
@@ -708,8 +708,8 @@ def check(render_only, evidence=None, fixture_subnets=None):
             require(listed_stale["state"] == stale["state"], "rule list disagrees with stale show")
             # Raising quota resets continuity; delete one actual artifact instead
             # so recovery follows the same quota and actual logical usage.
-            api("DELETE", "/raw/owned-agctl-timeline/critical.txt", status=204)
-            api("DELETE", "/raw/owned-agctl-timeline/synthetic.txt", status=204)
+            api("DELETE", "/raw/owned-notarxctl-timeline/critical.txt", status=204)
+            api("DELETE", "/raw/owned-notarxctl-timeline/synthetic.txt", status=204)
             start("gateway-scheduler")
             resolved = eventually(lambda: scenario_record("resolved"), "CLI quota resolves after fresh recovery samples")
             ctl("email", "delivery", "wait", resolved["deliveryId"], "--timeout", "30s")
@@ -720,16 +720,16 @@ def check(render_only, evidence=None, fixture_subnets=None):
                     all(row["notificationCode"] == "queued" and row["deliveryState"] == "accepted" for row in ordered),
                     "quota events changed ordering, episode, usage or actual SMTP results")
             ctl("quota-alert", "update", timeline_rule["id"], "--enabled=false")
-            checks.append("agctl: real warning→critical→resolved episode and accepted deliveries; stopped scheduler becomes stale without false recovery; fresh samples recover at unchanged 15s cadence")
+            checks.append("notarxctl: real warning→critical→resolved episode and accepted deliveries; stopped scheduler becomes stale without false recovery; fresh samples recover at unchanged 15s cadence")
 
             # A rule pins its target version, even when that target is edited.
             run(compose + ["stop", "gateway-scheduler"])
-            binding_repo = ctl("repo", "create", "owned-agctl-binding", "--format", "raw")["data"]
+            binding_repo = ctl("repo", "create", "owned-notarxctl-binding", "--format", "raw")["data"]
             api("PUT", "/api/v2/repositories/" + binding_repo["id"] + "/capacity", {"quotaBytes": 1000})
-            api("PUT", "/raw/owned-agctl-binding/synthetic.txt", b"x" * 900, 201, {"Content-Type": "application/octet-stream"})
-            pinned = ctl("quota-alert", "create", "--repo", binding_repo["id"], "--target", agctl_target["id"], *timeline_policy)["data"]
+            api("PUT", "/raw/owned-notarxctl-binding/synthetic.txt", b"x" * 900, 201, {"Content-Type": "application/octet-stream"})
+            pinned = ctl("quota-alert", "create", "--repo", binding_repo["id"], "--target", notarxctl_target["id"], *timeline_policy)["data"]
             pinned = ctl("quota-alert", "update", pinned["id"], "--enabled=true", "--yes")["data"]
-            updated_target = ctl("email", "target", "update", agctl_target["id"], "--name", "new bound target version")["data"]
+            updated_target = ctl("email", "target", "update", notarxctl_target["id"], "--name", "new bound target version")["data"]
             before_binding = len(ctl("email", "delivery", "list", "--limit", "100")["data"]["items"])
             start("gateway-scheduler")
             suppressed = eventually(lambda: ctl("quota-alert", "events", pinned["id"])["data"]["items"], "old target binding suppresses quota mail")
@@ -737,9 +737,9 @@ def check(render_only, evidence=None, fixture_subnets=None):
                     suppressed[0]["targetVersion"] == pinned["targetVersion"] and
                     len(ctl("email", "delivery", "list", "--limit", "100")["data"]["items"]) == before_binding,
                     "old target binding silently followed a newer address/version")
-            rebound = ctl("quota-alert", "update", pinned["id"], "--target", agctl_target["id"], "--enabled=false")["data"]
+            rebound = ctl("quota-alert", "update", pinned["id"], "--target", notarxctl_target["id"], "--enabled=false")["data"]
             require(rebound["targetVersion"] == updated_target["version"], "explicit rule update did not rebind the current target version")
-            checks.append("agctl: old target binding persists target_changed without a delivery; only explicit rule update binds the newer version")
+            checks.append("notarxctl: old target binding persists target_changed without a delivery; only explicit rule update binds the newer version")
 
             return {"status": "passed", "checks": checks, "runtime": True,
                     "acceptedMIME": len(list(sink.glob("*.eml"))), "permanentRejection": attempts().count("550"),

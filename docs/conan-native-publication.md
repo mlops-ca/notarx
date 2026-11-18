@@ -21,8 +21,8 @@ conan download widget/1.0@team/stable -r releases
 conan install --requires=widget/1.0@team/stable -r releases --build=never
 ```
 
-Use the recipe's real name/version. `agctl repo connect` and Console usage
-snippets emit the same canonical root. `agctl` does not reimplement Conan's
+Use the recipe's real name/version. `notarxctl repo connect` and Console usage
+snippets emit the same canonical root. `notarxctl` does not reimplement Conan's
 upload protocol. For a Group, publish to its Hosted member and install from
 the Group's canonical remote instead.
 

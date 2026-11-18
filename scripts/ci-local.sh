@@ -129,7 +129,7 @@ run_contract() {
   done < <(python3 scripts/ci-contract.py list)
   # Keep the existing additional local CLI stack check; CI runs this client
   # against the Console job's gateway instead.
-  run "agctl CLI E2E (isolated Compose stack)" make cli-e2e
+  run "notarxctl CLI E2E (isolated Compose stack)" make cli-e2e
 }
 
 run_console() {

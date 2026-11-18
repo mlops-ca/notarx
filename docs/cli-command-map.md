@@ -1,8 +1,8 @@
-# agctl command map
+# notarxctl command map
 
 [简体中文](cli-command-map.zh-CN.md) · [Documentation index](README.md) · [Project README](../README.md)
 
-`agctl` exposes one command surface for two navigation views: CI (onboarding,
+`notarxctl` exposes one command surface for two navigation views: CI (onboarding,
 identity, publication, retrieval and verification, audit) and platform
 management (identity and authority, repositories and Groups, data governance,
 configuration policy, logs/audit/diagnostics/capacity, alerts and
@@ -42,7 +42,7 @@ map is updated first whenever the contract changes. Last reviewed: 2026-10-11
 - N/A — explicitly not exposed by the CLI (for example the compatible
   whole-table grant replacement PUT); the API itself stays.
 - LOCAL — already present in the local `gateway` binary on the host; it does
-  not mean `agctl` implements a matching remote command.
+  not mean `notarxctl` implements a matching remote command.
 - BLOCKED — no management API or backend capability has shipped; the row
   records the dependency, and no invented HTTP endpoint may claim coverage.
 
@@ -109,9 +109,9 @@ just an HTTP 200:
 The rows below cover the complete operation set of the baseline
 `api/openapi/management-runtime-v1.json`; the drift guard re-derives the set
 from the file rather than trusting this count. Paths are relative to `/api/v2`,
-the contract's server base. Planned commands omit the leading `agctl`.
+the contract's server base. Planned commands omit the leading `notarxctl`.
 
-| API (all under /api/v2) / operationId | Planned command (agctl omitted) | Owning issue | Phase | Permission | Acceptance |
+| API (all under /api/v2) / operationId | Planned command (notarxctl omitted) | Owning issue | Phase | Permission | Acceptance |
 | --- | --- | --- | --- | --- | --- |
 | `GET /migrations/nexus/schedules`<br>`listNexusMigrationSchedules` | N: migration schedule API/Console only; CLI deferred | #443 | N/A | A | N: no CLI command registered; use the supported management API or Console |
 | `POST /migrations/nexus/schedules`<br>`createNexusMigrationSchedule` | N: migration schedule API/Console only; CLI deferred | #443 | N/A | A | N: no CLI command registered; use the supported management API or Console |
@@ -331,15 +331,15 @@ real routes and must not be joined to `/api/v2` blindly. Retired Nexus repositor
 
 | Protocol API / operationId | Planned command / handling | Owning issue | Phase | Permission | Acceptance |
 | --- | --- | --- | --- | --- | --- |
-| `GET /npm/{repository}/{package}`<br>`getNPMRegistryPackage` | Native npm metadata and governance; no duplicate agctl registry client | #309 / #310 | N/A | R | N: official npm owns the protocol operation |
-| `PUT /npm/{repository}/{package}`<br>`putNPMRegistryPackage` | Native npm metadata and governance; no duplicate agctl registry client | #309 | N/A | W | N: official npm owns the protocol operation |
-| `PUT /npm/{repository}/{package}/-rev/{revision}`<br>`unpublishNPMRegistryVersions` | Native npm metadata and governance; no duplicate agctl registry client | #310 | N/A | RA | N: official npm owns the protocol operation |
-| `DELETE /npm/{repository}/{package}/-rev/{revision}`<br>`unpublishNPMRegistryPackage` | Native npm metadata and governance; no duplicate agctl registry client | #310 | N/A | RA | N: official npm owns the protocol operation |
-| `DELETE /npm/{repository}/{package}/-/{tarball}/-rev/{revision}`<br>`acknowledgeNPMUnpublishTarball` | Native npm metadata and governance; no duplicate agctl registry client | #310 | N/A | RA | N: official npm owns the protocol operation |
-| `GET /npm/{repository}/-/package/{package}/dist-tags`<br>`listNPMDistTags` | native npm client manages dist-tags; agctl does not orchestrate this protocol action | #308 | N/A | native-format authorization | N: npm dist-tag owns this action; no separate agctl command |
-| `HEAD /npm/{repository}/-/package/{package}/dist-tags`<br>`headNPMDistTags` | native npm client manages dist-tags; agctl does not orchestrate this protocol action | #308 | N/A | native-format authorization | N: npm dist-tag owns this action; no separate agctl command |
-| `PUT /npm/{repository}/-/package/{package}/dist-tags/{tag}`<br>`setNPMDistTag` | native npm client manages dist-tags; agctl does not orchestrate this protocol action | #308 | N/A | native-format authorization | N: npm dist-tag owns this action; no separate agctl command |
-| `DELETE /npm/{repository}/-/package/{package}/dist-tags/{tag}`<br>`deleteNPMDistTag` | native npm client manages dist-tags; agctl does not orchestrate this protocol action | #308 | N/A | native-format authorization | N: npm dist-tag owns this action; no separate agctl command |
+| `GET /npm/{repository}/{package}`<br>`getNPMRegistryPackage` | Native npm metadata and governance; no duplicate notarxctl registry client | #309 / #310 | N/A | R | N: official npm owns the protocol operation |
+| `PUT /npm/{repository}/{package}`<br>`putNPMRegistryPackage` | Native npm metadata and governance; no duplicate notarxctl registry client | #309 | N/A | W | N: official npm owns the protocol operation |
+| `PUT /npm/{repository}/{package}/-rev/{revision}`<br>`unpublishNPMRegistryVersions` | Native npm metadata and governance; no duplicate notarxctl registry client | #310 | N/A | RA | N: official npm owns the protocol operation |
+| `DELETE /npm/{repository}/{package}/-rev/{revision}`<br>`unpublishNPMRegistryPackage` | Native npm metadata and governance; no duplicate notarxctl registry client | #310 | N/A | RA | N: official npm owns the protocol operation |
+| `DELETE /npm/{repository}/{package}/-/{tarball}/-rev/{revision}`<br>`acknowledgeNPMUnpublishTarball` | Native npm metadata and governance; no duplicate notarxctl registry client | #310 | N/A | RA | N: official npm owns the protocol operation |
+| `GET /npm/{repository}/-/package/{package}/dist-tags`<br>`listNPMDistTags` | native npm client manages dist-tags; notarxctl does not orchestrate this protocol action | #308 | N/A | native-format authorization | N: npm dist-tag owns this action; no separate notarxctl command |
+| `HEAD /npm/{repository}/-/package/{package}/dist-tags`<br>`headNPMDistTags` | native npm client manages dist-tags; notarxctl does not orchestrate this protocol action | #308 | N/A | native-format authorization | N: npm dist-tag owns this action; no separate notarxctl command |
+| `PUT /npm/{repository}/-/package/{package}/dist-tags/{tag}`<br>`setNPMDistTag` | native npm client manages dist-tags; notarxctl does not orchestrate this protocol action | #308 | N/A | native-format authorization | N: npm dist-tag owns this action; no separate notarxctl command |
+| `DELETE /npm/{repository}/-/package/{package}/dist-tags/{tag}`<br>`deleteNPMDistTag` | native npm client manages dist-tags; notarxctl does not orchestrate this protocol action | #308 | N/A | native-format authorization | N: npm dist-tag owns this action; no separate notarxctl command |
 | `GET /conan/{repository}/v1/ping`<br>`pingConanRemote` | native Conan 2 client; `repo connect` onboarding | #312 | N/A | native-format authorization | N: official Conan client owns the wire workflow |
 | `GET /conan/{repository}/v2/users/authenticate`<br>`authenticateConanRemote` | native Conan 2 client; `repo connect` onboarding | #312 | N/A | native-format authorization | N: official Conan client owns the wire workflow |
 | `GET /conan/{repository}/v2/users/check_credentials`<br>`checkConanCredentials` | native Conan 2 client; `repo connect` onboarding | #312 | N/A | native-format authorization | N: official Conan client owns the wire workflow |
@@ -356,10 +356,10 @@ real routes and must not be joined to `/api/v2` blindly. Retired Nexus repositor
 | `GET /raw/{repository}/`<br>`listRawRootDirectory` | no separate CLI protocol client; native client and onboarding configuration | #130 | N/A | native-format authorization | N: the CLI neither registers nor sends this protocol action |
 | `GET /apt/{repository}/{path}`<br>`getAptAsset` | no separate CLI protocol client; native client and onboarding configuration | #130 | N/A | native-format authorization | N: the CLI neither registers nor sends this protocol action |
 | `HEAD /apt/{repository}/{path}`<br>`headAptAsset` | no separate CLI protocol client; native client and onboarding configuration | #130 | N/A | native-format authorization | N: the CLI neither registers nor sends this protocol action |
-| `GET /v2/_catalog`<br>`listOCICatalog` | Native ORAS/OCI discovery; no separate agctl registry client | #315 | N/A | explicit repository-resource discovery authorization | N: official OCI clients own Catalog/Referrers; agctl neither registers nor sends this protocol action |
-| `HEAD /v2/_catalog`<br>`headOCICatalog` | Native ORAS/OCI discovery; no separate agctl registry client | #315 | N/A | explicit repository-resource discovery authorization | N: official OCI clients own Catalog/Referrers; agctl neither registers nor sends this protocol action |
-| `GET /v2/{name}/referrers/{digest}`<br>`listOCIReferrers` | Native ORAS/OCI discovery; no separate agctl registry client | #316 | N/A | explicit repository-resource discovery authorization | N: official OCI clients own Catalog/Referrers; agctl neither registers nor sends this protocol action |
-| `HEAD /v2/{name}/referrers/{digest}`<br>`headOCIReferrers` | Native ORAS/OCI discovery; no separate agctl registry client | #316 | N/A | explicit repository-resource discovery authorization | N: official OCI clients own Catalog/Referrers; agctl neither registers nor sends this protocol action |
+| `GET /v2/_catalog`<br>`listOCICatalog` | Native ORAS/OCI discovery; no separate notarxctl registry client | #315 | N/A | explicit repository-resource discovery authorization | N: official OCI clients own Catalog/Referrers; notarxctl neither registers nor sends this protocol action |
+| `HEAD /v2/_catalog`<br>`headOCICatalog` | Native ORAS/OCI discovery; no separate notarxctl registry client | #315 | N/A | explicit repository-resource discovery authorization | N: official OCI clients own Catalog/Referrers; notarxctl neither registers nor sends this protocol action |
+| `GET /v2/{name}/referrers/{digest}`<br>`listOCIReferrers` | Native ORAS/OCI discovery; no separate notarxctl registry client | #316 | N/A | explicit repository-resource discovery authorization | N: official OCI clients own Catalog/Referrers; notarxctl neither registers nor sends this protocol action |
+| `HEAD /v2/{name}/referrers/{digest}`<br>`headOCIReferrers` | Native ORAS/OCI discovery; no separate notarxctl registry client | #316 | N/A | explicit repository-resource discovery authorization | N: official OCI clients own Catalog/Referrers; notarxctl neither registers nor sends this protocol action |
 | `POST /v2/{name}/blobs/uploads/`<br>`startOCIUpload` | no separate CLI protocol client; native client and onboarding configuration | #130 | N/A | native-format authorization | N: the CLI neither registers nor sends this protocol action |
 | `GET /v2/{name}/blobs/uploads/{uuid}`<br>`getOCIUploadStatus` | no separate CLI protocol client; native client and onboarding configuration | #130 | N/A | native-format authorization | N: the CLI neither registers nor sends this protocol action |
 | `PATCH /v2/{name}/blobs/uploads/{uuid}`<br>`appendOCIUpload` | no separate CLI protocol client; native client and onboarding configuration | #130 | N/A | native-format authorization | N: the CLI neither registers nor sends this protocol action |
@@ -394,28 +394,28 @@ implementation.
 
 Each row states the planned entry point, owning issue, phase, permission, and
 acceptance. "Already exists" for a local entry point means the gateway binary
-only, never that agctl implements it:
+only, never that notarxctl implements it:
 
 | Capability and actual entry point | Planned CLI/documentation and owning issue | Phase | Permission/acceptance |
 | --- | --- | --- | --- |
 | GET /livez, GET /readyz | info/status, #125/#135 | M0/M1 | existing public health routes; verify 204, unhealthy, and timeout separately; not equivalent to full business success |
 | POST /auth/login, POST /auth/change-password, GET /auth/session, POST /auth/logout | auth login/change-password/logout plus the identity description, #129 | M1 | the actor's existing authentication/session state; missing private input fails bounded; the token is never echoed; non-interactive browser OIDC login is not promised |
 | client profiles/config, commands introspection, version | #125/#129 | M0/M1 | local client files and input only, never the server .env; precedence/0600/schema and both navigation views are tested |
-| gateway version | #125 documents the CLI/remote/server binary version distinction | LOCAL, already exists | local execution identity; the local version is never reported as the remote instance version |
-| gateway preflight list/run | #137 points at the existing entry point | LOCAL, already exists | host/server local configuration privileges; explicit checks and redacted results; an API token does not replace host privileges |
-| gateway preflight capacity --input | #137, reusing #202 | LOCAL, already exists | explicit offline inventory/capacity plan; unique objects, peak, and logical quota are distinguished, unknown/insufficient blocks; not a live reservation |
-| gateway preflight backup --input | #137, reusing #200 | LOCAL, already exists | explicit backup manifest and private file reads; integrity/compatibility verification; readyz cannot substitute |
+| notarx version | #125 documents the CLI/remote/server binary version distinction | LOCAL, already exists | local execution identity; the local version is never reported as the remote instance version |
+| notarx preflight list/run | #137 points at the existing entry point | LOCAL, already exists | host/server local configuration privileges; explicit checks and redacted results; an API token does not replace host privileges |
+| notarx preflight capacity --input | #137, reusing #202 | LOCAL, already exists | explicit offline inventory/capacity plan; unique objects, peak, and logical quota are distinguished, unknown/insufficient blocks; not a live reservation |
+| notarx preflight backup --input | #137, reusing #200 | LOCAL, already exists | explicit backup manifest and private file reads; integrity/compatibility verification; readyz cannot substitute |
 | gateway backup export/restore --spec --bundle | #137 points at the existing operations; #200/#201 keep the remaining scope | LOCAL, already exists; remote BLOCKED | additional PG/S3/file/Docker privileges and explicit isolated targets; digest/software/schema/semantic read-back; never overwrites an existing target implicitly |
-| gateway evidence collect --gateway-url --output | #137 points at the existing collection; #135 reuses it read-only for remote | LOCAL, already exists | explicit target and output directory plus administrator credentials; redacted evidence and version identity; not a durable server-side job |
+| notarx evidence collect --gateway-url --output | #137 points at the existing collection; #135 reuses it read-only for remote | LOCAL, already exists | explicit target and output directory plus administrator credentials; redacted evidence and version identity; not a durable server-side job |
 | gateway snapshot-import verify/dry-run/apply/takeover | #137 documentation, related #257/#259/#202 | LOCAL, already exists; online migration BLOCKED | frozen Maven bundle / private spec / target DB-S3 privileges; identity/bytes/checkpoint/capacity; no appends after takeover, no Nexus enumeration |
 | gateway apt-snapshot verify | #138 documentation; remote archive/restore see the table above | LOCAL, already exists | local archive read and digest integrity; the output signatures=not_checked must not pretend trusted signature verification passed |
 | gateway theme validate/install/list | #139 distinguishes the local directory from remote managed | LOCAL, already exists | explicit local directory/file privileges; package validation and ownership; a remote admin token does not buy local write access |
 | complete system backup/restore, host/deployment configuration, worker/PG/S3/SMTP relay/auth/CA | #126/#137/#139 define the deployment entry points; remote needs a dedicated API | LOCAL/remote BLOCKED | no generic remote management endpoint yet; no implicit SSH/container/database access; no automatic probing from real secrets |
-| Manual full and full-rescan incremental byte migration | #381/#382/#206/#425/#442, Console #383; no agctl command | API/Console, implemented | durable Maven release, Raw, OCI, Conan 2 and npm batches keep the source read-only and expose capacity/identity/full-byte verification evidence; protocol consumers still need the configured native endpoints |
-| Periodically scheduled Nexus synchronization | #443 and #269; API/Console plan management, agctl deferred to #137 | API/Console, implemented; CLI deferred | administrator-only plans freeze a successful batch's source version, target mappings and native policy; each occurrence needs a fresh operator capacity observation or waits in waiting_capacity; pause/stop prevent future dispatches; not fully unattended migration |
+| Manual full and full-rescan incremental byte migration | #381/#382/#206/#425/#442, Console #383; no notarxctl command | API/Console, implemented | durable Maven release, Raw, OCI, Conan 2 and npm batches keep the source read-only and expose capacity/identity/full-byte verification evidence; protocol consumers still need the configured native endpoints |
+| Periodically scheduled Nexus synchronization | #443 and #269; API/Console plan management, notarxctl deferred to #137 | API/Console, implemented; CLI deferred | administrator-only plans freeze a successful batch's source version, target mappings and native policy; each occurrence needs a fresh operator capacity observation or waits in waiting_capacity; pause/stop prevent future dispatches; not fully unattended migration |
 | physical mount alerts, cluster sender readiness/backlog, and more complete notifications | #255/#256 and #209–#213/#229/#230; a future #336 extends it | BLOCKED | the existing partial capability/heartbeat is not proof that every role shipped; wait for real API/schema/deployment acceptance; do not fabricate fields or commands |
 
-Sources: `cmd/gateway/main.go`; `internal/{backupops,snapshotimport,preflight,evidence,aptpublication,consoletheme}/cli*.go`;
+Sources: `cmd/notarx/main.go`; `internal/{backupops,snapshotimport,preflight,evidence,aptpublication,consoletheme}/cli*.go`;
 `docs/repository-deletion-contract.md`, `user-governance.md`,
 `runtime-log-product-design.md`, `email-notification-delivery.md`,
 `maven-snapshot-import.md`. Platform authority on the management API and local
@@ -437,7 +437,7 @@ operator file/OS privileges are two different authorization boundaries.
   Planned M2 or blocked rows do not force first-release implementation. A row
   claims implementation by carrying `implemented` in its Phase cell (for
   example `M1 implemented`); the guard reads the installed command registry
-  through `agctl commands --json` and fails when an implemented row has no
+  through `notarxctl commands --json` and fails when an implemented row has no
   registered command, or when the command does not declare the row's
   endpoint (`METHOD /api/v2/path`) in its metadata. One command may serve
   several rows, such as `artifact search --global` and `--repo`, only because
@@ -461,7 +461,7 @@ operator file/OS privileges are two different authorization boundaries.
 
 ## NuGet Hosted preview (#287)
 
-These explicit preview APIs have no agctl commands. NuGet remains absent from the admitted format catalog and creation selector. Official dotnet clients use the protocol operations. N/A classifies the CLI only and does not claim #288/#289 completion.
+These explicit preview APIs have no notarxctl commands. NuGet remains absent from the admitted format catalog and creation selector. Official dotnet clients use the protocol operations. N/A classifies the CLI only and does not claim #288/#289 completion.
 
 | Operation | CLI applicability | Owner | Phase | Permission | Acceptance |
 | --- | --- | --- | --- | --- | --- |
@@ -481,7 +481,7 @@ These explicit preview APIs have no agctl commands. NuGet remains absent from th
 
 ## NuGet Proxy/Group preview (#288)
 
-These opt-in preview operations have no agctl command. They do not admit NuGet into the public format catalog or Console; governance and formal admission remain #289.
+These opt-in preview operations have no notarxctl command. They do not admit NuGet into the public format catalog or Console; governance and formal admission remain #289.
 
 | Operation | CLI applicability | Owner | Phase | Permission | Acceptance |
 | --- | --- | --- | --- | --- | --- |
@@ -494,7 +494,7 @@ These opt-in preview operations have no agctl command. They do not admit NuGet i
 
 ## Helm Hosted preview (#290)
 
-Default-off. Management operations use the preview API; official Helm owns native reads. No agctl Helm command is registered.
+Default-off. Management operations use the preview API; official Helm owns native reads. No notarxctl Helm command is registered.
 
 | API / operationId | Planned command | Owning issue | Phase | Permission | Acceptance |
 | --- | --- | --- | --- | --- | --- |
@@ -513,8 +513,8 @@ Default-off. Management operations use the preview API; official Helm owns nativ
 ## Helm Proxy/Group preview (#291)
 
 The management command names below are M2 plans only, not registered or
-verified agctl commands. Use the opt-in preview API today. Official Helm
-clients follow the frozen chart and provenance URLs in the index; agctl does
+verified notarxctl commands. Use the opt-in preview API today. Official Helm
+clients follow the frozen chart and provenance URLs in the index; notarxctl does
 not add another Helm protocol client. These rows do not admit Helm into the
 public format catalog.
 
@@ -525,8 +525,8 @@ public format catalog.
 | `GET /previews/helm/groups/{groupId}`<br>`getHelmPreviewGroup` | `helm preview group show <id>` | #291 | M2 planned | R on all current members | Q |
 | `PUT /previews/helm/groups/{groupId}`<br>`replaceHelmPreviewGroup` | `helm preview group update <id>` | #291 | M2 planned | A | C |
 | `GET /previews/helm/groups/{groupId}/sources/{chartName}/{version}`<br>`getHelmPreviewSource` | `helm preview group source <id> --chart <name> --version <version>` | #291 | M2 planned | R on the chart in all current members | Q |
-| `GET /helm/{repository}/snapshots/{snapshotId}/charts/{chartName}/{version}/{filename}`<br>`readHelmSnapshotAsset` | official Helm snapshot asset read; no agctl protocol client | #291 | N/A | R* | N: official Helm follows the index snapshot URL; agctl neither registers nor sends this protocol action |
-| `HEAD /helm/{repository}/snapshots/{snapshotId}/charts/{chartName}/{version}/{filename}`<br>`headHelmSnapshotAsset` | native Helm snapshot asset metadata; no agctl protocol client | #291 | N/A | R* | N: the native Helm HTTP endpoint serves asset metadata; agctl neither registers nor sends this protocol action |
+| `GET /helm/{repository}/snapshots/{snapshotId}/charts/{chartName}/{version}/{filename}`<br>`readHelmSnapshotAsset` | official Helm snapshot asset read; no notarxctl protocol client | #291 | N/A | R* | N: official Helm follows the index snapshot URL; notarxctl neither registers nor sends this protocol action |
+| `HEAD /helm/{repository}/snapshots/{snapshotId}/charts/{chartName}/{version}/{filename}`<br>`headHelmSnapshotAsset` | native Helm snapshot asset metadata; no notarxctl protocol client | #291 | N/A | R* | N: the native Helm HTTP endpoint serves asset metadata; notarxctl neither registers nor sends this protocol action |
 
 ## NuGet governance preview (#449)
 
@@ -543,13 +543,13 @@ command. This mapping does not mark the remaining #289 admission complete.
 | `POST /previews/nuget/repositories/{repositoryId}/packages/{packageId}/{version}/governance`<br>`applyNuGetPreviewGovernance` | `nuget preview governance apply --repo <id> --package <id> --version <version>` | #449 | M2 planned | RA | C |
 | `GET /previews/nuget/repositories/{repositoryId}/quarantine-read-policy`<br>`getNuGetPreviewQuarantineReadPolicy` | `nuget preview quarantine-policy show --repo <id>` | #449 | M2 planned | RA | Q |
 | `PUT /previews/nuget/repositories/{repositoryId}/quarantine-read-policy`<br>`replaceNuGetPreviewQuarantineReadPolicy` | `nuget preview quarantine-policy set --repo <id>` | #449 | M2 planned | RA | C |
-| `DELETE /nuget/{repository}/api/v2/package/{packageId}/{version}`<br>`unlistNuGetHostedPackage` | native NuGet PackagePublish unlist; no agctl registry client | #449 | N/A | W | N: NuGet clients use the native unlist endpoint; agctl neither registers nor sends this protocol action |
-| `POST /nuget/{repository}/api/v2/package/{packageId}/{version}`<br>`relistNuGetHostedPackage` | native NuGet PackagePublish relist API; no agctl registry client | #449 | N/A | W | N: use the native relist API; no agctl or official dotnet CLI relist command is claimed |
+| `DELETE /nuget/{repository}/api/v2/package/{packageId}/{version}`<br>`unlistNuGetHostedPackage` | native NuGet PackagePublish unlist; no notarxctl registry client | #449 | N/A | W | N: NuGet clients use the native unlist endpoint; notarxctl neither registers nor sends this protocol action |
+| `POST /nuget/{repository}/api/v2/package/{packageId}/{version}`<br>`relistNuGetHostedPackage` | native NuGet PackagePublish relist API; no notarxctl registry client | #449 | N/A | W | N: use the native relist API; no notarxctl or official dotnet CLI relist command is claimed |
 
 ## Helm governance, NuGet replication and RubyGems Hosted previews (#457–#459)
 
 The seven command names below remain M2 plans. Their APIs require explicit
-preview enablement; no new agctl command is registered or verified here. NuGet
+preview enablement; no new notarxctl command is registered or verified here. NuGet
 retry retains the original durable actor and credential identity and rechecks
 current authority. RubyGems uses the preview API and official clients. Formal
 format admission remains under #292, #289 and #293.
@@ -563,30 +563,30 @@ format admission remains under #292, #289 and #293.
 | `POST /previews/nuget/replication-jobs`<br>`createNuGetPreviewReplicationJob` | `nuget preview replication create --file <plan.json>` | #458 | M2 planned | source R + target W | W |
 | `GET /previews/nuget/replication-jobs/{jobId}`<br>`getNuGetPreviewReplicationJob` | `nuget preview replication show <job-id>` | #458 | M2 planned | source R + target R | Q |
 | `POST /previews/nuget/replication-jobs/{jobId}/retry`<br>`retryNuGetPreviewReplicationJob` | `nuget preview replication retry <job-id> --file <retry.json>` | #458 | M2 planned | original actor + source R + target W | C |
-| `POST /previews/rubygems/repositories`<br>`createRubyGemsPreviewRepository` | explicit RubyGems preview API | #459 | N/A | A | N: this Hosted preview has an explicit management API; no agctl command is registered or verified |
-| `GET /previews/rubygems/repositories/{repositoryId}`<br>`getRubyGemsPreviewRepository` | explicit RubyGems preview API | #459 | N/A | R | N: this Hosted preview has an explicit management API; no agctl command is registered or verified |
-| `GET /previews/rubygems/repositories/{repositoryId}/capacity`<br>`getRubyGemsPreviewCapacity` | explicit RubyGems preview API | #459 | N/A | A | N: this Hosted preview has an explicit management API; no agctl command is registered or verified |
-| `PUT /previews/rubygems/repositories/{repositoryId}/capacity`<br>`setRubyGemsPreviewQuota` | explicit RubyGems preview API | #459 | N/A | A | N: this Hosted preview has an explicit management API; no agctl command is registered or verified |
-| `POST /rubygems/{repository}/api/v1/gems`<br>`pushRubyGemHostedPreview` | official RubyGems/Bundler client | #459 | N/A | W | N: official RubyGems/Bundler uses the native endpoint; agctl neither registers nor sends this operation |
-| `GET /rubygems/{repository}/{index}`<br>`readRubyGemsHostedPreviewIndex` | official RubyGems/Bundler client | #459 | N/A | R* | N: official RubyGems/Bundler uses the native endpoint; agctl neither registers nor sends this operation |
-| `HEAD /rubygems/{repository}/{index}`<br>`headRubyGemsHostedPreviewIndex` | official RubyGems/Bundler client | #459 | N/A | R* | N: official RubyGems/Bundler uses the native endpoint; agctl neither registers nor sends this operation |
-| `GET /rubygems/{repository}/info/{gemName}`<br>`readRubyGemsHostedPreviewInfo` | official RubyGems/Bundler client | #459 | N/A | R* | N: official RubyGems/Bundler uses the native endpoint; agctl neither registers nor sends this operation |
-| `GET /rubygems/{repository}/gems/{gemFile}`<br>`downloadRubyGemHostedPreview` | official RubyGems/Bundler client | #459 | N/A | R* | N: official RubyGems/Bundler uses the native endpoint; agctl neither registers nor sends this operation |
-| `HEAD /rubygems/{repository}/gems/{gemFile}`<br>`headRubyGemHostedPreview` | official RubyGems/Bundler client | #459 | N/A | R* | N: official RubyGems/Bundler uses the native endpoint; agctl neither registers nor sends this operation |
-| `GET /rubygems/{repository}/quick/Marshal.4.8/{gemspecFile}`<br>`readRubyGemsHostedPreviewGemspec` | official RubyGems/Bundler client | #459 | N/A | R* | N: official RubyGems/Bundler uses the native endpoint; agctl neither registers nor sends this operation |
-| `HEAD /rubygems/{repository}/info/{gemName}`<br>`headRubyGemsHostedPreviewInfo` | official RubyGems/Bundler client | #459 | N/A | R* | N: official RubyGems/Bundler uses the native endpoint; agctl neither registers nor sends this operation |
-| `HEAD /rubygems/{repository}/quick/Marshal.4.8/{gemspecFile}`<br>`headRubyGemsHostedPreviewGemspec` | official RubyGems/Bundler client | #459 | N/A | R* | N: official RubyGems/Bundler uses the native endpoint; agctl neither registers nor sends this operation |
+| `POST /previews/rubygems/repositories`<br>`createRubyGemsPreviewRepository` | explicit RubyGems preview API | #459 | N/A | A | N: this Hosted preview has an explicit management API; no notarxctl command is registered or verified |
+| `GET /previews/rubygems/repositories/{repositoryId}`<br>`getRubyGemsPreviewRepository` | explicit RubyGems preview API | #459 | N/A | R | N: this Hosted preview has an explicit management API; no notarxctl command is registered or verified |
+| `GET /previews/rubygems/repositories/{repositoryId}/capacity`<br>`getRubyGemsPreviewCapacity` | explicit RubyGems preview API | #459 | N/A | A | N: this Hosted preview has an explicit management API; no notarxctl command is registered or verified |
+| `PUT /previews/rubygems/repositories/{repositoryId}/capacity`<br>`setRubyGemsPreviewQuota` | explicit RubyGems preview API | #459 | N/A | A | N: this Hosted preview has an explicit management API; no notarxctl command is registered or verified |
+| `POST /rubygems/{repository}/api/v1/gems`<br>`pushRubyGemHostedPreview` | official RubyGems/Bundler client | #459 | N/A | W | N: official RubyGems/Bundler uses the native endpoint; notarxctl neither registers nor sends this operation |
+| `GET /rubygems/{repository}/{index}`<br>`readRubyGemsHostedPreviewIndex` | official RubyGems/Bundler client | #459 | N/A | R* | N: official RubyGems/Bundler uses the native endpoint; notarxctl neither registers nor sends this operation |
+| `HEAD /rubygems/{repository}/{index}`<br>`headRubyGemsHostedPreviewIndex` | official RubyGems/Bundler client | #459 | N/A | R* | N: official RubyGems/Bundler uses the native endpoint; notarxctl neither registers nor sends this operation |
+| `GET /rubygems/{repository}/info/{gemName}`<br>`readRubyGemsHostedPreviewInfo` | official RubyGems/Bundler client | #459 | N/A | R* | N: official RubyGems/Bundler uses the native endpoint; notarxctl neither registers nor sends this operation |
+| `GET /rubygems/{repository}/gems/{gemFile}`<br>`downloadRubyGemHostedPreview` | official RubyGems/Bundler client | #459 | N/A | R* | N: official RubyGems/Bundler uses the native endpoint; notarxctl neither registers nor sends this operation |
+| `HEAD /rubygems/{repository}/gems/{gemFile}`<br>`headRubyGemHostedPreview` | official RubyGems/Bundler client | #459 | N/A | R* | N: official RubyGems/Bundler uses the native endpoint; notarxctl neither registers nor sends this operation |
+| `GET /rubygems/{repository}/quick/Marshal.4.8/{gemspecFile}`<br>`readRubyGemsHostedPreviewGemspec` | official RubyGems/Bundler client | #459 | N/A | R* | N: official RubyGems/Bundler uses the native endpoint; notarxctl neither registers nor sends this operation |
+| `HEAD /rubygems/{repository}/info/{gemName}`<br>`headRubyGemsHostedPreviewInfo` | official RubyGems/Bundler client | #459 | N/A | R* | N: official RubyGems/Bundler uses the native endpoint; notarxctl neither registers nor sends this operation |
+| `HEAD /rubygems/{repository}/quick/Marshal.4.8/{gemspecFile}`<br>`headRubyGemsHostedPreviewGemspec` | official RubyGems/Bundler client | #459 | N/A | R* | N: official RubyGems/Bundler uses the native endpoint; notarxctl neither registers nor sends this operation |
 | `POST /previews/helm/replication-jobs`<br>`createHelmPreviewReplicationJob` | `helm preview replication create --file <plan.json>` | #463 | M2 planned | source R + target W | W |
 | `GET /previews/helm/replication-jobs/{jobId}`<br>`getHelmPreviewReplicationJob` | `helm preview replication show <job-id>` | #463 | M2 planned | source R + target R | Q |
 | `POST /previews/helm/replication-jobs/{jobId}/retry`<br>`retryHelmPreviewReplicationJob` | `helm preview replication retry <job-id> --file <retry.json>` | #463 | M2 planned | original actor + source R + target W | C |
-| `GET /previews/rubygems/repositories/{repositoryId}/packages/{gemName}/{gemVersion}/{platform}/governance`<br>`getRubyGemsPreviewGovernance` | explicit RubyGems preview API | #462 | N/A | RA for the exact package | N: this Hosted preview exposes versioned governance; no agctl command is registered or verified |
-| `POST /previews/rubygems/repositories/{repositoryId}/packages/{gemName}/{gemVersion}/{platform}/governance`<br>`changeRubyGemsPreviewGovernance` | explicit RubyGems preview API | #462 | N/A | RA for the exact package | N: this Hosted preview exposes versioned governance; no agctl command is registered or verified |
-| `DELETE /rubygems/{repository}/api/v1/gems/yank`<br>`yankRubyGemHostedPreview` | native `gem yank` | #462 | N/A | W for the exact package | N: the official RubyGems client owns native yank; agctl does not implement another protocol client |
-| `GET /previews/rubygems/repositories/{repositoryId}/quarantine-read-policy`<br>`getRubyGemsPreviewQuarantineReadPolicy` | explicit RubyGems preview API | #468 | N/A | RA | N: independent versioned policy API; no agctl command is registered or verified |
-| `PUT /previews/rubygems/repositories/{repositoryId}/quarantine-read-policy`<br>`replaceRubyGemsPreviewQuarantineReadPolicy` | explicit RubyGems preview API | #468 | N/A | RA | N: independent versioned policy API; no agctl command is registered or verified |
-| `GET /previews/rubygems/repositories/{repositoryId}/packages/{gemName}/{gemVersion}/{platform}`<br>`getRubyGemsPreviewPackageIdentity` | explicit RubyGems preview API | #472 | N/A | source R for the exact package | N: this Hosted replication preview is API-only; no agctl command is registered or verified |
-| `POST /previews/rubygems/replication-jobs`<br>`createRubyGemsPreviewReplicationJob` | explicit RubyGems preview API | #472 | N/A | source R + target W for every item | N: this Hosted replication preview is API-only; no agctl command is registered or verified |
-| `GET /previews/rubygems/replication-jobs/{jobId}`<br>`getRubyGemsPreviewReplicationJob` | explicit RubyGems preview API | #472 | N/A | source R + target R for every item | N: this Hosted replication preview is API-only; no agctl command is registered or verified |
-| `POST /previews/rubygems/replication-jobs/{jobId}/retry`<br>`retryRubyGemsPreviewReplicationJob` | explicit RubyGems preview API | #472 | N/A | original actor + source R + target W | N: this Hosted replication preview is API-only; no agctl command is registered or verified |
+| `GET /previews/rubygems/repositories/{repositoryId}/packages/{gemName}/{gemVersion}/{platform}/governance`<br>`getRubyGemsPreviewGovernance` | explicit RubyGems preview API | #462 | N/A | RA for the exact package | N: this Hosted preview exposes versioned governance; no notarxctl command is registered or verified |
+| `POST /previews/rubygems/repositories/{repositoryId}/packages/{gemName}/{gemVersion}/{platform}/governance`<br>`changeRubyGemsPreviewGovernance` | explicit RubyGems preview API | #462 | N/A | RA for the exact package | N: this Hosted preview exposes versioned governance; no notarxctl command is registered or verified |
+| `DELETE /rubygems/{repository}/api/v1/gems/yank`<br>`yankRubyGemHostedPreview` | native `gem yank` | #462 | N/A | W for the exact package | N: the official RubyGems client owns native yank; notarxctl does not implement another protocol client |
+| `GET /previews/rubygems/repositories/{repositoryId}/quarantine-read-policy`<br>`getRubyGemsPreviewQuarantineReadPolicy` | explicit RubyGems preview API | #468 | N/A | RA | N: independent versioned policy API; no notarxctl command is registered or verified |
+| `PUT /previews/rubygems/repositories/{repositoryId}/quarantine-read-policy`<br>`replaceRubyGemsPreviewQuarantineReadPolicy` | explicit RubyGems preview API | #468 | N/A | RA | N: independent versioned policy API; no notarxctl command is registered or verified |
+| `GET /previews/rubygems/repositories/{repositoryId}/packages/{gemName}/{gemVersion}/{platform}`<br>`getRubyGemsPreviewPackageIdentity` | explicit RubyGems preview API | #472 | N/A | source R for the exact package | N: this Hosted replication preview is API-only; no notarxctl command is registered or verified |
+| `POST /previews/rubygems/replication-jobs`<br>`createRubyGemsPreviewReplicationJob` | explicit RubyGems preview API | #472 | N/A | source R + target W for every item | N: this Hosted replication preview is API-only; no notarxctl command is registered or verified |
+| `GET /previews/rubygems/replication-jobs/{jobId}`<br>`getRubyGemsPreviewReplicationJob` | explicit RubyGems preview API | #472 | N/A | source R + target R for every item | N: this Hosted replication preview is API-only; no notarxctl command is registered or verified |
+| `POST /previews/rubygems/replication-jobs/{jobId}/retry`<br>`retryRubyGemsPreviewReplicationJob` | explicit RubyGems preview API | #472 | N/A | original actor + source R + target W | N: this Hosted replication preview is API-only; no notarxctl command is registered or verified |
 
 RubyGems governance POST also accepts independent `quarantine`/`release` (#468); the existing exact-package administrator permission and CAS contract apply. Release does not undo yank, and restore does not clear quarantine.

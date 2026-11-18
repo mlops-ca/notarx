@@ -33,6 +33,20 @@ type Release struct {
 	ImageReference string `json:"imageReference,omitempty"`
 }
 
+// legacyModule is the pre-fork module path; its published releases name the
+// server binary "gateway" and the command cmd/gateway.
+const legacyModule = "github.com/artifact-gateway/artifact-gateway"
+
+// releaseBinaryPath locates the server binary in a release directory: "notarx",
+// or the pre-fork name "gateway" for releases published before ADR 0013.
+func releaseBinaryPath(directory string) string {
+	path := filepath.Join(directory, "notarx")
+	if _, err := os.Lstat(path); err == nil {
+		return path
+	}
+	return filepath.Join(directory, "gateway")
+}
+
 // VerifyRelease compares full artifact bytes/build identity and the complete
 // applied migration ledger. Forward migration is intentionally a separate step.
 func VerifyRelease(m backupmanifest.Manifest, release Release, ledger io.Reader) error {
@@ -46,7 +60,7 @@ func VerifyRelease(m backupmanifest.Manifest, release Release, ledger io.Reader)
 		return errRelease
 	}
 	if m.SchemaVersion == 2 && m.Gateway.Artifact.Kind == "binary" {
-		path := filepath.Join(release.Directory, "gateway")
+		path := releaseBinaryPath(release.Directory)
 		info, err := os.Lstat(path)
 		if err != nil || !info.Mode().IsRegular() {
 			return errRelease
@@ -93,11 +107,17 @@ func VerifyRelease(m backupmanifest.Manifest, release Release, ledger io.Reader)
 		// Published releases retain the module namespace used when built. Bind
 		// the command and linker identity to that same, exact namespace.
 		module := bi.Main.Path
-		if module != "github.com/mlops-ca/notarx" && module != "github.com/artifact-gateway/artifact-gateway" {
+		if module != "github.com/mlops-ca/notarx" && module != legacyModule {
 			return errRelease
 		}
 		prefix := module + "/internal/buildinfo."
-		if bi.Path != module+"/cmd/gateway" || values["GOOS"]+"/"+values["GOARCH"] != m.Gateway.Artifact.Platform {
+		command := "notarx"
+		if module == legacyModule {
+			// Releases built before ADR 0013 name the server command and its
+			// binary gateway; the file name must match the module namespace.
+			command = "gateway"
+		}
+		if filepath.Base(path) != command || bi.Path != module+"/cmd/"+command || values["GOOS"]+"/"+values["GOARCH"] != m.Gateway.Artifact.Platform {
 			return errRelease
 		}
 		_, hasLDFlags := values["-ldflags"]

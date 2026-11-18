@@ -40,14 +40,31 @@ def path_issues(entries):
             if status[0] != 'D' and ZH_PATH.search(path) and (path, blob(path)) not in exempt]
 
 
+CJK_RUN = re.compile('[\u3400-\u9fff\uf900-\ufaff]+')
+
+
 def line_issues(diff_text):
-    issues, current = [], None
+    """Flag added lines with Chinese text that no removed line of the change had.
+
+    Editing the non-Chinese part of a line (for example an English title next
+    to a frozen zh-CN title) or moving a file re-adds the same Chinese text;
+    that adds no new Chinese content, so it is allowed.
+    """
+    issues, current, removed, added = [], None, set(), []
     exempt = {path for path, sha in allowed() if blob(path) == sha}
+
     for line in diff_text.splitlines():
         if line.startswith('+++ '):
             current = line[4:].removeprefix('b/')
+        elif line.startswith('--- '):
+            continue
+        elif line.startswith('-'):
+            removed.update(CJK_RUN.findall(line))
         elif line.startswith('+') and CJK.search(line) and current not in exempt:
-            issues.append(f'{current}: added line contains Chinese text')
+            added.append((current, line))
+    for path, line in added:
+        if not all(run in removed for run in CJK_RUN.findall(line)):
+            issues.append(f'{path}: added line contains Chinese text')
     return sorted(set(issues))
 
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify #134 catalogue CRUD through the real agctl and an isolated Gateway."""
+"""Verify #134 catalogue CRUD through the real notarxctl and an isolated Gateway."""
 
 import datetime
 import json
@@ -20,15 +20,15 @@ owned = []
 calls = 0
 
 
-with tempfile.TemporaryDirectory(prefix="agctl-authorization-") as directory:
+with tempfile.TemporaryDirectory(prefix="notarxctl-authorization-") as directory:
     private = Path(directory)
     environment = os.environ.copy()
-    environment.update(HOME=directory, AGCTL_SERVER=server, AGCTL_TOKEN=admin_token, AGCTL_PROFILE="")
+    environment.update(HOME=directory, NOTARXCTL_SERVER=server, NOTARXCTL_TOKEN=admin_token, NOTARXCTL_PROFILE="")
 
     def cli(*args, want=0, token=admin_token, stdin=None):
         global calls
         calls += 1
-        env = environment | {"AGCTL_TOKEN": token}
+        env = environment | {"NOTARXCTL_TOKEN": token}
         result = subprocess.run([binary, *args, "--json"], env=env, input=stdin or "", capture_output=True, text=True, timeout=45, check=False)
         output = result.stdout + result.stderr
         if any(secret and secret in output for secret in secrets):

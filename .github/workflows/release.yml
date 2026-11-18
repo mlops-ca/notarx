@@ -127,7 +127,7 @@ jobs:
           test "$(docker image inspect "$IMAGE@$DIGEST" --format '{{ index .Config.Labels "org.opencontainers.image.version" }}')" = "$VERSION"
           test "$(docker image inspect "$IMAGE@$DIGEST" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')" = "$GITHUB_SHA"
           if [ "${{ matrix.image }}" = artifact-gateway ]; then
-            docker run --rm "$IMAGE@$DIGEST" version | grep -F "artifact-gateway $VERSION (revision $GITHUB_SHA,"
+            docker run --rm "$IMAGE@$DIGEST" version | grep -F "notarx $VERSION (revision $GITHUB_SHA,"
           fi
           docker buildx imagetools create \
             --tag "$IMAGE:$VERSION" \

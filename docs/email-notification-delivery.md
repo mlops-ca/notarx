@@ -153,7 +153,7 @@ API-only pending, absent worker config, differing worker key, two corrected
 workers, accepted actual HTML/plain MIME, RCPT 550/dead, a disabled scheduler's
 permanent suppression, correct quota delivery and standalone delivery. Three
 baseline synthetic messages are accepted; the rejected attempt has no DATA.
-The same stack then exercises agctl's full quota/email workflow: default-disabled
+The same stack then exercises notarxctl's full quota/email workflow: default-disabled
 configuration, explicit enablement, all 16 management operations and wait under
 real member/forced-password-change sessions, private input and output redaction,
 no-write dry-run snapshots, missing channel/key and no-sender pending. A loopback

@@ -7,7 +7,7 @@ CONSOLE_DIR := console
 OPENAPI_SOURCE := api/openapi/native-hosted.yaml
 OPENAPI_BUNDLE := api/openapi/native-hosted-v1.json
 
-# agctl release identity. The client takes the VERSION file value and the Git
+# notarxctl release identity. The client takes the VERSION file value and the Git
 # revision, injected through buildinfo exactly like the release archives.
 VERSION ?= $(shell tr -d '[:space:]' < VERSION)
 CLI_REVISION ?= $(shell git rev-parse --verify HEAD 2>/dev/null || printf 'unknown')
@@ -142,7 +142,7 @@ cli-contract-check:
 	@node ./scripts/cli-contract-check.mjs
 
 cli-test:
-	@go test ./cmd/agctl/... ./internal/agctl/...
+	@go test ./cmd/notarxctl/... ./internal/notarxctl/...
 
 cli-e2e:
 	@./scripts/cli-e2e.sh
@@ -240,8 +240,8 @@ cli-build:
 	@set -eu; for target in $(CLI_TARGETS); do \
 		goos=$${target%/*}; goarch=$${target#*/}; \
 		CGO_ENABLED=0 GOOS=$$goos GOARCH=$$goarch go build -trimpath -buildvcs=false \
-			-ldflags '$(CLI_LDFLAGS)' -o dist/agctl_$${goos}_$${goarch} ./cmd/agctl; \
-		printf 'built dist/agctl_%s_%s (version %s)\n' "$$goos" "$$goarch" "$(VERSION)"; \
+			-ldflags '$(CLI_LDFLAGS)' -o dist/notarxctl_$${goos}_$${goarch} ./cmd/notarxctl; \
+		printf 'built dist/notarxctl_%s_%s (version %s)\n' "$$goos" "$$goarch" "$(VERSION)"; \
 	done
 
 build:
@@ -262,7 +262,7 @@ cli-docker-build:
 	@docker build -f Dockerfile.agctl \
 		--build-arg VERSION="$(VERSION)" \
 		--build-arg REVISION="$(CLI_REVISION)" \
-		-t artifact-gateway-agctl:dev .
+		-t notarxctl:dev .
 
 migrate:
 	@docker compose --env-file .env -f compose.yml run --rm migrate
@@ -280,7 +280,7 @@ evidence:
 	@test -n "$(GATEWAY_URL)" || { printf '%s\n' 'set GATEWAY_URL'; exit 2; }
 	@test -n "$(EVIDENCE_OUTPUT)" || { printf '%s\n' 'set EVIDENCE_OUTPUT'; exit 2; }
 	@test -n "$$GATEWAY_EVIDENCE_ADMIN_TOKEN" || { printf '%s\n' 'set GATEWAY_EVIDENCE_ADMIN_TOKEN'; exit 2; }
-	@go run ./cmd/gateway evidence collect --gateway-url "$(GATEWAY_URL)" --output "$(EVIDENCE_OUTPUT)" --revision "$(GIT_REVISION)" --image "$(IMAGE_DIGEST)"
+	@go run ./cmd/notarx evidence collect --gateway-url "$(GATEWAY_URL)" --output "$(EVIDENCE_OUTPUT)" --revision "$(GIT_REVISION)" --image "$(IMAGE_DIGEST)"
 
 raw-e2e:
 	@./scripts/raw-e2e.sh

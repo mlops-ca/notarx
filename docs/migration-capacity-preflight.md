@@ -5,10 +5,10 @@
 The Gateway binary provides an offline budget command for a fixed, normalized
 migration inventory. This addition is under `Unreleased`; it is not part of the
 already published v0.5.0 binaries. It uses the existing operations preflight
-entry point, independently of the planned `agctl` CLI.
+entry point, independently of the planned `notarxctl` CLI.
 
 ```sh
-gateway preflight capacity --input plan.json --format json
+notarx preflight capacity --input plan.json --format json
 ```
 
 The command reads one regular JSON file (maximum 8 MiB), writes a JSON report to
@@ -133,6 +133,6 @@ report unknown; version 1 does not model multiple pools or discover S3 physical
 free space. A missing/unverified object's bytes are not treated as zero.
 
 This slice supports normalized evidence only. Source collectors, importers,
-live target rechecks, transfer reservations, general `agctl` commands, quota
+live target rechecks, transfer reservations, general `notarxctl` commands, quota
 changes and cleanup are separate work. It does not redefine `objectCount` as a
 component count or change the existing capacity and authorization contracts.

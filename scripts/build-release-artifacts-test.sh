@@ -38,9 +38,9 @@ fi
     --skip-console
 )
 
-archive="$workdir/dist/artifact-gateway_${version}_${goos}_${goarch}.tar.gz"
+archive="$workdir/dist/notarx_${version}_${goos}_${goarch}.tar.gz"
 if [[ "$goos" == "windows" ]]; then
-  archive="$workdir/dist/artifact-gateway_${version}_${goos}_${goarch}.zip"
+  archive="$workdir/dist/notarx_${version}_${goos}_${goarch}.zip"
 fi
 test -f "$archive"
 test -f "$workdir/dist/SHA256SUMS"
@@ -52,7 +52,7 @@ cp "$archive" "$workdir/checksum-fixtures/artifact-gateway-openapi_${version}.ta
 printf '%s\n' 'not a release archive' > "$workdir/checksum-fixtures/ignored.txt"
 bash "$root/scripts/write-release-checksums.sh" "$workdir/checksum-fixtures"
 test "$(wc -l < "$workdir/checksum-fixtures/SHA256SUMS" | tr -d '[:space:]')" = 3
-grep -F "artifact-gateway_${version}_${goos}_${goarch}" "$workdir/checksum-fixtures/SHA256SUMS" >/dev/null
+grep -F "notarx_${version}_${goos}_${goarch}" "$workdir/checksum-fixtures/SHA256SUMS" >/dev/null
 grep -F "artifact-gateway-console_${version}_web.tar.gz" "$workdir/checksum-fixtures/SHA256SUMS" >/dev/null
 grep -F "artifact-gateway-openapi_${version}.tar.gz" "$workdir/checksum-fixtures/SHA256SUMS" >/dev/null
 if grep -F 'ignored.txt' "$workdir/checksum-fixtures/SHA256SUMS" >/dev/null; then
@@ -63,11 +63,11 @@ fi
 mkdir -p "$workdir/unpacked"
 if [[ "$archive" == *.zip ]]; then
   unzip -q "$archive" -d "$workdir/unpacked"
-  gateway="$workdir/unpacked/gateway.exe"
+  gateway="$workdir/unpacked/notarx.exe"
   healthcheck="$workdir/unpacked/gateway-healthcheck.exe"
 else
   tar -xzf "$archive" -C "$workdir/unpacked"
-  gateway="$workdir/unpacked/gateway"
+  gateway="$workdir/unpacked/notarx"
   healthcheck="$workdir/unpacked/gateway-healthcheck"
 fi
 test -x "$gateway"
@@ -78,7 +78,7 @@ test -f "$workdir/unpacked/artifact-gateway.env.example"
 test -f "$workdir/unpacked/INSTALL.txt"
 
 version_output=$("$gateway" version)
-printf '%s\n' "$version_output" | grep -F "artifact-gateway $version" >/dev/null
+printf '%s\n' "$version_output" | grep -F "notarx $version" >/dev/null
 printf '%s\n' "$version_output" | grep -F "revision $revision" >/dev/null
 test "$("$gateway" --version)" = "$version_output"
 healthcheck_version_output=$("$healthcheck" version)
@@ -98,31 +98,31 @@ for release_target in "${release_targets[@]}"; do
     target_extension=zip
     target_suffix=.exe
   fi
-  agctl_name="artifact-gateway-agctl_${version}_${target_goos}_${target_goarch}.${target_extension}"
-  agctl_archive="$workdir/dist/$agctl_name"
-  test -f "$agctl_archive"
-  grep -F "$agctl_name" "$workdir/dist/SHA256SUMS" >/dev/null
+  notarxctl_name="notarxctl_${version}_${target_goos}_${target_goarch}.${target_extension}"
+  notarxctl_archive="$workdir/dist/$notarxctl_name"
+  test -f "$notarxctl_archive"
+  grep -F "$notarxctl_name" "$workdir/dist/SHA256SUMS" >/dev/null
 
-  agctl_unpacked="$workdir/agctl-unpacked_${target_goos}_${target_goarch}"
-  mkdir -p "$agctl_unpacked"
+  notarxctl_unpacked="$workdir/notarxctl-unpacked_${target_goos}_${target_goarch}"
+  mkdir -p "$notarxctl_unpacked"
   if [[ "$target_extension" == "zip" ]]; then
-    unzip -q "$agctl_archive" -d "$agctl_unpacked"
+    unzip -q "$notarxctl_archive" -d "$notarxctl_unpacked"
   else
-    tar -xzf "$agctl_archive" -C "$agctl_unpacked"
+    tar -xzf "$notarxctl_archive" -C "$notarxctl_unpacked"
   fi
-  test -x "$agctl_unpacked/agctl$target_suffix"
-  test -f "$agctl_unpacked/VERSION.txt"
-  test -f "$agctl_unpacked/INSTALL.txt"
-  for server_material in gateway gateway-healthcheck migrations run-migrations.sh artifact-gateway.env.example; do
-    if [[ -e "$agctl_unpacked/$server_material" ]]; then
-      printf 'CLI archive %s leaked server distribution material: %s\n' "$agctl_name" "$server_material" >&2
+  test -x "$notarxctl_unpacked/notarxctl$target_suffix"
+  test -f "$notarxctl_unpacked/VERSION.txt"
+  test -f "$notarxctl_unpacked/INSTALL.txt"
+  for server_material in notarx gateway-healthcheck migrations run-migrations.sh artifact-gateway.env.example; do
+    if [[ -e "$notarxctl_unpacked/$server_material" ]]; then
+      printf 'CLI archive %s leaked server distribution material: %s\n' "$notarxctl_name" "$server_material" >&2
       exit 1
     fi
   done
 
   if [[ "$target_goos" == "$goos" && "$target_goarch" == "$goarch" ]]; then
-    agctl_version_output=$("$agctl_unpacked/agctl$target_suffix" version)
-    printf '%s\n' "$agctl_version_output" | grep -F "agctl $version (revision $revision," >/dev/null
+    notarxctl_version_output=$("$notarxctl_unpacked/notarxctl$target_suffix" version)
+    printf '%s\n' "$notarxctl_version_output" | grep -F "notarxctl $version (revision $revision," >/dev/null
   fi
 done
 
@@ -153,8 +153,8 @@ for release_target in "${release_targets[@]}"; do
   if [[ "$target_goos" == "windows" ]]; then
     target_extension=zip
   fi
-  repeat_agctl="artifact-gateway-agctl_${version}_${target_goos}_${target_goarch}.${target_extension}"
-  cmp "$workdir/dist/$repeat_agctl" "$workdir/dist-repeat/$repeat_agctl"
+  repeat_notarxctl="notarxctl_${version}_${target_goos}_${target_goarch}.${target_extension}"
+  cmp "$workdir/dist/$repeat_notarxctl" "$workdir/dist-repeat/$repeat_notarxctl"
 done
 cmp "$workdir/dist/SHA256SUMS" "$workdir/dist-repeat/SHA256SUMS"
 

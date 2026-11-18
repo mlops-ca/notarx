@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Exercise #131's Conan views and tombstone through the real agctl binary.
+"""Exercise #131's Conan views and tombstone through the real notarxctl binary.
 
 Called by cli-e2e.sh with its isolated Gateway and synthetic credentials.
 Publication seeds only this fixture through the supported session API; all
-views, authorization checks and deletion under test run through agctl.
+views, authorization checks and deletion under test run through notarxctl.
 """
 
 import gzip
@@ -20,19 +20,19 @@ import uuid
 
 
 binary = sys.argv[1]
-server = os.environ["AGCTL_SERVER"].rstrip("/")
-admin_token = os.environ["AGCTL_TOKEN"]
+server = os.environ["NOTARXCTL_SERVER"].rstrip("/")
+admin_token = os.environ["NOTARXCTL_TOKEN"]
 resolver_token = os.environ.get("CLI_CONAN_E2E_RESOLVER_TOKEN", "")
 
 
 def cli(*args, want=0, token=None):
-    env = dict(os.environ, AGCTL_PROFILE="", AGCTL_TOKEN=token or admin_token)
+    env = dict(os.environ, NOTARXCTL_PROFILE="", NOTARXCTL_TOKEN=token or admin_token)
     result = subprocess.run(
         [binary, *args, "--json"], env=env, stdin=subprocess.DEVNULL,
         capture_output=True, text=True, timeout=45,
     )
     if result.returncode != want:
-        raise AssertionError(f"agctl {args}: exit {result.returncode}, expected {want}: {result.stdout} {result.stderr}")
+        raise AssertionError(f"notarxctl {args}: exit {result.returncode}, expected {want}: {result.stdout} {result.stderr}")
     value = json.loads(result.stdout)
     assert value["schemaVersion"] == 1
     assert value["ok"] == (want == 0)
@@ -65,14 +65,14 @@ def manifest(tree):
 
 
 def recipe_fixture(reference, marker):
-    payload = f'# agctl conan fixture {reference} {marker}\nfrom conan import ConanFile\nclass Fixture(ConanFile):\n    pass\n'.encode()
+    payload = f'# notarxctl conan fixture {reference} {marker}\nfrom conan import ConanFile\nclass Fixture(ConanFile):\n    pass\n'.encode()
     revision, body = manifest({"conanfile.py": payload})
     return revision, {"conanfile.py": payload, "conanmanifest.txt": body}
 
 
 def package_fixture(settings, marker):
     info = f"[settings]\n{settings}\n".encode()
-    payload = f"agctl package payload {marker}\n".encode()
+    payload = f"notarxctl package payload {marker}\n".encode()
     package_id = hashlib.sha1(info).hexdigest()
     revision, body = manifest({"conaninfo.txt": info, "payload.txt": payload})
     archive = io.BytesIO()

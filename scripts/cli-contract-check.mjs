@@ -82,14 +82,14 @@ function contractIndex(operations) {
 }
 
 // normalizedCommand extracts the registry name from a planned-command cell:
-// backticks and an `agctl ` prefix are stripped, and argument placeholders or
+// backticks and an `notarxctl ` prefix are stripped, and argument placeholders or
 // flags end the name. `config profile add NAME --server URL` normalizes to
 // `config profile add`.
 export function normalizedCommand(cell) {
   const cleaned = String(cell ?? '')
     .replace(/`/gu, '')
     .trim()
-    .replace(/^agctl\s+/iu, '');
+    .replace(/^notarxctl\s+/iu, '');
   if (!cleaned) return '';
   const leading = [];
   for (const part of cleaned.split(/\s+/u)) {
@@ -105,7 +105,7 @@ export function normalizedCommand(cell) {
 // (for example `M1 implemented`). The claim is only legal when the installed
 // command registry actually exposes the command. The registry is either a
 // set of command names, or a map from each name to the endpoints its
-// `agctl commands --json` metadata declares. With endpoints, a claimed
+// `notarxctl commands --json` metadata declares. With endpoints, a claimed
 // management row must be one of the command's declared endpoints, and one
 // command may serve several rows (such as `artifact search --global` and
 // `--repo`) because each claim is checked against what it really sends.
@@ -131,7 +131,7 @@ function findImplementationIssues(englishMap, registeredCommands, nativeOperatio
     if (!command || !registeredCommands.has(command)) {
       issues.push({
         kind: 'implemented-without-command',
-        message: `${commandMapPath} marks ${operationId} implemented, but ${command ? `command "${command}" is` : 'its planned command is'} not registered in cmd/agctl; register it or drop the implemented claim`,
+        message: `${commandMapPath} marks ${operationId} implemented, but ${command ? `command "${command}" is` : 'its planned command is'} not registered in cmd/notarxctl; register it or drop the implemented claim`,
       });
       continue;
     }
@@ -256,16 +256,16 @@ export function findContractDrift({ managementOperations, nativeOperations, engl
 }
 
 // loadRegisteredCommands reads the installed command registry through its
-// stable machine contract (`agctl commands --json`): each command name with
+// stable machine contract (`notarxctl commands --json`): each command name with
 // the endpoints it declares.
 export function loadRegisteredCommands(repoRoot) {
-  const output = execFileSync('go', ['run', './cmd/agctl', 'commands', '--json'], {
+  const output = execFileSync('go', ['run', './cmd/notarxctl', 'commands', '--json'], {
     cwd: repoRoot,
     encoding: 'utf8',
   });
   const items = JSON.parse(output)?.data?.items;
   if (!Array.isArray(items)) {
-    throw new Error('agctl commands --json did not return a command list');
+    throw new Error('notarxctl commands --json did not return a command list');
   }
   return new Map(
     items.map((item) => [
