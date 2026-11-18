@@ -171,7 +171,7 @@ Each has a `DEFAULT` partition, three indexes (the primary key,
   exists.
 - One node at a time runs the work. The runner is elected by a lease row in
   `scheduled_tasks` (kind `partition-manager`, never enabled, hidden from the task
-  API); no session advisory lock is held, so it works through connection poolers.
+  API); no session advisory lock is held, so it works behind a connection pool in transaction mode.
 - A period whose range already has rows in the `DEFAULT` partition cannot be
   created directly. The manager creates the partition standalone, moves the rows
   with `DELETE ... RETURNING` into it and attaches it in one transaction.
