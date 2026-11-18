@@ -4,14 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/ccsert/artifact-gateway/internal/emailnotification"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/emailnotification"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func TestAdministratorCanPreviewWarningEmailWithoutSMTP(t *testing.T) {

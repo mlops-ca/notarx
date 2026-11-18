@@ -37,6 +37,10 @@ done
 test -d cmd/agctl
 grep -Fq 'artifact-gateway-agctl_${version}_' scripts/build-release-artifacts.sh
 cli_module=$(awk '/^module / { print $2; exit }' go.mod)
+if [[ "$cli_module" != "github.com/mlops-ca/notarx" ]]; then
+  printf 'go.mod module %s is not github.com/mlops-ca/notarx (ADR 0013).\n' "$cli_module" >&2
+  exit 1
+fi
 # go install resolves the module path as a repository, so it must be the GitHub
 # repository that serves the tags (ADR 0008). CI names it; a checkout falls back
 # to its origin remote and skips the check when neither is known.

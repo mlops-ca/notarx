@@ -10,12 +10,12 @@
       "archive": {
         "name": "artifact-gateway_0.5.0_linux_amd64.tar.gz",
         "sha256": "sha256:5ea14b680f71a6db8697000aedaeeeee0b06dc7ef74db17d14ad0e613db0cef1",
-        "url": "https://github.com/ccsert/artifact-gateway/releases/download/v0.5.0/artifact-gateway_0.5.0_linux_amd64.tar.gz",
+        "url": "https://github.com/mlops-ca/notarx/releases/download/v0.5.0/artifact-gateway_0.5.0_linux_amd64.tar.gz",
         "size": 14314361
       },
       "checksums": {
         "sha256": "sha256:67ee82f8c69305783fe8d7d2acb658f01800996b1a996bc6b09c678d45d51269",
-        "url": "https://github.com/ccsert/artifact-gateway/releases/download/v0.5.0/SHA256SUMS",
+        "url": "https://github.com/mlops-ca/notarx/releases/download/v0.5.0/SHA256SUMS",
         "size": 646
       }
     },
@@ -26,12 +26,12 @@
       "archive": {
         "name": "artifact-gateway_0.6.0_linux_amd64.tar.gz",
         "sha256": "sha256:fb28b2299d7d41845d85d3a0092bef3d21932dec61a3f2544c0b055fcc7f828b",
-        "url": "https://github.com/ccsert/artifact-gateway/releases/download/v0.6.0/artifact-gateway_0.6.0_linux_amd64.tar.gz",
+        "url": "https://github.com/mlops-ca/notarx/releases/download/v0.6.0/artifact-gateway_0.6.0_linux_amd64.tar.gz",
         "size": 14902831
       },
       "checksums": {
         "sha256": "sha256:be1189974777ddd83eca97940c9efc4379adc366f7921c5df7b3658d7981d63d",
-        "url": "https://github.com/ccsert/artifact-gateway/releases/download/v0.6.0/SHA256SUMS",
+        "url": "https://github.com/mlops-ca/notarx/releases/download/v0.6.0/SHA256SUMS",
         "size": 646
       }
     }

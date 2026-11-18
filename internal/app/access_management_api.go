@@ -1,6 +1,6 @@
 package app
 
-import "github.com/ccsert/artifact-gateway/internal/repository"
+import "github.com/mlops-ca/notarx/internal/repository"
 
 type accessManagementOptions struct {
 	Scope        managementScope

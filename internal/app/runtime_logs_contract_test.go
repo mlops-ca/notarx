@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/operationalog"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/mlops-ca/notarx/internal/operationalog"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func TestRuntimeLogErrorsMatchDeclaredProblemContract(t *testing.T) {

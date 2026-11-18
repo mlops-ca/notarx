@@ -8,10 +8,10 @@ extension/classifier、完整主资产字节及版本 metadata 原文。每一�
 选择，包括选旧构建或不同 classifier 各选不同构建。普通 Maven PUT/session 发布仍
 分配新的本地身份，不能用来原样保留历史。
 
-本实现对应父项 [#199](https://github.com/ccsert/artifact-gateway/issues/199) 下的
-[#257](https://github.com/ccsert/artifact-gateway/issues/257)。只读客户端验证
-[#204](https://github.com/ccsert/artifact-gateway/issues/204) 与通用迁移 ledger
-[#205](https://github.com/ccsert/artifact-gateway/issues/205) 仍是独立工作。命令不抓取源
+本实现对应父项 [#199](https://github.com/mlops-ca/notarx/issues/199) 下的
+[#257](https://github.com/mlops-ca/notarx/issues/257)。只读客户端验证
+[#204](https://github.com/mlops-ca/notarx/issues/204) 与通用迁移 ledger
+[#205](https://github.com/mlops-ca/notarx/issues/205) 仍是独立工作。命令不抓取源
 资产，不证明完整依赖闭包，不创建 Repository、发现凭据、启动服务或修改生产配置。
 
 ## 准入契约

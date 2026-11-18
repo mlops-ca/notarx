@@ -46,10 +46,10 @@ Progress update 2026-07-31:
 - The administrator-only Group resolution inspector now uses the protocol
   resolver's Hosted-first candidate order and shows configured positions
   separately. It does not query artifacts or upstreams, or decide reader access.
-  Raw Groups fall through between Proxy members on confirmed misses ([#24](https://github.com/ccsert/artifact-gateway/issues/24)).
+  Raw Groups fall through between Proxy members on confirmed misses ([#24](https://github.com/mlops-ca/notarx/issues/24)).
   Maven multi-Proxy fallback and positive/negative resolution-scope validation
-  are implemented in [#28](https://github.com/ccsert/artifact-gateway/issues/28); per-artifact
-  Group directory provenance is now implemented ([#25](https://github.com/ccsert/artifact-gateway/issues/25)).
+  are implemented in [#28](https://github.com/mlops-ca/notarx/issues/28); per-artifact
+  Group directory provenance is now implemented ([#25](https://github.com/mlops-ca/notarx/issues/25)).
 - Anonymous read decisions are recorded with the anonymous actor and bounded
   authorization source/reason values across protocol and management browse paths.
 

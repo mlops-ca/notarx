@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/objectstore"
 )
 
 func main() {

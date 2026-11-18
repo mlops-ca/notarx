@@ -1,7 +1,7 @@
 package app
 
 import (
-	ociprotocol "github.com/ccsert/artifact-gateway/internal/protocol/oci"
+	ociprotocol "github.com/mlops-ca/notarx/internal/protocol/oci"
 )
 
 // Compatibility aliases retain the app composition surface while OCI cache

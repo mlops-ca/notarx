@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	m "github.com/ccsert/artifact-gateway/internal/nexusmigration"
+	m "github.com/mlops-ca/notarx/internal/nexusmigration"
 )
 
 const conanRecipeSource = "conans/demo/1.0/_/_/revisions/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/files/"

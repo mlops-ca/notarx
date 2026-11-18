@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/ccsert/artifact-gateway/internal/protocol/identity"
+	"github.com/mlops-ca/notarx/internal/protocol/identity"
 )
 
 // PyPIImportStore is deliberately separate from GatewayStore. Production imports

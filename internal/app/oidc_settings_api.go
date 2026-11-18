@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	adminopenapi "github.com/ccsert/artifact-gateway/internal/admin/openapi"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/secrets"
+	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/secrets"
 )
 
 func (h identityManagementHandler) GetOIDCSettings(w http.ResponseWriter, r *http.Request) {

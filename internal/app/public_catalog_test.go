@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func TestPublicRepositoryCatalogExposesOnlyAnonymousRepositories(t *testing.T) {

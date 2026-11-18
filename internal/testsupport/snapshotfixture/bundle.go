@@ -4,7 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/ccsert/artifact-gateway/internal/capacityplan"
+	"github.com/mlops-ca/notarx/internal/capacityplan"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/snapshotimport"
+	"github.com/mlops-ca/notarx/internal/snapshotimport"
 )
 
 func WriteSnapshotManifest(t testing.TB, dir string, m snapshotimport.Manifest) string {

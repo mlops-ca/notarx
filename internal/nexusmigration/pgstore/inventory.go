@@ -9,8 +9,8 @@ import (
 	"errors"
 	"strings"
 
-	m "github.com/ccsert/artifact-gateway/internal/nexusmigration"
-	"github.com/ccsert/artifact-gateway/internal/nexussource"
+	m "github.com/mlops-ca/notarx/internal/nexusmigration"
+	"github.com/mlops-ca/notarx/internal/nexussource"
 )
 
 func (s *Store) InventoryScan(ctx context.Context, id string) (m.InventoryScan, error) {

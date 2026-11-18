@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/backupmanifest"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/backupmanifest"
 )
 
 const registryFixtureImage = "registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373"

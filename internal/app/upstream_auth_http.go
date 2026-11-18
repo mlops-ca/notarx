@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/secrets"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/secrets"
 )
 
 // applyUpstreamAuth attaches the repository's configured credential to an

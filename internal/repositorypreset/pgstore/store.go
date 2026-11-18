@@ -8,8 +8,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/ccsert/artifact-gateway/internal/repositorypreset"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/repositorypreset"
 )
 
 type Store struct{ db *sql.DB }

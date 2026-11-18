@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"reflect"
 
-	api "github.com/ccsert/artifact-gateway/internal/admin/openapi"
+	api "github.com/mlops-ca/notarx/internal/admin/openapi"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 

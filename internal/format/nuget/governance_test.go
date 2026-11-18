@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func governancePath(repo repository.HostedRepository, id, version string) string {

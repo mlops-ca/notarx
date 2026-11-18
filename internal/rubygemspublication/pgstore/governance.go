@@ -3,8 +3,8 @@ package pgstore
 import (
 	"context"
 
-	protocol "github.com/ccsert/artifact-gateway/internal/protocol/rubygems"
-	domain "github.com/ccsert/artifact-gateway/internal/rubygemspublication"
+	protocol "github.com/mlops-ca/notarx/internal/protocol/rubygems"
+	domain "github.com/mlops-ca/notarx/internal/rubygemspublication"
 )
 
 func (s *Store) GetRetained(ctx context.Context, repo, name, version, platform string) (domain.Publication, error) {

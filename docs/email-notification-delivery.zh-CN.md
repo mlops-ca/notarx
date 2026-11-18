@@ -6,14 +6,14 @@
 SMTP 发送，PostgreSQL 负责持久收件人快照、测试交付状态、幂等与 Worker fencing。
 Prometheus/Alertmanager 可负责外部可用性监测，但增加组件和路由配置。Gateway
 或数据库停机时，内置通道不能报告自身失联。决策见
-[#211](https://github.com/ccsert/artifact-gateway/issues/211) 与
-[#212](https://github.com/ccsert/artifact-gateway/issues/212)。
+[#211](https://github.com/mlops-ca/notarx/issues/211) 与
+[#212](https://github.com/mlops-ca/notarx/issues/212)。
 
 本通道支持**管理员显式发起的合成测试邮件**及
 [仓库逻辑配额告警](repository-quota-alerts.zh-CN.md)。本地挂载和 5xx 观测不入
 邮件队列；其评估与 Console 配置页仍待后续。
-[#229](https://github.com/ccsert/artifact-gateway/issues/229)、
-[#230](https://github.com/ccsert/artifact-gateway/issues/230) 的完整范围未交付；
+[#229](https://github.com/mlops-ca/notarx/issues/229)、
+[#230](https://github.com/mlops-ca/notarx/issues/230) 的完整范围未交付；
 浏览器截图不能代表 Gmail、Outlook 或 Apple Mail 客户端验收。
 
 ## 部署契约
@@ -287,4 +287,4 @@ UTF-8 纯文本与 HTML。没有外部图片、字体、跟踪像素或附件。
 交付在同一事务创建。新合成预览使用版本 2，已排队版本 1 仍保持原文案与渲染。
 显式本地挂载/进程 5xx 的评估与 Console 配置、真实邮件客户端验收及真实部署继续后续；
 S3/NAS 池容量保持 unknown。见[运维信号](operational-signals.zh-CN.md)和
-[#211](https://github.com/ccsert/artifact-gateway/issues/211)。
+[#211](https://github.com/mlops-ca/notarx/issues/211)。

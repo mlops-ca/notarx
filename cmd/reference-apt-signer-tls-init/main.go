@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ccsert/artifact-gateway/internal/aptpublication"
+	"github.com/mlops-ca/notarx/internal/aptpublication"
 )
 
 const maxTLSMaterialBytes = int64(1 << 20)

@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/cache"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/cache"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 type privateProxyCircuitBackend struct {

@@ -7,8 +7,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/requestcontext"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/requestcontext"
 )
 
 func TestPostgresAuditCarriesRequestCorrelation(t *testing.T) {

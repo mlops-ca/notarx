@@ -5,10 +5,10 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/ccsert/artifact-gateway/internal/artifactquery"
-	formatmodule "github.com/ccsert/artifact-gateway/internal/format"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/v2contract"
+	"github.com/mlops-ca/notarx/internal/artifactquery"
+	formatmodule "github.com/mlops-ca/notarx/internal/format"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/v2contract"
 )
 
 func validPrefix(value string) bool {

@@ -13,11 +13,11 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/ccsert/artifact-gateway/internal/capacityplan"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	"github.com/ccsert/artifact-gateway/internal/opsjson"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/capacityplan"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/opsjson"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 // TargetSpec names existing credentials through environment references. It

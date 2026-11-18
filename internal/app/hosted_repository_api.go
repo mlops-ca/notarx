@@ -13,11 +13,11 @@ import (
 	"strings"
 	"time"
 
-	adminopenapi "github.com/ccsert/artifact-gateway/internal/admin/openapi"
-	"github.com/ccsert/artifact-gateway/internal/egress"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/secrets"
 	"github.com/google/uuid"
+	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
+	"github.com/mlops-ca/notarx/internal/egress"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/secrets"
 )
 
 var hostedRepositoryName = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)

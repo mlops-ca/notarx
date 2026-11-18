@@ -9,12 +9,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ccsert/artifact-gateway/internal/authorization"
-	dist "github.com/ccsert/artifact-gateway/internal/nugetdistribution"
-	nugetprotocol "github.com/ccsert/artifact-gateway/internal/protocol/nuget"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/uploadspool"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/authorization"
+	dist "github.com/mlops-ca/notarx/internal/nugetdistribution"
+	nugetprotocol "github.com/mlops-ca/notarx/internal/protocol/nuget"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/uploadspool"
 )
 
 // The read-only adapter feeds transaction-locked grant snapshots through the

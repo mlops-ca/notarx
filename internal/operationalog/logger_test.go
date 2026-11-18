@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/requestcontext"
+	"github.com/mlops-ca/notarx/internal/requestcontext"
 )
 
 func TestNewLoggerEmitsIdentityAndRedactsSensitiveAttributes(t *testing.T) {

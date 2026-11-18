@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 const maxAssets = 256

@@ -8,10 +8,10 @@ import (
 	"sort"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/authorization"
-	helmprotocol "github.com/ccsert/artifact-gateway/internal/protocol/helm"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/authorization"
+	helmprotocol "github.com/mlops-ca/notarx/internal/protocol/helm"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func groupRepository(g repository.HostedGroup) repository.HostedRepository {

@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/refscanner"
+	"github.com/mlops-ca/notarx/internal/refscanner"
 )
 
 type configuration struct {

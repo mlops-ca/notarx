@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 // Capture the actual records produced by public HTTP. After rotation, replay

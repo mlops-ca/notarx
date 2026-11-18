@@ -139,7 +139,7 @@ destination.write_text(json.dumps(summary, indent=2) + "\n")
 for event in events:
     if event.get("Output"):
         print(event["Output"], end="")
-if required - run or required - passed or failed or skipped or packages != {"github.com/ccsert/artifact-gateway/internal/app"}:
+if required - run or required - passed or failed or skipped or packages != {"github.com/mlops-ca/notarx/internal/app"}:
     raise SystemExit("mandatory Conan migration proof is missing, skipped or failed; see results.json")
 print("Verified all 10 required Conan migration fixtures: complete revision bytes, actual transaction fencing, restart/retry, quarantine, and pinned target-only official client.")
 PY

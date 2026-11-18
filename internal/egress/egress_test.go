@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func testHooks(t *testing.T, ips map[string][]net.IP) Hooks {

@@ -20,8 +20,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/scanning"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/scanning"
 )
 
 func TestHandlerAcceptsGatewayMultipartAndMapsTrivyReport(t *testing.T) {

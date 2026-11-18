@@ -9,11 +9,11 @@ import (
 	"strconv"
 	"strings"
 
-	formatmodule "github.com/ccsert/artifact-gateway/internal/format"
-	rawformat "github.com/ccsert/artifact-gateway/internal/format/raw"
-	"github.com/ccsert/artifact-gateway/internal/protocol/cargo"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/scanning"
+	formatmodule "github.com/mlops-ca/notarx/internal/format"
+	rawformat "github.com/mlops-ca/notarx/internal/format/raw"
+	"github.com/mlops-ca/notarx/internal/protocol/cargo"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/scanning"
 )
 
 const maxOCIManifestBytes = 8 << 20

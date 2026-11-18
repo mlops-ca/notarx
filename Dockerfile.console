@@ -8,7 +8,7 @@ RUN npm run build
 FROM nginxinc/nginx-unprivileged:1.29-alpine@sha256:0c79d56aee561a1d81c63f00eee5fb5fe29279560cdc55e91425133104c7fbe6
 ARG VERSION=dev
 ARG REVISION=unknown
-ARG SOURCE=https://github.com/ccsert/artifact-gateway
+ARG SOURCE=https://github.com/mlops-ca/notarx
 LABEL org.opencontainers.image.title="Artifact Gateway Console" \
       org.opencontainers.image.version="$VERSION" \
       org.opencontainers.image.revision="$REVISION" \

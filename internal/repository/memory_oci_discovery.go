@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	discovery "github.com/ccsert/artifact-gateway/internal/ocidiscovery"
+	discovery "github.com/mlops-ca/notarx/internal/ocidiscovery"
 )
 
 var _ discovery.Store = (*MemoryStore)(nil)

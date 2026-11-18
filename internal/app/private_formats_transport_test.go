@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func privateFormatFetch(t *testing.T, fixture *proxyRedirectFixture, format repository.Format, target string, auth *repository.UpstreamAuth) (*http.Response, error) {

@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 const groupMavenAuthorizationPOM = `<project><modelVersion>4.0.0</modelVersion><groupId>org.example</groupId><artifactId>demo-parent</artifactId><version>1.0.0</version></project>`

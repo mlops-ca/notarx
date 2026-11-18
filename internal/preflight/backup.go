@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/backupmanifest"
-	"github.com/ccsert/artifact-gateway/internal/opsjson"
+	"github.com/mlops-ca/notarx/internal/backupmanifest"
+	"github.com/mlops-ca/notarx/internal/opsjson"
 )
 
 const maxBackupInputBytes = 8 << 20

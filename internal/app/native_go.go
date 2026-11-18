@@ -18,10 +18,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	protocolidentity "github.com/ccsert/artifact-gateway/internal/protocol/identity"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	protocolidentity "github.com/mlops-ca/notarx/internal/protocol/identity"
+	"github.com/mlops-ca/notarx/internal/repository"
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
 	"golang.org/x/mod/semver"

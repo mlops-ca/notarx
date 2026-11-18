@@ -3,7 +3,7 @@ package repository
 import (
 	"sort"
 
-	"github.com/ccsert/artifact-gateway/internal/protocol/cargo"
+	"github.com/mlops-ca/notarx/internal/protocol/cargo"
 	"golang.org/x/mod/semver"
 )
 

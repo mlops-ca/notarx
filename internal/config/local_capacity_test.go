@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/localcapacity"
+	"github.com/mlops-ca/notarx/internal/localcapacity"
 )
 
 func TestLoadLocalCapacityIsExplicitAndDoesNotReadDirectories(t *testing.T) {

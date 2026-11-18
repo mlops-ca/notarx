@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/v2contract"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/v2contract"
 )
 
 // The V1 compatibility surface stays a platform-administrator operation and does

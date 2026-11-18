@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	p "github.com/ccsert/artifact-gateway/internal/protocol/rubygems"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	d "github.com/ccsert/artifact-gateway/internal/rubygemspublication"
 	"github.com/google/uuid"
+	p "github.com/mlops-ca/notarx/internal/protocol/rubygems"
+	"github.com/mlops-ca/notarx/internal/repository"
+	d "github.com/mlops-ca/notarx/internal/rubygemspublication"
 )
 
 func Session(t testing.TB, repo string) d.Session {

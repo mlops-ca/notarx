@@ -19,16 +19,16 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/app"
-	"github.com/ccsert/artifact-gateway/internal/egress"
-	m "github.com/ccsert/artifact-gateway/internal/nexusmigration"
-	"github.com/ccsert/artifact-gateway/internal/nexussource"
-	sourcepg "github.com/ccsert/artifact-gateway/internal/nexussource/pgstore"
-	"github.com/ccsert/artifact-gateway/internal/ocigraph"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/secrets"
-	"github.com/ccsert/artifact-gateway/internal/testsupport/ocifixture"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/app"
+	"github.com/mlops-ca/notarx/internal/egress"
+	m "github.com/mlops-ca/notarx/internal/nexusmigration"
+	"github.com/mlops-ca/notarx/internal/nexussource"
+	sourcepg "github.com/mlops-ca/notarx/internal/nexussource/pgstore"
+	"github.com/mlops-ca/notarx/internal/ocigraph"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/secrets"
+	"github.com/mlops-ca/notarx/internal/testsupport/ocifixture"
 )
 
 type nexusOCISource struct {

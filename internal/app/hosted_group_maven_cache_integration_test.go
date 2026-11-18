@@ -5,7 +5,7 @@ package app
 import (
 	"context"
 	"errors"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/objectstore"
 	"net/http"
 	"os"
 	"testing"

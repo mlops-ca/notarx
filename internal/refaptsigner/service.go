@@ -14,7 +14,7 @@ import (
 	"github.com/ProtonMail/go-crypto/openpgp/armor"
 	"github.com/ProtonMail/go-crypto/openpgp/clearsign"
 	"github.com/ProtonMail/go-crypto/openpgp/packet"
-	"github.com/ccsert/artifact-gateway/internal/aptpublication"
+	"github.com/mlops-ca/notarx/internal/aptpublication"
 )
 
 type Service struct {

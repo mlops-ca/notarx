@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"github.com/ccsert/artifact-gateway/internal/quotaalert"
+	"github.com/mlops-ca/notarx/internal/quotaalert"
 	"strings"
 	"time"
 )

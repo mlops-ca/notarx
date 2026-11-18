@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func archiveValidationFixture(t *testing.T) (SnapshotArchiveExporter, string, []byte) {

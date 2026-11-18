@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	pypi "github.com/ccsert/artifact-gateway/internal/protocol/pypi"
+	pypi "github.com/mlops-ca/notarx/internal/protocol/pypi"
 )
 
 func TestPyPIHostedInventoryAndSameOriginSimple(t *testing.T) {

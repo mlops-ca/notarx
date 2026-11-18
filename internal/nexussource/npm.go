@@ -11,7 +11,7 @@ import (
 	"sort"
 	"strings"
 
-	npmprotocol "github.com/ccsert/artifact-gateway/internal/protocol/npm"
+	npmprotocol "github.com/mlops-ca/notarx/internal/protocol/npm"
 )
 
 // NPMPackument is a bounded authenticated observation. Paths are reconstructed

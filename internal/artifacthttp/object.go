@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/objectstore"
 )
 
 type Object struct {

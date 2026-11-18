@@ -16,13 +16,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/authorization"
-	"github.com/ccsert/artifact-gateway/internal/cache"
-	rawprotocol "github.com/ccsert/artifact-gateway/internal/protocol/raw"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/uploadspool"
-	"github.com/ccsert/artifact-gateway/internal/upstreamauth"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/cache"
+	rawprotocol "github.com/mlops-ca/notarx/internal/protocol/raw"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/uploadspool"
+	"github.com/mlops-ca/notarx/internal/upstreamauth"
 )
 
 func (h *Module) serveRepository(w http.ResponseWriter, r *http.Request) bool {

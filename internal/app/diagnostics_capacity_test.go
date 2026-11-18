@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/localcapacity"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/mlops-ca/notarx/internal/localcapacity"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func TestDiagnosticsCapacityPreservesAdministratorAndPasswordGates(t *testing.T) {

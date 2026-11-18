@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/authorization"
-	protocol "github.com/ccsert/artifact-gateway/internal/protocol/rubygems"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	domain "github.com/ccsert/artifact-gateway/internal/rubygemspublication"
+	"github.com/mlops-ca/notarx/internal/authorization"
+	protocol "github.com/mlops-ca/notarx/internal/protocol/rubygems"
+	"github.com/mlops-ca/notarx/internal/repository"
+	domain "github.com/mlops-ca/notarx/internal/rubygemspublication"
 )
 
 func metadata(p domain.Publication) (protocol.Metadata, error) {

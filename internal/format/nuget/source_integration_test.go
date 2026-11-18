@@ -14,12 +14,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/authorization"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/secrets"
-	"github.com/ccsert/artifact-gateway/internal/upstreamauth"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/secrets"
+	"github.com/mlops-ca/notarx/internal/upstreamauth"
 )
 
 func durableSourceModule(t *testing.T, store *repository.PostgresStore, objects objectstore.Store, feed *testFeed) *Module {

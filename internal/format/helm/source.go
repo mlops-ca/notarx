@@ -17,12 +17,12 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/ccsert/artifact-gateway/internal/authorization"
-	helmprotocol "github.com/ccsert/artifact-gateway/internal/protocol/helm"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/uploadspool"
-	"github.com/ccsert/artifact-gateway/internal/upstreamauth"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/authorization"
+	helmprotocol "github.com/mlops-ca/notarx/internal/protocol/helm"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/uploadspool"
+	"github.com/mlops-ca/notarx/internal/upstreamauth"
 	"go.yaml.in/yaml/v3"
 )
 

@@ -24,17 +24,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/app"
-	"github.com/ccsert/artifact-gateway/internal/egress"
-	m "github.com/ccsert/artifact-gateway/internal/nexusmigration"
-	"github.com/ccsert/artifact-gateway/internal/nexusmigration/pgstore"
-	"github.com/ccsert/artifact-gateway/internal/nexussource"
-	sourcepg "github.com/ccsert/artifact-gateway/internal/nexussource/pgstore"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/testsupport"
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/mlops-ca/notarx/internal/app"
+	"github.com/mlops-ca/notarx/internal/egress"
+	m "github.com/mlops-ca/notarx/internal/nexusmigration"
+	"github.com/mlops-ca/notarx/internal/nexusmigration/pgstore"
+	"github.com/mlops-ca/notarx/internal/nexussource"
+	sourcepg "github.com/mlops-ca/notarx/internal/nexussource/pgstore"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/testsupport"
 )
 
 type sourceFixture struct {

@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/localcapacity"
+	"github.com/mlops-ca/notarx/internal/localcapacity"
 )
 
 func TestNativeObservationReadsOnlyOwnedTemporaryFilesystemMetadata(t *testing.T) {

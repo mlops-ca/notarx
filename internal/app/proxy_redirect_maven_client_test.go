@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 const redirectMavenClientPlugin = "gateway.fixture:maven-client-fixture:1.0.0:resolve-fixture"

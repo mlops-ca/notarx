@@ -9,8 +9,8 @@ import (
 	"io"
 	"strings"
 
-	conanprotocol "github.com/ccsert/artifact-gateway/internal/protocol/conan"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	conanprotocol "github.com/mlops-ca/notarx/internal/protocol/conan"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func (h ConanHandler) nativeConanPackageSearch(ctx context.Context, repositoryID, reference, recipeRevision string) ([]byte, error) {

@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ccsert/artifact-gateway/internal/ocigraph"
+	"github.com/mlops-ca/notarx/internal/ocigraph"
 )
 
 type Fixture struct {

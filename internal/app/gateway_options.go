@@ -5,15 +5,15 @@ import (
 	"fmt"
 	"reflect"
 
-	helmformat "github.com/ccsert/artifact-gateway/internal/format/helm"
-	nugetformat "github.com/ccsert/artifact-gateway/internal/format/nuget"
-	helmdist "github.com/ccsert/artifact-gateway/internal/helmdistribution"
-	dist "github.com/ccsert/artifact-gateway/internal/nugetdistribution"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	"github.com/ccsert/artifact-gateway/internal/ocidiscovery"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	rubydist "github.com/ccsert/artifact-gateway/internal/rubygemsdistribution"
-	"github.com/ccsert/artifact-gateway/internal/rubygemspublication"
+	helmformat "github.com/mlops-ca/notarx/internal/format/helm"
+	nugetformat "github.com/mlops-ca/notarx/internal/format/nuget"
+	helmdist "github.com/mlops-ca/notarx/internal/helmdistribution"
+	dist "github.com/mlops-ca/notarx/internal/nugetdistribution"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/ocidiscovery"
+	"github.com/mlops-ca/notarx/internal/repository"
+	rubydist "github.com/mlops-ca/notarx/internal/rubygemsdistribution"
+	"github.com/mlops-ca/notarx/internal/rubygemspublication"
 )
 
 // ObjectStore is the format-independent byte-store port used by native

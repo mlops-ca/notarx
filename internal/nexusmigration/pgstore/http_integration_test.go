@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/app"
-	m "github.com/ccsert/artifact-gateway/internal/nexusmigration"
+	"github.com/mlops-ca/notarx/internal/app"
+	m "github.com/mlops-ca/notarx/internal/nexusmigration"
 )
 
 func TestPostgresMigrationPublicHTTPContractCASIdempotencyPauseResumeCancel(t *testing.T) {

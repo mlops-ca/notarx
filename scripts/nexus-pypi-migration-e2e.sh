@@ -193,6 +193,6 @@ summary={'exitCode':exit_code,'packages':sorted(packages),'required':sorted(requ
 destination.write_text(json.dumps(summary,indent=2)+'\n')
 for e in events:
     if e.get('Output'):print(e['Output'],end='')
-if exit_code or required-run or required-passed or failed or skipped or packages!={"github.com/ccsert/artifact-gateway/internal/app"}:raise SystemExit('mandatory pypi migration proof missing, skipped or failed')
+if exit_code or required-run or required-passed or failed or skipped or packages!={"github.com/mlops-ca/notarx/internal/app"}:raise SystemExit('mandatory pypi migration proof missing, skipped or failed')
 print('All eleven required PyPI migration fixtures passed: complete bytes/selection/identity, native transaction fence and progress, current authority, restart/recovery, governance and pinned target-only pip.')
 PYRESULT

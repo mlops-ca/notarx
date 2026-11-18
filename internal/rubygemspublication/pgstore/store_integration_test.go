@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/database"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/rubygemspublication/pgstore"
-	"github.com/ccsert/artifact-gateway/internal/testsupport"
-	f "github.com/ccsert/artifact-gateway/internal/testsupport/rubygemsfixture"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/database"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/rubygemspublication/pgstore"
+	"github.com/mlops-ca/notarx/internal/testsupport"
+	f "github.com/mlops-ca/notarx/internal/testsupport/rubygemsfixture"
 )
 
 func TestRubyGemsPostgresPublicationStoreContract(t *testing.T) {

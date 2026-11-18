@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/secrets"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/secrets"
 )
 
 const upstreamAuthTestKey = "0123456789abcdef0123456789abcdef"

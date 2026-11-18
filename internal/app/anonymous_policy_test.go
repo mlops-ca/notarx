@@ -2,13 +2,13 @@ package app
 
 import (
 	"context"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/objectstore"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func enableAnonymousAccess(t *testing.T, store *repository.MemoryStore) {

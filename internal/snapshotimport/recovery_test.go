@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/snapshotimport"
-	fixture "github.com/ccsert/artifact-gateway/internal/testsupport/snapshotfixture"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/snapshotimport"
+	fixture "github.com/mlops-ca/notarx/internal/testsupport/snapshotfixture"
 )
 
 type mutateAtUpload struct {

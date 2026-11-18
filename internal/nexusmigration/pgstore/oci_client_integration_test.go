@@ -17,11 +17,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/app"
-	"github.com/ccsert/artifact-gateway/internal/ocigraph"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/testsupport/ocifixture"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/app"
+	"github.com/mlops-ca/notarx/internal/ocigraph"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/testsupport/ocifixture"
 )
 
 // The fixed official client uses fresh content/config directories for every

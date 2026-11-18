@@ -5,8 +5,8 @@ import (
 	"errors"
 	"io"
 
-	"github.com/ccsert/artifact-gateway/internal/nexusmigration"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/nexusmigration"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 // MigrationPublicationAsset binds a native logical reference to immutable bytes.

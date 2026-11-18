@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"testing"
 
-	formatmodule "github.com/ccsert/artifact-gateway/internal/format"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	formatmodule "github.com/mlops-ca/notarx/internal/format"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 type module struct {

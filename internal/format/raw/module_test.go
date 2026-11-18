@@ -14,11 +14,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/authorization"
-	formatmodule "github.com/ccsert/artifact-gateway/internal/format"
-	rawformat "github.com/ccsert/artifact-gateway/internal/format/raw"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/authorization"
+	formatmodule "github.com/mlops-ca/notarx/internal/format"
+	rawformat "github.com/mlops-ca/notarx/internal/format/raw"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func fixture(t *testing.T) (*repository.MemoryStore, *rawformat.Module, *http.ServeMux) {

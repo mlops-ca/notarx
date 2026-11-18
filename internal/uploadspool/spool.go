@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/objectstore"
 )
 
 var ErrTooLarge = errors.New("upload exceeds size limit")

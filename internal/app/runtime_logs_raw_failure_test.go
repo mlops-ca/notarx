@@ -1,6 +1,6 @@
 package app
 
-import "github.com/ccsert/artifact-gateway/internal/objectstore"
+import "github.com/mlops-ca/notarx/internal/objectstore"
 
 import (
 	"bytes"
@@ -15,9 +15,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/operationalog"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/mlops-ca/notarx/internal/operationalog"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 type rawDiagnosticClient struct {

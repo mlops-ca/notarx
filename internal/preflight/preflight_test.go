@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/config"
+	"github.com/mlops-ca/notarx/internal/config"
 )
 
 func TestRunnerReportsSelectedChecksInStableOrder(t *testing.T) {

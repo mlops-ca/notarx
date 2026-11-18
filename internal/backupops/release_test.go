@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/backupmanifest"
-	"github.com/ccsert/artifact-gateway/internal/backupops"
+	"github.com/mlops-ca/notarx/internal/backupmanifest"
+	"github.com/mlops-ca/notarx/internal/backupops"
 )
 
 func binaryRelease(t *testing.T) (backupmanifest.Manifest, backupops.Release, []byte) {
@@ -22,7 +22,7 @@ func binaryRelease(t *testing.T) (backupmanifest.Manifest, backupops.Release, []
 
 func binaryReleaseWithInjection(t *testing.T, version, injectedRevision string) (backupmanifest.Manifest, backupops.Release, []byte) {
 	t.Helper()
-	flags := "-X github.com/ccsert/artifact-gateway/internal/buildinfo.injectedVersion=" + version + " -X github.com/ccsert/artifact-gateway/internal/buildinfo.injectedRevision=" + injectedRevision
+	flags := "-X github.com/mlops-ca/notarx/internal/buildinfo.injectedVersion=" + version + " -X github.com/mlops-ca/notarx/internal/buildinfo.injectedRevision=" + injectedRevision
 	return binaryReleaseWithFlags(t, flags)
 }
 

@@ -13,9 +13,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ccsert/artifact-gateway/internal/nexussource"
-	pypi "github.com/ccsert/artifact-gateway/internal/protocol/pypi"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/nexussource"
+	pypi "github.com/mlops-ca/notarx/internal/protocol/pypi"
 )
 
 const PyPISimplePath = "@simple"

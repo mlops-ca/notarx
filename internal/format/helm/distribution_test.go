@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/ccsert/artifact-gateway/internal/authorization"
-	helmprotocol "github.com/ccsert/artifact-gateway/internal/protocol/helm"
+	"github.com/mlops-ca/notarx/internal/authorization"
+	helmprotocol "github.com/mlops-ca/notarx/internal/protocol/helm"
 	"io"
 	"net/http/httptest"
 	"strings"
@@ -15,10 +15,10 @@ import (
 	"testing"
 	"time"
 
-	dist "github.com/ccsert/artifact-gateway/internal/helmdistribution"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	dist "github.com/mlops-ca/notarx/internal/helmdistribution"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 type replicationFixture struct {

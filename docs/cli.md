@@ -50,11 +50,11 @@ release containing this batch; merging the code does not publish them.
 ### Go module install
 
 ```sh
-go install github.com/ccsert/artifact-gateway/cmd/agctl@<tag>
+go install github.com/mlops-ca/notarx/cmd/agctl@<tag>
 ```
 
 `<tag>` is a release tag (`v<VERSION>`) whose `go.mod` declares
-`github.com/ccsert/artifact-gateway`, the source repository path
+`github.com/mlops-ca/notarx`, the source repository path
 ([ADR 0008](adr/0008-go-module-path.md)). The first release after this change is
 the earliest such tag; `v0.9.0` and older declare the previous, unresolvable
 path and cannot be installed this way. A module-mode install reports the tag as

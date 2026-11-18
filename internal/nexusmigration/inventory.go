@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/ccsert/artifact-gateway/internal/nexussource"
+	"github.com/mlops-ca/notarx/internal/nexussource"
 )
 
 // These are independent durable-inventory budgets, not the preview endpoint's

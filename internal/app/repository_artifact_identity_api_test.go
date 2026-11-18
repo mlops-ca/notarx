@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func TestRepositoryArtifactIdentitiesReturnHistoricalNPMVersions(t *testing.T) {

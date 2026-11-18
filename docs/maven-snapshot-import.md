@@ -10,10 +10,10 @@ selection, including an older build or different builds for different pairs.
 Normal Maven PUT/session publication continues to allocate a new local identity
 and must not be used to preserve historical identities.
 
-This implements the scoped import in [#257](https://github.com/ccsert/artifact-gateway/issues/257)
-under [#199](https://github.com/ccsert/artifact-gateway/issues/199).
-Read-only client verification [#204](https://github.com/ccsert/artifact-gateway/issues/204)
-and the broader migration ledger [#205](https://github.com/ccsert/artifact-gateway/issues/205)
+This implements the scoped import in [#257](https://github.com/mlops-ca/notarx/issues/257)
+under [#199](https://github.com/mlops-ca/notarx/issues/199).
+Read-only client verification [#204](https://github.com/mlops-ca/notarx/issues/204)
+and the broader migration ledger [#205](https://github.com/mlops-ca/notarx/issues/205)
 remain separate. This command does not fetch upstream artifacts, establish
 complete dependency closure, create a Repository, discover credentials, start
 services or change production configuration.

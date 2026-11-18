@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	rawformat "github.com/ccsert/artifact-gateway/internal/format/raw"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/v2contract"
 	"github.com/google/uuid"
+	rawformat "github.com/mlops-ca/notarx/internal/format/raw"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/v2contract"
 )
 
 func TestValidRawAssetPrefixUsesProtocolPathBoundary(t *testing.T) {

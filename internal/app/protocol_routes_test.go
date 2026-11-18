@@ -1,6 +1,6 @@
 package app
 
-import "github.com/ccsert/artifact-gateway/internal/objectstore"
+import "github.com/mlops-ca/notarx/internal/objectstore"
 
 import (
 	"bytes"
@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func TestRetiredNexusRepositoryRootsReturnNotFound(t *testing.T) {

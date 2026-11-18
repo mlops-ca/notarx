@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	dist "github.com/ccsert/artifact-gateway/internal/nugetdistribution"
 	"github.com/google/uuid"
+	dist "github.com/mlops-ca/notarx/internal/nugetdistribution"
 )
 
 func (s *MemoryStore) nuGetReplicationAuthorityLocked(j dist.Job) (dist.Authority, error) {

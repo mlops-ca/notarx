@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	adminopenapi "github.com/ccsert/artifact-gateway/internal/admin/openapi"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 // The audit log stays a platform operation, including for a repository

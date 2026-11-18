@@ -8,9 +8,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/ccsert/artifact-gateway/internal/protocol/identity"
-	protocol "github.com/ccsert/artifact-gateway/internal/protocol/rubygems"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/protocol/identity"
+	protocol "github.com/mlops-ca/notarx/internal/protocol/rubygems"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 type Governance struct {

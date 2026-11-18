@@ -16,10 +16,10 @@ import (
 	"testing"
 	"time"
 
-	dist "github.com/ccsert/artifact-gateway/internal/nugetdistribution"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	dist "github.com/mlops-ca/notarx/internal/nugetdistribution"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func TestNativeNuGetRealDotnetHostedReplicationAndSourceIndependentRestore(t *testing.T) {

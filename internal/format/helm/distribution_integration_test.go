@@ -7,17 +7,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/ccsert/artifact-gateway/internal/authorization"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/objectstore"
 	"io"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
-	dist "github.com/ccsert/artifact-gateway/internal/helmdistribution"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	dist "github.com/mlops-ca/notarx/internal/helmdistribution"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 type lostReplicationReply struct {

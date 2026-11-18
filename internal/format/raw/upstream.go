@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/egress"
-	"github.com/ccsert/artifact-gateway/internal/operationalog"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/upstreamauth"
+	"github.com/mlops-ca/notarx/internal/egress"
+	"github.com/mlops-ca/notarx/internal/operationalog"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/upstreamauth"
 )
 
 // Upstream owns Raw URL assembly and outbound policy. Hooks and tracing are

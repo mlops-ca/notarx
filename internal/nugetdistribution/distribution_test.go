@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	dist "github.com/ccsert/artifact-gateway/internal/nugetdistribution"
 	"github.com/google/uuid"
+	dist "github.com/mlops-ca/notarx/internal/nugetdistribution"
 )
 
 func TestNuGetReplicationCanonicalPlanIdentityAndBounds(t *testing.T) {

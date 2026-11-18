@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	"errors"
 
-	m "github.com/ccsert/artifact-gateway/internal/nexusmigration"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	m "github.com/mlops-ca/notarx/internal/nexusmigration"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 // Only PyPI adds durable owner admission. The actor kind is server-authenticated

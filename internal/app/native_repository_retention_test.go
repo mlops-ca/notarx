@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	adminopenapi "github.com/ccsert/artifact-gateway/internal/admin/openapi"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func retentionPolicyForTest(t *testing.T, store *repository.MemoryStore, repositoryID string, policy repository.RepositoryRetentionPolicy) {

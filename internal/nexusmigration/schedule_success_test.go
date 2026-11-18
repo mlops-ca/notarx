@@ -3,7 +3,7 @@ package nexusmigration_test
 import (
 	"testing"
 
-	m "github.com/ccsert/artifact-gateway/internal/nexusmigration"
+	m "github.com/mlops-ca/notarx/internal/nexusmigration"
 )
 
 func TestScheduleSuccessOnlyExemptsExactRegeneratedMavenMetadata(t *testing.T) {

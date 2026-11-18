@@ -1,4 +1,4 @@
-module github.com/ccsert/artifact-gateway
+module github.com/mlops-ca/notarx
 
 go 1.26.10
 

@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/apptest"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/apptest"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func newTestGateway(t *testing.T, options GatewayOptions) http.Handler {

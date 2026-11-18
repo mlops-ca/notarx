@@ -11,7 +11,7 @@ import (
 	"net/url"
 	"sort"
 
-	pypi "github.com/ccsert/artifact-gateway/internal/protocol/pypi"
+	pypi "github.com/mlops-ca/notarx/internal/protocol/pypi"
 )
 
 // PyPISimple contains canonical, bounded file selection facts, never source

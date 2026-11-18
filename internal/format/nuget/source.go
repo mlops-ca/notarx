@@ -19,11 +19,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/opsjson"
-	nugetprotocol "github.com/ccsert/artifact-gateway/internal/protocol/nuget"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/uploadspool"
-	"github.com/ccsert/artifact-gateway/internal/upstreamauth"
+	"github.com/mlops-ca/notarx/internal/opsjson"
+	nugetprotocol "github.com/mlops-ca/notarx/internal/protocol/nuget"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/uploadspool"
+	"github.com/mlops-ca/notarx/internal/upstreamauth"
 )
 
 var (

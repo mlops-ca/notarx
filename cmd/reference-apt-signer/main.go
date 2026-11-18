@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/ProtonMail/go-crypto/openpgp"
-	"github.com/ccsert/artifact-gateway/internal/refaptsigner"
+	"github.com/mlops-ca/notarx/internal/refaptsigner"
 )
 
 type configuration struct {

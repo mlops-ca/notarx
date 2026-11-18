@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/ocigraph"
+	"github.com/mlops-ca/notarx/internal/ocigraph"
 )
 
 func TestReferrerManifestSubjectAndDescriptors(t *testing.T) {

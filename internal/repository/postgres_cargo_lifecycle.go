@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/protocol/cargo"
+	"github.com/mlops-ca/notarx/internal/protocol/cargo"
 )
 
 func (s *PostgresStore) cargoObjectKey(ctx context.Context, repositoryID, name, version string) (string, error) {

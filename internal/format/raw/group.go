@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/authorization"
-	rawprotocol "github.com/ccsert/artifact-gateway/internal/protocol/raw"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/authorization"
+	rawprotocol "github.com/mlops-ca/notarx/internal/protocol/raw"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func (h *Module) serveGroup(w http.ResponseWriter, r *http.Request, group repository.HostedGroup) {

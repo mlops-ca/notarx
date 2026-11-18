@@ -12,10 +12,10 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/ccsert/artifact-gateway/internal/nexusmigration"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	npmprotocol "github.com/ccsert/artifact-gateway/internal/protocol/npm"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/nexusmigration"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	npmprotocol "github.com/mlops-ca/notarx/internal/protocol/npm"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 // NexusNPMMigrationStore retains only native npm publication and its readback.

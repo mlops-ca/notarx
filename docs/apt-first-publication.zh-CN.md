@@ -4,7 +4,7 @@
 
 Console 可以为 APT Hosted 仓库的空套件发布首个签名快照。这属于现有操作员预览，
 不提供生产私钥托管、安装告警或自动分发可信公钥，也不代表完成
-[#305](https://github.com/ccsert/artifact-gateway/issues/305) 跟踪的正式 Hosted 准入。
+[#305](https://github.com/mlops-ca/notarx/issues/305) 跟踪的正式 Hosted 准入。
 
 操作者需要仓库管理权限，Gateway 必须已配置 APT 发布服务及可信签名器，参见
 [APT Hosted 签名](apt-hosted-signing.zh-CN.md)。没有仓库管理权限的普通用户不会请求

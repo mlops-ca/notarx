@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/lifecycle"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/scanning"
+	"github.com/mlops-ca/notarx/internal/lifecycle"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/scanning"
 )
 
 // ArtifactScanResolver resolves a queued identity into verified object-store

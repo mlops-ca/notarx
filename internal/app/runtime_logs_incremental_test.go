@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	adminopenapi "github.com/ccsert/artifact-gateway/internal/admin/openapi"
-	"github.com/ccsert/artifact-gateway/internal/operationalog"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
+	"github.com/mlops-ca/notarx/internal/operationalog"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func runtimeLogFixture(t *testing.T, buffer *operationalog.Buffer, instance, session string) http.Handler {

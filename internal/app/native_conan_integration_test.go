@@ -14,10 +14,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	conanprotocol "github.com/ccsert/artifact-gateway/internal/protocol/conan"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	conanprotocol "github.com/mlops-ca/notarx/internal/protocol/conan"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func TestPostgresRustFSConanPromotionSharesVisibleRevision(t *testing.T) {

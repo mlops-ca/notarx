@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	conanprotocol "github.com/ccsert/artifact-gateway/internal/protocol/conan"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	conanprotocol "github.com/mlops-ca/notarx/internal/protocol/conan"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 type nativeConanPublishHandler struct {

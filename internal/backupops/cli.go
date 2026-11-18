@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/backupmanifest"
-	"github.com/ccsert/artifact-gateway/internal/opsjson"
+	"github.com/mlops-ca/notarx/internal/backupmanifest"
+	"github.com/mlops-ca/notarx/internal/opsjson"
 )
 
 // RunCLI executes real transfers only with an explicit private operational spec.

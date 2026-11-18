@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/lifecycle"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/lifecycle"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 type maintenanceStore interface {

@@ -2,7 +2,7 @@ package emailnotification
 
 import (
 	"fmt"
-	"github.com/ccsert/artifact-gateway/internal/quotaalert"
+	"github.com/mlops-ca/notarx/internal/quotaalert"
 	"math/big"
 	"time"
 )

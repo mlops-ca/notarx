@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	helmprotocol "github.com/ccsert/artifact-gateway/internal/protocol/helm"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/secrets"
-	"github.com/ccsert/artifact-gateway/internal/upstreamauth"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	helmprotocol "github.com/mlops-ca/notarx/internal/protocol/helm"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/secrets"
+	"github.com/mlops-ca/notarx/internal/upstreamauth"
 	"go.yaml.in/yaml/v3"
 )
 

@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/ccsert/artifact-gateway/internal/operationalog"
+	"github.com/mlops-ca/notarx/internal/operationalog"
 )
 
 type rawFailureContextKey struct{}

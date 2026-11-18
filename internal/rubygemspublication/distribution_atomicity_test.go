@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/authorization"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	dist "github.com/ccsert/artifact-gateway/internal/rubygemsdistribution"
-	domain "github.com/ccsert/artifact-gateway/internal/rubygemspublication"
-	f "github.com/ccsert/artifact-gateway/internal/testsupport/rubygemsfixture"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/repository"
+	dist "github.com/mlops-ca/notarx/internal/rubygemsdistribution"
+	domain "github.com/mlops-ca/notarx/internal/rubygemspublication"
+	f "github.com/mlops-ca/notarx/internal/testsupport/rubygemsfixture"
 )
 
 type distributionAudit func(context.Context, repository.AuditRecord) error

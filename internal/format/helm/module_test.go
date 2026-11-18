@@ -23,11 +23,11 @@ import (
 	"github.com/ProtonMail/go-crypto/openpgp"
 	"github.com/ProtonMail/go-crypto/openpgp/clearsign"
 	"github.com/ProtonMail/go-crypto/openpgp/packet"
-	"github.com/ccsert/artifact-gateway/internal/authorization"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	helmprotocol "github.com/ccsert/artifact-gateway/internal/protocol/helm"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	helmprotocol "github.com/mlops-ca/notarx/internal/protocol/helm"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 type fixture struct {

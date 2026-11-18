@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/buildinfo"
+	"github.com/mlops-ca/notarx/internal/buildinfo"
 )
 
 const defaultTimeout = 30 * time.Second

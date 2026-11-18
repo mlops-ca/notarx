@@ -2,7 +2,7 @@
 
 [English](runtime-log-product-design.md) | [当前日志行为](runtime-logging.zh-CN.md) | [文档索引](README.zh-CN.md)
 
-> 状态：2026-10-01 已确认输出方向为可选的**文件与 OTLP Logs**，保留 stdout。本文区分该方向与 [#151](https://github.com/ccsert/artifact-gateway/issues/151)、[#152](https://github.com/ccsert/artifact-gateway/issues/152) 中待定的历史/查询决策。文件输出实现在 [#194](https://github.com/ccsert/artifact-gateway/pull/194)；可选 OTLP/HTTP protobuf 配置及交付边界见[运行日志文档](runtime-logging.zh-CN.md)。两种输出都不增加 Console 历史，也不代表跨节点/重启部署验收完成。本文不选择日志后端或采集器产品。
+> 状态：2026-10-01 已确认输出方向为可选的**文件与 OTLP Logs**，保留 stdout。本文区分该方向与 [#151](https://github.com/mlops-ca/notarx/issues/151)、[#152](https://github.com/mlops-ca/notarx/issues/152) 中待定的历史/查询决策。文件输出实现在 [#194](https://github.com/mlops-ca/notarx/pull/194)；可选 OTLP/HTTP protobuf 配置及交付边界见[运行日志文档](runtime-logging.zh-CN.md)。两种输出都不增加 Console 历史，也不代表跨节点/重启部署验收完成。本文不选择日志后端或采集器产品。
 
 ## 1. 当前行为与共用事件
 

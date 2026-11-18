@@ -21,9 +21,9 @@ import (
 	"testing"
 	"time"
 
-	nugetprotocol "github.com/ccsert/artifact-gateway/internal/protocol/nuget"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	nugetprotocol "github.com/mlops-ca/notarx/internal/protocol/nuget"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 type nugetOfficialClient struct {

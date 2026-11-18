@@ -10,14 +10,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/backupmanifest"
-	"github.com/ccsert/artifact-gateway/internal/backupops"
+	"github.com/mlops-ca/notarx/internal/backupmanifest"
+	"github.com/mlops-ca/notarx/internal/backupops"
 )
 
 func TestReleaseModuleIdentityRemainsPairedAcrossNamespaceChange(t *testing.T) {
-	const current = "github.com/ccsert/artifact-gateway"
+	const current = "github.com/mlops-ca/notarx"
 	const legacy = "github.com/artifact-gateway/artifact-gateway"
-	const unrelated = "github.com/ccsert/artifact-gatewaX"
+	const unrelated = "github.com/mlops-ca/notarX"
 	for _, tc := range []struct {
 		name, module, flagsModule, patchedField, patchedValue string
 		archive, accepted                                     bool

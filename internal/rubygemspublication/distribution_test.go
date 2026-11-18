@@ -1,10 +1,10 @@
 package rubygemspublication_test
 
 import (
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	domain "github.com/ccsert/artifact-gateway/internal/rubygemspublication"
-	f "github.com/ccsert/artifact-gateway/internal/testsupport/rubygemsfixture"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/repository"
+	domain "github.com/mlops-ca/notarx/internal/rubygemspublication"
+	f "github.com/mlops-ca/notarx/internal/testsupport/rubygemsfixture"
 	"testing"
 )
 

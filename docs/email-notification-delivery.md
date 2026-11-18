@@ -7,14 +7,14 @@ versioned email templates and a bounded SMTP sender; PostgreSQL owns durable
 recipient snapshots, test delivery state, idempotency and worker fencing.
 Prometheus/Alertmanager remains useful for external availability monitoring, but
 adds services and routing configuration. A stopped Gateway or database cannot
-report its own outage through this channel. See [#211](https://github.com/ccsert/artifact-gateway/issues/211)
-and [#212](https://github.com/ccsert/artifact-gateway/issues/212).
+report its own outage through this channel. See [#211](https://github.com/mlops-ca/notarx/issues/211)
+and [#212](https://github.com/mlops-ca/notarx/issues/212).
 
 This channel supports **explicit administrator synthetic test mail** and
 [repository logical quota alerts](repository-quota-alerts.md). Local mount and
 5xx observations do not enqueue mail; their evaluation and Console configuration
-remain future work. [#229](https://github.com/ccsert/artifact-gateway/issues/229)
-and [#230](https://github.com/ccsert/artifact-gateway/issues/230) remain broader than
+remain future work. [#229](https://github.com/mlops-ca/notarx/issues/229)
+and [#230](https://github.com/mlops-ca/notarx/issues/230) remain broader than
 this slice; browser screenshots are not Gmail, Outlook or Apple Mail acceptance.
 
 ## Deployment contract
@@ -356,4 +356,4 @@ version 2, while queued version 1 remains available unchanged. Explicit local
 mount and process 5xx evaluation and their Console configuration, client acceptance and
 real deployment remain follow-up work. S3/NAS pool capacity stays unknown.
 See [operational signals](operational-signals.md) and
-[#211](https://github.com/ccsert/artifact-gateway/issues/211).
+[#211](https://github.com/mlops-ca/notarx/issues/211).

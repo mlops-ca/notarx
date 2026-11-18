@@ -1,6 +1,6 @@
 package app
 
-import "github.com/ccsert/artifact-gateway/internal/authorization"
+import "github.com/mlops-ca/notarx/internal/authorization"
 
 // These aliases keep the composition root and existing callers stable while
 // authentication and authorization live in their protocol-independent module.

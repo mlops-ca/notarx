@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	rawprotocol "github.com/ccsert/artifact-gateway/internal/protocol/raw"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	rawprotocol "github.com/mlops-ca/notarx/internal/protocol/raw"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 // RawHandler is the app composition adapter for the protocol-owned handler.

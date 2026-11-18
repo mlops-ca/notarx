@@ -9,17 +9,17 @@ import (
 	"strings"
 	"time"
 
-	adminopenapi "github.com/ccsert/artifact-gateway/internal/admin/openapi"
-	"github.com/ccsert/artifact-gateway/internal/aptpublication"
-	formatmodule "github.com/ccsert/artifact-gateway/internal/format"
-	rawformat "github.com/ccsert/artifact-gateway/internal/format/raw"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	conanprotocol "github.com/ccsert/artifact-gateway/internal/protocol/conan"
-	mavenprotocol "github.com/ccsert/artifact-gateway/internal/protocol/maven"
-	npmprotocol "github.com/ccsert/artifact-gateway/internal/protocol/npm"
-	ociprotocol "github.com/ccsert/artifact-gateway/internal/protocol/oci"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
+	"github.com/mlops-ca/notarx/internal/aptpublication"
+	formatmodule "github.com/mlops-ca/notarx/internal/format"
+	rawformat "github.com/mlops-ca/notarx/internal/format/raw"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	conanprotocol "github.com/mlops-ca/notarx/internal/protocol/conan"
+	mavenprotocol "github.com/mlops-ca/notarx/internal/protocol/maven"
+	npmprotocol "github.com/mlops-ca/notarx/internal/protocol/npm"
+	ociprotocol "github.com/mlops-ca/notarx/internal/protocol/oci"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func (h generatedRepositoryAPIAdapter) CreateRepositoryPromotion(w http.ResponseWriter, r *http.Request, repositoryID adminopenapi.RepositoryId, params adminopenapi.CreateRepositoryPromotionParams) {

@@ -11,10 +11,10 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/ccsert/artifact-gateway/internal/nexusmigration"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	pypi "github.com/ccsert/artifact-gateway/internal/protocol/pypi"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/nexusmigration"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	pypi "github.com/mlops-ca/notarx/internal/protocol/pypi"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 type NexusPyPIMigrationStore interface {

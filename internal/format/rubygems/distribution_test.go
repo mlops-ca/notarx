@@ -13,12 +13,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/authorization"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	dist "github.com/ccsert/artifact-gateway/internal/rubygemsdistribution"
-	domain "github.com/ccsert/artifact-gateway/internal/rubygemspublication"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/repository"
+	dist "github.com/mlops-ca/notarx/internal/rubygemsdistribution"
+	domain "github.com/mlops-ca/notarx/internal/rubygemspublication"
 )
 
 type distributionStore interface {

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	dist "github.com/ccsert/artifact-gateway/internal/helmdistribution"
 	"github.com/google/uuid"
+	dist "github.com/mlops-ca/notarx/internal/helmdistribution"
 )
 
 const helmReplicationColumns = `id::text,plan_digest,source_repository_id::text,target_repository_id::text,actor,actor_kind,credential_id,version::text,state,lease_owner,lease_token,lease_fence,lease_until,created_at,updated_at`

@@ -17,10 +17,10 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/egress"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/egress"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/repository"
 	"golang.org/x/mod/sumdb"
 	"golang.org/x/mod/sumdb/dirhash"
 	"golang.org/x/mod/sumdb/note"

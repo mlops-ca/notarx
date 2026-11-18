@@ -4,10 +4,10 @@ import (
 	"sync"
 	"time"
 
-	helmdist "github.com/ccsert/artifact-gateway/internal/helmdistribution"
-	dist "github.com/ccsert/artifact-gateway/internal/nugetdistribution"
+	helmdist "github.com/mlops-ca/notarx/internal/helmdistribution"
+	dist "github.com/mlops-ca/notarx/internal/nugetdistribution"
 
-	"github.com/ccsert/artifact-gateway/internal/ocidiscovery"
+	"github.com/mlops-ca/notarx/internal/ocidiscovery"
 )
 
 type MemoryStore struct {

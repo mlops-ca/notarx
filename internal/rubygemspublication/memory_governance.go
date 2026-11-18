@@ -3,7 +3,7 @@ package rubygemspublication
 import (
 	"context"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func (m *Memory) retained(repo, name, version, platform string) (Session, error) {

@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/nexusmigration"
-	migrationpg "github.com/ccsert/artifact-gateway/internal/nexusmigration/pgstore"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/nexusmigration"
+	migrationpg "github.com/mlops-ca/notarx/internal/nexusmigration/pgstore"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 type interceptedConanMigration struct {

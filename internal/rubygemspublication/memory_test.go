@@ -3,10 +3,10 @@ package rubygemspublication_test
 import (
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	d "github.com/ccsert/artifact-gateway/internal/rubygemspublication"
-	f "github.com/ccsert/artifact-gateway/internal/testsupport/rubygemsfixture"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/repository"
+	d "github.com/mlops-ca/notarx/internal/rubygemspublication"
+	f "github.com/mlops-ca/notarx/internal/testsupport/rubygemsfixture"
 )
 
 func TestRubyGemsMemoryPublicationStoreContract(t *testing.T) {

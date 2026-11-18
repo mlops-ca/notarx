@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/protocol/cargo"
+	"github.com/mlops-ca/notarx/internal/protocol/cargo"
 )
 
 // CargoIdentityStore reserves a crate/version before any public index or

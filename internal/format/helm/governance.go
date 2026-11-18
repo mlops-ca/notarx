@@ -8,10 +8,10 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/ccsert/artifact-gateway/internal/authorization"
-	helmprotocol "github.com/ccsert/artifact-gateway/internal/protocol/helm"
-	"github.com/ccsert/artifact-gateway/internal/protocol/identity"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/authorization"
+	helmprotocol "github.com/mlops-ca/notarx/internal/protocol/helm"
+	"github.com/mlops-ca/notarx/internal/protocol/identity"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 type previewGovernance struct {

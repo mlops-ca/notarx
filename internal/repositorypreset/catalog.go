@@ -2,7 +2,7 @@
 // The catalog is versioned independently from later administrator changes.
 package repositorypreset
 
-import "github.com/ccsert/artifact-gateway/internal/repository"
+import "github.com/mlops-ca/notarx/internal/repository"
 
 const Version = "standard-v1"
 

@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ccsert/artifact-gateway/internal/refaptsigner"
+	"github.com/mlops-ca/notarx/internal/refaptsigner"
 )
 
 func main() {

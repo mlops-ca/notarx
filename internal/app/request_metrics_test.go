@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/database"
+	"github.com/mlops-ca/notarx/internal/database"
 )
 
 func TestHTTPMetricsRecordBoundedClassStatusAndLatency(t *testing.T) {

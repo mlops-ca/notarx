@@ -521,7 +521,7 @@
       ],
       "labels": {
         "org.opencontainers.image.revision": "cb59b227748744de705694ff50a257414a6eb199",
-        "org.opencontainers.image.source": "https://github.com/ccsert/artifact-gateway",
+        "org.opencontainers.image.source": "https://github.com/mlops-ca/notarx",
         "org.opencontainers.image.title": "Artifact Gateway",
         "org.opencontainers.image.version": "0.1.0-main.cb59b2277487"
       },
@@ -544,7 +544,7 @@
         "org.opencontainers.image.description": "Unprivileged NGINX Dockerfiles",
         "org.opencontainers.image.licenses": "Apache-2.0",
         "org.opencontainers.image.revision": "cb59b227748744de705694ff50a257414a6eb199",
-        "org.opencontainers.image.source": "https://github.com/ccsert/artifact-gateway",
+        "org.opencontainers.image.source": "https://github.com/mlops-ca/notarx",
         "org.opencontainers.image.title": "Artifact Gateway Console",
         "org.opencontainers.image.url": "https://github.com/nginx/docker-nginx-unprivileged",
         "org.opencontainers.image.version": "0.1.0-main.cb59b2277487"
@@ -563,7 +563,7 @@
       ],
       "labels": {
         "org.opencontainers.image.revision": "cf4635f89d1038b16a491f42393f3ba7997e38a9",
-        "org.opencontainers.image.source": "https://github.com/ccsert/artifact-gateway",
+        "org.opencontainers.image.source": "https://github.com/mlops-ca/notarx",
         "org.opencontainers.image.title": "Artifact Gateway",
         "org.opencontainers.image.version": "0.1.0"
       },

@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ccsert/artifact-gateway/internal/protocol/cargo"
+	"github.com/mlops-ca/notarx/internal/protocol/cargo"
 )
 
 var ErrCargoGroupConflict = errors.New("cargo group version conflicts with another member")

@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 const jobNotificationChannel = "artifact_gateway_lifecycle_jobs"

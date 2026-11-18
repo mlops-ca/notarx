@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	domain "github.com/ccsert/artifact-gateway/internal/rubygemspublication"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	domain "github.com/mlops-ca/notarx/internal/rubygemspublication"
 )
 
 type Maintenance struct {

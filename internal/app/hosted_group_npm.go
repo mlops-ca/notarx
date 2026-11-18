@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	npmprotocol "github.com/ccsert/artifact-gateway/internal/protocol/npm"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	npmprotocol "github.com/mlops-ca/notarx/internal/protocol/npm"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 // v2GroupNPMHandler exposes multiple npm Hosted and Proxy repositories as one

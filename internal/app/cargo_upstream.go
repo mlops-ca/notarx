@@ -7,8 +7,8 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/upstreamauth"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/upstreamauth"
 )
 
 // FetchCargo applies the same endpoint, redirect and egress boundaries to

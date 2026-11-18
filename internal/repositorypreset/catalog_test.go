@@ -5,8 +5,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/repositorypreset"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/repositorypreset"
 )
 
 func TestStandardCatalogOnlyCreatesAdmittedPrivateRepositories(t *testing.T) {

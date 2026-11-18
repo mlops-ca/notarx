@@ -7,8 +7,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/ccsert/artifact-gateway/internal/backupmanifest"
-	"github.com/ccsert/artifact-gateway/internal/opsjson"
+	"github.com/mlops-ca/notarx/internal/backupmanifest"
+	"github.com/mlops-ca/notarx/internal/opsjson"
 )
 
 // Re-read inventory and complete bytes inside the observed stopped interval.

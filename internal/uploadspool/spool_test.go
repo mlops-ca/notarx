@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/objectstore"
 )
 
 func TestUploadSpoolComputesDigestAndRewinds(t *testing.T) {

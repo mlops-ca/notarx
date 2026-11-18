@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	dist "github.com/ccsert/artifact-gateway/internal/nugetdistribution"
 	"github.com/google/uuid"
+	dist "github.com/mlops-ca/notarx/internal/nugetdistribution"
 )
 
 type nuGetReplicationContractStore interface {

@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	rawformat "github.com/ccsert/artifact-gateway/internal/format/raw"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	rawformat "github.com/mlops-ca/notarx/internal/format/raw"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func TestRawReplicationPublishesVerifiedTargetAsset(t *testing.T) {

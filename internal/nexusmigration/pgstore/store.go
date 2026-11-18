@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"time"
 
-	m "github.com/ccsert/artifact-gateway/internal/nexusmigration"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	m "github.com/mlops-ca/notarx/internal/nexusmigration"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 type Store struct{ db *sql.DB }

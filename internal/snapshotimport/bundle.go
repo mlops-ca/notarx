@@ -21,9 +21,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/opsjson"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/opsjson"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 type Manifest struct {

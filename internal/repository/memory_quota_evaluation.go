@@ -2,7 +2,7 @@ package repository
 
 import (
 	"context"
-	"github.com/ccsert/artifact-gateway/internal/quotaalert"
+	"github.com/mlops-ca/notarx/internal/quotaalert"
 	"sort"
 	"time"
 )

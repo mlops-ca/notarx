@@ -3,8 +3,8 @@ package app
 import (
 	"net/http"
 
-	adminopenapi "github.com/ccsert/artifact-gateway/internal/admin/openapi"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 // Public repository DTOs only contain the admitted Format enum. The format

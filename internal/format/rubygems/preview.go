@@ -10,9 +10,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/ccsert/artifact-gateway/internal/authorization"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 var repositoryName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)

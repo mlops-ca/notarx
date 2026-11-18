@@ -16,8 +16,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ccsert/artifact-gateway/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ccsert/artifact-gateway/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="https://github.com/ccsert/artifact-gateway/releases/tag/v0.4.0"><img alt="Release 0.4.0" src="https://img.shields.io/badge/release-0.4.0-2563EB"></a>
+  <a href="https://github.com/mlops-ca/notarx/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/mlops-ca/notarx/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/mlops-ca/notarx/releases/tag/v0.4.0"><img alt="Release 0.4.0" src="https://img.shields.io/badge/release-0.4.0-2563EB"></a>
   <a href="LICENSE"><img alt="开源许可：MIT" src="https://img.shields.io/badge/license-MIT-22C55E"></a>
   <img alt="Go 1.26.10" src="https://img.shields.io/badge/Go-1.26.10-00ADD8?logo=go&logoColor=white">
   <img alt="PostgreSQL 16" src="https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white">
@@ -93,7 +93,7 @@ Maven Hosted 使用 `/repository/maven/<repository>/`，Maven Proxy/Group 使用
 
 ## 安装 0.4.0
 
-[0.4.0 Release](https://github.com/ccsert/artifact-gateway/releases/tag/v0.4.0)
+[0.4.0 Release](https://github.com/mlops-ca/notarx/releases/tag/v0.4.0)
 提供 Linux/macOS 的 amd64/arm64 归档、Console 静态包、已解析 OpenAPI 契约和
 `SHA256SUMS`。每个 Gateway 归档同时包含服务端、健康检查二进制、PostgreSQL
 Migrations、可移植迁移脚本和环境模板，可通过以下命令确认版本身份：
@@ -126,7 +126,7 @@ ghcr.io/ccsert/artifact-gateway-console:main
 前置条件：支持 Compose 的 Docker、Node.js 24+、npm、GNU Make 和 OpenSSL。
 
 ```sh
-git clone https://github.com/ccsert/artifact-gateway.git
+git clone https://github.com/mlops-ca/notarx.git
 cd artifact-gateway
 make dev-bootstrap
 make dev

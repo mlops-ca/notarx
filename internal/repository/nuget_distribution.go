@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	dist "github.com/ccsert/artifact-gateway/internal/nugetdistribution"
+	dist "github.com/mlops-ca/notarx/internal/nugetdistribution"
 )
 
 func nuGetReplicationSource(p NuGetPublication, item dist.Item) error {

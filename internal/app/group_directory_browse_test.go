@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	adminopenapi "github.com/ccsert/artifact-gateway/internal/admin/openapi"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func groupDirectoryRequest(t *testing.T, handler http.Handler, token, id, parent, pageToken string, size int) (*httptest.ResponseRecorder, adminopenapi.GroupBrowsePage) {

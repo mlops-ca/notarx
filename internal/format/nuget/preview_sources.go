@@ -12,12 +12,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/authorization"
-	nugetprotocol "github.com/ccsert/artifact-gateway/internal/protocol/nuget"
-	"github.com/ccsert/artifact-gateway/internal/repository"
-	"github.com/ccsert/artifact-gateway/internal/secrets"
-	"github.com/ccsert/artifact-gateway/internal/upstreamauth"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/authorization"
+	nugetprotocol "github.com/mlops-ca/notarx/internal/protocol/nuget"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/secrets"
+	"github.com/mlops-ca/notarx/internal/upstreamauth"
 )
 
 type sourceCredential struct {

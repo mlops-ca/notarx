@@ -1,6 +1,6 @@
 package app
 
-import "github.com/ccsert/artifact-gateway/internal/uploadspool"
+import "github.com/mlops-ca/notarx/internal/uploadspool"
 
 // Non-migrated format handlers share the same byte staging implementation.
 // These local names contain no publication or format-specific behavior.

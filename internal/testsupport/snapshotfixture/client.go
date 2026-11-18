@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/snapshotimport"
+	"github.com/mlops-ca/notarx/internal/snapshotimport"
 )
 
 func replaceSnapshotFile(t testing.TB, dir string, files map[string][]byte, f *snapshotimport.File, body []byte) {

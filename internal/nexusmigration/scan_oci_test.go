@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/nexussource"
-	"github.com/ccsert/artifact-gateway/internal/testsupport/ocifixture"
+	"github.com/mlops-ca/notarx/internal/nexussource"
+	"github.com/mlops-ca/notarx/internal/testsupport/ocifixture"
 )
 
 type ociPlanStore struct {

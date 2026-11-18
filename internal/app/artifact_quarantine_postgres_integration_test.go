@@ -11,10 +11,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	rawprotocol "github.com/ccsert/artifact-gateway/internal/protocol/raw"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	rawprotocol "github.com/mlops-ca/notarx/internal/protocol/raw"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func TestPostgresRawProtocolReadHonorsQuarantineReadPolicy(t *testing.T) {

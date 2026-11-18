@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/authorization"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func TestLocalLoginLocksRepeatedFailuresAndIssuesRevocableSession(t *testing.T) {

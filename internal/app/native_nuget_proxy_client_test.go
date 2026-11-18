@@ -33,12 +33,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/authorization"
-	nugetformat "github.com/ccsert/artifact-gateway/internal/format/nuget"
-	"github.com/ccsert/artifact-gateway/internal/objectstore"
-	nugetprotocol "github.com/ccsert/artifact-gateway/internal/protocol/nuget"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/authorization"
+	nugetformat "github.com/mlops-ca/notarx/internal/format/nuget"
+	"github.com/mlops-ca/notarx/internal/objectstore"
+	nugetprotocol "github.com/mlops-ca/notarx/internal/protocol/nuget"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func startNuGetProxyGatewayContainer(t *testing.T, c nugetOfficialClient, bucket, address string, extraEnv ...string) func() {

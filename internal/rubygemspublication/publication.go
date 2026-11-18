@@ -11,9 +11,9 @@ import (
 	"strconv"
 	"time"
 
-	protocol "github.com/ccsert/artifact-gateway/internal/protocol/rubygems"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	protocol "github.com/mlops-ca/notarx/internal/protocol/rubygems"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 var ErrInvalid = errors.New("invalid RubyGems publication")

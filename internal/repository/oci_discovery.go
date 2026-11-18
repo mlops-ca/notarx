@@ -5,7 +5,7 @@ import (
 	"sort"
 	"time"
 
-	discovery "github.com/ccsert/artifact-gateway/internal/ocidiscovery"
+	discovery "github.com/mlops-ca/notarx/internal/ocidiscovery"
 )
 
 func ociBindingKey(scope, owner, image, subject string) string {

@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/replication"
-	"github.com/ccsert/artifact-gateway/internal/repository"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/replication"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 type NativePyPIPromotion struct {

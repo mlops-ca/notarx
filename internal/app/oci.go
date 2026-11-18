@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/egress"
-	ociprotocol "github.com/ccsert/artifact-gateway/internal/protocol/oci"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/egress"
+	ociprotocol "github.com/mlops-ca/notarx/internal/protocol/oci"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 const ociManifest = "manifests"

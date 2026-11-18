@@ -8,8 +8,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/replication"
-	"github.com/ccsert/artifact-gateway/internal/repository"
+	"github.com/mlops-ca/notarx/internal/replication"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 // ConanReplication copies all assets in one visible recipe revision, including

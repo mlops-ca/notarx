@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/ccsert/artifact-gateway/internal/database"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/mlops-ca/notarx/internal/database"
 )
 
 type PostgresStore struct {

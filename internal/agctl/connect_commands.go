@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	adminopenapi "github.com/ccsert/artifact-gateway/internal/admin/openapi"
+	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
 )
 
 // tokenPlaceholder stands for the credential in every generated snippet. The

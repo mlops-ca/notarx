@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/nexussource"
-	"github.com/ccsert/artifact-gateway/internal/ocigraph"
-	"github.com/ccsert/artifact-gateway/internal/testsupport/ocifixture"
+	"github.com/mlops-ca/notarx/internal/nexussource"
+	"github.com/mlops-ca/notarx/internal/ocigraph"
+	"github.com/mlops-ca/notarx/internal/testsupport/ocifixture"
 )
 
 // The public worker seals the actual inventory, then observes an operator pause

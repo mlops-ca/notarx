@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccsert/artifact-gateway/internal/opsjson"
+	"github.com/mlops-ca/notarx/internal/opsjson"
 )
 
 type Status string

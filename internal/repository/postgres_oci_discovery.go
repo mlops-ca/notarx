@@ -7,7 +7,7 @@ import (
 	"errors"
 	"time"
 
-	discovery "github.com/ccsert/artifact-gateway/internal/ocidiscovery"
+	discovery "github.com/mlops-ca/notarx/internal/ocidiscovery"
 )
 
 var _ discovery.Store = (*PostgresStore)(nil)

@@ -2,7 +2,7 @@ package emailnotification
 
 import (
 	"context"
-	"github.com/ccsert/artifact-gateway/internal/testsupport"
+	"github.com/mlops-ca/notarx/internal/testsupport"
 	"net"
 	"os"
 	"path/filepath"

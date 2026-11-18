@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	p "github.com/ccsert/artifact-gateway/internal/protocol/rubygems"
-	f "github.com/ccsert/artifact-gateway/internal/testsupport/rubygemsfixture"
+	p "github.com/mlops-ca/notarx/internal/protocol/rubygems"
+	f "github.com/mlops-ca/notarx/internal/testsupport/rubygemsfixture"
 )
 
 func TestRubyGemArchivePreservesDependenciesAcrossBenignTrailingFields(t *testing.T) {

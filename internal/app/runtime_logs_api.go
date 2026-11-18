@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	adminopenapi "github.com/ccsert/artifact-gateway/internal/admin/openapi"
-	"github.com/ccsert/artifact-gateway/internal/operationalog"
+	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
+	"github.com/mlops-ca/notarx/internal/operationalog"
 )
 
 // ListRuntimeLogs only reads this process's bounded memory buffer. A caller

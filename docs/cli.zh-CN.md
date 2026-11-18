@@ -44,10 +44,10 @@ tar -xzf artifact-gateway-agctl_<version>_<goos>_<goarch>.tar.gz
 ### Go module 安装
 
 ```sh
-go install github.com/ccsert/artifact-gateway/cmd/agctl@<tag>
+go install github.com/mlops-ca/notarx/cmd/agctl@<tag>
 ```
 
-`<tag>` 是 `go.mod` 声明 `github.com/ccsert/artifact-gateway`（即源码仓库路径，见
+`<tag>` 是 `go.mod` 声明 `github.com/mlops-ca/notarx`（即源码仓库路径，见
 [ADR 0008](adr/0008-go-module-path.zh-CN.md)）的 Release tag（`v<VERSION>`）。本变更
 之后的首个发行是最早满足条件的 tag；`v0.9.0` 及更早版本声明的是此前无法解析的旧路径，
 不能这样安装。module 模式安装以 tag 作为版本，但 Go 工具链不为 `pkg@version` 构建
