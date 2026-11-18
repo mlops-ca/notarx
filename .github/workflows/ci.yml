@@ -77,6 +77,16 @@ jobs:
       - name: Documentation capability claims
         run: sh scripts/docs-capability-check.sh
 
+  # The image Dockerfiles carry an opt-in test stage that image builds skip;
+  # build it when the Dockerfiles or compose files changed so it cannot rot.
+  image-test-stages:
+    needs: changes
+    if: needs.changes.outputs.images == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - run: make docker-test
+
   contract-core:
     needs: changes
     if: needs.changes.outputs.go == 'true'
@@ -234,6 +244,8 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: console/package-lock.json
+      - name: Verify public npm lockfile sources before install
+        run: node scripts/npm-lockfile-check.mjs
       - run: npm ci --timing --loglevel=http
         timeout-minutes: 10
         working-directory: console
@@ -300,7 +312,7 @@ jobs:
   # skipped by change detection, fails on any failure or cancellation.
   ci-ok:
     if: always()
-    needs: [changes, pr-title, docs, quality, console, console-e2e, contract-core, contract-native, contract-and-test]
+    needs: [changes, pr-title, docs, quality, console, console-e2e, image-test-stages, contract-core, contract-native, contract-and-test]
     runs-on: ubuntu-latest
     steps:
       - name: Require every needed job to succeed or be skipped
@@ -309,6 +321,7 @@ jobs:
           GO: ${{ needs.changes.outputs.go }}
           CONSOLE: ${{ needs.changes.outputs.console }}
           DOCS: ${{ needs.changes.outputs.docs }}
+          IMAGES: ${{ needs.changes.outputs.images }}
         run: |
           echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
           echo "$NEEDS" | jq -e '[.[] | select(.result != "success" and .result != "skipped")] | length == 0' >/dev/null
@@ -317,7 +330,7 @@ jobs:
           e2e=false
           if [[ "$GO" == true || "$CONSOLE" == true ]]; then e2e=true; fi
           status=0
-          for pair in quality:$GO contract-core:$GO contract-native:$GO contract-and-test:$GO console:$CONSOLE console-e2e:$e2e docs:$DOCS; do
+          for pair in quality:$GO contract-core:$GO contract-native:$GO contract-and-test:$GO console:$CONSOLE console-e2e:$e2e docs:$DOCS image-test-stages:$IMAGES; do
             job=${pair%%:*} class=${pair##*:}
             result=$(echo "$NEEDS" | jq -r --arg job "$job" '.[$job].result')
             if [[ "$class" == true && "$result" != success ]]; then

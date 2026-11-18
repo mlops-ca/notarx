@@ -252,6 +252,8 @@ docker-build:
 
 docker-test:
 	@docker build --target test -f Dockerfile .
+	@docker build --target test -f Dockerfile.apt-signer .
+	@docker build --target test -f Dockerfile.scanner .
 
 console-docker-build:
 	@docker build -f Dockerfile.console -t artifact-gateway-console:dev .
