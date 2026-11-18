@@ -311,7 +311,7 @@ printf '%s\n' 'Measuring stripped Linux binaries and the runtime image...'
 printf 'component,os,arch,form,bytes,mib\n' >"$output_dir/artifact-sizes.csv"
 for arch in arm64 amd64; do
   for component in gateway healthcheck; do
-    package=./cmd/gateway
+    package=./cmd/notarx
     [[ "$component" == healthcheck ]] && package=./cmd/healthcheck
     binary_file="$private_dir/${component}-linux-${arch}"
     CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath -ldflags='-s -w' -o "$binary_file" "$package"

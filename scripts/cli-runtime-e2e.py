@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise agctl runtime failure/restart contracts in an owned disposable stack."""
+"""Exercise notarxctl runtime failure/restart contracts in an owned disposable stack."""
 import json
 import os
 from pathlib import Path
@@ -57,7 +57,7 @@ def check():
                    "--project-name", project, "-f", str(ROOT / "compose.yml"), "-f", str(override)]
         started = False
         base_url = ""
-        cli = work / "agctl"
+        cli = work / "notarxctl"
 
         def run(args):
             result = subprocess.run(args, cwd=ROOT, env=environment, capture_output=True, text=True)
@@ -75,11 +75,11 @@ def check():
         def ctl(*args, expected=0, token=None, stdin=None, stream=False):
             result = subprocess.run([str(cli), *args, "--json"], cwd=work,
                                     input=stdin, capture_output=True, text=True, timeout=45,
-                                    env={**environment, "HOME": str(work), "AGCTL_SERVER": base_url,
-                                         "AGCTL_TOKEN": token or values["GATEWAY_ADMIN_TOKEN"], "AGCTL_PROFILE": ""})
-            require(not any(v in result.stdout + result.stderr for v in private_values), "agctl leaked a synthetic secret")
+                                    env={**environment, "HOME": str(work), "NOTARXCTL_SERVER": base_url,
+                                         "NOTARXCTL_TOKEN": token or values["GATEWAY_ADMIN_TOKEN"], "NOTARXCTL_PROFILE": ""})
+            require(not any(v in result.stdout + result.stderr for v in private_values), "notarxctl leaked a synthetic secret")
             require(result.returncode == expected,
-                    "agctl " + " ".join(args) + " exited " + str(result.returncode) + ": " + result.stdout[-2000:] + result.stderr[-500:])
+                    "notarxctl " + " ".join(args) + " exited " + str(result.returncode) + ": " + result.stdout[-2000:] + result.stderr[-500:])
             if stream:
                 events = [json.loads(line) for line in result.stdout.splitlines()]
                 require(events and all(e["schemaVersion"] == 1 for e in events), "invalid NDJSON schema")
@@ -93,7 +93,7 @@ def check():
             return next(c["status"] for c in report["checks"] if c["name"] == "readyz")
 
         try:
-            run(["go", "build", "-o", str(cli), "./cmd/agctl"])
+            run(["go", "build", "-o", str(cli), "./cmd/notarxctl"])
             run(compose + ["build", "gateway"])
             started = True
             gateway()

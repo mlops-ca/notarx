@@ -105,7 +105,10 @@ func verifyNativeArchive(release Release, migrations map[string]string) error {
 				return errRelease
 			}
 			version = string(body)
-		case name == "gateway":
+		case name == "notarx" || name == "gateway":
+			if binary != "" {
+				return errRelease
+			}
 			binary, _, err = hashReader(tr)
 			if err != nil {
 				return errRelease

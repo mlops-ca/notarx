@@ -69,7 +69,7 @@ Deployment constraints and topology examples live in
 
 | Path | Ownership |
 | --- | --- |
-| `cmd/gateway` | Process composition, runtime roles, lifecycle start/stop |
+| `cmd/notarx` | Process composition, runtime roles, lifecycle start/stop |
 | `internal/app` | HTTP composition and application use cases |
 | `internal/format` | Explicit capability registry and migrated format modules (Raw tracer) |
 | `internal/authorization` | Authentication and authorization policy |
@@ -98,7 +98,7 @@ feature services; it no longer owns per-format byte-store fields.
 
 The constructor rejects missing metadata, availability adapters and any admitted
 format's object store, including typed nil interface values, before registering
-routes. `cmd/gateway` initializes its PostgreSQL pool and verifies the RustFS
+routes. `cmd/notarx` initializes its PostgreSQL pool and verifies the RustFS
 bucket first, then assigns the durable store with `SharedObjectStores`. Cache
 maintenance also requires an explicit object store. Configured format caches
 validate their own byte-store dependency, including typed nils. A nil format cache disables

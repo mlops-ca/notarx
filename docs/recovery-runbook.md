@@ -5,7 +5,7 @@
 ## Portable offline S3 byte transfers (Unreleased)
 
 `gateway backup export` and `gateway backup restore` implement the #200/#201
-offline transfer profile independently of agctl. They use explicit private JSON
+offline transfer profile independently of notarxctl. They use explicit private JSON
 specs and never load the server `.env`. Export reads a declared, already stopped
 source; it does not stop or restart writers. The operator must inventory every
 API, worker, and external writer, stop them before export, and keep them stopped

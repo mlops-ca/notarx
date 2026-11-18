@@ -229,7 +229,7 @@ func TestBuiltNativeArchiveIdentity(t *testing.T) {
 	if dir == "" {
 		t.Skip("actual release builder supplies the full native archive")
 	}
-	bi, err := buildinfo.ReadFile(filepath.Join(dir, "gateway"))
+	bi, err := buildinfo.ReadFile(filepath.Join(dir, "notarx"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -240,7 +240,7 @@ func TestBuiltNativeArchiveIdentity(t *testing.T) {
 	if settings["-trimpath"] != "true" {
 		t.Fatal("release acceptance must use actual trimpath build")
 	}
-	identity := backupmanifest.GatewayIdentity{Version: os.Getenv("BACKUPOPS_BUILT_VERSION"), Revision: os.Getenv("BACKUPOPS_BUILT_REVISION"), Artifact: &backupmanifest.SoftwareArtifact{Kind: "binary", SHA256: digestFile(t, filepath.Join(dir, "gateway")), Platform: os.Getenv("BACKUPOPS_BUILT_PLATFORM")}}
+	identity := backupmanifest.GatewayIdentity{Version: os.Getenv("BACKUPOPS_BUILT_VERSION"), Revision: os.Getenv("BACKUPOPS_BUILT_REVISION"), Artifact: &backupmanifest.SoftwareArtifact{Kind: "binary", SHA256: digestFile(t, filepath.Join(dir, "notarx")), Platform: os.Getenv("BACKUPOPS_BUILT_PLATFORM")}}
 	archive := os.Getenv("BACKUPOPS_BUILT_ARCHIVE")
 	release := backupops.Release{Directory: dir, Identity: identity, NativeArchive: &backupops.NativeArchive{Path: archive, SHA256: digestFile(t, archive)}}
 	ledger, _ := directoryLedger(t, dir)

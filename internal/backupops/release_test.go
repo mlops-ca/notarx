@@ -31,13 +31,13 @@ func binaryReleaseWithFlags(t *testing.T, flags string) (backupmanifest.Manifest
 	dir := t.TempDir()
 	_ = os.Chmod(dir, 0700)
 	revision := strings.Repeat("a", 40)
-	cmd := exec.CommandContext(context.Background(), "go", "build", "-buildvcs=false", "-ldflags", flags, "-o", filepath.Join(dir, "gateway"), "./cmd/gateway")
+	cmd := exec.CommandContext(context.Background(), "go", "build", "-buildvcs=false", "-ldflags", flags, "-o", filepath.Join(dir, "notarx"), "./cmd/notarx")
 	cmd.Dir = "../.."
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS=linux", "GOARCH=arm64")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("build synthetic release: %v %s", err, out)
 	}
-	body, err := os.ReadFile(filepath.Join(dir, "gateway"))
+	body, err := os.ReadFile(filepath.Join(dir, "notarx"))
 	if err != nil {
 		t.Fatal(err)
 	}

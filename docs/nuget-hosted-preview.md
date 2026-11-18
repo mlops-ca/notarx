@@ -11,7 +11,7 @@ The [#449](https://github.com/mlops-ca/notarx/issues/449) governance slice
 adds unlist/relist, retained tombstones and quarantine read enforcement. Symbols
 publication, signature verification, scanning, promotion/replication, retention,
 reclamation, Console and full governance admission remain tracked by #289.
-There is no `agctl` command for the preview API.
+There is no `notarxctl` command for the preview API.
 
 ## Enable and provision
 

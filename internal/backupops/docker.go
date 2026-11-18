@@ -475,7 +475,7 @@ func (t *OwnedTarget) StartGateway(ctx context.Context) (string, error) {
 			return "", errors.New("release staging unavailable")
 		}
 		t.directory = directory
-		input, err := os.Open(filepath.Join(spec.Release.Directory, "gateway"))
+		input, err := os.Open(releaseBinaryPath(spec.Release.Directory))
 		if err != nil {
 			return "", err
 		}

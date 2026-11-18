@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "ok": false,
+  "data": {
+    "outcome": "unknown",
+    "operation": "group create",
+    "name": "npm-all",
+    "idempotencyKey": "notarxctl-fixed-key",
+    "readBack": "notarxctl group list"
+  },
+  "error": {
+    "code": "unavailable",
+    "httpStatus": 503,
+    "message": "try again",
+    "hint": "the Group may have been created; re-run the same command with --idempotency-key notarxctl-fixed-key to retry safely, or check notarxctl group list",
+    "requestId": "req-test"
+  },
+  "meta": null
+}

@@ -12,7 +12,7 @@ RUN --mount=type=cache,id=artifact-gateway-go-mod,target=/go/pkg/mod,sharing=loc
     --mount=type=cache,id=artifact-gateway-go-build,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" go build -trimpath -buildvcs=false \
     -ldflags="-s -w -X github.com/mlops-ca/notarx/internal/buildinfo.injectedVersion=$VERSION -X github.com/mlops-ca/notarx/internal/buildinfo.injectedRevision=$REVISION" \
-    -o /gateway ./cmd/gateway
+    -o /notarx ./cmd/notarx
 RUN --mount=type=cache,id=artifact-gateway-go-mod,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=artifact-gateway-go-build,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" go build -trimpath -buildvcs=false \
@@ -35,8 +35,8 @@ LABEL org.opencontainers.image.title="Artifact Gateway" \
       org.opencontainers.image.version="$VERSION" \
       org.opencontainers.image.revision="$REVISION" \
       org.opencontainers.image.source="$SOURCE"
-COPY --from=build /gateway /gateway
+COPY --from=build /notarx /notarx
 COPY --from=build /gateway-healthcheck /gateway-healthcheck
 USER nonroot:nonroot
 EXPOSE 8080
-ENTRYPOINT ["/gateway"]
+ENTRYPOINT ["/notarx"]

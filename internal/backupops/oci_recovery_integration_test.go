@@ -98,7 +98,7 @@ func integrationOCIRelease(t *testing.T, ctx context.Context, d Docker, release 
 		}
 	}
 	dir := t.TempDir()
-	binary, err := os.ReadFile(filepath.Join(release.Directory, "gateway"))
+	binary, err := os.ReadFile(filepath.Join(release.Directory, "notarx"))
 	if err != nil || os.WriteFile(filepath.Join(dir, "gateway"), binary, 0555) != nil {
 		t.Fatal("OCI fixture binary staging failed")
 	}

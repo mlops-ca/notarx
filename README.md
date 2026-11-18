@@ -109,7 +109,7 @@ the server and healthcheck binaries, PostgreSQL migrations, a portable
 migration runner, and an environment template. Verify the identity with:
 
 ```sh
-./gateway version
+./notarx version
 ```
 
 For a binary installation, install `psql`, configure PostgreSQL and
@@ -162,10 +162,10 @@ make dev-down     # stop only the checkout-managed Console
 make down         # stop Compose services and preserve data volumes
 ```
 
-`make cli-build` cross-compiles `agctl`, the command line client for CI
-pipelines and platform management, into `dist/agctl_<goos>_<goarch>` for Linux
+`make cli-build` cross-compiles `notarxctl`, the command line client for CI
+pipelines and platform management, into `dist/notarxctl_<goos>_<goarch>` for Linux
 and macOS, and `make cli-docker-build` builds the client container image. See
-the [agctl CLI](docs/cli.md) guide for the install channels and their current
+the [notarxctl CLI](docs/cli.md) guide for the install channels and their current
 limits.
 
 See [Getting started](docs/getting-started.md) for credential handling,

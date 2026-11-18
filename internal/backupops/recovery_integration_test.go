@@ -483,14 +483,14 @@ func integrationRelease(t *testing.T) Release {
 	dir := t.TempDir()
 	revision := strings.Repeat("a", 40)
 	prefix := "github.com/mlops-ca/notarx/internal/buildinfo."
-	cmd := exec.Command("go", "build", "-buildvcs=false", "-ldflags", "-X "+prefix+"injectedVersion=synthetic-recovery -X "+prefix+"injectedRevision="+revision, "-o", filepath.Join(dir, "gateway"), "./cmd/gateway")
+	cmd := exec.Command("go", "build", "-buildvcs=false", "-ldflags", "-X "+prefix+"injectedVersion=synthetic-recovery -X "+prefix+"injectedRevision="+revision, "-o", filepath.Join(dir, "notarx"), "./cmd/notarx")
 	cmd.Dir = "../.."
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS=linux", "GOARCH="+runtime.GOARCH)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("fixture binary: %v %s", err, out)
 	}
 	copyPrivateFixture(t, "../../migrations", filepath.Join(dir, "migrations"))
-	sum, _, err := describeBinary(filepath.Join(dir, "gateway"))
+	sum, _, err := describeBinary(filepath.Join(dir, "notarx"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -149,7 +149,7 @@ func (s *observedSource) ObserveFrozen(ctx context.Context) (string, error) {
 			if values["ActiveState"] != "inactive" || values["InactiveEnterTimestampMonotonic"] == "" || values["InactiveEnterTimestampMonotonic"] == "0" {
 				return "", errors.New("writer not stopped")
 			}
-			expected, err := filepath.EvalSymlinks(filepath.Join(s.spec.Release.Directory, "gateway"))
+			expected, err := filepath.EvalSymlinks(releaseBinaryPath(s.spec.Release.Directory))
 			if err != nil {
 				return "", errRelease
 			}

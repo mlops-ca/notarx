@@ -37,9 +37,9 @@ Operators can instead validate and install a directory-owned package with the
 Gateway CLI:
 
 ```bash
-go run ./cmd/gateway theme validate --file /path/to/acme.theme.json --format json
-go run ./cmd/gateway theme install --file /path/to/acme.theme.json --dir ./themes --format json
-go run ./cmd/gateway theme list --dir ./themes --format json
+go run ./cmd/notarx theme validate --file /path/to/acme.theme.json --format json
+go run ./cmd/notarx theme install --file /path/to/acme.theme.json --dir ./themes --format json
+go run ./cmd/notarx theme list --dir ./themes --format json
 ```
 
 The running Gateway rereads the external directory and PostgreSQL catalog when

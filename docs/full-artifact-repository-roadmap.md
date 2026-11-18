@@ -47,7 +47,7 @@ artifacts and never mutate the source.
 3. **Repository experience APIs.** Add versioned management APIs for artifact
    browsing, coordinate search, tombstone inspection, retention execution,
    and bounded asynchronous-job status. Management changes may break historical
-   interfaces; update the contract, server, Console and agctl in the same slice.
+   interfaces; update the contract, server, Console and notarxctl in the same slice.
 4. **Distribution workflows.** Add policy-gated promotion between Hosted
    Repositories, then resumable replication with checkpoints, integrity checks,
    retry policy, and destination authorization.

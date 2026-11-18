@@ -4,7 +4,7 @@
 
 Issue #381 adds an administrator-only, read-only Nexus 3 source service. The
 contract lives in `api/openapi/native-hosted.yaml` and generates the management
-server and Console/CLI SDK types together. There is no `agctl` command yet; the
+server and Console/CLI SDK types together. There is no `notarxctl` command yet; the
 Console source workflow is described below. This service does not copy bytes, create repositories, schedule
 jobs or perform production migration/cutover.
 

@@ -208,9 +208,9 @@ try:
     else:raise RuntimeError('Owned RustFS readiness failed')
     command(['docker','cp',str(root/'migrations'),pg+':/migrations']);migration=(root/'scripts/run-migrations.sh').read_text();migration_args=['docker','exec','-i','--env','PGHOST=127.0.0.1','--env','PGUSER=gateway','--env','PGDATABASE=gateway_test',pg,'sh'];command(migration_args,input=migration,output='migrations-first.log');command(migration_args,input=migration,output='migrations-noop.log')
     env.update(TEST_DATABASE_URL='postgres://gateway:'+password+'@'+pg_address+'/gateway_test?sslmode=disable',TEST_RUSTFS_ENDPOINT='http://'+rust_address,TEST_RUSTFS_ACCESS_KEY=access,TEST_RUSTFS_SECRET_KEY=secret,RUBYGEMS_TEST_IMAGE=image,RUBYGEMS_OWNED_EVIDENCE_DIR=str(evidence),RUBYGEMS_OWNED_PROJECT=run_id,RUBYGEMS_OWNED_RESTART_CONTAINERS=pg+','+rust,GATEWAY_REPOSITORY_PRESETS='none')
-    command(['go','build','-o',str(work/'gateway'),'./cmd/gateway'],output='gateway-build.log')
+    command(['go','build','-o',str(work/'gateway'),'./cmd/notarx'],output='gateway-build.log')
     env['RUBYGEMS_GATEWAY_BIN']=str(work/'gateway')
-    write('gateway-binary.json',{'sha256':hashlib.sha256((work/'gateway').read_bytes()).hexdigest(),'build':'real cmd/gateway from recorded source snapshot','runtime':'production config/composition with explicit RubyGems preview flag'})
+    write('gateway-binary.json',{'sha256':hashlib.sha256((work/'gateway').read_bytes()).hexdigest(),'build':'real cmd/notarx from recorded source snapshot','runtime':'production config/composition with explicit RubyGems preview flag'})
     result=command(['go','test','-json','-count=1','-p','1','-race','-tags=integration','./internal/protocol/rubygems','./internal/rubygemspublication/...','./internal/rubygemsdistribution','./internal/format/rubygems','-run','RubyGem','-timeout','600s'],output='results.jsonl',check=False)
     events=[]
     for line in (evidence/'results.jsonl').read_text().splitlines():

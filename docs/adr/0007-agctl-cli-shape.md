@@ -2,7 +2,7 @@
 
 [简体中文](0007-agctl-cli-shape.zh-CN.md) · [Documentation index](../README.md)
 
-Status: accepted
+Status: accepted; amended by [ADR 0013](0013-notarx-fork-charter.md) (the client binary `agctl` is renamed `notarxctl`, with no symlink or alias; this record keeps the original names)
 
 ## Context
 
