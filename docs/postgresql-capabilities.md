@@ -255,6 +255,16 @@ across both tables by `(occurred_at, id)` and accepts `class=sync|async` to read
 one table. Without `from` it searches the table's default retention window, so the
 planner can prune partitions; pass `from` and `to` to bound large scans.
 
+Writes are decoupled from the request path by `internal/auditwriter`: sync-class
+records are committed immediately (statement per record), async-class records are
+flushed in batches with one `INSERT ... SELECT FROM unnest(...)` per table. Usage
+aggregates (`artifact_usage_stats`, keyed by `repository_id`) and the hourly
+`repository_request_rollup(repository_id, bucket_start, outcome, requests, bytes)`
+are added in key order with `INSERT ... ON CONFLICT DO UPDATE`, so two nodes flushing
+the same keys take their row locks in the same order. See
+[distributed deployment](distributed-deployment.md#audit-durability-and-capacity) for
+the guarantees and the settings.
+
 MySQL (ADR 0022) uses plain tables with an `AUTO_INCREMENT` key and batched
 retention; that twin is written with the ADR 0022 store slices.
 

@@ -243,6 +243,7 @@ func TestPostgresRepositoryRequestStatisticsCountBothAuditTables(t *testing.T) {
 	store := openAuditPageStore(t)
 	ctx := context.Background()
 	repo := "audit-stats-" + uuid.NewString()
+	seedHostedRepository(t, store, repo, "raw")
 	now := time.Now().UTC().Truncate(time.Second)
 	for _, record := range []AuditRecord{
 		{Class: AuditClassAsync, Repository: repo, Outcome: AuditResolved, Actor: "a", Format: "raw", OccurredAt: now.Add(-time.Minute)},

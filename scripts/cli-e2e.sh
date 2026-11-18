@@ -805,8 +805,9 @@ for object in ci-1.0.0.pom ci-1.0.0.jar; do
   curl --silent --show-error --fail --max-time 10 --output "$workdir/ci-maven/read-$object" -H "Authorization: Bearer $new_token" "$server/repository/maven/$ci_maven/com/example/notarxctl/ci/1.0.0/$object"
   cmp "$workdir/ci-maven/$object" "$workdir/ci-maven/read-$object"
 done
-expect 0 "$out" -- audit list --actor "service-account:$account_id" --repository "$ci_maven" --operation get --from "$grant_started" --all --json
-python3 - "$out" <<'PY2'
+# Read audit is buffered per node and flushed every NOTARX_AUDIT_FLUSH_INTERVAL (1s by
+# default), so poll until the read-back appears.
+cat >"$workdir/ci-read-audit.py" <<'PY2'
 import json
 import sys
 
@@ -816,6 +817,12 @@ expected = {"com/example/notarxctl/ci/1.0.0/ci-1.0.0.pom", "com/example/notarxct
 if {row["resource"] for row in rows if row["status"] == 200} != expected:
     raise SystemExit("the machine publisher's native read-back is absent from its audit scope")
 PY2
+for attempt in $(seq 1 30); do
+  expect 0 "$out" -- audit list --actor "service-account:$account_id" --repository "$ci_maven" --operation get --from "$grant_started" --all --json
+  if python3 "$workdir/ci-read-audit.py" "$out" 2>/dev/null; then break; fi
+  if [[ "$attempt" == 30 ]]; then python3 "$workdir/ci-read-audit.py" "$out"; fi
+  sleep 1
+done
 expect 0 "$out" -- grant delete --repo "$ci_maven_id" --principal "service-account:$account_id" --yes --json
 cli_test_token=$new_token expect 6 "$out" -- publish create --repo "$ci_maven_id" --coordinate com.example.notarxctl:ci:1.0.0 --pom "$workdir/ci-maven/ci-1.0.0.pom" --file "$workdir/ci-maven/ci-1.0.0.jar" --idempotency-key "refused-$ci_key" --json
 require "$(field "$out" error.httpStatus)" 403 "publisher refuses after grant removal"

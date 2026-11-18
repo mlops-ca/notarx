@@ -32,7 +32,7 @@ func (s *PostgresStore) PublishNPMImport(ctx context.Context, c NPMImportClosure
 		return err
 	}
 	var repoName string
-	err = tx.QueryRowContext(ctx, `SELECT name FROM hosted_repositories WHERE id::text=$1 AND format='npm' AND repo_type='hosted' AND state='active' FOR SHARE`, c.RepositoryID).Scan(&repoName)
+	err = tx.QueryRowContext(ctx, `SELECT name FROM hosted_repositories WHERE id=$1::uuid AND format='npm' AND repo_type='hosted' AND state='active' FOR SHARE`, c.RepositoryID).Scan(&repoName)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrDisabled
 	}
@@ -64,7 +64,7 @@ func (s *PostgresStore) PublishNPMImport(ctx context.Context, c NPMImportClosure
 	changed := false
 	for _, v := range c.Versions {
 		var blocked bool
-		err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM artifact_tombstones WHERE repository_id::text=$1 AND format='npm' AND coordinate=$2) OR EXISTS(SELECT 1 FROM artifact_quarantines WHERE repository_id::text=$1 AND format='npm' AND coordinate=$2 AND digest=$3 AND state='quarantined')`, c.RepositoryID, c.PackageName+"@"+v.Version, v.Digest).Scan(&blocked)
+		err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM artifact_tombstones WHERE repository_id=$1::uuid AND format='npm' AND coordinate=$2) OR EXISTS(SELECT 1 FROM artifact_quarantines WHERE repository_id=$1::uuid AND format='npm' AND coordinate=$2 AND digest=$3 AND state='quarantined')`, c.RepositoryID, c.PackageName+"@"+v.Version, v.Digest).Scan(&blocked)
 		if err != nil {
 			return err
 		}
@@ -94,7 +94,7 @@ func (s *PostgresStore) PublishNPMImport(ctx context.Context, c NPMImportClosure
 	}
 	if changed {
 		tags, _ := json.Marshal(pkg.DistTags)
-		if _, err = tx.ExecContext(ctx, `UPDATE native_npm_packages SET dist_tags=$3::jsonb,revision=revision+1,updated_at=now()WHERE repository_id::text=$1 AND name=$2`, c.RepositoryID, c.PackageName, tags); err != nil {
+		if _, err = tx.ExecContext(ctx, `UPDATE native_npm_packages SET dist_tags=$3::jsonb,revision=revision+1,updated_at=now()WHERE repository_id=$1::uuid AND name=$2`, c.RepositoryID, c.PackageName, tags); err != nil {
 			return err
 		}
 		if err = insertAudit(ctx, tx, npmImportAudit(c, repoName)); err != nil {

@@ -207,9 +207,29 @@ func runLocalRecoveryIntegration(t *testing.T, profile string) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	var auditMax int64
-	var auditBefore string
-	if e = auditConn.QueryRow(ctx, "SELECT COALESCE(max(id),0),COALESCE(jsonb_agg(to_jsonb(a) ORDER BY id)::text,'[]') FROM resolver_audit_log a").Scan(&auditMax, &auditBefore); e != nil || auditMax == 0 {
+	// Management mutations and authenticated denials are sync-class (security_audit_log);
+	// reads are async-class (resolver_audit_log, flushed when the gateway stops). Both
+	// tables are history that a restore must preserve.
+	auditMax, auditBefore := map[string]int64{}, map[string]string{}
+	var auditEvidence int64
+	tables := []string{"resolver_audit_log"}
+	var hasSecurity bool
+	// Published releases before the partitioned audit tables have no security_audit_log.
+	if e = auditConn.QueryRow(ctx, "SELECT to_regclass('public.security_audit_log') IS NOT NULL").Scan(&hasSecurity); e != nil {
+		t.Fatal(e)
+	}
+	if hasSecurity {
+		tables = append(tables, "security_audit_log")
+	}
+	for _, table := range tables {
+		var max int64
+		var before string
+		if e = auditConn.QueryRow(ctx, "SELECT COALESCE(max(id),0),COALESCE(jsonb_agg(to_jsonb(a) ORDER BY id)::text,'[]') FROM "+table+" a").Scan(&max, &before); e != nil {
+			t.Fatal(e)
+		}
+		auditMax[table], auditBefore[table], auditEvidence = max, before, auditEvidence+max
+	}
+	if auditEvidence == 0 {
 		t.Fatal("synthetic audit evidence missing")
 	}
 	_ = auditConn.Close(ctx)
@@ -294,9 +314,11 @@ func runLocalRecoveryIntegration(t *testing.T, profile string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var auditAfter string
-	if err = conn.QueryRow(ctx, "SELECT COALESCE(jsonb_agg(to_jsonb(a) ORDER BY id)::text,'[]') FROM resolver_audit_log a WHERE id <= $1", auditMax).Scan(&auditAfter); err != nil || auditBefore != auditAfter {
-		t.Fatal("restored historical audit identity/actor/group/member/outcome changed")
+	for table, max := range auditMax {
+		var after string
+		if err = conn.QueryRow(ctx, "SELECT COALESCE(jsonb_agg(to_jsonb(a) ORDER BY id)::text,'[]') FROM "+table+" a WHERE id <= $1", max).Scan(&after); err != nil || auditBefore[table] != after {
+			t.Fatalf("restored historical audit identity/actor/group/member/outcome changed in %s", table)
+		}
 	}
 	var absent bool
 	err = conn.QueryRow(ctx, "SELECT to_regclass('public.post_backup_mutation') IS NULL").Scan(&absent)

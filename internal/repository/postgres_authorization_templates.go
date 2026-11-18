@@ -7,7 +7,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 )
 
 func scanAuthorizationTemplate(scanner interface{ Scan(...any) error }) (AuthorizationTemplate, error) {
@@ -25,7 +25,7 @@ func scanAuthorizationTemplate(scanner interface{ Scan(...any) error }) (Authori
 const authorizationTemplateColumns = `id::text,name,description,grants,version::text,created_at,updated_at`
 
 func (s *PostgresStore) CreateAuthorizationTemplate(ctx context.Context, template AuthorizationTemplate) (AuthorizationTemplate, error) {
-	template.ID = uuid.NewString()
+	template.ID = ids.New()
 	template.Name = strings.TrimSpace(template.Name)
 	encoded, err := json.Marshal(template.Grants)
 	if err != nil {
@@ -62,7 +62,7 @@ func (s *PostgresStore) ListAuthorizationTemplates(ctx context.Context) ([]Autho
 }
 
 func (s *PostgresStore) GetAuthorizationTemplate(ctx context.Context, id string) (AuthorizationTemplate, error) {
-	template, err := scanAuthorizationTemplate(s.db.QueryRowContext(ctx, `SELECT `+authorizationTemplateColumns+` FROM authorization_templates WHERE id::text=$1`, id))
+	template, err := scanAuthorizationTemplate(s.db.QueryRowContext(ctx, `SELECT `+authorizationTemplateColumns+` FROM authorization_templates WHERE id=$1::uuid`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return AuthorizationTemplate{}, ErrNotFound
 	}
@@ -75,10 +75,10 @@ func (s *PostgresStore) UpdateAuthorizationTemplate(ctx context.Context, templat
 		return AuthorizationTemplate{}, err
 	}
 	template.Name = strings.TrimSpace(template.Name)
-	updated, err := scanAuthorizationTemplate(s.db.QueryRowContext(ctx, `UPDATE authorization_templates SET name=$1,description=$2,grants=$3,version=version+1,updated_at=now() WHERE id::text=$4 AND version::text=$5 RETURNING `+authorizationTemplateColumns, template.Name, template.Description, encoded, template.ID, expectedVersion))
+	updated, err := scanAuthorizationTemplate(s.db.QueryRowContext(ctx, `UPDATE authorization_templates SET name=$1,description=$2,grants=$3,version=version+1,updated_at=now() WHERE id=$4::uuid AND version=$5::text::bigint RETURNING `+authorizationTemplateColumns, template.Name, template.Description, encoded, template.ID, expectedVersion))
 	if errors.Is(err, sql.ErrNoRows) {
 		var exists bool
-		if queryErr := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM authorization_templates WHERE id::text=$1)`, template.ID).Scan(&exists); queryErr != nil {
+		if queryErr := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM authorization_templates WHERE id=$1::uuid)`, template.ID).Scan(&exists); queryErr != nil {
 			return AuthorizationTemplate{}, queryErr
 		}
 		if !exists {
@@ -93,7 +93,7 @@ func (s *PostgresStore) UpdateAuthorizationTemplate(ctx context.Context, templat
 }
 
 func (s *PostgresStore) DeleteAuthorizationTemplate(ctx context.Context, id string) error {
-	result, err := s.db.ExecContext(ctx, `DELETE FROM authorization_templates WHERE id::text=$1`, id)
+	result, err := s.db.ExecContext(ctx, `DELETE FROM authorization_templates WHERE id=$1::uuid`, id)
 	if err != nil {
 		return err
 	}
@@ -115,7 +115,7 @@ func (s *PostgresStore) ApplyAuthorizationTemplate(ctx context.Context, template
 	defer func() { _ = tx.Rollback() }()
 	var template AuthorizationTemplate
 	var encoded []byte
-	err = tx.QueryRowContext(ctx, `SELECT `+authorizationTemplateColumns+` FROM authorization_templates WHERE id::text=$1 FOR SHARE`, templateID).Scan(&template.ID, &template.Name, &template.Description, &encoded, &template.Version, &template.CreatedAt, &template.UpdatedAt)
+	err = tx.QueryRowContext(ctx, `SELECT `+authorizationTemplateColumns+` FROM authorization_templates WHERE id=$1::uuid FOR SHARE`, templateID).Scan(&template.ID, &template.Name, &template.Description, &encoded, &template.Version, &template.CreatedAt, &template.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RepositoryGrantSet{}, ErrNotFound
 	}
@@ -126,7 +126,7 @@ func (s *PostgresStore) ApplyAuthorizationTemplate(ctx context.Context, template
 		return RepositoryGrantSet{}, err
 	}
 	var repositoryExists bool
-	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM hosted_repositories WHERE id::text=$1)`, repositoryID).Scan(&repositoryExists); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM hosted_repositories WHERE id=$1::uuid)`, repositoryID).Scan(&repositoryExists); err != nil {
 		return RepositoryGrantSet{}, err
 	}
 	if !repositoryExists {
@@ -136,10 +136,10 @@ func (s *PostgresStore) ApplyAuthorizationTemplate(ctx context.Context, template
 		return RepositoryGrantSet{}, err
 	}
 	var version string
-	err = tx.QueryRowContext(ctx, `UPDATE repository_grant_sets SET version=version+1 WHERE repository_id::text=$1 AND version::text=$2 RETURNING version::text`, repositoryID, expectedVersion).Scan(&version)
+	err = tx.QueryRowContext(ctx, `UPDATE repository_grant_sets SET version=version+1 WHERE repository_id=$1::uuid AND version=$2::text::bigint RETURNING version::text`, repositoryID, expectedVersion).Scan(&version)
 	if errors.Is(err, sql.ErrNoRows) {
 		var exists bool
-		if queryErr := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM hosted_repositories WHERE id::text=$1)`, repositoryID).Scan(&exists); queryErr != nil {
+		if queryErr := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM hosted_repositories WHERE id=$1::uuid)`, repositoryID).Scan(&exists); queryErr != nil {
 			return RepositoryGrantSet{}, queryErr
 		}
 		if !exists {
@@ -150,7 +150,7 @@ func (s *PostgresStore) ApplyAuthorizationTemplate(ctx context.Context, template
 	if err != nil {
 		return RepositoryGrantSet{}, err
 	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM repository_grants WHERE repository_id::text=$1`, repositoryID); err != nil {
+	if _, err = tx.ExecContext(ctx, `DELETE FROM repository_grants WHERE repository_id=$1::uuid`, repositoryID); err != nil {
 		return RepositoryGrantSet{}, err
 	}
 	for _, grant := range template.Grants {

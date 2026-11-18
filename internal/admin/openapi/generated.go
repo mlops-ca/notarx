@@ -404,6 +404,24 @@ func (e AuditCleanupJobState) Valid() bool {
 	}
 }
 
+// Defines values for AuditPageCompleteness.
+const (
+	AuditPageCompletenessBestEffortReads AuditPageCompleteness = "best_effort_reads"
+	AuditPageCompletenessComplete        AuditPageCompleteness = "complete"
+)
+
+// Valid indicates whether the value is a known member of the AuditPageCompleteness enum.
+func (e AuditPageCompleteness) Valid() bool {
+	switch e {
+	case AuditPageCompletenessBestEffortReads:
+		return true
+	case AuditPageCompletenessComplete:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AuditRecordClass.
 const (
 	AuditRecordClassAsync AuditRecordClass = "async"
@@ -5383,9 +5401,14 @@ type AuditList = []AuditRecord
 
 // AuditPage defines model for AuditPage.
 type AuditPage struct {
-	Items         []AuditRecord `json:"items"`
-	NextPageToken *string       `json:"nextPageToken,omitempty"`
+	// Completeness Completeness of read audit. best_effort_reads (the default) means security evidence (sync class) is complete but read and download audit (async class) is buffered per node, so a trailing interval is lost on a crash and records are dropped when the buffer is full. complete means NOTARX_AUDIT_READ_MODE=sync and every read is committed before the response.
+	Completeness  AuditPageCompleteness `json:"completeness"`
+	Items         []AuditRecord         `json:"items"`
+	NextPageToken *string               `json:"nextPageToken,omitempty"`
 }
+
+// AuditPageCompleteness Completeness of read audit. best_effort_reads (the default) means security evidence (sync class) is complete but read and download audit (async class) is buffered per node, so a trailing interval is lost on a crash and records are dropped when the buffer is full. complete means NOTARX_AUDIT_READ_MODE=sync and every read is committed before the response.
+type AuditPageCompleteness string
 
 // AuditRecord defines model for AuditRecord.
 type AuditRecord struct {

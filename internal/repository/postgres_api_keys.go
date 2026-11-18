@@ -55,7 +55,7 @@ func (s *PostgresStore) FindActiveAPIKeyByHash(ctx context.Context, hash string)
 func (s *PostgresStore) RevokeAPIKey(ctx context.Context, id string) (APIKey, error) {
 	var key APIKey
 	var roles []byte
-	err := s.db.QueryRowContext(ctx, `UPDATE api_keys SET revoked_at = COALESCE(revoked_at, now()) WHERE id::text = $1 AND service_account_id IS NULL RETURNING id::text, '', name, array_to_json(roles), created_at, revoked_at, expires_at, last_used_at`, id).Scan(&key.ID, &key.ServiceAccountID, &key.Name, &roles, &key.CreatedAt, &key.RevokedAt, &key.ExpiresAt, &key.LastUsedAt)
+	err := s.db.QueryRowContext(ctx, `UPDATE api_keys SET revoked_at = COALESCE(revoked_at, now()) WHERE id=$1::uuid AND service_account_id IS NULL RETURNING id::text, '', name, array_to_json(roles), created_at, revoked_at, expires_at, last_used_at`, id).Scan(&key.ID, &key.ServiceAccountID, &key.Name, &roles, &key.CreatedAt, &key.RevokedAt, &key.ExpiresAt, &key.LastUsedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return APIKey{}, ErrNotFound
 	}

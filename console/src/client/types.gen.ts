@@ -2931,6 +2931,10 @@ export type CreateUserIdentity = {
 export type AuditPage = {
   items: Array<AuditRecord>;
   nextPageToken?: string;
+  /**
+   * Completeness of read audit. best_effort_reads (the default) means security evidence (sync class) is complete but read and download audit (async class) is buffered per node, so a trailing interval is lost on a crash and records are dropped when the buffer is full. complete means NOTARX_AUDIT_READ_MODE=sync and every read is committed before the response.
+   */
+  completeness: "best_effort_reads" | "complete";
 };
 
 export type OverviewWindowCounts = {

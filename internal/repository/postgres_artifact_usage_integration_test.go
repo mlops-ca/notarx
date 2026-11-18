@@ -21,10 +21,9 @@ func TestPostgresArtifactUsagePages(t *testing.T) {
 		t.Fatal(err)
 	}
 	repo := "usage-pages-" + uuid.NewString()
-	t.Cleanup(func() {
-		_, _ = store.db.ExecContext(context.Background(), `DELETE FROM artifact_usage_stats WHERE repository IN ($1, $2)`, repo, repo+"-other")
-		_ = store.Close()
-	})
+	t.Cleanup(func() { _ = store.Close() })
+	seedHostedRepository(t, store, repo, "raw")
+	seedHostedRepository(t, store, repo+"-other", "raw")
 	exerciseArtifactUsagePages(t, store, repo)
 }
 
@@ -43,10 +42,12 @@ func TestPostgresArtifactUsageAggregatesDownloadAudits(t *testing.T) {
 	first := time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)
 	last := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
 	t.Cleanup(func() {
-		_, _ = store.db.ExecContext(context.Background(), `DELETE FROM artifact_usage_stats WHERE repository IN ($1, $2)`, repositoryName, otherName)
 		_, _ = store.db.ExecContext(context.Background(), `DELETE FROM resolver_audit_log WHERE repository IN ($1, $2)`, repositoryName, otherName)
+		_, _ = store.db.ExecContext(context.Background(), `DELETE FROM security_audit_log WHERE repository IN ($1, $2)`, repositoryName, otherName)
 		_ = store.Close()
 	})
+	seedHostedRepository(t, store, repositoryName, "npm")
+	seedHostedRepository(t, store, otherName, "raw")
 
 	download := func(repo string, at time.Time, resource, actor string, bytes int64) {
 		t.Helper()

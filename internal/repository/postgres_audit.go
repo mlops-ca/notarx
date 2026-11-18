@@ -10,9 +10,12 @@ import (
 	"github.com/mlops-ca/notarx/internal/requestcontext"
 )
 
+// RecordAudit writes one audit record. With an installed recorder (the audit
+// writer) it delegates; without one the record is committed directly, together with
+// its usage aggregate and request rollup in one transaction.
 func (s *PostgresStore) RecordAudit(ctx context.Context, audit AuditRecord) error {
-	if !audit.IsArtifactDownload() {
-		return insertAudit(ctx, s.db, audit)
+	if recorder := s.auditRecorder.Load(); recorder != nil {
+		return (*recorder).RecordAudit(ctx, audit)
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -25,11 +28,39 @@ func (s *PostgresStore) RecordAudit(ctx context.Context, audit AuditRecord) erro
 	return tx.Commit()
 }
 
+// UsageBatchOf is the usage and rollup change one record contributes.
+func UsageBatchOf(audit AuditRecord) UsageBatch {
+	var batch UsageBatch
+	if audit.IsArtifactDownload() {
+		inc := audit.UsageIncrement()
+		batch.Usage = append(batch.Usage, UsageDelta{Repository: inc.Repository, Format: inc.Format, Resource: inc.Resource,
+			Downloads: 1, Bytes: inc.TotalBytes, First: inc.LastDownloadedAt, Last: inc.LastDownloadedAt, LastActor: inc.LastActor})
+	}
+	if audit.CountsAsRequest() {
+		at := audit.OccurredAt
+		if at.IsZero() {
+			at = time.Now().UTC()
+		}
+		batch.Rollups = append(batch.Rollups, RollupDelta{Repository: audit.Repository, BucketStart: at.UTC().Truncate(time.Hour),
+			Outcome: audit.RequestOutcome(), Requests: 1, Bytes: audit.Bytes})
+	}
+	return batch
+}
+
+// InsertAudit commits one audit row to the table of its class, without usage.
+func (s *PostgresStore) InsertAudit(ctx context.Context, audit AuditRecord) error {
+	return insertAuditRow(ctx, s.db, withAuditDefaults(ctx, audit))
+}
+
 type auditExecer interface {
 	ExecContext(context.Context, string, ...any) (sql.Result, error)
 }
 
-func insertAudit(ctx context.Context, execer auditExecer, audit AuditRecord) error {
+// withAuditDefaults fills the request ids and the timestamp the caller left empty.
+// The class is not inferred here: the audit writer sets it from Durability, and
+// audits written inside a store transaction keep the table they always used
+// (an empty class means resolver_audit_log).
+func withAuditDefaults(ctx context.Context, audit AuditRecord) AuditRecord {
 	if ids, ok := requestcontext.FromContext(ctx); ok {
 		if audit.RequestID == "" {
 			audit.RequestID = ids.RequestID
@@ -41,6 +72,21 @@ func insertAudit(ctx context.Context, execer auditExecer, audit AuditRecord) err
 	if audit.OccurredAt.IsZero() {
 		audit.OccurredAt = time.Now().UTC()
 	}
+	return audit
+}
+
+// insertAudit writes the audit row and, in the same transaction when execer is one,
+// the usage aggregate and request rollup the record contributes. Store methods
+// that audit a mutation inside their own transaction call it.
+func insertAudit(ctx context.Context, execer auditExecer, audit AuditRecord) error {
+	audit = withAuditDefaults(ctx, audit)
+	if err := insertAuditRow(ctx, execer, audit); err != nil {
+		return err
+	}
+	return flushUsage(ctx, execer, UsageBatchOf(audit))
+}
+
+func insertAuditRow(ctx context.Context, execer auditExecer, audit AuditRecord) error {
 	evidence := []byte("{}")
 	if len(audit.Evidence) > 0 {
 		encoded, err := json.Marshal(audit.Evidence)
@@ -50,21 +96,7 @@ func insertAudit(ctx context.Context, execer auditExecer, audit AuditRecord) err
 		evidence = encoded
 	}
 	_, err := execer.ExecContext(ctx, `INSERT INTO `+auditTable(audit.Class)+` (group_name, repository, member_name, outcome, actor, occurred_at, format, resource, representation, member_type, upstream_host, operation, http_status, cache_disposition, bytes, authorization_source, authorization_reason, request_id, trace_id, evidence) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb)`, audit.GroupName, audit.Repository, audit.MemberName, audit.Outcome, audit.Actor, audit.OccurredAt, audit.Format, audit.Resource, audit.Representation, audit.MemberType, audit.UpstreamHost, audit.Operation, audit.Status, audit.CacheDisposition, audit.Bytes, audit.AuthorizationSource, audit.AuthorizationReason, audit.RequestID, audit.TraceID, evidence)
-	if err != nil {
-		return err
-	}
-	if audit.IsArtifactDownload() {
-		// Keep the aggregate and audit in the caller's transaction so a
-		// download cannot leave a durable audit but missing retention evidence.
-		increment := audit.UsageIncrement()
-		_, err = execer.ExecContext(ctx, artifactUsageUpsertSQL,
-			increment.Repository, increment.Format, increment.Resource,
-			increment.TotalBytes, increment.LastDownloadedAt, increment.LastActor)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return err
 }
 
 func (s *PostgresStore) ListAudits(ctx context.Context, query AuditQuery) ([]AuditRecord, error) {
@@ -72,23 +104,24 @@ func (s *PostgresStore) ListAudits(ctx context.Context, query AuditQuery) ([]Aud
 	return page.Items, err
 }
 
+// ListRepositoryRequestStatistics reads the hourly request rollups (ADR 0023 section 1)
+// instead of scanning 30 days of audit. Windows start at the hour that contains the
+// rolling boundary, so counts are exact to the hour; a request is allowed or one of
+// the denial reasons, and denied is every outcome but allowed.
 func (s *PostgresStore) ListRepositoryRequestStatistics(ctx context.Context, now time.Time) ([]RepositoryRequestStatistics, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT repository,
-		COUNT(*) FILTER (WHERE occurred_at >= $1::timestamptz - INTERVAL '1 day'),
-		COUNT(*) FILTER (WHERE occurred_at >= $1::timestamptz - INTERVAL '7 days'),
-		COUNT(*),
-		COUNT(*) FILTER (WHERE outcome IN ('access_denied', 'proxy_denied', 'denied') AND occurred_at >= $1::timestamptz - INTERVAL '1 day'),
-		COUNT(*) FILTER (WHERE outcome IN ('access_denied', 'proxy_denied', 'denied') AND occurred_at >= $1::timestamptz - INTERVAL '7 days'),
-		COUNT(*) FILTER (WHERE outcome IN ('access_denied', 'proxy_denied', 'denied'))
-		FROM (
-		  SELECT repository, format, outcome, occurred_at FROM resolver_audit_log
-		  WHERE occurred_at >= $1::timestamptz - INTERVAL '30 days' AND occurred_at <= $1
-		  UNION ALL
-		  SELECT repository, format, outcome, occurred_at FROM security_audit_log
-		  WHERE occurred_at >= $1::timestamptz - INTERVAL '30 days' AND occurred_at <= $1
-		) audit
-		WHERE repository <> '' AND format IS DISTINCT FROM 'management'
-		GROUP BY repository ORDER BY repository`, now.UTC())
+	now = now.UTC()
+	hour := func(d time.Duration) time.Time { return now.Add(-d).Truncate(time.Hour) }
+	rows, err := s.db.QueryContext(ctx, `SELECT n.name,
+		COALESCE(SUM(r.requests) FILTER (WHERE r.bucket_start >= $2), 0),
+		COALESCE(SUM(r.requests) FILTER (WHERE r.bucket_start >= $3), 0),
+		COALESCE(SUM(r.requests), 0),
+		COALESCE(SUM(r.requests) FILTER (WHERE r.outcome <> 0 AND r.bucket_start >= $2), 0),
+		COALESCE(SUM(r.requests) FILTER (WHERE r.outcome <> 0 AND r.bucket_start >= $3), 0),
+		COALESCE(SUM(r.requests) FILTER (WHERE r.outcome <> 0), 0)
+		FROM repository_request_rollup r
+		JOIN (`+repositoryNames+`) n ON n.id = r.repository_id
+		WHERE r.bucket_start >= $4 AND r.bucket_start <= $1
+		GROUP BY n.name ORDER BY n.name`, now, hour(24*time.Hour), hour(7*24*time.Hour), hour(30*24*time.Hour))
 	if err != nil {
 		return nil, err
 	}

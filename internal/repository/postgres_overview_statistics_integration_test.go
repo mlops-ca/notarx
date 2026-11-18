@@ -26,6 +26,8 @@ func TestPostgresRepositoryRequestStatisticsAndIndex(t *testing.T) {
 		_, _ = store.db.ExecContext(context.Background(), `DELETE FROM resolver_audit_log WHERE repository IN ($1, $2)`, first, second)
 		_ = store.Close()
 	})
+	seedHostedRepository(t, store, first, "cargo")
+	seedHostedRepository(t, store, second, "raw")
 	var indexName string
 	if err := store.db.QueryRowContext(ctx, `SELECT indexname FROM pg_indexes WHERE tablename='resolver_audit_log' AND indexname='resolver_audit_log_repository_occurred_at_idx'`).Scan(&indexName); err != nil {
 		t.Fatalf("statistics migration index: %v", err)

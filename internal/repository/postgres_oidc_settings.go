@@ -37,7 +37,7 @@ func (s *PostgresStore) ReplaceOIDCSettings(ctx context.Context, settings OIDCSe
 			scopes=$8::jsonb, admin_subjects=$9::jsonb, member_roles=$10::jsonb, admin_roles=$11::jsonb,
 			provisioning_mode=$12, email_linking_enabled=$13, jit_default_role=$14,
 			version=version+1, updated_at=now()
-			WHERE singleton=true AND version::text=$15 RETURNING `+oidcSettingsColumns,
+			WHERE singleton=true AND version=$15::text::bigint RETURNING `+oidcSettingsColumns,
 			settings.Enabled, settings.Issuer, settings.Audience, settings.JWKSURL, settings.ClientID, settings.ClientSecret, settings.RedirectURL,
 			scopes, adminSubjects, memberRoles, adminRoles, settings.ProvisioningMode, settings.EmailLinkingEnabled, settings.JITDefaultRole, expectedVersion), &settings)
 	}

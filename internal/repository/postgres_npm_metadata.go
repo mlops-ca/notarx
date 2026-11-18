@@ -80,7 +80,7 @@ func (s *PostgresStore) UpdateNPMMetadata(ctx context.Context, mutation NPMMetad
 			if visible[version].Deprecated == message {
 				continue
 			}
-			if _, err = tx.ExecContext(ctx, `UPDATE native_npm_versions SET deprecated=$4 WHERE repository_id::text=$1 AND package_name=$2 AND version=$3`, mutation.RepositoryID, mutation.PackageName, version, message); err != nil {
+			if _, err = tx.ExecContext(ctx, `UPDATE native_npm_versions SET deprecated=$4 WHERE repository_id=$1::uuid AND package_name=$2 AND version=$3`, mutation.RepositoryID, mutation.PackageName, version, message); err != nil {
 				return NPMMetadataChange{}, err
 			}
 			change.Changed = true
@@ -99,9 +99,9 @@ func (s *PostgresStore) UpdateNPMMetadata(ctx context.Context, mutation NPMMetad
 			if marshalErr != nil {
 				return NPMMetadataChange{}, marshalErr
 			}
-			err = tx.QueryRowContext(ctx, `UPDATE native_npm_packages SET dist_tags=$3::jsonb,revision=revision+1,updated_at=now() WHERE repository_id::text=$1 AND name=$2 RETURNING revision`, mutation.RepositoryID, mutation.PackageName, tags).Scan(&change.Revision)
+			err = tx.QueryRowContext(ctx, `UPDATE native_npm_packages SET dist_tags=$3::jsonb,revision=revision+1,updated_at=now() WHERE repository_id=$1::uuid AND name=$2 RETURNING revision`, mutation.RepositoryID, mutation.PackageName, tags).Scan(&change.Revision)
 		} else {
-			err = tx.QueryRowContext(ctx, `UPDATE native_npm_packages SET revision=revision+1,updated_at=now() WHERE repository_id::text=$1 AND name=$2 RETURNING revision`, mutation.RepositoryID, mutation.PackageName).Scan(&change.Revision)
+			err = tx.QueryRowContext(ctx, `UPDATE native_npm_packages SET revision=revision+1,updated_at=now() WHERE repository_id=$1::uuid AND name=$2 RETURNING revision`, mutation.RepositoryID, mutation.PackageName).Scan(&change.Revision)
 		}
 		if err != nil {
 			return NPMMetadataChange{}, err

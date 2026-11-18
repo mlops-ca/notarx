@@ -6,10 +6,12 @@ import (
 	"errors"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 )
 
 const userSessionColumns = `id::text,user_id::text,kind,ip_address,user_agent,created_at,expires_at,revoked_at`
+
+const getUserSessionQuery = `SELECT ` + userSessionColumns + ` FROM user_sessions WHERE id=$1::uuid AND user_id=$2::uuid`
 
 func scanUserSession(scanner interface{ Scan(...any) error }, session *UserSession) error {
 	return scanner.Scan(
@@ -23,7 +25,7 @@ func (s *PostgresStore) CreateUserSession(ctx context.Context, session UserSessi
 		return UserSession{}, err
 	}
 	if session.ID == "" {
-		session.ID = uuid.NewString()
+		session.ID = ids.New()
 	}
 	if session.CreatedAt.IsZero() {
 		session.CreatedAt = time.Now().UTC()
@@ -40,7 +42,7 @@ func (s *PostgresStore) CreateUserSession(ctx context.Context, session UserSessi
 
 func (s *PostgresStore) GetUserSession(ctx context.Context, userID, sessionID string) (UserSession, error) {
 	var session UserSession
-	err := scanUserSession(s.db.QueryRowContext(ctx, `SELECT `+userSessionColumns+` FROM user_sessions WHERE id::text=$1 AND user_id::text=$2`, sessionID, userID), &session)
+	err := scanUserSession(s.db.QueryRowContext(ctx, getUserSessionQuery, sessionID, userID), &session)
 	if errors.Is(err, sql.ErrNoRows) {
 		return UserSession{}, ErrNotFound
 	}
@@ -51,7 +53,7 @@ func (s *PostgresStore) ListUserSessions(ctx context.Context, userID string, inc
 	if _, err := s.GetUser(ctx, userID); err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT `+userSessionColumns+` FROM user_sessions WHERE user_id::text=$1 AND ($2 OR (revoked_at IS NULL AND expires_at>now())) ORDER BY created_at DESC,id`, userID, includeInactive)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+userSessionColumns+` FROM user_sessions WHERE user_id=$1::uuid AND ($2 OR (revoked_at IS NULL AND expires_at>now())) ORDER BY created_at DESC,id`, userID, includeInactive)
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +71,7 @@ func (s *PostgresStore) ListUserSessions(ctx context.Context, userID string, inc
 
 func (s *PostgresStore) RevokeUserSession(ctx context.Context, userID, sessionID string) (UserSession, error) {
 	var session UserSession
-	err := scanUserSession(s.db.QueryRowContext(ctx, `UPDATE user_sessions SET revoked_at=COALESCE(revoked_at,now()) WHERE id::text=$1 AND user_id::text=$2 RETURNING `+userSessionColumns, sessionID, userID), &session)
+	err := scanUserSession(s.db.QueryRowContext(ctx, `UPDATE user_sessions SET revoked_at=COALESCE(revoked_at,now()) WHERE id=$1::uuid AND user_id=$2::uuid RETURNING `+userSessionColumns, sessionID, userID), &session)
 	if errors.Is(err, sql.ErrNoRows) {
 		return UserSession{}, ErrNotFound
 	}
@@ -80,7 +82,7 @@ func (s *PostgresStore) RevokeAllUserSessionRecords(ctx context.Context, userID 
 	if _, err := s.GetUser(ctx, userID); err != nil {
 		return err
 	}
-	_, err := s.db.ExecContext(ctx, `UPDATE user_sessions SET revoked_at=$2 WHERE user_id::text=$1 AND revoked_at IS NULL`, userID, occurredAt.UTC())
+	_, err := s.db.ExecContext(ctx, `UPDATE user_sessions SET revoked_at=$2 WHERE user_id=$1::uuid AND revoked_at IS NULL`, userID, occurredAt.UTC())
 	return err
 }
 

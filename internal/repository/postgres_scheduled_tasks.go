@@ -41,7 +41,7 @@ func (s *PostgresStore) ListScheduledTasks(ctx context.Context) ([]ScheduledTask
 
 func (s *PostgresStore) GetScheduledTask(ctx context.Context, id string) (ScheduledTask, error) {
 	var task ScheduledTask
-	err := scanScheduledTask(s.db.QueryRowContext(ctx, `SELECT `+scheduledTaskColumns+` FROM scheduled_tasks WHERE id::text=$1 AND kind<>'partition-manager'`, id), &task)
+	err := scanScheduledTask(s.db.QueryRowContext(ctx, `SELECT `+scheduledTaskColumns+` FROM scheduled_tasks WHERE id=$1::uuid AND kind<>'partition-manager'`, id), &task)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ScheduledTask{}, ErrNotFound
 	}
@@ -53,10 +53,10 @@ func (s *PostgresStore) UpdateScheduledTask(ctx context.Context, task ScheduledT
 	if err != nil || version < 1 {
 		return ScheduledTask{}, ErrVersionConflict
 	}
-	err = scanScheduledTask(s.db.QueryRowContext(ctx, `UPDATE scheduled_tasks SET name=$1,description=$2,kind=$3,repository_id=NULLIF($4,'')::uuid,interval_seconds=$5,enabled=$6,next_run_at=$7,version=version+1,updated_at=now() WHERE id::text=$8 AND version=$9 AND kind<>'partition-manager' RETURNING `+scheduledTaskColumns, task.Name, task.Description, task.Kind, task.RepositoryID, task.IntervalSeconds, task.Enabled, task.NextRunAt, task.ID, version), &task)
+	err = scanScheduledTask(s.db.QueryRowContext(ctx, `UPDATE scheduled_tasks SET name=$1,description=$2,kind=$3,repository_id=NULLIF($4,'')::uuid,interval_seconds=$5,enabled=$6,next_run_at=$7,version=version+1,updated_at=now() WHERE id=$8::uuid AND version=$9 AND kind<>'partition-manager' RETURNING `+scheduledTaskColumns, task.Name, task.Description, task.Kind, task.RepositoryID, task.IntervalSeconds, task.Enabled, task.NextRunAt, task.ID, version), &task)
 	if errors.Is(err, sql.ErrNoRows) {
 		var exists bool
-		if checkErr := s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM scheduled_tasks WHERE id::text=$1)`, task.ID).Scan(&exists); checkErr != nil {
+		if checkErr := s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM scheduled_tasks WHERE id=$1::uuid)`, task.ID).Scan(&exists); checkErr != nil {
 			return ScheduledTask{}, checkErr
 		}
 		if !exists {
@@ -71,7 +71,7 @@ func (s *PostgresStore) UpdateScheduledTask(ctx context.Context, task ScheduledT
 }
 
 func (s *PostgresStore) DeleteScheduledTask(ctx context.Context, id string) error {
-	result, err := s.db.ExecContext(ctx, `DELETE FROM scheduled_tasks WHERE id::text=$1 AND kind<>'partition-manager'`, id)
+	result, err := s.db.ExecContext(ctx, `DELETE FROM scheduled_tasks WHERE id=$1::uuid AND kind<>'partition-manager'`, id)
 	if err != nil {
 		return err
 	}
@@ -119,7 +119,7 @@ func (s *PostgresStore) CreateScheduledTaskRun(ctx context.Context, taskID, trig
 	var run ScheduledTaskRun
 	err := scanScheduledTaskRun(s.db.QueryRowContext(ctx, `WITH created AS (
 		INSERT INTO scheduled_task_runs (id,task_id,trigger,state,scheduled_at,created_at,last_error)
-		SELECT gen_random_uuid(),id,$2,'failed',$3,$3,'dispatch interrupted before submission' FROM scheduled_tasks WHERE id::text=$1 RETURNING *
+		SELECT gen_random_uuid(),id,$2,'failed',$3,$3,'dispatch interrupted before submission' FROM scheduled_tasks WHERE id=$1::uuid RETURNING *
 	), touched AS (
 		UPDATE scheduled_tasks tasks SET last_run_at=$3,last_run_id=created.id,last_run_state='failed',last_error='dispatch interrupted before submission',updated_at=$3 FROM created WHERE tasks.id=created.task_id
     ) SELECT `+scheduledTaskRunColumns+` FROM created`, taskID, trigger, now.UTC()), &run)
@@ -133,7 +133,7 @@ func (s *PostgresStore) ListScheduledTaskRuns(ctx context.Context, taskID string
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT `+scheduledTaskRunColumns+` FROM scheduled_task_runs WHERE task_id::text=$1 ORDER BY created_at DESC LIMIT $2`, taskID, limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+scheduledTaskRunColumns+` FROM scheduled_task_runs WHERE task_id=$1::uuid ORDER BY created_at DESC LIMIT $2`, taskID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -156,14 +156,14 @@ func (s *PostgresStore) UpdateScheduledTaskRun(ctx context.Context, run Schedule
 	}
 	defer func() { _ = tx.Rollback() }()
 	var taskID string
-	err = tx.QueryRowContext(ctx, `UPDATE scheduled_task_runs SET state=$1,completed_at=$2,target_kind=$3,target_id=$4,last_error=$5 WHERE id::text=$6 RETURNING task_id::text`, run.State, run.CompletedAt, run.TargetKind, run.TargetID, run.LastError, run.ID).Scan(&taskID)
+	err = tx.QueryRowContext(ctx, `UPDATE scheduled_task_runs SET state=$1,completed_at=$2,target_kind=$3,target_id=$4,last_error=$5 WHERE id=$6::uuid RETURNING task_id::text`, run.State, run.CompletedAt, run.TargetKind, run.TargetID, run.LastError, run.ID).Scan(&taskID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	}
 	if err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE scheduled_tasks SET last_run_state=$1,last_error=$2,updated_at=now() WHERE id::text=$3`, run.State, run.LastError, taskID); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE scheduled_tasks SET last_run_state=$1,last_error=$2,updated_at=now() WHERE id=$3::uuid`, run.State, run.LastError, taskID); err != nil {
 		return err
 	}
 	return tx.Commit()

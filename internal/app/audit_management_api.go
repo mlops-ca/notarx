@@ -115,7 +115,10 @@ func (h generatedRepositoryAPIAdapter) ListAuditPage(w http.ResponseWriter, r *h
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "list audit page failed")
 		return
 	}
-	response := auditPageResponse{Items: make([]auditResponse, 0, len(page.Items))}
+	response := auditPageResponse{Items: make([]auditResponse, 0, len(page.Items)), Completeness: AuditCompletenessBestEffortReads}
+	if h.diagnostics.AuditReadSync {
+		response.Completeness = AuditCompletenessComplete
+	}
 	for _, audit := range page.Items {
 		response.Items = append(response.Items, auditResponseFromRecord(audit))
 	}
@@ -280,8 +283,18 @@ type auditResponse struct {
 	Class               repository.AuditClass   `json:"class,omitempty"`
 }
 
+// AuditCompleteness values of the completeness field of audit pages (ADR 0023 section 1).
+const (
+	// AuditCompletenessBestEffortReads: security evidence is complete, read and
+	// download audit is buffered and best-effort.
+	AuditCompletenessBestEffortReads = "best_effort_reads"
+	// AuditCompletenessComplete: NOTARX_AUDIT_READ_MODE=sync, every read is committed.
+	AuditCompletenessComplete = "complete"
+)
+
 type auditPageResponse struct {
 	Items         []auditResponse `json:"items"`
+	Completeness  string          `json:"completeness"`
 	NextPageToken string          `json:"nextPageToken,omitempty"`
 }
 

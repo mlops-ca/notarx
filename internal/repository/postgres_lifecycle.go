@@ -10,6 +10,12 @@ import (
 	"github.com/mlops-ca/notarx/internal/requestcontext"
 )
 
+// Hot queries are named so the integration tests can EXPLAIN the production statement.
+const (
+	listLifecycleJobsQuery = `SELECT ` + lifecycleJobColumns + ` FROM lifecycle_jobs WHERE repository_id=$1::uuid ORDER BY created_at DESC LIMIT $2`
+	getLifecycleJobQuery   = `SELECT ` + lifecycleJobColumns + ` FROM lifecycle_jobs WHERE repository_id=$1::uuid AND id=$2::uuid`
+)
+
 const lifecycleJobColumns = `id::text,repository_id::text,kind,idempotency_key,payload,state,created_at,started_at,completed_at,last_error,attempts,max_attempts,next_attempt_at,lease_expires_at,lease_token,progress_current,progress_total,progress_message`
 
 func (s *PostgresStore) EnqueueLifecycleJob(ctx context.Context, job LifecycleJob) (LifecycleJob, bool, error) {
@@ -27,7 +33,7 @@ func (s *PostgresStore) EnqueueLifecycleJob(ctx context.Context, job LifecycleJo
 		return LifecycleJob{}, false, err
 	}
 	var existing LifecycleJob
-	err = scanLifecycleJob(s.db.QueryRowContext(ctx, `SELECT `+lifecycleJobColumns+` FROM lifecycle_jobs WHERE repository_id::text=$1 AND kind=$2 AND idempotency_key=$3`, job.RepositoryID, job.Kind, job.IdempotencyKey), &existing)
+	err = scanLifecycleJob(s.db.QueryRowContext(ctx, `SELECT `+lifecycleJobColumns+` FROM lifecycle_jobs WHERE repository_id=$1::uuid AND kind=$2 AND idempotency_key=$3`, job.RepositoryID, job.Kind, job.IdempotencyKey), &existing)
 	if err != nil {
 		return LifecycleJob{}, false, err
 	}
@@ -41,7 +47,7 @@ func (s *PostgresStore) ListLifecycleJobs(ctx context.Context, repositoryID stri
 	if limit <= 0 || limit > 100 {
 		limit = 100
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT `+lifecycleJobColumns+` FROM lifecycle_jobs WHERE repository_id::text=$1 ORDER BY created_at DESC LIMIT $2`, repositoryID, limit)
+	rows, err := s.db.QueryContext(ctx, listLifecycleJobsQuery, repositoryID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +99,7 @@ func (s *PostgresStore) ListAllLifecycleJobs(ctx context.Context, limit int) ([]
 
 func (s *PostgresStore) GetLifecycleJob(ctx context.Context, repositoryID, id string) (LifecycleJob, error) {
 	var job LifecycleJob
-	err := scanLifecycleJob(s.db.QueryRowContext(ctx, `SELECT `+lifecycleJobColumns+` FROM lifecycle_jobs WHERE repository_id::text=$1 AND id::text=$2`, repositoryID, id), &job)
+	err := scanLifecycleJob(s.db.QueryRowContext(ctx, getLifecycleJobQuery, repositoryID, id), &job)
 	if errors.Is(err, sql.ErrNoRows) {
 		return LifecycleJob{}, ErrNotFound
 	}
@@ -104,7 +110,7 @@ func (s *PostgresStore) GetLatestArtifactScanJob(ctx context.Context, repository
 	var job LifecycleJob
 	err := scanLifecycleJob(s.db.QueryRowContext(ctx, `SELECT `+lifecycleJobColumns+`
 		FROM lifecycle_jobs
-		WHERE repository_id::text=$1 AND kind='scan'
+		WHERE repository_id=$1::uuid AND kind='scan'
 		  AND payload->>'format'=$2 AND payload->>'coordinate'=$3 AND payload->>'digest'=$4
 		ORDER BY created_at DESC,id DESC LIMIT 1`, repositoryID, format, coordinate, digest), &job)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -171,7 +177,7 @@ func (s *PostgresStore) RecoverExpiredLifecycleJobs(ctx context.Context, before 
 	result, err := s.db.ExecContext(ctx, `WITH candidates AS (
 		SELECT id FROM lifecycle_jobs
 		WHERE state='running' AND lease_expires_at IS NOT NULL AND lease_expires_at<=$1
-		AND pg_try_advisory_xact_lock(hashtextextended('lifecycle-job-lease:' || id::text, 0))
+		AND pg_try_advisory_xact_lock(hashtextextended(format('lifecycle-job-lease:%s', id), 0))
 		FOR UPDATE SKIP LOCKED
 	) UPDATE lifecycle_jobs jobs SET
         state=CASE WHEN attempts>=max_attempts THEN 'failed' ELSE 'retrying' END,
@@ -187,11 +193,11 @@ func (s *PostgresStore) RecoverExpiredLifecycleJobs(ctx context.Context, before 
 }
 
 func (s *PostgresStore) RunLifecycleJobNow(ctx context.Context, repositoryID, id string) (LifecycleJob, error) {
-	return s.controlLifecycleJob(ctx, repositoryID, id, `UPDATE lifecycle_jobs SET state='pending',next_attempt_at=now() WHERE repository_id::text=$1 AND id::text=$2 AND state IN ('pending','retrying') RETURNING `+lifecycleJobColumns)
+	return s.controlLifecycleJob(ctx, repositoryID, id, `UPDATE lifecycle_jobs SET state='pending',next_attempt_at=now() WHERE repository_id=$1::uuid AND id=$2::uuid AND state IN ('pending','retrying') RETURNING `+lifecycleJobColumns)
 }
 
 func (s *PostgresStore) RetryLifecycleJob(ctx context.Context, repositoryID, id string) (LifecycleJob, error) {
-	return s.controlLifecycleJob(ctx, repositoryID, id, `UPDATE lifecycle_jobs SET state='pending',attempts=0,next_attempt_at=now(),started_at=NULL,completed_at=NULL,lease_expires_at=NULL,last_error='',progress_current=0,progress_message='' WHERE repository_id::text=$1 AND id::text=$2 AND state IN ('failed','cancelled') RETURNING `+lifecycleJobColumns)
+	return s.controlLifecycleJob(ctx, repositoryID, id, `UPDATE lifecycle_jobs SET state='pending',attempts=0,next_attempt_at=now(),started_at=NULL,completed_at=NULL,lease_expires_at=NULL,last_error='',progress_current=0,progress_message='' WHERE repository_id=$1::uuid AND id=$2::uuid AND state IN ('failed','cancelled') RETURNING `+lifecycleJobColumns)
 }
 
 func (s *PostgresStore) RequeueFailedLifecycleJobs(ctx context.Context, repositoryID string, kind LifecycleJobKind, limit int) ([]LifecycleJob, error) {
@@ -200,7 +206,7 @@ func (s *PostgresStore) RequeueFailedLifecycleJobs(ctx context.Context, reposito
 	}
 	rows, err := s.db.QueryContext(ctx, `WITH candidates AS (
         SELECT id FROM lifecycle_jobs
-        WHERE repository_id::text=$1 AND kind=$2 AND state IN ('failed','cancelled')
+        WHERE repository_id=$1::uuid AND kind=$2 AND state IN ('failed','cancelled')
         ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT $3
     ) UPDATE lifecycle_jobs jobs SET state='pending',attempts=0,next_attempt_at=now(),started_at=NULL,
         completed_at=NULL,lease_expires_at=NULL,lease_token='',last_error='',progress_current=0,progress_message=''
@@ -221,7 +227,7 @@ func (s *PostgresStore) RequeueFailedLifecycleJobs(ctx context.Context, reposito
 }
 
 func (s *PostgresStore) CancelLifecycleJob(ctx context.Context, repositoryID, id string) (LifecycleJob, error) {
-	return s.controlLifecycleJob(ctx, repositoryID, id, `UPDATE lifecycle_jobs SET state='cancelled',completed_at=now(),next_attempt_at=NULL WHERE repository_id::text=$1 AND id::text=$2 AND state IN ('pending','retrying') RETURNING `+lifecycleJobColumns)
+	return s.controlLifecycleJob(ctx, repositoryID, id, `UPDATE lifecycle_jobs SET state='cancelled',completed_at=now(),next_attempt_at=NULL WHERE repository_id=$1::uuid AND id=$2::uuid AND state IN ('pending','retrying') RETURNING `+lifecycleJobColumns)
 }
 
 func (s *PostgresStore) controlLifecycleJob(ctx context.Context, repositoryID, id, query string) (LifecycleJob, error) {
@@ -247,7 +253,7 @@ func (s *PostgresStore) UpdateLifecycleJobProgress(ctx context.Context, id, leas
 	}
 	result, err := s.db.ExecContext(ctx, `UPDATE lifecycle_jobs SET progress_current=$3,progress_total=$4,progress_message=$5,
 		lease_expires_at=GREATEST(lease_expires_at+interval '1 microsecond',clock_timestamp()+interval '10 minutes')
-		WHERE id::text=$1 AND lease_token=$2 AND state='running'`, id, leaseToken, current, total, message)
+		WHERE id=$1::uuid AND lease_token=$2 AND state='running'`, id, leaseToken, current, total, message)
 	if err != nil {
 		return err
 	}
@@ -260,7 +266,7 @@ func (s *PostgresStore) UpdateLifecycleJobProgress(ctx context.Context, id, leas
 func (s *PostgresStore) RenewLifecycleJobLease(ctx context.Context, id, leaseToken string) error {
 	result, err := s.db.ExecContext(ctx, `UPDATE lifecycle_jobs SET
 		lease_expires_at=GREATEST(lease_expires_at+interval '1 microsecond',clock_timestamp()+interval '10 minutes')
-		WHERE id::text=$1 AND lease_token=$2 AND state='running' AND lease_expires_at>clock_timestamp()`, id, leaseToken)
+		WHERE id=$1::uuid AND lease_token=$2 AND state='running' AND lease_expires_at>clock_timestamp()`, id, leaseToken)
 	if err != nil {
 		return err
 	}
@@ -276,7 +282,7 @@ func (s *PostgresStore) LockLifecycleJobLease(ctx context.Context, id, leaseToke
 		return nil, err
 	}
 	var valid bool
-	if err = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM lifecycle_jobs WHERE id::text=$1 AND state='running' AND lease_token=$2 AND lease_expires_at>clock_timestamp())`, id, leaseToken).Scan(&valid); err != nil {
+	if err = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM lifecycle_jobs WHERE id=$1::uuid AND state='running' AND lease_token=$2 AND lease_expires_at>clock_timestamp())`, id, leaseToken).Scan(&valid); err != nil {
 		release()
 		return nil, err
 	}
@@ -288,7 +294,7 @@ func (s *PostgresStore) LockLifecycleJobLease(ctx context.Context, id, leaseToke
 }
 
 func (s *PostgresStore) CompleteLifecycleJob(ctx context.Context, id, leaseToken string) error {
-	result, err := s.db.ExecContext(ctx, `UPDATE lifecycle_jobs SET state='completed',completed_at=now(),lease_expires_at=NULL,lease_token='',next_attempt_at=NULL,last_error='',progress_current=CASE WHEN progress_total>0 THEN progress_total ELSE progress_current END WHERE id::text=$1 AND lease_token=$2 AND state='running' AND lease_expires_at>clock_timestamp()`, id, leaseToken)
+	result, err := s.db.ExecContext(ctx, `UPDATE lifecycle_jobs SET state='completed',completed_at=now(),lease_expires_at=NULL,lease_token='',next_attempt_at=NULL,last_error='',progress_current=CASE WHEN progress_total>0 THEN progress_total ELSE progress_current END WHERE id=$1::uuid AND lease_token=$2 AND state='running' AND lease_expires_at>clock_timestamp()`, id, leaseToken)
 	if err != nil {
 		return err
 	}
@@ -309,7 +315,7 @@ func (s *PostgresStore) FailLifecycleJob(ctx context.Context, id, leaseToken, me
         completed_at=CASE WHEN attempts>=max_attempts THEN now() ELSE NULL END,
         next_attempt_at=CASE WHEN attempts>=max_attempts THEN NULL ELSE now()+LEAST(interval '30 minutes',interval '30 seconds'*power(2,LEAST(GREATEST(attempts-1,0),6))) END,
         lease_expires_at=NULL,lease_token='',last_error=$3
-        WHERE id::text=$1 AND lease_token=$2 AND state='running'`, id, leaseToken, message)
+        WHERE id=$1::uuid AND lease_token=$2 AND state='running'`, id, leaseToken, message)
 	if err != nil {
 		return err
 	}
