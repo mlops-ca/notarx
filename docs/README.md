@@ -19,6 +19,7 @@ agree with executable tests and the
 
 - [Project overview](../README.md) — positioning, capabilities, quick start, and lightweight deployment boundary.
 - [CI path classes and the ci-ok gate](ci.md) — which jobs a change triggers and the single required check.
+- [Native builds, runner matrix and local builds](native-builds.md) — no cross-compilation or emulation, the runner matrix, Apple Silicon local builds and the native-build guard.
 - [Documentation site guide](documentation-site-guide.md) — locale, route, navigation, and future site-generator contract.
 - [Getting started](getting-started.md) — complete local stack and first Repository.
 - [Product direction](../PRODUCT.md) — users, use cases, product boundary, and priorities.
