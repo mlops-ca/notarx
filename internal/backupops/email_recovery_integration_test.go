@@ -310,6 +310,12 @@ func verifyRecoveryEmail(t *testing.T, ctx context.Context, target *OwnedTarget,
 			t.Fatal(e)
 		}
 		recoverySQL(t, ctx, target.database, string(migration))
+		// The fixture mirrors what the migration did, so later comparisons hold.
+		f.Target.Locale = "en-CA"
+		for id, delivery := range f.Deliveries {
+			delivery.Locale = "en-CA"
+			f.Deliveries[id] = delivery
+		}
 	}
 	// Restore always starts API-only, with no SMTP configuration or worker role.
 	fixture := testsupport.NewSMTPFixture(t, true)
