@@ -1,10 +1,7 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { authenticateAsAdmin, authenticateAsMember } from "./support/auth";
 import { defaultSiteSettings } from "../src/lib/siteSettings";
-import {
-  waitForAnimationsToSettle,
-  waitForModalOpen,
-} from "./support/motion";
+import { waitForAnimationsToSettle, waitForModalOpen } from "./support/motion";
 import { nexusCapabilities } from "../src/test/nexusBatchFixtures";
 import {
   migrationDiscovery,
