@@ -64,25 +64,25 @@ storage credentials, or unredacted upstream URLs in that record.
 
 ## Pinning the Rehearsal Image
 
-`make upgrade-readiness` is fixed to formal v0.5.0 commit
-`ea60aea333b29bb60d4ac1b8e2b2a8720563726f`. It source-builds that baseline,
-uses fresh owned PostgreSQL/S3 resources and synthetic credentials, and never
-loads `.env`. One migration job adds 000136–139; a second run must preserve the
-complete metadata fingerprint. Existing repository IDs, Group order, grants and
-object bytes are read back. New encrypted targets are created through the API;
-exported Store interfaces create/evaluate quota state/events, with candidate API
-event readback. The separate restore gate checks safe API field identity/state. Rollback restores the consistent
-pre-upgrade DB/object snapshot into a fresh target with matching v0.5.0 software,
-then rolls forward. This gate does not validate an old binary against an
-expanded database, down migrations, every protocol/provider, or published images.
-`make backup-transfer-test` independently proves new outbox recovery semantics
-for both binary and OCI software profiles, with an owned TLS sink.
+`make upgrade-readiness [--from-tag vX.Y.Z]` upgrades from a stable notarx release
+tag (`^v[0-9]+\.[0-9]+\.[0-9]+$`; nightly pre-releases are never an upgrade
+source). It defaults to the highest stable tag and is a reported no-op while no
+stable tag exists, so it becomes meaningful with the second release (0.2.0).
+It source-builds the previous release, uses fresh owned PostgreSQL/S3 resources and
+synthetic credentials, and never loads `.env`. One migration job applies the
+candidate's new migrations; every previously applied checksum must be unchanged,
+and a second run must preserve the complete metadata fingerprint. Existing
+repository IDs, Group order, grants and object bytes are read back. Rollback
+restores the consistent pre-upgrade DB/object snapshot into a fresh target with
+matching previous-release software, then rolls forward. This gate does not
+validate an old binary against an expanded database, down migrations, every
+protocol/provider, or published images. Until a second release exists,
+`make backup-transfer-test` runs the same properties against the baseline plus a
+synthetic `000002` migration (`TestLocalReleaseUpgrade`). That target also proves
+new outbox recovery semantics for both binary and OCI software profiles, with an
+owned TLS sink.
 
-`scripts/historical-upgrade-readiness.sh` preserves the v0.1.0 protocol regression
-and its explicit `NOTARX_UPGRADE_FROM_REF` override. Its shared-volume binary
-rollback is historical evidence only, not this release's rollback approval.
-The image options below apply to that historical helper and
-`backup-restore-readiness`, not the fixed v0.5.0 gate.
+The image options below apply to `backup-restore-readiness`.
 
 Image inputs must be registry references ending in `@sha256:<64 lowercase hex>`
 or an already loaded local `sha256:<64 lowercase hex>` image ID. Mutable tags are
@@ -165,8 +165,8 @@ and any registry access failure separately.
       concurrent opted-in TLS workers send only permitted due work. Cancelled
       expired claims and terminal deliveries never automatically resend; active
       leases/future retries, stale-token fencing and possibleDuplicate remain.
-- [ ] `make upgrade-readiness` passes the fixed v0.5.0 forward migration,
-      replay no-op, core/new-state readback and isolated pre-upgrade snapshot
+- [ ] `make upgrade-readiness` passes the previous-release forward migration,
+      replay no-op, core readback and isolated pre-upgrade snapshot
       rollback/rollforward described above. Record source-built software identity
       separately from published binary/image distribution acceptance.
 - [ ] Before rolling out migration `000095`, stop accepting new replication
@@ -240,7 +240,7 @@ and any registry access failure separately.
 | Backup target | PostgreSQL metadata plus RustFS object data; 24-hour RPO, 30-minute RTO drill target |
 | OCI performance gate | 50 cached manifest reads, concurrency 10, zero errors, p95 <= 1000 ms |
 | Cache operations gate | Resolver denied; administrator collection increases successful-run count |
-| Upgrade gate | Fixed v0.5.0 `ea60aea…`, migrations 000136–139, replay no-op, core/new-state readback, pre-upgrade snapshot rollback and rollforward |
+| Upgrade gate | Latest stable notarx tag to candidate, unchanged applied checksums, replay no-op, core readback, pre-upgrade snapshot rollback and rollforward |
 
 ## Architecture
 
@@ -283,7 +283,7 @@ flowchart LR
 
 1. Stop traffic and all new evaluators/workers; retain logs, metrics and the
    current consistent state. Review external mail effects before re-enabling mail.
-2. For the v0.5.0 rollback proven by this gate, restore the consistent pre-upgrade
+2. For the previous-release rollback proven by this gate, restore the consistent pre-upgrade
    PostgreSQL/object snapshot into a fresh isolated target with matching old
    software, configuration and independently held key. This loses post-snapshot
    changes. Binary-only rollback against expanded DB requires separate explicit

@@ -71,7 +71,7 @@ current declaration when publishing a new target file. A retry finding an
 already-published identical target keeps that target's local governance state.
 Neither operation rewrites an existing target's advisory metadata. Backup and
 restore retain the PostgreSQL columns alongside the verified immutable objects.
-Migration `000152_pypi_yank.sql` is forward-only; older restored schemas must run
+Migrations are forward-only; older restored schemas must run
 the normal forward migrations before serving traffic.
 
 ## Evidence and limits

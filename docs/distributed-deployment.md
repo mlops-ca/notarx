@@ -37,8 +37,8 @@ and delete. `installation_repository_presets` records the one-time outcome.
 Concurrent API startup creates one catalog, and an SQL failure rolls back the
 entire set. Restarting preserves administrator changes and deletions. Upgrades
 with an existing repository or Group catalog skip initialization. Worker-only and
-scheduler-only nodes do not initialize repositories. Apply the additive
-`000174_installation_repository_presets.sql` migration before starting new nodes.
+scheduler-only nodes do not initialize repositories. Apply the standard migrations before starting new nodes; the baseline
+migration (`000001_baseline.sql`) seeds the pending preset record.
 
 To start empty, set `NOTARX_REPOSITORY_PRESETS=none` on every API/standalone node.
 This deletes nothing. A later explicit change to `standard` initializes only an

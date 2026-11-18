@@ -102,8 +102,8 @@ Open **Recurring migration plans** or `/operations?tab=migrations&view=schedules
 Create a plan from a fully successful completed batch and set an interval of
 1–43,200 minutes. The plan freezes that batch's source version, target mappings
 and native policy. Editing any of these bindings requires a new successful
-batch and a new plan. The additive schema is
-`000166_nexus_migration_schedules.sql`; administrator APIs live under
+batch and a new plan. The schema is part of the baseline migration
+`000001_baseline.sql`; administrator APIs live under
 `/api/v2/migrations/nexus/schedules`.
 
 The existing scheduler role dispatches ordinary durable batches; the existing

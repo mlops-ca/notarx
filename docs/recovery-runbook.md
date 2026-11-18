@@ -236,15 +236,17 @@ explicitly starting any mail worker, review pending/in-flight/possibleDuplicate
 and cancellation state. Restoring an earlier snapshot can repeat an externally
 accepted attempt; SMTP is not exactly-once and accepted mail cannot be recalled.
 
-`make upgrade-readiness` pins formal v0.5.0 `ea60aea333b29bb60d4ac1b8e2b2a8720563726f`.
-Stop all API/Scheduler/Worker and external writers; retain a consistent pre-upgrade
-PG + object snapshot and matching software/config/key. Apply 000136–139 with one
+`make upgrade-readiness` upgrades from the latest stable notarx release tag (see
+[release readiness](release-readiness.md)). Stop all API/Scheduler/Worker and
+external writers; retain a consistent pre-upgrade PG + object snapshot and
+matching software/config/key. Apply the candidate's new migrations with one
 migration job before starting same-revision roles and Console; default mail stays
-disabled. The gate checks replay no-op, core identity/bytes and new-state readback,
-then restores that pre-upgrade snapshot into a new v0.5.0 target and rolls forward.
+disabled. The gate checks that applied checksums are unchanged, replay no-op and
+core identity/bytes, then restores that pre-upgrade snapshot into a new
+previous-release target and rolls forward.
 Objects use the same S3 byte format; DB changes are additive forward migrations.
 Additive schema alone does not approve running an old binary against the expanded
-DB. No down migration or intermediate pre-000139 mail worker is approved here.
+DB. No down migration is approved here.
 Full snapshot rollback loses changes after the snapshot and requires reviewing
 external mail side effects before traffic/worker enablement. Published-registry
 and production deployment acceptance, provider/protocol/scale matrices remain open.

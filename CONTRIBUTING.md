@@ -238,8 +238,9 @@ regenerates and compares file hashes so uncommitted generated changes remain
 reviewable. The lane runner controls run with
 `python3 -B -m unittest discover -s scripts/tests -p test_ci_contract.py`.
 A failing lane uploads `contract-<lane>-<attempt>` with its step logs and raw
-producer reports. The upstream `upgrade-readiness` step is not run in CI (ADR
-0015, [#39](https://github.com/mlops-ca/notarx/issues/39)).
+producer reports. `upgrade-readiness` is not run in CI until a stable notarx release tag exists (ADR
+0015); `make backup-transfer-test` runs the baseline-plus-synthetic-`000002`
+upgrade fixture meanwhile.
 
 ## Documentation conventions
 

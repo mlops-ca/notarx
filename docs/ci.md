@@ -101,7 +101,6 @@ rebuilds an image from source. `compose.yml` names the images
 `NOTARX_COMPOSE_BUILD_FLAG=--no-build`; the e2e scripts use it in place of
 `--build`, and unset (local runs) they still build from source. Scripts that
 build with their own version arguments (`backup-restore-readiness`,
-`historical-upgrade-readiness`, `cargo-upgrade-readiness`,
 `performance-baseline`) keep a per-project image name so they never touch the
 shared tag. `ci-ok` requires `build-images` whenever `go` or `console`
 changed. `build-images` runs each image on both native runners (`ubuntu-24.04`
@@ -113,11 +112,30 @@ once in `core-checks` (`make test`) and `quality`. The tests live in an opt-in
 `test` stage (`make docker-test`, run by `image-test-stages` when Dockerfiles or
 compose files change) that BuildKit skips for image builds.
 
-CI does not fetch the upstream v0.5.0 tag or run `upgrade-readiness`: ADR 0015
-has no upgrade path from upstream, and
-[#39](https://github.com/mlops-ca/notarx/issues/39) re-parameterises
-`scripts/upgrade-readiness.sh` (kept, with its make target) on notarx release
-tags. Re-add the step once a notarx release tag exists.
+CI does not fetch an upstream tag or run `upgrade-readiness`: ADR 0015 has no
+upgrade path from upstream. `scripts/upgrade-readiness.sh` (kept, with its make
+target) is parameterised on stable notarx release tags and reports a no-op until
+one exists; re-add the CI step once a second notarx release exists.
+`make backup-transfer-test` (lane `core-backup`) runs the same upgrade properties
+against the baseline plus a synthetic `000002` migration meanwhile.
+
+## Migration checks
+
+The `quality` job runs `make migration-check`
+(`scripts/migration-immutability-check.sh`, checkout with full history and tags).
+It always enforces unique, gap-free, snake_case migration names. Once a stable
+`vX.Y.Z` tag exists it also fails any diff of a released migration against the
+latest stable tag; nightly tags are ignored. `make test` runs the script's bash
+fixtures.
+
+The temporary `baseline-equivalence` workflow
+(`.github/workflows/baseline-equivalence.yml`, ADR 0015 slice 3) runs on pull
+requests that touch the baseline, the runner or the baseline tooling. On linux/amd64
+and linux/arm64 native runners it proves `migrations/000001_baseline.sql`
+equivalent to the migration chain at the pull request base (schema dump, data dump,
+catalogs, no PUBLIC privileges), then runs `make integration-test` and the
+`core-native-e2e`, `nuget`, `helm`, `rubygems` and `oci-discovery` lanes against
+the baseline. It is not part of `ci-ok` and is removed with the re-squash.
 
 Run `bash scripts/ci-changes-test.sh` to check the classifier fixtures.
 

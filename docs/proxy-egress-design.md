@@ -2,7 +2,7 @@
 
 [简体中文](proxy-egress-design.zh-CN.md) | [Documentation index](README.md)
 
-Status: implemented (2026-08-06). Migration `000070_egress_proxy.sql`, the
+Status: implemented (2026-08-06). The egress schema (baseline migration `000001_baseline.sql`), the
 `internal/egress` transport factory, the V2 management API (including the
 `:test` endpoint), and the Console settings form are in place. Audit
 `egress_mode` fields from the original proposal were deferred; existing
@@ -273,8 +273,8 @@ and other formats reject this field, including `null`. Legacy V1 Group members
 also reject it: V2 Groups inherit their native Proxy member's configuration at
 runtime without introducing a legacy member configuration field.
 
-Migration `000144_oci_bearer_configuration.sql` adds nullable JSONB `oci_bearer`
-to `hosted_repositories`; existing rows remain disabled. Only configuration is
+`hosted_repositories` has a nullable JSONB `oci_bearer` column;
+rows default to disabled. Only configuration is
 persisted, never exchanged tokens. The API does not alter `allowedHosts`: a
 cross-origin token realm still needs independent authorization under the
 repository's existing egress policy. The `upstreamAuth` configuration below

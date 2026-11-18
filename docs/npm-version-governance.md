@@ -97,9 +97,9 @@ Collected identities remain reserved and cannot be republished.
 
 ## Persistence and verification
 
-Forward migration `000149_native_npm_metadata_governance.sql` adds package
-revisions, mutable warning metadata and the collection fence. It backfills
-warnings from existing manifests without rewriting publication identity or
+The schema (part of the baseline migration `000001_baseline.sql`) holds package
+revisions, mutable warning metadata and the collection fence. Warnings derive
+from existing manifests without rewriting publication identity or
 tarballs. Metadata-only changes neither upload bytes nor consume new byte
 quota. Restore retains the existing quota and lease admission. No new secret,
 upstream credential forwarding or signing key is introduced.
