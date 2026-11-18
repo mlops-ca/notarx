@@ -12,7 +12,7 @@
         { "id": "documentation-site-guide", "title": { "en": "Documentation site guide", "zh-CN": "文档站接入指南" }, "en": "docs/documentation-site-guide.md", "zh-CN": "docs/documentation-site-guide.zh-CN.md" },
         { "id": "getting-started", "title": { "en": "Getting started", "zh-CN": "快速入门" }, "en": "docs/getting-started.md", "zh-CN": "docs/getting-started.zh-CN.md" },
         { "id": "product", "title": { "en": "Product direction", "zh-CN": "产品方向" }, "en": "PRODUCT.md", "zh-CN": "PRODUCT.zh-CN.md" },
-        { "id": "ci-gates", "title": { "en": "CI path classes and the ci-ok gate", "zh-CN": "CI 路径分类与 ci-ok 门禁" }, "en": "docs/ci.md", "zh-CN": "docs/ci.zh-CN.md" },
+        { "id": "ci-gates", "title": { "en": "CI path classes and the ci-ok gate" }, "en": "docs/ci.md" },
         { "id": "contributing", "title": { "en": "Contributing", "zh-CN": "参与开发" }, "en": "CONTRIBUTING.md", "zh-CN": "CONTRIBUTING.zh-CN.md" },
         { "id": "format-extension", "title": { "en": "Format extension guide", "zh-CN": "格式扩展指南" }, "en": "docs/format-extension-guide.md", "zh-CN": "docs/format-extension-guide.zh-CN.md" }
       ]
