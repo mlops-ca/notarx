@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "defaultLocale": "en",
-  "locales": ["en", "zh-CN"],
+  "defaultLocale": "en-CA",
+  "locales": ["en-CA", "fr-CA", "zh-CN"],
   "sections": [
     {
       "id": "start",
