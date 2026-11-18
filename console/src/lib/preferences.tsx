@@ -1,5 +1,6 @@
+import { message } from "antd";
 import type { MessageKey } from "../messages";
-import { DEFAULT_LOCALE, detectLocale } from "../messages/locales";
+import { DEFAULT_LOCALE, detectLocale, localeInfo } from "../messages/locales";
 import {
   createTranslator,
   isMessagesLoaded,
@@ -147,6 +148,15 @@ function storedLocale(): AppLocale {
   return detectLocale(stored, languages);
 }
 
+/**
+ * Loads the message table of the language the reader will see first, so the
+ * Console renders in it from the start instead of switching after the chunk
+ * arrives. A failed fetch is left to the provider, which keeps en-CA.
+ */
+export function preloadLocale(): Promise<void> {
+  return loadMessages(storedLocale()).catch(() => undefined);
+}
+
 function persistThemePreference(theme: Pick<ConsoleTheme, "id" | "mode">) {
   try {
     localStorage.setItem(THEME_ID_KEY, theme.id);
@@ -178,6 +188,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     return isMessagesLoaded(detected) ? detected : DEFAULT_LOCALE;
   });
   const localeRequest = useRef(0);
+  const shownLocale = useRef(locale);
   const activeThemeTransition = useRef<ThemeViewTransition | null>(null);
   const themeCommitSequence = useRef(0);
   const requestedThemeId = useRef(themeId);
@@ -208,6 +219,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     document.documentElement.lang = locale;
+    shownLocale.current = locale;
   }, [locale]);
 
   const setThemeId = useCallback(
@@ -332,9 +344,18 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
         return;
       }
       loadMessages(nextLocale).then(commit, (error: unknown) => {
+        // A later request owns the outcome (StrictMode runs the start-up load
+        // twice, and the reader may pick another language meanwhile).
+        if (localeRequest.current !== request) return;
         // Offline or a stale deploy: stay in the current language and store
-        // nothing, so the next visit asks again.
+        // nothing, so the next visit asks again; say so in that language.
         console.error(`Console messages for ${nextLocale} did not load`, error);
+        const current = createTranslator(shownLocale.current);
+        void message.error(
+          current("common.language.loadFailed", {
+            language: current(localeInfo(nextLocale).labelKey),
+          }),
+        );
       });
     },
     [],

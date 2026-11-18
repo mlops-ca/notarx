@@ -19,8 +19,8 @@
 // Findings are printed as GitHub annotations. The exit status is 1 when a
 // critical key (a destructive action) has a finding, 2 when the review could
 // not run. Keys that pass are recorded "reviewed" with --write-sidecar.
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { existsSync, lstatSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { join, resolve, sep } from "node:path";
 import { RULES } from "./i18n-draft.mjs";
 import {
   defaultMessagesDir, dictionaryPath, featureNames, fingerprint, markReviewed,
@@ -250,6 +250,22 @@ function annotate(finding, unit, root) {
   return "::" + (finding.severity === "error" ? "error" : "warning") + (file ? " file=" + file : "") + "::" + encode(label + " [" + finding.kind + "] " + finding.message);
 }
 
+/**
+ * A fr-CA document's text, read only when it is a regular file inside the
+ * checkout: the head of a pull request is untrusted, and a symlink must not make
+ * this script send some other file to the provider. A document the pull request
+ * deleted is skipped (undefined).
+ */
+export function readDocument(repo, doc) {
+  if (!doc.endsWith(".fr-CA.md") || doc.startsWith("/") || doc.split("/").includes("..")) throw new Error("not a repository fr-CA document: " + doc);
+  const path = join(repo, doc);
+  if (!existsSync(path)) return undefined;
+  if (!lstatSync(path).isFile()) throw new Error("not a regular file: " + doc);
+  const root = realpathSync(repo);
+  if (!realpathSync(path).startsWith(root + sep)) throw new Error("outside the checkout: " + doc);
+  return readFileSync(path, "utf8");
+}
+
 function parseArgs(argv) {
   const args = { docs: [] };
   for (let i = 0; i < argv.length; i++) {
@@ -270,14 +286,14 @@ export async function main(argv = process.argv.slice(2), env = process.env, fetc
   const repo = resolve(args.root ?? ".");
   const messages = join(repo, "console/src/messages");
   const provider = selectProvider(args.provider ?? env[PROVIDER_VARIABLE], { env, fetchImpl });
-  const glossary = readGlossary(messages);
-  const units = existsSync(join(messages, "glossary.ts"))
+  const hasGlossary = existsSync(join(messages, "glossary.ts"));
+  const glossary = hasGlossary ? readGlossary(messages) : [];
+  const units = hasGlossary
     ? changedUnits({ root: messages, baseRoot: args.baseRoot ? join(resolve(args.baseRoot), "console/src/messages") : undefined })
     : [];
   for (const doc of args.docs) {
-    // Only fr-CA documents inside the checkout are read.
-    if (!doc.endsWith(".fr-CA.md") || doc.startsWith("/") || doc.split("/").includes("..")) throw new Error("not a repository fr-CA document: " + doc);
-    units.push(...docUnits(doc, readFileSync(join(repo, doc), "utf8")));
+    const text = readDocument(repo, doc);
+    if (text !== undefined) units.push(...docUnits(doc, text));
   }
   if (units.length === 0) {
     console.log("fr-CA review: nothing changed, nothing sent.");

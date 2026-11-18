@@ -21,11 +21,7 @@ import { FormatBadge, RepositoryTypeBadge } from "../components/ui/Badge";
 import { ErrorBanner } from "../components/ui/Feedback";
 import { usePreferences } from "../lib/preferences";
 import { SUPPORTED_LOCALES } from "../messages/locales";
-import {
-  createTranslator,
-  loadMessages,
-  type MessageLocale,
-} from "../messages/translate";
+import { createTranslator, isMessagesLoaded } from "../messages/translate";
 
 export interface CommandPage {
   to: string;
@@ -82,29 +78,6 @@ export function CommandPalette({
   const listId = useId();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
-  // Each language is named in its own table, which loads on demand (ADR 0014);
-  // opening the palette fetches the others so their names can show. Until they
-  // arrive (or if a fetch fails) a name reads in the current language.
-  const [namedLocales, setNamedLocales] = useState<readonly MessageLocale[]>(
-    [],
-  );
-  useEffect(() => {
-    if (!open) return undefined;
-    let current = true;
-    void Promise.allSettled(
-      SUPPORTED_LOCALES.map((item) => loadMessages(item.tag)),
-    ).then((results) => {
-      if (!current) return;
-      setNamedLocales(
-        SUPPORTED_LOCALES.filter(
-          (_, i) => results[i].status === "fulfilled",
-        ).map((item) => item.tag),
-      );
-    });
-    return () => {
-      current = false;
-    };
-  }, [open]);
   const repositoryRead = useAllRepositories(open && canBrowseRepositories);
   const { repositories } = repositoryRead;
   const repositoryError = repositoryRead.error;
@@ -176,9 +149,11 @@ export function CommandPalette({
       // The language is named in its own language, so a reader stuck in the
       // wrong one can still recognize it.
       label: t("palette.switchLanguage", {
-        language: (namedLocales.includes(item.tag)
-          ? createTranslator(item.tag)
-          : t)(item.labelKey),
+        // A language shows its own name once its table is loaded (the one
+        // the reader uses always is); until then it reads in the current one.
+        language: (isMessagesLoaded(item.tag) ? createTranslator(item.tag) : t)(
+          item.labelKey,
+        ),
       }),
       icon: <GlobalOutlined />,
       run: () => setLocale(item.tag),
@@ -203,7 +178,6 @@ export function CommandPalette({
     navigate,
     t,
     locale,
-    namedLocales,
     setLocale,
     toggleColorMode,
     onSignOut,

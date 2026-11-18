@@ -8,7 +8,11 @@ vi.mock("../messages/frCA.bundle", () => {
   throw new Error("chunk fetch failed");
 });
 
-import { PreferencesProvider, usePreferences } from "./preferences";
+import {
+  PreferencesProvider,
+  preloadLocale,
+  usePreferences,
+} from "./preferences";
 
 function Probe() {
   const { locale, setLocale, t } = usePreferences();
@@ -45,6 +49,19 @@ describe("PreferencesProvider message loading", () => {
     expect(screen.getByTestId("retry")).toHaveTextContent("Retry");
     expect(document.documentElement.lang).toBe("en-CA");
     expect(localStorage.getItem("ag.console.locale")).toBeNull();
+    // The reader is told, in the language still on screen.
+    expect(
+      await screen.findByText(
+        "Could not load the selected language (French). Check your connection and try again.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("preloads the stored language and swallows a failed fetch", async () => {
+    localStorage.setItem("ag.console.locale", "fr-CA");
+    await expect(preloadLocale()).resolves.toBeUndefined();
+    localStorage.setItem("ag.console.locale", "zh-CN");
+    await expect(preloadLocale()).resolves.toBeUndefined();
   });
 
   it("falls back to en-CA at start when the stored language cannot load", async () => {

@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { markReviewed, readSidecar, syncSidecar } from "./i18n-lib.mjs";
 import {
   PROVIDERS, buildReviewPrompt, changedUnits, docUnits, localFindings, main, parseFindings,
-  readGlossary, review, selectProvider,
+  readDocument, readGlossary, review, selectProvider,
 } from "./i18n-review.mjs";
 
 const EN = 'export const fooEnCA = {\n  "foo.title": "Repositories",\n  "foo.deleteRepo": "Delete repository",\n  "foo.count": "{count} items in {name}",\n};\n';
@@ -142,6 +142,35 @@ test("document paragraphs skip code, tables and bare URLs", () => {
     ["doc:README.fr-CA.md:3", "Un paragraphe sur deux lignes."],
     ["doc:README.fr-CA.md:15", "Fin."],
   ]);
+});
+
+test("a document is read only as a regular file inside the checkout", () => {
+  const { root } = repo();
+  writeFileSync(join(root, "README.fr-CA.md"), "Bonjour.\n");
+  assert.equal(readDocument(root, "README.fr-CA.md"), "Bonjour.\n");
+  // A document the pull request deleted is skipped.
+  assert.equal(readDocument(root, "gone.fr-CA.md"), undefined);
+  // A symlink to another file is refused, whatever it points at.
+  const outside = join(mkdtempSync(join(tmpdir(), "i18n-outside-")), "secret.txt");
+  writeFileSync(outside, "secret");
+  symlinkSync(outside, join(root, "evil.fr-CA.md"));
+  assert.throws(() => readDocument(root, "evil.fr-CA.md"), /not a regular file/);
+  assert.throws(() => readDocument(root, "../x.fr-CA.md"), /not a repository fr-CA document/);
+  assert.throws(() => readDocument(root, "/etc/passwd"), /not a repository fr-CA document/);
+  assert.throws(() => readDocument(root, "notes.md"), /not a repository fr-CA document/);
+});
+
+test("without a glossary file there is nothing to review and nothing is sent", async () => {
+  const root = mkdtempSync(join(tmpdir(), "i18n-review-empty-"));
+  const logs = [];
+  const log = console.log;
+  console.log = (line) => logs.push(line);
+  try {
+    assert.equal(await main(["--provider", "stub", "--root", root], {}, undefined), 0);
+  } finally {
+    console.log = log;
+  }
+  assert.match(logs.join("\n"), /nothing changed, nothing sent/);
 });
 
 test("main fails on a critical finding, records passing keys and prints annotations", async () => {

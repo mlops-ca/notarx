@@ -19,8 +19,8 @@ const msg = (locale, key, vars = {}) => {
   return text.replace(/\{([^{}]+)\}/g, (placeholder, name) => Object.hasOwn(vars, name) ? String(vars[name]) : placeholder);
 };
 const en = (key, vars) => msg('en-CA', key, vars);
-// A toast's lead clause: the text before the first clause break (ASCII or full-width).
-const prefix = text => new RegExp(text.split(/[;,\uff1b\uff0c]/)[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+// A toast's lead clause: the text before the first semicolon (en-CA text only).
+const prefix = text => new RegExp(text.split(';')[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
 const emailBundles = Object.fromEntries(LOCALES.filter(locale => locale !== 'zh-CN').map(locale => [locale, JSON.parse(readFileSync(new URL('../internal/emailnotification/locales/' + locale + '.json', import.meta.url), 'utf8'))]));
 const emailTitle = (locale, key) => (emailBundles[locale] ?? emailBundles['en-CA'])[key];
 const apiURL = process.env.EMAIL_CONSOLE_API;

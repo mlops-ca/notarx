@@ -9,6 +9,8 @@ export const shellFrCA: Record<keyof typeof shellEnCA, string> = {
   "common.language.zh": "Chinois",
   "common.language.fr": "Français",
   "common.language.en": "Anglais",
+  "common.language.loadFailed":
+    "Impossible de charger la langue sélectionnée ({language}). Vérifiez votre connexion et réessayez.",
   "palette.title": "Palette de commandes",
   "palette.trigger": "Rechercher ou aller à…",
   "palette.placeholder": "Rechercher des pages, des dépôts ou des actions…",
