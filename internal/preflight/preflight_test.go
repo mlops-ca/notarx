@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -124,5 +125,82 @@ func testConfig() config.Config {
 		RustFSBucket:    "gateway-cache",
 		RustFSAccessKey: "access-key",
 		RustFSSecretKey: "secret-key",
+	}
+}
+
+func TestTrigramResultStates(t *testing.T) {
+	cases := []struct {
+		state  string
+		err    error
+		status Status
+		phrase string
+	}{
+		{"installed", nil, StatusPass, "installed"},
+		{"creatable", nil, StatusPass, "can be created"},
+		{"unavailable", nil, StatusFail, "not available"},
+		{"denied", nil, StatusFail, "may not create pg_trgm"},
+		{"", errors.New("postgres://gateway:super-secret@db/gateway"), StatusFail, "could not run"},
+	}
+	for _, c := range cases {
+		result := trigramResult(c.state, c.err)
+		if result.Name != "pg_trgm" || result.Status != c.status || !strings.Contains(result.Summary, c.phrase) {
+			t.Errorf("state %q: result = %#v", c.state, result)
+		}
+		if strings.Contains(result.Summary, "super-secret") {
+			t.Errorf("state %q leaked the dependency error: %#v", c.state, result)
+		}
+	}
+}
+
+func TestRunnerReportsTrigramCheck(t *testing.T) {
+	runner := NewRunner()
+	runner.TrigramState = func(context.Context, string) (string, error) { return "denied", nil }
+	report := runner.Run(context.Background(), testConfig(), []string{"pg_trgm"})
+	if len(report.Results) != 1 || report.Results[0].Name != "pg_trgm" || !report.Failed() {
+		t.Fatalf("results = %#v", report.Results)
+	}
+	runner.TrigramState = func(context.Context, string) (string, error) { return "installed", nil }
+	if report := runner.Run(context.Background(), testConfig(), []string{"pg_trgm"}); report.Failed() {
+		t.Fatalf("results = %#v", report.Results)
+	}
+}
+
+func TestTrigramCheckIsListedAndSelectable(t *testing.T) {
+	found := false
+	for _, name := range CheckNames() {
+		found = found || name == "pg_trgm"
+	}
+	if !found || !isCheckName("pg_trgm") {
+		t.Fatal("pg_trgm must be a named preflight check")
+	}
+}
+
+func TestProbeTrigramReportsConnectionFailure(t *testing.T) {
+	if _, err := probeTrigram(context.Background(), "postgres://nobody@127.0.0.1:1/none?connect_timeout=1"); err == nil {
+		t.Fatal("expected a connection error")
+	}
+}
+
+// scripts/run-migrations.sh runs the same pg_trgm classification before its
+// first statement; the two copies must not drift.
+func TestTrigramSQLMatchesMigrationRunner(t *testing.T) {
+	script, err := os.ReadFile("../../scripts/run-migrations.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const start = "trigram_state=$(run_psql -At <<'SQL'\n"
+	text := string(script)
+	begin := strings.Index(text, start)
+	if begin < 0 {
+		t.Fatal("run-migrations.sh lost its pg_trgm classification")
+	}
+	rest := text[begin+len(start):]
+	end := strings.Index(rest, "\nSQL\n")
+	if end < 0 {
+		t.Fatal("run-migrations.sh pg_trgm classification is not terminated")
+	}
+	normalize := func(sql string) string { return strings.Join(strings.Fields(strings.TrimSuffix(strings.TrimSpace(sql), ";")), " ") }
+	if got, want := normalize(rest[:end]), normalize(trigramStateSQL); got != want {
+		t.Fatalf("pg_trgm SQL differs between run-migrations.sh and internal/preflight/trigram.go\nscript: %s\ngo:     %s", got, want)
 	}
 }

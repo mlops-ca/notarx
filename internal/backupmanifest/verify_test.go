@@ -44,7 +44,7 @@ func fixture(t *testing.T) (string, Manifest) {
 		SchemaVersion: 1, BackupID: "synthetic-backup", State: "complete", StartedAt: start, CompletedAt: start.Add(time.Minute),
 		Gateway:  GatewayIdentity{Version: "synthetic-v1", Revision: strings.Repeat("a", 40), ImageDigest: "sha256:" + strings.Repeat("b", 64)},
 		Database: DatabaseExport{Format: "pg-custom-v1", File: writeFixtureFile(t, dir, "database.dump", []byte("PGDMP-synthetic-not-a-restorable-dump"))},
-		Schema:   SchemaExport{Format: "gateway-migrations-tsv-v1", File: writeFixtureFile(t, dir, "migrations.tsv", []byte("filename\tsha256\n000000_schema_history.sql\t"+strings.Repeat("c", 64)+"\n"))},
+		Schema:   SchemaExport{Format: "notarx-migrations-tsv-v1", File: writeFixtureFile(t, dir, "migrations.tsv", []byte("filename\tsha256\n000000_schema_history.sql\t"+strings.Repeat("c", 64)+"\n"))},
 		Writers:  WriterEvidence{ScopeID: "synthetic-scope", InventoryDeclaredComplete: true, Writers: []Writer{{ID: "synthetic-api", StopConfirmed: true, StoppedAt: start.Add(-time.Minute), ConfirmedThrough: start.Add(2 * time.Minute)}}},
 	}
 	first := writeFixtureFile(t, dir, "objects/one.bin", []byte("abc"))
@@ -145,13 +145,14 @@ func TestMissingChangedAndInterruptedArtifactsAreInvalid(t *testing.T) {
 
 func TestUnknownVersionsAndQuantitiesRemainUnknown(t *testing.T) {
 	cases := map[string]func(*Manifest){
-		"manifest version": func(m *Manifest) { m.SchemaVersion = 2 },
-		"schema format":    func(m *Manifest) { m.Schema.Format = "future-schema-v2" },
-		"export format":    func(m *Manifest) { m.Objects.Format = "rustfs-physical-v1" },
-		"incomplete set":   func(m *Manifest) { m.State = "incomplete" },
-		"missing count":    func(m *Manifest) { m.Objects.Count = nil },
-		"missing bytes":    func(m *Manifest) { m.Objects.Bytes = nil },
-		"missing size":     func(m *Manifest) { m.Database.File.Size = nil },
+		"manifest version":     func(m *Manifest) { m.SchemaVersion = 2 },
+		"schema format":        func(m *Manifest) { m.Schema.Format = "future-schema-v2" },
+		"legacy schema format": func(m *Manifest) { m.Schema.Format = "gateway-migrations-tsv-v1" },
+		"export format":        func(m *Manifest) { m.Objects.Format = "rustfs-physical-v1" },
+		"incomplete set":       func(m *Manifest) { m.State = "incomplete" },
+		"missing count":        func(m *Manifest) { m.Objects.Count = nil },
+		"missing bytes":        func(m *Manifest) { m.Objects.Bytes = nil },
+		"missing size":         func(m *Manifest) { m.Database.File.Size = nil },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {

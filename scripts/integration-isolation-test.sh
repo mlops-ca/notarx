@@ -29,18 +29,9 @@ if [[ "$1" == port ]]; then
   esac
   exit 0
 fi
-# Upgrade probes use a second database within the same isolated project. Their
-# mounted legacy migrations are not the checksum-drift fixture.
-if [[ "$*" == *"--env PGDATABASE=gateway_"*"_upgrade_test"* ]]; then
-  exit 0
-fi
-if [[ "$*" == *"psql -X -U gateway -d gateway_apt_lifecycle_upgrade_test"* ]]; then
-  sql=$(cat)
-  if [[ "$sql" == *"APT lifecycle requires backup restoration for downgrade"* ]]; then
-    printf 'APT lifecycle requires backup restoration for downgrade\n' >&2
-    exit 1
-  fi
-  exit 0
+if [[ "$*" == *"PGDATABASE=gateway_foreign_schema_test"* && "$*" == *migrate* ]]; then
+  printf 'Database gateway_foreign_schema_test already holds 1 table(s) but no notarx migration ledger.\n' >&2
+  exit 1
 fi
 if [[ "$*" == *--volume* ]]; then
   printf 'Applied migration drift probe has changed\n' >&2
@@ -76,7 +67,7 @@ AG_ISOLATION_LATEST=$(find "$root/migrations" -maxdepth 1 -name '*.sql' | sort |
 AG_ISOLATION_LATEST=${AG_ISOLATION_LATEST##*/}
 "$root/scripts/integration-test.sh" >/dev/null
 make --no-print-directory -C "$root" integration-down >/dev/null
-for expected in 'down -v --remove-orphans' 'up -d --wait postgres rustfs' 'run --rm --no-deps test' 'port postgres 5432' 'port rustfs 9000' 'official Cargo persistent replay invoked' 'exec -T postgres createdb -U gateway gateway_apt_lifecycle_upgrade_test' 'exec -T postgres dropdb -U gateway --if-exists gateway_apt_lifecycle_upgrade_test' 'exec -T postgres createdb -U gateway gateway_member_role_upgrade_test' 'exec -T postgres dropdb -U gateway --if-exists gateway_member_role_upgrade_test' 'exec -T postgres env NOTARX_DATABASE_URL='; do
+for expected in 'down -v --remove-orphans' 'up -d --wait postgres rustfs' 'run --rm --no-deps test' 'port postgres 5432' 'port rustfs 9000' 'official Cargo persistent replay invoked'; do
   grep -Fq -- "$expected" "$AG_ISOLATION_LOG"
 done
 printf 'Integration Compose isolation passed with an unrelated exported project name.\n'

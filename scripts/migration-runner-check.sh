@@ -15,7 +15,12 @@ fi
 printf 'Migration no-op check passed: %s applied files were skipped.\n' "$actual_skips"
 
 probe_dir=$(mktemp -d)
-trap 'rm -rf "$probe_dir"' EXIT
+foreign_database=gateway_foreign_schema_test
+cleanup() {
+  "${compose[@]}" exec -T postgres dropdb -U gateway --if-exists "$foreign_database" >/dev/null 2>&1 || true
+  rm -rf "$probe_dir"
+}
+trap cleanup EXIT
 latest_migration=$(find "$root/migrations" -maxdepth 1 -type f -name '*.sql' | sort | tail -n 1)
 probe_name=${latest_migration##*/}
 cp "$latest_migration" "$probe_dir/$probe_name"
@@ -31,3 +36,18 @@ if [[ "$drift_status" -eq 0 ]] || ! printf '%s\n' "$drift_output" | grep -Fq "Ap
   exit 1
 fi
 printf 'Migration checksum-drift check passed for %s.\n' "$probe_name"
+
+# A database that holds tables but no notarx ledger (another schema) is refused
+# with a clear message instead of failing in the middle of the baseline.
+"${compose[@]}" exec -T postgres createdb -U gateway "$foreign_database"
+"${compose[@]}" exec -T postgres psql -X -U gateway -d "$foreign_database" -v ON_ERROR_STOP=1 -c 'CREATE TABLE hosted_repositories (id integer)' >/dev/null
+set +e
+foreign_output=$(cd "$root" && "${compose[@]}" run --rm --no-deps --env "PGDATABASE=$foreign_database" migrate 2>&1)
+foreign_status=$?
+set -e
+if [[ "$foreign_status" -eq 0 ]] || ! printf '%s\n' "$foreign_output" | grep -Fq 'no notarx migration ledger'; then
+  printf '%s\n' "$foreign_output" >&2
+  printf 'Migration foreign-schema check failed.\n' >&2
+  exit 1
+fi
+printf 'Migration foreign-schema check passed: a database without a notarx ledger is refused.\n'

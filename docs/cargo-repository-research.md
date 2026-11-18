@@ -40,10 +40,7 @@ The isolated `make backup-restore-readiness` drill now publishes with Cargo
 1.96.0, pins a Group owner, promotes and replicates the version, then restores
 PostgreSQL and RustFS after a post-backup yank. Fresh Cargo homes read the
 restored source, Group, and targets with unchanged index rows and archive
-digest. `make cargo-upgrade-readiness` starts from the pinned pre-distribution
-Cargo schema in #162 and verifies fresh Cargo 1.96.0 Hosted/Group installs,
-index rows, archive digests, Group ownership and member order after a forward
-migration and migration replay. Distribution outcome webhooks now persist
+digest. Distribution outcome webhooks now persist
 final promotion and replication success/failure events with the operation state.
 Fault-injection checks cover Hosted upload-before-commit and replication
 copy/admission interruption and replay. An isolated PostgreSQL/RustFS recovery

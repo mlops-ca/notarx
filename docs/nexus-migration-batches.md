@@ -9,12 +9,8 @@ supported. Production cutover, source deletion, conflict overwrites, Proxy cache
 and online SNAPSHOT history are outside this workflow. The offline SNAPSHOT
 importer remains independent.
 
-Apply migrations `000147_nexus_migration_batches.sql` and
-`000148_nexus_migration_scan_diagnostics.sql` and the appended
-`000154_nexus_native_migration_formats.sql` and
-`000155_nexus_migration_scan_checkpoints.sql`, `000162_nexus_npm_migration.sql` and
-`000186_nexus_pypi_migration.sql` and `000189_nexus_migration_actor_kind.sql`
-through the standard migration runner. Configure
+Apply the migrations (the Nexus migration schema is part of the baseline
+migration `000001_baseline.sql`) through the standard migration runner. Configure
 `NOTARX_MIGRATION_STORAGE_POOL_ID` with the real object-storage pool identity.
 Compose forwards it to every inherited Gateway role. Without it migration writes
 are disabled; the rest of Gateway and migration reports remain available. Source

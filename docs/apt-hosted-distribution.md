@@ -63,8 +63,8 @@ target security-policy check at enqueue time.
   publication scanning is scheduled for the target as for ordinary publication.
 
 The production Worker configuration uses `apt` with the existing `promotion`
-and `replication` worker kinds. Signer absence disables these workers. Migration
-`000118_apt_target_signed_distribution.sql` adds APT to the replication format
+and `replication` worker kinds. Signer absence disables these workers. The schema
+(baseline migration `000001_baseline.sql`) allows APT in the replication format
 constraint and persists the target suite. Downgrade requires restoration of a
 pre-upgrade backup; old binaries cannot execute APT distribution plans safely.
 

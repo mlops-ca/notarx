@@ -48,18 +48,18 @@ without changing the stable `service-account:<id>` principal. Standalone API
 Keys retain their own global roles and are not interchangeable with Service
 Account credentials. Grants are exact principal matches. A grant never grants
 access to another repository. A grant may also carry an optional resource
-prefix (`migrations/000048_repository_grant_resource_prefixes.sql`) that bounds
+prefix (a column in `migrations/000001_baseline.sql`) that bounds
 it to resources whose identity begins with the prefix; `grantMatchesResource`
 implements this rule and an empty prefix matches every resource of the
 repository.
 
 Authorization Roles and Authorization Templates are reusable management
 objects over grants. A role
-(`migrations/000091_authorization_roles.sql`) is a named bundle of
+(table `authorization_roles` in `migrations/000001_baseline.sql`) is a named bundle of
 `repositories:*` scopes: selecting one in a grant editor copies its scopes into
 the grant as an explicit snapshot, so a later role edit cannot silently change
 an already-persisted decision. A template
-(`migrations/000083_authorization_templates.sql`) is a reusable grant bundle:
+(table `authorization_templates` in `migrations/000001_baseline.sql`) is a reusable grant bundle:
 applying it to one repository replaces that repository's grant set with the
 template's rules, after those rules are validated against the target
 repository's format, and advances the stored version that marks a set managed.

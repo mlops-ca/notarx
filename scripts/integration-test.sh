@@ -17,8 +17,6 @@ cleanup
 "${compose[@]}" run --rm --no-deps rustfs-ready
 "${compose[@]}" run --rm --no-deps migrate
 ./scripts/migration-runner-check.sh
-./scripts/apt-lifecycle-upgrade-check.sh
-./scripts/member-role-upgrade-check.sh
 "${compose[@]}" run --rm --no-deps test
 
 # The Go test container has no Cargo binary. Run the pinned official client on

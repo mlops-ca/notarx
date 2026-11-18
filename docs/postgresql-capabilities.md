@@ -167,10 +167,10 @@ ORDER BY backend_start;
 | --- | --- |
 | Advisory locks | `internal/cache/coordinator.go`, `internal/repository/postgres_advisory_lock.go`, `postgres_{oci,raw,maven,npm}.go` |
 | `SKIP LOCKED` and leases | `internal/repository/postgres_lifecycle.go`, `postgres_replication.go`, `postgres_webhooks.go`, `postgres_scheduled_tasks.go` |
-| `LISTEN/NOTIFY` | `internal/database/notification.go`, `migrations/000066_postgres_notification_channels.sql` |
-| Extensions and indexes | `migrations/000064_postgres_observability_indexes.sql`, `000069_prefix_pattern_indexes.sql` |
-| Cross-format search | `migrations/000065_artifact_search_projection.sql` and later format migrations |
-| Capacity serialization | `migrations/000046_repository_capacity_enforcement.sql` and format-specific capacity functions |
+| `LISTEN/NOTIFY` | `internal/database/notification.go`, notification triggers in `migrations/000001_baseline.sql` |
+| Extensions and indexes | extension header and trigram, BRIN and prefix-pattern indexes in `migrations/000001_baseline.sql` |
+| Cross-format search | `artifact_search_projection` view in `migrations/000001_baseline.sql` |
+| Capacity serialization | capacity functions and triggers in `migrations/000001_baseline.sql` |
 
 `scripts/run-migrations.sh` applies migrations in checksum order. Changes to
 startup settings such as `shared_preload_libraries` require a PostgreSQL restart

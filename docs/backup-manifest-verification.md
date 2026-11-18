@@ -66,7 +66,7 @@ Explicit negative v1 object totals are invalid, rather than missing evidence.
 | `startedAt`, `completedAt` | Nonzero RFC3339 timestamps; completion strictly after start and no later than verification. Record UTC. |
 | `gateway` | `version`, 40 lowercase hex `revision`, full `imageDigest: sha256:<64 lowercase hex digits>`. These identify declared software, not proven compatibility. |
 | `database` | `format: pg-custom-v1` and `file` reference to dump bytes. No connection, dump parsing or restore is performed. |
-| `schema` | `format: gateway-migrations-tsv-v1` and `file` reference to the native migration ledger representation below. |
+| `schema` | `format: notarx-migrations-tsv-v1` and `file` reference to the native migration ledger representation below. |
 | `objects` | `format: s3-bytes-v1`, an `inventory` file reference, and nonnegative int64 `count` and `bytes` matching the streamed inventory. RustFS physical tar is a different profile and returns unknown. |
 | `writers` | `scopeId`, explicit `inventoryDeclaredComplete`, and nonempty `writers` declarations described below. |
 

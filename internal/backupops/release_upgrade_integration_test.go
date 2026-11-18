@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -16,20 +17,40 @@ import (
 	"github.com/mlops-ca/notarx/internal/backupmanifest"
 )
 
-const alertUpgradeBaseline = "ea60aea333b29bb60d4ac1b8e2b2a8720563726f"
+// syntheticUpgradeMigration is the second migration of the fixture release. The
+// fixture stands in for the first real 000002 until a second notarx release
+// exists (ADR 0015, "Backup, restore and release modules").
+const syntheticUpgradeMigration = "000002_synthetic_upgrade_fixture.sql"
+const syntheticUpgradeSQL = "-- +goose Up\nCREATE TABLE synthetic_upgrade_fixture (id integer PRIMARY KEY, note text NOT NULL DEFAULT '');\nINSERT INTO synthetic_upgrade_fixture (id, note) VALUES (1, 'added by the candidate release');\n"
 
-// A source-built formal v0.5.0 baseline, not a published-registry image test.
-// Rollback consumes the pre-upgrade snapshot with matching old software, never
-// assumes an old binary can read the expanded candidate database.
-func TestLocalAlertReleaseUpgrade(t *testing.T) {
+var stableReleaseTag = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+$`)
+
+// TestLocalReleaseUpgrade proves the release upgrade contract against real
+// PostgreSQL and object storage: applied migration checksums survive, a second
+// migration run is a complete no-op, and rollback restores an isolated
+// pre-upgrade snapshot with the previous software, never a down migration.
+//
+// By default the previous release is the current build with only the baseline
+// migration and the candidate additionally ships a synthetic 000002 migration.
+// With BACKUPOPS_UPGRADE_FROM_TAG=vX.Y.Z (see scripts/upgrade-readiness.sh) the
+// previous release is built from that stable notarx tag instead.
+func TestLocalReleaseUpgrade(t *testing.T) {
 	if os.Getenv("BACKUPOPS_DOCKER_TEST") != "1" {
 		t.Skip("explicit BACKUPOPS_DOCKER_TEST and local context required")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
 	defer cancel()
 	d := Docker{Context: os.Getenv("BACKUPOPS_DOCKER_CONTEXT")}
-	old := formalUpgradeRelease(t)
 	candidate := integrationRelease(t)
+	var old Release
+	if tag := os.Getenv("BACKUPOPS_UPGRADE_FROM_TAG"); tag != "" {
+		old = taggedUpgradeRelease(t, tag)
+	} else {
+		old = integrationRelease(t)
+		if err := os.WriteFile(filepath.Join(candidate.Directory, "migrations", syntheticUpgradeMigration), []byte(syntheticUpgradeSQL), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	makeSpec := func(release Release) TargetSpec {
 		return TargetSpec{Project: "ag-restore-" + uuid.NewString()[:18], Docker: d, Release: release, PostgresPassword: uuid.NewString(), AccessKey: "synthetic-test", SecretKey: uuid.NewString(), RPCSecret: uuid.NewString(), AdminToken: uuid.NewString(), ResolverToken: uuid.NewString(), RuntimeEnvironment: map[string]string{"NOTARX_SETTINGS_ENCRYPTION_KEY": recoveryEmailKey}}
 	}
@@ -50,12 +71,12 @@ func TestLocalAlertReleaseUpgrade(t *testing.T) {
 		t.Fatal(err)
 	}
 	oldMigrations := fixtureLedger(t, baselineLedger)
-	if len(oldMigrations) != 136 {
-		t.Fatal("formal v0.5.0 migration ledger missing")
+	if len(oldMigrations) == 0 {
+		t.Fatal("previous release migration ledger missing")
 	}
 	url, err := source.StartGateway(ctx)
 	if err != nil || waitGateway(ctx, url) != nil {
-		t.Fatal("formal baseline startup failed")
+		t.Fatal("previous release startup failed")
 	}
 	var ids []string
 	for i, name := range []string{"upgrade-first", "upgrade-second"} {
@@ -79,7 +100,7 @@ func TestLocalAlertReleaseUpgrade(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	preUpgrade := SourceSpec{BackupID: "synthetic-v050-upgrade", ScopeID: "synthetic-local", InventoryDeclaredComplete: true, Release: old, Docker: d, Postgres: source.database, S3: S3Settings{Endpoint: "http://127.0.0.1:" + s3port, Bucket: "gateway-cache", AccessKey: source.spec.AccessKey, SecretKey: source.spec.SecretKey}, Writers: []WriterSpec{{ID: "synthetic-api", Kind: "docker-container", Reference: source.resourceID("container", source.spec.Project+"-gateway")}}}
+	preUpgrade := SourceSpec{BackupID: "synthetic-release-upgrade", ScopeID: "synthetic-local", InventoryDeclaredComplete: true, Release: old, Docker: d, Postgres: source.database, S3: S3Settings{Endpoint: "http://127.0.0.1:" + s3port, Bucket: "gateway-cache", AccessKey: source.spec.AccessKey, SecretKey: source.spec.SecretKey}, Writers: []WriterSpec{{ID: "synthetic-api", Kind: "docker-container", Reference: source.resourceID("container", source.spec.Project+"-gateway")}}}
 	bundle := filepath.Join(t.TempDir(), "pre-upgrade")
 	exported, code, _ := fixtureBackupCommand(t, ctx, "export", preUpgrade, bundle)
 	if code != 0 || exported.Status != "exported" || exported.VerifiedObjects != 2 {
@@ -102,10 +123,11 @@ func TestLocalAlertReleaseUpgrade(t *testing.T) {
 			t.Fatal("applied baseline checksum changed")
 		}
 	}
-	for _, name := range []string{"000136_email_test_delivery.sql", "000137_repository_quota_alert_rules.sql", "000138_repository_quota_alert_events.sql", "000139_quota_delivery_permission.sql", "000141_maven_snapshot_import.sql", "000142_maven_snapshot_takeover.sql", "000143_artifact_usage_paging.sql", "000144_oci_bearer_configuration.sql", "000145_artifact_contains_search_indexes.sql"} {
-		if newMigrations[name] == "" {
-			t.Fatalf("candidate migration %s missing", name)
-		}
+	if len(newMigrations) <= len(oldMigrations) {
+		t.Fatal("candidate migration missing from the ledger")
+	}
+	if os.Getenv("BACKUPOPS_UPGRADE_FROM_TAG") == "" && newMigrations[syntheticUpgradeMigration] == "" {
+		t.Fatalf("synthetic migration %s missing", syntheticUpgradeMigration)
 	}
 	before, err := source.Metadata(ctx)
 	if err != nil {
@@ -118,11 +140,6 @@ func TestLocalAlertReleaseUpgrade(t *testing.T) {
 	}
 	url = replaceFixtureGateway(t, ctx, source, candidate)
 	assertUpgradeCore(t, ctx, source, url, ids, groupID.ID, group)
-	seed := seedRecoveryEmail(t, ctx, source, url, ids[0], ids[1])
-	data, _ := fixtureHTTP(t, ctx, url, "GET", "/api/v2/repository-quota-alert-rules/"+seed.Rules[1].ID+"/events", source.spec.AdminToken, nil, 200, "")
-	if !bytes.Contains(data, []byte(seed.Events[1][0].Snapshot.ID)) {
-		t.Fatal("candidate new event API readback missing")
-	}
 	stopFixtureGateway(t, ctx, source)
 	protected, err := source.Metadata(ctx)
 	if err != nil {
@@ -133,7 +150,7 @@ func TestLocalAlertReleaseUpgrade(t *testing.T) {
 	rollbackSpec := makeSpec(old)
 	restored, code, rollback := fixtureBackupCommand(t, ctx, "restore", rollbackSpec, bundle)
 	if code != 0 || rollback == nil || restored.Metadata != "verified" || restored.Objects != "verified" || restored.Software != "verified" {
-		t.Fatalf("v0.5.0 snapshot rollback: %+v exit=%d", restored, code)
+		t.Fatalf("previous release snapshot rollback: %+v exit=%d", restored, code)
 	}
 	port, err := rollback.port(ctx, "gateway", "8080/tcp")
 	if err != nil {
@@ -148,54 +165,51 @@ func TestLocalAlertReleaseUpgrade(t *testing.T) {
 	runFixtureMigrations(t, ctx, rollback, candidate.Directory)
 	url = replaceFixtureGateway(t, ctx, rollback, candidate)
 	assertUpgradeCore(t, ctx, rollback, url, ids, groupID.ID, group)
-	data, _ = fixtureHTTP(t, ctx, url, "GET", "/api/v2/email-targets", rollback.spec.AdminToken, nil, 200, "")
-	if string(bytes.TrimSpace(data)) != "[]" {
-		t.Fatal("post-upgrade target leaked into pre-upgrade snapshot")
-	}
 	stillProtected, err := source.Metadata(ctx)
 	if err != nil || !bytes.Equal(protected, stillProtected) || fixtureObjectFingerprint(t, ctx, source.objects) != sourceObjects || fixtureObjectFingerprint(t, ctx, rollback.objects) != sourceObjects {
 		t.Fatal("rollback/rollforward changed source or object format")
 	}
-	t.Logf("formal v0.5.0 %s -> candidate: 136 old checksums preserved, all %d candidate entries verified against the shipped migrations, replay complete no-op; object bytes/Group order/repository IDs/grants preserved; new alert API readback passed; isolated pre-upgrade snapshot rollback and rollforward passed; expanded-DB old-binary rollback NOT tested/supported by this gate", alertUpgradeBaseline, len(newMigrations))
+	t.Logf("release upgrade: %d old checksums preserved, all %d candidate entries verified against the shipped migrations, replay complete no-op; object bytes/Group order/repository IDs/grants preserved; isolated pre-upgrade snapshot rollback and rollforward passed; expanded-DB old-binary rollback NOT tested/supported by this gate", len(oldMigrations), len(newMigrations))
 }
 
-func formalUpgradeRelease(t *testing.T) Release {
+// taggedUpgradeRelease builds the previous release from a stable notarx tag.
+func taggedUpgradeRelease(t *testing.T, tag string) Release {
 	t.Helper()
-	check := exec.Command("git", "rev-parse", "v0.5.0^{commit}")
+	if !stableReleaseTag.MatchString(tag) {
+		t.Fatalf("%q is not a stable release tag", tag)
+	}
+	check := exec.Command("git", "rev-parse", tag+"^{commit}")
 	check.Dir = "../.."
 	out, err := check.Output()
-	if err != nil || strings.TrimSpace(string(out)) != alertUpgradeBaseline {
-		t.Fatal("fixed formal v0.5.0 baseline unavailable")
+	revision := strings.TrimSpace(string(out))
+	if err != nil || len(revision) != 40 {
+		t.Fatalf("release tag %s is unavailable", tag)
 	}
 	source := t.TempDir()
 	archive := filepath.Join(t.TempDir(), "source.tar")
-	cmd := exec.Command("git", "archive", "--format=tar", "--output", archive, alertUpgradeBaseline)
+	cmd := exec.Command("git", "archive", "--format=tar", "--output", archive, revision)
 	cmd.Dir = "../.."
 	if err = cmd.Run(); err != nil {
-		t.Fatal("formal source archive failed")
+		t.Fatal("release source archive failed")
 	}
 	if err = exec.Command("tar", "-xf", archive, "-C", source).Run(); err != nil {
 		t.Fatal(err)
 	}
-	version, err := os.ReadFile(filepath.Join(source, "VERSION"))
-	if err != nil || strings.TrimSpace(string(version)) != "0.5.0" {
-		t.Fatal("baseline VERSION mismatch")
-	}
+	version := strings.TrimPrefix(tag, "v")
 	releaseDir := t.TempDir()
-	// The fixed v0.5.0 source predates the module namespace migration.
-	prefix := "github.com/artifact-gateway/artifact-gateway/internal/buildinfo."
-	cmd = exec.Command("go", "build", "-mod=readonly", "-buildvcs=false", "-ldflags", "-X "+prefix+"injectedVersion=0.5.0 -X "+prefix+"injectedRevision="+alertUpgradeBaseline, "-o", filepath.Join(releaseDir, "gateway"), "./cmd/gateway")
+	prefix := "github.com/mlops-ca/notarx/internal/buildinfo."
+	cmd = exec.Command("go", "build", "-mod=readonly", "-buildvcs=false", "-ldflags", "-X "+prefix+"injectedVersion="+version+" -X "+prefix+"injectedRevision="+revision, "-o", filepath.Join(releaseDir, "notarx"), "./cmd/notarx")
 	cmd.Dir = source
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS=linux", "GOARCH="+runtime.GOARCH)
 	if out, err = cmd.CombinedOutput(); err != nil {
-		t.Fatalf("formal baseline build: %v %s", err, out)
+		t.Fatalf("release build: %v %s", err, out)
 	}
 	copyPrivateFixture(t, filepath.Join(source, "migrations"), filepath.Join(releaseDir, "migrations"))
-	sum, _, err := describeBinary(filepath.Join(releaseDir, "gateway"))
+	sum, _, err := describeBinary(filepath.Join(releaseDir, "notarx"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return Release{Directory: releaseDir, Identity: backupmanifest.GatewayIdentity{Version: "0.5.0", Revision: alertUpgradeBaseline, Artifact: &backupmanifest.SoftwareArtifact{Kind: "binary", SHA256: sum, Platform: "linux/" + runtime.GOARCH}}}
+	return Release{Directory: releaseDir, Identity: backupmanifest.GatewayIdentity{Version: version, Revision: revision, Artifact: &backupmanifest.SoftwareArtifact{Kind: "binary", SHA256: sum, Platform: "linux/" + runtime.GOARCH}}}
 }
 
 func runFixtureMigrations(t *testing.T, ctx context.Context, target *OwnedTarget, dir string) {

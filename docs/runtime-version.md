@@ -10,4 +10,4 @@ During a rolling upgrade, online or stale nodes with different reported versions
 
 `releaseSource: not_configured` means that no desired-version or Release source is connected. The running version, cluster versions, and latest available Release are distinct facts; the Gateway does not claim to know the latest version without a source. The Console labels a `dev` build “Development build.”
 
-Apply database migration `000135_runtime_node_build_identity.sql` before deploying the new process. Its fields are nullable so older processes can continue to write heartbeats during a rolling upgrade. Rolling back the process does not require dropping the new fields.
+Apply the database migrations (the node build identity columns are part of the baseline migration `000001_baseline.sql`) before deploying the new process. Its fields are nullable so older processes can continue to write heartbeats during a rolling upgrade. Rolling back the process does not require dropping the new fields.

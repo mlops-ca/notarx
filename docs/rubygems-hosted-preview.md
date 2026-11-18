@@ -16,10 +16,9 @@ backup admission and Nexus migration remain in
 
 ## Enable and provision
 
-Apply the normal append-only migrations, including
-`000185_native_rubygems_hosted_preview.sql` and
-`000187_native_rubygems_yank_governance.sql` and
-`000188_native_rubygems_quarantine.sql`. Use the existing PostgreSQL and
+Apply the normal forward-only migrations; the RubyGems schema (hosted
+preview, yank governance, quarantine) is part of the baseline migration
+`000001_baseline.sql`. Use the existing PostgreSQL and
 verified S3/RustFS runtime ports and set
 `NOTARX_RUBYGEMS_PREVIEW_ENABLED=true`. The default is false; an invalid boolean
 fails startup. Publication persistence is an explicitly injected domain store,

@@ -224,7 +224,7 @@ func validate(m Manifest, now time.Time) (Status, string) {
 	if m.StartedAt.IsZero() || !m.CompletedAt.After(m.StartedAt) || m.CompletedAt.After(now) {
 		return Unknown, "backup_interval_unknown"
 	}
-	if m.Database.Format != "pg-custom-v1" || m.Schema.Format != "gateway-migrations-tsv-v1" || m.Objects.Format != "s3-bytes-v1" {
+	if m.Database.Format != "pg-custom-v1" || m.Schema.Format != "notarx-migrations-tsv-v1" || m.Objects.Format != "s3-bytes-v1" {
 		return Unknown, "export_or_schema_format_unsupported"
 	}
 	if (m.Objects.Count != nil && *m.Objects.Count < 0) || (m.Objects.Bytes != nil && *m.Objects.Bytes < 0) {

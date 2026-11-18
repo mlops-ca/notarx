@@ -69,7 +69,7 @@ intent and therefore cannot bypass the recovery window.
 
 ## Shared Persistence
 
-Migration `000032_artifact_lifecycle.sql` adds two additive records:
+The schema (baseline migration `000001_baseline.sql`) has two lifecycle records:
 
 - `artifact_tombstones` records Repository, format, coordinate, digest, and
   tombstone timestamp. The unique Repository/format/coordinate key makes a

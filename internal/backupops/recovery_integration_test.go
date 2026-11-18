@@ -73,20 +73,21 @@ func runLocalRecoveryIntegration(t *testing.T, profile string) {
 	sentinel := create(spec())
 	migrateFixture(t, ctx, source.database, release.Directory)
 	legacy := create(spec())
-	legacyDir := t.TempDir()
-	copyPrivateFixture(t, filepath.Join(release.Directory, "migrations"), filepath.Join(legacyDir, "migrations"))
-	entries, e := os.ReadDir(filepath.Join(legacyDir, "migrations"))
+	migrateFixture(t, ctx, legacy.database, release.Directory)
+	// A pre-Cargo (v0.4.2) installation has none of the native_cargo_* tables;
+	// the single baseline is reduced to that shape instead of truncating a chain.
+	legacyConn, e := legacy.database.connect(ctx)
 	if e != nil {
 		t.Fatal(e)
 	}
-	for _, entry := range entries {
-		if entry.Name() > "000124_remove_legacy_roles.sql" {
-			if e = os.Remove(filepath.Join(legacyDir, "migrations", entry.Name())); e != nil {
-				t.Fatal(e)
-			}
-		}
+	_, e = legacyConn.Exec(ctx, `DO $$ DECLARE t text; BEGIN
+		FOR t IN SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename LIKE 'native\_cargo\_%' LOOP
+			EXECUTE format('DROP TABLE public.%I CASCADE', t);
+		END LOOP; END $$`)
+	_ = legacyConn.Close(ctx)
+	if e != nil {
+		t.Fatal(e)
 	}
-	migrateFixture(t, ctx, legacy.database, legacyDir)
 	if e = legacy.database.WalkReferences(ctx, func(string) error { t.Fatal("empty v0.4.2 reference"); return nil }); e != nil {
 		t.Fatal(e)
 	}
@@ -529,7 +530,7 @@ func migrateFixture(t *testing.T, ctx context.Context, p Postgres, releaseDir st
 		t.Fatal(err)
 	}
 	defer func() { _ = conn.Close(ctx) }()
-	if _, err = conn.Exec(ctx, "CREATE TABLE artifact_gateway_schema_migrations(filename text PRIMARY KEY,checksum text NOT NULL,applied_at timestamptz NOT NULL DEFAULT now())"); err != nil {
+	if _, err = conn.Exec(ctx, "CREATE TABLE notarx_schema_migrations(filename text PRIMARY KEY,checksum text NOT NULL,applied_at timestamptz NOT NULL DEFAULT now())"); err != nil {
 		t.Fatal(err)
 	}
 	entries, err := os.ReadDir(filepath.Join(releaseDir, "migrations"))
@@ -551,7 +552,7 @@ func migrateFixture(t *testing.T, ctx context.Context, p Postgres, releaseDir st
 			t.Fatal(err)
 		}
 		if _, err = tx.Exec(ctx, up); err == nil {
-			_, err = tx.Exec(ctx, "INSERT INTO artifact_gateway_schema_migrations(filename,checksum) VALUES($1,$2)", e.Name(), hex.EncodeToString(h[:]))
+			_, err = tx.Exec(ctx, "INSERT INTO notarx_schema_migrations(filename,checksum) VALUES($1,$2)", e.Name(), hex.EncodeToString(h[:]))
 		}
 		if err != nil {
 			_ = tx.Rollback(ctx)

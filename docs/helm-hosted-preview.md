@@ -193,7 +193,7 @@ scanning, distribution and visible-cache eviction stay unavailable under #292.
 
 ## Retained chart governance
 
-Apply migration `000183_native_helm_governance.sql` before enabling this preview.
+Apply the standard migrations (the Helm governance schema is part of the baseline migration `000001_baseline.sql`) before enabling this preview.
 A repository administrator reads a committed Hosted or cached Proxy chart through
 `GET /api/v2/previews/helm/repositories/{id}/charts/{name}/{version}/governance`.
 The receipt contains the immutable `digest`, independent `governanceVersion`,
