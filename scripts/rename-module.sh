@@ -8,7 +8,7 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root"
 
 # Built from parts so this script never matches its own search pattern.
-old='github.com/ccsert'"/artifact-gateway"
+old='github.com/''ccsert/artifact-gateway'
 new='github.com/mlops-ca/notarx'
 
 # Files that must keep the upstream identity (attribution, history, ADRs).
