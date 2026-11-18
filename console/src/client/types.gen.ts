@@ -3973,8 +3973,6 @@ export type IdempotencyKey = string;
 
 export type IfMatch = string;
 
-export type RepositoryId2 = string;
-
 /**
  * Actor-scoped replay key. An expired publication reservation requires a new key; exact closure replay without a key is also safe.
  */

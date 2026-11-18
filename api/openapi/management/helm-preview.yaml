@@ -1,7 +1,7 @@
 # Opt-in Hosted/Proxy/Group preview, outside the public format catalog.
 governance:
   parameters:
-    - {$ref: '#/repositoryId'}
+    - {$ref: '../components/parameters.yaml#/RepositoryId'}
     - {name: chartName, in: path, required: true, schema: {type: string}}
     - {name: version, in: path, required: true, schema: {type: string}}
   get:
@@ -40,7 +40,7 @@ governance:
       '503': {description: Preview disabled or storage/audit unavailable}
 quarantine_read_policy:
   parameters:
-    - {$ref: '#/repositoryId'}
+    - {$ref: '../components/parameters.yaml#/RepositoryId'}
   get:
     operationId: getHelmPreviewQuarantineReadPolicy
     responses:
@@ -185,7 +185,7 @@ repositories:
           Preview disabled or storage unavailable
 repository:
   parameters:
-    - {$ref: '#/repositoryId'}
+    - {$ref: '../components/parameters.yaml#/RepositoryId'}
   get:
     operationId: getHelmPreviewRepository
     responses:
@@ -229,7 +229,7 @@ repository:
       '503': {description: "Preview disabled or storage unavailable"}
 charts:
   parameters:
-    - {$ref: '#/repositoryId'}
+    - {$ref: '../components/parameters.yaml#/RepositoryId'}
   get:
     operationId: listHelmPreviewCharts
     description: Single consistent snapshot of at most 4096 chart entries, filtered by chart resource grants. Cold Proxy entries contain index metadata with cached=false and omit unknown byte counts and provenance. An inventory exceeding the preview bound fails explicitly.
@@ -257,7 +257,7 @@ charts:
           Preview disabled or unavailable
 chart:
   parameters:
-    - {$ref: '#/repositoryId'}
+    - {$ref: '../components/parameters.yaml#/RepositoryId'}
     - name: chartName
       in: path
       required: true
@@ -346,7 +346,7 @@ chart:
           Preview disabled, incomplete object read-back or storage unavailable
 capacity:
   parameters:
-    - {$ref: '#/repositoryId'}
+    - {$ref: '../components/parameters.yaml#/RepositoryId'}
   get:
     operationId: getHelmPreviewCapacity
     responses:
@@ -402,11 +402,6 @@ capacity:
       '503':
         description: >-
           Preview disabled or unavailable
-repositoryId:
-  name: repositoryId
-  in: path
-  required: true
-  schema: {type: string, format: uuid}
 helmPreviewIdempotencyKey:
   name: Idempotency-Key
   in: header

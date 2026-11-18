@@ -98,7 +98,7 @@ func TestConanProxyRejectsTLSOverrideWithoutDialing(t *testing.T) {
 			}}
 		}},
 		{"DialTLS", func(called *bool) *http.Transport {
-			return &http.Transport{DialTLS: func(string, string) (net.Conn, error) {
+			return &http.Transport{DialTLS: func(string, string) (net.Conn, error) { //nolint:staticcheck // The regression explicitly covers the legacy DialTLS hook.
 				*called = true
 				return nil, errors.New("unexpected TLS dial")
 			}}

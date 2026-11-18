@@ -308,7 +308,7 @@ class PlanTests(unittest.TestCase):
 
     def test_toolchains_are_read_from_the_repository(self):
         self.assertIn('1.96.0', (ROOT / 'rust-toolchain.toml').read_text())
-        self.assertEqual((ROOT / '.nvmrc').read_text().strip(), '24')
+        self.assertEqual((ROOT / '.nvmrc').read_text().strip(), '26')
         lane_workflow = (ROOT / '.github/workflows/contract-lane.yml').read_text()
         self.assertIn('node-version-file: .nvmrc', lane_workflow)
         self.assertIn('go-version-file: go.mod', lane_workflow)
@@ -335,6 +335,26 @@ class PlanTests(unittest.TestCase):
                                     env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=15)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertEqual(trace.read_text().splitlines(), list(ci.LANES))
+
+
+class ToolchainPinTests(unittest.TestCase):
+    """Every place that names a toolchain version must agree (docs/ci.md, Dependency updates)."""
+    def test_go_images_match_go_mod_and_each_other(self):
+        go_version = re.search(r'^go (\S+)$', (ROOT / 'go.mod').read_text(), re.M).group(1)
+        pinned = {}
+        for name in ['Dockerfile', 'Dockerfile.agctl', 'Dockerfile.apt-signer', 'Dockerfile.scanner',
+                     'compose.integration.yml', 'Makefile']:
+            for image in re.findall(r'golang:[^\s]+@sha256:[0-9a-f]{64}', (ROOT / name).read_text()):
+                pinned.setdefault(image, []).append(name)
+        self.assertEqual(len(pinned), 1, pinned)
+        self.assertTrue(next(iter(pinned)).startswith(f'golang:{go_version}-alpine@sha256:'), (go_version, pinned))
+
+    def test_console_image_uses_the_node_major_of_nvmrc(self):
+        major = (ROOT / '.nvmrc').read_text().strip()
+        first = (ROOT / 'Dockerfile.console').read_text().splitlines()[0]
+        self.assertRegex(first, rf'node:{major}\.\d+\.\d+-alpine@sha256:')
+        for name in ['ci.yml', 'release.yml']:
+            self.assertNotRegex((ROOT / '.github/workflows' / name).read_text(), r'node-version:\s*\d')
 
 
 if __name__ == '__main__':

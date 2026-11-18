@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 
-GO_IMAGE := golang:1.26.11-alpine@sha256:ecb67f987aa1a57794c91d19ade7ae0209f2f0f5496aaef9e6ae85ddf92d02ab
-LINT_IMAGE := golangci/golangci-lint:v2.12.2
+GO_IMAGE := golang:1.27.4-alpine@sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280
+LINT_IMAGE := golangci/golangci-lint:v2.15.0
 OPENAPI_TOOLS := tools/openapi
 CONSOLE_DIR := console
 OPENAPI_SOURCE := api/openapi/native-hosted.yaml
@@ -240,7 +240,7 @@ coverage:
 
 dependency-audit:
 	@node --test scripts/npm-audit-policy.test.mjs
-	@go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+	@go run golang.org/x/vuln/cmd/govulncheck@v1.10.0 ./...
 	@node ./scripts/npm-audit-check.mjs console tools/openapi
 
 fmt:

@@ -812,7 +812,7 @@
     "/previews/helm/repositories/{repositoryId}/charts/{chartName}/{version}/governance": {
       "parameters": [
         {
-          "$ref": "#/components/parameters/repositoryId"
+          "$ref": "#/components/parameters/RepositoryId"
         },
         {
           "name": "chartName",
@@ -910,7 +910,7 @@
     "/previews/helm/repositories/{repositoryId}/quarantine-read-policy": {
       "parameters": [
         {
-          "$ref": "#/components/parameters/repositoryId"
+          "$ref": "#/components/parameters/RepositoryId"
         }
       ],
       "get": {
@@ -1587,7 +1587,7 @@
     "/previews/helm/repositories/{repositoryId}": {
       "parameters": [
         {
-          "$ref": "#/components/parameters/repositoryId"
+          "$ref": "#/components/parameters/RepositoryId"
         }
       ],
       "get": {
@@ -1665,7 +1665,7 @@
     "/previews/helm/repositories/{repositoryId}/charts": {
       "parameters": [
         {
-          "$ref": "#/components/parameters/repositoryId"
+          "$ref": "#/components/parameters/RepositoryId"
         }
       ],
       "get": {
@@ -1703,7 +1703,7 @@
     "/previews/helm/repositories/{repositoryId}/charts/{chartName}/{version}": {
       "parameters": [
         {
-          "$ref": "#/components/parameters/repositoryId"
+          "$ref": "#/components/parameters/RepositoryId"
         },
         {
           "name": "chartName",
@@ -1831,7 +1831,7 @@
     "/previews/helm/repositories/{repositoryId}/capacity": {
       "parameters": [
         {
-          "$ref": "#/components/parameters/repositoryId"
+          "$ref": "#/components/parameters/RepositoryId"
         }
       ],
       "get": {
@@ -23696,15 +23696,6 @@
         "required": true,
         "schema": {
           "type": "string"
-        }
-      },
-      "repositoryId": {
-        "name": "repositoryId",
-        "in": "path",
-        "required": true,
-        "schema": {
-          "type": "string",
-          "format": "uuid"
         }
       },
       "helmPreviewIdempotencyKey": {
