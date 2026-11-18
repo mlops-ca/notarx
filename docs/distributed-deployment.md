@@ -156,7 +156,7 @@ Optional explicit directory capacity is described in [operational signal sources
 ## Instance Identity, Public URL and Legacy Names
 
 Settings are read only under the `NOTARX_` prefix. There are no aliases and no
-fallback reads of the old `GATEWAY_` names. To stop a mis-named variable from
+fallback reads of the old upstream names. To stop a mis-named variable from
 silently falling back to a default, the `notarx` binary (the server and every subcommand) refuses to start, naming the new
 key (`... was renamed to NOTARX_...`), when the process environment contains any
 name from the closed list of legacy settings in `internal/config/legacy_env.go`

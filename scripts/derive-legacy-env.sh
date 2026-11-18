@@ -11,7 +11,7 @@
 # match: an unrelated variable with the same prefix stays harmless.
 set -euo pipefail
 
-ref=${1:-${LEGACY_ENV_REF:-b35c4a53}}
+ref=${1:-${LEGACY_ENV_REF:-3dc71d9d}}
 legacy_prefix="GATEWAY""_"
 new_prefix="NOTARX""_"
 

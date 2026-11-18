@@ -33,7 +33,7 @@ rustfs_console_port=$(free_port)
 project="artifact-gateway-backup-${RANDOM}-${RANDOM}"
 # Keep the per-project image name this script tags and inspects; the shared
 # prebuilt tag is for lanes that run the unmodified source build.
-export NOTARX_NOTARX_IMAGE="$project-gateway:latest"
+export NOTARX_IMAGE="$project-gateway:latest"
 isolated_environment=$(mktemp)
 grant_headers=$(mktemp)
 grant_response=$(mktemp)

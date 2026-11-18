@@ -47,6 +47,22 @@ func releaseBinaryPath(directory string) string {
 	return filepath.Join(directory, "gateway")
 }
 
+// legacyEnvironment reports whether the release predates ADR 0013 and still
+// reads its settings under the pre-fork environment prefix. Pre-fork binary
+// releases ship the server as "gateway"; every notarx release ships "notarx"
+// and reads NOTARX_ names.
+func (r Release) legacyEnvironment() bool {
+	artifact := r.Identity.Artifact
+	return artifact != nil && artifact.Kind == "binary" && filepath.Base(releaseBinaryPath(r.Directory)) == "gateway"
+}
+
+// legacyEnvironmentKey maps a NOTARX_ setting name to the pre-fork name that a
+// legacy release reads. It exists only to run historical releases in recovery
+// tests; the notarx loader never reads the pre-fork names.
+func legacyEnvironmentKey(key string) string {
+	return "GATEWAY" + "_" + strings.TrimPrefix(key, "NOTARX_")
+}
+
 // VerifyRelease compares full artifact bytes/build identity and the complete
 // applied migration ledger. Forward migration is intentionally a separate step.
 func VerifyRelease(m backupmanifest.Manifest, release Release, ledger io.Reader) error {

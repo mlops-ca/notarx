@@ -83,6 +83,12 @@ func samplePublishedRecoveryQuota(t *testing.T, ctx context.Context, source *Own
 		"NOTARX_NODE_ROLES=scheduler", "NOTARX_LISTEN_ADDRESS=:0", "NOTARX_INSTANCE_ID=" + name,
 		"NOTARX_SETTINGS_ENCRYPTION_KEY=" + recoveryEmailKey, "NOTARX_EMAIL_CONFIG_FILE=/quota-mail.json",
 	}
+	if release.legacyEnvironment() {
+		for i, value := range environment {
+			key, rest, _ := strings.Cut(value, "=")
+			environment[i] = legacyEnvironmentKey(key) + "=" + rest
+		}
+	}
 	args := []string{"create", "--name", name, "--network", source.spec.Project + "-network", "--label", "artifact-gateway.restore-owner=" + source.owner, "--label", "artifact-gateway.quota-sample=" + invocation, "--read-only", "--tmpfs", "/tmp:rw,noexec,nosuid,size=256m,mode=1777", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true", "--mount", "type=bind,source=" + binary + ",target=/gateway,readonly", "--mount", "type=bind,source=" + configPath + ",target=/quota-mail.json,readonly", "--entrypoint", "/gateway", "--platform", release.Identity.Artifact.Platform}
 	for _, value := range environment {
 		key, _, _ := strings.Cut(value, "=")

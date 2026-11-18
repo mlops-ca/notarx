@@ -502,13 +502,21 @@ func (t *OwnedTarget) StartGateway(ctx context.Context) (string, error) {
 		args = append(args, "--mount", "type=bind,source="+filepath.Join(directory, "gateway")+",target=/gateway,readonly", "--entrypoint", "/gateway")
 	}
 	environment := []string{"NOTARX_DATABASE_URL=postgres://gateway:" + escapePassword(spec.PostgresPassword) + "@postgres:5432/gateway?sslmode=disable", "NOTARX_RUSTFS_ENDPOINT=http://rustfs:9000", "NOTARX_RUSTFS_BUCKET=gateway-cache", "NOTARX_RUSTFS_ACCESS_KEY=" + spec.AccessKey, "NOTARX_RUSTFS_SECRET_KEY=" + spec.SecretKey, "NOTARX_ADMIN_TOKEN=" + spec.AdminToken, "NOTARX_RESOLVER_TOKEN=" + spec.ResolverToken, "NOTARX_NODE_ROLES=api", "NOTARX_INSTANCE_ID=" + spec.Project, "NOTARX_LOG_BUFFER_LINES=1000"}
-	for _, e := range environment {
-		key, _, _ := strings.Cut(e, "=")
+	legacyEnv := spec.Release.legacyEnvironment()
+	for i, e := range environment {
+		key, value, _ := strings.Cut(e, "=")
+		if legacyEnv {
+			key = legacyEnvironmentKey(key)
+			environment[i] = key + "=" + value
+		}
 		args = append(args, "--env", key)
 	}
 	for key, value := range spec.RuntimeEnvironment {
 		if !allowedRuntimeKey(key) {
 			return "", errors.New("unsupported private runtime setting")
+		}
+		if legacyEnv {
+			key = legacyEnvironmentKey(key)
 		}
 		environment = append(environment, key+"="+value)
 		args = append(args, "--env", key)
