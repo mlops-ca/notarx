@@ -75,7 +75,7 @@ type AuditWriterStatsFunc func() auditwriter.Stats
 
 // WithAuditWriterStats exports the audit writer metrics of ADR 0023 section 1:
 // notarx_audit_buffer_depth, notarx_audit_dropped_total{class,reason},
-// notarx_audit_flush_seconds and notarx_audit_flush_errors_total.
+// notarx_audit_sanitized_total, notarx_audit_flush_seconds and notarx_audit_flush_errors_total.
 func (m *Metrics) WithAuditWriterStats(stats AuditWriterStatsFunc) *Metrics {
 	m.auditStats = stats
 	return m
@@ -92,6 +92,7 @@ func (m *Metrics) writeAuditWriterMetrics(w io.Writer) {
 	_, _ = io.WriteString(w, "notarx_audit_dropped_total{class=\"security\",reason=\"overload\"} "+utoa(stats.DroppedSecurity)+"\n")
 	_, _ = io.WriteString(w, "notarx_audit_dropped_total{class=\"invalid\",reason=\"rejected\"} "+utoa(stats.DroppedInvalid)+"\n")
 	_, _ = io.WriteString(w, "notarx_audit_dropped_total{class=\"usage\",reason=\"key_cap\"} "+utoa(stats.DroppedUsage)+"\n")
+	_, _ = io.WriteString(w, "# TYPE notarx_audit_sanitized_total counter\nnotarx_audit_sanitized_total "+utoa(stats.Sanitized)+"\n")
 	_, _ = io.WriteString(w, "# TYPE notarx_audit_flush_errors_total counter\nnotarx_audit_flush_errors_total "+utoa(stats.FlushErrors)+"\n")
 	_, _ = io.WriteString(w, "# TYPE notarx_audit_flush_seconds histogram\n")
 	for i, bound := range auditwriter.FlushBuckets {

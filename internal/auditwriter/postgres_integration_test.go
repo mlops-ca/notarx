@@ -204,6 +204,17 @@ func TestHostileTextCannotStallTheFlush(t *testing.T) {
 	if err := f.db.QueryRow(`SELECT resource FROM resolver_audit_log WHERE repository=$1 AND resource LIKE 'a%b'`, f.repo).Scan(&stored); err != nil || stored != "a\uFFFDb" {
 		t.Fatalf("resource stored as %q (%v), want the sanitised form", stored, err)
 	}
+	var usage int
+	if err := f.db.QueryRow(`SELECT count(*) FROM artifact_usage_stats u JOIN (SELECT id, name FROM hosted_repositories UNION ALL SELECT id, name FROM hosted_groups) n ON n.id = u.repository_id WHERE n.name = $1 AND u.resource = $2 AND u.last_actor = $3`, f.repo, "a\uFFFDb", "al\uFFFDice\uFFFD").Scan(&usage); err != nil || usage != 1 {
+		t.Fatalf("usage row for the sanitised key: %d (%v)", usage, err)
+	}
+	if stats := f.writer.Stats(); stats.Sanitized != 3 {
+		t.Fatalf("every rewritten record must be counted: %+v", stats)
+	}
+	var flagged int
+	if err := f.db.QueryRow(`SELECT count(*) FROM resolver_audit_log WHERE repository=$1 AND evidence->>'notarx_sanitized'='true'`, f.repo).Scan(&flagged); err != nil || flagged != 3 {
+		t.Fatalf("flagged records: %d (%v)", flagged, err)
+	}
 	var evidence string
 	if err := f.db.QueryRow(`SELECT evidence->>$2 FROM resolver_audit_log WHERE repository=$1 AND resource='fine'`, f.repo, "k\uFFFDey").Scan(&evidence); err != nil || evidence != "v\uFFFDal\uFFFDue" {
 		t.Fatalf("evidence stored as %q (%v)", evidence, err)

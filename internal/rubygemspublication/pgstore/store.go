@@ -287,6 +287,8 @@ func (s *Store) SetQuota(ctx context.Context, repo, actor string, quota int64) (
 	return c, tx.Commit()
 }
 func insertAudit(ctx context.Context, tx *sql.Tx, a repository.AuditRecord) error {
+	// Client-controlled text (NUL, invalid UTF-8) must not make the database reject the audit.
+	a = a.Sanitized()
 	evidence, e := json.Marshal(a.Evidence)
 	if e != nil {
 		return e

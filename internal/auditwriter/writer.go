@@ -133,7 +133,8 @@ type Stats struct {
 	DroppedRead        uint64 // buffer_full
 	DroppedSecurity    uint64 // queued denial that found no buffer space
 	DroppedUsage       uint64 // usage or rollup key beyond the cap, or rejected by the database
-	DroppedInvalid     uint64 // audit record the database rejects on its own
+	DroppedInvalid     uint64 // audit record the database rejects for a reason other than hostile text
+	Sanitized          uint64 // audit record whose NUL or invalid UTF-8 was rewritten to U+FFFD and stored
 	FlushErrors        uint64
 	FlushCount         uint64
 	FlushSecondsSum    float64
@@ -167,9 +168,9 @@ type Writer struct {
 	rollups   map[rollupKey]*repository.RollupDelta
 	usageWake chan struct{}
 
-	droppedRead, droppedSecurity, droppedUsage, droppedInvalid, flushErrors, flushCount atomic.Uint64
-	flushNanos                                                                          atomic.Uint64
-	flushBuckets                                                                        [len(FlushBuckets)]atomic.Uint64
+	droppedRead, droppedSecurity, droppedUsage, droppedInvalid, sanitized, flushErrors, flushCount atomic.Uint64
+	flushNanos                                                                                     atomic.Uint64
+	flushBuckets                                                                                   [len(FlushBuckets)]atomic.Uint64
 }
 
 type usageKey struct{ repository, format, resource string }
@@ -255,8 +256,13 @@ func (w *Writer) prepare(ctx context.Context, record repository.AuditRecord) rep
 		record.OccurredAt = time.Now().UTC()
 	}
 	record.Class = record.Durability()
-	// Client-controlled text must never make the database reject (and so lose) the record.
-	return record.Sanitized()
+	// Client-controlled text must never make the database reject (and so lose) the
+	// record: it is stored rewritten and flagged in its evidence, and counted.
+	record, rewritten := record.SanitizedChanged()
+	if rewritten {
+		w.sanitized.Add(1)
+	}
+	return record
 }
 
 // recordDenial writes the denial of an authenticated principal: a committed insert
@@ -430,7 +436,7 @@ const poisonAttempts = 5
 
 // salvage writes the batch record by record after a batch failure. It reports true when
 // the batch is fully handled: every record was written or identified as one the database
-// rejects on its own (counted in DroppedInvalid). It reports false, leaving nothing
+// rejects for a reason other than hostile text, which is sanitised before insert (counted in DroppedInvalid). It reports false, leaving nothing
 // written twice, when the database accepted none of them, which looks like an outage.
 func (w *Writer) salvage(ctx context.Context, batch []repository.AuditRecord, failures int) bool {
 	if len(batch) == 1 {
@@ -631,7 +637,7 @@ func (w *Writer) Shutdown(ctx context.Context) error {
 func (w *Writer) Stats() Stats {
 	stats := Stats{
 		BufferDepth: int64(len(w.buffer)) + w.pending.Load(),
-		DroppedRead: w.droppedRead.Load(), DroppedSecurity: w.droppedSecurity.Load(), DroppedUsage: w.droppedUsage.Load(), DroppedInvalid: w.droppedInvalid.Load(),
+		DroppedRead: w.droppedRead.Load(), DroppedSecurity: w.droppedSecurity.Load(), DroppedUsage: w.droppedUsage.Load(), DroppedInvalid: w.droppedInvalid.Load(), Sanitized: w.sanitized.Load(),
 		FlushErrors: w.flushErrors.Load(), FlushCount: w.flushCount.Load(),
 		FlushSecondsSum: float64(w.flushNanos.Load()) / float64(time.Second),
 	}

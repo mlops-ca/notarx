@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -76,38 +77,101 @@ func withAuditDefaults(ctx context.Context, audit AuditRecord) AuditRecord {
 	return audit.Sanitized()
 }
 
+// AuditEvidenceSanitized is the evidence key set on a record whose text had to be
+// rewritten, so forensics can tell a stored "a\uFFFDb" from a genuine request path.
+const AuditEvidenceSanitized = "notarx_sanitized"
+
 // SanitizeAuditText makes client-controlled text storable: PostgreSQL rejects a NUL
 // byte and invalid UTF-8 in text columns (SQLSTATE 22021) and U+0000 in jsonb, so
 // both become U+FFFD. Clean text is returned unchanged without allocating.
 func SanitizeAuditText(text string) string {
+	clean, _ := sanitizeAuditText(text)
+	return clean
+}
+
+func sanitizeAuditText(text string) (string, bool) {
 	if utf8.ValidString(text) && !strings.ContainsRune(text, 0) {
-		return text
+		return text, false
 	}
 	return strings.Map(func(r rune) rune {
 		if r == 0 {
 			return utf8.RuneError
 		}
 		return r
-	}, strings.ToValidUTF8(text, string(utf8.RuneError)))
+	}, strings.ToValidUTF8(text, string(utf8.RuneError))), true
 }
 
 // Sanitized returns the record with every text field, the evidence keys and values
 // included, made storable, so a hostile request path cannot make the record vanish.
 func (a AuditRecord) Sanitized() AuditRecord {
+	record, _ := a.SanitizedChanged()
+	return record
+}
+
+// SanitizedChanged is Sanitized that also reports whether any text was rewritten.
+// A rewritten record carries AuditEvidenceSanitized in its evidence. A clean record
+// is returned as is, without allocating.
+func (a AuditRecord) SanitizedChanged() (AuditRecord, bool) {
+	changed := false
 	for _, field := range []*string{&a.GroupName, &a.Repository, &a.MemberName, &a.Actor, &a.Format, &a.Resource,
 		&a.Representation, &a.MemberType, &a.UpstreamHost, &a.Operation, &a.CacheDisposition,
 		&a.AuthorizationSource, &a.AuthorizationReason, &a.RequestID, &a.TraceID} {
-		*field = SanitizeAuditText(*field)
-	}
-	a.Outcome = AuditOutcome(SanitizeAuditText(string(a.Outcome)))
-	if len(a.Evidence) > 0 {
-		clean := make(map[string]string, len(a.Evidence))
-		for key, value := range a.Evidence {
-			clean[SanitizeAuditText(key)] = SanitizeAuditText(value)
+		var rewritten bool
+		if *field, rewritten = sanitizeAuditText(*field); rewritten {
+			changed = true
 		}
-		a.Evidence = clean
 	}
-	return a
+	outcome, rewritten := sanitizeAuditText(string(a.Outcome))
+	a.Outcome, changed = AuditOutcome(outcome), changed || rewritten
+	if evidence, evidenceChanged := sanitizeAuditEvidence(a.Evidence); evidenceChanged {
+		a.Evidence, changed = evidence, true
+	}
+	if changed {
+		evidence := make(map[string]string, len(a.Evidence)+1)
+		for key, value := range a.Evidence {
+			evidence[key] = value
+		}
+		evidence[AuditEvidenceSanitized] = "true"
+		a.Evidence = evidence
+	}
+	return a, changed
+}
+
+// sanitizeAuditEvidence rewrites hostile keys and values. Keys are visited in sorted
+// order and a key that collides after rewriting gets a numeric suffix, so the result
+// is deterministic and no entry is lost.
+func sanitizeAuditEvidence(evidence map[string]string) (map[string]string, bool) {
+	dirty := false
+	for key, value := range evidence {
+		if _, bad := sanitizeAuditText(key); bad {
+			dirty = true
+			break
+		}
+		if _, bad := sanitizeAuditText(value); bad {
+			dirty = true
+			break
+		}
+	}
+	if !dirty {
+		return evidence, false
+	}
+	keys := make([]string, 0, len(evidence))
+	for key := range evidence {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	clean := make(map[string]string, len(evidence))
+	for _, key := range keys {
+		target := SanitizeAuditText(key)
+		for n := 2; ; n++ {
+			if _, taken := clean[target]; !taken {
+				break
+			}
+			target = SanitizeAuditText(key) + "~" + strconv.Itoa(n)
+		}
+		clean[target] = SanitizeAuditText(evidence[key])
+	}
+	return clean, true
 }
 
 // insertAudit writes the audit row and, in the same transaction when execer is one,
