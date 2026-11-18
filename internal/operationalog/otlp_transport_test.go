@@ -234,7 +234,7 @@ func TestOTLPOutputResourceEnvironmentUsesSameSensitiveNamePolicy(t *testing.T) 
 	NewLogger(output, "synthetic", "synthetic").Info("synthetic resource event")
 	shutdownOTLP(t, output)
 	attrs := wireAttributes(request.ResourceLogs[0].Resource.Attributes)
-	if attrs["AUTHORIZATION"].GetStringValue() != "[redacted]" || attrs["db.password"].GetStringValue() != "[redacted]" || attrs["safe.resource"].GetStringValue() != "synthetic-safe-value" || attrs["service.name"].GetStringValue() != "artifact-gateway" {
+	if attrs["AUTHORIZATION"].GetStringValue() != "[redacted]" || attrs["db.password"].GetStringValue() != "[redacted]" || attrs["safe.resource"].GetStringValue() != "synthetic-safe-value" || attrs["service.name"].GetStringValue() != "notarx" {
 		t.Fatalf("resource policy or explicit identity changed: %v", attrs)
 	}
 }

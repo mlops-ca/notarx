@@ -8,7 +8,7 @@ for binary in docker go curl python3 tar java javac cc make; do
 done
 
 work=$(mktemp -d)
-project="artifact-gateway-migration-clients-$$"
+project="notarx-migration-clients-$$"
 compose=(docker compose --env-file /dev/null --project-name "$project" -f compose.integration.yml)
 started=0
 cleanup() {
@@ -79,7 +79,7 @@ started=1
 "${compose[@]}" run --rm --no-deps migrate
 postgres_address=$("${compose[@]}" port postgres 5432)
 rustfs_address=$("${compose[@]}" port rustfs 9000)
-if ! TEST_DATABASE_URL="postgres://gateway:integration-password@${postgres_address}/gateway_test?sslmode=disable" \
+if ! TEST_DATABASE_URL="postgres://notarx:integration-password@${postgres_address}/notarx_test?sslmode=disable" \
   TEST_OBJECT_STORE_ENDPOINT="http://${rustfs_address}" \
   TEST_OBJECT_STORE_ACCESS_KEY=integration-rustfs TEST_OBJECT_STORE_SECRET_KEY=integration-password \
   MIGRATION_MAVEN_BIN="$work/apache-maven-3.9.16/bin/mvn" \

@@ -136,7 +136,7 @@ func (s *Service) planPyPIEntries(ctx context.Context, b Batch, sourceRepo, targ
 			if err != nil {
 				return nil, err
 			}
-			spool, err := os.CreateTemp("", "artifact-gateway-pypi-scan-*")
+			spool, err := os.CreateTemp("", "notarx-pypi-scan-*")
 			if err != nil {
 				_ = content.Body.Close()
 				return nil, Failed("temporary_storage_unavailable")

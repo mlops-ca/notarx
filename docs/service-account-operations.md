@@ -57,7 +57,7 @@ Maven `settings.xml`:
 
 ```xml
 <server>
-  <id>artifact-gateway</id>
+  <id>notarx</id>
   <username>jenkins</username>
   <password>${env.NOTARX_TOKEN}</password>
 </server>

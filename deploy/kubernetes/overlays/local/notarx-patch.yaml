@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: artifact-gateway
+  name: notarx
 spec:
   template:
     spec:
@@ -19,13 +19,13 @@ spec:
             - name: PGPORT
               value: "5432"
             - name: PGDATABASE
-              value: gateway
+              value: notarx
             - name: PGUSER
-              value: gateway
+              value: notarx
             - name: PGPASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: artifact-gateway-secrets
+                  name: notarx-secrets
                   key: POSTGRES_PASSWORD
           resources:
             requests:
@@ -47,9 +47,9 @@ spec:
               mountPath: /migrations
               readOnly: true
       containers:
-        - name: gateway
+        - name: notarx
         - name: reference-apt-signer
-          image: artifact-gateway-apt-signer:latest
+          image: notarx-apt-signer:latest
           imagePullPolicy: IfNotPresent
           env:
             - name: REFERENCE_APT_SIGNER_LISTEN_ADDRESS
@@ -57,7 +57,7 @@ spec:
             - name: REFERENCE_APT_SIGNER_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: artifact-gateway-secrets
+                  name: notarx-secrets
                   key: NOTARX_APT_SIGNER_TOKEN
             - name: REFERENCE_APT_SIGNER_KEY_FILE
               value: /var/lib/reference-apt-signer/keys/apt-release-private.gpg
@@ -99,8 +99,8 @@ spec:
       volumes:
         - name: migrations
           configMap:
-            name: artifact-gateway-migrations
+            name: notarx-migrations
             defaultMode: 0555
         - name: apt-signer-key
           persistentVolumeClaim:
-            claimName: artifact-gateway-apt-signer-key
+            claimName: notarx-apt-signer-key

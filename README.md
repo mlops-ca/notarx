@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/artifact-gateway-hero.png" alt="Artifact streams converging through one verification gateway into PostgreSQL metadata and immutable object storage" width="100%">
+  <img src="docs/assets/notarx-hero.png" alt="Artifact streams converging through one verification gateway into PostgreSQL metadata and immutable object storage" width="100%">
 </p>
 
 <h1 align="center">notarx</h1>
@@ -140,7 +140,7 @@ Prerequisites: Docker with Compose, Node.js 24+, npm, GNU Make, and OpenSSL.
 
 ```sh
 git clone https://github.com/mlops-ca/notarx.git
-cd artifact-gateway
+cd notarx
 make dev-bootstrap
 make dev
 ```
@@ -174,7 +174,7 @@ first-repository guidance, ports, lifecycle commands, and troubleshooting.
 
 ## Architecture at a glance
 
-![notarx lightweight system architecture](docs/assets/artifact-gateway-system-architecture.png)
+![notarx lightweight system architecture](docs/assets/notarx-system-architecture.png)
 
 The default `standalone` role runs API, scheduler, and worker responsibilities
 in one process. Larger installations can split the same image by role without

@@ -393,7 +393,7 @@ highest tag matching `^v[0-9]+\.[0-9]+\.[0-9]+$`; nightly pre-releases are
 ignored) differs from that tag. It needs the tags, so use a full clone.
 `bash scripts/migration-immutability-check-test.sh` runs its fixtures.
 
-Integration lifecycle commands explicitly use the `artifact-gateway-integration`
+Integration lifecycle commands explicitly use the `notarx-integration`
 Compose project and `/dev/null` as the environment file. They ignore the checkout
 `.env` and an exported `COMPOSE_PROJECT_NAME`, so test cleanup cannot select the
 normal development stack. Use `make integration-down` to clean that test project.

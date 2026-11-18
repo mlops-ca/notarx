@@ -20,8 +20,8 @@ make kubernetes-local-verify
 ```
 
 The Console and all same-origin API and artifact routes are exposed through the
-dedicated `artifact-gateway-local` IngressClass at
-`http://artifact-gateway.localhost`. The `.localhost` special-use domain resolves
+dedicated `notarx-local` IngressClass at
+`http://notarx.localhost`. The `.localhost` special-use domain resolves
 to the loopback interface without editing `/etc/hosts`; the direct Console
 fallback remains `http://127.0.0.1:18081`. The start command builds the Gateway
 Console, and APT reference-signer images, creates runtime Secrets without checking credential values
@@ -42,7 +42,7 @@ credential and encryption key already stored in the namespace Secret. Repeating
 administrator, or settings-encryption secrets back to local defaults.
 The APT reference-signer token follows the same reuse rule.
 
-The default administrator token is `local-gateway-admin-token`. These defaults
+The default administrator token is `local-notarx-admin-token`. These defaults
 are for a disposable local cluster only. Override them before a shared local
 installation:
 
@@ -70,7 +70,7 @@ To remove the stack:
 make kubernetes-local-down
 ```
 
-This deletes the `artifact-gateway-local` namespace, its dedicated IngressClass
+This deletes the `notarx-local` namespace, its dedicated IngressClass
 and read-only cluster RBAC, including its PostgreSQL and RustFS
 PersistentVolumeClaims, the APT signer key claim, and all local data. An existing
 legacy object-store StatefulSet or data PVC is never changed in place: the RustFS-only
@@ -80,7 +80,7 @@ explicitly. No compatibility or migration-bypass flag is available.
 ## Local topology
 
 ```text
-artifact-gateway.localhost:80
+notarx.localhost:80
        |
        v
 Traefik local Ingress

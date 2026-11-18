@@ -29,7 +29,7 @@ x-reference-apt-signer: &reference-apt-signer
     retries: 20
 
 services:
-  gateway:
+  notarx:
     environment:
       NOTARX_APT_SIGNER_ENDPOINT: https://${APT_SIGNER_ROTATION_SERVICE:-reference-apt-signer-old}:18083/v1/sign-release
       NOTARX_APT_SIGNER_TOKEN: ${NOTARX_APT_SIGNER_TOKEN:?set NOTARX_APT_SIGNER_TOKEN}
@@ -47,10 +47,10 @@ services:
       <<: *reference-apt-signer-environment
       REFERENCE_APT_SIGNER_KEY_FILE: /var/lib/reference-apt-signer/apt-release-private.gpg
       REFERENCE_APT_SIGNER_NAME: notarx Rotation Old
-      REFERENCE_APT_SIGNER_EMAIL: apt-rotation-old@artifact-gateway.local
+      REFERENCE_APT_SIGNER_EMAIL: apt-rotation-old@notarx.local
     volumes:
-      - gateway-apt-signer-old:/var/lib/reference-apt-signer:ro
-      - gateway-apt-signer-tls:/run/tls:ro
+      - notarx-apt-signer-old:/var/lib/reference-apt-signer:ro
+      - notarx-apt-signer-tls:/run/tls:ro
 
   reference-apt-signer-next:
     <<: *reference-apt-signer
@@ -58,10 +58,10 @@ services:
       <<: *reference-apt-signer-environment
       REFERENCE_APT_SIGNER_KEY_FILE: /var/lib/reference-apt-signer/apt-release-private.gpg
       REFERENCE_APT_SIGNER_NAME: notarx Rotation Next
-      REFERENCE_APT_SIGNER_EMAIL: apt-rotation-next@artifact-gateway.local
+      REFERENCE_APT_SIGNER_EMAIL: apt-rotation-next@notarx.local
     volumes:
-      - gateway-apt-signer-next:/var/lib/reference-apt-signer:ro
-      - gateway-apt-signer-tls:/run/tls:ro
+      - notarx-apt-signer-next:/var/lib/reference-apt-signer:ro
+      - notarx-apt-signer-tls:/run/tls:ro
 
   reference-apt-signer-tls-init:
     profiles: ["apt-signer-rotation"]
@@ -84,7 +84,7 @@ services:
       - ${APT_SIGNER_ROTATION_DIR:?set APT_SIGNER_ROTATION_DIR}/ca.pem:/run/source/ca.pem:ro
       - ${APT_SIGNER_ROTATION_DIR:?set APT_SIGNER_ROTATION_DIR}/tls.crt:/run/source/tls.crt:ro
       - ${APT_SIGNER_ROTATION_DIR:?set APT_SIGNER_ROTATION_DIR}/tls.key:/run/source/tls.key:ro
-      - gateway-apt-signer-tls:/var/lib/reference-apt-signer-tls
+      - notarx-apt-signer-tls:/var/lib/reference-apt-signer-tls
 
   reference-apt-signer-old-keygen:
     profiles: ["apt-signer-rotation"]
@@ -96,7 +96,7 @@ services:
     environment:
       REFERENCE_APT_SIGNER_KEY_FILE: /var/lib/reference-apt-signer/apt-release-private.gpg
       REFERENCE_APT_SIGNER_NAME: notarx Rotation Old
-      REFERENCE_APT_SIGNER_EMAIL: apt-rotation-old@artifact-gateway.local
+      REFERENCE_APT_SIGNER_EMAIL: apt-rotation-old@notarx.local
       REFERENCE_APT_SIGNER_RSA_BITS: ${REFERENCE_APT_SIGNER_RSA_BITS:-2048}
     security_opt:
       - no-new-privileges:true
@@ -104,7 +104,7 @@ services:
       - ALL
     read_only: true
     volumes:
-      - gateway-apt-signer-old:/var/lib/reference-apt-signer
+      - notarx-apt-signer-old:/var/lib/reference-apt-signer
 
   reference-apt-signer-next-keygen:
     profiles: ["apt-signer-rotation"]
@@ -116,7 +116,7 @@ services:
     environment:
       REFERENCE_APT_SIGNER_KEY_FILE: /var/lib/reference-apt-signer/apt-release-private.gpg
       REFERENCE_APT_SIGNER_NAME: notarx Rotation Next
-      REFERENCE_APT_SIGNER_EMAIL: apt-rotation-next@artifact-gateway.local
+      REFERENCE_APT_SIGNER_EMAIL: apt-rotation-next@notarx.local
       REFERENCE_APT_SIGNER_RSA_BITS: ${REFERENCE_APT_SIGNER_RSA_BITS:-2048}
     security_opt:
       - no-new-privileges:true
@@ -124,9 +124,9 @@ services:
       - ALL
     read_only: true
     volumes:
-      - gateway-apt-signer-next:/var/lib/reference-apt-signer
+      - notarx-apt-signer-next:/var/lib/reference-apt-signer
 
 volumes:
-  gateway-apt-signer-old:
-  gateway-apt-signer-next:
-  gateway-apt-signer-tls:
+  notarx-apt-signer-old:
+  notarx-apt-signer-next:
+  notarx-apt-signer-tls:

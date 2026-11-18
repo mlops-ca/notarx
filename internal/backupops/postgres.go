@@ -161,7 +161,7 @@ func (p Postgres) Dump(ctx context.Context, w io.Writer) error {
 	return nil
 }
 func (p Postgres) RestoreDatabase(ctx context.Context, r io.Reader) error {
-	cmd, err := p.command(ctx, "pg_restore", "--exit-on-error", "--no-owner", "--no-privileges", "--dbname=gateway")
+	cmd, err := p.command(ctx, "pg_restore", "--exit-on-error", "--no-owner", "--no-privileges", "--dbname=notarx")
 	if err != nil {
 		return err
 	}

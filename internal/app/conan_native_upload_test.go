@@ -81,14 +81,14 @@ func TestConanNativeUploadGatesVisibilityAndPreservesImmutableReplay(t *testing.
 		t.Fatalf("partial revision read=%d", w.Code)
 	}
 	file := f.request(t, http.MethodPut, f.base+"/files/conanfile.py", "build-agent", []byte("recipe"))
-	if file.Code != 201 || file.Header().Get("X-Artifact-Gateway-Publish-State") != "open" {
+	if file.Code != 201 || file.Header().Get("X-Notarx-Publish-State") != "open" {
 		t.Fatalf("stage=%d %s", file.Code, file.Body.String())
 	}
 	if w := f.request(t, http.MethodGet, f.base+"/files/conanfile.py", "reader", nil); w.Code != 404 {
 		t.Fatalf("asset became visible before manifest: %d", w.Code)
 	}
 	committed := f.request(t, http.MethodPut, f.base+"/files/conanmanifest.txt", "build-agent", f.manifest)
-	if committed.Code != 201 || committed.Header().Get("X-Artifact-Gateway-Publish-State") != "committed" || committed.Header().Get("X-Artifact-Gateway-Publish-Session") != file.Header().Get("X-Artifact-Gateway-Publish-Session") {
+	if committed.Code != 201 || committed.Header().Get("X-Notarx-Publish-State") != "committed" || committed.Header().Get("X-Notarx-Publish-Session") != file.Header().Get("X-Notarx-Publish-Session") {
 		t.Fatalf("commit=%d %s", committed.Code, committed.Body.String())
 	}
 	f.publish(t, "build-agent")
@@ -321,7 +321,7 @@ func TestConanNativeSessionCannotBypassManifestThroughManagementCommit(t *testin
 	if staged.Code != 201 {
 		t.Fatal(staged.Code)
 	}
-	sessionID := staged.Header().Get("X-Artifact-Gateway-Publish-Session")
+	sessionID := staged.Header().Get("X-Notarx-Publish-Session")
 	upload := httptest.NewRequest(http.MethodPut, "/api/v2/conan-publish-sessions/"+sessionID+"/objects/conanfile.py", strings.NewReader("recipe"))
 	authorize(upload, "resolver-secret")
 	denied := httptest.NewRecorder()

@@ -14,18 +14,18 @@ index = "sparse+https://gateway.example/cargo/company/"
 credential-provider = "cargo:token"
 ```
 
-For a private registry or Hosted publication, obtain a Gateway credential with the appropriate repository grant. Inject `CARGO_REGISTRIES_NOTARX_TOKEN` from a CI secret store or interactive credential provider. Its value is `Bearer <gateway-token>`; do not commit it to `.cargo/config.toml` or a lockfile. Anonymous reads work only when both global and repository or Group policy allow them. Group members also need compatible read grants.
+For a private registry or Hosted publication, obtain a Gateway credential with the appropriate repository grant. Inject `CARGO_REGISTRIES_NOTARX_TOKEN` from a CI secret store or interactive credential provider. Its value is `Bearer <notarx-token>`; do not commit it to `.cargo/config.toml` or a lockfile. Anonymous reads work only when both global and repository or Group policy allow them. Group members also need compatible read grants.
 
 ```sh
-cargo publish --registry gateway                 # Hosted only
-cargo search <crate> --registry gateway
-cargo add <crate> --registry gateway
-cargo install <crate> --registry gateway
-cargo yank <crate>@<version> --registry gateway  # Hosted only
-cargo yank --undo <crate>@<version> --registry gateway
+cargo publish --registry notarx                 # Hosted only
+cargo search <crate> --registry notarx
+cargo add <crate> --registry notarx
+cargo install <crate> --registry notarx
+cargo yank <crate>@<version> --registry notarx  # Hosted only
+cargo yank --undo <crate>@<version> --registry notarx
 ```
 
-A mixed private Group has its own registry identity. Keep `registry = "gateway"` on dependencies that come from it. Do not use a mixed Group as a crates.io source replacement. Gateway repository grants govern publishing; `cargo owner` is not implemented. Yank changes future version selection but preserves previously resolved crate downloads. Management tombstones are a separate operation.
+A mixed private Group has its own registry identity. Keep `registry = "notarx"` on dependencies that come from it. Do not use a mixed Group as a crates.io source replacement. Gateway repository grants govern publishing; `cargo owner` is not implemented. Yank changes future version selection but preserves previously resolved crate downloads. Management tombstones are a separate operation.
 
 ## Dedicated crates.io Proxy as source replacement
 
@@ -33,7 +33,7 @@ Create a Cargo Proxy with upstream `https://index.crates.io` and allowed hosts `
 
 ```toml
 [source.crates-io]
-replace-with = "gateway-crates-io"
+replace-with = "notarx-crates-io"
 
 [source.gateway-crates-io]
 registry = "sparse+https://gateway.example/cargo/crates-io-proxy/"

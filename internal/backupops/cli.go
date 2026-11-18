@@ -21,7 +21,7 @@ import (
 // It does not load the server .env, mint credentials, or use default endpoints.
 func RunCLI(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		_, _ = fmt.Fprintln(stderr, "usage: gateway backup <export|restore|restore-objects> ...")
+		_, _ = fmt.Fprintln(stderr, "usage: notarx backup <export|restore|restore-objects> ...")
 		return 2
 	}
 	action := args[0]
@@ -38,7 +38,7 @@ func RunCLI(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	directory := flags.String("bundle", "", "new export directory or existing backup directory")
 	if err := flags.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
-			_, _ = fmt.Fprintln(stdout, "usage: gateway backup <export|restore> --spec private.json --bundle directory")
+			_, _ = fmt.Fprintln(stdout, "usage: notarx backup <export|restore> --spec private.json --bundle directory")
 			return 0
 		}
 		_, _ = fmt.Fprintln(stderr, "invalid backup arguments")
@@ -154,7 +154,7 @@ func RestoreNew(ctx context.Context, directory string, spec TargetSpec) (Transfe
 		endpoint, startErr := target.StartGateway(ctx)
 		if startErr != nil || waitGateway(ctx, endpoint) != nil {
 			result.Status = "failed"
-			result.Reason = "restored_gateway_not_ready"
+			result.Reason = "restored_notarx_not_ready"
 			restoreErr = errors.New(result.Reason)
 		} else {
 			result.Readiness = "verified"

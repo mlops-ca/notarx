@@ -70,7 +70,7 @@ func startNuGetProxyGatewayContainer(t *testing.T, c nugetOfficialClient, bucket
 	if err = os.MkdirAll(filepath.Join(c.work, "gateway-home"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	args := []string{"run", "--rm", "--name", name, "--label", "com.docker.compose.project=" + c.project, "--label", "artifact-gateway.nuget-fixture-owner=" + owner, "--user", strconv.Itoa(os.Getuid()) + ":" + strconv.Itoa(os.Getgid()), "--mount", "type=bind,src=" + c.work + ",dst=/work"}
+	args := []string{"run", "--rm", "--name", name, "--label", "com.docker.compose.project=" + c.project, "--label", "notarx.nuget-fixture-owner=" + owner, "--user", strconv.Itoa(os.Getuid()) + ":" + strconv.Itoa(os.Getgid()), "--mount", "type=bind,src=" + c.work + ",dst=/work"}
 	args = append(args, c.networkArgs(false)...)
 	if !c.sharedHostNetwork {
 		args = append(args, "--publish", "127.0.0.1:"+port+":"+port)
@@ -99,7 +99,7 @@ func startNuGetProxyGatewayContainer(t *testing.T, c nugetOfficialClient, bucket
 		stopped = true
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		out, inspectErr := exec.CommandContext(ctx, "docker", "inspect", "--format", `{{index .Config.Labels "com.docker.compose.project"}}/{{index .Config.Labels "artifact-gateway.nuget-fixture-owner"}}`, name).Output()
+		out, inspectErr := exec.CommandContext(ctx, "docker", "inspect", "--format", `{{index .Config.Labels "com.docker.compose.project"}}/{{index .Config.Labels "notarx.nuget-fixture-owner"}}`, name).Output()
 		if inspectErr == nil && strings.TrimSpace(string(out)) == c.project+"/"+owner {
 			if err := exec.CommandContext(ctx, "docker", "rm", "--force", name).Run(); err != nil {
 				t.Error("owned Gateway container removal failed")

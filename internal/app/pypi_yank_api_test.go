@@ -25,14 +25,14 @@ func TestPyPIYankFileUpdatesBothSimpleRepresentations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"gateway_widget-1.0.0-py3-none-any.whl", "gateway_widget-1.0.0.tar.gz"} {
-		_, err = store.PublishPyPIFile(t.Context(), repository.PyPIFile{RepositoryID: repo.ID, Project: "gateway-widget", Version: "1.0.0", Filename: name, Digest: "sha256:" + strings.Repeat("a", 64), Size: 1})
+	for _, name := range []string{"notarx_widget-1.0.0-py3-none-any.whl", "notarx_widget-1.0.0.tar.gz"} {
+		_, err = store.PublishPyPIFile(t.Context(), repository.PyPIFile{RepositoryID: repo.ID, Project: "notarx-widget", Version: "1.0.0", Filename: name, Digest: "sha256:" + strings.Repeat("a", 64), Size: 1})
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
 	handler := newTestGateway(t, GatewayOptions{Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
-	path := "/api/v2/repositories/" + repo.ID + "/pypi/projects/gateway-widget/versions/1.0.0/yank"
+	path := "/api/v2/repositories/" + repo.ID + "/pypi/projects/notarx-widget/versions/1.0.0/yank"
 	request := httptest.NewRequest(http.MethodGet, path, nil)
 	authorize(request, "admin-secret")
 	read := httptest.NewRecorder()
@@ -41,7 +41,7 @@ func TestPyPIYankFileUpdatesBothSimpleRepresentations(t *testing.T) {
 		t.Fatalf("yank state=%d %s, expected state and revision", read.Code, read.Body.String())
 	}
 	reason := "bad <abi> & wheel"
-	request = httptest.NewRequest(http.MethodPatch, path, strings.NewReader(`{"filename":"gateway_widget-1.0.0-py3-none-any.whl","yanked":true,"reason":"bad <abi> & wheel"}`))
+	request = httptest.NewRequest(http.MethodPatch, path, strings.NewReader(`{"filename":"notarx_widget-1.0.0-py3-none-any.whl","yanked":true,"reason":"bad <abi> & wheel"}`))
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("If-Match", read.Header().Get("ETag"))
 	authorize(request, "admin-secret")
@@ -50,7 +50,7 @@ func TestPyPIYankFileUpdatesBothSimpleRepresentations(t *testing.T) {
 	if changed.Code != http.StatusOK || changed.Header().Get("ETag") == read.Header().Get("ETag") {
 		t.Fatalf("yank mutation=%d %s, expected updated state and revision", changed.Code, changed.Body.String())
 	}
-	request = httptest.NewRequest(http.MethodGet, "/pypi/python-yank/simple/gateway-widget/", nil)
+	request = httptest.NewRequest(http.MethodGet, "/pypi/python-yank/simple/notarx-widget/", nil)
 	authorize(request, "admin-secret")
 	html := httptest.NewRecorder()
 	handler.ServeHTTP(html, request)

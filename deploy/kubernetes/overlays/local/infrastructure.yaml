@@ -4,7 +4,7 @@ metadata:
   name: postgres
 spec:
   selector:
-    app.kubernetes.io/name: artifact-gateway
+    app.kubernetes.io/name: notarx
     app.kubernetes.io/component: postgres
   ports:
     - name: postgres
@@ -14,7 +14,7 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: artifact-gateway-apt-signer-key
+  name: notarx-apt-signer-key
 spec:
   accessModes: ["ReadWriteOnce"]
   resources:
@@ -30,12 +30,12 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: artifact-gateway
+      app.kubernetes.io/name: notarx
       app.kubernetes.io/component: postgres
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: artifact-gateway
+        app.kubernetes.io/name: notarx
         app.kubernetes.io/component: postgres
     spec:
       enableServiceLinks: false
@@ -47,20 +47,20 @@ spec:
           args: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements"]
           env:
             - name: POSTGRES_DB
-              value: gateway
+              value: notarx
             - name: POSTGRES_USER
-              value: gateway
+              value: notarx
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: artifact-gateway-secrets
+                  name: notarx-secrets
                   key: POSTGRES_PASSWORD
           ports:
             - name: postgres
               containerPort: 5432
           readinessProbe:
             exec:
-              command: ["sh", "-ec", "pg_isready -U gateway -d gateway"]
+              command: ["sh", "-ec", "pg_isready -U notarx -d notarx"]
             initialDelaySeconds: 3
             periodSeconds: 5
           resources:
@@ -88,7 +88,7 @@ metadata:
   name: rustfs
 spec:
   selector:
-    app.kubernetes.io/name: artifact-gateway
+    app.kubernetes.io/name: notarx
     app.kubernetes.io/component: rustfs
   ports:
     - name: api
@@ -104,12 +104,12 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: artifact-gateway
+      app.kubernetes.io/name: notarx
       app.kubernetes.io/component: rustfs
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: artifact-gateway
+        app.kubernetes.io/name: notarx
         app.kubernetes.io/component: rustfs
     spec:
       enableServiceLinks: false
@@ -133,17 +133,17 @@ spec:
             - name: RUSTFS_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
-                  name: artifact-gateway-secrets
+                  name: notarx-secrets
                   key: RUSTFS_ACCESS_KEY
             - name: RUSTFS_SECRET_KEY
               valueFrom:
                 secretKeyRef:
-                  name: artifact-gateway-secrets
+                  name: notarx-secrets
                   key: RUSTFS_SECRET_KEY
             - name: RUSTFS_RPC_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: artifact-gateway-secrets
+                  name: notarx-secrets
                   key: RUSTFS_RPC_SECRET
           ports:
             - name: api

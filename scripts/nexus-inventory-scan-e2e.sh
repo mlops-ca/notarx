@@ -8,7 +8,7 @@ for binary in python3 docker go; do
 done
 # The only source is an in-process read-only TLS fixture. This gate does not
 # contact or migrate an existing Nexus installation.
-project="artifact-gateway-inventory-$$-${RANDOM}"
+project="notarx-inventory-$$-${RANDOM}"
 evidence="$repo_root/output/nexus-inventory-scan-e2e/$project"
 mkdir -p "$evidence"
 compose=(docker compose --env-file /dev/null --project-name "$project" -f "$repo_root/compose.integration.yml")
@@ -35,7 +35,7 @@ started=1
 "${compose[@]}" run --rm --no-deps migrate >"$evidence/migrate-second.log" 2>&1
 postgres_address=$("${compose[@]}" port postgres 5432)
 rustfs_address=$("${compose[@]}" port rustfs 9000)
-export TEST_DATABASE_URL="postgres://gateway:integration-password@${postgres_address}/gateway_test?sslmode=disable"
+export TEST_DATABASE_URL="postgres://notarx:integration-password@${postgres_address}/notarx_test?sslmode=disable"
 export TEST_OBJECT_STORE_ENDPOINT="http://${rustfs_address}"
 export TEST_OBJECT_STORE_ACCESS_KEY=integration-rustfs
 export TEST_OBJECT_STORE_SECRET_KEY=integration-password

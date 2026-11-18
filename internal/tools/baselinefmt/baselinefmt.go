@@ -27,7 +27,7 @@ var requiredExtensions = map[string]bool{"pg_trgm": true, "pg_stat_statements": 
 
 var (
 	dollarTag     = regexp.MustCompile(`\$[A-Za-z_][A-Za-z_0-9]*\$|\$\$`)
-	ledgerObject  = regexp.MustCompile(`public\.(notarx_schema_migrations|artifact_gateway_schema_migrations|schema_version)\b|public\.schema_version_\w+`)
+	ledgerObject  = regexp.MustCompile(`public\.(notarx_schema_migrations|notarx_schema_migrations|schema_version)\b|public\.schema_version_\w+`)
 	createExt     = regexp.MustCompile(`^CREATE EXTENSION (IF NOT EXISTS )?("?[A-Za-z0-9_]+"?)`)
 	ownerStmt     = regexp.MustCompile(`(?s)^ALTER .* OWNER TO `)
 	randomKeyMeta = regexp.MustCompile(`^\\(restrict|unrestrict)( \S+)?$`)

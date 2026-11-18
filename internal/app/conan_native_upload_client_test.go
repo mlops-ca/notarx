@@ -316,7 +316,7 @@ class Fixture(ConanFile):
 		}
 		data, readErr := io.ReadAll(response.Body)
 		_ = response.Body.Close()
-		if readErr != nil || response.StatusCode != http.StatusCreated || response.Header.Get("X-Artifact-Gateway-Publish-State") != "committed" {
+		if readErr != nil || response.StatusCode != http.StatusCreated || response.Header.Get("X-Notarx-Publish-State") != "committed" {
 			t.Fatalf("post-restart manifest-only retry %s=%d %s err=%v", path, response.StatusCode, data, readErr)
 		}
 	}

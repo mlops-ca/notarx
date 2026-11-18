@@ -14,7 +14,7 @@
 #   --job <name>      quality, contract, console, all (default: fast)
 #   --lane <name>     one isolated contract lane; use --list for names
 #   --keep-going      run every selected check instead of stopping at the first failure
-#   --with-console-e2e  include Console E2E, which needs a running gateway stack
+#   --with-console-e2e  include Console E2E, which needs a running notarx stack
 #
 # The mainline-assets and mainline-images jobs are push-to-main only and cannot be
 # reproduced from a feature branch; they are reported as out of scope.
@@ -92,7 +92,7 @@ check_openapi_fresh() {
   python3 scripts/ci-contract.py openapi-fresh
 }
 
-gateway_ready() {
+notarx_ready() {
   local port=${NOTARX_HTTP_PORT:-8080}
   curl -sf "http://127.0.0.1:${port}/readyz" >/dev/null 2>&1
 }
@@ -128,7 +128,7 @@ run_contract() {
     run_contract_lane "$lane"
   done < <(python3 scripts/ci-contract.py list)
   # Keep the existing additional local CLI stack check; CI runs this client
-  # against the Console job's gateway instead.
+  # against the Console job's notarx instead.
   run "notarxctl CLI E2E (isolated Compose stack)" make cli-e2e
 }
 
@@ -142,13 +142,13 @@ run_console() {
   run "build" make console-build
   run "deployment image" make console-docker-build
   if [[ $with_console_e2e -eq 1 ]]; then
-    if gateway_ready; then
+    if notarx_ready; then
       run "console E2E" make console-e2e
     else
-      skip "console E2E" "gateway not ready on 127.0.0.1:${NOTARX_HTTP_PORT:-8080}; start it with \`make dev-bootstrap && make dev\`"
+      skip "console E2E" "notarx not ready on 127.0.0.1:${NOTARX_HTTP_PORT:-8080}; start it with \`make dev-bootstrap && make dev\`"
     fi
   else
-    skip "console E2E" "pass --with-console-e2e and start the gateway stack to include it"
+    skip "console E2E" "pass --with-console-e2e and start the notarx stack to include it"
   fi
 }
 

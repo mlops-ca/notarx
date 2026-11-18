@@ -14,8 +14,8 @@ identifiers are therefore not compiled into the frontend bundle.
 
 ```dotenv
 NOTARX_OIDC_ISSUER=https://login.example.com/realms/acme
-NOTARX_OIDC_AUDIENCE=artifact-gateway-api
-NOTARX_OIDC_CLIENT_ID=artifact-gateway-console
+NOTARX_OIDC_AUDIENCE=notarx-api
+NOTARX_OIDC_CLIENT_ID=notarx-console
 NOTARX_OIDC_CLIENT_SECRET=
 NOTARX_OIDC_REDIRECT_URL=https://gateway.example.com/auth/oidc/callback
 NOTARX_OIDC_SCOPES=openid profile email

@@ -129,8 +129,8 @@ jobs:
         with:
           name: console-openapi-${{ inputs.version }}
           path: |
-            dist/artifact-gateway-console_${{ inputs.version }}_web.tar.gz
-            dist/artifact-gateway-openapi_${{ inputs.version }}.tar.gz
+            dist/notarx-console_${{ inputs.version }}_web.tar.gz
+            dist/notarx-openapi_${{ inputs.version }}.tar.gz
           if-no-files-found: error
           retention-days: ${{ inputs.retention-days }}
 

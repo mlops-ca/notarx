@@ -191,7 +191,7 @@ func (m NativeMaintenance) StartWorker(ctx context.Context, interval time.Durati
 		return
 	}
 	go func() {
-		wake := notificationWake(ctx, m.Store, "artifact_gateway_lifecycle_jobs")
+		wake := notificationWake(ctx, m.Store, "notarx_lifecycle_jobs")
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {

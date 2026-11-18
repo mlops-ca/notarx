@@ -31,9 +31,9 @@ for file in \
   docs/maven-hosted-publication.md \
   docs/project-quality-assessment.md \
   docs/recovery-runbook.md \
-  docs/assets/artifact-gateway-hero.png \
-  docs/assets/artifact-gateway-system-architecture.png \
-  docs/assets/artifact-gateway-deployment-topology.png; do
+  docs/assets/notarx-hero.png \
+  docs/assets/notarx-system-architecture.png \
+  docs/assets/notarx-deployment-topology.png; do
   if [ ! -s "$file" ]; then
     printf 'missing required documentation entry %s\n' "$file" >&2
     exit 1
@@ -58,14 +58,14 @@ if ! contains_fixed_string 'site-map.json' docs/README.md; then
 fi
 
 for file in README.md docs/architecture-diagrams.md; do
-  if ! contains_fixed_string 'artifact-gateway-system-architecture.png' "$file"; then
+  if ! contains_fixed_string 'notarx-system-architecture.png' "$file"; then
     printf 'missing generated system architecture from %s\n' "$file" >&2
     exit 1
   fi
 done
 
 for file in docs/architecture-diagrams.md; do
-  if ! contains_fixed_string 'artifact-gateway-deployment-topology.png' "$file"; then
+  if ! contains_fixed_string 'notarx-deployment-topology.png' "$file"; then
     printf 'missing generated deployment topology from %s\n' "$file" >&2
     exit 1
   fi

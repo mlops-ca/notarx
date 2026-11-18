@@ -56,7 +56,7 @@ func (w RepositoryDeletionWorker) Start(ctx context.Context, interval time.Durat
 	}
 	go func() {
 		_, _ = w.Run(ctx)
-		wake := notificationWake(ctx, w.Store, "artifact_gateway_repository_deletions")
+		wake := notificationWake(ctx, w.Store, "notarx_repository_deletions")
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {

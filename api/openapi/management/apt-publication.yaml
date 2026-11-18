@@ -172,7 +172,7 @@ repositories_repositoryId_apt_snapshots_snapshotId_archive:
             schema:
               type: string
         content:
-          application/vnd.artifact-gateway.apt-snapshot.v1+tar:
+          application/vnd.notarx.apt-snapshot.v1+tar:
             schema:
               type: string
               format: binary
@@ -205,7 +205,7 @@ repositories_repositoryId_apt_snapshots_restore:
     requestBody:
       required: true
       content:
-        application/vnd.artifact-gateway.apt-snapshot.v1+tar:
+        application/vnd.notarx.apt-snapshot.v1+tar:
           schema:
             type: string
             format: binary

@@ -17,7 +17,7 @@ free_port() {
   python3 -c 'import socket; listener = socket.socket(); listener.bind(("127.0.0.1", 0)); print(listener.getsockname()[1]); listener.close()'
 }
 
-gateway_url="http://localhost:${NOTARX_HTTP_PORT}"
+notarx_url="http://localhost:${NOTARX_HTTP_PORT}"
 fixture_port=$(free_port)
 run_id=${RAW_E2E_RUN_ID:-"$(date +%s)-${RANDOM}"}
 group="raw-ready-${run_id}"
@@ -34,7 +34,7 @@ cleanup() {
   if [[ -n "$anonymous_policy_version" && "$anonymous_policy_enabled" != "true" ]]; then
     curl --silent --output /dev/null --write-out '' -X PUT \
       -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" -H 'Content-Type: application/json' -H "If-Match: $anonymous_policy_version" \
-      --data "{\"version\":\"$anonymous_policy_version\",\"enabled\":false}" "$gateway_url/api/v2/public-access-policy" || true
+      --data "{\"version\":\"$anonymous_policy_version\",\"enabled\":false}" "$notarx_url/api/v2/public-access-policy" || true
   fi
   rm -rf "$workdir"
   exit "$status"
@@ -58,7 +58,7 @@ create_group() {
     "$name" "$anonymous" "$member_type" "$endpoint" "$hosts")
   status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
     -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" -H 'Content-Type: application/json' \
-    --data "$payload" "$gateway_url/api/v1/raw/groups")
+    --data "$payload" "$notarx_url/api/v1/raw/groups")
   [[ "$status" == 201 ]] || { printf 'Creating Raw Group %s returned HTTP %s\n' "$name" "$status" >&2; exit 1; }
 }
 
@@ -78,12 +78,12 @@ admin_status() {
 
 enable_anonymous_access() {
   local policy response
-  policy=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$gateway_url/api/v2/public-access-policy")
+  policy=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$notarx_url/api/v2/public-access-policy")
   read -r anonymous_policy_version anonymous_policy_enabled < <(python3 -c 'import json, sys; policy = json.load(sys.stdin); print(policy["version"], str(policy["enabled"]).lower())' <<<"$policy")
   [[ "$anonymous_policy_enabled" == "true" ]] && return
   response=$(curl --silent --show-error --fail -X PUT \
     -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" -H 'Content-Type: application/json' -H "If-Match: $anonymous_policy_version" \
-    --data "{\"version\":\"$anonymous_policy_version\",\"enabled\":true}" "$gateway_url/api/v2/public-access-policy")
+    --data "{\"version\":\"$anonymous_policy_version\",\"enabled\":true}" "$notarx_url/api/v2/public-access-policy")
   anonymous_policy_version=$(python3 -c 'import json, sys; print(json.load(sys.stdin)["version"])' <<<"$response")
 }
 
@@ -93,14 +93,14 @@ create_group "$group" true hosted "$endpoint"
 create_group "$private_group" false hosted "$endpoint"
 create_group "$denied_group" true proxy 'https://example.com' '["not-example.com"]'
 
-response=$(curl --silent --show-error "$gateway_url/raw/$group/release/app.txt")
+response=$(curl --silent --show-error "$notarx_url/raw/$group/release/app.txt")
 [[ "$response" == 'raw release artifact' ]] || { printf 'Raw anonymous GET returned %q\n' "$response" >&2; exit 1; }
-expect_status 200 "$(curl --silent --show-error --head --output /dev/null --write-out '%{http_code}' "$gateway_url/raw/$group/release/app.txt")" 'Raw HEAD'
-range=$(curl --silent --show-error -H 'Range: bytes=4-10' "$gateway_url/raw/$group/release/app.txt")
+expect_status 200 "$(curl --silent --show-error --head --output /dev/null --write-out '%{http_code}' "$notarx_url/raw/$group/release/app.txt")" 'Raw HEAD'
+range=$(curl --silent --show-error -H 'Range: bytes=4-10' "$notarx_url/raw/$group/release/app.txt")
 [[ "$range" == 'release' ]] || { printf 'Raw range returned %q\n' "$range" >&2; exit 1; }
-expect_status 401 "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$gateway_url/raw/$private_group/release/app.txt")" 'Raw anonymous denial'
-expect_status 400 "$(admin_status "$gateway_url/raw/$group/release/%2Funsafe")" 'Raw encoded slash rejection'
-expect_status 404 "$(admin_status "$gateway_url/raw/$group/release/missing.txt")" 'Raw first missing request'
+expect_status 401 "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$notarx_url/raw/$private_group/release/app.txt")" 'Raw anonymous denial'
+expect_status 400 "$(admin_status "$notarx_url/raw/$group/release/%2Funsafe")" 'Raw encoded slash rejection'
+expect_status 404 "$(admin_status "$notarx_url/raw/$group/release/missing.txt")" 'Raw first missing request'
 
 # Removing the source after the first 404 proves the next 404 is a negative
 # cache hit. The same outage also proves the earlier successful read is served
@@ -108,15 +108,15 @@ expect_status 404 "$(admin_status "$gateway_url/raw/$group/release/missing.txt")
 kill "$fixture_pid"
 wait "$fixture_pid" 2>/dev/null || true
 fixture_pid=""
-expect_status 404 "$(admin_status "$gateway_url/raw/$group/release/missing.txt")" 'Raw negative cache request after upstream shutdown'
-response=$(curl --silent --show-error "$gateway_url/raw/$group/release/app.txt")
+expect_status 404 "$(admin_status "$notarx_url/raw/$group/release/missing.txt")" 'Raw negative cache request after upstream shutdown'
+response=$(curl --silent --show-error "$notarx_url/raw/$group/release/app.txt")
 [[ "$response" == 'raw release artifact' ]] || { printf 'Raw cached GET returned %q after upstream shutdown\n' "$response" >&2; exit 1; }
-expect_status 403 "$(admin_status "$gateway_url/raw/$denied_group/release/app.txt")" 'Raw Proxy allowlist denial'
+expect_status 403 "$(admin_status "$notarx_url/raw/$denied_group/release/app.txt")" 'Raw Proxy allowlist denial'
 
 # Read audit is buffered per node and flushed every NOTARX_AUDIT_FLUSH_INTERVAL (1s by
 # default), so wait for the last request of this scenario to appear.
 for _ in $(seq 1 30); do
-  audits=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$gateway_url/api/v1/audits?group=$group")
+  audits=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$notarx_url/api/v1/audits?group=$group")
   grep -Eq '"Outcome":"not_found".*"CacheDisposition":"hit"' <<<"$audits" && break
   sleep 1
 done
@@ -124,7 +124,7 @@ grep -Eq '"Format":"raw"' <<<"$audits" || { printf '%s\n' 'Raw audit format was 
 grep -Eq '"Actor":"anonymous"' <<<"$audits" || { printf '%s\n' 'Raw anonymous audit actor was not recorded.' >&2; exit 1; }
 grep -Eq '"CacheDisposition":"hit"' <<<"$audits" || { printf '%s\n' 'Raw cache-hit audit was not recorded.' >&2; exit 1; }
 grep -Eq '"Outcome":"not_found".*"CacheDisposition":"hit"' <<<"$audits" || { printf '%s\n' 'Raw negative-cache audit hit was not recorded.' >&2; exit 1; }
-metrics=$(curl --silent --show-error --fail "$gateway_url/metrics")
+metrics=$(curl --silent --show-error --fail "$notarx_url/metrics")
 grep -Eq 'notarx_raw_cache_requests_total\{outcome="hit"\} [1-9]' <<<"$metrics" || { printf '%s\n' 'Raw cache-hit metric did not increment.' >&2; exit 1; }
 grep -Eq 'notarx_raw_negative_cache_hits_total [1-9]' <<<"$metrics" || { printf '%s\n' 'Raw negative-cache metric did not increment.' >&2; exit 1; }
 

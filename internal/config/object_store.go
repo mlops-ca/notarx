@@ -12,7 +12,7 @@ import (
 )
 
 // Object store environment keys (ADR 0017). They replace the former RustFS
-// names (GATEWAY_ and NOTARX_ prefixed), which startup refuses (see RefuseLegacyEnv).
+// names (NOTARX_ and NOTARX_ prefixed), which startup refuses (see RefuseLegacyEnv).
 const (
 	envObjectStoreDriver             = "NOTARX_OBJECT_STORE_DRIVER"
 	envObjectStoreEndpoint           = "NOTARX_OBJECT_STORE_ENDPOINT"

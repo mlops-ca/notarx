@@ -10,10 +10,10 @@ import (
 )
 
 var postgresNotificationChannels = []string{
-	"artifact_gateway_audit_cleanup",
-	"artifact_gateway_lifecycle_jobs",
-	"artifact_gateway_replication_plans",
-	"artifact_gateway_repository_deletions",
+	"notarx_audit_cleanup",
+	"notarx_lifecycle_jobs",
+	"notarx_replication_plans",
+	"notarx_repository_deletions",
 }
 
 type postgresNotifier struct {

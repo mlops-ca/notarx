@@ -46,7 +46,7 @@ func exerciseConanNativeManifestOnlyReplay(t *testing.T, backend conanClientBack
 					t.Fatalf("different immutable manifest=%d %s", w.Code, w.Body.String())
 				}
 				f.assertBytes(t)
-				f.assertNoPublicationAudit(t, w.Header().Get("X-Artifact-Gateway-Publish-Session"))
+				f.assertNoPublicationAudit(t, w.Header().Get("X-Notarx-Publish-Session"))
 			})
 			t.Run("concurrent_bad_put_is_not_repaired_over", func(t *testing.T) {
 				f := newConanNativeReplayFixture(t, backend, kind)
@@ -76,9 +76,9 @@ func exerciseConanNativeManifestOnlyReplay(t *testing.T, backend conanClientBack
 					if w.Code != http.StatusUnprocessableEntity {
 						t.Fatalf("retry hid the concurrent bad upload: %d %s", w.Code, w.Body.String())
 					}
-					id := w.Header().Get("X-Artifact-Gateway-Publish-Session")
+					id := w.Header().Get("X-Notarx-Publish-Session")
 					session, err := backend.store.GetConanPublishSession(context.Background(), id)
-					if err != nil || session.State != "open" || id != bad.Header().Get("X-Artifact-Gateway-Publish-Session") {
+					if err != nil || session.State != "open" || id != bad.Header().Get("X-Notarx-Publish-Session") {
 						t.Fatalf("retry lost the concurrent session: %+v %v", session, err)
 					}
 					uploads, err := backend.store.ListConanPublishUploads(context.Background(), id)
@@ -109,7 +109,7 @@ func exerciseConanNativeManifestOnlyReplay(t *testing.T, backend conanClientBack
 				if w.Code != http.StatusConflict {
 					t.Fatalf("quarantined publication replay=%d %s", w.Code, w.Body.String())
 				}
-				f.assertNoPublicationAudit(t, w.Header().Get("X-Artifact-Gateway-Publish-Session"))
+				f.assertNoPublicationAudit(t, w.Header().Get("X-Notarx-Publish-Session"))
 			})
 			t.Run("promoted_target_can_replay_its_shared_tree", func(t *testing.T) {
 				f := newConanNativeReplayFixture(t, backend, kind)
@@ -210,10 +210,10 @@ func (f conanNativeReplayFixture) publish(t *testing.T) {
 
 func (f conanNativeReplayFixture) assertCommitted(t *testing.T, w *httptest.ResponseRecorder, actor string, replay bool) {
 	t.Helper()
-	if w.Code != http.StatusCreated || w.Header().Get("X-Artifact-Gateway-Publish-State") != "committed" {
-		t.Fatalf("manifest PUT=%d state=%q %s", w.Code, w.Header().Get("X-Artifact-Gateway-Publish-State"), w.Body.String())
+	if w.Code != http.StatusCreated || w.Header().Get("X-Notarx-Publish-State") != "committed" {
+		t.Fatalf("manifest PUT=%d state=%q %s", w.Code, w.Header().Get("X-Notarx-Publish-State"), w.Body.String())
 	}
-	id := w.Header().Get("X-Artifact-Gateway-Publish-Session")
+	id := w.Header().Get("X-Notarx-Publish-Session")
 	session, err := f.backend.store.GetConanPublishSession(context.Background(), id)
 	if err != nil || session.State != "committed" || session.Publisher != actor {
 		t.Fatalf("durable committed session=%+v %v", session, err)

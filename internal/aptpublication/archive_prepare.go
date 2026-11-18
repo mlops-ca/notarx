@@ -37,7 +37,7 @@ func prepareTrustedArchive(ctx context.Context, input io.Reader, maxBytes int64,
 	if maxBytes <= 0 || maxBytes > MaxSnapshotArchiveImportBytes {
 		maxBytes = MaxSnapshotArchiveImportBytes
 	}
-	file, err := os.CreateTemp("", "artifact-gateway-apt-restore-*.tar")
+	file, err := os.CreateTemp("", "notarx-apt-restore-*.tar")
 	if err != nil {
 		return nil, fmt.Errorf("create APT recovery spool: %w", err)
 	}

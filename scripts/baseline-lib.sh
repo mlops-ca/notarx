@@ -52,20 +52,20 @@ baseline_init() {
 }
 
 # baseline_start_server starts one disposable PostgreSQL server and creates the
-# databases named as arguments (role "gateway", trust authentication, reachable
+# databases named as arguments (role "notarx", trust authentication, reachable
 # only from containers that join its network namespace).
 baseline_start_server() {
   baseline_server="notarx-baseline-$$-$RANDOM"
   "$engine" run -d --name "$baseline_server" \
-    -e POSTGRES_USER=gateway -e POSTGRES_DB=postgres -e POSTGRES_HOST_AUTH_METHOD=trust \
+    -e POSTGRES_USER=notarx -e POSTGRES_DB=postgres -e POSTGRES_HOST_AUTH_METHOD=trust \
     "$BASELINE_PG_IMAGE" postgres -c shared_preload_libraries=pg_stat_statements >/dev/null
   local attempt
   for attempt in $(seq 1 60); do
-    if "$engine" exec "$baseline_server" pg_isready -h 127.0.0.1 -U gateway -d postgres >/dev/null 2>&1; then
+    if "$engine" exec "$baseline_server" pg_isready -h 127.0.0.1 -U notarx -d postgres >/dev/null 2>&1; then
       # The image restarts the server once after initialisation; require two
       # consecutive successful probes.
       sleep 1
-      if "$engine" exec "$baseline_server" pg_isready -h 127.0.0.1 -U gateway -d postgres >/dev/null 2>&1; then
+      if "$engine" exec "$baseline_server" pg_isready -h 127.0.0.1 -U notarx -d postgres >/dev/null 2>&1; then
         break
       fi
     fi
@@ -76,7 +76,7 @@ baseline_start_server() {
   done
   local database
   for database in "$@"; do
-    "$engine" exec "$baseline_server" psql -X -h 127.0.0.1 -U gateway -d postgres -v ON_ERROR_STOP=1 \
+    "$engine" exec "$baseline_server" psql -X -h 127.0.0.1 -U notarx -d postgres -v ON_ERROR_STOP=1 \
       -c "CREATE DATABASE $database" >/dev/null
   done
 }
@@ -86,7 +86,7 @@ baseline_start_server() {
 baseline_migrate() {
   local database=$1 directory=$2
   "$engine" run --rm --network "container:$baseline_server" \
-    -e PGHOST=127.0.0.1 -e PGUSER=gateway -e "PGDATABASE=$database" \
+    -e PGHOST=127.0.0.1 -e PGUSER=notarx -e "PGDATABASE=$database" \
     -v "$directory:/migrations:ro" \
     -v "$baseline_root/scripts/run-migrations.sh:/usr/local/bin/run-migrations:ro" \
     --entrypoint /usr/local/bin/run-migrations \
@@ -97,12 +97,12 @@ baseline_migrate() {
 baseline_psql() {
   local database=$1
   shift
-  "$engine" exec -i "$baseline_server" psql -X -h 127.0.0.1 -U gateway -d "$database" -v ON_ERROR_STOP=1 "$@"
+  "$engine" exec -i "$baseline_server" psql -X -h 127.0.0.1 -U notarx -d "$database" -v ON_ERROR_STOP=1 "$@"
 }
 
 # baseline_dump DATABASE [pg_dump arguments...] runs the pinned pg_dump.
 baseline_dump() {
   local database=$1
   shift
-  "$engine" exec "$baseline_server" pg_dump -h 127.0.0.1 -U gateway -d "$database" "$@"
+  "$engine" exec "$baseline_server" pg_dump -h 127.0.0.1 -U notarx -d "$database" "$@"
 }

@@ -609,7 +609,7 @@ func TestLoadConfiguresOIDCWithHTTPSIssuerAndDiscoveryDefault(t *testing.T) {
 	t.Setenv("NOTARX_ADMIN_TOKEN", "admin-token")
 	t.Setenv("NOTARX_RESOLVER_TOKEN", "resolver-token")
 	t.Setenv("NOTARX_OIDC_ISSUER", "https://login.example.test/")
-	t.Setenv("NOTARX_OIDC_AUDIENCE", "artifact-gateway")
+	t.Setenv("NOTARX_OIDC_AUDIENCE", "notarx")
 	t.Setenv("NOTARX_OIDC_JWKS_URL", "")
 	t.Setenv("NOTARX_OIDC_ADMIN_SUBJECTS", "ops-admin, release-admin ")
 	t.Setenv("NOTARX_OIDC_MEMBER_ROLES", "artifact-member")
@@ -626,10 +626,10 @@ func TestLoadConfiguresOIDCWithHTTPSIssuerAndDiscoveryDefault(t *testing.T) {
 
 func TestLoadAllowsLoopbackHTTPForLocalOIDCTestProvider(t *testing.T) {
 	setCompleteConfiguration(t)
-	t.Setenv("NOTARX_OIDC_ISSUER", "http://127.0.0.1:18081/realms/artifact-gateway")
-	t.Setenv("NOTARX_OIDC_AUDIENCE", "artifact-gateway-api")
-	t.Setenv("NOTARX_OIDC_JWKS_URL", "http://127.0.0.1:18081/realms/artifact-gateway/protocol/openid-connect/certs")
-	t.Setenv("NOTARX_OIDC_CLIENT_ID", "artifact-gateway-console")
+	t.Setenv("NOTARX_OIDC_ISSUER", "http://127.0.0.1:18081/realms/notarx")
+	t.Setenv("NOTARX_OIDC_AUDIENCE", "notarx-api")
+	t.Setenv("NOTARX_OIDC_JWKS_URL", "http://127.0.0.1:18081/realms/notarx/protocol/openid-connect/certs")
+	t.Setenv("NOTARX_OIDC_CLIENT_ID", "notarx-console")
 	t.Setenv("NOTARX_OIDC_REDIRECT_URL", "http://127.0.0.1:4173/auth/oidc/callback")
 
 	if _, err := Load(); err != nil {
@@ -639,8 +639,8 @@ func TestLoadAllowsLoopbackHTTPForLocalOIDCTestProvider(t *testing.T) {
 
 func TestLoadRejectsNonLoopbackHTTPOIDCIssuer(t *testing.T) {
 	setCompleteConfiguration(t)
-	t.Setenv("NOTARX_OIDC_ISSUER", "http://keycloak.example.test/realms/artifact-gateway")
-	t.Setenv("NOTARX_OIDC_AUDIENCE", "artifact-gateway-api")
+	t.Setenv("NOTARX_OIDC_ISSUER", "http://keycloak.example.test/realms/notarx")
+	t.Setenv("NOTARX_OIDC_AUDIENCE", "notarx-api")
 	if _, err := Load(); err == nil {
 		t.Fatal("Load() accepted a non-loopback HTTP OIDC issuer")
 	}
@@ -664,8 +664,8 @@ func TestLoadRejectsOIDCWithoutAudience(t *testing.T) {
 func TestLoadConfiguresOIDCBrowserLogin(t *testing.T) {
 	setCompleteConfiguration(t)
 	t.Setenv("NOTARX_OIDC_ISSUER", "https://login.example.test")
-	t.Setenv("NOTARX_OIDC_AUDIENCE", "artifact-gateway")
-	t.Setenv("NOTARX_OIDC_CLIENT_ID", "artifact-gateway-console")
+	t.Setenv("NOTARX_OIDC_AUDIENCE", "notarx")
+	t.Setenv("NOTARX_OIDC_CLIENT_ID", "notarx-console")
 	t.Setenv("NOTARX_OIDC_CLIENT_SECRET", "client-secret")
 	t.Setenv("NOTARX_OIDC_REDIRECT_URL", "https://gateway.example.test/auth/oidc/callback")
 	t.Setenv("NOTARX_OIDC_SCOPES", "openid profile,groups profile")
@@ -674,7 +674,7 @@ func TestLoadConfiguresOIDCBrowserLogin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.OIDCClientID != "artifact-gateway-console" || cfg.OIDCClientSecret != "client-secret" || cfg.OIDCRedirectURL != "https://gateway.example.test/auth/oidc/callback" {
+	if cfg.OIDCClientID != "notarx-console" || cfg.OIDCClientSecret != "client-secret" || cfg.OIDCRedirectURL != "https://gateway.example.test/auth/oidc/callback" {
 		t.Fatalf("OIDC browser config = %#v", cfg)
 	}
 	if got := strings.Join(cfg.OIDCScopes, ","); got != "openid,profile,groups" {
@@ -685,8 +685,8 @@ func TestLoadConfiguresOIDCBrowserLogin(t *testing.T) {
 func TestLoadRejectsInsecureOIDCBrowserRedirect(t *testing.T) {
 	setCompleteConfiguration(t)
 	t.Setenv("NOTARX_OIDC_ISSUER", "https://login.example.test")
-	t.Setenv("NOTARX_OIDC_AUDIENCE", "artifact-gateway")
-	t.Setenv("NOTARX_OIDC_CLIENT_ID", "artifact-gateway-console")
+	t.Setenv("NOTARX_OIDC_AUDIENCE", "notarx")
+	t.Setenv("NOTARX_OIDC_CLIENT_ID", "notarx-console")
 	t.Setenv("NOTARX_OIDC_REDIRECT_URL", "http://gateway.example.test/auth/oidc/callback")
 	if _, err := Load(); err == nil {
 		t.Fatal("Load() accepted a non-local HTTP OIDC redirect")

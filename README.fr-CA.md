@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/artifact-gateway-hero.png" alt="Des flux d’artefacts convergeant par une passerelle de vérification unique vers les métadonnées PostgreSQL et un stockage d’objets immuable" width="100%">
+  <img src="docs/assets/notarx-hero.png" alt="Des flux d’artefacts convergeant par une passerelle de vérification unique vers les métadonnées PostgreSQL et un stockage d’objets immuable" width="100%">
 </p>
 
 <h1 align="center">notarx</h1>
@@ -160,7 +160,7 @@ Prérequis : Docker avec Compose, Node.js 24 ou plus, npm, GNU Make et OpenSSL.
 
 ```sh
 git clone https://github.com/mlops-ca/notarx.git
-cd artifact-gateway
+cd notarx
 make dev-bootstrap
 make dev
 ```
@@ -197,7 +197,7 @@ de cycle de vie et le dépannage.
 
 ## L’architecture en un coup d’œil
 
-![Architecture système légère de notarx](docs/assets/artifact-gateway-system-architecture.png)
+![Architecture système légère de notarx](docs/assets/notarx-system-architecture.png)
 
 Le rôle `standalone` par défaut exécute les responsabilités d’API,
 d’ordonnanceur et de worker dans un seul processus. Les grandes installations

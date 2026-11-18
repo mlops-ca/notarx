@@ -11,7 +11,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
-const aptSnapshotArchiveContentType = "application/vnd.artifact-gateway.apt-snapshot.v1+tar"
+const aptSnapshotArchiveContentType = "application/vnd.notarx.apt-snapshot.v1+tar"
 
 func (h generatedRepositoryAPIAdapter) ExportAPTRepositorySnapshot(w http.ResponseWriter, r *http.Request, repositoryID adminopenapi.RepositoryId, snapshotID adminopenapi.SnapshotId) {
 	h.withRepositoryScope(w, r, repositoryID.String(), RepositoryAdmin, func(principal Principal, repo repository.HostedRepository) {

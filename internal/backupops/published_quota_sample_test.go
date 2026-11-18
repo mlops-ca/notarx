@@ -25,7 +25,7 @@ func samplePublishedRecoveryQuota(t *testing.T, ctx context.Context, source *Own
 	if release.NativeArchive == nil || release.Identity.Version != "0.6.0" || release.Identity.Artifact == nil || release.Identity.Artifact.Kind != "binary" || source.checkOwned(ctx) != nil {
 		t.Fatal("published quota fixture requires its verified original release")
 	}
-	binary := filepath.Join(source.directory, "gateway")
+	binary := filepath.Join(source.directory, "notarx")
 	if sum, _, err := describeBinary(binary); err != nil || sum != release.Identity.Artifact.SHA256 {
 		t.Fatal("published quota runtime identity changed")
 	}
@@ -67,7 +67,7 @@ func samplePublishedRecoveryQuota(t *testing.T, ctx context.Context, source *Own
 			Config     struct{ Labels map[string]string }
 			HostConfig struct{ NetworkMode string }
 		}
-		if err != nil || json.Unmarshal(data, &containers) != nil || len(containers) != 1 || strings.TrimPrefix(containers[0].Name, "/") != name || (id != "" && containers[0].ID != id) || containers[0].Config.Labels["artifact-gateway.restore-owner"] != source.owner || containers[0].Config.Labels["artifact-gateway.quota-sample"] != invocation || containers[0].HostConfig.NetworkMode != source.spec.Project+"-network" {
+		if err != nil || json.Unmarshal(data, &containers) != nil || len(containers) != 1 || strings.TrimPrefix(containers[0].Name, "/") != name || (id != "" && containers[0].ID != id) || containers[0].Config.Labels["notarx.restore-owner"] != source.owner || containers[0].Config.Labels["notarx.quota-sample"] != invocation || containers[0].HostConfig.NetworkMode != source.spec.Project+"-network" {
 			t.Error("published quota sampler cleanup ownership unavailable")
 			return
 		}
@@ -76,8 +76,8 @@ func samplePublishedRecoveryQuota(t *testing.T, ctx context.Context, source *Own
 		}
 	}()
 	environment := []string{
-		"NOTARX_DATABASE_URL=postgres://gateway:" + escapePassword(source.spec.PostgresPassword) + "@postgres:5432/gateway?sslmode=disable",
-		"NOTARX_OBJECT_STORE_ENDPOINT=http://rustfs:9000", "NOTARX_OBJECT_STORE_AUTO_CREATE_BUCKET=true", "NOTARX_OBJECT_STORE_BUCKET=gateway-cache",
+		"NOTARX_DATABASE_URL=postgres://notarx:" + escapePassword(source.spec.PostgresPassword) + "@postgres:5432/notarx?sslmode=disable",
+		"NOTARX_OBJECT_STORE_ENDPOINT=http://rustfs:9000", "NOTARX_OBJECT_STORE_AUTO_CREATE_BUCKET=true", "NOTARX_OBJECT_STORE_BUCKET=notarx-cache",
 		"NOTARX_OBJECT_STORE_ACCESS_KEY=" + source.spec.AccessKey, "NOTARX_OBJECT_STORE_SECRET_KEY=" + source.spec.SecretKey,
 		"NOTARX_ADMIN_TOKEN=" + source.spec.AdminToken, "NOTARX_RESOLVER_TOKEN=" + source.spec.ResolverToken,
 		"NOTARX_NODE_ROLES=scheduler", "NOTARX_LISTEN_ADDRESS=:0", "NOTARX_INSTANCE_ID=" + name,
@@ -89,7 +89,7 @@ func samplePublishedRecoveryQuota(t *testing.T, ctx context.Context, source *Own
 			environment[i] = legacyEnvironmentKey(key) + "=" + rest
 		}
 	}
-	args := []string{"create", "--name", name, "--network", source.spec.Project + "-network", "--label", "artifact-gateway.restore-owner=" + source.owner, "--label", "artifact-gateway.quota-sample=" + invocation, "--read-only", "--tmpfs", "/tmp:rw,noexec,nosuid,size=256m,mode=1777", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true", "--mount", "type=bind,source=" + binary + ",target=/gateway,readonly", "--mount", "type=bind,source=" + configPath + ",target=/quota-mail.json,readonly", "--entrypoint", "/gateway", "--platform", release.Identity.Artifact.Platform}
+	args := []string{"create", "--name", name, "--network", source.spec.Project + "-network", "--label", "notarx.restore-owner=" + source.owner, "--label", "notarx.quota-sample=" + invocation, "--read-only", "--tmpfs", "/tmp:rw,noexec,nosuid,size=256m,mode=1777", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true", "--mount", "type=bind,source=" + binary + ",target=/notarx,readonly", "--mount", "type=bind,source=" + configPath + ",target=/quota-mail.json,readonly", "--entrypoint", "/notarx", "--platform", release.Identity.Artifact.Platform}
 	for _, value := range environment {
 		key, _, _ := strings.Cut(value, "=")
 		args = append(args, "--env", key)

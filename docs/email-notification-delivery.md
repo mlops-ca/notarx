@@ -77,7 +77,7 @@ Updating a target without a `locale` keeps its current one.
 
 `compose.yml` keeps email disconnected. Setting `NOTARX_EMAIL_CONFIG_FILE` in
 `.env` alone does not mount or forward it. Explicitly add `compose.email.yml`,
-which fixes the in-container path to `/etc/gateway-email/relay.json`, requires
+which fixes the in-container path to `/etc/notarx-email/relay.json`, requires
 `NOTARX_EMAIL_CONFIG_DIR` and the existing settings encryption key, and mounts
 that directory read-only with `create_host_path: false`. The directory must
 already exist. [The checked-in file](../examples/email/relay.json) is disabled
@@ -88,12 +88,12 @@ Provision the directory through your existing secret management. The image runs
 as UID/GID 65532. On a Linux host, the following installs only the disabled file:
 
 ```sh
-sudo install -d -o 65532 -g 65532 -m 0750 /etc/artifact-gateway/email
-sudo install -o 65532 -g 65532 -m 0640 examples/email/relay.json /etc/artifact-gateway/email/relay.json
+sudo install -d -o 65532 -g 65532 -m 0750 /etc/notarx/email
+sudo install -o 65532 -g 65532 -m 0640 examples/email/relay.json /etc/notarx/email/relay.json
 ```
 
 Keep the private deployment `.env` mode 0600 and set
-`NOTARX_EMAIL_CONFIG_DIR=/etc/artifact-gateway/email`. Use a separately generated
+`NOTARX_EMAIL_CONFIG_DIR=/etc/notarx/email`. Use a separately generated
 32-byte `NOTARX_SETTINGS_ENCRYPTION_KEY` (for a new installation,
 `openssl rand -hex 32`), independent of admin/resolver, database, S3/RPC and SMTP
 credentials. Retain the existing key when encrypted settings or outbox snapshots
@@ -105,14 +105,14 @@ For one process, set `NOTARX_NODE_ROLES=standalone` in that private `.env`:
 
 ```sh
 docker compose --env-file .env -f compose.yml -f compose.email.yml config --quiet
-docker compose --env-file .env -f compose.yml -f compose.email.yml up -d --build --wait gateway
+docker compose --env-file .env -f compose.yml -f compose.email.yml up -d --build --wait notarx
 ```
 
 For split roles, set `NOTARX_NODE_ROLES=api`, then select the profile:
 
 ```sh
 docker compose --env-file .env -f compose.yml -f compose.email.yml --profile email-roles config --quiet
-docker compose --env-file .env -f compose.yml -f compose.email.yml --profile email-roles up -d --build --wait gateway gateway-scheduler gateway-email-worker
+docker compose --env-file .env -f compose.yml -f compose.email.yml --profile email-roles up -d --build --wait notarx notarx-scheduler notarx-email-worker
 ```
 
 The profile provides one scheduler and an email-only worker, with the same
@@ -124,7 +124,7 @@ migration job before an upgrade; this overlay does not orchestrate upgrades.
 
 To enable an authorized relay, replace `relay.json` with a complete validated
 configuration following the contract above. Paths for optional `caFile` and
-`authFile` must use `/etc/gateway-email/...`. Install private auth JSON mode 0600,
+`authFile` must use `/etc/notarx-email/...`. Install private auth JSON mode 0600,
 owned and readable by UID 65532; use readable trusted CA PEM and restrict the
 directory to authorized operators. The overlay mounts no SMTP server and
 provisions no credentials. Restart every selected role after config, CA or key

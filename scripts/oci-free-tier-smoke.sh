@@ -42,7 +42,7 @@ if [[ -z "${NOTARX_SMOKE_URL:-}" ]]; then
   admin_token=$(openssl rand -hex 24)
   mkdir -p "$workdir/data/postgres" "$workdir/data/objects"
   chmod 0700 "$workdir/data/objects"
-  # The gateway image runs as nonroot (65532) and keeps the object root private.
+  # The notarx image runs as nonroot (65532) and keeps the object root private.
   docker run --rm -v "$workdir/data:/data" --entrypoint sh "${NOTARX_POSTGRES_IMAGE:-postgres:18-alpine}" -c 'chown 65532:65532 /data/objects'
   cat >"$workdir/.env" <<ENV
 NOTARX_DOMAIN=localhost

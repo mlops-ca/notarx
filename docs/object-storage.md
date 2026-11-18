@@ -4,7 +4,7 @@
 
 notarx keeps verified immutable bytes behind the `objectstore.Store` port. The
 driver and its settings come from `NOTARX_OBJECT_STORE_*` environment variables.
-The former RustFS-prefixed names (under the old `GATEWAY_` prefix and the interim
+The former RustFS-prefixed names (under the old `NOTARX_` prefix and the interim
 `NOTARX_` prefix) are not read: startup refuses them and names the replacement
 (ADR 0013, no aliases).
 

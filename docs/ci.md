@@ -92,7 +92,7 @@ requires a check named exactly `quality`. See
 
 ## Shared images
 
-`build-images` builds the gateway and reference apt signer images once per run
+`build-images` builds the notarx and reference apt signer images once per run
 (one parallel matrix leg each, BuildKit layers cached in the GitHub Actions
 cache; the reference scanner has no CI consumer, so it is not built here) and uploads each as a tarball artifact named
 `image-<runner arch>-<image>`. Every contract lane and `console-e2e` downloads

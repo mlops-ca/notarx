@@ -29,17 +29,17 @@ func TestNativePyPIHostedUploadAndSimpleRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	enablePublicationScan(t, store, repo.ID)
-	wheel := pypiFixtureWheel(t, "gateway_widget", "1.2.3")
+	wheel := pypiFixtureWheel(t, "notarx_widget", "1.2.3")
 	sum := sha256.Sum256(wheel)
 	digest := hex.EncodeToString(sum[:])
 	body := new(bytes.Buffer)
 	writer := multipart.NewWriter(body)
-	for key, value := range map[string]string{":action": "file_upload", "name": "gateway-widget", "version": "1.2.3", "filetype": "bdist_wheel", "pyversion": "py3", "sha256_digest": digest} {
+	for key, value := range map[string]string{":action": "file_upload", "name": "notarx-widget", "version": "1.2.3", "filetype": "bdist_wheel", "pyversion": "py3", "sha256_digest": digest} {
 		if err = writer.WriteField(key, value); err != nil {
 			t.Fatal(err)
 		}
 	}
-	part, err := writer.CreateFormFile("content", "gateway_widget-1.2.3-py3-none-any.whl")
+	part, err := writer.CreateFormFile("content", "notarx_widget-1.2.3-py3-none-any.whl")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,12 +58,12 @@ func TestNativePyPIHostedUploadAndSimpleRead(t *testing.T) {
 	if uploaded.Code != http.StatusCreated {
 		t.Fatalf("upload=%d body=%s", uploaded.Code, uploaded.Body.String())
 	}
-	requirePublicationScan(t, store, repo.ID, repository.FormatPyPI, "gateway-widget@1.2.3", "sha256:"+digest)
-	simpleRequest := httptest.NewRequest(http.MethodGet, "/pypi/"+repo.Name+"/simple/gateway-widget/", nil)
+	requirePublicationScan(t, store, repo.ID, repository.FormatPyPI, "notarx-widget@1.2.3", "sha256:"+digest)
+	simpleRequest := httptest.NewRequest(http.MethodGet, "/pypi/"+repo.Name+"/simple/notarx-widget/", nil)
 	authorize(simpleRequest, "resolver-secret")
 	simple := httptest.NewRecorder()
 	handler.ServeHTTP(simple, simpleRequest)
-	filename := "gateway_widget-1.2.3-py3-none-any.whl"
+	filename := "notarx_widget-1.2.3-py3-none-any.whl"
 	if simple.Code != http.StatusOK || !strings.Contains(simple.Body.String(), filename+`#sha256=`+digest) {
 		t.Fatalf("simple=%d body=%s", simple.Code, simple.Body.String())
 	}
@@ -79,9 +79,9 @@ func TestNativePyPIHostedUploadAndSimpleRead(t *testing.T) {
 		if audit.Format != "pypi" || audit.Repository != repo.Name || audit.Actor != "build-agent" || audit.Outcome != repository.AuditResolved {
 			continue
 		}
-		foundUpload = foundUpload || audit.Operation == "post" && audit.Resource == "gateway-widget@1.2.3" && audit.Representation == "distribution" && audit.Status == http.StatusCreated && audit.Bytes == int64(len(wheel))
-		foundSimple = foundSimple || audit.Operation == "get" && audit.Resource == "gateway-widget" && audit.Representation == "project" && audit.Status == http.StatusOK && audit.CacheDisposition == "bypass"
-		foundDownload = foundDownload || audit.Operation == "get" && audit.Resource == "gateway-widget@1.2.3" && audit.Representation == "distribution" && audit.Status == http.StatusOK && audit.Bytes == int64(len(wheel))
+		foundUpload = foundUpload || audit.Operation == "post" && audit.Resource == "notarx-widget@1.2.3" && audit.Representation == "distribution" && audit.Status == http.StatusCreated && audit.Bytes == int64(len(wheel))
+		foundSimple = foundSimple || audit.Operation == "get" && audit.Resource == "notarx-widget" && audit.Representation == "project" && audit.Status == http.StatusOK && audit.CacheDisposition == "bypass"
+		foundDownload = foundDownload || audit.Operation == "get" && audit.Resource == "notarx-widget@1.2.3" && audit.Representation == "distribution" && audit.Status == http.StatusOK && audit.Bytes == int64(len(wheel))
 	}
 	if !foundUpload || !foundSimple || !foundDownload {
 		t.Fatalf("incomplete hosted PyPI audit: upload=%t simple=%t download=%t audits=%#v", foundUpload, foundSimple, foundDownload, store.Audits)
@@ -128,8 +128,8 @@ func TestNativePyPIRealTwineUploadAndPipDownload(t *testing.T) {
 	server := httptest.NewServer(newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator(), Storage: ObjectStores{repository.FormatPyPI: objects}, Upstream: UpstreamClient{HTTPClient: upstream.Client()}}))
 	defer server.Close()
 	temporary := t.TempDir()
-	wheelPath := filepath.Join(temporary, "gateway_widget-1.2.3-py3-none-any.whl")
-	if err = os.WriteFile(wheelPath, pypiFixtureWheel(t, "gateway_widget", "1.2.3"), 0o600); err != nil {
+	wheelPath := filepath.Join(temporary, "notarx_widget-1.2.3-py3-none-any.whl")
+	if err = os.WriteFile(wheelPath, pypiFixtureWheel(t, "notarx_widget", "1.2.3"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	run := func(arguments ...string) string {
@@ -148,7 +148,7 @@ func TestNativePyPIRealTwineUploadAndPipDownload(t *testing.T) {
 		t.Fatal(err)
 	}
 	authenticatedURL := strings.Replace(server.URL, "http://", "http://ci:resolver-secret@", 1)
-	run("-m", "pip", "download", "--disable-pip-version-check", "--no-deps", "--keyring-provider", "disabled", "--index-url", authenticatedURL+"/pypi/python/simple/", "--trusted-host", strings.TrimPrefix(server.URL, "http://"), "--dest", downloadDirectory, "gateway-widget==1.2.3")
+	run("-m", "pip", "download", "--disable-pip-version-check", "--no-deps", "--keyring-provider", "disabled", "--index-url", authenticatedURL+"/pypi/python/simple/", "--trusted-host", strings.TrimPrefix(server.URL, "http://"), "--dest", downloadDirectory, "notarx-widget==1.2.3")
 	downloaded, err := os.ReadFile(filepath.Join(downloadDirectory, filepath.Base(wheelPath)))
 	if err != nil {
 		t.Fatal(err)
@@ -427,7 +427,7 @@ func pypiFixtureWheel(t *testing.T, distribution, version string) []byte {
 	files := map[string]string{
 		distribution + "/__init__.py":                        "__version__ = \"" + version + "\"\n",
 		distribution + "-" + version + ".dist-info/METADATA": "Metadata-Version: 2.1\nName: " + strings.ReplaceAll(distribution, "_", "-") + "\nVersion: " + version + "\n",
-		distribution + "-" + version + ".dist-info/WHEEL":    "Wheel-Version: 1.0\nGenerator: artifact-gateway-test\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+		distribution + "-" + version + ".dist-info/WHEEL":    "Wheel-Version: 1.0\nGenerator: notarx-test\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
 		distribution + "-" + version + ".dist-info/RECORD":   "",
 	}
 	for name, contents := range files {

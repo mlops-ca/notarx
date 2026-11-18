@@ -42,7 +42,7 @@ trap cleanup EXIT
 "${compose[@]}" run --rm --no-deps migrate
 postgres_address=$("${compose[@]}" port postgres 5432)
 rustfs_address=$("${compose[@]}" port rustfs 9000)
-export TEST_DATABASE_URL="postgres://gateway:integration-password@${postgres_address}/gateway_test?sslmode=disable"
+export TEST_DATABASE_URL="postgres://notarx:integration-password@${postgres_address}/notarx_test?sslmode=disable"
 export TEST_OBJECT_STORE_ENDPOINT="http://${rustfs_address}" TEST_OBJECT_STORE_ACCESS_KEY=integration-rustfs TEST_OBJECT_STORE_SECRET_KEY=integration-password
 NOTARX_PYPI_BACKUP_MANIFEST="$temporary/manifest.json" \
   go test -v -count=1 -p=1 -tags=integration ./internal/repository ./internal/app \
@@ -67,10 +67,10 @@ printf 'PostgreSQL StartedAt: %s -> %s on %s\n' "$postgres_started" "$postgres_r
 printf 'RustFS StartedAt: %s -> %s on %s\n' "$rustfs_started" "$rustfs_restarted" "$rustfs_address"
 NOTARX_PYPI_RESTART_MANIFEST="$temporary/manifest.json" \
   go test -v -count=1 -tags=integration ./internal/app -run '^TestPyPIYankRestartedServicesPreserveState$'
-"${compose[@]}" exec -T postgres pg_dump -U gateway -d gateway_test -Fc --no-owner >"$temporary/metadata.dump"
-"${compose[@]}" exec -T postgres createdb -U gateway -T template0 gateway_yank_restore_test
-"${compose[@]}" exec -T postgres pg_restore -U gateway -d gateway_yank_restore_test --no-owner <"$temporary/metadata.dump"
-TEST_DATABASE_URL="postgres://gateway:integration-password@${postgres_address}/gateway_yank_restore_test?sslmode=disable" \
+"${compose[@]}" exec -T postgres pg_dump -U notarx -d notarx_test -Fc --no-owner >"$temporary/metadata.dump"
+"${compose[@]}" exec -T postgres createdb -U notarx -T template0 notarx_yank_restore_test
+"${compose[@]}" exec -T postgres pg_restore -U notarx -d notarx_yank_restore_test --no-owner <"$temporary/metadata.dump"
+TEST_DATABASE_URL="postgres://notarx:integration-password@${postgres_address}/notarx_yank_restore_test?sslmode=disable" \
 NOTARX_PYPI_RESTORE_MANIFEST="$temporary/manifest.json" \
   go test -v -count=1 -tags=integration ./internal/app -run '^TestPyPIYankRestoredDatabaseAndIndependentObjects$'
 printf '%s\n' 'PyPI yank: PostgreSQL transactions, Gateway reconstruction, PostgreSQL/RustFS service restart, distribution and isolated pg_dump restore verified.'

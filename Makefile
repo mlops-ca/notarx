@@ -225,9 +225,9 @@ email-compose-render-check:
 	@python3 ./scripts/email-compose-check.py --render-only
 
 integration-down:
-	@docker volume create artifact-gateway-go-mod >/dev/null
-	@docker volume create artifact-gateway-go-build >/dev/null
-	@docker compose --env-file /dev/null --project-name artifact-gateway-integration -f compose.integration.yml down -v --remove-orphans
+	@docker volume create notarx-go-mod >/dev/null
+	@docker volume create notarx-go-build >/dev/null
+	@docker compose --env-file /dev/null --project-name notarx-integration -f compose.integration.yml down -v --remove-orphans
 
 spellcheck:
 	@./scripts/spellcheck.sh
@@ -275,10 +275,10 @@ cli-build:
 		printf 'built dist/notarxctl_%s_%s (version %s)\n' "$$goos" "$$goarch" "$(VERSION)"
 
 build:
-	@docker build -t artifact-gateway:dev .
+	@docker build -t notarx:dev .
 
 docker-build:
-	@docker build -t artifact-gateway:dev .
+	@docker build -t notarx:dev .
 
 docker-test:
 	@docker build --target test -f Dockerfile .
@@ -286,10 +286,10 @@ docker-test:
 	@docker build --target test -f Dockerfile.scanner .
 
 console-docker-build:
-	@docker build -f Dockerfile.console -t artifact-gateway-console:dev .
+	@docker build -f Dockerfile.console -t notarx-console:dev .
 
 cli-docker-build:
-	@docker build -f Dockerfile.agctl \
+	@docker build -f Dockerfile.notarxctl \
 		--build-arg VERSION="$(VERSION)" \
 		--build-arg REVISION="$(CLI_REVISION)" \
 		-t notarxctl:dev .
@@ -307,7 +307,7 @@ migration-check:
 	@./scripts/migration-immutability-check.sh
 
 preflight: commit-policy-check native-build-check migration-check
-	@docker compose --env-file .env -f compose.yml run --rm --no-deps gateway preflight run --format json
+	@docker compose --env-file .env -f compose.yml run --rm --no-deps notarx preflight run --format json
 
 evidence:
 	@test -n "$(NOTARX_URL)" || { printf '%s\n' 'set NOTARX_URL'; exit 2; }

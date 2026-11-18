@@ -104,7 +104,7 @@ func (q *PostgresCacheTaskQueue) EnqueueCollectionForFormat(ctx context.Context,
 	if _, err := q.db.ExecContext(ctx, `INSERT INTO cache_tasks (id, task_type, dedupe_key) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`, uuid.NewString(), taskType, taskType); err != nil {
 		return err
 	}
-	_, err := q.db.ExecContext(ctx, `SELECT pg_notify('artifact_gateway_cache_tasks', $1)`, format)
+	_, err := q.db.ExecContext(ctx, `SELECT pg_notify('notarx_cache_tasks', $1)`, format)
 	return err
 }
 
@@ -248,7 +248,7 @@ func (q *PostgresCacheTaskQueue) listenForTasks(ctx context.Context) <-chan stru
 		for ctx.Err() == nil {
 			conn, err := q.listenerDB.Conn(ctx)
 			if err == nil {
-				err = database.ListenChannels(ctx, conn, "artifact_gateway_cache_tasks")
+				err = database.ListenChannels(ctx, conn, "notarx_cache_tasks")
 			}
 			if err != nil {
 				if conn != nil {

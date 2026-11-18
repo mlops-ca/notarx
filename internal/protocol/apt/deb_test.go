@@ -15,7 +15,7 @@ import (
 )
 
 func TestParseDebianBinaryDerivesCanonicalPackageIdentity(t *testing.T) {
-	deb := testDebianBinary(t, `Package: artifact-gateway
+	deb := testDebianBinary(t, `Package: notarx
 Version: 1:2.3.4-5
 Architecture: arm64
 Maintainer: Gateway Team <gateway@example.test>
@@ -27,16 +27,16 @@ Description: repository fixture
 	if err != nil {
 		t.Fatal(err)
 	}
-	if metadata.Package != "artifact-gateway" || metadata.Version != "1:2.3.4-5" || metadata.Architecture != "arm64" {
+	if metadata.Package != "notarx" || metadata.Version != "1:2.3.4-5" || metadata.Architecture != "arm64" {
 		t.Fatalf("metadata=%#v", metadata)
 	}
-	if metadata.CanonicalIdentity != "artifact-gateway@1:2.3.4-5#arm64" {
+	if metadata.CanonicalIdentity != "notarx@1:2.3.4-5#arm64" {
 		t.Fatalf("canonical identity=%q", metadata.CanonicalIdentity)
 	}
 }
 
 func TestParseDebianBinarySupportsCommonControlCompression(t *testing.T) {
-	const control = "Package: artifact-gateway\nVersion: 2.0-1\nArchitecture: amd64\n"
+	const control = "Package: notarx\nVersion: 2.0-1\nArchitecture: amd64\n"
 	for _, compression := range []string{"tar", "gz", "xz", "zst"} {
 		t.Run(compression, func(t *testing.T) {
 			deb := testDebianBinaryWithCompression(t, control, compression, true)
@@ -44,7 +44,7 @@ func TestParseDebianBinarySupportsCommonControlCompression(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if metadata.CanonicalIdentity != "artifact-gateway@2.0-1#amd64" {
+			if metadata.CanonicalIdentity != "notarx@2.0-1#amd64" {
 				t.Fatalf("canonical identity=%q", metadata.CanonicalIdentity)
 			}
 		})
@@ -52,7 +52,7 @@ func TestParseDebianBinarySupportsCommonControlCompression(t *testing.T) {
 }
 
 func TestParseDebianBinaryRequiresCompleteDataArchive(t *testing.T) {
-	const control = "Package: artifact-gateway\nVersion: 2.0-1\nArchitecture: amd64\n"
+	const control = "Package: notarx\nVersion: 2.0-1\nArchitecture: amd64\n"
 	missing := testDebianBinaryWithCompression(t, control, "gz", false)
 	if _, err := ParseDebianBinary(bytes.NewReader(missing), int64(len(missing))); err == nil {
 		t.Fatal("Debian archive without data member was accepted")
@@ -66,7 +66,7 @@ func TestParseDebianBinaryRequiresCompleteDataArchive(t *testing.T) {
 }
 
 func TestParseDebianBinaryRejectsInvalidArchiveMemberOrderAndData(t *testing.T) {
-	const control = "Package: artifact-gateway\nVersion: 2.0-1\nArchitecture: amd64\n"
+	const control = "Package: notarx\nVersion: 2.0-1\nArchitecture: amd64\n"
 	valid := testDebianBinaryWithCompression(t, control, "gz", true)
 
 	var prefixed bytes.Buffer
@@ -94,7 +94,7 @@ func TestParseDebianBinaryRejectsInvalidArchiveMemberOrderAndData(t *testing.T) 
 }
 
 func TestParseDebianBinaryRejectsCorruptCompressedControlTrailer(t *testing.T) {
-	const control = "Package: artifact-gateway\nVersion: 2.0-1\nArchitecture: amd64\n"
+	const control = "Package: notarx\nVersion: 2.0-1\nArchitecture: amd64\n"
 	deb := testDebianBinaryWithCompression(t, control, "gz", true)
 	controlHeader := 8 + 60 + len("2.0\n")
 	controlSize, err := strconv.Atoi(strings.TrimSpace(string(deb[controlHeader+48 : controlHeader+58])))
@@ -108,7 +108,7 @@ func TestParseDebianBinaryRejectsCorruptCompressedControlTrailer(t *testing.T) {
 }
 
 func TestParseDebianBinaryRejectsXZControlArchiveWithExcessiveDictionary(t *testing.T) {
-	const control = "Package: artifact-gateway\nVersion: 2.0-1\nArchitecture: amd64\n"
+	const control = "Package: notarx\nVersion: 2.0-1\nArchitecture: amd64\n"
 	var controlTar bytes.Buffer
 	tarWriter := tar.NewWriter(&controlTar)
 	if err := tarWriter.WriteHeader(&tar.Header{Name: "./control", Mode: 0o644, Size: int64(len(control))}); err != nil {
@@ -147,10 +147,10 @@ func TestParseDebianBinaryRejectsMissingOrInvalidIdentity(t *testing.T) {
 		name    string
 		control string
 	}{
-		{name: "missing version", control: "Package: artifact-gateway\nArchitecture: amd64\n"},
+		{name: "missing version", control: "Package: notarx\nArchitecture: amd64\n"},
 		{name: "invalid package", control: "Package: Artifact_Gateway\nVersion: 1.0-1\nArchitecture: amd64\n"},
-		{name: "invalid version", control: "Package: artifact-gateway\nVersion: 1.0 1\nArchitecture: amd64\n"},
-		{name: "invalid architecture", control: "Package: artifact-gateway\nVersion: 1.0-1\nArchitecture: AMD64\n"},
+		{name: "invalid version", control: "Package: notarx\nVersion: 1.0 1\nArchitecture: amd64\n"},
+		{name: "invalid architecture", control: "Package: notarx\nVersion: 1.0-1\nArchitecture: AMD64\n"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -167,7 +167,7 @@ func TestParseDebianBinaryRejectsNonDebianAndOversizedControl(t *testing.T) {
 		t.Fatal("non-Debian archive was accepted")
 	}
 
-	control := "Package: artifact-gateway\nVersion: 1.0-1\nArchitecture: amd64\nDescription: " + string(bytes.Repeat([]byte{'x'}, maxControlBytes)) + "\n"
+	control := "Package: notarx\nVersion: 1.0-1\nArchitecture: amd64\nDescription: " + string(bytes.Repeat([]byte{'x'}, maxControlBytes)) + "\n"
 	deb := testDebianBinary(t, control)
 	if _, err := ParseDebianBinary(bytes.NewReader(deb), int64(len(deb))); err == nil {
 		t.Fatal("oversized control metadata was accepted")

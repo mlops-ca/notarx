@@ -523,7 +523,7 @@ func (h nativePyPIHandler) writeSimpleProject(w http.ResponseWriter, r *http.Req
 			if !file.CachedAt.IsZero() {
 				gateway["cached-at"] = file.CachedAt
 			}
-			item := map[string]any{"filename": file.Filename, "url": "../../packages/" + url.PathEscape(file.Filename), "hashes": map[string]string{"sha256": strings.TrimPrefix(file.Digest, "sha256:")}, "_artifact-gateway": gateway}
+			item := map[string]any{"filename": file.Filename, "url": "../../packages/" + url.PathEscape(file.Filename), "hashes": map[string]string{"sha256": strings.TrimPrefix(file.Digest, "sha256:")}, "_notarx": gateway}
 			item["yanked"] = false
 			if file.Yanked {
 				item["yanked"] = true

@@ -22,8 +22,8 @@ const saved: OidcSettings = {
   source: "database",
   enabled: true,
   issuer: "https://id.example.com/realms/artifacts",
-  audience: "artifact-gateway-api",
-  clientId: "artifact-gateway-console",
+  audience: "notarx-api",
+  clientId: "notarx-console",
   clientSecretConfigured: true,
   redirectUrl: "https://gateway.example.com/auth/oidc/callback",
   scopes: ["openid", "profile"],
@@ -59,7 +59,7 @@ it("saves edits against the loaded version and restarts the form on the new one"
   } as never);
   renderPage();
 
-  const audience = await screen.findByDisplayValue("artifact-gateway-api");
+  const audience = await screen.findByDisplayValue("notarx-api");
   await user.clear(audience);
   await user.type(audience, "gateway-api-v2");
   await user.click(screen.getByRole("button", { name: /Remove secret/ }));

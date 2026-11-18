@@ -1,5 +1,5 @@
 {
-  "name": "artifact-gateway-openapi-tools",
+  "name": "notarx-openapi-tools",
   "private": true,
   "version": "0.0.0-dev",
   "devDependencies": {

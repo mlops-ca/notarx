@@ -18,7 +18,7 @@ fi
 shift
 # Every lifecycle call must override both the exported project variable and
 # the checkout .env. Validate the public command boundary before simulating it.
-[[ "$1" == --env-file && "$2" == /dev/null && "$3" == --project-name && "$4" == artifact-gateway-integration && "$5" == -f && "$6" == *compose.integration.yml ]] || exit 11
+[[ "$1" == --env-file && "$2" == /dev/null && "$3" == --project-name && "$4" == notarx-integration && "$5" == -f && "$6" == *compose.integration.yml ]] || exit 11
 shift 6
 printf '%s\n' "$*" >>"$AG_ISOLATION_LOG"
 if [[ "$1" == port ]]; then
@@ -29,8 +29,8 @@ if [[ "$1" == port ]]; then
   esac
   exit 0
 fi
-if [[ "$*" == *"PGDATABASE=gateway_foreign_schema_test"* && "$*" == *migrate* ]]; then
-  printf 'Database gateway_foreign_schema_test already holds 1 table(s) but no notarx migration ledger.\n' >&2
+if [[ "$*" == *"PGDATABASE=notarx_foreign_schema_test"* && "$*" == *migrate* ]]; then
+  printf 'Database notarx_foreign_schema_test already holds 1 table(s) but no notarx migration ledger.\n' >&2
   exit 1
 fi
 if [[ "$*" == *--volume* ]]; then
@@ -52,7 +52,7 @@ cat >"$workdir/bin/go" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "$1" == test && "$*" == *TestPostgresRustFSCargoProxyOfficialOfflineReplay* ]]; then
-  [[ "$TEST_DATABASE_URL" == 'postgres://gateway:integration-password@127.0.0.1:15432/gateway_test?sslmode=disable' ]] || exit 13
+  [[ "$TEST_DATABASE_URL" == 'postgres://notarx:integration-password@127.0.0.1:15432/notarx_test?sslmode=disable' ]] || exit 13
   [[ "$TEST_OBJECT_STORE_ENDPOINT" == 'http://127.0.0.1:19000' && "$CARGO_REQUIRED" == 1 ]] || exit 14
   printf 'official Cargo persistent replay invoked\n' >>"$AG_ISOLATION_LOG"
   exit 0

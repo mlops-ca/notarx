@@ -3,13 +3,13 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd); cd "$root"
 env_file=${NOTARX_ENV_FILE:-.env}; test -f "$env_file"
 port() { python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()'; }
-project="artifact-gateway-cacheops-${RANDOM}-${RANDOM}"; isolated=$(mktemp)
-gateway_port=$(port); awk -F= '$1 != "NOTARX_HTTP_PORT" && $1 != "NOTARX_POSTGRES_PORT" && $1 != "RUSTFS_API_PORT" && $1 != "RUSTFS_CONSOLE_PORT" {print}' "$env_file" > "$isolated"
-printf 'NOTARX_HTTP_PORT=%s\nNOTARX_POSTGRES_PORT=%s\nRUSTFS_API_PORT=%s\nRUSTFS_CONSOLE_PORT=%s\n' "$gateway_port" "$(port)" "$(port)" "$(port)" >> "$isolated"
+project="notarx-cacheops-${RANDOM}-${RANDOM}"; isolated=$(mktemp)
+notarx_port=$(port); awk -F= '$1 != "NOTARX_HTTP_PORT" && $1 != "NOTARX_POSTGRES_PORT" && $1 != "RUSTFS_API_PORT" && $1 != "RUSTFS_CONSOLE_PORT" {print}' "$env_file" > "$isolated"
+printf 'NOTARX_HTTP_PORT=%s\nNOTARX_POSTGRES_PORT=%s\nRUSTFS_API_PORT=%s\nRUSTFS_CONSOLE_PORT=%s\n' "$notarx_port" "$(port)" "$(port)" "$(port)" >> "$isolated"
 compose() { COMPOSE_PROJECT_NAME="$project" docker compose --env-file "$isolated" -f compose.yml "$@"; }
 trap 'compose down -v --remove-orphans >/dev/null 2>&1 || true; rm -f "$isolated"' EXIT
 source "$isolated"
-base="http://127.0.0.1:${gateway_port}"
+base="http://127.0.0.1:${notarx_port}"
 status() { curl --silent --show-error --output "$2" --write-out '%{http_code}' "$1" "${@:3}"; }
 compose up -d ${NOTARX_COMPOSE_BUILD_FLAG---build} --wait
 tmp=$(mktemp); trap 'compose down -v --remove-orphans >/dev/null 2>&1 || true; rm -f "$isolated" "$tmp"' EXIT

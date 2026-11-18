@@ -105,7 +105,7 @@ func loadConfig(getenv func(string) string) (configuration, error) {
 		KeyFile:         envOrDefault(getenv, "REFERENCE_APT_SIGNER_KEY_FILE", "/var/lib/reference-apt-signer/apt-release-private.gpg"),
 		Name:            envOrDefault(getenv, "REFERENCE_APT_SIGNER_NAME", "notarx Local APT"),
 		Comment:         envOrDefault(getenv, "REFERENCE_APT_SIGNER_COMMENT", "reference signer - local development only"),
-		Email:           envOrDefault(getenv, "REFERENCE_APT_SIGNER_EMAIL", "apt-release@artifact-gateway.local"),
+		Email:           envOrDefault(getenv, "REFERENCE_APT_SIGNER_EMAIL", "apt-release@notarx.local"),
 		RSABits:         4096,
 		MaxReleaseBytes: 16 << 20,
 		TLSCertFile:     strings.TrimSpace(getenv("REFERENCE_APT_SIGNER_TLS_CERT_FILE")),

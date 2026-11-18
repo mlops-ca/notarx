@@ -1,5 +1,5 @@
 {
-  "realm": "artifact-gateway",
+  "realm": "notarx",
   "enabled": true,
   "displayName": "notarx OIDC Test",
   "roles": {
@@ -11,7 +11,7 @@
   },
   "clients": [
     {
-      "clientId": "artifact-gateway-console",
+      "clientId": "notarx-console",
       "name": "notarx Console",
       "enabled": true,
       "protocol": "openid-connect",
@@ -48,16 +48,16 @@
   ],
   "users": [
     {
-      "username": "gateway-admin",
+      "username": "notarx-admin",
       "enabled": true,
       "firstName": "Gateway",
       "lastName": "Administrator",
-      "email": "gateway-admin@example.test",
+      "email": "notarx-admin@example.test",
       "emailVerified": true,
       "credentials": [
         {
           "type": "password",
-          "value": "gateway-oidc-test-password",
+          "value": "notarx-oidc-test-password",
           "temporary": false
         }
       ],

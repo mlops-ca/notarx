@@ -1,43 +1,43 @@
 # Opt-in overlay; compose.yml alone keeps mail disabled. See
 # docs/email-notification-delivery.md for provisioning and role selection.
 x-email-environment: &email-environment
-  NOTARX_EMAIL_CONFIG_FILE: /etc/gateway-email/relay.json
+  NOTARX_EMAIL_CONFIG_FILE: /etc/notarx-email/relay.json
   NOTARX_SETTINGS_ENCRYPTION_KEY: ${NOTARX_SETTINGS_ENCRYPTION_KEY:?set an independent settings encryption key}
 
 x-email-volumes: &email-volumes
   - type: bind
     source: ${NOTARX_EMAIL_CONFIG_DIR:?set an operator-owned absolute email config directory}
-    target: /etc/gateway-email
+    target: /etc/notarx-email
     read_only: true
     bind:
       create_host_path: false
 
 services:
-  gateway:
+  notarx:
     environment: *email-environment
     volumes: *email-volumes
 
-  gateway-scheduler:
+  notarx-scheduler:
     extends:
       file: compose.yml
-      service: gateway
+      service: notarx
     profiles: [email-roles]
     environment:
       <<: *email-environment
       NOTARX_NODE_ROLES: scheduler
-      NOTARX_INSTANCE_ID: gateway-email-scheduler
+      NOTARX_INSTANCE_ID: notarx-email-scheduler
     ports: !reset []
     volumes: *email-volumes
 
-  gateway-email-worker:
+  notarx-email-worker:
     extends:
       file: compose.yml
-      service: gateway
+      service: notarx
     profiles: [email-roles]
     environment:
       <<: *email-environment
       NOTARX_NODE_ROLES: worker
       NOTARX_WORKER_KINDS: email
-      NOTARX_INSTANCE_ID: gateway-email-worker
+      NOTARX_INSTANCE_ID: notarx-email-worker
     ports: !reset []
     volumes: *email-volumes

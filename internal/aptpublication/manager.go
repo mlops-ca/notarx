@@ -143,7 +143,7 @@ func (m *Manager) uploadPackage(ctx context.Context, sessionID, objectName strin
 		return repository.APTPackageRevision{}, ErrDigestMismatch
 	}
 
-	spool, err := os.CreateTemp("", "artifact-gateway-apt-*.deb")
+	spool, err := os.CreateTemp("", "notarx-apt-*.deb")
 	if err != nil {
 		return repository.APTPackageRevision{}, fmt.Errorf("create Debian package spool: %w", err)
 	}

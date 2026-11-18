@@ -142,9 +142,9 @@ type resourceEntry struct{ kind, suffix string }
 // existence checks before creation and after cleanup.
 func (s TargetSpec) resourceEntries() []resourceEntry {
 	if s.filesystem() {
-		return []resourceEntry{{"network", "network"}, {"volume", "pgdata"}, {"container", "postgres"}, {"container", "gateway"}}
+		return []resourceEntry{{"network", "network"}, {"volume", "pgdata"}, {"container", "postgres"}, {"container", "notarx"}}
 	}
-	return []resourceEntry{{"network", "network"}, {"volume", "pgdata"}, {"volume", "objects"}, {"container", "postgres"}, {"container", "rustfs"}, {"container", "gateway"}}
+	return []resourceEntry{{"network", "network"}, {"volume", "pgdata"}, {"volume", "objects"}, {"container", "postgres"}, {"container", "rustfs"}, {"container", "notarx"}}
 }
 
 // ownedResourceCount is the number of resources NewTarget creates.
@@ -225,7 +225,7 @@ func NewTarget(ctx context.Context, spec TargetSpec) (_ *OwnedTarget, resultErr 
 			return nil, errors.New("target resource already exists")
 		}
 	}
-	data, err := d.output(ctx, "network", "create", "--driver", "bridge", "--label", "artifact-gateway.restore-owner="+target.owner, spec.Project+"-network")
+	data, err := d.output(ctx, "network", "create", "--driver", "bridge", "--label", "notarx.restore-owner="+target.owner, spec.Project+"-network")
 	if err = target.recordCreated(ctx, "network", spec.Project+"-network", data, err); err != nil {
 		return nil, err
 	}
@@ -235,7 +235,7 @@ func NewTarget(ctx context.Context, spec TargetSpec) (_ *OwnedTarget, resultErr 
 	}
 	for _, suffix := range volumes {
 		name := spec.Project + "-" + suffix
-		data, err = d.output(ctx, "volume", "create", "--label", "artifact-gateway.restore-owner="+target.owner, name)
+		data, err = d.output(ctx, "volume", "create", "--label", "notarx.restore-owner="+target.owner, name)
 		if err = target.recordCreated(ctx, "volume", name, data, err); err != nil {
 			return nil, err
 		}
@@ -243,7 +243,7 @@ func NewTarget(ctx context.Context, spec TargetSpec) (_ *OwnedTarget, resultErr 
 			return nil, errors.New("target volume ownership unavailable")
 		}
 	}
-	label := "artifact-gateway.restore-owner=" + target.owner
+	label := "notarx.restore-owner=" + target.owner
 	start := func(name, image string, environment, tail []string) error {
 		args := []string{"create", "--name", spec.Project + "-" + name, "--network", spec.Project + "-network", "--network-alias", name, "--label", label, "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true"}
 		if name == "postgres" {
@@ -272,7 +272,7 @@ func NewTarget(ctx context.Context, spec TargetSpec) (_ *OwnedTarget, resultErr 
 	}
 	// PostgreSQL needs its image's normal capability set during data-directory
 	// initialization; a separate user-owned volume remains its only writable mount.
-	pgEnv := []string{"POSTGRES_DB=gateway", "POSTGRES_USER=gateway", "POSTGRES_PASSWORD=" + spec.PostgresPassword}
+	pgEnv := []string{"POSTGRES_DB=notarx", "POSTGRES_USER=notarx", "POSTGRES_PASSWORD=" + spec.PostgresPassword}
 	if err = start("postgres", postgresImage, pgEnv, []string{"postgres", "-c", "shared_preload_libraries=pg_stat_statements"}); err != nil {
 		return nil, err
 	}
@@ -292,13 +292,13 @@ func NewTarget(ctx context.Context, spec TargetSpec) (_ *OwnedTarget, resultErr 
 	if err != nil {
 		return nil, err
 	}
-	target.database = Postgres{DSN: fmt.Sprintf("postgres://gateway:%s@127.0.0.1:%s/gateway?sslmode=disable", escapePassword(spec.PostgresPassword), pgPort), ToolsContainer: target.resourceID("container", spec.Project+"-postgres"), DockerContext: d.Context}
+	target.database = Postgres{DSN: fmt.Sprintf("postgres://notarx:%s@127.0.0.1:%s/notarx?sslmode=disable", escapePassword(spec.PostgresPassword), pgPort), ToolsContainer: target.resourceID("container", spec.Project+"-postgres"), DockerContext: d.Context}
 	if !spec.filesystem() {
 		s3Port, portErr := target.port(ctx, "rustfs", "9000/tcp")
 		if portErr != nil {
 			return nil, portErr
 		}
-		target.objects, err = newS3(S3Settings{Endpoint: "http://127.0.0.1:" + s3Port, Bucket: "gateway-cache", AccessKey: spec.AccessKey, SecretKey: spec.SecretKey})
+		target.objects, err = newS3(S3Settings{Endpoint: "http://127.0.0.1:" + s3Port, Bucket: "notarx-cache", AccessKey: spec.AccessKey, SecretKey: spec.SecretKey})
 		if err != nil {
 			return nil, err
 		}
@@ -367,7 +367,7 @@ func (t *OwnedTarget) checkResource(ctx context.Context, r ownedResource) error 
 	if r.Kind == "container" {
 		labels = item.Config.Labels
 	}
-	if labels["artifact-gateway.restore-owner"] != t.owner {
+	if labels["notarx.restore-owner"] != t.owner {
 		return errors.New("foreign target resource")
 	}
 	if r.Kind != "volume" && (item.ID != r.ID || strings.TrimPrefix(item.Name, "/") != r.Name) {
@@ -404,7 +404,7 @@ func (t *OwnedTarget) checkResource(ctx context.Context, r ownedResource) error 
 				if len(item.Mounts) != 1 || item.Mounts[0].Type != "volume" || item.Mounts[0].Name != t.resourceID("volume", t.spec.Project+"-"+suffix) || item.Mounts[0].Destination != destination || !item.Mounts[0].RW {
 					return errors.New("target mount changed")
 				}
-			case t.spec.Project + "-gateway":
+			case t.spec.Project + "-notarx":
 				want := 0
 				if t.spec.Release.Identity.Artifact != nil && t.spec.Release.Identity.Artifact.Kind == "binary" {
 					want++
@@ -417,7 +417,7 @@ func (t *OwnedTarget) checkResource(ctx context.Context, r ownedResource) error 
 				}
 				for _, mount := range item.Mounts {
 					switch {
-					case mount.Type == "bind" && mount.Destination == "/gateway" && !mount.RW && t.directory != "" && filepath.Clean(mount.Source) == filepath.Join(t.directory, "gateway"):
+					case mount.Type == "bind" && mount.Destination == "/notarx" && !mount.RW && t.directory != "" && filepath.Clean(mount.Source) == filepath.Join(t.directory, "notarx"):
 					case t.spec.filesystem() && mount.Type == "bind" && mount.Destination == fsObjectMount && mount.RW && t.objectRoot != "" && filepath.Clean(mount.Source) == t.objectRoot:
 					default:
 						return errors.New("runtime mount changed")
@@ -629,7 +629,7 @@ func (t *OwnedTarget) StartGateway(ctx context.Context) (string, error) {
 	if err := t.closeFilesystem(); err != nil {
 		return "", errors.New("object root unavailable")
 	}
-	args := []string{"create", "--name", spec.Project + "-gateway", "--network", spec.Project + "-network", "--label", "artifact-gateway.restore-owner=" + t.owner, "-p", "127.0.0.1::8080", "--read-only", "--tmpfs", "/tmp:rw,noexec,nosuid,size=256m,mode=1777", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true"}
+	args := []string{"create", "--name", spec.Project + "-notarx", "--network", spec.Project + "-network", "--label", "notarx.restore-owner=" + t.owner, "-p", "127.0.0.1::8080", "--read-only", "--tmpfs", "/tmp:rw,noexec,nosuid,size=256m,mode=1777", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true"}
 	if g := spec.Release.Identity; g.Artifact != nil && g.Artifact.Kind == "binary" {
 		directory, err := os.MkdirTemp("", "ag-restore-release-")
 		if err != nil {
@@ -641,7 +641,7 @@ func (t *OwnedTarget) StartGateway(ctx context.Context) (string, error) {
 			return "", err
 		}
 		defer func() { _ = input.Close() }()
-		output, err := os.OpenFile(filepath.Join(directory, "gateway"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0500)
+		output, err := os.OpenFile(filepath.Join(directory, "notarx"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0500)
 		if err != nil {
 			return "", err
 		}
@@ -651,18 +651,18 @@ func (t *OwnedTarget) StartGateway(ctx context.Context) (string, error) {
 		if copyErr != nil || syncErr != nil || closeErr != nil {
 			return "", errors.New("release staging failed")
 		}
-		sum, _, err := describeBinary(filepath.Join(directory, "gateway"))
+		sum, _, err := describeBinary(filepath.Join(directory, "notarx"))
 		if err != nil || sum != g.Artifact.SHA256 {
 			return "", errRelease
 		}
 		// Nonroot in the runtime can execute the verified mounted file; no parent
 		// directory or writable runtime configuration is mounted into the container.
-		if os.Chmod(filepath.Join(directory, "gateway"), 0555) != nil {
+		if os.Chmod(filepath.Join(directory, "notarx"), 0555) != nil {
 			return "", errors.New("release staging failed")
 		}
-		args = append(args, "--mount", "type=bind,source="+filepath.Join(directory, "gateway")+",target=/gateway,readonly", "--entrypoint", "/gateway")
+		args = append(args, "--mount", "type=bind,source="+filepath.Join(directory, "notarx")+",target=/notarx,readonly", "--entrypoint", "/notarx")
 	}
-	objectEnvironment := []string{"NOTARX_OBJECT_STORE_ENDPOINT=http://rustfs:9000", "NOTARX_OBJECT_STORE_AUTO_CREATE_BUCKET=true", "NOTARX_OBJECT_STORE_BUCKET=gateway-cache", "NOTARX_OBJECT_STORE_ACCESS_KEY=" + spec.AccessKey, "NOTARX_OBJECT_STORE_SECRET_KEY=" + spec.SecretKey}
+	objectEnvironment := []string{"NOTARX_OBJECT_STORE_ENDPOINT=http://rustfs:9000", "NOTARX_OBJECT_STORE_AUTO_CREATE_BUCKET=true", "NOTARX_OBJECT_STORE_BUCKET=notarx-cache", "NOTARX_OBJECT_STORE_ACCESS_KEY=" + spec.AccessKey, "NOTARX_OBJECT_STORE_SECRET_KEY=" + spec.SecretKey}
 	if spec.filesystem() {
 		if t.objectRoot == "" {
 			return "", errors.New("object root unavailable")
@@ -671,7 +671,7 @@ func (t *OwnedTarget) StartGateway(ctx context.Context) (string, error) {
 		args = append(args, "--user", fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()), "--mount", "type=bind,source="+t.objectRoot+",target="+fsObjectMount)
 		objectEnvironment = []string{"NOTARX_OBJECT_STORE_DRIVER=" + objectstore.DriverFilesystem, "NOTARX_OBJECT_STORE_FS_ROOT=" + fsObjectMount}
 	}
-	environment := append([]string{"NOTARX_DATABASE_URL=postgres://gateway:" + escapePassword(spec.PostgresPassword) + "@postgres:5432/gateway?sslmode=disable"}, objectEnvironment...)
+	environment := append([]string{"NOTARX_DATABASE_URL=postgres://notarx:" + escapePassword(spec.PostgresPassword) + "@postgres:5432/notarx?sslmode=disable"}, objectEnvironment...)
 	environment = append(environment, "NOTARX_ADMIN_TOKEN="+spec.AdminToken, "NOTARX_RESOLVER_TOKEN="+spec.ResolverToken, "NOTARX_NODE_ROLES=api", "NOTARX_INSTANCE_ID="+spec.Project, "NOTARX_LOG_BUFFER_LINES=1000")
 	legacyEnv := spec.Release.legacyEnvironment()
 	for i, e := range environment {
@@ -697,13 +697,13 @@ func (t *OwnedTarget) StartGateway(ctx context.Context) (string, error) {
 	}
 	args = append(args, image)
 	out, err := spec.Docker.command(ctx, environment, args...).Output()
-	if err = t.recordCreated(ctx, "container", spec.Project+"-gateway", out, err); err != nil {
+	if err = t.recordCreated(ctx, "container", spec.Project+"-notarx", out, err); err != nil {
 		return "", err
 	}
-	if _, err = spec.Docker.output(ctx, "start", t.resourceID("container", spec.Project+"-gateway")); err != nil {
+	if _, err = spec.Docker.output(ctx, "start", t.resourceID("container", spec.Project+"-notarx")); err != nil {
 		return "", errors.New("restored Gateway startup failed")
 	}
-	port, err := t.port(ctx, "gateway", "8080/tcp")
+	port, err := t.port(ctx, "notarx", "8080/tcp")
 	if err != nil {
 		return "", err
 	}
@@ -723,7 +723,7 @@ func describeBinary(path string) (string, int64, error) {
 func (d Docker) ValidateDump(ctx context.Context, r io.Reader) (resultErr error) {
 	owner := uuid.NewString()
 	name := "ag-dump-check-" + strings.ReplaceAll(owner, "-", "")
-	data, err := d.output(ctx, "create", "-i", "--name", name, "--label", "artifact-gateway.restore-owner="+owner, "--network", "none", "--read-only", "--tmpfs", "/var/lib/postgresql:rw,noexec,nosuid,size=1m", "--cap-drop", "ALL", postgresImage, "pg_restore", "--file=-", "--no-owner", "--no-privileges")
+	data, err := d.output(ctx, "create", "-i", "--name", name, "--label", "notarx.restore-owner="+owner, "--network", "none", "--read-only", "--tmpfs", "/var/lib/postgresql:rw,noexec,nosuid,size=1m", "--cap-drop", "ALL", postgresImage, "pg_restore", "--file=-", "--no-owner", "--no-privileges")
 	helper := &OwnedTarget{spec: TargetSpec{Docker: d}, owner: owner}
 	defer func() {
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
@@ -747,7 +747,7 @@ func (d Docker) ValidateDump(ctx context.Context, r io.Reader) (resultErr error)
 var _ Destination = (*OwnedTarget)(nil)
 
 func escapePassword(password string) string {
-	return url.UserPassword("gateway", password).String()[len("gateway:"):]
+	return url.UserPassword("notarx", password).String()[len("notarx:"):]
 }
 
 func allowedRuntimeKey(key string) bool {
@@ -795,7 +795,7 @@ func (t *OwnedTarget) recordCreated(ctx context.Context, kind, name string, out 
 		if kind == "container" {
 			labels = item.Config.Labels
 		}
-		if labels["artifact-gateway.restore-owner"] != t.owner || strings.TrimPrefix(item.Name, "/") != name {
+		if labels["notarx.restore-owner"] != t.owner || strings.TrimPrefix(item.Name, "/") != name {
 			return errors.New("resource creation failed")
 		}
 		id = item.ID

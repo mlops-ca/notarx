@@ -38,8 +38,8 @@ func TestPostgresNotifierMultiplexesChannelsOnOneConnection(t *testing.T) {
 	defer func() { _ = store.Close() }()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	lifecycle := store.Listen(ctx, "artifact_gateway_lifecycle_jobs")
-	replication := store.Listen(ctx, "artifact_gateway_replication_plans")
+	lifecycle := store.Listen(ctx, "notarx_lifecycle_jobs")
+	replication := store.Listen(ctx, "notarx_replication_plans")
 	deadline := time.Now().Add(5 * time.Second)
 	for notifications.Stats().InUse != 1 && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
@@ -68,8 +68,8 @@ func TestPostgresNotifierMultiplexesChannelsOnOneConnection(t *testing.T) {
 		return false
 	}
 	for channel, wake := range map[string]<-chan struct{}{
-		"artifact_gateway_lifecycle_jobs":    lifecycle,
-		"artifact_gateway_replication_plans": replication,
+		"notarx_lifecycle_jobs":    lifecycle,
+		"notarx_replication_plans": replication,
 	} {
 		if !delivered(channel, wake) {
 			t.Fatalf("notification %q was not delivered", channel)

@@ -10298,7 +10298,7 @@
         "requestBody": {
           "required": true,
           "content": {
-            "application/vnd.artifact-gateway.apt-snapshot.v1+tar": {
+            "application/vnd.notarx.apt-snapshot.v1+tar": {
               "schema": {
                 "type": "string",
                 "format": "binary",
@@ -10386,7 +10386,7 @@
               }
             },
             "content": {
-              "application/vnd.artifact-gateway.apt-snapshot.v1+tar": {
+              "application/vnd.notarx.apt-snapshot.v1+tar": {
                 "schema": {
                   "type": "string",
                   "format": "binary",

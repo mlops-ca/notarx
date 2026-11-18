@@ -93,4 +93,4 @@ go_repository_modulePath:
         description: Repository capacity quota exceeded
   x-gateway-catchAll: modulePath
   x-gateway-visibility: all_three_representations_committed_together
-  x-gateway-publication: gateway_specific_single_zip_put
+  x-gateway-publication: notarx_specific_single_zip_put

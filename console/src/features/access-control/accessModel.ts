@@ -51,7 +51,7 @@ export function resourcePlaceholder(format: Repository["format"] | undefined) {
     case "npm":
       return "@scope/package";
     case "pypi":
-      return "gateway-widget";
+      return "notarx-widget";
     case "go":
       return "example.com/team/widget";
     case "apt":

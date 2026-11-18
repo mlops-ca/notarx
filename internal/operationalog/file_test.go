@@ -22,7 +22,7 @@ func fileOptions(t *testing.T) FileOptions {
 
 func managedFiles(t *testing.T, directory string) []string {
 	t.Helper()
-	files, err := filepath.Glob(filepath.Join(directory, "gateway-*", "*.ndjson"))
+	files, err := filepath.Glob(filepath.Join(directory, "notarx-*", "*.ndjson"))
 	if err != nil {
 		t.Fatal(err)
 	}

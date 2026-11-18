@@ -3,8 +3,8 @@ set -eu
 
 migration_dir=${MIGRATION_DIR:-/migrations}
 pg_host=${PGHOST:-postgres}
-pg_user=${PGUSER:-gateway}
-pg_database=${PGDATABASE:-gateway}
+pg_user=${PGUSER:-notarx}
+pg_database=${PGDATABASE:-notarx}
 
 run_psql() {
   psql -X -h "$pg_host" -U "$pg_user" -d "$pg_database" -v ON_ERROR_STOP=1 "$@"

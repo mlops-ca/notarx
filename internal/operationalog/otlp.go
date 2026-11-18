@@ -129,7 +129,7 @@ func newOTLPOutput(options OTLPOptions, client *http.Client) (*OTLPOutput, error
 	provider := sdklog.NewLoggerProvider(sdklog.WithProcessor(processor),
 		sdklog.WithAttributeCountLimit(-1), sdklog.WithAttributeValueLengthLimit(-1),
 		sdklog.WithResource(logResource))
-	return &OTLPOutput{provider: provider, logger: provider.Logger("artifact-gateway/runtime"), observed: observed, done: make(chan struct{}), closeIdle: closeIdle}, nil
+	return &OTLPOutput{provider: provider, logger: provider.Logger("notarx/runtime"), observed: observed, done: make(chan struct{}), closeIdle: closeIdle}, nil
 }
 
 func (o *OTLPOutput) Write(data []byte) (int, error) {
@@ -348,7 +348,7 @@ func privateLogResource(instanceID, sessionID string) (*resource.Resource, error
 			attrs = append(attrs, attribute.String(name, decoded))
 		}
 	}
-	attrs = append(attrs, attribute.String("service.name", "artifact-gateway"), attribute.String("service.instance.id", instanceID), attribute.String("gateway.runtime.session.id", sessionID))
+	attrs = append(attrs, attribute.String("service.name", "notarx"), attribute.String("service.instance.id", instanceID), attribute.String("gateway.runtime.session.id", sessionID))
 	return resource.NewSchemaless(attrs...), nil
 }
 

@@ -178,17 +178,17 @@ database records the identity of the object root, and a root restored without it
 database (or the reverse) is refused at start-up.
 
 **Nightly database dump.** Cloud-init installs `notarx-backup.timer`, which writes
-`/srv/notarx/backups/gateway-<UTC time>.dump` (custom format) at about 02:30 and keeps
+`/srv/notarx/backups/notarx-<UTC time>.dump` (custom format) at about 02:30 and keeps
 seven days. This protects against database damage on the same volume only.
 
 **Off-VM copy with the backup tooling.** Export the whole installation, database
 and objects, as a verified bundle with the offline transfer profile described in
 the [recovery runbook](../recovery-runbook.md), then copy the bundle to the bucket.
-Stop the gateway first (`docker compose stop notarx`), write a private source spec
+Stop the notarx first (`docker compose stop notarx`), write a private source spec
 with a `filesystem` object source for `/srv/notarx/objects`, and run:
 
 ```sh
-gateway backup export --spec /private/source.json --bundle /srv/notarx/backups/bundle-$(date -u +%Y%m%d)
+notarx backup export --spec /private/source.json --bundle /srv/notarx/backups/bundle-$(date -u +%Y%m%d)
 docker compose start notarx
 ```
 
@@ -206,9 +206,9 @@ production:
 1. Install the stack (above) without starting the gateway, and download and verify the
    bundle from the bucket.
 2. Restore the database: `docker compose up -d postgres`, then
-   `docker compose exec -T postgres pg_restore -U gateway -d gateway --exit-on-error < database.dump`.
+   `docker compose exec -T postgres pg_restore -U notarx -d notarx --exit-on-error < database.dump`.
 3. Restore the objects into a new root and carry the recorded root ID with them:
-   `gateway backup restore-objects --bundle <dir> --root /srv/notarx/objects` (the root must be new or empty; the command creates it with the identity from the bundle).
+   `notarx backup restore-objects --bundle <dir> --root /srv/notarx/objects` (the root must be new or empty; the command creates it with the identity from the bundle).
    Make sure the directory is owned by uid 65532 with mode 0700.
 4. Start the stack. The gateway starts only when the restored database's object store
    identity matches the restored root; then run `make oci-free-tier-smoke` against it.

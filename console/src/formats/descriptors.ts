@@ -82,7 +82,7 @@ export const FORMAT_DESCRIPTORS: Record<Format, FormatDescriptor> = {
     separateAssetPath: true,
     groupKey: mavenGA,
     publicGrouping: "mavenBuilds",
-    coordinateExample: "org.example:gateway-widget:1.2.3",
+    coordinateExample: "org.example:notarx-widget:1.2.3",
   },
   npm: {
     ...base,
@@ -103,7 +103,7 @@ export const FORMAT_DESCRIPTORS: Record<Format, FormatDescriptor> = {
     emptyHint: {
       proxy: "formats.upstreamMetadataAndCacheStatusAppearAfterNpm",
     },
-    coordinateExample: "@company/gateway-widget@1.2.3",
+    coordinateExample: "@company/notarx-widget@1.2.3",
   },
   pypi: {
     ...base,
@@ -124,7 +124,7 @@ export const FORMAT_DESCRIPTORS: Record<Format, FormatDescriptor> = {
     emptyHint: {
       proxy: "formats.upstreamFilesAndCacheStatusAppearAfterPip",
     },
-    coordinateExample: "gateway-widget@1.2.3",
+    coordinateExample: "notarx-widget@1.2.3",
   },
   go: {
     ...base,
@@ -144,7 +144,7 @@ export const FORMAT_DESCRIPTORS: Record<Format, FormatDescriptor> = {
       proxy: "formats.upstreamVersionsAndCachedAssetsAppearAfterGo",
     },
     upstreamAuthentication: true,
-    coordinateExample: "example.com/team/gateway-widget@v1.2.3",
+    coordinateExample: "example.com/team/notarx-widget@v1.2.3",
   },
   cargo: {
     ...base,
@@ -187,7 +187,7 @@ export const FORMAT_DESCRIPTORS: Record<Format, FormatDescriptor> = {
     securityColumn: "always",
     consoleUpload: true,
     retentionModel: "paths",
-    coordinateExample: "releases/gateway-widget-1.2.3.zip",
+    coordinateExample: "releases/notarx-widget-1.2.3.zip",
   },
   apt: {
     ...base,
@@ -213,7 +213,7 @@ export const FORMAT_DESCRIPTORS: Record<Format, FormatDescriptor> = {
     distributionSuite: true,
     publicArtifactColumn: "aptPath",
     coordinateExample:
-      "pool/main/g/gateway-widget/gateway-widget_1.2.3_amd64.deb",
+      "pool/main/g/notarx-widget/notarx-widget_1.2.3_amd64.deb",
     scannerSupport: false,
   },
 };

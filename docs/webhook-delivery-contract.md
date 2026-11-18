@@ -77,10 +77,10 @@ Webhook requests use `POST application/json` with this envelope:
 
 Requests include:
 
-- `X-Artifact-Gateway-Event-ID`
-- `X-Artifact-Gateway-Event-Type`
-- `X-Artifact-Gateway-Timestamp` (Unix seconds)
-- `X-Artifact-Gateway-Signature: v1=<hex HMAC-SHA256>`
+- `X-Notarx-Event-ID`
+- `X-Notarx-Event-Type`
+- `X-Notarx-Timestamp` (Unix seconds)
+- `X-Notarx-Signature: v1=<hex HMAC-SHA256>`
 
 The signature input is `<timestamp>.<exact request body>` using the decrypted
 subscription secret. A 2xx response completes the delivery. Every other

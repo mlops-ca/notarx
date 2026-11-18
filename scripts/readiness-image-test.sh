@@ -8,7 +8,7 @@ source "$root/scripts/readiness-image.sh"
 workspace=$(mktemp -d)
 trap 'rm -rf "$workspace"' EXIT
 calls="$workspace/docker-calls"
-image="example.invalid/gateway@sha256:$(printf 'a%.0s' {1..64})"
+image="example.invalid/notarx@sha256:$(printf 'a%.0s' {1..64})"
 expected_revision=$(printf 'b%.0s' {1..40})
 label_revision=$expected_revision
 label_version=0.1.0
@@ -38,7 +38,7 @@ assert_rejected() {
     exit 1
   fi
 }
-assert_rejected example.invalid/gateway:latest
+assert_rejected example.invalid/notarx:latest
 test ! -s "$calls"
 label_revision=wrong
 assert_rejected "$image"

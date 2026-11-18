@@ -139,7 +139,7 @@ func TestConanManagedPublicationCannotBypassManifestAcrossSessions(t *testing.T)
 					if w.Code != http.StatusCreated {
 						t.Fatalf("native stage=%d %s", w.Code, w.Body.String())
 					}
-					nativeID = w.Header().Get("X-Artifact-Gateway-Publish-Session")
+					nativeID = w.Header().Get("X-Notarx-Publish-Session")
 				}
 				if order == "native-first" || order == "different-actor" {
 					stageNative()

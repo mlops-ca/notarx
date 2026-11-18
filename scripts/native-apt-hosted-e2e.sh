@@ -5,8 +5,8 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root"
 
 debian_image='debian:bookworm-slim@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241'
-project="artifact-gateway-apt-e2e-$$"
-workdir=$(mktemp -d "${TMPDIR:-/tmp}/artifact-gateway-apt-e2e.XXXXXX")
+project="notarx-apt-e2e-$$"
+workdir=$(mktemp -d "${TMPDIR:-/tmp}/notarx-apt-e2e.XXXXXX")
 env_file="$workdir/e2e.env"
 admin_token='apt-e2e-admin-token'
 resolver_token='apt-e2e-resolver-token'
@@ -39,9 +39,9 @@ cat >"$signer_volume_override" <<'YAML'
 services:
   reference-apt-signer:
     volumes:
-      - gateway-apt-signer-tls:/var/lib/reference-apt-signer-tls
+      - notarx-apt-signer-tls:/var/lib/reference-apt-signer-tls
 volumes:
-  gateway-apt-signer-tls:
+  notarx-apt-signer-tls:
 YAML
 chmod 0600 "$signer_volume_override"
 compose=(docker compose --env-file "$env_file" -p "$project" --profile apt-signer \
@@ -51,7 +51,7 @@ cleanup() {
   local status=$?
   if [[ "$status" != 0 ]]; then
     "${compose[@]}" ps -a >&2 || true
-    "${compose[@]}" logs --tail=80 gateway postgres >&2 || true
+    "${compose[@]}" logs --tail=80 notarx postgres >&2 || true
   fi
   "${compose[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
   rm -rf "$workdir"
@@ -59,26 +59,26 @@ cleanup() {
 }
 trap cleanup EXIT
 
-"${compose[@]}" up -d ${NOTARX_COMPOSE_BUILD_FLAG---build} --wait gateway reference-apt-signer
+"${compose[@]}" up -d ${NOTARX_COMPOSE_BUILD_FLAG---build} --wait notarx reference-apt-signer
 
-refresh_gateway_url() {
+refresh_notarx_url() {
   local published_port
-  published_port=$("${compose[@]}" port gateway 8080 | tail -n 1)
+  published_port=$("${compose[@]}" port notarx 8080 | tail -n 1)
   [[ -n "$published_port" ]] || return 1
-  gateway_url="http://127.0.0.1:${published_port##*:}"
+  notarx_url="http://127.0.0.1:${published_port##*:}"
 }
 
-refresh_gateway_url
+refresh_notarx_url
 
-wait_gateway_ready() {
+wait_notarx_ready() {
   local ready_code=000
   for _ in $(seq 1 80); do
-    refresh_gateway_url || {
+    refresh_notarx_url || {
       sleep 0.25
       continue
     }
     ready_code=$(curl --noproxy '*' --silent --show-error --output /dev/null --write-out '%{http_code}' \
-      --max-time 2 "$gateway_url/readyz" 2>/dev/null || true)
+      --max-time 2 "$notarx_url/readyz" 2>/dev/null || true)
     [[ "$ready_code" == 204 ]] && return 0
     sleep 0.25
   done
@@ -86,20 +86,20 @@ wait_gateway_ready() {
   return 1
 }
 
-wait_gateway_ready
+wait_notarx_ready
 
-package_file="$workdir/artifact-gateway-e2e_1.0.0-1_all.deb"
+package_file="$workdir/notarx-e2e_1.0.0-1_all.deb"
 docker run --rm --volume "$workdir:/work" "$debian_image" /bin/sh -ec '
-  mkdir -p /tmp/artifact-gateway-e2e/DEBIAN /tmp/artifact-gateway-e2e/usr/share/artifact-gateway-e2e
+  mkdir -p /tmp/notarx-e2e/DEBIAN /tmp/notarx-e2e/usr/share/notarx-e2e
   printf "%s\n" \
-    "Package: artifact-gateway-e2e" \
+    "Package: notarx-e2e" \
     "Version: 1.0.0-1" \
     "Architecture: all" \
     "Maintainer: notarx E2E <apt-e2e@example.test>" \
     "Description: real APT Hosted installation gate" \
-    > /tmp/artifact-gateway-e2e/DEBIAN/control
-  printf "%s\n" "installed-from-artifact-gateway" > /tmp/artifact-gateway-e2e/usr/share/artifact-gateway-e2e/installed.txt
-  dpkg-deb --build --root-owner-group /tmp/artifact-gateway-e2e /work/artifact-gateway-e2e_1.0.0-1_all.deb >/dev/null
+    > /tmp/notarx-e2e/DEBIAN/control
+  printf "%s\n" "installed-from-notarx" > /tmp/notarx-e2e/usr/share/notarx-e2e/installed.txt
+  dpkg-deb --build --root-owner-group /tmp/notarx-e2e /work/notarx-e2e_1.0.0-1_all.deb >/dev/null
 '
 
 if command -v sha256sum >/dev/null 2>&1; then
@@ -111,7 +111,7 @@ package_size=$(wc -c <"$package_file" | tr -d ' ')
 
 repository_response="$workdir/repository.json"
 repository_status=$("${curl_request[@]}" --output "$repository_response" --write-out '%{http_code}' \
-  --request POST "$gateway_url/api/v2/repositories" \
+  --request POST "$notarx_url/api/v2/repositories" \
   --header "Authorization: Bearer $admin_token" \
   --header 'Content-Type: application/json' \
   --header 'Idempotency-Key: apt-hosted-e2e-repository' \
@@ -131,12 +131,12 @@ empty_backup_dir="$workdir/empty-backup"
 COMPOSE_PROJECT_NAME="$project" NOTARX_ENV_FILE="$env_file" \
   "$root/scripts/backup-drill.sh" "$empty_backup_dir"
 "${compose[@]}" up -d --force-recreate --wait reference-apt-signer >/dev/null
-wait_gateway_ready
+wait_notarx_ready
 
 session_response="$workdir/session.json"
-session_body=$(printf '{"suite":"stable","component":"main","objectName":"artifact-gateway-e2e_1.0.0-1_all.deb","declaredDigest":"sha256:%s","declaredSize":%s,"expectedIdentity":"artifact-gateway-e2e@1.0.0-1#all"}' "$package_sha256" "$package_size")
+session_body=$(printf '{"suite":"stable","component":"main","objectName":"notarx-e2e_1.0.0-1_all.deb","declaredDigest":"sha256:%s","declaredSize":%s,"expectedIdentity":"notarx-e2e@1.0.0-1#all"}' "$package_sha256" "$package_size")
 session_status=$("${curl_request[@]}" --output "$session_response" --write-out '%{http_code}' \
-  --request POST "$gateway_url/api/v2/repositories/$repository_id/apt/publication-sessions" \
+  --request POST "$notarx_url/api/v2/repositories/$repository_id/apt/publication-sessions" \
   --header "Authorization: Bearer $admin_token" \
   --header 'Content-Type: application/json' \
   --header 'Idempotency-Key: apt-hosted-e2e-session' \
@@ -151,7 +151,7 @@ session_id=$(sed -n 's/.*"id":"\([^"]*\)".*/\1/p' "$session_response")
 
 upload_response="$workdir/upload.json"
 upload_status=$("${curl_request[@]}" --output "$upload_response" --write-out '%{http_code}' \
-  --request PUT "$gateway_url/api/v2/repositories/$repository_id/apt/publication-sessions/$session_id/package" \
+  --request PUT "$notarx_url/api/v2/repositories/$repository_id/apt/publication-sessions/$session_id/package" \
   --header "Authorization: Bearer $admin_token" \
   --header 'Content-Type: application/vnd.debian.binary-package' \
   --data-binary "@$package_file")
@@ -164,7 +164,7 @@ fi
 snapshot_response="$workdir/snapshot.json"
 snapshot_body=$(printf '{"suite":"stable","sequence":1,"publicationSessionIds":["%s"]}' "$session_id")
 snapshot_status=$("${curl_request[@]}" --output "$snapshot_response" --write-out '%{http_code}' \
-  --request POST "$gateway_url/api/v2/repositories/$repository_id/apt/snapshots" \
+  --request POST "$notarx_url/api/v2/repositories/$repository_id/apt/snapshots" \
   --header "Authorization: Bearer $admin_token" \
   --header 'Content-Type: application/json' \
   --header 'Idempotency-Key: apt-hosted-e2e-snapshot' \
@@ -179,34 +179,34 @@ public_key="$workdir/apt-release.asc"
 "${compose[@]}" exec -T reference-apt-signer /usr/local/bin/reference-apt-signer-healthcheck public-key >"$public_key"
 grep -q 'BEGIN PGP PUBLIC KEY BLOCK' "$public_key"
 
-gateway_container=$("${compose[@]}" ps -q gateway)
-gateway_network=$(docker inspect --format '{{range $name, $settings := .NetworkSettings.Networks}}{{$name}}{{end}}' "$gateway_container")
-[[ -n "$gateway_network" ]] || { printf 'gateway network was not found\n' >&2; exit 1; }
+notarx_container=$("${compose[@]}" ps -q notarx)
+notarx_network=$(docker inspect --format '{{range $name, $settings := .NetworkSettings.Networks}}{{$name}}{{end}}' "$notarx_container")
+[[ -n "$notarx_network" ]] || { printf 'notarx network was not found\n' >&2; exit 1; }
 
 apt_install() {
   local version=${1:-1.0.0-1} repo_name=${2:-apt-hosted-e2e} suite=${3:-stable}
   docker run --rm \
-    --network "$gateway_network" \
+    --network "$notarx_network" \
     --env "APT_E2E_RESOLVER_TOKEN=$resolver_token" --env "APT_E2E_VERSION=$version" \
     --env "APT_E2E_REPOSITORY=$repo_name" --env "APT_E2E_SUITE=$suite" \
-    --volume "$public_key:/keys/artifact-gateway.asc:ro" \
+    --volume "$public_key:/keys/notarx.asc:ro" \
     "$debian_image" /bin/sh -ec '
       rm -f /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources
       install -d -m 0755 /etc/apt/keyrings /etc/apt/auth.conf.d
-      install -m 0644 /keys/artifact-gateway.asc /etc/apt/keyrings/artifact-gateway.asc
-      printf "machine http://gateway:8080/apt/%s\nlogin resolver\npassword %s\n" "$APT_E2E_REPOSITORY" "$APT_E2E_RESOLVER_TOKEN" > /etc/apt/auth.conf.d/artifact-gateway.conf
-      chmod 0600 /etc/apt/auth.conf.d/artifact-gateway.conf
-      printf "%s\n" "deb [arch=all signed-by=/etc/apt/keyrings/artifact-gateway.asc] http://gateway:8080/apt/$APT_E2E_REPOSITORY $APT_E2E_SUITE main" > /etc/apt/sources.list.d/artifact-gateway.list
+      install -m 0644 /keys/notarx.asc /etc/apt/keyrings/notarx.asc
+      printf "machine http://notarx:8080/apt/%s\nlogin resolver\npassword %s\n" "$APT_E2E_REPOSITORY" "$APT_E2E_RESOLVER_TOKEN" > /etc/apt/auth.conf.d/notarx.conf
+      chmod 0600 /etc/apt/auth.conf.d/notarx.conf
+      printf "%s\n" "deb [arch=all signed-by=/etc/apt/keyrings/notarx.asc] http://notarx:8080/apt/$APT_E2E_REPOSITORY $APT_E2E_SUITE main" > /etc/apt/sources.list.d/notarx.list
       apt-get -o Acquire::Retries=0 update
-      apt-get -o Acquire::Retries=0 install -y --no-install-recommends artifact-gateway-e2e="$APT_E2E_VERSION"
-      grep -Fxq installed-from-artifact-gateway /usr/share/artifact-gateway-e2e/installed.txt
+      apt-get -o Acquire::Retries=0 install -y --no-install-recommends notarx-e2e="$APT_E2E_VERSION"
+      grep -Fxq installed-from-notarx /usr/share/notarx-e2e/installed.txt
     '
 }
 
 signing_state() {
   "${curl_request[@]}" --fail \
     --header "Authorization: Bearer $admin_token" \
-    "$gateway_url/api/v2/repositories/$repository_id/apt/signing-state"
+    "$notarx_url/api/v2/repositories/$repository_id/apt/signing-state"
 }
 
 capture_signed_snapshot() {
@@ -234,7 +234,7 @@ PY
     local path=$1 destination=$2 expected_digest=${3:-} expected_size=${4:-}
     local actual_digest actual_size
     "${curl_request[@]}" --fail --user "resolver:$resolver_token" \
-      "$gateway_url/apt/apt-hosted-e2e/$path" >"$destination"
+      "$notarx_url/apt/apt-hosted-e2e/$path" >"$destination"
     actual_digest="sha256:$(shasum -a 256 "$destination" | awk '{print $1}')"
     actual_size=$(wc -c <"$destination" | tr -d ' ')
     if [[ -n "$expected_digest" && "$actual_digest" != "$expected_digest" ]]; then
@@ -251,7 +251,7 @@ PY
   fetch_and_record 'dists/stable/Release' "$release_file" "$release_digest"
   fetch_and_record 'dists/stable/InRelease' "$inrelease_file" "$inrelease_digest"
   fetch_and_record 'dists/stable/Release.gpg' "$detached_file"
-  fetch_and_record 'pool/main/a/artifact-gateway-e2e/artifact-gateway-e2e_1.0.0-1_all.deb' \
+  fetch_and_record 'pool/main/a/notarx-e2e/notarx-e2e_1.0.0-1_all.deb' \
     "$package_copy" "sha256:$package_sha256" "$package_size"
 
   local index=0 digest size relative direct_path by_hash_path index_paths
@@ -281,8 +281,8 @@ PY
 export_snapshot_archive() {
   local destination=$1
   "${curl_request[@]}" --fail --header "Authorization: Bearer $admin_token" \
-    "$gateway_url/api/v2/repositories/$repository_id/apt/snapshots/$snapshot_id/archive" >"$destination"
-  "${compose[@]}" exec -T gateway /notarx apt-snapshot verify - <"$destination"
+    "$notarx_url/api/v2/repositories/$repository_id/apt/snapshots/$snapshot_id/archive" >"$destination"
+  "${compose[@]}" exec -T notarx /notarx apt-snapshot verify - <"$destination"
 }
 
 install_snapshot_archive_offline() {
@@ -316,16 +316,16 @@ Path(binary_key).write_bytes(base64.b64decode(payload, validate=True))
 PYARCHIVE
   docker run --rm --network none \
     --volume "$directory:/archive:ro" \
-    --volume "$public_key:/keys/artifact-gateway.asc:ro" \
-    --volume "$workdir/apt-release.gpg:/keys/artifact-gateway.gpg:ro" \
+    --volume "$public_key:/keys/notarx.asc:ro" \
+    --volume "$workdir/apt-release.gpg:/keys/notarx.gpg:ro" \
     "$debian_image" /bin/sh -ec '
-      gpgv --keyring /keys/artifact-gateway.gpg /archive/dists/stable/InRelease
-      gpgv --keyring /keys/artifact-gateway.gpg /archive/dists/stable/Release.gpg /archive/dists/stable/Release
+      gpgv --keyring /keys/notarx.gpg /archive/dists/stable/InRelease
+      gpgv --keyring /keys/notarx.gpg /archive/dists/stable/Release.gpg /archive/dists/stable/Release
       rm -f /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources
-      printf "%s\n" "deb [arch=all signed-by=/keys/artifact-gateway.asc] file:/archive stable main" > /etc/apt/sources.list.d/archive.list
+      printf "%s\n" "deb [arch=all signed-by=/keys/notarx.asc] file:/archive stable main" > /etc/apt/sources.list.d/archive.list
       apt-get -o Acquire::Retries=0 update
-      apt-get -o Acquire::Retries=0 install -y --no-install-recommends artifact-gateway-e2e=1.0.0-1
-      grep -Fxq installed-from-artifact-gateway /usr/share/artifact-gateway-e2e/installed.txt
+      apt-get -o Acquire::Retries=0 install -y --no-install-recommends notarx-e2e=1.0.0-1
+      grep -Fxq installed-from-notarx /usr/share/notarx-e2e/installed.txt
     '
 }
 
@@ -361,12 +361,12 @@ backup_dir="$workdir/backup"
 COMPOSE_PROJECT_NAME="$project" NOTARX_ENV_FILE="$env_file" \
   "$root/scripts/backup-drill.sh" "$backup_dir"
 "${compose[@]}" up -d --force-recreate --wait reference-apt-signer >/dev/null
-wait_gateway_ready
+wait_notarx_ready
 
 mutation_response="$workdir/mutation-snapshot.json"
 mutation_body=$(printf '{"suite":"stable","sequence":2,"publicationSessionIds":["%s"]}' "$session_id")
 mutation_status=$("${curl_request[@]}" --output "$mutation_response" --write-out '%{http_code}' \
-  --request POST "$gateway_url/api/v2/repositories/$repository_id/apt/snapshots" \
+  --request POST "$notarx_url/api/v2/repositories/$repository_id/apt/snapshots" \
   --header "Authorization: Bearer $admin_token" \
   --header 'Content-Type: application/json' \
   --header 'Idempotency-Key: apt-hosted-e2e-post-backup-mutation' \
@@ -405,7 +405,7 @@ PYRETIRED
 "${compose[@]}" stop reference-apt-signer >/dev/null
 COMPOSE_PROJECT_NAME="$project" NOTARX_ENV_FILE="$env_file" \
   "$root/scripts/restore-drill.sh" "$backup_dir"
-wait_gateway_ready
+wait_notarx_ready
 restored_state="$workdir/restored-signing-state.json"
 restored_capture="$workdir/restored-snapshot"
 signing_state >"$restored_state"
@@ -441,13 +441,13 @@ source "$root/scripts/native-apt-lifecycle-e2e.inc.sh"
 "${compose[@]}" stop reference-apt-signer >/dev/null
 COMPOSE_PROJECT_NAME="$project" NOTARX_ENV_FILE="$env_file" \
   "$root/scripts/restore-drill.sh" "$empty_backup_dir"
-wait_gateway_ready
+wait_notarx_ready
 restore_override="$workdir/restore.compose.yml"
 restore_fingerprint=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["keyFingerprint"])' "$snapshot_response")
 python3 - "$restore_override" "$public_key" "$restore_fingerprint" <<'PYRESTORECONFIG'
 import json, sys
 from pathlib import Path
-Path(sys.argv[1]).write_text(json.dumps({"services":{"gateway":{
+Path(sys.argv[1]).write_text(json.dumps({"services":{"notarx":{
     "environment":{
         "NOTARX_APT_SIGNER_ENDPOINT":"", "NOTARX_APT_SIGNER_TOKEN":"", "NOTARX_APT_SIGNER_TIMEOUT":"",
         "NOTARX_APT_RESTORE_TRUSTED_FINGERPRINTS":sys.argv[3],
@@ -455,8 +455,8 @@ Path(sys.argv[1]).write_text(json.dumps({"services":{"gateway":{
     "volumes":[sys.argv[2]+":/run/apt-restore.asc:ro"]}}}))
 PYRESTORECONFIG
 compose+=( -f "$restore_override" )
-"${compose[@]}" up -d --no-deps --force-recreate --wait gateway
-wait_gateway_ready
+"${compose[@]}" up -d --no-deps --force-recreate --wait notarx
+wait_notarx_ready
 empty_state="$workdir/empty-signing-state.json"
 signing_state >"$empty_state"
 python3 - "$empty_state" <<'PYEMPTY'
@@ -467,9 +467,9 @@ PYEMPTY
 restore_response="$workdir/archive-restore.json"
 for attempt in 1 2; do
   restore_status=$("${curl_request[@]}" --output "$restore_response" --write-out '%{http_code}' \
-    --request POST "$gateway_url/api/v2/repositories/$repository_id/apt/snapshots/restore" \
+    --request POST "$notarx_url/api/v2/repositories/$repository_id/apt/snapshots/restore" \
     --header "Authorization: Bearer $admin_token" \
-    --header 'Content-Type: application/vnd.artifact-gateway.apt-snapshot.v1+tar' \
+    --header 'Content-Type: application/vnd.notarx.apt-snapshot.v1+tar' \
     --header "X-Artifact-Archive-Digest: $(cat "$workdir/original-archive.receipt")" \
     --data-binary "@$original_archive")
   if [[ "$restore_status" != 200 ]]; then

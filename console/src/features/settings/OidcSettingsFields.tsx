@@ -21,10 +21,10 @@ export function OidcProviderFields() {
           <Input placeholder="https://id.example.com/realms/artifacts" />
         </Form.Item>
         <Form.Item name="audience" label={t("settings.aPIAudience")}>
-          <Input placeholder="artifact-gateway-api" />
+          <Input placeholder="notarx-api" />
         </Form.Item>
         <Form.Item name="clientId" label="Client ID">
-          <Input placeholder="artifact-gateway-console" />
+          <Input placeholder="notarx-console" />
         </Form.Item>
         <Form.Item name="redirectUrl" label={t("settings.redirectURL")}>
           <Input placeholder="https://gateway.example.com/auth/oidc/callback" />

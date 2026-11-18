@@ -18,7 +18,7 @@ type MavenClient interface {
 	FetchMaven(context.Context, string, repository.Member, string, http.Header) (*http.Response, error)
 }
 
-const mavenProxyUserAgent = "Apache-Maven/3.9 Artifact-Gateway/1.0"
+const mavenProxyUserAgent = "Apache-Maven/3.9 notarx/1.0"
 
 func (c UpstreamClient) FetchMaven(ctx context.Context, method string, member repository.Member, artifactPath string, headers http.Header) (*http.Response, error) {
 	endpoint, err := url.Parse(member.Endpoint)
@@ -539,7 +539,7 @@ func (h MavenHandler) recordInternalPreference(ctx context.Context, groupName, a
 	if err := h.audit(ctx, groupName, artifactPath, conflictingMember, actor, repository.AuditInternalPreferred); err != nil {
 		return err
 	}
-	w.Header().Set("X-Artifact-Gateway-Conflict", "internal-preferred")
+	w.Header().Set("X-Notarx-Conflict", "internal-preferred")
 	return nil
 }
 

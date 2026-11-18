@@ -306,7 +306,7 @@ func restartNexusConanOwnedServices(t *testing.T, ctx context.Context) {
 	if project == "" && os.Getenv("CONAN_MIGRATION_REQUIRED") != "1" {
 		return
 	}
-	if !strings.HasPrefix(project, "artifact-gateway-conan-") || !filepath.IsAbs(file) || filepath.Base(file) != "compose.integration.yml" ||
+	if !strings.HasPrefix(project, "notarx-conan-") || !filepath.IsAbs(file) || filepath.Base(file) != "compose.integration.yml" ||
 		!filepath.IsAbs(override) || filepath.Base(override) != "compose.conan.yml" {
 		t.Fatal("refuse to restart an unowned Conan migration fixture")
 	}

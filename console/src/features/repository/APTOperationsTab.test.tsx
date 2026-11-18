@@ -380,7 +380,7 @@ describe("APT disaster-recovery archive", () => {
   const validReceipt = `sha256:${"b".repeat(64)}`;
   const archiveBlob = () =>
     new Blob(["apt-archive"], {
-      type: "application/vnd.artifact-gateway.apt-snapshot.v1+tar",
+      type: "application/vnd.notarx.apt-snapshot.v1+tar",
     });
 
   beforeEach(() => {
@@ -464,7 +464,7 @@ describe("APT disaster-recovery archive", () => {
     await user.upload(
       input as HTMLInputElement,
       new File(["apt-archive"], "apt-stable-2.tar", {
-        type: "application/vnd.artifact-gateway.apt-snapshot.v1+tar",
+        type: "application/vnd.notarx.apt-snapshot.v1+tar",
       }),
     );
     await waitFor(() =>

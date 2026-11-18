@@ -1,4 +1,4 @@
-name: artifact-gateway-integration
+name: notarx-integration
 
 services:
   postgres:
@@ -7,11 +7,11 @@ services:
       - "127.0.0.1::5432"
     command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements"]
     environment:
-      POSTGRES_DB: gateway_test
-      POSTGRES_USER: gateway
+      POSTGRES_DB: notarx_test
+      POSTGRES_USER: notarx
       POSTGRES_PASSWORD: integration-password
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U gateway -d gateway_test"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U notarx -d notarx_test"]
       interval: 1s
       timeout: 3s
       retries: 20
@@ -23,7 +23,7 @@ services:
         condition: service_healthy
     environment:
       PGPASSWORD: integration-password
-      PGDATABASE: gateway_test
+      PGDATABASE: notarx_test
     entrypoint: ["/usr/local/bin/run-migrations"]
     volumes:
       - ./migrations:/migrations:ro
@@ -37,7 +37,7 @@ services:
       rustfs-ready:
         condition: service_completed_successfully
     environment:
-      TEST_DATABASE_URL: postgres://gateway:integration-password@postgres:5432/gateway_test?sslmode=disable
+      TEST_DATABASE_URL: postgres://notarx:integration-password@postgres:5432/notarx_test?sslmode=disable
       TEST_OBJECT_STORE_ENDPOINT: http://rustfs:9000
       TEST_OBJECT_STORE_ACCESS_KEY: integration-rustfs
       TEST_OBJECT_STORE_SECRET_KEY: integration-password
@@ -45,8 +45,8 @@ services:
     command: ["go", "test", "-count=1", "-p", "1", "-tags=integration", "./internal/app", "./internal/aptpublication", "./internal/auditwriter", "./internal/partitions", "./internal/retention", "./internal/repository", "./internal/objectstore", "./cmd/notarx", "./internal/nexussource/pgstore", "./internal/nexusmigration/pgstore", "./internal/repositorypreset/pgstore", "./internal/format/nuget", "./internal/format/helm", "./internal/format/rubygems", "./internal/rubygemspublication/pgstore", "./internal/backupops", "./internal/preflight"]
     volumes:
       - ./:/src:ro
-      - artifact-gateway-go-mod:/go/pkg/mod
-      - artifact-gateway-go-build:/root/.cache/go-build
+      - notarx-go-mod:/go/pkg/mod
+      - notarx-go-build:/root/.cache/go-build
 
   rustfs:
     image: rustfs/rustfs:1.0.0-beta.12@sha256:41fe89380f4120a337790c02af192c3fe7bb55c3edc2e6e9357b487b47c6ab21
@@ -72,7 +72,7 @@ services:
     command: ["until curl --fail --silent http://rustfs:9000/health > /dev/null; do sleep 1; done"]
 
 volumes:
-  artifact-gateway-go-mod:
+  notarx-go-mod:
     external: true
-  artifact-gateway-go-build:
+  notarx-go-build:
     external: true

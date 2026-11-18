@@ -60,9 +60,9 @@ func TestNativeCargoOfficialClientHostedFlow(t *testing.T) {
 	}
 	write(filepath.Join(packageDir, "Cargo.toml"), "[package]\nname = \"gateway-official-cargo\"\nversion = \"0.2.0\"\nedition = \"2024\"\nlicense = \"MIT\"\ndescription = \"Gateway official Cargo client fixture\"\n")
 	write(filepath.Join(packageDir, "src", "lib.rs"), "pub fn answer() -> u8 { 42 }\n")
-	write(filepath.Join(packageDir, "src", "main.rs"), "fn main() { println!(\"{}\", gateway_official_cargo::answer()); }\n")
+	write(filepath.Join(packageDir, "src", "main.rs"), "fn main() { println!(\"{}\", notarx_official_cargo::answer()); }\n")
 	write(filepath.Join(consumerDir, "Cargo.toml"), "[package]\nname = \"cargo-gateway-consumer\"\nversion = \"0.1.0\"\nedition = \"2024\"\n")
-	write(filepath.Join(consumerDir, "src", "main.rs"), "fn main() { println!(\"{}\", gateway_official_cargo::answer()); }\n")
+	write(filepath.Join(consumerDir, "src", "main.rs"), "fn main() { println!(\"{}\", notarx_official_cargo::answer()); }\n")
 	environment := append(os.Environ(), "CARGO_HOME="+home, "CARGO_TARGET_DIR="+filepath.Join(t.TempDir(), "target"),
 		"CARGO_REGISTRIES_FIXTURE_TOKEN=admin-secret", "HTTP_PROXY=", "HTTPS_PROXY=", "ALL_PROXY=", "NO_PROXY=127.0.0.1,localhost")
 	runWithEnvironment := func(env []string, dir string, args ...string) {
@@ -142,7 +142,7 @@ func TestNativeCargoOfficialClientHostedFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 	write(filepath.Join(publicConsumer, "Cargo.toml"), "[package]\nname = \"cargo-gateway-public-consumer\"\nversion = \"0.1.0\"\nedition = \"2024\"\n")
-	write(filepath.Join(publicConsumer, "src", "main.rs"), "fn main() { println!(\"{}\", gateway_official_cargo::answer()); }\n")
+	write(filepath.Join(publicConsumer, "src", "main.rs"), "fn main() { println!(\"{}\", notarx_official_cargo::answer()); }\n")
 	publicEnvironment := append(os.Environ(), "CARGO_HOME="+publicHome, "CARGO_TARGET_DIR="+filepath.Join(t.TempDir(), "public-target"),
 		"CARGO_REGISTRIES_FIXTURE_TOKEN=", "HTTP_PROXY=", "HTTPS_PROXY=", "ALL_PROXY=", "NO_PROXY=127.0.0.1,localhost")
 	runWithEnvironment(publicEnvironment, publicConsumer, "search", "gateway-official-cargo", "--registry", "fixture")

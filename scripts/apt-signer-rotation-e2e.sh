@@ -12,8 +12,8 @@ for command_name in docker openssl python3 go; do
 done
 
 debian_image='debian:bookworm-slim@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241'
-project="artifact-gateway-apt-rotation-$$"
-workdir=$(mktemp -d "${TMPDIR:-/tmp}/artifact-gateway-apt-rotation.XXXXXX")
+project="notarx-apt-rotation-$$"
+workdir=$(mktemp -d "${TMPDIR:-/tmp}/notarx-apt-rotation.XXXXXX")
 env_file="$workdir/e2e.env"
 admin_token='apt-rotation-admin-token'
 resolver_token='apt-rotation-resolver-token'
@@ -110,24 +110,24 @@ next_fingerprint=${fingerprints##*,}
 
 install -m 0644 "$workdir/old.asc" "$workdir/trusted-public-keys.asc"
 write_environment reference-apt-signer-old "$old_fingerprint"
-"${compose[@]}" up -d ${NOTARX_COMPOSE_BUILD_FLAG---build} --wait gateway
+"${compose[@]}" up -d ${NOTARX_COMPOSE_BUILD_FLAG---build} --wait notarx
 
-refresh_gateway_url() {
+refresh_notarx_url() {
   local published_port
-  published_port=$("${compose[@]}" port gateway 8080 | tail -n 1)
+  published_port=$("${compose[@]}" port notarx 8080 | tail -n 1)
   [[ -n "$published_port" ]] || return 1
-  gateway_url="http://127.0.0.1:${published_port##*:}"
+  notarx_url="http://127.0.0.1:${published_port##*:}"
 }
 
-wait_gateway_ready() {
+wait_notarx_ready() {
   local ready_code=000
   for _ in $(seq 1 80); do
-    refresh_gateway_url || {
+    refresh_notarx_url || {
       sleep 0.25
       continue
     }
     ready_code=$(curl --noproxy '*' --silent --show-error --output /dev/null --write-out '%{http_code}' \
-      --max-time 2 "$gateway_url/readyz" 2>/dev/null || true)
+      --max-time 2 "$notarx_url/readyz" 2>/dev/null || true)
     [[ "$ready_code" == 204 ]] && return 0
     sleep 0.25
   done
@@ -136,31 +136,31 @@ wait_gateway_ready() {
 }
 
 restart_gateway() {
-  "${compose[@]}" up -d --force-recreate --wait gateway >/dev/null
-  wait_gateway_ready
+  "${compose[@]}" up -d --force-recreate --wait notarx >/dev/null
+  wait_notarx_ready
 }
 
-wait_gateway_ready
+wait_notarx_ready
 curl_request=(curl --noproxy '*' --connect-timeout 2 --max-time 45 --silent --show-error)
-package_file="$workdir/artifact-gateway-rotation_1.0.0-1_all.deb"
+package_file="$workdir/notarx-rotation_1.0.0-1_all.deb"
 docker run --rm --volume "$workdir:/work" "$debian_image" /bin/sh -ec '
-  mkdir -p /tmp/artifact-gateway-rotation/DEBIAN /tmp/artifact-gateway-rotation/usr/share/artifact-gateway-rotation
+  mkdir -p /tmp/notarx-rotation/DEBIAN /tmp/notarx-rotation/usr/share/notarx-rotation
   printf "%s\n" \
-    "Package: artifact-gateway-rotation" \
+    "Package: notarx-rotation" \
     "Version: 1.0.0-1" \
     "Architecture: all" \
     "Maintainer: notarx Rotation <apt-rotation@example.test>" \
     "Description: external signer rotation acceptance package" \
-    > /tmp/artifact-gateway-rotation/DEBIAN/control
-  printf "%s\n" "installed-from-rotated-signer" > /tmp/artifact-gateway-rotation/usr/share/artifact-gateway-rotation/installed.txt
-  dpkg-deb --build --root-owner-group /tmp/artifact-gateway-rotation /work/artifact-gateway-rotation_1.0.0-1_all.deb >/dev/null
+    > /tmp/notarx-rotation/DEBIAN/control
+  printf "%s\n" "installed-from-rotated-signer" > /tmp/notarx-rotation/usr/share/notarx-rotation/installed.txt
+  dpkg-deb --build --root-owner-group /tmp/notarx-rotation /work/notarx-rotation_1.0.0-1_all.deb >/dev/null
 '
 package_sha256=$(shasum -a 256 "$package_file" | awk '{print $1}')
 package_size=$(wc -c <"$package_file" | tr -d ' ')
 
 repository_response="$workdir/repository.json"
 repository_status=$("${curl_request[@]}" --output "$repository_response" --write-out '%{http_code}' \
-  --request POST "$gateway_url/api/v2/repositories" \
+  --request POST "$notarx_url/api/v2/repositories" \
   --header "Authorization: Bearer $admin_token" \
   --header 'Content-Type: application/json' \
   --header 'Idempotency-Key: apt-signer-rotation-repository' \
@@ -173,9 +173,9 @@ repository_status=$("${curl_request[@]}" --output "$repository_response" --write
 repository_id=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' "$repository_response")
 
 session_response="$workdir/session.json"
-session_body=$(printf '{"suite":"stable","component":"main","objectName":"artifact-gateway-rotation_1.0.0-1_all.deb","declaredDigest":"sha256:%s","declaredSize":%s,"expectedIdentity":"artifact-gateway-rotation@1.0.0-1#all"}' "$package_sha256" "$package_size")
+session_body=$(printf '{"suite":"stable","component":"main","objectName":"notarx-rotation_1.0.0-1_all.deb","declaredDigest":"sha256:%s","declaredSize":%s,"expectedIdentity":"notarx-rotation@1.0.0-1#all"}' "$package_sha256" "$package_size")
 session_status=$("${curl_request[@]}" --output "$session_response" --write-out '%{http_code}' \
-  --request POST "$gateway_url/api/v2/repositories/$repository_id/apt/publication-sessions" \
+  --request POST "$notarx_url/api/v2/repositories/$repository_id/apt/publication-sessions" \
   --header "Authorization: Bearer $admin_token" \
   --header 'Content-Type: application/json' \
   --header 'Idempotency-Key: apt-signer-rotation-session' \
@@ -188,7 +188,7 @@ session_status=$("${curl_request[@]}" --output "$session_response" --write-out '
 session_id=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' "$session_response")
 
 upload_status=$("${curl_request[@]}" --output "$workdir/upload.json" --write-out '%{http_code}' \
-  --request PUT "$gateway_url/api/v2/repositories/$repository_id/apt/publication-sessions/$session_id/package" \
+  --request PUT "$notarx_url/api/v2/repositories/$repository_id/apt/publication-sessions/$session_id/package" \
   --header "Authorization: Bearer $admin_token" \
   --header 'Content-Type: application/vnd.debian.binary-package' \
   --data-binary "@$package_file")
@@ -202,7 +202,7 @@ publish_snapshot() {
   local response="$workdir/snapshot-$sequence.json"
   body=$(printf '{"suite":"stable","sequence":%s,"publicationSessionIds":["%s"]}' "$sequence" "$session_id")
   status=$("${curl_request[@]}" --output "$response" --write-out '%{http_code}' \
-    --request POST "$gateway_url/api/v2/repositories/$repository_id/apt/snapshots" \
+    --request POST "$notarx_url/api/v2/repositories/$repository_id/apt/snapshots" \
     --header "Authorization: Bearer $admin_token" \
     --header 'Content-Type: application/json' \
     --header "Idempotency-Key: $key" \
@@ -218,7 +218,7 @@ assert_signing_state() {
   local readiness=$1 role=$2 sequence=$3 expected_fingerprints=$4
   local state_file="$workdir/state-$sequence-$role.json"
   "${curl_request[@]}" --fail --header "Authorization: Bearer $admin_token" \
-    "$gateway_url/api/v2/repositories/$repository_id/apt/signing-state" >"$state_file"
+    "$notarx_url/api/v2/repositories/$repository_id/apt/signing-state" >"$state_file"
   python3 - "$state_file" "$readiness" "$role" "$sequence" "$expected_fingerprints" <<'PY'
 import json
 import sys
@@ -236,13 +236,13 @@ if state.get("trustedFingerprints") != expected_fingerprints:
 PY
 }
 
-gateway_container=$("${compose[@]}" ps -q gateway)
-gateway_network=$(docker inspect --format '{{range $name, $settings := .NetworkSettings.Networks}}{{$name}}{{end}}' "$gateway_container")
-[[ -n "$gateway_network" ]] || {
+notarx_container=$("${compose[@]}" ps -q notarx)
+notarx_network=$(docker inspect --format '{{range $name, $settings := .NetworkSettings.Networks}}{{$name}}{{end}}' "$notarx_container")
+[[ -n "$notarx_network" ]] || {
   printf 'Gateway network was not found\n' >&2
   exit 1
 }
-if docker inspect --format '{{range .Mounts}}{{println .Name .Destination}}{{end}}' "$gateway_container" | grep -q 'gateway-apt-signer-'; then
+if docker inspect --format '{{range .Mounts}}{{println .Name .Destination}}{{end}}' "$notarx_container" | grep -q 'notarx-apt-signer-'; then
   printf 'Gateway unexpectedly mounts a signer private-key volume\n' >&2
   exit 1
 fi
@@ -250,19 +250,19 @@ fi
 apt_verify() {
   local keyring=$1
   docker run --rm \
-    --network "$gateway_network" \
+    --network "$notarx_network" \
     --env "APT_ROTATION_RESOLVER_TOKEN=$resolver_token" \
-    --volume "$keyring:/keys/artifact-gateway.asc:ro" \
+    --volume "$keyring:/keys/notarx.asc:ro" \
     "$debian_image" /bin/sh -ec '
       rm -f /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources
       install -d -m 0755 /etc/apt/keyrings /etc/apt/auth.conf.d
-      install -m 0644 /keys/artifact-gateway.asc /etc/apt/keyrings/artifact-gateway.asc
-      printf "machine http://gateway:8080/apt/apt-signer-rotation\nlogin resolver\npassword %s\n" "$APT_ROTATION_RESOLVER_TOKEN" > /etc/apt/auth.conf.d/artifact-gateway.conf
-      chmod 0600 /etc/apt/auth.conf.d/artifact-gateway.conf
-      printf "%s\n" "deb [arch=all signed-by=/etc/apt/keyrings/artifact-gateway.asc] http://gateway:8080/apt/apt-signer-rotation stable main" > /etc/apt/sources.list.d/artifact-gateway.list
+      install -m 0644 /keys/notarx.asc /etc/apt/keyrings/notarx.asc
+      printf "machine http://notarx:8080/apt/apt-signer-rotation\nlogin resolver\npassword %s\n" "$APT_ROTATION_RESOLVER_TOKEN" > /etc/apt/auth.conf.d/notarx.conf
+      chmod 0600 /etc/apt/auth.conf.d/notarx.conf
+      printf "%s\n" "deb [arch=all signed-by=/etc/apt/keyrings/notarx.asc] http://notarx:8080/apt/apt-signer-rotation stable main" > /etc/apt/sources.list.d/notarx.list
       apt-get -o Acquire::Retries=0 update >/dev/null
-      apt-get -o Acquire::Retries=0 install -y --no-install-recommends artifact-gateway-rotation=1.0.0-1 >/dev/null
-      grep -Fxq installed-from-rotated-signer /usr/share/artifact-gateway-rotation/installed.txt
+      apt-get -o Acquire::Retries=0 install -y --no-install-recommends notarx-rotation=1.0.0-1 >/dev/null
+      grep -Fxq installed-from-rotated-signer /usr/share/notarx-rotation/installed.txt
     '
 }
 
@@ -270,17 +270,17 @@ apt_rejects() {
   local keyring=$1 expected_key_id=${next_fingerprint: -16}
   local rejection_log="$workdir/old-key-rejection.log"
   if docker run --rm \
-    --network "$gateway_network" \
+    --network "$notarx_network" \
     --env "APT_ROTATION_RESOLVER_TOKEN=$resolver_token" \
     --env 'LC_ALL=C' \
-    --volume "$keyring:/keys/artifact-gateway.asc:ro" \
+    --volume "$keyring:/keys/notarx.asc:ro" \
     "$debian_image" /bin/sh -ec '
       rm -f /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources
       install -d -m 0755 /etc/apt/keyrings /etc/apt/auth.conf.d
-      install -m 0644 /keys/artifact-gateway.asc /etc/apt/keyrings/artifact-gateway.asc
-      printf "machine http://gateway:8080/apt/apt-signer-rotation\nlogin resolver\npassword %s\n" "$APT_ROTATION_RESOLVER_TOKEN" > /etc/apt/auth.conf.d/artifact-gateway.conf
-      chmod 0600 /etc/apt/auth.conf.d/artifact-gateway.conf
-      printf "%s\n" "deb [arch=all signed-by=/etc/apt/keyrings/artifact-gateway.asc] http://gateway:8080/apt/apt-signer-rotation stable main" > /etc/apt/sources.list.d/artifact-gateway.list
+      install -m 0644 /keys/notarx.asc /etc/apt/keyrings/notarx.asc
+      printf "machine http://notarx:8080/apt/apt-signer-rotation\nlogin resolver\npassword %s\n" "$APT_ROTATION_RESOLVER_TOKEN" > /etc/apt/auth.conf.d/notarx.conf
+      chmod 0600 /etc/apt/auth.conf.d/notarx.conf
+      printf "%s\n" "deb [arch=all signed-by=/etc/apt/keyrings/notarx.asc] http://notarx:8080/apt/apt-signer-rotation stable main" > /etc/apt/sources.list.d/notarx.list
       apt-get -o Acquire::Retries=0 update
     ' >"$rejection_log" 2>&1; then
     printf 'APT unexpectedly trusted a snapshot signed outside the client keyring\n' >&2

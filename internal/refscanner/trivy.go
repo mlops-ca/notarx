@@ -56,7 +56,7 @@ func NewTrivyEngine(options TrivyOptions) (Engine, error) {
 }
 
 func (e *trivyEngine) Scan(ctx context.Context, root string) (EngineOutput, error) {
-	outputDir, err := os.MkdirTemp(e.tempDir, "artifact-gateway-trivy-")
+	outputDir, err := os.MkdirTemp(e.tempDir, "notarx-trivy-")
 	if err != nil {
 		return EngineOutput{}, ErrEngineFailed
 	}

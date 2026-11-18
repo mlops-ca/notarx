@@ -164,7 +164,7 @@ func TestRubyGemsFixedOfficialClientColdTransitiveInstallAndRestart(t *testing.T
 		}
 		mu.Unlock()
 		container := project + "-cli-" + strings.ToLower(uuid.NewString())
-		dockerArgs := []string{"run", "--rm", "--name", container, "--label", "com.artifact-gateway.rubygems-e2e.run=" + project, "--user", strconv.Itoa(os.Getuid()) + ":" + strconv.Itoa(os.Getgid()), "--mount", "type=bind,src=" + root + ",dst=/work", "--workdir", "/work/project", "--env", "HOME=/work/home", "--env", "GEMRC=/work/home/gemrc", "--env", "GEM_HOME=/work/gems", "--env", "GEM_PATH=/work/gems", "--env", "GEM_SPEC_CACHE=/work/specs", "--env", "BUNDLE_PATH=/work/bundle", "--env", "BUNDLE_USER_HOME=/work/bundle-user", "--env", "BUNDLE_USER_CACHE=/work/bundle-cache", "--env", "BUNDLE_IGNORE_CONFIG=1", "--env", "BUNDLE_DISABLE_SHARED_GEMS=true", "--env", "BUNDLE_RETRY=0", "--env", "BUNDLE_TIMEOUT=30"}
+		dockerArgs := []string{"run", "--rm", "--name", container, "--label", "com.notarx.rubygems-e2e.run=" + project, "--user", strconv.Itoa(os.Getuid()) + ":" + strconv.Itoa(os.Getgid()), "--mount", "type=bind,src=" + root + ",dst=/work", "--workdir", "/work/project", "--env", "HOME=/work/home", "--env", "GEMRC=/work/home/gemrc", "--env", "GEM_HOME=/work/gems", "--env", "GEM_PATH=/work/gems", "--env", "GEM_SPEC_CACHE=/work/specs", "--env", "BUNDLE_PATH=/work/bundle", "--env", "BUNDLE_USER_HOME=/work/bundle-user", "--env", "BUNDLE_USER_CACHE=/work/bundle-cache", "--env", "BUNDLE_IGNORE_CONFIG=1", "--env", "BUNDLE_DISABLE_SHARED_GEMS=true", "--env", "BUNDLE_RETRY=0", "--env", "BUNDLE_TIMEOUT=30"}
 		if !consumer || strings.HasPrefix(phase, "yank-") {
 			dockerArgs = append(dockerArgs, "--env", "GEM_HOST_API_KEY="+admin)
 		}

@@ -35927,7 +35927,7 @@ type ExportAPTRepositorySnapshot200ApplicationvndArtifactGatewayAptSnapshotV1Tar
 
 func (response ExportAPTRepositorySnapshot200ApplicationvndArtifactGatewayAptSnapshotV1TarResponse) VisitExportAPTRepositorySnapshotResponse(w http.ResponseWriter) error {
 
-	w.Header().Set("Content-Type", "application/vnd.artifact-gateway.apt-snapshot.v1+tar")
+	w.Header().Set("Content-Type", "application/vnd.notarx.apt-snapshot.v1+tar")
 	if response.ContentLength != 0 {
 		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
 	}

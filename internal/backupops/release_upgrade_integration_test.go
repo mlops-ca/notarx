@@ -102,7 +102,7 @@ func TestLocalReleaseUpgrade(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	preUpgrade := SourceSpec{BackupID: "synthetic-release-upgrade", ScopeID: "synthetic-local", InventoryDeclaredComplete: true, Release: old, Docker: d, Postgres: source.database, S3: S3Settings{Endpoint: "http://127.0.0.1:" + s3port, Bucket: "gateway-cache", AccessKey: source.spec.AccessKey, SecretKey: source.spec.SecretKey}, Writers: []WriterSpec{{ID: "synthetic-api", Kind: "docker-container", Reference: source.resourceID("container", source.spec.Project+"-gateway")}}}
+	preUpgrade := SourceSpec{BackupID: "synthetic-release-upgrade", ScopeID: "synthetic-local", InventoryDeclaredComplete: true, Release: old, Docker: d, Postgres: source.database, S3: S3Settings{Endpoint: "http://127.0.0.1:" + s3port, Bucket: "notarx-cache", AccessKey: source.spec.AccessKey, SecretKey: source.spec.SecretKey}, Writers: []WriterSpec{{ID: "synthetic-api", Kind: "docker-container", Reference: source.resourceID("container", source.spec.Project+"-notarx")}}}
 	bundle := filepath.Join(t.TempDir(), "pre-upgrade")
 	exported, code, _ := fixtureBackupCommand(t, ctx, "export", preUpgrade, bundle)
 	if code != 0 || exported.Status != "exported" || exported.VerifiedObjects != 2 {
@@ -154,7 +154,7 @@ func TestLocalReleaseUpgrade(t *testing.T) {
 	if code != 0 || rollback == nil || restored.Metadata != "verified" || restored.Objects != "verified" || restored.Software != "verified" {
 		t.Fatalf("previous release snapshot rollback: %+v exit=%d", restored, code)
 	}
-	port, err := rollback.port(ctx, "gateway", "8080/tcp")
+	port, err := rollback.port(ctx, "notarx", "8080/tcp")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -255,7 +255,7 @@ func runFixtureMigrations(t *testing.T, ctx context.Context, target *OwnedTarget
 
 func stopFixtureGateway(t *testing.T, ctx context.Context, target *OwnedTarget) {
 	t.Helper()
-	id := target.resourceID("container", target.spec.Project+"-gateway")
+	id := target.resourceID("container", target.spec.Project+"-notarx")
 	if id == "" {
 		t.Fatal("owned Gateway missing")
 	}
@@ -267,7 +267,7 @@ func stopFixtureGateway(t *testing.T, ctx context.Context, target *OwnedTarget) 
 func replaceFixtureGateway(t *testing.T, ctx context.Context, target *OwnedTarget, release Release) string {
 	t.Helper()
 	for i, r := range target.resources {
-		if r.Kind == "container" && r.Name == target.spec.Project+"-gateway" {
+		if r.Kind == "container" && r.Name == target.spec.Project+"-notarx" {
 			if target.checkResource(ctx, r) != nil {
 				t.Fatal("Gateway ownership changed")
 			}

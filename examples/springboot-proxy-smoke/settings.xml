@@ -4,7 +4,7 @@
           xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0 https://maven.apache.org/xsd/settings-1.2.0.xsd">
   <mirrors>
     <mirror>
-      <id>artifact-gateway-proxy</id>
+      <id>notarx-proxy</id>
       <name>notarx Maven Proxy</name>
       <url>${env.NOTARX_MAVEN_PROXY_URL}</url>
       <mirrorOf>*</mirrorOf>
@@ -12,7 +12,7 @@
   </mirrors>
   <servers>
     <server>
-      <id>artifact-gateway-proxy</id>
+      <id>notarx-proxy</id>
       <username>${env.NOTARX_MAVEN_USERNAME}</username>
       <password>${env.NOTARX_MAVEN_PASSWORD}</password>
     </server>

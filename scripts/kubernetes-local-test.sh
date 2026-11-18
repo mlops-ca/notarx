@@ -106,12 +106,12 @@ grep -Fq 'local port 80 is already in use' "$workdir/stderr" || fail 'occupied I
 : >"$log"
 run_expect 0 "$script" up
 assert_log 'kubectl apply -k'
-assert_log 'kubectl -n artifact-gateway-local rollout status statefulset/postgres --timeout=180s'
-assert_log 'kubectl -n artifact-gateway-local rollout status statefulset/rustfs --timeout=180s'
-assert_log 'kubectl -n artifact-gateway-local rollout status deployment/artifact-gateway --timeout=300s'
-assert_log 'kubectl -n artifact-gateway-local rollout status deployment/artifact-gateway-ingress --timeout=180s'
+assert_log 'kubectl -n notarx-local rollout status statefulset/postgres --timeout=180s'
+assert_log 'kubectl -n notarx-local rollout status statefulset/rustfs --timeout=180s'
+assert_log 'kubectl -n notarx-local rollout status deployment/notarx --timeout=300s'
+assert_log 'kubectl -n notarx-local rollout status deployment/notarx-ingress --timeout=180s'
 assert_log '--from-literal=NOTARX_APT_SIGNER_TOKEN='
-grep -Fq 'notarx Kubernetes stack is ready at http://artifact-gateway.localhost' "$workdir/stdout" || fail 'up did not report the Ingress endpoint'
+grep -Fq 'notarx Kubernetes stack is ready at http://notarx.localhost' "$workdir/stdout" || fail 'up did not report the Ingress endpoint'
 
 : >"$log"
 FAKE_K8S_POSTGRES_PASSWORD='persisted-postgres-password' \
@@ -134,18 +134,18 @@ assert_log '--from-literal=NOTARX_APT_SIGNER_TOKEN=persisted-apt-signer-token-00
 
 : >"$log"
 run_expect 0 "$script" status
-assert_log 'kubectl -n artifact-gateway-local get pods\,pvc\,services\,ingresses'
+assert_log 'kubectl -n notarx-local get pods\,pvc\,services\,ingresses'
 
 : >"$log"
 FAKE_K8S_ADMIN_TOKEN='persisted-custom-token' run_expect 0 "$script" verify
-assert_log 'kubectl -n artifact-gateway-local rollout restart deployment/artifact-gateway'
-assert_log 'kubectl -n artifact-gateway-local rollout status deployment/artifact-gateway --timeout=300s'
-assert_log 'curl --noproxy artifact-gateway.localhost\,127.0.0.1\,localhost --connect-timeout 3 --max-time 15 --silent --show-error --fail -H Authorization:\ Bearer\ persisted-custom-token'
+assert_log 'kubectl -n notarx-local rollout restart deployment/notarx'
+assert_log 'kubectl -n notarx-local rollout status deployment/notarx --timeout=300s'
+assert_log 'curl --noproxy notarx.localhost\,127.0.0.1\,localhost --connect-timeout 3 --max-time 15 --silent --show-error --fail -H Authorization:\ Bearer\ persisted-custom-token'
 assert_log 'persistence%3Bencoded.txt'
 assert_log '--head'
 assert_log '--range 0-9'
 assert_log '@scope%2Fwidget'
-assert_log 'http://artifact-gateway.localhost/v2/'
+assert_log 'http://notarx.localhost/v2/'
 assert_log '/apt/ingress-missing/dists/stable/Release'
 assert_log 'rejected%5Cpath'
 assert_log 'rejected%00path'
@@ -153,10 +153,10 @@ grep -Fq 'Kubernetes persistence and Ingress protocol verification passed' "$wor
 
 : >"$log"
 run_expect 0 "$script" down
-assert_log 'kubectl delete ingressclass artifact-gateway-local --ignore-not-found'
-assert_log 'kubectl delete clusterrolebinding artifact-gateway-local-ingress-class-reader --ignore-not-found'
-assert_log 'kubectl delete clusterrole artifact-gateway-local-ingress-class-reader --ignore-not-found'
-assert_log 'kubectl delete namespace artifact-gateway-local --ignore-not-found'
+assert_log 'kubectl delete ingressclass notarx-local --ignore-not-found'
+assert_log 'kubectl delete clusterrolebinding notarx-local-ingress-class-reader --ignore-not-found'
+assert_log 'kubectl delete clusterrole notarx-local-ingress-class-reader --ignore-not-found'
+assert_log 'kubectl delete namespace notarx-local --ignore-not-found'
 [[ $(wc -l <"$log" | tr -d ' ') -eq 5 ]] || fail 'down issued commands outside context check and exact local resource deletion'
 
 run_expect 2 "$script" unsupported

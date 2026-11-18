@@ -11,29 +11,29 @@ p95_limit_ms=${NOTARX_PERFORMANCE_P95_MS:-1000}
 max_error_percent=${NOTARX_PERFORMANCE_MAX_ERROR_PERCENT:-0}
 
 port=$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()')
-gateway_url="http://127.0.0.1:${port}"
+notarx_url="http://127.0.0.1:${port}"
 workdir=$(mktemp -d)
 fixture_pid=""
 cleanup() { local status=$?; [[ -z "$fixture_pid" ]] || { kill "$fixture_pid" 2>/dev/null || true; wait "$fixture_pid" 2>/dev/null || true; }; rm -rf "$workdir"; trap - EXIT; exit "$status"; }
 trap cleanup EXIT
 
 go build -o "$workdir/native-oci-fixture" ./cmd/native-oci-fixture
-LISTEN_ADDR="127.0.0.1:${port}" "$workdir/native-oci-fixture" >"$workdir/gateway.log" 2>&1 &
+LISTEN_ADDR="127.0.0.1:${port}" "$workdir/native-oci-fixture" >"$workdir/notarx.log" 2>&1 &
 fixture_pid=$!
-until curl --silent --show-error --fail "$gateway_url/livez" >/dev/null; do kill -0 "$fixture_pid" 2>/dev/null || { cat "$workdir/gateway.log" >&2; exit 1; }; sleep 0.1; done
+until curl --silent --show-error --fail "$notarx_url/livez" >/dev/null; do kill -0 "$fixture_pid" 2>/dev/null || { cat "$workdir/notarx.log" >&2; exit 1; }; sleep 0.1; done
 
 status() { curl --silent --show-error --output "$workdir/response" --write-out '%{http_code}' "$@"; }
 expect() { local want=$1; shift; local got; got=$(status "$@"); [[ "$got" == "$want" ]] || { printf 'Expected HTTP %s, got %s: %s\n' "$want" "$got" "$*" >&2; cat "$workdir/response" >&2; exit 1; }; }
-expect 200 --user fixture:fixture-secret "$gateway_url/auth/token"
+expect 200 --user fixture:fixture-secret "$notarx_url/auth/token"
 token=$(sed -n 's/.*"token":"\([^"]*\)".*/\1/p' "$workdir/response")
 test -n "$token"
 auth=(-H "Authorization: Bearer $token")
 headers="$workdir/headers"
 manifest='{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json"}'
-expect 201 "${auth[@]}" -D "$headers" -H 'Content-Type: application/vnd.oci.image.manifest.v1+json' -X PUT --data-binary "$manifest" "$gateway_url/v2/team/perf/manifests/latest"
-expect 200 "${auth[@]}" "$gateway_url/v2/team/perf/manifests/latest"
+expect 201 "${auth[@]}" -D "$headers" -H 'Content-Type: application/vnd.oci.image.manifest.v1+json' -X PUT --data-binary "$manifest" "$notarx_url/v2/team/perf/manifests/latest"
+expect 200 "${auth[@]}" "$notarx_url/v2/team/perf/manifests/latest"
 
-python3 - "$gateway_url/v2/team/perf/manifests/latest" "$token" "$requests" "$concurrency" "$p95_limit_ms" "$max_error_percent" <<'PY'
+python3 - "$notarx_url/v2/team/perf/manifests/latest" "$token" "$requests" "$concurrency" "$p95_limit_ms" "$max_error_percent" <<'PY'
 import concurrent.futures, math, sys, time, urllib.error, urllib.request
 url, token = sys.argv[1], sys.argv[2]
 requests_count, concurrency = int(sys.argv[3]), int(sys.argv[4])

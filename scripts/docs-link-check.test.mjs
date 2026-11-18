@@ -34,7 +34,7 @@ test('normalizes local targets and skips remote or runtime routes', () => {
 });
 
 test('reports missing and escaping links while accepting valid files', () => {
-  const root = mkdtempSync(path.join(tmpdir(), 'artifact-gateway-docs-'));
+  const root = mkdtempSync(path.join(tmpdir(), 'notarx-docs-'));
   try {
     mkdirSync(path.join(root, 'docs'));
     writeFileSync(path.join(root, 'README.md'), '[ok](docs/guide.md) [missing](docs/missing.md) [escape](../outside.md)');
@@ -48,6 +48,22 @@ test('reports missing and escaping links while accepting valid files', () => {
     assert.deepEqual(broken, [
       { file: 'README.md', target: 'docs/missing.md', reason: 'missing target' },
       { file: 'README.md', target: '../outside.md', reason: 'outside repository' },
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('tolerates a frozen zh-CN page embedding a renamed image but not a missing page', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'notarx-docs-'));
+  try {
+    mkdirSync(path.join(root, 'docs'));
+    const read = (file) =>
+      file.endsWith('docs/index.zh-CN.md') ? '![d](assets/old.png) [p](missing.md)' : '![d](assets/old.png)';
+    const broken = findBrokenDocumentLinks(root, ['docs/index.zh-CN.md', 'docs/index.md'], read);
+    assert.deepEqual(broken, [
+      { file: 'docs/index.zh-CN.md', target: 'missing.md', reason: 'missing target' },
+      { file: 'docs/index.md', target: 'assets/old.png', reason: 'missing target' },
     ]);
   } finally {
     rmSync(root, { recursive: true, force: true });

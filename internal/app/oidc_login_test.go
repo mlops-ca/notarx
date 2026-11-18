@@ -36,7 +36,7 @@ func TestOIDCBrowserJITRegistersPendingUserWithoutRepositoryAccess(t *testing.T)
 		case "/token":
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"id_token": signedOIDCTokenWithClaims(
-					t, key, keyID, provider.URL, "artifact-gateway-console", "pending-subject",
+					t, key, keyID, provider.URL, "notarx-console", "pending-subject",
 					time.Now().Add(time.Minute), nil, expectedNonce,
 				),
 			})
@@ -49,8 +49,8 @@ func TestOIDCBrowserJITRegistersPendingUserWithoutRepositoryAccess(t *testing.T)
 	store := repository.NewMemoryStore()
 	runtime := NewOIDCRuntime(store, OIDCRuntimeConfig{})
 	_, err = runtime.Replace(t.Context(), OIDCSettingsUpdate{
-		Enabled: true, Issuer: provider.URL, Audience: "artifact-gateway-api",
-		ClientID: "artifact-gateway-console", RedirectURL: "http://localhost:4173/auth/oidc/callback",
+		Enabled: true, Issuer: provider.URL, Audience: "notarx-api",
+		ClientID: "notarx-console", RedirectURL: "http://localhost:4173/auth/oidc/callback",
 		ProvisioningMode: "jit", JITDefaultRole: "none",
 	}, "0")
 	if err != nil {
@@ -197,7 +197,7 @@ func TestOIDCBrowserLoginMapsBoundUserAndRevokesCookieSession(t *testing.T) {
 				"token_type":   "Bearer",
 				"expires_in":   300,
 				"id_token": signedOIDCTokenWithClaims(
-					t, key, keyID, provider.URL, "artifact-gateway-console", "gitlab-user", time.Now().Add(time.Minute), []string{"artifact-member"}, expectedNonce,
+					t, key, keyID, provider.URL, "notarx-console", "gitlab-user", time.Now().Add(time.Minute), []string{"artifact-member"}, expectedNonce,
 				),
 			})
 		default:
@@ -208,14 +208,14 @@ func TestOIDCBrowserLoginMapsBoundUserAndRevokesCookieSession(t *testing.T) {
 
 	authenticator := testAuthenticator()
 	authenticator.OIDC = NewOIDCValidator(OIDCConfig{
-		Issuer: provider.URL, Audience: "artifact-gateway-api", JWKSURL: provider.URL + "/jwks",
+		Issuer: provider.URL, Audience: "notarx-api", JWKSURL: provider.URL + "/jwks",
 		Roles: OIDCRoleMapping{Member: []string{"artifact-member"}},
 	})
 	dependencies := Dependencies{OIDCClient: NewOIDCClient(OIDCClientConfig{
-		Issuer: provider.URL, ClientID: "artifact-gateway-console",
+		Issuer: provider.URL, ClientID: "notarx-console",
 		RedirectURL: "http://localhost:4173/auth/oidc/callback", Scopes: []string{"openid", "profile"},
 	}), OIDCLoginValidator: NewOIDCValidator(OIDCConfig{
-		Issuer: provider.URL, Audience: "artifact-gateway-console", JWKSURL: provider.URL + "/jwks",
+		Issuer: provider.URL, Audience: "notarx-console", JWKSURL: provider.URL + "/jwks",
 		Roles: OIDCRoleMapping{Member: []string{"artifact-member"}},
 	})}
 	store := repository.NewMemoryStore()

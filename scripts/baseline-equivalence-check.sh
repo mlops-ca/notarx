@@ -93,7 +93,7 @@ printf 'ledger rows                chain %s, baseline %s\n' "$ledger_a" "$ledger
 # Remove the ledger and the inherited schema_version table from both sides.
 for database in chain_a baseline_b; do
   baseline_psql "$database" -q <<'SQL'
-DROP TABLE IF EXISTS public.notarx_schema_migrations, public.artifact_gateway_schema_migrations, public.schema_version;
+DROP TABLE IF EXISTS public.notarx_schema_migrations, public.notarx_schema_migrations, public.schema_version;
 SQL
 done
 

@@ -57,7 +57,7 @@ const initial: SiteSettings = {
 };
 
 const uploadedThemePackage: ConsoleThemePackage = {
-  $schema: "https://artifact-gateway.dev/schemas/console-theme-v1.json",
+  $schema: "https://notarx.dev/schemas/console-theme-v1.json",
   schemaVersion: 1,
   id: "twilight-lab",
   name: "Twilight Lab",

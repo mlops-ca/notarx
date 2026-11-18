@@ -18,7 +18,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
-const SnapshotArchiveSchemaVersion = "artifact-gateway.dev/apt-snapshot-export/v1"
+const SnapshotArchiveSchemaVersion = "notarx.dev/apt-snapshot-export/v1"
 
 var (
 	ErrInvalidSnapshotArchiveInput = errors.New("APT snapshot archive input is invalid")

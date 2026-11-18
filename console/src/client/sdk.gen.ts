@@ -3323,7 +3323,7 @@ export const restoreAptRepositorySnapshot = <ThrowOnError extends boolean = fals
     url: '/repositories/{repositoryId}/apt/snapshots/restore',
     ...options,
     headers: {
-        'Content-Type': 'application/vnd.artifact-gateway.apt-snapshot.v1+tar',
+        'Content-Type': 'application/vnd.notarx.apt-snapshot.v1+tar',
         ...options.headers
     }
 });

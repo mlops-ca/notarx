@@ -2,7 +2,7 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-compose=(docker compose --env-file /dev/null --project-name artifact-gateway-integration -f "$root/compose.integration.yml")
+compose=(docker compose --env-file /dev/null --project-name notarx-integration -f "$root/compose.integration.yml")
 
 second_output=$(cd "$root" && "${compose[@]}" run --rm --no-deps migrate 2>&1)
 expected_skips=$(find "$root/migrations" -maxdepth 1 -type f -name '*.sql' | wc -l | tr -d ' ')
@@ -15,9 +15,9 @@ fi
 printf 'Migration no-op check passed: %s applied files were skipped.\n' "$actual_skips"
 
 probe_dir=$(mktemp -d)
-foreign_database=gateway_foreign_schema_test
+foreign_database=notarx_foreign_schema_test
 cleanup() {
-  "${compose[@]}" exec -T postgres dropdb -U gateway --if-exists "$foreign_database" >/dev/null 2>&1 || true
+  "${compose[@]}" exec -T postgres dropdb -U notarx --if-exists "$foreign_database" >/dev/null 2>&1 || true
   rm -rf "$probe_dir"
 }
 trap cleanup EXIT
@@ -39,8 +39,8 @@ printf 'Migration checksum-drift check passed for %s.\n' "$probe_name"
 
 # A database that holds tables but no notarx ledger (another schema) is refused
 # with a clear message instead of failing in the middle of the baseline.
-"${compose[@]}" exec -T postgres createdb -U gateway "$foreign_database"
-"${compose[@]}" exec -T postgres psql -X -U gateway -d "$foreign_database" -v ON_ERROR_STOP=1 -c 'CREATE TABLE hosted_repositories (id integer)' >/dev/null
+"${compose[@]}" exec -T postgres createdb -U notarx "$foreign_database"
+"${compose[@]}" exec -T postgres psql -X -U notarx -d "$foreign_database" -v ON_ERROR_STOP=1 -c 'CREATE TABLE hosted_repositories (id integer)' >/dev/null
 set +e
 foreign_output=$(cd "$root" && "${compose[@]}" run --rm --no-deps --env "PGDATABASE=$foreign_database" migrate 2>&1)
 foreign_status=$?

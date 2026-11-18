@@ -379,7 +379,7 @@ func TestNativeConanCollectionBlocksRestoreAndHTTPReplayBeforeDelete(t *testing.
 		}
 		// A new immutable upload key may be staged, but it cannot revive the
 		// tombstoned identity or acknowledge a successful publication.
-		if response := f.request(t, http.MethodPut, f.base+"/files/"+name, "build-agent", body); response.Code != expected || expected == http.StatusCreated && response.Header().Get("X-Artifact-Gateway-Publish-State") != "open" {
+		if response := f.request(t, http.MethodPut, f.base+"/files/"+name, "build-agent", body); response.Code != expected || expected == http.StatusCreated && response.Header().Get("X-Notarx-Publish-State") != "open" {
 			t.Fatalf("HTTP replay crossed collector fence for %s: %d %s", name, response.Code, response.Body.String())
 		}
 		if response := f.request(t, http.MethodGet, f.base+"/files/"+name, "reader", nil); response.Code != http.StatusNotFound {

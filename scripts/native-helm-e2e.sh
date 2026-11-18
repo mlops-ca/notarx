@@ -16,7 +16,7 @@ work.chmod(0o700)
 base=dict(os.environ)
 env=dict(base)
 docker_ready=False
-label='com.artifact-gateway.helm-e2e.run='+run_id
+label='com.notarx.helm-e2e.run='+run_id
 containers=[];volumes=set();exit_code=1;bounded_process_receipts=[]
 required={
  'TestHelmMemoryGovernanceStoreContract',
@@ -162,7 +162,7 @@ try:
     hashes_by_path={name:hashlib.sha256((root/name).read_bytes()).hexdigest() for name in sorted(set(files)) if name and (root/name).is_file()}
     write_json('source.json',{'head':command(['git','rev-parse','HEAD']).stdout.strip(),'tree':command(['git','rev-parse','HEAD^{tree}']).stdout.strip(),'dirty':bool(command(['git','status','--porcelain']).stdout),'fileHashes':hashes_by_path,'goVersion':command(['go','version']).stdout.strip()})
     password=secrets.token_hex(24);access='helm'+secrets.token_hex(8);secret=secrets.token_hex(24)
-    pg_env=work/'pg.env';pg_env.write_text('POSTGRES_DB=gateway_test\nPOSTGRES_USER=gateway\nPOSTGRES_PASSWORD='+password+'\nPGPASSWORD='+password+'\n')
+    pg_env=work/'pg.env';pg_env.write_text('POSTGRES_DB=notarx_test\nPOSTGRES_USER=notarx\nPOSTGRES_PASSWORD='+password+'\nPGPASSWORD='+password+'\n')
     rust_env=work/'rust.env';rust_env.write_text('RUSTFS_VOLUMES=/data\nRUSTFS_ADDRESS=0.0.0.0:9000\nRUSTFS_CONSOLE_ENABLE=false\nRUSTFS_ACCESS_KEY='+access+'\nRUSTFS_SECRET_KEY='+secret+'\nRUSTFS_RPC_SECRET='+secrets.token_hex(32)+'\n')
     pg=run_id+'-pg';rust=run_id+'-rustfs'
     rust_image='rustfs/rustfs:1.0.0-beta.12@sha256:41fe89380f4120a337790c02af192c3fe7bb55c3edc2e6e9357b487b47c6ab21'
@@ -172,7 +172,7 @@ try:
     while time.monotonic()<deadline:
         remaining=deadline-time.monotonic()
         if remaining<=0:raise RuntimeError('Owned PostgreSQL failed readiness')
-        ready=command(['docker','exec',pg,'psql','-X','-h','127.0.0.1','-U','gateway','-d','gateway_test','-v','ON_ERROR_STOP=1','-Atqc','SELECT 1'],check=False,timeout=remaining)
+        ready=command(['docker','exec',pg,'psql','-X','-h','127.0.0.1','-U','notarx','-d','notarx_test','-v','ON_ERROR_STOP=1','-Atqc','SELECT 1'],check=False,timeout=remaining)
         if time.monotonic()>=deadline:raise RuntimeError('Owned PostgreSQL failed readiness')
         if ready.returncode==0 and ready.stdout.strip()=='1': break
         time.sleep(min(0.5,max(0,deadline-time.monotonic())))
@@ -188,10 +188,10 @@ try:
     else: raise RuntimeError('Owned RustFS failed readiness')
     command(['docker','cp',str(root/'migrations'),pg+':/migrations'])
     migration=(root/'scripts/run-migrations.sh').read_text()
-    migration_args=['docker','exec','-i','--env','PGHOST=127.0.0.1','--env','PGUSER=gateway','--env','PGDATABASE=gateway_test',pg,'sh']
+    migration_args=['docker','exec','-i','--env','PGHOST=127.0.0.1','--env','PGUSER=notarx','--env','PGDATABASE=notarx_test',pg,'sh']
     command(migration_args,input=migration,output='migrations-first.log')
     command(migration_args,input=migration,output='migrations-noop.log')
-    env.update(TEST_DATABASE_URL='postgres://gateway:'+password+'@'+pg_address+'/gateway_test?sslmode=disable',TEST_OBJECT_STORE_ENDPOINT='http://'+rust_address,TEST_OBJECT_STORE_ACCESS_KEY=access,TEST_OBJECT_STORE_SECRET_KEY=secret,HELM_TEST_BINARY=str(binary),HELM_OWNED_EVIDENCE_DIR=str(evidence),NOTARX_REPOSITORY_PRESETS='none')
+    env.update(TEST_DATABASE_URL='postgres://notarx:'+password+'@'+pg_address+'/notarx_test?sslmode=disable',TEST_OBJECT_STORE_ENDPOINT='http://'+rust_address,TEST_OBJECT_STORE_ACCESS_KEY=access,TEST_OBJECT_STORE_SECRET_KEY=secret,HELM_TEST_BINARY=str(binary),HELM_OWNED_EVIDENCE_DIR=str(evidence),NOTARX_REPOSITORY_PRESETS='none')
     env.update(HELM_SDK_NODE=shutil.which('node'),HELM_SDK_PUBLISH_SCRIPT=str(root/'scripts/helm-sdk-publish.ts'))
     result=command(['go','test','-json','-count=1','-p','1','-tags=integration','./internal/protocol/helm','./internal/repository','./internal/format/helm','./internal/helmdistribution','./internal/app','-run','Helm','-timeout','600s'],output='results.jsonl',check=False)
     events=[]
@@ -223,7 +223,7 @@ finally:
     for name in reversed(containers) if docker_ready else []:
         state=inspect(name)
         if state is None: continue
-        if state.get('Config',{}).get('Labels',{}).get('com.artifact-gateway.helm-e2e.run')!=run_id:
+        if state.get('Config',{}).get('Labels',{}).get('com.notarx.helm-e2e.run')!=run_id:
             cleanup_ok=False;remaining.append(name);continue
         command(['docker','logs',name],output=name+'-runtime.log',check=False)
         if command(['docker','rm','--force','--volumes',name],check=False).returncode!=0: cleanup_ok=False

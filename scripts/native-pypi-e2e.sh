@@ -2,7 +2,7 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-temporary=$(mktemp -d /tmp/artifact-gateway-pypi-e2e.XXXXXX)
+temporary=$(mktemp -d /tmp/notarx-pypi-e2e.XXXXXX)
 cleanup() {
   rm -rf -- "$temporary"
 }

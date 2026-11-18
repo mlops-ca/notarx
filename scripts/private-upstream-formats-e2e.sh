@@ -12,7 +12,7 @@ case "$endpoint" in
   unix://*) ;;
   *) printf 'Private upstream acceptance requires a local Docker Unix socket.\n' >&2; exit 1 ;;
 esac
-project="artifact-gateway-private-formats-${BASHPID}-${RANDOM}"
+project="notarx-private-formats-${BASHPID}-${RANDOM}"
 workdir=$(mktemp -d)
 evidence="$root/output/private-upstream-formats-e2e/$project"
 mkdir -p "$evidence" "$workdir/bin"
@@ -22,10 +22,10 @@ cleanup() {
   local result=$?
   trap - EXIT
   local clients
-  clients=$(docker --context "$context" ps -aq --filter "label=io.artifact-gateway.private-formats=$project")
+  clients=$(docker --context "$context" ps -aq --filter "label=io.notarx.private-formats=$project")
   if [[ -n "$clients" ]]; then
     docker --context "$context" rm -f $clients >/dev/null 2>&1 || result=1
-    clients=$(docker --context "$context" ps -aq --filter "label=io.artifact-gateway.private-formats=$project")
+    clients=$(docker --context "$context" ps -aq --filter "label=io.notarx.private-formats=$project")
   fi
   if [[ -n "$clients" ]]; then result=1; fi
   if [[ "$started" == 1 ]]; then "${compose[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || result=1; fi
@@ -172,7 +172,7 @@ started=1
 "${compose[@]}" run --rm --no-deps migrate
 postgres_address=$("${compose[@]}" port postgres 5432)
 rustfs_address=$("${compose[@]}" port rustfs 9000)
-if ! TEST_DATABASE_URL="postgres://gateway:integration-password@${postgres_address}/gateway_test?sslmode=disable" \
+if ! TEST_DATABASE_URL="postgres://notarx:integration-password@${postgres_address}/notarx_test?sslmode=disable" \
 TEST_OBJECT_STORE_ENDPOINT="http://${rustfs_address}" \
 TEST_OBJECT_STORE_ACCESS_KEY=integration-rustfs \
 TEST_OBJECT_STORE_SECRET_KEY=integration-password \

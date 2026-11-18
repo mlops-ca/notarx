@@ -98,7 +98,7 @@ describe("protocol detail reads", () => {
                 filename: "widget-1.0.0.tar.gz",
                 url: "widget.tar.gz",
                 hashes: { sha256: "a".repeat(64) },
-                "_artifact-gateway": {
+                "_notarx": {
                   version: "1.0.0",
                   "created-at": "2026-08-01T00:00:00Z",
                 },

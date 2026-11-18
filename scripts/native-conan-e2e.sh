@@ -6,7 +6,7 @@ for binary in python3 docker go; do
   command -v "$binary" >/dev/null || { printf 'Native Conan E2E requires %s\n' "$binary" >&2; exit 1; }
 done
 workdir=$(mktemp -d)
-project="artifact-gateway-conan-$$-${RANDOM}"
+project="notarx-conan-$$-${RANDOM}"
 evidence="$repo_root/output/nexus-conan-migration-e2e/$project"
 mkdir -p "$evidence"
 python3 - "$workdir/compose.conan.yml" <<'PY'
@@ -56,7 +56,7 @@ started=1
 "${compose[@]}" run --rm --no-deps migrate
 postgres_address=$("${compose[@]}" port postgres 5432)
 rustfs_address=$("${compose[@]}" port rustfs 9000)
-export TEST_DATABASE_URL="postgres://gateway:integration-password@${postgres_address}/gateway_test?sslmode=disable"
+export TEST_DATABASE_URL="postgres://notarx:integration-password@${postgres_address}/notarx_test?sslmode=disable"
 export TEST_OBJECT_STORE_ENDPOINT="http://${rustfs_address}"
 export TEST_OBJECT_STORE_ACCESS_KEY=integration-rustfs
 export TEST_OBJECT_STORE_SECRET_KEY=integration-password

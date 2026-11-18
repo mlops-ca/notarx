@@ -52,7 +52,7 @@ func TestPostgresRustFSConanNativeClientRestartAndColdInstall(t *testing.T) {
 		project, file := os.Getenv("TEST_CONAN_COMPOSE_PROJECT"), os.Getenv("TEST_CONAN_COMPOSE_FILE")
 		override := os.Getenv("TEST_CONAN_COMPOSE_OVERRIDE")
 		if project != "" || os.Getenv("CONAN_PERSISTENCE_REQUIRED") == "1" {
-			if !strings.HasPrefix(project, "artifact-gateway-conan-") || file == "" || !filepath.IsAbs(file) || filepath.Base(file) != "compose.integration.yml" || !filepath.IsAbs(override) || filepath.Base(override) != "compose.conan.yml" {
+			if !strings.HasPrefix(project, "notarx-conan-") || file == "" || !filepath.IsAbs(file) || filepath.Base(file) != "compose.integration.yml" || !filepath.IsAbs(override) || filepath.Base(override) != "compose.conan.yml" {
 				t.Fatal("refuse to restart an unowned Conan fixture")
 			}
 

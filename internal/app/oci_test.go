@@ -19,13 +19,13 @@ import (
 )
 
 func TestOCIChallengeUsesForwardedHTTPSScheme(t *testing.T) {
-	request := httptest.NewRequest(http.MethodGet, "http://artifact-gateway.example.com/v2/", nil)
+	request := httptest.NewRequest(http.MethodGet, "http://notarx.example.com/v2/", nil)
 	request.Header.Set("X-Forwarded-Proto", "https")
 	response := httptest.NewRecorder()
 
 	writeOCIChallenge(response, request)
 
-	if got := response.Header().Get("WWW-Authenticate"); !strings.Contains(got, `realm="https://artifact-gateway.example.com/auth/token"`) {
+	if got := response.Header().Get("WWW-Authenticate"); !strings.Contains(got, `realm="https://notarx.example.com/auth/token"`) {
 		t.Fatalf("HTTPS proxy challenge = %q", got)
 	}
 }

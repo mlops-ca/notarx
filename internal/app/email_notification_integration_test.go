@@ -150,7 +150,7 @@ func TestPostgresAdministratorEmailReopensAndDeliversActualTLSMIME(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if message.Header.Get("Message-ID") != "<"+delivery.EventID+"@artifact-gateway.invalid>" {
+	if message.Header.Get("Message-ID") != "<"+delivery.EventID+"@notarx.invalid>" {
 		t.Fatal("unstable message identity")
 	}
 	_, params, err := mime.ParseMediaType(message.Header.Get("Content-Type"))

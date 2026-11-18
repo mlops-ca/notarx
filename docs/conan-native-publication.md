@@ -124,8 +124,8 @@ the last reference can schedule a deterministic successor job (#422). Repeated
 or concurrent scheduling for the same completed predecessor converges on one
 successor and retains the original job history.
 
-Successful PUTs return `X-Artifact-Gateway-Publish-Session` and
-`X-Artifact-Gateway-Publish-State` (`open` or `committed`). The management session
+Successful PUTs return `X-Notarx-Publish-Session` and
+`X-Notarx-Publish-State` (`open` or `committed`). The management session
 GET can inspect that same session. Management object PUT/commit cannot mutate a
 native session or bypass its manifest validation. Console artifact views show
 only committed revisions. Expanding a Conan `publish` audit shows its persisted

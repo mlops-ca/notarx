@@ -13,7 +13,7 @@ case "$object_driver" in
     fs_root=${NOTARX_OBJECT_STORE_FS_ROOT:?set NOTARX_OBJECT_STORE_FS_ROOT to the filesystem object root}
     [[ -r "$fs_root" && -w "$fs_root" && -x "$fs_root" ]] || { printf '%s\n' "$fs_root is not readable and writable by this user; run the restore as the Gateway's user or root." >&2; exit 1; }
     if ! "${compose[@]}" config 2>/dev/null | grep -Eq 'NOTARX_OBJECT_STORE_DRIVER: "?filesystem"?'; then
-      printf '%s\n' "$compose_file does not configure the gateway service with NOTARX_OBJECT_STORE_DRIVER=filesystem." >&2
+      printf '%s\n' "$compose_file does not configure the notarx service with NOTARX_OBJECT_STORE_DRIVER=filesystem." >&2
       exit 1
     fi
     test -f "$backup_dir/objects-fs.tar" || { printf '%s\n' "$backup_dir has no objects-fs.tar; was it made with NOTARX_OBJECT_STORE_DRIVER=filesystem?" >&2; exit 1; }
@@ -23,17 +23,17 @@ esac
 shasum -a 256 --check "$backup_dir/SHA256SUMS"
 
 if [[ "$object_driver" == s3 ]]; then
-  "${compose[@]}" stop gateway rustfs
+  "${compose[@]}" stop notarx rustfs
 else
-  "${compose[@]}" stop gateway
+  "${compose[@]}" stop notarx
 fi
 # pg_restore --clean drops each partition's inherited primary key constraint and
 # fails on partitioned tables (the audit tables, ADR 0023), so reset the schema
 # explicitly and restore into the empty database.
 "${compose[@]}" exec -T postgres \
-  psql -U gateway -d gateway -v ON_ERROR_STOP=1 -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+  psql -U notarx -d notarx -v ON_ERROR_STOP=1 -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
 "${compose[@]}" exec -T postgres \
-  pg_restore -U gateway -d gateway --exit-on-error <"$backup_dir/gateway.dump"
+  pg_restore -U notarx -d notarx --exit-on-error <"$backup_dir/notarx.dump"
 if [[ "$object_driver" == s3 ]]; then
   rustfs_container=$("${compose[@]}" ps -aq rustfs)
   test -n "$rustfs_container"
@@ -56,20 +56,20 @@ fi
 # Starting through Compose re-evaluates the completed migrate dependency on
 # some Compose releases. The restored dump already contains its schema, so
 # restart only the existing Gateway container.
-gateway_container=$("${compose[@]}" ps -aq gateway)
-test -n "$gateway_container"
-docker start "$gateway_container" >/dev/null
+notarx_container=$("${compose[@]}" ps -aq notarx)
+test -n "$notarx_container"
+docker start "$notarx_container" >/dev/null
 ready_status=000
-gateway_url=
+notarx_url=
 for _ in $(seq 1 80); do
-  gateway_binding=$("${compose[@]}" port gateway 8080 | tail -n 1)
-  if [[ -n "$gateway_binding" ]]; then
-    gateway_url="http://127.0.0.1:${gateway_binding##*:}"
+  notarx_binding=$("${compose[@]}" port notarx 8080 | tail -n 1)
+  if [[ -n "$notarx_binding" ]]; then
+    notarx_url="http://127.0.0.1:${notarx_binding##*:}"
     ready_status=$(curl --noproxy '*' --silent --show-error --output /dev/null --write-out '%{http_code}' \
-      --max-time 2 "$gateway_url/readyz" 2>/dev/null || true)
+      --max-time 2 "$notarx_url/readyz" 2>/dev/null || true)
     [[ "$ready_status" == 204 ]] && break
   fi
   sleep 0.25
 done
-[[ "$ready_status" == 204 ]] || { printf 'Restored Gateway readiness returned HTTP %s at %s.\n' "$ready_status" "${gateway_url:-unresolved endpoint}" >&2; exit 1; }
+[[ "$ready_status" == 204 ]] || { printf 'Restored Gateway readiness returned HTTP %s at %s.\n' "$ready_status" "${notarx_url:-unresolved endpoint}" >&2; exit 1; }
 printf 'Restore completed from: %s\n' "$backup_dir"

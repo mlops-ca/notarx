@@ -94,7 +94,7 @@ func TestOTLPOutputMapsSameRedactedEventToOfficialHTTPProtobuf(t *testing.T) {
 		t.Fatalf("unexpected resources: %v", &request)
 	}
 	resource := wireAttributes(request.ResourceLogs[0].Resource.Attributes)
-	if resource["service.name"].GetStringValue() != "artifact-gateway" || resource["service.instance.id"].GetStringValue() != "synthetic-instance" {
+	if resource["service.name"].GetStringValue() != "notarx" || resource["service.instance.id"].GetStringValue() != "synthetic-instance" {
 		t.Fatalf("resource = %v", resource)
 	}
 	event := request.ResourceLogs[0].ScopeLogs[0].LogRecords[0]

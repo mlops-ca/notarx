@@ -78,7 +78,7 @@ func newFileOutput(options FileOptions, operations fileOperations) (*Output, err
 	if err := os.MkdirAll(options.Directory, 0o700); err != nil {
 		return nil, err
 	}
-	directory, err := os.MkdirTemp(options.Directory, "gateway-")
+	directory, err := os.MkdirTemp(options.Directory, "notarx-")
 	if err != nil {
 		return nil, err
 	}

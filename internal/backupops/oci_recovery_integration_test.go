@@ -19,7 +19,7 @@ import (
 )
 
 const registryFixtureImage = "registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373"
-const registryFixtureLabel = "artifact-gateway.recovery-test-owner"
+const registryFixtureLabel = "notarx.recovery-test-owner"
 
 type registryFixture struct {
 	docker                                               Docker
@@ -100,14 +100,14 @@ func integrationOCIRelease(t *testing.T, ctx context.Context, d Docker, release 
 	}
 	dir := t.TempDir()
 	binary, err := os.ReadFile(filepath.Join(release.Directory, "notarx"))
-	if err != nil || os.WriteFile(filepath.Join(dir, "gateway"), binary, 0555) != nil {
+	if err != nil || os.WriteFile(filepath.Join(dir, "notarx"), binary, 0555) != nil {
 		t.Fatal("OCI fixture binary staging failed")
 	}
 	runtimeImage, err := binaryRuntimeImage(release.Identity.Artifact.Platform)
 	if err != nil {
 		t.Fatal(err)
 	}
-	dockerfile := fmt.Sprintf("FROM %s\nLABEL %s=%q org.opencontainers.image.version=%q org.opencontainers.image.revision=%q\nCOPY gateway /gateway\nENTRYPOINT [\"/gateway\"]\n", runtimeImage, registryFixtureLabel, f.owner, release.Identity.Version, release.Identity.Revision)
+	dockerfile := fmt.Sprintf("FROM %s\nLABEL %s=%q org.opencontainers.image.version=%q org.opencontainers.image.revision=%q\nCOPY notarx /notarx\nENTRYPOINT [\"/notarx\"]\n", runtimeImage, registryFixtureLabel, f.owner, release.Identity.Version, release.Identity.Revision)
 	if os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte(dockerfile), 0600) != nil {
 		t.Fatal("OCI fixture Dockerfile staging failed")
 	}
@@ -294,7 +294,7 @@ func fixtureBackupCommand(t *testing.T, ctx context.Context, action string, spec
 
 func verifyFixtureGatewayImage(t *testing.T, ctx context.Context, target *OwnedTarget, release Release) {
 	t.Helper()
-	c := fixtureContainerInspection(t, ctx, target.spec.Docker, target.resourceID("container", target.spec.Project+"-gateway"))
+	c := fixtureContainerInspection(t, ctx, target.spec.Docker, target.resourceID("container", target.spec.Project+"-notarx"))
 	// Only the filesystem driver mounts anything: its object root.
 	wantMounts := 0
 	if target.spec.filesystem() {
@@ -308,7 +308,7 @@ func verifyFixtureGatewayImage(t *testing.T, ctx context.Context, target *OwnedT
 	if err != nil || json.Unmarshal(data, &actual) != nil || len(actual) != 1 || actual[0].Image != release.imageID {
 		t.Fatal("OCI Gateway actual image ID differs from observed release")
 	}
-	port, err := target.port(ctx, "gateway", "8080/tcp")
+	port, err := target.port(ctx, "notarx", "8080/tcp")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -354,7 +354,7 @@ func verifyOCIIdentityRejections(t *testing.T, ctx context.Context, d Docker, bu
 			if code != 1 || r.Status != "failed" || r.Reason != "release_schema_mismatch" {
 				t.Fatalf("OCI identity accepted or failed after target creation: %+v exit=%d", r, code)
 			}
-			for _, entry := range []struct{ kind, suffix string }{{"container", "postgres"}, {"container", "rustfs"}, {"container", "gateway"}, {"volume", "pgdata"}, {"volume", "objects"}, {"network", "network"}} {
+			for _, entry := range []struct{ kind, suffix string }{{"container", "postgres"}, {"container", "rustfs"}, {"container", "notarx"}, {"volume", "pgdata"}, {"volume", "objects"}, {"network", "network"}} {
 				if _, err := d.output(ctx, entry.kind, "inspect", candidate.Project+"-"+entry.suffix); err == nil {
 					t.Fatal("rejected OCI identity created target resource")
 				}

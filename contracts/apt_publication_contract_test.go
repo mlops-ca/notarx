@@ -41,7 +41,7 @@ func TestAPTPublicationManagementContract(t *testing.T) {
 		requireResponse(t, archive, status)
 	}
 	response := archive.Responses.Value("200").Value
-	if response.Content["application/vnd.artifact-gateway.apt-snapshot.v1+tar"] == nil || response.Headers["Content-Length"] == nil || response.Headers["Content-Disposition"] == nil {
+	if response.Content["application/vnd.notarx.apt-snapshot.v1+tar"] == nil || response.Headers["Content-Length"] == nil || response.Headers["Content-Disposition"] == nil {
 		t.Fatal("APT archive binary response and completion headers are required")
 	}
 	snapshot := spec.Components.Schemas["APTRepositorySnapshot"]

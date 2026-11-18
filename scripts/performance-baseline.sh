@@ -49,11 +49,11 @@ if [[ $(printf '%s\n' "${ports[@]}" | sort -u | wc -l | tr -d ' ') != 6 ]]; then
   exit 1
 fi
 
-project=${NOTARX_PERF_PROJECT:-artifact-gateway-perf-$(date -u +%Y%m%d%H%M%S)-$$}
+project=${NOTARX_PERF_PROJECT:-notarx-perf-$(date -u +%Y%m%d%H%M%S)-$$}
 # The baseline inspects the image Compose builds for this project.
-export NOTARX_IMAGE="${project}-gateway"
-if [[ ! "$project" =~ ^artifact-gateway-perf-[a-z0-9-]+$ ]]; then
-  printf 'NOTARX_PERF_PROJECT must start with artifact-gateway-perf-: %s\n' "$project" >&2
+export NOTARX_IMAGE="${project}-notarx"
+if [[ ! "$project" =~ ^notarx-perf-[a-z0-9-]+$ ]]; then
+  printf 'NOTARX_PERF_PROJECT must start with notarx-perf-: %s\n' "$project" >&2
   exit 1
 fi
 
@@ -61,7 +61,7 @@ if [[ -n ${NOTARX_PERF_OUTPUT_DIR:-} ]]; then
   output_dir=$NOTARX_PERF_OUTPUT_DIR
   mkdir -p "$output_dir"
 else
-  output_dir=$(mktemp -d "${TMPDIR:-/tmp}/artifact-gateway-performance.XXXXXX")
+  output_dir=$(mktemp -d "${TMPDIR:-/tmp}/notarx-performance.XXXXXX")
 fi
 output_dir=$(cd "$output_dir" && pwd)
 private_dir="$output_dir/.private"
@@ -82,7 +82,7 @@ cleanup() {
   set +e
   if [[ $exit_code != 0 ]]; then
     if [[ $stack_started == 1 ]]; then
-      "${compose[@]}" logs --no-color gateway >"$output_dir/gateway-failure.log" 2>&1 || true
+      "${compose[@]}" logs --no-color notarx >"$output_dir/notarx-failure.log" 2>&1 || true
     fi
     if [[ -f "$private_dir/raw-upstream.log" ]]; then
       cp "$private_dir/raw-upstream.log" "$output_dir/raw-upstream-failure.log"
@@ -137,12 +137,12 @@ chmod 644 "$upstream_cert"
 # shellcheck disable=SC2016
 printf '%s\n' \
   'services:' \
-  '  gateway:' \
+  '  notarx:' \
   '    environment:' \
   '      NO_PROXY: postgres,rustfs,127.0.0.1,localhost' \
-  '      SSL_CERT_FILE: /tmp/artifact-gateway-performance-ca.crt' \
+  '      SSL_CERT_FILE: /tmp/notarx-performance-ca.crt' \
   '    volumes:' \
-  '      - "${NOTARX_PERF_CA_FILE}:/tmp/artifact-gateway-performance-ca.crt:ro"' >"$compose_override"
+  '      - "${NOTARX_PERF_CA_FILE}:/tmp/notarx-performance-ca.crt:ro"' >"$compose_override"
 printf '%s\n' 'ok' >"$upstream_dir/healthz"
 python3 - "$raw_upstream_port" "$raw_proxy_port" "$upstream_dir" "$upstream_cert" "$upstream_key" >"$private_dir/raw-upstream.log" 2>&1 <<'PY' &
 import functools
@@ -277,19 +277,19 @@ printf '%s\n' 'Building and starting the isolated Gateway/PostgreSQL/RustFS core
 stack_started=1
 "${compose[@]}" up -d --build --wait --remove-orphans
 
-gateway_id=$("${compose[@]}" ps -q gateway)
+notarx_id=$("${compose[@]}" ps -q notarx)
 postgres_id=$("${compose[@]}" ps -q postgres)
 rustfs_id=$("${compose[@]}" ps -q rustfs)
-for container_id in "$gateway_id" "$postgres_id" "$rustfs_id"; do
+for container_id in "$notarx_id" "$postgres_id" "$rustfs_id"; do
   if [[ -z "$container_id" ]]; then
     printf '%s\n' 'Core stack did not expose all expected containers.' >&2
     exit 1
   fi
 done
 
-gateway_url="http://127.0.0.1:${NOTARX_HTTP_PORT}"
-expect_http 204 GET "$gateway_url/livez" "$private_dir/livez.out"
-expect_http 204 GET "$gateway_url/readyz" "$private_dir/readyz.out"
+notarx_url="http://127.0.0.1:${NOTARX_HTTP_PORT}"
+expect_http 204 GET "$notarx_url/livez" "$private_dir/livez.out"
+expect_http 204 GET "$notarx_url/readyz" "$private_dir/readyz.out"
 
 {
   worktree_dirty=false
@@ -304,22 +304,22 @@ expect_http 204 GET "$gateway_url/readyz" "$private_dir/readyz.out"
   printf 'docker=%s\n' "$(docker version --format 'client={{.Client.Version}} server={{.Server.Version}}')"
   docker info --format 'docker_server_arch={{.Architecture}} docker_server_cpus={{.NCPU}} docker_server_memory_bytes={{.MemTotal}}'
   printf 'compose_project=%s\n' "$project"
-  printf 'core_services=gateway,postgres,rustfs\n'
+  printf 'core_services=notarx,postgres,rustfs\n'
   printf 'raw_upstream=https://host.docker.internal:%s\n' "$raw_upstream_port"
   printf 'raw_egress_proxy=http://host.docker.internal:%s\n' "$raw_proxy_port"
 } >"$output_dir/environment.txt"
 
 printf '%s\n' 'Measuring the shipped stripped Linux binaries and the runtime image...'
 printf 'component,os,arch,form,bytes,mib\n' >"$output_dir/artifact-sizes.csv"
-# The binaries are copied out of the runtime image the gateway was built into, so
+# The binaries are copied out of the runtime image the notarx was built into, so
 # they are the shipped bytes of the image's own (native) architecture; nothing is
 # cross-compiled (ADR 0016).
-gateway_image="${project}-gateway"
-image_arch=$(docker image inspect --format '{{.Architecture}}' "$gateway_image")
-extract_id=$(docker create "$gateway_image")
-for component in gateway healthcheck; do
+notarx_image="${project}-notarx"
+image_arch=$(docker image inspect --format '{{.Architecture}}' "$notarx_image")
+extract_id=$(docker create "$notarx_image")
+for component in notarx healthcheck; do
   image_path=/notarx
-  [[ "$component" == healthcheck ]] && image_path=/gateway-healthcheck
+  [[ "$component" == healthcheck ]] && image_path=/notarx-healthcheck
   binary_file="$private_dir/${component}-linux-${image_arch}"
   docker cp "$extract_id:$image_path" "$binary_file"
   binary_bytes=$(wc -c <"$binary_file" | tr -d ' ')
@@ -330,18 +330,18 @@ for component in gateway healthcheck; do
 done
 docker rm "$extract_id" >/dev/null
 
-image_bytes=$(docker image inspect --format '{{.Size}}' "$gateway_image")
-image_archive="$private_dir/gateway-image.tar.gz"
-docker save "$gateway_image" | gzip -1 >"$image_archive"
+image_bytes=$(docker image inspect --format '{{.Size}}' "$notarx_image")
+image_archive="$private_dir/notarx-image.tar.gz"
+docker save "$notarx_image" | gzip -1 >"$image_archive"
 archive_bytes=$(wc -c <"$image_archive" | tr -d ' ')
-printf 'gateway-runtime-image,linux,%s,uncompressed-content,%s,%s\n' "$image_arch" "$image_bytes" "$(bytes_to_mib "$image_bytes")" >>"$output_dir/artifact-sizes.csv"
-printf 'gateway-runtime-image,linux,%s,docker-save-gzip-1,%s,%s\n' "$image_arch" "$archive_bytes" "$(bytes_to_mib "$archive_bytes")" >>"$output_dir/artifact-sizes.csv"
+printf 'notarx-runtime-image,linux,%s,uncompressed-content,%s,%s\n' "$image_arch" "$image_bytes" "$(bytes_to_mib "$image_bytes")" >>"$output_dir/artifact-sizes.csv"
+printf 'notarx-runtime-image,linux,%s,docker-save-gzip-1,%s,%s\n' "$image_arch" "$archive_bytes" "$(bytes_to_mib "$archive_bytes")" >>"$output_dir/artifact-sizes.csv"
 
 capture_snapshot() {
   local output=$1 sample=$2 service container_id line usage cpu memory
-  for service in gateway postgres rustfs; do
+  for service in notarx postgres rustfs; do
     case "$service" in
-      gateway) container_id=$gateway_id ;;
+      notarx) container_id=$notarx_id ;;
       postgres) container_id=$postgres_id ;;
       rustfs) container_id=$rustfs_id ;;
     esac
@@ -369,14 +369,14 @@ sleep 15
 sample_fixed "$output_dir/idle-stats.csv" "$idle_samples"
 
 repository_response="$private_dir/repository.json"
-expect_http 201 POST "$gateway_url/api/v2/repositories" "$repository_response" \
+expect_http 201 POST "$notarx_url/api/v2/repositories" "$repository_response" \
   -H "Authorization: Bearer $admin_token" \
   -H 'Content-Type: application/json' \
   -H 'Idempotency-Key: performance-baseline-raw-repository' \
   --data '{"name":"perf-raw","format":"raw","type":"hosted"}'
 jq -e '.id | strings | length > 0' "$repository_response" >/dev/null
 proxy_repository_response="$private_dir/proxy-repository.json"
-expect_http 201 POST "$gateway_url/api/v2/repositories" "$proxy_repository_response" \
+expect_http 201 POST "$notarx_url/api/v2/repositories" "$proxy_repository_response" \
   -H "Authorization: Bearer $admin_token" \
   -H 'Content-Type: application/json' \
   -H 'Idempotency-Key: performance-baseline-raw-proxy-repository' \
@@ -385,12 +385,12 @@ jq -e '.id | strings | length > 0' "$proxy_repository_response" >/dev/null
 
 payload="$private_dir/payload-64k.bin"
 dd if=/dev/urandom of="$payload" bs=65536 count=1 status=none
-raw_url="$gateway_url/raw/perf-raw/performance/payload-64k.bin"
+raw_url="$notarx_url/raw/perf-raw/performance/payload-64k.bin"
 expect_http 201 PUT "$raw_url" "$private_dir/upload.out" \
   -H "Authorization: Bearer $admin_token" \
   -H 'Content-Type: application/octet-stream' \
   --data-binary "@$payload"
-metadata_url="$gateway_url/api/v2/repositories"
+metadata_url="$notarx_url/api/v2/repositories"
 expect_http 200 GET "$metadata_url" "$private_dir/metadata-warmup.json" -H "Authorization: Bearer $admin_token"
 expect_http 200 GET "$raw_url" "$private_dir/raw-warmup.bin" -H "Authorization: Bearer $admin_token"
 cmp "$payload" "$private_dir/raw-warmup.bin"
@@ -398,8 +398,8 @@ cmp "$payload" "$private_dir/raw-warmup.bin"
 mkdir -p "$upstream_dir/performance"
 large_payload="$upstream_dir/performance/payload-${raw_large_mib}m.bin"
 dd if=/dev/urandom of="$large_payload" bs=1048576 count="$raw_large_mib" status=none
-raw_large_url="$gateway_url/raw/perf-raw/performance/payload-${raw_large_mib}m.bin"
-raw_proxy_cold_url="$gateway_url/raw/perf-raw-proxy/performance/payload-${raw_large_mib}m.bin"
+raw_large_url="$notarx_url/raw/perf-raw/performance/payload-${raw_large_mib}m.bin"
+raw_proxy_cold_url="$notarx_url/raw/perf-raw-proxy/performance/payload-${raw_large_mib}m.bin"
 expect_http 201 PUT "$raw_large_url" "$private_dir/upload-large.out" \
   -H "Authorization: Bearer $admin_token" \
   -H 'Content-Type: application/octet-stream' \
@@ -509,7 +509,7 @@ summarize_service() {
   ' "$file" >>"$output_dir/resource-summary.csv"
 }
 
-for service in gateway postgres rustfs; do
+for service in notarx postgres rustfs; do
   summarize_service idle "$output_dir/idle-stats.csv" "$service"
   summarize_service "metadata-c${high_concurrency}" "$output_dir/load-stats-metadata-c${high_concurrency}.csv" "$service"
   summarize_service "raw-64k-c${high_concurrency}" "$output_dir/load-stats-raw-64k-c${high_concurrency}.csv" "$service"
@@ -517,13 +517,13 @@ for service in gateway postgres rustfs; do
   summarize_service "raw-proxy-cold-${raw_large_mib}m-c${raw_proxy_cold_concurrency}" "$output_dir/load-stats-raw-proxy-cold-${raw_large_mib}m-c${raw_proxy_cold_concurrency}.csv" "$service"
 done
 
-expect_http 204 GET "$gateway_url/livez" "$private_dir/livez-after-load.out"
-expect_http 204 GET "$gateway_url/readyz" "$private_dir/readyz-after-load.out"
-gateway_logs="$private_dir/gateway.log"
-"${compose[@]}" logs --no-color gateway >"$gateway_logs"
-if rg -i 'panic|fatal' "$gateway_logs" >/dev/null 2>&1; then
+expect_http 204 GET "$notarx_url/livez" "$private_dir/livez-after-load.out"
+expect_http 204 GET "$notarx_url/readyz" "$private_dir/readyz-after-load.out"
+notarx_logs="$private_dir/notarx.log"
+"${compose[@]}" logs --no-color notarx >"$notarx_logs"
+if rg -i 'panic|fatal' "$notarx_logs" >/dev/null 2>&1; then
   printf '%s\n' 'Gateway logs contain panic or fatal output after the benchmark.' >&2
-  rg -in 'panic|fatal' "$gateway_logs" >&2
+  rg -in 'panic|fatal' "$notarx_logs" >&2
   exit 1
 fi
 
