@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Identity gate (ADR 0013, "Identity", slice 9). Fails when an upstream identity
 # string appears in a tracked file outside the allow-list: the upstream owner,
-# the upstream product name in its kebab, snake and spaced spellings, the old env prefix,
+# the upstream product name in its kebab, snake, spaced and camel spellings, the old env prefix,
 # the old CLI name and the old metric/ledger prefix.
 #
 # Usage: scripts/identity-check.sh [--root DIR] [--list-base | --list-extra]
@@ -43,6 +43,9 @@ extra_allow=(
   $'internal/backupops/release_module_test.go\tCovers the pre-fork module path verification above.'
   $'internal/backupops/testdata/published-native-provenance.json\tProvenance of pre-fork published release archives used by recovery tests.'
   $'scripts/published-native-backup-test.sh\tDownloads those pre-fork published release archives from the upstream repository.'
+  $'migrations/000001_baseline.sql\tThe generated baseline keeps the pre-fork column defaults; migration 000013 changes them.'
+  $'migrations/000013_brand_defaults.sql\tMoves stored pre-fork default names to the notarx ones, so it names the old default.'
+  $'internal/refaptsigner/testdata\tSigned APT fixtures; editing the Origin field would break their signatures.'
   $'scripts/rename-module.sh\tThe cherry-pick rewrite tool (ADR 0013 Relationship with upstream) must name the old identity.'
   $'internal/refaptsigner/testdata\tSigned legacy fixtures: rewriting the Origin line would break their signatures.'
   $'migrations/000001_baseline.sql\tAn applied migration is immutable; migration 000011 moves the stored default site name.'
@@ -55,7 +58,7 @@ case "$mode" in
   extra) printf '%s\n' "${extra_allow[@]}"; exit 0 ;;
 esac
 
-pattern='ccsert|artifact-gateway|artifact_gateway|[Aa]rtifact [Gg]ateway|ARTIFACT GATEWAY|GATEWAY_|agctl|gateway_'
+pattern='ccsert|[Aa]rtifact[ _-]?[Gg]ateway|ARTIFACT GATEWAY|artifact_gateway|GATEWAY_|agctl|gateway_'
 
 specs=(.)
 for entry in "${base_allow[@]}"; do specs+=(":(exclude)$entry"); done

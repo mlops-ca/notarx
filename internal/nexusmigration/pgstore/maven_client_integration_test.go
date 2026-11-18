@@ -260,7 +260,7 @@ func migrationResolverPlugin(t *testing.T, ctx context.Context, root string, env
 	migrationClientCommand(t, ctx, filepath.Join(javaHome, "bin", "javac"), root, environment, "--release", "17", "-classpath", apis[0], "-d", classes, source)
 	var archive bytes.Buffer
 	jar := zip.NewWriter(&archive)
-	for name, path := range map[string]string{"com/artifactgateway/fixture/ResolveMojo.class": filepath.Join(classes, "com", "artifactgateway", "fixture", "ResolveMojo.class"), "META-INF/maven/plugin.xml": filepath.Join(filepath.Dir(source), "plugin.xml")} {
+	for name, path := range map[string]string{"com/notarx/fixture/ResolveMojo.class": filepath.Join(classes, "com", "notarx", "fixture", "ResolveMojo.class"), "META-INF/maven/plugin.xml": filepath.Join(filepath.Dir(source), "plugin.xml")} {
 		body, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)

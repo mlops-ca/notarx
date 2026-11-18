@@ -388,7 +388,7 @@ for (const mode of ["dark", "light"]) {
           version: "synthetic-1",
           siteName: "notarx",
           logoUrl: "",
-          brandMark: "AG",
+          brandMark: "NX",
           availableThemes: defaultConsoleThemes,
           enabledThemeIds: defaultConsoleThemes.map((theme) => theme.id),
           defaultThemeId: "notarx-dark",

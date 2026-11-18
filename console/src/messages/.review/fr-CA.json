@@ -683,7 +683,7 @@
     "dashboard.7Days": "draft",
     "dashboard.access": "draft",
     "dashboard.anonymous": "draft",
-    "dashboard.artifactGatewayRuntimeAtAGlance": "draft",
+    "dashboard.runtimeAtAGlance": "draft",
     "dashboard.auditEventsUnavailable": "draft",
     "dashboard.capacityStatisticsUnavailable": "draft",
     "dashboard.createARepositoryToSeeRequestsObjectsAnd": "draft",

@@ -187,7 +187,7 @@ func (h v2GroupPyPIHandler) simpleProject(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if stale {
-		w.Header().Set("Warning", `110 Artifact-Gateway "Response is stale"`)
+		w.Header().Set("Warning", `110 notarx "Response is stale"`)
 	}
 	h.native.writeSimpleProject(w, r, project, merged)
 	resolver.auditResolution(r.Context(), group, repository.FormatPyPI, project, strings.ToLower(r.Method), actor, repository.AuditResolved, http.StatusOK)

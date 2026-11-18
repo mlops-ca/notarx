@@ -170,7 +170,7 @@ func (h nativePyPIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if disposition == "stale" {
-				w.Header().Set("Warning", `110 Artifact-Gateway "Response is stale"`)
+				w.Header().Set("Warning", `110 notarx "Response is stale"`)
 			}
 			h.writeSimpleProject(w, r, route.project, files)
 			h.recordAudit(r, repo, route.project, "project", principal.Actor, repository.AuditResolved, http.StatusOK, 0, disposition)

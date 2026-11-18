@@ -200,7 +200,7 @@ export function SiteSettingsPage() {
               value={draft.brandMark}
               maxLength={8}
               status={normalizedDraft.brandMark ? undefined : "error"}
-              placeholder="AG"
+              placeholder="NX"
               onChange={(event) =>
                 setDraft((current) => ({
                   ...current,

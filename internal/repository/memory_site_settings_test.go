@@ -8,7 +8,7 @@ func TestMemorySiteSettingsVersionedReplacement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if current.Version != "1" || current.SiteName != "notarx" || current.BrandMark != "AG" || current.DefaultThemeID != "notarx-dark" || len(current.EnabledThemeIDs) != 2 {
+	if current.Version != "1" || current.SiteName != "notarx" || current.BrandMark != "NX" || current.DefaultThemeID != "notarx-dark" || len(current.EnabledThemeIDs) != 2 {
 		t.Fatalf("defaults = %#v", current)
 	}
 

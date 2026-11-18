@@ -69,7 +69,7 @@ for (const [width, theme] of [
             version: "1",
             siteName: "notarx",
             logoUrl: "",
-            brandMark: "AG",
+            brandMark: "NX",
             enabledThemeIds: defaultConsoleThemes.map((item) => item.id),
             defaultThemeId: theme,
             availableThemes: defaultConsoleThemes,

@@ -49,7 +49,7 @@ const initial: SiteSettings = {
   version: "3",
   siteName: "notarx",
   logoUrl: "",
-  brandMark: "AG",
+  brandMark: "NX",
   enabledThemeIds: ["notarx-dark", "notarx-light"],
   defaultThemeId: "notarx-dark",
   availableThemes: defaultConsoleThemes,
@@ -156,7 +156,7 @@ describe("SiteSettingsPage", () => {
         body: {
           siteName: "Acme Packages",
           logoUrl: "",
-          brandMark: "AG",
+          brandMark: "NX",
           enabledThemeIds: ["notarx-dark", "notarx-light"],
           defaultThemeId: "notarx-dark",
         },
@@ -192,7 +192,7 @@ describe("SiteSettingsPage", () => {
         body: {
           siteName: "notarx",
           logoUrl: "",
-          brandMark: "AG",
+          brandMark: "NX",
           enabledThemeIds: ["notarx-light"],
           defaultThemeId: "notarx-light",
         },
@@ -269,7 +269,7 @@ describe("SiteSettingsPage", () => {
         body: {
           siteName: "notarx",
           logoUrl: "",
-          brandMark: "AG",
+          brandMark: "NX",
           enabledThemeIds: [...initial.enabledThemeIds, uploadedTheme.id],
           defaultThemeId: "notarx-dark",
         },

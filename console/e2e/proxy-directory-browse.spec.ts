@@ -55,7 +55,7 @@ async function mockProxyDirectory(page: Page, format: "maven" | "raw") {
           version: "1",
           siteName: "notarx",
           logoUrl: "",
-          brandMark: "AG",
+          brandMark: "NX",
           enabledThemeIds: defaultConsoleThemes.map((theme) => theme.id),
           defaultThemeId: "notarx-dark",
           availableThemes: defaultConsoleThemes,

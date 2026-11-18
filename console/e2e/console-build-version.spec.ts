@@ -10,7 +10,7 @@ async function mockDiagnostics(page: Page, gatewayVersion: string) {
       json: {
         version: "1",
         siteName: "notarx",
-        brandMark: "AG",
+        brandMark: "NX",
         logoUrl: "",
         enabledThemeIds: ["notarx-dark", "notarx-light"],
         defaultThemeId: "notarx-dark",

@@ -291,7 +291,7 @@ func (h nativeGoHandler) serveList(w http.ResponseWriter, r *http.Request, repo 
 		body.WriteByte('\n')
 	}
 	if disposition == "stale" {
-		w.Header().Set("Warning", `110 Artifact-Gateway "Response is stale"`)
+		w.Header().Set("Warning", `110 notarx "Response is stale"`)
 	}
 	h.writeBytes(w, r, []byte(body.String()), "text/plain; charset=utf-8", "")
 	h.recordAudit(r, repo, modulePath, "list", actor, repository.AuditResolved, http.StatusOK, int64(body.Len()), disposition)

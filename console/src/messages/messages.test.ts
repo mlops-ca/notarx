@@ -112,7 +112,7 @@ describe("message dictionaries", () => {
     }
   });
 
-  it("keep zh-CN a subset of en-CA with the same placeholders", async () => {
+  it("keep zh-CN a subset of en-CA, with no placeholder en-CA lacks", async () => {
     for (const { name, en, zh } of await featureDictionaries()) {
       if (!zh) continue;
       const stale = Object.keys(zh).filter((key) => !(key in en));
@@ -122,7 +122,12 @@ describe("message dictionaries", () => {
       ).toEqual([]);
       for (const [key, message] of Object.entries(zh)) {
         expect(message.trim(), key).not.toBe("");
-        expect(placeholders(message), key).toEqual(placeholders(en[key]));
+        // zh-CN is frozen (ADR 0014): it may spell out a name that en-CA and
+        // fr-CA take from a placeholder, but it may not use one en-CA lacks.
+        const known = placeholders(en[key]);
+        for (const name of placeholders(message)) {
+          expect(known, `${key} {${name}}`).toContain(name);
+        }
       }
     }
   });

@@ -92,7 +92,7 @@ async function mockDefaultSiteSettings(page: Page) {
         version: "1",
         siteName: "notarx",
         logoUrl: "",
-        brandMark: "AG",
+        brandMark: "NX",
         enabledThemeIds: ["notarx-dark", "notarx-light"],
         defaultThemeId: "notarx-dark",
         availableThemes: defaultConsoleThemes,

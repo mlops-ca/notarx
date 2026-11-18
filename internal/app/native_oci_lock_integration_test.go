@@ -191,7 +191,8 @@ func TestPostgresRustFSOCIConcurrentHTTPUploadsKeepMetadataAvailable(t *testing.
 			response, err := request(context.Background(), http.MethodPut, locations[i]+"?digest="+digests[i], bodies[i])
 			if err == nil {
 				if response.StatusCode != http.StatusCreated || response.Header.Get("Docker-Content-Digest") != digests[i] {
-					err = fmt.Errorf("upload %d status=%d digest=%s", i, response.StatusCode, response.Header.Get("Docker-Content-Digest"))
+					detail, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
+					err = fmt.Errorf("upload %d status=%d digest=%s body=%s", i, response.StatusCode, response.Header.Get("Docker-Content-Digest"), detail)
 				}
 				_ = response.Body.Close()
 			}

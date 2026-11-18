@@ -81,18 +81,18 @@ func TestNativeNPMHostedPublishInstallAndAnonymousBrowse(t *testing.T) {
 				Integrity string `json:"integrity"`
 				Shasum    string `json:"shasum"`
 			} `json:"dist"`
-			ArtifactGateway struct {
+			Notarx struct {
 				Digest    string `json:"digest"`
 				Publisher string `json:"publisher"`
 				Size      int64  `json:"size"`
-			} `json:"_artifactGateway"`
+			} `json:"_notarx"`
 		} `json:"versions"`
 	}
 	if err = json.NewDecoder(metadata.Body).Decode(&packument); err != nil {
 		t.Fatal(err)
 	}
 	version := packument.Versions["1.2.3"]
-	if packument.DistTags["latest"] != "1.2.3" || packument.DistTags["next"] != "2.0.0-beta.1" || len(packument.Versions) != 2 || !strings.HasPrefix(version.Dist.Integrity, "sha512-") || len(version.Dist.Shasum) != 40 || !strings.HasSuffix(version.Dist.Tarball, "/npm/npm-releases/@scope/widget/-/widget-1.2.3.tgz") || !strings.HasPrefix(version.ArtifactGateway.Digest, "sha256:") || version.ArtifactGateway.Publisher != "build-agent" || version.ArtifactGateway.Size != int64(len(tarball)) {
+	if packument.DistTags["latest"] != "1.2.3" || packument.DistTags["next"] != "2.0.0-beta.1" || len(packument.Versions) != 2 || !strings.HasPrefix(version.Dist.Integrity, "sha512-") || len(version.Dist.Shasum) != 40 || !strings.HasSuffix(version.Dist.Tarball, "/npm/npm-releases/@scope/widget/-/widget-1.2.3.tgz") || !strings.HasPrefix(version.Notarx.Digest, "sha256:") || version.Notarx.Publisher != "build-agent" || version.Notarx.Size != int64(len(tarball)) {
 		t.Fatalf("packument=%#v", packument)
 	}
 	versionMetadata := httptest.NewRecorder()
@@ -302,19 +302,19 @@ func TestNativeNPMProxyCachesPackumentAndVerifiedTarball(t *testing.T) {
 			Dist struct {
 				Tarball string `json:"tarball"`
 			} `json:"dist"`
-			ArtifactGateway struct {
+			Notarx struct {
 				Source      string `json:"source"`
 				CacheStatus string `json:"cacheStatus"`
 				Digest      string `json:"digest"`
 				Size        *int64 `json:"size"`
-			} `json:"_artifactGateway"`
+			} `json:"_notarx"`
 		} `json:"versions"`
 	}
 	if err = json.NewDecoder(metadata.Body).Decode(&packument); err != nil {
 		t.Fatal(err)
 	}
 	localTarball := packument.Versions[version].Dist.Tarball
-	metadataState := packument.Versions[version].ArtifactGateway
+	metadataState := packument.Versions[version].Notarx
 	if metadataState.Source != "proxy" || metadataState.CacheStatus != "metadata" || metadataState.Digest != "" || metadataState.Size != nil {
 		t.Fatalf("metadata cache state = %#v", metadataState)
 	}
@@ -345,18 +345,18 @@ func TestNativeNPMProxyCachesPackumentAndVerifiedTarball(t *testing.T) {
 	handler.ServeHTTP(cachedMetadata, httptest.NewRequest(http.MethodGet, metadataPath, nil))
 	var cachedPackument struct {
 		Versions map[string]struct {
-			ArtifactGateway struct {
+			Notarx struct {
 				CacheStatus string `json:"cacheStatus"`
 				Digest      string `json:"digest"`
 				Size        int64  `json:"size"`
 				CachedAt    string `json:"cachedAt"`
-			} `json:"_artifactGateway"`
+			} `json:"_notarx"`
 		} `json:"versions"`
 	}
 	if json.NewDecoder(cachedMetadata.Body).Decode(&cachedPackument) != nil {
 		t.Fatal("decode cached packument")
 	}
-	cachedState := cachedPackument.Versions[version].ArtifactGateway
+	cachedState := cachedPackument.Versions[version].Notarx
 	if cachedState.CacheStatus != "cached" || cachedState.Digest == "" || cachedState.Size != int64(len(tarball)) || cachedState.CachedAt == "" {
 		t.Fatalf("cached state = %#v", cachedState)
 	}

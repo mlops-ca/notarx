@@ -1,4 +1,4 @@
-package com.artifactgateway.fixture;
+package com.notarx.fixture;
 
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;

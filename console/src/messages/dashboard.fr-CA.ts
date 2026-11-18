@@ -45,8 +45,8 @@ export const dashboardFrCA: Record<keyof typeof dashboardEnCA, string> = {
     "Les décisions récentes s’affichent ici dès qu’un accès ou une publication est enregistré.",
   "dashboard.loadingAuditEvents": "Chargement des événements d’audit…",
   "dashboard.overview": "Vue d’ensemble",
-  "dashboard.artifactGatewayRuntimeAtAGlance":
-    "Aperçu de l’exécution de notarx",
+  "dashboard.runtimeAtAGlance":
+    "Aperçu de l’exécution de {productName}",
   "dashboard.statisticsWindow": "Période des statistiques",
   "dashboard.1Day": "1 jour",
   "dashboard.7Days": "7 jours",

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -364,7 +365,7 @@ func (h nativeOCIHandler) upload(w http.ResponseWriter, r *http.Request, repo re
 	case http.MethodPatch:
 		upload, err = h.appendUpload(r.Context(), r, upload)
 		if err != nil {
-			writeOCIError(w, 416, "RANGE_INVALID", "upload range is invalid")
+			writeOCIAppendError(w, r, err)
 			return
 		}
 		h.uploadHeaders(w, repo.Name, name, upload)
@@ -373,7 +374,7 @@ func (h nativeOCIHandler) upload(w http.ResponseWriter, r *http.Request, repo re
 		if r.ContentLength != 0 {
 			upload, err = h.appendUpload(r.Context(), r, upload)
 			if err != nil {
-				writeOCIError(w, 416, "RANGE_INVALID", "upload range is invalid")
+				writeOCIAppendError(w, r, err)
 				return
 			}
 		}
@@ -426,9 +427,33 @@ func (h nativeOCIHandler) upload(w http.ResponseWriter, r *http.Request, repo re
 	}
 }
 
+// errOCIUploadOffsetMismatch is the only appendUpload failure that is the
+// client's range error; every other failure is coordination or storage.
+var errOCIUploadOffsetMismatch = errors.New("upload offset mismatch")
+
+// writeOCIAppendError maps an appendUpload failure to its status: 416 only for a
+// real offset mismatch, 404 for an upload that closed or expired meanwhile, 503
+// for a cancelled or timed-out request, and 500 for a store or object failure.
+// The cause is logged, so a transient failure is no longer indistinguishable from
+// a range error.
+func writeOCIAppendError(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, errOCIUploadOffsetMismatch):
+		writeOCIError(w, http.StatusRequestedRangeNotSatisfiable, "RANGE_INVALID", "upload range is invalid")
+	case errors.Is(err, repository.ErrNotFound):
+		writeOCIError(w, http.StatusNotFound, "BLOB_UPLOAD_UNKNOWN", "blob upload unknown to registry")
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		slog.Warn("oci upload append interrupted", "method", r.Method, "error", err)
+		writeOCIError(w, http.StatusServiceUnavailable, "UNKNOWN", "upload append was interrupted")
+	default:
+		slog.Warn("oci upload append failed", "method", r.Method, "error", err)
+		writeOCIError(w, http.StatusInternalServerError, "UNKNOWN", "upload append failed")
+	}
+}
+
 func (h nativeOCIHandler) appendUpload(ctx context.Context, r *http.Request, upload repository.OCIUpload) (repository.OCIUpload, error) {
 	if start, ok := uploadRangeStart(r.Header.Get("Content-Range")); ok && start != upload.Offset {
-		return upload, errors.New("offset mismatch")
+		return upload, errOCIUploadOffsetMismatch
 	}
 	spool, chunkSize, err := spoolObjectAppend(ctx, h.objects, upload.ObjectKey, upload.Offset, r.Body, 1<<30)
 	if err != nil {

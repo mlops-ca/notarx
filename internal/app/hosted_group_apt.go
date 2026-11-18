@@ -69,7 +69,7 @@ func (h v2GroupAPTHandler) serve(w http.ResponseWriter, r *http.Request, resolve
 			continue
 		}
 		if disposition == "stale" {
-			w.Header().Set("Warning", `110 Artifact-Gateway "Response is stale"`)
+			w.Header().Set("Warning", `110 notarx "Response is stale"`)
 		}
 		status, _, writeErr := h.native.writeAsset(w, r, asset)
 		if writeErr != nil {

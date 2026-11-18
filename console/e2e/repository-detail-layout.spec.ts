@@ -59,7 +59,7 @@ async function mockRepositoryDetail(
                 "Minimal frontend service used to validate PipeOne's NPM delivery path.",
               license: "UNLICENSED",
               dist: { integrity: "sha512-example", shasum: "0ea64af013" },
-              _artifactGateway: {
+              _notarx: {
                 digest: npmDigest,
                 publisher: "resolver",
                 size: 4024,

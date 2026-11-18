@@ -1,4 +1,4 @@
-package com.artifactgateway.examples;
+package com.notarx.examples;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

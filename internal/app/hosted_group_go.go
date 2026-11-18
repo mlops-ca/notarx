@@ -119,7 +119,7 @@ func (h v2GroupGoHandler) serveList(w http.ResponseWriter, r *http.Request, reso
 		body.WriteByte('\n')
 	}
 	if stale {
-		w.Header().Set("Warning", `110 Artifact-Gateway "Response is stale"`)
+		w.Header().Set("Warning", `110 notarx "Response is stale"`)
 	}
 	h.native.writeBytes(w, r, []byte(body.String()), "text/plain; charset=utf-8", "")
 	resolver.auditResolution(r.Context(), group, repository.FormatGo, modulePath, strings.ToLower(r.Method), actor, repository.AuditResolved, http.StatusOK)

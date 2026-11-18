@@ -160,8 +160,8 @@ func buildRedirectMavenClientPlugin(t *testing.T, ctx context.Context, mvn, root
 	var archive bytes.Buffer
 	jar := zip.NewWriter(&archive)
 	entries := map[string]string{
-		"com/artifactgateway/fixture/ResolveMojo.class": filepath.Join(classes, "com", "artifactgateway", "fixture", "ResolveMojo.class"),
-		"META-INF/maven/plugin.xml":                     filepath.Join(filepath.Dir(source), "plugin.xml"),
+		"com/notarx/fixture/ResolveMojo.class": filepath.Join(classes, "com", "notarx", "fixture", "ResolveMojo.class"),
+		"META-INF/maven/plugin.xml":            filepath.Join(filepath.Dir(source), "plugin.xml"),
 	}
 	for name, path := range entries {
 		body, err := os.ReadFile(path)
