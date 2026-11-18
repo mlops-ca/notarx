@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/testsupport"
 
 	"github.com/mlops-ca/notarx/internal/capacity"
 )
@@ -368,7 +369,7 @@ func pypiCounterEquality(t *testing.T, ctx context.Context, store *PostgresStore
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _, _ = store.db.Exec(`DELETE FROM hosted_repositories WHERE id=$1`, proxy.ID) })
+	t.Cleanup(func() { testsupport.PurgeRepository(t, store.db, proxy.ID) })
 	listed := PyPIFile{RepositoryID: proxy.ID, SourceVersion: proxy.Version, Project: "widget", Version: "1.0", Filename: "widget-1.0-py3-none-any.whl", FileType: "bdist_wheel", PythonVersion: "py3", Digest: uniqueDigest(), Publisher: "upstream", SourceURL: "https://files.example/widget-1.0-py3-none-any.whl"}
 	if err = store.SyncPyPIProxyFiles(ctx, proxy.ID, "widget", []PyPIFile{listed}); err != nil {
 		t.Fatal(err)
@@ -450,7 +451,7 @@ func npmCounterEquality(t *testing.T, ctx context.Context, store *PostgresStore,
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _, _ = store.db.Exec(`DELETE FROM hosted_repositories WHERE id=$1`, proxy.ID) })
+	t.Cleanup(func() { testsupport.PurgeRepository(t, store.db, proxy.ID) })
 	listed := NPMVersion{Version: "1.0.0", UpstreamTarball: "https://registry.example/widget.tgz", TarballName: "widget.tgz", Manifest: []byte(`{"name":"widget","version":"1.0.0"}`)}
 	if _, err = store.SyncNPMProxyPackage(ctx, NPMPackage{RepositoryID: proxy.ID, SourceVersion: proxy.Version, Name: "widget", SourceEndpoint: proxy.Endpoint, Versions: []NPMVersion{listed}, DistTags: map[string]string{"latest": "1.0.0"}}); err != nil {
 		t.Fatal(err)
@@ -679,7 +680,7 @@ func aptCounterEquality(t *testing.T, ctx context.Context, store *PostgresStore,
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _, _ = store.db.Exec(`DELETE FROM hosted_repositories WHERE id=$1`, proxy.ID) })
+	t.Cleanup(func() { testsupport.PurgeRepository(t, store.db, proxy.ID) })
 	cache := func(path string, size int64, step string) {
 		t.Helper()
 		digest := uniqueDigest()

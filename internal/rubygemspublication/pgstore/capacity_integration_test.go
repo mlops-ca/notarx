@@ -22,6 +22,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/repository"
 	d "github.com/mlops-ca/notarx/internal/rubygemspublication"
 	"github.com/mlops-ca/notarx/internal/rubygemspublication/pgstore"
+	"github.com/mlops-ca/notarx/internal/testsupport"
 	f "github.com/mlops-ca/notarx/internal/testsupport/rubygemsfixture"
 )
 
@@ -79,7 +80,7 @@ func TestRubyGemsCounterEquality(t *testing.T) {
 		if createErr != nil {
 			t.Fatal(createErr)
 		}
-		t.Cleanup(func() { _, _ = db.Exec("DELETE FROM hosted_repositories WHERE id=$1", repo.ID) })
+		t.Cleanup(func() { testsupport.PurgeRepository(t, db, repo.ID) })
 		return repo
 	}
 	store, err := pgstore.New(db, locks)

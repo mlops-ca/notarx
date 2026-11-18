@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/capacity"
 	"github.com/mlops-ca/notarx/internal/repository/explaincheck"
+	"github.com/mlops-ca/notarx/internal/testsupport"
 )
 
 func counterTestStore(t *testing.T) *PostgresStore {
@@ -37,7 +38,7 @@ func counterTestRepository(t *testing.T, store *PostgresStore, format Format) Ho
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _, _ = store.db.Exec(`DELETE FROM hosted_repositories WHERE id=$1`, repo.ID) })
+	t.Cleanup(func() { testsupport.PurgeRepository(t, store.db, repo.ID) })
 	return repo
 }
 

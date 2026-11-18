@@ -155,8 +155,11 @@ calls `capacity.Reserve` as the last statement of its transaction; a positive
 delta that would pass `quota_bytes` is rejected (HTTP 507, as before) and a release
 never is. The overview and quota alert evaluation read the counters, so they cost
 O(repositories). Formats whose writers are not yet covered (the registry in
-`internal/capacity/registry.go` lists each format as pending or covered) keep the
-capacity triggers and aggregate on read until their slice lands.
+`internal/capacity/registry.go` lists each format as pending or covered; Maven and
+Conan are pending) aggregate on read, and every format keeps its capacity trigger
+until a later slice drops the triggers. Helm, NuGet and RubyGems still reserve
+bytes for pending sessions at reservation time, as their store contracts assert, and
+reserve the committed bytes in the counter at commit.
 
 A reconciler recomputes every repository's usage from the asset tables every
 `NOTARX_QUOTA_RECONCILE_INTERVAL` (default `6h`, jittered, in batches of 50 with
