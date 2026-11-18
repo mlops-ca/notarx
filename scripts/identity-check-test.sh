@@ -10,7 +10,7 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
 
-patterns=("cc""sert" "artifact""-gateway" "artifact""_gateway" "GATE""WAY_X" "ag""ctl" "gate""way_total")
+patterns=("cc""sert" "artifact""-gateway" "artifact""_gateway" "GATE""WAY_X" "ag""ctl" "gate""way_total" "Artifact"" Gateway" "artifact"" gateway" "ARTIFACT"" GATEWAY")
 joined=$(printf '%s ' "${patterns[@]}")
 
 repo=""
