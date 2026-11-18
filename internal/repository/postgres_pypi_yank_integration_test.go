@@ -79,9 +79,9 @@ func TestPyPIYankPostgresCrossInstanceAndAuditRollback(t *testing.T) {
 	before := PyPIYankRevision(files)
 	mutation.ExpectedRevision = before
 	mutation.Yanked = false
-	mutation.Audit.Evidence = map[string]string{"rollback": "\x00"}
-	// PostgreSQL jsonb rejects a NUL in the audit evidence. The already-issued
-	// metadata UPDATE must roll back with that failed audit insert.
+	mutation.Audit.Actor = "audit-failure"
+	failAuditsFor(t, second, repo.Name, "audit-failure")
+	// The already-issued metadata UPDATE must roll back with that failed audit insert.
 	if _, err = second.SetPyPIYank(t.Context(), mutation); err == nil {
 		t.Fatal("invalid audit unexpectedly committed")
 	}

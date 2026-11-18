@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"strconv"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/mlops-ca/notarx/internal/requestcontext"
 )
@@ -71,7 +73,41 @@ func withAuditDefaults(ctx context.Context, audit AuditRecord) AuditRecord {
 	if audit.OccurredAt.IsZero() {
 		audit.OccurredAt = time.Now().UTC()
 	}
-	return audit
+	return audit.Sanitized()
+}
+
+// SanitizeAuditText makes client-controlled text storable: PostgreSQL rejects a NUL
+// byte and invalid UTF-8 in text columns (SQLSTATE 22021) and U+0000 in jsonb, so
+// both become U+FFFD. Clean text is returned unchanged without allocating.
+func SanitizeAuditText(text string) string {
+	if utf8.ValidString(text) && !strings.ContainsRune(text, 0) {
+		return text
+	}
+	return strings.Map(func(r rune) rune {
+		if r == 0 {
+			return utf8.RuneError
+		}
+		return r
+	}, strings.ToValidUTF8(text, string(utf8.RuneError)))
+}
+
+// Sanitized returns the record with every text field, the evidence keys and values
+// included, made storable, so a hostile request path cannot make the record vanish.
+func (a AuditRecord) Sanitized() AuditRecord {
+	for _, field := range []*string{&a.GroupName, &a.Repository, &a.MemberName, &a.Actor, &a.Format, &a.Resource,
+		&a.Representation, &a.MemberType, &a.UpstreamHost, &a.Operation, &a.CacheDisposition,
+		&a.AuthorizationSource, &a.AuthorizationReason, &a.RequestID, &a.TraceID} {
+		*field = SanitizeAuditText(*field)
+	}
+	a.Outcome = AuditOutcome(SanitizeAuditText(string(a.Outcome)))
+	if len(a.Evidence) > 0 {
+		clean := make(map[string]string, len(a.Evidence))
+		for key, value := range a.Evidence {
+			clean[SanitizeAuditText(key)] = SanitizeAuditText(value)
+		}
+		a.Evidence = clean
+	}
+	return a
 }
 
 // insertAudit writes the audit row and, in the same transaction when execer is one,
