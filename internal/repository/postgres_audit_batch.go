@@ -131,6 +131,9 @@ func flushUsage(ctx context.Context, execer auditExecer, batch UsageBatch) error
 			return usage[i].Resource < usage[j].Resource
 		})
 		repo, format, resource, actor := make([]string, n), make([]string, n), make([]string, n), make([]string, n)
+		for i := range usage {
+			usage[i].Repository, usage[i].Format, usage[i].Resource, usage[i].LastActor = cleanText(usage[i].Repository), cleanText(usage[i].Format), cleanText(usage[i].Resource), cleanText(usage[i].LastActor)
+		}
 		downloads, size := make([]int64, n), make([]int64, n)
 		first, last := make([]time.Time, n), make([]time.Time, n)
 		for i, u := range usage {
@@ -152,7 +155,7 @@ func flushUsage(ctx context.Context, execer auditExecer, batch UsageBatch) error
 		repo, bucket, outcome := make([]string, n), make([]time.Time, n), make([]int16, n)
 		requests, size := make([]int64, n), make([]int64, n)
 		for i, r := range batch.Rollups {
-			repo[i], bucket[i], outcome[i], requests[i], size[i] = r.Repository, r.BucketStart, int16(r.Outcome), r.Requests, r.Bytes
+			repo[i], bucket[i], outcome[i], requests[i], size[i] = cleanText(r.Repository), r.BucketStart, int16(r.Outcome), r.Requests, r.Bytes
 		}
 		if _, err := execer.ExecContext(ctx, rollupFlushSQL, repo, bucket, outcome, requests, size); err != nil {
 			return err

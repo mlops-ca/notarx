@@ -55,6 +55,33 @@ CREATE TABLE public.repository_request_rollup (
     CONSTRAINT repository_request_rollup_counts_check CHECK (requests >= 0 AND bytes >= 0)
 );
 
+-- Backfill from the audit history so the statistics windows are full after the upgrade.
+-- The outcome mapping mirrors AuditRecord.RequestOutcome.
+INSERT INTO public.repository_request_rollup (repository_id, bucket_start, outcome, requests, bytes)
+SELECT names.id, date_trunc('hour', audit.occurred_at AT TIME ZONE 'UTC') AT TIME ZONE 'UTC',
+       CASE
+         WHEN audit.outcome NOT IN ('access_denied', 'proxy_denied', 'denied') THEN 0
+         WHEN audit.authorization_reason = 'artifact_quarantined' OR audit.authorization_source = 'quarantine_read_policy' THEN 4
+         WHEN audit.http_status = 401 THEN 1
+         WHEN audit.http_status = 403 THEN 2
+         WHEN audit.http_status = 429 THEN 5
+         WHEN audit.http_status IN (402, 413, 507) OR lower(COALESCE(audit.authorization_reason, '')) LIKE '%quota%' THEN 3
+         ELSE 6
+       END::smallint,
+       count(*), COALESCE(sum(audit.bytes), 0)
+  FROM (
+    SELECT repository, format, outcome, occurred_at, http_status, authorization_reason, authorization_source, bytes FROM public.resolver_audit_log
+    UNION ALL
+    SELECT repository, format, outcome, occurred_at, http_status, authorization_reason, authorization_source, bytes FROM public.security_audit_log
+  ) AS audit
+  JOIN (
+    SELECT id, name FROM public.hosted_repositories
+    UNION ALL
+    SELECT id, name FROM public.hosted_groups
+  ) AS names ON names.name = audit.repository
+ WHERE audit.repository <> '' AND audit.format IS DISTINCT FROM 'management'
+ GROUP BY 1, 2, 3;
+
 -- Retention (400 days) deletes by bucket across repositories.
 CREATE INDEX repository_request_rollup_bucket_idx
     ON public.repository_request_rollup USING btree (bucket_start);

@@ -243,6 +243,63 @@ func TestReadModeSyncCommitsEveryRead(t *testing.T) {
 	}
 }
 
+// A record the database rejects on its own is dropped and counted; it does not stall the
+// records behind it.
+func TestPoisonRecordDoesNotBlockTheBatch(t *testing.T) {
+	sink := &poisonSink{fakeSink: &fakeSink{}}
+	w := New(sink, quiet(Config{FlushInterval: time.Hour, UsageFlushInterval: time.Hour}))
+	for _, resource := range []string{"a", "poison", "b"} {
+		_ = w.RecordAudit(context.Background(), download("r", resource))
+	}
+	if err := w.FlushNow(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(sink.inserted); got != 2 || w.Stats().DroppedInvalid != 1 || w.Stats().BufferDepth != 0 {
+		t.Fatalf("inserted=%d stats=%+v", got, w.Stats())
+	}
+}
+
+type poisonSink struct{ *fakeSink }
+
+func (p *poisonSink) InsertAuditBatch(_ context.Context, rs []repository.AuditRecord) error {
+	for _, r := range rs {
+		if r.Resource == "poison" {
+			return errors.New("invalid byte sequence")
+		}
+	}
+	return p.fakeSink.InsertAuditBatch(context.Background(), rs)
+}
+
+func (p *poisonSink) InsertAudit(ctx context.Context, r repository.AuditRecord) error {
+	if r.Resource == "poison" {
+		return errors.New("invalid byte sequence")
+	}
+	return p.fakeSink.InsertAudit(ctx, r)
+}
+
+// A batch that fails while the writer stops is kept for the final flush, not discarded.
+func TestFailedBatchIsRetainedForTheFinalFlush(t *testing.T) {
+	down := errors.New("database down")
+	sink := &fakeSink{batchErr: down, insertErr: down}
+	w := New(sink, quiet(Config{FlushInterval: 10 * time.Millisecond, UsageFlushInterval: time.Hour}))
+	w.Start()
+	for i := 0; i < 3; i++ {
+		_ = w.RecordAudit(context.Background(), download("r", "a"))
+	}
+	time.Sleep(60 * time.Millisecond) // the first attempt failed and the loop is backing off
+	sink.mu.Lock()
+	sink.batchErr, sink.insertErr = nil, nil
+	sink.mu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := w.Shutdown(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if sink.batched() != 3 {
+		t.Fatalf("the retained batch must be written at shutdown: %d", sink.batched())
+	}
+}
+
 func TestShutdownFlushesBufferAndUsage(t *testing.T) {
 	sink := &fakeSink{}
 	w := New(sink, quiet(Config{FlushInterval: time.Hour, UsageFlushInterval: time.Hour}))
@@ -266,6 +323,9 @@ func TestShutdownFlushesBufferAndUsage(t *testing.T) {
 	// A record after shutdown is committed directly, not lost.
 	if err := w.RecordAudit(context.Background(), download("r", "b")); err != nil || len(sink.inserted) != 1 {
 		t.Fatalf("late record: err=%v inserted=%d", err, len(sink.inserted))
+	}
+	if len(sink.usage) != 2 || sink.usage[1].Usage[0].Resource != "b" {
+		t.Fatalf("a late record must write its own usage delta: %+v", sink.usage)
 	}
 }
 
@@ -301,7 +361,8 @@ func TestCrashLossBound(t *testing.T) {
 		t.Fatalf("records were not flushed within the interval bound: %d", sink.batched())
 	}
 
-	down := &fakeSink{batchErr: errors.New("database down")}
+	outage := errors.New("database down")
+	down := &fakeSink{batchErr: outage, insertErr: outage}
 	w2 := New(down, quiet(Config{BufferSize: 20, BatchSize: 5, FlushInterval: interval, UsageFlushInterval: time.Hour}))
 	w2.Start()
 	defer func() { _ = w2.Shutdown(context.Background()) }()

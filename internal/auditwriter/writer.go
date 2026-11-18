@@ -132,7 +132,8 @@ type Stats struct {
 	BufferDepth        int64
 	DroppedRead        uint64 // buffer_full
 	DroppedSecurity    uint64 // queued denial that found no buffer space
-	DroppedUsage       uint64 // usage or rollup key beyond the cap
+	DroppedUsage       uint64 // usage or rollup key beyond the cap, or rejected by the database
+	DroppedInvalid     uint64 // audit record the database rejects on its own
 	FlushErrors        uint64
 	FlushCount         uint64
 	FlushSecondsSum    float64
@@ -158,14 +159,17 @@ type Writer struct {
 
 	pending atomic.Int64 // records taken from the buffer and not yet written
 
+	retainMu sync.Mutex
+	retained []repository.AuditRecord // a failed batch kept for the next drain
+
 	aggMu     sync.Mutex
 	usage     map[usageKey]*repository.UsageDelta
 	rollups   map[rollupKey]*repository.RollupDelta
 	usageWake chan struct{}
 
-	droppedRead, droppedSecurity, droppedUsage, flushErrors, flushCount atomic.Uint64
-	flushNanos                                                          atomic.Uint64
-	flushBuckets                                                        [len(FlushBuckets)]atomic.Uint64
+	droppedRead, droppedSecurity, droppedUsage, droppedInvalid, flushErrors, flushCount atomic.Uint64
+	flushNanos                                                                          atomic.Uint64
+	flushBuckets                                                                        [len(FlushBuckets)]atomic.Uint64
 }
 
 type usageKey struct{ repository, format, resource string }
@@ -207,8 +211,8 @@ func (w *Writer) RecordAudit(ctx context.Context, record repository.AuditRecord)
 		if err := w.sink.InsertAudit(ctx, record); err != nil {
 			return err
 		}
-		w.count(record)
-		return nil
+		// The aggregates were flushed at shutdown, so write this delta directly.
+		return w.sink.FlushUsage(ctx, repository.UsageBatchOf(record))
 	}
 	if record.Class == repository.AuditClassSync {
 		if record.IsAuthenticatedDenial() {
@@ -387,20 +391,30 @@ func (w *Writer) drain(ctx context.Context, final bool) {
 		if len(batch) == 0 {
 			return
 		}
+		failures := 0
 		for {
-			if err := w.flushBatch(ctx, batch); err == nil {
+			err := w.flushBatch(ctx, batch)
+			if err == nil {
 				w.pending.Add(-int64(len(batch)))
 				break
-			} else {
-				w.flushErrors.Add(1)
-				w.cfg.Logger.Error("audit flush failed", "records", len(batch), "error", err)
+			}
+			failures++
+			w.flushErrors.Add(1)
+			w.cfg.Logger.Error("audit flush failed", "records", len(batch), "error", err)
+			// A record the database rejects on its own must not block the others: while
+			// the database accepts some records of the batch, the rejected ones are dropped.
+			if w.salvage(ctx, batch, failures) {
+				w.pending.Add(-int64(len(batch)))
+				break
 			}
 			if final || ctx.Err() != nil {
+				w.retain(batch)
 				return
 			}
 			select {
 			case <-time.After(backoff):
 			case <-w.stop:
+				w.retain(batch)
 				return
 			}
 			if backoff < 5*time.Second {
@@ -410,7 +424,56 @@ func (w *Writer) drain(ctx context.Context, final bool) {
 	}
 }
 
+// poisonAttempts is how many times a single record may fail before it is dropped.
+const poisonAttempts = 5
+
+// salvage writes the batch record by record after a batch failure. It reports true when
+// the batch is fully handled: every record was written or identified as one the database
+// rejects on its own (counted in DroppedInvalid). It reports false, leaving nothing
+// written twice, when the database accepted none of them, which looks like an outage.
+func (w *Writer) salvage(ctx context.Context, batch []repository.AuditRecord, failures int) bool {
+	if len(batch) == 1 {
+		if failures < poisonAttempts {
+			return false
+		}
+		w.droppedInvalid.Add(1)
+		w.cfg.Logger.Error("audit record rejected by the database and dropped", "operation", batch[0].Operation)
+		return true
+	}
+	var rejected []repository.AuditRecord
+	written := 0
+	for _, record := range batch {
+		if err := w.sink.InsertAudit(ctx, record); err != nil {
+			rejected = append(rejected, record)
+			continue
+		}
+		written++
+	}
+	if written == 0 {
+		return false
+	}
+	w.droppedInvalid.Add(uint64(len(rejected)))
+	if len(rejected) > 0 {
+		w.cfg.Logger.Error("audit records rejected by the database and dropped", "records", len(rejected))
+	}
+	return true
+}
+
+func (w *Writer) retain(batch []repository.AuditRecord) {
+	w.retainMu.Lock()
+	w.retained = append(append([]repository.AuditRecord(nil), batch...), w.retained...)
+	w.retainMu.Unlock()
+}
+
 func (w *Writer) take() []repository.AuditRecord {
+	w.retainMu.Lock()
+	if len(w.retained) > 0 {
+		batch := w.retained
+		w.retained = nil
+		w.retainMu.Unlock()
+		return batch // already counted in pending
+	}
+	w.retainMu.Unlock()
 	n := min(len(w.buffer), w.cfg.BatchSize)
 	if n == 0 {
 		return nil
@@ -492,12 +555,46 @@ func (w *Writer) flushUsage(ctx context.Context) error {
 	if err := w.sink.FlushUsage(ctx, batch); err != nil {
 		w.flushErrors.Add(1)
 		w.cfg.Logger.Error("usage flush failed", "keys", len(batch.Usage)+len(batch.Rollups), "error", err)
+		batch = w.salvageUsage(ctx, batch)
+		if len(batch.Usage)+len(batch.Rollups) == 0 {
+			return nil
+		}
 		w.aggMu.Lock()
 		w.addLocked(batch)
 		w.aggMu.Unlock()
 		return err
 	}
 	return nil
+}
+
+// salvageUsage retries the keys of a failed flush one by one. Keys the database rejects
+// while it accepts others are dropped (counted in DroppedUsage); when it accepts none the
+// whole batch is returned for the next interval.
+func (w *Writer) salvageUsage(ctx context.Context, batch repository.UsageBatch) repository.UsageBatch {
+	var keep repository.UsageBatch
+	accepted := 0
+	for _, u := range batch.Usage {
+		if err := w.sink.FlushUsage(ctx, repository.UsageBatch{Usage: []repository.UsageDelta{u}}); err != nil {
+			keep.Usage = append(keep.Usage, u)
+		} else {
+			accepted++
+		}
+	}
+	for _, r := range batch.Rollups {
+		if err := w.sink.FlushUsage(ctx, repository.UsageBatch{Rollups: []repository.RollupDelta{r}}); err != nil {
+			keep.Rollups = append(keep.Rollups, r)
+		} else {
+			accepted++
+		}
+	}
+	if accepted == 0 {
+		return batch
+	}
+	if rejected := len(keep.Usage) + len(keep.Rollups); rejected > 0 {
+		w.droppedUsage.Add(uint64(rejected))
+		w.cfg.Logger.Error("usage keys rejected by the database and dropped", "keys", rejected)
+	}
+	return repository.UsageBatch{}
 }
 
 // FlushNow writes the buffered audit records and the aggregates immediately. It is
@@ -533,7 +630,7 @@ func (w *Writer) Shutdown(ctx context.Context) error {
 func (w *Writer) Stats() Stats {
 	stats := Stats{
 		BufferDepth: int64(len(w.buffer)) + w.pending.Load(),
-		DroppedRead: w.droppedRead.Load(), DroppedSecurity: w.droppedSecurity.Load(), DroppedUsage: w.droppedUsage.Load(),
+		DroppedRead: w.droppedRead.Load(), DroppedSecurity: w.droppedSecurity.Load(), DroppedUsage: w.droppedUsage.Load(), DroppedInvalid: w.droppedInvalid.Load(),
 		FlushErrors: w.flushErrors.Load(), FlushCount: w.flushCount.Load(),
 		FlushSecondsSum: float64(w.flushNanos.Load()) / float64(time.Second),
 	}

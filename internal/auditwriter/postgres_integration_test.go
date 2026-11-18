@@ -177,6 +177,26 @@ func TestWriterAggregatesUsageAndRollups(t *testing.T) {
 	t.Fatalf("repository missing from %+v", statistics)
 }
 
+// A request path with a NUL byte or invalid UTF-8 cannot make an audit statement fail.
+func TestHostileTextCannotStallTheFlush(t *testing.T) {
+	f := openFixture(t, auditwriter.Config{})
+	ctx := context.Background()
+	for _, resource := range []string{"a\x00b", "bad\xff\xfeutf8", "fine"} {
+		if err := f.writer.RecordAudit(ctx, f.download(resource, time.Now().UTC())); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := f.writer.FlushNow(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if n := f.count(t, "resolver_audit_log"); n != 3 {
+		t.Fatalf("flushed %d of 3 records", n)
+	}
+	if stats := f.writer.Stats(); stats.DroppedInvalid != 0 || stats.FlushErrors != 0 {
+		t.Fatalf("%+v", stats)
+	}
+}
+
 func TestStatisticsDoNotScanTheAuditTables(t *testing.T) {
 	f := openFixture(t, auditwriter.Config{})
 	ctx := context.Background()

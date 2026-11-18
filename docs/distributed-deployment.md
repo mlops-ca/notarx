@@ -197,6 +197,8 @@ NOTARX_SHUTDOWN_FLUSH_TIMEOUT=10s
   `notarx_audit_flush_errors_total`, and on `notarx_audit_buffer_depth` close to
   `NOTARX_AUDIT_BUFFER_SIZE`. `notarx_audit_flush_seconds` is the flush latency histogram.
 
+Counters for a repository that was deleted or renamed before the flush are discarded. Records the database rejects on their own (for example a NUL byte, which is removed, or an unexpected data error) are dropped and counted in `notarx_audit_dropped_total{class="invalid"}` so they cannot stall the flush.
+
 Repository request statistics and the overview read hourly rollups
 (`repository_request_rollup`, kept 400 days) with the outcome `allowed` or a
 denial reason, so they no longer scan the audit tables.
