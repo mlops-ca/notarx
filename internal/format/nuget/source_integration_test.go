@@ -321,7 +321,9 @@ func TestPostgresRustFSNuGetProxyGroupLocalCredentialRevocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assert(green, 403)
+	// The proxy is public (ADR 0029): an identity without a grant still reads it
+	// through the visibility tier.
+	assert(green, 200)
 	if _, err = store.ReplaceRepositoryGrants(t.Context(), proxy.ID, grants, set.Version); err != nil {
 		t.Fatal(err)
 	}

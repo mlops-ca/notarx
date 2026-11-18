@@ -143,7 +143,9 @@ func TestPostgresRustFSNuGetCredentialRotationAndRevocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertAccess("grant removed", green, 403, 403)
+	// The repository is public (ADR 0029): an identity without a grant still reads
+	// it through the visibility tier, but publication needs the grant.
+	assertAccess("grant removed", green, 200, 403)
 	if _, err = store.ReplaceRepositoryGrants(ctx, f.repo.ID, grants, set.Version); err != nil {
 		t.Fatal(err)
 	}

@@ -6,7 +6,7 @@ import (
 )
 
 func TestVisibilityOrderingAndFailClosed(t *testing.T) {
-	if !(VisibilityPrivate.Rank() < VisibilityAuthenticated.Rank() && VisibilityAuthenticated.Rank() < VisibilityPublic.Rank()) {
+	if VisibilityPrivate.Rank() >= VisibilityAuthenticated.Rank() || VisibilityAuthenticated.Rank() >= VisibilityPublic.Rank() {
 		t.Fatal("visibility tiers must be ordered private < authenticated < public")
 	}
 	for _, unknown := range []Visibility{"", "internal", "PUBLIC"} {
