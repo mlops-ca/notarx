@@ -217,7 +217,7 @@ services:
       timeout: 3s
       retries: 10
     volumes:
-      - gateway-postgres:/var/lib/postgresql/data
+      - gateway-postgres:/var/lib/postgresql
 
   migrate:
     image: postgres:18-alpine
