@@ -79,6 +79,7 @@
     "cmd/gateway": "server",
     "cmd/notarx": "server",
     "cmd/healthcheck": "server",
+    "cmd/maven-fixture-mirror": "maven",
     "cmd/native-maven-fixture": "maven",
     "cmd/native-npm-fixture": "npm",
     "cmd/native-oci-fixture": "oci",

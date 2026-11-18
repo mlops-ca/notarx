@@ -158,6 +158,33 @@ and a manual dispatch, in this repository only; never `pull_request` or
 the `OCI_OBJECT_STORE_*` secrets in a first step and skips every other step, with a
 notice, when they are absent.
 
+## Re-record the Maven and Gradle fixtures
+
+Maven and Gradle client tests resolve plugins and dependencies from recorded
+Maven Central and Gradle plugin portal responses, never from the network. The
+recordings live in `internal/mavenfixture/testdata/maven-central-fixture`: the
+`maven2/` directory is Maven Central and `gradle-plugins/` is the Gradle plugin
+portal. `internal/mavenfixture` serves them (Go tests start it with
+`mavenfixturetest.Start`; `cmd/maven-fixture-mirror` serves it to scripts). A
+path that was not recorded answers 404 and the log names the re-record hint.
+`go test ./internal/mavenfixture` checks every recorded artifact against the
+SHA-1 sidecar Central published next to it.
+
+Recording needs `mvn`, `gradle`, `go` and outbound network, which the agent
+machines lack, so it runs in CI as a manual workflow that normal CI never starts:
+
+1. Run **Record Maven fixtures** (`.github/workflows/record-maven-fixtures.yml`)
+   from the Actions tab (`gh workflow run record-maven-fixtures.yml`). It builds
+   `.github/maven-fixture-recorder/Dockerfile` (Maven and Gradle, both source
+   images pinned by digest; bump the digests together), runs
+   `scripts/record-maven-fixtures.sh` in it with
+   `MAVEN_CENTRAL_FIXTURE_RECORD=1`, and uploads `maven-fixtures.tar`.
+2. Download the artifact, extract it at the repository root, review the new files
+   and commit them in a pull request.
+
+In record mode a miss is fetched from the upstream, stored and served, and an
+existing file is never replaced. To refresh a recording delete the file first.
+
 ## Migration checks
 
 The `quality` job runs `make migration-check`
