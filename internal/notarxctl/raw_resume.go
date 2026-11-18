@@ -87,7 +87,6 @@ func rawChunk(object localObject, offset, length int64) func() (io.ReadCloser, e
 func putResumableRawObject(ctx context.Context, client *apiClient, target string, object localObject, chunkSize int64, id string, result *objectResult) error {
 	var progress rawUploadProgress
 	if id != "" {
-		progress = rawUploadProgress{id: id}
 		result.UploadID = id
 		result.ReadBack = target + "?" + url.Values{"uploadId": {id}}.Encode()
 	}

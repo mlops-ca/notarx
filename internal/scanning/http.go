@@ -195,7 +195,9 @@ func (s *HTTPScanner) Scan(ctx context.Context, artifact Artifact) (Report, erro
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		_ = reader.CloseWithError(ErrScannerUnavailable)
-		_ = <-writeResult
+		// The upload outcome is moot: the HTTP status already failed the scan.
+		discarded := <-writeResult
+		_ = discarded
 		return Report{}, fmt.Errorf("%w: HTTP %d", ErrScannerUnavailable, response.StatusCode)
 	}
 	if streamErr := <-writeResult; streamErr != nil {
