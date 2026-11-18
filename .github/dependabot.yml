@@ -1,0 +1,39 @@
+version: 2
+updates:
+  # Titles must satisfy .github/commit-policy.json (ADR 0024); the prefix below is
+  # the whole "type(scope)" part, so no scope is derived from the directory.
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "build(deps)"
+  - package-ecosystem: npm
+    directory: /console
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "build(deps)"
+  - package-ecosystem: npm
+    directory: /tools/openapi
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "build(deps)"
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci(deps)"
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "build(deps)"

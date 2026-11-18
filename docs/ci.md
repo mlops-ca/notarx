@@ -17,10 +17,10 @@ five classes. Heavy jobs run only when their class changed.
 A path that matches no class also runs everything, so a new top-level directory
 cannot silently skip a job. Pushes to `main`, tags and unresolvable ranges run
 everything, including the mainline asset and image publication jobs.
-`pr-title` (Conventional Commit title, ADR 0024) runs on every pull request.
+The `pr-title` check (Conventional Commit title, ADR 0024, `.github/workflows/pr-title.yml`) is a separate workflow that runs when a pull request is opened, edited, synchronized or reopened, so editing a title re-checks it without re-running CI. It is not part of `ci-ok`; require it in branch protection next to `ci-ok`.
 
-Code directories are matched before Markdown, so a `.md` fixture under `internal/` is Go, not docs. A docs-only pull request therefore runs `changes`, `pr-title`, `docs` and
-`ci-ok`. A Go-only pull request skips `console` (unit, build, visual) but still runs `console-e2e`; a console-only pull request
+Code directories are matched before Markdown, so a `.md` fixture under `internal/` is Go, not docs. A docs-only pull request therefore runs `changes`, `docs` and
+`ci-ok` (plus the separate `pr-title` workflow). A Go-only pull request skips `console` (unit, build, visual) but still runs `console-e2e`; a console-only pull request
 skips every contract lane.
 
 ## Console E2E sharding and spec selection

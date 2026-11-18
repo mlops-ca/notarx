@@ -312,17 +312,32 @@ normal development stack. Use `make integration-down` to clean that test project
 
 ## Commit messages
 
-Use an imperative Conventional Commit subject:
+Pull requests are squash-merged, so the pull request title becomes the commit
+subject. Use an imperative Conventional Commit subject,
+`type(scope)!: subject`:
 
 ```text
-feat(search): add checksum lookup
+feat(oci): add range reads for blobs
 fix(console): preserve selected artifact version
 test(storage): cover expired worker leases
 docs: describe clustered runtime roles
 ```
 
+The types, the releasing types (`feat`, `fix`, `perf`, `revert`; a `!` or a
+`BREAKING CHANGE:` footer also releases) and the allowed scopes live in
+`.github/commit-policy.json`, the single source of the policy
+([ADR 0024](docs/adr/0024-release-versioning-and-conventional-commits.md)). A scope is
+optional, several may be listed separated by commas (`feat(oci,npm): ...`), and
+adding one is a one-line change to that file. The `pr-title` workflow checks the
+title when a pull request is opened, edited or updated; run
+`TITLE='feat(oci): x' make commit-policy-check` to check one locally.
+`fix(security)` and `fix(deps)` release a patch; Dependabot titles follow the
+policy through `.github/dependabot.yml`.
+
 Choose the narrowest useful scope. Keep generated output in the same commit as
-the contract or source change that produced it.
+the contract or source change that produced it. A change to the Trivy pin or the
+scanner image is `build(scanner)` and requires a reviewer from `CODEOWNERS`
+([ADR 0030](docs/adr/0030-sbom-generation-and-vulnerability-scanning.md)).
 
 A commit that cherry-picks work from the upstream project carries an
 `Upstream:` trailer naming the upstream commit, for example
