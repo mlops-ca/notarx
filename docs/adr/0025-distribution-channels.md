@@ -82,6 +82,15 @@ defines what `build` and `publish` produce and where they send it. ADR 0024 slic
 
 ## Decision
 
+### Amendment (2026-11-18): package and repository signing deferred
+
+The owner deferred all OpenPGP signing for the first releases. Until a later amendment restores it:
+
+- **Foundation ships packages as release assets only.** `.deb` and `.rpm` files (built natively by nfpm, slice 6) are attached to the GitHub Release beside the tarballs, covered by `SHA256SUMS` and by GitHub artifact attestations (Sigstore, keyless). Install with `apt install ./notarx_<v>_<arch>.deb` or `dnf install ./notarx-<v>.<arch>.rpm`, and verify with `gh attestation verify <file> --repo mlops-ca/notarx` or `sha256sum -c SHA256SUMS`. nfpm does not sign packages, and no signing secret exists.
+- **The apt and yum repository at `packages.mlops.ca` is deferred to Backlog**, together with the key ceremony. That covers the repository generator, the sign-repo/sync-repo/verify-repo jobs and `notarx-archive-keyring`. An unsigned apt repository would force users onto `[trusted=yes]`, so it is not published at all until signing returns.
+- The trust model, repository layout and install snippets below stay as the target design for when signing returns. The runbook `docs/release/packages-signing.md` and the `packages-signing` and `packages-publish` environments stay in place, unused.
+- The ADR 0026 notarx-hosted feeds still require repository signing, so they wait for signing to return.
+
 Option 3 for apt and yum, with option 1 as the canonical artifact store and option 2
 as a documented fallback mirror. Option 4 is realised as a second, equal-trust source: ADR 0026
 Part D publishes the same packages to public notarx feeds at `feeds.mlops.ca` (nightly first,
