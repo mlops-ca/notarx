@@ -60,12 +60,15 @@ func recoverySQL(t *testing.T, ctx context.Context, p Postgres, sql string, args
 	}
 }
 
-func seedRecoveryEmail(t *testing.T, ctx context.Context, source *OwnedTarget, endpoint, liveRepo, cancelledRepo string) recoveryEmail {
+// seedRecoveryEmail seeds through the source gateway, so a published release
+// that predates the en-CA, fr-CA and zh-CN locale tags (ADR 0014) is sent the
+// bare en tag it accepts; the restored gateway is that same release.
+func seedRecoveryEmail(t *testing.T, ctx context.Context, source *OwnedTarget, endpoint, liveRepo, cancelledRepo, locale string) recoveryEmail {
 	t.Helper()
 	t.Setenv(secrets.KeyEnv, recoveryEmailKey)
 	s := recoveryStore(t, source.database)
 	data, _ := fixtureHTTP(t, ctx, endpoint, "POST", "/api/v2/email-targets", source.spec.AdminToken,
-		[]byte(`{"name":"Synthetic recovery","locale":"en-CA","recipient":"`+recoveryRecipient+`","enabled":true}`), 201, "")
+		[]byte(`{"name":"Synthetic recovery","locale":"`+locale+`","recipient":"`+recoveryRecipient+`","enabled":true}`), 201, "")
 	var identity struct{ ID string }
 	if json.Unmarshal(data, &identity) != nil || identity.ID == "" {
 		t.Fatal("email target identity missing")
