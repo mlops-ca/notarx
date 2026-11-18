@@ -102,7 +102,7 @@ func TestPublishedNativeRelease(t *testing.T) {
 					case "extra ledger":
 						altered = append(altered, []byte("999999_extra.sql\t"+strings.Repeat("0", 64)+"\n")...)
 					case "wrong ledger checksum":
-						altered = bytes.Replace(altered, []byte(strings.Split(string(ledger), "\n")[1]), []byte("000001_initial.sql\t"+strings.Repeat("0", 64)), 1)
+						altered = bytes.Replace(altered, []byte(strings.Split(string(ledger), "\n")[1]), []byte("000001_baseline.sql\t"+strings.Repeat("0", 64)), 1)
 					case "duplicate ledger":
 						altered = append(altered, []byte(strings.Split(string(ledger), "\n")[1]+"\n")...)
 					case "unsorted ledger":
@@ -136,7 +136,7 @@ func TestPublishedNativeRelease(t *testing.T) {
 							// separately approved archive's original gateway bytes.
 							artifact.SHA256 = digestFile(t, p)
 						case "tampered migrations":
-							if err := os.WriteFile(filepath.Join(candidate.Directory, "migrations", "000001_initial.sql"), []byte("SELECT 'forged';\n"), 0600); err != nil {
+							if err := os.WriteFile(filepath.Join(candidate.Directory, "migrations", "000001_baseline.sql"), []byte("SELECT 'forged';\n"), 0600); err != nil {
 								t.Fatal(err)
 							}
 							altered, _ = directoryLedger(t, candidate.Directory)

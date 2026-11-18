@@ -126,3 +126,56 @@ func testConfig() config.Config {
 		RustFSSecretKey: "secret-key",
 	}
 }
+
+func TestTrigramResultStates(t *testing.T) {
+	cases := []struct {
+		state  string
+		err    error
+		status Status
+		phrase string
+	}{
+		{"installed", nil, StatusPass, "installed"},
+		{"creatable", nil, StatusPass, "can be created"},
+		{"unavailable", nil, StatusFail, "not available"},
+		{"denied", nil, StatusFail, "may not create pg_trgm"},
+		{"", errors.New("postgres://gateway:super-secret@db/gateway"), StatusFail, "could not run"},
+	}
+	for _, c := range cases {
+		result := trigramResult(c.state, c.err)
+		if result.Name != "pg_trgm" || result.Status != c.status || !strings.Contains(result.Summary, c.phrase) {
+			t.Errorf("state %q: result = %#v", c.state, result)
+		}
+		if strings.Contains(result.Summary, "super-secret") {
+			t.Errorf("state %q leaked the dependency error: %#v", c.state, result)
+		}
+	}
+}
+
+func TestRunnerReportsTrigramCheck(t *testing.T) {
+	runner := NewRunner()
+	runner.TrigramState = func(context.Context, string) (string, error) { return "denied", nil }
+	report := runner.Run(context.Background(), testConfig(), []string{"pg_trgm"})
+	if len(report.Results) != 1 || report.Results[0].Name != "pg_trgm" || !report.Failed() {
+		t.Fatalf("results = %#v", report.Results)
+	}
+	runner.TrigramState = func(context.Context, string) (string, error) { return "installed", nil }
+	if report := runner.Run(context.Background(), testConfig(), []string{"pg_trgm"}); report.Failed() {
+		t.Fatalf("results = %#v", report.Results)
+	}
+}
+
+func TestTrigramCheckIsListedAndSelectable(t *testing.T) {
+	found := false
+	for _, name := range CheckNames() {
+		found = found || name == "pg_trgm"
+	}
+	if !found || !isCheckName("pg_trgm") {
+		t.Fatal("pg_trgm must be a named preflight check")
+	}
+}
+
+func TestProbeTrigramReportsConnectionFailure(t *testing.T) {
+	if _, err := probeTrigram(context.Background(), "postgres://nobody@127.0.0.1:1/none?connect_timeout=1"); err == nil {
+		t.Fatal("expected a connection error")
+	}
+}

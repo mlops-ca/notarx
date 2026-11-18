@@ -23,6 +23,34 @@ file_sha256() {
   exit 1
 }
 
+# The baseline requires pg_trgm (GIN gin_trgm_ops indexes). Fail before the first
+# statement, with a clear message, when the extension is neither installed nor
+# creatable by this role. Keep the classification in step with
+# internal/preflight/trigram.go, which `make preflight` runs.
+trigram_state=$(run_psql -At <<'SQL'
+SELECT CASE
+  WHEN EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm') THEN 'installed'
+  WHEN NOT EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'pg_trgm') THEN 'unavailable'
+  WHEN (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) THEN 'creatable'
+  WHEN COALESCE((SELECT trusted FROM pg_available_extension_versions WHERE name = 'pg_trgm' ORDER BY version DESC LIMIT 1), false)
+       AND has_database_privilege(current_user, current_database(), 'CREATE')
+       AND has_schema_privilege(current_user, 'public', 'CREATE') THEN 'creatable'
+  ELSE 'denied'
+END;
+SQL
+)
+case "$trigram_state" in
+  installed|creatable) ;;
+  unavailable)
+    printf 'The pg_trgm extension is not available on this PostgreSQL server. Install the contrib package or use a backend that ships it.\n' >&2
+    exit 1
+    ;;
+  *)
+    printf 'Role %s may not create the pg_trgm extension. Have a superuser run CREATE EXTENSION pg_trgm in database %s, or grant CREATE on the database and on schema public.\n' "$pg_user" "$pg_database" >&2
+    exit 1
+    ;;
+esac
+
 run_psql <<'SQL'
 CREATE TABLE IF NOT EXISTS notarx_schema_migrations (
     filename TEXT PRIMARY KEY,

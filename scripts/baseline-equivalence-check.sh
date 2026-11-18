@@ -9,7 +9,7 @@
 #   --source-ref   git ref holding the source chain (default: HEAD)
 #   --source-dir   directory of the chain inside that ref (default: migrations)
 #   --baseline     baseline file under test (default:
-#                  migrations-next/000001_baseline.sql)
+#                  migrations/000001_baseline.sql)
 #   --pg-image     PostgreSQL image pinned by sha256 digest (default: the pin in
 #                  scripts/baseline-lib.sh, the same one the generator uses)
 #
@@ -38,7 +38,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/baseline-lib.sh"
 
 source_ref=HEAD
 source_dir=migrations
-baseline=$baseline_root/migrations-next/000001_baseline.sql
+baseline=$baseline_root/migrations/000001_baseline.sql
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
