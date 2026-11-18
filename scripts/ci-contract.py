@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Run the unchanged contract targets and verify their isolated evidence."""
+"""Run the CI contract lanes declared in scripts/ci-contract-lanes.json.
+
+The lane plan is the single source of truth: lane names, order, tool needs,
+timeouts, steps and failure artefacts all live there. The workflows read it
+through the `matrix` command; nothing else names a lane.
+"""
 import argparse
-import base64
 import hashlib
 import json
 import os
-from pathlib import Path
-import platform
-import re
 import selectors
 import shutil
 import signal
@@ -15,50 +16,17 @@ import subprocess
 import sys
 import tempfile
 import time
-from datetime import datetime, timezone
-from email.utils import parsedate_to_datetime
-import urllib.error
-import urllib.parse
-import urllib.request
-import uuid
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PLAN = json.loads((ROOT / 'scripts/ci-contract-lanes.json').read_text())
 LANES = tuple(PLAN['lanes'])
-CORE_LANES = tuple(PLAN['coreOrder'])
-BENCHMARK_LANES = tuple(PLAN['benchmarkOrder'])
-RAW_DIRS = sorted({p for lane in PLAN['lanes'].values() for p in lane['rawDirectories']})
-
-
-def now():
-    return datetime.now(timezone.utc).isoformat()
-
-
-def write(path, value):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, indent=2) + '\n')
+TOOL_NEEDS = ('rust', 'node', 'npm')
+TERMINATION_GRACE_SECONDS = 45
 
 
 def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def git(*args):
-    return subprocess.check_output(['git', *args], cwd=ROOT, text=True).strip()
-
-
-def business_source():
-    # CI orchestration and its documentation are the only permitted differences
-    # in a serial/parallel comparison. Product code, clients and targets remain.
-    def excluded(name):
-        return (name.startswith(('.github/workflows/', 'scripts/ci-', 'docs/ci-contract-lanes'))
-                or name in ('scripts/tests/test_ci_contract.py', 'CONTRIBUTING.md',
-                            'CONTRIBUTING.zh-CN.md', 'CHANGELOG.md', 'CHANGELOG.zh-CN.md'))
-    files = {name: sha(ROOT / name) for name in git('ls-files').splitlines()
-             if not excluded(name) and (ROOT / name).is_file()}
-    digest = hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest()
-    return {'head': git('rev-parse', 'HEAD'), 'tree': git('rev-parse', 'HEAD^{tree}'),
-            'businessDigest': digest, 'fileHashes': files}
 
 
 def openapi_fresh():
@@ -70,133 +38,6 @@ def openapi_fresh():
     subprocess.run(['npm', '--prefix', 'console', 'run', 'generate:api'], cwd=ROOT, check=True)
     if before != {p: sha(ROOT / p) for p in paths}:
         raise RuntimeError('generated OpenAPI artifacts were stale')
-
-
-def docker_inventory():
-    inventory = {}
-    for kind, args in [('containers', ['ps', '-aq']), ('volumes', ['volume', 'ls', '-q']),
-                       ('networks', ['network', 'ls', '-q'])]:
-        result = subprocess.run(['docker', *args], capture_output=True, text=True, timeout=30)
-        if result.returncode:
-            raise RuntimeError('Docker inventory unavailable: ' + kind)
-        inventory[kind] = sorted(result.stdout.split())
-    return inventory
-
-
-CORE_GO_CACHE_VOLUMES = ('artifact-gateway-go-mod', 'artifact-gateway-go-build')
-VOLUME_RECEIPT_FIELDS = ('Name', 'Driver', 'Scope', 'CreatedAt', 'Labels', 'Options')
-
-
-def docker_inspect(kind, name):
-    result = subprocess.run(['docker', kind, 'inspect', name], capture_output=True,
-                            text=True, timeout=30)
-    if result.returncode:
-        raise RuntimeError('Docker inspection unavailable: ' + kind + ' ' + name)
-    values = json.loads(result.stdout)
-    if not isinstance(values, list) or len(values) != 1 or not isinstance(values[0], dict):
-        raise RuntimeError('invalid Docker inspection: ' + kind + ' ' + name)
-    return values[0]
-
-
-def docker_step_snapshot(path):
-    """Persist attribution fields only; container environment/commands are private."""
-    snapshot = {'recordedAt': now(), 'inventory': {}, 'volumes': [], 'containers': []}
-    try:
-        snapshot['inventory'] = docker_inventory()
-        for name in snapshot['inventory']['volumes']:
-            item = docker_inspect('volume', name)
-            snapshot['volumes'].append({key: item.get(key) for key in VOLUME_RECEIPT_FIELDS})
-        for identity in snapshot['inventory']['containers']:
-            item = docker_inspect('container', identity)
-            snapshot['containers'].append({
-                'ID': item.get('Id'), 'Name': item.get('Name'), 'Image': item.get('Image'),
-                'Config': {'Labels': item.get('Config', {}).get('Labels')},
-                'Mounts': [{key: mount.get(key) for key in ('Type', 'Name', 'Destination', 'Driver', 'RW')}
-                           for mount in item.get('Mounts', [])]})
-    except Exception as error:
-        snapshot['error'] = type(error).__name__
-        raise
-    finally:
-        write(path, snapshot)
-
-
-class CoreGoCacheVolumes:
-    """Own only two caches absent before this dedicated core lane started."""
-    def __init__(self, output, run_id, attempt, lane):
-        self.path = output / 'docker-cache-claims.json'
-        self.labels = {'artifact-gateway.ci-owner': uuid.uuid4().hex,
-                       'artifact-gateway.ci-run': run_id,
-                       'artifact-gateway.ci-attempt': attempt,
-                       'artifact-gateway.ci-lane': lane}
-        self.names = CORE_GO_CACHE_VOLUMES
-        self.state = {'schemaVersion': 1, 'labels': self.labels, 'attempted': [],
-                      'receipts': {}, 'removed': [], 'remaining': [], 'errors': []}
-        write(self.path, self.state)
-
-    def error(self, stage, name, error):
-        self.state['errors'].append({'stage': stage, 'name': name, 'error': str(error)})
-        write(self.path, self.state)
-
-    def receipt(self, name):
-        item = docker_inspect('volume', name)
-        if (item.get('Name') != name or item.get('Driver') != 'local'
-                or item.get('Scope') != 'local' or not item.get('CreatedAt')
-                or item.get('Labels') != self.labels or item.get('Options') not in (None, {})):
-            raise RuntimeError('core cache ownership or creation receipt changed: ' + name)
-        return {key: item.get(key) for key in VOLUME_RECEIPT_FIELDS}
-
-    def claim(self, before):
-        existing = sorted(set(self.names) & set(before['volumes']))
-        if existing:
-            error = RuntimeError('refusing pre-existing core Go caches: ' + ', '.join(existing))
-            self.error('claim', ', '.join(existing), error)
-            raise error
-        for name in self.names:
-            self.state['attempted'].append(name)
-            write(self.path, self.state)
-            command = ['docker', 'volume', 'create', '--driver', 'local']
-            for key, value in self.labels.items():
-                command.extend(['--label', key + '=' + value])
-            command.append(name)
-            try:
-                result = subprocess.run(command, capture_output=True, text=True, timeout=30)
-                if result.returncode or result.stdout.strip() != name:
-                    raise RuntimeError('core cache create acknowledgement failed: ' + name)
-                self.state['receipts'][name] = self.receipt(name)
-                write(self.path, self.state)
-            except Exception as error:
-                # A lost CLI reply can follow a successful daemon-side create.
-                # Cleanup re-inspects this exact attempted name with our random owner.
-                self.error('claim', name, error)
-                raise
-
-    def cleanup(self):
-        for name in reversed(self.state['attempted']):
-            try:
-                receipt = self.receipt(name)
-                original = self.state['receipts'].get(name)
-                if original is not None and original != receipt:
-                    raise RuntimeError('core cache creation receipt changed: ' + name)
-                self.state['receipts'][name] = receipt
-                write(self.path, self.state)
-                result = subprocess.run(['docker', 'volume', 'rm', name], capture_output=True,
-                                        text=True, timeout=30)
-                if result.returncode or result.stdout.strip() != name:
-                    raise RuntimeError('owned core cache removal failed: ' + name)
-                observed = subprocess.run(['docker', 'volume', 'ls', '-q'], capture_output=True,
-                                          text=True, timeout=30)
-                if observed.returncode or name in observed.stdout.split():
-                    raise RuntimeError('owned core cache removal was not verified: ' + name)
-                self.state['removed'].append(name)
-            except Exception as error:
-                self.state['remaining'].append(name)
-                self.error('cleanup', name, error)
-            finally:
-                write(self.path, self.state)
-        return self.state
-
-
-TERMINATION_GRACE_SECONDS = 45
 
 
 def live_group_members(pgid):
@@ -295,70 +136,23 @@ def run_command(command, log, env, timeout=None):
             'processGroup': proc.pid, 'remainingLiveGroupMembers': []}
 
 
-def case_summary(directory):
-    events = {k: set() for k in ('run', 'pass', 'fail', 'skip')}
-    for path in directory.rglob('*.jsonl'):
-        for line in path.read_text(errors='replace').splitlines():
-            try:
-                event = json.loads(line)
-            except (ValueError, TypeError):
-                continue
-            if isinstance(event, dict) and event.get('Test') and event.get('Action') in events:
-                events[event['Action']].add(event.get('Package', '') + '/' + event['Test'])
-    for path in (directory / 'logs').glob('*.log'):
-        for line in path.read_text(errors='replace').splitlines():
-            match = re.match(r'\s*(?:=== (RUN)\s+|--- (PASS|FAIL|SKIP):\s+)(\S+)', line)
-            if match:
-                action = (match[1] or match[2]).lower()
-                events[action].add(path.stem + '/' + match[3])
-    return {k: sorted(v) for k, v in events.items()}
+def matrix():
+    """The GitHub Actions matrix: one entry per lane, straight from the plan."""
+    return {'include': [{'lane': name, 'timeout': lane['timeoutMinutes'],
+                         **{need: need in lane['needs'] for need in TOOL_NEEDS}}
+                        for name, lane in PLAN['lanes'].items()]}
 
 
 def run_lane(args):
     lane = PLAN['lanes'][args.lane]
-    output = args.output.resolve()
+    output = args.output
     output.mkdir(parents=True, exist_ok=True)
     (output / 'logs').mkdir(exist_ok=True)
-    started = now()
-    source = business_source()
-    write(output / 'source.json', source)
-    before_raw = {str(p) for directory in lane['rawDirectories']
-                  for p in (ROOT / directory).glob('*')}
-    dedicated = os.environ.get('GITHUB_ACTIONS') == 'true'
-    before_docker = docker_inventory() if dedicated else None
-    report = {'schemaVersion': 1, 'lane': args.lane, 'prefix': args.prefix,
-              'head': source['head'], 'tree': source['tree'],
-              'businessDigest': source['businessDigest'], 'startedAt': started,
-              'runId': os.environ.get('GITHUB_RUN_ID', 'local'),
-              'attempt': os.environ.get('GITHUB_RUN_ATTEMPT', 'local'),
-              'coldCache': args.cold_cache, 'status': 'failure', 'steps': [],
-              'runner': {'os': platform.system(), 'architecture': platform.machine(),
-                         'cpuCount': os.cpu_count(), 'imageOS': os.environ.get('ImageOS'),
-                         'imageVersion': os.environ.get('ImageVersion'),
-                         'memoryBytes': os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES')}}
+    raw_before = {str(p) for directory in lane['rawDirectories'] for p in (ROOT / directory).glob('*')}
     work = Path(tempfile.mkdtemp(prefix='ag-contract-' + args.lane + '-'))
     env = dict(os.environ, TMPDIR=str(work))
-    if args.cold_cache:
-        env.update(GOCACHE=str(work / 'go-build'), GOMODCACHE=str(work / 'go-mod'),
-                   GOFLAGS=(env.get('GOFLAGS', '') + ' -modcacherw').strip())
-    dedicated_core = dedicated and args.lane in CORE_LANES and not args.local
-    caches = None
-    def stop_lane(signum, _frame):
-        report['status'] = 'failure'
-        report['cancelledBySignal'] = signum
-        raise SystemExit(128 + signum)
-
-    def stop_during_cleanup(signum, _frame):
-        # Finish bounded cleanup even when cancellation arrives between targets.
-        report['status'] = 'failure'
-        report['cancelledBySignal'] = signum
-
-    previous_lane_signals = {sig: signal.signal(sig, stop_lane)
-                             for sig in (signal.SIGINT, signal.SIGTERM)}
+    report = {'lane': args.lane, 'status': 'failure', 'steps': []}
     try:
-        if dedicated_core:
-            caches = CoreGoCacheVolumes(output, report['runId'], report['attempt'], args.lane)
-            caches.claim(before_docker)
         for index, step in enumerate(lane['steps']):
             command = step['command']
             if args.local and command == ['make', 'openapi-check']:
@@ -369,656 +163,26 @@ def run_lane(args):
                 env.update(MAVEN_ARGS='--global-settings ' + str(settings),
                            MAVEN_POM_COMPAT_UPSTREAM='https://maven-central.storage-download.googleapis.com/maven2')
             print('Contract lane ' + args.lane + ': ' + step['name'], flush=True)
-            if dedicated_core:
-                docker_step_snapshot(output / 'docker' / f'{index:02d}-before.json')
-            try:
-                result = run_command(command, output / 'logs' / f'{index:02d}.log', env,
-                                     step['timeoutSeconds'])
-                result['name'] = step['name']
-                result['plannedCommand'] = step['command']
-                report['steps'].append(result)
-            finally:
-                if dedicated_core:
-                    docker_step_snapshot(output / 'docker' / f'{index:02d}-after.json')
+            result = run_command(command, output / 'logs' / f'{index:02d}.log', env, step.get('timeoutSeconds'))
+            result['name'] = step['name']
+            report['steps'].append(result)
             if result['status'] != 'success' and not args.keep_going:
                 break
         if len(report['steps']) == len(lane['steps']) and all(s['status'] == 'success' for s in report['steps']):
             report['status'] = 'success'
     finally:
-        for sig in previous_lane_signals:
-            signal.signal(sig, stop_during_cleanup)
-        try:
-            cleanup = {'dockerAuditScope': 'dedicated GitHub runner' if dedicated else 'fixture-owned reports only',
-                       'errors': []}
-            try:
-                for directory in lane['rawDirectories']:
-                    for path in (ROOT / directory).glob('*'):
-                        if str(path) not in before_raw:
-                            target = output / 'raw' / Path(directory).name / path.name
-                            if path.is_dir():
-                                shutil.copytree(path, target)
-                            else:
-                                target.parent.mkdir(parents=True, exist_ok=True)
-                                shutil.copy2(path, target)
-            except Exception as error:
-                cleanup['errors'].append({'stage': 'raw-evidence', 'error': type(error).__name__})
-            try:
-                shutil.rmtree(work)
-            except Exception as error:
-                cleanup['errors'].append({'stage': 'temporary-directory', 'error': type(error).__name__})
-            cleanup['ownedTemporaryDirectoryRemoved'] = not work.exists()
-            if caches is not None:
-                try:
-                    cleanup['coreGoCaches'] = caches.cleanup()
-                    if cleanup['coreGoCaches']['errors'] or cleanup['coreGoCaches']['remaining']:
-                        report['status'] = 'failure'
-                except Exception as error:
-                    cleanup['errors'].append({'stage': 'core-go-caches', 'error': type(error).__name__})
-            if dedicated:
-                try:
-                    after = docker_inventory()
-                    cleanup['before'] = before_docker
-                    cleanup['remainingNewResources'] = {k: sorted(set(v) - set(before_docker[k])) for k, v in after.items()}
-                    if any(cleanup['remainingNewResources'].values()):
-                        report['status'] = 'failure'
-                except Exception as error:
-                    cleanup['errors'].append({'stage': 'docker-inventory', 'error': type(error).__name__})
-            if cleanup['errors'] or not cleanup['ownedTemporaryDirectoryRemoved']:
-                report['status'] = 'failure'
-            report['cleanup'] = cleanup
-            report['cases'] = case_summary(output)
-            if business_source()['businessDigest'] != source['businessDigest']:
-                report['status'] = 'failure'
-                report['sourceChangedDuringExecution'] = True
-            report['completedAt'] = now()
-            report['filesSHA256'] = {str(p.relative_to(output)): sha(p) for p in output.rglob('*') if p.is_file() and p.name != 'report.json'}
-            write(output / 'report.json', report)
-        finally:
-            for sig, handler in previous_lane_signals.items():
-                signal.signal(sig, handler)
+        for directory in lane['rawDirectories']:
+            for path in (ROOT / directory).glob('*'):
+                if str(path) not in raw_before:
+                    target = output / 'raw' / Path(directory).name / path.name
+                    if path.is_dir():
+                        shutil.copytree(path, target, dirs_exist_ok=True)
+                    else:
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(path, target)
+        shutil.rmtree(work, ignore_errors=True)
+        (output / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
     return 0 if report['status'] == 'success' else 1
-
-
-def validate_evidence(root, prefix, expected_lanes, head, attempt):
-    found = {}
-    candidates = {}
-    for path in root.rglob('report.json'):
-        item = json.loads(path.read_text())
-        if item.get('prefix') != prefix:
-            continue
-        lane = item.get('lane')
-        if lane not in expected_lanes:
-            raise ValueError('unexpected lane: ' + str(lane))
-        observed_attempt = int(item['attempt'])
-        if observed_attempt > int(attempt) or observed_attempt < 1:
-            raise ValueError('invalid artifact attempt: ' + lane)
-        key = (lane, observed_attempt)
-        if key in candidates:
-            raise ValueError('duplicated lane artifact: ' + lane)
-        candidates[key] = (path, item)
-    # A targeted GitHub rerun retains successful same-run, same-head jobs.
-    # Select each lane's latest artifact; never replace a newer failure with an
-    # older success, and never claim inherited jobs executed a second time.
-    selected = {lane: max((key for key in candidates if key[0] == lane), key=lambda key: key[1])
-                for lane in expected_lanes if any(key[0] == lane for key in candidates)}
-    for lane, key in selected.items():
-        path, item = candidates[key]
-        if (item.get('status') != 'success' or item.get('head') != head
-                or item.get('runId') != os.environ.get('GITHUB_RUN_ID', item.get('runId'))):
-            raise ValueError('failed, stale, cancelled or incomplete lane: ' + lane)
-        steps = PLAN['lanes'][lane]['steps']
-        if len(item.get('steps', [])) != len(steps):
-            raise ValueError('missing steps: ' + lane)
-        for observed, planned in zip(item['steps'], steps):
-            if (observed.get('plannedCommand') != planned['command'] or observed.get('status') != 'success'
-                    or type(observed.get('exitCode')) is not int or observed['exitCode'] != 0
-                    or observed.get('timeoutSeconds') != planned['timeoutSeconds']
-                    or type(observed.get('processGroup')) is not int or observed['processGroup'] < 1
-                    or observed.get('remainingLiveGroupMembers') != []):
-                raise ValueError('step mismatch: ' + lane)
-        cleanup = item.get('cleanup', {})
-        inventories = cleanup.get('remainingNewResources')
-        kinds = {'containers', 'volumes', 'networks'}
-        if (cleanup.get('ownedTemporaryDirectoryRemoved') is not True
-                or cleanup.get('dockerAuditScope') != 'dedicated GitHub runner'
-                or not isinstance(inventories, dict) or set(inventories) != kinds
-                or any(not isinstance(v, list) or v for v in inventories.values())
-                or not isinstance(cleanup.get('before'), dict) or set(cleanup['before']) != kinds
-                or any(not isinstance(v, list) for v in cleanup['before'].values())):
-            raise ValueError('owned cleanup failed: ' + lane)
-        cases = item.get('cases')
-        if (not isinstance(cases, dict) or set(cases) != {'run', 'pass', 'fail', 'skip'}
-                or any(not isinstance(v, list) or any(not isinstance(case, str) or not case for case in v)
-                       for v in cases.values())):
-            raise ValueError('case evidence missing: ' + lane)
-        if lane not in CORE_LANES and (not cases['run'] or not cases['pass'] or cases['fail'] or cases['skip']):
-            raise ValueError('mandatory native cases missing, failed or skipped: ' + lane)
-        files = item.get('filesSHA256', {})
-        required_logs = {f'logs/{i:02d}.log' for i in range(len(steps))}
-        if not files or not {'source.json', *required_logs}.issubset(files):
-            raise ValueError('missing file manifest: ' + lane)
-        for directory in PLAN['lanes'][lane]['rawDirectories']:
-            if lane not in CORE_LANES:
-                prefix_path = 'raw/' + Path(directory).name + '/'
-                if not any(name.startswith(prefix_path) and name.endswith('/cleanup.json') for name in files):
-                    raise ValueError('original producer cleanup report missing: ' + lane)
-                if not any(name.startswith(prefix_path) and name.endswith('.jsonl') for name in files):
-                    raise ValueError('original producer case log missing: ' + lane)
-        for name, digest in files.items():
-            file = path.parent / name
-            if not file.resolve().is_relative_to(path.parent.resolve()) or not file.is_file() or sha(file) != digest:
-                raise ValueError('artifact bytes mismatch: ' + lane + '/' + name)
-            if name.startswith('raw/') and name.endswith('/cleanup.json'):
-                producer_cleanup = json.loads(file.read_text())
-                if type(producer_cleanup.get('exitCode')) is not int or producer_cleanup['exitCode'] != 0:
-                    raise ValueError('producer cleanup failed: ' + lane)
-        source = json.loads((path.parent / 'source.json').read_text())
-        if any(source.get(k) != item.get(k) for k in ('head', 'tree', 'businessDigest')):
-            raise ValueError('source manifest differs from report: ' + lane)
-        found[lane] = item
-    if set(found) != set(expected_lanes):
-        raise ValueError('missing lanes: ' + ', '.join(sorted(set(expected_lanes) - set(found))))
-    if len({(x['tree'], x['businessDigest']) for x in found.values()}) != 1:
-        raise ValueError('lanes ran different source trees')
-    return found
-
-
-def validate_needs(needs, expected):
-    if set(needs) != set(expected) or any(needs[x].get('result') != 'success' for x in expected):
-        raise ValueError('a required job failed, was skipped/cancelled, or has no result')
-
-
-class StripRedirectCredential(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
-        if redirected is not None:
-            redirected.remove_header('Authorization')
-        return redirected
-
-
-# The final single-block protocol is source-audited for this runner only:
-# actions/runner Logging.cs:117-164 and ResultsHttpClient.cs:424-499 at this commit.
-FINAL_LOG_RUNNER_VERSION = '2.338.0'
-FINAL_LOG_RUNNER_SOURCE_COMMIT = '197ca027b90de199464dee3bb9ff198a1db60967'
-FINAL_LOG_SAFE_HEADERS = {'content-length', 'content-md5', 'content-type', 'content-encoding',
-                          'content-range', 'transfer-encoding', 'etag', 'last-modified',
-                          'x-ms-blob-type'}
-
-
-def completed_runner_steps(job, lane):
-    """An exact runner plan, including conditional skips and action post steps."""
-    action = r'@[0-9a-f]{40}'
-    expected = [
-        ('Set up job', 'success'),
-        ('Initialize failure evidence before checkout or tool setup', 'success'),
-        ('Run actions/checkout' + action, 'success'),
-        ('Run actions/setup-go' + action, 'success'),
-        ('Warm the Go module cache with retries', 'success'),
-        ('Run dtolnay/rust-toolchain' + action,
-         'success' if lane in CORE_LANES or lane == 'six-format-auth' else 'skipped'),
-        ('Run actions/setup-node' + action, 'success'),
-        *[(name, 'success' if lane in CORE_LANES else 'skipped') for name in (
-            'Verify public npm lockfile sources before install', 'Install OpenAPI tooling',
-            'Install Console code generation dependencies')],
-        ('Run unchanged lane targets and preserve raw evidence', 'success'),
-        ('Preserve lane evidence including bootstrap failures', 'success'),
-        ('Post Run actions/setup-node' + action, 'success'),
-        ('Post Run actions/setup-go' + action, 'success'),
-        ('Post Run actions/checkout' + action, 'success'),
-        ('Complete job', 'success')]
-    steps = job.get('steps')
-    if not isinstance(steps, list) or len(steps) != len(expected):
-        return None
-    previous_number = 0
-
-    def api_timestamp(value):
-        if not isinstance(value, str) or not re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z', value):
-            raise ValueError('runner step timestamp unavailable')
-        return timestamp(value)
-
-    try:
-        previous_end = api_timestamp(job['started_at'])
-        for step, (name, conclusion) in zip(steps, expected):
-            if (not isinstance(step, dict) or not isinstance(step.get('name'), str)
-                    or not re.fullmatch(name, step['name']) or step.get('status') != 'completed'
-                    or step.get('conclusion') != conclusion
-                    or type(step.get('number')) is not int or step['number'] <= previous_number):
-                return None
-            start, end = api_timestamp(step['started_at']), api_timestamp(step['completed_at'])
-            if start < previous_end or end < start:
-                return None
-            previous_number, previous_end = step['number'], end
-        # A post action must belong to the same pinned action as its main step.
-        if any(steps[post]['name'][5:] != steps[main]['name']
-               for post, main in ((12, 6), (13, 3), (14, 2))):
-            return None
-    except (KeyError, TypeError, ValueError, AttributeError):
-        return None
-    return steps
-
-
-def runner_log_completion(data, steps):
-    """Corroborate machine steps with the original log's setup and finalization."""
-    try:
-        if not data.endswith(b'\n'):
-            return None
-        lines = data.decode('utf-8-sig').splitlines()
-        pattern = re.compile(r'^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z) (.*)$')
-        first, last = pattern.fullmatch(lines[0]), pattern.fullmatch(lines[-1])
-        runner = re.fullmatch(r"Current runner version: '(\d+\.\d+\.\d+)'", first[2]) if first else None
-        if not first or not last or not runner or runner[1] != FINAL_LOG_RUNNER_VERSION:
-            return None
-        posts, cleanup = [], []
-        log_times = []
-        for index, line in enumerate(lines):
-            match = pattern.fullmatch(line)
-            if match:
-                log_times.append(timestamp(match[1]))
-            if match and match[2] == 'Post job cleanup.':
-                posts.append((index, match[1]))
-            if match and match[2] == 'Cleaning up orphan processes':
-                cleanup.append((index, match[1]))
-
-        def within(value, step):
-            # The jobs API truncates timestamps to seconds; raw logs retain
-            # fractions. This is timestamp precision, not a polling allowance.
-            return timestamp(step['started_at']) <= timestamp(value) < timestamp(step['completed_at']) + 1
-
-        if (len(posts) != 3 or len(cleanup) != 1 or posts[-1][0] >= cleanup[0][0]
-                or not within(first[1], steps[0]) or not within(last[1], steps[-1])
-                or not within(cleanup[0][1], steps[-1])
-                or any(not within(value, step) for (_, value), step in zip(posts, steps[-4:-1]))):
-            return None
-        covered = []
-        for step in steps:
-            if step['conclusion'] == 'skipped':
-                continue
-            start, end = timestamp(step['started_at']), timestamp(step['completed_at']) + 1
-            if not any(start <= value < end for value in log_times):
-                return None
-            covered.append({'number': step['number'], 'name': step['name']})
-        return {'runnerCompleteStep': steps[-1], 'logSetupAt': first[1],
-                'logPostCleanupAt': [value for _, value in posts],
-                'logCleanupAt': cleanup[0][1], 'logLastLineAt': last[1],
-                'runnerVersion': runner[1], 'coveredRunnerSteps': covered}
-    except (UnicodeError, IndexError, KeyError, TypeError, ValueError):
-        return None
-
-
-def sealed_job_log_object(data, receipt, witness, job_id):
-    """Verify the trusted job endpoint's final object, not body-authored markers.
-
-    In the audited runner, only firstBlock && finalize creates a BlockBlob.
-    Incremental logs use AppendBlob; they are deliberately unsupported here.
-    Provider MD5 verifies object transport. SHA256 remains the evidence digest.
-    """
-    try:
-        headers = receipt['safeHeaders']
-        if (type(receipt['httpStatus']) is not int or receipt['httpStatus'] != 200
-                or receipt['jobId'] != job_id
-                or not receipt['trustedJobLogRedirect'] or not receipt['headersUnique']
-                or headers.get('x-ms-blob-type') != 'BlockBlob'
-                or headers.get('content-type', '').split(';', 1)[0].strip() != 'text/plain'
-                or any(key in headers for key in ('content-range', 'content-encoding', 'transfer-encoding'))
-                or not re.fullmatch(r'[1-9][0-9]*', headers.get('content-length', ''))
-                or int(headers['content-length']) != len(data)
-                or not re.fullmatch(r'"0x[0-9A-Fa-f]+"', headers.get('etag', ''))):
-            return None
-        digest = base64.b64decode(headers['content-md5'], validate=True)
-        if len(digest) != 16 or digest != hashlib.md5(data, usedforsecurity=False).digest():
-            return None
-        modified = parsedate_to_datetime(headers['last-modified'])
-        if (modified.tzinfo is None or modified.utcoffset().total_seconds() != 0
-                or modified.timestamp() < max(timestamp(witness['logLastLineAt']),
-                                              timestamp(witness['runnerCompleteStep']['completed_at']))
-                or modified.timestamp() > datetime.now(timezone.utc).timestamp()):
-            return None
-        return {'source': 'github-actions-results-final-block-blob',
-                'runnerVersion': FINAL_LOG_RUNNER_VERSION,
-                'runnerSourceCommit': FINAL_LOG_RUNNER_SOURCE_COMMIT,
-                'httpStatus': receipt['httpStatus'], 'downloadHost': receipt['downloadHost'],
-                'safeHeaders': headers, 'verifiedBytes': len(data),
-                'verifiedContentMD5': headers['content-md5'],
-                'verifiedSHA256': hashlib.sha256(data).hexdigest(),
-                'lastModifiedAt': modified.isoformat()}
-    except (KeyError, TypeError, ValueError, AttributeError, OverflowError):
-        return None
-
-
-def collect_job_logs(destination, prefixes=('contract',), lanes=LANES):
-    api = os.environ.get('GITHUB_API_URL', 'https://api.github.com')
-    repository = os.environ['GITHUB_REPOSITORY']
-    run = os.environ['GITHUB_RUN_ID']
-    token = os.environ['GITHUB_TOKEN']
-    head = os.environ.get('GITHUB_SHA', '')
-    attempt = os.environ.get('GITHUB_RUN_ATTEMPT', '')
-    event = os.environ.get('GITHUB_EVENT_NAME', '')
-    api_head = head
-    event_read = False
-    opener = urllib.request.build_opener(StripRedirectCredential())
-    budget = 120
-    deadline = time.monotonic() + budget
-    required = [p + '/' + lane for p in prefixes for lane in lanes]
-    manifest = {'required': required, 'selectedJobIDs': [], 'missing': required,
-                'missingLogs': required, 'complete': False, 'deadlineSeconds': budget,
-                'head': head, 'runId': run, 'attempt': attempt, 'event': event,
-                'completionEvidence': {}}
-    scheduler_success = False
-    if prefixes == ('contract',):
-        try:
-            needs = json.loads(os.environ['CI_CONTRACT_NEEDS'])
-            if not isinstance(needs, dict) or any(not isinstance(v, dict) for v in needs.values()):
-                raise ValueError('invalid scheduler needs')
-            validate_needs(needs, ['contract-core', 'contract-native'])
-            scheduler_success = True
-        except (KeyError, TypeError, ValueError):
-            pass  # Without the exact successful scheduler result, only REST terminal jobs qualify.
-    identities = {}
-    downloaded = set()
-    log_receipts = {}
-    poll = 0
-
-    def remaining():
-        available = deadline - time.monotonic()
-        if available <= 0:
-            raise ValueError('complete job log collection deadline exceeded (120s)')
-        return available
-
-    def fetch(url, log_job=None):
-        request = urllib.request.Request(url, headers={'Authorization': 'Bearer ' + token,
-                                         'Accept': 'application/vnd.github+json',
-                                         'X-GitHub-Api-Version': '2022-11-28',
-                                         'Cache-Control': 'no-cache'})
-        with opener.open(request, timeout=min(45, remaining())) as response:
-            data = response.read()
-            if log_job is not None:
-                headers, unique = {}, True
-                for key, value in response.headers.items():
-                    key = key.lower()
-                    if key in FINAL_LOG_SAFE_HEADERS:
-                        if key in headers:
-                            unique = False
-                        headers[key] = value
-                receipt = {'httpStatus': response.status, 'jobId': log_job,
-                           'safeHeaders': headers, 'headersUnique': unique,
-                           'trustedJobLogRedirect': False, 'downloadHost': None}
-                try:
-                    origin, target = urllib.parse.urlsplit(url), urllib.parse.urlsplit(response.geturl())
-                    receipt['downloadHost'] = target.hostname
-                    receipt['trustedJobLogRedirect'] = (
-                        origin.scheme == target.scheme == 'https'
-                        and origin.hostname == 'api.github.com' and origin.port in (None, 443)
-                        and origin.username is None and origin.password is None
-                        and origin.path == f'/repos/{repository}/actions/jobs/{log_job}/logs'
-                        and not origin.query and not origin.fragment
-                        and target.username is None and target.password is None
-                        and target.port in (None, 443) and not target.fragment
-                        and bool(re.fullmatch(r'[a-z0-9]{3,24}\.blob\.core\.windows\.net', target.hostname or '')))
-                except (TypeError, ValueError):
-                    pass
-        remaining()
-        return (data, receipt) if log_job is not None else data
-
-    # A dependent job can start while the jobs API still reports its completed
-    # prerequisite as in_progress. Current-attempt correctness collection can
-    # use the scheduler plus completed machine steps and the complete raw log.
-    # Retained jobs and benchmark timing still require REST terminal metadata.
-    while True:
-        poll += 1
-        readback = {'poll': poll, 'elapsedSeconds': budget - (deadline - time.monotonic()),
-                    'logReads': [], 'status': 'waiting'}
-        try:
-            jobs = []
-            page = 1
-            while True:
-                data = fetch(f'{api}/repos/{repository}/actions/runs/{run}/jobs?filter=latest&per_page=100&page={page}')
-                page_path = destination / 'job-log-polls' / f'{poll:03d}-page-{page:03d}.json'
-                page_path.parent.mkdir(parents=True, exist_ok=True)
-                page_path.write_bytes(data)
-                batch = json.loads(data)['jobs']
-                jobs.extend(batch)
-                if len(batch) < 100:
-                    break
-                page += 1
-            write(destination / 'jobs.json', jobs)
-            write(destination / 'job-log-polls' / f'{poll:03d}-jobs.json', jobs)
-            matching = {name: [j for j in jobs if j['name'].endswith(name)] for name in required}
-            manifest['missing'] = [name for name in required if len(matching[name]) != 1]
-            if manifest['missing']:
-                raise ValueError('complete job logs unavailable: ' + ', '.join(manifest['missing']))
-            if (not re.fullmatch(r'[0-9a-f]{40}', head) or not run.isdecimal()
-                    or not attempt.isdecimal() or int(run) < 1 or int(attempt) < 1):
-                raise ValueError('GitHub job source binding unavailable')
-            if not event_read:
-                if event == 'pull_request':
-                    # Jobs API identifies the PR head; GITHUB_SHA and artifact
-                    # validation identify its synthetic merge commit.
-                    try:
-                        payload = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text())
-                        api_head = payload['pull_request']['head']['sha']
-                        if (payload['repository']['full_name'] != repository
-                                or not isinstance(api_head, str)
-                                or not re.fullmatch(r'[0-9a-f]{40}', api_head)):
-                            raise ValueError('invalid event binding')
-                    except (KeyError, OSError, TypeError, ValueError):
-                        raise ValueError('GitHub pull request source binding unavailable') from None
-                manifest['apiHead'] = api_head
-                event_read = True
-            selected = []
-            runner_completed = {}
-            for name in required:
-                job = matching[name][0]
-                if (job.get('head_sha') != api_head or type(job.get('run_id')) is not int
-                        or job['run_id'] != int(run) or type(job.get('run_attempt')) is not int
-                        or not 1 <= job['run_attempt'] <= int(attempt)):
-                    raise ValueError('GitHub job source binding mismatch: ' + name)
-                if type(job.get('id')) is not int or job['id'] < 1:
-                    raise ValueError('GitHub job identity unavailable: ' + name)
-                identity = (job['id'], job['run_attempt'])
-                if name in identities and identities[name] != identity:
-                    raise ValueError('GitHub job identity changed during collection: ' + name)
-                identities[name] = identity
-                if (job['run_attempt'] < int(attempt)
-                        and (job['status'] != 'completed' or job.get('conclusion') != 'success')):
-                    raise ValueError('GitHub retained job source binding is not successful: ' + name)
-                if (scheduler_success and job.get('conclusion') is not None
-                        and job.get('conclusion') != 'success'):
-                    raise ValueError('GitHub job result contradicts successful scheduler needs: ' + name)
-                if (job['status'] == 'completed' and job.get('conclusion') in
-                        ('success', 'failure', 'cancelled', 'skipped', 'timed_out',
-                         'action_required', 'neutral', 'stale', 'startup_failure')):
-                    selected.append(job)
-                elif (job['status'] in ('queued', 'in_progress', 'waiting', 'pending', 'requested')
-                      or (job['status'] == 'completed' and job.get('conclusion') is None)):
-                    lane = name.split('/', 1)[1]
-                    group = f'contract-core ({lane})' if lane in CORE_LANES else f'contract-native ({lane})'
-                    steps = None
-                    if (scheduler_success and job['run_attempt'] == int(attempt)
-                            and job['status'] == 'in_progress' and job.get('conclusion') is None
-                            and job.get('completed_at') is None
-                            and job['name'] == group + ' / ' + name):
-                        steps = completed_runner_steps(job, lane)
-                    if steps is not None:
-                        selected.append(job)
-                        runner_completed[job['id']] = steps
-                    else:
-                        manifest['missing'].append(name)
-                else:
-                    raise ValueError('unknown GitHub job status: ' + name)
-            manifest['selectedJobIDs'] = [job['id'] for job in selected]
-            manifest['selectedAttempts'] = {str(job['id']): job['run_attempt'] for job in selected}
-            for job in selected:
-                if job['id'] in downloaded and job['id'] not in runner_completed:
-                    continue
-                observed = {'jobId': job['id'], 'status': 'not_ready'}
-                readback['logReads'].append(observed)
-                try:
-                    if job['id'] in runner_completed:
-                        if job['id'] in downloaded and job['id'] in log_receipts:
-                            data = (destination / f'job-{job["id"]}.log').read_bytes()
-                            receipt = log_receipts[job['id']]
-                        else:
-                            data, receipt = fetch(f'{api}/repos/{repository}/actions/jobs/{job["id"]}/logs',
-                                                  log_job=job['id'])
-                    else:
-                        data = fetch(f'{api}/repos/{repository}/actions/jobs/{job["id"]}/logs')
-                except urllib.error.HTTPError as error:
-                    if error.code != 404:
-                        raise
-                    observed['httpStatus'] = 404
-                    error.close()
-                    continue
-                if job['id'] in runner_completed:
-                    raw_path = destination / 'job-log-polls' / f'{poll:03d}-job-{job["id"]}.log'
-                    raw_path.write_bytes(data)
-                    observed['rawLog'] = str(raw_path.relative_to(destination))
-                    receipt_path = raw_path.with_suffix('.response.json')
-                    write(receipt_path, receipt)
-                    observed['responseReceipt'] = str(receipt_path.relative_to(destination))
-                if not data.strip():
-                    observed['reason'] = 'empty_log'
-                    continue
-                if job['id'] in runner_completed:
-                    witness = runner_log_completion(data, runner_completed[job['id']])
-                    sealed = (sealed_job_log_object(data, receipt, witness, job['id'])
-                              if witness is not None else None)
-                    if witness is None or sealed is None:
-                        downloaded.discard(job['id'])
-                        manifest['completionEvidence'].pop(str(job['id']), None)
-                        observed['reason'] = ('incomplete_runner_log' if witness is None
-                                              else 'unverified_final_log_object')
-                        continue
-                    log_receipts[job['id']] = receipt
-                    manifest['completionEvidence'][str(job['id'])] = {
-                        'source': 'github-needs-and-runner-completion',
-                        'schedulerJob': 'contract-core' if job['name'].split(' / ')[0].startswith('contract-core') else 'contract-native',
-                        'schedulerResults': {key: needs[key]['result'] for key in needs},
-                        'jobId': job['id'], 'runId': job['run_id'], 'attempt': job['run_attempt'],
-                        'head': job['head_sha'], 'observedStatus': job['status'],
-                        'logSHA256': hashlib.sha256(data).hexdigest(),
-                        'sealedLogObject': sealed, **witness}
-                (destination / f'job-{job["id"]}.log').write_bytes(data)
-                downloaded.add(job['id'])
-                observed.update(status='ready', bytes=len(data), sha256=hashlib.sha256(data).hexdigest())
-            manifest['missingLogs'] = [name for name in required if identities[name][0] not in downloaded]
-            remaining()
-            if not manifest['missing'] and not manifest['missingLogs']:
-                manifest['complete'] = True
-                readback['status'] = 'success'
-                return jobs
-        except Exception as error:
-            readback['status'] = 'failure'
-            readback['error'] = {'type': type(error).__name__}
-            if isinstance(error, ValueError):
-                readback['error']['reason'] = str(error)
-            if isinstance(error, urllib.error.HTTPError):
-                readback['error']['httpStatus'] = error.code
-                error.close()
-            raise
-        finally:
-            manifest['polls'] = poll
-            readback['missing'] = list(manifest['missing'])
-            readback['missingLogs'] = list(manifest['missingLogs'])
-            write(destination / 'job-log-manifest.json', manifest)
-            write(destination / 'job-log-polls' / f'{poll:03d}-readback.json', readback)
-        delay = min(2, max(0, deadline - time.monotonic()))
-        if delay:
-            time.sleep(delay)
-
-
-def aggregate(args):
-    if os.environ.get('GITHUB_ACTIONS') == 'true':
-        if os.environ.get('CI_CONTRACT_ARTIFACT_RESULT') != 'success':
-            raise ValueError('lane artifact download did not succeed')
-        if not args.benchmark_only and os.environ.get('CI_CONTRACT_JOB_LOG_RESULT') != 'success':
-            raise ValueError('complete job log collection did not succeed')
-    required_jobs = [args.needs_job] if args.needs_job else ['contract-core', 'contract-native']
-    validate_needs(json.loads(os.environ['CI_CONTRACT_NEEDS']), required_jobs)
-    expected = BENCHMARK_LANES if args.benchmark_only else LANES
-    found = validate_evidence(args.input, args.prefix, expected, os.environ['GITHUB_SHA'], os.environ['GITHUB_RUN_ATTEMPT'])
-    write(args.output / 'aggregate.json', {'status': 'success', 'head': os.environ['GITHUB_SHA'],
-                                        'runId': os.environ['GITHUB_RUN_ID'],
-                                        'attempt': os.environ['GITHUB_RUN_ATTEMPT'],
-                                        'prefix': args.prefix,
-                                        'lanes': sorted(found), 'completedAt': now()})
-    return 0
-
-
-def timestamp(value):
-    return datetime.fromisoformat(value.replace('Z', '+00:00')).timestamp()
-
-
-def validate_benchmark_aggregates(root, head, run, attempt):
-    found = {}
-    for prefix in ('benchmark-serial', 'benchmark-parallel'):
-        candidates = {}
-        for path in root.rglob('aggregate.json'):
-            item = json.loads(path.read_text())
-            if item.get('prefix') != prefix:
-                continue
-            observed = int(item['attempt'])
-            if observed < 1 or observed > int(attempt) or observed in candidates:
-                raise ValueError('invalid benchmark aggregate attempt: ' + prefix)
-            candidates[observed] = item
-        item = candidates.get(int(attempt))
-        if (not item or item.get('status') != 'success' or item.get('head') != head
-                or item.get('runId') != run or item.get('lanes') != sorted(BENCHMARK_LANES)):
-            raise ValueError('benchmark aggregate must succeed in the current execution attempt: ' + prefix)
-        found[prefix] = item
-    return found
-
-
-def benchmark(args):
-    if os.environ.get('GITHUB_ACTIONS') == 'true' and os.environ.get('CI_CONTRACT_ARTIFACT_RESULT') != 'success':
-        raise ValueError('benchmark artifact download did not succeed')
-    validate_needs(json.loads(os.environ['CI_CONTRACT_NEEDS']), ['serial-gate', 'parallel-gate'])
-    serial = validate_evidence(args.input, 'benchmark-serial', BENCHMARK_LANES, os.environ['GITHUB_SHA'], os.environ['GITHUB_RUN_ATTEMPT'])
-    parallel = validate_evidence(args.input, 'benchmark-parallel', BENCHMARK_LANES, os.environ['GITHUB_SHA'], os.environ['GITHUB_RUN_ATTEMPT'])
-    reports = [*serial.values(), *parallel.values()]
-    # GitHub gives retained successful jobs new IDs/run_attempt values while
-    # preserving their old timestamps. Artifact provenance is the execution
-    # authority; targeted reruns remain valid for correctness, not performance.
-    if any(int(r['attempt']) != int(os.environ['GITHUB_RUN_ATTEMPT']) for r in reports):
-        raise ValueError('benchmark lanes must use the current execution attempt; rerun all jobs for a comparable sample')
-    aggregates = validate_benchmark_aggregates(args.input, os.environ['GITHUB_SHA'],
-                                               os.environ['GITHUB_RUN_ID'], os.environ['GITHUB_RUN_ATTEMPT'])
-    if not all(r['coldCache'] for r in reports) or len({r['businessDigest'] for r in reports}) != 1:
-        raise ValueError('benchmark business inputs or cache conditions differ')
-    constraints = {(r['runner']['os'], r['runner']['architecture'], r['runner']['cpuCount'],
-                    r['runner']['memoryBytes'] // (512 * 1024**2), r['runner']['imageOS'],
-                    r['runner']['imageVersion']) for r in reports}
-    if len(constraints) != 1:
-        raise ValueError('benchmark runner constraints differ')
-    jobs = collect_job_logs(args.output, ('benchmark-serial', 'benchmark-parallel'), BENCHMARK_LANES)
-    results = {}
-    for mode, prefix in [('serial', 'benchmark-serial'), ('parallel', 'benchmark-parallel')]:
-        lanes = [j for j in jobs if any(j['name'].endswith(prefix + '/' + lane) for lane in BENCHMARK_LANES)]
-        gates = [j for j in jobs if j['name'] == mode + '-gate']
-        if len(lanes) != len(BENCHMARK_LANES) or len(gates) != 1 or any(j['conclusion'] != 'success' for j in [*lanes, *gates]):
-            raise ValueError('missing successful benchmark jobs: ' + mode)
-        start = min(timestamp(j['started_at']) for j in lanes)
-        end = timestamp(gates[0]['completed_at'])
-        points = sorted([(timestamp(j['started_at']), 1) for j in lanes]
-                        + [(timestamp(j['completed_at']), -1) for j in lanes])
-        count = peak = 0
-        for _, delta in points:
-            count += delta
-            peak = max(peak, count)
-        results[mode] = {'criticalPathSecondsIncludingSetupArtifactsCleanupAndAggregate': end - start,
-                         'peakAllocatedRunners': peak,
-                         'queueSecondsByJob': {str(j['id']): timestamp(j['started_at']) - timestamp(j['created_at']) for j in [*lanes, *gates]},
-                         'jobs': lanes, 'aggregate': gates[0]}
-    old = results['serial']['criticalPathSecondsIncludingSetupArtifactsCleanupAndAggregate']
-    new = results['parallel']['criticalPathSecondsIncludingSetupArtifactsCleanupAndAggregate']
-    improvement = (old - new) / old
-    passed = results['parallel']['peakAllocatedRunners'] >= 2 and improvement >= 0.25
-    write(args.output / 'benchmark.json', {'status': 'success' if passed else 'performance_unproven',
-          'businessDigest': reports[0]['businessDigest'], 'coldCache': True,
-          'executionAttempt': os.environ['GITHUB_RUN_ATTEMPT'], 'aggregateEvidence': aggregates,
-          'runnerConstraints': list(next(iter(constraints))), 'modes': results,
-          'improvementFraction': improvement, 'thresholdFraction': 0.25,
-          'note': 'Critical paths end after the corresponding aggregate job, including its artifact upload. Performance auditing is separate from the contract gate.'})
-    return 0 if passed else 1
 
 
 def main():
@@ -1027,44 +191,22 @@ def main():
     lane = commands.add_parser('run')
     lane.add_argument('lane', choices=LANES)
     lane.add_argument('--output', required=True, type=Path)
-    lane.add_argument('--prefix', default='contract')
-    lane.add_argument('--cold-cache', action='store_true')
     lane.add_argument('--local', action='store_true')
     lane.add_argument('--keep-going', action='store_true')
     commands.add_parser('openapi-fresh')
     commands.add_parser('list')
-    agg = commands.add_parser('aggregate')
-    agg.add_argument('--input', required=True, type=Path)
-    agg.add_argument('--output', required=True, type=Path)
-    agg.add_argument('--prefix', default='contract', choices=['contract', 'benchmark-serial', 'benchmark-parallel'])
-    agg.add_argument('--benchmark-only', action='store_true')
-    agg.add_argument('--needs-job', choices=['serial', 'parallel'])
-    logs = commands.add_parser('collect-job-logs')
-    logs.add_argument('--output', required=True, type=Path)
-    bench = commands.add_parser('benchmark')
-    bench.add_argument('--input', required=True, type=Path)
-    bench.add_argument('--output', required=True, type=Path)
+    commands.add_parser('matrix')
     args = parser.parse_args()
     if args.command == 'run':
         return run_lane(args)
     if args.command == 'openapi-fresh':
         openapi_fresh()
     elif args.command == 'list':
-        print(json.dumps(PLAN, indent=2))
-    elif args.command == 'aggregate':
-        return aggregate(args)
-    elif args.command == 'collect-job-logs':
-        args.output.mkdir(parents=True, exist_ok=True)
-        collect_job_logs(args.output)
-    elif args.command == 'benchmark':
-        args.output.mkdir(parents=True, exist_ok=True)
-        return benchmark(args)
+        print('\n'.join(LANES))
+    else:
+        print(json.dumps(matrix()))
     return 0
 
 
 if __name__ == '__main__':
-    try:
-        sys.exit(main())
-    except (ValueError, RuntimeError, OSError, subprocess.SubprocessError) as error:
-        print('Contract verification failed: ' + str(error), file=sys.stderr)
-        sys.exit(1)
+    sys.exit(main())

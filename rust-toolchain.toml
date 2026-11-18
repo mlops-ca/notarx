@@ -1,0 +1,4 @@
+# Verified Cargo client baseline (docs/cargo-usage.md); CI installs this toolchain.
+[toolchain]
+channel = "1.96.0"
+profile = "minimal"

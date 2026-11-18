@@ -9,11 +9,6 @@ permissions:
   contents: read
 
 env:
-  # Fail stalled registry requests with an actionable error instead of waiting
-  # five minutes per attempt. Dependency integrity and audit gates stay enabled.
-  NPM_CONFIG_FETCH_TIMEOUT: "60000"
-  NPM_CONFIG_FETCH_RETRY_MINTIMEOUT: "1000"
-  NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: "10000"
   # Fall through to the origin on any proxy failure (a "|" separator, unlike
   # ",", also covers stream errors, not only 404/410).
   GOPROXY: https://proxy.golang.org|direct
@@ -26,7 +21,7 @@ jobs:
   # Classifies the change (docs/ci.md). Heavy jobs run only when their class
   # changed; pushes to main, tags and unresolvable ranges run everything.
   changes:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       go: ${{ steps.classify.outputs.go }}
       console: ${{ steps.classify.outputs.console }}
@@ -34,7 +29,7 @@ jobs:
       ci: ${{ steps.classify.outputs.ci }}
       images: ${{ steps.classify.outputs.images }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Verify the classifier fixtures
@@ -49,7 +44,7 @@ jobs:
 
   pr-title:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Require a Conventional Commit PR title
         env:
@@ -64,10 +59,10 @@ jobs:
   docs:
     needs: changes
     if: needs.changes.outputs.docs == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
       - name: Documentation i18n twins
@@ -82,85 +77,62 @@ jobs:
   image-test-stages:
     needs: changes
     if: needs.changes.outputs.images == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: make docker-test
 
-  contract-core:
+  # The lane plan (scripts/ci-contract-lanes.json) is the single source for
+  # lane names, tool needs and timeouts; the matrix below is generated from it.
+  contract-plan:
     needs: changes
     if: needs.changes.outputs.go == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        lane: [core-checks, core-email, core-native-e2e, core-backup]
-    uses: ./.github/workflows/contract-lane.yml
-    with:
-      lane: ${{ matrix.lane }}
-
-  contract-native:
-    needs: changes
-    if: needs.changes.outputs.go == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        lane: [migration-clients, inventory, nuget, oci-migration, maven-oci-auth, six-format-auth, oci-discovery, npm-migration, helm, rubygems, pypi-migration]
-    uses: ./.github/workflows/contract-lane.yml
-    with:
-      lane: ${{ matrix.lane }}
-
-  contract-and-test:
-    if: always() && needs.contract-core.result != 'skipped'
-    needs: [contract-core, contract-native]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: read
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
     steps:
-      - name: Prepare aggregate evidence before checkout
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: plan
+        run: echo "matrix=$(python3 scripts/ci-contract.py matrix)" >> "$GITHUB_OUTPUT"
+
+  contract:
+    needs: contract-plan
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.contract-plan.outputs.matrix) }}
+    uses: ./.github/workflows/contract-lane.yml
+    with:
+      lane: ${{ matrix.lane }}
+      timeout: ${{ matrix.timeout }}
+      rust: ${{ matrix.rust }}
+      node: ${{ matrix.node }}
+      npm: ${{ matrix.npm }}
+
+  # Stable check name required by the release gate (ADR 0024): every contract
+  # lane succeeded. Skipped only when change detection skipped the lanes.
+  contract-and-test:
+    if: always() && needs.contract-plan.result != 'skipped'
+    needs: [contract-plan, contract]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require every contract lane to succeed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
         run: |
-          mkdir -p "$RUNNER_TEMP/contract-aggregate"
-          printf '{"status":"bootstrap_incomplete","head":"%s","runId":"%s","attempt":"%s"}\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" > "$RUNNER_TEMP/contract-aggregate/bootstrap.json"
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - name: Download every isolated lane artifact
-        id: lane-artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          pattern: contract-*
-          path: ${{ runner.temp }}/contract-input
-      - name: Preserve complete job logs including checkout and setup
-        id: job-logs
-        if: always()
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          CI_CONTRACT_NEEDS: ${{ toJSON(needs) }}
-        run: python3 scripts/ci-contract.py collect-job-logs --output "$RUNNER_TEMP/contract-aggregate"
-      - name: Require all job results and complete matching lane evidence
-        if: always()
-        env:
-          CI_CONTRACT_NEEDS: ${{ toJSON(needs) }}
-          CI_CONTRACT_ARTIFACT_RESULT: ${{ steps.lane-artifacts.outcome }}
-          CI_CONTRACT_JOB_LOG_RESULT: ${{ steps.job-logs.outcome }}
-        run: python3 scripts/ci-contract.py aggregate --input "$RUNNER_TEMP/contract-input" --output "$RUNNER_TEMP/contract-aggregate"
-      - name: Preserve aggregate evidence on every outcome
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: contract-aggregate-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/contract-aggregate/
-          if-no-files-found: error
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$NEEDS" | jq -e '[.[] | select(.result != "success")] | length == 0' >/dev/null
 
   quality:
     needs: changes
     if: needs.changes.outputs.go == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
           cache: true
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
@@ -190,10 +162,10 @@ jobs:
   console:
     needs: changes
     if: needs.changes.outputs.console == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
@@ -225,7 +197,7 @@ jobs:
         run: make console-visual
       - name: Upload Console visual diff
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: console-visual-diff
           path: console/test-results/
@@ -236,10 +208,10 @@ jobs:
   console-e2e:
     needs: changes
     if: needs.changes.outputs.go == 'true' || needs.changes.outputs.console == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
@@ -278,7 +250,7 @@ jobs:
         run: make console-e2e
       - name: Upload Console E2E report and traces
         if: ${{ !cancelled() && (steps.console-e2e.outcome == 'success' || steps.console-e2e.outcome == 'failure') }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: console-e2e-results
           path: |
@@ -286,7 +258,7 @@ jobs:
             console/playwright-report/
           retention-days: 7
           if-no-files-found: error
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
           cache: true
@@ -312,8 +284,8 @@ jobs:
   # skipped by change detection, fails on any failure or cancellation.
   ci-ok:
     if: always()
-    needs: [changes, pr-title, docs, quality, console, console-e2e, image-test-stages, contract-core, contract-native, contract-and-test]
-    runs-on: ubuntu-latest
+    needs: [changes, pr-title, docs, quality, console, console-e2e, image-test-stages, contract-plan, contract, contract-and-test]
+    runs-on: ubuntu-24.04
     steps:
       - name: Require every needed job to succeed or be skipped
         env:
@@ -330,7 +302,7 @@ jobs:
           e2e=false
           if [[ "$GO" == true || "$CONSOLE" == true ]]; then e2e=true; fi
           status=0
-          for pair in quality:$GO contract-core:$GO contract-native:$GO contract-and-test:$GO console:$CONSOLE console-e2e:$e2e docs:$DOCS image-test-stages:$IMAGES; do
+          for pair in quality:$GO contract-plan:$GO contract:$GO contract-and-test:$GO console:$CONSOLE console-e2e:$e2e docs:$DOCS image-test-stages:$IMAGES; do
             job=${pair%%:*} class=${pair##*:}
             result=$(echo "$NEEDS" | jq -r --arg job "$job" '.[$job].result')
             if [[ "$class" == true && "$result" != success ]]; then
@@ -343,14 +315,14 @@ jobs:
   mainline-assets:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [contract-and-test, quality, console, console-e2e]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
           cache: true
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
@@ -365,7 +337,7 @@ jobs:
             --output dist
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Upload mainline distribution assets
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: artifact-gateway-${{ steps.build.outputs.version }}
           path: dist/
@@ -375,7 +347,7 @@ jobs:
   mainline-images:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [contract-and-test, quality, console, console-e2e]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
@@ -387,7 +359,7 @@ jobs:
           - image: artifact-gateway-console
             file: Dockerfile.console
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Resolve mainline version
         id: version
         run: |

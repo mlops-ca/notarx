@@ -199,99 +199,31 @@ The CI workflow is the final source of truth for the complete required matrix.
 
 ### Contract lanes and performance evidence
 
-`contract-and-test` is the stable required aggregate. `contract-core` and the ten
-native lanes start independently; the native matrix uses `fail-fast: false` and
-at most three concurrent jobs. Publication still waits for the aggregate,
-quality and Console. The aggregate rejects failed, skipped, cancelled, missing,
-stale or corrupt results. A targeted rerun may reuse successful artifacts from
-an earlier attempt of the same run and head; their original attempt remains
-visible and a newer failure never falls back to an older success.
+`scripts/ci-contract-lanes.json` is the single source for the contract lanes:
+their names and order, the tools each needs (`rust`, `node`, `npm`), job and
+step timeouts, and the failure artefacts. `scripts/ci-contract.py matrix` turns
+it into the matrix that `ci.yml` feeds to the reusable `contract-lane.yml`, so
+neither workflow names a lane. Add or move a lane by editing the JSON only.
 
-The editable target/timeout inventory is `scripts/ci-contract-lanes.json`:
+The `contract` jobs run in parallel with `fail-fast: false`. The stable
+`contract-and-test` check (named by the release gate, ADR 0024) requires every
+lane to succeed; publication still waits for it, quality and Console. The
+former serial `core` lane is split into `core-checks`, `core-email`,
+`core-native-e2e` and `core-backup`, followed by the native lanes (migration
+clients, inventory, NuGet, OCI migration and discovery, private-upstream
+authentication, npm migration, Helm, RubyGems, PyPI migration). Each lane
+installs only the toolchains it declares, read from `go.mod`,
+`rust-toolchain.toml` and `.nvmrc`; npm retry and timeout settings live in
+`console/.npmrc` and `tools/openapi/.npmrc`.
 
-| Lane | Existing target | Target timeout |
-| --- | --- | --- |
-| migration-clients | `nexus-migration-client-e2e` | 10 minutes |
-| inventory | `nexus-inventory-scan-e2e` | 10 minutes |
-| nuget | `native-nuget-e2e` | 15 minutes |
-| oci-migration | `nexus-oci-migration-e2e` | 10 minutes |
-| maven-oci-auth | `private-upstream-auth-e2e` | 10 minutes |
-| six-format-auth | `private-upstream-formats-e2e` | 15 minutes |
-| oci-discovery | `native-oci-discovery-e2e` | 15 minutes |
-| npm-migration | `nexus-npm-migration-e2e` | 15 minutes |
-| helm | `native-helm-e2e` | 15 minutes |
-| rubygems | `native-rubygems-e2e` | 15 minutes |
-
-Every native lane first runs `go mod download` with a five-minute preparation limit. Its log is separate from the unchanged target: first-download Go diagnostics must not enter the existing strict producer JSONL stream. Both cold benchmark modes start with empty private Go caches and include this preparation in the measured critical path; build and protocol-client caches retain their original behavior.
-
-Core retains the other existing targets, including the 15-minute published
-backup and 10-minute upgrade checks. Run one lane with
-`./scripts/ci-local.sh --lane inventory`; `--job contract` runs core and all ten
-lanes plus the existing additional local CLI stack check. Local OpenAPI freshness
+Run one lane with `./scripts/ci-local.sh --lane inventory`; `--job contract`
+runs every lane plus the local CLI stack check. Local OpenAPI freshness
 regenerates and compares file hashes so uncommitted generated changes remain
-reviewable. The orchestration controls run with
+reviewable. The lane runner controls run with
 `python3 -B -m unittest discover -s scripts/tests -p test_ci_contract.py`.
-
-Each lane uploads `contract-<lane>-<attempt>` even after setup failure. A
-bootstrap-only artifact is a failure, not a completed test. Evidence contains
-head/tree, business-file hashes, exact commands and timeouts, case events, raw
-producer files, timings and cleanup. Each client uses the existing owned
-fixture directories; the wrapper removes its private temporary directory and
-never deletes other jobs' resources. Dedicated GitHub runners also compare
-container/volume/network inventories before and after execution; local runs
-retain fixture-owned cleanup reports without claiming ownership of other
-concurrent developers' resources. `contract-aggregate-<attempt>` also preserves
-complete GitHub job logs including setup. Only that collector gains read-only
-`actions: read`; publication write permissions are unchanged.
-
-Job-log collection keeps its 120-second budget. GitHub can publish a runner's
-complete log before updating the job's outer status. When that status remains
-`in_progress` with no conclusion in the current attempt, the contract collector
-can use the scheduler's successful dependency results,
-the exact head/run/job identity, successful runner completion steps and the
-matching complete raw log as independent completion evidence. This exception
-also requires the audited Runner 2.338.0 final log object: an HTTPS 200
-`BlockBlob` with matching provider length, content digest and publication time,
-plus raw output coverage for every non-skipped machine step. Other versions,
-appendable objects or missing integrity evidence must wait for the original
-terminal result. The log manifest records this evidence without rewriting the
-original job status or timestamps. Missing or contradictory results, incomplete logs and identity
-changes still fail the aggregate. Retained jobs from earlier attempts require
-their original completed/success result; benchmarks continue to require real
-terminal results and timestamps.
-
-Only the dedicated GitHub core lane creates the two absent integration Go
-cache volumes before running targets. It refuses existing caches and records
-random owner/run/attempt labels and creation receipts. Finally it rechecks
-those receipts and removes only its own two volumes; a lost create reply or
-cleanup error still fails the lane. Local runs never claim or delete these
-caches. Unknown new volumes, including anonymous volumes, remain failures.
-Each core step records before/after inventories and only volume identity,
-labels/options and container identity, labels/mounts for attribution; container
-environment, commands and arguments are excluded from diagnostic artifacts.
-
-Once `contract-benchmark.yml` is on the default branch, run
-`gh workflow run contract-benchmark.yml --ref main`. It invokes the same six
-lanes twice on the same commit: a one-slot serial matrix and a matrix capped at
-three slots, both with fresh private Go caches and the same pinned clients.
-`benchmarkOrder` fixes this comparison to the original six native lanes;
-the additional OCI discovery, npm migration, Helm and RubyGems lanes remain mandatory
-in normal CI and local contract runs, outside that six-lane performance claim.
-Each mode has its own strict aggregate. The final report reads completed job
-metadata and includes checkout/setup, execution, artifact upload, cleanup,
-aggregate duration, queue time and actual allocated concurrency. It rejects
-different business-file hashes, cache conditions, runner architecture or
-CPU/memory class. All lane and aggregate artifacts must originate from the
-current run attempt; retained successful jobs in a targeted rerun cannot prove
-performance because the rerun waiting interval is not execution time. Rerun all
-jobs to collect a new comparable sample. Normal correctness aggregates may
-still reuse earlier successful artifacts with their original provenance.
-At least two observed concurrent runners and a 25% reduction
-in the six-lane critical path are required for a successful performance proof.
-No comparable sample or one observed slot leaves performance unproven; normal
-contract correctness does not imply a speedup. The old full contract wall time
-and the new aggregate wall time must be reported separately with their actual
-cache conditions. The benchmark does not publish distribution assets or images.
+A failing lane uploads `contract-<lane>-<attempt>` with its step logs and raw
+producer reports. The upstream `upgrade-readiness` step is not run in CI (ADR
+0015, [#39](https://github.com/mlops-ca/notarx/issues/39)).
 
 ## Documentation conventions
 
