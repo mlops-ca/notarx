@@ -64,14 +64,14 @@ const oldCredential = {
   serviceAccountId: accountId,
   name: "jenkins-blue",
   createdAt: "2026-08-18T00:00:00Z",
-  expiresAt: "2026-11-16T00:00:00Z",
+  expiresAt: "2099-11-16T00:00:00Z",
 };
 const newCredential = {
   id: newCredentialId,
   serviceAccountId: accountId,
   name: "jenkins-green",
   createdAt: "2026-08-18T01:00:00Z",
-  expiresAt: "2026-11-16T01:00:00Z",
+  expiresAt: "2099-11-16T01:00:00Z",
 };
 
 const mockListServiceAccounts = vi.mocked(listServiceAccounts);

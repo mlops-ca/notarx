@@ -15,6 +15,7 @@ Artifact Gateway 是轻量级、协议原生的制品库。控制面只依赖 Po
 ## 快速开始
 
 - [项目概览](../README.zh-CN.md) — 定位、能力、快速启动与轻量部署边界。
+- [CI 路径分类与 ci-ok 门禁](ci.zh-CN.md) — 变更触发哪些作业，以及唯一的必需检查。
 - [文档站接入指南](documentation-site-guide.zh-CN.md) — locale、路由、导航与站点生成契约。
 - [快速入门](getting-started.zh-CN.md) — 启动完整本地栈并创建第一个 Repository。
 - [产品方向](../PRODUCT.zh-CN.md) — 用户、场景、产品边界和优先级。
