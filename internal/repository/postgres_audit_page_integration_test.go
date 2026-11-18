@@ -131,7 +131,7 @@ func (n explainNode) walk(visit func(explainNode)) {
 	}
 }
 
-// explainAuditPage plans the production statement with sequential scans disabled,
+// explainAuditPage plans the production statement with sequential, bitmap and sort plans discouraged,
 // so what remains shows which partitions and which index kinds the query can use.
 func explainAuditPage(t *testing.T, store *PostgresStore, query AuditQuery) (relations map[string]bool, nodeTypes map[string]bool) {
 	t.Helper()
@@ -141,8 +141,12 @@ func explainAuditPage(t *testing.T, store *PostgresStore, query AuditQuery) (rel
 		t.Fatal(err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err = tx.Exec(`SET LOCAL enable_seqscan = off`); err != nil {
-		t.Fatal(err)
+	// Disable the alternatives to an ordered index scan so the plan shows what the
+	// indexes can serve, independent of how much data other tests left behind.
+	for _, setting := range []string{"enable_seqscan", "enable_bitmapscan", "enable_sort"} {
+		if _, err = tx.Exec(`SET LOCAL ` + setting + ` = off`); err != nil {
+			t.Fatal(err)
+		}
 	}
 	var raw []byte
 	if err = tx.QueryRow(`EXPLAIN (FORMAT JSON) `+statement, args...).Scan(&raw); err != nil {

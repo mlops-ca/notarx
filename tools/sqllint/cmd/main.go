@@ -38,7 +38,7 @@ func run(root, allowlist string, update, seed bool) int {
 		return 2
 	}
 	allow, err := sqllint.ParseAllowlist(file)
-	file.Close()
+	_ = file.Close()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "sqllint:", err)
 		return 2

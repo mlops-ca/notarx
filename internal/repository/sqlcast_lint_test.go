@@ -19,7 +19,7 @@ func TestSQLTypedKeyLint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	allow, err := sqllint.ParseAllowlist(file)
 	if err != nil {
 		t.Fatal(err)

@@ -7,8 +7,13 @@ compose=(docker compose --env-file "$environment_file" -f compose.yml)
 shasum -a 256 --check "$backup_dir/SHA256SUMS"
 
 "${compose[@]}" stop gateway rustfs
+# pg_restore --clean drops each partition's inherited primary key constraint and
+# fails on partitioned tables (the audit tables, ADR 0023), so reset the schema
+# explicitly and restore into the empty database.
 "${compose[@]}" exec -T postgres \
-  pg_restore -U gateway -d gateway --clean --if-exists <"$backup_dir/gateway.dump"
+  psql -U gateway -d gateway -v ON_ERROR_STOP=1 -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+"${compose[@]}" exec -T postgres \
+  pg_restore -U gateway -d gateway --exit-on-error <"$backup_dir/gateway.dump"
 rustfs_container=$("${compose[@]}" ps -aq rustfs)
 test -n "$rustfs_container"
 "${compose[@]}" run --rm --no-deps --entrypoint sh rustfs \
