@@ -1,5 +1,6 @@
 x-reference-apt-signer: &reference-apt-signer
   profiles: ["apt-signer-rotation"]
+  image: ${NOTARX_APT_SIGNER_IMAGE:-notarx-reference-apt-signer:local}
   build:
     context: .
     dockerfile: Dockerfile.apt-signer
@@ -64,6 +65,7 @@ services:
 
   reference-apt-signer-tls-init:
     profiles: ["apt-signer-rotation"]
+    image: ${NOTARX_APT_SIGNER_IMAGE:-notarx-reference-apt-signer:local}
     build:
       context: .
       dockerfile: Dockerfile.apt-signer
@@ -86,6 +88,7 @@ services:
 
   reference-apt-signer-old-keygen:
     profiles: ["apt-signer-rotation"]
+    image: ${NOTARX_APT_SIGNER_IMAGE:-notarx-reference-apt-signer:local}
     build:
       context: .
       dockerfile: Dockerfile.apt-signer
@@ -105,6 +108,7 @@ services:
 
   reference-apt-signer-next-keygen:
     profiles: ["apt-signer-rotation"]
+    image: ${NOTARX_APT_SIGNER_IMAGE:-notarx-reference-apt-signer:local}
     build:
       context: .
       dockerfile: Dockerfile.apt-signer

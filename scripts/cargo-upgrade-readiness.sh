@@ -32,6 +32,7 @@ admin=(-H "Authorization: Bearer $admin_token")
 old_compose=(docker compose --project-name "$project" --env-file "$isolated_environment" -f "$old_tree/compose.yml")
 current_compose=(docker compose --project-name "$project" --env-file "$isolated_environment" -f "$root/compose.yml")
 gateway_image="${project}-gateway:latest"
+export NOTARX_GATEWAY_IMAGE="$gateway_image"
 cleanup() {
   "${current_compose[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
   "${old_compose[@]}" down -v --remove-orphans >/dev/null 2>&1 || true

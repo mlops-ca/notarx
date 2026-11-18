@@ -94,7 +94,8 @@ def check():
 
         try:
             run(["go", "build", "-o", str(cli), "./cmd/notarxctl"])
-            run(compose + ["build", "gateway"])
+            if os.environ.get("NOTARX_COMPOSE_BUILD_FLAG", "--build") == "--build":
+                run(compose + ["build", "gateway"])
             started = True
             gateway()
             require(readiness(ctl("status")["data"]) == "healthy", "fresh Gateway is not ready")

@@ -12,12 +12,12 @@ trap 'compose down -v --remove-orphans >/dev/null 2>&1 || true; rm -f "$isolated
 base="http://127.0.0.1:${gateway_port}"
 token() { curl --silent --show-error --fail --user "$1:$2" "$base/auth/token" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p'; }
 expect() { local want=$1; shift; local got; got=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$@"); [[ "$got" == "$want" ]] || { printf 'HTTP %s, want %s for %s\n' "$got" "$want" "$*" >&2; exit 1; }; }
-compose up -d --build --wait
+compose up -d ${NOTARX_COMPOSE_BUILD_FLAG---build} --wait
 old_token=$(token fixture resolver-before-rotation); test -n "$old_token"
 expect 404 -H "Authorization: Bearer $old_token" "$base/v2/rotation-missing/manifests/latest"
 awk -F= '$1 != "GATEWAY_RESOLVER_TOKEN" {print}' "$isolated" > "$isolated.next"
 printf 'GATEWAY_RESOLVER_TOKEN=resolver-after-rotation\n' >> "$isolated.next"; mv "$isolated.next" "$isolated"
-compose up -d --build --force-recreate --no-deps gateway --wait
+compose up -d ${NOTARX_COMPOSE_BUILD_FLAG---build} --force-recreate --no-deps gateway --wait
 expect 401 -H "Authorization: Bearer $old_token" "$base/v2/rotation-missing/manifests/latest"
 new_token=$(token fixture resolver-after-rotation); test -n "$new_token"
 expect 404 -H "Authorization: Bearer $new_token" "$base/v2/rotation-missing/manifests/latest"

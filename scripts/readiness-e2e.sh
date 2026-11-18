@@ -11,7 +11,7 @@ trap 'compose down -v --remove-orphans >/dev/null 2>&1 || true; rm -f "$isolated
 code() { curl --silent --output /dev/null --write-out '%{http_code}' "http://127.0.0.1:${gateway_port}/readyz"; }
 expect() { [[ $(code) == "$1" ]] || { printf 'readyz=%s, want %s\n' "$(code)" "$1" >&2; exit 1; }; }
 eventually() { for _ in $(seq 1 30); do [[ $(code) == "$1" ]] && return; sleep 1; done; expect "$1"; }
-compose up -d --build --wait; expect 204
+compose up -d ${NOTARX_COMPOSE_BUILD_FLAG---build} --wait; expect 204
 for service in rustfs postgres; do
   compose stop "$service"; sleep 1; expect 503
   compose start "$service"; eventually 204

@@ -50,6 +50,8 @@ if [[ $(printf '%s\n' "${ports[@]}" | sort -u | wc -l | tr -d ' ') != 6 ]]; then
 fi
 
 project=${GATEWAY_PERF_PROJECT:-artifact-gateway-perf-$(date -u +%Y%m%d%H%M%S)-$$}
+# The baseline inspects the image Compose builds for this project.
+export NOTARX_GATEWAY_IMAGE="${project}-gateway"
 if [[ ! "$project" =~ ^artifact-gateway-perf-[a-z0-9-]+$ ]]; then
   printf 'GATEWAY_PERF_PROJECT must start with artifact-gateway-perf-: %s\n' "$project" >&2
   exit 1

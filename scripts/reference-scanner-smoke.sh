@@ -15,7 +15,7 @@ gateway_id=$("${compose[@]}" ps -q gateway)
   printf 'Start the base development stack with make dev before this smoke check.\n' >&2
   exit 1
 }
-"${compose[@]}" up -d --build --no-deps --wait reference-scanner
+"${compose[@]}" up -d ${NOTARX_COMPOSE_BUILD_FLAG---build} --no-deps --wait reference-scanner
 container=$("${compose[@]}" ps -q reference-scanner)
 
 "${compose[@]}" exec -T reference-scanner /bin/sh -ec '

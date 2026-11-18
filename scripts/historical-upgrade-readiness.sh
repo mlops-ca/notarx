@@ -29,6 +29,7 @@ fi
 free_port() { python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()'; }
 project="artifact-gateway-upgrade-${RANDOM}-${RANDOM}"
 gateway_image="${project}-gateway:latest"
+export NOTARX_GATEWAY_IMAGE="$gateway_image"
 rollback_image="${project}-rollback-gateway:local"
 current_image="${project}-current-gateway:local"
 old_tree=$(mktemp -d)

@@ -105,7 +105,7 @@ assert_identity() {
   }
 }
 
-compose up -d --build --wait
+compose up -d ${NOTARX_COMPOSE_BUILD_FLAG---build} --wait
 
 repository_response="$workdir/repository.json"
 request 201 POST /api/v2/repositories "$admin_token" "$repository_response" \
