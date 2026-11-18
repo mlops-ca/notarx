@@ -14,21 +14,81 @@ env:
   NPM_CONFIG_FETCH_TIMEOUT: "60000"
   NPM_CONFIG_FETCH_RETRY_MINTIMEOUT: "1000"
   NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: "10000"
+  # Fall through to the origin on any proxy failure (a "|" separator, unlike
+  # ",", also covers stream errors, not only 404/410).
+  GOPROXY: https://proxy.golang.org|direct
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # Classifies the change (docs/ci.md). Heavy jobs run only when their class
+  # changed; pushes to main, tags and unresolvable ranges run everything.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      go: ${{ steps.classify.outputs.go }}
+      console: ${{ steps.classify.outputs.console }}
+      docs: ${{ steps.classify.outputs.docs }}
+      ci: ${{ steps.classify.outputs.ci }}
+      images: ${{ steps.classify.outputs.images }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Verify the classifier fixtures
+        run: bash scripts/ci-changes-test.sh
+      - name: Classify changed paths
+        id: classify
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+          HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || '' }}
+        run: |
+          scripts/ci-changes.sh "$BASE_SHA" "$HEAD_SHA" | tee -a "$GITHUB_OUTPUT"
+
+  pr-title:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require a Conventional Commit PR title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          pattern='^(feat|fix|perf|revert|docs|test|refactor|build|ci|chore|style)(\([a-z0-9._/-]+\))?!?: .+'
+          if [[ ! "$TITLE" =~ $pattern ]]; then
+            echo "PR title must be 'type(scope): subject' (ADR 0024); got: $TITLE" >&2
+            exit 1
+          fi
+
+  docs:
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+      - name: Documentation i18n twins
+        run: node scripts/docs-i18n-check.mjs
+      - name: Documentation links
+        run: node scripts/docs-link-check.mjs
+      - name: Documentation capability claims
+        run: sh scripts/docs-capability-check.sh
+
   contract-core:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     uses: ./.github/workflows/contract-lane.yml
     with:
       lane: core
 
   contract-native:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     strategy:
       fail-fast: false
-      max-parallel: 3
       matrix:
         lane: [migration-clients, inventory, nuget, oci-migration, maven-oci-auth, six-format-auth, oci-discovery, npm-migration, helm, rubygems, pypi-migration]
     uses: ./.github/workflows/contract-lane.yml
@@ -36,7 +96,7 @@ jobs:
       lane: ${{ matrix.lane }}
 
   contract-and-test:
-    if: always()
+    if: always() && needs.contract-core.result != 'skipped'
     needs: [contract-core, contract-native]
     runs-on: ubuntu-latest
     permissions:
@@ -77,6 +137,8 @@ jobs:
           if-no-files-found: error
 
   quality:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -112,6 +174,8 @@ jobs:
       - name: Audit dependencies
         run: make dependency-audit
   console:
+    needs: changes
+    if: needs.changes.outputs.console == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -207,6 +271,20 @@ jobs:
           else
             echo "Gateway environment file was not created; nothing to clean up."
           fi
+
+  # The one stable required check: passes when every job succeeded or was
+  # skipped by change detection, fails on any failure or cancellation.
+  ci-ok:
+    if: always()
+    needs: [changes, pr-title, docs, quality, console, contract-core, contract-native, contract-and-test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every needed job to succeed or be skipped
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$NEEDS" | jq -e '[.[] | select(.result != "success" and .result != "skipped")] | length == 0' >/dev/null
 
   mainline-assets:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

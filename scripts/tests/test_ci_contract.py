@@ -779,8 +779,9 @@ class ContractGateTests(unittest.TestCase):
         self.assertIn('CI_CONTRACT_NEEDS: ${{ toJSON(needs) }}', collector)
         native = workflow.split('  contract-native:', 1)[1].split('  contract-and-test:', 1)[0]
         self.assertIn('fail-fast: false', native)
-        self.assertIn('max-parallel: 3', native)
-        self.assertNotIn('needs:', native)
+        self.assertNotIn('max-parallel', native)
+        self.assertIn('needs: changes', native)
+        self.assertNotIn('needs: [', native)
         self.assertNotIn('continue-on-error', workflow)
         mapped = re.search(r'lane: \[([^]]+)\]', native).group(1).split(', ')
         self.assertEqual(mapped, ci.PLAN['nativeOrder'])
