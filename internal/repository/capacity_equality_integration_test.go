@@ -35,6 +35,7 @@ type counterEquality struct {
 var counterEqualityCases = map[string]counterEquality{
 	"raw":  {repoFormat: FormatRaw, run: rawCounterEquality, edge: rawCounterEdge},
 	"go":   {repoFormat: FormatGo, run: goCounterEquality, edge: goCounterEdge},
+	"npm":  {repoFormat: FormatNPM, run: npmCounterEquality, edge: npmCounterEdge},
 	"pypi": {repoFormat: FormatPyPI, run: pypiCounterEquality, edge: pypiCounterEdge},
 }
 
@@ -378,6 +379,88 @@ func pypiCounterEdge(t *testing.T, ctx context.Context, store *PostgresStore, re
 			defer wg.Done()
 			name := "edge" + string(rune('a'+index))
 			switch _, err := store.PublishPyPIFile(ctx, pypiFixture(repo, name, "1.0", name+"-1.0-py3-none-any.whl", size)); {
+			case err == nil:
+				acc.Add(1)
+			case IsQuotaExceeded(err):
+				rej.Add(1)
+			default:
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	return acc.Load(), rej.Load()
+}
+
+func npmFixture(repo HostedRepository, name, version string, size int64) NPMVersion {
+	return NPMVersion{RepositoryID: repo.ID, PackageName: name, Version: version, Digest: uniqueDigest(), ObjectKey: "npm/" + uuid.NewString(), TarballName: name + "-" + version + ".tgz", Size: size, Manifest: []byte(`{"name":"` + name + `","version":"` + version + `"}`)}
+}
+
+func npmCounterEquality(t *testing.T, ctx context.Context, store *PostgresStore, repo HostedRepository, check func(string)) {
+	for _, version := range []NPMVersion{npmFixture(repo, "widget", "1.0.0", 10), npmFixture(repo, "widget", "2.0.0", 20)} {
+		if _, err := store.PublishNPMVersion(ctx, version, map[string]string{"latest": version.Version}); err != nil {
+			t.Fatal(err)
+		}
+		check("publish " + version.Version)
+	}
+	if _, err := store.PublishNPMVersion(ctx, npmFixture(repo, "widget", "1.0.0", 99), map[string]string{}); !errors.Is(err, ErrNameExists) {
+		t.Fatalf("republish an existing version = %v, want ErrNameExists", err)
+	}
+	check("rejected republish of 1.0.0")
+	if _, err := store.TombstoneNPMVersion(ctx, repo.ID, "widget", "1.0.0"); err != nil {
+		t.Fatal(err)
+	}
+	check("tombstone 1.0.0 (bytes stay until the row goes)")
+	if _, err := store.RestoreNPMVersion(ctx, NPMRestoreRequest{RepositoryID: repo.ID, PackageName: "widget", Version: "1.0.0"}); err != nil {
+		t.Fatal(err)
+	}
+	check("restore 1.0.0")
+	if _, err := store.PublishNPMVersion(ctx, npmFixture(repo, "widget", "3.0.0", 5), map[string]string{}); err != nil {
+		t.Fatal(err)
+	}
+	check("publish after restore")
+	proxy, err := store.CreateHostedRepository(ctx, HostedRepository{ID: uuid.NewString(), Name: "npm-proxy-counter-" + uuid.NewString(), Format: FormatNPM, Type: RepositoryTypeProxy, Endpoint: "https://proxy.example"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = store.db.Exec(`DELETE FROM hosted_repositories WHERE id=$1`, proxy.ID) })
+	listed := NPMVersion{Version: "1.0.0", UpstreamTarball: "https://registry.example/widget.tgz", TarballName: "widget.tgz", Manifest: []byte(`{"name":"widget","version":"1.0.0"}`)}
+	if _, err = store.SyncNPMProxyPackage(ctx, NPMPackage{RepositoryID: proxy.ID, SourceVersion: proxy.Version, Name: "widget", SourceEndpoint: proxy.Endpoint, Versions: []NPMVersion{listed}, DistTags: map[string]string{"latest": "1.0.0"}}); err != nil {
+		t.Fatal(err)
+	}
+	assertCounterEqualsUsage(t, store, proxy, "sync proxy metadata")
+	cached, err := store.GetNPMVersion(ctx, proxy.ID, "widget", "1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cached.Digest, cached.ObjectKey, cached.Size, cached.SourceVersion = uniqueDigest(), "npm/"+uuid.NewString(), 40, proxy.Version
+	for _, step := range []string{"cache a proxy tarball", "cache the proxy tarball again"} {
+		if _, err = store.CacheNPMProxyTarball(ctx, cached); err != nil {
+			t.Fatal(err)
+		}
+		assertCounterEqualsUsage(t, store, proxy, step)
+	}
+	var used int64
+	if err = store.db.QueryRow(`SELECT bytes FROM repository_usage_counters WHERE repository_id=$1::uuid`, repo.ID).Scan(&used); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.ReplaceRepositoryCapacityQuota(ctx, repo.ID, used); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.PublishNPMVersion(ctx, npmFixture(repo, "widget", "4.0.0", 1), map[string]string{}); !IsQuotaExceeded(err) {
+		t.Fatalf("publish over quota = %v, want quota exceeded", err)
+	}
+	check("rejected publish over quota")
+}
+
+func npmCounterEdge(t *testing.T, ctx context.Context, store *PostgresStore, repo HostedRepository, size int64, workers int) (accepted, rejected int64) {
+	var acc, rej atomic.Int64
+	var wg sync.WaitGroup
+	for index := range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			switch _, err := store.PublishNPMVersion(ctx, npmFixture(repo, "edge", "1.0."+string(rune('a'+index)), size), map[string]string{}); {
 			case err == nil:
 				acc.Add(1)
 			case IsQuotaExceeded(err):

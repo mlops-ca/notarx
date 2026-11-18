@@ -25,7 +25,7 @@ var registry = []FormatCoverage{
 	{Format: "maven", Enforcement: byTrigger},
 	{Format: "oci", Enforcement: byTrigger},
 	{Format: "conan", Enforcement: byTrigger},
-	{Format: "npm", Enforcement: byTrigger},
+	{Format: "npm", Covered: true, Enforcement: byTrigger},
 	{Format: "pypi", Covered: true, Enforcement: byTrigger},
 	{Format: "go", Covered: true, Enforcement: byTrigger},
 	{Format: "apt", Enforcement: byTrigger},

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/mlops-ca/notarx/internal/capacity"
 	"time"
 )
 
@@ -57,6 +58,11 @@ func (s *PostgresStore) PublishNPMVersion(ctx context.Context, version NPMVersio
 		SET dist_tags=dist_tags || $3::jsonb,updated_at=now(),revision=revision+1
 		WHERE repository_id=$1::uuid AND name=$2`, version.RepositoryID, version.PackageName, tagsJSON); err != nil {
 		return NPMVersion{}, err
+	}
+	if version.ObjectKey != "" {
+		if err = capacity.Reserve(ctx, tx, version.RepositoryID, version.Size, 1); err != nil {
+			return NPMVersion{}, err
+		}
 	}
 	if err = tx.Commit(); err != nil {
 		return NPMVersion{}, err
@@ -386,6 +392,12 @@ func (s *PostgresStore) CacheNPMProxyTarball(ctx context.Context, incoming NPMVe
 		incoming.ObjectKey, incoming.Size, incoming.CachedAt), &stored)
 	if err != nil {
 		return NPMVersion{}, err
+	}
+	// The version had no tarball before (a metadata-only proxy row), so its bytes join the usage now.
+	if stored.ObjectKey != "" {
+		if err = capacity.Reserve(ctx, tx, stored.RepositoryID, stored.Size, 1); err != nil {
+			return NPMVersion{}, err
+		}
 	}
 	if err = tx.Commit(); err != nil {
 		return NPMVersion{}, err
