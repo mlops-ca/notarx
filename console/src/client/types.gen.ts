@@ -2319,7 +2319,10 @@ export type EmailTargetList = Array<EmailTarget>;
 
 export type EmailTargetInput = {
   name: string;
-  locale: "en-CA" | "fr-CA" | "zh-CN";
+  /**
+   * Omit at creation to use the installation default (NOTARX_EMAIL_DEFAULT_LOCALE; en-CA when unset). Omit on update to keep the current locale.
+   */
+  locale?: "en-CA" | "fr-CA" | "zh-CN";
   enabled?: boolean;
 };
 
@@ -3829,7 +3832,10 @@ export type MigrationSourceInputWritable = {
 
 export type EmailTargetInputWritable = {
   name: string;
-  locale: "en-CA" | "fr-CA" | "zh-CN";
+  /**
+   * Omit at creation to use the installation default (NOTARX_EMAIL_DEFAULT_LOCALE; en-CA when unset). Omit on update to keep the current locale.
+   */
+  locale?: "en-CA" | "fr-CA" | "zh-CN";
   enabled?: boolean;
   /**
    * Required at creation. Omit on update to retain the encrypted recipient.

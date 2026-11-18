@@ -29,7 +29,7 @@ func TestAdministratorCanPreviewWarningEmailWithoutSMTP(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(got.Subject, "警告") || !strings.Contains(got.HTML, "12%") || !strings.Contains(got.Text, "12%") || got.TemplateVersion != "2" {
+	if !strings.Contains(got.Subject, "Warning") || !strings.Contains(got.HTML, "12%") || !strings.Contains(got.Text, "12%") || got.TemplateVersion != "2" {
 		t.Fatalf("missing designed HTML/plain warning preview: %#v", got)
 	}
 	if w.Header().Get("Cache-Control") != "no-store" {
@@ -57,6 +57,40 @@ func TestEmailTargetsRequireAdministratorAndHideRecipient(t *testing.T) {
 	}
 	if json.Unmarshal(w.Body.Bytes(), &got) != nil || got.Enabled || !got.RecipientConfigured || got.Version != "1" {
 		t.Fatal("target must default disabled")
+	}
+}
+
+func TestEmailTargetLocaleDefaultsFromInstallationAndKeepsOnUpdate(t *testing.T) {
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", "01234567890123456789012345678901")
+	for _, tc := range []struct{ installation, want string }{{"", "en-CA"}, {"fr-CA", "fr-CA"}, {"unknown", "en-CA"}} {
+		h := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{EmailDefaultLocale: tc.installation}, Store: repository.NewMemoryStore(), Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
+		r := httptest.NewRequest(http.MethodPost, "/api/v2/email-targets", strings.NewReader(`{"name":"Operations","recipient":"private@example.test"}`))
+		authorize(r, "admin-secret")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		var got struct{ ID, Locale string }
+		if w.Code != 201 || json.Unmarshal(w.Body.Bytes(), &got) != nil || got.Locale != tc.want {
+			t.Fatalf("installation %q: status=%d body=%s", tc.installation, w.Code, w.Body.String())
+		}
+		r = httptest.NewRequest(http.MethodPut, "/api/v2/email-targets/"+got.ID, strings.NewReader(`{"name":"Renamed"}`))
+		authorize(r, "admin-secret")
+		r.Header.Set("If-Match", "1")
+		w = httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		var updated struct{ Locale string }
+		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &updated) != nil || updated.Locale != tc.want {
+			t.Fatalf("update dropped the locale: status=%d body=%s", w.Code, w.Body.String())
+		}
+	}
+	h := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: repository.NewMemoryStore(), Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
+	for _, locale := range []string{"en", "en-US", "fr"} {
+		r := httptest.NewRequest(http.MethodPost, "/api/v2/email-targets", strings.NewReader(`{"name":"Operations","recipient":"private@example.test","locale":"`+locale+`"}`))
+		authorize(r, "admin-secret")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != 400 {
+			t.Fatalf("%s: status=%d", locale, w.Code)
+		}
 	}
 }
 

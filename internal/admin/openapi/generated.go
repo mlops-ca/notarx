@@ -6324,15 +6324,17 @@ type EmailTargetLocale string
 
 // EmailTargetInput defines model for EmailTargetInput.
 type EmailTargetInput struct {
-	Enabled *bool                  `json:"enabled,omitempty"`
-	Locale  EmailTargetInputLocale `json:"locale"`
-	Name    string                 `json:"name"`
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// Locale Omit at creation to use the installation default (NOTARX_EMAIL_DEFAULT_LOCALE; en-CA when unset). Omit on update to keep the current locale.
+	Locale *EmailTargetInputLocale `json:"locale,omitempty"`
+	Name   string                  `json:"name"`
 
 	// Recipient Required at creation. Omit on update to retain the encrypted recipient.
 	Recipient *string `json:"recipient,omitempty"`
 }
 
-// EmailTargetInputLocale defines model for EmailTargetInput.Locale.
+// EmailTargetInputLocale Omit at creation to use the installation default (NOTARX_EMAIL_DEFAULT_LOCALE; en-CA when unset). Omit on update to keep the current locale.
 type EmailTargetInputLocale string
 
 // EmailTargetList defines model for EmailTargetList.

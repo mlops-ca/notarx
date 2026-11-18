@@ -853,6 +853,24 @@ func TestLoadSupportsDefaultOffDedicatedEmailWorker(t *testing.T) {
 	}
 }
 
+func TestEmailDefaultLocaleIsValidatedAgainstTheClosedRegistry(t *testing.T) {
+	setCompleteConfiguration(t)
+	t.Setenv("NOTARX_EMAIL_DEFAULT_LOCALE", "")
+	if cfg, err := Load(); err != nil || cfg.EmailDefaultLocale != "en-CA" {
+		t.Fatalf("default: %q %v", cfg.EmailDefaultLocale, err)
+	}
+	t.Setenv("NOTARX_EMAIL_DEFAULT_LOCALE", "fr-CA")
+	if cfg, err := Load(); err != nil || cfg.EmailDefaultLocale != "fr-CA" {
+		t.Fatalf("override: %q %v", cfg.EmailDefaultLocale, err)
+	}
+	for _, bad := range []string{"en", "en-US", "fr"} {
+		t.Setenv("NOTARX_EMAIL_DEFAULT_LOCALE", bad)
+		if _, err := Load(); err == nil {
+			t.Fatalf("%s accepted", bad)
+		}
+	}
+}
+
 func TestConanTokenSecretIsOptionalAndSeparateFromLoginCredentials(t *testing.T) {
 	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
 	t.Setenv("NOTARX_OBJECT_STORE_ENDPOINT", "http://rustfs:9000")

@@ -17553,8 +17553,7 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "name",
-          "locale"
+          "name"
         ],
         "properties": {
           "name": {
@@ -17568,7 +17567,8 @@
               "en-CA",
               "fr-CA",
               "zh-CN"
-            ]
+            ],
+            "description": "Omit at creation to use the installation default (NOTARX_EMAIL_DEFAULT_LOCALE; en-CA when unset). Omit on update to keep the current locale."
           },
           "enabled": {
             "type": "boolean",

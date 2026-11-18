@@ -26,11 +26,15 @@ func TestQuotaVersionedMIMEPreservesSemanticEvidenceAndSafeHTML(t *testing.T) {
 			if scenario == "resolved" {
 				v.UsedBytes = 790
 			}
+			unit := "bytes"
+			if locale == "fr-CA" {
+				unit = "octets"
+			}
 			p, err := RenderQuota(v, locale, cfg.ConsoleOrigin, "quota-1")
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !strings.Contains(p.HTML, "&lt;demo&gt;") || strings.Contains(p.HTML, "synthetic <demo>") || !strings.Contains(p.Text, "880 / 1000 bytes") && scenario == "warning" || !strings.Contains(p.Text, v.EpisodeID) || !strings.Contains(p.Text, "UTC") {
+			if !strings.Contains(p.HTML, "&lt;demo&gt;") || strings.Contains(p.HTML, "synthetic <demo>") || !strings.Contains(p.Text, "880 / 1000 "+unit) && scenario == "warning" || !strings.Contains(p.Text, v.EpisodeID) || !strings.Contains(p.Text, "UTC") {
 				t.Fatal("quota evidence/escaping mismatch")
 			}
 			if strings.Contains(p.HTML, "<img") || strings.Contains(p.HTML, "<script") || strings.Contains(p.HTML, "@import") {
@@ -65,8 +69,8 @@ func TestQuotaMailRejectsMalformedEvidenceAndHeaderInjection(t *testing.T) {
 	}
 }
 func TestLegacySyntheticV1FooterIsRetained(t *testing.T) {
-	p, err := renderSyntheticVersion("warning", "zh-CN", "synthetic", time.Now(), "", "1")
-	if err != nil || !strings.Contains(p.Text, "尚未启用容量告警评估") || p.TemplateVersion != "1" {
+	p, err := renderSyntheticVersion("warning", "en-CA", "synthetic", time.Now(), "", "1")
+	if err != nil || !strings.Contains(p.Text, "Capacity evaluation is not enabled") || p.TemplateVersion != "1" {
 		t.Fatal("legacy descriptor changed on replay")
 	}
 }

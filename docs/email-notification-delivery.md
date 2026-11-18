@@ -60,6 +60,19 @@ supply relay addresses, authentication, headers or message bodies.
   encryption key, authentication and trust configuration. A dedicated worker uses `NOTARX_NODE_ROLES=worker` and
   `NOTARX_WORKER_KINDS=email`; empty kind filters include email workers.
 
+## Locales
+
+Email text comes from embedded bundles, `internal/emailnotification/locales/<tag>.json`,
+for the closed set `en-CA`, `fr-CA` and `zh-CN` (ADR 0014). `en-CA` is the
+reference; `fr-CA` must hold every key (a Go test enforces it); `zh-CN` is a
+community-maintained overlay, and a locale or key without text falls back to
+`en-CA`. Placeholders are inserted as text and escaped by `html/template` in
+every locale.
+
+`NOTARX_EMAIL_DEFAULT_LOCALE` (`en-CA`, `fr-CA` or `zh-CN`; default `en-CA`) is the
+locale of a new target created without a `locale`. Any other value stops startup.
+Updating a target without a `locale` keeps its current one.
+
 ## Opt-in Compose example
 
 `compose.yml` keeps email disconnected. Setting `NOTARX_EMAIL_CONFIG_FILE` in

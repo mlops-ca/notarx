@@ -655,7 +655,7 @@ func sendEmailTarget(ctx context.Context, client *apiClient, method, path string
 	}
 	var target adminopenapi.EmailTarget
 	response, err := client.sendJSON(ctx, method, path, requestOptions{body: encoded, header: header}, &target)
-	if err == nil && (!completeEmailTarget(target) || target.Name != body.Name || target.Locale != adminopenapi.EmailTargetLocale(body.Locale) ||
+	if err == nil && (!completeEmailTarget(target) || target.Name != body.Name || (body.Locale != nil && target.Locale != adminopenapi.EmailTargetLocale(*body.Locale)) ||
 		(body.Enabled != nil && target.Enabled != *body.Enabled) || (body.Recipient != nil && !target.RecipientConfigured)) {
 		err = incompleteResponse(response, client, "email target")
 	}
@@ -715,11 +715,11 @@ func emailTargetCreateCommand() command {
 	return command{
 		name:        "email target create",
 		synopsis:    "create an email target; the recipient comes only from stdin or a private file",
-		usage:       "notarxctl email target create NAME --locale en-CA|fr-CA|zh-CN (--recipient-stdin | --recipient-file FILE) [--enabled] [--dry-run] [--json]",
+		usage:       "notarxctl email target create NAME [--locale en-CA|fr-CA|zh-CN] (--recipient-stdin | --recipient-file FILE) [--enabled] [--dry-run] [--json]",
 		positionals: 1,
 		argsUsage:   "NAME",
 		setFlags: func(fs *flag.FlagSet) {
-			fs.StringVar(&locale, "locale", "", "message language: en-CA, fr-CA or zh-CN")
+			fs.StringVar(&locale, "locale", "", "message language: en-CA, fr-CA or zh-CN (default: the installation default)")
 			fs.BoolVar(&enabled, "enabled", false, "enable the target (default: disabled)")
 			recipient.register(fs)
 		},
@@ -733,7 +733,7 @@ func emailTargetCreateCommand() command {
 			if name == "" || utf8.RuneCountInString(name) > 128 {
 				return &UsageError{Message: "the target name must be 1-128 characters", Hint: "for example notarxctl email target create ops --locale en-CA --recipient-stdin"}
 			}
-			if !adminopenapi.EmailTargetInputLocale(locale).Valid() {
+			if locale != "" && !adminopenapi.EmailTargetInputLocale(locale).Valid() {
 				return &UsageError{Message: "--locale must be en-CA, fr-CA or zh-CN", Hint: "messages are rendered in this language"}
 			}
 			if !recipient.given() {
@@ -743,7 +743,11 @@ func emailTargetCreateCommand() command {
 			if err != nil {
 				return err
 			}
-			body := adminopenapi.EmailTargetInput{Name: name, Locale: adminopenapi.EmailTargetInputLocale(locale), Enabled: &enabled, Recipient: &address}
+			body := adminopenapi.EmailTargetInput{Name: name, Enabled: &enabled, Recipient: &address}
+			if locale != "" {
+				chosen := adminopenapi.EmailTargetInputLocale(locale)
+				body.Locale = &chosen
+			}
 			if env.globals.dryRun {
 				shown := body
 				placeholder := recipientPlaceholder
@@ -830,7 +834,8 @@ func emailTargetUpdateCommand() command {
 					ifMatch = current.Version
 				}
 			}
-			body := adminopenapi.EmailTargetInput{Name: current.Name, Locale: adminopenapi.EmailTargetInputLocale(current.Locale), Recipient: address}
+			currentLocale := adminopenapi.EmailTargetInputLocale(current.Locale)
+			body := adminopenapi.EmailTargetInput{Name: current.Name, Locale: &currentLocale, Recipient: address}
 			next := current.Enabled
 			if env.flagSet["enabled"] {
 				next = enabled
@@ -840,7 +845,8 @@ func emailTargetUpdateCommand() command {
 				body.Name = strings.TrimSpace(name)
 			}
 			if env.flagSet["locale"] {
-				body.Locale = adminopenapi.EmailTargetInputLocale(locale)
+				chosen := adminopenapi.EmailTargetInputLocale(locale)
+				body.Locale = &chosen
 			}
 			if env.globals.dryRun {
 				shown := body

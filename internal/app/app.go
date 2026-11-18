@@ -45,6 +45,7 @@ type Dependencies struct {
 	LocalCapacity                 *localcapacity.Observer
 	HTTPErrorRate                 *httperrorrate.Observer
 	Email                         emailnotification.Config
+	EmailDefaultLocale            string
 	CargoUpstreamClient           *http.Client
 	APTArchiveTrust               aptpublication.SnapshotArchiveTrustVerifier
 	APTSigner                     aptpublication.Signer
@@ -101,11 +102,12 @@ func NewDependencies(cfg config.Config) Dependencies {
 			postgresChecker{databaseURL: cfg.DatabaseURL},
 			objectStoreChecker(cfg.ObjectStore),
 		},
-		Email:          cfg.Email,
-		BuildVersion:   build.Version,
-		BuildRevision:  build.Revision,
-		BuildModified:  build.Modified,
-		BuildGoVersion: build.GoVersion,
+		Email:              cfg.Email,
+		EmailDefaultLocale: cfg.EmailDefaultLocale,
+		BuildVersion:       build.Version,
+		BuildRevision:      build.Revision,
+		BuildModified:      build.Modified,
+		BuildGoVersion:     build.GoVersion,
 		AccessLog: AccessLogOptions{
 			Mode: cfg.AccessLogMode, SlowThreshold: time.Duration(cfg.AccessLogSlowMS) * time.Millisecond,
 		},
