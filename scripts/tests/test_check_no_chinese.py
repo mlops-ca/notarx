@@ -25,11 +25,17 @@ class NoChineseGuardTests(unittest.TestCase):
         self.assertEqual(guard.path_issues([('M', 'docs/ci.md'), ('A', 'scripts/check-no-chinese.py')]), [])
 
     def test_added_chinese_text_fails_but_removed_text_passes(self):
-        diff = ('--- a/docs/site-map.json\n+++ b/docs/site-map.json\n'
+        diff = ('diff --git a/docs/site-map.json b/docs/site-map.json\n'
+                '--- a/docs/site-map.json\n+++ b/docs/site-map.json\n@@ -1 +1 @@\n'
                 f'-  "title": "{HAN}"\n+  "title": "English"\n')
         self.assertEqual(guard.line_issues(diff), [])
         added = diff.replace('-  "title"', '+  "x"', 1)
         self.assertEqual(guard.line_issues(added), ['docs/site-map.json: added line contains Chinese text'])
+
+    def test_added_line_starting_with_plus_plus_is_content_not_a_header(self):
+        diff = ('diff --git a/a.md b/a.md\n--- a/a.md\n+++ b/a.md\n@@ -0,0 +2 @@\n'
+                f'+++ x\n+{HAN}\n')
+        self.assertEqual(guard.line_issues(diff), ['a.md: added line contains Chinese text'])
 
 
 if __name__ == '__main__':

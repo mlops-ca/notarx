@@ -53,9 +53,9 @@ A failing lane uploads its step logs and raw reports.
 
 ## Shared images
 
-`build-images` builds the gateway, reference apt signer and reference scanner
-images once per run (one parallel matrix leg each, BuildKit layers cached in the
-GitHub Actions cache) and uploads each as a tarball artifact named
+`build-images` builds the gateway and reference apt signer images once per run
+(one parallel matrix leg each, BuildKit layers cached in the GitHub Actions
+cache; the reference scanner has no CI consumer, so it is not built here) and uploads each as a tarball artifact named
 `image-<runner arch>-<image>`. Every contract lane and `console-e2e` downloads
 the artifacts for its own runner architecture and `docker load`s them, so no job
 rebuilds an image from source. `compose.yml` names the images

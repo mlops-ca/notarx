@@ -56,6 +56,17 @@ jobs:
             exit 1
           fi
 
+  # Owner rule: no Chinese content may be added anywhere (zh-CN deletions are
+  # allowed). Runs on every pull request, not only when docs changed.
+  no-chinese:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+      - run: python3 scripts/check-no-chinese.py
+
   docs:
     needs: changes
     if: needs.changes.outputs.docs == 'true'
@@ -64,9 +75,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 2
-      - name: No Chinese content added (owner rule; zh-CN deletions are allowed)
-        if: github.event_name == 'pull_request'
-        run: python3 scripts/check-no-chinese.py
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
@@ -87,7 +95,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: make docker-test
 
-  # Builds the three Compose images once per run. Contract lanes and the
+  # Builds the Compose images CI consumes once per run. Contract lanes and the
   # gateway-backed Console E2E load them instead of each rebuilding from source
   # (docs/ci.md). Each leg is native to its runner (ADR 0016); the artifact name
   # carries the runner architecture so an arm64 leg can be added without clashes.
@@ -105,9 +113,6 @@ jobs:
           - name: apt-signer
             file: Dockerfile.apt-signer
             tag: notarx-reference-apt-signer:local
-          - name: scanner
-            file: Dockerfile.scanner
-            tag: notarx-reference-scanner:local
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
@@ -338,7 +343,7 @@ jobs:
   # skipped by change detection, fails on any failure or cancellation.
   ci-ok:
     if: always()
-    needs: [changes, pr-title, docs, quality, console, console-e2e, image-test-stages, build-images, contract-plan, contract, contract-and-test]
+    needs: [changes, pr-title, no-chinese, docs, quality, console, console-e2e, image-test-stages, build-images, contract-plan, contract, contract-and-test]
     runs-on: ubuntu-24.04
     steps:
       - name: Require every needed job to succeed or be skipped
