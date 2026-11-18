@@ -58,7 +58,10 @@ seam, but every implementation is raw PostgreSQL SQL. Counts from the tree on
 | `pg_stat_statements` | preloaded by the Compose files and the isolated backup target; no Go code reads it |
 
 Migrations are a single baseline plus numbered migrations (ADR 0015), applied by
-`scripts/run-migrations.sh`.
+`scripts/run-migrations.sh`. The baseline generator and the equivalence proof
+(`scripts/baseline-lib.sh`) pin `postgres:18-alpine` by digest; the dump normalizer is
+tested against a PostgreSQL 16 and a PostgreSQL 18 `pg_dump`, and the equivalence
+workflow also runs on the pinned 16 image while 16 remains supported.
 
 ### Criteria for revisiting the single-database decision
 

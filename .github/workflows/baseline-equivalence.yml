@@ -48,15 +48,23 @@ env:
 
 jobs:
   equivalence:
-    name: equivalence/${{ matrix.arch }}
+    name: equivalence/${{ matrix.arch }}/pg${{ matrix.pg }}
+    # PostgreSQL 18 is the generator pin; 16 stays in the support matrix
+    # (docs/postgresql-capabilities.md), so the proof also runs on its pinned image.
     strategy:
       fail-fast: false
       matrix:
+        arch: [linux/amd64, linux/arm64]
+        pg: ["18", "16"]
         include:
           - arch: linux/amd64
             runner: ubuntu-24.04
           - arch: linux/arm64
             runner: ubuntu-24.04-arm
+          - pg: "18"
+            pg-image: postgres:18-alpine@sha256:b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015
+          - pg: "16"
+            pg-image: postgres:16-alpine@sha256:81e77a4833487b8132fe4b00bedd39dc3f74b8641e387f19312a48f7de218c2e
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     steps:
@@ -70,9 +78,10 @@ jobs:
         run: |
           scripts/baseline-equivalence-check.sh \
             --source-ref "$SOURCE_REF" --source-dir "$SOURCE_DIR" --baseline "$BASELINE" \
+            --pg-image "${{ matrix.pg-image }}" \
             | tee "$RUNNER_TEMP/equivalence.txt"
           {
-            echo '### Baseline equivalence (${{ matrix.arch }})'
+            echo '### Baseline equivalence (${{ matrix.arch }}, PostgreSQL ${{ matrix.pg }})'
             echo '~~~'
             grep -E 'diff size|ledger rows|PUBLIC grants|equivalent' "$RUNNER_TEMP/equivalence.txt"
             echo '~~~'
