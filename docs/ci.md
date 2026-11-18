@@ -143,9 +143,10 @@ Run `bash scripts/ci-changes-test.sh` to check the classifier fixtures.
 
 ## Dependency updates
 
-Dependabot (`.github/dependabot.yml`) runs weekly, on Mondays, for five
+Dependabot (`.github/dependabot.yml`) runs weekly, on Mondays, for six
 ecosystems: `gomod` (`/`), `npm` (`/console` and `/tools/openapi`), `docker`
-(`/`) and `github-actions` (`/`). Each ecosystem opens at most two pull requests
+(`/`, the Dockerfiles), `docker-compose` (`/`, the compose files) and
+`github-actions` (`/`). Each ecosystem opens at most two pull requests
 at a time, one grouped pull request for minor and patch updates and one for major
 updates, so a sweep cannot starve batch pull requests of CI runners. Titles carry
 the `build(deps)` or `ci(deps)` prefix so the `pr-title` check passes.
@@ -154,6 +155,10 @@ Rules for every update, whether Dependabot or a person lands it:
 
 - Docker base images stay pinned by digest (`image:tag@sha256:...`) and GitHub
   Actions stay pinned by commit SHA with the version in a trailing comment.
+- Toolchain versions must agree: `go.mod`, every `golang:` image (Dockerfiles,
+  `compose.integration.yml`, `Makefile`) and the Node major in `.nvmrc` and
+  `Dockerfile.console`. `scripts/tests/test_ci_contract.py` fails on drift, and
+  Dependabot cannot edit the Makefile, so bump it by hand in the same pull request.
 - Fix the code, tests and configuration an update breaks instead of pinning back.
   A truly incompatible update is deferred with an `ignore` entry in
   `dependabot.yml` that carries a comment and a link to the follow-up issue.

@@ -1,5 +1,6 @@
-import { act, cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { clickPage } from "../../test/pagination";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { listRepositoryArtifactUsage } from "../../client";
 import type { Repository } from "../../client";
@@ -62,7 +63,7 @@ describe("RepositoryUsageTab", () => {
       </TestQueryProvider>,
     );
     await screen.findByText("1-20 of 21 items");
-    await user.click(within(screen.getByTitle("2")).getByRole("button"));
+    await clickPage(user, 2);
     await vi.waitFor(() =>
       expect(mockListRepositoryArtifactUsage).toHaveBeenCalledTimes(3),
     );
@@ -177,7 +178,7 @@ describe("RepositoryUsageTab", () => {
       offset: 0,
       q: undefined,
     });
-    await user.click(within(screen.getByTitle("2")).getByRole("button"));
+    await clickPage(user, 2);
     await vi.waitFor(() =>
       expect(
         mockListRepositoryArtifactUsage.mock.calls.at(-1)?.[0]?.query,

@@ -6,6 +6,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { getLabelledButton } from "../../test/buttons";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import {
@@ -635,7 +636,7 @@ describe("AccessControlPage", () => {
       "service-account",
     );
     expect(await screen.findByText("1 repository grants")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /Clear/ }));
+    await user.click(getLabelledButton(/Clear/));
     expect(await screen.findByText("4 repository grants")).toBeInTheDocument();
     await user.type(
       screen.getByPlaceholderText("Repository name"),

@@ -1,5 +1,6 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { getLabelledButton } from "../../test/buttons";
 import { Link, MemoryRouter } from "react-router-dom";
 import { afterEach, expect, it, vi } from "vitest";
 import { listAuditPage, listGroups, listRepositories } from "../../client";
@@ -124,7 +125,7 @@ it("opens filtered to the actor a link names", async () => {
     actor: "service-account:sa-1",
   });
   // The filter is visible, so it can be cleared.
-  expect(screen.getByRole("button", { name: /Clear/ })).toBeEnabled();
+  expect(getLabelledButton(/Clear/)).toBeEnabled();
 });
 
 it("reveals an actor supplied by navigation after advanced filters were collapsed", async () => {
@@ -148,13 +149,13 @@ it("reveals an actor supplied by navigation after advanced filters were collapse
     screen.getByRole("button", { name: /Advanced filters/ }),
   ).toHaveAttribute("aria-expanded", "true");
   expect(screen.getByText("service-account:sa-2")).toBeVisible();
-  await user.click(screen.getByRole("button", { name: /Clear/ }));
+  await user.click(getLabelledButton(/Clear/));
   await waitFor(() =>
     expect(
       vi.mocked(listAuditPage).mock.calls.at(-1)?.[0]?.query?.actor,
     ).toBeUndefined(),
   );
-  expect(screen.getByRole("button", { name: /Clear/ })).toBeDisabled();
+  expect(getLabelledButton(/Clear/)).toBeDisabled();
 });
 
 it("expands a native Conan publication to its persisted session and state", async () => {

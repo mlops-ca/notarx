@@ -14,7 +14,7 @@ contribution.
   resources
 - Go at the version declared in `go.mod`
 - Rust/Cargo 1.96.0 when changing the staged Cargo protocol foundation
-- Node.js 24 and npm
+- Node.js 26 and npm
 - GNU Make
 - OpenSSL
 
