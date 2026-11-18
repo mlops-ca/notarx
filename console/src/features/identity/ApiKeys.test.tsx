@@ -65,10 +65,10 @@ describe("ApiKeysPage", () => {
     );
 
     renderPage();
-    await user.click(await screen.findByRole("button", { name: /新建密钥/ }));
+    await user.click(await screen.findByRole("button", { name: /New key/ }));
     const dialog = await screen.findByRole("dialog");
     await user.type(within(dialog).getByPlaceholderText("my-key"), "ci-deploy");
-    await user.click(within(dialog).getByRole("button", { name: /创\s*建/ }));
+    await user.click(within(dialog).getByRole("button", { name: /Create/ }));
 
     clickMask();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -102,10 +102,10 @@ describe("ApiKeysPage", () => {
 
     renderPage();
     await user.click(
-      await screen.findByRole("button", { name: "吊销密钥 ci-deploy" }),
+      await screen.findByRole("button", { name: "Revoke key ci-deploy" }),
     );
     const dialog = await screen.findByRole("dialog");
-    await user.click(within(dialog).getByRole("button", { name: /^吊\s*销$/ }));
+    await user.click(within(dialog).getByRole("button", { name: /^Revoke$/ }));
 
     expect(await screen.findByText("network down")).toBeInTheDocument();
     // The rejection released `revoking`, so the dialog is dismissible again.

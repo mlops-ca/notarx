@@ -94,17 +94,17 @@ async function horizontalOverflow(page: Page) {
 async function expectCompactBoundary(page: Page, maxHeight: number) {
   const card = page.locator(".ag-public-access-card");
   await expect(
-    card.getByRole("heading", { name: "公开访问边界" }),
+    card.getByRole("heading", { name: "Public access boundary" }),
   ).toBeVisible();
   await expect(
-    card.getByText("1 / 1 个仓库公开", { exact: true }),
+    card.getByText("1 / 1 repositories public", { exact: true }),
   ).toBeVisible();
   await expect(
-    card.getByRole("switch", { name: "切换全局匿名读取" }),
+    card.getByRole("switch", { name: "Toggle global anonymous reads" }),
   ).toBeChecked();
   await expect(
     card.getByText(
-      "匿名读取须全局、仓库及适用的分组同时允许，写入、删除和管理仍需认证。",
+      "Anonymous reads require global, repository, and applicable group opt-in; writes, deletes, and management still require authentication.",
       { exact: true },
     ),
   ).toBeVisible();
@@ -137,7 +137,7 @@ test("compact public access controls use coherent light and dark themes", async 
   await mockAccessControl(page);
   await page.goto("/access?tab=policies");
   const card = await expectCompactBoundary(page, 220);
-  const heading = card.getByRole("heading", { name: "公开访问边界" });
+  const heading = card.getByRole("heading", { name: "Public access boundary" });
   await expect(heading).toHaveCSS("color", "rgb(9, 9, 11)");
   const navigation = await page.locator(".ag-sider-desktop").boundingBox();
   const cardBox = await card.boundingBox();
@@ -150,7 +150,9 @@ test("compact public access controls use coherent light and dark themes", async 
     path: testInfo.outputPath("access-control-light-viewport.png"),
   });
 
-  await page.getByRole("button", { name: /选择主题.*Gateway Light/ }).click();
+  await page
+    .getByRole("button", { name: /Choose theme.*Gateway Light/ })
+    .click();
   await page.getByRole("menuitem", { name: /Gateway Dark/ }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect(heading).toHaveCSS("color", "rgb(250, 250, 250)");
@@ -184,13 +186,13 @@ test("permission evaluation has one collapsed explanation entry", async ({
   await mockAccessControl(page);
   await page.goto("/access?tab=evaluate");
   const explanation = page.getByRole("button", {
-    name: "权限判定顺序与角色能力",
+    name: "Authorization order and roles",
   });
   await expect(explanation).toHaveCount(1);
   await expect(explanation).toHaveAttribute("aria-expanded", "false");
-  await expect(page.getByText(/^1\.\s*先看身份$/)).toBeHidden();
+  await expect(page.getByText(/^1\.\s*Identify the principal$/)).toBeHidden();
   await explanation.click();
-  await expect(page.getByText(/^1\.\s*先看身份$/)).toHaveCount(1);
+  await expect(page.getByText(/^1\.\s*Identify the principal$/)).toHaveCount(1);
   expect(await horizontalOverflow(page)).toBe(0);
   expect(runtimeErrors).toEqual([]);
 });

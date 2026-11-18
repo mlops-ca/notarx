@@ -67,9 +67,11 @@ describe("ArtifactIntelligencePanel", () => {
 
     renderPanel();
 
-    expect(await screen.findByText("扫描失败")).toBeInTheDocument();
-    expect(screen.getByText("扫描未成功，请检查任务详情")).toBeInTheDocument();
-    expect(screen.queryByText("未发现问题")).not.toBeInTheDocument();
+    expect(await screen.findByText("Scan failed")).toBeInTheDocument();
+    expect(
+      screen.getByText("Scan did not complete; check the job details"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("No issues found")).not.toBeInTheDocument();
   });
 
   it("includes unknown findings in an affected summary", async () => {
@@ -87,7 +89,7 @@ describe("ArtifactIntelligencePanel", () => {
 
     renderPanel();
 
-    expect(await screen.findByText("受影响")).toBeInTheDocument();
+    expect(await screen.findByText("Affected")).toBeInTheDocument();
     expect(screen.getByText("0 C · 0 H · 0 M · 0 L · 2 U")).toBeInTheDocument();
   });
 });

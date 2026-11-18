@@ -20,7 +20,7 @@ test.use({
 
 const target: EmailTarget = {
   id: "00000000-0000-4000-8000-000000000001",
-  name: "Synthetic operations / 合成运维",
+  name: "Synthetic operations",
   locale: "zh-CN",
   enabled: true,
   recipientConfigured: true,
@@ -120,9 +120,9 @@ async function fixture(
     const { scenario, locale } = route.request().postDataJSON();
     return route.fulfill({
       json: {
-        subject: `Synthetic ${scenario} / 合成预览`,
+        subject: `Synthetic ${scenario} / Synthetic preview`,
         text: `Synthetic ${locale} ${scenario}`,
-        html: `<style>body{font-family:Arial}table{width:100%;table-layout:fixed}</style><table><tr><td><h1>Synthetic ${scenario}</h1><p>合成告警 ${locale}</p></td></tr></table>`,
+        html: `<style>body{font-family:Arial}table{width:100%;table-layout:fixed}</style><table><tr><td><h1>Synthetic ${scenario}</h1><p>Synthetic alert ${locale}</p></td></tr></table>`,
         templateVersion: "2",
       },
     });
@@ -173,7 +173,7 @@ async function capture(page: Page, name: string) {
   });
 }
 for (const width of [320, 390, 1440])
-  for (const locale of ["zh-CN", "en-US"])
+  for (const locale of ["en-CA"])
     for (const theme of ["dark", "light"]) {
       test(`email workspace ${width} ${locale} ${theme}`, async ({ page }) => {
         const errors: string[] = [];
@@ -184,25 +184,20 @@ for (const width of [320, 390, 1440])
         await page.setViewportSize({ width, height: 900 });
         await fixture(page, locale, theme);
         await page.goto("/system?tab=email");
-        const zh = locale === "zh-CN";
         await expect(
           page.getByRole("button", {
-            name: zh ? "新建邮件目标" : "New email target",
+            name: "New email target",
           }),
         ).toBeVisible();
         await geometry(page);
         await expect(page.getByText("private-raw-response")).toHaveCount(0);
         await expect(
-          page.getByText(zh ? "SMTP 服务器已接受" : "Accepted by SMTP server", {
+          page.getByText("Accepted by SMTP server", {
             exact: true,
           }),
         ).toBeVisible();
-        await expect(
-          page.getByText(zh ? /可能重复：/ : /Possible duplicate:/),
-        ).toBeVisible();
-        await page
-          .getByRole("button", { name: zh ? "预览模板" : "Preview template" })
-          .click();
+        await expect(page.getByText(/Possible duplicate:/)).toBeVisible();
+        await page.getByRole("button", { name: "Preview template" }).click();
         const frame = page.frameLocator(".ag-email-preview");
         await expect(
           frame.getByRole("heading", { name: "Synthetic warning" }),
@@ -211,27 +206,25 @@ for (const width of [320, 390, 1440])
         await geometry(page);
         await page
           .getByRole("button", {
-            name: zh ? `编辑 ${target.name}` : `Edit ${target.name}`,
+            name: `Edit ${target.name}`,
           })
           .click();
         await capture(page, `email-editor-${width}-${locale}-${theme}.png`);
         await page
           .getByRole("textbox", {
-            name: zh ? "收件人地址" : "Recipient address",
+            name: "Recipient address",
           })
           .fill("private@example.test");
         await expect(
           page.getByRole("textbox", {
-            name: zh ? "收件人地址" : "Recipient address",
+            name: "Recipient address",
           }),
         ).toHaveAttribute("autocomplete", "off");
         await geometry(page);
-        await page
-          .getByRole("button", { name: zh ? "取消" : "Cancel", exact: true })
-          .click();
+        await page.getByRole("button", { name: "Cancel", exact: true }).click();
         await page
           .getByRole("button", {
-            name: zh ? `测试 ${target.name}` : `Test ${target.name}`,
+            name: `Test ${target.name}`,
           })
           .click();
         await expect(page.getByText(/v1/)).toBeVisible();
@@ -240,9 +233,7 @@ for (const width of [320, 390, 1440])
         );
         await geometry(page);
         await capture(page, `email-confirm-${width}-${locale}-${theme}.png`);
-        await page
-          .getByRole("button", { name: zh ? "取消" : "Cancel", exact: true })
-          .click();
+        await page.getByRole("button", { name: "Cancel", exact: true }).click();
         expect(
           await page.evaluate(
             () => JSON.stringify(localStorage) + JSON.stringify(sessionStorage),
@@ -273,7 +264,7 @@ test("preview suppresses scripts, external requests and links before insertion",
     }),
   );
   await page.goto("/system?tab=email");
-  await page.getByRole("button", { name: "预览模板" }).click();
+  await page.getByRole("button", { name: "Preview template" }).click();
   const frame = page.frameLocator(".ag-email-preview");
   await expect(
     frame.getByRole("heading", { name: "Inert synthetic preview" }),
@@ -294,29 +285,39 @@ test("cancel/navigation clears drafts and duplicate confirmation queues only onc
 }) => {
   const writes = await fixture(page);
   await page.goto("/system?tab=email");
-  await page.getByRole("button", { name: "新建邮件目标" }).click();
-  await page.getByLabel("目标名称", { exact: true }).fill("Synthetic new");
+  await page.getByRole("button", { name: "New email target" }).click();
+  await page.getByLabel("Target name", { exact: true }).fill("Synthetic new");
   await page
-    .getByLabel("收件人地址", { exact: true })
+    .getByLabel("Recipient address", { exact: true })
     .fill("private@example.test");
-  const alertsTab = page.getByRole("tab", { name: "配额告警", exact: true });
+  const alertsTab = page.getByRole("tab", {
+    name: "Quota alerts",
+    exact: true,
+  });
   await alertsTab.click();
   await expect(alertsTab).toHaveAttribute("aria-selected", "true");
-  const emailTab = page.getByRole("tab", { name: "邮件通知", exact: true });
+  const emailTab = page.getByRole("tab", {
+    name: "Email notifications",
+    exact: true,
+  });
   await emailTab.click();
   await expect(emailTab).toHaveAttribute("aria-selected", "true");
-  await page.getByRole("button", { name: "新建邮件目标" }).click();
-  await expect(page.getByLabel("收件人地址", { exact: true })).toHaveValue("");
-  await page.getByRole("button", { name: "取消", exact: true }).click();
-  await page.getByRole("button", { name: `测试 ${target.name}` }).click();
+  await page.getByRole("button", { name: "New email target" }).click();
+  await expect(
+    page.getByLabel("Recipient address", { exact: true }),
+  ).toHaveValue("");
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await page.getByRole("button", { name: `Test ${target.name}` }).click();
   expect(writes).toHaveLength(0);
   await page
-    .getByRole("button", { name: "确认发送合成测试" })
+    .getByRole("button", { name: "Confirm synthetic test send" })
     .evaluate((el: HTMLButtonElement) => {
       el.click();
       el.click();
     });
-  await expect(page.getByText(/合成测试已入队/)).toBeVisible();
+  await expect(
+    page.getByText(/Synthetic test queued; check delivery results/),
+  ).toBeVisible();
   expect(writes).toHaveLength(1);
   expect(writes[0].headers["if-match"]).toBe("v1");
   expect(writes[0].body).toEqual({ targetId: target.id, scenario: "warning" });
@@ -338,26 +339,34 @@ test("initial failure and empty states are mutually exclusive; refresh denial re
     });
   });
   await page.goto("/system?tab=email");
-  await expect(page.getByText("加载中…", { exact: true })).toBeVisible();
+  await expect(page.getByText("Loading…", { exact: true })).toBeVisible();
   release();
   await expect(
-    page.getByText("无法读取邮件通知数据。请重试读取。", { exact: true }),
+    page.getByText("Could not read email notification data. Retry the read.", {
+      exact: true,
+    }),
   ).toBeVisible();
-  await expect(page.getByText("加载中…", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Loading…", { exact: true })).toHaveCount(0);
   await expect(page.getByText("private-raw")).toHaveCount(0);
   await page.unroute("**/api/v2/email-targets");
-  await page.getByRole("button", { name: /重试|Retry/ }).click();
-  await expect(page.getByText("尚无邮件目标", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "新建邮件目标" }).click();
+  await page.getByRole("button", { name: /Retry|Retry/ }).click();
+  await expect(
+    page.getByText("No email targets", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "New email target" }).click();
   await page
-    .getByLabel("收件人地址", { exact: true })
+    .getByLabel("Recipient address", { exact: true })
     .fill("private@example.test");
   await page.route("**/api/v2/email-targets", (route) =>
     route.fulfill({ status: 403, json: { code: "password_change_required" } }),
   );
-  await page.getByRole("button", { name: "刷新", exact: true }).click();
-  await expect(page.getByText(/必须先修改密码/)).toBeVisible();
-  await expect(page.getByLabel("收件人地址", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect(
+    page.getByText(/Change your password before returning to this page\./),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel("Recipient address", { exact: true }),
+  ).toHaveCount(0);
 });
 
 for (const mode of ["dark", "light"]) {
@@ -393,7 +402,7 @@ for (const mode of ["dark", "light"]) {
       `gateway-${mode}`,
     );
     const button = page.getByRole("button", {
-      name: "新建邮件目标",
+      name: "New email target",
       exact: true,
     });
     const colors = () =>
@@ -480,7 +489,7 @@ for (const mode of ["dark", "light"]) {
   });
 }
 
-for (const locale of ["zh-CN", "en-US"]) {
+for (const locale of ["en-CA"]) {
   for (const theme of ["dark", "light"]) {
     test(`desktop field validation uses keyboard focus and associated errors ${locale} ${theme}`, async ({
       page,
@@ -495,52 +504,47 @@ for (const locale of ["zh-CN", "en-US"]) {
         `gateway-${theme}`,
       );
       await page.goto("/system?tab=email");
-      const zh = locale === "zh-CN";
       await page
         .getByRole("button", {
-          name: zh ? "新建邮件目标" : "New email target",
+          name: "New email target",
           exact: true,
         })
         .click();
       const save = page.getByRole("button", {
-        name: zh ? "保存停用目标" : "Save disabled target",
+        name: "Save disabled target",
         exact: true,
       });
       await save.focus();
       await page.keyboard.press("Enter");
       const name = page.getByRole("textbox", {
-        name: zh ? "目标名称" : "Target name",
+        name: "Target name",
         exact: true,
       });
       const recipient = page.getByRole("textbox", {
-        name: zh ? "收件人地址" : "Recipient address",
+        name: "Recipient address",
         exact: true,
       });
       await expect(name).toBeFocused();
       await expect(name).toHaveAttribute("aria-invalid", "true");
-      await expect(name).toHaveAccessibleDescription(
-        zh ? /请输入目标名称/ : /Enter a target name/,
-      );
+      await expect(name).toHaveAccessibleDescription(/Enter a target name/);
       await name.fill("Synthetic");
       await expect(name).not.toHaveAttribute("aria-invalid", "true");
       await save.focus();
       await page.keyboard.press("Enter");
       await expect(recipient).toBeFocused();
       await expect(recipient).toHaveAccessibleDescription(
-        zh ? /请输入单个收件人邮箱地址/ : /Enter one recipient email address/,
+        /Enter one recipient email address/,
       );
       await recipient.fill("sensitive-marker-invalid");
       await expect(recipient).toHaveAccessibleDescription(
-        zh ? /请输入单个有效邮箱/ : /Enter one valid mailbox/,
+        /Enter one valid mailbox/,
       );
       await geometry(page);
       expect(writes).toHaveLength(0);
-      await page
-        .getByRole("button", { name: zh ? "取消" : "Cancel", exact: true })
-        .click();
+      await page.getByRole("button", { name: "Cancel", exact: true }).click();
       await page
         .getByRole("button", {
-          name: zh ? "新建邮件目标" : "New email target",
+          name: "New email target",
           exact: true,
         })
         .click();

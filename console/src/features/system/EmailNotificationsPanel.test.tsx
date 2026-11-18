@@ -73,7 +73,7 @@ afterEach(cleanup);
 it("rejects non-administrators before reading email resources", () => {
   mocks.identity.administrator = false;
   mount();
-  expect(screen.getByText(/仅平台管理员/)).toBeInTheDocument();
+  expect(screen.getByText(/Only platform administrators/)).toBeInTheDocument();
   expect(mocks.listEmailTargets).not.toHaveBeenCalled();
 });
 it("creates disabled without sending and clears the sensitive value on cancel", async () => {
@@ -82,21 +82,31 @@ it("creates disabled without sending and clears the sensitive value on cancel", 
   });
   mount();
   await userEvent.click(
-    await screen.findByRole("button", { name: "新建邮件目标" }),
+    await screen.findByRole("button", { name: "New email target" }),
   );
-  await userEvent.type(screen.getByLabelText("目标名称"), "Synthetic");
-  await userEvent.type(screen.getByLabelText("收件人地址"), "a@example.test");
-  await userEvent.click(screen.getByRole("button", { name: "取消" }));
-  await userEvent.click(screen.getByRole("button", { name: "新建邮件目标" }));
-  expect(screen.getByLabelText("收件人地址")).toHaveValue("");
-  await userEvent.type(screen.getByLabelText("目标名称"), "Synthetic");
-  await userEvent.type(screen.getByLabelText("收件人地址"), "a@example.test");
-  await userEvent.click(screen.getByRole("button", { name: "保存停用目标" }));
+  await userEvent.type(screen.getByLabelText("Target name"), "Synthetic");
+  await userEvent.type(
+    screen.getByLabelText("Recipient address"),
+    "a@example.test",
+  );
+  await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  await userEvent.click(
+    screen.getByRole("button", { name: "New email target" }),
+  );
+  expect(screen.getByLabelText("Recipient address")).toHaveValue("");
+  await userEvent.type(screen.getByLabelText("Target name"), "Synthetic");
+  await userEvent.type(
+    screen.getByLabelText("Recipient address"),
+    "a@example.test",
+  );
+  await userEvent.click(
+    screen.getByRole("button", { name: "Save disabled target" }),
+  );
   await waitFor(() => expect(mocks.createEmailTarget).toHaveBeenCalledTimes(1));
   expect(mocks.createEmailTarget.mock.calls[0][0].body).toEqual({
     name: "Synthetic",
     recipient: "a@example.test",
-    locale: "zh-CN",
+    locale: "en",
     enabled: false,
   });
   expect(mocks.testEmailNotification).not.toHaveBeenCalled();
@@ -108,10 +118,10 @@ it("omits the write-only recipient on edit and uses the target version", async (
   });
   mount();
   await userEvent.click(
-    await screen.findByRole("button", { name: "编辑 Synthetic operations" }),
+    await screen.findByRole("button", { name: "Edit Synthetic operations" }),
   );
-  expect(screen.getByLabelText("收件人地址")).toHaveValue("");
-  await userEvent.click(screen.getByRole("button", { name: "保存目标" }));
+  expect(screen.getByLabelText("Recipient address")).toHaveValue("");
+  await userEvent.click(screen.getByRole("button", { name: "Save target" }));
   await waitFor(() => expect(mocks.updateEmailTarget).toHaveBeenCalledTimes(1));
   expect(mocks.updateEmailTarget.mock.calls[0][0]).toMatchObject({
     headers: { "If-Match": "v1" },
@@ -127,27 +137,31 @@ it("preserves only the safe conflict draft and requires refresh to re-edit", asy
   });
   mount();
   await userEvent.click(
-    await screen.findByRole("button", { name: "编辑 Synthetic operations" }),
+    await screen.findByRole("button", { name: "Edit Synthetic operations" }),
   );
   await userEvent.type(
-    screen.getByLabelText("收件人地址"),
+    screen.getByLabelText("Recipient address"),
     "private@example.test",
   );
-  await userEvent.click(screen.getByRole("button", { name: "保存目标" }));
-  expect(await screen.findByText(/配置已变更/)).toBeInTheDocument();
-  expect(screen.getByLabelText("收件人地址")).toHaveValue("");
-  expect(screen.getByRole("button", { name: "保存目标" })).toBeDisabled();
+  await userEvent.click(screen.getByRole("button", { name: "Save target" }));
+  expect(
+    await screen.findByText(/Target settings changed/),
+  ).toBeInTheDocument();
+  expect(screen.getByLabelText("Recipient address")).toHaveValue("");
+  expect(screen.getByRole("button", { name: "Save target" })).toBeDisabled();
   expect(screen.queryByText("private-raw")).not.toBeInTheDocument();
   mocks.getEmailTarget.mockResolvedValue({
     data: { ...target, version: "v2" },
   });
   await userEvent.click(
-    screen.getByRole("button", { name: "刷新最新目标并重新编辑" }),
+    screen.getByRole("button", {
+      name: "Refresh latest target and edit again",
+    }),
   );
   await waitFor(() =>
-    expect(screen.getByRole("button", { name: "保存目标" })).toBeEnabled(),
+    expect(screen.getByRole("button", { name: "Save target" })).toBeEnabled(),
   );
-  expect(screen.getByLabelText("目标名称")).toHaveValue(target.name);
+  expect(screen.getByLabelText("Target name")).toHaveValue(target.name);
 });
 it("blocks the whole workspace after a password-change error", async () => {
   mocks.updateEmailTarget.mockResolvedValue({
@@ -155,17 +169,21 @@ it("blocks the whole workspace after a password-change error", async () => {
   });
   mount();
   await userEvent.click(
-    await screen.findByRole("button", { name: "编辑 Synthetic operations" }),
+    await screen.findByRole("button", { name: "Edit Synthetic operations" }),
   );
   await userEvent.type(
-    screen.getByLabelText("收件人地址"),
+    screen.getByLabelText("Recipient address"),
     "private@example.test",
   );
-  await userEvent.click(screen.getByRole("button", { name: "保存目标" }));
-  expect(await screen.findByText(/必须先修改密码/)).toBeInTheDocument();
-  expect(screen.queryByLabelText("收件人地址")).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Save target" }));
   expect(
-    screen.queryByRole("button", { name: "预览模板" }),
+    await screen.findByText(
+      /Change your password before returning to this page\./,
+    ),
+  ).toBeInTheDocument();
+  expect(screen.queryByLabelText("Recipient address")).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Preview template" }),
   ).not.toBeInTheDocument();
 });
 it.each(["test", "enable", "disable"])(
@@ -176,7 +194,7 @@ it.each(["test", "enable", "disable"])(
     });
     mount();
     const action =
-      kind === "test" ? "测试" : kind === "enable" ? "启用" : "停用";
+      kind === "test" ? "Test" : kind === "enable" ? "Enable" : "Disable";
     await userEvent.click(
       await screen.findByRole("button", {
         name: `${action} Synthetic operations`,
@@ -185,7 +203,9 @@ it.each(["test", "enable", "disable"])(
     expect(screen.queryByRole("button", { name: /close/i })).toBeNull();
     expect(
       screen.getByText(
-        kind === "test" ? /请求会入真实交付队列/ : /目标版本会变更/,
+        kind === "test"
+          ? /The data is synthetic\. The request enters the real delivery queue and is rate limited\. Cancelling cannot recall queued or in-flight mail\. SMTP acceptance does not mean inbox delivery\./
+          : /The target version changes\. Existing quota rules bind the old version and require route confirmation on the rules page; queued old-version mail will stop\./,
       ),
     ).toBeInTheDocument();
   },
@@ -200,11 +220,13 @@ it("confirms the target summary and suppresses repeated send clicks", async () =
   );
   mount();
   await userEvent.click(
-    await screen.findByRole("button", { name: "测试 Synthetic operations" }),
+    await screen.findByRole("button", { name: "Test Synthetic operations" }),
   );
   expect(mocks.testEmailNotification).not.toHaveBeenCalled();
   expect(screen.getByText(/v1/)).toBeInTheDocument();
-  const confirm = screen.getByRole("button", { name: "确认发送合成测试" });
+  const confirm = screen.getByRole("button", {
+    name: "Confirm synthetic test send",
+  });
   fireEvent.click(confirm);
   fireEvent.click(confirm);
   expect(mocks.testEmailNotification).toHaveBeenCalledTimes(1);
@@ -216,27 +238,31 @@ it("confirms the target summary and suppresses repeated send clicks", async () =
     mocks.testEmailNotification.mock.calls[0][0].headers["Idempotency-Key"],
   ).toMatch(/^[\da-f-]{36}$/);
   finish({ data: { id: "delivery-a", state: "pending" } });
-  expect(await screen.findByText(/合成测试已入队/)).toBeInTheDocument();
+  expect(
+    await screen.findByText(/Synthetic test queued; check delivery results/),
+  ).toBeInTheDocument();
 });
 
 it("clears the whole workspace immediately on refresh denial while a sibling request hangs", async () => {
   mount();
   await userEvent.click(
-    await screen.findByRole("button", { name: "编辑 Synthetic operations" }),
+    await screen.findByRole("button", { name: "Edit Synthetic operations" }),
   );
   await userEvent.type(
-    screen.getByLabelText("收件人地址"),
+    screen.getByLabelText("Recipient address"),
     "private@example.test",
   );
   mocks.listEmailDeliveries.mockImplementation(() => new Promise(() => {}));
   mocks.listEmailTargets.mockResolvedValue({
     error: { code: "permission_denied" },
   });
-  await userEvent.click(screen.getByRole("button", { name: "刷新" }));
-  expect(await screen.findByText(/无权访问邮件配置/)).toBeInTheDocument();
-  expect(screen.queryByLabelText("收件人地址")).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
   expect(
-    screen.queryByRole("button", { name: "保存目标" }),
+    await screen.findByText(/Email access denied|cannot access email settings/),
+  ).toBeInTheDocument();
+  expect(screen.queryByLabelText("Recipient address")).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Save target" }),
   ).not.toBeInTheDocument();
 });
 
@@ -249,15 +275,19 @@ it("retries an uncertain test using the same immutable idempotency key", async (
   });
   mount();
   await userEvent.click(
-    await screen.findByRole("button", { name: "测试 Synthetic operations" }),
+    await screen.findByRole("button", { name: "Test Synthetic operations" }),
   );
   await userEvent.click(
-    screen.getByRole("button", { name: "确认发送合成测试" }),
+    screen.getByRole("button", { name: "Confirm synthetic test send" }),
   );
-  expect(await screen.findByText(/结果可能尚未返回/)).toBeInTheDocument();
+  expect(
+    await screen.findByText(
+      /The request failed and its result may be unknown\. Test retries use the same key; refresh to check delivery results\./,
+    ),
+  ).toBeInTheDocument();
   expect(screen.queryByText("private-response")).not.toBeInTheDocument();
   await userEvent.click(
-    screen.getByRole("button", { name: "确认发送合成测试" }),
+    screen.getByRole("button", { name: "Confirm synthetic test send" }),
   );
   await waitFor(() =>
     expect(mocks.testEmailNotification).toHaveBeenCalledTimes(2),
@@ -279,90 +309,84 @@ it("cancels a pending save and ignores its later success after a new editor open
   );
   mount();
   await userEvent.click(
-    await screen.findByRole("button", { name: "编辑 Synthetic operations" }),
+    await screen.findByRole("button", { name: "Edit Synthetic operations" }),
   );
   await userEvent.type(
-    screen.getByLabelText("收件人地址"),
+    screen.getByLabelText("Recipient address"),
     "private@example.test",
   );
-  await userEvent.click(screen.getByRole("button", { name: "保存目标" }));
-  await userEvent.click(screen.getByRole("button", { name: "取消" }));
-  await userEvent.click(screen.getByRole("button", { name: "新建邮件目标" }));
+  await userEvent.click(screen.getByRole("button", { name: "Save target" }));
+  await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  await userEvent.click(
+    screen.getByRole("button", { name: "New email target" }),
+  );
   expect(mocks.updateEmailTarget.mock.calls[0][0].signal.aborted).toBe(true);
   finish({ data: target });
   await waitFor(() =>
     expect(
-      screen.getByRole("button", { name: "保存停用目标" }),
+      screen.getByRole("button", { name: "Save disabled target" }),
     ).toBeInTheDocument(),
   );
-  expect(screen.getByLabelText("收件人地址")).toHaveValue("");
-  expect(screen.queryByText(/邮件目标已保存/)).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Recipient address")).toHaveValue("");
+  expect(
+    screen.queryByText(/Email target saved; no test sent/),
+  ).not.toBeInTheDocument();
 });
 
-it.each(["zh-CN", "en-US"])(
+it.each(["en-CA"])(
   "associates field errors and focuses the first invalid field in %s",
   async (locale) => {
     localStorage.setItem("ag.console.locale", locale);
-    const zh = locale === "zh-CN";
     mount();
     await userEvent.click(
       await screen.findByRole("button", {
-        name: zh ? "新建邮件目标" : "New email target",
+        name: "New email target",
       }),
     );
     await userEvent.click(
       screen.getByRole("button", {
-        name: zh ? "保存停用目标" : "Save disabled target",
+        name: "Save disabled target",
       }),
     );
-    const name = screen.getByLabelText(zh ? "目标名称" : "Target name");
-    const recipient = screen.getByLabelText(
-      zh ? "收件人地址" : "Recipient address",
-    );
+    const name = screen.getByLabelText("Target name");
+    const recipient = screen.getByLabelText("Recipient address");
     expect(name).toHaveFocus();
     expect(name).toHaveAttribute("aria-invalid", "true");
-    expect(name).toHaveAccessibleDescription(
-      zh ? /请输入目标名称/ : /Enter a target name/,
-    );
+    expect(name).toHaveAccessibleDescription(/Enter a target name/);
     expect(recipient).toHaveAttribute("aria-invalid", "true");
     expect(recipient).toHaveAccessibleDescription(
-      zh ? /请输入单个收件人邮箱地址/ : /Enter one recipient email address/,
+      /Enter one recipient email address/,
     );
     await userEvent.type(name, "Synthetic");
     expect(name).not.toHaveAttribute("aria-invalid", "true");
     await userEvent.click(
       screen.getByRole("button", {
-        name: zh ? "保存停用目标" : "Save disabled target",
+        name: "Save disabled target",
       }),
     );
     expect(recipient).toHaveFocus();
     await userEvent.type(recipient, "private-sensitive-marker");
-    expect(recipient).toHaveAccessibleDescription(
-      zh ? /请输入单个有效邮箱/ : /Enter one valid mailbox/,
-    );
+    expect(recipient).toHaveAccessibleDescription(/Enter one valid mailbox/);
     expect(
       screen.queryByText("private-sensitive-marker"),
     ).not.toBeInTheDocument();
     expect(mocks.createEmailTarget).not.toHaveBeenCalled();
     expect(mocks.testEmailNotification).not.toHaveBeenCalled();
-    await userEvent.click(
-      screen.getByRole("button", { name: zh ? "取消" : "Cancel" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
     await userEvent.click(
       screen.getByRole("button", {
-        name: zh ? "新建邮件目标" : "New email target",
+        name: "New email target",
       }),
     );
-    expect(
-      screen.getByLabelText(zh ? "收件人地址" : "Recipient address"),
-    ).toHaveValue("");
-    expect(
-      screen.getByLabelText(zh ? "收件人地址" : "Recipient address"),
-    ).not.toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText("Recipient address")).toHaveValue("");
+    expect(screen.getByLabelText("Recipient address")).not.toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
   },
 );
 
-it.each(["zh-CN", "en-US"])(
+it.each(["en-CA"])(
   "gives a safe read fallback rather than test retry instructions in %s",
   async (locale) => {
     localStorage.setItem("ag.console.locale", locale);
@@ -372,13 +396,11 @@ it.each(["zh-CN", "en-US"])(
     mount();
     expect(
       await screen.findByText(
-        locale === "zh-CN"
-          ? "无法读取邮件通知数据。请重试读取。"
-          : "Could not read email notification data. Retry the read.",
+        "Could not read email notification data. Retry the read.",
       ),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText(/private-server-marker|同一标识|same key/),
+      screen.queryByText(/private-server-marker|same key/),
     ).not.toBeInTheDocument();
     expect(mocks.testEmailNotification).not.toHaveBeenCalled();
   },
@@ -390,16 +412,16 @@ it("keeps an unknown save outcome separate from test retries without revealing i
   });
   mount();
   await userEvent.click(
-    await screen.findByRole("button", { name: "编辑 Synthetic operations" }),
+    await screen.findByRole("button", { name: "Edit Synthetic operations" }),
   );
-  await userEvent.click(screen.getByRole("button", { name: "保存目标" }));
+  await userEvent.click(screen.getByRole("button", { name: "Save target" }));
   expect(
     await screen.findByText(
-      "保存结果不确定。请刷新核对目标配置后再决定是否重试。",
+      "Could not confirm the save. Refresh and check target settings before retrying.",
     ),
   ).toBeInTheDocument();
   expect(
-    screen.queryByText(/private-server-marker|同一标识/),
+    screen.queryByText(/private-server-marker|same key/),
   ).not.toBeInTheDocument();
   expect(mocks.testEmailNotification).not.toHaveBeenCalled();
 });
@@ -414,27 +436,34 @@ it("locks duplicate saves and discards a cancelled form's late result and errors
   );
   mount();
   await userEvent.click(
-    await screen.findByRole("button", { name: "新建邮件目标" }),
+    await screen.findByRole("button", { name: "New email target" }),
   );
-  await userEvent.type(screen.getByLabelText("目标名称"), "Synthetic pending");
   await userEvent.type(
-    screen.getByLabelText("收件人地址"),
+    screen.getByLabelText("Target name"),
+    "Synthetic pending",
+  );
+  await userEvent.type(
+    screen.getByLabelText("Recipient address"),
     "private@example.test",
   );
-  const save = screen.getByRole("button", { name: "保存停用目标" });
+  const save = screen.getByRole("button", { name: "Save disabled target" });
   fireEvent.click(save);
   fireEvent.click(save);
   expect(mocks.createEmailTarget).toHaveBeenCalledTimes(1);
   const signal = mocks.createEmailTarget.mock.calls[0][0].signal as AbortSignal;
-  await userEvent.click(screen.getByRole("button", { name: "取消" }));
+  await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
   expect(signal.aborted).toBe(true);
-  await userEvent.click(screen.getByRole("button", { name: "新建邮件目标" }));
+  await userEvent.click(
+    screen.getByRole("button", { name: "New email target" }),
+  );
   finish({ data: { ...target, enabled: false } });
   await waitFor(() =>
-    expect(screen.getByLabelText("收件人地址")).toHaveValue(""),
+    expect(screen.getByLabelText("Recipient address")).toHaveValue(""),
   );
-  expect(screen.getByLabelText("目标名称")).toHaveValue("");
-  expect(screen.queryByText(/目标已保存/)).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Target name")).toHaveValue("");
+  expect(
+    screen.queryByText(/Email target saved; no test sent/),
+  ).not.toBeInTheDocument();
   expect(JSON.stringify(localStorage)).not.toContain("private@example.test");
   expect(mocks.testEmailNotification).not.toHaveBeenCalled();
 });
@@ -445,22 +474,30 @@ it("blocks the workspace when reloading a conflicted target is refused", async (
   });
   mount();
   await userEvent.click(
-    await screen.findByRole("button", { name: "编辑 Synthetic operations" }),
+    await screen.findByRole("button", { name: "Edit Synthetic operations" }),
   );
   await userEvent.type(
-    screen.getByLabelText("收件人地址"),
+    screen.getByLabelText("Recipient address"),
     "private@example.test",
   );
-  await userEvent.click(screen.getByRole("button", { name: "保存目标" }));
-  expect(await screen.findByText(/配置已变更/)).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Save target" }));
+  expect(
+    await screen.findByText(/Target settings changed/),
+  ).toBeInTheDocument();
   mocks.getEmailTarget.mockResolvedValue({
     error: { code: "password_change_required" },
   });
   await userEvent.click(
-    screen.getByRole("button", { name: "刷新最新目标并重新编辑" }),
+    screen.getByRole("button", {
+      name: "Refresh latest target and edit again",
+    }),
   );
-  expect(await screen.findByText(/必须先修改密码/)).toBeInTheDocument();
   expect(
-    screen.queryByRole("button", { name: "保存目标" }),
+    await screen.findByText(
+      /Change your password before returning to this page\./,
+    ),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Save target" }),
   ).not.toBeInTheDocument();
 });

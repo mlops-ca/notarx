@@ -90,25 +90,25 @@ test("dashboard switches real request windows and repository ranking", async ({
 }) => {
   await mockDashboard(page);
   await page.goto("/");
-  const metric = page.getByRole("group", { name: "页面摘要" });
+  const metric = page.getByRole("group", { name: "Page summary" });
   const requests = metric
     .locator(":scope > div")
-    .filter({ hasText: "总请求量" });
+    .filter({ hasText: "Total requests" });
   await expect(requests).toContainText("9");
   await expect(
     page.locator(".ant-table-tbody tr.ant-table-row").first(),
   ).toContainText("runtime-images");
-  await page.getByText("1 天", { exact: true }).click();
+  await page.getByText("1 day", { exact: true }).click();
   await expect(requests).toContainText("6");
   await expect(
     page.locator(".ant-table-tbody tr.ant-table-row").first(),
   ).toContainText("linux-packages");
-  await page.getByText("30 天", { exact: true }).click();
+  await page.getByText("30 days", { exact: true }).click();
   await expect(requests).toContainText("17");
   await expect(
     page.locator(".ant-table-tbody tr.ant-table-row").first(),
   ).toContainText("runtime-images");
-  await expect(page.getByText("近期趋势")).toHaveCount(0);
+  await expect(page.getByText("Recent trend")).toHaveCount(0);
 });
 
 test("dashboard empty statistics show a clear empty state", async ({
@@ -116,9 +116,13 @@ test("dashboard empty statistics show a clear empty state", async ({
 }) => {
   await mockDashboard(page, true);
   await page.goto("/");
-  await expect(page.getByText("暂无仓库", { exact: true })).toBeVisible();
   await expect(
-    page.getByText("创建仓库后，这里会展示请求量、对象数与存储占用。"),
+    page.getByText("No repositories", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "Create a repository to see requests, objects, and storage here.",
+    ),
   ).toBeVisible();
 });
 
@@ -138,9 +142,9 @@ for (const viewport of [
     await mockDashboard(page);
     await page.goto("/");
     const stack = page.locator(".ag-page-stack").filter({
-      has: page.getByRole("heading", { name: "总览" }),
+      has: page.getByRole("heading", { name: "Overview" }),
     });
-    const metrics = stack.getByRole("group", { name: "页面摘要" });
+    const metrics = stack.getByRole("group", { name: "Page summary" });
     const primary = stack.locator(":scope > .ag-page-primary");
     await expect(primary).toBeVisible();
     expect(await verticalGap(metrics, primary)).toBeGreaterThanOrEqual(23);

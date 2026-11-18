@@ -62,7 +62,7 @@ function expectBoundedEmptyStateFlow(
 async function useDarkChinesePreferences(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem("ag.console.theme", "dark");
-    localStorage.setItem("ag.console.locale", "zh-CN");
+    localStorage.setItem("ag.console.locale", "en-CA");
   });
 }
 
@@ -126,9 +126,11 @@ test("public catalog empty state stays quiet and responsive", async ({
   );
 
   await page.goto("/browse");
-  await expect(page.getByText("暂无公开仓库", { exact: true })).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "管理登录" }).last(),
+    page.getByText("No public repositories", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Management sign in" }).last(),
   ).toBeVisible();
 
   const emptyState = page.locator(".ag-public-catalog-empty");
@@ -168,7 +170,9 @@ test("public catalog empty state stays quiet and responsive", async ({
     });
   }
 
-  await page.getByRole("button", { name: /选择主题.*Gateway Dark/ }).click();
+  await page
+    .getByRole("button", { name: /Choose theme.*Gateway Dark/ })
+    .click();
   await page.getByRole("menuitem", { name: /Gateway Light/ }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   const lightIconColors = await icon.evaluate((node) => {
@@ -205,7 +209,9 @@ test("repository first-use state leads directly to creation", async ({
   );
 
   await page.goto("/repositories");
-  await expect(page.getByText("暂无仓库", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("No repositories", { exact: true }),
+  ).toBeVisible();
 
   const emptyState = page.locator(".ag-empty-state");
   const icon = emptyState.locator(".ag-empty-state-icon");
@@ -213,12 +219,18 @@ test("repository first-use state leads directly to creation", async ({
   await expect(emptyState.locator("img")).toHaveCount(0);
   expectBoundedEmptyStateFlow(await measureEmptyStateFlow(emptyState));
 
-  await emptyState.getByRole("button", { name: "新建仓库" }).click();
-  await expect(page.getByRole("dialog", { name: "新建仓库" })).toBeVisible();
+  await emptyState.getByRole("button", { name: "New repository" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "New repository" }),
+  ).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog", { name: "新建仓库" })).toBeHidden();
+  await expect(
+    page.getByRole("dialog", { name: "New repository" }),
+  ).toBeHidden();
 
-  await page.getByRole("button", { name: /选择主题.*Gateway Dark/ }).click();
+  await page
+    .getByRole("button", { name: /Choose theme.*Gateway Dark/ })
+    .click();
   await page.getByRole("menuitem", { name: /Gateway Light/ }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await expect(icon).toBeVisible();
@@ -259,7 +271,7 @@ test("repository filter-only empty state keeps the standard feedback", async ({
 
   await page.goto("/repositories");
   await expect(
-    page.getByText("暂无符合条件的仓库", { exact: true }),
+    page.getByText("No matching repositories", { exact: true }),
   ).toBeVisible();
   await expect(page.locator(".ag-empty-state-icon")).toBeVisible();
   await expect(page.locator(".ag-empty-state img")).toHaveCount(0);

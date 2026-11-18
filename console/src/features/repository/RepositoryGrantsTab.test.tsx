@@ -139,14 +139,16 @@ describe("RepositoryGrantsTab", () => {
 
     renderTab();
 
-    expect(await screen.findByText("暂无授权规则")).toBeInTheDocument();
+    expect(await screen.findByText("No access grants")).toBeInTheDocument();
     // Listing users or keys would be refused, and a refusal ends the session.
     expect(mockListUsers).not.toHaveBeenCalled();
     expect(mockListApiKeys).not.toHaveBeenCalled();
     expect(mockListServiceAccounts).not.toHaveBeenCalled();
     expect(mockListAuthorizationRoles).not.toHaveBeenCalled();
     expect(
-      screen.queryByText(/无法加载用户、API Key、服务账号或自定义角色/),
+      screen.queryByText(
+        /Could not load users, API keys, service accounts, or custom roles\. You can still use a custom identity and built-in permissions\./,
+      ),
     ).not.toBeInTheDocument();
   });
 
@@ -157,13 +159,15 @@ describe("RepositoryGrantsTab", () => {
     const user = userEvent.setup();
     renderTab();
 
-    await user.click(await screen.findByRole("button", { name: /添加授权/ }));
-    await user.click(screen.getByRole("combobox", { name: "授权主体" }));
+    await user.click(await screen.findByRole("button", { name: /Add grant/ }));
+    await user.click(screen.getByRole("combobox", { name: "Principal" }));
 
-    expect(screen.getByText(/用户 · active-user/)).toBeInTheDocument();
+    expect(screen.getByText(/User · active-user/)).toBeInTheDocument();
     expect(screen.getByText(/API Key · Active key/)).toBeInTheDocument();
-    expect(screen.getByText(/服务账号 · release-bot/)).toBeInTheDocument();
-    expect(screen.getByText(/OIDC \/ 自定义 actor/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Service account · release-bot/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/OIDC \/ custom actor/)).toBeInTheDocument();
     expect(screen.queryByText(/disabled-user/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Revoked key/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Expired key/)).not.toBeInTheDocument();
@@ -179,10 +183,10 @@ describe("RepositoryGrantsTab", () => {
     const user = userEvent.setup();
     renderTab();
 
-    await user.click(await screen.findByRole("button", { name: /添加授权/ }));
-    await user.click(screen.getByRole("combobox", { name: "授权主体" }));
-    await user.click(await screen.findByText(/用户 · active-user/));
-    await user.click(screen.getByRole("button", { name: /保\s*存/ }));
+    await user.click(await screen.findByRole("button", { name: /Add grant/ }));
+    await user.click(screen.getByRole("combobox", { name: "Principal" }));
+    await user.click(await screen.findByText(/User · active-user/));
+    await user.click(screen.getByRole("button", { name: /Save/ }));
 
     await waitFor(() =>
       expect(mockUpsertGrant).toHaveBeenCalledWith({
@@ -207,13 +211,13 @@ describe("RepositoryGrantsTab", () => {
     const user = userEvent.setup();
     renderTab();
 
-    await user.click(await screen.findByRole("button", { name: /添加授权/ }));
-    await user.click(screen.getByRole("combobox", { name: "授权主体" }));
-    await user.click(await screen.findByText(/用户 · active-user/));
-    await user.click(screen.getByRole("button", { name: /保\s*存/ }));
+    await user.click(await screen.findByRole("button", { name: /Add grant/ }));
+    await user.click(screen.getByRole("combobox", { name: "Principal" }));
+    await user.click(await screen.findByText(/User · active-user/));
+    await user.click(screen.getByRole("button", { name: /Save/ }));
 
     expect(await screen.findByText(/upsert failed/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /保\s*存/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Save/ })).toBeInTheDocument();
   });
 
   it("upserts without touching other rows when a grant is edited in place", async () => {
@@ -226,10 +230,10 @@ describe("RepositoryGrantsTab", () => {
     const user = userEvent.setup();
     renderTab();
 
-    await user.click(await screen.findByRole("button", { name: /编\s*辑/ }));
-    await user.click(screen.getByRole("combobox", { name: "权限级别" }));
-    await user.click(await screen.findByText("写入 · 发布 / 编辑"));
-    await user.click(screen.getByRole("button", { name: /保\s*存/ }));
+    await user.click(await screen.findByRole("button", { name: /Edit/ }));
+    await user.click(screen.getByRole("combobox", { name: "Permission" }));
+    await user.click(await screen.findByText("Write · publish / edit"));
+    await user.click(screen.getByRole("button", { name: /Save/ }));
 
     await waitFor(() =>
       expect(mockUpsertGrant).toHaveBeenCalledWith({
@@ -257,10 +261,10 @@ describe("RepositoryGrantsTab", () => {
     const user = userEvent.setup();
     renderTab();
 
-    await user.click(await screen.findByRole("button", { name: /编\s*辑/ }));
-    await user.click(screen.getByRole("combobox", { name: "授权主体" }));
+    await user.click(await screen.findByRole("button", { name: /Edit/ }));
+    await user.click(screen.getByRole("combobox", { name: "Principal" }));
     await user.click(await screen.findByText(/API Key · Active key/));
-    await user.click(screen.getByRole("button", { name: /保\s*存/ }));
+    await user.click(screen.getByRole("button", { name: /Save/ }));
 
     await waitFor(() =>
       expect(mockDeleteGrant).toHaveBeenCalledWith({
@@ -289,13 +293,15 @@ describe("RepositoryGrantsTab", () => {
     const user = userEvent.setup();
     renderTab();
 
-    await user.click(await screen.findByRole("button", { name: /编\s*辑/ }));
-    await user.click(screen.getByRole("combobox", { name: "授权主体" }));
+    await user.click(await screen.findByRole("button", { name: /Edit/ }));
+    await user.click(screen.getByRole("combobox", { name: "Principal" }));
     await user.click(await screen.findByText(/API Key · Active key/));
-    await user.click(screen.getByRole("button", { name: /保\s*存/ }));
+    await user.click(screen.getByRole("button", { name: /Save/ }));
 
     expect(
-      await screen.findByText("旧授权删除失败，新授权未保存，请重试。"),
+      await screen.findByText(
+        "The previous row could not be removed, so the new grant was not saved. Please retry.",
+      ),
     ).toBeInTheDocument();
     expect(mockUpsertGrant).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -318,13 +324,13 @@ describe("RepositoryGrantsTab", () => {
     const row = (await screen.findByText("user:active-user")).closest("tr");
     expect(row).not.toBeNull();
     await user.click(
-      within(row!).getByRole("button", { name: "移除该行授权" }),
+      within(row!).getByRole("button", { name: "Remove this grant row" }),
     );
     // The confirmation lives in the popover; the row button is labelled
     // distinctly so the two are never confused by name.
     await user.click(
       within(await screen.findByRole("tooltip")).getByRole("button", {
-        name: /^移\s*除$/,
+        name: /^Remove$/,
       }),
     );
 
@@ -363,19 +369,21 @@ describe("RepositoryGrantsTab", () => {
     renderTab();
 
     await user.click(
-      (await screen.findAllByRole("button", { name: /编\s*辑/ }))[0],
+      (await screen.findAllByRole("button", { name: /Edit/ }))[0],
     );
     expect(
-      screen.queryByText("该主体在此资源范围已有授权，保存将替换原有规则。"),
+      screen.queryByText(
+        "This principal already holds a grant at this resource scope; saving replaces it.",
+      ),
     ).not.toBeInTheDocument();
 
     // A raw repository starts its limited scope at the format's own example,
     // which is exactly the prefix the second row already holds.
-    await user.click(screen.getByText("限定范围"));
+    await user.click(screen.getByText("Limit by prefix"));
 
     expect(
       await screen.findByText(
-        "该主体在此资源范围已有授权，保存将替换原有规则。",
+        "This principal already holds a grant at this resource scope; saving replaces it.",
       ),
     ).toBeInTheDocument();
   });
@@ -394,12 +402,12 @@ describe("RepositoryGrantsTab", () => {
     const user = userEvent.setup();
     renderTab();
 
-    await user.click(await screen.findByRole("button", { name: /添加授权/ }));
-    await user.click(screen.getByRole("combobox", { name: "授权主体" }));
-    await user.click(await screen.findByText(/用户 · active-user/));
-    await user.click(screen.getByRole("button", { name: /^保\s*存$/ }));
+    await user.click(await screen.findByRole("button", { name: /Add grant/ }));
+    await user.click(screen.getByRole("combobox", { name: "Principal" }));
+    await user.click(await screen.findByText(/User · active-user/));
+    await user.click(screen.getByRole("button", { name: /^Save$/ }));
 
-    expect(screen.getByRole("button", { name: /^取\s*消$/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^Cancel$/ })).toBeDisabled();
     await user.keyboard("{Escape}");
     expect(screen.getByRole("dialog")).toBeInTheDocument();
 
@@ -415,10 +423,10 @@ describe("RepositoryGrantsTab", () => {
     const user = userEvent.setup();
     renderTab();
 
-    await user.click(await screen.findByRole("button", { name: /添加授权/ }));
-    await user.click(screen.getByRole("combobox", { name: "授权主体" }));
-    await user.click(await screen.findByText(/用户 · active-user/));
-    await user.click(screen.getByRole("button", { name: /^保\s*存$/ }));
+    await user.click(await screen.findByRole("button", { name: /Add grant/ }));
+    await user.click(screen.getByRole("combobox", { name: "Principal" }));
+    await user.click(await screen.findByText(/User · active-user/));
+    await user.click(screen.getByRole("button", { name: /^Save$/ }));
 
     expect(await screen.findByText("user:active-user")).toBeInTheDocument();
     expect(mockListGrants).toHaveBeenCalledTimes(1);

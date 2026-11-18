@@ -57,7 +57,10 @@ function renderPalette(pages: readonly CommandPage[] = []) {
       </PreferencesProvider>
     </TestQueryProvider>,
   );
-  return { onClose, input: screen.getByRole("combobox", { name: "命令面板" }) };
+  return {
+    onClose,
+    input: screen.getByRole("combobox", { name: "Command palette" }),
+  };
 }
 beforeEach(() => {
   window.localStorage.clear();
@@ -123,7 +126,7 @@ describe("CommandPalette recovery and keyboard boundaries", () => {
       expect(await screen.findByRole("alert")).toHaveTextContent(
         "Repository source unavailable",
       );
-      await user.click(screen.getByRole("button", { name: /重\s*试/ }));
+      await user.click(screen.getByRole("button", { name: /Retry/ }));
       await user.type(input, "recovered-release");
       expect(
         await screen.findByRole("option", { name: /^recovered-release/ }),
@@ -170,7 +173,7 @@ describe("CommandPalette recovery and keyboard boundaries", () => {
 
   it("does not execute a command while confirming a Chinese IME candidate", async () => {
     const { input, onClose } = renderPalette([
-      { to: "/system", label: "系统", icon: null },
+      { to: "/system", label: "System", icon: null },
     ]);
     fireEvent.compositionStart(input);
     fireEvent.keyDown(input, { key: "Enter", isComposing: true, keyCode: 229 });

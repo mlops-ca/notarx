@@ -130,10 +130,10 @@ test.describe("runtime log touch controls", () => {
       );
       await geometry(page);
       await page
-        .getByRole("combobox", { name: "时间范围", exact: true })
+        .getByRole("combobox", { name: "Date range", exact: true })
         .click();
-      await page.getByRole("option", { name: "自定义", exact: true }).click();
-      await page.getByPlaceholder("开始日期").click();
+      await page.getByRole("option", { name: "Custom", exact: true }).click();
+      await page.getByPlaceholder("Start date").click();
       const calendar = page.locator(".ag-runtime-log-calendar:visible");
       await expect(calendar).toBeVisible();
       const popup = await calendar.boundingBox();
@@ -145,10 +145,10 @@ test.describe("runtime log touch controls", () => {
 });
 
 for (const [width, locale, theme] of [
-  [1440, "zh-CN", "dark"],
-  [390, "en-US", "light"],
-  [320, "zh-CN", "dark"],
-  [900, "zh-CN", "dark"],
+  [1440, "en-CA", "dark"],
+  [390, "en-CA", "light"],
+  [320, "en-CA", "dark"],
+  [900, "en-CA", "dark"],
 ] as const) {
   test(`literal bounded log rows, history and export at ${width}px ${theme}`, async ({
     page,
@@ -227,7 +227,7 @@ for (const [width, locale, theme] of [
         .evaluate((node) => node.scrollWidth > node.clientWidth),
     ).toBe(true);
     await geometry(page);
-    await page.getByRole("button", { name: /复制已加载|Copy loaded/ }).click();
+    await page.getByRole("button", { name: /Copy loaded|Copy loaded/ }).click();
     const copied = await page.evaluate(() => navigator.clipboard.readText());
     const parsed = copied
       .trim()
@@ -245,10 +245,10 @@ for (const [width, locale, theme] of [
       JSON.parse(await page.evaluate(() => navigator.clipboard.readText())),
     ).toMatchObject({ errorCode: "upstream_transport_failed", phase: "fetch" });
     expect(parsed[0].message).toContain("\\u001b");
-    await page.getByRole("button", { name: /复制已加载|Copy loaded/ }).click();
+    await page.getByRole("button", { name: /Copy loaded|Copy loaded/ }).click();
     const downloadEvent = page.waitForEvent("download");
     await page
-      .getByRole("button", { name: /下载 NDJSON|Download NDJSON/ })
+      .getByRole("button", { name: /Download NDJSON|Download NDJSON/ })
       .click();
     const download = await downloadEvent;
     expect(download.suggestedFilename()).toBe("runtime-logs.ndjson");
@@ -267,7 +267,9 @@ for (const [width, locale, theme] of [
         selection.addRange(range);
         document.dispatchEvent(new Event("selectionchange"));
       });
-    await page.getByRole("button", { name: /复制选择|Copy selection/ }).click();
+    await page
+      .getByRole("button", { name: /Copy selection|Copy selection/ })
+      .click();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toContain(
       "second line",
     );
@@ -282,12 +284,14 @@ for (const [width, locale, theme] of [
         selection.addRange(range);
         document.dispatchEvent(new Event("selectionchange"));
       });
-    await page.getByRole("button", { name: /复制选择|Copy selection/ }).click();
+    await page
+      .getByRole("button", { name: /Copy selection|Copy selection/ })
+      .click();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toContain(
       "errorCode=upstream_transport_failed · phase=fetch",
     );
     await page
-      .getByRole("button", { name: /加载更早日志|Load older logs/ })
+      .getByRole("button", { name: /Load older logs|Load older logs/ })
       .click();
     await expect(stream.locator(".ag-runtime-log-row")).toHaveCount(5);
     await expect(stream.getByText("event-1", { exact: true })).toBeVisible();
@@ -336,13 +340,13 @@ test("bounded follow retains the consumed anchor and reports only fetched unread
     node.scrollTop = 0;
     node.dispatchEvent(new Event("scroll"));
   });
-  await page.getByRole("button", { name: "跟随新日志" }).click();
-  await expect(page.getByRole("button", { name: /100 条未读/ })).toBeVisible();
+  await page.getByRole("button", { name: "Follow new logs" }).click();
+  await expect(page.getByRole("button", { name: /100 unread/ })).toBeVisible();
   expect(await stream.evaluate((node) => node.scrollTop)).toBe(0);
   await expect(stream.locator('[data-sequence="430"]')).toHaveCount(1, {
     timeout: 15_000,
   });
-  await page.getByRole("button", { name: "暂停跟随" }).click();
+  await page.getByRole("button", { name: "Pause follow" }).click();
   expect(cursors).toEqual([
     "cursor-50",
     "cursor-150",
@@ -356,10 +360,18 @@ test("bounded follow retains the consumed anchor and reports only fetched unread
       nodes.map((node) => Number((node as HTMLElement).dataset.sequence)),
     );
   expect(sequences).toEqual(Array.from({ length: 300 }, (_, i) => i + 131));
-  await expect(page.getByText(/客户端容量已移除 130 条/)).toBeVisible();
-  await expect(page.getByText("服务器保留已覆盖部分未读日志")).toBeVisible();
-  await page.getByRole("button", { name: /条未读 · 回到底部/ }).click();
-  await expect(page.getByRole("button", { name: "暂停跟随" })).toBeVisible();
+  await expect(
+    page.getByText(/Client capacity removed 130 rows/),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Server retention overwrote some unread logs"),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: /.+ unread · Resume at bottom/ })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Pause follow" }),
+  ).toBeVisible();
   expect(
     await stream.evaluate(
       (node) => node.scrollHeight - node.scrollTop - node.clientHeight,
@@ -390,21 +402,27 @@ test("empty source policy and failed refresh retain honest async states", async 
   );
   await page.goto("/operations?tab=logs&requestId=legacy-link");
   await expect(page).toHaveURL(/\/system\?tab=logs&requestId=legacy-link$/);
-  await expect(page.getByText("当前范围内没有日志")).toBeVisible();
-  await page.getByText("查询与复制说明", { exact: true }).click();
-  await expect(page.getByText(/DEBUG 筛选不会启用 DEBUG/)).toBeVisible();
-  await expect(page.getByText(/最低 INFO · 请求 limited/)).toBeVisible();
+  await expect(page.getByText("No logs in this range")).toBeVisible();
+  await page.getByText("Query and copy details", { exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "下载 NDJSON" }),
+    page.getByText(/A DEBUG filter does not enable DEBUG/),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/Minimum INFO · requested limited/),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Download NDJSON" }),
   ).toBeDisabled();
   await geometry(page);
   fail = true;
-  await page.getByRole("button", { name: "刷新快照" }).click();
+  await page.getByRole("button", { name: "Refresh snapshot" }).click();
   await expect(
-    page.getByText("当前节点未启用内存日志查询，请检查日志缓冲配置。"),
+    page.getByText(
+      "Memory log queries are disabled on this node. Check the buffer configuration.",
+    ),
   ).toBeVisible();
-  await expect(page.getByText("当前范围内没有日志")).toBeVisible();
-  await expect(page.getByText("查询运行日志…")).toHaveCount(0);
+  await expect(page.getByText("No logs in this range")).toBeVisible();
+  await expect(page.getByText("Querying runtime logs…")).toHaveCount(0);
   await geometry(page);
 });
 
@@ -424,7 +442,9 @@ test("non-administrators cannot enter the runtime stream or request logs", async
     route.fulfill({ json: { items: [] } }),
   );
   await page.goto("/system?tab=logs");
-  await expect(page.getByRole("heading", { name: "系统运行" })).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "System Runtime" }),
+  ).toHaveCount(0);
   await expect(page.locator(".ag-runtime-log-stream")).toHaveCount(0);
   expect(calls).toBe(0);
 });
@@ -436,7 +456,7 @@ for (const width of [1440, 390])
     await page.setViewportSize({ width, height: 900 });
     await shell(page);
     await page.addInitScript(() =>
-      localStorage.setItem("ag.console.locale", "en-US"),
+      localStorage.setItem("ag.console.locale", "en-CA"),
     );
     const requests: URL[] = [];
     await page.route("**/api/v2/runtime/logs**", (route) => {
@@ -516,7 +536,7 @@ test("native selection is cleared on snapshot, session and permission recovery",
     ),
   );
   await page.goto("/system?tab=logs&requestId=initial-filter");
-  const copy = page.getByRole("button", { name: "复制选择" });
+  const copy = page.getByRole("button", { name: "Copy selection" });
   const select = async () => {
     await page.locator(".ag-runtime-log-message").evaluate((node) => {
       const range = document.createRange();
@@ -536,14 +556,14 @@ test("native selection is cleared on snapshot, session and permission recovery",
   ).toBeVisible();
   await select();
   version = 2;
-  await page.getByRole("button", { name: "刷新快照" }).click();
+  await page.getByRole("button", { name: "Refresh snapshot" }).click();
   await expect(
     page.getByText("safe-snapshot-2", { exact: true }),
   ).toBeVisible();
   await expect(copy).toBeDisabled();
   await select();
   version = 3;
-  await page.getByRole("button", { name: "刷新快照" }).click();
+  await page.getByRole("button", { name: "Refresh snapshot" }).click();
   await expect(
     page.getByText("safe-snapshot-3", { exact: true }),
   ).toBeVisible();
@@ -551,14 +571,14 @@ test("native selection is cleared on snapshot, session and permission recovery",
   expect(await page.evaluate(() => getSelection()?.toString())).toBe("");
   await select();
   deny = true;
-  await page.getByRole("button", { name: "刷新快照" }).click();
+  await page.getByRole("button", { name: "Refresh snapshot" }).click();
   await expect(
-    page.getByText("需要先更新密码，之后再查询运行日志。"),
+    page.getByText("Update your password before querying runtime logs."),
   ).toBeVisible();
   await expect(copy).toHaveCount(0);
   deny = false;
   version = 4;
-  await page.getByRole("button", { name: "刷新快照" }).click();
+  await page.getByRole("button", { name: "Refresh snapshot" }).click();
   await expect(
     page.getByText("safe-snapshot-4", { exact: true }),
   ).toBeVisible();
@@ -566,7 +586,7 @@ test("native selection is cleared on snapshot, session and permission recovery",
   expect(await page.evaluate(() => getSelection()?.toString())).toBe("");
   await select();
   version = 5;
-  await page.getByRole("button", { name: "清除筛选" }).click();
+  await page.getByRole("button", { name: "Clear filters" }).click();
   await expect(
     page.getByText("safe-snapshot-5", { exact: true }),
   ).toBeVisible();

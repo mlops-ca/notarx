@@ -134,7 +134,9 @@ describe("public version pages", () => {
     );
     await act(() => result.current.loadOciTags("app", "page-2"));
     await waitFor(() =>
-      expect(result.current.ociTagPages.app?.error).toBe("读取 OCI 版本失败"),
+      expect(result.current.ociTagPages.app?.error).toBe(
+        "Failed to read OCI versions",
+      ),
     );
     expect(result.current.ociTagPages.app.items).toEqual(["1.0"]);
 

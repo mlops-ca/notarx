@@ -8,7 +8,7 @@ async function setup(page: Page, width: number, theme: string) {
   await page.setViewportSize({ width, height: 1000 });
   await authenticateAsAdmin(page);
   await page.addInitScript((theme) => {
-    localStorage.setItem("ag.console.locale", "zh-CN");
+    localStorage.setItem("ag.console.locale", "en-CA");
     localStorage.setItem("ag.console.theme.id", theme);
   }, theme);
   await page.route("**/api/v2/site-settings", (route) =>
@@ -105,20 +105,29 @@ for (const theme of ["gateway-dark", "gateway-light"])
       const errors = await setup(page, width, theme);
       await page.goto("/operations?tab=migrations&view=schedules");
       await expect(
-        page.getByText("等待新容量观测", { exact: true }),
+        page.getByText("Waiting for new capacity", { exact: true }),
       ).toBeVisible();
       await expect(
-        page.getByText("最近成功追平", { exact: true }),
+        page.getByText("Last successful sync", { exact: true }),
       ).toBeVisible();
       await geometry(page);
       await page
-        .getByRole("button", { name: "补充容量观测", exact: true })
+        .getByRole("button", {
+          name: "Supply capacity observation",
+          exact: true,
+        })
         .click();
       await expect(
-        page.getByRole("textbox", { name: "存储池可用字节", exact: true }),
+        page.getByRole("textbox", {
+          name: "Free storage-pool bytes",
+          exact: true,
+        }),
       ).toHaveValue("");
       await expect(
-        page.getByRole("button", { name: "提交新观测", exact: true }),
+        page.getByRole("button", {
+          name: "Submit new observation",
+          exact: true,
+        }),
       ).toBeDisabled();
       await geometry(page);
       if (process.env.CAPTURE_LAYOUT_EVIDENCE === "1")
@@ -129,13 +138,13 @@ for (const theme of ["gateway-dark", "gateway-light"])
         });
       await page
         .getByTestId("nexus-schedule-capacity")
-        .getByRole("button", { name: "关闭", exact: true })
+        .getByRole("button", { name: "Close", exact: true })
         .click();
       await page
-        .getByRole("button", { name: "创建周期计划", exact: true })
+        .getByRole("button", { name: "Create recurring plan", exact: true })
         .click();
       await expect(
-        page.getByRole("combobox", { name: "成功批次", exact: true }),
+        page.getByRole("combobox", { name: "Successful batch", exact: true }),
       ).toBeVisible();
       await geometry(page);
       if (process.env.CAPTURE_LAYOUT_EVIDENCE === "1")
@@ -177,16 +186,16 @@ test("stopped and blocked plans show durable boundaries without dispatching", as
   await page.goto("/operations?tab=migrations&view=schedules");
   const stopped = page.locator(".ag-nexus-schedule").first();
   await expect(
-    stopped.getByText("已停止，不再触发", { exact: true }),
+    stopped.getByText("Stopped; no further occurrences", { exact: true }),
   ).toBeVisible();
   await expect(
-    stopped.getByRole("link", { name: "查看当前批次" }),
+    stopped.getByRole("link", { name: "View active batch" }),
   ).toBeVisible();
   await expect(
-    stopped.getByRole("button", { name: "更新容量并恢复" }),
+    stopped.getByRole("button", { name: "Refresh capacity and resume" }),
   ).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "更新容量并恢复" }),
+    page.getByRole("button", { name: "Refresh capacity and resume" }),
   ).toBeVisible();
   await geometry(page);
   expect(errors).toEqual([]);

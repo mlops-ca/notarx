@@ -36,11 +36,17 @@ it("explains cache coverage, source authority, and signer trust from advertised 
       <OCIDiscoveryNotice />
     </PreferencesProvider>,
   );
-  const notice = screen.getByRole("region", { name: "OCI 目录与关联制品" });
-  expect(notice).toHaveTextContent("缓存列表不代表完整库存");
-  expect(notice).toHaveTextContent("Group 成员调整后仍保持原来源");
-  expect(notice).toHaveTextContent("尚未验证签名者身份与信任策略");
-  expect(notice).toHaveTextContent("不使用标签回退");
+  const notice = screen.getByRole("region", {
+    name: "OCI catalog and attached artifacts",
+  });
+  expect(notice).toHaveTextContent(
+    "The cache below is not a complete inventory",
+  );
+  expect(notice).toHaveTextContent("even after Group members are reordered");
+  expect(notice).toHaveTextContent(
+    "does not verify signer identity or trust policy",
+  );
+  expect(notice).toHaveTextContent("tag fallback is unavailable");
 });
 
 it.each([undefined, [], [{ ...profile, ociDiscovery: undefined }]])(

@@ -21,7 +21,7 @@ import { buildPublicArtifactRows } from "./publicArtifactRows";
 
 vi.mock("../../lib/preferences", () => ({
   usePreferences: () => ({
-    locale: "en-US",
+    locale: "en-CA",
     t: (key: string) => key,
   }),
 }));
@@ -151,7 +151,7 @@ describe("public version recovery", () => {
         ociManifestDetails: pages.ociManifestDetails,
         selectedProtocolVersions: {},
         artifactHref: () => "/artifact",
-        t: createTranslator("zh-CN"),
+        t: createTranslator("en-CA"),
       });
       return (
         <>

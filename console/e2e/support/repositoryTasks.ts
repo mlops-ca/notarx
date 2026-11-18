@@ -5,7 +5,7 @@ import { expect, type Page } from "@playwright/test";
  * the selected group.
  */
 function repositoryNavigation(page: Page) {
-  const navigation = page.getByRole("navigation", { name: "仓库任务" });
+  const navigation = page.getByRole("navigation", { name: "Repository tasks" });
   return {
     groups: navigation.locator(".ag-repository-tabs").getByRole("tab"),
     group: (name: string) =>

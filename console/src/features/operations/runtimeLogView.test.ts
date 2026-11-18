@@ -105,7 +105,7 @@ describe("bounded runtime log view", () => {
     );
     expect(large.dropped).toBeGreaterThan(130);
     const unicode = boundRuntimeLogs(
-      rows.map((row) => ({ ...row, message: "备份".repeat(5000) })),
+      rows.map((row) => ({ ...row, message: "€€".repeat(5000) })),
       "synthetic-node",
       "synthetic-session",
     );

@@ -43,16 +43,23 @@ for (const width of [1440, 375]) {
         await page.goto("/browse");
         await page.getByRole("link", { name: /nuget-public/ }).click();
       }
-      const unavailable = page.getByText("当前 Console 尚未支持 nuget 格式", {
-        exact: true,
-      });
+      const unavailable = page.getByText(
+        "This Console does not support the nuget format yet",
+        {
+          exact: true,
+        },
+      );
       await expect(unavailable).toBeVisible();
-      await expect(page.getByText("暂无制品", { exact: true })).toHaveCount(0);
-      await expect(page.getByText("Raw 仓库地址", { exact: true })).toHaveCount(
+      await expect(page.getByText("No artifacts", { exact: true })).toHaveCount(
         0,
       );
       await expect(
-        page.getByText("当前后端构建尚未挂载此管理端点（返回 404）"),
+        page.getByText("Raw repository address", { exact: true }),
+      ).toHaveCount(0);
+      await expect(
+        page.getByText(
+          "The current backend does not expose this endpoint (404)",
+        ),
       ).toHaveCount(0);
       expect(
         await page.evaluate(

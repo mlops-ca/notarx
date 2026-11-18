@@ -61,7 +61,7 @@ describe("RepositoryUsageTab", () => {
         </PreferencesProvider>
       </TestQueryProvider>,
     );
-    await screen.findByText("第 1-20 项，共 21 项");
+    await screen.findByText("1-20 of 21 items");
     await user.click(screen.getByTitle("2"));
     await vi.waitFor(() =>
       expect(mockListRepositoryArtifactUsage).toHaveBeenCalledTimes(3),
@@ -99,9 +99,9 @@ describe("RepositoryUsageTab", () => {
       </TestQueryProvider>,
     );
     await screen.findByText("initial read failed");
-    expect(screen.queryByText("正在加载…")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /重\s*试/ }));
-    await screen.findByText("暂无下载记录");
+    expect(screen.queryByText("Loading…")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Retry/ }));
+    await screen.findByText("No downloads recorded yet");
   });
   it("ignores a slow old refresh after a new search succeeds", async () => {
     const user = userEvent.setup();
@@ -141,9 +141,9 @@ describe("RepositoryUsageTab", () => {
       </TestQueryProvider>,
     );
     await screen.findByText("initial");
-    await user.click(screen.getByRole("button", { name: /刷\s*新/ }));
+    await user.click(screen.getByRole("button", { name: /Refresh/ }));
     await user.type(
-      screen.getByRole("searchbox", { name: "搜索制品地址" }),
+      screen.getByRole("searchbox", { name: "Search artifact address" }),
       "new-search{Enter}",
     );
     await screen.findByText("new-search");
@@ -170,7 +170,7 @@ describe("RepositoryUsageTab", () => {
         </PreferencesProvider>
       </TestQueryProvider>,
     );
-    await screen.findByText("暂无下载记录");
+    await screen.findByText("No downloads recorded yet");
     expect(mockListRepositoryArtifactUsage).toHaveBeenCalledTimes(1);
     expect(mockListRepositoryArtifactUsage.mock.calls[0][0]?.query).toEqual({
       limit: 20,
@@ -184,7 +184,7 @@ describe("RepositoryUsageTab", () => {
       ).toEqual({ limit: 20, offset: 20, q: undefined }),
     );
     await user.type(
-      screen.getByRole("searchbox", { name: "搜索制品地址" }),
+      screen.getByRole("searchbox", { name: "Search artifact address" }),
       "widget",
     );
     await user.keyboard("{Enter}");
@@ -193,8 +193,8 @@ describe("RepositoryUsageTab", () => {
         mockListRepositoryArtifactUsage.mock.calls.at(-1)?.[0]?.query,
       ).toEqual({ limit: 20, offset: 0, q: "widget" }),
     );
-    expect(screen.getByText("第 1-20 项，共 201 项")).toBeVisible();
-    expect(screen.getByText(/全仓库：201 个地址/)).toBeVisible();
+    expect(screen.getByText("1-20 of 201 items")).toBeVisible();
+    expect(screen.getByText(/Whole repository: 201 addresses/)).toBeVisible();
   });
   it("shows per-artifact downloads without redundant summary cards", async () => {
     mockListRepositoryArtifactUsage.mockResolvedValue({
@@ -235,9 +235,11 @@ describe("RepositoryUsageTab", () => {
 
     expect(await screen.findByText("@scope/widget@1.2.3")).toBeInTheDocument();
     expect(screen.getByText("10")).toBeInTheDocument();
-    expect(screen.queryByText("累计下载")).not.toBeInTheDocument();
+    expect(screen.queryByText("Total downloads")).not.toBeInTheDocument();
     expect(screen.getByText("build-agent")).toBeInTheDocument();
-    expect(screen.queryByText("暂无下载记录")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("No downloads recorded yet"),
+    ).not.toBeInTheDocument();
   });
 
   it("shows the empty state when nothing has been downloaded", async () => {
@@ -259,8 +261,10 @@ describe("RepositoryUsageTab", () => {
       </TestQueryProvider>,
     );
 
-    expect(await screen.findByText("暂无下载记录")).toBeInTheDocument();
-    expect(screen.queryByText("累计下载")).not.toBeInTheDocument();
+    expect(
+      await screen.findByText("No downloads recorded yet"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Total downloads")).not.toBeInTheDocument();
   });
 
   it("reloads usage when refresh is clicked", async () => {
@@ -282,8 +286,8 @@ describe("RepositoryUsageTab", () => {
         </PreferencesProvider>
       </TestQueryProvider>,
     );
-    await screen.findByText("暂无下载记录");
-    await user.click(screen.getByRole("button", { name: /刷\s*新/ }));
+    await screen.findByText("No downloads recorded yet");
+    await user.click(screen.getByRole("button", { name: /Refresh/ }));
     await vi.waitFor(() => {
       expect(mockListRepositoryArtifactUsage).toHaveBeenCalledTimes(2);
     });
@@ -319,7 +323,7 @@ describe("RepositoryUsageTab", () => {
       </TestQueryProvider>,
     );
     await screen.findByText("widget@1.0.0");
-    await user.click(screen.getByRole("button", { name: /刷\s*新/ }));
+    await user.click(screen.getByRole("button", { name: /Refresh/ }));
     expect(await screen.findByText("temporary failure")).toBeVisible();
     expect(screen.getByText("widget@1.0.0")).toBeVisible();
   });

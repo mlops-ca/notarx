@@ -47,7 +47,7 @@ describe("PreferenceControls", () => {
       );
 
       const themeButton = screen.getByRole("button", {
-        name: /选择主题.*Gateway Dark/,
+        name: /Choose theme.*Gateway Dark/,
       });
       vi.spyOn(themeButton, "getBoundingClientRect").mockReturnValue({
         x: 900,
@@ -99,7 +99,7 @@ describe("PreferenceControls", () => {
       expect(localStorage.getItem("ag.console.theme")).toBe("light");
       expect(localStorage.getItem("ag.console.theme.id")).toBe("aerok-light");
       expect(
-        screen.getByRole("button", { name: /选择主题.*Aerok Light/ }),
+        screen.getByRole("button", { name: /Choose theme.*Aerok Light/ }),
       ).toBeInTheDocument();
     } finally {
       Object.defineProperty(document, "startViewTransition", {
@@ -133,7 +133,7 @@ describe("PreferenceControls", () => {
           <PreferenceControls />
         </PreferencesProvider>,
       );
-      await user.click(screen.getByRole("button", { name: /选择主题/ }));
+      await user.click(screen.getByRole("button", { name: /Choose theme/ }));
       await user.click(
         await screen.findByRole("menuitem", { name: /Gateway Light/ }),
       );
@@ -181,7 +181,7 @@ describe("PreferenceControls", () => {
       );
 
       await user.click(
-        screen.getByRole("button", { name: /选择主题.*Gateway Dark/ }),
+        screen.getByRole("button", { name: /Choose theme.*Gateway Dark/ }),
       );
       const lightTheme = await screen.findByRole("menuitem", {
         name: /Gateway Light/,
@@ -208,7 +208,7 @@ describe("PreferenceControls", () => {
         ),
       );
       expect(
-        screen.getByRole("button", { name: /选择主题.*Gateway Light/ }),
+        screen.getByRole("button", { name: /Choose theme.*Gateway Light/ }),
       ).toBeInTheDocument();
     } finally {
       animationFrameSpy?.mockRestore();
@@ -235,7 +235,7 @@ describe("PreferenceControls", () => {
           <PreferenceControls />
         </PreferencesProvider>,
       );
-      await user.click(screen.getByRole("button", { name: /选择主题/ }));
+      await user.click(screen.getByRole("button", { name: /Choose theme/ }));
       await user.click(
         await screen.findByRole("menuitem", { name: /Gateway Light/ }),
       );
@@ -286,7 +286,7 @@ describe("PreferenceControls", () => {
           <PreferenceControls />
         </PreferencesProvider>,
       );
-      await user.click(screen.getByRole("button", { name: /选择主题/ }));
+      await user.click(screen.getByRole("button", { name: /Choose theme/ }));
       await user.click(
         await screen.findByRole("menuitem", { name: /Gateway Light/ }),
       );
@@ -319,10 +319,10 @@ describe("PreferenceControls", () => {
       </PreferencesProvider>,
     );
 
-    await user.click(screen.getByRole("button", { name: "语言" }));
+    await user.click(screen.getByRole("button", { name: "Language" }));
 
     expect(
-      await screen.findByRole("menuitem", { name: "中文" }),
+      await screen.findByRole("menuitem", { name: "Chinese" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("menuitem", { name: "English" }),
@@ -334,6 +334,6 @@ describe("PreferenceControls", () => {
     expect(screen.getByRole("button", { name: "Language" })).toHaveTextContent(
       "EN",
     );
-    expect(localStorage.getItem("ag.console.locale")).toBe("en-US");
+    expect(localStorage.getItem("ag.console.locale")).toBe("en-CA");
   });
 });

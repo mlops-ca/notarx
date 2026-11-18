@@ -27,7 +27,7 @@ function Page({
     <PreferencesProvider>
       <h1>page title</h1>
       <SectionBoundary
-        title="面板不可用"
+        title="Panel unavailable"
         resetKeys={[resetKey]}
         recoveryKeys={recoveryKey === undefined ? undefined : [recoveryKey]}
         onReset={onReset}
@@ -89,7 +89,7 @@ describe("SectionBoundary", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "malformed answer",
     );
-    await user.click(screen.getByRole("button", { name: /重试/ }));
+    await user.click(screen.getByRole("button", { name: /Retry/ }));
     expect(
       screen.getByRole("button", { name: "Sibling action" }),
     ).toBeEnabled();
@@ -135,7 +135,9 @@ describe("SectionBoundary", () => {
     );
     error.mockClear();
     rendered.length = 0;
-    await userEvent.setup().click(screen.getByRole("button", { name: /重试/ }));
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: /Retry/ }));
     expect(await screen.findByText("Recovered panel")).toBeVisible();
     expect(rendered).not.toContain("broken");
     expect(error).not.toHaveBeenCalled();
@@ -147,13 +149,13 @@ describe("SectionBoundary", () => {
 
     expect(screen.getByText("page title")).toBeInTheDocument();
     expect(screen.getByText("sibling section")).toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent("面板不可用");
+    expect(screen.getByRole("alert")).toHaveTextContent("Panel unavailable");
     expect(screen.getByRole("alert")).toHaveTextContent("panel exploded");
 
     broken = false;
     await userEvent
       .setup()
-      .click(screen.getByRole("button", { name: /重\s*试/ }));
+      .click(screen.getByRole("button", { name: /Retry/ }));
     expect(onReset).toHaveBeenCalledOnce();
     expect(screen.getByText("panel content")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
@@ -187,7 +189,9 @@ describe("SectionBoundary", () => {
       <Page recoveryKey="old answer" onReset={onReset} />,
     );
     error.mockClear();
-    await userEvent.setup().click(screen.getByRole("button", { name: /重试/ }));
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: /Retry/ }));
     expect(screen.getByRole("alert")).toHaveTextContent("refresh failed");
     expect(onReset).toHaveBeenCalledOnce();
     expect(screen.getByText("sibling section")).toBeVisible();
@@ -206,7 +210,9 @@ describe("SectionBoundary", () => {
       reject = fail;
     });
     const { rerender } = render(<Page resetKey="a" onReset={() => pending} />);
-    await userEvent.setup().click(screen.getByRole("button", { name: /重试/ }));
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: /Retry/ }));
     broken = false;
     rerender(<Page resetKey="b" />);
     expect(screen.getByText("panel content")).toBeVisible();

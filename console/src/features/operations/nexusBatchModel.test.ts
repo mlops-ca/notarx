@@ -183,7 +183,7 @@ describe("batch truth and safe reports", () => {
     expect(scanStage("pypi_distribution_validation")).toBe(
       "nexusBatch.scanPyPIDistribution",
     );
-    for (const locale of ["zh-CN", "en-US"] as const) {
+    for (const locale of ["en-CA"] as const) {
       const t = createTranslator(locale);
       for (const code of [
         "pypi_simple_invalid",
@@ -215,7 +215,7 @@ describe("batch truth and safe reports", () => {
   });
   it("keeps npm scan failures bounded and localized in reports", () => {
     expect(scanStage("npm_packument_validation")).toBe("nexusBatch.scanNPM");
-    const t = createTranslator("zh-CN");
+    const t = createTranslator("en-CA");
     for (const code of [
       "npm_closure_incomplete",
       "npm_packument_invalid",
@@ -282,7 +282,7 @@ describe("batch truth and safe reports", () => {
     });
   });
   it("maps the actual source boundary codes without confusing changed asset bytes with a changed connection version", () => {
-    const t = createTranslator("zh-CN");
+    const t = createTranslator("en-CA");
     expect(batchReason("source_missing", t)).toBe(
       t("nexusBatch.sourceMissing"),
     );

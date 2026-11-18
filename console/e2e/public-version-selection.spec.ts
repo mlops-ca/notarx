@@ -70,7 +70,7 @@ test("Maven versions stay grouped and selecting one updates the version deep lin
   await expect(
     page.getByText("com.example:demo", { exact: true }),
   ).toBeVisible();
-  await expect(page.getByText(/2 个版本/)).toBeVisible();
+  await expect(page.getByText(/2 versions/)).toBeVisible();
   await chooseVersion(page, "1.0.0");
   await expect
     .poll(() => selectedArtifact(page))
@@ -379,6 +379,6 @@ test("Conan package versions are grouped, searchable, and collapsible", async ({
     });
   }
   expect(pageErrors).toEqual([]);
-  await page.getByRole("button", { name: "收起" }).click();
+  await page.getByRole("button", { name: "Collapse" }).click();
   await expect(page.getByRole("combobox")).toHaveCount(0);
 });

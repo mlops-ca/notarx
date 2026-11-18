@@ -82,7 +82,7 @@ async function openInjectedRuntimeError(page: Page, theme: "dark" | "light") {
 
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "页面加载失败" }),
+    page.getByRole("heading", { name: "Page failed to load" }),
   ).toBeVisible();
 }
 
@@ -101,7 +101,7 @@ for (const scenario of [
     await openInjectedRuntimeError(page, scenario.theme);
 
     const card = page.locator(".ag-route-error-card");
-    const title = page.getByRole("heading", { name: "页面加载失败" });
+    const title = page.getByRole("heading", { name: "Page failed to load" });
     const description = card.locator(".ag-route-error-description");
     const styles = await card.evaluate((element) => {
       const cardStyle = getComputedStyle(element);
@@ -146,10 +146,10 @@ for (const scenario of [
     await expect(card).toBeVisible();
     await expect(title).toBeVisible();
     await expect(description).toBeVisible();
-    await expect(page.getByText("技术详情")).toBeVisible();
-    await expect(page.getByRole("button", { name: "重新加载" })).toBeVisible();
+    await expect(page.getByText("Technical details")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Reload" })).toBeVisible();
     await expect(
-      page.getByRole("link", { name: "浏览公开制品" }),
+      page.getByRole("link", { name: "Browse public artifacts" }),
     ).toBeVisible();
     expect(contrast(styles.title, styles.background)).toBeGreaterThanOrEqual(
       4.5,
@@ -199,8 +199,8 @@ test("route error recovery targets meet coarse-pointer sizing", async ({
 
   for (const target of [
     page.locator(".ag-route-error-detail summary"),
-    page.getByRole("button", { name: "重新加载" }),
-    page.getByRole("link", { name: "浏览公开制品" }),
+    page.getByRole("button", { name: "Reload" }),
+    page.getByRole("link", { name: "Browse public artifacts" }),
   ]) {
     const box = await target.boundingBox();
     expect(box).not.toBeNull();

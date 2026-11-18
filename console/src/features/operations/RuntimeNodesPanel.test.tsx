@@ -65,16 +65,18 @@ describe("RuntimeNodesPanel", () => {
     renderPanel();
 
     expect(await screen.findByText("worker-01")).toBeInTheDocument();
-    expect(screen.getByText("在线")).toBeInTheDocument();
+    expect(screen.getByText("Online")).toBeInTheDocument();
     expect(screen.getByText("oci")).toBeInTheDocument();
     expect(screen.getByText("reclaim")).toBeInTheDocument();
-    expect(screen.getByText("1 个实例")).toBeInTheDocument();
-    expect(screen.getByText("健康")).toBeInTheDocument();
-    expect(screen.getByText("当前连接节点")).toBeInTheDocument();
+    expect(screen.getByText("1 instances")).toBeInTheDocument();
+    expect(screen.getByText("Healthy")).toBeInTheDocument();
+    expect(screen.getByText("Connected node")).toBeInTheDocument();
     expect(screen.getByText("v0.4.3")).toBeInTheDocument();
     expect(screen.getByText("abc123")).toBeInTheDocument();
     expect(
-      screen.getByText(/无法判断当前构建是否为最新版本/),
+      screen.getByText(
+        /No release source is configured, so the latest version cannot be determined\./,
+      ),
     ).toBeInTheDocument();
   });
 
@@ -95,7 +97,7 @@ describe("RuntimeNodesPanel", () => {
               {
                 code: "stale_nodes",
                 severity: "warning",
-                message: "存在心跳过期的运行节点",
+                message: "Runtime nodes with stale heartbeats exist",
               },
             ],
           },
@@ -107,7 +109,7 @@ describe("RuntimeNodesPanel", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
-    expect(screen.getByText("在线")).toBeInTheDocument();
+    expect(screen.getByText("Online")).toBeInTheDocument();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(15_000);
@@ -117,11 +119,13 @@ describe("RuntimeNodesPanel", () => {
       await vi.advanceTimersByTimeAsync(50);
     });
     expect(mockListRuntimeNodes).toHaveBeenCalledTimes(2);
-    expect(screen.getByText("陈旧")).toBeInTheDocument();
-    expect(screen.getByText("集群运行能力需要关注")).toBeInTheDocument();
+    expect(screen.getByText("Stale")).toBeInTheDocument();
+    expect(
+      screen.getByText("Cluster capabilities need attention"),
+    ).toBeInTheDocument();
     // In-card alerts keep the shared rounded inset; only filter bars sit flush.
     const banner = screen
-      .getByText("集群运行能力需要关注")
+      .getByText("Cluster capabilities need attention")
       .closest(".ant-alert");
     expect(banner).not.toHaveClass("rounded-none");
     expect(banner?.parentElement).toHaveClass("px-5");
@@ -138,8 +142,10 @@ describe("RuntimeNodesPanel", () => {
     renderPanel();
     expect(await screen.findByText("node request failed")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /重试/ }));
-    expect(await screen.findByText("暂未收到节点心跳")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Retry/ }));
+    expect(
+      await screen.findByText("No node heartbeats received"),
+    ).toBeInTheDocument();
     expect(mockListRuntimeNodes).toHaveBeenCalledTimes(2);
   });
 
@@ -164,7 +170,7 @@ describe("RuntimeNodesPanel", () => {
     renderPanel();
 
     expect(await screen.findByText("worker-01")).toBeInTheDocument();
-    expect(screen.getByText("无格式 Worker")).toBeInTheDocument();
-    expect(screen.getByText("版本未知")).toBeInTheDocument();
+    expect(screen.getByText("No format worker")).toBeInTheDocument();
+    expect(screen.getByText("Version unknown")).toBeInTheDocument();
   });
 });

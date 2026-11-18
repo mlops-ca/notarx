@@ -44,16 +44,16 @@ describe("RecentAuditList", () => {
     expect(within(granted).getByText("maven-releases")).toBeInTheDocument();
     expect(granted).toHaveTextContent("user:alice");
 
-    expect(denied).toHaveTextContent("读取（GET）");
+    expect(denied).toHaveTextContent("Read (GET)");
     expect(denied).toHaveTextContent("containers/platform/api");
-    expect(denied).toHaveTextContent("访问被拒");
+    expect(denied).toHaveTextContent("Access denied");
     expect(denied).toHaveAttribute("data-denied", "true");
 
     // Codes a newer backend writes degrade to the raw code, never a blank.
     expect(unknown).toHaveTextContent("future.operation");
     expect(unknown).toHaveTextContent("future_outcome");
-    expect(unknown).toHaveTextContent("未记录");
-    expect(unknown).not.toHaveTextContent("匿名");
+    expect(unknown).toHaveTextContent("Not recorded");
+    expect(unknown).not.toHaveTextContent("Anonymous");
   });
 
   it("distinguishes explicit anonymous actors from missing identities", () => {
@@ -78,8 +78,8 @@ describe("RecentAuditList", () => {
       </PreferencesProvider>,
     );
     const [anonymous, empty] = screen.getAllByRole("listitem");
-    expect(anonymous).toHaveTextContent("匿名");
-    expect(empty).toHaveTextContent("未记录");
-    expect(empty).not.toHaveTextContent("匿名");
+    expect(anonymous).toHaveTextContent("Anonymous");
+    expect(empty).toHaveTextContent("Not recorded");
+    expect(empty).not.toHaveTextContent("Anonymous");
   });
 });

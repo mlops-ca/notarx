@@ -107,7 +107,7 @@ afterEach(() => {
 describe("UsersPage", () => {
   it.each([
     ["role", "admin", "admin", 0],
-    ["state", "disabled", "已停用", 1],
+    ["state", "disabled", "Disabled", 1],
   ] as const)(
     "keeps a pending search when the %s control changes",
     async (key, value, label, index) => {
@@ -116,7 +116,9 @@ describe("UsersPage", () => {
       } as never);
       renderPage();
       await screen.findByText("Alice Chen");
-      const search = screen.getByPlaceholderText("搜索用户名、显示名或邮箱…");
+      const search = screen.getByPlaceholderText(
+        "Search username, display name, or email…",
+      );
       fireEvent.change(search, { target: { value: "alice" } });
       fireEvent.mouseDown(screen.getAllByRole("combobox")[index]);
       fireEvent.click(
@@ -140,7 +142,9 @@ describe("UsersPage", () => {
     const user = userEvent.setup();
     renderPage({ entry: "/users?q=alice", destination: "/users?q=bob" });
     await screen.findByText("Alice Chen");
-    const search = screen.getByPlaceholderText("搜索用户名、显示名或邮箱…");
+    const search = screen.getByPlaceholderText(
+      "Search username, display name, or email…",
+    );
 
     await user.click(
       screen.getByRole("button", { name: "Open filtered users" }),
@@ -163,7 +167,9 @@ describe("UsersPage", () => {
     const user = userEvent.setup();
     renderPage({ entry: "/users?q=alice", destination: "/users" });
     await screen.findByText("Alice Chen");
-    const search = screen.getByPlaceholderText("搜索用户名、显示名或邮箱…");
+    const search = screen.getByPlaceholderText(
+      "Search username, display name, or email…",
+    );
     await user.type(search, "-draft");
     await user.click(
       screen.getByRole("button", { name: "Open filtered users" }),
@@ -223,8 +229,8 @@ describe("UsersPage", () => {
     } as never);
     renderPage();
     expect(await screen.findByText("Pending User")).toBeInTheDocument();
-    expect(screen.getByText("待授权")).toBeInTheDocument();
-    expect(screen.getByText("仅 SSO")).toBeInTheDocument();
+    expect(screen.getByText("Pending")).toBeInTheDocument();
+    expect(screen.getByText("SSO only")).toBeInTheDocument();
   });
 
   it("loads a server-paginated user list and opens the selected account", async () => {
@@ -257,9 +263,9 @@ describe("UsersPage", () => {
 
     await user.click(screen.getByText("Alice Chen"));
     expect(
-      await screen.findByRole("heading", { name: "账户资料" }),
+      await screen.findByRole("heading", { name: "Account profile" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("登录与安全")).toBeInTheDocument();
+    expect(screen.getByText("Sign-in and security")).toBeInTheDocument();
     expect(screen.getByDisplayValue("alice@example.test")).toBeInTheDocument();
   });
 
@@ -271,9 +277,9 @@ describe("UsersPage", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await screen.findByText("暂无用户");
+    await screen.findByText("No users");
     await user.type(
-      screen.getByPlaceholderText("搜索用户名、显示名或邮箱…"),
+      screen.getByPlaceholderText("Search username, display name, or email…"),
       " alice ",
     );
 

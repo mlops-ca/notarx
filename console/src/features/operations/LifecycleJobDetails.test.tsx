@@ -22,7 +22,7 @@ describe("LifecycleJobDetails", () => {
 
     expect(screen.getByText("oci")).toBeInTheDocument();
     expect(screen.getByText("demo/api")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "复制" })).toHaveLength(3);
+    expect(screen.getAllByRole("button", { name: "Copy" })).toHaveLength(3);
   });
 
   it("omits source repository details for scan jobs", () => {
@@ -39,9 +39,11 @@ describe("LifecycleJobDetails", () => {
       </PreferencesProvider>,
     );
 
-    expect(within(container).queryByText("源仓库 ID")).not.toBeInTheDocument();
     expect(
-      within(container).getAllByRole("button", { name: "复制" }),
+      within(container).queryByText("Source repository ID"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(container).getAllByRole("button", { name: "Copy" }),
     ).toHaveLength(2);
   });
 });

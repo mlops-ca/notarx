@@ -82,10 +82,10 @@ describe("npm version governance", () => {
     ).toBeVisible();
     expect(document.querySelector("script")).toBeNull();
     expect(
-      screen.queryByRole("button", { name: "编辑弃用提示" }),
+      screen.queryByRole("button", { name: "Edit deprecation" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /^撤\s*包$/ }),
+      screen.queryByRole("button", { name: /^Unpublish$/ }),
     ).not.toBeInTheDocument();
   });
 
@@ -96,12 +96,12 @@ describe("npm version governance", () => {
     const { onChanged } = renderGovernance({ canUnpublish: false });
     const user = userEvent.setup();
     expect(
-      screen.queryByRole("button", { name: /^撤\s*包$/ }),
+      screen.queryByRole("button", { name: /^Unpublish$/ }),
     ).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "编辑弃用提示" }));
+    await user.click(screen.getByRole("button", { name: "Edit deprecation" }));
     await user.clear(screen.getByRole("textbox"));
     await user.type(screen.getByRole("textbox"), "new warning");
-    await user.click(screen.getByRole("button", { name: "保存提示" }));
+    await user.click(screen.getByRole("button", { name: "Save message" }));
     await waitFor(() => expect(onChanged).toHaveBeenCalledOnce());
     const call = fetchMock.mock.calls.find(([url]) => url !== "/auth/session");
     expect(call?.[0]).toBe("/npm/npm-hosted/%40scope%2Fwidget");
@@ -125,10 +125,12 @@ describe("npm version governance", () => {
       );
       const { onChanged } = renderGovernance();
       const user = userEvent.setup();
-      await user.click(screen.getByRole("button", { name: "编辑弃用提示" }));
+      await user.click(
+        screen.getByRole("button", { name: "Edit deprecation" }),
+      );
       await user.clear(screen.getByRole("textbox"));
       await user.type(screen.getByRole("textbox"), "retained draft");
-      await user.click(screen.getByRole("button", { name: "保存提示" }));
+      await user.click(screen.getByRole("button", { name: "Save message" }));
       expect(
         await screen.findByText(new RegExp(`HTTP ${status}`)),
       ).toBeVisible();
@@ -136,13 +138,13 @@ describe("npm version governance", () => {
       expect(
         screen.getByText("Use 1.1.0 <script>literal</script>"),
       ).toBeVisible();
-      await user.click(screen.getByRole("button", { name: /重试/ }));
+      await user.click(screen.getByRole("button", { name: /Retry/ }));
       await waitFor(() => expect(onChanged).toHaveBeenCalledOnce());
       expect(
         fetchMock.mock.calls.filter(([url]) => url !== "/auth/session"),
       ).toHaveLength(1);
       expect(
-        screen.getByRole("button", { name: "保存提示" }),
+        screen.getByRole("button", { name: "Save message" }),
       ).not.toBeDisabled();
     },
   );
@@ -153,7 +155,7 @@ describe("npm version governance", () => {
     );
     const { rerender, onChanged } = renderGovernance();
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "编辑弃用提示" }));
+    await user.click(screen.getByRole("button", { name: "Edit deprecation" }));
     await user.clear(screen.getByRole("textbox"));
     await user.type(screen.getByRole("textbox"), "my unsaved warning");
     const refreshed = packageDocument();
@@ -162,7 +164,7 @@ describe("npm version governance", () => {
     refreshed["dist-tags"].next = "1.0.0";
     rerender(refreshed);
     expect(screen.getByText("another writer's update")).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "保存提示" }));
+    await user.click(screen.getByRole("button", { name: "Save message" }));
     expect(await screen.findByText(/HTTP 409/)).toBeVisible();
     const calls = fetchMock.mock.calls.filter(
       ([url]) => url !== "/auth/session",
@@ -180,9 +182,13 @@ describe("npm version governance", () => {
     mockMutation(async () => Response.json({ ok: true }));
     const { onChanged } = renderGovernance();
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "编辑弃用提示" }));
-    await user.click(screen.getByRole("button", { name: "保存提示" }));
-    expect(await screen.findByText(/无法确认更新结果/)).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Edit deprecation" }));
+    await user.click(screen.getByRole("button", { name: "Save message" }));
+    expect(
+      await screen.findByText(
+        /The update outcome is unknown\. Read the package state before deciding whether to submit again\./,
+      ),
+    ).toBeVisible();
     expect(screen.getByRole("textbox")).toBeVisible();
     expect(onChanged).not.toHaveBeenCalled();
   });
@@ -193,9 +199,9 @@ describe("npm version governance", () => {
     );
     const { onChanged, onUnpublished } = renderGovernance();
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: /^撤\s*包$/ }));
+    await user.click(screen.getByRole("button", { name: /^Unpublish$/ }));
     await user.click(
-      screen.getAllByRole("button", { name: /^撤\s*包$/ }).at(-1)!,
+      screen.getAllByRole("button", { name: /^Unpublish$/ }).at(-1)!,
     );
     await waitFor(() => expect(onChanged).toHaveBeenCalledOnce());
     expect(onUnpublished).toHaveBeenCalledOnce();

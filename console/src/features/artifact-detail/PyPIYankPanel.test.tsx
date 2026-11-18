@@ -68,11 +68,13 @@ describe("PyPI yank operation", () => {
       },
     } as Awaited<ReturnType<typeof updatePyPiYankState>>);
     mount();
-    fireEvent.click(await screen.findByRole("button", { name: "管理撤回" }));
-    fireEvent.change(screen.getByLabelText("撤回原因（可选）"), {
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Manage yanking" }),
+    );
+    fireEvent.change(screen.getByLabelText("Yank reason (optional)"), {
       target: { value: "bad ABI" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "确认撤回" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm yank" }));
     await waitFor(() =>
       expect(updatePyPiYankState).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -85,7 +87,7 @@ describe("PyPI yank operation", () => {
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
-    expect(screen.getByText("已撤回 1 / 1 个文件")).toBeInTheDocument();
+    expect(screen.getByText("1 / 1 files yanked")).toBeInTheDocument();
   });
 
   it("retains a failed draft, reports stale revision and offers a deliberate refresh", async () => {
@@ -97,21 +99,25 @@ describe("PyPI yank operation", () => {
       },
     } as Awaited<ReturnType<typeof updatePyPiYankState>>);
     mount();
-    fireEvent.click(await screen.findByRole("button", { name: "管理撤回" }));
-    fireEvent.change(screen.getByLabelText("撤回原因（可选）"), {
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Manage yanking" }),
+    );
+    fireEvent.change(screen.getByLabelText("Yank reason (optional)"), {
       target: { value: "keep my reason" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "确认撤回" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm yank" }));
     expect(
       await screen.findByDisplayValue("keep my reason"),
     ).toBeInTheDocument();
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: "刷新后重新确认" }),
+        screen.getByRole("button", { name: "Refresh and confirm again" }),
       ).toBeInTheDocument(),
     );
     expect(updatePyPiYankState).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole("button", { name: "刷新后重新确认" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Refresh and confirm again" }),
+    );
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
@@ -122,7 +128,7 @@ describe("PyPI yank operation", () => {
     mount(false);
     expect(getPyPiYankState).not.toHaveBeenCalled();
     expect(
-      screen.queryByRole("button", { name: "管理撤回" }),
+      screen.queryByRole("button", { name: "Manage yanking" }),
     ).not.toBeInTheDocument();
   });
 
@@ -140,10 +146,14 @@ describe("PyPI yank operation", () => {
       },
     } as Awaited<ReturnType<typeof updatePyPiYankState>>);
     mount();
-    fireEvent.click(await screen.findByRole("button", { name: "管理撤回" }));
-    fireEvent.click(screen.getByRole("button", { name: "确认撤回" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Manage yanking" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Confirm yank" }));
     expect(
-      await screen.findByText("未收到完整的撤回状态，请刷新后核实结果。"),
+      await screen.findByText(
+        "The yank response is incomplete. Refresh to verify the outcome.",
+      ),
     ).toBeInTheDocument();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(updatePyPiYankState).toHaveBeenCalledTimes(1);

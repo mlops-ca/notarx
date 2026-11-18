@@ -20,7 +20,7 @@ describe("IdentitySummary", () => {
         }}
       />,
     );
-    expect(screen.getByText("待授权")).toBeInTheDocument();
+    expect(screen.getByText("Awaiting approval")).toBeInTheDocument();
   });
 
   it("explains an OIDC role mapping without exposing unrelated claims", () => {
@@ -44,7 +44,7 @@ describe("IdentitySummary", () => {
 
     expect(screen.getByText("ci-user")).toBeInTheDocument();
     expect(screen.getByText("OIDC")).toBeInTheDocument();
-    expect(screen.getByText("成员")).toBeInTheDocument();
+    expect(screen.getByText("Member")).toBeInTheDocument();
     expect(screen.getByText("gateway-member → member")).toBeInTheDocument();
     expect(screen.getByText("gateway-admin → admin")).toBeInTheDocument();
   });
@@ -60,7 +60,9 @@ describe("IdentitySummary", () => {
       />,
     );
 
-    expect(screen.getByText("静态解析凭据")).toBeInTheDocument();
-    expect(screen.getByText("无，由仓库规则判定")).toBeInTheDocument();
+    expect(screen.getByText("Static resolver credential")).toBeInTheDocument();
+    expect(
+      screen.getByText("None; repository rules decide"),
+    ).toBeInTheDocument();
   });
 });

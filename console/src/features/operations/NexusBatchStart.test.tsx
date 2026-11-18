@@ -92,22 +92,26 @@ function show(
 async function fillCapacity() {
   const user = userEvent.setup();
   for (const label of [
-    "存储池可用字节",
-    "下载峰值字节",
-    "上传峰值字节",
-    "备份峰值字节",
-    "恢复峰值字节",
-    "保留余量字节",
+    "Free storage-pool bytes",
+    "Peak download bytes",
+    "Peak upload bytes",
+    "Peak backup bytes",
+    "Peak restore bytes",
+    "Headroom bytes",
   ]) {
     await user.click(screen.getByRole("textbox", { name: label }));
-    await user.paste(label === "存储池可用字节" ? "1000000" : "0");
+    await user.paste(label === "Free storage-pool bytes" ? "1000000" : "0");
   }
   await user.click(
-    screen.getByRole("textbox", { name: "容量观察时间（含时区）" }),
+    screen.getByRole("textbox", {
+      name: "Capacity observation time (with time zone)",
+    }),
   );
   await user.paste(new Date(Date.now() - 1000).toISOString());
   await user.click(
-    screen.getByRole("textbox", { name: "证据有效截止时间（含时区）" }),
+    screen.getByRole("textbox", {
+      name: "Evidence expiry time (with time zone)",
+    }),
   );
   await user.paste(new Date(Date.now() + 600000).toISOString());
 }
@@ -138,11 +142,15 @@ describe("explicit start", () => {
       } as never);
       const accepted = show();
       await userEvent.click(
-        await screen.findByRole("button", { name: "运行预检" }),
+        await screen.findByRole("button", { name: "Run preflight" }),
       );
-      await screen.findByRole("combobox", { name: "releases 的目标仓库" });
+      await screen.findByRole("combobox", {
+        name: "Target repository for releases",
+      });
       await fillCapacity();
-      const submit = screen.getByRole("button", { name: "应用映射并创建批次" });
+      const submit = screen.getByRole("button", {
+        name: "Apply mappings and create batch",
+      });
       expect(submit).toBeEnabled();
       await userEvent.click(submit);
       await waitFor(() => expect(accepted).toHaveBeenCalledWith(nexusBatch));
@@ -172,15 +180,17 @@ describe("explicit start", () => {
     } as never);
     show();
     await userEvent.click(
-      await screen.findByRole("button", { name: "运行预检" }),
+      await screen.findByRole("button", { name: "Run preflight" }),
     );
-    await screen.findByText("此凭据可见范围内没有仓库");
+    await screen.findByText("No repositories visible to these credentials");
     await fillCapacity();
     expect(
-      screen.queryByRole("combobox", { name: "releases 的目标仓库" }),
+      screen.queryByRole("combobox", {
+        name: "Target repository for releases",
+      }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "应用映射并创建批次" }),
+      screen.getByRole("button", { name: "Apply mappings and create batch" }),
     ).toBeDisabled();
     expect(startNexusMigrationBatch).not.toHaveBeenCalled();
   });
@@ -192,19 +202,23 @@ describe("explicit start", () => {
         });
         const accepted = show(client);
         await userEvent.click(
-          await screen.findByRole("button", { name: "运行预检" }),
+          await screen.findByRole("button", { name: "Run preflight" }),
         );
-        await screen.findByRole("combobox", { name: "releases 的目标仓库" });
+        await screen.findByRole("combobox", {
+          name: "Target repository for releases",
+        });
         await fillCapacity();
         expect(
-          screen.getByRole("button", { name: "应用映射并创建批次" }),
+          screen.getByRole("button", {
+            name: "Apply mappings and create batch",
+          }),
         ).toBeEnabled();
         if (query === "preflight") {
           vi.mocked(preflightMigrationSource).mockResolvedValue({
             error: { status },
           } as never);
           await userEvent.click(
-            screen.getByRole("button", { name: "运行预检" }),
+            screen.getByRole("button", { name: "Run preflight" }),
           );
         } else {
           (query === "list"
@@ -221,42 +235,54 @@ describe("explicit start", () => {
             });
           });
         }
-        await screen.findByText(/没有读取或管理此迁移源的权限/);
+        await screen.findByText(
+          /This migration source requires a platform administrator identity\./,
+        );
         expect(document.body).not.toHaveTextContent(migrationSource.name);
         expect(
-          screen.queryByRole("combobox", { name: "已保存的迁移源" }),
+          screen.queryByRole("combobox", { name: "Saved migration source" }),
         ).not.toBeInTheDocument();
         expect(
-          screen.queryByRole("button", { name: "应用映射并创建批次" }),
+          screen.queryByRole("button", {
+            name: "Apply mappings and create batch",
+          }),
         ).not.toBeInTheDocument();
         expect(startNexusMigrationBatch).not.toHaveBeenCalled();
         cleanup();
         show(client);
-        await screen.findByText(/没有读取或管理此迁移源的权限/);
+        await screen.findByText(
+          /This migration source requires a platform administrator identity\./,
+        );
         vi.mocked(listMigrationSources).mockResolvedValue({
           data: { items: [migrationSource], nextCursor: "" },
         } as never);
-        await userEvent.click(screen.getByRole("button", { name: /重试/ }));
-        await screen.findByRole("combobox", { name: "已保存的迁移源" });
+        await userEvent.click(screen.getByRole("button", { name: /Retry/ }));
+        await screen.findByRole("combobox", { name: "Saved migration source" });
         expect(
-          screen.getByRole("combobox", { name: "已保存的迁移源" }),
+          screen.getByRole("combobox", { name: "Saved migration source" }),
         ).toHaveValue("");
         expect(
-          screen.getByRole("textbox", { name: "存储池可用字节" }),
+          screen.getByRole("textbox", { name: "Free storage-pool bytes" }),
         ).toHaveValue("");
         expect(
-          screen.queryByRole("combobox", { name: "releases 的目标仓库" }),
+          screen.queryByRole("combobox", {
+            name: "Target repository for releases",
+          }),
         ).not.toBeInTheDocument();
         expect(accepted).not.toHaveBeenCalled();
       });
   it("does not execute a draft or unknown capacity, then binds real target IDs and re-reads the response", async () => {
     const accepted = show();
-    const submit = screen.getByRole("button", { name: "应用映射并创建批次" });
+    const submit = screen.getByRole("button", {
+      name: "Apply mappings and create batch",
+    });
     expect(submit).toBeDisabled();
     await userEvent.click(
-      await screen.findByRole("button", { name: "运行预检" }),
+      await screen.findByRole("button", { name: "Run preflight" }),
     );
-    await screen.findByRole("combobox", { name: "releases 的目标仓库" });
+    await screen.findByRole("combobox", {
+      name: "Target repository for releases",
+    });
     expect(submit).toBeDisabled();
     expect(startNexusMigrationBatch).not.toHaveBeenCalled();
     await fillCapacity();
@@ -296,11 +322,11 @@ describe("explicit start", () => {
     } as never);
     show();
     await userEvent.click(
-      await screen.findByRole("button", { name: "运行预检" }),
+      await screen.findByRole("button", { name: "Run preflight" }),
     );
     await fillCapacity();
     expect(
-      screen.getByRole("button", { name: "应用映射并创建批次" }),
+      screen.getByRole("button", { name: "Apply mappings and create batch" }),
     ).toBeDisabled();
     expect(startNexusMigrationBatch).not.toHaveBeenCalled();
   });
@@ -314,12 +340,14 @@ describe("explicit start", () => {
     );
     const accepted = show();
     await userEvent.click(
-      await screen.findByRole("button", { name: "运行预检" }),
+      await screen.findByRole("button", { name: "Run preflight" }),
     );
-    await screen.findByRole("combobox", { name: "releases 的目标仓库" });
+    await screen.findByRole("combobox", {
+      name: "Target repository for releases",
+    });
     await fillCapacity();
     await userEvent.dblClick(
-      screen.getByRole("button", { name: "应用映射并创建批次" }),
+      screen.getByRole("button", { name: "Apply mappings and create batch" }),
     );
     expect(startNexusMigrationBatch).toHaveBeenCalledTimes(1);
     complete();
@@ -331,11 +359,11 @@ describe("explicit start", () => {
     } as never);
     show();
     await userEvent.click(
-      await screen.findByRole("button", { name: "运行预检" }),
+      await screen.findByRole("button", { name: "Run preflight" }),
     );
-    await screen.findByText(/源连接版本已变化/);
+    await screen.findByText(/source connection version changed/);
     expect(
-      screen.getByRole("button", { name: "应用映射并创建批次" }),
+      screen.getByRole("button", { name: "Apply mappings and create batch" }),
     ).toBeDisabled();
     expect(startNexusMigrationBatch).not.toHaveBeenCalled();
   });

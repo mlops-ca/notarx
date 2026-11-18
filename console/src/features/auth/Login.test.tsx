@@ -90,7 +90,7 @@ describe("LoginPage forced password change", () => {
       "/repositories",
     );
     expect(
-      screen.queryByRole("heading", { name: "登录控制台" }),
+      screen.queryByRole("heading", { name: "Sign in to the console" }),
     ).not.toBeInTheDocument();
   });
 
@@ -133,16 +133,23 @@ describe("LoginPage forced password change", () => {
 
     const user = userEvent.setup();
     renderPage();
-    await user.type(screen.getByLabelText("用户名"), "alice");
-    await user.type(screen.getByLabelText("密码"), "temporary-password");
-    await user.click(screen.getByRole("button", { name: /登录/ }));
+    await user.type(screen.getByLabelText("Username"), "alice");
+    await user.type(screen.getByLabelText("Password"), "temporary-password");
+    await user.click(screen.getByRole("button", { name: /Sign in/ }));
 
-    expect(await screen.findByText("更新初始密码")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Change initial password"),
+    ).toBeInTheDocument();
     expect(auth.setToken).not.toHaveBeenCalled();
 
-    await user.type(screen.getByLabelText("新密码"), "personal-password");
-    await user.type(screen.getByLabelText("确认新密码"), "personal-password");
-    await user.click(screen.getByRole("button", { name: /更新密码并继续/ }));
+    await user.type(screen.getByLabelText("New password"), "personal-password");
+    await user.type(
+      screen.getByLabelText("Confirm new password"),
+      "personal-password",
+    );
+    await user.click(
+      screen.getByRole("button", { name: /Change password and continue/ }),
+    );
 
     expect(auth.setToken).toHaveBeenCalledWith("final-token", "member");
     expect(fetchMock).toHaveBeenCalledWith("/auth/change-password", {
@@ -182,7 +189,7 @@ describe("LoginPage forced password change", () => {
 
     expect(await screen.findByText("https://id.example.com")).toBeVisible();
     expect(screen.getByRole("alert")).toBeVisible();
-    await user.click(screen.getByText("访问令牌"));
+    await user.click(screen.getByText("Access Token"));
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });

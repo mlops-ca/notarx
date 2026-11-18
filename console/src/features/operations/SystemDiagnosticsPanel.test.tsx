@@ -78,12 +78,14 @@ describe("SystemDiagnosticsPanel", () => {
     mockGetDiagnostics.mockResolvedValue({ data: diagnostics } as never);
     renderPanel();
 
-    const label = await screen.findByText("Console 版本");
+    const label = await screen.findByText("Console version");
     expect(
       within(label.parentElement as HTMLElement).getByText("dev"),
     ).toBeInTheDocument();
-    expect(screen.getByText("Gateway 版本")).toBeInTheDocument();
-    expect(screen.queryByText("前后端版本不一致")).not.toBeInTheDocument();
+    expect(screen.getByText("Gateway version")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Console and Gateway versions differ"),
+    ).not.toBeInTheDocument();
   });
 
   it("shows the injected Console build and matching Gateway version without a warning", async () => {
@@ -91,12 +93,14 @@ describe("SystemDiagnosticsPanel", () => {
     mockGetDiagnostics.mockResolvedValue({ data: diagnostics } as never);
     renderPanel();
 
-    const label = await screen.findByText("Console 版本");
+    const label = await screen.findByText("Console version");
     expect(
       within(label.parentElement as HTMLElement).getByText("1.2.3"),
     ).toBeInTheDocument();
     expect(screen.getByText("v1.2.3")).toBeInTheDocument();
-    expect(screen.queryByText("前后端版本不一致")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Console and Gateway versions differ"),
+    ).not.toBeInTheDocument();
   });
 
   it("explains a known build mismatch next to the identity fields", async () => {
@@ -105,13 +109,17 @@ describe("SystemDiagnosticsPanel", () => {
     renderPanel();
 
     const identityHeading = await screen.findByRole("heading", {
-      name: "构建与运行身份",
+      name: "Build and runtime identity",
     });
     const card = identityHeading.closest(".ag-card") as HTMLElement;
     expect(within(card).getByText("1.2.2")).toBeInTheDocument();
-    expect(within(card).getByText("前后端版本不一致")).toBeInTheDocument();
     expect(
-      within(card).getByText(/镜像 tag 不一致或浏览器缓存了旧 bundle/),
+      within(card).getByText("Console and Gateway versions differ"),
+    ).toBeInTheDocument();
+    expect(
+      within(card).getByText(
+        /Image tags may differ, or the browser may have cached an older bundle\. Check the deployed versions and refresh the page\./,
+      ),
     ).toBeInTheDocument();
   });
 
@@ -123,8 +131,10 @@ describe("SystemDiagnosticsPanel", () => {
         data: { ...diagnostics, build: { ...diagnostics.build, version } },
       } as never);
       renderPanel();
-      await screen.findByText("Console 版本");
-      expect(screen.queryByText("前后端版本不一致")).not.toBeInTheDocument();
+      await screen.findByText("Console version");
+      expect(
+        screen.queryByText("Console and Gateway versions differ"),
+      ).not.toBeInTheDocument();
     },
   );
 
@@ -132,18 +142,22 @@ describe("SystemDiagnosticsPanel", () => {
     mockGetDiagnostics.mockResolvedValue({ data: diagnostics } as never);
     renderPanel();
 
-    expect(await screen.findByText("系统运行状态需要关注")).toBeInTheDocument();
+    expect(
+      await screen.findByText("System health needs attention"),
+    ).toBeInTheDocument();
     expect(screen.getByText("v1.2.3")).toBeInTheDocument();
     expect(screen.getByText("gateway-01")).toBeInTheDocument();
-    expect(screen.getByText("Worker 格式")).toBeInTheDocument();
+    expect(screen.getByText("Worker formats")).toBeInTheDocument();
     expect(screen.getByText("retention")).toBeInTheDocument();
-    expect(screen.getByText("干净")).toBeInTheDocument();
+    expect(screen.getByText("Clean")).toBeInTheDocument();
     expect(screen.getByText("PostgreSQL")).toBeInTheDocument();
-    expect(screen.getByText("对象存储")).toBeInTheDocument();
-    expect(screen.getByText("不可用")).toBeInTheDocument();
-    expect(screen.getByText(/制品扫描器 · trivy/)).toBeInTheDocument();
-    expect(screen.getByText(/漏洞库新鲜/)).toBeInTheDocument();
-    expect(screen.getByText("健康")).toBeInTheDocument();
+    expect(screen.getByText("Object storage")).toBeInTheDocument();
+    expect(screen.getByText("Unreachable")).toBeInTheDocument();
+    expect(screen.getByText(/Artifact scanner · trivy/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Vulnerability database fresh/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Healthy")).toBeInTheDocument();
     expect(screen.getByText("promotion")).toBeInTheDocument();
     expect(screen.getByText("maven")).toBeInTheDocument();
   });
@@ -153,18 +167,18 @@ describe("SystemDiagnosticsPanel", () => {
     const { container } = renderPanel();
 
     const identityHeading = await screen.findByRole("heading", {
-      name: "构建与运行身份",
+      name: "Build and runtime identity",
     });
     const identityCard = identityHeading.closest(".ag-card");
     expect(identityCard).not.toBeNull();
     expect(
       within(identityCard as HTMLElement).getByRole("heading", {
-        name: "构建信息",
+        name: "Build information",
       }),
     ).toBeInTheDocument();
     expect(
       within(identityCard as HTMLElement).getByRole("heading", {
-        name: "运行身份",
+        name: "Runtime identity",
       }),
     ).toBeInTheDocument();
     expect(
@@ -183,7 +197,7 @@ describe("SystemDiagnosticsPanel", () => {
           issues: [
             {
               code: "worker-capacity-missing",
-              message: "没有节点能够执行 OCI 扫描任务",
+              message: "No node can run OCI scan jobs",
             },
           ],
         },
@@ -192,11 +206,11 @@ describe("SystemDiagnosticsPanel", () => {
     renderPanel();
 
     expect(
-      await screen.findByRole("heading", { name: "诊断快照" }),
+      await screen.findByRole("heading", { name: "Diagnostic snapshot" }),
     ).toBeInTheDocument();
     expect(screen.getByText("worker-capacity-missing")).toBeInTheDocument();
     expect(
-      screen.getByText("没有节点能够执行 OCI 扫描任务"),
+      screen.getByText("No node can run OCI scan jobs"),
     ).toBeInTheDocument();
   });
 
@@ -211,13 +225,15 @@ describe("SystemDiagnosticsPanel", () => {
     renderPanel();
 
     await user.click(
-      await screen.findByRole("button", { name: "复制脱敏诊断 JSON" }),
+      await screen.findByRole("button", {
+        name: "Copy sanitized diagnostics JSON",
+      }),
     );
     expect(writeText).toHaveBeenCalledOnce();
     const copied = writeText.mock.calls[0]?.[0] as string;
     expect(copied).toContain('"instanceId": "gateway-01"');
     expect(copied).not.toMatch(/password|token|databaseUrl/i);
-    expect(screen.getByText("已复制")).toBeInTheDocument();
+    expect(screen.getByText("Copied")).toBeInTheDocument();
   });
 
   it("reports no dependency checks as neutral, not healthy", async () => {
@@ -227,12 +243,12 @@ describe("SystemDiagnosticsPanel", () => {
     renderPanel();
 
     const summary = within(
-      await screen.findByRole("group", { name: "页面摘要" }),
+      await screen.findByRole("group", { name: "Page summary" }),
     );
-    const dependencyMetric = summary.getByText("依赖可用")
+    const dependencyMetric = summary.getByText("Dependencies ready")
       .parentElement as HTMLElement;
     expect(
-      within(dependencyMetric).getByText("没有依赖检查结果"),
+      within(dependencyMetric).getByText("No dependency checks reported"),
     ).toBeVisible();
     expect(within(dependencyMetric).getByText("0").className).not.toContain(
       "status-success",
@@ -244,21 +260,28 @@ describe("SystemDiagnosticsPanel", () => {
       data: {
         ...diagnostics,
         dependencies: [
-          { name: "runtime", status: "not_configured", detail: "未配置" },
+          {
+            name: "runtime",
+            status: "not_configured",
+            detail: "Not configured",
+          },
         ],
       },
     } as never);
     renderPanel();
 
-    expect(await screen.findByText("系统运行状态需要关注")).toBeInTheDocument();
-    const summary = within(screen.getByRole("group", { name: "页面摘要" }));
-    const dependencyMetric = summary.getByText("依赖可用").parentElement;
+    expect(
+      await screen.findByText("System health needs attention"),
+    ).toBeInTheDocument();
+    const summary = within(screen.getByRole("group", { name: "Page summary" }));
+    const dependencyMetric =
+      summary.getByText("Dependencies ready").parentElement;
     expect(dependencyMetric).not.toBeNull();
     expect(
       within(dependencyMetric as HTMLElement).getByText("0"),
     ).toBeInTheDocument();
     expect(
-      within(dependencyMetric as HTMLElement).getByText("1 项检查"),
+      within(dependencyMetric as HTMLElement).getByText("1 checks"),
     ).toBeInTheDocument();
   });
 
@@ -288,9 +311,13 @@ describe("SystemDiagnosticsPanel", () => {
     } as never);
     renderPanel();
 
-    expect(await screen.findByText("系统运行状态需要关注")).toBeInTheDocument();
-    expect(screen.getAllByText(/漏洞库已过期/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("需关注").length).toBeGreaterThan(0);
+    expect(
+      await screen.findByText("System health needs attention"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText(/Vulnerability database stale · .+/).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText("Degraded").length).toBeGreaterThan(0);
   });
 
   it("remains compatible with diagnostics from an older rolling-upgrade node", async () => {
@@ -300,7 +327,7 @@ describe("SystemDiagnosticsPanel", () => {
     renderPanel();
 
     expect(await screen.findByText("PostgreSQL")).toBeInTheDocument();
-    expect(screen.queryByText(/制品扫描器/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Artifact scanner/)).not.toBeInTheDocument();
   });
 
   it("retains the previous snapshot on a refresh failure and clears it when authorization is lost", async () => {
@@ -318,18 +345,24 @@ describe("SystemDiagnosticsPanel", () => {
         message: "Synthetic permission denied",
       });
     renderPanel();
-    await user.click(await screen.findByRole("button", { name: "刷新诊断" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Refresh diagnostics" }),
+    );
     expect(
-      await screen.findByText("刷新失败，仍显示旧诊断快照"),
+      await screen.findByText(
+        "Refresh failed; showing the previous diagnostic snapshot",
+      ),
     ).toBeInTheDocument();
     expect(screen.getByText("gateway-01")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "刷新诊断" }));
+    await user.click(
+      screen.getByRole("button", { name: "Refresh diagnostics" }),
+    );
     expect(
       await screen.findByText("Synthetic permission denied"),
     ).toBeInTheDocument();
     expect(screen.queryByText("gateway-01")).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("heading", { name: "本地挂载容量" }),
+      screen.queryByRole("heading", { name: "Local mount capacity" }),
     ).not.toBeInTheDocument();
   });
 
@@ -344,13 +377,17 @@ describe("SystemDiagnosticsPanel", () => {
           response: new Response(body, { status: 403 }),
         } as never);
       renderPanel();
-      await user.click(await screen.findByRole("button", { name: "刷新诊断" }));
-      await screen.findByText("请求出错");
+      await user.click(
+        await screen.findByRole("button", { name: "Refresh diagnostics" }),
+      );
+      await screen.findByText("Request failed");
       expect(screen.queryByText("gateway-01")).not.toBeInTheDocument();
       expect(
-        screen.queryByRole("heading", { name: "本地挂载容量" }),
+        screen.queryByRole("heading", { name: "Local mount capacity" }),
       ).not.toBeInTheDocument();
-      expect(screen.queryByText("加载系统诊断…")).not.toBeInTheDocument();
+      expect(
+        screen.queryByText("Loading diagnostics…"),
+      ).not.toBeInTheDocument();
     },
   );
 
@@ -375,12 +412,14 @@ describe("SystemDiagnosticsPanel", () => {
         </QueryClientProvider>,
       );
 
-      await user.click(await screen.findByRole("button", { name: "刷新诊断" }));
-      await screen.findByText("请求出错");
+      await user.click(
+        await screen.findByRole("button", { name: "Refresh diagnostics" }),
+      );
+      await screen.findByText("Request failed");
       expect(onAuthFailure).toHaveBeenCalledExactlyOnceWith(status);
       expect(screen.queryByText("gateway-01")).not.toBeInTheDocument();
       expect(
-        screen.queryByRole("heading", { name: "本地挂载容量" }),
+        screen.queryByRole("heading", { name: "Local mount capacity" }),
       ).not.toBeInTheDocument();
       client.clear();
     },

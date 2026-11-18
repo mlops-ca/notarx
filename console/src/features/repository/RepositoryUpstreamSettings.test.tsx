@@ -38,7 +38,7 @@ afterEach(() => {
   vi.resetAllMocks();
 });
 
-function showSettings(repo: Repository = ociProxy, locale = "en-US") {
+function showSettings(repo: Repository = ociProxy, locale = "en-CA") {
   localStorage.setItem("ag.console.locale", locale);
   const client = new QueryClient();
   client.setQueryData(["repository", repo.id], repo);
@@ -209,18 +209,11 @@ describe("OCI upstream token service settings", () => {
 
   it.each([
     {
-      locale: "en-US",
+      locale: "en-CA",
       realm: "Token service URL",
       secret: "Upstream token",
       save: "Save changes",
       message: /The upstream endpoint or OCI token binding changed/,
-    },
-    {
-      locale: "zh-CN",
-      realm: "令牌服务地址",
-      secret: "上游令牌",
-      save: "保存更改",
-      message: /上游地址或 OCI 令牌绑定已更改/,
     },
   ])(
     "explains a rejected rebind in $locale and retains only the public draft",

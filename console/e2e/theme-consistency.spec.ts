@@ -85,7 +85,7 @@ for (const theme of ["dark", "light"] as const) {
       fullPage: true,
     });
     await page.goto("/operations");
-    await page.getByRole("tab", { name: "执行记录", exact: true }).click();
+    await page.getByRole("tab", { name: "Job history", exact: true }).click();
     await expectRole(
       page.locator("main .anticon-sync"),
       "--ag-content-tertiary",
@@ -95,14 +95,19 @@ for (const theme of ["dark", "light"] as const) {
       fullPage: true,
     });
     await page.goto("/operations?tab=schedules");
-    await page.getByRole("button", { name: "投递历史", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Dispatch history", exact: true })
+      .click();
     await expectRole(
       page.locator('main .anticon-history[class*="text-fg-tertiary"]'),
       "--ag-content-tertiary",
     );
     await page.goto("/repositories/repo-maven-releases");
-    const summary = page.getByRole("group", { name: "仓库摘要", exact: true });
-    const capacity = summary.getByRole("button", { name: /个对象/ });
+    const summary = page.getByRole("group", {
+      name: "Repository summary",
+      exact: true,
+    });
+    const capacity = summary.getByRole("button", { name: /objects/ });
     await expectRole(capacity.locator("span").last(), "--ag-content-secondary");
     await capacity.hover();
     await expectRole(capacity.locator("span").last(), "--ag-content-secondary");
@@ -138,23 +143,25 @@ test("pending authorization uses the light surface without exposing management",
   });
   await page.addInitScript(() => {
     localStorage.setItem("ag.console.theme", "light");
-    localStorage.setItem("ag.console.locale", "zh-CN");
+    localStorage.setItem("ag.console.locale", "en-CA");
   });
   await page.emulateMedia({ reducedMotion: "reduce" });
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-    const heading = page.getByRole("heading", { name: "等待管理员授权" });
+    const heading = page.getByRole("heading", {
+      name: "Awaiting administrator approval",
+    });
     const panel = heading.locator("..");
     await expect(heading).toBeVisible();
     await expect(
-      page.getByRole("button", { name: "检查授权状态", exact: true }),
+      page.getByRole("button", { name: "Check access", exact: true }),
     ).toBeEnabled();
     await expect(page.getByRole("navigation")).toHaveCount(0);
-    await expect(page.getByRole("link", { name: /仓库|仪表盘/ })).toHaveCount(
-      0,
-    );
+    await expect(
+      page.getByRole("link", { name: /Repositories|Dashboard/ }),
+    ).toHaveCount(0);
     expect(
       await panel.evaluate((node) => getComputedStyle(node).backgroundColor),
     ).toBe("rgb(255, 255, 255)");
@@ -270,7 +277,9 @@ test("theme and language preferences persist on the sign-in surface", async ({
         ),
     )
     .toContain("artifact-control-plane.webp");
-  await page.getByRole("button", { name: /选择主题.*Gateway Dark/ }).click();
+  await page
+    .getByRole("button", { name: /Choose theme.*Gateway Dark/ })
+    .click();
   await page.getByRole("menuitem", { name: /Gateway Light/ }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await expect
@@ -337,9 +346,9 @@ test("theme and language preferences persist on the sign-in surface", async ({
     )
     .toContain("artifact-control-plane-light.webp");
 
-  await page.getByRole("button", { name: "语言" }).click();
+  await page.getByRole("button", { name: "Language" }).click();
   await page.getByRole("menuitem", { name: "English" }).click();
-  await expect(page.locator("html")).toHaveAttribute("lang", "en-US");
+  await expect(page.locator("html")).toHaveAttribute("lang", "en-CA");
   await expect(
     page.locator(".ag-login-panel").getByText("Sign in to the console", {
       exact: true,
@@ -351,7 +360,7 @@ test("theme and language preferences persist on the sign-in surface", async ({
 
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-  await expect(page.locator("html")).toHaveAttribute("lang", "en-US");
+  await expect(page.locator("html")).toHaveAttribute("lang", "en-CA");
   await expect(
     page.getByRole("button", { name: /Choose theme.*Gateway Light/ }),
   ).toBeVisible();
@@ -520,7 +529,9 @@ test("sign-in artwork and controls update when switching to the light theme", as
       response.url().includes("artifact-control-plane-light.webp") &&
       response.ok(),
   );
-  await page.getByRole("button", { name: /选择主题.*Gateway Dark/ }).click();
+  await page
+    .getByRole("button", { name: /Choose theme.*Gateway Dark/ })
+    .click();
   await page.getByRole("menuitem", { name: /Gateway Light/ }).click();
   await lightArtworkResponse;
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
@@ -689,27 +700,29 @@ test("OIDC, password, and token sign-in modes share a stable layout", async ({
 
   await page.goto("/login");
   const frame = page.locator(".ag-login-frame");
-  const oidcMode = page.getByRole("radio", { name: /企业登录/ });
+  const oidcMode = page.getByRole("radio", { name: /Enterprise SSO/ });
   await expect(oidcMode).toBeChecked();
-  await expect(page.getByText("由组织身份提供方统一认证")).toBeVisible();
+  await expect(
+    page.getByText("Authenticate with your organization's identity provider"),
+  ).toBeVisible();
   const oidcHeight = await frame.evaluate((element) =>
     Math.round(element.getBoundingClientRect().height),
   );
 
   await page
     .locator(".ag-login-modes label")
-    .filter({ hasText: "访问令牌" })
+    .filter({ hasText: "Access Token" })
     .click();
-  await expect(page.getByPlaceholder("粘贴 Bearer Token…")).toBeVisible();
+  await expect(page.getByPlaceholder("Paste Bearer token…")).toBeVisible();
   const tokenHeight = await frame.evaluate((element) =>
     Math.round(element.getBoundingClientRect().height),
   );
 
   await page
     .locator(".ag-login-modes label")
-    .filter({ hasText: "账号密码" })
+    .filter({ hasText: "Username & Password" })
     .click();
-  await expect(page.getByPlaceholder("输入用户名")).toBeVisible();
+  await expect(page.getByPlaceholder("Enter your username")).toBeVisible();
   const passwordHeight = await frame.evaluate((element) =>
     Math.round(element.getBoundingClientRect().height),
   );
@@ -726,7 +739,9 @@ test("public browse surfaces stay aligned with the dark console palette", async 
 }) => {
   await page.goto("/browse");
   await expect(
-    page.getByRole("heading", { name: "查找并使用可信的公开制品" }),
+    page.getByRole("heading", {
+      name: "Discover and consume trusted public artifacts",
+    }),
   ).toBeVisible();
 
   const card = page.locator(".ant-card");
@@ -821,10 +836,10 @@ test("management tables keep action columns opaque and cards separated", async (
   );
 
   await page.goto("/users");
-  await expect(page.getByRole("heading", { name: "用户" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "User" })).toBeVisible();
 
   const pageHeader = page
-    .getByRole("heading", { name: "用户" })
+    .getByRole("heading", { name: "User" })
     .locator("xpath=../..");
   const card = pageHeader.locator(
     "xpath=following-sibling::*[contains(@class, 'ant-card')][1]",
@@ -840,9 +855,9 @@ test("management tables keep action columns opaque and cards separated", async (
   expect(gap).toBeGreaterThanOrEqual(16);
 
   await page.goto("/repositories");
-  await expect(page.getByRole("heading", { name: "仓库" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Repository" })).toBeVisible();
   await expect(
-    page.getByRole("columnheader", { name: "操作", exact: true }),
+    page.getByRole("columnheader", { name: "Actions", exact: true }),
   ).toBeVisible();
   const actionCell = page.locator(".ant-table-cell-fix-end").first();
   await expect(actionCell).toBeVisible();
@@ -919,8 +934,8 @@ test("deleted repositories stay archived unless explicitly requested", async ({
   ).toBeVisible();
   await expect(page.getByText("archived-repository")).not.toBeVisible();
 
-  await page.getByText("运行中与删除中", { exact: true }).click();
-  await page.getByText("已删除", { exact: true }).click();
+  await page.getByText("Active and deleting", { exact: true }).click();
+  await page.getByText("Deleted", { exact: true }).click();
   await expect(page.getByText("archived-repository")).toBeVisible();
   await expect(page.getByText("active-repository")).not.toBeVisible();
 });
@@ -999,9 +1014,9 @@ test("dashboard keeps a compact overview without archived repositories", async (
   ).toBeVisible();
   await expect(page.getByText("archived-repository")).not.toBeVisible();
   await expect(page.locator(".ag-health-strip, .ag-lifecycle")).toHaveCount(0);
-  const metricStrip = page.getByRole("group", { name: "页面摘要" });
+  const metricStrip = page.getByRole("group", { name: "Page summary" });
   await expect(
-    metricStrip.locator(":scope > div").filter({ hasText: "仓库总数" }),
+    metricStrip.locator(":scope > div").filter({ hasText: "Repositories" }),
   ).toContainText("1");
   const header = page.locator(".ag-page-header");
   const primary = page.locator(".ag-page-primary");
@@ -1028,7 +1043,7 @@ test("dashboard keeps a compact overview without archived repositories", async (
   }
 
   await page.setViewportSize({ width: 390, height: 844 });
-  const openNavigation = page.getByRole("button", { name: "打开导航" });
+  const openNavigation = page.getByRole("button", { name: "Open navigation" });
   await expect(openNavigation).toBeVisible();
   const triggerBox = await openNavigation.boundingBox();
   expect(triggerBox?.width).toBeGreaterThanOrEqual(44);
@@ -1056,7 +1071,7 @@ test("dashboard keeps a compact overview without archived repositories", async (
   }
   await openNavigation.click();
   const drawer = page.getByRole("dialog");
-  await expect(drawer.getByRole("link", { name: /仓库/ })).toBeVisible();
+  await expect(drawer.getByRole("link", { name: /Repository/ })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(drawer).toBeHidden();
 });

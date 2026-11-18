@@ -39,12 +39,14 @@ describe("DashboardCharts", () => {
     renderWithPreferences(
       <StorageByFormatChart bytesByFormat={{ oci: 1024 }} totalBytes={1024} />,
     );
-    expect(await screen.findByText("存储图表加载失败")).toBeVisible();
-    expect(screen.getByRole("list", { name: "格式图例" })).toHaveTextContent(
-      "oci",
-    );
+    expect(await screen.findByText("Storage chart unavailable")).toBeVisible();
     expect(
-      screen.getByText("容量数据仍可查看，请刷新页面重试图表。"),
+      screen.getByRole("list", { name: "Format legend" }),
+    ).toHaveTextContent("oci");
+    expect(
+      screen.getByText(
+        "Capacity data remains available. Reload the page to retry the chart.",
+      ),
     ).toBeVisible();
   });
 
@@ -65,7 +67,9 @@ describe("DashboardCharts", () => {
       <StorageByFormatChart bytesByFormat={null} totalBytes={null} />,
     );
 
-    expect(screen.getByText("容量统计未启用或暂无数据")).toBeVisible();
+    expect(
+      screen.getByText("Capacity metrics are unavailable or empty"),
+    ).toBeVisible();
     expect(chartSpies.pie).not.toHaveBeenCalled();
   });
 
@@ -76,7 +80,7 @@ describe("DashboardCharts", () => {
     );
 
     expect(screen.getByTestId("ant-design-pie")).toBeVisible();
-    expect(screen.queryByText("正在加载图表…")).not.toBeInTheDocument();
+    expect(screen.queryByText("Loading chart…")).not.toBeInTheDocument();
   });
 
   it("passes real format data to a lazily loaded Ant Design pie chart", async () => {
@@ -89,7 +93,7 @@ describe("DashboardCharts", () => {
 
     expect(await screen.findByTestId("ant-design-pie")).toBeVisible();
     expect(screen.getByRole("img")).toHaveAccessibleName(
-      "各制品格式的存储占比，合计 2.0 KiB",
+      "Storage share by artifact format, 2.0 KiB total",
     );
     expect(screen.getByText("apt")).toBeVisible();
     expect(screen.getByText("25%")).toBeVisible();

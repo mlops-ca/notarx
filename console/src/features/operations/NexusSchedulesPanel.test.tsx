@@ -51,7 +51,7 @@ function show() {
   );
 }
 beforeEach(() => {
-  localStorage.setItem("ag.console.locale", "zh-CN");
+  localStorage.setItem("ag.console.locale", "en-CA");
   vi.mocked(getNexusMigrationCapabilities).mockResolvedValue({
     data: nexusCapabilities,
   } as never);
@@ -71,21 +71,28 @@ afterEach(() => {
 describe("durable migration schedules", () => {
   it("renders the capacity boundary and persisted dates without dispatching", async () => {
     show();
-    expect(await screen.findByText("等待新容量观测")).toBeInTheDocument();
-    expect(screen.getByText("最近成功追平")).toBeInTheDocument();
-    expect(screen.getByText(/还不是完全无人值守迁移/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "查看最近批次" })).toHaveAttribute(
-      "href",
-      expect.stringContaining(nexusBatch.id),
-    );
+    expect(
+      await screen.findByText("Waiting for new capacity"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Last successful sync")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /No trusted remote object-pool observer is available yet\. Each administrator-reported observation authorizes one occurrence\. Missing or expired observations pause dispatch until refreshed; migration is not fully unattended\./,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "View latest batch" }),
+    ).toHaveAttribute("href", expect.stringContaining(nexusBatch.id));
     expect(createNexusMigrationSchedule).not.toHaveBeenCalled();
     expect(refreshNexusMigrationScheduleCapacity).not.toHaveBeenCalled();
   });
   it("renders an initial error without a spinner or an empty result", async () => {
     list.mockResolvedValue({ error: { status: 503 } } as never);
     show();
-    expect(await screen.findByText("请求出错")).toBeInTheDocument();
-    expect(screen.queryByText("还没有周期计划")).not.toBeInTheDocument();
+    expect(await screen.findByText("Request failed")).toBeInTheDocument();
+    expect(
+      screen.queryByText("No recurring plans yet"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByTestId("nexus-schedule-card")).not.toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
@@ -94,8 +101,8 @@ describe("durable migration schedules", () => {
     show();
     await screen.findByTestId("nexus-schedule-card");
     list.mockResolvedValue({ error: { status: 503 } } as never);
-    await user.click(screen.getByRole("button", { name: "刷新计划" }));
-    expect(await screen.findByText("请求出错")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Refresh plans" }));
+    expect(await screen.findByText("Request failed")).toBeInTheDocument();
     expect(screen.getByTestId("nexus-schedule-card")).toBeInTheDocument();
   });
   it("creates a waiting plan from a successful batch without copying its capacity", async () => {
@@ -105,9 +112,13 @@ describe("durable migration schedules", () => {
     } as never);
     show();
     await screen.findByTestId("nexus-schedule-card");
-    await user.click(screen.getByRole("button", { name: "创建周期计划" }));
+    await user.click(
+      screen.getByRole("button", { name: "Create recurring plan" }),
+    );
     const form = await screen.findByTestId("nexus-schedule-create");
-    await user.click(within(form).getByRole("combobox", { name: "成功批次" }));
+    await user.click(
+      within(form).getByRole("combobox", { name: "Successful batch" }),
+    );
     await user.click(
       await screen.findByText(
         `releases, raw-source · ${nexusBatch.id.slice(0, 8)}`,
@@ -115,7 +126,7 @@ describe("durable migration schedules", () => {
       ),
     );
     await user.click(
-      within(form).getByRole("button", { name: "创建周期计划" }),
+      within(form).getByRole("button", { name: "Create recurring plan" }),
     );
     await waitFor(() =>
       expect(createNexusMigrationSchedule).toHaveBeenCalledTimes(1),
@@ -139,18 +150,26 @@ describe("durable migration schedules", () => {
     } as never);
     show();
     await screen.findByTestId("nexus-schedule-card");
-    await user.click(screen.getByRole("button", { name: "补充容量观测" }));
+    await user.click(
+      screen.getByRole("button", { name: "Supply capacity observation" }),
+    );
     const form = await screen.findByTestId("nexus-schedule-capacity");
-    const submit = within(form).getByRole("button", { name: "提交新观测" });
+    const submit = within(form).getByRole("button", {
+      name: "Submit new observation",
+    });
     expect(submit).toBeDisabled();
     const observed = new Date(Date.now() - 1000).toISOString();
     const until = new Date(Date.now() + 60_000).toISOString();
     await user.type(
-      within(form).getByRole("textbox", { name: "容量观察时间（含时区）" }),
+      within(form).getByRole("textbox", {
+        name: "Capacity observation time (with time zone)",
+      }),
       observed,
     );
     await user.type(
-      within(form).getByRole("textbox", { name: "证据有效截止时间（含时区）" }),
+      within(form).getByRole("textbox", {
+        name: "Evidence expiry time (with time zone)",
+      }),
       until,
     );
     const fields = within(form).getAllByRole("textbox");
@@ -186,7 +205,7 @@ describe("durable migration schedules", () => {
     );
     expect(await within(form).findByRole("alert")).toBeInTheDocument();
     expect(
-      within(form).getByRole("textbox", { name: "存储池可用字节" }),
+      within(form).getByRole("textbox", { name: "Free storage-pool bytes" }),
     ).toHaveValue("1000");
     expect(resumeNexusMigrationSchedule).not.toHaveBeenCalled();
   });
@@ -201,10 +220,10 @@ describe("durable migration schedules", () => {
     });
     show();
     await screen.findByTestId("nexus-schedule-card");
-    await user.click(screen.getByRole("button", { name: "暂停计划" }));
-    expect(await screen.findByText("计划已暂停")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Pause plan" }));
+    expect(await screen.findByText("Paused")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "更新容量并恢复" }),
+      screen.getByRole("button", { name: "Refresh capacity and resume" }),
     ).toBeInTheDocument();
     expect(pauseNexusMigrationSchedule).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -221,13 +240,15 @@ describe("durable migration schedules", () => {
         nextCursor: "",
       },
     } as never);
-    await user.click(screen.getByRole("button", { name: "刷新计划" }));
-    expect(await screen.findByText("已停止，不再触发")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Refresh plans" }));
     expect(
-      screen.queryByRole("button", { name: "暂停计划" }),
+      await screen.findByText("Stopped; no further occurrences"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Pause plan" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "更新容量并恢复" }),
+      screen.queryByRole("button", { name: "Refresh capacity and resume" }),
     ).not.toBeInTheDocument();
     expect(stopNexusMigrationSchedule).not.toHaveBeenCalled();
   });

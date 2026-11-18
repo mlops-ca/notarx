@@ -13,10 +13,16 @@ test("server identity overrides a stale administrator role", async ({
   await page.goto("/access");
 
   await expect(page).toHaveURL(/\/search$/);
-  await expect(page.getByRole("heading", { name: "全局搜索" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "制品搜索" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "访问控制" })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "API 密钥" })).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Global search" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Artifact Search" }),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "Access control" })).toHaveCount(
+    0,
+  );
+  await expect(page.getByRole("link", { name: "API keys" })).toHaveCount(0);
 });
 
 test("a member sees the repository catalog without administrator navigation", async ({
@@ -53,9 +59,13 @@ test("a member sees the repository catalog without administrator navigation", as
   await expect(
     page.getByRole("link", { name: "readable-releases" }),
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: "访问控制" })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "API 密钥" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: /新建仓库/ })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Access control" })).toHaveCount(
+    0,
+  );
+  await expect(page.getByRole("link", { name: "API keys" })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: /New repository/ }),
+  ).toHaveCount(0);
 });
 
 test("a scoped token signs in through identity without repository discovery", async ({
@@ -93,11 +103,15 @@ test("a scoped token signs in through identity without repository discovery", as
   });
 
   await page.goto("/login");
-  await page.getByText("访问令牌", { exact: true }).click();
-  await page.getByRole("textbox", { name: "访问令牌" }).fill("scoped-token");
-  await page.getByRole("button", { name: /验证并登录/ }).click();
+  await page.getByText("Access Token", { exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "Access Token" })
+    .fill("scoped-token");
+  await page.getByRole("button", { name: /Verify and sign in/ }).click();
 
   await expect(page).toHaveURL(/\/search$/);
-  await expect(page.getByRole("heading", { name: "全局搜索" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Global search" }),
+  ).toBeVisible();
   expect(repositoryDiscoveryRequests).toBe(0);
 });

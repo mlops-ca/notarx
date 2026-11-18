@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { mockGateway } from "./visual/mockGateway";
 import { repositoryPage, scheduledTasks } from "./visual/fixtures";
 
-for (const locale of ["zh-CN", "en-US"] as const) {
+for (const locale of ["en-CA"] as const) {
   for (const theme of ["gateway-dark", "gateway-light"] as const) {
     test(`scheduled task columns and actions fit at desktop width (${locale}, ${theme})`, async ({
       page,
@@ -43,16 +43,13 @@ for (const locale of ["zh-CN", "en-US"] as const) {
       for (const cell of widths)
         expect(cell.contentWidth).toBeLessThanOrEqual(cell.width + 1);
       const more = row.getByRole("button", {
-        name:
-          locale === "zh-CN"
-            ? `${task.name} 的更多操作`
-            : `More actions for ${task.name}`,
+        name: `More actions for ${task.name}`,
       });
       await expect(more).toBeInViewport({ ratio: 1 });
       await more.click();
       await expect(
         page.getByRole("menuitem", {
-          name: locale === "zh-CN" ? "编辑" : "Edit",
+          name: "Edit",
         }),
       ).toBeVisible();
     });

@@ -11,14 +11,14 @@ describe("Loading", () => {
   it("announces the busy state without requiring visual inspection", () => {
     render(
       <PreferencesProvider>
-        <Loading label="正在核对制品摘要…" />
+        <Loading label="Verifying artifact digest…" />
       </PreferencesProvider>,
     );
 
     const status = screen.getByRole("status");
     expect(status).toHaveAttribute("aria-live", "polite");
     expect(status).toHaveAttribute("aria-busy", "true");
-    expect(status).toHaveTextContent("正在核对制品摘要…");
+    expect(status).toHaveTextContent("Verifying artifact digest…");
   });
 });
 
@@ -32,7 +32,7 @@ describe("ErrorBanner", () => {
 
     expect(screen.getByText("upstream maintenance in progress")).toBeVisible();
     expect(
-      screen.queryByText("请求失败，请检查网络或 Token"),
+      screen.queryByText("Request failed. Check the network or token."),
     ).not.toBeInTheDocument();
   });
 
@@ -45,7 +45,7 @@ describe("ErrorBanner", () => {
 
     expect(
       screen.getByText(
-        "当前 Gateway 未提供此接口，Console 与 Gateway 版本可能不一致。请更新或重启 Gateway 后重试。",
+        "The connected Gateway does not expose this endpoint. The Console and Gateway versions may not match; update or restart Gateway and retry.",
       ),
     ).toBeVisible();
   });
@@ -109,11 +109,11 @@ describe("Notice", () => {
     const onClose = vi.fn();
     render(
       <PreferencesProvider>
-        <Notice tone="success" title="保存成功" onClose={onClose} />
+        <Notice tone="success" title="Saved" onClose={onClose} />
       </PreferencesProvider>,
     );
 
-    expect(screen.getByText("保存成功")).toBeVisible();
+    expect(screen.getByText("Saved")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: /close/i }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -121,11 +121,11 @@ describe("Notice", () => {
   it("keeps standing explanations open and without an icon", () => {
     const { container } = render(
       <PreferencesProvider>
-        <Notice tone="info" title="这是一段说明" />
+        <Notice tone="info" title="This is a note" />
       </PreferencesProvider>,
     );
 
-    expect(screen.getByText("这是一段说明")).toBeVisible();
+    expect(screen.getByText("This is a note")).toBeVisible();
     expect(container.querySelector(".ant-alert-icon")).toBeNull();
     expect(screen.queryByRole("button", { name: /close/i })).toBeNull();
   });

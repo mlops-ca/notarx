@@ -164,7 +164,7 @@ for (const format of ["npm", "pypi", "cargo", "apt", "raw", "conan"] as const) {
       });
       await page.setViewportSize({ width, height: 900 });
       await page.addInitScript(() => {
-        localStorage.setItem("ag.console.locale", "en-US");
+        localStorage.setItem("ag.console.locale", "en-CA");
         localStorage.setItem("ag.console.theme", "light");
       });
       const initial: Repository = {
@@ -278,7 +278,7 @@ for (const width of [1440, 390]) {
     });
     await page.setViewportSize({ width, height: 900 });
     await page.addInitScript(() =>
-      localStorage.setItem("ag.console.locale", "en-US"),
+      localStorage.setItem("ag.console.locale", "en-CA"),
     );
     await mockSettings(page);
     const second: Repository = {
@@ -386,15 +386,17 @@ for (const width of [1440, 390]) {
       });
       await page.setViewportSize({ width, height: 900 });
       await page.addInitScript((mode) => {
-        localStorage.setItem("ag.console.locale", "zh-CN");
+        localStorage.setItem("ag.console.locale", "en-CA");
         localStorage.setItem("ag.console.theme", mode);
       }, theme);
       const updates = await mockSettings(page);
       await page.goto(`/repositories/${repository.id}?tab=settings`);
-      const realm = page.getByLabel("令牌服务地址", { exact: true });
-      const token = page.getByLabel("上游令牌", { exact: true });
-      const password = page.getByLabel("代理认证密码（可选）", { exact: true });
-      const save = page.getByRole("button", { name: /保存更改$/ });
+      const realm = page.getByLabel("Token service URL", { exact: true });
+      const token = page.getByLabel("Upstream token", { exact: true });
+      const password = page.getByLabel("Proxy password (optional)", {
+        exact: true,
+      });
+      const save = page.getByRole("button", { name: /Save changes$/ });
       await expect(realm).toHaveValue(repository.ociBearer?.realm ?? "");
       await expect(token).toHaveValue("");
       await expect(password).toHaveValue("");
@@ -402,7 +404,9 @@ for (const width of [1440, 390]) {
       await expect(save).not.toHaveClass(/ant-btn-loading/);
       await save.click();
       await expect(
-        page.getByText(/上游地址或 OCI 令牌绑定已更改/),
+        page.getByText(
+          /The upstream endpoint or OCI token binding changed\. Enter a new secret, or choose Anonymous to clear the stored credential, then save again\./,
+        ),
       ).toBeVisible();
       await expect(realm).toHaveValue("https://new-issuer.example.test/token");
       expect(updates[0]?.upstreamAuth).not.toHaveProperty("secret");
@@ -434,11 +438,11 @@ for (const width of [1440, 390]) {
       }
 
       const issuer = page.getByRole("group", {
-        name: "OCI 令牌交换",
+        name: "OCI token exchange",
         exact: true,
       });
       const authentication = page.getByRole("group", {
-        name: "上游认证",
+        name: "Upstream authentication",
         exact: true,
       });
       const issuerBox = await issuer.boundingBox();
@@ -462,12 +466,12 @@ for (const width of [1440, 390]) {
       });
 
       await page
-        .getByRole("switch", { name: "OCI 令牌交换", exact: true })
+        .getByRole("switch", { name: "OCI token exchange", exact: true })
         .click();
-      await page.getByRole("radio", { name: /匿名访问/ }).click();
+      await page.getByRole("radio", { name: /Anonymous/ }).click();
       await expect(save).not.toHaveClass(/ant-btn-loading/);
       await save.click();
-      await expect(page.getByText("仓库设置已保存")).toBeVisible();
+      await expect(page.getByText("Repository settings saved")).toBeVisible();
       expect(updates[2]?.ociBearer).toBeNull();
       expect(updates[2]?.upstreamAuth).toEqual({ scheme: "none" });
       expect(updates[2]?.egressProxy).not.toHaveProperty("password");

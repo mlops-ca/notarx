@@ -135,9 +135,11 @@ describe("GroupsPage dialogs", () => {
     );
     vi.mocked(replaceGroupMembers).mockResolvedValue({ data: [] } as never);
     renderPage();
-    await user.click(await screen.findByRole("button", { name: /编辑成员/ }));
+    await user.click(
+      await screen.findByRole("button", { name: /Edit members/ }),
+    );
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByRole("button", { name: /保存/ })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: /Save/ })).toBeDisabled();
     expect(
       within(dialog).queryByRole("button", { name: /npm-lib/ }),
     ).not.toBeInTheDocument();
@@ -146,7 +148,7 @@ describe("GroupsPage dialogs", () => {
       response: new Response(null, { headers: { ETag: '"7"' } }),
     } as never);
     await within(dialog).findByText("npm-lib");
-    await user.click(within(dialog).getByRole("button", { name: /保存/ }));
+    await user.click(within(dialog).getByRole("button", { name: /Save/ }));
     expect(replaceGroupMembers).toHaveBeenCalledWith({
       path: { groupId: group.id },
       body: [{ repositoryId: repository.id, position: 0 }],
@@ -164,17 +166,19 @@ describe("GroupsPage dialogs", () => {
         data: [{ repositoryId: repository.id, position: 0 }],
       } as never);
     renderPage();
-    await user.click(await screen.findByRole("button", { name: /编辑成员/ }));
+    await user.click(
+      await screen.findByRole("button", { name: /Edit members/ }),
+    );
     const dialog = await screen.findByRole("dialog");
     await within(dialog).findByText("members unavailable");
     expect(within(dialog).queryByRole("status")).not.toBeInTheDocument();
-    expect(within(dialog).getByRole("button", { name: /保存/ })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: /Save/ })).toBeDisabled();
     expect(
       within(dialog).queryByRole("button", { name: /npm-lib/ }),
     ).not.toBeInTheDocument();
-    await user.click(within(dialog).getByRole("button", { name: /重试/ }));
+    await user.click(within(dialog).getByRole("button", { name: /Retry/ }));
     await within(dialog).findByText("npm-lib");
-    expect(within(dialog).getByRole("button", { name: /保存/ })).toBeEnabled();
+    expect(within(dialog).getByRole("button", { name: /Save/ })).toBeEnabled();
     expect(within(dialog).queryByText("members unavailable")).toBeNull();
   });
 
@@ -198,19 +202,19 @@ describe("GroupsPage dialogs", () => {
       } as never);
     vi.mocked(replaceGroupMembers).mockResolvedValue({ data: [] } as never);
     renderPage();
-    const trigger = await screen.findByRole("button", { name: /编辑成员/ });
+    const trigger = await screen.findByRole("button", { name: /Edit members/ });
     await user.click(trigger);
     await screen.findByText("npm-lib");
-    await user.click(screen.getByRole("button", { name: "取消" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     await user.click(trigger);
-    expect(screen.getByRole("button", { name: /保存/ })).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: "取消" }));
+    expect(screen.getByRole("button", { name: /Save/ })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(oldSignal?.aborted).toBe(true));
     await user.click(trigger);
     await screen.findByText("npm-lib");
     finish?.({ data: [] } as never);
-    await user.click(screen.getByRole("button", { name: /保存/ }));
+    await user.click(screen.getByRole("button", { name: /Save/ }));
     expect(replaceGroupMembers).toHaveBeenCalledWith({
       path: { groupId: group.id },
       body: [{ repositoryId: repository.id, position: 0 }],
@@ -222,15 +226,15 @@ describe("GroupsPage dialogs", () => {
     const user = userEvent.setup();
     renderPage();
     const trigger = await screen.findByRole("button", {
-      name: "oci-mirror 的更多操作",
+      name: "More actions for oci-mirror",
     });
     await user.click(trigger);
-    const item = await screen.findByRole("menuitem", { name: "删除分组" });
+    const item = await screen.findByRole("menuitem", { name: "Delete group" });
     item.focus();
     expect(item).toHaveFocus();
     await user.click(item);
     await screen.findByRole("dialog");
-    await user.click(screen.getByRole("button", { name: "取消" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(trigger).toHaveFocus());
   });
 
@@ -244,11 +248,11 @@ describe("GroupsPage dialogs", () => {
     } as never);
     renderPage();
     await screen.findByText("format profiles temporarily unavailable");
-    expect(screen.getByRole("button", { name: /新建分组/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /New group/ })).toBeDisabled();
 
-    await user.click(screen.getByRole("button", { name: /重试/ }));
+    await user.click(screen.getByRole("button", { name: /Retry/ }));
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /新建分组/ })).toBeEnabled(),
+      expect(screen.getByRole("button", { name: /New group/ })).toBeEnabled(),
     );
     expect(
       screen.queryByText("format profiles temporarily unavailable"),
@@ -260,14 +264,14 @@ describe("GroupsPage dialogs", () => {
     const fail = pendingSave(vi.mocked(createGroup));
 
     renderPage();
-    await user.click(await screen.findByRole("button", { name: /新建分组/ }));
+    await user.click(await screen.findByRole("button", { name: /New group/ }));
     const dialog = await screen.findByRole("dialog");
     await user.type(
-      screen.getByRole("textbox", { name: "分组名称" }),
+      screen.getByRole("textbox", { name: "Group name" }),
       "js-utils",
     );
     await user.click(within(dialog).getByRole("button", { name: /npm-lib/ }));
-    await user.click(within(dialog).getByRole("button", { name: /创\s*建/ }));
+    await user.click(within(dialog).getByRole("button", { name: /Create/ }));
 
     clickMask();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -289,11 +293,11 @@ describe("GroupsPage dialogs", () => {
 
     renderPage();
     await user.click(
-      await screen.findByRole("button", { name: /的更多操作$/ }),
+      await screen.findByRole("button", { name: /More actions for .+$/ }),
     );
-    await user.click(await screen.findByRole("menuitem", { name: "设置" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Settings" }));
     const dialog = await screen.findByRole("dialog");
-    await user.click(within(dialog).getByRole("button", { name: /保\s*存/ }));
+    await user.click(within(dialog).getByRole("button", { name: /Save/ }));
 
     clickMask();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -315,9 +319,11 @@ describe("GroupsPage dialogs", () => {
     const fail = pendingSave(vi.mocked(replaceGroupMembers));
 
     renderPage();
-    await user.click(await screen.findByRole("button", { name: /编辑成员/ }));
+    await user.click(
+      await screen.findByRole("button", { name: /Edit members/ }),
+    );
     const dialog = await screen.findByRole("dialog");
-    await user.click(within(dialog).getByRole("button", { name: /保\s*存/ }));
+    await user.click(within(dialog).getByRole("button", { name: /Save/ }));
 
     clickMask();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -339,11 +345,15 @@ describe("GroupsPage dialogs", () => {
 
     renderPage();
     await user.click(
-      await screen.findByRole("button", { name: "oci-mirror 的更多操作" }),
+      await screen.findByRole("button", {
+        name: "More actions for oci-mirror",
+      }),
     );
-    await user.click(await screen.findByRole("menuitem", { name: "删除分组" }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Delete group" }),
+    );
     const dialog = await screen.findByRole("dialog");
-    await user.click(within(dialog).getByRole("button", { name: /^删\s*除$/ }));
+    await user.click(within(dialog).getByRole("button", { name: /^Delete$/ }));
 
     expect(await screen.findByText("network down")).toBeInTheDocument();
     // The rejection released `deleting`, so the dialog is dismissible again.

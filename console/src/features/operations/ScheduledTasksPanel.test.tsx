@@ -107,7 +107,9 @@ describe("ScheduledTasksPanel", () => {
 
     renderPanel();
     expect(await screen.findByText("Audit one")).toBeInTheDocument();
-    const historyButtons = screen.getAllByRole("button", { name: "投递历史" });
+    const historyButtons = screen.getAllByRole("button", {
+      name: "Dispatch history",
+    });
     await user.click(historyButtons[0]);
     expect(await screen.findByText("job-first")).toBeInTheDocument();
 
@@ -123,9 +125,11 @@ describe("ScheduledTasksPanel", () => {
       data: { items: [], nextPageToken: undefined },
     } as never);
     renderPanel();
-    expect(await screen.findByText("还没有计划任务")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /新建计划/ }),
+      await screen.findByText("No scheduled tasks yet"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /New schedule/ }),
     ).toBeInTheDocument();
   });
 
@@ -151,9 +155,11 @@ describe("ScheduledTasksPanel", () => {
     } as never);
 
     renderPanel();
-    await user.click(await screen.findByRole("button", { name: /新建计划/ }));
+    await user.click(
+      await screen.findByRole("button", { name: /New schedule/ }),
+    );
 
-    expect(await screen.findByText("目标仓库")).toBeInTheDocument();
+    expect(await screen.findByText("Target repository")).toBeInTheDocument();
     // The kind selector precedes the target repository selector.
     const [kindSelect, targetSelect] = screen.getAllByRole("combobox");
     expect(kindSelect).toBeInTheDocument();
@@ -175,7 +181,7 @@ describe("ScheduledTasksPanel", () => {
       await screen.findByText("schedules unavailable"),
     ).toBeInTheDocument();
     // A failed first load must not leave a spinner turning underneath it.
-    expect(screen.queryByText("加载计划任务…")).not.toBeInTheDocument();
+    expect(screen.queryByText("Loading schedules…")).not.toBeInTheDocument();
   });
 
   it("keeps the loaded schedules when a refresh fails", async () => {
@@ -193,11 +199,11 @@ describe("ScheduledTasksPanel", () => {
     mockListTasks.mockResolvedValue({
       error: { status: 503, message: "refresh failed" },
     } as never);
-    await user.click(screen.getByRole("button", { name: /刷\s*新/ }));
+    await user.click(screen.getByRole("button", { name: /Refresh/ }));
 
     expect(await screen.findByText("refresh failed")).toBeInTheDocument();
     expect(screen.getByText("Audit one")).toBeInTheDocument();
-    expect(screen.queryByText("加载计划任务…")).not.toBeInTheDocument();
+    expect(screen.queryByText("Loading schedules…")).not.toBeInTheDocument();
   });
 
   it("holds the editor shut while saving and reopens dismissal after a failure", async () => {
@@ -229,15 +235,17 @@ describe("ScheduledTasksPanel", () => {
     );
 
     renderPanel();
-    await user.click(await screen.findByRole("button", { name: /新建计划/ }));
+    await user.click(
+      await screen.findByRole("button", { name: /New schedule/ }),
+    );
     await user.type(
-      screen.getByRole("textbox", { name: "任务名称" }),
+      screen.getByRole("textbox", { name: "Task name" }),
       "Nightly audit",
     );
     const [, targetSelect] = screen.getAllByRole("combobox");
     await user.click(targetSelect);
     await user.click(await screen.findByTitle("go-modules"));
-    await user.click(screen.getByRole("button", { name: /创\s*建/ }));
+    await user.click(screen.getByRole("button", { name: /Create/ }));
 
     clickMask();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -267,7 +275,7 @@ describe("ScheduledTasksPanel", () => {
     );
 
     renderPanel();
-    const runButton = await screen.findByRole("button", { name: "立即执行" });
+    const runButton = await screen.findByRole("button", { name: "Run now" });
     await user.click(runButton);
 
     expect(await screen.findByText("network down")).toBeInTheDocument();

@@ -368,7 +368,9 @@ test("Cargo publish guide stays readable at desktop and mobile widths", async ({
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto(`/repositories/${repositoryId}?tab=publish`);
-    const guide = page.getByRole("heading", { name: "配置 Cargo 仓库" });
+    const guide = page.getByRole("heading", {
+      name: "Configure Cargo registry",
+    });
     await expect(guide).toBeVisible();
     await expect(
       page.getByText("cargo publish --registry gateway", { exact: false }),
@@ -455,12 +457,14 @@ for (const width of [1440, 390]) {
     );
 
     await page.goto(`/repositories/${repositoryId}?tab=capacity`);
-    const metrics = page.getByRole("group", { name: "页面摘要" });
+    const metrics = page.getByRole("group", { name: "Page summary" });
     await expect(metrics).toBeVisible();
     await expect(metrics.locator(":scope > div")).toHaveCount(3);
-    await expect(page.getByText("主资产缓存")).toHaveCount(0);
-    await expect(page.getByText("Hosted 仓库的容量来自")).toHaveCount(0);
-    await expect(page.getByText("使用率")).toBeVisible();
+    await expect(page.getByText("Primary assetsCache")).toHaveCount(0);
+    await expect(
+      page.getByText("Hosted repository capacity comes from"),
+    ).toHaveCount(0);
+    await expect(page.getByText("Utilization")).toBeVisible();
     const capacityStack = metrics.locator("..");
     await expect(capacityStack).toHaveClass(/ag-page-stack/);
     await page.evaluate(() => window.scrollTo(0, 0));
@@ -472,9 +476,11 @@ for (const width of [1440, 390]) {
     }
     await page.goto(`/repositories/${repositoryId}?tab=usage`);
     await expect(page.getByText("releases/widget.zip")).toBeVisible();
-    await expect(page.getByText("累计下载")).toHaveCount(0);
+    await expect(page.getByText("Total downloads")).toHaveCount(0);
     await expect(
-      page.getByRole("table").getByRole("columnheader", { name: "累计流量" }),
+      page
+        .getByRole("table")
+        .getByRole("columnheader", { name: "Total bytes" }),
     ).toHaveCount(1);
     await page.evaluate(() => window.scrollTo(0, 0));
     expect(
@@ -503,8 +509,10 @@ test("npm detail keeps version selection and package content aligned when intell
     `/repositories/${repositoryId}?artifact=${packageName}&version=0.1.3`,
   );
 
-  await expect(page.getByText("扫描状态 · NPM", { exact: true })).toBeVisible();
-  const versionPanel = page.getByText(/^选择版本/).locator("..");
+  await expect(
+    page.getByText("Scan status · NPM", { exact: true }),
+  ).toBeVisible();
+  const versionPanel = page.getByText(/^Select version/).locator("..");
   const detailPanel = page
     .getByText(`${packageName}@0.1.3`, { exact: true })
     .locator("../..");
@@ -608,21 +616,21 @@ test("repository detail keeps the whole content region stable when security beco
 
   await page.goto(`/repositories/${repositoryId}`);
 
-  const navigation = page.getByRole("navigation", { name: "仓库任务" });
+  const navigation = page.getByRole("navigation", { name: "Repository tasks" });
   const taskTabs = navigation.locator(".ag-repository-tabs").getByRole("tab");
   expect(await repositoryNavigationState(page)).toEqual({
-    groups: ["制品", "治理与安全", "分发", "设置"],
-    tasks: ["浏览", "使用统计", "发布"],
+    groups: ["Artifact", "Governance", "Distribution", "Settings"],
+    tasks: ["Browse", "Usage", "Publish"],
   });
   await expect(
     navigation.locator(".ag-repository-tabs .ant-tabs-nav-more"),
   ).toBeHidden();
-  await openRepositoryTask(page, "制品", "浏览");
+  await openRepositoryTask(page, "Artifact", "Browse");
 
   const beforeSecurity = await page.evaluate(() => {
     const main = document.querySelector<HTMLElement>(".ag-main");
     const summary = document.querySelector<HTMLElement>(
-      '[aria-label="仓库摘要"]',
+      '[aria-label="Repository summary"]',
     );
     const navigation = document.querySelector<HTMLElement>(
       ".ag-repository-navigation",
@@ -643,17 +651,17 @@ test("repository detail keeps the whole content region stable when security beco
       fullPage: false,
     });
   }
-  await openRepositoryTask(page, "治理与安全", "安全准入");
+  await openRepositoryTask(page, "Governance", "Security admission");
   await expect(
     page.getByRole("heading", {
-      name: "安全准入与隔离读取",
+      name: "Admission and quarantined reads",
       exact: true,
     }),
   ).toBeVisible();
   const afterSecurity = await page.evaluate(() => {
     const main = document.querySelector<HTMLElement>(".ag-main");
     const summary = document.querySelector<HTMLElement>(
-      '[aria-label="仓库摘要"]',
+      '[aria-label="Repository summary"]',
     );
     const navigation = document.querySelector<HTMLElement>(
       ".ag-repository-navigation",
@@ -727,30 +735,30 @@ test("repository detail keeps operational content above the fold", async ({
 
   await page.goto(`/repositories/${repositoryId}`);
 
-  const summary = page.getByRole("group", { name: "仓库摘要" });
+  const summary = page.getByRole("group", { name: "Repository summary" });
   await expect(summary).toBeVisible();
-  await expect(summary).toContainText("1.0 MiB · 20 个对象");
+  await expect(summary).toContainText("1.0 MiB · 20 objects");
   const summaryBox = await summary.boundingBox();
   expect(summaryBox?.height ?? Number.POSITIVE_INFINITY).toBeLessThan(110);
 
-  await page.getByRole("button", { name: "查看概念说明" }).click();
-  await expect(page.getByText("概念说明", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "View concepts" }).click();
+  await expect(page.getByText("Concepts", { exact: true })).toBeVisible();
   await expect(
     page.getByText("Hosted Repository", { exact: true }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
 
-  const navigation = page.getByRole("navigation", { name: "仓库任务" });
+  const navigation = page.getByRole("navigation", { name: "Repository tasks" });
   const taskGroups = navigation.locator(".ag-repository-tabs").getByRole("tab");
   expect(await repositoryNavigationState(page)).toEqual({
-    groups: ["制品", "治理与安全", "分发", "设置"],
-    tasks: ["浏览", "使用统计"],
+    groups: ["Artifact", "Governance", "Distribution", "Settings"],
+    tasks: ["Browse", "Usage"],
   });
-  await openRepositoryTask(page, "制品", "浏览");
+  await openRepositoryTask(page, "Artifact", "Browse");
   await expect(
-    page.getByRole("tab", { name: "设置", exact: true }),
+    page.getByRole("tab", { name: "Settings", exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: "设置" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Settings" })).toHaveCount(0);
 
   const table = page.locator(".ag-console-table");
   await expect(table).toBeVisible();
@@ -797,7 +805,7 @@ test("repository detail keeps operational content above the fold", async ({
     });
   }
 
-  await openRepositoryTask(page, "治理与安全", "访问授权");
+  await openRepositoryTask(page, "Governance", "Access grants");
   await expect(page).toHaveURL(/\?tab=grants$/);
 
   await page.goto(`/repositories/${repositoryId}`);
@@ -805,7 +813,7 @@ test("repository detail keeps operational content above the fold", async ({
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(taskGroups).toHaveCount(4);
   await expect(
-    page.getByRole("tab", { name: "制品", exact: true }),
+    page.getByRole("tab", { name: "Artifact", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
   await expect(table).toBeVisible();
   await expect(
@@ -895,14 +903,14 @@ test("repository grants tab manages rows in a table", async ({
 
   const access = page
     .locator(".ant-collapse-item")
-    .filter({ hasText: "当前访问判定" });
+    .filter({ hasText: "Effective access" });
   await access.getByRole("button").click();
   await expect(access.getByText("mock-admin", { exact: true })).toBeVisible();
-  await expect(access.getByText("允许", { exact: true })).toHaveCount(5);
-  await expect(page.getByText(/判定顺序：/)).toHaveCount(0);
+  await expect(access.getByText("Allowed", { exact: true })).toHaveCount(5);
+  await expect(page.getByText(/Decision order:/)).toHaveCount(0);
   await access.getByRole("button").click();
 
-  const addButton = page.getByRole("button", { name: /添加授权/ });
+  const addButton = page.getByRole("button", { name: /Add grant/ });
   await expect(addButton).toBeVisible();
   const table = page.locator(".ag-console-table");
   await expect(table).toBeVisible();
@@ -912,13 +920,10 @@ test("repository grants tab manages rows in a table", async ({
 
   // Editing one row writes exactly that row: a single-grant upsert with no
   // If-Match precondition, never the repository's whole grant set.
-  await table
-    .getByRole("button", { name: /编\s*辑/ })
-    .first()
-    .click();
+  await table.getByRole("button", { name: /Edit/ }).first().click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  await dialog.getByRole("button", { name: /^保\s*存$/ }).click();
+  await dialog.getByRole("button", { name: /^Save$/ }).click();
   await expect(dialog).toBeHidden();
   expect(upsertBodies).toEqual([
     {
@@ -930,8 +935,11 @@ test("repository grants tab manages rows in a table", async ({
   expect(upsertHeaders[0]["if-match"]).toBeUndefined();
 
   // Removing one row deletes exactly its (principal, prefix) key.
-  await table.getByRole("button", { name: "移除该行授权" }).first().click();
-  await page.getByRole("button", { name: /^移\s*除$/ }).click();
+  await table
+    .getByRole("button", { name: "Remove this grant row" })
+    .first()
+    .click();
+  await page.getByRole("button", { name: /^Remove$/ }).click();
   await expect.poll(() => deleteQueries.length).toBe(1);
   const deleteParams = new URLSearchParams(deleteQueries[0]);
   expect(deleteParams.get("principal")).toBe("user:alice");
@@ -981,10 +989,12 @@ test("repository settings live in a tab and keep the update workflow", async ({
   );
 
   await page.goto(`/repositories/${repositoryId}`);
-  const settingsTab = page.getByRole("tab", { name: "设置", exact: true });
+  const settingsTab = page.getByRole("tab", { name: "Settings", exact: true });
   await settingsTab.click();
 
-  await expect(page.getByRole("heading", { name: "仓库设置" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Repository settings" }),
+  ).toBeVisible();
   await expect
     .poll(async () => {
       const [tabBox, indicatorBox] = await Promise.all([
@@ -997,8 +1007,10 @@ test("repository settings live in a tab and keep the update workflow", async ({
       return Math.abs(tabCenter - indicatorCenter);
     })
     .toBeLessThan(2);
-  const anonymousSwitch = page.getByRole("switch", { name: "允许匿名读取" });
-  const strictSwitch = page.getByRole("switch", { name: "严格发布" });
+  const anonymousSwitch = page.getByRole("switch", {
+    name: "Allow anonymous reads",
+  });
+  const strictSwitch = page.getByRole("switch", { name: "Strict publication" });
   await expect(anonymousSwitch).toBeChecked();
   await expect(strictSwitch).not.toBeChecked();
 
@@ -1015,14 +1027,14 @@ test("repository settings live in a tab and keep the update workflow", async ({
   expect(policyGap).toBeLessThanOrEqual(25);
 
   await strictSwitch.click();
-  await page.getByRole("button", { name: "保存更改" }).click();
+  await page.getByRole("button", { name: "Save changes" }).click();
 
   const submitted = await updateRequest;
   expect(submitted.postDataJSON()).toMatchObject({
     anonymousRead: true,
     mavenStrictPublication: true,
   });
-  await expect(page.getByText("仓库设置已保存")).toBeVisible();
+  await expect(page.getByText("Repository settings saved")).toBeVisible();
 
   if (process.env.CAPTURE_REPOSITORY_DETAIL) {
     await page.screenshot({
@@ -1057,32 +1069,36 @@ test("scanning uses a frameless responsive workspace", async ({
 
   await page.goto(`/repositories/${repositoryId}?tab=scanning`);
   await expect(
-    page.getByRole("heading", { name: "制品扫描", exact: true }),
+    page.getByRole("heading", { name: "Artifact scanning", exact: true }),
   ).toBeVisible();
 
   await expect(page.locator(".ag-card .ag-card")).toHaveCount(0);
 
   const scannerWarning = page
     .getByRole("alert")
-    .filter({ hasText: "当前仓库未配置可用扫描器" });
+    .filter({ hasText: "No scanner is configured for this repository" });
   await expect(scannerWarning).toBeVisible();
-  await expect(page.getByText("扫描与处置是两个步骤")).toHaveCount(0);
+  await expect(
+    page.getByText("Scanning and disposition are two steps"),
+  ).toHaveCount(0);
 
   const artifactScanHeading = page.getByRole("heading", {
-    name: "选择并扫描不可变制品",
+    name: "Select and scan an immutable artifact",
     exact: true,
   });
   const artifactScanCard = page
     .locator(".ag-card")
     .filter({ has: artifactScanHeading });
   const artifactPicker = artifactScanCard.getByRole("combobox", {
-    name: "搜索并选择制品",
+    name: "Search and select an artifact",
   });
   const scanHint = artifactScanCard.getByText(
-    "选择后会自动锁定规范坐标与完整摘要；最多显示 50 条，可输入关键词检索历史版本和 Conan 修订。仅在无法检索时使用高级手动输入。",
+    "Selection locks the canonical coordinate and full digest. Up to 50 matches are shown; search historical versions and Conan revisions by keyword. Use advanced manual input only as a recovery path.",
     { exact: true },
   );
-  const submitScan = artifactScanCard.getByRole("button", { name: "提交扫描" });
+  const submitScan = artifactScanCard.getByRole("button", {
+    name: "Queue scan",
+  });
   const [artifactCardBox, pickerBox, hintBox, submitBox] = await Promise.all([
     artifactScanCard.boundingBox(),
     artifactPicker.boundingBox(),
@@ -1116,16 +1132,18 @@ test("scanning uses a frameless responsive workspace", async ({
     cardBottom - ((submitBox?.y ?? 0) + (submitBox?.height ?? 0)),
   ).toBeGreaterThanOrEqual(16);
 
-  await artifactScanCard.getByRole("button", { name: "高级手动输入" }).click();
+  await artifactScanCard
+    .getByRole("button", { name: "Advanced manual input" })
+    .click();
   await expect(
-    artifactScanCard.getByRole("textbox", { name: "制品坐标" }),
+    artifactScanCard.getByRole("textbox", { name: "Artifact coordinate" }),
   ).toBeVisible();
   await expect(
-    artifactScanCard.getByRole("textbox", { name: "SHA-256 摘要" }),
+    artifactScanCard.getByRole("textbox", { name: "SHA-256 digest" }),
   ).toBeVisible();
 
   const recentJobsHeading = page.getByRole("heading", {
-    name: "最近扫描任务",
+    name: "Recent scan jobs",
     exact: true,
   });
   const recentJobsCard = page
@@ -1197,7 +1215,7 @@ test.describe("touch repository task navigation", () => {
     await mockRepositoryDetail(page);
     await page.goto(`/repositories/${repositoryId}?tab=scanning`);
     await expect(
-      page.getByRole("heading", { name: "制品扫描", exact: true }),
+      page.getByRole("heading", { name: "Artifact scanning", exact: true }),
     ).toBeVisible();
     expect(
       await page.evaluate(() => matchMedia("(pointer: coarse)").matches),
@@ -1230,9 +1248,9 @@ test("scanning selects a searchable immutable artifact before queuing", async ({
   await page.goto(`/repositories/${repositoryId}?tab=scanning`);
   const artifactScanCard = page
     .locator(".ag-card")
-    .filter({ hasText: "选择并扫描不可变制品" });
+    .filter({ hasText: "Select and scan an immutable artifact" });
   const picker = artifactScanCard.getByRole("combobox", {
-    name: "搜索并选择制品",
+    name: "Search and select an artifact",
   });
   await picker.click();
   const option = page
@@ -1245,10 +1263,10 @@ test("scanning selects a searchable immutable artifact before queuing", async ({
   await expect(
     artifactScanCard.getByText(digest, { exact: true }),
   ).toBeVisible();
-  await artifactScanCard.getByRole("button", { name: "提交扫描" }).click();
+  await artifactScanCard.getByRole("button", { name: "Queue scan" }).click();
 
   expect((await scanRequest).postDataJSON()).toEqual({ coordinate, digest });
-  await expect(page.getByText("扫描任务已提交")).toBeVisible();
+  await expect(page.getByText("Scan job queued")).toBeVisible();
 });
 
 test("promotion selects a source artifact and a compatible Hosted target", async ({
@@ -1273,7 +1291,7 @@ test("promotion selects a source artifact and a compatible Hosted target", async
     0,
   );
   const sourcePicker = page.getByRole("combobox", {
-    name: "搜索并选择源制品",
+    name: "Search and select a source artifact",
   });
   await sourcePicker.click();
   const artifactOption = page
@@ -1283,7 +1301,9 @@ test("promotion selects a source artifact and a compatible Hosted target", async
   await expect(artifactOption).toBeVisible();
   await artifactOption.click();
 
-  const targetPicker = page.getByRole("combobox", { name: "选择目标仓库" });
+  const targetPicker = page.getByRole("combobox", {
+    name: "Select target repository",
+  });
   await targetPicker.click();
   await expect(
     page.locator(".ant-select-item-option").filter({
@@ -1299,7 +1319,7 @@ test("promotion selects a source artifact and a compatible Hosted target", async
     .locator(".ant-select-item-option")
     .filter({ hasText: "production-files" })
     .click();
-  await page.getByRole("button", { name: /晋\s*升/ }).click();
+  await page.getByRole("button", { name: /Promote/ }).click();
 
   expect((await promotionRequest).postDataJSON()).toEqual({
     targetRepositoryId: "repo-production",
@@ -1307,7 +1327,9 @@ test("promotion selects a source artifact and a compatible Hosted target", async
     digest,
   });
   await expect(
-    page.getByText("晋升任务已提交，请在目标仓库的「生命周期任务」查看进度"),
+    page.getByText(
+      "Promotion submitted. Track it on the target repository's Lifecycle jobs tab.",
+    ),
   ).toBeVisible();
   if (process.env.CAPTURE_REPOSITORY_DETAIL) {
     await page.screenshot({
@@ -1344,11 +1366,11 @@ test("security guardrails use independent desktop columns", async ({
 
   await page.goto(`/repositories/${repositoryId}?tab=security`);
   const readHeading = page.getByRole("heading", {
-    name: "隔离制品读取",
+    name: "Quarantined artifact reads",
     exact: true,
   });
   const admissionHeading = page.getByRole("heading", {
-    name: "晋升准入",
+    name: "Promotion admission",
     exact: true,
   });
   await expect(readHeading).toBeVisible();
@@ -1432,11 +1454,11 @@ test("a quarantined artifact reads as an ongoing state in both themes", async ({
 
   const quarantineAlert = page
     .locator(".ant-alert")
-    .filter({ hasText: "制品已隔离" })
+    .filter({ hasText: "Artifact quarantined" })
     .first();
   for (const mode of ["dark", "light"] as const) {
     if (mode === "light") {
-      await page.getByRole("button", { name: /选择主题/ }).click();
+      await page.getByRole("button", { name: /Choose theme/ }).click();
       await page.getByRole("menuitem", { name: /Gateway Light/ }).click();
       await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
       await testInfo.attach("quarantine-single-light-events.json", {
@@ -1497,28 +1519,32 @@ test("a blocked admission reads as a policy judgment in both themes", async ({
 
   const coordinate = "releases/example-1.zip";
   const openEvaluation = async () => {
-    await page.getByRole("combobox", { name: "搜索并选择源制品" }).click();
+    await page
+      .getByRole("combobox", { name: "Search and select a source artifact" })
+      .click();
     await page
       .locator(".ant-select-item-option")
       .filter({ hasText: coordinate })
       .first()
       .click();
-    await page.getByRole("combobox", { name: "选择目标仓库" }).click();
+    await page
+      .getByRole("combobox", { name: "Select target repository" })
+      .click();
     await page
       .locator(".ant-select-item-option")
       .filter({ hasText: "production-files" })
       .first()
       .click();
-    await page.getByRole("button", { name: "评估准入" }).click();
+    await page.getByRole("button", { name: "Evaluate admission" }).click();
   };
 
   const policyAlert = page
     .locator(".ant-alert")
-    .filter({ hasText: "安全策略阻止晋升" })
+    .filter({ hasText: "Security policy blocks promotion" })
     .first();
   for (const mode of ["dark", "light"] as const) {
     if (mode === "light") {
-      await page.getByRole("button", { name: /选择主题/ }).click();
+      await page.getByRole("button", { name: /Choose theme/ }).click();
       await page.getByRole("menuitem", { name: /Gateway Light/ }).click();
       await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     }
@@ -1578,7 +1604,7 @@ for (const delayedMotion of [false, true]) {
           (await page.locator("html").getAttribute("data-theme-id")) !==
           `gateway-${mode}`
         ) {
-          await page.getByRole("button", { name: /选择主题/ }).click();
+          await page.getByRole("button", { name: /Choose theme/ }).click();
           await page
             .getByRole("menuitem", {
               name: mode === "dark" ? /Gateway Dark/ : /Gateway Light/,
@@ -1595,7 +1621,7 @@ for (const delayedMotion of [false, true]) {
           });
         }
         await page
-          .getByRole("button", { name: /添加授权/ })
+          .getByRole("button", { name: /Add grant/ })
           .last()
           .click();
         const dialog = page.locator(".ant-modal").first();
@@ -1634,15 +1660,15 @@ for (const delayedMotion of [false, true]) {
         expect(overflow.hidden, `${width}px dialog body overflows`).toBe(0);
 
         for (const label of [
-          "授权主体",
-          "权限级别",
-          "资源范围",
-          "本规则授予",
+          "Principal",
+          "Permission level",
+          "Resource scope",
+          "Granted by this rule",
         ]) {
           await expect(body.getByText(label, { exact: true })).toBeVisible();
         }
         // The scope control and its prefix input are reachable, not cut off.
-        const prefix = body.getByText("整个仓库", { exact: true });
+        const prefix = body.getByText("Entire repository", { exact: true });
         await expect(prefix).toBeVisible();
         const box = await prefix.boundingBox();
         const dialogBox = await dialog.boundingBox();
@@ -1729,7 +1755,7 @@ for (const width of [1440, 390]) {
       const panel = page.getByTestId("npm-version-governance");
       await expect(panel.getByText(warning, { exact: true })).toBeVisible();
       await expect(
-        panel.getByRole("button", { name: "编辑弃用提示" }),
+        panel.getByRole("button", { name: "Edit deprecation" }),
       ).toBeVisible();
       const geometry = await panel.evaluate((node) => {
         const box = node.getBoundingClientRect();
@@ -1759,7 +1785,7 @@ for (const width of [1440, 390]) {
             ".ant-modal.ant-zoom-enter-active, .ant-modal.ant-zoom-appear-active { animation-duration: 800ms !important; }",
         });
       }
-      await panel.getByRole("button", { name: "编辑弃用提示" }).click();
+      await panel.getByRole("button", { name: "Edit deprecation" }).click();
       const dialog = page.getByRole("dialog");
       // Visibility precedes AntD's opening scale. Wait before measuring or
       // clicking so the button cannot move between pointer down and pointer up.
@@ -1768,7 +1794,7 @@ for (const width of [1440, 390]) {
       expect(bounds!.x).toBeGreaterThanOrEqual(0);
       expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
       await dialog.getByRole("textbox").fill("Use 0.2.0");
-      await dialog.getByRole("button", { name: "保存提示" }).click();
+      await dialog.getByRole("button", { name: "Save message" }).click();
       await expect(dialog).not.toBeVisible();
       await expect(panel.getByText("Use 0.2.0", { exact: true })).toBeVisible();
       expect(writes).toHaveLength(1);

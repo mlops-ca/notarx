@@ -227,14 +227,16 @@ for (const operation of ["GET", "POST"] as const)
       if (operation === "GET") {
         vi.mocked(getMigrationSource).mockImplementationOnce(pending);
         await userEvent.click(
-          screen.getAllByRole("button", { name: "刷新源" })[1],
+          screen.getAllByRole("button", { name: "Refresh source" })[1],
         );
         await waitFor(() => expect(finish).toBeDefined());
       } else {
         vi.mocked(updateMigrationSource).mockImplementationOnce(pending);
-        await userEvent.click(screen.getByRole("button", { name: "编辑源" }));
         await userEvent.click(
-          screen.getByRole("button", { name: "保存迁移源" }),
+          screen.getByRole("button", { name: "Edit source" }),
+        );
+        await userEvent.click(
+          screen.getByRole("button", { name: "Save migration source" }),
         );
         await waitFor(() =>
           expect(updateMigrationSource).toHaveBeenCalledTimes(1),
@@ -275,7 +277,9 @@ for (const operation of ["GET", "POST"] as const)
       expect(document.body).not.toHaveTextContent(migrationSource.baseUrl);
       expect(localStorage.getItem("ag.console.token")).toBe("bob-token");
       expect(
-        screen.queryByText(/没有读取或管理此迁移源的权限/),
+        screen.queryByText(
+          /This migration source requires a platform administrator identity\./,
+        ),
       ).not.toBeInTheDocument();
       if (operation === "POST")
         expect(updateMigrationSource).toHaveBeenCalledTimes(1);

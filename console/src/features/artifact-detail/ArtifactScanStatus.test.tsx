@@ -62,8 +62,8 @@ describe("ArtifactScanStatus", () => {
 
     renderStatus();
 
-    expect(await screen.findByText("未扫描")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /重新扫描/ }));
+    expect(await screen.findByText("Not scanned")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Rescan/ }));
 
     expect(mockCreateScan).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -71,7 +71,7 @@ describe("ArtifactScanStatus", () => {
         body: { coordinate: "releases/widget.bin", digest },
       }),
     );
-    expect(await screen.findByText("待处理")).toBeInTheDocument();
+    expect(await screen.findByText("Pending")).toBeInTheDocument();
   });
 
   it("keeps status failures visible and retries them", async () => {
@@ -100,10 +100,12 @@ describe("ArtifactScanStatus", () => {
 
     renderStatus();
 
-    expect(await screen.findByText("读取扫描状态失败")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /重\s*试/ }));
+    expect(
+      await screen.findByText("Failed to load scan status"),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Retry/ }));
 
-    expect(await screen.findByText("已完成")).toBeInTheDocument();
+    expect(await screen.findByText("Completed")).toBeInTheDocument();
     expect(mockGetStatus).toHaveBeenCalledTimes(2);
   });
 
@@ -130,9 +132,9 @@ describe("ArtifactScanStatus", () => {
     mockCreateScan.mockRejectedValue(new Error("queue unavailable"));
 
     renderStatus();
-    await screen.findByText(/扫描状态/);
+    await screen.findByText(/Scan status/);
 
-    await userEvent.click(screen.getByRole("button", { name: /重新扫描/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Rescan/ }));
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveClass("ant-alert-error");

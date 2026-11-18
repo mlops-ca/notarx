@@ -217,7 +217,7 @@ for (const format of ["maven", "raw"] as const) {
         format,
       );
       await page.goto(`/repositories/${repositoryId}`);
-      await page.getByText("目录", { exact: true }).click();
+      await page.getByText("Directory", { exact: true }).click();
       const tree = page.locator(".ag-repository-tree");
       await tree
         .getByText(
@@ -232,9 +232,11 @@ for (const format of ["maven", "raw"] as const) {
           .click();
       }
       await tree.getByText(asset.name!, { exact: true }).click();
-      const inspector = page.getByRole("complementary", { name: "节点详情" });
+      const inspector = page.getByRole("complementary", {
+        name: "Node details",
+      });
       await expect(
-        inspector.getByText("已缓存", { exact: true }),
+        inspector.getByText("Cached", { exact: true }),
       ).toBeVisible();
       await expect(
         inspector.getByText(repositoryName, { exact: true }),
@@ -265,7 +267,7 @@ for (const format of ["maven", "raw"] as const) {
         path: testInfo.outputPath(`proxy-${format}-${width}.png`),
         fullPage: true,
       });
-      await inspector.getByRole("button", { name: "在列表中查看" }).click();
+      await inspector.getByRole("button", { name: "Open in list" }).click();
       await expect
         .poll(() => new URL(page.url()).searchParams.get("artifact"))
         .toBe(coordinate);
@@ -274,17 +276,17 @@ for (const format of ["maven", "raw"] as const) {
         expect(new URL(page.url()).searchParams.get("build")).toBe("2");
       await page.reload();
       await expect(
-        page.getByRole("alert", { name: "页面加载失败" }),
+        page.getByRole("alert", { name: "Page failed to load" }),
       ).toHaveCount(0);
       expect(failures).toEqual([]);
       await expect(
         page.getByPlaceholder(
-          format === "maven" ? "搜索 GAV 坐标…" : "搜索路径…",
+          format === "maven" ? "Search GAV coordinates…" : "Search paths…",
         ),
       ).toHaveValue(format === "raw" ? decodeURIComponent(path) : path);
       if (format === "raw")
         await expect(
-          page.getByRole("button", { name: "删除文件", exact: true }),
+          page.getByRole("button", { name: "Delete file", exact: true }),
         ).toHaveCount(0);
       expect(failures).toEqual([]);
     });

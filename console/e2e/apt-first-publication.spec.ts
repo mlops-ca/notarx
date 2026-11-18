@@ -66,10 +66,10 @@ const snapshot = {
 };
 
 for (const [width, locale, theme, errorMode] of [
-  [1440, "zh-CN", "dark", "503"],
-  [390, "en-US", "light", "503"],
-  [1440, "en-US", "light", "lost-response"],
-  [390, "zh-CN", "dark", "lost-response"],
+  [1440, "en-CA", "dark", "503"],
+  [390, "en-CA", "light", "503"],
+  [1440, "en-CA", "light", "lost-response"],
+  [390, "en-CA", "dark", "lost-response"],
 ] as const) {
   test(`APT first publication ${width}px ${locale} ${errorMode}`, async ({
     page,
@@ -77,7 +77,6 @@ for (const [width, locale, theme, errorMode] of [
     expect(digest).toBe(
       "sha256:b8e6a938dd5372b04f26751b8fea447fa2277c4e4cc2a964c87daff0dc6db63d",
     );
-    const en = locale === "en-US";
     await page.setViewportSize({ width, height: 1000 });
     await page.emulateMedia({ reducedMotion: "reduce" });
     await authenticateAsAdmin(page);
@@ -230,7 +229,7 @@ for (const [width, locale, theme, errorMode] of [
     await page.goto(`/repositories/${repositoryId}?tab=apt-snapshots`);
     const surface = page.locator(".ag-apt-first-publication");
     const stage = surface.getByRole("button", {
-      name: en ? "Stage and review package" : "暂存并核对软件包",
+      name: "Stage and review package",
       exact: true,
     });
     await expect(stage).toBeDisabled();
@@ -244,9 +243,7 @@ for (const [width, locale, theme, errorMode] of [
     ).toBeVisible();
     await expect(
       surface.getByRole("heading", {
-        name: en
-          ? "Staged: review the server-identified package"
-          : "已暂存：核对服务端识别的身份",
+        name: "Staged: review the server-identified package",
       }),
     ).toBeFocused();
     await page.keyboard.press("Tab");
@@ -255,7 +252,7 @@ for (const [width, locale, theme, errorMode] of [
     expect(uploadCount).toBe(1);
     expect(publications).toEqual([]);
     const publish = surface.getByRole("button", {
-      name: en ? "Confirm and sign first snapshot" : "确认并签署首次快照",
+      name: "Confirm and sign first snapshot",
       exact: true,
     });
     await expect(publish).toBeDisabled();
@@ -298,14 +295,12 @@ for (const [width, locale, theme, errorMode] of [
     });
     await surface
       .getByRole("checkbox", {
-        name: en
-          ? "I checked the package name, version and architecture"
-          : "已核对包名、版本和架构",
+        name: "I checked the package name, version and architecture",
       })
       .check();
     await publish.click();
     const retry = surface.getByRole("button", {
-      name: en ? "Retry first publication" : "重试首次发布",
+      name: "Retry first publication",
       exact: true,
     });
     await expect(retry).toBeEnabled();
@@ -318,7 +313,7 @@ for (const [width, locale, theme, errorMode] of [
     ).toBeVisible();
     await retry.click();
     await expect(
-      page.getByText(en ? "Current snapshot #1" : "当前快照 #1", {
+      page.getByText("Current snapshot #1", {
         exact: true,
       }),
     ).toBeVisible();

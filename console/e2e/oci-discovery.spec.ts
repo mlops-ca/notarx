@@ -38,7 +38,7 @@ const profile: FormatProfile = {
   },
 };
 
-for (const locale of ["en-US", "zh-CN"] as const) {
+for (const locale of ["en-CA"] as const) {
   for (const width of [1440, 390]) {
     test(`OCI discovery coverage stays clear in ${locale} at ${width}px`, async ({
       page,
@@ -109,25 +109,16 @@ for (const locale of ["en-US", "zh-CN"] as const) {
       });
       await page.goto(`/repositories/${repository.id}?tab=artifacts`);
       const notice = page.getByRole("region", {
-        name:
-          locale === "zh-CN"
-            ? "OCI 目录与关联制品"
-            : "OCI catalog and attached artifacts",
+        name: "OCI catalog and attached artifacts",
       });
       await expect(notice).toBeVisible();
       await expect(notice).toContainText(
-        locale === "zh-CN"
-          ? "缓存列表不代表完整库存"
-          : "cache below is not a complete inventory",
+        "cache below is not a complete inventory",
       );
       await expect(notice).toContainText(
-        locale === "zh-CN"
-          ? "尚未验证签名者身份与信任策略"
-          : "does not verify signer identity or trust policy",
+        "does not verify signer identity or trust policy",
       );
-      await expect(notice).toContainText(
-        locale === "zh-CN" ? "不使用标签回退" : "tag fallback is unavailable",
-      );
+      await expect(notice).toContainText("tag fallback is unavailable");
       await expect(page.getByText("team/image", { exact: true })).toBeVisible();
       await page.evaluate(() => document.fonts.ready);
       const geometry = await notice.evaluate((section) => {

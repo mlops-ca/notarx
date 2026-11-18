@@ -120,10 +120,14 @@ describe("incremental runtime log controls", () => {
       selection.removeAllRanges();
       selection.addRange(range);
       fireEvent(document, new Event("selectionchange"));
-      expect(screen.getByRole("button", { name: /复制选择/ })).toBeEnabled();
-      fireEvent.click(screen.getByRole("button", { name: /刷新快照/ }));
+      expect(
+        screen.getByRole("button", { name: /Copy selection/ }),
+      ).toBeEnabled();
+      fireEvent.click(screen.getByRole("button", { name: /Refresh snapshot/ }));
       await screen.findByText("event-2");
-      expect(screen.getByRole("button", { name: /复制选择/ })).toBeDisabled();
+      expect(
+        screen.getByRole("button", { name: /Copy selection/ }),
+      ).toBeDisabled();
       expect(selection.toString()).toBe("");
     });
 
@@ -146,13 +150,19 @@ describe("incremental runtime log controls", () => {
     selection.removeAllRanges();
     selection.addRange(range);
     fireEvent(document, new Event("selectionchange"));
-    expect(screen.getByRole("button", { name: /复制选择/ })).toBeEnabled();
-    fireEvent.click(screen.getByRole("button", { name: /刷新快照/ }));
-    await screen.findByText("需要先更新密码，之后再查询运行日志。");
-    expect(screen.queryByRole("button", { name: /复制选择/ })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /刷新快照/ }));
+    expect(
+      screen.getByRole("button", { name: /Copy selection/ }),
+    ).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: /Refresh snapshot/ }));
+    await screen.findByText(
+      "Update your password before querying runtime logs.",
+    );
+    expect(screen.queryByRole("button", { name: /Copy selection/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Refresh snapshot/ }));
     await screen.findByText("event-2");
-    expect(screen.getByRole("button", { name: /复制选择/ })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /Copy selection/ }),
+    ).toBeDisabled();
   });
 
   it("rechecks an empty native selection at click time even without a selection event", async () => {
@@ -174,11 +184,15 @@ describe("incremental runtime log controls", () => {
     selection.removeAllRanges();
     selection.addRange(range);
     fireEvent(document, new Event("selectionchange"));
-    expect(screen.getByRole("button", { name: /复制选择/ })).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: /Copy selection/ }),
+    ).toBeEnabled();
     selection.removeAllRanges();
-    fireEvent.click(screen.getByRole("button", { name: /复制选择/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Copy selection/ }));
     expect(writeText).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: /复制选择/ })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /Copy selection/ }),
+    ).toBeDisabled();
   });
 
   it("copies a full multi-row selection and rejects an oversized UTF-8 selection visibly", async () => {
@@ -193,7 +207,7 @@ describe("incremental runtime log controls", () => {
       value: { writeText },
     });
     mount();
-    const viewport = await screen.findByLabelText("运行日志流");
+    const viewport = await screen.findByLabelText("Runtime log stream");
     const range = document.createRange();
     range.selectNodeContents(viewport);
     const selection = window.getSelection()!;
@@ -202,13 +216,15 @@ describe("incremental runtime log controls", () => {
     const actualSelected = selection.toString();
     expect(actualSelected.length).toBeGreaterThan(24_000);
     fireEvent(document, new Event("selectionchange"));
-    fireEvent.click(screen.getByRole("button", { name: /复制选择/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Copy selection/ }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(actualSelected));
-    vi.spyOn(selection, "toString").mockReturnValue("中".repeat(350_000));
+    vi.spyOn(selection, "toString").mockReturnValue("€".repeat(350_000));
     fireEvent(document, new Event("selectionchange"));
-    expect(screen.getByRole("button", { name: /复制选择/ })).toBeDisabled();
     expect(
-      screen.getByText("选择内容超过 1 MiB，请缩小选择后复制"),
+      screen.getByRole("button", { name: /Copy selection/ }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText("Selection exceeds 1 MiB; select less text to copy"),
     ).toBeInTheDocument();
     expect(writeText).toHaveBeenCalledTimes(1);
   });
@@ -219,7 +235,7 @@ describe("incremental runtime log controls", () => {
       .mockResolvedValueOnce(reply(page(2, 2, { items: [row(2), row(2)] })));
     mount();
     await screen.findByText("event-1");
-    const viewport = screen.getByLabelText("运行日志流");
+    const viewport = screen.getByLabelText("Runtime log stream");
     Object.defineProperties(viewport, {
       scrollHeight: { configurable: true, value: 1000 },
       clientHeight: { configurable: true, value: 100 },
@@ -227,12 +243,12 @@ describe("incremental runtime log controls", () => {
     });
     fireEvent.scroll(viewport);
     await act(async () =>
-      fireEvent.click(screen.getByRole("button", { name: /跟随新日志/ })),
+      fireEvent.click(screen.getByRole("button", { name: /Follow new logs/ })),
     );
     expect(screen.getAllByText("event-2")).toHaveLength(1);
-    expect(screen.getByRole("button", { name: /条未读/ })).toHaveTextContent(
-      "1 条未读",
-    );
+    expect(
+      screen.getByRole("button", { name: /.+ unread · Resume at bottom/ }),
+    ).toHaveTextContent("1 unread");
   });
   it("drains 100+ pages from consumed cursors, deduplicates, and preserves the live anchor through older history", async () => {
     api
@@ -245,11 +261,11 @@ describe("incremental runtime log controls", () => {
       .mockResolvedValueOnce(reply(page(430, 460)));
     mount();
     await screen.findByText("event-230");
-    fireEvent.click(screen.getByRole("button", { name: /加载更早日志/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Load older logs/ }));
     await screen.findByText("event-1");
     vi.useFakeTimers();
     await act(async () =>
-      fireEvent.click(screen.getByRole("button", { name: /跟随新日志/ })),
+      fireEvent.click(screen.getByRole("button", { name: /Follow new logs/ })),
     );
     expect(api).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -281,7 +297,9 @@ describe("incremental runtime log controls", () => {
       2,
       ...Array.from({ length: 231 }, (_, i) => i + 230),
     ]);
-    expect(screen.queryByText(/服务器保留已覆盖/)).toBeNull();
+    expect(
+      screen.queryByText(/Server retention overwrote some unread logs/),
+    ).toBeNull();
   });
 
   it("pauses network reads, suspends hidden-page polling and resumes from the same cursor", async () => {
@@ -293,14 +311,14 @@ describe("incremental runtime log controls", () => {
     await screen.findByText("event-1");
     vi.useFakeTimers();
     await act(async () =>
-      fireEvent.click(screen.getByRole("button", { name: /跟随新日志/ })),
+      fireEvent.click(screen.getByRole("button", { name: /Follow new logs/ })),
     );
     expect(screen.getByText("event-2")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /暂停跟随/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Pause follow/ }));
     await act(async () => vi.advanceTimersByTimeAsync(10_000));
     expect(api).toHaveBeenCalledTimes(2);
     await act(async () =>
-      fireEvent.click(screen.getByRole("button", { name: /跟随新日志/ })),
+      fireEvent.click(screen.getByRole("button", { name: /Follow new logs/ })),
     );
     expect(api).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -332,7 +350,7 @@ describe("incremental runtime log controls", () => {
     // Complete the initial snapshot's scroll effect before simulating a reader
     // who has scrolled away from the bottom.
     await act(async () => {});
-    const viewport = screen.getByLabelText("运行日志流");
+    const viewport = screen.getByLabelText("Runtime log stream");
     Object.defineProperties(viewport, {
       scrollHeight: { configurable: true, value: 1000 },
       clientHeight: { configurable: true, value: 100 },
@@ -340,11 +358,11 @@ describe("incremental runtime log controls", () => {
     });
     fireEvent.scroll(viewport);
     await act(async () =>
-      fireEvent.click(screen.getByRole("button", { name: /跟随新日志/ })),
+      fireEvent.click(screen.getByRole("button", { name: /Follow new logs/ })),
     );
     expect(viewport.scrollTop).toBe(20);
     expect(
-      screen.getByRole("button", { name: /2 条未读/ }),
+      screen.getByRole("button", { name: /2 unread/ }),
     ).toBeInTheDocument();
   });
 
@@ -367,24 +385,30 @@ describe("incremental runtime log controls", () => {
     mount();
     await screen.findByText("event-1");
     await waitFor(() => {
-      const refresh = screen.getByRole("button", { name: /刷新快照/ });
+      const refresh = screen.getByRole("button", { name: /Refresh snapshot/ });
       expect(refresh).not.toBeDisabled();
       expect(refresh).not.toHaveClass("ant-btn-loading");
     });
-    fireEvent.click(screen.getByRole("button", { name: /刷新快照/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Refresh snapshot/ }));
     expect(api).toHaveBeenCalledTimes(2);
-    await screen.findByText("当前节点未启用内存日志查询，请检查日志缓冲配置。");
+    await screen.findByText(
+      "Memory log queries are disabled on this node. Check the buffer configuration.",
+    );
     expect(screen.getByText("event-1")).toBeInTheDocument();
     await waitFor(() => {
-      const refresh = screen.getByRole("button", { name: /刷新快照/ });
+      const refresh = screen.getByRole("button", { name: /Refresh snapshot/ });
       expect(refresh).not.toBeDisabled();
       expect(refresh).not.toHaveClass("ant-btn-loading");
     });
-    fireEvent.click(screen.getByRole("button", { name: /刷新快照/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Refresh snapshot/ }));
     expect(api).toHaveBeenCalledTimes(3);
-    await screen.findByText("需要先更新密码，之后再查询运行日志。");
+    await screen.findByText(
+      "Update your password before querying runtime logs.",
+    );
     expect(screen.queryByText("event-1")).toBeNull();
-    expect(screen.queryByRole("status", { name: /查询运行日志/ })).toBeNull();
+    expect(
+      screen.queryByRole("status", { name: /SearchRuntime logs/ }),
+    ).toBeNull();
   });
 
   it("clears the stream when an incremental response changes session", async () => {
@@ -398,8 +422,8 @@ describe("incremental runtime log controls", () => {
     );
     mount();
     await screen.findByText("event-1");
-    fireEvent.click(screen.getByRole("button", { name: /跟随新日志/ }));
-    await screen.findByText("进程或会话已变化，请刷新新快照");
+    fireEvent.click(screen.getByRole("button", { name: /Follow new logs/ }));
+    await screen.findByText("Process or session changed; refresh the snapshot");
     expect(screen.queryByText("event-1")).toBeNull();
     expect(screen.queryByText("event-2")).toBeNull();
   });
@@ -417,8 +441,8 @@ describe("incremental runtime log controls", () => {
       .mockResolvedValueOnce(reply(page(7, 7)));
     mount();
     await screen.findByText("event-1");
-    fireEvent.click(screen.getByRole("button", { name: /跟随新日志/ }));
-    fireEvent.click(screen.getByRole("button", { name: /清除筛选/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Follow new logs/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Clear filters/ }));
     await screen.findByText("event-7");
     await act(async () => complete?.(reply(page(99, 99))));
     expect(screen.queryByText("event-99")).toBeNull();
@@ -439,10 +463,10 @@ describe("incremental runtime log controls", () => {
     mount();
     await screen.findByText("event-1");
     vi.useFakeTimers();
-    fireEvent.click(screen.getByRole("button", { name: /跟随新日志/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Follow new logs/ }));
     await act(async () => vi.advanceTimersByTimeAsync(5000));
     expect(
-      screen.getByText("日志查询失败，请检查连接后重试。"),
+      screen.getByText("Log query failed. Check the connection and retry."),
     ).toBeInTheDocument();
     expect(screen.getByText("event-1")).toBeInTheDocument();
     expect(api.mock.calls.at(-1)?.[0]?.signal?.aborted).toBe(true);
@@ -461,11 +485,11 @@ describe("incremental runtime log controls", () => {
       .mockResolvedValueOnce(reply(page(2, 3)));
     mount();
     await screen.findByText("event-1");
-    fireEvent.click(screen.getByRole("button", { name: /跟随新日志/ }));
-    fireEvent.click(screen.getByRole("button", { name: /暂停跟随/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Follow new logs/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Pause follow/ }));
     await act(async () => complete?.(reply(page(2, 2))));
     expect(screen.queryByText("event-2")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /跟随新日志/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Follow new logs/ }));
     await screen.findByText("event-3");
     expect(screen.getByText("event-2")).toBeInTheDocument();
     expect(api.mock.calls.at(-1)?.[0]?.query?.afterCursor).toBe("cursor-1");
@@ -485,16 +509,18 @@ describe("incremental runtime log controls", () => {
     mount();
     await screen.findByText("event-1");
     await waitFor(() => {
-      const refresh = screen.getByRole("button", { name: /刷新快照/ });
+      const refresh = screen.getByRole("button", { name: /Refresh snapshot/ });
       expect(refresh).not.toBeDisabled();
       expect(refresh).not.toHaveClass("ant-btn-loading");
     });
-    fireEvent.click(screen.getByRole("button", { name: /刷新快照/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Refresh snapshot/ }));
     expect(api).toHaveBeenCalledTimes(2);
     await screen.findByText("event-2");
     expect(screen.queryByText("event-1")).toBeNull();
     expect(
-      screen.getByText("已切换新进程或会话，旧记录已清除"),
+      screen.getByText(
+        "Changed to a new process or session; previous records cleared",
+      ),
     ).toBeInTheDocument();
   });
 
@@ -519,38 +545,32 @@ describe("incremental runtime log controls", () => {
     await screen.findByText("event-50");
     vi.useFakeTimers();
     await act(async () =>
-      fireEvent.click(screen.getByRole("button", { name: /跟随新日志/ })),
+      fireEvent.click(screen.getByRole("button", { name: /Follow new logs/ })),
     );
     for (let i = 0; i < 3; i++)
       await act(async () => vi.advanceTimersByTimeAsync(1000));
     expect(document.querySelectorAll("[data-sequence]")).toHaveLength(300);
-    expect(screen.getByText(/客户端容量已移除 130 条/)).toBeInTheDocument();
     expect(
-      screen.getByText("服务器保留已覆盖部分未读日志"),
+      screen.getByText(/Client capacity removed 130 rows/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Server retention overwrote some unread logs"),
     ).toBeInTheDocument();
   });
 
-  for (const locale of ["zh-CN", "en-US"])
+  for (const locale of ["en-CA"])
     it(`reports actual source policy and missing-event uncertainty in ${locale}`, async () => {
       localStorage.setItem("ag.console.locale", locale);
       api.mockResolvedValueOnce(reply(page(1, 0)));
       mount();
       await waitFor(() =>
-        expect(
-          screen.getByText(
-            locale === "zh-CN" ? "当前范围内没有日志" : "No logs in this range",
-          ),
-        ).toBeInTheDocument(),
+        expect(screen.getByText("No logs in this range")).toBeInTheDocument(),
       );
       expect(
         screen.getByText(/INFO.*limited.*1000ms.*1000/),
       ).toBeInTheDocument();
       expect(
-        screen.getByText(
-          locale === "zh-CN"
-            ? /DEBUG 筛选不会启用 DEBUG/
-            : /A DEBUG filter does not enable DEBUG/,
-        ),
+        screen.getByText(/A DEBUG filter does not enable DEBUG/),
       ).toBeInTheDocument();
     });
 });

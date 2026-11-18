@@ -27,15 +27,15 @@ describe("email input and isolated preview", () => {
     expect(validEmailTarget("name\nInjected", "a@example.test", true)).toBe(
       false,
     );
-    expect(validEmailTarget("界".repeat(129), "", false)).toBe(false);
+    expect(validEmailTarget("€".repeat(129), "", false)).toBe(false);
   });
   it("keeps mail layout while stripping executable, navigation and external elements", () => {
     const html = emailPreviewDocument(
-      '<html><head><base href="https://evil.example"><style>p{color:red}</style></head><body><table><tr><td>合成 &amp; Synthetic</td></tr></table><a href="https://evil.example" onclick="alert(1)">Details</a><img src="https://evil.example/pixel"><script>alert(1)</script><iframe src="https://evil.example"></iframe><form action="https://evil.example"><input></form><svg onload="alert(1)"></svg></body></html>',
+      '<html><head><base href="https://evil.example"><style>p{color:red}</style></head><body><table><tr><td>Synthetic &amp; Synthetic</td></tr></table><a href="https://evil.example" onclick="alert(1)">Details</a><img src="https://evil.example/pixel"><script>alert(1)</script><iframe src="https://evil.example"></iframe><form action="https://evil.example"><input></form><svg onload="alert(1)"></svg></body></html>',
     );
     expect(html).toContain("default-src 'none'");
     expect(html).toContain("form-action 'none'");
-    expect(html).toContain("合成 &amp; Synthetic");
+    expect(html).toContain("Synthetic &amp; Synthetic");
     expect(html).toContain("<table>");
     expect(html).toContain("p{color:red}");
     expect(html).not.toMatch(
@@ -48,7 +48,7 @@ describe("email input and isolated preview", () => {
 it.each(["constructor", "__proto__", "toString", "unknown-private-raw"])(
   "uses a fixed fallback for unknown server codes: %s",
   (code) => {
-    const text = createTranslator("en-US");
+    const text = createTranslator("en-CA");
     expect(
       safeEmailError({ code, message: "private-raw" }, text, "test"),
     ).toContain("request failed");
@@ -57,18 +57,16 @@ it.each(["constructor", "__proto__", "toString", "unknown-private-raw"])(
 );
 
 it("asks test conflicts to refresh and reconfirm without claiming an address was cleared", () => {
-  for (const language of ["zh", "en"]) {
-    const text = createTranslator(language === "zh" ? "zh-CN" : "en-US");
+  for (const language of ["en"]) {
+    const text = createTranslator(language === "zh" ? "zh-CN" : "en-CA");
     const message = safeEmailError({ code: "version_conflict" }, text, "test");
-    expect(message).not.toMatch(
-      /敏感地址已清除|address was cleared|重新编辑|edit again/,
-    );
+    expect(message).not.toMatch(/address was cleared|edit again/);
     expect(
       safeEmailError({ code: "version_conflict" }, text, "save"),
-    ).not.toMatch(/敏感地址已清除|address was cleared/);
+    ).not.toMatch(/address was cleared/);
     expect(message).toMatch(
       language === "zh"
-        ? /取消.*刷新.*重新确认/
+        ? /Cancel.*Refresh.*confirm again/
         : /Cancel.*refresh.*confirm again/,
     );
   }
@@ -85,18 +83,17 @@ it.each(["read", "save", "preview"] as const)(
       "queue_full",
       "invalid_request",
     ]) {
-      for (const language of ["zh", "en"]) {
-        const text = createTranslator(language === "zh" ? "zh-CN" : "en-US");
+      for (const language of ["en"]) {
+        const text = createTranslator(language === "zh" ? "zh-CN" : "en-CA");
         const message = safeEmailError(
           { code, message: "private-response-marker" },
           text,
           operation,
         );
         expect(message).not.toMatch(
-          /private-response-marker|同一标识|same key|Retry the same test/,
+          /private-response-marker|same key|Retry the same test/,
         );
         expect(message.length).toBeGreaterThan(10);
-        if (language === "zh") expect(message).toMatch(/[\u4e00-\u9fff]/);
       }
     }
   },

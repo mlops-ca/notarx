@@ -25,21 +25,24 @@ test("rejects a 24-hour-plus-one-second custom window before requesting logs", a
     });
   });
   await page.goto("/system?tab=logs");
-  await expect(page.getByText("当前范围内没有日志")).toBeVisible();
-  const custom = page.getByRole("combobox", { name: "时间范围", exact: true });
+  await expect(page.getByText("No logs in this range")).toBeVisible();
+  const custom = page.getByRole("combobox", {
+    name: "Date range",
+    exact: true,
+  });
   if (await custom.count()) {
     await custom.click();
-    await page.getByRole("option", { name: "自定义", exact: true }).click();
+    await page.getByRole("option", { name: "Custom", exact: true }).click();
   }
-  await page.getByPlaceholder("开始日期").fill("2026-10-02 22:07:26");
-  await page.getByPlaceholder("开始日期").press("Enter");
-  await page.getByPlaceholder("结束日期").fill("2026-10-03 22:07:27");
-  await page.getByPlaceholder("结束日期").press("Enter");
-  await page.getByPlaceholder("结束日期").press("Escape");
+  await page.getByPlaceholder("Start date").fill("2026-10-02 22:07:26");
+  await page.getByPlaceholder("Start date").press("Enter");
+  await page.getByPlaceholder("End date").fill("2026-10-03 22:07:27");
+  await page.getByPlaceholder("End date").press("Enter");
+  await page.getByPlaceholder("End date").press("Escape");
   const count = requests.length;
-  await page.getByRole("button", { name: /查询$/ }).click();
+  await page.getByRole("button", { name: /Search$/ }).click();
   await expect(page.getByRole("alert")).toContainText(
-    "时间范围不能超过 24 小时",
+    "Time range cannot exceed 24 hours",
   );
   expect(requests.length).toBe(count);
 });

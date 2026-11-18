@@ -118,7 +118,7 @@ describe("ConanArtifactDetail", () => {
     await user.click(
       linuxRow.querySelector<HTMLElement>("button.ant-btn-dangerous")!,
     );
-    const confirm = await screen.findAllByRole("button", { name: /删\s*除/ });
+    const confirm = await screen.findAllByRole("button", { name: /Delete/ });
     await user.click(confirm[confirm.length - 1]);
 
     await waitFor(() =>

@@ -51,7 +51,7 @@ describe("Maven proxy cache cards", () => {
     );
     await userEvent.clear(input);
     await userEvent.type(input, "org.example:demo:1.0.0");
-    await userEvent.click(screen.getByRole("button", { name: /^预\s*热$/ }));
+    await userEvent.click(screen.getByRole("button", { name: /^Warm$/ }));
 
     await waitFor(() => expect(onWarmed).toHaveBeenCalledTimes(1));
     const [url, init] = fetchMock.mock.calls[0];
@@ -74,7 +74,7 @@ describe("Maven proxy cache cards", () => {
     );
 
     await userEvent.type(screen.getByRole("textbox"), "org/example/demo/");
-    await userEvent.click(screen.getByRole("button", { name: /^失\s*效$/ }));
+    await userEvent.click(screen.getByRole("button", { name: /^Invalidate$/ }));
     await waitFor(() =>
       expect(invalidateProxyCache).toHaveBeenCalledWith({
         path: { repositoryId: repoId },
@@ -82,7 +82,9 @@ describe("Maven proxy cache cards", () => {
       }),
     );
 
-    await userEvent.click(screen.getByRole("button", { name: "清理负缓存" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Clear negative cache" }),
+    );
     await waitFor(() => expect(clearProxyNegativeCache).toHaveBeenCalled());
     expect(onWarmed).toHaveBeenCalledTimes(2);
   });

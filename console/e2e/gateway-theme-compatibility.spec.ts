@@ -15,7 +15,9 @@ test("Gateway Dark projects the v2 shell and menu palette", async ({
     "data-theme-id",
     "gateway-dark",
   );
-  await expect(page.getByRole("heading", { name: "站点设置" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Site settings" }),
+  ).toBeVisible();
 
   const palette = await page.evaluate(() => {
     const style = (selector: string) => {
@@ -83,7 +85,9 @@ test("Gateway Light projects the v2 shell and menu palette", async ({
     "data-theme-id",
     "gateway-light",
   );
-  await expect(page.getByRole("heading", { name: "站点设置" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Site settings" }),
+  ).toBeVisible();
 
   const palette = await page.evaluate(() => {
     const style = (selector: string) => {
@@ -151,7 +155,7 @@ test("switching back from an extension theme restores Gateway Dark exactly", asy
     "data-theme-id",
     "aerok-dark",
   );
-  await page.getByRole("button", { name: /选择主题.*Aerok Dark/ }).click();
+  await page.getByRole("button", { name: /Choose theme.*Aerok Dark/ }).click();
   await page.getByRole("menuitem", { name: /Gateway Dark/ }).click();
   await expect(page.locator("html")).toHaveAttribute(
     "data-theme-id",
@@ -232,7 +236,9 @@ for (const [themeID, expectedAction] of semanticThemeCases) {
       "data-theme-id",
       themeID,
     );
-    await expect(page.getByRole("heading", { name: "站点设置" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Site settings" }),
+    ).toBeVisible();
 
     const contract = await page.evaluate(() => {
       const root = document.documentElement;

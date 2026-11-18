@@ -62,10 +62,10 @@ it("saves edits against the loaded version and restarts the form on the new one"
   const audience = await screen.findByDisplayValue("artifact-gateway-api");
   await user.clear(audience);
   await user.type(audience, "gateway-api-v2");
-  await user.click(screen.getByRole("button", { name: /移除密钥/ }));
-  await user.click(screen.getByRole("button", { name: /标记移除/ }));
-  expect(screen.getByText("等待保存")).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: /保存并应用/ }));
+  await user.click(screen.getByRole("button", { name: /Remove secret/ }));
+  await user.click(screen.getByRole("button", { name: /Mark for removal/ }));
+  expect(screen.getByText("Pending save")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: /Save and apply/ }));
 
   await waitFor(() =>
     expect(replaceOidcSettings).toHaveBeenCalledWith({
@@ -77,12 +77,14 @@ it("saves edits against the loaded version and restarts the form on the new one"
     }),
   );
   expect(
-    await screen.findByText("配置已保存并在当前节点生效"),
+    await screen.findByText("Settings saved and active on this node"),
   ).toBeInTheDocument();
   expect(screen.getByDisplayValue("gateway-api-v2")).toBeInTheDocument();
   // The new version starts clean: no pending removal and nothing to save.
-  expect(screen.queryByText("等待保存")).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: /配置已同步/ })).toBeDisabled();
+  expect(screen.queryByText("Pending save")).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: /Settings synchronized/ }),
+  ).toBeDisabled();
 });
 
 it("rejects an enabled provider without an issuer before saving", async () => {
@@ -92,8 +94,10 @@ it("rejects an enabled provider without an issuer before saving", async () => {
 
   const issuer = await screen.findByDisplayValue(saved.issuer);
   await user.clear(issuer);
-  await user.click(screen.getByRole("button", { name: /保存并应用/ }));
+  await user.click(screen.getByRole("button", { name: /Save and apply/ }));
 
-  expect(await screen.findByText("启用 OIDC 时必填")).toBeInTheDocument();
+  expect(
+    await screen.findByText("Required when OIDC is enabled"),
+  ).toBeInTheDocument();
   expect(replaceOidcSettings).not.toHaveBeenCalled();
 });

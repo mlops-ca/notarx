@@ -62,24 +62,24 @@ it("pages forward by cursor, back from cache, and keeps the page when the next o
   renderPage();
 
   expect(await screen.findByText("user:first")).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "下一页" }));
+  await user.click(screen.getByRole("button", { name: "Next" }));
   expect(await screen.findByText("user:second")).toBeInTheDocument();
-  expect(screen.getByText("第 2 页 · 当前页 1 条")).toBeInTheDocument();
+  expect(screen.getByText("Page 2 · 1 records")).toBeInTheDocument();
   expect(vi.mocked(listAuditPage).mock.calls[1][0]?.query).toMatchObject({
     pageSize: 100,
     pageToken: "cursor-2",
   });
 
-  await user.click(screen.getByRole("button", { name: "上一页" }));
+  await user.click(screen.getByRole("button", { name: "Previous" }));
   expect(await screen.findByText("user:first")).toBeInTheDocument();
   expect(listAuditPage).toHaveBeenCalledTimes(2);
 
-  await user.click(screen.getByRole("button", { name: "下一页" }));
+  await user.click(screen.getByRole("button", { name: "Next" }));
   expect(await screen.findByText("user:second")).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "下一页" }));
+  await user.click(screen.getByRole("button", { name: "Next" }));
   expect(await screen.findByText("cursor expired")).toBeInTheDocument();
   expect(screen.getByText("user:second")).toBeInTheDocument();
-  expect(screen.getByText("第 2 页 · 当前页 1 条")).toBeInTheDocument();
+  expect(screen.getByText("Page 2 · 1 records")).toBeInTheDocument();
   expect(listAuditPage).toHaveBeenCalledTimes(3);
 });
 
@@ -98,12 +98,12 @@ it("refreshes from the first page with one request", async () => {
   renderPage();
 
   await screen.findByText("user:first");
-  await user.click(screen.getByRole("button", { name: "下一页" }));
+  await user.click(screen.getByRole("button", { name: "Next" }));
   await screen.findByText("user:second");
-  await user.click(screen.getByRole("button", { name: /刷\s*新/ }));
+  await user.click(screen.getByRole("button", { name: /Refresh/ }));
 
   expect(await screen.findByText("user:newest")).toBeInTheDocument();
-  expect(screen.getByText("第 1 页 · 当前页 1 条")).toBeInTheDocument();
+  expect(screen.getByText("Page 1 · 1 records")).toBeInTheDocument();
   await waitFor(() => expect(listAuditPage).toHaveBeenCalledTimes(3));
   expect(vi.mocked(listAuditPage).mock.calls[2][0]?.query).not.toHaveProperty(
     "pageToken",
@@ -124,14 +124,14 @@ it("opens filtered to the actor a link names", async () => {
     actor: "service-account:sa-1",
   });
   // The filter is visible, so it can be cleared.
-  expect(screen.getByRole("button", { name: /清\s*除/ })).toBeEnabled();
+  expect(screen.getByRole("button", { name: /Clear/ })).toBeEnabled();
 });
 
 it("reveals an actor supplied by navigation after advanced filters were collapsed", async () => {
   const user = userEvent.setup();
   vi.mocked(listAuditPage).mockResolvedValue({ data: { items: [] } } as never);
   renderPage("/audits?actor=service-account%3Asa-1");
-  const advanced = screen.getByRole("button", { name: /高级筛选/ });
+  const advanced = screen.getByRole("button", { name: /Advanced filters/ });
   expect(advanced).toHaveAttribute("aria-expanded", "true");
   await user.click(advanced);
   expect(advanced).toHaveAttribute("aria-expanded", "false");
@@ -144,18 +144,17 @@ it("reveals an actor supplied by navigation after advanced filters were collapse
       actor: "service-account:sa-2",
     }),
   );
-  expect(screen.getByRole("button", { name: /高级筛选/ })).toHaveAttribute(
-    "aria-expanded",
-    "true",
-  );
+  expect(
+    screen.getByRole("button", { name: /Advanced filters/ }),
+  ).toHaveAttribute("aria-expanded", "true");
   expect(screen.getByText("service-account:sa-2")).toBeVisible();
-  await user.click(screen.getByRole("button", { name: /清\s*除/ }));
+  await user.click(screen.getByRole("button", { name: /Clear/ }));
   await waitFor(() =>
     expect(
       vi.mocked(listAuditPage).mock.calls.at(-1)?.[0]?.query?.actor,
     ).toBeUndefined(),
   );
-  expect(screen.getByRole("button", { name: /清\s*除/ })).toBeDisabled();
+  expect(screen.getByRole("button", { name: /Clear/ })).toBeDisabled();
 });
 
 it("expands a native Conan publication to its persisted session and state", async () => {
@@ -183,7 +182,7 @@ it("expands a native Conan publication to its persisted session and state", asyn
 
   await user.click(await screen.findByText("service-account:conan-producer"));
   expect(screen.getByText(sessionId)).toBeVisible();
-  expect(screen.getByText("已提交")).toBeVisible();
+  expect(screen.getByText("Committed")).toBeVisible();
   expect(
     screen.queryByText(`sha256:${"b".repeat(64)}`),
   ).not.toBeInTheDocument();

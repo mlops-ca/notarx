@@ -14,7 +14,7 @@ import {
 } from "./usage";
 import { createTranslator } from "../messages/translate";
 
-const t = createTranslator("zh-CN");
+const t = createTranslator("en-CA");
 
 describe("Raw usage", () => {
   it("downloads to the readable file name and shell-quotes every user-controlled value", () => {

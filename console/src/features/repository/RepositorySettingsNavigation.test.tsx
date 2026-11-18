@@ -26,7 +26,7 @@ afterEach(() => {
 it.each(["go", "maven", "oci"] as const)(
   "drops the %s settings draft and all secrets on cached repository navigation",
   async (format) => {
-    localStorage.setItem("ag.console.locale", "en-US");
+    localStorage.setItem("ag.console.locale", "en-CA");
     const user = userEvent.setup();
     const first: Repository = {
       id: "11111111-1111-4111-8111-111111111111",

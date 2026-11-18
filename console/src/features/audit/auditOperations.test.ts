@@ -2,69 +2,80 @@ import { createTranslator } from "../../messages/translate";
 import { describe, expect, it } from "vitest";
 import { auditOperationLabel } from "./auditOperations";
 
-const zh = createTranslator("zh-CN");
-const en = createTranslator("en-US");
+const en = createTranslator("en-CA");
 
 describe("auditOperationLabel", () => {
   it("translates the traffic operations derived from HTTP methods", () => {
-    expect(auditOperationLabel("get", zh)).toBe("读取（GET）");
+    expect(auditOperationLabel("get", en)).toBe("Read (GET)");
     expect(auditOperationLabel("put", en)).toBe("Upload (PUT)");
-    expect(auditOperationLabel("delete", zh)).toBe("删除（DELETE）");
+    expect(auditOperationLabel("delete", en)).toBe("Delete (DELETE)");
   });
 
   it("translates every management code family", () => {
     const samples: [string, string, string][] = [
-      ["repository.grants.upsert", "写入仓库授权", "Upsert repository grant"],
-      ["repository.grants.delete", "删除仓库授权", "Delete repository grant"],
-      ["artifact.tombstone", "墓碑化制品", "Tombstone artifact"],
-      ["user.login", "用户登录", "User sign-in"],
-      ["promote", "晋升制品", "Promote artifact"],
+      [
+        "repository.grants.upsert",
+        "Upsert repository grant",
+        "Upsert repository grant",
+      ],
+      [
+        "repository.grants.delete",
+        "Delete repository grant",
+        "Delete repository grant",
+      ],
+      ["artifact.tombstone", "Tombstone artifact", "Tombstone artifact"],
+      ["user.login", "User sign-in", "User sign-in"],
+      ["promote", "Promote artifact", "Promote artifact"],
       [
         "apt.repository_snapshot.publish",
-        "发布 APT 快照",
+        "Publish APT snapshot",
         "Publish APT snapshot",
       ],
       [
         "webhook.subscription.create",
-        "创建 Webhook 订阅",
+        "Create webhook subscription",
         "Create webhook subscription",
       ],
       [
         "lifecycle.intelligence_reconcile",
-        "对账制品情报",
+        "Reconcile artifact intelligence",
         "Reconcile artifact intelligence",
       ],
-      ["capacity.configure", "配置仓库容量", "Configure capacity"],
+      ["capacity.configure", "Configure capacity", "Configure capacity"],
       [
         "service_account.credential.revoke",
-        "吊销服务账号凭据",
+        "Revoke service account credential",
         "Revoke service account credential",
       ],
     ];
     for (const [code, chinese, english] of samples) {
-      expect(auditOperationLabel(code, zh)).toBe(chinese);
+      expect(auditOperationLabel(code, en)).toBe(chinese);
       expect(auditOperationLabel(code, en)).toBe(english);
     }
   });
 
   it("labels the codes denial audits and APT package operations write", () => {
     const samples: [string, string, string][] = [
-      ["admin", "仓库管理", "Repository admin"],
-      ["intelligence", "制品情报", "Artifact intelligence"],
-      ["apt.package.promote", "晋升 APT 包", "Promote APT package"],
-      ["apt.package.replicate", "复制 APT 包", "Replicate APT package"],
-      ["apt.package.delete", "删除 APT 包", "Delete APT package"],
-      ["apt.package.restore", "恢复 APT 包", "Restore APT package"],
-      ["apt.package.retention", "按保留策略清理 APT 包", "Retain APT package"],
+      ["admin", "Repository admin", "Repository admin"],
+      ["intelligence", "Artifact intelligence", "Artifact intelligence"],
+      ["apt.package.promote", "Promote APT package", "Promote APT package"],
+      [
+        "apt.package.replicate",
+        "Replicate APT package",
+        "Replicate APT package",
+      ],
+      ["apt.package.delete", "Delete APT package", "Delete APT package"],
+      ["apt.package.restore", "Restore APT package", "Restore APT package"],
+      ["apt.package.retention", "Retain APT package", "Retain APT package"],
     ];
     for (const [code, chinese, english] of samples) {
-      expect(auditOperationLabel(code, zh)).toBe(chinese);
+      expect(auditOperationLabel(code, en)).toBe(chinese);
       expect(auditOperationLabel(code, en)).toBe(english);
     }
   });
 
   it("keeps an unknown code readable by showing the code itself", () => {
-    expect(auditOperationLabel("future.feature.action", zh)).toBe(
+    expect(auditOperationLabel("future.feature.action", en)).toBe(
       "future.feature.action",
     );
     expect(auditOperationLabel("future.feature.action", en)).toBe(

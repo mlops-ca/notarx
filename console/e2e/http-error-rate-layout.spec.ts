@@ -65,7 +65,7 @@ async function shell(page: Page, member = false) {
     );
 }
 
-for (const locale of ["zh-CN", "en-US"]) {
+for (const locale of ["en-CA"]) {
   test(`HTTP observation has bounded desktop/mobile geometry (${locale})`, async ({
     page,
   }, info) => {
@@ -143,12 +143,17 @@ test("count boundary, no/low traffic, warmup, reset and stale observations hide 
   const card = page.locator(".ag-http-error-rate-card");
   await expect(card.getByTestId("http-error-rate-ratio")).toHaveText("10%");
   for (const [reason, requests, errors, message] of [
-    ["low_sample", 19, 2, "少于 20 个请求，数据不足"],
-    ["no_traffic", 0, 0, "窗口内无请求，比例未知"],
-    ["warming_up", 20, 2, "窗口预热，数据不足"],
-    ["session_changed", 1, 0, "进程会话已切换，窗口重新预热"],
-    ["counter_reset", 1, 0, "计数器已重置，窗口重新预热"],
-    ["sample_stale", 20, 2, "样本已过期，比例未知"],
+    ["low_sample", 19, 2, "Fewer than 20 requests; insufficient data"],
+    ["no_traffic", 0, 0, "No requests in the window; ratio unknown"],
+    ["warming_up", 20, 2, "Window warming up; insufficient data"],
+    [
+      "session_changed",
+      1,
+      0,
+      "Process session changed; window warming up again",
+    ],
+    ["counter_reset", 1, 0, "Counter reset; window warming up again"],
+    ["sample_stale", 20, 2, "Sample is stale; ratio unknown"],
   ] as const) {
     current = rate({
       state: reason === "sample_stale" ? "stale" : "unknown",
@@ -157,12 +162,12 @@ test("count boundary, no/low traffic, warmup, reset and stale observations hide 
       errors,
       ratio: undefined,
     });
-    await page.getByRole("button", { name: "刷新诊断" }).click();
+    await page.getByRole("button", { name: "Refresh diagnostics" }).click();
     await expect(card.getByText(message)).toBeVisible();
     await expect(card.getByTestId("http-error-rate-ratio")).toHaveText("—");
   }
   current = rate({ requests: 20, errors: 0, ratio: 0 });
-  await page.getByRole("button", { name: "刷新诊断" }).click();
+  await page.getByRole("button", { name: "Refresh diagnostics" }).click();
   await expect(card.getByTestId("http-error-rate-ratio")).toHaveText("0%");
 });
 
@@ -190,17 +195,21 @@ test("repeat refresh is bounded, failure retains old observation and permission 
   const card = page.locator(".ag-http-error-rate-card");
   await expect(card).toBeVisible();
   const before = calls;
-  await page.getByRole("button", { name: "刷新诊断" }).evaluate((button) => {
-    (button as HTMLButtonElement).click();
-    (button as HTMLButtonElement).click();
-  });
+  await page
+    .getByRole("button", { name: "Refresh diagnostics" })
+    .evaluate((button) => {
+      (button as HTMLButtonElement).click();
+      (button as HTMLButtonElement).click();
+    });
   await expect.poll(() => calls).toBe(before + 1);
   mode = "failed";
-  await page.getByRole("button", { name: "刷新诊断" }).click();
-  await expect(page.getByText("刷新失败，仍显示旧诊断快照")).toBeVisible();
+  await page.getByRole("button", { name: "Refresh diagnostics" }).click();
+  await expect(
+    page.getByText("Refresh failed; showing the previous diagnostic snapshot"),
+  ).toBeVisible();
   await expect(card.getByTestId("http-error-rate-ratio")).toHaveText("10%");
   mode = "forbidden";
-  await page.getByRole("button", { name: "刷新诊断" }).click();
+  await page.getByRole("button", { name: "Refresh diagnostics" }).click();
   await expect(
     page.getByText("Synthetic HTTP observation refusal"),
   ).toBeVisible();

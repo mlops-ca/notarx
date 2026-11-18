@@ -36,12 +36,16 @@ describe("public catalog with the production query policy", () => {
         );
 
         expect(
-          await screen.findByText(`读取公开仓库失败 (${status})`, undefined, {
-            timeout: 3000,
-          }),
+          await screen.findByText(
+            `Failed to read public repositories (${status})`,
+            undefined,
+            {
+              timeout: 3000,
+            },
+          ),
         ).toBeInTheDocument();
         expect(
-          screen.getByRole("link", { name: "管理登录" }),
+          screen.getByRole("link", { name: "Management sign in" }),
         ).toBeInTheDocument();
         expect(fetch).toHaveBeenCalledTimes(1);
         expect(onAuthFailure).not.toHaveBeenCalled();
@@ -73,7 +77,9 @@ describe("public catalog with the production query policy", () => {
         </MemoryRouter>,
       );
       expect(
-        await screen.findByText("暂无公开仓库", undefined, { timeout: 3000 }),
+        await screen.findByText("No public repositories", undefined, {
+          timeout: 3000,
+        }),
       ).toBeInTheDocument();
       expect(fetch).toHaveBeenCalledTimes(2);
     } finally {

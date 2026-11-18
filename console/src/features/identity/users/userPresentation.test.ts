@@ -36,8 +36,8 @@ describe("user presentation", () => {
 
   it("derives compact initials from the display name", () => {
     expect(userInitials(user)).toBe("AC");
-    expect(userInitials({ ...user, displayName: "", name: "张三" })).toBe(
-      "张三",
+    expect(userInitials({ ...user, displayName: "", name: "Élodie" })).toBe(
+      "ÉL",
     );
   });
 });

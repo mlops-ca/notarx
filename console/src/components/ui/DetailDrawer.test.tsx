@@ -14,7 +14,7 @@ function renderDrawer(busy: boolean, onClose: () => void) {
         error={new Error("save failed")}
         onClose={onClose}
       >
-        <p>详情</p>
+        <p>Details</p>
       </DetailDrawer>
     </PreferencesProvider>,
   );
@@ -24,7 +24,7 @@ describe("DetailDrawer", () => {
   it("cannot be dismissed while a change is saved", async () => {
     const onClose = vi.fn();
     renderDrawer(true, onClose);
-    expect(await screen.findByText("详情")).toBeInTheDocument();
+    expect(await screen.findByText("Details")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     const mask = document.querySelector(".ant-drawer-mask");

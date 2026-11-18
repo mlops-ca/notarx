@@ -14,7 +14,7 @@ test.describe("Keycloak OIDC browser sign-in", () => {
     page,
   }) => {
     await page.goto("/login");
-    const signIn = page.getByRole("button", { name: /SSO|企业登录/ });
+    const signIn = page.getByRole("button", { name: /SSO|Enterprise SSO/ });
     await expect(signIn).toBeVisible();
     await signIn.click();
 
@@ -29,7 +29,7 @@ test.describe("Keycloak OIDC browser sign-in", () => {
       new RegExp(`127\\.0\\.0\\.1:${consolePort}/$`),
     );
     await expect(
-      page.getByRole("button", { name: /退出|Sign out/ }),
+      page.getByRole("button", { name: /Sign out|Sign out/ }),
     ).toBeVisible();
 
     const session = await page.request.get("/auth/session");
@@ -55,13 +55,15 @@ test.describe("Keycloak OIDC browser sign-in", () => {
 
     await page.goto("/identity-providers");
     await expect(
-      page.getByRole("heading", { name: /身份认证|Authentication/ }),
+      page.getByRole("heading", { name: /Authentication|Authentication/ }),
     ).toBeVisible();
     await expect(
-      page.getByText(/运行时配置|Runtime settings/, { exact: true }).first(),
+      page
+        .getByText(/Runtime settings|Runtime settings/, { exact: true })
+        .first(),
     ).toBeVisible();
 
-    await page.getByRole("button", { name: /退出|Sign out/ }).click();
+    await page.getByRole("button", { name: /Sign out|Sign out/ }).click();
     await expect(page).toHaveURL(/\/login\?redirect=/);
     const loggedOutSession = await page.request.get("/auth/session");
     await expect(loggedOutSession).toBeOK();

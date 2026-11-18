@@ -87,11 +87,11 @@ describe("UserIdentitiesPanel", () => {
       signal: expect.any(AbortSignal),
     });
 
-    await user.click(screen.getByText("绑定身份", { selector: "span" }));
+    await user.click(screen.getByText("Link identity", { selector: "span" }));
     expect(screen.getByLabelText("Issuer")).toHaveValue(identity.issuer);
     await user.type(screen.getByLabelText("Subject"), "second-subject");
-    const dialog = screen.getByRole("dialog", { name: "绑定 OIDC 身份" });
-    await user.click(within(dialog).getByRole("button", { name: /绑\s*定/ }));
+    const dialog = screen.getByRole("dialog", { name: "Link OIDC identity" });
+    await user.click(within(dialog).getByRole("button", { name: /Link/ }));
 
     await waitFor(() => {
       expect(mockCreateIdentity).toHaveBeenCalledWith({
@@ -104,9 +104,11 @@ describe("UserIdentitiesPanel", () => {
     });
     expect(await screen.findByText("second-subject")).toBeInTheDocument();
 
-    const unlinkButtons = screen.getAllByRole("button", { name: "解绑身份" });
+    const unlinkButtons = screen.getAllByRole("button", {
+      name: "Unlink identity",
+    });
     await user.click(unlinkButtons[0]);
-    await user.click(await screen.findByRole("button", { name: /^解\s*绑$/ }));
+    await user.click(await screen.findByRole("button", { name: /^Unlink$/ }));
 
     await waitFor(() => {
       expect(mockDeleteIdentity).toHaveBeenCalledWith({
@@ -125,24 +127,26 @@ describe("UserIdentitiesPanel", () => {
     const user = userEvent.setup();
     renderPanel();
 
-    await screen.findByText("尚未绑定外部身份");
-    await user.click(screen.getByText("绑定身份", { selector: "span" }));
+    await screen.findByText("No external identity linked");
+    await user.click(screen.getByText("Link identity", { selector: "span" }));
     expect(screen.getByLabelText("Issuer")).toHaveValue(identity.issuer);
-    await user.click(screen.getByRole("button", { name: /取\s*消/ }));
+    await user.click(screen.getByRole("button", { name: /Cancel/ }));
 
-    await user.click(screen.getByRole("button", { name: "刷新外部身份" }));
+    await user.click(
+      screen.getByRole("button", { name: "Refresh external identities" }),
+    );
     await waitFor(() => expect(mockGetOidcSettings).toHaveBeenCalledTimes(2));
-    await user.click(screen.getByText("绑定身份", { selector: "span" }));
+    await user.click(screen.getByText("Link identity", { selector: "span" }));
 
     expect(screen.getByLabelText("Issuer")).toHaveValue("");
     expect(
-      screen.getByText("尚未配置 OIDC 提供方，暂时无法绑定身份。"),
+      screen.getByText(
+        "No OIDC provider is configured, so identities cannot be linked yet.",
+      ),
     ).toBeInTheDocument();
     await user.type(screen.getByLabelText("Subject"), "provider-subject");
-    const dialog = screen.getByRole("dialog", { name: "绑定 OIDC 身份" });
-    expect(
-      within(dialog).getByRole("button", { name: /绑\s*定/ }),
-    ).toBeDisabled();
+    const dialog = screen.getByRole("dialog", { name: "Link OIDC identity" });
+    expect(within(dialog).getByRole("button", { name: /Link/ })).toBeDisabled();
   });
 
   it("shows the shared loading state while the first request is in flight", async () => {
@@ -178,7 +182,7 @@ describe("UserIdentitiesPanel", () => {
       </TestQueryProvider>,
     );
 
-    const empty = await screen.findByText("尚未绑定外部身份");
+    const empty = await screen.findByText("No external identity linked");
     expect(empty.closest(".ag-empty-state")).not.toBeNull();
   });
 
@@ -198,16 +202,16 @@ describe("UserIdentitiesPanel", () => {
     const user = userEvent.setup();
     renderPanel();
 
-    await screen.findByText("尚未绑定外部身份");
-    await user.click(screen.getByText("绑定身份", { selector: "span" }));
+    await screen.findByText("No external identity linked");
+    await user.click(screen.getByText("Link identity", { selector: "span" }));
     await user.type(screen.getByLabelText("Subject"), "provider-subject");
-    const dialog = screen.getByRole("dialog", { name: "绑定 OIDC 身份" });
-    await user.click(within(dialog).getByRole("button", { name: /绑\s*定/ }));
+    const dialog = screen.getByRole("dialog", { name: "Link OIDC identity" });
+    await user.click(within(dialog).getByRole("button", { name: /Link/ }));
 
     rejectLink(new Error("network down"));
     expect(await within(dialog).findByText("network down")).toBeInTheDocument();
     expect(
-      screen.getByRole("dialog", { name: "绑定 OIDC 身份" }),
+      screen.getByRole("dialog", { name: "Link OIDC identity" }),
     ).toBeVisible();
   });
 });

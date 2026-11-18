@@ -49,13 +49,13 @@ it("shows readable Raw identities and canonicalizes literal percent signs in sea
           purpose="distribution"
           value={null}
           onChange={vi.fn()}
-          ariaLabel="选择 Raw 制品"
+          ariaLabel="Select Raw Artifact"
         />
       </PreferencesProvider>
     </TestQueryProvider>,
   );
 
-  const input = screen.getByRole("combobox", { name: "选择 Raw 制品" });
+  const input = screen.getByRole("combobox", { name: "Select Raw Artifact" });
   await user.click(input);
   expect(await screen.findByText("report%20final.txt")).toBeInTheDocument();
 

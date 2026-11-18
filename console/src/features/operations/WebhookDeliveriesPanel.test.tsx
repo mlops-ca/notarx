@@ -95,7 +95,7 @@ describe("WebhookDeliveriesPanel", () => {
       (await screen.findAllByText("Security automation"))[0],
     ).toBeInTheDocument();
     expect(screen.getByText("receiver unavailable")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "重放投递" }));
+    await user.click(screen.getByRole("button", { name: "Replay delivery" }));
 
     expect(mockReplay).toHaveBeenCalledWith({
       path: { deliveryId: deadDelivery.id },
@@ -110,10 +110,12 @@ describe("WebhookDeliveriesPanel", () => {
     mockCreate.mockResolvedValue({ data: subscription } as never);
 
     renderPanel();
-    await screen.findByText("还没有 Webhook 订阅");
-    await user.click(screen.getAllByRole("button", { name: "新建订阅" })[0]);
+    await screen.findByText("No webhook subscriptions yet");
+    await user.click(
+      screen.getAllByRole("button", { name: "New subscription" })[0],
+    );
     await user.type(
-      screen.getByPlaceholderText("例如：安全自动化"),
+      screen.getByPlaceholderText("e.g. Security automation"),
       "Security automation",
     );
     await user.type(
@@ -121,12 +123,12 @@ describe("WebhookDeliveriesPanel", () => {
       "https://hooks.example.test/artifacts",
     );
     await user.type(
-      screen.getByPlaceholderText("至少 32 个字符"),
+      screen.getByPlaceholderText("At least 32 characters"),
       "webhook-signing-secret-at-least-32-characters",
     );
     await user.click(within(screen.getByRole("dialog")).getByRole("combobox"));
     await user.click(await screen.findByText("cargo.promotion.completed"));
-    await user.click(screen.getByRole("button", { name: "创建" }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
 
     expect(mockCreate).toHaveBeenCalledWith({
       body: {
@@ -149,8 +151,12 @@ describe("WebhookDeliveriesPanel", () => {
 
     renderPanel();
 
-    expect(await screen.findByText("还没有 Webhook 订阅")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "新建订阅" })).toHaveLength(1);
+    expect(
+      await screen.findByText("No webhook subscriptions yet"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: "New subscription" }),
+    ).toHaveLength(1);
   });
 
   it("holds the editor shut while saving and reopens dismissal after a failure", async () => {
@@ -166,10 +172,12 @@ describe("WebhookDeliveriesPanel", () => {
     );
 
     renderPanel();
-    await screen.findByText("还没有 Webhook 订阅");
-    await user.click(screen.getAllByRole("button", { name: "新建订阅" })[0]);
+    await screen.findByText("No webhook subscriptions yet");
+    await user.click(
+      screen.getAllByRole("button", { name: "New subscription" })[0],
+    );
     await user.type(
-      screen.getByPlaceholderText("例如：安全自动化"),
+      screen.getByPlaceholderText("e.g. Security automation"),
       "Security automation",
     );
     await user.type(
@@ -177,10 +185,10 @@ describe("WebhookDeliveriesPanel", () => {
       "https://hooks.example.test/artifacts",
     );
     await user.type(
-      screen.getByPlaceholderText("至少 32 个字符"),
+      screen.getByPlaceholderText("At least 32 characters"),
       "webhook-signing-secret-at-least-32-characters",
     );
-    await user.click(screen.getByRole("button", { name: "创建" }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
 
     clickMask();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -205,7 +213,7 @@ describe("WebhookDeliveriesPanel", () => {
 
     renderPanel();
     const replayButton = await screen.findByRole("button", {
-      name: "重放投递",
+      name: "Replay delivery",
     });
     await user.click(replayButton);
 

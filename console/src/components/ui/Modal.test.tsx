@@ -42,8 +42,8 @@ describe("Modal", () => {
   it("refuses every dismissal route while a mutation is in flight", async () => {
     const onClose = vi.fn();
     renderDialog(
-      <Modal open title="删除用户" onClose={onClose} busy>
-        <p>正在删除</p>
+      <Modal open title="Delete user" onClose={onClose} busy>
+        <p>Deleting</p>
       </Modal>,
     );
     await dialogElement();
@@ -58,8 +58,8 @@ describe("Modal", () => {
   it("stays dismissible through escape, mask and the close button when idle", async () => {
     const onClose = vi.fn();
     renderDialog(
-      <Modal open title="删除用户" onClose={onClose}>
-        <p>确认删除？</p>
+      <Modal open title="Delete user" onClose={onClose}>
+        <p>Confirm delete？</p>
       </Modal>,
     );
     await dialogElement();
@@ -84,8 +84,8 @@ describe("ConfirmDialog", () => {
         open
         busy
         danger
-        title="撤销全部会话"
-        message="已签发的令牌将立即失效。"
+        title="Revoke all sessions"
+        message="Issued tokens stop working immediately."
         onConfirm={onConfirm}
         onClose={onClose}
       />,
@@ -97,18 +97,18 @@ describe("ConfirmDialog", () => {
 
     expect(onClose).not.toHaveBeenCalled();
     // antd renders a two-character CJK label with a space inside it.
-    expect(screen.getByRole("button", { name: /取\s*消/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Cancel/ })).toBeDisabled();
 
     // A loading button swallows the click instead of taking the disabled
     // attribute, so assert the second confirmation cannot be fired.
-    const confirm = screen.getByRole("button", { name: /确\s*认/ });
+    const confirm = screen.getByRole("button", { name: /Confirm/ });
     expect(confirm).toHaveClass("ant-btn-loading");
     fireEvent.click(confirm);
     expect(onConfirm).not.toHaveBeenCalled();
   });
 
   it("labels its own buttons in the active locale", async () => {
-    localStorage.setItem("ag.console.locale", "en-US");
+    localStorage.setItem("ag.console.locale", "en-CA");
     renderDialog(
       <ConfirmDialog
         open
@@ -139,24 +139,24 @@ describe("FormModal", () => {
     renderDialog(
       <FormModal
         open
-        title="新建密钥"
-        submitLabel="创建"
+        title="New key"
+        submitLabel="Create"
         onSubmit={onSubmit}
         onClose={onClose}
       >
-        <input aria-label="名称" />
+        <input aria-label="Name" />
       </FormModal>,
     );
 
-    await user.type(await screen.findByLabelText("名称"), "ci{Enter}");
+    await user.type(await screen.findByLabelText("Name"), "ci{Enter}");
     expect(onSubmit).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("button", { name: /取\s*消/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Cancel/ })).toBeDisabled();
     clickMask();
     expect(onClose).not.toHaveBeenCalled();
 
     await act(async () => reject(new Error("network down")));
     expect(await screen.findByText("network down")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /取\s*消/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Cancel/ })).toBeEnabled();
   });
 
   it("does not submit an incomplete form", async () => {
@@ -165,17 +165,17 @@ describe("FormModal", () => {
     renderDialog(
       <FormModal
         open
-        title="新建密钥"
-        submitLabel="创建"
+        title="New key"
+        submitLabel="Create"
         canSubmit={false}
         onSubmit={onSubmit}
         onClose={() => {}}
       >
-        <input aria-label="名称" />
+        <input aria-label="Name" />
       </FormModal>,
     );
-    await user.type(await screen.findByLabelText("名称"), "{Enter}");
-    expect(screen.getByRole("button", { name: /创\s*建/ })).toBeDisabled();
+    await user.type(await screen.findByLabelText("Name"), "{Enter}");
+    expect(screen.getByRole("button", { name: /Create/ })).toBeDisabled();
     expect(onSubmit).not.toHaveBeenCalled();
   });
 });
@@ -189,16 +189,16 @@ describe("ConfirmDanger", () => {
     renderDialog(
       <ConfirmDanger
         target={{ name: "ci-deploy" }}
-        title="吊销密钥"
-        message={(key) => `吊销 ${key.name}？`}
-        confirmLabel="吊销"
+        title="Revoke key"
+        message={(key) => `Revoke ${key.name}？`}
+        confirmLabel="Revoke"
         onConfirm={onConfirm}
         onClose={onClose}
         onDone={onDone}
       />,
     );
-    expect(await screen.findByText("吊销 ci-deploy？")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /^吊\s*销$/ }));
+    expect(await screen.findByText("Revoke ci-deploy？")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Revoke$/ }));
     expect(onConfirm).toHaveBeenCalledWith({ name: "ci-deploy" });
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(onDone).toHaveBeenCalledTimes(1);
@@ -210,18 +210,18 @@ describe("ConfirmDanger", () => {
     renderDialog(
       <ConfirmDanger
         target={{ name: "ci-deploy" }}
-        title="吊销密钥"
-        message={(key) => `吊销 ${key.name}？`}
-        confirmLabel="吊销"
+        title="Revoke key"
+        message={(key) => `Revoke ${key.name}？`}
+        confirmLabel="Revoke"
         onConfirm={async () => {
           throw new Error("network down");
         }}
         onClose={onClose}
       />,
     );
-    await user.click(await screen.findByRole("button", { name: /^吊\s*销$/ }));
+    await user.click(await screen.findByRole("button", { name: /^Revoke$/ }));
     expect(await screen.findByText("network down")).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: /取\s*消/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Cancel/ })).toBeEnabled();
   });
 });

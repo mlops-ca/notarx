@@ -61,16 +61,16 @@ it("does not silently write a v3 retention draft using a refreshed v4 token", as
   const days = await screen.findByRole("spinbutton");
   fireEvent.change(days, { target: { value: "30" } });
   expect(days).toHaveValue("30");
-  await user.click(screen.getByRole("button", { name: /刷\s*新/ }));
+  await user.click(screen.getByRole("button", { name: /Refresh/ }));
   await waitFor(() => expect(getAuditRetentionPolicy).toHaveBeenCalledTimes(2));
   await waitFor(() => expect(days).toHaveValue("180"));
-  await user.click(screen.getByRole("button", { name: "保存策略" }));
+  await user.click(screen.getByRole("button", { name: "Save policy" }));
   expect(replaceAuditRetentionPolicy).not.toHaveBeenCalledWith({
     body: expect.objectContaining({ keepDays: 30 }),
     headers: { "If-Match": "4" },
   });
   fireEvent.change(days, { target: { value: "45" } });
-  await user.click(screen.getByRole("button", { name: "保存策略" }));
+  await user.click(screen.getByRole("button", { name: "Save policy" }));
   await waitFor(() =>
     expect(replaceAuditRetentionPolicy).toHaveBeenCalledWith({
       body: expect.objectContaining({ keepDays: 45 }),
@@ -112,12 +112,12 @@ it("retains the displayed second audit page if first-page refresh fails", async 
     </MemoryRouter>,
   );
   await screen.findByText("user:first");
-  await user.click(screen.getByRole("button", { name: "下一页" }));
+  await user.click(screen.getByRole("button", { name: "Next" }));
   await screen.findByText("user:second");
-  await user.click(screen.getByRole("button", { name: /刷\s*新/ }));
+  await user.click(screen.getByRole("button", { name: /Refresh/ }));
   await screen.findByText("refresh unavailable");
   expect(screen.getByText("user:second")).toBeInTheDocument();
-  expect(screen.getByText("第 2 页 · 当前页 1 条")).toBeInTheDocument();
+  expect(screen.getByText("Page 2 · 1 records")).toBeInTheDocument();
 });
 
 it("can filter by a group from the second cursor page in the 200-group window", async () => {
@@ -147,8 +147,8 @@ it("can filter by a group from the second cursor page in the 200-group window", 
       </TestQueryProvider>
     </MemoryRouter>,
   );
-  await user.click(screen.getByText("高级筛选"));
-  const label = screen.getByText("所属分组");
+  await user.click(screen.getByText("Advanced filters"));
+  const label = screen.getByText("Group");
   const field = label.closest("label");
   if (!field) throw new Error("Missing group filter field");
   const select = within(field).getByRole("combobox");
@@ -191,13 +191,13 @@ it("keeps retention edits after a failed refresh and same-version retry", async 
   vi.mocked(getAuditRetentionPolicy).mockResolvedValue({
     error: { status: 503, message: "policy unavailable" },
   } as never);
-  await user.click(screen.getByRole("button", { name: /刷\s*新/ }));
+  await user.click(screen.getByRole("button", { name: /Refresh/ }));
   await screen.findByText("policy unavailable");
   expect(screen.getByRole("spinbutton")).toHaveValue("30");
   vi.mocked(getAuditRetentionPolicy).mockResolvedValue({
     data: policy,
   } as never);
-  await user.click(screen.getByRole("button", { name: /重试/ }));
+  await user.click(screen.getByRole("button", { name: /Retry/ }));
   await waitFor(() =>
     expect(screen.queryByText("policy unavailable")).not.toBeInTheDocument(),
   );

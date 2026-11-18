@@ -82,9 +82,9 @@ test("OCI manifest without image descriptors is not shown as 0 B", async ({
   await expect(
     page.getByText("demo/api", { exact: true }).first(),
   ).toBeVisible();
-  await page.getByRole("button", { name: "展开 demo/api" }).click();
+  await page.getByRole("button", { name: "Expand demo/api" }).click();
 
-  await expect(page.getByText("镜像大小", { exact: true })).toBeVisible();
-  await expect(page.getByText("无层数据", { exact: true })).toBeVisible();
+  await expect(page.getByText("Image size", { exact: true })).toBeVisible();
+  await expect(page.getByText("No layer data", { exact: true })).toBeVisible();
   await expect(page.getByText("0 B", { exact: true })).not.toBeVisible();
 });

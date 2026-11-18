@@ -175,8 +175,10 @@ async function stage(
   user: ReturnType<typeof userEvent.setup>,
 ) {
   const file = await choose(container, user);
-  await user.click(screen.getByRole("button", { name: "暂存并核对软件包" }));
-  await screen.findByText("已暂存：核对服务端识别的身份");
+  await user.click(
+    screen.getByRole("button", { name: "Stage and review package" }),
+  );
+  await screen.findByText("Staged: review the server-identified package");
   return file;
 }
 
@@ -213,10 +215,10 @@ it.each(["empty.deb", "wrong.zip"])(
       packageFile(name, name === "empty.deb" ? "" : "deb-bytes"),
     );
     await screen.findByText(
-      "请选择一个非空 .deb 文件，文件名不含路径且不超过 255 个字符，大小不超过 1 GiB。",
+      "Choose one non-empty .deb file with no path in its name, at most 255 filename characters and 1 GiB in size.",
     );
     expect(
-      screen.getByRole("button", { name: "暂存并核对软件包" }),
+      screen.getByRole("button", { name: "Stage and review package" }),
     ).toBeDisabled();
     expect(createAptPublicationSession).not.toHaveBeenCalled();
   },
@@ -226,11 +228,11 @@ it("requires a valid component and a successful browser digest", async () => {
   const user = userEvent.setup();
   const view = render(workflow());
   await choose(view.container, user);
-  const component = screen.getByRole("textbox", { name: "组件" });
+  const component = screen.getByRole("textbox", { name: "Component" });
   await user.clear(component);
   await user.type(component, "Bad/Component");
   expect(
-    screen.getByRole("button", { name: "暂存并核对软件包" }),
+    screen.getByRole("button", { name: "Stage and review package" }),
   ).toBeDisabled();
   expect(createAptPublicationSession).not.toHaveBeenCalled();
   view.unmount();
@@ -241,10 +243,10 @@ it("requires a valid component and a successful browser digest", async () => {
     throw new Error("file picker missing");
   await user.upload(input, packageFile());
   await screen.findByText(
-    "无法计算文件的 SHA-256。请在 HTTPS 或 localhost 页面重新选择文件。",
+    "The file SHA-256 could not be computed. Select the file again on an HTTPS or localhost page.",
   );
   expect(
-    screen.getByRole("button", { name: "暂存并核对软件包" }),
+    screen.getByRole("button", { name: "Stage and review package" }),
   ).toBeDisabled();
   expect(createAptPublicationSession).not.toHaveBeenCalled();
 });
@@ -262,9 +264,9 @@ it("does not offer first publication when the initial administrator state cannot
   );
   await screen.findByText("state unavailable");
   expect(
-    screen.queryByRole("button", { name: "暂存并核对软件包" }),
+    screen.queryByRole("button", { name: "Stage and review package" }),
   ).not.toBeInTheDocument();
-  expect(screen.queryByText("加载中…")).not.toBeInTheDocument();
+  expect(screen.queryByText("Loading…")).not.toBeInTheDocument();
 });
 
 it("replays the same File against an existing session after a lost upload response", async () => {
@@ -274,9 +276,13 @@ it("replays the same File against an existing session after a lost upload respon
   const user = userEvent.setup();
   const { container } = render(workflow());
   const file = await choose(container, user);
-  await user.click(screen.getByRole("button", { name: "暂存并核对软件包" }));
+  await user.click(
+    screen.getByRole("button", { name: "Stage and review package" }),
+  );
   await screen.findByText("upload response lost");
-  await user.click(screen.getByRole("button", { name: "重试暂存并核对" }));
+  await user.click(
+    screen.getByRole("button", { name: "Retry staging and review" }),
+  );
   await screen.findByText("widget@1.2.3#amd64");
   expect(createAptPublicationSession).toHaveBeenCalledTimes(1);
   expect(uploadAptPublicationPackage).toHaveBeenCalledTimes(2);
@@ -292,16 +298,20 @@ it("does not treat a failed state refresh as an unconfirmed publication", async 
   const { container } = render(workflow(onPublished));
   await stage(container, user);
   await user.click(
-    screen.getByRole("checkbox", { name: "已核对包名、版本和架构" }),
+    screen.getByRole("checkbox", {
+      name: "I checked the package name, version and architecture",
+    }),
   );
-  await user.click(screen.getByRole("button", { name: "确认并签署首次快照" }));
+  await user.click(
+    screen.getByRole("button", { name: "Confirm and sign first snapshot" }),
+  );
   await screen.findByText("refresh disconnected");
-  expect(screen.getByText("已发布 stable 快照 #1")).toBeInTheDocument();
+  expect(screen.getByText("Published stable snapshot #1")).toBeInTheDocument();
   expect(
-    screen.queryByRole("button", { name: "重试首次发布" }),
+    screen.queryByRole("button", { name: "Retry first publication" }),
   ).not.toBeInTheDocument();
   expect(
-    screen.queryByRole("button", { name: "清除本次选择" }),
+    screen.queryByRole("button", { name: "Clear this selection" }),
   ).not.toBeInTheDocument();
   expect(publishAptRepositorySnapshot).toHaveBeenCalledTimes(1);
 });
@@ -321,7 +331,7 @@ it.each(["upload", "publish"])(
       );
       await choose(view.container, user);
       await user.click(
-        screen.getByRole("button", { name: "暂存并核对软件包" }),
+        screen.getByRole("button", { name: "Stage and review package" }),
       );
       await waitFor(() =>
         expect(uploadAptPublicationPackage).toHaveBeenCalledTimes(1),
@@ -332,22 +342,24 @@ it.each(["upload", "publish"])(
         publish.promise,
       );
       await user.click(
-        screen.getByRole("checkbox", { name: "已核对包名、版本和架构" }),
+        screen.getByRole("checkbox", {
+          name: "I checked the package name, version and architecture",
+        }),
       );
       await user.click(
-        screen.getByRole("button", { name: "确认并签署首次快照" }),
+        screen.getByRole("button", { name: "Confirm and sign first snapshot" }),
       );
     }
     view.rerender(
       workflow(onPublished, { ...repo, id: "next-repository" }, "bookworm"),
     );
-    const nextComponent = screen.getByRole("textbox", { name: "组件" });
+    const nextComponent = screen.getByRole("textbox", { name: "Component" });
     await user.click(nextComponent);
     await act(async () => {
       upload.resolve(success(revision));
       publish.resolve(success(snapshot, 201));
     });
-    expect(screen.getByText("尚未选择文件")).toBeInTheDocument();
+    expect(screen.getByText("No file selected")).toBeInTheDocument();
     expect(screen.queryByText("widget@1.2.3#amd64")).not.toBeInTheDocument();
     expect(nextComponent).toHaveFocus();
     expect(onPublished).not.toHaveBeenCalled();
@@ -367,7 +379,9 @@ it("never fetches administrator state for a member or a non-Hosted repository", 
       </PreferencesProvider>
     </TestQueryProvider>,
   );
-  expect(screen.getByText("需要仓库管理权限")).toBeInTheDocument();
+  expect(
+    screen.getByText("Repository administrator access required"),
+  ).toBeInTheDocument();
   view.rerender(
     <TestQueryProvider>
       <PreferencesProvider>
@@ -376,7 +390,7 @@ it("never fetches administrator state for a member or a non-Hosted repository", 
     </TestQueryProvider>,
   );
   expect(
-    screen.getByText("首次发布仅适用于 APT Hosted 仓库"),
+    screen.getByText("First publication requires an APT Hosted repository"),
   ).toBeInTheDocument();
   expect(getAptLifecycleState).not.toHaveBeenCalled();
   expect(createAptPublicationSession).not.toHaveBeenCalled();
@@ -387,10 +401,12 @@ it("hashes without uploading, stages the original File, and requires identity co
   const onPublished = vi.fn(async () => {});
   const { container } = render(workflow(onPublished));
   const file = await choose(container, user);
-  expect(screen.getByText("9 字节")).toBeInTheDocument();
+  expect(screen.getByText("9 bytes")).toBeInTheDocument();
   expect(createAptPublicationSession).not.toHaveBeenCalled();
   expect(uploadAptPublicationPackage).not.toHaveBeenCalled();
-  await user.click(screen.getByRole("button", { name: "暂存并核对软件包" }));
+  await user.click(
+    screen.getByRole("button", { name: "Stage and review package" }),
+  );
   await screen.findByText("widget@1.2.3#amd64");
   expect(createAptPublicationSession).toHaveBeenCalledWith(
     expect.objectContaining({
@@ -410,11 +426,13 @@ it("hashes without uploading, stages the original File, and requires identity co
   );
   expect(publishAptRepositorySnapshot).not.toHaveBeenCalled();
   const publishButton = screen.getByRole("button", {
-    name: "确认并签署首次快照",
+    name: "Confirm and sign first snapshot",
   });
   expect(publishButton).toBeDisabled();
   await user.click(
-    screen.getByRole("checkbox", { name: "已核对包名、版本和架构" }),
+    screen.getByRole("checkbox", {
+      name: "I checked the package name, version and architecture",
+    }),
   );
   await user.click(publishButton);
   await waitFor(() => expect(onPublished).toHaveBeenCalledWith(snapshot));
@@ -436,12 +454,12 @@ it("focuses the staged identity heading and lets keyboard review continue withou
   const view = render(workflow());
   await stage(view.container, user);
   const heading = screen.getByRole("heading", {
-    name: "已暂存：核对服务端识别的身份",
+    name: "Staged: review the server-identified package",
   });
   expect(heading).toHaveFocus();
   await user.tab();
   const review = screen.getByRole("checkbox", {
-    name: "已核对包名、版本和架构",
+    name: "I checked the package name, version and architecture",
   });
   expect(review).toHaveFocus();
   await user.keyboard(" ");
@@ -458,10 +476,14 @@ it("keeps the create request and idempotency key after a lost create response", 
   const user = userEvent.setup();
   const { container } = render(workflow());
   await choose(container, user);
-  await user.click(screen.getByRole("button", { name: "暂存并核对软件包" }));
+  await user.click(
+    screen.getByRole("button", { name: "Stage and review package" }),
+  );
   await screen.findByText("create response lost");
-  expect(screen.getByRole("textbox", { name: "组件" })).toBeDisabled();
-  await user.click(screen.getByRole("button", { name: "重试暂存并核对" }));
+  expect(screen.getByRole("textbox", { name: "Component" })).toBeDisabled();
+  await user.click(
+    screen.getByRole("button", { name: "Retry staging and review" }),
+  );
   await screen.findByText("widget@1.2.3#amd64");
   const [first, second] = vi.mocked(createAptPublicationSession).mock.calls;
   expect(second[0].headers).toEqual(first[0].headers);
@@ -481,11 +503,15 @@ it.each([
     const user = userEvent.setup();
     const { container } = render(workflow());
     const file = await choose(container, user);
-    await user.click(screen.getByRole("button", { name: "暂存并核对软件包" }));
+    await user.click(
+      screen.getByRole("button", { name: "Stage and review package" }),
+    );
     await screen.findByText(message);
     expect(screen.getByText(session.id)).toBeInTheDocument();
     expect(publishAptRepositorySnapshot).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "重试暂存并核对" }));
+    await user.click(
+      screen.getByRole("button", { name: "Retry staging and review" }),
+    );
     await screen.findByText("widget@1.2.3#amd64");
     expect(createAptPublicationSession).toHaveBeenCalledTimes(1);
     for (const [request] of vi.mocked(uploadAptPublicationPackage).mock.calls) {
@@ -518,17 +544,23 @@ it.each(["signer 503", "lost publish response", "concurrent snapshot"])(
     const { container } = render(workflow(onPublished));
     await stage(container, user);
     await user.click(
-      screen.getByRole("checkbox", { name: "已核对包名、版本和架构" }),
+      screen.getByRole("checkbox", {
+        name: "I checked the package name, version and architecture",
+      }),
     );
     await user.click(
-      screen.getByRole("button", { name: "确认并签署首次快照" }),
+      screen.getByRole("button", { name: "Confirm and sign first snapshot" }),
     );
     await screen.findByText(kind);
     expect(screen.getByText("widget@1.2.3#amd64")).toBeInTheDocument();
     expect(
-      screen.getByRole("checkbox", { name: "已核对包名、版本和架构" }),
+      screen.getByRole("checkbox", {
+        name: "I checked the package name, version and architecture",
+      }),
     ).toBeChecked();
-    await user.click(screen.getByRole("button", { name: "重试首次发布" }));
+    await user.click(
+      screen.getByRole("button", { name: "Retry first publication" }),
+    );
     await waitFor(() => expect(onPublished).toHaveBeenCalledTimes(1));
     const [first, second] = vi.mocked(publishAptRepositorySnapshot).mock.calls;
     expect(second[0].headers).toEqual(first[0].headers);
@@ -556,9 +588,11 @@ it.each([
     const user = userEvent.setup();
     const { container } = render(workflow());
     await choose(container, user);
-    await user.click(screen.getByRole("button", { name: "暂存并核对软件包" }));
+    await user.click(
+      screen.getByRole("button", { name: "Stage and review package" }),
+    );
     await screen.findByText(
-      "服务端软件包身份不完整，或摘要、大小与本次文件不一致，未允许发布。",
+      "The server package identity is incomplete, or its digest or size differs from this file. Publication was not enabled.",
     );
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
     expect(publishAptRepositorySnapshot).not.toHaveBeenCalled();
@@ -572,8 +606,12 @@ it("rejects a mismatched session before sending any package bytes", async () => 
   const user = userEvent.setup();
   const { container } = render(workflow());
   await choose(container, user);
-  await user.click(screen.getByRole("button", { name: "暂存并核对软件包" }));
-  await screen.findByText("服务端暂存会话与本次文件或目标不一致，未继续上传。");
+  await user.click(
+    screen.getByRole("button", { name: "Stage and review package" }),
+  );
+  await screen.findByText(
+    "The staging session does not match this file or target. Upload was not continued.",
+  );
   expect(uploadAptPublicationPackage).not.toHaveBeenCalled();
 });
 
@@ -587,7 +625,9 @@ it.each(["suite", "repository"])(
     const onPublished = vi.fn(async () => {});
     const view = render(workflow(onPublished));
     await choose(view.container, user);
-    await user.click(screen.getByRole("button", { name: "暂存并核对软件包" }));
+    await user.click(
+      screen.getByRole("button", { name: "Stage and review package" }),
+    );
     view.rerender(
       workflow(
         onPublished,
@@ -596,7 +636,7 @@ it.each(["suite", "repository"])(
       ),
     );
     await act(async () => pending.resolve(success(session, 201)));
-    expect(screen.getByText("尚未选择文件")).toBeInTheDocument();
+    expect(screen.getByText("No file selected")).toBeInTheDocument();
     expect(uploadAptPublicationPackage).not.toHaveBeenCalled();
     expect(onPublished).not.toHaveBeenCalled();
   },
@@ -608,7 +648,9 @@ it("prevents same-event double submission before React paints a busy state", asy
   const user = userEvent.setup();
   const { container } = render(workflow());
   await choose(container, user);
-  const button = screen.getByRole("button", { name: "暂存并核对软件包" });
+  const button = screen.getByRole("button", {
+    name: "Stage and review package",
+  });
   act(() => {
     button.click();
     button.click();
@@ -617,11 +659,15 @@ it("prevents same-event double submission before React paints a busy state", asy
   await act(async () => pending.resolve(success(session, 201)));
   await screen.findByText("widget@1.2.3#amd64");
   await user.click(
-    screen.getByRole("checkbox", { name: "已核对包名、版本和架构" }),
+    screen.getByRole("checkbox", {
+      name: "I checked the package name, version and architecture",
+    }),
   );
   const publish = deferred<ReturnType<typeof success<AptRepositorySnapshot>>>();
   vi.mocked(publishAptRepositorySnapshot).mockReturnValueOnce(publish.promise);
-  const confirm = screen.getByRole("button", { name: "确认并签署首次快照" });
+  const confirm = screen.getByRole("button", {
+    name: "Confirm and sign first snapshot",
+  });
   act(() => {
     confirm.click();
     confirm.click();
@@ -639,18 +685,22 @@ it("keeps existing suites in the management view and refreshes a successful firs
       </PreferencesProvider>
     </TestQueryProvider>,
   );
-  await screen.findByRole("button", { name: "暂存并核对软件包" });
+  await screen.findByRole("button", { name: "Stage and review package" });
   await stage(view.container, user);
   vi.mocked(getAptLifecycleState).mockResolvedValue(
     success({ snapshots: [{ snapshot }], packages: [], deletions: [] }),
   );
   await user.click(
-    screen.getByRole("checkbox", { name: "已核对包名、版本和架构" }),
+    screen.getByRole("checkbox", {
+      name: "I checked the package name, version and architecture",
+    }),
   );
-  await user.click(screen.getByRole("button", { name: "确认并签署首次快照" }));
-  await screen.findByText("当前快照 #1");
+  await user.click(
+    screen.getByRole("button", { name: "Confirm and sign first snapshot" }),
+  );
+  await screen.findByText("Current snapshot #1");
   expect(
-    screen.queryByRole("button", { name: "暂存并核对软件包" }),
+    screen.queryByRole("button", { name: "Stage and review package" }),
   ).not.toBeInTheDocument();
   expect(screen.getByText(snapshot.keyFingerprint)).toBeInTheDocument();
   expect(getAptLifecycleState).toHaveBeenCalledTimes(2);
@@ -665,6 +715,6 @@ it("lets an administrator start the first publication in an empty suite", async 
     </TestQueryProvider>,
   );
   expect(
-    await screen.findByRole("button", { name: "暂存并核对软件包" }),
+    await screen.findByRole("button", { name: "Stage and review package" }),
   ).toBeDisabled();
 });

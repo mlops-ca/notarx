@@ -18,7 +18,7 @@ const digest = publicationAudit.evidence!.digest;
 
 for (const width of [1440, 390])
   for (const theme of ["dark", "light"])
-    for (const locale of ["zh-CN", "en-US"]) {
+    for (const locale of ["en-CA"]) {
       test(`Conan publication audit stays readable at ${width}px in ${theme} ${locale}`, async ({
         page,
       }, testInfo) => {
@@ -58,10 +58,7 @@ for (const width of [1440, 390])
         await actor.click();
         const detail = page.locator(".ant-table-expanded-row");
         const session = detail.getByText(sessionId, { exact: true });
-        const state = detail.getByText(
-          locale === "zh-CN" ? "已提交" : "Committed",
-          { exact: true },
-        );
+        const state = detail.getByText("Committed", { exact: true });
         await expect(session).toBeVisible();
         await expect(state).toBeVisible();
         await expect(detail.getByText(digest)).toHaveCount(0);

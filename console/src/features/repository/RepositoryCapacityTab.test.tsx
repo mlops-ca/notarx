@@ -76,7 +76,7 @@ describe("RepositoryCapacityTab", () => {
     mounted.rerender(view({ ...repository, id: "repo-B", name: "B" }));
     await screen.findByText("20.0 GiB");
     expect.soft(screen.getByRole("spinbutton")).toHaveValue("20");
-    await user.click(screen.getByRole("button", { name: /更新配额/ }));
+    await user.click(screen.getByRole("button", { name: /Update quota/ }));
     expect(replaceRepositoryCapacity).toHaveBeenCalledWith({
       path: { repositoryId: "repo-B" },
       body: { quotaBytes: 21474836480 },

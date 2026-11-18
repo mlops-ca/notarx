@@ -5,7 +5,7 @@ import {
   type PublicRepositoryFormat,
 } from "./publicRepositoryUsage";
 
-const english = createTranslator("en-US");
+const english = createTranslator("en-CA");
 
 function usage(format: PublicRepositoryFormat) {
   return publicRepositoryUsage({
@@ -61,9 +61,9 @@ describe("public repository usage", () => {
         repositoryName: "releases",
         origin: "https://gateway.test",
         host: "gateway.test",
-        t: createTranslator("zh-CN"),
+        t: createTranslator("en-CA"),
       })[1].label,
-    ).toBe("临时使用");
+    ).toBe("One-off usage");
   });
 
   it("shows Cargo's alternate registry and uses no embedded credential", () => {

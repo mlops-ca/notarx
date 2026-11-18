@@ -90,7 +90,7 @@ for (const mismatch of [false, true]) {
     const identity = page.locator(".ag-diagnostics-identity-card");
     const consoleRow = identity
       .locator(".ag-diagnostic-identity-row")
-      .filter({ has: page.locator("dt", { hasText: "Console 版本" }) });
+      .filter({ has: page.locator("dt", { hasText: "Console version" }) });
     await expect(consoleRow.locator("dd")).toHaveText(consoleVersion);
     await expect(
       identity.getByText(gatewayVersion, { exact: true }),
@@ -98,11 +98,15 @@ for (const mismatch of [false, true]) {
     await expect(
       identity.getByText("synthetic-revision", { exact: true }),
     ).toBeVisible();
-    const warning = identity.getByText("前后端版本不一致", { exact: true });
+    const warning = identity.getByText("Console and Gateway versions differ", {
+      exact: true,
+    });
     if (mismatch && consoleVersion !== "dev") {
       await expect(warning).toBeVisible();
       await expect(
-        identity.getByText(/镜像 tag 不一致或浏览器缓存了旧 bundle/),
+        identity.getByText(
+          /Image tags may differ, or the browser may have cached an older bundle\. Check the deployed versions and refresh the page\./,
+        ),
       ).toBeVisible();
     } else {
       await expect(warning).toHaveCount(0);

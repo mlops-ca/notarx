@@ -14,10 +14,7 @@ async function setup(page: Page, width: number) {
   await page.setViewportSize({ width, height: 1000 });
   await authenticateAsAdmin(page);
   await page.addInitScript((width) => {
-    localStorage.setItem(
-      "ag.console.locale",
-      width === 390 ? "en-US" : "zh-CN",
-    );
+    localStorage.setItem("ag.console.locale", "en-CA");
     localStorage.setItem(
       "ag.console.theme.id",
       width === 390 ? "gateway-light" : "gateway-dark",
@@ -118,7 +115,6 @@ for (const width of [1440, 390]) {
     page,
   }, info) => {
     const errors = await setup(page, width);
-    const chinese = width === 1440;
     await page.route("**/api/v2/migrations/nexus/capabilities", (route) =>
       route.fulfill({ json: nexusCapabilities }),
     );
@@ -131,9 +127,7 @@ for (const width of [1440, 390]) {
     ).toBeVisible();
     let refuse!: () => Promise<void>;
     await page.route(
-      chinese
-        ? "**/api/v2/migration-sources?**"
-        : `**/api/v2/migration-sources/${migrationSource.id}`,
+      `**/api/v2/migration-sources/${migrationSource.id}`,
       (route) =>
         new Promise<void>((resolve) => {
           refuse = async () => {
@@ -146,30 +140,24 @@ for (const width of [1440, 390]) {
         }),
     );
     const request = page.waitForRequest((request) =>
-      request
-        .url()
-        .includes(
-          chinese
-            ? "/api/v2/migration-sources?"
-            : `/api/v2/migration-sources/${migrationSource.id}`,
-        ),
+      request.url().includes(`/api/v2/migration-sources/${migrationSource.id}`),
     );
     await page
       .getByRole("button", {
-        name: chinese ? "刷新源" : "Refresh source",
+        name: "Refresh source",
         exact: true,
       })
-      .nth(chinese ? 0 : 1)
+      .nth(1)
       .click();
     await request;
     await page
       .getByRole("button", {
-        name: chinese ? "编辑源" : "Edit source",
+        name: "Edit source",
         exact: true,
       })
       .click();
     const dialog = page.getByRole("dialog", {
-      name: chinese ? "编辑迁移源" : "Edit migration source",
+      name: "Edit migration source",
       exact: true,
     });
     await waitForModalOpen(dialog);
@@ -184,31 +172,31 @@ for (const width of [1440, 390]) {
     );
     await expect(
       page.getByRole("button", {
-        name: chinese ? "添加迁移源" : "Add migration source",
+        name: "Add migration source",
         exact: true,
       }),
     ).toHaveCount(0);
     await page
       .getByRole("button", {
-        name: chinese ? "批次与验收" : "Batches and acceptance",
+        name: "Batches and acceptance",
         exact: true,
       })
       .click();
     await page
       .getByRole("button", {
-        name: chinese ? "创建迁移批次" : "Create migration batch",
+        name: "Create migration batch",
         exact: true,
       })
       .click();
     await expect(
       page.getByRole("combobox", {
-        name: chinese ? "已保存的迁移源" : "Saved migration source",
+        name: "Saved migration source",
         exact: true,
       }),
     ).toHaveCount(0);
     await page
       .getByRole("button", {
-        name: chinese ? "连接与映射" : "Connections and mappings",
+        name: "Connections and mappings",
         exact: true,
       })
       .click();
@@ -231,57 +219,46 @@ for (const width of [1440, 390]) {
     page,
   }, info) => {
     const errors = await setup(page, width);
-    const chinese = width === 1440;
     await page.goto(`/operations?tab=migrations&source=${migrationSource.id}`);
     await expect(
-      page.getByRole("tab", { name: chinese ? "迁移源" : "Migration sources" }),
+      page.getByRole("tab", { name: "Migration sources" }),
     ).toHaveAttribute("aria-selected", "true");
-    await page
-      .getByRole("button", { name: chinese ? "运行预检" : "Run preflight" })
-      .click();
+    await page.getByRole("button", { name: "Run preflight" }).click();
     await page
       .getByRole("checkbox", {
-        name: chinese ? "选择 releases" : "Select releases",
+        name: "Select releases",
         exact: true,
       })
       .check();
     await page
       .getByRole("checkbox", {
-        name: chinese ? "选择 raw-source" : "Select raw-source",
+        name: "Select raw-source",
         exact: true,
       })
       .check();
     await page
       .getByRole("textbox", {
-        name: chinese ? "releases 的目标名称" : "Target name for releases",
+        name: "Target name for releases",
       })
       .fill("native-releases");
     await page
       .getByRole("textbox", {
-        name: chinese ? "raw-source 的目标名称" : "Target name for raw-source",
+        name: "Target name for raw-source",
       })
       .fill("native-raw");
     await page
       .getByRole("button", {
-        name: chinese
-          ? "发现选中 Hosted 内容（2）"
-          : "Discover selected Hosted content (2)",
+        name: "Discover selected Hosted content (2)",
       })
       .click();
-    await expect(
-      page.getByText(chinese ? /2 个源资产/ : /2 source assets/),
-    ).toBeVisible();
+    await expect(page.getByText(/2 source assets/)).toBeVisible();
     await page
       .getByRole("button", {
-        name: chinese ? "预览显式映射" : "Preview explicit mappings",
+        name: "Preview explicit mappings",
       })
       .click();
     await expect(
-      page.getByText(
-        chinese
-          ? /所选映射通过当前校验/
-          : /Selected mappings pass current validation/,
-      ),
+      page.getByText(/Selected mappings pass current validation/),
     ).toBeVisible();
     await geometry(page, width);
     await capture(page, info, "source-success");
@@ -300,19 +277,13 @@ for (const width of [1440, 390]) {
     );
     await page
       .getByRole("button", {
-        name: chinese
-          ? "发现选中 Hosted 内容（2）"
-          : "Discover selected Hosted content (2)",
+        name: "Discover selected Hosted content (2)",
       })
       .click();
     await expect(
-      page.getByText(
-        chinese ? /保留上次成功结果/ : /Keeping the last successful result/,
-      ),
+      page.getByText(/Keeping the last successful result/),
     ).toBeVisible();
-    await expect(
-      page.getByText(chinese ? /2 个源资产/ : /2 source assets/),
-    ).toBeVisible();
+    await expect(page.getByText(/2 source assets/)).toBeVisible();
     await expect(page.locator("body")).not.toContainText(
       "must-not-render-secret",
     );
@@ -341,24 +312,21 @@ for (const width of [1440, 390]) {
     await page.goto("/operations?tab=migrations");
     await expect(
       page.getByText(
-        width === 1440 ? /请求未完成/ : /The request did not complete/,
+        width === 1440
+          ? /request did not complete/
+          : /The request did not complete/,
       ),
     ).toBeVisible();
-    await expect(
-      page.getByRole("status", { name: /Loading|加载/ }),
-    ).toHaveCount(0);
+    await expect(page.getByRole("status", { name: /Loading/ })).toHaveCount(0);
     await expect(page.locator("body")).not.toContainText("hidden-password");
     await geometry(page, width);
     await capture(page, info, "source-initial-error");
     await page.route("**/api/v2/migration-sources?**", (route) =>
       route.fulfill({ json: { items: [], nextCursor: "" } }),
     );
-    await page.getByRole("button", { name: /重试|Retry/ }).click();
+    await page.getByRole("button", { name: /Retry|Retry/ }).click();
     await expect(
-      page.getByText(
-        width === 1440 ? "尚未配置迁移源" : "No migration sources configured",
-        { exact: true },
-      ),
+      page.getByText("No migration sources configured", { exact: true }),
     ).toBeVisible();
     await geometry(page, width);
     expect(errors.pageErrors).toEqual([]);
@@ -393,8 +361,12 @@ test("a member cannot open the migration source deep link or issue source API re
   });
   await page.goto(`/operations?tab=migrations&source=${migrationSource.id}`);
   // The empty state confirms the redirected catalog consumed its response.
-  await expect(page.getByText("暂无仓库", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("No repositories", { exact: true }),
+  ).toBeVisible();
   await expect(page).toHaveURL(/\/repositories$/);
-  await expect(page.getByRole("tab", { name: "迁移源" })).toHaveCount(0);
+  await expect(
+    page.getByRole("tab", { name: "Migration sources" }),
+  ).toHaveCount(0);
   expect(sourceRequests).toBe(0);
 });

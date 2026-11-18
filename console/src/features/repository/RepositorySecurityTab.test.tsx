@@ -123,13 +123,17 @@ describe("RepositorySecurityTab", () => {
       </QueryClientProvider>
     );
     const view = render(content(repo));
-    await screen.findByText("当前版本 1");
-    await user.click(screen.getByRole("switch", { name: "发布后自动扫描" }));
-    await user.click(screen.getByRole("button", { name: "保存策略" }));
-    await user.click(screen.getByRole("switch", { name: "阻断隔离制品读取" }));
-    await user.click(screen.getByRole("button", { name: "保存读取策略" }));
+    await screen.findByText("Current version 1");
+    await user.click(
+      screen.getByRole("switch", { name: "Scan after publication" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Save policy" }));
+    await user.click(
+      screen.getByRole("switch", { name: "Block quarantined artifact reads" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Save read policy" }));
     view.rerender(content(nextRepo));
-    await screen.findByText("当前版本 2");
+    await screen.findByText("Current version 2");
     await act(async () => {
       admissionAnswer(
         policyAnswer({
@@ -141,19 +145,33 @@ describe("RepositorySecurityTab", () => {
       );
       quarantineAnswer(policyAnswer({ version: "2", enabled: false }));
     });
-    expect(screen.getByRole("switch", { name: "启用准入检查" })).toBeChecked();
-    expect(screen.getByRole("switch", { name: "要求签名" })).toBeChecked();
     expect(
-      screen.getByRole("switch", { name: "阻断隔离制品读取" }),
+      screen.getByRole("switch", { name: "Enforce admission checks" }),
     ).toBeChecked();
-    expect(screen.getByRole("button", { name: "保存策略" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "保存读取策略" })).toBeDisabled();
-    expect(screen.queryByText("仓库安全策略已保存")).not.toBeInTheDocument();
-    expect(screen.queryByText("隔离读取策略已保存")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("switch", { name: "发布后自动扫描" }));
-    await user.click(screen.getByRole("button", { name: "保存策略" }));
-    await user.click(screen.getByRole("switch", { name: "阻断隔离制品读取" }));
-    await user.click(screen.getByRole("button", { name: "保存读取策略" }));
+    expect(
+      screen.getByRole("switch", { name: "Require a signature" }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole("switch", { name: "Block quarantined artifact reads" }),
+    ).toBeChecked();
+    expect(screen.getByRole("button", { name: "Save policy" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Save read policy" }),
+    ).toBeDisabled();
+    expect(
+      screen.queryByText("Repository security policy saved"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Quarantine read policy saved"),
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("switch", { name: "Scan after publication" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Save policy" }));
+    await user.click(
+      screen.getByRole("switch", { name: "Block quarantined artifact reads" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Save read policy" }));
     expect(mockReplaceSecurityPolicy).toHaveBeenLastCalledWith(
       expect.objectContaining({
         path: { repositoryId: nextRepo.id },
@@ -209,18 +227,24 @@ describe("RepositorySecurityTab", () => {
         </PreferencesProvider>
       </QueryClientProvider>,
     );
-    expect(await screen.findByText("当前版本 1")).toBeInTheDocument();
+    expect(await screen.findByText("Current version 1")).toBeInTheDocument();
     await act(async () =>
       answer(
         policyAnswer({ version: "2", enabled: true, requireSignature: true }),
       ),
     );
-    await screen.findByText("当前版本 2");
-    expect(screen.getByRole("switch", { name: "启用准入检查" })).toBeChecked();
-    expect(screen.getByRole("switch", { name: "要求签名" })).toBeChecked();
-    expect(screen.getByRole("button", { name: "保存策略" })).toBeDisabled();
-    await user.click(screen.getByRole("switch", { name: "发布后自动扫描" }));
-    await user.click(screen.getByRole("button", { name: "保存策略" }));
+    await screen.findByText("Current version 2");
+    expect(
+      screen.getByRole("switch", { name: "Enforce admission checks" }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole("switch", { name: "Require a signature" }),
+    ).toBeChecked();
+    expect(screen.getByRole("button", { name: "Save policy" })).toBeDisabled();
+    await user.click(
+      screen.getByRole("switch", { name: "Scan after publication" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Save policy" }));
     await waitFor(() =>
       expect(mockReplaceSecurityPolicy).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -269,17 +293,21 @@ describe("RepositorySecurityTab", () => {
         </PreferencesProvider>
       </QueryClientProvider>,
     );
-    await screen.findByText("读取策略当前版本 1");
+    await screen.findByText("Read policy version 1");
     await act(async () =>
       answer(policyAnswer({ version: "2", enabled: true })),
     );
-    await screen.findByText("读取策略当前版本 2");
+    await screen.findByText("Read policy version 2");
     expect(
-      screen.getByRole("switch", { name: "阻断隔离制品读取" }),
+      screen.getByRole("switch", { name: "Block quarantined artifact reads" }),
     ).toBeChecked();
-    expect(screen.getByRole("button", { name: "保存读取策略" })).toBeDisabled();
-    await user.click(screen.getByRole("switch", { name: "阻断隔离制品读取" }));
-    await user.click(screen.getByRole("button", { name: "保存读取策略" }));
+    expect(
+      screen.getByRole("button", { name: "Save read policy" }),
+    ).toBeDisabled();
+    await user.click(
+      screen.getByRole("switch", { name: "Block quarantined artifact reads" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Save read policy" }));
     await waitFor(() =>
       expect(mockReplaceQuarantineReadPolicy).toHaveBeenCalledWith({
         path: { repositoryId: repo.id },
@@ -325,11 +353,13 @@ describe("RepositorySecurityTab", () => {
       </TestQueryProvider>,
     );
 
-    expect(await screen.findByText("签名信任与当前快照")).toBeInTheDocument();
-    expect(screen.getByText("密钥轮换重叠")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Signing trust and current snapshot"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Key rotation overlap")).toBeInTheDocument();
     expect(screen.getByText("stable / 7")).toBeInTheDocument();
     expect(screen.getByText("release@example.test")).toBeInTheDocument();
-    expect(screen.getByText("当前使用")).toBeInTheDocument();
+    expect(screen.getByText("In use")).toBeInTheDocument();
     expect(mockGetSecurityPolicy).not.toHaveBeenCalled();
     expect(mockGetQuarantineReadPolicy).not.toHaveBeenCalled();
   });
@@ -377,7 +407,9 @@ describe("RepositorySecurityTab", () => {
       </TestQueryProvider>,
     );
 
-    expect(await screen.findByText("生产信任已固定")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Production trust pinned"),
+    ).toBeInTheDocument();
     resolveFirst?.({
       data: {
         repositoryId: repo.id,
@@ -387,8 +419,8 @@ describe("RepositorySecurityTab", () => {
       },
     });
     await Promise.resolve();
-    expect(screen.queryByText("仅参考签名器")).not.toBeInTheDocument();
-    expect(screen.getByText("生产信任已固定")).toBeInTheDocument();
+    expect(screen.queryByText("Reference signer only")).not.toBeInTheDocument();
+    expect(screen.getByText("Production trust pinned")).toBeInTheDocument();
   });
 
   it("explains an unavailable APT signing endpoint during a rolling upgrade", async () => {
@@ -412,10 +444,12 @@ describe("RepositorySecurityTab", () => {
     );
 
     expect(
-      await screen.findByText("APT 签名状态功能未启用"),
+      await screen.findByText("APT signing state is unavailable"),
     ).toBeInTheDocument();
-    expect(screen.getByText(/当前后端构建尚未挂载/)).toBeInTheDocument();
-    expect(screen.queryByText("请求出错")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/current backend does not expose/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Request failed")).not.toBeInTheDocument();
   });
 
   it("loads and saves a versioned security admission policy", async () => {
@@ -459,12 +493,16 @@ describe("RepositorySecurityTab", () => {
       </TestQueryProvider>,
     );
 
-    expect(await screen.findByText("当前版本 3")).toBeInTheDocument();
-    const saveButton = screen.getByRole("button", { name: "保存策略" });
+    expect(await screen.findByText("Current version 3")).toBeInTheDocument();
+    const saveButton = screen.getByRole("button", { name: "Save policy" });
     expect(saveButton).toBeDisabled();
-    await user.click(screen.getByRole("switch", { name: "发布后自动扫描" }));
-    await user.click(screen.getByRole("switch", { name: "启用准入检查" }));
-    expect(screen.getByText("有未保存更改")).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("switch", { name: "Scan after publication" }),
+    );
+    await user.click(
+      screen.getByRole("switch", { name: "Enforce admission checks" }),
+    );
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
     expect(saveButton).toBeEnabled();
     await user.click(saveButton);
 
@@ -483,8 +521,10 @@ describe("RepositorySecurityTab", () => {
         }),
       }),
     );
-    expect(await screen.findByText("当前版本 4")).toBeInTheDocument();
-    expect(screen.getByText("仓库安全策略已保存")).toBeInTheDocument();
+    expect(await screen.findByText("Current version 4")).toBeInTheDocument();
+    expect(
+      screen.getByText("Repository security policy saved"),
+    ).toBeInTheDocument();
     expect(saveButton).toBeDisabled();
   });
 
@@ -502,9 +542,9 @@ describe("RepositorySecurityTab", () => {
     );
 
     expect(
-      await screen.findByRole("switch", { name: "发布后自动扫描" }),
+      await screen.findByRole("switch", { name: "Scan after publication" }),
     ).toBeDisabled();
-    expect(screen.getByText("未配置可用扫描器")).toBeInTheDocument();
+    expect(screen.getByText("No scanner configured")).toBeInTheDocument();
   });
 
   it("loads and saves the independent quarantine read policy", async () => {
@@ -528,14 +568,14 @@ describe("RepositorySecurityTab", () => {
     );
 
     const readSwitch = await screen.findByRole("switch", {
-      name: "阻断隔离制品读取",
+      name: "Block quarantined artifact reads",
     });
     const readSaveButton = screen.getByRole("button", {
-      name: "保存读取策略",
+      name: "Save read policy",
     });
     expect(readSaveButton).toBeDisabled();
     await user.click(readSwitch);
-    expect(screen.getByText("有未保存更改")).toBeInTheDocument();
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
     expect(readSaveButton).toBeEnabled();
     await user.click(readSaveButton);
 
@@ -546,8 +586,12 @@ describe("RepositorySecurityTab", () => {
         body: { version: "7", enabled: true },
       }),
     );
-    expect(await screen.findByText("读取策略当前版本 8")).toBeInTheDocument();
-    expect(screen.getByText("隔离读取策略已保存")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Read policy version 8"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Quarantine read policy saved"),
+    ).toBeInTheDocument();
     expect(readSaveButton).toBeDisabled();
   });
 
@@ -568,10 +612,12 @@ describe("RepositorySecurityTab", () => {
     );
 
     expect(
-      await screen.findByText("module@version 全部表示"),
+      await screen.findByText("Every module@version representation"),
     ).toBeInTheDocument();
-    expect(screen.getByText("从 @v/list 与 @latest 隐藏")).toBeInTheDocument();
-    expect(screen.queryByText("制品身份")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Hidden from @v/list and @latest"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Artifact identity")).not.toBeInTheDocument();
   });
 
   it("keeps the security policy usable when the read policy request fails", async () => {
@@ -579,7 +625,11 @@ describe("RepositorySecurityTab", () => {
       data: { version: "3", enabled: false },
     } as never);
     mockGetQuarantineReadPolicy.mockResolvedValue({
-      error: { code: "internal_error", message: "读取策略失败", status: 500 },
+      error: {
+        code: "internal_error",
+        message: "Failed to read policy",
+        status: 500,
+      },
     } as never);
 
     render(
@@ -590,15 +640,17 @@ describe("RepositorySecurityTab", () => {
       </TestQueryProvider>,
     );
 
-    expect(await screen.findByText("读取策略失败")).toBeInTheDocument();
-    expect(screen.getByText("当前版本 3")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "保存策略" }),
+      await screen.findByText("Failed to read policy"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Current version 3")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Save policy" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "保存读取策略" }),
+      screen.queryByRole("button", { name: "Save read policy" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByText("状态不可用")).toBeInTheDocument();
-    expect(screen.queryByText("有未保存更改")).not.toBeInTheDocument();
+    expect(screen.getByText("Unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
   });
 });

@@ -140,12 +140,14 @@ test("anonymous browsing and global-search deep links reach the exact artifact",
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBe(true);
-  await expect(page.getByText("包含", { exact: true })).toBeVisible();
+  await expect(page.getByText("Contains", { exact: true })).toBeVisible();
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto(
     `/browse?repository=${repositoryId}&artifact=${encodeURIComponent(artifactPath)}`,
   );
-  await expect(page.getByRole("button", { name: "公开仓库" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Public repositories" }),
+  ).toBeVisible();
   await expect(
     page.getByRole("row").filter({ hasText: artifactPath }).first(),
   ).toBeVisible();
@@ -153,9 +155,11 @@ test("anonymous browsing and global-search deep links reach the exact artifact",
   await authenticate(page);
   await page.goto(`/search?q=${encodeURIComponent(suffix.toUpperCase())}`);
   await expect(page.getByText(artifactPath, { exact: true })).toBeVisible();
-  await page.getByText("前缀", { exact: true }).click();
-  await expect(page.getByText("没有匹配的制品", { exact: true })).toBeVisible();
-  await page.getByText("包含", { exact: true }).click();
+  await page.getByText("Prefix", { exact: true }).click();
+  await expect(
+    page.getByText("No matching artifacts", { exact: true }),
+  ).toBeVisible();
+  await page.getByText("Contains", { exact: true }).click();
   await expect(page.getByText(artifactPath, { exact: true })).toBeVisible();
   await page.getByRole("link", { name: repositoryName, exact: true }).click();
   await expect(page).toHaveURL(
@@ -196,10 +200,10 @@ test("retention dry-run and lifecycle jobs are visible in the repository console
 
   await authenticate(page);
   await page.goto(`/repositories/${repositoryId}`);
-  await openRepositoryTask(page, "治理与安全", "保留策略");
+  await openRepositoryTask(page, "Governance", "Retention policy");
   await expect(page.getByRole("switch")).toBeChecked();
-  await page.getByRole("button", { name: "试运行" }).click();
-  await expect(page.getByText("没有需要清理的路径资产")).toBeVisible();
+  await page.getByRole("button", { name: "Dry run" }).click();
+  await expect(page.getByText("No path assets to clean")).toBeVisible();
 
   const execute = await request.post(
     `/api/v2/repositories/${repositoryId}/retention:execute`,
@@ -213,7 +217,7 @@ test("retention dry-run and lifecycle jobs are visible in the repository console
   );
   await expectOK(execute, "enqueue Raw retention job");
 
-  await openRepositoryTask(page, "设置", "生命周期任务");
+  await openRepositoryTask(page, "Settings", "Lifecycle job");
   await expect(
     page.getByRole("row").filter({ hasText: "retention" }).first(),
   ).toBeVisible();
@@ -231,19 +235,19 @@ test("a deleted artifact can be restored from the repository tombstone tab", asy
 
   await authenticate(page);
   await page.goto(`/repositories/${repositoryId}`);
-  await openRepositoryTask(page, "治理与安全", "墓碑");
+  await openRepositoryTask(page, "Governance", "Tombstones");
   const tombstoneTable = page
     .getByRole("table")
-    .filter({ has: page.getByRole("columnheader", { name: "坐标" }) });
+    .filter({ has: page.getByRole("columnheader", { name: "Coordinate" }) });
   const row = tombstoneTable.getByRole("row").filter({ hasText: artifactPath });
   await expect(row).toBeVisible();
-  await row.getByRole("button", { name: /恢\s*复/ }).click();
+  await row.getByRole("button", { name: /Restore/ }).click();
   await page
-    .getByRole("button", { name: /恢\s*复/ })
+    .getByRole("button", { name: /Restore/ })
     .last()
     .click();
   await expect(
-    page.getByText(`已恢复 ${artifactPath}`, { exact: true }),
+    page.getByText(`Restored ${artifactPath}`, { exact: true }),
   ).toBeVisible();
   await expect(row).toHaveCount(0);
 
@@ -270,9 +274,9 @@ test("expired API keys are clearly distinguished from active and revoked keys", 
 
   await authenticate(page);
   await page.goto("/keys");
-  await page.getByText("有效", { exact: true }).click();
-  await page.getByText("已过期", { exact: true }).click();
+  await page.getByText("Active", { exact: true }).click();
+  await page.getByText("Expired", { exact: true }).click();
   const row = page.getByRole("row").filter({ hasText: apiKeyName });
   await expect(row).toBeVisible();
-  await expect(row.getByText("已过期", { exact: true })).toBeVisible();
+  await expect(row.getByText("Expired", { exact: true })).toBeVisible();
 });

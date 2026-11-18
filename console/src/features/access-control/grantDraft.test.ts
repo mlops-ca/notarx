@@ -15,7 +15,7 @@ import {
   type GrantLevel,
 } from "./grantDraft";
 
-const text = createTranslator("en-US");
+const text = createTranslator("en-CA");
 
 function role(
   id: string,
@@ -134,9 +134,9 @@ describe("grantedCapabilitiesLabel", () => {
     expect(
       grantedCapabilitiesLabel(
         ["repositories:admin"],
-        createTranslator("zh-CN"),
+        createTranslator("en-CA"),
       ),
-    ).toBe("读取 + 写入 + 管理 + 制品情报");
+    ).toBe("Read + write + admin + intelligence");
   });
 
   it("combines read/write with the independent intelligence scope", () => {

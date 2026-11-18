@@ -76,7 +76,9 @@ describe("UserSessionsPanel", () => {
       signal: expect.any(AbortSignal),
     });
 
-    await user.click(screen.getByRole("switch", { name: "显示失效会话" }));
+    await user.click(
+      screen.getByRole("switch", { name: "Show inactive sessions" }),
+    );
     expect(await screen.findByText("OIDC client")).toBeInTheDocument();
     await waitFor(() => {
       expect(mockListSessions).toHaveBeenLastCalledWith({
@@ -86,14 +88,16 @@ describe("UserSessionsPanel", () => {
       });
     });
 
-    await user.click(screen.getAllByRole("button", { name: "撤销会话" })[0]);
-    await user.click(await screen.findByRole("button", { name: /^撤\s*销$/ }));
+    await user.click(
+      screen.getAllByRole("button", { name: "Revoke session" })[0],
+    );
+    await user.click(await screen.findByRole("button", { name: /^Revoke$/ }));
     await waitFor(() => {
       expect(mockRevokeSession).toHaveBeenCalledWith({
         path: { userId, sessionId: active.id },
       });
     });
-    expect((await screen.findAllByText("已撤销")).length).toBe(2);
+    expect((await screen.findAllByText("Revoked")).length).toBe(2);
   });
 
   it("shows the shared loading state while the first request is in flight", async () => {
@@ -109,7 +113,7 @@ describe("UserSessionsPanel", () => {
 
     renderPanel();
 
-    const empty = await screen.findByText("当前没有活动会话");
+    const empty = await screen.findByText("No active sessions");
     expect(empty.closest(".ag-empty-state")).not.toBeNull();
   });
 
@@ -120,11 +124,11 @@ describe("UserSessionsPanel", () => {
 
     renderPanel();
     const revokeButton = await screen.findByRole("button", {
-      name: "撤销会话",
+      name: "Revoke session",
     });
     await user.click(revokeButton);
 
-    const confirm = await screen.findByRole("button", { name: /^撤\s*销$/ });
+    const confirm = await screen.findByRole("button", { name: /^Revoke$/ });
     await user.click(confirm);
 
     expect(await screen.findByText("network down")).toBeInTheDocument();

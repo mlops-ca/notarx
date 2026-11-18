@@ -55,7 +55,7 @@ describe("CargoCrateDetail", () => {
     );
 
     expect(await screen.findByText("yanked")).toBeInTheDocument();
-    expect(screen.getByText("下载 .crate")).toBeInTheDocument();
+    expect(screen.getByText("Download .crate")).toBeInTheDocument();
     expect(screen.getByText("SHA-256", { exact: false })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       "/cargo/cargo-hosted/de/mo/demo-crate",

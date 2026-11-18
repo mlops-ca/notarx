@@ -24,7 +24,7 @@ test("audit date search uses the Ant Design range picker and ISO query bounds", 
   });
 
   await page.goto("/audits");
-  await expect(page.getByRole("heading", { name: "审计日志" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Audit log" })).toBeVisible();
   const picker = page.locator(".ant-picker-range");
   const inputs = picker.locator("input");
   await expect(picker).toBeVisible();
@@ -153,27 +153,27 @@ test("audit refresh failure retains the previously loaded records", async ({
   await expect(page.getByText("stable-releases").first()).toBeVisible();
   // Known codes render as readable labels, the raw code stays on the cell's
   // tooltip, and a code the console does not know degrades to the raw code.
-  const knownLabel = page.getByText("读取（GET）").first();
+  const knownLabel = page.getByText("Read (GET)").first();
   await expect(knownLabel).toBeVisible();
   await expect(knownLabel).toHaveAttribute("title", "get");
-  await expect(page.getByText("写入仓库授权")).toBeVisible();
+  await expect(page.getByText("Upsert repository grant")).toBeVisible();
   await expect(page.getByText("future.feature.action")).toBeVisible();
 
   // The outcome column reads as a label too, with its code kept in the tooltip.
   const deniedRow = page.locator('span[title="access_denied"]');
-  await expect(deniedRow).toContainText("访问被拒");
+  await expect(deniedRow).toContainText("Access denied");
 
   // The filter keeps machine codes searchable: pasting the code from a CSV
   // export still finds the operation it names.
-  await page.getByText("高级筛选").click();
+  await page.getByText("Advanced filters").click();
   const operationFilter = page.getByRole("combobox", {
-    name: "操作类型",
+    name: "Operation",
   });
   await operationFilter.click();
   await operationFilter.fill("repository.grants.upsert");
   await expect(
     page.locator(".ant-select-item-option").filter({
-      hasText: "写入仓库授权",
+      hasText: "Upsert repository grant",
     }),
   ).toBeVisible();
 
@@ -185,10 +185,10 @@ test("audit refresh failure retains the previously loaded records", async ({
   }
 
   failRefresh = true;
-  await page.getByRole("button", { name: "刷新" }).click();
+  await page.getByRole("button", { name: "Refresh" }).click();
   await expect(page.getByText("refresh failed")).toBeVisible();
   await expect(page.getByText("stable-releases").first()).toBeVisible();
-  await expect(page.getByText("加载中…")).toHaveCount(0);
+  await expect(page.getByText("Loading…")).toHaveCount(0);
   // A 5xx answer is retried once by the shared query layer, then reported.
   expect(consoleErrors).toHaveLength(2);
   for (const message of consoleErrors) expect(message).toContain("503");

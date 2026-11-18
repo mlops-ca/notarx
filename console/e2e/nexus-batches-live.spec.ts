@@ -75,7 +75,7 @@ async function authenticate(page: Page) {
   await page.addInitScript((token) => {
     localStorage.setItem("ag.console.token", token);
     localStorage.setItem("ag.console.role", "admin");
-    localStorage.setItem("ag.console.locale", "zh-CN");
+    localStorage.setItem("ag.console.locale", "en-CA");
   }, runtime!.adminToken);
 }
 async function prepareTargets(request: APIRequestContext) {
@@ -116,38 +116,42 @@ async function fillCapacity(container: Page | Locator) {
   const downloadPeak = Math.max(...sizes(inventory));
   expect(Number.isSafeInteger(freeBytes) && freeBytes > 0).toBeTruthy();
   for (const [name, value] of [
-    ["存储池可用字节", String(freeBytes)],
-    ["下载峰值字节", String(downloadPeak)],
-    ["上传峰值字节", "0"],
-    ["备份峰值字节", "0"],
-    ["恢复峰值字节", "0"],
-    ["保留余量字节", "1048576"],
+    ["Free storage-pool bytes", String(freeBytes)],
+    ["Peak download bytes", String(downloadPeak)],
+    ["Peak upload bytes", "0"],
+    ["Peak backup bytes", "0"],
+    ["Peak restore bytes", "0"],
+    ["Headroom bytes", "1048576"],
   ])
     await container.getByRole("textbox", { name, exact: true }).fill(value);
   await container
-    .getByRole("textbox", { name: "容量观察时间（含时区）" })
+    .getByRole("textbox", {
+      name: "Capacity observation time (with time zone)",
+    })
     .fill(new Date(Date.now() - 250).toISOString());
   await container
-    .getByRole("textbox", { name: "证据有效截止时间（含时区）" })
+    .getByRole("textbox", { name: "Evidence expiry time (with time zone)" })
     .fill(new Date(Date.now() + 900_000).toISOString());
 }
 async function start(page: Page, rescan = false) {
   await page
     .getByRole("button", {
-      name: rescan ? "重新扫描并追平" : "创建迁移批次",
+      name: rescan ? "Rescan and catch up" : "Create migration batch",
       exact: true,
     })
     .click();
   if (!rescan) {
     await page
-      .getByRole("combobox", { name: "已保存的迁移源", exact: true })
+      .getByRole("combobox", { name: "Saved migration source", exact: true })
       .fill(runtime!.source.name);
     await page
       .locator(".ant-select-dropdown:visible")
       .getByText(runtime!.source.name, { exact: true })
       .click();
   }
-  await page.getByRole("button", { name: "运行预检", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Run preflight", exact: true })
+    .click();
   for (const [source, target] of [
     ["releases", runtime!.repositories.maven.name],
     ["raw-source", runtime!.repositories.raw.name],
@@ -159,7 +163,10 @@ async function start(page: Page, rescan = false) {
     await checkbox.check();
     if (!rescan) {
       await page
-        .getByRole("combobox", { name: `${source} 的目标仓库`, exact: true })
+        .getByRole("combobox", {
+          name: `Target repository for ${source}`,
+          exact: true,
+        })
         .fill(target);
       await page
         .locator(".ant-select-dropdown:visible")
@@ -168,7 +175,7 @@ async function start(page: Page, rescan = false) {
     }
   }
   const submit = page.getByRole("button", {
-    name: "应用映射并创建批次",
+    name: "Apply mappings and create batch",
     exact: true,
   });
   await expect(submit).toBeDisabled();
@@ -198,12 +205,12 @@ async function finished(page: Page, request: APIRequestContext, id: string) {
     .toBe("completed");
   await page
     .getByTestId("nexus-batch-detail")
-    .getByRole("button", { name: "刷新批次" })
+    .getByRole("button", { name: "Refresh batches" })
     .click();
   await expect(
     page
       .getByTestId("nexus-batch-detail")
-      .getByText("后台批次已完成", { exact: true }),
+      .getByText("Background batch completed", { exact: true }),
   ).toBeVisible();
   return readBatch(request, id);
 }
@@ -221,17 +228,17 @@ async function entryPage(request: APIRequestContext, id: string) {
 async function retry(page: Page, batchId: string) {
   await page
     .getByTestId("nexus-batch-detail")
-    .getByRole("button", { name: "刷新批次" })
+    .getByRole("button", { name: "Refresh batches" })
     .click();
   await page
-    .getByRole("button", { name: "重试可重试失败项", exact: true })
+    .getByRole("button", { name: "Retry eligible failed entries", exact: true })
     .click();
   const dialog = page.getByRole("dialog", {
-    name: "重试可重试失败项",
+    name: "Retry eligible failed entries",
     exact: true,
   });
   const submit = dialog.getByRole("button", {
-    name: "重试可重试失败项",
+    name: "Retry eligible failed entries",
     exact: true,
   });
   await expect(submit).toBeDisabled();
@@ -297,11 +304,17 @@ test("real source mappings, full copy, reopen and full rescan retain independent
       expect(await response.body()).toEqual(body);
     }
   await expect(
-    page.getByText("本批次 target-only 冷客户端验收：未验证", { exact: true }),
+    page.getByText(
+      "Target-only cold-client acceptance for this batch: unverified",
+      { exact: true },
+    ),
   ).toBeVisible();
   const downloadPromise = page.waitForEvent("download");
   await page
-    .getByRole("button", { name: "导出当前观察报告", exact: true })
+    .getByRole("button", {
+      name: "Export current observation report",
+      exact: true,
+    })
     .click();
   const download = await downloadPromise;
   const exportPath = info.outputPath("observed-full.json");
@@ -328,7 +341,7 @@ test("real source mappings, full copy, reopen and full rescan retain independent
     await expect(
       page
         .getByTestId("nexus-batch-detail")
-        .getByText("后台批次已完成", { exact: true }),
+        .getByText("Background batch completed", { exact: true }),
     ).toBeVisible();
     phase(2);
     const next = await start(page, true);
@@ -337,10 +350,15 @@ test("real source mappings, full copy, reopen and full rescan retain independent
     expect(delta.counts.sourceDeleted).toBe(1);
     expect(delta.counts.committed).toBe(2);
     await expect(
-      page.getByText(/存在冲突、失败、未支持或源变化/),
+      page.getByText(
+        /Conflicts, failures, unsupported content or source changes remain\. This does not prove complete catch-up\./,
+      ),
     ).toBeVisible();
     await expect(
-      page.getByText("冻结写入后的最后追平点：未验证", { exact: true }),
+      page.getByText(
+        "Final catch-up after freezing source writes: unverified",
+        { exact: true },
+      ),
     ).toBeVisible();
     await page.screenshot({
       path: info.outputPath("real-batch-rescan.png"),
@@ -380,9 +398,11 @@ test("real pause drain, fresh resume, worker restart and cancel are durable serv
       .toBe("running");
     await page
       .getByTestId("nexus-batch-detail")
-      .getByRole("button", { name: "刷新批次" })
+      .getByRole("button", { name: "Refresh batches" })
       .click();
-    await page.getByRole("button", { name: "暂停批次", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Pause batch", exact: true })
+      .click();
     await expect
       .poll(async () => (await readBatch(request, batch.id)).state, {
         timeout: 60_000,
@@ -390,15 +410,25 @@ test("real pause drain, fresh resume, worker restart and cancel are durable serv
       .toBe("paused");
     await page
       .getByTestId("nexus-batch-detail")
-      .getByRole("button", { name: "刷新批次" })
+      .getByRole("button", { name: "Refresh batches" })
       .click();
-    await page.getByRole("button", { name: "恢复批次", exact: true }).click();
-    const dialog = page.getByRole("dialog", { name: "恢复批次", exact: true });
+    await page
+      .getByRole("button", { name: "Resume batch", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog", {
+      name: "Resume batch",
+      exact: true,
+    });
     await expect(
-      dialog.getByRole("textbox", { name: "存储池可用字节", exact: true }),
+      dialog.getByRole("textbox", {
+        name: "Free storage-pool bytes",
+        exact: true,
+      }),
     ).toHaveValue("");
     await fillCapacity(dialog);
-    await dialog.getByRole("button", { name: "恢复批次", exact: true }).click();
+    await dialog
+      .getByRole("button", { name: "Resume batch", exact: true })
+      .click();
     await expect(dialog).toBeHidden();
     compose(["restart", "migration-worker"]);
     const after = await finished(page, request, batch.id);
@@ -409,16 +439,20 @@ test("real pause drain, fresh resume, worker restart and cancel are durable serv
       animations: "disabled",
     });
     const cancelling = await start(page, true);
-    await page.getByRole("button", { name: "取消批次", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Cancel batch", exact: true })
+      .click();
     const confirm = page.getByRole("dialog", {
-      name: "取消这个迁移批次？",
+      name: "Cancel this migration batch?",
       exact: true,
     });
     await expect(
-      confirm.getByText(/已提交的身份和源内容都会保留/),
+      confirm.getByText(
+        /Stop new work and fence subsequent publication\. Committed identities and source content are preserved\. This does not delete or roll back data\./,
+      ),
     ).toBeVisible();
     await confirm
-      .getByRole("button", { name: "取消批次", exact: true })
+      .getByRole("button", { name: "Cancel batch", exact: true })
       .click();
     await expect
       .poll(async () => (await readBatch(request, cancelling.id)).state, {
@@ -530,17 +564,19 @@ for (const scenario of ["missing-source", "bad-digest"] as const)
       expect(inventory.items).toEqual([]);
       await page
         .getByTestId("nexus-batch-detail")
-        .getByRole("button", { name: "刷新批次" })
+        .getByRole("button", { name: "Refresh batches" })
         .click();
       const diagnosis = page.getByRole("region", {
-        name: "最近的持久扫描失败定位",
+        name: "Most recent durable scan failure",
         exact: true,
       });
       await expect(diagnosis).toContainText(path);
       await expect(diagnosis).toContainText(repository);
       await expect(diagnosis).toContainText(expectedCode);
       await expect(
-        page.getByText("未知；完整清单尚未封存", { exact: true }),
+        page.getByText("Unknown; complete manifest is not sealed", {
+          exact: true,
+        }),
       ).toBeVisible();
       await expect(page.locator("body")).not.toContainText("fixture-password");
       await page.screenshot({
@@ -617,30 +653,46 @@ test("real explicit Hosted preview continues into generated-client batch applica
   await prepareTargets(request);
   await authenticate(page);
   await page.goto(`/operations?tab=migrations&source=${runtime!.source.id}`);
-  await page.getByRole("button", { name: "运行预检", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Run preflight", exact: true })
+    .click();
   for (const [source, target] of [
     ["releases", runtime!.repositories.maven.name],
     ["raw-source", runtime!.repositories.raw.name],
   ]) {
     await page
-      .getByRole("checkbox", { name: `选择 ${source}`, exact: true })
+      .getByRole("checkbox", { name: `Select ${source}`, exact: true })
       .check();
     await page
-      .getByRole("textbox", { name: `${source} 的目标名称`, exact: true })
+      .getByRole("textbox", { name: `Target name for ${source}`, exact: true })
       .fill(target);
   }
-  await page.getByRole("button", { name: "预览显式映射", exact: true }).click();
-  await expect(page.getByText(/所选映射通过当前校验/)).toBeVisible();
   await page
-    .getByRole("button", { name: "使用 2 个 Hosted 映射创建批次", exact: true })
+    .getByRole("button", { name: "Preview explicit mappings", exact: true })
+    .click();
+  await expect(
+    page.getByText(
+      /Selected mappings pass current validation\. No targets have been created and no content has migrated\./,
+    ),
+  ).toBeVisible();
+  await page
+    .getByRole("button", {
+      name: "Create a batch with 2 Hosted mappings",
+      exact: true,
+    })
     .click();
   await expect(page).toHaveURL(/view=batches/);
-  await page.getByRole("button", { name: "运行预检", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Run preflight", exact: true })
+    .click();
   await expect(
-    page.getByRole("combobox", { name: "releases 的目标仓库", exact: true }),
+    page.getByRole("combobox", {
+      name: "Target repository for releases",
+      exact: true,
+    }),
   ).toBeVisible();
   const submit = page.getByRole("button", {
-    name: "应用映射并创建批次",
+    name: "Apply mappings and create batch",
     exact: true,
   });
   await expect(submit).toBeDisabled();
@@ -669,7 +721,10 @@ test("real explicit Hosted preview continues into generated-client batch applica
   await expect(page).toHaveURL(new RegExp(`batch=${batch.id}`));
   await finished(page, request, batch.id);
   await expect(
-    page.getByText("本批次 target-only 冷客户端验收：未验证", { exact: true }),
+    page.getByText(
+      "Target-only cold-client acceptance for this batch: unverified",
+      { exact: true },
+    ),
   ).toBeVisible();
   await page.screenshot({
     path: info.outputPath("real-preview-applied.png"),

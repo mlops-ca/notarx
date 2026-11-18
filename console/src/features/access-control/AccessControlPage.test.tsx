@@ -151,16 +151,16 @@ describe("AccessControlPage", () => {
 
     expect(
       await screen.findByText(
-        "服务账号暂时不可用，仍可检查当前身份、用户、API Key 和自定义 actor。",
+        "Service accounts are temporarily unavailable. You can still evaluate the current identity, users, API keys, and custom actors.",
       ),
     ).toBeVisible();
 
     const principalPicker = screen.getByRole("combobox", {
-      name: "授权主体",
+      name: "Principal",
     });
     await user.click(principalPicker);
-    await user.click(screen.getByText(/用户 · active-user/));
-    await user.click(screen.getByRole("button", { name: /检\s*查/ }));
+    await user.click(screen.getByText(/User · active-user/));
+    await user.click(screen.getByRole("button", { name: /Evaluate/ }));
 
     await waitFor(() =>
       expect(mockGetRepositoryEffectiveAccess).toHaveBeenCalledWith({
@@ -174,7 +174,7 @@ describe("AccessControlPage", () => {
         },
       }),
     );
-    expect(await screen.findByText("模拟结果")).toBeInTheDocument();
+    expect(await screen.findByText("Simulated")).toBeInTheDocument();
   });
 
   it("never shows an earlier evaluation after its inputs changed", async () => {
@@ -270,16 +270,16 @@ describe("AccessControlPage", () => {
 
     expect(
       await screen.findByText(
-        "服务账号暂时不可用，仍可检查当前身份、用户、API Key 和自定义 actor。",
+        "Service accounts are temporarily unavailable. You can still evaluate the current identity, users, API keys, and custom actors.",
       ),
     ).toBeVisible();
 
     const principalPicker = screen.getByRole("combobox", {
-      name: "授权主体",
+      name: "Principal",
     });
     await user.click(principalPicker);
-    await user.click(screen.getByText(/用户 · active-user/));
-    await user.click(screen.getByRole("button", { name: /检\s*查/ }));
+    await user.click(screen.getByText(/User · active-user/));
+    await user.click(screen.getByRole("button", { name: /Evaluate/ }));
 
     await waitFor(() =>
       expect(mockGetRepositoryEffectiveAccess).toHaveBeenCalledTimes(1),
@@ -289,12 +289,12 @@ describe("AccessControlPage", () => {
       screen.getByPlaceholderText("releases/2026/app.tar.gz"),
       "docs/",
     );
-    await user.click(screen.getByRole("button", { name: /检\s*查/ }));
+    await user.click(screen.getByRole("button", { name: /Evaluate/ }));
     expect(await screen.findByText("docs/")).toBeInTheDocument();
     finishFirst(answer(""));
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(screen.getByText("docs/")).toBeInTheDocument();
-    expect(screen.queryByText("整个仓库")).not.toBeInTheDocument();
+    expect(screen.queryByText("Entire repository")).not.toBeInTheDocument();
   });
 
   it("omits disabled users and unusable API keys from the principal picker", async () => {
@@ -381,21 +381,23 @@ describe("AccessControlPage", () => {
     );
 
     const principalPicker = await screen.findByRole("combobox", {
-      name: "授权主体",
+      name: "Principal",
     });
     await user.click(principalPicker);
 
-    expect(screen.getByText(/用户 · active-user/)).toBeInTheDocument();
+    expect(screen.getByText(/User · active-user/)).toBeInTheDocument();
     expect(screen.getByText(/API Key · Active key/)).toBeInTheDocument();
-    expect(screen.getByText(/服务账号 · pipeone-ci/)).toBeInTheDocument();
-    expect(screen.getAllByText(/当前登录身份/)).not.toHaveLength(0);
-    expect(screen.getByText(/OIDC \/ 自定义 actor/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Service account · pipeone-ci/),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/Current identity/)).not.toHaveLength(0);
+    expect(screen.getByText(/OIDC \/ custom actor/)).toBeInTheDocument();
     expect(screen.queryByText(/disabled-user/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Revoked key/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Expired key/)).not.toBeInTheDocument();
     expect(screen.queryByText(/old-ci/)).not.toBeInTheDocument();
 
-    await user.click(screen.getByText(/服务账号 · pipeone-ci/));
+    await user.click(screen.getByText(/Service account · pipeone-ci/));
     mockGetRepositoryEffectiveAccess.mockResolvedValue({
       data: {
         actor: "service-account:active-service-account",
@@ -430,7 +432,7 @@ describe("AccessControlPage", () => {
         },
       },
     } as never);
-    await user.click(screen.getByRole("button", { name: /检\s*查/ }));
+    await user.click(screen.getByRole("button", { name: /Evaluate/ }));
     await waitFor(() =>
       expect(mockGetRepositoryEffectiveAccess).toHaveBeenCalledWith({
         // The evaluation runs as a query, so a superseded one is cancelled.
@@ -443,7 +445,7 @@ describe("AccessControlPage", () => {
         },
       }),
     );
-    expect(await screen.findByText("模拟结果")).toBeInTheDocument();
+    expect(await screen.findByText("Simulated")).toBeInTheDocument();
   });
 
   it.each(["updated", "update-error", "load-error"])(
@@ -501,37 +503,41 @@ describe("AccessControlPage", () => {
         </TestQueryProvider>,
       );
 
-      expect(await screen.findByText("公开访问边界")).toBeInTheDocument();
+      expect(
+        await screen.findByText("Public access boundary"),
+      ).toBeInTheDocument();
       expect(
         screen.getByText(
-          "匿名读取须全局、仓库及适用的分组同时允许，写入、删除和管理仍需认证。",
+          "Anonymous reads require global, repository, and applicable group opt-in; writes, deletes, and management still require authentication.",
         ),
       ).toBeInTheDocument();
-      expect(screen.queryByText("分组双重同意")).not.toBeInTheDocument();
-      expect(await screen.findByText("1 / 2 个仓库公开")).toBeInTheDocument();
+      expect(screen.queryByText("Group dual consent")).not.toBeInTheDocument();
+      expect(
+        await screen.findByText("1 / 2 repositories public"),
+      ).toBeInTheDocument();
       if (outcome === "load-error") {
         expect(
           await screen.findByText("synthetic policy unavailable"),
         ).toBeInTheDocument();
         const card = within(
           screen
-            .getByRole("heading", { name: "公开访问边界" })
+            .getByRole("heading", { name: "Public access boundary" })
             .closest(".ag-public-access-card")! as HTMLElement,
         );
-        expect(card.queryByText("加载中…")).not.toBeInTheDocument();
+        expect(card.queryByText("Loading…")).not.toBeInTheDocument();
         expect(card.queryByRole("switch")).not.toBeInTheDocument();
         expect(mockReplaceAnonymousAccessPolicy).not.toHaveBeenCalled();
         return;
       }
       expect(
-        screen.getByRole("switch", { name: "切换全局匿名读取" }),
+        screen.getByRole("switch", { name: "Toggle global anonymous reads" }),
       ).toBeChecked();
       await user.click(
-        screen.getByRole("switch", { name: "切换全局匿名读取" }),
+        screen.getByRole("switch", { name: "Toggle global anonymous reads" }),
       );
       await user.click(
         within(await screen.findByRole("tooltip")).getByRole("button", {
-          name: /继\s*续/,
+          name: /Continue/,
         }),
       );
       await waitFor(() =>
@@ -545,12 +551,14 @@ describe("AccessControlPage", () => {
           await screen.findByText("synthetic policy conflict"),
         ).toBeInTheDocument();
         expect(
-          screen.getByRole("switch", { name: "切换全局匿名读取" }),
+          screen.getByRole("switch", { name: "Toggle global anonymous reads" }),
         ).toBeChecked();
       } else {
         await waitFor(() =>
           expect(
-            screen.getByRole("switch", { name: "切换全局匿名读取" }),
+            screen.getByRole("switch", {
+              name: "Toggle global anonymous reads",
+            }),
           ).not.toBeChecked(),
         );
       }
@@ -612,24 +620,27 @@ describe("AccessControlPage", () => {
       </TestQueryProvider>,
     );
 
-    expect(await screen.findByText("用户 · alice")).toBeInTheDocument();
+    expect(await screen.findByText("User · alice")).toBeInTheDocument();
     // Identifiers are shown whole under their kind, not cut to a prefix.
     expect(
       screen.getByText("11111111-1111-4111-8111-111111111111"),
     ).toBeInTheDocument();
     expect(screen.getByText("legacy-publisher")).toBeInTheDocument();
-    expect(screen.getByText("OIDC / 自定义")).toBeInTheDocument();
-    expect(screen.getByText("制品情报")).toBeInTheDocument();
-    expect(screen.getByText("高权限")).toBeInTheDocument();
+    expect(screen.getByText("OIDC / custom")).toBeInTheDocument();
+    expect(screen.getByText("Artifact intelligence")).toBeInTheDocument();
+    expect(screen.getByText("Elevated")).toBeInTheDocument();
 
     await user.type(
-      screen.getByPlaceholderText("用户名、API Key 或 actor"),
+      screen.getByPlaceholderText("Username, API key, or actor"),
       "service-account",
     );
-    expect(await screen.findByText("逐仓库授权（1）")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /清\s*除/ }));
-    expect(await screen.findByText("逐仓库授权（4）")).toBeInTheDocument();
-    await user.type(screen.getByPlaceholderText("仓库名称"), "raw-assets");
-    expect(await screen.findByText("逐仓库授权（1）")).toBeInTheDocument();
+    expect(await screen.findByText("1 repository grants")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Clear/ }));
+    expect(await screen.findByText("4 repository grants")).toBeInTheDocument();
+    await user.type(
+      screen.getByPlaceholderText("Repository name"),
+      "raw-assets",
+    );
+    expect(await screen.findByText("1 repository grants")).toBeInTheDocument();
   });
 });

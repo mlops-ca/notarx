@@ -125,13 +125,15 @@ describe("service account read containment", () => {
           ),
         ).toBeVisible();
         expect(
-          screen.getByRole("button", { name: /新建服务账号/ }),
+          screen.getByRole("button", { name: /New service account/ }),
         ).toBeVisible();
-        expect(screen.queryByText("加载凭据…")).not.toBeInTheDocument();
+        expect(
+          screen.queryByText("Loading credentials…"),
+        ).not.toBeInTheDocument();
         mockListServiceAccountCredentials.mockResolvedValue({
           data: { items: [oldCredential] },
         } as never);
-        fireEvent.click(screen.getByRole("button", { name: /重试/ }));
+        fireEvent.click(screen.getByRole("button", { name: /Retry/ }));
         expect(await screen.findByText(oldCredential.name)).toBeVisible();
         expect(mockListServiceAccountCredentials).toHaveBeenCalledTimes(2);
         expect(errors).not.toHaveBeenCalled();
@@ -152,14 +154,14 @@ describe("service account read containment", () => {
     renderPage();
     expect(await screen.findByText(oldCredential.name)).toBeVisible();
 
-    await userEvent.click(screen.getByRole("button", { name: /刷新/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Refresh/ }));
     expect(
       await screen.findByText("Invalid service account credentials response"),
     ).toBeVisible();
     expect(screen.getByText(oldCredential.name)).toBeVisible();
-    expect(screen.queryByText("加载凭据…")).not.toBeInTheDocument();
+    expect(screen.queryByText("Loading credentials…")).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /重试/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Retry/ }));
     expect(await screen.findByText(newCredential.name)).toBeVisible();
     expect(screen.queryByText(oldCredential.name)).not.toBeInTheDocument();
     expect(mockListServiceAccountCredentials).toHaveBeenCalledTimes(3);
@@ -177,13 +179,13 @@ describe("service account read containment", () => {
       renderPage();
 
       const revoke = await screen.findByRole("button", {
-        name: `吊销 ${name}`,
+        name: `Revoke ${name}`,
       });
       await userEvent.click(revoke);
       await waitFor(() =>
         expect(
           screen.getByText(
-            `吊销 ${name} 后，使用该 Token 的任务会立即认证失败；同一服务账号的其他凭据不受影响。`,
+            `After revoking ${name}, jobs using that token fail authentication immediately. Other credentials remain valid.`,
           ),
         ).toBeVisible(),
       );
@@ -209,11 +211,13 @@ describe("ServiceAccountsPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("请求出错")).toBeInTheDocument();
+    expect(await screen.findByText("Request failed")).toBeInTheDocument();
     expect(
       screen.getByText("service account inventory unavailable"),
     ).toBeInTheDocument();
-    expect(screen.queryByText("加载服务账号…")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Loading service accounts…"),
+    ).not.toBeInTheDocument();
   });
 
   it("turns a rejected initial request into a recoverable page error", async () => {
@@ -223,11 +227,11 @@ describe("ServiceAccountsPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("请求出错")).toBeInTheDocument();
+    expect(await screen.findByText("Request failed")).toBeInTheDocument();
     expect(
       screen.getByText("service account request rejected"),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /重试/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Retry/ })).toBeInTheDocument();
   });
 
   it("explains when the connected Gateway does not expose service accounts", async () => {
@@ -239,10 +243,10 @@ describe("ServiceAccountsPage", () => {
 
     expect(
       await screen.findByText(
-        "当前 Gateway 未提供此接口，Console 与 Gateway 版本可能不一致。请更新或重启 Gateway 后重试。",
+        "The connected Gateway does not expose this endpoint. The Console and Gateway versions may not match; update or restart Gateway and retry.",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /重试/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Retry/ })).toBeInTheDocument();
   });
 
   it("presents one stable machine principal separately from its rotating credentials", async () => {
@@ -256,22 +260,24 @@ describe("ServiceAccountsPage", () => {
     renderPage();
 
     expect(await screen.findAllByText("pipeone-ci")).toHaveLength(2);
-    expect(screen.getByText("机器身份与凭据分离")).toBeInTheDocument();
+    expect(
+      screen.getByText("Machine identity is separate from credentials"),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(`service-account:${accountId}`),
     ).toBeInTheDocument();
     expect(await screen.findByText("jenkins-blue")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /签发新凭据/ })).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: /Issue credential/ }),
+    ).toBeEnabled();
     // Rotation is verified where the principal is granted and used.
     const principal = encodeURIComponent(`service-account:${accountId}`);
-    expect(screen.getByRole("link", { name: "查看仓库授权" })).toHaveAttribute(
-      "href",
-      `/access?principal=${principal}`,
-    );
-    expect(screen.getByRole("link", { name: "查看最近审计" })).toHaveAttribute(
-      "href",
-      `/audits?actor=${principal}`,
-    );
+    expect(
+      screen.getByRole("link", { name: "View repository grants" }),
+    ).toHaveAttribute("href", `/access?principal=${principal}`);
+    expect(
+      screen.getByRole("link", { name: "View recent audits" }),
+    ).toHaveAttribute("href", `/audits?actor=${principal}`);
   });
 
   it("loads additional machine principals and credential history through bounded pages", async () => {
@@ -294,7 +300,7 @@ describe("ServiceAccountsPage", () => {
     renderPage();
 
     await user.click(
-      await screen.findByRole("button", { name: "加载更多账号" }),
+      await screen.findByRole("button", { name: "Load more accounts" }),
     );
     expect(await screen.findByText("release-bot")).toBeInTheDocument();
     expect(mockListServiceAccounts).toHaveBeenLastCalledWith({
@@ -303,7 +309,7 @@ describe("ServiceAccountsPage", () => {
     });
 
     await user.click(
-      await screen.findByRole("button", { name: "加载更多凭据" }),
+      await screen.findByRole("button", { name: "Load more credentials" }),
     );
     expect(await screen.findByText("jenkins-green")).toBeInTheDocument();
     expect(mockListServiceAccountCredentials).toHaveBeenLastCalledWith({
@@ -360,10 +366,10 @@ describe("ServiceAccountsPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("暂无服务账号")).toBeInTheDocument();
+    expect(await screen.findByText("No service accounts")).toBeInTheDocument();
     // The header action is the only primary; the empty state must not twin it.
     const createButtons = screen.getAllByRole("button", {
-      name: /新建服务账号/,
+      name: /New service account/,
     });
     expect(createButtons).toHaveLength(1);
     await user.click(createButtons[0]);
@@ -371,7 +377,7 @@ describe("ServiceAccountsPage", () => {
     const fields = within(dialog).getAllByRole("textbox");
     await user.type(fields[0], "  pipeone-ci  ");
     await user.type(fields[1], "Publishes PipeOne release artifacts");
-    await user.click(within(dialog).getByRole("button", { name: /创\s*建/ }));
+    await user.click(within(dialog).getByRole("button", { name: /Create/ }));
 
     await waitFor(() =>
       expect(mockCreateServiceAccount).toHaveBeenCalledWith({
@@ -404,11 +410,13 @@ describe("ServiceAccountsPage", () => {
 
     renderPage();
 
-    await user.click(await screen.findByRole("button", { name: /签发新凭据/ }));
+    await user.click(
+      await screen.findByRole("button", { name: /Issue credential/ }),
+    );
     const issueDialog = await screen.findByRole("dialog");
     await user.type(within(issueDialog).getByRole("textbox"), "jenkins-green");
     await user.click(
-      within(issueDialog).getByRole("button", { name: /签\s*发/ }),
+      within(issueDialog).getByRole("button", { name: /Issue/ }),
     );
 
     expect(await screen.findByText("agc_once_only_secret")).toBeInTheDocument();
@@ -418,17 +426,19 @@ describe("ServiceAccountsPage", () => {
         body: expect.objectContaining({ name: "jenkins-green" }),
       }),
     );
-    await user.click(screen.getByRole("button", { name: /我已安全保存/ }));
+    await user.click(
+      screen.getByRole("button", { name: /I stored it securely/ }),
+    );
     expect(
       screen.getByText(`service-account:${accountId}`),
     ).toBeInTheDocument();
 
     await user.click(
-      await screen.findByRole("button", { name: "吊销 jenkins-blue" }),
+      await screen.findByRole("button", { name: "Revoke jenkins-blue" }),
     );
     const revokeDialog = await screen.findByRole("dialog");
     await user.click(
-      within(revokeDialog).getByRole("button", { name: /确\s*认\s*吊\s*销/ }),
+      within(revokeDialog).getByRole("button", { name: /Revoke/ }),
     );
 
     await waitFor(() =>
@@ -456,11 +466,11 @@ describe("ServiceAccountsPage", () => {
     renderPage();
 
     await user.click(
-      await screen.findByRole("button", { name: /禁\s*用\s*账\s*号/ }),
+      await screen.findByRole("button", { name: /Disable account/ }),
     );
     await user.click(
       within(await screen.findByRole("dialog")).getByRole("button", {
-        name: /确\s*认\s*禁\s*用/,
+        name: /Disable/,
       }),
     );
     await waitFor(() =>
@@ -472,13 +482,15 @@ describe("ServiceAccountsPage", () => {
     );
 
     const enable = await screen.findByRole("button", {
-      name: /重\s*新\s*启\s*用/,
+      name: /Enable account/,
     });
-    expect(screen.getByRole("button", { name: /签发新凭据/ })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /Issue credential/ }),
+    ).toBeDisabled();
     await user.click(enable);
     await user.click(
       within(await screen.findByRole("dialog")).getByRole("button", {
-        name: /确\s*认\s*启\s*用/,
+        name: /Enable/,
       }),
     );
     await waitFor(() =>
@@ -489,7 +501,7 @@ describe("ServiceAccountsPage", () => {
       }),
     );
     expect(
-      await screen.findByRole("button", { name: /禁\s*用\s*账\s*号/ }),
+      await screen.findByRole("button", { name: /Disable account/ }),
     ).toBeInTheDocument();
   });
 
@@ -511,11 +523,11 @@ describe("ServiceAccountsPage", () => {
 
     renderPage();
     await user.click(
-      await screen.findByRole("button", { name: /新建服务账号/ }),
+      await screen.findByRole("button", { name: /New service account/ }),
     );
     const dialog = await screen.findByRole("dialog");
     await user.type(within(dialog).getAllByRole("textbox")[0], "pipeone-ci");
-    await user.click(within(dialog).getByRole("button", { name: /创\s*建/ }));
+    await user.click(within(dialog).getByRole("button", { name: /Create/ }));
 
     clickMask();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -549,10 +561,12 @@ describe("ServiceAccountsPage", () => {
     );
 
     renderPage();
-    await user.click(await screen.findByRole("button", { name: /签发新凭据/ }));
+    await user.click(
+      await screen.findByRole("button", { name: /Issue credential/ }),
+    );
     const dialog = await screen.findByRole("dialog");
     await user.type(within(dialog).getByRole("textbox"), "jenkins-green");
-    await user.click(within(dialog).getByRole("button", { name: /签\s*发/ }));
+    await user.click(within(dialog).getByRole("button", { name: /Issue/ }));
 
     clickMask();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
