@@ -156,6 +156,9 @@ type Config struct {
 	OTLPLogsTimeout                 time.Duration
 	OTLPLogsShutdownTimeout         time.Duration
 	OTELSamplingRatio               float64
+
+	// publicURL is the validated NOTARX_PUBLIC_URL; read it through PublicURL.
+	publicURL string
 }
 
 func Load() (Config, error) {
@@ -512,6 +515,10 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("invalid migration storage pool ID")
 	}
 	cfg.MigrationSourcePrivateEndpoints, err = parseMigrationSourcePrivateEndpoints(os.Getenv("NOTARX_MIGRATION_SOURCE_PRIVATE_ENDPOINTS"))
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.publicURL, err = ParsePublicURL(os.Getenv(PublicURLEnv))
 	if err != nil {
 		return Config{}, err
 	}

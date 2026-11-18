@@ -153,6 +153,25 @@ variables, tokens, or credentials. Operators can copy it from Console system dia
 
 Optional explicit directory capacity is described in [operational signal sources](operational-signals.md). It observes the responding API process's mount namespace only; Worker/Scheduler-only processes do not expose diagnostics. The values do not represent S3/NAS physical pools.
 
+## Instance Identity, Public URL and Legacy Names
+
+Settings are read only under the `NOTARX_` prefix. There are no aliases and no
+fallback reads of the old `GATEWAY_` names. To stop a mis-named variable from
+silently falling back to a default, the server refuses to start, naming the new
+key (`... was renamed to NOTARX_...`), when the process environment contains any
+name from the closed list of legacy settings in `internal/config/legacy_env.go`
+(derived by `scripts/derive-legacy-env.sh`). Unrelated variables are not matched.
+The Kubernetes service-link variables `NOTARX_SERVICE_HOST` and `NOTARX_PORT` are
+not settings and are ignored.
+
+| Key | Meaning |
+| --- | --- |
+| `NOTARX_PUBLIC_URL` | Externally visible base URL of this instance, shared by every feature that must emit absolute URLs. An absolute `https://` URL with no trailing slash, query or fragment; `http://` is accepted only for a loopback host. Empty is allowed: features that need it are disabled or refuse to start. An invalid value stops startup. Code reads it through `config.Config.PublicURL()`. |
+| `NOTARX_INSTANCE_ID` | Stable identifier of this node (default: derived from the host name). |
+| `NOTARX_SETTINGS_ENCRYPTION_KEY` | Key for encrypted stored settings, read through `internal/secrets` only. |
+
+There is no second public-URL key and no `NOTARX_ENV`.
+
 ## Standalone Fallback
 
 Local development and small installations continue to use:
