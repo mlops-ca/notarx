@@ -203,7 +203,7 @@ services:
       retries: 12
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements"]
     environment:
       POSTGRES_DB: gateway
@@ -217,10 +217,10 @@ services:
       timeout: 3s
       retries: 10
     volumes:
-      - gateway-postgres:/var/lib/postgresql/data
+      - gateway-postgres:/var/lib/postgresql
 
   migrate:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     depends_on:
       postgres:
         condition: service_healthy
@@ -249,7 +249,7 @@ services:
       - ./scripts/run-rustfs.sh:/usr/local/bin/run-rustfs:ro
 
   rustfs-ready:
-    image: curlimages/curl:8.14.1
+    image: curlimages/curl:8.23.0
     depends_on:
       rustfs:
         condition: service_started

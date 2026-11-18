@@ -26,8 +26,8 @@ import (
 	dist "github.com/mlops-ca/notarx/internal/helmdistribution"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
-	"golang.org/x/crypto/openpgp"
-	"golang.org/x/crypto/openpgp/packet"
+	"github.com/ProtonMail/go-crypto/openpgp"
+	"github.com/ProtonMail/go-crypto/openpgp/packet"
 )
 
 func TestHelmFixedOfficialCLIReplicatedClosureTargetOnlyColdRestart(t *testing.T) {

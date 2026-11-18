@@ -363,7 +363,7 @@ def check(render_only, evidence=None, fixture_subnets=None):
             # The real image runs as UID 65532. Provision only this disposable
             # auth file, with the same owner and 0600 permissions as the runbook.
             run(["docker", "run", "--rm", "--network", "none", "-v", str(config) + ":/owned",
-                 "postgres:16-alpine", "chown", "65532:65532", "/owned/auth.json"])
+                 "postgres:18-alpine", "chown", "65532:65532", "/owned/auth.json"])
             started = True
             run(compose + ["up", "-d", "smtp"])
             eventually(lambda: (sink / "ready").exists(), "TLS sink readiness", 15)

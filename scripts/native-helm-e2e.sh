@@ -166,7 +166,7 @@ try:
     rust_env=work/'rust.env';rust_env.write_text('RUSTFS_VOLUMES=/data\nRUSTFS_ADDRESS=0.0.0.0:9000\nRUSTFS_CONSOLE_ENABLE=false\nRUSTFS_ACCESS_KEY='+access+'\nRUSTFS_SECRET_KEY='+secret+'\nRUSTFS_RPC_SECRET='+secrets.token_hex(32)+'\n')
     pg=run_id+'-pg';rust=run_id+'-rustfs'
     rust_image='rustfs/rustfs:1.0.0-beta.12@sha256:41fe89380f4120a337790c02af192c3fe7bb55c3edc2e6e9357b487b47c6ab21'
-    start(pg,['--env-file',str(pg_env),'--tmpfs','/var/lib/postgresql/data:rw','-p','127.0.0.1::5432','postgres:16-alpine','postgres','-c','shared_preload_libraries=pg_stat_statements'])
+    start(pg,['--env-file',str(pg_env),'--tmpfs','/var/lib/postgresql:rw','-p','127.0.0.1::5432','postgres:18-alpine','postgres','-c','shared_preload_libraries=pg_stat_statements'])
     start(rust,['--env-file',str(rust_env),'--tmpfs','/data:rw,mode=1777','--tmpfs','/logs:rw,mode=1777','-p','127.0.0.1::9000',rust_image])
     deadline=time.monotonic()+90
     while time.monotonic()<deadline:
