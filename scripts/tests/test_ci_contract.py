@@ -748,12 +748,13 @@ class ContractGateTests(unittest.TestCase):
                 with self.assertRaises(subprocess.CalledProcessError):
                     ci.signal_group(456, signal.SIGKILL)
 
-    def test_mapping_preserves_original_make_targets_and_timeouts(self):
+    def test_plan_make_targets_exist_and_keep_their_timeouts(self):
         makefile = (ROOT / 'Makefile').read_text()
         actual = [s['command'][1] for lane in ci.PLAN['lanes'].values() for s in lane['steps'] if s['command'][0] == 'make']
         # Every planned make target must exist; the plan is the source of truth.
         for target in actual:
-            self.assertRegex(makefile, r'(?m)^' + re.escape(target) + r':', target)
+            self.assertRegex(makefile, r'(?m)^(?:[\w.-]+ )*' + re.escape(target) + r'(?: [\w.-]+)*::?(?!=)',
+                             'planned make target is not defined in the Makefile: ' + target)
         self.assertEqual(len(actual), len(set(actual)), 'a make target is planned twice')
         for required in ('native-oci-discovery-e2e', 'nexus-npm-migration-e2e', 'native-helm-e2e',
                          'native-rubygems-e2e', 'nexus-pypi-migration-e2e', 'email-compose-check',
