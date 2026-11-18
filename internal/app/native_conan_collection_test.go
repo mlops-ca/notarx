@@ -117,7 +117,7 @@ func exerciseConanCollectionWorker(t *testing.T, factory conanCollectionWorkerFa
 					cancel()
 					if !finished {
 						select {
-						case <-done:
+						case _ = <-done:
 						case <-time.After(3 * time.Second):
 							t.Error("owned reclaim worker did not stop")
 						}

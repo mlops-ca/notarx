@@ -268,7 +268,7 @@ func runRawStoreContract(t *testing.T, factory rawContractFactory) {
 					}
 				case <-time.After(time.Second):
 					once.Do(release)
-					<-done
+					_ = <-done
 					t.Fatal("canceled waiter blocked until current owner released")
 				}
 				once.Do(release)

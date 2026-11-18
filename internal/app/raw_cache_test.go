@@ -182,7 +182,7 @@ func TestRawProxyValidatesDirectRequestsWhenEgressIsBypassed(t *testing.T) {
 }
 
 func TestRawProxyEgressClientClearsCustomDialers(t *testing.T) {
-	client := rawProxyEgressClient(&http.Client{Transport: &http.Transport{DialContext: func(context.Context, string, string) (net.Conn, error) { return nil, nil }, Dial: func(string, string) (net.Conn, error) { return nil, nil }}})
+	client := rawProxyEgressClient(&http.Client{Transport: &http.Transport{DialContext: func(context.Context, string, string) (net.Conn, error) { return nil, nil }, Dial: func(string, string) (net.Conn, error) { return nil, nil }}}) //nolint:staticcheck // The regression explicitly covers the legacy Dial hook.
 	transport, ok := client.Transport.(*http.Transport)
 	if !ok || transport.DialContext != nil || transport.Dial != nil || transport.Proxy == nil { //nolint:staticcheck // The regression explicitly covers the legacy Dial hook.
 		t.Fatalf("egress transport did not use standard proxy dialing")
@@ -210,7 +210,7 @@ func TestRawProxyRejectsTLSOverrideWithoutDialing(t *testing.T) {
 			}}
 		}},
 		{"DialTLS", func(called *bool) *http.Transport {
-			return &http.Transport{DialTLS: func(string, string) (net.Conn, error) {
+			return &http.Transport{DialTLS: func(string, string) (net.Conn, error) { //nolint:staticcheck // The regression explicitly covers the legacy DialTLS hook.
 				*called = true
 				return nil, errors.New("unexpected TLS dial")
 			}}
