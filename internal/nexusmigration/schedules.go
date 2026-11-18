@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 )
 
 // ScheduleBinding is copied from a completed batch. Editing a source, mapping or
@@ -128,7 +129,7 @@ func (s *ScheduleService) Create(ctx context.Context, in ScheduleCreate, actor, 
 		return Schedule{}, err
 	}
 	now := s.now().UTC()
-	p := Schedule{ScheduleBinding: ScheduleBinding{TemplateBatchID: b.ID, SourceID: b.SourceID, SourceVersion: b.SourceVersion, Mappings: b.Mappings, PolicyVersion: b.PolicyVersion, IntervalSeconds: in.IntervalSeconds}, ID: uuid.NewString(), Actor: actor, ActorKind: kind, OwnerID: ownerID, State: "waiting_capacity", NextRunAt: &now, LastBatchID: b.ID, LastSuccessfulAt: &b.UpdatedAt, ConsumedObservedAt: &b.CapacityEvidence.ObservedAt, LastError: "capacity_evidence_refresh_required"}
+	p := Schedule{ScheduleBinding: ScheduleBinding{TemplateBatchID: b.ID, SourceID: b.SourceID, SourceVersion: b.SourceVersion, Mappings: b.Mappings, PolicyVersion: b.PolicyVersion, IntervalSeconds: in.IntervalSeconds}, ID: ids.New(), Actor: actor, ActorKind: kind, OwnerID: ownerID, State: "waiting_capacity", NextRunAt: &now, LastBatchID: b.ID, LastSuccessfulAt: &b.UpdatedAt, ConsumedObservedAt: &b.CapacityEvidence.ObservedAt, LastError: "capacity_evidence_refresh_required"}
 	if err = s.validateBinding(ctx, p); err != nil {
 		return Schedule{}, err
 	}
@@ -236,7 +237,7 @@ func (s *ScheduleService) RunDue(ctx context.Context, limit int) error {
 			}
 		}
 		if err == nil {
-			b := Batch{ID: uuid.NewString(), Actor: p.Actor, ActorKind: p.ActorKind, OwnerID: p.OwnerID, StartInput: StartInput{SourceID: p.SourceID, SourceVersion: p.SourceVersion, Mappings: p.Mappings, PolicyVersion: p.PolicyVersion, CapacityEvidence: *p.CapacityEvidence}}
+			b := Batch{ID: ids.New(), Actor: p.Actor, ActorKind: p.ActorKind, OwnerID: p.OwnerID, StartInput: StartInput{SourceID: p.SourceID, SourceVersion: p.SourceVersion, Mappings: p.Mappings, PolicyVersion: p.PolicyVersion, CapacityEvidence: *p.CapacityEvidence}}
 			err = s.store.DispatchSchedule(ctx, p, b, now)
 		}
 		if errors.Is(err, ErrLeaseLost) {

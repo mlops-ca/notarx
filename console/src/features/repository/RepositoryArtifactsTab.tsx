@@ -13,6 +13,7 @@ import { formatViews } from "../../formats/views";
 import { useAuth } from "../../lib/auth";
 import { formatNumber } from "../../lib/format";
 import { usePreferences } from "../../lib/preferences";
+import { clearable } from "../../lib/clearable";
 import { useFormatters } from "../../lib/useFormatters";
 import { ArtifactViewSwitch } from "./ArtifactViewSwitch";
 import { RepositoryFeatureUnavailable } from "./RepositoryFeatureUnavailable";
@@ -257,7 +258,7 @@ export function RepositoryArtifactsTab({
         )}
         <Input.Search
           loading={refreshing}
-          allowClear
+          allowClear={clearable(t, t("repository.search"))}
           className="ag-artifact-view-search"
           placeholder={
             descriptor?.serverKeywordSearch &&

@@ -184,80 +184,50 @@ jobs:
     if: needs.changes.outputs.go == 'true'
     uses: ./.github/workflows/object-store-contract.yml
 
+  # One definition of the Go checks for both architectures: the composite action
+  # holds setup, lint, vet and race. Two jobs, not a matrix, because the release
+  # gate requires a check named exactly `quality` (ADR 0024) and a matrix would
+  # rename it. The coverage floor, dependency audit and packaging checks are
+  # architecture independent and stay on amd64 only; make test runs on arm64 in
+  # the core lanes of the contract matrix.
   quality:
     needs: changes
     if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-24.04
+    # Steps inside the composite action cannot set their own timeout, so the job
+    # carries one (the npm installs used to be capped at 10 minutes each).
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # migration-check compares migrations with the latest stable tag.
           fetch-depth: 0
-      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
-        with:
-          go-version-file: go.mod
-          cache: true
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-          cache-dependency-path: |
-            console/package-lock.json
-            tools/openapi/package-lock.json
       - name: Verify public npm lockfile sources
         run: node scripts/npm-lockfile-check.mjs
-      - run: npm ci --ignore-scripts --no-audit --no-fund --timing --loglevel=http
-        timeout-minutes: 10
-        working-directory: console
-      - run: npm ci --ignore-scripts --no-audit --no-fund --timing --loglevel=http
-        timeout-minutes: 10
-        working-directory: tools/openapi
+      - uses: ./.github/actions/go-quality
+        with:
+          openapi-tools: "true"
       - name: Verify the native-build rules (no cross-compilation, no emulation)
         run: make native-build-check
       - name: Check migration immutability and sequencing
         run: make migration-check
-      - name: Run Go lint
-        run: make lint
-      - name: Run Go vet
-        run: make vet
       - name: Verify release version and artifact builder
         run: make release-version-check stamp-version-test release-plan-test release-artifacts-test
       - name: Verify package signing runbook and environment checks
         run: make packages-signing-drill packages-environments-test
-      - name: Run race detector
-        run: make race
       - name: Enforce coverage floor
         run: make coverage
       - name: Audit dependencies
         run: make dependency-audit
-  # The same Go checks natively on arm64 (ADR 0016). make test runs on arm64 in
-  # the core lanes of the contract matrix. The coverage floor, dependency audit
-  # and packaging checks are architecture independent and stay on amd64 only.
+
   quality-arm64:
     needs: changes
     if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
-        with:
-          go-version-file: go.mod
-          cache: true
-      # make lint runs the en-CA spell check, which needs the Console tools.
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-          cache-dependency-path: console/package-lock.json
-      - run: npm ci --ignore-scripts --no-audit --no-fund --timing --loglevel=http
-        timeout-minutes: 10
-        working-directory: console
-      - name: Run Go lint
-        run: make lint
-      - name: Run Go vet
-        run: make vet
-      - name: Run race detector
-        run: make race
+      - uses: ./.github/actions/go-quality
 
   console:
     needs: changes

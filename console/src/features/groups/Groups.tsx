@@ -15,6 +15,7 @@ import {
   MetricStrip,
 } from "../../components/ui/ConsolePrimitives";
 import { usePreferences } from "../../lib/preferences";
+import { clearable } from "../../lib/clearable";
 import { groupFormats } from "../../lib/formatProfiles";
 
 import { CreateGroupDialog } from "./CreateGroupDialog";
@@ -179,7 +180,7 @@ export function GroupsPage() {
             <>
               <FilterField label={t("groups.search")} className="min-w-[260px]">
                 <Input
-                  allowClear
+                  allowClear={clearable(t, t("groups.search"))}
                   prefix={<SearchOutlined />}
                   placeholder={t("groups.searchGroupNames")}
                   value={filter}

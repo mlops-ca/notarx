@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	p "github.com/mlops-ca/notarx/internal/protocol/rubygems"
 	"github.com/mlops-ca/notarx/internal/repository"
 	d "github.com/mlops-ca/notarx/internal/rubygemspublication"
@@ -24,7 +24,7 @@ func Session(t testing.TB, repo string) d.Session {
 		t.Fatal(e)
 	}
 	sum := sha256.Sum256(body)
-	return d.Session{ID: uuid.NewString(), RepositoryID: repo, Name: in.Metadata.Name, Version: in.Metadata.Version, Platform: in.Metadata.Platform, Digest: "sha256:" + hex.EncodeToString(sum[:]), Size: int64(len(body)), Actor: "operator", MetadataJSON: in.MetadataJSON, MetadataYAML: in.MetadataYAML, ExpiresAt: time.Now().UTC().Add(time.Hour)}
+	return d.Session{ID: ids.New(), RepositoryID: repo, Name: in.Metadata.Name, Version: in.Metadata.Version, Platform: in.Metadata.Platform, Digest: "sha256:" + hex.EncodeToString(sum[:]), Size: int64(len(body)), Actor: "operator", MetadataJSON: in.MetadataJSON, MetadataYAML: in.MetadataYAML, ExpiresAt: time.Now().UTC().Add(time.Hour)}
 }
 func StoreContract(t *testing.T, store d.Store, repo repository.HostedRepository) {
 	t.Helper()
@@ -38,7 +38,7 @@ func StoreContract(t *testing.T, store d.Store, repo repository.HostedRepository
 	if e != nil || len(rows) != 0 {
 		t.Fatalf("pending visible %v %v", rows, e)
 	}
-	in.ID = uuid.NewString()
+	in.ID = ids.New()
 	same, replay, e := store.Reserve(ctx, in)
 	if e != nil || !replay || same.ID != session.ID {
 		t.Fatalf("pending replay %+v %t %v", same, replay, e)

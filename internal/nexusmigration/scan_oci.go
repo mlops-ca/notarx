@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/nexussource"
 	"github.com/mlops-ca/notarx/internal/ocigraph"
 )
@@ -31,7 +31,7 @@ func (s *Service) planOCIEntries(ctx context.Context, b Batch, sourceRepo, targe
 	manifests, blobs := map[string][]ociInventory{}, map[string][]ociInventory{}
 	entries := []Entry{}
 	unsupported := func(sourcePath, identity, reason string) {
-		entries = append(entries, Entry{ID: uuid.NewString(), BatchID: b.ID, SourceRepository: sourceRepo, TargetRepositoryID: targetRepo, Format: "oci", Identity: identity, State: "unsupported", Assets: []Asset{}, LastError: reason})
+		entries = append(entries, Entry{ID: ids.New(), BatchID: b.ID, SourceRepository: sourceRepo, TargetRepositoryID: targetRepo, Format: "oci", Identity: identity, State: "unsupported", Assets: []Asset{}, LastError: reason})
 	}
 	sort.Slice(inventory, func(i, j int) bool { return inventory[i].Path < inventory[j].Path })
 	for _, asset := range inventory {
@@ -198,7 +198,7 @@ func (s *Service) planOCIEntries(ctx context.Context, b Batch, sourceRepo, targe
 			unsupported(root.asset.Path, identity, reason)
 			continue
 		}
-		entry := Entry{ID: uuid.NewString(), BatchID: b.ID, SourceRepository: sourceRepo, TargetRepositoryID: targetRepo, Format: "oci", Identity: identity, State: "pending", Assets: make([]Asset, 0, len(assets))}
+		entry := Entry{ID: ids.New(), BatchID: b.ID, SourceRepository: sourceRepo, TargetRepositoryID: targetRepo, Format: "oci", Identity: identity, State: "pending", Assets: make([]Asset, 0, len(assets))}
 		for _, asset := range assets {
 			entry.Assets = append(entry.Assets, asset)
 		}

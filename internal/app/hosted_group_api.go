@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -214,7 +215,7 @@ func (h repositoryManagementHandler) CreateGroup(w http.ResponseWriter, r *http.
 	if !h.authorizeGroupMembership(w, r, principal, group.Name, group.Members) {
 		return
 	}
-	group.ID = uuid.NewString()
+	group.ID = ids.New()
 	payload, _ := json.Marshal(struct {
 		Name          string                   `json:"name"`
 		Format        repository.Format        `json:"format"`

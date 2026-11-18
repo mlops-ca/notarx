@@ -2,6 +2,7 @@ import { SafetyCertificateOutlined, SearchOutlined } from "@ant-design/icons";
 import { Input } from "antd";
 import { Card } from "../../components/ui/Layout";
 import { usePreferences } from "../../lib/preferences";
+import { clearable } from "../../lib/clearable";
 import type { PublicRepositoryFormat } from "../../lib/publicRepositoryUsage";
 import type { PublicRepository } from "./types";
 
@@ -37,7 +38,10 @@ export function PublicCatalogHero({
           </p>
           {(!repositories || repositories.length > 0) && (
             <Input
-              allowClear
+              allowClear={clearable(
+                t,
+                t("publicBrowse.searchRepositoryNameOrFormat"),
+              )}
               size="large"
               prefix={<SearchOutlined className="text-fg-tertiary!" />}
               className="mt-6 max-w-2xl"

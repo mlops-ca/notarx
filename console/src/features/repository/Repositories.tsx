@@ -20,6 +20,7 @@ import {
   useClipboardAction,
 } from "../../components/ui/ConsolePrimitives";
 import { usePreferences } from "../../lib/preferences";
+import { clearable } from "../../lib/clearable";
 import { useAuth } from "../../lib/auth";
 import { platformCapabilities } from "../../lib/authorization";
 import {
@@ -209,7 +210,7 @@ export function RepositoriesPage() {
       >
         <FilterField label={t("repository.search")} className="min-w-[280px]">
           <Input
-            allowClear
+            allowClear={clearable(t, t("repository.search"))}
             prefix={<SearchOutlined />}
             placeholder={t("repository.nameFormatOrRepositoryType")}
             value={filter}

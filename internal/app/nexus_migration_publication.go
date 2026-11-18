@@ -16,10 +16,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/capacityplan"
 	formatmodule "github.com/mlops-ca/notarx/internal/format"
 	rawformat "github.com/mlops-ca/notarx/internal/format/raw"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/nexusmigration"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -311,7 +311,7 @@ func (p *NexusMigrationPublication) Begin(ctx context.Context, entry nexusmigrat
 	} else if !errors.Is(err, repository.ErrNotFound) {
 		return "", nexusmigration.Failed("native_session_unavailable")
 	}
-	expected.ID = uuid.NewString()
+	expected.ID = ids.New()
 	session, err = p.store.CreateMavenPublishSession(ctx, expected)
 	if errors.Is(err, repository.ErrNameExists) {
 		// Native creation can commit before a response/ledger update is lost.

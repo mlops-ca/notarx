@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -458,5 +459,51 @@ func TestNuGetAccountStateBlocksNativeAndPreviewRequests(t *testing.T) {
 				t.Fatalf("account %s %s=%d %s", entry.name, handler.path, w.Code, w.Body.String())
 			}
 		}
+	}
+}
+
+// uuidBoundSessionStore behaves like the PostgreSQL store, which binds the session
+// id as a uuid: a malformed id is an error (SQLSTATE 22P02), not "not found".
+type uuidBoundSessionStore struct {
+	*repository.MemoryStore
+	malformed int
+}
+
+func (s *uuidBoundSessionStore) GetNuGetSession(ctx context.Context, id string) (repository.NuGetSession, error) {
+	if _, err := uuid.Parse(id); err != nil {
+		s.malformed++
+		return repository.NuGetSession{}, errors.New("pq: invalid input syntax for type uuid (22P02)")
+	}
+	return s.MemoryStore.GetNuGetSession(ctx, id)
+}
+
+func TestNuGetPreviewRejectsMalformedSessionIdentifiersWithoutStoreQuery(t *testing.T) {
+	memory := repository.NewMemoryStore()
+	store := &uuidBoundSessionStore{MemoryStore: memory}
+	repo, err := memory.CreateHostedRepository(context.Background(), repository.HostedRepository{ID: uuid.NewString(), Name: "nuget-test", Format: repository.FormatNuGet, Type: repository.RepositoryTypeHosted})
+	if err != nil {
+		t.Fatal(err)
+	}
+	auth := authorization.Authenticator{AdminToken: "nuget-test-admin", AdminActor: "operator"}
+	m, err := New(Options{Store: store, Repositories: memory, Objects: objectstore.NewMemoryStore(), Authenticator: auth, Authorizer: authorization.RepositoryAuthorizer{Grants: memory, Legacy: auth}, Audit: memory, Anonymous: memory})
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := "/api/v2/previews/nuget/repositories/" + repo.ID + "/publication-sessions/"
+	for _, tc := range []struct{ name, method, path string }{
+		{"stage", "PUT", base + "not-a-uuid/package"},
+		{"commit", "POST", base + "not-a-uuid/commit"},
+		{"read", "GET", base + "12345"},
+		{"sql text", "GET", base + "%27%20OR%201%3D1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := request(t, m.Preview(), tc.method, tc.path, []byte("x"), bearer)
+			if w.Code != 404 {
+				t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+			}
+		})
+	}
+	if store.malformed != 0 {
+		t.Fatalf("%d malformed identifiers reached the uuid-typed store query", store.malformed)
 	}
 }

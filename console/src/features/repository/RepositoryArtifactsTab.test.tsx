@@ -534,7 +534,7 @@ describe("RepositoryArtifactsTab Raw browse", () => {
     expect(await screen.findByText("image/png")).toBeInTheDocument();
 
     await user.type(screen.getByPlaceholderText("Search paths…"), readablePath);
-    await user.click(screen.getByRole("button", { name: /Search/ }));
+    await user.click(screen.getByRole("button", { name: /^Search$/ }));
     await waitFor(() =>
       expect(mockSearchRepositoryArtifacts).toHaveBeenLastCalledWith({
         signal: expect.any(AbortSignal),

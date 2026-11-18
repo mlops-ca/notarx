@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/secrets"
 )
@@ -122,7 +123,7 @@ func (h generatedRepositoryAPIAdapter) CreateWebhookSubscription(w http.Response
 		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
-	id := uuid.NewString()
+	id := ids.New()
 	ciphertext, err := secrets.Seal("webhook-subscription:"+id, secret)
 	if errors.Is(err, secrets.ErrKeyNotConfigured) || errors.Is(err, secrets.ErrInvalidKey) {
 		writeHostedProblem(w, http.StatusServiceUnavailable, "encryption_key_unavailable", secrets.KeyEnv+" is required to persist webhook signing secrets")

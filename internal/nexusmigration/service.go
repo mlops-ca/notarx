@@ -20,6 +20,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/capacityplan"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/nexussource"
 )
 
@@ -126,7 +127,7 @@ func (s *Service) Start(ctx context.Context, in StartInput, actor, key string) (
 	if err = s.publication.ValidateTargets(ctx, in.Mappings); err != nil {
 		return Batch{}, err
 	}
-	return s.store.Create(ctx, Batch{StartInput: in, ID: uuid.NewString(), Actor: actor, ActorKind: kind, OwnerID: ownerID}, key, digest(in))
+	return s.store.Create(ctx, Batch{StartInput: in, ID: ids.New(), Actor: actor, ActorKind: kind, OwnerID: ownerID}, key, digest(in))
 }
 func (s *Service) Get(ctx context.Context, id string) (Batch, error) { return s.store.Get(ctx, id) }
 func (s *Service) List(ctx context.Context, limit int, cursor string) ([]Batch, string, error) {
@@ -524,7 +525,7 @@ func (s *Service) scanManifest(ctx context.Context, b Batch, failure *ScanFailur
 	unsupported := func(repo, p, reason string) {
 		// Report identities are absolute, so they cannot equal a native relative
 		// Raw path or Maven GAV. Retain the decoded source path for traceability.
-		entries = append(entries, Entry{ID: uuid.NewString(), BatchID: b.ID, SourceRepository: repo, TargetRepositoryID: targets[repo], Format: formats[repo], Identity: "/unsupported/" + p, State: "unsupported", Assets: []Asset{}, LastError: reason})
+		entries = append(entries, Entry{ID: ids.New(), BatchID: b.ID, SourceRepository: repo, TargetRepositoryID: targets[repo], Format: formats[repo], Identity: "/unsupported/" + p, State: "unsupported", Assets: []Asset{}, LastError: reason})
 	}
 	for _, a := range discovery.UnsupportedAssets {
 		unsupported(a.Repository, a.Path, a.Reason)
@@ -640,7 +641,7 @@ func (s *Service) scanManifest(ctx context.Context, b Batch, failure *ScanFailur
 		key := a.Repository + "\x00" + identity
 		entry := byIdentity[key]
 		if entry == nil {
-			entry = &Entry{ID: uuid.NewString(), BatchID: b.ID, SourceRepository: a.Repository, TargetRepositoryID: targets[a.Repository], Format: format, Identity: identity, State: "pending", Assets: []Asset{}}
+			entry = &Entry{ID: ids.New(), BatchID: b.ID, SourceRepository: a.Repository, TargetRepositoryID: targets[a.Repository], Format: format, Identity: identity, State: "pending", Assets: []Asset{}}
 			byIdentity[key] = entry
 		}
 		entry.Assets = append(entry.Assets, asset)
@@ -712,7 +713,7 @@ func (s *Service) scanManifest(ctx context.Context, b Batch, failure *ScanFailur
 		if old.State == "unsupported" || old.State == "source_deleted" || seen[old.SourceRepository+"\x00"+old.Identity] {
 			continue
 		}
-		old.ID = uuid.NewString()
+		old.ID = ids.New()
 		old.BatchID = b.ID
 		old.State = "source_deleted"
 		old.LastError = "source_deleted_target_retained"

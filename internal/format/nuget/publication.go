@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/ids"
 	nugetprotocol "github.com/mlops-ca/notarx/internal/protocol/nuget"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/uploadspool"
@@ -43,7 +44,7 @@ func (m *Module) reserve(ctx context.Context, repo repository.HostedRepository, 
 	if err != nil || in.Size > m.maxBytes {
 		return repository.NuGetSession{}, repository.ErrInvalidNuGetPublication
 	}
-	sessionID := uuid.NewString()
+	sessionID := ids.New()
 	if key != "" {
 		sessionID = uuid.NewSHA1(uuid.NameSpaceURL, []byte(repo.ID+"\x00nuget\x00"+actor+"\x00"+key)).String()
 	}

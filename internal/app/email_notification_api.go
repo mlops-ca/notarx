@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
 	"github.com/mlops-ca/notarx/internal/emailnotification"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/secrets"
 	"io"
@@ -61,7 +62,7 @@ func (h generatedRepositoryAPIAdapter) CreateEmailTarget(w http.ResponseWriter, 
 		writeHostedProblem(w, 400, "invalid_request", "email recipient is required")
 		return
 	}
-	v := repository.EmailTarget{ID: uuid.NewString()}
+	v := repository.EmailTarget{ID: ids.New()}
 	if !emailTargetInput(w, input, &v, h.emailDefaultLocale()) {
 		return
 	}
@@ -269,7 +270,7 @@ func (h generatedRepositoryAPIAdapter) TestEmailNotification(w http.ResponseWrit
 		writeHostedProblem(w, 400, "invalid_request", "email test is invalid")
 		return
 	}
-	v, err := h.emailTargets.EnqueueEmailTest(r.Context(), repository.EmailTestRequest{ID: uuid.NewString(), EventID: uuid.NewString(), RequestKey: params.IdempotencyKey.String(), TargetID: input.TargetId.String(), TargetVersion: string(params.IfMatch), Scenario: string(input.Scenario), From: h.diagnostics.Email.From, ConsoleOrigin: h.diagnostics.Email.ConsoleOrigin, TemplateVersion: emailnotification.TemplateVersion})
+	v, err := h.emailTargets.EnqueueEmailTest(r.Context(), repository.EmailTestRequest{ID: ids.New(), EventID: ids.New(), RequestKey: params.IdempotencyKey.String(), TargetID: input.TargetId.String(), TargetVersion: string(params.IfMatch), Scenario: string(input.Scenario), From: h.diagnostics.Email.From, ConsoleOrigin: h.diagnostics.Email.ConsoleOrigin, TemplateVersion: emailnotification.TemplateVersion})
 	if emailProblem(w, err) {
 		return
 	}

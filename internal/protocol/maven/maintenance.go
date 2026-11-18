@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -254,7 +255,7 @@ func (m NativePromotion) Enqueue(ctx context.Context, targetRepositoryID, idempo
 	if err != nil {
 		return repository.LifecycleJob{}, false, err
 	}
-	return m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: uuid.NewString(), RepositoryID: targetRepositoryID, Kind: repository.LifecycleJobPromotion, IdempotencyKey: idempotencyKey, Payload: encoded})
+	return m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: ids.New(), RepositoryID: targetRepositoryID, Kind: repository.LifecycleJobPromotion, IdempotencyKey: idempotencyKey, Payload: encoded})
 }
 func (m NativePromotion) RunJobs(ctx context.Context, limit int) error {
 	jobs, err := m.Store.ClaimLifecycleJobsByKindAndFormat(ctx, repository.LifecycleJobPromotion, repository.FormatMaven, limit)
@@ -396,7 +397,7 @@ func (m NativeRetention) EnqueueRepository(ctx context.Context, repositoryID, id
 	if err != nil {
 		return repository.LifecycleJob{}, false, err
 	}
-	return m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: uuid.NewString(), RepositoryID: repositoryID, Kind: repository.LifecycleJobRetention, IdempotencyKey: idempotencyKey, Payload: payload})
+	return m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: ids.New(), RepositoryID: repositoryID, Kind: repository.LifecycleJobRetention, IdempotencyKey: idempotencyKey, Payload: payload})
 }
 
 func (m NativeRetention) RunJobs(ctx context.Context, limit int) error {

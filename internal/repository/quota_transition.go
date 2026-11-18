@@ -1,7 +1,7 @@
 package repository
 
 import (
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/quotaalert"
 	"time"
 )
@@ -16,7 +16,7 @@ func quotaTransition(rule *RepositoryQuotaAlertRule, o quotaalert.Observation, n
 		return nil
 	}
 	if rule.ActiveEpisodeID == "" {
-		rule.ActiveEpisodeID = uuid.NewString()
+		rule.ActiveEpisodeID = ids.New()
 	}
 	since := state.WarningSince
 	if scenario == "critical" {
@@ -26,7 +26,7 @@ func quotaTransition(rule *RepositoryQuotaAlertRule, o quotaalert.Observation, n
 		since = before.RecoverySince
 	}
 	rule.Sequence++
-	event := quotaalert.Event{ID: uuid.NewString(), RuleID: rule.ID, RuleVersion: rule.Version, RepositoryID: rule.RepositoryID, RepositoryName: name, EpisodeID: rule.ActiveEpisodeID, PreviousEventID: rule.LastEventID, Sequence: rule.Sequence, Scenario: scenario, UsedBytes: state.UsedBytes, QuotaBytes: state.QuotaBytes, Policy: rule.Policy, OccurredAt: now, SampleAt: state.LastSampleAt, EvidenceSince: since}
+	event := quotaalert.Event{ID: ids.New(), RuleID: rule.ID, RuleVersion: rule.Version, RepositoryID: rule.RepositoryID, RepositoryName: name, EpisodeID: rule.ActiveEpisodeID, PreviousEventID: rule.LastEventID, Sequence: rule.Sequence, Scenario: scenario, UsedBytes: state.UsedBytes, QuotaBytes: state.QuotaBytes, Policy: rule.Policy, OccurredAt: now, SampleAt: state.LastSampleAt, EvidenceSince: since}
 	rule.LastEventID = event.ID
 	if scenario == "resolved" {
 		rule.ActiveEpisodeID = ""
@@ -52,7 +52,7 @@ func quotaRouteCode(cfg QuotaAlertMailConfig, target EmailTarget, rule Repositor
 }
 
 func quotaDelivery(e quotaalert.Event, target EmailTarget, cfg QuotaAlertMailConfig, full bool) EmailDelivery {
-	d := EmailDelivery{ID: uuid.NewString(), EventID: e.ID, RequestKey: e.ID, Kind: "repository_quota", QuotaRuleID: e.RuleID, EpisodeID: e.EpisodeID, EventSequence: e.Sequence, QuotaEvent: e, TargetID: target.ID, TargetVersion: target.Version, Scenario: e.Scenario, Locale: target.Locale, TemplateVersion: quotaalert.TemplateVersion, RecipientCiphertext: target.RecipientCiphertext, From: cfg.From, ConsoleOrigin: cfg.ConsoleOrigin, State: "pending", Version: "1", CreatedAt: e.OccurredAt, UpdatedAt: e.OccurredAt, NextAttemptAt: e.OccurredAt}
+	d := EmailDelivery{ID: ids.New(), EventID: e.ID, RequestKey: e.ID, Kind: "repository_quota", QuotaRuleID: e.RuleID, EpisodeID: e.EpisodeID, EventSequence: e.Sequence, QuotaEvent: e, TargetID: target.ID, TargetVersion: target.Version, Scenario: e.Scenario, Locale: target.Locale, TemplateVersion: quotaalert.TemplateVersion, RecipientCiphertext: target.RecipientCiphertext, From: cfg.From, ConsoleOrigin: cfg.ConsoleOrigin, State: "pending", Version: "1", CreatedAt: e.OccurredAt, UpdatedAt: e.OccurredAt, NextAttemptAt: e.OccurredAt}
 	if full {
 		d.State = "dead"
 		d.ErrorCode = "queue_full"

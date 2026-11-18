@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -72,7 +72,7 @@ func (c Collector) Schedule(ctx context.Context) error {
 			return err
 		}
 		if _, _, err = c.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{
-			ID: uuid.NewString(), RepositoryID: upload.RepositoryID, Kind: repository.LifecycleJobReclaim,
+			ID: ids.New(), RepositoryID: upload.RepositoryID, Kind: repository.LifecycleJobReclaim,
 			IdempotencyKey: "raw-upload:" + upload.ID, Payload: payload,
 		}); err != nil {
 			return err
@@ -98,7 +98,7 @@ func (c Collector) EnqueueReclaimJobs(ctx context.Context, before time.Time, lim
 		if err != nil {
 			return err
 		}
-		if _, _, err = c.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: uuid.NewString(), RepositoryID: object.RepositoryID, Kind: repository.LifecycleJobReclaim, IdempotencyKey: "raw-object:" + object.Digest, Payload: payload}); err != nil {
+		if _, _, err = c.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: ids.New(), RepositoryID: object.RepositoryID, Kind: repository.LifecycleJobReclaim, IdempotencyKey: "raw-object:" + object.Digest, Payload: payload}); err != nil {
 			return err
 		}
 	}

@@ -15,6 +15,7 @@ import {
   useSiteSettingsQuery,
 } from "../../lib/siteSettings";
 import { usePreferences } from "../../lib/preferences";
+import { clearable } from "../../lib/clearable";
 import { SiteBrandPreview } from "./SiteBrandPreview";
 import { SiteThemeOption } from "./SiteThemeOption";
 import {
@@ -215,7 +216,7 @@ export function SiteSettingsPage() {
               <Input
                 id="site-logo-url"
                 value={draft.logoUrl}
-                allowClear
+                allowClear={clearable(t, t("settings.siteLogo"))}
                 placeholder={t("settings.logoUrlPlaceholder")}
                 onChange={(event) =>
                   setDraft((current) => ({

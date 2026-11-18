@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/ids"
 	helmprotocol "github.com/mlops-ca/notarx/internal/protocol/helm"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -146,7 +147,7 @@ func (m *Module) servePreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, prefix+"/"), "/")
-	if _, err := uuid.Parse(parts[0]); err != nil {
+	if !ids.Valid(parts[0]) {
 		m.problem(w, 404, "not_found")
 		return
 	}
@@ -271,6 +272,6 @@ func (m *Module) capacity(w http.ResponseWriter, r *http.Request, repo repositor
 }
 
 func withRepositoryID(in repository.HostedRepository) repository.HostedRepository {
-	in.ID = uuid.NewString()
+	in.ID = ids.New()
 	return in
 }

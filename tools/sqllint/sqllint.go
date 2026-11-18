@@ -1,6 +1,6 @@
 // Package sqllint enforces the typed-key rules of ADR 0023 section 4.
 //
-// Two rules are checked over the Go source below internal/:
+// Three rules are checked over the Go source below internal/:
 //
 //   - SQL string literals in non-test files must not compare a column cast to
 //     text with a parameter (`col::text = $1`, `$1::text = col`, or `id::text` after
@@ -8,7 +8,12 @@
 //     violations are recorded per file in an allowlist that may only shrink.
 //   - `uuid.New()` and `uuid.NewRandom()` (random UUIDv4), also under an import alias,
 //     are forbidden outside internal/ids so every new identifier is a UUIDv7
-//     created by ids.New. Existing `uuid.NewString()` calls are not covered yet.
+//     created by ids.New. `uuid.Must(uuid.NewRandom())` is caught by the same rule.
+//   - `uuid.NewString()` (also a random UUIDv4) in non-test files is counted per file
+//     in a second allowlist that may only shrink (tools/sqllint/allowlist-uuid.txt):
+//     a new call in a file without an allowance fails. Files convert to ids.New() in
+//     waves; calls that are not row identifiers (leases, trace ids, temp names)
+//     may stay and keep their count.
 package sqllint
 
 import (
@@ -46,6 +51,9 @@ type Result struct {
 	Casts map[string]int
 	// UUIDNew lists file:line positions of uuid.New() calls outside internal/ids.
 	UUIDNew []string
+	// NewStrings maps a file path to its number of uuid.NewString() calls in
+	// non-test files outside internal/ids.
+	NewStrings map[string]int
 }
 
 // CountCasts returns the number of text-cast comparisons in one SQL string.
@@ -83,7 +91,7 @@ func CountCasts(sql string) int {
 
 // Scan walks root/internal and applies both rules.
 func Scan(root string) (Result, error) {
-	result := Result{Casts: map[string]int{}}
+	result := Result{Casts: map[string]int{}, NewStrings: map[string]int{}}
 	err := filepath.WalkDir(filepath.Join(root, "internal"), func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -129,9 +137,14 @@ func Scan(root string) (Result, error) {
 				if inIDs {
 					return true
 				}
-				if sel, ok := n.Fun.(*ast.SelectorExpr); ok && (sel.Sel.Name == "New" || sel.Sel.Name == "NewRandom") {
-					if pkg, ok := sel.X.(*ast.Ident); ok && uuidNames[pkg.Name] {
+				if sel, ok := n.Fun.(*ast.SelectorExpr); ok {
+					pkg, isPkg := sel.X.(*ast.Ident)
+					switch {
+					case !isPkg || !uuidNames[pkg.Name]:
+					case sel.Sel.Name == "New" || sel.Sel.Name == "NewRandom":
 						result.UUIDNew = append(result.UUIDNew, set.Position(n.Pos()).String())
+					case sel.Sel.Name == "NewString" && !isTest:
+						result.NewStrings[rel]++
 					}
 				}
 			}
@@ -212,14 +225,58 @@ func Check(result Result, allow map[string]int) []string {
 	return problems
 }
 
+// CheckNewStrings compares the uuid.NewString() counts with their allowlist and
+// returns one message per problem.
+func CheckNewStrings(result Result, allow map[string]int) []string {
+	var problems []string
+	for _, file := range sortedKeys(result.NewStrings) {
+		actual, allowed := result.NewStrings[file], allow[file]
+		switch {
+		case actual > allowed:
+			problems = append(problems, fmt.Sprintf("%s: %d uuid.NewString() call(s), allowlist permits %d; create identifiers with ids.New() (ADR 0023 section 4)", file, actual, allowed))
+		case actual < allowed:
+			problems = append(problems, fmt.Sprintf("%s: uuid allowlist permits %d but only %d remain; lower it with go run ./tools/sqllint/cmd -update", file, allowed, actual))
+		}
+	}
+	for _, file := range sortedKeys(allow) {
+		if _, ok := result.NewStrings[file]; !ok {
+			problems = append(problems, fmt.Sprintf("%s: uuid allowlist entry has no remaining calls; remove it with go run ./tools/sqllint/cmd -update", file))
+		}
+	}
+	return problems
+}
+
+// LoweredNewStrings is Lowered for the uuid.NewString() counts.
+func LoweredNewStrings(result Result, allow map[string]int) (map[string]int, error) {
+	return lowerCounts(result.NewStrings, allow, "uuid.NewString() call(s)")
+}
+
+// FormatNewStringAllowlist renders the uuid.NewString() counts in the allowlist file format.
+func FormatNewStringAllowlist(counts map[string]int) string {
+	var b strings.Builder
+	b.WriteString("# Ratchet for ADR 0023 section 4: uuid.NewString() (random UUIDv4) in non-test files.\n")
+	b.WriteString("# Convert row identifiers to ids.New(); counts may only decrease, remove a file at zero.\n")
+	b.WriteString("# Calls that are not row identifiers (lease tokens, trace ids, temporary names) may stay.\n")
+	b.WriteString("# Regenerate lower counts with: go run ./tools/sqllint/cmd -update\n")
+	for _, file := range sortedKeys(counts) {
+		fmt.Fprintf(&b, "%s %d\n", file, counts[file])
+	}
+	return b.String()
+}
+
 // Lowered returns the allowlist after a ratchet step: each file keeps its current
 // count and files without violations are dropped. It reports an error when any
 // count grew or a new file appeared, because the ratchet never goes up.
 func Lowered(result Result, allow map[string]int) (map[string]int, error) {
+	return lowerCounts(result.Casts, allow, "text-cast comparison(s)")
+}
+
+// lowerCounts keeps each file's current count and refuses to raise any of them.
+func lowerCounts(counts, allow map[string]int, what string) (map[string]int, error) {
 	next := map[string]int{}
-	for file, actual := range result.Casts {
+	for file, actual := range counts {
 		if actual > allow[file] {
-			return nil, fmt.Errorf("%s has %d violations, allowlist permits %d: fix the code instead of raising the allowlist", file, actual, allow[file])
+			return nil, fmt.Errorf("%s has %d %s, allowlist permits %d: fix the code instead of raising the allowlist", file, actual, what, allow[file])
 		}
 		next[file] = actual
 	}

@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -22,7 +22,7 @@ func (w AuditRetentionWorker) Enqueue(ctx context.Context, key string, batchSize
 	if batchSize <= 0 || batchSize > 1000 {
 		batchSize = 1000
 	}
-	return w.Store.EnqueueAuditCleanupJob(ctx, repository.AuditCleanupJob{ID: uuid.NewString(), IdempotencyKey: key, PolicyVersion: p.Version, CutoffAt: time.Now().UTC().AddDate(0, 0, -p.KeepDays), BatchSize: batchSize})
+	return w.Store.EnqueueAuditCleanupJob(ctx, repository.AuditCleanupJob{ID: ids.New(), IdempotencyKey: key, PolicyVersion: p.Version, CutoffAt: time.Now().UTC().AddDate(0, 0, -p.KeepDays), BatchSize: batchSize})
 }
 func (w AuditRetentionWorker) RunJobs(ctx context.Context, limit int) error {
 	jobs, err := w.Store.ClaimAuditCleanupJobs(ctx, limit)

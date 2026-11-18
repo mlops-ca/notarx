@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/ocidiscovery"
 	ociprotocol "github.com/mlops-ca/notarx/internal/protocol/oci"
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -326,7 +326,7 @@ func (h nativeOCIHandler) startUpload(w http.ResponseWriter, r *http.Request, re
 			}
 		}
 	}
-	id := uuid.NewString()
+	id := ids.New()
 	upload := repository.OCIUpload{ID: id, RepositoryID: repo.ID, Name: name, ObjectKey: "native/oci/uploads/" + id, State: "open", ExpiresAt: time.Now().UTC().Add(time.Hour)}
 	if _, err := h.store.CreateOCIUpload(r.Context(), upload); err != nil {
 		writeOCIError(w, 500, "UNKNOWN", "create upload failed")

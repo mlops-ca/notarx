@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/egress"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/secrets"
 )
@@ -105,7 +106,7 @@ func (s *Service) apply(in Input, old Source) (Source, error) {
 		return Source{}, fail("invalid_source")
 	}
 	if old.ID == "" {
-		old.ID = uuid.NewString()
+		old.ID = ids.New()
 	}
 	if old.CredentialCiphertext != "" && old.BaseURL != u.String() && in.Credentials == nil && !in.ClearCredentials {
 		return Source{}, fail("credential_replacement_required")

@@ -18,3 +18,16 @@ func New() string {
 func NewUUID() uuid.UUID {
 	return uuid.Must(uuid.NewV7())
 }
+
+// Valid reports whether s is a UUID in the canonical 36 character hyphenated form.
+// Validate client-supplied identifiers with it before a store query that binds
+// them as uuid: uuid.Parse alone also accepts the urn:uuid: prefix, braces and
+// unhyphenated forms, and PostgreSQL rejects or normalizes some of those
+// differently from the in-memory stores (SQLSTATE 22P02).
+func Valid(s string) bool {
+	if len(s) != 36 {
+		return false
+	}
+	_, err := uuid.Parse(s)
+	return err == nil
+}

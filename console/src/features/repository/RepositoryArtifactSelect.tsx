@@ -12,6 +12,7 @@ import type {
 import { formatDate, shortDigest } from "../../lib/format";
 import { useFormatters } from "../../lib/useFormatters";
 import { usePreferences } from "../../lib/preferences";
+import { clearable } from "../../lib/clearable";
 import {
   artifactCoordinateForDisplay,
   artifactSearchPrefix,
@@ -186,7 +187,7 @@ export function RepositoryArtifactSelect({
           );
           if (option) onChange(option);
         }}
-        allowClear
+        allowClear={clearable(t, ariaLabel)}
         onClear={() => {
           window.clearTimeout(searchTimer.current);
           setQuery("");

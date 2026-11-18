@@ -12,8 +12,12 @@
 
 baseline_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 
-# postgres:16-alpine (16.16), multi-architecture index digest.
-BASELINE_PG_IMAGE=${BASELINE_PG_IMAGE:-postgres:16-alpine@sha256:81e77a4833487b8132fe4b00bedd39dc3f74b8641e387f19312a48f7de218c2e}
+# postgres:18-alpine, multi-architecture index digest. PostgreSQL 16 stays in the
+# support matrix (docs/postgresql-capabilities.md): the generator output is
+# version independent (internal/tools/baselinefmt tests a 16 and an 18 dump) and
+# the baseline-equivalence workflow runs the proof on 16 as well. To use 16 by
+# hand, pass --pg-image postgres:16-alpine@sha256:81e77a4833487b8132fe4b00bedd39dc3f74b8641e387f19312a48f7de218c2e.
+BASELINE_PG_IMAGE=${BASELINE_PG_IMAGE:-postgres:18-alpine@sha256:b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015}
 engine=${CONTAINER_ENGINE:-docker}
 
 # pg_dump flags shared by the generator and the equivalence proof. The proof

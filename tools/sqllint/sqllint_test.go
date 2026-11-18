@@ -62,6 +62,9 @@ func TestScanFindsCastsAndUUIDNew(t *testing.T) {
 	if strings.Join(result.UUIDNew, ",") != strings.Join(want, ",") {
 		t.Fatalf("uuid.New positions = %v, want %v", result.UUIDNew, want)
 	}
+	if want := map[string]int{"internal/a/a.go": 1, "internal/c/c.go": 1}; len(result.NewStrings) != 2 || result.NewStrings["internal/a/a.go"] != 1 || result.NewStrings["internal/c/c.go"] != 1 {
+		t.Fatalf("NewStrings = %v, want %v (test files and internal/ids are not counted)", result.NewStrings, want)
+	}
 	if _, err := Scan(filepath.Join(root, "missing")); err == nil {
 		t.Fatal("Scan of a missing root must fail")
 	}
@@ -117,5 +120,29 @@ func TestLowered(t *testing.T) {
 	}
 	if _, err := Lowered(Result{Casts: map[string]int{"new.go": 1}}, map[string]int{}); err == nil {
 		t.Fatal("adding a file must fail")
+	}
+}
+
+func TestCheckNewStringsRatchet(t *testing.T) {
+	result := Result{NewStrings: map[string]int{"a.go": 2, "b.go": 1, "c.go": 4}}
+	allow := map[string]int{"a.go": 2, "b.go": 3, "gone.go": 2}
+	problems := strings.Join(CheckNewStrings(result, allow), "\n")
+	for _, want := range []string{"c.go: 4 uuid.NewString() call(s), allowlist permits 0", "b.go: uuid allowlist permits 3 but only 1", "gone.go: uuid allowlist entry has no remaining"} {
+		if !strings.Contains(problems, want) {
+			t.Errorf("missing %q in:\n%s", want, problems)
+		}
+	}
+	if strings.Contains(problems, "a.go:") {
+		t.Errorf("a.go is at its allowance and must not be reported:\n%s", problems)
+	}
+	next, err := LoweredNewStrings(Result{NewStrings: map[string]int{"a.go": 1}}, map[string]int{"a.go": 2, "b.go": 1})
+	if err != nil || len(next) != 1 || next["a.go"] != 1 {
+		t.Fatalf("next = %v, err = %v", next, err)
+	}
+	if _, err := LoweredNewStrings(Result{NewStrings: map[string]int{"new.go": 1}}, map[string]int{}); err == nil || !strings.Contains(err.Error(), "uuid.NewString() call(s)") {
+		t.Fatalf("a new file with uuid.NewString() must not be absorbed by -update, and must name the rule: %v", err)
+	}
+	if !strings.Contains(FormatNewStringAllowlist(map[string]int{"a.go": 2}), "a.go 2\n") {
+		t.Error("FormatNewStringAllowlist lost an entry")
 	}
 }

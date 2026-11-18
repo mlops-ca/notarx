@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 )
 
 // ArtifactIntelligenceCopyPayload is persisted in a lifecycle job after a
@@ -32,7 +32,7 @@ func EnqueueArtifactIntelligenceCopyJob(ctx context.Context, store LifecycleJobS
 		return LifecycleJob{}, false, err
 	}
 	key := "artifact-intelligence:" + sourceRepositoryID + ":" + string(format) + ":" + coordinate + ":" + digest
-	return store.EnqueueLifecycleJob(ctx, LifecycleJob{ID: uuid.NewString(), RepositoryID: targetRepositoryID, Kind: LifecycleJobIntelligence, IdempotencyKey: key, Payload: body})
+	return store.EnqueueLifecycleJob(ctx, LifecycleJob{ID: ids.New(), RepositoryID: targetRepositoryID, Kind: LifecycleJobIntelligence, IdempotencyKey: key, Payload: body})
 }
 
 // CopyArtifactIntelligence copies immutable evidence without overwriting

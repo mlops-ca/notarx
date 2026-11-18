@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -37,16 +38,16 @@ func validLifecycleRequest(r LifecycleRequest) bool {
 	if !repository.ValidAPTPublicationScope(r.Suite) {
 		return false
 	}
-	if _, err := uuid.Parse(r.ExpectedSnapshotID); err != nil {
+	if !ids.Valid(r.ExpectedSnapshotID) {
 		return false
 	}
-	for _, ids := range [][]string{r.PublicationSessionIDs, r.DeletionIDs} {
-		if len(ids) > 10000 {
+	for _, list := range [][]string{r.PublicationSessionIDs, r.DeletionIDs} {
+		if len(list) > 10000 {
 			return false
 		}
 		seen := make(map[string]bool)
-		for _, id := range ids {
-			if _, err := uuid.Parse(id); err != nil || seen[id] {
+		for _, id := range list {
+			if !ids.Valid(id) || seen[id] {
 				return false
 			}
 			seen[id] = true
@@ -216,7 +217,7 @@ func (l Lifecycle) Apply(ctx context.Context, repoID, actor, key string, r Lifec
 	if err != nil {
 		return repository.APTRepositorySnapshot{}, err
 	}
-	attemptID := uuid.NewString()
+	attemptID := ids.New()
 	snapshot, err := p.Publish(locked, PublishSnapshotInput{ID: attemptID, RepositoryID: repoID, Suite: r.Suite, Sequence: sequence + 1, SessionIDs: sessions, Actor: actor, CreatedAt: now, indexScopes: snapshotIndexScopes(r.Suite, assets), lifecycle: &repository.APTLifecycleCommit{ID: commandID, RequestDigest: digest, BaseSnapshotID: r.ExpectedSnapshotID, Operation: r.Action, RemoveSessionIDs: plan.RemoveSessionIDs, RestoreIDs: plan.RestoreIDs, Now: now}})
 	if err != nil {
 		cleanup, cancel := context.WithTimeout(context.WithoutCancel(locked), 5*time.Second)

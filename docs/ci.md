@@ -84,7 +84,10 @@ emits the matrix. A step that runs a third-party artifact published for one
 architecture only (`published-native-backup-test` executes the published amd64
 release binaries) declares `architectures` in the plan; other architectures skip
 and report it, nothing is emulated. `quality-arm64` runs lint, vet and the race detector on
-`ubuntu-24.04-arm`; the coverage floor stays on amd64. See
+`ubuntu-24.04-arm`; the coverage floor stays on amd64. Both jobs call the local
+composite action `.github/actions/go-quality` for setup, lint, vet and race, so the
+steps have one definition. They stay two jobs, not a matrix, because the release gate
+requires a check named exactly `quality`. See
 [native builds](native-builds.md).
 
 ## Shared images
@@ -203,3 +206,19 @@ that must be green on a commit before it is released. `make release-plan-test`
 runs the plan against fixture repositories and fails if git-cliff's bump behaviour
 deviates from the pinned expectations. Wiring the plan into the release workflow is
 a later slice of ADR 0024.
+
+## Release dry run
+
+`.github/workflows/release-dry-run.yml` rehearses the publication path on a pull
+request, so a major bump of `actions/checkout`, `download-artifact`,
+`upload-artifact` or a Docker action is tested before a tag is cut. It runs when
+a file it exercises changes (the release and image workflows, the artifact scripts,
+the Dockerfiles) and on demand through `workflow_dispatch`. It calls
+`release-archives.yml` (four native runners, artifact download, checksum union) and
+`image-build.yml` with `dry-run: true`: each image is built natively and loaded
+locally, the labels and version are checked, the SBOM is scanned, and the digest and
+SBOM artifacts are handed to `image-manifest`, which validates them. Nothing signs in,
+pushes, tags or attests, so push-by-digest, the pull back by digest, the tag merge and
+the attestations are not rehearsed; they first run on `main` and on a release. It is path filtered, so it is not a required check and not
+part of `ci-ok`. `release.yml` itself (tag verification and `publish-release`) is not
+callable and is still first exercised by a real release.

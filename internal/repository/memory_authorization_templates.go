@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 )
 
 func cloneAuthorizationTemplate(template AuthorizationTemplate) AuthorizationTemplate {
@@ -28,7 +28,7 @@ func (s *MemoryStore) CreateAuthorizationTemplate(_ context.Context, template Au
 	}
 	now := time.Now().UTC()
 	if template.ID == "" {
-		template.ID = uuid.NewString()
+		template.ID = ids.New()
 	}
 	template.Name = name
 	template.Version = "1"

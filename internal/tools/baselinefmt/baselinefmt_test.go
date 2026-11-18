@@ -7,9 +7,14 @@ import (
 	"testing"
 )
 
-func normalizeFixture(t *testing.T) string {
+// dumpFixtures are real pg_dump outputs of the same schema from each supported
+// major version. The generator pins the newest (see scripts/baseline-lib.sh); the
+// older one stays because the support matrix still lists it (docs/postgresql-capabilities.md).
+var dumpFixtures = []string{"testdata/pg_dump_16.sql", "testdata/pg_dump_18.sql"}
+
+func normalizeFixture(t *testing.T, fixture string) string {
 	t.Helper()
-	dump, err := os.ReadFile("testdata/pg_dump_16.sql")
+	dump, err := os.ReadFile(fixture)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -20,77 +25,88 @@ func normalizeFixture(t *testing.T) string {
 	return string(out)
 }
 
+func forEachFixture(t *testing.T, check func(t *testing.T, got string)) {
+	t.Helper()
+	for _, fixture := range dumpFixtures {
+		t.Run(fixture, func(t *testing.T) { check(t, normalizeFixture(t, fixture)) })
+	}
+}
+
 func TestNormalizeMatchesGolden(t *testing.T) {
-	got := normalizeFixture(t)
-	want, err := os.ReadFile("testdata/baseline.golden.sql")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != string(want) {
-		t.Fatalf("output differs from testdata/baseline.golden.sql:\n%s", got)
-	}
+	forEachFixture(t, func(t *testing.T, got string) {
+		want, err := os.ReadFile("testdata/baseline.golden.sql")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != string(want) {
+			t.Fatalf("output differs from testdata/baseline.golden.sql:\n%s", got)
+		}
+	})
 }
 
 func TestNormalizeStripsPreambleOwnershipAndLedger(t *testing.T) {
-	got := normalizeFixture(t)
-	for _, banned := range []string{
-		"\\restrict", "\\unrestrict", "set_config", "SET statement_timeout", "SET check_function_bodies",
-		"OWNER TO", "COMMENT ON EXTENSION", "notarx_schema_migrations", "schema_version",
-		"WITH SCHEMA public", "Dumped from", "PostgreSQL database dump",
-	} {
-		if strings.Contains(got, banned) {
-			t.Errorf("normalised output still contains %q", banned)
+	forEachFixture(t, func(t *testing.T, got string) {
+		for _, banned := range []string{
+			"\\restrict", "\\unrestrict", "set_config", "SET statement_timeout", "SET check_function_bodies",
+			"OWNER TO", "COMMENT ON EXTENSION", "notarx_schema_migrations", "schema_version",
+			"WITH SCHEMA public", "Dumped from", "PostgreSQL database dump",
+		} {
+			if strings.Contains(got, banned) {
+				t.Errorf("normalised output still contains %q", banned)
+			}
 		}
-	}
-	for _, kept := range []string{
-		"-- +goose Up\n", "CREATE EXTENSION IF NOT EXISTS pg_trgm;\n", "CREATE FUNCTION public.touch()",
-		"CREATE TABLE public.items (", "gin_trgm_ops", "ADD CONSTRAINT items_pkey",
-	} {
-		if !strings.Contains(got, kept) {
-			t.Errorf("normalised output lost %q", kept)
+		for _, kept := range []string{
+			"-- +goose Up\n", "CREATE EXTENSION IF NOT EXISTS pg_trgm;\n", "CREATE FUNCTION public.touch()",
+			"CREATE TABLE public.items (", "gin_trgm_ops", "ADD CONSTRAINT items_pkey",
+		} {
+			if !strings.Contains(got, kept) {
+				t.Errorf("normalised output lost %q", kept)
+			}
 		}
-	}
-	if strings.Contains(got, "-- +goose Down") {
-		t.Error("baseline must not carry a Down section")
-	}
-	if strings.Count(got, "CREATE EXTENSION") != 2 {
-		t.Errorf("extensions must come only from the fixed header (pg_trgm and the guarded pg_stat_statements)")
-	}
+		if strings.Contains(got, "-- +goose Down") {
+			t.Error("baseline must not carry a Down section")
+		}
+		if strings.Count(got, "CREATE EXTENSION") != 2 {
+			t.Errorf("extensions must come only from the fixed header (pg_trgm and the guarded pg_stat_statements)")
+		}
+	})
 }
 
 func TestNormalizeGuardsOptionalExtension(t *testing.T) {
-	got := normalizeFixture(t)
-	if !strings.Contains(got, "DO $$") || !strings.Contains(got, "EXCEPTION WHEN OTHERS THEN") ||
-		!strings.Contains(got, "RAISE NOTICE") {
-		t.Fatal("pg_stat_statements must be created in a guarded block")
-	}
-	if strings.Contains(got, "CREATE EXTENSION IF NOT EXISTS pg_stat_statements;\n\n") {
-		t.Fatal("pg_stat_statements must not be created outside the guarded block")
-	}
+	forEachFixture(t, func(t *testing.T, got string) {
+		if !strings.Contains(got, "DO $$") || !strings.Contains(got, "EXCEPTION WHEN OTHERS THEN") ||
+			!strings.Contains(got, "RAISE NOTICE") {
+			t.Fatal("pg_stat_statements must be created in a guarded block")
+		}
+		if strings.Contains(got, "CREATE EXTENSION IF NOT EXISTS pg_stat_statements;\n\n") {
+			t.Fatal("pg_stat_statements must not be created outside the guarded block")
+		}
+	})
 }
 
 func TestNormalizeSeedHasExactlyTheFourSingletons(t *testing.T) {
-	got := normalizeFixture(t)
-	seed := got[strings.Index(got, "-- seed:"):]
-	if n := strings.Count(seed, "INSERT INTO"); n != 4 {
-		t.Fatalf("seed has %d INSERT statements, want 4", n)
-	}
-	for _, table := range []string{"audit_retention_policy", "anonymous_access_policy", "site_settings", "installation_repository_presets"} {
-		if !strings.Contains(seed, "INSERT INTO public."+table+" ") {
-			t.Errorf("seed missing %s", table)
+	forEachFixture(t, func(t *testing.T, got string) {
+		seed := got[strings.Index(got, "-- seed:"):]
+		if n := strings.Count(seed, "INSERT INTO"); n != 4 {
+			t.Fatalf("seed has %d INSERT statements, want 4", n)
 		}
-	}
-	for _, migration := range []string{"000049_", "000055_", "000107_", "000174_"} {
-		if !strings.Contains(seed, "Originating migration: "+migration) {
-			t.Errorf("seed does not name migration %s", migration)
+		for _, table := range []string{"audit_retention_policy", "anonymous_access_policy", "site_settings", "installation_repository_presets"} {
+			if !strings.Contains(seed, "INSERT INTO public."+table+" ") {
+				t.Errorf("seed missing %s", table)
+			}
 		}
-	}
-	if !strings.Contains(seed, "'standard-v1', 'pending'") || strings.Contains(seed, "skipped_existing'") {
-		t.Error("presets seed must be standard-v1 pending")
-	}
-	if strings.Contains(got, "GRANT ") || strings.Contains(got, "PUBLIC") {
-		t.Error("baseline must not grant to PUBLIC")
-	}
+		for _, migration := range []string{"000049_", "000055_", "000107_", "000174_"} {
+			if !strings.Contains(seed, "Originating migration: "+migration) {
+				t.Errorf("seed does not name migration %s", migration)
+			}
+		}
+		if !strings.Contains(seed, "'standard-v1', 'pending'") || strings.Contains(seed, "skipped_existing'") {
+			t.Error("presets seed must be standard-v1 pending")
+		}
+		if strings.Contains(got, "GRANT ") || strings.Contains(got, "PUBLIC") {
+			t.Error("baseline must not grant to PUBLIC")
+		}
+	})
 }
 
 func TestNormalizeAddsIfNotExistsToOtherExtensions(t *testing.T) {

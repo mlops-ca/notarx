@@ -1,7 +1,8 @@
 name: Image build
 
 # Reusable per-architecture image build, merge and attest (ADR 0016). Callers:
-# ci.yml (mainline-images) today and the ADR 0024 release pipeline. The image
+# ci.yml (mainline-images) today and the ADR 0024 release pipeline, and
+# release-dry-run.yml (dry-run: true, nothing published). The image
 # list, the version and the tags to create all come from the caller; this
 # workflow hard-codes none of them.
 #
@@ -40,6 +41,13 @@ on:
         type: string
       require-main-tip:
         description: Fail instead of tagging when sha is no longer the tip of main (mainline path).
+        default: false
+        type: boolean
+      dry-run:
+        description: >-
+          Pull-request rehearsal (release-dry-run.yml): build each image natively and load it
+          locally, run the same checks, scan the SBOM and exercise the digest and SBOM artifact
+          hand-off, but never sign in, push, tag or attest.
         default: false
         type: boolean
 
@@ -94,20 +102,23 @@ jobs:
           npm --prefix tools/openapi ci --ignore-scripts --no-audit --no-fund
           ./scripts/stamp-version.sh "$VERSION"
       - name: Sign in to GitHub Container Registry
+        if: ${{ !inputs.dry-run }}
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      - name: Build natively and push by digest
+      - name: Build natively and push by digest (a dry run loads it locally)
         id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: ${{ matrix.file }}
           platforms: linux/${{ matrix.arch }}
-          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-only=true,push=true
+          tags: ${{ inputs.dry-run && format('{0}:dry-run', env.IMAGE) || '' }}
+          load: ${{ inputs.dry-run }}
+          outputs: ${{ !inputs.dry-run && format('type=image,name={0},push-by-digest=true,name-only=true,push=true', env.IMAGE) || '' }}
           provenance: false
           sbom: false
           build-args: |
@@ -119,31 +130,40 @@ jobs:
       - name: Run the pushed digest natively and check its labels
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
+          DRY_RUN: ${{ inputs.dry-run }}
           VERSION: ${{ inputs.version }}
           REVISION: ${{ inputs.sha }}
           RUN_VERSION: ${{ matrix.version-command }}
           ARCH: ${{ matrix.arch }}
         run: |
           # Push-by-digest tags nothing, so pull the image from the registry by digest.
-          docker pull "$IMAGE@$DIGEST"
-          test "$(docker image inspect "$IMAGE@$DIGEST" --format '{{ .Architecture }}')" = "$ARCH"
-          test "$(docker image inspect "$IMAGE@$DIGEST" --format '{{ index .Config.Labels "org.opencontainers.image.version" }}')" = "$VERSION"
-          test "$(docker image inspect "$IMAGE@$DIGEST" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')" = "$REVISION"
+          # A dry run loaded the image locally under a tag instead.
+          if [ "$DRY_RUN" = true ]; then
+            ref="$IMAGE:dry-run"
+          else
+            ref="$IMAGE@$DIGEST"
+            docker pull "$ref"
+          fi
+          test "$(docker image inspect "$ref" --format '{{ .Architecture }}')" = "$ARCH"
+          test "$(docker image inspect "$ref" --format '{{ index .Config.Labels "org.opencontainers.image.version" }}')" = "$VERSION"
+          test "$(docker image inspect "$ref" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')" = "$REVISION"
           if [ "$RUN_VERSION" = true ]; then
-            docker run --rm "$IMAGE@$DIGEST" version | grep -F "$VERSION (revision $REVISION,"
+            docker run --rm "$ref" version | grep -F "$VERSION (revision $REVISION,"
           fi
       - name: Scan an SBOM of this architecture
         uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
-          image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          image: ${{ inputs.dry-run && format('{0}:dry-run', env.IMAGE) || format('{0}@{1}', env.IMAGE, steps.build.outputs.digest) }}
           format: spdx-json
           output-file: sbom-${{ matrix.image }}-${{ matrix.arch }}.spdx.json
           upload-artifact: false
           upload-release-assets: false
       - name: Record the digest
         env:
-          DIGEST: ${{ steps.build.outputs.digest }}
+          # A dry run pushes nothing, so the local image id stands in for the digest.
+          DIGEST: ${{ inputs.dry-run && steps.build.outputs.imageid || steps.build.outputs.digest }}
         run: |
+          printf '%s' "$DIGEST" | grep -Eq '^sha256:[0-9a-f]{64}$'
           mkdir -p "$RUNNER_TEMP/digest"
           printf '%s\n' "$DIGEST" > "$RUNNER_TEMP/digest/digest"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -192,14 +212,26 @@ jobs:
           pattern: sbom-${{ matrix.image }}-*
           path: ${{ runner.temp }}/sboms
           merge-multiple: true
+      - name: Dry run, check the digest and SBOM hand-off without publishing
+        if: ${{ inputs.dry-run }}
+        env:
+          IMAGE_NAME: ${{ matrix.image }}
+        run: |
+          for arch in amd64 arm64; do
+            grep -Eq '^sha256:[0-9a-f]{64}$' "$RUNNER_TEMP/digests/digest-$IMAGE_NAME-$arch/digest"
+            jq -e '.spdxVersion' "$RUNNER_TEMP/sboms/sbom-$IMAGE_NAME-$arch.spdx.json" >/dev/null
+          done
       - name: Sign in to GitHub Container Registry
+        if: ${{ !inputs.dry-run }}
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - if: ${{ !inputs.dry-run }}
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Verify each digest, then create the multi-architecture tags
+        if: ${{ !inputs.dry-run }}
         id: merge
         env:
           REVISION: ${{ inputs.sha }}
@@ -226,12 +258,14 @@ jobs:
           # Both platforms must be present with their platform fields set.
           jq -e '[.manifests[] | .platform | select(.os == "linux") | .architecture] | sort == ["amd64", "arm64"]' <<<"$index" >/dev/null
       - name: Attest the index provenance
+        if: ${{ !inputs.dry-run }}
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ${{ env.IMAGE }}
           subject-digest: ${{ steps.merge.outputs.digest }}
           push-to-registry: true
       - name: Attest the amd64 SBOM on the index
+        if: ${{ !inputs.dry-run }}
         uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
         with:
           subject-name: ${{ env.IMAGE }}
@@ -239,6 +273,7 @@ jobs:
           sbom-path: ${{ runner.temp }}/sboms/sbom-${{ matrix.image }}-amd64.spdx.json
           push-to-registry: true
       - name: Attest the arm64 SBOM on the index
+        if: ${{ !inputs.dry-run }}
         uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
         with:
           subject-name: ${{ env.IMAGE }}

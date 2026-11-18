@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 )
 
 func (s *MemoryStore) aptArchiveStateLocked(plan APTArchiveRestorePlan) aptArchiveRestoreState {
@@ -107,7 +107,7 @@ func (s *MemoryStore) CommitAPTArchiveRestore(_ context.Context, plan APTArchive
 				s.aptPackageRevisions[revision.ID] = revision
 				s.aptPackageIdentities[identity] = revision.ID
 			}
-			sessionID := uuid.NewString()
+			sessionID := ids.New()
 			s.aptPublicationSessions[sessionID] = APTPublicationSession{ID: sessionID, RepositoryID: snapshot.RepositoryID, Suite: snapshot.Suite, Component: p.Component, Publisher: revision.Publisher, ObjectName: revision.ObjectName, DeclaredDigest: revision.Digest, DeclaredSize: revision.Size, ExpectedIdentity: revision.CanonicalIdentity, ObjectKey: revision.ObjectKey, PackageRevisionID: revision.ID, State: APTPublicationSessionStaged, CreatedAt: revision.CreatedAt, ExpiresAt: time.Now().UTC().Add(24 * time.Hour)}
 			members = append(members, APTSnapshotPackage{SnapshotID: snapshot.ID, PublicationSessionID: sessionID, PackageRevisionID: revision.ID, Component: p.Component, Architecture: revision.Architecture})
 		}

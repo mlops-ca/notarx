@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	discovery "github.com/mlops-ca/notarx/internal/ocidiscovery"
 	"github.com/mlops-ca/notarx/internal/ocigraph"
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -230,7 +230,7 @@ func (h nativeOCIHandler) discoveryReferrers(w http.ResponseWriter, r *http.Requ
 		var guards []discovery.Guard
 		binding, guards, err = h.discoverSubject(ctx, scope, p, image, subject)
 		if err == nil {
-			snapshot = discovery.Snapshot{ID: uuid.NewString(), Owner: discoveryOwner(p.Principal, p.authenticated), Actor: p.Actor, Kind: "referrers", Scope: scope.id, Image: image, Subject: subject, ArtifactType: filter, Guards: guards, Coverage: []discovery.Coverage{{Namespace: scope.name, State: "complete"}}, Referrers: []discovery.Descriptor{}, ExpiresAt: time.Now().UTC().Add(discovery.SnapshotTTL)}
+			snapshot = discovery.Snapshot{ID: ids.New(), Owner: discoveryOwner(p.Principal, p.authenticated), Actor: p.Actor, Kind: "referrers", Scope: scope.id, Image: image, Subject: subject, ArtifactType: filter, Guards: guards, Coverage: []discovery.Coverage{{Namespace: scope.name, State: "complete"}}, Referrers: []discovery.Descriptor{}, ExpiresAt: time.Now().UTC().Add(discovery.SnapshotTTL)}
 			for _, ref := range binding.Referrers {
 				if filter == "" || ref.ArtifactType == filter {
 					snapshot.Referrers = append(snapshot.Referrers, ref)

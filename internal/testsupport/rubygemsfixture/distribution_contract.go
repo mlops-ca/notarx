@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	protocol "github.com/mlops-ca/notarx/internal/protocol/rubygems"
 	"github.com/mlops-ca/notarx/internal/repository"
 	dist "github.com/mlops-ca/notarx/internal/rubygemsdistribution"
@@ -31,7 +32,7 @@ func replicationPublication(t *testing.T, s domain.Store, repo, name, platform s
 		t.Fatal(err)
 	}
 	sum := sha256.Sum256(body)
-	session, _, err := s.Reserve(t.Context(), domain.Session{ID: uuid.NewString(), RepositoryID: repo, Name: name, Version: "1.0.0", Platform: platform, Digest: "sha256:" + hex.EncodeToString(sum[:]), Size: int64(len(body)), Actor: "operator", MetadataJSON: in.MetadataJSON, MetadataYAML: in.MetadataYAML, ExpiresAt: time.Now().UTC().Add(time.Hour)})
+	session, _, err := s.Reserve(t.Context(), domain.Session{ID: ids.New(), RepositoryID: repo, Name: name, Version: "1.0.0", Platform: platform, Digest: "sha256:" + hex.EncodeToString(sum[:]), Size: int64(len(body)), Actor: "operator", MetadataJSON: in.MetadataJSON, MetadataYAML: in.MetadataYAML, ExpiresAt: time.Now().UTC().Add(time.Hour)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +44,7 @@ func replicationPublication(t *testing.T, s domain.Store, repo, name, platform s
 }
 func replicationStage(t *testing.T, s ReplicationStore, j dist.Job, index int, p domain.Publication, check dist.Check) domain.Session {
 	t.Helper()
-	session, _, err := s.Reserve(t.Context(), domain.Session{ID: uuid.NewString(), RepositoryID: j.TargetRepositoryID, Name: p.Name, Version: p.Version, Platform: p.Platform, Digest: p.Digest, Size: p.Size, Actor: j.Actor, MetadataJSON: p.MetadataJSON, MetadataYAML: p.MetadataYAML, ExpiresAt: time.Now().UTC().Add(time.Hour)})
+	session, _, err := s.Reserve(t.Context(), domain.Session{ID: ids.New(), RepositoryID: j.TargetRepositoryID, Name: p.Name, Version: p.Version, Platform: p.Platform, Digest: p.Digest, Size: p.Size, Actor: j.Actor, MetadataJSON: p.MetadataJSON, MetadataYAML: p.MetadataYAML, ExpiresAt: time.Now().UTC().Add(time.Hour)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -334,7 +335,7 @@ func ReplicationPublicationExpiryContract(t *testing.T, s ReplicationStore, audi
 	if err != nil {
 		t.Fatal(err)
 	}
-	in.ID = uuid.NewString()
+	in.ID = ids.New()
 	in.RepositoryID = target.ID
 	in.Actor = claim.Actor
 	in.ExpiresAt = time.Now().UTC().Add(PublicationExpiryWindow)

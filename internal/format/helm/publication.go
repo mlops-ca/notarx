@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	helmprotocol "github.com/mlops-ca/notarx/internal/protocol/helm"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/uploadspool"
@@ -97,7 +98,7 @@ func (m *Module) upload(w http.ResponseWriter, r *http.Request, repo repository.
 		m.problem(w, 400, "invalid_idempotency_key")
 		return
 	}
-	sessionID := uuid.NewString()
+	sessionID := ids.New()
 	if key != "" {
 		sessionID = uuid.NewSHA1(uuid.NameSpaceURL, []byte(repo.ID+"\x00helm\x00"+actor+"\x00"+key)).String()
 	}

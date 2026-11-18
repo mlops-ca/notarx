@@ -1,0 +1,44 @@
+name: Go quality checks
+description: >-
+  Sets up Go and Node, installs the Console tools and runs the lint, vet and race
+  checks that every architecture runs (ADR 0016). The quality job in ci.yml calls
+  it on ubuntu-24.04 and ubuntu-24.04-arm so the two cannot drift; the checkout
+  stays in the job. Steps that are architecture independent (coverage floor,
+  dependency audit, packaging checks) stay in the amd64 job.
+
+inputs:
+  openapi-tools:
+    description: Also install tools/openapi (needed by the amd64 job's later steps).
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+      with:
+        go-version-file: go.mod
+        cache: true
+    # make lint runs the en-CA spell check, which needs the Console tools.
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version-file: .nvmrc
+        cache: npm
+        cache-dependency-path: |
+          console/package-lock.json
+          tools/openapi/package-lock.json
+    - run: npm ci --ignore-scripts --no-audit --no-fund --timing --loglevel=http
+      shell: bash
+      working-directory: console
+    - if: inputs.openapi-tools == 'true'
+      run: npm ci --ignore-scripts --no-audit --no-fund --timing --loglevel=http
+      shell: bash
+      working-directory: tools/openapi
+    - name: Run Go lint
+      shell: bash
+      run: make lint
+    - name: Run Go vet
+      shell: bash
+      run: make vet
+    - name: Run race detector
+      shell: bash
+      run: make race

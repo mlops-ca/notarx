@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -238,7 +239,7 @@ func (h nativeMavenHandler) createWithIdempotencyKey(w http.ResponseWriter, r *h
 	}
 	payload, _ := json.Marshal(body)
 	digest := sha256.Sum256(payload)
-	s := repository.MavenPublishSession{ID: uuid.NewString(), RepositoryID: repo.ID, Coordinate: body.Coordinate, Publisher: principal.Actor, PomObject: body.PomObject, State: "open", Objects: body.Objects, ExpiresAt: time.Now().UTC().Add(time.Hour)}
+	s := repository.MavenPublishSession{ID: ids.New(), RepositoryID: repo.ID, Coordinate: body.Coordinate, Publisher: principal.Actor, PomObject: body.PomObject, State: "open", Objects: body.Objects, ExpiresAt: time.Now().UTC().Add(time.Hour)}
 	s, _, err = h.store.CreateMavenPublishSessionIdempotently(r.Context(), s, principal.Actor, "repositories/"+repo.ID+"/publish-sessions", key, hex.EncodeToString(digest[:]))
 	if errors.Is(err, repository.ErrIdempotencyConflict) {
 		writeHostedProblem(w, http.StatusConflict, "idempotency_conflict", "Idempotency-Key was already used with a different request")
@@ -869,7 +870,7 @@ func (h nativeMavenHandler) deploy(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(name, ".pom") {
 			pomObject = name
 		}
-		s = repository.MavenPublishSession{ID: uuid.NewString(), RepositoryID: repo.ID, Coordinate: coordinate, Publisher: principal.Actor, PomObject: pomObject, State: "open", Objects: []repository.MavenDeclaredObject{declared}, ExpiresAt: time.Now().Add(time.Hour)}
+		s = repository.MavenPublishSession{ID: ids.New(), RepositoryID: repo.ID, Coordinate: coordinate, Publisher: principal.Actor, PomObject: pomObject, State: "open", Objects: []repository.MavenDeclaredObject{declared}, ExpiresAt: time.Now().Add(time.Hour)}
 		if writable {
 			s.ClientTimestamp, s.ClientBuildNumber = clientStamp, clientBuild
 			_, err = h.store.CreateMavenSnapshotDeployment(r.Context(), s)

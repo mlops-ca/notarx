@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -49,7 +49,7 @@ func (m NativePyPIMaintenance) EnqueueReclaimJobs(ctx context.Context, before ti
 	}
 	for _, object := range objects {
 		payload, _ := json.Marshal(pypiReclaimPayload{Format: repository.FormatPyPI, ObjectKey: object.ObjectKey})
-		if _, _, err = m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: uuid.NewString(), RepositoryID: object.RepositoryID, Kind: repository.LifecycleJobReclaim, IdempotencyKey: "pypi:" + object.ObjectKey, Payload: payload}); err != nil && !errors.Is(err, repository.ErrIdempotencyConflict) {
+		if _, _, err = m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: ids.New(), RepositoryID: object.RepositoryID, Kind: repository.LifecycleJobReclaim, IdempotencyKey: "pypi:" + object.ObjectKey, Payload: payload}); err != nil && !errors.Is(err, repository.ErrIdempotencyConflict) {
 			return err
 		}
 	}

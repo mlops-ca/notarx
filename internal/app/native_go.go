@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	protocolidentity "github.com/mlops-ca/notarx/internal/protocol/identity"
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -655,7 +655,7 @@ func enqueueGoPublicationReclaim(ctx context.Context, store repository.Lifecycle
 	if err != nil {
 		return repository.LifecycleJob{}, err
 	}
-	jobID := uuid.NewString()
+	jobID := ids.New()
 	job, _, err := store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{
 		ID: jobID, RepositoryID: repositoryID, Kind: repository.LifecycleJobReclaim,
 		IdempotencyKey: "go-publication-object:" + jobID, Payload: payload,

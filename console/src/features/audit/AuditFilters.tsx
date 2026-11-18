@@ -3,6 +3,7 @@ import { Collapse, DatePicker, Select } from "antd";
 import dayjs from "dayjs";
 import { FilterBar, FilterField } from "../../components/ui/ConsolePrimitives";
 import { usePreferences } from "../../lib/preferences";
+import { clearable } from "../../lib/clearable";
 import type { AuditFilters as Filters } from "./auditQueries";
 
 type Option = { value: string; label: string };
@@ -22,11 +23,12 @@ function AuditSelect({
   searchByValue?: boolean;
   onChange: (value: string) => void;
 }) {
+  const { t } = usePreferences();
   return (
     <FilterField label={label}>
       <Select
         className="w-full min-w-[170px]"
-        allowClear
+        allowClear={clearable(t, label)}
         showSearch={{
           // Options carry a readable label and the stored machine code, and a
           // reader may search by either — for operations, pasting the code

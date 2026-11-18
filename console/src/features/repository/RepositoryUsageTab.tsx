@@ -6,6 +6,7 @@ import { EmptyState, ErrorBanner, Loading } from "../../components/ui/Feedback";
 import { formatDate, formatNumber } from "../../lib/format";
 import { useFormatters } from "../../lib/useFormatters";
 import { usePreferences } from "../../lib/preferences";
+import { clearable } from "../../lib/clearable";
 import { ConsoleTable, FilterBar } from "../../components/ui/ConsolePrimitives";
 import { CONSOLE_PAGE_SIZE } from "../../components/ui/useConsolePagination";
 import { useArtifactUsage } from "./repositoryQueries";
@@ -102,7 +103,7 @@ function RepositoryUsageContent({ repo }: { repo: Repository }) {
           aria-label={t("repository.searchArtifactAddress")}
           placeholder={t("repository.searchAddressCaseSensitive")}
           maxLength={512}
-          allowClear
+          allowClear={clearable(t, t("repository.searchArtifactAddress"))}
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onSearch={(value) => {

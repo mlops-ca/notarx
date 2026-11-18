@@ -5,12 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/mlops-ca/notarx/internal/ids"
 	protocol "github.com/mlops-ca/notarx/internal/protocol/rubygems"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/repository"
 	d "github.com/mlops-ca/notarx/internal/rubygemspublication"
 )
@@ -60,7 +60,7 @@ func GovernanceContract(t *testing.T, store d.Store, repo repository.HostedRepos
 	if err != nil || replay.Governance != yanked.Governance {
 		t.Fatalf("no-op changed state %+v %v", replay, err)
 	}
-	in.ID = uuid.NewString()
+	in.ID = ids.New()
 	if _, _, err = store.Reserve(ctx, in); !errors.Is(err, d.ErrConflict) {
 		t.Fatalf("repush revived identity %v", err)
 	}
@@ -189,7 +189,7 @@ func QuarantinePlatformContract(t *testing.T, store d.Store, repo repository.Hos
 	original.MetadataYAML = bytes.Replace(original.MetadataYAML, []byte("name: contract"), []byte("name: variant"), 1)
 	for _, platform := range []string{"ruby", "java"} {
 		in := original
-		in.ID, in.Platform = uuid.NewString(), platform
+		in.ID, in.Platform = ids.New(), platform
 		in.MetadataYAML = bytes.Replace(in.MetadataYAML, []byte("platform: ruby"), []byte("platform: "+platform), 1)
 		meta, err := protocol.ParseMetadata(in.MetadataYAML)
 		if err != nil {

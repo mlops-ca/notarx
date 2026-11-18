@@ -272,3 +272,27 @@ type failingPublicationReader struct{}
 func (failingPublicationReader) Read([]byte) (int, error) {
 	return 0, errors.New("synthetic upload interruption")
 }
+
+// A resumable upload id comes from the query string; a malformed one is a client
+// error at the boundary (400) and never a database error (ADR 0023 section 4).
+func TestRawModuleRejectsMalformedUploadIdentifiers(t *testing.T) {
+	_, _, mux := fixture(t)
+	for _, tc := range []struct{ name, method, query string }{
+		{"read", http.MethodGet, "not-a-uuid"},
+		{"append", http.MethodPatch, "12345"},
+		{"cancel", http.MethodDelete, "not-a-uuid"},
+		{"complete", http.MethodPut, "11111111-1111-4111-8111"},
+		{"sql text", http.MethodGet, "%27%20OR%201%3D1"},
+		// uuid.Parse accepts these spellings, PostgreSQL's uuid input does not.
+		{"urn prefix", http.MethodGet, "urn:uuid:11111111-1111-4111-8111-111111111111"},
+		{"braces", http.MethodGet, "%7B11111111-1111-4111-8111-111111111111%7D"},
+		{"unhyphenated", http.MethodGet, "11111111111141118111111111111111"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			response := request(mux, tc.method, "/raw/downloads/release.bin?uploadId="+tc.query, "x", map[string]string{"Upload-Offset": "0"})
+			if response.Code != http.StatusBadRequest {
+				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+			}
+		})
+	}
+}
