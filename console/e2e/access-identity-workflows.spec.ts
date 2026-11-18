@@ -392,7 +392,7 @@ test("the user drawer saves a profile and adds, narrows, and removes a repositor
   await page.getByText(username, { exact: true }).click();
   const drawer = page
     .getByRole("dialog")
-    .filter({ hasText: "Repository grant" });
+    .filter({ hasText: "Repository access" });
 
   // A profile save shows in the list behind the drawer without a reload.
   const renamed = `Drawer renamed ${suffix}`;
