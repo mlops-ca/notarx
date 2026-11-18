@@ -1,0 +1,123 @@
+name: Baseline equivalence
+
+# Temporary (ADR 0015 slice 3): proves that the single baseline migration is
+# equivalent to the source migration chain, on both architectures, then runs the
+# Go integration suite and the format e2e lanes against the baseline. Run at the
+# cut-over and again at the re-squash; deleted with scripts/baseline-generate.sh
+# when the re-squash PR has merged.
+#
+# Parameterised on the source chain. On a pull request the chain is the one at
+# the base commit; run it by hand for any other ref.
+on:
+  pull_request:
+    paths:
+      - migrations/**
+      - migrations-next/**
+      - scripts/baseline-*.sh
+      - scripts/run-migrations.sh
+      - internal/tools/baselinefmt/**
+      - .github/workflows/baseline-equivalence.yml
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Git ref (or sha) that holds the source migration chain
+        required: true
+        type: string
+      source_dir:
+        description: Directory of the chain inside that ref
+        default: migrations
+        type: string
+      baseline:
+        description: Baseline file under test, relative to the checkout
+        default: migrations-next/000001_baseline.sql
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOPROXY: https://proxy.golang.org|direct
+  SOURCE_REF: ${{ inputs.source_ref || github.event.pull_request.base.sha }}
+  SOURCE_DIR: ${{ inputs.source_dir || 'migrations' }}
+  BASELINE: ${{ inputs.baseline || 'migrations-next/000001_baseline.sql' }}
+
+jobs:
+  equivalence:
+    name: equivalence/${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: linux/amd64
+            runner: ubuntu-24.04
+          - arch: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+      - name: Prove the baseline equivalent to the source chain
+        run: |
+          scripts/baseline-equivalence-check.sh \
+            --source-ref "$SOURCE_REF" --source-dir "$SOURCE_DIR" --baseline "$BASELINE" \
+            | tee "$RUNNER_TEMP/equivalence.txt"
+          {
+            echo '### Baseline equivalence (${{ matrix.arch }})'
+            echo '~~~'
+            grep -E 'diff size|ledger rows|PUBLIC grants|equivalent' "$RUNNER_TEMP/equivalence.txt"
+            echo '~~~'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # The baseline replaces the chain in this disposable checkout, so the suites
+  # below exercise exactly what the cut-over ships.
+  integration:
+    needs: equivalence
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+      - name: Rust toolchain for the Cargo integration test
+        run: rustup show active-toolchain || rustup toolchain install
+      - name: Install the baseline as the only migration
+        run: |
+          install -m 0644 "$BASELINE" "$RUNNER_TEMP/000001_baseline.sql"
+          find migrations -maxdepth 1 -name '*.sql' -delete
+          install -m 0644 "$RUNNER_TEMP/000001_baseline.sql" migrations-next/000001_baseline.sql
+      - name: Go integration suite against the baseline
+        run: make integration-test
+
+  format-e2e:
+    needs: equivalence
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [core-native-e2e, nuget, helm, rubygems, oci-discovery]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Install the baseline as the only migration
+        run: |
+          install -m 0644 "$BASELINE" "$RUNNER_TEMP/000001_baseline.sql"
+          find migrations -maxdepth 1 -name '*.sql' -delete
+          install -m 0644 "$RUNNER_TEMP/000001_baseline.sql" migrations-next/000001_baseline.sql
+      - name: Format e2e lane against the baseline (images build from source)
+        run: python3 scripts/ci-contract.py run "${{ matrix.lane }}" --output "$RUNNER_TEMP/lane"
