@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -38,10 +39,18 @@ type counterEquality struct {
 var counterEqualityCases = map[string]counterEquality{
 	"raw":   {repoFormat: FormatRaw, run: rawCounterEquality, edge: rawCounterEdge},
 	"go":    {repoFormat: FormatGo, run: goCounterEquality, edge: goCounterEdge},
+	"helm":  {repoFormat: FormatHelm, run: helmCounterEquality, edge: helmCounterEdge},
+	"nuget": {repoFormat: FormatNuGet, run: nugetCounterEquality, edge: nugetCounterEdge},
 	"apt":   {repoFormat: FormatAPT, run: aptCounterEquality, edge: aptCounterEdge},
 	"cargo": {repoFormat: FormatCargo, run: cargoCounterEquality, edge: cargoCounterEdge},
 	"npm":   {repoFormat: FormatNPM, run: npmCounterEquality, edge: npmCounterEdge},
 	"pypi":  {repoFormat: FormatPyPI, run: pypiCounterEquality, edge: pypiCounterEdge},
+}
+
+// counterEqualityElsewhere names the equality tests of covered formats whose store lives in
+// another package (it imports this one, so its test cannot be listed above).
+var counterEqualityElsewhere = map[string]struct{ file, test string }{
+	"rubygems": {file: "../rubygemspublication/pgstore/capacity_integration_test.go", test: "TestRubyGemsCounterEquality"},
 }
 
 // assertCounterEqualsUsage fails when the repository's counter differs from the
@@ -75,6 +84,13 @@ func TestCapacityCountersEqualAggregationForEveryCoveredFormat(t *testing.T) {
 			continue
 		}
 		testCase, ok := counterEqualityCases[entry.Format]
+		if elsewhere, found := counterEqualityElsewhere[entry.Format]; found && !ok {
+			source, err := os.ReadFile(elsewhere.file)
+			if err != nil || !strings.Contains(string(source), "func "+elsewhere.test+"(") {
+				t.Errorf("%s names its equality test %s in %s, which does not exist: %v", entry.Format, elsewhere.test, elsewhere.file, err)
+			}
+			continue
+		}
 		if !ok {
 			t.Errorf("%s is covered in the capacity registry but has no counter equality test", entry.Format)
 			continue
@@ -83,6 +99,11 @@ func TestCapacityCountersEqualAggregationForEveryCoveredFormat(t *testing.T) {
 			repo := counterTestRepository(t, store, testCase.repoFormat)
 			testCase.run(t, ctx, store, repo, func(step string) { assertCounterEqualsUsage(t, store, repo, step) })
 		})
+	}
+	for format := range counterEqualityElsewhere {
+		if !capacity.Covered(format) {
+			t.Errorf("%s has an equality test but is not marked covered in the capacity registry", format)
+		}
 	}
 	for format := range counterEqualityCases {
 		if !capacity.Covered(format) {
@@ -691,6 +712,135 @@ func aptCounterEdge(t *testing.T, ctx context.Context, store *PostgresStore, rep
 		go func() {
 			defer wg.Done()
 			switch _, err := aptPackage(t, ctx, store, repo, "edge"+string(rune('a'+index)), size); {
+			case err == nil:
+				acc.Add(1)
+			case IsQuotaExceeded(err):
+				rej.Add(1)
+			default:
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	return acc.Load(), rej.Load()
+}
+
+func helmPublish(ctx context.Context, store *PostgresStore, repo HostedRepository, name, version string, size, provenanceSize int64) error {
+	session := HelmSession{ID: uuid.NewString(), RepositoryID: repo.ID, Name: name, Version: version, Digest: uniqueDigest(), Size: size, Actor: "publisher",
+		MetadataJSON: []byte(`{"name":"` + name + `","version":"` + version + `"}`), ChartYAML: []byte("chart metadata"), ExpiresAt: time.Now().UTC().Add(time.Hour)}
+	if provenanceSize > 0 {
+		session.ProvenanceDigest, session.ProvenanceSize = uniqueDigest(), provenanceSize
+	}
+	reserved, _, err := store.ReserveHelmPublication(ctx, session)
+	if err != nil {
+		return err
+	}
+	_, _, err = store.CommitHelmPublication(ctx, reserved.ID, "publisher")
+	return err
+}
+
+func helmCounterEquality(t *testing.T, ctx context.Context, store *PostgresStore, repo HostedRepository, check func(string)) {
+	for _, step := range []struct {
+		name, version string
+		size, prov    int64
+	}{{"chart", "1.0.0", 60, 10}, {"chart", "1.1.0", 25, 0}, {"other", "0.1.0", 5, 3}} {
+		if err := helmPublish(ctx, store, repo, step.name, step.version, step.size, step.prov); err != nil {
+			t.Fatal(err)
+		}
+		check("publish " + step.name + " " + step.version)
+	}
+	// Committing a session twice is a replay and counts once.
+	session := HelmSession{ID: uuid.NewString(), RepositoryID: repo.ID, Name: "replay", Version: "1.0.0", Digest: uniqueDigest(), Size: 7, Actor: "publisher", MetadataJSON: []byte(`{"name":"replay","version":"1.0.0"}`), ChartYAML: []byte("chart metadata"), ExpiresAt: time.Now().UTC().Add(time.Hour)}
+	reserved, _, err := store.ReserveHelmPublication(ctx, session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, step := range []string{"commit a session", "commit the same session again"} {
+		if _, _, err = store.CommitHelmPublication(ctx, reserved.ID, "publisher"); err != nil {
+			t.Fatal(err)
+		}
+		check(step)
+	}
+	var used int64
+	if err = store.db.QueryRow(`SELECT bytes FROM repository_usage_counters WHERE repository_id=$1::uuid`, repo.ID).Scan(&used); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.ReplaceRepositoryCapacityQuota(ctx, repo.ID, used); err != nil {
+		t.Fatal(err)
+	}
+	if err = helmPublish(ctx, store, repo, "overflow", "1.0.0", 1, 0); !IsQuotaExceeded(err) {
+		t.Fatalf("publish over quota = %v, want quota exceeded", err)
+	}
+	check("rejected publish over quota")
+}
+
+func helmCounterEdge(t *testing.T, ctx context.Context, store *PostgresStore, repo HostedRepository, size int64, workers int) (accepted, rejected int64) {
+	var acc, rej atomic.Int64
+	var wg sync.WaitGroup
+	for index := range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			switch err := helmPublish(ctx, store, repo, "edge", "1.0."+strconv.Itoa(index), size, 0); {
+			case err == nil:
+				acc.Add(1)
+			case IsQuotaExceeded(err):
+				rej.Add(1)
+			default:
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	return acc.Load(), rej.Load()
+}
+
+func nugetPublish(ctx context.Context, store *PostgresStore, repo HostedRepository, packageID, version string, size int64) error {
+	session := NuGetSession{ID: uuid.NewString(), RepositoryID: repo.ID, PackageID: strings.ToLower(packageID), Version: version, Digest: uniqueDigest(), Size: size, Actor: "publisher", ExpiresAt: time.Now().UTC().Add(time.Hour)}
+	reserved, _, err := store.ReserveNuGetPublication(ctx, session)
+	if err != nil {
+		return err
+	}
+	reserved.Nuspec = []byte("nuspec")
+	reserved.MetadataJSON = []byte(`{"id":"` + packageID + `","version":"` + version + `","dependencyGroups":[]}`)
+	if _, err = store.StageNuGetPublication(ctx, reserved); err != nil {
+		return err
+	}
+	_, _, err = store.CommitNuGetPublication(ctx, reserved.ID, "publisher")
+	return err
+}
+
+func nugetCounterEquality(t *testing.T, ctx context.Context, store *PostgresStore, repo HostedRepository, check func(string)) {
+	for _, step := range []struct {
+		id, version string
+		size        int64
+	}{{"Example", "1.0.0", 60}, {"Example", "1.1.0", 25}, {"Other", "0.1.0", 5}} {
+		if err := nugetPublish(ctx, store, repo, step.id, step.version, step.size); err != nil {
+			t.Fatal(err)
+		}
+		check("publish " + step.id + " " + step.version)
+	}
+	var used int64
+	if err := store.db.QueryRow(`SELECT bytes FROM repository_usage_counters WHERE repository_id=$1::uuid`, repo.ID).Scan(&used); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ReplaceRepositoryCapacityQuota(ctx, repo.ID, used); err != nil {
+		t.Fatal(err)
+	}
+	if err := nugetPublish(ctx, store, repo, "Overflow", "1.0.0", 1); !IsQuotaExceeded(err) {
+		t.Fatalf("publish over quota = %v, want quota exceeded", err)
+	}
+	check("rejected publish over quota")
+}
+
+func nugetCounterEdge(t *testing.T, ctx context.Context, store *PostgresStore, repo HostedRepository, size int64, workers int) (accepted, rejected int64) {
+	var acc, rej atomic.Int64
+	var wg sync.WaitGroup
+	for index := range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			switch err := nugetPublish(ctx, store, repo, "Edge", "1.0."+strconv.Itoa(index), size); {
 			case err == nil:
 				acc.Add(1)
 			case IsQuotaExceeded(err):

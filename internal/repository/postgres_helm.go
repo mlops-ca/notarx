@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/mlops-ca/notarx/internal/capacity"
 	"time"
 )
 
@@ -165,7 +166,20 @@ func (s *PostgresStore) CommitHelmPublication(ctx context.Context, id, actor str
 	if err = insertAudit(ctx, tx, helmPublicationAudit(p, name)); err != nil {
 		return HelmPublication{}, false, err
 	}
+	if err = reserveHelmPublication(ctx, tx, p); err != nil {
+		return HelmPublication{}, false, err
+	}
 	return p, false, tx.Commit()
+}
+
+// reserveHelmPublication adds a committed publication to the repository's usage counter
+// (ADR 0023 section 3): the chart object, plus the provenance object when there is one.
+func reserveHelmPublication(ctx context.Context, tx *sql.Tx, p HelmPublication) error {
+	objects := int64(1)
+	if p.ProvenanceSize > 0 {
+		objects++
+	}
+	return capacity.Reserve(ctx, tx, p.RepositoryID, p.Size+p.ProvenanceSize, objects)
 }
 func (s *PostgresStore) GetHelmPublication(ctx context.Context, repo, name, version string) (HelmPublication, error) {
 	return scanHelmPublication(s.db.QueryRowContext(ctx, `SELECT `+helmPublicationColumns+` FROM native_helm_publications WHERE repository_id=$1::uuid AND name=$2 AND version=$3 AND EXISTS(SELECT 1 FROM hosted_repositories h WHERE h.id=repository_id AND h.format='helm' AND h.repo_type IN ('hosted','proxy') AND h.state='active')`, repo, name, version))

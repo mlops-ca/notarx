@@ -30,9 +30,9 @@ var registry = []FormatCoverage{
 	{Format: "go", Covered: true, Enforcement: byTrigger},
 	{Format: "apt", Covered: true, Enforcement: byTrigger},
 	{Format: "cargo", Covered: true, Enforcement: byTrigger},
-	{Format: "helm", Enforcement: bySessionStore},
-	{Format: "nuget", Enforcement: bySessionStore},
-	{Format: "rubygems", Enforcement: bySessionStore},
+	{Format: "helm", Covered: true, Enforcement: bySessionStore},
+	{Format: "nuget", Covered: true, Enforcement: bySessionStore},
+	{Format: "rubygems", Covered: true, Enforcement: bySessionStore},
 }
 
 // Formats returns the registry sorted by format.

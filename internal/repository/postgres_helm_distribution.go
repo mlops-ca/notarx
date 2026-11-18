@@ -488,6 +488,9 @@ func (s *PostgresStore) CompleteHelmReplicationItem(ctx context.Context, lease d
 		if err = insertAudit(ctx, tx, helmPublicationAudit(target, a.Target.Name)); err != nil {
 			return dist.Job{}, err
 		}
+		if err = reserveHelmPublication(ctx, tx, target); err != nil {
+			return dist.Job{}, err
+		}
 		item.Result = "published"
 	} else {
 		return dist.Job{}, err
