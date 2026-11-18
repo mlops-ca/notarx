@@ -47,7 +47,7 @@ func (s *PostgresStore) ListUserIdentities(ctx context.Context, userID string) (
 
 func (s *PostgresStore) CreateUserIdentity(ctx context.Context, identity UserIdentity, audit ...AuditRecord) (UserIdentity, error) {
 	return runAudited(ctx, s, audit, func(q sqlRunner) (UserIdentity, error) {
-		if _, err := s.GetUser(ctx, identity.UserID); err != nil {
+		if _, err := getUserOn(ctx, q, identity.UserID); err != nil {
 			return UserIdentity{}, err
 		}
 		identity = normalizeUserIdentity(identity)

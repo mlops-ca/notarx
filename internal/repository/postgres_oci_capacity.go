@@ -9,9 +9,11 @@ import (
 // blob's size (ADR 0023 section 3). It returns the size added to the repository's usage
 // and whether the reference is new; a re-referenced blob adds nothing.
 func ociReferenceBlob(ctx context.Context, q sqlRunner, repositoryID, digest string) (size int64, added bool, err error) {
+	// The reference row references native_oci_blobs by foreign key, so a new reference always
+	// finds its blob; a NULL size would fail the scan and roll the transaction back.
 	err = q.QueryRowContext(ctx, `WITH inserted AS (
 		INSERT INTO native_oci_repository_blobs (repository_id,digest) VALUES ($1,$2) ON CONFLICT DO NOTHING RETURNING digest
-	) SELECT COALESCE((SELECT b.size FROM native_oci_blobs b JOIN inserted i ON i.digest=b.digest),-1)::bigint`, repositoryID, digest).Scan(&size)
+	) SELECT CASE WHEN EXISTS (SELECT 1 FROM inserted) THEN (SELECT b.size FROM native_oci_blobs b WHERE b.digest=$2) ELSE -1 END::bigint`, repositoryID, digest).Scan(&size)
 	if err != nil {
 		return 0, false, err
 	}

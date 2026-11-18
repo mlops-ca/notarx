@@ -61,15 +61,14 @@ func Reserve(ctx context.Context, tx Execer, repositoryID string, deltaBytes, de
 		if attempt == 1 {
 			break
 		}
-		result, err = tx.ExecContext(ctx, ensureSQL, repositoryID)
-		if err != nil {
+		// No counter row yet (a repository created after the backfill). A concurrent writer may
+		// create it first and DO NOTHING then affects no row, so the next attempt, not this
+		// statement, decides whether the repository exists.
+		if _, err = tx.ExecContext(ctx, ensureSQL, repositoryID); err != nil {
 			return err
 		}
-		if rows, _ := result.RowsAffected(); rows == 0 {
-			return sql.ErrNoRows // the repository does not exist
-		}
 	}
-	return sql.ErrNoRows
+	return sql.ErrNoRows // the repository does not exist
 }
 
 // SetQuota records the quota in the counter row, creating the row when needed. The

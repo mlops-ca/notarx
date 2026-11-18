@@ -60,9 +60,14 @@ func (s *PostgresStore) ListServiceAccounts(ctx context.Context, limit int, afte
 }
 
 func (s *PostgresStore) GetServiceAccount(ctx context.Context, id string) (ServiceAccount, error) {
+	return getServiceAccountOn(ctx, s.db, id)
+}
+
+// getServiceAccountOn reads a service account on the pool or inside a transaction (see getUserOn).
+func getServiceAccountOn(ctx context.Context, q sqlRunner, id string) (ServiceAccount, error) {
 	var account ServiceAccount
 	err := scanServiceAccount(
-		s.db.QueryRowContext(ctx, `SELECT `+serviceAccountColumns+` FROM service_accounts WHERE id=$1::uuid`, id),
+		q.QueryRowContext(ctx, `SELECT `+serviceAccountColumns+` FROM service_accounts WHERE id=$1::uuid`, id),
 		&account,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -97,7 +102,7 @@ func (s *PostgresStore) UpdateServiceAccount(ctx context.Context, update Service
 			&account,
 		)
 		if errors.Is(err, sql.ErrNoRows) {
-			if _, getErr := s.GetServiceAccount(ctx, update.ID); errors.Is(getErr, ErrNotFound) {
+			if _, getErr := getServiceAccountOn(ctx, q, update.ID); errors.Is(getErr, ErrNotFound) {
 				return ServiceAccount{}, ErrNotFound
 			}
 			return ServiceAccount{}, ErrVersionConflict
@@ -124,7 +129,7 @@ func (s *PostgresStore) CreateServiceAccountCredential(ctx context.Context, cred
 			credential.ExpiresAt,
 		).Scan(&credential.CreatedAt)
 		if errors.Is(err, sql.ErrNoRows) {
-			account, getErr := s.GetServiceAccount(ctx, credential.ServiceAccountID)
+			account, getErr := getServiceAccountOn(ctx, q, credential.ServiceAccountID)
 			if errors.Is(getErr, ErrNotFound) {
 				return APIKey{}, ErrNotFound
 			}

@@ -75,8 +75,14 @@ func (s *PostgresStore) ListUsers(ctx context.Context, query UserListQuery) (Use
 }
 
 func (s *PostgresStore) GetUser(ctx context.Context, id string) (User, error) {
+	return getUserOn(ctx, s.db, id)
+}
+
+// getUserOn reads a user on the pool or inside a transaction, so a lookup that runs inside an
+// audited mutation does not take a second pooled connection while the transaction holds one.
+func getUserOn(ctx context.Context, q sqlRunner, id string) (User, error) {
 	var user User
-	err := scanUser(s.db.QueryRowContext(ctx, `SELECT `+userColumns+` FROM users WHERE id=$1::uuid`, id), &user)
+	err := scanUser(q.QueryRowContext(ctx, `SELECT `+userColumns+` FROM users WHERE id=$1::uuid`, id), &user)
 	if errors.Is(err, sql.ErrNoRows) {
 		return User{}, ErrNotFound
 	}
@@ -226,7 +232,7 @@ func (s *PostgresStore) UpdateUserPassword(ctx context.Context, id, secretHash, 
 		UPDATE user_sessions SET revoked_at=now() WHERE user_id=(SELECT id FROM updated_user) AND revoked_at IS NULL
 	) SELECT `+userColumns+` FROM updated_user`, id, secretHash, mustChange, expectedVersion), &user)
 		if errors.Is(err, sql.ErrNoRows) {
-			if _, getErr := s.GetUser(ctx, id); errors.Is(getErr, ErrNotFound) {
+			if _, getErr := getUserOn(ctx, q, id); errors.Is(getErr, ErrNotFound) {
 				return User{}, ErrNotFound
 			}
 			return User{}, ErrVersionConflict
@@ -244,7 +250,7 @@ func (s *PostgresStore) RevokeUserSessions(ctx context.Context, id, expectedVers
 		UPDATE user_sessions SET revoked_at=now() WHERE user_id=(SELECT id FROM updated_user) AND revoked_at IS NULL
 	) SELECT `+userColumns+` FROM updated_user`, id, expectedVersion), &user)
 		if errors.Is(err, sql.ErrNoRows) {
-			if _, getErr := s.GetUser(ctx, id); errors.Is(getErr, ErrNotFound) {
+			if _, getErr := getUserOn(ctx, q, id); errors.Is(getErr, ErrNotFound) {
 				return User{}, ErrNotFound
 			}
 			return User{}, ErrVersionConflict

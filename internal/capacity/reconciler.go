@@ -19,6 +19,8 @@ const (
 	// the alert fires (0.1 percent).
 	DriftAlertRatio = 0.001
 	defaultBatch    = 50
+	// defaultInitialDelay bounds the jitter before the first pass after start.
+	defaultInitialDelay = 30 * time.Second
 )
 
 // Stats is the reconciler's observable state.
@@ -41,7 +43,9 @@ type Reconciler struct {
 	db       *sql.DB
 	interval time.Duration
 	batch    int
-	logger   *slog.Logger
+	// initialDelay bounds the jitter before the first pass after start.
+	initialDelay time.Duration
+	logger       *slog.Logger
 	// pause is the sleep between batches and between repositories, injectable for tests.
 	pause func(context.Context, time.Duration)
 
@@ -57,7 +61,7 @@ func NewReconciler(db *sql.DB, interval time.Duration, logger *slog.Logger) *Rec
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Reconciler{db: db, interval: interval, batch: defaultBatch, logger: logger, pause: sleepContext}
+	return &Reconciler{db: db, interval: interval, batch: defaultBatch, initialDelay: defaultInitialDelay, logger: logger, pause: sleepContext}
 }
 
 func sleepContext(ctx context.Context, d time.Duration) {
@@ -67,6 +71,13 @@ func sleepContext(ctx context.Context, d time.Duration) {
 	case <-ctx.Done():
 	case <-timer.C:
 	}
+}
+
+// WithInitialDelay bounds the random wait before the first pass after Run starts (30s by
+// default).
+func (r *Reconciler) WithInitialDelay(d time.Duration) *Reconciler {
+	r.initialDelay = d
+	return r
 }
 
 // Stats returns the result of the last pass.
@@ -80,15 +91,15 @@ func (r *Reconciler) Stats() Stats {
 // start in step, until ctx ends. Concurrent runs on several nodes are safe: each
 // repository is recomputed under its counter row lock.
 func (r *Reconciler) Run(ctx context.Context) {
-	for {
-		jitter := time.Duration(rand.Int64N(int64(r.interval/10) + 1))
-		r.pause(ctx, r.interval+jitter)
-		if ctx.Err() != nil {
-			return
-		}
+	// The first pass runs shortly after start, so nodes that restart more often than the
+	// interval (rolling deploys) still correct drift and publish the metrics.
+	r.pause(ctx, time.Duration(rand.Int64N(int64(min(r.interval/10, r.initialDelay))+1)))
+	for ctx.Err() == nil {
 		if _, err := r.RunOnce(ctx); err != nil && ctx.Err() == nil {
 			r.logger.Error("quota reconciliation failed", "error", err)
 		}
+		jitter := time.Duration(rand.Int64N(int64(r.interval/10) + 1))
+		r.pause(ctx, r.interval+jitter)
 	}
 }
 
@@ -168,7 +179,9 @@ func (r *Reconciler) RunOnce(ctx context.Context) (Stats, error) {
 // returns the corrected drift (counter minus actual) and the actual usage.
 func (r *Reconciler) reconcile(ctx context.Context, id, format string) (drift, used int64, err error) {
 	query, ok := UsageQuery(format)
-	if !ok {
+	if !ok || !Covered(format) {
+		// A pending format's writers do not call Reserve yet, so its counter row is only
+		// ever the backfill; recomputing it would report every publish as drift.
 		return 0, 0, nil
 	}
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})

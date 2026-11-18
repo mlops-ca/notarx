@@ -48,19 +48,17 @@ func userLoginHandler(users repository.UserStore, audit userLoginAuditStore, aut
 		}
 		if !authorization.VerifyPassword(user.SecretHash, body.Password) {
 			maxAttempts, lockout := localAuthPolicy(authenticator)
-			// The failure counter and its audit commit together; a failed audit leaves the
-			// counter untouched and the answer stays "invalid credentials".
-			if _, err := users.RecordUserLoginFailure(r.Context(), user.ID, now, maxAttempts, lockout, userAuditRecords(r, audit, body.Username, "auth/login", "user.login", repository.AuditAccessDenied, http.StatusUnauthorized, "invalid credentials")...); err != nil && audit != nil {
-				recordUserLoginAudit(r, audit, body.Username, repository.AuditAccessDenied, http.StatusUnauthorized, "invalid credentials")
-			}
+			// The attempt counter and lockout never depend on the audit store: a denial changes
+			// nothing a failed audit could roll back, and an attacker must not escape the lockout
+			// while audit writes fail. The denial audit stays best effort.
+			_, _ = users.RecordUserLoginFailure(r.Context(), user.ID, now, maxAttempts, lockout)
+			recordUserLoginAudit(r, audit, body.Username, repository.AuditAccessDenied, http.StatusUnauthorized, "invalid credentials")
 			writeHostedProblem(w, http.StatusUnauthorized, "access_denied", "invalid credentials")
 			return
 		}
-		user, err = users.RecordUserLoginSuccess(r.Context(), user.ID, now, userAuditRecords(r, audit, user.Name, "auth/login", "user.login", repository.AuditResolved, http.StatusOK, "authenticated")...)
-		if err != nil {
-			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "login failed")
-			return
-		}
+		// The session exists before the success is recorded, so a session that cannot be created
+		// never leaves an "authenticated" audit behind; when recording fails (including its audit)
+		// the unused session is revoked and no token is issued.
 		sessionID := newUserSessionID()
 		if authenticator.UserSessions != nil {
 			if _, err := authenticator.UserSessions.CreateUserSession(r.Context(), repository.UserSession{
@@ -72,6 +70,15 @@ func userLoginHandler(users repository.UserStore, audit userLoginAuditStore, aut
 				return
 			}
 		}
+		loggedIn, err := users.RecordUserLoginSuccess(r.Context(), user.ID, now, userAuditRecords(r, audit, user.Name, "auth/login", "user.login", repository.AuditResolved, http.StatusOK, "authenticated")...)
+		if err != nil {
+			if authenticator.UserSessions != nil {
+				_, _ = authenticator.UserSessions.RevokeUserSession(context.WithoutCancel(r.Context()), user.ID, sessionID)
+			}
+			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "login failed")
+			return
+		}
+		user = loggedIn
 		token := authenticator.IssueUserSessionWithID(user.ID, sessionID, user.SessionVersion)
 		writeNativeMavenJSON(w, http.StatusOK, map[string]any{"token": token, "username": user.Name, "displayName": user.DisplayName, "role": user.Role, "mustChangePassword": user.MustChangePassword})
 	}
