@@ -290,7 +290,7 @@ for (const width of [1440, 390])
       });
       await panel.getByRole("button", { name: "Manage yanking" }).click();
       const action = page.getByRole("combobox", {
-        name: "Actions",
+        name: "Action",
         exact: true,
       });
       await action.click();

@@ -118,7 +118,7 @@ test("a repository grant is created, edited from Access Control, and removed", a
     .locator(".ant-select-item-option")
     .filter({ hasText: grantAccountName })
     .click();
-  await dialog.getByRole("combobox", { name: "Permission level" }).click();
+  await dialog.getByRole("combobox", { name: "Permission" }).click();
   await page
     .locator(".ant-select-item-option")
     .filter({ hasText: "Read · browse / pull" })
@@ -140,7 +140,7 @@ test("a repository grant is created, edited from Access Control, and removed", a
   await grantRow.getByRole("button", { name: /^Edit$/ }).click();
   const editor = page.getByRole("dialog", { name: "Edit grant" });
   await waitForModalOpen(editor);
-  await editor.getByRole("combobox", { name: "Permission level" }).click();
+  await editor.getByRole("combobox", { name: "Permission" }).click();
   await page
     .locator(".ant-select-item-option")
     .filter({ hasText: "Write · publish / edit" })
@@ -419,7 +419,7 @@ test("the user drawer saves a profile and adds, narrows, and removes a repositor
     .filter({ hasText: repositoryName })
     .click();
   await expect(
-    editor.getByRole("combobox", { name: "Permission level" }),
+    editor.getByRole("combobox", { name: "Permission" }),
   ).toBeVisible();
   await editor.getByRole("button", { name: /^Save$/ }).click();
   await expect(editor).toBeHidden();

@@ -85,7 +85,12 @@ for (const theme of ["dark", "light"] as const) {
       fullPage: true,
     });
     await page.goto("/operations");
-    await page.getByRole("tab", { name: "Job history", exact: true }).click();
+    await expect(async () => {
+      await page.getByRole("tab", { name: "Job history", exact: true }).click();
+      await expect(
+        page.getByRole("tab", { name: "Job history", exact: true }),
+      ).toHaveAttribute("aria-selected", "true", { timeout: 1000 });
+    }).toPass();
     await expectRole(
       page.locator("main .anticon-sync"),
       "--ag-content-tertiary",
@@ -855,7 +860,9 @@ test("management tables keep action columns opaque and cards separated", async (
   expect(gap).toBeGreaterThanOrEqual(16);
 
   await page.goto("/repositories");
-  await expect(page.getByRole("heading", { name: "Repository" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Repositories" }),
+  ).toBeVisible();
   await expect(
     page.getByRole("columnheader", { name: "Actions", exact: true }),
   ).toBeVisible();
@@ -1071,7 +1078,9 @@ test("dashboard keeps a compact overview without archived repositories", async (
   }
   await openNavigation.click();
   const drawer = page.getByRole("dialog");
-  await expect(drawer.getByRole("link", { name: /Repository/ })).toBeVisible();
+  await expect(
+    drawer.getByRole("link", { name: /Repositories/ }),
+  ).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(drawer).toBeHidden();
 });

@@ -27,7 +27,7 @@ test("rejects a 24-hour-plus-one-second custom window before requesting logs", a
   await page.goto("/system?tab=logs");
   await expect(page.getByText("No logs in this range")).toBeVisible();
   const custom = page.getByRole("combobox", {
-    name: "Date range",
+    name: "Time range",
     exact: true,
   });
   if (await custom.count()) {

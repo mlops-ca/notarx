@@ -27,6 +27,15 @@ export async function expectTabGutter(
     expect(gap).toBeGreaterThanOrEqual(23);
     expect(gap).toBeLessThanOrEqual(25);
   }
+  // A long label set scrolls the bar to the selected tab; the first label is
+  // then off the edge by design.
+  const scrolled = await page
+    .locator(tabBarSelector)
+    .locator(".ant-tabs-nav-wrap")
+    .first()
+    .evaluate((wrap) => wrap.classList.contains("ant-tabs-nav-wrap-ping-left"))
+    .catch(() => false);
+  if (scrolled) return;
   const edge = await page.locator(contentEdgeSelector).first().boundingBox();
   expect(edge).not.toBeNull();
   expect(Math.abs(boxes[0].x - (edge?.x ?? 0))).toBeLessThanOrEqual(1);

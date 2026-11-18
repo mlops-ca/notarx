@@ -200,7 +200,7 @@ test("retention dry-run and lifecycle jobs are visible in the repository console
 
   await authenticate(page);
   await page.goto(`/repositories/${repositoryId}`);
-  await openRepositoryTask(page, "Governance", "Retention policy");
+  await openRepositoryTask(page, "Governance", "Retention");
   await expect(page.getByRole("switch")).toBeChecked();
   await page.getByRole("button", { name: "Dry run" }).click();
   await expect(page.getByText("No path assets to clean")).toBeVisible();
@@ -217,7 +217,7 @@ test("retention dry-run and lifecycle jobs are visible in the repository console
   );
   await expectOK(execute, "enqueue Raw retention job");
 
-  await openRepositoryTask(page, "Settings", "Lifecycle job");
+  await openRepositoryTask(page, "Settings", "Lifecycle jobs");
   await expect(
     page.getByRole("row").filter({ hasText: "retention" }).first(),
   ).toBeVisible();

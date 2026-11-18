@@ -369,7 +369,12 @@ test("job history uses one compact and consistent detail path", async ({
   );
 
   await page.goto("/operations");
-  await page.getByRole("tab", { name: "Job history" }).click();
+  await expect(async () => {
+    await page.getByRole("tab", { name: "Job history", exact: true }).click();
+    await expect(
+      page.getByRole("tab", { name: "Job history", exact: true }),
+    ).toHaveAttribute("aria-selected", "true", { timeout: 1000 });
+  }).toPass();
 
   const table = page.locator(".ag-operation-desktop-table");
   await expect(table).toBeVisible();
@@ -429,7 +434,12 @@ test("job history keeps the record path compact on mobile", async ({
   );
 
   await page.goto("/operations");
-  await page.getByRole("tab", { name: "Job history" }).click();
+  await expect(async () => {
+    await page.getByRole("tab", { name: "Job history", exact: true }).click();
+    await expect(
+      page.getByRole("tab", { name: "Job history", exact: true }),
+    ).toHaveAttribute("aria-selected", "true", { timeout: 1000 });
+  }).toPass();
 
   await expect(
     page.getByRole("heading", { name: "Job history" }),

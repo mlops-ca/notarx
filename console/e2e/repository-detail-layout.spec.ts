@@ -619,13 +619,13 @@ test("repository detail keeps the whole content region stable when security beco
   const navigation = page.getByRole("navigation", { name: "Repository tasks" });
   const taskTabs = navigation.locator(".ag-repository-tabs").getByRole("tab");
   expect(await repositoryNavigationState(page)).toEqual({
-    groups: ["Artifact", "Governance", "Distribution", "Settings"],
+    groups: ["Artifacts", "Governance", "Distribution", "Settings"],
     tasks: ["Browse", "Usage", "Publish"],
   });
   await expect(
     navigation.locator(".ag-repository-tabs .ant-tabs-nav-more"),
   ).toBeHidden();
-  await openRepositoryTask(page, "Artifact", "Browse");
+  await openRepositoryTask(page, "Artifacts", "Browse");
 
   const beforeSecurity = await page.evaluate(() => {
     const main = document.querySelector<HTMLElement>(".ag-main");
@@ -751,10 +751,10 @@ test("repository detail keeps operational content above the fold", async ({
   const navigation = page.getByRole("navigation", { name: "Repository tasks" });
   const taskGroups = navigation.locator(".ag-repository-tabs").getByRole("tab");
   expect(await repositoryNavigationState(page)).toEqual({
-    groups: ["Artifact", "Governance", "Distribution", "Settings"],
+    groups: ["Artifacts", "Governance", "Distribution", "Settings"],
     tasks: ["Browse", "Usage"],
   });
-  await openRepositoryTask(page, "Artifact", "Browse");
+  await openRepositoryTask(page, "Artifacts", "Browse");
   await expect(
     page.getByRole("tab", { name: "Settings", exact: true }),
   ).toBeVisible();
@@ -813,7 +813,7 @@ test("repository detail keeps operational content above the fold", async ({
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(taskGroups).toHaveCount(4);
   await expect(
-    page.getByRole("tab", { name: "Artifact", exact: true }),
+    page.getByRole("tab", { name: "Artifacts", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
   await expect(table).toBeVisible();
   await expect(
@@ -1661,7 +1661,7 @@ for (const delayedMotion of [false, true]) {
 
         for (const label of [
           "Principal",
-          "Permission level",
+          "Permission",
           "Resource scope",
           "Granted by this rule",
         ]) {

@@ -130,7 +130,7 @@ test.describe("runtime log touch controls", () => {
       );
       await geometry(page);
       await page
-        .getByRole("combobox", { name: "Date range", exact: true })
+        .getByRole("combobox", { name: "Time range", exact: true })
         .click();
       await page.getByRole("option", { name: "Custom", exact: true }).click();
       await page.getByPlaceholder("Start date").click();
@@ -407,9 +407,7 @@ test("empty source policy and failed refresh retain honest async states", async 
   await expect(
     page.getByText(/A DEBUG filter does not enable DEBUG/),
   ).toBeVisible();
-  await expect(
-    page.getByText(/Minimum INFO · requested limited/),
-  ).toBeVisible();
+  await expect(page.getByText(/Minimum INFO · requests limited/)).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Download NDJSON" }),
   ).toBeDisabled();

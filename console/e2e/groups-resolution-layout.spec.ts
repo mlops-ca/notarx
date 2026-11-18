@@ -152,7 +152,7 @@ for (const width of [1440, 390]) {
     await rows.last().scrollIntoViewIfNeeded();
     await expect(rows.last().getByRole("link")).toBeInViewport();
     await expect(
-      dialog.getByRole("button", { name: "Close", exact: true }),
+      dialog.getByRole("button", { name: "Close", exact: true }).last(),
     ).toBeInViewport();
     await dialog.getByRole("button", { name: "Refresh", exact: true }).click();
     await expect.poll(() => inspected).toBe(2);

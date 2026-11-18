@@ -141,11 +141,11 @@ async function mockTieredRepository(
 
 const managementTabs = [
   "Access grants",
-  "Retention policy",
+  "Retention",
   "Security admission",
   "Capacity",
   "Promote / replicate",
-  "Lifecycle job",
+  "Lifecycle jobs",
   "Tombstones",
   "General",
 ];
@@ -166,7 +166,7 @@ test("a repository administrator manages its repository without platform navigat
   // Management lives in the governance, distribution and settings groups;
   // without a write grant the artifacts group offers no publication.
   expect(await repositoryNavigationState(page)).toEqual({
-    groups: ["Artifact", "Governance", "Distribution", "Settings"],
+    groups: ["Artifacts", "Governance", "Distribution", "Settings"],
     tasks: ["Browse", "Usage"],
   });
 
@@ -201,7 +201,7 @@ test("a reader keeps only the read surfaces and cannot reach a management tab by
   await page.goto(`/repositories/${repositoryId}?tab=settings`);
 
   await expect(
-    page.getByRole("tab", { name: "Artifact", exact: true }),
+    page.getByRole("tab", { name: "Artifacts", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
   await expect(page).not.toHaveURL(/tab=settings/);
   for (const label of managementTabs) {
@@ -211,7 +211,7 @@ test("a reader keeps only the read surfaces and cannot reach a management tab by
   }
   await expect(page.getByRole("tab", { name: "Usage" })).toBeVisible();
   expect(await repositoryNavigationState(page)).toEqual({
-    groups: ["Artifact"],
+    groups: ["Artifacts"],
     tasks: ["Browse", "Usage"],
   });
 });
@@ -256,7 +256,7 @@ test("a platform administrator keeps every tab without repository grants", async
   await page.goto(`/repositories/${repositoryId}`);
 
   expect((await repositoryNavigationState(page)).groups).toEqual([
-    "Artifact",
+    "Artifacts",
     "Governance",
     "Distribution",
     "Settings",

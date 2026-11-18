@@ -36,7 +36,7 @@ const rule: RepositoryQuotaAlertRule = {
 
 async function fixture(
   page: Page,
-  locale = "zh-CN",
+  locale = "en-CA",
   theme = "dark",
   empty = false,
 ) {
@@ -322,7 +322,7 @@ for (const width of [1440, 390, 320])
 test("creation is explicit, disabled, and persists exact policy; deletion retains history", async ({
   page,
 }) => {
-  const writes = await fixture(page, "zh-CN", "dark", true);
+  const writes = await fixture(page, "en-CA", "dark", true);
   await page.goto("/system?tab=alerts");
   await page.getByRole("button", { name: "Create rule" }).click();
   await expect(

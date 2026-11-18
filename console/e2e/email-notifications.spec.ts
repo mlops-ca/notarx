@@ -47,7 +47,7 @@ const delivery: EmailDelivery = {
 };
 async function fixture(
   page: Page,
-  locale = "zh-CN",
+  locale = "en-CA",
   theme = "dark",
   empty = false,
 ) {
@@ -326,7 +326,7 @@ test("cancel/navigation clears drafts and duplicate confirmation queues only onc
 test("initial failure and empty states are mutually exclusive; refresh denial removes form", async ({
   page,
 }) => {
-  await fixture(page, "zh-CN", "dark", true);
+  await fixture(page, "en-CA", "dark", true);
   let release!: () => void;
   const gate = new Promise<void>((resolve) => {
     release = resolve;
@@ -377,7 +377,7 @@ for (const mode of ["dark", "light"]) {
     await page.route("**/api/**", (route) =>
       route.fulfill({ status: 503, json: { code: "synthetic-unavailable" } }),
     );
-    await fixture(page, "zh-CN", mode);
+    await fixture(page, "en-CA", mode);
     await page.addInitScript(
       (id) => localStorage.setItem("ag.console.theme.id", id),
       `gateway-${mode}`,
