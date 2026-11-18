@@ -255,7 +255,8 @@ func (w *Writer) prepare(ctx context.Context, record repository.AuditRecord) rep
 		record.OccurredAt = time.Now().UTC()
 	}
 	record.Class = record.Durability()
-	return record
+	// Client-controlled text must never make the database reject (and so lose) the record.
+	return record.Sanitized()
 }
 
 // recordDenial writes the denial of an authenticated principal: a committed insert

@@ -178,24 +178,35 @@ func TestWriterAggregatesUsageAndRollups(t *testing.T) {
 	t.Fatalf("repository missing from %+v", statistics)
 }
 
-// A request path with a NUL byte or invalid UTF-8 is rejected by PostgreSQL. The writer
-// drops and counts those records and still writes the rest of the batch.
+// A request path with a NUL byte or invalid UTF-8 is rejected by PostgreSQL as is. The
+// writer stores it sanitised (U+FFFD) in the audit row, the evidence and the usage key,
+// so a client cannot make its own audit record disappear.
 func TestHostileTextCannotStallTheFlush(t *testing.T) {
 	f := openFixture(t, auditwriter.Config{})
 	ctx := context.Background()
 	for _, resource := range []string{"a\x00b", "bad\xff\xfeutf8", "fine"} {
-		if err := f.writer.RecordAudit(ctx, f.download(resource, time.Now().UTC())); err != nil {
+		record := f.download(resource, time.Now().UTC())
+		record.Actor, record.Evidence = "al\x00ice\xff", map[string]string{"k\x00ey": "v\xffal\x00ue"}
+		if err := f.writer.RecordAudit(ctx, record); err != nil {
 			t.Fatal(err)
 		}
 	}
 	if err := f.writer.FlushNow(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if n := f.count(t, "resolver_audit_log"); n != 1 {
-		t.Fatalf("flushed %d records, want the one valid record", n)
+	if n := f.count(t, "resolver_audit_log"); n != 3 {
+		t.Fatalf("flushed %d records, want all three", n)
 	}
-	if stats := f.writer.Stats(); stats.DroppedInvalid != 2 {
-		t.Fatalf("the two rejected records must be counted: %+v", stats)
+	if stats := f.writer.Stats(); stats.DroppedInvalid != 0 || stats.DroppedUsage != 0 {
+		t.Fatalf("no record may be dropped: %+v", stats)
+	}
+	var stored string
+	if err := f.db.QueryRow(`SELECT resource FROM resolver_audit_log WHERE repository=$1 AND resource LIKE 'a%b'`, f.repo).Scan(&stored); err != nil || stored != "a\uFFFDb" {
+		t.Fatalf("resource stored as %q (%v), want the sanitised form", stored, err)
+	}
+	var evidence string
+	if err := f.db.QueryRow(`SELECT evidence->>'k\uFFFDey' FROM resolver_audit_log WHERE repository=$1 AND resource='fine'`, f.repo).Scan(&evidence); err != nil || evidence != "v\uFFFDal\uFFFDue" {
+		t.Fatalf("evidence stored as %q (%v)", evidence, err)
 	}
 }
 
