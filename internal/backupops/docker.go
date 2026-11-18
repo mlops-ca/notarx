@@ -520,7 +520,8 @@ func (t *OwnedTarget) Open(ctx context.Context, key string) (io.ReadCloser, int6
 // the restored database. It must run before the first object is written.
 func (t *OwnedTarget) SetObjectRootID(rootID string) error {
 	if !t.spec.filesystem() {
-		return errors.New("target does not use the filesystem object driver")
+		// An S3 target has no root to identify: nothing to carry over.
+		return nil
 	}
 	if t.fsStore != nil {
 		return errors.New("object root is already initialised")

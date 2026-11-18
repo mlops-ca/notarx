@@ -7,9 +7,12 @@
 {$NOTARX_DOMAIN} {
 	encode zstd gzip
 
-	# Operational endpoints are not public.
+	# Operational endpoints are not public. A `handle` block, because `respond`
+	# directives run after every `handle` and the catch-all below would win.
 	@private path /metrics /metrics/*
-	respond @private 404
+	handle @private {
+		respond 404
+	}
 
 	# Artifact and management protocols go straight to notarx. Keep this list in
 	# step with deploy/kubernetes/console/default.conf and the format routes.

@@ -57,9 +57,11 @@ write_files:
       cd /opt/notarx
       stamp=$(date -u +%Y%m%dT%H%M%SZ)
       target=/srv/notarx/backups/gateway-$stamp.dump
+      # A failed dump must not leave a partial file behind to fill the volume.
+      trap 'rm -f "$target.partial"' EXIT
       docker compose exec -T postgres pg_dump -U gateway -d gateway --format=custom > "$target.partial"
       mv "$target.partial" "$target"
-      find /srv/notarx/backups -name 'gateway-*.dump' -mtime +7 -delete
+      find /srv/notarx/backups \( -name 'gateway-*.dump' -o -name 'gateway-*.dump.partial' \) -mtime +7 -delete
 
   - path: /etc/systemd/system/notarx.service
     permissions: "0644"
@@ -71,6 +73,7 @@ write_files:
       Wants=network-online.target
       RequiresMountsFor=/srv/notarx
       ConditionPathExists=/opt/notarx/.env
+      ConditionPathIsMountPoint=/srv/notarx
 
       [Service]
       Type=oneshot
@@ -91,6 +94,7 @@ write_files:
       Requires=docker.service
       RequiresMountsFor=/srv/notarx
       ConditionPathExists=/opt/notarx/.env
+      ConditionPathIsMountPoint=/srv/notarx
 
       [Service]
       Type=oneshot
@@ -111,10 +115,15 @@ write_files:
       [Install]
       WantedBy=timers.target
 
+# One shell, stop at the first failure: if the data volume never appears, nothing
+# after it runs, so Compose can never fill the boot volume (the units also
+# require /srv/notarx to be a mount point).
 runcmd:
-  - [systemctl, enable, --now, docker]
-  - [/usr/local/sbin/notarx-prepare-volume]
-  - [mkdir, -p, /opt/notarx]
-  - [systemctl, daemon-reload]
-  - [systemctl, enable, notarx.service, notarx-backup.timer]
-  - [systemctl, start, notarx-backup.timer]
+  - |
+    set -eu
+    systemctl enable --now docker
+    /usr/local/sbin/notarx-prepare-volume
+    mkdir -p /opt/notarx
+    systemctl daemon-reload
+    systemctl enable notarx.service notarx-backup.timer
+    systemctl start notarx-backup.timer

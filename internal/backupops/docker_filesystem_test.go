@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -86,9 +85,11 @@ func TestFilesystemTargetRestoresIntoOwnedRootWithRecordedIdentity(t *testing.T)
 	}
 }
 
-func TestS3TargetRejectsRootID(t *testing.T) {
+// A backup exported from a filesystem source carries a root ID; restoring it
+// into an S3 target must not fail on it.
+func TestS3TargetIgnoresRootID(t *testing.T) {
 	target := &OwnedTarget{spec: TargetSpec{Project: "ag-restore-s3test00001"}}
-	if err := target.SetObjectRootID(uuid.NewString()); err == nil || !strings.Contains(err.Error(), "filesystem") {
+	if err := target.SetObjectRootID(uuid.NewString()); err != nil {
 		t.Fatalf("err = %v", err)
 	}
 }

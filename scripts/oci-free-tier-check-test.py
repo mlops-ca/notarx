@@ -95,6 +95,17 @@ class OciFreeTierCheck(unittest.TestCase):
             check.check_files(directory, errors)
             self.assertTrue(any("VARIABLE" in error for error in errors))
 
+    def test_metrics_block_must_not_be_shadowed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = pathlib.Path(tmp)
+            for name in check.LAYOUT:
+                (directory / name).write_text((DIRECTORY / name).read_text())
+            caddyfile = directory / "Caddyfile"
+            caddyfile.write_text(caddyfile.read_text().replace("handle @private {\n\t\trespond 404\n\t}", "respond @private 404"))
+            errors = []
+            check.check_files(directory, errors)
+            self.assertTrue(any("/metrics" in error for error in errors))
+
     def test_secrets_and_missing_layout_fail(self):
         with tempfile.TemporaryDirectory() as tmp:
             directory = pathlib.Path(tmp)

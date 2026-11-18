@@ -116,6 +116,9 @@ def check_files(directory, errors):
                 value = stripped[len("image:"):].strip()
                 if not IMAGE_EXPRESSION.match(value):
                     errors.append(f"compose.yml:{number}: image must be one ${{VARIABLE:-reference}} expression, found {value!r}")
+    caddyfile = directory / "Caddyfile"
+    if caddyfile.is_file() and not re.search(r"handle\s+@private\s*{\s*respond\s+404", caddyfile.read_text()):
+        errors.append("Caddyfile: /metrics must be blocked by a handle block (respond directives run after handle and would be shadowed)")
     example = directory / ".env.example"
     if example.is_file():
         for number, line in enumerate(example.read_text().splitlines(), 1):
