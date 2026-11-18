@@ -27,12 +27,12 @@ import (
 // The official pip process has a fresh destination and cache for every case,
 // reads only this Gateway, and cannot resolve build dependencies elsewhere.
 func TestPyPIYankRealPipHostedProxyGroup(t *testing.T) {
-	if os.Getenv("ARTIFACT_GATEWAY_PYPI_CLI_E2E") == "" {
-		t.Skip("set ARTIFACT_GATEWAY_PYPI_CLI_E2E=1 for official pip acceptance")
+	if os.Getenv("NOTARX_PYPI_CLI_E2E") == "" {
+		t.Skip("set NOTARX_PYPI_CLI_E2E=1 for official pip acceptance")
 	}
-	python := os.Getenv("ARTIFACT_GATEWAY_PYTHON")
+	python := os.Getenv("NOTARX_PYTHON")
 	if python == "" {
-		t.Fatal("ARTIFACT_GATEWAY_PYTHON must name the isolated pinned client")
+		t.Fatal("NOTARX_PYTHON must name the isolated pinned client")
 	}
 	version, err := exec.CommandContext(t.Context(), python, "-m", "pip", "--version").CombinedOutput()
 	if err != nil || !strings.HasPrefix(string(version), "pip 26.2 ") {

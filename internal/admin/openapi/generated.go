@@ -946,13 +946,13 @@ func (e DiagnosticHTTPErrorRateScope) Valid() bool {
 
 // Defines values for DiagnosticHTTPErrorRateSource.
 const (
-	ArtifactGatewayHttpRequestsTotal DiagnosticHTTPErrorRateSource = "artifact_gateway_http_requests_total"
+	NotarxHttpRequestsTotal DiagnosticHTTPErrorRateSource = "notarx_http_requests_total"
 )
 
 // Valid indicates whether the value is a known member of the DiagnosticHTTPErrorRateSource enum.
 func (e DiagnosticHTTPErrorRateSource) Valid() bool {
 	switch e {
-	case ArtifactGatewayHttpRequestsTotal:
+	case NotarxHttpRequestsTotal:
 		return true
 	default:
 		return false

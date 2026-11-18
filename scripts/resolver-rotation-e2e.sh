@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd); cd "$root"
-env_file=${GATEWAY_ENV_FILE:-.env}; test -f "$env_file"
+env_file=${NOTARX_ENV_FILE:-.env}; test -f "$env_file"
 port() { python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()'; }
 project="artifact-gateway-rotate-${RANDOM}-${RANDOM}"; isolated=$(mktemp)
 gateway_port=$(port); rustfs_api=$(port); rustfs_console=$(port)
-awk -F= '$1 != "GATEWAY_HTTP_PORT" && $1 != "GATEWAY_POSTGRES_PORT" && $1 != "RUSTFS_API_PORT" && $1 != "RUSTFS_CONSOLE_PORT" && $1 != "GATEWAY_RESOLVER_TOKEN" && $1 != "GATEWAY_REPOSITORY_READERS" {print}' "$env_file" > "$isolated"
-printf 'GATEWAY_HTTP_PORT=%s\nGATEWAY_POSTGRES_PORT=%s\nRUSTFS_API_PORT=%s\nRUSTFS_CONSOLE_PORT=%s\nGATEWAY_RESOLVER_TOKEN=resolver-before-rotation\nGATEWAY_REPOSITORY_READERS=fixture=rotation-missing\n' "$gateway_port" "$(port)" "$rustfs_api" "$rustfs_console" >> "$isolated"
+awk -F= '$1 != "NOTARX_HTTP_PORT" && $1 != "NOTARX_POSTGRES_PORT" && $1 != "RUSTFS_API_PORT" && $1 != "RUSTFS_CONSOLE_PORT" && $1 != "NOTARX_RESOLVER_TOKEN" && $1 != "NOTARX_REPOSITORY_READERS" {print}' "$env_file" > "$isolated"
+printf 'NOTARX_HTTP_PORT=%s\nNOTARX_POSTGRES_PORT=%s\nRUSTFS_API_PORT=%s\nRUSTFS_CONSOLE_PORT=%s\nNOTARX_RESOLVER_TOKEN=resolver-before-rotation\nNOTARX_REPOSITORY_READERS=fixture=rotation-missing\n' "$gateway_port" "$(port)" "$rustfs_api" "$rustfs_console" >> "$isolated"
 compose() { COMPOSE_PROJECT_NAME="$project" docker compose --env-file "$isolated" -f compose.yml "$@"; }
 trap 'compose down -v --remove-orphans >/dev/null 2>&1 || true; rm -f "$isolated"' EXIT
 base="http://127.0.0.1:${gateway_port}"
@@ -15,8 +15,8 @@ expect() { local want=$1; shift; local got; got=$(curl --silent --show-error --o
 compose up -d ${NOTARX_COMPOSE_BUILD_FLAG---build} --wait
 old_token=$(token fixture resolver-before-rotation); test -n "$old_token"
 expect 404 -H "Authorization: Bearer $old_token" "$base/v2/rotation-missing/manifests/latest"
-awk -F= '$1 != "GATEWAY_RESOLVER_TOKEN" {print}' "$isolated" > "$isolated.next"
-printf 'GATEWAY_RESOLVER_TOKEN=resolver-after-rotation\n' >> "$isolated.next"; mv "$isolated.next" "$isolated"
+awk -F= '$1 != "NOTARX_RESOLVER_TOKEN" {print}' "$isolated" > "$isolated.next"
+printf 'NOTARX_RESOLVER_TOKEN=resolver-after-rotation\n' >> "$isolated.next"; mv "$isolated.next" "$isolated"
 compose up -d ${NOTARX_COMPOSE_BUILD_FLAG---build} --force-recreate --no-deps gateway --wait
 expect 401 -H "Authorization: Bearer $old_token" "$base/v2/rotation-missing/manifests/latest"
 new_token=$(token fixture resolver-after-rotation); test -n "$new_token"

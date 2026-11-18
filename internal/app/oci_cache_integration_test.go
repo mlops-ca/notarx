@@ -578,9 +578,9 @@ func TestOCIProxyCacheWithPostgresAndS3AcrossGatewayInstances(t *testing.T) {
 	metrics := httptest.NewRecorder()
 	metricsB.Handler(metrics, httptest.NewRequest(http.MethodGet, "/metrics", nil))
 	for _, want := range []string{
-		`artifact_gateway_oci_cache_requests_total{outcome="hit"} 2`,
-		"artifact_gateway_oci_negative_cache_hits_total 1",
-		"artifact_gateway_oci_upstream_circuit_open_total 1",
+		`notarx_oci_cache_requests_total{outcome="hit"} 2`,
+		"notarx_oci_negative_cache_hits_total 1",
+		"notarx_oci_upstream_circuit_open_total 1",
 	} {
 		if !strings.Contains(metrics.Body.String(), want) {
 			t.Fatalf("metrics missing %q:\n%s", want, metrics.Body.String())
@@ -588,7 +588,7 @@ func TestOCIProxyCacheWithPostgresAndS3AcrossGatewayInstances(t *testing.T) {
 	}
 	deniedMetrics := httptest.NewRecorder()
 	metricsA.Handler(deniedMetrics, httptest.NewRequest(http.MethodGet, "/metrics", nil))
-	if !strings.Contains(deniedMetrics.Body.String(), "artifact_gateway_oci_proxy_denied_total 1") {
+	if !strings.Contains(deniedMetrics.Body.String(), "notarx_oci_proxy_denied_total 1") {
 		t.Fatalf("whitelist metric missing:\n%s", deniedMetrics.Body.String())
 	}
 

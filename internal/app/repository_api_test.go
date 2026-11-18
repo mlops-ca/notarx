@@ -100,9 +100,9 @@ func TestRepositoryAuthorizationMetricsUseOnlyBoundedGrantLabels(t *testing.T) {
 	metrics.Handler(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
 	body := response.Body.String()
 	for _, want := range []string{
-		`artifact_gateway_repository_authorization_denials_total{format="raw",authorization_source="repository_grants",authorization_reason="scope_not_granted"} 1`,
-		`artifact_gateway_repository_authorization_denials_total{format="management",authorization_source="repository_grants",authorization_reason="grant_lookup_failed"} 1`,
-		`artifact_gateway_repository_authorization_denials_total{format="raw",authorization_source="repository_grants",authorization_reason="grant_lookup_failed"} 0`,
+		`notarx_repository_authorization_denials_total{format="raw",authorization_source="repository_grants",authorization_reason="scope_not_granted"} 1`,
+		`notarx_repository_authorization_denials_total{format="management",authorization_source="repository_grants",authorization_reason="grant_lookup_failed"} 1`,
+		`notarx_repository_authorization_denials_total{format="raw",authorization_source="repository_grants",authorization_reason="grant_lookup_failed"} 0`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("metrics missing %q:\n%s", want, body)
@@ -127,9 +127,9 @@ func TestBackgroundOperationMetricsUseOnlyBoundedLabels(t *testing.T) {
 	metrics.Handler(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
 	body := response.Body.String()
 	for _, want := range []string{
-		`artifact_gateway_background_operations_total{kind="promotion",format="raw",outcome="started"} 1`,
-		`artifact_gateway_background_operations_total{kind="promotion",format="raw",outcome="completed"} 1`,
-		`artifact_gateway_background_operations_in_flight{kind="promotion",format="raw"} 0`,
+		`notarx_background_operations_total{kind="promotion",format="raw",outcome="started"} 1`,
+		`notarx_background_operations_total{kind="promotion",format="raw",outcome="completed"} 1`,
+		`notarx_background_operations_in_flight{kind="promotion",format="raw"} 0`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("metrics missing %q:\n%s", want, body)

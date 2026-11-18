@@ -2,7 +2,7 @@
 # notarxctl end-to-end check against a real Gateway (issues #127, #129, #130,
 # #131, #132, #133, #134, #135 and #335).
 #
-# By default it boots an isolated Compose project from GATEWAY_ENV_FILE (or
+# By default it boots an isolated Compose project from NOTARX_ENV_FILE (or
 # .env) on free ports and removes it afterwards. To reuse a Gateway that is
 # already running, set CLI_E2E_SERVER and CLI_E2E_TOKEN (an admin token); the
 # script then only creates repositories with unique names and deletes them.
@@ -83,9 +83,9 @@ else
     printf '%s\n' 'CLI E2E requires docker, or CLI_E2E_SERVER and CLI_E2E_TOKEN for a running Gateway.' >&2
     exit 1
   }
-  env_file=${GATEWAY_ENV_FILE:-.env}
+  env_file=${NOTARX_ENV_FILE:-.env}
   test -f "$env_file" || {
-    printf '%s\n' 'CLI E2E requires a configured environment file (GATEWAY_ENV_FILE or .env).' >&2
+    printf '%s\n' 'CLI E2E requires a configured environment file (NOTARX_ENV_FILE or .env).' >&2
     exit 1
   }
   project="artifact-gateway-cli-${RANDOM}-${RANDOM}"
@@ -107,22 +107,22 @@ PY2
   admin_token="cli-e2e-admin-${RANDOM}-${RANDOM}"
   resolver_token="cli-e2e-resolver-${RANDOM}-${RANDOM}"
   awk -F= '
-    $1 != "GATEWAY_HTTP_PORT" &&
-    $1 != "GATEWAY_POSTGRES_PORT" &&
+    $1 != "NOTARX_HTTP_PORT" &&
+    $1 != "NOTARX_POSTGRES_PORT" &&
     $1 != "RUSTFS_API_PORT" &&
     $1 != "RUSTFS_CONSOLE_PORT" &&
-    $1 != "GATEWAY_ADMIN_TOKEN" &&
-    $1 != "GATEWAY_RESOLVER_TOKEN" &&
-    $1 !~ /^GATEWAY_OIDC_/ { print }
+    $1 != "NOTARX_ADMIN_TOKEN" &&
+    $1 != "NOTARX_RESOLVER_TOKEN" &&
+    $1 !~ /^NOTARX_OIDC_/ { print }
   ' "$env_file" >"$workdir/gateway.env"
-  printf 'GATEWAY_HTTP_PORT=%s\nGATEWAY_POSTGRES_PORT=%s\nRUSTFS_API_PORT=%s\nRUSTFS_CONSOLE_PORT=%s\nGATEWAY_ADMIN_TOKEN=%s\nGATEWAY_RESOLVER_TOKEN=%s\n' \
+  printf 'NOTARX_HTTP_PORT=%s\nNOTARX_POSTGRES_PORT=%s\nRUSTFS_API_PORT=%s\nRUSTFS_CONSOLE_PORT=%s\nNOTARX_ADMIN_TOKEN=%s\nNOTARX_RESOLVER_TOKEN=%s\n' \
     "$gateway_port" "$(free_port)" "$(free_port)" "$(free_port)" \
     "$admin_token" "$resolver_token" >>"$workdir/gateway.env"
   # A synthetic OIDC issuer for the identity-link checks. Nothing listens on
   # it: linking only compares the issuer, and opaque bearer tokens are
   # rejected as JWTs before any key fetch.
   oidc_issuer="http://127.0.0.1:1/cli-e2e-oidc-${RANDOM}"
-  printf 'GATEWAY_OIDC_ISSUER=%s\nGATEWAY_OIDC_AUDIENCE=notarxctl-cli-e2e\nGATEWAY_OIDC_JWKS_URL=%s/jwks\n' \
+  printf 'NOTARX_OIDC_ISSUER=%s\nNOTARX_OIDC_AUDIENCE=notarxctl-cli-e2e\nNOTARX_OIDC_JWKS_URL=%s/jwks\n' \
     "$oidc_issuer" "$oidc_issuer" >>"$workdir/gateway.env"
   compose up -d ${NOTARX_COMPOSE_BUILD_FLAG---build} --wait
   server="http://127.0.0.1:${gateway_port}"

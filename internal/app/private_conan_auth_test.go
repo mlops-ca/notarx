@@ -29,7 +29,7 @@ func TestPrivateConanProxyCredentials(t *testing.T) {
 
 func privateConanCredentialsContract(t *testing.T, scheme repository.UpstreamAuthScheme, group bool, backend privateProxyBackend) {
 	t.Helper()
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
 	store := backend.store
 	var expected atomic.Value
 	expected.Store(privateProxyAuthorization(scheme, "conan-source-first-secret"))
@@ -141,12 +141,12 @@ func privateConanCredentialsContract(t *testing.T, scheme repository.UpstreamAut
 		backend.client(t, handler, name, "hot", assets)
 	}
 	beforeMissingKey := requests.Load() + tokens.Load()
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", "")
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", "")
 	get(recipe, 502, false)
 	if requests.Load()+tokens.Load() != beforeMissingKey {
 		t.Fatal("Conan missing key contacted source")
 	}
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
 	privateRejectSourceRebinding(t, handler, store, repo, func() int32 { return requests.Load() + tokens.Load() + fallbackCalls.Load() })
 	beforeCorruption := requests.Load() + tokens.Load()
 	repo = privateCorruptSourceCredential(t, store, repo, func() { get(recipe, 502, false) })

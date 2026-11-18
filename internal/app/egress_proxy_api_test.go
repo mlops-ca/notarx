@@ -16,7 +16,7 @@ import (
 )
 
 func TestRepositoryEgressProxyCreateRedactsAndEncrypts(t *testing.T) {
-	t.Setenv("GATEWAY_EGRESS_PROXY_KEY", strings.Repeat("ab", 32))
+	t.Setenv("NOTARX_EGRESS_PROXY_KEY", strings.Repeat("ab", 32))
 	store := repository.NewMemoryStore()
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
 
@@ -56,7 +56,7 @@ func TestRepositoryEgressProxyCreateRedactsAndEncrypts(t *testing.T) {
 }
 
 func TestRepositoryEgressProxyUpdateKeepsAndClearsCredentials(t *testing.T) {
-	t.Setenv("GATEWAY_EGRESS_PROXY_KEY", strings.Repeat("ab", 32))
+	t.Setenv("NOTARX_EGRESS_PROXY_KEY", strings.Repeat("ab", 32))
 	store := repository.NewMemoryStore()
 	repo, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{
 		ID:           uuid.NewString(),
@@ -115,7 +115,7 @@ func TestRepositoryEgressProxyUpdateKeepsAndClearsCredentials(t *testing.T) {
 }
 
 func TestRepositoryEgressProxyValidation(t *testing.T) {
-	t.Setenv("GATEWAY_EGRESS_PROXY_KEY", strings.Repeat("ab", 32))
+	t.Setenv("NOTARX_EGRESS_PROXY_KEY", strings.Repeat("ab", 32))
 	store := repository.NewMemoryStore()
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
 	post := func(body string) *httptest.ResponseRecorder {

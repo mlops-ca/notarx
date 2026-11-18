@@ -15,7 +15,7 @@ Apply migrations `000147_nexus_migration_batches.sql` and
 `000155_nexus_migration_scan_checkpoints.sql`, `000162_nexus_npm_migration.sql` and
 `000186_nexus_pypi_migration.sql` and `000189_nexus_migration_actor_kind.sql`
 through the standard migration runner. Configure
-`GATEWAY_MIGRATION_STORAGE_POOL_ID` with the real object-storage pool identity.
+`NOTARX_MIGRATION_STORAGE_POOL_ID` with the real object-storage pool identity.
 Compose forwards it to every inherited Gateway role. Without it migration writes
 are disabled; the rest of Gateway and migration reports remain available. Source
 HTTPS, credential encryption, exact private-endpoint allowlists, DNS pinning and

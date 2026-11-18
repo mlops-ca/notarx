@@ -102,7 +102,7 @@ func TestConanAuditFieldsAndMetricsCoverCacheLifecycle(t *testing.T) {
 	}
 	metricsResponse := httptest.NewRecorder()
 	metrics.Handler(metricsResponse, httptest.NewRequest(http.MethodGet, "/metrics", nil))
-	for _, line := range []string{"artifact_gateway_conan_requests_total{method=\"get\"} 2", "artifact_gateway_conan_cache_requests_total{outcome=\"hit\"} 1", "artifact_gateway_conan_cache_requests_total{outcome=\"miss\"} 1", "artifact_gateway_conan_response_bytes_total"} {
+	for _, line := range []string{"notarx_conan_requests_total{method=\"get\"} 2", "notarx_conan_cache_requests_total{outcome=\"hit\"} 1", "notarx_conan_cache_requests_total{outcome=\"miss\"} 1", "notarx_conan_response_bytes_total"} {
 		if !strings.Contains(metricsResponse.Body.String(), line) {
 			t.Fatalf("missing metric %q in %s", line, metricsResponse.Body.String())
 		}

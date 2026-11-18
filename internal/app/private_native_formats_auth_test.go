@@ -75,7 +75,7 @@ func TestPrivateNativeFormatCredentials(t *testing.T) {
 
 func privateNativeCredentialsContract(t *testing.T, format repository.Format, scheme repository.UpstreamAuthScheme, group bool, backend privateProxyBackend) {
 	t.Helper()
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
 	store := backend.store
 	fixture := privateNativeFixture(t, format)
 	if backend.assets != nil {
@@ -159,13 +159,13 @@ func privateNativeCredentialsContract(t *testing.T, format repository.Format, sc
 		backend.client(t, handler, name, "hot", fixture.assets)
 	}
 	beforeMissingKey := sourceCalls.Load()
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", "")
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", "")
 	get(fixture.metadata, 502, false)
 	get(fixture.object, 502, false)
 	if sourceCalls.Load() != beforeMissingKey {
 		t.Fatal("missing decryption key reached the upstream")
 	}
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
 	privateRejectSourceRebinding(t, handler, store, repo, func() int32 { return sourceCalls.Load() + fallbackCalls.Load() })
 	beforeCorruption := sourceCalls.Load()
 	repo = privateCorruptSourceCredential(t, store, repo, func() {

@@ -156,55 +156,61 @@ type Config struct {
 	OTLPLogsTimeout                 time.Duration
 	OTLPLogsShutdownTimeout         time.Duration
 	OTELSamplingRatio               float64
+
+	// publicURL is the validated NOTARX_PUBLIC_URL; read it through PublicURL.
+	publicURL *url.URL
 }
 
 func Load() (Config, error) {
+	if err := RefuseLegacyEnv(os.Environ()); err != nil {
+		return Config{}, err
+	}
 	presetsMode, presetsErr := loadRepositoryPresetsMode()
 	if presetsErr != nil {
 		return Config{}, presetsErr
 	}
 	cfg := Config{
 		RepositoryPresetsMode:           presetsMode,
-		MigrationStoragePoolID:          strings.TrimSpace(os.Getenv("GATEWAY_MIGRATION_STORAGE_POOL_ID")),
-		ListenAddress:                   value("GATEWAY_LISTEN_ADDRESS", ":8080"),
-		ConsoleThemeDir:                 strings.TrimSpace(os.Getenv("GATEWAY_CONSOLE_THEME_DIR")),
-		NodeRoles:                       parseNodeRoles(os.Getenv("GATEWAY_NODE_ROLES")),
-		InstanceID:                      value("GATEWAY_INSTANCE_ID", "gateway-"+hostname()),
-		AccessLogMode:                   value("GATEWAY_ACCESS_LOG", "limited"),
+		MigrationStoragePoolID:          strings.TrimSpace(os.Getenv("NOTARX_MIGRATION_STORAGE_POOL_ID")),
+		ListenAddress:                   value("NOTARX_LISTEN_ADDRESS", ":8080"),
+		ConsoleThemeDir:                 strings.TrimSpace(os.Getenv("NOTARX_CONSOLE_THEME_DIR")),
+		NodeRoles:                       parseNodeRoles(os.Getenv("NOTARX_NODE_ROLES")),
+		InstanceID:                      value("NOTARX_INSTANCE_ID", "gateway-"+hostname()),
+		AccessLogMode:                   value("NOTARX_ACCESS_LOG", "limited"),
 		AccessLogSlowMS:                 1000,
 		LogBufferLines:                  1000,
-		WorkerFormats:                   parseFilter(os.Getenv("GATEWAY_WORKER_FORMATS"), supportedWorkerFormats),
-		WorkerKinds:                     parseFilter(os.Getenv("GATEWAY_WORKER_KINDS"), supportedWorkerKinds),
-		ScannerEndpoint:                 strings.TrimSpace(os.Getenv("GATEWAY_SCANNER_ENDPOINT")),
-		ScannerHealthEndpoint:           strings.TrimSpace(os.Getenv("GATEWAY_SCANNER_HEALTH_ENDPOINT")),
-		ScannerName:                     strings.TrimSpace(os.Getenv("GATEWAY_SCANNER_NAME")),
-		ScannerToken:                    os.Getenv("GATEWAY_SCANNER_TOKEN"),
+		WorkerFormats:                   parseFilter(os.Getenv("NOTARX_WORKER_FORMATS"), supportedWorkerFormats),
+		WorkerKinds:                     parseFilter(os.Getenv("NOTARX_WORKER_KINDS"), supportedWorkerKinds),
+		ScannerEndpoint:                 strings.TrimSpace(os.Getenv("NOTARX_SCANNER_ENDPOINT")),
+		ScannerHealthEndpoint:           strings.TrimSpace(os.Getenv("NOTARX_SCANNER_HEALTH_ENDPOINT")),
+		ScannerName:                     strings.TrimSpace(os.Getenv("NOTARX_SCANNER_NAME")),
+		ScannerToken:                    os.Getenv("NOTARX_SCANNER_TOKEN"),
 		ScannerTimeout:                  2 * time.Minute,
 		ScannerHealthTimeout:            2 * time.Second,
 		ScannerDatabaseMaxAge:           24 * time.Hour,
 		ScannerMaxResponseBytes:         512 << 10,
 		ScannerMaxArtifactBytes:         20 << 30,
-		APTRestoreTrustedFingerprints:   splitCSV(os.Getenv("GATEWAY_APT_RESTORE_TRUSTED_FINGERPRINTS")),
-		APTRestoreTrustedPublicKeysFile: strings.TrimSpace(os.Getenv("GATEWAY_APT_RESTORE_TRUSTED_PUBLIC_KEYS_FILE")),
-		APTSignerEndpoint:               strings.TrimSpace(os.Getenv("GATEWAY_APT_SIGNER_ENDPOINT")),
-		APTSignerToken:                  os.Getenv("GATEWAY_APT_SIGNER_TOKEN"),
+		APTRestoreTrustedFingerprints:   splitCSV(os.Getenv("NOTARX_APT_RESTORE_TRUSTED_FINGERPRINTS")),
+		APTRestoreTrustedPublicKeysFile: strings.TrimSpace(os.Getenv("NOTARX_APT_RESTORE_TRUSTED_PUBLIC_KEYS_FILE")),
+		APTSignerEndpoint:               strings.TrimSpace(os.Getenv("NOTARX_APT_SIGNER_ENDPOINT")),
+		APTSignerToken:                  os.Getenv("NOTARX_APT_SIGNER_TOKEN"),
 		APTSignerTimeout:                15 * time.Second,
-		APTSignerTrustedFingerprints:    splitCSV(os.Getenv("GATEWAY_APT_SIGNER_TRUSTED_FINGERPRINTS")),
-		APTSignerTrustedPublicKeysFile:  strings.TrimSpace(os.Getenv("GATEWAY_APT_SIGNER_TRUSTED_PUBLIC_KEYS_FILE")),
-		APTSignerTLSCAFile:              strings.TrimSpace(os.Getenv("GATEWAY_APT_SIGNER_TLS_CA_FILE")),
+		APTSignerTrustedFingerprints:    splitCSV(os.Getenv("NOTARX_APT_SIGNER_TRUSTED_FINGERPRINTS")),
+		APTSignerTrustedPublicKeysFile:  strings.TrimSpace(os.Getenv("NOTARX_APT_SIGNER_TRUSTED_PUBLIC_KEYS_FILE")),
+		APTSignerTLSCAFile:              strings.TrimSpace(os.Getenv("NOTARX_APT_SIGNER_TLS_CA_FILE")),
 		RuntimeNodeRetention:            7 * 24 * time.Hour,
 		RuntimeNodePruneInterval:        time.Hour,
-		DatabaseURL:                     os.Getenv("GATEWAY_DATABASE_URL"),
+		DatabaseURL:                     os.Getenv("NOTARX_DATABASE_URL"),
 		DatabasePool:                    database.DefaultPoolConfig(),
 		DatabaseCoordinatorPool:         database.DefaultCoordinatorPoolConfig(),
 		DatabaseArtifactLockPool:        database.DefaultArtifactLockPoolConfig(),
-		RustFSEndpoint:                  os.Getenv("GATEWAY_RUSTFS_ENDPOINT"),
-		RustFSBucket:                    os.Getenv("GATEWAY_RUSTFS_BUCKET"),
-		RustFSAccessKey:                 os.Getenv("GATEWAY_RUSTFS_ACCESS_KEY"),
-		RustFSSecretKey:                 os.Getenv("GATEWAY_RUSTFS_SECRET_KEY"),
-		OCIProxyAllowedHosts:            splitCSV(os.Getenv("GATEWAY_OCI_PROXY_ALLOWED_HOSTS")),
-		MavenProxyAllowedHosts:          splitCSV(os.Getenv("GATEWAY_MAVEN_PROXY_ALLOWED_HOSTS")),
-		RawProxyAllowedHosts:            splitCSV(os.Getenv("GATEWAY_RAW_PROXY_ALLOWED_HOSTS")),
+		RustFSEndpoint:                  os.Getenv("NOTARX_RUSTFS_ENDPOINT"),
+		RustFSBucket:                    os.Getenv("NOTARX_RUSTFS_BUCKET"),
+		RustFSAccessKey:                 os.Getenv("NOTARX_RUSTFS_ACCESS_KEY"),
+		RustFSSecretKey:                 os.Getenv("NOTARX_RUSTFS_SECRET_KEY"),
+		OCIProxyAllowedHosts:            splitCSV(os.Getenv("NOTARX_OCI_PROXY_ALLOWED_HOSTS")),
+		MavenProxyAllowedHosts:          splitCSV(os.Getenv("NOTARX_MAVEN_PROXY_ALLOWED_HOSTS")),
+		RawProxyAllowedHosts:            splitCSV(os.Getenv("NOTARX_RAW_PROXY_ALLOWED_HOSTS")),
 		RawCacheMaxObjectBytes:          1 << 30,
 		RawCacheMaxConcurrentSpools:     4,
 		ConanCacheMaxObjectBytes:        1 << 30,
@@ -217,75 +223,75 @@ func Load() (Config, error) {
 		NPMProxyBreakerTTL:              30 * time.Second,
 		RawCacheTTL:                     15 * time.Minute,
 		ConanCacheTTL:                   15 * time.Minute,
-		AdminToken:                      os.Getenv("GATEWAY_ADMIN_TOKEN"),
-		ResolverToken:                   os.Getenv("GATEWAY_RESOLVER_TOKEN"),
-		ConanTokenSecret:                os.Getenv("GATEWAY_CONAN_TOKEN_SECRET"),
-		AdminActor:                      value("GATEWAY_ADMIN_ACTOR", "gateway-admin"),
-		ResolverActor:                   value("GATEWAY_RESOLVER_ACTOR", "gateway-resolver"),
+		AdminToken:                      os.Getenv("NOTARX_ADMIN_TOKEN"),
+		ResolverToken:                   os.Getenv("NOTARX_RESOLVER_TOKEN"),
+		ConanTokenSecret:                os.Getenv("NOTARX_CONAN_TOKEN_SECRET"),
+		AdminActor:                      value("NOTARX_ADMIN_ACTOR", "gateway-admin"),
+		ResolverActor:                   value("NOTARX_RESOLVER_ACTOR", "gateway-resolver"),
 		LocalAuthMaxFailedAttempts:      5,
 		LocalAuthLockoutDuration:        15 * time.Minute,
-		RepositoryReaders:               repositoryReaders(os.Getenv("GATEWAY_REPOSITORY_READERS")),
-		LegacyReadPermissive:            legacyReadPermissive(os.Getenv("GATEWAY_LEGACY_READ_DEFAULT")),
-		RepositoryCacheQuotas:           repositoryCacheQuotas(os.Getenv("GATEWAY_REPOSITORY_CACHE_QUOTAS")),
-		OIDCIssuer:                      strings.TrimRight(strings.TrimSpace(os.Getenv("GATEWAY_OIDC_ISSUER")), "/"),
-		OIDCAudience:                    strings.TrimSpace(os.Getenv("GATEWAY_OIDC_AUDIENCE")),
-		OIDCJWKSURL:                     strings.TrimSpace(os.Getenv("GATEWAY_OIDC_JWKS_URL")),
-		OIDCClientID:                    strings.TrimSpace(os.Getenv("GATEWAY_OIDC_CLIENT_ID")),
-		OIDCClientSecret:                strings.TrimSpace(os.Getenv("GATEWAY_OIDC_CLIENT_SECRET")),
-		OIDCRedirectURL:                 strings.TrimSpace(os.Getenv("GATEWAY_OIDC_REDIRECT_URL")),
-		OIDCScopes:                      oidcScopes(os.Getenv("GATEWAY_OIDC_SCOPES")),
-		OIDCAdminSubjects:               splitCSV(os.Getenv("GATEWAY_OIDC_ADMIN_SUBJECTS")),
+		RepositoryReaders:               repositoryReaders(os.Getenv("NOTARX_REPOSITORY_READERS")),
+		LegacyReadPermissive:            legacyReadPermissive(os.Getenv("NOTARX_LEGACY_READ_DEFAULT")),
+		RepositoryCacheQuotas:           repositoryCacheQuotas(os.Getenv("NOTARX_REPOSITORY_CACHE_QUOTAS")),
+		OIDCIssuer:                      strings.TrimRight(strings.TrimSpace(os.Getenv("NOTARX_OIDC_ISSUER")), "/"),
+		OIDCAudience:                    strings.TrimSpace(os.Getenv("NOTARX_OIDC_AUDIENCE")),
+		OIDCJWKSURL:                     strings.TrimSpace(os.Getenv("NOTARX_OIDC_JWKS_URL")),
+		OIDCClientID:                    strings.TrimSpace(os.Getenv("NOTARX_OIDC_CLIENT_ID")),
+		OIDCClientSecret:                strings.TrimSpace(os.Getenv("NOTARX_OIDC_CLIENT_SECRET")),
+		OIDCRedirectURL:                 strings.TrimSpace(os.Getenv("NOTARX_OIDC_REDIRECT_URL")),
+		OIDCScopes:                      oidcScopes(os.Getenv("NOTARX_OIDC_SCOPES")),
+		OIDCAdminSubjects:               splitCSV(os.Getenv("NOTARX_OIDC_ADMIN_SUBJECTS")),
 		OIDCRoles: authorization.OIDCRoleMapping{
-			Member: splitCSV(os.Getenv("GATEWAY_OIDC_MEMBER_ROLES")),
-			Admin:  splitCSV(os.Getenv("GATEWAY_OIDC_ADMIN_ROLES")),
+			Member: splitCSV(os.Getenv("NOTARX_OIDC_MEMBER_ROLES")),
+			Admin:  splitCSV(os.Getenv("NOTARX_OIDC_ADMIN_ROLES")),
 		},
-		OTLPHTTPEndpoint:  strings.TrimSpace(os.Getenv("GATEWAY_OTLP_HTTP_ENDPOINT")),
+		OTLPHTTPEndpoint:  strings.TrimSpace(os.Getenv("NOTARX_OTLP_HTTP_ENDPOINT")),
 		OTELSamplingRatio: 1,
 	}
-	if raw := strings.TrimSpace(os.Getenv("GATEWAY_HELM_PREVIEW_ENABLED")); raw != "" {
+	if raw := strings.TrimSpace(os.Getenv("NOTARX_HELM_PREVIEW_ENABLED")); raw != "" {
 		if raw != "true" && raw != "false" {
-			return Config{}, errors.New("GATEWAY_HELM_PREVIEW_ENABLED must be true or false")
+			return Config{}, errors.New("NOTARX_HELM_PREVIEW_ENABLED must be true or false")
 		}
 		cfg.HelmPreviewEnabled = raw == "true"
 	}
-	if cfg.HelmPreviewEnabled && strings.TrimSpace(os.Getenv("GATEWAY_WORKER_FORMATS")) == "" {
+	if cfg.HelmPreviewEnabled && strings.TrimSpace(os.Getenv("NOTARX_WORKER_FORMATS")) == "" {
 		cfg.WorkerFormats = append(cfg.WorkerFormats, "helm")
 	}
-	if raw := strings.TrimSpace(os.Getenv("GATEWAY_NUGET_PREVIEW_ENABLED")); raw != "" {
+	if raw := strings.TrimSpace(os.Getenv("NOTARX_NUGET_PREVIEW_ENABLED")); raw != "" {
 		if raw != "true" && raw != "false" {
-			return Config{}, errors.New("GATEWAY_NUGET_PREVIEW_ENABLED must be true or false")
+			return Config{}, errors.New("NOTARX_NUGET_PREVIEW_ENABLED must be true or false")
 		}
 		cfg.NuGetPreviewEnabled = raw == "true"
 	}
-	if cfg.NuGetPreviewEnabled && strings.TrimSpace(os.Getenv("GATEWAY_WORKER_FORMATS")) == "" {
+	if cfg.NuGetPreviewEnabled && strings.TrimSpace(os.Getenv("NOTARX_WORKER_FORMATS")) == "" {
 		cfg.WorkerFormats = append(cfg.WorkerFormats, "nuget")
 	}
-	if raw := strings.TrimSpace(os.Getenv("GATEWAY_RUBYGEMS_PREVIEW_ENABLED")); raw != "" {
+	if raw := strings.TrimSpace(os.Getenv("NOTARX_RUBYGEMS_PREVIEW_ENABLED")); raw != "" {
 		if raw != "true" && raw != "false" {
-			return Config{}, errors.New("GATEWAY_RUBYGEMS_PREVIEW_ENABLED must be true or false")
+			return Config{}, errors.New("NOTARX_RUBYGEMS_PREVIEW_ENABLED must be true or false")
 		}
 		cfg.RubyGemsPreviewEnabled = raw == "true"
 	}
-	if cfg.RubyGemsPreviewEnabled && strings.TrimSpace(os.Getenv("GATEWAY_WORKER_FORMATS")) == "" {
+	if cfg.RubyGemsPreviewEnabled && strings.TrimSpace(os.Getenv("NOTARX_WORKER_FORMATS")) == "" {
 		cfg.WorkerFormats = append(cfg.WorkerFormats, "rubygems")
 	}
 	if err := validateRuntimeConfig(cfg); err != nil {
 		return Config{}, err
 	}
 	if cfg.AccessLogMode != "limited" && cfg.AccessLogMode != "full" {
-		return Config{}, fmt.Errorf("GATEWAY_ACCESS_LOG must be limited or full")
+		return Config{}, fmt.Errorf("NOTARX_ACCESS_LOG must be limited or full")
 	}
-	if slowMS, err := positiveIntEnv("GATEWAY_ACCESS_LOG_SLOW_MS", cfg.AccessLogSlowMS, false); err != nil {
+	if slowMS, err := positiveIntEnv("NOTARX_ACCESS_LOG_SLOW_MS", cfg.AccessLogSlowMS, false); err != nil {
 		return Config{}, err
 	} else if slowMS > 60_000 {
-		return Config{}, fmt.Errorf("GATEWAY_ACCESS_LOG_SLOW_MS must be at most 60000")
+		return Config{}, fmt.Errorf("NOTARX_ACCESS_LOG_SLOW_MS must be at most 60000")
 	} else {
 		cfg.AccessLogSlowMS = slowMS
 	}
-	if lines, err := positiveIntEnv("GATEWAY_LOG_BUFFER_LINES", cfg.LogBufferLines, true); err != nil {
+	if lines, err := positiveIntEnv("NOTARX_LOG_BUFFER_LINES", cfg.LogBufferLines, true); err != nil {
 		return Config{}, err
 	} else if lines > 5000 {
-		return Config{}, fmt.Errorf("GATEWAY_LOG_BUFFER_LINES must be at most 5000")
+		return Config{}, fmt.Errorf("NOTARX_LOG_BUFFER_LINES must be at most 5000")
 	} else {
 		cfg.LogBufferLines = lines
 	}
@@ -293,12 +299,12 @@ func Load() (Config, error) {
 	if err := configureLogFile(&cfg); err != nil {
 		return Config{}, err
 	}
-	capacityMounts, err := localcapacity.ParsePaths(os.Getenv("GATEWAY_LOCAL_CAPACITY_MOUNTS"))
+	capacityMounts, err := localcapacity.ParsePaths(os.Getenv("NOTARX_LOCAL_CAPACITY_MOUNTS"))
 	if err != nil {
-		return Config{}, fmt.Errorf("GATEWAY_LOCAL_CAPACITY_MOUNTS is invalid")
+		return Config{}, fmt.Errorf("NOTARX_LOCAL_CAPACITY_MOUNTS is invalid")
 	}
 	cfg.LocalCapacityMounts = capacityMounts
-	cfg.Email, err = emailnotification.Load(strings.TrimSpace(os.Getenv("GATEWAY_EMAIL_CONFIG_FILE")))
+	cfg.Email, err = emailnotification.Load(strings.TrimSpace(os.Getenv("NOTARX_EMAIL_CONFIG_FILE")))
 	if err != nil {
 		return Config{}, err
 	}
@@ -306,16 +312,16 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if cfg.ConanTokenSecret != "" && (len(cfg.ConanTokenSecret) < 32 || cfg.ConanTokenSecret == cfg.ResolverToken || cfg.ConanTokenSecret == cfg.AdminToken) {
-		return Config{}, fmt.Errorf("GATEWAY_CONAN_TOKEN_SECRET requires at least 32 bytes and must differ from login credentials")
+		return Config{}, fmt.Errorf("NOTARX_CONAN_TOKEN_SECRET requires at least 32 bytes and must differ from login credentials")
 	}
 	if cfg.DatabaseURL == "" || cfg.RustFSEndpoint == "" || cfg.RustFSBucket == "" || cfg.RustFSAccessKey == "" || cfg.RustFSSecretKey == "" || cfg.AdminToken == "" || cfg.ResolverToken == "" {
-		return Config{}, fmt.Errorf("GATEWAY_DATABASE_URL, GATEWAY_RUSTFS_ENDPOINT, GATEWAY_RUSTFS_BUCKET, GATEWAY_RUSTFS_ACCESS_KEY, GATEWAY_RUSTFS_SECRET_KEY, GATEWAY_ADMIN_TOKEN, and GATEWAY_RESOLVER_TOKEN are required")
+		return Config{}, fmt.Errorf("NOTARX_DATABASE_URL, NOTARX_RUSTFS_ENDPOINT, NOTARX_RUSTFS_BUCKET, NOTARX_RUSTFS_ACCESS_KEY, NOTARX_RUSTFS_SECRET_KEY, NOTARX_ADMIN_TOKEN, and NOTARX_RESOLVER_TOKEN are required")
 	}
 	if _, err := url.ParseRequestURI(cfg.DatabaseURL); err != nil {
-		return Config{}, fmt.Errorf("GATEWAY_DATABASE_URL is not a valid URL")
+		return Config{}, fmt.Errorf("NOTARX_DATABASE_URL is not a valid URL")
 	}
 	if _, err := url.ParseRequestURI(cfg.RustFSEndpoint); err != nil {
-		return Config{}, fmt.Errorf("GATEWAY_RUSTFS_ENDPOINT is not a valid URL")
+		return Config{}, fmt.Errorf("NOTARX_RUSTFS_ENDPOINT is not a valid URL")
 	}
 	if err := configureScanner(&cfg); err != nil {
 		return Config{}, err
@@ -326,94 +332,94 @@ func Load() (Config, error) {
 	if err := configureAPTSigner(&cfg); err != nil {
 		return Config{}, err
 	}
-	if attempts, err := positiveIntEnv("GATEWAY_LOCAL_AUTH_MAX_FAILED_ATTEMPTS", cfg.LocalAuthMaxFailedAttempts, false); err != nil {
+	if attempts, err := positiveIntEnv("NOTARX_LOCAL_AUTH_MAX_FAILED_ATTEMPTS", cfg.LocalAuthMaxFailedAttempts, false); err != nil {
 		return Config{}, err
 	} else {
 		cfg.LocalAuthMaxFailedAttempts = attempts
 	}
 	if cfg.LocalAuthMaxFailedAttempts > 100 {
-		return Config{}, fmt.Errorf("GATEWAY_LOCAL_AUTH_MAX_FAILED_ATTEMPTS must not exceed 100")
+		return Config{}, fmt.Errorf("NOTARX_LOCAL_AUTH_MAX_FAILED_ATTEMPTS must not exceed 100")
 	}
-	if lockout, err := durationEnv("GATEWAY_LOCAL_AUTH_LOCKOUT_DURATION", cfg.LocalAuthLockoutDuration); err != nil {
+	if lockout, err := durationEnv("NOTARX_LOCAL_AUTH_LOCKOUT_DURATION", cfg.LocalAuthLockoutDuration); err != nil {
 		return Config{}, err
 	} else {
 		cfg.LocalAuthLockoutDuration = lockout
 	}
 	if cfg.LocalAuthLockoutDuration < time.Minute || cfg.LocalAuthLockoutDuration > 24*time.Hour {
-		return Config{}, fmt.Errorf("GATEWAY_LOCAL_AUTH_LOCKOUT_DURATION must be between 1m and 24h")
+		return Config{}, fmt.Errorf("NOTARX_LOCAL_AUTH_LOCKOUT_DURATION must be between 1m and 24h")
 	}
 	if cfg.OIDCIssuer != "" {
 		if cfg.OIDCAudience == "" {
-			return Config{}, fmt.Errorf("GATEWAY_OIDC_AUDIENCE is required when GATEWAY_OIDC_ISSUER is set")
+			return Config{}, fmt.Errorf("NOTARX_OIDC_AUDIENCE is required when NOTARX_OIDC_ISSUER is set")
 		}
 		if parsed, err := url.ParseRequestURI(cfg.OIDCIssuer); err != nil || parsed.Host == "" || !secureOrLoopbackHTTP(parsed) {
-			return Config{}, fmt.Errorf("GATEWAY_OIDC_ISSUER must use HTTPS outside localhost")
+			return Config{}, fmt.Errorf("NOTARX_OIDC_ISSUER must use HTTPS outside localhost")
 		}
 		if cfg.OIDCJWKSURL != "" {
 			if parsed, err := url.ParseRequestURI(cfg.OIDCJWKSURL); err != nil || parsed.Host == "" || !secureOrLoopbackHTTP(parsed) {
-				return Config{}, fmt.Errorf("GATEWAY_OIDC_JWKS_URL must use HTTPS outside localhost")
+				return Config{}, fmt.Errorf("NOTARX_OIDC_JWKS_URL must use HTTPS outside localhost")
 			}
 		}
 		if cfg.OIDCClientID != "" {
 			if cfg.OIDCRedirectURL == "" {
-				return Config{}, fmt.Errorf("GATEWAY_OIDC_REDIRECT_URL is required when GATEWAY_OIDC_CLIENT_ID is set")
+				return Config{}, fmt.Errorf("NOTARX_OIDC_REDIRECT_URL is required when NOTARX_OIDC_CLIENT_ID is set")
 			}
 			parsed, err := url.ParseRequestURI(cfg.OIDCRedirectURL)
 			if err != nil || parsed.Host == "" || parsed.Scheme != "https" && parsed.Scheme != "http" {
-				return Config{}, fmt.Errorf("GATEWAY_OIDC_REDIRECT_URL must be an HTTP or HTTPS URL")
+				return Config{}, fmt.Errorf("NOTARX_OIDC_REDIRECT_URL must be an HTTP or HTTPS URL")
 			}
 			if parsed.Scheme == "http" && parsed.Hostname() != "localhost" && parsed.Hostname() != "127.0.0.1" && parsed.Hostname() != "::1" {
-				return Config{}, fmt.Errorf("GATEWAY_OIDC_REDIRECT_URL must use HTTPS outside localhost")
+				return Config{}, fmt.Errorf("NOTARX_OIDC_REDIRECT_URL must use HTTPS outside localhost")
 			}
 		} else if cfg.OIDCClientSecret != "" || cfg.OIDCRedirectURL != "" {
-			return Config{}, fmt.Errorf("GATEWAY_OIDC_CLIENT_ID is required when OIDC browser login is configured")
+			return Config{}, fmt.Errorf("NOTARX_OIDC_CLIENT_ID is required when OIDC browser login is configured")
 		}
 	} else if cfg.OIDCClientID != "" || cfg.OIDCClientSecret != "" || cfg.OIDCRedirectURL != "" {
-		return Config{}, fmt.Errorf("GATEWAY_OIDC_ISSUER is required for OIDC browser login")
+		return Config{}, fmt.Errorf("NOTARX_OIDC_ISSUER is required for OIDC browser login")
 	}
-	if raw := strings.TrimSpace(os.Getenv("GATEWAY_OTEL_SAMPLING_RATIO")); raw != "" {
+	if raw := strings.TrimSpace(os.Getenv("NOTARX_OTEL_SAMPLING_RATIO")); raw != "" {
 		ratio, err := strconv.ParseFloat(raw, 64)
 		if err != nil || math.IsNaN(ratio) || math.IsInf(ratio, 0) || ratio < 0 || ratio > 1 {
-			return Config{}, fmt.Errorf("GATEWAY_OTEL_SAMPLING_RATIO must be between 0 and 1")
+			return Config{}, fmt.Errorf("NOTARX_OTEL_SAMPLING_RATIO must be between 0 and 1")
 		}
 		cfg.OTELSamplingRatio = ratio
 	}
-	if value, err := positiveIntEnv("GATEWAY_DATABASE_MAX_OPEN_CONNS", cfg.DatabasePool.MaxOpenConns, false); err != nil {
+	if value, err := positiveIntEnv("NOTARX_DATABASE_MAX_OPEN_CONNS", cfg.DatabasePool.MaxOpenConns, false); err != nil {
 		return Config{}, err
 	} else {
 		cfg.DatabasePool.MaxOpenConns = value
 	}
-	if value, err := positiveIntEnv("GATEWAY_DATABASE_MAX_IDLE_CONNS", cfg.DatabasePool.MaxIdleConns, true); err != nil {
+	if value, err := positiveIntEnv("NOTARX_DATABASE_MAX_IDLE_CONNS", cfg.DatabasePool.MaxIdleConns, true); err != nil {
 		return Config{}, err
 	} else {
 		cfg.DatabasePool.MaxIdleConns = value
 	}
-	if ttl, err := durationEnv("GATEWAY_DATABASE_CONN_MAX_LIFETIME", cfg.DatabasePool.ConnMaxLifetime); err != nil {
+	if ttl, err := durationEnv("NOTARX_DATABASE_CONN_MAX_LIFETIME", cfg.DatabasePool.ConnMaxLifetime); err != nil {
 		return Config{}, err
 	} else {
 		cfg.DatabasePool.ConnMaxLifetime = ttl
 	}
-	if ttl, err := durationEnv("GATEWAY_DATABASE_CONN_MAX_IDLE_TIME", cfg.DatabasePool.ConnMaxIdleTime); err != nil {
+	if ttl, err := durationEnv("NOTARX_DATABASE_CONN_MAX_IDLE_TIME", cfg.DatabasePool.ConnMaxIdleTime); err != nil {
 		return Config{}, err
 	} else {
 		cfg.DatabasePool.ConnMaxIdleTime = ttl
 	}
-	if value, err := positiveIntEnv("GATEWAY_DATABASE_COORDINATOR_MAX_OPEN_CONNS", cfg.DatabaseCoordinatorPool.MaxOpenConns, false); err != nil {
+	if value, err := positiveIntEnv("NOTARX_DATABASE_COORDINATOR_MAX_OPEN_CONNS", cfg.DatabaseCoordinatorPool.MaxOpenConns, false); err != nil {
 		return Config{}, err
 	} else {
 		cfg.DatabaseCoordinatorPool.MaxOpenConns = value
 	}
-	if value, err := positiveIntEnv("GATEWAY_DATABASE_COORDINATOR_MAX_IDLE_CONNS", cfg.DatabaseCoordinatorPool.MaxIdleConns, true); err != nil {
+	if value, err := positiveIntEnv("NOTARX_DATABASE_COORDINATOR_MAX_IDLE_CONNS", cfg.DatabaseCoordinatorPool.MaxIdleConns, true); err != nil {
 		return Config{}, err
 	} else {
 		cfg.DatabaseCoordinatorPool.MaxIdleConns = value
 	}
-	if value, err := positiveIntEnv("GATEWAY_DATABASE_ARTIFACT_LOCK_MAX_OPEN_CONNS", cfg.DatabaseArtifactLockPool.MaxOpenConns, false); err != nil {
+	if value, err := positiveIntEnv("NOTARX_DATABASE_ARTIFACT_LOCK_MAX_OPEN_CONNS", cfg.DatabaseArtifactLockPool.MaxOpenConns, false); err != nil {
 		return Config{}, err
 	} else {
 		cfg.DatabaseArtifactLockPool.MaxOpenConns = value
 	}
-	if value, err := positiveIntEnv("GATEWAY_DATABASE_ARTIFACT_LOCK_MAX_IDLE_CONNS", cfg.DatabaseArtifactLockPool.MaxIdleConns, true); err != nil {
+	if value, err := positiveIntEnv("NOTARX_DATABASE_ARTIFACT_LOCK_MAX_IDLE_CONNS", cfg.DatabaseArtifactLockPool.MaxIdleConns, true); err != nil {
 		return Config{}, err
 	} else {
 		cfg.DatabaseArtifactLockPool.MaxIdleConns = value
@@ -431,76 +437,76 @@ func Load() (Config, error) {
 	if err := cfg.DatabaseArtifactLockPool.Validate(); err != nil {
 		return Config{}, fmt.Errorf("invalid database artifact lock pool configuration: %w", err)
 	}
-	if raw := strings.TrimSpace(os.Getenv("GATEWAY_RAW_CACHE_MAX_OBJECT_BYTES")); raw != "" {
+	if raw := strings.TrimSpace(os.Getenv("NOTARX_RAW_CACHE_MAX_OBJECT_BYTES")); raw != "" {
 		bytes, err := strconv.ParseInt(raw, 10, 64)
 		if err != nil || bytes <= 0 {
-			return Config{}, fmt.Errorf("GATEWAY_RAW_CACHE_MAX_OBJECT_BYTES must be a positive integer")
+			return Config{}, fmt.Errorf("NOTARX_RAW_CACHE_MAX_OBJECT_BYTES must be a positive integer")
 		}
 		cfg.RawCacheMaxObjectBytes = bytes
 	}
-	if value, err := positiveIntEnv("GATEWAY_RAW_CACHE_MAX_CONCURRENT_SPOOLS", cfg.RawCacheMaxConcurrentSpools, false); err != nil {
+	if value, err := positiveIntEnv("NOTARX_RAW_CACHE_MAX_CONCURRENT_SPOOLS", cfg.RawCacheMaxConcurrentSpools, false); err != nil {
 		return Config{}, err
 	} else {
 		cfg.RawCacheMaxConcurrentSpools = value
 	}
-	if raw := strings.TrimSpace(os.Getenv("GATEWAY_CONAN_CACHE_MAX_OBJECT_BYTES")); raw != "" {
+	if raw := strings.TrimSpace(os.Getenv("NOTARX_CONAN_CACHE_MAX_OBJECT_BYTES")); raw != "" {
 		bytes, err := strconv.ParseInt(raw, 10, 64)
 		if err != nil || bytes <= 0 {
-			return Config{}, fmt.Errorf("GATEWAY_CONAN_CACHE_MAX_OBJECT_BYTES must be a positive integer")
+			return Config{}, fmt.Errorf("NOTARX_CONAN_CACHE_MAX_OBJECT_BYTES must be a positive integer")
 		}
 		cfg.ConanCacheMaxObjectBytes = bytes
 	}
-	if ttl, err := durationEnv("GATEWAY_OCI_CACHE_TTL", cfg.OCICacheTTL); err != nil {
+	if ttl, err := durationEnv("NOTARX_OCI_CACHE_TTL", cfg.OCICacheTTL); err != nil {
 		return Config{}, err
 	} else {
 		cfg.OCICacheTTL = ttl
 	}
-	if ttl, err := durationEnv("GATEWAY_MAVEN_CACHE_TTL", cfg.MavenCacheTTL); err != nil {
+	if ttl, err := durationEnv("NOTARX_MAVEN_CACHE_TTL", cfg.MavenCacheTTL); err != nil {
 		return Config{}, err
 	} else {
 		cfg.MavenCacheTTL = ttl
 	}
-	if ttl, err := durationEnv("GATEWAY_MAVEN_METADATA_CACHE_TTL", cfg.MavenMetadataCacheTTL); err != nil {
+	if ttl, err := durationEnv("NOTARX_MAVEN_METADATA_CACHE_TTL", cfg.MavenMetadataCacheTTL); err != nil {
 		return Config{}, err
 	} else {
 		cfg.MavenMetadataCacheTTL = ttl
 	}
-	if ttl, err := durationEnv("GATEWAY_MAVEN_NEGATIVE_CACHE_TTL", cfg.MavenNegativeCacheTTL); err != nil {
+	if ttl, err := durationEnv("NOTARX_MAVEN_NEGATIVE_CACHE_TTL", cfg.MavenNegativeCacheTTL); err != nil {
 		return Config{}, err
 	} else {
 		cfg.MavenNegativeCacheTTL = ttl
 	}
-	if ttl, err := durationEnv("GATEWAY_NPM_METADATA_CACHE_TTL", cfg.NPMMetadataCacheTTL); err != nil {
+	if ttl, err := durationEnv("NOTARX_NPM_METADATA_CACHE_TTL", cfg.NPMMetadataCacheTTL); err != nil {
 		return Config{}, err
 	} else {
 		cfg.NPMMetadataCacheTTL = ttl
 	}
-	if ttl, err := durationEnv("GATEWAY_NPM_NEGATIVE_CACHE_TTL", cfg.NPMNegativeCacheTTL); err != nil {
+	if ttl, err := durationEnv("NOTARX_NPM_NEGATIVE_CACHE_TTL", cfg.NPMNegativeCacheTTL); err != nil {
 		return Config{}, err
 	} else {
 		cfg.NPMNegativeCacheTTL = ttl
 	}
-	if ttl, err := durationEnv("GATEWAY_NPM_PROXY_BREAKER_TTL", cfg.NPMProxyBreakerTTL); err != nil {
+	if ttl, err := durationEnv("NOTARX_NPM_PROXY_BREAKER_TTL", cfg.NPMProxyBreakerTTL); err != nil {
 		return Config{}, err
 	} else {
 		cfg.NPMProxyBreakerTTL = ttl
 	}
-	if ttl, err := durationEnv("GATEWAY_RAW_CACHE_TTL", cfg.RawCacheTTL); err != nil {
+	if ttl, err := durationEnv("NOTARX_RAW_CACHE_TTL", cfg.RawCacheTTL); err != nil {
 		return Config{}, err
 	} else {
 		cfg.RawCacheTTL = ttl
 	}
-	if ttl, err := durationEnv("GATEWAY_CONAN_CACHE_TTL", cfg.ConanCacheTTL); err != nil {
+	if ttl, err := durationEnv("NOTARX_CONAN_CACHE_TTL", cfg.ConanCacheTTL); err != nil {
 		return Config{}, err
 	} else {
 		cfg.ConanCacheTTL = ttl
 	}
-	if ttl, err := durationEnv("GATEWAY_RUNTIME_NODE_RETENTION", cfg.RuntimeNodeRetention); err != nil {
+	if ttl, err := durationEnv("NOTARX_RUNTIME_NODE_RETENTION", cfg.RuntimeNodeRetention); err != nil {
 		return Config{}, err
 	} else {
 		cfg.RuntimeNodeRetention = ttl
 	}
-	if interval, err := durationEnv("GATEWAY_RUNTIME_NODE_PRUNE_INTERVAL", cfg.RuntimeNodePruneInterval); err != nil {
+	if interval, err := durationEnv("NOTARX_RUNTIME_NODE_PRUNE_INTERVAL", cfg.RuntimeNodePruneInterval); err != nil {
 		return Config{}, err
 	} else {
 		cfg.RuntimeNodePruneInterval = interval
@@ -508,7 +514,11 @@ func Load() (Config, error) {
 	if cfg.MigrationStoragePoolID != "" && !regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`).MatchString(cfg.MigrationStoragePoolID) {
 		return Config{}, fmt.Errorf("invalid migration storage pool ID")
 	}
-	cfg.MigrationSourcePrivateEndpoints, err = parseMigrationSourcePrivateEndpoints(os.Getenv("GATEWAY_MIGRATION_SOURCE_PRIVATE_ENDPOINTS"))
+	cfg.MigrationSourcePrivateEndpoints, err = parseMigrationSourcePrivateEndpoints(os.Getenv("NOTARX_MIGRATION_SOURCE_PRIVATE_ENDPOINTS"))
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.publicURL, err = ParsePublicURL(os.Getenv(PublicURLEnv))
 	if err != nil {
 		return Config{}, err
 	}
@@ -522,19 +532,14 @@ func secureOrLoopbackHTTP(parsed *url.URL) bool {
 	if parsed.Scheme != "http" {
 		return false
 	}
-	switch parsed.Hostname() {
-	case "localhost", "127.0.0.1", "::1":
-		return true
-	default:
-		return false
-	}
+	return isLoopbackHost(parsed.Hostname())
 }
 
 func configureScanner(cfg *Config) error {
-	requestedWithoutEndpoint := cfg.ScannerHealthEndpoint != "" || cfg.ScannerName != "" || cfg.ScannerToken != "" || strings.TrimSpace(os.Getenv("GATEWAY_SCANNER_FORMATS")) != "" || strings.TrimSpace(os.Getenv("GATEWAY_SCANNER_TIMEOUT")) != "" || strings.TrimSpace(os.Getenv("GATEWAY_SCANNER_HEALTH_TIMEOUT")) != "" || strings.TrimSpace(os.Getenv("GATEWAY_SCANNER_DATABASE_MAX_AGE")) != "" || strings.TrimSpace(os.Getenv("GATEWAY_SCANNER_MAX_RESPONSE_BYTES")) != "" || strings.TrimSpace(os.Getenv("GATEWAY_SCANNER_MAX_ARTIFACT_BYTES")) != ""
+	requestedWithoutEndpoint := cfg.ScannerHealthEndpoint != "" || cfg.ScannerName != "" || cfg.ScannerToken != "" || strings.TrimSpace(os.Getenv("NOTARX_SCANNER_FORMATS")) != "" || strings.TrimSpace(os.Getenv("NOTARX_SCANNER_TIMEOUT")) != "" || strings.TrimSpace(os.Getenv("NOTARX_SCANNER_HEALTH_TIMEOUT")) != "" || strings.TrimSpace(os.Getenv("NOTARX_SCANNER_DATABASE_MAX_AGE")) != "" || strings.TrimSpace(os.Getenv("NOTARX_SCANNER_MAX_RESPONSE_BYTES")) != "" || strings.TrimSpace(os.Getenv("NOTARX_SCANNER_MAX_ARTIFACT_BYTES")) != ""
 	if cfg.ScannerEndpoint == "" {
 		if requestedWithoutEndpoint {
-			return fmt.Errorf("GATEWAY_SCANNER_ENDPOINT is required when artifact scanner settings are configured")
+			return fmt.Errorf("NOTARX_SCANNER_ENDPOINT is required when artifact scanner settings are configured")
 		}
 		cfg.ScannerName = ""
 		cfg.ScannerToken = ""
@@ -543,12 +548,12 @@ func configureScanner(cfg *Config) error {
 	}
 	parsed, err := url.ParseRequestURI(cfg.ScannerEndpoint)
 	if err != nil || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || !secureOrLoopbackHTTP(parsed) {
-		return fmt.Errorf("GATEWAY_SCANNER_ENDPOINT must be an HTTPS URL without credentials, query, or fragment outside localhost")
+		return fmt.Errorf("NOTARX_SCANNER_ENDPOINT must be an HTTPS URL without credentials, query, or fragment outside localhost")
 	}
 	if cfg.ScannerHealthEndpoint != "" {
 		parsed, err = url.ParseRequestURI(cfg.ScannerHealthEndpoint)
 		if err != nil || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || !secureOrLoopbackHTTP(parsed) {
-			return fmt.Errorf("GATEWAY_SCANNER_HEALTH_ENDPOINT must be an HTTPS URL without credentials, query, or fragment outside localhost")
+			return fmt.Errorf("NOTARX_SCANNER_HEALTH_ENDPOINT must be an HTTPS URL without credentials, query, or fragment outside localhost")
 		}
 	}
 	if cfg.ScannerName == "" {
@@ -557,51 +562,51 @@ func configureScanner(cfg *Config) error {
 	if len(cfg.ScannerName) > 128 || strings.ContainsAny(cfg.ScannerName, "\r\n\x00") || strings.ContainsAny(cfg.ScannerToken, "\r\n") {
 		return fmt.Errorf("artifact scanner name or token is invalid")
 	}
-	if cfg.ScannerTimeout, err = durationEnv("GATEWAY_SCANNER_TIMEOUT", cfg.ScannerTimeout); err != nil {
+	if cfg.ScannerTimeout, err = durationEnv("NOTARX_SCANNER_TIMEOUT", cfg.ScannerTimeout); err != nil {
 		return err
 	}
 	if cfg.ScannerTimeout < time.Second || cfg.ScannerTimeout > 30*time.Minute {
-		return fmt.Errorf("GATEWAY_SCANNER_TIMEOUT must be between 1s and 30m")
+		return fmt.Errorf("NOTARX_SCANNER_TIMEOUT must be between 1s and 30m")
 	}
-	if cfg.ScannerHealthTimeout, err = durationEnv("GATEWAY_SCANNER_HEALTH_TIMEOUT", cfg.ScannerHealthTimeout); err != nil {
+	if cfg.ScannerHealthTimeout, err = durationEnv("NOTARX_SCANNER_HEALTH_TIMEOUT", cfg.ScannerHealthTimeout); err != nil {
 		return err
 	}
 	if cfg.ScannerHealthTimeout < time.Second || cfg.ScannerHealthTimeout > 30*time.Second {
-		return fmt.Errorf("GATEWAY_SCANNER_HEALTH_TIMEOUT must be between 1s and 30s")
+		return fmt.Errorf("NOTARX_SCANNER_HEALTH_TIMEOUT must be between 1s and 30s")
 	}
-	if cfg.ScannerDatabaseMaxAge, err = durationEnv("GATEWAY_SCANNER_DATABASE_MAX_AGE", cfg.ScannerDatabaseMaxAge); err != nil {
+	if cfg.ScannerDatabaseMaxAge, err = durationEnv("NOTARX_SCANNER_DATABASE_MAX_AGE", cfg.ScannerDatabaseMaxAge); err != nil {
 		return err
 	}
 	if cfg.ScannerDatabaseMaxAge < time.Minute || cfg.ScannerDatabaseMaxAge > 30*24*time.Hour {
-		return fmt.Errorf("GATEWAY_SCANNER_DATABASE_MAX_AGE must be between 1m and 720h")
+		return fmt.Errorf("NOTARX_SCANNER_DATABASE_MAX_AGE must be between 1m and 720h")
 	}
-	if cfg.ScannerMaxResponseBytes, err = positiveInt64Env("GATEWAY_SCANNER_MAX_RESPONSE_BYTES", cfg.ScannerMaxResponseBytes); err != nil {
+	if cfg.ScannerMaxResponseBytes, err = positiveInt64Env("NOTARX_SCANNER_MAX_RESPONSE_BYTES", cfg.ScannerMaxResponseBytes); err != nil {
 		return err
 	}
 	if cfg.ScannerMaxResponseBytes < 1024 || cfg.ScannerMaxResponseBytes > 8<<20 {
-		return fmt.Errorf("GATEWAY_SCANNER_MAX_RESPONSE_BYTES must be between 1024 and 8388608")
+		return fmt.Errorf("NOTARX_SCANNER_MAX_RESPONSE_BYTES must be between 1024 and 8388608")
 	}
-	if cfg.ScannerMaxArtifactBytes, err = positiveInt64Env("GATEWAY_SCANNER_MAX_ARTIFACT_BYTES", cfg.ScannerMaxArtifactBytes); err != nil {
+	if cfg.ScannerMaxArtifactBytes, err = positiveInt64Env("NOTARX_SCANNER_MAX_ARTIFACT_BYTES", cfg.ScannerMaxArtifactBytes); err != nil {
 		return err
 	}
 	if cfg.ScannerMaxArtifactBytes > 1<<40 {
-		return fmt.Errorf("GATEWAY_SCANNER_MAX_ARTIFACT_BYTES must not exceed 1099511627776")
+		return fmt.Errorf("NOTARX_SCANNER_MAX_ARTIFACT_BYTES must not exceed 1099511627776")
 	}
-	cfg.ScannerFormats = parseFilter(os.Getenv("GATEWAY_SCANNER_FORMATS"), supportedScannerFormats)
+	cfg.ScannerFormats = parseFilter(os.Getenv("NOTARX_SCANNER_FORMATS"), supportedScannerFormats)
 	for _, format := range cfg.ScannerFormats {
 		if _, ok := supportedScannerFormats[format]; !ok {
-			return fmt.Errorf("GATEWAY_SCANNER_FORMATS contains unsupported format %q", format)
+			return fmt.Errorf("NOTARX_SCANNER_FORMATS contains unsupported format %q", format)
 		}
 	}
 	return nil
 }
 
 func configureAPTSigner(cfg *Config) error {
-	requestedWithoutEndpoint := cfg.APTSignerToken != "" || strings.TrimSpace(os.Getenv("GATEWAY_APT_SIGNER_TIMEOUT")) != "" ||
+	requestedWithoutEndpoint := cfg.APTSignerToken != "" || strings.TrimSpace(os.Getenv("NOTARX_APT_SIGNER_TIMEOUT")) != "" ||
 		len(cfg.APTSignerTrustedFingerprints) > 0 || cfg.APTSignerTrustedPublicKeysFile != "" || cfg.APTSignerTLSCAFile != ""
 	if cfg.APTSignerEndpoint == "" {
 		if requestedWithoutEndpoint {
-			return fmt.Errorf("GATEWAY_APT_SIGNER_ENDPOINT is required when APT signer settings are configured")
+			return fmt.Errorf("NOTARX_APT_SIGNER_ENDPOINT is required when APT signer settings are configured")
 		}
 		cfg.APTSignerToken = ""
 		cfg.APTSignerTrustedFingerprints = nil
@@ -613,32 +618,32 @@ func configureAPTSigner(cfg *Config) error {
 	}
 	parsed, err := url.ParseRequestURI(cfg.APTSignerEndpoint)
 	if err != nil || parsed.Host == "" || parsed.Path == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || !secureOrLoopbackHTTP(parsed) {
-		return fmt.Errorf("GATEWAY_APT_SIGNER_ENDPOINT must be an HTTPS URL without credentials, query, or fragment outside localhost")
+		return fmt.Errorf("NOTARX_APT_SIGNER_ENDPOINT must be an HTTPS URL without credentials, query, or fragment outside localhost")
 	}
 	if len(cfg.APTSignerToken) < 32 || len(cfg.APTSignerToken) > 256 || strings.ContainsAny(cfg.APTSignerToken, "\x00\r\n") {
-		return fmt.Errorf("GATEWAY_APT_SIGNER_TOKEN must contain between 32 and 256 safe bytes")
+		return fmt.Errorf("NOTARX_APT_SIGNER_TOKEN must contain between 32 and 256 safe bytes")
 	}
-	if cfg.APTSignerTimeout, err = durationEnv("GATEWAY_APT_SIGNER_TIMEOUT", cfg.APTSignerTimeout); err != nil {
+	if cfg.APTSignerTimeout, err = durationEnv("NOTARX_APT_SIGNER_TIMEOUT", cfg.APTSignerTimeout); err != nil {
 		return err
 	}
 	if cfg.APTSignerTimeout < time.Second || cfg.APTSignerTimeout > time.Minute {
-		return fmt.Errorf("GATEWAY_APT_SIGNER_TIMEOUT must be between 1s and 1m")
+		return fmt.Errorf("NOTARX_APT_SIGNER_TIMEOUT must be between 1s and 1m")
 	}
 	fingerprints, err := aptpublication.NormalizeTrustedSignerFingerprints(cfg.APTSignerTrustedFingerprints)
 	if err != nil {
-		return fmt.Errorf("GATEWAY_APT_SIGNER_TRUSTED_FINGERPRINTS: %w", err)
+		return fmt.Errorf("NOTARX_APT_SIGNER_TRUSTED_FINGERPRINTS: %w", err)
 	}
 	remote := !aptpublication.IsLoopbackSignerHost(parsed.Hostname())
 	if remote && (len(fingerprints) == 0 || cfg.APTSignerTrustedPublicKeysFile == "") {
-		return fmt.Errorf("GATEWAY_APT_SIGNER_TRUSTED_FINGERPRINTS and GATEWAY_APT_SIGNER_TRUSTED_PUBLIC_KEYS_FILE are required for a remote APT signer")
+		return fmt.Errorf("NOTARX_APT_SIGNER_TRUSTED_FINGERPRINTS and NOTARX_APT_SIGNER_TRUSTED_PUBLIC_KEYS_FILE are required for a remote APT signer")
 	}
 	if len(fingerprints) > 0 || cfg.APTSignerTrustedPublicKeysFile != "" {
 		if len(fingerprints) == 0 || cfg.APTSignerTrustedPublicKeysFile == "" {
-			return fmt.Errorf("GATEWAY_APT_SIGNER_TRUSTED_FINGERPRINTS and GATEWAY_APT_SIGNER_TRUSTED_PUBLIC_KEYS_FILE must be configured together")
+			return fmt.Errorf("NOTARX_APT_SIGNER_TRUSTED_FINGERPRINTS and NOTARX_APT_SIGNER_TRUSTED_PUBLIC_KEYS_FILE must be configured together")
 		}
 		publicKeys, loadErr := aptpublication.LoadTrustedSignerPublicKeys(cfg.APTSignerTrustedPublicKeysFile)
 		if loadErr != nil {
-			return fmt.Errorf("GATEWAY_APT_SIGNER_TRUSTED_PUBLIC_KEYS_FILE could not be loaded")
+			return fmt.Errorf("NOTARX_APT_SIGNER_TRUSTED_PUBLIC_KEYS_FILE could not be loaded")
 		}
 		if validateErr := aptpublication.ValidateTrustedSignerPublicKeys(fingerprints, publicKeys); validateErr != nil {
 			return fmt.Errorf("APT signer trusted public-key policy is invalid")
@@ -647,11 +652,11 @@ func configureAPTSigner(cfg *Config) error {
 	}
 	if cfg.APTSignerTLSCAFile != "" {
 		if parsed.Scheme != "https" {
-			return fmt.Errorf("GATEWAY_APT_SIGNER_TLS_CA_FILE requires an HTTPS signer endpoint")
+			return fmt.Errorf("NOTARX_APT_SIGNER_TLS_CA_FILE requires an HTTPS signer endpoint")
 		}
 		rootCertificates, loadErr := aptpublication.LoadHTTPSignerTLSRootCertificates(cfg.APTSignerTLSCAFile)
 		if loadErr != nil {
-			return fmt.Errorf("GATEWAY_APT_SIGNER_TLS_CA_FILE could not be loaded")
+			return fmt.Errorf("NOTARX_APT_SIGNER_TLS_CA_FILE could not be loaded")
 		}
 		cfg.APTSignerTLSRootCertificates = rootCertificates
 	}
@@ -715,22 +720,22 @@ func (c Config) ScannerFormatEnabled(format string) bool {
 
 func validateRuntimeConfig(cfg Config) error {
 	if strings.TrimSpace(cfg.InstanceID) == "" {
-		return fmt.Errorf("GATEWAY_INSTANCE_ID must not be empty")
+		return fmt.Errorf("NOTARX_INSTANCE_ID must not be empty")
 	}
 	if len(cfg.NodeRoles) == 0 {
-		return fmt.Errorf("GATEWAY_NODE_ROLES must include at least one role")
+		return fmt.Errorf("NOTARX_NODE_ROLES must include at least one role")
 	}
 	standalone := false
 	for _, role := range cfg.NodeRoles {
 		if _, ok := supportedNodeRoles[role]; !ok {
-			return fmt.Errorf("GATEWAY_NODE_ROLES contains unsupported role %q", role)
+			return fmt.Errorf("NOTARX_NODE_ROLES contains unsupported role %q", role)
 		}
 		if role == NodeRoleStandalone {
 			standalone = true
 		}
 	}
 	if standalone && len(cfg.NodeRoles) != 1 {
-		return fmt.Errorf("GATEWAY_NODE_ROLES=standalone cannot be combined with other roles")
+		return fmt.Errorf("NOTARX_NODE_ROLES=standalone cannot be combined with other roles")
 	}
 	for _, format := range cfg.WorkerFormats {
 		if format == "helm" && cfg.HelmPreviewEnabled {
@@ -743,12 +748,12 @@ func validateRuntimeConfig(cfg Config) error {
 			continue
 		}
 		if _, ok := supportedWorkerFormats[format]; !ok {
-			return fmt.Errorf("GATEWAY_WORKER_FORMATS contains unsupported format %q", format)
+			return fmt.Errorf("NOTARX_WORKER_FORMATS contains unsupported format %q", format)
 		}
 	}
 	for _, kind := range cfg.WorkerKinds {
 		if _, ok := supportedWorkerKinds[kind]; !ok {
-			return fmt.Errorf("GATEWAY_WORKER_KINDS contains unsupported kind %q", kind)
+			return fmt.Errorf("NOTARX_WORKER_KINDS contains unsupported kind %q", kind)
 		}
 	}
 	return nil
@@ -934,15 +939,15 @@ func configureAPTRestore(cfg *Config) error {
 		return nil
 	}
 	if len(cfg.APTRestoreTrustedFingerprints) == 0 || cfg.APTRestoreTrustedPublicKeysFile == "" {
-		return fmt.Errorf("GATEWAY_APT_RESTORE_TRUSTED_FINGERPRINTS and GATEWAY_APT_RESTORE_TRUSTED_PUBLIC_KEYS_FILE must be configured together")
+		return fmt.Errorf("NOTARX_APT_RESTORE_TRUSTED_FINGERPRINTS and NOTARX_APT_RESTORE_TRUSTED_PUBLIC_KEYS_FILE must be configured together")
 	}
 	fingerprints, err := aptpublication.NormalizeTrustedSignerFingerprints(cfg.APTRestoreTrustedFingerprints)
 	if err != nil {
-		return fmt.Errorf("GATEWAY_APT_RESTORE_TRUSTED_FINGERPRINTS: %w", err)
+		return fmt.Errorf("NOTARX_APT_RESTORE_TRUSTED_FINGERPRINTS: %w", err)
 	}
 	publicKeys, err := aptpublication.LoadTrustedSignerPublicKeys(cfg.APTRestoreTrustedPublicKeysFile)
 	if err != nil {
-		return fmt.Errorf("GATEWAY_APT_RESTORE_TRUSTED_PUBLIC_KEYS_FILE could not be loaded")
+		return fmt.Errorf("NOTARX_APT_RESTORE_TRUSTED_PUBLIC_KEYS_FILE could not be loaded")
 	}
 	if err = aptpublication.ValidateTrustedSignerPublicKeys(fingerprints, publicKeys); err != nil {
 		return fmt.Errorf("APT restore trusted public-key policy is invalid")

@@ -9,12 +9,12 @@ Create a Cargo Hosted, Proxy, or Group repository in the Console or management A
 Put this in the project's `.cargo/config.toml` (or `$CARGO_HOME/config.toml`):
 
 ```toml
-[registries.gateway]
+[registries.notarx]
 index = "sparse+https://gateway.example/cargo/company/"
 credential-provider = "cargo:token"
 ```
 
-For a private registry or Hosted publication, obtain a Gateway credential with the appropriate repository grant. Inject `CARGO_REGISTRIES_GATEWAY_TOKEN` from a CI secret store or interactive credential provider. Its value is `Bearer <gateway-token>`; do not commit it to `.cargo/config.toml` or a lockfile. Anonymous reads work only when both global and repository or Group policy allow them. Group members also need compatible read grants.
+For a private registry or Hosted publication, obtain a Gateway credential with the appropriate repository grant. Inject `CARGO_REGISTRIES_NOTARX_TOKEN` from a CI secret store or interactive credential provider. Its value is `Bearer <gateway-token>`; do not commit it to `.cargo/config.toml` or a lockfile. Anonymous reads work only when both global and repository or Group policy allow them. Group members also need compatible read grants.
 
 ```sh
 cargo publish --registry gateway                 # Hosted only

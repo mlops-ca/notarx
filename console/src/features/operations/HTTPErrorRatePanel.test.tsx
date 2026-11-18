@@ -20,7 +20,7 @@ const snapshot: DiagnosticHttpErrorRate = {
   windowEnd: "2026-10-03T12:05:00Z",
   instanceId: "synthetic-node",
   sessionId: "synthetic-session",
-  source: "artifact_gateway_http_requests_total",
+  source: "notarx_http_requests_total",
   scope: "responding_process_business_http",
   state: "available",
   windowSeconds: 300,

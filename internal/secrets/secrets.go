@@ -13,7 +13,7 @@ import (
 	"strings"
 )
 
-const KeyEnv = "GATEWAY_SETTINGS_ENCRYPTION_KEY"
+const KeyEnv = "NOTARX_SETTINGS_ENCRYPTION_KEY"
 
 var ErrKeyNotConfigured = errors.New(KeyEnv + " is not configured")
 var ErrInvalidKey = errors.New(KeyEnv + " is invalid")

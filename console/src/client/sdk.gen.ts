@@ -1036,7 +1036,7 @@ export const cancelNexusMigrationBatch = <ThrowOnError extends boolean = false>(
 });
 
 /**
- * Administrator-only Nexus 3 read-only source. Credentials are encrypted using GATEWAY_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur.
+ * Administrator-only Nexus 3 read-only source. Credentials are encrypted using NOTARX_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur.
  */
 export const listMigrationSources = <ThrowOnError extends boolean = false>(options?: Options<ListMigrationSourcesData, ThrowOnError>): RequestResult<ListMigrationSourcesResponses, ListMigrationSourcesErrors, ThrowOnError> => (options?.client ?? client).get<ListMigrationSourcesResponses, ListMigrationSourcesErrors, ThrowOnError>({
     security: [{
@@ -1049,7 +1049,7 @@ export const listMigrationSources = <ThrowOnError extends boolean = false>(optio
 });
 
 /**
- * Administrator-only Nexus 3 read-only source. Credentials are encrypted using GATEWAY_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur.
+ * Administrator-only Nexus 3 read-only source. Credentials are encrypted using NOTARX_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur.
  */
 export const createMigrationSource = <ThrowOnError extends boolean = false>(options: Options<CreateMigrationSourceData, ThrowOnError>): RequestResult<CreateMigrationSourceResponses, CreateMigrationSourceErrors, ThrowOnError> => (options.client ?? client).post<CreateMigrationSourceResponses, CreateMigrationSourceErrors, ThrowOnError>({
     security: [{
@@ -1066,7 +1066,7 @@ export const createMigrationSource = <ThrowOnError extends boolean = false>(opti
 });
 
 /**
- * Administrator-only Nexus 3 read-only source. Credentials are encrypted using GATEWAY_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur. Removes encrypted credentials and connection configuration.
+ * Administrator-only Nexus 3 read-only source. Credentials are encrypted using NOTARX_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur. Removes encrypted credentials and connection configuration.
  */
 export const deleteMigrationSource = <ThrowOnError extends boolean = false>(options: Options<DeleteMigrationSourceData, ThrowOnError>): RequestResult<DeleteMigrationSourceResponses, DeleteMigrationSourceErrors, ThrowOnError> => (options.client ?? client).delete<DeleteMigrationSourceResponses, DeleteMigrationSourceErrors, ThrowOnError>({
     security: [{
@@ -1079,7 +1079,7 @@ export const deleteMigrationSource = <ThrowOnError extends boolean = false>(opti
 });
 
 /**
- * Administrator-only Nexus 3 read-only source. Credentials are encrypted using GATEWAY_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur.
+ * Administrator-only Nexus 3 read-only source. Credentials are encrypted using NOTARX_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur.
  */
 export const getMigrationSource = <ThrowOnError extends boolean = false>(options: Options<GetMigrationSourceData, ThrowOnError>): RequestResult<GetMigrationSourceResponses, GetMigrationSourceErrors, ThrowOnError> => (options.client ?? client).get<GetMigrationSourceResponses, GetMigrationSourceErrors, ThrowOnError>({
     security: [{
@@ -1092,7 +1092,7 @@ export const getMigrationSource = <ThrowOnError extends boolean = false>(options
 });
 
 /**
- * Administrator-only Nexus 3 read-only source. Credentials are encrypted using GATEWAY_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur. Omitted credentials retain the current encrypted value; clearCredentials removes it. Changing the source origin requires explicitly replacing or clearing configured credentials.
+ * Administrator-only Nexus 3 read-only source. Credentials are encrypted using NOTARX_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur. Omitted credentials retain the current encrypted value; clearCredentials removes it. Changing the source origin requires explicitly replacing or clearing configured credentials.
  */
 export const updateMigrationSource = <ThrowOnError extends boolean = false>(options: Options<UpdateMigrationSourceData, ThrowOnError>): RequestResult<UpdateMigrationSourceResponses, UpdateMigrationSourceErrors, ThrowOnError> => (options.client ?? client).put<UpdateMigrationSourceResponses, UpdateMigrationSourceErrors, ThrowOnError>({
     security: [{
@@ -1109,7 +1109,7 @@ export const updateMigrationSource = <ThrowOnError extends boolean = false>(opti
 });
 
 /**
- * Administrator-only Nexus 3 read-only source. Credentials are encrypted using GATEWAY_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur. Fetches only credential-visible repositories and their supported read-only configuration. It does not prove global inventory completeness. A failed request is a problem response, never an empty success.
+ * Administrator-only Nexus 3 read-only source. Credentials are encrypted using NOTARX_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur. Fetches only credential-visible repositories and their supported read-only configuration. It does not prove global inventory completeness. A failed request is a problem response, never an empty success.
  */
 export const preflightMigrationSource = <ThrowOnError extends boolean = false>(options: Options<PreflightMigrationSourceData, ThrowOnError>): RequestResult<PreflightMigrationSourceResponses, PreflightMigrationSourceErrors, ThrowOnError> => (options.client ?? client).post<PreflightMigrationSourceResponses, PreflightMigrationSourceErrors, ThrowOnError>({
     security: [{
@@ -1122,7 +1122,7 @@ export const preflightMigrationSource = <ThrowOnError extends boolean = false>(o
 });
 
 /**
- * Administrator-only Nexus 3 read-only source. Credentials are encrypted using GATEWAY_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur. Exhausts asset pagination for selected supported Hosted repositories with bounded requests (128), response bytes (16 MiB total, 2 MiB per response), repositories (500) and time (30 seconds). Cyclic tokens, untrusted download URLs and exhausted budgets fail explicitly without partial success. Proxy/Group/unknown formats and Maven SNAPSHOT repositories are explicitly unsupported for asset discovery. MIXED repositories return release-version paths; SNAPSHOT paths, shared metadata and unclassifiable Maven paths are listed explicitly in unsupportedAssets. Budgets count both supported and unsupported assets.
+ * Administrator-only Nexus 3 read-only source. Credentials are encrypted using NOTARX_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur. Exhausts asset pagination for selected supported Hosted repositories with bounded requests (128), response bytes (16 MiB total, 2 MiB per response), repositories (500) and time (30 seconds). Cyclic tokens, untrusted download URLs and exhausted budgets fail explicitly without partial success. Proxy/Group/unknown formats and Maven SNAPSHOT repositories are explicitly unsupported for asset discovery. MIXED repositories return release-version paths; SNAPSHOT paths, shared metadata and unclassifiable Maven paths are listed explicitly in unsupportedAssets. Budgets count both supported and unsupported assets.
  */
 export const discoverMigrationSource = <ThrowOnError extends boolean = false>(options: Options<DiscoverMigrationSourceData, ThrowOnError>): RequestResult<DiscoverMigrationSourceResponses, DiscoverMigrationSourceErrors, ThrowOnError> => (options.client ?? client).post<DiscoverMigrationSourceResponses, DiscoverMigrationSourceErrors, ThrowOnError>({
     security: [{
@@ -1139,7 +1139,7 @@ export const discoverMigrationSource = <ThrowOnError extends boolean = false>(op
 });
 
 /**
- * Administrator-only Nexus 3 read-only source. Credentials are encrypted using GATEWAY_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur. Validates explicit native target names, formats/types, existing-name conflicts and ordered Group member mappings. Re-reads source configuration; performs no target writes. Permissions, credentials and source-specific fields require manual reconfiguration.
+ * Administrator-only Nexus 3 read-only source. Credentials are encrypted using NOTARX_SETTINGS_ENCRYPTION_KEY; responses and audits never include them. No source writes or target mutations occur. Validates explicit native target names, formats/types, existing-name conflicts and ordered Group member mappings. Re-reads source configuration; performs no target writes. Permissions, credentials and source-specific fields require manual reconfiguration.
  */
 export const previewMigrationSourceMapping = <ThrowOnError extends boolean = false>(options: Options<PreviewMigrationSourceMappingData, ThrowOnError>): RequestResult<PreviewMigrationSourceMappingResponses, PreviewMigrationSourceMappingErrors, ThrowOnError> => (options.client ?? client).post<PreviewMigrationSourceMappingResponses, PreviewMigrationSourceMappingErrors, ThrowOnError>({
     security: [{

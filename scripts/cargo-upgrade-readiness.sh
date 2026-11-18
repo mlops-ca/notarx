@@ -3,10 +3,10 @@ set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root"
-base_ref=${GATEWAY_CARGO_UPGRADE_FROM_REF:-395c13fe291b6d14083e5918ce2f8c766618274d}
+base_ref=${NOTARX_CARGO_UPGRADE_FROM_REF:-395c13fe291b6d14083e5918ce2f8c766618274d}
 base_revision=$(git rev-parse "$base_ref^{commit}")
 current_revision=$(git rev-parse HEAD)
-environment_file=${GATEWAY_ENV_FILE:-.env}
+environment_file=${NOTARX_ENV_FILE:-.env}
 test -f "$environment_file" || { printf '%s\n' 'Cargo upgrade readiness requires a configured environment file.' >&2; exit 1; }
 [[ $(cargo --version) == cargo\ 1.96.0\ * ]] || { printf '%s\n' 'Cargo 1.96.0 is required.' >&2; exit 1; }
 
@@ -20,19 +20,19 @@ old_tree="$workspace/old"
 mkdir -p "$old_tree"
 git archive "$base_revision" | tar -x -C "$old_tree"
 isolated_environment="$workspace/environment"
-awk -F= '$1 != "GATEWAY_HTTP_PORT" && $1 != "GATEWAY_POSTGRES_PORT" && $1 != "RUSTFS_API_PORT" && $1 != "RUSTFS_CONSOLE_PORT" && $1 != "COMPOSE_PROFILES" { print }' "$environment_file" >"$isolated_environment"
+awk -F= '$1 != "NOTARX_HTTP_PORT" && $1 != "NOTARX_POSTGRES_PORT" && $1 != "RUSTFS_API_PORT" && $1 != "RUSTFS_CONSOLE_PORT" && $1 != "COMPOSE_PROFILES" { print }' "$environment_file" >"$isolated_environment"
 gateway_port=$(free_port)
 rustfs_port=$(free_port)
-printf 'GATEWAY_HTTP_PORT=%s\nGATEWAY_POSTGRES_PORT=%s\nRUSTFS_API_PORT=%s\nRUSTFS_CONSOLE_PORT=%s\n' \
+printf 'NOTARX_HTTP_PORT=%s\nNOTARX_POSTGRES_PORT=%s\nRUSTFS_API_PORT=%s\nRUSTFS_CONSOLE_PORT=%s\n' \
   "$gateway_port" "$(free_port)" "$rustfs_port" "$(free_port)" >>"$isolated_environment"
 gateway_url="http://127.0.0.1:$gateway_port"
-admin_token=$(awk -F= '$1 == "GATEWAY_ADMIN_TOKEN" { print substr($0, index($0, "=") + 1) }' "$isolated_environment")
+admin_token=$(awk -F= '$1 == "NOTARX_ADMIN_TOKEN" { print substr($0, index($0, "=") + 1) }' "$isolated_environment")
 test -n "$admin_token"
 admin=(-H "Authorization: Bearer $admin_token")
 old_compose=(docker compose --project-name "$project" --env-file "$isolated_environment" -f "$old_tree/compose.yml")
 current_compose=(docker compose --project-name "$project" --env-file "$isolated_environment" -f "$root/compose.yml")
 gateway_image="${project}-gateway:latest"
-export NOTARX_GATEWAY_IMAGE="$gateway_image"
+export NOTARX_IMAGE="$gateway_image"
 cleanup() {
   "${current_compose[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
   "${old_compose[@]}" down -v --remove-orphans >/dev/null 2>&1 || true

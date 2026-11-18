@@ -5,10 +5,10 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 
 for binary in curl go python3 sha256sum; do command -v "$binary" >/dev/null || { printf 'OCI performance E2E requires %s\n' "$binary" >&2; exit 1; }; done
-requests=${GATEWAY_PERFORMANCE_REQUESTS:-50}
-concurrency=${GATEWAY_PERFORMANCE_CONCURRENCY:-10}
-p95_limit_ms=${GATEWAY_PERFORMANCE_P95_MS:-1000}
-max_error_percent=${GATEWAY_PERFORMANCE_MAX_ERROR_PERCENT:-0}
+requests=${NOTARX_PERFORMANCE_REQUESTS:-50}
+concurrency=${NOTARX_PERFORMANCE_CONCURRENCY:-10}
+p95_limit_ms=${NOTARX_PERFORMANCE_P95_MS:-1000}
+max_error_percent=${NOTARX_PERFORMANCE_MAX_ERROR_PERCENT:-0}
 
 port=$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()')
 gateway_url="http://127.0.0.1:${port}"

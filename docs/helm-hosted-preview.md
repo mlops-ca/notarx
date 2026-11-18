@@ -14,13 +14,13 @@ protocol. Preview tombstone/restore and quarantine governance are tracked in
 
 Apply the append-only migrations using the normal runner and configure the
 existing PostgreSQL and verified S3/RustFS ports. Explicitly set
-`GATEWAY_HELM_PREVIEW_ENABLED=true`; invalid booleans fail startup. Enable the
+`NOTARX_HELM_PREVIEW_ENABLED=true`; invalid booleans fail startup. Enable the
 same preview on a worker/standalone node with `retention` work enabled to collect
-expired upload objects. A restrictive `GATEWAY_WORKER_FORMATS` filter must include
+expired upload objects. A restrictive `NOTARX_WORKER_FORMATS` filter must include
 `helm`. API-only nodes do not collect uploads. Diagnostics place the collector in
 `previewWorkerFormats:["helm"]`, outside the admitted `workerFormats` enum.
 
-The supplied Compose stack forwards `GATEWAY_HELM_PREVIEW_ENABLED` from `.env`,
+The supplied Compose stack forwards `NOTARX_HELM_PREVIEW_ENABLED` from `.env`,
 defaulting to `false`. Set it to `true` before recreating the API and worker
 services that should serve or maintain this preview.
 
@@ -126,7 +126,7 @@ An administrator creates a Proxy through the same preview repository POST with
 `allowedHosts` (at most 32 additional HTTPS authorities), `egressMode` (`direct`
 or `environment`) and optional `upstreamAuth:{scheme,username,secret}`. Supported
 schemes are `none`, `basic`, and `bearer`. The write-only source secret is sealed
-with `GATEWAY_SETTINGS_ENCRYPTION_KEY`; local Gateway credentials and signing
+with `NOTARX_SETTINGS_ENCRYPTION_KEY`; local Gateway credentials and signing
 private keys are independent. Responses expose only the scheme, optional username
 and `credentialsConfigured`. A repository PUT replaces configuration with a
 required current `version`. Changing endpoint/allowlist while retaining a source

@@ -4,13 +4,13 @@
 
 ## Optional file output
 
-Stdout remains enabled. Set `GATEWAY_LOG_FILE_DIRECTORY` to an absolute, writable deployment directory to additionally save the exact same redacted NDJSON. It is unset by default; no files are created in that mode. An explicitly enabled file output that cannot initialize fails startup before business resources open.
+Stdout remains enabled. Set `NOTARX_LOG_FILE_DIRECTORY` to an absolute, writable deployment directory to additionally save the exact same redacted NDJSON. It is unset by default; no files are created in that mode. An explicitly enabled file output that cannot initialize fails startup before business resources open.
 
 | Variable | Default | Accepted values |
 | --- | --- | --- |
-| `GATEWAY_LOG_FILE_MAX_BYTES` | `104857600` (100 MiB) | 1–1073741824 bytes |
-| `GATEWAY_LOG_FILE_MAX_BACKUPS` | `10` | 0–100 sealed segments |
-| `GATEWAY_LOG_FILE_MAX_AGE` | `168h` (7 days) | positive Go duration or integer seconds, at most 365 days |
+| `NOTARX_LOG_FILE_MAX_BYTES` | `104857600` (100 MiB) | 1–1073741824 bytes |
+| `NOTARX_LOG_FILE_MAX_BACKUPS` | `10` | 0–100 sealed segments |
+| `NOTARX_LOG_FILE_MAX_AGE` | `168h` (7 days) | positive Go duration or integer seconds, at most 365 days |
 
 These configurable defaults are conservative starting values, not production capacity estimates. Each output creates a private `gateway-*` session directory (0700) containing `active.ndjson` and numbered sealed segments (0600). Rotation happens before a complete event would exceed the byte limit; an event larger than the limit is rejected instead of fragmented. Each accepted write calls Sync; rotation syncs and closes the old file before rename/reopen, and normal shutdown flushes/closes after runtime resource cleanup. A failed partial write is rolled back; rollback failure stops further file writes to that segment. Sync reduces the loss window but does not promise zero loss on power failure or SIGKILL, or directory-entry durability after a filesystem crash.
 
@@ -20,15 +20,15 @@ File writes and Sync are synchronous and can delay a logging caller; there is no
 
 ## Optional OTLP Logs output
 
-Set `GATEWAY_OTLP_LOGS_ENDPOINT` to additionally export the same redacted events as standard **OTLP/HTTP protobuf Logs**. It is unset by default, independent of the trace setting `GATEWAY_OTLP_HTTP_ENDPOINT`. Files and OTLP may be enabled separately or together; stdout stays enabled. No receiver, log database, volume or credentials are provisioned.
+Set `NOTARX_OTLP_LOGS_ENDPOINT` to additionally export the same redacted events as standard **OTLP/HTTP protobuf Logs**. It is unset by default, independent of the trace setting `NOTARX_OTLP_HTTP_ENDPOINT`. Files and OTLP may be enabled separately or together; stdout stays enabled. No receiver, log database, volume or credentials are provisioned.
 
 | Variable | Default | Accepted values |
 | --- | --- | --- |
-| `GATEWAY_OTLP_LOGS_ENDPOINT` | unset (disabled) | HTTP(S) URL without user credentials, query or fragment; an empty/root path becomes `/v1/logs`, a custom path is preserved |
-| `GATEWAY_OTLP_LOGS_HEADERS` | empty | JSON object of string header values; each value at most 4096 bytes, with transport/content headers reserved |
-| `GATEWAY_OTLP_LOGS_QUEUE_SIZE` | `256` | 1–1024 unconfirmed records, including queued and in-flight records |
-| `GATEWAY_OTLP_LOGS_TIMEOUT` | `3s` | Go duration or integer seconds, 1 ms–30 s per export including retries |
-| `GATEWAY_OTLP_LOGS_SHUTDOWN_TIMEOUT` | `5s` | Go duration or integer seconds, 1 ms–10 s for each flush and shutdown attempt |
+| `NOTARX_OTLP_LOGS_ENDPOINT` | unset (disabled) | HTTP(S) URL without user credentials, query or fragment; an empty/root path becomes `/v1/logs`, a custom path is preserved |
+| `NOTARX_OTLP_LOGS_HEADERS` | empty | JSON object of string header values; each value at most 4096 bytes, with transport/content headers reserved |
+| `NOTARX_OTLP_LOGS_QUEUE_SIZE` | `256` | 1–1024 unconfirmed records, including queued and in-flight records |
+| `NOTARX_OTLP_LOGS_TIMEOUT` | `3s` | Go duration or integer seconds, 1 ms–30 s per export including retries |
+| `NOTARX_OTLP_LOGS_SHUTDOWN_TIMEOUT` | `5s` | Go duration or integer seconds, 1 ms–10 s for each flush and shutdown attempt |
 
 These are configurable starting values, not measured deployment capacity. The private Logs provider uses the official exporter and batches at most 64 records, normally every second. It neither changes the global tracing/logging providers nor inherits `OTEL_EXPORTER_OTLP*` exporter configuration. Shared `OTEL_RESOURCE_ATTRIBUTES` metadata uses the same sensitive-name redaction policy while preserving safe attributes; malformed syntax or encoding fails initialization with a safe error before SDK diagnostics. Fixed Gateway service/instance/session identity takes priority. HTTPS verifies certificates using the private HTTP client's system trust; private CA deployments must provide that trust through the process's system certificate configuration. There is no insecure TLS mode or redirect following. Header credentials stay in the request headers, outside log fields and fallback diagnostics.
 
@@ -50,9 +50,9 @@ Runtime logging has an explicit output lifecycle: writes, flushes, and closes ar
 
 Each HTTP response carries `X-Request-ID` and `X-Trace-ID`. A safe client request ID can be reused; an absent or unsafe ID is replaced with a generated ID. The same IDs are stored on audit records written during that request, including management operations. Audit rows remain in PostgreSQL as operation evidence; runtime JSON is not written to a business table. Lifecycle job claim, completion, and failure events use the job ID as `requestId`. Webhook delivery attempts use the delivery ID. Operators can locate these worker events from the corresponding job or delivery record.
 
-`GATEWAY_ACCESS_LOG=limited` is the default: only 5xx responses and requests slower than `GATEWAY_ACCESS_LOG_SLOW_MS` (default `1000`) emit access records. Set `GATEWAY_ACCESS_LOG=full` to log every request. The slow threshold must be a positive integer no greater than 60000 milliseconds. The policy limits log volume; it does not disable audit records.
+`NOTARX_ACCESS_LOG=limited` is the default: only 5xx responses and requests slower than `NOTARX_ACCESS_LOG_SLOW_MS` (default `1000`) emit access records. Set `NOTARX_ACCESS_LOG=full` to log every request. The slow threshold must be a positive integer no greater than 60000 milliseconds. The policy limits log volume; it does not disable audit records.
 
-System Runtime → Runtime logs calls `GET /api/v2/runtime/logs` against the connected Gateway process's memory buffer. `GATEWAY_LOG_BUFFER_LINES` defaults to 1000 and accepts 0–5000; zero disables queries with HTTP 503. Only platform administrators can query. Filters include a time window of at most 24 hours, instance, level, component, request ID, trace ID, and keyword, with at most 100 results per page and a two-second execution timeout. Audit record correlation IDs link to this panel. Responses identify `scope=local`, `instanceId`, and `sessionId`; requesting another instance returns 503. The buffer is lost on process restart. File persistence and protocol export do not change this endpoint. File history and cross-node queries require separately designed readers or search adapters; see [output and history design](runtime-log-product-design.md).
+System Runtime → Runtime logs calls `GET /api/v2/runtime/logs` against the connected Gateway process's memory buffer. `NOTARX_LOG_BUFFER_LINES` defaults to 1000 and accepts 0–5000; zero disables queries with HTTP 503. Only platform administrators can query. Filters include a time window of at most 24 hours, instance, level, component, request ID, trace ID, and keyword, with at most 100 results per page and a two-second execution timeout. Audit record correlation IDs link to this panel. Responses identify `scope=local`, `instanceId`, and `sessionId`; requesting another instance returns 503. The buffer is lost on process restart. File persistence and protocol export do not change this endpoint. File history and cross-node queries require separately designed readers or search adapters; see [output and history design](runtime-log-product-design.md).
 
 Console keeps keyword, time range, level, exact component and Request ID visible; instance and Trace ID are under More filters. Recent 15-minute, one-hour and 24-hour ranges use a rolling duration. `windowSeconds` accepts 1–86400 seconds and is mutually exclusive with `from` and `to`; omitted bounds still default to one hour. Both rolling bounds are calculated from the same locked snapshot on every query and follow read, so pause/resume or a long-open page cannot lengthen the span. The cursor binds the duration, and changing the time range or any filter resets cursors and pauses follow before a new snapshot.
 
@@ -156,7 +156,7 @@ the cursor scope error. The two-second query budget also bounds waiting for a
 contended writer. These cursors do not add files, durable history, other nodes,
 stdout readers, worker aggregators or a zero-loss delivery promise.
 
-The bundled Compose deployment uses Docker's `json-file` logging driver with `GATEWAY_LOG_MAX_SIZE` (default `10m`) and `GATEWAY_LOG_MAX_FILES` (default `5`). These bounds apply per container; recreating a container can remove its local history. For a cluster, collect stdout/stderr from every API, scheduler, and worker pod with the deployment's log collector. Configure the collector's durable storage and retention policy outside Gateway, preserving searchable `instanceId`, `sessionId`, `requestId`, and `traceId` fields. Do not use these high-cardinality fields directly as index labels in label-indexed backends such as Loki. Kubernetes node log rotation alone is insufficient for queries after a pod is replaced. Keep collector credentials outside the browser and outside log fields. Verify retention by querying one request ID after a pod restart and by querying a worker event from another node.
+The bundled Compose deployment uses Docker's `json-file` logging driver with `NOTARX_LOG_MAX_SIZE` (default `10m`) and `NOTARX_LOG_MAX_FILES` (default `5`). These bounds apply per container; recreating a container can remove its local history. For a cluster, collect stdout/stderr from every API, scheduler, and worker pod with the deployment's log collector. Configure the collector's durable storage and retention policy outside Gateway, preserving searchable `instanceId`, `sessionId`, `requestId`, and `traceId` fields. Do not use these high-cardinality fields directly as index labels in label-indexed backends such as Loki. Kubernetes node log rotation alone is insufficient for queries after a pod is replaced. Keep collector credentials outside the browser and outside log fields. Verify retention by querying one request ID after a pod restart and by querying a worker event from another node.
 
 ### Console reading, follow and bounded export
 

@@ -151,7 +151,7 @@ func TestPyPIYankPostgresRustFSRestartDistributionAndBackup(t *testing.T) {
 	if err != nil || len(audits) != 1 || audits[0].Actor != "build-agent" || audits[0].RequestID == "" {
 		t.Fatalf("durable mutation audit=%+v %v", audits, err)
 	}
-	if destination := os.Getenv("ARTIFACT_GATEWAY_PYPI_BACKUP_MANIFEST"); destination != "" {
+	if destination := os.Getenv("NOTARX_PYPI_BACKUP_MANIFEST"); destination != "" {
 		manifest := pypiYankBackup{Repository: repo, Group: group.Name, Bucket: bucket, Files: files, Objects: map[string][]byte{file.ObjectKey: data}}
 		encoded, marshalErr := json.Marshal(manifest)
 		if marshalErr != nil {
@@ -166,7 +166,7 @@ func TestPyPIYankPostgresRustFSRestartDistributionAndBackup(t *testing.T) {
 // The owned acceptance runner restores an actual pg_dump into an empty
 // database. This test uses only that database and a separate empty S3 bucket.
 func TestPyPIYankRestoredDatabaseAndIndependentObjects(t *testing.T) {
-	manifest := readPyPIYankBackup(t, "ARTIFACT_GATEWAY_PYPI_RESTORE_MANIFEST")
+	manifest := readPyPIYankBackup(t, "NOTARX_PYPI_RESTORE_MANIFEST")
 	store, objects := pypiYankDurableFixture(t, "pypi-restored-"+strings.ReplaceAll(uuid.NewString(), "-", "")[:20])
 	for key, data := range manifest.Objects {
 		if err := objects.Put(t.Context(), key, data); err != nil {
@@ -179,7 +179,7 @@ func TestPyPIYankRestoredDatabaseAndIndependentObjects(t *testing.T) {
 // The runner restarts the original PostgreSQL and RustFS containers before
 // this process starts. No object is uploaded here: reads use the original bucket.
 func TestPyPIYankRestartedServicesPreserveState(t *testing.T) {
-	manifest := readPyPIYankBackup(t, "ARTIFACT_GATEWAY_PYPI_RESTART_MANIFEST")
+	manifest := readPyPIYankBackup(t, "NOTARX_PYPI_RESTART_MANIFEST")
 	store, objects := pypiYankDurableFixture(t, manifest.Bucket)
 	assertPyPIYankBackup(t, manifest, store, objects)
 	handler := newTestGateway(t, GatewayOptions{Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator(), Storage: ObjectStores{repository.FormatPyPI: objects}})

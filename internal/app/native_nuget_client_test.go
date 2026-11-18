@@ -104,13 +104,13 @@ func startNuGetGatewayBinaryWithRoles(t *testing.T, c nugetOfficialClient, bucke
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command(os.Getenv("NUGET_GATEWAY_BIN"))
+	cmd := exec.Command(os.Getenv("NUGET_NOTARX_BIN"))
 	for _, e := range os.Environ() {
-		if !strings.HasPrefix(e, "GATEWAY_") {
+		if !strings.HasPrefix(e, "NOTARX_") {
 			cmd.Env = append(cmd.Env, e)
 		}
 	}
-	cmd.Env = append(cmd.Env, "GATEWAY_DATABASE_URL="+os.Getenv("TEST_DATABASE_URL"), "GATEWAY_RUSTFS_ENDPOINT="+os.Getenv("TEST_RUSTFS_ENDPOINT"), "GATEWAY_RUSTFS_ACCESS_KEY="+os.Getenv("TEST_RUSTFS_ACCESS_KEY"), "GATEWAY_RUSTFS_SECRET_KEY="+os.Getenv("TEST_RUSTFS_SECRET_KEY"), "GATEWAY_RUSTFS_BUCKET="+bucket, "GATEWAY_ADMIN_TOKEN="+c.admin, "GATEWAY_ADMIN_ACTOR=nuget-gate-operator", "GATEWAY_RESOLVER_TOKEN="+c.reader, "GATEWAY_RESOLVER_ACTOR=nuget-gate-reader", "GATEWAY_NUGET_PREVIEW_ENABLED=true", "GATEWAY_NODE_ROLES="+roles, "GATEWAY_LISTEN_ADDRESS="+address, "GATEWAY_ACCESS_LOG=limited")
+	cmd.Env = append(cmd.Env, "NOTARX_DATABASE_URL="+os.Getenv("TEST_DATABASE_URL"), "NOTARX_RUSTFS_ENDPOINT="+os.Getenv("TEST_RUSTFS_ENDPOINT"), "NOTARX_RUSTFS_ACCESS_KEY="+os.Getenv("TEST_RUSTFS_ACCESS_KEY"), "NOTARX_RUSTFS_SECRET_KEY="+os.Getenv("TEST_RUSTFS_SECRET_KEY"), "NOTARX_RUSTFS_BUCKET="+bucket, "NOTARX_ADMIN_TOKEN="+c.admin, "NOTARX_ADMIN_ACTOR=nuget-gate-operator", "NOTARX_RESOLVER_TOKEN="+c.reader, "NOTARX_RESOLVER_ACTOR=nuget-gate-reader", "NOTARX_NUGET_PREVIEW_ENABLED=true", "NOTARX_NODE_ROLES="+roles, "NOTARX_LISTEN_ADDRESS="+address, "NOTARX_ACCESS_LOG=limited")
 	cmd.Stdout, cmd.Stderr = file, file
 	if err = cmd.Start(); err != nil {
 		_ = file.Close()
@@ -231,7 +231,7 @@ func restartNuGetOwnedService(t *testing.T, project, service string) {
 }
 
 func TestNativeNuGetRealDotnetPushAndColdTransitiveRestore(t *testing.T) {
-	for _, key := range []string{"NUGET_GATEWAY_BIN", "NUGET_DOTNET_IMAGE", "NUGET_COMPOSE_PROJECT", "NUGET_EVIDENCE_DIR", "TEST_DATABASE_URL", "TEST_RUSTFS_ENDPOINT"} {
+	for _, key := range []string{"NUGET_NOTARX_BIN", "NUGET_DOTNET_IMAGE", "NUGET_COMPOSE_PROJECT", "NUGET_EVIDENCE_DIR", "TEST_DATABASE_URL", "TEST_RUSTFS_ENDPOINT"} {
 		if os.Getenv(key) == "" {
 			t.Skip("owned native-nuget-e2e fixture is required")
 		}

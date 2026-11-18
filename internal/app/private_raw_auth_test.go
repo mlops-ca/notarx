@@ -26,7 +26,7 @@ func TestPrivateRawProxyCredentials(t *testing.T) {
 
 func privateRawCredentialsContract(t *testing.T, scheme repository.UpstreamAuthScheme, groupRead bool, backend privateProxyBackend) {
 	t.Helper()
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
 	ctx := t.Context()
 	store, objects := backend.store, backend.objects
 	var calls, fallbackCalls, refusalStatus atomic.Int32
@@ -101,12 +101,12 @@ func privateRawCredentialsContract(t *testing.T, scheme repository.UpstreamAuthS
 	if backend.client != nil {
 		backend.client(t, handler, name, "hot", assets)
 	}
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", "")
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", "")
 	get(502)
 	if calls.Load() != before {
 		t.Fatal("Raw missing key contacted source")
 	}
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
 	privateRejectSourceRebinding(t, handler, store, repo, func() int32 { return calls.Load() + fallbackCalls.Load() })
 	beforeCorruption := calls.Load()
 	repo = privateCorruptSourceCredential(t, store, repo, func() { get(502) })

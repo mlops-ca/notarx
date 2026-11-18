@@ -48,6 +48,10 @@ func main() {
 		fmt.Printf("notarx %s (revision %s, %s)\n", build.Version, build.Revision, build.GoVersion)
 		return
 	}
+	if err := config.RefuseLegacyEnv(os.Environ()); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	if len(os.Args) > 1 && os.Args[1] == "snapshot-import" {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		code := snapshotimport.RunCLI(ctx, os.Args[2:], os.Stdout, os.Stderr)
@@ -389,8 +393,8 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 	if startAPI {
 		if len(cfg.RepositoryReaders) == 0 && cfg.LegacyReadPermissive {
 			slog.Warn("legacy repository reads are unrestricted without reader patterns",
-				"detail", "GATEWAY_REPOSITORY_READERS is empty and GATEWAY_LEGACY_READ_DEFAULT=allow, so any authenticated caller may read a legacy repository with no grant",
-				"change", "unset GATEWAY_LEGACY_READ_DEFAULT to deny unmatched readers once every reading actor has a reader pattern or a per-repository grant")
+				"detail", "NOTARX_REPOSITORY_READERS is empty and NOTARX_LEGACY_READ_DEFAULT=allow, so any authenticated caller may read a legacy repository with no grant",
+				"change", "unset NOTARX_LEGACY_READ_DEFAULT to deny unmatched readers once every reading actor has a reader pattern or a per-repository grant")
 		}
 		gatewayOptions := app.GatewayOptions{
 			Dependencies:      dependencies,

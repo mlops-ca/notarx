@@ -25,7 +25,7 @@ func TestRepoConnectPyPINetrcMatchesHostnameWithExplicitPort(t *testing.T) {
 	}
 	for _, snippet := range guide.Snippets {
 		if snippet.File == ".netrc" {
-			want := "machine " + server.Hostname() + "\nlogin ci\npassword ${ARTIFACT_GATEWAY_TOKEN}"
+			want := "machine " + server.Hostname() + "\nlogin ci\npassword ${NOTARX_TOKEN}"
 			if snippet.Content != want {
 				t.Fatalf("pip must match the URL hostname without its port: got %q, want %q", snippet.Content, want)
 			}

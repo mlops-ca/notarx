@@ -14,10 +14,10 @@ func main() {
 		fatal("usage: rustfs-object-state <present|absent> <object-key>")
 	}
 	store, err := objectstore.NewRustFSStore(
-		os.Getenv("GATEWAY_RUSTFS_ENDPOINT"),
+		os.Getenv("NOTARX_RUSTFS_ENDPOINT"),
 		os.Getenv("RUSTFS_ACCESS_KEY"),
 		os.Getenv("RUSTFS_SECRET_KEY"),
-		os.Getenv("GATEWAY_RUSTFS_BUCKET"),
+		os.Getenv("NOTARX_RUSTFS_BUCKET"),
 	)
 	if err != nil {
 		fatal("configure RustFS object check: %v", err)

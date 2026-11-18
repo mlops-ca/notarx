@@ -23,7 +23,7 @@ test account. It is deleted at the end of the run. Set
 `OIDC_TEST_KEEP_NAMESPACE=1` when inspecting a failed deployment. The script
 expects a Kubernetes environment whose local image store is shared with Docker
 (Docker Desktop satisfies this) and requires free local ports `18080`, `8081`,
-and `4173`. Override those ports with `OIDC_TEST_GATEWAY_PORT`,
+and `4173`. Override those ports with `OIDC_TEST_NOTARX_PORT`,
 `OIDC_TEST_KEYCLOAK_PORT`, and `OIDC_TEST_CONSOLE_PORT` when needed.
 The script updates the test-only Keycloak issuer and browser assertions to use
 the selected Keycloak port, including the Keycloak sidecar listener and its

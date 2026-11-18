@@ -34,8 +34,8 @@ apply the schema before starting Gateway:
 MIGRATION_DIR=./migrations ./run-migrations.sh
 ```
 
-Release containers use `ghcr.io/ccsert/artifact-gateway:0.1.0` and
-`ghcr.io/ccsert/artifact-gateway-console:0.1.0`. The corresponding `main` tags
+Release containers use `ghcr.io/mlops-ca/notarx:0.1.0` and
+`ghcr.io/mlops-ca/notarx-console:0.1.0`. The corresponding `main` tags
 are moving CI-qualified snapshots and should not replace a pinned release tag
 or digest in a controlled deployment.
 
@@ -48,9 +48,9 @@ make dev-bootstrap
 The command creates `.env` from `.env.example` when the file is absent, sets
 its permissions to `0600`, and generates these required local-only values:
 
-- `GATEWAY_POSTGRES_PASSWORD`
-- `GATEWAY_ADMIN_TOKEN`
-- `GATEWAY_RESOLVER_TOKEN`
+- `NOTARX_POSTGRES_PASSWORD`
+- `NOTARX_ADMIN_TOKEN`
+- `NOTARX_RESOLVER_TOKEN`
 - `RUSTFS_ACCESS_KEY`
 - `RUSTFS_SECRET_KEY`
 - `RUSTFS_RPC_SECRET`
@@ -89,7 +89,7 @@ Overrides in `.env` are reflected by `make dev-status`.
 ## 3. Create the first repository
 
 1. Open the Console.
-2. Read `GATEWAY_ADMIN_TOKEN` from the local `.env` file and use it at the
+2. Read `NOTARX_ADMIN_TOKEN` from the local `.env` file and use it at the
    administrator sign-in entry.
 3. Open **Repositories**, choose **Create repository**, and select Hosted,
    Proxy, or Group plus a currently supported format.
@@ -130,7 +130,7 @@ Stop the managed Console with `make dev-down`, run
 
 ### A local port is already in use
 
-Change `GATEWAY_HTTP_PORT`, `GATEWAY_CONSOLE_PORT`, `GATEWAY_POSTGRES_PORT`, or
+Change `NOTARX_HTTP_PORT`, `NOTARX_CONSOLE_PORT`, `NOTARX_POSTGRES_PORT`, or
 the RustFS ports in `.env`, then restart the affected services. Confirm the
 effective endpoints with `make dev-status`.
 

@@ -28,7 +28,7 @@ func TestPostgresAdministratorEmailReopensAndDeliversActualTLSMIME(t *testing.T)
 	if connection == "" {
 		t.Skip("TEST_DATABASE_URL is required")
 	}
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", "01234567890123456789012345678901")
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", "01234567890123456789012345678901")
 	db, err := sql.Open("pgx", connection)
 	if err != nil {
 		t.Fatal(err)

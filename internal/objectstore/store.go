@@ -278,7 +278,7 @@ func (s *RustFSStore) PutVerifiedReader(ctx context.Context, key string, value i
 	defer cleanup()
 	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket: aws.String(s.bucket), Key: aws.String(key), Body: body, ContentLength: aws.Int64(size), ContentType: aws.String("application/octet-stream"),
-		Metadata: map[string]string{"artifact-gateway-sha256": digest},
+		Metadata: map[string]string{"notarx-sha256": digest},
 	})
 	return err
 }
@@ -333,7 +333,7 @@ func (s *RustFSStore) SetVerifiedDigest(ctx context.Context, key, digest string)
 	for name, value := range info.Metadata {
 		metadata[name] = value
 	}
-	metadata["artifact-gateway-sha256"] = digest
+	metadata["notarx-sha256"] = digest
 	_, err = s.client.CopyObject(ctx, &s3.CopyObjectInput{
 		Bucket: aws.String(s.bucket), Key: aws.String(key), CopySource: aws.String(url.PathEscape(s.bucket + "/" + key)),
 		MetadataDirective: types.MetadataDirectiveReplace, Metadata: metadata,
@@ -380,7 +380,7 @@ func rustFSNotFound(err error) bool {
 
 func digestMetadata(metadata map[string]string) string {
 	for key, value := range metadata {
-		if strings.EqualFold(key, "Artifact-Gateway-Sha256") || strings.EqualFold(key, "X-Amz-Meta-Artifact-Gateway-Sha256") {
+		if strings.EqualFold(key, "Notarx-Sha256") || strings.EqualFold(key, "X-Amz-Meta-Notarx-Sha256") {
 			return value
 		}
 	}

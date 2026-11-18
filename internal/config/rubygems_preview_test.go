@@ -4,15 +4,15 @@ import "testing"
 
 func TestRubyGemsPreviewRequiresExplicitEnablementAndHonorsWorkerFilters(t *testing.T) {
 	for key, value := range map[string]string{
-		"GATEWAY_DATABASE_URL":          "postgres://gateway:owned@localhost/gateway",
-		"GATEWAY_RUSTFS_ENDPOINT":       "http://localhost:9000",
-		"GATEWAY_RUSTFS_BUCKET":         "owned-rubygems",
-		"GATEWAY_RUSTFS_ACCESS_KEY":     "owned",
-		"GATEWAY_RUSTFS_SECRET_KEY":     "owned-secret",
-		"GATEWAY_ADMIN_TOKEN":           "owned-admin",
-		"GATEWAY_RESOLVER_TOKEN":        "owned-reader",
-		"GATEWAY_HELM_PREVIEW_ENABLED":  "false",
-		"GATEWAY_NUGET_PREVIEW_ENABLED": "false",
+		"NOTARX_DATABASE_URL":          "postgres://gateway:owned@localhost/gateway",
+		"NOTARX_RUSTFS_ENDPOINT":       "http://localhost:9000",
+		"NOTARX_RUSTFS_BUCKET":         "owned-rubygems",
+		"NOTARX_RUSTFS_ACCESS_KEY":     "owned",
+		"NOTARX_RUSTFS_SECRET_KEY":     "owned-secret",
+		"NOTARX_ADMIN_TOKEN":           "owned-admin",
+		"NOTARX_RESOLVER_TOKEN":        "owned-reader",
+		"NOTARX_HELM_PREVIEW_ENABLED":  "false",
+		"NOTARX_NUGET_PREVIEW_ENABLED": "false",
 	} {
 		t.Setenv(key, value)
 	}
@@ -31,8 +31,8 @@ func TestRubyGemsPreviewRequiresExplicitEnablementAndHonorsWorkerFilters(t *test
 		{name: "numeric boolean", enabled: "1", wantError: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			t.Setenv("GATEWAY_RUBYGEMS_PREVIEW_ENABLED", test.enabled)
-			t.Setenv("GATEWAY_WORKER_FORMATS", test.formats)
+			t.Setenv("NOTARX_RUBYGEMS_PREVIEW_ENABLED", test.enabled)
+			t.Setenv("NOTARX_WORKER_FORMATS", test.formats)
 			cfg, err := Load()
 			if (err != nil) != test.wantError {
 				t.Fatalf("Load() error=%v wantError=%t", err, test.wantError)

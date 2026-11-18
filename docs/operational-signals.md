@@ -28,12 +28,12 @@ contracts and freshness checks.
 
 ## Opt-in local-capacity diagnostics
 
-Set optional `GATEWAY_LOCAL_CAPACITY_MOUNTS` to a JSON object containing only
+Set optional `NOTARX_LOCAL_CAPACITY_MOUNTS` to a JSON object containing only
 `temporary`, `logs` and `backups`, each mapped to an explicit absolute directory
 in this process's namespace. For example, with synthetic paths:
 
 ```sh
-GATEWAY_LOCAL_CAPACITY_MOUNTS='{"temporary":"/explicit/temp","logs":"/explicit/logs","backups":"/explicit/backup"}'
+NOTARX_LOCAL_CAPACITY_MOUNTS='{"temporary":"/explicit/temp","logs":"/explicit/logs","backups":"/explicit/backup"}'
 ```
 
 The default is empty; no system temporary, log or backup directory is inferred.
@@ -110,7 +110,7 @@ wait for it during shutdown; process exit releases its OS resources.
 
 Administrator diagnostics and the Console report optional `httpErrorRate` for
 the responding API/standalone process. The observation reuses
-`artifact_gateway_http_requests_total`: the ten fixed business classes
+`notarx_http_requests_total`: the ten fixed business classes
 `management`, `oci`, `maven`, `raw`, `conan`, `npm`, `pypi`, `go`, `cargo` and
 `other`. All recorded 1xx–5xx statuses contribute to requests; only 5xx contributes
 to errors. Health and metrics probe classes and the `other` status bucket are

@@ -113,10 +113,10 @@ func TestCanonicalRepositoryRoutesReportsResolvedProtocolMetrics(t *testing.T) {
 	response := httptest.NewRecorder()
 	metrics.Handler(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
 	body := response.Body.String()
-	if !strings.Contains(body, `artifact_gateway_http_requests_total{class="raw",status="4xx"} 1`) {
+	if !strings.Contains(body, `notarx_http_requests_total{class="raw",status="4xx"} 1`) {
 		t.Fatalf("canonical request was not classified as Raw:\n%s", body)
 	}
-	if !strings.Contains(body, `artifact_gateway_http_requests_total{class="other",status="4xx"} 0`) {
+	if !strings.Contains(body, `notarx_http_requests_total{class="other",status="4xx"} 0`) {
 		t.Fatalf("canonical request leaked into other metrics:\n%s", body)
 	}
 }

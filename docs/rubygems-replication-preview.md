@@ -4,10 +4,10 @@
 
 RubyGems Hosted→Hosted replication copies original `.gem` archives within one
 installation into independent target objects. It shares the default-disabled
-`GATEWAY_RUBYGEMS_PREVIEW_ENABLED` flag. Apply the append-only migrations,
+`NOTARX_RUBYGEMS_PREVIEW_ENABLED` flag. Apply the append-only migrations,
 including `000190_native_rubygems_replication.sql`, before enabling it. API nodes
-create/read jobs; only worker nodes with `rubygems` in `GATEWAY_WORKER_FORMATS`
-and `replication` in `GATEWAY_WORKER_KINDS` execute them. No formal format profile,
+create/read jobs; only worker nodes with `rubygems` in `NOTARX_WORKER_FORMATS`
+and `replication` in `NOTARX_WORKER_KINDS` execute them. No formal format profile,
 Console/notarxctl command or installation preset is added.
 
 ## Pin exact server identities

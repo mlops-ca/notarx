@@ -2717,7 +2717,7 @@ export type DiagnosticHttpErrorRate = {
   checkedAt: string;
   instanceId: string;
   sessionId: string;
-  source: "artifact_gateway_http_requests_total";
+  source: "notarx_http_requests_total";
   scope: "responding_process_business_http";
   state: HttpErrorRateState;
   reason?: HttpErrorRateReason;

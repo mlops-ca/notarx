@@ -199,7 +199,7 @@ func TestOCICacheServesVerifiedContentAndCoalescesConcurrentPulls(t *testing.T) 
 	}
 	metricResponse := httptest.NewRecorder()
 	metrics.Handler(metricResponse, httptest.NewRequest(http.MethodGet, "/metrics", nil))
-	if !strings.Contains(metricResponse.Body.String(), `artifact_gateway_oci_cache_requests_total{outcome="hit"} 1`) {
+	if !strings.Contains(metricResponse.Body.String(), `notarx_oci_cache_requests_total{outcome="hit"} 1`) {
 		t.Fatalf("metrics = %s", metricResponse.Body.String())
 	}
 }
@@ -447,7 +447,7 @@ func TestOCICacheNegativeResultAndCircuitBreakerAvoidRepeatedProxyRequests(t *te
 	}
 	metricResponse := httptest.NewRecorder()
 	metrics.Handler(metricResponse, httptest.NewRequest(http.MethodGet, "/metrics", nil))
-	if !strings.Contains(metricResponse.Body.String(), "artifact_gateway_oci_negative_cache_hits_total 1") {
+	if !strings.Contains(metricResponse.Body.String(), "notarx_oci_negative_cache_hits_total 1") {
 		t.Fatalf("metrics = %s", metricResponse.Body.String())
 	}
 
@@ -475,7 +475,7 @@ func TestOCICacheRecordsProxyWhitelistDenial(t *testing.T) {
 	}
 	metricResponse := httptest.NewRecorder()
 	metrics.Handler(metricResponse, httptest.NewRequest(http.MethodGet, "/metrics", nil))
-	if !strings.Contains(metricResponse.Body.String(), "artifact_gateway_oci_proxy_denied_total 1") {
+	if !strings.Contains(metricResponse.Body.String(), "notarx_oci_proxy_denied_total 1") {
 		t.Fatalf("metrics = %s", metricResponse.Body.String())
 	}
 }

@@ -8,7 +8,7 @@ that another instance must read locally, so the service can scale horizontally.
 
 ## Repositories on First Installation
 
-New installations default to `GATEWAY_REPOSITORY_PRESETS=standard`. Before serving
+New installations default to `NOTARX_REPOSITORY_PRESETS=standard`. Before serving
 requests, the first API or standalone node creates the following catalog in one
 PostgreSQL transaction.
 
@@ -40,7 +40,7 @@ with an existing repository or Group catalog skip initialization. Worker-only an
 scheduler-only nodes do not initialize repositories. Apply the additive
 `000174_installation_repository_presets.sql` migration before starting new nodes.
 
-To start empty, set `GATEWAY_REPOSITORY_PRESETS=none` on every API/standalone node.
+To start empty, set `NOTARX_REPOSITORY_PRESETS=none` on every API/standalone node.
 This deletes nothing. A later explicit change to `standard` initializes only an
 empty catalog that has never been initialized. NuGet/Helm/RubyGems previews, APT signing,
 and registries requiring additional upstream credentials retain their individual
@@ -53,7 +53,7 @@ Public upstream references: [npm Registry](https://docs.npmjs.com/cli/v11/using-
 
 ## Node Roles
 
-The same image selects responsibilities with `GATEWAY_NODE_ROLES`:
+The same image selects responsibilities with `NOTARX_NODE_ROLES`:
 
 | Role | Responsibility | External routes |
 | --- | --- | --- |
@@ -67,20 +67,20 @@ An unset value means `standalone`. Do not combine `standalone` with another role
 Workers can narrow their format and job responsibilities:
 
 ```env
-GATEWAY_NODE_ROLES=worker
-GATEWAY_WORKER_FORMATS=oci
-GATEWAY_WORKER_KINDS=reclaim,replication
+NOTARX_NODE_ROLES=worker
+NOTARX_WORKER_FORMATS=oci
+NOTARX_WORKER_KINDS=reclaim,replication
 ```
 
-`GATEWAY_WORKER_FORMATS` accepts `maven`, `oci`, `raw`, `conan`, `npm`, `pypi`,
+`NOTARX_WORKER_FORMATS` accepts `maven`, `oci`, `raw`, `conan`, `npm`, `pypi`,
 `go`, and `apt`. APT currently runs only reclaim for management-preview uploads;
 this does not make Hosted APT public. Job kinds include `promotion`, `replication`,
 `retention`, `reclaim`, `intelligence`, `deletion`, `scan`, `recovery`, `cache`,
 `audit`, `webhook`, and `email`.
 
 `intelligence` copies delayed artifact intelligence after promotion. `scan`
-starts only when the node has `GATEWAY_SCANNER_ENDPOINT`; its independent
-`GATEWAY_SCANNER_FORMATS` may include Proxy-only Go and allows scanner isolation.
+starts only when the node has `NOTARX_SCANNER_ENDPOINT`; its independent
+`NOTARX_SCANNER_FORMATS` may include Proxy-only Go and allows scanner isolation.
 `webhook` claims global deliveries from the PostgreSQL durable outbox and ignores
 format filters. Without filters, a worker handles every applicable format and job.
 `email` likewise ignores format filters and sends the durable email outbox.
@@ -98,7 +98,7 @@ is evaluated during reads and has no independent reclaim job.
    baseline uses RustFS.
 2. A separate migration job finishes before application replicas start.
    Gateway processes do not race to run migrations.
-3. Give each instance a stable `GATEWAY_INSTANCE_ID` for logs and diagnosis.
+3. Give each instance a stable `NOTARX_INSTANCE_ID` for logs and diagnosis.
    Every process start also receives a unique session ID, so duplicate instance
    IDs cannot overwrite sessions.
 4. Budget primary, cache coordinator, artifact lock, and notification pools per
@@ -137,8 +137,8 @@ Abnormal exits become `stale` after 30 seconds without a heartbeat and `offline`
 after two minutes. Offline records are retained for seven days by default:
 
 ```env
-GATEWAY_RUNTIME_NODE_RETENTION=168h
-GATEWAY_RUNTIME_NODE_PRUNE_INTERVAL=1h
+NOTARX_RUNTIME_NODE_RETENTION=168h
+NOTARX_RUNTIME_NODE_PRUNE_INTERVAL=1h
 ```
 
 `GET /api/v2/runtime/nodes` returns the node inventory and cluster-health
@@ -153,12 +153,31 @@ variables, tokens, or credentials. Operators can copy it from Console system dia
 
 Optional explicit directory capacity is described in [operational signal sources](operational-signals.md). It observes the responding API process's mount namespace only; Worker/Scheduler-only processes do not expose diagnostics. The values do not represent S3/NAS physical pools.
 
+## Instance Identity, Public URL and Legacy Names
+
+Settings are read only under the `NOTARX_` prefix. There are no aliases and no
+fallback reads of the old upstream names. To stop a mis-named variable from
+silently falling back to a default, the `notarx` binary (the server and every subcommand) refuses to start, naming the new
+key (`... was renamed to NOTARX_...`), when the process environment contains any
+name from the closed list of legacy settings in `internal/config/legacy_env.go`
+(derived by `scripts/derive-legacy-env.sh`). Unrelated variables are not matched.
+The Kubernetes service-link variables `NOTARX_SERVICE_HOST` and `NOTARX_PORT` are
+not settings and are ignored.
+
+| Key | Meaning |
+| --- | --- |
+| `NOTARX_PUBLIC_URL` | Externally visible base URL of this instance, shared by every feature that must emit absolute URLs. An absolute `https://` URL with no trailing slash, query or fragment; `http://` is accepted only for a loopback host. Empty is allowed: features that need it are disabled or refuse to start. An invalid value stops startup. Code reads it through `config.Config.PublicURL()`. |
+| `NOTARX_INSTANCE_ID` | Stable identifier of this node (default: derived from the host name). |
+| `NOTARX_SETTINGS_ENCRYPTION_KEY` | Key for encrypted stored settings, read through `internal/secrets` only. |
+
+There is no second public-URL key and no `NOTARX_ENV`.
+
 ## Standalone Fallback
 
 Local development and small installations continue to use:
 
 ```env
-GATEWAY_NODE_ROLES=standalone
+NOTARX_NODE_ROLES=standalone
 ```
 
 This mode requires no separate queue or service discovery and preserves the

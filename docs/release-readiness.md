@@ -79,7 +79,7 @@ expanded database, down migrations, every protocol/provider, or published images
 for both binary and OCI software profiles, with an owned TLS sink.
 
 `scripts/historical-upgrade-readiness.sh` preserves the v0.1.0 protocol regression
-and its explicit `GATEWAY_UPGRADE_FROM_REF` override. Its shared-volume binary
+and its explicit `NOTARX_UPGRADE_FROM_REF` override. Its shared-volume binary
 rollback is historical evidence only, not this release's rollback approval.
 The image options below apply to that historical helper and
 `backup-restore-readiness`, not the fixed v0.5.0 gate.
@@ -88,7 +88,7 @@ Image inputs must be registry references ending in `@sha256:<64 lowercase hex>`
 or an already loaded local `sha256:<64 lowercase hex>` image ID. Mutable tags are
 rejected. Before starting the rehearsal, the helper checks image revision/version
 labels and the actual `notarx version` output. The candidate's mounted migration,
-theme, Compose, and startup files must match `GATEWAY_READINESS_REF`.
+theme, Compose, and startup files must match `NOTARX_READINESS_REF`.
 
 A local container assembled from checksum-verified distribution binaries is a
 distribution archive rehearsal, not proof of access to the published registry
@@ -158,8 +158,8 @@ and any registry access failure separately.
 - [ ] `make oci-performance-e2e` completes cached OCI manifest reads with the
       default 50 requests at concurrency 10, zero errors, and p95 latency at or
       below one second. Override only with an approved release record using
-      `GATEWAY_PERFORMANCE_REQUESTS`, `GATEWAY_PERFORMANCE_CONCURRENCY`,
-      `GATEWAY_PERFORMANCE_P95_MS`, and `GATEWAY_PERFORMANCE_MAX_ERROR_PERCENT`.
+      `NOTARX_PERFORMANCE_REQUESTS`, `NOTARX_PERFORMANCE_CONCURRENCY`,
+      `NOTARX_PERFORMANCE_P95_MS`, and `NOTARX_PERFORMANCE_MAX_ERROR_PERCENT`.
 - [ ] `make backup-transfer-test` preserves nonempty encrypted targets, quota
       rules/state/events and outbox permissions after real public export/restore;
       concurrent opted-in TLS workers send only permitted due work. Cancelled
@@ -210,7 +210,7 @@ and any registry access failure separately.
 
       ```promql
       sum by (format, authorization_reason) (
-        increase(artifact_gateway_repository_authorization_denials_total[15m])
+        increase(notarx_repository_authorization_denials_total[15m])
       )
       ```
 
@@ -220,10 +220,10 @@ and any registry access failure separately.
 
       ```promql
       sum by (kind, format, state) (
-        artifact_gateway_background_jobs{state=~"pending|retrying"}
+        notarx_background_jobs{state=~"pending|retrying"}
       )
       max by (kind, format) (
-        artifact_gateway_background_queue_oldest_actionable_age_seconds
+        notarx_background_queue_oldest_actionable_age_seconds
       )
       ```
 
@@ -234,7 +234,7 @@ and any registry access failure separately.
 | Hosted source | Native PostgreSQL metadata and RustFS S3-compatible object bytes |
 | External Proxy | Disabled unless the exact upstream host is in the protocol allowlist |
 | Authentication | Service Accounts with rotating credentials for CI/applications; HTTPS RS256 OIDC for human production identity; static resolver/admin tokens only for local break-glass |
-| Authorization | Deny unmatched repository readers. A deployment that configures no `GATEWAY_REPOSITORY_READERS` patterns refuses an authenticated caller with no grant instead of admitting it; `GATEWAY_LEGACY_READ_DEFAULT=allow` restores the pre-0.4 posture and logs a startup warning while it is set. See [legacy group migration](legacy-group-migration.md) for the upgrade and rollback procedure |
+| Authorization | Deny unmatched repository readers. A deployment that configures no `NOTARX_REPOSITORY_READERS` patterns refuses an authenticated caller with no grant instead of admitting it; `NOTARX_LEGACY_READ_DEFAULT=allow` restores the pre-0.4 posture and logs a startup warning while it is set. See [legacy group migration](legacy-group-migration.md) for the upgrade and rollback procedure |
 | OCI cache | Read-through, content-addressed S3 storage; cleanup every five minutes after TTL grace period |
 | Maven cache | Component files: 15 minutes; metadata and negative results: one minute |
 | Backup target | PostgreSQL metadata plus RustFS object data; 24-hour RPO, 30-minute RTO drill target |
@@ -308,7 +308,7 @@ approved both switches: set `anonymous: true` on the format Group and on every
 member Repository that may serve unauthenticated `GET`/`HEAD`. A false member
 switch narrows the Group and keeps that member's cache and upstream inaccessible
 to anonymous requests. Verify the change with an unauthenticated read, the
-`actor=anonymous` audit record, and `artifact_gateway_anonymous_reads_total`.
+`actor=anonymous` audit record, and `notarx_anonymous_reads_total`.
 
 To roll back public access, first set the affected member switches to false,
 then the Group switch to false and confirm unauthenticated reads receive the

@@ -11,14 +11,14 @@ The remaining admission work stays in [the NuGet roadmap](nuget-roadmap.md).
 
 ## Enablement and roles
 
-`GATEWAY_NUGET_PREVIEW_ENABLED=true` enables the existing preview routes and
+`NOTARX_NUGET_PREVIEW_ENABLED=true` enables the existing preview routes and
 this API. It is false by default and adds no installation presets. Only active
 NuGet **Hosted** repositories with different IDs are accepted; public format
 profiles and formal Console repository creation remain unchanged.
 
 The API role creates and reads durable jobs. A worker role executes them only
 when both the `nuget` worker format and `replication` worker kind are selected
-by `GATEWAY_WORKER_FORMATS` / `GATEWAY_WORKER_KINDS`. Standalone nodes include
+by `NOTARX_WORKER_FORMATS` / `NOTARX_WORKER_KINDS`. Standalone nodes include
 both roles. API-only nodes never execute these jobs; worker-only nodes do not
 expose the management or native protocol routes. Migration `000184` must be
 applied before starting the upgraded nodes.

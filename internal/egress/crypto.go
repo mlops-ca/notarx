@@ -15,7 +15,7 @@ import (
 // KeyEnv names the environment variable holding the 32-byte data key used to
 // encrypt stored egress proxy credentials. Accepts hex (64 chars), base64
 // (44 chars), or a raw 32-byte string.
-const KeyEnv = "GATEWAY_EGRESS_PROXY_KEY"
+const KeyEnv = "NOTARX_EGRESS_PROXY_KEY"
 
 // ErrKeyNotConfigured is returned when credentials are used but no data key
 // is configured on the process.

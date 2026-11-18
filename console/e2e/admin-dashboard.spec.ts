@@ -1,10 +1,10 @@
 import { expect, test } from "@playwright/test";
 
-const token = process.env.GATEWAY_ADMIN_TOKEN;
+const token = process.env.NOTARX_ADMIN_TOKEN;
 
 test.skip(
   !token,
-  "GATEWAY_ADMIN_TOKEN is required for the administrator browser gate",
+  "NOTARX_ADMIN_TOKEN is required for the administrator browser gate",
 );
 
 test("administrator dashboard loads management data through the Console proxy", async ({

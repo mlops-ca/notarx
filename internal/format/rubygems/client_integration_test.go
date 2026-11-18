@@ -766,7 +766,7 @@ func TestRubyGemsFixedOfficialClientColdTransitiveInstallAndRestart(t *testing.T
 
 func startRealRubyGateway(t *testing.T, admin, reader, bucket, evidence string, replication ...bool) (func(), string) {
 	t.Helper()
-	binary := os.Getenv("RUBYGEMS_GATEWAY_BIN")
+	binary := os.Getenv("RUBYGEMS_NOTARX_BIN")
 	if binary == "" {
 		t.Fatal("full production gateway binary required")
 	}
@@ -782,18 +782,18 @@ func startRealRubyGateway(t *testing.T, admin, reader, bucket, evidence string, 
 	}
 	cmd := exec.Command(binary)
 	for _, value := range os.Environ() {
-		if !strings.HasPrefix(value, "GATEWAY_") {
+		if !strings.HasPrefix(value, "NOTARX_") {
 			cmd.Env = append(cmd.Env, value)
 		}
 	}
-	cmd.Env = append(cmd.Env, "GATEWAY_DATABASE_URL="+os.Getenv("TEST_DATABASE_URL"), "GATEWAY_RUSTFS_ENDPOINT="+os.Getenv("TEST_RUSTFS_ENDPOINT"), "GATEWAY_RUSTFS_ACCESS_KEY="+os.Getenv("TEST_RUSTFS_ACCESS_KEY"), "GATEWAY_RUSTFS_SECRET_KEY="+os.Getenv("TEST_RUSTFS_SECRET_KEY"), "GATEWAY_RUSTFS_BUCKET="+bucket, "GATEWAY_ADMIN_TOKEN="+admin, "GATEWAY_ADMIN_ACTOR=ruby-gate-operator", "GATEWAY_RESOLVER_TOKEN="+reader, "GATEWAY_RESOLVER_ACTOR=ruby-gate-reader", "GATEWAY_RUBYGEMS_PREVIEW_ENABLED=true", "GATEWAY_REPOSITORY_PRESETS=none", "GATEWAY_NODE_ROLES=api", "GATEWAY_LISTEN_ADDRESS="+address, "GATEWAY_ACCESS_LOG=limited")
+	cmd.Env = append(cmd.Env, "NOTARX_DATABASE_URL="+os.Getenv("TEST_DATABASE_URL"), "NOTARX_RUSTFS_ENDPOINT="+os.Getenv("TEST_RUSTFS_ENDPOINT"), "NOTARX_RUSTFS_ACCESS_KEY="+os.Getenv("TEST_RUSTFS_ACCESS_KEY"), "NOTARX_RUSTFS_SECRET_KEY="+os.Getenv("TEST_RUSTFS_SECRET_KEY"), "NOTARX_RUSTFS_BUCKET="+bucket, "NOTARX_ADMIN_TOKEN="+admin, "NOTARX_ADMIN_ACTOR=ruby-gate-operator", "NOTARX_RESOLVER_TOKEN="+reader, "NOTARX_RESOLVER_ACTOR=ruby-gate-reader", "NOTARX_RUBYGEMS_PREVIEW_ENABLED=true", "NOTARX_REPOSITORY_PRESETS=none", "NOTARX_NODE_ROLES=api", "NOTARX_LISTEN_ADDRESS="+address, "NOTARX_ACCESS_LOG=limited")
 	if len(replication) > 0 && replication[0] {
 		for i, v := range cmd.Env {
-			if v == "GATEWAY_NODE_ROLES=api" {
-				cmd.Env[i] = "GATEWAY_NODE_ROLES=api,worker"
+			if v == "NOTARX_NODE_ROLES=api" {
+				cmd.Env[i] = "NOTARX_NODE_ROLES=api,worker"
 			}
 		}
-		cmd.Env = append(cmd.Env, "GATEWAY_WORKER_FORMATS=rubygems", "GATEWAY_WORKER_KINDS=replication")
+		cmd.Env = append(cmd.Env, "NOTARX_WORKER_FORMATS=rubygems", "NOTARX_WORKER_KINDS=replication")
 	}
 	cmd.Stdout, cmd.Stderr = log, log
 	if e = cmd.Start(); e != nil {

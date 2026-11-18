@@ -411,7 +411,7 @@ func TestRawRejectsNewColdMissBeforeUpstreamWhenSpoolCapacityIsFull(t *testing.T
 	}
 	metricsResponse := httptest.NewRecorder()
 	metrics.Handler(metricsResponse, httptest.NewRequest(http.MethodGet, "/metrics", nil))
-	if !strings.Contains(metricsResponse.Body.String(), "artifact_gateway_raw_spool_rejections_total 1") {
+	if !strings.Contains(metricsResponse.Body.String(), "notarx_raw_spool_rejections_total 1") {
 		t.Fatalf("Raw spool rejection metric is missing:\n%s", metricsResponse.Body.String())
 	}
 }
@@ -610,15 +610,15 @@ func TestRawAuditsCorrelationAndExportsMetrics(t *testing.T) {
 	response := httptest.NewRecorder()
 	metrics.Handler(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
 	for _, want := range []string{
-		"artifact_gateway_raw_requests_total{method=\"get\"} 9",
-		"artifact_gateway_raw_authorization_denials_total 2",
-		"artifact_gateway_raw_cache_requests_total{outcome=\"hit\"} 1",
-		"artifact_gateway_raw_cache_requests_total{outcome=\"miss\"} 5",
-		"artifact_gateway_raw_negative_cache_hits_total 1",
-		"artifact_gateway_raw_proxy_denied_total 1",
-		"artifact_gateway_raw_checksum_failures_total 1",
-		"artifact_gateway_raw_upstream_failures_total 1",
-		"artifact_gateway_raw_response_bytes_total 16",
+		"notarx_raw_requests_total{method=\"get\"} 9",
+		"notarx_raw_authorization_denials_total 2",
+		"notarx_raw_cache_requests_total{outcome=\"hit\"} 1",
+		"notarx_raw_cache_requests_total{outcome=\"miss\"} 5",
+		"notarx_raw_negative_cache_hits_total 1",
+		"notarx_raw_proxy_denied_total 1",
+		"notarx_raw_checksum_failures_total 1",
+		"notarx_raw_upstream_failures_total 1",
+		"notarx_raw_response_bytes_total 16",
 	} {
 		if !strings.Contains(response.Body.String(), want) {
 			t.Fatalf("metrics missing %q:\n%s", want, response.Body.String())

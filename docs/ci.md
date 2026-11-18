@@ -60,7 +60,7 @@ cache; the reference scanner has no CI consumer, so it is not built here) and up
 the artifacts for its own runner architecture and `docker load`s them, so no job
 rebuilds an image from source. `compose.yml` names the images
 (`notarx-gateway:local`, `notarx-reference-apt-signer:local`,
-`notarx-reference-scanner:local`; override with `NOTARX_GATEWAY_IMAGE`,
+`notarx-reference-scanner:local`; override with `NOTARX_IMAGE`,
 `NOTARX_APT_SIGNER_IMAGE`, `NOTARX_SCANNER_IMAGE`). Lanes set
 `NOTARX_COMPOSE_BUILD_FLAG=--no-build`; the e2e scripts use it in place of
 `--build`, and unset (local runs) they still build from source. Scripts that

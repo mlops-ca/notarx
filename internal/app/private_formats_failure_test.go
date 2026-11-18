@@ -14,7 +14,7 @@ import (
 )
 
 func TestPrivateFormatSourceFailureDoesNotFallThrough(t *testing.T) {
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
 	for _, format := range []repository.Format{repository.FormatNPM, repository.FormatPyPI, repository.FormatCargo, repository.FormatAPT, repository.FormatRaw, repository.FormatConan} {
 		t.Run(string(format), func(t *testing.T) {
 			var fallbackCalls atomic.Int32

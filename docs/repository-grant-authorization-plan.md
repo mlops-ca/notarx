@@ -26,7 +26,7 @@ The evaluator has these inputs:
 - policy: repository grant set and legacy static reader/writer patterns.
 
 An administrator is always allowed. This preserves the bootstrap and recovery
-path provided by `GATEWAY_ADMIN_TOKEN` and OIDC administrator subjects.
+path provided by `NOTARX_ADMIN_TOKEN` and OIDC administrator subjects.
 
 For any principal the evaluator applies one fixed order: a `none` account state
 is denied, the administrator identity is allowed, a role allowed by
@@ -72,7 +72,7 @@ Until a repository has a managed grant set, legacy patterns remain in force:
   Native Raw retains its existing authenticated-principal behavior;
 - static maps retain their present wildcard semantics where they already apply;
 - an absent reader map denies an unmatched caller, unless
-  `GATEWAY_LEGACY_READ_DEFAULT=allow` restores the pre-0.4 posture.
+  `NOTARX_LEGACY_READ_DEFAULT=allow` restores the pre-0.4 posture.
 
 The repository store exposes an unmodified default grant set as version `1`.
 A successful `ReplaceRepositoryGrants`, including replacement with `[]`, moves
@@ -205,7 +205,7 @@ means the request never reached a repository authorization decision.
 | `administrator` | The platform administrator identity: the `admin` level, an administrator subject, or the static administrator token |
 | `role` | A global account level; the reason names it |
 | `repository_grants` | The per-repository grant set, either marked managed or naming this principal |
-| `legacy_static` | The configured reader and writer patterns in `GATEWAY_REPOSITORY_READERS` and `GATEWAY_REPOSITORY_WRITERS` |
+| `legacy_static` | The configured reader and writer patterns in `NOTARX_REPOSITORY_READERS` and `NOTARX_REPOSITORY_WRITERS` |
 | `legacy_protocol` | The native protocol fallback that admits any authenticated principal: npm, PyPI, OCI, Raw, and APT |
 
 `authorizationReason`:
@@ -250,7 +250,7 @@ depend on it.
 
 ## Metrics
 
-`artifact_gateway_repository_authorization_denials_total` counts denied
+`notarx_repository_authorization_denials_total` counts denied
 decisions produced by an explicitly managed Repository grant set. It has only
 these bounded labels:
 
@@ -264,7 +264,7 @@ can identify a policy rollout problem with:
 
 ```promql
 sum by (format, authorization_reason) (
-  increase(artifact_gateway_repository_authorization_denials_total[15m])
+  increase(notarx_repository_authorization_denials_total[15m])
 )
 ```
 

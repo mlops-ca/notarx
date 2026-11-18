@@ -22,7 +22,7 @@ func TestPrivateFormatDefaultPortCredentials(t *testing.T) {
 
 func privateDefaultPortCredentials(t *testing.T, newBackend func(*testing.T) privateProxyBackend) {
 	t.Helper()
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
 	for _, format := range []repository.Format{repository.FormatNPM, repository.FormatPyPI} {
 		for _, scheme := range []repository.UpstreamAuthScheme{repository.UpstreamAuthSchemeBasic, repository.UpstreamAuthSchemeBearer} {
 			for _, direction := range []string{"asset-explicit", "endpoint-explicit"} {

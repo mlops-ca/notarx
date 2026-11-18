@@ -33,6 +33,7 @@ spec:
         app.kubernetes.io/name: artifact-gateway
         app.kubernetes.io/component: console
     spec:
+      enableServiceLinks: false
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true

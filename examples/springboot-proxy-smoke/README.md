@@ -4,9 +4,9 @@ This project resolves a broad Spring Boot dependency graph exclusively through
 the local Artifact Gateway Maven Proxy.
 
 ```sh
-export GATEWAY_MAVEN_PROXY_URL=http://127.0.0.1:18080/maven/maven-central-proxy
-export GATEWAY_MAVEN_USERNAME=resolver
-export GATEWAY_MAVEN_PASSWORD='<resolver token>'
+export NOTARX_MAVEN_PROXY_URL=http://127.0.0.1:18080/maven/maven-central-proxy
+export NOTARX_MAVEN_USERNAME=resolver
+export NOTARX_MAVEN_PASSWORD='<resolver token>'
 mvn --batch-mode --settings settings.xml -Dmaven.repo.local=/tmp/artifact-gateway-m2 clean test
 ```
 

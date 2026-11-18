@@ -15,7 +15,7 @@ await new Promise((resolve, reject) => { probe.once('error', reject); probe.list
 await new Promise(resolve => probe.close(resolve));
 const output = path.resolve('.impeccable/review');
 await fs.mkdir(output, { recursive: true });
-const vite = spawn(process.execPath, [path.resolve('console/node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', String(port), '--strictPort'], { cwd: path.resolve('console'), env: { ...process.env, VITE_GATEWAY_PROXY_TARGET: apiURL }, stdio: 'ignore' });
+const vite = spawn(process.execPath, [path.resolve('console/node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', String(port), '--strictPort'], { cwd: path.resolve('console'), env: { ...process.env, VITE_NOTARX_PROXY_TARGET: apiURL }, stdio: 'ignore' });
 const origin = `http://127.0.0.1:${port}`;
 let browser;
 try {

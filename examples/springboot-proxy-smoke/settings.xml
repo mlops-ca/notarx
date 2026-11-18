@@ -6,15 +6,15 @@
     <mirror>
       <id>artifact-gateway-proxy</id>
       <name>Artifact Gateway Maven Proxy</name>
-      <url>${env.GATEWAY_MAVEN_PROXY_URL}</url>
+      <url>${env.NOTARX_MAVEN_PROXY_URL}</url>
       <mirrorOf>*</mirrorOf>
     </mirror>
   </mirrors>
   <servers>
     <server>
       <id>artifact-gateway-proxy</id>
-      <username>${env.GATEWAY_MAVEN_USERNAME}</username>
-      <password>${env.GATEWAY_MAVEN_PASSWORD}</password>
+      <username>${env.NOTARX_MAVEN_USERNAME}</username>
+      <password>${env.NOTARX_MAVEN_PASSWORD}</password>
     </server>
   </servers>
 </settings>

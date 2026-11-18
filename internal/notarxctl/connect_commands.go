@@ -12,7 +12,7 @@ import (
 
 // tokenPlaceholder stands for the credential in every generated snippet. The
 // configured token is never written into a snippet.
-const tokenPlaceholder = "${ARTIFACT_GATEWAY_TOKEN}"
+const tokenPlaceholder = "${NOTARX_TOKEN}"
 
 // clientUser is the non-empty label native clients need as a username; the
 // Gateway authorizes the credential, not the label.
@@ -124,7 +124,7 @@ func connectSnippets(target connectTarget, name string, format adminopenapi.Form
 		}
 		snippets = append(snippets,
 			connectSnippet{Label: "Maven credentials", File: "settings.xml", Content: fmt.Sprintf(
-				"<servers>\n  <server>\n    <id>%s</id>\n    <username>%s</username>\n    <password>${env.ARTIFACT_GATEWAY_TOKEN}</password>\n  </server>\n</servers>", name, clientUser)},
+				"<servers>\n  <server>\n    <id>%s</id>\n    <username>%s</username>\n    <password>${env.NOTARX_TOKEN}</password>\n  </server>\n</servers>", name, clientUser)},
 			connectSnippet{Label: "Maven repository", File: "pom.xml", Content: fmt.Sprintf(
 				"<repositories>\n  <repository>\n    <id>%s</id>\n    <url>%s</url>\n  </repository>\n</repositories>", name, repository)})
 		if hosted {
@@ -139,7 +139,7 @@ func connectSnippets(target connectTarget, name string, format adminopenapi.Form
 	case adminopenapi.FormatOci:
 		image := target.path + "/" + name + "/<image>:<tag>"
 		snippets = append(snippets,
-			connectSnippet{Label: "sign in", Content: fmt.Sprintf("printf '%%s' \"$ARTIFACT_GATEWAY_TOKEN\" | docker login %s --username %s --password-stdin", target.host, clientUser)},
+			connectSnippet{Label: "sign in", Content: fmt.Sprintf("printf '%%s' \"$NOTARX_TOKEN\" | docker login %s --username %s --password-stdin", target.host, clientUser)},
 			connectSnippet{Label: "pull", Content: "docker pull " + image})
 		if hosted {
 			snippets = append(snippets, connectSnippet{Label: "push", Content: "docker tag <local-image>:<tag> " + image + "\ndocker push " + image})
@@ -147,16 +147,16 @@ func connectSnippets(target connectTarget, name string, format adminopenapi.Form
 	case adminopenapi.FormatRaw:
 		root := base + "/raw/" + name
 		snippets = append(snippets, connectSnippet{Label: "download", Content: fmt.Sprintf(
-			"curl --fail --location -H \"Authorization: Bearer $ARTIFACT_GATEWAY_TOKEN\" --output <file> %s/<path>", root)})
+			"curl --fail --location -H \"Authorization: Bearer $NOTARX_TOKEN\" --output <file> %s/<path>", root)})
 		if hosted {
 			snippets = append(snippets, connectSnippet{Label: "upload", Content: fmt.Sprintf(
-				"curl --fail -H \"Authorization: Bearer $ARTIFACT_GATEWAY_TOKEN\" --upload-file <file> %s/<path>", root)})
+				"curl --fail -H \"Authorization: Bearer $NOTARX_TOKEN\" --upload-file <file> %s/<path>", root)})
 		}
 	case adminopenapi.FormatConan:
-		notes = append(notes, "official Conan 2 authentication requires an independent GATEWAY_CONAN_TOKEN_SECRET on the server; use a local service-account or resolver credential")
+		notes = append(notes, "official Conan 2 authentication requires an independent NOTARX_CONAN_TOKEN_SECRET on the server; use a local service-account or resolver credential")
 		snippets = append(snippets,
 			connectSnippet{Label: "add remote", Content: fmt.Sprintf("conan remote add %s %s/conan/%s", name, base, name)},
-			connectSnippet{Label: "sign in", Content: fmt.Sprintf("conan remote login %s %s -p \"$ARTIFACT_GATEWAY_TOKEN\"", name, clientUser)})
+			connectSnippet{Label: "sign in", Content: fmt.Sprintf("conan remote login %s %s -p \"$NOTARX_TOKEN\"", name, clientUser)})
 		if hosted {
 			snippets = append(snippets, connectSnippet{Label: "upload", Content: fmt.Sprintf("conan upload \"<reference>:*\" -r %s --confirm", name)})
 		}
@@ -171,7 +171,7 @@ func connectSnippets(target connectTarget, name string, format adminopenapi.Form
 		snippets = append(snippets,
 			connectSnippet{Label: "Cargo registry", File: ".cargo/config.toml", Content: fmt.Sprintf(
 				"[registries.%s]\nindex = \"sparse+%s/cargo/%s/\"\ncredential-provider = \"cargo:token\"", name, base, name)},
-			connectSnippet{Label: "sign in", Content: fmt.Sprintf("printf '%%s' \"$ARTIFACT_GATEWAY_TOKEN\" | cargo login --registry %s", name)})
+			connectSnippet{Label: "sign in", Content: fmt.Sprintf("printf '%%s' \"$NOTARX_TOKEN\" | cargo login --registry %s", name)})
 		if hosted {
 			snippets = append(snippets, connectSnippet{Label: "publish", Content: "cargo publish --registry " + name})
 		}
@@ -225,7 +225,7 @@ func repoConnectCommand() command {
 }
 
 func renderConnectGuide(w io.Writer, guide connectGuide) error {
-	if _, err := fmt.Fprintf(w, "# %s (%s %s) at %s\n# set ARTIFACT_GATEWAY_TOKEN to a credential with access to this repository\n",
+	if _, err := fmt.Fprintf(w, "# %s (%s %s) at %s\n# set NOTARX_TOKEN to a credential with access to this repository\n",
 		guide.Repository.Name, guide.Repository.Format, guide.Repository.Type, guide.BaseURL); err != nil {
 		return err
 	}

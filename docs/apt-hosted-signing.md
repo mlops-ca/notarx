@@ -16,9 +16,9 @@ local `.env` without committing them:
 
 ```text
 COMPOSE_PROFILES=apt-signer
-GATEWAY_APT_SIGNER_ENDPOINT=http://127.0.0.1:18083/v1/sign-release
-GATEWAY_APT_SIGNER_TOKEN=<random-token>
-GATEWAY_APT_SIGNER_TIMEOUT=15s
+NOTARX_APT_SIGNER_ENDPOINT=http://127.0.0.1:18083/v1/sign-release
+NOTARX_APT_SIGNER_TOKEN=<random-token>
+NOTARX_APT_SIGNER_TIMEOUT=15s
 ```
 
 Then start the normal local stack. The signer shares Gateway's network
@@ -106,8 +106,8 @@ while keeping private-key operations in a managed KMS, HSM, or equivalent
 audited signer.
 
 Remote HTTPS signers are fail-closed unless
-`GATEWAY_APT_SIGNER_TRUSTED_FINGERPRINTS` contains their OpenPGP fingerprint
-and `GATEWAY_APT_SIGNER_TRUSTED_PUBLIC_KEYS_FILE` points to a bounded, armored,
+`NOTARX_APT_SIGNER_TRUSTED_FINGERPRINTS` contains their OpenPGP fingerprint
+and `NOTARX_APT_SIGNER_TRUSTED_PUBLIC_KEYS_FILE` points to a bounded, armored,
 public-only keyring containing exactly the same one or two keys. Gateway verifies
 both `InRelease` and `Release.gpg` against this keyring and requires the verified
 signing entity to match the reported fingerprint. The persisted signer identity,
@@ -121,7 +121,7 @@ fingerprint for a controlled rotation overlap. It never changes client trust
 automatically.
 
 For a signer whose server certificate chains to a private CA, mount the bounded
-PEM bundle read-only and set `GATEWAY_APT_SIGNER_TLS_CA_FILE`. Gateway builds a
+PEM bundle read-only and set `NOTARX_APT_SIGNER_TLS_CA_FILE`. Gateway builds a
 dedicated TLS trust pool for only the signer client; it does not change
 process-wide roots. Public-CA signers leave this setting empty.
 
@@ -172,10 +172,10 @@ The readiness values are operationally significant:
 histogram:
 
 ```text
-artifact_gateway_apt_signing_requests_total{outcome="success|untrusted_signer|invalid_signature|unavailable"}
-artifact_gateway_apt_signing_duration_seconds_bucket
-artifact_gateway_apt_signing_duration_seconds_sum
-artifact_gateway_apt_signing_duration_seconds_count
+notarx_apt_signing_requests_total{outcome="success|untrusted_signer|invalid_signature|unavailable"}
+notarx_apt_signing_duration_seconds_bucket
+notarx_apt_signing_duration_seconds_sum
+notarx_apt_signing_duration_seconds_count
 ```
 
 The labels deliberately exclude repository, actor, endpoint, and fingerprint.
@@ -183,8 +183,8 @@ A deployment may start with alerts equivalent to these PromQL expressions,
 tuning the window and threshold to its release frequency:
 
 ```promql
-sum(increase(artifact_gateway_apt_signing_requests_total{outcome!="success"}[15m])) > 0
-histogram_quantile(0.95, sum by (le) (rate(artifact_gateway_apt_signing_duration_seconds_bucket[15m]))) > 10
+sum(increase(notarx_apt_signing_requests_total{outcome!="success"}[15m])) > 0
+histogram_quantile(0.95, sum by (le) (rate(notarx_apt_signing_duration_seconds_bucket[15m]))) > 10
 ```
 
 The first alert should page during an active release window; the second is a

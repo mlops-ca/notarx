@@ -878,7 +878,7 @@ func TestNativeMavenUsesManagedRepositoryGrants(t *testing.T) {
 	}
 	metricResponse := httptest.NewRecorder()
 	metrics.Handler(metricResponse, httptest.NewRequest(http.MethodGet, "/metrics", nil))
-	if !strings.Contains(metricResponse.Body.String(), `artifact_gateway_repository_authorization_denials_total{format="maven",authorization_source="repository_grants",authorization_reason="scope_not_granted"} 2`) {
+	if !strings.Contains(metricResponse.Body.String(), `notarx_repository_authorization_denials_total{format="maven",authorization_source="repository_grants",authorization_reason="scope_not_granted"} 2`) {
 		t.Fatalf("Maven authorization metric=%s", metricResponse.Body.String())
 	}
 }

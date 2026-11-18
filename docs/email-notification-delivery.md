@@ -19,7 +19,7 @@ this slice; browser screenshots are not Gmail, Outlook or Apple Mail acceptance.
 
 ## Deployment contract
 
-No config file means disabled. `GATEWAY_EMAIL_CONFIG_FILE` is an absolute path to
+No config file means disabled. `NOTARX_EMAIL_CONFIG_FILE` is an absolute path to
 an operator-managed JSON file. It is read offline at startup, with unknown keys
 rejected. A synthetic documentation example:
 
@@ -50,22 +50,22 @@ supply relay addresses, authentication, headers or message bodies.
   `password`, readable only by its owner (mode 0600 or stricter). Authentication
   is sent only after verified TLS. Secret contents are never API fields or logs.
   Rotate the file atomically; workers reread it per attempt.
-- Configure `GATEWAY_SETTINGS_ENCRYPTION_KEY` through existing deployment secret
+- Configure `NOTARX_SETTINGS_ENCRYPTION_KEY` through existing deployment secret
   management. Recipients are AES-GCM encrypted with target-specific associated
   data. Keep the encryption key stable while queued snapshots exist.
 - Optional `consoleOrigin` must be an explicit HTTPS origin, without credentials,
   query or fragment. The server appends `/system?tab=diagnostics`. No request Host
   or arbitrary event URL is used; absent configuration omits the link.
 - API, scheduler and email workers need the same relay, From, Console origin,
-  encryption key, authentication and trust configuration. A dedicated worker uses `GATEWAY_NODE_ROLES=worker` and
-  `GATEWAY_WORKER_KINDS=email`; empty kind filters include email workers.
+  encryption key, authentication and trust configuration. A dedicated worker uses `NOTARX_NODE_ROLES=worker` and
+  `NOTARX_WORKER_KINDS=email`; empty kind filters include email workers.
 
 ## Opt-in Compose example
 
-`compose.yml` keeps email disconnected. Setting `GATEWAY_EMAIL_CONFIG_FILE` in
+`compose.yml` keeps email disconnected. Setting `NOTARX_EMAIL_CONFIG_FILE` in
 `.env` alone does not mount or forward it. Explicitly add `compose.email.yml`,
 which fixes the in-container path to `/etc/gateway-email/relay.json`, requires
-`GATEWAY_EMAIL_CONFIG_DIR` and the existing settings encryption key, and mounts
+`NOTARX_EMAIL_CONFIG_DIR` and the existing settings encryption key, and mounts
 that directory read-only with `create_host_path: false`. The directory must
 already exist. [The checked-in file](../examples/email/relay.json) is disabled
 and contains no relay or credential. The overlay requires Docker Compose with
@@ -80,22 +80,22 @@ sudo install -o 65532 -g 65532 -m 0640 examples/email/relay.json /etc/artifact-g
 ```
 
 Keep the private deployment `.env` mode 0600 and set
-`GATEWAY_EMAIL_CONFIG_DIR=/etc/artifact-gateway/email`. Use a separately generated
-32-byte `GATEWAY_SETTINGS_ENCRYPTION_KEY` (for a new installation,
+`NOTARX_EMAIL_CONFIG_DIR=/etc/artifact-gateway/email`. Use a separately generated
+32-byte `NOTARX_SETTINGS_ENCRYPTION_KEY` (for a new installation,
 `openssl rand -hex 32`), independent of admin/resolver, database, S3/RPC and SMTP
 credentials. Retain the existing key when encrypted settings or outbox snapshots
 already exist; regenerating it loses decryption. Do not commit or print the key
 or the expanded Compose environment. On Docker Desktop, verify ownership and
 readability from the image's UID rather than assuming host permission mapping.
 
-For one process, set `GATEWAY_NODE_ROLES=standalone` in that private `.env`:
+For one process, set `NOTARX_NODE_ROLES=standalone` in that private `.env`:
 
 ```sh
 docker compose --env-file .env -f compose.yml -f compose.email.yml config --quiet
 docker compose --env-file .env -f compose.yml -f compose.email.yml up -d --build --wait gateway
 ```
 
-For split roles, set `GATEWAY_NODE_ROLES=api`, then select the profile:
+For split roles, set `NOTARX_NODE_ROLES=api`, then select the profile:
 
 ```sh
 docker compose --env-file .env -f compose.yml -f compose.email.yml --profile email-roles config --quiet

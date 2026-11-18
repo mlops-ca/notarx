@@ -123,10 +123,10 @@ MIGRATION_DIR=./migrations ./run-migrations.sh
 Container images are published to GHCR for both release and development use:
 
 ```text
-ghcr.io/ccsert/artifact-gateway:0.4.1
-ghcr.io/ccsert/artifact-gateway-console:0.4.1
-ghcr.io/ccsert/artifact-gateway:main
-ghcr.io/ccsert/artifact-gateway-console:main
+ghcr.io/mlops-ca/notarx:0.4.1
+ghcr.io/mlops-ca/notarx-console:0.4.1
+ghcr.io/mlops-ca/notarx:main
+ghcr.io/mlops-ca/notarx-console:main
 ```
 
 `main` is a moving, CI-qualified development snapshot. Release deployments
@@ -153,7 +153,7 @@ when no change is needed.
 Console dependencies when absent, and waits for both the API and Console.
 
 Open the Console at <http://127.0.0.1:4173>. Sign in with the
-`GATEWAY_ADMIN_TOKEN` stored in `.env`, then create a Hosted, Proxy, or Group
+`NOTARX_ADMIN_TOKEN` stored in `.env`, then create a Hosted, Proxy, or Group
 repository from the Repositories page.
 
 ```sh

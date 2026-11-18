@@ -23,7 +23,7 @@ import (
 )
 
 func TestNativeNuGetRealDotnetHostedReplicationAndSourceIndependentRestore(t *testing.T) {
-	for _, key := range []string{"NUGET_GATEWAY_BIN", "NUGET_DOTNET_IMAGE", "NUGET_COMPOSE_PROJECT", "NUGET_EVIDENCE_DIR", "TEST_DATABASE_URL", "TEST_RUSTFS_ENDPOINT"} {
+	for _, key := range []string{"NUGET_NOTARX_BIN", "NUGET_DOTNET_IMAGE", "NUGET_COMPOSE_PROJECT", "NUGET_EVIDENCE_DIR", "TEST_DATABASE_URL", "TEST_RUSTFS_ENDPOINT"} {
 		if os.Getenv(key) == "" {
 			t.Skip("owned native-nuget-e2e fixture is required")
 		}

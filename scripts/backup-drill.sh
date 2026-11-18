@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-environment_file=${GATEWAY_ENV_FILE:-.env}
+environment_file=${NOTARX_ENV_FILE:-.env}
 backup_dir=${1:-.artifacts/backup-drill/$(date -u +%Y%m%dT%H%M%SZ)}
 compose=(docker compose --env-file "$environment_file" -f compose.yml)
 mkdir -p "$backup_dir"

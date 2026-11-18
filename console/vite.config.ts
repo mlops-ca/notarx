@@ -10,9 +10,9 @@ export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const rootEnv = loadEnv(mode, "..", "");
   const target =
-    env.VITE_GATEWAY_PROXY_TARGET ??
-    rootEnv.VITE_GATEWAY_PROXY_TARGET ??
-    `http://127.0.0.1:${rootEnv.GATEWAY_HTTP_PORT || "8080"}`;
+    env.VITE_NOTARX_PROXY_TARGET ??
+    rootEnv.VITE_NOTARX_PROXY_TARGET ??
+    `http://127.0.0.1:${rootEnv.NOTARX_HTTP_PORT || "8080"}`;
   const gateway = { changeOrigin: true, target };
 
   return {

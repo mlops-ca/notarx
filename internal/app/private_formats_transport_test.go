@@ -33,7 +33,7 @@ func privateFormatFetch(t *testing.T, fixture *proxyRedirectFixture, format repo
 }
 
 func TestPrivateFormatRedirectCredentialBoundary(t *testing.T) {
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
 	for _, format := range []repository.Format{repository.FormatNPM, repository.FormatPyPI, repository.FormatCargo, repository.FormatAPT} {
 		for _, target := range []string{"same-origin", "cdn-return", "cdn-initial", "different-port"} {
 			t.Run(string(format)+"/"+target, func(t *testing.T) {
@@ -84,7 +84,7 @@ func TestPrivateFormatRedirectCredentialBoundary(t *testing.T) {
 }
 
 func TestPrivateRawConanRejectRedirectWithoutCredentialLeak(t *testing.T) {
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
 	for _, format := range []repository.Format{repository.FormatRaw, repository.FormatConan} {
 		t.Run(string(format), func(t *testing.T) {
 			fixture := newProxyRedirectFixture(t, func(w http.ResponseWriter, r *http.Request) {

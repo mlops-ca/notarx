@@ -18,7 +18,7 @@ read-only source account with access to the desired repositories and their
 configuration. The service never enumerates source users, hashes, API keys,
 security exports, scripts or task endpoints, and never sends a source write.
 
-`GATEWAY_SETTINGS_ENCRYPTION_KEY` must decode to 32 bytes when storing credentials.
+`NOTARX_SETTINGS_ENCRYPTION_KEY` must decode to 32 bytes when storing credentials.
 AES-GCM binds each encrypted credential to its source UUID. PostgreSQL stores
 only ciphertext. GET/list responses return `credentialsConfigured`, never a
 username, password or ciphertext. The key must be available to every API node;
@@ -58,7 +58,7 @@ Direct private endpoints are denied by default. An operator can set an exact
 hostname and private CIDR allowlist, for example:
 
 ```sh
-GATEWAY_MIGRATION_SOURCE_PRIVATE_ENDPOINTS=nexus.internal=10.20.30.0/24,10.20.30.7=10.20.30.7/32
+NOTARX_MIGRATION_SOURCE_PRIVATE_ENDPOINTS=nexus.internal=10.20.30.0/24,10.20.30.7=10.20.30.7/32
 ```
 
 The default Compose deployment forwards this setting from its environment file
@@ -187,8 +187,8 @@ Playwright layout gate covers 1440px and 390px, both languages/themes, bounded
 `console/e2e/migration-sources-live.spec.ts` additionally exercises the real
 Gateway and PostgreSQL against `console/e2e/support/nexusSourceFixture.mjs`:
 create/read, preflight, multi-repository discovery/preview, page reopen, credential
-rotation/clear, read refusal and deletion. Run it with `GATEWAY_ADMIN_TOKEN`,
-`GATEWAY_RESOLVER_TOKEN` and `MIGRATION_SOURCE_FIXTURE_URL` against an isolated
+rotation/clear, read refusal and deletion. Run it with `NOTARX_ADMIN_TOKEN`,
+`NOTARX_RESOLVER_TOKEN` and `MIGRATION_SOURCE_FIXTURE_URL` against an isolated
 Gateway. The TLS fixture needs a test certificate trusted by that Gateway and an
 operator-owned exact-host/private-address allowlist; neither TLS nor private
 network enforcement is bypassed. This fixture gate does not prove real Nexus

@@ -1,12 +1,12 @@
 # maven-hosted (maven hosted) at http://gateway.test/gw
-# set ARTIFACT_GATEWAY_TOKEN to a credential with access to this repository
+# set NOTARX_TOKEN to a credential with access to this repository
 
 ## Maven credentials — settings.xml
 <servers>
   <server>
     <id>maven-hosted</id>
     <username>ci</username>
-    <password>${env.ARTIFACT_GATEWAY_TOKEN}</password>
+    <password>${env.NOTARX_TOKEN}</password>
   </server>
 </servers>
 

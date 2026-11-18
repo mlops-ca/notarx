@@ -3,7 +3,7 @@ migration_sources:
   get:
     operationId: listMigrationSources
     description: Administrator-only Nexus 3 read-only source. Credentials are encrypted
-      using GATEWAY_SETTINGS_ENCRYPTION_KEY; responses and audits never include them.
+      using NOTARX_SETTINGS_ENCRYPTION_KEY; responses and audits never include them.
       No source writes or target mutations occur.
     parameters:
     - name: limit
@@ -46,7 +46,7 @@ migration_sources:
   post:
     operationId: createMigrationSource
     description: Administrator-only Nexus 3 read-only source. Credentials are encrypted
-      using GATEWAY_SETTINGS_ENCRYPTION_KEY; responses and audits never include them.
+      using NOTARX_SETTINGS_ENCRYPTION_KEY; responses and audits never include them.
       No source writes or target mutations occur.
     parameters: []
     responses:
@@ -91,7 +91,7 @@ migration_source:
   get:
     operationId: getMigrationSource
     description: Administrator-only Nexus 3 read-only source. Credentials are encrypted
-      using GATEWAY_SETTINGS_ENCRYPTION_KEY; responses and audits never include them.
+      using NOTARX_SETTINGS_ENCRYPTION_KEY; responses and audits never include them.
       No source writes or target mutations occur.
     parameters: []
     responses:
@@ -122,7 +122,7 @@ migration_source:
   put:
     operationId: updateMigrationSource
     description: Administrator-only Nexus 3 read-only source. Credentials are encrypted
-      using GATEWAY_SETTINGS_ENCRYPTION_KEY; responses and audits never include them.
+      using NOTARX_SETTINGS_ENCRYPTION_KEY; responses and audits never include them.
       No source writes or target mutations occur. Omitted credentials retain the current
       encrypted value; clearCredentials removes it. Changing the source origin requires
       explicitly replacing or clearing configured credentials.
@@ -168,7 +168,7 @@ migration_source:
   delete:
     operationId: deleteMigrationSource
     description: Administrator-only Nexus 3 read-only source. Credentials are encrypted
-      using GATEWAY_SETTINGS_ENCRYPTION_KEY; responses and audits never include them.
+      using NOTARX_SETTINGS_ENCRYPTION_KEY; responses and audits never include them.
       No source writes or target mutations occur. Removes encrypted credentials and
       connection configuration.
     parameters:
@@ -211,7 +211,7 @@ migration_source_preflight:
   post:
     operationId: preflightMigrationSource
     description: Administrator-only Nexus 3 read-only source. Credentials are encrypted
-      using GATEWAY_SETTINGS_ENCRYPTION_KEY; responses and audits never include them.
+      using NOTARX_SETTINGS_ENCRYPTION_KEY; responses and audits never include them.
       No source writes or target mutations occur. Fetches only credential-visible
       repositories and their supported read-only configuration. It does not prove
       global inventory completeness. A failed request is a problem response, never
@@ -253,7 +253,7 @@ migration_source_discover:
   post:
     operationId: discoverMigrationSource
     description: Administrator-only Nexus 3 read-only source. Credentials are encrypted
-      using GATEWAY_SETTINGS_ENCRYPTION_KEY; responses and audits never include them.
+      using NOTARX_SETTINGS_ENCRYPTION_KEY; responses and audits never include them.
       No source writes or target mutations occur. Exhausts asset pagination for selected
       supported Hosted repositories with bounded requests (128), response bytes (16
       MiB total, 2 MiB per response), repositories (500) and time (30 seconds). Cyclic
@@ -306,7 +306,7 @@ migration_source_mapping_preview:
   post:
     operationId: previewMigrationSourceMapping
     description: Administrator-only Nexus 3 read-only source. Credentials are encrypted
-      using GATEWAY_SETTINGS_ENCRYPTION_KEY; responses and audits never include them.
+      using NOTARX_SETTINGS_ENCRYPTION_KEY; responses and audits never include them.
       No source writes or target mutations occur. Validates explicit native target
       names, formats/types, existing-name conflicts and ordered Group member mappings.
       Re-reads source configuration; performs no target writes. Permissions, credentials

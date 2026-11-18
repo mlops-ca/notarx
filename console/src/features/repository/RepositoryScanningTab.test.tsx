@@ -298,7 +298,7 @@ describe("RepositoryScanningTab", () => {
     expect(
       await screen.findByText("当前仓库未配置可用扫描器"),
     ).toBeInTheDocument();
-    expect(screen.getByText("GATEWAY_SCANNER_ENDPOINT")).toBeInTheDocument();
+    expect(screen.getByText("NOTARX_SCANNER_ENDPOINT")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "提交扫描" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "对账历史制品" })).toBeDisabled();
     expect(mockReconcileScans).not.toHaveBeenCalled();

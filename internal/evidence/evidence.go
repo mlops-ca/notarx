@@ -134,14 +134,14 @@ func redactReady(_ []byte) ([]byte, error) { return json.Marshal(map[string]bool
 
 func redactMetrics(body []byte) ([]byte, error) {
 	allowed := map[string]bool{
-		"artifact_gateway_cache_quota_rejections_total":           true,
-		"artifact_gateway_anonymous_reads_total":                  true,
-		"artifact_gateway_repository_authorization_denials_total": true,
-		"artifact_gateway_resolver_requests_total":                true,
-		"artifact_gateway_oci_cache_requests_total":               true,
-		"artifact_gateway_maven_cache_requests_total":             true,
-		"artifact_gateway_raw_cache_requests_total":               true,
-		"artifact_gateway_conan_cache_requests_total":             true,
+		"notarx_cache_quota_rejections_total":           true,
+		"notarx_anonymous_reads_total":                  true,
+		"notarx_repository_authorization_denials_total": true,
+		"notarx_resolver_requests_total":                true,
+		"notarx_oci_cache_requests_total":               true,
+		"notarx_maven_cache_requests_total":             true,
+		"notarx_raw_cache_requests_total":               true,
+		"notarx_conan_cache_requests_total":             true,
 	}
 	values := make(map[string]float64)
 	for _, line := range strings.Split(string(body), "\n") {

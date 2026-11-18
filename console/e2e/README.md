@@ -58,7 +58,7 @@ The behaviour each refactor must preserve, and where it is proven.
 | Audit log and retention                         | `audit-layout`, `audits-date-filter`, `admin-list-behavior`                                                                    |
 | Service accounts and API keys                   | `service-accounts-layout`, `admin-list-behavior`, `artifact-workflows`                                                         |
 | Operations, runtime nodes, logs, diagnostics    | `runtime-nodes-health`, `runtime-logs-layout`, `runtime-log-window`, `http-error-rate-layout`, `local-capacity-layout`         |
-| Job history, schedules and webhook writes       | `operations-workflows` (live Gateway; webhooks need `GATEWAY_SETTINGS_ENCRYPTION_KEY`)                                         |
+| Job history, schedules and webhook writes       | `operations-workflows` (live Gateway; webhooks need `NOTARX_SETTINGS_ENCRYPTION_KEY`)                                          |
 | Nexus source observations and credentials       | `migration-sources-layout` (real route, typed fixtures), `migration-sources-live` (live Gateway + approved TLS source fixture) |
 | Nexus batch control and acceptance observations | `nexus-batches-layout` (real route, both themes/widths), `nexus-batches-live` (opt-in owned PG/S3/TLS runtime, real worker)    |
 | Quota alerts and email notifications            | `quota-alerts`, `email-notifications`                                                                                          |

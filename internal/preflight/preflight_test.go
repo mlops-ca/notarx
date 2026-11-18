@@ -92,13 +92,13 @@ func TestRunnerChecksOIDCJWKS(t *testing.T) {
 
 func TestCLIConfigurationFailureIsRedacted(t *testing.T) {
 	secret := "do-not-log-this-database-secret"
-	t.Setenv("GATEWAY_DATABASE_URL", secret)
-	t.Setenv("GATEWAY_RUSTFS_ENDPOINT", "http://rustfs:9000")
-	t.Setenv("GATEWAY_RUSTFS_BUCKET", "gateway-cache")
-	t.Setenv("GATEWAY_RUSTFS_ACCESS_KEY", "access-key")
-	t.Setenv("GATEWAY_RUSTFS_SECRET_KEY", "object-store-secret")
-	t.Setenv("GATEWAY_ADMIN_TOKEN", "admin-token")
-	t.Setenv("GATEWAY_RESOLVER_TOKEN", "resolver-token")
+	t.Setenv("NOTARX_DATABASE_URL", secret)
+	t.Setenv("NOTARX_RUSTFS_ENDPOINT", "http://rustfs:9000")
+	t.Setenv("NOTARX_RUSTFS_BUCKET", "gateway-cache")
+	t.Setenv("NOTARX_RUSTFS_ACCESS_KEY", "access-key")
+	t.Setenv("NOTARX_RUSTFS_SECRET_KEY", "object-store-secret")
+	t.Setenv("NOTARX_ADMIN_TOKEN", "admin-token")
+	t.Setenv("NOTARX_RESOLVER_TOKEN", "resolver-token")
 
 	var stdout, stderr bytes.Buffer
 	exitCode := RunCLI(context.Background(), []string{"run", "--format", "json"}, &stdout, &stderr)

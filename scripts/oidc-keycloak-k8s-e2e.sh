@@ -4,7 +4,7 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 namespace=${OIDC_K8S_NAMESPACE:-artifact-gateway-oidc-test}
 image=${OIDC_TEST_IMAGE:-artifact-gateway:oidc-test}
-gateway_port=${OIDC_TEST_GATEWAY_PORT:-18080}
+gateway_port=${OIDC_TEST_NOTARX_PORT:-18080}
 keycloak_port=${OIDC_TEST_KEYCLOAK_PORT:-8081}
 console_port=${OIDC_TEST_CONSOLE_PORT:-4173}
 keep_namespace=${OIDC_TEST_KEEP_NAMESPACE:-0}
@@ -53,7 +53,7 @@ kubectl -n "$namespace" create configmap ag-oidc-keycloak-realm \
   --from-file=artifact-gateway-realm.json="$work_dir/artifact-gateway-realm.json" \
   --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n "$namespace" create configmap ag-oidc-test-config \
-  --from-literal="GATEWAY_OIDC_REDIRECT_URL=http://127.0.0.1:${console_port}/auth/oidc/callback" \
+  --from-literal="NOTARX_OIDC_REDIRECT_URL=http://127.0.0.1:${console_port}/auth/oidc/callback" \
   --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n "$namespace" create configmap ag-oidc-migrations \
   --from-file="$root/migrations" \
@@ -67,7 +67,7 @@ kubectl -n "$namespace" rollout status deployment/postgres --timeout=180s
 kubectl -n "$namespace" rollout status deployment/rustfs --timeout=180s
 kubectl -n "$namespace" rollout status deployment/gateway --timeout=300s
 
-kubectl -n "$namespace" port-forward service/gateway "$gateway_port":8080 >"$work_dir/gateway-port-forward.log" 2>&1 &
+kubectl -n "$namespace" port-forward service/notarx "$gateway_port":8080 >"$work_dir/gateway-port-forward.log" 2>&1 &
 processes+=("$!")
 kubectl -n "$namespace" port-forward service/keycloak "$keycloak_port":"$keycloak_port" >"$work_dir/keycloak-port-forward.log" 2>&1 &
 processes+=("$!")
@@ -104,7 +104,7 @@ curl --silent --show-error --fail-with-body \
   "http://127.0.0.1:${gateway_port}/api/v2/authentication/oidc:test" \
   | jq -e '.reachable == true' >/dev/null
 
-VITE_GATEWAY_PROXY_TARGET="http://127.0.0.1:${gateway_port}" \
+VITE_NOTARX_PROXY_TARGET="http://127.0.0.1:${gateway_port}" \
   npm --prefix "$root/console" run dev -- --host 127.0.0.1 --port "$console_port" >"$work_dir/console.log" 2>&1 &
 processes+=("$!")
 until curl --silent --show-error --fail "http://127.0.0.1:${console_port}" >/dev/null; do sleep 1; done

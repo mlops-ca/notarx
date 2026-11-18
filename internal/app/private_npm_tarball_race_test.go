@@ -33,7 +33,7 @@ func TestPrivateFormatNPMTarballPublication(t *testing.T) {
 
 func privateNPMTarballPublication(t *testing.T, change string, backend privateProxyBackend) {
 	t.Helper()
-	t.Setenv("GATEWAY_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
 	const packageName, tarballName = "private-demo", "private-demo-1.0.0.tgz"
 	oldBody := npmFixtureTarball(t, packageName, "1.0.0")
 	newBody := npmFixtureTarballWithRoot(t, "new-source-package", packageName, "1.0.0")

@@ -11,12 +11,12 @@ mkdir -p "$workdir/bin" "$workdir/state"
 for command_name in curl docker id launchctl node npm stat uname; do
   ln -s "$fake_command" "$workdir/bin/$command_name"
 done
-printf '%s\n' 'GATEWAY_HTTP_PORT=18081' 'GATEWAY_CONSOLE_PORT=4174' >"$workdir/.env"
+printf '%s\n' 'NOTARX_HTTP_PORT=18081' 'NOTARX_CONSOLE_PORT=4174' >"$workdir/.env"
 
 export PATH="$workdir/bin:/usr/bin:/bin"
 export LOCAL_DEV_TEST_STATE="$workdir/state"
-export GATEWAY_ENV_FILE="$workdir/.env"
-export GATEWAY_DEV_STATE_DIR="$workdir/dev-state"
+export NOTARX_ENV_FILE="$workdir/.env"
+export NOTARX_DEV_STATE_DIR="$workdir/dev-state"
 
 fail() {
   printf 'FAIL: %s\n' "$1" >&2
@@ -25,7 +25,7 @@ fail() {
 
 bootstrap_environment="$workdir/bootstrap.env"
 bootstrap_state="$workdir/bootstrap-state"
-output=$(GATEWAY_ENV_FILE="$bootstrap_environment" GATEWAY_DEV_STATE_DIR="$bootstrap_state" "$subject" bootstrap-env)
+output=$(NOTARX_ENV_FILE="$bootstrap_environment" NOTARX_DEV_STATE_DIR="$bootstrap_state" "$subject" bootstrap-env)
 
 assert_environment_key() {
   local file=$1 name=$2 minimum_length=$3 value
@@ -34,38 +34,38 @@ assert_environment_key() {
   [[ "$output" != *"$value"* ]] || fail "bootstrap printed generated $name"
 }
 
-assert_environment_key "$bootstrap_environment" GATEWAY_POSTGRES_PASSWORD 32
-assert_environment_key "$bootstrap_environment" GATEWAY_ADMIN_TOKEN 32
-assert_environment_key "$bootstrap_environment" GATEWAY_RESOLVER_TOKEN 32
+assert_environment_key "$bootstrap_environment" NOTARX_POSTGRES_PASSWORD 32
+assert_environment_key "$bootstrap_environment" NOTARX_ADMIN_TOKEN 32
+assert_environment_key "$bootstrap_environment" NOTARX_RESOLVER_TOKEN 32
 assert_environment_key "$bootstrap_environment" RUSTFS_ACCESS_KEY 16
 assert_environment_key "$bootstrap_environment" RUSTFS_SECRET_KEY 32
 assert_environment_key "$bootstrap_environment" RUSTFS_RPC_SECRET 32
 [[ $(stat -f '%Lp' "$bootstrap_environment" 2>/dev/null || stat -c '%a' "$bootstrap_environment") == 600 ]] || fail 'bootstrap environment is not private'
 [[ ! -d "$bootstrap_state/environment-backups" ]] || fail 'first-time bootstrap created a rollback copy without an original file'
-output=$(GATEWAY_ENV_FILE="$bootstrap_environment" GATEWAY_DEV_STATE_DIR="$bootstrap_state" "$subject" bootstrap-env)
+output=$(NOTARX_ENV_FILE="$bootstrap_environment" NOTARX_DEV_STATE_DIR="$bootstrap_state" "$subject" bootstrap-env)
 [[ "$output" == *'already configured'* ]] || fail 'idempotent environment bootstrap did not report the existing configuration'
 [[ ! -d "$bootstrap_state/environment-backups" ]] || fail 'idempotent environment bootstrap created a rollback copy'
 
 existing_environment="$workdir/existing.env"
 existing_state="$workdir/existing-state"
 cp "$repo_root/.env.example" "$existing_environment"
-output=$(GATEWAY_ENV_FILE="$existing_environment" GATEWAY_DEV_STATE_DIR="$existing_state" "$subject" bootstrap-env)
+output=$(NOTARX_ENV_FILE="$existing_environment" NOTARX_DEV_STATE_DIR="$existing_state" "$subject" bootstrap-env)
 existing_backup_count=$(find "$existing_state/environment-backups" -maxdepth 1 -name 'existing.env.before-bootstrap-*' | wc -l | tr -d ' ')
 [[ "$existing_backup_count" == 1 ]] || fail 'bootstrap did not preserve an existing placeholder environment'
-assert_environment_key "$existing_environment" GATEWAY_POSTGRES_PASSWORD 32
-assert_environment_key "$existing_environment" GATEWAY_ADMIN_TOKEN 32
-assert_environment_key "$existing_environment" GATEWAY_RESOLVER_TOKEN 32
+assert_environment_key "$existing_environment" NOTARX_POSTGRES_PASSWORD 32
+assert_environment_key "$existing_environment" NOTARX_ADMIN_TOKEN 32
+assert_environment_key "$existing_environment" NOTARX_RESOLVER_TOKEN 32
 
 invalid_environment="$workdir/invalid.env"
 printf '%s\n' \
-  'GATEWAY_POSTGRES_PASSWORD=short' \
-  'GATEWAY_ADMIN_TOKEN=replace-with-admin' \
-  'GATEWAY_RESOLVER_TOKEN=replace-with-resolver' \
+  'NOTARX_POSTGRES_PASSWORD=short' \
+  'NOTARX_ADMIN_TOKEN=replace-with-admin' \
+  'NOTARX_RESOLVER_TOKEN=replace-with-resolver' \
   'RUSTFS_ACCESS_KEY=replace-with-access' \
   'RUSTFS_SECRET_KEY=replace-with-secret' \
   'RUSTFS_RPC_SECRET=replace-with-rpc' >"$invalid_environment"
 cp "$invalid_environment" "$invalid_environment.before"
-if GATEWAY_ENV_FILE="$invalid_environment" GATEWAY_DEV_STATE_DIR="$workdir/invalid-state" "$subject" bootstrap-env >/dev/null 2>&1; then
+if NOTARX_ENV_FILE="$invalid_environment" NOTARX_DEV_STATE_DIR="$workdir/invalid-state" "$subject" bootstrap-env >/dev/null 2>&1; then
   fail 'bootstrap accepted an unsafe existing credential'
 fi
 cmp -s "$invalid_environment.before" "$invalid_environment" || fail 'failed bootstrap changed the existing environment'
@@ -83,10 +83,10 @@ rustfs_secret=$(awk -F= '$1 == "RUSTFS_SECRET_KEY" { print substr($0, index($0, 
 rustfs_rpc_secret=$(awk -F= '$1 == "RUSTFS_RPC_SECRET" { print substr($0, index($0, "=") + 1); exit }' "$workdir/.env")
 [[ "$rustfs_secret" != "$rustfs_rpc_secret" ]] || fail 'migration reused the S3 secret as the RPC secret'
 [[ "$output" != *"$rustfs_secret"* && "$output" != *"$rustfs_rpc_secret"* ]] || fail 'bootstrap printed generated credentials'
-backup_count=$(find "$GATEWAY_DEV_STATE_DIR/rustfs-env-backups" -maxdepth 1 -name '.env.before-rustfs-*' | wc -l | tr -d ' ')
+backup_count=$(find "$NOTARX_DEV_STATE_DIR/rustfs-env-backups" -maxdepth 1 -name '.env.before-rustfs-*' | wc -l | tr -d ' ')
 [[ "$backup_count" == 1 ]] || fail 'bootstrap did not create exactly one rollback copy'
 $subject bootstrap-rustfs-env >/dev/null
-second_backup_count=$(find "$GATEWAY_DEV_STATE_DIR/rustfs-env-backups" -maxdepth 1 -name '.env.before-rustfs-*' | wc -l | tr -d ' ')
+second_backup_count=$(find "$NOTARX_DEV_STATE_DIR/rustfs-env-backups" -maxdepth 1 -name '.env.before-rustfs-*' | wc -l | tr -d ' ')
 [[ "$second_backup_count" == 1 ]] || fail 'idempotent bootstrap created another rollback copy'
 cp "$workdir/.env" "$workdir/.env.before-failure-tests"
 awk '!/^RUSTFS_(ACCESS_KEY|SECRET_KEY|RPC_SECRET)=/' "$workdir/.env.before-failure-tests" >"$workdir/.env"
@@ -117,12 +117,12 @@ assert_contains "$output" 'http://127.0.0.1:4174/'
 assert_contains "$output" 'http://127.0.0.1:18081/readyz'
 [[ -f "$workdir/state/managed" ]] || fail 'start did not submit the Console supervisor job'
 grep -Fq 'compose --env-file' "$workdir/state/docker.log" || fail 'start did not invoke Docker Compose'
-grep -Fq 'VITE_GATEWAY_PROXY_TARGET=http://127.0.0.1:18081' "$workdir/state/launchctl.log" || fail 'start did not configure the Console API proxy'
+grep -Fq 'VITE_NOTARX_PROXY_TARGET=http://127.0.0.1:18081' "$workdir/state/launchctl.log" || fail 'start did not configure the Console API proxy'
 grep -Fq -- '--strictPort' "$workdir/state/launchctl.log" || fail 'start allowed Vite to drift to another port'
 
 reset_state
 export LOCAL_DEV_TEST_MODE=legacy-minio
-if output=$(GATEWAY_RUSTFS_MIGRATION_CONFIRMED=0 $subject start 2>&1); then
+if output=$(NOTARX_RUSTFS_MIGRATION_CONFIRMED=0 $subject start 2>&1); then
   fail 'start replaced legacy MinIO data with an empty RustFS volume'
 fi
 assert_contains "$output" 'Unsupported legacy MinIO resources were detected'
@@ -130,7 +130,7 @@ if grep -Fq ' up -d ' "$workdir/state/docker.log"; then
   fail 'start invoked Compose after detecting legacy MinIO data'
 fi
 
-if output=$(GATEWAY_RUSTFS_MIGRATION_CONFIRMED=1 GATEWAY_RUSTFS_MIGRATION_MANIFEST_SHA256="sha256:$(printf 'a%.0s' {1..64})" $subject guard 2>&1); then
+if output=$(NOTARX_RUSTFS_MIGRATION_CONFIRMED=1 NOTARX_RUSTFS_MIGRATION_MANIFEST_SHA256="sha256:$(printf 'a%.0s' {1..64})" $subject guard 2>&1); then
   fail 'legacy MinIO guard accepted the removed migration bypass'
 fi
 assert_contains "$output" 'no longer provides an in-place compatibility or migration bypass'
@@ -169,7 +169,7 @@ fi
 assert_contains "$output" 'Console exited before becoming ready'
 
 missing_environment="$workdir/missing.env"
-if output=$(GATEWAY_ENV_FILE="$missing_environment" $subject start 2>&1); then
+if output=$(NOTARX_ENV_FILE="$missing_environment" $subject start 2>&1); then
   fail 'start succeeded without an environment file'
 fi
 assert_contains "$output" 'Missing'
@@ -177,11 +177,11 @@ assert_contains "$output" 'Missing'
 reset_state
 export LOCAL_DEV_TEST_OS=Linux
 export LOCAL_DEV_TEST_MODE=managed
-mkdir -p "$GATEWAY_DEV_STATE_DIR"
-printf '%s %s\n' "$$" 0 >"$GATEWAY_DEV_STATE_DIR/console.pid"
+mkdir -p "$NOTARX_DEV_STATE_DIR"
+printf '%s %s\n' "$$" 0 >"$NOTARX_DEV_STATE_DIR/console.pid"
 $subject stop >/dev/null
 kill -0 "$$" || fail 'Linux PID reuse test unexpectedly killed its caller'
-[[ ! -f "$GATEWAY_DEV_STATE_DIR/console.pid" ]] || fail 'stop did not discard a stale Linux PID identity'
+[[ ! -f "$NOTARX_DEV_STATE_DIR/console.pid" ]] || fail 'stop did not discard a stale Linux PID identity'
 unset LOCAL_DEV_TEST_OS
 
 printf 'local-dev tests passed\n'

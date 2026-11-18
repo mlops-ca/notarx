@@ -42,7 +42,7 @@ features behind coordination and search.
 
 ## Runtime roles
 
-One image supports four runtime configurations through `GATEWAY_NODE_ROLES`:
+One image supports four runtime configurations through `NOTARX_NODE_ROLES`:
 
 | Role | Responsibility | Exposed surface |
 | --- | --- | --- |

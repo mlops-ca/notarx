@@ -20,6 +20,6 @@ print('Python executable SHA-256:', hashlib.sha256(pathlib.Path(sys.executable).
 PY
 
 cd "$root"
-ARTIFACT_GATEWAY_PYPI_CLI_E2E=1 \
-ARTIFACT_GATEWAY_PYTHON="$temporary/venv/bin/python" \
+NOTARX_PYPI_CLI_E2E=1 \
+NOTARX_PYTHON="$temporary/venv/bin/python" \
 go test ./internal/app -run '^TestNativePyPIRealTwineUploadAndPipDownload$|^TestPyPIYankRealPipHostedProxyGroup$' -count=1 -v

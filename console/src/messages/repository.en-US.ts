@@ -61,7 +61,7 @@ export const repositoryEnUS: Record<RepositoryMessageKey, string> = {
     "Anonymous pip reads need no credentials; twine uses any non-empty username with the resolver token.",
   "repository.configureCargoRegistry": "Configure Cargo registry",
   "repository.askAnAdministratorForRepositoryWriteAccessFor":
-    "Ask an administrator for repository write access. For private reads and publishing, inject CARGO_REGISTRIES_GATEWAY_TOKEN as Bearer followed by the Gateway token through a secret manager; never put it in the config file. Repository grants manage access; cargo owner is unsupported.",
+    "Ask an administrator for repository write access. For private reads and publishing, inject CARGO_REGISTRIES_NOTARX_TOKEN as Bearer followed by the Gateway token through a secret manager; never put it in the config file. Repository grants manage access; cargo owner is unsupported.",
   "repository.publishAndRead": "Publish and read",
   "repository.yankAndRestoreAVersion": "Yank and restore a version",
   "repository.fileName": "File name",

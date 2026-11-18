@@ -73,7 +73,7 @@ and Console images, so build it locally at the version you need:
 ```sh
 make cli-docker-build                                     # docker build -f Dockerfile.agctl -t notarxctl:dev .
 docker run --rm notarxctl:dev version
-docker run --rm -e NOTARXCTL_SERVER=https://gateway.example.com -e NOTARXCTL_TOKEN="$GATEWAY_TOKEN" \
+docker run --rm -e NOTARXCTL_SERVER=https://gateway.example.com -e NOTARXCTL_TOKEN="$NOTARX_TOKEN" \
   notarxctl:dev info
 ```
 
@@ -87,7 +87,7 @@ it under the nonroot home:
 ```sh
 make cli-build                             # writes dist/notarxctl_<goos>_<goarch>
 dist/notarxctl_darwin_arm64 version
-dist/notarxctl_linux_amd64 info --server https://gateway.example.com --token "$GATEWAY_TOKEN"
+dist/notarxctl_linux_amd64 info --server https://gateway.example.com --token "$NOTARX_TOKEN"
 ```
 
 `make cli-build` cross-compiles linux and darwin for amd64 and arm64 with the
@@ -570,7 +570,7 @@ addressed by ID with `--repo`.
   `pom.xml`, `GOPROXY` and `.netrc`, `docker login`, Raw `curl`, Conan
   remotes, APT `sources.list` and `auth.conf`, Cargo `config.toml`), with
   publish snippets for hosted repositories. Credentials are always the
-  placeholder `${ARTIFACT_GATEWAY_TOKEN}`; the configured token is never
+  placeholder `${NOTARX_TOKEN}`; the configured token is never
   written into a snippet. Maven Hosted reads and deploys through
   `/repository/maven/<repository>/`; Proxy guides use `/maven/<repository>/`.
   URLs follow the server the CLI talks to, with
@@ -936,7 +936,7 @@ command, flag, or argument count the client does not have.
   output change, rewrite them with `go test ./internal/notarxctl/ -update` and
   review the diff.
 - `make cli-e2e` builds `notarxctl` and runs it against a real, isolated Gateway:
-  it boots a Compose project from `GATEWAY_ENV_FILE` (or `.env`) on free
+  it boots a Compose project from `NOTARX_ENV_FILE` (or `.env`) on free
   ports and removes it afterwards. `CLI_E2E_NETWORK_SUBNET` optionally selects
   an unused RFC 1918 IPv4 /16 through /28 CIDR for that project's network when
   Docker's automatic address pools are full; Docker still refuses overlaps.

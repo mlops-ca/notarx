@@ -112,7 +112,7 @@ func TestPostgresContainsSearchPlansAndCancellation(t *testing.T) {
 			}
 		}
 	}
-	if output := os.Getenv("GATEWAY_SEARCH_PLAN_OUTPUT"); output != "" {
+	if output := os.Getenv("NOTARX_SEARCH_PLAN_OUTPUT"); output != "" {
 		data, err := json.MarshalIndent(report, "", "  ")
 		if err != nil {
 			t.Fatal(err)

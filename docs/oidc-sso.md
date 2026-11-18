@@ -13,27 +13,27 @@ identifiers are therefore not compiled into the frontend bundle.
 ## Required configuration
 
 ```dotenv
-GATEWAY_OIDC_ISSUER=https://login.example.com/realms/acme
-GATEWAY_OIDC_AUDIENCE=artifact-gateway-api
-GATEWAY_OIDC_CLIENT_ID=artifact-gateway-console
-GATEWAY_OIDC_CLIENT_SECRET=
-GATEWAY_OIDC_REDIRECT_URL=https://gateway.example.com/auth/oidc/callback
-GATEWAY_OIDC_SCOPES=openid profile email
-GATEWAY_SETTINGS_ENCRYPTION_KEY=<32-byte-key>
+NOTARX_OIDC_ISSUER=https://login.example.com/realms/acme
+NOTARX_OIDC_AUDIENCE=artifact-gateway-api
+NOTARX_OIDC_CLIENT_ID=artifact-gateway-console
+NOTARX_OIDC_CLIENT_SECRET=
+NOTARX_OIDC_REDIRECT_URL=https://gateway.example.com/auth/oidc/callback
+NOTARX_OIDC_SCOPES=openid profile email
+NOTARX_SETTINGS_ENCRYPTION_KEY=<32-byte-key>
 ```
 
-Set `GATEWAY_OIDC_CLIENT_SECRET` for a confidential client. Leave it empty for
+Set `NOTARX_OIDC_CLIENT_SECRET` for a confidential client. Leave it empty for
 a public client that requires PKCE. Issuer and JWKS endpoints must use HTTPS,
 except for the loopback hosts `localhost`, `127.0.0.1`, and `::1` in local
 development. The redirect URL must use HTTPS except for those same local
 development callbacks. API-only bearer validation may leave both
-`GATEWAY_OIDC_CLIENT_ID` and `GATEWAY_OIDC_REDIRECT_URL` empty; when browser
+`NOTARX_OIDC_CLIENT_ID` and `NOTARX_OIDC_REDIRECT_URL` empty; when browser
 login is enabled, those two values must be configured together.
 
 Environment variables are the bootstrap source. Administrators can then open
 **Authentication** in the Console and save a runtime configuration. The first
 save creates the singleton database record; subsequent changes use versioned
-`If-Match` updates. `GATEWAY_SETTINGS_ENCRYPTION_KEY` encrypts confidential
+`If-Match` updates. `NOTARX_SETTINGS_ENCRYPTION_KEY` encrypts confidential
 client secrets with AES-256-GCM. Responses expose only
 `clientSecretConfigured` and never return plaintext or ciphertext.
 
@@ -51,8 +51,8 @@ token. Administrators can inspect and revoke individual sessions from the user
 detail view. `POST /auth/logout` revokes the current linked session before
 clearing the browser cookie.
 
-API Bearer tokens are checked against `GATEWAY_OIDC_AUDIENCE`. Browser ID
-tokens are checked independently against `GATEWAY_OIDC_CLIENT_ID`, so the API
+API Bearer tokens are checked against `NOTARX_OIDC_AUDIENCE`. Browser ID
+tokens are checked independently against `NOTARX_OIDC_CLIENT_ID`, so the API
 and Console may use separate audiences.
 
 ## Local account linkage
@@ -123,8 +123,8 @@ Realm roles, client roles, top-level `roles`, and `groups` claims can be mapped
 onto Gateway account levels:
 
 ```dotenv
-GATEWAY_OIDC_MEMBER_ROLES=artifact-member
-GATEWAY_OIDC_ADMIN_ROLES=artifact-admin
+NOTARX_OIDC_MEMBER_ROLES=artifact-member
+NOTARX_OIDC_ADMIN_ROLES=artifact-admin
 ```
 
 A mapping approves the account rather than granting repository capability: a
@@ -143,8 +143,8 @@ their exact values through the same member and administrator variables above.
 
 The saved OIDC settings move to a single member role list. The reader list and
 the writer list merge into it, a stored JIT default of `reader` or `writer`
-becomes `member`, and `GATEWAY_OIDC_READER_ROLES` and `GATEWAY_OIDC_WRITER_ROLES`
-are replaced by `GATEWAY_OIDC_MEMBER_ROLES`. An external realm role listed in
+becomes `member`, and `NOTARX_OIDC_READER_ROLES` and `NOTARX_OIDC_WRITER_ROLES`
+are replaced by `NOTARX_OIDC_MEMBER_ROLES`. An external realm role listed in
 either legacy variable has to be listed in the new one to keep matching.
 
 The migration replaces the reader and writer columns rather than leaving them

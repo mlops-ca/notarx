@@ -5,20 +5,20 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 
 # Historical protocol regression only; not the v0.6.0 release gate.
-base_ref=${GATEWAY_UPGRADE_FROM_REF:-v0.1.0}
-current_ref=${GATEWAY_READINESS_REF:-HEAD}
-base_image=${GATEWAY_UPGRADE_FROM_IMAGE:-}
-candidate_image=${GATEWAY_READINESS_IMAGE:-}
+base_ref=${NOTARX_UPGRADE_FROM_REF:-v0.1.0}
+current_ref=${NOTARX_READINESS_REF:-HEAD}
+base_image=${NOTARX_UPGRADE_FROM_IMAGE:-}
+candidate_image=${NOTARX_READINESS_IMAGE:-}
 # shellcheck source=readiness-image.sh
 source "$repo_root/scripts/readiness-image.sh"
 [[ -z "$base_image" ]] || readiness_validate_image_ref "$base_image"
 [[ -z "$candidate_image" ]] || readiness_validate_image_ref "$candidate_image"
-environment_file=${GATEWAY_ENV_FILE:-.env}
+environment_file=${NOTARX_ENV_FILE:-.env}
 test -f "$environment_file" || { printf '%s\n' 'Upgrade readiness requires a configured environment file.' >&2; exit 1; }
 base_revision=$(git rev-parse "$base_ref^{commit}")
 current_revision=$(git rev-parse "$current_ref^{commit}")
 base_version=$(git show "$base_revision:VERSION" | tr -d '[:space:]')
-current_version=${GATEWAY_READINESS_VERSION:-$(tr -d '[:space:]' < VERSION)-main.${current_revision:0:12}}
+current_version=${NOTARX_READINESS_VERSION:-$(tr -d '[:space:]' < VERSION)-main.${current_revision:0:12}}
 # These checkout files are mounted alongside a pinned candidate image.
 if [[ -n "$candidate_image" ]]; then
   git diff --exit-code "$current_revision" -- migrations themes compose.yml scripts/run-migrations.sh scripts/run-rustfs.sh >/dev/null || {
@@ -29,7 +29,7 @@ fi
 free_port() { python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()'; }
 project="artifact-gateway-upgrade-${RANDOM}-${RANDOM}"
 gateway_image="${project}-gateway:latest"
-export NOTARX_GATEWAY_IMAGE="$gateway_image"
+export NOTARX_IMAGE="$gateway_image"
 rollback_image="${project}-rollback-gateway:local"
 current_image="${project}-current-gateway:local"
 old_tree=$(mktemp -d)
@@ -80,16 +80,16 @@ printf '%s\n' \
   '    environment:' \
   '      NO_PROXY: postgres,rustfs,127.0.0.1,localhost' \
   '    volumes:' \
-  '      - "${GATEWAY_UPGRADE_CA_FILE}:/etc/ssl/certs/ca-certificates.crt:ro"' >"$compose_override"
+  '      - "${NOTARX_UPGRADE_CA_FILE}:/etc/ssl/certs/ca-certificates.crt:ro"' >"$compose_override"
 suffix="upgrade-${RANDOM}"
-awk -F= '$1 != "GATEWAY_HTTP_PORT" && $1 != "GATEWAY_POSTGRES_PORT" && $1 != "RUSTFS_API_PORT" && $1 != "RUSTFS_CONSOLE_PORT" && $1 != "RUSTFS_ACCESS_KEY" && $1 != "RUSTFS_SECRET_KEY" && $1 != "RUSTFS_RPC_SECRET" && $1 != "GATEWAY_MAVEN_PROXY_ALLOWED_HOSTS" && $1 != "GATEWAY_EGRESS_PROXY" && $1 != "GATEWAY_REPOSITORY_READERS" && $1 != "COMPOSE_PROFILES" { print }' "$environment_file" >"$isolated_environment"
+awk -F= '$1 != "NOTARX_HTTP_PORT" && $1 != "NOTARX_POSTGRES_PORT" && $1 != "RUSTFS_API_PORT" && $1 != "RUSTFS_CONSOLE_PORT" && $1 != "RUSTFS_ACCESS_KEY" && $1 != "RUSTFS_SECRET_KEY" && $1 != "RUSTFS_RPC_SECRET" && $1 != "NOTARX_MAVEN_PROXY_ALLOWED_HOSTS" && $1 != "NOTARX_EGRESS_PROXY" && $1 != "NOTARX_REPOSITORY_READERS" && $1 != "COMPOSE_PROFILES" { print }' "$environment_file" >"$isolated_environment"
 rustfs_access_key=${RUSTFS_ACCESS_KEY:-$(awk -F= '$1 == "RUSTFS_ACCESS_KEY" { print substr($0, index($0, "=") + 1) }' "$environment_file")}
 rustfs_secret_key=${RUSTFS_SECRET_KEY:-$(awk -F= '$1 == "RUSTFS_SECRET_KEY" { print substr($0, index($0, "=") + 1) }' "$environment_file")}
 rustfs_rpc_secret=${RUSTFS_RPC_SECRET:-$(awk -F= '$1 == "RUSTFS_RPC_SECRET" { print substr($0, index($0, "=") + 1) }' "$environment_file")}
 test -n "$rustfs_access_key"
 test -n "$rustfs_secret_key"
 test -n "$rustfs_rpc_secret"
-printf 'GATEWAY_HTTP_PORT=%s\nGATEWAY_POSTGRES_PORT=%s\nRUSTFS_API_PORT=%s\nRUSTFS_CONSOLE_PORT=%s\nRUSTFS_ACCESS_KEY=%s\nRUSTFS_SECRET_KEY=%s\nRUSTFS_RPC_SECRET=%s\nGATEWAY_MAVEN_PROXY_ALLOWED_HOSTS=host.docker.internal:%s\nGATEWAY_EGRESS_PROXY=http://host.docker.internal:%s\nGATEWAY_UPGRADE_CA_FILE=%s\nGATEWAY_REPOSITORY_READERS=upgrade-readiness=maven-object-%s\n' \
+printf 'NOTARX_HTTP_PORT=%s\nNOTARX_POSTGRES_PORT=%s\nRUSTFS_API_PORT=%s\nRUSTFS_CONSOLE_PORT=%s\nRUSTFS_ACCESS_KEY=%s\nRUSTFS_SECRET_KEY=%s\nRUSTFS_RPC_SECRET=%s\nNOTARX_MAVEN_PROXY_ALLOWED_HOSTS=host.docker.internal:%s\nNOTARX_EGRESS_PROXY=http://host.docker.internal:%s\nNOTARX_UPGRADE_CA_FILE=%s\nNOTARX_REPOSITORY_READERS=upgrade-readiness=maven-object-%s\n' \
   "$gateway_port" "$(free_port)" "$rustfs_api_port" "$rustfs_console_port" \
   "$rustfs_access_key" "$rustfs_secret_key" "$rustfs_rpc_secret" "$upstream_port" "$proxy_port" "$upstream_cert" "$suffix" >>"$isolated_environment"
 gateway_url="http://127.0.0.1:${gateway_port}"
@@ -97,8 +97,8 @@ gateway_url="http://127.0.0.1:${gateway_port}"
 old_compose=(docker compose --env-file "$isolated_environment" -f "$old_tree/compose.yml" -f "$compose_override")
 current_compose=(docker compose --env-file "$isolated_environment" -f compose.yml -f "$compose_override")
 status() { curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$@"; }
-admin=(-H "Authorization: Bearer $(awk -F= '$1 == "GATEWAY_ADMIN_TOKEN" { print substr($0, index($0, "=") + 1) }' "$isolated_environment")")
-resolver_token=$(awk -F= '$1 == "GATEWAY_RESOLVER_TOKEN" { print substr($0, index($0, "=") + 1) }' "$isolated_environment")
+admin=(-H "Authorization: Bearer $(awk -F= '$1 == "NOTARX_ADMIN_TOKEN" { print substr($0, index($0, "=") + 1) }' "$isolated_environment")")
+resolver_token=$(awk -F= '$1 == "NOTARX_RESOLVER_TOKEN" { print substr($0, index($0, "=") + 1) }' "$isolated_environment")
 resolver=(-u "upgrade-readiness:$resolver_token")
 
 assert_go_module_download() {

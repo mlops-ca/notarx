@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-environment_file=${GATEWAY_ENV_FILE:-.env}
+environment_file=${NOTARX_ENV_FILE:-.env}
 backup_dir=${1:?usage: scripts/restore-drill.sh <backup-directory>}
 compose=(docker compose --env-file "$environment_file" -f compose.yml)
 shasum -a 256 --check "$backup_dir/SHA256SUMS"

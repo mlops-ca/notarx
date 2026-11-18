@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import type { MigrationSource } from "../src/client";
 import { waitForModalOpen } from "./support/motion";
 
-const token = process.env.GATEWAY_ADMIN_TOKEN;
+const token = process.env.NOTARX_ADMIN_TOKEN;
 const sourceUrl = process.env.MIGRATION_SOURCE_FIXTURE_URL;
 test.skip(
   !token || !sourceUrl,
@@ -127,7 +127,7 @@ test("source connection, metadata reads, explicit mapping and credential lifecyc
         }),
       ),
     ).not.toMatch(/fixture-reader|fixture-password/);
-    const resolver = process.env.GATEWAY_RESOLVER_TOKEN;
+    const resolver = process.env.NOTARX_RESOLVER_TOKEN;
     if (resolver)
       expect(
         (

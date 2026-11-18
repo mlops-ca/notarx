@@ -203,7 +203,7 @@ func writeThemeResult(output io.Writer, format, status string, theme Theme, path
 }
 
 func defaultDirectory() string {
-	if value := strings.TrimSpace(os.Getenv("GATEWAY_CONSOLE_THEME_DIR")); value != "" {
+	if value := strings.TrimSpace(os.Getenv("NOTARX_CONSOLE_THEME_DIR")); value != "" {
 		return value
 	}
 	return "themes"

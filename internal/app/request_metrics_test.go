@@ -25,10 +25,10 @@ func TestHTTPMetricsRecordBoundedClassStatusAndLatency(t *testing.T) {
 	metrics.Handler(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
 	body := response.Body.String()
 	for _, expected := range []string{
-		`artifact_gateway_http_requests_total{class="management",status="2xx"} 1`,
-		`artifact_gateway_http_requests_in_flight{class="management"} 0`,
-		`artifact_gateway_http_request_duration_seconds_bucket{class="management",status="2xx",le="+Inf"} 1`,
-		`artifact_gateway_http_request_duration_seconds_count{class="management",status="2xx"} 1`,
+		`notarx_http_requests_total{class="management",status="2xx"} 1`,
+		`notarx_http_requests_in_flight{class="management"} 0`,
+		`notarx_http_request_duration_seconds_bucket{class="management",status="2xx",le="+Inf"} 1`,
+		`notarx_http_request_duration_seconds_count{class="management",status="2xx"} 1`,
 	} {
 		if !strings.Contains(body, expected) {
 			t.Fatalf("metrics missing %q\n%s", expected, body)
@@ -53,7 +53,7 @@ func TestHTTPMetricsExposeInFlightRequest(t *testing.T) {
 	<-started
 	response := httptest.NewRecorder()
 	metrics.Handler(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
-	if !strings.Contains(response.Body.String(), `artifact_gateway_http_requests_in_flight{class="oci"} 1`) {
+	if !strings.Contains(response.Body.String(), `notarx_http_requests_in_flight{class="oci"} 1`) {
 		t.Fatalf("in-flight metric missing\n%s", response.Body.String())
 	}
 	close(release)
@@ -85,12 +85,12 @@ func TestRuntimeAndDatabasePoolMetrics(t *testing.T) {
 	metrics.Handler(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
 	body := response.Body.String()
 	for _, expected := range []string{
-		"artifact_gateway_runtime_heap_alloc_bytes ",
-		"artifact_gateway_runtime_gc_cycles_total ",
-		"artifact_gateway_runtime_goroutines ",
-		`artifact_gateway_database_connections{pool="primary",state="max_open"} 7`,
-		`artifact_gateway_database_connections{pool="artifact-locks",state="max_open"} 4`,
-		`artifact_gateway_database_connections{pool="notifications",state="max_open"} 2`,
+		"notarx_runtime_heap_alloc_bytes ",
+		"notarx_runtime_gc_cycles_total ",
+		"notarx_runtime_goroutines ",
+		`notarx_database_connections{pool="primary",state="max_open"} 7`,
+		`notarx_database_connections{pool="artifact-locks",state="max_open"} 4`,
+		`notarx_database_connections{pool="notifications",state="max_open"} 2`,
 	} {
 		if !strings.Contains(body, expected) {
 			t.Fatalf("metrics missing %q\n%s", expected, body)
@@ -102,7 +102,7 @@ func TestNodeInfoMetricEscapesConfiguredIdentity(t *testing.T) {
 	metrics := (&Metrics{}).WithNodeIdentity("worker\"01\n", []string{"worker"})
 	response := httptest.NewRecorder()
 	metrics.Handler(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
-	if !strings.Contains(response.Body.String(), `artifact_gateway_node_info{instance_id="worker\"01\n",roles="worker"} 1`) {
+	if !strings.Contains(response.Body.String(), `notarx_node_info{instance_id="worker\"01\n",roles="worker"} 1`) {
 		t.Fatalf("node metric is missing or malformed:\n%s", response.Body.String())
 	}
 }
@@ -186,7 +186,7 @@ func TestHTTPMetricsPassThroughInformationalStatusAndRecordFinalStatus(t *testin
 	}
 	response := httptest.NewRecorder()
 	metrics.Handler(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
-	if !strings.Contains(response.Body.String(), `artifact_gateway_http_requests_total{class="management",status="2xx"} 1`) {
+	if !strings.Contains(response.Body.String(), `notarx_http_requests_total{class="management",status="2xx"} 1`) {
 		t.Fatal("HTTP metrics did not record the final status family")
 	}
 }

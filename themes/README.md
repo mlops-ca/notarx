@@ -5,7 +5,7 @@ Artifact Gateway loads Console themes from three sources:
 1. four bundled packages: the original `Gateway Dark` and `Gateway Light`, plus
    the extension packages `Aerok Dark` and `Aerok Light`;
 2. optional operator-owned `*.theme.json` files in
-   `GATEWAY_CONSOLE_THEME_DIR`;
+   `NOTARX_CONSOLE_THEME_DIR`;
 3. administrator-managed packages uploaded in Console and persisted in
    PostgreSQL.
 

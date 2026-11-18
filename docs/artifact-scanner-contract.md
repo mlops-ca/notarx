@@ -6,7 +6,7 @@ The `internal/scanning` module is the controlled seam between Artifact Gateway
 and an external security scanner. It does not execute user-configured commands
 and does not allow a scanner to mutate repository state directly.
 
-The adapter is enabled at process startup with `GATEWAY_SCANNER_ENDPOINT`.
+The adapter is enabled at process startup with `NOTARX_SCANNER_ENDPOINT`.
 Administrators can enqueue a scan for an immutable artifact; a `scan` worker
 resolves protocol-owned assets, streams them to the adapter, and optimistically
 merges scanner-owned fields into stored artifact intelligence. Hosted
@@ -15,20 +15,20 @@ publication.
 
 ## Configuration
 
-Set `GATEWAY_SCANNER_ENDPOINT` to enable the adapter. The other settings are
+Set `NOTARX_SCANNER_ENDPOINT` to enable the adapter. The other settings are
 optional:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `GATEWAY_SCANNER_NAME` | `artifact-scanner` | Bounded scanner identity recorded with vulnerability summaries. |
-| `GATEWAY_SCANNER_TOKEN` | empty | Bearer token sent to the configured endpoint. |
-| `GATEWAY_SCANNER_TIMEOUT` | `2m` | Per-scan request deadline, between `1s` and `30m`. |
-| `GATEWAY_SCANNER_HEALTH_ENDPOINT` | empty | Optional read-only scanner health and vulnerability database metadata endpoint. |
-| `GATEWAY_SCANNER_HEALTH_TIMEOUT` | `2s` | Health request deadline, between `1s` and `30s`. |
-| `GATEWAY_SCANNER_DATABASE_MAX_AGE` | `24h` | Maximum accepted vulnerability database age, between `1m` and `720h`. |
-| `GATEWAY_SCANNER_MAX_RESPONSE_BYTES` | `524288` | Maximum JSON response, between 1 KiB and 8 MiB. |
-| `GATEWAY_SCANNER_MAX_ARTIFACT_BYTES` | `21474836480` | Maximum streamed logical artifact, up to 1 TiB. |
-| `GATEWAY_SCANNER_FORMATS` | all scanner-supported formats | Comma-separated format allowlist. |
+| `NOTARX_SCANNER_NAME` | `artifact-scanner` | Bounded scanner identity recorded with vulnerability summaries. |
+| `NOTARX_SCANNER_TOKEN` | empty | Bearer token sent to the configured endpoint. |
+| `NOTARX_SCANNER_TIMEOUT` | `2m` | Per-scan request deadline, between `1s` and `30m`. |
+| `NOTARX_SCANNER_HEALTH_ENDPOINT` | empty | Optional read-only scanner health and vulnerability database metadata endpoint. |
+| `NOTARX_SCANNER_HEALTH_TIMEOUT` | `2s` | Health request deadline, between `1s` and `30s`. |
+| `NOTARX_SCANNER_DATABASE_MAX_AGE` | `24h` | Maximum accepted vulnerability database age, between `1m` and `720h`. |
+| `NOTARX_SCANNER_MAX_RESPONSE_BYTES` | `524288` | Maximum JSON response, between 1 KiB and 8 MiB. |
+| `NOTARX_SCANNER_MAX_ARTIFACT_BYTES` | `21474836480` | Maximum streamed logical artifact, up to 1 TiB. |
+| `NOTARX_SCANNER_FORMATS` | all scanner-supported formats | Comma-separated format allowlist. |
 
 Both endpoints must be HTTPS outside localhost/loopback and cannot contain
 credentials, query parameters, or fragments. Scanner settings without a scan
@@ -53,13 +53,13 @@ Compose `up` command):
 
 ```dotenv
 COMPOSE_PROFILES=scanner
-GATEWAY_SCANNER_ENDPOINT=http://127.0.0.1:18082/v1/scan
-GATEWAY_SCANNER_HEALTH_ENDPOINT=http://127.0.0.1:18082/v1/health
-GATEWAY_SCANNER_NAME=trivy-reference
-GATEWAY_SCANNER_FORMATS=maven,raw,npm,pypi,go,conan
-GATEWAY_SCANNER_TOKEN=replace-with-a-local-scanner-token
-GATEWAY_SCANNER_TIMEOUT=10m
-GATEWAY_SCANNER_MAX_ARTIFACT_BYTES=1073741824
+NOTARX_SCANNER_ENDPOINT=http://127.0.0.1:18082/v1/scan
+NOTARX_SCANNER_HEALTH_ENDPOINT=http://127.0.0.1:18082/v1/health
+NOTARX_SCANNER_NAME=trivy-reference
+NOTARX_SCANNER_FORMATS=maven,raw,npm,pypi,go,conan
+NOTARX_SCANNER_TOKEN=replace-with-a-local-scanner-token
+NOTARX_SCANNER_TIMEOUT=10m
+NOTARX_SCANNER_MAX_ARTIFACT_BYTES=1073741824
 ```
 
 The sidecar accepts no command flags from a request. It materializes each asset
@@ -74,7 +74,7 @@ vulnerability summary plus up to 200 detailed findings. A result that would
 exceed the Gateway's default response bound automatically falls back to the
 complete severity summary. Trivy's database cache is kept in the
 `gateway-trivy-cache` volume so routine restarts do not redownload it. Database
-downloads use the configured `GATEWAY_EGRESS_PROXY` when present. The 10-minute
+downloads use the configured `NOTARX_EGRESS_PROXY` when present. The 10-minute
 Gateway timeout shown above also covers the first database download; later
 scans normally reuse the cache.
 
@@ -96,7 +96,7 @@ Console:
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `REFERENCE_SCANNER_LISTEN_ADDRESS` | `127.0.0.1:18082` | Loopback listener; non-loopback addresses are rejected. |
-| `REFERENCE_SCANNER_TOKEN` | empty | Optional Bearer token; Compose maps `GATEWAY_SCANNER_TOKEN`. |
+| `REFERENCE_SCANNER_TOKEN` | empty | Optional Bearer token; Compose maps `NOTARX_SCANNER_TOKEN`. |
 | `REFERENCE_SCANNER_TRIVY_BINARY` | `trivy` | Operator-controlled Trivy executable path. |
 | `REFERENCE_SCANNER_SCAN_TIMEOUT` | `10m` | Fixed-command scan deadline, between `1s` and `30m`. |
 | `REFERENCE_SCANNER_HEALTH_TIMEOUT` | `10s` | Version/database probe deadline, between `1s` and `30s`. |
@@ -134,7 +134,7 @@ Content-Type: application/json
 
 The API returns `202` with the lifecycle job. Repeating the same key and body
 returns the existing job; reusing the key for another identity returns `409`.
-The repository format must be present in `GATEWAY_SCANNER_FORMATS`.
+The repository format must be present in `NOTARX_SCANNER_FORMATS`.
 Capability discovery reports this manual-scan path as `artifactScanning` and
 reports publication-hook availability separately as `publicationScanning`, so
 Proxy caches and formats without a native publish hook never expose a
@@ -149,8 +149,8 @@ repository, format, coordinate, and digest identity receives a stable
 `publish-scan:` idempotency key, so protocol retries do not create duplicate
 scan jobs. Enqueue successes and failures are recorded in the audit log.
 
-Worker nodes must include `worker` in `GATEWAY_NODE_ROLES`, allow `scan` in
-`GATEWAY_WORKER_KINDS`, and use the same scanner configuration. Jobs use the
+Worker nodes must include `worker` in `NOTARX_NODE_ROLES`, allow `scan` in
+`NOTARX_WORKER_KINDS`, and use the same scanner configuration. Jobs use the
 existing PostgreSQL lease, retry, cancellation, and run-now controls. A report
 replaces only scanner-owned SBOM, license, and vulnerability fields. Existing
 signatures and provenance remain unchanged, including when a concurrent writer
@@ -175,7 +175,7 @@ canonical `pool/.../*.deb` path and exact digest. It sends one binary-package
 asset, including for quarantined packages under investigation; metadata,
 staged and retired-only packages are rejected. Automatic publication scanning
 and reconciliation use the same identity across suites. Configure an external
-APT-capable service in `GATEWAY_SCANNER_FORMATS`; the bundled reference adapter
+APT-capable service in `NOTARX_SCANNER_FORMATS`; the bundled reference adapter
 continues rejecting APT. Its [Trivy filesystem mode](https://trivy.dev/docs/latest/target/filesystem/)
 does not establish standalone Debian-package vulnerability coverage. Do not
 interpret an unanalyzed archive as a clean result. See [APT governance](apt-hosted-lifecycle.md#scanning-and-quarantine).
@@ -305,7 +305,7 @@ boundary and the management intelligence write boundary.
 
 ## Health and vulnerability database freshness
 
-When `GATEWAY_SCANNER_HEALTH_ENDPOINT` is set, the Gateway sends a bounded
+When `NOTARX_SCANNER_HEALTH_ENDPOINT` is set, the Gateway sends a bounded
 `GET` request with the same Bearer credential, `Accept: application/json`, and
 `X-Artifact-Scanner-Schema: v1`. The endpoint returns:
 
@@ -328,7 +328,7 @@ than five minutes in the future, and follows the same no-redirect and no-error-
 body policy as scanning.
 
 The Gateway assigns `checkedAt` locally and compares `database.updatedAt` with
-`GATEWAY_SCANNER_DATABASE_MAX_AGE`. A healthy scanner with an older database is
+`NOTARX_SCANNER_DATABASE_MAX_AGE`. A healthy scanner with an older database is
 reported as degraded. `GET /api/v2/diagnostics` exposes this sanitized status,
 the configured format coverage, scanner/database versions, and freshness to
 administrators; the Console presents it inside the existing dependency panel.
@@ -391,7 +391,7 @@ with `purpose=scan`; it includes historical versions and both Conan recipe and
 package revisions instead of reconstructing identities from browse results.
 Exact manual entry remains an advanced recovery path. When capability discovery
 reports no scanner, the tab stays visible but disables mutation and points the
-operator to `GATEWAY_SCANNER_ENDPOINT`, `GATEWAY_SCANNER_FORMATS`, and Worker
+operator to `NOTARX_SCANNER_ENDPOINT`, `NOTARX_SCANNER_FORMATS`, and Worker
 `scan`-kind deployment configuration. Scanner endpoints and tokens remain
 deployment secrets and are never returned to the browser.
 

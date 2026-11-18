@@ -74,7 +74,7 @@ optional `egressProxy` object:
 - `protocol`: `http` | `socks5` (custom mode only).
 - `password`: decided — **encrypted at rest**. The API accepts a plaintext
   password over TLS, the server encrypts it with AES-256-GCM using a key
-  from `GATEWAY_EGRESS_PROXY_KEY` (32-byte, env-injected; a KMS envelope
+  from `NOTARX_EGRESS_PROXY_KEY` (32-byte, env-injected; a KMS envelope
   can replace it later without a schema change), and stores only the
   base64 ciphertext. The management API never returns plaintext or
   ciphertext; responses carry `credentialsConfigured: true` instead.
@@ -102,7 +102,7 @@ type Config struct {
     Host     string
     Port     int
     Username string
-    Password string // decrypted in memory with GATEWAY_EGRESS_PROXY_KEY
+    Password string // decrypted in memory with NOTARX_EGRESS_PROXY_KEY
     RemoteDNS bool
     NoProxy  []string
 }
@@ -174,7 +174,7 @@ must not resolve to a private/loopback address — same rule as
 
 - Passwords are stored only as AES-256-GCM ciphertext, decrypted lazily in
   memory when a transport is constructed; the data key comes from
-  `GATEWAY_EGRESS_PROXY_KEY` and key rotation re-encrypts via a forward
+  `NOTARX_EGRESS_PROXY_KEY` and key rotation re-encrypts via a forward
   migration tool.
 - Audit records gain `egress_mode` (`direct|environment|custom`) and
   `egress_proxy_host` (host only, no credentials) fields.
@@ -310,7 +310,7 @@ reject this field. An administrator sets
 Basic credentials with `{"scheme":"basic","username":"source-reader","secret":"synthetic-example"}`
 or a static Bearer credential with `{"scheme":"bearer","secret":"synthetic-example"}`.
 The source secret is distinct from Gateway client credentials and egress proxy
-credentials. Management writes seal it with `GATEWAY_SETTINGS_ENCRYPTION_KEY`
+credentials. Management writes seal it with `NOTARX_SETTINGS_ENCRYPTION_KEY`
 under the `repository-upstream-auth` purpose; reads expose only scheme, username
 and `credentialsConfigured`, never plaintext or ciphertext.
 

@@ -4,12 +4,12 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 
-environment_file=${GATEWAY_ENV_FILE:-.env}
+environment_file=${NOTARX_ENV_FILE:-.env}
 test -f "$environment_file" || { printf '%s\n' 'Raw E2E requires a configured environment file.' >&2; exit 1; }
 # shellcheck disable=SC1091
 source "$environment_file"
 
-for name in GATEWAY_HTTP_PORT GATEWAY_ADMIN_TOKEN GATEWAY_RESOLVER_TOKEN; do
+for name in NOTARX_HTTP_PORT NOTARX_ADMIN_TOKEN NOTARX_RESOLVER_TOKEN; do
   test -n "${!name:-}" || { printf 'Missing required %s\n' "$name" >&2; exit 1; }
 done
 
@@ -17,7 +17,7 @@ free_port() {
   python3 -c 'import socket; listener = socket.socket(); listener.bind(("127.0.0.1", 0)); print(listener.getsockname()[1]); listener.close()'
 }
 
-gateway_url="http://localhost:${GATEWAY_HTTP_PORT}"
+gateway_url="http://localhost:${NOTARX_HTTP_PORT}"
 fixture_port=$(free_port)
 run_id=${RAW_E2E_RUN_ID:-"$(date +%s)-${RANDOM}"}
 group="raw-ready-${run_id}"
@@ -33,7 +33,7 @@ cleanup() {
   if [[ -n "$fixture_pid" ]]; then kill "$fixture_pid" 2>/dev/null || true; fi
   if [[ -n "$anonymous_policy_version" && "$anonymous_policy_enabled" != "true" ]]; then
     curl --silent --output /dev/null --write-out '' -X PUT \
-      -H "Authorization: Bearer $GATEWAY_ADMIN_TOKEN" -H 'Content-Type: application/json' -H "If-Match: $anonymous_policy_version" \
+      -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" -H 'Content-Type: application/json' -H "If-Match: $anonymous_policy_version" \
       --data "{\"version\":\"$anonymous_policy_version\",\"enabled\":false}" "$gateway_url/api/v2/anonymous-access-policy" || true
   fi
   rm -rf "$workdir"
@@ -57,7 +57,7 @@ create_group() {
   payload=$(printf '{"name":"%s","anonymous":%s,"cacheQuotaBytes":1048576,"members":[{"name":"fixture","type":"%s","endpoint":"%s","position":0,"anonymous":%s,"allowedHosts":%s}]}' \
     "$name" "$anonymous" "$member_type" "$endpoint" "$anonymous" "$hosts")
   status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-    -H "Authorization: Bearer $GATEWAY_ADMIN_TOKEN" -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" -H 'Content-Type: application/json' \
     --data "$payload" "$gateway_url/api/v1/raw/groups")
   [[ "$status" == 201 ]] || { printf 'Creating Raw Group %s returned HTTP %s\n' "$name" "$status" >&2; exit 1; }
 }
@@ -68,21 +68,21 @@ expect_status() {
 }
 
 # The Group names carry a per-run suffix, so they cannot be named in
-# GATEWAY_REPOSITORY_READERS. These probes assert path, cache, and allowlist
+# NOTARX_REPOSITORY_READERS. These probes assert path, cache, and allowlist
 # behaviour rather than read authority, so they authenticate as the
 # administrator and stay independent of the reader policy in force.
 admin_status() {
   curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-    -H "Authorization: Bearer $GATEWAY_ADMIN_TOKEN" "$1"
+    -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$1"
 }
 
 enable_anonymous_access() {
   local policy response
-  policy=$(curl --silent --show-error --fail -H "Authorization: Bearer $GATEWAY_ADMIN_TOKEN" "$gateway_url/api/v2/anonymous-access-policy")
+  policy=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$gateway_url/api/v2/anonymous-access-policy")
   read -r anonymous_policy_version anonymous_policy_enabled < <(python3 -c 'import json, sys; policy = json.load(sys.stdin); print(policy["version"], str(policy["enabled"]).lower())' <<<"$policy")
   [[ "$anonymous_policy_enabled" == "true" ]] && return
   response=$(curl --silent --show-error --fail -X PUT \
-    -H "Authorization: Bearer $GATEWAY_ADMIN_TOKEN" -H 'Content-Type: application/json' -H "If-Match: $anonymous_policy_version" \
+    -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" -H 'Content-Type: application/json' -H "If-Match: $anonymous_policy_version" \
     --data "{\"version\":\"$anonymous_policy_version\",\"enabled\":true}" "$gateway_url/api/v2/anonymous-access-policy")
   anonymous_policy_version=$(python3 -c 'import json, sys; print(json.load(sys.stdin)["version"])' <<<"$response")
 }
@@ -113,13 +113,13 @@ response=$(curl --silent --show-error "$gateway_url/raw/$group/release/app.txt")
 [[ "$response" == 'raw release artifact' ]] || { printf 'Raw cached GET returned %q after upstream shutdown\n' "$response" >&2; exit 1; }
 expect_status 403 "$(admin_status "$gateway_url/raw/$denied_group/release/app.txt")" 'Raw Proxy allowlist denial'
 
-audits=$(curl --silent --show-error --fail -H "Authorization: Bearer $GATEWAY_ADMIN_TOKEN" "$gateway_url/api/v1/audits?group=$group")
+audits=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$gateway_url/api/v1/audits?group=$group")
 grep -Eq '"Format":"raw"' <<<"$audits" || { printf '%s\n' 'Raw audit format was not recorded.' >&2; exit 1; }
 grep -Eq '"Actor":"anonymous"' <<<"$audits" || { printf '%s\n' 'Raw anonymous audit actor was not recorded.' >&2; exit 1; }
 grep -Eq '"CacheDisposition":"hit"' <<<"$audits" || { printf '%s\n' 'Raw cache-hit audit was not recorded.' >&2; exit 1; }
 grep -Eq '"Outcome":"not_found".*"CacheDisposition":"hit"' <<<"$audits" || { printf '%s\n' 'Raw negative-cache audit hit was not recorded.' >&2; exit 1; }
 metrics=$(curl --silent --show-error --fail "$gateway_url/metrics")
-grep -Eq 'artifact_gateway_raw_cache_requests_total\{outcome="hit"\} [1-9]' <<<"$metrics" || { printf '%s\n' 'Raw cache-hit metric did not increment.' >&2; exit 1; }
-grep -Eq 'artifact_gateway_raw_negative_cache_hits_total [1-9]' <<<"$metrics" || { printf '%s\n' 'Raw negative-cache metric did not increment.' >&2; exit 1; }
+grep -Eq 'notarx_raw_cache_requests_total\{outcome="hit"\} [1-9]' <<<"$metrics" || { printf '%s\n' 'Raw cache-hit metric did not increment.' >&2; exit 1; }
+grep -Eq 'notarx_raw_negative_cache_hits_total [1-9]' <<<"$metrics" || { printf '%s\n' 'Raw negative-cache metric did not increment.' >&2; exit 1; }
 
 printf '%s\n' 'Raw HTTP E2E passed: live Gateway GET/HEAD/range, anonymous policy, canonical rejection, negative cache, allowlist denial, cache recovery, audit, and metrics.'

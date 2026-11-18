@@ -88,8 +88,8 @@ required by that API. For example, save only the fields needed by the plan:
 
 ```sh
 curl --fail --silent --show-error \
-  -H "Authorization: Bearer $GATEWAY_READ_TOKEN" \
-  "$GATEWAY_URL/api/v2/repositories/$REPOSITORY_ID/capacity" \
+  -H "Authorization: Bearer $NOTARX_READ_TOKEN" \
+  "$NOTARX_URL/api/v2/repositories/$REPOSITORY_ID/capacity" \
   | jq '{repositoryId, usedBytes, quotaBytes}'
 ```
 

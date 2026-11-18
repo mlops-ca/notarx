@@ -18,7 +18,7 @@ func parseMigrationSourcePrivateEndpoints(raw string) (map[string][]netip.Prefix
 		cidr = strings.TrimSpace(cidr)
 		prefix, err := netip.ParsePrefix(cidr)
 		if !ok || err != nil || (!hostPattern.MatchString(host) && net.ParseIP(host) == nil) || !privateMigrationPrefix(prefix) {
-			return nil, errors.New("GATEWAY_MIGRATION_SOURCE_PRIVATE_ENDPOINTS requires exact host=private-CIDR entries")
+			return nil, errors.New("NOTARX_MIGRATION_SOURCE_PRIVATE_ENDPOINTS requires exact host=private-CIDR entries")
 		}
 		out[host] = append(out[host], prefix.Masked())
 	}
