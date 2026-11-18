@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/mlops-ca/notarx/internal/capacity"
 	"slices"
 	"sort"
 	"time"
@@ -68,7 +69,12 @@ func (s *PostgresStore) PublishPyPIFile(ctx context.Context, file PyPIFile) (PyP
 		file.YankRevision = 1
 	}
 	var stored PyPIFile
-	err = scanPyPIFile(s.db.QueryRowContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return PyPIFile{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	err = scanPyPIFile(tx.QueryRowContext(ctx, `
 		INSERT INTO native_pypi_files
 		(repository_id,project,version,filename,file_type,python_version,requires_python,digest,object_key,size,publisher,source_url,state,cached_at,created_at,yanked,yank_reason,yank_revision)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
@@ -78,6 +84,7 @@ func (s *PostgresStore) PublishPyPIFile(ctx context.Context, file PyPIFile) (PyP
 		file.RequiresPython, file.Digest, file.ObjectKey, file.Size, file.Publisher, file.SourceURL,
 		file.State, pypiNullableTime(file.CachedAt), file.CreatedAt, file.Yanked, file.YankReason, file.YankRevision), &stored)
 	if errors.Is(err, sql.ErrNoRows) {
+		_ = tx.Rollback()
 		existing, lookupErr := s.getPyPIFileAnyState(ctx, file.RepositoryID, file.Filename)
 		if lookupErr == nil && existing.Digest == file.Digest && existing.Project == file.Project && existing.Version == file.Version {
 			return existing, nil
@@ -87,7 +94,19 @@ func (s *PostgresStore) PublishPyPIFile(ctx context.Context, file PyPIFile) (PyP
 		}
 		return PyPIFile{}, lookupErr
 	}
-	return stored, err
+	if err != nil {
+		return stored, err
+	}
+	// A cached or published file with bytes counts; a metadata-only row does not.
+	if stored.State == "visible" && stored.ObjectKey != "" {
+		if err = capacity.Reserve(ctx, tx, stored.RepositoryID, stored.Size, 1); err != nil {
+			return PyPIFile{}, err
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		return PyPIFile{}, err
+	}
+	return stored, nil
 }
 
 func (s *PostgresStore) PublishPyPIVersion(ctx context.Context, files []PyPIFile) ([]PyPIFile, error) {
@@ -106,6 +125,7 @@ func (s *PostgresStore) PublishPyPIVersion(ctx context.Context, files []PyPIFile
 	defer func() { _ = tx.Rollback() }()
 	now := time.Now().UTC()
 	result := make([]PyPIFile, 0, len(files))
+	var delta usageDelta
 	for _, file := range files {
 		if !ValidPyPIYankReason(file.YankReason) || !file.Yanked && file.YankReason != "" {
 			return nil, ErrInvalidPyPIYank
@@ -144,7 +164,11 @@ func (s *PostgresStore) PublishPyPIVersion(ctx context.Context, files []PyPIFile
 		if err != nil {
 			return nil, err
 		}
+		delta.add(stored.RepositoryID, stored.Size, 1)
 		result = append(result, stored)
+	}
+	if err = delta.reserve(ctx, tx); err != nil {
+		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
 		return nil, err
@@ -232,6 +256,10 @@ func (s *PostgresStore) CachePyPIProxyFile(ctx context.Context, incoming PyPIFil
 		WHERE repository_id=$1::uuid AND filename=$2
 		RETURNING `+pypiFileColumns, incoming.RepositoryID, incoming.Filename, incoming.ObjectKey, incoming.Size, incoming.CachedAt), &stored)
 	if err != nil {
+		return PyPIFile{}, err
+	}
+	// The row had no bytes before (a metadata-only proxy row), so its object joins the usage now.
+	if err = capacity.Reserve(ctx, tx, stored.RepositoryID, stored.Size, 1); err != nil {
 		return PyPIFile{}, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -369,6 +397,16 @@ func (s *PostgresStore) TombstonePyPIVersion(ctx context.Context, repositoryID, 
 		DO UPDATE SET tombstoned_at=now()`, repositoryID, project+"@"+version); err != nil {
 		return nil, err
 	}
+	// Deleted files leave the usage; only files with bytes were counted.
+	var delta usageDelta
+	for _, file := range files {
+		if file.ObjectKey != "" {
+			delta.add(repositoryID, -file.Size, -1)
+		}
+	}
+	if err = delta.reserve(ctx, tx); err != nil {
+		return nil, err
+	}
 	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -494,6 +532,15 @@ func (s *PostgresStore) restorePyPIVersionLocked(ctx context.Context, repository
 		return nil, false, ErrDisabled
 	}
 	if _, err = tx.ExecContext(ctx, `DELETE FROM artifact_tombstones WHERE repository_id=$1::uuid AND format='pypi' AND coordinate=$2`, repositoryID, project+"@"+version); err != nil {
+		return nil, false, err
+	}
+	var delta usageDelta
+	for _, file := range files {
+		if file.ObjectKey != "" {
+			delta.add(repositoryID, file.Size, 1)
+		}
+	}
+	if err = delta.reserve(ctx, tx); err != nil {
 		return nil, false, err
 	}
 	if err = tx.Commit(); err != nil {

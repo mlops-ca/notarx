@@ -5,6 +5,7 @@ package repository
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"sync"
@@ -32,8 +33,9 @@ type counterEquality struct {
 // counterEqualityCases lists the covered formats' tests; add a case when a format's
 // registry entry becomes covered.
 var counterEqualityCases = map[string]counterEquality{
-	"raw": {repoFormat: FormatRaw, run: rawCounterEquality, edge: rawCounterEdge},
-	"go":  {repoFormat: FormatGo, run: goCounterEquality, edge: goCounterEdge},
+	"raw":  {repoFormat: FormatRaw, run: rawCounterEquality, edge: rawCounterEdge},
+	"go":   {repoFormat: FormatGo, run: goCounterEquality, edge: goCounterEdge},
+	"pypi": {repoFormat: FormatPyPI, run: pypiCounterEquality, edge: pypiCounterEdge},
 }
 
 // assertCounterEqualsUsage fails when the repository's counter differs from the
@@ -49,7 +51,8 @@ func assertCounterEqualsUsage(t *testing.T, store *PostgresStore, repo HostedRep
 		t.Fatalf("%s: aggregate usage: %v", step, err)
 	}
 	var bytes, objects int64
-	if err := store.db.QueryRow(`SELECT bytes,objects FROM repository_usage_counters WHERE repository_id=$1::uuid`, repo.ID).Scan(&bytes, &objects); err != nil {
+	// A repository that never reserved has no counter row; it must have no usage either.
+	if err := store.db.QueryRow(`SELECT bytes,objects FROM repository_usage_counters WHERE repository_id=$1::uuid`, repo.ID).Scan(&bytes, &objects); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("%s: counter row: %v", step, err)
 	}
 	if bytes != usedBytes || objects != usedObjects {
@@ -276,6 +279,105 @@ func goCounterEdge(t *testing.T, ctx context.Context, store *PostgresStore, repo
 			defer wg.Done()
 			// Every version is size bytes: one byte each for info and mod, the rest the zip.
 			switch _, _, err := store.PublishGoModule(ctx, goPublicationFixture(repo, "example.com/edge", "v1.0."+string(rune('a'+index)), [3]int64{1, 1, size - 2})); {
+			case err == nil:
+				acc.Add(1)
+			case IsQuotaExceeded(err):
+				rej.Add(1)
+			default:
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	return acc.Load(), rej.Load()
+}
+
+func pypiFixture(repo HostedRepository, project, version, filename string, size int64) PyPIFile {
+	return PyPIFile{RepositoryID: repo.ID, Project: project, Version: version, Filename: filename, FileType: "bdist_wheel", PythonVersion: "py3", Digest: uniqueDigest(), ObjectKey: "native/pypi/" + uuid.NewString(), Size: size, Publisher: "builder"}
+}
+
+func pypiCounterEquality(t *testing.T, ctx context.Context, store *PostgresStore, repo HostedRepository, check func(string)) {
+	one := pypiFixture(repo, "widget", "1.0", "widget-1.0-py3-none-any.whl", 10)
+	if _, err := store.PublishPyPIFile(ctx, one); err != nil {
+		t.Fatal(err)
+	}
+	check("publish a file")
+	if _, err := store.PublishPyPIFile(ctx, one); err != nil {
+		t.Fatalf("idempotent publish: %v", err)
+	}
+	check("publish the same file again")
+	version := []PyPIFile{
+		pypiFixture(repo, "widget", "2.0", "widget-2.0-py3-none-any.whl", 20),
+		pypiFixture(repo, "widget", "2.0", "widget-2.0.tar.gz", 30),
+	}
+	version[1].FileType = "sdist"
+	if _, err := store.PublishPyPIVersion(ctx, version); err != nil {
+		t.Fatal(err)
+	}
+	check("publish a version of two files")
+	if _, err := store.PublishPyPIVersion(ctx, version); err != nil {
+		t.Fatal(err)
+	}
+	check("publish the same version again")
+	if _, err := store.TombstonePyPIVersion(ctx, repo.ID, "widget", "2.0"); err != nil {
+		t.Fatal(err)
+	}
+	check("tombstone version 2.0")
+	if _, err := store.RestorePyPIVersion(ctx, repo.ID, "widget", "2.0"); err != nil {
+		t.Fatal(err)
+	}
+	check("restore version 2.0")
+	if _, err := store.TombstonePyPIVersion(ctx, repo.ID, "widget", "1.0"); err != nil {
+		t.Fatal(err)
+	}
+	check("tombstone version 1.0")
+	if _, err := store.PublishPyPIFile(ctx, pypiFixture(repo, "widget", "3.0", "widget-3.0-py3-none-any.whl", 7)); err != nil {
+		t.Fatal(err)
+	}
+	check("publish after tombstone")
+	// A proxy repository caches bytes after listing metadata: only the cached file counts.
+	proxy, err := store.CreateHostedRepository(ctx, HostedRepository{ID: uuid.NewString(), Name: "pypi-proxy-counter-" + uuid.NewString(), Format: FormatPyPI, Type: RepositoryTypeProxy, Endpoint: "https://proxy.example"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = store.db.Exec(`DELETE FROM hosted_repositories WHERE id=$1`, proxy.ID) })
+	listed := PyPIFile{RepositoryID: proxy.ID, SourceVersion: proxy.Version, Project: "widget", Version: "1.0", Filename: "widget-1.0-py3-none-any.whl", FileType: "bdist_wheel", PythonVersion: "py3", Digest: uniqueDigest(), Publisher: "upstream", SourceURL: "https://files.example/widget-1.0-py3-none-any.whl"}
+	if err = store.SyncPyPIProxyFiles(ctx, proxy.ID, "widget", []PyPIFile{listed}); err != nil {
+		t.Fatal(err)
+	}
+	assertCounterEqualsUsage(t, store, proxy, "sync proxy metadata")
+	listed.ObjectKey, listed.Size, listed.CachedAt = "native/pypi/"+uuid.NewString(), 40, time.Now().UTC()
+	for _, step := range []string{"cache a proxy file", "cache the proxy file again"} {
+		if _, err = store.CachePyPIProxyFile(ctx, listed); err != nil {
+			t.Fatal(err)
+		}
+		assertCounterEqualsUsage(t, store, proxy, step)
+	}
+	var used int64
+	if err = store.db.QueryRow(`SELECT bytes FROM repository_usage_counters WHERE repository_id=$1::uuid`, repo.ID).Scan(&used); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.ReplaceRepositoryCapacityQuota(ctx, repo.ID, used); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.PublishPyPIFile(ctx, pypiFixture(repo, "widget", "4.0", "widget-4.0-py3-none-any.whl", 1)); !IsQuotaExceeded(err) {
+		t.Fatalf("publish over quota = %v, want quota exceeded", err)
+	}
+	if _, err = store.PublishPyPIVersion(ctx, []PyPIFile{pypiFixture(repo, "widget", "5.0", "widget-5.0-py3-none-any.whl", 1)}); !IsQuotaExceeded(err) {
+		t.Fatalf("publish version over quota = %v, want quota exceeded", err)
+	}
+	check("rejected publishes over quota")
+}
+
+func pypiCounterEdge(t *testing.T, ctx context.Context, store *PostgresStore, repo HostedRepository, size int64, workers int) (accepted, rejected int64) {
+	var acc, rej atomic.Int64
+	var wg sync.WaitGroup
+	for index := range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			name := "edge" + string(rune('a'+index))
+			switch _, err := store.PublishPyPIFile(ctx, pypiFixture(repo, name, "1.0", name+"-1.0-py3-none-any.whl", size)); {
 			case err == nil:
 				acc.Add(1)
 			case IsQuotaExceeded(err):

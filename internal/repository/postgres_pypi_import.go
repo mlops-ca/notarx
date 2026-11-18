@@ -86,6 +86,7 @@ func (s *PostgresStore) PublishPyPIImport(ctx context.Context, c PyPIImportClosu
 		return err
 	}
 	changed := false
+	var delta usageDelta
 	for _, f := range c.Files {
 		var blocked bool
 		err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM artifact_tombstones WHERE repository_id=$1::uuid AND format='pypi' AND coordinate=$2) OR EXISTS(SELECT 1 FROM artifact_quarantines WHERE repository_id=$1::uuid AND format='pypi' AND coordinate=$2 AND digest=$3 AND state='quarantined')`, c.RepositoryID, coordinate, f.Digest).Scan(&blocked)
@@ -113,6 +114,9 @@ func (s *PostgresStore) PublishPyPIImport(ctx context.Context, c PyPIImportClosu
 		if err != nil {
 			return err
 		}
+		if f.ObjectKey != "" {
+			delta.add(c.RepositoryID, f.Size, 1)
+		}
 		changed = true
 	}
 	if changed {
@@ -128,6 +132,9 @@ func (s *PostgresStore) PublishPyPIImport(ctx context.Context, c PyPIImportClosu
 		return err
 	}
 	if err = completeNativePublication(ctx, tx); err != nil {
+		return err
+	}
+	if err = delta.reserve(ctx, tx); err != nil {
 		return err
 	}
 	return tx.Commit()
