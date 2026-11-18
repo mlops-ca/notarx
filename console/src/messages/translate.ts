@@ -1,4 +1,4 @@
-import { enCA, frCA, zhCN, type MessageKey } from ".";
+import { enCA, type MessageKey } from ".";
 
 export type MessageLocale = "en-CA" | "fr-CA" | "zh-CN";
 
@@ -18,24 +18,65 @@ export const LOCALE_FALLBACK: Record<MessageLocale, readonly MessageLocale[]> =
 
 type MessageTable = Partial<Record<MessageKey, string>>;
 
-// A key a dictionary lacks resolves through the en-CA reference at the end of
-// `resolve`, so a reader never sees a blank.
-const tables: Record<MessageLocale, MessageTable> = {
-  "en-CA": enCA,
-  "fr-CA": frCA,
-  "zh-CN": zhCN,
+/**
+ * One merged module per locale, fetched on first use so an English reader never
+ * downloads the fr-CA or zh-CN text (ADR 0014). en-CA is the reference and
+ * ships with the shell.
+ */
+const loaders: Record<MessageLocale, () => Promise<MessageTable>> = {
+  "en-CA": async () => enCA,
+  "fr-CA": async () => (await import("./frCA.bundle")).frCA,
+  "zh-CN": async () => (await import("./zhCN.bundle")).zhCN,
 };
+
+// The tables fetched so far. A key a table lacks, or a locale not fetched yet,
+// resolves through the en-CA reference at the end of `resolve`, so a reader
+// never sees a blank.
+const tables: Partial<Record<MessageLocale, MessageTable>> = {
+  "en-CA": enCA,
+};
+const pending = new Map<MessageLocale, Promise<void>>();
+
+/** Whether the locale's table is in memory, so a translator for it is complete. */
+export function isMessagesLoaded(locale: MessageLocale): boolean {
+  return tables[locale] !== undefined;
+}
+
+/**
+ * Fetches the locale's message table (once; concurrent calls share the fetch).
+ * A failed fetch rejects and is forgotten, so a later call retries; nothing is
+ * half-loaded, so the caller can keep the previous language.
+ */
+export function loadMessages(locale: MessageLocale): Promise<void> {
+  if (isMessagesLoaded(locale)) return Promise.resolve();
+  let load = pending.get(locale);
+  if (!load) {
+    load = loaders[locale]().then(
+      (table) => {
+        tables[locale] = table;
+        pending.delete(locale);
+      },
+      (error: unknown) => {
+        pending.delete(locale);
+        throw error;
+      },
+    );
+    pending.set(locale, load);
+  }
+  return load;
+}
 
 function resolve(locale: MessageLocale, key: MessageKey): string {
   for (const tag of [locale, ...LOCALE_FALLBACK[locale]]) {
-    const message = tables[tag][key];
+    const message = tables[tag]?.[key];
     if (message !== undefined) return message;
   }
   return enCA[key];
 }
 
 /**
- * A translator bound to one locale. `{name}` placeholders take the matching
+ * A translator bound to one locale; call `loadMessages` first, because a locale
+ * whose table is not loaded reads as en-CA. `{name}` placeholders take the matching
  * variable; a placeholder without one stays literal, and inserted values are
  * never matched again.
  */

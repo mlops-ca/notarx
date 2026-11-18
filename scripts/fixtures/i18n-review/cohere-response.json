@@ -1,0 +1,19 @@
+{
+  "id": "fixture",
+  "finish_reason": "COMPLETE",
+  "message": {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"findings\":[{\"id\":\"foo.deleteRepo\",\"kind\":\"glossary\",\"message\":\"Use dépôt, not référentiel.\"}]}"
+      }
+    ]
+  },
+  "usage": {
+    "tokens": {
+      "input_tokens": 410,
+      "output_tokens": 38
+    }
+  }
+}

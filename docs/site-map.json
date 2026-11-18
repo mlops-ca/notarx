@@ -8,14 +8,14 @@
       "id": "start",
       "title": { "en": "Start here", "zh-CN": "快速开始" },
       "items": [
-        { "id": "project-home", "title": { "en": "Project overview", "zh-CN": "项目概览" }, "en": "README.md", "zh-CN": "README.zh-CN.md" },
-        { "id": "docs-home", "title": { "en": "Documentation home", "zh-CN": "文档首页" }, "en": "docs/README.md", "zh-CN": "docs/README.zh-CN.md" },
+        { "id": "project-home", "title": { "en": "Project overview", "fr-CA": "Aperçu du projet", "zh-CN": "项目概览" }, "en": "README.md", "fr-CA": "README.fr-CA.md", "zh-CN": "README.zh-CN.md" },
+        { "id": "docs-home", "title": { "en": "Documentation home", "fr-CA": "Accueil de la documentation", "zh-CN": "文档首页" }, "en": "docs/README.md", "fr-CA": "docs/README.fr-CA.md", "zh-CN": "docs/README.zh-CN.md" },
         { "id": "documentation-site-guide", "title": { "en": "Documentation site guide", "zh-CN": "文档站接入指南" }, "en": "docs/documentation-site-guide.md", "zh-CN": "docs/documentation-site-guide.zh-CN.md" },
-        { "id": "getting-started", "title": { "en": "Getting started", "zh-CN": "快速入门" }, "en": "docs/getting-started.md", "zh-CN": "docs/getting-started.zh-CN.md" },
+        { "id": "getting-started", "title": { "en": "Getting started", "fr-CA": "Démarrage", "zh-CN": "快速入门" }, "en": "docs/getting-started.md", "fr-CA": "docs/getting-started.fr-CA.md", "zh-CN": "docs/getting-started.zh-CN.md" },
         { "id": "product", "title": { "en": "Product direction", "zh-CN": "产品方向" }, "en": "PRODUCT.md", "zh-CN": "PRODUCT.zh-CN.md" },
         { "id": "ci-gates", "title": { "en": "CI path classes and the ci-ok gate" }, "en": "docs/ci.md" },
         { "id": "native-builds", "title": { "en": "Native builds, runner matrix and local builds" }, "en": "docs/native-builds.md" },
-        { "id": "contributing", "title": { "en": "Contributing", "zh-CN": "参与开发" }, "en": "CONTRIBUTING.md", "zh-CN": "CONTRIBUTING.zh-CN.md" },
+        { "id": "contributing", "title": { "en": "Contributing", "fr-CA": "Contribuer", "zh-CN": "参与开发" }, "en": "CONTRIBUTING.md", "fr-CA": "CONTRIBUTING.fr-CA.md", "zh-CN": "CONTRIBUTING.zh-CN.md" },
         { "id": "format-extension", "title": { "en": "Format extension guide", "zh-CN": "格式扩展指南" }, "en": "docs/format-extension-guide.md", "zh-CN": "docs/format-extension-guide.zh-CN.md" }
       ]
     },
@@ -134,7 +134,7 @@
         { "id": "artifact-scanner", "title": { "en": "Artifact scanner contract", "zh-CN": "制品扫描器契约" }, "en": "docs/artifact-scanner-contract.md", "zh-CN": "docs/artifact-scanner-contract.zh-CN.md" },
         { "id": "proxy-egress", "title": { "en": "Proxy egress design", "zh-CN": "Proxy 出网设计" }, "en": "docs/proxy-egress-design.md", "zh-CN": "docs/proxy-egress-design.zh-CN.md" },
         { "id": "webhook-delivery", "title": { "en": "Webhook delivery contract", "zh-CN": "Webhook 投递契约" }, "en": "docs/webhook-delivery-contract.md", "zh-CN": "docs/webhook-delivery-contract.zh-CN.md" },
-        { "id": "security-policy", "title": { "en": "Security policy", "zh-CN": "安全策略" }, "en": "SECURITY.md", "zh-CN": "SECURITY.zh-CN.md" }
+        { "id": "security-policy", "title": { "en": "Security policy", "fr-CA": "Politique de sécurité", "zh-CN": "安全策略" }, "en": "SECURITY.md", "fr-CA": "SECURITY.fr-CA.md", "zh-CN": "SECURITY.zh-CN.md" }
       ]
     },
     {

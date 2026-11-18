@@ -20,7 +20,7 @@ import {
   placeholders, readDictionary, readSidecar, syncSidecar, writeSidecar,
 } from "./i18n-lib.mjs";
 
-const RULES = {
+export const RULES = {
   "fr-CA": [
     "Write Canadian French (Quebec usage), not France French.",
     "Say courriel, never e-mail or email. No space before ? ! ;. A no-break space (U+00A0) before a colon. Guillemets with no-break spaces inside. The typographic apostrophe (U+2019).",

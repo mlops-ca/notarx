@@ -3,8 +3,12 @@
 Every piece of display text lives here, one dictionary per feature and locale:
 `<feature>.en-CA.ts` is the typed reference, `<feature>.fr-CA.ts` is the complete
 first-class translation and `<feature>.zh-CN.ts` is a lagging, partial overlay
-(ADR 0014). `index.ts` merges them into the `enCA`, `frCA` and `zhCN`
-tables, and `MessageKey` is the union of every en-CA key. `locales.ts` is the
+(ADR 0014). `index.ts` merges the en-CA files into `enCA`, and `MessageKey` is
+the union of every en-CA key. `frCA.bundle.ts` and `zhCN.bundle.ts` merge the
+other two into one module each; `loadMessages` in `translate.ts` imports them
+on demand, so an English reader never downloads the other tables. A translator
+for a locale that is not loaded yet reads as en-CA, and `PreferencesProvider`
+keeps the previous language until the chunk arrives (and after a failed fetch). `locales.ts` is the
 registry of supported locales (tag, antd locale, dayjs locale, Intl tag) and the
 browser-language detection that `usePreferences()` uses.
 

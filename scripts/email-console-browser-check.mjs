@@ -4,8 +4,25 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import net from 'node:net';
+import { readFileSync } from 'node:fs';
+import { dictionaryPath, defaultMessagesDir, featureNames, readDictionary } from './i18n-lib.mjs';
 const require = createRequire(new URL('../console/package.json', import.meta.url));
 const { chromium, expect } = require('@playwright/test');
+// The locale matrix runs over the registry tags (ADR 0014). Expected text comes
+// from the message dictionaries and the email bundles, never from literals, so a
+// copy change does not break the check; zh-CN reads through en-CA as in the app.
+const LOCALES = ['en-CA', 'fr-CA', 'zh-CN'];
+const dictionaries = Object.fromEntries(LOCALES.map(locale => [locale, Object.assign({}, ...featureNames().map(feature => readDictionary(dictionaryPath(defaultMessagesDir, feature, locale))))]));
+const msg = (locale, key, vars = {}) => {
+  const text = dictionaries[locale][key] ?? dictionaries['en-CA'][key];
+  if (text === undefined) throw new Error('Unknown Console message key ' + key);
+  return text.replace(/\{([^{}]+)\}/g, (placeholder, name) => Object.hasOwn(vars, name) ? String(vars[name]) : placeholder);
+};
+const en = (key, vars) => msg('en-CA', key, vars);
+// A toast's lead clause: the text before the first semicolon (en-CA text only).
+const prefix = text => new RegExp(text.split(';')[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+const emailBundles = Object.fromEntries(LOCALES.filter(locale => locale !== 'zh-CN').map(locale => [locale, JSON.parse(readFileSync(new URL('../internal/emailnotification/locales/' + locale + '.json', import.meta.url), 'utf8'))]));
+const emailTitle = (locale, key) => (emailBundles[locale] ?? emailBundles['en-CA'])[key];
 const apiURL = process.env.EMAIL_CONSOLE_API;
 if (!apiURL || new URL(apiURL).hostname !== '127.0.0.1') throw new Error('Owned loopback fixture API is required');
 const port = Number(process.env.EMAIL_CONSOLE_BROWSER_PORT || 4196);
@@ -33,59 +50,59 @@ try {
   page.on('console', m => { if (m.type() === 'error') { if (m.text().includes('status of 412') && m.location().url === expectedConflictURL) expectedHTTP.push(412); else errors.push(m.text()); } });
   page.on('request', r => { if (r.url().startsWith('http') && !r.url().startsWith(origin)) external.push(new URL(r.url()).origin); if (r.url().endsWith('email-notifications:test')) { sends++; keys.push(r.headers()['idempotency-key']); } });
   await page.goto('/system?tab=email');
-  await expect(page.getByText('尚无邮件目标', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '新建邮件目标' }).click();
-  await page.getByLabel('目标名称', { exact: true }).fill('Owned synthetic operations');
-  await page.getByLabel('收件人地址', { exact: true }).fill('synthetic-recipient@example.test');
-  await page.getByRole('button', { name: '保存停用目标' }).click();
-  await expect(page.getByText(/邮件目标已保存/)).toBeVisible();
+  await expect(page.getByText(en('system.noEmailTargets'), { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: en('system.newEmailTarget') }).click();
+  await page.getByLabel(en('system.targetName'), { exact: true }).fill('Owned synthetic operations');
+  await page.getByLabel(en('system.recipientAddress'), { exact: true }).fill('synthetic-recipient@example.test');
+  await page.getByRole('button', { name: en('system.saveDisabledTarget') }).click();
+  await expect(page.getByText(prefix(en('system.emailTargetSavedNoTestSent')))).toBeVisible();
   const api = context.request;
   const listResponse = await api.get('/api/v2/email-targets'); expect(listResponse.headers()['cache-control']).toBe('no-store');
   const targets = await listResponse.json(); const target = targets.find(x => x.name === 'Owned synthetic operations');
   expect(target.enabled).toBe(false); expect(target.recipientConfigured).toBe(true); expect(target).not.toHaveProperty('recipient');
-  await page.getByRole('button', { name: '预览模板' }).click();
-  await expect(page.frameLocator('.ag-email-preview').getByRole('heading', { name: '临时挂载的可用空间偏低', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: en('system.previewTemplate') }).click();
+  await expect(page.frameLocator('.ag-email-preview').getByRole('heading', { name: emailTitle('en-CA', 'synthetic.title.warning'), exact: true })).toBeVisible();
   expect((await (await api.get(`${apiURL}/__fixture/attempts`)).json()).attempts).toBe(0); expect(sends).toBe(0);
-  await page.getByRole('button', { name: '启用 Owned synthetic operations' }).click();
-  await page.getByRole('button', { name: '取消', exact: true }).click(); expect((await (await api.get(`/api/v2/email-targets/${target.id}`)).json()).enabled).toBe(false);
-  await page.getByRole('button', { name: '启用 Owned synthetic operations' }).click();
-  await page.getByRole('button', { name: '确认启用', exact: true }).click(); await expect(page.getByRole('button', { name: '测试 Owned synthetic operations' })).toBeEnabled();
-  await page.getByRole('button', { name: '编辑 Owned synthetic operations' }).click(); await expect(page.getByLabel('收件人地址', { exact: true })).toHaveValue('');
-  await page.getByLabel('目标名称', { exact: true }).fill('Owned synthetic edited');
+  await page.getByRole('button', { name: en('system.enableTarget', { name: 'Owned synthetic operations' }) }).click();
+  await page.getByRole('button', { name: en('system.cancel'), exact: true }).click(); expect((await (await api.get(`/api/v2/email-targets/${target.id}`)).json()).enabled).toBe(false);
+  await page.getByRole('button', { name: en('system.enableTarget', { name: 'Owned synthetic operations' }) }).click();
+  await page.getByRole('button', { name: en('system.confirmEnable'), exact: true }).click(); await expect(page.getByRole('button', { name: en('system.test', { name: 'Owned synthetic operations' }) })).toBeEnabled();
+  await page.getByRole('button', { name: en('system.edit', { name: 'Owned synthetic operations' }) }).click(); await expect(page.getByLabel(en('system.recipientAddress'), { exact: true })).toHaveValue('');
+  await page.getByLabel(en('system.targetName'), { exact: true }).fill('Owned synthetic edited');
   const before = await (await api.get(`/api/v2/email-targets/${target.id}`)).json();
   const competing = await api.put(`/api/v2/email-targets/${target.id}`, { headers: { 'If-Match': before.version }, data: { name: before.name, locale: before.locale, enabled: before.enabled } }); expect(competing.status()).toBe(200);
-  await page.getByLabel('收件人地址', { exact: true }).fill('replacement@example.test');
+  await page.getByLabel(en('system.recipientAddress'), { exact: true }).fill('replacement@example.test');
   expectedConflictURL = origin + '/api/v2/email-targets/' + target.id;
-  await page.getByRole('button', { name: '保存目标' }).click(); await expect(page.getByText(/配置已变更/)).toBeVisible(); await expect(page.getByLabel('收件人地址', { exact: true })).toHaveValue('');
+  await page.getByRole('button', { name: en('system.saveTarget') }).click(); await expect(page.getByText(prefix(en('system.configurationChanged')))).toBeVisible(); await expect(page.getByLabel(en('system.recipientAddress'), { exact: true })).toHaveValue('');
   expectedConflictURL = undefined;
-  await page.getByRole('button', { name: '刷新最新目标并重新编辑' }).click(); await expect(page.getByRole('button', { name: '保存目标' })).toBeEnabled(); await expect(page.getByLabel('目标名称', { exact: true })).toHaveValue('Owned synthetic edited');
-  await page.getByRole('button', { name: '保存目标' }).click(); await expect(page.getByText(/邮件目标已保存/)).toBeVisible();
-  await page.reload(); await page.getByRole('button', { name: '测试 Owned synthetic edited' }).click();
-  await page.getByRole('button', { name: '确认发送合成测试' }).evaluate(el => { el.click(); el.click(); });
-  await expect(page.getByText(/合成测试已入队/)).toBeVisible(); expect(sends).toBe(1);
+  await page.getByRole('button', { name: en('system.refreshLatestTargetAndEditAgain') }).click(); await expect(page.getByRole('button', { name: en('system.saveTarget') })).toBeEnabled(); await expect(page.getByLabel(en('system.targetName'), { exact: true })).toHaveValue('Owned synthetic edited');
+  await page.getByRole('button', { name: en('system.saveTarget') }).click(); await expect(page.getByText(prefix(en('system.emailTargetSavedNoTestSent')))).toBeVisible();
+  await page.reload(); await page.getByRole('button', { name: en('system.test', { name: 'Owned synthetic edited' }) }).click();
+  await page.getByRole('button', { name: en('system.confirmSyntheticTestSend2') }).evaluate(el => { el.click(); el.click(); });
+  await expect(page.getByText(prefix(en('system.syntheticTestQueuedCheckDeliveryResults')))).toBeVisible(); expect(sends).toBe(1);
   await expect.poll(async () => (await (await api.get('/api/v2/email-deliveries')).json()).some(x => x.state === 'accepted'), { timeout: 15000 }).toBe(true);
-  await page.getByRole('button', { name: '刷新', exact: true }).click(); await expect(page.getByText('SMTP 服务器已接受', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: en('system.refresh'), exact: true }).click(); await expect(page.getByText(en('system.acceptedBySMTPServer'), { exact: true })).toBeVisible();
   await api.post(`${apiURL}/__fixture/failure`);
-  await page.getByRole('button', { name: '测试 Owned synthetic edited' }).click();
-  await page.getByRole('combobox', { name: '合成场景', exact: true }).click(); await page.locator('.ant-select-dropdown:visible').getByText('严重', { exact: true }).click();
-  await page.getByRole('button', { name: '确认发送合成测试' }).click(); await expect(page.getByText(/合成测试已入队/)).toBeVisible();
+  await page.getByRole('button', { name: en('system.test', { name: 'Owned synthetic edited' }) }).click();
+  await page.getByRole('combobox', { name: en('system.syntheticScenario'), exact: true }).click(); await page.locator('.ant-select-dropdown:visible').getByText(en('system.critical'), { exact: true }).click();
+  await page.getByRole('button', { name: en('system.confirmSyntheticTestSend2') }).click(); await expect(page.getByText(prefix(en('system.syntheticTestQueuedCheckDeliveryResults')))).toBeVisible();
   await expect.poll(async () => (await (await api.get('/api/v2/email-deliveries')).json()).some(x => x.state === 'dead' && x.errorCode === 'smtp_permanent_rejection'), { timeout: 15000 }).toBe(true);
-  await page.getByRole('button', { name: '刷新', exact: true }).click(); await expect(page.getByText('SMTP 永久拒绝', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '停用 Owned synthetic edited' }).click(); await page.getByRole('button', { name: '确认停用', exact: true }).click(); await expect(page.getByRole('button', { name: '测试 Owned synthetic edited' })).toBeDisabled();
+  await page.getByRole('button', { name: en('system.refresh'), exact: true }).click(); await expect(page.getByText(en('system.permanentSMTPRejection'), { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: en('system.disableTarget', { name: 'Owned synthetic edited' }) }).click(); await page.getByRole('button', { name: en('system.confirmDisable'), exact: true }).click(); await expect(page.getByRole('button', { name: en('system.test', { name: 'Owned synthetic edited' }) })).toBeDisabled();
   expect(sends).toBe(2); expect(new Set(keys).size).toBe(2);
   expect(await page.evaluate(() => JSON.stringify(localStorage) + JSON.stringify(sessionStorage))).not.toContain('synthetic-recipient');
   await context.close();
   let combinations = 0;
-  for (const width of [320, 390, 1440]) for (const locale of ['zh-CN', 'en-US']) for (const theme of ['dark', 'light']) {
+  for (const width of [320, 390, 1440]) for (const locale of LOCALES) for (const theme of ['dark', 'light']) {
     const ctx = await browser.newContext({ baseURL: origin, extraHTTPHeaders: { Authorization: 'Bearer admin-secret' }, viewport: { width, height: 1000 }, colorScheme: theme });
     await ctx.addInitScript(({ locale, theme }) => { if (window.top !== window) return; localStorage.setItem('ag.console.locale', locale); localStorage.setItem('ag.console.theme', theme); }, { locale, theme });
     const p = await ctx.newPage(); p.on('pageerror', e => errors.push(e.message)); p.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
-    const zh = locale === 'zh-CN';
+    const m = (key, vars) => msg(locale, key, vars);
     await p.goto('/system?tab=email');
-    await expect(p.getByRole('button', { name: zh ? '新建邮件目标' : 'New email target' })).toBeVisible();
-    const previewButton = p.getByRole('button', { name: zh ? '预览模板' : 'Preview template' });
-    for (const [scenario, label, title] of [['warning', zh ? '警告' : 'Warning', zh ? '临时挂载的可用空间偏低' : 'Temporary mount is running low on space'], ['critical', zh ? '严重' : 'Critical', zh ? '临时挂载的可用空间偏低' : 'Temporary mount is running low on space'], ['resolved', zh ? '恢复' : 'Recovered', zh ? '临时挂载空间已恢复' : 'Temporary mount space has recovered']]) {
-      await p.getByRole('combobox', { name: zh ? '预览场景' : 'Preview scenario' }).click(); await p.locator('.ant-select-dropdown:visible').getByText(label, { exact: true }).click();
+    await expect(p.getByRole('button', { name: m('system.newEmailTarget') })).toBeVisible();
+    const previewButton = p.getByRole('button', { name: m('system.previewTemplate') });
+    for (const [scenario, label, title] of [['warning', m('system.warning'), emailTitle(locale, 'synthetic.title.warning')], ['critical', m('system.critical'), emailTitle(locale, 'synthetic.title.warning')], ['resolved', m('system.recovered'), emailTitle(locale, 'synthetic.title.resolved')]]) {
+      await p.getByRole('combobox', { name: m('system.previewScenario') }).click(); await p.locator('.ant-select-dropdown:visible').getByText(label, { exact: true }).click();
       await previewButton.click();
       const frame = p.frameLocator('.ag-email-preview');
       await expect(frame.getByRole('heading', { name: title, exact: true })).toBeVisible();
@@ -108,5 +125,5 @@ try {
     await ctx.close();
   }
   expect(errors).toEqual([]); expect(external).toEqual([]);
-  console.log(JSON.stringify({ status: 'passed', browser: browser.version(), realAPI: true, realPG: true, ownedTLS: true, explicitTests: sends, MIMEAccepted: 1, permanentFailure: 1, previewCombinations: combinations, widths: [320,390,1440], locales: ['zh-CN','en'], themes: ['dark','light'], CAS: '412 retained safe draft and cleared recipient', browserErrors: errors, expectedCASHTTPDiagnostics: expectedHTTP, externalRequests: external, limits: 'Chromium, not Gmail/Outlook/Apple Mail; synthetic SMTP sink only' }));
+  console.log(JSON.stringify({ status: 'passed', browser: browser.version(), realAPI: true, realPG: true, ownedTLS: true, explicitTests: sends, MIMEAccepted: 1, permanentFailure: 1, previewCombinations: combinations, widths: [320,390,1440], locales: LOCALES, themes: ['dark','light'], CAS: '412 retained safe draft and cleared recipient', browserErrors: errors, expectedCASHTTPDiagnostics: expectedHTTP, externalRequests: external, limits: 'Chromium, not Gmail/Outlook/Apple Mail; synthetic SMTP sink only' }));
 } finally { if (browser) await browser.close(); vite.kill('SIGTERM'); await new Promise(resolve => { if (vite.exitCode !== null) resolve(); else vite.once('exit', resolve); }); }

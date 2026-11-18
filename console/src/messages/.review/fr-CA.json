@@ -673,6 +673,7 @@
     "common.language": "draft",
     "common.language.en": "draft",
     "common.language.fr": "draft",
+    "common.language.loadFailed": "draft",
     "common.language.zh": "draft",
     "common.loading": "draft",
     "common.theme.current": "draft",

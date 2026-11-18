@@ -11,10 +11,11 @@ export function AntdProvider({ children }: { children: ReactNode }) {
   );
 
   // The antd and dayjs locale objects load on demand (ADR 0014), so the bundle
-  // does not carry all three; the message tables are bundled. While one loads,
-  // or when its chunk cannot be fetched (offline, stale deploy), the previous
-  // antd locale stays and the messages still switch: widgets keep working in
-  // the old language rather than failing.
+  // does not carry all three, like the message tables (`loadMessages`). The
+  // Console switches language only once its messages have loaded; while the
+  // antd locale loads, or when its chunk cannot be fetched (offline, stale
+  // deploy), the previous antd locale stays: widgets keep working in the old
+  // language rather than failing.
   useEffect(() => {
     let current = true;
     const info = localeInfo(locale);

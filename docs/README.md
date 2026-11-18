@@ -1,6 +1,6 @@
 # Artifact Gateway documentation
 
-[简体中文](README.zh-CN.md) · [Project README](../README.md)
+[Français](README.fr-CA.md) · [简体中文](README.zh-CN.md) · [Project README](../README.md)
 
 Artifact Gateway is a lightweight, protocol-native artifact repository. Its
 control plane relies on PostgreSQL as its only coordination and database

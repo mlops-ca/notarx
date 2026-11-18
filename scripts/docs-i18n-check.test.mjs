@@ -25,10 +25,17 @@ const frenchProse =
   'avec une configuration sans surprise et une sécurité que nous gardons pour chaque dépôt.\n';
 const englishProse = 'This guide explains how to install the service and the tools.\n';
 
-const enforcedTable = {
+// The shipped table enforces the fr-CA core documents (issue 37); the relaxed
+// one stands for a locale that has not made them required.
+const enforcedTable = localeTable;
+const relaxedTable = {
   ...localeTable,
-  'fr-CA': { ...localeTable['fr-CA'], enforceRequired: true },
+  'fr-CA': { ...localeTable['fr-CA'], enforceRequired: false },
 };
+
+test('the shipped table requires the fr-CA core documents', () => {
+  assert.equal(localeTable['fr-CA'].enforceRequired, true);
+});
 
 function withRoot(fn) {
   const root = mkdtempSync(path.join(tmpdir(), 'notarx-i18n-'));
@@ -93,7 +100,7 @@ test('enforces fr-CA core documents only when the locale requires them', () => {
   withRoot((root) => {
     writeFileSync(path.join(root, 'README.md'), '# Notarx\n');
     writeFileSync(path.join(root, 'docs/guide.md'), '# Guide\n');
-    assert.deepEqual(findPairIssues(root, ['README.md', 'docs/guide.md']), []);
+    assert.deepEqual(findPairIssues(root, ['README.md', 'docs/guide.md'], undefined, relaxedTable), []);
     assert.deepEqual(
       findPairIssues(root, ['README.md', 'docs/guide.md'], undefined, enforcedTable),
       ['README.fr-CA.md: required fr-CA companion of README.md is missing'],
@@ -193,7 +200,7 @@ test('accepts English-only navigation entries and keeps existing companions list
 
 test('requires fr-CA titles and entries for core items when enforced', () => {
   const readme = { id: 'home', title: { en: 'Home' }, en: 'README.md' };
-  assert.deepEqual(findSiteMapIssues(siteMap([readme]), ['README.md']), []);
+  assert.deepEqual(findSiteMapIssues(siteMap([readme]), ['README.md'], undefined, relaxedTable), []);
   assert.deepEqual(findSiteMapIssues(siteMap([readme]), ['README.md'], undefined, enforcedTable), [
     'site-map.json: home must list its required fr-CA companion',
   ]);

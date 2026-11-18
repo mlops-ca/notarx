@@ -1,11 +1,19 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { enCA, frCA, zhCN, type MessageKey } from ".";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { enCA, type MessageKey } from ".";
+import { frCA } from "./frCA.bundle";
 import {
   LOCALE_FALLBACK,
   LocalizedError,
   createTranslator,
   errorText,
+  isMessagesLoaded,
+  loadMessages,
 } from "./translate";
+import { zhCN } from "./zhCN.bundle";
+
+beforeAll(async () => {
+  await Promise.all([loadMessages("fr-CA"), loadMessages("zh-CN")]);
+});
 
 describe("LOCALE_FALLBACK", () => {
   it("is the single source of the chain: zh-CN falls back to en-CA, fr-CA to nothing", () => {
@@ -51,6 +59,45 @@ describe("createTranslator fallback", () => {
     expect(createTranslator("fr-CA")(disable, { name: "Ops" })).toContain(
       "Ops",
     );
+  });
+});
+
+describe("loadMessages", () => {
+  it("reads a locale that is not loaded as en-CA, then as its own table once loaded", async () => {
+    vi.resetModules();
+    const fresh = await import("./translate");
+    const key: MessageKey = "ui.retry";
+    expect(fresh.isMessagesLoaded("fr-CA")).toBe(false);
+    expect(fresh.createTranslator("fr-CA")(key)).toBe(enCA[key]);
+    const first = fresh.loadMessages("fr-CA");
+    expect(fresh.loadMessages("fr-CA")).toBe(first);
+    await first;
+    expect(fresh.isMessagesLoaded("fr-CA")).toBe(true);
+    expect(fresh.createTranslator("fr-CA")(key)).toBe(frCA[key]);
+    await expect(fresh.loadMessages("fr-CA")).resolves.toBeUndefined();
+  });
+
+  it("keeps en-CA available and rejects, then retries, a failed chunk fetch", async () => {
+    vi.resetModules();
+    let broken = true;
+    vi.doMock("./frCA.bundle", () => {
+      if (broken) throw new Error("chunk fetch failed");
+      return { frCA };
+    });
+    const fresh = await import("./translate");
+    await expect(fresh.loadMessages("fr-CA")).rejects.toThrow();
+    expect(fresh.isMessagesLoaded("fr-CA")).toBe(false);
+    // Nothing is half-loaded: the translator still speaks the reference.
+    expect(fresh.createTranslator("fr-CA")("ui.retry")).toBe(enCA["ui.retry"]);
+    expect(fresh.isMessagesLoaded("en-CA")).toBe(true);
+    broken = false;
+    await fresh.loadMessages("fr-CA");
+    expect(fresh.createTranslator("fr-CA")("ui.retry")).toBe(frCA["ui.retry"]);
+    vi.doUnmock("./frCA.bundle");
+  });
+
+  it("marks en-CA loaded from the start", () => {
+    expect(isMessagesLoaded("en-CA")).toBe(true);
   });
 });
 

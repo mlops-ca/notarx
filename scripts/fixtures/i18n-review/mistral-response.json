@@ -1,0 +1,20 @@
+{
+  "id": "fixture",
+  "object": "chat.completion",
+  "model": "mistral-large-latest",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"findings\":[{\"id\":\"foo.deleteRepo\",\"kind\":\"glossary\",\"message\":\"Use dépôt, not référentiel.\"}]}"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 410,
+    "completion_tokens": 38,
+    "total_tokens": 448
+  }
+}

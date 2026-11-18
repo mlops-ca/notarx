@@ -21,7 +21,7 @@ import { FormatBadge, RepositoryTypeBadge } from "../components/ui/Badge";
 import { ErrorBanner } from "../components/ui/Feedback";
 import { usePreferences } from "../lib/preferences";
 import { SUPPORTED_LOCALES } from "../messages/locales";
-import { createTranslator } from "../messages/translate";
+import { createTranslator, isMessagesLoaded } from "../messages/translate";
 
 export interface CommandPage {
   to: string;
@@ -149,7 +149,11 @@ export function CommandPalette({
       // The language is named in its own language, so a reader stuck in the
       // wrong one can still recognize it.
       label: t("palette.switchLanguage", {
-        language: createTranslator(item.tag)(item.labelKey),
+        // A language shows its own name once its table is loaded (the one
+        // the reader uses always is); until then it reads in the current one.
+        language: (isMessagesLoaded(item.tag) ? createTranslator(item.tag) : t)(
+          item.labelKey,
+        ),
       }),
       icon: <GlobalOutlined />,
       run: () => setLocale(item.tag),

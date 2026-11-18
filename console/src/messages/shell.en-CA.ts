@@ -7,6 +7,8 @@ export const shellEnCA = {
   "common.language.zh": "Chinese",
   "common.language.fr": "French",
   "common.language.en": "English",
+  "common.language.loadFailed":
+    "Could not load the selected language ({language}). Check your connection and try again.",
   "palette.title": "Command palette",
   "palette.trigger": "Search or jump to…",
   "palette.placeholder": "Search pages, repositories, or actions…",

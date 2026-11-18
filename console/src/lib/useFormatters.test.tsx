@@ -1,4 +1,4 @@
-import { renderHook } from "@testing-library/react";
+import { renderHook, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import { createFormatters } from "./format";
@@ -100,10 +100,11 @@ describe("useFormatters", () => {
     return createElement(PreferencesProvider, null, children);
   }
 
-  it("binds the formatters to the active Console locale", () => {
+  it("binds the formatters to the active Console locale", async () => {
     localStorage.setItem("ag.console.locale", "zh-CN");
     const { result } = renderHook(() => useFormatters(), { wrapper });
-    expect(result.current.locale).toBe("zh-CN");
+    // The stored language shows once its message table has loaded.
+    await waitFor(() => expect(result.current.locale).toBe("zh-CN"));
     expect(
       plain(result.current.formatDateTime(instant, { timeZone: "UTC" })),
     ).toBe("2026/10/14 15:04:05");

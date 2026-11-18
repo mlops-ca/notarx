@@ -9,6 +9,7 @@
 </p>
 
 <p align="center">
+  <a href="README.fr-CA.md">Français</a> ·
   <a href="README.zh-CN.md">简体中文</a> ·
   <a href="docs/README.md">Documentation</a> ·
   <a href="ARCHITECTURE.md">Architecture</a> ·

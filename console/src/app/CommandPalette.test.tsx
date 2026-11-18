@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { listRepositories, type Repository } from "../client";
 import { PreferencesProvider } from "../lib/preferences";
+import { loadMessages } from "../messages/translate";
 import { TestQueryProvider } from "../test/queryClient";
 import { CommandPalette, type CommandPage } from "./CommandPalette";
 
@@ -85,7 +86,7 @@ describe("CommandPalette language commands", () => {
     const { input } = renderPalette();
     await user.click(input);
     expect(
-      screen.getByRole("option", { name: /Switch language to Français/ }),
+      await screen.findByRole("option", { name: /Switch language to French/ }),
     ).toBeInTheDocument();
     expect(
       screen.getAllByRole("option", { name: /Switch language to / }),
@@ -95,15 +96,30 @@ describe("CommandPalette language commands", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("names a language in its own table once that table is loaded", async () => {
+    await loadMessages("fr-CA");
+    const user = userEvent.setup();
+    const { input } = renderPalette();
+    await user.click(input);
+    expect(
+      await screen.findByRole("option", {
+        name: /Switch language to Français/,
+      }),
+    ).toBeInTheDocument();
+  });
+
   it("switches the Console language from a command", async () => {
     const user = userEvent.setup();
     const { input, onClose } = renderPalette();
     await user.click(input);
     await user.click(
-      screen.getByRole("option", { name: /Switch language to Français/ }),
+      await screen.findByRole("option", { name: /Switch language to F/ }),
     );
     expect(onClose).toHaveBeenCalled();
-    expect(window.localStorage.getItem("ag.console.locale")).toBe("fr-CA");
+    // The choice is stored once the French table has loaded.
+    await waitFor(() =>
+      expect(window.localStorage.getItem("ag.console.locale")).toBe("fr-CA"),
+    );
   });
 });
 

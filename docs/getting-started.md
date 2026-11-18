@@ -1,6 +1,6 @@
 # Getting started
 
-[简体中文](getting-started.zh-CN.md) · [Back to README](../README.md)
+[Français](getting-started.fr-CA.md) · [简体中文](getting-started.zh-CN.md) · [Back to README](../README.md)
 
 This guide brings up the complete development stack: one standalone Gateway,
 PostgreSQL for metadata and coordination, RustFS for the S3-compatible byte

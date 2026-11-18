@@ -107,6 +107,7 @@ filelists
 fillfactor
 formatters
 frameless
+français
 française
 freetier
 frontmatter
