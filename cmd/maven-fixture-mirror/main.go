@@ -5,12 +5,16 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/mavenfixture"
@@ -28,5 +32,15 @@ func main() {
 	fmt.Printf("http://%s\n", listener.Addr())
 	_ = os.Stdout.Sync()
 	server := &http.Server{Handler: mavenfixture.New(*dir, mavenfixture.RecordMode(), log.Printf), ReadHeaderTimeout: 10 * time.Second}
-	log.Fatal(server.Serve(listener))
+	stop, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	go func() {
+		<-stop.Done()
+		shutdown, done := context.WithTimeout(context.Background(), 5*time.Second)
+		defer done()
+		_ = server.Shutdown(shutdown)
+	}()
+	if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Fatal(err)
+	}
 }

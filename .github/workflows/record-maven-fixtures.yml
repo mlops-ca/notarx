@@ -39,9 +39,10 @@ jobs:
         run: docker build --tag maven-fixture-recorder .github/maven-fixture-recorder
       - name: Record the fixtures in the container
         run: |
+          mkdir -p "$RUNNER_TEMP/home"
           docker run --rm --network host \
             --user "$(id -u):$(id -g)" \
-            --env HOME=/tmp/home --env GOCACHE=/tmp/gocache --env GOMODCACHE=/gomodcache \
+            --volume "$RUNNER_TEMP/home:/tmp/home" --env HOME=/tmp/home --env GRADLE_USER_HOME=/tmp/gradle-home --env CGO_ENABLED=0 --env GOCACHE=/tmp/gocache --env GOMODCACHE=/gomodcache \
             --env GOFLAGS=-buildvcs=false --env GOTOOLCHAIN=local --env GOPROXY \
             --volume "$PWD:/work" --workdir /work \
             --volume "$(go env GOROOT):/usr/local/go:ro" \
@@ -55,9 +56,15 @@ jobs:
       - name: Pack the new files
         run: |
           mkdir -p "$RUNNER_TEMP/out"
-          git ls-files --others --modified --exclude-standard internal/mavenfixture/testdata | tar --create --file "$RUNNER_TEMP/out/maven-fixtures.tar" --files-from -
+          # Existing recordings are never replaced, so only new files are packed.
+          git ls-files --others --exclude-standard internal/mavenfixture/testdata > "$RUNNER_TEMP/new-files.txt"
+          if [ -s "$RUNNER_TEMP/new-files.txt" ]; then
+            tar --create --file "$RUNNER_TEMP/out/maven-fixtures.tar" --files-from "$RUNNER_TEMP/new-files.txt"
+          else
+            echo "::notice::No new fixture files were recorded; every request was already recorded."
+          fi
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: maven-fixtures
           path: ${{ runner.temp }}/out/maven-fixtures.tar
-          if-no-files-found: error
+          if-no-files-found: ignore
