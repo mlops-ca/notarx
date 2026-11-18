@@ -1,0 +1,5 @@
+# Non-test Go files exempt from scripts/check-no-cjk-go.py (ADR 0014).
+# The email bodies stay until ADR 0014 slice 7 moves them into embedded
+# locale bundles; remove each line when its file is clean.
+internal/emailnotification/template.go  # slice 7
+internal/emailnotification/quota.go     # slice 7

@@ -214,6 +214,8 @@ spellcheck:
 architecture-check:
 	@go run ./tools/architecture
 	@go test ./tools/architecture
+	@python3 scripts/check-no-cjk-go.py
+	@python3 -B -m unittest discover -s scripts/tests -p test_check_no_cjk_go.py
 
 architecture-metrics:
 	@go run ./tools/architecture -metrics

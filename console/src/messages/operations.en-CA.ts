@@ -451,6 +451,18 @@ export const operationsEnCA = {
   "operations.deleteScheduledTask": "Delete schedule",
   "operations.deleteScheduledTaskNamed": "Delete the scheduled task {name}?",
   "operations.paused": "Paused",
+  "operations.noOnlineApiNodes": "No online API nodes",
+  "operations.noOnlineSchedulerNodes":
+    "No online scheduler nodes; background scheduling will not run",
+  "operations.noOnlineWorkerNodes":
+    "No online worker nodes; background jobs will not be processed",
+  "operations.duplicateInstanceIds":
+    "Duplicate instance IDs exist; their sessions are recorded separately",
+  "operations.staleHeartbeatNodes": "Runtime nodes with stale heartbeats exist",
+  "operations.buildIdentityUnknown":
+    "Some online nodes did not report a complete build identity; version consistency cannot be confirmed",
+  "operations.mixedBuild":
+    "Online nodes run different versions or revisions; a rolling upgrade may be in progress",
 };
 
 export type OperationsMessageKey = keyof typeof operationsEnCA;

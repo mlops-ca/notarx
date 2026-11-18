@@ -2562,8 +2562,21 @@ export type RuntimeNode = {
 };
 
 export type RuntimeNodeHealthIssue = {
-  code: string;
+  /**
+   * Stable issue code. The Console localizes by code and falls back to the English message for a code it does not know.
+   */
+  code:
+    | "api_unavailable"
+    | "scheduler_unavailable"
+    | "worker_unavailable"
+    | "duplicate_instance_id"
+    | "stale_nodes"
+    | "build_identity_unknown"
+    | "mixed_build";
   severity: "warning" | "error";
+  /**
+   * English text for logs and for clients that do not know the code; the server does not localize it.
+   */
   message: string;
   /**
    * Session IDs of nodes involved in this issue.

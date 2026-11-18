@@ -157,6 +157,13 @@ make console-test
 make console-build
 ```
 
+`make lint` also runs `make spellcheck`, which checks the Console messages and
+the English documentation against the Canadian English (`en-CA`) dictionary
+(`colour`, `-ize`); `make architecture-check` rejects CJK text in non-test Go
+files, because servers return English messages with stable codes and the
+Console localizes by code (ADR 0014). Install the Console dependencies first
+(`npm --prefix console ci`); project terms go in `.cspell/project-words.txt`.
+
 `make coverage` enforces both the repository-wide Go baseline and stricter
 floors for stable security, lifecycle, replication, and scanning packages.
 `make console-test` measures all hand-written Console TypeScript and TSX while

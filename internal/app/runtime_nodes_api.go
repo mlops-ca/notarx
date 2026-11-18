@@ -59,7 +59,7 @@ func runtimeNodeHealth(items []adminopenapi.RuntimeNode) adminopenapi.RuntimeNod
 			}
 		}
 	}
-	addIssue := func(code, severity, message string) {
+	addIssue := func(code adminopenapi.RuntimeNodeHealthIssueCode, severity, message string) {
 		issue := adminopenapi.RuntimeNodeHealthIssue{Code: code, Message: message}
 		if severity == "error" {
 			issue.Severity = adminopenapi.RuntimeNodeHealthIssueSeverityError
@@ -69,13 +69,13 @@ func runtimeNodeHealth(items []adminopenapi.RuntimeNode) adminopenapi.RuntimeNod
 		health.Issues = append(health.Issues, issue)
 	}
 	if !hasAPI {
-		addIssue("api_unavailable", "error", "没有在线 API 节点")
+		addIssue(adminopenapi.ApiUnavailable, "error", "No online API nodes")
 	}
 	if !hasScheduler {
-		addIssue("scheduler_unavailable", "warning", "没有在线 Scheduler 节点，后台调度不会运行")
+		addIssue(adminopenapi.SchedulerUnavailable, "warning", "No online scheduler nodes; background scheduling will not run")
 	}
 	if !hasWorker {
-		addIssue("worker_unavailable", "warning", "没有在线 Worker 节点，后台任务不会被处理")
+		addIssue(adminopenapi.WorkerUnavailable, "warning", "No online worker nodes; background jobs will not be processed")
 	}
 	duplicateCount := 0
 	for _, count := range activeInstanceIDs {
@@ -84,10 +84,10 @@ func runtimeNodeHealth(items []adminopenapi.RuntimeNode) adminopenapi.RuntimeNod
 		}
 	}
 	if duplicateCount > 0 {
-		addIssue("duplicate_instance_id", "warning", "存在重复的实例 ID，会话已分开记录")
+		addIssue(adminopenapi.DuplicateInstanceId, "warning", "Duplicate instance IDs exist; their sessions are recorded separately")
 	}
 	if health.Stale > 0 {
-		addIssue("stale_nodes", "warning", "存在心跳过期的运行节点")
+		addIssue(adminopenapi.StaleNodes, "warning", "Runtime nodes with stale heartbeats exist")
 	}
 	builds := make(map[string][]string)
 	unknownBuild := make([]string, 0)
@@ -112,8 +112,8 @@ func runtimeNodeHealth(items []adminopenapi.RuntimeNode) adminopenapi.RuntimeNod
 		sort.Strings(unknownBuild)
 		affected := unknownBuild
 		health.Issues = append(health.Issues, adminopenapi.RuntimeNodeHealthIssue{
-			Code: "build_identity_unknown", Severity: adminopenapi.RuntimeNodeHealthIssueSeverityWarning,
-			Message: "部分在线节点未报告完整构建身份，无法确认版本一致", AffectedNodes: &affected,
+			Code: adminopenapi.BuildIdentityUnknown, Severity: adminopenapi.RuntimeNodeHealthIssueSeverityWarning,
+			Message: "Some online nodes did not report a complete build identity; version consistency cannot be confirmed", AffectedNodes: &affected,
 		})
 	}
 	if len(builds) > 1 {
@@ -123,8 +123,8 @@ func runtimeNodeHealth(items []adminopenapi.RuntimeNode) adminopenapi.RuntimeNod
 		}
 		sort.Strings(affected)
 		health.Issues = append(health.Issues, adminopenapi.RuntimeNodeHealthIssue{
-			Code: "mixed_build", Severity: adminopenapi.RuntimeNodeHealthIssueSeverityWarning,
-			Message: "在线节点运行不同的版本或修订号，可能正在滚动升级", AffectedNodes: &affected,
+			Code: adminopenapi.MixedBuild, Severity: adminopenapi.RuntimeNodeHealthIssueSeverityWarning,
+			Message: "Online nodes run different versions or revisions; a rolling upgrade may be in progress", AffectedNodes: &affected,
 		})
 	}
 	health.Status = adminopenapi.RuntimeNodeHealthStatusHealthy

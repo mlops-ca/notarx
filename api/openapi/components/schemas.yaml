@@ -157,6 +157,17 @@ RuntimeNodeHealthIssue:
   properties:
     code:
       type: string
+      description: >-
+        Stable issue code. The Console localizes by code and falls back to the
+        English message for a code it does not know.
+      enum:
+      - api_unavailable
+      - scheduler_unavailable
+      - worker_unavailable
+      - duplicate_instance_id
+      - stale_nodes
+      - build_identity_unknown
+      - mixed_build
     severity:
       type: string
       enum:
@@ -164,6 +175,7 @@ RuntimeNodeHealthIssue:
       - error
     message:
       type: string
+      description: English text for logs and for clients that do not know the code; the server does not localize it.
     affectedNodes:
       type: array
       description: Session IDs of nodes involved in this issue.
