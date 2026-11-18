@@ -111,12 +111,13 @@ func VerifyRelease(m backupmanifest.Manifest, release Release, ledger io.Reader)
 			return errRelease
 		}
 		prefix := module + "/internal/buildinfo."
-		command := "/cmd/notarx"
+		command := "notarx"
 		if module == legacyModule {
-			// Releases built before ADR 0013 name the server command cmd/gateway.
-			command = "/cmd/gateway"
+			// Releases built before ADR 0013 name the server command and its
+			// binary gateway; the file name must match the module namespace.
+			command = "gateway"
 		}
-		if bi.Path != module+command || values["GOOS"]+"/"+values["GOARCH"] != m.Gateway.Artifact.Platform {
+		if filepath.Base(path) != command || bi.Path != module+"/cmd/"+command || values["GOOS"]+"/"+values["GOARCH"] != m.Gateway.Artifact.Platform {
 			return errRelease
 		}
 		_, hasLDFlags := values["-ldflags"]
