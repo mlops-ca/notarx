@@ -2563,7 +2563,7 @@ export type RuntimeNode = {
 
 export type RuntimeNodeHealthIssue = {
   /**
-   * Stable issue code. The Console localizes by code and falls back to the English message for a code it does not know.
+   * Stable issue code. The Console localizes by code and falls back to the English message for a code it does not know; new codes may be added, so clients must tolerate values outside this list.
    */
   code:
     | "api_unavailable"

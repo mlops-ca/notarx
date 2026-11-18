@@ -175,7 +175,8 @@ describe("message dictionaries", () => {
   });
 
   it("only keep messages some source file uses", () => {
-    const source = sourceFiles(root)
+    // locales.ts names the language-picker messages by key.
+    const source = [...sourceFiles(root), join(messagesDir, "locales.ts")]
       .map((path) => readFileSync(path, "utf8"))
       .join("\n");
     // Keys built at run time, such as `account.kind.${kind}`.

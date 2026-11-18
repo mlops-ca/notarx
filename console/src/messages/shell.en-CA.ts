@@ -5,6 +5,7 @@ export const shellEnCA = {
   "common.theme.current": "Current theme: {name}",
   "common.language": "Language",
   "common.language.zh": "Chinese",
+  "common.language.fr": "French",
   "common.language.en": "English",
   "palette.title": "Command palette",
   "palette.trigger": "Search or jump to…",

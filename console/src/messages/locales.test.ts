@@ -4,6 +4,7 @@ import { createElement } from "react";
 import { PreferencesProvider, usePreferences } from "../lib/preferences";
 import {
   DEFAULT_LOCALE,
+  READY_LOCALES,
   SUPPORTED_LOCALES,
   detectLocale,
   isMessageLocale,
@@ -73,23 +74,31 @@ describe("matchLanguage", () => {
 describe("detectLocale", () => {
   it("prefers the stored choice over the browser languages", () => {
     expect(detectLocale("zh-CN", ["fr-CA", US_ENGLISH])).toBe("zh-CN");
-    expect(detectLocale("fr-CA", [US_ENGLISH])).toBe("fr-CA");
+    expect(detectLocale("zh-CN", [US_ENGLISH])).toBe("zh-CN");
   });
 
   it("ignores a stored tag outside the registry", () => {
-    expect(detectLocale(US_ENGLISH, ["fr-CA"])).toBe("fr-CA");
+    expect(detectLocale(US_ENGLISH, ["zh-CN"])).toBe("zh-CN");
     expect(detectLocale("klingon", [])).toBe(DEFAULT_LOCALE);
   });
 
   it("uses the first matching navigator language by language subtag", () => {
-    expect(detectLocale(null, ["fr", "en"])).toBe("fr-CA");
-    expect(detectLocale(null, ["en", "fr"])).toBe("en-CA");
+    const all = ["en-CA", "fr-CA", "zh-CN"] as const;
+    expect(detectLocale(null, ["fr", "en"], all)).toBe("fr-CA");
+    expect(detectLocale(null, ["en", "fr"], all)).toBe("en-CA");
     expect(detectLocale(null, ["zh-CN"])).toBe("zh-CN");
     expect(detectLocale(null, ["zh-Hans"])).toBe("zh-CN");
   });
 
+  it("skips a locale that has no dictionary yet, so French browsers read English", () => {
+    expect(READY_LOCALES).toEqual(["en-CA", "zh-CN"]);
+    expect(detectLocale(null, ["fr-CA", "en"])).toBe("en-CA");
+    expect(detectLocale(null, ["fr-FR", "zh-CN"])).toBe("zh-CN");
+    expect(detectLocale("fr-CA", ["fr"])).toBe("en-CA");
+  });
+
   it("skips Traditional Chinese and unknown languages for the next entry", () => {
-    expect(detectLocale(null, ["zh-TW", "fr-FR"])).toBe("fr-CA");
+    expect(detectLocale(null, ["zh-TW", "fr-FR"], ["fr-CA"])).toBe("fr-CA");
     expect(detectLocale(null, ["zh-HK", "zh-Hant", "en-GB"])).toBe("en-CA");
     expect(detectLocale(null, ["de", "es", "zh-CN"])).toBe("zh-CN");
   });
@@ -113,23 +122,32 @@ describe("PreferencesProvider locale detection", () => {
     vi.restoreAllMocks();
   });
 
-  it("starts from the browser language and sets the document language", async () => {
-    vi.spyOn(navigator, "languages", "get").mockReturnValue(["zh-TW", "fr-FR"]);
+  it("starts from the browser language, sets the document language and stores nothing", async () => {
+    vi.spyOn(navigator, "languages", "get").mockReturnValue(["zh-TW", "zh-CN"]);
     render(createElement(PreferencesProvider, null, createElement(Probe)));
-    expect(await screen.findByText("fr-CA")).toBeInTheDocument();
-    expect(document.documentElement.lang).toBe("fr-CA");
-    expect(localStorage.getItem("ag.console.locale")).toBe("fr-CA");
+    expect(await screen.findByText("zh-CN")).toBeInTheDocument();
+    expect(document.documentElement.lang).toBe("zh-CN");
+    // A detected language is not a choice: a later browser change still applies.
+    expect(localStorage.getItem("ag.console.locale")).toBeNull();
+  });
+
+  it("keeps English for a French browser until fr-CA has a dictionary", async () => {
+    vi.spyOn(navigator, "languages", "get").mockReturnValue(["fr-FR", "fr"]);
+    render(createElement(PreferencesProvider, null, createElement(Probe)));
+    expect(await screen.findByText("en-CA")).toBeInTheDocument();
+    expect(document.documentElement.lang).toBe("en-CA");
   });
 
   it("lets the stored choice win and drops the retired US English value", async () => {
-    vi.spyOn(navigator, "languages", "get").mockReturnValue(["fr-FR"]);
+    vi.spyOn(navigator, "languages", "get").mockReturnValue(["en-GB"]);
     localStorage.setItem("ag.console.locale", "zh-CN");
     render(createElement(PreferencesProvider, null, createElement(Probe)));
     expect(await screen.findByText("zh-CN")).toBeInTheDocument();
     cleanup();
 
     localStorage.setItem("ag.console.locale", US_ENGLISH);
+    vi.spyOn(navigator, "languages", "get").mockReturnValue(["zh-CN"]);
     render(createElement(PreferencesProvider, null, createElement(Probe)));
-    expect(await screen.findByText("fr-CA")).toBeInTheDocument();
+    expect(await screen.findByText("zh-CN")).toBeInTheDocument();
   });
 });

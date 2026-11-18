@@ -62,7 +62,10 @@ export interface Formatters {
   list: Intl.ListFormat;
   /** Plural categories; fr-CA reports `one` for 0 and 1, en-CA only for 1. */
   plural: Intl.PluralRules;
-  /** A date and time, or "—" when there is none or it does not parse. */
+  /**
+   * A date and time; "—" when there is none, and the input text unchanged
+   * when it does not parse (as `formatDate` does).
+   */
   formatDateTime(
     value: string | number | Date | undefined,
     options?: Intl.DateTimeFormatOptions,
@@ -73,8 +76,10 @@ export interface Formatters {
     options?: Intl.NumberFormatOptions,
   ): string;
   /**
-   * A byte size in SI units; the separators and unit names come from Intl
-   * (`1.5 GB` in en-CA, `1,5 Go` in fr-CA).
+   * A byte size in decimal SI units; the separators and unit names come from
+   * Intl (`1.5 GB` in en-CA, `1,5 Go` in fr-CA). The module-level
+   * `formatBytes` keeps its binary KiB units for the existing tables; use one
+   * system per screen.
    */
   formatBytes(bytes: number | undefined): string;
 }
@@ -118,16 +123,22 @@ export function createFormatters(locale: string): Formatters {
     },
     formatBytes(size) {
       if (size === undefined || size === null || Number.isNaN(size)) return "—";
-      const exponent =
+      const last = BYTE_UNITS.length - 1;
+      let exponent =
         size === 0
           ? 0
-          : Math.min(
-              Math.floor(Math.log10(Math.abs(size)) / 3),
-              BYTE_UNITS.length - 1,
+          : Math.max(
+              0,
+              Math.min(Math.floor(Math.log10(Math.abs(size)) / 3), last),
             );
-      return bytes[Math.max(0, exponent)].format(
-        size / 1000 ** Math.max(0, exponent),
-      );
+      // A value that rounds up to 1000 belongs to the next unit (1000 kB is 1 MB).
+      if (
+        exponent < last &&
+        Math.abs(Math.round((size / 1000 ** exponent) * 10) / 10) >= 1000
+      ) {
+        exponent += 1;
+      }
+      return bytes[exponent].format(size / 1000 ** exponent);
     },
   };
 }

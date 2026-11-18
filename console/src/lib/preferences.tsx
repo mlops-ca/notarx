@@ -190,11 +190,6 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     document.documentElement.lang = locale;
-    try {
-      localStorage.setItem(LOCALE_KEY, locale);
-    } catch {
-      // Preferences still work for this session when storage is unavailable.
-    }
   }, [locale]);
 
   const setThemeId = useCallback(
@@ -298,10 +293,16 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     },
     [availableThemes, setThemeId],
   );
-  const setLocale = useCallback(
-    (nextLocale: AppLocale) => setLocaleState(nextLocale),
-    [],
-  );
+  // Only a choice the reader makes is stored; a detected language is not, so
+  // a later change of the browser's languages still applies.
+  const setLocale = useCallback((nextLocale: AppLocale) => {
+    setLocaleState(nextLocale);
+    try {
+      localStorage.setItem(LOCALE_KEY, nextLocale);
+    } catch {
+      // Preferences still work for this session when storage is unavailable.
+    }
+  }, []);
   const toggleColorMode = useCallback(() => {
     const opposite = availableThemes.find((theme) => theme.mode !== colorMode);
     if (opposite) {

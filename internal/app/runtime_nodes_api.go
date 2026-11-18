@@ -69,13 +69,13 @@ func runtimeNodeHealth(items []adminopenapi.RuntimeNode) adminopenapi.RuntimeNod
 		health.Issues = append(health.Issues, issue)
 	}
 	if !hasAPI {
-		addIssue(adminopenapi.ApiUnavailable, "error", "No online API nodes")
+		addIssue(adminopenapi.RuntimeNodeIssueApiUnavailable, "error", "No online API nodes")
 	}
 	if !hasScheduler {
-		addIssue(adminopenapi.SchedulerUnavailable, "warning", "No online scheduler nodes; background scheduling will not run")
+		addIssue(adminopenapi.RuntimeNodeIssueSchedulerUnavailable, "warning", "No online scheduler nodes; background scheduling will not run")
 	}
 	if !hasWorker {
-		addIssue(adminopenapi.WorkerUnavailable, "warning", "No online worker nodes; background jobs will not be processed")
+		addIssue(adminopenapi.RuntimeNodeIssueWorkerUnavailable, "warning", "No online worker nodes; background jobs will not be processed")
 	}
 	duplicateCount := 0
 	for _, count := range activeInstanceIDs {
@@ -84,10 +84,10 @@ func runtimeNodeHealth(items []adminopenapi.RuntimeNode) adminopenapi.RuntimeNod
 		}
 	}
 	if duplicateCount > 0 {
-		addIssue(adminopenapi.DuplicateInstanceId, "warning", "Duplicate instance IDs exist; their sessions are recorded separately")
+		addIssue(adminopenapi.RuntimeNodeIssueDuplicateInstanceId, "warning", "Duplicate instance IDs exist; their sessions are recorded separately")
 	}
 	if health.Stale > 0 {
-		addIssue(adminopenapi.StaleNodes, "warning", "Runtime nodes with stale heartbeats exist")
+		addIssue(adminopenapi.RuntimeNodeIssueStaleNodes, "warning", "Runtime nodes with stale heartbeats exist")
 	}
 	builds := make(map[string][]string)
 	unknownBuild := make([]string, 0)
@@ -112,7 +112,7 @@ func runtimeNodeHealth(items []adminopenapi.RuntimeNode) adminopenapi.RuntimeNod
 		sort.Strings(unknownBuild)
 		affected := unknownBuild
 		health.Issues = append(health.Issues, adminopenapi.RuntimeNodeHealthIssue{
-			Code: adminopenapi.BuildIdentityUnknown, Severity: adminopenapi.RuntimeNodeHealthIssueSeverityWarning,
+			Code: adminopenapi.RuntimeNodeIssueBuildIdentityUnknown, Severity: adminopenapi.RuntimeNodeHealthIssueSeverityWarning,
 			Message: "Some online nodes did not report a complete build identity; version consistency cannot be confirmed", AffectedNodes: &affected,
 		})
 	}
@@ -123,7 +123,7 @@ func runtimeNodeHealth(items []adminopenapi.RuntimeNode) adminopenapi.RuntimeNod
 		}
 		sort.Strings(affected)
 		health.Issues = append(health.Issues, adminopenapi.RuntimeNodeHealthIssue{
-			Code: adminopenapi.MixedBuild, Severity: adminopenapi.RuntimeNodeHealthIssueSeverityWarning,
+			Code: adminopenapi.RuntimeNodeIssueMixedBuild, Severity: adminopenapi.RuntimeNodeHealthIssueSeverityWarning,
 			Message: "Online nodes run different versions or revisions; a rolling upgrade may be in progress", AffectedNodes: &affected,
 		})
 	}

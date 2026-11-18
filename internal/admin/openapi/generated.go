@@ -4294,31 +4294,31 @@ func (e RuntimeNodeHealthStatus) Valid() bool {
 
 // Defines values for RuntimeNodeHealthIssueCode.
 const (
-	ApiUnavailable       RuntimeNodeHealthIssueCode = "api_unavailable"
-	BuildIdentityUnknown RuntimeNodeHealthIssueCode = "build_identity_unknown"
-	DuplicateInstanceId  RuntimeNodeHealthIssueCode = "duplicate_instance_id"
-	MixedBuild           RuntimeNodeHealthIssueCode = "mixed_build"
-	SchedulerUnavailable RuntimeNodeHealthIssueCode = "scheduler_unavailable"
-	StaleNodes           RuntimeNodeHealthIssueCode = "stale_nodes"
-	WorkerUnavailable    RuntimeNodeHealthIssueCode = "worker_unavailable"
+	RuntimeNodeIssueApiUnavailable       RuntimeNodeHealthIssueCode = "api_unavailable"
+	RuntimeNodeIssueBuildIdentityUnknown RuntimeNodeHealthIssueCode = "build_identity_unknown"
+	RuntimeNodeIssueDuplicateInstanceId  RuntimeNodeHealthIssueCode = "duplicate_instance_id"
+	RuntimeNodeIssueMixedBuild           RuntimeNodeHealthIssueCode = "mixed_build"
+	RuntimeNodeIssueSchedulerUnavailable RuntimeNodeHealthIssueCode = "scheduler_unavailable"
+	RuntimeNodeIssueStaleNodes           RuntimeNodeHealthIssueCode = "stale_nodes"
+	RuntimeNodeIssueWorkerUnavailable    RuntimeNodeHealthIssueCode = "worker_unavailable"
 )
 
 // Valid indicates whether the value is a known member of the RuntimeNodeHealthIssueCode enum.
 func (e RuntimeNodeHealthIssueCode) Valid() bool {
 	switch e {
-	case ApiUnavailable:
+	case RuntimeNodeIssueApiUnavailable:
 		return true
-	case BuildIdentityUnknown:
+	case RuntimeNodeIssueBuildIdentityUnknown:
 		return true
-	case DuplicateInstanceId:
+	case RuntimeNodeIssueDuplicateInstanceId:
 		return true
-	case MixedBuild:
+	case RuntimeNodeIssueMixedBuild:
 		return true
-	case SchedulerUnavailable:
+	case RuntimeNodeIssueSchedulerUnavailable:
 		return true
-	case StaleNodes:
+	case RuntimeNodeIssueStaleNodes:
 		return true
-	case WorkerUnavailable:
+	case RuntimeNodeIssueWorkerUnavailable:
 		return true
 	default:
 		return false
@@ -8653,7 +8653,7 @@ type RuntimeNodeHealthIssue struct {
 	// AffectedNodes Session IDs of nodes involved in this issue.
 	AffectedNodes *[]string `json:"affectedNodes,omitempty"`
 
-	// Code Stable issue code. The Console localizes by code and falls back to the English message for a code it does not know.
+	// Code Stable issue code. The Console localizes by code and falls back to the English message for a code it does not know; new codes may be added, so clients must tolerate values outside this list.
 	Code RuntimeNodeHealthIssueCode `json:"code"`
 
 	// Message English text for logs and for clients that do not know the code; the server does not localize it.
@@ -8661,7 +8661,7 @@ type RuntimeNodeHealthIssue struct {
 	Severity RuntimeNodeHealthIssueSeverity `json:"severity"`
 }
 
-// RuntimeNodeHealthIssueCode Stable issue code. The Console localizes by code and falls back to the English message for a code it does not know.
+// RuntimeNodeHealthIssueCode Stable issue code. The Console localizes by code and falls back to the English message for a code it does not know; new codes may be added, so clients must tolerate values outside this list.
 type RuntimeNodeHealthIssueCode string
 
 // RuntimeNodeHealthIssueSeverity defines model for RuntimeNodeHealthIssue.Severity.

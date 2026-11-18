@@ -4,6 +4,7 @@ import zhCN from "antd/locale/zh_CN";
 import "dayjs/locale/en-ca";
 import "dayjs/locale/fr-ca";
 import "dayjs/locale/zh-cn";
+import type { MessageKey } from ".";
 import type { MessageLocale } from "./translate";
 
 type AntdLocale = typeof enGB;
@@ -18,6 +19,14 @@ export interface SupportedLocale {
   dayjs: string;
   /** The BCP 47 tag handed to Intl. */
   intl: string;
+  /** The message that names the language in the language picker. */
+  labelKey: MessageKey;
+  /**
+   * Whether the locale ships its own dictionary. Only ready locales are
+   * detected from the browser and offered in the picker; fr-CA turns ready
+   * with its dictionaries.
+   */
+  ready: boolean;
 }
 
 /**
@@ -35,9 +44,27 @@ export const SUPPORTED_LOCALES: readonly SupportedLocale[] = [
     antd: antdEnCA,
     dayjs: "en-ca",
     intl: "en-CA",
+    labelKey: "common.language.en",
+    ready: true,
   },
-  { tag: "fr-CA", name: "French", antd: frCA, dayjs: "fr-ca", intl: "fr-CA" },
-  { tag: "zh-CN", name: "Chinese", antd: zhCN, dayjs: "zh-cn", intl: "zh-CN" },
+  {
+    tag: "fr-CA",
+    name: "French",
+    antd: frCA,
+    dayjs: "fr-ca",
+    intl: "fr-CA",
+    labelKey: "common.language.fr",
+    ready: false,
+  },
+  {
+    tag: "zh-CN",
+    name: "Chinese",
+    antd: zhCN,
+    dayjs: "zh-cn",
+    intl: "zh-CN",
+    labelKey: "common.language.zh",
+    ready: true,
+  },
 ];
 
 export const DEFAULT_LOCALE: MessageLocale = "en-CA";
@@ -75,19 +102,27 @@ export function matchLanguage(language: string): MessageLocale | undefined {
   }
 }
 
+/** The locales that ship their own dictionary: detected and offered in the picker. */
+export const READY_LOCALES: readonly MessageLocale[] = SUPPORTED_LOCALES.filter(
+  (locale) => locale.ready,
+).map((locale) => locale.tag);
+
 /**
  * Detection order: the stored choice, then the first `navigator.languages`
- * entry that matches, then en-CA. A stored tag outside the registry (the
- * retired US English tag, say) is ignored with no alias.
+ * entry that matches, then en-CA. Only `available` locales count (the ready
+ * ones by default), so a French browser keeps English text until fr-CA ships
+ * its dictionary. A stored tag outside the registry (the retired US English
+ * tag, say) is ignored with no alias.
  */
 export function detectLocale(
   stored: string | null | undefined,
   languages: readonly string[],
+  available: readonly MessageLocale[] = READY_LOCALES,
 ): MessageLocale {
-  if (isMessageLocale(stored)) return stored;
+  if (isMessageLocale(stored) && available.includes(stored)) return stored;
   for (const language of languages) {
     const match = matchLanguage(language);
-    if (match) return match;
+    if (match && available.includes(match)) return match;
   }
   return DEFAULT_LOCALE;
 }

@@ -87,15 +87,9 @@ export function PreferenceControls({ compact = false }: { compact?: boolean }) {
           selectable: true,
           selectedKeys: [locale],
           items: [
-            ...SUPPORTED_LOCALES
-              // fr-CA joins the picker when its dictionaries land.
-              .filter(({ tag }) => tag !== "fr-CA")
-              .map(({ tag }) => ({
-                key: tag,
-                label: t(
-                  tag === "zh-CN" ? "common.language.zh" : "common.language.en",
-                ),
-              })),
+            ...SUPPORTED_LOCALES.filter(({ ready }) => ready).map(
+              ({ tag, labelKey }) => ({ key: tag, label: t(labelKey) }),
+            ),
           ],
           onClick: ({ key }) => setLocale(key as AppLocale),
         }}

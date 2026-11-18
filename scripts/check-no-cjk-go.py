@@ -3,7 +3,7 @@
 
 Servers return stable codes and English messages; the Console localizes by
 code. Test files are free to use any text. Files listed in
-scripts/check-no-cjk-go.allow are exempt until the change that owns them
+scripts/check-no-cjk-go.allow (under the scanned root) are exempt until the change that owns them
 lands; each line there names the file and the ADR slice that removes the text.
 
     python3 scripts/check-no-cjk-go.py            # scan the repository
@@ -18,7 +18,8 @@ SCAN = ('internal', 'cmd')
 
 
 def allowed(root):
-    path = Path(__file__).with_suffix('.allow')
+    """The exempt paths from scripts/check-no-cjk-go.allow under root."""
+    path = Path(root) / 'scripts' / 'check-no-cjk-go.allow'
     if not path.exists():
         return set()
     rows = [row.split('#')[0].strip() for row in path.read_text().splitlines()]

@@ -60,6 +60,10 @@ describe("createFormatters", () => {
     expect(en.formatBytes(0)).toBe("0 bytes");
     expect(plain(en.formatBytes(999))).toBe("999 bytes");
     expect(plain(en.formatBytes(1500))).toBe("1.5 kB");
+    // A value that rounds up to 1000 moves to the next unit.
+    expect(plain(en.formatBytes(999_999))).toBe("1 MB");
+    expect(plain(en.formatBytes(999_949))).toBe("999.9 kB");
+    expect(plain(en.formatBytes(999_950_000))).toBe("1 GB");
     expect(en.formatBytes(undefined)).toBe("—");
     expect(en.formatBytes(Number.NaN)).toBe("—");
     expect(en.formatDateTime(undefined)).toBe("—");
@@ -91,10 +95,12 @@ describe("useFormatters", () => {
   }
 
   it("binds the formatters to the active Console locale", () => {
-    localStorage.setItem("ag.console.locale", "fr-CA");
+    localStorage.setItem("ag.console.locale", "zh-CN");
     const { result } = renderHook(() => useFormatters(), { wrapper });
-    expect(result.current.locale).toBe("fr-CA");
-    expect(plain(result.current.formatNumber(1234.5))).toBe("1 234,5");
+    expect(result.current.locale).toBe("zh-CN");
+    expect(
+      plain(result.current.formatDateTime(instant, { timeZone: "UTC" })),
+    ).toBe("2026/10/14 15:04:05");
   });
 
   it("defaults to en-CA", () => {

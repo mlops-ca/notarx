@@ -99,10 +99,10 @@ func TestRuntimeNodeHealthIdentifiesMixedBuildAndLegacyNodes(t *testing.T) {
 			issues[issue.Code] = *issue.AffectedNodes
 		}
 	}
-	if got := issues[adminopenapi.MixedBuild]; len(got) != 2 || got[0] != "api-old" || got[1] != "worker-new" {
+	if got := issues[adminopenapi.RuntimeNodeIssueMixedBuild]; len(got) != 2 || got[0] != "api-old" || got[1] != "worker-new" {
 		t.Fatalf("mixed builds=%#v", issues)
 	}
-	if got := issues[adminopenapi.BuildIdentityUnknown]; len(got) != 1 || got[0] != "legacy-session" {
+	if got := issues[adminopenapi.RuntimeNodeIssueBuildIdentityUnknown]; len(got) != 1 || got[0] != "legacy-session" {
 		t.Fatalf("legacy builds=%#v", issues)
 	}
 }
@@ -118,8 +118,8 @@ func TestRuntimeNodeHealthMessagesAreEnglishWithStableCodes(t *testing.T) {
 		{InstanceId: "stale", SessionId: "s4", Roles: []string{"worker"}, Status: adminopenapi.RuntimeNodeStatusStale},
 	}
 	want := []adminopenapi.RuntimeNodeHealthIssueCode{
-		adminopenapi.ApiUnavailable, adminopenapi.SchedulerUnavailable, adminopenapi.DuplicateInstanceId,
-		adminopenapi.StaleNodes, adminopenapi.BuildIdentityUnknown, adminopenapi.MixedBuild,
+		adminopenapi.RuntimeNodeIssueApiUnavailable, adminopenapi.RuntimeNodeIssueSchedulerUnavailable, adminopenapi.RuntimeNodeIssueDuplicateInstanceId,
+		adminopenapi.RuntimeNodeIssueStaleNodes, adminopenapi.RuntimeNodeIssueBuildIdentityUnknown, adminopenapi.RuntimeNodeIssueMixedBuild,
 	}
 	seen := map[adminopenapi.RuntimeNodeHealthIssueCode]bool{}
 	for _, issue := range runtimeNodeHealth(nodes).Issues {
@@ -141,7 +141,7 @@ func TestRuntimeNodeHealthMessagesAreEnglishWithStableCodes(t *testing.T) {
 			t.Fatalf("missing issue %q in %#v", code, seen)
 		}
 	}
-	if empty := runtimeNodeHealth(nil); len(empty.Issues) == 0 || empty.Issues[0].Code != adminopenapi.ApiUnavailable {
+	if empty := runtimeNodeHealth(nil); len(empty.Issues) == 0 || empty.Issues[0].Code != adminopenapi.RuntimeNodeIssueApiUnavailable {
 		t.Fatalf("no nodes must report api_unavailable first: %#v", empty.Issues)
 	}
 }

@@ -36,11 +36,26 @@ class CheckNoCJKGo(unittest.TestCase):
         }) as root:
             self.assertEqual(check.findings(root), [])
 
-    def test_honours_the_allow_list(self):
-        listed = check.allowed(None)
-        self.assertIn('internal/emailnotification/template.go', listed)
+    def test_honours_the_allow_list_of_the_scanned_root(self):
+        files = {
+            'internal/a/exempt.go': f'package a\nvar m = "{CJK_TEXT}"\n',
+            'internal/a/flagged.go': f'package a\nvar m = "{CJK_TEXT}"\n',
+            'scripts/check-no-cjk-go.allow': '# owned by a later slice\ninternal/a/exempt.go  # slice 7\n',
+        }
+        with tree(files) as root:
+            self.assertEqual(check.allowed(root), {'internal/a/exempt.go'})
+            self.assertEqual(check.findings(root), ['internal/a/flagged.go:2: CJK text in a non-test Go file'])
+
+    def test_another_roots_allow_list_does_not_leak(self):
         with tree({'internal/emailnotification/template.go': f'package e\nvar m = "{CJK_TEXT}"\n'}) as root:
-            self.assertEqual(check.findings(root), [])
+            self.assertEqual(check.allowed(root), set())
+            self.assertEqual(len(check.findings(root)), 1)
+
+    def test_the_repository_lists_only_the_email_bodies(self):
+        self.assertEqual(
+            check.allowed(SCRIPT.parent.parent),
+            {'internal/emailnotification/template.go', 'internal/emailnotification/quota.go'},
+        )
 
     def test_the_repository_is_clean(self):
         self.assertEqual(check.findings(SCRIPT.parent.parent), [])
