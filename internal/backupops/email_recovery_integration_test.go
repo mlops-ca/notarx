@@ -305,7 +305,7 @@ func verifyRecoveryEmail(t *testing.T, ctx context.Context, target *OwnedTarget,
 	// worker below is the current code, so apply the migration an operator runs
 	// when upgrading (ADR 0014): it maps en to en-CA.
 	if restored.Locale == "en" {
-		migration, e := os.ReadFile("../../migrations/000002_email_locale_tags.sql")
+		migration, e := os.ReadFile("../../migrations/000003_email_locale_tags.sql")
 		if e != nil {
 			t.Fatal(e)
 		}

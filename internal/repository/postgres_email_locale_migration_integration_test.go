@@ -17,7 +17,7 @@ func TestEmailLocaleMigrationRewritesLegacyTagsAndConstrains(t *testing.T) {
 	if connection == "" {
 		t.Skip("TEST_DATABASE_URL is required")
 	}
-	migration, err := os.ReadFile("../../migrations/000002_email_locale_tags.sql")
+	migration, err := os.ReadFile("../../migrations/000003_email_locale_tags.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
