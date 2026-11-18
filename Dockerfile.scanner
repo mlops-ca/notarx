@@ -10,13 +10,16 @@ RUN --mount=type=cache,id=artifact-gateway-go-mod,target=/go/pkg/mod,sharing=loc
 COPY . .
 RUN --mount=type=cache,id=artifact-gateway-go-mod,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=artifact-gateway-go-build,target=/root/.cache/go-build,sharing=locked \
-    go test ./cmd/reference-scanner ./cmd/reference-scanner-healthcheck ./internal/refscanner
-RUN --mount=type=cache,id=artifact-gateway-go-mod,target=/go/pkg/mod,sharing=locked \
-    --mount=type=cache,id=artifact-gateway-go-build,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /reference-scanner ./cmd/reference-scanner
 RUN --mount=type=cache,id=artifact-gateway-go-mod,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=artifact-gateway-go-build,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /reference-scanner-healthcheck ./cmd/reference-scanner-healthcheck
+
+# Opt-in test stage (`docker build --target test`); the image build skips it.
+FROM build AS test
+RUN --mount=type=cache,id=artifact-gateway-go-mod,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,id=artifact-gateway-go-build,target=/root/.cache/go-build,sharing=locked \
+    go test ./cmd/reference-scanner ./cmd/reference-scanner-healthcheck ./internal/refscanner
 
 FROM ${TRIVY_IMAGE}
 USER root

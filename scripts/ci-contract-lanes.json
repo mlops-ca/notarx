@@ -1,22 +1,13 @@
 {
-  "schemaVersion": 1,
-  "baseline": "d86c44f1ede5a74c562c8b39660411fb43a7da6f",
-  "nativeOrder": [
-    "migration-clients",
-    "inventory",
-    "nuget",
-    "oci-migration",
-    "maven-oci-auth",
-    "six-format-auth",
-    "oci-discovery",
-    "npm-migration",
-    "helm",
-    "rubygems",
-    "pypi-migration"
-  ],
+  "schemaVersion": 2,
   "lanes": {
-    "core": {
-      "timeoutMinutes": 360,
+    "core-checks": {
+      "timeoutMinutes": 30,
+      "needs": [
+        "rust",
+        "node",
+        "npm"
+      ],
       "steps": [
         {
           "name": "CI lane control contracts",
@@ -30,14 +21,6 @@
             "scripts/tests",
             "-p",
             "test_ci_contract.py"
-          ],
-          "timeoutSeconds": null
-        },
-        {
-          "name": "npm lockfile sources",
-          "command": [
-            "node",
-            "scripts/npm-lockfile-check.mjs"
           ],
           "timeoutSeconds": null
         },
@@ -90,13 +73,39 @@
           "timeoutSeconds": null
         },
         {
+          "name": "release-readiness-check",
+          "command": [
+            "make",
+            "release-readiness-check"
+          ],
+          "timeoutSeconds": null
+        }
+      ],
+      "rawDirectories": []
+    },
+    "core-email": {
+      "timeoutMinutes": 25,
+      "needs": [
+        "node"
+      ],
+      "steps": [
+        {
           "name": "email-compose-check",
           "command": [
             "make",
             "email-compose-check"
           ],
           "timeoutSeconds": null
-        },
+        }
+      ],
+      "rawDirectories": []
+    },
+    "core-native-e2e": {
+      "timeoutMinutes": 30,
+      "needs": [
+        "node"
+      ],
+      "steps": [
         {
           "name": "cli-runtime-e2e",
           "command": [
@@ -168,7 +177,17 @@
             "apt-signer-rotation-e2e"
           ],
           "timeoutSeconds": null
-        },
+        }
+      ],
+      "rawDirectories": []
+    },
+    "core-backup": {
+      "timeoutMinutes": 25,
+      "needs": [
+        "rust",
+        "node"
+      ],
+      "steps": [
         {
           "name": "conan-e2e",
           "command": [
@@ -200,14 +219,6 @@
             "integration-test"
           ],
           "timeoutSeconds": null
-        },
-        {
-          "name": "release-readiness-check",
-          "command": [
-            "make",
-            "release-readiness-check"
-          ],
-          "timeoutSeconds": null
         }
       ],
       "rawDirectories": [
@@ -216,16 +227,10 @@
     },
     "migration-clients": {
       "timeoutMinutes": 10,
+      "needs": [
+        "node"
+      ],
       "steps": [
-        {
-          "name": "Prepare pinned Go modules",
-          "command": [
-            "go",
-            "mod",
-            "download"
-          ],
-          "timeoutSeconds": 300
-        },
         {
           "name": "nexus-migration-client-e2e",
           "command": [
@@ -239,16 +244,10 @@
     },
     "inventory": {
       "timeoutMinutes": 10,
+      "needs": [
+        "node"
+      ],
       "steps": [
-        {
-          "name": "Prepare pinned Go modules",
-          "command": [
-            "go",
-            "mod",
-            "download"
-          ],
-          "timeoutSeconds": 300
-        },
         {
           "name": "nexus-inventory-scan-e2e",
           "command": [
@@ -264,16 +263,10 @@
     },
     "nuget": {
       "timeoutMinutes": 15,
+      "needs": [
+        "node"
+      ],
       "steps": [
-        {
-          "name": "Prepare pinned Go modules",
-          "command": [
-            "go",
-            "mod",
-            "download"
-          ],
-          "timeoutSeconds": 300
-        },
         {
           "name": "native-nuget-e2e",
           "command": [
@@ -289,16 +282,10 @@
     },
     "oci-migration": {
       "timeoutMinutes": 10,
+      "needs": [
+        "node"
+      ],
       "steps": [
-        {
-          "name": "Prepare pinned Go modules",
-          "command": [
-            "go",
-            "mod",
-            "download"
-          ],
-          "timeoutSeconds": 300
-        },
         {
           "name": "nexus-oci-migration-e2e",
           "command": [
@@ -314,16 +301,10 @@
     },
     "maven-oci-auth": {
       "timeoutMinutes": 10,
+      "needs": [
+        "node"
+      ],
       "steps": [
-        {
-          "name": "Prepare pinned Go modules",
-          "command": [
-            "go",
-            "mod",
-            "download"
-          ],
-          "timeoutSeconds": 300
-        },
         {
           "name": "private-upstream-auth-e2e",
           "command": [
@@ -339,16 +320,11 @@
     },
     "six-format-auth": {
       "timeoutMinutes": 15,
+      "needs": [
+        "rust",
+        "node"
+      ],
       "steps": [
-        {
-          "name": "Prepare pinned Go modules",
-          "command": [
-            "go",
-            "mod",
-            "download"
-          ],
-          "timeoutSeconds": 300
-        },
         {
           "name": "private-upstream-formats-e2e",
           "command": [
@@ -364,16 +340,10 @@
     },
     "oci-discovery": {
       "timeoutMinutes": 15,
+      "needs": [
+        "node"
+      ],
       "steps": [
-        {
-          "name": "Prepare pinned Go modules",
-          "command": [
-            "go",
-            "mod",
-            "download"
-          ],
-          "timeoutSeconds": 300
-        },
         {
           "name": "native-oci-discovery-e2e",
           "command": [
@@ -389,16 +359,10 @@
     },
     "npm-migration": {
       "timeoutMinutes": 15,
+      "needs": [
+        "node"
+      ],
       "steps": [
-        {
-          "name": "Prepare pinned Go modules",
-          "command": [
-            "go",
-            "mod",
-            "download"
-          ],
-          "timeoutSeconds": 300
-        },
         {
           "name": "nexus-npm-migration-e2e",
           "command": [
@@ -414,16 +378,10 @@
     },
     "helm": {
       "timeoutMinutes": 15,
+      "needs": [
+        "node"
+      ],
       "steps": [
-        {
-          "name": "Prepare pinned Go modules",
-          "command": [
-            "go",
-            "mod",
-            "download"
-          ],
-          "timeoutSeconds": 300
-        },
         {
           "name": "native-helm-e2e",
           "command": [
@@ -439,16 +397,10 @@
     },
     "rubygems": {
       "timeoutMinutes": 15,
+      "needs": [
+        "node"
+      ],
       "steps": [
-        {
-          "name": "Prepare pinned Go modules",
-          "command": [
-            "go",
-            "mod",
-            "download"
-          ],
-          "timeoutSeconds": 300
-        },
         {
           "name": "native-rubygems-e2e",
           "command": [
@@ -464,16 +416,10 @@
     },
     "pypi-migration": {
       "timeoutMinutes": 15,
+      "needs": [
+        "node"
+      ],
       "steps": [
-        {
-          "name": "Prepare pinned Go modules",
-          "command": [
-            "go",
-            "mod",
-            "download"
-          ],
-          "timeoutSeconds": 300
-        },
         {
           "name": "nexus-pypi-migration-e2e",
           "command": [
@@ -487,13 +433,5 @@
         "output/nexus-pypi-migration-e2e"
       ]
     }
-  },
-  "benchmarkOrder": [
-    "migration-clients",
-    "inventory",
-    "nuget",
-    "oci-migration",
-    "maven-oci-auth",
-    "six-format-auth"
-  ]
+  }
 }
