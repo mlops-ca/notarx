@@ -105,10 +105,11 @@ func TestPostgresAPTSignedSnapshotVisibilityAndAuditCommitAtomically(t *testing.
 		t.Fatalf("latest visible snapshot=%#v err=%v", latest, err)
 	}
 
+	failAuditsFor(t, store, repo.Name, "audit-failure")
 	second := create(2)
 	secondAssets, secondRelease := assets(second, "second")
 	_, err = store.PublishAPTRepositorySnapshotWithAudit(ctx, complete(second, secondAssets), secondAssets, secondRelease, AuditRecord{
-		Repository: repo.Name, Actor: string([]byte{0xff}), Outcome: AuditResolved, Operation: "apt.repository_snapshot.publish", Status: 200,
+		Repository: repo.Name, Actor: "audit-failure", Outcome: AuditResolved, Operation: "apt.repository_snapshot.publish", Status: 200,
 	})
 	if err == nil {
 		t.Fatal("snapshot visibility committed without durable audit")
@@ -163,6 +164,23 @@ func TestPostgresLatestVisibleAPTSnapshotIsRepositoryWide(t *testing.T) {
 	if err != nil || latest.ID != latestAcrossSuitesID || latest.Suite != "testing" {
 		t.Fatalf("repository-wide latest visible snapshot=%#v err=%v", latest, err)
 	}
+}
+
+// failAuditsFor makes every insert into security_audit_log by the actor on the
+// repository fail until the test ends, so a test can prove a mutation rolls back
+// with its audit. (Invalid UTF-8 no longer fails: audit text is sanitised.)
+func failAuditsFor(t *testing.T, store *PostgresStore, repositoryName, actor string) {
+	t.Helper()
+	name := "fail_audit_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	query := fmt.Sprintf(`CREATE FUNCTION %s() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.repository='%s' AND NEW.actor='%s' THEN RAISE EXCEPTION 'fixture audit failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER %s BEFORE INSERT ON security_audit_log FOR EACH ROW EXECUTE FUNCTION %s()`, name, repositoryName, actor, name, name)
+	if _, err := store.db.ExecContext(t.Context(), query); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if _, err := store.db.Exec(`DROP TRIGGER ` + name + ` ON security_audit_log; DROP FUNCTION ` + name + `()`); err != nil {
+			t.Error(err)
+		}
+	})
 }
 
 func newPostgresAPTHostedFixture(t *testing.T) (context.Context, *PostgresStore, HostedRepository) {
