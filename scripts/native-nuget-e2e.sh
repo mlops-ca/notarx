@@ -101,7 +101,10 @@ hashes={name:hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() for nam
 PY
 docker pull --platform "$platform" "$sdk_image" >"$evidence/dotnet-pull.log" 2>&1
 go build -o "$work/gateway" ./cmd/notarx
-GOOS=linux GOARCH=${platform#linux/} CGO_ENABLED=0 go build -o "$work/gateway-linux" ./cmd/notarx
+# The SDK container runs on the Docker server's own platform, so the Linux gateway
+# is built natively inside a pinned Go container (no cross-compilation).
+go_image=$(sed -n 's/^GO_IMAGE := //p' Makefile)
+docker run --rm --platform "$platform" -v "$PWD:/src:ro" -v "$work:/out" -w /src -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false "$go_image" go build -o /out/gateway-linux ./cmd/notarx
 python3 - "$work/gateway" "$sdk_image" "$evidence/tool-provenance.json" <<'PY'
 import hashlib,json,pathlib,subprocess,sys
 p=pathlib.Path(sys.argv[3]);data=json.loads(p.read_text())

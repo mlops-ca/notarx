@@ -309,19 +309,21 @@ expect_http 204 GET "$gateway_url/readyz" "$private_dir/readyz.out"
   printf 'raw_egress_proxy=http://host.docker.internal:%s\n' "$raw_proxy_port"
 } >"$output_dir/environment.txt"
 
-printf '%s\n' 'Measuring stripped Linux binaries and the runtime image...'
+printf '%s\n' 'Measuring stripped host-native binaries and the runtime image...'
 printf 'component,os,arch,form,bytes,mib\n' >"$output_dir/artifact-sizes.csv"
-for arch in arm64 amd64; do
+host_os=$(go env GOOS)
+host_arch=$(go env GOARCH)
+for arch in "$host_arch"; do
   for component in gateway healthcheck; do
     package=./cmd/notarx
     [[ "$component" == healthcheck ]] && package=./cmd/healthcheck
-    binary_file="$private_dir/${component}-linux-${arch}"
-    CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath -ldflags='-s -w' -o "$binary_file" "$package"
+    binary_file="$private_dir/${component}-${host_os}-${arch}"
+    CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o "$binary_file" "$package"
     binary_bytes=$(wc -c <"$binary_file" | tr -d ' ')
     gzip -9 -c "$binary_file" >"${binary_file}.gz"
     gzip_bytes=$(wc -c <"${binary_file}.gz" | tr -d ' ')
-    printf '%s,linux,%s,stripped-static-binary,%s,%s\n' "$component" "$arch" "$binary_bytes" "$(bytes_to_mib "$binary_bytes")" >>"$output_dir/artifact-sizes.csv"
-    printf '%s,linux,%s,gzip-9,%s,%s\n' "$component" "$arch" "$gzip_bytes" "$(bytes_to_mib "$gzip_bytes")" >>"$output_dir/artifact-sizes.csv"
+    printf '%s,%s,%s,stripped-static-binary,%s,%s\n' "$component" "$host_os" "$arch" "$binary_bytes" "$(bytes_to_mib "$binary_bytes")" >>"$output_dir/artifact-sizes.csv"
+    printf '%s,%s,%s,gzip-9,%s,%s\n' "$component" "$host_os" "$arch" "$gzip_bytes" "$(bytes_to_mib "$gzip_bytes")" >>"$output_dir/artifact-sizes.csv"
   done
 done
 
