@@ -203,7 +203,7 @@ services:
       retries: 12
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements"]
     environment:
       POSTGRES_DB: gateway
@@ -220,7 +220,7 @@ services:
       - gateway-postgres:/var/lib/postgresql/data
 
   migrate:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     depends_on:
       postgres:
         condition: service_healthy
