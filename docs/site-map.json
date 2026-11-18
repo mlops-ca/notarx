@@ -35,6 +35,7 @@
         { "id": "architecture-diagrams", "title": { "en": "Architecture diagrams", "zh-CN": "架构图" }, "en": "docs/architecture-diagrams.md", "zh-CN": "docs/architecture-diagrams.zh-CN.md" },
         { "id": "design", "title": { "en": "Design notes", "zh-CN": "设计说明" }, "en": "DESIGN.md", "zh-CN": "DESIGN.zh-CN.md" },
         { "id": "context", "title": { "en": "Project context", "zh-CN": "项目上下文" }, "en": "CONTEXT.md", "zh-CN": "CONTEXT.zh-CN.md" },
+        { "id": "oci-free-tier", "title": { "en": "Deploy on Oracle Cloud Always Free" }, "en": "docs/deployment/oci-free-tier.md" },
         { "id": "object-storage", "title": { "en": "Object storage configuration" }, "en": "docs/object-storage.md" },
         { "id": "postgresql", "title": { "en": "PostgreSQL capabilities", "zh-CN": "PostgreSQL 能力" }, "en": "docs/postgresql-capabilities.md", "zh-CN": "docs/postgresql-capabilities.zh-CN.md" },
         { "id": "native-hosted-contract", "title": { "en": "Native Hosted contract", "zh-CN": "Native Hosted 契约" }, "en": "docs/native-hosted-contract.md", "zh-CN": "docs/native-hosted-contract.zh-CN.md" },

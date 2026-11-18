@@ -1,0 +1,146 @@
+# Reference deployment for one Oracle Cloud Always Free Ampere A1 VM (2 OCPU,
+# 12 GB, Ubuntu arm64). ADR 0017, "Reference deployment". Runbook:
+# docs/deployment/oci-free-tier.md.
+#
+# Rules this file keeps (checked by scripts/oci-free-tier-check.py):
+#   - every image is one `${VARIABLE:-reference}` expression so the release
+#     bundle renderer (scripts/render-compose-bundle.sh, ADR 0025 slice 3) can
+#     replace the reference with a digest pin per architecture;
+#   - no secret appears in this file: values come from the environment file next
+#     to it (copy .env.example to .env, mode 0600);
+#   - memory limits sum to well under 12 GB, leaving about 5 GB for the OS and
+#     the page cache;
+#   - only 80 and 443 are published; PostgreSQL and notarx are on the Compose
+#     networks only. The scanner (ADR 0030) is off and not part of this file.
+name: notarx
+
+services:
+  postgres:
+    image: ${NOTARX_POSTGRES_IMAGE:-postgres:18-alpine@sha256:b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015}
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gateway
+      POSTGRES_USER: gateway
+      POSTGRES_PASSWORD: ${NOTARX_POSTGRES_PASSWORD:?set NOTARX_POSTGRES_PASSWORD in .env}
+    volumes:
+      - ${NOTARX_DATA_DIR:-/srv/notarx}/postgres:/var/lib/postgresql
+    networks: [backend]
+    mem_limit: 3g
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U gateway -d gateway"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migrate:
+    image: ${NOTARX_POSTGRES_IMAGE:-postgres:18-alpine@sha256:b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${NOTARX_POSTGRES_PASSWORD:?set NOTARX_POSTGRES_PASSWORD in .env}
+    entrypoint: ["/usr/local/bin/run-migrations"]
+    volumes:
+      - ${NOTARX_MIGRATIONS_DIR:-./migrations}:/migrations:ro
+      - ${NOTARX_MIGRATION_RUNNER:-./run-migrations.sh}:/usr/local/bin/run-migrations:ro
+    networks: [backend]
+    restart: "no"
+    mem_limit: 256m
+
+  notarx:
+    image: ${NOTARX_IMAGE:-ghcr.io/mlops-ca/notarx:main}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      NOTARX_LISTEN_ADDRESS: :8080
+      NOTARX_NODE_ROLES: standalone
+      NOTARX_INSTANCE_ID: ${NOTARX_INSTANCE_ID:-oci-free-tier}
+      NOTARX_PUBLIC_URL: https://${NOTARX_DOMAIN:?set NOTARX_DOMAIN in .env}
+      NOTARX_DATABASE_URL: postgres://gateway:${NOTARX_POSTGRES_PASSWORD:?set NOTARX_POSTGRES_PASSWORD in .env}@postgres:5432/gateway?sslmode=disable
+      # The filesystem driver is the primary store; OCI Object Storage only holds backups.
+      NOTARX_OBJECT_STORE_DRIVER: filesystem
+      NOTARX_OBJECT_STORE_FS_ROOT: /srv/notarx/objects
+      NOTARX_ADMIN_TOKEN: ${NOTARX_ADMIN_TOKEN:?set NOTARX_ADMIN_TOKEN in .env}
+      NOTARX_RESOLVER_TOKEN: ${NOTARX_RESOLVER_TOKEN:?set NOTARX_RESOLVER_TOKEN in .env}
+      NOTARX_SETTINGS_ENCRYPTION_KEY: ${NOTARX_SETTINGS_ENCRYPTION_KEY:-}
+      NOTARX_EGRESS_PROXY_KEY: ${NOTARX_EGRESS_PROXY_KEY:-}
+      NOTARX_CONAN_TOKEN_SECRET: ${NOTARX_CONAN_TOKEN_SECRET:-}
+      NOTARX_REPOSITORY_PRESETS: ${NOTARX_REPOSITORY_PRESETS:-standard}
+      NOTARX_ACCESS_LOG: ${NOTARX_ACCESS_LOG:-limited}
+      NOTARX_LOG_BUFFER_LINES: ${NOTARX_LOG_BUFFER_LINES:-1000}
+    volumes:
+      # The root is mode 0700 and owned by the image's nonroot user (65532).
+      - ${NOTARX_DATA_DIR:-/srv/notarx}/objects:/srv/notarx/objects
+    networks: [frontend, backend]
+    mem_limit: 3g
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+    healthcheck:
+      test: ["CMD", "/gateway-healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  notarx-console:
+    image: ${NOTARX_CONSOLE_IMAGE:-ghcr.io/mlops-ca/notarx-console:main}
+    restart: unless-stopped
+    depends_on:
+      notarx:
+        condition: service_healthy
+    networks: [frontend]
+    mem_limit: 256m
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+
+  caddy:
+    image: ${NOTARX_CADDY_IMAGE:-caddy:2.11-alpine@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0}
+    restart: unless-stopped
+    depends_on:
+      notarx:
+        condition: service_healthy
+      notarx-console:
+        condition: service_started
+    environment:
+      NOTARX_DOMAIN: ${NOTARX_DOMAIN:?set NOTARX_DOMAIN in .env}
+      NOTARX_ACME_EMAIL: ${NOTARX_ACME_EMAIL:?set NOTARX_ACME_EMAIL in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [frontend]
+    mem_limit: 128m
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  frontend: {}
+  # PostgreSQL has no route out of the host and no published port.
+  backend:
+    internal: true
+
+volumes:
+  caddy-data:
+  caddy-config:

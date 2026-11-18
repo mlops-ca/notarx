@@ -91,6 +91,52 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: make docker-test
 
+  # The OCI Always Free reference deployment (ADR 0017, deploy/oci-free-tier):
+  # rendered Compose model and limits, arm64 manifests of every third-party
+  # image, and a smoke run on a native arm64 runner (the A1 VM is arm64) that
+  # pushes and pulls an OCI image and a Raw file through Caddy.
+  oci-free-tier:
+    needs: changes
+    if: needs.changes.outputs.images == 'true'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Install the YAML parser the check fixtures use
+        run: sudo apt-get install -y --no-install-recommends python3-yaml
+      - name: Check the rendered Compose model, limits and layout
+        run: make oci-free-tier-check
+      - name: Check that every third-party image publishes linux/arm64
+        run: make oci-free-tier-images-check
+      - name: Build the images the smoke run executes
+        run: |
+          docker build --tag notarx-gateway:local .
+          docker build --file Dockerfile.console --tag notarx-console:local .
+      - name: Smoke the stack through Caddy
+        env:
+          NOTARX_IMAGE: notarx-gateway:local
+          NOTARX_CONSOLE_IMAGE: notarx-console:local
+        run: make oci-free-tier-smoke
+
+  # The optional OpenTofu module of the same deployment (ADR 0017 slice 7).
+  oci-free-tier-tofu:
+    needs: changes
+    if: needs.changes.outputs.images == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with:
+          tofu_version: 1.11.5
+          tofu_wrapper: false
+      - uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6.3.2
+        with:
+          tflint_version: v0.66.0
+      - name: Format, validate and lint the module
+        run: make oci-free-tier-tofu-check
+
   # Builds the Compose images CI consumes once per run. Contract lanes and the
   # gateway-backed Console E2E load them instead of each rebuilding from source
   # (docs/ci.md). Each leg is native to its runner (ADR 0016): amd64 images build
@@ -427,7 +473,7 @@ jobs:
   # skipped by change detection, fails on any failure or cancellation.
   ci-ok:
     if: always()
-    needs: [changes, no-chinese, docs, quality, quality-arm64, console, console-e2e, console-e2e-report, image-test-stages, build-images, object-store-contract, contract-plan, contract, contract-and-test]
+    needs: [changes, no-chinese, docs, quality, quality-arm64, console, console-e2e, console-e2e-report, image-test-stages, oci-free-tier, oci-free-tier-tofu, build-images, object-store-contract, contract-plan, contract, contract-and-test]
     runs-on: ubuntu-24.04
     steps:
       - name: Require every needed job to succeed or be skipped
@@ -449,7 +495,7 @@ jobs:
           report=false
           if [[ "$e2e" == true && $(echo "$NEEDS" | jq -r '.["console-e2e"].result') == success ]]; then report=true; fi
           status=0
-          for pair in quality:$GO quality-arm64:$GO object-store-contract:$GO contract-plan:$GO contract:$GO contract-and-test:$GO console:$CONSOLE console-e2e:$e2e console-e2e-report:$report build-images:$e2e docs:$DOCS image-test-stages:$IMAGES; do
+          for pair in quality:$GO quality-arm64:$GO object-store-contract:$GO contract-plan:$GO contract:$GO contract-and-test:$GO console:$CONSOLE console-e2e:$e2e console-e2e-report:$report build-images:$e2e docs:$DOCS image-test-stages:$IMAGES oci-free-tier:$IMAGES oci-free-tier-tofu:$IMAGES; do
             job=${pair%%:*} class=${pair##*:}
             result=$(echo "$NEEDS" | jq -r --arg job "$job" '.[$job].result')
             if [[ "$class" == true && "$result" != success ]]; then

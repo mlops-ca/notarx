@@ -258,6 +258,13 @@ and explicitly review/authorize re-enabling it after recovery.
 
 ### Filesystem object driver
 
+`make backup-transfer-test` runs the real-Docker recovery drill with the source
+and the target each on the S3 and the filesystem driver (the filesystem target is a
+new private host directory mounted into the restored Gateway, which runs as the
+directory's owner), and `make backup-restore-readiness` ends with a filesystem leg
+that runs `backup-drill.sh` and `restore-drill.sh` on a Gateway with
+`NOTARX_OBJECT_STORE_DRIVER=filesystem`.
+
 A gateway on `NOTARX_OBJECT_STORE_DRIVER=filesystem` is exported with the
 `filesystem` source field above. The bundle holds `database.dump`, the migration
 ledger and `objects/segment-NNNNNN.tar` segments, so a nightly copy to Oracle

@@ -110,6 +110,17 @@ changed. `build-images` runs each image on both native runners (`ubuntu-24.04`
 and `ubuntu-24.04-arm`), and a contract lane downloads the artifacts of its own
 runner architecture.
 
+The `oci-free-tier` and `oci-free-tier-tofu` jobs run when the `images` class changed
+(`deploy/` is in it). `oci-free-tier` runs on the native arm64 runner, because the
+reference deployment targets the Oracle Ampere A1 shape: it checks the rendered
+Compose model and resource limits (`make oci-free-tier-check`), asserts that every
+third-party image publishes `linux/arm64` (`make oci-free-tier-images-check`; the
+project's own images are gated by the release pipeline) and smoke-tests the stack by
+pushing and pulling an OCI image and a Raw file through Caddy
+(`make oci-free-tier-smoke`). `oci-free-tier-tofu` formats, validates and lints the
+optional OpenTofu module (`make oci-free-tier-tofu-check`). `ci-ok` requires both
+whenever `images` changed.
+
 The Dockerfiles no longer run `go test` while building an image: the suite runs
 once in `core-checks` (`make test`) and `quality`. The tests live in an opt-in
 `test` stage (`make docker-test`, run by `image-test-stages` when Dockerfiles or
