@@ -85,7 +85,12 @@ for (const theme of ["dark", "light"] as const) {
       fullPage: true,
     });
     await page.goto("/operations");
-    await page.getByRole("tab", { name: "Job history", exact: true }).click();
+    await expect(async () => {
+      await page.getByRole("tab", { name: "Job history", exact: true }).click();
+      await expect(
+        page.getByRole("tab", { name: "Job history", exact: true }),
+      ).toHaveAttribute("aria-selected", "true", { timeout: 1000 });
+    }).toPass();
     await expectRole(
       page.locator("main .anticon-sync"),
       "--ag-content-tertiary",
