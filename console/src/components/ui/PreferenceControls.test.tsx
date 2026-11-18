@@ -325,6 +325,9 @@ describe("PreferenceControls", () => {
     expect(
       screen.getByRole("menuitem", { name: "English" }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: "French" }),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("menuitem", { name: "English" }));
@@ -333,5 +336,13 @@ describe("PreferenceControls", () => {
       "EN",
     );
     expect(localStorage.getItem("ag.console.locale")).toBe("en-CA");
+
+    await user.click(screen.getByRole("button", { name: "Language" }));
+    await user.click(await screen.findByRole("menuitem", { name: "French" }));
+
+    expect(screen.getByRole("button", { name: "Language" })).toHaveTextContent(
+      "FR",
+    );
+    expect(localStorage.getItem("ag.console.locale")).toBe("fr-CA");
   });
 });

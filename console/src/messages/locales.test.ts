@@ -32,11 +32,22 @@ describe("SUPPORTED_LOCALES", () => {
       "fr-CA",
       "zh-CN",
     ]);
+  });
+
+  it("loads the antd locale of each tag on demand", async () => {
     // en-CA reuses the en_GB strings (en_US formats dates as MM/DD) and points
     // the pickers at the dayjs en-ca locale.
-    expect(localeInfo("en-CA").antd.locale).toBe("en-ca");
-    expect(localeInfo("fr-CA").antd.locale).toBe("fr");
-    expect(localeInfo("zh-CN").antd.locale).toBe("zh-cn");
+    expect((await localeInfo("en-CA").load()).locale).toBe("en-ca");
+    expect((await localeInfo("fr-CA").load()).locale).toBe("fr-ca");
+    expect((await localeInfo("zh-CN").load()).locale).toBe("zh-cn");
+  });
+
+  it("gives every tag a short button code", () => {
+    expect(SUPPORTED_LOCALES.map((locale) => locale.code)).toEqual([
+      "EN",
+      "FR",
+      "ZH",
+    ]);
   });
 
   it("retires the legacy US English and bare en tags without an alias", () => {
@@ -90,11 +101,18 @@ describe("detectLocale", () => {
     expect(detectLocale(null, ["zh-Hans"])).toBe("zh-CN");
   });
 
-  it("skips a locale that has no dictionary yet, so French browsers read English", () => {
-    expect(READY_LOCALES).toEqual(["en-CA", "zh-CN"]);
-    expect(detectLocale(null, ["fr-CA", "en"])).toBe("en-CA");
-    expect(detectLocale(null, ["fr-FR", "zh-CN"])).toBe("zh-CN");
-    expect(detectLocale("fr-CA", ["fr"])).toBe("en-CA");
+  it("offers every ready locale and detects fr-CA from a French browser", () => {
+    expect(READY_LOCALES).toEqual(["en-CA", "fr-CA", "zh-CN"]);
+    expect(detectLocale(null, ["fr-CA", "en"])).toBe("fr-CA");
+    expect(detectLocale(null, ["fr-FR", "zh-CN"])).toBe("fr-CA");
+    expect(detectLocale("fr-CA", ["en"])).toBe("fr-CA");
+  });
+
+  it("skips a locale outside the available set", () => {
+    expect(detectLocale(null, ["fr-CA", "en"], ["en-CA", "zh-CN"])).toBe(
+      "en-CA",
+    );
+    expect(detectLocale("fr-CA", ["fr"], ["en-CA"])).toBe("en-CA");
   });
 
   it("skips Traditional Chinese and unknown languages for the next entry", () => {
@@ -131,11 +149,11 @@ describe("PreferencesProvider locale detection", () => {
     expect(localStorage.getItem("ag.console.locale")).toBeNull();
   });
 
-  it("keeps English for a French browser until fr-CA has a dictionary", async () => {
+  it("selects fr-CA for a French browser and sets the document language", async () => {
     vi.spyOn(navigator, "languages", "get").mockReturnValue(["fr-FR", "fr"]);
     render(createElement(PreferencesProvider, null, createElement(Probe)));
-    expect(await screen.findByText("en-CA")).toBeInTheDocument();
-    expect(document.documentElement.lang).toBe("en-CA");
+    expect(await screen.findByText("fr-CA")).toBeInTheDocument();
+    expect(document.documentElement.lang).toBe("fr-CA");
   });
 
   it("lets the stored choice win and drops the retired US English value", async () => {

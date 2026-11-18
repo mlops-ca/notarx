@@ -38,6 +38,26 @@ import { accessZhCN } from "./access.zh-CN";
 import { identityZhCN } from "./identity.zh-CN";
 import { publicBrowseZhCN } from "./public-browse.zh-CN";
 import { shellZhCN } from "./shell.zh-CN";
+import { accessFrCA } from "./access.fr-CA";
+import { artifactDetailFrCA } from "./artifact-detail.fr-CA";
+import { auditFrCA } from "./audit.fr-CA";
+import { dashboardFrCA } from "./dashboard.fr-CA";
+import { formatsFrCA } from "./formats.fr-CA";
+import { groupsFrCA } from "./groups.fr-CA";
+import { identityFrCA } from "./identity.fr-CA";
+import { libFrCA } from "./lib.fr-CA";
+import { migrationFrCA } from "./migration.fr-CA";
+import { nexusBatchFrCA } from "./nexus-batch.fr-CA";
+import { nexusScheduleFrCA } from "./nexus-schedule.fr-CA";
+import { operationsFrCA } from "./operations.fr-CA";
+import { publicBrowseFrCA } from "./public-browse.fr-CA";
+import { repositoryGrantsFrCA } from "./repository-grants.fr-CA";
+import { repositoryFrCA } from "./repository.fr-CA";
+import { searchFrCA } from "./search.fr-CA";
+import { settingsFrCA } from "./settings.fr-CA";
+import { shellFrCA } from "./shell.fr-CA";
+import { systemFrCA } from "./system.fr-CA";
+import { uiFrCA } from "./ui.fr-CA";
 
 /** The typed reference: every Console message, merged from the feature dictionaries (ADR 0014). */
 export const enCA = {
@@ -95,6 +115,37 @@ const zhCNMessages = {
 type AssertNoExcessKeys<T extends never> = T;
 export type ZhCNExcessKeys = AssertNoExcessKeys<
   Exclude<keyof typeof zhCNMessages, MessageKey>
+>;
+
+const frCAMessages = {
+  ...accessFrCA,
+  ...artifactDetailFrCA,
+  ...auditFrCA,
+  ...dashboardFrCA,
+  ...formatsFrCA,
+  ...groupsFrCA,
+  ...identityFrCA,
+  ...libFrCA,
+  ...migrationFrCA,
+  ...nexusBatchFrCA,
+  ...nexusScheduleFrCA,
+  ...operationsFrCA,
+  ...publicBrowseFrCA,
+  ...repositoryGrantsFrCA,
+  ...repositoryFrCA,
+  ...searchFrCA,
+  ...settingsFrCA,
+  ...shellFrCA,
+  ...systemFrCA,
+  ...uiFrCA,
+};
+
+/** The first-class translation: every key, enforced by a test (ADR 0014). */
+export const frCA: Partial<Record<MessageKey, string>> = frCAMessages;
+
+type AssertNoExcessFrKeys<T extends never> = T;
+export type FrCAExcessKeys = AssertNoExcessFrKeys<
+  Exclude<keyof typeof frCAMessages, MessageKey>
 >;
 
 /** A lagging, partial overlay: a missing key falls back to en-CA. */

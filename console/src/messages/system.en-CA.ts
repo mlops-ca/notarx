@@ -333,7 +333,7 @@ export const systemEnCA = {
   "system.chooseAScenarioAndPreviewTheTemplate":
     "Choose a scenario and preview the template",
   "system.warningCriticalAndRecoveryProvideEnglishAndChinese":
-    "Warning, critical, and recovery provide English and Chinese HTML and equivalent plain text.",
+    "Warning, critical, and recovery provide English, French and Chinese HTML and equivalent plain text.",
   "system.recentDeliveryResultsUpTo50": "Recent delivery results (up to 50)",
   "system.sMTPAcceptanceDoesNotMeanInboxDeliveryOr":
     "SMTP acceptance does not mean inbox delivery or reading. Disabling cannot recall in-flight mail; uncertain retries may duplicate mail.",

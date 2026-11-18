@@ -20,6 +20,7 @@ import { useAllRepositories } from "../features/repository/allRepositoriesQuery"
 import { FormatBadge, RepositoryTypeBadge } from "../components/ui/Badge";
 import { ErrorBanner } from "../components/ui/Feedback";
 import { usePreferences } from "../lib/preferences";
+import { SUPPORTED_LOCALES } from "../messages/locales";
 
 export interface CommandPage {
   to: string;
@@ -138,13 +139,16 @@ export function CommandPalette({
       icon: <BgColorsOutlined />,
       run: toggleColorMode,
     };
-    const switchLanguage: Command = {
-      id: "action:language",
+    // One command per other ready locale, from the registry.
+    const switchLanguages: Command[] = SUPPORTED_LOCALES.filter(
+      (item) => item.ready && item.tag !== locale,
+    ).map((item) => ({
+      id: `action:language:${item.tag}`,
       group: "actions",
-      label: locale === "zh-CN" ? "Switch to English" : "切换到中文",
+      label: t("palette.switchLanguage", { language: t(item.labelKey) }),
       icon: <GlobalOutlined />,
-      run: () => setLocale(locale === "zh-CN" ? "en-CA" : "zh-CN"),
-    };
+      run: () => setLocale(item.tag),
+    }));
     const signOut: Command = {
       id: "action:sign-out",
       group: "actions",
@@ -152,7 +156,7 @@ export function CommandPalette({
       icon: <LogoutOutlined />,
       run: onSignOut,
     };
-    for (const command of [toggleTheme, switchLanguage, signOut]) {
+    for (const command of [toggleTheme, ...switchLanguages, signOut]) {
       if (matches(command.label)) actionCommands.push(command);
     }
 

@@ -3,6 +3,7 @@ import { join, relative, resolve } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import { enCA, zhCN } from ".";
+import { frCAStyleIssues } from "./frCAStyle";
 import { glossary, type GlossaryLocale } from "./glossary";
 import { createTranslator, errorText, LocalizedError } from "./translate";
 
@@ -127,13 +128,43 @@ describe("message dictionaries", () => {
 
   it("keep fr-CA the same keys as en-CA, with the same placeholders, once it exists", async () => {
     for (const { name, en, fr } of await featureDictionaries()) {
-      if (!fr) continue;
+      // Scaffolding may be empty until the dictionary lands.
+      if (!fr || Object.keys(fr).length === 0) continue;
       expect(Object.keys(fr).sort(), name).toEqual(Object.keys(en).sort());
       for (const [key, message] of Object.entries(fr)) {
         expect(message.trim(), key).not.toBe("");
         expect(placeholders(message), key).toEqual(placeholders(en[key]));
       }
     }
+  });
+
+  it("write fr-CA with courriel, French spacing and typographic apostrophes", async () => {
+    const issues: string[] = [];
+    for (const { name, fr } of await featureDictionaries()) {
+      for (const [key, message] of Object.entries(fr ?? {})) {
+        for (const issue of frCAStyleIssues(message)) {
+          issues.push(`${name} ${key}: ${issue}`);
+        }
+      }
+    }
+    expect(issues).toEqual([]);
+  });
+
+  it("flags the fr-CA writing mistakes the rules name", () => {
+    const nb = "\u00a0";
+    expect(frCAStyleIssues("Envoyer un e-mail")).toHaveLength(1);
+    expect(frCAStyleIssues("Envoyer un email")).toHaveLength(1);
+    expect(frCAStyleIssues("Envoyer un courriel")).toEqual([]);
+    expect(frCAStyleIssues("Envoyer un `email` {email}")).toEqual([]);
+    expect(frCAStyleIssues("Supprimer ?")).toHaveLength(1);
+    expect(frCAStyleIssues("Supprimer le dépôt !")).toHaveLength(1);
+    expect(frCAStyleIssues("Nom : {name}")).toHaveLength(1);
+    expect(frCAStyleIssues(`Nom${nb}: {name}`)).toEqual([]);
+    expect(frCAStyleIssues("Supprimer le dépôt?")).toEqual([]);
+    expect(frCAStyleIssues("l'artefact")).toHaveLength(1);
+    expect(frCAStyleIssues("l’artefact")).toEqual([]);
+    expect(frCAStyleIssues("«Dépôt»")).toHaveLength(1);
+    expect(frCAStyleIssues(`«${nb}Dépôt${nb}»`)).toEqual([]);
   });
 
   it("never define one key in two dictionaries", async () => {

@@ -1,30 +1,31 @@
 import enGB from "antd/locale/en_GB";
-import frCA from "antd/locale/fr_CA";
-import zhCN from "antd/locale/zh_CN";
 import "dayjs/locale/en-ca";
-import "dayjs/locale/fr-ca";
-import "dayjs/locale/zh-cn";
 import type { MessageKey } from ".";
 import type { MessageLocale } from "./translate";
 
-type AntdLocale = typeof enGB;
+export type AntdLocale = typeof enGB;
 
 export interface SupportedLocale {
   tag: MessageLocale;
   /** The language's name, in the Latin script used by the rest of the code. */
   name: string;
-  /** The antd locale object for this tag (antd ships no en_CA). */
-  antd: AntdLocale;
+  /**
+   * Loads the antd locale object for this tag (antd ships no en_CA). fr-CA and
+   * zh-CN load on demand, with their dayjs locale, so the bundle does not carry
+   * all three (ADR 0014); en-CA is the reference and ships with the shell.
+   */
+  load: () => Promise<AntdLocale>;
   /** The dayjs locale this tag selects. */
   dayjs: string;
+  /** The short code the language button shows. */
+  code: string;
   /** The BCP 47 tag handed to Intl. */
   intl: string;
   /** The message that names the language in the language picker. */
   labelKey: MessageKey;
   /**
    * Whether the locale ships its own dictionary. Only ready locales are
-   * detected from the browser and offered in the picker; fr-CA turns ready
-   * with its dictionaries.
+   * detected from the browser and offered in the picker.
    */
   ready: boolean;
 }
@@ -34,15 +35,16 @@ export interface SupportedLocale {
  * MM/DD; the override points the pickers at the dayjs en-ca locale, which
  * starts the week on Sunday.
  */
-const antdEnCA: AntdLocale = { ...enGB, locale: "en-ca" };
+export const antdEnCA: AntdLocale = { ...enGB, locale: "en-ca" };
 
 /** Every locale the Console knows (ADR 0014); one registry, no ad hoc lists. */
 export const SUPPORTED_LOCALES: readonly SupportedLocale[] = [
   {
     tag: "en-CA",
     name: "English",
-    antd: antdEnCA,
+    load: async () => antdEnCA,
     dayjs: "en-ca",
+    code: "EN",
     intl: "en-CA",
     labelKey: "common.language.en",
     ready: true,
@@ -50,17 +52,30 @@ export const SUPPORTED_LOCALES: readonly SupportedLocale[] = [
   {
     tag: "fr-CA",
     name: "French",
-    antd: frCA,
+    load: async () => {
+      await import("dayjs/locale/fr-ca");
+      // antd names this locale "fr"; the override points its pickers at the
+      // dayjs fr-ca locale loaded above.
+      return {
+        ...(await import("antd/locale/fr_CA")).default,
+        locale: "fr-ca",
+      };
+    },
     dayjs: "fr-ca",
+    code: "FR",
     intl: "fr-CA",
     labelKey: "common.language.fr",
-    ready: false,
+    ready: true,
   },
   {
     tag: "zh-CN",
     name: "Chinese",
-    antd: zhCN,
+    load: async () => {
+      await import("dayjs/locale/zh-cn");
+      return (await import("antd/locale/zh_CN")).default;
+    },
     dayjs: "zh-cn",
+    code: "ZH",
     intl: "zh-CN",
     labelKey: "common.language.zh",
     ready: true,
@@ -110,8 +125,7 @@ export const READY_LOCALES: readonly MessageLocale[] = SUPPORTED_LOCALES.filter(
 /**
  * Detection order: the stored choice, then the first `navigator.languages`
  * entry that matches, then en-CA. Only `available` locales count (the ready
- * ones by default), so a French browser keeps English text until fr-CA ships
- * its dictionary. A stored tag outside the registry (the retired US English
+ * ones by default). A stored tag outside the registry (the retired US English
  * tag, say) is ignored with no alias.
  */
 export function detectLocale(

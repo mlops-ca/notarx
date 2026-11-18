@@ -1,0 +1,6 @@
+import type { formatsEnCA } from "./formats.en-CA";
+
+// fr-CA scaffolding (ADR 0014): empty until the dictionary lands; the total
+// Record type and the completeness test come with the strings.
+export const formatsFrCA: Partial<Record<keyof typeof formatsEnCA, string>> =
+  {};

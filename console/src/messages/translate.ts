@@ -1,4 +1,4 @@
-import { enCA, zhCN, type MessageKey } from ".";
+import { enCA, frCA, zhCN, type MessageKey } from ".";
 
 export type MessageLocale = "en-CA" | "fr-CA" | "zh-CN";
 
@@ -18,11 +18,11 @@ export const LOCALE_FALLBACK: Record<MessageLocale, readonly MessageLocale[]> =
 
 type MessageTable = Partial<Record<MessageKey, string>>;
 
-// fr-CA ships in a later slice; until its dictionaries land it serves the
-// en-CA reference so a French reader gets readable English, not blanks.
+// A key a dictionary lacks resolves through the en-CA reference at the end of
+// `resolve`, so a reader never sees a blank.
 const tables: Record<MessageLocale, MessageTable> = {
   "en-CA": enCA,
-  "fr-CA": enCA,
+  "fr-CA": frCA,
   "zh-CN": zhCN,
 };
 

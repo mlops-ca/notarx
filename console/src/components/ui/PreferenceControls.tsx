@@ -8,7 +8,7 @@ import { Button, Dropdown, Space } from "antd";
 import { useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { usePreferences, type AppLocale } from "../../lib/preferences";
-import { SUPPORTED_LOCALES } from "../../messages/locales";
+import { SUPPORTED_LOCALES, localeInfo } from "../../messages/locales";
 
 export function PreferenceControls({ compact = false }: { compact?: boolean }) {
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
@@ -99,7 +99,7 @@ export function PreferenceControls({ compact = false }: { compact?: boolean }) {
           aria-label={t("common.language")}
           icon={<GlobalOutlined />}
         >
-          {locale === "zh-CN" ? "中" : "EN"}
+          {localeInfo(locale).code}
         </Button>
       </Dropdown>
     </Space>
