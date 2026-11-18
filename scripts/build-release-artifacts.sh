@@ -10,7 +10,8 @@ targets=()
 
 usage() {
   printf '%s\n' \
-    'Usage: build-release-artifacts.sh --version VERSION --revision SHA --output DIR [--target GOOS/GOARCH] [--skip-console]'
+    'Usage: build-release-artifacts.sh --version VERSION --revision SHA --output DIR [--target GOOS/GOARCH] [--skip-console]' \
+    'Builds for the host only (go env GOOS/GOARCH); --target must equal the host (no cross-compilation, ADR 0016).'
 }
 
 while [[ $# -gt 0 ]]; do
@@ -110,39 +111,36 @@ PY
   )
 }
 
-create_zip() {
-  local source=$1
-  local destination=$2
-  normalize_stage "$source"
-  (
-    cd "$source"
-    find . -type f -print | LC_ALL=C sort | zip -q -X "$destination" -@
-  )
-}
-
-if [[ ${#targets[@]} -eq 0 ]]; then
-  targets=(linux/amd64 linux/arm64 darwin/amd64 darwin/arm64)
+host_goos=$(go env GOOS)
+host_goarch=$(go env GOARCH)
+host_target="$host_goos/$host_goarch"
+if [[ ! "$host_target" =~ ^(linux|darwin)/(amd64|arm64)$ ]]; then
+  printf 'Unsupported release host: %s\n' "$host_target" >&2
+  exit 2
 fi
+# Releases are built natively on each runner: a target other than the host would
+# be a cross build, which ADR 0016 forbids, so it is rejected rather than built.
+if [[ ${#targets[@]} -eq 0 ]]; then
+  targets=("$host_target")
+fi
+for target in "${targets[@]}"; do
+  if [[ "$target" != "$host_target" ]]; then
+    printf 'Foreign release target %s rejected: this host builds %s only (no cross-compilation).\n' "$target" "$host_target" >&2
+    exit 2
+  fi
+done
 
 workdir=$(mktemp -d)
 trap 'rm -rf "$workdir"' EXIT
 ldflags="-s -w -X github.com/mlops-ca/notarx/internal/buildinfo.injectedVersion=$version -X github.com/mlops-ca/notarx/internal/buildinfo.injectedRevision=$revision"
 
 for target in "${targets[@]}"; do
-  if [[ ! "$target" =~ ^(linux|darwin|windows)/(amd64|arm64)$ ]]; then
-    printf 'Unsupported release target: %s\n' "$target" >&2
-    exit 2
-  fi
-  goos=${target%/*}
-  goarch=${target#*/}
+  goos=$host_goos
+  goarch=$host_goarch
   stage="$workdir/notarx_${version}_${goos}_${goarch}"
   mkdir -p "$stage"
-  suffix=
-  if [[ "$goos" == "windows" ]]; then
-    suffix=.exe
-  fi
-  CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -trimpath -buildvcs=false -ldflags "$ldflags" -o "$stage/notarx$suffix" ./cmd/notarx
-  CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -trimpath -buildvcs=false -ldflags "$ldflags" -o "$stage/gateway-healthcheck$suffix" ./cmd/healthcheck
+  CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "$ldflags" -o "$stage/notarx" ./cmd/notarx
+  CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "$ldflags" -o "$stage/gateway-healthcheck" ./cmd/healthcheck
   cp -R "$root/migrations" "$stage/migrations"
   cp "$root/scripts/run-migrations.sh" "$stage/run-migrations.sh"
   cp "$root/.env.example" "$stage/artifact-gateway.env.example"
@@ -160,13 +158,8 @@ for target in "${targets[@]}"; do
     "Documentation: https://github.com/mlops-ca/notarx/blob/$revision/docs/getting-started.md" \
     > "$stage/INSTALL.txt"
 
-  if [[ "$goos" == "windows" ]]; then
-    archive="$output/notarx_${version}_${goos}_${goarch}.zip"
-    create_zip "$stage" "$archive"
-  else
-    archive="$output/notarx_${version}_${goos}_${goarch}.tar.gz"
-    create_tar_gz "$stage" "$archive"
-  fi
+  archive="$output/notarx_${version}_${goos}_${goarch}.tar.gz"
+  create_tar_gz "$stage" "$archive"
 
   # Backup's native profile supports Linux. Verify the actual packaged bytes
   # statically on the build host; a self-built non-trimpath fixture or runtime
@@ -187,7 +180,7 @@ for target in "${targets[@]}"; do
   # ldflags, and write-release-checksums.sh covers the new archives unchanged.
   notarxctl_stage="$workdir/notarxctl_${version}_${goos}_${goarch}"
   mkdir -p "$notarxctl_stage"
-  CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -trimpath -buildvcs=false -ldflags "$ldflags" -o "$notarxctl_stage/notarxctl$suffix" ./cmd/notarxctl
+  CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "$ldflags" -o "$notarxctl_stage/notarxctl" ./cmd/notarxctl
   printf 'version=%s\nrevision=%s\ntarget=%s/%s\n' "$version" "$revision" "$goos" "$goarch" > "$notarxctl_stage/VERSION.txt"
   printf '%s\n' \
     'Artifact Gateway CLI installation materials' \
@@ -203,11 +196,7 @@ for target in "${targets[@]}"; do
     "Documentation: https://github.com/mlops-ca/notarx/blob/$revision/docs/cli.md" \
     > "$notarxctl_stage/INSTALL.txt"
 
-  if [[ "$goos" == "windows" ]]; then
-    create_zip "$notarxctl_stage" "$output/notarxctl_${version}_${goos}_${goarch}.zip"
-  else
-    create_tar_gz "$notarxctl_stage" "$output/notarxctl_${version}_${goos}_${goarch}.tar.gz"
-  fi
+  create_tar_gz "$notarxctl_stage" "$output/notarxctl_${version}_${goos}_${goarch}.tar.gz"
 done
 
 if [[ "$skip_console" -eq 0 ]]; then

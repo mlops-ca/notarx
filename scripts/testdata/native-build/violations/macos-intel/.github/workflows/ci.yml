@@ -1,0 +1,7 @@
+name: CI
+on: push
+jobs:
+  b:
+    runs-on: macos-15-intel
+    steps:
+      - run: true

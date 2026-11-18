@@ -4,5 +4,9 @@
 quality
 contract-and-test
 console
-mainline-assets
-mainline-images * 2
+# mainline-assets and mainline-images are reusable-workflow calls (ADR 0016), so
+# their check runs are named <calling job> / <called job>: one assembled archive set
+# and one merged, attested index per published image.
+mainline-assets / assemble-release
+mainline-images / image-manifest (notarx)
+mainline-images / image-manifest (notarx-console)

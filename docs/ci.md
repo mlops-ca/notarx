@@ -71,8 +71,21 @@ retries (`GOPROXY=https://proxy.golang.org|direct`) and installs only the tools
 it declares: Rust from `rust-toolchain.toml`, Node from `.nvmrc`, Go from
 `go.mod`, and npm dependencies only for lanes that run OpenAPI or Console code
 generation. npm timeouts live in `console/.npmrc` and `tools/openapi/.npmrc`.
-Jobs run on `ubuntu-24.04` with a per-lane `timeout-minutes` from the plan.
-A failing lane uploads its step logs and raw reports.
+Jobs run on the native runner of their leg (`ubuntu-24.04` or `ubuntu-24.04-arm`,
+the `runner` input of `contract-lane.yml`) with a per-lane `timeout-minutes` from
+the plan. A failing lane uploads its step logs and raw reports under a name that
+carries the architecture.
+
+Every lane runs on amd64. The plan gives each lane an `arm64` tier: `pull-request`
+lanes (the four `core-*` lanes and the `six-format-auth` and `oci-discovery`
+smoke subset) also run on arm64 for every pull request, and `mainline` lanes join
+them on pushes to `main`. `scripts/ci-contract.py matrix --scope pull-request|mainline`
+emits the matrix. A step that runs a third-party artifact published for one
+architecture only (`published-native-backup-test` executes the published amd64
+release binaries) declares `architectures` in the plan; other architectures skip
+and report it, nothing is emulated. `quality-arm64` runs lint, vet and the race detector on
+`ubuntu-24.04-arm`; the coverage floor stays on amd64. See
+[native builds](native-builds.md).
 
 ## Shared images
 
@@ -91,8 +104,9 @@ build with their own version arguments (`backup-restore-readiness`,
 `historical-upgrade-readiness`, `cargo-upgrade-readiness`,
 `performance-baseline`) keep a per-project image name so they never touch the
 shared tag. `ci-ok` requires `build-images` whenever `go` or `console`
-changed. Running lanes natively on arm64 is part of ADR 0016 slice 5: the
-artifact name already carries the architecture.
+changed. `build-images` runs each image on both native runners (`ubuntu-24.04`
+and `ubuntu-24.04-arm`), and a contract lane downloads the artifacts of its own
+runner architecture.
 
 The Dockerfiles no longer run `go test` while building an image: the suite runs
 once in `core-checks` (`make test`) and `quality`. The tests live in an opt-in

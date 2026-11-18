@@ -9,6 +9,7 @@ import argparse
 import hashlib
 import json
 import os
+import platform
 import selectors
 import shutil
 import signal
@@ -136,11 +137,27 @@ def run_command(command, log, env, timeout=None):
             'processGroup': proc.pid, 'remainingLiveGroupMembers': []}
 
 
-def matrix():
-    """The GitHub Actions matrix: one entry per lane, straight from the plan."""
-    return {'include': [{'lane': name, 'timeout': lane['timeoutMinutes'],
-                         **{need: need in lane['needs'] for need in TOOL_NEEDS}}
-                        for name, lane in PLAN['lanes'].items()]}
+HOST_ARCH = {'x86_64': 'amd64', 'amd64': 'amd64', 'aarch64': 'arm64', 'arm64': 'arm64'}.get(
+    platform.machine().lower(), platform.machine().lower())
+RUNNERS = {'amd64': 'ubuntu-24.04', 'arm64': 'ubuntu-24.04-arm'}
+SCOPES = ('pull-request', 'mainline')
+
+
+def matrix(scope='mainline'):
+    """The GitHub Actions matrix, straight from the plan (ADR 0016).
+
+    Every lane runs on amd64. A lane also runs natively on arm64 when its
+    `arm64` tier is `pull-request` (every pull request) or the scope is
+    `mainline` (pushes to main: the remaining lanes join). Nothing is emulated.
+    """
+    def entry(name, lane, arch):
+        return {'lane': name, 'timeout': lane['timeoutMinutes'], 'arch': arch, 'runner': RUNNERS[arch],
+                **{need: need in lane['needs'] for need in TOOL_NEEDS}}
+
+    include = [entry(name, lane, 'amd64') for name, lane in PLAN['lanes'].items()]
+    include += [entry(name, lane, 'arm64') for name, lane in PLAN['lanes'].items()
+                if scope == 'mainline' or lane['arm64'] == 'pull-request']
+    return {'include': include}
 
 
 def run_lane(args):
@@ -155,6 +172,13 @@ def run_lane(args):
     try:
         for index, step in enumerate(lane['steps']):
             command = step['command']
+            # A step that executes a third-party artifact published for one architecture
+            # only declares it; it is skipped (and reported) elsewhere, never emulated.
+            if 'architectures' in step and HOST_ARCH not in step['architectures']:
+                print('Contract lane ' + args.lane + ': ' + step['name'] + ' skipped on ' + HOST_ARCH
+                      + ' (amd64-only artifact)', flush=True)
+                report['steps'].append({'name': step['name'], 'status': 'skipped', 'architecture': HOST_ARCH})
+                continue
             if args.local and command == ['make', 'openapi-check']:
                 command = [sys.executable, str(Path(__file__).resolve()), 'openapi-fresh']
             if command == ['make', 'native-maven-e2e']:
@@ -168,7 +192,7 @@ def run_lane(args):
             report['steps'].append(result)
             if result['status'] != 'success' and not args.keep_going:
                 break
-        if len(report['steps']) == len(lane['steps']) and all(s['status'] == 'success' for s in report['steps']):
+        if len(report['steps']) == len(lane['steps']) and all(s['status'] in ('success', 'skipped') for s in report['steps']):
             report['status'] = 'success'
     finally:
         for directory in lane['rawDirectories']:
@@ -195,7 +219,8 @@ def main():
     lane.add_argument('--keep-going', action='store_true')
     commands.add_parser('openapi-fresh')
     commands.add_parser('list')
-    commands.add_parser('matrix')
+    plan_matrix = commands.add_parser('matrix')
+    plan_matrix.add_argument('--scope', choices=SCOPES, default='mainline')
     args = parser.parse_args()
     if args.command == 'run':
         return run_lane(args)
@@ -204,7 +229,7 @@ def main():
     elif args.command == 'list':
         print('\n'.join(LANES))
     else:
-        print(json.dumps(matrix()))
+        print(json.dumps(matrix(args.scope)))
     return 0
 
 

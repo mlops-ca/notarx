@@ -52,7 +52,7 @@ green() {
   local sha=${1:-$(head_sha)}
   shift || true
   if [[ $# -eq 0 ]]; then
-    printf '%s\n' quality contract-and-test console mainline-assets 'mainline-images amd64' 'mainline-images arm64' > "$RELEASE_PLAN_CHECKS_DIR/$sha"
+    printf '%s\n' quality contract-and-test console 'mainline-assets / assemble-release' 'mainline-images / image-manifest (notarx)' 'mainline-images / image-manifest (notarx-console)' > "$RELEASE_PLAN_CHECKS_DIR/$sha"
   else
     printf '%s\n' "$@" > "$RELEASE_PLAN_CHECKS_DIR/$sha"
   fi
@@ -178,7 +178,7 @@ nightly 'revert releases a patch' core=0.1.1
 new_repo; commit 'feat: a'; older=$(head_sha); green "$older"
 commit 'fix: b'
 nightly 'newest commit without green checks falls back to the last green one' sha="$older" core=0.1.0
-green "$(head_sha)" quality contract-and-test console mainline-assets 'mainline-images amd64'
+green "$(head_sha)" quality contract-and-test console 'mainline-assets / assemble-release' 'mainline-images / image-manifest (notarx)'
 nightly 'a missing second image check is not green' sha="$older"
 green "$(head_sha)"
 nightly 'green tip is picked' sha="$(head_sha)"

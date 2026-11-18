@@ -3,6 +3,7 @@
   "lanes": {
     "core-checks": {
       "timeoutMinutes": 30,
+      "arm64": "pull-request",
       "needs": [
         "rust",
         "node",
@@ -85,6 +86,7 @@
     },
     "core-email": {
       "timeoutMinutes": 25,
+      "arm64": "pull-request",
       "needs": [
         "node"
       ],
@@ -102,6 +104,7 @@
     },
     "core-native-e2e": {
       "timeoutMinutes": 30,
+      "arm64": "pull-request",
       "needs": [
         "node"
       ],
@@ -183,6 +186,7 @@
     },
     "core-backup": {
       "timeoutMinutes": 25,
+      "arm64": "pull-request",
       "needs": [
         "rust",
         "node"
@@ -210,7 +214,10 @@
             "make",
             "published-native-backup-test"
           ],
-          "timeoutSeconds": 900
+          "timeoutSeconds": 900,
+          "architectures": [
+            "amd64"
+          ]
         },
         {
           "name": "integration-test",
@@ -227,6 +234,7 @@
     },
     "migration-clients": {
       "timeoutMinutes": 10,
+      "arm64": "mainline",
       "needs": [
         "node"
       ],
@@ -244,6 +252,7 @@
     },
     "inventory": {
       "timeoutMinutes": 10,
+      "arm64": "mainline",
       "needs": [
         "node"
       ],
@@ -263,6 +272,7 @@
     },
     "nuget": {
       "timeoutMinutes": 15,
+      "arm64": "mainline",
       "needs": [
         "node"
       ],
@@ -282,6 +292,7 @@
     },
     "oci-migration": {
       "timeoutMinutes": 10,
+      "arm64": "mainline",
       "needs": [
         "node"
       ],
@@ -301,6 +312,7 @@
     },
     "maven-oci-auth": {
       "timeoutMinutes": 10,
+      "arm64": "mainline",
       "needs": [
         "node"
       ],
@@ -320,6 +332,7 @@
     },
     "six-format-auth": {
       "timeoutMinutes": 15,
+      "arm64": "pull-request",
       "needs": [
         "rust",
         "node"
@@ -340,6 +353,7 @@
     },
     "oci-discovery": {
       "timeoutMinutes": 15,
+      "arm64": "pull-request",
       "needs": [
         "node"
       ],
@@ -359,6 +373,7 @@
     },
     "npm-migration": {
       "timeoutMinutes": 15,
+      "arm64": "mainline",
       "needs": [
         "node"
       ],
@@ -378,6 +393,7 @@
     },
     "helm": {
       "timeoutMinutes": 15,
+      "arm64": "mainline",
       "needs": [
         "node"
       ],
@@ -397,6 +413,7 @@
     },
     "rubygems": {
       "timeoutMinutes": 15,
+      "arm64": "mainline",
       "needs": [
         "node"
       ],
@@ -416,6 +433,7 @@
     },
     "pypi-migration": {
       "timeoutMinutes": 15,
+      "arm64": "mainline",
       "needs": [
         "node"
       ],
