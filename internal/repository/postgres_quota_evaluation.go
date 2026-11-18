@@ -28,7 +28,7 @@ func (s *PostgresStore) EvaluateNextRepositoryQuotaAlert(ctx context.Context, cf
 	}
 	// A single SQL statement captures logical usage, quota and repository state.
 	var record RepositoryCapacityRecord
-	query := `SELECT capacity.*,statement_timestamp() FROM (` + strings.TrimSuffix(repositoryCapacityRecordsQuery, "ORDER BY h.id") + `WHERE h.id::text=$1) capacity`
+	query := `SELECT capacity.*,statement_timestamp() FROM (` + strings.TrimSuffix(repositoryCapacityRecordsQuery, "ORDER BY h.id") + `WHERE h.id=$1::uuid) capacity`
 	var sampledAt time.Time
 	err = tx.QueryRowContext(ctx, query, rule.RepositoryID).Scan(&record.Repository.ID, &record.Repository.Name, &record.Repository.Format, &record.Repository.Type, &record.Repository.Endpoint, &record.Repository.State, &record.Capacity.QuotaBytes, &record.Capacity.UsedBytes, &record.Capacity.ObjectCount, &sampledAt)
 	o := quotaalert.Observation{DataState: "repository_deleted"}
@@ -46,7 +46,7 @@ func (s *PostgresStore) EvaluateNextRepositoryQuotaAlert(ctx context.Context, cf
 		_ = tx.Rollback()
 		// Fence a best-effort unknown state against a newer evaluation/configuration.
 		reset, _ := json.Marshal(quotaalert.Reset(rule.State, "unknown"))
-		_, _ = s.db.ExecContext(ctx, `UPDATE repository_quota_alert_rules SET state=$4,state_version=state_version+1,evaluated_at=clock_timestamp(),next_evaluate_at=clock_timestamp()+$5::bigint*interval '1 millisecond' WHERE id::text=$1 AND version::text=$2 AND state_version::text=$3`, rule.ID, rule.Version, rule.StateVersion, reset, interval.Milliseconds())
+		_, _ = s.db.ExecContext(ctx, `UPDATE repository_quota_alert_rules SET state=$4,state_version=state_version+1,evaluated_at=clock_timestamp(),next_evaluate_at=clock_timestamp()+$5::bigint*interval '1 millisecond' WHERE id=$1::uuid AND version=$2::text::bigint AND state_version=$3::text::bigint`, rule.ID, rule.Version, rule.StateVersion, reset, interval.Milliseconds())
 		return true, err
 	}
 	var now time.Time
@@ -59,7 +59,7 @@ func (s *PostgresStore) EvaluateNextRepositoryQuotaAlert(ctx context.Context, cf
 	}
 	event := quotaTransition(&rule, o, record.Repository.Name, now)
 	if event != nil {
-		target, e := scanEmailTarget(tx.QueryRowContext(ctx, `SELECT `+emailTargetColumns+` FROM email_targets WHERE id::text=$1 FOR SHARE`, rule.TargetID))
+		target, e := scanEmailTarget(tx.QueryRowContext(ctx, `SELECT `+emailTargetColumns+` FROM email_targets WHERE id=$1::uuid FOR SHARE`, rule.TargetID))
 		if e != nil && !errors.Is(e, ErrNotFound) {
 			return true, e
 		}
@@ -91,7 +91,7 @@ func (s *PostgresStore) EvaluateNextRepositoryQuotaAlert(ctx context.Context, cf
 		}
 	}
 	state, _ := json.Marshal(rule.State)
-	_, err = tx.ExecContext(ctx, `UPDATE repository_quota_alert_rules SET state=$2,state_version=state_version+1,active_episode_id=NULLIF($3,'')::uuid,last_event_id=NULLIF($4,'')::uuid,sequence=$5,evaluated_at=$6::timestamptz,next_evaluate_at=$6::timestamptz+$7::bigint*interval '1 millisecond' WHERE id::text=$1`, rule.ID, state, rule.ActiveEpisodeID, rule.LastEventID, rule.Sequence, now, interval.Milliseconds())
+	_, err = tx.ExecContext(ctx, `UPDATE repository_quota_alert_rules SET state=$2,state_version=state_version+1,active_episode_id=NULLIF($3,'')::uuid,last_event_id=NULLIF($4,'')::uuid,sequence=$5,evaluated_at=$6::timestamptz,next_evaluate_at=$6::timestamptz+$7::bigint*interval '1 millisecond' WHERE id=$1::uuid`, rule.ID, state, rule.ActiveEpisodeID, rule.LastEventID, rule.Sequence, now, interval.Milliseconds())
 	if err != nil {
 		return true, err
 	}

@@ -60,7 +60,7 @@ func (s *PostgresStore) ListServiceAccounts(ctx context.Context, limit int, afte
 func (s *PostgresStore) GetServiceAccount(ctx context.Context, id string) (ServiceAccount, error) {
 	var account ServiceAccount
 	err := scanServiceAccount(
-		s.db.QueryRowContext(ctx, `SELECT `+serviceAccountColumns+` FROM service_accounts WHERE id::text=$1`, id),
+		s.db.QueryRowContext(ctx, `SELECT `+serviceAccountColumns+` FROM service_accounts WHERE id=$1::uuid`, id),
 		&account,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -83,7 +83,7 @@ func (s *PostgresStore) UpdateServiceAccount(ctx context.Context, update Service
 		state = *update.State
 	}
 	err := scanServiceAccount(
-		s.db.QueryRowContext(ctx, `UPDATE service_accounts SET description=CASE WHEN $2 THEN $3 ELSE description END, state=CASE WHEN $4 THEN $5 ELSE state END, updated_at=now(), version=version+1 WHERE id::text=$1 AND version::text=$6 RETURNING `+serviceAccountColumns,
+		s.db.QueryRowContext(ctx, `UPDATE service_accounts SET description=CASE WHEN $2 THEN $3 ELSE description END, state=CASE WHEN $4 THEN $5 ELSE state END, updated_at=now(), version=version+1 WHERE id=$1::uuid AND version=$6::text::bigint RETURNING `+serviceAccountColumns,
 			update.ID,
 			update.Description != nil,
 			description,
@@ -109,7 +109,7 @@ func (s *PostgresStore) CreateServiceAccountCredential(ctx context.Context, cred
 	err := s.db.QueryRowContext(
 		ctx,
 		`INSERT INTO api_keys (id, service_account_id, name, secret_hash, roles, expires_at)
-		 SELECT $1, id, $3, $4, $5, $6 FROM service_accounts WHERE id::text=$2 AND state='active'
+		 SELECT $1, id, $3, $4, $5, $6 FROM service_accounts WHERE id=$2::uuid AND state='active'
 		 RETURNING created_at`,
 		credential.ID,
 		credential.ServiceAccountID,
@@ -164,7 +164,7 @@ func (s *PostgresStore) ListServiceAccountCredentials(ctx context.Context, accou
 func (s *PostgresStore) RevokeServiceAccountCredential(ctx context.Context, accountID, credentialID string) (APIKey, error) {
 	var key APIKey
 	var roles []byte
-	err := s.db.QueryRowContext(ctx, `UPDATE api_keys SET revoked_at=COALESCE(revoked_at, now()) WHERE id::text=$1 AND service_account_id::text=$2 RETURNING id::text, service_account_id::text, name, array_to_json(roles), created_at, revoked_at, expires_at, last_used_at`, credentialID, accountID).Scan(&key.ID, &key.ServiceAccountID, &key.Name, &roles, &key.CreatedAt, &key.RevokedAt, &key.ExpiresAt, &key.LastUsedAt)
+	err := s.db.QueryRowContext(ctx, `UPDATE api_keys SET revoked_at=COALESCE(revoked_at, now()) WHERE id=$1::uuid AND service_account_id=$2::uuid RETURNING id::text, service_account_id::text, name, array_to_json(roles), created_at, revoked_at, expires_at, last_used_at`, credentialID, accountID).Scan(&key.ID, &key.ServiceAccountID, &key.Name, &roles, &key.CreatedAt, &key.RevokedAt, &key.ExpiresAt, &key.LastUsedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return APIKey{}, ErrNotFound
 	}

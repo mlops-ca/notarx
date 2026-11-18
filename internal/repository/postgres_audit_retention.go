@@ -99,7 +99,7 @@ func (s *PostgresStore) FailAuditCleanupJob(ctx context.Context, id, message str
 	return s.finishAuditCleanupJob(ctx, id, LifecycleJobFailed, message, 0)
 }
 func (s *PostgresStore) finishAuditCleanupJob(ctx context.Context, id string, state LifecycleJobState, message string, deleted int) error {
-	r, err := s.db.ExecContext(ctx, `UPDATE audit_cleanup_jobs SET state=$2,completed_at=now(),last_error=$3,deleted=CASE WHEN $2='completed' THEN $4 ELSE deleted END WHERE id::text=$1 AND state='running'`, id, state, message, deleted)
+	r, err := s.db.ExecContext(ctx, `UPDATE audit_cleanup_jobs SET state=$2,completed_at=now(),last_error=$3,deleted=CASE WHEN $2='completed' THEN $4 ELSE deleted END WHERE id=$1::uuid AND state='running'`, id, state, message, deleted)
 	if err != nil {
 		return err
 	}

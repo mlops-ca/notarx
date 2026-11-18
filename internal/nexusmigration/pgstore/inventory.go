@@ -24,7 +24,7 @@ type inventoryQuerier interface {
 func readInventoryScan(ctx context.Context, q inventoryQuerier, id string) (m.InventoryScan, error) {
 	var v m.InventoryScan
 	var repos []byte
-	err := q.QueryRowContext(ctx, `SELECT binding_sha256,repositories,repository_index,cursor,page_count,verified_pages,asset_count,metadata_bytes FROM nexus_migration_scans WHERE batch_id::text=$1`, id).Scan(&v.BindingSHA256, &repos, &v.RepositoryIndex, &v.Cursor, &v.PageCount, &v.VerifiedPages, &v.AssetCount, &v.MetadataBytes)
+	err := q.QueryRowContext(ctx, `SELECT binding_sha256,repositories,repository_index,cursor,page_count,verified_pages,asset_count,metadata_bytes FROM nexus_migration_scans WHERE batch_id=$1::uuid`, id).Scan(&v.BindingSHA256, &repos, &v.RepositoryIndex, &v.Cursor, &v.PageCount, &v.VerifiedPages, &v.AssetCount, &v.MetadataBytes)
 	if errors.Is(err, sql.ErrNoRows) {
 		return v, m.ErrNotFound
 	}
@@ -51,7 +51,7 @@ func (s *Store) inventoryTransaction(ctx context.Context, b m.Batch) (*sql.Tx, e
 	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('nexus-migration-lease:'||$1,0))`, b.ID); err != nil {
 		return bad(err)
 	}
-	actual, err := scanBatch(tx.QueryRowContext(ctx, `SELECT `+batchColumns+` FROM nexus_migration_batches b WHERE id::text=$1 FOR UPDATE`, b.ID))
+	actual, err := scanBatch(tx.QueryRowContext(ctx, `SELECT `+batchColumns+` FROM nexus_migration_batches b WHERE id=$1::uuid FOR UPDATE`, b.ID))
 	if err != nil {
 		return bad(err)
 	}
@@ -59,7 +59,7 @@ func (s *Store) inventoryTransaction(ctx context.Context, b m.Batch) (*sql.Tx, e
 		return bad(m.ErrLeaseLost)
 	}
 	var fresh bool
-	if err = tx.QueryRowContext(ctx, `SELECT lease_expires_at>clock_timestamp() FROM nexus_migration_batches WHERE id::text=$1`, b.ID).Scan(&fresh); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT lease_expires_at>clock_timestamp() FROM nexus_migration_batches WHERE id=$1::uuid`, b.ID).Scan(&fresh); err != nil {
 		return bad(err)
 	}
 	if !fresh {
@@ -82,7 +82,7 @@ func (s *Store) inventoryTransaction(ctx context.Context, b m.Batch) (*sql.Tx, e
 // remains held until the actual inventory/native publication transaction ends.
 func lockSourceVersion(ctx context.Context, tx *sql.Tx, id, expected string) error {
 	var version string
-	err := tx.QueryRowContext(ctx, `SELECT version::text FROM nexus_migration_sources WHERE id::text=$1 FOR SHARE`, id).Scan(&version)
+	err := tx.QueryRowContext(ctx, `SELECT version::text FROM nexus_migration_sources WHERE id=$1::uuid FOR SHARE`, id).Scan(&version)
 	if errors.Is(err, sql.ErrNoRows) || err == nil && version != expected {
 		return m.Failed("source_changed")
 	}
@@ -196,7 +196,7 @@ func (s *Store) AppendInventoryPage(ctx context.Context, b m.Batch, expected m.I
 func (s *Store) InventoryPage(ctx context.Context, id string, ordinal int64) (m.InventoryPage, error) {
 	var out m.InventoryPage
 	var page []byte
-	err := s.db.QueryRowContext(ctx, `SELECT source_repository,cursor,page_sha256,page FROM nexus_migration_scan_pages WHERE batch_id::text=$1 AND ordinal=$2`, id, ordinal).Scan(&out.SourceRepository, &out.Cursor, &out.SHA256, &page)
+	err := s.db.QueryRowContext(ctx, `SELECT source_repository,cursor,page_sha256,page FROM nexus_migration_scan_pages WHERE batch_id=$1::uuid AND ordinal=$2`, id, ordinal).Scan(&out.SourceRepository, &out.Cursor, &out.SHA256, &page)
 	if errors.Is(err, sql.ErrNoRows) {
 		return out, m.ErrNotFound
 	}

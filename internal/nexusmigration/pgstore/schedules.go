@@ -36,7 +36,7 @@ func scanSchedule(row scanner) (m.Schedule, error) {
 }
 
 func (s *Store) GetSchedule(ctx context.Context, id string) (m.Schedule, error) {
-	return scanSchedule(s.db.QueryRowContext(ctx, `SELECT `+scheduleColumns+` FROM nexus_migration_schedules s WHERE s.id::text=$1`, id))
+	return scanSchedule(s.db.QueryRowContext(ctx, `SELECT `+scheduleColumns+` FROM nexus_migration_schedules s WHERE s.id=$1::uuid`, id))
 }
 
 func (s *Store) ListSchedules(ctx context.Context, limit int, cursor string) ([]m.Schedule, string, error) {
@@ -83,7 +83,7 @@ func (s *Store) ReplayScheduleCreate(ctx context.Context, actor, key, hash strin
 func (s *Store) ReplayScheduleControl(ctx context.Context, id, actor, key, action, hash string) (m.Schedule, bool, error) {
 	var operation, stored string
 	var raw []byte
-	err := s.db.QueryRowContext(ctx, `SELECT operation,request_hash,response FROM nexus_migration_schedule_controls WHERE schedule_id::text=$1 AND actor=$2 AND idempotency_key=$3`, id, actor, key).Scan(&operation, &stored, &raw)
+	err := s.db.QueryRowContext(ctx, `SELECT operation,request_hash,response FROM nexus_migration_schedule_controls WHERE schedule_id=$1::uuid AND actor=$2 AND idempotency_key=$3`, id, actor, key).Scan(&operation, &stored, &raw)
 	if errors.Is(err, sql.ErrNoRows) {
 		return m.Schedule{}, false, nil
 	}
@@ -107,7 +107,7 @@ func lockMigrationDispatch(ctx context.Context, tx *sql.Tx) error {
 
 func activeMigrationTargets(ctx context.Context, tx *sql.Tx, mappings []m.Mapping, onlyScheduled bool, exceptBatchID string) error {
 	var busy bool
-	err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM nexus_migration_batches b CROSS JOIN LATERAL jsonb_array_elements(b.request->'mappings') oldmp JOIN jsonb_array_elements($1::jsonb) newmp ON oldmp->>'targetRepositoryId'=newmp->>'targetRepositoryId' WHERE b.state NOT IN ('completed','failed','cancelled') AND (NOT $2 OR b.schedule_id IS NOT NULL) AND b.id::text<>$3)`, mustJSON(mappings), onlyScheduled, exceptBatchID).Scan(&busy)
+	err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM nexus_migration_batches b CROSS JOIN LATERAL jsonb_array_elements(b.request->'mappings') oldmp JOIN jsonb_array_elements($1::jsonb) newmp ON oldmp->>'targetRepositoryId'=newmp->>'targetRepositoryId' WHERE b.state NOT IN ('completed','failed','cancelled') AND (NOT $2 OR b.schedule_id IS NOT NULL) AND ($3='' OR b.id<>NULLIF($3,'')::uuid))`, mustJSON(mappings), onlyScheduled, exceptBatchID).Scan(&busy)
 	if err == nil && busy {
 		return m.Failed("mapping_active_batch")
 	}
@@ -156,7 +156,7 @@ func (s *Store) CreateSchedule(ctx context.Context, p m.Schedule, key, hash stri
 		if priorHash != hash || (p.ActorKind != "" || p.OwnerID != "") && (priorKind != p.ActorKind || priorOwner != p.OwnerID) {
 			return p, m.ErrIdempotencyConflict
 		}
-		return scanSchedule(tx.QueryRowContext(ctx, `SELECT `+scheduleColumns+` FROM nexus_migration_schedules s WHERE s.id::text=$1`, priorID))
+		return scanSchedule(tx.QueryRowContext(ctx, `SELECT `+scheduleColumns+` FROM nexus_migration_schedules s WHERE s.id=$1::uuid`, priorID))
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return p, err
@@ -169,7 +169,7 @@ func (s *Store) CreateSchedule(ctx context.Context, p m.Schedule, key, hash stri
 	if overlap {
 		return p, m.Failed("mapping_schedule_exists")
 	}
-	template, err := scanBatch(tx.QueryRowContext(ctx, `SELECT `+batchColumns+` FROM nexus_migration_batches b WHERE b.id::text=$1 FOR SHARE`, p.TemplateBatchID))
+	template, err := scanBatch(tx.QueryRowContext(ctx, `SELECT `+batchColumns+` FROM nexus_migration_batches b WHERE b.id=$1::uuid FOR SHARE`, p.TemplateBatchID))
 	if err != nil {
 		return p, err
 	}
@@ -195,7 +195,7 @@ func (s *Store) CreateSchedule(ctx context.Context, p m.Schedule, key, hash stri
 	if err != nil {
 		return p, err
 	}
-	p, err = scanSchedule(tx.QueryRowContext(ctx, `SELECT `+scheduleColumns+` FROM nexus_migration_schedules s WHERE s.id::text=$1`, p.ID))
+	p, err = scanSchedule(tx.QueryRowContext(ctx, `SELECT `+scheduleColumns+` FROM nexus_migration_schedules s WHERE s.id=$1::uuid`, p.ID))
 	if err != nil {
 		return p, err
 	}
@@ -214,7 +214,7 @@ func (s *Store) ControlSchedule(ctx context.Context, id, expected, actor, key, a
 		return m.Schedule{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	p, err := scanSchedule(tx.QueryRowContext(ctx, `SELECT `+scheduleColumns+` FROM nexus_migration_schedules s WHERE s.id::text=$1 FOR UPDATE`, id))
+	p, err := scanSchedule(tx.QueryRowContext(ctx, `SELECT `+scheduleColumns+` FROM nexus_migration_schedules s WHERE s.id=$1::uuid FOR UPDATE`, id))
 	if err != nil {
 		return p, err
 	}
@@ -286,7 +286,7 @@ func (s *Store) ControlSchedule(ctx context.Context, id, expected, actor, key, a
 	if err != nil {
 		return p, err
 	}
-	p, err = scanSchedule(tx.QueryRowContext(ctx, `SELECT `+scheduleColumns+` FROM nexus_migration_schedules s WHERE s.id::text=$1`, id))
+	p, err = scanSchedule(tx.QueryRowContext(ctx, `SELECT `+scheduleColumns+` FROM nexus_migration_schedules s WHERE s.id=$1::uuid`, id))
 	if err != nil {
 		return p, err
 	}
@@ -308,7 +308,7 @@ func (s *Store) ControlSchedule(ctx context.Context, id, expected, actor, key, a
 // ScheduleTemplate reads only immutable batch configuration and terminal state.
 // It deliberately avoids totals/entry/asset projections, including npm metadata.
 func (s *Store) ScheduleTemplate(ctx context.Context, id string) (m.Batch, error) {
-	return scanBatch(s.db.QueryRowContext(ctx, `SELECT `+batchColumns+` FROM nexus_migration_batches b WHERE b.id::text=$1`, id))
+	return scanBatch(s.db.QueryRowContext(ctx, `SELECT `+batchColumns+` FROM nexus_migration_batches b WHERE b.id=$1::uuid`, id))
 }
 
 // Completed/skipped entries pass by terminal state without loading any assets.
@@ -446,7 +446,7 @@ func (s *Store) DispatchSchedule(ctx context.Context, claim m.Schedule, b m.Batc
 	if err = lockMigrationDispatch(ctx, tx); err != nil {
 		return err
 	}
-	p, err := scanSchedule(tx.QueryRowContext(ctx, `SELECT `+scheduleColumns+` FROM nexus_migration_schedules s WHERE s.id::text=$1 AND s.lease_token=$2 AND s.lease_expires_at>clock_timestamp() AND s.state='active' AND s.active_batch_id IS NULL FOR UPDATE`, claim.ID, claim.LeaseToken))
+	p, err := scanSchedule(tx.QueryRowContext(ctx, `SELECT `+scheduleColumns+` FROM nexus_migration_schedules s WHERE s.id=$1::uuid AND s.lease_token=$2 AND s.lease_expires_at>clock_timestamp() AND s.state='active' AND s.active_batch_id IS NULL FOR UPDATE`, claim.ID, claim.LeaseToken))
 	if errors.Is(err, m.ErrNotFound) {
 		return m.ErrLeaseLost
 	}
@@ -473,7 +473,7 @@ func (s *Store) DispatchSchedule(ctx context.Context, claim m.Schedule, b m.Batc
 	}
 	for _, mapping := range p.Mappings {
 		var state, kind string
-		err = tx.QueryRowContext(ctx, `SELECT state,repo_type FROM hosted_repositories WHERE id::text=$1 FOR SHARE`, mapping.TargetRepositoryID).Scan(&state, &kind)
+		err = tx.QueryRowContext(ctx, `SELECT state,repo_type FROM hosted_repositories WHERE id=$1::uuid FOR SHARE`, mapping.TargetRepositoryID).Scan(&state, &kind)
 		if errors.Is(err, sql.ErrNoRows) || err == nil && (state != "active" || kind != "hosted") {
 			return m.Failed("target_not_active_hosted")
 		}
@@ -518,6 +518,6 @@ func (s *Store) FailSchedule(ctx context.Context, p m.Schedule, state, message s
 		retryAt := now.Add(time.Minute)
 		next = &retryAt
 	}
-	result, err := s.db.ExecContext(ctx, `UPDATE nexus_migration_schedules SET state=$3,last_error=$4,dispatch_attempts=$5,next_run_at=$6,lease_token='',lease_expires_at=NULL,version=version+1,updated_at=clock_timestamp() WHERE id::text=$1 AND lease_token=$2 AND lease_expires_at>clock_timestamp() AND state='active'`, p.ID, p.LeaseToken, state, message, attempts, next)
+	result, err := s.db.ExecContext(ctx, `UPDATE nexus_migration_schedules SET state=$3,last_error=$4,dispatch_attempts=$5,next_run_at=$6,lease_token='',lease_expires_at=NULL,version=version+1,updated_at=clock_timestamp() WHERE id=$1::uuid AND lease_token=$2 AND lease_expires_at>clock_timestamp() AND state='active'`, p.ID, p.LeaseToken, state, message, attempts, next)
 	return changed(result, err)
 }

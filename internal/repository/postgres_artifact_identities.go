@@ -36,7 +36,7 @@ func (s *PostgresStore) ListArtifactIdentities(ctx context.Context, repositoryID
 		       ) END AS intelligence
 		FROM identities
 		LEFT JOIN artifact_intelligence ai
-		  ON ai.repository_id::text=$1 AND ai.format=$4 AND ai.coordinate=identities.coordinate AND ai.digest=identities.digest
+		  ON ai.repository_id=$1::uuid AND ai.format=$4 AND ai.coordinate=identities.coordinate AND ai.digest=identities.digest
 		WHERE $2='' OR position($2 in lower(identities.coordinate))>0 OR lower(identities.digest)=$2
 		ORDER BY identities.published_at DESC,identities.coordinate,identities.digest DESC
 		LIMIT $3`, repositoryID, query, limit, format)
@@ -75,30 +75,30 @@ func postgresArtifactIdentityQuery(format Format, purpose ArtifactIdentityPurpos
 	case FormatAPT:
 		return `SELECT a.path AS coordinate,a.digest,a.size,s.published_at
  FROM native_apt_snapshot_assets a JOIN native_apt_repository_snapshots s ON s.id=a.snapshot_id
- WHERE a.repository_id::text=$1 AND s.state='visible' AND a.path LIKE 'pool/%'
+ WHERE a.repository_id=$1::uuid AND s.state='visible' AND a.path LIKE 'pool/%'
  AND a.content_type='application/vnd.debian.binary-package'`, nil
 	case FormatMaven:
 		return `SELECT coordinate,digest,NULL::bigint AS size,created_at AS published_at
-			FROM native_maven_artifacts WHERE repository_id::text=$1 AND state='visible' AND digest ~ '^sha256:[a-f0-9]{64}$'`, nil
+			FROM native_maven_artifacts WHERE repository_id=$1::uuid AND state='visible' AND digest ~ '^sha256:[a-f0-9]{64}$'`, nil
 	case FormatOCI:
 		return `SELECT name AS coordinate,digest,size,created_at AS published_at
-			FROM native_oci_manifests WHERE repository_id::text=$1 AND object_key<>'' AND digest ~ '^sha256:[a-f0-9]{64}$'`, nil
+			FROM native_oci_manifests WHERE repository_id=$1::uuid AND object_key<>'' AND digest ~ '^sha256:[a-f0-9]{64}$'`, nil
 	case FormatRaw:
 		return `SELECT a.path AS coordinate,a.digest,o.size,a.updated_at AS published_at
 			FROM native_raw_assets a JOIN native_raw_objects o ON o.digest=a.digest
-			WHERE a.repository_id::text=$1 AND o.object_key<>'' AND a.digest ~ '^sha256:[a-f0-9]{64}$'`, nil
+			WHERE a.repository_id=$1::uuid AND o.object_key<>'' AND a.digest ~ '^sha256:[a-f0-9]{64}$'`, nil
 	case FormatNPM:
 		return `SELECT ` + protocolidentity.PostgreSQLNPMVersion("v.package_name", "v.version") + ` AS coordinate,v.digest,v.size,v.created_at AS published_at
 			FROM native_npm_versions v JOIN native_npm_packages p ON p.repository_id=v.repository_id AND p.name=v.package_name
-			WHERE v.repository_id::text=$1 AND v.state='visible' AND v.object_key<>'' AND v.digest ~ '^sha256:[a-f0-9]{64}$' AND NOT p.negative`, nil
+			WHERE v.repository_id=$1::uuid AND v.state='visible' AND v.object_key<>'' AND v.digest ~ '^sha256:[a-f0-9]{64}$' AND NOT p.negative`, nil
 	case FormatPyPI:
 		return `SELECT ` + protocolidentity.PostgreSQLPyPIVersion("project", "version") + ` AS coordinate,digest,size,created_at AS published_at
-			FROM native_pypi_files WHERE repository_id::text=$1 AND state='visible' AND object_key<>'' AND digest ~ '^sha256:[a-f0-9]{64}$'`, nil
+			FROM native_pypi_files WHERE repository_id=$1::uuid AND state='visible' AND object_key<>'' AND digest ~ '^sha256:[a-f0-9]{64}$'`, nil
 	case FormatGo:
 		return `SELECT ` + protocolidentity.PostgreSQLGoVersion("v.module_path", "v.version") + ` AS coordinate,a.digest,a.size,v.created_at AS published_at
 			FROM native_go_versions v
 			JOIN native_go_assets a ON a.repository_id=v.repository_id AND a.module_path=v.module_path AND a.version=v.version AND a.kind='zip'
-			WHERE v.repository_id::text=$1
+			WHERE v.repository_id=$1::uuid
 			  AND a.object_key<>'' AND a.collecting_at IS NULL AND a.collected_at IS NULL AND a.digest ~ '^sha256:[a-f0-9]{64}$'
 			  AND (SELECT count(*) FROM native_go_assets closure
 			       WHERE closure.repository_id=v.repository_id AND closure.module_path=v.module_path AND closure.version=v.version
@@ -110,14 +110,14 @@ func postgresArtifactIdentityQuery(format Format, purpose ArtifactIdentityPurpos
 			FROM native_cargo_publications p
 			JOIN native_cargo_identity_reservations r USING (repository_id,collision_key,version_key)
 			JOIN native_cargo_names n USING (repository_id,collision_key)
-			WHERE p.repository_id::text=$1 AND p.object_key<>'' AND p.collected_at IS NULL
+			WHERE p.repository_id=$1::uuid AND p.object_key<>'' AND p.collected_at IS NULL
 			  AND r.digest ~ '^sha256:[a-f0-9]{64}$'
 			  AND NOT EXISTS (SELECT 1 FROM artifact_tombstones t WHERE t.repository_id=p.repository_id
 			    AND t.format='cargo' AND t.coordinate=n.name || '@' || r.version)`, nil
 	case FormatConan:
 		recipes := `SELECT ` + protocolidentity.PostgreSQLConanRecipe("reference", "revision") + ` AS coordinate,digest,NULL::bigint AS size,created_at AS published_at
 			FROM native_conan_recipe_revisions r
-			WHERE repository_id::text=$1 AND state='visible' AND digest ~ '^sha256:[a-f0-9]{64}$'
+			WHERE repository_id=$1::uuid AND state='visible' AND digest ~ '^sha256:[a-f0-9]{64}$'
 			  AND EXISTS (SELECT 1 FROM native_conan_assets a JOIN native_conan_object_intents i ON i.object_key=a.object_key
 			              WHERE a.repository_id=r.repository_id AND a.reference=r.reference AND a.recipe_revision=r.revision
 			                AND a.package_id='' AND a.package_revision='' AND i.collected_at IS NULL)`
@@ -136,7 +136,7 @@ func postgresArtifactIdentityQuery(format Format, purpose ArtifactIdentityPurpos
 			       p.digest,NULL::bigint AS size,p.created_at AS published_at
 			FROM native_conan_package_revisions p
 			JOIN native_conan_recipe_revisions r ON r.repository_id=p.repository_id AND r.reference=p.reference AND r.revision=p.recipe_revision AND r.state='visible'
-			WHERE p.repository_id::text=$1 AND p.state='visible' AND p.digest ~ '^sha256:[a-f0-9]{64}$'
+			WHERE p.repository_id=$1::uuid AND p.state='visible' AND p.digest ~ '^sha256:[a-f0-9]{64}$'
 			  AND EXISTS (SELECT 1 FROM native_conan_assets a JOIN native_conan_object_intents i ON i.object_key=a.object_key
 			              WHERE a.repository_id=p.repository_id AND a.reference=p.reference AND a.recipe_revision=p.recipe_revision
 			                AND a.package_id=p.package_id AND a.package_revision=p.revision AND i.collected_at IS NULL)`, nil

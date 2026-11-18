@@ -190,37 +190,15 @@ func ParseAllowlist(r io.Reader) (map[string]int, error) {
 	return allow, scanner.Err()
 }
 
-// FormatAllowlist renders counts in the allowlist file format.
-func FormatAllowlist(counts map[string]int) string {
-	var b strings.Builder
-	b.WriteString("# Ratchet for ADR 0023 section 4: SQL literals that compare a text-cast column with a\n")
-	b.WriteString("# parameter. Counts may only decrease; remove a file when it reaches zero.\n")
-	b.WriteString("# Regenerate lower counts with: go run ./tools/sqllint/cmd -update\n")
-	for _, file := range sortedKeys(counts) {
-		fmt.Fprintf(&b, "%s %d\n", file, counts[file])
-	}
-	return b.String()
-}
-
-// Check compares a scan with the allowlist and returns one message per problem.
-func Check(result Result, allow map[string]int) []string {
+// Check returns one message per violation of the text-cast and uuid.New rules; the
+// text-cast rule has no allowlist (ADR 0023 slice 4c).
+func Check(result Result) []string {
 	var problems []string
 	for _, position := range result.UUIDNew {
 		problems = append(problems, position+": uuid.New() and uuid.NewRandom() are forbidden outside "+IDsPackage+"; use ids.New() (ADR 0023 section 4)")
 	}
 	for _, file := range sortedKeys(result.Casts) {
-		actual, allowed := result.Casts[file], allow[file]
-		switch {
-		case actual > allowed:
-			problems = append(problems, fmt.Sprintf("%s: %d text-cast comparison(s), allowlist permits %d; bind uuid parameters as uuid.UUID or $n::uuid instead of col::text = $n", file, actual, allowed))
-		case actual < allowed:
-			problems = append(problems, fmt.Sprintf("%s: allowlist permits %d but only %d remain; lower it with go run ./tools/sqllint/cmd -update", file, allowed, actual))
-		}
-	}
-	for _, file := range sortedKeys(allow) {
-		if _, ok := result.Casts[file]; !ok {
-			problems = append(problems, fmt.Sprintf("%s: allowlist entry has no remaining violations; remove it with go run ./tools/sqllint/cmd -update", file))
-		}
+		problems = append(problems, fmt.Sprintf("%s: %d text-cast comparison(s); bind uuid parameters as uuid.UUID or $n::uuid instead of col::text = $n", file, result.Casts[file]))
 	}
 	return problems
 }
@@ -262,13 +240,6 @@ func FormatNewStringAllowlist(counts map[string]int) string {
 		fmt.Fprintf(&b, "%s %d\n", file, counts[file])
 	}
 	return b.String()
-}
-
-// Lowered returns the allowlist after a ratchet step: each file keeps its current
-// count and files without violations are dropped. It reports an error when any
-// count grew or a new file appeared, because the ratchet never goes up.
-func Lowered(result Result, allow map[string]int) (map[string]int, error) {
-	return lowerCounts(result.Casts, allow, "text-cast comparison(s)")
 }
 
 // lowerCounts keeps each file's current count and refuses to raise any of them.
