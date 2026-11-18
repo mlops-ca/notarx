@@ -102,7 +102,7 @@ i18n-release-check:
 	@node ./scripts/i18n-release-check.mjs
 
 i18n-tooling-test:
-	@node --test ./scripts/i18n-draft.test.mjs ./scripts/i18n-release-check.test.mjs
+	@node --test ./scripts/i18n-draft.test.mjs ./scripts/i18n-release-check.test.mjs ./scripts/i18n-review.test.mjs
 
 console-api-check:
 	@cd console && npm run check:api
@@ -135,7 +135,7 @@ test:
 	@bash ./scripts/openapi-dependency-test.sh
 	@./scripts/release-readiness-check.sh
 	@./scripts/docs-capability-check.sh
-	@node --test ./scripts/i18n-draft.test.mjs ./scripts/i18n-release-check.test.mjs
+	@node --test ./scripts/i18n-draft.test.mjs ./scripts/i18n-release-check.test.mjs ./scripts/i18n-review.test.mjs
 	@python3 -m unittest scripts/maven_proxy_fixture_test.py
 
 ci-local:

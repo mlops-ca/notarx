@@ -1,0 +1,17 @@
+{
+  "id": "msg_fixture",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-sonnet-5-5",
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"findings\":[{\"id\":\"foo.deleteRepo\",\"kind\":\"glossary\",\"message\":\"Use dépôt, not référentiel.\"}]}"
+    }
+  ],
+  "stop_reason": "end_turn",
+  "usage": {
+    "input_tokens": 410,
+    "output_tokens": 38
+  }
+}

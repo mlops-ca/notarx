@@ -4,3 +4,6 @@
 *.fr-CA.ts @kharkevich @olgakharkevich
 *.fr-CA.md @kharkevich @olgakharkevich
 /console/src/messages/.review/ @kharkevich @olgakharkevich
+/console/src/messages/glossary.ts @kharkevich @olgakharkevich
+/scripts/i18n-review.mjs @kharkevich @olgakharkevich
+/.github/workflows/i18n-review.yml @kharkevich @olgakharkevich
