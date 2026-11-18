@@ -10,7 +10,7 @@ import (
 
 // TestNoDerivedMemberVisibilityIsStored guards ADR 0029: a group's member
 // visibility is computed at request time, so no migration may store it. The
-// legacy per-member anonymous flag is dropped by 000006 and no member table may
+// legacy per-member anonymous flag is dropped by 000007 and no member table may
 // gain a visibility or anonymous column afterwards.
 func TestNoDerivedMemberVisibilityIsStored(t *testing.T) {
 	files, err := filepath.Glob("../../migrations/*.sql")
@@ -31,7 +31,7 @@ func TestNoDerivedMemberVisibilityIsStored(t *testing.T) {
 		if match := memberColumn.FindStringSubmatch(text); match != nil {
 			t.Errorf("%s adds %s to %s: group member visibility must stay computed", filepath.Base(file), match[2], match[1])
 		}
-		if strings.HasPrefix(filepath.Base(file), "000006_") {
+		if strings.HasPrefix(filepath.Base(file), "000007_") {
 			drops.WriteString(text)
 		}
 	}
@@ -39,12 +39,12 @@ func TestNoDerivedMemberVisibilityIsStored(t *testing.T) {
 	for _, table := range []string{"oci", "maven", "raw", "conan"} {
 		backfill := "UPDATE " + table + "_groups SET anonymous = false"
 		if !strings.Contains(drops.String(), backfill) || strings.Index(drops.String(), backfill) > strings.Index(drops.String(), "ALTER TABLE "+table+"_group_members DROP COLUMN anonymous;") {
-			t.Errorf("migration 000006 must turn a mixed %s group private before dropping the member flag", table)
+			t.Errorf("migration 000007 must turn a mixed %s group private before dropping the member flag", table)
 		}
 	}
 	for _, table := range []string{"oci_group_members", "maven_group_members", "raw_group_members", "conan_group_members"} {
 		if !strings.Contains(drops.String(), "ALTER TABLE "+table+" DROP COLUMN anonymous;") {
-			t.Errorf("migration 000006 must drop the stored anonymous copy from %s", table)
+			t.Errorf("migration 000007 must drop the stored anonymous copy from %s", table)
 		}
 	}
 }

@@ -24,7 +24,7 @@ explicit Hosted and Proxy Repositories, then switch clients after validation.
 
 ## Upgrade of per-member anonymous flags
 
-Legacy Group members no longer carry an anonymous flag (migration `000006`). So
+Legacy Group members no longer carry an anonymous flag (migration `000007`). So
 that an upgrade never widens access, a Legacy Group stays anonymous only when it
 was anonymous and every one of its members was; a mixed Group becomes private and
 an operator re-enables it deliberately, or moves to a V2 Group whose members bind

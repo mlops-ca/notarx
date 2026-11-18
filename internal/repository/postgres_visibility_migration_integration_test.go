@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// TestVisibilityMigrationBackfillsAnonymousRead replays migration 000005 over
+// TestVisibilityMigrationBackfillsAnonymousRead replays migration 000006 over
 // the pre-migration shape inside a rolled-back transaction (ADR 0029, data
 // migration): anonymous_read=true becomes 'public', false becomes 'private'.
 func TestVisibilityMigrationBackfillsAnonymousRead(t *testing.T) {
@@ -18,7 +18,7 @@ func TestVisibilityMigrationBackfillsAnonymousRead(t *testing.T) {
 	if connection == "" {
 		t.Skip("TEST_DATABASE_URL is required")
 	}
-	migration, err := os.ReadFile("../../migrations/000005_repository_visibility.sql")
+	migration, err := os.ReadFile("../../migrations/000006_repository_visibility.sql")
 	if err != nil {
 		t.Fatal(err)
 	}

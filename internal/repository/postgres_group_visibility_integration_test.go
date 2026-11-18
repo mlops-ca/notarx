@@ -37,7 +37,7 @@ func TestMigration000006TurnsMixedLegacyGroupsPrivate(t *testing.T) {
 	if connection == "" {
 		t.Skip("TEST_DATABASE_URL is required")
 	}
-	migration, err := os.ReadFile("../../migrations/000006_group_member_visibility_computed.sql")
+	migration, err := os.ReadFile("../../migrations/000007_group_member_visibility_computed.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
