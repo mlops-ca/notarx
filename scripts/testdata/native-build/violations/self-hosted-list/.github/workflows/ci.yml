@@ -1,0 +1,9 @@
+name: CI
+on: push
+jobs:
+  b:
+    runs-on:
+      - self-hosted
+      - linux
+    steps:
+      - run: true

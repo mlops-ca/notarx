@@ -1,0 +1,6 @@
+# Paths the native-build guard skips (scripts/native-build-check.sh, ADR 0016).
+# Only the guard, its self-test and the negative fixtures belong here: they have
+# to spell the forbidden patterns. A trailing slash allowlists a directory.
+scripts/native-build-check.sh
+scripts/native-build-check-test.sh
+scripts/testdata/native-build/

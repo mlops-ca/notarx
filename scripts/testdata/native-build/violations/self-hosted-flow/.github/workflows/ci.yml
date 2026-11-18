@@ -1,0 +1,7 @@
+name: CI
+on: push
+jobs:
+  b:
+    runs-on: [self-hosted, arm64]
+    steps:
+      - run: true

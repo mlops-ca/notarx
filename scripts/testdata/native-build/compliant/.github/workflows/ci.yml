@@ -1,0 +1,19 @@
+name: CI
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: docker/build-push-action@v6
+        with:
+          platforms: linux/${{ matrix.arch }}
+  arm:
+    runs-on: [ubuntu-24.04-arm]
+    steps:
+      - uses: docker/build-push-action@v6
+        with:
+          platforms: linux/arm64
+  mac:
+    runs-on: macos-15
+    steps:
+      - run: true

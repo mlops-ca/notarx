@@ -1,0 +1,7 @@
+name: CI
+on: push
+jobs:
+  b:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: docker/setup-qemu-action@v3

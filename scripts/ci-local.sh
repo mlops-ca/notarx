@@ -154,6 +154,7 @@ run_console() {
 
 run_fast() {
   printf '\n== fast (inner loop) ==\n'
+  run "native-build rules" make native-build-check
   run "go lint" make lint
   run "go vet" make vet
   run "go tests" env GOFLAGS= go test ./... -count=1
