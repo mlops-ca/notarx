@@ -193,7 +193,7 @@ func TestPostgresNexusConanMigrationGuardPreventsVisibilityAndAudit(t *testing.T
 					t.Fatalf("fenced native revision is visible=%s %v", state, err)
 				}
 				var auditCount int
-				if err = f.db.QueryRowContext(ctx, `SELECT count(*) FROM resolver_audit_log WHERE repository=$1 AND operation='publish' AND resource=$2`, f.repo.Name, entry.Identity).Scan(&auditCount); err != nil || auditCount != 0 {
+				if err = f.db.QueryRowContext(ctx, `SELECT count(*) FROM security_audit_log WHERE repository=$1 AND operation='publish' AND resource=$2`, f.repo.Name, entry.Identity).Scan(&auditCount); err != nil || auditCount != 0 {
 					t.Fatalf("fenced transaction emitted success audit=%d %v", auditCount, err)
 				}
 				if err = p.Publish(ctx, *entry); err != nil {

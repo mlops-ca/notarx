@@ -235,7 +235,7 @@ func (f *npmMigrationPG) noVersions() {
 		f.t.Fatalf("rejected migration leaked %d native versions: %v", count, err)
 	}
 	var audits int
-	if err := f.db.QueryRow(`SELECT count(*)FROM resolver_audit_log WHERE repository=$1 AND operation='publish'`, f.repo.Name).Scan(&audits); err != nil || audits != 0 {
+	if err := f.db.QueryRow(`SELECT count(*)FROM security_audit_log WHERE repository=$1 AND operation='publish'`, f.repo.Name).Scan(&audits); err != nil || audits != 0 {
 		f.t.Fatalf("rejected migration leaked %d publication audits: %v", audits, err)
 	}
 }

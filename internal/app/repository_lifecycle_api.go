@@ -155,8 +155,7 @@ func (h generatedRepositoryAPIAdapter) controlRepositoryLifecycleJob(w http.Resp
 			return
 		}
 		if h.audit != nil {
-			if auditErr := h.audit.RecordAudit(r.Context(), repository.AuditRecord{Repository: repo.Name, GroupName: repo.Name, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: "lifecycle-jobs/" + job.ID, Operation: operation, Status: http.StatusOK, CacheDisposition: "bypass"}); auditErr != nil {
-				writeHostedProblem(w, http.StatusInternalServerError, "audit_failed", "audit record could not be written")
+			if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{Repository: repo.Name, GroupName: repo.Name, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: "lifecycle-jobs/" + job.ID, Operation: operation, Status: http.StatusOK, CacheDisposition: "bypass"}) {
 				return
 			}
 		}
@@ -268,8 +267,7 @@ func (h generatedRepositoryAPIAdapter) TombstoneRepositoryArtifact(w http.Respon
 			return
 		}
 		if h.audit != nil {
-			if auditErr := h.audit.RecordAudit(r.Context(), repository.AuditRecord{GroupName: repo.Name, Repository: repo.Name, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: request.Coordinate, Operation: "artifact.tombstone", Status: http.StatusNoContent, CacheDisposition: "bypass"}); auditErr != nil {
-				writeHostedProblem(w, http.StatusInternalServerError, "audit_failed", "audit record could not be written")
+			if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{GroupName: repo.Name, Repository: repo.Name, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: request.Coordinate, Operation: "artifact.tombstone", Status: http.StatusNoContent, CacheDisposition: "bypass"}) {
 				return
 			}
 		}

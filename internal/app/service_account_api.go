@@ -303,7 +303,7 @@ func (h identityManagementHandler) recordServiceAccountAudit(w http.ResponseWrit
 	if h.audit == nil {
 		return true
 	}
-	if auditErr := h.audit.RecordAudit(r.Context(), repository.AuditRecord{
+	if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{
 		Actor:            h.auditActor(r),
 		Outcome:          repository.AuditResolved,
 		OccurredAt:       time.Now().UTC(),
@@ -312,8 +312,7 @@ func (h identityManagementHandler) recordServiceAccountAudit(w http.ResponseWrit
 		Operation:        operation,
 		Status:           status,
 		CacheDisposition: "bypass",
-	}); auditErr != nil {
-		writeHostedProblem(w, http.StatusInternalServerError, "audit_failed", "audit record could not be written")
+	}) {
 		return false
 	}
 	return true

@@ -74,7 +74,7 @@ func installConanManagedContractAuditFailure(t *testing.T, store *PostgresStore,
 	name := "conan_managed_audit_" + strings.ReplaceAll(uuid.NewString(), "-", "")
 	remove := func() {
 		t.Helper()
-		if _, err := store.db.Exec(fmt.Sprintf(`DROP TRIGGER IF EXISTS %s ON resolver_audit_log`, name)); err != nil {
+		if _, err := store.db.Exec(fmt.Sprintf(`DROP TRIGGER IF EXISTS %s ON security_audit_log`, name)); err != nil {
 			t.Errorf("remove owned audit trigger: %v", err)
 		}
 		if _, err := store.db.Exec(fmt.Sprintf(`DROP FUNCTION IF EXISTS %s()`, name)); err != nil {
@@ -93,7 +93,7 @@ $$`, name))
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = store.db.Exec(fmt.Sprintf(`CREATE TRIGGER %s BEFORE INSERT ON resolver_audit_log FOR EACH ROW EXECUTE FUNCTION %s('%s','%s')`, name, name, repositoryName, sessionID))
+	_, err = store.db.Exec(fmt.Sprintf(`CREATE TRIGGER %s BEFORE INSERT ON security_audit_log FOR EACH ROW EXECUTE FUNCTION %s('%s','%s')`, name, name, repositoryName, sessionID))
 	if err != nil {
 		t.Fatal(err)
 	}

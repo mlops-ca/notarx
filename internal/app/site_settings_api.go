@@ -75,12 +75,11 @@ func (h generatedRepositoryAPIAdapter) ReplaceSiteSettings(w http.ResponseWriter
 		return
 	}
 	if h.audit != nil {
-		if auditErr := h.audit.RecordAudit(r.Context(), repository.AuditRecord{
+		if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{
 			Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(),
 			Format: "management", Resource: "site-settings", Operation: "site-settings.replace",
 			Status: http.StatusOK, CacheDisposition: "bypass",
-		}); auditErr != nil {
-			writeHostedProblem(w, http.StatusInternalServerError, "audit_failed", "audit record could not be written")
+		}) {
 			return
 		}
 	}

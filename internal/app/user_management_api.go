@@ -485,10 +485,10 @@ func (h identityManagementHandler) ListUserSessions(w http.ResponseWriter, r *ht
 	for _, session := range items {
 		response = append(response, userSessionResponse(session, principal.UserID == session.UserID && principal.SessionID == session.ID))
 	}
+	// Listing reads only: the audit stays best-effort so a transient audit failure
+	// does not withhold data that was not changed.
 	if user, getErr := h.users.GetUser(r.Context(), userID.String()); getErr == nil {
-		if !h.recordUserManagementAudit(w, r, user, "user.session.list", http.StatusOK) {
-			return
-		}
+		h.bestEffortUserManagementAudit(r, user, "user.session.list", http.StatusOK)
 	}
 	writeNativeMavenJSON(w, http.StatusOK, adminopenapi.UserSessionList{Items: response})
 }
@@ -507,10 +507,14 @@ func (h identityManagementHandler) RevokeUserSession(w http.ResponseWriter, r *h
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "revoke user session failed")
 		return
 	}
-	if user, getErr := h.users.GetUser(r.Context(), userID.String()); getErr == nil {
-		if !h.recordUserManagementAudit(w, r, user, "user.session.revoke", http.StatusOK) {
-			return
-		}
+	// The revocation is audited even when the user lookup fails; the audit only
+	// needs the user ID.
+	user, getErr := h.users.GetUser(r.Context(), userID.String())
+	if getErr != nil {
+		user = repository.User{ID: userID.String()}
+	}
+	if !h.recordUserManagementAudit(w, r, user, "user.session.revoke", http.StatusOK) {
+		return
 	}
 	writeNativeMavenJSON(w, http.StatusOK, userSessionResponse(session, principal.UserID == session.UserID && principal.SessionID == session.ID))
 }
@@ -590,12 +594,11 @@ func (h identityManagementHandler) DeleteUserIdentity(w http.ResponseWriter, r *
 		return
 	}
 	if h.audit != nil {
-		if auditErr := h.audit.RecordAudit(r.Context(), repository.AuditRecord{
+		if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{
 			Actor: h.auditActor(r), Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(),
 			Format: "management", Resource: "users/" + userID + "/identities/" + identityID,
 			Operation: "user.identity.unlink", Status: http.StatusNoContent, CacheDisposition: "bypass",
-		}); auditErr != nil {
-			writeHostedProblem(w, http.StatusInternalServerError, "audit_failed", "audit record could not be written")
+		}) {
 			return
 		}
 	}
@@ -606,12 +609,11 @@ func (h identityManagementHandler) recordUserIdentityAudit(w http.ResponseWriter
 	if h.audit == nil {
 		return true
 	}
-	if auditErr := h.audit.RecordAudit(r.Context(), repository.AuditRecord{
+	if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{
 		Actor: h.auditActor(r), Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(),
 		Format: "management", Resource: "users/" + identity.UserID + "/identities/" + identity.ID,
 		Operation: operation, Status: status, CacheDisposition: "bypass",
-	}); auditErr != nil {
-		writeHostedProblem(w, http.StatusInternalServerError, "audit_failed", "audit record could not be written")
+	}) {
 		return false
 	}
 	return true
@@ -629,9 +631,16 @@ func (h identityManagementHandler) recordUserManagementAudit(w http.ResponseWrit
 	if principal, ok := h.authenticator.Authenticate(r.Header.Get("Authorization")); ok {
 		actor = principal.Actor
 	}
-	if auditErr := h.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: "users/" + user.ID, Operation: operation, Status: status, CacheDisposition: "bypass"}); auditErr != nil {
-		writeHostedProblem(w, http.StatusInternalServerError, "audit_failed", "audit record could not be written")
+	if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{Actor: actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: "users/" + user.ID, Operation: operation, Status: status, CacheDisposition: "bypass"}) {
 		return false
 	}
 	return true
+}
+
+// bestEffortUserManagementAudit audits a read; a failure is not surfaced.
+func (h identityManagementHandler) bestEffortUserManagementAudit(r *http.Request, user repository.User, operation string, status int) {
+	if h.audit == nil {
+		return
+	}
+	_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: h.auditActor(r), Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: "users/" + user.ID, Operation: operation, Status: status, CacheDisposition: "bypass"})
 }

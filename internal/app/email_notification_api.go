@@ -106,8 +106,7 @@ func emailTargetInput(w http.ResponseWriter, input adminopenapi.EmailTargetInput
 }
 func (h generatedRepositoryAPIAdapter) emailAudit(w http.ResponseWriter, r *http.Request, p Principal, id, operation string, status int) bool {
 	if h.audit != nil {
-		if auditErr := h.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: p.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: id, Operation: operation, Status: status, CacheDisposition: "bypass"}); auditErr != nil {
-			writeHostedProblem(w, http.StatusInternalServerError, "audit_failed", "audit record could not be written")
+		if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{Actor: p.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: id, Operation: operation, Status: status, CacheDisposition: "bypass"}) {
 			return false
 		}
 	}

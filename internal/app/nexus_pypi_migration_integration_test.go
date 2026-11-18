@@ -370,7 +370,7 @@ func (f *pypiMigrationPG) reopen() {
 }
 func (f *pypiMigrationPG) noPublication() {
 	f.t.Helper()
-	for _, q := range []string{`SELECT count(*) FROM native_pypi_files WHERE repository_id=$1`, `SELECT count(*) FROM resolver_audit_log WHERE repository=$1 AND operation='publish'`} {
+	for _, q := range []string{`SELECT count(*) FROM native_pypi_files WHERE repository_id=$1`, `SELECT count(*) FROM security_audit_log WHERE repository=$1 AND operation='publish'`} {
 		arg := f.repo.ID
 		if strings.Contains(q, "resolver_audit") {
 			arg = f.repo.Name
@@ -434,7 +434,7 @@ func TestPostgresRustFSNexusPyPIMigrationClosureAndRestart(t *testing.T) {
 		t.Fatalf("idempotent replay=%+v", repeated)
 	}
 	var audits int
-	if err = f.db.QueryRow(`SELECT count(*) FROM resolver_audit_log WHERE repository=$1 AND operation='publish'`, f.repo.Name).Scan(&audits); err != nil || audits != 4 {
+	if err = f.db.QueryRow(`SELECT count(*) FROM security_audit_log WHERE repository=$1 AND operation='publish'`, f.repo.Name).Scan(&audits); err != nil || audits != 4 {
 		t.Fatalf("duplicate audits=%d %v", audits, err)
 	}
 	t.Logf("five full files/four version closures persisted; source metadata excluded from target bytes=%d; restart/idempotency intact", expected)
@@ -480,7 +480,7 @@ func TestPostgresRustFSNexusPyPIMigrationRecovery(t *testing.T) {
 					t.Fatalf("commit ACK loss lost atomic progress=%d want=%d %v", rows, want, err)
 				}
 				var audits int
-				if err = f.db.QueryRow(`SELECT count(*) FROM resolver_audit_log WHERE repository=$1 AND operation='publish'`, f.repo.Name).Scan(&audits); err != nil || audits != want {
+				if err = f.db.QueryRow(`SELECT count(*) FROM security_audit_log WHERE repository=$1 AND operation='publish'`, f.repo.Name).Scan(&audits); err != nil || audits != want {
 					t.Fatalf("atomic progress/audit mismatch=%d want=%d %v", audits, want, err)
 				}
 			}
@@ -666,12 +666,12 @@ func TestPostgresNexusPyPIMigrationAtomicConflictQuotaAudit(t *testing.T) {
 
 			if mode == "audit-failure" {
 				name := "ag461_audit_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-				_, err := f.db.Exec(`CREATE FUNCTION ` + name + `() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN IF NEW.repository='` + f.repo.Name + `' AND NEW.operation='publish' THEN RAISE EXCEPTION 'owned audit failure'; END IF;RETURN NEW;END$$;CREATE TRIGGER ` + name + ` BEFORE INSERT ON resolver_audit_log FOR EACH ROW EXECUTE FUNCTION ` + name + `()`)
+				_, err := f.db.Exec(`CREATE FUNCTION ` + name + `() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN IF NEW.repository='` + f.repo.Name + `' AND NEW.operation='publish' THEN RAISE EXCEPTION 'owned audit failure'; END IF;RETURN NEW;END$$;CREATE TRIGGER ` + name + ` BEFORE INSERT ON security_audit_log FOR EACH ROW EXECUTE FUNCTION ` + name + `()`)
 				if err != nil {
 					t.Fatal(err)
 				}
 				t.Cleanup(func() {
-					_, err := f.db.Exec(`DROP TRIGGER IF EXISTS ` + name + ` ON resolver_audit_log;DROP FUNCTION IF EXISTS ` + name + `() `)
+					_, err := f.db.Exec(`DROP TRIGGER IF EXISTS ` + name + ` ON security_audit_log;DROP FUNCTION IF EXISTS ` + name + `() `)
 					if err != nil {
 						t.Error(err)
 					}
@@ -722,7 +722,7 @@ func TestPostgresNexusPyPIMigrationAtomicConflictQuotaAudit(t *testing.T) {
 			if err := f.db.QueryRow(`SELECT count(*) FROM native_pypi_files WHERE repository_id=$1`, f.repo.ID).Scan(&rows); err != nil {
 				t.Fatal(err)
 			}
-			if err := f.db.QueryRow(`SELECT count(*) FROM resolver_audit_log WHERE repository=$1 AND operation='publish'`, f.repo.Name).Scan(&audits); err != nil {
+			if err := f.db.QueryRow(`SELECT count(*) FROM security_audit_log WHERE repository=$1 AND operation='publish'`, f.repo.Name).Scan(&audits); err != nil {
 				t.Fatal(err)
 			}
 			want := 0

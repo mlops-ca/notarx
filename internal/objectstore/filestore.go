@@ -120,11 +120,11 @@ type FileStore struct {
 	// the write as a crash would, leaving the on-disk state behind.
 	hook  func(step string) error
 	locks [fsLockStripes]sync.Mutex
-	// dirMu orders directory-structure changes: renameInto holds it shared
-	// while it creates parents and renames into them, pruneEmptyDirs holds it
-	// exclusively, so a prune can never remove a directory a commit is about
-	// to use.
-	dirMu sync.RWMutex
+	// dirLocks order directory-structure changes per top-level directory of a
+	// key: renameInto holds one shared while it creates parents and renames into
+	// them, pruneEmptyDirs holds it exclusively, so a prune can never remove a
+	// directory a commit is about to use.
+	dirLocks [fsLockStripes]sync.RWMutex
 }
 
 // NewFileStore opens (creating on first use) the root directory named by
@@ -405,6 +405,19 @@ func (s *FileStore) checkNoSymlinks(rel string) error {
 	return nil
 }
 
+// dirLockFor returns the directory lock of a path below data/ or meta/. A prune
+// walks up from the deepest directory but stops below the base, so every
+// directory it can remove shares its first component with the path.
+func (s *FileStore) dirLockFor(rel string) *sync.RWMutex {
+	parts := strings.SplitN(rel, "/", 3)
+	top := ""
+	if len(parts) > 2 {
+		top = parts[1]
+	}
+	sum := sha256.Sum256([]byte(top))
+	return &s.dirLocks[int(sum[0])%fsLockStripes]
+}
+
 func (s *FileStore) lockFor(key string) *sync.Mutex {
 	sum := sha256.Sum256([]byte(key))
 	return &s.locks[int(sum[0])%fsLockStripes]
@@ -631,8 +644,9 @@ func (s *FileStore) stream(ctx context.Context, tmpName string, value io.Reader,
 // left where the object should go (by an earlier Delete or a crash) is
 // removed; a directory with content makes the rename fail, as it must.
 func (s *FileStore) renameInto(tmpName, dst string) error {
-	s.dirMu.RLock()
-	defer s.dirMu.RUnlock()
+	lock := s.dirLockFor(dst)
+	lock.RLock()
+	defer lock.RUnlock()
 	if err := s.mkdirAll(path.Dir(dst)); err != nil {
 		return err
 	}
@@ -653,8 +667,9 @@ func directoryVanished(err error) bool {
 // deepest up to (not including) base. It stops at the first directory that is
 // not empty and is best effort: an error only means a directory stays.
 func (s *FileStore) pruneEmptyDirs(base, rel string) {
-	s.dirMu.Lock()
-	defer s.dirMu.Unlock()
+	lock := s.dirLockFor(rel)
+	lock.Lock()
+	defer lock.Unlock()
 	for dir := path.Dir(rel); dir != base && dir != "." && dir != "/"; dir = path.Dir(dir) {
 		if err := s.root.Remove(dir); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return

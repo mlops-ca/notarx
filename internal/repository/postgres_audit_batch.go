@@ -67,7 +67,7 @@ func insertAuditUnnest(ctx context.Context, execer auditExecer, class AuditClass
 			evidence[i] = string(encoded)
 		}
 	}
-	_, err := execer.ExecContext(ctx, `INSERT INTO `+auditTable(class)+` (group_name, repository, member_name, outcome, actor, occurred_at, format, resource, representation, member_type, upstream_host, operation, http_status, cache_disposition, bytes, authorization_source, authorization_reason, request_id, trace_id, evidence)
+	_, err := execer.ExecContext(ctx, `INSERT INTO `+AuditTable(class)+` (group_name, repository, member_name, outcome, actor, occurred_at, format, resource, representation, member_type, upstream_host, operation, http_status, cache_disposition, bytes, authorization_source, authorization_reason, request_id, trace_id, evidence)
 SELECT group_name, repository, member_name, outcome, actor, occurred_at, format, resource, representation, member_type, upstream_host, operation, http_status, cache_disposition, bytes, authorization_source, authorization_reason, request_id, trace_id, evidence::jsonb
 FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::timestamptz[], $7::text[], $8::text[], $9::text[], $10::text[], $11::text[], $12::text[], $13::int4[], $14::text[], $15::int8[], $16::text[], $17::text[], $18::text[], $19::text[], $20::text[])
   AS u(group_name, repository, member_name, outcome, actor, occurred_at, format, resource, representation, member_type, upstream_host, operation, http_status, cache_disposition, bytes, authorization_source, authorization_reason, request_id, trace_id, evidence)`,

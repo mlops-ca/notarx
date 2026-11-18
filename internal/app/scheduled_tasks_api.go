@@ -233,9 +233,9 @@ func (h generatedRepositoryAPIAdapter) RunScheduledTask(w http.ResponseWriter, r
 	}
 	run, err := (ScheduledTaskScheduler{Store: h.sessions.store}).RunNow(r.Context(), task.ID)
 	if err != nil {
-		if !h.auditScheduledTask(w, r, principal, task, "scheduled_task.run_failed", http.StatusConflict) {
-			return
-		}
+		// Nothing was dispatched, so the audit stays best-effort and the real
+		// dispatch error reaches the caller.
+		h.bestEffortAuditScheduledTask(r, principal, task, "scheduled_task.run_failed", http.StatusConflict)
 		writeHostedProblem(w, http.StatusConflict, "dispatch_failed", truncateScheduledTaskError(err.Error()))
 		return
 	}
@@ -383,19 +383,27 @@ func scheduledTaskRunResponse(run repository.ScheduledTaskRun) adminopenapi.Sche
 	return item
 }
 
-func (h generatedRepositoryAPIAdapter) auditScheduledTask(w http.ResponseWriter, r *http.Request, principal Principal, task repository.ScheduledTask, operation string, status int) bool {
-	if h.audit == nil {
-		return true
-	}
+func (h generatedRepositoryAPIAdapter) scheduledTaskAuditRecord(r *http.Request, principal Principal, task repository.ScheduledTask, operation string, status int) repository.AuditRecord {
 	repositoryName := "global"
 	if task.RepositoryID != "" {
 		if repo, err := h.store.GetHostedRepository(r.Context(), task.RepositoryID); err == nil {
 			repositoryName = repo.Name
 		}
 	}
-	if auditErr := h.audit.RecordAudit(r.Context(), repository.AuditRecord{Repository: repositoryName, GroupName: repositoryName, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: "scheduled-tasks/" + task.ID, Operation: operation, Status: status, CacheDisposition: "bypass"}); auditErr != nil {
-		writeHostedProblem(w, http.StatusInternalServerError, "audit_failed", "audit record could not be written")
-		return false
+	return repository.AuditRecord{Repository: repositoryName, GroupName: repositoryName, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: "scheduled-tasks/" + task.ID, Operation: operation, Status: status, CacheDisposition: "bypass"}
+}
+
+// bestEffortAuditScheduledTask audits an outcome that changed nothing.
+func (h generatedRepositoryAPIAdapter) bestEffortAuditScheduledTask(r *http.Request, principal Principal, task repository.ScheduledTask, operation string, status int) {
+	if h.audit == nil {
+		return
 	}
-	return true
+	_ = h.audit.RecordAudit(r.Context(), h.scheduledTaskAuditRecord(r, principal, task, operation, status))
+}
+
+func (h generatedRepositoryAPIAdapter) auditScheduledTask(w http.ResponseWriter, r *http.Request, principal Principal, task repository.ScheduledTask, operation string, status int) bool {
+	if h.audit == nil {
+		return true
+	}
+	return recordMutationAudit(w, h.audit, r.Context(), h.scheduledTaskAuditRecord(r, principal, task, operation, status))
 }

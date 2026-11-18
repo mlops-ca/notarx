@@ -19,8 +19,14 @@ export async function waitForAnimationsToSettle(page: Page) {
         .filter((animation) =>
           Number.isFinite(animation.effect?.getComputedTiming().endTime ?? 0),
         );
-    // Finishing an animation can start another, so loop until none is left.
-    for (let pending = finite(); pending.length > 0; pending = finite())
-      await Promise.all(pending.map((animation) => animation.finished));
+    // Finishing an animation can start another, so loop (bounded) until none
+    // is left. A cancelled animation rejects `finished`; it is settled too.
+    for (let round = 0; round < 10; round++) {
+      const pending = finite();
+      if (pending.length === 0) return;
+      await Promise.all(
+        pending.map((animation) => animation.finished.catch(() => undefined)),
+      );
+    }
   });
 }

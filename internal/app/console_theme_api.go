@@ -300,12 +300,11 @@ func (h generatedRepositoryAPIAdapter) recordConsoleThemeAudit(w http.ResponseWr
 	if h.audit == nil {
 		return true
 	}
-	if auditErr := h.audit.RecordAudit(ctx, repository.AuditRecord{
+	if !recordMutationAudit(w, h.audit, ctx, repository.AuditRecord{
 		Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(),
 		Format: "management", Resource: "console-theme:" + themeID, Operation: operation,
 		Status: status, CacheDisposition: "bypass",
-	}); auditErr != nil {
-		writeHostedProblem(w, http.StatusInternalServerError, "audit_failed", "audit record could not be written")
+	}) {
 		return false
 	}
 	return true

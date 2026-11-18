@@ -55,13 +55,12 @@ func (h artifactScanEnqueueHandler) serve(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if h.audit != nil {
-		if auditErr := h.audit.RecordAudit(r.Context(), repository.AuditRecord{
+		if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{
 			Repository: repo.Name, GroupName: repo.Name, Actor: principal.Actor,
 			Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management",
 			Resource: request.Coordinate + "@" + request.Digest, Operation: "artifact.scan.enqueue",
 			Status: http.StatusAccepted, CacheDisposition: "bypass",
-		}); auditErr != nil {
-			writeHostedProblem(w, http.StatusInternalServerError, "audit_failed", "audit record could not be written")
+		}) {
 			return
 		}
 	}
