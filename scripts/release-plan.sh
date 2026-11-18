@@ -76,20 +76,19 @@ checks_names() {
     return 0
   fi
   [[ -n "${GITHUB_REPOSITORY:-}" ]] || fail 'GITHUB_REPOSITORY is not set'
-  gh api "repos/$GITHUB_REPOSITORY/commits/$sha/check-runs?per_page=100" \
+  gh api --paginate "repos/$GITHUB_REPOSITORY/commits/$sha/check-runs?per_page=100" \
     --jq '.check_runs[] | select(.conclusion == "success") | .name'
 }
 
 # Succeeds when every entry of the required-checks list has a successful run.
 checks_green() {
   local names line name count have
-  names=$(checks_names "$1")
+  names=$(checks_names "$1") || fail "cannot read the check runs of $1"
   while IFS= read -r line || [[ -n "$line" ]]; do
-    line=${line%%#*}
     line=$(printf '%s' "$line" | sed -e 's/[[:space:]]*$//')
-    [[ -n "$line" ]] || continue
+    [[ -n "$line" && "$line" != '#'* ]] || continue
     if [[ "$line" =~ ^(.+)\*\ ([0-9]+)$ ]]; then
-      name=${BASH_REMATCH[1]}
+      name=$(printf '%s' "${BASH_REMATCH[1]}" | sed -e 's/[[:space:]]*$//')
       count=${BASH_REMATCH[2]}
       have=$(printf '%s\n' "$names" | awk -v prefix="$name" 'index($0, prefix) == 1 { n++ } END { print n + 0 }')
       [[ "$have" -ge "$count" ]] || return 1
@@ -158,11 +157,14 @@ plan_nightly() {
 }
 
 plan_stable() {
-  local nightly_tag= override= stable_tag core version sha previous
+  local nightly_tag= override= stable_tag newest_nightly core version sha previous
   while [[ $# -gt 0 ]]; do
     case $1 in
-      --nightly-tag) nightly_tag=$2; shift 2 ;;
-      --version-override) override=$2; shift 2 ;;
+      --nightly-tag | --version-override)
+        [[ $# -ge 2 ]] || fail "$1 needs a value"
+        if [[ "$1" == --nightly-tag ]]; then nightly_tag=$2; else override=$2; fi
+        shift 2
+        ;;
       *) fail "unknown argument $1" ;;
     esac
   done
@@ -173,6 +175,10 @@ plan_stable() {
   repo_git rev-parse --verify --quiet "refs/tags/$nightly_tag" >/dev/null || fail "tag $nightly_tag does not exist"
 
   sha=$(repo_git rev-list -n 1 "$nightly_tag")
+  newest_nightly=$(latest_tag "$nightly_pattern")
+  if [[ "$newest_nightly" != "$nightly_tag" ]]; then
+    printf 'release-plan: notice: %s is not the newest nightly (%s); promoting the commit of %s\n' "$nightly_tag" "$newest_nightly" "$nightly_tag" >&2
+  fi
   core=$(printf '%s' "${nightly_tag#v}" | sed -e 's/-nightly\..*//')
   version=$core
   if [[ -n "$override" ]]; then

@@ -42,6 +42,7 @@ check_value() {
   fi
 }
 
+command -v node >/dev/null || { printf 'release-version-check: node is required\n' >&2; exit 1; }
 check_value 'Console package' "$(node -p "require('./console/package.json').version")"
 check_value 'Console lockfile' "$(node -p "require('./console/package-lock.json').version")"
 check_value 'OpenAPI tools package' "$(node -p "require('./tools/openapi/package.json').version")"

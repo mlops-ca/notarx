@@ -24,6 +24,17 @@ if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?
 fi
 
 cd "$root"
+
+# Check every tool before the first write so a failure never leaves a half-stamped tree.
+redocly=$openapi_tools/node_modules/.bin/redocly
+for tool in npm yq; do
+  command -v "$tool" >/dev/null || { printf 'stamp-version: %s is required\n' "$tool" >&2; exit 1; }
+done
+if [[ ! -x "$redocly" ]]; then
+  printf 'OpenAPI tools are not installed (%s); run npm --prefix tools/openapi ci\n' "$redocly" >&2
+  exit 1
+fi
+
 printf '%s\n' "$version" > VERSION
 
 for package_dir in console tools/openapi; do
@@ -34,11 +45,6 @@ for contract in api/openapi/native-hosted.yaml api/openapi/management-runtime.ya
   STAMP_VERSION=$version yq -i '.info.version = strenv(STAMP_VERSION)' "$contract"
 done
 
-redocly=$openapi_tools/node_modules/.bin/redocly
-if [[ ! -x "$redocly" ]]; then
-  printf 'OpenAPI tools are not installed (%s); run npm --prefix tools/openapi ci\n' "$redocly" >&2
-  exit 1
-fi
 "$redocly" bundle api/openapi/native-hosted.yaml --output api/openapi/native-hosted-v1.json --ext json >/dev/null 2>&1
 "$redocly" bundle api/openapi/management-runtime.yaml --output api/openapi/management-runtime-v1.json --ext json >/dev/null 2>&1
 

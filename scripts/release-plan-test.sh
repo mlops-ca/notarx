@@ -203,6 +203,7 @@ tag v0.1.0 "$nightly_sha"
 expect_refused 'an existing stable tag is refused' stable --nightly-tag v0.1.0-nightly.1
 expect_refused 'a stable tag name is not a nightly' stable --nightly-tag v0.1.0
 expect_refused 'a missing tag is refused' stable --nightly-tag v0.9.9-nightly.1
+expect_refused 'an option without a value is refused' stable --nightly-tag
 
 commit 'feat: next'; green; tag v0.2.0-nightly.1
 STABLE_ARGS=(--nightly-tag v0.2.0-nightly.1)
