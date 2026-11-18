@@ -1,4 +1,5 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { message } from "antd";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -26,7 +27,11 @@ function Probe() {
   );
 }
 
-afterEach(() => {
+afterEach(async () => {
+  // The failure notice renders in antd's own React root; let it settle and go
+  // before the test environment is torn down.
+  message.destroy();
+  await new Promise((resolve) => setTimeout(resolve, 0));
   cleanup();
   localStorage.clear();
   vi.restoreAllMocks();
@@ -76,9 +81,15 @@ describe("PreferencesProvider message loading", () => {
     );
     await waitFor(() => expect(error).toHaveBeenCalled());
     expect(screen.getByTestId("locale")).toHaveTextContent("en-CA");
+    // Start-up detection reads the stored language, which is still en-CA here.
+    expect(
+      await screen.findByText(
+        /Could not load the selected language \(French\)/,
+      ),
+    ).toBeInTheDocument();
   });
 
-  it("switches to a language whose chunk loads, and then to the one it was before", async () => {
+  it("switches to a language whose chunk loads and stores the choice", async () => {
     const user = userEvent.setup();
     render(
       <PreferencesProvider>
