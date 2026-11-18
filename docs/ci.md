@@ -23,6 +23,29 @@ Code directories are matched before Markdown, so a `.md` fixture under `internal
 `ci-ok`. A Go-only pull request skips `console` (unit, build, visual) but still runs `console-e2e`; a console-only pull request
 skips every contract lane.
 
+## Console E2E sharding and spec selection
+
+`console-e2e` is a matrix of four jobs. Shards `1`, `2` and `3` each start the
+shared prebuilt gateway images and run `playwright test --shard=i/3`, so every
+spec runs in exactly one shard; the fourth entry, `cli`, runs the `notarxctl` CLI
+E2E against its own gateway instead of serializing it behind the Playwright
+suite. Each matrix entry carries its own shard fraction, so add or renumber entries together. Each
+shard uploads a Playwright blob report; `console-e2e-report` merges them with
+`playwright merge-reports` into one HTML report artifact (`console-e2e-report`),
+(it runs when every shard passed; failed shards upload their own blob report and traces) (`console-e2e-traces-<shard>`).
+`ci-ok` requires the matrix result (every shard) and, when all shards passed, `console-e2e-report`.
+
+The `changes` job also runs `scripts/ci-e2e-select.sh`. When every changed path is
+an existing top-level `console/e2e/*.spec.ts` file, only those specs run (still
+spread over the shards; a shard left without a spec passes and uploads no blob). Any other path (Console
+sources, `e2e/support`, fixtures, a deleted spec, Go, CI files) or an
+unresolvable range is uncertain and runs the full suite. No spec is skipped on
+`main`, tags or any non-selected change.
+
+The `console` job (unit tests, build, mocked visual baseline) and `console-e2e`
+do not duplicate work: the visual config only matches `e2e/visual`, which the
+behaviour config ignores, and the contract lanes never run Playwright.
+
 ## The ci-ok gate
 
 `ci-ok` depends on every other job and always runs. It passes when each needed
