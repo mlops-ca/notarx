@@ -254,16 +254,14 @@ func (h identityManagementHandler) CreateUser(w http.ResponseWriter, r *http.Req
 		return
 	}
 	mustChange := request.MustChangePassword != nil && *request.MustChangePassword
-	user, err := h.users.CreateUser(r.Context(), repository.User{ID: ids.New(), Name: name, DisplayName: displayName, Email: email, Description: description, SecretHash: hash, Role: string(request.Role), MustChangePassword: mustChange})
+	userID := ids.New()
+	user, err := h.users.CreateUser(r.Context(), repository.User{ID: userID, Name: name, DisplayName: displayName, Email: email, Description: description, SecretHash: hash, Role: string(request.Role), MustChangePassword: mustChange}, h.userAudit(r, userID, "user.create", http.StatusCreated)...)
 	if errors.Is(err, repository.ErrNameExists) {
 		writeHostedProblem(w, http.StatusConflict, "version_conflict", "user name already exists")
 		return
 	}
 	if err != nil {
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "create user failed")
-		return
-	}
-	if !h.recordUserManagementAudit(w, r, user, "user.create", http.StatusCreated) {
 		return
 	}
 	writeNativeMavenJSON(w, http.StatusCreated, userResponse(user))
@@ -341,7 +339,7 @@ func (h identityManagementHandler) UpdateUser(w http.ResponseWriter, r *http.Req
 		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "user profile fields exceed their limits or email is invalid")
 		return
 	}
-	updated, err := h.users.UpdateUser(r.Context(), profile, string(params.IfMatch))
+	updated, err := h.users.UpdateUser(r.Context(), profile, string(params.IfMatch), h.userAudit(r, profile.ID, "user.update", http.StatusOK)...)
 	if errors.Is(err, repository.ErrNotFound) {
 		writeHostedProblem(w, http.StatusNotFound, "not_found", "user not found")
 		return
@@ -358,9 +356,6 @@ func (h identityManagementHandler) UpdateUser(w http.ResponseWriter, r *http.Req
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "update user failed")
 		return
 	}
-	if !h.recordUserManagementAudit(w, r, updated, "user.update", http.StatusOK) {
-		return
-	}
 	writeNativeMavenJSON(w, http.StatusOK, userResponse(updated))
 }
 
@@ -368,16 +363,7 @@ func (h identityManagementHandler) DeleteUser(w http.ResponseWriter, r *http.Req
 	if _, ok := h.authorize(w, r); !ok {
 		return
 	}
-	current, err := h.users.GetUser(r.Context(), userID)
-	if errors.Is(err, repository.ErrNotFound) {
-		writeHostedProblem(w, http.StatusNotFound, "not_found", "user not found")
-		return
-	}
-	if err != nil {
-		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "get user failed")
-		return
-	}
-	if err := h.users.DeleteUser(r.Context(), userID); err != nil {
+	if err := h.users.DeleteUser(r.Context(), userID, h.userAudit(r, userID, "user.delete", http.StatusNoContent)...); err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			writeHostedProblem(w, http.StatusNotFound, "not_found", "user not found")
 			return
@@ -387,9 +373,6 @@ func (h identityManagementHandler) DeleteUser(w http.ResponseWriter, r *http.Req
 			return
 		}
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "delete user failed")
-		return
-	}
-	if !h.recordUserManagementAudit(w, r, current, "user.delete", http.StatusNoContent) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -424,7 +407,7 @@ func (h identityManagementHandler) ResetUserPassword(w http.ResponseWriter, r *h
 	if request.MustChangePassword != nil {
 		mustChange = *request.MustChangePassword
 	}
-	updated, err := h.users.UpdateUserPassword(r.Context(), userID, hash, string(params.IfMatch), mustChange)
+	updated, err := h.users.UpdateUserPassword(r.Context(), userID, hash, string(params.IfMatch), mustChange, h.userAudit(r, userID, "user.password.reset", http.StatusOK)...)
 	if errors.Is(err, repository.ErrNotFound) {
 		writeHostedProblem(w, http.StatusNotFound, "not_found", "user not found")
 		return
@@ -437,9 +420,6 @@ func (h identityManagementHandler) ResetUserPassword(w http.ResponseWriter, r *h
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "reset user password failed")
 		return
 	}
-	if !h.recordUserManagementAudit(w, r, updated, "user.password.reset", http.StatusOK) {
-		return
-	}
 	writeNativeMavenJSON(w, http.StatusOK, userResponse(updated))
 }
 
@@ -447,7 +427,7 @@ func (h identityManagementHandler) RevokeUserSessions(w http.ResponseWriter, r *
 	if _, ok := h.authorize(w, r); !ok {
 		return
 	}
-	user, err := h.users.RevokeUserSessions(r.Context(), userID, string(params.IfMatch))
+	user, err := h.users.RevokeUserSessions(r.Context(), userID, string(params.IfMatch), h.userAudit(r, userID, "user.sessions.revoke", http.StatusOK)...)
 	if errors.Is(err, repository.ErrNotFound) {
 		writeHostedProblem(w, http.StatusNotFound, "not_found", "user not found")
 		return
@@ -458,9 +438,6 @@ func (h identityManagementHandler) RevokeUserSessions(w http.ResponseWriter, r *
 	}
 	if err != nil {
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "revoke user sessions failed")
-		return
-	}
-	if !h.recordUserManagementAudit(w, r, user, "user.sessions.revoke", http.StatusOK) {
 		return
 	}
 	writeNativeMavenJSON(w, http.StatusOK, userResponse(user))
@@ -498,22 +475,13 @@ func (h identityManagementHandler) RevokeUserSession(w http.ResponseWriter, r *h
 	if !ok {
 		return
 	}
-	session, err := h.users.RevokeUserSession(r.Context(), userID.String(), sessionID.String())
+	session, err := h.users.RevokeUserSession(r.Context(), userID.String(), sessionID.String(), h.userAudit(r, userID.String(), "user.session.revoke", http.StatusOK)...)
 	if errors.Is(err, repository.ErrNotFound) {
 		writeHostedProblem(w, http.StatusNotFound, "not_found", "user session not found")
 		return
 	}
 	if err != nil {
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "revoke user session failed")
-		return
-	}
-	// The revocation is audited even when the user lookup fails; the audit only
-	// needs the user ID.
-	user, getErr := h.users.GetUser(r.Context(), userID.String())
-	if getErr != nil {
-		user = repository.User{ID: userID.String()}
-	}
-	if !h.recordUserManagementAudit(w, r, user, "user.session.revoke", http.StatusOK) {
 		return
 	}
 	writeNativeMavenJSON(w, http.StatusOK, userSessionResponse(session, principal.UserID == session.UserID && principal.SessionID == session.ID))
@@ -560,10 +528,11 @@ func (h identityManagementHandler) CreateUserIdentity(w http.ResponseWriter, r *
 		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "identity issuer must match the configured OIDC issuer")
 		return
 	}
+	identityID := ids.New()
 	identity, err := h.users.CreateUserIdentity(r.Context(), repository.UserIdentity{
-		ID: ids.New(), UserID: userID, Kind: repository.UserIdentityOIDC,
+		ID: identityID, UserID: userID, Kind: repository.UserIdentityOIDC,
 		Issuer: issuer, Subject: strings.TrimSpace(request.Subject),
-	})
+	}, h.auditRecords(r, "users/"+userID+"/identities/"+identityID, "user.identity.link", http.StatusCreated)...)
 	if errors.Is(err, repository.ErrNotFound) {
 		writeHostedProblem(w, http.StatusNotFound, "not_found", "user not found")
 		return
@@ -576,9 +545,6 @@ func (h identityManagementHandler) CreateUserIdentity(w http.ResponseWriter, r *
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "create user identity failed")
 		return
 	}
-	if !h.recordUserIdentityAudit(w, r, identity, "user.identity.link", http.StatusCreated) {
-		return
-	}
 	writeNativeMavenJSON(w, http.StatusCreated, userIdentityResponse(identity))
 }
 
@@ -586,55 +552,33 @@ func (h identityManagementHandler) DeleteUserIdentity(w http.ResponseWriter, r *
 	if _, ok := h.authorize(w, r); !ok {
 		return
 	}
-	if err := h.users.DeleteUserIdentity(r.Context(), userID, identityID); errors.Is(err, repository.ErrNotFound) {
+	if err := h.users.DeleteUserIdentity(r.Context(), userID, identityID, h.auditRecords(r, "users/"+userID+"/identities/"+identityID, "user.identity.unlink", http.StatusNoContent)...); errors.Is(err, repository.ErrNotFound) {
 		writeHostedProblem(w, http.StatusNotFound, "not_found", "user identity not found")
 		return
 	} else if err != nil {
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "delete user identity failed")
 		return
 	}
-	if h.audit != nil {
-		if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{
-			Actor: h.auditActor(r), Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(),
-			Format: "management", Resource: "users/" + userID + "/identities/" + identityID,
-			Operation: "user.identity.unlink", Status: http.StatusNoContent, CacheDisposition: "bypass",
-		}) {
-			return
-		}
-	}
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func (h identityManagementHandler) recordUserIdentityAudit(w http.ResponseWriter, r *http.Request, identity repository.UserIdentity, operation string, status int) bool {
-	if h.audit == nil {
-		return true
-	}
-	if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{
-		Actor: h.auditActor(r), Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(),
-		Format: "management", Resource: "users/" + identity.UserID + "/identities/" + identity.ID,
-		Operation: operation, Status: status, CacheDisposition: "bypass",
-	}) {
-		return false
-	}
-	return true
 }
 
 func normalizeOIDCIssuerForAPI(value string) string {
 	return strings.TrimRight(strings.TrimSpace(value), "/")
 }
 
-func (h identityManagementHandler) recordUserManagementAudit(w http.ResponseWriter, r *http.Request, user repository.User, operation string, status int) bool {
+// userAudit is the audit of a user mutation, written by the store in the transaction of
+// the change (ADR 0023 section 1).
+func (h identityManagementHandler) userAudit(r *http.Request, userID, operation string, status int) []repository.AuditRecord {
+	return h.auditRecords(r, "users/"+userID, operation, status)
+}
+
+// auditRecords builds the one audit record a management mutation hands to its store, or
+// none when audit is not configured.
+func (h identityManagementHandler) auditRecords(r *http.Request, resource, operation string, status int) []repository.AuditRecord {
 	if h.audit == nil {
-		return true
+		return nil
 	}
-	actor := "unknown"
-	if principal, ok := h.authenticator.Authenticate(r.Header.Get("Authorization")); ok {
-		actor = principal.Actor
-	}
-	if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{Actor: actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: "users/" + user.ID, Operation: operation, Status: status, CacheDisposition: "bypass"}) {
-		return false
-	}
-	return true
+	return []repository.AuditRecord{{Actor: h.auditActor(r), Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: resource, Operation: operation, Status: status, CacheDisposition: "bypass"}}
 }
 
 // bestEffortUserManagementAudit audits a read; a failure is not surfaced.

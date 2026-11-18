@@ -109,7 +109,7 @@ func TestIdentityManagementDomainIndependentHTTP(t *testing.T) {
 		t.Fatalf("unconfigured OIDC=%d %s", response.Code, response.Body.String())
 	}
 	operations := map[string]int{}
-	for _, record := range audit.records {
+	for _, record := range store.Audits {
 		operations[record.Operation]++
 		if record.Actor != "alice" || record.Status < 200 || record.Status >= 300 {
 			t.Fatalf("identity audit=%+v", record)

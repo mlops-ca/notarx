@@ -69,12 +69,15 @@ func (s *MemoryStore) ListUserSessions(_ context.Context, userID string, include
 	return items, nil
 }
 
-func (s *MemoryStore) RevokeUserSession(_ context.Context, userID, sessionID string) (UserSession, error) {
+func (s *MemoryStore) RevokeUserSession(ctx context.Context, userID, sessionID string, audit ...AuditRecord) (UserSession, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	session, ok := s.userSessions[sessionID]
 	if !ok || session.UserID != userID {
 		return UserSession{}, ErrNotFound
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return UserSession{}, err
 	}
 	if session.RevokedAt == nil {
 		now := time.Now().UTC()

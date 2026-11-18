@@ -31,11 +31,11 @@ type ServiceAccountUpdate struct {
 }
 
 type ServiceAccountStore interface {
-	CreateServiceAccount(context.Context, ServiceAccount) (ServiceAccount, error)
+	CreateServiceAccount(context.Context, ServiceAccount, ...AuditRecord) (ServiceAccount, error)
 	ListServiceAccounts(context.Context, int, string) ([]ServiceAccount, error)
 	GetServiceAccount(context.Context, string) (ServiceAccount, error)
-	UpdateServiceAccount(context.Context, ServiceAccountUpdate, string) (ServiceAccount, error)
-	CreateServiceAccountCredential(context.Context, APIKey) (APIKey, error)
+	UpdateServiceAccount(context.Context, ServiceAccountUpdate, string, ...AuditRecord) (ServiceAccount, error)
+	CreateServiceAccountCredential(context.Context, APIKey, ...AuditRecord) (APIKey, error)
 	ListServiceAccountCredentials(context.Context, string, int, string) ([]APIKey, error)
-	RevokeServiceAccountCredential(context.Context, string, string) (APIKey, error)
+	RevokeServiceAccountCredential(context.Context, string, string, ...AuditRecord) (APIKey, error)
 }

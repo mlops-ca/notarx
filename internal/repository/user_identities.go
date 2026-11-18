@@ -33,7 +33,7 @@ func (s *MemoryStore) ListUserIdentities(_ context.Context, userID string) ([]Us
 	return items, nil
 }
 
-func (s *MemoryStore) CreateUserIdentity(_ context.Context, identity UserIdentity) (UserIdentity, error) {
+func (s *MemoryStore) CreateUserIdentity(ctx context.Context, identity UserIdentity, audit ...AuditRecord) (UserIdentity, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.users[identity.UserID]; !ok {
@@ -48,6 +48,9 @@ func (s *MemoryStore) CreateUserIdentity(_ context.Context, identity UserIdentit
 			return UserIdentity{}, ErrIdentityExists
 		}
 	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return UserIdentity{}, err
+	}
 	if identity.ID == "" {
 		identity.ID = ids.New()
 	}
@@ -58,12 +61,15 @@ func (s *MemoryStore) CreateUserIdentity(_ context.Context, identity UserIdentit
 	return identity, nil
 }
 
-func (s *MemoryStore) DeleteUserIdentity(_ context.Context, userID, identityID string) error {
+func (s *MemoryStore) DeleteUserIdentity(ctx context.Context, userID, identityID string, audit ...AuditRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	identity, ok := s.userIdentities[identityID]
 	if !ok || identity.UserID != userID {
 		return ErrNotFound
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return err
 	}
 	delete(s.userIdentities, identityID)
 	return nil
