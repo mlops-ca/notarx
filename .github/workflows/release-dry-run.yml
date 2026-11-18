@@ -1,0 +1,70 @@
+name: Release dry run
+
+# Rehearses the release and mainline publication path before a tag is cut (#325).
+# It calls the same reusable workflows as ci.yml (mainline) and release.yml, so a
+# major bump of checkout, download-artifact, upload-artifact or the Docker actions
+# is exercised here on the pull request: the four-runner archive build, the
+# artifact download and checksum union, the per-architecture image build, the
+# digest and SBOM artifact hand-off. Nothing is published: images are loaded
+# locally, never pushed, tagged or attested, and artifacts expire after one day.
+#
+# The workflow runs only when a file it exercises changes (it cannot be a required
+# check) and on demand through workflow_dispatch.
+on:
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - .github/workflows/release-archives.yml
+      - .github/workflows/image-build.yml
+      - .github/workflows/release-dry-run.yml
+      - scripts/build-release-artifacts.sh
+      - scripts/write-release-checksums.sh
+      - scripts/stamp-version.sh
+      - Dockerfile
+      - Dockerfile.console
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-dry-run-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: plan
+        run: echo "version=$(tr -d '[:space:]' < VERSION)-main.dryrun${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+  assets:
+    needs: plan
+    uses: ./.github/workflows/release-archives.yml
+    with:
+      version: ${{ needs.plan.outputs.version }}
+      sha: ${{ github.sha }}
+      assets-artifact: dry-run-gateway-${{ needs.plan.outputs.version }}
+      retention-days: 1
+
+  images:
+    needs: plan
+    # Same permission set as the publishing callers: the called jobs declare it,
+    # and dry-run never uses the write scopes.
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/image-build.yml
+    with:
+      version: ${{ needs.plan.outputs.version }}
+      sha: ${{ github.sha }}
+      tags: dry-run
+      dry-run: true
+      images: >-
+        [{"image": "notarx", "file": "Dockerfile", "version-command": true},
+        {"image": "notarx-console", "file": "Dockerfile.console", "version-command": false}]
