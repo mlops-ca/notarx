@@ -537,6 +537,12 @@ func TestBatchSelectionsAreServedByAnIndex(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			if want == "" {
+				if len(plan.Indexes()) == 0 || len(plan.SequentialScans()) > 0 {
+					t.Fatalf("plan is not index-served: indexes %v, sequential scans %v", plan.Indexes(), plan.SequentialScans())
+				}
+				return
+			}
 			if !plan.UsesIndex(want) {
 				t.Fatalf("plan scans %v, want %s", plan.Indexes(), want)
 			}
