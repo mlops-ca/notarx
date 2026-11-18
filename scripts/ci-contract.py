@@ -9,6 +9,7 @@ import argparse
 import hashlib
 import json
 import os
+import platform
 import selectors
 import shutil
 import signal
@@ -136,6 +137,8 @@ def run_command(command, log, env, timeout=None):
             'processGroup': proc.pid, 'remainingLiveGroupMembers': []}
 
 
+HOST_ARCH = {'x86_64': 'amd64', 'amd64': 'amd64', 'aarch64': 'arm64', 'arm64': 'arm64'}.get(
+    platform.machine().lower(), platform.machine().lower())
 RUNNERS = {'amd64': 'ubuntu-24.04', 'arm64': 'ubuntu-24.04-arm'}
 SCOPES = ('pull-request', 'mainline')
 
@@ -169,6 +172,13 @@ def run_lane(args):
     try:
         for index, step in enumerate(lane['steps']):
             command = step['command']
+            # A step that executes a third-party artifact published for one architecture
+            # only declares it; it is skipped (and reported) elsewhere, never emulated.
+            if 'architectures' in step and HOST_ARCH not in step['architectures']:
+                print('Contract lane ' + args.lane + ': ' + step['name'] + ' skipped on ' + HOST_ARCH
+                      + ' (amd64-only artifact)', flush=True)
+                report['steps'].append({'name': step['name'], 'status': 'skipped', 'architecture': HOST_ARCH})
+                continue
             if args.local and command == ['make', 'openapi-check']:
                 command = [sys.executable, str(Path(__file__).resolve()), 'openapi-fresh']
             if command == ['make', 'native-maven-e2e']:
@@ -182,7 +192,7 @@ def run_lane(args):
             report['steps'].append(result)
             if result['status'] != 'success' and not args.keep_going:
                 break
-        if len(report['steps']) == len(lane['steps']) and all(s['status'] == 'success' for s in report['steps']):
+        if len(report['steps']) == len(lane['steps']) and all(s['status'] in ('success', 'skipped') for s in report['steps']):
             report['status'] = 'success'
     finally:
         for directory in lane['rawDirectories']:

@@ -174,6 +174,14 @@ class RunLaneTests(unittest.TestCase):
         self.assertEqual([s['name'] for s in report['steps']], ['a', 'b'])
         self.assertTrue((output / 'logs/01.log').exists())
 
+    def test_architecture_restricted_step_is_skipped_elsewhere(self):
+        other = 'arm64' if ci.HOST_ARCH == 'amd64' else 'amd64'
+        skipped = dict(self.step('only-elsewhere', 'raise SystemExit(9)'), architectures=[other])
+        ran = dict(self.step('here', 'print(1)'), architectures=[ci.HOST_ARCH])
+        status, report, _ = self.run_lane([skipped, ran])
+        self.assertEqual((status, report['status']), (0, 'success'))
+        self.assertEqual([s['status'] for s in report['steps']], ['skipped', 'success'])
+
     def test_failure_stops_the_lane_unless_keep_going(self):
         steps = [self.step('bad', 'raise SystemExit(3)'), self.step('after', 'print(1)')]
         status, report, _ = self.run_lane(steps)

@@ -214,7 +214,10 @@
             "make",
             "published-native-backup-test"
           ],
-          "timeoutSeconds": 900
+          "timeoutSeconds": 900,
+          "architectures": [
+            "amd64"
+          ]
         },
         {
           "name": "integration-test",

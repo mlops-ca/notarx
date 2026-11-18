@@ -80,7 +80,10 @@ Every lane runs on amd64. The plan gives each lane an `arm64` tier: `pull-reques
 lanes (the four `core-*` lanes and the `six-format-auth` and `oci-discovery`
 smoke subset) also run on arm64 for every pull request, and `mainline` lanes join
 them on pushes to `main`. `scripts/ci-contract.py matrix --scope pull-request|mainline`
-emits the matrix. `quality-arm64` runs lint, vet and the race detector on
+emits the matrix. A step that runs a third-party artifact published for one
+architecture only (`published-native-backup-test` executes the published amd64
+release binaries) declares `architectures` in the plan; other architectures skip
+and report it, nothing is emulated. `quality-arm64` runs lint, vet and the race detector on
 `ubuntu-24.04-arm`; the coverage floor stays on amd64. See
 [native builds](native-builds.md).
 
