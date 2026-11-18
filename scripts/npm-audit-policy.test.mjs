@@ -25,6 +25,13 @@ test('preserves the separate React Router decision and expiry', () => {
   assert.throws(() => acceptsAdvisory(router, 'react-router', new Date('2026-11-01T00:00:00Z')), /expired/);
 });
 
+test('accepts only the dated picomatch dev-tooling exception', () => {
+  const advisory = { url: 'https://github.com/advisories/GHSA-fc5q-39xc-vjpf' };
+  assert.ok(acceptsAdvisory(advisory, 'picomatch', new Date('2026-12-16T23:59:59Z')));
+  assert.equal(acceptsAdvisory(advisory, 'braces', new Date('2026-11-17T00:00:00Z')), false);
+  assert.throws(() => acceptsAdvisory(advisory, 'picomatch', new Date('2026-12-17T00:00:00Z')), /expired/);
+});
+
 test('execution errors, signals, invalid JSON and inconsistent npm status fail closed', () => {
   const clean = JSON.stringify(report({}));
   assert.deepEqual(parseAuditResult({status:0,stdout:clean}), report({}));
