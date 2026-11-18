@@ -17,7 +17,9 @@ import (
 	"github.com/google/uuid"
 )
 
-const postgresImage = "postgres:18-alpine"
+// Pinned by digest like rustfsImage: the owned-resource checks assert the
+// image's declared volume layout (/var/lib/postgresql since Postgres 18).
+const postgresImage = "postgres:18-alpine@sha256:b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015"
 const rustfsImage = "rustfs/rustfs:1.0.0-beta.12@sha256:41fe89380f4120a337790c02af192c3fe7bb55c3edc2e6e9357b487b47c6ab21"
 
 var errCleanupIncomplete = errors.New("owned resource cleanup incomplete")

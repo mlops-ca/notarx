@@ -166,7 +166,9 @@ describe("CommandPalette recovery and keyboard boundaries", () => {
     const { input } = renderPalette(pages);
     await user.click(input);
     await user.keyboard("{ArrowDown>10/}");
-    const active = screen.getByRole("option", { name: /^Page 10\s?\// });
+    const active = screen.getByRole("option", {
+      name: (name) => name.replace(/\s+/g, "") === "Page10/page-10",
+    });
     expect(active).toHaveAttribute("aria-selected", "true");
     await waitFor(() => expect(scroll.mock.instances.at(-1)).toBe(active));
   });

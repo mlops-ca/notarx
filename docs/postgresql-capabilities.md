@@ -2,7 +2,7 @@
 
 [简体中文](postgresql-capabilities.zh-CN.md) · [Architecture diagrams](architecture-diagrams.md) · [Documentation index](README.md)
 
-The runtime baseline is PostgreSQL 16. Artifact Gateway uses PostgreSQL as its
+The runtime baseline is PostgreSQL 16 or later; the reference image runs PostgreSQL 18. Artifact Gateway uses PostgreSQL as its
 only database and control-plane coordination service. Repositories,
 authorization, artifact metadata, audit records, idempotency keys, background
 jobs, leases, locks, and runtime-node state all treat PostgreSQL as the source
@@ -80,7 +80,7 @@ meets every row. Providers that cannot meet every row are unsupported.
 
 | Requirement | Why | Failure mode |
 | --- | --- | --- |
-| PostgreSQL 16 or later | the only tested version | unsupported |
+| PostgreSQL 16 or later | tested on 16 (schema baseline generator) and 18 (Compose, Kubernetes and backup-ops reference) | unsupported |
 | `CREATE EXTENSION pg_trgm` allowed | GIN trigram indexes in the baseline | the baseline fails; unsupported |
 | `pg_stat_statements` (optional) | created in a guarded block by the baseline (ADR 0015); no Go code reads it | statement statistics unavailable; the migration still succeeds |
 | Session-level connections (direct, or a pooler in session mode) | session advisory locks and `LISTEN/NOTIFY` | locks and notifications are lost behind a transaction-mode pooler; unsupported |
@@ -285,3 +285,14 @@ retention; that twin is written with the ADR 0022 store slices.
 `scripts/run-migrations.sh` applies migrations in checksum order. Changes to
 startup settings such as `shared_preload_libraries` require a PostgreSQL restart
 or container rebuild, never deletion of the `gateway-postgres` data volume.
+
+### Upgrading an existing Compose stack from PostgreSQL 16 to 18
+
+PostgreSQL 18 images store the cluster under `/var/lib/postgresql/18/docker` and
+the Compose volume is mounted at `/var/lib/postgresql`. A `gateway-postgres`
+volume created by the 16 image keeps its cluster in `data/`, which the 18 image
+ignores, so the stack would start with an empty database. Before pulling this
+change, dump with the old stack (`docker compose exec -T postgres pg_dump -U
+gateway -d gateway --format=custom > gateway.dump`), run `docker compose down
+--volumes`, start the new stack, and restore with `pg_restore` (or recreate the
+stack from a verified backup). The volume is never reused across majors in place.

@@ -27,8 +27,8 @@ import (
 	"github.com/mlops-ca/notarx/internal/secrets"
 	"github.com/mlops-ca/notarx/internal/upstreamauth"
 	"go.yaml.in/yaml/v3"
-	"golang.org/x/crypto/openpgp"
-	"golang.org/x/crypto/openpgp/packet"
+	"github.com/ProtonMail/go-crypto/openpgp"
+	"github.com/ProtonMail/go-crypto/openpgp/packet"
 )
 
 type helmOwnedUpstream struct{ client *http.Client }

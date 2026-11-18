@@ -8,10 +8,15 @@ import "@testing-library/jest-dom/vitest";
 for (const name of ["AnimationEvent", "TransitionEvent"]) {
   Reflect.deleteProperty(window, name);
 }
-const styleProto = Object.getPrototypeOf(document.createElement("div").style);
-for (const name of Object.getOwnPropertyNames(styleProto)) {
-  if (/^(webkit|moz|ms|o)?(animation|transition)$/i.test(name)) {
-    Reflect.deleteProperty(styleProto, name);
+for (
+  let proto = Object.getPrototypeOf(document.createElement("div").style);
+  proto && proto !== Object.prototype;
+  proto = Object.getPrototypeOf(proto)
+) {
+  for (const name of Object.getOwnPropertyNames(proto)) {
+    if (/^(webkit|moz|ms|o)?(animation|transition)$/i.test(name)) {
+      Reflect.deleteProperty(proto, name);
+    }
   }
 }
 

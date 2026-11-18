@@ -31,7 +31,7 @@ spec:
       enableServiceLinks: false
       containers:
         - name: postgres
-          image: postgres:16-alpine
+          image: postgres:18-alpine
           env:
             - name: POSTGRES_DB
               value: gateway
@@ -48,7 +48,7 @@ spec:
             periodSeconds: 2
           volumeMounts:
             - name: data
-              mountPath: /var/lib/postgresql/data
+              mountPath: /var/lib/postgresql
       volumes:
         - name: data
           emptyDir: {}
@@ -149,7 +149,7 @@ spec:
       enableServiceLinks: false
       initContainers:
         - name: migrate
-          image: postgres:16-alpine
+          image: postgres:18-alpine
           env:
             - name: PGHOST
               value: postgres

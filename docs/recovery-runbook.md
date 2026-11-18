@@ -114,7 +114,7 @@ change IAM/grants. `project` must be a fresh `ag-restore-...` name, at most 42
 characters. Existing networks, volumes or service containers are refused even
 if empty. No arbitrary target DSN, endpoint, bucket or Compose `.env` is accepted.
 The adapter creates a dedicated local bridge network, two fresh local volumes,
-new PostgreSQL 16 and pinned RustFS services, and a new Gateway. Every published
+new PostgreSQL 18 and pinned RustFS services, and a new Gateway. Every published
 port binds only 127.0.0.1; identity, ownership labels, mounts and sole network
 membership are checked before writes. Bridge isolation separates data/projects;
 it is not an outbound network firewall. Gateway runs with API roles, a read-only
