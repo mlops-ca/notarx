@@ -182,7 +182,7 @@ func TestConsoleThemeCatalogMutationsShareOneLock(t *testing.T) {
 	store := &catalogLockObservingStore{MemoryStore: repository.NewMemoryStore()}
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
 
-	settingsBody := `{"siteName":"Artifact Gateway","logoUrl":"","brandMark":"AG","enabledThemeIds":["notarx-dark", "notarx-light"],"defaultThemeId":"notarx-dark"}`
+	settingsBody := `{"siteName":"notarx","logoUrl":"","brandMark":"AG","enabledThemeIds":["notarx-dark", "notarx-light"],"defaultThemeId":"notarx-dark"}`
 	settingsRequest := httptest.NewRequest(http.MethodPut, "/api/v2/site-settings", strings.NewReader(settingsBody))
 	authorize(settingsRequest, "admin-secret")
 	settingsRequest.Header.Set("If-Match", "1")

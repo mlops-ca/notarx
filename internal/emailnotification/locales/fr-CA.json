@@ -1,5 +1,5 @@
 {
-  "subjectPrefix": "[Artifact Gateway]",
+  "subjectPrefix": "[notarx]",
   "status.warning": "Avertissement",
   "status.critical": "Critique",
   "status.resolved": "Résolu",

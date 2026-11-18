@@ -1,0 +1,70 @@
+name: Record Maven fixtures
+
+# Maintenance workflow, never part of normal CI. It runs the Maven and Gradle
+# client tests and end-to-end flows in a container that has mvn and gradle, with
+# outbound network and MAVEN_CENTRAL_FIXTURE_RECORD=1, so every Maven Central and
+# Gradle plugin portal response they need is recorded under
+# internal/mavenfixture/testdata, then uploads the new files as an artifact.
+# See docs/ci.md, "Re-record the Maven and Gradle fixtures".
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: record-maven-fixtures
+  cancel-in-progress: false
+
+env:
+  GOPROXY: https://proxy.golang.org|direct
+
+jobs:
+  record:
+    name: record-maven-fixtures
+    if: github.repository == 'mlops-ca/notarx' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Download the Go modules
+        run: go mod download
+      - name: Build the Maven and Gradle toolchain image
+        run: docker build --tag maven-fixture-recorder .github/maven-fixture-recorder
+      - name: Record the fixtures in the container
+        run: |
+          mkdir -p "$RUNNER_TEMP/home"
+          docker run --rm --network host \
+            --user "$(id -u):$(id -g)" \
+            --volume "$RUNNER_TEMP/home:/tmp/home" --env HOME=/tmp/home --env GRADLE_USER_HOME=/tmp/gradle-home --env CGO_ENABLED=0 --env GOCACHE=/tmp/gocache --env GOMODCACHE=/gomodcache \
+            --env GOFLAGS=-buildvcs=false --env GOTOOLCHAIN=local --env GOPROXY \
+            --volume "$PWD:/work" --workdir /work \
+            --volume "$(go env GOROOT):/usr/local/go:ro" \
+            --volume "$(go env GOMODCACHE):/gomodcache" \
+            --env PATH=/usr/local/go/bin:/usr/share/maven/bin:/opt/gradle/bin:/opt/java/openjdk/bin:/usr/local/bin:/usr/bin:/bin \
+            maven-fixture-recorder ./scripts/record-maven-fixtures.sh
+      - name: List the new files
+        run: |
+          git status --short internal/mavenfixture/testdata
+          git ls-files --others --exclude-standard internal/mavenfixture/testdata | wc -l
+      - name: Pack the new files
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          # Existing recordings are never replaced, so only new files are packed.
+          git ls-files --others --exclude-standard internal/mavenfixture/testdata > "$RUNNER_TEMP/new-files.txt"
+          if [ -s "$RUNNER_TEMP/new-files.txt" ]; then
+            tar --create --file "$RUNNER_TEMP/out/maven-fixtures.tar" --files-from "$RUNNER_TEMP/new-files.txt"
+          else
+            echo "::notice::No new fixture files were recorded; every request was already recorded."
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: maven-fixtures
+          path: ${{ runner.temp }}/out/maven-fixtures.tar
+          if-no-files-found: ignore

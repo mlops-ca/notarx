@@ -386,7 +386,7 @@ for (const mode of ["dark", "light"]) {
       route.fulfill({
         json: {
           version: "synthetic-1",
-          siteName: "Artifact Gateway",
+          siteName: "notarx",
           logoUrl: "",
           brandMark: "AG",
           availableThemes: defaultConsoleThemes,

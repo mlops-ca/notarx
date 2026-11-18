@@ -73,7 +73,7 @@ customer demand. The reasons are:
   yank, unyank, and search against a private registry. Its current guidance
   prefers a sparse index while retaining a Git index as a compatibility option
   ([Gitea Cargo registry](https://docs.gitea.com/usage/packages/cargo/)).
-- The immutable archive is a good fit for Artifact Gateway's digest identity,
+- The immutable archive is a good fit for notarx's digest identity,
   scanning, quarantine, promotion, replication, and RustFS object model.
 
 The main cost is not the `.crate` upload. It is making sparse-index generation,
@@ -116,7 +116,7 @@ These are Cargo's
 [registry-index requirements](https://doc.rust-lang.org/cargo/reference/registry-index.html),
 not Gitea-specific behaviour.
 
-The Web API operations needed for the initial Artifact Gateway profile are:
+The Web API operations needed for the initial notarx profile are:
 
 | Operation | Cargo path relative to `api` | Method | Authentication |
 | --- | --- | --- | --- |
@@ -131,7 +131,7 @@ bytes. The registry computes the checksum; the publish JSON does not supply the
 index `cksum`. Cargo permits a successful publish response before the index is
 observable and polls briefly afterward
 ([Cargo Registry Web API](https://doc.rust-lang.org/cargo/reference/registry-web-api.html)).
-Artifact Gateway should choose the stronger compatible rule: do not return
+notarx should choose the stronger compatible rule: do not return
 success until the immutable download reference and index row are atomically
 visible.
 
@@ -143,7 +143,7 @@ those descriptions
 ([registry index authentication](https://doc.rust-lang.org/cargo/reference/registry-index.html),
 [Web API search](https://doc.rust-lang.org/cargo/reference/registry-web-api.html#search)).
 
-## Recommended Artifact Gateway Surface
+## Recommended notarx Surface
 
 Use one canonical sparse registry root per Repository or Group, with a trailing
 slash:
@@ -158,7 +158,7 @@ default = "gateway" # optional
 
 For CI, configure a Cargo credential provider and inject the token rather than
 committing credentials. Cargo sends the token value verbatim in the
-`Authorization` header. Since Artifact Gateway protocol tokens use the Bearer
+`Authorization` header. Since notarx protocol tokens use the Bearer
 scheme, the Cargo token value is `Bearer <gateway-token>`, matching Gitea's
 documented private-registry configuration. With the built-in token provider,
 CI may inject `CARGO_REGISTRIES_NOTARX_TOKEN`
@@ -188,7 +188,7 @@ may direct an operator to token acquisition
 ([Cargo sparse authentication](https://doc.rust-lang.org/cargo/reference/registry-index.html#sparse-authentication)).
 
 The Cargo Web API also specifies owner-management endpoints. They are not
-needed in the first profile because Artifact Gateway Repository grants remain
+needed in the first profile because notarx Repository grants remain
 the authorization source. `cargo owner` should be explicitly documented as
 unsupported until a deliberate mapping to Repository principals exists.
 
@@ -227,7 +227,7 @@ an existing version must fail as an immutable-coordinate conflict.
 Yank is not deletion. It changes only the index `yanked` field, prevents new
 resolution from selecting that version, and leaves the `.crate` downloadable
 for existing lockfiles. Unyank reverses only that flag. A Tombstone remains a
-separate Artifact Gateway lifecycle transition
+separate notarx lifecycle transition
 ([`cargo yank`](https://doc.rust-lang.org/cargo/commands/cargo-yank.html)).
 
 ### Proxy
@@ -309,7 +309,7 @@ those mutations target a Hosted member directly.
 
 ## Sparse Index Versus Git Index
 
-Artifact Gateway should ship sparse-only and make its sparse URL canonical.
+notarx should ship sparse-only and make its sparse URL canonical.
 
 - Cargo's sparse protocol fetches only relevant metadata files over HTTP and
   can save substantial time and bandwidth; HTTP/2, `ETag`/`Last-Modified`, and
@@ -317,7 +317,7 @@ Artifact Gateway should ship sparse-only and make its sparse URL canonical.
   ([Cargo sparse protocol](https://doc.rust-lang.org/cargo/reference/registry-index.html#sparse-protocol)).
 - A Git index would add Git smart-HTTP, repository maintenance, ref updates,
   compaction, repair, and a second publication consistency boundary. Gitea can
-  justify that because it already owns Git repositories; Artifact Gateway does
+  justify that because it already owns Git repositories; notarx does
   not.
 - Cargo warns that a registry URL is recorded in the lockfile and recommends
   one canonical protocol when a registry is not crates.io. Offering sparse and
@@ -332,7 +332,7 @@ migration/source-replacement story, not a hidden alias.
 
 ## Lifecycle And Governance Fit
 
-| Artifact Gateway concern | Cargo mapping and required rule |
+| notarx concern | Cargo mapping and required rule |
 | --- | --- |
 | Artifact identity | One crate name/version plus immutable `.crate` SHA-256; version uniqueness ignores build metadata. |
 | Publication scanning | Scan the committed `.crate` by coordinate and digest. Publication metadata may seed descriptive fields, but scanner-owned SBOM, licenses, and vulnerabilities remain independent evidence. |
@@ -348,7 +348,7 @@ migration/source-replacement story, not a hidden alias.
 Cargo's own publishing guidance treats a crates.io release as permanent, and
 `cargo yank` explicitly preserves bytes for existing lockfiles. Gitea permits
 delete-and-republish through its package UI, but that product choice should not
-weaken Artifact Gateway's immutable-coordinate rule
+weaken notarx's immutable-coordinate rule
 ([Cargo publishing](https://doc.rust-lang.org/cargo/reference/publishing.html),
 [`cargo yank`](https://doc.rust-lang.org/cargo/commands/cargo-yank.html),
 [Gitea Cargo registry](https://docs.gitea.com/usage/packages/cargo/#publish-a-package)).

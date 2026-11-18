@@ -4,7 +4,7 @@
 
 ## Objective
 
-Deliver Artifact Gateway V1 as a complete artifact repository for its four
+Deliver notarx V1 as a complete artifact repository for its four
 supported formats: OCI, Maven, Raw, and Conan. A release is complete only when
 every supported format can participate in Hosted, Proxy, and Group workflows,
 has a safe artifact lifecycle, and can be operated and recovered as a repository

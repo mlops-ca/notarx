@@ -1,6 +1,6 @@
 ---
 name: issue-authoring
-description: Use when creating, splitting, or triaging Artifact Gateway GitHub issues — choosing type/area/format labels, drafting background and acceptance criteria from verified evidence, linking series and dependencies, and setting up the issue-to-merge trace. Covers feature requests, defects, design decisions, console, CLI, and format-specific work.
+description: Use when creating, splitting, or triaging notarx GitHub issues — choosing type/area/format labels, drafting background and acceptance criteria from verified evidence, linking series and dependencies, and setting up the issue-to-merge trace. Covers feature requests, defects, design decisions, console, CLI, and format-specific work.
 ---
 
 # Issue Authoring

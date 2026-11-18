@@ -28,6 +28,7 @@ import {
 } from "./siteSettingsModel";
 import { ThemePackageReviewDialog } from "./ThemePackageReviewDialog";
 import { useThemePackages } from "./useThemePackages";
+import { productName } from "../../lib/brand";
 import "./settings.css";
 
 export function SiteSettingsPage() {
@@ -179,7 +180,7 @@ export function SiteSettingsPage() {
               value={draft.siteName}
               maxLength={80}
               status={normalizedDraft.siteName ? undefined : "error"}
-              placeholder="Artifact Gateway"
+              placeholder={productName}
               onChange={(event) =>
                 setDraft((current) => ({
                   ...current,

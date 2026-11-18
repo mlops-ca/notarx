@@ -616,7 +616,7 @@ func writeHostedProblem(w http.ResponseWriter, status int, code, message string)
 	// publish their own challenge (OCI and Raw a protocol realm, Conan Basic), so
 	// never overwrite one that is already set.
 	if status == http.StatusUnauthorized && w.Header().Get("WWW-Authenticate") == "" {
-		w.Header().Set("WWW-Authenticate", `Bearer realm="Artifact Gateway"`)
+		w.Header().Set("WWW-Authenticate", `Bearer realm="notarx"`)
 	}
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]any{"type": "about:blank", "title": http.StatusText(status), "status": status, "code": code, "message": message, "requestId": ""})

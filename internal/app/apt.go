@@ -126,7 +126,7 @@ func (h nativeAPTHandler) protocolPrincipal(r *http.Request) (Principal, bool) {
 }
 
 func (h nativeAPTHandler) challenge(w http.ResponseWriter, status int, message string) {
-	w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway APT"`)
+	w.Header().Set("WWW-Authenticate", `Basic realm="notarx APT"`)
 	http.Error(w, message, status)
 }
 

@@ -2,7 +2,7 @@
 
 [简体中文](kubernetes-deployment.zh-CN.md) | [Documentation index](README.md)
 
-Artifact Gateway ships a Kustomize base and a local-development overlay. The
+notarx ships a Kustomize base and a local-development overlay. The
 local overlay is an executable deployment baseline validated on Docker Desktop.
 It is not a production topology.
 
@@ -89,7 +89,7 @@ Traefik local Ingress
 Console nginx (SPA + same-origin reverse proxy)
        |
        v
-Artifact Gateway (standalone API + scheduler + worker)
+notarx (standalone API + scheduler + worker)
        |                 |                 |
        v                 v                 v
 PostgreSQL PVC       RustFS PVC      APT H2 signer sidecar

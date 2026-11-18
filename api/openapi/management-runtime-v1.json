@@ -1,9 +1,9 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Artifact Gateway Native Hosted Management API",
+    "title": "notarx Native Hosted Management API",
     "version": "0.0.0-dev",
-    "description": "Runtime management contract for Artifact Gateway 0.2."
+    "description": "Runtime management contract for notarx 0.2."
   },
   "servers": [
     {

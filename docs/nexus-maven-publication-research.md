@@ -27,7 +27,7 @@ Gradle documentation.
 5. Nexus Repository 3 Staging must not be confused with Nexus Repository 2's
    classic close/release flow. Nexus 2 created a repository per build; Nexus 3
    uses a tag per build and moves content between a fixed set of Hosted repos.
-6. Artifact Gateway therefore uses direct publication by default and keeps
+6. notarx therefore uses direct publication by default and keeps
    `mavenStrictPublication=true` as an explicit opt-in.
 
 ## 1. Does ordinary `mvn deploy` need another commit?
@@ -132,7 +132,7 @@ When asking for “Nexus-style staging,” a design must say whether it means th
 historic Nexus 2/Maven Central close/release model or the current Nexus 3 Pro
 tag-and-move model. The latter is the useful reference for this product.
 
-## 6. Comparison with Artifact Gateway
+## 6. Comparison with notarx
 
 | Dimension | Nexus ordinary Hosted | Gateway default direct | Gateway strict |
 | --- | --- | --- | --- |
@@ -150,7 +150,7 @@ ordinary Nexus Hosted and therefore has an explicit integration cost.
 
 ## 7. Product implications
 
-Artifact Gateway has implemented the evidence as a Repository policy:
+notarx has implemented the evidence as a Repository policy:
 `mavenStrictPublication` defaults to `false`; setting it to `true` enables
 staging and `coordinate:commit`.
 

@@ -6,7 +6,7 @@ Status: accepted
 
 ## Context
 
-Artifact Gateway Console has four built-in Theme Packages and can load more
+notarx Console has four built-in Theme Packages and can load more
 packages from the server. A package contains a constrained Ant Design seed and
 alias-token subset. The runtime previously projected that package through
 several unrelated paths:

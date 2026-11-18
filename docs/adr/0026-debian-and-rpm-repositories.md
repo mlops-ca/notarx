@@ -24,7 +24,7 @@ repositories for its users. The state of the tree:
   `native_apt_snapshot_assets` (`migrations/000098`, `000100`, `000102`, `000116`, `000117`).
 - **Metadata.** `internal/aptpublication/snapshot.go:465` emits only `Packages` and
   `Packages.gz` per component and architecture; `Release` hard-codes
-  `Origin: Artifact Gateway` and `Acquire-By-Hash: yes` (`snapshot.go:477`). `go.mod`
+  `Origin: notarx` and `Acquire-By-Hash: yes` (`snapshot.go:477`). `go.mod`
   already carries `github.com/ulikunitz/xz` and `github.com/klauspost/compress`.
 - **Signer boundary.** `HTTPSigner.SignRelease` (`internal/aptpublication/http_signer.go:362`)
   posts the `Release` bytes to `POST /v1/sign-release` and receives `InRelease` and

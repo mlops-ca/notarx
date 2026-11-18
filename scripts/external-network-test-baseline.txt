@@ -5,7 +5,6 @@ internal/app/cache_entries_api_test.go registry-1.docker.io
 internal/app/cache_entries_api_test.go repo.maven.apache.org
 internal/app/format_profiles_api_test.go index.crates.io
 internal/app/hosted_repository_api_test.go registry.npmjs.org
-internal/app/maven_central_fixture_test.go maven-central.storage-download.googleapis.com
 internal/app/native_cargo_live_test.go github.com
 internal/app/native_cargo_live_test.go index.crates.io
 internal/app/native_cargo_proxy_official_integration_test.go github.com

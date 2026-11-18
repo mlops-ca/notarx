@@ -1,6 +1,6 @@
 ---
 name: console-layout-guardrails
-description: Use when adding or changing Artifact Gateway Console pages, page-level cards, alerts, metrics, tables, loading/error/empty states, or responsive multi-column layouts, especially to prevent sibling surfaces from touching, stacking, overlapping, or overflowing.
+description: Use when adding or changing notarx Console pages, page-level cards, alerts, metrics, tables, loading/error/empty states, or responsive multi-column layouts, especially to prevent sibling surfaces from touching, stacking, overlapping, or overflowing.
 ---
 
 # Console Layout Guardrails

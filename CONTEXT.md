@@ -1,8 +1,8 @@
-# Artifact Gateway Domain
+# notarx Domain
 
 [简体中文](CONTEXT.zh-CN.md) | [Documentation index](docs/README.md)
 
-Artifact Gateway is a multi-format artifact repository. It stores, governs,
+notarx is a multi-format artifact repository. It stores, governs,
 and distributes software artifacts through native package protocols.
 
 ## Repository Model
@@ -13,7 +13,7 @@ and either hosted bytes or a configured upstream source.
 _Avoid_: Registry, bucket, remote
 
 **Hosted Repository**:
-A Repository whose visible artifacts and metadata are owned by Artifact Gateway.
+A Repository whose visible artifacts and metadata are owned by notarx.
 _Avoid_: Local cache, proxy
 
 **Proxy Repository**:

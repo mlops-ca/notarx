@@ -8,7 +8,7 @@ document records architecture sequencing and implementation status.
 
 ## Product Goal
 
-Artifact Gateway is becoming a complete artifact repository for its supported
+notarx is becoming a complete artifact repository for its supported
 formats, beginning with OCI, Maven, Raw, and Conan. A format is complete only
 when it has Hosted, Proxy, and Group behaviour; safe publication and retrieval;
 browsing and search; logical deletion and retention; promotion and replication;

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/mavenfixture/mavenfixturetest"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -47,8 +48,8 @@ func TestMavenClientHostedPOMCompatibilityColdCache(t *testing.T) {
 	defer cancel()
 	// Plugin and unrelated dependencies come from a hermetic in-process Central
 	// fixture (recorded responses under testdata/maven-central-fixture), never the
-	// network. See startMavenCentralFixture for how to re-record it.
-	central := startMavenCentralFixture(t)
+	// network. See internal/mavenfixture for how to re-record it.
+	central := mavenfixturetest.Start(t)
 	endpoint := central.URL + "/maven2"
 	upstreamURL, err := url.Parse(endpoint)
 	if err != nil {

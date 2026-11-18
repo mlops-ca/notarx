@@ -103,7 +103,7 @@ func loadConfig(getenv func(string) string) (configuration, error) {
 		ListenAddress:   envOrDefault(getenv, "REFERENCE_APT_SIGNER_LISTEN_ADDRESS", "127.0.0.1:18083"),
 		Token:           getenv("REFERENCE_APT_SIGNER_TOKEN"),
 		KeyFile:         envOrDefault(getenv, "REFERENCE_APT_SIGNER_KEY_FILE", "/var/lib/reference-apt-signer/apt-release-private.gpg"),
-		Name:            envOrDefault(getenv, "REFERENCE_APT_SIGNER_NAME", "Artifact Gateway Local APT"),
+		Name:            envOrDefault(getenv, "REFERENCE_APT_SIGNER_NAME", "notarx Local APT"),
 		Comment:         envOrDefault(getenv, "REFERENCE_APT_SIGNER_COMMENT", "reference signer - local development only"),
 		Email:           envOrDefault(getenv, "REFERENCE_APT_SIGNER_EMAIL", "apt-release@artifact-gateway.local"),
 		RSABits:         4096,

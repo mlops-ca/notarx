@@ -9,7 +9,7 @@ async function mockDiagnostics(page: Page, gatewayVersion: string) {
     route.fulfill({
       json: {
         version: "1",
-        siteName: "Artifact Gateway",
+        siteName: "notarx",
         brandMark: "AG",
         logoUrl: "",
         enabledThemeIds: ["notarx-dark", "notarx-light"],

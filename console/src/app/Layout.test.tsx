@@ -333,9 +333,7 @@ describe("AppLayout", () => {
       document.querySelector<HTMLElement>(".ag-sider-desktop");
     expect(desktopSider).toHaveAttribute("data-collapsed", "true");
     expect(within(desktopSider!).getByText("Runtime")).toBeInTheDocument();
-    expect(
-      within(desktopSider!).getByText("Artifact Gateway"),
-    ).toBeInTheDocument();
+    expect(within(desktopSider!).getByText("notarx")).toBeInTheDocument();
     expect(
       within(desktopSider!).getByRole("link", {
         name: /Connected node · v0.4.3 · abc123/,

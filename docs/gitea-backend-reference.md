@@ -13,12 +13,12 @@ revision `99053ce4fa2b45f1bca5837418c0c57f793ca824`. It lives outside this
 repository at `../gitea-reference-v1.24.7` and must not be committed here.
 
 Gitea is MIT licensed. Its implementation is a design and test reference only:
-new Artifact Gateway code must be independently written, preserve applicable
+new notarx code must be independently written, preserve applicable
 copyright notices when required, and must not be copied wholesale.
 
 ## Current Position
 
-Artifact Gateway already has the core runtime needed for OCI, Maven, Raw, and
+notarx already has the core runtime needed for OCI, Maven, Raw, and
 Conan reads:
 
 - PostgreSQL metadata and S3-compatible object storage (RustFS in the bundled baseline);
@@ -34,7 +34,7 @@ the stated RPO/RTO. That is the remaining back-end risk.
 
 ## Relevant Gitea Patterns
 
-| Gitea reference | What it demonstrates | Artifact Gateway decision |
+| Gitea reference | What it demonstrates | notarx decision |
 | --- | --- | --- |
 | `cmd/doctor.go`, `services/doctor/doctor.go` | Named, ordered checks; basic configuration is checked before DB/storage; checks can be listed and selective checks can abort. | Add a read-only preflight command with named checks and machine-readable output. Do not add an HTTP route. |
 | `modules/storage/storage.go` | One storage interface supports lifecycle and migration tooling. | Keep the existing S3 object-store boundary. Do not generalize storage providers until there is a concrete product requirement. |

@@ -8,7 +8,7 @@ import (
 func DefaultSiteSettings() SiteSettings {
 	return SiteSettings{
 		Version:         "1",
-		SiteName:        "Artifact Gateway",
+		SiteName:        "notarx",
 		BrandMark:       "AG",
 		EnabledThemeIDs: []string{"notarx-dark", "notarx-light"},
 		DefaultThemeID:  "notarx-dark",

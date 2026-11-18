@@ -30,7 +30,7 @@ func (h *Module) serveGroup(w http.ResponseWriter, r *http.Request, group reposi
 		if decision, _, _ := access.Decide(r.Context(), access.ReadRequest{Class: access.Anonymous, Method: r.Method, Gate: h.groupRuntime.Gate(), Group: &group}); decision.Allow {
 			principal = anonymousPrincipal()
 		} else {
-			w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Raw"`)
+			w.Header().Set("WWW-Authenticate", `Basic realm="notarx Raw"`)
 			http.Error(w, "authentication required", http.StatusUnauthorized)
 			return
 		}
@@ -57,7 +57,7 @@ func (h *Module) serveGroup(w http.ResponseWriter, r *http.Request, group reposi
 	}
 	if len(members) == 0 {
 		h.groupRuntime.AuditResolution(r.Context(), group, repository.FormatRaw, path, strings.ToLower(r.Method), principal.Actor, repository.AuditAccessDenied, http.StatusUnauthorized)
-		w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Raw"`)
+		w.Header().Set("WWW-Authenticate", `Basic realm="notarx Raw"`)
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}

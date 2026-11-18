@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "generatedAt": "2026-10-19T06:42:35.782Z",
-  "title": "Design System: Artifact Gateway Console",
+  "title": "Design System: notarx Console",
   "extensions": {
     "colorMeta": {
       "action-dark": {
@@ -695,7 +695,7 @@
   ],
   "narrative": {
     "northStar": "The Refined Engineering Console",
-    "overview": "Artifact Gateway Console should feel like the control surface for a system whose claims can be proved, built with the care of a well-made developer tool. The visual language is calm, precise, and generous: neutral layers separated by hairline borders, open spacing, and a single foreground-colored primary action. Real status, immutable identity, policy boundaries, and recoverable actions receive attention before decoration. The default dark theme is a quiet, near-black workspace rather than a glowing dashboard; the light theme preserves the same hierarchy instead of becoming a separate product.\n\nThe [v2 design canvas](https://claude.ai/artifact/V5Hyr915rnoPv477jcc8Xr) shows the target dashboard, repository list, repository detail, command palette, and tokens.\n\nThe interface is an **Operate** surface. Density, scanability, predictable Ant Design behavior, keyboard access, and fast state feedback outrank spectacle. Product character comes from protocol-aware objects, monospaced identities, the source-to-distribution lifecycle, and restrained signal cyan—not from gradients, oversized marketing type, or ornamental motion.",
+    "overview": "notarx Console should feel like the control surface for a system whose claims can be proved, built with the care of a well-made developer tool. The visual language is calm, precise, and generous: neutral layers separated by hairline borders, open spacing, and a single foreground-colored primary action. Real status, immutable identity, policy boundaries, and recoverable actions receive attention before decoration. The default dark theme is a quiet, near-black workspace rather than a glowing dashboard; the light theme preserves the same hierarchy instead of becoming a separate product.\n\nThe [v2 design canvas](https://claude.ai/artifact/V5Hyr915rnoPv477jcc8Xr) shows the target dashboard, repository list, repository detail, command palette, and tokens.\n\nThe interface is an **Operate** surface. Density, scanability, predictable Ant Design behavior, keyboard access, and fast state feedback outrank spectacle. Product character comes from protocol-aware objects, monospaced identities, the source-to-distribution lifecycle, and restrained signal cyan—not from gradients, oversized marketing type, or ornamental motion.",
     "keyCharacteristics": [
       "Evidence-led hierarchy: health, risk, blocked work, and required action appear before decorative metrics.",
       "Protocol-native specificity: coordinates, digests, Repository types, and lifecycle stages remain visible and copyable.",
@@ -765,7 +765,7 @@
       "Do keep animation crisp, purposeful, and interruptible."
     ],
     "donts": [
-      "Don't turn the Console into a generic card-and-table admin template; expose Artifact Gateway's protocol, identity, trust, and lifecycle semantics.",
+      "Don't turn the Console into a generic card-and-table admin template; expose notarx's protocol, identity, trust, and lifecycle semantics.",
       "Don't fabricate capacity, health, scan, vulnerability, release, or availability data.",
       "Don't use `transition-all`, animate layout properties, or replay staggered page entrances during frequent administration.",
       "Don't use low-contrast muted text for required guidance or encode state through color alone.",

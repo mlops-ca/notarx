@@ -12,7 +12,7 @@ applies. NuGet is the Microsoft-supported package
 mechanism for .NET, Visual Studio, and `dotnet` clients, and because its V3
 service index gives a stable discovery boundary for private repositories.
 
-The N1 byte-contract foundation is implemented: Artifact Gateway can validate
+The N1 byte-contract foundation is implemented: notarx can validate
 a complete `.nupkg` ZIP, read one bounded root `.nuspec`, reject ambiguous XML
 or archive paths, normalize NuGet versions, and derive a case-insensitive
 canonical identity. The preview adds independent OpenAPI management and native

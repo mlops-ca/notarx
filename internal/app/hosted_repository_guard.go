@@ -76,16 +76,16 @@ func (h hostedRepositoryGuard) reject(w http.ResponseWriter, r *http.Request, st
 	if status == http.StatusUnauthorized {
 		// The challenge matches the one the format's handler gives a name that does
 		// not exist, so a private name and an absent one are indistinguishable.
-		realm, message := "Artifact Gateway", http.StatusText(status)
+		realm, message := "notarx", http.StatusText(status)
 		switch h.format {
 		case repository.FormatRaw:
-			realm, message = "Artifact Gateway Raw", "authentication required"
+			realm, message = "notarx Raw", "authentication required"
 		case repository.FormatMaven:
-			realm, message = "Artifact Gateway Maven", "authentication required"
+			realm, message = "notarx Maven", "authentication required"
 		case repository.FormatNPM:
-			realm, message = "Artifact Gateway npm", "authentication required"
+			realm, message = "notarx npm", "authentication required"
 		case repository.FormatAPT:
-			realm, message = "Artifact Gateway APT", "authentication required"
+			realm, message = "notarx APT", "authentication required"
 		}
 		w.Header().Set("WWW-Authenticate", `Basic realm="`+realm+`"`)
 		http.Error(w, message, status)

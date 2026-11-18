@@ -1,8 +1,8 @@
-# Artifact Gateway documentation
+# notarx documentation
 
 [Français](README.fr-CA.md) · [简体中文](README.zh-CN.md) · [Project README](../README.md)
 
-Artifact Gateway is a lightweight, protocol-native artifact repository. Its
+notarx is a lightweight, protocol-native artifact repository. Its
 control plane relies on PostgreSQL as its only coordination and database
 dependency; immutable bytes live in S3-compatible object storage.
 

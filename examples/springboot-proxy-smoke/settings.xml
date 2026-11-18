@@ -5,7 +5,7 @@
   <mirrors>
     <mirror>
       <id>artifact-gateway-proxy</id>
-      <name>Artifact Gateway Maven Proxy</name>
+      <name>notarx Maven Proxy</name>
       <url>${env.NOTARX_MAVEN_PROXY_URL}</url>
       <mirrorOf>*</mirrorOf>
     </mirror>

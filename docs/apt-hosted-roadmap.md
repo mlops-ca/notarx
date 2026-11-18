@@ -7,13 +7,13 @@
 APT Hosted is an unadvertised operator preview and a planned formal format
 expansion after the Kubernetes local deployment baseline. APT Proxy and ordered
 Group reads are already supported; this roadmap covers trusted publication owned
-by Artifact Gateway. The preview does not change the advertised Proxy/Group read
+by notarx. The preview does not change the advertised Proxy/Group read
 capability before the remaining Hosted admission gates pass.
 
 The format cannot be admitted by adding a generic upload endpoint. Debian
 clients resolve `Packages` indices through checksums in `Release` or
 `InRelease`, and current APT clients reject unsigned repositories by default.
-Artifact Gateway therefore uses one atomic, signed repository-snapshot model
+notarx therefore uses one atomic, signed repository-snapshot model
 for its Hosted preview; production admission still requires the gates below.
 The normative upstream references are the
 [Debian Repository Format](https://wiki.debian.org/DebianRepository/Format)

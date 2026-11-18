@@ -25,7 +25,7 @@ Web.
 
 ## Product Purpose
 
-Artifact Gateway is a multi-format artifact repository and governance control
+notarx is a multi-format artifact repository and governance control
 plane. It stores, resolves, governs, and distributes software through native
 ecosystem protocols. PostgreSQL owns lifecycle metadata, authorization, audit,
 and background work; S3-compatible storage owns verified content-addressed bytes.
@@ -38,7 +38,7 @@ High-risk operations remain auditable, retryable, idempotent, and recoverable.
 ## Positioning
 
 The immutable governance identity is `Repository + format + canonical
-coordinate + SHA-256 digest`. Artifact Gateway centres native protocol traffic,
+coordinate + SHA-256 digest`. notarx centres native protocol traffic,
 explicit Hosted/Proxy/Group models, and database-backed lifecycle workflows. It
 is not a transparent rewriting proxy, generic object browser, or vulnerability
 scanner; external scanners contribute intelligence only through versioned contracts.
@@ -87,7 +87,7 @@ scanner; external scanners contribute intelligence only through versioned contra
 
 ## Brand Commitments
 
-- The product name is **Artifact Gateway**.
+- The product name is **notarx**.
 - UI and documentation use the domain language from `CONTEXT.md`: Repository,
   Hosted Repository, Proxy Repository, Group, Artifact, Asset, Service Account,
   Publication, Tombstone, Quarantine, Promotion, and Replication.

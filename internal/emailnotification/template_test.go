@@ -39,7 +39,7 @@ func TestVersionedMIMEContainsEquivalentTextAndEscapedHTML(t *testing.T) {
 					t.Fatal(err)
 				}
 				subject, err := new(mime.WordDecoder).DecodeHeader(m.Header.Get("Subject"))
-				if err != nil || !strings.Contains(subject, "Artifact Gateway") {
+				if err != nil || !strings.Contains(subject, "notarx") {
 					t.Fatal("invalid subject")
 				}
 				_, params, err := mime.ParseMediaType(m.Header.Get("Content-Type"))

@@ -1,8 +1,8 @@
-# Documentation d’Artifact Gateway
+# Documentation de notarx
 
 [English](README.md) · [Fichier README du projet](../README.fr-CA.md)
 
-Artifact Gateway est un dépôt d’artefacts léger et natif au protocole. Son plan de
+notarx est un dépôt d’artefacts léger et natif au protocole. Son plan de
 contrôle s’appuie sur PostgreSQL comme seule dépendance de coordination et de
 base de données; les octets immuables résident dans un stockage d’objets
 compatible S3.

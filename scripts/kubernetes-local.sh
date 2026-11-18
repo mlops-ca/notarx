@@ -227,7 +227,7 @@ up() {
     --silent --show-error --fail \
     -H "Authorization: Bearer $configured_admin_token" \
     "$ingress_url/api/v2/formats" >/dev/null
-  printf 'Artifact Gateway Kubernetes stack is ready at %s\n' "$ingress_url"
+  printf 'notarx Kubernetes stack is ready at %s\n' "$ingress_url"
   printf 'Direct Console fallback remains available at %s\n' "$console_url"
   printf 'Local administrator token: %s\n' "$configured_admin_token"
 }
@@ -241,7 +241,7 @@ status() {
     --silent --show-error --fail "$ingress_url/readyz" >/dev/null
   curl --noproxy "$local_no_proxy" --connect-timeout 3 --max-time 15 \
     --silent --show-error --fail "$ingress_url/" >/dev/null
-  printf 'Artifact Gateway Kubernetes stack is ready at %s\n' "$ingress_url"
+  printf 'notarx Kubernetes stack is ready at %s\n' "$ingress_url"
 }
 
 verify_persistence() {

@@ -973,6 +973,6 @@ func (h nativeGoHandler) protocolPrincipal(r *http.Request) (Principal, bool) {
 }
 
 func (h nativeGoHandler) challenge(w http.ResponseWriter, status int, message string) {
-	w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Go"`)
+	w.Header().Set("WWW-Authenticate", `Basic realm="notarx Go"`)
 	http.Error(w, message, status)
 }

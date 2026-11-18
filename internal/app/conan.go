@@ -133,7 +133,7 @@ func (h ConanHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Conan"`)
+		w.Header().Set("WWW-Authenticate", `Basic realm="notarx Conan"`)
 		actor := "anonymous"
 		status := http.StatusUnauthorized
 		if authenticated {
@@ -157,7 +157,7 @@ func (h ConanHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if !authenticated {
-			w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Conan"`)
+			w.Header().Set("WWW-Authenticate", `Basic realm="notarx Conan"`)
 			h.audit(withConanAuditStatus(r.Context(), http.StatusUnauthorized), group, "", "", "anonymous", repository.AuditAccessDenied)
 			http.Error(w, "authentication required", http.StatusUnauthorized)
 			return
@@ -189,7 +189,7 @@ func (h ConanHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		authenticated = true
 	}
 	if !authenticated {
-		w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Conan"`)
+		w.Header().Set("WWW-Authenticate", `Basic realm="notarx Conan"`)
 		h.audit(withConanAuditStatus(r.Context(), http.StatusUnauthorized), group, path, "", "anonymous", repository.AuditAccessDenied)
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return

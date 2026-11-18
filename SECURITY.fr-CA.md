@@ -2,7 +2,7 @@
 
 [English](SECURITY.md) | [Index de la documentation](docs/README.fr-CA.md)
 
-Artifact Gateway manipule des justificatifs d’authentification, des permissions
+notarx manipule des justificatifs d’authentification, des permissions
 de dépôt, des métadonnées de paquets non fiables et des octets d’artefacts
 exécutables. Les rapports de sécurité doivent donc être traités en privé jusqu’à
 ce qu’un correctif et un plan de divulgation existent.
@@ -74,7 +74,7 @@ l’empreinte dans le même changement qui publie `gpg.key`.
   Les mots de passe de mandataire personnalisés par dépôt exigent
   `NOTARX_EGRESS_PROXY_KEY`.
 - Traitez les paquets et les métadonnées téléversés comme des entrées non fiables.
-  Artifact Gateway n’offre pas d’analyse de maliciels. L’analyse des
+  notarx n’offre pas d’analyse de maliciels. L’analyse des
   vulnérabilités, des licences et des SBOM n’est offerte que lorsqu’un
   exploitant active explicitement l’analyseur de référence fourni ou un analyseur
   externe conforme au contrat.

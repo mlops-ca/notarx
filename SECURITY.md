@@ -2,7 +2,7 @@
 
 [Français](SECURITY.fr-CA.md) | [简体中文](SECURITY.zh-CN.md) | [Documentation index](docs/README.md)
 
-Artifact Gateway handles authentication credentials, repository permissions,
+notarx handles authentication credentials, repository permissions,
 untrusted package metadata, and executable artifact bytes. Security reports
 must therefore be handled privately until a fix and disclosure plan exist.
 
@@ -60,7 +60,7 @@ change that publishes `gpg.key`.
   Gateway nodes schema-owner credentials.
 - Restrict Proxy upstream hosts and outbound network access. Per-repository
   custom proxy passwords require `NOTARX_EGRESS_PROXY_KEY`.
-- Treat uploaded packages and metadata as untrusted input. Artifact Gateway
+- Treat uploaded packages and metadata as untrusted input. notarx
   does not provide malware scanning. Vulnerability, license, and SBOM analysis
   is available only when an operator explicitly enables the bundled reference
   scanner or a contract-compatible external scanner.

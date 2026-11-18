@@ -1,6 +1,6 @@
 # Console theme packages
 
-Artifact Gateway loads Console themes from three sources:
+notarx loads Console themes from three sources:
 
 1. two bundled packages, `notarx Dark` and `notarx Light`;
 2. optional operator-owned `*.theme.json` files in
