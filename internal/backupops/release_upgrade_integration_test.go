@@ -17,10 +17,12 @@ import (
 	"github.com/mlops-ca/notarx/internal/backupmanifest"
 )
 
-// syntheticUpgradeMigration is the second migration of the fixture release. The
-// fixture stands in for the first real 000002 until a second notarx release
-// exists (ADR 0015, "Backup, restore and release modules").
-const syntheticUpgradeMigration = "000002_synthetic_upgrade_fixture.sql"
+// syntheticUpgradeMigration is a migration the fixture candidate ships beyond
+// the real ones (000002 is the object store identity table). The fixture stands
+// in for the next real migration until a second notarx release exists (ADR
+// 0015, "Backup, restore and release modules"); renumber it when a real
+// migration takes this number.
+const syntheticUpgradeMigration = "000003_synthetic_upgrade_fixture.sql"
 const syntheticUpgradeSQL = "-- +goose Up\nCREATE TABLE synthetic_upgrade_fixture (id integer PRIMARY KEY, note text NOT NULL DEFAULT '');\nINSERT INTO synthetic_upgrade_fixture (id, note) VALUES (1, 'added by the candidate release');\n"
 
 var stableReleaseTag = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+$`)

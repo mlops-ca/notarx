@@ -46,12 +46,16 @@ type Config struct {
 	AutoCreateBucket bool
 	FSRoot           string
 	FSFsync          bool
+	// FSReserveBytes is the free space the filesystem driver leaves untouched;
+	// writes that would dip below it fail with ErrInsufficientStorage. Zero
+	// disables the check.
+	FSReserveBytes int64
 }
 
 // Defaults returns the documented defaults: s3 driver, us-east-1, path-style,
 // when_required checksums, no bucket auto-creation, fsync on commit.
 func Defaults() Config {
-	return Config{Driver: DriverS3, Region: DefaultRegion, PathStyle: true, ChecksumMode: ChecksumWhenRequired, FSFsync: true}
+	return Config{Driver: DriverS3, Region: DefaultRegion, PathStyle: true, ChecksumMode: ChecksumWhenRequired, FSFsync: true, FSReserveBytes: DefaultFSReserveBytes}
 }
 
 // withDefaults fills the string settings a caller left empty. Booleans are not
@@ -209,7 +213,14 @@ func Check(ctx context.Context, cfg Config) error {
 	return store.CheckBucket(ctx)
 }
 
-func checkDriver(_ context.Context, cfg Config) error { return unknownDriverError(cfg.Driver) }
+func checkDriver(_ context.Context, cfg Config) error {
+	switch cfg.Driver {
+	case DriverFilesystem:
+		return checkFilesystem(cfg)
+	default:
+		return unknownDriverError(cfg.Driver)
+	}
+}
 
 func openS3(ctx context.Context, cfg Config) (Store, error) {
 	store, err := NewS3Store(cfg)

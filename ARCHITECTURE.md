@@ -26,14 +26,20 @@ flowchart LR
     Scheduler[Scheduler] --> PG[(PostgreSQL 16)]
     Gateway --> PG
     Workers[Worker pools] --> PG
-    Gateway --> S3[(S3 / RustFS)]
+    Gateway --> S3[(Object store: S3 / RustFS / filesystem)]
     Workers --> S3
 ```
 
 PostgreSQL is the source of truth for repositories, authorization, artifact
 metadata, lifecycle state, audit records, idempotency, and background leases.
-S3/RustFS stores verified object bytes addressed by digest. Gateway processes do
-not keep durable artifact state on local disk.
+The object store holds verified object bytes addressed by digest behind the
+`objectstore.Store` port. Two drivers exist (ADR 0017): `s3` for any
+S3-compatible service (RustFS, AWS S3, Oracle Cloud Object Storage) and
+`filesystem` for a single node. With `s3`, gateway processes do not keep durable
+artifact state on local disk. With `filesystem`, the object root on the node's
+volume is that state; the database records the root's identity and the gateway
+refuses a second node or a different volume. See
+[Object storage configuration](docs/object-storage.md).
 
 See [Architecture diagrams](docs/architecture-diagrams.md) for the standalone,
 split-role, publication, and worker flows, and
@@ -98,8 +104,8 @@ feature services; it no longer owns per-format byte-store fields.
 
 The constructor rejects missing metadata, availability adapters and any admitted
 format's object store, including typed nil interface values, before registering
-routes. `cmd/notarx` initializes its PostgreSQL pool and verifies the RustFS
-bucket first, then assigns the durable store with `SharedObjectStores`. Cache
+routes. `cmd/notarx` initializes its PostgreSQL pool and opens the configured object store
+first (a bucket check or creation, or the filesystem root and its identity), then assigns the durable store with `SharedObjectStores`. Cache
 maintenance also requires an explicit object store. Configured format caches
 validate their own byte-store dependency, including typed nils. A nil format cache disables
 that cache; no HTTP or native-format constructor creates replacement storage.

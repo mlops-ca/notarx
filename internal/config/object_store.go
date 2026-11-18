@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/mlops-ca/notarx/internal/objectstore"
@@ -24,6 +25,7 @@ const (
 	envObjectStoreAutoCreateBucket = "NOTARX_OBJECT_STORE_AUTO_CREATE_BUCKET"
 	envObjectStoreFSRoot           = "NOTARX_OBJECT_STORE_FS_ROOT"
 	envObjectStoreFSFsync          = "NOTARX_OBJECT_STORE_FS_FSYNC"
+	envObjectStoreFSReserveBytes   = "NOTARX_OBJECT_STORE_FS_RESERVE_BYTES"
 )
 
 // loadObjectStore reads and validates the NOTARX_OBJECT_STORE_* keys.
@@ -48,6 +50,13 @@ func loadObjectStore() (objectstore.Config, error) {
 	}
 	if cfg.FSFsync, err = boolEnv(envObjectStoreFSFsync, cfg.FSFsync); err != nil {
 		return objectstore.Config{}, err
+	}
+	if raw := strings.TrimSpace(os.Getenv(envObjectStoreFSReserveBytes)); raw != "" {
+		reserve, parseErr := strconv.ParseInt(raw, 10, 64)
+		if parseErr != nil || reserve < 0 {
+			return objectstore.Config{}, fmt.Errorf("%s must be a non-negative number of bytes", envObjectStoreFSReserveBytes)
+		}
+		cfg.FSReserveBytes = reserve
 	}
 	cfg.Endpoint = strings.TrimSpace(os.Getenv(envObjectStoreEndpoint))
 	cfg.Bucket = strings.TrimSpace(os.Getenv(envObjectStoreBucket))

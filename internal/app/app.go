@@ -215,8 +215,18 @@ func (h httpChecker) Check(ctx context.Context) error {
 
 // objectStoreChecker builds the readiness probe for the configured driver.
 func objectStoreChecker(cfg objectstore.Config) Checker {
+	if cfg.Driver == objectstore.DriverFilesystem {
+		return filesystemChecker{cfg: cfg}
+	}
 	return httpChecker{url: objectStoreEndpointURL(cfg.Endpoint)}
 }
+
+// filesystemChecker is readiness for the filesystem driver: the root must
+// exist with a valid marker and its free space must be above the reserve, the
+// point at which writes start to fail with insufficient storage.
+type filesystemChecker struct{ cfg objectstore.Config }
+
+func (c filesystemChecker) Check(ctx context.Context) error { return objectstore.Check(ctx, c.cfg) }
 
 func objectStoreEndpointURL(endpoint string) string {
 	return strings.TrimRight(endpoint, "/") + "/"

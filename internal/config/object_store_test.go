@@ -12,7 +12,7 @@ func clearObjectStoreEnv(t *testing.T) {
 	for _, name := range []string{
 		envObjectStoreDriver, envObjectStoreEndpoint, envObjectStoreBucket, envObjectStoreRegion,
 		envObjectStoreAccessKey, envObjectStoreSecretKey, envObjectStorePathStyle, envObjectStoreChecksumMode,
-		envObjectStoreAutoCreateBucket, envObjectStoreFSRoot, envObjectStoreFSFsync,
+		envObjectStoreAutoCreateBucket, envObjectStoreFSRoot, envObjectStoreFSFsync, envObjectStoreFSReserveBytes,
 	} {
 		t.Setenv(name, "")
 	}
@@ -104,5 +104,66 @@ func TestLoadObjectStoreReachesConfig(t *testing.T) {
 	}
 	if cfg.ObjectStore.Endpoint != "http://rustfs:9000" || cfg.ObjectStore.Bucket != "notarx-cache" {
 		t.Fatalf("ObjectStore = %#v", cfg.ObjectStore)
+	}
+}
+
+func TestLoadObjectStoreFilesystemDriver(t *testing.T) {
+	clearObjectStoreEnv(t)
+	t.Setenv(envObjectStoreDriver, "filesystem")
+	t.Setenv(envObjectStoreFSRoot, "/srv/notarx/objects/")
+	cfg, err := loadObjectStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Driver != objectstore.DriverFilesystem || cfg.FSRoot != "/srv/notarx/objects" || !cfg.FSFsync || cfg.FSReserveBytes != objectstore.DefaultFSReserveBytes {
+		t.Fatalf("filesystem defaults not applied: %#v", cfg)
+	}
+	t.Setenv(envObjectStoreFSFsync, "false")
+	t.Setenv(envObjectStoreFSReserveBytes, "0")
+	cfg, err = loadObjectStore()
+	if err != nil || cfg.FSFsync || cfg.FSReserveBytes != 0 {
+		t.Fatalf("overrides not applied: %#v, %v", cfg, err)
+	}
+	if endpoint, bucket := cfg.Binding(); endpoint != "filesystem" || bucket != "/srv/notarx/objects" {
+		t.Fatalf("Binding = %q %q", endpoint, bucket)
+	}
+}
+
+func TestLoadObjectStoreFilesystemRejectsInvalidValues(t *testing.T) {
+	cases := map[string]struct {
+		set  map[string]string
+		want string
+	}{
+		"missing root":      {map[string]string{}, "NOTARX_OBJECT_STORE_FS_ROOT is required"},
+		"relative root":     {map[string]string{envObjectStoreFSRoot: "objects"}, "must be an absolute path"},
+		"bad fsync":         {map[string]string{envObjectStoreFSRoot: "/srv/o", envObjectStoreFSFsync: "maybe"}, "NOTARX_OBJECT_STORE_FS_FSYNC must be true or false"},
+		"negative reserve":  {map[string]string{envObjectStoreFSRoot: "/srv/o", envObjectStoreFSReserveBytes: "-1"}, "non-negative number of bytes"},
+		"reserve not a int": {map[string]string{envObjectStoreFSRoot: "/srv/o", envObjectStoreFSReserveBytes: "1GiB"}, "non-negative number of bytes"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			clearObjectStoreEnv(t)
+			t.Setenv(envObjectStoreDriver, "filesystem")
+			for key, value := range tc.set {
+				t.Setenv(key, value)
+			}
+			_, err := loadObjectStore()
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want it to contain %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestLoadAcceptsFilesystemDriverWithoutS3Keys(t *testing.T) {
+	setValidNativeEnv(t)
+	for _, name := range []string{envObjectStoreEndpoint, envObjectStoreBucket, envObjectStoreAccessKey, envObjectStoreSecretKey} {
+		t.Setenv(name, "")
+	}
+	t.Setenv(envObjectStoreDriver, "filesystem")
+	t.Setenv(envObjectStoreFSRoot, "/srv/notarx/objects")
+	cfg, err := Load()
+	if err != nil || cfg.ObjectStore.Driver != "filesystem" {
+		t.Fatalf("Load() = %#v, %v", cfg.ObjectStore, err)
 	}
 }

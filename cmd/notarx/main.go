@@ -208,6 +208,22 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 		return 1
 	}
 	defer func() { _ = store.Close() }()
+	// A single-node store (filesystem) is bound to this database: refuse a
+	// second node, a restored volume or a wrong mount, and keep the root locked.
+	identityGuard, err := objectstore.VerifyIdentity(context.Background(), objectStore, objectStoreIdentity{store})
+	switch {
+	case errors.Is(err, objectstore.ErrIdentityMismatch):
+		// Log errors are redacted, so the operator-facing guidance is the message.
+		slog.Error("the object store root does not match the root this database is bound to: mount the original volume, or restore the database and the object store together")
+		return 1
+	case errors.Is(err, objectstore.ErrRootLocked):
+		slog.Error("another gateway process already holds this object store root: the filesystem driver supports one process per root")
+		return 1
+	case err != nil:
+		slog.Error("verify object store identity", "error", err)
+		return 1
+	}
+	defer identityGuard.Close()
 	if err := initializeRepositoryPresets(cfg, databasePool); err != nil {
 		slog.Error("initialize repository presets", "error", err)
 		return 1
@@ -262,6 +278,9 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 		WithDatabasePoolStats("coordinator", coordinatorPool.Stats).
 		WithDatabasePoolStats("notifications", notificationPool.Stats).
 		WithNodeIdentity(cfg.InstanceID, nodeRoleStrings(cfg.NodeRoles))
+	if fileStore, ok := objectStore.(*objectstore.FileStore); ok {
+		metrics = metrics.WithObjectStoreCapacity(fileStore.Capacity)
+	}
 	migrationTargetID := nexusmigration.TargetBinding(cfg.ObjectStore.Binding())
 	migrationScanner := app.NewPublicationScanScheduler(store, dependencies.ArtifactScanner != nil, dependencies.ArtifactScannerFormats, metrics)
 	migrationPublication := app.NewNexusMigrationPublication(store, app.SharedObjectStores(objectStore), migrationTargetID, cfg.MigrationStoragePoolID).
@@ -300,6 +319,9 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 		slog.Error("partition observation at start-up failed", "error", err)
 	}
 	go partitionManager.Run(runtimeContext, partitions.DefaultInterval)
+	// Losing the root lock means another process could write the same root.
+	rootLost := make(chan error, 1)
+	identityGuard.Watch(runtimeContext, 15*time.Second, func(err error) { rootLost <- err })
 	startAPI := cfg.HasRole(config.NodeRoleAPI)
 	if startAPI {
 		observer, done := metrics.StartHTTPErrorRateSampling(runtimeContext, cfg.InstanceID, runtimeSessionID)
@@ -496,6 +518,9 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 			slog.Error("gateway stopped", "error", err)
 			return 1
 		}
+	case err := <-rootLost:
+		slog.Error("object store root lock lost; stopping", "error", err)
+		return 1
 	case <-runtimeContext.Done():
 		select {
 		case <-heartbeatDone:
