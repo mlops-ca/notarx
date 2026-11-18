@@ -32,18 +32,20 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Go client tests: the tests that start the fixture record what they miss.
-# A renamed test would make go test pass without running anything, so require both.
+# Go client tests and the end-to-end flows: the fixture they start records what
+# they miss. The end-to-end script runs the same two Go tests, so a renamed test
+# would make go test pass without running anything; require both to pass.
 go test -v -count=1 -tags=mavenclient ./internal/app \
   -run '^TestMavenClient(SnapshotHistoryTakeoverAndDeploy|HostedPOMCompatibilityColdCache)$' | tee "$workdir/go-test.log"
 [[ $(grep -c '^--- PASS: TestMavenClient' "$workdir/go-test.log") -ge 2 ]] || {
   printf 'Expected both Maven client tests to run and pass\n' >&2
   exit 1
 }
+# Then the Maven part of the end-to-end flow (its Gradle steps need no recording).
+./scripts/native-maven-e2e.sh
 
 # Gradle: resolve a plugin from the plugin portal route and a dependency from
-# the Central route through the recording mirror. The end-to-end flows join
-# here when they use the mirror (#357).
+# the Central route through the recording mirror.
 go build -o "$workdir/maven-fixture-mirror" ./cmd/maven-fixture-mirror
 "$workdir/maven-fixture-mirror" >"$workdir/mirror.url" 2>"$workdir/mirror.log" &
 mirror_pid=$!

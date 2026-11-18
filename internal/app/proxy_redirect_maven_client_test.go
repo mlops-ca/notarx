@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/mavenfixture"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -52,7 +53,7 @@ func TestMavenClientProxyRedirectGatewayColdHotCache(t *testing.T) {
 			writeRedirectMavenClientFile(t, globalSettings, []byte(`<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"/>`))
 			// Explicit user/global settings and user.home isolate the CLI from
 			// real ~/.m2 settings, identities, extensions and local artifacts.
-			writeRedirectMavenClientFile(t, settings, []byte(fmt.Sprintf(`<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"><mirrors><mirror><id>owned-gateway</id><mirrorOf>*</mirrorOf><url>%s/maven/%s</url></mirror></mirrors></settings>`, gateway.URL, name)))
+			writeRedirectMavenClientFile(t, settings, []byte(mavenfixture.AddBlockedProxies(fmt.Sprintf(`<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"><mirrors><mirror><id>owned-gateway</id><mirrorOf>*</mirrorOf><url>%s/maven/%s</url></mirror></mirrors></settings>`, gateway.URL, name))))
 			writeRedirectMavenClientFile(t, pom, []byte(fmt.Sprintf(`<project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0</modelVersion><groupId>gateway.fixture</groupId><artifactId>redirect-resolver</artifactId><version>1</version><repositories><repository><id>owned-gateway</id><url>%s/maven/%s</url><releases><checksumPolicy>fail</checksumPolicy></releases><snapshots><enabled>false</enabled></snapshots></repository></repositories><dependencies><dependency><groupId>org.example</groupId><artifactId>widget</artifactId><version>1.0</version></dependency></dependencies></project>`, gateway.URL, name)))
 			coldRequests := 0
 			for _, round := range []string{"cold", "hot"} {

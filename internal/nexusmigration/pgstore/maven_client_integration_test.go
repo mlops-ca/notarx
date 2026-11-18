@@ -21,6 +21,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/app"
+	"github.com/mlops-ca/notarx/internal/mavenfixture"
 )
 
 const migrationMavenVersion = "3.9.16"
@@ -70,7 +71,7 @@ func TestPostgresMigrationTargetOnlyMavenClient(t *testing.T) {
 	settings, globalSettings, pom := filepath.Join(root, "settings.xml"), filepath.Join(root, "global-settings.xml"), filepath.Join(root, "pom.xml")
 	base := server.URL + "/repository/maven/" + f.repo.Name + "/"
 	migrationClientFile(t, globalSettings, []byte(`<settings/>`))
-	migrationClientFile(t, settings, []byte(fmt.Sprintf(`<settings><mirrors><mirror><id>owned-migration-target</id><mirrorOf>*</mirrorOf><url>%s</url></mirror></mirrors><servers><server><id>owned-migration-target</id><username>migration-reader</username><password>%s</password></server></servers></settings>`, base, token)))
+	migrationClientFile(t, settings, []byte(mavenfixture.AddBlockedProxies(fmt.Sprintf(`<settings><mirrors><mirror><id>owned-migration-target</id><mirrorOf>*</mirrorOf><url>%s</url></mirror></mirrors><servers><server><id>owned-migration-target</id><username>migration-reader</username><password>%s</password></server></servers></settings>`, base, token))))
 	migrationClientFile(t, pom, []byte(`<project><modelVersion>4.0.0</modelVersion><groupId>gateway.fixture</groupId><artifactId>migration-resolver</artifactId><version>1</version><dependencies><dependency><groupId>org.example</groupId><artifactId>widget</artifactId><version>1.0</version></dependency></dependencies></project>`))
 	local := filepath.Join(root, "cold-repository")
 	migrationClientFile(t, filepath.Join(local, migrationClientPluginPath+".jar"), plugin)
