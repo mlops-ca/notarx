@@ -114,7 +114,6 @@ func seedRecoveryEmail(t *testing.T, ctx context.Context, source *OwnedTarget, e
 	for i, repoID := range []string{cancelledRepo, liveRepo} {
 		quota := int64(17)
 		if i == 1 {
-			quota = 15
 			policy.CriticalBasisPoints = 9200
 			policy.CriticalForSeconds = 2
 			// Start in the warning-only band and change the real quota below.

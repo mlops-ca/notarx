@@ -19,6 +19,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/ocidiscovery"
 	ociprotocol "github.com/mlops-ca/notarx/internal/protocol/oci"
 	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/uploadspool"
 )
 
 // nativeOCIHandler is the write-capable Registry V2 implementation. It only
@@ -365,7 +366,7 @@ func (h nativeOCIHandler) upload(w http.ResponseWriter, r *http.Request, repo re
 	case http.MethodPatch:
 		upload, err = h.appendUpload(r.Context(), r, upload)
 		if err != nil {
-			writeOCIAppendError(w, r, err)
+			writeOCIAppendError(w, r, repo, upload, err)
 			return
 		}
 		h.uploadHeaders(w, repo.Name, name, upload)
@@ -374,7 +375,7 @@ func (h nativeOCIHandler) upload(w http.ResponseWriter, r *http.Request, repo re
 		if r.ContentLength != 0 {
 			upload, err = h.appendUpload(r.Context(), r, upload)
 			if err != nil {
-				writeOCIAppendError(w, r, err)
+				writeOCIAppendError(w, r, repo, upload, err)
 				return
 			}
 		}
@@ -432,21 +433,27 @@ func (h nativeOCIHandler) upload(w http.ResponseWriter, r *http.Request, repo re
 var errOCIUploadOffsetMismatch = errors.New("upload offset mismatch")
 
 // writeOCIAppendError maps an appendUpload failure to its status: 416 only for a
-// real offset mismatch, 404 for an upload that closed or expired meanwhile, 503
-// for a cancelled or timed-out request, and 500 for a store or object failure.
-// The cause is logged, so a transient failure is no longer indistinguishable from
-// a range error.
-func writeOCIAppendError(w http.ResponseWriter, r *http.Request, err error) {
+// real offset mismatch, 413 for an oversized chunk, 400 for a request body that
+// ended early, 404 for an upload that closed or expired meanwhile, 503 for a
+// cancelled or timed-out request, and 500 for a store or object failure. The
+// cause is logged with the repository and upload, so a transient failure is no
+// longer indistinguishable from a range error.
+func writeOCIAppendError(w http.ResponseWriter, r *http.Request, repo repository.HostedRepository, upload repository.OCIUpload, err error) {
+	fields := []any{"method", r.Method, "repository", repo.Name, "upload", upload.ID, "error", err}
 	switch {
 	case errors.Is(err, errOCIUploadOffsetMismatch):
 		writeOCIError(w, http.StatusRequestedRangeNotSatisfiable, "RANGE_INVALID", "upload range is invalid")
+	case errors.Is(err, uploadspool.ErrTooLarge):
+		writeOCIError(w, http.StatusRequestEntityTooLarge, "SIZE_INVALID", "upload chunk is too large")
+	case errors.Is(err, io.ErrUnexpectedEOF):
+		writeOCIError(w, http.StatusBadRequest, "BLOB_UPLOAD_INVALID", "upload body ended early")
 	case errors.Is(err, repository.ErrNotFound):
 		writeOCIError(w, http.StatusNotFound, "BLOB_UPLOAD_UNKNOWN", "blob upload unknown to registry")
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
-		slog.Warn("oci upload append interrupted", "method", r.Method, "error", err)
+		slog.Info("oci upload append interrupted", fields...)
 		writeOCIError(w, http.StatusServiceUnavailable, "UNKNOWN", "upload append was interrupted")
 	default:
-		slog.Warn("oci upload append failed", "method", r.Method, "error", err)
+		slog.Warn("oci upload append failed", fields...)
 		writeOCIError(w, http.StatusInternalServerError, "UNKNOWN", "upload append failed")
 	}
 }

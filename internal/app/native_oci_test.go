@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/uploadspool"
 )
 
 func TestNativeOCIHostedUploadMountManifestRangeAndDelete(t *testing.T) {
@@ -661,6 +662,8 @@ func TestNativeOCIUploadAppendReportsStorageFailuresApart(t *testing.T) {
 		"object store failure": {err: errors.New("object store unavailable"), status: http.StatusInternalServerError, code: "UNKNOWN"},
 		"deadline":             {err: context.DeadlineExceeded, status: http.StatusServiceUnavailable, code: "UNKNOWN"},
 		"upload closed":        {err: repository.ErrNotFound, status: http.StatusNotFound, code: "BLOB_UPLOAD_UNKNOWN"},
+		"chunk too large":      {err: uploadspool.ErrTooLarge, status: http.StatusRequestEntityTooLarge, code: "SIZE_INVALID"},
+		"body ended early":     {err: io.ErrUnexpectedEOF, status: http.StatusBadRequest, code: "BLOB_UPLOAD_INVALID"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			store := repository.NewMemoryStore()

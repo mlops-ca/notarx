@@ -52,7 +52,7 @@ func integrationOCIRelease(t *testing.T, ctx context.Context, d Docker, release 
 		t.Fatal("remote OCI fixture daemon refused")
 	}
 	f := &registryFixture{docker: d, host: host, config: t.TempDir(), helpers: t.TempDir(), owner: uuid.NewString()}
-	f.name = "ag-oci-fixture-" + strings.ReplaceAll(f.owner, "-", "")
+	f.name = "notarx-oci-fixture-" + strings.ReplaceAll(f.owner, "-", "")
 	f.marker = filepath.Join(f.helpers, "invoked")
 	writeConfig := func(registries ...string) {
 		t.Helper()
@@ -68,7 +68,7 @@ func integrationOCIRelease(t *testing.T, ctx context.Context, d Docker, release 
 	writeConfig()
 	// Docker auto-discovers a native credential helper for a wholly empty
 	// config. Trap every platform's default helper to prove none is consulted.
-	script := []byte("#!/bin/sh\n: > \"$AG_OCI_FIXTURE_HELPER_MARKER\"\nprintf '%s\\n' 'synthetic helper refuses credential access' >&2\nexit 1\n")
+	script := []byte("#!/bin/sh\n: > \"$NOTARX_OCI_FIXTURE_HELPER_MARKER\"\nprintf '%s\\n' 'synthetic helper refuses credential access' >&2\nexit 1\n")
 	for _, name := range []string{"pass", "docker-credential-pass", "docker-credential-secretservice", "docker-credential-osxkeychain", "docker-credential-wincred"} {
 		if os.WriteFile(filepath.Join(f.helpers, name), script, 0700) != nil {
 			t.Fatal("OCI fixture helper trap unavailable")
@@ -155,7 +155,7 @@ func integrationOCIRelease(t *testing.T, ctx context.Context, d Docker, release 
 
 func (f *registryFixture) output(ctx context.Context, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "docker", append([]string{"--config", f.config, "--host", f.host}, args...)...)
-	cmd.Env = sanitizedEnvironment([]string{"PATH=" + f.helpers + string(os.PathListSeparator) + os.Getenv("PATH"), "AG_OCI_FIXTURE_HELPER_MARKER=" + f.marker})
+	cmd.Env = sanitizedEnvironment([]string{"PATH=" + f.helpers + string(os.PathListSeparator) + os.Getenv("PATH"), "NOTARX_OCI_FIXTURE_HELPER_MARKER=" + f.marker})
 	data, err := cmd.CombinedOutput()
 	if _, markerErr := os.Stat(f.marker); !os.IsNotExist(markerErr) {
 		return nil, fmt.Errorf("OCI fixture credential-helper isolation failed")
