@@ -1,7 +1,10 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { authenticateAsAdmin, authenticateAsMember } from "./support/auth";
 import { defaultSiteSettings } from "../src/lib/siteSettings";
-import { waitForModalOpen } from "./support/motion";
+import {
+  waitForAnimationsToSettle,
+  waitForModalOpen,
+} from "./support/motion";
 import { nexusCapabilities } from "../src/test/nexusBatchFixtures";
 import {
   migrationDiscovery,
@@ -47,6 +50,7 @@ async function setup(page: Page, width: number) {
 }
 async function geometry(page: Page, width: number) {
   await page.evaluate(() => document.fonts.ready);
+  await waitForAnimationsToSettle(page);
   expect(
     await page
       .locator("html")
