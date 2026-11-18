@@ -15,6 +15,10 @@ func AddBlockedProxies(settings string) string {
 	if proxies == "" {
 		return settings
 	}
+	// Fail loudly instead of silently leaving a test unguarded.
+	if !strings.Contains(settings, "</settings>") || strings.Contains(settings, "<proxies>") {
+		panic("mavenfixture.AddBlockedProxies: settings must be a non-empty element without <proxies>")
+	}
 	return strings.Replace(settings, "</settings>", "<proxies>"+proxies+"</proxies></settings>", 1)
 }
 

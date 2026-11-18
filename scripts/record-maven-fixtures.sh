@@ -35,11 +35,14 @@ trap cleanup EXIT
 # Go client tests and the end-to-end flows: the fixture they start records what
 # they miss. The end-to-end script runs the same two Go tests, so a renamed test
 # would make go test pass without running anything; require both to pass.
-./scripts/native-maven-e2e.sh | tee "$workdir/e2e.log"
-[[ $(grep -c '^--- PASS: TestMavenClient' "$workdir/e2e.log") -ge 2 ]] || {
+go test -v -count=1 -tags=mavenclient ./internal/app \
+  -run '^TestMavenClient(SnapshotHistoryTakeoverAndDeploy|HostedPOMCompatibilityColdCache)$' | tee "$workdir/go-test.log"
+[[ $(grep -c '^--- PASS: TestMavenClient' "$workdir/go-test.log") -ge 2 ]] || {
   printf 'Expected both Maven client tests to run and pass\n' >&2
   exit 1
 }
+# Then the Maven part of the end-to-end flow (its Gradle steps need no recording).
+./scripts/native-maven-e2e.sh
 
 # Gradle: resolve a plugin from the plugin portal route and a dependency from
 # the Central route through the recording mirror.
