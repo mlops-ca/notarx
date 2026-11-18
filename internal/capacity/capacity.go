@@ -1,0 +1,83 @@
+package capacity
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+)
+
+// ErrQuotaExceeded is returned by Reserve when a positive delta would take a
+// repository over its quota. The message is the one the capacity triggers raise,
+// so both enforcement paths map to the same HTTP result.
+var ErrQuotaExceeded = errors.New("repository capacity quota exceeded")
+
+// Execer is the part of *sql.Tx (or *sql.DB) Reserve needs.
+type Execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// ReserveStatement is the guarded counter update of ADR 0023 section 3. A negative or zero
+// delta is never rejected, so deletion and tombstoning always release bytes; the
+// counter never goes below zero.
+const ReserveStatement = `UPDATE repository_usage_counters
+   SET bytes = GREATEST(0, bytes + $2::bigint), objects = GREATEST(0, objects + $3::bigint), updated_at = now()
+ WHERE repository_id = $1::uuid
+   AND ($2::bigint <= 0 OR quota_bytes IS NULL OR quota_bytes = 0 OR bytes + $2::bigint <= quota_bytes)`
+
+// ensureSQL creates the counter row of a repository that has none yet (a repository
+// created after the backfill). Its usage starts at zero: a repository without a
+// counter row has had no counted write. The quota comes from the quota table.
+const ensureSQL = `INSERT INTO repository_usage_counters(repository_id,bytes,objects,quota_bytes,updated_at)
+SELECT h.id,0,0,NULLIF((SELECT q.quota_bytes FROM repository_capacity_quotas q WHERE q.repository_id=h.id),0),now()
+  FROM hosted_repositories h WHERE h.id=$1::uuid
+ON CONFLICT (repository_id) DO NOTHING`
+
+// Reserve adds deltaBytes and deltaObjects to the repository's usage counter and
+// enforces the quota in the same statement. Call it as the last statement of the
+// publishing transaction (short lock hold). A positive delta that would exceed
+// the quota returns ErrQuotaExceeded and changes nothing. The caller owns the
+// transaction and must roll it back on error.
+func Reserve(ctx context.Context, tx Execer, repositoryID string, deltaBytes, deltaObjects int64) error {
+	for attempt := 0; attempt < 2; attempt++ {
+		result, err := tx.ExecContext(ctx, ReserveStatement, repositoryID, deltaBytes, deltaObjects)
+		if err != nil {
+			return err
+		}
+		if rows, err := result.RowsAffected(); err != nil {
+			return err
+		} else if rows > 0 {
+			return nil
+		}
+		var present int
+		err = tx.QueryRowContext(ctx, `SELECT 1 FROM repository_usage_counters WHERE repository_id=$1::uuid`, repositoryID).Scan(&present)
+		switch {
+		case err == nil:
+			// The row exists, so the quota guard rejected the delta.
+			return ErrQuotaExceeded
+		case !errors.Is(err, sql.ErrNoRows):
+			return err
+		}
+		if attempt == 1 {
+			break
+		}
+		result, err = tx.ExecContext(ctx, ensureSQL, repositoryID)
+		if err != nil {
+			return err
+		}
+		if rows, _ := result.RowsAffected(); rows == 0 {
+			return sql.ErrNoRows // the repository does not exist
+		}
+	}
+	return sql.ErrNoRows
+}
+
+// SetQuota records the quota in the counter row, creating the row when needed. The
+// quota API calls it in the transaction that writes repository_capacity_quotas;
+// a zero quota (unlimited) is stored as NULL.
+func SetQuota(ctx context.Context, tx Execer, repositoryID string, quotaBytes int64) error {
+	_, err := tx.ExecContext(ctx, `INSERT INTO repository_usage_counters(repository_id,bytes,objects,quota_bytes,updated_at)
+VALUES ($1::uuid,0,0,NULLIF($2::bigint,0),now())
+ON CONFLICT (repository_id) DO UPDATE SET quota_bytes=NULLIF($2::bigint,0), updated_at=now()`, repositoryID, quotaBytes)
+	return err
+}

@@ -112,6 +112,9 @@ type Config struct {
 	APTSignerTLSRootCertificates    []byte
 	RuntimeNodeRetention            time.Duration
 	RuntimeNodePruneInterval        time.Duration
+	// QuotaReconcileInterval is how often the quota reconciler recomputes every
+	// repository's usage counter (NOTARX_QUOTA_RECONCILE_INTERVAL, ADR 0023 section 3).
+	QuotaReconcileInterval time.Duration
 	// PartitionAhead is the number of future partition periods the partition
 	// manager creates beyond the current one (ADR 0023 section 2).
 	PartitionAhead int
@@ -223,6 +226,7 @@ func Load() (Config, error) {
 		APTSignerTLSCAFile:              strings.TrimSpace(os.Getenv("NOTARX_APT_SIGNER_TLS_CA_FILE")),
 		RuntimeNodeRetention:            7 * 24 * time.Hour,
 		RuntimeNodePruneInterval:        time.Hour,
+		QuotaReconcileInterval:          6 * time.Hour,
 		PartitionAhead:                  3,
 		Retention:                       retention.DefaultConfig(),
 		AuditBufferSize:                 65536,
@@ -544,6 +548,11 @@ func Load() (Config, error) {
 		return Config{}, err
 	} else {
 		cfg.RuntimeNodePruneInterval = interval
+	}
+	if interval, err := durationEnv("NOTARX_QUOTA_RECONCILE_INTERVAL", cfg.QuotaReconcileInterval); err != nil {
+		return Config{}, err
+	} else {
+		cfg.QuotaReconcileInterval = interval
 	}
 	if ahead, err := positiveIntEnv("NOTARX_PARTITION_AHEAD", cfg.PartitionAhead, false); err != nil {
 		return Config{}, err

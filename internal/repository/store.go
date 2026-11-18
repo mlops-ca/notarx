@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"github.com/mlops-ca/notarx/internal/capacity"
 )
 
 var (
@@ -13,7 +15,7 @@ var (
 	ErrIdempotencyConflict           = errors.New("idempotency key conflicts with request")
 	ErrVersionConflict               = errors.New("resource version conflicts with current state")
 	ErrLastActiveAdmin               = errors.New("last active administrator cannot be removed")
-	ErrQuotaExceeded                 = errors.New("repository capacity quota exceeded")
+	ErrQuotaExceeded                 = capacity.ErrQuotaExceeded
 	ErrUpstreamChanged               = errors.New("upstream immutable artifact metadata changed")
 	ErrInvalidGoModulePublication    = errors.New("go module publication is invalid")
 	ErrInvalidCargoIdentity          = errors.New("cargo identity reservation is invalid")

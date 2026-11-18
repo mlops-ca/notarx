@@ -147,6 +147,25 @@ Every node starts the partition manager for the audit tables. One node at a time
 see [PostgreSQL capabilities](postgresql-capabilities.md#partitioned-audit-tables).
 Alert when `notarx_partition_default_rows` is not zero.
 
+## Quota counters
+
+Quota accounting (ADR 0023 section 3) keeps one row per repository in
+`repository_usage_counters` (`bytes`, `objects`, `quota_bytes`). Publishing code
+calls `capacity.Reserve` as the last statement of its transaction; a positive
+delta that would pass `quota_bytes` is rejected (HTTP 507, as before) and a release
+never is. The overview and quota alert evaluation read the counters, so they cost
+O(repositories). Formats whose writers are not yet covered (the registry in
+`internal/capacity/registry.go` lists each format as pending or covered) keep the
+capacity triggers and aggregate on read until their slice lands.
+
+A reconciler recomputes every repository's usage from the asset tables every
+`NOTARX_QUOTA_RECONCILE_INTERVAL` (default `6h`, jittered, in batches of 50 with
+a pause between them) under the counter row lock and corrects drift in one UPDATE.
+Metrics: `notarx_quota_drift_bytes` (absolute drift corrected by the last pass),
+`notarx_quota_drift_ratio_max` and `notarx_quota_drift_alert` (1 when a
+repository drifted by more than 0.1 percent of its usage; alert on it, a non-zero
+value means a writer does not call `Reserve`).
+
 ## Retention
 
 Every append-only or churning table is bounded by default (ADR 0023 section 2).

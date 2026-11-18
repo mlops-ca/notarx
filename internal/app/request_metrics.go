@@ -12,6 +12,7 @@ import (
 
 	"github.com/felixge/httpsnoop"
 	"github.com/mlops-ca/notarx/internal/auditwriter"
+	"github.com/mlops-ca/notarx/internal/capacity"
 	"github.com/mlops-ca/notarx/internal/partitions"
 	"github.com/mlops-ca/notarx/internal/retention"
 )
@@ -92,6 +93,32 @@ func (m *Metrics) writeRetentionMetrics(w io.Writer) {
 		_, _ = io.WriteString(w, "notarx_retention_deleted_rows_total{"+label+"} "+itoa(stat.Deleted)+"\n")
 		_, _ = io.WriteString(w, "notarx_retention_lag_seconds{"+label+"} "+strconv.FormatFloat(stat.LagSeconds, 'f', 0, 64)+"\n")
 	}
+}
+
+// QuotaDriftStatsFunc reports the quota reconciler's last pass (internal/capacity).
+type QuotaDriftStatsFunc func() capacity.Stats
+
+// WithQuotaDriftStats exports notarx_quota_drift_bytes (absolute drift corrected by
+// the last reconciliation pass), notarx_quota_drift_ratio_max and
+// notarx_quota_drift_alert (1 above 0.1 percent of a repository's usage), ADR 0023
+// section 3.
+func (m *Metrics) WithQuotaDriftStats(stats QuotaDriftStatsFunc) *Metrics {
+	m.quotaDriftStats = stats
+	return m
+}
+
+func (m *Metrics) writeQuotaDriftMetrics(w io.Writer) {
+	if m.quotaDriftStats == nil {
+		return
+	}
+	stats := m.quotaDriftStats()
+	alert := int64(0)
+	if stats.Alerting {
+		alert = 1
+	}
+	_, _ = io.WriteString(w, "# TYPE notarx_quota_drift_bytes gauge\nnotarx_quota_drift_bytes "+itoa(stats.DriftBytes)+"\n")
+	_, _ = io.WriteString(w, "# TYPE notarx_quota_drift_ratio_max gauge\nnotarx_quota_drift_ratio_max "+strconv.FormatFloat(stats.MaxDriftRatio, 'g', 6, 64)+"\n")
+	_, _ = io.WriteString(w, "# TYPE notarx_quota_drift_alert gauge\nnotarx_quota_drift_alert "+itoa(alert)+"\n")
 }
 
 // AuditWriterStatsFunc reports the audit writer's counters (internal/auditwriter).

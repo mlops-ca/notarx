@@ -245,6 +245,7 @@ func TestLoadParsesClusterNodeRolesAndWorkerFilters(t *testing.T) {
 	t.Setenv("NOTARX_RUNTIME_NODE_RETENTION", "48h")
 	t.Setenv("NOTARX_RUNTIME_NODE_PRUNE_INTERVAL", "900")
 	t.Setenv("NOTARX_PARTITION_AHEAD", "5")
+	t.Setenv("NOTARX_QUOTA_RECONCILE_INTERVAL", "2h")
 
 	cfg, err := Load()
 	if err != nil {
@@ -255,6 +256,9 @@ func TestLoadParsesClusterNodeRolesAndWorkerFilters(t *testing.T) {
 	}
 	if len(cfg.WorkerFormats) != 2 || len(cfg.WorkerKinds) != 2 || !cfg.WorkerEnabled("oci", "replication") || !cfg.WorkerEnabled("raw", "reclaim") || cfg.WorkerEnabled("maven", "reclaim") || cfg.WorkerEnabled("oci", "promotion") {
 		t.Fatalf("worker filters formats=%#v kinds=%#v", cfg.WorkerFormats, cfg.WorkerKinds)
+	}
+	if cfg.QuotaReconcileInterval != 2*time.Hour {
+		t.Fatalf("quota reconcile interval = %s, want 2h", cfg.QuotaReconcileInterval)
 	}
 	if cfg.PartitionAhead != 5 {
 		t.Fatalf("partition ahead = %d, want 5", cfg.PartitionAhead)

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/auditwriter"
+	"github.com/mlops-ca/notarx/internal/capacity"
 	"github.com/mlops-ca/notarx/internal/database"
 	"github.com/mlops-ca/notarx/internal/partitions"
 	"github.com/mlops-ca/notarx/internal/retention"
@@ -282,5 +283,24 @@ func TestRetentionMetricsExposeDeletedRowsAndLag(t *testing.T) {
 	(&Metrics{}).Handler(empty, httptest.NewRequest(http.MethodGet, "/metrics", nil))
 	if strings.Contains(empty.Body.String(), "notarx_retention") {
 		t.Fatal("retention metrics must be absent when no janitor is configured")
+	}
+}
+
+func TestQuotaDriftMetricsExposeDriftAndAlert(t *testing.T) {
+	metrics := (&Metrics{}).WithQuotaDriftStats(func() capacity.Stats {
+		return capacity.Stats{DriftBytes: 4096, MaxDriftRatio: 0.25, Alerting: true}
+	})
+	recorder := httptest.NewRecorder()
+	metrics.Handler(recorder, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	body := recorder.Body.String()
+	for _, want := range []string{"notarx_quota_drift_bytes 4096", "notarx_quota_drift_ratio_max 0.25", "notarx_quota_drift_alert 1"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("metrics lack %q", want)
+		}
+	}
+	empty := httptest.NewRecorder()
+	(&Metrics{}).Handler(empty, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if strings.Contains(empty.Body.String(), "notarx_quota_drift") {
+		t.Fatal("quota drift metrics must be absent when no reconciler is configured")
 	}
 }
