@@ -39,4 +39,10 @@ the Go module cache with retries and resolves modules through
 `GOPROXY=https://proxy.golang.org|direct`, so one failed proxy stream no longer
 fails a lane. Lane evidence and the aggregate check are unchanged.
 
+The contract lanes use the default shallow checkout. CI no longer fetches the
+upstream v0.5.0 tag or runs `upgrade-readiness`: ADR 0015 has no upgrade path
+from upstream, and [#39](https://github.com/mlops-ca/notarx/issues/39)
+re-parameterises `scripts/upgrade-readiness.sh` (kept, with its make target) on
+notarx release tags. Re-add the step once a notarx release tag exists.
+
 Run `bash scripts/ci-changes-test.sh` to check the classifier fixtures.

@@ -31,4 +31,9 @@ CI 只运行变更所需的作业。`.github/workflows/ci.yml` 中的 `changes` 
 每个通道带重试地预热 Go 模块缓存，并通过 `GOPROXY=https://proxy.golang.org|direct` 解析模块，
 单次代理流错误不再使通道失败。通道证据与聚合检查保持不变。
 
+契约通道使用默认的浅克隆。CI 不再获取上游 v0.5.0 标签，也不再运行 `upgrade-readiness`：
+ADR 0015 不提供来自上游的升级路径，[#39](https://github.com/mlops-ca/notarx/issues/39)
+会把 `scripts/upgrade-readiness.sh`（及其 make 目标，予以保留）改为基于 notarx 发布标签。
+notarx 发布标签出现后再恢复该步骤。
+
 运行 `bash scripts/ci-changes-test.sh` 可检查分类器用例。

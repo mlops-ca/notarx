@@ -1,6 +1,5 @@
 {
   "schemaVersion": 1,
-  "baseline": "d86c44f1ede5a74c562c8b39660411fb43a7da6f",
   "nativeOrder": [
     "migration-clients",
     "inventory",
@@ -192,14 +191,6 @@
             "published-native-backup-test"
           ],
           "timeoutSeconds": 900
-        },
-        {
-          "name": "upgrade-readiness",
-          "command": [
-            "make",
-            "upgrade-readiness"
-          ],
-          "timeoutSeconds": 600
         },
         {
           "name": "integration-test",

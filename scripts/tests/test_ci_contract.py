@@ -749,15 +749,16 @@ class ContractGateTests(unittest.TestCase):
                     ci.signal_group(456, signal.SIGKILL)
 
     def test_mapping_preserves_original_make_targets_and_timeouts(self):
-        baseline = subprocess.check_output(['git', 'show', ci.PLAN['baseline'] + ':.github/workflows/ci.yml'], cwd=ROOT, text=True)
-        original = baseline.split('  contract-and-test:', 1)[1].split('  quality:', 1)[0]
-        expected = re.findall(r'^\s+(?:run:\s+)?make ([a-z0-9-]+)\s*$', original, re.M)
+        makefile = (ROOT / 'Makefile').read_text()
         actual = [s['command'][1] for lane in ci.PLAN['lanes'].values() for s in lane['steps'] if s['command'][0] == 'make']
-        # New native gates extend the matrix without removing any original
-        # target from the fixed six-lane performance scope.
-        self.assertCountEqual(actual, [*expected, 'native-oci-discovery-e2e',
-                                     'nexus-npm-migration-e2e', 'native-helm-e2e',
-                                     'native-rubygems-e2e', 'nexus-pypi-migration-e2e'])
+        # Every planned make target must exist; the plan is the source of truth.
+        for target in actual:
+            self.assertRegex(makefile, r'(?m)^' + re.escape(target) + r':', target)
+        self.assertEqual(len(actual), len(set(actual)), 'a make target is planned twice')
+        for required in ('native-oci-discovery-e2e', 'nexus-npm-migration-e2e', 'native-helm-e2e',
+                         'native-rubygems-e2e', 'nexus-pypi-migration-e2e', 'email-compose-check',
+                         'backup-transfer-test', 'integration-test', 'release-readiness-check'):
+            self.assertIn(required, actual)
         self.assertEqual(ci.PLAN['lanes']['oci-discovery']['steps'][-1]['timeoutSeconds'], 900)
         self.assertEqual(ci.PLAN['lanes']['nuget']['steps'][-1]['timeoutSeconds'], 900)
         self.assertEqual(ci.PLAN['lanes']['six-format-auth']['steps'][-1]['timeoutSeconds'], 900)
@@ -768,7 +769,7 @@ class ContractGateTests(unittest.TestCase):
             self.assertEqual(ci.PLAN['lanes'][lane]['steps'][0]['timeoutSeconds'], 300)
         steps = {s['name']: s for s in ci.PLAN['lanes']['core']['steps']}
         self.assertEqual(steps['published-native-backup-test']['timeoutSeconds'], 900)
-        self.assertEqual(steps['upgrade-readiness']['timeoutSeconds'], 600)
+        self.assertNotIn('upgrade-readiness', steps)  # ADR 0015 / #39: no upstream upgrade step in CI
 
     def test_workflow_preserves_stable_aggregate_and_publication_dependencies(self):
         workflow = (ROOT / '.github/workflows/ci.yml').read_text()
