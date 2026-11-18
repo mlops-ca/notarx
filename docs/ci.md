@@ -106,3 +106,15 @@ has no upgrade path from upstream, and
 tags. Re-add the step once a notarx release tag exists.
 
 Run `bash scripts/ci-changes-test.sh` to check the classifier fixtures.
+
+## Release plan
+
+`scripts/release-plan.sh` is the one place a release version is computed (ADR 0024).
+It is read-only and prints `skip`, `channel`, `version`, `core`, `sha` and `previous`.
+The bump comes from git-cliff, pinned in `scripts/git-cliff.version` and installed
+with a checksum check by `scripts/install-git-cliff.sh`; `cliff.toml` holds the
+0.x rules. `scripts/release-required-checks.txt` is the single list of check names
+that must be green on a commit before it is released. `make release-plan-test`
+runs the plan against fixture repositories and fails if git-cliff's bump behaviour
+deviates from the pinned expectations. Wiring the plan into the release workflow is
+a later slice of ADR 0024.

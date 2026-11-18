@@ -26,15 +26,8 @@ jobs:
           test "$GITHUB_REF_NAME" = "$expected_tag"
           git fetch origin main
           test "$GITHUB_SHA" = "$(git rev-parse origin/main)"
-          checks=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?per_page=100")
-          for required in quality contract-and-test console mainline-assets; do
-            jq -e --arg name "$required" \
-              '[.check_runs[] | select(.name == $name and .conclusion == "success")] | length > 0' \
-              <<<"$checks" >/dev/null
-          done
-          jq -e \
-            '[.check_runs[] | select((.name | startswith("mainline-images ")) and .conclusion == "success")] | length == 2' \
-            <<<"$checks" >/dev/null
+          # The required checks are listed in scripts/release-required-checks.txt.
+          ./scripts/release-plan.sh green "$GITHUB_SHA"
       - name: Verify release version consistency
         run: make release-version-check
 
