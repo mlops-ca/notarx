@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+host=$(go env GOOS)/$(go env GOARCH)
+go build ./...

@@ -207,6 +207,13 @@ restarts Gateway, and reads both its PostgreSQL Repository record and object
 bytes back. Record the live evidence and use `make kubernetes-local-down` only
 when deleting the namespace and its local PVC data is intended.
 
+Builds are native: notarx never cross-compiles and never emulates (ADR 0016).
+`make build`, `make docker-build` and `make cli-build` produce the architecture of
+your machine (arm64 on Apple Silicon, amd64 on Linux x86_64), and the other
+architecture comes from the CI artifacts, not from a local `--platform` build.
+Run `make native-build-check` after touching a Dockerfile, the Makefile, `scripts/`
+or a workflow; see [native builds](docs/native-builds.md).
+
 Run `make test` before submitting a change that affects shared backend behaviour.
 Run `make docs-check` when changing Markdown entry points, capability claims,
 or local assets; it validates local documentation references and the

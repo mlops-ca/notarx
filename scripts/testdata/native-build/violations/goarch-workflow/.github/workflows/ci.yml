@@ -1,0 +1,7 @@
+name: CI
+on: push
+jobs:
+  b:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: GOARCH=arm64 go build ./...

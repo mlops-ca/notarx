@@ -1,0 +1,179 @@
+name: Release archives
+
+# Reusable four-runner archive matrix (ADR 0016). Every archive is built natively
+# on its own runner: nothing is cross-compiled. Callers: ci.yml (mainline-assets)
+# and the ADR 0024 release pipeline.
+#
+# Interface other slices build on (ADR 0024 slice 4, ADR 0025 slice 2):
+#   - per-leg artifacts named <product>-<version>-<goos>-<goarch>, one per
+#     archive (notarx, notarxctl); the linux/amd64 leg also uploads the
+#     architecture independent Console and OpenAPI archives;
+#   - one combined artifact (input assets-artifact) holding the union of every
+#     archive plus the SHA256SUMS that scripts/write-release-checksums.sh writes
+#     over that union.
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Stamped version (X.Y.Z, X.Y.Z-nightly.N or a mainline pre-release); no v prefix.
+        required: true
+        type: string
+      sha:
+        description: Full commit SHA the archives are built from.
+        required: true
+        type: string
+      assets-artifact:
+        description: Name of the combined artifact (union of every archive plus SHA256SUMS).
+        required: true
+        type: string
+      retention-days:
+        default: 30
+        type: number
+
+permissions:
+  contents: read
+
+jobs:
+  archives:
+    name: archives (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            runner: ubuntu-24.04
+            console: true
+          - goos: linux
+            goarch: arm64
+            runner: ubuntu-24.04-arm
+            console: false
+          - goos: darwin
+            goarch: arm64
+            runner: macos-15
+            console: false
+          # The last x86_64 hosted macOS image; scripts/native-build-check.sh fails
+          # from 2027-09-01 while this label remains (ADR 0016).
+          - goos: darwin
+            goarch: amd64
+            runner: macos-15-intel
+            console: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.sha }}
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: matrix.console
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: console/package-lock.json
+      - name: Stamp the version into this workspace (ADR 0024)
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          npm --prefix tools/openapi ci --ignore-scripts --no-audit --no-fund
+          ./scripts/stamp-version.sh "$VERSION"
+      - name: Build this runner's archives natively
+        env:
+          VERSION: ${{ inputs.version }}
+          REVISION: ${{ inputs.sha }}
+          BUILD_CONSOLE: ${{ matrix.console }}
+        run: |
+          test "$(go env GOOS)/$(go env GOARCH)" = "${{ matrix.goos }}/${{ matrix.goarch }}"
+          # The Console and OpenAPI archives do not depend on the architecture, so
+          # only the linux/amd64 leg builds them; the archive contents are unchanged.
+          args=()
+          if [ "$BUILD_CONSOLE" != true ]; then args+=(--skip-console); fi
+          ./scripts/build-release-artifacts.sh \
+            --version "$VERSION" \
+            --revision "$REVISION" \
+            --output dist \
+            "${args[@]}"
+      - name: Smoke-run this runner's own binaries
+        env:
+          VERSION: ${{ inputs.version }}
+          REVISION: ${{ inputs.sha }}
+        run: |
+          suffix="${{ matrix.goos }}_${{ matrix.goarch }}"
+          mkdir -p smoke/server smoke/cli
+          tar -xzf "dist/notarx_${VERSION}_$suffix.tar.gz" -C smoke/server
+          tar -xzf "dist/notarxctl_${VERSION}_$suffix.tar.gz" -C smoke/cli
+          smoke/cli/notarxctl version | grep -F "notarxctl $VERSION (revision $REVISION,"
+          smoke/server/notarx version | grep -F "notarx $VERSION"
+      - name: Run the CLI unit tests (no Docker on hosted macOS)
+        if: matrix.goos == 'darwin'
+        run: make cli-test
+      - name: Upload the notarx archive
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: notarx-${{ inputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/notarx_${{ inputs.version }}_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention-days }}
+      - name: Upload the notarxctl archive
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: notarxctl-${{ inputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/notarxctl_${{ inputs.version }}_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention-days }}
+      - name: Upload the architecture independent archives
+        if: matrix.console
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: console-openapi-${{ inputs.version }}
+          path: |
+            dist/artifact-gateway-console_${{ inputs.version }}_web.tar.gz
+            dist/artifact-gateway-openapi_${{ inputs.version }}.tar.gz
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention-days }}
+
+  assemble-release:
+    needs: archives
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.sha }}
+      # Explicit per-product patterns: a version-wide glob would also sweep in the
+      # combined artifact (and any other artifact named after the version) on a re-run.
+      - name: Download the notarx archives
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: notarx-${{ inputs.version }}-*
+          path: dist
+          merge-multiple: true
+      - name: Download the notarxctl archives
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: notarxctl-${{ inputs.version }}-*
+          path: dist
+          merge-multiple: true
+      - name: Download the Console and OpenAPI archives
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: console-openapi-${{ inputs.version }}
+          path: dist
+      - name: Write one checksum file over the union
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          ls -1 dist
+          # Four runners x two archives, plus the Console and OpenAPI archives.
+          test "$(find dist -maxdepth 1 -name '*.tar.gz' | wc -l | tr -d ' ')" = 10
+          ./scripts/write-release-checksums.sh dist
+          test "$(wc -l < dist/SHA256SUMS | tr -d ' ')" = 10
+          (cd dist && sha256sum -c SHA256SUMS)
+      - name: Upload the combined release assets
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ inputs.assets-artifact }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention-days }}
