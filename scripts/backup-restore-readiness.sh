@@ -43,6 +43,10 @@ conan_workspace=$(mktemp -d)
 cargo_workspace=$(mktemp -d)
 mkdir -p "$repo_root/.artifacts"
 backup_dir=$(mktemp -d "$repo_root/.artifacts/backup-readiness.XXXXXX")
+fs_backup_dir=$(mktemp -d "$repo_root/.artifacts/backup-readiness-fs.XXXXXX")
+fs_root=$(mktemp -d)
+fs_override=$(mktemp)
+fs_compose=$(mktemp)
 
 awk -F= '$1 != "NOTARX_HTTP_PORT" && $1 != "NOTARX_POSTGRES_PORT" && $1 != "RUSTFS_API_PORT" && $1 != "RUSTFS_CONSOLE_PORT" { print }' "$environment_file" >"$isolated_environment"
 printf 'NOTARX_HTTP_PORT=%s\nNOTARX_POSTGRES_PORT=%s\nRUSTFS_API_PORT=%s\nRUSTFS_CONSOLE_PORT=%s\n' "$gateway_port" "$(free_port)" "$rustfs_api_port" "$rustfs_console_port" >>"$isolated_environment"
@@ -62,7 +66,10 @@ cleanup() {
   rm -rf "$conan_workspace"
   chmod -R u+w "$cargo_workspace" >/dev/null 2>&1 || true
   rm -rf "$cargo_workspace"
-  rm -rf "$backup_dir"
+  rm -rf "$backup_dir" "$fs_backup_dir"
+  rm -f "$fs_override" "$fs_compose"
+  chmod -R u+w "$fs_root" >/dev/null 2>&1 || true
+  rm -rf "$fs_root"
 }
 trap cleanup EXIT
 
@@ -632,4 +639,62 @@ grep -Fq '"AuthorizationSource":"repository_grants"' <<<"$audits" || { printf '%
 [[ $(grep -o '"Operation":"promote"' <<<"$audits" | wc -l | tr -d ' ') -ge 5 ]] || { printf '%s\n' 'Restored promotion audits do not cover all native formats.' >&2; exit 1; }
 [[ $(grep -o '"Operation":"replicate"' <<<"$audits" | wc -l | tr -d ' ') -ge 5 ]] || { printf '%s\n' 'Restored replication audits do not cover all native formats.' >&2; exit 1; }
 
-printf '%s\n' 'Backup/restore readiness passed: isolated PostgreSQL and RustFS restore preserved OCI, Maven, Raw, Conan, Go, and Cargo Artifacts; Cargo Group owner, source index and object digest; recovery intents, promotion jobs and replication plans; quarantine, grants, and audits.'
+# Filesystem leg (ADR 0017): the same drills with the Gateway on the filesystem
+# object driver. The Gateway runs as this user so it owns the new root, and the
+# restored database must match the restored root marker for it to become ready.
+cat >"$fs_override" <<YAML
+services:
+  gateway:
+    user: "$(id -u):$(id -g)"
+    environment:
+      NOTARX_OBJECT_STORE_DRIVER: filesystem
+      NOTARX_OBJECT_STORE_FS_ROOT: /srv/notarx/objects
+    volumes:
+      - $fs_root:/srv/notarx/objects
+YAML
+compose -f "$fs_override" config >"$fs_compose"
+COMPOSE_PROJECT_NAME="$project" docker compose --env-file "$isolated_environment" -f "$fs_compose" \
+  up -d --no-build --no-deps --force-recreate --wait gateway
+fs_wait_ready() {
+  local status=000
+  for _ in $(seq 1 80); do
+    status=$(curl --noproxy '*' --silent --output /dev/null --write-out '%{http_code}' --max-time 2 "$gateway_url/readyz" 2>/dev/null || true)
+    [[ "$status" == 204 ]] && return 0
+    sleep 0.25
+  done
+  printf 'Filesystem Gateway readiness returned HTTP %s.\n' "$status" >&2
+  return 1
+}
+fs_put() {
+  local name=$1 body=$2 status
+  status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+    --request PUT -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" --data-binary "$body" \
+    "$gateway_url/raw/$fs_repository/$name")
+  [[ "$status" == 201 ]] || { printf 'Writing filesystem recovery Raw object %s returned HTTP %s.\n' "$name" "$status" >&2; return 1; }
+}
+fs_get() {
+  curl --silent --show-error --output "$grant_response" --write-out '%{http_code}' \
+    -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$gateway_url/raw/$fs_repository/$1"
+}
+fs_wait_ready
+test -f "$fs_root/.notarx-root" || { printf '%s\n' 'The filesystem Gateway did not initialise its object root.' >&2; exit 1; }
+fs_repository="fs-restore-${run_id}"
+create_hosted_repository raw "$fs_repository" "fs-restore-${run_id}" >/dev/null
+fs_put original.txt 'filesystem restore artifact'
+fs_root_id=$(<"$fs_root/.notarx-root")
+fs_drill_environment=(COMPOSE_PROJECT_NAME="$project" NOTARX_ENV_FILE="$isolated_environment" NOTARX_COMPOSE_FILE="$fs_compose" \
+  NOTARX_OBJECT_STORE_DRIVER=filesystem NOTARX_OBJECT_STORE_FS_ROOT="$fs_root")
+env "${fs_drill_environment[@]}" ./scripts/backup-drill.sh "$fs_backup_dir"
+fs_wait_ready
+fs_put after-backup.txt 'written after the backup'
+env "${fs_drill_environment[@]}" ./scripts/restore-drill.sh "$fs_backup_dir"
+fs_wait_ready
+[[ $(<"$fs_root/.notarx-root") == "$fs_root_id" ]] || { printf '%s\n' 'The restored filesystem root lost its recorded identity.' >&2; exit 1; }
+status=$(fs_get original.txt)
+[[ "$status" == 200 && $(<"$grant_response") == 'filesystem restore artifact' ]] || {
+  printf 'Restored filesystem Raw object returned HTTP %s.\n' "$status" >&2; exit 1;
+}
+status=$(fs_get after-backup.txt)
+[[ "$status" == 404 ]] || { printf 'Post-backup filesystem object survived the restore (HTTP %s).\n' "$status" >&2; exit 1; }
+
+printf '%s\n' 'Backup/restore readiness passed: isolated PostgreSQL and RustFS restore preserved OCI, Maven, Raw, Conan, Go, and Cargo Artifacts; Cargo Group owner, source index and object digest; recovery intents, promotion jobs and replication plans; quarantine, grants, and audits; the filesystem object driver round trip restored its root identity and bytes.'

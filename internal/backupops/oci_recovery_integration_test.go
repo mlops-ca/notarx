@@ -253,7 +253,7 @@ func fixtureBackupCommand(t *testing.T, ctx context.Context, action string, spec
 		}
 		// Never adopt an existing project. Only a new random fixture project
 		// can be captured after this public invocation.
-		for _, entry := range []struct{ kind, suffix string }{{"network", "network"}, {"volume", "pgdata"}, {"volume", "objects"}, {"container", "postgres"}, {"container", "rustfs"}, {"container", "gateway"}} {
+		for _, entry := range candidate.resourceEntries() {
 			if _, err := candidate.Docker.output(ctx, entry.kind, "inspect", candidate.Project+"-"+entry.suffix); err == nil {
 				t.Fatal("public restore fixture project already exists")
 			}
@@ -295,7 +295,12 @@ func fixtureBackupCommand(t *testing.T, ctx context.Context, action string, spec
 func verifyFixtureGatewayImage(t *testing.T, ctx context.Context, target *OwnedTarget, release Release) {
 	t.Helper()
 	c := fixtureContainerInspection(t, ctx, target.spec.Docker, target.resourceID("container", target.spec.Project+"-gateway"))
-	if c.ID == "" || c.Config.Image != release.ImageReference || len(c.Mounts) != 0 {
+	// Only the filesystem driver mounts anything: its object root.
+	wantMounts := 0
+	if target.spec.filesystem() {
+		wantMounts = 1
+	}
+	if c.ID == "" || c.Config.Image != release.ImageReference || len(c.Mounts) != wantMounts {
 		t.Fatal("OCI Gateway did not start from the approved digest without binary mounts")
 	}
 	var actual []struct{ Image string }

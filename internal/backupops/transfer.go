@@ -357,6 +357,12 @@ func Restore(ctx context.Context, directory string, release Release, target Dest
 	}
 	r.Metadata = "verified"
 	recordMetadataEvidence(restoredMetadata, &r)
+	if identified, ok := target.(interface{ SetObjectRootID(string) error }); ok && m.Objects.RootID != "" {
+		// A filesystem target carries the root ID the restored database recorded.
+		if identified.SetObjectRootID(m.Objects.RootID) != nil {
+			return fail(r, "object_restore_failed")
+		}
+	}
 	if reason := restoreObjects(ctx, root, m, target, &r); reason != "" {
 		return fail(r, reason)
 	}

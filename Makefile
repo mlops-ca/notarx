@@ -394,7 +394,7 @@ packages-environments-test:
 
 # Explicit opt-in real transfer fixture; no server .env or existing data targets.
 backup-transfer-test:
-	@BACKUPOPS_DOCKER_TEST=1 BACKUPOPS_DOCKER_CONTEXT="$$(docker context show)" go test -v -count=1 ./internal/backupops -run '^(TestLocalRecoveryIntegration|TestLocalReleaseUpgrade|TestFilesystemExport.*|TestEmptyFilesystemExportAndRestore|TestRestoreFilesystemObjects.*|TestBackupCLIRestoresObjects.*)$$'
+	@BACKUPOPS_DOCKER_TEST=1 BACKUPOPS_DOCKER_CONTEXT="$$(docker context show)" go test -v -count=1 -timeout 60m ./internal/backupops -run '^(TestLocalRecoveryIntegration|TestLocalReleaseUpgrade|TestFilesystemExport.*|TestEmptyFilesystemExportAndRestore|TestRestoreFilesystemObjects.*|TestBackupCLIRestoresObjects.*)$$'
 
 .PHONY: published-native-backup-test
 published-native-backup-test:

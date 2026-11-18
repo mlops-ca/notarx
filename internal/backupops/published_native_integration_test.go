@@ -20,7 +20,7 @@ func TestPublishedNativeRecoveryIntegration(t *testing.T) {
 		t.Skip("run make published-native-backup-test for original-asset PG/RustFS recovery")
 	}
 	for _, version := range []string{"0.5.0", "0.6.0"} {
-		t.Run(version, func(t *testing.T) { runLocalRecoveryIntegration(t, "published-"+version) })
+		t.Run(version, func(t *testing.T) { runLocalRecoveryIntegration(t, "published-"+version, "s3", "s3") })
 	}
 }
 
