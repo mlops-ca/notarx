@@ -394,7 +394,16 @@ func runLocalRecoveryIntegration(t *testing.T, profile, sourceDriver, targetDriv
 			if strings.HasPrefix(scenario, "corrupt") || scenario == "unsupported manifest" {
 				input = filepath.Join(t.TempDir(), "damaged")
 				copyPrivateFixture(t, bundle, input)
+				// The first object file of the bundle: a per-object data file for
+				// s3-bytes-v1, a tar segment for fs-bytes-v1 (filesystem source).
 				path := "objects/000000000000.data"
+				if _, statErr := os.Stat(filepath.Join(input, path)); statErr != nil {
+					entries, readErr := os.ReadDir(filepath.Join(input, "objects"))
+					if readErr != nil || len(entries) == 0 {
+						t.Fatal("fixture bundle has no object files")
+					}
+					path = "objects/" + entries[0].Name()
+				}
 				if scenario == "corrupt dump" || scenario == "corrupt archive with matching digest" {
 					path = "database.dump"
 				}
