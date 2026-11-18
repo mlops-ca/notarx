@@ -123,10 +123,10 @@ MIGRATION_DIR=./migrations ./run-migrations.sh
 Container images are published to GHCR for both release and development use:
 
 ```text
-ghcr.io/ccsert/artifact-gateway:0.4.1
-ghcr.io/ccsert/artifact-gateway-console:0.4.1
-ghcr.io/ccsert/artifact-gateway:main
-ghcr.io/ccsert/artifact-gateway-console:main
+ghcr.io/mlops-ca/notarx:0.4.1
+ghcr.io/mlops-ca/notarx-console:0.4.1
+ghcr.io/mlops-ca/notarx:main
+ghcr.io/mlops-ca/notarx-console:main
 ```
 
 `main` is a moving, CI-qualified development snapshot. Release deployments

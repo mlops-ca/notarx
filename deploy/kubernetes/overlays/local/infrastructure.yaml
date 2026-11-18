@@ -38,6 +38,7 @@ spec:
         app.kubernetes.io/name: artifact-gateway
         app.kubernetes.io/component: postgres
     spec:
+      enableServiceLinks: false
       automountServiceAccountToken: false
       containers:
         - name: postgres
@@ -111,6 +112,7 @@ spec:
         app.kubernetes.io/name: artifact-gateway
         app.kubernetes.io/component: rustfs
     spec:
+      enableServiceLinks: false
       automountServiceAccountToken: false
       securityContext:
         fsGroup: 10001

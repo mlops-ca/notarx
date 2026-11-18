@@ -17,4 +17,4 @@ data:
   NOTARX_APT_SIGNER_TIMEOUT: 15s
   NOTARX_APT_SIGNER_TRUSTED_FINGERPRINTS: ""
   NOTARX_APT_SIGNER_TRUSTED_PUBLIC_KEYS_FILE: ""
-  NO_PROXY: postgres,rustfs,artifact-gateway,artifact-gateway-console,127.0.0.1,localhost
+  NO_PROXY: postgres,rustfs,notarx,artifact-gateway-console,127.0.0.1,localhost

@@ -34,8 +34,8 @@ apply the schema before starting Gateway:
 MIGRATION_DIR=./migrations ./run-migrations.sh
 ```
 
-Release containers use `ghcr.io/ccsert/artifact-gateway:0.1.0` and
-`ghcr.io/ccsert/artifact-gateway-console:0.1.0`. The corresponding `main` tags
+Release containers use `ghcr.io/mlops-ca/notarx:0.1.0` and
+`ghcr.io/mlops-ca/notarx-console:0.1.0`. The corresponding `main` tags
 are moving CI-qualified snapshots and should not replace a pinned release tag
 or digest in a controlled deployment.
 

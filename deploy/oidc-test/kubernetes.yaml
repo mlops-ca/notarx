@@ -28,6 +28,7 @@ spec:
       labels:
         app: postgres
     spec:
+      enableServiceLinks: false
       containers:
         - name: postgres
           image: postgres:16-alpine
@@ -77,6 +78,7 @@ spec:
       labels:
         app: rustfs
     spec:
+      enableServiceLinks: false
       containers:
         - name: rustfs
           image: rustfs/rustfs:1.0.0-beta.12@sha256:41fe89380f4120a337790c02af192c3fe7bb55c3edc2e6e9357b487b47c6ab21
@@ -111,7 +113,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: gateway
+  name: notarx
 spec:
   selector:
     app: artifact-gateway
@@ -144,6 +146,7 @@ spec:
       labels:
         app: artifact-gateway
     spec:
+      enableServiceLinks: false
       initContainers:
         - name: migrate
           image: postgres:16-alpine
