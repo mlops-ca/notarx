@@ -132,9 +132,7 @@ export function PyPIProjectDetail({
       key: "type",
       width: 130,
       render: (_, file) => (
-        <Tag variant="filled">
-          {file["_notarx"]?.["file-type"] || "sdist"}
-        </Tag>
+        <Tag variant="filled">{file["_notarx"]?.["file-type"] || "sdist"}</Tag>
       ),
     },
     {

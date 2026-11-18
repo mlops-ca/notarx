@@ -7,7 +7,7 @@ import (
 
 func TestOpenPostgresConfiguresBoundedPool(t *testing.T) {
 	config := PoolConfig{MaxOpenConns: 7, MaxIdleConns: 3, ConnMaxLifetime: time.Minute, ConnMaxIdleTime: 30 * time.Second}
-	db, err := OpenPostgres("postgres://gateway:secret@localhost:5432/gateway?sslmode=disable", config)
+	db, err := OpenPostgres("postgres://notarx:secret@localhost:5432/notarx?sslmode=disable", config)
 	if err != nil {
 		t.Fatal(err)
 	}

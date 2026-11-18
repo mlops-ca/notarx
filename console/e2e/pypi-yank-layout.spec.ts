@@ -209,7 +209,7 @@ async function mockPyPI(page: Page, write = true) {
           url: `../../packages/${file.filename}`,
           hashes: { sha256: file.digest.slice(7) },
           yanked: file.yanked ? file.reason || true : false,
-          "_notarx": {
+          _notarx: {
             version: "1.0",
             size: file.size,
             publisher: "python-fixture",

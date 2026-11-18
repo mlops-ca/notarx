@@ -3,7 +3,7 @@ package config
 import "testing"
 
 func TestRepositoryPresetsModeIsExplicitAndDefaultsToStandard(t *testing.T) {
-	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
+	t.Setenv("NOTARX_DATABASE_URL", "postgres://notarx:password@db:5432/notarx")
 	t.Setenv("NOTARX_OBJECT_STORE_ENDPOINT", "http://rustfs:9000")
 	t.Setenv("NOTARX_OBJECT_STORE_BUCKET", "gateway-cache")
 	t.Setenv("NOTARX_OBJECT_STORE_ACCESS_KEY", "rustfs-user")

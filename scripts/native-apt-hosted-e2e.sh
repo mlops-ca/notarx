@@ -251,7 +251,7 @@ PY
   fetch_and_record 'dists/stable/Release' "$release_file" "$release_digest"
   fetch_and_record 'dists/stable/InRelease' "$inrelease_file" "$inrelease_digest"
   fetch_and_record 'dists/stable/Release.gpg' "$detached_file"
-  fetch_and_record 'pool/main/a/notarx-e2e/notarx-e2e_1.0.0-1_all.deb' \
+  fetch_and_record 'pool/main/n/notarx-e2e/notarx-e2e_1.0.0-1_all.deb' \
     "$package_copy" "sha256:$package_sha256" "$package_size"
 
   local index=0 digest size relative direct_path by_hash_path index_paths

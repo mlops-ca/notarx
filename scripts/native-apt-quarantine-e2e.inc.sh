@@ -1,6 +1,6 @@
 # Sourced by native-apt-hosted-e2e.sh with its isolated repository and signer.
 # Cache a real APT index, then prove that it cannot bypass a later quarantine.
-quarantine_pool='pool/main/a/notarx-e2e/notarx-e2e_1.0.0-1_all.deb'
+quarantine_pool='pool/main/n/notarx-e2e/notarx-e2e_1.0.0-1_all.deb'
 quarantine_query=$(python3 - "$quarantine_pool" "$package_file" <<'PY'
 import hashlib,sys,urllib.parse
 print(urllib.parse.urlencode({'coordinate':sys.argv[1],'digest':'sha256:'+hashlib.file_digest(open(sys.argv[2],'rb'),'sha256').hexdigest()}))

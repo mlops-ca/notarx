@@ -29,7 +29,7 @@ func TestLoadRejectsIncompleteConfiguration(t *testing.T) {
 }
 
 func TestLoadDoesNotAcceptLegacyS3Configuration(t *testing.T) {
-	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
+	t.Setenv("NOTARX_DATABASE_URL", "postgres://notarx:password@db:5432/notarx")
 	t.Setenv("NOTARX_OBJECT_STORE_ENDPOINT", "")
 	t.Setenv("NOTARX_OBJECT_STORE_BUCKET", "")
 	t.Setenv("NOTARX_OBJECT_STORE_ACCESS_KEY", "")
@@ -46,7 +46,7 @@ func TestLoadDoesNotAcceptLegacyS3Configuration(t *testing.T) {
 }
 
 func TestLoadAcceptsNativeConfiguration(t *testing.T) {
-	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
+	t.Setenv("NOTARX_DATABASE_URL", "postgres://notarx:password@db:5432/notarx")
 	t.Setenv("NOTARX_OBJECT_STORE_ENDPOINT", "http://rustfs:9000")
 	t.Setenv("NOTARX_OBJECT_STORE_BUCKET", "gateway-cache")
 	t.Setenv("NOTARX_OBJECT_STORE_ACCESS_KEY", "rustfs-user")
@@ -544,7 +544,7 @@ func TestLoadRejectsStandaloneRoleCombination(t *testing.T) {
 
 func setCompleteConfiguration(t *testing.T) {
 	t.Helper()
-	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
+	t.Setenv("NOTARX_DATABASE_URL", "postgres://notarx:password@db:5432/notarx")
 	t.Setenv("NOTARX_OBJECT_STORE_ENDPOINT", "http://rustfs:9000")
 	t.Setenv("NOTARX_OBJECT_STORE_BUCKET", "gateway-cache")
 	t.Setenv("NOTARX_OBJECT_STORE_ACCESS_KEY", "rustfs-user")
@@ -601,7 +601,7 @@ func TestRepositoryCacheQuotasParsesPositiveByteLimits(t *testing.T) {
 }
 
 func TestLoadConfiguresOIDCWithHTTPSIssuerAndDiscoveryDefault(t *testing.T) {
-	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
+	t.Setenv("NOTARX_DATABASE_URL", "postgres://notarx:password@db:5432/notarx")
 	t.Setenv("NOTARX_OBJECT_STORE_ENDPOINT", "http://rustfs:9000")
 	t.Setenv("NOTARX_OBJECT_STORE_BUCKET", "gateway-cache")
 	t.Setenv("NOTARX_OBJECT_STORE_ACCESS_KEY", "rustfs-user")
@@ -647,7 +647,7 @@ func TestLoadRejectsNonLoopbackHTTPOIDCIssuer(t *testing.T) {
 }
 
 func TestLoadRejectsOIDCWithoutAudience(t *testing.T) {
-	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
+	t.Setenv("NOTARX_DATABASE_URL", "postgres://notarx:password@db:5432/notarx")
 	t.Setenv("NOTARX_OBJECT_STORE_ENDPOINT", "http://rustfs:9000")
 	t.Setenv("NOTARX_OBJECT_STORE_BUCKET", "gateway-cache")
 	t.Setenv("NOTARX_OBJECT_STORE_ACCESS_KEY", "rustfs-user")
@@ -694,7 +694,7 @@ func TestLoadRejectsInsecureOIDCBrowserRedirect(t *testing.T) {
 }
 
 func TestLoadRejectsInvalidOTELSamplingRatio(t *testing.T) {
-	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
+	t.Setenv("NOTARX_DATABASE_URL", "postgres://notarx:password@db:5432/notarx")
 	t.Setenv("NOTARX_OBJECT_STORE_ENDPOINT", "http://rustfs:9000")
 	t.Setenv("NOTARX_OBJECT_STORE_BUCKET", "gateway-cache")
 	t.Setenv("NOTARX_OBJECT_STORE_ACCESS_KEY", "rustfs-user")
@@ -710,7 +710,7 @@ func TestLoadRejectsInvalidOTELSamplingRatio(t *testing.T) {
 }
 
 func TestLoadParsesCacheTTLs(t *testing.T) {
-	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
+	t.Setenv("NOTARX_DATABASE_URL", "postgres://notarx:password@db:5432/notarx")
 	t.Setenv("NOTARX_OBJECT_STORE_ENDPOINT", "http://rustfs:9000")
 	t.Setenv("NOTARX_OBJECT_STORE_BUCKET", "gateway-cache")
 	t.Setenv("NOTARX_OBJECT_STORE_ACCESS_KEY", "rustfs-user")
@@ -748,7 +748,7 @@ func TestLoadParsesCacheTTLs(t *testing.T) {
 }
 
 func TestLoadUsesMavenCacheDefaultsSuitedToImmutableComponents(t *testing.T) {
-	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
+	t.Setenv("NOTARX_DATABASE_URL", "postgres://notarx:password@db:5432/notarx")
 	t.Setenv("NOTARX_OBJECT_STORE_ENDPOINT", "http://rustfs:9000")
 	t.Setenv("NOTARX_OBJECT_STORE_BUCKET", "gateway-cache")
 	t.Setenv("NOTARX_OBJECT_STORE_ACCESS_KEY", "rustfs-user")
@@ -769,7 +769,7 @@ func TestLoadUsesMavenCacheDefaultsSuitedToImmutableComponents(t *testing.T) {
 }
 
 func TestLoadConfiguresDatabasePool(t *testing.T) {
-	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
+	t.Setenv("NOTARX_DATABASE_URL", "postgres://notarx:password@db:5432/notarx")
 	t.Setenv("NOTARX_OBJECT_STORE_ENDPOINT", "http://rustfs:9000")
 	t.Setenv("NOTARX_OBJECT_STORE_BUCKET", "gateway-cache")
 	t.Setenv("NOTARX_OBJECT_STORE_ACCESS_KEY", "rustfs-user")
@@ -801,7 +801,7 @@ func TestLoadConfiguresDatabasePool(t *testing.T) {
 }
 
 func TestLoadRejectsDatabaseIdleConnectionsAboveOpenLimit(t *testing.T) {
-	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
+	t.Setenv("NOTARX_DATABASE_URL", "postgres://notarx:password@db:5432/notarx")
 	t.Setenv("NOTARX_OBJECT_STORE_ENDPOINT", "http://rustfs:9000")
 	t.Setenv("NOTARX_OBJECT_STORE_BUCKET", "gateway-cache")
 	t.Setenv("NOTARX_OBJECT_STORE_ACCESS_KEY", "rustfs-user")
@@ -816,7 +816,7 @@ func TestLoadRejectsDatabaseIdleConnectionsAboveOpenLimit(t *testing.T) {
 }
 
 func TestLoadRejectsCoordinatorIdleConnectionsAboveOpenLimit(t *testing.T) {
-	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
+	t.Setenv("NOTARX_DATABASE_URL", "postgres://notarx:password@db:5432/notarx")
 	t.Setenv("NOTARX_OBJECT_STORE_ENDPOINT", "http://rustfs:9000")
 	t.Setenv("NOTARX_OBJECT_STORE_BUCKET", "gateway-cache")
 	t.Setenv("NOTARX_OBJECT_STORE_ACCESS_KEY", "rustfs-user")
@@ -831,7 +831,7 @@ func TestLoadRejectsCoordinatorIdleConnectionsAboveOpenLimit(t *testing.T) {
 }
 
 func TestLoadRejectsArtifactLockIdleConnectionsAboveOpenLimit(t *testing.T) {
-	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
+	t.Setenv("NOTARX_DATABASE_URL", "postgres://notarx:password@db:5432/notarx")
 	t.Setenv("NOTARX_OBJECT_STORE_ENDPOINT", "http://rustfs:9000")
 	t.Setenv("NOTARX_OBJECT_STORE_BUCKET", "gateway-cache")
 	t.Setenv("NOTARX_OBJECT_STORE_ACCESS_KEY", "rustfs-user")
@@ -846,7 +846,7 @@ func TestLoadRejectsArtifactLockIdleConnectionsAboveOpenLimit(t *testing.T) {
 }
 
 func TestLoadRejectsInvalidCacheTTL(t *testing.T) {
-	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
+	t.Setenv("NOTARX_DATABASE_URL", "postgres://notarx:password@db:5432/notarx")
 	t.Setenv("NOTARX_OBJECT_STORE_ENDPOINT", "http://rustfs:9000")
 	t.Setenv("NOTARX_OBJECT_STORE_BUCKET", "gateway-cache")
 	t.Setenv("NOTARX_OBJECT_STORE_ACCESS_KEY", "rustfs-user")
@@ -921,7 +921,7 @@ func TestEmailDefaultLocaleIsValidatedAgainstTheClosedRegistry(t *testing.T) {
 }
 
 func TestConanTokenSecretIsOptionalAndSeparateFromLoginCredentials(t *testing.T) {
-	t.Setenv("NOTARX_DATABASE_URL", "postgres://gateway:password@db:5432/gateway")
+	t.Setenv("NOTARX_DATABASE_URL", "postgres://notarx:password@db:5432/notarx")
 	t.Setenv("NOTARX_OBJECT_STORE_ENDPOINT", "http://rustfs:9000")
 	t.Setenv("NOTARX_OBJECT_STORE_BUCKET", "gateway-cache")
 	t.Setenv("NOTARX_OBJECT_STORE_ACCESS_KEY", "rustfs-user")

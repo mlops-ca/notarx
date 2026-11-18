@@ -37,7 +37,7 @@ func TestReadinessReportsDependencyFailure(t *testing.T) {
 
 func TestNewDependenciesChecksObjectStoreEndpoint(t *testing.T) {
 	dependencies := NewDependencies(config.Config{
-		DatabaseURL: "postgres://gateway:password@db:5432/gateway",
+		DatabaseURL: "postgres://notarx:password@db:5432/notarx",
 		ObjectStore: objectstore.Config{Driver: objectstore.DriverS3, Endpoint: "https://objects.example.test/prefix"},
 	})
 	if len(dependencies.checkers) != 2 {
@@ -47,7 +47,7 @@ func TestNewDependenciesChecksObjectStoreEndpoint(t *testing.T) {
 	if !ok {
 		t.Fatalf("database checker type = %T, want postgresChecker", dependencies.checkers[0])
 	}
-	if databaseChecker.databaseURL != "postgres://gateway:password@db:5432/gateway" {
+	if databaseChecker.databaseURL != "postgres://notarx:password@db:5432/notarx" {
 		t.Fatalf("database checker URL = %q", databaseChecker.databaseURL)
 	}
 	s3Checker, ok := dependencies.checkers[1].(httpChecker)
@@ -79,12 +79,12 @@ func TestNewDependenciesClassifiesAPTSignerWithoutExposingEndpoint(t *testing.T)
 }
 
 func TestDependenciesUseSharedDatabasePoolForReadiness(t *testing.T) {
-	pool, err := database.OpenPostgres("postgres://gateway:password@db:5432/gateway", database.PoolConfig{MaxOpenConns: 2, MaxIdleConns: 1, ConnMaxLifetime: time.Minute, ConnMaxIdleTime: time.Minute})
+	pool, err := database.OpenPostgres("postgres://notarx:password@db:5432/notarx", database.PoolConfig{MaxOpenConns: 2, MaxIdleConns: 1, ConnMaxLifetime: time.Minute, ConnMaxIdleTime: time.Minute})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = pool.Close() }()
-	dependencies := NewDependencies(config.Config{DatabaseURL: "postgres://gateway:password@db:5432/gateway"}).WithDatabasePool(pool)
+	dependencies := NewDependencies(config.Config{DatabaseURL: "postgres://notarx:password@db:5432/notarx"}).WithDatabasePool(pool)
 	checker, ok := dependencies.checkers[0].(postgresPoolChecker)
 	if !ok || checker.db != pool {
 		t.Fatalf("database checker=%T pool=%p want=%p", dependencies.checkers[0], checker.db, pool)

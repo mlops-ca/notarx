@@ -32,7 +32,7 @@ cmp "$workdir/lifecycle-empty.json" "$workdir/lifecycle-replay.json"
 # Fresh clients accept a fully signed empty index; cached clients still fetch
 # the immutable package and by-hash bytes from the retired snapshot.
 "${curl_request[@]}" --fail --user "resolver:$resolver_token" \
-  "$notarx_url/apt/apt-hosted-e2e/pool/main/a/notarx-e2e/notarx-e2e_1.0.0-1_all.deb" >"$workdir/lifecycle-old-package.deb"
+  "$notarx_url/apt/apt-hosted-e2e/pool/main/n/notarx-e2e/notarx-e2e_1.0.0-1_all.deb" >"$workdir/lifecycle-old-package.deb"
 cmp "$package_file" "$workdir/lifecycle-old-package.deb"
 docker run --rm --network "$notarx_network" \
   --env "APT_E2E_RESOLVER_TOKEN=$resolver_token" --volume "$public_key:/keys/notarx.asc:ro" \

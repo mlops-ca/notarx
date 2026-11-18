@@ -17,12 +17,12 @@ func TestCacheTaskQueueFiltersUnsupportedWorkerFormats(t *testing.T) {
 }
 
 func TestCacheTaskQueueUsesDedicatedBoundedListenerPool(t *testing.T) {
-	db, err := database.OpenPostgres("postgres://gateway:password@localhost:5432/gateway", database.PoolConfig{MaxOpenConns: 3, MaxIdleConns: 1, ConnMaxLifetime: time.Minute, ConnMaxIdleTime: time.Minute})
+	db, err := database.OpenPostgres("postgres://notarx:password@localhost:5432/notarx", database.PoolConfig{MaxOpenConns: 3, MaxIdleConns: 1, ConnMaxLifetime: time.Minute, ConnMaxIdleTime: time.Minute})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = db.Close() }()
-	queue, err := NewPostgresCacheTaskQueueWithDB(db, "postgres://gateway:password@localhost:5432/gateway")
+	queue, err := NewPostgresCacheTaskQueueWithDB(db, "postgres://notarx:password@localhost:5432/notarx")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,12 +42,12 @@ func TestCacheTaskQueueUsesDedicatedBoundedListenerPool(t *testing.T) {
 
 func TestCacheTaskQueueCanBorrowSharedListenerPool(t *testing.T) {
 	config := database.PoolConfig{MaxOpenConns: 3, MaxIdleConns: 1, ConnMaxLifetime: time.Minute, ConnMaxIdleTime: time.Minute}
-	db, err := database.OpenPostgres("postgres://gateway:password@localhost:5432/gateway", config)
+	db, err := database.OpenPostgres("postgres://notarx:password@localhost:5432/notarx", config)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = db.Close() }()
-	listenerDB, err := database.OpenPostgres("postgres://gateway:password@localhost:5432/gateway", database.NotificationPoolConfig())
+	listenerDB, err := database.OpenPostgres("postgres://notarx:password@localhost:5432/notarx", database.NotificationPoolConfig())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -28,7 +28,7 @@ func TestPostgresOIDCSettingsVersionedReplacement(t *testing.T) {
 	})
 
 	created, err := store.ReplaceOIDCSettings(ctx, OIDCSettings{
-		Enabled: true, Issuer: "https://identity.example.test/realms/gateway",
+		Enabled: true, Issuer: "https://identity.example.test/realms/notarx",
 		Audience: "notarx-api", ClientID: "notarx-console",
 		ClientSecret: "ciphertext", RedirectURL: "https://gateway.example.test/auth/oidc/callback",
 		Scopes: []string{"openid", "profile"}, MemberRoles: []string{"artifact-member"},

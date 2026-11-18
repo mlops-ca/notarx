@@ -35919,13 +35919,13 @@ type ExportAPTRepositorySnapshot200ResponseHeaders struct {
 	ContentLength      *int64
 }
 
-type ExportAPTRepositorySnapshot200ApplicationvndArtifactGatewayAptSnapshotV1TarResponse struct {
+type ExportAPTRepositorySnapshot200ApplicationvndNotarxAptSnapshotV1TarResponse struct {
 	Body          io.Reader
 	Headers       ExportAPTRepositorySnapshot200ResponseHeaders
 	ContentLength int64
 }
 
-func (response ExportAPTRepositorySnapshot200ApplicationvndArtifactGatewayAptSnapshotV1TarResponse) VisitExportAPTRepositorySnapshotResponse(w http.ResponseWriter) error {
+func (response ExportAPTRepositorySnapshot200ApplicationvndNotarxAptSnapshotV1TarResponse) VisitExportAPTRepositorySnapshotResponse(w http.ResponseWriter) error {
 
 	w.Header().Set("Content-Type", "application/vnd.notarx.apt-snapshot.v1+tar")
 	if response.ContentLength != 0 {

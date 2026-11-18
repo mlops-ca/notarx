@@ -125,12 +125,12 @@ func TestClassifyNPMRequest(t *testing.T) {
 }
 
 func TestRuntimeAndDatabasePoolMetrics(t *testing.T) {
-	pool, err := database.OpenPostgres("postgres://gateway:secret@localhost:5432/gateway?sslmode=disable", database.PoolConfig{MaxOpenConns: 7, MaxIdleConns: 2, ConnMaxLifetime: time.Minute, ConnMaxIdleTime: time.Minute})
+	pool, err := database.OpenPostgres("postgres://notarx:secret@localhost:5432/notarx?sslmode=disable", database.PoolConfig{MaxOpenConns: 7, MaxIdleConns: 2, ConnMaxLifetime: time.Minute, ConnMaxIdleTime: time.Minute})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = pool.Close() }()
-	notifications, err := database.OpenPostgres("postgres://gateway:secret@localhost:5432/gateway?sslmode=disable", database.NotificationPoolConfig())
+	notifications, err := database.OpenPostgres("postgres://notarx:secret@localhost:5432/notarx?sslmode=disable", database.NotificationPoolConfig())
 	if err != nil {
 		t.Fatal(err)
 	}

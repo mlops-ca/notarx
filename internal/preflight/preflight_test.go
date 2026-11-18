@@ -52,7 +52,7 @@ func TestConfigurationReportsAPTSignerTrustWithoutExposingFingerprints(t *testin
 }
 
 func TestRunnerDoesNotExposeDependencyError(t *testing.T) {
-	secret := "postgres://gateway:super-secret@db/gateway"
+	secret := "postgres://notarx:super-secret@db/notarx"
 	runner := NewRunner()
 	runner.PostgresPing = func(context.Context, string) error { return errors.New(secret) }
 	report := runner.Run(context.Background(), testConfig(), []string{"postgres"})
@@ -121,7 +121,7 @@ func TestCLIConfigurationFailureIsRedacted(t *testing.T) {
 
 func testConfig() config.Config {
 	return config.Config{
-		DatabaseURL: "postgres://gateway:password@db/gateway",
+		DatabaseURL: "postgres://notarx:password@db/notarx",
 		ObjectStore: objectstore.Config{Driver: objectstore.DriverS3, Endpoint: "http://rustfs:9000", Bucket: "gateway-cache", AccessKey: "access-key", SecretKey: "secret-key", Region: "us-east-1", PathStyle: true, ChecksumMode: objectstore.ChecksumWhenRequired},
 	}
 }
@@ -137,7 +137,7 @@ func TestTrigramResultStates(t *testing.T) {
 		{"creatable", nil, StatusPass, "can be created"},
 		{"unavailable", nil, StatusFail, "not available"},
 		{"denied", nil, StatusFail, "may not create pg_trgm"},
-		{"", errors.New("postgres://gateway:super-secret@db/gateway"), StatusFail, "could not run"},
+		{"", errors.New("postgres://notarx:super-secret@db/notarx"), StatusFail, "could not run"},
 	}
 	for _, c := range cases {
 		result := trigramResult(c.state, c.err)

@@ -48,7 +48,7 @@ describe("PyPIProjectDetail", () => {
               filename: "notarx_widget-1.0.0-py3-none-any.whl",
               url: "../../packages/notarx_widget-1.0.0-py3-none-any.whl",
               hashes: { sha256: "a".repeat(64) },
-              "_notarx": {
+              _notarx: {
                 version: "1.0.0",
                 size: 1024,
                 publisher: "release-bot",
@@ -62,7 +62,7 @@ describe("PyPIProjectDetail", () => {
               url: "../../packages/notarx_widget-2.0.0-py3-none-any.whl",
               hashes: { sha256: "b".repeat(64) },
               "requires-python": ">=3.11",
-              "_notarx": {
+              _notarx: {
                 version: "2.0.0",
                 size: 2048,
                 publisher: "next-bot",
@@ -75,7 +75,7 @@ describe("PyPIProjectDetail", () => {
               filename: "notarx_widget-2.0.0.tar.gz",
               url: "../../packages/notarx_widget-2.0.0.tar.gz",
               hashes: { sha256: "c".repeat(64) },
-              "_notarx": {
+              _notarx: {
                 version: "2.0.0",
                 size: 4096,
                 publisher: "next-bot",
@@ -109,9 +109,7 @@ describe("PyPIProjectDetail", () => {
       </AuthProvider>,
     );
 
-    expect(
-      await screen.findByText("notarx-widget==2.0.0"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("notarx-widget==2.0.0")).toBeInTheDocument();
     expect(
       screen.getByText("notarx_widget-2.0.0-py3-none-any.whl"),
     ).toBeInTheDocument();

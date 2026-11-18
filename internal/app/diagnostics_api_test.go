@@ -34,7 +34,7 @@ func TestDiagnosticsRequiresAdministratorAndRedactsDependencyErrors(t *testing.T
 	}
 	dependencies := Dependencies{
 		checkers: []Checker{checkerFunc(func(context.Context) error {
-			return errors.New("postgres://gateway:top-secret@database/gateway")
+			return errors.New("postgres://notarx:top-secret@database/notarx")
 		})},
 		BuildVersion: "v1.2.3", BuildRevision: "abc123", BuildGoVersion: "go1.test",
 		ArtifactScanner:     diagnosticsHealthScanner{err: errors.New("scanner-token-that-must-not-leak")},
