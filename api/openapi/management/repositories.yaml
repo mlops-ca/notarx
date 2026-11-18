@@ -215,7 +215,9 @@ repositories_repositoryId:
     description: Updates repository configuration. Requires repository `admin` scope,
       because endpoint, allowlist, egress, upstream credential, visibility, and
       strict-publication settings change how the repository behaves for every
-      client; a `write` scope is not sufficient.
+      client; a `write` scope is not sufficient. In strict group mode, lowering
+      visibility below a group that contains the repository is refused with
+      409 visibility_conflict.
     parameters:
     - "$ref": "../components/parameters.yaml#/IfMatch"
     requestBody:
@@ -230,6 +232,8 @@ repositories_repositoryId:
       '400':
         "$ref": "../components/responses.yaml#/Problem"
       '404':
+        "$ref": "../components/responses.yaml#/Problem"
+      '409':
         "$ref": "../components/responses.yaml#/Problem"
       '412':
         "$ref": "../components/responses.yaml#/Problem"

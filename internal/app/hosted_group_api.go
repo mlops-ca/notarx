@@ -330,6 +330,9 @@ func (h repositoryManagementHandler) ReplaceGroup(w http.ResponseWriter, r *http
 	if !h.authorizeGroupMembership(w, r, principal, group.Name, append(append([]repository.GroupMember{}, current.Members...), group.Members...)) {
 		return
 	}
+	if h.rejectVisibilityConflict(w, r, principal, group) {
+		return
+	}
 	group.ID = id.String()
 	updated, err := h.groups.ReplaceHostedGroup(r.Context(), group, string(params.IfMatch))
 	h.writeGroupMutation(w, updated, err)
@@ -359,6 +362,9 @@ func (h repositoryManagementHandler) ReplaceGroupMembers(w http.ResponseWriter, 
 	// A membership change needs authority over the members it keeps or drops as
 	// well as the ones it adds.
 	if !h.authorizeGroupMembership(w, r, principal, group.Name, append(append([]repository.GroupMember{}, group.Members...), members...)) {
+		return
+	}
+	if h.rejectVisibilityConflict(w, r, principal, repository.HostedGroup{Name: group.Name, Format: group.Format, Visibility: group.Visibility, Members: members}) {
 		return
 	}
 	updated, err := h.groups.ReplaceHostedGroupMembers(r.Context(), id.String(), members, string(params.IfMatch))

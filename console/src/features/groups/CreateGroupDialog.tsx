@@ -16,6 +16,7 @@ import { VisibilitySelect } from "../../components/ui/VisibilitySelect";
 import { MemberOrderPicker } from "./MemberOrderPicker";
 import { usePreferences } from "../../lib/preferences";
 import { groupFormats } from "../../lib/formatProfiles";
+import { visibilityConflict } from "../../lib/visibilityConflict";
 
 /** Create a group of repositories of one format. */
 export function CreateGroupDialog({
@@ -63,7 +64,7 @@ export function CreateGroupDialog({
         headers: { "Idempotency-Key": crypto.randomUUID() },
       });
       if (err) {
-        setError(err);
+        setError(visibilityConflict(err));
         return;
       }
       dialog.hide();

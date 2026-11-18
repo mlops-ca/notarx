@@ -3309,6 +3309,7 @@ const (
 	ProblemCodeUntrustedArchive                 ProblemCode = "untrusted_archive"
 	ProblemCodeUpstreamCredentialRebindRequired ProblemCode = "upstream_credential_rebind_required"
 	ProblemCodeVersionConflict                  ProblemCode = "version_conflict"
+	ProblemCodeVisibilityConflict               ProblemCode = "visibility_conflict"
 )
 
 // Valid indicates whether the value is a known member of the ProblemCode enum.
@@ -3383,6 +3384,8 @@ func (e ProblemCode) Valid() bool {
 	case ProblemCodeUpstreamCredentialRebindRequired:
 		return true
 	case ProblemCodeVersionConflict:
+		return true
+	case ProblemCodeVisibilityConflict:
 		return true
 	default:
 		return false
@@ -7917,12 +7920,15 @@ type PreviewWorkerFormat string
 
 // Problem defines model for Problem.
 type Problem struct {
-	Code      ProblemCode `json:"code"`
-	Message   string      `json:"message"`
-	RequestId string      `json:"requestId"`
-	Status    int         `json:"status"`
-	Title     string      `json:"title"`
-	Type      string      `json:"type"`
+	Code ProblemCode `json:"code"`
+
+	// Members Present on visibility_conflict (ADR 0029, strict group mode). The member repositories whose visibility is below the group's, limited to those the caller may administer.
+	Members   *[]VisibilityConflictMember `json:"members,omitempty"`
+	Message   string                      `json:"message"`
+	RequestId string                      `json:"requestId"`
+	Status    int                         `json:"status"`
+	Title     string                      `json:"title"`
+	Type      string                      `json:"type"`
 }
 
 // ProblemCode defines model for Problem.Code.
@@ -9120,6 +9126,15 @@ type UserSessionList struct {
 
 // Visibility Read visibility ceiling, ordered private < authenticated < public. private admits principals with a grant, authenticated admits any non-anonymous identity, public admits anyone while the global public-access gate is enabled (otherwise public behaves as authenticated). Omitted on create means private.
 type Visibility string
+
+// VisibilityConflictMember defines model for VisibilityConflictMember.
+type VisibilityConflictMember struct {
+	Name         string             `json:"name"`
+	RepositoryId openapi_types.UUID `json:"repositoryId"`
+
+	// Visibility Read visibility ceiling, ordered private < authenticated < public. private admits principals with a grant, authenticated admits any non-anonymous identity, public admits anyone while the global public-access gate is enabled (otherwise public behaves as authenticated). Omitted on create means private.
+	Visibility Visibility `json:"visibility"`
+}
 
 // WebhookDelivery defines model for WebhookDelivery.
 type WebhookDelivery struct {
@@ -26166,9 +26181,23 @@ func (response ReplaceGroup200JSONResponse) VisitReplaceGroupResponse(w http.Res
 	return err
 }
 
-type ReplaceGroup412ApplicationProblemPlusJSONResponse struct {
+type ReplaceGroup409ApplicationProblemPlusJSONResponse struct {
 	ProblemApplicationProblemPlusJSONResponse
 }
+
+func (response ReplaceGroup409ApplicationProblemPlusJSONResponse) VisitReplaceGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceGroup412ApplicationProblemPlusJSONResponse Problem
 
 func (response ReplaceGroup412ApplicationProblemPlusJSONResponse) VisitReplaceGroupResponse(w http.ResponseWriter) error {
 
@@ -26391,9 +26420,23 @@ func (response ReplaceGroupMembers200JSONResponse) VisitReplaceGroupMembersRespo
 	return err
 }
 
-type ReplaceGroupMembers412ApplicationProblemPlusJSONResponse struct {
+type ReplaceGroupMembers409ApplicationProblemPlusJSONResponse struct {
 	ProblemApplicationProblemPlusJSONResponse
 }
+
+func (response ReplaceGroupMembers409ApplicationProblemPlusJSONResponse) VisitReplaceGroupMembersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceGroupMembers412ApplicationProblemPlusJSONResponse Problem
 
 func (response ReplaceGroupMembers412ApplicationProblemPlusJSONResponse) VisitReplaceGroupMembersResponse(w http.ResponseWriter) error {
 
@@ -34518,6 +34561,20 @@ func (response UpdateRepository404ApplicationProblemPlusJSONResponse) VisitUpdat
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateRepository409ApplicationProblemPlusJSONResponse Problem
+
+func (response UpdateRepository409ApplicationProblemPlusJSONResponse) VisitUpdateRepositoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
 	_, err := buf.WriteTo(w)
 	return err
 }

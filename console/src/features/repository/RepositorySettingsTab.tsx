@@ -11,6 +11,7 @@ import { Badge } from "../../components/ui/Badge";
 import { ErrorBanner, Notice } from "../../components/ui/Feedback";
 import { VisibilitySelect } from "../../components/ui/VisibilitySelect";
 import { usePreferences } from "../../lib/preferences";
+import { visibilityConflict } from "../../lib/visibilityConflict";
 import { ProxyUpstreamSettings } from "./ProxyUpstreamSettings";
 import { useProxySettingsDraft } from "./useProxySettingsDraft";
 
@@ -57,7 +58,7 @@ export function RepositorySettingsTab({
       });
       return;
     }
-    setError(nextError);
+    setError(visibilityConflict(nextError));
   };
 
   const submit = async () => {

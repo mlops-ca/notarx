@@ -2323,7 +2323,7 @@ export const getRepository = <ThrowOnError extends boolean = false>(options: Opt
 });
 
 /**
- * Updates repository configuration. Requires repository `admin` scope, because endpoint, allowlist, egress, upstream credential, visibility, and strict-publication settings change how the repository behaves for every client; a `write` scope is not sufficient.
+ * Updates repository configuration. Requires repository `admin` scope, because endpoint, allowlist, egress, upstream credential, visibility, and strict-publication settings change how the repository behaves for every client; a `write` scope is not sufficient. In strict group mode, lowering visibility below a group that contains the repository is refused with 409 visibility_conflict.
  */
 export const updateRepository = <ThrowOnError extends boolean = false>(options: Options<UpdateRepositoryData, ThrowOnError>): RequestResult<UpdateRepositoryResponses, UpdateRepositoryErrors, ThrowOnError> => (options.client ?? client).patch<UpdateRepositoryResponses, UpdateRepositoryErrors, ThrowOnError>({
     security: [{
@@ -2818,7 +2818,7 @@ export const listGroups = <ThrowOnError extends boolean = false>(options?: Optio
 });
 
 /**
- * A hosted group references repositories, so the platform tier and the administrators of every repository it references may manage it. The refusal names the member that is out of bounds.
+ * A hosted group references repositories, so the platform tier and the administrators of every repository it references may manage it. The refusal names the member that is out of bounds. In strict mode (NOTARX_GROUP_VISIBILITY_MODE) a group more visible than its least visible member is refused with 409 visibility_conflict.
  */
 export const createGroup = <ThrowOnError extends boolean = false>(options: Options<CreateGroupData, ThrowOnError>): RequestResult<CreateGroupResponses, CreateGroupErrors, ThrowOnError> => (options.client ?? client).post<CreateGroupResponses, CreateGroupErrors, ThrowOnError>({
     security: [{

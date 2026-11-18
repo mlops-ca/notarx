@@ -842,6 +842,7 @@
     "groups.unlimited": "draft",
     "groups.used": "draft",
     "groups.visibilityCeilingHelp": "draft",
+    "groups.visibilityConflict": "draft",
     "groups.visibleMemberCandidateOrder": "draft",
     "identity.180Days": "draft",
     "identity.30Days": "draft",

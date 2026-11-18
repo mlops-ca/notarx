@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/access"
 	"github.com/mlops-ca/notarx/internal/app"
 	"github.com/mlops-ca/notarx/internal/aptpublication"
 	"github.com/mlops-ca/notarx/internal/authorization"
@@ -456,7 +457,9 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 			NPMRestore:        store,
 			OCIDiscoveryStore: store,
 			Storage:           app.SharedObjectStores(objectStore),
-			Adapter:           app.TestAdapter{},
+			// Load validated the mode; an unreadable value stays strict.
+			GroupVisibilityMode: access.GroupMode(cfg.GroupVisibilityMode),
+			Adapter:             app.TestAdapter{},
 			Authenticator: app.Authenticator{
 				AdminToken:           cfg.AdminToken,
 				ResolverToken:        cfg.ResolverToken,

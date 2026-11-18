@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/mlops-ca/notarx/internal/access"
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
 	formatmodule "github.com/mlops-ca/notarx/internal/format"
 	rawformat "github.com/mlops-ca/notarx/internal/format/raw"
@@ -20,6 +21,8 @@ type repositoryManagementOptions struct {
 	Maintenance         *CacheMaintenance
 	ArtifactScanner     scanning.Scanner
 	ArtifactScanFormats []repository.Format
+	// GroupVisibilityMode is strict (the zero value) or lenient (ADR 0029).
+	GroupVisibilityMode access.GroupMode
 }
 
 // repositoryManagementHandler owns repository configuration and Group policy.
@@ -33,13 +36,14 @@ type repositoryManagementHandler struct {
 	maintenance         *CacheMaintenance
 	artifactScanner     scanning.Scanner
 	artifactScanFormats []repository.Format
+	groupMode           access.GroupMode
 }
 
 func newRepositoryManagementHandler(options repositoryManagementOptions) repositoryManagementHandler {
 	return repositoryManagementHandler{managementScope: options.Scope,
-		hosted: hostedRepositoryAPIHandler{store: options.Repositories, groups: options.Groups, authenticator: options.Scope.authenticator},
+		hosted: hostedRepositoryAPIHandler{store: options.Repositories, groups: options.Groups, authenticator: options.Scope.authenticator, groupMode: options.GroupVisibilityMode},
 		store:  options.Repositories, groups: options.Groups, capacities: options.Capacities,
-		maintenance: options.Maintenance, artifactScanner: options.ArtifactScanner,
+		maintenance: options.Maintenance, artifactScanner: options.ArtifactScanner, groupMode: options.GroupVisibilityMode,
 		artifactScanFormats: append([]repository.Format(nil), options.ArtifactScanFormats...),
 	}
 }

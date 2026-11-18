@@ -90,5 +90,6 @@ per-repository grant, there is nothing to do. Otherwise:
 
 An administrator, a global read role, and this repository's own grants are
 unaffected because they never used the fallback. Anonymous access is unaffected
-because it is governed by the repository's own visibility setting. A pending
+because it is governed by the repository's own visibility setting (a Legacy Group
+marked anonymous resolves all its members; see [Group visibility](anonymous-access-operations.md#group-visibility)). A pending
 or password-change account is refused under every posture.

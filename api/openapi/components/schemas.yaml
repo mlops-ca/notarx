@@ -3582,10 +3582,23 @@ Problem:
       - untrusted_archive
       - snapshot_corrupt
       - internal_error
+      - visibility_conflict
     message:
       type: string
     requestId:
       type: string
+    members:
+      type: array
+      description: Present on visibility_conflict (ADR 0029, strict group mode). The member repositories whose visibility is below the group's, limited to those the caller may administer.
+      items:
+        "$ref": "#/VisibilityConflictMember"
+VisibilityConflictMember:
+  type: object
+  required: [repositoryId, name, visibility]
+  properties:
+    repositoryId: {type: string, format: uuid}
+    name: {type: string}
+    visibility: {"$ref": "#/Visibility"}
 CreateAPTPublicationSession:
   type: object
   additionalProperties: false

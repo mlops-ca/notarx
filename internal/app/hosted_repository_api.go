@@ -28,6 +28,7 @@ type hostedRepositoryAPIHandler struct {
 	store         repository.HostedRepositoryStore
 	groups        repository.HostedGroupStore
 	authenticator Authenticator
+	groupMode     access.GroupMode
 }
 
 type createHostedRepositoryRequest struct {
@@ -211,7 +212,7 @@ func (h hostedRepositoryAPIHandler) authenticateManagementRequest(w http.Respons
 	}
 	if parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v2/groups/"), "/"); strings.HasPrefix(r.URL.Path, "/api/v2/groups/") && len(parts) == 2 && parts[1] == "browse" {
 		group, err := h.groups.GetHostedGroup(r.Context(), parts[0])
-		if err == nil && group.Visibility == repository.VisibilityPublic && anonymousAccessAllowed(r.Context(), h.groups) {
+		if err == nil && anonymousGroupAllowed(r.Context(), h.groups, group, r.Method) {
 			return anonymousPrincipal(), true
 		}
 		return h.authenticate(w, r)
@@ -449,6 +450,9 @@ func (h hostedRepositoryAPIHandler) update(w http.ResponseWriter, r *http.Reques
 	if request.Visibility != nil {
 		if !request.Visibility.Valid() {
 			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "visibility must be private, authenticated or public")
+			return
+		}
+		if h.rejectLoweringBelowGroups(w, r, repo, *request.Visibility) {
 			return
 		}
 		updatedRepo.Visibility = *request.Visibility

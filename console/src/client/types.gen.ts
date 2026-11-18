@@ -1367,9 +1367,14 @@ export type Problem = {
     | "signer_unavailable"
     | "untrusted_archive"
     | "snapshot_corrupt"
-    | "internal_error";
+    | "internal_error"
+    | "visibility_conflict";
   message: string;
   requestId: string;
+  /**
+   * Present on visibility_conflict (ADR 0029, strict group mode). The member repositories whose visibility is below the group's, limited to those the caller may administer.
+   */
+  members?: Array<VisibilityConflictMember>;
 };
 
 export type RepositoryPage = {
@@ -1756,6 +1761,12 @@ export type AuditCleanupJob = {
  * Read visibility ceiling, ordered private < authenticated < public. private admits principals with a grant, authenticated admits any non-anonymous identity, public admits anyone while the global public-access gate is enabled (otherwise public behaves as authenticated). Omitted on create means private.
  */
 export type Visibility = "private" | "authenticated" | "public";
+
+export type VisibilityConflictMember = {
+  repositoryId: string;
+  name: string;
+  visibility: Visibility;
+};
 
 /**
  * Write-only source credential sealed independently of local client credentials; a changed source binding requires a fresh secret or explicit none
@@ -11529,6 +11540,10 @@ export type UpdateRepositoryErrors = {
   /**
    * Problem response
    */
+  409: Problem;
+  /**
+   * Problem response
+   */
   412: Problem;
 };
 
@@ -12847,6 +12862,10 @@ export type ReplaceGroupErrors = {
   /**
    * Problem response
    */
+  409: Problem;
+  /**
+   * Problem response
+   */
   412: Problem;
 };
 
@@ -12962,6 +12981,10 @@ export type ReplaceGroupMembersData = {
 };
 
 export type ReplaceGroupMembersErrors = {
+  /**
+   * Problem response
+   */
+  409: Problem;
   /**
    * Problem response
    */

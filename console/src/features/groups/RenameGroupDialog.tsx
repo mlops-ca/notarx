@@ -7,6 +7,7 @@ import { ErrorBanner } from "../../components/ui/Feedback";
 import { Modal } from "../../components/ui/Modal";
 import { VisibilitySelect } from "../../components/ui/VisibilitySelect";
 import { usePreferences } from "../../lib/preferences";
+import { visibilityConflict } from "../../lib/visibilityConflict";
 
 /** Rename a group and change its read visibility. */
 export function RenameGroupDialog({
@@ -38,7 +39,7 @@ export function RenameGroupDialog({
         headers: { "If-Match": group.version },
       });
       if (err) {
-        setError(err);
+        setError(visibilityConflict(err));
         return;
       }
       onClose();

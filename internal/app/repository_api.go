@@ -356,13 +356,13 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 		aptSnapshotPublisher = aptpublication.NewPublisher(store, nativeAPTObjects, dependencies.APTSigner).WithMetrics(metrics).WithPublicationScanner(publicationScanner)
 	}
 	publishRouter := nativePublishRouter{maven: nativeMaven, conan: nativeConanPublish}
-	hostedRepositories := hostedRepositoryAPIHandler{store: store, groups: store, authenticator: authenticator}
+	hostedRepositories := hostedRepositoryAPIHandler{store: store, groups: store, authenticator: authenticator, groupMode: options.GroupVisibilityMode}
 	var searchProjection repository.ArtifactSearchStore
 	if candidate, ok := any(store).(repository.ArtifactSearchStore); ok {
 		searchProjection = candidate
 	}
 	scope := newManagementScope(store, store, store, store, authenticator, metrics)
-	repositoriesAPI := newRepositoryManagementHandler(repositoryManagementOptions{Scope: scope, Repositories: store, Groups: store, Capacities: store, Maintenance: maintenance, ArtifactScanner: dependencies.ArtifactScanner, ArtifactScanFormats: dependencies.ArtifactScannerFormats})
+	repositoriesAPI := newRepositoryManagementHandler(repositoryManagementOptions{GroupVisibilityMode: options.GroupVisibilityMode, Scope: scope, Repositories: store, Groups: store, Capacities: store, Maintenance: maintenance, ArtifactScanner: dependencies.ArtifactScanner, ArtifactScanFormats: dependencies.ArtifactScannerFormats})
 	identities, _ := any(store).(repository.ArtifactIdentityStore)
 	artifactsAPI := newArtifactManagementHandler(artifactManagementOptions{
 		Scope: scope, Repositories: store, Groups: store, Grants: store,
@@ -408,7 +408,7 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 			}
 			oci.ServeHTTP(w, r)
 		})}
-	mux.Handle("/v2/", hostedRepositoryGuard{store: store, authenticator: authenticator, format: repository.FormatOCI, next: ociGroupRouter})
+	mux.Handle("/v2/", anonymousBearerHandler{auth: authenticator, next: hostedRepositoryGuard{store: store, authenticator: authenticator, format: repository.FormatOCI, next: ociGroupRouter}})
 	mavenLegacy := MavenHandler{Store: store, Repositories: store, Authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator}, Authenticator: authenticator, Client: mavenClient, Metrics: metrics, Cache: mavenCache}
 	mavenGroupRouter := v2GroupRouter{format: repository.FormatMaven, groups: store, repos: store, audit: store, auth: authenticator,
 		authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator},
@@ -427,30 +427,45 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	npmGroupRouter := v2GroupRouter{format: repository.FormatNPM, groups: store, repos: store, audit: store, auth: authenticator,
 		authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator},
 		npm:        &v2GroupNPMHandler{native: &nativeNPM},
-		next: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !nativeNPM.ServeHTTP(w, r) {
-				http.NotFound(w, r)
-			}
-		})}
+		next: anonymousAbsentShaper{format: repository.FormatNPM, repos: store,
+			challenge: func(w http.ResponseWriter, _ *http.Request) {
+				nativeNPM.challenge(w, http.StatusUnauthorized, "authentication required")
+			},
+			next: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if !nativeNPM.ServeHTTP(w, r) {
+					http.NotFound(w, r)
+				}
+			})}}
 	mux.Handle("/npm/", npmGroupRouter)
 	pypiGroupRouter := v2GroupRouter{format: repository.FormatPyPI, groups: store, repos: store, audit: store, auth: authenticator,
 		authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator},
 		pypi:       &v2GroupPyPIHandler{native: &nativePyPI},
-		next:       nativePyPI}
+		next: anonymousAbsentShaper{format: repository.FormatPyPI, repos: store, next: nativePyPI,
+			challenge: func(w http.ResponseWriter, _ *http.Request) {
+				nativePyPI.challenge(w, http.StatusUnauthorized, "authentication required")
+			}}}
 	mux.Handle("/pypi/", pypiGroupRouter)
 	goGroupRouter := v2GroupRouter{format: repository.FormatGo, groups: store, repos: store, audit: store, auth: authenticator,
 		authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator},
 		goModules:  &v2GroupGoHandler{native: &nativeGo},
-		next:       nativeGo}
+		next: anonymousAbsentShaper{format: repository.FormatGo, repos: store, next: nativeGo,
+			challenge: func(w http.ResponseWriter, _ *http.Request) {
+				nativeGo.challenge(w, http.StatusUnauthorized, "authentication required")
+			}}}
 	mux.Handle("/go/", goGroupRouter)
 	cargoGroupRouter := v2GroupRouter{format: repository.FormatCargo, groups: store, repos: store, audit: store, auth: authenticator,
 		authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator},
-		cargo:      &v2GroupCargoHandler{native: &nativeCargo, owners: store}, next: nativeCargo}
+		cargo:      &v2GroupCargoHandler{native: &nativeCargo, owners: store},
+		next: anonymousAbsentShaper{format: repository.FormatCargo, repos: store, next: nativeCargo,
+			challenge: func(w http.ResponseWriter, _ *http.Request) { nativeCargo.challenge(w, http.StatusUnauthorized) }}}
 	mux.Handle("/cargo/", cargoGroupRouter)
 	aptGroupRouter := v2GroupRouter{format: repository.FormatAPT, groups: store, repos: store, audit: store, auth: authenticator,
 		authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator},
 		apt:        &v2GroupAPTHandler{native: &nativeAPT},
-		next:       nativeAPT}
+		next: anonymousAbsentShaper{format: repository.FormatAPT, repos: store, next: nativeAPT,
+			challenge: func(w http.ResponseWriter, _ *http.Request) {
+				nativeAPT.challenge(w, http.StatusUnauthorized, "authentication required")
+			}}}
 	mux.Handle("/apt/", aptGroupRouter)
 	conan := ConanHandler{Store: store, NativeStore: store, Repositories: store, Authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator}, Authenticator: authenticator, Client: conanClient, Metrics: metrics, Cache: conanCache, NativeObjects: nativeConanObjects, ReadPolicies: store, Quarantine: store}
 	conan.Publications, conan.PublicationScanner = options.ConanPublications, &publicationScanner

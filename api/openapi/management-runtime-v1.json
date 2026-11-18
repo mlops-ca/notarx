@@ -7718,7 +7718,7 @@
       },
       "patch": {
         "operationId": "updateRepository",
-        "description": "Updates repository configuration. Requires repository `admin` scope, because endpoint, allowlist, egress, upstream credential, visibility, and strict-publication settings change how the repository behaves for every client; a `write` scope is not sufficient.",
+        "description": "Updates repository configuration. Requires repository `admin` scope, because endpoint, allowlist, egress, upstream credential, visibility, and strict-publication settings change how the repository behaves for every client; a `write` scope is not sufficient. In strict group mode, lowering visibility below a group that contains the repository is refused with 409 visibility_conflict.",
         "parameters": [
           {
             "$ref": "#/components/parameters/IfMatch"
@@ -7742,6 +7742,9 @@
             "$ref": "#/components/responses/Problem"
           },
           "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
             "$ref": "#/components/responses/Problem"
           },
           "412": {
@@ -8826,7 +8829,7 @@
       },
       "post": {
         "operationId": "createGroup",
-        "description": "A hosted group references repositories, so the platform tier and the administrators of every repository it references may manage it. The refusal names the member that is out of bounds.",
+        "description": "A hosted group references repositories, so the platform tier and the administrators of every repository it references may manage it. The refusal names the member that is out of bounds. In strict mode (NOTARX_GROUP_VISIBILITY_MODE) a group more visible than its least visible member is refused with 409 visibility_conflict.",
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -8891,6 +8894,9 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/Group"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
           },
           "412": {
             "$ref": "#/components/responses/Problem"
@@ -9017,6 +9023,9 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/Group"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
           },
           "412": {
             "$ref": "#/components/responses/Problem"
@@ -15687,7 +15696,8 @@
               "signer_unavailable",
               "untrusted_archive",
               "snapshot_corrupt",
-              "internal_error"
+              "internal_error",
+              "visibility_conflict"
             ]
           },
           "message": {
@@ -15695,6 +15705,13 @@
           },
           "requestId": {
             "type": "string"
+          },
+          "members": {
+            "type": "array",
+            "description": "Present on visibility_conflict (ADR 0029, strict group mode). The member repositories whose visibility is below the group's, limited to those the caller may administer.",
+            "items": {
+              "$ref": "#/components/schemas/VisibilityConflictMember"
+            }
           }
         }
       },
@@ -16970,6 +16987,26 @@
           "public"
         ],
         "description": "Read visibility ceiling, ordered private < authenticated < public. private admits principals with a grant, authenticated admits any non-anonymous identity, public admits anyone while the global public-access gate is enabled (otherwise public behaves as authenticated). Omitted on create means private."
+      },
+      "VisibilityConflictMember": {
+        "type": "object",
+        "required": [
+          "repositoryId",
+          "name",
+          "visibility"
+        ],
+        "properties": {
+          "repositoryId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/Visibility"
+          }
+        }
       },
       "HelmPreviewUpstreamAuth": {
         "type": "object",

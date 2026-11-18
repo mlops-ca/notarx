@@ -22,7 +22,7 @@ func (s *PostgresStore) CreateGroup(ctx context.Context, group Group) (Group, er
 		return Group{}, err
 	}
 	for _, member := range group.Members {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO oci_group_members (group_name, name, member_type, endpoint, position, anonymous, allowed_hosts, repository_id) VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7::text[], '{}'::text[]),NULLIF($8,'')::uuid)`, group.Name, member.Name, member.Type, member.Endpoint, member.Position, member.Anonymous, member.AllowedHosts, member.RepositoryID); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO oci_group_members (group_name, name, member_type, endpoint, position, allowed_hosts, repository_id) VALUES ($1,$2,$3,$4,$5,COALESCE($6::text[], '{}'::text[]),NULLIF($7,'')::uuid)`, group.Name, member.Name, member.Type, member.Endpoint, member.Position, member.AllowedHosts, member.RepositoryID); err != nil {
 			return Group{}, err
 		}
 	}
@@ -40,7 +40,7 @@ func (s *PostgresStore) GetGroup(ctx context.Context, name string) (Group, error
 		}
 		return Group{}, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT name, member_type, endpoint, position, anonymous, array_to_json(allowed_hosts), COALESCE(repository_id::text, '') FROM oci_group_members WHERE group_name=$1 ORDER BY position`, name)
+	rows, err := s.db.QueryContext(ctx, `SELECT name, member_type, endpoint, position, array_to_json(allowed_hosts), COALESCE(repository_id::text, '') FROM oci_group_members WHERE group_name=$1 ORDER BY position`, name)
 	if err != nil {
 		return Group{}, err
 	}
@@ -48,7 +48,7 @@ func (s *PostgresStore) GetGroup(ctx context.Context, name string) (Group, error
 	for rows.Next() {
 		var member Member
 		var allowedHosts []byte
-		if err := rows.Scan(&member.Name, &member.Type, &member.Endpoint, &member.Position, &member.Anonymous, &allowedHosts, &member.RepositoryID); err != nil {
+		if err := rows.Scan(&member.Name, &member.Type, &member.Endpoint, &member.Position, &allowedHosts, &member.RepositoryID); err != nil {
 			return Group{}, err
 		}
 		if err := json.Unmarshal(allowedHosts, &member.AllowedHosts); err != nil {
@@ -87,9 +87,9 @@ func (s *PostgresStore) listGroups(ctx context.Context, groupsTable, membersTabl
 	if err := groupRows.Err(); err != nil {
 		return nil, err
 	}
-	memberQuery := `SELECT name, member_type, endpoint, position, anonymous, array_to_json(allowed_hosts), COALESCE(repository_id::text, '') FROM ` + membersTable + ` WHERE group_name=$1 ORDER BY position`
+	memberQuery := `SELECT name, member_type, endpoint, position, array_to_json(allowed_hosts), COALESCE(repository_id::text, '') FROM ` + membersTable + ` WHERE group_name=$1 ORDER BY position`
 	if !withAllowedHosts {
-		memberQuery = `SELECT name, member_type, endpoint, position, anonymous, COALESCE(repository_id::text, '') FROM ` + membersTable + ` WHERE group_name=$1 ORDER BY position`
+		memberQuery = `SELECT name, member_type, endpoint, position, COALESCE(repository_id::text, '') FROM ` + membersTable + ` WHERE group_name=$1 ORDER BY position`
 	}
 	for i := range groups {
 		rows, err := s.db.QueryContext(ctx, memberQuery, groups[i].Name)
@@ -100,7 +100,7 @@ func (s *PostgresStore) listGroups(ctx context.Context, groupsTable, membersTabl
 			var member Member
 			if withAllowedHosts {
 				var allowedHosts []byte
-				if err := rows.Scan(&member.Name, &member.Type, &member.Endpoint, &member.Position, &member.Anonymous, &allowedHosts, &member.RepositoryID); err != nil {
+				if err := rows.Scan(&member.Name, &member.Type, &member.Endpoint, &member.Position, &allowedHosts, &member.RepositoryID); err != nil {
 					_ = rows.Close()
 					return nil, err
 				}
@@ -108,7 +108,7 @@ func (s *PostgresStore) listGroups(ctx context.Context, groupsTable, membersTabl
 					_ = rows.Close()
 					return nil, err
 				}
-			} else if err := rows.Scan(&member.Name, &member.Type, &member.Endpoint, &member.Position, &member.Anonymous, &member.RepositoryID); err != nil {
+			} else if err := rows.Scan(&member.Name, &member.Type, &member.Endpoint, &member.Position, &member.RepositoryID); err != nil {
 				_ = rows.Close()
 				return nil, err
 			}
@@ -157,7 +157,7 @@ func (s *PostgresStore) CreateRawGroup(ctx context.Context, group Group) (Group,
 		return Group{}, err
 	}
 	for _, m := range group.Members {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO raw_group_members (group_name,name,member_type,endpoint,position,anonymous,allowed_hosts,repository_id) VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7::text[], '{}'::text[]),NULLIF($8,'')::uuid)`, group.Name, m.Name, m.Type, m.Endpoint, m.Position, m.Anonymous, m.AllowedHosts, m.RepositoryID); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO raw_group_members (group_name,name,member_type,endpoint,position,allowed_hosts,repository_id) VALUES ($1,$2,$3,$4,$5,COALESCE($6::text[], '{}'::text[]),NULLIF($7,'')::uuid)`, group.Name, m.Name, m.Type, m.Endpoint, m.Position, m.AllowedHosts, m.RepositoryID); err != nil {
 			return Group{}, err
 		}
 	}
@@ -174,7 +174,7 @@ func (s *PostgresStore) GetRawGroup(ctx context.Context, name string) (Group, er
 		}
 		return Group{}, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT name,member_type,endpoint,position,anonymous,array_to_json(allowed_hosts),COALESCE(repository_id::text, '') FROM raw_group_members WHERE group_name=$1 ORDER BY position`, name)
+	rows, err := s.db.QueryContext(ctx, `SELECT name,member_type,endpoint,position,array_to_json(allowed_hosts),COALESCE(repository_id::text, '') FROM raw_group_members WHERE group_name=$1 ORDER BY position`, name)
 	if err != nil {
 		return Group{}, err
 	}
@@ -182,7 +182,7 @@ func (s *PostgresStore) GetRawGroup(ctx context.Context, name string) (Group, er
 	for rows.Next() {
 		var m Member
 		var allowedHosts []byte
-		if err := rows.Scan(&m.Name, &m.Type, &m.Endpoint, &m.Position, &m.Anonymous, &allowedHosts, &m.RepositoryID); err != nil {
+		if err := rows.Scan(&m.Name, &m.Type, &m.Endpoint, &m.Position, &allowedHosts, &m.RepositoryID); err != nil {
 			return Group{}, err
 		}
 		if err := json.Unmarshal(allowedHosts, &m.AllowedHosts); err != nil {
@@ -225,7 +225,7 @@ func (s *PostgresStore) CreateMavenGroup(ctx context.Context, group Group) (Grou
 		return Group{}, err
 	}
 	for _, member := range group.Members {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO maven_group_members (group_name, name, member_type, endpoint, position, anonymous, repository_id) VALUES ($1,$2,$3,$4,$5,$6,NULLIF($7,'')::uuid)`, group.Name, member.Name, member.Type, member.Endpoint, member.Position, member.Anonymous, member.RepositoryID); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO maven_group_members (group_name, name, member_type, endpoint, position, repository_id) VALUES ($1,$2,$3,$4,$5,NULLIF($6,'')::uuid)`, group.Name, member.Name, member.Type, member.Endpoint, member.Position, member.RepositoryID); err != nil {
 			return Group{}, err
 		}
 	}
@@ -243,14 +243,14 @@ func (s *PostgresStore) GetMavenGroup(ctx context.Context, name string) (Group, 
 		}
 		return Group{}, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT name, member_type, endpoint, position, anonymous, COALESCE(repository_id::text, '') FROM maven_group_members WHERE group_name=$1 ORDER BY position`, name)
+	rows, err := s.db.QueryContext(ctx, `SELECT name, member_type, endpoint, position, COALESCE(repository_id::text, '') FROM maven_group_members WHERE group_name=$1 ORDER BY position`, name)
 	if err != nil {
 		return Group{}, err
 	}
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var member Member
-		if err := rows.Scan(&member.Name, &member.Type, &member.Endpoint, &member.Position, &member.Anonymous, &member.RepositoryID); err != nil {
+		if err := rows.Scan(&member.Name, &member.Type, &member.Endpoint, &member.Position, &member.RepositoryID); err != nil {
 			return Group{}, err
 		}
 		group.Members = append(group.Members, member)
@@ -295,7 +295,7 @@ func (s *PostgresStore) CreateConanGroup(ctx context.Context, group Group) (Grou
 		return Group{}, err
 	}
 	for _, member := range group.Members {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO conan_group_members (group_name, name, member_type, endpoint, position, anonymous, allowed_hosts, repository_id) VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7::text[], '{}'::text[]),NULLIF($8,'')::uuid)`, group.Name, member.Name, member.Type, member.Endpoint, member.Position, member.Anonymous, member.AllowedHosts, member.RepositoryID); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO conan_group_members (group_name, name, member_type, endpoint, position, allowed_hosts, repository_id) VALUES ($1,$2,$3,$4,$5,COALESCE($6::text[], '{}'::text[]),NULLIF($7,'')::uuid)`, group.Name, member.Name, member.Type, member.Endpoint, member.Position, member.AllowedHosts, member.RepositoryID); err != nil {
 			return Group{}, err
 		}
 	}
@@ -312,7 +312,7 @@ func (s *PostgresStore) GetConanGroup(ctx context.Context, name string) (Group, 
 		}
 		return Group{}, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT name, member_type, endpoint, position, anonymous, array_to_json(allowed_hosts), COALESCE(repository_id::text, '') FROM conan_group_members WHERE group_name=$1 ORDER BY position`, name)
+	rows, err := s.db.QueryContext(ctx, `SELECT name, member_type, endpoint, position, array_to_json(allowed_hosts), COALESCE(repository_id::text, '') FROM conan_group_members WHERE group_name=$1 ORDER BY position`, name)
 	if err != nil {
 		return Group{}, err
 	}
@@ -320,7 +320,7 @@ func (s *PostgresStore) GetConanGroup(ctx context.Context, name string) (Group, 
 	for rows.Next() {
 		var member Member
 		var allowedHosts []byte
-		if err := rows.Scan(&member.Name, &member.Type, &member.Endpoint, &member.Position, &member.Anonymous, &allowedHosts, &member.RepositoryID); err != nil {
+		if err := rows.Scan(&member.Name, &member.Type, &member.Endpoint, &member.Position, &allowedHosts, &member.RepositoryID); err != nil {
 			return Group{}, err
 		}
 		if err := json.Unmarshal(allowedHosts, &member.AllowedHosts); err != nil {
