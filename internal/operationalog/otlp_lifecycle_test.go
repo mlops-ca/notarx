@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel"
-	logglobal "go.opentelemetry.io/otel/log/global"
 )
 
 type otlpSyntheticTransport func(*http.Request) (*http.Response, error)
@@ -40,13 +39,13 @@ func TestOTLPOutputDoesNotInheritTraceTLSOrChangeGlobalProviders(t *testing.T) {
 	}
 	t.Setenv("OTEL_EXPORTER_OTLP_CERTIFICATE", certificatePath)
 	t.Setenv("OTEL_EXPORTER_OTLP_LOGS_CERTIFICATE", "")
-	traceProvider, logsProvider := otel.GetTracerProvider(), logglobal.GetLoggerProvider()
+	traceProvider, logsProvider := otel.GetTracerProvider(), otel.GetLoggerProvider()
 	output, err := NewOTLPOutput(otlpTestOptions("http://synthetic-logs.invalid"))
 	if err != nil {
 		t.Fatalf("shared trace TLS changed explicit Logs initialization: %v", err)
 	}
 	defer shutdownOTLP(t, output)
-	if otel.GetTracerProvider() != traceProvider || logglobal.GetLoggerProvider() != logsProvider || os.Getenv("OTEL_EXPORTER_OTLP_CERTIFICATE") != certificatePath {
+	if otel.GetTracerProvider() != traceProvider || otel.GetLoggerProvider() != logsProvider || os.Getenv("OTEL_EXPORTER_OTLP_CERTIFICATE") != certificatePath {
 		t.Fatal("Logs changed tracing/global configuration")
 	}
 }
