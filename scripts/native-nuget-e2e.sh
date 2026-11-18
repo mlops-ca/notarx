@@ -104,7 +104,12 @@ go build -o "$work/gateway" ./cmd/notarx
 # The SDK container runs on the Docker server's own platform, so the Linux gateway
 # is built natively inside a pinned Go container (no cross-compilation).
 go_image=$(sed -n 's/^GO_IMAGE := //p' Makefile)
-docker run --rm --platform "$platform" -v "$PWD:/src:ro" -v "$work:/out" -w /src -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false "$go_image" go build -o /out/gateway-linux ./cmd/notarx
+if [[ -z "$go_image" ]]; then
+  printf '%s\n' 'GO_IMAGE is not defined in the Makefile; cannot build the Linux gateway natively.' >&2
+  exit 1
+fi
+docker run --rm --platform "$platform" -v "$PWD:/src:ro" -v "$work:/out" -v artifact-gateway-go-mod:/go/pkg/mod -w /src \
+  -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false "$go_image" go build -o /out/gateway-linux ./cmd/notarx
 python3 - "$work/gateway" "$sdk_image" "$evidence/tool-provenance.json" <<'PY'
 import hashlib,json,pathlib,subprocess,sys
 p=pathlib.Path(sys.argv[3]);data=json.loads(p.read_text())

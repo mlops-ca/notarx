@@ -309,26 +309,27 @@ expect_http 204 GET "$gateway_url/readyz" "$private_dir/readyz.out"
   printf 'raw_egress_proxy=http://host.docker.internal:%s\n' "$raw_proxy_port"
 } >"$output_dir/environment.txt"
 
-printf '%s\n' 'Measuring stripped host-native binaries and the runtime image...'
+printf '%s\n' 'Measuring the shipped stripped Linux binaries and the runtime image...'
 printf 'component,os,arch,form,bytes,mib\n' >"$output_dir/artifact-sizes.csv"
-host_os=$(go env GOOS)
-host_arch=$(go env GOARCH)
-for arch in "$host_arch"; do
-  for component in gateway healthcheck; do
-    package=./cmd/notarx
-    [[ "$component" == healthcheck ]] && package=./cmd/healthcheck
-    binary_file="$private_dir/${component}-${host_os}-${arch}"
-    CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o "$binary_file" "$package"
-    binary_bytes=$(wc -c <"$binary_file" | tr -d ' ')
-    gzip -9 -c "$binary_file" >"${binary_file}.gz"
-    gzip_bytes=$(wc -c <"${binary_file}.gz" | tr -d ' ')
-    printf '%s,%s,%s,stripped-static-binary,%s,%s\n' "$component" "$host_os" "$arch" "$binary_bytes" "$(bytes_to_mib "$binary_bytes")" >>"$output_dir/artifact-sizes.csv"
-    printf '%s,%s,%s,gzip-9,%s,%s\n' "$component" "$host_os" "$arch" "$gzip_bytes" "$(bytes_to_mib "$gzip_bytes")" >>"$output_dir/artifact-sizes.csv"
-  done
-done
-
+# The binaries are copied out of the runtime image the gateway was built into, so
+# they are the shipped bytes of the image's own (native) architecture; nothing is
+# cross-compiled (ADR 0016).
 gateway_image="${project}-gateway"
 image_arch=$(docker image inspect --format '{{.Architecture}}' "$gateway_image")
+extract_id=$(docker create "$gateway_image")
+for component in gateway healthcheck; do
+  image_path=/notarx
+  [[ "$component" == healthcheck ]] && image_path=/gateway-healthcheck
+  binary_file="$private_dir/${component}-linux-${image_arch}"
+  docker cp "$extract_id:$image_path" "$binary_file"
+  binary_bytes=$(wc -c <"$binary_file" | tr -d ' ')
+  gzip -9 -c "$binary_file" >"${binary_file}.gz"
+  gzip_bytes=$(wc -c <"${binary_file}.gz" | tr -d ' ')
+  printf '%s,linux,%s,stripped-static-binary,%s,%s\n' "$component" "$image_arch" "$binary_bytes" "$(bytes_to_mib "$binary_bytes")" >>"$output_dir/artifact-sizes.csv"
+  printf '%s,linux,%s,gzip-9,%s,%s\n' "$component" "$image_arch" "$gzip_bytes" "$(bytes_to_mib "$gzip_bytes")" >>"$output_dir/artifact-sizes.csv"
+done
+docker rm "$extract_id" >/dev/null
+
 image_bytes=$(docker image inspect --format '{{.Size}}' "$gateway_image")
 image_archive="$private_dir/gateway-image.tar.gz"
 docker save "$gateway_image" | gzip -1 >"$image_archive"

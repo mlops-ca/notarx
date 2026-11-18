@@ -103,23 +103,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+        name: [gateway, apt-signer]
         include:
           - name: gateway
             file: Dockerfile
             tag: notarx-gateway:local
-            runner: ubuntu-24.04
           - name: apt-signer
             file: Dockerfile.apt-signer
             tag: notarx-reference-apt-signer:local
-            runner: ubuntu-24.04
-          - name: gateway
-            file: Dockerfile
-            tag: notarx-gateway:local
-            runner: ubuntu-24.04-arm
-          - name: apt-signer
-            file: Dockerfile.apt-signer
-            tag: notarx-reference-apt-signer:local
-            runner: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1

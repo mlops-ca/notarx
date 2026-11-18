@@ -60,8 +60,10 @@ jobs:
       assets-artifact: artifact-gateway-${{ github.ref_name }}
       retention-days: 90
 
+  # Image tags are public and immutable, so they are created only after the
+  # archives of every runner built and checksummed.
   publish-images:
-    needs: verify-candidate
+    needs: [verify-candidate, build-assets]
     permissions:
       contents: read
       packages: write

@@ -52,6 +52,16 @@ jobs:
     outputs:
       legs: ${{ steps.legs.outputs.legs }}
     steps:
+      # Fail before any build or push when main already moved; image-manifest
+      # checks again right before tagging.
+      - name: Confirm this run still owns the main tip
+        if: inputs.require-main-tip
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ inputs.sha }}
+        run: |
+          tip=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
+          test "$SHA" = "$tip"
       - name: Expand the image list into one native leg per architecture
         id: legs
         env:
