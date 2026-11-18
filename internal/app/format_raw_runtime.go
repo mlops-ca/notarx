@@ -13,7 +13,7 @@ import (
 type rawModuleGroupRuntime struct {
 	resolver v2GroupResolver
 	policy   interface {
-		GetAnonymousAccessPolicy(context.Context) (repository.AnonymousAccessPolicy, error)
+		GetPublicAccessPolicy(context.Context) (repository.PublicAccessPolicy, error)
 	}
 }
 

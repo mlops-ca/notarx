@@ -37,7 +37,7 @@ async function mockProxyDirectory(page: Page, format: "maven" | "raw") {
     type: "proxy",
     endpoint: "https://upstream.example.test/repository",
     allowedHosts: ["upstream.example.test"],
-    anonymousRead: false,
+    visibility: "private",
     state: "active",
     version: "1",
   };
@@ -130,7 +130,8 @@ async function mockProxyDirectory(page: Page, format: "maven" | "raw") {
             admin: allowed,
             intelligence: allowed,
           },
-          anonymousRead: { allowed: false },
+          visibility: "private",
+          anonymousAccess: { allowed: false },
         },
       });
     if (endpoint.endsWith("/capacity"))

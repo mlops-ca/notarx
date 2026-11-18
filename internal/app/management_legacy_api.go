@@ -31,7 +31,7 @@ type generatedRepositoryAPIAdapter struct {
 	tombstones             repository.ArtifactTombstoneStore
 	lifecycleJobs          repository.LifecycleJobStore
 	auditRetention         repository.AuditRetentionStore
-	anonymousAccess        repository.AnonymousAccessPolicyStore
+	publicAccess           repository.PublicAccessPolicyStore
 	siteSettings           repository.SiteSettingsStore
 	consoleThemePackages   repository.ConsoleThemeStore
 	consoleThemes          *consoletheme.Registry

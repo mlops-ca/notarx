@@ -13,15 +13,15 @@ func TestNuGetGroupPreviewDoesNotEnterFormalCatalogOrDeepLinks(t *testing.T) {
 	o := explicitGatewayOptions()
 	store := o.Store.(*repository.MemoryStore)
 	o.NuGetPreviewEnabled, o.NuGetStore, o.NuGetObjects, o.NuGetSources = true, store, objectstore.NewMemoryStore(), store
-	repo, err := store.CreateHostedRepository(t.Context(), repository.HostedRepository{ID: uuid.NewString(), Name: "nuget-group-member", Format: repository.FormatNuGet, Type: repository.RepositoryTypeHosted, AnonymousRead: true})
+	repo, err := store.CreateHostedRepository(t.Context(), repository.HostedRepository{ID: uuid.NewString(), Name: "nuget-group-member", Format: repository.FormatNuGet, Type: repository.RepositoryTypeHosted, Visibility: repository.VisibilityPublic})
 	if err != nil {
 		t.Fatal(err)
 	}
-	group, _, err := store.CreateHostedGroupIdempotently(t.Context(), repository.HostedGroup{ID: uuid.NewString(), Name: "nuget-group-preview", Format: repository.FormatNuGet, AnonymousRead: true, Members: []repository.GroupMember{{RepositoryID: repo.ID, Position: 0}}}, "operator", uuid.NewString(), "fixture")
+	group, _, err := store.CreateHostedGroupIdempotently(t.Context(), repository.HostedGroup{ID: uuid.NewString(), Name: "nuget-group-preview", Format: repository.FormatNuGet, Visibility: repository.VisibilityPublic, Members: []repository.GroupMember{{RepositoryID: repo.ID, Position: 0}}}, "operator", uuid.NewString(), "fixture")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = store.ReplaceAnonymousAccessPolicy(t.Context(), repository.AnonymousAccessPolicy{Enabled: true}, "1"); err != nil {
+	if _, err = store.ReplacePublicAccessPolicy(t.Context(), repository.PublicAccessPolicy{Enabled: true}, "1"); err != nil {
 		t.Fatal(err)
 	}
 	h, err := NewGatewayHandler(o)

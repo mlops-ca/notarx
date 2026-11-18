@@ -155,7 +155,8 @@ test("managed Maven deep links scan later pages for the exact snapshot build", a
             type: "hosted",
             state: "active",
           },
-          anonymousRead: {
+          visibility: "private",
+          anonymousAccess: {
             allowed: false,
             source: "repository_policy",
             reason: "repository_anonymous_read_disabled",
@@ -191,7 +192,7 @@ test("managed Maven deep links scan later pages for the exact snapshot build", a
         name: "managed-maven",
         format: "maven",
         type: "hosted",
-        anonymousRead: false,
+        visibility: "private",
         state: "active",
         version: "1",
       },

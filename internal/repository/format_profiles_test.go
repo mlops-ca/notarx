@@ -47,8 +47,8 @@ func TestSupportedFormatProfilesAreCompleteAndUnique(t *testing.T) {
 			t.Fatalf("duplicate format profile %q", profile.Format)
 		}
 		seen[profile.Format] = true
-		if !profile.AnonymousRead {
-			t.Errorf("format %q group=%t anonymous=%t", profile.Format, profile.GroupSupported, profile.AnonymousRead)
+		if !profile.PublicVisibility {
+			t.Errorf("format %q group=%t anonymous=%t", profile.Format, profile.GroupSupported, profile.PublicVisibility)
 		}
 		if profile.Format == FormatAPT {
 			if !profile.PublicationScanning || !FormatSupportsPublicationScanning(profile.Format, RepositoryTypeHosted) || FormatSupportsPublicationScanning(profile.Format, RepositoryTypeProxy) {

@@ -10,14 +10,14 @@ import { getLabelledButton } from "../../test/buttons";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import {
-  getAnonymousAccessPolicy,
+  getPublicAccessPolicy,
   getRepositoryEffectiveAccess,
   listApiKeys,
   listRepositories,
   listRepositoryGrants,
   listServiceAccounts,
   listUsers,
-  replaceAnonymousAccessPolicy,
+  replacePublicAccessPolicy,
 } from "../../client";
 import { AntdProvider } from "../../app/AntdProvider";
 import { PreferencesProvider } from "../../lib/preferences";
@@ -29,14 +29,14 @@ vi.mock("../../client", async () => {
     await vi.importActual<typeof import("../../client")>("../../client");
   return {
     ...actual,
-    getAnonymousAccessPolicy: vi.fn(),
+    getPublicAccessPolicy: vi.fn(),
     getRepositoryEffectiveAccess: vi.fn(),
     listApiKeys: vi.fn(),
     listRepositories: vi.fn(),
     listRepositoryGrants: vi.fn(),
     listServiceAccounts: vi.fn(),
     listUsers: vi.fn(),
-    replaceAnonymousAccessPolicy: vi.fn(),
+    replacePublicAccessPolicy: vi.fn(),
   };
 });
 
@@ -52,7 +52,7 @@ vi.mock("../../lib/auth", () => ({
   }),
 }));
 
-const mockGetAnonymousAccessPolicy = vi.mocked(getAnonymousAccessPolicy);
+const mockGetAnonymousAccessPolicy = vi.mocked(getPublicAccessPolicy);
 const mockGetRepositoryEffectiveAccess = vi.mocked(
   getRepositoryEffectiveAccess,
 );
@@ -61,9 +61,7 @@ const mockListRepositories = vi.mocked(listRepositories);
 const mockListRepositoryGrants = vi.mocked(listRepositoryGrants);
 const mockListServiceAccounts = vi.mocked(listServiceAccounts);
 const mockListUsers = vi.mocked(listUsers);
-const mockReplaceAnonymousAccessPolicy = vi.mocked(
-  replaceAnonymousAccessPolicy,
-);
+const mockReplaceAnonymousAccessPolicy = vi.mocked(replacePublicAccessPolicy);
 
 afterEach(() => {
   cleanup();
@@ -115,7 +113,8 @@ describe("AccessControlPage", () => {
           subject: "active-user",
           displayName: "active-user",
         },
-        anonymousRead: {
+        visibility: "private",
+        anonymousAccess: {
           allowed: false,
           source: "repository",
           reason: "private",
@@ -223,7 +222,8 @@ describe("AccessControlPage", () => {
             subject: "active-user",
             displayName: "active-user",
           },
-          anonymousRead: {
+          visibility: "private",
+          anonymousAccess: {
             allowed: false,
             source: "repository",
             reason: "private",
@@ -416,7 +416,8 @@ describe("AccessControlPage", () => {
           subject: "active-service-account",
           displayName: "pipeone-ci",
         },
-        anonymousRead: {
+        visibility: "private",
+        anonymousAccess: {
           allowed: false,
           source: "repository",
           reason: "private",
@@ -468,7 +469,7 @@ describe("AccessControlPage", () => {
               format: "maven",
               type: "hosted",
               state: "active",
-              anonymousRead: true,
+              visibility: "public",
             },
             {
               id: "00000000-0000-4000-8000-000000000002",
@@ -476,7 +477,7 @@ describe("AccessControlPage", () => {
               format: "npm",
               type: "hosted",
               state: "active",
-              anonymousRead: false,
+              visibility: "private",
             },
           ],
         },

@@ -24,7 +24,7 @@ type FormatProfile struct {
 	Format              Format
 	RepositoryTypes     []RepositoryType
 	GroupSupported      bool
-	AnonymousRead       bool
+	PublicVisibility    bool
 	PublicationScanning bool
 	HostedOperations    []RepositoryOperation
 	ProxyOperations     []RepositoryOperation
@@ -49,7 +49,7 @@ var supportedFormatProfiles = []FormatProfile{
 		Format:              FormatNPM,
 		RepositoryTypes:     []RepositoryType{RepositoryTypeHosted, RepositoryTypeProxy},
 		GroupSupported:      true,
-		AnonymousRead:       true,
+		PublicVisibility:    true,
 		PublicationScanning: true,
 		HostedOperations: []RepositoryOperation{
 			RepositoryOperationDeprecate,
@@ -72,7 +72,7 @@ var supportedFormatProfiles = []FormatProfile{
 		Format:              FormatPyPI,
 		RepositoryTypes:     []RepositoryType{RepositoryTypeHosted, RepositoryTypeProxy},
 		GroupSupported:      true,
-		AnonymousRead:       true,
+		PublicVisibility:    true,
 		PublicationScanning: true,
 		HostedOperations: []RepositoryOperation{
 			RepositoryOperationYank,
@@ -96,7 +96,7 @@ var supportedFormatProfiles = []FormatProfile{
 		Format:              FormatGo,
 		RepositoryTypes:     []RepositoryType{RepositoryTypeHosted, RepositoryTypeProxy},
 		GroupSupported:      true,
-		AnonymousRead:       true,
+		PublicVisibility:    true,
 		PublicationScanning: true,
 		HostedOperations: []RepositoryOperation{
 			RepositoryOperationRead,
@@ -118,7 +118,7 @@ var supportedFormatProfiles = []FormatProfile{
 		Format:              FormatCargo,
 		RepositoryTypes:     []RepositoryType{RepositoryTypeHosted, RepositoryTypeProxy},
 		GroupSupported:      true,
-		AnonymousRead:       true,
+		PublicVisibility:    true,
 		PublicationScanning: true,
 		HostedOperations: []RepositoryOperation{
 			RepositoryOperationRead,
@@ -141,7 +141,7 @@ var supportedFormatProfiles = []FormatProfile{
 		PublicationScanning: true,
 		RepositoryTypes:     []RepositoryType{RepositoryTypeProxy},
 		GroupSupported:      true,
-		AnonymousRead:       true,
+		PublicVisibility:    true,
 		ProxyOperations: []RepositoryOperation{
 			RepositoryOperationRead,
 			RepositoryOperationBrowse,
@@ -154,7 +154,7 @@ func formatProfile(format Format) FormatProfile {
 		Format:              format,
 		RepositoryTypes:     []RepositoryType{RepositoryTypeHosted, RepositoryTypeProxy},
 		GroupSupported:      true,
-		AnonymousRead:       true,
+		PublicVisibility:    true,
 		PublicationScanning: true,
 		HostedOperations: []RepositoryOperation{
 			RepositoryOperationRead,

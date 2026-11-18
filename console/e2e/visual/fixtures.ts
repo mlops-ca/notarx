@@ -1,5 +1,5 @@
 import type {
-  GetAnonymousAccessPolicyResponses,
+  GetPublicAccessPolicyResponses,
   GetDiagnosticsResponses,
   GetOidcSettingsResponses,
   GetOverviewStatisticsResponses,
@@ -46,7 +46,7 @@ function repository(
     name,
     format,
     type,
-    anonymousRead: false,
+    visibility: "private",
     mavenStrictPublication: false,
     state: "active",
     version: "3",
@@ -56,7 +56,7 @@ function repository(
 
 export const repositories = [
   repository("repo-maven-releases", "maven-releases", "maven", "hosted", {
-    anonymousRead: true,
+    visibility: "public",
   }),
   repository("repo-maven-central", "maven-central", "maven", "proxy", {
     endpoint: "https://repo.maven.apache.org/maven2",
@@ -69,7 +69,7 @@ export const repositories = [
     allowedHosts: ["pypi.org", "files.pythonhosted.org"],
   }),
   repository("repo-raw", "release-files", "raw", "hosted", {
-    anonymousRead: true,
+    visibility: "public",
   }),
   repository("repo-go-proxy", "go-proxy", "go", "proxy", {
     endpoint: "https://proxy.golang.org",
@@ -88,7 +88,7 @@ export const groupPage = {
       id: "group-maven-public",
       name: "maven-public",
       format: "maven",
-      anonymousRead: true,
+      visibility: "public",
       members: [
         { repositoryId: "repo-maven-releases", position: 0 },
         { repositoryId: "repo-maven-central", position: 1 },
@@ -189,7 +189,7 @@ export const formatProfiles = {
     format,
     repositoryTypes: format === "apt" ? ["proxy"] : ["hosted", "proxy"],
     groupSupported: true,
-    anonymousRead: true,
+    publicVisibility: true,
     hostedOperations:
       format === "apt"
         ? []
@@ -300,7 +300,7 @@ export const diagnostics = {
 export const anonymousAccessPolicy = {
   enabled: true,
   version: "1",
-} satisfies GetAnonymousAccessPolicyResponses[200];
+} satisfies GetPublicAccessPolicyResponses[200];
 
 export const apiKeys = {
   items: [
@@ -417,7 +417,7 @@ export const oidcLoginConfig = { enabled: false };
 export const publicRepositories = {
   enabled: true,
   items: repositories
-    .filter((item) => item.anonymousRead)
+    .filter((item) => item.visibility === "public")
     .map(({ id, name, format, type }) => ({ id, name, format, type })),
 };
 
@@ -451,7 +451,8 @@ export const mavenReleasesAccess = {
     type: "hosted",
     state: "active",
   },
-  anonymousRead: { allowed: true, source: "repository", reason: "enabled" },
+  visibility: "private",
+  anonymousAccess: { allowed: true, source: "repository", reason: "enabled" },
   permissions: { read: allow, write: allow, admin: allow, intelligence: allow },
 } satisfies GetRepositoryEffectiveAccessResponses[200];
 

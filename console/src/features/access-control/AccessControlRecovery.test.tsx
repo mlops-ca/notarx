@@ -10,7 +10,7 @@ import {
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  getAnonymousAccessPolicy,
+  getPublicAccessPolicy,
   listApiKeys,
   listAuthorizationRoles,
   listAuthorizationTemplates,
@@ -26,7 +26,7 @@ import { AccessControlPage } from "./AccessControl";
 
 vi.mock("../../client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../client")>()),
-  getAnonymousAccessPolicy: vi.fn(),
+  getPublicAccessPolicy: vi.fn(),
   listApiKeys: vi.fn(),
   listAuthorizationRoles: vi.fn(),
   listAuthorizationTemplates: vi.fn(),
@@ -97,7 +97,7 @@ beforeEach(() => {
   vi.mocked(listServiceAccounts).mockResolvedValue({
     data: { items: [] },
   } as never);
-  vi.mocked(getAnonymousAccessPolicy).mockResolvedValue({
+  vi.mocked(getPublicAccessPolicy).mockResolvedValue({
     data: { enabled: false, version: "1" },
   } as never);
   vi.mocked(listAuthorizationRoles).mockResolvedValue({ data: [] } as never);

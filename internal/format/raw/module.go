@@ -24,7 +24,7 @@ type AuditRecorder interface {
 	RecordAudit(context.Context, repository.AuditRecord) error
 }
 type AnonymousPolicy interface {
-	GetAnonymousAccessPolicy(context.Context) (repository.AnonymousAccessPolicy, error)
+	GetPublicAccessPolicy(context.Context) (repository.PublicAccessPolicy, error)
 }
 type Metrics interface {
 	RecordRawSpoolRejected()
@@ -141,11 +141,11 @@ func (m *Module) anonymousAllowed(ctx context.Context) bool {
 	if m.anonymous == nil {
 		return false
 	}
-	policy, err := m.anonymous.GetAnonymousAccessPolicy(ctx)
+	policy, err := m.anonymous.GetPublicAccessPolicy(ctx)
 	return err == nil && policy.Enabled
 }
 func (m *Module) anonymousRepositoryRead(ctx context.Context, repo repository.HostedRepository, method string) bool {
-	return (method == http.MethodGet || method == http.MethodHead) && repo.State == repository.RepositoryActive && repo.AnonymousRead && m.anonymousAllowed(ctx)
+	return (method == http.MethodGet || method == http.MethodHead) && repo.State == repository.RepositoryActive && repo.Visibility == repository.VisibilityPublic && m.anonymousAllowed(ctx)
 }
 
 const anonymousActor = "anonymous"

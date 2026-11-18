@@ -154,7 +154,7 @@ func privateProxyCredentialRebindingContract(t *testing.T, store GatewayStore) {
 				}
 				readCount := len(fixture.snapshot())
 				// An unchanged destination still preserves the existing ciphertext.
-				kept := ociBearerManagementRequest(handler, http.MethodPatch, "/api/v2/repositories/"+repo.ID, `{"anonymousRead":false}`, repo.Version, "")
+				kept := ociBearerManagementRequest(handler, http.MethodPatch, "/api/v2/repositories/"+repo.ID, `{"visibility":"private"}`, repo.Version, "")
 				if kept.Code != http.StatusOK {
 					t.Fatalf("same binding update=%d %s", kept.Code, kept.Body.String())
 				}

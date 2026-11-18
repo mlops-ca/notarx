@@ -13,7 +13,7 @@ import (
 type publicRepositoryCatalogHandler struct {
 	repositories repository.HostedRepositoryStore
 	groups       repository.HostedGroupStore
-	anonymous    repository.AnonymousAccessPolicyStore
+	anonymous    repository.PublicAccessPolicyStore
 }
 
 type publicRepositoryCatalogEntry struct {
@@ -29,7 +29,7 @@ type publicRepositoryCatalogResponse struct {
 }
 
 func (h publicRepositoryCatalogHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	policy, err := h.anonymous.GetAnonymousAccessPolicy(r.Context())
+	policy, err := h.anonymous.GetPublicAccessPolicy(r.Context())
 	if err != nil || !policy.Enabled {
 		writeNativeMavenJSON(w, http.StatusOK, publicRepositoryCatalogResponse{Enabled: false, Items: []publicRepositoryCatalogEntry{}})
 		return
@@ -44,7 +44,7 @@ func (h publicRepositoryCatalogHandler) ServeHTTP(w http.ResponseWriter, r *http
 			return
 		}
 		for _, repo := range repositories {
-			if repository.IsSupportedFormat(repo.Format) && repo.State == repository.RepositoryActive && repo.AnonymousRead {
+			if repository.IsSupportedFormat(repo.Format) && repo.State == repository.RepositoryActive && repo.Visibility == repository.VisibilityPublic {
 				items = append(items, publicRepositoryCatalogEntry{ID: repo.ID, Name: repo.Name, Format: repo.Format, Type: string(repo.Type)})
 			}
 		}

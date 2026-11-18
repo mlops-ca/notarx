@@ -10,7 +10,7 @@ func TestRepoConnectMavenUsesTheNativePublicationEndpoint(t *testing.T) {
 	for _, kind := range []string{"hosted", "proxy"} {
 		t.Run(kind, func(t *testing.T) {
 			api := newRouteAPI(t, "/gw")
-			api.on("GET", repoBase, 200, fmt.Sprintf(`{"id":%q,"name":"maven-target","format":"maven","type":%q,"state":"active","version":"1","anonymousRead":false,"mavenStrictPublication":false}`, testRepoID, kind))
+			api.on("GET", repoBase, 200, fmt.Sprintf(`{"id":%q,"name":"maven-target","format":"maven","type":%q,"state":"active","version":"1","visibility":"private","mavenStrictPublication":false}`, testRepoID, kind))
 			code, stdout, stderr := runCLI(t, "repo", "connect", testRepoID, "--json")
 			if code != ExitOK {
 				t.Fatalf("repo connect exit %d: %s", code, stderr)

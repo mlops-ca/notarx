@@ -39,7 +39,7 @@ const repo: Repository = {
   name: "releases",
   format: "maven",
   type: "hosted",
-  anonymousRead: false,
+  visibility: "private",
   mavenStrictPublication: false,
   state: "active",
   version: "1",

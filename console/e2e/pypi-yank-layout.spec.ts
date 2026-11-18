@@ -39,7 +39,7 @@ async function mockPyPI(page: Page, write = true) {
     name: repositoryName,
     format: "pypi",
     type: "hosted",
-    anonymousRead: false,
+    visibility: "private",
     state: "active",
     version: "1",
     mavenStrictPublication: false,
@@ -59,7 +59,7 @@ async function mockPyPI(page: Page, write = true) {
               format: "pypi",
               repositoryTypes: ["hosted", "proxy"],
               groupSupported: true,
-              anonymousRead: true,
+              visibility: "public",
               publicationScanning: true,
               hostedOperations: ["read", "publish", "browse", "yank"],
               proxyOperations: ["read", "browse"],
@@ -119,7 +119,8 @@ async function mockPyPI(page: Page, write = true) {
             admin: deny,
             intelligence: deny,
           },
-          anonymousRead: deny,
+          visibility: "private",
+          anonymousAccess: deny,
         },
       });
     }

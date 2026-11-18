@@ -182,6 +182,13 @@ export const repositoryEnCA = {
   "repository.repositorySummary": "Repository summary",
   "repository.anonymousReads": "Anonymous reads",
   "repository.privateReads": "Private reads",
+  "repository.visibility": "Visibility",
+  "repository.visibilityPrivate": "Private",
+  "repository.visibilityAuthenticated": "Authenticated",
+  "repository.visibilityPublic": "Public",
+  "repository.visibilityAuthenticatedReads": "Authenticated reads",
+  "repository.visibilityHelp":
+    "Private: only principals with a grant can read. Authenticated: any signed-in identity can read. Public: anyone can read while the global public-access gate is enabled; otherwise public behaves as authenticated.",
   "repository.protocolEndpoint": "Protocol endpoint",
   "repository.openPublicBrowser": "Open public browser",
   "repository.objects2": "{bytes} · {number} objects",

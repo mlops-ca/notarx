@@ -213,7 +213,7 @@ repositories_repositoryId:
   patch:
     operationId: updateRepository
     description: Updates repository configuration. Requires repository `admin` scope,
-      because endpoint, allowlist, egress, upstream credential, anonymous-read, and
+      because endpoint, allowlist, egress, upstream credential, visibility, and
       strict-publication settings change how the repository behaves for every
       client; a `write` scope is not sufficient.
     parameters:

@@ -98,7 +98,7 @@ export type RubyGemsPreviewGovernanceChange = {
 
 export type RubyGemsPreviewRepositoryInput = {
   name: string;
-  anonymousRead?: boolean;
+  visibility?: Visibility;
 };
 
 export type RubyGemsPreviewRepository = {
@@ -108,7 +108,7 @@ export type RubyGemsPreviewRepository = {
   type: "hosted";
   preview: true;
   version: string;
-  anonymousRead: boolean;
+  visibility: Visibility;
   sourceUrl: string;
   /**
    * Base URI for gem push --host, without a trailing slash. The official client appends /api/v1/gems.
@@ -298,7 +298,7 @@ export type NuGetPreviewReplicationItem = {
 
 export type HelmPreviewRepositoryCreate = {
   name: string;
-  anonymousRead?: boolean;
+  visibility?: Visibility;
   type?: "hosted" | "proxy";
   /**
    * Explicit HTTPS index.yaml URL required for a Proxy
@@ -315,7 +315,7 @@ export type HelmPreviewRepositoryCreate = {
 export type HelmPreviewRepositoryReplace = {
   name: string;
   version: string;
-  anonymousRead?: boolean;
+  visibility?: Visibility;
   type?: "hosted" | "proxy";
   /**
    * Explicit HTTPS index.yaml URL required for a Proxy
@@ -328,7 +328,7 @@ export type HelmPreviewRepositoryReplace = {
 
 export type HelmPreviewGroupInput = {
   name: string;
-  anonymousRead?: boolean;
+  visibility?: Visibility;
   /**
    * Required for replacement and compared atomically
    */
@@ -349,7 +349,7 @@ export type HelmPreviewGroup = {
   format: "helm";
   preview: true;
   version: string;
-  anonymousRead: boolean;
+  visibility: Visibility;
   members: Array<string>;
   sourceUrl: string;
 };
@@ -418,7 +418,7 @@ export type NuGetPreviewSourceRevalidation = {
 
 export type NuGetPreviewRepositoryReplace = {
   name: string;
-  anonymousRead?: boolean;
+  visibility?: Visibility;
   type?: "hosted" | "proxy";
   /**
    * Explicit HTTPS V3 service-index URL for a Proxy. Resources are discovered from this index.
@@ -449,7 +449,7 @@ export type NuGetPreviewUpstreamAuthStatus = {
 
 export type NuGetPreviewGroupInput = {
   name: string;
-  anonymousRead?: boolean;
+  visibility?: Visibility;
   members: Array<string>;
   /**
    * Required when replacing an existing Group. Compared atomically.
@@ -463,7 +463,7 @@ export type NuGetPreviewGroup = {
   format: "nuget";
   preview: true;
   version: string;
-  anonymousRead?: boolean;
+  visibility?: Visibility;
   members: Array<string>;
   sourceUrl: string;
 };
@@ -483,7 +483,7 @@ export type NuGetPreviewSource = {
 
 export type NuGetPreviewRepositoryCreate = {
   name: string;
-  anonymousRead?: boolean;
+  visibility?: Visibility;
   type?: "hosted" | "proxy";
   /**
    * Explicit HTTPS V3 service-index URL for a Proxy. Resources are discovered from this index.
@@ -632,7 +632,10 @@ export type FormatProfile = {
   format: Format;
   repositoryTypes: Array<"hosted" | "proxy">;
   groupSupported: boolean;
-  anonymousRead: boolean;
+  /**
+   * True when the format supports the public visibility tier.
+   */
+  publicVisibility: boolean;
   hostedOperations: Array<RepositoryOperation>;
   proxyOperations: Array<RepositoryOperation>;
   ociDiscovery?: OciDiscoveryProfile;
@@ -677,10 +680,7 @@ export type Repository = {
   type?: "hosted" | "proxy";
   endpoint?: string;
   allowedHosts?: Array<string>;
-  /**
-   * Anonymous read policy. Defaults to false and permits unauthenticated protocol GET/HEAD where effective policy allows it.
-   */
-  anonymousRead: boolean;
+  visibility: Visibility;
   /**
    * Maven Hosted only. When false (the default), successful standard Maven/Gradle PUTs are published directly. When true, uploaded coordinates remain unreadable until the Gateway coordinate commit succeeds.
    */
@@ -710,10 +710,7 @@ export type CreateRepository = {
    * Hosts the proxy may egress to. Required for raw, conan, and npm proxies. npm tarball redirects are limited to this list.
    */
   allowedHosts?: Array<string>;
-  /**
-   * Anonymous read policy. Defaults to false and permits unauthenticated protocol GET/HEAD where effective policy allows it.
-   */
-  anonymousRead?: boolean;
+  visibility?: Visibility;
   /**
    * Maven Hosted only. Opt in to Gateway coordinate commits and atomic per-coordinate visibility. The default false mode accepts standard Maven/Gradle publishing without a companion integration.
    */
@@ -727,10 +724,7 @@ export type Group = {
   id: string;
   name: string;
   format: Format;
-  /**
-   * Anonymous read policy. Defaults to false and permits unauthenticated protocol GET/HEAD where effective policy allows it.
-   */
-  anonymousRead: boolean;
+  visibility: Visibility;
   members: MemberList;
   version: string;
 };
@@ -738,10 +732,7 @@ export type Group = {
 export type CreateGroup = {
   name: string;
   format: Format;
-  /**
-   * Anonymous read policy. Defaults to false and permits unauthenticated protocol GET/HEAD where effective policy allows it.
-   */
-  anonymousRead?: boolean;
+  visibility?: Visibility;
   members: MemberList;
 };
 
@@ -1616,10 +1607,10 @@ export type AuditRetentionPolicy = {
   keepDays: number;
 };
 
-export type AnonymousAccessPolicy = {
+export type PublicAccessPolicy = {
   version: string;
   /**
-   * Permits unauthenticated protocol reads only when the Repository or Group policy also allows them.
+   * Instance kill switch for public visibility. When false, repositories and groups marked public behave as authenticated; the gate never widens access.
    */
   enabled: boolean;
 };
@@ -1762,6 +1753,11 @@ export type AuditCleanupJob = {
 };
 
 /**
+ * Read visibility ceiling, ordered private < authenticated < public. private admits principals with a grant, authenticated admits any non-anonymous identity, public admits anyone while the global public-access gate is enabled (otherwise public behaves as authenticated). Omitted on create means private.
+ */
+export type Visibility = "private" | "authenticated" | "public";
+
+/**
  * Write-only source credential sealed independently of local client credentials; a changed source binding requires a fresh secret or explicit none
  */
 export type HelmPreviewUpstreamAuth = {
@@ -1782,7 +1778,7 @@ export type HelmPreviewRepository = {
   type: "hosted" | "proxy";
   preview: true;
   version: string;
-  anonymousRead: boolean;
+  visibility: Visibility;
   endpoint?: string;
   allowedHosts?: Array<string>;
   egressMode?: "direct" | "environment";
@@ -3139,7 +3135,7 @@ export type CreateScheduledTask = {
 export type UpdateScheduledTask = CreateScheduledTask;
 
 /**
- * Editable repository management policy and proxy configuration. Hosted repositories accept anonymousRead updates and Maven Hosted repositories also accept mavenStrictPublication updates; name, format, and type are immutable after creation.
+ * Editable repository management policy and proxy configuration. Hosted repositories accept visibility updates and Maven Hosted repositories also accept mavenStrictPublication updates; name, format, and type are immutable after creation.
  */
 export type UpdateRepository = {
   /**
@@ -3150,10 +3146,7 @@ export type UpdateRepository = {
    * Hosts the proxy may egress to. Required for raw, conan, and npm proxies. npm tarball redirects are limited to this list.
    */
   allowedHosts?: Array<string>;
-  /**
-   * Anonymous read policy. Defaults to false and permits unauthenticated protocol GET/HEAD where effective policy allows it.
-   */
-  anonymousRead?: boolean;
+  visibility?: Visibility;
   /**
    * Maven Hosted only. False publishes successful standard PUTs directly; true requires a Gateway coordinate commit before reads can resolve the uploaded coordinate.
    */
@@ -3281,7 +3274,8 @@ export type RepositoryEffectiveAccess = {
     type: "hosted" | "proxy";
     state: "active" | "deleting" | "deleted";
   };
-  anonymousRead: EffectiveAccessDecision;
+  visibility: Visibility;
+  anonymousAccess: EffectiveAccessDecision;
   permissions: EffectiveAccessPermissions;
 };
 
@@ -3666,7 +3660,7 @@ export type ProxyCacheBrowseItem = {
 
 export type HelmPreviewRepositoryCreateWritable = {
   name: string;
-  anonymousRead?: boolean;
+  visibility?: Visibility;
   type?: "hosted" | "proxy";
   /**
    * Explicit HTTPS index.yaml URL required for a Proxy
@@ -3683,7 +3677,7 @@ export type HelmPreviewRepositoryCreateWritable = {
 export type HelmPreviewRepositoryReplaceWritable = {
   name: string;
   version: string;
-  anonymousRead?: boolean;
+  visibility?: Visibility;
   type?: "hosted" | "proxy";
   /**
    * Explicit HTTPS index.yaml URL required for a Proxy
@@ -3696,7 +3690,7 @@ export type HelmPreviewRepositoryReplaceWritable = {
 
 export type NuGetPreviewRepositoryReplaceWritable = {
   name: string;
-  anonymousRead?: boolean;
+  visibility?: Visibility;
   type?: "hosted" | "proxy";
   /**
    * Explicit HTTPS V3 service-index URL for a Proxy. Resources are discovered from this index.
@@ -3722,7 +3716,7 @@ export type NuGetPreviewUpstreamAuthWritable = {
 
 export type NuGetPreviewRepositoryCreateWritable = {
   name: string;
-  anonymousRead?: boolean;
+  visibility?: Visibility;
   type?: "hosted" | "proxy";
   /**
    * Explicit HTTPS V3 service-index URL for a Proxy. Resources are discovered from this index.
@@ -3746,10 +3740,7 @@ export type RepositoryWritable = {
   type?: "hosted" | "proxy";
   endpoint?: string;
   allowedHosts?: Array<string>;
-  /**
-   * Anonymous read policy. Defaults to false and permits unauthenticated protocol GET/HEAD where effective policy allows it.
-   */
-  anonymousRead: boolean;
+  visibility: Visibility;
   /**
    * Maven Hosted only. When false (the default), successful standard Maven/Gradle PUTs are published directly. When true, uploaded coordinates remain unreadable until the Gateway coordinate commit succeeds.
    */
@@ -3779,10 +3770,7 @@ export type CreateRepositoryWritable = {
    * Hosts the proxy may egress to. Required for raw, conan, and npm proxies. npm tarball redirects are limited to this list.
    */
   allowedHosts?: Array<string>;
-  /**
-   * Anonymous read policy. Defaults to false and permits unauthenticated protocol GET/HEAD where effective policy allows it.
-   */
-  anonymousRead?: boolean;
+  visibility?: Visibility;
   /**
    * Maven Hosted only. Opt in to Gateway coordinate commits and atomic per-coordinate visibility. The default false mode accepts standard Maven/Gradle publishing without a companion integration.
    */
@@ -3921,7 +3909,7 @@ export type UpstreamAuthWritable = {
 };
 
 /**
- * Editable repository management policy and proxy configuration. Hosted repositories accept anonymousRead updates and Maven Hosted repositories also accept mavenStrictPublication updates; name, format, and type are immutable after creation.
+ * Editable repository management policy and proxy configuration. Hosted repositories accept visibility updates and Maven Hosted repositories also accept mavenStrictPublication updates; name, format, and type are immutable after creation.
  */
 export type UpdateRepositoryWritable = {
   /**
@@ -3932,10 +3920,7 @@ export type UpdateRepositoryWritable = {
    * Hosts the proxy may egress to. Required for raw, conan, and npm proxies. npm tarball redirects are limited to this list.
    */
   allowedHosts?: Array<string>;
-  /**
-   * Anonymous read policy. Defaults to false and permits unauthenticated protocol GET/HEAD where effective policy allows it.
-   */
-  anonymousRead?: boolean;
+  visibility?: Visibility;
   /**
    * Maven Hosted only. False publishes successful standard PUTs directly; true requires a Gateway coordinate commit before reads can resolve the uploaded coordinate.
    */
@@ -8890,44 +8875,44 @@ export type SearchArtifactsResponses = {
 export type SearchArtifactsResponse =
   SearchArtifactsResponses[keyof SearchArtifactsResponses];
 
-export type GetAnonymousAccessPolicyData = {
+export type GetPublicAccessPolicyData = {
   body?: never;
   path?: never;
   query?: never;
-  url: "/anonymous-access-policy";
+  url: "/public-access-policy";
 };
 
-export type GetAnonymousAccessPolicyErrors = {
+export type GetPublicAccessPolicyErrors = {
   /**
    * Problem response
    */
   401: Problem;
 };
 
-export type GetAnonymousAccessPolicyError =
-  GetAnonymousAccessPolicyErrors[keyof GetAnonymousAccessPolicyErrors];
+export type GetPublicAccessPolicyError =
+  GetPublicAccessPolicyErrors[keyof GetPublicAccessPolicyErrors];
 
-export type GetAnonymousAccessPolicyResponses = {
+export type GetPublicAccessPolicyResponses = {
   /**
-   * Global anonymous protocol-read policy
+   * Global public-access gate
    */
-  200: AnonymousAccessPolicy;
+  200: PublicAccessPolicy;
 };
 
-export type GetAnonymousAccessPolicyResponse =
-  GetAnonymousAccessPolicyResponses[keyof GetAnonymousAccessPolicyResponses];
+export type GetPublicAccessPolicyResponse =
+  GetPublicAccessPolicyResponses[keyof GetPublicAccessPolicyResponses];
 
-export type ReplaceAnonymousAccessPolicyData = {
-  body: AnonymousAccessPolicy;
+export type ReplacePublicAccessPolicyData = {
+  body: PublicAccessPolicy;
   headers: {
     "If-Match": string;
   };
   path?: never;
   query?: never;
-  url: "/anonymous-access-policy";
+  url: "/public-access-policy";
 };
 
-export type ReplaceAnonymousAccessPolicyErrors = {
+export type ReplacePublicAccessPolicyErrors = {
   /**
    * Problem response
    */
@@ -8938,18 +8923,18 @@ export type ReplaceAnonymousAccessPolicyErrors = {
   412: Problem;
 };
 
-export type ReplaceAnonymousAccessPolicyError =
-  ReplaceAnonymousAccessPolicyErrors[keyof ReplaceAnonymousAccessPolicyErrors];
+export type ReplacePublicAccessPolicyError =
+  ReplacePublicAccessPolicyErrors[keyof ReplacePublicAccessPolicyErrors];
 
-export type ReplaceAnonymousAccessPolicyResponses = {
+export type ReplacePublicAccessPolicyResponses = {
   /**
-   * Global anonymous protocol-read policy
+   * Global public-access gate
    */
-  200: AnonymousAccessPolicy;
+  200: PublicAccessPolicy;
 };
 
-export type ReplaceAnonymousAccessPolicyResponse =
-  ReplaceAnonymousAccessPolicyResponses[keyof ReplaceAnonymousAccessPolicyResponses];
+export type ReplacePublicAccessPolicyResponse =
+  ReplacePublicAccessPolicyResponses[keyof ReplacePublicAccessPolicyResponses];
 
 export type GetSiteSettingsData = {
   body?: never;

@@ -239,7 +239,7 @@ func TestNativePyPIAnonymousReadAndManagedGrantBoundaries(t *testing.T) {
 	store := repository.NewMemoryStore()
 	objects := objectstore.NewMemoryStore()
 	public, err := store.CreateHostedRepository(ctx, repository.HostedRepository{
-		ID: "pypi-public", Name: "pypi-public", Format: repository.FormatPyPI, AnonymousRead: true,
+		ID: "pypi-public", Name: "pypi-public", Format: repository.FormatPyPI, Visibility: repository.VisibilityPublic,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -270,7 +270,7 @@ func TestNativePyPIAnonymousReadAndManagedGrantBoundaries(t *testing.T) {
 	if response := request(publicProject, ""); response.Code != http.StatusUnauthorized {
 		t.Fatalf("anonymous without global policy=%d", response.Code)
 	}
-	if _, err = store.ReplaceAnonymousAccessPolicy(ctx, repository.AnonymousAccessPolicy{Enabled: true}, "1"); err != nil {
+	if _, err = store.ReplacePublicAccessPolicy(ctx, repository.PublicAccessPolicy{Enabled: true}, "1"); err != nil {
 		t.Fatal(err)
 	}
 	if response := request(publicProject, ""); response.Code != http.StatusOK || !strings.Contains(response.Body.String(), publicFile.Filename) {

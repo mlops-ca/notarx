@@ -20,7 +20,7 @@ An administrator creates a Proxy with
 {
   "name": "dotnet-private-proxy",
   "type": "proxy",
-  "anonymousRead": false,
+  "visibility": "private",
   "endpoint": "https://packages.example.test/v3/index.json",
   "allowedHosts": ["package-cdn.example.test"],
   "egressMode": "direct",

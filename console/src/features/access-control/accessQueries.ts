@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-query";
 import { useCallback } from "react";
 import {
-  getAnonymousAccessPolicy,
+  getPublicAccessPolicy,
   listAuthorizationRoles,
   listAuthorizationTemplates,
   listGrants,
@@ -14,10 +14,10 @@ import {
   listRepositoryGrants,
   listServiceAccounts,
   listUsers,
-  replaceAnonymousAccessPolicy,
+  replacePublicAccessPolicy,
 } from "../../client";
 import type {
-  AnonymousAccessPolicy,
+  PublicAccessPolicy,
   RepositoryGrantRecord,
   RepositoryPage,
 } from "../../client";
@@ -106,7 +106,7 @@ export function useAccessRepositories({ activeOnly = false } = {}) {
 export function useAnonymousPolicy() {
   return useQuery({
     queryKey: accessKeys.anonymousPolicy(),
-    queryFn: ({ signal }) => unwrap(getAnonymousAccessPolicy({ signal })),
+    queryFn: ({ signal }) => unwrap(getPublicAccessPolicy({ signal })),
     staleTime: ALWAYS_REVALIDATE,
   });
 }
@@ -114,9 +114,9 @@ export function useAnonymousPolicy() {
 export function useReplaceAnonymousPolicy() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (next: AnonymousAccessPolicy) =>
+    mutationFn: (next: PublicAccessPolicy) =>
       unwrap(
-        replaceAnonymousAccessPolicy({
+        replacePublicAccessPolicy({
           body: next,
           headers: { "If-Match": next.version },
         }),

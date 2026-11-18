@@ -356,7 +356,7 @@ func TestRepoConnectSnapshots(t *testing.T) {
 		t.Run(tc.format+"-"+tc.kind, func(t *testing.T) {
 			api := newRouteAPI(t, "/gw")
 			name := tc.format + "-" + tc.kind
-			api.on("GET", repoBase, 200, `{"id":"`+testRepoID+`","name":"`+name+`","format":"`+tc.format+`","type":"`+tc.kind+`","state":"active","version":"1","anonymousRead":false,"mavenStrictPublication":false}`)
+			api.on("GET", repoBase, 200, `{"id":"`+testRepoID+`","name":"`+name+`","format":"`+tc.format+`","type":"`+tc.kind+`","state":"active","version":"1","visibility":"private","mavenStrictPublication":false}`)
 			code, stdout, stderr := runCLI(t, "repo", "connect", testRepoID)
 			if code != ExitOK {
 				t.Fatalf("exit = %d, stderr = %s", code, stderr)
@@ -376,7 +376,7 @@ func TestRepoConnectSnapshots(t *testing.T) {
 
 func TestRepoConnectJSONAndInactive(t *testing.T) {
 	api := newRouteAPI(t, "")
-	api.on("GET", repoBase, 200, `{"id":"`+testRepoID+`","name":"raw-hosted","format":"raw","type":"hosted","state":"deleting","version":"2","anonymousRead":false,"mavenStrictPublication":false}`)
+	api.on("GET", repoBase, 200, `{"id":"`+testRepoID+`","name":"raw-hosted","format":"raw","type":"hosted","state":"deleting","version":"2","visibility":"private","mavenStrictPublication":false}`)
 	code, stdout, _ := runCLI(t, "repo", "connect", testRepoID, "--json")
 	var guide connectGuide
 	_ = json.Unmarshal(decodeEnvelope(t, stdout).Data, &guide)

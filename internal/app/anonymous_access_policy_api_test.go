@@ -12,7 +12,7 @@ import (
 func TestAnonymousAccessPolicyManagementHTTP(t *testing.T) {
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: repository.NewMemoryStore(), Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
 	request := func(method, body, token, version string) *httptest.ResponseRecorder {
-		r := httptest.NewRequest(method, "/api/v2/anonymous-access-policy", strings.NewReader(body))
+		r := httptest.NewRequest(method, "/api/v2/public-access-policy", strings.NewReader(body))
 		if token != "" {
 			authorize(r, token)
 		}

@@ -8,16 +8,23 @@ other management writes always require authentication.
 
 ## Enablement
 
-An anonymous read is allowed only when every applicable gate is enabled:
+Every Repository and Group has a `visibility` (ADR 0029), an ordered value:
+`private` (the default, principals with a grant or admin authority),
+`authenticated` (any valid non-anonymous identity may read; writes still need
+a grant) and `public` (anyone may read). An anonymous read is allowed only when
+every applicable gate is open:
 
-1. An administrator enables the global policy with `PUT
-   /api/v2/anonymous-access-policy` using `If-Match`.
-2. The addressed Repository or Group has `anonymousRead: true`.
-3. For a Group, the resolved member Repository also has `anonymousRead: true`.
+1. An administrator enables the global gate with `PUT
+   /api/v2/public-access-policy` using `If-Match`.
+2. The addressed Repository or Group has `visibility: public`.
+3. For a Group, the Group's visibility is a ceiling: the resolved member list is
+   computed per request from the members whose own visibility admits the caller.
 
-Enabling the global policy does not expose any existing Repository or Group by
-itself. Disabling it immediately denies all anonymous reads, including targets
-whose local policy remains enabled.
+Enabling the global gate does not expose any existing Repository or Group by
+itself. While it is disabled, `public` behaves as `authenticated`: the gate
+never widens access, and all anonymous reads are denied, including targets
+marked `public`. A request for a non-public name from an anonymous caller is
+answered exactly like a name that does not exist.
 
 An authenticated operator or scoped user can review its own effective decision
 through `GET /api/v2/repositories/{repositoryId}/effective-access`, and an

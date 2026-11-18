@@ -186,11 +186,11 @@ func TestArtifactManagementMissingCapabilitiesAreBoundedAndAuthorized(t *testing
 func TestArtifactManagementMissingSearchAndBrowseNeverBecomeEmptySuccess(t *testing.T) {
 	ctx := context.Background()
 	store := repository.NewMemoryStore()
-	repo, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "cap-maven", Format: repository.FormatMaven, AnonymousRead: true})
+	repo, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "cap-maven", Format: repository.FormatMaven, Visibility: repository.VisibilityPublic})
 	if err != nil {
 		t.Fatal(err)
 	}
-	group, _, err := store.CreateHostedGroupIdempotently(ctx, repository.HostedGroup{ID: uuid.NewString(), Name: "cap-group", Format: repository.FormatMaven, AnonymousRead: true, Members: []repository.GroupMember{{RepositoryID: repo.ID, Position: 0}}}, "alice", "cap-group", "cap-group-fingerprint")
+	group, _, err := store.CreateHostedGroupIdempotently(ctx, repository.HostedGroup{ID: uuid.NewString(), Name: "cap-group", Format: repository.FormatMaven, Visibility: repository.VisibilityPublic, Members: []repository.GroupMember{{RepositoryID: repo.ID, Position: 0}}}, "alice", "cap-group", "cap-group-fingerprint")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -302,11 +302,11 @@ func TestArtifactManagementGroupSearchPreservesAccountGatesWithoutCapabilities(t
 	domain := newArtifactManagementHandler(artifactManagementOptions{Scope: newManagementScope(store, store, store, &managementAuditFixture{}, auth, nil), Repositories: store, Groups: store, Grants: store})
 	server := adminopenapi.HandlerWithOptions(managementServer{artifactManagementHandler: domain}, adminopenapi.StdHTTPServerOptions{BaseURL: "/api/v2", BaseRouter: openAPIServeMux{mux: http.NewServeMux()}})
 	for _, format := range []repository.Format{repository.FormatMaven, repository.FormatConan} {
-		repo, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "group-cap-" + string(format), Format: format, AnonymousRead: true})
+		repo, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "group-cap-" + string(format), Format: format, Visibility: repository.VisibilityPublic})
 		if err != nil {
 			t.Fatal(err)
 		}
-		group, _, err := store.CreateHostedGroupIdempotently(ctx, repository.HostedGroup{ID: uuid.NewString(), Name: "group-cap-all-" + string(format), Format: format, AnonymousRead: true, Members: []repository.GroupMember{{RepositoryID: repo.ID, Position: 0}}}, "admin", string(format), "group-cap-fingerprint")
+		group, _, err := store.CreateHostedGroupIdempotently(ctx, repository.HostedGroup{ID: uuid.NewString(), Name: "group-cap-all-" + string(format), Format: format, Visibility: repository.VisibilityPublic, Members: []repository.GroupMember{{RepositoryID: repo.ID, Position: 0}}}, "admin", string(format), "group-cap-fingerprint")
 		if err != nil {
 			t.Fatal(err)
 		}

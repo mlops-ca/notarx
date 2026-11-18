@@ -46,7 +46,7 @@ func TestRubyGemsPreviewGatewayPublishesWithoutEnteringFormalCatalog(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	w := rubyGemsGatewayRequest(h, "POST", createPath, []byte(`{"name":"owned-gems","anonymousRead":true}`))
+	w := rubyGemsGatewayRequest(h, "POST", createPath, []byte(`{"name":"owned-gems","visibility":"public"}`))
 	var created struct {
 		ID      string `json:"id"`
 		Preview bool   `json:"preview"`
@@ -65,7 +65,7 @@ func TestRubyGemsPreviewGatewayPublishesWithoutEnteringFormalCatalog(t *testing.
 	if w = rubyGemsGatewayRequest(h, "GET", "/rubygems/owned-gems/info/owned", nil); w.Code != 200 || !bytes.Contains(w.Body.Bytes(), []byte("owned_leaf")) {
 		t.Fatalf("dependency index=%d %s", w.Code, w.Body.String())
 	}
-	if _, err := repos.ReplaceAnonymousAccessPolicy(t.Context(), repository.AnonymousAccessPolicy{Enabled: true}, "1"); err != nil {
+	if _, err := repos.ReplacePublicAccessPolicy(t.Context(), repository.PublicAccessPolicy{Enabled: true}, "1"); err != nil {
 		t.Fatal(err)
 	}
 	for _, path := range []string{"/api/v2/formats", "/api/v2/repositories", "/api/v2/repositories?pageSize=1", "/api/v2/public/repositories"} {

@@ -82,26 +82,26 @@ func TestNativeGoSumDBMirrorsOnlyAllowlistedChecksumDatabases(t *testing.T) {
 	t.Cleanup(moduleUpstream.Close)
 
 	store := repository.NewMemoryStore()
-	if _, err := store.ReplaceAnonymousAccessPolicy(context.Background(), repository.AnonymousAccessPolicy{Enabled: true}, "1"); err != nil {
+	if _, err := store.ReplacePublicAccessPolicy(context.Background(), repository.PublicAccessPolicy{Enabled: true}, "1"); err != nil {
 		t.Fatal(err)
 	}
 	_, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{
 		ID: uuid.NewString(), Name: "go-mirroring", Format: repository.FormatGo,
 		Type: repository.RepositoryTypeProxy, Endpoint: moduleUpstream.URL,
-		AllowedHosts: []string{sumdbHost, "sum.golang.org+032de1593235d1b1fa4d8799931925c7efdf2c9d"}, AnonymousRead: true,
+		AllowedHosts: []string{sumdbHost, "sum.golang.org+032de1593235d1b1fa4d8799931925c7efdf2c9d"}, Visibility: repository.VisibilityPublic,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = store.CreateHostedRepository(context.Background(), repository.HostedRepository{
 		ID: uuid.NewString(), Name: "go-without-mirroring", Format: repository.FormatGo,
-		Type: repository.RepositoryTypeProxy, Endpoint: moduleUpstream.URL, AnonymousRead: true,
+		Type: repository.RepositoryTypeProxy, Endpoint: moduleUpstream.URL, Visibility: repository.VisibilityPublic,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = store.CreateHostedRepository(context.Background(), repository.HostedRepository{
-		ID: uuid.NewString(), Name: "go-hosted", Format: repository.FormatGo, AnonymousRead: true,
+		ID: uuid.NewString(), Name: "go-hosted", Format: repository.FormatGo, Visibility: repository.VisibilityPublic,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -275,13 +275,13 @@ func TestNativeGoRealClientVerifiesChecksumsThroughSumDBMirror(t *testing.T) {
 	t.Cleanup(upstream.Close)
 
 	store := repository.NewMemoryStore()
-	if _, err = store.ReplaceAnonymousAccessPolicy(context.Background(), repository.AnonymousAccessPolicy{Enabled: true}, "1"); err != nil {
+	if _, err = store.ReplacePublicAccessPolicy(context.Background(), repository.PublicAccessPolicy{Enabled: true}, "1"); err != nil {
 		t.Fatal(err)
 	}
 	repo, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{
 		ID: uuid.NewString(), Name: "go-sumdb-mirror", Format: repository.FormatGo,
 		Type: repository.RepositoryTypeProxy, Endpoint: upstream.URL,
-		AllowedHosts: []string{sumdbName}, AnonymousRead: true,
+		AllowedHosts: []string{sumdbName}, Visibility: repository.VisibilityPublic,
 	})
 	if err != nil {
 		t.Fatal(err)

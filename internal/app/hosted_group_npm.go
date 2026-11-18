@@ -58,7 +58,7 @@ func (h v2GroupNPMHandler) serve(w http.ResponseWriter, r *http.Request, resolve
 		if route.Kind == npmprotocol.RouteAuditBulk || route.Kind == npmprotocol.RouteAuditQuick {
 			anonymousMethod = http.MethodGet
 		}
-		if group.AnonymousRead && anonymousReadMethod(anonymousMethod) && anonymousAccessAllowed(r.Context(), resolver.groups) {
+		if group.Visibility == repository.VisibilityPublic && anonymousReadMethod(anonymousMethod) && anonymousAccessAllowed(r.Context(), resolver.groups) {
 			principal = anonymousPrincipal()
 		} else {
 			h.native.challenge(w, http.StatusUnauthorized, "authentication required")

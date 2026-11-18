@@ -90,7 +90,7 @@ async function prepareTargets(request: APIRequestContext) {
         name: `ag383-browser-${suffix}-${format}`,
         format,
         type: "hosted",
-        anonymousRead: false,
+        visibility: "private",
         mavenStrictPublication: format === "maven",
       },
     });

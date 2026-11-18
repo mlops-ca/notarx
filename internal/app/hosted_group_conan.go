@@ -25,7 +25,7 @@ func (h v2GroupConanHandler) serve(w http.ResponseWriter, r *http.Request, resol
 	}
 	principal, authenticated := h.authenticate(r, group.ID)
 	if conanHandshakeKind(r) != "" {
-		h.conan.serveConanHandshake(w, r, conanHandshakeScope{ID: group.ID, Name: group.Name, AnonymousRead: group.AnonymousRead && anonymousAccessAllowed(r.Context(), resolver.groups)}, principal, authenticated)
+		h.conan.serveConanHandshake(w, r, conanHandshakeScope{ID: group.ID, Name: group.Name, PublicRead: group.Visibility == repository.VisibilityPublic && anonymousAccessAllowed(r.Context(), resolver.groups)}, principal, authenticated)
 		return
 	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -38,7 +38,7 @@ func (h v2GroupConanHandler) serve(w http.ResponseWriter, r *http.Request, resol
 		return
 	}
 	if !authenticated {
-		if r.Header.Get("Authorization") == "" && group.AnonymousRead && anonymousReadMethod(r.Method) && anonymousAccessAllowed(r.Context(), resolver.groups) {
+		if r.Header.Get("Authorization") == "" && group.Visibility == repository.VisibilityPublic && anonymousReadMethod(r.Method) && anonymousAccessAllowed(r.Context(), resolver.groups) {
 			principal = anonymousPrincipal()
 		} else {
 			w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway Conan"`)

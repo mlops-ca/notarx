@@ -1,11 +1,18 @@
 import { useState } from "react";
 import { PlusOutlined } from "@ant-design/icons";
-import { Button, Input, Select, Space, Switch } from "antd";
+import { Button, Input, Select, Space } from "antd";
 import { createGroup } from "../../client";
-import type { Format, FormatProfile, Member, Repository } from "../../client";
+import type {
+  Format,
+  FormatProfile,
+  Member,
+  Repository,
+  Visibility,
+} from "../../client";
 import { Field } from "../../components/ui/Layout";
 import { ErrorBanner } from "../../components/ui/Feedback";
 import { Modal, useDisclosure } from "../../components/ui/Modal";
+import { VisibilitySelect } from "../../components/ui/VisibilitySelect";
 import { MemberOrderPicker } from "./MemberOrderPicker";
 import { usePreferences } from "../../lib/preferences";
 import { groupFormats } from "../../lib/formatProfiles";
@@ -25,7 +32,7 @@ export function CreateGroupDialog({
   const [name, setName] = useState("");
   const [format, setFormat] = useState<Format>("oci");
   const [memberIds, setMemberIds] = useState<string[]>([]);
-  const [anonymousRead, setAnonymousRead] = useState(false);
+  const [visibility, setVisibility] = useState<Visibility>("private");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
@@ -50,7 +57,7 @@ export function CreateGroupDialog({
         body: {
           name: name.trim(),
           format: selectedFormat,
-          anonymousRead,
+          visibility,
           members,
         },
         headers: { "Idempotency-Key": crypto.randomUUID() },
@@ -62,7 +69,7 @@ export function CreateGroupDialog({
       dialog.hide();
       setName("");
       setMemberIds([]);
-      setAnonymousRead(false);
+      setVisibility("private");
       onCreated();
     } catch (nextError) {
       setError(nextError);
@@ -154,16 +161,16 @@ export function CreateGroupDialog({
           <div className="flex items-center justify-between gap-6 rounded-lg border border-line bg-surface-translucent px-3 py-2.5">
             <div>
               <div className="text-sm font-medium text-fg">
-                {t("groups.allowAnonymousReads")}
+                {t("repository.visibility")}
               </div>
               <div className="mt-0.5 text-xs text-fg-tertiary">
-                {t("groups.anonymousRequestsResolveAMemberOnlyWhenBoth")}
+                {t("groups.visibilityCeilingHelp")}
               </div>
             </div>
-            <Switch
-              checked={anonymousRead}
-              onChange={setAnonymousRead}
-              aria-label={t("groups.allowAnonymousGroupReads")}
+            <VisibilitySelect
+              value={visibility}
+              onChange={setVisibility}
+              ariaLabel={t("repository.visibility")}
             />
           </div>
         </div>

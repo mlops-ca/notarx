@@ -36,7 +36,7 @@ func (h v2GroupCargoHandler) serve(w http.ResponseWriter, r *http.Request, resol
 	}
 	principal, authenticated := h.native.principal(r)
 	if !authenticated {
-		if !group.AnonymousRead || !anonymousAccessAllowed(r.Context(), resolver.groups) {
+		if group.Visibility != repository.VisibilityPublic || !anonymousAccessAllowed(r.Context(), resolver.groups) {
 			h.native.challenge(w, http.StatusUnauthorized)
 			return
 		}
@@ -62,12 +62,12 @@ func (h v2GroupCargoHandler) serve(w http.ResponseWriter, r *http.Request, resol
 	}
 	switch route.kind {
 	case "config":
-		public := group.AnonymousRead
+		public := group.Visibility == repository.VisibilityPublic
 		for _, member := range allMembers {
 			public = public && member.Anonymous
 		}
 		h.native.config(w, r, repository.HostedRepository{Name: group.Name, Format: repository.FormatCargo,
-			State: repository.RepositoryActive, AnonymousRead: public})
+			State: repository.RepositoryActive, Visibility: cargoConfigVisibility(public)})
 	case "index":
 		versions, err := h.reconcileIndex(r, resolver, group, members, route.name)
 		if denied && errors.Is(err, repository.ErrUpstreamChanged) {
@@ -422,4 +422,11 @@ func (h v2GroupCargoHandler) search(w http.ResponseWriter, r *http.Request, reso
 		_, _ = w.Write(body)
 	}
 	resolver.auditResolution(r.Context(), group, repository.FormatCargo, query, strings.ToLower(r.Method), actor, repository.AuditResolved, http.StatusOK)
+}
+
+func cargoConfigVisibility(public bool) repository.Visibility {
+	if public {
+		return repository.VisibilityPublic
+	}
+	return repository.VisibilityPrivate
 }

@@ -147,12 +147,12 @@ func TestNativeNPMDistTagsRefuseInvalidTargetsAndCallers(t *testing.T) {
 	ctx := context.Background()
 	store := repository.NewMemoryStore()
 	repo, err := store.CreateHostedRepository(ctx, repository.HostedRepository{
-		ID: uuid.NewString(), Name: "npm-tag-guards", Format: repository.FormatNPM, AnonymousRead: true,
+		ID: uuid.NewString(), Name: "npm-tag-guards", Format: repository.FormatNPM, Visibility: repository.VisibilityPublic,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = store.ReplaceAnonymousAccessPolicy(ctx, repository.AnonymousAccessPolicy{Enabled: true}, "1"); err != nil {
+	if _, err = store.ReplacePublicAccessPolicy(ctx, repository.PublicAccessPolicy{Enabled: true}, "1"); err != nil {
 		t.Fatal(err)
 	}
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator(), Storage: ObjectStores{repository.FormatNPM: objectstore.NewMemoryStore()}})
@@ -296,7 +296,7 @@ func TestNativeNPMDistTagsProxyAndGroupAreReadOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The Proxy fixture fetches this repository without credentials.
-	secondary, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: "npm-secondary", Name: "npm-secondary", Format: repository.FormatNPM, AnonymousRead: true})
+	secondary, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: "npm-secondary", Name: "npm-secondary", Format: repository.FormatNPM, Visibility: repository.VisibilityPublic})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -319,7 +319,7 @@ func TestNativeNPMDistTagsProxyAndGroupAreReadOnly(t *testing.T) {
 	)
 	proxyHandler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator(), Storage: ObjectStores{repository.FormatNPM: objects}, Upstream: UpstreamClient{HTTPClient: upstream.Client()}})
 
-	if _, err = store.ReplaceAnonymousAccessPolicy(ctx, repository.AnonymousAccessPolicy{Enabled: true}, "1"); err != nil {
+	if _, err = store.ReplacePublicAccessPolicy(ctx, repository.PublicAccessPolicy{Enabled: true}, "1"); err != nil {
 		t.Fatal(err)
 	}
 

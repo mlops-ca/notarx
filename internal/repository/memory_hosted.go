@@ -158,7 +158,7 @@ func (s *MemoryStore) UpdateHostedRepository(_ context.Context, repo HostedRepos
 	}
 	current.Endpoint = repo.Endpoint
 	current.AllowedHosts = append([]string(nil), repo.AllowedHosts...)
-	current.AnonymousRead = repo.AnonymousRead
+	current.Visibility = repo.Visibility
 	current.MavenStrictPublication = repo.MavenStrictPublication
 	current.EgressProxy = cloneEgressProxy(repo.EgressProxy)
 	current.UpstreamAuth = cloneUpstreamAuth(repo.UpstreamAuth)
@@ -225,6 +225,7 @@ func (s *MemoryStore) CreateHostedGroupIdempotently(_ context.Context, group Hos
 		}
 	}
 	group.Version = "1"
+	group.Visibility = NormalizeVisibility(group.Visibility)
 	group.Members = append([]GroupMember(nil), group.Members...)
 	sort.Slice(group.Members, func(i, j int) bool { return group.Members[i].Position < group.Members[j].Position })
 	s.hostedGroups[group.ID] = group
@@ -303,6 +304,7 @@ func (s *MemoryStore) ReplaceHostedGroup(_ context.Context, group HostedGroup, e
 		}
 	}
 	group.Version = nextHostedGroupVersion(stored.Version)
+	group.Visibility = NormalizeVisibility(group.Visibility)
 	group.Members = append([]GroupMember(nil), group.Members...)
 	sort.Slice(group.Members, func(i, j int) bool { return group.Members[i].Position < group.Members[j].Position })
 	s.hostedGroups[group.ID] = group

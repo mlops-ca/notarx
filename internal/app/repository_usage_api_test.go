@@ -17,12 +17,12 @@ func TestRepositoryArtifactUsageCountsRealDownloads(t *testing.T) {
 	ctx := context.Background()
 	store := repository.NewMemoryStore()
 	repo, err := store.CreateHostedRepository(ctx, repository.HostedRepository{
-		ID: uuid.NewString(), Name: "npm-usage", Format: repository.FormatNPM, AnonymousRead: true,
+		ID: uuid.NewString(), Name: "npm-usage", Format: repository.FormatNPM, Visibility: repository.VisibilityPublic,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = store.ReplaceAnonymousAccessPolicy(ctx, repository.AnonymousAccessPolicy{Enabled: true}, "1"); err != nil {
+	if _, err = store.ReplacePublicAccessPolicy(ctx, repository.PublicAccessPolicy{Enabled: true}, "1"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = store.ReplaceRepositoryGrants(ctx, repo.ID, []repository.RepositoryGrant{

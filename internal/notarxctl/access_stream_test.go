@@ -183,7 +183,7 @@ func TestRolesAndTemplatesRead(t *testing.T) {
 	}
 }
 
-const effectiveAccess = `{"actor":"service-account:ci","identity":{"actor":"service-account:ci","kind":"service-account","administrator":false},"repository":{"id":"` + testRepoID + `","name":"raw-hosted","format":"raw","type":"hosted","state":"active"},"resource":"","simulated":false,"anonymousRead":{"allowed":false,"source":"policy","reason":"disabled"},"permissions":{"read":{"allowed":true,"source":"grant","reason":"granted"},"write":{"allowed":false,"source":"grant","reason":"scope_not_granted"},"admin":{"allowed":false,"source":"grant","reason":"scope_not_granted"},"intelligence":{"allowed":false,"source":"grant","reason":"scope_not_granted"}}}`
+const effectiveAccess = `{"actor":"service-account:ci","identity":{"actor":"service-account:ci","kind":"service-account","administrator":false},"repository":{"id":"` + testRepoID + `","name":"raw-hosted","format":"raw","type":"hosted","state":"active"},"resource":"","simulated":false,"visibility":"private","anonymousAccess":{"allowed":false,"source":"policy","reason":"disabled"},"permissions":{"read":{"allowed":true,"source":"grant","reason":"granted"},"write":{"allowed":false,"source":"grant","reason":"scope_not_granted"},"admin":{"allowed":false,"source":"grant","reason":"scope_not_granted"},"intelligence":{"allowed":false,"source":"grant","reason":"scope_not_granted"}}}`
 
 func TestAccessCheckRequire(t *testing.T) {
 	api := newRouteAPI(t, "")
@@ -210,16 +210,16 @@ func TestAccessCheckRequire(t *testing.T) {
 func TestAnonymousPolicy(t *testing.T) {
 	api := newRouteAPI(t, "")
 	expectUsage(t, api,
-		[]string{"access", "anonymous", "set"},
-		[]string{"access", "anonymous", "set", "--enabled=true"},
+		[]string{"access", "public", "set"},
+		[]string{"access", "public", "set", "--enabled=true"},
 	)
-	api.on("GET", "/api/v2/anonymous-access-policy", 200, `{"version":"3","enabled":false}`)
-	api.on("PUT", "/api/v2/anonymous-access-policy", 200, `{"version":"4","enabled":true}`)
-	code, stdout, _ := runCLI(t, "access", "anonymous", "set", "--enabled=true", "--dry-run", "--json")
+	api.on("GET", "/api/v2/public-access-policy", 200, `{"version":"3","enabled":false}`)
+	api.on("PUT", "/api/v2/public-access-policy", 200, `{"version":"4","enabled":true}`)
+	code, stdout, _ := runCLI(t, "access", "public", "set", "--enabled=true", "--dry-run", "--json")
 	if code != ExitOK || api.count("PUT") != 0 || !strings.Contains(stdout, `"If-Match": "3"`) {
 		t.Fatalf("dry run exit = %d, stdout = %s", code, stdout)
 	}
-	code, stdout, _ = runCLI(t, "access", "anonymous", "set", "--enabled=true", "--yes")
+	code, stdout, _ = runCLI(t, "access", "public", "set", "--enabled=true", "--yes")
 	if code != ExitOK || !strings.Contains(stdout, "enabled (version 4)") {
 		t.Fatalf("exit = %d, stdout = %s", code, stdout)
 	}
@@ -230,7 +230,7 @@ func TestAnonymousPolicy(t *testing.T) {
 	}
 	// Disabling narrows access and needs no confirmation; a mismatched answer
 	// is an unknown outcome.
-	code, stdout, _ = runCLI(t, "access", "anonymous", "set", "--enabled=false", "--if-match", "4", "--json")
+	code, stdout, _ = runCLI(t, "access", "public", "set", "--enabled=false", "--if-match", "4", "--json")
 	var data unknownOutcome
 	_ = json.Unmarshal(decodeEnvelope(t, stdout).Data, &data)
 	if code == ExitOK || data.Outcome != "unknown" {
@@ -433,7 +433,7 @@ func TestStreamCommandsAreRegisteredHonestly(t *testing.T) {
 			t.Fatalf("%s meta = %+v", name, cmd.meta)
 		}
 	}
-	for name, wantRetry := range map[string]bool{"grant upsert": true, "grant delete": false, "template apply": false, "access anonymous set": false} {
+	for name, wantRetry := range map[string]bool{"grant upsert": true, "grant delete": false, "template apply": false, "access public set": false} {
 		cmd, _ := lookupCommand(name)
 		if !cmd.meta.Mutating || cmd.meta.DryRun != "client-plan" || cmd.meta.Retry != wantRetry {
 			t.Fatalf("%s meta = %+v", name, cmd.meta)

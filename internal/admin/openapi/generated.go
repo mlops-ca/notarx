@@ -4691,6 +4691,27 @@ func (e UserSessionKind) Valid() bool {
 	}
 }
 
+// Defines values for Visibility.
+const (
+	Authenticated Visibility = "authenticated"
+	Private       Visibility = "private"
+	Public        Visibility = "public"
+)
+
+// Valid indicates whether the value is a known member of the Visibility enum.
+func (e Visibility) Valid() bool {
+	switch e {
+	case Authenticated:
+		return true
+	case Private:
+		return true
+	case Public:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for WebhookDeliveryState.
 const (
 	WebhookDeliveryStateDead       WebhookDeliveryState = "dead"
@@ -5079,13 +5100,6 @@ type APTRepositorySnapshotState string
 type APTSnapshotHistory struct {
 	PrunableAfter *time.Time            `json:"prunableAfter,omitempty"`
 	Snapshot      APTRepositorySnapshot `json:"snapshot"`
-}
-
-// AnonymousAccessPolicy defines model for AnonymousAccessPolicy.
-type AnonymousAccessPolicy struct {
-	// Enabled Permits unauthenticated protocol reads only when the Repository or Group policy also allows them.
-	Enabled bool   `json:"enabled"`
-	Version string `json:"version"`
 }
 
 // ApplyAuthorizationTemplate defines model for ApplyAuthorizationTemplate.
@@ -5798,11 +5812,12 @@ type CreateConanPublishSessionKind string
 
 // CreateGroup defines model for CreateGroup.
 type CreateGroup struct {
-	// AnonymousRead Anonymous read policy. Defaults to false and permits unauthenticated protocol GET/HEAD where effective policy allows it.
-	AnonymousRead *bool      `json:"anonymousRead,omitempty"`
-	Format        Format     `json:"format"`
-	Members       MemberList `json:"members"`
-	Name          string     `json:"name"`
+	Format  Format     `json:"format"`
+	Members MemberList `json:"members"`
+	Name    string     `json:"name"`
+
+	// Visibility Read visibility ceiling, ordered private < authenticated < public. private admits principals with a grant, authenticated admits any non-anonymous identity, public admits anyone while the global public-access gate is enabled (otherwise public behaves as authenticated). Omitted on create means private.
+	Visibility *Visibility `json:"visibility,omitempty"`
 }
 
 // CreateMavenPublishSession defines model for CreateMavenPublishSession.
@@ -5826,9 +5841,6 @@ type CreateRepository struct {
 	// AllowedHosts Hosts the proxy may egress to. Required for raw, conan, and npm proxies. npm tarball redirects are limited to this list.
 	AllowedHosts *[]string `json:"allowedHosts,omitempty"`
 
-	// AnonymousRead Anonymous read policy. Defaults to false and permits unauthenticated protocol GET/HEAD where effective policy allows it.
-	AnonymousRead *bool `json:"anonymousRead,omitempty"`
-
 	// EgressProxy Per-Proxy-Repository egress network proxy configuration. Only meaningful when the repository type is proxy. `password` is accepted on write (plaintext over TLS) and stored AES-256-GCM encrypted; responses never return it and carry `credentialsConfigured` instead.
 	EgressProxy *EgressProxy `json:"egressProxy,omitempty"`
 
@@ -5848,6 +5860,9 @@ type CreateRepository struct {
 
 	// UpstreamAuth Protected upstream credentials for Go, Maven, OCI, npm, PyPI, Cargo, APT, Raw and Conan Proxy repositories. Basic or Bearer authentication targets the bound upstream. Conan exchanges Basic credentials through its users/authenticate endpoint before reading protected metadata or files. When OCI ociBearer is configured, these credentials are sent only to its bound issuer and content requests use the exchanged pull token. Cross-origin redirects strip credentials. Rotation or clear invalidates credential-bound content and token caches. Changing the upstream URL or OCI issuer binding requires a fresh secret or scheme none; stored credentials are never implicitly rebound to a new destination. Hosted repositories and unsupported formats reject this field. `secret` is accepted on write over TLS and stored AES-256-GCM encrypted; responses never return it and carry `credentialsConfigured` instead.
 	UpstreamAuth *UpstreamAuth `json:"upstreamAuth,omitempty"`
+
+	// Visibility Read visibility ceiling, ordered private < authenticated < public. private admits principals with a grant, authenticated admits any non-anonymous identity, public admits anyone while the global public-access gate is enabled (otherwise public behaves as authenticated). Omitted on create means private.
+	Visibility *Visibility `json:"visibility,omitempty"`
 }
 
 // CreateRepositoryType APT hosted is accepted as a management-only preview repository; it is not advertised as protocol-capable until signed snapshots are implemented.
@@ -6377,15 +6392,17 @@ type Format string
 
 // FormatProfile defines model for FormatProfile.
 type FormatProfile struct {
-	AnonymousRead    bool                  `json:"anonymousRead"`
 	Format           Format                `json:"format"`
 	GroupSupported   bool                  `json:"groupSupported"`
 	HostedOperations []RepositoryOperation `json:"hostedOperations"`
 
 	// OciDiscovery Gateway OCI discovery API support, independent of any upstream's enumeration coverage. Each Catalog/Referrers response reports its actual coverage or an explicit unsupported/error response. Verified content digests do not establish signer trust.
-	OciDiscovery    *OCIDiscoveryProfile           `json:"ociDiscovery,omitempty"`
-	ProxyOperations []RepositoryOperation          `json:"proxyOperations"`
-	RepositoryTypes []FormatProfileRepositoryTypes `json:"repositoryTypes"`
+	OciDiscovery    *OCIDiscoveryProfile  `json:"ociDiscovery,omitempty"`
+	ProxyOperations []RepositoryOperation `json:"proxyOperations"`
+
+	// PublicVisibility True when the format supports the public visibility tier.
+	PublicVisibility bool                           `json:"publicVisibility"`
+	RepositoryTypes  []FormatProfileRepositoryTypes `json:"repositoryTypes"`
 }
 
 // FormatProfileRepositoryTypes defines model for FormatProfile.RepositoryTypes.
@@ -6471,13 +6488,14 @@ type GrantList = []Grant
 
 // Group defines model for Group.
 type Group struct {
-	// AnonymousRead Anonymous read policy. Defaults to false and permits unauthenticated protocol GET/HEAD where effective policy allows it.
-	AnonymousRead bool               `json:"anonymousRead"`
-	Format        Format             `json:"format"`
-	Id            openapi_types.UUID `json:"id"`
-	Members       MemberList         `json:"members"`
-	Name          string             `json:"name"`
-	Version       string             `json:"version"`
+	Format  Format             `json:"format"`
+	Id      openapi_types.UUID `json:"id"`
+	Members MemberList         `json:"members"`
+	Name    string             `json:"name"`
+	Version string             `json:"version"`
+
+	// Visibility Read visibility ceiling, ordered private < authenticated < public. private admits principals with a grant, authenticated admits any non-anonymous identity, public admits anyone while the global public-access gate is enabled (otherwise public behaves as authenticated). Omitted on create means private.
+	Visibility Visibility `json:"visibility"`
 }
 
 // GroupBrowsePage defines model for GroupBrowsePage.
@@ -6632,14 +6650,16 @@ type HelmPreviewGovernanceChangeAction string
 
 // HelmPreviewGroup defines model for HelmPreviewGroup.
 type HelmPreviewGroup struct {
-	AnonymousRead bool                    `json:"anonymousRead"`
-	Format        HelmPreviewGroupFormat  `json:"format"`
-	Id            openapi_types.UUID      `json:"id"`
-	Members       []openapi_types.UUID    `json:"members"`
-	Name          string                  `json:"name"`
-	Preview       HelmPreviewGroupPreview `json:"preview"`
-	SourceUrl     string                  `json:"sourceUrl"`
-	Version       string                  `json:"version"`
+	Format    HelmPreviewGroupFormat  `json:"format"`
+	Id        openapi_types.UUID      `json:"id"`
+	Members   []openapi_types.UUID    `json:"members"`
+	Name      string                  `json:"name"`
+	Preview   HelmPreviewGroupPreview `json:"preview"`
+	SourceUrl string                  `json:"sourceUrl"`
+	Version   string                  `json:"version"`
+
+	// Visibility Read visibility ceiling, ordered private < authenticated < public. private admits principals with a grant, authenticated admits any non-anonymous identity, public admits anyone while the global public-access gate is enabled (otherwise public behaves as authenticated). Omitted on create means private.
+	Visibility Visibility `json:"visibility"`
 }
 
 // HelmPreviewGroupFormat defines model for HelmPreviewGroup.Format.
@@ -6650,26 +6670,28 @@ type HelmPreviewGroupPreview bool
 
 // HelmPreviewGroupInput defines model for HelmPreviewGroupInput.
 type HelmPreviewGroupInput struct {
-	AnonymousRead *bool `json:"anonymousRead,omitempty"`
-
 	// Members Ordered direct Hosted or Proxy members; nested Groups are rejected
 	Members []openapi_types.UUID `json:"members"`
 	Name    string               `json:"name"`
 
 	// Version Required for replacement and compared atomically
 	Version *string `json:"version,omitempty"`
+
+	// Visibility Read visibility ceiling, ordered private < authenticated < public. private admits principals with a grant, authenticated admits any non-anonymous identity, public admits anyone while the global public-access gate is enabled (otherwise public behaves as authenticated). Omitted on create means private.
+	Visibility *Visibility `json:"visibility,omitempty"`
 }
 
 // HelmPreviewGroupReplace defines model for HelmPreviewGroupReplace.
 type HelmPreviewGroupReplace struct {
-	AnonymousRead *bool `json:"anonymousRead,omitempty"`
-
 	// Members Ordered direct Hosted or Proxy members; nested Groups are rejected
 	Members []openapi_types.UUID `json:"members"`
 	Name    string               `json:"name"`
 
 	// Version Required for replacement and compared atomically
 	Version string `json:"version"`
+
+	// Visibility Read visibility ceiling, ordered private < authenticated < public. private admits principals with a grant, authenticated admits any non-anonymous identity, public admits anyone while the global public-access gate is enabled (otherwise public behaves as authenticated). Omitted on create means private.
+	Visibility *Visibility `json:"visibility,omitempty"`
 }
 
 // HelmPreviewQuarantineReadPolicy Independently versioned policy. enabled=true blocks quarantined chart discovery and assets; the default is false. Tombstones always block.
@@ -6793,7 +6815,6 @@ type HelmPreviewReplicationRetry struct {
 // HelmPreviewRepository defines model for HelmPreviewRepository.
 type HelmPreviewRepository struct {
 	AllowedHosts    *[]string                            `json:"allowedHosts,omitempty"`
-	AnonymousRead   bool                                 `json:"anonymousRead"`
 	EgressMode      *HelmPreviewRepositoryEgressMode     `json:"egressMode,omitempty"`
 	Endpoint        *string                              `json:"endpoint,omitempty"`
 	Format          HelmPreviewRepositoryFormat          `json:"format"`
@@ -6810,6 +6831,9 @@ type HelmPreviewRepository struct {
 	Type         HelmPreviewRepositoryType     `json:"type"`
 	UpstreamAuth HelmPreviewUpstreamAuthStatus `json:"upstreamAuth"`
 	Version      string                        `json:"version"`
+
+	// Visibility Read visibility ceiling, ordered private < authenticated < public. private admits principals with a grant, authenticated admits any non-anonymous identity, public admits anyone while the global public-access gate is enabled (otherwise public behaves as authenticated). Omitted on create means private.
+	Visibility Visibility `json:"visibility"`
 }
 
 // HelmPreviewRepositoryEgressMode defines model for HelmPreviewRepository.EgressMode.
@@ -6830,9 +6854,8 @@ type HelmPreviewRepositoryType string
 // HelmPreviewRepositoryCreate defines model for HelmPreviewRepositoryCreate.
 type HelmPreviewRepositoryCreate struct {
 	// AllowedHosts Additional allowed HTTPS authorities; allowlisting never permits credentials to cross origins
-	AllowedHosts  *[]string                              `json:"allowedHosts,omitempty"`
-	AnonymousRead *bool                                  `json:"anonymousRead,omitempty"`
-	EgressMode    *HelmPreviewRepositoryCreateEgressMode `json:"egressMode,omitempty"`
+	AllowedHosts *[]string                              `json:"allowedHosts,omitempty"`
+	EgressMode   *HelmPreviewRepositoryCreateEgressMode `json:"egressMode,omitempty"`
 
 	// Endpoint Explicit HTTPS index.yaml URL required for a Proxy
 	Endpoint *string                          `json:"endpoint,omitempty"`
@@ -6841,6 +6864,9 @@ type HelmPreviewRepositoryCreate struct {
 
 	// UpstreamAuth Write-only source credential sealed independently of local client credentials; a changed source binding requires a fresh secret or explicit none
 	UpstreamAuth *HelmPreviewUpstreamAuth `json:"upstreamAuth,omitempty"`
+
+	// Visibility Read visibility ceiling, ordered private < authenticated < public. private admits principals with a grant, authenticated admits any non-anonymous identity, public admits anyone while the global public-access gate is enabled (otherwise public behaves as authenticated). Omitted on create means private.
+	Visibility *Visibility `json:"visibility,omitempty"`
 }
 
 // HelmPreviewRepositoryCreateEgressMode defines model for HelmPreviewRepositoryCreate.EgressMode.
@@ -6851,9 +6877,8 @@ type HelmPreviewRepositoryCreateType string
 
 // HelmPreviewRepositoryReplace defines model for HelmPreviewRepositoryReplace.
 type HelmPreviewRepositoryReplace struct {
-	AllowedHosts  *[]string                               `json:"allowedHosts,omitempty"`
-	AnonymousRead *bool                                   `json:"anonymousRead,omitempty"`
-	EgressMode    *HelmPreviewRepositoryReplaceEgressMode `json:"egressMode,omitempty"`
+	AllowedHosts *[]string                               `json:"allowedHosts,omitempty"`
+	EgressMode   *HelmPreviewRepositoryReplaceEgressMode `json:"egressMode,omitempty"`
 
 	// Endpoint Explicit HTTPS index.yaml URL required for a Proxy
 	Endpoint *string                           `json:"endpoint,omitempty"`
@@ -6863,6 +6888,9 @@ type HelmPreviewRepositoryReplace struct {
 	// UpstreamAuth Write-only source credential sealed independently of local client credentials; a changed source binding requires a fresh secret or explicit none
 	UpstreamAuth *HelmPreviewUpstreamAuth `json:"upstreamAuth,omitempty"`
 	Version      string                   `json:"version"`
+
+	// Visibility Read visibility ceiling, ordered private < authenticated < public. private admits principals with a grant, authenticated admits any non-anonymous identity, public admits anyone while the global public-access gate is enabled (otherwise public behaves as authenticated). Omitted on create means private.
+	Visibility *Visibility `json:"visibility,omitempty"`
 }
 
 // HelmPreviewRepositoryReplaceEgressMode defines model for HelmPreviewRepositoryReplace.EgressMode.
@@ -7440,14 +7468,16 @@ type NuGetPreviewGovernanceRequestAction string
 
 // NuGetPreviewGroup defines model for NuGetPreviewGroup.
 type NuGetPreviewGroup struct {
-	AnonymousRead *bool                    `json:"anonymousRead,omitempty"`
-	Format        NuGetPreviewGroupFormat  `json:"format"`
-	Id            openapi_types.UUID       `json:"id"`
-	Members       []openapi_types.UUID     `json:"members"`
-	Name          string                   `json:"name"`
-	Preview       NuGetPreviewGroupPreview `json:"preview"`
-	SourceUrl     string                   `json:"sourceUrl"`
-	Version       string                   `json:"version"`
+	Format    NuGetPreviewGroupFormat  `json:"format"`
+	Id        openapi_types.UUID       `json:"id"`
+	Members   []openapi_types.UUID     `json:"members"`
+	Name      string                   `json:"name"`
+	Preview   NuGetPreviewGroupPreview `json:"preview"`
+	SourceUrl string                   `json:"sourceUrl"`
+	Version   string                   `json:"version"`
+
+	// Visibility Read visibility ceiling, ordered private < authenticated < public. private admits principals with a grant, authenticated admits any non-anonymous identity, public admits anyone while the global public-access gate is enabled (otherwise public behaves as authenticated). Omitted on create means private.
+	Visibility *Visibility `json:"visibility,omitempty"`
 }
 
 // NuGetPreviewGroupFormat defines model for NuGetPreviewGroup.Format.
@@ -7458,12 +7488,14 @@ type NuGetPreviewGroupPreview bool
 
 // NuGetPreviewGroupInput defines model for NuGetPreviewGroupInput.
 type NuGetPreviewGroupInput struct {
-	AnonymousRead *bool                `json:"anonymousRead,omitempty"`
-	Members       []openapi_types.UUID `json:"members"`
-	Name          string               `json:"name"`
+	Members []openapi_types.UUID `json:"members"`
+	Name    string               `json:"name"`
 
 	// Version Required when replacing an existing Group. Compared atomically.
 	Version *string `json:"version,omitempty"`
+
+	// Visibility Read visibility ceiling, ordered private < authenticated < public. private admits principals with a grant, authenticated admits any non-anonymous identity, public admits anyone while the global public-access gate is enabled (otherwise public behaves as authenticated). Omitted on create means private.
+	Visibility *Visibility `json:"visibility,omitempty"`
 }
 
 // NuGetPreviewPackage defines model for NuGetPreviewPackage.
@@ -7604,9 +7636,8 @@ type NuGetPreviewRepositoryType string
 // NuGetPreviewRepositoryCreate defines model for NuGetPreviewRepositoryCreate.
 type NuGetPreviewRepositoryCreate struct {
 	// AllowedHosts Explicit additional HTTPS authorities (host and optional port). Permission to fetch does not permit credentials to cross origins.
-	AllowedHosts  *[]string                               `json:"allowedHosts,omitempty"`
-	AnonymousRead *bool                                   `json:"anonymousRead,omitempty"`
-	EgressMode    *NuGetPreviewRepositoryCreateEgressMode `json:"egressMode,omitempty"`
+	AllowedHosts *[]string                               `json:"allowedHosts,omitempty"`
+	EgressMode   *NuGetPreviewRepositoryCreateEgressMode `json:"egressMode,omitempty"`
 
 	// Endpoint Explicit HTTPS V3 service-index URL for a Proxy. Resources are discovered from this index.
 	Endpoint *string                           `json:"endpoint,omitempty"`
@@ -7615,6 +7646,9 @@ type NuGetPreviewRepositoryCreate struct {
 
 	// UpstreamAuth Write-only source credential, sealed separately from local client credentials. A changed source binding requires a fresh secret or explicit none.
 	UpstreamAuth *NuGetPreviewUpstreamAuth `json:"upstreamAuth,omitempty"`
+
+	// Visibility Read visibility ceiling, ordered private < authenticated < public. private admits principals with a grant, authenticated admits any non-anonymous identity, public admits anyone while the global public-access gate is enabled (otherwise public behaves as authenticated). Omitted on create means private.
+	Visibility *Visibility `json:"visibility,omitempty"`
 }
 
 // NuGetPreviewRepositoryCreateEgressMode defines model for NuGetPreviewRepositoryCreate.EgressMode.
@@ -7626,9 +7660,8 @@ type NuGetPreviewRepositoryCreateType string
 // NuGetPreviewRepositoryReplace defines model for NuGetPreviewRepositoryReplace.
 type NuGetPreviewRepositoryReplace struct {
 	// AllowedHosts Explicit additional HTTPS authorities (host and optional port). Permission to fetch does not permit credentials to cross origins.
-	AllowedHosts  *[]string                                `json:"allowedHosts,omitempty"`
-	AnonymousRead *bool                                    `json:"anonymousRead,omitempty"`
-	EgressMode    *NuGetPreviewRepositoryReplaceEgressMode `json:"egressMode,omitempty"`
+	AllowedHosts *[]string                                `json:"allowedHosts,omitempty"`
+	EgressMode   *NuGetPreviewRepositoryReplaceEgressMode `json:"egressMode,omitempty"`
 
 	// Endpoint Explicit HTTPS V3 service-index URL for a Proxy. Resources are discovered from this index.
 	Endpoint *string                            `json:"endpoint,omitempty"`
@@ -7638,6 +7671,9 @@ type NuGetPreviewRepositoryReplace struct {
 	// UpstreamAuth Write-only source credential, sealed separately from local client credentials. A changed source binding requires a fresh secret or explicit none.
 	UpstreamAuth *NuGetPreviewUpstreamAuth `json:"upstreamAuth,omitempty"`
 	Version      string                    `json:"version"`
+
+	// Visibility Read visibility ceiling, ordered private < authenticated < public. private admits principals with a grant, authenticated admits any non-anonymous identity, public admits anyone while the global public-access gate is enabled (otherwise public behaves as authenticated). Omitted on create means private.
+	Visibility *Visibility `json:"visibility,omitempty"`
 }
 
 // NuGetPreviewRepositoryReplaceEgressMode defines model for NuGetPreviewRepositoryReplace.EgressMode.
@@ -7968,6 +8004,13 @@ type ProxyCacheNegativeClearResult struct {
 	Cleared int `json:"cleared"`
 }
 
+// PublicAccessPolicy defines model for PublicAccessPolicy.
+type PublicAccessPolicy struct {
+	// Enabled Instance kill switch for public visibility. When false, repositories and groups marked public behave as authenticated; the gate never widens access.
+	Enabled bool   `json:"enabled"`
+	Version string `json:"version"`
+}
+
 // PublishAPTRepositorySnapshot defines model for PublishAPTRepositorySnapshot.
 type PublishAPTRepositorySnapshot struct {
 	PublicationSessionIds []openapi_types.UUID `json:"publicationSessionIds"`
@@ -8103,9 +8146,6 @@ type ReplicationRequest struct {
 type Repository struct {
 	AllowedHosts *[]string `json:"allowedHosts,omitempty"`
 
-	// AnonymousRead Anonymous read policy. Defaults to false and permits unauthenticated protocol GET/HEAD where effective policy allows it.
-	AnonymousRead bool `json:"anonymousRead"`
-
 	// EgressProxy Per-Proxy-Repository egress network proxy configuration. Only meaningful when the repository type is proxy. `password` is accepted on write (plaintext over TLS) and stored AES-256-GCM encrypted; responses never return it and carry `credentialsConfigured` instead.
 	EgressProxy *EgressProxy `json:"egressProxy,omitempty"`
 	Endpoint    *string      `json:"endpoint,omitempty"`
@@ -8128,6 +8168,9 @@ type Repository struct {
 	// UpstreamAuth Protected upstream credentials for Go, Maven, OCI, npm, PyPI, Cargo, APT, Raw and Conan Proxy repositories. Basic or Bearer authentication targets the bound upstream. Conan exchanges Basic credentials through its users/authenticate endpoint before reading protected metadata or files. When OCI ociBearer is configured, these credentials are sent only to its bound issuer and content requests use the exchanged pull token. Cross-origin redirects strip credentials. Rotation or clear invalidates credential-bound content and token caches. Changing the upstream URL or OCI issuer binding requires a fresh secret or scheme none; stored credentials are never implicitly rebound to a new destination. Hosted repositories and unsupported formats reject this field. `secret` is accepted on write over TLS and stored AES-256-GCM encrypted; responses never return it and carry `credentialsConfigured` instead.
 	UpstreamAuth *UpstreamAuth `json:"upstreamAuth,omitempty"`
 	Version      string        `json:"version"`
+
+	// Visibility Read visibility ceiling, ordered private < authenticated < public. private admits principals with a grant, authenticated admits any non-anonymous identity, public admits anyone while the global public-access gate is enabled (otherwise public behaves as authenticated). Omitted on create means private.
+	Visibility Visibility `json:"visibility"`
 }
 
 // RepositoryState Deletion is asynchronous. Protocol access stops in deleting; the worker advances it to deleted. The metadata row remains as an audit anchor.
@@ -8199,11 +8242,11 @@ type RepositoryCapacityQuota struct {
 
 // RepositoryEffectiveAccess defines model for RepositoryEffectiveAccess.
 type RepositoryEffectiveAccess struct {
-	Actor         string                     `json:"actor"`
-	AnonymousRead EffectiveAccessDecision    `json:"anonymousRead"`
-	Identity      CurrentIdentity            `json:"identity"`
-	Permissions   EffectiveAccessPermissions `json:"permissions"`
-	Repository    struct {
+	Actor           string                     `json:"actor"`
+	AnonymousAccess EffectiveAccessDecision    `json:"anonymousAccess"`
+	Identity        CurrentIdentity            `json:"identity"`
+	Permissions     EffectiveAccessPermissions `json:"permissions"`
+	Repository      struct {
 		Format Format                                   `json:"format"`
 		Id     openapi_types.UUID                       `json:"id"`
 		Name   string                                   `json:"name"`
@@ -8216,6 +8259,9 @@ type RepositoryEffectiveAccess struct {
 
 	// Simulated True when an administrator supplied an actor instead of evaluating the authenticated caller.
 	Simulated bool `json:"simulated"`
+
+	// Visibility Read visibility ceiling, ordered private < authenticated < public. private admits principals with a grant, authenticated admits any non-anonymous identity, public admits anyone while the global public-access gate is enabled (otherwise public behaves as authenticated). Omitted on create means private.
+	Visibility Visibility `json:"visibility"`
 }
 
 // RepositoryEffectiveAccessRepositoryState defines model for RepositoryEffectiveAccess.Repository.State.
@@ -8564,7 +8610,6 @@ type RubyGemsPreviewReplicationRetry struct {
 
 // RubyGemsPreviewRepository defines model for RubyGemsPreviewRepository.
 type RubyGemsPreviewRepository struct {
-	AnonymousRead  bool                             `json:"anonymousRead"`
 	Format         RubyGemsPreviewRepositoryFormat  `json:"format"`
 	Id             openapi_types.UUID               `json:"id"`
 	Name           string                           `json:"name"`
@@ -8576,6 +8621,9 @@ type RubyGemsPreviewRepository struct {
 	SourceUrl string                        `json:"sourceUrl"`
 	Type      RubyGemsPreviewRepositoryType `json:"type"`
 	Version   string                        `json:"version"`
+
+	// Visibility Read visibility ceiling, ordered private < authenticated < public. private admits principals with a grant, authenticated admits any non-anonymous identity, public admits anyone while the global public-access gate is enabled (otherwise public behaves as authenticated). Omitted on create means private.
+	Visibility Visibility `json:"visibility"`
 }
 
 // RubyGemsPreviewRepositoryFormat defines model for RubyGemsPreviewRepository.Format.
@@ -8589,8 +8637,10 @@ type RubyGemsPreviewRepositoryType string
 
 // RubyGemsPreviewRepositoryInput defines model for RubyGemsPreviewRepositoryInput.
 type RubyGemsPreviewRepositoryInput struct {
-	AnonymousRead *bool  `json:"anonymousRead,omitempty"`
-	Name          string `json:"name"`
+	Name string `json:"name"`
+
+	// Visibility Read visibility ceiling, ordered private < authenticated < public. private admits principals with a grant, authenticated admits any non-anonymous identity, public admits anyone while the global public-access gate is enabled (otherwise public behaves as authenticated). Omitted on create means private.
+	Visibility *Visibility `json:"visibility,omitempty"`
 }
 
 // RuntimeLogEntry defines model for RuntimeLogEntry.
@@ -8910,13 +8960,10 @@ type SiteSettingsUpdate struct {
 	SiteName string `json:"siteName"`
 }
 
-// UpdateRepository Editable repository management policy and proxy configuration. Hosted repositories accept anonymousRead updates and Maven Hosted repositories also accept mavenStrictPublication updates; name, format, and type are immutable after creation.
+// UpdateRepository Editable repository management policy and proxy configuration. Hosted repositories accept visibility updates and Maven Hosted repositories also accept mavenStrictPublication updates; name, format, and type are immutable after creation.
 type UpdateRepository struct {
 	// AllowedHosts Hosts the proxy may egress to. Required for raw, conan, and npm proxies. npm tarball redirects are limited to this list.
 	AllowedHosts *[]string `json:"allowedHosts,omitempty"`
-
-	// AnonymousRead Anonymous read policy. Defaults to false and permits unauthenticated protocol GET/HEAD where effective policy allows it.
-	AnonymousRead *bool `json:"anonymousRead,omitempty"`
 
 	// EgressProxy Per-Proxy-Repository egress network proxy configuration. Only meaningful when the repository type is proxy. `password` is accepted on write (plaintext over TLS) and stored AES-256-GCM encrypted; responses never return it and carry `credentialsConfigured` instead.
 	EgressProxy *EgressProxy `json:"egressProxy,omitempty"`
@@ -8932,6 +8979,9 @@ type UpdateRepository struct {
 
 	// UpstreamAuth Protected upstream credentials for Go, Maven, OCI, npm, PyPI, Cargo, APT, Raw and Conan Proxy repositories. Basic or Bearer authentication targets the bound upstream. Conan exchanges Basic credentials through its users/authenticate endpoint before reading protected metadata or files. When OCI ociBearer is configured, these credentials are sent only to its bound issuer and content requests use the exchanged pull token. Cross-origin redirects strip credentials. Rotation or clear invalidates credential-bound content and token caches. Changing the upstream URL or OCI issuer binding requires a fresh secret or scheme none; stored credentials are never implicitly rebound to a new destination. Hosted repositories and unsupported formats reject this field. `secret` is accepted on write over TLS and stored AES-256-GCM encrypted; responses never return it and carry `credentialsConfigured` instead.
 	UpstreamAuth *UpstreamAuth `json:"upstreamAuth,omitempty"`
+
+	// Visibility Read visibility ceiling, ordered private < authenticated < public. private admits principals with a grant, authenticated admits any non-anonymous identity, public admits anyone while the global public-access gate is enabled (otherwise public behaves as authenticated). Omitted on create means private.
+	Visibility *Visibility `json:"visibility,omitempty"`
 }
 
 // UpdateScheduledTask defines model for UpdateScheduledTask.
@@ -9067,6 +9117,9 @@ type UserSessionKind string
 type UserSessionList struct {
 	Items []UserSession `json:"items"`
 }
+
+// Visibility Read visibility ceiling, ordered private < authenticated < public. private admits principals with a grant, authenticated admits any non-anonymous identity, public admits anyone while the global public-access gate is enabled (otherwise public behaves as authenticated). Omitted on create means private.
+type Visibility string
 
 // WebhookDelivery defines model for WebhookDelivery.
 type WebhookDelivery struct {
@@ -9204,11 +9257,6 @@ type OCIManifestSummaryList = OCIManifestSummaryPage
 
 // RepositoryList defines model for RepositoryList.
 type RepositoryList = RepositoryPage
-
-// ReplaceAnonymousAccessPolicyParams defines parameters for ReplaceAnonymousAccessPolicy.
-type ReplaceAnonymousAccessPolicyParams struct {
-	IfMatch IfMatch `json:"If-Match"`
-}
 
 // SearchArtifactsParams defines parameters for SearchArtifacts.
 type SearchArtifactsParams struct {
@@ -9537,6 +9585,11 @@ type RetryRubyGemsPreviewReplicationJobParams struct {
 // CreateRubyGemsPreviewRepositoryParams defines parameters for CreateRubyGemsPreviewRepository.
 type CreateRubyGemsPreviewRepositoryParams struct {
 	IdempotencyKey *string `json:"Idempotency-Key,omitempty"`
+}
+
+// ReplacePublicAccessPolicyParams defines parameters for ReplacePublicAccessPolicy.
+type ReplacePublicAccessPolicyParams struct {
+	IfMatch IfMatch `json:"If-Match"`
 }
 
 // ListRepositoriesParams defines parameters for ListRepositories.
@@ -9954,9 +10007,6 @@ type UpdateWebhookSubscriptionParams struct {
 	IfMatch IfMatch `json:"If-Match"`
 }
 
-// ReplaceAnonymousAccessPolicyJSONRequestBody defines body for ReplaceAnonymousAccessPolicy for application/json ContentType.
-type ReplaceAnonymousAccessPolicyJSONRequestBody = AnonymousAccessPolicy
-
 // CreateApiKeyJSONRequestBody defines body for CreateApiKey for application/json ContentType.
 type CreateApiKeyJSONRequestBody = CreateAPIKey
 
@@ -10121,6 +10171,9 @@ type ChangeRubyGemsPreviewGovernanceJSONRequestBody = RubyGemsPreviewGovernanceC
 
 // ReplaceRubyGemsPreviewQuarantineReadPolicyJSONRequestBody defines body for ReplaceRubyGemsPreviewQuarantineReadPolicy for application/json ContentType.
 type ReplaceRubyGemsPreviewQuarantineReadPolicyJSONRequestBody = RubyGemsPreviewQuarantineReadPolicyChange
+
+// ReplacePublicAccessPolicyJSONRequestBody defines body for ReplacePublicAccessPolicy for application/json ContentType.
+type ReplacePublicAccessPolicyJSONRequestBody = PublicAccessPolicy
 
 // CreateRepositoryJSONRequestBody defines body for CreateRepository for application/json ContentType.
 type CreateRepositoryJSONRequestBody = CreateRepository
@@ -10951,12 +11004,6 @@ func (t *HelmPreviewReplicationItem) UnmarshalJSON(b []byte) error {
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 
-	// (GET /anonymous-access-policy)
-	GetAnonymousAccessPolicy(w http.ResponseWriter, r *http.Request)
-
-	// (PUT /anonymous-access-policy)
-	ReplaceAnonymousAccessPolicy(w http.ResponseWriter, r *http.Request, params ReplaceAnonymousAccessPolicyParams)
-
 	// (GET /api-keys)
 	ListApiKeys(w http.ResponseWriter, r *http.Request)
 
@@ -11362,6 +11409,12 @@ type ServerInterface interface {
 	// (PUT /previews/rubygems/repositories/{repositoryId}/quarantine-read-policy)
 	ReplaceRubyGemsPreviewQuarantineReadPolicy(w http.ResponseWriter, r *http.Request, repositoryId openapi_types.UUID)
 
+	// (GET /public-access-policy)
+	GetPublicAccessPolicy(w http.ResponseWriter, r *http.Request)
+
+	// (PUT /public-access-policy)
+	ReplacePublicAccessPolicy(w http.ResponseWriter, r *http.Request, params ReplacePublicAccessPolicyParams)
+
 	// (GET /publish-sessions/{sessionId})
 	GetPublishSession(w http.ResponseWriter, r *http.Request, sessionId SessionId)
 
@@ -11746,65 +11799,6 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
-
-// GetAnonymousAccessPolicy operation middleware
-func (siw *ServerInterfaceWrapper) GetAnonymousAccessPolicy(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetAnonymousAccessPolicy(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ReplaceAnonymousAccessPolicy operation middleware
-func (siw *ServerInterfaceWrapper) ReplaceAnonymousAccessPolicy(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ReplaceAnonymousAccessPolicyParams
-
-	headers := r.Header
-
-	// ------------- Required header parameter "If-Match" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
-		var IfMatch IfMatch
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
-			return
-		}
-
-		params.IfMatch = IfMatch
-
-	} else {
-		err := fmt.Errorf("Header parameter If-Match is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ReplaceAnonymousAccessPolicy(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
 
 // ListApiKeys operation middleware
 func (siw *ServerInterfaceWrapper) ListApiKeys(w http.ResponseWriter, r *http.Request) {
@@ -16862,6 +16856,65 @@ func (siw *ServerInterfaceWrapper) ReplaceRubyGemsPreviewQuarantineReadPolicy(w 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ReplaceRubyGemsPreviewQuarantineReadPolicy(w, r, repositoryId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPublicAccessPolicy operation middleware
+func (siw *ServerInterfaceWrapper) GetPublicAccessPolicy(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPublicAccessPolicy(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReplacePublicAccessPolicy operation middleware
+func (siw *ServerInterfaceWrapper) ReplacePublicAccessPolicy(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ReplacePublicAccessPolicyParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReplacePublicAccessPolicy(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -22418,8 +22471,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/formats", wrapper.ListFormatProfiles)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/identity", wrapper.GetCurrentIdentity)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/artifact-search", wrapper.SearchArtifacts)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/anonymous-access-policy", wrapper.GetAnonymousAccessPolicy)
-	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/anonymous-access-policy", wrapper.ReplaceAnonymousAccessPolicy)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/public-access-policy", wrapper.GetPublicAccessPolicy)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/public-access-policy", wrapper.ReplacePublicAccessPolicy)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/site-settings", wrapper.GetSiteSettings)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/site-settings", wrapper.ReplaceSiteSettings)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/console-themes:validate", wrapper.ValidateConsoleThemePackage)
@@ -22590,8 +22643,6 @@ type APIKeyJSONResponse APIKey
 
 type APIKeyListJSONResponse APIKeyList
 
-type AnonymousAccessPolicyJSONResponse AnonymousAccessPolicy
-
 type ArtifactJSONResponse Artifact
 
 type ArtifactIntelligenceResponseHeaders struct {
@@ -22701,6 +22752,8 @@ type ProxyCacheInvalidateResultJSONResponse ProxyCacheInvalidateResult
 
 type ProxyCacheNegativeClearResultJSONResponse ProxyCacheNegativeClearResult
 
+type PublicAccessPolicyJSONResponse PublicAccessPolicy
+
 type PublishSessionJSONResponse PublishSession
 
 type QuarantineReadPolicyResponseHeaders struct {
@@ -22797,100 +22850,6 @@ type WebhookSubscriptionJSONResponse struct {
 }
 
 type WebhookSubscriptionListJSONResponse WebhookSubscriptionList
-
-type GetAnonymousAccessPolicyRequestObject struct {
-}
-
-type GetAnonymousAccessPolicyResponseObject interface {
-	VisitGetAnonymousAccessPolicyResponse(w http.ResponseWriter) error
-}
-
-type GetAnonymousAccessPolicy200JSONResponse struct {
-	AnonymousAccessPolicyJSONResponse
-}
-
-func (response GetAnonymousAccessPolicy200JSONResponse) VisitGetAnonymousAccessPolicyResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type GetAnonymousAccessPolicy401ApplicationProblemPlusJSONResponse struct {
-	ProblemApplicationProblemPlusJSONResponse
-}
-
-func (response GetAnonymousAccessPolicy401ApplicationProblemPlusJSONResponse) VisitGetAnonymousAccessPolicyResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(401)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ReplaceAnonymousAccessPolicyRequestObject struct {
-	Params ReplaceAnonymousAccessPolicyParams
-	Body   *ReplaceAnonymousAccessPolicyJSONRequestBody
-}
-
-type ReplaceAnonymousAccessPolicyResponseObject interface {
-	VisitReplaceAnonymousAccessPolicyResponse(w http.ResponseWriter) error
-}
-
-type ReplaceAnonymousAccessPolicy200JSONResponse struct {
-	AnonymousAccessPolicyJSONResponse
-}
-
-func (response ReplaceAnonymousAccessPolicy200JSONResponse) VisitReplaceAnonymousAccessPolicyResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ReplaceAnonymousAccessPolicy401ApplicationProblemPlusJSONResponse struct {
-	ProblemApplicationProblemPlusJSONResponse
-}
-
-func (response ReplaceAnonymousAccessPolicy401ApplicationProblemPlusJSONResponse) VisitReplaceAnonymousAccessPolicyResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(401)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ReplaceAnonymousAccessPolicy412ApplicationProblemPlusJSONResponse Problem
-
-func (response ReplaceAnonymousAccessPolicy412ApplicationProblemPlusJSONResponse) VisitReplaceAnonymousAccessPolicyResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(412)
-	_, err := buf.WriteTo(w)
-	return err
-}
 
 type ListApiKeysRequestObject struct {
 }
@@ -34058,6 +34017,96 @@ func (response ReplaceRubyGemsPreviewQuarantineReadPolicy500ApplicationProblemPl
 	return err
 }
 
+type GetPublicAccessPolicyRequestObject struct {
+}
+
+type GetPublicAccessPolicyResponseObject interface {
+	VisitGetPublicAccessPolicyResponse(w http.ResponseWriter) error
+}
+
+type GetPublicAccessPolicy200JSONResponse struct{ PublicAccessPolicyJSONResponse }
+
+func (response GetPublicAccessPolicy200JSONResponse) VisitGetPublicAccessPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicAccessPolicy401ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetPublicAccessPolicy401ApplicationProblemPlusJSONResponse) VisitGetPublicAccessPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplacePublicAccessPolicyRequestObject struct {
+	Params ReplacePublicAccessPolicyParams
+	Body   *ReplacePublicAccessPolicyJSONRequestBody
+}
+
+type ReplacePublicAccessPolicyResponseObject interface {
+	VisitReplacePublicAccessPolicyResponse(w http.ResponseWriter) error
+}
+
+type ReplacePublicAccessPolicy200JSONResponse struct{ PublicAccessPolicyJSONResponse }
+
+func (response ReplacePublicAccessPolicy200JSONResponse) VisitReplacePublicAccessPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplacePublicAccessPolicy401ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response ReplacePublicAccessPolicy401ApplicationProblemPlusJSONResponse) VisitReplacePublicAccessPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplacePublicAccessPolicy412ApplicationProblemPlusJSONResponse Problem
+
+func (response ReplacePublicAccessPolicy412ApplicationProblemPlusJSONResponse) VisitReplacePublicAccessPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(412)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetPublishSessionRequestObject struct {
 	SessionId SessionId `json:"sessionId"`
 }
@@ -43145,12 +43194,6 @@ func (response UpdateWebhookSubscription503ApplicationProblemPlusJSONResponse) V
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 
-	// (GET /anonymous-access-policy)
-	GetAnonymousAccessPolicy(ctx context.Context, request GetAnonymousAccessPolicyRequestObject) (GetAnonymousAccessPolicyResponseObject, error)
-
-	// (PUT /anonymous-access-policy)
-	ReplaceAnonymousAccessPolicy(ctx context.Context, request ReplaceAnonymousAccessPolicyRequestObject) (ReplaceAnonymousAccessPolicyResponseObject, error)
-
 	// (GET /api-keys)
 	ListApiKeys(ctx context.Context, request ListApiKeysRequestObject) (ListApiKeysResponseObject, error)
 
@@ -43555,6 +43598,12 @@ type StrictServerInterface interface {
 
 	// (PUT /previews/rubygems/repositories/{repositoryId}/quarantine-read-policy)
 	ReplaceRubyGemsPreviewQuarantineReadPolicy(ctx context.Context, request ReplaceRubyGemsPreviewQuarantineReadPolicyRequestObject) (ReplaceRubyGemsPreviewQuarantineReadPolicyResponseObject, error)
+
+	// (GET /public-access-policy)
+	GetPublicAccessPolicy(ctx context.Context, request GetPublicAccessPolicyRequestObject) (GetPublicAccessPolicyResponseObject, error)
+
+	// (PUT /public-access-policy)
+	ReplacePublicAccessPolicy(ctx context.Context, request ReplacePublicAccessPolicyRequestObject) (ReplacePublicAccessPolicyResponseObject, error)
 
 	// (GET /publish-sessions/{sessionId})
 	GetPublishSession(ctx context.Context, request GetPublishSessionRequestObject) (GetPublishSessionResponseObject, error)
@@ -43969,63 +44018,6 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
-}
-
-// GetAnonymousAccessPolicy operation middleware
-func (sh *strictHandler) GetAnonymousAccessPolicy(w http.ResponseWriter, r *http.Request) {
-	var request GetAnonymousAccessPolicyRequestObject
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetAnonymousAccessPolicy(ctx, request.(GetAnonymousAccessPolicyRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetAnonymousAccessPolicy")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetAnonymousAccessPolicyResponseObject); ok {
-		if err := validResponse.VisitGetAnonymousAccessPolicyResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// ReplaceAnonymousAccessPolicy operation middleware
-func (sh *strictHandler) ReplaceAnonymousAccessPolicy(w http.ResponseWriter, r *http.Request, params ReplaceAnonymousAccessPolicyParams) {
-	var request ReplaceAnonymousAccessPolicyRequestObject
-
-	request.Params = params
-
-	var body ReplaceAnonymousAccessPolicyJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.ReplaceAnonymousAccessPolicy(ctx, request.(ReplaceAnonymousAccessPolicyRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "ReplaceAnonymousAccessPolicy")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(ReplaceAnonymousAccessPolicyResponseObject); ok {
-		if err := validResponse.VisitReplaceAnonymousAccessPolicyResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
 }
 
 // ListApiKeys operation middleware
@@ -47928,6 +47920,63 @@ func (sh *strictHandler) ReplaceRubyGemsPreviewQuarantineReadPolicy(w http.Respo
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ReplaceRubyGemsPreviewQuarantineReadPolicyResponseObject); ok {
 		if err := validResponse.VisitReplaceRubyGemsPreviewQuarantineReadPolicyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPublicAccessPolicy operation middleware
+func (sh *strictHandler) GetPublicAccessPolicy(w http.ResponseWriter, r *http.Request) {
+	var request GetPublicAccessPolicyRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPublicAccessPolicy(ctx, request.(GetPublicAccessPolicyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPublicAccessPolicy")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPublicAccessPolicyResponseObject); ok {
+		if err := validResponse.VisitGetPublicAccessPolicyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ReplacePublicAccessPolicy operation middleware
+func (sh *strictHandler) ReplacePublicAccessPolicy(w http.ResponseWriter, r *http.Request, params ReplacePublicAccessPolicyParams) {
+	var request ReplacePublicAccessPolicyRequestObject
+
+	request.Params = params
+
+	var body ReplacePublicAccessPolicyJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ReplacePublicAccessPolicy(ctx, request.(ReplacePublicAccessPolicyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReplacePublicAccessPolicy")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReplacePublicAccessPolicyResponseObject); ok {
+		if err := validResponse.VisitReplacePublicAccessPolicyResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

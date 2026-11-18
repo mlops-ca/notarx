@@ -156,7 +156,7 @@ func TestCrossFormatArtifactSearchUsesFormatProjectionsAndBoundPagination(t *tes
 func TestMavenSnapshotSearchPaginationPreservesBuildPositionAcrossSurfaces(t *testing.T) {
 	ctx := context.Background()
 	store := repository.NewMemoryStore()
-	repo, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "snapshot-search", Format: repository.FormatMaven, AnonymousRead: true})
+	repo, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "snapshot-search", Format: repository.FormatMaven, Visibility: repository.VisibilityPublic})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +164,7 @@ func TestMavenSnapshotSearchPaginationPreservesBuildPositionAcrossSurfaces(t *te
 		t.Fatal(err)
 	}
 	group, _, err := store.CreateHostedGroupIdempotently(ctx, repository.HostedGroup{
-		ID: uuid.NewString(), Name: "snapshot-search-group", Format: repository.FormatMaven, AnonymousRead: true,
+		ID: uuid.NewString(), Name: "snapshot-search-group", Format: repository.FormatMaven, Visibility: repository.VisibilityPublic,
 		Members: []repository.GroupMember{{RepositoryID: repo.ID, Position: 0}},
 	}, "test", "snapshot-search-group", "snapshot-search-group")
 	if err != nil {
@@ -265,7 +265,7 @@ func TestOCIManifestBrowseIncludesUntaggedManifest(t *testing.T) {
 func TestAnonymousHostedGroupArtifactSearchAggregatesOnlyAnonymousMembers(t *testing.T) {
 	ctx := context.Background()
 	store := repository.NewMemoryStore()
-	public, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "public-group-member", Format: repository.FormatOCI, AnonymousRead: true})
+	public, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "public-group-member", Format: repository.FormatOCI, Visibility: repository.VisibilityPublic})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -281,7 +281,7 @@ func TestAnonymousHostedGroupArtifactSearchAggregatesOnlyAnonymousMembers(t *tes
 		t.Fatal(err)
 	}
 	group, _, err := store.CreateHostedGroupIdempotently(ctx, repository.HostedGroup{
-		ID: uuid.NewString(), Name: "public-search-group", Format: repository.FormatOCI, AnonymousRead: true,
+		ID: uuid.NewString(), Name: "public-search-group", Format: repository.FormatOCI, Visibility: repository.VisibilityPublic,
 		Members: []repository.GroupMember{{RepositoryID: public.ID, Position: 0}, {RepositoryID: private.ID, Position: 1}},
 	}, "test", "public-search-group", "public-search-group")
 	if err != nil {
@@ -368,7 +368,7 @@ func TestConanRecipeRevisionSearchPaginatesAndBindsCursorToQuery(t *testing.T) {
 func TestAnonymousHostedGroupConanRecipeRevisionsAggregateMembers(t *testing.T) {
 	ctx := context.Background()
 	store := repository.NewMemoryStore()
-	public, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "conan-public", Format: repository.FormatConan, AnonymousRead: true})
+	public, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "conan-public", Format: repository.FormatConan, Visibility: repository.VisibilityPublic})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -393,7 +393,7 @@ func TestAnonymousHostedGroupConanRecipeRevisionsAggregateMembers(t *testing.T) 
 	}
 	publish(public.ID, "public-revision")
 	publish(private.ID, "private-revision")
-	group, _, err := store.CreateHostedGroupIdempotently(ctx, repository.HostedGroup{ID: uuid.NewString(), Name: "conan-public-group", Format: repository.FormatConan, AnonymousRead: true, Members: []repository.GroupMember{{RepositoryID: public.ID, Position: 0}, {RepositoryID: private.ID, Position: 1}}}, "test", "conan-public-group", "conan-public-group")
+	group, _, err := store.CreateHostedGroupIdempotently(ctx, repository.HostedGroup{ID: uuid.NewString(), Name: "conan-public-group", Format: repository.FormatConan, Visibility: repository.VisibilityPublic, Members: []repository.GroupMember{{RepositoryID: public.ID, Position: 0}, {RepositoryID: private.ID, Position: 1}}}, "test", "conan-public-group", "conan-public-group")
 	if err != nil {
 		t.Fatal(err)
 	}

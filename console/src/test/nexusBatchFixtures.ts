@@ -32,7 +32,7 @@ export const nexusTargets: Repository[] = [
     type: "hosted",
     state: "active",
     version: "1",
-    anonymousRead: false,
+    visibility: "private",
     mavenStrictPublication: true,
   },
   {
@@ -42,7 +42,7 @@ export const nexusTargets: Repository[] = [
     type: "hosted",
     state: "active",
     version: "1",
-    anonymousRead: false,
+    visibility: "private",
     mavenStrictPublication: false,
   },
 ];

@@ -32,19 +32,19 @@ type upstreamStatus struct {
 	CredentialsConfigured bool                          `json:"credentialsConfigured"`
 }
 type repositoryInput struct {
-	Name          string                     `json:"name"`
-	AnonymousRead bool                       `json:"anonymousRead"`
-	Type          repository.RepositoryType  `json:"type,omitempty"`
-	Endpoint      string                     `json:"endpoint,omitempty"`
-	AllowedHosts  []string                   `json:"allowedHosts,omitempty"`
-	UpstreamAuth  *sourceCredential          `json:"upstreamAuth,omitempty"`
-	EgressMode    repository.EgressProxyMode `json:"egressMode,omitempty"`
-	Version       string                     `json:"version,omitempty"`
+	Name         string                     `json:"name"`
+	Visibility   repository.Visibility      `json:"visibility"`
+	Type         repository.RepositoryType  `json:"type,omitempty"`
+	Endpoint     string                     `json:"endpoint,omitempty"`
+	AllowedHosts []string                   `json:"allowedHosts,omitempty"`
+	UpstreamAuth *sourceCredential          `json:"upstreamAuth,omitempty"`
+	EgressMode   repository.EgressProxyMode `json:"egressMode,omitempty"`
+	Version      string                     `json:"version,omitempty"`
 }
 
 func (m *Module) configureRepository(in repositoryInput, existing repository.HostedRepository) (repository.HostedRepository, error) {
 	invalid := errors.New("invalid Helm source configuration")
-	if !repositoryName.MatchString(in.Name) {
+	if !repositoryName.MatchString(in.Name) || !repository.NormalizeVisibility(in.Visibility).Valid() {
 		return existing, invalid
 	}
 	if in.Type == "" {
@@ -54,7 +54,7 @@ func (m *Module) configureRepository(in repositoryInput, existing repository.Hos
 		return existing, invalid
 	}
 	next := existing
-	next.Name, next.Format, next.Type, next.AnonymousRead = in.Name, repository.FormatHelm, in.Type, in.AnonymousRead
+	next.Name, next.Format, next.Type, next.Visibility = in.Name, repository.FormatHelm, in.Type, repository.NormalizeVisibility(in.Visibility)
 	if in.Type == repository.RepositoryTypeHosted {
 		if in.Endpoint != "" || len(in.AllowedHosts) > 0 || in.UpstreamAuth != nil || in.EgressMode != "" {
 			return next, invalid
@@ -172,10 +172,10 @@ func (m *Module) replacePreviewRepository(w http.ResponseWriter, r *http.Request
 }
 
 type groupInput struct {
-	Name          string   `json:"name"`
-	AnonymousRead bool     `json:"anonymousRead"`
-	Members       []string `json:"members"`
-	Version       string   `json:"version,omitempty"`
+	Name       string                `json:"name"`
+	Visibility repository.Visibility `json:"visibility"`
+	Members    []string              `json:"members"`
+	Version    string                `json:"version,omitempty"`
 }
 
 func groupDTO(r *http.Request, g repository.HostedGroup) map[string]any {
@@ -183,7 +183,7 @@ func groupDTO(r *http.Request, g repository.HostedGroup) map[string]any {
 	for _, member := range g.Members {
 		members = append(members, member.RepositoryID)
 	}
-	return map[string]any{"id": g.ID, "name": g.Name, "format": "helm", "preview": true, "version": g.Version, "anonymousRead": g.AnonymousRead, "members": members, "sourceUrl": "/helm/" + url.PathEscape(g.Name) + "/index.yaml"}
+	return map[string]any{"id": g.ID, "name": g.Name, "format": "helm", "preview": true, "version": g.Version, "visibility": g.Visibility, "members": members, "sourceUrl": "/helm/" + url.PathEscape(g.Name) + "/index.yaml"}
 }
 func (m *Module) previewGroups(w http.ResponseWriter, r *http.Request, p authorization.Principal) {
 	if m.groups == nil || m.sources == nil {
@@ -343,10 +343,10 @@ func (m *Module) previewGroups(w http.ResponseWriter, r *http.Request, p authori
 }
 
 func (m *Module) configuredGroup(ctx context.Context, input groupInput) (repository.HostedGroup, error) {
-	if !repositoryName.MatchString(input.Name) || len(input.Members) < 1 || len(input.Members) > 32 {
+	if !repositoryName.MatchString(input.Name) || len(input.Members) < 1 || len(input.Members) > 32 || !repository.NormalizeVisibility(input.Visibility).Valid() {
 		return repository.HostedGroup{}, repository.ErrInvalidHelmPublication
 	}
-	group := repository.HostedGroup{Name: input.Name, Format: repository.FormatHelm, AnonymousRead: input.AnonymousRead, Members: []repository.GroupMember{}}
+	group := repository.HostedGroup{Name: input.Name, Format: repository.FormatHelm, Visibility: repository.NormalizeVisibility(input.Visibility), Members: []repository.GroupMember{}}
 	seen := map[string]bool{}
 	for index, id := range input.Members {
 		if !ids.Valid(id) || seen[id] {

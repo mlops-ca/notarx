@@ -19,7 +19,7 @@ const ociProxy: Repository = {
   type: "proxy",
   endpoint: "https://registry.example.test",
   allowedHosts: ["registry.example.test"],
-  anonymousRead: false,
+  visibility: "private",
   mavenStrictPublication: false,
   state: "active",
   version: "7",

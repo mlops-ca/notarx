@@ -55,13 +55,13 @@ func testOCIAnonymousIdentityPartition(t *testing.T, store GatewayStore, persist
 		t.Fatal(err)
 	}
 	rb.Endpoint += "/b"
-	rb.AnonymousRead = true
+	rb.Visibility = repository.VisibilityPublic
 	rb, err = store.UpdateHostedRepository(t.Context(), rb, rb.Version)
 	if err != nil {
 		t.Fatal(err)
 	}
 	catalogReader(t, store, ra, anonymousActor, "team/")
-	group, _, err := store.CreateHostedGroupIdempotently(t.Context(), repository.HostedGroup{ID: uuid.NewString(), Name: "identity-group-" + uuid.NewString()[:8], Format: repository.FormatOCI, AnonymousRead: true, Members: []repository.GroupMember{{RepositoryID: ra.ID}, {RepositoryID: rb.ID, Position: 1}}}, "fixture-admin", uuid.NewString(), "fixture")
+	group, _, err := store.CreateHostedGroupIdempotently(t.Context(), repository.HostedGroup{ID: uuid.NewString(), Name: "identity-group-" + uuid.NewString()[:8], Format: repository.FormatOCI, Visibility: repository.VisibilityPublic, Members: []repository.GroupMember{{RepositoryID: ra.ID}, {RepositoryID: rb.ID, Position: 1}}}, "fixture-admin", uuid.NewString(), "fixture")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,13 +130,13 @@ func testOCIExplicitCredentials(t *testing.T, store GatewayStore, persistence di
 		f.serve(w, r)
 	})
 	repo := catalogProxy(t, store, "auth-discovery-"+uuid.NewString()[:8])
-	repo.AnonymousRead = true
+	repo.Visibility = repository.VisibilityPublic
 	var err error
 	repo, err = store.UpdateHostedRepository(t.Context(), repo, repo.Version)
 	if err != nil {
 		t.Fatal(err)
 	}
-	group, _, err := store.CreateHostedGroupIdempotently(t.Context(), repository.HostedGroup{ID: uuid.NewString(), Name: "auth-group-" + uuid.NewString()[:8], Format: repository.FormatOCI, AnonymousRead: true, Members: []repository.GroupMember{{RepositoryID: repo.ID}}}, "fixture-admin", uuid.NewString(), "fixture")
+	group, _, err := store.CreateHostedGroupIdempotently(t.Context(), repository.HostedGroup{ID: uuid.NewString(), Name: "auth-group-" + uuid.NewString()[:8], Format: repository.FormatOCI, Visibility: repository.VisibilityPublic, Members: []repository.GroupMember{{RepositoryID: repo.ID}}}, "fixture-admin", uuid.NewString(), "fixture")
 	if err != nil {
 		t.Fatal(err)
 	}

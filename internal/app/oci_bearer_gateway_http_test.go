@@ -40,7 +40,7 @@ func TestOCIBearerNativeAndGroupColdHot(t *testing.T) {
 			proxy, err := store.CreateHostedRepository(t.Context(), repository.HostedRepository{
 				ID: "synthetic-bearer-proxy", Name: "synthetic-bearer-proxy", Format: repository.FormatOCI,
 				Type: repository.RepositoryTypeProxy, Endpoint: "https://" + redirectOrigin,
-				AllowedHosts: []string{redirectOrigin}, AnonymousRead: true,
+				AllowedHosts: []string{redirectOrigin}, Visibility: repository.VisibilityPublic,
 				OCIBearer: &repository.OCIBearer{Realm: "https://" + redirectOrigin + "/token", Service: "synthetic-registry"},
 			})
 			if err != nil {
@@ -49,7 +49,7 @@ func TestOCIBearerNativeAndGroupColdHot(t *testing.T) {
 			name := proxy.Name
 			if route == "group" {
 				group, _, err := store.CreateHostedGroupIdempotently(t.Context(), repository.HostedGroup{
-					ID: "synthetic-bearer-group", Name: "synthetic-bearer-group", Format: repository.FormatOCI, AnonymousRead: true,
+					ID: "synthetic-bearer-group", Name: "synthetic-bearer-group", Format: repository.FormatOCI, Visibility: repository.VisibilityPublic,
 					Members: []repository.GroupMember{{RepositoryID: proxy.ID}},
 				}, "synthetic-fixture", "synthetic-bearer-group", "synthetic-fixture")
 				if err != nil {

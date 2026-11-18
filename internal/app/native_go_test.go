@@ -457,7 +457,7 @@ func TestNativeGoProxyHonorsAnonymousPolicyAndRepositoryGrantPrefix(t *testing.T
 	store := repository.NewMemoryStore()
 	public, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{
 		ID: "go-anonymous", Name: "go-anonymous", Format: repository.FormatGo,
-		Type: repository.RepositoryTypeProxy, Endpoint: upstream.URL, AnonymousRead: true,
+		Type: repository.RepositoryTypeProxy, Endpoint: upstream.URL, Visibility: repository.VisibilityPublic,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -488,7 +488,7 @@ func TestNativeGoProxyHonorsAnonymousPolicyAndRepositoryGrantPrefix(t *testing.T
 	if response := request(public.Name, "example.com/public/widget", ""); response.Code != http.StatusUnauthorized {
 		t.Fatalf("anonymous without global policy=%d", response.Code)
 	}
-	if _, err = store.ReplaceAnonymousAccessPolicy(context.Background(), repository.AnonymousAccessPolicy{Enabled: true}, "1"); err != nil {
+	if _, err = store.ReplacePublicAccessPolicy(context.Background(), repository.PublicAccessPolicy{Enabled: true}, "1"); err != nil {
 		t.Fatal(err)
 	}
 	if response := request(public.Name, "example.com/public/widget", ""); response.Code != http.StatusOK {
@@ -827,12 +827,12 @@ func TestNativeGoRealClientDownloadsThroughProxyAndOfflineCache(t *testing.T) {
 		}
 	}))
 	store := repository.NewMemoryStore()
-	if _, err := store.ReplaceAnonymousAccessPolicy(context.Background(), repository.AnonymousAccessPolicy{Enabled: true}, "1"); err != nil {
+	if _, err := store.ReplacePublicAccessPolicy(context.Background(), repository.PublicAccessPolicy{Enabled: true}, "1"); err != nil {
 		t.Fatal(err)
 	}
 	repo, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{
 		ID: "go-cli", Name: "go-public", Format: repository.FormatGo,
-		Type: repository.RepositoryTypeProxy, Endpoint: upstream.URL, AnonymousRead: true,
+		Type: repository.RepositoryTypeProxy, Endpoint: upstream.URL, Visibility: repository.VisibilityPublic,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -893,12 +893,12 @@ func TestNativeGoRealClientDownloadsHostedPublication(t *testing.T) {
 		"go.mod": string(mod), "hosted.go": "package hostedclient\n\nconst Version = \"v1.3.0\"\n",
 	})
 	store := repository.NewMemoryStore()
-	if _, err := store.ReplaceAnonymousAccessPolicy(context.Background(), repository.AnonymousAccessPolicy{Enabled: true}, "1"); err != nil {
+	if _, err := store.ReplacePublicAccessPolicy(context.Background(), repository.PublicAccessPolicy{Enabled: true}, "1"); err != nil {
 		t.Fatal(err)
 	}
 	repo, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{
 		ID: "go-hosted-cli", Name: "go-hosted-cli", Format: repository.FormatGo,
-		Type: repository.RepositoryTypeHosted, AnonymousRead: true,
+		Type: repository.RepositoryTypeHosted, Visibility: repository.VisibilityPublic,
 	})
 	if err != nil {
 		t.Fatal(err)

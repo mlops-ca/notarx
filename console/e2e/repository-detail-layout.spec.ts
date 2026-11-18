@@ -84,7 +84,7 @@ async function mockRepositoryDetail(
                 name: "release-files",
                 format: "raw",
                 type: "hosted",
-                anonymousRead: true,
+                visibility: "public",
                 mavenStrictPublication: false,
                 state: "active",
                 version: "1",
@@ -94,7 +94,7 @@ async function mockRepositoryDetail(
                 name: "production-files",
                 format: "raw",
                 type: "hosted",
-                anonymousRead: false,
+                visibility: "private",
                 mavenStrictPublication: false,
                 state: "active",
                 version: "1",
@@ -104,7 +104,7 @@ async function mockRepositoryDetail(
                 name: "upstream-proxy",
                 format: "raw",
                 type: "proxy",
-                anonymousRead: false,
+                visibility: "private",
                 mavenStrictPublication: false,
                 state: "active",
                 version: "1",
@@ -189,7 +189,7 @@ async function mockRepositoryDetail(
           name: repositoryName,
           format,
           type: "hosted",
-          anonymousRead: true,
+          visibility: "public",
           mavenStrictPublication: false,
           state: "active",
           version: "2",
@@ -311,7 +311,8 @@ async function mockRepositoryDetail(
             type: "hosted",
             state: "active",
           },
-          anonymousRead: {
+          visibility: "private",
+          anonymousAccess: {
             allowed: true,
             source: "anonymous_policy",
             reason: "repository_anonymous_read_enabled",
@@ -345,7 +346,7 @@ async function mockRepositoryDetail(
         name: repositoryName,
         format,
         type: "hosted",
-        anonymousRead: true,
+        visibility: "public",
         mavenStrictPublication: false,
         state: "active",
         version: "1",
@@ -1007,15 +1008,19 @@ test("repository settings live in a tab and keep the update workflow", async ({
       return Math.abs(tabCenter - indicatorCenter);
     })
     .toBeLessThan(2);
-  const anonymousSwitch = page.getByRole("switch", {
-    name: "Allow anonymous reads",
+  const visibilitySelect = page.getByRole("combobox", {
+    name: "Visibility",
   });
   const strictSwitch = page.getByRole("switch", { name: "Strict publication" });
-  await expect(anonymousSwitch).toBeChecked();
+  await expect(
+    page.locator(".ant-select", { has: visibilitySelect }),
+  ).toContainText("Public");
   await expect(strictSwitch).not.toBeChecked();
 
   const [anonymousPolicy, strictPolicy] = await Promise.all([
-    anonymousSwitch.locator("..").boundingBox(),
+    visibilitySelect
+      .locator("xpath=ancestor::div[contains(@class,'rounded-lg')][1]")
+      .boundingBox(),
     strictSwitch.locator("..").boundingBox(),
   ]);
   expect(anonymousPolicy).not.toBeNull();
@@ -1031,7 +1036,7 @@ test("repository settings live in a tab and keep the update workflow", async ({
 
   const submitted = await updateRequest;
   expect(submitted.postDataJSON()).toMatchObject({
-    anonymousRead: true,
+    visibility: "public",
     mavenStrictPublication: true,
   });
   await expect(page.getByText("Repository settings saved")).toBeVisible();

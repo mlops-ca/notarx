@@ -27,7 +27,7 @@ type Auditor interface {
 	RecordAudit(context.Context, repository.AuditRecord) error
 }
 type AnonymousPolicy interface {
-	GetAnonymousAccessPolicy(context.Context) (repository.AnonymousAccessPolicy, error)
+	GetPublicAccessPolicy(context.Context) (repository.PublicAccessPolicy, error)
 }
 type CapacityStore interface {
 	GetRepositoryCapacity(context.Context, string) (repository.RepositoryCapacity, error)
@@ -130,8 +130,8 @@ func (m *Module) principal(r *http.Request) (authorization.Principal, bool) {
 }
 func (m *Module) authorize(w http.ResponseWriter, r *http.Request, repo repository.HostedRepository, operation authorization.RepositoryOperation, resource string, collection bool) (authorization.Principal, bool) {
 	p, ok := m.principal(r)
-	if !ok && r.Header.Get("Authorization") == "" && operation == authorization.RepositoryRead && repo.AnonymousRead {
-		policy, err := m.anonymous.GetAnonymousAccessPolicy(r.Context())
+	if !ok && r.Header.Get("Authorization") == "" && operation == authorization.RepositoryRead && repo.Visibility == repository.VisibilityPublic {
+		policy, err := m.anonymous.GetPublicAccessPolicy(r.Context())
 		if err == nil && policy.Enabled {
 			return authorization.Principal{Actor: "anonymous"}, true
 		}

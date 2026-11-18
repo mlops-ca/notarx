@@ -53,7 +53,7 @@ func (h artifactManagementHandler) BrowseGroup(w http.ResponseWriter, r *http.Re
 	}
 	principal, authenticated := h.authenticator.Authenticate(r.Header.Get("Authorization"))
 	if !authenticated {
-		if !group.AnonymousRead || !anonymousAccessAllowed(r.Context(), h.anonymousPolicy) {
+		if group.Visibility != repository.VisibilityPublic || !anonymousAccessAllowed(r.Context(), h.anonymousPolicy) {
 			writeHostedProblem(w, 401, "access_denied", "authentication is required")
 			return
 		}
@@ -173,7 +173,7 @@ func (h artifactManagementHandler) groupBrowseMembers(r *http.Request, group rep
 			revisions = append(revisions, repo, grants.Version)
 		}
 		if isAnonymous(principal) {
-			if !repo.AnonymousRead {
+			if repo.Visibility != repository.VisibilityPublic {
 				continue
 			}
 		} else if !h.authorizer.Authorize(r.Context(), principal, repo, RepositoryRead).Allowed {
@@ -195,7 +195,7 @@ func (h artifactManagementHandler) groupBrowseMembers(r *http.Request, group rep
 	if missingGrants || h.anonymousPolicy == nil {
 		return nil, "", "", errArtifactCapabilityUnavailable
 	}
-	policy, err := h.anonymousPolicy.GetAnonymousAccessPolicy(r.Context())
+	policy, err := h.anonymousPolicy.GetPublicAccessPolicy(r.Context())
 	if err != nil {
 		return nil, "", "", err
 	}

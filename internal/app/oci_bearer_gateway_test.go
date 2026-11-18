@@ -84,7 +84,7 @@ func TestOCIBearerORASMultiplatformColdHot(t *testing.T) {
 			proxy, err := store.CreateHostedRepository(t.Context(), repository.HostedRepository{
 				ID: "bearer-layout-proxy", Name: "bearer-layout-proxy", Format: repository.FormatOCI,
 				Type: repository.RepositoryTypeProxy, Endpoint: "https://" + redirectOrigin,
-				AllowedHosts: []string{redirectOrigin, redirectCDN}, AnonymousRead: true,
+				AllowedHosts: []string{redirectOrigin, redirectCDN}, Visibility: repository.VisibilityPublic,
 				EgressProxy: &repository.EgressProxy{Mode: repository.EgressProxyModeDirect},
 				OCIBearer:   &repository.OCIBearer{Realm: "https://" + redirectOrigin + "/token", Service: "synthetic-registry"},
 			})
@@ -94,7 +94,7 @@ func TestOCIBearerORASMultiplatformColdHot(t *testing.T) {
 			name := proxy.Name
 			if route == "group" {
 				group, _, err := store.CreateHostedGroupIdempotently(t.Context(), repository.HostedGroup{
-					ID: "bearer-layout-group", Name: "bearer-layout-group", Format: repository.FormatOCI, AnonymousRead: true,
+					ID: "bearer-layout-group", Name: "bearer-layout-group", Format: repository.FormatOCI, Visibility: repository.VisibilityPublic,
 					Members: []repository.GroupMember{{RepositoryID: proxy.ID}},
 				}, "synthetic-fixture", "bearer-layout-group", "synthetic-fixture")
 				if err != nil {

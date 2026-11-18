@@ -43,7 +43,7 @@ func newRawGateway(t *testing.T) *rawGateway {
 		defer gateway.mu.Unlock()
 		gateway.calls++
 		if r.URL.Path == "/api/v2/repositories/"+testRepoID {
-			writeJSON(w, http.StatusOK, map[string]any{"id": testRepoID, "name": "raw-hosted", "format": "raw", "type": "hosted", "state": "active", "version": "1", "anonymousRead": false, "mavenStrictPublication": false})
+			writeJSON(w, http.StatusOK, map[string]any{"id": testRepoID, "name": "raw-hosted", "format": "raw", "type": "hosted", "state": "active", "version": "1", "visibility": "private", "mavenStrictPublication": false})
 			return
 		}
 		if r.URL.Path == "/api/v2/repositories/"+testRepoID+"/capabilities" {
@@ -189,7 +189,7 @@ func TestPublishRawValidatesBeforeRequest(t *testing.T) {
 
 func TestPublishRawRefusesOtherRepositories(t *testing.T) {
 	api := newRouteAPI(t, "")
-	api.on("GET", repoBase, 200, `{"id":"`+testRepoID+`","name":"npm-hosted","format":"npm","type":"hosted","state":"active","version":"1","anonymousRead":false,"mavenStrictPublication":false}`)
+	api.on("GET", repoBase, 200, `{"id":"`+testRepoID+`","name":"npm-hosted","format":"npm","type":"hosted","state":"active","version":"1","visibility":"private","mavenStrictPublication":false}`)
 	file := filepath.Join(writeTree(t, map[string]string{"a.txt": "alpha"}), "a.txt")
 	code, stdout, _ := runCLI(t, "publish", "raw", file, "--repo", testRepoID, "--json")
 	if code != ExitUsage || !strings.Contains(stdout, "repo connect") || api.count("PUT") != 0 {

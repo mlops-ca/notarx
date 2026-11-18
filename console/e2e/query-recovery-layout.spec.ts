@@ -9,7 +9,7 @@ const repository = {
   format: "maven",
   type: "hosted",
   state: "active",
-  anonymousRead: false,
+  visibility: "private",
   mavenStrictPublication: false,
   version: "1",
 };
@@ -349,7 +349,7 @@ for (const width of [1440, 390]) {
               format: "maven",
               repositoryTypes: ["hosted"],
               groupSupported: true,
-              anonymousRead: true,
+              visibility: "public",
               hostedOperations: ["read", "publish"],
               proxyOperations: [],
             },

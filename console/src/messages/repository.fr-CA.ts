@@ -188,6 +188,13 @@ export const repositoryFrCA: Record<keyof typeof repositoryEnCA, string> = {
   "repository.repositorySummary": "Résumé du dépôt",
   "repository.anonymousReads": "Lectures anonymes",
   "repository.privateReads": "Lectures privées",
+  "repository.visibility": "Visibilité",
+  "repository.visibilityPrivate": "Privé",
+  "repository.visibilityAuthenticated": "Authentifié",
+  "repository.visibilityPublic": "Public",
+  "repository.visibilityAuthenticatedReads": "Lectures authentifiées",
+  "repository.visibilityHelp":
+    "Privé : seuls les principaux disposant d’un droit peuvent lire. Authentifié : toute identité connectée peut lire. Public : tout le monde peut lire tant que la porte d’accès public globale est activée; sinon, public se comporte comme authentifié.",
   "repository.protocolEndpoint": "Point de terminaison du protocole",
   "repository.openPublicBrowser": "Ouvrir le navigateur public",
   "repository.objects2": "{bytes} · {number} objets",

@@ -35,7 +35,7 @@ const repository: Repository = {
   name: "npm-hosted",
   format: "npm",
   type: "hosted",
-  anonymousRead: false,
+  visibility: "private",
   mavenStrictPublication: false,
   state: "active",
   version: "1",

@@ -31,21 +31,21 @@ func anonymousAccessAllowed(ctx context.Context, source any) bool {
 	if !ok {
 		return false
 	}
-	policy, err := store.GetAnonymousAccessPolicy(ctx)
+	policy, err := store.GetPublicAccessPolicy(ctx)
 	return err == nil && policy.Enabled
 }
 
 func anonymousHostedRepositoryReadAllowed(ctx context.Context, source any, repo repository.HostedRepository, method string) bool {
-	return anonymousReadMethod(method) && repo.State == repository.RepositoryActive && repo.AnonymousRead && anonymousAccessAllowed(ctx, source)
+	return anonymousReadMethod(method) && repo.State == repository.RepositoryActive && repo.Visibility == repository.VisibilityPublic && anonymousAccessAllowed(ctx, source)
 }
 
 func anonymousHostedGroupReadAllowed(ctx context.Context, policySource any, repositories managementRepositoryReader, group repository.HostedGroup, method string) bool {
-	if !anonymousReadMethod(method) || !group.AnonymousRead || !anonymousAccessAllowed(ctx, policySource) {
+	if !anonymousReadMethod(method) || group.Visibility != repository.VisibilityPublic || !anonymousAccessAllowed(ctx, policySource) {
 		return false
 	}
 	for _, member := range group.Members {
 		repo, err := repositories.GetHostedRepository(ctx, member.RepositoryID)
-		if err == nil && repo.State == repository.RepositoryActive && repo.Format == group.Format && repo.AnonymousRead {
+		if err == nil && repo.State == repository.RepositoryActive && repo.Format == group.Format && repo.Visibility == repository.VisibilityPublic {
 			return true
 		}
 	}
@@ -53,7 +53,7 @@ func anonymousHostedGroupReadAllowed(ctx context.Context, policySource any, repo
 }
 
 func anonymousHostedGroupMembers(group repository.HostedGroup, members []repository.Member) []repository.Member {
-	if !group.AnonymousRead {
+	if group.Visibility != repository.VisibilityPublic {
 		return nil
 	}
 	allowed := make([]repository.Member, 0, len(members))

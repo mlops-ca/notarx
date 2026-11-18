@@ -2,9 +2,14 @@ import { formatDescriptor } from "../../formats";
 import { useState } from "react";
 import { Button, Space, Switch } from "antd";
 import { updateRepository } from "../../client";
-import type { Repository, RepositoryCapabilities } from "../../client";
+import type {
+  Repository,
+  RepositoryCapabilities,
+  Visibility,
+} from "../../client";
 import { Badge } from "../../components/ui/Badge";
 import { ErrorBanner, Notice } from "../../components/ui/Feedback";
+import { VisibilitySelect } from "../../components/ui/VisibilitySelect";
 import { usePreferences } from "../../lib/preferences";
 import { ProxyUpstreamSettings } from "./ProxyUpstreamSettings";
 import { useProxySettingsDraft } from "./useProxySettingsDraft";
@@ -19,7 +24,7 @@ export function RepositorySettingsTab({
   onUpdated: () => void;
 }) {
   const { t } = usePreferences();
-  const [anonymousRead, setAnonymousRead] = useState(repo.anonymousRead);
+  const [visibility, setVisibility] = useState<Visibility>(repo.visibility);
   const [mavenStrictPublication, setMavenStrictPublication] = useState(
     repo.mavenStrictPublication,
   );
@@ -33,7 +38,7 @@ export function RepositorySettingsTab({
 
   const resetForm = () => {
     proxyDraft.reset();
-    setAnonymousRead(repo.anonymousRead);
+    setVisibility(repo.visibility);
     setMavenStrictPublication(repo.mavenStrictPublication);
     setError(null);
     setNotice("");
@@ -61,7 +66,7 @@ export function RepositorySettingsTab({
     setNotice("");
     try {
       const body = {
-        anonymousRead,
+        visibility,
         ...(repo.type === "hosted" && descriptor?.strictPublicationSetting
           ? { mavenStrictPublication }
           : {}),
@@ -117,16 +122,16 @@ export function RepositorySettingsTab({
         <div className="flex items-center justify-between gap-6 rounded-lg border border-line bg-surface-translucent px-4 py-3">
           <div>
             <div className="text-sm font-medium text-fg">
-              {t("repository.allowAnonymousReads")}
+              {t("repository.visibility")}
             </div>
             <div className="mt-1 text-xs leading-5 text-fg-tertiary">
-              {t("repository.whenEnabledProtocolGETHEADRequestsCanRead")}
+              {t("repository.visibilityHelp")}
             </div>
           </div>
-          <Switch
-            checked={anonymousRead}
-            onChange={setAnonymousRead}
-            aria-label={t("repository.allowAnonymousReads")}
+          <VisibilitySelect
+            value={visibility}
+            onChange={setVisibility}
+            ariaLabel={t("repository.visibility")}
           />
         </div>
         {repo.type === "hosted" && descriptor?.strictPublicationSetting && (

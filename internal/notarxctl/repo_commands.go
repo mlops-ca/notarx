@@ -97,7 +97,7 @@ func renderRepository(w io.Writer, repo adminopenapi.Repository) error {
 		{"type", repositoryType(repo)},
 		{"state", string(repo.State)},
 		{"version", repo.Version},
-		{"anonymous read", yesNo(repo.AnonymousRead)},
+		{"visibility", string(repo.Visibility)},
 	}
 	if repo.Format == adminopenapi.FormatMaven && repositoryType(repo) == string(adminopenapi.RepositoryTypeHosted) {
 		lines = append(lines, [2]string{"maven strict publication", yesNo(repo.MavenStrictPublication)})
@@ -302,11 +302,12 @@ func newIdempotencyKey() (string, error) {
 func repoCreateCommand() command {
 	var format, repoType, endpoint, idempotencyKey string
 	var allowedHosts stringList
-	var anonymousRead, mavenStrict bool
+	var visibility string
+	var mavenStrict bool
 	return command{
 		name:        "repo create",
 		synopsis:    "create a hosted or proxy repository",
-		usage:       "notarxctl repo create NAME --format FORMAT [--type hosted|proxy] [--endpoint URL] [--allowed-host HOST]... [--anonymous-read] [--maven-strict-publication] [--idempotency-key KEY] [--dry-run] [--json]",
+		usage:       "notarxctl repo create NAME --format FORMAT [--type hosted|proxy] [--endpoint URL] [--allowed-host HOST]... [--visibility private|authenticated|public] [--maven-strict-publication] [--idempotency-key KEY] [--dry-run] [--json]",
 		positionals: 1,
 		argsUsage:   "NAME",
 		setFlags: func(fs *flag.FlagSet) {
@@ -314,7 +315,7 @@ func repoCreateCommand() command {
 			fs.StringVar(&repoType, "type", string(adminopenapi.CreateRepositoryTypeHosted), "repository type: hosted or proxy")
 			fs.StringVar(&endpoint, "endpoint", "", "upstream base URL (proxy repositories)")
 			fs.Var(&allowedHosts, "allowed-host", "host the proxy may reach (repeatable; proxy repositories)")
-			fs.BoolVar(&anonymousRead, "anonymous-read", false, "allow unauthenticated protocol reads where effective policy permits")
+			fs.StringVar(&visibility, "visibility", "", "read visibility: private (default), authenticated or public")
 			fs.BoolVar(&mavenStrict, "maven-strict-publication", false, "require Gateway coordinate commits (Maven hosted only)")
 			fs.StringVar(&idempotencyKey, "idempotency-key", "", "reuse the key of an earlier attempt whose outcome was unknown (default: a new key)")
 		},
@@ -359,8 +360,12 @@ func repoCreateCommand() command {
 			} else if endpoint != "" || len(allowedHosts) > 0 {
 				return &UsageError{Message: "--endpoint and --allowed-host only apply to proxy repositories", Hint: "add --type proxy, or drop them for a hosted repository"}
 			}
-			if env.flagSet["anonymous-read"] {
-				request.AnonymousRead = &anonymousRead
+			if env.flagSet["visibility"] {
+				value, err := parseVisibility(visibility)
+				if err != nil {
+					return err
+				}
+				request.Visibility = &value
 			}
 			if env.flagSet["maven-strict-publication"] {
 				if request.Format != adminopenapi.FormatMaven || kind != adminopenapi.CreateRepositoryTypeHosted {
@@ -433,15 +438,16 @@ func repoCreateCommand() command {
 func repoUpdateCommand() command {
 	var endpoint, ifMatch string
 	var allowedHosts stringList
-	var anonymousRead, mavenStrict bool
+	var visibility string
+	var mavenStrict bool
 	return command{
 		name:        "repo update",
 		synopsis:    "change repository policy or proxy settings (conditional on its version)",
-		usage:       "notarxctl repo update ID [--anonymous-read=true|false] [--maven-strict-publication=true|false] [--endpoint URL] [--allowed-host HOST]... [--if-match VERSION] [--dry-run] [--json]",
+		usage:       "notarxctl repo update ID [--visibility private|authenticated|public] [--maven-strict-publication=true|false] [--endpoint URL] [--allowed-host HOST]... [--if-match VERSION] [--dry-run] [--json]",
 		positionals: 1,
 		argsUsage:   "ID",
 		setFlags: func(fs *flag.FlagSet) {
-			fs.BoolVar(&anonymousRead, "anonymous-read", false, "set the anonymous read policy")
+			fs.StringVar(&visibility, "visibility", "", "read visibility: private, authenticated or public")
 			fs.BoolVar(&mavenStrict, "maven-strict-publication", false, "set strict Maven publication (Maven hosted only)")
 			fs.StringVar(&endpoint, "endpoint", "", "replace the upstream base URL (proxy repositories)")
 			fs.Var(&allowedHosts, "allowed-host", "replace the allowed hosts (repeatable; proxy repositories)")
@@ -462,8 +468,12 @@ func repoUpdateCommand() command {
 			id := env.args[0]
 			request := adminopenapi.UpdateRepository{}
 			changed := false
-			if env.flagSet["anonymous-read"] {
-				request.AnonymousRead = &anonymousRead
+			if env.flagSet["visibility"] {
+				value, err := parseVisibility(visibility)
+				if err != nil {
+					return err
+				}
+				request.Visibility = &value
 				changed = true
 			}
 			if env.flagSet["maven-strict-publication"] {
@@ -483,7 +493,7 @@ func repoUpdateCommand() command {
 				changed = true
 			}
 			if !changed {
-				return &UsageError{Message: "nothing to update", Hint: "pass at least one of --anonymous-read, --maven-strict-publication, --endpoint, --allowed-host"}
+				return &UsageError{Message: "nothing to update", Hint: "pass at least one of --visibility, --maven-strict-publication, --endpoint, --allowed-host"}
 			}
 			if env.flagSet["if-match"] && strings.TrimSpace(ifMatch) == "" {
 				return &UsageError{Message: "--if-match cannot be empty", Hint: "pass the repository version from notarxctl repo show"}
@@ -514,7 +524,7 @@ func repoUpdateCommand() command {
 					Verified: []string{"at least one setting is given"},
 					NotVerified: []string{
 						"caller permission (repositories:admin)",
-						"which settings the repository type accepts (hosted repositories only take anonymous read and Maven publication policy)",
+						"which settings the repository type accepts (hosted repositories only take visibility and Maven publication policy)",
 						"that the version still matches when the update is sent",
 					},
 				}

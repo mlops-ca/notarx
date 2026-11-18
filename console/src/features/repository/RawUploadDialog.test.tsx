@@ -22,7 +22,7 @@ const repository: Repository = {
   format: "raw",
   type: "hosted",
   allowedHosts: [],
-  anonymousRead: false,
+  visibility: "private",
   mavenStrictPublication: false,
   state: "active",
   version: "1",

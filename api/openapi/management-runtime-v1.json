@@ -5416,12 +5416,12 @@
         }
       }
     },
-    "/anonymous-access-policy": {
+    "/public-access-policy": {
       "get": {
-        "operationId": "getAnonymousAccessPolicy",
+        "operationId": "getPublicAccessPolicy",
         "responses": {
           "200": {
-            "$ref": "#/components/responses/AnonymousAccessPolicy"
+            "$ref": "#/components/responses/PublicAccessPolicy"
           },
           "401": {
             "$ref": "#/components/responses/Problem"
@@ -5429,7 +5429,7 @@
         }
       },
       "put": {
-        "operationId": "replaceAnonymousAccessPolicy",
+        "operationId": "replacePublicAccessPolicy",
         "parameters": [
           {
             "$ref": "#/components/parameters/IfMatch"
@@ -5440,14 +5440,14 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AnonymousAccessPolicy"
+                "$ref": "#/components/schemas/PublicAccessPolicy"
               }
             }
           }
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/AnonymousAccessPolicy"
+            "$ref": "#/components/responses/PublicAccessPolicy"
           },
           "401": {
             "$ref": "#/components/responses/Problem"
@@ -7718,7 +7718,7 @@
       },
       "patch": {
         "operationId": "updateRepository",
-        "description": "Updates repository configuration. Requires repository `admin` scope, because endpoint, allowlist, egress, upstream credential, anonymous-read, and strict-publication settings change how the repository behaves for every client; a `write` scope is not sufficient.",
+        "description": "Updates repository configuration. Requires repository `admin` scope, because endpoint, allowlist, egress, upstream credential, visibility, and strict-publication settings change how the repository behaves for every client; a `write` scope is not sufficient.",
         "parameters": [
           {
             "$ref": "#/components/parameters/IfMatch"
@@ -11493,9 +11493,8 @@
             "type": "string",
             "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
           },
-          "anonymousRead": {
-            "type": "boolean",
-            "default": false
+          "visibility": {
+            "$ref": "#/components/schemas/Visibility"
           }
         }
       },
@@ -11509,7 +11508,7 @@
           "type",
           "preview",
           "version",
-          "anonymousRead",
+          "visibility",
           "sourceUrl",
           "pushHost",
           "publicationUrl"
@@ -11543,8 +11542,8 @@
           "version": {
             "type": "string"
           },
-          "anonymousRead": {
-            "type": "boolean"
+          "visibility": {
+            "$ref": "#/components/schemas/Visibility"
           },
           "sourceUrl": {
             "type": "string"
@@ -12308,9 +12307,8 @@
             "type": "string",
             "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
           },
-          "anonymousRead": {
-            "type": "boolean",
-            "default": false
+          "visibility": {
+            "$ref": "#/components/schemas/Visibility"
           },
           "type": {
             "type": "string",
@@ -12363,9 +12361,8 @@
             "type": "string",
             "minLength": 1
           },
-          "anonymousRead": {
-            "type": "boolean",
-            "default": false
+          "visibility": {
+            "$ref": "#/components/schemas/Visibility"
           },
           "type": {
             "type": "string",
@@ -12413,9 +12410,8 @@
             "type": "string",
             "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
           },
-          "anonymousRead": {
-            "type": "boolean",
-            "default": false
+          "visibility": {
+            "$ref": "#/components/schemas/Visibility"
           },
           "version": {
             "type": "string",
@@ -12457,7 +12453,7 @@
           "format",
           "preview",
           "version",
-          "anonymousRead",
+          "visibility",
           "members",
           "sourceUrl"
         ],
@@ -12482,8 +12478,8 @@
           "version": {
             "type": "string"
           },
-          "anonymousRead": {
-            "type": "boolean"
+          "visibility": {
+            "$ref": "#/components/schemas/Visibility"
           },
           "members": {
             "type": "array",
@@ -12697,9 +12693,8 @@
             "type": "string",
             "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
           },
-          "anonymousRead": {
-            "type": "boolean",
-            "default": false
+          "visibility": {
+            "$ref": "#/components/schemas/Visibility"
           },
           "type": {
             "type": "string",
@@ -12802,9 +12797,8 @@
             "type": "string",
             "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
           },
-          "anonymousRead": {
-            "type": "boolean",
-            "default": false
+          "visibility": {
+            "$ref": "#/components/schemas/Visibility"
           },
           "members": {
             "type": "array",
@@ -12852,8 +12846,8 @@
           "version": {
             "type": "string"
           },
-          "anonymousRead": {
-            "type": "boolean"
+          "visibility": {
+            "$ref": "#/components/schemas/Visibility"
           },
           "members": {
             "type": "array",
@@ -12918,9 +12912,8 @@
             "type": "string",
             "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
           },
-          "anonymousRead": {
-            "type": "boolean",
-            "default": false
+          "visibility": {
+            "$ref": "#/components/schemas/Visibility"
           },
           "type": {
             "type": "string",
@@ -13340,7 +13333,7 @@
           "format",
           "repositoryTypes",
           "groupSupported",
-          "anonymousRead",
+          "publicVisibility",
           "hostedOperations",
           "proxyOperations"
         ],
@@ -13362,8 +13355,9 @@
           "groupSupported": {
             "type": "boolean"
           },
-          "anonymousRead": {
-            "type": "boolean"
+          "publicVisibility": {
+            "type": "boolean",
+            "description": "True when the format supports the public visibility tier."
           },
           "hostedOperations": {
             "type": "array",
@@ -13464,7 +13458,7 @@
           "id",
           "name",
           "format",
-          "anonymousRead",
+          "visibility",
           "mavenStrictPublication",
           "state",
           "version"
@@ -13497,9 +13491,8 @@
               "type": "string"
             }
           },
-          "anonymousRead": {
-            "type": "boolean",
-            "description": "Anonymous read policy. Defaults to false and permits unauthenticated protocol GET/HEAD where effective policy allows it."
+          "visibility": {
+            "$ref": "#/components/schemas/Visibility"
           },
           "mavenStrictPublication": {
             "type": "boolean",
@@ -13563,10 +13556,8 @@
             },
             "description": "Hosts the proxy may egress to. Required for raw, conan, and npm proxies. npm tarball redirects are limited to this list."
           },
-          "anonymousRead": {
-            "type": "boolean",
-            "default": false,
-            "description": "Anonymous read policy. Defaults to false and permits unauthenticated protocol GET/HEAD where effective policy allows it."
+          "visibility": {
+            "$ref": "#/components/schemas/Visibility"
           },
           "mavenStrictPublication": {
             "type": "boolean",
@@ -13590,7 +13581,7 @@
           "id",
           "name",
           "format",
-          "anonymousRead",
+          "visibility",
           "members",
           "version"
         ],
@@ -13605,9 +13596,8 @@
           "format": {
             "$ref": "#/components/schemas/Format"
           },
-          "anonymousRead": {
-            "type": "boolean",
-            "description": "Anonymous read policy. Defaults to false and permits unauthenticated protocol GET/HEAD where effective policy allows it."
+          "visibility": {
+            "$ref": "#/components/schemas/Visibility"
           },
           "members": {
             "$ref": "#/components/schemas/MemberList"
@@ -13632,10 +13622,8 @@
           "format": {
             "$ref": "#/components/schemas/Format"
           },
-          "anonymousRead": {
-            "type": "boolean",
-            "default": false,
-            "description": "Anonymous read policy. Defaults to false and permits unauthenticated protocol GET/HEAD where effective policy allows it."
+          "visibility": {
+            "$ref": "#/components/schemas/Visibility"
           },
           "members": {
             "$ref": "#/components/schemas/MemberList"
@@ -16374,7 +16362,7 @@
           }
         }
       },
-      "AnonymousAccessPolicy": {
+      "PublicAccessPolicy": {
         "type": "object",
         "required": [
           "version",
@@ -16387,7 +16375,7 @@
           },
           "enabled": {
             "type": "boolean",
-            "description": "Permits unauthenticated protocol reads only when the Repository or Group policy also allows them."
+            "description": "Instance kill switch for public visibility. When false, repositories and groups marked public behave as authenticated; the gate never widens access."
           }
         }
       },
@@ -16974,6 +16962,15 @@
           }
         }
       },
+      "Visibility": {
+        "type": "string",
+        "enum": [
+          "private",
+          "authenticated",
+          "public"
+        ],
+        "description": "Read visibility ceiling, ordered private < authenticated < public. private admits principals with a grant, authenticated admits any non-anonymous identity, public admits anyone while the global public-access gate is enabled (otherwise public behaves as authenticated). Omitted on create means private."
+      },
       "HelmPreviewUpstreamAuth": {
         "type": "object",
         "additionalProperties": false,
@@ -17035,7 +17032,7 @@
           "type",
           "preview",
           "version",
-          "anonymousRead",
+          "visibility",
           "sourceUrl",
           "provenanceTrust",
           "upstreamAuth"
@@ -17068,8 +17065,8 @@
           "version": {
             "type": "string"
           },
-          "anonymousRead": {
-            "type": "boolean"
+          "visibility": {
+            "$ref": "#/components/schemas/Visibility"
           },
           "endpoint": {
             "type": "string",
@@ -21771,7 +21768,7 @@
       },
       "UpdateRepository": {
         "type": "object",
-        "description": "Editable repository management policy and proxy configuration. Hosted repositories accept anonymousRead updates and Maven Hosted repositories also accept mavenStrictPublication updates; name, format, and type are immutable after creation.",
+        "description": "Editable repository management policy and proxy configuration. Hosted repositories accept visibility updates and Maven Hosted repositories also accept mavenStrictPublication updates; name, format, and type are immutable after creation.",
         "additionalProperties": false,
         "properties": {
           "endpoint": {
@@ -21785,9 +21782,8 @@
             },
             "description": "Hosts the proxy may egress to. Required for raw, conan, and npm proxies. npm tarball redirects are limited to this list."
           },
-          "anonymousRead": {
-            "type": "boolean",
-            "description": "Anonymous read policy. Defaults to false and permits unauthenticated protocol GET/HEAD where effective policy allows it."
+          "visibility": {
+            "$ref": "#/components/schemas/Visibility"
           },
           "mavenStrictPublication": {
             "type": "boolean",
@@ -22107,7 +22103,8 @@
           "repository",
           "resource",
           "simulated",
-          "anonymousRead",
+          "visibility",
+          "anonymousAccess",
           "permissions"
         ],
         "properties": {
@@ -22162,7 +22159,10 @@
               }
             }
           },
-          "anonymousRead": {
+          "visibility": {
+            "$ref": "#/components/schemas/Visibility"
+          },
+          "anonymousAccess": {
             "$ref": "#/components/schemas/EffectiveAccessDecision"
           },
           "permissions": {
@@ -24384,12 +24384,12 @@
           }
         }
       },
-      "AnonymousAccessPolicy": {
-        "description": "Global anonymous protocol-read policy",
+      "PublicAccessPolicy": {
+        "description": "Global public-access gate",
         "content": {
           "application/json": {
             "schema": {
-              "$ref": "#/components/schemas/AnonymousAccessPolicy"
+              "$ref": "#/components/schemas/PublicAccessPolicy"
             }
           }
         }

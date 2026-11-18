@@ -217,11 +217,11 @@ func (h repositoryManagementHandler) CreateGroup(w http.ResponseWriter, r *http.
 	}
 	group.ID = ids.New()
 	payload, _ := json.Marshal(struct {
-		Name          string                   `json:"name"`
-		Format        repository.Format        `json:"format"`
-		AnonymousRead bool                     `json:"anonymousRead"`
-		Members       []repository.GroupMember `json:"members"`
-	}{group.Name, group.Format, group.AnonymousRead, group.Members})
+		Name       string                   `json:"name"`
+		Format     repository.Format        `json:"format"`
+		Visibility repository.Visibility    `json:"visibility"`
+		Members    []repository.GroupMember `json:"members"`
+	}{group.Name, group.Format, repository.NormalizeVisibility(group.Visibility), group.Members})
 	digest := sha256.Sum256(payload)
 	created, _, err := h.groups.CreateHostedGroupIdempotently(r.Context(), group, principal.Actor, string(params.IdempotencyKey), base64.RawURLEncoding.EncodeToString(digest[:]))
 	if errors.Is(err, repository.ErrIdempotencyConflict) {
@@ -393,7 +393,7 @@ func (h repositoryManagementHandler) writeGroupMutation(w http.ResponseWriter, g
 
 func (h repositoryManagementHandler) validHostedGroup(r *http.Request, group repository.HostedGroup) bool {
 	profile, supported := repository.FormatProfileFor(group.Format)
-	if !hostedRepositoryName.MatchString(group.Name) || group.Format == repository.FormatConan && group.Name == "v2" || !supported || !profile.GroupSupported || len(group.Members) == 0 {
+	if !hostedRepositoryName.MatchString(group.Name) || group.Format == repository.FormatConan && group.Name == "v2" || !supported || !profile.GroupSupported || len(group.Members) == 0 || !repository.NormalizeVisibility(group.Visibility).Valid() {
 		return false
 	}
 	seen := map[string]bool{}

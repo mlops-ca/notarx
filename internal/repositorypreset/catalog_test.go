@@ -21,7 +21,7 @@ func TestStandardCatalogOnlyCreatesAdmittedPrivateRepositories(t *testing.T) {
 		if !repository.FormatSupportsRepositoryType(repo.Format, repo.Type) {
 			t.Fatalf("unadmitted repository: %+v", repo)
 		}
-		if repo.AnonymousRead || repo.UpstreamAuth != nil || repo.OCIBearer != nil {
+		if repo.Visibility == repository.VisibilityPublic || repo.UpstreamAuth != nil || repo.OCIBearer != nil {
 			t.Fatalf("preset changes authorization: %+v", repo)
 		}
 		if repo.Type == repository.RepositoryTypeHosted {

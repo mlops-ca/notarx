@@ -35,7 +35,7 @@ const repository: Repository = {
   type: "proxy",
   endpoint: "https://deb.example.test/debian",
   allowedHosts: ["deb.example.test"],
-  anonymousRead: true,
+  visibility: "public",
   mavenStrictPublication: false,
   state: "active",
   version: "1",

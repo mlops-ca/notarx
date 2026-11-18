@@ -127,7 +127,7 @@ func newFakeGateway(t *testing.T, token string) *fakeGateway {
 				writeProblem(w, http.StatusUnauthorized, "access_denied", "authentication required")
 				return
 			}
-			_, _ = fmt.Fprint(w, `{"items":[{"format":"maven","repositoryTypes":["hosted"],"groupSupported":true,"anonymousRead":false,"hostedOperations":[],"proxyOperations":[]},{"format":"raw","repositoryTypes":["hosted","proxy"],"groupSupported":true,"anonymousRead":true,"hostedOperations":[],"proxyOperations":[]}]}`)
+			_, _ = fmt.Fprint(w, `{"items":[{"format":"maven","repositoryTypes":["hosted"],"groupSupported":true,"visibility":"private","hostedOperations":[],"proxyOperations":[]},{"format":"raw","repositoryTypes":["hosted","proxy"],"groupSupported":true,"visibility":"public","hostedOperations":[],"proxyOperations":[]}]}`)
 		default:
 			writeProblem(w, http.StatusNotFound, "not_found", "no route")
 		}

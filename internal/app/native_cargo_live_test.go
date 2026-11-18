@@ -26,7 +26,7 @@ func TestCargoProxyLiveCratesIO(t *testing.T) {
 	if _, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{
 		ID: "live-crates-io", Name: "live-crates-io", Format: repository.FormatCargo,
 		Type: repository.RepositoryTypeProxy, Endpoint: "https://index.crates.io",
-		AllowedHosts: []string{"static.crates.io", "crates.io"}, AnonymousRead: true,
+		AllowedHosts: []string{"static.crates.io", "crates.io"}, Visibility: repository.VisibilityPublic,
 	}); err != nil {
 		t.Fatal(err)
 	}

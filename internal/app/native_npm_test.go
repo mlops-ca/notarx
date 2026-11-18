@@ -27,13 +27,13 @@ import (
 func TestNativeNPMHostedPublishInstallAndAnonymousBrowse(t *testing.T) {
 	store := repository.NewMemoryStore()
 	repo, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{
-		ID: uuid.NewString(), Name: "npm-releases", Format: repository.FormatNPM, AnonymousRead: true,
+		ID: uuid.NewString(), Name: "npm-releases", Format: repository.FormatNPM, Visibility: repository.VisibilityPublic,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	enablePublicationScan(t, store, repo.ID)
-	if _, err = store.ReplaceAnonymousAccessPolicy(context.Background(), repository.AnonymousAccessPolicy{Enabled: true}, "1"); err != nil {
+	if _, err = store.ReplacePublicAccessPolicy(context.Background(), repository.PublicAccessPolicy{Enabled: true}, "1"); err != nil {
 		t.Fatal(err)
 	}
 	objects := objectstore.NewMemoryStore()
@@ -279,12 +279,12 @@ func TestNativeNPMProxyCachesPackumentAndVerifiedTarball(t *testing.T) {
 	repo, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{
 		ID: uuid.NewString(), Name: "npm-proxy", Format: repository.FormatNPM,
 		Type: repository.RepositoryTypeProxy, Endpoint: upstream.URL,
-		AllowedHosts: []string{parsedUpstream.Hostname()}, AnonymousRead: true,
+		AllowedHosts: []string{parsedUpstream.Hostname()}, Visibility: repository.VisibilityPublic,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = store.ReplaceAnonymousAccessPolicy(context.Background(), repository.AnonymousAccessPolicy{Enabled: true}, "1"); err != nil {
+	if _, err = store.ReplacePublicAccessPolicy(context.Background(), repository.PublicAccessPolicy{Enabled: true}, "1"); err != nil {
 		t.Fatal(err)
 	}
 	objects := objectstore.NewMemoryStore()
@@ -802,12 +802,12 @@ func TestNativeNPMProxyNegativeCachesAndServesStaleMetadata(t *testing.T) {
 	repo, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{
 		ID: uuid.NewString(), Name: "npm-stale", Format: repository.FormatNPM,
 		Type: repository.RepositoryTypeProxy, Endpoint: upstream.URL,
-		AllowedHosts: []string{parsed.Hostname()}, AnonymousRead: true,
+		AllowedHosts: []string{parsed.Hostname()}, Visibility: repository.VisibilityPublic,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = store.ReplaceAnonymousAccessPolicy(context.Background(), repository.AnonymousAccessPolicy{Enabled: true}, "1"); err != nil {
+	if _, err = store.ReplacePublicAccessPolicy(context.Background(), repository.PublicAccessPolicy{Enabled: true}, "1"); err != nil {
 		t.Fatal(err)
 	}
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{
@@ -857,12 +857,12 @@ func TestNativeNPMProxyRetriesAndOpensUpstreamCircuit(t *testing.T) {
 	repo, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{
 		ID: uuid.NewString(), Name: "npm-protected", Format: repository.FormatNPM,
 		Type: repository.RepositoryTypeProxy, Endpoint: upstream.URL,
-		AllowedHosts: []string{parsed.Hostname()}, AnonymousRead: true,
+		AllowedHosts: []string{parsed.Hostname()}, Visibility: repository.VisibilityPublic,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = store.ReplaceAnonymousAccessPolicy(context.Background(), repository.AnonymousAccessPolicy{Enabled: true}, "1"); err != nil {
+	if _, err = store.ReplacePublicAccessPolicy(context.Background(), repository.PublicAccessPolicy{Enabled: true}, "1"); err != nil {
 		t.Fatal(err)
 	}
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator(), Storage: ObjectStores{repository.FormatNPM: objectstore.NewMemoryStore()}, Upstream: UpstreamClient{HTTPClient: upstream.Client()}})
@@ -952,12 +952,12 @@ func TestNativeNPMProxyRevalidatesExpiredMetadata(t *testing.T) {
 	repo, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{
 		ID: uuid.NewString(), Name: "npm-revalidate", Format: repository.FormatNPM,
 		Type: repository.RepositoryTypeProxy, Endpoint: upstream.URL,
-		AllowedHosts: []string{parsed.Hostname()}, AnonymousRead: true,
+		AllowedHosts: []string{parsed.Hostname()}, Visibility: repository.VisibilityPublic,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _ = store.ReplaceAnonymousAccessPolicy(context.Background(), repository.AnonymousAccessPolicy{Enabled: true}, "1")
+	_, _ = store.ReplacePublicAccessPolicy(context.Background(), repository.PublicAccessPolicy{Enabled: true}, "1")
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{NPMMetadataTTL: time.Millisecond}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator(), Storage: ObjectStores{repository.FormatNPM: objectstore.NewMemoryStore()}, Upstream: UpstreamClient{HTTPClient: upstream.Client()}})
 	requestPath := "/npm/" + repo.Name + "/" + packageName
 	for range 2 {
@@ -1068,12 +1068,12 @@ func TestNativeNPMProxyDoesNotCacheIntegrityMismatch(t *testing.T) {
 	repo, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{
 		ID: uuid.NewString(), Name: "npm-integrity", Format: repository.FormatNPM,
 		Type: repository.RepositoryTypeProxy, Endpoint: upstream.URL,
-		AllowedHosts: []string{parsed.Hostname()}, AnonymousRead: true,
+		AllowedHosts: []string{parsed.Hostname()}, Visibility: repository.VisibilityPublic,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _ = store.ReplaceAnonymousAccessPolicy(context.Background(), repository.AnonymousAccessPolicy{Enabled: true}, "1")
+	_, _ = store.ReplacePublicAccessPolicy(context.Background(), repository.PublicAccessPolicy{Enabled: true}, "1")
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator(), Storage: ObjectStores{repository.FormatNPM: objectstore.NewMemoryStore()}, Upstream: UpstreamClient{HTTPClient: upstream.Client()}})
 	metadata := httptest.NewRecorder()
 	handler.ServeHTTP(metadata, httptest.NewRequest(http.MethodGet, "/npm/"+repo.Name+"/"+packageName, nil))

@@ -279,8 +279,8 @@ func TestNativeNPMGroupTombstoneAuthority(t *testing.T) {
 	ctx := context.Background()
 	store := repository.NewMemoryStore()
 	objects := objectstore.NewMemoryStore()
-	primary, _ := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "npm-primary", Format: repository.FormatNPM, AnonymousRead: true})
-	secondary, _ := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "npm-secondary", Format: repository.FormatNPM, AnonymousRead: true})
+	primary, _ := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "npm-primary", Format: repository.FormatNPM, Visibility: repository.VisibilityPublic})
+	secondary, _ := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "npm-secondary", Format: repository.FormatNPM, Visibility: repository.VisibilityPublic})
 	handler := newTestGateway(t, GatewayOptions{Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator(), Storage: ObjectStores{repository.FormatNPM: objects}})
 	publishNPMDistTagHTTPFixture(t, handler, primary.Name, "widget", "1.0.0", map[string]string{"latest": "1.0.0"})
 	visibleTarball := publishNPMDistTagHTTPFixture(t, handler, secondary.Name, "widget", "2.0.0", map[string]string{"next": "2.0.0"})
@@ -291,11 +291,11 @@ func TestNativeNPMGroupTombstoneAuthority(t *testing.T) {
 	if createErr != nil {
 		t.Fatal(createErr)
 	}
-	groupRecord.AnonymousRead = true
+	groupRecord.Visibility = repository.VisibilityPublic
 	if _, err := store.ReplaceHostedGroup(ctx, groupRecord, groupRecord.Version); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.ReplaceAnonymousAccessPolicy(ctx, repository.AnonymousAccessPolicy{Enabled: true}, "1"); err != nil {
+	if _, err := store.ReplacePublicAccessPolicy(ctx, repository.PublicAccessPolicy{Enabled: true}, "1"); err != nil {
 		t.Fatal(err)
 	}
 	document := npmMetadataDocument(t, handler, "/npm/npm-primary/widget")

@@ -231,7 +231,7 @@ func TestCargoProxyOfficialSourceReplacementOnlineAndOffline(t *testing.T) {
 	}))
 	store := repository.NewMemoryStore()
 	if _, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{ID: "proxy-official", Name: "proxy-official",
-		Format: repository.FormatCargo, Type: repository.RepositoryTypeProxy, Endpoint: upstream.URL, AnonymousRead: true}); err != nil {
+		Format: repository.FormatCargo, Type: repository.RepositoryTypeProxy, Endpoint: upstream.URL, Visibility: repository.VisibilityPublic}); err != nil {
 		t.Fatal(err)
 	}
 	enableAnonymousAccess(t, store)

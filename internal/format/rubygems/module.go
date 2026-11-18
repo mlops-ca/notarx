@@ -26,7 +26,7 @@ type RepositoryStore interface {
 	CreateHostedRepositoryIdempotently(context.Context, repository.HostedRepository, string, string, string) (repository.HostedRepository, bool, error)
 }
 type AnonymousPolicy interface {
-	GetAnonymousAccessPolicy(context.Context) (repository.AnonymousAccessPolicy, error)
+	GetPublicAccessPolicy(context.Context) (repository.PublicAccessPolicy, error)
 }
 type Options struct {
 	Store         domain.Store
@@ -101,8 +101,8 @@ func (m *Module) principal(r *http.Request) (authorization.Principal, bool) {
 }
 func (m *Module) authorize(w http.ResponseWriter, r *http.Request, repo repository.HostedRepository, op authorization.RepositoryOperation, resource string, collection bool) (authorization.Principal, bool) {
 	p, ok := m.principal(r)
-	if !ok && r.Header.Get("Authorization") == "" && op == authorization.RepositoryRead && repo.AnonymousRead {
-		policy, e := m.anonymous.GetAnonymousAccessPolicy(r.Context())
+	if !ok && r.Header.Get("Authorization") == "" && op == authorization.RepositoryRead && repo.Visibility == repository.VisibilityPublic {
+		policy, e := m.anonymous.GetPublicAccessPolicy(r.Context())
 		if e == nil && policy.Enabled {
 			return authorization.Principal{Actor: "anonymous"}, true
 		}

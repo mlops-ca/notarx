@@ -285,10 +285,11 @@ function main() {
     loadContractFile(path.join(repoRoot, contractBundlePaths.native)),
   );
   const englishMap = parseCommandMap(readFileSync(path.join(repoRoot, commandMapPath), 'utf8'));
-  const chineseMap = parseCommandMap(readFileSync(path.join(repoRoot, chineseCommandMapPath), 'utf8'));
+  // The zh-CN map is optional and frozen (ADR 0014, owner order 2026-11-18): it is
+  // not compared with the English map, so English-only changes pass.
   const registeredCommands = loadRegisteredCommands(repoRoot);
 
-  const issues = findContractDrift({ managementOperations, nativeOperations, englishMap, chineseMap, registeredCommands });
+  const issues = findContractDrift({ managementOperations, nativeOperations, englishMap, registeredCommands });
   if (issues.length > 0) {
     for (const issue of issues) process.stderr.write(`${issue.message}\n`);
     process.exitCode = 1;

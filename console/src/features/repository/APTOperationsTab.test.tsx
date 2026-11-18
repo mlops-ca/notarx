@@ -44,7 +44,7 @@ const repo: Repository = {
   type: "hosted",
   state: "active",
   version: "1",
-  anonymousRead: false,
+  visibility: "private",
   mavenStrictPublication: false,
 };
 const pkg: AptLifecyclePackage = {

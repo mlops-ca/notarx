@@ -384,10 +384,10 @@ func TestNuGetPackagePrefixGrantsAndAnonymousCredentialFailure(t *testing.T) {
 	if w := request(t, f.module, "GET", "/nuget/nuget-test/v3/flat/other.widget/index.json", nil, read); w.Code != 403 {
 		t.Fatalf("prefix escape=%d", w.Code)
 	}
-	if _, err := f.store.ReplaceAnonymousAccessPolicy(ctx, repository.AnonymousAccessPolicy{Enabled: true}, "1"); err != nil {
+	if _, err := f.store.ReplacePublicAccessPolicy(ctx, repository.PublicAccessPolicy{Enabled: true}, "1"); err != nil {
 		t.Fatal(err)
 	}
-	f.repo.AnonymousRead = true
+	f.repo.Visibility = repository.VisibilityPublic
 	if _, err := f.store.UpdateHostedRepository(ctx, f.repo, f.repo.Version); err != nil {
 		t.Fatal(err)
 	}

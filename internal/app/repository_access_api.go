@@ -138,7 +138,8 @@ func (h accessManagementHandler) repositoryEffectiveAccess(ctx context.Context, 
 	response := adminopenapi.RepositoryEffectiveAccess{
 		Actor: principal.Actor, Identity: currentIdentityResponse(principal),
 		Resource: resource, Simulated: simulated,
-		AnonymousRead: adminopenapi.EffectiveAccessDecision{
+		Visibility: adminopenapi.Visibility(repo.Visibility),
+		AnonymousAccess: adminopenapi.EffectiveAccessDecision{
 			Allowed: anonymousReason == "repository_anonymous_read_enabled",
 			Source:  "anonymous_policy",
 			Reason:  anonymousReason,
@@ -169,7 +170,7 @@ func anonymousRepositoryReason(ctx context.Context, source any, repo repository.
 	if !anonymousAccessAllowed(ctx, source) {
 		return "global_anonymous_access_disabled"
 	}
-	if !repo.AnonymousRead {
+	if repo.Visibility != repository.VisibilityPublic {
 		return "repository_anonymous_read_disabled"
 	}
 	return "repository_anonymous_read_enabled"

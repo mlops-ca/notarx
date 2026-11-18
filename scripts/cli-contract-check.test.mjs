@@ -186,13 +186,11 @@ test('the repository command map classifies every contract operation', () => {
     loadContractFile(path.join(repoRoot, 'api/openapi/native-hosted-v1.json')),
   );
   const englishMap = parseCommandMap(readFileSync(path.join(repoRoot, 'docs/cli-command-map.md'), 'utf8'));
-  const chineseMap = parseCommandMap(
-    readFileSync(path.join(repoRoot, 'docs/cli-command-map.zh-CN.md'), 'utf8'),
-  );
+  // The zh-CN map is optional and frozen, so it is not compared (ADR 0014).
   // Implemented rows are checked against the registry the client really has.
   const registeredCommands = loadRegisteredCommands(repoRoot);
   assert.deepEqual(
-    findContractDrift({ managementOperations, nativeOperations, englishMap, chineseMap, registeredCommands }),
+    findContractDrift({ managementOperations, nativeOperations, englishMap, registeredCommands }),
     [],
   );
 });

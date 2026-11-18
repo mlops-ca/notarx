@@ -80,10 +80,10 @@ gateway_token() {
     python3 -c 'import json, sys; print(json.load(sys.stdin)["token"])'
 }
 create_hosted_repository() {
-  local format=$1 name=$2 key=$3 anonymous_read=${4:-false} response
+  local format=$1 name=$2 key=$3 visibility=${4:-private} response
   response=$(curl --silent --show-error --fail \
     -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" -H 'Content-Type: application/json' -H "Idempotency-Key: $key" \
-    --data "$(printf '{\"name\":\"%s\",\"format\":\"%s\",\"anonymousRead\":%s}' "$name" "$format" "$anonymous_read")" "$gateway_url/api/v2/repositories")
+    --data "$(printf '{\"name\":\"%s\",\"format\":\"%s\",\"visibility\":\"%s\"}' "$name" "$format" "$visibility")" "$gateway_url/api/v2/repositories")
   python3 -c 'import json, sys; print(json.load(sys.stdin)["id"])' <<<"$response"
 }
 enqueue_idempotently() {
@@ -349,7 +349,7 @@ status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}
   -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" --request POST "$gateway_url/api/v2/conan-publish-sessions/$conan_session_id:commit")
 [[ "$status" == 200 ]] || { printf 'Committing Conan publication returned HTTP %s.\n' "$status" >&2; exit 1; }
 
-go_source_id=$(create_hosted_repository go "$go_source_repository" "go-source-${run_id}" true)
+go_source_id=$(create_hosted_repository go "$go_source_repository" "go-source-${run_id}" public)
 go_archive="$go_workspace/$go_version.zip"
 write_go_module_zip "$go_archive" "$go_module_path" "$go_version" before-backup
 publish_go_module "$go_source_repository" "$go_module_path" "$go_version" "$go_archive"
@@ -467,11 +467,11 @@ status=$(curl --silent --show-error --output "$grant_response" --write-out '%{ht
 [[ "$status" == 200 && $(<"$grant_response") == 'grant restore artifact' ]] || {
   printf 'Managed grant allow before backup returned HTTP %s: %s\n' "$status" "$(<"$grant_response")" >&2; exit 1;
 }
-anonymous_policy=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$gateway_url/api/v2/anonymous-access-policy")
+anonymous_policy=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" "$gateway_url/api/v2/public-access-policy")
 anonymous_policy_version=$(python3 -c 'import json, sys; print(json.load(sys.stdin)["version"])' <<<"$anonymous_policy")
 curl --silent --show-error --fail -X PUT \
   -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" -H 'Content-Type: application/json' -H "If-Match: $anonymous_policy_version" \
-  --data "{\"version\":\"$anonymous_policy_version\",\"enabled\":true}" "$gateway_url/api/v2/anonymous-access-policy" >/dev/null
+  --data "{\"version\":\"$anonymous_policy_version\",\"enabled\":true}" "$gateway_url/api/v2/public-access-policy" >/dev/null
 assert_go_module_download "$go_source_repository" "$go_module_path" "$go_version" pre-backup
 conan_payload=$(printf '{"name":"%s","anonymous":true,"cacheQuotaBytes":1048576,"members":[{"name":"fixture","type":"hosted","endpoint":"http://host.docker.internal:9","position":0,"anonymous":true}]}' "$conan_group")
 status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \

@@ -13,11 +13,11 @@ import (
 
 func enableAnonymousAccess(t *testing.T, store *repository.MemoryStore) {
 	t.Helper()
-	policy, err := store.GetAnonymousAccessPolicy(context.Background())
+	policy, err := store.GetPublicAccessPolicy(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.ReplaceAnonymousAccessPolicy(context.Background(), repository.AnonymousAccessPolicy{Enabled: true}, policy.Version); err != nil {
+	if _, err := store.ReplacePublicAccessPolicy(context.Background(), repository.PublicAccessPolicy{Enabled: true}, policy.Version); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -55,7 +55,7 @@ func TestAnonymousPolicyRequiresGroupAndMember(t *testing.T) {
 
 func TestAnonymousHostedRepositoryReadRequiresGlobalPolicy(t *testing.T) {
 	store := repository.NewMemoryStore()
-	repo := repository.HostedRepository{State: repository.RepositoryActive, AnonymousRead: true}
+	repo := repository.HostedRepository{State: repository.RepositoryActive, Visibility: repository.VisibilityPublic}
 	if anonymousHostedRepositoryReadAllowed(context.Background(), store, repo, http.MethodGet) {
 		t.Fatal("repository policy bypassed disabled global policy")
 	}
@@ -126,7 +126,7 @@ func TestAnonymousPolicyAuditReasonValuesAreStable(t *testing.T) {
 
 func TestAnonymousConanPolicyNeverAllowsWrites(t *testing.T) {
 	store := repository.NewMemoryStore()
-	if _, err := store.ReplaceAnonymousAccessPolicy(context.Background(), repository.AnonymousAccessPolicy{Enabled: true}, "1"); err != nil {
+	if _, err := store.ReplacePublicAccessPolicy(context.Background(), repository.PublicAccessPolicy{Enabled: true}, "1"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.CreateConanGroup(context.Background(), repository.Group{Name: "public", Anonymous: true, Members: []repository.Member{{Name: "hosted", Type: repository.MemberHosted, Anonymous: true}}}); err != nil {

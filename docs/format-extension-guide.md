@@ -26,7 +26,7 @@ for every declared capability:
    promotion, and checkpointed replication before declaring those operations.
    Protocol-only formats must omit unsupported lifecycle operations rather than
    exposing placeholders.
-7. Apply repository grants, anonymous-read gates, audit fields, bounded metrics,
+7. Apply repository grants, visibility checks through `internal/access`, audit fields, bounded metrics,
    worker-format filtering, capacity, quota, backup, and recovery behaviour.
 8. Extend OpenAPI, generated Go/TypeScript clients, Console selectors, protocol
    compatibility documentation, unit/integration tests, and a black-box client

@@ -36,7 +36,7 @@ Progress update 2026-07-31:
   Orphan Collector.
 - Maven Proxy now supports forced refresh from upstream, upstream health/circuit
   status, and negative-cache clearing from the Repository detail surface.
-- V2 Repository and Group management now include `anonymousRead`; native OCI,
+- V2 Repository and Group management now include `visibility`; native OCI,
   Maven, and Raw protocol reads honour Repository policy, and V2 Groups only
   expose anonymous members whose backing Repository also allows anonymous read.
 - Deletion UX now covers OCI tag unlink, Maven version tombstones, Raw path
@@ -299,8 +299,8 @@ Anonymous must be an explicit managed policy, not an implicit bypass.
 Recommended model:
 
 - A global setting: `anonymousAccess.enabled`.
-- Per Repository setting: `anonymousRead.enabled`.
-- Per Group setting: `anonymousRead.enabled`.
+- Per Repository setting: `visibility`.
+- Per Group setting: `visibility`.
 - Optional per-member anonymous inclusion for Groups.
 - Optional resource prefix or content-selector support in a later phase.
 - Anonymous principal should appear consistently in audit as `anonymous`.

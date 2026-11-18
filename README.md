@@ -95,7 +95,7 @@ path. OCI uses `/v2/`. Retired Nexus `/repository/<name>/...` aliases return 404
 update client URLs and regenerate lockfiles that retain the old roots.
 
 Beyond protocol reads and writes, the current foundation includes repository
-grants, local users and OIDC, service accounts, anonymous-read policy, audit,
+grants, local users and OIDC, service accounts, repository visibility and the public-access gate, audit,
 search and browse, retention, recoverable deletion, promotion, replication,
 webhooks, scanner integration, quarantine, diagnostics, metrics, and backup /
 restore workflows. Each area is tracked from the [documentation index](docs/README.md).

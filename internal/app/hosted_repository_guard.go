@@ -11,7 +11,7 @@ import (
 // hostedRepositoryGuard prevents a Native Hosted Repository from falling back
 // into legacy Group resolution after it leaves the active state. Native
 // repositories are private by default; anonymous protocol reads are admitted
-// only when the addressed Hosted Repository explicitly enables anonymousRead.
+// only when the addressed Hosted Repository is explicitly marked public.
 type hostedRepositoryGuard struct {
 	store         repository.HostedRepositoryStore
 	authenticator Authenticator

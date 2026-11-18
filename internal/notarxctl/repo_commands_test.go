@@ -21,16 +21,16 @@ var updateGolden = flag.Bool("update", false, "rewrite the golden files under te
 const repoTestToken = "repo-test-token"
 
 type fakeRepository struct {
-	ID            string   `json:"id"`
-	Name          string   `json:"name"`
-	Format        string   `json:"format"`
-	Type          string   `json:"type"`
-	State         string   `json:"state"`
-	Version       string   `json:"version"`
-	AnonymousRead bool     `json:"anonymousRead"`
-	MavenStrict   bool     `json:"mavenStrictPublication"`
-	Endpoint      string   `json:"endpoint,omitempty"`
-	AllowedHosts  []string `json:"allowedHosts,omitempty"`
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	Format       string   `json:"format"`
+	Type         string   `json:"type"`
+	State        string   `json:"state"`
+	Version      string   `json:"version"`
+	Visibility   string   `json:"visibility"`
+	MavenStrict  bool     `json:"mavenStrictPublication"`
+	Endpoint     string   `json:"endpoint,omitempty"`
+	AllowedHosts []string `json:"allowedHosts,omitempty"`
 }
 
 type recordedRequest struct {
@@ -75,12 +75,13 @@ func (api *fakeRepositoryAPI) add(name, format, kind string) *fakeRepository {
 	api.mu.Lock()
 	defer api.mu.Unlock()
 	repo := &fakeRepository{
-		ID:      fmt.Sprintf("00000000-0000-4000-8000-%012d", len(api.repos)+1),
-		Name:    name,
-		Format:  format,
-		Type:    kind,
-		State:   "active",
-		Version: "1",
+		ID:         fmt.Sprintf("00000000-0000-4000-8000-%012d", len(api.repos)+1),
+		Name:       name,
+		Format:     format,
+		Type:       kind,
+		State:      "active",
+		Version:    "1",
+		Visibility: "private",
 	}
 	api.repos = append(api.repos, repo)
 	return repo
@@ -156,13 +157,13 @@ func (api *fakeRepositoryAPI) handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var change struct {
-			AnonymousRead *bool     `json:"anonymousRead"`
-			Endpoint      *string   `json:"endpoint"`
-			AllowedHosts  *[]string `json:"allowedHosts"`
+			Visibility   *string   `json:"visibility"`
+			Endpoint     *string   `json:"endpoint"`
+			AllowedHosts *[]string `json:"allowedHosts"`
 		}
 		_ = json.Unmarshal(body, &change)
-		if change.AnonymousRead != nil {
-			repo.AnonymousRead = *change.AnonymousRead
+		if change.Visibility != nil {
+			repo.Visibility = *change.Visibility
 		}
 		if change.Endpoint != nil {
 			repo.Endpoint = *change.Endpoint
@@ -458,7 +459,7 @@ func TestRepoWriteInvalidResponsePreservesRecovery(t *testing.T) {
 				var repo *fakeRepository
 				if operation == "update" {
 					repo = api.add("npm-hosted", "npm", "hosted")
-					args = []string{"repo", "update", repo.ID, "--anonymous-read", "--if-match", "1", "--json"}
+					args = []string{"repo", "update", repo.ID, "--visibility", "public", "--if-match", "1", "--json"}
 				}
 				code, stdout, _ := runCLI(t, args...)
 				envelope := decodeEnvelope(t, stdout)
@@ -477,7 +478,7 @@ func TestRepoWriteInvalidResponsePreservesRecovery(t *testing.T) {
 					t.Fatalf("an unreadable success response must not trigger another write: %+v", writes)
 				}
 				if operation == "update" {
-					if outcome.ID != repo.ID || outcome.ReadBack != "notarxctl repo show "+repo.ID || !repo.AnonymousRead || repo.Version != "2" {
+					if outcome.ID != repo.ID || outcome.ReadBack != "notarxctl repo show "+repo.ID || repo.Visibility != "public" || repo.Version != "2" {
 						t.Fatalf("update recovery = %+v, repository = %+v", outcome, repo)
 					}
 					return
@@ -534,22 +535,22 @@ func TestRepoUpdateUsesReadVersionAndNeverOverwritesOnConflict(t *testing.T) {
 	api := newFakeRepositoryAPI(t)
 	repo := api.add("npm-hosted", "npm", "hosted")
 
-	code, stdout, stderr := runCLI(t, "repo", "update", repo.ID, "--anonymous-read=true", "--json")
+	code, stdout, stderr := runCLI(t, "repo", "update", repo.ID, "--visibility", "public", "--json")
 	if code != ExitOK {
 		t.Fatalf("exit = %d, stdout = %s, stderr = %s", code, stdout, stderr)
 	}
 	writes := api.writes()
-	if len(writes) != 1 || writes[0].IfMatch != "1" || writes[0].Body != `{"anonymousRead":true}` {
+	if len(writes) != 1 || writes[0].IfMatch != "1" || writes[0].Body != `{"visibility":"public"}` {
 		t.Fatalf("writes = %+v", writes)
 	}
 
 	// A stale --if-match fails with 412 and leaves the repository unchanged.
-	code, stdout, _ = runCLI(t, "repo", "update", repo.ID, "--anonymous-read=false", "--if-match", "1", "--json")
+	code, stdout, _ = runCLI(t, "repo", "update", repo.ID, "--visibility", "private", "--if-match", "1", "--json")
 	envelope := decodeEnvelope(t, stdout)
 	if code != ExitConflict || envelope.Error.Code != "version_conflict" || !strings.Contains(envelope.Error.Hint, "was not updated") {
 		t.Fatalf("exit = %d, stdout = %s", code, stdout)
 	}
-	if !repo.AnonymousRead || repo.Version != "2" {
+	if repo.Visibility != "public" || repo.Version != "2" {
 		t.Fatalf("a 412 must not overwrite: %+v", repo)
 	}
 	if writes := api.writes(); len(writes) != 2 {
@@ -563,7 +564,7 @@ func TestRepoUpdateRequiresAChange(t *testing.T) {
 	if code, _, _ := runCLI(t, "repo", "update", repo.ID); code != ExitUsage {
 		t.Fatalf("exit = %d, want %d", code, ExitUsage)
 	}
-	if code, _, _ := runCLI(t, "repo", "update", repo.ID, "--anonymous-read", "--if-match", ""); code != ExitUsage {
+	if code, _, _ := runCLI(t, "repo", "update", repo.ID, "--visibility", "public", "--if-match", ""); code != ExitUsage {
 		t.Fatalf("empty --if-match exit = %d, want %d", code, ExitUsage)
 	}
 	if len(api.requests) != 0 {

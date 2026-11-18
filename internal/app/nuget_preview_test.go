@@ -47,7 +47,7 @@ func TestNuGetPreviewExplicitCompositionAndFormalDiscoveryBoundary(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	w := nugetGatewayRequest(t, h, "POST", "/api/v2/previews/nuget/repositories", `{"name":"preview","anonymousRead":true}`, true)
+	w := nugetGatewayRequest(t, h, "POST", "/api/v2/previews/nuget/repositories", `{"name":"preview","visibility":"public"}`, true)
 	var preview struct {
 		ID, SourceURL string
 		Preview       bool
@@ -55,11 +55,11 @@ func TestNuGetPreviewExplicitCompositionAndFormalDiscoveryBoundary(t *testing.T)
 	if w.Code != 201 || json.Unmarshal(w.Body.Bytes(), &preview) != nil || preview.ID == "" || !preview.Preview {
 		t.Fatalf("preview create=%d %s", w.Code, w.Body.String())
 	}
-	apt, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "apt-preview", Format: repository.FormatAPT, Type: repository.RepositoryTypeHosted, AnonymousRead: true})
+	apt, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "apt-preview", Format: repository.FormatAPT, Type: repository.RepositoryTypeHosted, Visibility: repository.VisibilityPublic})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = store.ReplaceAnonymousAccessPolicy(ctx, repository.AnonymousAccessPolicy{Enabled: true}, "1"); err != nil {
+	if _, err = store.ReplacePublicAccessPolicy(ctx, repository.PublicAccessPolicy{Enabled: true}, "1"); err != nil {
 		t.Fatal(err)
 	}
 	for _, endpoint := range []string{"/api/v2/repositories", "/api/v2/repositories?pageSize=1", "/api/v2/public/repositories", "/api/v2/formats"} {

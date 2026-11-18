@@ -26,7 +26,7 @@ const repository: Repository = {
   format: "raw",
   type: "hosted",
   allowedHosts: [],
-  anonymousRead: true,
+  visibility: "public",
   mavenStrictPublication: false,
   state: "active",
   version: "1",

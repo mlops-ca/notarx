@@ -233,7 +233,7 @@ func TestConanNativeTokenCannotCrossIntoAnonymousRepository(t *testing.T) {
 	f := newConanUploadFixture(t)
 	f.publish(t, "build-agent")
 	enableAnonymousAccess(t, f.store)
-	other, err := f.store.CreateHostedRepository(context.Background(), repository.HostedRepository{ID: uuid.NewString(), Name: "other-conan", Format: repository.FormatConan, AnonymousRead: true})
+	other, err := f.store.CreateHostedRepository(context.Background(), repository.HostedRepository{ID: uuid.NewString(), Name: "other-conan", Format: repository.FormatConan, Visibility: repository.VisibilityPublic})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -101,21 +101,21 @@ func TestPostgresRustFSCargoProxyOfficialOfflineReplay(t *testing.T) {
 	if err := objectsA.EnsureBucket(ctx); err != nil {
 		t.Fatal(err)
 	}
-	policy, err := storeA.GetAnonymousAccessPolicy(ctx)
+	policy, err := storeA.GetPublicAccessPolicy(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	enabled, err := storeA.ReplaceAnonymousAccessPolicy(ctx, repository.AnonymousAccessPolicy{Enabled: true}, policy.Version)
+	enabled, err := storeA.ReplacePublicAccessPolicy(ctx, repository.PublicAccessPolicy{Enabled: true}, policy.Version)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() {
-		if _, err := storeA.ReplaceAnonymousAccessPolicy(context.Background(), policy, enabled.Version); err != nil {
+		if _, err := storeA.ReplacePublicAccessPolicy(context.Background(), policy, enabled.Version); err != nil {
 			t.Errorf("restore anonymous access policy: %v", err)
 		}
 	}()
 	repo, err := storeA.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "cargo-official-" + uuid.NewString()[:8],
-		Format: repository.FormatCargo, Type: repository.RepositoryTypeProxy, Endpoint: upstream.URL, AnonymousRead: true})
+		Format: repository.FormatCargo, Type: repository.RepositoryTypeProxy, Endpoint: upstream.URL, Visibility: repository.VisibilityPublic})
 	if err != nil {
 		t.Fatal(err)
 	}

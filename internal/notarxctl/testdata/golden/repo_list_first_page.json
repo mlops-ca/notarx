@@ -4,24 +4,24 @@
   "data": {
     "items": [
       {
-        "anonymousRead": false,
         "format": "npm",
         "id": "00000000-0000-4000-8000-000000000001",
         "mavenStrictPublication": false,
         "name": "npm-hosted",
         "state": "active",
         "type": "hosted",
-        "version": "1"
+        "version": "1",
+        "visibility": "private"
       },
       {
-        "anonymousRead": false,
         "format": "raw",
         "id": "00000000-0000-4000-8000-000000000002",
         "mavenStrictPublication": false,
         "name": "raw-proxy",
         "state": "active",
         "type": "proxy",
-        "version": "1"
+        "version": "1",
+        "visibility": "private"
       }
     ],
     "nextCursor": "cursor-2"

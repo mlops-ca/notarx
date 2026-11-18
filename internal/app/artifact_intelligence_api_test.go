@@ -15,7 +15,7 @@ import (
 
 func TestArtifactIntelligenceManagementHTTP(t *testing.T) {
 	store := repository.NewMemoryStore()
-	repo, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{ID: "22222222-2222-2222-2222-222222222222", Name: "public-oci", Format: repository.FormatOCI, AnonymousRead: true})
+	repo, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{ID: "22222222-2222-2222-2222-222222222222", Name: "public-oci", Format: repository.FormatOCI, Visibility: repository.VisibilityPublic})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,7 +26,7 @@ func TestArtifactIntelligenceManagementHTTP(t *testing.T) {
 	}, "latest"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.ReplaceAnonymousAccessPolicy(context.Background(), repository.AnonymousAccessPolicy{Enabled: true}, "1"); err != nil {
+	if _, err := store.ReplacePublicAccessPolicy(context.Background(), repository.PublicAccessPolicy{Enabled: true}, "1"); err != nil {
 		t.Fatal(err)
 	}
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})

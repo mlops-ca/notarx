@@ -376,7 +376,7 @@ func TestRepositoryGrantReplacementWritesAudit(t *testing.T) {
 func TestRepositoryEffectiveAccessReportsPermissionsAndAnonymousPolicy(t *testing.T) {
 	store := repository.NewMemoryStore()
 	enableAnonymousAccess(t, store)
-	repo, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{ID: uuid.NewString(), Name: "effective-raw", Format: repository.FormatRaw, AnonymousRead: true})
+	repo, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{ID: uuid.NewString(), Name: "effective-raw", Format: repository.FormatRaw, Visibility: repository.VisibilityPublic})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -398,10 +398,10 @@ func TestRepositoryEffectiveAccessReportsPermissionsAndAnonymousPolicy(t *testin
 		Identity struct {
 			Kind string `json:"kind"`
 		} `json:"identity"`
-		AnonymousRead struct {
+		AnonymousAccess struct {
 			Allowed bool   `json:"allowed"`
 			Reason  string `json:"reason"`
-		} `json:"anonymousRead"`
+		} `json:"anonymousAccess"`
 		Permissions struct {
 			Read  struct{ Allowed bool } `json:"read"`
 			Write struct{ Allowed bool } `json:"write"`
@@ -411,7 +411,7 @@ func TestRepositoryEffectiveAccessReportsPermissionsAndAnonymousPolicy(t *testin
 	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 		t.Fatal(err)
 	}
-	if body.Actor != "reader" || body.Identity.Kind != "static_resolver" || !body.AnonymousRead.Allowed || body.AnonymousRead.Reason != "repository_anonymous_read_enabled" || !body.Permissions.Read.Allowed || body.Permissions.Write.Allowed || body.Permissions.Admin.Allowed {
+	if body.Actor != "reader" || body.Identity.Kind != "static_resolver" || !body.AnonymousAccess.Allowed || body.AnonymousAccess.Reason != "repository_anonymous_read_enabled" || !body.Permissions.Read.Allowed || body.Permissions.Write.Allowed || body.Permissions.Admin.Allowed {
 		t.Fatalf("effective access body=%#v", body)
 	}
 
@@ -450,7 +450,7 @@ func TestRepositoryEffectiveAccessReportsPermissionsAndAnonymousPolicy(t *testin
 	authorize(deleted, authenticator.IssueToken("reader"))
 	deletedResponse := httptest.NewRecorder()
 	handler.ServeHTTP(deletedResponse, deleted)
-	if deletedResponse.Code != http.StatusOK || !strings.Contains(deletedResponse.Body.String(), `"anonymousRead":{"allowed":false,"reason":"repository_not_active"`) {
+	if deletedResponse.Code != http.StatusOK || !strings.Contains(deletedResponse.Body.String(), `"anonymousAccess":{"allowed":false,"reason":"repository_not_active"`) {
 		t.Fatalf("deleted effective access = %d %s", deletedResponse.Code, deletedResponse.Body.String())
 	}
 }
@@ -576,7 +576,7 @@ func TestCurrentIdentityReportsSafeCredentialMetadata(t *testing.T) {
 func TestAnonymousRepositoryBrowseAllowsReadOnlyQueries(t *testing.T) {
 	store := repository.NewMemoryStore()
 	enableAnonymousAccess(t, store)
-	repo, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{ID: uuid.NewString(), Name: "public-oci", Format: repository.FormatOCI, AnonymousRead: true})
+	repo, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{ID: uuid.NewString(), Name: "public-oci", Format: repository.FormatOCI, Visibility: repository.VisibilityPublic})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -627,16 +627,16 @@ func TestGroupManagementAnonymousReadPolicyDefaultsAndUpdates(t *testing.T) {
 		t.Fatalf("create=%d body=%s", created.Code, created.Body.String())
 	}
 	var group repository.HostedGroup
-	if err := json.NewDecoder(created.Body).Decode(&group); err != nil || group.AnonymousRead {
+	if err := json.NewDecoder(created.Body).Decode(&group); err != nil || group.Visibility == repository.VisibilityPublic {
 		t.Fatalf("group=%#v err=%v", group, err)
 	}
 
-	replace := httptest.NewRequest(http.MethodPut, "/api/v2/groups/"+group.ID, strings.NewReader(`{"name":"group-policy","format":"raw","anonymousRead":true,"members":[{"repositoryId":"`+repo.ID+`","position":0}]}`))
+	replace := httptest.NewRequest(http.MethodPut, "/api/v2/groups/"+group.ID, strings.NewReader(`{"name":"group-policy","format":"raw","visibility":"public","members":[{"repositoryId":"`+repo.ID+`","position":0}]}`))
 	authorize(replace, "admin-secret")
 	replace.Header.Set("If-Match", "1")
 	replaced := httptest.NewRecorder()
 	handler.ServeHTTP(replaced, replace)
-	if replaced.Code != http.StatusOK || !strings.Contains(replaced.Body.String(), `"anonymousRead":true`) {
+	if replaced.Code != http.StatusOK || !strings.Contains(replaced.Body.String(), `"visibility":"public"`) {
 		t.Fatalf("replace=%d body=%s", replaced.Code, replaced.Body.String())
 	}
 
@@ -645,7 +645,7 @@ func TestGroupManagementAnonymousReadPolicyDefaultsAndUpdates(t *testing.T) {
 	membersOnly.Header.Set("If-Match", "2")
 	membersOnlyResponse := httptest.NewRecorder()
 	handler.ServeHTTP(membersOnlyResponse, membersOnly)
-	if membersOnlyResponse.Code != http.StatusOK || !strings.Contains(membersOnlyResponse.Body.String(), `"anonymousRead":true`) {
+	if membersOnlyResponse.Code != http.StatusOK || !strings.Contains(membersOnlyResponse.Body.String(), `"visibility":"public"`) {
 		t.Fatalf("members replace=%d body=%s", membersOnlyResponse.Code, membersOnlyResponse.Body.String())
 	}
 }

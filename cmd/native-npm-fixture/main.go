@@ -20,7 +20,7 @@ func main() {
 	store := repository.NewMemoryStore()
 	packages := repository.HostedRepository{
 		ID: uuid.NewString(), Name: "packages", Format: repository.FormatNPM,
-		Type: repository.RepositoryTypeHosted, AnonymousRead: true,
+		Type: repository.RepositoryTypeHosted, Visibility: repository.VisibilityPublic,
 	}
 	if endpoint := os.Getenv("NPM_PROXY_ENDPOINT"); endpoint != "" {
 		parsed, err := url.Parse(endpoint)
@@ -37,19 +37,19 @@ func main() {
 	if packages.Type == repository.RepositoryTypeProxy {
 		private := repository.HostedRepository{
 			ID: uuid.NewString(), Name: "private", Format: repository.FormatNPM,
-			Type: repository.RepositoryTypeHosted, AnonymousRead: true,
+			Type: repository.RepositoryTypeHosted, Visibility: repository.VisibilityPublic,
 		}
 		if _, err := store.CreateHostedRepository(ctx, private); err != nil {
 			log.Fatal(err)
 		}
 		if _, _, err := store.CreateHostedGroupIdempotently(ctx, repository.HostedGroup{
-			ID: uuid.NewString(), Name: "all-packages", Format: repository.FormatNPM, AnonymousRead: true,
+			ID: uuid.NewString(), Name: "all-packages", Format: repository.FormatNPM, Visibility: repository.VisibilityPublic,
 			Members: []repository.GroupMember{{RepositoryID: private.ID, Position: 0}, {RepositoryID: packages.ID, Position: 1}},
 		}, "native-npm-fixture", "all-packages", "all-packages"); err != nil {
 			log.Fatal(err)
 		}
 	}
-	if _, err := store.ReplaceAnonymousAccessPolicy(ctx, repository.AnonymousAccessPolicy{Enabled: true}, "1"); err != nil {
+	if _, err := store.ReplacePublicAccessPolicy(ctx, repository.PublicAccessPolicy{Enabled: true}, "1"); err != nil {
 		log.Fatal(err)
 	}
 	address := os.Getenv("LISTEN_ADDR")

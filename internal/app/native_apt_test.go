@@ -253,8 +253,8 @@ func newAPTProxyTestFixture(t *testing.T) aptProxyTestFixture {
 	}))
 	t.Cleanup(upstream.Close)
 	store := repository.NewMemoryStore()
-	_, _ = store.ReplaceAnonymousAccessPolicy(context.Background(), repository.AnonymousAccessPolicy{Enabled: true}, "1")
-	repo, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{ID: "apt-proxy", Name: "debian", Format: repository.FormatAPT, Type: repository.RepositoryTypeProxy, Endpoint: upstream.URL, AllowedHosts: []string{"127.0.0.1"}, AnonymousRead: true})
+	_, _ = store.ReplacePublicAccessPolicy(context.Background(), repository.PublicAccessPolicy{Enabled: true}, "1")
+	repo, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{ID: "apt-proxy", Name: "debian", Format: repository.FormatAPT, Type: repository.RepositoryTypeProxy, Endpoint: upstream.URL, AllowedHosts: []string{"127.0.0.1"}, Visibility: repository.VisibilityPublic})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -349,8 +349,8 @@ func TestNativeAPTProxyDoesNotForwardClientValidatorsToColdUpstream(t *testing.T
 	}))
 	defer upstream.Close()
 	store := repository.NewMemoryStore()
-	_, _ = store.ReplaceAnonymousAccessPolicy(context.Background(), repository.AnonymousAccessPolicy{Enabled: true}, "1")
-	repo, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{ID: "apt-cold", Name: "apt-cold", Format: repository.FormatAPT, Type: repository.RepositoryTypeProxy, Endpoint: upstream.URL, AllowedHosts: []string{"127.0.0.1"}, AnonymousRead: true})
+	_, _ = store.ReplacePublicAccessPolicy(context.Background(), repository.PublicAccessPolicy{Enabled: true}, "1")
+	repo, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{ID: "apt-cold", Name: "apt-cold", Format: repository.FormatAPT, Type: repository.RepositoryTypeProxy, Endpoint: upstream.URL, AllowedHosts: []string{"127.0.0.1"}, Visibility: repository.VisibilityPublic})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -430,7 +430,7 @@ func TestNativeAPTProxyAnonymousReadRequiresGlobalAndRepositoryPolicy(t *testing
 	store := repository.NewMemoryStore()
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "Origin: Debian\n") }))
 	defer upstream.Close()
-	repo, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{ID: "apt-public", Name: "apt-public", Format: repository.FormatAPT, Type: repository.RepositoryTypeProxy, Endpoint: upstream.URL, AllowedHosts: []string{"127.0.0.1"}, AnonymousRead: true})
+	repo, err := store.CreateHostedRepository(context.Background(), repository.HostedRepository{ID: "apt-public", Name: "apt-public", Format: repository.FormatAPT, Type: repository.RepositoryTypeProxy, Endpoint: upstream.URL, AllowedHosts: []string{"127.0.0.1"}, Visibility: repository.VisibilityPublic})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -441,7 +441,7 @@ func TestNativeAPTProxyAnonymousReadRequiresGlobalAndRepositoryPolicy(t *testing
 	if denied.Code != http.StatusUnauthorized {
 		t.Fatalf("global policy disabled=%d", denied.Code)
 	}
-	if _, err = store.ReplaceAnonymousAccessPolicy(context.Background(), repository.AnonymousAccessPolicy{Enabled: true}, "1"); err != nil {
+	if _, err = store.ReplacePublicAccessPolicy(context.Background(), repository.PublicAccessPolicy{Enabled: true}, "1"); err != nil {
 		t.Fatal(err)
 	}
 	allowed := httptest.NewRecorder()

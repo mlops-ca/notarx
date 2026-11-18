@@ -157,8 +157,8 @@ the contract's server base. Planned commands omit the leading `notarxctl`.
 | `GET /formats`<br>`listFormatProfiles` | `formats list` (info reuses the same read) | #125 | M0 | I | Q |
 | `GET /identity`<br>`getCurrentIdentity` | `auth whoami` (info reuses the same read) | #129 | M1 | I | Q |
 | `GET /artifact-search`<br>`searchArtifacts` | `artifact search --global` | #131 | M1 implemented | FR | Q |
-| `GET /anonymous-access-policy`<br>`getAnonymousAccessPolicy` | `access anonymous show` | #134 | M1 implemented | A | Q |
-| `PUT /anonymous-access-policy`<br>`replaceAnonymousAccessPolicy` | `access anonymous set` | #134 | M1 implemented | A | C |
+| `GET /public-access-policy`<br>`getPublicAccessPolicy` | `access public show` | #134 | M1 implemented | A | Q |
+| `PUT /public-access-policy`<br>`replacePublicAccessPolicy` | `access public set` | #134 | M1 implemented | A | C |
 | `GET /site-settings`<br>`getSiteSettings` | `site-settings show` (theme list reuses availableThemes) | #139 | M2 | PUBLIC | Q |
 | `PUT /site-settings`<br>`replaceSiteSettings` | `site-settings set` | #139 | M2 | A | C |
 | `POST /console-themes:validate`<br>`validateConsoleThemePackage` | `theme validate --remote` | #139 | M2 | A | W |

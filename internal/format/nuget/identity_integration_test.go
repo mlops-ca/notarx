@@ -44,10 +44,10 @@ func TestPostgresRustFSNuGetCredentialRotationAndRevocation(t *testing.T) {
 	// Keep global PostgreSQL settings untouched in the shared integration DB.
 	// This explicit policy port enables anonymous reads for this test's own repo.
 	anonymous := repository.NewMemoryStore()
-	if _, err = anonymous.ReplaceAnonymousAccessPolicy(ctx, repository.AnonymousAccessPolicy{Enabled: true}, "1"); err != nil {
+	if _, err = anonymous.ReplacePublicAccessPolicy(ctx, repository.PublicAccessPolicy{Enabled: true}, "1"); err != nil {
 		t.Fatal(err)
 	}
-	f.repo.AnonymousRead = true
+	f.repo.Visibility = repository.VisibilityPublic
 	if f.repo, err = store.UpdateHostedRepository(ctx, f.repo, f.repo.Version); err != nil {
 		t.Fatal(err)
 	}

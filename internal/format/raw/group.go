@@ -26,7 +26,7 @@ func (h *Module) serveGroup(w http.ResponseWriter, r *http.Request, group reposi
 	}
 	principal, authenticated := h.auth.Authenticate(r.Header.Get("Authorization"))
 	if !authenticated {
-		if group.AnonymousRead && (r.Method == http.MethodGet || r.Method == http.MethodHead) && h.groupRuntime.AnonymousAllowed(r.Context()) {
+		if group.Visibility == repository.VisibilityPublic && (r.Method == http.MethodGet || r.Method == http.MethodHead) && h.groupRuntime.AnonymousAllowed(r.Context()) {
 			principal = anonymousPrincipal()
 		} else {
 			w.Header().Set("WWW-Authenticate", `Basic realm="Artifact Gateway"`)
@@ -134,7 +134,7 @@ func (h *Module) blockQuarantinedRead(w http.ResponseWriter, r *http.Request, re
 }
 
 func anonymousMembers(group repository.HostedGroup, members []repository.Member) []repository.Member {
-	if !group.AnonymousRead {
+	if group.Visibility != repository.VisibilityPublic {
 		return nil
 	}
 	allowed := make([]repository.Member, 0, len(members))

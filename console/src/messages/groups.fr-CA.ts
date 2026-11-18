@@ -57,6 +57,9 @@ export const groupsFrCA: Record<keyof typeof groupsEnCA, string> = {
   "groups.access": "Accès",
   "groups.anonymousRead": "Lecture anonyme",
   "groups.private": "Privé",
+  "groups.publicGroups": "Groupes publics",
+  "groups.visibilityCeilingHelp":
+    "Un groupe est un plafond de visibilité : les appelants ne voient que les membres dont la visibilité propre les admet.",
   "groups.membersConfiguredOrder": "Membres (ordre configuré)",
   "groups.unknown": "inconnu",
   "groups.noMembers": "Aucun membre",

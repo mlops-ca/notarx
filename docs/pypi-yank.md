@@ -28,7 +28,7 @@ and all visible files with `filename`, `yanked`, `reason`, `digest`, and `size`.
 Its strong `ETag` is the quoted revision. The complete visible file membership
 participates in that revision: a concurrent upload, restore, yank or unyank
 invalidates an old selection. Read access follows the repository's existing
-read and explicit anonymous-read policy. PATCH requires an authenticated writer.
+read and explicit public visibility. PATCH requires an authenticated writer.
 
 Send one current `If-Match` and a JSON body:
 

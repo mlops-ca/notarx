@@ -71,7 +71,7 @@ func TestRepositoryOCIBearerConfigRoundTripAndIdempotency(t *testing.T) {
 	if configured.Code != http.StatusOK || configured.Header().Get("ETag") != "2" {
 		t.Fatalf("configure=%d body=%s", configured.Code, configured.Body.String())
 	}
-	kept := ociBearerManagementRequest(handler, http.MethodPatch, "/api/v2/repositories/"+response.ID, `{"anonymousRead":false}`, "2", "")
+	kept := ociBearerManagementRequest(handler, http.MethodPatch, "/api/v2/repositories/"+response.ID, `{"visibility":"private"}`, "2", "")
 	if kept.Code != http.StatusOK || !strings.Contains(kept.Body.String(), `"service":"next-service"`) {
 		t.Fatalf("omitted configuration=%d body=%s", kept.Code, kept.Body.String())
 	}

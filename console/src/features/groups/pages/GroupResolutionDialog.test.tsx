@@ -24,7 +24,7 @@ const group: Group = {
   id: "11111111-1111-4111-8111-111111111111",
   name: "raw-chain",
   format: "raw",
-  anonymousRead: false,
+  visibility: "private",
   members: [],
   version: "1",
 };

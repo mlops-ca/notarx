@@ -157,8 +157,8 @@ paths:
     "$ref": "./management/identity.yaml#/identity"
   "/artifact-search":
     "$ref": "./management/search.yaml#/artifact_search"
-  "/anonymous-access-policy":
-    "$ref": "./management/anonymous-access.yaml#/anonymous_access_policy"
+  "/public-access-policy":
+    "$ref": "./management/public-access.yaml#/public_access_policy"
   "/site-settings":
     "$ref": "./management/site-settings.yaml#/site_settings"
   "/console-themes:validate":
@@ -687,8 +687,8 @@ components:
       "$ref": "./components/schemas.yaml#/AuditList"
     AuditRetentionPolicy:
       "$ref": "./components/schemas.yaml#/AuditRetentionPolicy"
-    AnonymousAccessPolicy:
-      "$ref": "./components/schemas.yaml#/AnonymousAccessPolicy"
+    PublicAccessPolicy:
+      "$ref": "./components/schemas.yaml#/PublicAccessPolicy"
     SiteSettings:
       "$ref": "./components/schemas.yaml#/SiteSettings"
     SiteSettingsUpdate:
@@ -839,8 +839,8 @@ components:
       "$ref": "./components/responses.yaml#/AuditList"
     AuditRetentionPolicy:
       "$ref": "./components/responses.yaml#/AuditRetentionPolicy"
-    AnonymousAccessPolicy:
-      "$ref": "./components/responses.yaml#/AnonymousAccessPolicy"
+    PublicAccessPolicy:
+      "$ref": "./components/responses.yaml#/PublicAccessPolicy"
     SiteSettings:
       "$ref": "./components/responses.yaml#/SiteSettings"
     OIDCSettings:

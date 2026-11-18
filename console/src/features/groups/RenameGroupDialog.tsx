@@ -1,13 +1,14 @@
 import { useState } from "react";
-import { Button, Input, Space, Switch } from "antd";
+import { Button, Input, Space } from "antd";
 import { replaceGroup } from "../../client";
-import type { Group } from "../../client";
+import type { Group, Visibility } from "../../client";
 import { Field } from "../../components/ui/Layout";
 import { ErrorBanner } from "../../components/ui/Feedback";
 import { Modal } from "../../components/ui/Modal";
+import { VisibilitySelect } from "../../components/ui/VisibilitySelect";
 import { usePreferences } from "../../lib/preferences";
 
-/** Rename a group and change its anonymous read access. */
+/** Rename a group and change its read visibility. */
 export function RenameGroupDialog({
   group,
   open,
@@ -23,7 +24,7 @@ export function RenameGroupDialog({
 }) {
   const { t } = usePreferences();
   const [name, setName] = useState(group.name);
-  const [anonymousRead, setAnonymousRead] = useState(group.anonymousRead);
+  const [visibility, setVisibility] = useState<Visibility>(group.visibility);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
@@ -33,7 +34,7 @@ export function RenameGroupDialog({
     try {
       const { error: err } = await replaceGroup({
         path: { groupId: group.id },
-        body: { ...group, name: name.trim(), anonymousRead },
+        body: { ...group, name: name.trim(), visibility },
         headers: { "If-Match": group.version },
       });
       if (err) {
@@ -85,16 +86,16 @@ export function RenameGroupDialog({
           <div className="flex items-center justify-between gap-6 rounded-lg border border-line bg-surface-translucent px-3 py-2.5">
             <div>
               <div className="text-sm font-medium text-fg">
-                {t("groups.allowAnonymousReads")}
+                {t("repository.visibility")}
               </div>
               <div className="mt-0.5 text-xs text-fg-tertiary">
-                {t("groups.eachMemberRepositoryMustAlsoAllowAnonymousReads")}
+                {t("groups.visibilityCeilingHelp")}
               </div>
             </div>
-            <Switch
-              checked={anonymousRead}
-              onChange={setAnonymousRead}
-              aria-label={t("groups.allowAnonymousGroupReads")}
+            <VisibilitySelect
+              value={visibility}
+              onChange={setVisibility}
+              ariaLabel={t("repository.visibility")}
             />
           </div>
         </div>

@@ -33,7 +33,7 @@ type nativeCargoHandler struct {
 	auth               Authenticator
 	authorizer         RepositoryAuthorizer
 	audit              repository.Store
-	anonymous          repository.AnonymousAccessPolicyStore
+	anonymous          repository.PublicAccessPolicyStore
 	readPolicies       repository.RepositoryQuarantineReadPolicyStore
 	quarantine         repository.ArtifactQuarantineStore
 	tombstones         repository.ArtifactTombstoneStore

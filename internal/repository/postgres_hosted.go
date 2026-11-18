@@ -22,7 +22,7 @@ func (s *PostgresStore) CreateHostedRepository(ctx context.Context, repo HostedR
 	if err != nil {
 		return HostedRepository{}, err
 	}
-	err = s.db.QueryRowContext(ctx, `INSERT INTO hosted_repositories (id, name, format, repo_type, endpoint, allowed_hosts, anonymous_read, maven_strict_publication, state, version, egress_proxy, upstream_auth, oci_bearer) VALUES ($1,$2,$3,$4,$5,COALESCE($6::text[], '{}'::text[]),$7,$8,'active',1,$9,$10,$11) RETURNING state, version, created_at`, repo.ID, repo.Name, repo.Format, repo.Type, repo.Endpoint, repo.AllowedHosts, repo.AnonymousRead, repo.MavenStrictPublication, egressProxy, upstreamAuth, ociBearer).Scan(&repo.State, &repo.Version, &repo.CreatedAt)
+	err = s.db.QueryRowContext(ctx, `INSERT INTO hosted_repositories (id, name, format, repo_type, endpoint, allowed_hosts, visibility, maven_strict_publication, state, version, egress_proxy, upstream_auth, oci_bearer) VALUES ($1,$2,$3,$4,$5,COALESCE($6::text[], '{}'::text[]),$7,$8,'active',1,$9,$10,$11) RETURNING state, version, created_at`, repo.ID, repo.Name, repo.Format, repo.Type, repo.Endpoint, repo.AllowedHosts, repo.Visibility, repo.MavenStrictPublication, egressProxy, upstreamAuth, ociBearer).Scan(&repo.State, &repo.Version, &repo.CreatedAt)
 	if isUnique(err) {
 		return HostedRepository{}, ErrNameExists
 	}
@@ -81,7 +81,7 @@ func (s *PostgresStore) CreateHostedRepositoryIdempotently(ctx context.Context, 
 	if !errors.Is(err, sql.ErrNoRows) {
 		return HostedRepository{}, false, err
 	}
-	err = tx.QueryRowContext(ctx, `INSERT INTO hosted_repositories (id, name, format, repo_type, endpoint, allowed_hosts, anonymous_read, maven_strict_publication, state, version, egress_proxy, upstream_auth, oci_bearer) VALUES ($1,$2,$3,$4,$5,COALESCE($6::text[], '{}'::text[]),$7,$8,'active',1,$9,$10,$11) RETURNING state, version, created_at`, repo.ID, repo.Name, repo.Format, repo.Type, repo.Endpoint, repo.AllowedHosts, repo.AnonymousRead, repo.MavenStrictPublication, egressProxy, upstreamAuth, ociBearer).Scan(&repo.State, &repo.Version, &repo.CreatedAt)
+	err = tx.QueryRowContext(ctx, `INSERT INTO hosted_repositories (id, name, format, repo_type, endpoint, allowed_hosts, visibility, maven_strict_publication, state, version, egress_proxy, upstream_auth, oci_bearer) VALUES ($1,$2,$3,$4,$5,COALESCE($6::text[], '{}'::text[]),$7,$8,'active',1,$9,$10,$11) RETURNING state, version, created_at`, repo.ID, repo.Name, repo.Format, repo.Type, repo.Endpoint, repo.AllowedHosts, repo.Visibility, repo.MavenStrictPublication, egressProxy, upstreamAuth, ociBearer).Scan(&repo.State, &repo.Version, &repo.CreatedAt)
 	if isUnique(err) {
 		return HostedRepository{}, false, ErrNameExists
 	}
@@ -103,7 +103,7 @@ func (s *PostgresStore) CreateHostedRepositoryIdempotently(ctx context.Context, 
 // []byte and decodes into []string without a pq dependency.
 const getHostedRepositoryQuery = `SELECT ` + hostedRepositoryColumns + ` FROM hosted_repositories WHERE id=$1::uuid`
 
-const hostedRepositoryColumns = `id::text, name, format, repo_type, endpoint, array_to_json(allowed_hosts), anonymous_read, maven_strict_publication, state, version::text, created_at, egress_proxy, upstream_auth, oci_bearer`
+const hostedRepositoryColumns = `id::text, name, format, repo_type, endpoint, array_to_json(allowed_hosts), visibility, maven_strict_publication, state, version::text, created_at, egress_proxy, upstream_auth, oci_bearer`
 
 // marshalEgressProxy encodes the egress proxy configuration for the JSONB
 // column. The response-only CredentialsConfigured marker is never persisted.
@@ -150,7 +150,7 @@ func marshalOCIBearer(config *OCIBearer) (any, error) {
 
 func scanHostedRepository(row interface{ Scan(...any) error }, repo *HostedRepository) error {
 	var allowedHosts, egressProxy, upstreamAuth, ociBearer []byte
-	if err := row.Scan(&repo.ID, &repo.Name, &repo.Format, &repo.Type, &repo.Endpoint, &allowedHosts, &repo.AnonymousRead, &repo.MavenStrictPublication, &repo.State, &repo.Version, &repo.CreatedAt, &egressProxy, &upstreamAuth, &ociBearer); err != nil {
+	if err := row.Scan(&repo.ID, &repo.Name, &repo.Format, &repo.Type, &repo.Endpoint, &allowedHosts, &repo.Visibility, &repo.MavenStrictPublication, &repo.State, &repo.Version, &repo.CreatedAt, &egressProxy, &upstreamAuth, &ociBearer); err != nil {
 		return err
 	}
 	if err := json.Unmarshal(allowedHosts, &repo.AllowedHosts); err != nil {
@@ -299,7 +299,7 @@ func (s *PostgresStore) UpdateHostedRepository(ctx context.Context, repo HostedR
 		return HostedRepository{}, err
 	}
 	var updated HostedRepository
-	err = scanHostedRepository(s.db.QueryRowContext(ctx, `UPDATE hosted_repositories SET endpoint=$2, allowed_hosts=COALESCE($3::text[], '{}'::text[]), anonymous_read=$4, maven_strict_publication=$5, version=version+1, egress_proxy=$7, upstream_auth=$8, oci_bearer=$9 WHERE id=$1::uuid AND state='active' AND version=$6::text::bigint RETURNING `+hostedRepositoryColumns, repo.ID, repo.Endpoint, repo.AllowedHosts, repo.AnonymousRead, repo.MavenStrictPublication, expectedVersion, egressProxy, upstreamAuth, ociBearer), &updated)
+	err = scanHostedRepository(s.db.QueryRowContext(ctx, `UPDATE hosted_repositories SET endpoint=$2, allowed_hosts=COALESCE($3::text[], '{}'::text[]), visibility=$4, maven_strict_publication=$5, version=version+1, egress_proxy=$7, upstream_auth=$8, oci_bearer=$9 WHERE id=$1::uuid AND state='active' AND version=$6::text::bigint RETURNING `+hostedRepositoryColumns, repo.ID, repo.Endpoint, repo.AllowedHosts, repo.Visibility, repo.MavenStrictPublication, expectedVersion, egressProxy, upstreamAuth, ociBearer), &updated)
 	if errors.Is(err, sql.ErrNoRows) {
 		if _, getErr := s.GetHostedRepository(ctx, repo.ID); errors.Is(getErr, ErrNotFound) {
 			return HostedRepository{}, ErrNotFound
@@ -336,7 +336,7 @@ func (s *PostgresStore) getHostedGroup(ctx context.Context, query interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 }, id string) (HostedGroup, error) {
 	var group HostedGroup
-	err := query.QueryRowContext(ctx, `SELECT id::text, name, format, anonymous_read, version::text FROM hosted_groups WHERE id=$1::uuid`, id).Scan(&group.ID, &group.Name, &group.Format, &group.AnonymousRead, &group.Version)
+	err := query.QueryRowContext(ctx, `SELECT id::text, name, format, visibility, version::text FROM hosted_groups WHERE id=$1::uuid`, id).Scan(&group.ID, &group.Name, &group.Format, &group.Visibility, &group.Version)
 	if errors.Is(err, sql.ErrNoRows) {
 		return HostedGroup{}, ErrNotFound
 	}
@@ -350,6 +350,7 @@ func (s *PostgresStore) getHostedGroup(ctx context.Context, query interface {
 }
 
 func (s *PostgresStore) CreateHostedGroupIdempotently(ctx context.Context, group HostedGroup, actor, key, payload string) (HostedGroup, bool, error) {
+	group.Visibility = NormalizeVisibility(group.Visibility)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return HostedGroup{}, false, err
@@ -388,7 +389,7 @@ func (s *PostgresStore) CreateHostedGroupIdempotently(ctx context.Context, group
 			return HostedGroup{}, false, err
 		}
 	}
-	if err = tx.QueryRowContext(ctx, `INSERT INTO hosted_groups (id,name,format,anonymous_read,version) VALUES ($1,$2,$3,$4,1) RETURNING version::text`, group.ID, group.Name, group.Format, group.AnonymousRead).Scan(&group.Version); err != nil {
+	if err = tx.QueryRowContext(ctx, `INSERT INTO hosted_groups (id,name,format,visibility,version) VALUES ($1,$2,$3,$4,1) RETURNING version::text`, group.ID, group.Name, group.Format, group.Visibility).Scan(&group.Version); err != nil {
 		if isUnique(err) {
 			return HostedGroup{}, false, ErrNameExists
 		}
@@ -415,7 +416,7 @@ func (s *PostgresStore) ListHostedGroups(ctx context.Context, limit int, after s
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id::text, name, format, anonymous_read, version::text FROM hosted_groups WHERE ($1='' OR id>NULLIF($1,'')::uuid) ORDER BY id LIMIT $2`, after, limit+1)
+	rows, err := s.db.QueryContext(ctx, `SELECT id::text, name, format, visibility, version::text FROM hosted_groups WHERE ($1='' OR id>NULLIF($1,'')::uuid) ORDER BY id LIMIT $2`, after, limit+1)
 	if err != nil {
 		return nil, "", err
 	}
@@ -423,7 +424,7 @@ func (s *PostgresStore) ListHostedGroups(ctx context.Context, limit int, after s
 	groups := make([]HostedGroup, 0, limit)
 	for rows.Next() {
 		var group HostedGroup
-		if err := rows.Scan(&group.ID, &group.Name, &group.Format, &group.AnonymousRead, &group.Version); err != nil {
+		if err := rows.Scan(&group.ID, &group.Name, &group.Format, &group.Visibility, &group.Version); err != nil {
 			return nil, "", err
 		}
 		if err := scanHostedGroupMembers(ctx, s.db, &group); err != nil {
@@ -448,7 +449,7 @@ func (s *PostgresStore) GetHostedGroup(ctx context.Context, id string) (HostedGr
 
 func (s *PostgresStore) GetHostedGroupByName(ctx context.Context, name string) (HostedGroup, error) {
 	var group HostedGroup
-	err := s.db.QueryRowContext(ctx, `SELECT id::text, name, format, anonymous_read, version::text FROM hosted_groups WHERE name=$1`, name).Scan(&group.ID, &group.Name, &group.Format, &group.AnonymousRead, &group.Version)
+	err := s.db.QueryRowContext(ctx, `SELECT id::text, name, format, visibility, version::text FROM hosted_groups WHERE name=$1`, name).Scan(&group.ID, &group.Name, &group.Format, &group.Visibility, &group.Version)
 	if errors.Is(err, sql.ErrNoRows) {
 		return HostedGroup{}, ErrNotFound
 	}
@@ -461,7 +462,7 @@ func (s *PostgresStore) GetHostedGroupByName(ctx context.Context, name string) (
 	return group, nil
 }
 
-func (s *PostgresStore) replaceHostedGroup(ctx context.Context, id, name string, format Format, anonymousRead bool, members []GroupMember, expectedVersion string, replaceMetadata bool) (HostedGroup, error) {
+func (s *PostgresStore) replaceHostedGroup(ctx context.Context, id, name string, format Format, visibility Visibility, members []GroupMember, expectedVersion string, replaceMetadata bool) (HostedGroup, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return HostedGroup{}, err
@@ -479,12 +480,12 @@ func (s *PostgresStore) replaceHostedGroup(ctx context.Context, id, name string,
 	query := `UPDATE hosted_groups SET version=version+1`
 	args := []any{id, expectedVersion}
 	if replaceMetadata {
-		query += `, name=$3, format=$4, anonymous_read=$5`
-		args = []any{id, expectedVersion, name, format, anonymousRead}
+		query += `, name=$3, format=$4, visibility=$5`
+		args = []any{id, expectedVersion, name, format, visibility}
 	}
-	query += ` WHERE id=$1::uuid AND version=$2::text::bigint RETURNING id::text,name,format,anonymous_read,version::text`
+	query += ` WHERE id=$1::uuid AND version=$2::text::bigint RETURNING id::text,name,format,visibility,version::text`
 	var group HostedGroup
-	err = tx.QueryRowContext(ctx, query, args...).Scan(&group.ID, &group.Name, &group.Format, &group.AnonymousRead, &group.Version)
+	err = tx.QueryRowContext(ctx, query, args...).Scan(&group.ID, &group.Name, &group.Format, &group.Visibility, &group.Version)
 	if errors.Is(err, sql.ErrNoRows) {
 		if _, getErr := s.getHostedGroup(ctx, tx, id); errors.Is(getErr, ErrNotFound) {
 			return HostedGroup{}, ErrNotFound
@@ -515,14 +516,14 @@ func (s *PostgresStore) replaceHostedGroup(ctx context.Context, id, name string,
 }
 
 func (s *PostgresStore) ReplaceHostedGroup(ctx context.Context, group HostedGroup, expectedVersion string) (HostedGroup, error) {
-	return s.replaceHostedGroup(ctx, group.ID, group.Name, group.Format, group.AnonymousRead, group.Members, expectedVersion, true)
+	return s.replaceHostedGroup(ctx, group.ID, group.Name, group.Format, NormalizeVisibility(group.Visibility), group.Members, expectedVersion, true)
 }
 func (s *PostgresStore) ReplaceHostedGroupMembers(ctx context.Context, id string, members []GroupMember, expectedVersion string) (HostedGroup, error) {
 	current, err := s.GetHostedGroup(ctx, id)
 	if err != nil {
 		return HostedGroup{}, err
 	}
-	return s.replaceHostedGroup(ctx, id, current.Name, current.Format, current.AnonymousRead, members, expectedVersion, false)
+	return s.replaceHostedGroup(ctx, id, current.Name, current.Format, current.Visibility, members, expectedVersion, false)
 }
 func (s *PostgresStore) DeleteHostedGroup(ctx context.Context, id string) error {
 	result, err := s.db.ExecContext(ctx, `DELETE FROM hosted_groups WHERE id=$1::uuid`, id)

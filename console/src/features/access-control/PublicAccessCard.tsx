@@ -1,5 +1,5 @@
 import { Popconfirm, Switch } from "antd";
-import type { AnonymousAccessPolicy, Repository } from "../../client";
+import type { PublicAccessPolicy, Repository } from "../../client";
 import { Badge } from "../../components/ui/Badge";
 import { ErrorBanner, Notice } from "../../components/ui/Feedback";
 import { Card } from "../../components/ui/Layout";
@@ -15,7 +15,7 @@ export function PublicAccessCard({
   directoryError,
   onRetry,
 }: {
-  anonymousPolicy: AnonymousAccessPolicy | null;
+  anonymousPolicy: PublicAccessPolicy | null;
   loadError: unknown;
   canManageAnonymousPolicy: boolean;
   repositories: Repository[];
@@ -25,7 +25,7 @@ export function PublicAccessCard({
   const { t } = usePreferences();
   const repositoryCount = repositories.length;
   const publicRepositoryCount = repositories.filter(
-    (repository) => repository.anonymousRead,
+    (repository) => repository.visibility === "public",
   ).length;
   const replacePolicy = useReplaceAnonymousPolicy();
   const savingAnonymousPolicy = replacePolicy.isPending;

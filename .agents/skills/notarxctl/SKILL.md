@@ -145,7 +145,7 @@ notarxctl group resolution GROUP_ID --json
 notarxctl user create alice --role member --password-file ./alice-password --json
 notarxctl user sessions revoke USER_ID --all --yes --json
 notarxctl template apply TEMPLATE_ID --repo REPOSITORY_ID --dry-run --json
-notarxctl access anonymous show --json
+notarxctl access public show --json
 ```
 
 `member` grants no repository access by itself; repository access always

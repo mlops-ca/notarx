@@ -47,7 +47,7 @@ const source: Repository = {
   name: "staging",
   format: "maven",
   type: "hosted",
-  anonymousRead: false,
+  visibility: "private",
   mavenStrictPublication: false,
   state: "active",
   version: "1",

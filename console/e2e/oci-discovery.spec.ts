@@ -17,7 +17,7 @@ const repository: Repository = {
   type: "proxy",
   endpoint: "https://registry.example.test",
   allowedHosts: ["registry.example.test"],
-  anonymousRead: false,
+  visibility: "private",
   mavenStrictPublication: false,
   state: "active",
   version: "1",
@@ -27,7 +27,7 @@ const profile: FormatProfile = {
   format: "oci",
   repositoryTypes: ["hosted", "proxy"],
   groupSupported: true,
-  anonymousRead: true,
+  publicVisibility: true,
   hostedOperations: ["read", "publish", "browse"],
   proxyOperations: ["read", "browse"],
   ociDiscovery: {
@@ -91,7 +91,8 @@ for (const locale of ["en-CA"] as const) {
             json: {
               actor: "mock-admin",
               repository,
-              anonymousRead: { allowed: false },
+              visibility: "private",
+              anonymousAccess: { allowed: false },
               permissions: {
                 read: allowed,
                 write: allowed,

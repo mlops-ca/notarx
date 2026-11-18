@@ -21,7 +21,7 @@ import (
 var repositoryName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
 
 func repositoryDTO(repo repository.HostedRepository) any {
-	out := map[string]any{"id": repo.ID, "name": repo.Name, "format": "helm", "type": repo.Type, "preview": true, "version": repo.Version, "anonymousRead": repo.AnonymousRead, "sourceUrl": "/helm/" + url.PathEscape(repo.Name) + "/index.yaml", "provenanceTrust": "consumer-public-keyring"}
+	out := map[string]any{"id": repo.ID, "name": repo.Name, "format": "helm", "type": repo.Type, "preview": true, "version": repo.Version, "visibility": repo.Visibility, "sourceUrl": "/helm/" + url.PathEscape(repo.Name) + "/index.yaml", "provenanceTrust": "consumer-public-keyring"}
 	status := upstreamStatus{Scheme: repository.UpstreamAuthSchemeNone}
 	if repo.UpstreamAuth != nil {
 		status.Scheme = repo.UpstreamAuth.Scheme

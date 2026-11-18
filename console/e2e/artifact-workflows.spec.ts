@@ -51,13 +51,13 @@ test.beforeAll(async ({ request }) => {
       name: repositoryName,
       format: "raw",
       type: "hosted",
-      anonymousRead: true,
+      visibility: "public",
     },
   });
   await expectOK(create, "create Raw repository");
   repositoryId = (await create.json()).id as string;
 
-  const currentPolicy = await request.get("/api/v2/anonymous-access-policy", {
+  const currentPolicy = await request.get("/api/v2/public-access-policy", {
     headers: authorization(),
   });
   await expectOK(currentPolicy, "read anonymous policy");
@@ -67,7 +67,7 @@ test.beforeAll(async ({ request }) => {
   };
   anonymousPolicyWasEnabled = policy.enabled;
   if (!policy.enabled) {
-    const enable = await request.put("/api/v2/anonymous-access-policy", {
+    const enable = await request.put("/api/v2/public-access-policy", {
       headers: { ...authorization(), "If-Match": policy.version },
       data: { version: policy.version, enabled: true },
     });
@@ -106,13 +106,13 @@ test.afterAll(async ({ request }) => {
     );
   }
   if (!anonymousPolicyWasEnabled) {
-    const current = await request.get("/api/v2/anonymous-access-policy", {
+    const current = await request.get("/api/v2/public-access-policy", {
       headers: authorization(),
     });
     await expectOK(current, "read anonymous policy for cleanup");
     const policy = (await current.json()) as { version: string };
     await expectOK(
-      await request.put("/api/v2/anonymous-access-policy", {
+      await request.put("/api/v2/public-access-policy", {
         headers: { ...authorization(), "If-Match": policy.version },
         data: { version: policy.version, enabled: false },
       }),

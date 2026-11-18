@@ -29,7 +29,7 @@ const repository: Repository = {
     port: 8080,
     credentialsConfigured: true,
   },
-  anonymousRead: false,
+  visibility: "private",
   mavenStrictPublication: false,
   state: "active",
   version: "7",
@@ -133,7 +133,8 @@ async function mockSettings(
             type: "proxy",
             state: "active",
           },
-          anonymousRead: {
+          visibility: "private",
+          anonymousAccess: {
             allowed: false,
             source: "anonymous_policy",
             reason: "repository_anonymous_read_disabled",
