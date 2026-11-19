@@ -87,7 +87,7 @@ func testSAMLIdentityContract(t *testing.T, store interface {
 }, providerID, suffix string) {
 	t.Helper()
 	ctx := context.Background()
-	existing, err := store.CreateUser(ctx, User{Name: "ada-" + suffix, Email: "ada-" + suffix + "@example.test", Role: "member", State: UserActive})
+	existing, err := store.CreateUser(ctx, User{ID: ids.New(), Name: "ada-" + suffix, Email: "ada-" + suffix + "@example.test", Role: "member", State: UserActive})
 	if err != nil {
 		t.Fatal(err)
 	}

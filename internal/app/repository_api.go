@@ -513,7 +513,7 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	mux.HandleFunc("GET /auth/idp", oidcLogin.providers)
 	mux.HandleFunc("GET /auth/oidc/{slug}/login", oidcLogin.start)
 	mux.HandleFunc("GET /auth/oidc/{slug}/callback", oidcLogin.callback)
-	samlLogin := samlLoginHandler{runtime: dependencies.IdentityRuntime, authenticator: authenticator, identities: store, sessions: store, audit: store}
+	samlLogin := samlLoginHandler{runtime: dependencies.IdentityRuntime, authenticator: authenticator, identities: store, sessions: store, audit: store, limiter: &samlRateLimiter{}}
 	mux.HandleFunc("GET /auth/saml/{slug}/login", samlLogin.start)
 	mux.HandleFunc("POST /auth/saml/{slug}/acs", samlLogin.acs)
 	mux.HandleFunc("GET /auth/saml/{slug}/metadata", samlLogin.metadata)

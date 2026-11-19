@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"net/url"
 	"slices"
@@ -30,6 +31,17 @@ type samlLoginHandler struct {
 	identities    repository.UserIdentityStore
 	sessions      repository.UserSessionStore
 	audit         samlAuditor
+	limiter       *samlRateLimiter
+}
+
+// limited reports whether the client has used up its anonymous SAML budget.
+func (h samlLoginHandler) limited(r *http.Request) bool {
+	// The peer address, not X-Forwarded-For: a client-supplied header would let one caller dodge the budget or fill the table.
+	peer := strings.TrimSpace(r.RemoteAddr)
+	if host, _, err := net.SplitHostPort(peer); err == nil {
+		peer = host
+	}
+	return h.limiter != nil && !h.limiter.allow(peer, h.runtimeNow())
 }
 
 // samlFlowState is the signed flow cookie. It binds the browser to one AuthnRequest: the request ID
@@ -57,6 +69,11 @@ func (h samlLoginHandler) start(w http.ResponseWriter, r *http.Request) {
 		writeHostedProblem(w, http.StatusNotFound, "not_found", "SAML login is not configured")
 		return
 	}
+	if h.limited(r) {
+		w.Header().Set("Retry-After", "60")
+		writeHostedProblem(w, http.StatusTooManyRequests, "rate_limited", "too many sign-in attempts; try again shortly")
+		return
+	}
 	provider, err := runtime.SAMLBrowser(r.Context(), r.PathValue("slug"))
 	switch {
 	case errors.Is(err, errProviderNotFound):
@@ -82,8 +99,9 @@ func (h samlLoginHandler) start(w http.ResponseWriter, r *http.Request) {
 		SP: provider.endpoints, RequestID: saml.RequestIDFor(stateID), RelayState: relay,
 	}
 	if provider.settings.SignRequests {
-		key, ok := provider.keys.Signing()
-		if !ok {
+		keys, err := runtime.spKeys(provider.provider)
+		key, ok := keys.Signing()
+		if err != nil || !ok {
 			writeHostedProblem(w, http.StatusServiceUnavailable, "saml_unavailable", "SAML login is unavailable")
 			return
 		}
@@ -128,7 +146,12 @@ func (h samlLoginHandler) metadata(w http.ResponseWriter, r *http.Request) {
 		writeHostedProblem(w, http.StatusServiceUnavailable, "saml_unavailable", "SAML metadata is unavailable")
 		return
 	}
-	body, err := saml.SPMetadata(provider.endpoints, provider.settings.NameIDFormat, provider.settings.SignRequests, provider.keys)
+	keys, err := runtime.spKeys(provider.provider)
+	if err != nil {
+		writeHostedProblem(w, http.StatusServiceUnavailable, "saml_unavailable", "SAML metadata is unavailable")
+		return
+	}
+	body, err := saml.SPMetadata(provider.endpoints, provider.settings.NameIDFormat, provider.settings.SignRequests, keys)
 	if err != nil {
 		writeHostedProblem(w, http.StatusServiceUnavailable, "saml_unavailable", "SAML metadata is unavailable")
 		return
@@ -145,6 +168,10 @@ func (h samlLoginHandler) acs(w http.ResponseWriter, r *http.Request) {
 	runtime, ok := h.ready()
 	if !ok {
 		writeHostedProblem(w, http.StatusNotFound, "not_found", "SAML login is not configured")
+		return
+	}
+	if h.limited(r) {
+		h.fail(w, r, slug, "rate_limited", "rate_limited")
 		return
 	}
 	provider, err := runtime.SAMLBrowser(r.Context(), slug)
@@ -307,9 +334,20 @@ func (h samlLoginHandler) runtimeNow() time.Time {
 	return time.Now().UTC()
 }
 
+// samlInfrastructureReasons are the audit reasons caused by a failing dependency instead of a refused response.
+var samlInfrastructureReasons = map[string]bool{
+	"provider_unavailable": true, "state_store_unavailable": true, "replay_store_unavailable": true,
+	"store_unavailable": true, "identity_store_error": true, "session_store_error": true,
+}
+
 // fail redirects to the console with a generic code and audits the precise reason.
 func (h samlLoginHandler) fail(w http.ResponseWriter, r *http.Request, slug, code, reason string) {
-	h.record(r, slug, "saml:"+slug, repository.AuditAccessDenied, http.StatusFound, reason)
+	outcome := repository.AuditAccessDenied
+	if samlInfrastructureReasons[reason] {
+		// A store outage is not a denial: keep it out of the access-denied counts that alerting reads.
+		outcome = repository.AuditStorageError
+	}
+	h.record(r, slug, "saml:"+slug, outcome, http.StatusFound, reason)
 	values := url.Values{"oidc_error": {code}}
 	http.Redirect(w, r, "/login?"+values.Encode(), http.StatusFound)
 }

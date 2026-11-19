@@ -16,6 +16,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/identity"
 	"github.com/mlops-ca/notarx/internal/identity/saml"
 	"github.com/mlops-ca/notarx/internal/identity/saml/samltest"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/secrets"
 )
@@ -281,5 +282,240 @@ func TestSAMLEndpointsNeedAPublicURL(t *testing.T) {
 	}
 	if view := runtime.SAMLView(identity.Provider{Slug: "corp"}); view.Endpoints.ACSURL != "" || len(view.Keys) != 0 {
 		t.Fatalf("view = %+v", view)
+	}
+}
+
+type auditCapturingStore struct {
+	*repository.MemoryStore
+	audits []repository.AuditRecord
+}
+
+func (s *auditCapturingStore) ReplaceIdentityProvider(ctx context.Context, provider identity.Provider, version int64, audit ...repository.AuditRecord) (identity.Provider, error) {
+	s.audits = append(s.audits, audit...)
+	return s.MemoryStore.ReplaceIdentityProvider(ctx, provider, version, audit...)
+}
+
+func TestSAMLMetadataRefreshIsAuditedAndSurvivesTheCertificateCap(t *testing.T) {
+	t.Setenv(secrets.KeyEnv, "0123456789abcdef0123456789abcdef")
+	store := &auditCapturingStore{MemoryStore: repository.NewMemoryStore()}
+	runtime := NewIdentityRuntime(store)
+	next := samltest.NewRSAKey(t, "next")
+	fetcher := &stubFetcher{body: idpMetadata(samlTestEntityID, "https://idp.example.test/sso", next)}
+	runtime.ConfigureSAML(SAMLRuntimeOptions{Config: config.DefaultSAMLConfig(), State: store, Fetcher: fetcher, Now: func() time.Time { return samlTestNow }})
+	// Eight pinned certificates, seven of them already expired: the new one must still fit.
+	var pinned []identity.SAMLCertificate
+	for i := range identity.MaxSAMLCertificates {
+		key := samltest.NewRSAKey(t, "old")
+		entry := identity.SAMLCertificate{PEM: saml.CertificatePEM(key.Cert)}
+		if i > 0 {
+			entry.NotAfter = samlTestNow.Add(-time.Hour)
+		}
+		pinned = append(pinned, entry)
+	}
+	provider, err := runtime.Create(t.Context(), IdentityProviderInput{
+		Slug: "full", Kind: identity.KindSAML, DisplayName: "Full",
+		SAML: &identity.SAMLSettings{EntityID: samlTestEntityID, SSOURL: "https://idp.example.test/sso", Certificates: pinned, MetadataURL: "https://idp.example.test/m", MetadataRefresh: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Normalisation derives notAfter from the PEM (ten years out), so mark seven as expired in the stored settings.
+	settings, _ := provider.SAML()
+	for i := 1; i < len(settings.Certificates); i++ {
+		settings.Certificates[i].NotAfter = samlTestNow.Add(-time.Hour)
+	}
+	stored, _ := provider.WithSAML(settings)
+	if _, err := store.MemoryStore.ReplaceIdentityProvider(t.Context(), stored, provider.Version); err != nil {
+		t.Fatal(err)
+	}
+	runtime.invalidate()
+	runtime.RefreshSAMLMetadata(t.Context())
+	if len(store.audits) != 1 || store.audits[0].Operation != "authentication.provider.refresh-metadata" || store.audits[0].Actor != "system:saml-metadata-refresh" || store.audits[0].Class != repository.AuditClassSync {
+		t.Fatalf("audits = %+v", store.audits)
+	}
+	refreshed, _ := runtime.Get(t.Context(), provider.ID)
+	after, _ := refreshed.SAML()
+	if len(after.Certificates) != 2 || after.Certificates[1].State != identity.SAMLCertificateNext {
+		t.Fatalf("certificates after refresh = %d", len(after.Certificates))
+	}
+}
+
+func TestSAMLChooserHidesProvidersUntilSAMLIsReady(t *testing.T) {
+	f := newSAMLFixture(t, nil)
+	public, err := f.runtime.Public(t.Context())
+	if err != nil || len(public) != 1 || public[0].Kind != identity.KindSAML {
+		t.Fatalf("ready = %+v, %v", public, err)
+	}
+	f.runtime.saml.publicURL = nil
+	f.runtime.invalidate()
+	if public, _ := f.runtime.Public(t.Context()); len(public) != 0 {
+		t.Fatalf("without NOTARX_PUBLIC_URL the chooser lists %+v", public)
+	}
+}
+
+func TestSAMLKeySetsAreCachedPerProviderVersion(t *testing.T) {
+	t.Setenv(secrets.KeyEnv, "0123456789abcdef0123456789abcdef")
+	runtime := NewIdentityRuntime(repository.NewMemoryStore())
+	keys, err := saml.SPKeySet{}.Rotated("corp", samlTestNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealed, _ := keys.Seal()
+	provider := identity.Provider{ID: "p", Version: 1, SecretsSealed: sealed}
+	first, err := runtime.spKeys(provider)
+	if err != nil || len(first.Keys) != 1 {
+		t.Fatalf("first = %+v, %v", first, err)
+	}
+	// The same (id, version) is served from the cache even if the ciphertext is no longer readable.
+	t.Setenv(secrets.KeyEnv, "fedcba9876543210fedcba9876543210")
+	if again, err := runtime.spKeys(provider); err != nil || again.Keys[0].ID != first.Keys[0].ID {
+		t.Fatalf("cached = %+v, %v", again, err)
+	}
+	provider.Version = 2
+	if _, err := runtime.spKeys(provider); err == nil {
+		t.Fatal("a new version must reopen the sealed set, which the changed key cannot read")
+	}
+}
+
+func TestMergeSAMLMetadataRefusesBadMetadata(t *testing.T) {
+	provider, err := identity.Provider{Slug: "corp", Kind: identity.KindSAML, DisplayName: "Corp"}.WithSAML(identity.SAMLSettings{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, raw := range []string{"<<", "", `<a xmlns="urn:x"/>`} {
+		if _, err := mergeSAMLMetadata(provider, []byte(raw), "", samlTestNow); !errors.Is(err, identity.ErrInvalid) {
+			t.Fatalf("%q = %v, want an invalid-provider error", raw, err)
+		}
+	}
+}
+
+func TestSAMLAdminLinkLetsAnExistingAccountSignIn(t *testing.T) {
+	f := newSAMLFixture(t, func(in *IdentityProviderInput) { in.ProvisioningMode = identity.ProvisioningDisabled })
+	user, err := f.store.CreateUser(t.Context(), repository.User{ID: ids.New(), Name: "grace", Email: "grace@example.test", Role: "member", State: repository.UserActive})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{IdentityRuntime: f.runtime}, Store: f.store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
+	link := func(body string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodPost, "/api/v2/users/"+user.ID+"/identities", strings.NewReader(body))
+		authorize(request, "admin-secret")
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+		return recorder
+	}
+	if response := link(`{"issuer":"https://elsewhere.example.test/","subject":"G-1","providerId":"` + f.provider.ID + `"}`); response.Code != http.StatusBadRequest {
+		t.Fatalf("an issuer that is not the entity id = %d %s", response.Code, response.Body.String())
+	}
+	response := link(`{"issuer":"` + samlTestEntityID + `","subject":"G-1"}`)
+	if response.Code != http.StatusCreated || !strings.Contains(response.Body.String(), `"kind":"saml"`) {
+		t.Fatalf("link by entity id = %d %s", response.Code, response.Body.String())
+	}
+	login := f.begin("/")
+	params := redirectParams(t, f.post(&login, f.response(samltest.Response{RequestID: login.requestID, NameID: "G-1"}), login.relay))
+	if params.Get("oidc") != "success" {
+		t.Fatalf("the linked account must sign in: %v", params)
+	}
+	if page, _ := f.store.ListUsers(t.Context(), repository.UserListQuery{Limit: 10}); page.Total != 1 {
+		t.Fatalf("users = %d, the sign-in must reuse the linked account", page.Total)
+	}
+}
+
+func TestSAMLMetadataImportAcceptsLargePastedXML(t *testing.T) {
+	key := samltest.NewRSAKey(t, "idp")
+	handler, _, _ := samlManagementGateway(t, &stubFetcher{})
+	create := `{"slug":"big","kind":"saml","displayName":"Big","enabled":false,"saml":{"entityId":"","ssoUrl":"","certificates":[]}}`
+	created := callManagement(t, handler, http.MethodPost, "/authentication/providers", create, "")
+	var view struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal(created.Body.Bytes(), &view)
+	padded := strings.Replace(string(idpMetadata(samlTestEntityID, "https://idp.example.test/sso", key)), "<md:IDPSSODescriptor>", "<!-- "+strings.Repeat("x", 200<<10)+" --><md:IDPSSODescriptor>", 1)
+	body, _ := json.Marshal(map[string]string{"xml": padded})
+	if response := callManagement(t, handler, http.MethodPost, "/authentication/providers/"+view.ID+":import-metadata", string(body), ""); response.Code != http.StatusOK {
+		t.Fatalf("200 KiB of metadata = %d %s", response.Code, response.Body.String())
+	}
+}
+
+type failingStateStore struct{ repository.SAMLStateStore }
+
+func (failingStateStore) ConsumeSAMLRequestState(context.Context, string, string, time.Time) (bool, error) {
+	return false, errors.New("database down")
+}
+
+func TestSAMLStoreOutagesAreNotAuditedAsDenials(t *testing.T) {
+	f := newSAMLFixture(t, nil)
+	login := f.begin("/")
+	f.runtime.saml.state = failingStateStore{SAMLStateStore: f.store}
+	params := redirectParams(t, f.post(&login, f.response(samltest.Response{RequestID: login.requestID}), login.relay))
+	if params.Get("oidc_error") != "identity_unavailable" {
+		t.Fatalf("params = %v", params)
+	}
+	record := f.audit.records[len(f.audit.records)-1]
+	if record.Outcome != repository.AuditStorageError || record.AuthorizationReason != "state_store_unavailable" {
+		t.Fatalf("record = %+v", record)
+	}
+}
+
+func TestSAMLRateLimiter(t *testing.T) {
+	limiter := &samlRateLimiter{}
+	now := samlTestNow
+	for i := range samlRateBurst {
+		if !limiter.allow("a", now) {
+			t.Fatalf("call %d refused inside the burst", i)
+		}
+	}
+	if limiter.allow("a", now) {
+		t.Fatal("the burst was exceeded")
+	}
+	if !limiter.allow("b", now) {
+		t.Fatal("clients have separate budgets")
+	}
+	if !limiter.allow("a", now.Add(samlRateWindow/samlRateBurst+time.Millisecond)) {
+		t.Fatal("tokens refill over time")
+	}
+	// A full table refuses new clients but keeps serving the tracked ones, and idle entries make room.
+	full := &samlRateLimiter{buckets: map[string]samlBucket{}}
+	for i := range samlRateMaxClients {
+		full.buckets[strings.Repeat("x", 1)+string(rune('a'+i%26))+strings.Repeat("y", i/26)] = samlBucket{tokens: 5, seen: now}
+	}
+	if full.allow("new-client", now) {
+		t.Fatal("a new client was admitted to a full table of active clients")
+	}
+	if !full.allow("new-client", now.Add(2*samlRateWindow)) {
+		t.Fatal("idle entries must be evicted to admit a new client")
+	}
+}
+
+func TestSAMLLoginIsRateLimitedPerPeer(t *testing.T) {
+	f := newSAMLFixture(t, nil)
+	f.handler.limiter = &samlRateLimiter{}
+	call := func() int {
+		request := httptest.NewRequest(http.MethodGet, "/auth/saml/corp/login", nil)
+		request.SetPathValue("slug", "corp")
+		request.RemoteAddr = "203.0.113.7:4444"
+		// A forged forwarding header must not buy a fresh budget.
+		request.Header.Set("X-Forwarded-For", "198.51.100."+strings.Repeat("1", 1))
+		recorder := httptest.NewRecorder()
+		f.handler.start(recorder, request)
+		return recorder.Code
+	}
+	for i := range samlRateBurst {
+		if code := call(); code != http.StatusFound {
+			t.Fatalf("call %d = %d", i, code)
+		}
+	}
+	if code := call(); code != http.StatusTooManyRequests {
+		t.Fatalf("over the budget = %d", code)
+	}
+	// The ACS refuses with the console error code instead of a JSON problem.
+	form := url.Values{"SAMLResponse": {"x"}}
+	request := httptest.NewRequest(http.MethodPost, "/auth/saml/corp/acs", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.SetPathValue("slug", "corp")
+	request.RemoteAddr = "203.0.113.7:4444"
+	recorder := httptest.NewRecorder()
+	f.handler.acs(recorder, request)
+	if params := redirectParams(t, recorder); params.Get("oidc_error") != "rate_limited" {
+		t.Fatalf("acs = %v", params)
 	}
 }

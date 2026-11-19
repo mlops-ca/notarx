@@ -18,6 +18,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/identity"
 	"github.com/mlops-ca/notarx/internal/identity/saml"
 	"github.com/mlops-ca/notarx/internal/identity/saml/samltest"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/secrets"
 )
@@ -362,7 +363,7 @@ func TestSAMLProvisioningRules(t *testing.T) {
 	})
 	t.Run("an asserted email never links an existing account", func(t *testing.T) {
 		f := newSAMLFixture(t, func(in *IdentityProviderInput) { in.EmailLinkingEnabled = true })
-		if _, err := f.store.CreateUser(t.Context(), repository.User{Name: "ada", Email: "ada@example.test", Role: "member", State: repository.UserActive}); err != nil {
+		if _, err := f.store.CreateUser(t.Context(), repository.User{ID: ids.New(), Name: "ada", Email: "ada@example.test", Role: "member", State: repository.UserActive}); err != nil {
 			t.Fatal(err)
 		}
 		login := f.begin("/")

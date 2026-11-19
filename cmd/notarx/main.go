@@ -252,7 +252,10 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 		// secret) must not stop the Gateway: providers can still be added through the API.
 		slog.Warn("seed the default OIDC identity provider from NOTARX_OIDC_* failed", "error", err)
 	}
-	publicURL, _ := cfg.PublicURL()
+	publicURL, hasPublicURL := cfg.PublicURL()
+	if !hasPublicURL {
+		slog.Info("NOTARX_PUBLIC_URL is not set: SAML providers are hidden from the login chooser and their routes answer 503")
+	}
 	identityRuntime.ConfigureSAML(app.SAMLRuntimeOptions{Config: cfg.SAML, PublicURL: publicURL, State: store})
 	dependencies.IdentityRuntime = identityRuntime
 	dependencies.AuditReadSync = cfg.AuditReadMode == "sync"

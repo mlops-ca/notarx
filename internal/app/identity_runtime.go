@@ -100,6 +100,7 @@ type IdentityRuntime struct {
 	generation uint64 // bumped by invalidate so an in-flight refresh cannot store a stale list
 	states     map[stateKey]*oidcProviderState
 	saml       samlRuntime
+	spKeySets  map[stateKey]saml.SPKeySet
 }
 
 func NewIdentityRuntime(store repository.IdentityProviderStore) *IdentityRuntime {
@@ -163,6 +164,11 @@ func (o *IdentityRuntime) cached(ctx context.Context) ([]identity.Provider, erro
 			delete(o.states, key)
 		}
 	}
+	for key := range o.spKeySets {
+		if !live[key] {
+			delete(o.spKeySets, key)
+		}
+	}
 	return providers, nil
 }
 
@@ -174,7 +180,7 @@ func (o *IdentityRuntime) Public(ctx context.Context) ([]PublicIdentityProvider,
 	}
 	public := make([]PublicIdentityProvider, 0, len(providers))
 	for _, provider := range providers {
-		if provider.Enabled && canStartBrowserLogin(provider) {
+		if provider.Enabled && canStartBrowserLogin(provider) && (provider.Kind != identity.KindSAML || o.samlReady()) {
 			public = append(public, PublicIdentityProvider{Slug: provider.Slug, DisplayName: provider.DisplayName, Kind: provider.Kind})
 		}
 	}

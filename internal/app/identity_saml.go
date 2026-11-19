@@ -2,10 +2,13 @@ package app
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"net/url"
+	"slices"
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/config"
@@ -75,11 +78,38 @@ func (o *IdentityRuntime) SAMLEndpoints(slug string) (saml.SPEndpoints, bool) {
 	return saml.EndpointsFor(o.saml.publicURL, slug), true
 }
 
+// spKeys opens the sealed service provider key set of a provider, cached by (id, version) like the OIDC
+// provider state so the decryption and key parsing do not repeat on every login or metadata request.
+func (o *IdentityRuntime) spKeys(provider identity.Provider) (saml.SPKeySet, error) {
+	key := stateKey{provider.ID, provider.Version}
+	o.mu.Lock()
+	keys, ok := o.spKeySets[key]
+	o.mu.Unlock()
+	if ok {
+		return keys, nil
+	}
+	keys, err := saml.OpenSPKeySet(provider.SecretsSealed)
+	if err != nil {
+		return saml.SPKeySet{}, err
+	}
+	o.mu.Lock()
+	if o.spKeySets == nil {
+		o.spKeySets = map[stateKey]saml.SPKeySet{}
+	}
+	o.spKeySets[key] = keys
+	o.mu.Unlock()
+	return keys, nil
+}
+
+// samlReady reports whether the SAML routes can serve: the public URL derives every endpoint and the
+// request-state store makes the flow single use. Without them the chooser must not offer SAML providers.
+func (o *IdentityRuntime) samlReady() bool { return o.saml.publicURL != nil && o.saml.state != nil }
+
 // SAMLView returns the derived fields of a SAML provider.
 func (o *IdentityRuntime) SAMLView(provider identity.Provider) SAMLView {
 	var view SAMLView
 	view.Endpoints, _ = o.SAMLEndpoints(provider.Slug)
-	if keys, err := saml.OpenSPKeySet(provider.SecretsSealed); err == nil {
+	if keys, err := o.spKeys(provider); err == nil {
 		for _, key := range keys.Keys {
 			view.Keys = append(view.Keys, SAMLSPKeyInfo{ID: key.ID, NotAfter: key.NotAfter})
 		}
@@ -92,7 +122,6 @@ type samlProviderRuntime struct {
 	provider  identity.Provider
 	settings  identity.SAMLSettings
 	endpoints saml.SPEndpoints
-	keys      saml.SPKeySet
 }
 
 // SAMLBrowser resolves the enabled SAML provider of a slug. A disabled provider is reported
@@ -117,11 +146,7 @@ func (o *IdentityRuntime) SAMLBrowser(ctx context.Context, slug string) (samlPro
 		if err != nil {
 			return samlProviderRuntime{}, err
 		}
-		keys, err := saml.OpenSPKeySet(provider.SecretsSealed)
-		if err != nil {
-			return samlProviderRuntime{}, err
-		}
-		return samlProviderRuntime{provider: provider, settings: settings, endpoints: endpoints, keys: keys}, nil
+		return samlProviderRuntime{provider: provider, settings: settings, endpoints: endpoints}, nil
 	}
 	return samlProviderRuntime{}, errProviderNotFound
 }
@@ -200,7 +225,7 @@ func (o *IdentityRuntime) ImportSAMLMetadata(ctx context.Context, id string, sou
 			return identity.Provider{}, metadataInvalid(err)
 		}
 	}
-	merged, err := mergeSAMLMetadata(current, raw, source.URL)
+	merged, err := mergeSAMLMetadata(current, raw, source.URL, o.saml.clock())
 	if err != nil {
 		return identity.Provider{}, err
 	}
@@ -211,6 +236,16 @@ func (o *IdentityRuntime) ImportSAMLMetadata(ctx context.Context, id string, sou
 	return replaced, err
 }
 
+func countNewCertificates(pinned map[string]bool, parsed []*x509.Certificate) int {
+	count := 0
+	for _, cert := range parsed {
+		if !pinned[saml.CertificatePEM(cert)] {
+			count++
+		}
+	}
+	return count
+}
+
 func metadataInvalid(err error) error {
 	var metadata *saml.MetadataError
 	if errors.As(err, &metadata) {
@@ -219,7 +254,7 @@ func metadataInvalid(err error) error {
 	return err
 }
 
-func mergeSAMLMetadata(current identity.Provider, raw []byte, sourceURL string) (identity.Provider, error) {
+func mergeSAMLMetadata(current identity.Provider, raw []byte, sourceURL string, now time.Time) (identity.Provider, error) {
 	parsed, err := saml.ParseIdPMetadata(raw)
 	if err != nil {
 		return identity.Provider{}, metadataInvalid(err)
@@ -242,6 +277,11 @@ func mergeSAMLMetadata(current identity.Provider, raw []byte, sourceURL string) 
 	state := identity.SAMLCertificateActive
 	if len(settings.Certificates) > 0 {
 		state = identity.SAMLCertificateNext
+	}
+	// Rollovers add certificates and never remove one the administrator pinned; expired ones are the
+	// exception, dropped only when the list would otherwise pass its cap, so a refresh cannot get stuck.
+	if fresh := countNewCertificates(pinned, parsed.Certificates); len(settings.Certificates)+fresh > identity.MaxSAMLCertificates {
+		settings.Certificates = slices.DeleteFunc(settings.Certificates, func(entry identity.SAMLCertificate) bool { return entry.NotAfter.Before(now) })
 	}
 	for _, cert := range parsed.Certificates {
 		if canonical := saml.CertificatePEM(cert); !pinned[canonical] {
@@ -272,7 +312,20 @@ func (o *IdentityRuntime) RefreshSAMLMetadata(ctx context.Context) {
 		if err != nil || !settings.MetadataRefresh || settings.MetadataURL == "" {
 			continue
 		}
-		if _, err := o.ImportSAMLMetadata(ctx, provider.ID, SAMLMetadataSource{URL: settings.MetadataURL}); err != nil {
+		// The refresh changes the trusted certificates, the entity id and the SSO URL, so it is audited like an
+		// administrator's import, as the system actor.
+		audit := repository.AuditRecord{
+			Class: repository.AuditClassSync, Actor: "system:saml-metadata-refresh", Outcome: repository.AuditResolved, OccurredAt: o.saml.clock(),
+			Format: "management", Resource: providerResourcePrefix + provider.ID, Operation: "authentication.provider.refresh-metadata",
+			Status: http.StatusOK, CacheDisposition: "bypass",
+		}
+		_, err = o.ImportSAMLMetadata(ctx, provider.ID, SAMLMetadataSource{URL: settings.MetadataURL}, audit)
+		switch {
+		case err == nil:
+		case errors.Is(err, repository.ErrVersionConflict):
+			// Another node (or an administrator) changed the provider first; the next tick retries.
+			slog.Debug("SAML metadata refresh skipped after a concurrent change", "provider", provider.Slug)
+		default:
 			slog.Warn("SAML metadata refresh failed", "provider", provider.Slug, "error", err)
 		}
 	}

@@ -124,6 +124,18 @@ func TestSAMLSettingsValidationRules(t *testing.T) {
 	}
 }
 
+func TestSAMLProviderRefusesASubjectMapping(t *testing.T) {
+	provider := samlProvider(t, false, SAMLSettings{})
+	provider.AttributeMapping = AttributeMapping{Subject: "employeeId"}
+	if _, err := provider.NormalizeAndValidate(); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "NameID") {
+		t.Fatalf("a SAML subject mapping must be refused: %v", err)
+	}
+	provider.AttributeMapping = AttributeMapping{Email: "mail"}
+	if _, err := provider.NormalizeAndValidate(); err != nil {
+		t.Fatalf("other mappings stay valid: %v", err)
+	}
+}
+
 func TestExpiringCertificatesWindow(t *testing.T) {
 	now := time.Date(2026, 11, 19, 0, 0, 0, 0, time.UTC)
 	settings := SAMLSettings{Certificates: []SAMLCertificate{

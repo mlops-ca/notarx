@@ -20,6 +20,17 @@ func TestSAMLConfigDefaultsAndOverrides(t *testing.T) {
 	}
 }
 
+func TestSAMLConfigAllowsZeroToDisable(t *testing.T) {
+	for _, value := range []string{"0", "0s", "off"} {
+		t.Setenv("NOTARX_SAML_CLOCK_SKEW", value)
+		t.Setenv("NOTARX_SAML_METADATA_REFRESH_INTERVAL", value)
+		got, err := samlConfigFromEnv(DefaultSAMLConfig())
+		if err != nil || got.ClockSkew != 0 || got.MetadataRefreshInterval != 0 {
+			t.Fatalf("%s = %+v, %v", value, got, err)
+		}
+	}
+}
+
 func TestSAMLConfigRejectsInvalidValues(t *testing.T) {
 	for name, value := range map[string]string{
 		"NOTARX_SAML_CLOCK_SKEW":                "301s",

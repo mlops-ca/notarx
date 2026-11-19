@@ -189,6 +189,9 @@ func (p Provider) NormalizeAndValidate() (Provider, error) {
 		}
 		return p.WithOIDC(settings)
 	case KindSAML:
+		if p.AttributeMapping.Subject != "" {
+			return p, invalid("attributeMapping.subject does not apply to SAML: the identity key is the NameID")
+		}
 		settings, err := p.SAML()
 		if err != nil {
 			return p, err

@@ -200,7 +200,7 @@ func (h identityManagementHandler) ImportIdentityProviderMetadata(w http.Respons
 		return
 	}
 	var request adminopenapi.ImportIdentityProviderMetadata
-	if !decodeProviderRequest(w, r, &request) {
+	if !decodeProviderRequestLimit(w, r, &request, providerMetadataRequestLimit) {
 		return
 	}
 	source := SAMLMetadataSource{}
@@ -291,7 +291,14 @@ func (h identityManagementHandler) TestIdentityProvider(w http.ResponseWriter, r
 }
 
 func decodeProviderRequest(w http.ResponseWriter, r *http.Request, target any) bool {
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
+	return decodeProviderRequestLimit(w, r, target, 64<<10)
+}
+
+// providerMetadataRequestLimit leaves room for 1 MiB of pasted metadata XML after JSON escaping.
+const providerMetadataRequestLimit = 4 << 20
+
+func decodeProviderRequestLimit(w http.ResponseWriter, r *http.Request, target any, limit int64) bool {
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, limit))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
 		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "identity provider request is invalid")

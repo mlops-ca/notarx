@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"os"
+	"strings"
 	"time"
 )
 
@@ -37,9 +39,18 @@ func DefaultSAMLConfig() SAMLConfig {
 	return SAMLConfig{ClockSkew: DefaultSAMLClockSkew, RequestTTL: DefaultSAMLRequestTTL, MaxResponseBytes: DefaultSAMLMaxResponseBytes, MetadataRefreshInterval: DefaultSAMLMetadataRefreshInterval}
 }
 
+// optionalDurationEnv is durationEnv where 0 (or "off") is a valid value: no skew, or no background refresh.
+func optionalDurationEnv(name string, fallback time.Duration) (time.Duration, error) {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(name))) {
+	case "0", "0s", "off":
+		return 0, nil
+	}
+	return durationEnv(name, fallback)
+}
+
 func samlConfigFromEnv(current SAMLConfig) (SAMLConfig, error) {
 	var err error
-	if current.ClockSkew, err = durationEnv("NOTARX_SAML_CLOCK_SKEW", current.ClockSkew); err != nil {
+	if current.ClockSkew, err = optionalDurationEnv("NOTARX_SAML_CLOCK_SKEW", current.ClockSkew); err != nil {
 		return current, err
 	}
 	if current.ClockSkew > MaxSAMLClockSkew {
@@ -51,7 +62,7 @@ func samlConfigFromEnv(current SAMLConfig) (SAMLConfig, error) {
 	if current.MaxResponseBytes, err = positiveInt64Env("NOTARX_SAML_MAX_RESPONSE_BYTES", current.MaxResponseBytes); err != nil {
 		return current, err
 	}
-	if current.MetadataRefreshInterval, err = durationEnv("NOTARX_SAML_METADATA_REFRESH_INTERVAL", current.MetadataRefreshInterval); err != nil {
+	if current.MetadataRefreshInterval, err = optionalDurationEnv("NOTARX_SAML_METADATA_REFRESH_INTERVAL", current.MetadataRefreshInterval); err != nil {
 		return current, err
 	}
 	return current, nil
