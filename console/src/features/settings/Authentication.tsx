@@ -13,6 +13,7 @@ import { usePreferences } from "../../lib/preferences";
 import { useQueryClient } from "@tanstack/react-query";
 import { identityKeys, settingsKeys } from "../../lib/query/keys";
 import { AuthenticationForm } from "./AuthenticationForm";
+import { SamlProvidersCard } from "./SamlProviders";
 import {
   emptySettings,
   settingsFromProvider,
@@ -212,6 +213,7 @@ export function AuthenticationPage() {
           }}
         />
       </Card>
+      <SamlProvidersCard />
     </div>
   );
 }

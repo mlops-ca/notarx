@@ -93,6 +93,22 @@ export const settingsFrCA: Record<keyof typeof settingsEnCA, string> = {
   "settings.configured": "Configuré",
   "settings.notConfigured": "Non configuré",
   "settings.neverReturnedByTheAPI": "Jamais retourné par l’API",
+  "settings.samlProviders": "Fournisseurs SAML",
+  "settings.samlProvidersDescription":
+    "Enregistrez les informations du fournisseur de services ci-dessous auprès de chaque fournisseur d’identité. Les certificats de signature épinglés vérifient les réponses de connexion; ajoutez un nouveau certificat comme suivant avant que le fournisseur d’identité ne bascule.",
+  "settings.samlMetadataURL": "URL des métadonnées du fournisseur de services",
+  "settings.samlACSURL": "URL du service de consommation d’assertions",
+  "settings.samlPinnedCertificates": "Certificats de signature épinglés",
+  "settings.samlNoCertificates": "Aucun certificat n’est encore épinglé.",
+  "settings.samlCertificateActive": "Actif",
+  "settings.samlCertificateNext": "Suivant (renouvellement)",
+  "settings.samlCertificateExpires": "Expire le {date}",
+  "settings.samlCertificateExpiresSoon":
+    "Un certificat de {name} expire dans {days} jours ({date}). Ajoutez le nouveau certificat avant que le fournisseur d’identité ne bascule.",
+  "settings.samlCertificateExpired":
+    "Un certificat de {name} a expiré le {date}. Retirez-le ou remplacez-le par le certificat courant.",
+  "settings.samlServiceProviderKeys":
+    "Clés de signature du fournisseur de services publiées : {count}",
   "settings.lastUpdated": "Dernière mise à jour",
   "settings.notPersisted": "Non persisté",
   "settings.databaseSettingsAreShared":

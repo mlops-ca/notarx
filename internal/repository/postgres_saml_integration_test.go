@@ -5,9 +5,11 @@ package repository
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/identity"
 	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository/explaincheck"
 )
@@ -81,4 +83,24 @@ func TestSAMLExpiryDeletesUseTheExpiresAtIndex(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSAMLPostgresIdentityContract(t *testing.T) {
+	store := samlStore(t)
+	ctx := context.Background()
+	suffix := strings.ToLower(ids.New()[:12])
+	provider, err := store.CreateIdentityProvider(ctx, identity.Provider{
+		ID: ids.New(), Slug: "saml-" + suffix, Kind: identity.KindSAML, DisplayName: "SAML provider",
+		Settings: []byte(`{"entityId":"https://idp.example.test/m"}`), ProvisioningMode: identity.ProvisioningJIT, JITDefaultRole: identity.JITRoleNone,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = store.db.ExecContext(ctx, "DELETE FROM user_sessions WHERE user_id IN (SELECT user_id FROM user_identities WHERE provider_id=$1::uuid)", provider.ID)
+		_, _ = store.db.ExecContext(ctx, "DELETE FROM user_identities WHERE provider_id=$1::uuid", provider.ID)
+		_, _ = store.db.ExecContext(ctx, "DELETE FROM users WHERE name IN ('ada-'||$1, 'saml-'||$1)", suffix)
+		_, _ = store.db.ExecContext(ctx, "DELETE FROM identity_providers WHERE id=$1::uuid", provider.ID)
+	})
+	testSAMLIdentityContract(t, store, provider.ID, suffix)
 }

@@ -76,3 +76,48 @@ func testSAMLStateContract(t *testing.T, store SAMLStateStore) {
 }
 
 func TestMemorySAMLStateContract(t *testing.T) { testSAMLStateContract(t, NewMemoryStore()) }
+
+// testSAMLIdentityContract covers the SAML kind of the identity registry on any store: a first sign-in
+// creates a saml identity keyed by (provider, NameID), a SAML session is accepted, and an asserted
+// email never matches an existing account because the provision carries no verified email.
+func testSAMLIdentityContract(t *testing.T, store interface {
+	UserStore
+	UserIdentityStore
+	UserSessionStore
+}, providerID, suffix string) {
+	t.Helper()
+	ctx := context.Background()
+	existing, err := store.CreateUser(ctx, User{Name: "ada-" + suffix, Email: "ada-" + suffix + "@example.test", Role: "member", State: UserActive})
+	if err != nil {
+		t.Fatal(err)
+	}
+	provision := OIDCIdentityProvision{
+		Kind: UserIdentitySAML, ProviderID: providerID, Issuer: "https://idp.example.test/m", Subject: "name-id-" + suffix,
+		Email: existing.Email, DisplayName: "Ada", PreferredUsername: "saml-" + suffix, Provision: true, DefaultRole: "none",
+	}
+	user, link, created, err := store.ResolveOIDCIdentity(ctx, provision)
+	if err != nil || !created || link.Kind != UserIdentitySAML || user.ID == existing.ID || user.Role != "none" {
+		t.Fatalf("first sign-in = %+v %+v created=%v err=%v", user, link, created, err)
+	}
+	again, _, created, err := store.ResolveOIDCIdentity(ctx, provision)
+	if err != nil || created || again.ID != user.ID {
+		t.Fatalf("second sign-in = %+v created=%v err=%v", again, created, err)
+	}
+	found, stored, err := store.GetUserByProviderIdentity(ctx, providerID, provision.Subject)
+	if err != nil || found.ID != user.ID || stored.Kind != UserIdentitySAML {
+		t.Fatalf("lookup = %+v %+v %v", found, stored, err)
+	}
+	provision.Subject, provision.Provision = "unknown-"+suffix, false
+	if _, _, _, err := store.ResolveOIDCIdentity(ctx, provision); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("an unknown subject without provisioning = %v", err)
+	}
+	now := time.Now().UTC()
+	if _, err := store.CreateUserSession(ctx, UserSession{ID: ids.New(), UserID: user.ID, Kind: UserSessionSAML, CreatedAt: now, ExpiresAt: now.Add(time.Hour)}); err != nil {
+		t.Fatalf("a saml session = %v", err)
+	}
+}
+
+func TestMemorySAMLIdentityContract(t *testing.T) {
+	store := NewMemoryStore()
+	testSAMLIdentityContract(t, store, ids.New(), strings.ReplaceAll(ids.New(), "-", "")[:12])
+}

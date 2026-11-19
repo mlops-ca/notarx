@@ -1754,6 +1754,7 @@ export type IdentityProvider = {
   displayName: string;
   enabled: boolean;
   oidc?: IdentityProviderOidcSettings;
+  saml?: IdentityProviderSamlSettings;
   attributeMapping: IdentityProviderAttributeMapping;
   provisioningMode: "disabled" | "jit" | "scim_only";
   emailLinkingEnabled: boolean;
@@ -1770,22 +1771,30 @@ export type IdentityProviderList = {
   items: Array<IdentityProvider>;
 };
 
+/**
+ * The settings object that matches kind is required; the other is rejected.
+ */
 export type CreateIdentityProvider = {
   slug: string;
-  kind: "oidc";
+  kind: "oidc" | "saml";
   displayName: string;
   enabled: boolean;
-  oidc: IdentityProviderOidcInput;
+  oidc?: IdentityProviderOidcInput;
+  saml?: IdentityProviderSamlInput;
   attributeMapping?: IdentityProviderAttributeMapping;
   provisioningMode?: "disabled" | "jit" | "scim_only";
   emailLinkingEnabled?: boolean;
   jitDefaultRole?: "none" | "member";
 };
 
+/**
+ * The settings object that matches the provider's kind is required; the other is rejected.
+ */
 export type ReplaceIdentityProvider = {
   displayName: string;
   enabled: boolean;
-  oidc: IdentityProviderOidcInput;
+  oidc?: IdentityProviderOidcInput;
+  saml?: IdentityProviderSamlInput;
   attributeMapping: IdentityProviderAttributeMapping;
   provisioningMode: "disabled" | "jit" | "scim_only";
   emailLinkingEnabled: boolean;
@@ -2551,6 +2560,77 @@ export type ConsoleThemePackageValidation = {
   status: "available" | "replaceable" | "reserved";
   existingSource?: "builtin" | "directory" | "managed";
   existingVersion?: string;
+};
+
+/**
+ * One pinned IdP signing certificate. notAfter is read from the PEM on every save. Any listed certificate verifies a response; next marks a certificate added before the IdP cuts over.
+ *
+ */
+export type IdentityProviderSamlCertificate = {
+  pem: string;
+  notAfter: string;
+  state: "active" | "next";
+};
+
+/**
+ * A published service provider signing key. The private key is never returned.
+ */
+export type IdentityProviderSamlKey = {
+  id: string;
+  notAfter: string;
+};
+
+export type IdentityProviderSamlSettings = {
+  entityId: string;
+  ssoUrl: string;
+  certificates: Array<IdentityProviderSamlCertificate>;
+  nameIdFormat: "persistent" | "emailAddress" | "unspecified";
+  allowIdpInitiated: boolean;
+  relayStateAllowlist: Array<string>;
+  signRequests: boolean;
+  metadataUrl?: string;
+  metadataRefresh: boolean;
+  /**
+   * Entity id of notarx as service provider, derived from NOTARX_PUBLIC_URL. Empty when that is not set.
+   */
+  spEntityId: string;
+  acsUrl: string;
+  metadataEndpoint: string;
+  /**
+   * Service provider signing keys published in the SP metadata (at most two while a rotation is in progress).
+   */
+  spKeys: Array<IdentityProviderSamlKey>;
+};
+
+export type IdentityProviderSamlCertificateInput = {
+  pem: string;
+  state?: "active" | "next";
+};
+
+export type IdentityProviderSamlInput = {
+  entityId: string;
+  ssoUrl: string;
+  certificates: Array<IdentityProviderSamlCertificateInput>;
+  nameIdFormat?: "persistent" | "emailAddress" | "unspecified";
+  allowIdpInitiated?: boolean;
+  relayStateAllowlist?: Array<string>;
+  signRequests?: boolean;
+  metadataUrl?: string;
+  metadataRefresh?: boolean;
+};
+
+/**
+ * Exactly one of url and xml.
+ */
+export type ImportIdentityProviderMetadata = {
+  /**
+   * HTTPS URL of the IdP metadata
+   */
+  url?: string;
+  /**
+   * Pasted IdP metadata XML.
+   */
+  xml?: string;
 };
 
 export type WebhookEventType =
@@ -3894,22 +3974,30 @@ export type IdentityProviderOidcInputWritable = {
   algorithms?: Array<"RS256" | "ES256" | "EdDSA">;
 };
 
+/**
+ * The settings object that matches kind is required; the other is rejected.
+ */
 export type CreateIdentityProviderWritable = {
   slug: string;
-  kind: "oidc";
+  kind: "oidc" | "saml";
   displayName: string;
   enabled: boolean;
-  oidc: IdentityProviderOidcInputWritable;
+  oidc?: IdentityProviderOidcInputWritable;
+  saml?: IdentityProviderSamlInput;
   attributeMapping?: IdentityProviderAttributeMapping;
   provisioningMode?: "disabled" | "jit" | "scim_only";
   emailLinkingEnabled?: boolean;
   jitDefaultRole?: "none" | "member";
 };
 
+/**
+ * The settings object that matches the provider's kind is required; the other is rejected.
+ */
 export type ReplaceIdentityProviderWritable = {
   displayName: string;
   enabled: boolean;
-  oidc: IdentityProviderOidcInputWritable;
+  oidc?: IdentityProviderOidcInputWritable;
+  saml?: IdentityProviderSamlInput;
   attributeMapping: IdentityProviderAttributeMapping;
   provisioningMode: "disabled" | "jit" | "scim_only";
   emailLinkingEnabled: boolean;
@@ -9551,6 +9639,104 @@ export type TestIdentityProviderResponses = {
 
 export type TestIdentityProviderResponse =
   TestIdentityProviderResponses[keyof TestIdentityProviderResponses];
+
+export type ImportIdentityProviderMetadataData = {
+  body: ImportIdentityProviderMetadata;
+  path: {
+    providerId: string;
+  };
+  query?: never;
+  url: "/authentication/providers/{providerId}:import-metadata";
+};
+
+export type ImportIdentityProviderMetadataErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+  /**
+   * Problem response
+   */
+  503: Problem;
+};
+
+export type ImportIdentityProviderMetadataError =
+  ImportIdentityProviderMetadataErrors[keyof ImportIdentityProviderMetadataErrors];
+
+export type ImportIdentityProviderMetadataResponses = {
+  /**
+   * One identity provider with credentials redacted
+   */
+  200: IdentityProvider;
+};
+
+export type ImportIdentityProviderMetadataResponse =
+  ImportIdentityProviderMetadataResponses[keyof ImportIdentityProviderMetadataResponses];
+
+export type RotateIdentityProviderSpKeyData = {
+  body?: never;
+  path: {
+    providerId: string;
+  };
+  query?: never;
+  url: "/authentication/providers/{providerId}:rotate-sp-key";
+};
+
+export type RotateIdentityProviderSpKeyErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+  /**
+   * Problem response
+   */
+  503: Problem;
+};
+
+export type RotateIdentityProviderSpKeyError =
+  RotateIdentityProviderSpKeyErrors[keyof RotateIdentityProviderSpKeyErrors];
+
+export type RotateIdentityProviderSpKeyResponses = {
+  /**
+   * One identity provider with credentials redacted
+   */
+  200: IdentityProvider;
+};
+
+export type RotateIdentityProviderSpKeyResponse =
+  RotateIdentityProviderSpKeyResponses[keyof RotateIdentityProviderSpKeyResponses];
 
 export type ListWebhookSubscriptionsData = {
   body?: never;

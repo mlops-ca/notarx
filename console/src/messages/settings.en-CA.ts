@@ -90,6 +90,22 @@ export const settingsEnCA = {
   "settings.configured": "Configured",
   "settings.notConfigured": "Not configured",
   "settings.neverReturnedByTheAPI": "Never returned by the API",
+  "settings.samlProviders": "SAML providers",
+  "settings.samlProvidersDescription":
+    "Register the service provider details below at each identity provider. The pinned signing certificates verify sign-in responses; add a new certificate as next before the identity provider cuts over.",
+  "settings.samlMetadataURL": "Service provider metadata URL",
+  "settings.samlACSURL": "Assertion consumer service URL",
+  "settings.samlPinnedCertificates": "Pinned signing certificates",
+  "settings.samlNoCertificates": "No certificate is pinned yet.",
+  "settings.samlCertificateActive": "Active",
+  "settings.samlCertificateNext": "Next (rollover)",
+  "settings.samlCertificateExpires": "Expires {date}",
+  "settings.samlCertificateExpiresSoon":
+    "A certificate of {name} expires in {days} days ({date}). Add the new certificate before the identity provider cuts over.",
+  "settings.samlCertificateExpired":
+    "A certificate of {name} expired on {date}. Remove it or replace it with the current one.",
+  "settings.samlServiceProviderKeys":
+    "Service provider signing keys published: {count}",
   "settings.lastUpdated": "Last updated",
   "settings.notPersisted": "Not persisted",
   "settings.databaseSettingsAreShared": "Database settings are shared",

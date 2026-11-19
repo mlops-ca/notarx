@@ -14,6 +14,7 @@ import (
 	dsig "github.com/russellhaering/goxmldsig"
 
 	"github.com/mlops-ca/notarx/internal/identity"
+	"github.com/mlops-ca/notarx/internal/identity/saml/samltest"
 )
 
 func verify(t *testing.T, config Config, body string, mutate ...func(*Request)) (Claims, error) {
@@ -329,3 +330,23 @@ func TestReasonOf(t *testing.T) {
 }
 
 var _ = x509.Certificate{}
+
+// TestVerifyCertificateRollover pins two certificates: a response signed by either verifies, and once
+// one is removed from the pinned list a response signed by it is refused.
+func TestVerifyCertificateRollover(t *testing.T) {
+	primary, other, _ := testKeys(t)
+	both := baseConfig(t)
+	both.Certificates = []*x509.Certificate{primary.Cert, other.Cert}
+	for name, key := range map[string]*samltest.Key{"current": &primary, "next": &other} {
+		if _, err := verify(t, both, buildResponse(t, responseOptions{key: key})); err != nil {
+			t.Fatalf("signed by the %s certificate: %v (%s)", name, err, ReasonOf(err))
+		}
+	}
+	retired := baseConfig(t)
+	retired.Certificates = []*x509.Certificate{primary.Cert}
+	_, err := verify(t, retired, buildResponse(t, responseOptions{key: &other}))
+	wantReason(t, err, ReasonSignatureInvalid)
+	if _, err := verify(t, retired, buildResponse(t, responseOptions{key: &primary})); err != nil {
+		t.Fatalf("the remaining certificate must keep working: %v", err)
+	}
+}
