@@ -108,8 +108,8 @@ defines the verifier interface that ADR 0018's OIDC slice consumes.
   three; `none` and HMAC algorithms are never accepted; `alg` must be in the
   issuer's list before key lookup, which prevents algorithm confusion). The
   allow-list is per issuer, so ADR 0018 providers may restrict themselves to
-  RS256. Hardening: RSA keys under 2048 bits are rejected, the `crit` header is
-  not honoured, and the JWK `kty` must match the `alg`.
+  RS256. Hardening: RSA keys under 2048 bits are rejected, a token whose header carries `crit` is
+  refused (see the 2026-11-19 amendment), and the JWK `kty` must match the `alg`.
 - Claims: required `iss`, `sub`, `aud`, `exp`; `nbf` and `iat` validated when
   present. Clock skew `NOTARX_WORKLOAD_CLOCK_SKEW` (default `60s`, max `5m`).
   Maximum token age `NOTARX_WORKLOAD_MAX_TOKEN_AGE` (default `1h`, applied to
@@ -464,3 +464,11 @@ the v0.1.0 tag, and slice 1 is first.
 **Q2 — Is single-use `jti` default-on for generic issuers?** Decision: No; `single_use` defaults off for all kinds. The tester warns when a token lacks `jti`, saving `single_use=true` is refused when the issuer's sample token has no `jti`, and UI templates recommend it for exchange-only policies. Tokens are legitimately reused across steps and pulls, so default-on would break the common path.
 
 **Q3 — Should exchanged tokens be narrowable per request through `scope`?** Decision: No; `scope` stays ignored in 0.2 (RFC 8693 makes it optional). If ADR 0021 needs publish-only tokens, a per-policy token profile is preferred over a client-supplied scope, which avoids a cross-format scope vocabulary.
+
+## Amendment (2026-11-19): tokens with a `crit` header are refused
+
+Status: accepted (2026-11-19)
+
+The Decision above said the `crit` header is not honoured, which reads as "ignored". The verifier in `internal/jose` (PR #408, issue #55) instead refuses every token whose protected header carries `crit`, with the uniform invalid-token error. RFC 7515 section 4.1.11 requires a recipient to reject a JWS whose `crit` lists an extension it does not understand, and go-jose cannot honour critical extensions, so ignoring the header would accept tokens the issuer marked as unsafe to process without that extension. Refusing is the safer behaviour and is now the decision. Issuers that emit `crit` (none of GitHub Actions, GitLab CI or Kubernetes do) cannot be used until a future ADR adds support for a specific extension. The same applies to the human OIDC validator of ADR 0018, which shares the verifier.
+
+A review of the other JWT header and claim rules against `internal/jose` and `internal/authorization/oidc.go` found them consistent with this ADR: `jku`, `x5u` and `jwk` are never used to find a key (keys come only from the configured discovery document or static JWKS); the discovery document's `issuer` must equal the configured issuer; `alg` must be in the issuer's allow-list before key lookup; the default clock skew is 60 s (maximum 5 m); `nbf` and `iat` are validated when present, and `exp` is accepted until `exp + skew`. One rule is added that the Decision did not state: when a token has no `iat`, the maximum token age cannot be applied to `now - iat`, so the verifier instead rejects a token whose remaining lifetime (`exp - now`) exceeds the maximum age plus skew. The Context bullet describing the old hand-written `oidc.go` (no `nbf`/`iat`, no skew) is historical: that validator now delegates to `internal/jose`.
