@@ -91,6 +91,28 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: make docker-test
 
+  # Native deb and rpm packages (ADR 0025): build all three from release archives, assert
+  # contents, modes, Version/Release fields and maintainer scripts, then install them in
+  # debian:12 and rockylinux:9 containers and drive notarx-migrate against PostgreSQL 16.
+  packages:
+    needs: changes
+    # Packaged contents include migrations/ and the Go binaries, so a go change runs it too.
+    if: needs.changes.outputs.ci == 'true' || needs.changes.outputs.go == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install the package inspection tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends rpm cpio
+      - name: Build the packages, assert their contents and run the container install test
+        run: make package-install-test
+
   # The OCI Always Free reference deployment (ADR 0017, deploy/oci-free-tier):
   # rendered Compose model and limits, arm64 manifests of every third-party
   # image, and a smoke run on a native arm64 runner (the A1 VM is arm64) that
@@ -473,7 +495,7 @@ jobs:
   # skipped by change detection, fails on any failure or cancellation.
   ci-ok:
     if: always()
-    needs: [changes, no-chinese, docs, quality, quality-arm64, console, console-e2e, console-e2e-report, image-test-stages, oci-free-tier, oci-free-tier-tofu, build-images, object-store-contract, contract-plan, contract, contract-and-test]
+    needs: [changes, no-chinese, docs, quality, quality-arm64, console, console-e2e, console-e2e-report, image-test-stages, packages, oci-free-tier, oci-free-tier-tofu, build-images, object-store-contract, contract-plan, contract, contract-and-test]
     runs-on: ubuntu-24.04
     steps:
       - name: Require every needed job to succeed or be skipped
@@ -483,11 +505,14 @@ jobs:
           CONSOLE: ${{ needs.changes.outputs.console }}
           DOCS: ${{ needs.changes.outputs.docs }}
           IMAGES: ${{ needs.changes.outputs.images }}
+          CI_CLASS: ${{ needs.changes.outputs.ci }}
         run: |
           echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
           echo "$NEEDS" | jq -e '[.[] | select(.result != "success" and .result != "skipped")] | length == 0' >/dev/null
           # A skip is legitimate only when change detection turned the job off;
           # a job skipped because something upstream failed must not pass.
+          packages=false
+          if [[ "$GO" == true || "$CI_CLASS" == true ]]; then packages=true; fi
           e2e=false
           if [[ "$GO" == true || "$CONSOLE" == true ]]; then e2e=true; fi
           # The merged report is required whenever the shards all passed; when a
@@ -495,7 +520,7 @@ jobs:
           report=false
           if [[ "$e2e" == true && $(echo "$NEEDS" | jq -r '.["console-e2e"].result') == success ]]; then report=true; fi
           status=0
-          for pair in quality:$GO quality-arm64:$GO object-store-contract:$GO contract-plan:$GO contract:$GO contract-and-test:$GO console:$CONSOLE console-e2e:$e2e console-e2e-report:$report build-images:$e2e docs:$DOCS image-test-stages:$IMAGES oci-free-tier:$IMAGES oci-free-tier-tofu:$IMAGES; do
+          for pair in quality:$GO quality-arm64:$GO object-store-contract:$GO contract-plan:$GO contract:$GO contract-and-test:$GO console:$CONSOLE console-e2e:$e2e console-e2e-report:$report build-images:$e2e docs:$DOCS image-test-stages:$IMAGES packages:$packages oci-free-tier:$IMAGES oci-free-tier-tofu:$IMAGES; do
             job=${pair%%:*} class=${pair##*:}
             result=$(echo "$NEEDS" | jq -r --arg job "$job" '.[$job].result')
             if [[ "$class" == true && "$result" != success ]]; then

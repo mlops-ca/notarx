@@ -34,7 +34,7 @@ go=false console=false docs=false ci=false images=false
 while IFS= read -r path; do
   [[ -z "$path" ]] && continue
   case "$path" in
-    .github/*|Makefile|scripts/*)
+    .github/*|Makefile|scripts/*|packaging/*)
       ci=true ;;
     # Code directories first, so a Markdown fixture under them is never "docs".
     console/*)

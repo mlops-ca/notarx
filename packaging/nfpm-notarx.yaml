@@ -1,0 +1,74 @@
+# notarx server package (ADR 0025). Run by scripts/build-packages.sh, which exports:
+#   VERSION  package version for the format (version_schema none: used verbatim)
+#   RELEASE  package release for the format (deb revision, rpm Release)
+#   ARCH     Go architecture of the runner (amd64 or arm64); nfpm maps it per format
+#   STAGE    directory holding the extracted release archive (the packaged binary
+#            is the archived binary, byte for byte)
+# The package never runs migrations and never starts or enables the service.
+name: notarx
+arch: ${ARCH}
+platform: linux
+version: ${VERSION}
+version_schema: none
+release: ${RELEASE}
+section: web
+priority: optional
+maintainer: notarx maintainers <noreply@mlops.ca>
+description: |-
+  notarx artifact repository server.
+  Installs the server binary, a hardened systemd unit (not enabled), the SQL
+  migrations and the notarx-migrate wrapper. Run notarx-migrate against your
+  PostgreSQL database, then enable the service.
+vendor: mlops-ca
+homepage: https://github.com/mlops-ca/notarx
+license: Apache-2.0
+contents:
+  - src: ${STAGE}/notarx
+    dst: /usr/bin/notarx
+    expand: true
+    file_info:
+      mode: 0755
+  - src: scripts/notarx-migrate
+    dst: /usr/bin/notarx-migrate
+    file_info:
+      mode: 0755
+  - src: ${STAGE}/run-migrations.sh
+    dst: /usr/share/notarx/run-migrations.sh
+    expand: true
+    file_info:
+      mode: 0755
+  - src: ${STAGE}/migrations
+    dst: /usr/share/notarx/migrations
+    expand: true
+    type: tree
+  - src: packaging/notarx.service
+    dst: /usr/lib/systemd/system/notarx.service
+    file_info:
+      mode: 0644
+  - src: packaging/notarx.sysusers
+    dst: /usr/lib/sysusers.d/notarx.conf
+    file_info:
+      mode: 0644
+  - dst: /etc/notarx
+    type: dir
+    file_info:
+      mode: 0755
+  - src: packaging/notarx.env
+    dst: /etc/notarx/notarx.env
+    type: config|noreplace
+    file_info:
+      mode: 0640
+      owner: root
+      group: notarx
+scripts:
+  preinstall: packaging/preinst
+  postinstall: packaging/postinst
+  preremove: packaging/prerm
+  postremove: packaging/postrm
+overrides:
+  deb:
+    recommends:
+      - postgresql-client
+  rpm:
+    recommends:
+      - postgresql

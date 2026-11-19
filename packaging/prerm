@@ -1,0 +1,14 @@
+#!/bin/sh
+# notarx preremove (deb prerm, rpm %preun). Stops the service on removal only; an
+# upgrade keeps it running (postinst decides about a restart).
+set -e
+
+case "$1" in
+  remove|0)
+    if [ -d /run/systemd/system ]; then
+      systemctl stop notarx.service || true
+      systemctl disable notarx.service || true
+    fi
+    ;;
+esac
+exit 0

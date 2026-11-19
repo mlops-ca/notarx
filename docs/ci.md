@@ -12,7 +12,7 @@ five classes. Heavy jobs run only when their class changed.
 | `console` | `console/`, `api/` (the generated client) | `console` (unit tests, build, visual) and `console-e2e` |
 | `docs` | `docs/`, `*.md`, `LICENSE`, `NOTICE` | `docs` (i18n twins, links, capability claims) |
 | `images` | `Dockerfile*`, `compose*.yml`, `deploy/` | everything that executes the product (`go` and `console` too) |
-| `ci` | `.github/`, `Makefile`, `scripts/` | everything |
+| `ci` | `.github/`, `Makefile`, `scripts/`, `packaging/` | everything, including `packages` (native deb and rpm build, content assertions and container install test; ADR 0025) |
 
 A path that matches no class also runs everything, so a new top-level directory
 cannot silently skip a job. Pushes to `main`, tags and unresolvable ranges run

@@ -1,0 +1,22 @@
+#!/bin/sh
+# notarx postinstall (deb postinst, rpm %post). Reloads systemd and prints the next
+# steps. It never applies migrations and never starts or enables the service.
+set -e
+
+if [ -d /run/systemd/system ]; then
+  systemctl daemon-reload || true
+  # An upgrade restarts a running service only when the applied schema ledger
+  # already matches the packaged migrations; otherwise the operator migrates first.
+  if systemctl is-active --quiet notarx.service; then
+    rc=0
+    notarx-migrate --check >/dev/null 2>&1 || rc=$?
+    case "$rc" in
+      0) systemctl try-restart notarx.service || true ;;
+      1) printf '%s\n' 'notarx: the applied migrations differ from this package; the running service was not restarted. Run notarx-migrate, then restart notarx.' >&2 ;;
+      *) printf '%s\n' 'notarx: could not read the migration ledger (see notarx-migrate --check); the running service was not restarted.' >&2 ;;
+    esac
+  fi
+fi
+
+printf '%s\n' 'notarx: configure /etc/notarx/notarx.env, then run: notarx-migrate, then: systemctl enable --now notarx'
+exit 0

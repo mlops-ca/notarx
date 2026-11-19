@@ -1,0 +1,13 @@
+#!/bin/sh
+# notarx preinstall (deb preinst, rpm %pre). Creates the service account only.
+# No migrations and no service start live in any maintainer script (ADR 0025).
+set -e
+
+if ! getent group notarx >/dev/null 2>&1; then
+  groupadd --system notarx
+fi
+if ! getent passwd notarx >/dev/null 2>&1; then
+  useradd --system --gid notarx --home-dir /var/lib/notarx --no-create-home \
+    --shell /usr/sbin/nologin --comment 'notarx artifact repository' notarx
+fi
+exit 0
