@@ -14,7 +14,8 @@ import (
 const conanSessionColumns = `id::text,repository_id::text,publisher,kind,reference,recipe_revision,package_id,package_revision,state,expires_at,objects,native,version`
 
 // Keep native, management, lifecycle and distribution writers in the same
-// repository/recipe lock order. No object I/O occurs under these locks.
+// repository/recipe lock order. The advisory lock serialises the writers of one repository, whose
+// usage counter delta is the difference of two measurements; Reserve then guards the quota. No object I/O occurs under these locks.
 func lockConanRepositoriesTx(ctx context.Context, tx *sql.Tx, ids ...string) error {
 	ordered := append([]string(nil), ids...)
 	sort.Strings(ordered)

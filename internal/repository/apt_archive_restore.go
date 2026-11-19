@@ -52,8 +52,11 @@ type NativeAPTArchiveRestoreStore interface {
 }
 
 type aptArchiveRestoreState struct {
-	deletions                       []APTPackageDeletion
-	repo                            HostedRepository
+	deletions []APTPackageDeletion
+	repo      HostedRepository
+	// quota, baseBytes and reservedBytes feed the total-based quota check of the in-memory store.
+	// The Postgres store leaves them zero: it admits through the counter reservation of
+	// BeginAPTArchiveRestore (capacity.Reserve), so checkAPTArchiveRestore only sizes it there.
 	quota, baseBytes, reservedBytes int64
 	packages                        map[string]APTPackageRevision
 	snapshots                       map[string]APTRepositorySnapshot

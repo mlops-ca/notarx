@@ -146,8 +146,10 @@ func (s *PostgresStore) BeginAPTArchiveRestore(ctx context.Context, plan APTArch
 	if err != nil {
 		return err
 	}
-	if err = capacity.Reserve(ctx, tx, plan.Snapshot.RepositoryID, reserved-superseded, 0); err != nil {
-		return err
+	if reserved != superseded {
+		if err = capacity.Reserve(ctx, tx, plan.Snapshot.RepositoryID, reserved-superseded, 0); err != nil {
+			return err
+		}
 	}
 	intents := aptArchiveObjectIntents(plan)
 	keys := make([]string, 0, len(intents))
@@ -207,8 +209,10 @@ func (s *PostgresStore) CommitAPTArchiveRestore(ctx context.Context, plan APTArc
 	// Capacity reservation and metadata become durable in the same transaction. The attempt's
 	// reservation is released first and the restored objects are then reserved by their own deltas,
 	// so a restore that fits its reservation is never counted twice against the quota.
-	if err = capacity.Reserve(ctx, tx, snapshot.RepositoryID, -reservedBytes, 0); err != nil {
-		return APTRepositorySnapshot{}, err
+	if reservedBytes != 0 {
+		if err = capacity.Reserve(ctx, tx, snapshot.RepositoryID, -reservedBytes, 0); err != nil {
+			return APTRepositorySnapshot{}, err
+		}
 	}
 	_, err = tx.ExecContext(ctx, `UPDATE native_apt_archive_restores SET state='completed',reserved_bytes=0,finished_at=clock_timestamp() WHERE id=$1`, plan.ID)
 	if err != nil {

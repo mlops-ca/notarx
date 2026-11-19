@@ -48,10 +48,10 @@ func lockMavenCoordinate(ctx context.Context, tx *sql.Tx, repo, coordinate strin
 	return err
 }
 
-// Capacity triggers lock the repository quota even when its value is zero.
-// Acquire it before artifact or CAS intent locks in every Maven transaction
-// that participates in publication visibility. The repository lock also
-// fences insertion of a previously absent quota by the quota setter.
+// Acquire the repository lock and the per-repository capacity advisory lock before artifact or
+// CAS intent locks in every Maven transaction that participates in publication visibility.
+// The usage counter delta of a writer is the difference of two measurements, so the advisory
+// lock keeps the writers of one repository one at a time; Reserve then guards the quota.
 func lockMavenCapacityTx(ctx context.Context, tx *sql.Tx, repositories ...string) error {
 	repos := append([]string(nil), repositories...)
 	sort.Strings(repos)
@@ -67,8 +67,6 @@ func lockMavenCapacityTx(ctx context.Context, tx *sql.Tx, repositories ...string
 		if i > 0 && repo == repos[i-1] {
 			continue
 		}
-		// The usage counter delta of a writer is the difference of two measurements, so
-		// writers of one repository run one at a time under this advisory lock.
 		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "maven-capacity:"+repo); err != nil {
 			return err
 		}
