@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Release plan (ADR 0024): the one place a release version is computed. It is
 # read-only: it creates no tag and changes nothing. Output is key=value lines
-# (usable as $GITHUB_OUTPUT): skip, channel, version, core, sha, previous.
+# (usable as $GITHUB_OUTPUT): skip, channel, version, core, sha, previous, base (where
+# commit ranges start: previous, or the fork commit before the first release).
 #
 #   scripts/release-plan.sh nightly
 #   scripts/release-plan.sh stable [--nightly-tag vX.Y.Z-nightly.N] [--version-override X.Y.Z]
@@ -130,6 +131,7 @@ plan_nightly() {
     fi
   done
   [[ -n "$sha" ]] || skip 'no commit among the last 10 on main has green required checks' nightly
+  fork=$(fork_commit)
 
   latest_nightly=$(latest_tag "$nightly_pattern")
   if [[ -n "$latest_nightly" && "$(repo_git rev-list -n 1 "$latest_nightly")" == "$sha" ]]; then
@@ -143,7 +145,6 @@ plan_nightly() {
     count=$(releasing_commits "$previous..$sha")
     [[ "$count" -gt 0 ]] || skip "no releasing commit between $previous and $sha" nightly "$sha"
   else
-    fork=$(fork_commit)
     count=$(releasing_commits "${fork:+$fork..}$sha")
     [[ "$count" -gt 0 ]] || skip "no releasing commit up to $sha" nightly "$sha"
   fi
@@ -172,10 +173,11 @@ plan_nightly() {
   emit core "$core"
   emit sha "$sha"
   emit previous "$previous"
+  emit base "${previous:-$fork}"
 }
 
 plan_stable() {
-  local nightly_tag= override= stable_tag newest_nightly core version sha previous
+  local nightly_tag= override= stable_tag fork newest_nightly core version sha previous
   while [[ $# -gt 0 ]]; do
     case $1 in
       --nightly-tag | --version-override)
@@ -224,6 +226,7 @@ plan_stable() {
   emit core "$core"
   emit sha "$sha"
   emit previous "$previous"
+  emit base "${previous:-$(fork_commit)}"
   emit nightly_tag "$nightly_tag"
 }
 
