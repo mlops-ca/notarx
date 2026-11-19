@@ -228,7 +228,9 @@ expired unrevoked attempts retain possibleDuplicate, and stale tokens cannot
 finish a newer claim. Safe API reads and administrator denials are also checked.
 
 `NOTARX_SETTINGS_ENCRYPTION_KEY` is an independent operational prerequisite.
-Back up/escrow it separately under the operator's secret-management policy; the
+Back up/escrow it (and any key still listed in
+`NOTARX_SETTINGS_ENCRYPTION_KEY_PREVIOUS`, see `notarxctl secrets reseal` in
+`docs/cli.md`) separately under the operator's secret-management policy; the
 bundle stores encrypted recipient snapshots, never the encryption key, SMTP
 authentication files, or runtime configuration. Supply the original key through
 the private target runtime settings. Missing/wrong keys cannot decrypt. Restored

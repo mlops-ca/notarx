@@ -12,3 +12,4 @@
 ./internal/scanning 82.0
 ./internal/jose 90.0
 ./internal/authorization/workloadpolicy 90.0
+./internal/secrets 90.0

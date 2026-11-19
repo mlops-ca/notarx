@@ -409,6 +409,26 @@ the process exits, and contention fails after ten seconds so callers can retry.
 A lax existing file is refused with a `chmod 600` hint. Profile and login
 output strips URL userinfo, query parameters, and fragments.
 
+### `notarxctl secrets reseal`
+
+Rotates the settings encryption key. Sealed values (OIDC client secret, webhook
+signing secrets, email recipients, upstream credentials, Nexus migration
+credentials) are stored as `v1:<kid>:<base64>`, where `kid` names the ring key
+that sealed them; values from older releases (plain base64) stay readable.
+
+1. Set the new key as `NOTARX_SETTINGS_ENCRYPTION_KEY` and move the old one to
+   `NOTARX_SETTINGS_ENCRYPTION_KEY_PREVIOUS` (comma-separated when several
+   remain), then restart the Gateway. New writes use the new key; old values
+   still open.
+2. Run `notarxctl secrets reseal --yes` with the same two variables and
+   `NOTARX_DATABASE_URL` exported. It connects to PostgreSQL directly (the
+   management API never sees the keys), rewrites every sealed column with the
+   current key, and prints the rows scanned, resealed and unchanged.
+   `--dry-run` counts without writing. It is idempotent; if a value cannot be
+   opened the command names the row (never its contents) and fails.
+3. Remove the retired key from `NOTARX_SETTINGS_ENCRYPTION_KEY_PREVIOUS` and
+   restart.
+
 The Windows lock implementation is compile-checked, but private profile
 persistence is not supported by the current POSIX permission validation:
 Windows file modes do not establish the required 0600 protection. Use file-less
