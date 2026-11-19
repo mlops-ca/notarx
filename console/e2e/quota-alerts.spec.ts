@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { RepositoryQuotaAlertRule } from "../src/client";
 import { mockDefaultSiteSettings } from "./support/siteSettings";
+import { openSelect } from "./support/motion";
 
 const policy = {
   warningBasisPoints: 8000,
@@ -328,14 +329,20 @@ test("creation is explicit, disabled, and persists exact policy; deletion retain
   await expect(
     page.getByRole("textbox", { name: "Warning threshold (%)" }),
   ).toHaveValue("");
-  await page.getByRole("combobox", { name: "Repository", exact: true }).click();
-  await page
+  const repositoryDropdown = await openSelect(
+    page,
+    page.getByRole("combobox", { name: "Repository", exact: true }),
+  );
+  await repositoryDropdown
     .getByRole("option", { name: "Synthetic Raw", exact: true })
     .click();
-  await page
-    .getByRole("combobox", { name: "Email target", exact: true })
+  const targetDropdown = await openSelect(
+    page,
+    page.getByRole("combobox", { name: "Email target", exact: true }),
+  );
+  await targetDropdown
+    .getByRole("option", { name: /Synthetic operations/ })
     .click();
-  await page.getByRole("option", { name: /Synthetic operations/ }).click();
   for (const [label, value] of [
     ["Warning threshold (%)", "80.01"],
     ["Critical threshold (%)", "95"],

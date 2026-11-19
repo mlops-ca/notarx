@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { authenticateAsAdmin } from "./support/auth";
 import { defaultSiteSettings } from "../src/lib/siteSettings";
+import { openSelect } from "./support/motion";
 
 test.use({ timezoneId: "Asia/Shanghai" });
 
@@ -31,8 +32,8 @@ test("rejects a 24-hour-plus-one-second custom window before requesting logs", a
     exact: true,
   });
   if (await custom.count()) {
-    await custom.click();
-    await page.getByRole("option", { name: "Custom", exact: true }).click();
+    const dropdown = await openSelect(page, custom);
+    await dropdown.getByRole("option", { name: "Custom", exact: true }).click();
   }
   await page.getByPlaceholder("Start date").fill("2026-10-02 22:07:26");
   await page.getByPlaceholder("Start date").press("Enter");

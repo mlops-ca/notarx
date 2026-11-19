@@ -319,6 +319,9 @@ test("a custom role feeds a template that is applied to a repository", async ({
   await waitForModalOpen(editor);
   await editor.getByPlaceholder("Template name").fill(templateName);
   await editor.getByRole("combobox").first().fill(principal);
+  // The principal suggestions stay open over the grid; close them first.
+  await editor.getByPlaceholder("Template name").click();
+  await expect(page.locator(".ant-select-dropdown:visible")).toHaveCount(0);
   const roleDropdown = await openSelect(
     page,
     editor

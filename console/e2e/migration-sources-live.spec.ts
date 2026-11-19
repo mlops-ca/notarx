@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import type { MigrationSource } from "../src/client";
-import { waitForModalOpen } from "./support/motion";
+import { waitForModalOpen, openSelect } from "./support/motion";
 
 const token = process.env.NOTARX_ADMIN_TOKEN;
 const sourceUrl = process.env.MIGRATION_SOURCE_FIXTURE_URL;
@@ -44,8 +44,13 @@ test("source connection, metadata reads, explicit mapping and credential lifecyc
     await dialog
       .getByRole("textbox", { name: "Nexus HTTPS address" })
       .fill(sourceUrl!);
-    await dialog.getByRole("combobox", { name: "Source credentials" }).click();
-    await page.getByRole("option", { name: "Set new credentials" }).click();
+    const newCredentials = await openSelect(
+      page,
+      dialog.getByRole("combobox", { name: "Source credentials" }),
+    );
+    await newCredentials
+      .getByRole("option", { name: "Set new credentials" })
+      .click();
     await dialog
       .getByRole("textbox", { name: "Source username" })
       .fill("fixture-reader");
@@ -105,8 +110,13 @@ test("source connection, metadata reads, explicit mapping and credential lifecyc
     const edit = page.getByRole("dialog", { name: "Edit migration source" });
     await waitForModalOpen(edit);
     await expect(edit.locator('input[type="password"]')).toHaveCount(0);
-    await edit.getByRole("combobox", { name: "Source credentials" }).click();
-    await page.getByRole("option", { name: "Set new credentials" }).click();
+    const editCredentials = await openSelect(
+      page,
+      edit.getByRole("combobox", { name: "Source credentials" }),
+    );
+    await editCredentials
+      .getByRole("option", { name: "Set new credentials" })
+      .click();
     await edit
       .getByRole("textbox", { name: "Source username" })
       .fill("fixture-reader");
@@ -123,8 +133,11 @@ test("source connection, metadata reads, explicit mapping and credential lifecyc
 
     await page.getByRole("button", { name: "Edit source" }).click();
     await waitForModalOpen(edit);
-    await edit.getByRole("combobox", { name: "Source credentials" }).click();
-    await page
+    const clearCredentials = await openSelect(
+      page,
+      edit.getByRole("combobox", { name: "Source credentials" }),
+    );
+    await clearCredentials
       .getByRole("option", { name: "Clear current credentials" })
       .click();
     await edit.getByRole("button", { name: "Save migration source" }).click();
