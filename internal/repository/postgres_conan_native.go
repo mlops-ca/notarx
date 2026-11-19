@@ -92,6 +92,10 @@ func putConanRecipeRevisionTx(ctx context.Context, tx *sql.Tx, revision ConanRec
 	if !errors.Is(err, sql.ErrNoRows) {
 		return ConanRecipeRevision{}, err
 	}
+	usage, err := openConanUsageBracket(ctx, tx, revision.RepositoryID, revision.Reference, revision.Revision)
+	if err != nil {
+		return ConanRecipeRevision{}, err
+	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO native_conan_recipe_revisions (repository_id,reference,revision,digest,state,publisher) VALUES ($1,$2,$3,$4,'visible',COALESCE((SELECT s.publisher FROM native_conan_publish_sessions s WHERE s.repository_id=$1 AND s.reference=$2 AND s.state IN ('open','committed') ORDER BY s.expires_at DESC LIMIT 1),''))`, revision.RepositoryID, revision.Reference, revision.Revision, revision.Digest); err != nil {
 		return ConanRecipeRevision{}, err
 	}
@@ -102,6 +106,9 @@ func putConanRecipeRevisionTx(ctx context.Context, tx *sql.Tx, revision ConanRec
 		if _, err = tx.ExecContext(ctx, `INSERT INTO native_conan_assets (repository_id,reference,recipe_revision,package_id,package_revision,path,object_key,digest,size) VALUES ($1,$2,$3,'','',$4,$5,$6,$7) ON CONFLICT DO NOTHING`, asset.RepositoryID, asset.Reference, asset.RecipeRevision, asset.Path, asset.ObjectKey, asset.Digest, asset.Size); err != nil {
 			return ConanRecipeRevision{}, err
 		}
+	}
+	if err = usage.reserve(ctx, tx); err != nil {
+		return ConanRecipeRevision{}, err
 	}
 	if err = scanConanRecipeRevision(tx.QueryRowContext(ctx, `SELECT repository_id::text,reference,revision,digest,state,created_at FROM native_conan_recipe_revisions WHERE repository_id=$1::uuid AND reference=$2 AND revision=$3`, revision.RepositoryID, revision.Reference, revision.Revision), &revision); err != nil {
 		return ConanRecipeRevision{}, err
@@ -151,6 +158,10 @@ func putConanPackageRevisionTx(ctx context.Context, tx *sql.Tx, revision ConanPa
 	if !errors.Is(err, sql.ErrNoRows) {
 		return ConanPackageRevision{}, err
 	}
+	usage, err := openConanUsageBracket(ctx, tx, revision.RepositoryID, revision.Reference, revision.RecipeRevision)
+	if err != nil {
+		return ConanPackageRevision{}, err
+	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO native_conan_package_revisions (repository_id,reference,recipe_revision,package_id,revision,digest,state) VALUES ($1,$2,$3,$4,$5,$6,'visible')`, revision.RepositoryID, revision.Reference, revision.RecipeRevision, revision.PackageID, revision.Revision, revision.Digest); err != nil {
 		return ConanPackageRevision{}, err
 	}
@@ -161,6 +172,9 @@ func putConanPackageRevisionTx(ctx context.Context, tx *sql.Tx, revision ConanPa
 		if _, err = tx.ExecContext(ctx, `INSERT INTO native_conan_assets (repository_id,reference,recipe_revision,package_id,package_revision,path,object_key,digest,size) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING`, asset.RepositoryID, asset.Reference, asset.RecipeRevision, asset.PackageID, asset.PackageRevision, asset.Path, asset.ObjectKey, asset.Digest, asset.Size); err != nil {
 			return ConanPackageRevision{}, err
 		}
+	}
+	if err = usage.reserve(ctx, tx); err != nil {
+		return ConanPackageRevision{}, err
 	}
 	if err = scanConanPackageRevision(tx.QueryRowContext(ctx, `SELECT repository_id::text,reference,recipe_revision,package_id,revision,digest,state,created_at FROM native_conan_package_revisions WHERE repository_id=$1::uuid AND reference=$2 AND recipe_revision=$3 AND package_id=$4 AND revision=$5`, revision.RepositoryID, revision.Reference, revision.RecipeRevision, revision.PackageID, revision.Revision), &revision); err != nil {
 		return ConanPackageRevision{}, err
@@ -258,6 +272,10 @@ func (s *PostgresStore) PublishReplicatedConanRevision(ctx context.Context, publ
 			return ConanRecipeRevision{}, err
 		}
 	}
+	usage, err := openConanUsageBracket(ctx, tx, publication.Recipe.RepositoryID, publication.Recipe.Reference, publication.Recipe.Revision)
+	if err != nil {
+		return ConanRecipeRevision{}, err
+	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO native_conan_recipe_revisions (repository_id,reference,revision,digest,state,publisher) VALUES ($1,$2,$3,$4,'visible',COALESCE((SELECT s.publisher FROM native_conan_publish_sessions s WHERE s.repository_id=$1 AND s.reference=$2 AND s.state IN ('open','committed') ORDER BY s.expires_at DESC LIMIT 1),''))`, publication.Recipe.RepositoryID, publication.Recipe.Reference, publication.Recipe.Revision, publication.Recipe.Digest); err != nil {
 		return ConanRecipeRevision{}, err
 	}
@@ -270,6 +288,9 @@ func (s *PostgresStore) PublishReplicatedConanRevision(ctx context.Context, publ
 		if _, err = tx.ExecContext(ctx, `INSERT INTO native_conan_assets (repository_id,reference,recipe_revision,package_id,package_revision,path,object_key,digest,size) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, asset.RepositoryID, asset.Reference, asset.RecipeRevision, asset.PackageID, asset.PackageRevision, asset.Path, asset.ObjectKey, asset.Digest, asset.Size); err != nil {
 			return ConanRecipeRevision{}, err
 		}
+	}
+	if err = usage.reserve(ctx, tx); err != nil {
+		return ConanRecipeRevision{}, err
 	}
 	if err = scanConanRecipeRevision(tx.QueryRowContext(ctx, `SELECT repository_id::text,reference,revision,digest,state,created_at FROM native_conan_recipe_revisions WHERE repository_id=$1::uuid AND reference=$2 AND revision=$3`, publication.Recipe.RepositoryID, publication.Recipe.Reference, publication.Recipe.Revision), &publication.Recipe); err != nil {
 		return ConanRecipeRevision{}, err
@@ -325,6 +346,10 @@ func (s *PostgresStore) PromoteConanRecipeRevision(ctx context.Context, p ConanP
 	if err != nil {
 		return ConanRecipeRevision{}, err
 	}
+	usage, err := openConanUsageBracket(ctx, tx, p.TargetRepositoryID, p.Reference, p.Revision)
+	if err != nil {
+		return ConanRecipeRevision{}, err
+	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO native_conan_recipe_revisions (repository_id,reference,revision,digest,state,publisher) VALUES ($1,$2,$3,$4,'visible',COALESCE((SELECT s.publisher FROM native_conan_publish_sessions s WHERE s.repository_id=$1 AND s.reference=$2 AND s.state IN ('open','committed') ORDER BY s.expires_at DESC LIMIT 1),''))`, p.TargetRepositoryID, p.Reference, p.Revision, p.Digest); err != nil {
 		return ConanRecipeRevision{}, err
 	}
@@ -335,6 +360,9 @@ func (s *PostgresStore) PromoteConanRecipeRevision(ctx context.Context, p ConanP
 		return ConanRecipeRevision{}, err
 	}
 	out.RepositoryID = p.TargetRepositoryID
+	if err = usage.reserve(ctx, tx); err != nil {
+		return ConanRecipeRevision{}, err
+	}
 	if err = tx.Commit(); err != nil {
 		return ConanRecipeRevision{}, err
 	}
@@ -497,6 +525,10 @@ func (s *PostgresStore) TombstoneConanRecipeRevision(ctx context.Context, reposi
 	if err = lockConanRepositoriesTx(ctx, tx, repositoryID); err != nil {
 		return item, err
 	}
+	usage, err := openConanUsageBracket(ctx, tx, repositoryID, reference, revision)
+	if err != nil {
+		return item, err
+	}
 	err = scanConanRecipeRevision(tx.QueryRowContext(ctx, `UPDATE native_conan_recipe_revisions SET state='deleted' WHERE repository_id=$1::uuid AND reference=$2 AND revision=$3 RETURNING repository_id::text,reference,revision,digest,state,created_at`, repositoryID, reference, revision), &item)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ConanRecipeRevision{}, ErrNotFound
@@ -509,6 +541,9 @@ func (s *PostgresStore) TombstoneConanRecipeRevision(ctx context.Context, reposi
 	}
 	coordinate := reference + "#" + revision
 	if _, err = tx.ExecContext(ctx, `INSERT INTO artifact_tombstones (repository_id,format,coordinate,digest) VALUES ($1,'conan',$2,$3) ON CONFLICT DO NOTHING`, repositoryID, coordinate, item.Digest); err != nil {
+		return item, err
+	}
+	if err = usage.reserve(ctx, tx); err != nil {
 		return item, err
 	}
 	return item, tx.Commit()
@@ -524,6 +559,10 @@ func (s *PostgresStore) TombstoneConanPackageRevision(ctx context.Context, repos
 	if err = lockConanRepositoriesTx(ctx, tx, repositoryID); err != nil {
 		return item, err
 	}
+	usage, err := openConanUsageBracket(ctx, tx, repositoryID, reference, recipeRevision)
+	if err != nil {
+		return item, err
+	}
 	err = scanConanPackageRevision(tx.QueryRowContext(ctx, `UPDATE native_conan_package_revisions SET state='deleted' WHERE repository_id=$1::uuid AND reference=$2 AND recipe_revision=$3 AND package_id=$4 AND revision=$5 RETURNING repository_id::text,reference,recipe_revision,package_id,revision,digest,state,created_at`, repositoryID, reference, recipeRevision, packageID, revision), &item)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ConanPackageRevision{}, ErrNotFound
@@ -533,6 +572,9 @@ func (s *PostgresStore) TombstoneConanPackageRevision(ctx context.Context, repos
 	}
 	coordinate := reference + "#" + recipeRevision + "/" + packageID + "#" + revision
 	if _, err = tx.ExecContext(ctx, `INSERT INTO artifact_tombstones (repository_id,format,coordinate,digest) VALUES ($1,'conan',$2,$3) ON CONFLICT DO NOTHING`, repositoryID, coordinate, item.Digest); err != nil {
+		return item, err
+	}
+	if err = usage.reserve(ctx, tx); err != nil {
 		return item, err
 	}
 	return item, tx.Commit()
@@ -549,6 +591,10 @@ func (s *PostgresStore) RestoreConanRecipeRevision(ctx context.Context, reposito
 		return item, err
 	}
 	if _, err = lockConanRevisionObjectsTx(ctx, tx, repositoryID, reference, revision); err != nil {
+		return item, err
+	}
+	usage, err := openConanUsageBracket(ctx, tx, repositoryID, reference, revision)
+	if err != nil {
 		return item, err
 	}
 	err = scanConanRecipeRevision(tx.QueryRowContext(ctx, `UPDATE native_conan_recipe_revisions r SET state='visible' WHERE r.repository_id=$1::uuid AND r.reference=$2 AND r.revision=$3 AND r.state='deleted' AND NOT EXISTS (SELECT 1 FROM native_conan_assets a LEFT JOIN native_conan_object_intents i ON i.object_key=a.object_key WHERE a.repository_id=r.repository_id AND a.reference=r.reference AND a.recipe_revision=r.revision AND a.package_id='' AND (i.object_key IS NULL OR i.collecting_at IS NOT NULL OR i.collected_at IS NOT NULL)) RETURNING repository_id::text,reference,revision,digest,state,created_at`, repositoryID, reference, revision), &item)
@@ -575,6 +621,9 @@ func (s *PostgresStore) RestoreConanRecipeRevision(ctx context.Context, reposito
 	if _, err = tx.ExecContext(ctx, `DELETE FROM artifact_tombstones WHERE repository_id=$1::uuid AND format='conan' AND coordinate=$2`, repositoryID, reference+"#"+revision); err != nil {
 		return item, err
 	}
+	if err = usage.reserve(ctx, tx); err != nil {
+		return item, err
+	}
 	return item, tx.Commit()
 }
 func (s *PostgresStore) RestoreConanPackageRevision(ctx context.Context, repositoryID, reference, recipeRevision, packageID, revision string) (ConanPackageRevision, error) {
@@ -590,6 +639,10 @@ func (s *PostgresStore) RestoreConanPackageRevision(ctx context.Context, reposit
 	if _, err = lockConanRevisionObjectsTx(ctx, tx, repositoryID, reference, recipeRevision); err != nil {
 		return item, err
 	}
+	usage, err := openConanUsageBracket(ctx, tx, repositoryID, reference, recipeRevision)
+	if err != nil {
+		return item, err
+	}
 	err = scanConanPackageRevision(tx.QueryRowContext(ctx, `UPDATE native_conan_package_revisions p SET state='visible' WHERE p.repository_id=$1::uuid AND p.reference=$2 AND p.recipe_revision=$3 AND p.package_id=$4 AND p.revision=$5 AND p.state='deleted' AND EXISTS (SELECT 1 FROM native_conan_recipe_revisions r WHERE r.repository_id=p.repository_id AND r.reference=p.reference AND r.revision=p.recipe_revision AND r.state='visible') AND NOT EXISTS (SELECT 1 FROM native_conan_assets a LEFT JOIN native_conan_object_intents i ON i.object_key=a.object_key WHERE a.repository_id=p.repository_id AND a.reference=p.reference AND a.recipe_revision=p.recipe_revision AND a.package_id=p.package_id AND a.package_revision=p.revision AND (i.object_key IS NULL OR i.collecting_at IS NOT NULL OR i.collected_at IS NOT NULL)) RETURNING repository_id::text,reference,recipe_revision,package_id,revision,digest,state,created_at`, repositoryID, reference, recipeRevision, packageID, revision), &item)
 	if errors.Is(err, sql.ErrNoRows) {
 		return item, ErrNotFound
@@ -599,6 +652,9 @@ func (s *PostgresStore) RestoreConanPackageRevision(ctx context.Context, reposit
 	}
 	coordinate := reference + "#" + recipeRevision + "/" + packageID + "#" + revision
 	if _, err = tx.ExecContext(ctx, `DELETE FROM artifact_tombstones WHERE repository_id=$1::uuid AND format='conan' AND coordinate=$2`, repositoryID, coordinate); err != nil {
+		return item, err
+	}
+	if err = usage.reserve(ctx, tx); err != nil {
 		return item, err
 	}
 	return item, tx.Commit()

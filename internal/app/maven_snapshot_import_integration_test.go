@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/capacity"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	mavenprotocol "github.com/mlops-ca/notarx/internal/protocol/maven"
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -529,6 +530,9 @@ func TestPostgresRustFSMavenSnapshotImportAtomicReplay(t *testing.T) {
 	if err != nil || len(histories) != 3 {
 		t.Fatalf("histories=%v %v", histories, err)
 	}
+	// The import reserves the imported assets once, however many importers raced: the usage
+	// counter equals the reconciler's aggregation (ADR 0023 section 3).
+	assertMavenCounterEqualsUsage(t, repo.ID)
 	auth := Authenticator{ResolverToken: "synthetic-reader", RepositoryReaders: map[string][]string{"synthetic": {repo.Name}}}
 	handler := newNativeMavenHandler(store, objects, auth)
 	for path, want := range files {
@@ -566,5 +570,30 @@ func TestPostgresRustFSMavenSnapshotImportAtomicReplay(t *testing.T) {
 	handler.ServeHTTP(w, r)
 	if w.Code != 404 {
 		t.Fatalf("metadata changed after current removal=%d", w.Code)
+	}
+}
+
+// assertMavenCounterEqualsUsage fails when the Maven repository's usage counter differs from
+// the aggregation the reconciler recomputes.
+func assertMavenCounterEqualsUsage(t *testing.T, repositoryID string) {
+	t.Helper()
+	db, err := sql.Open("pgx", os.Getenv("TEST_DATABASE_URL"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	query, ok := capacity.UsageQuery("maven")
+	if !ok {
+		t.Fatal("no usage query for maven")
+	}
+	var usedBytes, usedObjects, bytes, objects int64
+	if err = db.QueryRow(query, repositoryID).Scan(&usedBytes, &usedObjects); err != nil {
+		t.Fatal(err)
+	}
+	if err = db.QueryRow(`SELECT bytes,objects FROM repository_usage_counters WHERE repository_id=$1::uuid`, repositoryID).Scan(&bytes, &objects); err != nil {
+		t.Fatal(err)
+	}
+	if usedBytes == 0 || bytes != usedBytes || objects != usedObjects {
+		t.Fatalf("counter bytes=%d objects=%d, aggregation bytes=%d objects=%d", bytes, objects, usedBytes, usedObjects)
 	}
 }

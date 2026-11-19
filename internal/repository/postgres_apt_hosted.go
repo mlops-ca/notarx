@@ -794,7 +794,7 @@ func publishAPTRepositorySnapshotTx(ctx context.Context, tx *sql.Tx, snapshot AP
 	if err != nil {
 		return APTRepositorySnapshot{}, err
 	}
-	if delta := generatedAfter.minus(generatedBefore); delta != (aptUsage{}) {
+	if delta := generatedAfter.minus(generatedBefore); delta != (measuredUsage{}) {
 		if err = capacity.Reserve(ctx, tx, snapshot.RepositoryID, delta.bytes, delta.objects); err != nil {
 			return APTRepositorySnapshot{}, err
 		}

@@ -154,10 +154,12 @@ Quota accounting (ADR 0023 section 3) keeps one row per repository in
 calls `capacity.Reserve` as the last statement of its transaction; a positive
 delta that would pass `quota_bytes` is rejected (HTTP 507, as before) and a release
 never is. The overview and quota alert evaluation read the counters, so they cost
-O(repositories). Formats whose writers are not yet covered (the registry in
-`internal/capacity/registry.go` lists each format as pending or covered; Maven and
-Conan are pending) aggregate on read, and every format keeps its capacity trigger
-until a later slice drops the triggers. Helm, NuGet and RubyGems still reserve
+O(repositories). Every hosted format is covered (the registry in
+`internal/capacity/registry.go` lists each format as pending or covered), and every
+format keeps its capacity trigger until a later slice drops the triggers. Maven and Conan
+count an asset only while a visible artifact or revision covers it, so their writers bracket
+the transaction with a measurement of the touched coordinate or recipe revision under a
+per-repository advisory lock and reserve the difference. Helm, NuGet and RubyGems still reserve
 bytes for pending sessions at reservation time, as their store contracts assert, and
 reserve the committed bytes in the counter at commit.
 

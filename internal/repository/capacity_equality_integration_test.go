@@ -47,6 +47,8 @@ var counterEqualityCases = map[string]counterEquality{
 	"cargo": {repoFormat: FormatCargo, run: cargoCounterEquality, edge: cargoCounterEdge},
 	"npm":   {repoFormat: FormatNPM, run: npmCounterEquality, edge: npmCounterEdge},
 	"pypi":  {repoFormat: FormatPyPI, run: pypiCounterEquality, edge: pypiCounterEdge},
+	"maven": {repoFormat: FormatMaven, run: mavenCounterEquality, edge: mavenCounterEdge},
+	"conan": {repoFormat: FormatConan, run: conanCounterEquality, edge: conanCounterEdge},
 }
 
 // counterEqualityElsewhere names the equality tests of covered formats whose store lives in
