@@ -17,6 +17,7 @@ done
 # the Gateway under test. Every client and test below runs through
 # scripts/egress-guard.sh, which rejects non-private addresses in CI. A path
 # that was not recorded answers 404 and is reported.
+"$repo_root/scripts/egress-guard.sh" curl --fail --silent --show-error --max-time 10 --output /dev/null https://repo.maven.apache.org/maven2/
 # Mandatory real clients: snapshot history/takeover and unchanged Hosted POMs from an empty cache.
 "$repo_root/scripts/egress-guard.sh" go test -v -count=1 -tags=mavenclient ./internal/app -run '^TestMavenClient(SnapshotHistoryTakeoverAndDeploy|HostedPOMCompatibilityColdCache)$'
 
