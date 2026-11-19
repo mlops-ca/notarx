@@ -201,7 +201,8 @@ newer record) and the provenance tables `artifact_promotions`,
 | `repository_quota_alert_events`, `email_test_deliveries` | 365 d, 7 d | 30 d, 1 d |
 | `nexus_migration_entries` | batch finished + 30 d | + 7 d |
 | idempotency tables | `expires_at` + 1 d | same |
-| `workload_jti_seen`, `saml_assertion_ids`, `saml_request_state` | `expires_at` | same |
+| `workload_jti_seen` | `expires_at` + 1 h (only expired rows) | same |
+| `saml_assertion_ids`, `saml_request_state` | `expires_at` | same |
 
 ```env
 NOTARX_RETENTION_PROFILE=standard        # or freetier (the ADR 0017 reference stack)

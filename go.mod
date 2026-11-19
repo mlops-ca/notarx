@@ -14,6 +14,7 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/felixge/httpsnoop v1.1.0
 	github.com/getkin/kin-openapi v0.153.0
+	github.com/go-jose/go-jose/v4 v4.1.9
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.13.0
 	github.com/klauspost/compress v1.20.4
