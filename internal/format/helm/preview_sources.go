@@ -162,13 +162,10 @@ func (m *Module) replacePreviewRepository(w http.ResponseWriter, r *http.Request
 		m.problem(w, 400, "invalid_source_configuration")
 		return
 	}
-	next, err = m.configuration.UpdateHostedRepository(r.Context(), next, input.Version)
+	next, err = m.configuration.UpdateHostedRepository(r.Context(), next, input.Version,
+		auditRecords(repository.AuditRecord{Actor: p.Actor, Repository: repo.Name, Format: "helm", Resource: repo.ID, Operation: "helm.preview.configure", Outcome: repository.AuditResolved, Status: 200, OccurredAt: time.Now().UTC(), Evidence: map[string]string{"version": repository.NextHostedVersion(input.Version)}})...)
 	if err != nil {
 		m.failure(w, err)
-		return
-	}
-	if auditErr := m.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: p.Actor, Repository: repo.Name, Format: "helm", Resource: repo.ID, Operation: "helm.preview.configure", Outcome: repository.AuditResolved, Status: 200, OccurredAt: time.Now().UTC(), Evidence: map[string]string{"version": next.Version}}); auditErr != nil {
-		m.problem(w, 500, "audit_failed")
 		return
 	}
 	writeJSON(w, r, 200, repositoryDTO(next))
@@ -231,16 +228,11 @@ func (m *Module) previewGroups(w http.ResponseWriter, r *http.Request, p authori
 		body, _ := json.Marshal(input)
 		sum := sha256.Sum256(body)
 		group.ID = ids.New()
-		group, replay, err := m.groups.CreateHostedGroupIdempotently(ctx, group, p.Actor, "helm-preview:"+key, hex.EncodeToString(sum[:]))
+		group, _, err = m.groups.CreateHostedGroupIdempotently(ctx, group, p.Actor, "helm-preview:"+key, hex.EncodeToString(sum[:]),
+			auditRecords(repository.AuditRecord{Actor: p.Actor, Repository: group.Name, GroupName: group.Name, Format: "helm", Resource: group.ID, Operation: "helm.preview.group.create", Outcome: repository.AuditResolved, Status: 201, OccurredAt: time.Now().UTC()})...)
 		if err != nil {
 			m.failure(w, err)
 			return
-		}
-		if !replay {
-			if auditErr := m.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: p.Actor, Repository: group.Name, GroupName: group.Name, Format: "helm", Resource: group.ID, Operation: "helm.preview.group.create", Outcome: repository.AuditResolved, Status: 201, OccurredAt: time.Now().UTC()}); auditErr != nil {
-				m.problem(w, 500, "audit_failed")
-				return
-			}
 		}
 		writeJSON(w, r, 201, groupDTO(r, group))
 		return
@@ -275,13 +267,10 @@ func (m *Module) previewGroups(w http.ResponseWriter, r *http.Request, p authori
 			return
 		}
 		next.ID = group.ID
-		next, err = m.groups.ReplaceHostedGroup(r.Context(), next, input.Version)
+		next, err = m.groups.ReplaceHostedGroup(r.Context(), next, input.Version,
+			auditRecords(repository.AuditRecord{Actor: p.Actor, Repository: group.Name, GroupName: group.Name, Format: "helm", Resource: group.ID, Operation: "helm.preview.group.configure", Outcome: repository.AuditResolved, Status: 200, OccurredAt: time.Now().UTC(), Evidence: map[string]string{"version": repository.NextHostedVersion(input.Version)}})...)
 		if err != nil {
 			m.failure(w, err)
-			return
-		}
-		if auditErr := m.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: p.Actor, Repository: group.Name, GroupName: group.Name, Format: "helm", Resource: group.ID, Operation: "helm.preview.group.configure", Outcome: repository.AuditResolved, Status: 200, OccurredAt: time.Now().UTC(), Evidence: map[string]string{"version": next.Version}}); auditErr != nil {
-			m.problem(w, 500, "audit_failed")
 			return
 		}
 		writeJSON(w, r, 200, groupDTO(r, next))

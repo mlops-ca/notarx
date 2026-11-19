@@ -40,6 +40,19 @@ type operation struct {
 	principal authorization.Principal
 	name, id  string
 	status    int
+	// audited is set when the store wrote the audit of a successful state change in its own
+	// transaction (ADR 0023 section 1), so finish writes no second record for it. An idempotent
+	// replay changes nothing and writes none either: its change was audited when it was made.
+	audited bool
+}
+
+// audit is the record handed to the service call that changes state; the store writes it in the
+// transaction of the change, and a record without a resource names the created source.
+func (op *operation) audit(status int) []repository.AuditRecord {
+	if op.adapter == nil || op.adapter.audit == nil {
+		return nil
+	}
+	return []repository.AuditRecord{repository.ManagementAudit(op.principal.Actor, op.name, op.id, status)}
 }
 
 func (h *Adapter) begin(w http.ResponseWriter, r *http.Request, name, id string) (*operation, bool) {
@@ -72,7 +85,7 @@ func (h *Adapter) begin(w http.ResponseWriter, r *http.Request, name, id string)
 	return op, true
 }
 func (op *operation) finish() {
-	if op.adapter == nil || op.adapter.audit == nil {
+	if op.audited || op.adapter == nil || op.adapter.audit == nil {
 		return
 	}
 	outcome := repository.AuditResolved
@@ -163,10 +176,11 @@ func (h *Adapter) CreateMigrationSource(w http.ResponseWriter, r *http.Request) 
 	if op.failed(w, err) {
 		return
 	}
-	out, err := h.service.Create(r.Context(), in)
+	out, err := h.service.Create(r.Context(), in, op.audit(201)...)
 	if op.failed(w, err) {
 		return
 	}
+	op.audited = true
 	op.id = out.ID
 	w.Header().Set("ETag", out.Version)
 	op.respond(w, 201, sourceResponse(out))
@@ -221,10 +235,11 @@ func (h *Adapter) UpdateMigrationSource(w http.ResponseWriter, r *http.Request, 
 	if op.failed(w, err) {
 		return
 	}
-	out, err := h.service.Update(r.Context(), id.String(), in, params.IfMatch)
+	out, err := h.service.Update(r.Context(), id.String(), in, params.IfMatch, op.audit(200)...)
 	if op.failed(w, err) {
 		return
 	}
+	op.audited = true
 	w.Header().Set("ETag", out.Version)
 	op.respond(w, 200, sourceResponse(out))
 }
@@ -234,9 +249,10 @@ func (h *Adapter) DeleteMigrationSource(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	defer op.finish()
-	if op.failed(w, h.service.Delete(r.Context(), id.String(), params.IfMatch)) {
+	if op.failed(w, h.service.Delete(r.Context(), id.String(), params.IfMatch, op.audit(204)...)) {
 		return
 	}
+	op.audited = true
 	op.status = 204
 	w.WriteHeader(204)
 }

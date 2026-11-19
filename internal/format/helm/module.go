@@ -22,7 +22,7 @@ import (
 type RepositoryStore interface {
 	GetHostedRepository(context.Context, string) (repository.HostedRepository, error)
 	GetHostedRepositoryByName(context.Context, string) (repository.HostedRepository, error)
-	CreateHostedRepositoryIdempotently(context.Context, repository.HostedRepository, string, string, string) (repository.HostedRepository, bool, error)
+	CreateHostedRepositoryIdempotently(context.Context, repository.HostedRepository, string, string, string, ...repository.AuditRecord) (repository.HostedRepository, bool, error)
 }
 type Auditor interface {
 	RecordAudit(context.Context, repository.AuditRecord) error
@@ -32,16 +32,16 @@ type AnonymousPolicy interface {
 }
 type CapacityStore interface {
 	GetRepositoryCapacity(context.Context, string) (repository.RepositoryCapacity, error)
-	ReplaceRepositoryCapacityQuota(context.Context, string, int64) (repository.RepositoryCapacity, error)
+	ReplaceRepositoryCapacityQuota(context.Context, string, int64, ...repository.AuditRecord) (repository.RepositoryCapacity, error)
 }
 type ConfigurationStore interface {
-	UpdateHostedRepository(context.Context, repository.HostedRepository, string) (repository.HostedRepository, error)
+	UpdateHostedRepository(context.Context, repository.HostedRepository, string, ...repository.AuditRecord) (repository.HostedRepository, error)
 }
 type GroupStore interface {
-	CreateHostedGroupIdempotently(context.Context, repository.HostedGroup, string, string, string) (repository.HostedGroup, bool, error)
+	CreateHostedGroupIdempotently(context.Context, repository.HostedGroup, string, string, string, ...repository.AuditRecord) (repository.HostedGroup, bool, error)
 	GetHostedGroup(context.Context, string) (repository.HostedGroup, error)
 	GetHostedGroupByName(context.Context, string) (repository.HostedGroup, error)
-	ReplaceHostedGroup(context.Context, repository.HostedGroup, string) (repository.HostedGroup, error)
+	ReplaceHostedGroup(context.Context, repository.HostedGroup, string, ...repository.AuditRecord) (repository.HostedGroup, error)
 }
 type Upstream interface {
 	FetchHelm(context.Context, repository.HostedRepository, string, http.Header) (*http.Response, error)
@@ -189,6 +189,14 @@ func (m *Module) problem(w http.ResponseWriter, status int, code string) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]any{"type": "about:blank", "title": code, "status": status, "code": code, "detail": "Helm preview operation failed"})
 }
+
+// auditRecords wraps the audit of a management change for the store method that makes the
+// change, which writes it in the same transaction (ADR 0023 section 1): a failing audit insert
+// fails the change itself and the handler answers with the store's error.
+func auditRecords(record repository.AuditRecord) []repository.AuditRecord {
+	return []repository.AuditRecord{record}
+}
+
 func (m *Module) failure(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, repository.ErrNotFound):

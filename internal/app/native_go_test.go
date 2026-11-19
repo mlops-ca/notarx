@@ -31,11 +31,11 @@ type failingGoReclaimEnqueueStore struct {
 	*repository.MemoryStore
 }
 
-func (s *failingGoReclaimEnqueueStore) EnqueueLifecycleJob(ctx context.Context, job repository.LifecycleJob) (repository.LifecycleJob, bool, error) {
+func (s *failingGoReclaimEnqueueStore) EnqueueLifecycleJob(ctx context.Context, job repository.LifecycleJob, audit ...repository.AuditRecord) (repository.LifecycleJob, bool, error) {
 	if job.Kind == repository.LifecycleJobReclaim {
 		return repository.LifecycleJob{}, false, errors.New("injected Go reclaim enqueue failure")
 	}
-	return s.MemoryStore.EnqueueLifecycleJob(ctx, job)
+	return s.MemoryStore.EnqueueLifecycleJob(ctx, job, audit...)
 }
 
 func (s *failNthGoPutStore) PutVerifiedReader(ctx context.Context, key string, reader io.Reader, size int64, digest string) error {

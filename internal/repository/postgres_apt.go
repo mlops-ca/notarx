@@ -67,11 +67,11 @@ func (s *PostgresStore) CacheAPTAsset(ctx context.Context, incoming APTAsset) (A
 	if stored.Digest != incoming.Digest || stored.ObjectKey != incoming.ObjectKey || stored.Size != incoming.Size || stored.SourceURL != incoming.SourceURL {
 		return APTAsset{}, ErrUpstreamChanged
 	}
-	delta := aptUsage{bytes: stored.Size - previousSize}
+	delta := measuredUsage{bytes: stored.Size - previousSize}
 	if !previousExisted {
 		delta.objects = 1
 	}
-	if delta != (aptUsage{}) {
+	if delta != (measuredUsage{}) {
 		if err = capacity.Reserve(ctx, tx, stored.RepositoryID, delta.bytes, delta.objects); err != nil {
 			return APTAsset{}, err
 		}

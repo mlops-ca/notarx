@@ -19,6 +19,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/nexusmigration"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/testsupport"
 )
 
 type nexusPGPublicationFixture struct {
@@ -249,8 +250,8 @@ type nexusLostCommitResponse struct {
 	lost atomic.Bool
 }
 
-func (s *nexusLostCommitResponse) CommitMavenPublishSessionIdempotently(ctx context.Context, id, key, payload string, assets []repository.MavenAsset) (repository.MavenArtifact, bool, error) {
-	artifact, replayed, err := s.NexusMigrationPublicationStore.CommitMavenPublishSessionIdempotently(ctx, id, key, payload, assets)
+func (s *nexusLostCommitResponse) CommitMavenPublishSessionIdempotently(ctx context.Context, id, key, payload string, assets []repository.MavenAsset, audit ...repository.AuditRecord) (repository.MavenArtifact, bool, error) {
+	artifact, replayed, err := s.NexusMigrationPublicationStore.CommitMavenPublishSessionIdempotently(ctx, id, key, payload, assets, audit...)
 	if err == nil && !s.lost.Swap(true) {
 		return repository.MavenArtifact{}, false, errors.New("synthetic commit response lost")
 	}
@@ -486,4 +487,27 @@ func TestPostgresRustFSNexusPublicationMavenDecodedVersionNames(t *testing.T) {
 	handler := newTestGateway(t, GatewayOptions{Store: f.storeB, Adapter: TestAdapter{}, Authenticator: testAuthenticator(), Storage: ObjectStores{repository.FormatMaven: f.objectsB}})
 	// Maven GETs encode the wire path; native metadata still uses decoded '+'.
 	nexusPublicationNativeReads(t, handler, f.repo, f.entry, bodies)
+}
+
+// TestPostgresNexusMigrationPublicationRollsBackWithItsAudit makes the nexus.migration.publish audit
+// insert of the target repository fail: the Raw or Maven publication must not take effect.
+func TestPostgresNexusMigrationPublicationRollsBackWithItsAudit(t *testing.T) {
+	for _, format := range []repository.Format{repository.FormatRaw, repository.FormatMaven} {
+		t.Run(string(format), func(t *testing.T) {
+			f := newNexusPGPublicationFixture(t, format)
+			db, err := sql.Open("pgx", os.Getenv("TEST_DATABASE_URL"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = db.Close() })
+			var restore func()
+			runNexusPublicationAuditRollback(t, f.publication, f.entry, f.bodies, func() {
+				restore = testsupport.FailSecurityAudits(t, db, f.repo.Name, f.entry.Actor)
+			}, func() { restore() })
+			var published int
+			if err = db.QueryRow(`SELECT COUNT(*) FROM security_audit_log WHERE repository=$1 AND operation='nexus.migration.publish'`, f.repo.Name).Scan(&published); err != nil || published != 1 {
+				t.Fatalf("nexus.migration.publish audits=%d err=%v, want 1", published, err)
+			}
+		})
+	}
 }

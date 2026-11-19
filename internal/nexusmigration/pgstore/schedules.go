@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	m "github.com/mlops-ca/notarx/internal/nexusmigration"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 var _ m.ScheduleStore = (*Store)(nil)
@@ -138,7 +139,7 @@ func freshScheduleEvidence(ctx context.Context, tx *sql.Tx, evidence *m.Capacity
 	return now, nil
 }
 
-func (s *Store) CreateSchedule(ctx context.Context, p m.Schedule, key, hash string) (m.Schedule, error) {
+func (s *Store) CreateSchedule(ctx context.Context, p m.Schedule, key, hash string, audit ...repository.AuditRecord) (m.Schedule, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return p, err
@@ -202,13 +203,16 @@ func (s *Store) CreateSchedule(ctx context.Context, p m.Schedule, key, hash stri
 	if err = checkPyPIMigrationActor(ctx, tx, p.Actor, p.ActorKind, p.OwnerID, p.Mappings); err != nil {
 		return p, err
 	}
+	if err = repository.InsertAuditsTx(ctx, tx, audit...); err != nil {
+		return p, err
+	}
 	if err = tx.Commit(); err != nil {
 		return p, err
 	}
 	return p, nil
 }
 
-func (s *Store) ControlSchedule(ctx context.Context, id, expected, actor, key, action, hash string, evidence *m.CapacityEvidence, now time.Time) (m.Schedule, error) {
+func (s *Store) ControlSchedule(ctx context.Context, id, expected, actor, key, action, hash string, evidence *m.CapacityEvidence, now time.Time, audit ...repository.AuditRecord) (m.Schedule, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return m.Schedule{}, err
@@ -298,6 +302,9 @@ func (s *Store) ControlSchedule(ctx context.Context, id, expected, actor, key, a
 		if err = checkPyPIMigrationActor(ctx, tx, p.Actor, p.ActorKind, p.OwnerID, p.Mappings); err != nil {
 			return p, err
 		}
+	}
+	if err = repository.InsertAuditsTx(ctx, tx, audit...); err != nil {
+		return p, err
 	}
 	if err = tx.Commit(); err != nil {
 		return p, err

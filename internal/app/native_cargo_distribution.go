@@ -35,14 +35,14 @@ type CargoPromotionPayload struct {
 	Digest             string            `json:"digest"`
 }
 
-func (m NativeCargoPromotion) Enqueue(ctx context.Context, targetID, key string, payload CargoPromotionPayload) (repository.LifecycleJob, bool, error) {
+func (m NativeCargoPromotion) Enqueue(ctx context.Context, targetID, key string, payload CargoPromotionPayload, audit ...repository.AuditRecord) (repository.LifecycleJob, bool, error) {
 	payload.Format = repository.FormatCargo
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return repository.LifecycleJob{}, false, err
 	}
 	return m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: ids.New(), RepositoryID: targetID,
-		Kind: repository.LifecycleJobPromotion, IdempotencyKey: key, Payload: body})
+		Kind: repository.LifecycleJobPromotion, IdempotencyKey: key, Payload: body}, audit...)
 }
 
 func (m NativeCargoPromotion) RunJobs(ctx context.Context, limit int) error {

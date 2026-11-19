@@ -35,7 +35,7 @@ type Governance interface {
 	Restore(context.Context, string, string) error
 }
 type Promotion interface {
-	EnqueuePromotion(context.Context, string, string, string, string, string) (repository.LifecycleJob, bool, error)
+	EnqueuePromotion(context.Context, string, string, string, string, string, ...repository.AuditRecord) (repository.LifecycleJob, bool, error)
 }
 type Replication interface {
 	ReplicationCheckpoints(context.Context, string, string, string) ([]repository.ReplicationCheckpoint, error)
@@ -73,7 +73,7 @@ type ImmutablePublication interface {
 	ValidatePublication(string, []NativeAsset) error
 	LockPublication(context.Context, []NativeAsset) (context.Context, func(), error)
 	StageVerifiedPublication(context.Context, NativeAsset, io.Reader) error
-	PublishPublication(context.Context, NativeAsset) error
+	PublishPublication(context.Context, NativeAsset, ...repository.AuditRecord) error
 	ReadPublication(context.Context, string, string) (NativeAsset, error)
 }
 

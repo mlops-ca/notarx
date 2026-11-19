@@ -36,14 +36,13 @@ type NexusMigrationPublicationStore interface {
 	FindMavenPublishSession(context.Context, string, string, string) (repository.MavenPublishSession, error)
 	GetMavenPublishSession(context.Context, string) (repository.MavenPublishSession, error)
 	MarkMavenPublishObject(context.Context, string, string, string) error
-	CommitMavenPublishSessionIdempotently(context.Context, string, string, string, []repository.MavenAsset) (repository.MavenArtifact, bool, error)
+	CommitMavenPublishSessionIdempotently(context.Context, string, string, string, []repository.MavenAsset, ...repository.AuditRecord) (repository.MavenArtifact, bool, error)
 	GetMavenArtifactByCoordinate(context.Context, string, string) (repository.MavenArtifact, error)
 	GetMavenAsset(context.Context, string, string) (repository.MavenAsset, error)
 	ListMavenAssets(context.Context, string, string) ([]repository.MavenAsset, error)
 	StageRawObject(context.Context, repository.RawObject) error
-	PutRawAssetIf(context.Context, repository.RawAsset, repository.RawWriteCondition) (repository.RawAsset, error)
+	PutRawAssetIf(context.Context, repository.RawAsset, repository.RawWriteCondition, ...repository.AuditRecord) (repository.RawAsset, error)
 	GetRawAsset(context.Context, string, string) (repository.RawAsset, error)
-	RecordAudit(context.Context, repository.AuditRecord) error
 }
 
 type nexusMigrationPublicationScanner interface {
@@ -654,20 +653,28 @@ func (p *NexusMigrationPublication) Publish(ctx context.Context, entry nexusmigr
 		return err
 	}
 	digest := assets[0].Digest
+	// The publication and its audit commit together (ADR 0023 section 1): a failing audit insert
+	// fails the publication. The audit is stamped in that transaction.
+	auditOf := func(artifactDigest string) repository.AuditRecord {
+		return repository.AuditRecord{Repository: repo.Name, GroupName: repo.Name, Actor: entry.Actor,
+			Outcome: repository.AuditResolved, Format: entry.Format, Resource: entry.Identity,
+			Representation: artifactDigest, Operation: "nexus.migration.publish", Status: 201}
+	}
 	if capability, ok := p.publicationModule(entry.Format); ok {
-		err = capability.PublishPublication(ctx, nativePublicationAsset(assets[0].MavenAsset))
+		err = capability.PublishPublication(ctx, nativePublicationAsset(assets[0].MavenAsset), auditOf(digest))
 		if errors.Is(err, repository.ErrPreconditionFailed) {
 			return nexusmigration.Failed("target_conflict")
 		}
 	} else {
-		if _, err = p.session(ctx, entry, assets); err != nil {
-			return err
+		session, sessionErr := p.session(ctx, entry, assets)
+		if sessionErr != nil {
+			return sessionErr
 		}
 		native := make([]repository.MavenAsset, 0, len(assets))
 		for _, asset := range assets {
 			native = append(native, asset.MavenAsset)
 		}
-		artifact, _, commitErr := p.store.CommitMavenPublishSessionIdempotently(ctx, entry.SessionID, "nexus-migration:"+entry.ID, nexusPublicationIdentity(entry), native)
+		artifact, _, commitErr := p.store.CommitMavenPublishSessionIdempotently(ctx, entry.SessionID, "nexus-migration:"+entry.ID, nexusPublicationIdentity(entry), native, auditOf(session.Objects[0].Digest))
 		err, digest = commitErr, artifact.Digest
 		if errors.Is(err, repository.ErrNameExists) {
 			return nexusmigration.Failed("target_conflict")
@@ -679,9 +686,6 @@ func (p *NexusMigrationPublication) Publish(ctx context.Context, entry nexusmigr
 	if err != nil {
 		return nexusmigration.Failed("native_publish_failed")
 	}
-	_ = p.store.RecordAudit(ctx, repository.AuditRecord{Repository: repo.Name, GroupName: repo.Name, Actor: entry.Actor,
-		Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: entry.Format, Resource: entry.Identity,
-		Representation: digest, Operation: "nexus.migration.publish", Status: 201})
 	if !nilDependency(p.scanner) {
 		_ = p.scanner.ScheduleRepository(ctx, entry.TargetRepositoryID, repo.Format, entry.Identity, digest, entry.Actor)
 	}

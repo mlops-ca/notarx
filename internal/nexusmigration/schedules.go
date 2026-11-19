@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/ids"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 // ScheduleBinding is copied from a completed batch. Editing a source, mapping or
@@ -55,10 +56,10 @@ type ScheduleStore interface {
 	ScheduleTemplate(context.Context, string) (Batch, error)
 	ReplayScheduleCreate(context.Context, string, string, string) (Schedule, bool, error)
 	ReplayScheduleControl(context.Context, string, string, string, string, string) (Schedule, bool, error)
-	CreateSchedule(context.Context, Schedule, string, string) (Schedule, error)
+	CreateSchedule(context.Context, Schedule, string, string, ...repository.AuditRecord) (Schedule, error)
 	GetSchedule(context.Context, string) (Schedule, error)
 	ListSchedules(context.Context, int, string) ([]Schedule, string, error)
-	ControlSchedule(context.Context, string, string, string, string, string, string, *CapacityEvidence, time.Time) (Schedule, error)
+	ControlSchedule(context.Context, string, string, string, string, string, string, *CapacityEvidence, time.Time, ...repository.AuditRecord) (Schedule, error)
 	ReconcileSchedules(context.Context, int) error
 	ClaimDueSchedule(context.Context, time.Time) (Schedule, error)
 	DispatchSchedule(context.Context, Schedule, Batch, time.Time) error
@@ -96,7 +97,7 @@ func (s *ScheduleService) validateBinding(ctx context.Context, p Schedule) error
 	return s.batches.publication.ValidateTargets(ctx, p.Mappings)
 }
 
-func (s *ScheduleService) Create(ctx context.Context, in ScheduleCreate, actor, key string) (Schedule, error) {
+func (s *ScheduleService) Create(ctx context.Context, in ScheduleCreate, actor, key string, audit ...repository.AuditRecord) (Schedule, error) {
 	if !s.Available() {
 		return Schedule{}, Failed("migration_execution_disabled")
 	}
@@ -139,7 +140,7 @@ func (s *ScheduleService) Create(ctx context.Context, in ScheduleCreate, actor, 
 		}
 		p.State, p.LastError, p.CapacityEvidence = "active", "", in.CapacityEvidence
 	}
-	return s.store.CreateSchedule(ctx, p, key, hash)
+	return s.store.CreateSchedule(ctx, p, key, hash, repository.WithAuditResource(audit, p.ID)...)
 }
 
 func (s *ScheduleService) validateObservation(p Schedule, e CapacityEvidence) error {
@@ -163,7 +164,7 @@ func (s *ScheduleService) List(ctx context.Context, limit int, cursor string) ([
 	return s.store.ListSchedules(ctx, limit, cursor)
 }
 
-func (s *ScheduleService) Control(ctx context.Context, id, expected, actor, key, action string, evidence *CapacityEvidence) (Schedule, error) {
+func (s *ScheduleService) Control(ctx context.Context, id, expected, actor, key, action string, evidence *CapacityEvidence, audit ...repository.AuditRecord) (Schedule, error) {
 	if !s.Available() {
 		return Schedule{}, Failed("migration_execution_disabled")
 	}
@@ -204,7 +205,7 @@ func (s *ScheduleService) Control(ctx context.Context, id, expected, actor, key,
 			return p, err
 		}
 	}
-	return s.store.ControlSchedule(ctx, id, expected, actor, key, action, hash, evidence, s.now().UTC())
+	return s.store.ControlSchedule(ctx, id, expected, actor, key, action, hash, evidence, s.now().UTC(), audit...)
 }
 
 // RunDue only dispatches durable batches. Missed occurrences coalesce, and one

@@ -16,14 +16,26 @@ import (
 type nuGetSourceContract interface {
 	nuGetContractStore
 	NuGetSourceStore
-	CreateHostedGroupIdempotently(context.Context, HostedGroup, string, string, string) (HostedGroup, bool, error)
+	CreateHostedGroupIdempotently(context.Context, HostedGroup, string, string, string, ...AuditRecord) (HostedGroup, bool, error)
 	ReplaceHostedGroupMembers(context.Context, string, []GroupMember, string) (HostedGroup, error)
 }
 
 func TestNuGetMemorySourceStoreContract(t *testing.T) {
-	testNuGetSourceStoreContract(t, NewMemoryStore())
+	store := NewMemoryStore()
+	testNuGetSourceStoreContract(t, store, func(_ *testing.T, repository, actor string) func() {
+		store.SetAuditFault(func(record AuditRecord) error {
+			if record.Repository == repository && record.Actor == actor {
+				return errors.New("audit store unavailable")
+			}
+			return nil
+		})
+		return func() { store.SetAuditFault(nil) }
+	})
 }
-func testNuGetSourceStoreContract(t *testing.T, s nuGetSourceContract) {
+
+// testNuGetSourceStoreContract runs the contract on a store; failAudit makes the audit inserts of
+// the repository and actor fail until the returned restore function runs.
+func testNuGetSourceStoreContract(t *testing.T, s nuGetSourceContract, failAudit func(t *testing.T, repository, actor string) func()) {
 	t.Helper()
 	ctx := t.Context()
 	a, err := s.CreateHostedRepository(ctx, HostedRepository{ID: uuid.NewString(), Name: "nuget-proxy-" + uuid.NewString(), Format: FormatNuGet, Type: RepositoryTypeProxy, Endpoint: "https://private.example.test/dynamic/index.json"})
@@ -120,6 +132,19 @@ func testNuGetSourceStoreContract(t *testing.T, s nuGetSourceContract) {
 	}
 	owner.RepositoryVersion = updated.Version
 	owner.Digest = "sha256:" + fmt.Sprintf("%064x", 1)
+	// A failing audit fails the revalidation itself (ADR 0023 section 1): the authority keeps its version.
+	restore := failAudit(t, group.Name, "operator")
+	audit := AuditRecord{Actor: "operator", Repository: group.Name, GroupName: group.Name, Format: "nuget", Resource: "private.a@1.0.0", Operation: "nuget.preview.source.revalidate", Outcome: AuditResolved, Status: 200}
+	if _, err = s.RevalidateNuGetGroupAuthority(ctx, group.Version, a.Version, owner, audit); err == nil {
+		t.Fatal("revalidation took effect although its audit failed")
+	}
+	if current, getErr := s.GetNuGetGroupAuthority(ctx, group.ID, owner.PackageID, owner.Version); getErr != nil || current.RepositoryVersion != a.Version {
+		t.Fatalf("failed revalidation moved the authority: %+v %v", current, getErr)
+	}
+	restore()
+	if _, err = s.RevalidateNuGetGroupAuthority(ctx, group.Version, a.Version, owner, audit); err != nil {
+		t.Fatalf("revalidation with a working audit: %v", err)
+	}
 	if _, err = s.RevalidateNuGetGroupAuthority(ctx, group.Version, a.Version, owner); err != nil {
 		t.Fatalf("same-owner verified revalidation: %v", err)
 	}

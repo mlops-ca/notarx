@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func (s *PostgresStore) CreateReplicationPlan(ctx context.Context, plan ReplicationPlan, checkpoints []ReplicationCheckpoint) (ReplicationPlan, bool, error) {
+func (s *PostgresStore) CreateReplicationPlan(ctx context.Context, plan ReplicationPlan, checkpoints []ReplicationCheckpoint, audit ...AuditRecord) (ReplicationPlan, bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return ReplicationPlan{}, false, err
@@ -30,6 +30,9 @@ func (s *PostgresStore) CreateReplicationPlan(ctx context.Context, plan Replicat
 			if _, err = tx.ExecContext(ctx, `INSERT INTO replication_checkpoints (plan_id,source_object_key,object_key,digest,size,byte_offset,state,attempts,last_error) VALUES ($1,$2,$3,$4,$5,0,'pending',0,'')`, plan.ID, sourceObjectKey, checkpoint.ObjectKey, checkpoint.Digest, checkpoint.Size); err != nil {
 				return ReplicationPlan{}, false, err
 			}
+		}
+		if err = insertAudits(ctx, tx, audit); err != nil {
+			return ReplicationPlan{}, false, err
 		}
 		if err = tx.Commit(); err != nil {
 			return ReplicationPlan{}, false, err
@@ -78,6 +81,9 @@ func (s *PostgresStore) CreateReplicationPlan(ctx context.Context, plan Replicat
 			return ReplicationPlan{}, false, err
 		}
 		existing = requeued
+		if err = insertAudits(ctx, tx, audit); err != nil {
+			return ReplicationPlan{}, false, err
+		}
 	}
 	if err = tx.Commit(); err != nil {
 		return ReplicationPlan{}, false, err

@@ -72,7 +72,7 @@ func (s *PostgresStore) TombstoneCargoPublication(ctx context.Context, repositor
 	return publication, nil
 }
 
-func (s *PostgresStore) RestoreCargoPublication(ctx context.Context, repositoryID, name, version string) (CargoPublication, error) {
+func (s *PostgresStore) RestoreCargoPublication(ctx context.Context, repositoryID, name, version string, audit ...AuditRecord) (CargoPublication, error) {
 	objectKey, err := s.cargoObjectKey(ctx, repositoryID, name, version)
 	if errors.Is(err, ErrNotFound) {
 		return CargoPublication{}, ErrDisabled
@@ -110,6 +110,9 @@ func (s *PostgresStore) RestoreCargoPublication(ctx context.Context, repositoryI
 	if _, err := tx.ExecContext(ctx, `DELETE FROM artifact_tombstones
 		WHERE repository_id=$1::uuid AND format='cargo' AND coordinate=$2`, repositoryID,
 		cargoPublicationCoordinate(publication.Name, publication.Version)); err != nil {
+		return CargoPublication{}, err
+	}
+	if err := insertAudits(ctx, tx, audit); err != nil {
 		return CargoPublication{}, err
 	}
 	if err := tx.Commit(); err != nil {

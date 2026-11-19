@@ -41,6 +41,31 @@ func runAudited[T any](ctx context.Context, s *PostgresStore, audit []AuditRecor
 	return value, nil
 }
 
+// ManagementAudit is the resolved audit record of a management change made through a store of
+// another package. OccurredAt stays empty so the audit is stamped when it is written, in the
+// transaction of the change.
+func ManagementAudit(actor, operation, resource string, status int) AuditRecord {
+	return AuditRecord{Actor: actor, Operation: operation, Resource: resource, Format: "management", Outcome: AuditResolved, Status: status, CacheDisposition: "bypass"}
+}
+
+// WithAuditResource returns the audit records with the resource set to resource where it is empty,
+// for a change whose subject is named by the service that creates it.
+func WithAuditResource(audit []AuditRecord, resource string) []AuditRecord {
+	named := append([]AuditRecord(nil), audit...)
+	for index := range named {
+		if named[index].Resource == "" {
+			named[index].Resource = resource
+		}
+	}
+	return named
+}
+
+// InsertAuditsTx writes the audit records inside the caller's transaction, for the stores of other
+// packages that make a management change and its audit atomic (ADR 0023 section 1).
+func InsertAuditsTx(ctx context.Context, tx *sql.Tx, audit ...AuditRecord) error {
+	return insertAudits(ctx, tx, audit)
+}
+
 // insertAudits writes the audit records inside the caller's transaction.
 func insertAudits(ctx context.Context, execer auditExecer, audit []AuditRecord) error {
 	for _, record := range audit {

@@ -67,6 +67,11 @@ func lockMavenCapacityTx(ctx context.Context, tx *sql.Tx, repositories ...string
 		if i > 0 && repo == repos[i-1] {
 			continue
 		}
+		// The usage counter delta of a writer is the difference of two measurements, so
+		// writers of one repository run one at a time even when it has no quota row to lock.
+		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "maven-capacity:"+repo); err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx, `SELECT repository_id FROM repository_capacity_quotas WHERE repository_id=$1 FOR UPDATE`, repo); err != nil {
 			return err
 		}
@@ -232,6 +237,10 @@ func (s *PostgresStore) CommitMavenSnapshotImport(ctx context.Context, p MavenSn
 	if err = lockMavenCapacityTx(ctx, tx, p.RepositoryID); err != nil {
 		return v, err
 	}
+	usage, err := openMavenUsageBracket(ctx, tx, p.RepositoryID, p.Coordinate)
+	if err != nil {
+		return v, err
+	}
 	if err = lockMavenSnapshotAssetIntentsTx(ctx, tx, p.Assets); err != nil {
 		return v, err
 	}
@@ -273,6 +282,9 @@ func (s *PostgresStore) CommitMavenSnapshotImport(ctx context.Context, p MavenSn
 		return v, err
 	}
 	if err = insertAudit(ctx, tx, AuditRecord{Repository: repoName, GroupName: repoName, Actor: p.Actor, Operation: "maven.snapshot.import", Format: "maven", Resource: p.Coordinate, Outcome: AuditResolved, OccurredAt: time.Now().UTC(), Evidence: map[string]string{"manifestDigest": p.ManifestDigest, "sourceId": p.SourceID, "sessionId": v.SessionID, "repositoryId": p.RepositoryID, "targetBinding": p.TargetBinding}}); err != nil {
+		return v, err
+	}
+	if err = usage.reserve(ctx, tx); err != nil {
 		return v, err
 	}
 	if err = tx.Commit(); err != nil {

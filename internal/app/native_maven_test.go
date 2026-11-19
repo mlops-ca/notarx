@@ -84,12 +84,12 @@ func (s *failOnceMavenCommitStore) CommitMavenPublishSession(ctx context.Context
 	return s.MemoryStore.CommitMavenPublishSession(ctx, id, assets)
 }
 
-func (s *failOnceMavenCommitStore) CommitMavenPublishSessionIdempotently(ctx context.Context, id, key, payload string, assets []repository.MavenAsset) (repository.MavenArtifact, bool, error) {
+func (s *failOnceMavenCommitStore) CommitMavenPublishSessionIdempotently(ctx context.Context, id, key, payload string, assets []repository.MavenAsset, audit ...repository.AuditRecord) (repository.MavenArtifact, bool, error) {
 	if s.fail {
 		s.fail = false
 		return repository.MavenArtifact{}, false, errors.New("control plane unavailable")
 	}
-	return s.MemoryStore.CommitMavenPublishSessionIdempotently(ctx, id, key, payload, assets)
+	return s.MemoryStore.CommitMavenPublishSessionIdempotently(ctx, id, key, payload, assets, audit...)
 }
 
 func TestNativeMavenPublishIsInvisibleUntilCommitAndAuditedOnRead(t *testing.T) {

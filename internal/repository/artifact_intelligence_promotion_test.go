@@ -11,7 +11,7 @@ type failingArtifactIntelligenceQueue struct {
 	err error
 }
 
-func (s *failingArtifactIntelligenceQueue) EnqueueLifecycleJob(context.Context, LifecycleJob) (LifecycleJob, bool, error) {
+func (s *failingArtifactIntelligenceQueue) EnqueueLifecycleJob(context.Context, LifecycleJob, ...AuditRecord) (LifecycleJob, bool, error) {
 	return LifecycleJob{}, false, s.err
 }
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/mlops-ca/notarx/internal/capacityplan"
 	"github.com/mlops-ca/notarx/internal/nexussource"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 var (
@@ -180,12 +181,12 @@ type Publication interface {
 type Store interface {
 	ReplayStart(context.Context, string, string, string) (Batch, bool, error)
 	ReplayControl(context.Context, string, string, string, string, string) (Batch, bool, error)
-	Create(context.Context, Batch, string, string) (Batch, error)
+	Create(context.Context, Batch, string, string, ...repository.AuditRecord) (Batch, error)
 	Get(context.Context, string) (Batch, error)
 	List(context.Context, int, string) ([]Batch, string, error)
 	Entries(context.Context, string, int, string) ([]Entry, string, error)
 	PreviousEntries(context.Context, Batch) ([]Entry, error)
-	Control(context.Context, string, string, string, string, string, string, *CapacityEvidence) (Batch, error)
+	Control(context.Context, string, string, string, string, string, string, *CapacityEvidence, ...repository.AuditRecord) (Batch, error)
 	Claim(context.Context, []string) (Batch, error)
 	Renew(context.Context, string, string) error
 	RecordScanProgress(context.Context, string, string, int64, int64) error

@@ -42,13 +42,13 @@ var (
 
 type HostedRepositoryStore interface {
 	CreateHostedRepository(context.Context, HostedRepository) (HostedRepository, error)
-	CreateHostedRepositoryIdempotently(context.Context, HostedRepository, string, string, string) (HostedRepository, bool, error)
+	CreateHostedRepositoryIdempotently(context.Context, HostedRepository, string, string, string, ...AuditRecord) (HostedRepository, bool, error)
 	ListHostedRepositories(context.Context, int, string) ([]HostedRepository, string, error)
 	GetHostedRepository(context.Context, string) (HostedRepository, error)
 	GetHostedRepositoryByName(context.Context, string) (HostedRepository, error)
 	DisableHostedRepository(context.Context, string) (HostedRepository, error)
 	FinalizeHostedRepositoryDeletion(context.Context, string) (HostedRepository, error)
-	UpdateHostedRepository(context.Context, HostedRepository, string) (HostedRepository, error)
+	UpdateHostedRepository(context.Context, HostedRepository, string, ...AuditRecord) (HostedRepository, error)
 }
 
 type PublicAccessPolicyStore interface {
@@ -118,11 +118,11 @@ type UserSessionStore interface {
 }
 
 type HostedGroupStore interface {
-	CreateHostedGroupIdempotently(context.Context, HostedGroup, string, string, string) (HostedGroup, bool, error)
+	CreateHostedGroupIdempotently(context.Context, HostedGroup, string, string, string, ...AuditRecord) (HostedGroup, bool, error)
 	ListHostedGroups(context.Context, int, string) ([]HostedGroup, string, error)
 	GetHostedGroup(context.Context, string) (HostedGroup, error)
 	GetHostedGroupByName(context.Context, string) (HostedGroup, error)
-	ReplaceHostedGroup(context.Context, HostedGroup, string) (HostedGroup, error)
+	ReplaceHostedGroup(context.Context, HostedGroup, string, ...AuditRecord) (HostedGroup, error)
 	ReplaceHostedGroupMembers(context.Context, string, []GroupMember, string) (HostedGroup, error)
 	DeleteHostedGroup(context.Context, string) error
 }
@@ -177,7 +177,7 @@ type RepositoryQuarantineReadPolicyStore interface {
 
 type RepositoryCapacityStore interface {
 	GetRepositoryCapacity(context.Context, string) (RepositoryCapacity, error)
-	ReplaceRepositoryCapacityQuota(context.Context, string, int64) (RepositoryCapacity, error)
+	ReplaceRepositoryCapacityQuota(context.Context, string, int64, ...AuditRecord) (RepositoryCapacity, error)
 }
 
 type RepositoryCapacityRecordStore interface {
@@ -215,7 +215,7 @@ type ArtifactQuarantineStore interface {
 }
 
 type LifecycleJobStore interface {
-	EnqueueLifecycleJob(context.Context, LifecycleJob) (LifecycleJob, bool, error)
+	EnqueueLifecycleJob(context.Context, LifecycleJob, ...AuditRecord) (LifecycleJob, bool, error)
 	ListLifecycleJobs(context.Context, string, int) ([]LifecycleJob, error)
 	GetLifecycleJob(context.Context, string, string) (LifecycleJob, error)
 	GetLatestArtifactScanJob(context.Context, string, Format, string, string) (LifecycleJob, error)
@@ -294,7 +294,7 @@ type ScheduledTaskStore interface {
 }
 
 type ReplicationStore interface {
-	CreateReplicationPlan(context.Context, ReplicationPlan, []ReplicationCheckpoint) (ReplicationPlan, bool, error)
+	CreateReplicationPlan(context.Context, ReplicationPlan, []ReplicationCheckpoint, ...AuditRecord) (ReplicationPlan, bool, error)
 	ClaimReplicationPlans(context.Context, int) ([]ReplicationPlan, error)
 	ClaimReplicationPlansByFormat(context.Context, Format, int) ([]ReplicationPlan, error)
 	RecoverExpiredReplicationPlans(context.Context, time.Time) (int, error)
@@ -327,7 +327,7 @@ type NativeMavenStore interface {
 	CompleteMavenProtocolPublications(context.Context, string, string, string, bool) error
 	HasOpenMavenPublishSessions(context.Context, string) (bool, error)
 	CommitMavenPublishSession(context.Context, string, []MavenAsset) (MavenArtifact, error)
-	CommitMavenPublishSessionIdempotently(context.Context, string, string, string, []MavenAsset) (MavenArtifact, bool, error)
+	CommitMavenPublishSessionIdempotently(context.Context, string, string, string, []MavenAsset, ...AuditRecord) (MavenArtifact, bool, error)
 	GetMavenAsset(context.Context, string, string) (MavenAsset, error)
 	ListMavenAssets(context.Context, string, string) ([]MavenAsset, error)
 	ListMavenArtifacts(context.Context, string) ([]MavenArtifact, error)
@@ -394,7 +394,7 @@ type NativeRawStore interface {
 	LockRawObject(context.Context, string) (func(), error)
 	StageRawObject(context.Context, RawObject) error
 	PutRawAsset(context.Context, RawAsset) (RawAsset, error)
-	PutRawAssetIf(context.Context, RawAsset, RawWriteCondition) (RawAsset, error)
+	PutRawAssetIf(context.Context, RawAsset, RawWriteCondition, ...AuditRecord) (RawAsset, error)
 	GetRawAsset(context.Context, string, string) (RawAsset, error)
 	ListRawAssets(context.Context, string, string, int, string, ...ArtifactSearchMatch) ([]RawAsset, error)
 	DeleteRawAsset(context.Context, string, string) error

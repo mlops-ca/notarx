@@ -183,7 +183,7 @@ func (s *PostgresStore) PutRawAsset(ctx context.Context, v RawAsset) (RawAsset, 
 
 // PutRawAssetIf replaces the path reference only when its current state
 // satisfies condition; on ErrPreconditionFailed it returns the current asset.
-func (s *PostgresStore) PutRawAssetIf(ctx context.Context, v RawAsset, condition RawWriteCondition) (RawAsset, error) {
+func (s *PostgresStore) PutRawAssetIf(ctx context.Context, v RawAsset, condition RawWriteCondition, audit ...AuditRecord) (RawAsset, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return v, err
@@ -206,6 +206,9 @@ func (s *PostgresStore) PutRawAssetIf(ctx context.Context, v RawAsset, condition
 		return v, replaceErr
 	}
 	v.UpdatedAt = time.Now().UTC()
+	if err = insertAudits(ctx, tx, audit); err != nil {
+		return v, err
+	}
 	if err = delta.reserve(ctx, tx, v.RepositoryID); err != nil {
 		return v, err
 	}

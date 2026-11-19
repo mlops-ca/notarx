@@ -66,3 +66,44 @@ func lockUsagePath(ctx context.Context, tx *sql.Tx, key string) error {
 	_, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text,0))`, key)
 	return err
 }
+
+// measuredUsage is bytes and objects a before and after measurement compares.
+type measuredUsage struct{ bytes, objects int64 }
+
+func (u measuredUsage) minus(other measuredUsage) measuredUsage {
+	return measuredUsage{bytes: u.bytes - other.bytes, objects: u.objects - other.objects}
+}
+
+// usageBracket is the before and after measurement technique of ADR 0023 section 3 for
+// formats whose usage is not a per-row sum (Maven and Conan count an asset only while a
+// visible artifact or revision covers it, so a state change of one row moves the usage of
+// many). The writer opens the bracket after taking its repository lock and before its first
+// change, then reserves the difference as the last statement of the transaction. The
+// measurement is scoped to the coordinate the writer touches, so its cost follows the
+// coordinate, not the repository.
+type usageBracket struct {
+	repositoryID string
+	measure      func(context.Context, *sql.Tx) (measuredUsage, error)
+	before       measuredUsage
+}
+
+func openUsageBracket(ctx context.Context, tx *sql.Tx, repositoryID string, measure func(context.Context, *sql.Tx) (measuredUsage, error)) (*usageBracket, error) {
+	before, err := measure(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	return &usageBracket{repositoryID: repositoryID, measure: measure, before: before}, nil
+}
+
+// reserve measures again and applies the difference to the repository's counter.
+func (b *usageBracket) reserve(ctx context.Context, tx *sql.Tx) error {
+	after, err := b.measure(ctx, tx)
+	if err != nil {
+		return err
+	}
+	delta := after.minus(b.before)
+	if delta == (measuredUsage{}) {
+		return nil
+	}
+	return capacity.Reserve(ctx, tx, b.repositoryID, delta.bytes, delta.objects)
+}

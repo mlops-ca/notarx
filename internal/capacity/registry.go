@@ -22,9 +22,9 @@ const (
 // without an entry fails the registry test, so a new format cannot be unbounded.
 var registry = []FormatCoverage{
 	{Format: "raw", Covered: true, Enforcement: byTrigger},
-	{Format: "maven", Enforcement: byTrigger},
+	{Format: "maven", Covered: true, Enforcement: byTrigger},
 	{Format: "oci", Covered: true, Enforcement: byTrigger},
-	{Format: "conan", Enforcement: byTrigger},
+	{Format: "conan", Covered: true, Enforcement: byTrigger},
 	{Format: "npm", Covered: true, Enforcement: byTrigger},
 	{Format: "pypi", Covered: true, Enforcement: byTrigger},
 	{Format: "go", Covered: true, Enforcement: byTrigger},

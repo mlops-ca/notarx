@@ -126,3 +126,72 @@ func TestPostgresSettingsMutationsRollBackWithTheirAudit(t *testing.T) {
 		}
 	})
 }
+
+// TestPostgresFormatPreviewMutationsRollBackWithTheirAudit makes every insert into
+// security_audit_log for the preview repositories and groups fail and drives the Helm and
+// NuGet preview handlers: none may leave its change behind (ADR 0023 section 1).
+func TestPostgresFormatPreviewMutationsRollBackWithTheirAudit(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is required for PostgreSQL integration tests")
+	}
+	store, err := repository.NewPostgresStore(databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = store.Close() }()
+	db, err := database.OpenPostgres(databaseURL, database.DefaultPoolConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	var restores []func()
+	runFormatPreviewAuditRollback(t, store, func(names ...string) {
+		// testAuthenticator's administrator acts as "alice"; preview audits name the repository or group.
+		for _, name := range names {
+			restores = append(restores, testsupport.FailSecurityAudits(t, db, name, "alice"))
+		}
+	}, func() {
+		for _, restore := range restores {
+			restore()
+		}
+		restores = nil
+	})
+}
+
+// TestPostgresDistributionMutationsRollBackWithTheirAudit makes every insert into
+// security_audit_log for the source and Cargo repositories fail and drives the promote,
+// replicate and Cargo restore handlers: none may leave its change behind (ADR 0023 section 1).
+func TestPostgresDistributionMutationsRollBackWithTheirAudit(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is required for PostgreSQL integration tests")
+	}
+	store, err := repository.NewPostgresStore(databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = store.Close() }()
+	db, err := database.OpenPostgres(databaseURL, database.DefaultPoolConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	var restores []func()
+	runDistributionAuditRollback(t, store, func(id string) {
+		// Pending jobs and plans of this test must not be claimed by the next one.
+		t.Cleanup(func() {
+			_, _ = db.Exec(`DELETE FROM replication_plans WHERE source_repository_id=$1::uuid OR target_repository_id=$1::uuid`, id)
+			testsupport.PurgeRepository(t, db, id)
+		})
+	}, func(names ...string) {
+		for _, name := range names {
+			restores = append(restores, testsupport.FailSecurityAudits(t, db, name, "alice"))
+		}
+	}, func() {
+		for _, restore := range restores {
+			restore()
+		}
+		restores = nil
+	})
+}

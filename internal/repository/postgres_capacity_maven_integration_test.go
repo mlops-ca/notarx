@@ -7,6 +7,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/mlops-ca/notarx/internal/capacity"
 	"github.com/mlops-ca/notarx/internal/database"
 )
 
@@ -75,29 +76,42 @@ func TestPostgresCapacityListPreservesMavenPrefixSemantics(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	store := &PostgresStore{db: db}
-	records, err := store.ListRepositoryCapacityRecords(ctx)
+	// Every format reads its usage counter now, so the Maven prefix semantics live in the aggregation the
+	// reconciler recomputes the counter from: its per repository query and its CTE must both keep them.
+	query, ok := capacity.UsageQuery("maven")
+	if !ok {
+		t.Fatal("no usage query for maven")
+	}
+	totals := map[string][2]int64{}
+	rows, err := db.QueryContext(ctx, capacity.UsageCTE+` SELECT repository_id::text,used_bytes,object_count FROM totals`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(records) != 2 {
-		t.Fatalf("records: %#v", records)
-	}
-	for _, record := range records {
-		// The individual capacity query retains the previous EXISTS predicate and
-		// is an independent oracle for the batch optimization.
-		individual, err := store.GetRepositoryCapacity(ctx, record.Repository.ID)
-		if err != nil {
+	for rows.Next() {
+		var id string
+		var usedBytes, objectCount int64
+		if err = rows.Scan(&id, &usedBytes, &objectCount); err != nil {
 			t.Fatal(err)
 		}
-		if record.Capacity != individual {
-			t.Fatalf("batch=%#v individual=%#v", record.Capacity, individual)
+		totals[id] = [2]int64{usedBytes, objectCount}
+	}
+	if err = rows.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{first, second} {
+		var usedBytes, objectCount int64
+		if err = db.QueryRowContext(ctx, query, id).Scan(&usedBytes, &objectCount); err != nil {
+			t.Fatal(err)
 		}
-		if record.Repository.ID == first && (individual.UsedBytes != 83 || individual.ObjectCount != 5) {
-			t.Fatalf("prefix semantics changed: %#v", individual)
+		// The CTE and the per repository query are independent oracles of each other.
+		if total := totals[id]; total != ([2]int64{usedBytes, objectCount}) {
+			t.Fatalf("repository %s: aggregation query=%d/%d, reconciler CTE=%v", id, usedBytes, objectCount, total)
 		}
-		if record.Repository.ID == second && (individual.UsedBytes != 0 || individual.ObjectCount != 0) {
-			t.Fatalf("another repository's assets leaked into the aggregate: %#v", individual)
+		if id == first && (usedBytes != 83 || objectCount != 5) {
+			t.Fatalf("prefix semantics changed: bytes=%d objects=%d", usedBytes, objectCount)
+		}
+		if id == second && (usedBytes != 0 || objectCount != 0) {
+			t.Fatalf("another repository's assets leaked into the aggregate: bytes=%d objects=%d", usedBytes, objectCount)
 		}
 	}
 }

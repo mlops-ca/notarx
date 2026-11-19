@@ -257,7 +257,7 @@ func (s *PostgresStore) MarkMavenPublishObject(ctx context.Context, id, name, ke
 	return tx.Commit()
 }
 func (s *PostgresStore) CommitMavenPublishSession(ctx context.Context, id string, assets []MavenAsset) (MavenArtifact, error) {
-	artifact, _, err := s.commitMavenPublishSession(ctx, id, "", "", assets)
+	artifact, _, err := s.commitMavenPublishSession(ctx, id, "", "", assets, nil)
 	return artifact, err
 }
 
@@ -293,6 +293,10 @@ func (s *PostgresStore) PublishMavenProtocolAssets(ctx context.Context, id strin
 		return MavenArtifact{}, ErrNameExists
 	}
 	if err = lockMavenCapacityTx(ctx, tx, session.RepositoryID); err != nil {
+		return MavenArtifact{}, err
+	}
+	usage, err := openMavenUsageBracket(ctx, tx, session.RepositoryID, session.Coordinate)
+	if err != nil {
 		return MavenArtifact{}, err
 	}
 
@@ -379,6 +383,9 @@ func (s *PostgresStore) PublishMavenProtocolAssets(ctx context.Context, id strin
 			return MavenArtifact{}, err
 		}
 	}
+	if err = usage.reserve(ctx, tx); err != nil {
+		return MavenArtifact{}, err
+	}
 	if err = tx.Commit(); err != nil {
 		return MavenArtifact{}, err
 	}
@@ -400,11 +407,13 @@ func (s *PostgresStore) HasOpenMavenPublishSessions(ctx context.Context, reposit
 	return open, err
 }
 
-func (s *PostgresStore) CommitMavenPublishSessionIdempotently(ctx context.Context, id, key, payload string, assets []MavenAsset) (MavenArtifact, bool, error) {
-	return s.commitMavenPublishSession(ctx, id, key, payload, assets)
+// CommitMavenPublishSessionIdempotently commits the session; the audit records, when given, are written
+// in the transaction of the commit (ADR 0023 section 1), and a replay of the key writes none.
+func (s *PostgresStore) CommitMavenPublishSessionIdempotently(ctx context.Context, id, key, payload string, assets []MavenAsset, audit ...AuditRecord) (MavenArtifact, bool, error) {
+	return s.commitMavenPublishSession(ctx, id, key, payload, assets, audit)
 }
 
-func (s *PostgresStore) commitMavenPublishSession(ctx context.Context, id, key, payload string, assets []MavenAsset) (MavenArtifact, bool, error) {
+func (s *PostgresStore) commitMavenPublishSession(ctx context.Context, id, key, payload string, assets []MavenAsset, audit []AuditRecord) (MavenArtifact, bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return MavenArtifact{}, false, err
@@ -479,6 +488,10 @@ func (s *PostgresStore) commitMavenPublishSession(ctx context.Context, id, key, 
 		return MavenArtifact{}, false, ErrDisabled
 	}
 	if err = lockMavenCapacityTx(ctx, tx, v.RepositoryID); err != nil {
+		return MavenArtifact{}, false, err
+	}
+	usage, err := openMavenUsageBracket(ctx, tx, v.RepositoryID, v.Coordinate)
+	if err != nil {
 		return MavenArtifact{}, false, err
 	}
 	var claimed bool
@@ -583,6 +596,12 @@ func (s *PostgresStore) commitMavenPublishSession(ctx context.Context, id, key, 
 		}
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE native_maven_publish_sessions SET state='committed' WHERE id=$1`, id); err != nil {
+		return MavenArtifact{}, false, err
+	}
+	if err = insertAudits(ctx, tx, audit); err != nil {
+		return MavenArtifact{}, false, err
+	}
+	if err = usage.reserve(ctx, tx); err != nil {
 		return MavenArtifact{}, false, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -769,6 +788,10 @@ func tombstoneMavenArtifactTx(ctx context.Context, tx *sql.Tx, repositoryID, art
 	if artifact.State == "deleted" {
 		return artifact, tx.Commit()
 	}
+	usage, err := openMavenUsageBracket(ctx, tx, repositoryID, artifact.Coordinate)
+	if err != nil {
+		return MavenArtifact{}, err
+	}
 	if _, err = tx.ExecContext(ctx, `UPDATE native_maven_artifacts SET state='deleted' WHERE id=$1::uuid`, artifactID); err != nil {
 		return MavenArtifact{}, err
 	}
@@ -792,6 +815,9 @@ func tombstoneMavenArtifactTx(ctx context.Context, tx *sql.Tx, repositoryID, art
 		return MavenArtifact{}, err
 	}
 	artifact.State = "deleted"
+	if err = usage.reserve(ctx, tx); err != nil {
+		return MavenArtifact{}, err
+	}
 	if err = tx.Commit(); err != nil {
 		return MavenArtifact{}, err
 	}
@@ -835,6 +861,10 @@ func (s *PostgresStore) RestoreMavenArtifact(ctx context.Context, repositoryID, 
 	if !recoverable {
 		return MavenArtifact{}, ErrDisabled
 	}
+	usage, err := openMavenUsageBracket(ctx, tx, repositoryID, artifact.Coordinate)
+	if err != nil {
+		return MavenArtifact{}, err
+	}
 	if _, err = tx.ExecContext(ctx, `UPDATE native_maven_artifacts SET state='visible' WHERE id=$1::uuid`, artifactID); err != nil {
 		return MavenArtifact{}, err
 	}
@@ -845,6 +875,9 @@ func (s *PostgresStore) RestoreMavenArtifact(ctx context.Context, repositoryID, 
 		return MavenArtifact{}, err
 	}
 	artifact.State = "visible"
+	if err = usage.reserve(ctx, tx); err != nil {
+		return MavenArtifact{}, err
+	}
 	if err = tx.Commit(); err != nil {
 		return MavenArtifact{}, err
 	}
@@ -874,6 +907,10 @@ func (s *PostgresStore) PromoteMavenArtifact(ctx context.Context, promotion Mave
 	if err != nil {
 		return MavenArtifact{}, err
 	}
+	usage, err := openMavenUsageBracket(ctx, tx, promotion.TargetRepositoryID, source.Coordinate)
+	if err != nil {
+		return MavenArtifact{}, err
+	}
 	result, err := tx.ExecContext(ctx, `INSERT INTO native_maven_artifacts (id,repository_id,coordinate,digest,state,publisher) VALUES ($1,$2,$3,$4,'visible',COALESCE((SELECT s.publisher FROM native_maven_publish_sessions s WHERE s.repository_id=$2 AND s.coordinate=$3 AND s.state IN ('open','committed') ORDER BY s.expires_at DESC LIMIT 1),'')) ON CONFLICT (repository_id,coordinate,build_number) DO NOTHING`, promotion.ID, promotion.TargetRepositoryID, source.Coordinate, source.Digest)
 	if err != nil {
 		return MavenArtifact{}, err
@@ -896,6 +933,9 @@ func (s *PostgresStore) PromoteMavenArtifact(ctx context.Context, promotion Mave
 		return MavenArtifact{}, err
 	}
 	if err = tx.QueryRowContext(ctx, `SELECT created_at FROM native_maven_artifacts WHERE id=$1`, promotion.ID).Scan(&source.CreatedAt); err != nil {
+		return MavenArtifact{}, err
+	}
+	if err = usage.reserve(ctx, tx); err != nil {
 		return MavenArtifact{}, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -938,6 +978,10 @@ func (s *PostgresStore) PublishReplicatedMavenArtifact(ctx context.Context, repl
 		return MavenArtifact{}, ErrNameExists
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
+		return MavenArtifact{}, err
+	}
+	usage, err := openMavenUsageBracket(ctx, tx, replication.TargetRepositoryID, replication.Coordinate)
+	if err != nil {
 		return MavenArtifact{}, err
 	}
 	prefix := mavenArtifactPathPrefix(replication.Coordinate)
@@ -990,6 +1034,9 @@ func (s *PostgresStore) PublishReplicatedMavenArtifact(ctx context.Context, repl
 		return MavenArtifact{}, ErrNameExists
 	}
 	if err != nil {
+		return MavenArtifact{}, err
+	}
+	if err = usage.reserve(ctx, tx); err != nil {
 		return MavenArtifact{}, err
 	}
 	if err = tx.Commit(); err != nil {

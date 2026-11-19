@@ -297,13 +297,13 @@ func (s *MemoryStore) HasOpenMavenPublishSessions(_ context.Context, repositoryI
 	return false, nil
 }
 
-func (s *MemoryStore) CommitMavenPublishSession(_ context.Context, id string, assets []MavenAsset) (MavenArtifact, error) {
+func (s *MemoryStore) CommitMavenPublishSession(ctx context.Context, id string, assets []MavenAsset) (MavenArtifact, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.commitMavenPublishSessionLocked(id, assets)
+	return s.commitMavenPublishSessionLocked(ctx, id, assets, nil)
 }
 
-func (s *MemoryStore) CommitMavenPublishSessionIdempotently(_ context.Context, id, key, payload string, assets []MavenAsset) (MavenArtifact, bool, error) {
+func (s *MemoryStore) CommitMavenPublishSessionIdempotently(ctx context.Context, id, key, payload string, assets []MavenAsset, audit ...AuditRecord) (MavenArtifact, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if record, ok := s.mavenCommitKeys[id]; ok && time.Now().UTC().Before(record.expiresAt) {
@@ -322,7 +322,7 @@ func (s *MemoryStore) CommitMavenPublishSessionIdempotently(_ context.Context, i
 	} else if session.State == "committed" {
 		return MavenArtifact{}, false, ErrNameExists
 	}
-	artifact, err := s.commitMavenPublishSessionLocked(id, assets)
+	artifact, err := s.commitMavenPublishSessionLocked(ctx, id, assets, audit)
 	if err != nil {
 		return MavenArtifact{}, false, err
 	}
@@ -330,7 +330,7 @@ func (s *MemoryStore) CommitMavenPublishSessionIdempotently(_ context.Context, i
 	return artifact, false, nil
 }
 
-func (s *MemoryStore) commitMavenPublishSessionLocked(id string, assets []MavenAsset) (MavenArtifact, error) {
+func (s *MemoryStore) commitMavenPublishSessionLocked(ctx context.Context, id string, assets []MavenAsset, audit []AuditRecord) (MavenArtifact, error) {
 	session, ok := s.mavenSessions[id]
 	if !ok {
 		return MavenArtifact{}, ErrNotFound
@@ -367,6 +367,10 @@ func (s *MemoryStore) commitMavenPublishSessionLocked(id string, assets []MavenA
 		return MavenArtifact{}, ErrNameExists
 	}
 	artifact := MavenArtifact{ID: id, RepositoryID: session.RepositoryID, Coordinate: session.Coordinate, Digest: session.Objects[0].Digest, State: "visible", BuildNumber: buildNumber, CreatedAt: time.Now().UTC()}
+	// Validate every asset before the first change, so the audit below is written only for a
+	// publication that takes effect.
+	placed := make(map[string]MavenAsset, len(assets))
+	order := make([]string, 0, len(assets))
 	for _, a := range assets {
 		if intent := s.mavenObjectIntents[a.ObjectKey]; !intent.claimedAt.IsZero() || !intent.deletedAt.IsZero() {
 			return MavenArtifact{}, ErrDisabled
@@ -380,8 +384,18 @@ func (s *MemoryStore) commitMavenPublishSessionLocked(id string, assets []MavenA
 		if _, exists := s.mavenAssets[k]; exists {
 			return MavenArtifact{}, ErrNameExists
 		}
-		s.mavenAssets[k] = a
-		s.mavenObjectRefs[a.ObjectKey] = true
+		if _, duplicate := placed[k]; duplicate {
+			return MavenArtifact{}, ErrNameExists
+		}
+		placed[k] = a
+		order = append(order, k)
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return MavenArtifact{}, err
+	}
+	for _, k := range order {
+		s.mavenAssets[k] = placed[k]
+		s.mavenObjectRefs[placed[k].ObjectKey] = true
 	}
 	s.mavenArtifacts[id] = artifact
 	session.State = "committed"

@@ -130,16 +130,12 @@ func (m *Module) servePreview(w http.ResponseWriter, r *http.Request) {
 		}
 		body, _ := json.Marshal(in)
 		sum := sha256.Sum256(body)
-		repo, replay, err := m.repos.CreateHostedRepositoryIdempotently(ctx, withRepositoryID(next), p.Actor, "helm-preview:"+key, hex.EncodeToString(sum[:]))
+		created := withRepositoryID(next)
+		repo, _, err := m.repos.CreateHostedRepositoryIdempotently(ctx, created, p.Actor, "helm-preview:"+key, hex.EncodeToString(sum[:]),
+			auditRecords(repository.AuditRecord{Actor: p.Actor, Repository: created.Name, Format: string(repository.FormatHelm), Resource: created.ID, Operation: "helm.preview.create", Outcome: repository.AuditResolved, Status: 201, OccurredAt: time.Now().UTC()})...)
 		if err != nil {
 			m.failure(w, err)
 			return
-		}
-		if !replay {
-			if auditErr := m.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: p.Actor, Repository: repo.Name, Format: string(repository.FormatHelm), Resource: repo.ID, Operation: "helm.preview.create", Outcome: repository.AuditResolved, Status: 201, OccurredAt: time.Now().UTC()}); auditErr != nil {
-				m.problem(w, 500, "audit_failed")
-				return
-			}
 		}
 		w.Header().Set("Location", prefix+"/"+repo.ID)
 		writeJSON(w, r, 201, repositoryDTO(repo))
@@ -260,19 +256,14 @@ func (m *Module) capacity(w http.ResponseWriter, r *http.Request, repo repositor
 			m.problem(w, 400, "invalid_quota")
 			return
 		}
-		capacity, err = m.capacities.ReplaceRepositoryCapacityQuota(r.Context(), repo.ID, *in.QuotaBytes)
+		capacity, err = m.capacities.ReplaceRepositoryCapacityQuota(r.Context(), repo.ID, *in.QuotaBytes,
+			auditRecords(repository.AuditRecord{Actor: p.Actor, Repository: repo.Name, Format: string(repository.FormatHelm), Resource: repo.ID, Operation: "helm.preview.quota.configure", Outcome: repository.AuditResolved, Status: 200, OccurredAt: time.Now().UTC()})...)
 	} else {
 		capacity, err = m.capacities.GetRepositoryCapacity(r.Context(), repo.ID)
 	}
 	if err != nil {
 		m.failure(w, err)
 		return
-	}
-	if r.Method == http.MethodPut {
-		if auditErr := m.audit.RecordAudit(r.Context(), repository.AuditRecord{Actor: p.Actor, Repository: repo.Name, Format: string(repository.FormatHelm), Resource: repo.ID, Operation: "helm.preview.quota.configure", Outcome: repository.AuditResolved, Status: 200, OccurredAt: time.Now().UTC()}); auditErr != nil {
-			m.problem(w, 500, "audit_failed")
-			return
-		}
 	}
 	writeJSON(w, r, 200, map[string]any{"repositoryId": repo.ID, "usedBytes": capacity.UsedBytes, "objectCount": capacity.ObjectCount, "quotaBytes": capacity.QuotaBytes})
 }

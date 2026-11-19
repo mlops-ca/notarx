@@ -170,11 +170,14 @@ func (s *MemoryStore) PutRawAsset(ctx context.Context, asset RawAsset) (RawAsset
 
 // PutRawAssetIf replaces the path reference only when its current state
 // satisfies condition; on ErrPreconditionFailed it returns the current asset.
-func (s *MemoryStore) PutRawAssetIf(_ context.Context, asset RawAsset, condition RawWriteCondition) (RawAsset, error) {
+func (s *MemoryStore) PutRawAssetIf(ctx context.Context, asset RawAsset, condition RawWriteCondition, audit ...AuditRecord) (RawAsset, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if current, exists := s.rawAssets[rawAssetKey(asset.RepositoryID, asset.Path)]; !condition.Allows(current, exists) {
 		return current, ErrPreconditionFailed
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return asset, err
 	}
 	asset.UpdatedAt = time.Now().UTC()
 	if object, ok := s.rawObjects[asset.Digest]; ok {

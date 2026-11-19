@@ -32,7 +32,7 @@ func (s *PostgresStore) CreateHostedRepository(ctx context.Context, repo HostedR
 	return repo, nil
 }
 
-func (s *PostgresStore) CreateHostedRepositoryIdempotently(ctx context.Context, repo HostedRepository, actor, key, payload string) (HostedRepository, bool, error) {
+func (s *PostgresStore) CreateHostedRepositoryIdempotently(ctx context.Context, repo HostedRepository, actor, key, payload string, audit ...AuditRecord) (HostedRepository, bool, error) {
 	repo = normalizeHostedRepository(repo)
 	egressProxy, err := marshalEgressProxy(repo.EgressProxy)
 	if err != nil {
@@ -90,6 +90,9 @@ func (s *PostgresStore) CreateHostedRepositoryIdempotently(ctx context.Context, 
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO hosted_repository_idempotency (actor, target, key, payload_hash, repository_id, expires_at) VALUES ($1,$2,$3,$4,$5,now() + interval '24 hours')`, actor, "/repositories", key, payload, repo.ID)
 	if err != nil {
+		return HostedRepository{}, false, err
+	}
+	if err = insertAudits(ctx, tx, audit); err != nil {
 		return HostedRepository{}, false, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -285,7 +288,7 @@ func (s *PostgresStore) FinalizeHostedRepositoryDeletion(ctx context.Context, id
 	return repo, nil
 }
 
-func (s *PostgresStore) UpdateHostedRepository(ctx context.Context, repo HostedRepository, expectedVersion string) (HostedRepository, error) {
+func (s *PostgresStore) UpdateHostedRepository(ctx context.Context, repo HostedRepository, expectedVersion string, audit ...AuditRecord) (HostedRepository, error) {
 	egressProxy, err := marshalEgressProxy(repo.EgressProxy)
 	if err != nil {
 		return HostedRepository{}, err
@@ -298,8 +301,14 @@ func (s *PostgresStore) UpdateHostedRepository(ctx context.Context, repo HostedR
 	if err != nil {
 		return HostedRepository{}, err
 	}
+	return runAudited(ctx, s, audit, func(q sqlRunner) (HostedRepository, error) {
+		return s.updateHostedRepository(ctx, q, repo, expectedVersion, egressProxy, upstreamAuth, ociBearer)
+	})
+}
+
+func (s *PostgresStore) updateHostedRepository(ctx context.Context, q sqlRunner, repo HostedRepository, expectedVersion string, egressProxy, upstreamAuth, ociBearer any) (HostedRepository, error) {
 	var updated HostedRepository
-	err = scanHostedRepository(s.db.QueryRowContext(ctx, `UPDATE hosted_repositories SET endpoint=$2, allowed_hosts=COALESCE($3::text[], '{}'::text[]), visibility=$4, maven_strict_publication=$5, version=version+1, egress_proxy=$7, upstream_auth=$8, oci_bearer=$9 WHERE id=$1::uuid AND state='active' AND version=$6::text::bigint RETURNING `+hostedRepositoryColumns, repo.ID, repo.Endpoint, repo.AllowedHosts, repo.Visibility, repo.MavenStrictPublication, expectedVersion, egressProxy, upstreamAuth, ociBearer), &updated)
+	err := scanHostedRepository(q.QueryRowContext(ctx, `UPDATE hosted_repositories SET endpoint=$2, allowed_hosts=COALESCE($3::text[], '{}'::text[]), visibility=$4, maven_strict_publication=$5, version=version+1, egress_proxy=$7, upstream_auth=$8, oci_bearer=$9 WHERE id=$1::uuid AND state='active' AND version=$6::text::bigint RETURNING `+hostedRepositoryColumns, repo.ID, repo.Endpoint, repo.AllowedHosts, repo.Visibility, repo.MavenStrictPublication, expectedVersion, egressProxy, upstreamAuth, ociBearer), &updated)
 	if errors.Is(err, sql.ErrNoRows) {
 		if _, getErr := s.GetHostedRepository(ctx, repo.ID); errors.Is(getErr, ErrNotFound) {
 			return HostedRepository{}, ErrNotFound
@@ -349,7 +358,7 @@ func (s *PostgresStore) getHostedGroup(ctx context.Context, query interface {
 	return group, nil
 }
 
-func (s *PostgresStore) CreateHostedGroupIdempotently(ctx context.Context, group HostedGroup, actor, key, payload string) (HostedGroup, bool, error) {
+func (s *PostgresStore) CreateHostedGroupIdempotently(ctx context.Context, group HostedGroup, actor, key, payload string, audit ...AuditRecord) (HostedGroup, bool, error) {
 	group.Visibility = NormalizeVisibility(group.Visibility)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -404,6 +413,9 @@ func (s *PostgresStore) CreateHostedGroupIdempotently(ctx context.Context, group
 		}
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO hosted_group_idempotency (actor,key,payload_hash,group_id,expires_at) VALUES ($1,$2,$3,$4,now() + interval '24 hours')`, actor, key, payload, group.ID); err != nil {
+		return HostedGroup{}, false, err
+	}
+	if err = insertAudits(ctx, tx, audit); err != nil {
 		return HostedGroup{}, false, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -462,7 +474,7 @@ func (s *PostgresStore) GetHostedGroupByName(ctx context.Context, name string) (
 	return group, nil
 }
 
-func (s *PostgresStore) replaceHostedGroup(ctx context.Context, id, name string, format Format, visibility Visibility, members []GroupMember, expectedVersion string, replaceMetadata bool) (HostedGroup, error) {
+func (s *PostgresStore) replaceHostedGroup(ctx context.Context, id, name string, format Format, visibility Visibility, members []GroupMember, expectedVersion string, replaceMetadata bool, audit ...AuditRecord) (HostedGroup, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return HostedGroup{}, err
@@ -509,14 +521,17 @@ func (s *PostgresStore) replaceHostedGroup(ctx context.Context, id, name string,
 		}
 	}
 	group.Members = append([]GroupMember(nil), members...)
+	if err = insertAudits(ctx, tx, audit); err != nil {
+		return HostedGroup{}, err
+	}
 	if err = tx.Commit(); err != nil {
 		return HostedGroup{}, err
 	}
 	return group, nil
 }
 
-func (s *PostgresStore) ReplaceHostedGroup(ctx context.Context, group HostedGroup, expectedVersion string) (HostedGroup, error) {
-	return s.replaceHostedGroup(ctx, group.ID, group.Name, group.Format, NormalizeVisibility(group.Visibility), group.Members, expectedVersion, true)
+func (s *PostgresStore) ReplaceHostedGroup(ctx context.Context, group HostedGroup, expectedVersion string, audit ...AuditRecord) (HostedGroup, error) {
+	return s.replaceHostedGroup(ctx, group.ID, group.Name, group.Format, NormalizeVisibility(group.Visibility), group.Members, expectedVersion, true, audit...)
 }
 func (s *PostgresStore) ReplaceHostedGroupMembers(ctx context.Context, id string, members []GroupMember, expectedVersion string) (HostedGroup, error) {
 	current, err := s.GetHostedGroup(ctx, id)

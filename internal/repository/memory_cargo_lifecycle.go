@@ -52,7 +52,7 @@ func (s *MemoryStore) TombstoneCargoPublication(ctx context.Context, repositoryI
 	return cloneCargoPublication(publication), nil
 }
 
-func (s *MemoryStore) RestoreCargoPublication(ctx context.Context, repositoryID, name, version string) (CargoPublication, error) {
+func (s *MemoryStore) RestoreCargoPublication(ctx context.Context, repositoryID, name, version string, audit ...AuditRecord) (CargoPublication, error) {
 	key, err := s.cargoPublicationForLifecycle(repositoryID, name, version)
 	if err != nil {
 		if err == ErrNotFound {
@@ -75,6 +75,9 @@ func (s *MemoryStore) RestoreCargoPublication(ctx context.Context, repositoryID,
 	tombstoneKey := cargoTombstoneKey(repositoryID, publication.Name, publication.Version)
 	if _, exists := s.artifactTombstones[tombstoneKey]; !exists {
 		return CargoPublication{}, ErrNotFound
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return CargoPublication{}, err
 	}
 	delete(s.artifactTombstones, tombstoneKey)
 	return cloneCargoPublication(publication), nil

@@ -15,7 +15,7 @@ import (
 type helmSourceContract interface {
 	helmContractStore
 	HelmSourceStore
-	CreateHostedGroupIdempotently(context.Context, HostedGroup, string, string, string) (HostedGroup, bool, error)
+	CreateHostedGroupIdempotently(context.Context, HostedGroup, string, string, string, ...AuditRecord) (HostedGroup, bool, error)
 	ReplaceHostedGroupMembers(context.Context, string, []GroupMember, string) (HostedGroup, error)
 }
 
