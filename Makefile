@@ -294,22 +294,27 @@ cli-build:
 			-ldflags '$(CLI_LDFLAGS)' -o dist/notarxctl_$${goos}_$${goarch} ./cmd/notarxctl; \
 		printf 'built dist/notarxctl_%s_%s (version %s)\n' "$$goos" "$$goarch" "$(VERSION)"
 
+# Local image builds seed go mod download from the host module cache (the
+# gomod-seed build context, docs/ci.md), so a go.mod change fetches only new modules.
+GOMOD_SEED = $(shell d="$$(go env GOMODCACHE)/cache/download"; mkdir -p "$$d"; echo "$$d")
+SEED_CONTEXT = --build-context gomod-seed="$(GOMOD_SEED)"
+
 build:
-	@docker build -t notarx:dev .
+	@docker build $(SEED_CONTEXT) -t notarx:dev .
 
 docker-build:
-	@docker build -t notarx:dev .
+	@docker build $(SEED_CONTEXT) -t notarx:dev .
 
 docker-test:
-	@docker build --target test -f Dockerfile .
-	@docker build --target test -f Dockerfile.apt-signer .
-	@docker build --target test -f Dockerfile.scanner .
+	@docker build $(SEED_CONTEXT) --target test -f Dockerfile .
+	@docker build $(SEED_CONTEXT) --target test -f Dockerfile.apt-signer .
+	@docker build $(SEED_CONTEXT) --target test -f Dockerfile.scanner .
 
 console-docker-build:
 	@docker build -f Dockerfile.console -t notarx-console:dev .
 
 cli-docker-build:
-	@docker build -f Dockerfile.notarxctl \
+	@docker build $(SEED_CONTEXT) -f Dockerfile.notarxctl \
 		--build-arg VERSION="$(VERSION)" \
 		--build-arg REVISION="$(CLI_REVISION)" \
 		-t notarxctl:dev .

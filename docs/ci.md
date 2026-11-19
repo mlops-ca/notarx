@@ -152,6 +152,10 @@ changed. `build-images` runs each image on both native runners (`ubuntu-24.04`
 and `ubuntu-24.04-arm`), and a contract lane downloads the artifacts of its own
 runner architecture.
 
+### Go module cache for image builds
+
+BuildKit cache mounts do not survive between hosted runners, so the image build used to fetch every module from proxy.golang.org whenever `go.mod` or `go.sum` changed, and one proxy error failed the job. `build-images` now restores the module download directory with `actions/cache` (key: runner architecture, month, hash of `go.mod` and `go.sum`; the prefix fallback is limited to the same month, so dropped modules cannot pile up). It passes the directory to the build as the `gomod-seed` build context. Each Dockerfile runs `GOPROXY=file:///gomod-seed,https://proxy.golang.org|direct go mod download && go mod verify`, so a warm run makes no request to the proxy and a `go.sum` change fetches only the new modules. On an exact cache hit the job first runs `GOPROXY=off go mod download`, which fails instead of fetching and is the proof that the warm path is network free. `go.sum` and `go mod verify` still decide which bytes are accepted, so a poisoned cache cannot change the build, and there is no retry loop. The BuildKit `/go/pkg/mod` cache mount is gone, because the layer now holds the modules; local `make` image targets pass the host module cache as the same seed. A seed that changes content (a cache miss) also invalidates the cached download layer, which is correct since `go.mod` changed. Release image builds (`image-build.yml`) use the empty default seed and fetch from the proxy, as they did before on their fresh runners, so release digests and provenance (ADR 0016, ADR 0024) are unaffected; module contents are fixed by `go.sum`, so the compiled output does not depend on where the modules came from.
+
 The `oci-free-tier` and `oci-free-tier-tofu` jobs run when the `images` class changed
 (`deploy/` is in it). `oci-free-tier` runs on the native arm64 runner, because the
 reference deployment targets the Oracle Ampere A1 shape: it checks the rendered
