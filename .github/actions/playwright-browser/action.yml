@@ -28,8 +28,9 @@ runs:
     # PR 405 and 412). Keep the downloaded packages in a user-owned directory that
     # actions/cache can restore, so a retry or the next run on the PR needs no
     # download, and give apt network timeouts and retries.
-    - name: Cache apt packages for the browser dependencies
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+    - name: Restore apt packages for the browser dependencies
+      id: apt-cache
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.cache/playwright-apt
         key: playwright-apt-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
@@ -42,3 +43,11 @@ runs:
       shell: bash
       working-directory: console
       run: timeout 600 npx playwright install-deps chromium
+    # Save even when the install timed out: the packages that did arrive make the
+    # next attempt on the pull request faster.
+    - name: Save apt packages for the browser dependencies
+      if: always() && steps.apt-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/playwright-apt
+        key: playwright-apt-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
