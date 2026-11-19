@@ -419,14 +419,19 @@ stamp-version-test:
 
 release-plan-test:
 	@./scripts/release-plan-test.sh
+	@./scripts/changelog-section-test.sh
 
 # Release pipeline pieces that cannot run a real release (ADR 0024): manifest and attestation
-# verification, retention (releases, tags, GHCR mark and sweep) and repository governance.
+# verification, retention (releases, tags, GHCR mark and sweep), repository governance and the
+# stable promotion (first-release gate, version identity, publication helpers).
 release-pipeline-test:
 	@./scripts/release-manifest-test.sh
 	@./scripts/prune-releases-test.sh
 	@node --test ./scripts/prune-ghcr.test.mjs
 	@./scripts/repo-governance-apply-test.sh
+	@./scripts/baseline-gate-test.sh
+	@./scripts/check-no-nightly-test.sh
+	@./scripts/promote-release-test.sh
 
 # Structure of release.yml; needs mikefarah yq (preinstalled on hosted runners).
 release-workflow-check:

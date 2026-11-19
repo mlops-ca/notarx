@@ -69,6 +69,7 @@
       "docs",
       "ci",
       "release",
+      "changelog",
       "security",
       "repo"
     ]
