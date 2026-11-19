@@ -7,8 +7,8 @@ import (
 )
 
 // ErrQuotaExceeded is returned by Reserve when a positive delta would take a
-// repository over its quota. The message is the one the capacity triggers raise,
-// so both enforcement paths map to the same HTTP result.
+// repository over its quota. The capacity triggers that once raised the same message were
+// dropped by migration 000014; Reserve is the only enforcement.
 var ErrQuotaExceeded = errors.New("repository capacity quota exceeded")
 
 // Execer is the part of *sql.Tx (or *sql.DB) Reserve needs.

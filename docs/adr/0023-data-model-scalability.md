@@ -35,7 +35,7 @@ estimate until slice 17 produces numbers.
   audit rows per call; `QueryArtifactUsage` uses `strpos`, `COUNT(*)` and `OFFSET`
   (`postgres_artifact_usage.go:29`); `ListAuditPage` (`postgres_audit.go:103`)
   uses `($n='' OR col=$n)` catch-alls with no actor or outcome index.
-- **Quota triggers.** `assert_hosted_repository_capacity` (`000046`, bodies
+- **Quota triggers** (dropped by migration `000014` once every format reserved through `capacity.Reserve`). `assert_hosted_repository_capacity` (`000046`, bodies
   replaced in `000076`, `000080`, `000081`, `000090`, `000110`, `000126`,
   `000131`) runs `SELECT ... FOR UPDATE` on the quota row and then `SUM()`s the
   whole repository from `AFTER INSERT OR UPDATE ... FOR EACH ROW` triggers:

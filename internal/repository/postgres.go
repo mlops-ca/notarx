@@ -78,9 +78,5 @@ func isUnique(err error) bool {
 }
 
 func IsQuotaExceeded(err error) bool {
-	if errors.Is(err, ErrQuotaExceeded) {
-		return true
-	}
-	var postgresError *pgconn.PgError
-	return errors.As(err, &postgresError) && postgresError.Code == "P0001" && postgresError.Message == ErrQuotaExceeded.Error()
+	return errors.Is(err, ErrQuotaExceeded)
 }

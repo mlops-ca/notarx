@@ -117,13 +117,21 @@ func (s *PostgresStore) ReplaceRepositoryCapacityQuota(ctx context.Context, id s
 		return RepositoryCapacity{}, err
 	}
 	// The capacity triggers that rejected a quota below the current usage are gone (migration
-	// 000014); the counter row SetQuota just locked holds the usage, so a concurrent Reserve waits.
-	var used int64
-	if err = tx.QueryRowContext(ctx, `SELECT bytes FROM repository_usage_counters WHERE repository_id=$1::uuid`, repositoryID).Scan(&used); err != nil {
-		return RepositoryCapacity{}, err
-	}
-	if quota > 0 && used > quota {
-		return RepositoryCapacity{}, ErrQuotaExceeded
+	// 000014). The counter row SetQuota just locked makes a concurrent Reserve wait. The counter
+	// can drift until the reconciler corrects it, so the decision also uses the live aggregation
+	// of the format, as the triggers did; changing a quota is rare, so its cost does not matter.
+	if quota > 0 {
+		var counted int64
+		if err = tx.QueryRowContext(ctx, `SELECT bytes FROM repository_usage_counters WHERE repository_id=$1::uuid`, repositoryID).Scan(&counted); err != nil {
+			return RepositoryCapacity{}, err
+		}
+		live, liveErr := liveRepositoryBytes(ctx, tx, repositoryID)
+		if liveErr != nil {
+			return RepositoryCapacity{}, liveErr
+		}
+		if max(counted, live) > quota {
+			return RepositoryCapacity{}, ErrQuotaExceeded
+		}
 	}
 	if err = insertAudits(ctx, tx, audit); err != nil {
 		return RepositoryCapacity{}, err
@@ -132,4 +140,22 @@ func (s *PostgresStore) ReplaceRepositoryCapacityQuota(ctx context.Context, id s
 		return RepositoryCapacity{}, err
 	}
 	return s.GetRepositoryCapacity(ctx, id)
+}
+
+// liveRepositoryBytes aggregates the bytes a repository holds from its asset tables, the
+// reconciler's query, not from the counter.
+func liveRepositoryBytes(ctx context.Context, q sqlRunner, repositoryID string) (int64, error) {
+	var format string
+	if err := q.QueryRowContext(ctx, `SELECT format FROM hosted_repositories WHERE id=$1::uuid`, repositoryID).Scan(&format); err != nil {
+		return 0, err
+	}
+	query, ok := capacity.UsageQuery(format)
+	if !ok {
+		return 0, nil
+	}
+	var bytes, objects int64
+	if err := q.QueryRowContext(ctx, query, repositoryID).Scan(&bytes, &objects); err != nil {
+		return 0, err
+	}
+	return bytes, nil
 }

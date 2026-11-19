@@ -167,6 +167,13 @@ func (s *MemoryStore) ReplaceRepositoryCapacityQuota(ctx context.Context, id str
 		s.mu.Unlock()
 		return RepositoryCapacity{}, ErrNotFound
 	}
+	if current, err := s.repositoryCapacityLocked(id); err != nil || quota > 0 && current.UsedBytes > quota {
+		s.mu.Unlock()
+		if err == nil {
+			err = ErrQuotaExceeded
+		}
+		return RepositoryCapacity{}, err
+	}
 	if err := s.commitAuditLocked(ctx, audit); err != nil {
 		s.mu.Unlock()
 		return RepositoryCapacity{}, err

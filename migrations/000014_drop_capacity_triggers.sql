@@ -6,7 +6,7 @@
 -- covered), so the capacity triggers, which summed the whole repository from an
 -- AFTER INSERT OR UPDATE ... FOR EACH ROW trigger, are dropped. This supersedes the
 -- AssertRepositoryCapacity of ADR 0022 slice 7. Lowering a quota below current usage is
--- rejected by the quota API (ReplaceRepositoryCapacityQuota) against the counter row.
+-- rejected by the quota API (ReplaceRepositoryCapacityQuota) against the live usage.
 --
 -- MySQL (ADR 0022): there is no migrations/mysql directory yet; the twin has no triggers
 -- to create.

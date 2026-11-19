@@ -175,7 +175,12 @@ func TestAPTPublicationRuntimeResponsesConformToOpenAPI(t *testing.T) {
 	identityMismatchSession := createErrorSession("contract-identity-mismatch", "identity.deb", digest, len(deb), "other@1.0-1#amd64")
 	uploadError(identityMismatchSession, deb, http.StatusUnprocessableEntity, "identity_mismatch")
 
-	if _, err = store.ReplaceRepositoryCapacityQuota(context.Background(), repo.ID, 1); err != nil {
+	current, err := store.GetRepositoryCapacity(context.Background(), repo.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The quota equals the usage, so the declared two bytes of the next session do not fit.
+	if _, err = store.ReplaceRepositoryCapacityQuota(context.Background(), repo.ID, max(current.UsedBytes, 1)); err != nil {
 		t.Fatal(err)
 	}
 	quotaBody := `{"suite":"stable","component":"main","objectName":"quota.deb","declaredDigest":"sha256:` + strings.Repeat("b", 64) + `","declaredSize":2}`
