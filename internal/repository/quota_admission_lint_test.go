@@ -18,8 +18,8 @@ var quotaAdmissionExceptions = map[string]string{
 }
 
 var (
-	quotaRowLock = regexp.MustCompile("(?is)repository_capacity_quotas[^`]*FOR\\s+UPDATE")
-	assetSum     = regexp.MustCompile("(?i)\\bsum\\s*\\(")
+	quotaRowLock = regexp.MustCompile(`(?is)repository_capacity_quotas[^\x60]*FOR\s+UPDATE`)
+	assetSum     = regexp.MustCompile(`(?i)\bsum\s*\(`)
 )
 
 // TestQuotaAdmissionUsesCountersNotAssetSums enforces ADR 0023 section 3: a Postgres store query
