@@ -77,14 +77,28 @@ test('the moving nightly tag keeps its index alive though its versioned tag expi
   assert.deepEqual(result.sweep, []);
 });
 
-test('versions newer than 7 days or newer than the oldest retained nightly are kept', () => {
+test('versions newer than 7 days are kept even when expired', () => {
   const recent = image('1', '0.3.0-nightly.1', 3);
-  const retainedOld = image('2', '0.2.0-nightly.9', 30);
-  const between = image('4', '0.2.0-nightly.1', 20);
-  const result = plan({ ...merge(recent, retainedOld, between), retainedNightlies: new Set(['0.2.0-nightly.9']), now });
-  // recent is expired but younger than 7 days; between is expired and 20 days old, younger than the
-  // oldest retained nightly (30 days): both are kept.
+  const retained = image('2', '0.2.0-nightly.9', 30);
+  const result = plan({ ...merge(recent, retained), retainedNightlies: new Set(['0.2.0-nightly.9']), now });
   assert.deepEqual(result.sweep, []);
+});
+
+test('an old retained nightly does not hold the sweep cutoff back', () => {
+  const retainedOld = image('2', '0.2.0-nightly.9', 400);
+  const expired = image('4', '0.2.0-nightly.1', 20);
+  const orphan = version(digest('f'), 20);
+  const young = image('5', '0.3.0-nightly.1', 3);
+  const result = plan({
+    versions: [...merge(retainedOld, expired, young).versions, orphan],
+    manifests: merge(retainedOld, expired, young).manifests,
+    retainedNightlies: new Set(['0.2.0-nightly.9']),
+    now,
+  });
+  // The expired index and its children are 20 days old, far younger than the retained nightly
+  // (400 days) but older than 7 days: they are swept, the 3-day-old expired index is not.
+  assert.deepEqual(new Set(names(result.sweep)), new Set([...expired.all, orphan.name]));
+  assert.equal(result.cutoff, now - 7 * day);
 });
 
 test('an unmarked untagged orphan older than the cutoff is swept', () => {

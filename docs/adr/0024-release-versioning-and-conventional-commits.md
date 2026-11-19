@@ -305,8 +305,13 @@ trigger CI.
 - GHCR: `scripts/prune-ghcr.mjs` (tested on fixtures) works by mark and sweep. Mark:
   every version reachable from a retained tag (the tagged index, its child manifests
   for each platform, and the attestation or referrer manifests that point at them).
-  Sweep: delete only package versions that are unmarked, older than 7 days (in-flight
-  builds), and older than the oldest retained nightly. Per-architecture digests behind
+  Sweep: delete only package versions that are unmarked and older than 7 days (the
+  in-flight guard for builds that have pushed digests but not yet tags). There is no
+  other age condition: a cutoff pinned to the oldest retained nightly would age without
+  bound, because retention keeps the newest nightly of every core and the nightlies of
+  stable tags, and expired indexes, their children and orphans younger than that
+  nightly would never be swept. Reachability from retained tags already protects
+  retained images. Per-architecture digests behind
   an index are untagged versions, so "delete untagged" is forbidden; the script must
   never call a bulk untagged-deletion action. Stable image versions are always marked.
   Expired nightly indexes are deleted first and their orphans swept on the next run.

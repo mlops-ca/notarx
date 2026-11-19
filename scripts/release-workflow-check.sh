@@ -35,6 +35,8 @@ check 'the gate runs the arm64 lanes only' '.jobs["gates-plan"].steps | map(.run
 check 'the tag and pre-release are created by the last step of publish' '.jobs.publish.steps | last | (.run | contains("gh release create")) and (.run | contains("--prerelease")) and (.run | contains("--target \"$SHA\""))'
 check 'no other step creates a tag or release' '[.jobs | to_entries[] | .value.steps // [] | .[] | .run // "" | select(contains("gh release create") or contains("git tag") or contains("git push"))] | length == 1'
 check 'every action is pinned by commit SHA' '[.jobs[] | (.uses // empty), (.steps // [] | .[] | .uses // empty)] | map(select(startswith("./") | not)) | all(test("@[0-9a-f]{40}( |$)"))'
+check 'a dry run still runs the gates and the build, and only publish needs publish=true' '(.jobs["gates-images"].if | contains("outputs.build")) and (.jobs["gates-plan"].if | contains("outputs.build")) and (.jobs.gates.if | contains("outputs.build")) and (.jobs.publish.if | contains("outputs.publish == '"'"'true'"'"'"))'
+check 'a dry run pushes no image' '.jobs["build-images"].with["dry-run"] | contains("outputs.publish")'
 check 'image tags are nightly and the version' '.jobs.plan.steps | map(.run // "") | any(contains("echo nightly"))'
 check 'prune never runs for a skipped or failed nightly' '.jobs.prune.if | contains("needs.publish.result == '"'"'success'"'"'")'
 

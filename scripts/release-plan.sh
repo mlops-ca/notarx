@@ -7,6 +7,11 @@
 #   scripts/release-plan.sh stable [--nightly-tag vX.Y.Z-nightly.N] [--version-override X.Y.Z]
 #   scripts/release-plan.sh green <sha>     # exit 0 when the required checks are green
 #
+#   scripts/release-plan.sh fork      # print the fork commit (empty when it is not in the repository)
+#
+# Commit history before the fork commit (the upstream history, docs/upstream.md) is never
+# parsed: every range starts at the previous release or, before the first one, at the fork.
+#
 # Environment: RELEASE_PLAN_REPO (repository, default the current directory),
 # RELEASE_PLAN_REF (main branch ref, default HEAD), GIT_CLIFF (binary, default the
 # pinned one from scripts/install-git-cliff.sh), RELEASE_PLAN_CHECKS_DIR (tests: a
@@ -33,6 +38,18 @@ cliff() {
     GIT_CLIFF=$("$script_dir/install-git-cliff.sh")
   fi
   "$GIT_CLIFF" --config "$config" --repository "$repo" "$@"
+}
+
+# The last upstream commit before the first notarx commit, read from docs/upstream.md.
+# Prints nothing when the repository does not contain it (a test repository).
+fork_commit() {
+  local file=${RELEASE_PLAN_UPSTREAM_DOC:-$script_dir/../docs/upstream.md} commit
+  [[ -f "$file" ]] || fail "$file not found"
+  commit=$(sed -n 's/^- Last upstream commit before the first notarx commit: `\([0-9a-f]\{40\}\)`.*/\1/p' "$file")
+  [[ -n "$commit" ]] || fail "no fork commit in $file"
+  if repo_git cat-file -e "$commit^{commit}" 2>/dev/null; then
+    printf '%s' "$commit"
+  fi
 }
 
 # Release tags sorted by SemVer precedence, ascending: for one core the nightlies
@@ -101,7 +118,7 @@ checks_green() {
 normalise() { printf '%s' "$1" | sed -e 's/^v//'; }
 
 plan_nightly() {
-  local stable_tag latest_nightly sha candidate core number previous count
+  local stable_tag latest_nightly sha candidate core number previous count fork
   stable_tag=$(latest_tag "$stable_pattern")
 
   # The newest of the last 10 first-parent commits with green required checks.
@@ -126,7 +143,8 @@ plan_nightly() {
     count=$(releasing_commits "$previous..$sha")
     [[ "$count" -gt 0 ]] || skip "no releasing commit between $previous and $sha" nightly "$sha"
   else
-    count=$(releasing_commits "$sha")
+    fork=$(fork_commit)
+    count=$(releasing_commits "${fork:+$fork..}$sha")
     [[ "$count" -gt 0 ]] || skip "no releasing commit up to $sha" nightly "$sha"
   fi
 
@@ -214,9 +232,10 @@ mode=${1:-}
 case "$mode" in
   nightly) plan_nightly "$@" ;;
   stable) plan_stable "$@" ;;
+  fork) fork_commit ;;
   green)
     [[ $# -eq 1 ]] || fail 'usage: release-plan.sh green <sha>'
     checks_green "$1" || fail "the required checks are not green on $1"
     ;;
-  *) fail 'usage: release-plan.sh nightly | stable [options] | green <sha>' ;;
+  *) fail 'usage: release-plan.sh nightly | stable [options] | green <sha> | fork' ;;
 esac

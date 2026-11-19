@@ -2,7 +2,8 @@ name: Release
 
 # Nightly release pipeline (ADR 0024). One workflow, two triggers: schedule (a
 # nightly pre-release of the newest green commit of main) and workflow_dispatch
-# (a manual run; dry_run defaults to true and prints the plan without building).
+# (a manual run; dry_run defaults to true: it plans, runs the gates and builds the
+# archives and images without pushing anything, and publishes nothing).
 # The stable channel is added to this job graph by ADR 0024 slice 5. There is no tag
 # trigger: the workflow creates the tag itself as its last step, so a failed run
 # leaves only untagged digests and the next night retries.
@@ -25,7 +26,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: Print the plan and the intended tags only; build and publish nothing.
+        description: Plan, run the gates and build the archives and images (nothing is pushed); never publish, tag or attest.
         type: boolean
         default: true
 
@@ -65,7 +66,9 @@ jobs:
       previous: ${{ steps.plan.outputs.previous }}
       tags: ${{ steps.tags.outputs.tags }}
       images: ${{ steps.tags.outputs.images }}
-      # true when the run builds and publishes; false for a skip and for a dry run.
+      # true when the run runs the gates and builds: every run that is not skipped.
+      build: ${{ steps.tags.outputs.build }}
+      # true when the run also publishes; false for a skip and for a dry run.
       publish: ${{ steps.tags.outputs.publish }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -89,7 +92,11 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           echo "images=$(jq -c . scripts/release-images.json)" >> "$GITHUB_OUTPUT"
+          build=false
           publish=false
+          if [ "$SKIP" != true ]; then
+            build=true
+          fi
           if [ "$SKIP" != true ] && { [ "$EVENT" = schedule ] || [ "$DRY_RUN" != true ]; }; then
             publish=true
           fi
@@ -98,6 +105,7 @@ jobs:
             echo "::error::a release runs only from main, not from $GITHUB_REF"
             exit 1
           fi
+          echo "build=$build" >> "$GITHUB_OUTPUT"
           echo "publish=$publish" >> "$GITHUB_OUTPUT"
           if [ "$SKIP" = true ]; then
             echo "::notice::release skipped: no new releasing commit with green required checks"
@@ -117,19 +125,22 @@ jobs:
             echo "- commit: $PLAN_SHA"
             echo "- previous release: $PREVIOUS"
             echo "- image tags: nightly, $VERSION"
-            echo "- publishes: $publish (dry run: $DRY_RUN)"
+            echo "- builds: $build, publishes: $publish (dry run: $DRY_RUN)"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Warn about commit subjects that break the commit policy
         if: steps.plan.outputs.skip != 'true'
         env:
           SHA: ${{ steps.plan.outputs.sha }}
           PREVIOUS: ${{ steps.plan.outputs.previous }}
-        run: node scripts/commit-policy-check.mjs --warn-range "${PREVIOUS:+$PREVIOUS..}$SHA"
+        run: |
+          # Start at the previous release, or at the fork commit: upstream history is not ours to lint.
+          from=${PREVIOUS:-$(./scripts/release-plan.sh fork)}
+          node scripts/commit-policy-check.mjs --warn-range "${from:+$from..}$SHA"
 
   # --- gates: the full arm64 contract-native run on the planned commit -----------
   gates-images:
     needs: plan
-    if: needs.plan.outputs.publish == 'true'
+    if: needs.plan.outputs.build == 'true'
     runs-on: ubuntu-24.04-arm
     strategy:
       fail-fast: true
@@ -164,7 +175,7 @@ jobs:
 
   gates-plan:
     needs: plan
-    if: needs.plan.outputs.publish == 'true'
+    if: needs.plan.outputs.build == 'true'
     runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
@@ -195,7 +206,7 @@ jobs:
       sha: ${{ needs.plan.outputs.sha }}
 
   gates:
-    if: ${{ !cancelled() && needs.plan.outputs.publish == 'true' }}
+    if: ${{ !cancelled() && needs.plan.outputs.build == 'true' }}
     needs: [plan, gates-images, gates-plan, gates-contract]
     runs-on: ubuntu-24.04
     steps:
@@ -231,6 +242,8 @@ jobs:
       sha: ${{ needs.plan.outputs.sha }}
       tags: ${{ needs.plan.outputs.tags }}
       images: ${{ needs.plan.outputs.images }}
+      # A dry run builds and checks the images natively but pushes, tags and attests nothing.
+      dry-run: ${{ needs.plan.outputs.publish != 'true' }}
 
   build:
     needs: [build-archives, build-images]
@@ -241,6 +254,7 @@ jobs:
   # --- publish: tag and pre-release in one call, as the last step ---------------------
   publish:
     needs: [plan, build]
+    if: needs.plan.outputs.publish == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -292,7 +306,8 @@ jobs:
       - name: Generate the release notes
         run: |
           cliff=$(./scripts/install-git-cliff.sh)
-          "$cliff" --config cliff.toml "${PREVIOUS:+$PREVIOUS..}$SHA" --tag "v$VERSION" --strip all > notes.md
+          from=${PREVIOUS:-$(./scripts/release-plan.sh fork)}
+          "$cliff" --config cliff.toml "${from:+$from..}$SHA" --tag "v$VERSION" --strip all > notes.md
           [ -s notes.md ] || echo "No user-facing changes." > notes.md
           {
             echo
