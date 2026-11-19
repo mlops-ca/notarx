@@ -654,24 +654,27 @@ func (p *NexusMigrationPublication) Publish(ctx context.Context, entry nexusmigr
 	}
 	digest := assets[0].Digest
 	// The publication and its audit commit together (ADR 0023 section 1): a failing audit insert
-	// fails the publication. The artifact digest is the first declared object's digest.
-	audit := repository.AuditRecord{Repository: repo.Name, GroupName: repo.Name, Actor: entry.Actor,
-		Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: entry.Format, Resource: entry.Identity,
-		Representation: digest, Operation: "nexus.migration.publish", Status: 201}
+	// fails the publication. The audit is stamped in that transaction.
+	auditOf := func(artifactDigest string) repository.AuditRecord {
+		return repository.AuditRecord{Repository: repo.Name, GroupName: repo.Name, Actor: entry.Actor,
+			Outcome: repository.AuditResolved, Format: entry.Format, Resource: entry.Identity,
+			Representation: artifactDigest, Operation: "nexus.migration.publish", Status: 201}
+	}
 	if capability, ok := p.publicationModule(entry.Format); ok {
-		err = capability.PublishPublication(ctx, nativePublicationAsset(assets[0].MavenAsset), audit)
+		err = capability.PublishPublication(ctx, nativePublicationAsset(assets[0].MavenAsset), auditOf(digest))
 		if errors.Is(err, repository.ErrPreconditionFailed) {
 			return nexusmigration.Failed("target_conflict")
 		}
 	} else {
-		if _, err = p.session(ctx, entry, assets); err != nil {
-			return err
+		session, sessionErr := p.session(ctx, entry, assets)
+		if sessionErr != nil {
+			return sessionErr
 		}
 		native := make([]repository.MavenAsset, 0, len(assets))
 		for _, asset := range assets {
 			native = append(native, asset.MavenAsset)
 		}
-		artifact, _, commitErr := p.store.CommitMavenPublishSessionIdempotently(ctx, entry.SessionID, "nexus-migration:"+entry.ID, nexusPublicationIdentity(entry), native, audit)
+		artifact, _, commitErr := p.store.CommitMavenPublishSessionIdempotently(ctx, entry.SessionID, "nexus-migration:"+entry.ID, nexusPublicationIdentity(entry), native, auditOf(session.Objects[0].Digest))
 		err, digest = commitErr, artifact.Digest
 		if errors.Is(err, repository.ErrNameExists) {
 			return nexusmigration.Failed("target_conflict")

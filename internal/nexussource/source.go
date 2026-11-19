@@ -137,19 +137,9 @@ func (s *Service) Create(ctx context.Context, in Input, audit ...repository.Audi
 	if err != nil {
 		return Source{}, err
 	}
-	return s.store.Create(ctx, v, auditResource(audit, v.ID)...)
+	return s.store.Create(ctx, v, repository.WithAuditResource(audit, v.ID)...)
 }
 
-// auditResource returns the audit records with the resource set to id where it is empty.
-func auditResource(audit []repository.AuditRecord, id string) []repository.AuditRecord {
-	named := append([]repository.AuditRecord(nil), audit...)
-	for index := range named {
-		if named[index].Resource == "" {
-			named[index].Resource = id
-		}
-	}
-	return named
-}
 func (s *Service) Get(ctx context.Context, id string) (Source, error) { return s.store.Get(ctx, id) }
 func (s *Service) List(ctx context.Context, limit int, cursor string) ([]Source, string, error) {
 	if limit < 1 || limit > 100 {
@@ -177,13 +167,13 @@ func (s *Service) Update(ctx context.Context, id string, in Input, expected stri
 	if err != nil {
 		return Source{}, err
 	}
-	return s.store.Update(ctx, v, expected, auditResource(audit, id)...)
+	return s.store.Update(ctx, v, expected, repository.WithAuditResource(audit, id)...)
 }
 func (s *Service) Delete(ctx context.Context, id, expected string, audit ...repository.AuditRecord) error {
 	if !version.MatchString(expected) {
 		return fail("invalid_request")
 	}
-	return s.store.Delete(ctx, id, expected, auditResource(audit, id)...)
+	return s.store.Delete(ctx, id, expected, repository.WithAuditResource(audit, id)...)
 }
 
 type Field struct{ Field, Disposition, Reason string }

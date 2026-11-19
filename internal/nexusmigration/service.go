@@ -133,19 +133,9 @@ func (s *Service) Start(ctx context.Context, in StartInput, actor, key string, a
 		return Batch{}, err
 	}
 	id := ids.New()
-	return s.store.Create(ctx, Batch{StartInput: in, ID: id, Actor: actor, ActorKind: kind, OwnerID: ownerID}, key, digest(in), auditResource(audit, id)...)
+	return s.store.Create(ctx, Batch{StartInput: in, ID: id, Actor: actor, ActorKind: kind, OwnerID: ownerID}, key, digest(in), repository.WithAuditResource(audit, id)...)
 }
 
-// auditResource returns the audit records with the resource set to id where it is empty.
-func auditResource(audit []repository.AuditRecord, id string) []repository.AuditRecord {
-	named := append([]repository.AuditRecord(nil), audit...)
-	for index := range named {
-		if named[index].Resource == "" {
-			named[index].Resource = id
-		}
-	}
-	return named
-}
 func (s *Service) Get(ctx context.Context, id string) (Batch, error) { return s.store.Get(ctx, id) }
 func (s *Service) List(ctx context.Context, limit int, cursor string) ([]Batch, string, error) {
 	if !validPage(limit, cursor) {

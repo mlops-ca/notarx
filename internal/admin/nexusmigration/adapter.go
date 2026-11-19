@@ -46,7 +46,8 @@ type operation struct {
 	name, id string
 	status   int
 	// audited is set when the store wrote the audit of a successful state change in its own
-	// transaction (ADR 0023 section 1), so finish writes no second record for it.
+	// transaction (ADR 0023 section 1), so finish writes no second record for it. An idempotent
+	// replay changes nothing and writes none either: its change was audited when it was made.
 	audited bool
 }
 
@@ -56,7 +57,7 @@ func (op *operation) audit(status int) []repository.AuditRecord {
 	if op.h == nil || op.h.audit == nil {
 		return nil
 	}
-	return []repository.AuditRecord{{Actor: op.p.Actor, Operation: op.name, Resource: op.id, Format: "management", Outcome: repository.AuditResolved, Status: status, OccurredAt: time.Now().UTC(), CacheDisposition: "bypass"}}
+	return []repository.AuditRecord{repository.ManagementAudit(op.p.Actor, op.name, op.id, status)}
 }
 
 func (h *BatchAdapter) begin(w http.ResponseWriter, r *http.Request, name, id string) (*operation, bool) {

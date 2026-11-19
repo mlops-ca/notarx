@@ -140,7 +140,7 @@ func (s *ScheduleService) Create(ctx context.Context, in ScheduleCreate, actor, 
 		}
 		p.State, p.LastError, p.CapacityEvidence = "active", "", in.CapacityEvidence
 	}
-	return s.store.CreateSchedule(ctx, p, key, hash, auditResource(audit, p.ID)...)
+	return s.store.CreateSchedule(ctx, p, key, hash, repository.WithAuditResource(audit, p.ID)...)
 }
 
 func (s *ScheduleService) validateObservation(p Schedule, e CapacityEvidence) error {

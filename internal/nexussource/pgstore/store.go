@@ -27,18 +27,23 @@ func scan(row interface{ Scan(...any) error }) (nexussource.Source, error) {
 	return v, err
 }
 
-// withAudit runs the change on the pool, or with audit in one transaction with the audit records so
-// a failing audit insert rolls the change back (ADR 0023 section 1).
-func (s *Store) withAudit(ctx context.Context, audit []repository.AuditRecord, change func(row func(string, ...any) *sql.Row) error) error {
+// rowQuerier is the part of *sql.DB and *sql.Tx the single-statement changes use.
+type rowQuerier interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// change runs fn on the pool, or, when audit is given, on a transaction that also writes the audit
+// records, so a failing audit insert rolls the change back (ADR 0023 section 1).
+func (s *Store) change(ctx context.Context, audit []repository.AuditRecord, fn func(rowQuerier) error) error {
 	if len(audit) == 0 {
-		return change(func(query string, args ...any) *sql.Row { return s.db.QueryRowContext(ctx, query, args...) })
+		return fn(s.db)
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err = change(func(query string, args ...any) *sql.Row { return tx.QueryRowContext(ctx, query, args...) }); err != nil {
+	if err = fn(tx); err != nil {
 		return err
 	}
 	if err = repository.InsertAuditsTx(ctx, tx, audit...); err != nil {
@@ -48,8 +53,8 @@ func (s *Store) withAudit(ctx context.Context, audit []repository.AuditRecord, c
 }
 func (s *Store) Create(ctx context.Context, v nexussource.Source, audit ...repository.AuditRecord) (nexussource.Source, error) {
 	var out nexussource.Source
-	err := s.withAudit(ctx, audit, func(row func(string, ...any) *sql.Row) (err error) {
-		out, err = scan(row(`INSERT INTO nexus_migration_sources(id,name,base_url,credential_ciphertext) VALUES($1,$2,$3,$4) RETURNING `+columns, v.ID, v.Name, v.BaseURL, v.CredentialCiphertext))
+	err := s.change(ctx, audit, func(q rowQuerier) (err error) {
+		out, err = scan(q.QueryRowContext(ctx, `INSERT INTO nexus_migration_sources(id,name,base_url,credential_ciphertext) VALUES($1,$2,$3,$4) RETURNING `+columns, v.ID, v.Name, v.BaseURL, v.CredentialCiphertext))
 		return err
 	})
 	return out, err
@@ -83,16 +88,16 @@ func (s *Store) List(ctx context.Context, limit int, cursor string) ([]nexussour
 }
 func (s *Store) Update(ctx context.Context, v nexussource.Source, expected string, audit ...repository.AuditRecord) (nexussource.Source, error) {
 	var out nexussource.Source
-	err := s.withAudit(ctx, audit, func(row func(string, ...any) *sql.Row) (err error) {
-		out, err = scan(row(`UPDATE nexus_migration_sources SET name=$2,base_url=$3,credential_ciphertext=$4,version=version+1,updated_at=clock_timestamp() WHERE id=$1::uuid AND version=$5::text::bigint RETURNING `+columns, v.ID, v.Name, v.BaseURL, v.CredentialCiphertext, expected))
+	err := s.change(ctx, audit, func(q rowQuerier) (err error) {
+		out, err = scan(q.QueryRowContext(ctx, `UPDATE nexus_migration_sources SET name=$2,base_url=$3,credential_ciphertext=$4,version=version+1,updated_at=clock_timestamp() WHERE id=$1::uuid AND version=$5::text::bigint RETURNING `+columns, v.ID, v.Name, v.BaseURL, v.CredentialCiphertext, expected))
 		return err
 	})
 	return out, s.classify(ctx, v.ID, err)
 }
 func (s *Store) Delete(ctx context.Context, id, expected string, audit ...repository.AuditRecord) error {
-	err := s.withAudit(ctx, audit, func(row func(string, ...any) *sql.Row) error {
+	err := s.change(ctx, audit, func(q rowQuerier) error {
 		var deleted string
-		err := row(`DELETE FROM nexus_migration_sources WHERE id=$1::uuid AND version=$2::text::bigint RETURNING id::text`, id, expected).Scan(&deleted)
+		err := q.QueryRowContext(ctx, `DELETE FROM nexus_migration_sources WHERE id=$1::uuid AND version=$2::text::bigint RETURNING id::text`, id, expected).Scan(&deleted)
 		if errors.Is(err, sql.ErrNoRows) {
 			err = nexussource.ErrNotFound
 		}

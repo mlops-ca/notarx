@@ -32,7 +32,7 @@ func TestPostgresMigrationChangesRollBackWithTheirAudit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	call := func(method, path string, body any, version string) *httptest.ResponseRecorder {
+	call := func(method, path string, body any, version string, key ...string) *httptest.ResponseRecorder {
 		t.Helper()
 		var raw []byte
 		if body != nil {
@@ -40,7 +40,11 @@ func TestPostgresMigrationChangesRollBackWithTheirAudit(t *testing.T) {
 		}
 		r := httptest.NewRequest(method, "/api/v2"+path, bytes.NewReader(raw))
 		r.Header.Set("Authorization", "Bearer audit-admin")
-		r.Header.Set("Idempotency-Key", uuid.NewString())
+		idempotency := uuid.NewString()
+		if len(key) > 0 {
+			idempotency = key[0]
+		}
+		r.Header.Set("Idempotency-Key", idempotency)
 		if version != "" {
 			r.Header.Set("If-Match", version)
 		}
@@ -77,9 +81,20 @@ func TestPostgresMigrationChangesRollBackWithTheirAudit(t *testing.T) {
 		t.Fatal("batch created although its audit failed")
 	}
 	restore()
-	w := call("POST", "/migrations/nexus/batches", input, "")
+	startKey := uuid.NewString()
+	w := call("POST", "/migrations/nexus/batches", input, "", startKey)
 	if w.Code != 202 || batches() != before+1 {
 		t.Fatalf("batch start with a working audit: %d %s", w.Code, w.Body.String())
+	}
+	audits := func() int {
+		return count(`SELECT count(*) FROM security_audit_log WHERE actor=$1 AND operation='migration.batch.start' AND http_status=202`, f.actor)
+	}
+	if audits() != 1 {
+		t.Fatalf("batch start audits=%d, want the one written with the change", audits())
+	}
+	// A replay of the idempotency key changes nothing and writes no second audit.
+	if replay := call("POST", "/migrations/nexus/batches", input, "", startKey); replay.Code != 202 || audits() != 1 || batches() != before+1 {
+		t.Fatalf("batch start replay: %d %s audits=%d", replay.Code, replay.Body.String(), audits())
 	}
 	var b m.Batch
 	if err = json.Unmarshal(w.Body.Bytes(), &b); err != nil {
