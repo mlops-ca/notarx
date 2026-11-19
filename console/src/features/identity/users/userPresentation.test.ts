@@ -14,6 +14,7 @@ const user: User = {
   localPasswordEnabled: true,
   failedLoginAttempts: 0,
   mustChangePassword: false,
+  emailVerifiedByAdmin: false,
   createdAt: "2026-08-01T08:00:00Z",
   version: "1",
 };

@@ -270,13 +270,16 @@ func (h samlLoginHandler) flow(r *http.Request, slug string, now time.Time) (sam
 
 // samlProvision maps verified claims to the identity resolution request. The linking rules of ADR 0018
 // section 3 are encoded here: a SAML assertion never carries a provider-verified email, so an asserted
-// email (and an emailAddress NameID) never links an existing account; an unknown subject is created only
-// when the provider provisions just in time; roles never come from the assertion in this release.
-func samlProvision(provider identity.Provider, settings identity.SAMLSettings, claims saml.Claims, now time.Time) repository.OIDCIdentityProvision {
+// email (and an emailAddress NameID) never links an existing account on its own (EmailVerified and
+// MatchEmail stay false). When the provider enables email linking, the store may link the one account
+// whose email an administrator verified, if that account is not an admin and has no local password
+// (LinkAdminVerifiedEmail); its decision comes back in link. An unknown subject is created only when
+// the provider provisions just in time; roles never come from the assertion in this release.
+func samlProvision(provider identity.Provider, settings identity.SAMLSettings, claims saml.Claims, now time.Time, link *repository.EmailLinkDecision) repository.OIDCIdentityProvision {
 	return repository.OIDCIdentityProvision{
 		Kind: repository.UserIdentitySAML, ProviderID: provider.ID, Issuer: settings.EntityID, Subject: claims.NameID,
 		Email: claims.Email, DisplayName: claims.DisplayName, PreferredUsername: claims.Username,
-		EmailVerified: false, MatchEmail: false,
+		EmailVerified: false, MatchEmail: false, LinkAdminVerifiedEmail: provider.EmailLinkingEnabled, EmailLink: link,
 		Provision: provider.ProvisioningMode == identity.ProvisioningJIT, DefaultRole: provider.JITDefaultRole, OccurredAt: now,
 	}
 }
@@ -287,7 +290,11 @@ func (h samlLoginHandler) signIn(w http.ResponseWriter, r *http.Request, provide
 		return
 	}
 	now := h.runtimeNow()
-	user, _, _, err := h.identities.ResolveOIDCIdentity(r.Context(), samlProvision(provider.provider, provider.settings, claims, now))
+	var link repository.EmailLinkDecision
+	user, _, _, err := h.identities.ResolveOIDCIdentity(r.Context(), samlProvision(provider.provider, provider.settings, claims, now, &link))
+	if link.Reason != "" {
+		h.recordEmailLink(r, provider.provider.Slug, link)
+	}
 	switch {
 	case err == nil:
 	case errors.Is(err, repository.ErrNotFound):
@@ -362,6 +369,23 @@ func (h samlLoginHandler) record(r *http.Request, slug, actor string, outcome re
 		Class: repository.AuditClassSync, Actor: actor, Outcome: outcome, OccurredAt: h.runtimeNow(), Format: "management",
 		Resource: "auth/saml/" + strings.ToLower(slug), Operation: "auth.saml.acs", Status: status, CacheDisposition: "bypass",
 		AuthorizationSource: "saml", AuthorizationReason: reason,
+	})
+}
+
+// recordEmailLink audits the decision of the administrator-verified email-link path: linked, or refused
+// and why. The asserted email is never written to the log, only the machine-readable reason.
+func (h samlLoginHandler) recordEmailLink(r *http.Request, slug string, decision repository.EmailLinkDecision) {
+	if h.audit == nil {
+		return
+	}
+	outcome := repository.AuditResolved
+	if !decision.Linked {
+		outcome = repository.AuditAccessDenied
+	}
+	_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{
+		Class: repository.AuditClassSync, Actor: "saml:" + slug, Outcome: outcome, OccurredAt: h.runtimeNow(), Format: "management",
+		Resource: "auth/saml/" + strings.ToLower(slug), Operation: "auth.saml.email_link", Status: http.StatusFound, CacheDisposition: "bypass",
+		AuthorizationSource: "saml", AuthorizationReason: "email_link_" + decision.Reason,
 	})
 }
 

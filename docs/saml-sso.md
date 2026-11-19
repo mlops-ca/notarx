@@ -62,6 +62,16 @@ SP metadata, so two keys are published until the next rotation. The private key 
 
 The identity key is the NameID of the provider (lower-cased for the `emailAddress` format; `transient` is
 refused). A first sign-in creates an account only when the provider provisions just in time. An asserted
-email address never links an existing account: there is no provider-verified email in a SAML response, and
-the admin-verified email flag that the ADR requires for email linking does not exist yet, so an
-administrator links accounts explicitly.
+email address never links an existing account on its own: there is no provider-verified email in a SAML
+response, and a NameID of format `emailAddress` never implies linking either. Administrators can link
+accounts explicitly.
+
+When the provider enables `email_linking_enabled`, a first sign-in links an existing account by the
+asserted email attribute only if exactly one account carries that email with the administrator-verified
+flag, the account is not an `admin`, has no local password and has no identity at this provider. An
+administrator sets the flag on the user (Users, Sign-in and security, "Mark email verified", or
+`PATCH /users/{userId}` with `emailVerifiedByAdmin`); the account records who verified the address and
+when, and changing the email clears the verification. Every other case keeps the behaviour above. The
+decision (linked, or refused with a reason such as `admin_account`, `local_password`,
+`email_not_verified`, `already_linked`) is written to the audit log under `auth.saml.email_link`; two
+verified matches refuse the sign-in as ambiguous.

@@ -9360,8 +9360,11 @@ type UpdateUser struct {
 	Description *string              `json:"description,omitempty"`
 	DisplayName *string              `json:"displayName,omitempty"`
 	Email       *openapi_types.Email `json:"email,omitempty"`
-	Role        *UpdateUserRole      `json:"role,omitempty"`
-	State       *UpdateUserState     `json:"state,omitempty"`
+
+	// EmailVerifiedByAdmin Set or clear the administrator verification of the account email. Setting it requires an email on the account, and it is cleared automatically when the email changes.
+	EmailVerifiedByAdmin *bool            `json:"emailVerifiedByAdmin,omitempty"`
+	Role                 *UpdateUserRole  `json:"role,omitempty"`
+	State                *UpdateUserState `json:"state,omitempty"`
 }
 
 // UpdateUserRole defines model for UpdateUser.Role.
@@ -9417,10 +9420,19 @@ type UpstreamAuthScheme string
 
 // User defines model for User.
 type User struct {
-	CreatedAt            time.Time          `json:"createdAt"`
-	Description          string             `json:"description"`
-	DisplayName          string             `json:"displayName"`
-	Email                string             `json:"email"`
+	CreatedAt   time.Time `json:"createdAt"`
+	Description string    `json:"description"`
+	DisplayName string    `json:"displayName"`
+	Email       string    `json:"email"`
+
+	// EmailVerifiedAt When the email was verified; present only while emailVerifiedByAdmin is true.
+	EmailVerifiedAt *time.Time `json:"emailVerifiedAt,omitempty"`
+
+	// EmailVerifiedBy The administrator who verified the email; present only while emailVerifiedByAdmin is true.
+	EmailVerifiedBy *string `json:"emailVerifiedBy,omitempty"`
+
+	// EmailVerifiedByAdmin Whether an administrator verified the account email. Only a verified email lets a SAML login link the account by email (ADR 0018 Decision 3). Changing the email clears it.
+	EmailVerifiedByAdmin bool               `json:"emailVerifiedByAdmin"`
 	FailedLoginAttempts  int                `json:"failedLoginAttempts"`
 	Id                   openapi_types.UUID `json:"id"`
 	LastLoginAt          *time.Time         `json:"lastLoginAt,omitempty"`

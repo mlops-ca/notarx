@@ -4,6 +4,7 @@ import {
   DeleteOutlined,
   KeyOutlined,
   LogoutOutlined,
+  MailOutlined,
   SaveOutlined,
 } from "@ant-design/icons";
 import { Alert, App, Avatar, Button, Divider, Form, Space } from "antd";
@@ -98,6 +99,25 @@ export function UserDetailsDrawer({
       return;
     }
     void message.success(t("identity.userProfileSaved"));
+    onChanged(data);
+  };
+
+  const setEmailVerification = async (verified: boolean) => {
+    setActionBusy(true);
+    setError(null);
+    const { data, error: requestError } = await updateUser({
+      path: { userId: user.id },
+      headers: { "If-Match": user.version },
+      body: { emailVerifiedByAdmin: verified },
+    });
+    setActionBusy(false);
+    if (requestError || !data) {
+      setError(
+        requestError ?? new Error(t("identity.failedToSaveEmailVerification")),
+      );
+      return;
+    }
+    void message.success(t("identity.emailVerificationSaved"));
     onChanged(data);
   };
 
@@ -291,7 +311,23 @@ export function UserDetailsDrawer({
             >
               {t("identity.revokeAllSessions")}
             </Button>
+            <Button
+              icon={<MailOutlined />}
+              disabled={
+                actionBusy || (!user.emailVerifiedByAdmin && !user.email)
+              }
+              onClick={() =>
+                void setEmailVerification(!user.emailVerifiedByAdmin)
+              }
+            >
+              {user.emailVerifiedByAdmin
+                ? t("identity.clearEmailVerification")
+                : t("identity.markEmailVerified")}
+            </Button>
           </Space>
+          <p className="mt-2 text-xs text-fg-tertiary">
+            {t("identity.emailVerificationHelp")}
+          </p>
         </section>
 
         <Divider />

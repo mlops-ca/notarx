@@ -126,6 +126,11 @@ func userResponse(user repository.User) adminopenapi.User {
 		LastLoginAt: user.LastLoginAt, PasswordChangedAt: user.PasswordChangedAt,
 		FailedLoginAttempts: user.FailedLoginAttempts, LockedUntil: user.LockedUntil,
 		MustChangePassword: user.MustChangePassword, LocalPasswordEnabled: user.SecretHash != "", Version: user.Version,
+		EmailVerifiedByAdmin: user.EmailVerifiedByAdmin, EmailVerifiedAt: user.EmailVerifiedAt,
+	}
+	if user.EmailVerifiedBy != "" {
+		verifiedBy := user.EmailVerifiedBy
+		response.EmailVerifiedBy = &verifiedBy
 	}
 	if !user.UpdatedAt.IsZero() {
 		updated := user.UpdatedAt
@@ -285,7 +290,8 @@ func (h identityManagementHandler) GetUser(w http.ResponseWriter, r *http.Reques
 }
 
 func (h identityManagementHandler) UpdateUser(w http.ResponseWriter, r *http.Request, userID string, params adminopenapi.UpdateUserParams) {
-	if _, ok := h.authorize(w, r); !ok {
+	principal, ok := h.authorize(w, r)
+	if !ok {
 		return
 	}
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10))
@@ -312,8 +318,8 @@ func (h identityManagementHandler) UpdateUser(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if role == "" && state == "" {
-		if request.DisplayName == nil && request.Email == nil && request.Description == nil {
-			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "provide a profile, role, or state to update")
+		if request.DisplayName == nil && request.Email == nil && request.Description == nil && request.EmailVerifiedByAdmin == nil {
+			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "provide a profile, role, state, or email verification to update")
 			return
 		}
 	}
@@ -336,6 +342,9 @@ func (h identityManagementHandler) UpdateUser(w http.ResponseWriter, r *http.Req
 		value := strings.TrimSpace(*request.Description)
 		profile.Description = &value
 	}
+	if request.EmailVerifiedByAdmin != nil {
+		profile.EmailVerifiedByAdmin, profile.EmailVerifiedBy = request.EmailVerifiedByAdmin, principal.Actor
+	}
 	if (profile.DisplayName != nil && !validUserText(*profile.DisplayName, 128)) || (profile.Email != nil && !validUserEmail(*profile.Email)) || (profile.Description != nil && !validUserText(*profile.Description, 512)) {
 		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "user profile fields exceed their limits or email is invalid")
 		return
@@ -351,6 +360,10 @@ func (h identityManagementHandler) UpdateUser(w http.ResponseWriter, r *http.Req
 	}
 	if errors.Is(err, repository.ErrLastActiveAdmin) {
 		writeHostedProblem(w, http.StatusConflict, "last_admin", "the last active administrator cannot be disabled or demoted")
+		return
+	}
+	if errors.Is(err, repository.ErrEmailRequired) {
+		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "an email is required to verify it")
 		return
 	}
 	if err != nil {

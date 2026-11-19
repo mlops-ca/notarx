@@ -1140,9 +1140,16 @@ type User struct {
 	LockedUntil         *time.Time
 	MustChangePassword  bool
 	SessionVersion      int64
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
-	Version             string
+	// EmailVerifiedByAdmin records that an administrator verified Email. A SAML assertion never carries
+	// a provider-verified email, so this is the only basis on which a SAML login may link the account by
+	// email (ADR 0018 Decision 3). Changing the email clears it. EmailVerifiedAt and EmailVerifiedBy are
+	// the audit trail: when, and the actor that verified it. They are set and cleared together with the flag.
+	EmailVerifiedByAdmin bool
+	EmailVerifiedAt      *time.Time
+	EmailVerifiedBy      string
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+	Version              string
 }
 
 // UserSession is server-side metadata for a signed browser or local login
@@ -1208,8 +1215,70 @@ type OIDCIdentityProvision struct {
 	Role              string
 	Provision         bool
 	MatchEmail        bool
-	DefaultRole       string
-	OccurredAt        time.Time
+	// LinkAdminVerifiedEmail enables the SAML email-link path (ADR 0018 Decision 3): an unknown subject links
+	// the one existing account whose administrator-verified email matches Email, when that account is not an
+	// administrator, has no local password and has no identity at this provider. It is set from the
+	// provider's email_linking_enabled and never from an asserted email alone.
+	LinkAdminVerifiedEmail bool
+	DefaultRole            string
+	OccurredAt             time.Time
+	// EmailLink is an optional out parameter: the store fills it with the decision of the email-link
+	// path (linked, or refused and why) so the caller can audit it. It stays nil when the path is off.
+	EmailLink *EmailLinkDecision
+}
+
+// EmailLinkDecision is the outcome of the administrator-verified email-link path of one sign-in.
+type EmailLinkDecision struct {
+	Linked bool
+	// Reason is a machine-readable code: linked, no_email, no_match, email_not_verified, ambiguous,
+	// admin_account, local_password or already_linked.
+	Reason string
+}
+
+// Reasons of an EmailLinkDecision.
+const (
+	EmailLinkLinked        = "linked"
+	EmailLinkNoEmail       = "no_email"
+	EmailLinkNoMatch       = "no_match"
+	EmailLinkNotVerified   = "email_not_verified"
+	EmailLinkAmbiguous     = "ambiguous"
+	EmailLinkAdminAccount  = "admin_account"
+	EmailLinkLocalPassword = "local_password"
+	EmailLinkAlreadyLinked = "already_linked"
+)
+
+// decideEmailLink applies the eligibility rules to the accounts whose email matches the asserted one
+// (case-insensitively). hasIdentityAtProvider reports whether a candidate already has an identity at the
+// provider. It returns the single eligible account or a refusal; two verified matches are ambiguous.
+func decideEmailLink(email string, matches []User, hasIdentityAtProvider func(User) bool) (User, EmailLinkDecision) {
+	if strings.TrimSpace(email) == "" {
+		return User{}, EmailLinkDecision{Reason: EmailLinkNoEmail}
+	}
+	if len(matches) == 0 {
+		return User{}, EmailLinkDecision{Reason: EmailLinkNoMatch}
+	}
+	var verified []User
+	for _, candidate := range matches {
+		if candidate.EmailVerifiedByAdmin {
+			verified = append(verified, candidate)
+		}
+	}
+	switch {
+	case len(verified) == 0:
+		return User{}, EmailLinkDecision{Reason: EmailLinkNotVerified}
+	case len(verified) > 1:
+		return User{}, EmailLinkDecision{Reason: EmailLinkAmbiguous}
+	}
+	candidate := verified[0]
+	switch {
+	case candidate.Role == "admin":
+		return User{}, EmailLinkDecision{Reason: EmailLinkAdminAccount}
+	case candidate.SecretHash != "":
+		return User{}, EmailLinkDecision{Reason: EmailLinkLocalPassword}
+	case hasIdentityAtProvider(candidate):
+		return User{}, EmailLinkDecision{Reason: EmailLinkAlreadyLinked}
+	}
+	return candidate, EmailLinkDecision{Linked: true, Reason: EmailLinkLinked}
 }
 
 const (

@@ -117,6 +117,10 @@ func (s *MemoryStore) ResolveOIDCIdentity(_ context.Context, provision OIDCIdent
 				user.DisplayName = identity.DisplayName
 			}
 			if identity.EmailVerified && identity.Email != "" {
+				if user.Email != identity.Email {
+					// The address changed under the administrator's verification: it no longer applies.
+					user = clearEmailVerification(user)
+				}
 				user.Email = identity.Email
 			}
 		}
@@ -127,12 +131,35 @@ func (s *MemoryStore) ResolveOIDCIdentity(_ context.Context, provision OIDCIdent
 		s.users[user.ID] = user
 		return user, identity, false, nil
 	}
-	if !provision.Provision {
-		return User{}, UserIdentity{}, false, ErrNotFound
-	}
 
 	var user User
-	if provision.MatchEmail && provision.EmailVerified && strings.TrimSpace(provision.Email) != "" {
+	if provision.LinkAdminVerifiedEmail {
+		var matches []User
+		for _, candidate := range s.users {
+			if strings.TrimSpace(provision.Email) != "" && strings.EqualFold(candidate.Email, strings.TrimSpace(provision.Email)) {
+				matches = append(matches, candidate)
+			}
+		}
+		linked, decision := decideEmailLink(provision.Email, matches, func(candidate User) bool {
+			for _, existing := range s.userIdentities {
+				if existing.UserID == candidate.ID && existing.ProviderID == provision.ProviderID {
+					return true
+				}
+			}
+			return false
+		})
+		if provision.EmailLink != nil {
+			*provision.EmailLink = decision
+		}
+		if decision.Reason == EmailLinkAmbiguous {
+			return User{}, UserIdentity{}, false, ErrIdentityAmbiguous
+		}
+		user = linked
+	}
+	if user.ID == "" && !provision.Provision {
+		return User{}, UserIdentity{}, false, ErrNotFound
+	}
+	if user.ID == "" && provision.MatchEmail && provision.EmailVerified && strings.TrimSpace(provision.Email) != "" {
 		for _, candidate := range s.users {
 			if !strings.EqualFold(candidate.Email, strings.TrimSpace(provision.Email)) {
 				continue

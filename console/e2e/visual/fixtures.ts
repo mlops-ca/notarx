@@ -378,6 +378,7 @@ function user(
     localPasswordEnabled: true,
     failedLoginAttempts: 0,
     mustChangePassword: false,
+    emailVerifiedByAdmin: false,
     createdAt: "2026-05-01T00:00:00Z",
     version: "1",
   };

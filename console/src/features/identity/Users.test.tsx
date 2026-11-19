@@ -17,6 +17,7 @@ import {
   listUserIdentities,
   listUserSessions,
   listUsers,
+  updateUser,
 } from "../../client";
 import type { User } from "../../client";
 import { AntdProvider } from "../../app/AntdProvider";
@@ -55,6 +56,7 @@ vi.mock("../../client", () => ({
 }));
 
 const mockListUsers = vi.mocked(listUsers);
+const mockUpdateUser = vi.mocked(updateUser);
 const mockListUserIdentities = vi.mocked(listUserIdentities);
 const mockListRepositoryGrants = vi.mocked(listRepositoryGrants);
 const mockListRepositories = vi.mocked(listRepositories);
@@ -75,6 +77,7 @@ const alice: User = {
   localPasswordEnabled: true,
   failedLoginAttempts: 0,
   mustChangePassword: false,
+  emailVerifiedByAdmin: false,
   createdAt: "2026-07-01T08:00:00Z",
   updatedAt: "2026-08-10T08:00:00Z",
   version: "4",
@@ -279,6 +282,52 @@ describe("UsersPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Sign-in and security")).toBeInTheDocument();
     expect(screen.getByDisplayValue("alice@example.test")).toBeInTheDocument();
+  });
+
+  it("marks and clears the administrator-verified email of an account", async () => {
+    mockListUsers.mockResolvedValue({
+      data: { items: [alice], total: 1, limit: 20, offset: 0 },
+    } as never);
+    mockListUserIdentities.mockResolvedValue({ data: { items: [] } } as never);
+    mockListRepositoryGrants.mockResolvedValue({ data: [] } as never);
+    mockListRepositories.mockResolvedValue({ data: { items: [] } } as never);
+    mockListAuthorizationRoles.mockResolvedValue({ data: [] } as never);
+    mockListProviders.mockResolvedValue({
+      data: providerList("https://issuer.example.test"),
+    } as never);
+    mockListUserSessions.mockResolvedValue({ data: { items: [] } } as never);
+    const verified: User = {
+      ...alice,
+      emailVerifiedByAdmin: true,
+      emailVerifiedBy: "root",
+      emailVerifiedAt: "2026-08-11T08:00:00Z",
+      version: "5",
+    };
+    mockUpdateUser
+      .mockResolvedValueOnce({ data: verified } as never)
+      .mockResolvedValueOnce({
+        data: { ...alice, version: "6" },
+      } as never);
+
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByText("Alice Chen"));
+    await user.click(
+      await screen.findByRole("button", { name: /Mark email verified/ }),
+    );
+    expect(mockUpdateUser).toHaveBeenLastCalledWith({
+      path: { userId: alice.id },
+      headers: { "If-Match": "4" },
+      body: { emailVerifiedByAdmin: true },
+    });
+    await user.click(
+      await screen.findByRole("button", { name: /Clear email verification/ }),
+    );
+    expect(mockUpdateUser).toHaveBeenLastCalledWith({
+      path: { userId: alice.id },
+      headers: { "If-Match": "5" },
+      body: { emailVerifiedByAdmin: false },
+    });
   });
 
   it("debounces search and sends it to the server", async () => {

@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const userColumns = `id::text, name, display_name, email, description, secret_hash, role, state, last_login_at, password_changed_at, failed_login_attempts, locked_until, must_change_password, session_version, created_at, updated_at, version::text`
+const userColumns = `id::text, name, display_name, email, description, secret_hash, role, state, last_login_at, password_changed_at, failed_login_attempts, locked_until, must_change_password, session_version, email_verified_by_admin, email_verified_at, email_verified_by, created_at, updated_at, version::text`
 
 // Serializes role/state mutations so two concurrent requests cannot both
 // remove an administrator after observing the other as active.
@@ -19,7 +19,8 @@ func scanUser(row interface{ Scan(...any) error }, user *User) error {
 		&user.ID, &user.Name, &user.DisplayName, &user.Email, &user.Description,
 		&user.SecretHash, &user.Role, &user.State, &user.LastLoginAt,
 		&user.PasswordChangedAt, &user.FailedLoginAttempts, &user.LockedUntil,
-		&user.MustChangePassword, &user.SessionVersion, &user.CreatedAt,
+		&user.MustChangePassword, &user.SessionVersion, &user.EmailVerifiedByAdmin,
+		&user.EmailVerifiedAt, &user.EmailVerifiedBy, &user.CreatedAt,
 		&user.UpdatedAt, &user.Version,
 	)
 }
@@ -133,8 +134,14 @@ func (s *PostgresStore) UpdateUser(ctx context.Context, update UserUpdate, expec
 			return User{}, ErrLastActiveAdmin
 		}
 	}
+	// The email verification follows the same rules as the in-memory store (applyEmailVerification);
+	// the verification columns are computed in Go from the locked row so both stores stay in step.
+	verified, err := applyEmailVerification(current, update, time.Now().UTC())
+	if err != nil {
+		return User{}, err
+	}
 	var updated User
-	err = scanUser(tx.QueryRowContext(ctx, `UPDATE users SET role=CASE WHEN $2 THEN $3 ELSE role END, state=CASE WHEN $4 THEN $5 ELSE state END, disabled_reason=CASE WHEN $4 THEN (CASE WHEN $5='disabled' THEN 'admin' END) ELSE disabled_reason END, display_name=CASE WHEN $6 THEN $7 ELSE display_name END, email=CASE WHEN $8 THEN $9 ELSE email END, description=CASE WHEN $10 THEN $11 ELSE description END, version=version+1, updated_at=now() WHERE id=$1::uuid AND version=$12::text::bigint RETURNING `+userColumns,
+	err = scanUser(tx.QueryRowContext(ctx, `UPDATE users SET role=CASE WHEN $2 THEN $3 ELSE role END, state=CASE WHEN $4 THEN $5 ELSE state END, disabled_reason=CASE WHEN $4 THEN (CASE WHEN $5='disabled' THEN 'admin' END) ELSE disabled_reason END, display_name=CASE WHEN $6 THEN $7 ELSE display_name END, email=CASE WHEN $8 THEN $9 ELSE email END, description=CASE WHEN $10 THEN $11 ELSE description END, email_verified_by_admin=$13, email_verified_at=$14, email_verified_by=$15, version=version+1, updated_at=now() WHERE id=$1::uuid AND version=$12::text::bigint RETURNING `+userColumns,
 		update.ID,
 		update.Role != nil, stringValue(update.Role),
 		update.State != nil, stringValue(update.State),
@@ -142,6 +149,7 @@ func (s *PostgresStore) UpdateUser(ctx context.Context, update UserUpdate, expec
 		update.Email != nil, stringValue(update.Email),
 		update.Description != nil, stringValue(update.Description),
 		expectedVersion,
+		verified.EmailVerifiedByAdmin, verified.EmailVerifiedAt, verified.EmailVerifiedBy,
 	), &updated)
 	if errors.Is(err, sql.ErrNoRows) {
 		return User{}, ErrVersionConflict

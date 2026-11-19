@@ -99,8 +99,9 @@ func TestSAMLPostgresIdentityContract(t *testing.T) {
 	t.Cleanup(func() {
 		_, _ = store.db.ExecContext(ctx, "DELETE FROM user_sessions WHERE user_id IN (SELECT user_id FROM user_identities WHERE provider_id=$1::uuid)", provider.ID)
 		_, _ = store.db.ExecContext(ctx, "DELETE FROM user_identities WHERE provider_id=$1::uuid", provider.ID)
-		_, _ = store.db.ExecContext(ctx, "DELETE FROM users WHERE name IN ('ada-'||$1, 'saml-'||$1)", suffix)
+		_, _ = store.db.ExecContext(ctx, "DELETE FROM users WHERE name IN ('ada-'||$1, 'saml-'||$1) OR name LIKE '%-'||$1", suffix)
 		_, _ = store.db.ExecContext(ctx, "DELETE FROM identity_providers WHERE id=$1::uuid", provider.ID)
 	})
 	testSAMLIdentityContract(t, store, provider.ID, suffix)
+	testSAMLEmailLinkContract(t, store, provider.ID, suffix)
 }
