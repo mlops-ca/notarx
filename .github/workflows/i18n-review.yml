@@ -53,7 +53,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     permissions:
-      contents: write
+      contents: read
       pull-requests: write
       statuses: write
     env:
@@ -64,8 +64,8 @@ jobs:
         id: pr
         run: |
           case "$PR_NUMBER" in ''|*[!0-9]*) echo "pull request number must be numeric" >&2; exit 1;; esac
-          gh pr view "$PR_NUMBER" -R "$GITHUB_REPOSITORY" --json baseRefOid,headRefOid,headRefName,isCrossRepository \
-            --jq '"base_sha=\(.baseRefOid)\nhead_sha=\(.headRefOid)\nhead_ref=\(.headRefName)\ncross=\(.isCrossRepository)"' >> "$GITHUB_OUTPUT"
+          gh pr view "$PR_NUMBER" -R "$GITHUB_REPOSITORY" --json baseRefOid,headRefOid \
+            --jq '"base_sha=\(.baseRefOid)\nhead_sha=\(.headRefOid)"' >> "$GITHUB_OUTPUT"
       - name: Trusted scripts from the base revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -141,28 +141,13 @@ jobs:
           } > comment.md
           cat comment.md >> "$GITHUB_STEP_SUMMARY"
           gh pr comment "$PR_NUMBER" -R "$GITHUB_REPOSITORY" --edit-last --create-if-none --body-file comment.md
-      - name: Record the passing keys on the pull request branch
-        if: always() && steps.review.outcome != 'skipped' && steps.pr.outputs.cross != 'true'
-        env:
-          HEAD_REF: ${{ steps.pr.outputs.head_ref }}
-          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
-        run: |
-          cd head
-          if [ -z "$(git status --porcelain -- console/src/messages/.review/fr-CA.json)" ]; then exit 0; fi
-          remote=$(git ls-remote "https://github.com/$GITHUB_REPOSITORY.git" "refs/heads/$HEAD_REF" | cut -f1)
-          if [ "$remote" != "$HEAD_SHA" ]; then
-            echo "::warning::The branch moved during the review; the sidecar was not committed. The next push reviews the new head."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add console/src/messages/.review/fr-CA.json
-          git commit -m "chore(i18n): record the fr-CA review"
-          # Pushes made with GITHUB_TOKEN do not start other workflows, so a
-          # maintainer re-runs the pull request checks after this commit.
-          git push "https://x-access-token:${GH_TOKEN}@github.com/$GITHUB_REPOSITORY.git" "HEAD:refs/heads/$HEAD_REF"
-      - name: Keep the updated sidecar for a fork pull request
-        if: always() && steps.review.outcome != 'skipped' && steps.pr.outputs.cross == 'true'
+      - name: Keep the updated sidecar as a workflow artifact
+        # Nothing is pushed to the pull request branch: a push made with
+        # GITHUB_TOKEN starts no workflows, which left the new head without CI
+        # (`ci-ok` missing). The passing keys are kept here and recorded in the
+        # committed sidecar at release time (docs/ci.md, "fr-CA review and the
+        # sidecar").
+        if: always() && steps.review.outcome != 'skipped'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: fr-CA-review-sidecar

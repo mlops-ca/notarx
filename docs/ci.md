@@ -65,6 +65,25 @@ required but that was skipped (for example because an upstream job failed). On a
 `main` every job behind `ci-ok` is skipped, so it passes without running a test. Require `ci-ok` as the single branch-protection check; the set of
 jobs behind it can change without editing the protection rule.
 
+## fr-CA review and the sidecar
+
+`.github/workflows/i18n-review.yml` (ADR 0014, slice 13) reviews the changed fr-CA strings and
+documents of a pull request. Its `review` job is the check: it fails when a critical key has a
+finding, and it posts the findings as a pull request comment. It never commits to the pull
+request branch. A push made with `GITHUB_TOKEN` starts no workflows, so a bot commit left the new
+head without a CI run and `ci-ok` missing until a maintainer re-ran the checks; the pull request
+head now keeps exactly the commits its author pushed, and its required checks run on them. No
+personal access token and no GitHub App token is used.
+
+The keys that pass are recorded in a copy of `console/src/messages/.review/fr-CA.json`, uploaded as
+the `fr-CA-review-sidecar` artifact of the run. The committed sidecar is the input of
+`make i18n-release-check`, so it is updated at release time, in the release preparation pull request:
+run `node scripts/i18n-review.mjs --write-sidecar` (with `I18N_REVIEW_PROVIDER` and its key set),
+which reviews every key that is not yet reviewed or whose text changed, and commit the sidecar it
+writes (or copy the artifact of the last pull request run). `make i18n-release-check` then
+passes only when every key is reviewed for its current text. Fork pull requests are reviewed by a
+maintainer with `workflow_dispatch`; the result is the `i18n-review` commit status on the head.
+
 ## Contract lanes
 
 `scripts/ci-contract-lanes.json` is the only place that names lanes, their tool
