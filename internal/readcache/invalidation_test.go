@@ -75,53 +75,6 @@ func TestLostNotifyIsBoundedByTTL(t *testing.T) {
 	}
 }
 
-type fakeEpochs struct {
-	mu     sync.Mutex
-	epochs map[string]int64
-	err    error
-}
-
-func (f *fakeEpochs) ReadEpochs(context.Context) (map[string]int64, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.err != nil {
-		return nil, f.err
-	}
-	out := map[string]int64{}
-	for k, v := range f.epochs {
-		out[k] = v
-	}
-	return out, nil
-}
-
-func TestPollerInvalidatesMovedScopesAndFlushesOnFailure(t *testing.T) {
-	reg, cache, _ := newTestCache(time.Minute, Options[string]{})
-	other := New[string, string](reg, Options[string]{Name: "other", Scope: "other"})
-	source := &fakeEpochs{epochs: map[string]int64{"thing": 1, "other": 1}}
-	poller := &Poller{Registry: reg, Source: source}
-	var calls atomic.Int32
-	known := poller.Poll(context.Background(), nil)
-	_, _ = cache.Get(context.Background(), "k", counting("v", &calls))
-	_, _ = other.Get(context.Background(), "k", counting("v", &calls))
-	known = poller.Poll(context.Background(), known)
-	if cache.Len() != 1 || other.Len() != 1 {
-		t.Fatal("an unchanged epoch evicted entries")
-	}
-	source.epochs["thing"] = 2
-	known = poller.Poll(context.Background(), known)
-	if cache.Len() != 0 || other.Len() != 1 {
-		t.Fatalf("moved scope not isolated: %d %d", cache.Len(), other.Len())
-	}
-	_, _ = cache.Get(context.Background(), "k", counting("v", &calls))
-	source.err = errors.New("db down")
-	if known = poller.Poll(context.Background(), known); known != nil {
-		t.Fatal("a failed poll must reset the baseline")
-	}
-	if cache.Len() != 0 || other.Len() != 0 {
-		t.Fatal("a failed poll must flush every cache")
-	}
-}
-
 func waitFor(t *testing.T, ok func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -131,23 +84,6 @@ func waitFor(t *testing.T, ok func() bool) {
 		}
 		time.Sleep(time.Millisecond)
 	}
-}
-
-func TestPollerRunPollsUntilCancelled(t *testing.T) {
-	reg, cache, _ := newTestCache(time.Minute, Options[string]{})
-	source := &fakeEpochs{epochs: map[string]int64{"thing": 1}}
-	poller := &Poller{Registry: reg, Source: source, Interval: time.Millisecond}
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() { poller.Run(ctx); close(done) }()
-	var calls atomic.Int32
-	waitFor(t, func() bool { _, _ = cache.Get(context.Background(), "k", counting("v", &calls)); return cache.Len() == 1 })
-	source.mu.Lock()
-	source.epochs["thing"] = 2
-	source.mu.Unlock()
-	waitFor(t, func() bool { return cache.Len() == 0 })
-	cancel()
-	<-done
 }
 
 func TestListenerFlushesWhenConnectFails(t *testing.T) {

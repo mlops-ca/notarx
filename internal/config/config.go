@@ -140,7 +140,6 @@ type Config struct {
 	// AuthzCacheTTL is the revocation window of the read caches (ADR 0023
 	// section 6); zero disables every cache.
 	AuthzCacheTTL               time.Duration
-	CachePollInterval           time.Duration
 	APIKeyLastUsedInterval      time.Duration
 	OverviewCacheTTL            time.Duration
 	DatabaseURL                 string
@@ -264,7 +263,6 @@ func Load() (Config, error) {
 		UsageFlushInterval:          5 * time.Second,
 		ShutdownFlushTimeout:        10 * time.Second,
 		AuthzCacheTTL:               5 * time.Second,
-		CachePollInterval:           2 * time.Second,
 		APIKeyLastUsedInterval:      time.Minute,
 		OverviewCacheTTL:            30 * time.Second,
 		DatabaseURL:                 os.Getenv("NOTARX_DATABASE_URL"),

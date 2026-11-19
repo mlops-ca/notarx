@@ -100,7 +100,7 @@ func TestPostgresServiceAccountCredentialRotationAndDisable(t *testing.T) {
 	store.SetCacheInvalidator(registry.Invalidate)
 	keys := authorization.NewCachedAPIKeys(store, registry, store, time.Minute, nil)
 	authenticator := authorization.Authenticator{APIKeys: keys, ServiceAccounts: authorization.NewCachedServiceAccounts(store, registry)}
-	principal, ok := authenticator.Authenticate("Bearer " + token)
+	principal, ok := authenticator.AuthenticateContext(context.Background(), "Bearer "+token)
 	if !ok || principal.Actor != "service-account:"+account.ID || principal.AuthenticationKind != authorization.AuthenticationServiceAccountCredential {
 		t.Fatalf("principal=%#v authenticated=%t", principal, ok)
 	}
@@ -121,7 +121,7 @@ func TestPostgresServiceAccountCredentialRotationAndDisable(t *testing.T) {
 	if _, err := store.UpdateServiceAccount(context.Background(), repository.ServiceAccountUpdate{ID: account.ID, State: &disabled}, account.Version); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := authenticator.Authenticate("Bearer " + token); ok {
+	if _, ok := authenticator.AuthenticateContext(context.Background(), "Bearer "+token); ok {
 		t.Fatal("disabled PostgreSQL service account credential authenticated")
 	}
 	if _, err := store.CreateServiceAccountCredential(context.Background(), repository.APIKey{
@@ -189,7 +189,7 @@ func TestPostgresRevocationReachesOtherNodeThroughNotify(t *testing.T) {
 		t.Fatal(err)
 	}
 	authenticator := authorization.Authenticator{APIKeys: keys}
-	if _, ok := authenticator.Authenticate("Bearer " + token); !ok {
+	if _, ok := authenticator.AuthenticateContext(ctx, "Bearer "+token); !ok {
 		t.Fatal("node B rejected a valid key")
 	}
 	if _, err := nodeA.RevokeAPIKey(ctx, key.ID); err != nil {
@@ -197,7 +197,7 @@ func TestPostgresRevocationReachesOtherNodeThroughNotify(t *testing.T) {
 	}
 	deadline := time.Now().Add(10 * time.Second)
 	for {
-		if _, ok := authenticator.Authenticate("Bearer " + token); !ok {
+		if _, ok := authenticator.AuthenticateContext(ctx, "Bearer "+token); !ok {
 			return
 		}
 		if time.Now().After(deadline) {

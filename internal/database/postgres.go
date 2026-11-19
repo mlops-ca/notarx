@@ -50,6 +50,16 @@ func NotificationPoolConfig() PoolConfig {
 	return config
 }
 
+// SharedNotificationPoolConfig sizes the gateway's shared notification pool: each of
+// the store's notifier, the cache task queue and the read-cache invalidation
+// listener holds one connection for the process lifetime.
+func SharedNotificationPoolConfig() PoolConfig {
+	config := NotificationPoolConfig()
+	config.MaxOpenConns = 3
+	config.MaxIdleConns = 3
+	return config
+}
+
 func (c PoolConfig) Validate() error {
 	if c.MaxOpenConns <= 0 {
 		return errors.New("database maximum open connections must be positive")

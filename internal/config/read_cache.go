@@ -16,14 +16,12 @@ const (
 )
 
 // loadReadCacheConfig reads the read-cache settings of ADR 0023 section 6:
-// NOTARX_AUTHZ_CACHE_TTL, NOTARX_CACHE_POLL_INTERVAL,
-// NOTARX_API_KEY_LAST_USED_INTERVAL and NOTARX_OVERVIEW_CACHE_TTL.
+// NOTARX_AUTHZ_CACHE_TTL, NOTARX_API_KEY_LAST_USED_INTERVAL and
+// NOTARX_OVERVIEW_CACHE_TTL. NOTARX_CACHE_POLL_INTERVAL arrives with the epoch
+// poller wiring for engines without push notifications.
 func loadReadCacheConfig(cfg *Config) error {
 	var err error
 	if cfg.AuthzCacheTTL, err = authzCacheTTLEnv("NOTARX_AUTHZ_CACHE_TTL", cfg.AuthzCacheTTL); err != nil {
-		return err
-	}
-	if cfg.CachePollInterval, err = durationEnv("NOTARX_CACHE_POLL_INTERVAL", cfg.CachePollInterval); err != nil {
 		return err
 	}
 	if cfg.APIKeyLastUsedInterval, err = durationEnv("NOTARX_API_KEY_LAST_USED_INTERVAL", cfg.APIKeyLastUsedInterval); err != nil {

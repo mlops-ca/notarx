@@ -153,7 +153,7 @@ func (h mavenProxyOperationsHandler) Health(w http.ResponseWriter, r *http.Reque
 }
 
 func (h mavenProxyOperationsHandler) withMavenProxyRepository(w http.ResponseWriter, r *http.Request, operation RepositoryOperation) (Principal, repository.HostedRepository, bool) {
-	principal, ok := h.authenticator.Authenticate(r.Header.Get("Authorization"))
+	principal, ok := h.authenticator.AuthenticateContext(r.Context(), r.Header.Get("Authorization"))
 	if !ok {
 		writeHostedProblem(w, http.StatusUnauthorized, "access_denied", "authentication is required")
 		return Principal{}, repository.HostedRepository{}, false

@@ -108,7 +108,7 @@ export const settingsEnCA = {
     "Service provider signing keys published: {count}",
   "settings.authorizationCache": "Authorization cache",
   "settings.authorizationCacheDescription":
-    "Each node caches credentials, accounts and access inputs in memory. A revoked credential, a disabled account, a removed grant or a visibility change is effective on every node within this window, even when a change notification is lost.",
+    "Each node caches API keys and service-account state in memory. A revoked API key, a disabled service account or a revoked service-account credential is effective on every node within this window, even when a change notification is lost.",
   "settings.authorizationCacheWindow": "Revocation window",
   "settings.authorizationCacheSeconds": "{seconds} s",
   "settings.authorizationCacheDisabled":

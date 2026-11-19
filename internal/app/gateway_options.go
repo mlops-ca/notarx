@@ -13,6 +13,7 @@ import (
 	dist "github.com/mlops-ca/notarx/internal/nugetdistribution"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/ocidiscovery"
+	"github.com/mlops-ca/notarx/internal/readcache"
 	"github.com/mlops-ca/notarx/internal/repository"
 	rubydist "github.com/mlops-ca/notarx/internal/rubygemsdistribution"
 	"github.com/mlops-ca/notarx/internal/rubygemspublication"
@@ -65,6 +66,9 @@ type GatewayOptions struct {
 	// OverviewCacheTTL is how long the overview statistics snapshot is reused
 	// (NOTARX_OVERVIEW_CACHE_TTL); zero reads through.
 	OverviewCacheTTL time.Duration
+	// ReadCache is the process-wide read-cache registry; the overview snapshot
+	// registers there so the notarx_cache_* metrics cover it.
+	ReadCache *readcache.Registry
 	// AuthzCacheTTL is the revocation window of the read caches
 	// (NOTARX_AUTHZ_CACHE_TTL), reported by the security settings API; zero means
 	// the caches are disabled.

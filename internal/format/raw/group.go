@@ -25,7 +25,7 @@ func (h *Module) serveGroup(w http.ResponseWriter, r *http.Request, group reposi
 		http.NotFound(w, r)
 		return
 	}
-	principal, authenticated := h.auth.Authenticate(r.Header.Get("Authorization"))
+	principal, authenticated := h.auth.AuthenticateContext(r.Context(), r.Header.Get("Authorization"))
 	if !authenticated {
 		if decision, _, _ := access.Decide(r.Context(), access.ReadRequest{Class: access.Anonymous, Method: r.Method, Gate: h.groupRuntime.Gate(), Group: &group}); decision.Allow {
 			principal = anonymousPrincipal()

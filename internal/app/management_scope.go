@@ -211,7 +211,7 @@ func (h managementScope) mayAdministerRepository(r *http.Request, principal Prin
 }
 
 func (h managementScope) auditActor(r *http.Request) string {
-	if principal, ok := h.authenticator.Authenticate(r.Header.Get("Authorization")); ok {
+	if principal, ok := h.authenticator.AuthenticateContext(r.Context(), r.Header.Get("Authorization")); ok {
 		return principal.Actor
 	}
 	return "unknown"

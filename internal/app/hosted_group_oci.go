@@ -42,7 +42,7 @@ func (h v2GroupOCIHandler) serve(w http.ResponseWriter, r *http.Request, resolve
 		writeOCIError(w, http.StatusNotFound, "NAME_UNKNOWN", "repository name not known to registry")
 		return
 	}
-	principal, authenticated := h.auth.Authenticate(r.Header.Get("Authorization"))
+	principal, authenticated := h.auth.AuthenticateContext(r.Context(), r.Header.Get("Authorization"))
 	if !authenticated {
 		if anonymousGroupAllowed(r.Context(), resolver.groups, group, r.Method) {
 			principal = anonymousPrincipal()

@@ -52,7 +52,7 @@ func (h artifactManagementHandler) BrowseGroup(w http.ResponseWriter, r *http.Re
 		writeHostedProblem(w, 500, "internal_error", "get group failed")
 		return
 	}
-	principal, authenticated := h.authenticator.Authenticate(r.Header.Get("Authorization"))
+	principal, authenticated := h.authenticator.AuthenticateContext(r.Context(), r.Header.Get("Authorization"))
 	if !authenticated {
 		if !anonymousGroupAllowed(r.Context(), h.anonymousPolicy, group, r.Method) {
 			writeHostedProblem(w, 401, "access_denied", "authentication is required")

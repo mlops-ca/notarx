@@ -36,7 +36,7 @@ type conanCacheInvalidationHandler struct {
 }
 
 func (h conanCacheInvalidationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	p, ok := h.authenticator.Authenticate(r.Header.Get("Authorization"))
+	p, ok := h.authenticator.AuthenticateContext(r.Context(), r.Header.Get("Authorization"))
 	if !ok || !p.Admin {
 		writeError(w, http.StatusForbidden, "forbidden", "administrator permission required")
 		return
@@ -86,7 +86,7 @@ type rawAPIHandler struct {
 }
 
 func (a rawAPIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	p, ok := a.authenticator.Authenticate(r.Header.Get("Authorization"))
+	p, ok := a.authenticator.AuthenticateContext(r.Context(), r.Header.Get("Authorization"))
 	if !ok || !p.Admin {
 		writeError(w, http.StatusForbidden, "forbidden", "administrator permission required")
 		return
@@ -176,7 +176,7 @@ type rawInvalidationRequest struct {
 }
 
 func (h rawCacheInvalidationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	p, ok := h.authenticator.Authenticate(r.Header.Get("Authorization"))
+	p, ok := h.authenticator.AuthenticateContext(r.Context(), r.Header.Get("Authorization"))
 	if !ok || !p.Admin {
 		writeError(w, http.StatusForbidden, "forbidden", "administrator permission required")
 		return
@@ -229,7 +229,7 @@ func (h rawCacheInvalidationHandler) ServeHTTP(w http.ResponseWriter, r *http.Re
 }
 
 func (a conanAPIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	p, ok := a.authenticator.Authenticate(r.Header.Get("Authorization"))
+	p, ok := a.authenticator.AuthenticateContext(r.Context(), r.Header.Get("Authorization"))
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "valid bearer token required")
 		return
@@ -310,7 +310,7 @@ func (a conanAPIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a mavenAPIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	principal, ok := a.authenticator.Authenticate(r.Header.Get("Authorization"))
+	principal, ok := a.authenticator.AuthenticateContext(r.Context(), r.Header.Get("Authorization"))
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "valid bearer token required")
 		return
@@ -398,7 +398,7 @@ type apiHandler struct {
 }
 
 func (a apiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	principal, ok := a.authenticator.Authenticate(r.Header.Get("Authorization"))
+	principal, ok := a.authenticator.AuthenticateContext(r.Context(), r.Header.Get("Authorization"))
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "valid bearer token required")
 		return

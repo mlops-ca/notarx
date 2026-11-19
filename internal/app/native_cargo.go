@@ -210,7 +210,7 @@ func (h nativeCargoHandler) principal(r *http.Request) (Principal, bool) {
 	if !ok {
 		return Principal{}, false
 	}
-	return h.auth.AuthenticateBasic(username, password)
+	return h.auth.AuthenticateBasicContext(r.Context(), username, password)
 }
 
 func (h nativeCargoHandler) challenge(w http.ResponseWriter, status int) {

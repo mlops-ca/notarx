@@ -86,24 +86,24 @@ func TestRevokedKeyIsRejectedOnOtherNodeWithinAuthzCacheTTL(t *testing.T) {
 			key := seedKey(t, db, "token")
 			nodeA, nodeB := newNode(t, db, ttl, start), newNode(t, db, ttl, start)
 			header := "Bearer token"
-			if _, ok := nodeB.auth.Authenticate(header); !ok {
+			if _, ok := nodeB.auth.AuthenticateContext(context.Background(), header); !ok {
 				t.Fatal("node B rejected a valid key")
 			}
 			if _, err := db.RevokeAPIKey(context.Background(), key.ID); err != nil {
 				t.Fatal(err)
 			}
 			nodeA.registry.Invalidate(repository.CacheScopeAPIKey, key.ID) // the mutating node evicts synchronously
-			if _, ok := nodeA.auth.Authenticate(header); ok {
+			if _, ok := nodeA.auth.AuthenticateContext(context.Background(), header); ok {
 				t.Fatal("node A accepted a key it just revoked")
 			}
 			if ttl > 0 {
 				nodeB.clock.Advance(ttl - time.Nanosecond)
-				if _, ok := nodeB.auth.Authenticate(header); !ok {
+				if _, ok := nodeB.auth.AuthenticateContext(context.Background(), header); !ok {
 					t.Fatal("expected the cached entry to serve inside the window")
 				}
 				nodeB.clock.Advance(time.Nanosecond)
 			}
-			if _, ok := nodeB.auth.Authenticate(header); ok {
+			if _, ok := nodeB.auth.AuthenticateContext(context.Background(), header); ok {
 				t.Fatalf("node B accepted a revoked key after the %s window", ttl)
 			}
 		})
@@ -114,10 +114,10 @@ func TestNotificationRevokesKeyImmediately(t *testing.T) {
 	db := &countingKeys{MemoryStore: repository.NewMemoryStore()}
 	key := seedKey(t, db, "token")
 	node := newNode(t, db, 5*time.Second, time.Unix(1_700_000_000, 0))
-	_, _ = node.auth.Authenticate("Bearer token")
+	_, _ = node.auth.AuthenticateContext(context.Background(), "Bearer token")
 	_, _ = db.RevokeAPIKey(context.Background(), key.ID)
 	node.registry.HandleNotification(readcache.Payload(repository.CacheScopeAPIKey, key.ID))
-	if _, ok := node.auth.Authenticate("Bearer token"); ok {
+	if _, ok := node.auth.AuthenticateContext(context.Background(), "Bearer token"); ok {
 		t.Fatal("a delivered notification did not evict the revoked key")
 	}
 }
@@ -126,12 +126,12 @@ func TestWarmAuthenticatedReadIssuesNoDatabaseStatement(t *testing.T) {
 	db := &countingKeys{MemoryStore: repository.NewMemoryStore()}
 	seedKey(t, db, "token")
 	node := newNode(t, db, 5*time.Second, time.Unix(1_700_000_000, 0))
-	if _, ok := node.auth.Authenticate("Bearer token"); !ok {
+	if _, ok := node.auth.AuthenticateContext(context.Background(), "Bearer token"); !ok {
 		t.Fatal("cold authentication failed")
 	}
 	before := db.finds.Load()
 	for range 100 {
-		if _, ok := node.auth.Authenticate("Bearer token"); !ok {
+		if _, ok := node.auth.AuthenticateContext(context.Background(), "Bearer token"); !ok {
 			t.Fatal("warm authentication failed")
 		}
 	}
@@ -151,7 +151,7 @@ func TestServiceAccountDisableEvictsPrincipal(t *testing.T) {
 		t.Fatal(err)
 	}
 	node := newNode(t, db, 5*time.Second, time.Unix(1_700_000_000, 0))
-	if p, ok := node.auth.Authenticate("Bearer sa-token"); !ok || p.Actor != "service-account:"+account.ID {
+	if p, ok := node.auth.AuthenticateContext(context.Background(), "Bearer sa-token"); !ok || p.Actor != "service-account:"+account.ID {
 		t.Fatalf("principal = %#v ok = %t", p, ok)
 	}
 	disabled := repository.ServiceAccountDisabled
@@ -159,7 +159,7 @@ func TestServiceAccountDisableEvictsPrincipal(t *testing.T) {
 		t.Fatal(err)
 	}
 	node.registry.Invalidate(repository.CacheScopeServiceAccount, account.ID)
-	if _, ok := node.auth.Authenticate("Bearer sa-token"); ok {
+	if _, ok := node.auth.AuthenticateContext(context.Background(), "Bearer sa-token"); ok {
 		t.Fatal("a disabled service account still authenticated")
 	}
 }
@@ -188,7 +188,7 @@ func TestExpiredKeyIsNotServedFromCache(t *testing.T) {
 	registry.SetClock(clock.Now)
 	auth := Authenticator{APIKeys: NewCachedAPIKeys(db, registry, nil, time.Minute, nil)}
 	for range 2 {
-		if _, ok := auth.Authenticate("Bearer t"); !ok {
+		if _, ok := auth.AuthenticateContext(context.Background(), "Bearer t"); !ok {
 			t.Fatal("unexpired key rejected")
 		}
 	}
@@ -196,7 +196,7 @@ func TestExpiredKeyIsNotServedFromCache(t *testing.T) {
 		t.Fatalf("loads before expiry = %d, want 1", loads.Load())
 	}
 	clock.Advance(2 * time.Second)
-	_, _ = auth.Authenticate("Bearer t")
+	_, _ = auth.AuthenticateContext(context.Background(), "Bearer t")
 	if loads.Load() != 2 {
 		t.Fatal("a cached key was served at its expires_at instead of being re-read")
 	}
@@ -205,13 +205,13 @@ func TestExpiredKeyIsNotServedFromCache(t *testing.T) {
 func TestNegativeResultIsShortAndNewKeyIsVisibleOnCreator(t *testing.T) {
 	db := &countingKeys{MemoryStore: repository.NewMemoryStore()}
 	node := newNode(t, db, 30*time.Second, time.Unix(1_700_000_000, 0))
-	if _, ok := node.auth.Authenticate("Bearer late"); ok {
+	if _, ok := node.auth.AuthenticateContext(context.Background(), "Bearer late"); ok {
 		t.Fatal("unknown key authenticated")
 	}
 	if _, err := node.keys.CreateAPIKey(context.Background(), repository.APIKey{ID: "k", Name: "k", SecretHash: HashAPIKey("late"), Roles: []string{"admin"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := node.auth.Authenticate("Bearer late"); !ok {
+	if _, ok := node.auth.AuthenticateContext(context.Background(), "Bearer late"); !ok {
 		t.Fatal("a cached denial hid a key created on the same node")
 	}
 }
@@ -221,7 +221,7 @@ func TestLastUsedIsThrottledAndFlushedInBatches(t *testing.T) {
 	key := seedKey(t, db, "token")
 	node := newNode(t, db, 5*time.Second, time.Unix(1_700_000_000, 0))
 	for range 50 {
-		if _, ok := node.auth.Authenticate("Bearer token"); !ok {
+		if _, ok := node.auth.AuthenticateContext(context.Background(), "Bearer token"); !ok {
 			t.Fatal("authentication failed")
 		}
 	}
@@ -240,7 +240,7 @@ func TestLastUsedIsThrottledAndFlushedInBatches(t *testing.T) {
 	}
 	// A use inside the interval leaves the stored value alone.
 	node.clock.Advance(10 * time.Second)
-	_, _ = node.auth.Authenticate("Bearer token")
+	_, _ = node.auth.AuthenticateContext(context.Background(), "Bearer token")
 	if err := node.keys.Flush(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -248,7 +248,7 @@ func TestLastUsedIsThrottledAndFlushedInBatches(t *testing.T) {
 		t.Fatalf("a write inside the interval moved last_used_at to %v", again)
 	}
 	node.clock.Advance(time.Minute)
-	_, _ = node.auth.Authenticate("Bearer token")
+	_, _ = node.auth.AuthenticateContext(context.Background(), "Bearer token")
 	_ = node.keys.Flush(context.Background())
 	if later := lastUsed(t, db, key.ID); !later.After(*stored) {
 		t.Fatal("last_used_at never advanced past the interval")
@@ -296,5 +296,29 @@ func TestFailedFlushKeepsUsesForRetry(t *testing.T) {
 	store.fail.Store(false)
 	if err := keys.Flush(context.Background()); err != nil || store.got.Load() != 1 {
 		t.Fatalf("retry err=%v uses=%d", err, store.got.Load())
+	}
+}
+
+// TestAuthenticateWithoutRequestContextReadsThrough pins the safe default: a
+// caller that passes no request context never sees a cached principal, so a
+// revocation is effective at once even inside the window.
+func TestAuthenticateWithoutRequestContextReadsThrough(t *testing.T) {
+	db := &countingKeys{MemoryStore: repository.NewMemoryStore()}
+	key := seedKey(t, db, "token")
+	node := newNode(t, db, 30*time.Second, time.Unix(1_700_000_000, 0))
+	if _, ok := node.auth.AuthenticateContext(context.Background(), "Bearer token"); !ok {
+		t.Fatal("cached authentication failed")
+	}
+	if _, err := db.RevokeAPIKey(context.Background(), key.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := node.auth.Authenticate("Bearer token"); ok {
+		t.Fatal("Authenticate served a revoked key from the cache")
+	}
+	if _, ok := node.auth.AuthenticateBasic("ci", "token"); ok {
+		t.Fatal("AuthenticateBasic served a revoked key from the cache")
+	}
+	if _, ok := node.auth.AuthenticateContext(readcache.Bypass(context.Background()), "Bearer token"); ok {
+		t.Fatal("a bypassed context served a revoked key from the cache")
 	}
 }

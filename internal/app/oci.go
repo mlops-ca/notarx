@@ -94,7 +94,7 @@ func (h OCIHandler) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 	}
 	groupName := strings.SplitN(repositoryName, "/", 2)[0]
 	if request.Method != http.MethodGet && request.Method != http.MethodHead {
-		if _, authenticated := h.Authenticator.Authenticate(request.Header.Get("Authorization")); !authenticated {
+		if _, authenticated := h.Authenticator.AuthenticateContext(request.Context(), request.Header.Get("Authorization")); !authenticated {
 			if err := h.Resolver.RecordOCIAnonymousDenied(request.Context(), groupName, repositoryName, resource, request.Method, http.StatusMethodNotAllowed); err != nil {
 				writeOCIError(w, http.StatusInternalServerError, "UNKNOWN", "unable to record repository audit")
 				return
@@ -104,7 +104,7 @@ func (h OCIHandler) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 		return
 	}
 	h.Resolver.Metrics.recordRequest(repositoryName)
-	principal, ok := h.Authenticator.Authenticate(request.Header.Get("Authorization"))
+	principal, ok := h.Authenticator.AuthenticateContext(request.Context(), request.Header.Get("Authorization"))
 	if !ok && h.anonymousGroupRead(request.Context(), groupName, request.Method) {
 		principal = Principal{Actor: "anonymous"}
 		ok = true
@@ -572,7 +572,7 @@ func (h OCIHandler) cacheSourcePresent(content CachedOCIContent, members []repos
 }
 
 func (h OCIHandler) authenticateProbe(w http.ResponseWriter, request *http.Request) {
-	if _, ok := h.Authenticator.Authenticate(request.Header.Get("Authorization")); !ok {
+	if _, ok := h.Authenticator.AuthenticateContext(request.Context(), request.Header.Get("Authorization")); !ok {
 		writeOCIChallenge(w, request)
 		return
 	}
@@ -761,6 +761,7 @@ func (h OCIHandler) Token(w http.ResponseWriter, request *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"token": token, "access_token": token, "expires_in": 300, "issued_at": time.Now().UTC().Format(time.RFC3339)})
 		return
 	}
+	// Token minting reads through to the database.
 	principal, authenticated := h.Authenticator.Authenticate(request.Header.Get("Authorization"))
 	if !authenticated {
 		// A client that sent no credentials and asks only to pull gets an

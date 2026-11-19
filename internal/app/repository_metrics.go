@@ -1,7 +1,6 @@
 package app
 
 import (
-	"github.com/mlops-ca/notarx/internal/readcache"
 	"net/http"
 	"strconv"
 	"strings"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/mlops-ca/notarx/internal/aptpublication"
 	"github.com/mlops-ca/notarx/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/readcache"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 

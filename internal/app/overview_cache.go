@@ -32,10 +32,18 @@ type overviewCache struct {
 	snapshots *readcache.Cache[struct{}, overviewSnapshot]
 }
 
-func newOverviewCache(ttl time.Duration) *overviewCache {
-	registry := readcache.NewRegistry(ttl)
+// newOverviewCache registers the cache with the shared registry (so its hits show
+// in the notarx_cache_* metrics); a nil registry gives it a private one. A zero ttl
+// returns nil, which reads through.
+func newOverviewCache(registry *readcache.Registry, ttl time.Duration) *overviewCache {
+	if ttl <= 0 {
+		return nil
+	}
+	if registry == nil {
+		registry = readcache.NewRegistry(ttl)
+	}
 	return &overviewCache{snapshots: readcache.New[struct{}, overviewSnapshot](registry, readcache.Options[overviewSnapshot]{
-		Name: "overview", Scope: "overview", MaxEntries: 1, IgnoreBypass: true,
+		Name: "overview", Scope: "overview", MaxEntries: 1, TTL: ttl, IgnoreBypass: true,
 	})}
 }
 

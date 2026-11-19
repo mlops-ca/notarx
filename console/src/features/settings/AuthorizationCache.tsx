@@ -15,8 +15,9 @@ function useSecuritySettings() {
 
 /**
  * The revocation window of the read caches (NOTARX_AUTHZ_CACHE_TTL, ADR 0023): the longest a
- * node may keep honouring a revoked credential, a removed grant or a visibility change when an
- * invalidation is lost. It is configuration, so the card is read-only.
+ * node may keep honouring a revoked API key, a disabled service account or a revoked
+ * service-account credential when an invalidation is lost. It is configuration, so the card is
+ * read-only.
  */
 export function AuthorizationCacheCard() {
   const { t } = usePreferences();

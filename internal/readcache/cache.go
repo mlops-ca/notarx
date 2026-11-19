@@ -28,6 +28,9 @@ import (
 // DefaultMaxEntries bounds a cache that sets no limit of its own.
 const DefaultMaxEntries = 10000
 
+// DefaultMaxNegativeEntries bounds the negative results of a cache.
+const DefaultMaxNegativeEntries = 1000
+
 // MaxNegativeTTL caps how long a not-found or denied result is cached; it only
 // absorbs floods and never outlives the authorization window.
 const MaxNegativeTTL = time.Second
@@ -41,6 +44,13 @@ type Options[V any] struct {
 	Scope string
 	// MaxEntries bounds the cache (DefaultMaxEntries when zero).
 	MaxEntries int
+	// MaxNegativeEntries bounds the negative results (DefaultMaxNegativeEntries when
+	// zero). They live in their own LRU, so a flood of unknown credentials evicts
+	// only other negative results and never the entries of valid principals.
+	MaxNegativeEntries int
+	// TTL overrides the registry TTL for this cache (the overview snapshot has its
+	// own window). Zero uses the registry TTL.
+	TTL time.Duration
 	// Match reports whether a cached value belongs to the entity id of an
 	// invalidation. When nil, an invalidation flushes the whole cache.
 	Match func(value V, id string) bool
@@ -182,6 +192,7 @@ func (r *Registry) Stats() []Stats {
 }
 
 type entry[K comparable, V any] struct {
+	list      *list.List
 	key       K
 	value     V
 	err       error
@@ -191,15 +202,17 @@ type entry[K comparable, V any] struct {
 
 // Cache is a bounded LRU with TTL, singleflight and version stamps.
 type Cache[K comparable, V any] struct {
-	reg   *Registry
-	opts  Options[V]
-	scope *atomic.Uint64
-	max   int
+	reg    *Registry
+	opts   Options[V]
+	scope  *atomic.Uint64
+	max    int
+	maxNeg int
 
-	mu      sync.Mutex
-	entries map[K]*list.Element
-	order   *list.List
-	group   singleflight.Group
+	mu       sync.Mutex
+	entries  map[K]*list.Element
+	order    *list.List // valid entries, most recent first
+	negOrder *list.List // negative results, most recent first
+	group    singleflight.Group
 
 	hits, misses, evictions atomic.Uint64
 }
@@ -209,8 +222,11 @@ func New[K comparable, V any](reg *Registry, opts Options[V]) *Cache[K, V] {
 	if opts.MaxEntries <= 0 {
 		opts.MaxEntries = DefaultMaxEntries
 	}
-	c := &Cache[K, V]{reg: reg, opts: opts, scope: reg.scope(opts.Scope), max: opts.MaxEntries,
-		entries: map[K]*list.Element{}, order: list.New()}
+	if opts.MaxNegativeEntries <= 0 {
+		opts.MaxNegativeEntries = DefaultMaxNegativeEntries
+	}
+	c := &Cache[K, V]{reg: reg, opts: opts, scope: reg.scope(opts.Scope), max: opts.MaxEntries, maxNeg: opts.MaxNegativeEntries,
+		entries: map[K]*list.Element{}, order: list.New(), negOrder: list.New()}
 	reg.mu.Lock()
 	reg.caches = append(reg.caches, c)
 	reg.mu.Unlock()
@@ -232,6 +248,7 @@ func (c *Cache[K, V]) flush() {
 	c.evictions.Add(uint64(len(c.entries)))
 	c.entries = map[K]*list.Element{}
 	c.order.Init()
+	c.negOrder.Init()
 	c.mu.Unlock()
 }
 
@@ -243,8 +260,7 @@ func (c *Cache[K, V]) invalidate(id string) {
 	c.mu.Lock()
 	for el := c.order.Front(); el != nil; {
 		next := el.Next()
-		e := el.Value.(*entry[K, V])
-		if e.err == nil && c.opts.Match(e.value, id) {
+		if c.opts.Match(el.Value.(*entry[K, V]).value, id) {
 			c.remove(el)
 		}
 		el = next
@@ -271,7 +287,7 @@ func (c *Cache[K, V]) Evict(key K) {
 func (c *Cache[K, V]) remove(el *list.Element) {
 	e := el.Value.(*entry[K, V])
 	delete(c.entries, e.key)
-	c.order.Remove(el)
+	e.list.Remove(el)
 	c.evictions.Add(1)
 }
 
@@ -292,7 +308,10 @@ func (c *Cache[K, V]) Get(ctx context.Context, key K, load func(context.Context)
 // GetVersioned is Get with the entity version the caller currently knows. A hit
 // stored under a different version is a miss.
 func (c *Cache[K, V]) GetVersioned(ctx context.Context, key K, version uint64, load func(context.Context) (V, error)) (V, error) {
-	ttl := c.reg.ttl()
+	ttl := c.opts.TTL
+	if ttl <= 0 {
+		ttl = c.reg.ttl()
+	}
 	if ttl <= 0 || (Bypassed(ctx) && !c.opts.IgnoreBypass) {
 		return load(ctx)
 	}
@@ -304,7 +323,9 @@ func (c *Cache[K, V]) GetVersioned(ctx context.Context, key K, version uint64, l
 	c.misses.Add(1)
 	for attempt := 0; ; attempt++ {
 		epoch := c.reg.epoch(c.scope)
-		sfKey := fmt.Sprintf("%v@%d", key, version)
+		// The epoch is part of the flight: a caller that arrives after an
+		// invalidation never joins a load that started before it.
+		sfKey := fmt.Sprintf("%v@%d@%d", key, version, epoch)
 		res, err, _ := c.group.Do(sfKey, func() (any, error) {
 			value, loadErr := load(ctx)
 			c.store(key, version, epoch, value, loadErr, ttl)
@@ -343,7 +364,7 @@ func (c *Cache[K, V]) lookup(key K, version uint64, now time.Time) (V, error, bo
 		c.remove(el)
 		return zero, nil, false
 	}
-	c.order.MoveToFront(el)
+	e.list.MoveToFront(el)
 	return e.value, e.err, true
 }
 
@@ -364,9 +385,13 @@ func (c *Cache[K, V]) store(key K, version, epoch uint64, value V, err error, tt
 	if el, ok := c.entries[key]; ok {
 		c.remove(el)
 	}
-	e := &entry[K, V]{key: key, value: value, err: err, version: version, expiresAt: c.reg.now().Add(ttl)}
-	c.entries[key] = c.order.PushFront(e)
-	for len(c.entries) > c.max {
-		c.remove(c.order.Back())
+	e := &entry[K, V]{key: key, value: value, err: err, version: version, expiresAt: c.reg.now().Add(ttl), list: c.order}
+	limit := c.max
+	if err != nil {
+		e.list, limit = c.negOrder, c.maxNeg
+	}
+	c.entries[key] = e.list.PushFront(e)
+	for e.list.Len() > limit {
+		c.remove(e.list.Back())
 	}
 }

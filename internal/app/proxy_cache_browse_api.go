@@ -110,7 +110,7 @@ func (h proxyCacheBrowseHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		writeHostedProblem(w, http.StatusBadRequest, "invalid_repository", "cache browse is only available for proxy repositories")
 		return
 	}
-	principal, ok := h.authenticator.Authenticate(r.Header.Get("Authorization"))
+	principal, ok := h.authenticator.AuthenticateContext(r.Context(), r.Header.Get("Authorization"))
 	if !ok {
 		if anonymousHostedRepositoryReadAllowed(r.Context(), h.store, repo, r.Method) {
 			principal = anonymousPrincipal()
@@ -185,7 +185,7 @@ func (h proxyCacheBrowseHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 }
 
 func (h proxyCacheBrowseHandler) Invalidate(w http.ResponseWriter, r *http.Request) {
-	principal, ok := h.authenticator.Authenticate(r.Header.Get("Authorization"))
+	principal, ok := h.authenticator.AuthenticateContext(r.Context(), r.Header.Get("Authorization"))
 	if !ok {
 		writeHostedProblem(w, http.StatusUnauthorized, "access_denied", "authentication is required")
 		return
@@ -276,7 +276,7 @@ func proxyCacheInvalidationTarget(request proxyCacheInvalidateRequest) (path str
 }
 
 func (h proxyCacheBrowseHandler) ClearNegative(w http.ResponseWriter, r *http.Request) {
-	principal, ok := h.authenticator.Authenticate(r.Header.Get("Authorization"))
+	principal, ok := h.authenticator.AuthenticateContext(r.Context(), r.Header.Get("Authorization"))
 	if !ok {
 		writeHostedProblem(w, http.StatusUnauthorized, "access_denied", "authentication is required")
 		return

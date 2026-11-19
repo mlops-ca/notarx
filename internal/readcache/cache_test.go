@@ -311,3 +311,68 @@ func TestPayloadRoundTrip(t *testing.T) {
 		t.Fatalf("split = %q %q", scope, id)
 	}
 }
+
+func TestNegativeFloodNeverEvictsValidEntries(t *testing.T) {
+	_, cache, _ := newTestCache(time.Minute, Options[string]{MaxEntries: 3, MaxNegativeEntries: 2, IsNegative: func(err error) bool { return errors.Is(err, errMissing) }})
+	var calls atomic.Int32
+	for _, k := range []string{"a", "b", "c"} {
+		_, _ = cache.Get(context.Background(), k, counting(k, &calls))
+	}
+	missing := func(context.Context) (string, error) { return "", errMissing }
+	for i := range 50 {
+		_, _ = cache.Get(context.Background(), "unknown-"+string(rune('A'+i)), missing)
+	}
+	before := calls.Load()
+	for _, k := range []string{"a", "b", "c"} {
+		_, _ = cache.Get(context.Background(), k, counting(k, &calls))
+	}
+	if calls.Load() != before {
+		t.Fatal("a flood of negative results evicted valid entries")
+	}
+	if cache.Len() != 5 {
+		t.Fatalf("entries = %d, want 3 valid and 2 negative", cache.Len())
+	}
+}
+
+func TestCallerAfterInvalidationDoesNotJoinEarlierLoad(t *testing.T) {
+	reg, cache, _ := newTestCache(5*time.Second, Options[string]{})
+	started, release := make(chan struct{}), make(chan struct{})
+	old := make(chan string, 1)
+	go func() {
+		v, _ := cache.Get(context.Background(), "k", func(context.Context) (string, error) {
+			close(started)
+			<-release
+			return "stale", nil
+		})
+		old <- v
+	}()
+	<-started
+	reg.Invalidate("thing", "k") // the revocation commits while the old load is in flight
+	fresh, _ := cache.Get(context.Background(), "k", func(context.Context) (string, error) { return "fresh", nil })
+	close(release)
+	if fresh != "fresh" {
+		t.Fatalf("a caller after the invalidation was served %q from the earlier load", fresh)
+	}
+	if v := <-old; v != "stale" {
+		t.Fatalf("earlier caller = %q", v)
+	}
+}
+
+func TestOptionTTLOverridesDisabledRegistry(t *testing.T) {
+	clk := &clock{now: time.Unix(1_700_000_000, 0)}
+	reg := NewRegistry(0)
+	reg.SetClock(clk.Now)
+	cache := New[string, string](reg, Options[string]{Name: "own", Scope: "own", TTL: 30 * time.Second, IgnoreBypass: true})
+	var calls atomic.Int32
+	for range 3 {
+		_, _ = cache.Get(Bypass(context.Background()), "k", counting("v", &calls))
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("loads = %d, want 1", calls.Load())
+	}
+	clk.Advance(30 * time.Second)
+	_, _ = cache.Get(context.Background(), "k", counting("v", &calls))
+	if calls.Load() != 2 {
+		t.Fatal("own TTL not honoured")
+	}
+}

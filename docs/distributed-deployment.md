@@ -102,7 +102,7 @@ is evaluated during reads and has no independent reclaim job.
    Every process start also receives a unique session ID, so duplicate instance
    IDs cannot overwrite sessions.
 4. Budget primary, cache coordinator, artifact lock, and notification pools per
-   replica. The default maximum is `32 + 8 + 4 + 2 = 46` connections per
+   replica. The default maximum is `32 + 8 + 4 + 3 = 47` connections per
    instance. Size the three database pool variables against PostgreSQL
    `max_connections`, leaving room for migrations and administration.
 5. `LISTEN/NOTIFY` is only a wake hint. Durable tables and leases are authoritative,
@@ -280,13 +280,13 @@ Counters for a repository that was deleted or renamed before the flush are disca
 ## Read caches and the authorization window
 
 Each node keeps in-process read caches (ADR 0023 section 6): API-key principals by
-key hash and service-account state. They remove the per-request database queries
+key hash and service-account state. Repositories, groups, grants, visibility and
+users are not cached yet. The caches remove the per-request database queries
 of an authenticated read; a warm cache issues no statement for credential
 lookup. No shared cache is involved.
 
 ```env
 NOTARX_AUTHZ_CACHE_TTL=5s
-NOTARX_CACHE_POLL_INTERVAL=2s
 NOTARX_API_KEY_LAST_USED_INTERVAL=60s
 NOTARX_OVERVIEW_CACHE_TTL=30s
 ```
@@ -303,8 +303,10 @@ NOTARX_OVERVIEW_CACHE_TTL=30s
   or `0` where no staleness is acceptable: `0` disables every read cache, so a
   change is effective on the next request at the cost of the per-request query
   load. The revocation test runs at 5s, 1s and 0.
-- **Read-through paths.** Writes, token minting, login and every management API
-  authorization (`/api/` and `/auth/`) read the database and never use these caches.
+- **Read-through paths.** Every write (any method other than `GET` and `HEAD`),
+  token minting, login and every management API authorization read the database
+  and never use these caches; only protocol reads do. A caller that supplies no
+  request context reads through too.
 - **Negative results** (unknown key) are cached for at most 1s, so a key created
   on one node can take up to 1s to be accepted on another.
 - **Last used.** Authenticating a request writes nothing: `last_used_at` is
@@ -317,8 +319,6 @@ NOTARX_OVERVIEW_CACHE_TTL=30s
   `notarx_cache_evictions_total{cache}` and `notarx_cache_entries{cache}`.
   Sustained misses on `api_key_principals` point at an undersized window or a
   credential flood.
-- On engines without push notifications the caches poll a `cache_epochs` table
-  every `NOTARX_CACHE_POLL_INTERVAL`; the TTL still bounds staleness.
 
 Repository request statistics and the overview read hourly rollups
 (`repository_request_rollup`, kept 400 days) with the outcome `allowed` or a

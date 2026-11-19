@@ -199,7 +199,12 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 	}
 	defer func() { _ = databasePool.Close() }()
 	dependencies = dependencies.WithDatabasePool(databasePool)
-	notificationPool, err := database.Open(cfg.DatabaseDriver, cfg.DatabaseURL, cfg.DatabaseNotificationPool)
+	// The shared notification pool holds three LISTEN connections for the process
+	// lifetime: the store notifier, the cache task queue and the read-cache listener.
+	notificationConfig := cfg.DatabaseNotificationPool
+	notificationConfig.MaxOpenConns = max(notificationConfig.MaxOpenConns, database.SharedNotificationPoolConfig().MaxOpenConns)
+	notificationConfig.MaxIdleConns = max(notificationConfig.MaxIdleConns, database.SharedNotificationPoolConfig().MaxIdleConns)
+	notificationPool, err := database.Open(cfg.DatabaseDriver, cfg.DatabaseURL, notificationConfig)
 	if err != nil {
 		slog.Error("open PostgreSQL notification pool", "error", err)
 		return 1
@@ -504,6 +509,7 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 			// Load validated the mode; an unreadable value stays strict.
 			GroupVisibilityMode: access.GroupMode(cfg.GroupVisibilityMode),
 			OverviewCacheTTL:    cfg.OverviewCacheTTL,
+			ReadCache:           caches.registry,
 			AuthzCacheTTL:       cfg.AuthzCacheTTL,
 			Adapter:             app.TestAdapter{},
 			Authenticator: app.Authenticator{

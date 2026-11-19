@@ -49,7 +49,7 @@ type cacheEntriesStore interface {
 }
 
 func (h cacheEntriesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	principal, ok := h.authenticator.Authenticate(r.Header.Get("Authorization"))
+	principal, ok := h.authenticator.AuthenticateContext(r.Context(), r.Header.Get("Authorization"))
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "valid bearer token required")
 		return

@@ -112,7 +112,7 @@ export const settingsFrCA: Record<keyof typeof settingsEnCA, string> = {
     "Clés de signature du fournisseur de services publiées : {count}",
   "settings.authorizationCache": "Cache d’autorisation",
   "settings.authorizationCacheDescription":
-    "Chaque nœud conserve en mémoire les justificatifs d’identité, les comptes et les données d’accès. Un justificatif révoqué, un compte désactivé, une autorisation retirée ou un changement de visibilité prend effet sur tous les nœuds dans cette fenêtre, même si une notification de changement est perdue.",
+    "Chaque nœud conserve en mémoire les clés d’API et l’état des comptes de service. Une clé d’API révoquée, un compte de service désactivé ou un justificatif de compte de service révoqué prend effet sur tous les nœuds dans cette fenêtre, même si une notification de changement est perdue.",
   "settings.authorizationCacheWindow": "Fenêtre de révocation",
   "settings.authorizationCacheSeconds": "{seconds} s",
   "settings.authorizationCacheDisabled":
