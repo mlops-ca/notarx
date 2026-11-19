@@ -27,7 +27,7 @@ func (s *MemoryStore) cargoPublicationForLifecycle(repositoryID, name, version s
 	return publication.ObjectKey, nil
 }
 
-func (s *MemoryStore) TombstoneCargoPublication(ctx context.Context, repositoryID, name, version string) (CargoPublication, error) {
+func (s *MemoryStore) TombstoneCargoPublication(ctx context.Context, repositoryID, name, version string, audit ...AuditRecord) (CargoPublication, error) {
 	key, err := s.cargoPublicationForLifecycle(repositoryID, name, version)
 	if err != nil {
 		return CargoPublication{}, err
@@ -43,6 +43,9 @@ func (s *MemoryStore) TombstoneCargoPublication(ctx context.Context, repositoryI
 	publication, exists := s.cargoPublications[cargoVersionReservationKey(repositoryID, identity.CollisionKey, identity.VersionKey)]
 	if !exists || publication.ObjectKey != key || !publication.CollectedAt.IsZero() || s.cargoPublicationTombstonedLocked(publication) {
 		return CargoPublication{}, ErrNotFound
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return CargoPublication{}, err
 	}
 	now := time.Now().UTC()
 	s.artifactTombstones[cargoTombstoneKey(repositoryID, publication.Name, publication.Version)] = ArtifactTombstone{

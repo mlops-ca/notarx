@@ -397,7 +397,12 @@ func (h generatedRepositoryAPIAdapter) ReplaceQuarantineReadPolicy(w http.Respon
 			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "quarantine read policy payload is invalid")
 			return
 		}
-		updated, err := h.quarantineReadPolicies.ReplaceRepositoryQuarantineReadPolicy(r.Context(), repo.ID, repository.RepositoryQuarantineReadPolicy{Version: strings.TrimSpace(input.Version), Enabled: input.Enabled}, string(params.IfMatch))
+		state := "disabled"
+		if input.Enabled {
+			state = "enabled"
+		}
+		audit := auditRecordsWhen(h.audit != nil, repository.AuditRecord{GroupName: repo.Name, Repository: repo.Name, Actor: principal.Actor, Resource: "repositories/" + repo.ID + "/quarantine-read-policy", Operation: "quarantine_read_policy.replace", Status: http.StatusOK, AuthorizationSource: "repository_admin", AuthorizationReason: state})
+		updated, err := h.quarantineReadPolicies.ReplaceRepositoryQuarantineReadPolicy(r.Context(), repo.ID, repository.RepositoryQuarantineReadPolicy{Version: strings.TrimSpace(input.Version), Enabled: input.Enabled}, string(params.IfMatch), audit...)
 		if errors.Is(err, repository.ErrVersionConflict) {
 			writeHostedProblem(w, http.StatusPreconditionFailed, "version_conflict", "If-Match does not match current quarantine read policy version")
 			return
@@ -409,15 +414,6 @@ func (h generatedRepositoryAPIAdapter) ReplaceQuarantineReadPolicy(w http.Respon
 		if err != nil {
 			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "replace quarantine read policy failed")
 			return
-		}
-		if h.audit != nil {
-			state := "disabled"
-			if updated.Enabled {
-				state = "enabled"
-			}
-			if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{GroupName: repo.Name, Repository: repo.Name, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: "repositories/" + repo.ID + "/quarantine-read-policy", Operation: "quarantine_read_policy.replace", Status: http.StatusOK, CacheDisposition: "bypass", AuthorizationSource: "repository_admin", AuthorizationReason: state}) {
-				return
-			}
 		}
 		w.Header().Set("ETag", updated.Version)
 		writeNativeMavenJSON(w, http.StatusOK, quarantineReadPolicyResponse(updated))
@@ -438,7 +434,7 @@ func (h generatedRepositoryAPIAdapter) ReplaceSecurityPolicy(w http.ResponseWrit
 			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", err.Error())
 			return
 		}
-		updated, err := h.securityPolicies.ReplaceRepositorySecurityPolicy(r.Context(), repo.ID, policy, string(params.IfMatch))
+		updated, err := h.securityPolicies.ReplaceRepositorySecurityPolicy(r.Context(), repo.ID, policy, string(params.IfMatch), auditRecordsWhen(h.audit != nil, repository.AuditRecord{GroupName: repo.Name, Repository: repo.Name, Actor: principal.Actor, Resource: "repositories/" + repo.ID + "/security-policy", Operation: "security_policy.replace", Status: http.StatusOK})...)
 		if errors.Is(err, repository.ErrVersionConflict) {
 			writeHostedProblem(w, http.StatusPreconditionFailed, "version_conflict", "If-Match does not match current security policy version")
 			return
@@ -450,11 +446,6 @@ func (h generatedRepositoryAPIAdapter) ReplaceSecurityPolicy(w http.ResponseWrit
 		if err != nil {
 			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "replace security policy failed")
 			return
-		}
-		if h.audit != nil {
-			if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{GroupName: repo.Name, Repository: repo.Name, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: "repositories/" + repo.ID + "/security-policy", Operation: "security_policy.replace", Status: http.StatusOK, CacheDisposition: "bypass"}) {
-				return
-			}
 		}
 		w.Header().Set("ETag", updated.Version)
 		writeNativeMavenJSON(w, http.StatusOK, securityPolicyResponse(updated))
@@ -685,7 +676,7 @@ func (h generatedRepositoryAPIAdapter) ReplaceRepositoryCapacity(w http.Response
 			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "quotaBytes must be a non-negative integer")
 			return
 		}
-		capacity, err := h.capacities.ReplaceRepositoryCapacityQuota(r.Context(), repositoryID.String(), request.QuotaBytes)
+		capacity, err := h.capacities.ReplaceRepositoryCapacityQuota(r.Context(), repositoryID.String(), request.QuotaBytes, auditRecordsWhen(h.audit != nil, repository.AuditRecord{GroupName: repo.Name, Repository: repo.Name, Actor: principal.Actor, Resource: "repositories/" + repo.ID + "/capacity", Operation: "capacity.configure", Status: http.StatusOK})...)
 		if repository.IsQuotaExceeded(err) {
 			writeHostedProblem(w, http.StatusConflict, "quota_exceeded", "quotaBytes is lower than current repository usage")
 			return
@@ -697,11 +688,6 @@ func (h generatedRepositoryAPIAdapter) ReplaceRepositoryCapacity(w http.Response
 		if err != nil {
 			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "replace repository capacity failed")
 			return
-		}
-		if h.audit != nil {
-			if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{GroupName: repo.Name, Repository: repo.Name, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: "repositories/" + repo.ID + "/capacity", Operation: "capacity.configure", Status: http.StatusOK, CacheDisposition: "bypass"}) {
-				return
-			}
 		}
 		writeNativeMavenJSON(w, http.StatusOK, capacity)
 	})

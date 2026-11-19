@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
@@ -139,9 +138,9 @@ func (h generatedRepositoryAPIAdapter) CancelRepositoryLifecycleJob(w http.Respo
 	h.controlRepositoryLifecycleJob(w, r, repositoryID.String(), lifecycleJobID.String(), "lifecycle.cancel", h.lifecycleJobs.CancelLifecycleJob)
 }
 
-func (h generatedRepositoryAPIAdapter) controlRepositoryLifecycleJob(w http.ResponseWriter, r *http.Request, repositoryID, lifecycleJobID, operation string, control func(context.Context, string, string) (repository.LifecycleJob, error)) {
+func (h generatedRepositoryAPIAdapter) controlRepositoryLifecycleJob(w http.ResponseWriter, r *http.Request, repositoryID, lifecycleJobID, operation string, control func(context.Context, string, string, ...repository.AuditRecord) (repository.LifecycleJob, error)) {
 	h.withRepositoryScope(w, r, repositoryID, RepositoryAdmin, func(principal Principal, repo repository.HostedRepository) {
-		job, err := control(r.Context(), repositoryID, lifecycleJobID)
+		job, err := control(r.Context(), repositoryID, lifecycleJobID, auditRecordsWhen(h.audit != nil, repository.AuditRecord{Repository: repo.Name, GroupName: repo.Name, Actor: principal.Actor, Resource: "lifecycle-jobs/" + lifecycleJobID, Operation: operation, Status: http.StatusOK})...)
 		if errors.Is(err, repository.ErrNotFound) {
 			writeHostedProblem(w, http.StatusNotFound, "not_found", "lifecycle job not found")
 			return
@@ -153,11 +152,6 @@ func (h generatedRepositoryAPIAdapter) controlRepositoryLifecycleJob(w http.Resp
 		if err != nil {
 			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "control lifecycle job failed")
 			return
-		}
-		if h.audit != nil {
-			if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{Repository: repo.Name, GroupName: repo.Name, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: "lifecycle-jobs/" + job.ID, Operation: operation, Status: http.StatusOK, CacheDisposition: "bypass"}) {
-				return
-			}
 		}
 		writeNativeMavenJSON(w, http.StatusOK, lifecycleJobResponse(job))
 	})
@@ -222,9 +216,10 @@ func (h generatedRepositoryAPIAdapter) TombstoneRepositoryArtifact(w http.Respon
 			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "coordinate must identify a visible artifact")
 			return
 		}
+		audit := auditRecordsWhen(h.audit != nil, repository.AuditRecord{GroupName: repo.Name, Repository: repo.Name, Actor: principal.Actor, Resource: request.Coordinate, Operation: "artifact.tombstone", Status: http.StatusNoContent})
 		var err error
 		if capability, ok := formatmodule.Capability[formatmodule.Governance](rawFormatRegistry(rawformat.Options{Store: h.sessions.store}), repo.Format); ok {
-			err = capability.Tombstone(r.Context(), repo.ID, request.Coordinate)
+			err = capability.Tombstone(r.Context(), repo.ID, request.Coordinate, audit...)
 		} else {
 			switch repo.Format {
 			case repository.FormatMaven:
@@ -232,30 +227,30 @@ func (h generatedRepositoryAPIAdapter) TombstoneRepositoryArtifact(w http.Respon
 				if lookupErr != nil {
 					err = lookupErr
 				} else {
-					_, err = h.sessions.store.TombstoneMavenArtifact(r.Context(), repo.ID, artifact.ID)
+					_, err = h.sessions.store.TombstoneMavenArtifact(r.Context(), repo.ID, artifact.ID, audit...)
 				}
 			case repository.FormatOCI:
 				name, digest, _ := parseOCIRestoreCoordinate(request.Coordinate)
-				err = h.oci.DeleteOCIManifest(r.Context(), repo.ID, name, digest)
+				err = h.oci.DeleteOCIManifest(r.Context(), repo.ID, name, digest, audit...)
 			case repository.FormatConan:
 				reference, revision, packageID, packageRevision, packageDelete, _ := parseConanRestoreCoordinate(request.Coordinate)
 				if packageDelete {
-					_, err = h.conan.TombstoneConanPackageRevision(r.Context(), repo.ID, reference, revision, packageID, packageRevision)
+					_, err = h.conan.TombstoneConanPackageRevision(r.Context(), repo.ID, reference, revision, packageID, packageRevision, audit...)
 				} else {
-					_, err = h.conan.TombstoneConanRecipeRevision(r.Context(), repo.ID, reference, revision)
+					_, err = h.conan.TombstoneConanRecipeRevision(r.Context(), repo.ID, reference, revision, audit...)
 				}
 			case repository.FormatNPM:
 				name, version, _ := parseNPMVersionCoordinate(request.Coordinate)
-				_, err = h.sessions.store.TombstoneNPMVersion(r.Context(), repo.ID, name, version)
+				_, err = h.sessions.store.TombstoneNPMVersion(r.Context(), repo.ID, name, version, audit...)
 			case repository.FormatPyPI:
 				project, version, _ := parsePyPIVersionCoordinate(request.Coordinate)
-				_, err = h.sessions.store.TombstonePyPIVersion(r.Context(), repo.ID, project, version)
+				_, err = h.sessions.store.TombstonePyPIVersion(r.Context(), repo.ID, project, version, audit...)
 			case repository.FormatGo:
 				modulePath, version, _ := parseGoModuleVersionCoordinate(request.Coordinate)
-				_, err = h.sessions.store.TombstoneGoModuleVersion(r.Context(), repo.ID, modulePath, version)
+				_, err = h.sessions.store.TombstoneGoModuleVersion(r.Context(), repo.ID, modulePath, version, audit...)
 			case repository.FormatCargo:
 				name, version, _ := splitVersionCoordinate(request.Coordinate)
-				_, err = h.cargo.TombstoneCargoPublication(r.Context(), repo.ID, name, version)
+				_, err = h.cargo.TombstoneCargoPublication(r.Context(), repo.ID, name, version, audit...)
 			}
 		}
 		if errors.Is(err, repository.ErrNotFound) {
@@ -265,11 +260,6 @@ func (h generatedRepositoryAPIAdapter) TombstoneRepositoryArtifact(w http.Respon
 		if err != nil {
 			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "tombstone artifact failed")
 			return
-		}
-		if h.audit != nil {
-			if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{GroupName: repo.Name, Repository: repo.Name, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: request.Coordinate, Operation: "artifact.tombstone", Status: http.StatusNoContent, CacheDisposition: "bypass"}) {
-				return
-			}
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})

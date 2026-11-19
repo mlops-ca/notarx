@@ -512,10 +512,10 @@ func (s *MemoryStore) GetMavenArtifactByCoordinate(_ context.Context, repository
 	return best, nil
 }
 
-func (s *MemoryStore) TombstoneMavenArtifact(_ context.Context, repositoryID, artifactID string) (MavenArtifact, error) {
+func (s *MemoryStore) TombstoneMavenArtifact(ctx context.Context, repositoryID, artifactID string, audit ...AuditRecord) (MavenArtifact, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.tombstoneMavenArtifactLocked(repositoryID, artifactID)
+	return s.tombstoneMavenArtifactLocked(ctx, repositoryID, artifactID, audit)
 }
 
 func (s *MemoryStore) TombstoneMavenArtifactForRetention(_ context.Context, repositoryID, artifactID, policyVersion string) (MavenArtifact, error) {
@@ -530,13 +530,16 @@ func (s *MemoryStore) TombstoneMavenArtifactForRetention(_ context.Context, repo
 			return MavenArtifact{}, ErrMavenSnapshotImportRetention
 		}
 	}
-	return s.tombstoneMavenArtifactLocked(repositoryID, artifactID)
+	return s.tombstoneMavenArtifactLocked(context.Background(), repositoryID, artifactID, nil)
 }
 
-func (s *MemoryStore) tombstoneMavenArtifactLocked(repositoryID, artifactID string) (MavenArtifact, error) {
+func (s *MemoryStore) tombstoneMavenArtifactLocked(ctx context.Context, repositoryID, artifactID string, audit []AuditRecord) (MavenArtifact, error) {
 	artifact, ok := s.mavenArtifacts[artifactID]
 	if !ok || artifact.RepositoryID != repositoryID {
 		return MavenArtifact{}, ErrNotFound
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return MavenArtifact{}, err
 	}
 	if artifact.State == "deleted" {
 		return artifact, nil

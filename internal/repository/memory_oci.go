@@ -391,12 +391,15 @@ func (s *MemoryStore) DeleteOCITag(_ context.Context, repositoryID, name, tag st
 	delete(s.ociTags, key)
 	return nil
 }
-func (s *MemoryStore) DeleteOCIManifest(_ context.Context, repositoryID, name, digest string) error {
+func (s *MemoryStore) DeleteOCIManifest(ctx context.Context, repositoryID, name, digest string, audit ...AuditRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	key := ociManifestKey(repositoryID, name, digest)
 	if _, ok := s.ociManifests[key]; !ok {
 		return ErrNotFound
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return err
 	}
 	manifest := s.ociManifests[key]
 	tags := make([]string, 0)

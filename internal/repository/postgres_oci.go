@@ -489,7 +489,7 @@ func (s *PostgresStore) DeleteOCITag(ctx context.Context, repositoryID, name, ta
 	}
 	return nil
 }
-func (s *PostgresStore) DeleteOCIManifest(ctx context.Context, repositoryID, name, digest string) error {
+func (s *PostgresStore) DeleteOCIManifest(ctx context.Context, repositoryID, name, digest string, audit ...AuditRecord) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -527,6 +527,9 @@ func (s *PostgresStore) DeleteOCIManifest(ctx context.Context, repositoryID, nam
 	}
 	// The deleted manifest leaves the usage; its blob references stay until the blobs are reclaimed.
 	if err = capacity.Reserve(ctx, tx, repositoryID, -deletedSize, -1); err != nil {
+		return err
+	}
+	if err = insertAudits(ctx, tx, audit); err != nil {
 		return err
 	}
 	return tx.Commit()

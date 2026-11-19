@@ -21,7 +21,7 @@ func (s *recordingDistributionAdmissionStore) GetArtifactQuarantine(_ context.Co
 	return ArtifactQuarantine{}, ErrNotFound
 }
 
-func (*recordingDistributionAdmissionStore) ReplaceArtifactQuarantine(_ context.Context, value ArtifactQuarantine, _ string) (ArtifactQuarantine, error) {
+func (*recordingDistributionAdmissionStore) ReplaceArtifactQuarantine(_ context.Context, value ArtifactQuarantine, _ string, _ ...AuditRecord) (ArtifactQuarantine, error) {
 	return value, nil
 }
 

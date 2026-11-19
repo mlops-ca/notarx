@@ -25,13 +25,13 @@ func (g governanceGrants) GetRepositoryGrants(_ context.Context, id string) (rep
 	}
 	return g.set, nil
 }
-func (governanceGrants) ReplaceRepositoryGrants(context.Context, string, []repository.RepositoryGrant, string) (repository.RepositoryGrantSet, error) {
+func (governanceGrants) ReplaceRepositoryGrants(context.Context, string, []repository.RepositoryGrant, string, ...repository.AuditRecord) (repository.RepositoryGrantSet, error) {
 	return repository.RepositoryGrantSet{}, domain.ErrAccessDenied
 }
-func (governanceGrants) UpsertRepositoryGrant(context.Context, string, repository.RepositoryGrant) (repository.RepositoryGrantSet, error) {
+func (governanceGrants) UpsertRepositoryGrant(context.Context, string, repository.RepositoryGrant, ...repository.AuditRecord) (repository.RepositoryGrantSet, error) {
 	return repository.RepositoryGrantSet{}, domain.ErrAccessDenied
 }
-func (governanceGrants) DeleteRepositoryGrant(context.Context, string, string, string) (repository.RepositoryGrantSet, error) {
+func (governanceGrants) DeleteRepositoryGrant(context.Context, string, string, string, ...repository.AuditRecord) (repository.RepositoryGrantSet, error) {
 	return repository.RepositoryGrantSet{}, domain.ErrAccessDenied
 }
 

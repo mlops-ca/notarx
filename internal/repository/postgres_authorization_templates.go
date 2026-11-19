@@ -24,24 +24,22 @@ func scanAuthorizationTemplate(scanner interface{ Scan(...any) error }) (Authori
 
 const authorizationTemplateColumns = `id::text,name,description,grants,version::text,created_at,updated_at`
 
-func (s *PostgresStore) CreateAuthorizationTemplate(ctx context.Context, template AuthorizationTemplate) (AuthorizationTemplate, error) {
-	template.ID = ids.New()
+func (s *PostgresStore) CreateAuthorizationTemplate(ctx context.Context, template AuthorizationTemplate, audit ...AuditRecord) (AuthorizationTemplate, error) {
+	if template.ID == "" {
+		template.ID = ids.New()
+	}
 	template.Name = strings.TrimSpace(template.Name)
 	encoded, err := json.Marshal(template.Grants)
 	if err != nil {
 		return AuthorizationTemplate{}, err
 	}
-	err = s.db.QueryRowContext(ctx, `INSERT INTO authorization_templates (id,name,description,grants) VALUES ($1,$2,$3,$4) RETURNING `+authorizationTemplateColumns, template.ID, template.Name, template.Description, encoded).Scan(&template.ID, &template.Name, &template.Description, &encoded, &template.Version, &template.CreatedAt, &template.UpdatedAt)
-	if isUnique(err) {
-		return AuthorizationTemplate{}, ErrTemplateNameExists
-	}
-	if err != nil {
-		return AuthorizationTemplate{}, err
-	}
-	if err := json.Unmarshal(encoded, &template.Grants); err != nil {
-		return AuthorizationTemplate{}, err
-	}
-	return template, nil
+	return runAudited(ctx, s, audit, func(q sqlRunner) (AuthorizationTemplate, error) {
+		created, err := scanAuthorizationTemplate(q.QueryRowContext(ctx, `INSERT INTO authorization_templates (id,name,description,grants) VALUES ($1,$2,$3,$4) RETURNING `+authorizationTemplateColumns, template.ID, template.Name, template.Description, encoded))
+		if isUnique(err) {
+			return AuthorizationTemplate{}, ErrTemplateNameExists
+		}
+		return created, err
+	})
 }
 
 func (s *PostgresStore) ListAuthorizationTemplates(ctx context.Context) ([]AuthorizationTemplate, error) {
@@ -69,45 +67,50 @@ func (s *PostgresStore) GetAuthorizationTemplate(ctx context.Context, id string)
 	return template, err
 }
 
-func (s *PostgresStore) UpdateAuthorizationTemplate(ctx context.Context, template AuthorizationTemplate, expectedVersion string) (AuthorizationTemplate, error) {
+func (s *PostgresStore) UpdateAuthorizationTemplate(ctx context.Context, template AuthorizationTemplate, expectedVersion string, audit ...AuditRecord) (AuthorizationTemplate, error) {
 	encoded, err := json.Marshal(template.Grants)
 	if err != nil {
 		return AuthorizationTemplate{}, err
 	}
 	template.Name = strings.TrimSpace(template.Name)
-	updated, err := scanAuthorizationTemplate(s.db.QueryRowContext(ctx, `UPDATE authorization_templates SET name=$1,description=$2,grants=$3,version=version+1,updated_at=now() WHERE id=$4::uuid AND version=$5::text::bigint RETURNING `+authorizationTemplateColumns, template.Name, template.Description, encoded, template.ID, expectedVersion))
-	if errors.Is(err, sql.ErrNoRows) {
-		var exists bool
-		if queryErr := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM authorization_templates WHERE id=$1::uuid)`, template.ID).Scan(&exists); queryErr != nil {
-			return AuthorizationTemplate{}, queryErr
+	return runAudited(ctx, s, audit, func(q sqlRunner) (AuthorizationTemplate, error) {
+		updated, err := scanAuthorizationTemplate(q.QueryRowContext(ctx, `UPDATE authorization_templates SET name=$1,description=$2,grants=$3,version=version+1,updated_at=now() WHERE id=$4::uuid AND version=$5::text::bigint RETURNING `+authorizationTemplateColumns, template.Name, template.Description, encoded, template.ID, expectedVersion))
+		if errors.Is(err, sql.ErrNoRows) {
+			var exists bool
+			if queryErr := q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM authorization_templates WHERE id=$1::uuid)`, template.ID).Scan(&exists); queryErr != nil {
+				return AuthorizationTemplate{}, queryErr
+			}
+			if !exists {
+				return AuthorizationTemplate{}, ErrNotFound
+			}
+			return AuthorizationTemplate{}, ErrVersionConflict
 		}
-		if !exists {
-			return AuthorizationTemplate{}, ErrNotFound
+		if isUnique(err) {
+			return AuthorizationTemplate{}, ErrTemplateNameExists
 		}
-		return AuthorizationTemplate{}, ErrVersionConflict
-	}
-	if isUnique(err) {
-		return AuthorizationTemplate{}, ErrTemplateNameExists
-	}
-	return updated, err
+		return updated, err
+	})
 }
 
-func (s *PostgresStore) DeleteAuthorizationTemplate(ctx context.Context, id string) error {
-	result, err := s.db.ExecContext(ctx, `DELETE FROM authorization_templates WHERE id=$1::uuid`, id)
-	if err != nil {
-		return err
-	}
-	count, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if count == 0 {
-		return ErrNotFound
-	}
-	return nil
+func (s *PostgresStore) DeleteAuthorizationTemplate(ctx context.Context, id string, audit ...AuditRecord) error {
+	_, err := runAudited(ctx, s, audit, func(q sqlRunner) (struct{}, error) {
+		result, err := q.ExecContext(ctx, `DELETE FROM authorization_templates WHERE id=$1::uuid`, id)
+		if err != nil {
+			return struct{}{}, err
+		}
+		count, err := result.RowsAffected()
+		if err != nil {
+			return struct{}{}, err
+		}
+		if count == 0 {
+			return struct{}{}, ErrNotFound
+		}
+		return struct{}{}, nil
+	})
+	return err
 }
 
-func (s *PostgresStore) ApplyAuthorizationTemplate(ctx context.Context, templateID, repositoryID, expectedVersion string) (RepositoryGrantSet, error) {
+func (s *PostgresStore) ApplyAuthorizationTemplate(ctx context.Context, templateID, repositoryID, expectedVersion string, audit ...AuditRecord) (RepositoryGrantSet, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return RepositoryGrantSet{}, err
@@ -157,6 +160,9 @@ func (s *PostgresStore) ApplyAuthorizationTemplate(ctx context.Context, template
 		if _, err = tx.ExecContext(ctx, `INSERT INTO repository_grants (repository_id,principal,scopes,resource_prefix) VALUES ($1,$2,$3,$4)`, repositoryID, grant.Principal, grant.Scopes, grant.ResourcePrefix); err != nil {
 			return RepositoryGrantSet{}, err
 		}
+	}
+	if err = insertAudits(ctx, tx, audit); err != nil {
+		return RepositoryGrantSet{}, err
 	}
 	if err = tx.Commit(); err != nil {
 		return RepositoryGrantSet{}, err

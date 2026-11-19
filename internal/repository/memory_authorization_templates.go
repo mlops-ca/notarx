@@ -14,7 +14,7 @@ func cloneAuthorizationTemplate(template AuthorizationTemplate) AuthorizationTem
 	return template
 }
 
-func (s *MemoryStore) CreateAuthorizationTemplate(_ context.Context, template AuthorizationTemplate) (AuthorizationTemplate, error) {
+func (s *MemoryStore) CreateAuthorizationTemplate(ctx context.Context, template AuthorizationTemplate, audit ...AuditRecord) (AuthorizationTemplate, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	name := strings.TrimSpace(template.Name)
@@ -25,6 +25,9 @@ func (s *MemoryStore) CreateAuthorizationTemplate(_ context.Context, template Au
 		if strings.EqualFold(existing.Name, name) {
 			return AuthorizationTemplate{}, ErrTemplateNameExists
 		}
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return AuthorizationTemplate{}, err
 	}
 	now := time.Now().UTC()
 	if template.ID == "" {
@@ -60,7 +63,7 @@ func (s *MemoryStore) GetAuthorizationTemplate(_ context.Context, id string) (Au
 	return cloneAuthorizationTemplate(template), nil
 }
 
-func (s *MemoryStore) UpdateAuthorizationTemplate(_ context.Context, template AuthorizationTemplate, expectedVersion string) (AuthorizationTemplate, error) {
+func (s *MemoryStore) UpdateAuthorizationTemplate(ctx context.Context, template AuthorizationTemplate, expectedVersion string, audit ...AuditRecord) (AuthorizationTemplate, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	current, ok := s.authorizationTemplates[template.ID]
@@ -79,6 +82,9 @@ func (s *MemoryStore) UpdateAuthorizationTemplate(_ context.Context, template Au
 			return AuthorizationTemplate{}, ErrTemplateNameExists
 		}
 	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return AuthorizationTemplate{}, err
+	}
 	template.Name = name
 	template.Version = nextHostedGroupVersion(current.Version)
 	template.CreatedAt = current.CreatedAt
@@ -88,17 +94,20 @@ func (s *MemoryStore) UpdateAuthorizationTemplate(_ context.Context, template Au
 	return cloneAuthorizationTemplate(template), nil
 }
 
-func (s *MemoryStore) DeleteAuthorizationTemplate(_ context.Context, id string) error {
+func (s *MemoryStore) DeleteAuthorizationTemplate(ctx context.Context, id string, audit ...AuditRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.authorizationTemplates[id]; !ok {
 		return ErrNotFound
 	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return err
+	}
 	delete(s.authorizationTemplates, id)
 	return nil
 }
 
-func (s *MemoryStore) ApplyAuthorizationTemplate(_ context.Context, templateID, repositoryID, expectedVersion string) (RepositoryGrantSet, error) {
+func (s *MemoryStore) ApplyAuthorizationTemplate(ctx context.Context, templateID, repositoryID, expectedVersion string, audit ...AuditRecord) (RepositoryGrantSet, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	template, ok := s.authorizationTemplates[templateID]
@@ -114,6 +123,9 @@ func (s *MemoryStore) ApplyAuthorizationTemplate(_ context.Context, templateID, 
 	}
 	if set.Version != expectedVersion {
 		return RepositoryGrantSet{}, ErrVersionConflict
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return RepositoryGrantSet{}, err
 	}
 	set.Version = nextHostedGroupVersion(set.Version)
 	set.Grants = cloneAuthorizationTemplate(template).Grants

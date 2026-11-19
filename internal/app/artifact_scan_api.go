@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/scanning"
@@ -45,7 +44,11 @@ func (h artifactScanEnqueueHandler) serve(w http.ResponseWriter, r *http.Request
 		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "coordinate and sha256 digest must identify an immutable artifact")
 		return
 	}
-	job, replayed, err := repository.EnqueueArtifactScanJob(r.Context(), h.jobs, repo.ID, idempotencyKey, repository.ArtifactScanPayload{Format: repo.Format, Coordinate: request.Coordinate, Digest: request.Digest})
+	job, replayed, err := repository.EnqueueArtifactScanJob(r.Context(), h.jobs, repo.ID, idempotencyKey, repository.ArtifactScanPayload{Format: repo.Format, Coordinate: request.Coordinate, Digest: request.Digest}, auditRecordsWhen(h.audit != nil, repository.AuditRecord{
+		Repository: repo.Name, GroupName: repo.Name, Actor: principal.Actor,
+		Resource: request.Coordinate + "@" + request.Digest, Operation: "artifact.scan.enqueue",
+		Status: http.StatusAccepted,
+	})...)
 	if errors.Is(err, repository.ErrIdempotencyConflict) {
 		writeHostedProblem(w, http.StatusConflict, "idempotency_conflict", "Idempotency-Key was already used with a different scan request")
 		return
@@ -53,16 +56,6 @@ func (h artifactScanEnqueueHandler) serve(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "enqueue artifact scan failed")
 		return
-	}
-	if h.audit != nil {
-		if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{
-			Repository: repo.Name, GroupName: repo.Name, Actor: principal.Actor,
-			Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management",
-			Resource: request.Coordinate + "@" + request.Digest, Operation: "artifact.scan.enqueue",
-			Status: http.StatusAccepted, CacheDisposition: "bypass",
-		}) {
-			return
-		}
 	}
 	if replayed {
 		w.Header().Set("Idempotent-Replayed", "true")

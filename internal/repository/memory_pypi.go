@@ -284,7 +284,7 @@ func (s *MemoryStore) ListPyPIProjects(_ context.Context, repositoryID, prefix s
 	return result, nil
 }
 
-func (s *MemoryStore) TombstonePyPIVersion(ctx context.Context, repositoryID, project, version string) ([]PyPIFile, error) {
+func (s *MemoryStore) TombstonePyPIVersion(ctx context.Context, repositoryID, project, version string, audit ...AuditRecord) ([]PyPIFile, error) {
 	releaseDistribution, err := lockArtifactDistributionCoordinates(ctx, s, repositoryID, FormatPyPI, []string{project + "@" + version})
 	if err != nil {
 		return nil, err
@@ -292,6 +292,19 @@ func (s *MemoryStore) TombstonePyPIVersion(ctx context.Context, repositoryID, pr
 	defer releaseDistribution()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	visible := false
+	for _, file := range s.pypiFiles {
+		if file.RepositoryID == repositoryID && file.Project == project && file.Version == version && file.State == "visible" {
+			visible = true
+			break
+		}
+	}
+	if !visible {
+		return nil, ErrNotFound
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return nil, err
+	}
 	now := time.Now().UTC()
 	files := make([]PyPIFile, 0)
 	for key, file := range s.pypiFiles {

@@ -27,11 +27,11 @@ type RetentionCandidate struct {
 }
 type Retention interface {
 	PlanRetention(context.Context, string, repository.RepositoryRetentionPolicy, time.Time) ([]RetentionCandidate, error)
-	Tombstone(context.Context, string, string) error
+	Tombstone(context.Context, string, string, ...repository.AuditRecord) error
 }
 type Governance interface {
 	ValidCoordinate(string) bool
-	Tombstone(context.Context, string, string) error
+	Tombstone(context.Context, string, string, ...repository.AuditRecord) error
 	Restore(context.Context, string, string) error
 }
 type Promotion interface {

@@ -198,7 +198,7 @@ func (s *PostgresStore) GetGoModuleVersion(ctx context.Context, repositoryID, mo
 	return item, err
 }
 
-func (s *PostgresStore) TombstoneGoModuleVersion(ctx context.Context, repositoryID, modulePath, version string) (GoModuleVersion, error) {
+func (s *PostgresStore) TombstoneGoModuleVersion(ctx context.Context, repositoryID, modulePath, version string, audit ...AuditRecord) (GoModuleVersion, error) {
 	for attempt := 0; attempt < 3; attempt++ {
 		objectKeys, err := s.goModuleObjectKeys(ctx, repositoryID, modulePath, version)
 		if err != nil {
@@ -208,7 +208,7 @@ func (s *PostgresStore) TombstoneGoModuleVersion(ctx context.Context, repository
 		if err != nil {
 			return GoModuleVersion{}, err
 		}
-		item, membershipChanged, tombstoneErr := s.tombstoneGoModuleVersionLocked(objectCtx, repositoryID, modulePath, version, objectKeys)
+		item, membershipChanged, tombstoneErr := s.tombstoneGoModuleVersionLocked(objectCtx, repositoryID, modulePath, version, objectKeys, audit)
 		releaseObjects()
 		if membershipChanged {
 			continue
@@ -236,7 +236,7 @@ func (s *PostgresStore) goModuleObjectKeys(ctx context.Context, repositoryID, mo
 	return keys, rows.Err()
 }
 
-func (s *PostgresStore) tombstoneGoModuleVersionLocked(ctx context.Context, repositoryID, modulePath, version string, expectedObjectKeys []string) (GoModuleVersion, bool, error) {
+func (s *PostgresStore) tombstoneGoModuleVersionLocked(ctx context.Context, repositoryID, modulePath, version string, expectedObjectKeys []string, audit []AuditRecord) (GoModuleVersion, bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return GoModuleVersion{}, false, err
@@ -294,6 +294,9 @@ func (s *PostgresStore) tombstoneGoModuleVersionLocked(ctx context.Context, repo
 		return GoModuleVersion{}, false, rowsErr
 	} else if affected != 1 {
 		return GoModuleVersion{}, false, ErrNotFound
+	}
+	if err = insertAudits(ctx, tx, audit); err != nil {
+		return GoModuleVersion{}, false, err
 	}
 	if err = tx.Commit(); err != nil {
 		return GoModuleVersion{}, false, err

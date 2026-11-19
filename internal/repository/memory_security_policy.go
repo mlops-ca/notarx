@@ -15,7 +15,7 @@ func (s *MemoryStore) GetRepositorySecurityPolicy(_ context.Context, repositoryI
 	return CloneRepositorySecurityPolicy(policy), nil
 }
 
-func (s *MemoryStore) ReplaceRepositorySecurityPolicy(_ context.Context, repositoryID string, policy RepositorySecurityPolicy, expectedVersion string) (RepositorySecurityPolicy, error) {
+func (s *MemoryStore) ReplaceRepositorySecurityPolicy(ctx context.Context, repositoryID string, policy RepositorySecurityPolicy, expectedVersion string, audit ...AuditRecord) (RepositorySecurityPolicy, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.hostedRepositories[repositoryID]; !ok {
@@ -33,6 +33,9 @@ func (s *MemoryStore) ReplaceRepositorySecurityPolicy(_ context.Context, reposit
 	}
 	if policy.AllowedLicenses == nil {
 		policy.AllowedLicenses = []string{}
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return RepositorySecurityPolicy{}, err
 	}
 	policy.Version = nextHostedGroupVersion(current.Version)
 	policy = CloneRepositorySecurityPolicy(policy)

@@ -6,12 +6,12 @@ import (
 	"errors"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/access"
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
 	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/ids"
 	helmprotocol "github.com/mlops-ca/notarx/internal/protocol/helm"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -358,16 +358,14 @@ func (h accessManagementHandler) CreateAuthorizationRole(w http.ResponseWriter, 
 	if body.Description != nil {
 		description = *body.Description
 	}
-	role, err := h.authorizationRoles.CreateAuthorizationRole(r.Context(), repository.AuthorizationRole{Name: body.Name, Description: description, Scopes: scopes})
+	roleID := ids.New()
+	role, err := h.authorizationRoles.CreateAuthorizationRole(r.Context(), repository.AuthorizationRole{ID: roleID, Name: body.Name, Description: description, Scopes: scopes}, h.authorizationAudit(r, "", "authorization-roles/"+roleID, "authorization_role.create", http.StatusCreated)...)
 	if errors.Is(err, repository.ErrAuthorizationRoleNameExists) {
 		writeHostedProblem(w, http.StatusConflict, "name_exists", "authorization role name already exists")
 		return
 	}
 	if err != nil {
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "create authorization role failed")
-		return
-	}
-	if !h.recordAuthorizationAudit(w, r, "", "authorization-roles/"+role.ID, "authorization_role.create", http.StatusCreated) {
 		return
 	}
 	writeNativeMavenJSON(w, http.StatusCreated, authorizationRoleResponse(role))
@@ -410,7 +408,7 @@ func (h accessManagementHandler) UpdateAuthorizationRole(w http.ResponseWriter, 
 	if body.Description != nil {
 		description = *body.Description
 	}
-	role, err := h.authorizationRoles.UpdateAuthorizationRole(r.Context(), repository.AuthorizationRole{ID: roleID.String(), Name: body.Name, Description: description, Scopes: scopes}, string(params.IfMatch))
+	role, err := h.authorizationRoles.UpdateAuthorizationRole(r.Context(), repository.AuthorizationRole{ID: roleID.String(), Name: body.Name, Description: description, Scopes: scopes}, string(params.IfMatch), h.authorizationAudit(r, "", "authorization-roles/"+roleID.String(), "authorization_role.update", http.StatusOK)...)
 	if errors.Is(err, repository.ErrNotFound) {
 		writeHostedProblem(w, http.StatusNotFound, "not_found", "authorization role not found")
 		return
@@ -427,9 +425,6 @@ func (h accessManagementHandler) UpdateAuthorizationRole(w http.ResponseWriter, 
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "update authorization role failed")
 		return
 	}
-	if !h.recordAuthorizationAudit(w, r, "", "authorization-roles/"+role.ID, "authorization_role.update", http.StatusOK) {
-		return
-	}
 	w.Header().Set("ETag", role.Version)
 	writeNativeMavenJSON(w, http.StatusOK, authorizationRoleResponse(role))
 }
@@ -438,16 +433,13 @@ func (h accessManagementHandler) DeleteAuthorizationRole(w http.ResponseWriter, 
 	if _, ok := h.authorize(w, r); !ok {
 		return
 	}
-	err := h.authorizationRoles.DeleteAuthorizationRole(r.Context(), roleID.String())
+	err := h.authorizationRoles.DeleteAuthorizationRole(r.Context(), roleID.String(), h.authorizationAudit(r, "", "authorization-roles/"+roleID.String(), "authorization_role.delete", http.StatusNoContent)...)
 	if errors.Is(err, repository.ErrNotFound) {
 		writeHostedProblem(w, http.StatusNotFound, "not_found", "authorization role not found")
 		return
 	}
 	if err != nil {
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "delete authorization role failed")
-		return
-	}
-	if !h.recordAuthorizationAudit(w, r, "", "authorization-roles/"+roleID.String(), "authorization_role.delete", http.StatusNoContent) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -489,16 +481,14 @@ func (h accessManagementHandler) CreateAuthorizationTemplate(w http.ResponseWrit
 	if body.Description != nil {
 		description = *body.Description
 	}
-	template, err := h.templates.CreateAuthorizationTemplate(r.Context(), repository.AuthorizationTemplate{Name: body.Name, Description: description, Grants: grants})
+	templateID := ids.New()
+	template, err := h.templates.CreateAuthorizationTemplate(r.Context(), repository.AuthorizationTemplate{ID: templateID, Name: body.Name, Description: description, Grants: grants}, h.authorizationAudit(r, "", "authorization-templates/"+templateID, "authorization_template.create", http.StatusCreated)...)
 	if errors.Is(err, repository.ErrTemplateNameExists) {
 		writeHostedProblem(w, http.StatusConflict, "name_exists", "authorization template name already exists")
 		return
 	}
 	if err != nil {
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "create authorization template failed")
-		return
-	}
-	if !h.recordAuthorizationAudit(w, r, "", "authorization-templates/"+template.ID, "authorization_template.create", http.StatusCreated) {
 		return
 	}
 	writeNativeMavenJSON(w, http.StatusCreated, authorizationTemplateResponse(template))
@@ -541,7 +531,7 @@ func (h accessManagementHandler) UpdateAuthorizationTemplate(w http.ResponseWrit
 	if body.Description != nil {
 		description = *body.Description
 	}
-	template, err := h.templates.UpdateAuthorizationTemplate(r.Context(), repository.AuthorizationTemplate{ID: templateID.String(), Name: body.Name, Description: description, Grants: grants}, string(params.IfMatch))
+	template, err := h.templates.UpdateAuthorizationTemplate(r.Context(), repository.AuthorizationTemplate{ID: templateID.String(), Name: body.Name, Description: description, Grants: grants}, string(params.IfMatch), h.authorizationAudit(r, "", "authorization-templates/"+templateID.String(), "authorization_template.update", http.StatusOK)...)
 	if errors.Is(err, repository.ErrNotFound) {
 		writeHostedProblem(w, http.StatusNotFound, "not_found", "authorization template not found")
 		return
@@ -558,9 +548,6 @@ func (h accessManagementHandler) UpdateAuthorizationTemplate(w http.ResponseWrit
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "update authorization template failed")
 		return
 	}
-	if !h.recordAuthorizationAudit(w, r, "", "authorization-templates/"+template.ID, "authorization_template.update", http.StatusOK) {
-		return
-	}
 	w.Header().Set("ETag", template.Version)
 	writeNativeMavenJSON(w, http.StatusOK, authorizationTemplateResponse(template))
 }
@@ -569,16 +556,13 @@ func (h accessManagementHandler) DeleteAuthorizationTemplate(w http.ResponseWrit
 	if _, ok := h.authorize(w, r); !ok {
 		return
 	}
-	err := h.templates.DeleteAuthorizationTemplate(r.Context(), templateID.String())
+	err := h.templates.DeleteAuthorizationTemplate(r.Context(), templateID.String(), h.authorizationAudit(r, "", "authorization-templates/"+templateID.String(), "authorization_template.delete", http.StatusNoContent)...)
 	if errors.Is(err, repository.ErrNotFound) {
 		writeHostedProblem(w, http.StatusNotFound, "not_found", "authorization template not found")
 		return
 	}
 	if err != nil {
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "delete authorization template failed")
-		return
-	}
-	if !h.recordAuthorizationAudit(w, r, "", "authorization-templates/"+templateID.String(), "authorization_template.delete", http.StatusNoContent) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -612,7 +596,7 @@ func (h accessManagementHandler) ApplyAuthorizationTemplate(w http.ResponseWrite
 			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "template grants are not valid for the target repository format")
 			return
 		}
-		set, err := h.templates.ApplyAuthorizationTemplate(r.Context(), templateID.String(), body.RepositoryId.String(), string(params.IfMatch))
+		set, err := h.templates.ApplyAuthorizationTemplate(r.Context(), templateID.String(), body.RepositoryId.String(), string(params.IfMatch), h.authorizationAudit(r, repo.Name, "repositories/"+repo.ID+"/grants", "repository.grants.apply_template", http.StatusOK)...)
 		if errors.Is(err, repository.ErrNotFound) {
 			writeHostedProblem(w, http.StatusNotFound, "not_found", "repository or authorization template not found")
 			return
@@ -623,9 +607,6 @@ func (h accessManagementHandler) ApplyAuthorizationTemplate(w http.ResponseWrite
 		}
 		if err != nil {
 			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "apply authorization template failed")
-			return
-		}
-		if !h.recordAuthorizationAudit(w, r, repo.Name, "repositories/"+repo.ID+"/grants", "repository.grants.apply_template", http.StatusOK) {
 			return
 		}
 		w.Header().Set("ETag", set.Version)
@@ -642,7 +623,7 @@ func (h accessManagementHandler) ReplaceGrants(w http.ResponseWriter, r *http.Re
 			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "grants must contain unique principal/resource prefixes, valid scopes, and canonical resource prefixes")
 			return
 		}
-		set, err := h.grants.ReplaceRepositoryGrants(r.Context(), repositoryID.String(), grants, string(params.IfMatch))
+		set, err := h.grants.ReplaceRepositoryGrants(r.Context(), repositoryID.String(), grants, string(params.IfMatch), h.authorizationAudit(r, repo.Name, "repositories/"+repo.ID+"/grants", "repository.grants.replace", http.StatusOK)...)
 		if errors.Is(err, repository.ErrNotFound) {
 			writeHostedProblem(w, http.StatusNotFound, "not_found", "repository not found")
 			return
@@ -653,9 +634,6 @@ func (h accessManagementHandler) ReplaceGrants(w http.ResponseWriter, r *http.Re
 		}
 		if err != nil {
 			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "replace grants failed")
-			return
-		}
-		if !h.recordAuthorizationAudit(w, r, repo.Name, "repositories/"+repo.ID+"/grants", "repository.grants.replace", http.StatusOK) {
 			return
 		}
 		w.Header().Set("ETag", set.Version)
@@ -690,16 +668,13 @@ func (h accessManagementHandler) UpsertGrant(w http.ResponseWriter, r *http.Requ
 			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "grant must name a principal, valid scopes, and a canonical resource prefix")
 			return
 		}
-		set, err := h.grants.UpsertRepositoryGrant(r.Context(), repositoryID.String(), grant)
+		set, err := h.grants.UpsertRepositoryGrant(r.Context(), repositoryID.String(), grant, h.authorizationAudit(r, repo.Name, "repositories/"+repo.ID+"/grants", "repository.grants.upsert", http.StatusOK)...)
 		if errors.Is(err, repository.ErrNotFound) {
 			writeHostedProblem(w, http.StatusNotFound, "not_found", "repository not found")
 			return
 		}
 		if err != nil {
 			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "upsert grant failed")
-			return
-		}
-		if !h.recordAuthorizationAudit(w, r, repo.Name, "repositories/"+repo.ID+"/grants", "repository.grants.upsert", http.StatusOK) {
 			return
 		}
 		w.Header().Set("ETag", set.Version)
@@ -718,7 +693,7 @@ func (h accessManagementHandler) DeleteGrant(w http.ResponseWriter, r *http.Requ
 			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "principal must name the grant to delete")
 			return
 		}
-		set, err := h.grants.DeleteRepositoryGrant(r.Context(), repositoryID.String(), principal, prefix)
+		set, err := h.grants.DeleteRepositoryGrant(r.Context(), repositoryID.String(), principal, prefix, h.authorizationAudit(r, repo.Name, "repositories/"+repo.ID+"/grants", "repository.grants.delete", http.StatusNoContent)...)
 		if errors.Is(err, repository.ErrNotFound) {
 			writeHostedProblem(w, http.StatusNotFound, "not_found", "grant not found")
 			return
@@ -727,26 +702,18 @@ func (h accessManagementHandler) DeleteGrant(w http.ResponseWriter, r *http.Requ
 			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "delete grant failed")
 			return
 		}
-		if !h.recordAuthorizationAudit(w, r, repo.Name, "repositories/"+repo.ID+"/grants", "repository.grants.delete", http.StatusNoContent) {
-			return
-		}
 		w.Header().Set("ETag", set.Version)
 		w.WriteHeader(http.StatusNoContent)
 	})
 }
 
-func (h accessManagementHandler) recordAuthorizationAudit(w http.ResponseWriter, r *http.Request, repositoryName, resource, operation string, status int) bool {
-	if h.audit == nil {
-		return true
-	}
-	if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{
+// authorizationAudit builds the audit record an access mutation hands to its store method,
+// so the audit commits with the change (ADR 0023 section 1).
+func (h accessManagementHandler) authorizationAudit(r *http.Request, repositoryName, resource, operation string, status int) []repository.AuditRecord {
+	return auditRecordsWhen(h.audit != nil, repository.AuditRecord{
 		GroupName: repositoryName, Repository: repositoryName,
-		Actor: h.auditActor(r), Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(),
-		Format: "management", Resource: resource, Operation: operation, Status: status, CacheDisposition: "bypass",
-	}) {
-		return false
-	}
-	return true
+		Actor: h.auditActor(r), Resource: resource, Operation: operation, Status: status,
+	})
 }
 
 func validRepositoryGrants(grants []repository.RepositoryGrant, format repository.Format) bool {

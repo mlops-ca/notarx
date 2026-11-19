@@ -3,7 +3,6 @@ package app
 import (
 	"errors"
 	"net/http"
-	"time"
 
 	"github.com/google/uuid"
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
@@ -63,6 +62,12 @@ func (h generatedRepositoryAPIAdapter) ReconcileRepositoryArtifactScans(w http.R
 			JobIds:       make([]string, 0, len(candidates)),
 		}
 		for _, candidate := range candidates {
+			// Every job it creates or requeues carries its own audit record, written in the
+			// transaction of that change; a reconciliation that changes nothing writes none.
+			audit := auditRecordsWhen(h.audit != nil, repository.AuditRecord{
+				Repository: repo.Name, GroupName: repo.Name, Actor: principal.Actor,
+				Resource: candidate.Coordinate, Representation: candidate.Digest, Operation: "artifact.scan.reconcile", Status: http.StatusOK,
+			})
 			process := func() error {
 				job, getErr := h.lifecycleJobs.GetLatestArtifactScanJob(r.Context(), repo.ID, repo.Format, candidate.Coordinate, candidate.Digest)
 				switch {
@@ -70,7 +75,7 @@ func (h generatedRepositoryAPIAdapter) ReconcileRepositoryArtifactScans(w http.R
 					var enqueueErr error
 					job, _, enqueueErr = repository.EnqueueArtifactScanJobLocked(r.Context(), h.lifecycleJobs, repo.ID, publicationScanIdempotencyKey(repo.ID, repo.Format, candidate.Coordinate, candidate.Digest), repository.ArtifactScanPayload{
 						Format: repo.Format, Coordinate: candidate.Coordinate, Digest: candidate.Digest,
-					})
+					}, audit...)
 					if enqueueErr == nil {
 						result.Enqueued++
 						result.JobIds = append(result.JobIds, job.ID)
@@ -80,7 +85,7 @@ func (h generatedRepositoryAPIAdapter) ReconcileRepositoryArtifactScans(w http.R
 					return getErr
 				case job.State == repository.LifecycleJobFailed || job.State == repository.LifecycleJobCancelled:
 					var retryErr error
-					job, retryErr = h.lifecycleJobs.RetryLifecycleJob(r.Context(), repo.ID, job.ID)
+					job, retryErr = h.lifecycleJobs.RetryLifecycleJob(r.Context(), repo.ID, job.ID, audit...)
 					if errors.Is(retryErr, repository.ErrVersionConflict) {
 						result.Skipped++
 						return nil
@@ -110,14 +115,6 @@ func (h generatedRepositoryAPIAdapter) ReconcileRepositoryArtifactScans(w http.R
 				writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "reconcile artifact scan queue failed")
 				return
 			}
-		}
-		if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{
-			Repository: repo.Name, GroupName: repo.Name, Actor: principal.Actor,
-			Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management",
-			Resource: repo.Name, Operation: "artifact.scan.reconcile", Status: http.StatusOK,
-			CacheDisposition: "bypass",
-		}) {
-			return
 		}
 		writeNativeMavenJSON(w, http.StatusOK, result)
 	})

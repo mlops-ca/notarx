@@ -21,7 +21,7 @@ func (s *MemoryStore) GetRepositoryQuarantineReadPolicy(_ context.Context, repos
 	return DefaultRepositoryQuarantineReadPolicy(), nil
 }
 
-func (s *MemoryStore) ReplaceRepositoryQuarantineReadPolicy(_ context.Context, repositoryID string, policy RepositoryQuarantineReadPolicy, expectedVersion string) (RepositoryQuarantineReadPolicy, error) {
+func (s *MemoryStore) ReplaceRepositoryQuarantineReadPolicy(ctx context.Context, repositoryID string, policy RepositoryQuarantineReadPolicy, expectedVersion string, audit ...AuditRecord) (RepositoryQuarantineReadPolicy, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.hostedRepositories[repositoryID]; !ok {
@@ -33,6 +33,9 @@ func (s *MemoryStore) ReplaceRepositoryQuarantineReadPolicy(_ context.Context, r
 	}
 	if current.Version != expectedVersion {
 		return RepositoryQuarantineReadPolicy{}, ErrVersionConflict
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return RepositoryQuarantineReadPolicy{}, err
 	}
 	policy.Version = nextHostedGroupVersion(current.Version)
 	s.quarantineReadPolicies[repositoryID] = policy

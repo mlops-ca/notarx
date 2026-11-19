@@ -219,13 +219,16 @@ func (s *MemoryStore) ListRawAssets(_ context.Context, repositoryID, prefix stri
 	}
 	return assets, nil
 }
-func (s *MemoryStore) DeleteRawAsset(_ context.Context, repositoryID, path string) error {
+func (s *MemoryStore) DeleteRawAsset(ctx context.Context, repositoryID, path string, audit ...AuditRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	key := rawAssetKey(repositoryID, path)
 	asset, ok := s.rawAssets[key]
 	if !ok {
 		return ErrNotFound
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return err
 	}
 	now := time.Now().UTC()
 	s.rawAssetTombstones[key] = asset

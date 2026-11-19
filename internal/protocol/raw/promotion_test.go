@@ -18,7 +18,7 @@ type unavailableRawIntelligenceStore struct {
 	err error
 }
 
-func (s *unavailableRawIntelligenceStore) ReplaceArtifactIntelligence(ctx context.Context, value repository.ArtifactIntelligence, expectedVersion string) (repository.ArtifactIntelligence, error) {
+func (s *unavailableRawIntelligenceStore) ReplaceArtifactIntelligence(ctx context.Context, value repository.ArtifactIntelligence, expectedVersion string, _ ...repository.AuditRecord) (repository.ArtifactIntelligence, error) {
 	if value.RepositoryID == "target" {
 		return repository.ArtifactIntelligence{}, s.err
 	}

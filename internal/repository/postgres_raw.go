@@ -332,7 +332,7 @@ func (s *PostgresStore) ListRawAssets(ctx context.Context, repositoryID, prefix 
 	}
 	return assets, rows.Err()
 }
-func (s *PostgresStore) DeleteRawAsset(ctx context.Context, repositoryID, path string) error {
+func (s *PostgresStore) DeleteRawAsset(ctx context.Context, repositoryID, path string, audit ...AuditRecord) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -362,6 +362,9 @@ func (s *PostgresStore) DeleteRawAsset(ctx context.Context, repositoryID, path s
 		return err
 	}
 	if err = capacity.Reserve(ctx, tx, repositoryID, -asset.Size, -1); err != nil {
+		return err
+	}
+	if err = insertAudits(ctx, tx, audit); err != nil {
 		return err
 	}
 	return tx.Commit()

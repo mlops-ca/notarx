@@ -22,8 +22,9 @@ type mutationAuditRecorder interface {
 // change (a trailing optional argument; PostgreSQL writes it with insertAudit in the same
 // transaction through runAudited, the memory store through commitAuditLocked), so a failed
 // audit fails the change itself. The user and service account, settings, theme, email,
-// webhook and scheduled task handlers and the local login are migrated; the remaining
-// handlers follow in their own slices.
+// webhook and scheduled task handlers, the local login, and the repository policy, access,
+// lifecycle job, quarantine, scan, intelligence and tombstone handlers are migrated
+// (auditRecordsWhen builds their records); the remaining handlers follow in their own slices.
 func recordMutationAudit(w http.ResponseWriter, recorder mutationAuditRecorder, ctx context.Context, record repository.AuditRecord) bool {
 	if err := recorder.RecordAudit(ctx, record); err != nil {
 		writeHostedProblem(w, http.StatusInternalServerError, "audit_failed", "audit record could not be written")

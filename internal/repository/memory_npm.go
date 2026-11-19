@@ -324,17 +324,20 @@ func (s *MemoryStore) GetNPMVersion(_ context.Context, repositoryID, name, versi
 	return cloneNPMVersion(item), nil
 }
 
-func (s *MemoryStore) TombstoneNPMVersion(_ context.Context, repositoryID, name, version string) (NPMVersion, error) {
+func (s *MemoryStore) TombstoneNPMVersion(ctx context.Context, repositoryID, name, version string, audit ...AuditRecord) (NPMVersion, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.tombstoneNPMVersionLocked(repositoryID, name, version)
+	return s.tombstoneNPMVersionLocked(ctx, repositoryID, name, version, audit)
 }
 
-func (s *MemoryStore) tombstoneNPMVersionLocked(repositoryID, name, version string) (NPMVersion, error) {
+func (s *MemoryStore) tombstoneNPMVersionLocked(ctx context.Context, repositoryID, name, version string, audit []AuditRecord) (NPMVersion, error) {
 	key := npmVersionKey(repositoryID, name, version)
 	item, ok := s.npmVersions[key]
 	if !ok || item.State == "deleted" {
 		return NPMVersion{}, ErrNotFound
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return NPMVersion{}, err
 	}
 	now := time.Now().UTC()
 	item.State, item.DeletedAt = "deleted", now

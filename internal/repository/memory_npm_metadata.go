@@ -56,7 +56,7 @@ func (s *MemoryStore) UpdateNPMMetadata(ctx context.Context, mutation NPMMetadat
 	} else {
 		for _, version := range versions {
 			// All targets were checked under this lock before any write.
-			_, _ = s.tombstoneNPMVersionLocked(mutation.RepositoryID, mutation.PackageName, version)
+			_, _ = s.tombstoneNPMVersionLocked(context.Background(), mutation.RepositoryID, mutation.PackageName, version, nil)
 		}
 		pkg = s.npmPackages[key]
 		pkg.DistTags = cloneStringMap(mutation.DistTags)
