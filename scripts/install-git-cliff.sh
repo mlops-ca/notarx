@@ -10,11 +10,6 @@ version=$(tr -d '[:space:]' < "$root/scripts/git-cliff.version")
 cache=${GIT_CLIFF_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/notarx/git-cliff}/$version
 binary=$cache/git-cliff
 
-if [[ -x "$binary" && "$("$binary" --version)" == "git-cliff $version" ]]; then
-  printf '%s\n' "$binary"
-  exit 0
-fi
-
 case "$(uname -s)/$(uname -m)" in
   Linux/x86_64)
     target=x86_64-unknown-linux-gnu
@@ -38,16 +33,22 @@ case "$(uname -s)/$(uname -m)" in
     ;;
 esac
 
-workdir=$(mktemp -d)
-trap 'rm -rf "$workdir"' EXIT
-archive=git-cliff-$version-$target.tar.gz
-github_release_download orhun/git-cliff "v$version" "$archive" "$workdir/$archive"
-actual=$(shasum -a 512 "$workdir/$archive" | cut -d' ' -f1)
-if [[ "$actual" != "$expected" ]]; then
-  printf 'git-cliff checksum mismatch for %s\n' "$archive" >&2
-  exit 1
-fi
-tar -xzf "$workdir/$archive" -C "$workdir"
+# The cache directory (which CI restores with actions/cache) holds only the archive and
+# the extracted binary is rebuilt from it on every run, so a stale or tampered cache
+# entry can never be executed: the archive must match the pinned SHA-512 first.
 mkdir -p "$cache"
-install -m 0755 "$workdir/git-cliff-$version/git-cliff" "$binary"
+archive=git-cliff-$version-$target.tar.gz
+cached=$cache/$archive
+if [[ ! -f "$cached" ]] || [[ "$(shasum -a 512 "$cached" | cut -d' ' -f1)" != "$expected" ]]; then
+  workdir=$(mktemp -d)
+  trap 'rm -rf "$workdir"' EXIT
+  github_release_download orhun/git-cliff "v$version" "$archive" "$workdir/$archive"
+  actual=$(shasum -a 512 "$workdir/$archive" | cut -d' ' -f1)
+  if [[ "$actual" != "$expected" ]]; then
+    printf 'git-cliff checksum mismatch for %s\n' "$archive" >&2
+    exit 1
+  fi
+  mv -f -- "$workdir/$archive" "$cached"
+fi
+tar -xzf "$cached" -C "$cache" --strip-components=1 "git-cliff-$version/git-cliff"
 printf '%s\n' "$binary"
