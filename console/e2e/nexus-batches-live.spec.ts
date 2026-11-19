@@ -17,6 +17,7 @@ import type {
   NexusMigrationCapabilities,
   Repository,
 } from "../src/client";
+import { openSelect } from "./support/motion";
 
 type Runtime = {
   project: string;
@@ -141,11 +142,13 @@ async function start(page: Page, rescan = false) {
     })
     .click();
   if (!rescan) {
-    await page
-      .getByRole("combobox", { name: "Saved migration source", exact: true })
-      .fill(runtime!.source.name);
-    await page
-      .locator(".ant-select-dropdown:visible")
+    const sourcePicker = page.getByRole("combobox", {
+      name: "Saved migration source",
+      exact: true,
+    });
+    const sourceDropdown = await openSelect(page, sourcePicker);
+    await sourcePicker.fill(runtime!.source.name);
+    await sourceDropdown
       .getByText(runtime!.source.name, { exact: true })
       .click();
   }
@@ -162,16 +165,13 @@ async function start(page: Page, rescan = false) {
     });
     await checkbox.check();
     if (!rescan) {
-      await page
-        .getByRole("combobox", {
-          name: `Target repository for ${source}`,
-          exact: true,
-        })
-        .fill(target);
-      await page
-        .locator(".ant-select-dropdown:visible")
-        .getByText(target, { exact: true })
-        .click();
+      const targetPicker = page.getByRole("combobox", {
+        name: `Target repository for ${source}`,
+        exact: true,
+      });
+      const targetDropdown = await openSelect(page, targetPicker);
+      await targetPicker.fill(target);
+      await targetDropdown.getByText(target, { exact: true }).click();
     }
   }
   const submit = page.getByRole("button", {

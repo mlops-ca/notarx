@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { authenticateAsAdmin, authenticateAsMember } from "./support/auth";
 import { defaultSiteSettings } from "../src/lib/siteSettings";
 import type { RuntimeLogEntry, RuntimeLogPage } from "../src/client";
+import { openSelect } from "./support/motion";
 
 const entry = (sequence: number): RuntimeLogEntry => ({
   sequence,
@@ -129,10 +130,13 @@ test.describe("runtime log touch controls", () => {
         "",
       );
       await geometry(page);
-      await page
-        .getByRole("combobox", { name: "Time range", exact: true })
+      const timeRange = await openSelect(
+        page,
+        page.getByRole("combobox", { name: "Time range", exact: true }),
+      );
+      await timeRange
+        .getByRole("option", { name: "Custom", exact: true })
         .click();
-      await page.getByRole("option", { name: "Custom", exact: true }).click();
       await page.getByPlaceholder("Start date").click();
       const calendar = page.locator(".ag-runtime-log-calendar:visible");
       await expect(calendar).toBeVisible();
@@ -463,10 +467,13 @@ for (const width of [1440, 390])
     });
     await page.goto("/system?tab=logs&requestId=request-01&traceId=trace-01");
     await expect(page.getByText("event-1", { exact: true })).toBeVisible();
-    await page
-      .getByRole("combobox", { name: "Time range", exact: true })
+    const timeRange = await openSelect(
+      page,
+      page.getByRole("combobox", { name: "Time range", exact: true }),
+    );
+    await timeRange
+      .getByRole("option", { name: "Custom", exact: true })
       .click();
-    await page.getByRole("option", { name: "Custom", exact: true }).click();
     await page.getByPlaceholder("Start date").fill("2026-10-03 00:00:00");
     await page.getByPlaceholder("Start date").press("Enter");
     await page.getByPlaceholder("End date").fill("2026-10-03 01:00:00");

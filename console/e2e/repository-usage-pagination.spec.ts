@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { authenticateAsAdmin } from "./support/auth";
 import { defaultSiteSettings } from "../src/lib/siteSettings";
+import { openSelect } from "./support/motion";
 
 const repositoryId = "22222222-2222-4222-8222-222222222222";
 
@@ -103,8 +104,8 @@ for (const width of [1440, 1024]) {
     await search.press("Enter");
     await expect(page.locator("tbody tr.ant-table-row")).toHaveCount(20);
     const countBefore = queries.length;
-    await page.getByRole("combobox").last().click();
-    await page.getByTitle("50 / page").click();
+    const pageSize = await openSelect(page, page.getByRole("combobox").last());
+    await pageSize.getByTitle("50 / page").click();
     await expect(page.locator("tbody tr.ant-table-row")).toHaveCount(50);
     expect(queries.length).toBe(countBefore + 1);
     expect(queries.at(-1)).toBe("?limit=50&offset=0");
