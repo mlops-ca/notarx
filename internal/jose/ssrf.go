@@ -128,6 +128,32 @@ func newGuardedClient(allowPrivate bool, caPEM string) (*http.Client, error) {
 	return &http.Client{Transport: httpsOnly{base: transport}, Timeout: fetchTimeout, CheckRedirect: checkRedirect(allowPrivate)}, nil
 }
 
+// NewGuardedClient returns the SSRF-guarded client (https only, no proxy, dial-time private and
+// link-local refusal, redirects limited to the original host and re-checked) with the given total
+// timeout. SAML metadata import (ADR 0018) uses it; a zero timeout keeps the JWKS default.
+func NewGuardedClient(timeout time.Duration) (*http.Client, error) {
+	client, err := newGuardedClient(false, "")
+	if err != nil {
+		return nil, err
+	}
+	if timeout > 0 {
+		client.Timeout = timeout
+	}
+	return client, nil
+}
+
+// ReadLimited reads at most limit bytes of body and fails when the body is larger.
+func ReadLimited(body io.Reader, limit int64) ([]byte, error) {
+	data, err := io.ReadAll(io.LimitReader(body, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > limit {
+		return nil, fmt.Errorf("jose: response exceeds %d bytes", limit)
+	}
+	return data, nil
+}
+
 // readLimited reads at most MaxJWKSBytes and fails when the body is larger.
 func readLimited(body io.Reader) ([]byte, error) {
 	data, err := io.ReadAll(io.LimitReader(body, MaxJWKSBytes+1))

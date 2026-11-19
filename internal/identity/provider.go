@@ -189,14 +189,18 @@ func (p Provider) NormalizeAndValidate() (Provider, error) {
 		}
 		return p.WithOIDC(settings)
 	case KindSAML:
-		if len(p.Settings) == 0 {
-			p.Settings = json.RawMessage(`{}`)
+		if p.AttributeMapping.Subject != "" {
+			return p, invalid("attributeMapping.subject does not apply to SAML: the identity key is the NameID")
 		}
-		var generic map[string]any
-		if json.Unmarshal(p.Settings, &generic) != nil {
-			return p, invalid("settings must be a JSON object")
+		settings, err := p.SAML()
+		if err != nil {
+			return p, err
 		}
-		return p, nil
+		settings, err = settings.normalizeAndValidate(p.Enabled)
+		if err != nil {
+			return p, err
+		}
+		return p.WithSAML(settings)
 	default:
 		return p, invalid("kind must be oidc or saml")
 	}

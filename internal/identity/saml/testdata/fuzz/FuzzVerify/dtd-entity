@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("<!DOCTYPE r [<!ENTITY a \"aaaa\"><!ENTITY b \"&a;&a;&a;&a;\">]><samlp:Response xmlns:samlp=\"urn:oasis:names:tc:SAML:2.0:protocol\">&b;</samlp:Response>")

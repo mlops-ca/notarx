@@ -38,7 +38,7 @@ func (h identityManagementHandler) ListIdentityProviders(w http.ResponseWriter, 
 	}
 	items := make([]adminopenapi.IdentityProvider, 0, len(providers))
 	for _, provider := range providers {
-		items = append(items, identityProviderResponse(provider))
+		items = append(items, h.providerResponse(provider))
 	}
 	writeNativeMavenJSON(w, http.StatusOK, adminopenapi.IdentityProviderList{Items: items})
 }
@@ -52,7 +52,7 @@ func (h identityManagementHandler) GetIdentityProvider(w http.ResponseWriter, r 
 		writeIdentityProviderError(w, err, "load identity provider failed")
 		return
 	}
-	writeIdentityProvider(w, http.StatusOK, provider)
+	h.writeIdentityProvider(w, http.StatusOK, provider)
 }
 
 func (h identityManagementHandler) CreateIdentityProvider(w http.ResponseWriter, r *http.Request) {
@@ -65,9 +65,10 @@ func (h identityManagementHandler) CreateIdentityProvider(w http.ResponseWriter,
 	}
 	input := IdentityProviderInput{
 		Slug: request.Slug, Kind: identity.Kind(request.Kind), DisplayName: request.DisplayName, Enabled: request.Enabled,
-		OIDC: oidcSettingsFromInput(request.Oidc), ClientSecret: request.Oidc.ClientSecret,
-		ClearClientSecret: request.Oidc.ClearClientSecret != nil && *request.Oidc.ClearClientSecret,
-		AttributeMapping:  attributeMappingFromRequest(request.AttributeMapping),
+		AttributeMapping: attributeMappingFromRequest(request.AttributeMapping),
+	}
+	if !applyProviderSettings(w, &input, request.Oidc, request.Saml) {
+		return
 	}
 	if request.ProvisioningMode != nil {
 		input.ProvisioningMode = identity.ProvisioningMode(*request.ProvisioningMode)
@@ -83,7 +84,7 @@ func (h identityManagementHandler) CreateIdentityProvider(w http.ResponseWriter,
 		writeIdentityProviderError(w, err, "create identity provider failed")
 		return
 	}
-	writeIdentityProvider(w, http.StatusCreated, provider)
+	h.writeIdentityProvider(w, http.StatusCreated, provider)
 }
 
 func (h identityManagementHandler) ReplaceIdentityProvider(w http.ResponseWriter, r *http.Request, providerID openapi_types.UUID, params adminopenapi.ReplaceIdentityProviderParams) {
@@ -100,18 +101,135 @@ func (h identityManagementHandler) ReplaceIdentityProvider(w http.ResponseWriter
 		return
 	}
 	input := IdentityProviderInput{
-		DisplayName: request.DisplayName, Enabled: request.Enabled, OIDC: oidcSettingsFromInput(request.Oidc),
-		ClientSecret: request.Oidc.ClientSecret, ClearClientSecret: request.Oidc.ClearClientSecret != nil && *request.Oidc.ClearClientSecret,
+		DisplayName: request.DisplayName, Enabled: request.Enabled,
 		AttributeMapping: attributeMappingFromRequest(&request.AttributeMapping), ProvisioningMode: identity.ProvisioningMode(request.ProvisioningMode),
 		EmailLinkingEnabled: request.EmailLinkingEnabled, JITDefaultRole: string(request.JitDefaultRole),
 	}
 	id := providerID.String()
+	// The kind is fixed at creation, so the stored provider decides which settings object applies.
+	current, err := h.identityProviders.Get(r.Context(), id)
+	if err != nil {
+		writeIdentityProviderError(w, err, "load identity provider failed")
+		return
+	}
+	input.Kind = current.Kind
+	if !applyProviderSettings(w, &input, request.Oidc, request.Saml) {
+		return
+	}
 	provider, err := h.identityProviders.Replace(r.Context(), id, input, version, h.auditRecords(r, providerResourcePrefix+id, "authentication.provider.update", http.StatusOK)...)
 	if err != nil {
 		writeIdentityProviderError(w, err, "replace identity provider failed")
 		return
 	}
-	writeIdentityProvider(w, http.StatusOK, provider)
+	h.writeIdentityProvider(w, http.StatusOK, provider)
+}
+
+// applyProviderSettings copies the settings object that matches the kind into the input and rejects a
+// request that omits it or sends the other kind's object.
+func applyProviderSettings(w http.ResponseWriter, input *IdentityProviderInput, oidc *adminopenapi.IdentityProviderOIDCInput, samlInput *adminopenapi.IdentityProviderSAMLInput) bool {
+	switch input.Kind {
+	case identity.KindOIDC:
+		if oidc == nil || samlInput != nil {
+			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "an OIDC provider takes the oidc settings object and no saml object")
+			return false
+		}
+		input.OIDC = oidcSettingsFromInput(*oidc)
+		input.ClientSecret = oidc.ClientSecret
+		input.ClearClientSecret = oidc.ClearClientSecret != nil && *oidc.ClearClientSecret
+	case identity.KindSAML:
+		if samlInput == nil || oidc != nil {
+			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "a SAML provider takes the saml settings object and no oidc object")
+			return false
+		}
+		input.SAML = samlSettingsFromInput(samlInput)
+	default:
+		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "kind must be oidc or saml")
+		return false
+	}
+	return true
+}
+
+func samlSettingsFromInput(input *adminopenapi.IdentityProviderSAMLInput) *identity.SAMLSettings {
+	settings := &identity.SAMLSettings{EntityID: input.EntityId, SSOURL: input.SsoUrl}
+	for _, certificate := range input.Certificates {
+		entry := identity.SAMLCertificate{PEM: certificate.Pem}
+		if certificate.State != nil {
+			entry.State = string(*certificate.State)
+		}
+		settings.Certificates = append(settings.Certificates, entry)
+	}
+	if input.NameIdFormat != nil {
+		settings.NameIDFormat = string(*input.NameIdFormat)
+	}
+	settings.AllowIdPInitiated = input.AllowIdpInitiated != nil && *input.AllowIdpInitiated
+	if input.RelayStateAllowlist != nil {
+		settings.RelayStateAllowlist = *input.RelayStateAllowlist
+	}
+	settings.SignRequests = input.SignRequests != nil && *input.SignRequests
+	if input.MetadataUrl != nil {
+		settings.MetadataURL = *input.MetadataUrl
+	}
+	settings.MetadataRefresh = input.MetadataRefresh != nil && *input.MetadataRefresh
+	return settings
+}
+
+func samlSettingsResponse(settings identity.SAMLSettings, view SAMLView) *adminopenapi.IdentityProviderSAMLSettings {
+	certificates := make([]adminopenapi.IdentityProviderSAMLCertificate, 0, len(settings.Certificates))
+	for _, certificate := range settings.Certificates {
+		certificates = append(certificates, adminopenapi.IdentityProviderSAMLCertificate{
+			Pem: certificate.PEM, NotAfter: certificate.NotAfter, State: adminopenapi.IdentityProviderSAMLCertificateState(certificate.State),
+		})
+	}
+	keys := make([]adminopenapi.IdentityProviderSAMLKey, 0, len(view.Keys))
+	for _, key := range view.Keys {
+		if id, err := uuid.Parse(key.ID); err == nil {
+			keys = append(keys, adminopenapi.IdentityProviderSAMLKey{Id: id, NotAfter: key.NotAfter})
+		}
+	}
+	return &adminopenapi.IdentityProviderSAMLSettings{
+		EntityId: settings.EntityID, SsoUrl: settings.SSOURL, Certificates: certificates,
+		NameIdFormat:      adminopenapi.IdentityProviderSAMLSettingsNameIdFormat(settings.NameIDFormat),
+		AllowIdpInitiated: settings.AllowIdPInitiated, RelayStateAllowlist: nonNil(settings.RelayStateAllowlist),
+		SignRequests: settings.SignRequests, MetadataUrl: optionalString(settings.MetadataURL), MetadataRefresh: settings.MetadataRefresh,
+		SpEntityId: view.Endpoints.EntityID, AcsUrl: view.Endpoints.ACSURL, MetadataEndpoint: view.Endpoints.MetadataURL, SpKeys: keys,
+	}
+}
+
+func (h identityManagementHandler) ImportIdentityProviderMetadata(w http.ResponseWriter, r *http.Request, providerID openapi_types.UUID) {
+	if _, ok := h.authorize(w, r); !ok || !h.providersAvailable(w) {
+		return
+	}
+	var request adminopenapi.ImportIdentityProviderMetadata
+	if !decodeProviderRequestLimit(w, r, &request, providerMetadataRequestLimit) {
+		return
+	}
+	source := SAMLMetadataSource{}
+	if request.Url != nil {
+		source.URL = *request.Url
+	}
+	if request.Xml != nil {
+		source.XML = *request.Xml
+	}
+	id := providerID.String()
+	provider, err := h.identityProviders.ImportSAMLMetadata(r.Context(), id, source, h.auditRecords(r, providerResourcePrefix+id, "authentication.provider.import-metadata", http.StatusOK)...)
+	if err != nil {
+		writeIdentityProviderError(w, err, "import SAML metadata failed")
+		return
+	}
+	h.writeIdentityProvider(w, http.StatusOK, provider)
+}
+
+func (h identityManagementHandler) RotateIdentityProviderSPKey(w http.ResponseWriter, r *http.Request, providerID openapi_types.UUID) {
+	if _, ok := h.authorize(w, r); !ok || !h.providersAvailable(w) {
+		return
+	}
+	id := providerID.String()
+	provider, err := h.identityProviders.RotateSAMLSPKey(r.Context(), id, h.auditRecords(r, providerResourcePrefix+id, "authentication.provider.rotate-sp-key", http.StatusOK)...)
+	if err != nil {
+		writeIdentityProviderError(w, err, "rotate the service provider key failed")
+		return
+	}
+	h.writeIdentityProvider(w, http.StatusOK, provider)
 }
 
 func (h identityManagementHandler) DeleteIdentityProvider(w http.ResponseWriter, r *http.Request, providerID openapi_types.UUID, params adminopenapi.DeleteIdentityProviderParams) {
@@ -173,7 +291,14 @@ func (h identityManagementHandler) TestIdentityProvider(w http.ResponseWriter, r
 }
 
 func decodeProviderRequest(w http.ResponseWriter, r *http.Request, target any) bool {
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
+	return decodeProviderRequestLimit(w, r, target, 64<<10)
+}
+
+// providerMetadataRequestLimit leaves room for 1 MiB of pasted metadata XML after JSON escaping.
+const providerMetadataRequestLimit = 4 << 20
+
+func decodeProviderRequestLimit(w http.ResponseWriter, r *http.Request, target any, limit int64) bool {
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, limit))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
 		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "identity provider request is invalid")
@@ -209,9 +334,21 @@ func writeIdentityProviderError(w http.ResponseWriter, err error, fallback strin
 	}
 }
 
-func writeIdentityProvider(w http.ResponseWriter, status int, provider identity.Provider) {
+func (h identityManagementHandler) writeIdentityProvider(w http.ResponseWriter, status int, provider identity.Provider) {
 	w.Header().Set("ETag", `"`+strconv.FormatInt(provider.Version, 10)+`"`)
-	writeNativeMavenJSON(w, status, identityProviderResponse(provider))
+	writeNativeMavenJSON(w, status, h.providerResponse(provider))
+}
+
+// providerResponse adds the derived SAML fields (service provider URLs and published keys) that only the
+// runtime knows to the stored provider.
+func (h identityManagementHandler) providerResponse(provider identity.Provider) adminopenapi.IdentityProvider {
+	response := identityProviderResponse(provider)
+	if provider.Kind == identity.KindSAML {
+		if settings, err := provider.SAML(); err == nil {
+			response.Saml = samlSettingsResponse(settings, h.identityProviders.SAMLView(provider))
+		}
+	}
+	return response
 }
 
 func oidcSettingsFromInput(input adminopenapi.IdentityProviderOIDCInput) identity.OIDCSettings {

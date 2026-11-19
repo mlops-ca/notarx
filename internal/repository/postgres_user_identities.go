@@ -191,7 +191,7 @@ func (s *PostgresStore) ResolveOIDCIdentity(ctx context.Context, provision OIDCI
 	}
 
 	identity = refreshUserIdentity(UserIdentity{
-		ID: ids.New(), UserID: user.ID, Kind: UserIdentityOIDC, ProviderID: provision.ProviderID,
+		ID: ids.New(), UserID: user.ID, Kind: provision.identityKind(), ProviderID: provision.ProviderID,
 		Issuer: provision.Issuer, Subject: provision.Subject, CreatedAt: now,
 	}, provision, now)
 	err = scanUserIdentity(tx.QueryRowContext(ctx, `INSERT INTO user_identities (id,user_id,kind,provider_id,issuer,subject,email,display_name,email_verified,last_login_at,created_at,updated_at) VALUES ($1,$2,$3,$4::uuid,$5,$6,$7,$8,$9,$10,$11,$11) RETURNING `+userIdentityColumns,

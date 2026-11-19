@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestBlockedAddresses(t *testing.T) {
@@ -154,4 +155,41 @@ func TestPrivateIssuerBlockedByDefault(t *testing.T) {
 
 func pemOf(srv *httptest.Server) []byte {
 	return []byte((&issuerServer{Server: srv}).caPEM())
+}
+
+func TestNewGuardedClientAppliesTheTimeoutAndRefusesPrivateTargets(t *testing.T) {
+	client, err := NewGuardedClient(3 * time.Second)
+	if err != nil || client.Timeout != 3*time.Second {
+		t.Fatalf("client = %+v, %v", client, err)
+	}
+	if defaulted, err := NewGuardedClient(0); err != nil || defaulted.Timeout != fetchTimeout {
+		t.Fatalf("zero timeout keeps the default: %+v, %v", defaulted, err)
+	}
+	for _, target := range []string{"https://127.0.0.1/", "https://169.254.169.254/", "https://10.0.0.1/", "https://[::1]/"} {
+		if _, err := client.Get(target); err == nil {
+			t.Fatalf("%s reached", target)
+		}
+	}
+	// A redirect is re-checked: another host, a downgrade to http and a private literal are all refused.
+	first, _ := http.NewRequest(http.MethodGet, "https://metadata.example.test/a", nil)
+	for _, target := range []string{"https://other.example.test/", "http://metadata.example.test/", "https://metadata.example.test:8443/"} {
+		next, _ := http.NewRequest(http.MethodGet, target, nil)
+		if err := client.CheckRedirect(next, []*http.Request{first}); err == nil {
+			t.Fatalf("redirect to %s allowed", target)
+		}
+	}
+	privateFirst, _ := http.NewRequest(http.MethodGet, "https://10.0.0.7/a", nil)
+	privateNext, _ := http.NewRequest(http.MethodGet, "https://10.0.0.7/b", nil)
+	if err := client.CheckRedirect(privateNext, []*http.Request{privateFirst}); err == nil {
+		t.Fatal("redirect to a private literal allowed")
+	}
+}
+
+func TestReadLimited(t *testing.T) {
+	if data, err := ReadLimited(strings.NewReader("abcd"), 4); err != nil || string(data) != "abcd" {
+		t.Fatalf("at the limit = %q, %v", data, err)
+	}
+	if _, err := ReadLimited(strings.NewReader("abcde"), 4); err == nil {
+		t.Fatal("over the limit accepted")
+	}
 }

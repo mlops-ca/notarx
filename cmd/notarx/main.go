@@ -252,6 +252,11 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 		// secret) must not stop the Gateway: providers can still be added through the API.
 		slog.Warn("seed the default OIDC identity provider from NOTARX_OIDC_* failed", "error", err)
 	}
+	publicURL, hasPublicURL := cfg.PublicURL()
+	if !hasPublicURL {
+		slog.Info("NOTARX_PUBLIC_URL is not set: SAML providers are hidden from the login chooser and their routes answer 503")
+	}
+	identityRuntime.ConfigureSAML(app.SAMLRuntimeOptions{Config: cfg.SAML, PublicURL: publicURL, State: store})
 	dependencies.IdentityRuntime = identityRuntime
 	dependencies.AuditReadSync = cfg.AuditReadMode == "sync"
 	coordinatorPool, err := database.OpenPostgres(cfg.DatabaseURL, cfg.DatabaseCoordinatorPool)
@@ -335,6 +340,7 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 		slog.Error("partition observation at start-up failed", "error", err)
 	}
 	go partitionManager.Run(runtimeContext, partitions.DefaultInterval)
+	go identityRuntime.RunSAMLMetadataRefresh(runtimeContext, cfg.SAML.MetadataRefreshInterval)
 	// The retention janitor prunes every other append-only or churning table in
 	// throttled batches; one node at a time runs a pass (lease row).
 	retentionJanitor, err := retention.New(databasePool, cfg.Retention, retention.Options{Owner: cfg.InstanceID + "/" + runtimeSessionID, Logger: slog.Default()})

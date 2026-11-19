@@ -113,3 +113,63 @@ identity_providers_providerId_test:
         "$ref": "../components/responses.yaml#/Problem"
       '503':
         "$ref": "../components/responses.yaml#/Problem"
+identity_providers_providerId_import_metadata:
+  parameters:
+  - name: providerId
+    in: path
+    required: true
+    schema: {type: string, format: uuid}
+  post:
+    operationId: importIdentityProviderMetadata
+    description: >
+      Imports IdP metadata into a SAML provider: the entity id, the HTTP-Redirect SSO endpoint and the
+      signing certificates. Certificates not yet pinned are added as next when the provider already
+      pins one. Admin only. Send exactly one of url (fetched through the SSRF guard) and xml.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            "$ref": "../components/schemas.yaml#/ImportIdentityProviderMetadata"
+    responses:
+      '200':
+        "$ref": "../components/responses.yaml#/IdentityProvider"
+      '400':
+        "$ref": "../components/responses.yaml#/Problem"
+      '401':
+        "$ref": "../components/responses.yaml#/Problem"
+      '403':
+        "$ref": "../components/responses.yaml#/Problem"
+      '404':
+        "$ref": "../components/responses.yaml#/Problem"
+      '409':
+        "$ref": "../components/responses.yaml#/Problem"
+      '503':
+        "$ref": "../components/responses.yaml#/Problem"
+identity_providers_providerId_rotate_sp_key:
+  parameters:
+  - name: providerId
+    in: path
+    required: true
+    schema: {type: string, format: uuid}
+  post:
+    operationId: rotateIdentityProviderSPKey
+    description: >
+      Generates a new service provider signing key for a SAML provider. The previous key stays published
+      in the SP metadata, so two keys are active until the next rotation. The private key is sealed
+      and never returned.
+    responses:
+      '200':
+        "$ref": "../components/responses.yaml#/IdentityProvider"
+      '400':
+        "$ref": "../components/responses.yaml#/Problem"
+      '401':
+        "$ref": "../components/responses.yaml#/Problem"
+      '403':
+        "$ref": "../components/responses.yaml#/Problem"
+      '404':
+        "$ref": "../components/responses.yaml#/Problem"
+      '409':
+        "$ref": "../components/responses.yaml#/Problem"
+      '503':
+        "$ref": "../components/responses.yaml#/Problem"

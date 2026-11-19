@@ -171,9 +171,14 @@ the contract's server base. Planned commands omit the leading `notarxctl`.
 | `PUT /authentication/providers/{providerId}`<br>`replaceIdentityProvider` | `idp update <id>` | #139 | M2 | A | C |
 | `DELETE /authentication/providers/{providerId}`<br>`deleteIdentityProvider` | `idp delete <id>` | #139 | M2 | A | C |
 | `POST /authentication/providers/{providerId}:test`<br>`testIdentityProvider` | `idp test <id>` | #139 | M2 | A | W |
+| `POST /authentication/providers/{providerId}:import-metadata`<br>`importIdentityProviderMetadata` | `idp import-metadata <id>` | #426 | M2 | A | W |
+| `POST /authentication/providers/{providerId}:rotate-sp-key`<br>`rotateIdentityProviderSPKey` | `idp rotate-sp-key <id>` | #427 | M2 | A | W |
 | `GET /auth/idp`<br>`listLoginIdentityProviders` | N: browser sign-in chooser; no CLI | #56 | N/A | PUBLIC | N: browser-only; no CLI command registered |
 | `GET /auth/oidc/{slug}/login`<br>`startOIDCLogin` | N: browser Authorization Code redirect; no CLI | #56 | N/A | PUBLIC | N: browser-only; no CLI command registered |
 | `GET /auth/oidc/{slug}/callback`<br>`completeOIDCLogin` | N: browser Authorization Code callback; no CLI | #56 | N/A | PUBLIC | N: browser-only; no CLI command registered |
+| `GET /auth/saml/{slug}/login`<br>`startSAMLLogin` | N: browser SAML AuthnRequest redirect; no CLI | #425 | N/A | PUBLIC | N: browser-only; no CLI command registered |
+| `POST /auth/saml/{slug}/acs`<br>`completeSAMLLogin` | N: browser SAML assertion consumer service; no CLI | #425 | N/A | PUBLIC | N: browser-only; no CLI command registered |
+| `GET /auth/saml/{slug}/metadata`<br>`getSAMLServiceProviderMetadata` | N: identity-provider-facing SP metadata; no CLI | #425 | N/A | PUBLIC | N: IdP-facing XML document; no CLI command registered |
 | `GET /webhook-subscriptions`<br>`listWebhookSubscriptions` | `webhook list` | #137 | M2 | A | Q |
 | `POST /webhook-subscriptions`<br>`createWebhookSubscription` | `webhook create` | #137 | M2 | A | W |
 | `GET /webhook-subscriptions/{subscriptionId}`<br>`getWebhookSubscription` | `webhook show <id>` | #137 | M2 | A | Q |

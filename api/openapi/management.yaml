@@ -21,6 +21,10 @@ paths:
     "$ref": "./management/authentication.yaml#/identity_providers_providerId"
   "/authentication/providers/{providerId}:test":
     "$ref": "./management/authentication.yaml#/identity_providers_providerId_test"
+  "/authentication/providers/{providerId}:import-metadata":
+    "$ref": "./management/authentication.yaml#/identity_providers_providerId_import_metadata"
+  "/authentication/providers/{providerId}:rotate-sp-key":
+    "$ref": "./management/authentication.yaml#/identity_providers_providerId_rotate_sp_key"
   "/webhook-subscriptions":
     "$ref": "./management/webhooks.yaml#/webhook_subscriptions"
   "/webhook-subscriptions/{subscriptionId}":

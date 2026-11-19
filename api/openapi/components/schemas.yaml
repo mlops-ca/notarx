@@ -2208,6 +2208,92 @@ IdentityProviderOIDCSettings:
       type: array
       description: Allow-list of ID token signature algorithms. The default is RS256.
       items: {type: string, enum: [RS256, ES256, EdDSA]}
+IdentityProviderSAMLCertificate:
+  type: object
+  description: >
+    One pinned IdP signing certificate. notAfter is read from the PEM on every save. Any listed
+    certificate verifies a response; next marks a certificate added before the IdP cuts over.
+  required: [pem, notAfter, state]
+  additionalProperties: false
+  properties:
+    pem: {type: string, maxLength: 16384}
+    notAfter: {type: string, format: date-time}
+    state: {type: string, enum: [active, next]}
+IdentityProviderSAMLCertificateInput:
+  type: object
+  required: [pem]
+  additionalProperties: false
+  properties:
+    pem: {type: string, maxLength: 16384}
+    state: {type: string, enum: [active, next], default: active}
+IdentityProviderSAMLInput:
+  type: object
+  required: [entityId, ssoUrl, certificates]
+  additionalProperties: false
+  properties:
+    entityId: {type: string, maxLength: 1024}
+    ssoUrl: {type: string, maxLength: 2048}
+    certificates:
+      type: array
+      maxItems: 8
+      items: {"$ref": "#/IdentityProviderSAMLCertificateInput"}
+    nameIdFormat: {type: string, enum: [persistent, emailAddress, unspecified], default: persistent}
+    allowIdpInitiated: {type: boolean, default: false}
+    relayStateAllowlist:
+      type: array
+      maxItems: 32
+      items: {type: string, maxLength: 512}
+    signRequests: {type: boolean, default: false}
+    metadataUrl: {type: string, maxLength: 2048}
+    metadataRefresh: {type: boolean, default: false}
+IdentityProviderSAMLKey:
+  type: object
+  description: A published service provider signing key. The private key is never returned.
+  required: [id, notAfter]
+  additionalProperties: false
+  properties:
+    id: {type: string, format: uuid}
+    notAfter: {type: string, format: date-time}
+IdentityProviderSAMLSettings:
+  type: object
+  required: [entityId, ssoUrl, certificates, nameIdFormat, allowIdpInitiated, relayStateAllowlist, signRequests, metadataRefresh, spEntityId, acsUrl, metadataEndpoint, spKeys]
+  additionalProperties: false
+  properties:
+    entityId: {type: string}
+    ssoUrl: {type: string}
+    certificates:
+      type: array
+      items: {"$ref": "#/IdentityProviderSAMLCertificate"}
+    nameIdFormat: {type: string, enum: [persistent, emailAddress, unspecified]}
+    allowIdpInitiated: {type: boolean}
+    relayStateAllowlist:
+      type: array
+      items: {type: string}
+    signRequests: {type: boolean}
+    metadataUrl: {type: string}
+    metadataRefresh: {type: boolean}
+    spEntityId:
+      type: string
+      description: Entity id of notarx as service provider, derived from NOTARX_PUBLIC_URL. Empty when that is not set.
+    acsUrl: {type: string}
+    metadataEndpoint: {type: string}
+    spKeys:
+      type: array
+      description: Service provider signing keys published in the SP metadata (at most two while a rotation is in progress).
+      items: {"$ref": "#/IdentityProviderSAMLKey"}
+ImportIdentityProviderMetadata:
+  type: object
+  description: Exactly one of url and xml.
+  additionalProperties: false
+  properties:
+    url:
+      type: string
+      maxLength: 2048
+      description: "HTTPS URL of the IdP metadata, fetched through the SSRF guard (no private ranges, 5 s timeout, 1 MiB)."
+    xml:
+      type: string
+      maxLength: 1048576
+      description: Pasted IdP metadata XML.
 IdentityProviderOIDCInput:
   type: object
   required: [issuer, audience, clientId, redirectUrl, scopes, adminSubjects, memberRoles, adminRoles]
@@ -2248,6 +2334,7 @@ IdentityProvider:
     displayName: {type: string, minLength: 1, maxLength: 120}
     enabled: {type: boolean}
     oidc: {"$ref": "#/IdentityProviderOIDCSettings"}
+    saml: {"$ref": "#/IdentityProviderSAMLSettings"}
     attributeMapping: {"$ref": "#/IdentityProviderAttributeMapping"}
     provisioningMode: {type: string, enum: [disabled, jit, scim_only]}
     emailLinkingEnabled: {type: boolean}
@@ -2267,26 +2354,30 @@ IdentityProviderList:
       items: {"$ref": "#/IdentityProvider"}
 CreateIdentityProvider:
   type: object
-  required: [slug, kind, displayName, enabled, oidc]
+  description: The settings object that matches kind is required; the other is rejected.
+  required: [slug, kind, displayName, enabled]
   additionalProperties: false
   properties:
     slug: {type: string, pattern: '^[a-z0-9][a-z0-9-]{1,62}$'}
-    kind: {type: string, enum: [oidc]}
+    kind: {type: string, enum: [oidc, saml]}
     displayName: {type: string, minLength: 1, maxLength: 120}
     enabled: {type: boolean}
     oidc: {"$ref": "#/IdentityProviderOIDCInput"}
+    saml: {"$ref": "#/IdentityProviderSAMLInput"}
     attributeMapping: {"$ref": "#/IdentityProviderAttributeMapping"}
     provisioningMode: {type: string, enum: [disabled, jit, scim_only], default: disabled}
     emailLinkingEnabled: {type: boolean, default: false}
     jitDefaultRole: {type: string, enum: [none, member], default: none}
 ReplaceIdentityProvider:
   type: object
-  required: [displayName, enabled, oidc, attributeMapping, provisioningMode, emailLinkingEnabled, jitDefaultRole]
+  description: The settings object that matches the provider's kind is required; the other is rejected.
+  required: [displayName, enabled, attributeMapping, provisioningMode, emailLinkingEnabled, jitDefaultRole]
   additionalProperties: false
   properties:
     displayName: {type: string, minLength: 1, maxLength: 120}
     enabled: {type: boolean}
     oidc: {"$ref": "#/IdentityProviderOIDCInput"}
+    saml: {"$ref": "#/IdentityProviderSAMLInput"}
     attributeMapping: {"$ref": "#/IdentityProviderAttributeMapping"}
     provisioningMode: {type: string, enum: [disabled, jit, scim_only]}
     emailLinkingEnabled: {type: boolean}

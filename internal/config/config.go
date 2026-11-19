@@ -116,6 +116,8 @@ type Config struct {
 	// Workload is the JWT verification policy of workload identity federation
 	// (NOTARX_WORKLOAD_*, ADR 0019).
 	Workload WorkloadConfig
+	// SAML is the SAML service provider policy (NOTARX_SAML_*, ADR 0018 section 3).
+	SAML SAMLConfig
 	// QuotaReconcileInterval is how often the quota reconciler recomputes every
 	// repository's usage counter (NOTARX_QUOTA_RECONCILE_INTERVAL, ADR 0023 section 3).
 	QuotaReconcileInterval time.Duration
@@ -237,6 +239,7 @@ func Load() (Config, error) {
 			ClockSkew: jose.DefaultClockSkew, MaxTokenAge: jose.DefaultMaxTokenAge,
 			JWKSTTL: jose.DefaultJWKSTTL, JWKSStaleMax: jose.DefaultJWKSStaleMax,
 		},
+		SAML:                        DefaultSAMLConfig(),
 		QuotaReconcileInterval:      6 * time.Hour,
 		PartitionAhead:              3,
 		Retention:                   retention.DefaultConfig(),
@@ -559,6 +562,11 @@ func Load() (Config, error) {
 		return Config{}, err
 	} else {
 		cfg.Workload = workload
+	}
+	if saml, err := samlConfigFromEnv(cfg.SAML); err != nil {
+		return Config{}, err
+	} else {
+		cfg.SAML = saml
 	}
 	if interval, err := durationEnv("NOTARX_RUNTIME_NODE_PRUNE_INTERVAL", cfg.RuntimeNodePruneInterval); err != nil {
 		return Config{}, err

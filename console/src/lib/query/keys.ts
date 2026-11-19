@@ -114,6 +114,7 @@ export const auditKeys = {
 export const settingsKeys = {
   all: ["settings"] as const,
   identityProviders: () => [...settingsKeys.all, "identity-providers"] as const,
+  samlProviders: () => [...settingsKeys.all, "saml-providers"] as const,
 };
 
 export const dashboardKeys = {

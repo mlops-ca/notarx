@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("\xef\xbb\xbf<?xml version=\"1.0\"?><?pi x?><r/>")

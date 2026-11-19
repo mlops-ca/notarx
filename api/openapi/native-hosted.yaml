@@ -199,12 +199,22 @@ paths:
     "$ref": "./protocols/oidc-login.yaml#/oidc_login"
   "/auth/oidc/{slug}/callback":
     "$ref": "./protocols/oidc-login.yaml#/oidc_callback"
+  "/auth/saml/{slug}/login":
+    "$ref": "./protocols/saml.yaml#/saml_login"
+  "/auth/saml/{slug}/acs":
+    "$ref": "./protocols/saml.yaml#/saml_acs"
+  "/auth/saml/{slug}/metadata":
+    "$ref": "./protocols/saml.yaml#/saml_metadata"
   "/authentication/providers":
     "$ref": "./management/authentication.yaml#/identity_providers"
   "/authentication/providers/{providerId}":
     "$ref": "./management/authentication.yaml#/identity_providers_providerId"
   "/authentication/providers/{providerId}:test":
     "$ref": "./management/authentication.yaml#/identity_providers_providerId_test"
+  "/authentication/providers/{providerId}:import-metadata":
+    "$ref": "./management/authentication.yaml#/identity_providers_providerId_import_metadata"
+  "/authentication/providers/{providerId}:rotate-sp-key":
+    "$ref": "./management/authentication.yaml#/identity_providers_providerId_rotate_sp_key"
   "/webhook-subscriptions":
     "$ref": "./management/webhooks.yaml#/webhook_subscriptions"
   "/webhook-subscriptions/{subscriptionId}":

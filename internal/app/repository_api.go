@@ -5,6 +5,7 @@ import (
 	"maps"
 	"net/http"
 	"strings"
+	"sync"
 
 	helmapi "github.com/mlops-ca/notarx/internal/admin/helm"
 	migrationapi "github.com/mlops-ca/notarx/internal/admin/nexusmigration"
@@ -90,7 +91,9 @@ func isManagementObjectUpload(r *http.Request) bool {
 }
 
 func (m openAPIServeMux) HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) {
-	if m.handlePathParameterAction(pattern, "sessionId", "commit", handler) || m.handlePathParameterAction(pattern, "deliveryId", "replay", handler) || m.handlePathParameterAction(pattern, "providerId", "test", handler) {
+	if m.handlePathParameterAction(pattern, "sessionId", "commit", handler) || m.handlePathParameterAction(pattern, "deliveryId", "replay", handler) ||
+		m.handlePathParameterAction(pattern, "providerId", "test", handler) || m.handlePathParameterAction(pattern, "providerId", "import-metadata", handler) ||
+		m.handlePathParameterAction(pattern, "providerId", "rotate-sp-key", handler) {
 		return
 	}
 	guarded := m.guarded(handler)
@@ -106,6 +109,22 @@ func (m openAPIServeMux) HandleFunc(pattern string, handler func(http.ResponseWr
 	m.mux.HandleFunc(pattern, guarded)
 }
 
+// actionRoute dispatches the ":action" suffixes of one collection prefix. net/http patterns cannot
+// carry a literal after a wildcard ({id}:action), so each prefix is registered once and routes by
+// the suffix; several actions (providers: test, import-metadata, rotate-sp-key) share it.
+type actionRoute struct {
+	mu        sync.RWMutex
+	parameter string
+	handlers  map[string]func(http.ResponseWriter, *http.Request)
+}
+
+type actionRouteKey struct {
+	mux    any
+	prefix string
+}
+
+var actionRoutes sync.Map
+
 func (m openAPIServeMux) handlePathParameterAction(pattern, parameter, action string, handler func(http.ResponseWriter, *http.Request)) bool {
 	template := "{" + parameter + "}:" + action
 	if !strings.HasSuffix(pattern, template) {
@@ -117,15 +136,27 @@ func (m openAPIServeMux) handlePathParameterAction(pattern, parameter, action st
 	}
 	prefix := strings.TrimSuffix(pattern, template)
 	pathPrefix := strings.TrimPrefix(prefix, method+" ")
+	created := &actionRoute{parameter: parameter, handlers: map[string]func(http.ResponseWriter, *http.Request){}}
+	loaded, existed := actionRoutes.LoadOrStore(actionRouteKey{mux: m.mux, prefix: prefix}, created)
+	route := loaded.(*actionRoute)
+	route.mu.Lock()
+	route.handlers[action] = handler
+	route.mu.Unlock()
+	if existed {
+		return true
+	}
 	m.mux.HandleFunc(prefix, m.guarded(func(w http.ResponseWriter, r *http.Request) {
 		value := strings.TrimPrefix(r.URL.Path, pathPrefix)
-		suffix := ":" + action
-		if value == "" || strings.Contains(value, "/") || !strings.HasSuffix(value, suffix) {
+		id, name, found := strings.Cut(value, ":")
+		route.mu.RLock()
+		next, known := route.handlers[name]
+		route.mu.RUnlock()
+		if id == "" || strings.Contains(value, "/") || !found || !known {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
-		r.SetPathValue(parameter, strings.TrimSuffix(value, suffix))
-		handler(w, r)
+		r.SetPathValue(route.parameter, id)
+		next(w, r)
 	}))
 	return true
 }
@@ -482,6 +513,10 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	mux.HandleFunc("GET /auth/idp", oidcLogin.providers)
 	mux.HandleFunc("GET /auth/oidc/{slug}/login", oidcLogin.start)
 	mux.HandleFunc("GET /auth/oidc/{slug}/callback", oidcLogin.callback)
+	samlLogin := samlLoginHandler{runtime: dependencies.IdentityRuntime, authenticator: authenticator, identities: store, sessions: store, audit: store, limiter: &samlRateLimiter{}}
+	mux.HandleFunc("GET /auth/saml/{slug}/login", samlLogin.start)
+	mux.HandleFunc("POST /auth/saml/{slug}/acs", samlLogin.acs)
+	mux.HandleFunc("GET /auth/saml/{slug}/metadata", samlLogin.metadata)
 	mux.HandleFunc("GET /auth/session", oidcLogin.session)
 	mux.HandleFunc("POST /auth/logout", oidcLogin.logout)
 	return sessionCookieAuthentication(tracedHTTPHandler(dependencies.requestObservability(openAPIServeMux{mux: mux}))), nil

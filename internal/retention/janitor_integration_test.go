@@ -377,6 +377,8 @@ func fixtures() map[string]fixture {
 		"native_maven_commit_idempotency":    {},
 		"native_maven_publish_idempotency":   {},
 		"workload_jti_seen":                  {},
+		"saml_assertion_ids":                 {},
+		"saml_request_state":                 {},
 	}
 }
 
@@ -414,6 +416,51 @@ func TestCheckpointsGoWithCompletedPlansAndDeliveriesStayWhileAnEventPointsAtThe
 	}
 	if got := count(t, db, "SELECT count(*) FROM replication_checkpoints WHERE plan_id=$1::uuid", running); got != 1 {
 		t.Errorf("checkpoints of a running plan = %d, want 1", got)
+	}
+}
+
+// TestSAMLStateRowsAreDeletedPastExpiryPlusSkewInThrottledBatches runs the registry entries of the
+// two SAML tables (ADR 0018 section 3, ADR 0023 section 2) against copies of the real tables and
+// indexes: rows past expires_at plus the default clock skew go in batches of two, rows inside the
+// skew grace and unexpired rows survive.
+func TestSAMLStateRowsAreDeletedPastExpiryPlusSkewInThrottledBatches(t *testing.T) {
+	db := scratchSchema(t)
+	skew := time.Minute
+	for _, entry := range DefaultRegistry() {
+		if entry.Table != "saml_assertion_ids" && entry.Table != "saml_request_state" {
+			continue
+		}
+		t.Run(entry.Table, func(t *testing.T) {
+			for _, keep := range []time.Duration{entry.Standard, entry.FreeTier} {
+				if keep != skew {
+					t.Fatalf("keep time %s differs from the default SAML clock skew %s", keep, skew)
+				}
+			}
+			insert := func(age time.Duration, n int) {
+				for range n {
+					insertRow(t, db, entry.Table, "expires_at", fmt.Sprintf("now() - interval '%d seconds'", int64(age.Seconds())), nil)
+				}
+			}
+			insert(skew+time.Minute, 5) // past expiry plus skew: deleted
+			insert(skew/2, 2)           // expired but inside the skew grace: kept
+			insert(-10*time.Minute, 2)  // not yet expired: kept
+			entry.Batch = 2
+			var sleeps int
+			j, err := New(db, DefaultConfig(), Options{Owner: "saml", Registry: []Entry{entry}, Sleep: func(context.Context, time.Duration) { sleeps++ }})
+			if err != nil {
+				t.Fatal(err)
+			}
+			report, err := j.RunOnce(t.Context())
+			if err != nil || report.Deleted[entry.Table] != 5 {
+				t.Fatalf("RunOnce = %+v, %v; want 5 deleted", report, err)
+			}
+			if sleeps != 2 {
+				t.Fatalf("sleeps = %d, want one after each full batch of 2, 2 and a final partial batch of 1", sleeps)
+			}
+			if got := count(t, db, "SELECT count(*) FROM "+entry.Table); got != 4 {
+				t.Fatalf("rows left = %d, want the 4 inside the grace or unexpired", got)
+			}
+		})
 	}
 }
 
@@ -520,6 +567,8 @@ func TestBatchSelectionsAreServedByAnIndex(t *testing.T) {
 		"native_apt_publication_idempotency": "native_apt_publication_idempotency_expiry_idx",
 		"native_maven_publish_idempotency":   "native_maven_publish_idempotency_expires_at_idx",
 		"workload_jti_seen":                  "workload_jti_seen_expires_at_idx",
+		"saml_assertion_ids":                 "saml_assertion_ids_expires_at_idx",
+		"saml_request_state":                 "saml_request_state_expires_at_idx",
 	}
 	for _, entry := range DefaultRegistry() {
 		if entry.PartitionedOnPostgres || entry.Optional {

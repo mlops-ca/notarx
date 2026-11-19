@@ -48,6 +48,9 @@ type identityProviderRuntime interface {
 	Replace(ctx context.Context, id string, in IdentityProviderInput, expectedVersion int64, audit ...repository.AuditRecord) (identity.Provider, error)
 	Delete(ctx context.Context, id string, expectedVersion int64, audit ...repository.AuditRecord) error
 	Test(context.Context, string) (OIDCConnectionTest, error)
+	ImportSAMLMetadata(ctx context.Context, id string, source SAMLMetadataSource, audit ...repository.AuditRecord) (identity.Provider, error)
+	RotateSAMLSPKey(ctx context.Context, id string, audit ...repository.AuditRecord) (identity.Provider, error)
+	SAMLView(identity.Provider) SAMLView
 }
 
 type identityManagementOptions struct {

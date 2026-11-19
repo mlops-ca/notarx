@@ -40,7 +40,7 @@ func (s *MemoryStore) CreateUserIdentity(ctx context.Context, identity UserIdent
 		return UserIdentity{}, ErrNotFound
 	}
 	identity = normalizeUserIdentity(identity)
-	if identity.Kind != UserIdentityOIDC || identity.ProviderID == "" || identity.Issuer == "" || identity.Subject == "" {
+	if (identity.Kind != UserIdentityOIDC && identity.Kind != UserIdentitySAML) || identity.ProviderID == "" || identity.Issuer == "" || identity.Subject == "" {
 		return UserIdentity{}, ErrIdentityExists
 	}
 	for _, existing := range s.userIdentities {
@@ -160,7 +160,7 @@ func (s *MemoryStore) ResolveOIDCIdentity(_ context.Context, provision OIDCIdent
 		s.users[user.ID] = user
 	}
 	identity := refreshUserIdentity(UserIdentity{
-		ID: ids.New(), UserID: user.ID, Kind: UserIdentityOIDC, ProviderID: provision.ProviderID,
+		ID: ids.New(), UserID: user.ID, Kind: provision.identityKind(), ProviderID: provision.ProviderID,
 		Issuer: provision.Issuer, Subject: provision.Subject, CreatedAt: now,
 	}, provision, now)
 	s.userIdentities[identity.ID] = identity
@@ -178,6 +178,14 @@ func normalizeUserIdentity(identity UserIdentity) UserIdentity {
 
 func normalizeOIDCIssuer(value string) string {
 	return strings.TrimRight(strings.TrimSpace(value), "/")
+}
+
+// identityKind is the stored kind of the identity a sign-in creates.
+func (p OIDCIdentityProvision) identityKind() string {
+	if p.Kind == UserIdentitySAML {
+		return UserIdentitySAML
+	}
+	return UserIdentityOIDC
 }
 
 func refreshUserIdentity(identity UserIdentity, provision OIDCIdentityProvision, now time.Time) UserIdentity {

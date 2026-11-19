@@ -126,6 +126,7 @@
         { "id": "anonymous-access", "title": { "en": "Anonymous access operations", "zh-CN": "匿名访问运维" }, "en": "docs/anonymous-access-operations.md", "zh-CN": "docs/anonymous-access-operations.zh-CN.md" },
         { "id": "user-governance", "title": { "en": "User governance", "zh-CN": "用户治理" }, "en": "docs/user-governance.md", "zh-CN": "docs/user-governance.zh-CN.md" },
         { "id": "oidc-sso", "title": { "en": "OIDC SSO", "zh-CN": "OIDC 单点登录" }, "en": "docs/oidc-sso.md", "zh-CN": "docs/oidc-sso.zh-CN.md" },
+        { "id": "saml-sso", "title": { "en": "SAML SSO" }, "en": "docs/saml-sso.md" },
         { "id": "oidc-keycloak", "title": { "en": "Keycloak on Kubernetes", "zh-CN": "Kubernetes 上的 Keycloak" }, "en": "docs/oidc-keycloak-k8s.md", "zh-CN": "docs/oidc-keycloak-k8s.zh-CN.md" },
         { "id": "repository-grants", "title": { "en": "Repository grant authorization", "zh-CN": "仓库授权" }, "en": "docs/repository-grant-authorization-plan.md", "zh-CN": "docs/repository-grant-authorization-plan.zh-CN.md" },
         { "id": "service-accounts", "title": { "en": "Service account operations", "zh-CN": "Service Account 运维" }, "en": "docs/service-account-operations.md", "zh-CN": "docs/service-account-operations.zh-CN.md" },

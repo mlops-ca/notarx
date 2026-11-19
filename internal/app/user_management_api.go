@@ -520,6 +520,7 @@ func (h identityManagementHandler) CreateUserIdentity(w http.ResponseWriter, r *
 		return
 	}
 	issuer := normalizeOIDCIssuerForAPI(request.Issuer)
+	subject := strings.TrimSpace(request.Subject)
 	if h.identityProviders == nil {
 		writeHostedProblem(w, http.StatusServiceUnavailable, "not_supported", "the identity provider registry is unavailable")
 		return
@@ -529,9 +530,14 @@ func (h identityManagementHandler) CreateUserIdentity(w http.ResponseWriter, r *
 		return
 	}
 	identityID := ids.New()
+	// A SAML identity is keyed by the NameID; sign-in lower-cases it for an emailAddress provider, so the
+	// link must carry the same form to be found.
+	if settings, err := provider.SAML(); provider.Kind == identity.KindSAML && err == nil && settings.NameIDFormat == identity.SAMLNameIDEmailAddress {
+		subject = strings.ToLower(subject)
+	}
 	identity, err := h.users.CreateUserIdentity(r.Context(), repository.UserIdentity{
-		ID: identityID, UserID: userID, Kind: repository.UserIdentityOIDC, ProviderID: provider.ID,
-		Issuer: issuer, Subject: strings.TrimSpace(request.Subject),
+		ID: identityID, UserID: userID, Kind: string(provider.Kind), ProviderID: provider.ID,
+		Issuer: issuer, Subject: subject,
 	}, h.auditRecords(r, "users/"+userID+"/identities/"+identityID, "user.identity.link", http.StatusCreated)...)
 	if errors.Is(err, repository.ErrNotFound) {
 		writeHostedProblem(w, http.StatusNotFound, "not_found", "user not found")
@@ -548,8 +554,21 @@ func (h identityManagementHandler) CreateUserIdentity(w http.ResponseWriter, r *
 	writeNativeMavenJSON(w, http.StatusCreated, userIdentityResponse(identity))
 }
 
+// providerIssuer is the issuer a manual link names: the OIDC issuer, or the entity id of a SAML IdP.
+func providerIssuer(provider identity.Provider) string {
+	switch provider.Kind {
+	case identity.KindOIDC:
+		settings, _ := provider.OIDC()
+		return normalizeOIDCIssuerForAPI(settings.Issuer)
+	case identity.KindSAML:
+		settings, _ := provider.SAML()
+		return normalizeOIDCIssuerForAPI(settings.EntityID)
+	}
+	return ""
+}
+
 // linkProvider resolves the provider a manual identity link belongs to: the one named
-// by providerId, or else the single OIDC provider whose issuer matches.
+// by providerId, or else the single provider (OIDC or SAML) whose issuer or entity id matches.
 func (h identityManagementHandler) linkProvider(w http.ResponseWriter, r *http.Request, providerID *openapi_types.UUID, issuer string) (identity.Provider, bool) {
 	if providerID != nil {
 		provider, err := h.identityProviders.Get(r.Context(), providerID.String())
@@ -561,7 +580,7 @@ func (h identityManagementHandler) linkProvider(w http.ResponseWriter, r *http.R
 			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "load identity provider failed")
 			return identity.Provider{}, false
 		}
-		if settings, _ := provider.OIDC(); provider.Kind != identity.KindOIDC || normalizeOIDCIssuerForAPI(settings.Issuer) != issuer {
+		if providerIssuer(provider) != issuer || issuer == "" {
 			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "identity issuer must match the issuer of the provider")
 			return identity.Provider{}, false
 		}
@@ -574,7 +593,7 @@ func (h identityManagementHandler) linkProvider(w http.ResponseWriter, r *http.R
 	}
 	var matches []identity.Provider
 	for _, provider := range providers {
-		if settings, _ := provider.OIDC(); provider.Kind == identity.KindOIDC && normalizeOIDCIssuerForAPI(settings.Issuer) == issuer {
+		if providerIssuer(provider) == issuer {
 			matches = append(matches, provider)
 		}
 	}

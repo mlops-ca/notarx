@@ -30,7 +30,7 @@ func (s *MemoryStore) CreateUserSession(_ context.Context, session UserSession) 
 
 func validUserSession(session UserSession) bool {
 	return session.UserID != "" &&
-		(session.Kind == UserSessionLocal || session.Kind == UserSessionOIDC) &&
+		(session.Kind == UserSessionLocal || session.Kind == UserSessionOIDC || session.Kind == UserSessionSAML) &&
 		session.ExpiresAt.After(session.CreatedAt) &&
 		utf8.RuneCountInString(session.IPAddress) <= 64 &&
 		utf8.RuneCountInString(session.UserAgent) <= 512

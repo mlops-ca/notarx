@@ -10,6 +10,7 @@ import (
 
 	"github.com/mlops-ca/notarx/internal/authorization"
 	"github.com/mlops-ca/notarx/internal/identity"
+	"github.com/mlops-ca/notarx/internal/identity/saml"
 	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/secrets"
@@ -38,11 +39,13 @@ type OIDCRuntimeConfig struct {
 
 // IdentityProviderInput is the administrator-editable part of a provider.
 type IdentityProviderInput struct {
-	Slug                string
-	Kind                identity.Kind
-	DisplayName         string
-	Enabled             bool
-	OIDC                identity.OIDCSettings
+	Slug        string
+	Kind        identity.Kind
+	DisplayName string
+	Enabled     bool
+	OIDC        identity.OIDCSettings
+	// SAML is the settings of a SAML provider; it is set exactly when Kind is saml.
+	SAML                *identity.SAMLSettings
 	ClientSecret        *string
 	ClearClientSecret   bool
 	AttributeMapping    identity.AttributeMapping
@@ -96,6 +99,8 @@ type IdentityRuntime struct {
 	expires    time.Time
 	generation uint64 // bumped by invalidate so an in-flight refresh cannot store a stale list
 	states     map[stateKey]*oidcProviderState
+	saml       samlRuntime
+	spKeySets  map[stateKey]saml.SPKeySet
 }
 
 func NewIdentityRuntime(store repository.IdentityProviderStore) *IdentityRuntime {
@@ -159,6 +164,11 @@ func (o *IdentityRuntime) cached(ctx context.Context) ([]identity.Provider, erro
 			delete(o.states, key)
 		}
 	}
+	for key := range o.spKeySets {
+		if !live[key] {
+			delete(o.spKeySets, key)
+		}
+	}
 	return providers, nil
 }
 
@@ -170,7 +180,7 @@ func (o *IdentityRuntime) Public(ctx context.Context) ([]PublicIdentityProvider,
 	}
 	public := make([]PublicIdentityProvider, 0, len(providers))
 	for _, provider := range providers {
-		if provider.Enabled && canStartBrowserLogin(provider) {
+		if provider.Enabled && canStartBrowserLogin(provider) && (provider.Kind != identity.KindSAML || o.samlReady()) {
 			public = append(public, PublicIdentityProvider{Slug: provider.Slug, DisplayName: provider.DisplayName, Kind: provider.Kind})
 		}
 	}
@@ -351,12 +361,19 @@ func (in IdentityProviderInput) provider(current identity.Provider) (identity.Pr
 	provider.DisplayName, provider.Enabled = in.DisplayName, in.Enabled
 	provider.AttributeMapping, provider.ProvisioningMode = in.AttributeMapping, in.ProvisioningMode
 	provider.EmailLinkingEnabled, provider.JITDefaultRole = in.EmailLinkingEnabled, in.JITDefaultRole
-	if provider.Kind != identity.KindOIDC {
-		return provider, fmt.Errorf("%w: only OIDC providers can be configured by this release", identity.ErrInvalid)
-	}
 	var err error
-	if provider, err = provider.WithOIDC(in.OIDC); err != nil {
-		return provider, err
+	switch provider.Kind {
+	case identity.KindOIDC:
+		if in.SAML != nil {
+			return provider, fmt.Errorf("%w: saml settings do not apply to an OIDC provider", identity.ErrInvalid)
+		}
+		if provider, err = provider.WithOIDC(in.OIDC); err != nil {
+			return provider, err
+		}
+	case identity.KindSAML:
+		return in.samlProvider(provider)
+	default:
+		return provider, fmt.Errorf("%w: kind must be oidc or saml", identity.ErrInvalid)
 	}
 	switch {
 	case in.ClientSecret != nil && *in.ClientSecret != "":
@@ -374,6 +391,34 @@ func (in IdentityProviderInput) provider(current identity.Provider) (identity.Pr
 	}
 	if provider.SecretsSealed != "" && in.OIDC.ClientID == "" {
 		return provider, fmt.Errorf("%w: clientId is required when a client secret is configured", identity.ErrInvalid)
+	}
+	return provider, nil
+}
+
+// samlProvider applies the SAML settings. The sealed service provider key set is server-owned: it is
+// kept across edits, generated the first time signed requests are switched on, and never taken from a client.
+func (in IdentityProviderInput) samlProvider(provider identity.Provider) (identity.Provider, error) {
+	if in.SAML == nil {
+		return provider, fmt.Errorf("%w: saml settings are required for a SAML provider", identity.ErrInvalid)
+	}
+	if in.ClientSecret != nil || in.ClearClientSecret {
+		return provider, fmt.Errorf("%w: a SAML provider has no client secret", identity.ErrInvalid)
+	}
+	provider, err := provider.WithSAML(*in.SAML)
+	if err != nil {
+		return provider, err
+	}
+	if provider, err = provider.NormalizeAndValidate(); err != nil {
+		return provider, err
+	}
+	if in.SAML.SignRequests && provider.SecretsSealed == "" {
+		keys, err := saml.SPKeySet{}.Rotated(provider.Slug, time.Now().UTC())
+		if err != nil {
+			return provider, err
+		}
+		if provider.SecretsSealed, err = keys.Seal(); err != nil {
+			return provider, err
+		}
 	}
 	return provider, nil
 }

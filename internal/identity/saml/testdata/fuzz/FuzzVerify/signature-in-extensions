@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("<samlp:Response xmlns:samlp=\"urn:oasis:names:tc:SAML:2.0:protocol\" xmlns:saml=\"urn:oasis:names:tc:SAML:2.0:assertion\" xmlns:ds=\"http://www.w3.org/2000/09/xmldsig#\" ID=\"_r\"><samlp:Extensions><ds:Signature><ds:SignedInfo><ds:Reference URI=\"#_r\"/></ds:SignedInfo></ds:Signature></samlp:Extensions><saml:Assertion ID=\"_a\"/></samlp:Response>")
