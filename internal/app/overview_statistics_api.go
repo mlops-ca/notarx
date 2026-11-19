@@ -1,6 +1,8 @@
 package app
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -24,22 +26,32 @@ func (h generatedRepositoryAPIAdapter) GetOverviewStatistics(w http.ResponseWrit
 		writeHostedProblem(w, http.StatusNotImplemented, "not_supported", "repository request aggregation is unavailable")
 		return
 	}
-	now := time.Now().UTC()
-	records, err := capacityStore.ListRepositoryCapacityRecords(r.Context())
-	if err != nil {
+	snapshot, err := h.overview.get(r.Context(), func(ctx context.Context) (overviewSnapshot, error) {
+		now := time.Now().UTC()
+		records, err := capacityStore.ListRepositoryCapacityRecords(ctx)
+		if err != nil {
+			return overviewSnapshot{}, errOverviewCapacities
+		}
+		requests, err := requestStore.ListRepositoryRequestStatistics(ctx, now)
+		if err != nil {
+			return overviewSnapshot{}, errOverviewRequests
+		}
+		byName := make(map[string]repository.RepositoryRequestStatistics, len(requests))
+		for _, item := range requests {
+			byName[item.Repository] = item
+		}
+		proxyCapacities, proxyErr := (proxyCacheBrowseHandler{store: h.store, maintenance: h.maintenance, authenticator: h.authenticator, authorizer: h.authorizer}).proxyCacheCapacities(ctx, records)
+		return overviewSnapshot{generatedAt: now, records: records, byName: byName, proxyCapacities: proxyCapacities, proxyErr: proxyErr}, nil
+	})
+	switch {
+	case errors.Is(err, errOverviewCapacities):
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "list repository capacities failed")
 		return
-	}
-	requests, err := requestStore.ListRepositoryRequestStatistics(r.Context(), now)
-	if err != nil {
+	case err != nil:
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "list repository request statistics failed")
 		return
 	}
-	byName := make(map[string]repository.RepositoryRequestStatistics, len(requests))
-	for _, item := range requests {
-		byName[item.Repository] = item
-	}
-	proxyCapacities, proxyErr := (proxyCacheBrowseHandler{store: h.store, maintenance: h.maintenance, authenticator: h.authenticator, authorizer: h.authorizer}).proxyCacheCapacities(r.Context(), records)
+	now, records, byName, proxyCapacities, proxyErr := snapshot.generatedAt, snapshot.records, snapshot.byName, snapshot.proxyCapacities, snapshot.proxyErr
 	response := adminopenapi.OverviewStatistics{
 		GeneratedAt:  now,
 		Repositories: make([]adminopenapi.OverviewRepositoryStatistics, 0, len(records)),

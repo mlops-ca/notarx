@@ -129,14 +129,20 @@ type Config struct {
 	Retention retention.Config
 	// Audit writer (ADR 0023 section 1). Modes are "queue"|"sync" (denials) and
 	// "async"|"sync" (reads); intervals are Go durations or whole seconds.
-	AuditBufferSize             int
-	AuditBatchSize              int
-	AuditFlushInterval          time.Duration
-	AuditSyncMaxInflight        int
-	AuditDenialMode             string
-	AuditReadMode               string
-	UsageFlushInterval          time.Duration
-	ShutdownFlushTimeout        time.Duration
+	AuditBufferSize      int
+	AuditBatchSize       int
+	AuditFlushInterval   time.Duration
+	AuditSyncMaxInflight int
+	AuditDenialMode      string
+	AuditReadMode        string
+	UsageFlushInterval   time.Duration
+	ShutdownFlushTimeout time.Duration
+	// AuthzCacheTTL is the revocation window of the read caches (ADR 0023
+	// section 6); zero disables every cache.
+	AuthzCacheTTL               time.Duration
+	CachePollInterval           time.Duration
+	APIKeyLastUsedInterval      time.Duration
+	OverviewCacheTTL            time.Duration
 	DatabaseURL                 string
 	DatabaseDriver              string
 	DatabaseTLSCAFile           string
@@ -257,6 +263,10 @@ func Load() (Config, error) {
 		AuditReadMode:               "async",
 		UsageFlushInterval:          5 * time.Second,
 		ShutdownFlushTimeout:        10 * time.Second,
+		AuthzCacheTTL:               5 * time.Second,
+		CachePollInterval:           2 * time.Second,
+		APIKeyLastUsedInterval:      time.Minute,
+		OverviewCacheTTL:            30 * time.Second,
 		DatabaseURL:                 os.Getenv("NOTARX_DATABASE_URL"),
 		DatabasePool:                database.DefaultPoolConfig(),
 		DatabaseCoordinatorPool:     database.DefaultCoordinatorPoolConfig(),
@@ -598,6 +608,9 @@ func Load() (Config, error) {
 		return Config{}, err
 	} else {
 		cfg.Retention = loaded
+	}
+	if err := loadReadCacheConfig(&cfg); err != nil {
+		return Config{}, err
 	}
 	if err := loadAuditWriterConfig(&cfg); err != nil {
 		return Config{}, err

@@ -18,6 +18,8 @@ type PostgresStore struct {
 	notifier   *postgresNotifier
 	// auditRecorder, when set, receives every RecordAudit call (internal/auditwriter).
 	auditRecorder atomic.Pointer[AuditRecorder]
+	// cacheInvalidator evicts local read-cache entries after a mutation commits.
+	cacheInvalidator atomic.Pointer[CacheInvalidator]
 }
 
 // SetAuditRecorder routes RecordAudit through recorder, the tiered audit writer

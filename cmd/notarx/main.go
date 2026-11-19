@@ -298,13 +298,17 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 	rawCache := app.NewDefaultRawCache(cacheStore, cfg.RawProxyAllowedHosts).WithCoordinator(coordinator).WithQuota(quota).WithMaxObjectBytes(cfg.RawCacheMaxObjectBytes).WithMaxConcurrentSpools(cfg.RawCacheMaxConcurrentSpools).WithTTL(cfg.RawCacheTTL)
 	conanCache := app.NewDefaultConanCache(cacheStore, nil).WithCoordinator(coordinator).WithQuota(quota).WithMaxObjectBytes(cfg.ConanCacheMaxObjectBytes).WithTTL(cfg.ConanCacheTTL)
 	maintenance := app.NewCacheMaintenanceWithRaw(cacheStore, ociCache, rawCache).WithConan(conanCache)
+	caches := newReadCaches(cfg, store)
+	caches.start(notificationPool)
+	defer caches.stop()
 	metrics := (&app.Metrics{}).
 		WithDatabaseStats(databasePool.Stats).
 		WithDatabasePoolStats("artifact-locks", artifactLockPool.Stats).
 		WithDatabasePoolStats("coordinator", coordinatorPool.Stats).
 		WithDatabasePoolStats("notifications", notificationPool.Stats).
 		WithNodeIdentity(cfg.InstanceID, nodeRoleStrings(cfg.NodeRoles)).
-		WithAuditWriterStats(auditWriter.Stats)
+		WithAuditWriterStats(auditWriter.Stats).
+		WithReadCacheStats(caches.registry.Stats)
 	if fileStore, ok := objectStore.(*objectstore.FileStore); ok {
 		metrics = metrics.WithObjectStoreCapacity(fileStore.Capacity)
 	}
@@ -499,6 +503,8 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 			Storage:           app.SharedObjectStores(objectStore),
 			// Load validated the mode; an unreadable value stays strict.
 			GroupVisibilityMode: access.GroupMode(cfg.GroupVisibilityMode),
+			OverviewCacheTTL:    cfg.OverviewCacheTTL,
+			AuthzCacheTTL:       cfg.AuthzCacheTTL,
 			Adapter:             app.TestAdapter{},
 			Authenticator: app.Authenticator{
 				AdminToken:           cfg.AdminToken,
@@ -511,7 +517,8 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 				RepositoryReaders:    cfg.RepositoryReaders,
 				LegacyReadPermissive: cfg.LegacyReadPermissive,
 				OIDCSource:           identityRuntime,
-				APIKeys:              store,
+				APIKeys:              caches.keys,
+				ServiceAccounts:      caches.accounts,
 			},
 			Caches: app.GatewayCaches{
 				OCI: ociCache,

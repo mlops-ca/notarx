@@ -106,6 +106,15 @@ export const settingsEnCA = {
     "A certificate of {name} expired on {date}. Remove it or replace it with the current one.",
   "settings.samlServiceProviderKeys":
     "Service provider signing keys published: {count}",
+  "settings.authorizationCache": "Authorization cache",
+  "settings.authorizationCacheDescription":
+    "Each node caches credentials, accounts and access inputs in memory. A revoked credential, a disabled account, a removed grant or a visibility change is effective on every node within this window, even when a change notification is lost.",
+  "settings.authorizationCacheWindow": "Revocation window",
+  "settings.authorizationCacheSeconds": "{seconds} s",
+  "settings.authorizationCacheDisabled":
+    "Caching disabled: effective immediately",
+  "settings.authorizationCacheRegulatedProfile":
+    "Regulated profile: set NOTARX_AUTHZ_CACHE_TTL=1s, or 0 where no staleness is acceptable, at the cost of more database queries per request. The setting changes only by restarting the node.",
   "settings.lastUpdated": "Last updated",
   "settings.notPersisted": "Not persisted",
   "settings.databaseSettingsAreShared": "Database settings are shared",

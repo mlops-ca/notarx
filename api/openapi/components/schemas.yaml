@@ -1662,6 +1662,19 @@ OverviewRepositoryStatistics:
     denied: {"$ref": "#/OverviewWindowCounts"}
     objectCount: {type: integer, format: int64, minimum: 0}
     usedBytes: {type: integer, format: int64, minimum: 0}
+SecuritySettings:
+  type: object
+  required: [authorizationCacheTtlSeconds, authorizationCacheEnabled]
+  additionalProperties: false
+  properties:
+    authorizationCacheTtlSeconds:
+      type: integer
+      minimum: 0
+      maximum: 30
+      description: >-
+        Revocation window in seconds (NOTARX_AUTHZ_CACHE_TTL). 0 means the read
+        caches are disabled and every change is effective on the next request.
+    authorizationCacheEnabled: {type: boolean}
 OverviewStatistics:
   type: object
   required: [generatedAt, totals, repositories]

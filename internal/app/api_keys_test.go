@@ -2,18 +2,22 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/readcache"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func TestAPIKeyManagementCreatesAuthenticatesAndRevokesKey(t *testing.T) {
 	store := repository.NewMemoryStore()
-	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, Adapter: TestAdapter{}, Authenticator: Authenticator{AdminToken: "root", AdminActor: "root", APIKeys: store}})
+	keys := authorization.NewCachedAPIKeys(store, readcache.NewRegistry(0), store, time.Minute, nil)
+	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, Adapter: TestAdapter{}, Authenticator: Authenticator{AdminToken: "root", AdminActor: "root", APIKeys: keys}})
 	create := httptest.NewRequest(http.MethodPost, "/api/v2/api-keys", bytes.NewBufferString(`{"name":"automation","roles":["admin"]}`))
 	create.Header.Set("Authorization", "Bearer root")
 	create.Header.Set("Content-Type", "application/json")
@@ -39,6 +43,13 @@ func TestAPIKeyManagementCreatesAuthenticatesAndRevokesKey(t *testing.T) {
 		t.Fatalf("default expiry=%q parsed=%v err=%v", result.ExpiresAt, expiresAt, err)
 	}
 
+	// last_used_at is written in batches, not by the request that authenticates.
+	if _, err := keys.FindActiveAPIKeyByHash(context.Background(), authorization.HashAPIKey(result.Token)); err != nil {
+		t.Fatal(err)
+	}
+	if err := keys.Flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	list := httptest.NewRequest(http.MethodGet, "/api/v2/api-keys", nil)
 	list.Header.Set("Authorization", "Bearer "+result.Token)
 	listed := httptest.NewRecorder()

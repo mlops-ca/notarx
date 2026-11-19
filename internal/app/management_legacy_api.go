@@ -1,6 +1,8 @@
 package app
 
 import (
+	"time"
+
 	migrationapi "github.com/mlops-ca/notarx/internal/admin/nexusmigration"
 	sourceapi "github.com/mlops-ca/notarx/internal/admin/nexussource"
 	"github.com/mlops-ca/notarx/internal/aptpublication"
@@ -33,6 +35,8 @@ type generatedRepositoryAPIAdapter struct {
 	auditRetention         repository.AuditRetentionStore
 	publicAccess           repository.PublicAccessPolicyStore
 	siteSettings           repository.SiteSettingsStore
+	overview               *overviewCache
+	authzCacheTTL          time.Duration
 	consoleThemePackages   repository.ConsoleThemeStore
 	consoleThemes          *consoletheme.Registry
 	replication            repository.ReplicationStore

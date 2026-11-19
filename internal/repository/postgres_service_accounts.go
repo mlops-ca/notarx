@@ -80,7 +80,7 @@ func getServiceAccountOn(ctx context.Context, q sqlRunner, id string) (ServiceAc
 }
 
 func (s *PostgresStore) UpdateServiceAccount(ctx context.Context, update ServiceAccountUpdate, expectedVersion string, audit ...AuditRecord) (ServiceAccount, error) {
-	return runAudited(ctx, s, audit, func(q sqlRunner) (ServiceAccount, error) {
+	account, err := runAudited(ctx, s, audit, func(q sqlRunner) (ServiceAccount, error) {
 		var account ServiceAccount
 		description := ""
 		if update.Description != nil {
@@ -110,8 +110,12 @@ func (s *PostgresStore) UpdateServiceAccount(ctx context.Context, update Service
 		if err != nil {
 			return ServiceAccount{}, err
 		}
-		return account, nil
+		return account, notifyCache(ctx, q, CacheScopeServiceAccount, account.ID)
 	})
+	if err == nil {
+		s.invalidateLocal(CacheScopeServiceAccount, account.ID)
+	}
+	return account, err
 }
 
 func (s *PostgresStore) CreateServiceAccountCredential(ctx context.Context, credential APIKey, audit ...AuditRecord) (APIKey, error) {
@@ -173,7 +177,7 @@ func (s *PostgresStore) ListServiceAccountCredentials(ctx context.Context, accou
 }
 
 func (s *PostgresStore) RevokeServiceAccountCredential(ctx context.Context, accountID, credentialID string, audit ...AuditRecord) (APIKey, error) {
-	return runAudited(ctx, s, audit, func(q sqlRunner) (APIKey, error) {
+	key, err := runAudited(ctx, s, audit, func(q sqlRunner) (APIKey, error) {
 		var key APIKey
 		var roles []byte
 		err := q.QueryRowContext(ctx, `UPDATE api_keys SET revoked_at=COALESCE(revoked_at, now()) WHERE id=$1::uuid AND service_account_id=$2::uuid RETURNING id::text, service_account_id::text, name, array_to_json(roles), created_at, revoked_at, expires_at, last_used_at`, credentialID, accountID).Scan(&key.ID, &key.ServiceAccountID, &key.Name, &roles, &key.CreatedAt, &key.RevokedAt, &key.ExpiresAt, &key.LastUsedAt)
@@ -186,6 +190,10 @@ func (s *PostgresStore) RevokeServiceAccountCredential(ctx context.Context, acco
 		if err := scanAPIKeyRoles(roles, &key); err != nil {
 			return APIKey{}, err
 		}
-		return key, nil
+		return key, notifyCache(ctx, q, CacheScopeAPIKey, key.ID)
 	})
+	if err == nil {
+		s.invalidateLocal(CacheScopeAPIKey, key.ID)
+	}
+	return key, err
 }

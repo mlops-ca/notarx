@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"time"
 
 	"github.com/mlops-ca/notarx/internal/access"
 	helmformat "github.com/mlops-ca/notarx/internal/format/helm"
@@ -61,6 +62,13 @@ type GatewayOptions struct {
 	// GroupVisibilityMode is how group visibility invariants are enforced on
 	// writes: strict (the zero value) or lenient (ADR 0029).
 	GroupVisibilityMode access.GroupMode
+	// OverviewCacheTTL is how long the overview statistics snapshot is reused
+	// (NOTARX_OVERVIEW_CACHE_TTL); zero reads through.
+	OverviewCacheTTL time.Duration
+	// AuthzCacheTTL is the revocation window of the read caches
+	// (NOTARX_AUTHZ_CACHE_TTL), reported by the security settings API; zero means
+	// the caches are disabled.
+	AuthzCacheTTL time.Duration
 	// Preview formats stay outside the admitted format catalog. Their persistent
 	// ports are supplied explicitly, never inferred from Store.
 	HelmPreviewEnabled     bool
