@@ -248,8 +248,9 @@ with a checksum check by `scripts/install-git-cliff.sh`; `cliff.toml` holds the
 0.x rules. `scripts/release-required-checks.txt` is the single list of check names
 that must be green on a commit before it is released. `make release-plan-test`
 runs the plan against fixture repositories and fails if git-cliff's bump behaviour
-deviates from the pinned expectations. Wiring the plan into the release workflow is
-a later slice of ADR 0024.
+deviates from the pinned expectations. `release.yml` runs the plan every night
+(see [releasing](releasing.md)); `make release-pipeline-test` covers the manifest, attestation
+verification, pruning, governance and workflow-structure checks of that pipeline.
 
 ## Release dry run
 
@@ -264,5 +265,6 @@ locally, the labels and version are checked, the SBOM is scanned, and the digest
 SBOM artifacts are handed to `image-manifest`, which validates them. Nothing signs in,
 pushes, tags or attests, so push-by-digest, the pull back by digest, the tag merge and
 the attestations are not rehearsed; they first run on `main` and on a release. It is path filtered, so it is not a required check and not
-part of `ci-ok`. `release.yml` itself (tag verification and `publish-release`) is not
-callable and is still first exercised by a real release.
+part of `ci-ok`. `release.yml` itself (the nightly `plan`, `gates`, `build`, `publish` and `prune`
+jobs) is not callable: its structure is checked by `make release-pipeline-test` and it is first
+exercised by a real nightly or a `workflow_dispatch` dry run on `main`.
