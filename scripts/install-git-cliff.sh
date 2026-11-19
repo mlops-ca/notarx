@@ -4,6 +4,8 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+# shellcheck source=lib/github-release.sh
+source "$root/scripts/lib/github-release.sh"
 version=$(tr -d '[:space:]' < "$root/scripts/git-cliff.version")
 cache=${GIT_CLIFF_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/notarx/git-cliff}/$version
 binary=$cache/git-cliff
@@ -39,9 +41,7 @@ esac
 workdir=$(mktemp -d)
 trap 'rm -rf "$workdir"' EXIT
 archive=git-cliff-$version-$target.tar.gz
-curl --fail --silent --show-error --location --retry 3 \
-  --output "$workdir/$archive" \
-  "https://github.com/orhun/git-cliff/releases/download/v$version/$archive"
+github_release_download orhun/git-cliff "v$version" "$archive" "$workdir/$archive"
 actual=$(shasum -a 512 "$workdir/$archive" | cut -d' ' -f1)
 if [[ "$actual" != "$expected" ]]; then
   printf 'git-cliff checksum mismatch for %s\n' "$archive" >&2

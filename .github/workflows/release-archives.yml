@@ -112,9 +112,16 @@ jobs:
           smoke/server/notarx version | grep -F "notarx $VERSION"
       # Linux legs repack the archives they just built, so the packaged binary is
       # byte-identical to the archived one (package-check compares the hashes).
+      - name: Cache the pinned nfpm
+        if: matrix.goos == 'linux'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/notarx/nfpm
+          key: nfpm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/nfpm.version', 'scripts/install-nfpm.sh') }}
       - name: Build, verify and smoke-test the native packages (ADR 0025)
         if: matrix.goos == 'linux'
         env:
+          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
           BUILD_CONSOLE: ${{ matrix.console }}
         run: |

@@ -238,6 +238,15 @@ archives) happen outside the guard, before the clients run. Without the variable
 the guard runs the command unchanged, so local runs are not affected.
 `scripts/ci-contract.py` carries no Maven Central mirror.
 
+Pinned tools fetched from GitHub releases (nfpm, git-cliff, ORAS, crane) go through
+`github_release_download` in `scripts/lib/github-release.sh`. GitHub sometimes answers
+unauthenticated release-asset downloads from shared runner IPs with a 403, which
+`curl --retry` does not retry. With `GH_TOKEN` set (the workflows pass `github.token`) the
+helper uses `gh release download` with retries; without a token, as in a local run, it falls back
+to a plain `curl`. Every caller still verifies its pinned checksum, and the nfpm and git-cliff
+binaries are also cached with `actions/cache`, keyed by runner architecture and a hash of the
+version file and installer script, so most runs make no network call.
+
 ## Migration checks
 
 The `quality` job runs `make migration-check`

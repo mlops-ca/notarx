@@ -5,6 +5,8 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+# shellcheck source=lib/github-release.sh
+source "$root/scripts/lib/github-release.sh"
 version=$(tr -d '[:space:]' < "$root/scripts/nfpm.version")
 cache=${NFPM_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/notarx/nfpm}/$version
 binary=$cache/nfpm
@@ -40,9 +42,7 @@ esac
 workdir=$(mktemp -d)
 trap 'rm -rf "$workdir"' EXIT
 archive=nfpm_${version}_$target.tar.gz
-curl --fail --silent --show-error --location --retry 3 \
-  --output "$workdir/$archive" \
-  "https://github.com/goreleaser/nfpm/releases/download/v$version/$archive"
+github_release_download goreleaser/nfpm "v$version" "$archive" "$workdir/$archive"
 actual=$(shasum -a 256 "$workdir/$archive" | cut -d' ' -f1)
 if [[ "$actual" != "$expected" ]]; then
   printf 'nfpm checksum mismatch for %s\n' "$archive" >&2

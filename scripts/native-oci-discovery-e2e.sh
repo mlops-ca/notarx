@@ -3,6 +3,8 @@ set -euo pipefail
 umask 077
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
+# shellcheck source=lib/github-release.sh
+source "$repo_root/scripts/lib/github-release.sh"
 for binary in docker go curl python3 tar; do
   command -v "$binary" >/dev/null || { printf 'OCI discovery gate requires %s\n' "$binary" >&2; exit 1; }
 done
@@ -72,7 +74,6 @@ files=subprocess.check_output(['git','ls-files','-co','--exclude-standard','-z']
 hashes={name:hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() for name in sorted(set(files)) if name and pathlib.Path(name).is_file()}
 (evidence/'source.json').write_text(json.dumps({'head':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(),'dirty':bool(subprocess.check_output(['git','status','--porcelain'])),'fileHashes':hashes},indent=2)+'\n')
 PY
-curl_args=(--disable --fail --silent --show-error --location --proto '=https' --tlsv1.2 --connect-timeout 15 --max-time 120 --retry 2)
 case "$(uname -s)/$(uname -m)" in
   Linux/x86_64) oras_platform=linux_amd64; oras_sha=9ce999f8d2de03fc03968b29d743077a58783e545e5eaa53917ca177352d0e59 ;;
   Linux/aarch64|Linux/arm64) oras_platform=linux_arm64; oras_sha=ac7156f93a21e903f7ad606c792f3560f17e0cd0e36365634701b1e7cc4e4eca ;;
@@ -87,7 +88,7 @@ if [[ -n "${OCI_DISCOVERY_ORAS_ARCHIVE:-}" ]]; then
   cp -- "$OCI_DISCOVERY_ORAS_ARCHIVE" "$work/oras.tar.gz"
   oras_bootstrap=verified-local-archive
 else
-  curl "${curl_args[@]}" "https://github.com/oras-project/oras/releases/download/v1.3.3/oras_1.3.3_${oras_platform}.tar.gz" --output "$work/oras.tar.gz"
+  github_release_download oras-project/oras v1.3.3 "oras_1.3.3_${oras_platform}.tar.gz" "$work/oras.tar.gz"
 fi
 python3 - "$work/oras.tar.gz" "$oras_sha" <<'PY'
 import hashlib,pathlib,sys
