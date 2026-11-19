@@ -18,8 +18,10 @@ func scanEmailTarget(row interface{ Scan(...any) error }) (EmailTarget, error) {
 	}
 	return v, err
 }
-func (s *PostgresStore) CreateEmailTarget(ctx context.Context, v EmailTarget) (EmailTarget, error) {
-	return scanEmailTarget(s.db.QueryRowContext(ctx, `INSERT INTO email_targets(id,name,locale,recipient_ciphertext,enabled) VALUES ($1,$2,$3,$4,$5) RETURNING `+emailTargetColumns, v.ID, v.Name, v.Locale, v.RecipientCiphertext, v.Enabled))
+func (s *PostgresStore) CreateEmailTarget(ctx context.Context, v EmailTarget, audit ...AuditRecord) (EmailTarget, error) {
+	return runAudited(ctx, s, audit, func(q sqlRunner) (EmailTarget, error) {
+		return scanEmailTarget(q.QueryRowContext(ctx, `INSERT INTO email_targets(id,name,locale,recipient_ciphertext,enabled) VALUES ($1,$2,$3,$4,$5) RETURNING `+emailTargetColumns, v.ID, v.Name, v.Locale, v.RecipientCiphertext, v.Enabled))
+	})
 }
 func (s *PostgresStore) GetEmailTarget(ctx context.Context, id string) (EmailTarget, error) {
 	return scanEmailTarget(s.db.QueryRowContext(ctx, `SELECT `+emailTargetColumns+` FROM email_targets WHERE id=$1::uuid`, id))
@@ -40,10 +42,16 @@ func (s *PostgresStore) ListEmailTargets(ctx context.Context) ([]EmailTarget, er
 	}
 	return out, rows.Err()
 }
-func (s *PostgresStore) UpdateEmailTarget(ctx context.Context, v EmailTarget, version string) (EmailTarget, error) {
-	out, err := scanEmailTarget(s.db.QueryRowContext(ctx, `UPDATE email_targets SET name=$2,locale=$3,recipient_ciphertext=$4,enabled=$5,version=version+1,updated_at=clock_timestamp() WHERE id=$1::uuid AND version=$6::text::bigint RETURNING `+emailTargetColumns, v.ID, v.Name, v.Locale, v.RecipientCiphertext, v.Enabled, version))
+func (s *PostgresStore) UpdateEmailTarget(ctx context.Context, v EmailTarget, version string, audit ...AuditRecord) (EmailTarget, error) {
+	return runAudited(ctx, s, audit, func(q sqlRunner) (EmailTarget, error) {
+		return s.updateEmailTarget(ctx, q, v, version)
+	})
+}
+
+func (s *PostgresStore) updateEmailTarget(ctx context.Context, q sqlRunner, v EmailTarget, version string) (EmailTarget, error) {
+	out, err := scanEmailTarget(q.QueryRowContext(ctx, `UPDATE email_targets SET name=$2,locale=$3,recipient_ciphertext=$4,enabled=$5,version=version+1,updated_at=clock_timestamp() WHERE id=$1::uuid AND version=$6::text::bigint RETURNING `+emailTargetColumns, v.ID, v.Name, v.Locale, v.RecipientCiphertext, v.Enabled, version))
 	if errors.Is(err, ErrNotFound) {
-		if _, e := s.GetEmailTarget(ctx, v.ID); e == nil {
+		if _, e := scanEmailTarget(q.QueryRowContext(ctx, `SELECT `+emailTargetColumns+` FROM email_targets WHERE id=$1::uuid`, v.ID)); e == nil {
 			err = ErrVersionConflict
 		}
 	}
@@ -94,7 +102,7 @@ func emailRatePostgres(ctx context.Context, tx *sql.Tx) error {
 	}
 	return nil
 }
-func (s *PostgresStore) EnqueueEmailTest(ctx context.Context, r EmailTestRequest) (EmailDelivery, error) {
+func (s *PostgresStore) EnqueueEmailTest(ctx context.Context, r EmailTestRequest, audit ...AuditRecord) (EmailDelivery, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return EmailDelivery{}, err
@@ -131,6 +139,9 @@ func (s *PostgresStore) EnqueueEmailTest(ctx context.Context, r EmailTestRequest
 		return EmailDelivery{}, err
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO email_test_requests DEFAULT VALUES`); err != nil {
+		return EmailDelivery{}, err
+	}
+	if err = insertAudits(ctx, tx, audit); err != nil {
 		return EmailDelivery{}, err
 	}
 	return v, tx.Commit()
@@ -205,7 +216,7 @@ func (s *PostgresStore) FinishEmailDelivery(ctx context.Context, id, token strin
 	}
 	return err
 }
-func (s *PostgresStore) ReplayEmailDelivery(ctx context.Context, id, version string) (EmailDelivery, error) {
+func (s *PostgresStore) ReplayEmailDelivery(ctx context.Context, id, version string, audit ...AuditRecord) (EmailDelivery, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return EmailDelivery{}, err
@@ -242,6 +253,9 @@ func (s *PostgresStore) ReplayEmailDelivery(ctx context.Context, id, version str
 		return EmailDelivery{}, err
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO email_test_requests DEFAULT VALUES`); err != nil {
+		return EmailDelivery{}, err
+	}
+	if err = insertAudits(ctx, tx, audit); err != nil {
 		return EmailDelivery{}, err
 	}
 	return v, tx.Commit()

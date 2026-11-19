@@ -115,7 +115,7 @@ func (o *OIDCRuntime) Settings(ctx context.Context) (OIDCSettingsView, error) {
 	return cloneOIDCSettingsView(state.view), nil
 }
 
-func (o *OIDCRuntime) Replace(ctx context.Context, update OIDCSettingsUpdate, expectedVersion string) (OIDCSettingsView, error) {
+func (o *OIDCRuntime) Replace(ctx context.Context, update OIDCSettingsUpdate, expectedVersion string, audit ...repository.AuditRecord) (OIDCSettingsView, error) {
 	if o.store == nil {
 		return OIDCSettingsView{}, errors.New("OIDC settings storage is unavailable")
 	}
@@ -144,7 +144,7 @@ func (o *OIDCRuntime) Replace(ctx context.Context, update OIDCSettingsUpdate, ex
 		MemberRoles: normalized.MemberRoles, AdminRoles: normalized.AdminRoles,
 		ProvisioningMode: normalized.ProvisioningMode, EmailLinkingEnabled: normalized.EmailLinkingEnabled,
 		JITDefaultRole: normalized.JITDefaultRole,
-	}, expectedVersion)
+	}, expectedVersion, audit...)
 	if err != nil {
 		return OIDCSettingsView{}, err
 	}

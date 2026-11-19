@@ -66,11 +66,8 @@ func (h generatedRepositoryAPIAdapter) CreateEmailTarget(w http.ResponseWriter, 
 	if !emailTargetInput(w, input, &v, h.emailDefaultLocale()) {
 		return
 	}
-	out, err := h.emailTargets.CreateEmailTarget(r.Context(), v)
+	out, err := h.emailTargets.CreateEmailTarget(r.Context(), v, h.emailAudit(principal, v.ID, "email.target.create", 201)...)
 	if emailProblem(w, err) {
-		return
-	}
-	if !h.emailAudit(w, r, principal, out.ID, "email.target.create", 201) {
 		return
 	}
 	w.Header().Set("ETag", out.Version)
@@ -104,13 +101,10 @@ func emailTargetInput(w http.ResponseWriter, input adminopenapi.EmailTargetInput
 	}
 	return true
 }
-func (h generatedRepositoryAPIAdapter) emailAudit(w http.ResponseWriter, r *http.Request, p Principal, id, operation string, status int) bool {
-	if h.audit != nil {
-		if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{Actor: p.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: id, Operation: operation, Status: status, CacheDisposition: "bypass"}) {
-			return false
-		}
-	}
-	return true
+
+// emailAudit builds the audit the email store writes in the transaction of the mutation.
+func (h generatedRepositoryAPIAdapter) emailAudit(p Principal, id, operation string, status int) []repository.AuditRecord {
+	return h.auditFor(repository.AuditRecord{Actor: p.Actor, Resource: id, Operation: operation, Status: status})
 }
 func emailProblem(w http.ResponseWriter, err error) bool {
 	if err == nil {
@@ -177,11 +171,8 @@ func (h generatedRepositoryAPIAdapter) UpdateEmailTarget(w http.ResponseWriter, 
 	if !emailInput(w, r, &input) || !emailTargetInput(w, input, &v, h.emailDefaultLocale()) {
 		return
 	}
-	out, err := h.emailTargets.UpdateEmailTarget(r.Context(), v, string(params.IfMatch))
+	out, err := h.emailTargets.UpdateEmailTarget(r.Context(), v, string(params.IfMatch), h.emailAudit(p, v.ID, "email.target.update", 200)...)
 	if emailProblem(w, err) {
-		return
-	}
-	if !h.emailAudit(w, r, p, out.ID, "email.target.update", 200) {
 		return
 	}
 	w.Header().Set("ETag", out.Version)
@@ -277,11 +268,9 @@ func (h generatedRepositoryAPIAdapter) TestEmailNotification(w http.ResponseWrit
 		writeHostedProblem(w, 400, "invalid_request", "email test is invalid")
 		return
 	}
-	v, err := h.emailTargets.EnqueueEmailTest(r.Context(), repository.EmailTestRequest{ID: ids.New(), EventID: ids.New(), RequestKey: params.IdempotencyKey.String(), TargetID: input.TargetId.String(), TargetVersion: string(params.IfMatch), Scenario: string(input.Scenario), From: h.diagnostics.Email.From, ConsoleOrigin: h.diagnostics.Email.ConsoleOrigin, TemplateVersion: emailnotification.TemplateVersion})
+	deliveryID := ids.New()
+	v, err := h.emailTargets.EnqueueEmailTest(r.Context(), repository.EmailTestRequest{ID: deliveryID, EventID: ids.New(), RequestKey: params.IdempotencyKey.String(), TargetID: input.TargetId.String(), TargetVersion: string(params.IfMatch), Scenario: string(input.Scenario), From: h.diagnostics.Email.From, ConsoleOrigin: h.diagnostics.Email.ConsoleOrigin, TemplateVersion: emailnotification.TemplateVersion}, h.emailAudit(p, deliveryID, "email.test.enqueue", 202)...)
 	if emailProblem(w, err) {
-		return
-	}
-	if !h.emailAudit(w, r, p, v.ID, "email.test.enqueue", 202) {
 		return
 	}
 	w.Header().Set("ETag", v.Version)
@@ -325,11 +314,8 @@ func (h generatedRepositoryAPIAdapter) ReplayEmailDelivery(w http.ResponseWriter
 	if !ok || !h.requireEmailReady(w) {
 		return
 	}
-	v, err := h.emailTargets.ReplayEmailDelivery(r.Context(), id.String(), string(params.IfMatch))
+	v, err := h.emailTargets.ReplayEmailDelivery(r.Context(), id.String(), string(params.IfMatch), h.emailAudit(p, id.String(), "email.delivery.replay", 200)...)
 	if emailProblem(w, err) {
-		return
-	}
-	if !h.emailAudit(w, r, p, v.ID, "email.delivery.replay", 200) {
 		return
 	}
 	w.Header().Set("ETag", v.Version)

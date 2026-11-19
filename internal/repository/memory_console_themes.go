@@ -37,11 +37,14 @@ func (s *MemoryStore) GetConsoleThemePackage(_ context.Context, id string) (Cons
 	return cloneConsoleThemePackage(theme), nil
 }
 
-func (s *MemoryStore) CreateConsoleThemePackage(_ context.Context, theme ConsoleThemePackage) (ConsoleThemePackage, error) {
+func (s *MemoryStore) CreateConsoleThemePackage(ctx context.Context, theme ConsoleThemePackage, audit ...AuditRecord) (ConsoleThemePackage, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, exists := s.consoleThemePackages[theme.ID]; exists {
 		return ConsoleThemePackage{}, ErrConsoleThemeExists
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return ConsoleThemePackage{}, err
 	}
 	now := time.Now().UTC()
 	theme.Version = "1"
@@ -52,7 +55,7 @@ func (s *MemoryStore) CreateConsoleThemePackage(_ context.Context, theme Console
 	return cloneConsoleThemePackage(theme), nil
 }
 
-func (s *MemoryStore) ReplaceConsoleThemePackage(_ context.Context, theme ConsoleThemePackage, expectedVersion string) (ConsoleThemePackage, error) {
+func (s *MemoryStore) ReplaceConsoleThemePackage(ctx context.Context, theme ConsoleThemePackage, expectedVersion string, audit ...AuditRecord) (ConsoleThemePackage, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	current, exists := s.consoleThemePackages[theme.ID]
@@ -62,6 +65,9 @@ func (s *MemoryStore) ReplaceConsoleThemePackage(_ context.Context, theme Consol
 	if current.Version != expectedVersion {
 		return ConsoleThemePackage{}, ErrVersionConflict
 	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return ConsoleThemePackage{}, err
+	}
 	theme.Version = nextHostedGroupVersion(current.Version)
 	theme.CreatedAt = current.CreatedAt
 	theme.UpdatedAt = time.Now().UTC()
@@ -70,7 +76,7 @@ func (s *MemoryStore) ReplaceConsoleThemePackage(_ context.Context, theme Consol
 	return cloneConsoleThemePackage(theme), nil
 }
 
-func (s *MemoryStore) DeleteConsoleThemePackage(_ context.Context, id, expectedVersion string) error {
+func (s *MemoryStore) DeleteConsoleThemePackage(ctx context.Context, id, expectedVersion string, audit ...AuditRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	current, exists := s.consoleThemePackages[id]
@@ -79,6 +85,9 @@ func (s *MemoryStore) DeleteConsoleThemePackage(_ context.Context, id, expectedV
 	}
 	if current.Version != expectedVersion {
 		return ErrVersionConflict
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return err
 	}
 	delete(s.consoleThemePackages, id)
 	return nil

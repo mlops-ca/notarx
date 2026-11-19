@@ -7,9 +7,12 @@ import (
 	"time"
 )
 
-func (s *MemoryStore) CreateEmailTarget(_ context.Context, v EmailTarget) (EmailTarget, error) {
+func (s *MemoryStore) CreateEmailTarget(ctx context.Context, v EmailTarget, audit ...AuditRecord) (EmailTarget, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return EmailTarget{}, err
+	}
 	v.Version = "1"
 	v.CreatedAt = time.Now().UTC()
 	v.UpdatedAt = v.CreatedAt
@@ -35,7 +38,7 @@ func (s *MemoryStore) GetEmailTarget(_ context.Context, id string) (EmailTarget,
 	}
 	return v, nil
 }
-func (s *MemoryStore) UpdateEmailTarget(_ context.Context, v EmailTarget, version string) (EmailTarget, error) {
+func (s *MemoryStore) UpdateEmailTarget(ctx context.Context, v EmailTarget, version string, audit ...AuditRecord) (EmailTarget, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	old, ok := s.emailTargets[v.ID]
@@ -44,6 +47,9 @@ func (s *MemoryStore) UpdateEmailTarget(_ context.Context, v EmailTarget, versio
 	}
 	if old.Version != version {
 		return EmailTarget{}, ErrVersionConflict
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return EmailTarget{}, err
 	}
 	v.Version = nextHostedGroupVersion(old.Version)
 	v.CreatedAt = old.CreatedAt
@@ -74,7 +80,7 @@ func (s *MemoryStore) emailRate(now time.Time) error {
 	}
 	return nil
 }
-func (s *MemoryStore) EnqueueEmailTest(_ context.Context, r EmailTestRequest) (EmailDelivery, error) {
+func (s *MemoryStore) EnqueueEmailTest(ctx context.Context, r EmailTestRequest, audit ...AuditRecord) (EmailDelivery, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, v := range s.emailDeliveries {
@@ -97,6 +103,9 @@ func (s *MemoryStore) EnqueueEmailTest(_ context.Context, r EmailTestRequest) (E
 	}
 	now := time.Now().UTC()
 	if err := s.emailRate(now); err != nil {
+		return EmailDelivery{}, err
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
 		return EmailDelivery{}, err
 	}
 	v := EmailDelivery{ID: r.ID, EventID: r.EventID, RequestKey: r.RequestKey, TargetID: target.ID, TargetVersion: target.Version, Scenario: r.Scenario, Locale: target.Locale, TemplateVersion: r.TemplateVersion, RecipientCiphertext: target.RecipientCiphertext, From: r.From, ConsoleOrigin: r.ConsoleOrigin, State: "pending", Version: "1", CreatedAt: now, UpdatedAt: now, NextAttemptAt: now}
@@ -218,7 +227,7 @@ func (s *MemoryStore) FinishEmailDelivery(_ context.Context, id, token string, r
 	s.emailDeliveries[id] = v
 	return nil
 }
-func (s *MemoryStore) ReplayEmailDelivery(_ context.Context, id, version string) (EmailDelivery, error) {
+func (s *MemoryStore) ReplayEmailDelivery(ctx context.Context, id, version string, audit ...AuditRecord) (EmailDelivery, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	v, ok := s.emailDeliveries[id]
@@ -240,6 +249,9 @@ func (s *MemoryStore) ReplayEmailDelivery(_ context.Context, id, version string)
 	}
 	now := time.Now().UTC()
 	if err := s.emailRate(now); err != nil {
+		return EmailDelivery{}, err
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
 		return EmailDelivery{}, err
 	}
 	v.State = "pending"

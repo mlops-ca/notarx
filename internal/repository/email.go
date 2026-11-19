@@ -37,19 +37,19 @@ type EmailAttemptResult struct {
 	Permanent, OutcomeUnknown bool
 }
 type EmailTargetStore interface {
-	CreateEmailTarget(context.Context, EmailTarget) (EmailTarget, error)
+	CreateEmailTarget(context.Context, EmailTarget, ...AuditRecord) (EmailTarget, error)
 	ListEmailTargets(context.Context) ([]EmailTarget, error)
 	GetEmailTarget(context.Context, string) (EmailTarget, error)
-	UpdateEmailTarget(context.Context, EmailTarget, string) (EmailTarget, error)
+	UpdateEmailTarget(context.Context, EmailTarget, string, ...AuditRecord) (EmailTarget, error)
 }
 type EmailStore interface {
 	EmailTargetStore
-	EnqueueEmailTest(context.Context, EmailTestRequest) (EmailDelivery, error)
+	EnqueueEmailTest(context.Context, EmailTestRequest, ...AuditRecord) (EmailDelivery, error)
 	ListEmailDeliveries(context.Context, int) ([]EmailDelivery, error)
 	GetEmailDelivery(context.Context, string) (EmailDelivery, error)
 	ClaimEmailDelivery(context.Context, string) (EmailDelivery, error)
 	FinishEmailDelivery(context.Context, string, string, EmailAttemptResult) error
-	ReplayEmailDelivery(context.Context, string, string) (EmailDelivery, error)
+	ReplayEmailDelivery(context.Context, string, string, ...AuditRecord) (EmailDelivery, error)
 }
 
 func emailSameRequest(v EmailDelivery, r EmailTestRequest) bool {

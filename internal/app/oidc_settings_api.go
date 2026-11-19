@@ -28,7 +28,7 @@ func (h identityManagementHandler) GetOIDCSettings(w http.ResponseWriter, r *htt
 }
 
 func (h identityManagementHandler) ReplaceOIDCSettings(w http.ResponseWriter, r *http.Request, params adminopenapi.ReplaceOIDCSettingsParams) {
-	principal, ok := h.authorize(w, r)
+	_, ok := h.authorize(w, r)
 	if !ok {
 		return
 	}
@@ -55,7 +55,7 @@ func (h identityManagementHandler) ReplaceOIDCSettings(w http.ResponseWriter, r 
 		MemberRoles: request.MemberRoles, AdminRoles: request.AdminRoles,
 		ProvisioningMode: string(request.ProvisioningMode), EmailLinkingEnabled: request.EmailLinkingEnabled,
 		JITDefaultRole: string(request.JitDefaultRole),
-	}, string(params.IfMatch))
+	}, string(params.IfMatch), h.auditRecords(r, "authentication/oidc", "authentication.oidc.configure", http.StatusOK)...)
 	switch {
 	case errors.Is(err, repository.ErrVersionConflict):
 		writeHostedProblem(w, http.StatusPreconditionFailed, "version_conflict", "If-Match does not match the current OIDC settings version")
@@ -69,15 +69,6 @@ func (h identityManagementHandler) ReplaceOIDCSettings(w http.ResponseWriter, r 
 	case err != nil:
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "replace OIDC settings failed")
 		return
-	}
-	if h.audit != nil {
-		if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{
-			Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(),
-			Format: "management", Resource: "authentication/oidc", Operation: "authentication.oidc.configure",
-			Status: http.StatusOK, CacheDisposition: "bypass",
-		}) {
-			return
-		}
 	}
 	writeNativeMavenJSON(w, http.StatusOK, oidcSettingsResponse(settings))
 }

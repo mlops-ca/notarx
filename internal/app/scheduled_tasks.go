@@ -48,17 +48,23 @@ func (s ScheduledTaskScheduler) RunDue(ctx context.Context, limit int) error {
 	return joined
 }
 
-func (s ScheduledTaskScheduler) RunNow(ctx context.Context, taskID string) (repository.ScheduledTaskRun, error) {
+func (s ScheduledTaskScheduler) RunNow(ctx context.Context, taskID string, audit ...repository.AuditRecord) (repository.ScheduledTaskRun, error) {
 	task, err := s.Store.GetScheduledTask(ctx, taskID)
 	if err != nil {
 		return repository.ScheduledTaskRun{}, err
 	}
-	run, err := s.Store.CreateScheduledTaskRun(ctx, taskID, "manual", s.now())
+	// The audit of a manual run is written in the transaction that records the run, before
+	// anything is enqueued, so a failed audit dispatches nothing.
+	run, err := s.Store.CreateScheduledTaskRun(ctx, taskID, "manual", s.now(), audit...)
 	if err != nil {
-		return repository.ScheduledTaskRun{}, err
+		return repository.ScheduledTaskRun{}, fmt.Errorf("%w: %w", ErrScheduledTaskRunNotRecorded, err)
 	}
 	return s.dispatch(ctx, task, run)
 }
+
+// ErrScheduledTaskRunNotRecorded marks a manual run that was refused before dispatch
+// because its run record (and audit) could not be written.
+var ErrScheduledTaskRunNotRecorded = errors.New("scheduled task run could not be recorded")
 
 func (s ScheduledTaskScheduler) dispatch(ctx context.Context, task repository.ScheduledTask, run repository.ScheduledTaskRun) (repository.ScheduledTaskRun, error) {
 	key := "scheduled-task:" + task.ID + ":" + run.ID
