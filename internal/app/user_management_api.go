@@ -349,7 +349,15 @@ func (h identityManagementHandler) UpdateUser(w http.ResponseWriter, r *http.Req
 		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "user profile fields exceed their limits or email is invalid")
 		return
 	}
-	updated, err := h.users.UpdateUser(r.Context(), profile, string(params.IfMatch), h.userAudit(r, profile.ID, "user.update", http.StatusOK)...)
+	operation := "user.update"
+	if profile.EmailVerifiedByAdmin != nil {
+		// The verification is the gate of SAML email linking, so it has its own audit operation.
+		operation = "user.email_verification.clear"
+		if *profile.EmailVerifiedByAdmin {
+			operation = "user.email_verification.set"
+		}
+	}
+	updated, err := h.users.UpdateUser(r.Context(), profile, string(params.IfMatch), h.userAudit(r, profile.ID, operation, http.StatusOK)...)
 	if errors.Is(err, repository.ErrNotFound) {
 		writeHostedProblem(w, http.StatusNotFound, "not_found", "user not found")
 		return

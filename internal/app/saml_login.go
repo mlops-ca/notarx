@@ -292,7 +292,9 @@ func (h samlLoginHandler) signIn(w http.ResponseWriter, r *http.Request, provide
 	now := h.runtimeNow()
 	var link repository.EmailLinkDecision
 	user, _, _, err := h.identities.ResolveOIDCIdentity(r.Context(), samlProvision(provider.provider, provider.settings, claims, now, &link))
-	if link.Reason != "" {
+	// The decision is audited only once the resolution outcome is known, so a rolled-back link is
+	// never recorded as linked; a store failure is audited by fail() below.
+	if err == nil || errors.Is(err, repository.ErrNotFound) || errors.Is(err, repository.ErrIdentityAmbiguous) {
 		h.recordEmailLink(r, provider.provider.Slug, link)
 	}
 	switch {
@@ -373,17 +375,16 @@ func (h samlLoginHandler) record(r *http.Request, slug, actor string, outcome re
 }
 
 // recordEmailLink audits the decision of the administrator-verified email-link path: linked, or refused
-// and why. The asserted email is never written to the log, only the machine-readable reason.
+// and why. The asserted email is never written to the log, only the machine-readable reason. No candidate
+// account (no_match, no_email) and a path that is off are not decisions about an account and write nothing.
+// The record is a resolution, not a denial: a refused link usually continues as a just-in-time sign-in, and
+// a refused sign-in is already counted as access denied by fail().
 func (h samlLoginHandler) recordEmailLink(r *http.Request, slug string, decision repository.EmailLinkDecision) {
-	if h.audit == nil {
+	if h.audit == nil || decision.Reason == "" || decision.Reason == repository.EmailLinkNoMatch || decision.Reason == repository.EmailLinkNoEmail {
 		return
 	}
-	outcome := repository.AuditResolved
-	if !decision.Linked {
-		outcome = repository.AuditAccessDenied
-	}
 	_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{
-		Class: repository.AuditClassSync, Actor: "saml:" + slug, Outcome: outcome, OccurredAt: h.runtimeNow(), Format: "management",
+		Class: repository.AuditClassSync, Actor: "saml:" + slug, Outcome: repository.AuditResolved, OccurredAt: h.runtimeNow(), Format: "management",
 		Resource: "auth/saml/" + strings.ToLower(slug), Operation: "auth.saml.email_link", Status: http.StatusFound, CacheDisposition: "bypass",
 		AuthorizationSource: "saml", AuthorizationReason: "email_link_" + decision.Reason,
 	})

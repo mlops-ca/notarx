@@ -117,7 +117,7 @@ func (s *MemoryStore) ResolveOIDCIdentity(_ context.Context, provision OIDCIdent
 				user.DisplayName = identity.DisplayName
 			}
 			if identity.EmailVerified && identity.Email != "" {
-				if user.Email != identity.Email {
+				if !strings.EqualFold(user.Email, identity.Email) {
 					// The address changed under the administrator's verification: it no longer applies.
 					user = clearEmailVerification(user)
 				}

@@ -185,6 +185,11 @@ func testSAMLEmailLinkContract(t *testing.T, store interface {
 		{name: "admin account", role: "admin", verify: true, link: true, reason: EmailLinkAdminAccount},
 		{name: "local password", role: "member", secret: "hash", verify: true, link: true, reason: EmailLinkLocalPassword},
 		{name: "provider does not allow linking", role: "member", verify: true, link: false, reason: ""},
+		{name: "disabled account", role: "member", verify: true, link: true, reason: EmailLinkDisabled, prepare: func(user User) {
+			if _, err := store.UpdateUser(ctx, UserUpdate{ID: user.ID, State: ptr(UserDisabled)}, mustVersion(t, store, user.ID)); err != nil {
+				t.Fatal(err)
+			}
+		}},
 		{name: "already has an identity at the provider", role: "member", verify: true, link: true, reason: EmailLinkAlreadyLinked, prepare: func(user User) {
 			if _, err := store.CreateUserIdentity(ctx, UserIdentity{ID: ids.New(), UserID: user.ID, Kind: UserIdentitySAML, ProviderID: providerID, Issuer: "https://idp.example.test/m", Subject: "other-subject-" + suffix}); err != nil {
 				t.Fatal(err)
@@ -252,7 +257,26 @@ func testSAMLEmailLinkContract(t *testing.T, store interface {
 		if err != nil || cleared.EmailVerifiedByAdmin || cleared.EmailVerifiedAt != nil || cleared.EmailVerifiedBy != "" {
 			t.Fatalf("clear = %+v err=%v", cleared, err)
 		}
+		upper, err := store.UpdateUser(ctx, UserUpdate{ID: user.ID, Email: ptr(strings.ToUpper(address("follows")))}, cleared.Version)
+		if err != nil || upper.EmailVerifiedByAdmin {
+			t.Fatalf("clear stays cleared: %+v err=%v", upper, err)
+		}
+		again, err := store.UpdateUser(ctx, UserUpdate{ID: user.ID, EmailVerifiedByAdmin: ptr(true), EmailVerifiedBy: "first"}, upper.Version)
+		if err != nil || again.EmailVerifiedBy != "first" || again.EmailVerifiedAt == nil {
+			t.Fatalf("verify again = %+v err=%v", again, err)
+		}
+		recased, err := store.UpdateUser(ctx, UserUpdate{ID: user.ID, Email: ptr(address("follows"))}, again.Version)
+		if err != nil || !recased.EmailVerifiedByAdmin || recased.Email != address("follows") {
+			t.Fatalf("a case-only change is the same address and keeps the verification: %+v err=%v", recased, err)
+		}
+		second, err := store.UpdateUser(ctx, UserUpdate{ID: user.ID, EmailVerifiedByAdmin: ptr(true), EmailVerifiedBy: "second"}, recased.Version)
+		if err != nil || second.EmailVerifiedBy != "first" || !second.EmailVerifiedAt.Equal(*again.EmailVerifiedAt) {
+			t.Fatalf("verifying an already verified account keeps the original verifier: %+v err=%v", second, err)
+		}
 		blank := newUser("blank", "member", "", false, "")
+		if _, err := store.UpdateUser(ctx, UserUpdate{ID: blank.ID, Email: ptr("blank-" + suffix + "@example.test"), EmailVerifiedByAdmin: ptr(true)}, blank.Version); !errors.Is(err, ErrVerifierRequired) {
+			t.Fatalf("verifying without a verifier = %v", err)
+		}
 		if _, err := store.UpdateUser(ctx, UserUpdate{ID: blank.ID, EmailVerifiedByAdmin: ptr(true), EmailVerifiedBy: "root"}, blank.Version); !errors.Is(err, ErrEmailRequired) {
 			t.Fatalf("verifying an account without an email = %v", err)
 		}
@@ -263,6 +287,10 @@ func testSAMLEmailLinkContract(t *testing.T, store interface {
 		if err != nil {
 			t.Fatal(err)
 		}
+		recased, _, _, err := store.ResolveOIDCIdentity(ctx, OIDCIdentityProvision{ProviderID: providerID, Issuer: "https://idp.example.test/m", Subject: linked.Subject, Email: strings.ToUpper(address("synced")), EmailVerified: true})
+		if err != nil || !recased.EmailVerifiedByAdmin {
+			t.Fatalf("a case-only provider email change keeps the verification: %+v err=%v", recased, err)
+		}
 		synced, _, _, err := store.ResolveOIDCIdentity(ctx, OIDCIdentityProvision{ProviderID: providerID, Issuer: "https://idp.example.test/m", Subject: linked.Subject, Email: address("synced-moved"), EmailVerified: true})
 		if err != nil || synced.Email != address("synced-moved") || synced.EmailVerifiedByAdmin || synced.EmailVerifiedAt != nil || synced.EmailVerifiedBy != "" {
 			t.Fatalf("synced = %+v err=%v", synced, err)
@@ -272,6 +300,15 @@ func testSAMLEmailLinkContract(t *testing.T, store interface {
 
 func TestMemorySAMLEmailLinkContract(t *testing.T) {
 	testSAMLEmailLinkContract(t, NewMemoryStore(), ids.New(), strings.ReplaceAll(ids.New(), "-", "")[:12])
+}
+
+func mustVersion(t *testing.T, store UserStore, id string) string {
+	t.Helper()
+	user, err := store.GetUser(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return user.Version
 }
 
 func ptr[T any](value T) *T { return &value }

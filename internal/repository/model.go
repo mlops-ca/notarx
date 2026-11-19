@@ -1231,7 +1231,7 @@ type OIDCIdentityProvision struct {
 type EmailLinkDecision struct {
 	Linked bool
 	// Reason is a machine-readable code: linked, no_email, no_match, email_not_verified, ambiguous,
-	// admin_account, local_password or already_linked.
+	// admin_account, account_disabled, local_password or already_linked.
 	Reason string
 }
 
@@ -1243,6 +1243,7 @@ const (
 	EmailLinkNotVerified   = "email_not_verified"
 	EmailLinkAmbiguous     = "ambiguous"
 	EmailLinkAdminAccount  = "admin_account"
+	EmailLinkDisabled      = "account_disabled"
 	EmailLinkLocalPassword = "local_password"
 	EmailLinkAlreadyLinked = "already_linked"
 )
@@ -1271,8 +1272,12 @@ func decideEmailLink(email string, matches []User, hasIdentityAtProvider func(Us
 	}
 	candidate := verified[0]
 	switch {
-	case candidate.Role == "admin":
+	case candidate.Role == userRoleAdmin:
 		return User{}, EmailLinkDecision{Reason: EmailLinkAdminAccount}
+	case candidate.State != UserActive:
+		// A disabled account is refused before any write: binding a foreign subject to it would
+		// survive a later re-enable.
+		return User{}, EmailLinkDecision{Reason: EmailLinkDisabled}
 	case candidate.SecretHash != "":
 		return User{}, EmailLinkDecision{Reason: EmailLinkLocalPassword}
 	case hasIdentityAtProvider(candidate):

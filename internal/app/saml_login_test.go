@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -422,6 +423,13 @@ func TestSAMLProvisioningRules(t *testing.T) {
 			if tc.wantLinked && params.Get("oidc") != "success" {
 				t.Fatalf("params = %v", params)
 			}
+			f.audit.mu.Lock()
+			for _, record := range f.audit.records {
+				if record.Operation == "auth.saml.email_link" && record.Outcome != repository.AuditResolved {
+					t.Fatalf("the email-link decision must not count as an access denial: %+v", record)
+				}
+			}
+			f.audit.mu.Unlock()
 			reasons, found := f.audit.reasons(), false
 			for _, reason := range reasons {
 				if tc.wantReason != "" && reason == tc.wantReason {
@@ -436,6 +444,24 @@ func TestSAMLProvisioningRules(t *testing.T) {
 			}
 		})
 	}
+	t.Run("a disabled account is refused before anything is bound", func(t *testing.T) {
+		f := newSAMLFixture(t, func(in *IdentityProviderInput) {
+			in.EmailLinkingEnabled = true
+			in.ProvisioningMode = identity.ProvisioningDisabled
+		})
+		target := adminVerified(t, f, "ada", "member", "")
+		disabled := repository.UserDisabled
+		if _, err := f.store.UpdateUser(t.Context(), repository.UserUpdate{ID: target.ID, State: &disabled}, target.Version); err != nil {
+			t.Fatal(err)
+		}
+		signInWithEmail(t, f, "opaque-persistent-id", "")
+		if identities, err := f.store.ListUserIdentities(t.Context(), target.ID); err != nil || len(identities) != 0 {
+			t.Fatalf("a disabled account must not get a foreign subject bound: %+v %v", identities, err)
+		}
+		if reasons := f.audit.reasons(); !slices.Contains(reasons, "email_link_account_disabled") {
+			t.Fatalf("audit reasons = %v", reasons)
+		}
+	})
 	t.Run("two verified accounts are ambiguous", func(t *testing.T) {
 		f := newSAMLFixture(t, func(in *IdentityProviderInput) { in.EmailLinkingEnabled = true })
 		adminVerified(t, f, "ada-one", "member", "")

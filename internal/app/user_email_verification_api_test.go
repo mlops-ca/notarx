@@ -55,6 +55,13 @@ func TestUserManagementEmailVerificationLifecycle(t *testing.T) {
 		t.Fatalf("verified account = %+v", user)
 	}
 
+	// Verifying again keeps the original verifier and time (a second administrator cannot overwrite them).
+	again := call(http.MethodPatch, target, user.Version, `{"emailVerifiedByAdmin":true}`)
+	if again.Code != http.StatusOK || !decode(again).EmailVerifiedAt.Equal(*user.EmailVerifiedAt) {
+		t.Fatalf("verify again = %d %s", again.Code, again.Body.String())
+	}
+	user = decode(again)
+
 	// A profile save that leaves the email alone keeps the verification.
 	kept := call(http.MethodPatch, target, user.Version, `{"displayName":"Owner","email":"owner@example.test"}`)
 	if kept.Code != http.StatusOK || !decode(kept).EmailVerifiedByAdmin {
