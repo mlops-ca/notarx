@@ -51,7 +51,7 @@ CREATE TABLE public.identity_providers (
 INSERT INTO public.identity_providers (id, slug, kind, display_name, enabled, settings, secrets_sealed,
         attribute_mapping, provisioning_mode, email_linking_enabled, jit_default_role, version, updated_at)
 SELECT gen_random_uuid(), 'default', 'oidc', 'Single sign-on', enabled,
-       jsonb_build_object('issuer', issuer, 'audience', audience, 'jwksUrl', jwks_url, 'clientId', client_id,
+       jsonb_build_object('issuer', rtrim(btrim(issuer), '/'), 'audience', audience, 'jwksUrl', jwks_url, 'clientId', client_id,
                           'redirectUrl', redirect_url, 'scopes', scopes, 'adminSubjects', admin_subjects,
                           'memberRoles', member_roles, 'adminRoles', admin_roles, 'algorithms', '["RS256"]'::jsonb),
        NULLIF(client_secret, ''), '{}'::jsonb, provisioning_mode, email_linking_enabled,
@@ -69,7 +69,7 @@ SELECT gen_random_uuid(),
   FROM (SELECT issuer, row_number() OVER (ORDER BY max(COALESCE(last_login_at, created_at)) DESC, issuer) AS rank
           FROM public.user_identities
          WHERE kind = 'oidc'
-           AND NOT EXISTS (SELECT 1 FROM public.identity_providers AS provider WHERE provider.settings->>'issuer' = user_identities.issuer)
+           AND NOT EXISTS (SELECT 1 FROM public.identity_providers AS provider WHERE rtrim(btrim(provider.settings->>'issuer'), '/') = rtrim(btrim(user_identities.issuer), '/'))
          GROUP BY issuer) AS issuers;
 
 ALTER TABLE public.user_identities
@@ -80,7 +80,7 @@ ALTER TABLE public.user_identities
 -- remaining identity (the issuer matches no provider) falls to 'default'.
 UPDATE public.user_identities AS identity
    SET provider_id = COALESCE(
-       (SELECT provider.id FROM public.identity_providers AS provider WHERE provider.settings->>'issuer' = identity.issuer ORDER BY provider.slug LIMIT 1),
+       (SELECT provider.id FROM public.identity_providers AS provider WHERE rtrim(btrim(provider.settings->>'issuer'), '/') = rtrim(btrim(identity.issuer), '/') ORDER BY provider.slug LIMIT 1),
        (SELECT provider.id FROM public.identity_providers AS provider WHERE provider.slug = 'default'));
 
 ALTER TABLE public.user_identities

@@ -2,6 +2,7 @@ package authorization
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -168,6 +169,27 @@ func (v *OIDCValidator) validate(ctx context.Context, token, expectedNonce strin
 		identity.Role = RoleMember
 	}
 	return identity, true
+}
+
+// UnverifiedIssuer reads the iss claim of a JWT without verifying anything. It is only
+// for choosing which provider's validator to try: a forged value can at most select a
+// validator that then rejects the token.
+func UnverifiedIssuer(token string) string {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return ""
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return ""
+	}
+	var claims struct {
+		Issuer string `json:"iss"`
+	}
+	if json.Unmarshal(payload, &claims) != nil {
+		return ""
+	}
+	return strings.TrimRight(strings.TrimSpace(claims.Issuer), "/")
 }
 
 func (v *OIDCValidator) algorithms() []string {

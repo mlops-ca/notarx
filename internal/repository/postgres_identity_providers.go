@@ -134,6 +134,10 @@ func (s *PostgresStore) DeleteIdentityProvider(ctx context.Context, id string, e
 			return struct{}{}, ErrIdentityProviderInUse
 		}
 		result, err := q.ExecContext(ctx, `DELETE FROM identity_providers WHERE id=$1::uuid AND version=$2`, id, expectedVersion)
+		if isForeignKeyViolation(err) {
+			// A login linked an identity between the check above and the delete.
+			return struct{}{}, ErrIdentityProviderInUse
+		}
 		if err != nil {
 			return struct{}{}, err
 		}

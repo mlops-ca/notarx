@@ -143,7 +143,8 @@ func TestPostgresIdentityProviderSeedIsNoOpWhenProvidersExist(t *testing.T) {
 
 // TestIdentityProviderMigrationCopiesOIDCSettings replays migration 000016 over the
 // pre-migration shape inside a rolled-back transaction: the oidc_settings singleton becomes
-// the 'default' provider with its sealed secret and version, identities keep their links,
+// the 'default' provider with its sealed secret and version (a trailing slash on the saved
+// issuer does not stop stored identities from binding to it), identities keep their links,
 // an identity of another issuer gets its own disabled provider, and 'admin' as the JIT
 // default becomes 'member'.
 func TestIdentityProviderMigrationCopiesOIDCSettings(t *testing.T) {
@@ -192,7 +193,7 @@ func TestIdentityProviderMigrationCopiesOIDCSettings(t *testing.T) {
 	suffix := strings.ToLower(uuid.NewString()[:12])
 	issuer, other := "https://main-"+suffix+".example.test", "https://old-"+suffix+".example.test"
 	exec(`INSERT INTO public.oidc_settings (version, enabled, issuer, audience, client_id, client_secret, redirect_url, admin_roles, provisioning_mode, jit_default_role)
-		VALUES (7, true, $1, 'api', 'console', 'v1:sealed-secret', 'https://gw.example.test/auth/oidc/callback', '["boss"]', 'jit', 'admin')`, issuer)
+		VALUES (7, true, $1, 'api', 'console', 'v1:sealed-secret', 'https://gw.example.test/auth/oidc/callback', '["boss"]', 'jit', 'admin')`, issuer+"/")
 	user := uuid.NewString()
 	other2 := uuid.NewString()
 	exec(`INSERT INTO public.users (id, name, secret_hash, role) VALUES ($1, $2, '', 'member'), ($3, $4, '', 'member')`, user, "mig-"+suffix, other2, "mig2-"+suffix)

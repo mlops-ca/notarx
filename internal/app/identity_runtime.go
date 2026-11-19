@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -90,10 +91,11 @@ type stateKey struct {
 type IdentityRuntime struct {
 	store repository.IdentityProviderStore
 
-	mu        sync.Mutex
-	providers []identity.Provider
-	expires   time.Time
-	states    map[stateKey]*oidcProviderState
+	mu         sync.Mutex
+	providers  []identity.Provider
+	expires    time.Time
+	generation uint64 // bumped by invalidate so an in-flight refresh cannot store a stale list
+	states     map[stateKey]*oidcProviderState
 }
 
 func NewIdentityRuntime(store repository.IdentityProviderStore) *IdentityRuntime {
@@ -103,6 +105,7 @@ func NewIdentityRuntime(store repository.IdentityProviderStore) *IdentityRuntime
 func (o *IdentityRuntime) invalidate() {
 	o.mu.Lock()
 	o.expires = time.Time{}
+	o.generation++
 	o.mu.Unlock()
 }
 
@@ -133,6 +136,7 @@ func (o *IdentityRuntime) cached(ctx context.Context) ([]identity.Provider, erro
 		o.mu.Unlock()
 		return providers, nil
 	}
+	generation := o.generation
 	o.mu.Unlock()
 	providers, err := o.store.ListIdentityProviders(ctx)
 	if err != nil {
@@ -140,6 +144,11 @@ func (o *IdentityRuntime) cached(ctx context.Context) ([]identity.Provider, erro
 	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	if o.generation != generation {
+		// A write invalidated the cache while this read was in flight: the list may be
+		// stale, so serve it once but do not keep it.
+		return providers, nil
+	}
 	o.providers, o.expires = providers, time.Now().Add(identityCacheTTL)
 	live := make(map[stateKey]bool, len(providers))
 	for _, provider := range providers {
@@ -161,11 +170,21 @@ func (o *IdentityRuntime) Public(ctx context.Context) ([]PublicIdentityProvider,
 	}
 	public := make([]PublicIdentityProvider, 0, len(providers))
 	for _, provider := range providers {
-		if provider.Enabled {
+		if provider.Enabled && canStartBrowserLogin(provider) {
 			public = append(public, PublicIdentityProvider{Slug: provider.Slug, DisplayName: provider.DisplayName, Kind: provider.Kind})
 		}
 	}
 	return public, nil
+}
+
+// canStartBrowserLogin reports whether the chooser may offer the provider: an API-only
+// OIDC provider (no client and redirect URL) has no browser flow to start.
+func canStartBrowserLogin(provider identity.Provider) bool {
+	if provider.Kind != identity.KindOIDC {
+		return true
+	}
+	settings, err := provider.OIDC()
+	return err == nil && settings.ClientID != "" && settings.RedirectURL != ""
 }
 
 func (o *IdentityRuntime) stateFor(provider identity.Provider) (*oidcProviderState, error) {
@@ -263,10 +282,15 @@ func (o *IdentityRuntime) Browser(ctx context.Context, slug string) (*oidcProvid
 	return nil, nil, errProviderNotFound
 }
 
-// OIDCValidators returns one API bearer validator per enabled OIDC provider
-// that has an audience. A provider whose discovery fails is skipped, so one
-// broken IdP does not lock out the others.
-func (o *IdentityRuntime) OIDCValidators(ctx context.Context) ([]*authorization.OIDCValidator, error) {
+// OIDCValidators returns the API bearer validators of the enabled OIDC providers that
+// have an audience and whose issuer is the token's (unverified) iss. Selecting by issuer
+// keeps discovery of an unrelated, slow or unreachable provider off the request path of
+// every other provider's tokens. A provider whose discovery fails is skipped.
+func (o *IdentityRuntime) OIDCValidators(ctx context.Context, token string) ([]*authorization.OIDCValidator, error) {
+	issuer := authorization.UnverifiedIssuer(token)
+	if issuer == "" {
+		return nil, nil
+	}
 	providers, err := o.cached(ctx)
 	if err != nil {
 		return nil, err
@@ -277,7 +301,7 @@ func (o *IdentityRuntime) OIDCValidators(ctx context.Context) ([]*authorization.
 			continue
 		}
 		state, err := o.stateFor(provider)
-		if err != nil || state.discoveryClient == nil || state.settings.Audience == "" {
+		if err != nil || state.discoveryClient == nil || state.settings.Audience == "" || state.settings.Issuer != issuer {
 			continue
 		}
 		metadata, err := state.discoveryClient.Metadata(ctx)
@@ -418,8 +442,14 @@ func (o *IdentityRuntime) Seed(ctx context.Context, config OIDCRuntimeConfig) er
 		o.invalidate()
 		return err
 	}
+	// The environment never overrides a registry that already exists; say so, because an
+	// operator who changed the variables would otherwise see no effect and no reason.
+	ignored := func(reason string) {
+		slog.Warn("NOTARX_OIDC_* ignored: it only seeds an empty identity provider registry; manage providers through the management API", "reason", reason, "issuer", config.Issuer)
+	}
 	stub, err := o.store.GetIdentityProviderBySlug(ctx, provider.Slug)
 	if errors.Is(err, repository.ErrNotFound) {
+		ignored("the registry already has providers")
 		return nil
 	}
 	if err != nil {
@@ -427,10 +457,12 @@ func (o *IdentityRuntime) Seed(ctx context.Context, config OIDCRuntimeConfig) er
 	}
 	settings, err := stub.OIDC()
 	if err != nil || stub.Enabled || stub.Kind != identity.KindOIDC || stub.SecretsSealed != "" || settings.Audience != "" || settings.ClientID != "" {
+		ignored("the default provider is already configured")
 		return nil
 	}
 	want, _ := provider.OIDC()
 	if settings.Issuer != want.Issuer {
+		ignored("the default provider belongs to another issuer")
 		return nil
 	}
 	provider.ID, provider.Version = stub.ID, stub.Version

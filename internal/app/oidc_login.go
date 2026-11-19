@@ -118,13 +118,14 @@ func (h oidcLoginHandler) callback(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("slug")
 	provider, validator, resolveErr := h.browser(r)
 	if resolveErr != nil || provider == nil || validator == nil {
+		h.clearFlowCookie(w, r, slug)
 		h.redirectError(w, r, "not_configured")
 		return
 	}
 	client := provider.browserClient
 	if providerError := r.URL.Query().Get("error"); providerError != "" {
 		h.clearFlowCookie(w, r, slug)
-		h.redirectError(w, r, "provider_error")
+		h.redirectError(w, r, providerError)
 		return
 	}
 	code, state := r.URL.Query().Get("code"), r.URL.Query().Get("state")

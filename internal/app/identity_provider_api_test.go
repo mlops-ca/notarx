@@ -1,6 +1,8 @@
 package app
 
 import (
+	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -44,9 +46,23 @@ func TestIdentityRuntimeSupportsBearerOnlyProvider(t *testing.T) {
 	if _, _, err := runtime.Browser(t.Context(), "api-only"); !errors.Is(err, errOIDCNotEnabled) {
 		t.Fatalf("a provider without a browser client must not start a login: %v", err)
 	}
-	validators, err := runtime.OIDCValidators(t.Context())
+	// A provider that cannot be reached is never asked for tokens of another issuer.
+	if _, err := runtime.Create(t.Context(), IdentityProviderInput{
+		Slug: "down", Kind: identity.KindOIDC, DisplayName: "Down", Enabled: true,
+		OIDC: identity.OIDCSettings{Issuer: "http://127.0.0.1:1", Audience: "other"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	token := fakeBearer(provider.URL + "/")
+	validators, err := runtime.OIDCValidators(t.Context(), token)
 	if err != nil || len(validators) != 1 {
 		t.Fatalf("API validators=%v err=%v", validators, err)
+	}
+	if none, err := runtime.OIDCValidators(t.Context(), fakeBearer("https://unknown.example.test")); err != nil || len(none) != 0 {
+		t.Fatalf("a token of an unknown issuer must select no validator: %v %v", none, err)
+	}
+	if none, err := runtime.OIDCValidators(t.Context(), "not-a-jwt"); err != nil || len(none) != 0 {
+		t.Fatalf("an unparsable token must select no validator: %v %v", none, err)
 	}
 	result, err := runtime.Test(t.Context(), created.ID)
 	if err != nil || !result.Reachable || result.JWKSURL != provider.URL+"/jwks" {
@@ -283,5 +299,73 @@ func TestIdentityRuntimeSeedCompletesMigrationStub(t *testing.T) {
 	}
 	if untouched, _ := other.GetIdentityProviderBySlug(t.Context(), "default"); untouched.Version != 1 || untouched.Enabled {
 		t.Fatalf("a stub of another issuer must stay as it is: %#v", untouched)
+	}
+}
+
+func fakeBearer(issuer string) string {
+	payload, _ := json.Marshal(map[string]string{"iss": issuer})
+	return "e30." + base64.RawURLEncoding.EncodeToString(payload) + ".sig"
+}
+
+// invalidatingStore invalidates the runtime cache while a list read is in flight.
+type invalidatingStore struct {
+	repository.IdentityProviderStore
+	hook func()
+}
+
+func (s *invalidatingStore) ListIdentityProviders(ctx context.Context) ([]identity.Provider, error) {
+	providers, err := s.IdentityProviderStore.ListIdentityProviders(ctx)
+	if s.hook != nil {
+		hook := s.hook
+		s.hook = nil
+		hook()
+	}
+	return providers, err
+}
+
+func TestIdentityRuntimeDoesNotCacheAListThatAWriteInvalidatedMidRead(t *testing.T) {
+	store := repository.NewMemoryStore()
+	wrapped := &invalidatingStore{IdentityProviderStore: store}
+	runtime := NewIdentityRuntime(wrapped)
+	in := func(slug string) IdentityProviderInput {
+		return IdentityProviderInput{Slug: slug, Kind: identity.KindOIDC, DisplayName: slug, Enabled: true,
+			OIDC: identity.OIDCSettings{Issuer: "https://idp.example.test", Audience: "a", ClientID: "c", RedirectURL: "http://localhost/cb"}}
+	}
+	if _, err := runtime.Create(t.Context(), in("first")); err != nil {
+		t.Fatal(err)
+	}
+	wrapped.hook = func() {
+		if _, err := runtime.Create(t.Context(), in("second")); err != nil {
+			t.Error(err)
+		}
+	}
+	stale, err := runtime.Public(t.Context())
+	if err != nil || len(stale) != 1 {
+		t.Fatalf("the read in flight returns what it read: %v %v", stale, err)
+	}
+	fresh, err := runtime.Public(t.Context())
+	if err != nil || len(fresh) != 2 {
+		t.Fatalf("a list read before the write must not be kept: %v %v", fresh, err)
+	}
+}
+
+func TestIdentityChooserOffersOnlyProvidersThatCanStartALogin(t *testing.T) {
+	store := repository.NewMemoryStore()
+	runtime := NewIdentityRuntime(store)
+	for _, in := range []IdentityProviderInput{
+		{Slug: "browser", Kind: identity.KindOIDC, DisplayName: "Browser", Enabled: true,
+			OIDC: identity.OIDCSettings{Issuer: "https://idp.example.test", Audience: "a", ClientID: "c", RedirectURL: "http://localhost/cb"}},
+		{Slug: "api-only", Kind: identity.KindOIDC, DisplayName: "API only", Enabled: true,
+			OIDC: identity.OIDCSettings{Issuer: "https://idp.example.test", Audience: "a"}},
+		{Slug: "off", Kind: identity.KindOIDC, DisplayName: "Off", Enabled: false,
+			OIDC: identity.OIDCSettings{Issuer: "https://idp.example.test", Audience: "a", ClientID: "c", RedirectURL: "http://localhost/cb"}},
+	} {
+		if _, err := runtime.Create(t.Context(), in); err != nil {
+			t.Fatal(err)
+		}
+	}
+	public, err := runtime.Public(t.Context())
+	if err != nil || len(public) != 1 || public[0].Slug != "browser" {
+		t.Fatalf("public=%+v err=%v", public, err)
 	}
 }

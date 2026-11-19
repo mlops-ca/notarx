@@ -58,7 +58,10 @@ type OIDCRoleMappingMatch struct {
 // OIDCValidatorSource supplies one validator per enabled identity provider
 // that accepts API bearer tokens (ADR 0018).
 type OIDCValidatorSource interface {
-	OIDCValidators(context.Context) ([]*OIDCValidator, error)
+	// OIDCValidators returns the validators worth trying for token: the ones of
+	// providers whose issuer matches the token's unverified iss claim, so a slow or
+	// unreachable provider never delays the tokens of another.
+	OIDCValidators(ctx context.Context, token string) ([]*OIDCValidator, error)
 }
 
 type Authenticator struct {
@@ -141,7 +144,7 @@ func (a Authenticator) AuthenticateContext(ctx context.Context, header string) (
 	}
 	validators := []*OIDCValidator{a.OIDC}
 	if a.OIDCSource != nil {
-		if resolved, err := a.OIDCSource.OIDCValidators(ctx); err == nil {
+		if resolved, err := a.OIDCSource.OIDCValidators(ctx, token); err == nil {
 			validators = resolved
 		}
 	}
@@ -160,7 +163,13 @@ func (a Authenticator) AuthenticateContext(ctx context.Context, header string) (
 // key is (provider id, subject); a token of a provider with no linked account
 // keeps the external-principal behavior.
 func (a Authenticator) oidcPrincipal(ctx context.Context, identity OIDCIdentity) (Principal, bool) {
-	if a.UserIdentities != nil && identity.ProviderID != "" {
+	if a.UserIdentities != nil && identity.ProviderID == "" {
+		// Identities are keyed by provider (ADR 0018). A validator that belongs to no
+		// provider cannot tell whether the subject is a linked, possibly disabled
+		// account, so it fails closed instead of trusting the token's role claims.
+		return Principal{}, false
+	}
+	if a.UserIdentities != nil {
 		user, _, err := a.UserIdentities.GetUserByProviderIdentity(ctx, identity.ProviderID, identity.Subject)
 		if err == nil {
 			if user.State != repository.UserActive {

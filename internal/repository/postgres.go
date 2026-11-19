@@ -77,6 +77,11 @@ func isUnique(err error) bool {
 	return errors.As(err, &postgresError) && postgresError.Code == "23505"
 }
 
+func isForeignKeyViolation(err error) bool {
+	var postgresError *pgconn.PgError
+	return errors.As(err, &postgresError) && postgresError.Code == "23503"
+}
+
 func IsQuotaExceeded(err error) bool {
 	return errors.Is(err, ErrQuotaExceeded)
 }
