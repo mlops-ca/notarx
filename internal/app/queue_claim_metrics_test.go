@@ -48,7 +48,7 @@ func TestMergeWakesFansInAndIgnoresNilChannels(t *testing.T) {
 	close(first)
 }
 
-type recoveryCounts struct{ lifecycle, replication int }
+type recoveryCounts struct{ replication int }
 
 func (r *recoveryCounts) RecoverExpiredReplicationPlans(context.Context, time.Time) (int, error) {
 	r.replication++

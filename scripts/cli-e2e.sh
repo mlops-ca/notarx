@@ -403,7 +403,7 @@ expect 0 "$out" -- artifact identities --repo "$content_id" --purpose distributi
 require "$(field "$out" data.items.0.digest)" "$content_digest" "identity digest"
 expect 4 "$out" -- artifact intelligence show --repo "$content_id" --coordinate releases/app.txt --digest "$content_digest" --json
 expect 0 "$out" -- artifact usage --repo "$content_id" --json
-require "$(field "$out" meta.pagination.mode)" offset "usage window mode"
+require "$(field "$out" meta.pagination.mode)" cursor "usage window mode"
 
 content_group="cli-e2e-raw-group-${suffix}"
 expect 0 "$out" -- group create "$content_group" --format raw --member "$content_id" --json

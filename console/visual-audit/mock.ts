@@ -606,8 +606,7 @@ export async function mockConsole(page: Page) {
     route.fulfill({
       json: {
         items: users,
-        total: users.length,
-        offset: 0,
+        total: { value: users.length, relation: "eq" },
         limit: 50,
       },
     }),
