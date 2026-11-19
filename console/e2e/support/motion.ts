@@ -7,6 +7,38 @@ export async function waitForModalOpen(dialog: Locator) {
 }
 
 /**
+ * Opens an AntD Select and returns its dropdown once the list is usable.
+ * AntD mounts the list, then re-renders (and so replaces) its option nodes
+ * when the dropdown motion starts, and visibility starts before the slide has
+ * finished; a click on an option before then lands on a detached node. The
+ * dropdown is found through the combobox's own listbox, so another Select's
+ * closing list is never mistaken for it.
+ */
+export async function openSelect(page: Page, combobox: Locator) {
+  await combobox.click();
+  await expect(combobox).toHaveAttribute("aria-controls", /.+/);
+  const listId = (await combobox.getAttribute("aria-controls")) ?? "";
+  const dropdown = page
+    .locator(".ant-select-dropdown")
+    .filter({ has: page.locator(`[id="${listId}"]`) });
+  await expect(dropdown).toBeVisible();
+  await expect(dropdown).not.toHaveClass(
+    /ant-slide-(?:up|down)-(?:appear|enter)/,
+  );
+  await dropdown.evaluate(async (element) => {
+    await Promise.all(
+      element
+        .getAnimations({ subtree: true })
+        .filter((animation) =>
+          Number.isFinite(animation.effect?.getComputedTiming().endTime ?? 0),
+        )
+        .map((animation) => animation.finished.catch(() => undefined)),
+    );
+  });
+  return dropdown;
+}
+
+/**
  * Waits for every finite CSS animation and transition on the page (for
  * example the 220ms ag-feedback-enter entrance, which shifts a box by up to
  * 3px) to finish, so layout measurements read the settled geometry.

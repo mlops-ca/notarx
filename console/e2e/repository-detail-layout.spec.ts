@@ -5,7 +5,7 @@ import {
   openRepositoryTask,
   repositoryNavigationState,
 } from "./support/repositoryTasks";
-import { waitForModalOpen } from "./support/motion";
+import { waitForModalOpen, openSelect } from "./support/motion";
 import {
   attachThemeEvidence,
   recordThemeEvidence,
@@ -1257,8 +1257,8 @@ test("scanning selects a searchable immutable artifact before queuing", async ({
   const picker = artifactScanCard.getByRole("combobox", {
     name: "Search and select an artifact",
   });
-  await picker.click();
-  const option = page
+  const dropdown = await openSelect(page, picker);
+  const option = dropdown
     .locator(".ant-select-item-option")
     .filter({ hasText: coordinate })
     .first();
@@ -1298,8 +1298,8 @@ test("promotion selects a source artifact and a compatible Hosted target", async
   const sourcePicker = page.getByRole("combobox", {
     name: "Search and select a source artifact",
   });
-  await sourcePicker.click();
-  const artifactOption = page
+  const sourceDropdown = await openSelect(page, sourcePicker);
+  const artifactOption = sourceDropdown
     .locator(".ant-select-item-option")
     .filter({ hasText: coordinate })
     .first();
@@ -1309,18 +1309,18 @@ test("promotion selects a source artifact and a compatible Hosted target", async
   const targetPicker = page.getByRole("combobox", {
     name: "Select target repository",
   });
-  await targetPicker.click();
+  const targetDropdown = await openSelect(page, targetPicker);
   await expect(
-    page.locator(".ant-select-item-option").filter({
+    targetDropdown.locator(".ant-select-item-option").filter({
       hasText: "production-files",
     }),
   ).toBeVisible();
   await expect(
-    page.locator(".ant-select-item-option").filter({
+    targetDropdown.locator(".ant-select-item-option").filter({
       hasText: "upstream-proxy",
     }),
   ).toHaveCount(0);
-  await page
+  await targetDropdown
     .locator(".ant-select-item-option")
     .filter({ hasText: "production-files" })
     .click();
@@ -1524,18 +1524,22 @@ test("a blocked admission reads as a policy judgment in both themes", async ({
 
   const coordinate = "releases/example-1.zip";
   const openEvaluation = async () => {
-    await page
-      .getByRole("combobox", { name: "Search and select a source artifact" })
-      .click();
-    await page
+    const sourceDropdown = await openSelect(
+      page,
+      page.getByRole("combobox", {
+        name: "Search and select a source artifact",
+      }),
+    );
+    await sourceDropdown
       .locator(".ant-select-item-option")
       .filter({ hasText: coordinate })
       .first()
       .click();
-    await page
-      .getByRole("combobox", { name: "Select target repository" })
-      .click();
-    await page
+    const targetDropdown = await openSelect(
+      page,
+      page.getByRole("combobox", { name: "Select target repository" }),
+    );
+    await targetDropdown
       .locator(".ant-select-item-option")
       .filter({ hasText: "production-files" })
       .first()
