@@ -119,7 +119,7 @@ STUB
 chmod +x "$stub"
 export STUB_LOG=$workdir/gh.log
 verify() {
-  GH_CLI=$stub bash "$root/scripts/verify-release-attestations.sh" --repo mlops-ca/notarx --manifest "$assets/release-manifest.json" --assets "$assets" "$@"
+  GH_CLI=$stub bash "$root/scripts/verify-release-attestations.sh" --repo mlops-ca/notarx --manifest "$assets/release-manifest.json" --assets "$assets" --attempts 1 --delay 0 "$@"
 }
 
 new_assets
@@ -141,7 +141,26 @@ cases=$((cases + 1))
 grep -q -e '--source-ref refs/tags/v0.3.0-nightly.2' "$STUB_LOG" || fail '--source-ref was not passed'
 expect_fail 'bare-path workflow is refused up front' 'not paths' verify --images-workflow .github/workflows/image-build.yml
 expect_fail 'attestation from another workflow is rejected' 'does not verify' verify --images-workflow other.yml
-expect_fail 'another repository is rejected' 'does not verify' bash -c "GH_CLI=$stub bash $root/scripts/verify-release-attestations.sh --repo mlops-ca/other --manifest $assets/release-manifest.json --assets $assets"
+expect_fail 'another repository is rejected' 'does not verify' bash -c "GH_CLI=$stub bash $root/scripts/verify-release-attestations.sh --repo mlops-ca/other --manifest $assets/release-manifest.json --assets $assets --attempts 1 --delay 0"
+# A fresh attestation that is not visible yet is retried: the first call of each subject fails.
+flaky=$workdir/gh-flaky
+cat >"$flaky" <<'FLAKY'
+#!/usr/bin/env bash
+seen=$STUB_SEEN/$(printf '%s' "$3" | shasum | cut -d' ' -f1)
+if [[ ! -e "$seen" ]]; then : >"$seen"; exit 1; fi
+exit 0
+FLAKY
+chmod +x "$flaky"
+mkdir "$workdir/seen"
+cases=$((cases + 1))
+STUB_SEEN=$workdir/seen GH_CLI=$flaky bash "$root/scripts/verify-release-attestations.sh" --repo mlops-ca/notarx --manifest "$assets/release-manifest.json" \
+  --assets "$assets" --attempts 2 --delay 0 >/dev/null 2>&1 || fail 'a transient miss was not retried'
+rm -rf "$workdir/seen"
+mkdir "$workdir/seen"
+cases=$((cases + 1))
+if STUB_SEEN=$workdir/seen GH_CLI=$flaky bash "$root/scripts/verify-release-attestations.sh" --repo mlops-ca/notarx --manifest "$assets/release-manifest.json" \
+  --assets "$assets" --attempts 1 --delay 0 >/dev/null 2>&1; then fail 'a miss with a single attempt passed'; fi
+expect_fail 'bad attempts value' 'attempts must be' verify --attempts 0
 rm "$assets/notarxctl_1.0.0_linux_amd64.tar.gz"
 expect_fail 'a missing archive fails' 'is missing' verify
 

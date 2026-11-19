@@ -22,7 +22,13 @@ fail() {
   exit 1
 }
 
-version= core= sha= built_at= assets= images_json= verified=
+version=''
+core=''
+sha=''
+built_at=''
+assets=''
+images_json=''
+verified=''
 declare -a image_args=()
 while [[ $# -gt 0 ]]; do
   [[ $# -ge 2 ]] || fail "$1 needs a value"

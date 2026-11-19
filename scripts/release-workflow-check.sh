@@ -3,6 +3,10 @@
 # cannot be exercised without publishing. Needs yq (mikefarah) and jq.
 set -euo pipefail
 
+command -v yq >/dev/null 2>&1 && yq --version 2>&1 | grep -q mikefarah || {
+  printf 'release-workflow-check: needs mikefarah yq (https://github.com/mikefarah/yq) and jq\n' >&2
+  exit 1
+}
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 file=${RELEASE_WORKFLOW_FILE:-$root/.github/workflows/release.yml}
 json=$(yq -o=json '.' "$file")
@@ -23,7 +27,7 @@ check 'the ADR job graph exists: plan, gates, build, publish, prune' '["plan","g
 check 'verify-candidate is gone' '.jobs | has("verify-candidate") | not'
 check 'plan is read-only' '[.jobs.plan.permissions[]] | all(. == "read")'
 check 'only publish and prune get contents: write' '[.jobs | to_entries[] | select(.value.permissions.contents == "write") | .key] | sort == ["prune", "publish"]'
-check 'only publish and prune (and the image build) get packages: write' '[.jobs | to_entries[] | select(.value.permissions.packages == "write") | .key] | sort == ["build-images", "prune"]'
+check 'only the image build and prune get packages: write' '[.jobs | to_entries[] | select(.value.permissions.packages == "write") | .key] | sort == ["build-images", "prune"]'
 check 'only the attest jobs get id-token and attestations: write' '[.jobs | to_entries[] | select(.value.permissions["id-token"] == "write" or .value.permissions.attestations == "write") | .key] | sort == ["build-images", "publish"]'
 check 'publish needs the build, prune needs publish' '(.jobs.publish.needs | index("build")) != null and (.jobs.prune.needs | index("publish")) != null'
 check 'build needs gates through both reusable calls' '(.jobs["build-archives"].needs | index("gates")) != null and (.jobs["build-images"].needs | index("gates")) != null'

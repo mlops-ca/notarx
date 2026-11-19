@@ -70,7 +70,7 @@ stable tag's commit; it deletes the rest with `gh release delete --cleanup-tag` 
 and its attestation (referrer) manifests, and deletes only unmarked versions older than seven days and older than the oldest
 retained nightly. It aborts when the mark set is empty and never uses a bulk "delete untagged" action, because the per-architecture
 digests behind an index are untagged. Both scripts default to a dry run (the workflow applies them only after its own nightly was
-published). Mainline tags (`main`, `main-sha-*`) are treated as live and are not pruned by this slice. To rehearse:
+published). The ADR's "older than the oldest retained nightly" condition keeps the sweep cutoff pinned to long-lived retained nightlies; bounding it is tracked in issue 388. Mainline tags (`main`, `main-sha-*`) are treated as live and are not pruned by this slice. To rehearse:
 
 ```
 gh workflow run release.yml -f dry_run=true
@@ -110,5 +110,7 @@ GitHub disables scheduled workflows after 60 days without repository activity. T
   returns `204 No Content` and changes nothing visible; whether it revives a schedule that GitHub disabled for inactivity cannot be shown
   without waiting out the timer, and GitHub documents only repository activity as resetting it. Nothing relies on the call.
 - `.github/workflows/release-liveness.yml` runs monthly and opens an issue titled "release: no nightly run in 35 days" when the nightly
-  workflow recorded no successful scheduled run (a nightly or a skip notice) in 35 days. The monthly alert, not the call, is the guarantee.
-  When it fires: re-enable the workflow in the Actions tab, then dispatch it once.
+  workflow recorded no successful scheduled run (a nightly or a skip notice) in 35 days. The monthly alert, not the call, is the backstop.
+  It is itself a scheduled workflow, so a repository that is quiet for 60 days disables it together with the nightly; it therefore
+  also runs on every push to `main`, which raises the alert as soon as activity resumes. When it fires: re-enable the workflow in
+  the Actions tab, then dispatch it once.

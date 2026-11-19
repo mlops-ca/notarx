@@ -83,16 +83,21 @@ ruleset nightly-tags 'refs/tags/v*-nightly.*' '' '[{"type":"update"},{"type":"de
 ruleset tag-creation 'refs/tags/v*' '' '[{"type":"creation"}]' "$app_bypass"
 
 # --- environment ---------------------------------------------------------------------
-env_body=$(jq -n -c '{wait_timer: 0}')
+# Reviewers are replaced only when --reviewer is given; a re-run without it must never clear the
+# approval gate of an existing environment.
 if [[ ${#reviewers[@]} -gt 0 ]]; then
   ids='[]'
   for login in "${reviewers[@]}"; do
     ids=$(jq -c --argjson id "$(get "users/$login" | jq '.id')" '. + [{type: "User", id: $id}]' <<<"$ids")
   done
-  env_body=$(jq -n -c --argjson reviewers "$ids" '{wait_timer: 0, reviewers: $reviewers}')
+  send PUT "repos/$repo/environments/stable-release" "$(jq -n -c --argjson reviewers "$ids" '{wait_timer: 0, reviewers: $reviewers}')"
+  printf 'environment stable-release: reviewers set\n'
+elif get "repos/$repo/environments/stable-release" >/dev/null 2>&1; then
+  printf 'environment stable-release: present, left unchanged\n'
+else
+  send PUT "repos/$repo/environments/stable-release" '{"wait_timer":0}'
+  printf 'environment stable-release: created\n'
 fi
-send PUT "repos/$repo/environments/stable-release" "$env_body"
-printf 'environment stable-release: present\n'
 
 # --- milestones ----------------------------------------------------------------------
 existing=$(get "repos/$repo/milestones?state=all&per_page=100" | jq -r '.[].title')

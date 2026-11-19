@@ -35,6 +35,7 @@ case "$method $path" in
     id=${path##*/}
     jq -c --argjson id "$id" '. + {id: $id}' <<<"$body" >"$STATE/rulesets/$id.json" ;;
   "PUT repos/o/r/environments/stable-release") printf '%s' "$body" >"$STATE/environment.json" ;;
+  "GET repos/o/r/environments/stable-release") cat "$STATE/environment.json" 2>/dev/null || exit 1 ;;
   "GET users/"*) echo '{"id": 4242}' ;;
   "GET repos/o/r/milestones?state=all&per_page=100") cat "$STATE/milestones.json" ;;
   "POST repos/o/r/milestones") jq -c --argjson m "$body" '. + [$m]' "$STATE/milestones.json" >"$STATE/m.new" && mv "$STATE/m.new" "$STATE/milestones.json" ;;
@@ -78,6 +79,11 @@ expect_eq 'nightly tags bypass only for the App' \
 expect_eq 'tag creation restricted to the App' \
   "$(jq -c '[.name, .bypass_actors[0].actor_id, ([.rules[].type] | join(","))]' "$STATE/rulesets/3.json")" '["tag-creation",77,"creation"]'
 expect_eq 'reviewer is recorded on the environment' "$(jq -c '.reviewers' "$STATE/environment.json")" '[{"type":"User","id":4242}]'
+apply >/dev/null
+expect_eq 'a re-run without --reviewer keeps the reviewers' "$(jq -c '.reviewers' "$STATE/environment.json")" '[{"type":"User","id":4242}]'
+rm "$STATE/environment.json"
+apply >/dev/null
+expect_eq 'a missing environment is created without reviewers' "$(jq -c '.' "$STATE/environment.json")" '{"wait_timer":0}'
 expect_eq 'effective rulesets are printed' "$(grep -c '^ruleset ' <<<"$second" | tr -d ' ')" 6
 expect_eq 'effective output names the squash defaults' "$(grep -c 'allow_merge_commit=false allow_rebase_merge=false squash_merge_commit_title=PR_TITLE' <<<"$second")" 1
 

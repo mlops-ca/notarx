@@ -4,9 +4,13 @@ name: Release liveness
 # repository activity, and the workflow-enable call in release.yml is only best effort.
 # This check opens an issue when the nightly workflow recorded no successful run (a nightly or
 # a skip notice) in 35 days. docs/releasing.md describes the response.
+# It is a schedule too, so it is disabled by the same inactivity; a push to main (repository
+# activity) also runs it, so the first change after a quiet spell raises the alert at once.
 on:
   schedule:
     - cron: "43 4 1 * *"
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:

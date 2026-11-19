@@ -80,7 +80,8 @@ export function plan({ versions, manifests, retainedNightlies, now = Date.now() 
   }
   if (marked.size === 0) throw new Error('the mark set is empty; refusing to prune');
 
-  // Oldest retained nightly: the cutoff below which an unmarked version may go.
+  // Oldest retained nightly: the cutoff below which an unmarked version may go (ADR 0024 wording;
+  // it lets old retained nightlies hold the cutoff back, tracked in issue 388).
   const retainedTimes = versions
     .filter((v) => tagsOf(v).some((t) => retainedNightlies.has(t)))
     .map((v) => Date.parse(v.created_at));
@@ -106,18 +107,46 @@ async function registryToken(owner, name) {
   return (await res.json()).token;
 }
 
-async function fetchManifest(owner, name, token, digest) {
+// Fetches one manifest; a 401 (the short-lived pull token expired mid-run) refreshes the token once.
+export async function fetchManifest(owner, name, tokens, digest, fetchImpl = fetch) {
   const accept = [
     'application/vnd.oci.image.index.v1+json',
     'application/vnd.oci.image.manifest.v1+json',
     'application/vnd.docker.distribution.manifest.list.v2+json',
     'application/vnd.docker.distribution.manifest.v2+json',
   ].join(', ');
-  const res = await fetch('https://ghcr.io/v2/' + owner + '/' + name + '/manifests/' + digest, {
-    headers: { Authorization: 'Bearer ' + token, Accept: accept },
-  });
+  const url = 'https://ghcr.io/v2/' + owner + '/' + name + '/manifests/' + digest;
+  const request = async () => fetchImpl(url, { headers: { Authorization: 'Bearer ' + (await tokens.get()), Accept: accept } });
+  let res = await request();
+  if (res.status === 401) {
+    await tokens.refresh();
+    res = await request();
+  }
   if (!res.ok) throw new Error('manifest ' + digest + ' of ' + name + ': ' + res.status);
   return res.json();
+}
+
+// Runs fn over items with at most limit calls in flight; results keep the order of items.
+export async function mapLimit(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next;
+      next += 1;
+      results[index] = await fn(items[index]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+function tokenSource(load) {
+  let current = null;
+  return {
+    get: async () => (current ??= await load()),
+    refresh: async () => (current = await load()),
+  };
 }
 
 export function parseArgs(argv) {
@@ -145,9 +174,9 @@ async function main() {
   for (const name of opts.packages.split(',')) {
     const base = '/' + opts.ownerType + '/' + opts.owner + '/packages/container/' + name + '/versions';
     const versions = JSON.parse(gh(['api', '--paginate', '--slurp', base + '?per_page=100'])).flat();
-    const token = await registryToken(opts.owner, name);
-    const manifests = {};
-    for (const v of versions) manifests[v.name] = await fetchManifest(opts.owner, name, token, v.name);
+    const tokens = tokenSource(() => registryToken(opts.owner, name));
+    const fetched = await mapLimit(versions, 8, (v) => fetchManifest(opts.owner, name, tokens, v.name));
+    const manifests = Object.fromEntries(versions.map((v, i) => [v.name, fetched[i]]));
     const { marked, sweep, cutoff } = plan({ versions, manifests, retainedNightlies: retained });
     console.log(name + ': ' + versions.length + ' versions, ' + marked.size + ' marked, ' + sweep.length + ' to delete (cutoff ' + new Date(cutoff).toISOString() + ')');
     for (const v of sweep) {

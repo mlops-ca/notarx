@@ -103,6 +103,11 @@ run_quality() {
   run "go lint" make lint
   run "go vet" make vet
   run "release version and artifact builder" make release-version-check stamp-version-test release-plan-test release-pipeline-test release-artifacts-test
+  if command -v yq >/dev/null 2>&1; then
+    run "release workflow structure" make release-workflow-check
+  else
+    printf 'SKIPPED release workflow structure: yq is not installed (CI runs it)\n'
+  fi
   if command -v gpg >/dev/null 2>&1; then
     run "package signing drill and environment checks" make packages-signing-drill packages-environments-test
   else

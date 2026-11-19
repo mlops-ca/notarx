@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { plan, parseArgs } from './prune-ghcr.mjs';
+import { fetchManifest, mapLimit, parseArgs, plan } from './prune-ghcr.mjs';
 
 const now = Date.parse('2026-11-18T00:00:00Z');
 const day = 24 * 60 * 60 * 1000;
@@ -120,6 +120,42 @@ test('arguments are validated and dry run is the default', () => {
   assert.throws(() => parseArgs(['--owner', 'o']), /--packages is required/);
   assert.throws(() => parseArgs(['--bogus']), /unknown argument/);
   assert.throws(() => parseArgs(['--owner', 'o', '--packages', 'a', '--retained-nightlies', 'f', '--owner-type', 'x']), /orgs or users/);
+});
+
+test('mapLimit bounds concurrency and keeps order', async () => {
+  let active = 0;
+  let peak = 0;
+  const result = await mapLimit([1, 2, 3, 4, 5, 6, 7], 3, async (n) => {
+    active += 1;
+    peak = Math.max(peak, active);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    active -= 1;
+    return n * 2;
+  });
+  assert.deepEqual(result, [2, 4, 6, 8, 10, 12, 14]);
+  assert.ok(peak <= 3 && peak > 1, 'peak ' + peak);
+});
+
+test('an expired registry token is refreshed once', async () => {
+  const issued = [];
+  const tokens = {
+    get: async () => issued.at(-1) ?? 'old',
+    refresh: async () => {
+      issued.push('fresh');
+      return 'fresh';
+    },
+  };
+  const seen = [];
+  const fetchImpl = async (_url, options) => {
+    seen.push(options.headers.Authorization);
+    return options.headers.Authorization === 'Bearer fresh'
+      ? { ok: true, status: 200, json: async () => ({ manifests: [] }) }
+      : { ok: false, status: 401 };
+  };
+  assert.deepEqual(await fetchManifest('o', 'n', tokens, digest('a'), fetchImpl), { manifests: [] });
+  assert.deepEqual(seen, ['Bearer old', 'Bearer fresh']);
+  const failing = async () => ({ ok: false, status: 500 });
+  await assert.rejects(fetchManifest('o', 'n', tokens, digest('a'), failing), /500/);
 });
 
 test('the script never calls a bulk untagged deletion', () => {
