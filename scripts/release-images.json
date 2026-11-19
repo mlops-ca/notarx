@@ -1,0 +1,4 @@
+[
+  { "image": "notarx", "file": "Dockerfile", "version-command": true },
+  { "image": "notarx-console", "file": "Dockerfile.console", "version-command": false }
+]

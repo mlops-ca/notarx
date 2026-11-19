@@ -39,7 +39,10 @@ ON CONFLICT (repository_id) DO NOTHING`
 // the quota returns ErrQuotaExceeded and changes nothing. The caller owns the
 // transaction and must roll it back on error.
 func Reserve(ctx context.Context, tx Execer, repositoryID string, deltaBytes, deltaObjects int64) error {
-	for attempt := 0; attempt < 2; attempt++ {
+	// seen is true once a SELECT has found the counter row: the UPDATE that follows it ran with
+	// the row visible, so only then does zero affected rows mean the quota guard rejected the delta.
+	seen := false
+	for attempt := 0; attempt < 3; attempt++ {
 		result, err := tx.ExecContext(ctx, ReserveStatement, repositoryID, deltaBytes, deltaObjects)
 		if err != nil {
 			return err
@@ -53,12 +56,18 @@ func Reserve(ctx context.Context, tx Execer, repositoryID string, deltaBytes, de
 		err = tx.QueryRowContext(ctx, `SELECT 1 FROM repository_usage_counters WHERE repository_id=$1::uuid`, repositoryID).Scan(&present)
 		switch {
 		case err == nil:
-			// The row exists, so the quota guard rejected the delta.
-			return ErrQuotaExceeded
+			// The row exists. The UPDATE above may have run before a concurrent writer committed it
+			// (zero rows for that reason), so the guard is blamed only after an UPDATE that followed
+			// a SELECT which saw the row.
+			if seen {
+				return ErrQuotaExceeded
+			}
+			seen = true
+			continue
 		case !errors.Is(err, sql.ErrNoRows):
 			return err
 		}
-		if attempt == 1 {
+		if attempt == 2 {
 			break
 		}
 		// No counter row yet (a repository created after the backfill). A concurrent writer may

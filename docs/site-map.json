@@ -14,6 +14,7 @@
         { "id": "getting-started", "title": { "en": "Getting started", "fr-CA": "Démarrage", "zh-CN": "快速入门" }, "en": "docs/getting-started.md", "fr-CA": "docs/getting-started.fr-CA.md", "zh-CN": "docs/getting-started.zh-CN.md" },
         { "id": "product", "title": { "en": "Product direction", "zh-CN": "产品方向" }, "en": "PRODUCT.md", "zh-CN": "PRODUCT.zh-CN.md" },
         { "id": "ci-gates", "title": { "en": "CI path classes and the ci-ok gate" }, "en": "docs/ci.md" },
+        { "id": "releasing", "title": { "en": "Releasing notarx: nightly pipeline, retention and governance" }, "en": "docs/releasing.md" },
         { "id": "native-builds", "title": { "en": "Native builds, runner matrix and local builds" }, "en": "docs/native-builds.md" },
         { "id": "contributing", "title": { "en": "Contributing", "fr-CA": "Contribuer", "zh-CN": "参与开发" }, "en": "CONTRIBUTING.md", "fr-CA": "CONTRIBUTING.fr-CA.md", "zh-CN": "CONTRIBUTING.zh-CN.md" },
         { "id": "format-extension", "title": { "en": "Format extension guide", "zh-CN": "格式扩展指南" }, "en": "docs/format-extension-guide.md", "zh-CN": "docs/format-extension-guide.zh-CN.md" }

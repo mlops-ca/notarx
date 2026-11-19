@@ -1,0 +1,45 @@
+name: Release liveness
+
+# Monthly alert (ADR 0024): GitHub disables scheduled workflows after 60 days without
+# repository activity, and the workflow-enable call in release.yml is only best effort.
+# This check opens an issue when the nightly workflow recorded no successful run (a nightly or
+# a skip notice) in 35 days. docs/releasing.md describes the response.
+# It is a schedule too, so it is disabled by the same inactivity; a push to main (repository
+# activity) also runs it, so the first change after a quiet spell raises the alert at once.
+on:
+  schedule:
+    - cron: "43 4 1 * *"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  liveness:
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      WINDOW_DAYS: "35"
+      TITLE: "release: no nightly run in 35 days"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Count successful nightly runs in the window
+        id: runs
+        run: |
+          since=$(date -u -d "$WINDOW_DAYS days ago" +%Y-%m-%dT%H:%M:%SZ)
+          count=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/release.yml/runs?event=schedule&status=success&created=%3E%3D$since&per_page=1" --jq .total_count)
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "successful scheduled release runs since $since: $count"
+      - name: Open the alert issue when there is none
+        if: steps.runs.outputs.count == '0'
+        run: |
+          if [ -n "$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[].number')" ]; then
+            echo "an alert issue is already open"
+            exit 0
+          fi
+          gh issue create --title "$TITLE" --body "The scheduled release workflow recorded no successful run (a nightly or a skip notice) in the last $WINDOW_DAYS days. The schedule may have been disabled after 60 days without repository activity, or every run is failing. Follow the liveness section of docs/releasing.md: re-enable the workflow in the Actions tab, then dispatch it once."

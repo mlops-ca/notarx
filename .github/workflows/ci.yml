@@ -258,7 +258,7 @@ jobs:
       - name: Check migration immutability and sequencing
         run: make migration-check
       - name: Verify release version and artifact builder
-        run: make release-version-check stamp-version-test release-plan-test release-artifacts-test
+        run: make release-version-check stamp-version-test release-plan-test release-pipeline-test release-workflow-check release-artifacts-test
       - name: Verify package signing runbook and environment checks
         run: make packages-signing-drill packages-environments-test
       - name: Enforce coverage floor
@@ -514,12 +514,15 @@ jobs:
     outputs:
       version: ${{ steps.plan.outputs.version }}
       tags: ${{ steps.plan.outputs.tags }}
+      images: ${{ steps.plan.outputs.images }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: plan
         run: |
-          echo "version=$(tr -d '[:space:]' < VERSION)-main.${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+          # The single list of published images (ADR 0016) is scripts/release-images.json.
           {
+            echo "images=$(jq -c . scripts/release-images.json)"
+            echo "version=$(tr -d '[:space:]' < VERSION)-main.${GITHUB_SHA::12}"
             echo 'tags<<EOF'
             echo main
             echo "main-sha-${GITHUB_SHA::12}"
@@ -549,8 +552,6 @@ jobs:
       sha: ${{ github.sha }}
       tags: ${{ needs.mainline-plan.outputs.tags }}
       require-main-tip: true
-      # The single list of published images (ADR 0016): adding one is one entry here
-      # (and its release-gate check).
-      images: >-
-        [{"image": "notarx", "file": "Dockerfile", "version-command": true},
-        {"image": "notarx-console", "file": "Dockerfile.console", "version-command": false}]
+      # The single list of published images (ADR 0016) is scripts/release-images.json:
+      # adding one is one entry there (and its release-gate check).
+      images: ${{ needs.mainline-plan.outputs.images }}
