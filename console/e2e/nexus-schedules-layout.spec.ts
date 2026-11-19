@@ -3,6 +3,7 @@ import { authenticateAsAdmin } from "./support/auth";
 import { defaultSiteSettings } from "../src/lib/siteSettings";
 import { nexusBatch, nexusCapabilities } from "../src/test/nexusBatchFixtures";
 import { nexusSchedule } from "../src/test/nexusScheduleFixtures";
+import { waitForAnimationsToSettle } from "./support/motion";
 
 async function setup(page: Page, width: number, theme: string) {
   await page.setViewportSize({ width, height: 1000 });
@@ -37,6 +38,8 @@ async function setup(page: Page, width: number, theme: string) {
 }
 
 async function geometry(page: Page) {
+  // Entrance animations (ag-feedback-enter) shift boxes by up to 3px.
+  await waitForAnimationsToSettle(page);
   await page.evaluate(() => document.fonts.ready);
   expect(
     await page

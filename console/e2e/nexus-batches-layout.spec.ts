@@ -1,6 +1,6 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { authenticateAsAdmin, authenticateAsMember } from "./support/auth";
-import { waitForModalOpen } from "./support/motion";
+import { waitForAnimationsToSettle, waitForModalOpen } from "./support/motion";
 import { defaultSiteSettings } from "../src/lib/siteSettings";
 import {
   migrationPreflight,
@@ -68,6 +68,8 @@ async function setup(page: Page, width: number, theme: string) {
   return { pageErrors, consoleErrors };
 }
 async function geometry(page: Page, width: number) {
+  // Entrance animations (ag-feedback-enter) shift boxes by up to 3px.
+  await waitForAnimationsToSettle(page);
   await page.evaluate(() => document.fonts.ready);
   expect(
     await page
