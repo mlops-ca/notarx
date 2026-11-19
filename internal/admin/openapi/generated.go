@@ -839,12 +839,15 @@ func (e CreateIdentityProviderJitDefaultRole) Valid() bool {
 // Defines values for CreateIdentityProviderKind.
 const (
 	CreateIdentityProviderKindOidc CreateIdentityProviderKind = "oidc"
+	CreateIdentityProviderKindSaml CreateIdentityProviderKind = "saml"
 )
 
 // Valid indicates whether the value is a known member of the CreateIdentityProviderKind enum.
 func (e CreateIdentityProviderKind) Valid() bool {
 	switch e {
 	case CreateIdentityProviderKindOidc:
+		return true
+	case CreateIdentityProviderKindSaml:
 		return true
 	default:
 		return false
@@ -2345,6 +2348,84 @@ func (e IdentityProviderOIDCSettingsAlgorithms) Valid() bool {
 	case IdentityProviderOIDCSettingsAlgorithmsEdDSA:
 		return true
 	case IdentityProviderOIDCSettingsAlgorithmsRS256:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IdentityProviderSAMLCertificateState.
+const (
+	IdentityProviderSAMLCertificateStateActive IdentityProviderSAMLCertificateState = "active"
+	IdentityProviderSAMLCertificateStateNext   IdentityProviderSAMLCertificateState = "next"
+)
+
+// Valid indicates whether the value is a known member of the IdentityProviderSAMLCertificateState enum.
+func (e IdentityProviderSAMLCertificateState) Valid() bool {
+	switch e {
+	case IdentityProviderSAMLCertificateStateActive:
+		return true
+	case IdentityProviderSAMLCertificateStateNext:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IdentityProviderSAMLCertificateInputState.
+const (
+	IdentityProviderSAMLCertificateInputStateActive IdentityProviderSAMLCertificateInputState = "active"
+	IdentityProviderSAMLCertificateInputStateNext   IdentityProviderSAMLCertificateInputState = "next"
+)
+
+// Valid indicates whether the value is a known member of the IdentityProviderSAMLCertificateInputState enum.
+func (e IdentityProviderSAMLCertificateInputState) Valid() bool {
+	switch e {
+	case IdentityProviderSAMLCertificateInputStateActive:
+		return true
+	case IdentityProviderSAMLCertificateInputStateNext:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IdentityProviderSAMLInputNameIdFormat.
+const (
+	IdentityProviderSAMLInputNameIdFormatEmailAddress IdentityProviderSAMLInputNameIdFormat = "emailAddress"
+	IdentityProviderSAMLInputNameIdFormatPersistent   IdentityProviderSAMLInputNameIdFormat = "persistent"
+	IdentityProviderSAMLInputNameIdFormatUnspecified  IdentityProviderSAMLInputNameIdFormat = "unspecified"
+)
+
+// Valid indicates whether the value is a known member of the IdentityProviderSAMLInputNameIdFormat enum.
+func (e IdentityProviderSAMLInputNameIdFormat) Valid() bool {
+	switch e {
+	case IdentityProviderSAMLInputNameIdFormatEmailAddress:
+		return true
+	case IdentityProviderSAMLInputNameIdFormatPersistent:
+		return true
+	case IdentityProviderSAMLInputNameIdFormatUnspecified:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IdentityProviderSAMLSettingsNameIdFormat.
+const (
+	IdentityProviderSAMLSettingsNameIdFormatEmailAddress IdentityProviderSAMLSettingsNameIdFormat = "emailAddress"
+	IdentityProviderSAMLSettingsNameIdFormatPersistent   IdentityProviderSAMLSettingsNameIdFormat = "persistent"
+	IdentityProviderSAMLSettingsNameIdFormatUnspecified  IdentityProviderSAMLSettingsNameIdFormat = "unspecified"
+)
+
+// Valid indicates whether the value is a known member of the IdentityProviderSAMLSettingsNameIdFormat enum.
+func (e IdentityProviderSAMLSettingsNameIdFormat) Valid() bool {
+	switch e {
+	case IdentityProviderSAMLSettingsNameIdFormatEmailAddress:
+		return true
+	case IdentityProviderSAMLSettingsNameIdFormatPersistent:
+		return true
+	case IdentityProviderSAMLSettingsNameIdFormatUnspecified:
 		return true
 	default:
 		return false
@@ -5943,7 +6024,7 @@ type CreateGroup struct {
 	Visibility *Visibility `json:"visibility,omitempty"`
 }
 
-// CreateIdentityProvider defines model for CreateIdentityProvider.
+// CreateIdentityProvider The settings object that matches kind is required; the other is rejected.
 type CreateIdentityProvider struct {
 	// AttributeMapping Where each user attribute comes from: a claim of the ID token (OIDC) or an attribute of the assertion (SAML). An empty value selects the protocol default. subject may join two claims with a colon, which is how Entra ID keeps its stable key (tid:oid).
 	AttributeMapping    *IdentityProviderAttributeMapping       `json:"attributeMapping,omitempty"`
@@ -5952,8 +6033,9 @@ type CreateIdentityProvider struct {
 	Enabled             bool                                    `json:"enabled"`
 	JitDefaultRole      *CreateIdentityProviderJitDefaultRole   `json:"jitDefaultRole,omitempty"`
 	Kind                CreateIdentityProviderKind              `json:"kind"`
-	Oidc                IdentityProviderOIDCInput               `json:"oidc"`
+	Oidc                *IdentityProviderOIDCInput              `json:"oidc,omitempty"`
 	ProvisioningMode    *CreateIdentityProviderProvisioningMode `json:"provisioningMode,omitempty"`
+	Saml                *IdentityProviderSAMLInput              `json:"saml,omitempty"`
 	Slug                string                                  `json:"slug"`
 }
 
@@ -7097,6 +7179,7 @@ type IdentityProvider struct {
 	Kind                IdentityProviderKind             `json:"kind"`
 	Oidc                *IdentityProviderOIDCSettings    `json:"oidc,omitempty"`
 	ProvisioningMode    IdentityProviderProvisioningMode `json:"provisioningMode"`
+	Saml                *IdentityProviderSAMLSettings    `json:"saml,omitempty"`
 	Slug                string                           `json:"slug"`
 	UpdatedAt           time.Time                        `json:"updatedAt"`
 
@@ -7166,6 +7249,80 @@ type IdentityProviderOIDCSettings struct {
 
 // IdentityProviderOIDCSettingsAlgorithms defines model for IdentityProviderOIDCSettings.Algorithms.
 type IdentityProviderOIDCSettingsAlgorithms string
+
+// IdentityProviderSAMLCertificate One pinned IdP signing certificate. notAfter is read from the PEM on every save. Any listed certificate verifies a response; next marks a certificate added before the IdP cuts over.
+type IdentityProviderSAMLCertificate struct {
+	NotAfter time.Time                            `json:"notAfter"`
+	Pem      string                               `json:"pem"`
+	State    IdentityProviderSAMLCertificateState `json:"state"`
+}
+
+// IdentityProviderSAMLCertificateState defines model for IdentityProviderSAMLCertificate.State.
+type IdentityProviderSAMLCertificateState string
+
+// IdentityProviderSAMLCertificateInput defines model for IdentityProviderSAMLCertificateInput.
+type IdentityProviderSAMLCertificateInput struct {
+	Pem   string                                     `json:"pem"`
+	State *IdentityProviderSAMLCertificateInputState `json:"state,omitempty"`
+}
+
+// IdentityProviderSAMLCertificateInputState defines model for IdentityProviderSAMLCertificateInput.State.
+type IdentityProviderSAMLCertificateInputState string
+
+// IdentityProviderSAMLInput defines model for IdentityProviderSAMLInput.
+type IdentityProviderSAMLInput struct {
+	AllowIdpInitiated   *bool                                  `json:"allowIdpInitiated,omitempty"`
+	Certificates        []IdentityProviderSAMLCertificateInput `json:"certificates"`
+	EntityId            string                                 `json:"entityId"`
+	MetadataRefresh     *bool                                  `json:"metadataRefresh,omitempty"`
+	MetadataUrl         *string                                `json:"metadataUrl,omitempty"`
+	NameIdFormat        *IdentityProviderSAMLInputNameIdFormat `json:"nameIdFormat,omitempty"`
+	RelayStateAllowlist *[]string                              `json:"relayStateAllowlist,omitempty"`
+	SignRequests        *bool                                  `json:"signRequests,omitempty"`
+	SsoUrl              string                                 `json:"ssoUrl"`
+}
+
+// IdentityProviderSAMLInputNameIdFormat defines model for IdentityProviderSAMLInput.NameIdFormat.
+type IdentityProviderSAMLInputNameIdFormat string
+
+// IdentityProviderSAMLKey A published service provider signing key. The private key is never returned.
+type IdentityProviderSAMLKey struct {
+	Id       openapi_types.UUID `json:"id"`
+	NotAfter time.Time          `json:"notAfter"`
+}
+
+// IdentityProviderSAMLSettings defines model for IdentityProviderSAMLSettings.
+type IdentityProviderSAMLSettings struct {
+	AcsUrl              string                                   `json:"acsUrl"`
+	AllowIdpInitiated   bool                                     `json:"allowIdpInitiated"`
+	Certificates        []IdentityProviderSAMLCertificate        `json:"certificates"`
+	EntityId            string                                   `json:"entityId"`
+	MetadataEndpoint    string                                   `json:"metadataEndpoint"`
+	MetadataRefresh     bool                                     `json:"metadataRefresh"`
+	MetadataUrl         *string                                  `json:"metadataUrl,omitempty"`
+	NameIdFormat        IdentityProviderSAMLSettingsNameIdFormat `json:"nameIdFormat"`
+	RelayStateAllowlist []string                                 `json:"relayStateAllowlist"`
+	SignRequests        bool                                     `json:"signRequests"`
+
+	// SpEntityId Entity id of notarx as service provider, derived from NOTARX_PUBLIC_URL. Empty when that is not set.
+	SpEntityId string `json:"spEntityId"`
+
+	// SpKeys Service provider signing keys published in the SP metadata (at most two while a rotation is in progress).
+	SpKeys []IdentityProviderSAMLKey `json:"spKeys"`
+	SsoUrl string                    `json:"ssoUrl"`
+}
+
+// IdentityProviderSAMLSettingsNameIdFormat defines model for IdentityProviderSAMLSettings.NameIdFormat.
+type IdentityProviderSAMLSettingsNameIdFormat string
+
+// ImportIdentityProviderMetadata Exactly one of url and xml.
+type ImportIdentityProviderMetadata struct {
+	// Url HTTPS URL of the IdP metadata
+	Url *string `json:"url,omitempty"`
+
+	// Xml Pasted IdP metadata XML.
+	Xml *string `json:"xml,omitempty"`
+}
 
 // LifecycleJob defines model for LifecycleJob.
 type LifecycleJob struct {
@@ -8248,7 +8405,7 @@ type QuarantineReadPolicy struct {
 	Version string `json:"version"`
 }
 
-// ReplaceIdentityProvider defines model for ReplaceIdentityProvider.
+// ReplaceIdentityProvider The settings object that matches the provider's kind is required; the other is rejected.
 type ReplaceIdentityProvider struct {
 	// AttributeMapping Where each user attribute comes from: a claim of the ID token (OIDC) or an attribute of the assertion (SAML). An empty value selects the protocol default. subject may join two claims with a colon, which is how Entra ID keeps its stable key (tid:oid).
 	AttributeMapping    IdentityProviderAttributeMapping        `json:"attributeMapping"`
@@ -8256,8 +8413,9 @@ type ReplaceIdentityProvider struct {
 	EmailLinkingEnabled bool                                    `json:"emailLinkingEnabled"`
 	Enabled             bool                                    `json:"enabled"`
 	JitDefaultRole      ReplaceIdentityProviderJitDefaultRole   `json:"jitDefaultRole"`
-	Oidc                IdentityProviderOIDCInput               `json:"oidc"`
+	Oidc                *IdentityProviderOIDCInput              `json:"oidc,omitempty"`
 	ProvisioningMode    ReplaceIdentityProviderProvisioningMode `json:"provisioningMode"`
+	Saml                *IdentityProviderSAMLInput              `json:"saml,omitempty"`
 }
 
 // ReplaceIdentityProviderJitDefaultRole defines model for ReplaceIdentityProvider.JitDefaultRole.
@@ -10253,6 +10411,9 @@ type CreateIdentityProviderJSONRequestBody = CreateIdentityProvider
 // ReplaceIdentityProviderJSONRequestBody defines body for ReplaceIdentityProvider for application/json ContentType.
 type ReplaceIdentityProviderJSONRequestBody = ReplaceIdentityProvider
 
+// ImportIdentityProviderMetadataJSONRequestBody defines body for ImportIdentityProviderMetadata for application/json ContentType.
+type ImportIdentityProviderMetadataJSONRequestBody = ImportIdentityProviderMetadata
+
 // CreateAuthorizationRoleJSONRequestBody defines body for CreateAuthorizationRole for application/json ContentType.
 type CreateAuthorizationRoleJSONRequestBody = AuthorizationRoleWritable
 
@@ -11285,6 +11446,12 @@ type ServerInterface interface {
 
 	// (PUT /authentication/providers/{providerId})
 	ReplaceIdentityProvider(w http.ResponseWriter, r *http.Request, providerId openapi_types.UUID, params ReplaceIdentityProviderParams)
+
+	// (POST /authentication/providers/{providerId}:import-metadata)
+	ImportIdentityProviderMetadata(w http.ResponseWriter, r *http.Request, providerId openapi_types.UUID)
+
+	// (POST /authentication/providers/{providerId}:rotate-sp-key)
+	RotateIdentityProviderSPKey(w http.ResponseWriter, r *http.Request, providerId openapi_types.UUID)
 
 	// (POST /authentication/providers/{providerId}:test)
 	TestIdentityProvider(w http.ResponseWriter, r *http.Request, providerId openapi_types.UUID)
@@ -12730,6 +12897,58 @@ func (siw *ServerInterfaceWrapper) ReplaceIdentityProvider(w http.ResponseWriter
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ReplaceIdentityProvider(w, r, providerId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ImportIdentityProviderMetadata operation middleware
+func (siw *ServerInterfaceWrapper) ImportIdentityProviderMetadata(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "providerId" -------------
+	var providerId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "providerId", r.PathValue("providerId"), &providerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "providerId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ImportIdentityProviderMetadata(w, r, providerId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RotateIdentityProviderSPKey operation middleware
+func (siw *ServerInterfaceWrapper) RotateIdentityProviderSPKey(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "providerId" -------------
+	var providerId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "providerId", r.PathValue("providerId"), &providerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "providerId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RotateIdentityProviderSPKey(w, r, providerId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -22846,6 +23065,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/authentication/providers/{providerId}", wrapper.GetIdentityProvider)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/authentication/providers/{providerId}", wrapper.ReplaceIdentityProvider)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/authentication/providers/{providerId}:test", wrapper.TestIdentityProvider)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/authentication/providers/{providerId}:import-metadata", wrapper.ImportIdentityProviderMetadata)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/authentication/providers/{providerId}:rotate-sp-key", wrapper.RotateIdentityProviderSPKey)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/webhook-subscriptions", wrapper.ListWebhookSubscriptions)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/webhook-subscriptions", wrapper.CreateWebhookSubscription)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/webhook-subscriptions/{subscriptionId}", wrapper.GetWebhookSubscription)
@@ -24084,6 +24305,229 @@ func (response ReplaceIdentityProvider412ApplicationProblemPlusJSONResponse) Vis
 type ReplaceIdentityProvider503ApplicationProblemPlusJSONResponse Problem
 
 func (response ReplaceIdentityProvider503ApplicationProblemPlusJSONResponse) VisitReplaceIdentityProviderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ImportIdentityProviderMetadataRequestObject struct {
+	ProviderId openapi_types.UUID `json:"providerId"`
+	Body       *ImportIdentityProviderMetadataJSONRequestBody
+}
+
+type ImportIdentityProviderMetadataResponseObject interface {
+	VisitImportIdentityProviderMetadataResponse(w http.ResponseWriter) error
+}
+
+type ImportIdentityProviderMetadata200JSONResponse struct{ IdentityProviderJSONResponse }
+
+func (response ImportIdentityProviderMetadata200JSONResponse) VisitImportIdentityProviderMetadataResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.ETag != nil {
+		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ImportIdentityProviderMetadata400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response ImportIdentityProviderMetadata400ApplicationProblemPlusJSONResponse) VisitImportIdentityProviderMetadataResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ImportIdentityProviderMetadata401ApplicationProblemPlusJSONResponse Problem
+
+func (response ImportIdentityProviderMetadata401ApplicationProblemPlusJSONResponse) VisitImportIdentityProviderMetadataResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ImportIdentityProviderMetadata403ApplicationProblemPlusJSONResponse Problem
+
+func (response ImportIdentityProviderMetadata403ApplicationProblemPlusJSONResponse) VisitImportIdentityProviderMetadataResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ImportIdentityProviderMetadata404ApplicationProblemPlusJSONResponse Problem
+
+func (response ImportIdentityProviderMetadata404ApplicationProblemPlusJSONResponse) VisitImportIdentityProviderMetadataResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ImportIdentityProviderMetadata409ApplicationProblemPlusJSONResponse Problem
+
+func (response ImportIdentityProviderMetadata409ApplicationProblemPlusJSONResponse) VisitImportIdentityProviderMetadataResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ImportIdentityProviderMetadata503ApplicationProblemPlusJSONResponse Problem
+
+func (response ImportIdentityProviderMetadata503ApplicationProblemPlusJSONResponse) VisitImportIdentityProviderMetadataResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RotateIdentityProviderSPKeyRequestObject struct {
+	ProviderId openapi_types.UUID `json:"providerId"`
+}
+
+type RotateIdentityProviderSPKeyResponseObject interface {
+	VisitRotateIdentityProviderSPKeyResponse(w http.ResponseWriter) error
+}
+
+type RotateIdentityProviderSPKey200JSONResponse struct{ IdentityProviderJSONResponse }
+
+func (response RotateIdentityProviderSPKey200JSONResponse) VisitRotateIdentityProviderSPKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.ETag != nil {
+		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RotateIdentityProviderSPKey400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response RotateIdentityProviderSPKey400ApplicationProblemPlusJSONResponse) VisitRotateIdentityProviderSPKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RotateIdentityProviderSPKey401ApplicationProblemPlusJSONResponse Problem
+
+func (response RotateIdentityProviderSPKey401ApplicationProblemPlusJSONResponse) VisitRotateIdentityProviderSPKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RotateIdentityProviderSPKey403ApplicationProblemPlusJSONResponse Problem
+
+func (response RotateIdentityProviderSPKey403ApplicationProblemPlusJSONResponse) VisitRotateIdentityProviderSPKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RotateIdentityProviderSPKey404ApplicationProblemPlusJSONResponse Problem
+
+func (response RotateIdentityProviderSPKey404ApplicationProblemPlusJSONResponse) VisitRotateIdentityProviderSPKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RotateIdentityProviderSPKey409ApplicationProblemPlusJSONResponse Problem
+
+func (response RotateIdentityProviderSPKey409ApplicationProblemPlusJSONResponse) VisitRotateIdentityProviderSPKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RotateIdentityProviderSPKey503ApplicationProblemPlusJSONResponse Problem
+
+func (response RotateIdentityProviderSPKey503ApplicationProblemPlusJSONResponse) VisitRotateIdentityProviderSPKeyResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -44000,6 +44444,12 @@ type StrictServerInterface interface {
 	// (PUT /authentication/providers/{providerId})
 	ReplaceIdentityProvider(ctx context.Context, request ReplaceIdentityProviderRequestObject) (ReplaceIdentityProviderResponseObject, error)
 
+	// (POST /authentication/providers/{providerId}:import-metadata)
+	ImportIdentityProviderMetadata(ctx context.Context, request ImportIdentityProviderMetadataRequestObject) (ImportIdentityProviderMetadataResponseObject, error)
+
+	// (POST /authentication/providers/{providerId}:rotate-sp-key)
+	RotateIdentityProviderSPKey(ctx context.Context, request RotateIdentityProviderSPKeyRequestObject) (RotateIdentityProviderSPKeyResponseObject, error)
+
 	// (POST /authentication/providers/{providerId}:test)
 	TestIdentityProvider(ctx context.Context, request TestIdentityProviderRequestObject) (TestIdentityProviderResponseObject, error)
 
@@ -45191,6 +45641,65 @@ func (sh *strictHandler) ReplaceIdentityProvider(w http.ResponseWriter, r *http.
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ReplaceIdentityProviderResponseObject); ok {
 		if err := validResponse.VisitReplaceIdentityProviderResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ImportIdentityProviderMetadata operation middleware
+func (sh *strictHandler) ImportIdentityProviderMetadata(w http.ResponseWriter, r *http.Request, providerId openapi_types.UUID) {
+	var request ImportIdentityProviderMetadataRequestObject
+
+	request.ProviderId = providerId
+
+	var body ImportIdentityProviderMetadataJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ImportIdentityProviderMetadata(ctx, request.(ImportIdentityProviderMetadataRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ImportIdentityProviderMetadata")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ImportIdentityProviderMetadataResponseObject); ok {
+		if err := validResponse.VisitImportIdentityProviderMetadataResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RotateIdentityProviderSPKey operation middleware
+func (sh *strictHandler) RotateIdentityProviderSPKey(w http.ResponseWriter, r *http.Request, providerId openapi_types.UUID) {
+	var request RotateIdentityProviderSPKeyRequestObject
+
+	request.ProviderId = providerId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RotateIdentityProviderSPKey(ctx, request.(RotateIdentityProviderSPKeyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RotateIdentityProviderSPKey")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RotateIdentityProviderSPKeyResponseObject); ok {
+		if err := validResponse.VisitRotateIdentityProviderSPKeyResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

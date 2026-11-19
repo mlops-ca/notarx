@@ -281,8 +281,13 @@ func randomURLToken(size int) (string, error) {
 }
 
 func signOIDCFlow(flow oidcFlowState, secret string) (string, error) {
+	return signFlowPayload(flow, secret)
+}
+
+// signFlowPayload signs a flow cookie payload with an HMAC of the signing secret.
+func signFlowPayload(flow any, secret string) (string, error) {
 	if secret == "" {
-		return "", errors.New("OIDC state signing secret is empty")
+		return "", errors.New("login state signing secret is empty")
 	}
 	payload, err := json.Marshal(flow)
 	if err != nil {
@@ -295,28 +300,36 @@ func signOIDCFlow(flow oidcFlowState, secret string) (string, error) {
 }
 
 func verifyOIDCFlow(value, secret string) (oidcFlowState, error) {
+	var flow oidcFlowState
+	if err := verifyFlowPayload(value, secret, &flow); err != nil {
+		return oidcFlowState{}, err
+	}
+	if flow.State == "" || flow.Nonce == "" || flow.Verifier == "" || flow.ExpiresAt == 0 {
+		return oidcFlowState{}, errors.New("invalid OIDC state payload")
+	}
+	return flow, nil
+}
+
+// verifyFlowPayload checks the HMAC of a flow cookie and decodes its payload into target.
+func verifyFlowPayload(value, secret string, target any) error {
 	parts := strings.Split(value, ".")
 	if len(parts) != 2 || secret == "" {
-		return oidcFlowState{}, errors.New("invalid OIDC state")
+		return errors.New("invalid login state")
 	}
 	signature, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return oidcFlowState{}, errors.New("invalid OIDC state signature")
+		return errors.New("invalid login state signature")
 	}
 	mac := hmac.New(sha256.New, []byte(secret))
 	_, _ = mac.Write([]byte(parts[0]))
 	if !hmac.Equal(signature, mac.Sum(nil)) {
-		return oidcFlowState{}, errors.New("invalid OIDC state signature")
+		return errors.New("invalid login state signature")
 	}
 	payload, err := base64.RawURLEncoding.DecodeString(parts[0])
-	if err != nil {
-		return oidcFlowState{}, errors.New("invalid OIDC state payload")
+	if err != nil || json.Unmarshal(payload, target) != nil {
+		return errors.New("invalid login state payload")
 	}
-	var flow oidcFlowState
-	if json.Unmarshal(payload, &flow) != nil || flow.State == "" || flow.Nonce == "" || flow.Verifier == "" || flow.ExpiresAt == 0 {
-		return oidcFlowState{}, errors.New("invalid OIDC state payload")
-	}
-	return flow, nil
+	return nil
 }
 
 func safeConsoleRedirect(value string) string {

@@ -16,6 +16,8 @@ const (
 
 	maxElements = 20000
 	maxDepth    = 64
+	// maxTextBytes bounds the character data kept per element (a PEM certificate is under 8 KiB).
+	maxTextBytes = 1 << 16
 )
 
 // allowedSignatureMethods is RSA-SHA256, RSA-SHA384, RSA-SHA512 and ECDSA-SHA256; SHA-1 is refused.
@@ -35,6 +37,7 @@ var allowedDigestMethods = []string{
 type element struct {
 	space, local string
 	attrs        []xml.Attr
+	text         string
 	parent       *element
 	children     []*element
 }
@@ -100,6 +103,10 @@ func parseStructure(raw []byte) (*element, error) {
 				current.children = append(current.children, node)
 			}
 			current = node
+		case xml.CharData:
+			if current != nil && len(current.text) < maxTextBytes {
+				current.text += string(t)
+			}
 		case xml.EndElement:
 			depth--
 			if current != nil {

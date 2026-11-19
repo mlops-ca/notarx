@@ -1184,7 +1184,10 @@ type UserIdentity struct {
 	UpdatedAt      time.Time
 }
 
-const UserIdentityOIDC = "oidc"
+const (
+	UserIdentityOIDC = "oidc"
+	UserIdentitySAML = "saml"
+)
 
 // OIDCIdentityProvision describes verified claims and the explicit
 // provisioning policy observed during an OIDC sign-in. Role is the level an
@@ -1192,6 +1195,9 @@ const UserIdentityOIDC = "oidc"
 // are limited to the assignable levels, and an unrecognized value falls back to
 // the member level, which carries no repository capability.
 type OIDCIdentityProvision struct {
+	// Kind is the protocol of the sign-in, oidc or saml; empty means oidc. The subject is the OIDC
+	// subject or the SAML NameID (lower-cased for emailAddress), the issuer the IdP entity id.
+	Kind              string
 	ProviderID        string
 	Issuer            string
 	Subject           string

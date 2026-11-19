@@ -1,0 +1,77 @@
+---
+x-gateway-protocol-overlay:
+  gatewayDecision: >
+    SAML 2.0 Web SSO service provider of ADR 0018 section 3 (SP-initiated; IdP-initiated only when
+    the provider allows it with a fixed RelayState allowlist). The login route redirects to the IdP
+    with an HTTP-Redirect AuthnRequest whose ID is a single-use row of saml_request_state, bound to
+    the browser by a signed HttpOnly SameSite=None; Secure flow cookie scoped to the provider. The
+    ACS consumes the row, verifies the response (pinned certificates, wrapping defences, replay
+    refusal) and redirects to the console login page with oidc=success or a generic oidc_error
+    code; precise reasons stay in the audit log and no assertion content is ever logged. There is
+    no Single Logout: logout revokes the notarx session only. A disabled or unknown slug is
+    indistinguishable (404).
+saml_login:
+  servers: [{url: https://gateway.example.com}]
+  parameters:
+  - name: slug
+    in: path
+    required: true
+    schema: {type: string, pattern: '^[a-z0-9][a-z0-9-]{1,62}$'}
+  get:
+    operationId: startSAMLLogin
+    description: Starts SP-initiated login for one provider and redirects to its SSO URL with an AuthnRequest.
+    security: [{}]
+    parameters:
+    - name: redirect
+      in: query
+      required: false
+      description: Console path to return to after sign-in; anything that is not a local path is ignored.
+      schema: {type: string}
+    responses:
+      '302': {description: Redirect to the identity provider}
+      '404': {description: "The provider does not exist, is disabled, or is not a SAML provider"}
+      '503': {description: SAML sign-in is unavailable (no public URL, request state or key)}
+saml_acs:
+  servers: [{url: https://gateway.example.com}]
+  parameters:
+  - name: slug
+    in: path
+    required: true
+    schema: {type: string, pattern: '^[a-z0-9][a-z0-9-]{1,62}$'}
+  post:
+    operationId: completeSAMLLogin
+    description: Assertion consumer service. Consumes the request state, verifies the response and creates the notarx session.
+    security: [{}]
+    requestBody:
+      required: true
+      content:
+        application/x-www-form-urlencoded:
+          schema:
+            type: object
+            required: [SAMLResponse]
+            additionalProperties: false
+            properties:
+              SAMLResponse: {type: string, description: Base64 SAML response, maxLength: 2000000}
+              RelayState: {type: string, maxLength: 1024}
+    responses:
+      '302': {description: Redirect to /login with oidc=success or a generic oidc_error code}
+      '404': {description: "The provider does not exist, is disabled, or is not a SAML provider"}
+saml_metadata:
+  servers: [{url: https://gateway.example.com}]
+  parameters:
+  - name: slug
+    in: path
+    required: true
+    schema: {type: string, pattern: '^[a-z0-9][a-z0-9-]{1,62}$'}
+  get:
+    operationId: getSAMLServiceProviderMetadata
+    description: Service provider metadata of one provider, including every published signing key. Private keys never appear.
+    security: [{}]
+    responses:
+      '200':
+        description: SAML metadata
+        content:
+          application/samlmetadata+xml:
+            schema: {type: string}
+      '404': {description: "The provider does not exist, is disabled, or is not a SAML provider"}
+      '503': {description: SAML sign-in is unavailable}
