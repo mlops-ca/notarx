@@ -37,11 +37,19 @@ STUB
 chmod +x "$workdir/docker"
 export DOCKER="$workdir/docker"
 
-# Stub dpkg-deb and rpm that print the package version stored inside the stub package file.
-for tool in dpkg-deb rpm; do
-  printf '#!/usr/bin/env bash\nfor a; do if [[ -f "$a" ]]; then cat "$a"; fi; done\n' >"$workdir/$tool"
-  chmod +x "$workdir/$tool"
-done
+# Stub dpkg-deb and rpm that accept only the exact field queries of check-no-nightly.sh and print
+# the package version stored inside the stub package file.
+cat >"$workdir/dpkg-deb" <<'STUB'
+#!/usr/bin/env bash
+[[ $# -eq 3 && "$1" == -f && "$3" == Version ]] || { echo "dpkg-deb stub: unexpected arguments: $*" >&2; exit 2; }
+cat "$2"
+STUB
+cat >"$workdir/rpm" <<'STUB'
+#!/usr/bin/env bash
+[[ $# -eq 5 && "$1" == -qp && "$2" == --nosignature && "$3" == --qf && "$4" == '%{VERSION}-%{RELEASE}' ]] || { echo "rpm stub: unexpected arguments: $*" >&2; exit 2; }
+cat "$5"
+STUB
+chmod +x "$workdir/dpkg-deb" "$workdir/rpm"
 export DPKG_DEB="$workdir/dpkg-deb" RPM="$workdir/rpm"
 
 # new_release <version> <version text of VERSION.txt> <binary text>
@@ -53,7 +61,6 @@ new_release() {
   mkdir "$stage/notarx_${version}_linux_amd64"
   printf '%s\n' "$versiontxt" >"$stage/notarx_${version}_linux_amd64/VERSION.txt"
   printf '\000\001notarx %s\000' "$binary" >"$stage/notarx_${version}_linux_amd64/notarx"
-  chmod +x "$stage/notarx_${version}_linux_amd64/notarx"
   printf 'Upgrading from 0.1.0-nightly.3 is supported.\n' >"$stage/notarx_${version}_linux_amd64/README.md"
   tar -czf "$dir/notarx_${version}_linux_amd64.tar.gz" -C "$stage" "notarx_${version}_linux_amd64"
   printf '%s' "$version" >"$dir/notarx_${version}_amd64.deb"
@@ -99,6 +106,7 @@ expect_fail 'SHA256SUMS naming a nightly fails' 'SHA256SUMS contains nightly' ch
 mkdir "$workdir/empty"
 expect_fail 'an empty directory fails' 'no asset' bash "$root/scripts/check-no-nightly.sh" --dir "$workdir/empty"
 expect_fail 'a missing directory fails' 'not a directory' bash "$root/scripts/check-no-nightly.sh" --dir "$workdir/none"
+expect_fail 'neither --dir nor --manifest fails' 'give --dir' bash "$root/scripts/check-no-nightly.sh"
 expect_fail 'a manifest without a registry fails' 'needs --registry' bash "$root/scripts/check-no-nightly.sh" --dir "$workdir/empty" --manifest x
 
 new_release 0.1.0 0.1.0 0.1.0
@@ -107,6 +115,17 @@ printf '{"linux/amd64":{"config":{"Labels":{"org.opencontainers.image.version":"
 expect_ok 'clean image labels pass' check --manifest "$dir/release-manifest.json" --registry ghcr.io/o
 printf '{"linux/amd64":{"config":{"Labels":{"org.opencontainers.image.version":"0.1.0-nightly.2"}}}}\n' >"$DOCKER_LABELS_FILE"
 expect_fail 'an image label naming a nightly fails' 'label of image notarx contains nightly' check --manifest "$dir/release-manifest.json" --registry ghcr.io/o
+expect_fail 'the image labels are checked without --dir' 'label of image notarx contains nightly' bash "$root/scripts/check-no-nightly.sh" --manifest "$dir/release-manifest.json" --registry ghcr.io/o
+
+# With the real dpkg-deb (Linux runners), a package built for a nightly is refused by its control field.
+if command -v dpkg-deb >/dev/null 2>&1; then
+  new_release 0.1.0 0.1.0 0.1.0
+  pkg=$(mktemp -d "$workdir/pkg.XXXXXX")
+  mkdir "$pkg/DEBIAN"
+  printf 'Package: notarx\nVersion: 0.1.0~nightly.3\nArchitecture: amd64\nMaintainer: notarx\nDescription: test\n' >"$pkg/DEBIAN/control"
+  dpkg-deb --build --root-owner-group "$pkg" "$dir/notarx_0.1.0_amd64.deb" >/dev/null
+  expect_fail 'the real dpkg-deb reads a nightly Version field' 'the package version .0\.1\.0~nightly\.3' env -u DPKG_DEB bash "$root/scripts/check-no-nightly.sh" --dir "$dir"
+fi
 
 if [[ "$failures" -ne 0 ]]; then
   printf '%d of %d check-no-nightly case(s) failed\n' "$failures" "$cases" >&2

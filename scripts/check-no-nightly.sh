@@ -3,16 +3,18 @@
 # identity): the stable build is a rebuild of the verified commit stamped with the clean X.Y.Z,
 # so every surface must report it.
 #
-#   scripts/check-no-nightly.sh --dir <release assets> [--manifest release-manifest.json --registry ghcr.io/owner]
+#   scripts/check-no-nightly.sh --dir <release assets>
+#   scripts/check-no-nightly.sh --manifest release-manifest.json --registry ghcr.io/owner   (image labels only)
 #
 # Checked in <dir>: every file name (release-manifest.json is exempt: it records the verified
 # nightly on purpose), SHA256SUMS, every archive member name, VERSION.txt of every archive and
-# every executable an archive holds (the binaries) for a stamped nightly version
-# (X.Y.Z-nightly.N; the bare word is not searched there because a dependency may contain it, and
-# documentation is not scanned). Every .deb and .rpm is checked by name and by its Version and
+# every other extracted file (the binaries) for a stamped nightly version (X.Y.Z-nightly.N; the
+# bare word is not searched there because a dependency may contain it). Documentation (*.md,
+# LICENSE*, NOTICE*) is exempt from that scan: it may quote an upgrade from a nightly. Every .deb and .rpm is checked by name and by its Version and
 # Release header fields (dpkg-deb -f, rpm -qp); their payload equals the archive binaries
 # (scripts/package-check.sh). With --manifest, the labels of every image platform recorded in
-# the manifest are read from the registry and must not contain it either. DOCKER, DPKG_DEB and
+# the manifest are read from the registry and must not contain it either; --dir and --manifest
+# may be given together. DOCKER, DPKG_DEB and
 # RPM override the docker, dpkg-deb and rpm binaries (tests).
 set -euo pipefail
 
@@ -34,7 +36,8 @@ while [[ $# -gt 0 ]]; do
   esac
   shift 2
 done
-[[ -d "$dir" ]] || fail "--dir '$dir' is not a directory"
+[[ -n "$dir" || -n "$manifest" ]] || fail 'give --dir, --manifest or both'
+[[ -z "$dir" || -d "$dir" ]] || fail "--dir '$dir' is not a directory"
 [[ -z "$manifest" || -n "$registry" ]] || fail '--manifest needs --registry'
 
 stamped='[0-9]+\.[0-9]+\.[0-9]+-nightly\.[0-9]+'
@@ -42,7 +45,11 @@ scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
 checked=0
 
-while IFS= read -r path; do
+assets=()
+if [[ -n "$dir" ]]; then
+  while IFS= read -r path; do assets+=("$path"); done < <(find "$dir" -maxdepth 1 -type f | sort)
+fi
+for path in ${assets[@]+"${assets[@]}"}; do
   name=$(basename "$path")
   [[ "$name" != release-manifest.json ]] || continue
   checked=$((checked + 1))
@@ -63,10 +70,11 @@ while IFS= read -r path; do
         if [[ "$(basename "$file")" == VERSION.txt ]] && grep -q -i nightly "$file"; then
           fail "$name: VERSION.txt reports a nightly version"
         fi
-      done < <(find "$extract" -type f)
-      while IFS= read -r file; do
+        case $(basename "$file") in
+          *.md | LICENSE* | NOTICE*) continue ;;
+        esac
         if grep -a -q -E "$stamped" "$file"; then fail "$name: $(basename "$file") embeds a stamped nightly version"; fi
-      done < <(find "$extract" -type f -perm -u+x)
+      done < <(find "$extract" -type f)
       rm -rf "$extract"
       ;;
     *.deb)
@@ -78,8 +86,8 @@ while IFS= read -r path; do
       if grep -q -i nightly <<<"$fields"; then fail "$name: the package version '$fields' contains nightly"; fi
       ;;
   esac
-done < <(find "$dir" -maxdepth 1 -type f | sort)
-[[ "$checked" -gt 0 ]] || fail "no asset found in $dir"
+done
+[[ -z "$dir" || "$checked" -gt 0 ]] || fail "no asset found in $dir"
 
 images=0
 if [[ -n "$manifest" ]]; then

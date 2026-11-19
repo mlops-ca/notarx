@@ -375,12 +375,10 @@ jobs:
           ./scripts/release-manifest.sh --version "$VERSION" --core "$CORE" --sha "$SHA" \
             --built-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --assets dist --images-json "$IMAGES" "${args[@]}"
           cat dist/release-manifest.json
-      - name: Assert that no stable archive, package or image reports a nightly
+      # The archives and packages of dist were checked in build; this adds the pushed image labels.
+      - name: Assert that no stable image reports a nightly
         if: env.CHANNEL == 'stable'
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq --no-install-recommends rpm
-          ./scripts/check-no-nightly.sh --dir dist --manifest dist/release-manifest.json --registry "ghcr.io/$GITHUB_REPOSITORY_OWNER"
+        run: ./scripts/check-no-nightly.sh --manifest dist/release-manifest.json --registry "ghcr.io/$GITHUB_REPOSITORY_OWNER"
       # Native packages are unsigned (ADR 0025 amendment); their integrity is SHA256SUMS plus
       # these keyless attestations, one per file.
       - name: Attest the archives and the native packages

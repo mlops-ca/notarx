@@ -62,10 +62,12 @@ apply() {
     printf 'changelog-section: %s already records %s\n' "$file" "$version"
     return 0
   fi
-  local section next out
+  local next
   section=$(mktemp)
-  render >"$section"
   out=$(mktemp)
+  # Removed on every exit, including a failing render.
+  trap 'rm -f "$section" "$out"' EXIT
+  render >"$section"
   next=$(grep -n -m 1 '^## ' "$file" | cut -d: -f1 || true)
   if [[ -n "$next" ]]; then
     { head -n $((next - 1)) "$file"; cat "$section"; tail -n +"$next" "$file"; } >"$out"
@@ -73,7 +75,6 @@ apply() {
     { cat "$file"; printf '\n'; cat "$section"; } >"$out"
   fi
   cat "$out" >"$file"
-  rm -f "$section" "$out"
 }
 
 case $command in
