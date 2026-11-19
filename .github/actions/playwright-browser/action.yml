@@ -26,16 +26,18 @@ runs:
       run: timeout 300 npx playwright install chromium
     # The system dependencies come from the runner's Ubuntu mirror, which is
     # sometimes slow enough to take longer than any sane step time (observed on
-    # PR 405 and 412). apt update still contacts the mirror, but the package
-    # downloads, the slow part, come from a user-owned directory that
-    # actions/cache restores. The cache is saved only when the whole job
-    # succeeds, so a timed-out install never stores a partial package set under
-    # the immutable key.
-    - name: Cache apt packages for the browser dependencies
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+    # PR 405, 412 and 419). apt update still contacts the mirror, but the package
+    # downloads, the slow part, are kept in a user-owned directory that
+    # actions/cache restores. Every run saves under its own key, even when the
+    # install timed out, and restores the newest earlier set by prefix: apt moves
+    # a package out of partial/ only when it is complete and verified, so a
+    # timed-out run leaves only whole packages and the next attempt resumes.
+    - name: Restore apt packages for the browser dependencies
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.cache/playwright-apt
-        key: playwright-apt-${{ env.ImageOS }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
+        key: playwright-apt-${{ env.ImageOS }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ runner.name }}
+        restore-keys: playwright-apt-${{ env.ImageOS }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}-
     - name: Configure apt
       shell: bash
       run: |
@@ -45,7 +47,17 @@ runs:
       shell: bash
       working-directory: console
       run: timeout 600 npx playwright install-deps chromium
-    # apt ran as root; hand the files back so the cache save can read them.
+    # apt ran as root; hand the files back so the cache save can read them, and
+    # drop the root-only lock and partial downloads.
     - name: Hand the apt package cache back to the runner user
+      if: always()
       shell: bash
-      run: sudo chown -R "$(id -u):$(id -g)" ~/.cache/playwright-apt
+      run: |
+        sudo rm -rf ~/.cache/playwright-apt/partial ~/.cache/playwright-apt/lock
+        sudo chown -R "$(id -u):$(id -g)" ~/.cache/playwright-apt
+    - name: Save apt packages for the browser dependencies
+      if: always()
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/playwright-apt
+        key: playwright-apt-${{ env.ImageOS }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ runner.name }}

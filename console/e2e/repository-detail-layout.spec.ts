@@ -1262,12 +1262,15 @@ test("scanning selects a searchable immutable artifact before queuing", async ({
     .locator(".ant-select-item-option")
     .filter({ hasText: coordinate })
     .first();
-  await expect(option).toBeVisible();
-  await option.click();
-
-  await expect(
-    artifactScanCard.getByText(digest, { exact: true }),
-  ).toBeVisible();
+  // The option list re-renders while the async search settles, so a click can
+  // land on a detached option and leave the dropdown open. Click until the
+  // selection takes, as the mobile gap check above does for reflow.
+  await expect(async () => {
+    await option.click({ timeout: 1000 });
+    await expect(
+      artifactScanCard.getByText(digest, { exact: true }),
+    ).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 10000 });
   await artifactScanCard.getByRole("button", { name: "Queue scan" }).click();
 
   expect((await scanRequest).postDataJSON()).toEqual({ coordinate, digest });
