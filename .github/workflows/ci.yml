@@ -82,11 +82,19 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Cache the pinned nfpm
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/notarx/nfpm
+          key: nfpm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/nfpm.version', 'scripts/install-nfpm.sh') }}
       - name: Install the package inspection tools
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq --no-install-recommends rpm cpio
       - name: Build the packages, assert their contents and run the container install test
+        env:
+          # Authenticated download of the pinned nfpm (scripts/lib/github-release.sh).
+          GH_TOKEN: ${{ github.token }}
         run: make package-install-test
 
   # The OCI Always Free reference deployment (ADR 0017, deploy/oci-free-tier):

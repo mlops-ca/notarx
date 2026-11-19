@@ -90,6 +90,10 @@ jobs:
           npm ci --ignore-scripts --no-audit --no-fund --timing --loglevel=http --prefix console
         timeout-minutes: 10
       - name: Run the lane steps
+        env:
+          # Authenticated download of the pinned ORAS and crane clients
+          # (scripts/lib/github-release.sh); the egress guard wraps only the clients.
+          GH_TOKEN: ${{ github.token }}
         run: python3 scripts/ci-contract.py run "${{ inputs.lane }}" --output "$RUNNER_TEMP/lane"
       - name: Preserve lane logs and raw reports on failure
         if: failure()

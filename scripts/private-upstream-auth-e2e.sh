@@ -3,6 +3,8 @@ set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root"
+# shellcheck source=lib/github-release.sh
+source "$root/scripts/lib/github-release.sh"
 for binary in docker go curl tar java javac python3; do
   command -v "$binary" >/dev/null || { printf 'Private upstream acceptance requires %s\n' "$binary" >&2; exit 1; }
 done
@@ -69,7 +71,7 @@ case "$(uname -s)/$(uname -m)" in
   Darwin/arm64) oras_platform=darwin_arm64; oras_sha=f33fc12753c54172b0d0d19eaa0318d3f90fe9b094d96e8b259c881713c92e1c ;;
   *) printf 'Unsupported official ORAS platform\n' >&2; exit 1 ;;
 esac
-curl "${curl_args[@]}" "https://github.com/oras-project/oras/releases/download/v1.3.3/oras_1.3.3_${oras_platform}.tar.gz" --output "$workdir/oras.tar.gz"
+github_release_download oras-project/oras v1.3.3 "oras_1.3.3_${oras_platform}.tar.gz" "$workdir/oras.tar.gz"
 python3 - "$workdir/oras.tar.gz" "$oras_sha" <<'PYHASH'
 import hashlib, pathlib, sys
 if hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest() != sys.argv[2]:

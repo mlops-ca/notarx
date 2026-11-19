@@ -180,8 +180,17 @@ jobs:
         run: make native-build-check
       - name: Check migration immutability and sequencing
         run: make migration-check
+      - name: Cache the pinned git-cliff
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/notarx/git-cliff
+          key: git-cliff-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/git-cliff.version', 'scripts/install-git-cliff.sh') }}
       - name: Verify release version and artifact builder
-        run: make release-version-check stamp-version-test release-plan-test release-pipeline-test release-workflow-check release-artifacts-test
+        run: make release-version-check stamp-version-test release-pipeline-test release-workflow-check release-artifacts-test
+      - name: Verify the release plan against the pinned git-cliff
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: make release-plan-test
       - name: Verify package signing runbook and environment checks
         run: make packages-signing-drill packages-environments-test
       - name: Enforce coverage floor

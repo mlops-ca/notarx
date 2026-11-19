@@ -2,6 +2,8 @@
 set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root"
+# shellcheck source=lib/github-release.sh
+source "$root/scripts/lib/github-release.sh"
 recovery=0
 if [[ "${1:-}" == --recovery && $# == 1 ]]; then
   recovery=1
@@ -13,14 +15,9 @@ workdir=$(mktemp -d)
 trap 'rm -rf "$workdir"' EXIT
 mkdir -p "$workdir/public-assets"
 for version in 0.5.0 0.6.0; do
-  curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
-    --retry 2 --connect-timeout 10 --max-time 120 \
-    "https://github.com/ccsert/artifact-gateway/releases/download/v$version/artifact-gateway_${version}_linux_amd64.tar.gz" \
-    --output "$workdir/public-assets/artifact-gateway_${version}_linux_amd64.tar.gz"
-  curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
-    --retry 2 --connect-timeout 10 --max-time 120 \
-    "https://github.com/ccsert/artifact-gateway/releases/download/v$version/SHA256SUMS" \
-    --output "$workdir/public-assets/v${version//./}-SHA256SUMS"
+  github_release_download ccsert/artifact-gateway "v$version" "artifact-gateway_${version}_linux_amd64.tar.gz" \
+    "$workdir/public-assets/artifact-gateway_${version}_linux_amd64.tar.gz"
+  github_release_download ccsert/artifact-gateway "v$version" SHA256SUMS "$workdir/public-assets/v${version//./}-SHA256SUMS"
 done
 python3 - "$workdir" <<'PY'
 import hashlib, json, sys, tarfile

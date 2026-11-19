@@ -250,7 +250,14 @@ jobs:
         run: |
           ./scripts/verify-release-attestations.sh --repo "$GITHUB_REPOSITORY" \
             --manifest dist/release-manifest.json --assets dist --registry "ghcr.io/$GITHUB_REPOSITORY_OWNER"
+      - name: Cache the pinned git-cliff
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/notarx/git-cliff
+          key: git-cliff-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/git-cliff.version', 'scripts/install-git-cliff.sh') }}
       - name: Generate the release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           cliff=$(./scripts/install-git-cliff.sh)
           "$cliff" --config cliff.toml "${BASE:+$BASE..}$SHA" --tag "v$VERSION" --strip all > notes.md

@@ -5,14 +5,11 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+# shellcheck source=lib/github-release.sh
+source "$root/scripts/lib/github-release.sh"
 version=$(tr -d '[:space:]' < "$root/scripts/nfpm.version")
 cache=${NFPM_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/notarx/nfpm}/$version
 binary=$cache/nfpm
-
-if [[ -x "$binary" ]] && "$binary" --version 2>&1 | grep -Fq "$version"; then
-  printf '%s\n' "$binary"
-  exit 0
-fi
 
 case "$(uname -s)/$(uname -m)" in
   Linux/x86_64)
@@ -37,18 +34,22 @@ case "$(uname -s)/$(uname -m)" in
     ;;
 esac
 
-workdir=$(mktemp -d)
-trap 'rm -rf "$workdir"' EXIT
-archive=nfpm_${version}_$target.tar.gz
-curl --fail --silent --show-error --location --retry 3 \
-  --output "$workdir/$archive" \
-  "https://github.com/goreleaser/nfpm/releases/download/v$version/$archive"
-actual=$(shasum -a 256 "$workdir/$archive" | cut -d' ' -f1)
-if [[ "$actual" != "$expected" ]]; then
-  printf 'nfpm checksum mismatch for %s\n' "$archive" >&2
-  exit 1
-fi
-tar -xzf "$workdir/$archive" -C "$workdir" nfpm
+# The cache directory (which CI restores with actions/cache) holds only the archive and
+# the extracted binary is rebuilt from it on every run, so a stale or tampered cache
+# entry can never be executed: the archive must match the pinned SHA-256 first.
 mkdir -p "$cache"
-install -m 0755 "$workdir/nfpm" "$binary"
+archive=nfpm_${version}_$target.tar.gz
+cached=$cache/$archive
+if [[ ! -f "$cached" ]] || [[ "$(shasum -a 256 "$cached" | cut -d' ' -f1)" != "$expected" ]]; then
+  workdir=$(mktemp -d)
+  trap 'rm -rf "$workdir"' EXIT
+  github_release_download goreleaser/nfpm "v$version" "$archive" "$workdir/$archive"
+  actual=$(shasum -a 256 "$workdir/$archive" | cut -d' ' -f1)
+  if [[ "$actual" != "$expected" ]]; then
+    printf 'nfpm checksum mismatch for %s\n' "$archive" >&2
+    exit 1
+  fi
+  mv -f -- "$workdir/$archive" "$cached"
+fi
+tar -xzf "$cached" -C "$cache" nfpm
 printf '%s\n' "$binary"

@@ -4,6 +4,8 @@ umask 077
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
+# shellcheck source=lib/github-release.sh
+source "$repo_root/scripts/lib/github-release.sh"
 for binary in docker go curl python3 tar uname; do
   command -v "$binary" >/dev/null || { printf 'Nexus OCI migration client gate requires %s\n' "$binary" >&2; exit 1; }
 done
@@ -64,10 +66,7 @@ case "$platform" in
   Linux_x86_64) archive_name=go-containerregistry_Linux_x86_64.tar.gz; digest=0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0 ;;
   *) printf 'Unsupported official crane client platform: %s\n' "$platform" >&2; exit 1 ;;
 esac
-curl --disable --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
-  --connect-timeout 15 --max-time 120 --retry 2 \
-  "https://github.com/google/go-containerregistry/releases/download/v0.22.1/$archive_name" \
-  --output "$work/crane.tar.gz"
+github_release_download google/go-containerregistry v0.22.1 "$archive_name" "$work/crane.tar.gz"
 python3 - "$work" "$digest" <<'PY'
 import hashlib, json, pathlib, secrets, sys, tarfile
 work = pathlib.Path(sys.argv[1])
