@@ -24,7 +24,9 @@ import (
 	"github.com/mlops-ca/notarx/internal/secrets"
 )
 
-var samlTestNow = time.Date(2026, 11, 19, 10, 0, 0, 0, time.UTC)
+// samlTestNow is the wall clock at package start: the in-memory store judges a session
+// expired against time.Now, so a fixed date would turn this suite red once that date passes.
+var samlTestNow = time.Now().UTC().Truncate(time.Second)
 
 const (
 	samlTestEntityID = "https://idp.example.test/metadata"
