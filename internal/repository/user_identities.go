@@ -40,11 +40,11 @@ func (s *MemoryStore) CreateUserIdentity(ctx context.Context, identity UserIdent
 		return UserIdentity{}, ErrNotFound
 	}
 	identity = normalizeUserIdentity(identity)
-	if identity.Kind != UserIdentityOIDC || identity.Issuer == "" || identity.Subject == "" {
+	if identity.Kind != UserIdentityOIDC || identity.ProviderID == "" || identity.Issuer == "" || identity.Subject == "" {
 		return UserIdentity{}, ErrIdentityExists
 	}
 	for _, existing := range s.userIdentities {
-		if existing.Kind == identity.Kind && existing.Issuer == identity.Issuer && (existing.Subject == identity.Subject || existing.UserID == identity.UserID) {
+		if existing.ProviderID == identity.ProviderID && (existing.Subject == identity.Subject || existing.UserID == identity.UserID) {
 			return UserIdentity{}, ErrIdentityExists
 		}
 	}
@@ -75,12 +75,11 @@ func (s *MemoryStore) DeleteUserIdentity(ctx context.Context, userID, identityID
 	return nil
 }
 
-func (s *MemoryStore) GetUserByOIDCIdentity(_ context.Context, issuer, subject string) (User, UserIdentity, error) {
+func (s *MemoryStore) GetUserByProviderIdentity(_ context.Context, providerID, subject string) (User, UserIdentity, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	issuer = normalizeOIDCIssuer(issuer)
 	for _, identity := range s.userIdentities {
-		if identity.Kind != UserIdentityOIDC || identity.Issuer != issuer || identity.Subject != strings.TrimSpace(subject) {
+		if identity.ProviderID != providerID || identity.Subject == "" || identity.Subject != strings.TrimSpace(subject) {
 			continue
 		}
 		user, ok := s.users[identity.UserID]
@@ -97,7 +96,7 @@ func (s *MemoryStore) ResolveOIDCIdentity(_ context.Context, provision OIDCIdent
 	defer s.mu.Unlock()
 	provision.Issuer = normalizeOIDCIssuer(provision.Issuer)
 	provision.Subject = strings.TrimSpace(provision.Subject)
-	if provision.Issuer == "" || provision.Subject == "" {
+	if provision.ProviderID == "" || provision.Subject == "" {
 		return User{}, UserIdentity{}, false, ErrNotFound
 	}
 	now := provision.OccurredAt.UTC()
@@ -105,7 +104,7 @@ func (s *MemoryStore) ResolveOIDCIdentity(_ context.Context, provision OIDCIdent
 		now = time.Now().UTC()
 	}
 	for id, identity := range s.userIdentities {
-		if identity.Kind != UserIdentityOIDC || identity.Issuer != provision.Issuer || identity.Subject != provision.Subject {
+		if identity.ProviderID != provision.ProviderID || identity.Subject != provision.Subject {
 			continue
 		}
 		user, ok := s.users[identity.UserID]
@@ -151,7 +150,7 @@ func (s *MemoryStore) ResolveOIDCIdentity(_ context.Context, provision OIDCIdent
 		created = true
 	} else {
 		for _, existing := range s.userIdentities {
-			if existing.UserID == user.ID && existing.Kind == UserIdentityOIDC && existing.Issuer == provision.Issuer {
+			if existing.UserID == user.ID && existing.ProviderID == provision.ProviderID {
 				return User{}, UserIdentity{}, false, ErrIdentityExists
 			}
 		}
@@ -161,7 +160,7 @@ func (s *MemoryStore) ResolveOIDCIdentity(_ context.Context, provision OIDCIdent
 		s.users[user.ID] = user
 	}
 	identity := refreshUserIdentity(UserIdentity{
-		ID: ids.New(), UserID: user.ID, Kind: UserIdentityOIDC,
+		ID: ids.New(), UserID: user.ID, Kind: UserIdentityOIDC, ProviderID: provision.ProviderID,
 		Issuer: provision.Issuer, Subject: provision.Subject, CreatedAt: now,
 	}, provision, now)
 	s.userIdentities[identity.ID] = identity

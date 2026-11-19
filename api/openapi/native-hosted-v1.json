@@ -7252,20 +7252,248 @@
         }
       }
     },
-    "/authentication/oidc": {
+    "/auth/idp": {
+      "servers": [
+        {
+          "url": "https://gateway.example.com"
+        }
+      ],
       "get": {
-        "operationId": "getOIDCSettings",
+        "operationId": "listLoginIdentityProviders",
+        "description": "Lists the enabled identity providers for the login chooser (slug, display name, kind).",
+        "security": [
+          {}
+        ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/OIDCSettings"
+            "description": "Enabled providers, possibly none",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "slug",
+                          "displayName",
+                          "kind"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                          "slug": {
+                            "type": "string"
+                          },
+                          "displayName": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "oidc",
+                              "saml"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/oidc/{slug}/login": {
+      "servers": [
+        {
+          "url": "https://gateway.example.com"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "slug",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "startOIDCLogin",
+        "description": "Starts the Authorization Code flow with PKCE for one provider and redirects to its authorization endpoint.",
+        "security": [
+          {}
+        ],
+        "parameters": [
+          {
+            "name": "redirect",
+            "in": "query",
+            "required": false,
+            "description": "Console path to return to after sign-in; anything that is not a local path is ignored.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Redirect to the identity provider"
+          },
+          "404": {
+            "description": "The provider does not exist, is disabled, or is not an OIDC provider"
+          },
+          "503": {
+            "description": "Provider discovery failed"
+          }
+        }
+      }
+    },
+    "/auth/oidc/{slug}/callback": {
+      "servers": [
+        {
+          "url": "https://gateway.example.com"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "slug",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "completeOIDCLogin",
+        "description": "Completes the flow, creates the notarx session and redirects to the console.",
+        "security": [
+          {}
+        ],
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Redirect to /login with oidc=success or a generic oidc_error code"
+          }
+        }
+      }
+    },
+    "/authentication/providers": {
+      "get": {
+        "operationId": "listIdentityProviders",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/IdentityProviderList"
           },
           "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createIdentityProvider",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateIdentityProvider"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/IdentityProvider"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/authentication/providers/{providerId}": {
+      "parameters": [
+        {
+          "name": "providerId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getIdentityProvider",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/IdentityProvider"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
             "$ref": "#/components/responses/Problem"
           }
         }
       },
       "put": {
-        "operationId": "replaceOIDCSettings",
+        "operationId": "replaceIdentityProvider",
         "parameters": [
           {
             "$ref": "#/components/parameters/IfMatch"
@@ -7276,19 +7504,28 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/OIDCSettingsUpdate"
+                "$ref": "#/components/schemas/ReplaceIdentityProvider"
               }
             }
           }
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/OIDCSettings"
+            "$ref": "#/components/responses/IdentityProvider"
           },
           "400": {
             "$ref": "#/components/responses/Problem"
           },
           "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
             "$ref": "#/components/responses/Problem"
           },
           "412": {
@@ -7298,11 +7535,51 @@
             "$ref": "#/components/responses/Problem"
           }
         }
+      },
+      "delete": {
+        "operationId": "deleteIdentityProvider",
+        "description": "Deletes a provider that has no linked identities.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Provider deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
       }
     },
-    "/authentication/oidc:test": {
+    "/authentication/providers/{providerId}:test": {
+      "parameters": [
+        {
+          "name": "providerId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
       "post": {
-        "operationId": "testOIDCSettings",
+        "operationId": "testIdentityProvider",
         "responses": {
           "200": {
             "$ref": "#/components/responses/OIDCConnectionTest"
@@ -7311,6 +7588,12 @@
             "$ref": "#/components/responses/Problem"
           },
           "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
             "$ref": "#/components/responses/Problem"
           },
           "503": {
@@ -18218,12 +18501,16 @@
           }
         }
       },
-      "OIDCSettings": {
+      "IdentityProviderKind": {
+        "type": "string",
+        "enum": [
+          "oidc",
+          "saml"
+        ]
+      },
+      "IdentityProviderOIDCSettings": {
         "type": "object",
         "required": [
-          "version",
-          "source",
-          "enabled",
           "issuer",
           "audience",
           "clientId",
@@ -18233,35 +18520,18 @@
           "adminSubjects",
           "memberRoles",
           "adminRoles",
-          "provisioningMode",
-          "emailLinkingEnabled",
-          "jitDefaultRole"
+          "algorithms"
         ],
         "additionalProperties": false,
         "properties": {
-          "version": {
-            "type": "string"
-          },
-          "source": {
-            "type": "string",
-            "enum": [
-              "environment",
-              "database"
-            ]
-          },
-          "enabled": {
-            "type": "boolean"
-          },
           "issuer": {
-            "type": "string",
-            "format": "uri"
+            "type": "string"
           },
           "audience": {
             "type": "string"
           },
           "jwksUrl": {
-            "type": "string",
-            "format": "uri"
+            "type": "string"
           },
           "clientId": {
             "type": "string"
@@ -18270,8 +18540,7 @@
             "type": "boolean"
           },
           "redirectUrl": {
-            "type": "string",
-            "format": "uri"
+            "type": "string"
           },
           "scopes": {
             "type": "array",
@@ -18297,11 +18566,100 @@
               "type": "string"
             }
           },
+          "algorithms": {
+            "type": "array",
+            "description": "Allow-list of ID token signature algorithms. The default is RS256.",
+            "items": {
+              "type": "string",
+              "enum": [
+                "RS256",
+                "ES256",
+                "EdDSA"
+              ]
+            }
+          }
+        }
+      },
+      "IdentityProviderAttributeMapping": {
+        "type": "object",
+        "description": "Where each user attribute comes from: a claim of the ID token (OIDC) or an attribute of the assertion (SAML). An empty value selects the protocol default. subject may join two claims with a colon, which is how Entra ID keeps its stable key (tid:oid).\n",
+        "additionalProperties": false,
+        "properties": {
+          "subject": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "username": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "displayName": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "groups": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "externalId": {
+            "type": "string",
+            "maxLength": 200
+          }
+        }
+      },
+      "IdentityProvider": {
+        "type": "object",
+        "required": [
+          "id",
+          "slug",
+          "kind",
+          "displayName",
+          "enabled",
+          "attributeMapping",
+          "provisioningMode",
+          "emailLinkingEnabled",
+          "jitDefaultRole",
+          "version",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "slug": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/IdentityProviderKind"
+          },
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "oidc": {
+            "$ref": "#/components/schemas/IdentityProviderOIDCSettings"
+          },
+          "attributeMapping": {
+            "$ref": "#/components/schemas/IdentityProviderAttributeMapping"
+          },
           "provisioningMode": {
             "type": "string",
             "enum": [
               "disabled",
-              "jit"
+              "jit",
+              "scim_only"
             ]
           },
           "emailLinkingEnabled": {
@@ -18311,9 +18669,16 @@
             "type": "string",
             "enum": [
               "none",
-              "member",
-              "admin"
+              "member"
             ]
+          },
+          "version": {
+            "type": "string",
+            "description": "Optimistic concurrency version, also returned as the ETag header."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
           },
           "updatedAt": {
             "type": "string",
@@ -18321,10 +18686,24 @@
           }
         }
       },
-      "OIDCSettingsUpdate": {
+      "IdentityProviderList": {
         "type": "object",
         "required": [
-          "enabled",
+          "items"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IdentityProvider"
+            }
+          }
+        }
+      },
+      "IdentityProviderOIDCInput": {
+        "type": "object",
+        "required": [
           "issuer",
           "audience",
           "clientId",
@@ -18332,26 +18711,18 @@
           "scopes",
           "adminSubjects",
           "memberRoles",
-          "adminRoles",
-          "provisioningMode",
-          "emailLinkingEnabled",
-          "jitDefaultRole"
+          "adminRoles"
         ],
         "additionalProperties": false,
         "properties": {
-          "enabled": {
-            "type": "boolean"
-          },
           "issuer": {
-            "type": "string",
-            "format": "uri"
+            "type": "string"
           },
           "audience": {
             "type": "string"
           },
           "jwksUrl": {
-            "type": "string",
-            "format": "uri"
+            "type": "string"
           },
           "clientId": {
             "type": "string"
@@ -18365,8 +18736,7 @@
             "default": false
           },
           "redirectUrl": {
-            "type": "string",
-            "format": "uri"
+            "type": "string"
           },
           "scopes": {
             "type": "array",
@@ -18392,11 +18762,110 @@
               "type": "string"
             }
           },
+          "algorithms": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "RS256",
+                "ES256",
+                "EdDSA"
+              ]
+            }
+          }
+        }
+      },
+      "CreateIdentityProvider": {
+        "type": "object",
+        "required": [
+          "slug",
+          "kind",
+          "displayName",
+          "enabled",
+          "oidc"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "slug": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "oidc"
+            ]
+          },
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "oidc": {
+            "$ref": "#/components/schemas/IdentityProviderOIDCInput"
+          },
+          "attributeMapping": {
+            "$ref": "#/components/schemas/IdentityProviderAttributeMapping"
+          },
           "provisioningMode": {
             "type": "string",
             "enum": [
               "disabled",
-              "jit"
+              "jit",
+              "scim_only"
+            ],
+            "default": "disabled"
+          },
+          "emailLinkingEnabled": {
+            "type": "boolean",
+            "default": false
+          },
+          "jitDefaultRole": {
+            "type": "string",
+            "enum": [
+              "none",
+              "member"
+            ],
+            "default": "none"
+          }
+        }
+      },
+      "ReplaceIdentityProvider": {
+        "type": "object",
+        "required": [
+          "displayName",
+          "enabled",
+          "oidc",
+          "attributeMapping",
+          "provisioningMode",
+          "emailLinkingEnabled",
+          "jitDefaultRole"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "oidc": {
+            "$ref": "#/components/schemas/IdentityProviderOIDCInput"
+          },
+          "attributeMapping": {
+            "$ref": "#/components/schemas/IdentityProviderAttributeMapping"
+          },
+          "provisioningMode": {
+            "type": "string",
+            "enum": [
+              "disabled",
+              "jit",
+              "scim_only"
             ]
           },
           "emailLinkingEnabled": {
@@ -18406,8 +18875,7 @@
             "type": "string",
             "enum": [
               "none",
-              "member",
-              "admin"
+              "member"
             ]
           }
         }
@@ -20735,12 +21203,30 @@
           }
         }
       },
-      "OIDCSettings": {
-        "description": "Effective runtime OIDC authentication settings with credentials redacted",
+      "IdentityProviderList": {
+        "description": "Identity providers, enabled or not",
         "content": {
           "application/json": {
             "schema": {
-              "$ref": "#/components/schemas/OIDCSettings"
+              "$ref": "#/components/schemas/IdentityProviderList"
+            }
+          }
+        }
+      },
+      "IdentityProvider": {
+        "description": "One identity provider with credentials redacted",
+        "headers": {
+          "ETag": {
+            "description": "Quoted provider version; send it as If-Match on replace and delete.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/IdentityProvider"
             }
           }
         }

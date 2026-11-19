@@ -32,7 +32,7 @@ var schemaDDL = []string{
 	"CREATE TABLE email_targets (id uuid PRIMARY KEY, recipient_ciphertext text NOT NULL, version bigint NOT NULL DEFAULT 1)",
 	"CREATE TABLE email_test_deliveries (id uuid PRIMARY KEY, target_id uuid NOT NULL, recipient_ciphertext text NOT NULL)",
 	"CREATE TABLE nexus_migration_sources (id uuid PRIMARY KEY, credential_ciphertext text NOT NULL DEFAULT '', version bigint NOT NULL DEFAULT 1)",
-	"CREATE TABLE oidc_settings (singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton), client_secret text NOT NULL DEFAULT '', version bigint NOT NULL DEFAULT 1)",
+	"CREATE TABLE identity_providers (id uuid PRIMARY KEY, secrets_sealed text, version bigint NOT NULL DEFAULT 1)",
 	"CREATE TABLE webhook_subscriptions (id uuid PRIMARY KEY, secret_ciphertext text NOT NULL, version bigint NOT NULL DEFAULT 1)",
 	"CREATE TABLE hosted_repositories (id uuid PRIMARY KEY, upstream_auth jsonb, version bigint NOT NULL DEFAULT 1)",
 	"CREATE TABLE token_signing_keys (kid text PRIMARY KEY, alg text NOT NULL, state text NOT NULL, public_jwk jsonb NOT NULL, private_sealed text NOT NULL, integrity_mac text NOT NULL)",
@@ -103,7 +103,8 @@ func TestResealRotatesEverySealedColumn(t *testing.T) {
 	exec("INSERT INTO email_test_deliveries VALUES ($1, $2, $3)", delivery, target, seal("email-target:"+target, "ops@example.com"))
 	exec("INSERT INTO nexus_migration_sources (id, credential_ciphertext) VALUES ($1, $2)", nexus, seal("nexus-source:"+nexus, "creds"))
 	exec("INSERT INTO nexus_migration_sources (id, credential_ciphertext) VALUES ($1, '')", uuid.NewString())
-	exec("INSERT INTO oidc_settings (client_secret) VALUES ($1)", seal("oidc.client-secret", "oidc"))
+	exec("INSERT INTO identity_providers (id, secrets_sealed) VALUES ($1, $2)", uuid.NewString(), seal("oidc.client-secret", "oidc"))
+	exec("INSERT INTO identity_providers (id, secrets_sealed) VALUES ($1, NULL)", uuid.NewString())
 	exec("INSERT INTO webhook_subscriptions (id, secret_ciphertext) VALUES ($1, $2)", hook, seal("webhook-subscription:"+hook, "hook-secret-32-bytes-long-enough!"))
 	exec("INSERT INTO hosted_repositories (id, upstream_auth) VALUES ($1, jsonb_build_object('scheme','bearer','secret',$2::text))", repo, seal("repository-upstream-auth", "upstream"))
 	exec("INSERT INTO hosted_repositories (id, upstream_auth) VALUES ($1, NULL)", uuid.NewString())
@@ -127,7 +128,7 @@ func TestResealRotatesEverySealedColumn(t *testing.T) {
 		t.Fatalf("dry run results: %+v", dry)
 	}
 	var stored string
-	if err := db.QueryRowContext(ctx, "SELECT client_secret FROM oidc_settings").Scan(&stored); err != nil {
+	if err := db.QueryRowContext(ctx, "SELECT secrets_sealed FROM identity_providers WHERE secrets_sealed IS NOT NULL").Scan(&stored); err != nil {
 		t.Fatal(err)
 	}
 	if need, _ := secrets.NeedsReseal(stored); !need {
@@ -203,7 +204,7 @@ func TestResealRotatesEverySealedColumn(t *testing.T) {
 	check("email-target:"+email, "SELECT recipient_ciphertext FROM email_targets WHERE id=$1", email)
 	check("email-target:"+target, "SELECT recipient_ciphertext FROM email_test_deliveries WHERE id=$1", delivery)
 	check("nexus-source:"+nexus, "SELECT credential_ciphertext FROM nexus_migration_sources WHERE id=$1", nexus)
-	check("oidc.client-secret", "SELECT client_secret FROM oidc_settings")
+	check("oidc.client-secret", "SELECT secrets_sealed FROM identity_providers WHERE secrets_sealed IS NOT NULL")
 	check("webhook-subscription:"+hook, "SELECT secret_ciphertext FROM webhook_subscriptions WHERE id=$1", hook)
 	var rowMAC, rowSealed string
 	if err := db.QueryRowContext(ctx, "SELECT private_sealed, integrity_mac FROM token_signing_keys WHERE kid=$1", signingKey.KID).Scan(&rowSealed, &rowMAC); err != nil {

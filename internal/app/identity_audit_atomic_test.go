@@ -11,20 +11,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/authorization"
+	idprovider "github.com/mlops-ca/notarx/internal/identity"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
-
-type identityOIDCStub struct{ issuer string }
-
-func (s identityOIDCStub) Settings(context.Context) (OIDCSettingsView, error) {
-	return OIDCSettingsView{Issuer: s.issuer}, nil
-}
-func (identityOIDCStub) Replace(context.Context, OIDCSettingsUpdate, string, ...repository.AuditRecord) (OIDCSettingsView, error) {
-	return OIDCSettingsView{}, errors.New("not used")
-}
-func (identityOIDCStub) Test(context.Context) (OIDCConnectionTest, error) {
-	return OIDCConnectionTest{}, errors.New("not used")
-}
 
 // TestIdentityMutationsRollBackWithTheirAudit proves ADR 0023 section 1 for the user and
 // service account handlers: when the audit of a mutation cannot be written the
@@ -48,6 +37,7 @@ type identityRollbackStore interface {
 	identityUserStore
 	identityAPIKeyStore
 	identityServiceAccountStore
+	repository.IdentityProviderStore
 	GetUserByName(context.Context, string) (repository.User, error)
 	GetUserSession(context.Context, string, string) (repository.UserSession, error)
 	GetServiceAccount(context.Context, string) (repository.ServiceAccount, error)
@@ -74,7 +64,14 @@ func runIdentityAuditRollback(t *testing.T, store identityRollbackStore, failAud
 	if err != nil {
 		t.Fatal(err)
 	}
-	identity, err := store.CreateUserIdentity(ctx, repository.UserIdentity{ID: uuid.NewString(), UserID: victim.ID, Kind: repository.UserIdentityOIDC, Issuer: "https://issuer.example", Subject: "victim-subject-" + suffix})
+	provider, err := store.CreateIdentityProvider(ctx, idprovider.Provider{
+		ID: uuid.NewString(), Slug: "audit-" + suffix, Kind: idprovider.KindOIDC, DisplayName: "Audit " + suffix,
+		Settings: []byte(`{"issuer":"https://issuer-` + suffix + `.example"}`), ProvisioningMode: idprovider.ProvisioningDisabled, JITDefaultRole: idprovider.JITRoleNone,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity, err := store.CreateUserIdentity(ctx, repository.UserIdentity{ID: uuid.NewString(), UserID: victim.ID, Kind: repository.UserIdentityOIDC, ProviderID: provider.ID, Issuer: "https://issuer-" + suffix + ".example", Subject: "victim-subject-" + suffix})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +91,7 @@ func runIdentityAuditRollback(t *testing.T, store identityRollbackStore, failAud
 	domain := newIdentityManagementHandler(identityManagementOptions{
 		Scope: managementScope{authenticator: auth, audit: audit},
 		Users: identityUserPort{store}, APIKeys: identityKeyPort{store}, ServiceAccounts: identityAccountPort{store},
-		OIDC: identityOIDCStub{issuer: "https://issuer.example"},
+		IdentityProviders: NewIdentityRuntime(store),
 	})
 	server := identityDomainHTTP(domain)
 	call := func(method, path, body, version string) *httptest.ResponseRecorder {
@@ -145,7 +142,7 @@ func runIdentityAuditRollback(t *testing.T, store identityRollbackStore, failAud
 				t.Fatalf("identity unlinked: %+v", items)
 			}
 		}},
-		{"link identity", http.MethodPost, "/users/" + linker.ID + "/identities", `{"issuer":"https://issuer.example","subject":"second-subject"}`, "", func(t *testing.T) {
+		{"link identity", http.MethodPost, "/users/" + linker.ID + "/identities", `{"issuer":"https://issuer-` + suffix + `.example","subject":"second-subject"}`, "", func(t *testing.T) {
 			if items, _ := store.ListUserIdentities(ctx, linker.ID); len(items) != 0 {
 				t.Fatalf("identity linked: %+v", items)
 			}

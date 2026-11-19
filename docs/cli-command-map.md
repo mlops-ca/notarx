@@ -165,9 +165,15 @@ the contract's server base. Planned commands omit the leading `notarxctl`.
 | `POST /console-themes`<br>`installConsoleThemePackage` | `theme install --remote` | #139 | M2 | A | W |
 | `PUT /console-themes/{themeId}`<br>`replaceConsoleThemePackage` | `theme replace --remote <id>` | #139 | M2 | A | C |
 | `DELETE /console-themes/{themeId}`<br>`deleteConsoleThemePackage` | `theme delete --remote <id>` | #139 | M2 | A | C |
-| `GET /authentication/oidc`<br>`getOIDCSettings` | `oidc settings show` | #139 | M2 | A | Q |
-| `PUT /authentication/oidc`<br>`replaceOIDCSettings` | `oidc settings set` | #139 | M2 | A | C |
-| `POST /authentication/oidc:test`<br>`testOIDCSettings` | `oidc settings test` | #139 | M2 | A | W |
+| `GET /authentication/providers`<br>`listIdentityProviders` | `idp list` | #139 | M2 | A | Q |
+| `POST /authentication/providers`<br>`createIdentityProvider` | `idp create` | #139 | M2 | A | W |
+| `GET /authentication/providers/{providerId}`<br>`getIdentityProvider` | `idp show <id>` | #139 | M2 | A | Q |
+| `PUT /authentication/providers/{providerId}`<br>`replaceIdentityProvider` | `idp update <id>` | #139 | M2 | A | C |
+| `DELETE /authentication/providers/{providerId}`<br>`deleteIdentityProvider` | `idp delete <id>` | #139 | M2 | A | C |
+| `POST /authentication/providers/{providerId}:test`<br>`testIdentityProvider` | `idp test <id>` | #139 | M2 | A | W |
+| `GET /auth/idp`<br>`listLoginIdentityProviders` | N: browser sign-in chooser; no CLI | #56 | N/A | PUBLIC | N: browser-only; no CLI command registered |
+| `GET /auth/oidc/{slug}/login`<br>`startOIDCLogin` | N: browser Authorization Code redirect; no CLI | #56 | N/A | PUBLIC | N: browser-only; no CLI command registered |
+| `GET /auth/oidc/{slug}/callback`<br>`completeOIDCLogin` | N: browser Authorization Code callback; no CLI | #56 | N/A | PUBLIC | N: browser-only; no CLI command registered |
 | `GET /webhook-subscriptions`<br>`listWebhookSubscriptions` | `webhook list` | #137 | M2 | A | Q |
 | `POST /webhook-subscriptions`<br>`createWebhookSubscription` | `webhook create` | #137 | M2 | A | W |
 | `GET /webhook-subscriptions/{subscriptionId}`<br>`getWebhookSubscription` | `webhook show <id>` | #137 | M2 | A | Q |

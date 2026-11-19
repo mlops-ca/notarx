@@ -7,8 +7,15 @@ notarx supports two OIDC credential paths:
 - bearer validation for CI and API clients;
 - browser sign-in through Authorization Code + PKCE.
 
-The Console reads `GET /auth/oidc/config` at runtime. Provider URLs and client
-identifiers are therefore not compiled into the frontend bundle.
+Identity providers live in a registry in PostgreSQL (ADR 0018): any number of OIDC
+providers can be configured and enabled at once, each with its own issuer,
+client, role mapping and provisioning policy. The Console login page reads
+`GET /auth/idp` at runtime, which lists only the enabled providers (slug,
+display name, kind), and offers one sign-in button per provider. Provider URLs
+and client identifiers are therefore not compiled into the frontend bundle.
+Each provider signs in on its own routes, `GET /auth/oidc/{slug}/login` and
+`GET /auth/oidc/{slug}/callback`, with its own flow cookie, so two providers
+never interfere. A disabled provider answers exactly like an unknown slug.
 
 ## Required configuration
 
@@ -17,7 +24,7 @@ NOTARX_OIDC_ISSUER=https://login.example.com/realms/acme
 NOTARX_OIDC_AUDIENCE=notarx-api
 NOTARX_OIDC_CLIENT_ID=notarx-console
 NOTARX_OIDC_CLIENT_SECRET=
-NOTARX_OIDC_REDIRECT_URL=https://gateway.example.com/auth/oidc/callback
+NOTARX_OIDC_REDIRECT_URL=https://gateway.example.com/auth/oidc/default/callback
 NOTARX_OIDC_SCOPES=openid profile email
 NOTARX_SETTINGS_ENCRYPTION_KEY=<32-byte-key>
 ```
@@ -30,12 +37,24 @@ development callbacks. API-only bearer validation may leave both
 `NOTARX_OIDC_CLIENT_ID` and `NOTARX_OIDC_REDIRECT_URL` empty; when browser
 login is enabled, those two values must be configured together.
 
-Environment variables are the bootstrap source. Administrators can then open
-**Authentication** in the Console and save a runtime configuration. The first
-save creates the singleton database record; subsequent changes use versioned
-`If-Match` updates. `NOTARX_SETTINGS_ENCRYPTION_KEY` encrypts confidential
+The environment variables only seed the registry: when the registry is empty at
+startup they create one provider with slug `default`, so its callback URL is
+`/auth/oidc/default/callback`. There is no ongoing merge; later changes to the
+variables are ignored once a provider exists. Administrators manage providers
+with the management API (`/api/v2/authentication/providers`: list, create, get,
+replace, delete and `:test`, admin only) and, for the `default` provider, the
+**Authentication** page of the Console. Replace and delete use versioned
+`If-Match` updates; every response carries the version as an `ETag`. A provider
+that still has linked identities cannot be deleted. The slug and kind of a
+provider never change. `NOTARX_SETTINGS_ENCRYPTION_KEY` encrypts confidential
 client secrets with AES-256-GCM. Responses expose only
 `clientSecretConfigured` and never return plaintext or ciphertext.
+
+Each provider has an ID token signature algorithm allow-list (default `RS256`;
+`ES256` and `EdDSA` can be selected) and an attribute mapping. Entra ID uses
+the issuer `https://login.microsoftonline.com/{tenant}/v2.0` and the stable
+subject `tid:oid`, selected with `attributeMapping.subject: "tid:oid"`; the
+Entra `groups` overage is not resolved through Graph.
 
 The provider discovery document must contain matching `issuer`,
 `authorization_endpoint`, and `token_endpoint` values. notarx never
@@ -57,8 +76,10 @@ and Console may use separate audiences.
 
 ## Local account linkage
 
-Validated OIDC identities can be bound to local accounts by normalized issuer
-and stable `sub`. Administrators may manage links from the Users page. The
+Validated OIDC identities can be bound to local accounts by identity provider and
+stable subject (`sub`, or the mapped subject). The same subject string at two
+providers is two different identities, and one account holds at most one
+identity per provider. Administrators may manage links from the Users page. The
 runtime Authentication settings can also enable just-in-time account creation,
 choose its default role, and opt into linking an existing account by a unique
 verified email claim. These provisioning options default to disabled.
@@ -140,6 +161,18 @@ mapping is required, include the relevant group claims in the ID token and map
 their exact values through the same member and administrator variables above.
 
 ## Upgrade and rollback
+
+Migration `000016_identity_providers.sql` replaces the `oidc_settings` singleton
+with the registry. The saved settings become the provider `default` (with their
+sealed client secret and version), stored identities stay bound to it, and
+`oidc_settings` is dropped. An identity whose issuer differs from the saved one
+is bound to its own disabled provider so no link is lost. A stored JIT default
+role of `admin` becomes `member`: an IdP-driven first login never mints an
+administrator. The `/api/v2/authentication/oidc` operations and
+`GET /auth/oidc/config`, `/auth/oidc/login` and `/auth/oidc/callback` are
+removed without aliases; update the redirect URI registered at the identity
+provider to `/auth/oidc/{slug}/callback`. `notarxctl secrets reseal` covers the
+sealed secret of every provider.
 
 The saved OIDC settings move to a single member role list. The reader list and
 the writer list merge into it, a stored JIT default of `reader` or `writer`

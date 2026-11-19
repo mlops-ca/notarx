@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"github.com/mlops-ca/notarx/internal/identity"
 	"sync"
 	"time"
 
@@ -38,7 +39,7 @@ type MemoryStore struct {
 	publicAccessPolicy     PublicAccessPolicy
 	siteSettings           SiteSettings
 	consoleThemePackages   map[string]ConsoleThemePackage
-	oidcSettings           *OIDCSettings
+	identityProviders      map[string]identity.Provider
 	auditCleanupJobs       map[string]AuditCleanupJob
 	hostedRepositories     map[string]HostedRepository
 	hostedGroups           map[string]HostedGroup

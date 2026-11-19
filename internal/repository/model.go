@@ -1161,22 +1161,27 @@ type UserSession struct {
 const (
 	UserSessionLocal = "local_session"
 	UserSessionOIDC  = "oidc"
+	UserSessionSAML  = "saml"
 )
 
 // UserIdentity is an external credential linked to a local account. Issuer
 // and Subject together form the provider-owned immutable identity key.
 type UserIdentity struct {
-	ID            string
-	UserID        string
-	Kind          string
-	Issuer        string
-	Subject       string
-	Email         string
-	DisplayName   string
-	EmailVerified bool
-	LastLoginAt   *time.Time
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID     string
+	UserID string
+	Kind   string
+	// ProviderID is the identity provider that owns the identity (ADR 0018). The
+	// login key is (ProviderID, Subject); Issuer is informational.
+	ProviderID     string
+	Issuer         string
+	Subject        string
+	SCIMExternalID string
+	Email          string
+	DisplayName    string
+	EmailVerified  bool
+	LastLoginAt    *time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 const UserIdentityOIDC = "oidc"
@@ -1187,6 +1192,7 @@ const UserIdentityOIDC = "oidc"
 // are limited to the assignable levels, and an unrecognized value falls back to
 // the member level, which carries no repository capability.
 type OIDCIdentityProvision struct {
+	ProviderID        string
 	Issuer            string
 	Subject           string
 	Email             string
@@ -1507,28 +1513,6 @@ type ConsoleThemePackage struct {
 	Payload   []byte    `json:"-"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
-}
-
-// OIDCSettings is the persisted singleton configuration for API bearer and
-// browser OIDC authentication. ClientSecret contains ciphertext at the
-// repository boundary and must never be serialized by an API response.
-type OIDCSettings struct {
-	Version             string    `json:"version"`
-	Enabled             bool      `json:"enabled"`
-	Issuer              string    `json:"issuer"`
-	Audience            string    `json:"audience"`
-	JWKSURL             string    `json:"jwksUrl,omitempty"`
-	ClientID            string    `json:"clientId"`
-	ClientSecret        string    `json:"-"`
-	RedirectURL         string    `json:"redirectUrl"`
-	Scopes              []string  `json:"scopes"`
-	AdminSubjects       []string  `json:"adminSubjects"`
-	MemberRoles         []string  `json:"memberRoles"`
-	AdminRoles          []string  `json:"adminRoles"`
-	ProvisioningMode    string    `json:"provisioningMode"`
-	EmailLinkingEnabled bool      `json:"emailLinkingEnabled"`
-	JITDefaultRole      string    `json:"jitDefaultRole"`
-	UpdatedAt           time.Time `json:"updatedAt"`
 }
 
 type AuditCleanupJob struct {

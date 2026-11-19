@@ -6,12 +6,14 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/emailnotification"
+	idprovider "github.com/mlops-ca/notarx/internal/identity"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/secrets"
 )
@@ -51,7 +53,7 @@ func runSettingsAuditRollback(t *testing.T, store settingsRollbackStore, seed de
 	ctx := context.Background()
 	suffix := uuid.NewString()[:8]
 	emailConfig := emailnotification.Config{Enabled: true, Host: "smtp.example.test", Port: 465, Mode: "implicit_tls", From: "gateway@example.test", ApprovedIPs: []string{"192.0.2.10"}}
-	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{Email: emailConfig, OIDCRuntime: NewOIDCRuntime(store, OIDCRuntimeConfig{})}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
+	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{Email: emailConfig, IdentityRuntime: NewIdentityRuntime(store)}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
 	call := func(method, path, body, version, key string) *httptest.ResponseRecorder {
 		t.Helper()
 		request := httptest.NewRequest(method, "/api/v2"+path, strings.NewReader(body))
@@ -115,14 +117,23 @@ func runSettingsAuditRollback(t *testing.T, store settingsRollbackStore, seed de
 	}
 	t.Cleanup(func() { _ = store.DeleteScheduledTask(ctx, deleteTask.ID) })
 
-	oidcBefore := repository.OIDCSettings{Version: "0"}
-	if got, getErr := store.GetOIDCSettings(ctx); getErr == nil {
-		oidcBefore = got
+	provider, err := store.CreateIdentityProvider(ctx, idprovider.Provider{
+		ID: uuid.NewString(), Slug: "audit-" + suffix, Kind: idprovider.KindOIDC, DisplayName: "Audit " + suffix,
+		Settings: []byte(`{"issuer":"https://issuer-` + suffix + `.example"}`), ProvisioningMode: idprovider.ProvisioningDisabled, JITDefaultRole: idprovider.JITRoleNone,
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if current, getErr := store.GetIdentityProvider(ctx, provider.ID); getErr == nil {
+			_ = store.DeleteIdentityProvider(ctx, provider.ID, current.Version)
+		}
+	})
+	providerBody := `{"slug":"new-` + suffix + `","kind":"oidc","displayName":"New","enabled":false,"oidc":{"issuer":"","audience":"","clientId":"","redirectUrl":"","scopes":["openid"],"adminSubjects":[],"memberRoles":[],"adminRoles":[]}}`
+	providerReplace := `{"displayName":"Changed","enabled":false,"oidc":{"issuer":"https://issuer-` + suffix + `.example","audience":"","clientId":"","redirectUrl":"","scopes":["openid"],"adminSubjects":[],"memberRoles":[],"adminRoles":[]},"attributeMapping":{},"provisioningMode":"disabled","emailLinkingEnabled":false,"jitDefaultRole":"none"}`
 	themeBody := strings.Replace(acmeDarkTheme, `"id":"acme-dark"`, `"id":"acme-new-`+suffix+`"`, 1)
 	replaceThemeBody := strings.Replace(fixtureTheme, `"name":"Acme Dark"`, `"name":"Acme Changed"`, 1)
 	siteBody := `{"siteName":"changed-` + suffix + `","logoUrl":"","brandMark":"AG","enabledThemeIds":["notarx-dark"],"defaultThemeId":"notarx-dark"}`
-	oidcBody := `{"enabled":false,"issuer":"","audience":"","clientId":"","redirectUrl":"","scopes":["openid"],"adminSubjects":[],"memberRoles":[],"adminRoles":[]}`
 	webhookBody := `{"name":"%s","endpointUrl":"https://events.example.test/hooks","secret":"0123456789abcdef0123456789abcdef","eventTypes":["artifact.quarantined"],"enabled":true}`
 	webhookUpdate := `{"name":"renamed-` + suffix + `","endpointUrl":"https://events.example.test/hooks","eventTypes":["artifact.quarantined"],"enabled":false}`
 
@@ -135,9 +146,19 @@ func runSettingsAuditRollback(t *testing.T, store settingsRollbackStore, seed de
 				t.Fatalf("site settings changed: %+v", got)
 			}
 		}},
-		{"oidc settings", http.MethodPut, "/authentication/oidc", oidcBody, oidcBefore.Version, func(t *testing.T) {
-			if got, getErr := store.GetOIDCSettings(ctx); oidcBefore.Version == "0" && !errors.Is(getErr, repository.ErrNotFound) || oidcBefore.Version != "0" && got.Version != oidcBefore.Version {
-				t.Fatalf("oidc settings changed: %+v %v", got, getErr)
+		{"identity provider create", http.MethodPost, "/authentication/providers", providerBody, "", func(t *testing.T) {
+			if _, getErr := store.GetIdentityProviderBySlug(ctx, "new-"+suffix); !errors.Is(getErr, repository.ErrNotFound) {
+				t.Fatalf("identity provider created: %v", getErr)
+			}
+		}},
+		{"identity provider replace", http.MethodPut, "/authentication/providers/" + provider.ID, providerReplace, strconv.FormatInt(provider.Version, 10), func(t *testing.T) {
+			if got, _ := store.GetIdentityProvider(ctx, provider.ID); got.Version != provider.Version || got.DisplayName != provider.DisplayName {
+				t.Fatalf("identity provider changed: %+v", got)
+			}
+		}},
+		{"identity provider delete", http.MethodDelete, "/authentication/providers/" + provider.ID, "", strconv.FormatInt(provider.Version, 10), func(t *testing.T) {
+			if _, getErr := store.GetIdentityProvider(ctx, provider.ID); getErr != nil {
+				t.Fatalf("identity provider deleted: %v", getErr)
 			}
 		}},
 		{"theme install", http.MethodPost, "/console-themes", themeBody, "", func(t *testing.T) {

@@ -1701,10 +1701,22 @@ export type ConsoleThemeToken = {
   controlOutline?: string;
 };
 
-export type OidcSettings = {
-  version: string;
-  source: "environment" | "database";
-  enabled: boolean;
+export type IdentityProviderKind = "oidc" | "saml";
+
+/**
+ * Where each user attribute comes from: a claim of the ID token (OIDC) or an attribute of the assertion (SAML). An empty value selects the protocol default. subject may join two claims with a colon, which is how Entra ID keeps its stable key (tid:oid).
+ *
+ */
+export type IdentityProviderAttributeMapping = {
+  subject?: string;
+  username?: string;
+  email?: string;
+  displayName?: string;
+  groups?: string;
+  externalId?: string;
+};
+
+export type IdentityProviderOidcSettings = {
   issuer: string;
   audience: string;
   jwksUrl?: string;
@@ -1715,14 +1727,13 @@ export type OidcSettings = {
   adminSubjects: Array<string>;
   memberRoles: Array<string>;
   adminRoles: Array<string>;
-  provisioningMode: "disabled" | "jit";
-  emailLinkingEnabled: boolean;
-  jitDefaultRole: "none" | "member" | "admin";
-  updatedAt?: string;
+  /**
+   * Allow-list of ID token signature algorithms. The default is RS256.
+   */
+  algorithms: Array<"RS256" | "ES256" | "EdDSA">;
 };
 
-export type OidcSettingsUpdate = {
-  enabled: boolean;
+export type IdentityProviderOidcInput = {
   issuer: string;
   audience: string;
   jwksUrl?: string;
@@ -1733,9 +1744,52 @@ export type OidcSettingsUpdate = {
   adminSubjects: Array<string>;
   memberRoles: Array<string>;
   adminRoles: Array<string>;
-  provisioningMode: "disabled" | "jit";
+  algorithms?: Array<"RS256" | "ES256" | "EdDSA">;
+};
+
+export type IdentityProvider = {
+  id: string;
+  slug: string;
+  kind: IdentityProviderKind;
+  displayName: string;
+  enabled: boolean;
+  oidc?: IdentityProviderOidcSettings;
+  attributeMapping: IdentityProviderAttributeMapping;
+  provisioningMode: "disabled" | "jit" | "scim_only";
   emailLinkingEnabled: boolean;
-  jitDefaultRole: "none" | "member" | "admin";
+  jitDefaultRole: "none" | "member";
+  /**
+   * Optimistic concurrency version, also returned as the ETag header.
+   */
+  version: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type IdentityProviderList = {
+  items: Array<IdentityProvider>;
+};
+
+export type CreateIdentityProvider = {
+  slug: string;
+  kind: "oidc";
+  displayName: string;
+  enabled: boolean;
+  oidc: IdentityProviderOidcInput;
+  attributeMapping?: IdentityProviderAttributeMapping;
+  provisioningMode?: "disabled" | "jit" | "scim_only";
+  emailLinkingEnabled?: boolean;
+  jitDefaultRole?: "none" | "member";
+};
+
+export type ReplaceIdentityProvider = {
+  displayName: string;
+  enabled: boolean;
+  oidc: IdentityProviderOidcInput;
+  attributeMapping: IdentityProviderAttributeMapping;
+  provisioningMode: "disabled" | "jit" | "scim_only";
+  emailLinkingEnabled: boolean;
+  jitDefaultRole: "none" | "member";
 };
 
 export type OidcConnectionTest = {
@@ -2900,7 +2954,7 @@ export type RuntimeLogPage = {
 export type UserSession = {
   id: string;
   userId: string;
-  kind: "local_session" | "oidc";
+  kind: "local_session" | "oidc" | "saml";
   ipAddress: string;
   userAgent: string;
   createdAt: string;
@@ -2919,7 +2973,8 @@ export type UserSessionList = {
 export type UserIdentity = {
   id: string;
   userId: string;
-  kind: "oidc";
+  kind: "oidc" | "saml";
+  providerId: string;
   issuer: string;
   subject: string;
   email: string;
@@ -2935,6 +2990,10 @@ export type UserIdentityList = {
 };
 
 export type CreateUserIdentity = {
+  /**
+   * The identity provider that owns the subject. When omitted, the single provider whose issuer matches is used.
+   */
+  providerId?: string;
   issuer: string;
   subject: string;
 };
@@ -3820,8 +3879,7 @@ export type RepositoryPageWritable = {
   nextPageToken?: string;
 };
 
-export type OidcSettingsUpdateWritable = {
-  enabled: boolean;
+export type IdentityProviderOidcInputWritable = {
   issuer: string;
   audience: string;
   jwksUrl?: string;
@@ -3833,9 +3891,29 @@ export type OidcSettingsUpdateWritable = {
   adminSubjects: Array<string>;
   memberRoles: Array<string>;
   adminRoles: Array<string>;
-  provisioningMode: "disabled" | "jit";
+  algorithms?: Array<"RS256" | "ES256" | "EdDSA">;
+};
+
+export type CreateIdentityProviderWritable = {
+  slug: string;
+  kind: "oidc";
+  displayName: string;
+  enabled: boolean;
+  oidc: IdentityProviderOidcInputWritable;
+  attributeMapping?: IdentityProviderAttributeMapping;
+  provisioningMode?: "disabled" | "jit" | "scim_only";
+  emailLinkingEnabled?: boolean;
+  jitDefaultRole?: "none" | "member";
+};
+
+export type ReplaceIdentityProviderWritable = {
+  displayName: string;
+  enabled: boolean;
+  oidc: IdentityProviderOidcInputWritable;
+  attributeMapping: IdentityProviderAttributeMapping;
+  provisioningMode: "disabled" | "jit" | "scim_only";
   emailLinkingEnabled: boolean;
-  jitDefaultRole: "none" | "member" | "admin";
+  jitDefaultRole: "none" | "member";
 };
 
 /**
@@ -9214,44 +9292,45 @@ export type ReplaceConsoleThemePackageResponses = {
 export type ReplaceConsoleThemePackageResponse =
   ReplaceConsoleThemePackageResponses[keyof ReplaceConsoleThemePackageResponses];
 
-export type GetOidcSettingsData = {
+export type ListIdentityProvidersData = {
   body?: never;
   path?: never;
   query?: never;
-  url: "/authentication/oidc";
+  url: "/authentication/providers";
 };
 
-export type GetOidcSettingsErrors = {
+export type ListIdentityProvidersErrors = {
   /**
    * Problem response
    */
   401: Problem;
-};
-
-export type GetOidcSettingsError =
-  GetOidcSettingsErrors[keyof GetOidcSettingsErrors];
-
-export type GetOidcSettingsResponses = {
   /**
-   * Effective runtime OIDC authentication settings with credentials redacted
+   * Problem response
    */
-  200: OidcSettings;
+  403: Problem;
 };
 
-export type GetOidcSettingsResponse =
-  GetOidcSettingsResponses[keyof GetOidcSettingsResponses];
+export type ListIdentityProvidersError =
+  ListIdentityProvidersErrors[keyof ListIdentityProvidersErrors];
 
-export type ReplaceOidcSettingsData = {
-  body: OidcSettingsUpdateWritable;
-  headers: {
-    "If-Match": string;
-  };
+export type ListIdentityProvidersResponses = {
+  /**
+   * Identity providers, enabled or not
+   */
+  200: IdentityProviderList;
+};
+
+export type ListIdentityProvidersResponse =
+  ListIdentityProvidersResponses[keyof ListIdentityProvidersResponses];
+
+export type CreateIdentityProviderData = {
+  body: CreateIdentityProviderWritable;
   path?: never;
   query?: never;
-  url: "/authentication/oidc";
+  url: "/authentication/providers";
 };
 
-export type ReplaceOidcSettingsErrors = {
+export type CreateIdentityProviderErrors = {
   /**
    * Problem response
    */
@@ -9260,6 +9339,151 @@ export type ReplaceOidcSettingsErrors = {
    * Problem response
    */
   401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+  /**
+   * Problem response
+   */
+  503: Problem;
+};
+
+export type CreateIdentityProviderError =
+  CreateIdentityProviderErrors[keyof CreateIdentityProviderErrors];
+
+export type CreateIdentityProviderResponses = {
+  /**
+   * One identity provider with credentials redacted
+   */
+  201: IdentityProvider;
+};
+
+export type CreateIdentityProviderResponse =
+  CreateIdentityProviderResponses[keyof CreateIdentityProviderResponses];
+
+export type DeleteIdentityProviderData = {
+  body?: never;
+  headers: {
+    "If-Match": string;
+  };
+  path: {
+    providerId: string;
+  };
+  query?: never;
+  url: "/authentication/providers/{providerId}";
+};
+
+export type DeleteIdentityProviderErrors = {
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+  /**
+   * Problem response
+   */
+  412: Problem;
+};
+
+export type DeleteIdentityProviderError =
+  DeleteIdentityProviderErrors[keyof DeleteIdentityProviderErrors];
+
+export type DeleteIdentityProviderResponses = {
+  /**
+   * Provider deleted
+   */
+  204: void;
+};
+
+export type DeleteIdentityProviderResponse =
+  DeleteIdentityProviderResponses[keyof DeleteIdentityProviderResponses];
+
+export type GetIdentityProviderData = {
+  body?: never;
+  path: {
+    providerId: string;
+  };
+  query?: never;
+  url: "/authentication/providers/{providerId}";
+};
+
+export type GetIdentityProviderErrors = {
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+};
+
+export type GetIdentityProviderError =
+  GetIdentityProviderErrors[keyof GetIdentityProviderErrors];
+
+export type GetIdentityProviderResponses = {
+  /**
+   * One identity provider with credentials redacted
+   */
+  200: IdentityProvider;
+};
+
+export type GetIdentityProviderResponse =
+  GetIdentityProviderResponses[keyof GetIdentityProviderResponses];
+
+export type ReplaceIdentityProviderData = {
+  body: ReplaceIdentityProviderWritable;
+  headers: {
+    "If-Match": string;
+  };
+  path: {
+    providerId: string;
+  };
+  query?: never;
+  url: "/authentication/providers/{providerId}";
+};
+
+export type ReplaceIdentityProviderErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
   /**
    * Problem response
    */
@@ -9270,27 +9494,29 @@ export type ReplaceOidcSettingsErrors = {
   503: Problem;
 };
 
-export type ReplaceOidcSettingsError =
-  ReplaceOidcSettingsErrors[keyof ReplaceOidcSettingsErrors];
+export type ReplaceIdentityProviderError =
+  ReplaceIdentityProviderErrors[keyof ReplaceIdentityProviderErrors];
 
-export type ReplaceOidcSettingsResponses = {
+export type ReplaceIdentityProviderResponses = {
   /**
-   * Effective runtime OIDC authentication settings with credentials redacted
+   * One identity provider with credentials redacted
    */
-  200: OidcSettings;
+  200: IdentityProvider;
 };
 
-export type ReplaceOidcSettingsResponse =
-  ReplaceOidcSettingsResponses[keyof ReplaceOidcSettingsResponses];
+export type ReplaceIdentityProviderResponse =
+  ReplaceIdentityProviderResponses[keyof ReplaceIdentityProviderResponses];
 
-export type TestOidcSettingsData = {
+export type TestIdentityProviderData = {
   body?: never;
-  path?: never;
+  path: {
+    providerId: string;
+  };
   query?: never;
-  url: "/authentication/oidc:test";
+  url: "/authentication/providers/{providerId}:test";
 };
 
-export type TestOidcSettingsErrors = {
+export type TestIdentityProviderErrors = {
   /**
    * Problem response
    */
@@ -9302,21 +9528,29 @@ export type TestOidcSettingsErrors = {
   /**
    * Problem response
    */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
   503: Problem;
 };
 
-export type TestOidcSettingsError =
-  TestOidcSettingsErrors[keyof TestOidcSettingsErrors];
+export type TestIdentityProviderError =
+  TestIdentityProviderErrors[keyof TestIdentityProviderErrors];
 
-export type TestOidcSettingsResponses = {
+export type TestIdentityProviderResponses = {
   /**
    * OIDC discovery connectivity result
    */
   200: OidcConnectionTest;
 };
 
-export type TestOidcSettingsResponse =
-  TestOidcSettingsResponses[keyof TestOidcSettingsResponses];
+export type TestIdentityProviderResponse =
+  TestIdentityProviderResponses[keyof TestIdentityProviderResponses];
 
 export type ListWebhookSubscriptionsData = {
   body?: never;

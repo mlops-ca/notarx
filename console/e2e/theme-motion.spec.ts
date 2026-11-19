@@ -40,8 +40,8 @@ async function mockThemeSurface(page: Page) {
   await page.route("**/auth/session", (route) =>
     route.fulfill({ json: { authenticated: false } }),
   );
-  await page.route("**/auth/oidc/config", (route) =>
-    route.fulfill({ json: { enabled: false } }),
+  await page.route("**/auth/idp", (route) =>
+    route.fulfill({ json: { items: [] } }),
   );
 }
 

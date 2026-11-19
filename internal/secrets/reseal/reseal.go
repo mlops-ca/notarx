@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/mlops-ca/notarx/internal/identity"
 	"github.com/mlops-ca/notarx/internal/secrets"
 	"github.com/mlops-ca/notarx/internal/tokenissuer"
 )
@@ -56,10 +57,10 @@ func Targets() []Target {
 			Purpose: func(id string) string { return "nexus-source:" + id },
 		},
 		{
-			Name:    "oidc_settings.client_secret",
-			Select:  "SELECT singleton::text, singleton::text, client_secret FROM oidc_settings WHERE client_secret <> ''",
-			Update:  "UPDATE oidc_settings SET client_secret = $1, version = version + 1 WHERE singleton = $2::text::boolean AND client_secret = $3",
-			Purpose: func(string) string { return "oidc.client-secret" },
+			Name:    "identity_providers.secrets_sealed",
+			Select:  "SELECT id::text, id::text, secrets_sealed FROM identity_providers WHERE COALESCE(secrets_sealed, '') <> '' ORDER BY id",
+			Update:  "UPDATE identity_providers SET secrets_sealed = $1, version = version + 1 WHERE id = $2::uuid AND secrets_sealed = $3",
+			Purpose: func(string) string { return identity.SecretPurpose },
 		},
 		{
 			Name:    "webhook_subscriptions.secret_ciphertext",

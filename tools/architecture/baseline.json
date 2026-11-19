@@ -34,7 +34,6 @@
     "repository.NativeOCIStore",
     "repository.NativePyPIStore",
     "repository.NativeRawStore",
-    "repository.OIDCSettingsStore",
     "repository.RawStore",
     "repository.ReplicationStore",
     "repository.RepositoryCapacityStore",
@@ -51,7 +50,8 @@
     "repository.UserIdentityStore",
     "repository.UserSessionStore",
     "repository.UserStore",
-    "repository.WebhookStore"
+    "repository.WebhookStore",
+    "repository.IdentityProviderStore"
   ],
   "effectiveStoreMethods": [
     "internal/repository.APIKeyStore.CreateAPIKey func(context.Context, APIKey) (APIKey, error)",
@@ -66,7 +66,6 @@
     "internal/repository.EmailStore.ReplayEmailDelivery func(context.Context, string, string, ...AuditRecord) (EmailDelivery, error)",
     "internal/repository.EmailTargetStore.CreateEmailTarget func(context.Context, EmailTarget, ...AuditRecord) (EmailTarget, error)",
     "internal/repository.EmailTargetStore.UpdateEmailTarget func(context.Context, EmailTarget, string, ...AuditRecord) (EmailTarget, error)",
-    "internal/repository.OIDCSettingsStore.ReplaceOIDCSettings func(context.Context, OIDCSettings, string, ...AuditRecord) (OIDCSettings, error)",
     "internal/repository.PublicAccessPolicyStore.GetPublicAccessPolicy func(context.Context) (PublicAccessPolicy, error)",
     "internal/repository.PublicAccessPolicyStore.ReplacePublicAccessPolicy func(context.Context, PublicAccessPolicy, string) (PublicAccessPolicy, error)",
     "internal/repository.ArtifactBrowseStore.ListArtifactBrowseNodes func(context.Context, string, Format, ArtifactBrowseParent, int, string) ([]ArtifactBrowseNode, error)",
@@ -387,7 +386,6 @@
     "internal/repository.NativeRawStore.RestoreRawAsset func(context.Context, string, string) (RawAsset, error)",
     "internal/repository.NativeRawStore.StageRawObject func(context.Context, RawObject) error",
     "internal/repository.NativeRawStore.UpdateRawUpload func(context.Context, string, int64) (RawUpload, error)",
-    "internal/repository.OIDCSettingsStore.GetOIDCSettings func(context.Context) (OIDCSettings, error)",
     "internal/repository.RawStore.CreateRawGroup func(context.Context, Group) (Group, error)",
     "internal/repository.RawStore.DisableRawGroup func(context.Context, string) error",
     "internal/repository.RawStore.GetRawGroup func(context.Context, string) (Group, error)",
@@ -456,7 +454,6 @@
     "internal/repository.Store.RecordAudit func(context.Context, AuditRecord) error",
     "internal/repository.UserIdentityStore.CreateUserIdentity func(context.Context, UserIdentity, ...AuditRecord) (UserIdentity, error)",
     "internal/repository.UserIdentityStore.DeleteUserIdentity func(context.Context, string, string, ...AuditRecord) error",
-    "internal/repository.UserIdentityStore.GetUserByOIDCIdentity func(context.Context, string, string) (User, UserIdentity, error)",
     "internal/repository.UserIdentityStore.ListUserIdentities func(context.Context, string) ([]UserIdentity, error)",
     "internal/repository.UserIdentityStore.ResolveOIDCIdentity func(context.Context, OIDCIdentityProvision) (User, UserIdentity, bool, error)",
     "internal/repository.UserSessionStore.CreateUserSession func(context.Context, UserSession) (UserSession, error)",
@@ -485,7 +482,15 @@
     "internal/repository.WebhookStore.ListWebhookDeliveries func(context.Context, WebhookDeliveryQuery) ([]WebhookDelivery, error)",
     "internal/repository.WebhookStore.ListWebhookSubscriptions func(context.Context) ([]WebhookSubscription, error)",
     "internal/repository.WebhookStore.ReplayWebhookDelivery func(context.Context, string, time.Time, ...AuditRecord) (WebhookDelivery, error)",
-    "internal/repository.WebhookStore.UpdateWebhookSubscription func(context.Context, WebhookSubscription, string, ...AuditRecord) (WebhookSubscription, error)"
+    "internal/repository.WebhookStore.UpdateWebhookSubscription func(context.Context, WebhookSubscription, string, ...AuditRecord) (WebhookSubscription, error)",
+    "internal/repository.IdentityProviderStore.CreateIdentityProvider func(context.Context, identity.Provider, ...AuditRecord) (identity.Provider, error)",
+    "internal/repository.IdentityProviderStore.DeleteIdentityProvider func(ctx context.Context, id string, expectedVersion int64, audit ...AuditRecord) error",
+    "internal/repository.IdentityProviderStore.GetIdentityProvider func(context.Context, string) (identity.Provider, error)",
+    "internal/repository.IdentityProviderStore.GetIdentityProviderBySlug func(context.Context, string) (identity.Provider, error)",
+    "internal/repository.IdentityProviderStore.ListIdentityProviders func(context.Context) ([]identity.Provider, error)",
+    "internal/repository.IdentityProviderStore.ReplaceIdentityProvider func(ctx context.Context, provider identity.Provider, expectedVersion int64, audit ...AuditRecord) (identity.Provider, error)",
+    "internal/repository.IdentityProviderStore.SeedIdentityProvider func(context.Context, identity.Provider) (bool, error)",
+    "internal/repository.UserIdentityStore.GetUserByProviderIdentity func(context.Context, string, string) (User, UserIdentity, error)"
   ],
   "visibilityAccessors": [
     "internal/app/audit_management_api.go",

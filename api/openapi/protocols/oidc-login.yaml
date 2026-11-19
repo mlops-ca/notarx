@@ -1,0 +1,73 @@
+---
+x-gateway-protocol-overlay:
+  gatewayDecision: >
+    Browser sign-in against the identity provider registry of ADR 0018. The chooser
+    lists enabled providers only; a disabled or unknown slug is indistinguishable
+    (404). The flow cookie is HttpOnly and scoped to /auth/oidc, so two providers
+    sign in independently. The callback redirects to the console login page with
+    either oidc=success or a generic oidc_error code; precise reasons stay in the
+    audit log.
+idp:
+  servers: [{url: https://gateway.example.com}]
+  get:
+    operationId: listLoginIdentityProviders
+    description: Lists the enabled identity providers for the login chooser (slug, display name, kind).
+    security: [{}]
+    responses:
+      '200':
+        description: Enabled providers, possibly none
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              additionalProperties: false
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [slug, displayName, kind]
+                    additionalProperties: false
+                    properties:
+                      slug: {type: string}
+                      displayName: {type: string}
+                      kind: {type: string, enum: [oidc, saml]}
+oidc_login:
+  servers: [{url: https://gateway.example.com}]
+  parameters:
+  - name: slug
+    in: path
+    required: true
+    schema: {type: string, pattern: '^[a-z0-9][a-z0-9-]{1,62}$'}
+  get:
+    operationId: startOIDCLogin
+    description: Starts the Authorization Code flow with PKCE for one provider and redirects to its authorization endpoint.
+    security: [{}]
+    parameters:
+    - name: redirect
+      in: query
+      required: false
+      description: Console path to return to after sign-in; anything that is not a local path is ignored.
+      schema: {type: string}
+    responses:
+      '302': {description: Redirect to the identity provider}
+      '404': {description: "The provider does not exist, is disabled, or is not an OIDC provider"}
+      '503': {description: Provider discovery failed}
+oidc_callback:
+  servers: [{url: https://gateway.example.com}]
+  parameters:
+  - name: slug
+    in: path
+    required: true
+    schema: {type: string, pattern: '^[a-z0-9][a-z0-9-]{1,62}$'}
+  get:
+    operationId: completeOIDCLogin
+    description: Completes the flow, creates the notarx session and redirects to the console.
+    security: [{}]
+    parameters:
+    - {name: code, in: query, required: false, schema: {type: string}}
+    - {name: state, in: query, required: false, schema: {type: string}}
+    - {name: error, in: query, required: false, schema: {type: string}}
+    responses:
+      '302': {description: Redirect to /login with oidc=success or a generic oidc_error code}

@@ -15,7 +15,7 @@ import { Field } from "../../components/ui/Layout";
 import { LoginBeamsBackground } from "../../components/ui/kokonutui/LoginBeamsBackground";
 import { PreferenceControls } from "../../components/ui/PreferenceControls";
 import { usePreferences } from "../../lib/preferences";
-import { useOidcLoginConfig } from "./authQueries";
+import { loginPath, useLoginIdentityProviders } from "./authQueries";
 import { LoginBrandPanel } from "./LoginBrandPanel";
 import { PasswordChangeForm } from "./PasswordChangeForm";
 import {
@@ -48,10 +48,11 @@ export function LoginPage() {
   const [params] = useSearchParams();
   const redirect = params.get("redirect") || "/";
 
-  const oidc = useOidcLoginConfig().data ?? { enabled: false };
+  const providers = useLoginIdentityProviders().data ?? [];
+  const ssoEnabled = providers.length > 0;
   // Single sign-on is offered first once discovery finds it.
   const [chosenMode, setMode] = useState<Mode | null>(null);
-  const mode = chosenMode ?? (oidc.enabled ? "oidc" : "password");
+  const mode = chosenMode ?? (ssoEnabled ? "oidc" : "password");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [token, setTokenDraft] = useState("");
@@ -234,7 +235,7 @@ export function LoginPage() {
                 className="ag-login-modes"
                 value={mode}
                 options={[
-                  ...(oidc.enabled
+                  ...(ssoEnabled
                     ? [
                         {
                           value: "oidc" as const,
@@ -273,7 +274,7 @@ export function LoginPage() {
                 busy={busy}
                 onSubmit={submitPasswordChange}
               />
-            ) : mode === "oidc" && oidc.enabled ? (
+            ) : mode === "oidc" && ssoEnabled ? (
               <div className="ag-login-sso text-center">
                 <div className="ag-login-mode-icon">
                   <SafetyCertificateOutlined />
@@ -281,12 +282,12 @@ export function LoginPage() {
                 <div className="mt-4 text-sm font-medium text-fg-strong">
                   {t("auth.ssoConfigured")}
                 </div>
-                {oidc.issuer && (
+                {providers.length === 1 && (
                   <div
                     className="mt-2 truncate font-mono text-xs text-fg-tertiary"
-                    title={oidc.issuer}
+                    title={providers[0].displayName}
                   >
-                    {oidc.issuer}
+                    {providers[0].displayName}
                   </div>
                 )}
                 {error && (
@@ -297,20 +298,23 @@ export function LoginPage() {
                     title={error}
                   />
                 )}
-                <Button
-                  className="mt-6"
-                  type="primary"
-                  size="large"
-                  block
-                  icon={<LoginOutlined />}
-                  onClick={() => {
-                    window.location.assign(
-                      `/auth/oidc/login?redirect=${encodeURIComponent(redirect)}`,
-                    );
-                  }}
-                >
-                  {t("auth.ssoLogin")}
-                </Button>
+                {providers.map((provider) => (
+                  <Button
+                    key={provider.slug}
+                    className="mt-6"
+                    type="primary"
+                    size="large"
+                    block
+                    icon={<LoginOutlined />}
+                    onClick={() => {
+                      window.location.assign(loginPath(provider, redirect));
+                    }}
+                  >
+                    {providers.length === 1
+                      ? t("auth.ssoLogin")
+                      : provider.displayName}
+                  </Button>
+                ))}
               </div>
             ) : mode === "password" ? (
               <form onSubmit={submitPassword} className="ag-login-form">

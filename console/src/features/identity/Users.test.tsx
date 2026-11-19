@@ -10,7 +10,7 @@ import userEvent from "@testing-library/user-event";
 import { clickPage } from "../../test/pagination";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  getOidcSettings,
+  listIdentityProviders,
   listAuthorizationRoles,
   listRepositories,
   listRepositoryGrants,
@@ -24,12 +24,23 @@ import { PreferencesProvider } from "../../lib/preferences";
 import { TestQueryProvider } from "../../test/queryClient";
 import { UsersPage } from "./Users";
 
+const providerList = (issuer: string) => ({
+  items: [
+    {
+      id: "00000000-0000-0000-0000-000000000201",
+      slug: "default",
+      kind: "oidc",
+      oidc: { issuer },
+    },
+  ],
+});
+
 vi.mock("../../client", () => ({
   createUser: vi.fn(),
   createUserIdentity: vi.fn(),
   deleteUser: vi.fn(),
   deleteUserIdentity: vi.fn(),
-  getOidcSettings: vi.fn(),
+  listIdentityProviders: vi.fn(),
   listAuthorizationRoles: vi.fn(),
   listGrants: vi.fn(),
   listRepositories: vi.fn(),
@@ -48,7 +59,7 @@ const mockListUserIdentities = vi.mocked(listUserIdentities);
 const mockListRepositoryGrants = vi.mocked(listRepositoryGrants);
 const mockListRepositories = vi.mocked(listRepositories);
 const mockListAuthorizationRoles = vi.mocked(listAuthorizationRoles);
-const mockGetOidcSettings = vi.mocked(getOidcSettings);
+const mockListProviders = vi.mocked(listIdentityProviders);
 const mockListUserSessions = vi.mocked(listUserSessions);
 
 const alice: User = {
@@ -242,8 +253,8 @@ describe("UsersPage", () => {
     mockListRepositoryGrants.mockResolvedValue({ data: [] } as never);
     mockListRepositories.mockResolvedValue({ data: { items: [] } } as never);
     mockListAuthorizationRoles.mockResolvedValue({ data: [] } as never);
-    mockGetOidcSettings.mockResolvedValue({
-      data: { issuer: "https://issuer.example.test" },
+    mockListProviders.mockResolvedValue({
+      data: providerList("https://issuer.example.test"),
     } as never);
     mockListUserSessions.mockResolvedValue({ data: { items: [] } } as never);
 

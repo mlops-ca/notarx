@@ -71,14 +71,15 @@ func TestOIDCBearerIdentityUsesBoundLocalAccountRoleAndState(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err = store.CreateUserIdentity(context.Background(), repository.UserIdentity{
-		ID: "bound-identity", UserID: user.ID, Kind: repository.UserIdentityOIDC,
+		ID: "bound-identity", UserID: user.ID, Kind: repository.UserIdentityOIDC, ProviderID: "provider-1",
 		Issuer: "https://issuer.example.test", Subject: "provider-admin",
 	}); err != nil {
 		t.Fatal(err)
 	}
 	authenticator := Authenticator{
 		OIDC: NewOIDCValidator(OIDCConfig{
-			Issuer: "https://issuer.example.test", Audience: "notarx", JWKSURL: server.URL,
+			ProviderID: "provider-1",
+			Issuer:     "https://issuer.example.test", Audience: "notarx", JWKSURL: server.URL,
 			Roles: OIDCRoleMapping{Admin: []string{"provider-admin-role"}},
 		}),
 		Users: store, UserIdentities: store,

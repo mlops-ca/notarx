@@ -11,7 +11,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/mlops-ca/notarx/internal/aptpublication"
-	"github.com/mlops-ca/notarx/internal/authorization"
 	"github.com/mlops-ca/notarx/internal/buildinfo"
 	"github.com/mlops-ca/notarx/internal/config"
 	"github.com/mlops-ca/notarx/internal/consoletheme"
@@ -63,9 +62,7 @@ type Dependencies struct {
 	ArtifactScannerDatabaseMaxAge time.Duration
 	ArtifactScannerFormats        []repository.Format
 	ArtifactScanResolver          ArtifactScanResolver
-	OIDCClient                    *authorization.OIDCClient
-	OIDCLoginValidator            *authorization.OIDCValidator
-	OIDCRuntime                   *OIDCRuntime
+	IdentityRuntime               *IdentityRuntime
 	ConsoleThemes                 *consoletheme.Registry
 }
 

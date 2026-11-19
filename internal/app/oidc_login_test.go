@@ -8,9 +8,11 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/identity"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/secrets"
 )
@@ -47,20 +49,23 @@ func TestOIDCBrowserJITRegistersPendingUserWithoutRepositoryAccess(t *testing.T)
 	defer provider.Close()
 
 	store := repository.NewMemoryStore()
-	runtime := NewOIDCRuntime(store, OIDCRuntimeConfig{})
-	_, err = runtime.Replace(t.Context(), OIDCSettingsUpdate{
-		Enabled: true, Issuer: provider.URL, Audience: "notarx-api",
-		ClientID: "notarx-console", RedirectURL: "http://localhost:4173/auth/oidc/callback",
-		ProvisioningMode: "jit", JITDefaultRole: "none",
-	}, "0")
+	runtime := NewIdentityRuntime(store)
+	_, err = runtime.Create(t.Context(), IdentityProviderInput{
+		Slug: "corp", Kind: identity.KindOIDC, DisplayName: "Corp", Enabled: true,
+		OIDC: identity.OIDCSettings{
+			Issuer: provider.URL, Audience: "notarx-api", ClientID: "notarx-console",
+			RedirectURL: "http://localhost:4173/auth/oidc/corp/callback",
+		},
+		ProvisioningMode: identity.ProvisioningJIT, JITDefaultRole: identity.JITRoleNone,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{OIDCRuntime: runtime}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
+	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{IdentityRuntime: runtime}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
 	signIn := func() *http.Cookie {
 		t.Helper()
 		start := httptest.NewRecorder()
-		handler.ServeHTTP(start, httptest.NewRequest(http.MethodGet, "/auth/oidc/login", nil))
+		handler.ServeHTTP(start, httptest.NewRequest(http.MethodGet, "/auth/oidc/corp/login", nil))
 		if start.Code != http.StatusFound {
 			t.Fatalf("start=%d body=%s", start.Code, start.Body.String())
 		}
@@ -78,7 +83,7 @@ func TestOIDCBrowserJITRegistersPendingUserWithoutRepositoryAccess(t *testing.T)
 		if flow == nil || expectedNonce == "" {
 			t.Fatal("OIDC flow state was not issued")
 		}
-		callback := httptest.NewRequest(http.MethodGet, "/auth/oidc/callback?code=code&state="+url.QueryEscape(target.Query().Get("state")), nil)
+		callback := httptest.NewRequest(http.MethodGet, "/auth/oidc/corp/callback?code=code&state="+url.QueryEscape(target.Query().Get("state")), nil)
 		callback.AddCookie(flow)
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, callback)
@@ -169,56 +174,20 @@ func TestOIDCBrowserJITRegistersPendingUserWithoutRepositoryAccess(t *testing.T)
 }
 
 func TestOIDCBrowserLoginMapsBoundUserAndRevokesCookieSession(t *testing.T) {
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	t.Setenv(secrets.KeyEnv, "0123456789abcdef0123456789abcdef")
+	idp := newStubOIDCProvider(t, "browser-login-key", "gitlab-user", []string{"artifact-member"})
+	store := repository.NewMemoryStore()
+	runtime := NewIdentityRuntime(store)
+	corp, err := runtime.Create(t.Context(), corpProviderInput("corp", idp))
 	if err != nil {
 		t.Fatal(err)
 	}
-	const keyID = "browser-login-key"
-	var expectedNonce string
-	var provider *httptest.Server
-	provider = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/.well-known/openid-configuration":
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"issuer":                 provider.URL,
-				"authorization_endpoint": provider.URL + "/authorize",
-				"token_endpoint":         provider.URL + "/token",
-				"jwks_uri":               provider.URL + "/jwks",
-			})
-		case "/jwks":
-			_, _ = w.Write(oidcJWKS(t, keyID, &key.PublicKey))
-		case "/token":
-			if err := r.ParseForm(); err != nil || r.Form.Get("code") != "authorization-code" || r.Form.Get("code_verifier") == "" {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"access_token": "provider-access-token",
-				"token_type":   "Bearer",
-				"expires_in":   300,
-				"id_token": signedOIDCTokenWithClaims(
-					t, key, keyID, provider.URL, "notarx-console", "gitlab-user", time.Now().Add(time.Minute), []string{"artifact-member"}, expectedNonce,
-				),
-			})
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer provider.Close()
-
-	authenticator := testAuthenticator()
-	authenticator.OIDC = NewOIDCValidator(OIDCConfig{
-		Issuer: provider.URL, Audience: "notarx-api", JWKSURL: provider.URL + "/jwks",
-		Roles: OIDCRoleMapping{Member: []string{"artifact-member"}},
-	})
-	dependencies := Dependencies{OIDCClient: NewOIDCClient(OIDCClientConfig{
-		Issuer: provider.URL, ClientID: "notarx-console",
-		RedirectURL: "http://localhost:4173/auth/oidc/callback", Scopes: []string{"openid", "profile"},
-	}), OIDCLoginValidator: NewOIDCValidator(OIDCConfig{
-		Issuer: provider.URL, Audience: "notarx-console", JWKSURL: provider.URL + "/jwks",
-		Roles: OIDCRoleMapping{Member: []string{"artifact-member"}},
-	})}
-	store := repository.NewMemoryStore()
+	if _, err = runtime.Create(t.Context(), IdentityProviderInput{
+		Slug: "hidden", Kind: identity.KindOIDC, DisplayName: "Hidden", Enabled: false,
+		OIDC: identity.OIDCSettings{Issuer: idp.URL, Audience: "notarx-api", ClientID: "notarx-console", RedirectURL: "http://localhost:4173/auth/oidc/hidden/callback"},
+	}); err != nil {
+		t.Fatal(err)
+	}
 	localUser, err := store.CreateUser(t.Context(), repository.User{
 		ID: "browser-oidc-user", Name: "local-user", Role: "member",
 	})
@@ -226,44 +195,32 @@ func TestOIDCBrowserLoginMapsBoundUserAndRevokesCookieSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err = store.CreateUserIdentity(t.Context(), repository.UserIdentity{
-		ID: "browser-oidc-identity", UserID: localUser.ID, Kind: repository.UserIdentityOIDC,
-		Issuer: provider.URL, Subject: "gitlab-user",
+		ID: "browser-oidc-identity", UserID: localUser.ID, Kind: repository.UserIdentityOIDC, ProviderID: corp.ID,
+		Issuer: idp.URL, Subject: "gitlab-user",
 	}); err != nil {
 		t.Fatal(err)
 	}
-	handler := newTestGateway(t, GatewayOptions{Dependencies: dependencies, Store: store, Adapter: TestAdapter{}, Authenticator: authenticator})
+	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{IdentityRuntime: runtime}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
 
-	configResponse := httptest.NewRecorder()
-	handler.ServeHTTP(configResponse, httptest.NewRequest(http.MethodGet, "/auth/oidc/config", nil))
-	if configResponse.Code != http.StatusOK || !strings.Contains(configResponse.Body.String(), `"enabled":true`) || !strings.Contains(configResponse.Body.String(), `"issuer":"`+provider.URL+`"`) {
-		t.Fatalf("config=%d body=%s", configResponse.Code, configResponse.Body.String())
+	chooser := httptest.NewRecorder()
+	handler.ServeHTTP(chooser, httptest.NewRequest(http.MethodGet, "/auth/idp", nil))
+	if chooser.Code != http.StatusOK || !strings.Contains(chooser.Body.String(), `"slug":"corp"`) || strings.Contains(chooser.Body.String(), "hidden") || strings.Contains(chooser.Body.String(), "notarx-console") {
+		t.Fatalf("chooser=%d body=%s", chooser.Code, chooser.Body.String())
 	}
 
-	startResponse := httptest.NewRecorder()
-	handler.ServeHTTP(startResponse, httptest.NewRequest(http.MethodGet, "/auth/oidc/login?redirect=%2Frepositories", nil))
-	if startResponse.Code != http.StatusFound {
-		t.Fatalf("start=%d body=%s", startResponse.Code, startResponse.Body.String())
+	hidden := httptest.NewRecorder()
+	handler.ServeHTTP(hidden, httptest.NewRequest(http.MethodGet, "/auth/oidc/hidden/login", nil))
+	unknown := httptest.NewRecorder()
+	handler.ServeHTTP(unknown, httptest.NewRequest(http.MethodGet, "/auth/oidc/nonexistent/login", nil))
+	if hidden.Code != http.StatusNotFound || unknown.Code != http.StatusNotFound || hidden.Body.String() != unknown.Body.String() {
+		t.Fatalf("a disabled provider must look unknown: hidden=%d unknown=%d", hidden.Code, unknown.Code)
 	}
-	authorizationURL, err := url.Parse(startResponse.Header().Get("Location"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	expectedNonce = authorizationURL.Query().Get("nonce")
-	state := authorizationURL.Query().Get("state")
-	if expectedNonce == "" || state == "" || authorizationURL.Query().Get("code_challenge") == "" {
-		t.Fatalf("authorization URL = %s", authorizationURL)
-	}
-	var flowCookie *http.Cookie
-	for _, cookie := range startResponse.Result().Cookies() {
-		if cookie.Name == oidcStateCookieName {
-			flowCookie = cookie
-		}
-	}
-	if flowCookie == nil || !flowCookie.HttpOnly || flowCookie.SameSite != http.SameSiteLaxMode {
+
+	flowCookie, state := startStubLogin(t, handler, idp, "corp", "/auth/oidc/corp/login?redirect=%2Frepositories")
+	if !flowCookie.HttpOnly || flowCookie.SameSite != http.SameSiteLaxMode || flowCookie.Path != "/auth/oidc/corp" {
 		t.Fatalf("flow cookie = %#v", flowCookie)
 	}
-
-	callback := httptest.NewRequest(http.MethodGet, "/auth/oidc/callback?code=authorization-code&state="+url.QueryEscape(state), nil)
+	callback := httptest.NewRequest(http.MethodGet, "/auth/oidc/corp/callback?code=authorization-code&state="+url.QueryEscape(state), nil)
 	callback.AddCookie(flowCookie)
 	callbackResponse := httptest.NewRecorder()
 	handler.ServeHTTP(callbackResponse, callback)
@@ -280,10 +237,10 @@ func TestOIDCBrowserLoginMapsBoundUserAndRevokesCookieSession(t *testing.T) {
 		t.Fatalf("session cookie = %#v", sessionCookie)
 	}
 
-	identity := httptest.NewRequest(http.MethodGet, "/api/v2/identity", nil)
-	identity.AddCookie(sessionCookie)
+	identityRequest := httptest.NewRequest(http.MethodGet, "/api/v2/identity", nil)
+	identityRequest.AddCookie(sessionCookie)
 	identityResponse := httptest.NewRecorder()
-	handler.ServeHTTP(identityResponse, identity)
+	handler.ServeHTTP(identityResponse, identityRequest)
 	if identityResponse.Code != http.StatusOK || !strings.Contains(identityResponse.Body.String(), `"actor":"user:local-user"`) || !strings.Contains(identityResponse.Body.String(), `"kind":"oidc"`) || !strings.Contains(identityResponse.Body.String(), `"role":"member"`) {
 		t.Fatalf("identity=%d body=%s", identityResponse.Code, identityResponse.Body.String())
 	}
@@ -312,11 +269,160 @@ func TestOIDCBrowserLoginMapsBoundUserAndRevokesCookieSession(t *testing.T) {
 	}
 }
 
-func TestOIDCConfigIsDisabledWithoutBrowserClient(t *testing.T) {
+// Two providers with the same subject string are two identities: each signs in on its
+// own flow cookie, and a flow started for one provider cannot be completed on the other.
+func TestOIDCTwoProvidersSignInIndependently(t *testing.T) {
+	t.Setenv(secrets.KeyEnv, "0123456789abcdef0123456789abcdef")
+	alpha := newStubOIDCProvider(t, "alpha-key", "shared-subject", nil)
+	beta := newStubOIDCProvider(t, "beta-key", "shared-subject", nil)
+	store := repository.NewMemoryStore()
+	runtime := NewIdentityRuntime(store)
+	for slug, idp := range map[string]*stubOIDCProvider{"alpha": alpha, "beta": beta} {
+		input := corpProviderInput(slug, idp)
+		input.ProvisioningMode, input.JITDefaultRole = identity.ProvisioningJIT, identity.JITRoleMember
+		if _, err := runtime.Create(t.Context(), input); err != nil {
+			t.Fatal(err)
+		}
+	}
+	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{IdentityRuntime: runtime}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
+
+	alphaFlow, alphaState := startStubLogin(t, handler, alpha, "alpha", "/auth/oidc/alpha/login")
+	betaFlow, betaState := startStubLogin(t, handler, beta, "beta", "/auth/oidc/beta/login")
+	if alphaFlow.Path == betaFlow.Path {
+		t.Fatalf("flow cookies share a path: %s", alphaFlow.Path)
+	}
+	cross := httptest.NewRequest(http.MethodGet, "/auth/oidc/beta/callback?code=authorization-code&state="+url.QueryEscape(alphaState), nil)
+	cross.AddCookie(alphaFlow)
+	crossResponse := httptest.NewRecorder()
+	handler.ServeHTTP(crossResponse, cross)
+	if loc := crossResponse.Header().Get("Location"); crossResponse.Code != http.StatusFound || !strings.Contains(loc, "oidc_error=invalid_state") {
+		t.Fatalf("cross-provider callback=%d location=%q", crossResponse.Code, loc)
+	}
+	for slug, flow := range map[string]struct {
+		cookie *http.Cookie
+		state  string
+	}{"alpha": {alphaFlow, alphaState}, "beta": {betaFlow, betaState}} {
+		callback := httptest.NewRequest(http.MethodGet, "/auth/oidc/"+slug+"/callback?code=authorization-code&state="+url.QueryEscape(flow.state), nil)
+		callback.AddCookie(flow.cookie)
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, callback)
+		if loc := response.Header().Get("Location"); response.Code != http.StatusFound || !strings.Contains(loc, "oidc=success") {
+			t.Fatalf("%s callback=%d location=%q", slug, response.Code, loc)
+		}
+	}
+	users, err := store.ListUsers(t.Context(), repository.UserListQuery{Limit: 10})
+	if err != nil || users.Total != 2 {
+		t.Fatalf("each provider must provision its own account: %+v err=%v", users, err)
+	}
+	alphaProvider, _ := runtime.store.GetIdentityProviderBySlug(t.Context(), "alpha")
+	betaProvider, _ := runtime.store.GetIdentityProviderBySlug(t.Context(), "beta")
+	if _, _, err := store.GetUserByProviderIdentity(t.Context(), alphaProvider.ID, "shared-subject"); err != nil {
+		t.Fatalf("alpha identity: %v", err)
+	}
+	if _, _, err := store.GetUserByProviderIdentity(t.Context(), betaProvider.ID, "shared-subject"); err != nil {
+		t.Fatalf("beta identity: %v", err)
+	}
+}
+
+func TestIdentityChooserIsEmptyWithoutProviders(t *testing.T) {
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: repository.NewMemoryStore(), Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
 	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/auth/oidc/config", nil))
-	if response.Code != http.StatusOK || strings.TrimSpace(response.Body.String()) != `{"enabled":false}` {
-		t.Fatalf("config=%d body=%s", response.Code, response.Body.String())
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/auth/idp", nil))
+	if response.Code != http.StatusOK || strings.TrimSpace(response.Body.String()) != `{"items":[]}` {
+		t.Fatalf("chooser=%d body=%s", response.Code, response.Body.String())
 	}
+	login := httptest.NewRecorder()
+	handler.ServeHTTP(login, httptest.NewRequest(http.MethodGet, "/auth/oidc/default/login", nil))
+	if login.Code != http.StatusNotFound {
+		t.Fatalf("login without providers=%d", login.Code)
+	}
+}
+
+// stubOIDCProvider is a minimal OIDC IdP: discovery, JWKS and a token endpoint that
+// signs an ID token for the nonce of the flow under test.
+type stubOIDCProvider struct {
+	*httptest.Server
+	mu      sync.Mutex
+	nonce   string
+	subject string
+	roles   []string
+}
+
+func newStubOIDCProvider(t *testing.T, keyID, subject string, roles []string) *stubOIDCProvider {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	idp := &stubOIDCProvider{subject: subject, roles: roles}
+	idp.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/.well-known/openid-configuration":
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"issuer": idp.URL, "authorization_endpoint": idp.URL + "/authorize",
+				"token_endpoint": idp.URL + "/token", "jwks_uri": idp.URL + "/jwks",
+			})
+		case "/jwks":
+			_, _ = w.Write(oidcJWKS(t, keyID, &key.PublicKey))
+		case "/token":
+			if err := r.ParseForm(); err != nil || r.Form.Get("code") != "authorization-code" || r.Form.Get("code_verifier") == "" {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			idp.mu.Lock()
+			nonce := idp.nonce
+			idp.mu.Unlock()
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"access_token": "provider-access-token", "token_type": "Bearer", "expires_in": 300,
+				"id_token": signedOIDCTokenWithClaims(t, key, keyID, idp.URL, "notarx-console", idp.subject, time.Now().Add(time.Minute), idp.roles, nonce),
+			})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(idp.Close)
+	return idp
+}
+
+func (p *stubOIDCProvider) setNonce(nonce string) {
+	p.mu.Lock()
+	p.nonce = nonce
+	p.mu.Unlock()
+}
+
+func corpProviderInput(slug string, idp *stubOIDCProvider) IdentityProviderInput {
+	return IdentityProviderInput{
+		Slug: slug, Kind: identity.KindOIDC, DisplayName: strings.ToUpper(slug), Enabled: true,
+		OIDC: identity.OIDCSettings{
+			Issuer: idp.URL, Audience: "notarx-api", ClientID: "notarx-console",
+			RedirectURL: "http://localhost:4173/auth/oidc/" + slug + "/callback", Scopes: []string{"openid", "profile"},
+			MemberRoles: []string{"artifact-member"},
+		},
+	}
+}
+
+// startStubLogin runs the start step of the flow and returns the flow cookie and state.
+func startStubLogin(t *testing.T, handler http.Handler, idp *stubOIDCProvider, slug, path string) (*http.Cookie, string) {
+	t.Helper()
+	start := httptest.NewRecorder()
+	handler.ServeHTTP(start, httptest.NewRequest(http.MethodGet, path, nil))
+	if start.Code != http.StatusFound {
+		t.Fatalf("start %s=%d body=%s", slug, start.Code, start.Body.String())
+	}
+	target, err := url.Parse(start.Header().Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	nonce, state := target.Query().Get("nonce"), target.Query().Get("state")
+	if nonce == "" || state == "" || target.Query().Get("code_challenge") == "" {
+		t.Fatalf("authorization URL = %s", target)
+	}
+	idp.setNonce(nonce)
+	for _, cookie := range start.Result().Cookies() {
+		if cookie.Name == oidcStateCookieName {
+			return cookie, state
+		}
+	}
+	t.Fatal("OIDC flow state was not issued")
+	return nil, ""
 }

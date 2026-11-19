@@ -27,7 +27,7 @@ export function OidcProviderFields() {
           <Input placeholder="notarx-console" />
         </Form.Item>
         <Form.Item name="redirectUrl" label={t("settings.redirectURL")}>
-          <Input placeholder="https://gateway.example.com/auth/oidc/callback" />
+          <Input placeholder="https://gateway.example.com/auth/oidc/default/callback" />
         </Form.Item>
         <Form.Item
           name="jwksUrl"
@@ -110,7 +110,6 @@ export function OidcRoleMappingFields() {
                 value: "member",
                 label: t("settings.memberNoRepositoryAccess"),
               },
-              { value: "admin", label: "admin" },
             ]}
           />
         </Form.Item>

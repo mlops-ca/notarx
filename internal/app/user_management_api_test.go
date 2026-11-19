@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/identity"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -321,8 +322,12 @@ func TestUserSessionManagementSupportsIndependentRevocation(t *testing.T) {
 
 func TestUserManagementIdentityBindingLifecycle(t *testing.T) {
 	store := repository.NewMemoryStore()
-	runtime := NewOIDCRuntime(store, OIDCRuntimeConfig{Issuer: "https://issuer.example.test"})
-	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{OIDCRuntime: runtime}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
+	runtime := NewIdentityRuntime(store)
+	provider, err := runtime.Create(t.Context(), IdentityProviderInput{Slug: "corp", Kind: identity.KindOIDC, DisplayName: "Corp", OIDC: identity.OIDCSettings{Issuer: "https://issuer.example.test"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{IdentityRuntime: runtime}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
 	adminRequest := func(method, target, body string) *httptest.ResponseRecorder {
 		request := httptest.NewRequest(method, target, strings.NewReader(body))
 		request.Header.Set("Authorization", "Bearer admin-secret")
@@ -346,28 +351,44 @@ func TestUserManagementIdentityBindingLifecycle(t *testing.T) {
 		t.Fatalf("initial identities=%d body=%s", initial.Code, initial.Body.String())
 	}
 	linked := adminRequest(http.MethodPost, "/api/v2/users/"+user.ID+"/identities", `{"issuer":"https://issuer.example.test/","subject":"gitlab-subject"}`)
-	if linked.Code != http.StatusCreated || !strings.Contains(linked.Body.String(), `"issuer":"https://issuer.example.test"`) {
+	if linked.Code != http.StatusCreated || !strings.Contains(linked.Body.String(), `"issuer":"https://issuer.example.test"`) || !strings.Contains(linked.Body.String(), `"providerId":"`+provider.ID+`"`) {
 		t.Fatalf("link=%d body=%s", linked.Code, linked.Body.String())
 	}
-	var identity struct {
+	var linkedIdentity struct {
 		ID string `json:"id"`
 	}
-	if err := json.Unmarshal(linked.Body.Bytes(), &identity); err != nil || identity.ID == "" {
-		t.Fatalf("linked identity=%+v err=%v", identity, err)
+	if err := json.Unmarshal(linked.Body.Bytes(), &linkedIdentity); err != nil || linkedIdentity.ID == "" {
+		t.Fatalf("linked identity=%+v err=%v", linkedIdentity, err)
 	}
 	duplicate := adminRequest(http.MethodPost, "/api/v2/users/"+user.ID+"/identities", `{"issuer":"https://issuer.example.test","subject":"gitlab-subject"}`)
 	if duplicate.Code != http.StatusConflict {
 		t.Fatalf("duplicate link=%d body=%s", duplicate.Code, duplicate.Body.String())
 	}
+	otherProvider, err := runtime.Create(t.Context(), IdentityProviderInput{Slug: "corp-two", Kind: identity.KindOIDC, DisplayName: "Corp two", OIDC: identity.OIDCSettings{Issuer: "https://issuer.example.test"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ambiguous := adminRequest(http.MethodPost, "/api/v2/users/"+user.ID+"/identities", `{"issuer":"https://issuer.example.test","subject":"second"}`)
+	if ambiguous.Code != http.StatusBadRequest || !strings.Contains(ambiguous.Body.String(), "providerId") {
+		t.Fatalf("an issuer shared by two providers needs providerId: %d %s", ambiguous.Code, ambiguous.Body.String())
+	}
+	explicit := adminRequest(http.MethodPost, "/api/v2/users/"+user.ID+"/identities", `{"providerId":"`+otherProvider.ID+`","issuer":"https://issuer.example.test","subject":"gitlab-subject"}`)
+	if explicit.Code != http.StatusCreated {
+		t.Fatalf("explicit provider link=%d body=%s", explicit.Code, explicit.Body.String())
+	}
+	mismatch := adminRequest(http.MethodPost, "/api/v2/users/"+user.ID+"/identities", `{"providerId":"`+provider.ID+`","issuer":"https://other.example.test","subject":"x"}`)
+	if mismatch.Code != http.StatusBadRequest {
+		t.Fatalf("providerId with another issuer=%d body=%s", mismatch.Code, mismatch.Body.String())
+	}
 	wrongIssuer := adminRequest(http.MethodPost, "/api/v2/users/"+user.ID+"/identities", `{"issuer":"https://other.example.test","subject":"other"}`)
 	if wrongIssuer.Code != http.StatusBadRequest {
 		t.Fatalf("wrong issuer=%d body=%s", wrongIssuer.Code, wrongIssuer.Body.String())
 	}
-	deleted := adminRequest(http.MethodDelete, "/api/v2/users/"+user.ID+"/identities/"+identity.ID, "")
+	deleted := adminRequest(http.MethodDelete, "/api/v2/users/"+user.ID+"/identities/"+linkedIdentity.ID, "")
 	if deleted.Code != http.StatusNoContent {
 		t.Fatalf("unlink=%d body=%s", deleted.Code, deleted.Body.String())
 	}
-	missing := adminRequest(http.MethodDelete, "/api/v2/users/"+user.ID+"/identities/"+identity.ID, "")
+	missing := adminRequest(http.MethodDelete, "/api/v2/users/"+user.ID+"/identities/"+linkedIdentity.ID, "")
 	if missing.Code != http.StatusNotFound {
 		t.Fatalf("repeat unlink=%d body=%s", missing.Code, missing.Body.String())
 	}

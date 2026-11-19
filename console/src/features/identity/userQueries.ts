@@ -5,7 +5,7 @@ import {
 } from "@tanstack/react-query";
 import { useCallback } from "react";
 import {
-  getOidcSettings,
+  listIdentityProviders,
   listUserIdentities,
   listUserSessions,
   listUsers,
@@ -13,6 +13,7 @@ import {
 import type { ListUsersData, ListUsersResponse, User } from "../../client";
 import { unwrap } from "../../lib/query/client";
 import { accessKeys, identityKeys } from "../../lib/query/keys";
+import { pickOidcProvider } from "../settings/settingsQueries";
 
 export type UserListQuery = NonNullable<ListUsersData["query"]>;
 
@@ -85,14 +86,22 @@ export function useUserIdentities(userId: string) {
 }
 
 /**
- * The configured OIDC issuer, used to prefill identity links. Settings are
- * edited on another page, and an unreadable setting just leaves it blank.
+ * The OIDC provider identity links are made against, used to prefill the link
+ * form: the provider with slug "default", otherwise the first OIDC provider.
+ * Providers are edited on another page, and an unreadable list just leaves it
+ * blank.
  */
-export function useOidcIssuer() {
+export function useLinkProvider() {
   return useQuery({
-    queryKey: identityKeys.oidcIssuer(),
-    queryFn: async ({ signal }) =>
-      (await getOidcSettings({ signal })).data?.issuer ?? "",
+    queryKey: identityKeys.linkProvider(),
+    queryFn: async ({ signal }) => {
+      const list = (await listIdentityProviders({ signal })).data;
+      const provider = pickOidcProvider(list?.items ?? []);
+      return {
+        providerId: provider?.id ?? "",
+        issuer: provider?.oidc?.issuer ?? "",
+      };
+    },
     staleTime: 0,
   });
 }

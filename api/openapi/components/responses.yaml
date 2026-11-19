@@ -347,11 +347,20 @@ SiteSettings:
   content:
     application/json:
       schema: {"$ref": "../components/schemas.yaml#/SiteSettings"}
-OIDCSettings:
-  description: Effective runtime OIDC authentication settings with credentials redacted
+IdentityProvider:
+  description: One identity provider with credentials redacted
+  headers:
+    ETag:
+      description: Quoted provider version; send it as If-Match on replace and delete.
+      schema: {type: string}
   content:
     application/json:
-      schema: {"$ref": "../components/schemas.yaml#/OIDCSettings"}
+      schema: {"$ref": "../components/schemas.yaml#/IdentityProvider"}
+IdentityProviderList:
+  description: Identity providers, enabled or not
+  content:
+    application/json:
+      schema: {"$ref": "../components/schemas.yaml#/IdentityProviderList"}
 OIDCConnectionTest:
   description: OIDC discovery connectivity result
   content:

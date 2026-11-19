@@ -313,8 +313,8 @@ test("maximum branding values stay bounded from desktop through narrow zoom", as
   await page.route("**/auth/session", (route) =>
     route.fulfill({ json: { authenticated: false } }),
   );
-  await page.route("**/auth/oidc/config", (route) =>
-    route.fulfill({ json: { enabled: false } }),
+  await page.route("**/auth/idp", (route) =>
+    route.fulfill({ json: { items: [] } }),
   );
   await page.route("**/api/v2/public/repositories", (route) =>
     route.fulfill({ json: { enabled: true, items: [] } }),

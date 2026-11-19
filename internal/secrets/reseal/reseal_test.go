@@ -23,7 +23,7 @@ func TestTargetsCoverSealedColumns(t *testing.T) {
 		}
 		baseline = append(baseline, body...)
 	}
-	sealedColumn := regexp.MustCompile(`(?m)^\s+(\w*ciphertext|client_secret)\s+text`)
+	sealedColumn := regexp.MustCompile(`(?m)^\s+(\w*ciphertext|secrets_sealed)\s+text`)
 	found := sealedColumn.FindAllStringSubmatch(string(baseline), -1)
 	if len(found) == 0 {
 		t.Fatal("no sealed columns found in the baseline; the pattern is stale")
@@ -45,7 +45,7 @@ func TestPurposesMatchCallers(t *testing.T) {
 		"email_targets.recipient_ciphertext":            "email-target:X",
 		"email_test_deliveries.recipient_ciphertext":    "email-target:X",
 		"nexus_migration_sources.credential_ciphertext": "nexus-source:X",
-		"oidc_settings.client_secret":                   "oidc.client-secret",
+		"identity_providers.secrets_sealed":             "oidc.client-secret",
 		"webhook_subscriptions.secret_ciphertext":       "webhook-subscription:X",
 		"hosted_repositories.upstream_auth.secret":      "repository-upstream-auth",
 		"token_signing_keys.private_sealed":             "token-signing-key:X",

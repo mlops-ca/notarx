@@ -193,10 +193,18 @@ paths:
     "$ref": "./management/search.yaml#/artifact_search"
   "/audits":
     "$ref": "./management/audits.yaml#/audits"
-  "/authentication/oidc":
-    "$ref": "./management/authentication.yaml#/oidc_settings"
-  "/authentication/oidc:test":
-    "$ref": "./management/authentication.yaml#/oidc_settings_test"
+  "/auth/idp":
+    "$ref": "./protocols/oidc-login.yaml#/idp"
+  "/auth/oidc/{slug}/login":
+    "$ref": "./protocols/oidc-login.yaml#/oidc_login"
+  "/auth/oidc/{slug}/callback":
+    "$ref": "./protocols/oidc-login.yaml#/oidc_callback"
+  "/authentication/providers":
+    "$ref": "./management/authentication.yaml#/identity_providers"
+  "/authentication/providers/{providerId}":
+    "$ref": "./management/authentication.yaml#/identity_providers_providerId"
+  "/authentication/providers/{providerId}:test":
+    "$ref": "./management/authentication.yaml#/identity_providers_providerId_test"
   "/webhook-subscriptions":
     "$ref": "./management/webhooks.yaml#/webhook_subscriptions"
   "/webhook-subscriptions/{subscriptionId}":

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/identity"
 )
 
 func TestPostgresUserGovernanceLifecycle(t *testing.T) {
@@ -151,6 +152,14 @@ func TestPostgresUserIdentityBindingAndJITProvisioning(t *testing.T) {
 	ctx := context.Background()
 	suffix := strings.ToLower(uuid.NewString())
 	issuer := "https://issuer.example.test/" + suffix
+	provider, err := store.CreateIdentityProvider(ctx, identity.Provider{
+		ID: uuid.NewString(), Slug: "users-" + suffix[:12], Kind: identity.KindOIDC, DisplayName: "Users test",
+		Settings: []byte(`{"issuer":"` + issuer + `"}`), ProvisioningMode: identity.ProvisioningJIT, JITDefaultRole: identity.JITRoleMember,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = store.DeleteIdentityProvider(ctx, provider.ID, provider.Version) }()
 	local, err := store.CreateUser(ctx, User{
 		ID: uuid.NewString(), Name: "identity-local-" + suffix,
 		Email: "identity-" + suffix + "@example.test", Role: "member",
@@ -164,7 +173,7 @@ func TestPostgresUserIdentityBindingAndJITProvisioning(t *testing.T) {
 	}
 
 	linked, err := store.CreateUserIdentity(ctx, UserIdentity{
-		ID: uuid.NewString(), UserID: local.ID, Kind: UserIdentityOIDC,
+		ID: uuid.NewString(), UserID: local.ID, Kind: UserIdentityOIDC, ProviderID: provider.ID,
 		Issuer: issuer + "/", Subject: "provider-subject",
 	})
 	if err != nil {
@@ -180,7 +189,7 @@ func TestPostgresUserIdentityBindingAndJITProvisioning(t *testing.T) {
 
 	occurredAt := time.Now().UTC().Truncate(time.Microsecond)
 	resolved, refreshed, created, err := store.ResolveOIDCIdentity(ctx, OIDCIdentityProvision{
-		Issuer: issuer, Subject: linked.Subject, Email: "refreshed@example.test",
+		ProviderID: provider.ID, Issuer: issuer, Subject: linked.Subject, Email: "refreshed@example.test",
 		DisplayName: "Refreshed Identity", EmailVerified: true, OccurredAt: occurredAt,
 	})
 	if err != nil || created || resolved.ID != local.ID || refreshed.Email != "refreshed@example.test" || refreshed.LastLoginAt == nil {
@@ -188,7 +197,7 @@ func TestPostgresUserIdentityBindingAndJITProvisioning(t *testing.T) {
 	}
 
 	jitUser, jitIdentity, created, err := store.ResolveOIDCIdentity(ctx, OIDCIdentityProvision{
-		Issuer: issuer, Subject: "jit-subject", Email: "jit-" + suffix + "@example.test",
+		ProviderID: provider.ID, Issuer: issuer, Subject: "jit-subject", Email: "jit-" + suffix + "@example.test",
 		DisplayName: "JIT Identity", PreferredUsername: "jit-" + suffix,
 		EmailVerified: true, Provision: true, DefaultRole: "member", OccurredAt: occurredAt,
 	})
@@ -198,7 +207,7 @@ func TestPostgresUserIdentityBindingAndJITProvisioning(t *testing.T) {
 	defer func() { _ = store.DeleteUser(ctx, jitUser.ID) }()
 
 	pending, pendingIdentity, created, err := store.ResolveOIDCIdentity(ctx, OIDCIdentityProvision{
-		Issuer: issuer, Subject: "pending-subject", Email: "pending-" + suffix + "@example.test",
+		ProviderID: provider.ID, Issuer: issuer, Subject: "pending-subject", Email: "pending-" + suffix + "@example.test",
 		DisplayName: "Pending Identity", PreferredUsername: "pending-" + suffix,
 		EmailVerified: true, Provision: true, DefaultRole: "none", OccurredAt: occurredAt,
 	})
@@ -216,7 +225,7 @@ func TestPostgresUserIdentityBindingAndJITProvisioning(t *testing.T) {
 		t.Fatalf("approved user=%+v err=%v", approved, err)
 	}
 	again, _, created, err := store.ResolveOIDCIdentity(ctx, OIDCIdentityProvision{
-		Issuer: issuer, Subject: "pending-subject", Provision: true, DefaultRole: "none", OccurredAt: time.Now().UTC(),
+		ProviderID: provider.ID, Issuer: issuer, Subject: "pending-subject", Provision: true, DefaultRole: "none", OccurredAt: time.Now().UTC(),
 	})
 	if err != nil || created || again.ID != pending.ID || again.Role != "member" {
 		t.Fatalf("repeat sign-in user=%+v created=%v err=%v", again, created, err)

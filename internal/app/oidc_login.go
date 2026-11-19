@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/identity"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -25,15 +26,14 @@ const (
 )
 
 type oidcLoginHandler struct {
-	client        *authorization.OIDCClient
-	validator     *authorization.OIDCValidator
-	runtime       *OIDCRuntime
+	runtime       *IdentityRuntime
 	authenticator Authenticator
 	identities    repository.UserIdentityStore
 	sessions      repository.UserSessionStore
 }
 
 type oidcFlowState struct {
+	Slug      string `json:"slug"`
 	State     string `json:"state"`
 	Nonce     string `json:"nonce"`
 	Verifier  string `json:"verifier"`
@@ -41,36 +41,32 @@ type oidcFlowState struct {
 	ExpiresAt int64  `json:"expiresAt"`
 }
 
-func (h oidcLoginHandler) config(w http.ResponseWriter, r *http.Request) {
-	client, _, err := h.browser(r.Context())
-	if errors.Is(err, errOIDCNotEnabled) || client == nil {
-		writeNativeMavenJSON(w, http.StatusOK, map[string]any{"enabled": false})
-		return
+// providers lists the enabled providers for the login chooser. A disabled provider is never revealed.
+func (h oidcLoginHandler) providers(w http.ResponseWriter, r *http.Request) {
+	items := []PublicIdentityProvider{}
+	if h.runtime != nil {
+		public, err := h.runtime.Public(r.Context())
+		if err != nil {
+			writeHostedProblem(w, http.StatusServiceUnavailable, "identity_providers_unavailable", "identity providers are unavailable")
+			return
+		}
+		items = append(items, public...)
 	}
-	if err != nil {
-		writeHostedProblem(w, http.StatusServiceUnavailable, "oidc_unavailable", "OIDC configuration is unavailable")
-		return
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-	defer cancel()
-	metadata, err := client.Metadata(ctx)
-	if err != nil {
-		writeHostedProblem(w, http.StatusServiceUnavailable, "oidc_unavailable", "OIDC provider discovery failed")
-		return
-	}
-	writeNativeMavenJSON(w, http.StatusOK, map[string]any{
-		"enabled":          true,
-		"issuer":           client.Issuer(),
-		"clientId":         client.ClientID(),
-		"redirectUrl":      client.RedirectURL(),
-		"scopes":           client.Scopes(),
-		"authorizationUrl": metadata.AuthorizationEndpoint,
-	})
+	writeNativeMavenJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
+func (h oidcLoginHandler) browser(r *http.Request) (*oidcProviderState, *authorization.OIDCValidator, error) {
+	if h.runtime == nil {
+		return nil, nil, errProviderNotFound
+	}
+	return h.runtime.Browser(r.Context(), r.PathValue("slug"))
+}
+
+func oidcFlowCookiePath(slug string) string { return "/auth/oidc/" + slug }
+
 func (h oidcLoginHandler) start(w http.ResponseWriter, r *http.Request) {
-	client, _, err := h.browser(r.Context())
-	if errors.Is(err, errOIDCNotEnabled) || client == nil {
+	provider, _, err := h.browser(r)
+	if errors.Is(err, errOIDCNotEnabled) || errors.Is(err, errProviderNotFound) {
 		writeHostedProblem(w, http.StatusNotFound, "not_found", "OIDC browser login is not configured")
 		return
 	}
@@ -78,6 +74,7 @@ func (h oidcLoginHandler) start(w http.ResponseWriter, r *http.Request) {
 		writeHostedProblem(w, http.StatusServiceUnavailable, "oidc_unavailable", "OIDC configuration is unavailable")
 		return
 	}
+	client := provider.browserClient
 	state, err := randomURLToken(32)
 	if err != nil {
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "create OIDC login state failed")
@@ -94,7 +91,7 @@ func (h oidcLoginHandler) start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	flow := oidcFlowState{
-		State: state, Nonce: nonce, Verifier: verifier,
+		Slug: provider.provider.Slug, State: state, Nonce: nonce, Verifier: verifier,
 		Redirect:  safeConsoleRedirect(r.URL.Query().Get("redirect")),
 		ExpiresAt: time.Now().UTC().Add(oidcFlowLifetime).Unix(),
 	}
@@ -109,38 +106,41 @@ func (h oidcLoginHandler) start(w http.ResponseWriter, r *http.Request) {
 		writeHostedProblem(w, http.StatusServiceUnavailable, "oidc_unavailable", "OIDC provider discovery failed")
 		return
 	}
+	// The cookie path names the provider, so two providers never share or overwrite a flow cookie.
 	http.SetCookie(w, &http.Cookie{
-		Name: oidcStateCookieName, Value: encoded, Path: "/auth/oidc", MaxAge: int(oidcFlowLifetime.Seconds()),
+		Name: oidcStateCookieName, Value: encoded, Path: oidcFlowCookiePath(flow.Slug), MaxAge: int(oidcFlowLifetime.Seconds()),
 		HttpOnly: true, Secure: oidcSecureCookie(client.RedirectURL()), SameSite: http.SameSiteLaxMode,
 	})
 	http.Redirect(w, r, authorizationURL, http.StatusFound)
 }
 
 func (h oidcLoginHandler) callback(w http.ResponseWriter, r *http.Request) {
-	client, validator, resolveErr := h.browser(r.Context())
-	if resolveErr != nil || client == nil || validator == nil {
+	slug := r.PathValue("slug")
+	provider, validator, resolveErr := h.browser(r)
+	if resolveErr != nil || provider == nil || validator == nil {
 		h.redirectError(w, r, "not_configured")
 		return
 	}
+	client := provider.browserClient
 	if providerError := r.URL.Query().Get("error"); providerError != "" {
-		h.clearFlowCookie(w, r)
-		h.redirectError(w, r, providerError)
+		h.clearFlowCookie(w, r, slug)
+		h.redirectError(w, r, "provider_error")
 		return
 	}
 	code, state := r.URL.Query().Get("code"), r.URL.Query().Get("state")
 	cookie, err := r.Cookie(oidcStateCookieName)
 	if err != nil || code == "" || state == "" {
-		h.clearFlowCookie(w, r)
+		h.clearFlowCookie(w, r, slug)
 		h.redirectError(w, r, "invalid_callback")
 		return
 	}
 	flow, err := verifyOIDCFlow(cookie.Value, h.authenticator.AdminToken)
-	if err != nil || flow.State != state || time.Now().UTC().Unix() >= flow.ExpiresAt {
-		h.clearFlowCookie(w, r)
+	if err != nil || flow.Slug != slug || flow.State != state || time.Now().UTC().Unix() >= flow.ExpiresAt {
+		h.clearFlowCookie(w, r, slug)
 		h.redirectError(w, r, "invalid_state")
 		return
 	}
-	h.clearFlowCookie(w, r)
+	h.clearFlowCookie(w, r, slug)
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 	tokens, err := client.Exchange(ctx, code, flow.Verifier)
@@ -148,28 +148,22 @@ func (h oidcLoginHandler) callback(w http.ResponseWriter, r *http.Request) {
 		h.redirectError(w, r, "exchange_failed")
 		return
 	}
-	identity, ok := validator.ValidateNonce(ctx, tokens.IDToken, flow.Nonce)
+	verified, ok := validator.ValidateNonce(ctx, tokens.IDToken, flow.Nonce)
 	if !ok {
 		h.redirectError(w, r, "invalid_identity")
 		return
 	}
 	if h.identities != nil {
-		settings := OIDCSettingsView{ProvisioningMode: "disabled", JITDefaultRole: "none"}
-		if h.runtime != nil {
-			if current, err := h.runtime.Settings(ctx); err == nil {
-				settings = current
-			}
-		}
-		issuer := identity.Issuer
+		issuer := verified.Issuer
 		if issuer == "" {
 			issuer = client.Issuer()
 		}
 		user, _, _, resolveErr := h.identities.ResolveOIDCIdentity(ctx, repository.OIDCIdentityProvision{
-			Issuer: issuer, Subject: identity.Subject, Email: identity.Email,
-			DisplayName: identity.DisplayName, PreferredUsername: identity.Username,
-			EmailVerified: identity.EmailVerified, Role: string(identity.Role),
-			Provision: settings.ProvisioningMode == "jit", MatchEmail: settings.EmailLinkingEnabled,
-			DefaultRole: settings.JITDefaultRole, OccurredAt: time.Now().UTC(),
+			ProviderID: provider.provider.ID, Issuer: issuer, Subject: verified.Subject, Email: verified.Email,
+			DisplayName: verified.DisplayName, PreferredUsername: verified.Username,
+			EmailVerified: verified.EmailVerified, Role: string(verified.Role),
+			Provision: provider.provider.ProvisioningMode == identity.ProvisioningJIT, MatchEmail: provider.provider.EmailLinkingEnabled,
+			DefaultRole: provider.provider.JITDefaultRole, OccurredAt: time.Now().UTC(),
 		})
 		switch {
 		case resolveErr == nil:
@@ -181,8 +175,8 @@ func (h oidcLoginHandler) callback(w http.ResponseWriter, r *http.Request) {
 			principal.Admin = user.Role == string(authorization.RoleAdmin)
 			principal.Role = authorization.Role(user.Role)
 			principal.AuthenticationKind = authorization.AuthenticationOIDC
-			principal.OIDCAdminSubject = identity.AdminSubject
-			principal.OIDCRoleMappings = identity.RoleMappings
+			principal.OIDCAdminSubject = verified.AdminSubject
+			principal.OIDCRoleMappings = verified.RoleMappings
 			sessionID := newUserSessionID()
 			if h.sessions != nil {
 				if _, err := h.sessions.CreateUserSession(ctx, repository.UserSession{
@@ -210,12 +204,12 @@ func (h oidcLoginHandler) callback(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	principal := h.authenticator.PrincipalForActor(identity.Subject)
-	principal.Admin = identity.Admin
-	principal.Role = identity.Role
+	principal := h.authenticator.PrincipalForActor(verified.Subject)
+	principal.Admin = verified.Admin
+	principal.Role = verified.Role
 	principal.AuthenticationKind = authorization.AuthenticationOIDC
-	principal.OIDCAdminSubject = identity.AdminSubject
-	principal.OIDCRoleMappings = identity.RoleMappings
+	principal.OIDCAdminSubject = verified.AdminSubject
+	principal.OIDCRoleMappings = verified.RoleMappings
 	session := h.authenticator.IssueWebSession(principal)
 	h.setWebSessionCookie(w, client, session)
 	values := url.Values{"oidc": {"success"}, "redirect": {safeConsoleRedirect(flow.Redirect)}}
@@ -257,21 +251,11 @@ func (h oidcLoginHandler) redirectError(w http.ResponseWriter, r *http.Request, 
 	http.Redirect(w, r, "/login?"+values.Encode(), http.StatusFound)
 }
 
-func (h oidcLoginHandler) clearFlowCookie(w http.ResponseWriter, r *http.Request) {
+func (h oidcLoginHandler) clearFlowCookie(w http.ResponseWriter, r *http.Request, slug string) {
 	http.SetCookie(w, &http.Cookie{
-		Name: oidcStateCookieName, Value: "", Path: "/auth/oidc", MaxAge: -1,
+		Name: oidcStateCookieName, Value: "", Path: oidcFlowCookiePath(slug), MaxAge: -1,
 		HttpOnly: true, Secure: oidcSecureRequest(r), SameSite: http.SameSiteLaxMode,
 	})
-}
-
-func (h oidcLoginHandler) browser(ctx context.Context) (*authorization.OIDCClient, *authorization.OIDCValidator, error) {
-	if h.runtime != nil {
-		return h.runtime.Browser(ctx)
-	}
-	if h.client == nil || h.validator == nil {
-		return nil, nil, errOIDCNotEnabled
-	}
-	return h.client, h.validator, nil
 }
 
 func sessionCookieAuthentication(next http.Handler) http.Handler {

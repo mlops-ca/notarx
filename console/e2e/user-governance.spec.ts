@@ -46,11 +46,11 @@ test("mandatory password change keeps the restricted session in memory", async (
   createdUserId = ((await created.json()) as { id: string }).id;
 
   const oidcConfig = page.waitForResponse(
-    (response) => new URL(response.url()).pathname === "/auth/oidc/config",
+    (response) => new URL(response.url()).pathname === "/auth/idp",
   );
   await page.goto("/login");
-  const config = (await (await oidcConfig).json()) as { enabled: boolean };
-  if (config.enabled) {
+  const config = (await (await oidcConfig).json()) as { items?: unknown[] };
+  if ((config.items?.length ?? 0) > 0) {
     await expect(
       page.getByText("Enterprise SSO", { exact: true }),
     ).toBeVisible();

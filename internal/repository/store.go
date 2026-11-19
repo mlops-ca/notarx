@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/capacity"
+	"github.com/mlops-ca/notarx/internal/identity"
 )
 
 var (
@@ -14,6 +15,8 @@ var (
 	ErrNameExists                    = errors.New("group name already exists")
 	ErrIdempotencyConflict           = errors.New("idempotency key conflicts with request")
 	ErrVersionConflict               = errors.New("resource version conflicts with current state")
+	ErrIdentityProviderSlugExists    = errors.New("identity provider slug already exists")
+	ErrIdentityProviderInUse         = errors.New("identity provider still has linked identities")
 	ErrLastActiveAdmin               = errors.New("last active administrator cannot be removed")
 	ErrQuotaExceeded                 = capacity.ErrQuotaExceeded
 	ErrUpstreamChanged               = errors.New("upstream immutable artifact metadata changed")
@@ -76,9 +79,22 @@ type ConsoleThemeStore interface {
 	DeleteConsoleThemePackage(context.Context, string, string, ...AuditRecord) error
 }
 
-type OIDCSettingsStore interface {
-	GetOIDCSettings(context.Context) (OIDCSettings, error)
-	ReplaceOIDCSettings(context.Context, OIDCSettings, string, ...AuditRecord) (OIDCSettings, error)
+// IdentityProviderStore is the registry of human identity providers (ADR 0018).
+type IdentityProviderStore interface {
+	ListIdentityProviders(context.Context) ([]identity.Provider, error)
+	GetIdentityProvider(context.Context, string) (identity.Provider, error)
+	GetIdentityProviderBySlug(context.Context, string) (identity.Provider, error)
+	// CreateIdentityProvider returns ErrIdentityProviderSlugExists for a taken slug.
+	CreateIdentityProvider(context.Context, identity.Provider, ...AuditRecord) (identity.Provider, error)
+	// ReplaceIdentityProvider is a version-checked replace; ErrVersionConflict
+	// reports a stale expected version.
+	ReplaceIdentityProvider(ctx context.Context, provider identity.Provider, expectedVersion int64, audit ...AuditRecord) (identity.Provider, error)
+	// DeleteIdentityProvider returns ErrIdentityProviderInUse while identities
+	// are linked to the provider.
+	DeleteIdentityProvider(ctx context.Context, id string, expectedVersion int64, audit ...AuditRecord) error
+	// SeedIdentityProvider inserts the provider only while the registry is empty
+	// and reports whether it did.
+	SeedIdentityProvider(context.Context, identity.Provider) (bool, error)
 }
 
 type WebhookStore interface {
@@ -102,7 +118,8 @@ type UserIdentityStore interface {
 	ListUserIdentities(context.Context, string) ([]UserIdentity, error)
 	CreateUserIdentity(context.Context, UserIdentity, ...AuditRecord) (UserIdentity, error)
 	DeleteUserIdentity(context.Context, string, string, ...AuditRecord) error
-	GetUserByOIDCIdentity(context.Context, string, string) (User, UserIdentity, error)
+	// GetUserByProviderIdentity resolves a login key: the provider id and the subject.
+	GetUserByProviderIdentity(context.Context, string, string) (User, UserIdentity, error)
 	ResolveOIDCIdentity(context.Context, OIDCIdentityProvision) (User, UserIdentity, bool, error)
 }
 

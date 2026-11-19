@@ -241,13 +241,18 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 	if dependencies.ArtifactScanner != nil {
 		dependencies.ArtifactScanResolver = app.NewNativeArtifactScanResolver(store, objectStore)
 	}
-	oidcRuntime := app.NewOIDCRuntime(store, app.OIDCRuntimeConfig{
+	identityRuntime := app.NewIdentityRuntime(store)
+	if err := identityRuntime.Seed(context.Background(), app.OIDCRuntimeConfig{
 		Enabled: cfg.OIDCIssuer != "" && cfg.OIDCAudience != "", Issuer: cfg.OIDCIssuer,
 		Audience: cfg.OIDCAudience, JWKSURL: cfg.OIDCJWKSURL, ClientID: cfg.OIDCClientID,
 		ClientSecret: cfg.OIDCClientSecret, RedirectURL: cfg.OIDCRedirectURL, Scopes: cfg.OIDCScopes,
 		AdminSubjects: cfg.OIDCAdminSubjects, Roles: cfg.OIDCRoles,
-	})
-	dependencies.OIDCRuntime = oidcRuntime
+	}); err != nil {
+		// A seed that cannot be applied (for example no encryption key for the client
+		// secret) must not stop the Gateway: providers can still be added through the API.
+		slog.Warn("seed the default OIDC identity provider from NOTARX_OIDC_* failed", "error", err)
+	}
+	dependencies.IdentityRuntime = identityRuntime
 	dependencies.AuditReadSync = cfg.AuditReadMode == "sync"
 	coordinatorPool, err := database.OpenPostgres(cfg.DatabaseURL, cfg.DatabaseCoordinatorPool)
 	if err != nil {
@@ -493,7 +498,7 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 				LocalAuthLockout:     cfg.LocalAuthLockoutDuration,
 				RepositoryReaders:    cfg.RepositoryReaders,
 				LegacyReadPermissive: cfg.LegacyReadPermissive,
-				OIDCSource:           oidcRuntime,
+				OIDCSource:           identityRuntime,
 				APIKeys:              store,
 			},
 			Caches: app.GatewayCaches{

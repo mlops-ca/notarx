@@ -26,16 +26,24 @@ type OIDCRoleMapping struct {
 // accepted so the configured JWKS cannot negotiate an unexpected algorithm.
 // Verification itself is delegated to internal/jose (ADR 0019).
 type OIDCConfig struct {
+	// ProviderID identifies the identity provider (ADR 0018) the validator was built for.
+	ProviderID    string
 	Issuer        string
 	Audience      string
 	JWKSURL       string
 	AdminSubjects []string
+	// Algorithms is the per-provider allow-list; empty means RS256.
+	Algorithms []string
+	// SubjectClaims are the claims whose values, joined with a colon, form the
+	// login subject (Entra ID: tid and oid). Empty means the sub claim.
+	SubjectClaims []string
 	// Realm-role mappings are opt-in. When a token contains several mapped
 	// roles, the validator grants the most privileged one.
 	Roles OIDCRoleMapping
 }
 
 type OIDCIdentity struct {
+	ProviderID    string
 	Issuer        string
 	Subject       string
 	Email         string
@@ -97,7 +105,7 @@ func (v *OIDCValidator) validate(ctx context.Context, token, expectedNonce strin
 	verified, err := v.verifier.Verify(ctx, token, jose.Issuer{
 		Issuer:              v.config.Issuer,
 		Audiences:           []string{v.config.Audience},
-		Algorithms:          []string{jose.RS256},
+		Algorithms:          v.algorithms(),
 		Mode:                jose.ModeDiscovery,
 		JWKSURI:             v.config.JWKSURL,
 		AllowPrivateNetwork: true,
@@ -128,8 +136,13 @@ func (v *OIDCValidator) validate(ctx context.Context, token, expectedNonce strin
 	if err != nil || json.Unmarshal(encoded, &claims) != nil || expectedNonce != "" && claims.Nonce != expectedNonce {
 		return OIDCIdentity{}, false
 	}
+	subject, ok := v.subject(verified.Claims, claims.Subject)
+	if !ok {
+		return OIDCIdentity{}, false
+	}
 	identity := OIDCIdentity{
-		Issuer: claims.Issuer, Subject: claims.Subject, Email: strings.TrimSpace(claims.Email),
+		ProviderID: v.config.ProviderID,
+		Issuer:     claims.Issuer, Subject: subject, Email: strings.TrimSpace(claims.Email),
 		DisplayName: strings.TrimSpace(claims.Name), Username: strings.TrimSpace(claims.Username),
 		EmailVerified: claims.EmailVerified,
 	}
@@ -155,6 +168,30 @@ func (v *OIDCValidator) validate(ctx context.Context, token, expectedNonce strin
 		identity.Role = RoleMember
 	}
 	return identity, true
+}
+
+func (v *OIDCValidator) algorithms() []string {
+	if len(v.config.Algorithms) == 0 {
+		return []string{jose.RS256}
+	}
+	return v.config.Algorithms
+}
+
+// subject builds the login subject. A configured composite key (Entra ID tid:oid)
+// needs every claim to be a non-empty string, otherwise the token is refused.
+func (v *OIDCValidator) subject(verified map[string]any, standard string) (string, bool) {
+	if len(v.config.SubjectClaims) == 0 || len(v.config.SubjectClaims) == 1 && v.config.SubjectClaims[0] == "sub" {
+		return standard, standard != ""
+	}
+	parts := make([]string, 0, len(v.config.SubjectClaims))
+	for _, name := range v.config.SubjectClaims {
+		value, _ := verified[name].(string)
+		if strings.TrimSpace(value) == "" {
+			return "", false
+		}
+		parts = append(parts, value)
+	}
+	return strings.Join(parts, ":"), true
 }
 
 func normalizedOIDCRoles(values []string) []string {

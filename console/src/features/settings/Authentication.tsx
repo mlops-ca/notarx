@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { Alert } from "antd";
-import { replaceOidcSettings, testOidcSettings } from "../../client";
-import type {
-  OidcConnectionTest,
-  OidcSettingsUpdateWritable,
+import {
+  createIdentityProvider,
+  replaceIdentityProvider,
+  testIdentityProvider,
 } from "../../client";
+import type { OidcConnectionTest } from "../../client";
 import { Card, PageHeader } from "../../components/ui/Layout";
 import { ErrorBanner, Loading, Notice } from "../../components/ui/Feedback";
 import { MetricStrip } from "../../components/ui/ConsolePrimitives";
@@ -13,16 +13,29 @@ import { usePreferences } from "../../lib/preferences";
 import { useQueryClient } from "@tanstack/react-query";
 import { identityKeys, settingsKeys } from "../../lib/query/keys";
 import { AuthenticationForm } from "./AuthenticationForm";
-import { useOidcSettings } from "./settingsQueries";
+import {
+  emptySettings,
+  settingsFromProvider,
+  toCreateBody,
+  toReplaceBody,
+  type AuthenticationFormValues,
+} from "./authenticationModel";
+import { useOidcProvider } from "./settingsQueries";
 import "./settings.css";
 
 export function AuthenticationPage() {
   const { locale, t } = usePreferences();
   const queryClient = useQueryClient();
-  const settingsQuery = useOidcSettings(
+  const settingsQuery = useOidcProvider(
     t("settings.failedToLoadAuthenticationSettings"),
   );
-  const settings = settingsQuery.data ?? null;
+  // No provider yet: the form starts empty and its first save creates one.
+  const settings =
+    settingsQuery.data !== undefined
+      ? settingsQuery.data
+        ? settingsFromProvider(settingsQuery.data)
+        : emptySettings(t("settings.enterpriseIdentityProvider"))
+      : null;
   const loadError = settingsQuery.error;
   const [actionError, setActionError] = useState<unknown>(null);
   const [notice, setNotice] = useState("");
@@ -39,12 +52,12 @@ export function AuthenticationPage() {
   const setClearSecret = (clear: boolean) =>
     setSecretRemoval({ version: settings?.version ?? "", clear });
 
-  const save = async (body: OidcSettingsUpdateWritable) => {
+  const save = async (values: AuthenticationFormValues) => {
     if (!settings) return;
     // Identity changes remove protected queries. Capture this query instance
     // as its generation so a late save cannot repopulate another session.
     const generation = queryClient.getQueryCache().find({
-      queryKey: settingsKeys.oidc(),
+      queryKey: settingsKeys.identityProviders(),
       exact: true,
     });
     if (!generation) return;
@@ -53,13 +66,18 @@ export function AuthenticationPage() {
     setNotice("");
     setTestResult(null);
     try {
-      const { data, error } = await replaceOidcSettings({
-        body,
-        headers: { "If-Match": settings.version },
-      });
+      const { data, error } = settings.id
+        ? await replaceIdentityProvider({
+            path: { providerId: settings.id },
+            body: toReplaceBody(values, settings, clearSecret),
+            headers: { "If-Match": settings.version },
+          })
+        : await createIdentityProvider({
+            body: toCreateBody(values, settings, clearSecret),
+          });
       if (
         queryClient.getQueryCache().find({
-          queryKey: settingsKeys.oidc(),
+          queryKey: settingsKeys.identityProviders(),
           exact: true,
         }) !== generation
       )
@@ -70,9 +88,9 @@ export function AuthenticationPage() {
         );
         return;
       }
-      queryClient.setQueryData(settingsKeys.oidc(), data);
+      queryClient.setQueryData(settingsKeys.identityProviders(), data);
       void queryClient.invalidateQueries({
-        queryKey: identityKeys.oidcIssuer(),
+        queryKey: identityKeys.linkProvider(),
       });
       setNotice(t("settings.settingsSavedAndActiveOnThisNode"));
     } catch (nextError) {
@@ -86,7 +104,9 @@ export function AuthenticationPage() {
     setTesting(true);
     setActionError(null);
     setNotice("");
-    const { data, error } = await testOidcSettings();
+    const { data, error } = await testIdentityProvider({
+      path: { providerId: settings?.id ?? "" },
+    });
     setTesting(false);
     if (error || !data) {
       setActionError(
@@ -107,10 +127,9 @@ export function AuthenticationPage() {
   }
   if (!settings) return <Loading />;
 
-  const sourceLabel =
-    settings.source === "database"
-      ? t("settings.runtimeSettings")
-      : t("settings.environmentBootstrap");
+  const sourceLabel = settings.id
+    ? t("settings.runtimeSettings")
+    : t("settings.notPersisted");
   const secretConfigured = settings.clientSecretConfigured && !clearSecret;
 
   return (
@@ -160,15 +179,6 @@ export function AuthenticationPage() {
       />
 
       <div className="space-y-4">
-        {settings.source === "environment" && (
-          <Alert
-            type="info"
-            showIcon
-            title={t(
-              "settings.settingsCurrentlyComeFromTheEnvironmentTheFirst",
-            )}
-          />
-        )}
         {actionError !== null && <ErrorBanner error={actionError} />}
         {notice && (
           <Notice tone="success" title={notice} onClose={() => setNotice("")} />
@@ -187,7 +197,7 @@ export function AuthenticationPage() {
 
       <Card>
         <AuthenticationForm
-          key={settings.version}
+          key={settings.version || "new"}
           settings={settings}
           sourceLabel={sourceLabel}
           clearSecret={clearSecret}
