@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/capacity"
 	dist "github.com/mlops-ca/notarx/internal/helmdistribution"
 	"github.com/mlops-ca/notarx/internal/ids"
 )
@@ -252,7 +253,8 @@ func (s *PostgresStore) CreateHelmReplication(ctx context.Context, j dist.Job, c
 			extra += item.Size + item.ProvenanceSize
 		}
 	}
-	if err = helmQuota(ctx, tx, j.TargetRepositoryID, extra); err != nil {
+	// Pre-flight only: each item reserves its bytes through its own session when it runs.
+	if err = capacity.Headroom(ctx, tx, j.TargetRepositoryID, extra); err != nil {
 		return dist.Job{}, false, err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO native_helm_replication_jobs(id,plan_digest,source_repository_id,target_repository_id,actor,actor_kind,credential_id,state) VALUES($1,$2,$3,$4,$5,$6,$7,'queued')`, j.ID, j.PlanDigest, j.SourceRepositoryID, j.TargetRepositoryID, j.Actor, j.ActorKind, j.CredentialID)
@@ -474,9 +476,6 @@ func (s *PostgresStore) CompleteHelmReplicationItem(ctx context.Context, lease d
 		}
 		if session.Actor != j.Actor || session.State != "pending" || !session.ExpiresAt.After(time.Now()) || !validHelmSession(session) {
 			return dist.Job{}, dist.ErrTargetBlocked
-		}
-		if err = helmQuota(ctx, tx, j.TargetRepositoryID, 0); err != nil {
-			return dist.Job{}, err
 		}
 		if _, err = tx.ExecContext(ctx, `UPDATE native_helm_publication_sessions SET state='committed',committed_at=clock_timestamp() WHERE id=$1::uuid`, session.ID); err != nil {
 			return dist.Job{}, err

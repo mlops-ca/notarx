@@ -12,10 +12,7 @@ import (
 // asset or session tables under the quota row lock instead of capacity.Reserve. Each one is a debt
 // of ADR 0023 section 3 (see docs/distributed-deployment.md, "Quota counters"); delete the entry
 // when the file moves to the counters. The test fails when an entry no longer matches.
-var quotaAdmissionExceptions = map[string]string{
-	"postgres_helm.go":  "locks the quota row and sums pending Helm sessions instead of reserving them",
-	"postgres_nuget.go": "locks the quota row and sums pending NuGet sessions instead of reserving them",
-}
+var quotaAdmissionExceptions = map[string]string{}
 
 var (
 	quotaRowLock = regexp.MustCompile(`(?is)repository_capacity_quotas[^\x60]*FOR\s+UPDATE`)

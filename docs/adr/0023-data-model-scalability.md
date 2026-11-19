@@ -358,14 +358,16 @@ assert `counter == SUM` from the reconciler query, so an uncovered writer fails 
 Pending reservations (slice 8 follow-up, #449): a writer that admits bytes before it
 commits reserves them in the counter at admission and releases them at the state
 transition that ends the reservation. APT publication sessions (open or uploading) and
-archive restores (preparing) work this way: the reconciler's aggregation counts their
-declared and reserved bytes, so `counter == SUM` holds at every step, and snapshot
-publication admits through the `Reserve` of its generated-object delta. A source test (a
+archive restores (preparing) work this way, and so do Helm publication sessions (pending) and NuGet
+publication sessions (reserved or staged), #451: the reconciler's aggregation counts their
+declared, reserved and session bytes, so `counter == SUM` holds at every step, and snapshot
+publication admits through the `Reserve` of its generated-object delta. A session releases its bytes at the transition that ends the
+reservation (commit, lazy expiry in the next reservation, the janitor), and the commit adds only the
+object count, because the bytes are already in the counter. A replication job creation is a
+pre-flight (`capacity.Headroom`) against the counter: each item reserves its own bytes through its
+target session. A source test (a
 textual heuristic over the Postgres stores) fails on a file that locks the quota row `FOR UPDATE`
-or sums rows and rejects with `ErrQuotaExceeded`. Exception: Helm and NuGet still sum their pending
-sessions under the quota row lock at reservation time (`helmQuota`, `nuGetQuota`), until
-#451 moves them to the same pattern; the exception is listed in the test and in
-`docs/distributed-deployment.md`.
+or sums rows and rejects with `ErrQuotaExceeded`; its exception list is empty.
 
 ### 4. Typed keys and identifiers
 

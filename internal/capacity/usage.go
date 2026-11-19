@@ -57,6 +57,14 @@ const UsageCTE = `WITH usage AS (
 	SELECT repository_id,COALESCE(SUM(size+provenance_size),0)::bigint,SUM(1+CASE WHEN provenance_size>0 THEN 1 ELSE 0 END)::bigint
 	FROM native_helm_publications GROUP BY repository_id
 	UNION ALL
+	-- Bytes reserved by Helm and NuGet sessions still pending (not yet committed or expired): in the
+	-- counter from admission until the session commits, expires or is aborted. They hold bytes, not objects.
+	SELECT repository_id,COALESCE(SUM(size+provenance_size),0)::bigint,0::bigint
+	FROM native_helm_publication_sessions WHERE state='pending' GROUP BY repository_id
+	UNION ALL
+	SELECT repository_id,COALESCE(SUM(size),0)::bigint,0::bigint
+	FROM native_nuget_publication_sessions WHERE state IN ('reserved','staged') GROUP BY repository_id
+	UNION ALL
 	SELECT repository_id,COALESCE(SUM(size),0)::bigint,COUNT(*)::bigint
 	FROM native_apt_assets GROUP BY repository_id
 	UNION ALL
@@ -106,8 +114,14 @@ var formatUsage = map[string]string{
 	"pypi":  `SELECT COALESCE(SUM(size),0),COUNT(*) FROM native_pypi_files WHERE repository_id=$1::uuid AND object_key<>'' AND state='visible'`,
 	"go":    `SELECT COALESCE(SUM(size),0),COUNT(*) FROM native_go_assets WHERE repository_id=$1::uuid AND collected_at IS NULL`,
 	"cargo": `SELECT COALESCE(SUM(size),0),COUNT(*) FROM native_cargo_publications WHERE repository_id=$1::uuid AND collected_at IS NULL`,
-	"helm":  `SELECT COALESCE(SUM(size+provenance_size),0),COALESCE(SUM(1+CASE WHEN provenance_size>0 THEN 1 ELSE 0 END),0) FROM native_helm_publications WHERE repository_id=$1::uuid`,
-	"nuget": `SELECT COALESCE(SUM(size),0),COUNT(*) FROM native_nuget_publications WHERE repository_id=$1::uuid`,
+	"helm": `SELECT
+			COALESCE((SELECT SUM(size+provenance_size) FROM native_helm_publications WHERE repository_id=$1::uuid),0)+
+			COALESCE((SELECT SUM(size+provenance_size) FROM native_helm_publication_sessions WHERE repository_id=$1::uuid AND state='pending'),0),
+			COALESCE((SELECT SUM(1+CASE WHEN provenance_size>0 THEN 1 ELSE 0 END) FROM native_helm_publications WHERE repository_id=$1::uuid),0)`,
+	"nuget": `SELECT
+			COALESCE((SELECT SUM(size) FROM native_nuget_publications WHERE repository_id=$1::uuid),0)+
+			COALESCE((SELECT SUM(size) FROM native_nuget_publication_sessions WHERE repository_id=$1::uuid AND state IN ('reserved','staged')),0),
+			(SELECT COUNT(*) FROM native_nuget_publications WHERE repository_id=$1::uuid)`,
 	"apt": `SELECT
 			COALESCE((SELECT SUM(size) FROM native_apt_assets WHERE repository_id=$1::uuid),0)+
 			COALESCE((SELECT SUM(size) FROM native_apt_package_revisions WHERE repository_id=$1::uuid),0)+
