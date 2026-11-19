@@ -1,6 +1,6 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { authenticateAsAdmin } from "./support/auth";
-import { waitForModalOpen } from "./support/motion";
+import { waitForAnimationsToSettle, waitForModalOpen } from "./support/motion";
 import { defaultSiteSettings } from "../src/lib/siteSettings";
 
 const repository = {
@@ -54,6 +54,8 @@ async function setup(page: Page, width: number) {
 }
 
 async function geometry(page: Page) {
+  // The ag-feedback-enter entrance shifts a box by up to 3px for 220ms.
+  await waitForAnimationsToSettle(page);
   expect(
     await page
       .locator("html")

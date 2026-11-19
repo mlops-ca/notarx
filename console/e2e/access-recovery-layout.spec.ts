@@ -1,5 +1,6 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { defaultSiteSettings } from "../src/lib/siteSettings";
+import { waitForAnimationsToSettle } from "./support/motion";
 
 const repository = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -70,6 +71,8 @@ async function geometry(
   info: TestInfo,
   state: string,
 ) {
+  // Entrance animations (ag-feedback-enter) shift boxes by up to 3px.
+  await waitForAnimationsToSettle(page);
   expect(
     await page
       .locator("html")
