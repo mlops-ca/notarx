@@ -49,8 +49,9 @@ func TestBaselineSchemaInvariants(t *testing.T) {
 		if got := columnDefault(table, "visibility"); !strings.Contains(got, "private") {
 			t.Errorf("%s visibility default = %q, want private", table, got)
 		}
-		if got := columnDefault(table, "anonymous_read"); got != "" {
-			t.Errorf("%s still has an anonymous_read column", table)
+		var retired int
+		if err := store.db.QueryRowContext(ctx, `SELECT count(*) FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = $1 AND column_name LIKE 'anonymous%'`, table).Scan(&retired); err != nil || retired != 0 {
+			t.Errorf("%s keeps a retired anonymous column: %d %v", table, retired, err)
 		}
 	}
 	if def := definition("user_sessions", "user_sessions_kind_check"); !strings.Contains(def, "saml") {
