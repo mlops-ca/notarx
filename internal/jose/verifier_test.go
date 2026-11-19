@@ -331,9 +331,11 @@ func TestVerifyRejectsBadSignatureAndHeaders(t *testing.T) {
 	// The attacker embeds its own key in jwk/jku/x5u headers; they must never be used.
 	embedded := rawToken(t, gojose.RS256, attacker, "k1", claims, map[gojose.HeaderKey]any{"jwk": attackerJWK, "jku": "https://evil.example.test/jwks", "x5u": "https://evil.example.test/cert"})
 	crit := rawToken(t, gojose.RS256, rsaKey, "k1", claims, map[gojose.HeaderKey]any{"crit": []string{"exp"}, "exp": 1})
+	// go-jose itself understands the b64 extension; notarx must still refuse it.
+	critB64 := rawToken(t, gojose.RS256, rsaKey, "k1", claims, map[gojose.HeaderKey]any{"crit": []string{"b64"}, "b64": true})
 	tampered := mint(t, RS256, "k1", claims)
 	tampered = tampered[:len(tampered)-4] + "AAAA"
-	for name, token := range map[string]string{"forged": forged, "embedded jwk": embedded, "crit": crit, "tampered": tampered, "garbage": "a.b.c", "empty": ""} {
+	for name, token := range map[string]string{"forged": forged, "embedded jwk": embedded, "crit": crit, "crit b64": critB64, "tampered": tampered, "garbage": "a.b.c", "empty": ""} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := v.Verify(t.Context(), token, srv.issuer()); !errors.Is(err, ErrInvalidToken) {
 				t.Fatalf("err = %v, want ErrInvalidToken", err)
