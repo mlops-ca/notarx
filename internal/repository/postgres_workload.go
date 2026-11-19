@@ -134,6 +134,9 @@ func mapMalformedUUID(err error) error {
 }
 
 func (s *PostgresStore) ListWorkloadIssuers(ctx context.Context, limit int, afterID string) ([]WorkloadIssuer, error) {
+	if err := checkWorkloadLimit(limit); err != nil {
+		return nil, err
+	}
 	rows, err := s.db.QueryContext(ctx, `SELECT `+workloadIssuerColumns+` FROM workload_issuers WHERE ($1='' OR id>$1::uuid) ORDER BY id LIMIT $2`, afterID, limit)
 	if err != nil {
 		return nil, mapMalformedUUID(err)
@@ -263,6 +266,9 @@ func (s *PostgresStore) listWorkloadPolicies(ctx context.Context, query string, 
 }
 
 func (s *PostgresStore) ListWorkloadTrustPolicies(ctx context.Context, limit int, afterID string) ([]WorkloadTrustPolicy, error) {
+	if err := checkWorkloadLimit(limit); err != nil {
+		return nil, err
+	}
 	return s.listWorkloadPolicies(ctx, `SELECT `+workloadPolicyColumns+` FROM workload_trust_policies WHERE ($1='' OR id>$1::uuid) ORDER BY id LIMIT $2`, afterID, limit)
 }
 
@@ -315,7 +321,8 @@ func (s *PostgresStore) DeleteWorkloadTrustPolicy(ctx context.Context, id, expec
 }
 
 func (s *PostgresStore) RecordWorkloadJTI(ctx context.Context, issuerID string, jtiHash []byte, expiresAt time.Time) (bool, error) {
-	if err := checkJTIArguments(issuerID, jtiHash); err != nil {
+	issuerID, err := canonicalJTIArguments(issuerID, jtiHash)
+	if err != nil {
 		return false, err
 	}
 	result, err := s.db.ExecContext(ctx, `INSERT INTO workload_jti_seen (issuer_id, jti_hash, expires_at) VALUES ($1::uuid,$2,$3) ON CONFLICT DO NOTHING`, issuerID, jtiHash, expiresAt)

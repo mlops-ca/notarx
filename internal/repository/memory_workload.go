@@ -17,11 +17,18 @@ type memoryWorkloadState struct {
 	jti      map[string]time.Time
 }
 
-func (s *MemoryStore) workloadLocked() *memoryWorkloadState {
-	if s.workload == nil {
-		s.workload = &memoryWorkloadState{issuers: map[string]WorkloadIssuer{}, policies: map[string]WorkloadTrustPolicy{}, jti: map[string]time.Time{}}
-	}
-	return s.workload
+func newMemoryWorkloadState() *memoryWorkloadState {
+	return &memoryWorkloadState{issuers: map[string]WorkloadIssuer{}, policies: map[string]WorkloadTrustPolicy{}, jti: map[string]time.Time{}}
+}
+
+// workloadLocked returns the state, created with the store so readers holding only the read
+// lock never write the field.
+func (s *MemoryStore) workloadLocked() *memoryWorkloadState { return s.workload }
+
+// workloadKey canonicalises an identifier the way PostgreSQL does; a malformed one is not found.
+func workloadKey(id string) string {
+	canonical, _ := canonicalUUID(id)
+	return canonical
 }
 
 func cloneWorkloadIssuer(issuer WorkloadIssuer) WorkloadIssuer {
@@ -84,7 +91,7 @@ func (s *MemoryStore) CreateWorkloadIssuer(ctx context.Context, issuer WorkloadI
 func (s *MemoryStore) GetWorkloadIssuer(_ context.Context, id string) (WorkloadIssuer, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	issuer, ok := s.workloadLocked().issuers[id]
+	issuer, ok := s.workloadLocked().issuers[workloadKey(id)]
 	if !ok {
 		return WorkloadIssuer{}, ErrNotFound
 	}
@@ -103,16 +110,23 @@ func (s *MemoryStore) GetWorkloadIssuerByIssuer(_ context.Context, value string)
 }
 
 func (s *MemoryStore) ListWorkloadIssuers(_ context.Context, limit int, afterID string) ([]WorkloadIssuer, error) {
+	if err := checkWorkloadLimit(limit); err != nil {
+		return nil, err
+	}
+	after, err := workloadAfter(afterID)
+	if err != nil {
+		return nil, err
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	issuers := make([]WorkloadIssuer, 0)
 	for _, issuer := range s.workloadLocked().issuers {
-		if afterID == "" || issuer.ID > afterID {
+		if after == "" || issuer.ID > after {
 			issuers = append(issuers, cloneWorkloadIssuer(issuer))
 		}
 	}
 	sort.Slice(issuers, func(i, j int) bool { return issuers[i].ID < issuers[j].ID })
-	if limit >= 0 && len(issuers) > limit {
+	if len(issuers) > limit {
 		issuers = issuers[:limit]
 	}
 	return issuers, nil
@@ -150,6 +164,7 @@ func (s *MemoryStore) UpdateWorkloadIssuer(ctx context.Context, issuer WorkloadI
 }
 
 func (s *MemoryStore) DeleteWorkloadIssuer(ctx context.Context, id, expectedVersion string, audit ...AuditRecord) error {
+	id = workloadKey(id)
 	version, err := parseWorkloadVersion(expectedVersion)
 	if err != nil {
 		return err
@@ -223,7 +238,7 @@ func (s *MemoryStore) workloadPolicyConflictLocked(policy WorkloadTrustPolicy) e
 func (s *MemoryStore) GetWorkloadTrustPolicy(_ context.Context, id string) (WorkloadTrustPolicy, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	policy, ok := s.workloadLocked().policies[id]
+	policy, ok := s.workloadLocked().policies[workloadKey(id)]
 	if !ok {
 		return WorkloadTrustPolicy{}, ErrNotFound
 	}
@@ -241,17 +256,25 @@ func (s *MemoryStore) listWorkloadPoliciesLocked(keep func(WorkloadTrustPolicy) 
 }
 
 func (s *MemoryStore) ListWorkloadTrustPolicies(_ context.Context, limit int, afterID string) ([]WorkloadTrustPolicy, error) {
+	if err := checkWorkloadLimit(limit); err != nil {
+		return nil, err
+	}
+	after, err := workloadAfter(afterID)
+	if err != nil {
+		return nil, err
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	policies := s.listWorkloadPoliciesLocked(func(policy WorkloadTrustPolicy) bool { return afterID == "" || policy.ID > afterID })
+	policies := s.listWorkloadPoliciesLocked(func(policy WorkloadTrustPolicy) bool { return after == "" || policy.ID > after })
 	sort.Slice(policies, func(i, j int) bool { return policies[i].ID < policies[j].ID })
-	if limit >= 0 && len(policies) > limit {
+	if len(policies) > limit {
 		policies = policies[:limit]
 	}
 	return policies, nil
 }
 
 func (s *MemoryStore) ListActiveWorkloadTrustPolicies(_ context.Context, issuerID string, now time.Time) ([]WorkloadTrustPolicy, error) {
+	issuerID = workloadKey(issuerID)
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	policies := s.listWorkloadPoliciesLocked(func(policy WorkloadTrustPolicy) bool {
@@ -293,6 +316,7 @@ func (s *MemoryStore) UpdateWorkloadTrustPolicy(ctx context.Context, policy Work
 }
 
 func (s *MemoryStore) DeleteWorkloadTrustPolicy(ctx context.Context, id, expectedVersion string, audit ...AuditRecord) error {
+	id = workloadKey(id)
 	version, err := parseWorkloadVersion(expectedVersion)
 	if err != nil {
 		return err
@@ -317,7 +341,8 @@ func (s *MemoryStore) DeleteWorkloadTrustPolicy(ctx context.Context, id, expecte
 // RecordWorkloadJTI mirrors the PostgreSQL table: a recorded pair conflicts until it is deleted,
 // even after expires_at, because deletion belongs to the retention janitor.
 func (s *MemoryStore) RecordWorkloadJTI(_ context.Context, issuerID string, jtiHash []byte, expiresAt time.Time) (bool, error) {
-	if err := checkJTIArguments(issuerID, jtiHash); err != nil {
+	issuerID, err := canonicalJTIArguments(issuerID, jtiHash)
+	if err != nil {
 		return false, err
 	}
 	s.mu.Lock()
@@ -332,3 +357,15 @@ func (s *MemoryStore) RecordWorkloadJTI(_ context.Context, issuerID string, jtiH
 }
 
 func formatWorkloadVersion(version int64) string { return strconv.FormatInt(version, 10) }
+
+// workloadAfter canonicalises a paging cursor; PostgreSQL rejects a malformed one, which reads as not found.
+func workloadAfter(afterID string) (string, error) {
+	if afterID == "" {
+		return "", nil
+	}
+	canonical, ok := canonicalUUID(afterID)
+	if !ok {
+		return "", ErrNotFound
+	}
+	return canonical, nil
+}

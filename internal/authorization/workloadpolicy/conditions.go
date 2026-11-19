@@ -130,6 +130,27 @@ func buildCondition(kind Kind, item wireCondition) (Condition, error) {
 	return condition, nil
 }
 
+// CheckCanonical verifies that raw is a well-formed condition list already in stored form
+// (every claim an array of keys, no shorthand, no unknown fields). Stores call it so that a
+// caller that skipped Validate cannot persist a list that Evaluate would later fail to parse.
+// It does not apply the per-kind mandatory conditions, which need the issuer kind and the
+// write-time acknowledgements; handlers call Validate for that.
+func CheckCanonical(raw []byte) error {
+	conditions, err := ParseConditions(KindGeneric, raw)
+	if err != nil {
+		return err
+	}
+	canonical, err := Canonical(conditions)
+	if err != nil {
+		return err
+	}
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, raw); err != nil || !bytes.Equal(compact.Bytes(), canonical) {
+		return errors.New("conditions are not in canonical form; run Validate first")
+	}
+	return nil
+}
+
 // Canonical returns the stored form of a condition list: claims as key arrays.
 func Canonical(conditions []Condition) (json.RawMessage, error) {
 	return json.Marshal(conditions)

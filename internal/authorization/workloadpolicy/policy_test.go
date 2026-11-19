@@ -394,6 +394,25 @@ func TestNewPolicyRejectsBadStoredConditions(t *testing.T) {
 	}
 }
 
+func TestCheckCanonical(t *testing.T) {
+	canonical, _, err := Validate(KindGeneric, []byte(`[{"claim":"sub","op":"glob","values":["ci:*"]}]`), ValidateOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := CheckCanonical(canonical); err != nil {
+		t.Fatalf("canonical form rejected: %v", err)
+	}
+	spaced := strings.ReplaceAll(string(canonical), ",", ", ")
+	if err := CheckCanonical([]byte(spaced)); err != nil {
+		t.Fatalf("whitespace must not matter: %v", err)
+	}
+	for _, raw := range []string{`[{"claim":"sub","op":"eq","values":["a"]}]`, `[null]`, `[]`, `nope`, `[{"claim":["sub"],"values":["a"],"op":"eq"}]`} {
+		if err := CheckCanonical([]byte(raw)); err == nil {
+			t.Errorf("CheckCanonical(%s) accepted", raw)
+		}
+	}
+}
+
 func TestErrorTexts(t *testing.T) {
 	if (&NoMatchError{}).Error() != ErrNoMatch.Error() || (&ValidationError{Reason: "x"}).Error() != "invalid workload trust policy: x" {
 		t.Fatal("unexpected error text")

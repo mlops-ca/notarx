@@ -29,6 +29,9 @@ var blockedPrefixes = []netip.Prefix{
 	netip.MustParsePrefix("192.0.0.0/24"),  // IETF protocol assignments
 	netip.MustParsePrefix("64:ff9b::/96"),  // NAT64 can embed any IPv4 address
 	netip.MustParsePrefix("fec0::/10"),     // deprecated site-local
+	netip.MustParsePrefix("240.0.0.0/4"),   // reserved, includes the broadcast address
+	netip.MustParsePrefix("2002::/16"),     // 6to4 embeds an arbitrary IPv4 address
+	netip.MustParsePrefix("2001::/32"),     // Teredo embeds an arbitrary IPv4 address
 }
 
 // blockedAddr reports whether an address must not be dialled unless the issuer
@@ -88,8 +91,9 @@ func checkRedirect(allowPrivate bool) func(req *http.Request, via []*http.Reques
 		if req.URL.Scheme != "https" {
 			return errors.New("jose: redirect to a non-https URL")
 		}
-		if !strings.EqualFold(req.URL.Hostname(), via[0].URL.Hostname()) {
-			return errors.New("jose: redirect to another host")
+		// The port is part of the host: a redirect to another port of the same name could probe internal services.
+		if !strings.EqualFold(req.URL.Host, via[0].URL.Host) {
+			return errors.New("jose: redirect to another host or port")
 		}
 		if addr, err := netip.ParseAddr(req.URL.Hostname()); err == nil && !allowPrivate && blockedAddr(addr) {
 			return errBlockedAddress

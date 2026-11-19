@@ -69,12 +69,13 @@ func NewOIDCValidator(config OIDCConfig) *OIDCValidator {
 	// The human IdP is configured by an administrator (ADR 0018 owns its registry), so it
 	// keeps the plain client of the original validator: http issuers used by development
 	// setups stay reachable. Workload issuers use the SSRF-guarded default of internal/jose.
-	verifier, err := jose.NewVerifier(jose.Options{
-		JWKSTTL:    oidcJWKSCacheTTL,
-		HTTPClient: &http.Client{Timeout: 5 * time.Second},
-	})
+	options := jose.DefaultOptions()
+	options.MaxTokenAge = 0 // an administrator-configured IdP keeps its own token lifetimes
+	options.JWKSTTL = oidcJWKSCacheTTL
+	options.HTTPClient = &http.Client{Timeout: 5 * time.Second}
+	verifier, err := jose.NewVerifier(options)
 	if err != nil {
-		return nil
+		panic("authorization: invalid OIDC verifier options: " + err.Error()) // the options are constants
 	}
 	return &OIDCValidator{config: config, verifier: verifier}
 }

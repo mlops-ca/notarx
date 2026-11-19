@@ -19,6 +19,7 @@ func TestBlockedAddresses(t *testing.T) {
 		{"169.254.169.254", true}, {"fe80::1", true}, {"fd00::1", true}, {"0.0.0.0", true}, {"::", true},
 		{"100.64.0.1", true}, {"198.18.0.1", true}, {"224.0.0.1", true}, {"255.255.255.255", true},
 		{"::ffff:127.0.0.1", true}, {"::ffff:10.0.0.1", true}, {"64:ff9b::7f00:1", true}, {"fec0::1", true},
+		{"240.0.0.1", true}, {"2002:c000:204::1", true}, {"2001:0:4136:e378:8000:63bf:3fff:fdd2", true},
 		{"8.8.8.8", false}, {"1.1.1.1", false}, {"2606:4700:4700::1111", false},
 	} {
 		if got := blockedAddr(netip.MustParseAddr(tc.addr)); got != tc.blocked {
@@ -95,7 +96,7 @@ func TestRedirectPolicy(t *testing.T) {
 	if err := redirect("https://issuer.example.test/other"); err != nil {
 		t.Fatalf("same-host redirect: %v", err)
 	}
-	for _, raw := range []string{"https://evil.example.test/jwks", "http://issuer.example.test/jwks", "https://127.0.0.1/jwks", "https://169.254.169.254/"} {
+	for _, raw := range []string{"https://issuer.example.test:6379/jwks", "https://evil.example.test/jwks", "http://issuer.example.test/jwks", "https://127.0.0.1/jwks", "https://169.254.169.254/"} {
 		if err := redirect(raw); err == nil {
 			t.Fatalf("redirect to %s allowed", raw)
 		}

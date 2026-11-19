@@ -674,3 +674,47 @@ func TestErrorFormatting(t *testing.T) {
 }
 
 var _ = x509.NewCertPool
+
+func TestColdStartConcurrentRequestsJoinTheFirstFetch(t *testing.T) {
+	clk := newClock()
+	srv := newIssuerServer(t, pubKey(t, RS256, "k1"))
+	v := newTestVerifier(t, clk, nil)
+	token := mint(t, RS256, "k1", claimsAt(clk, srv.URL, nil))
+	var wg sync.WaitGroup
+	failures := make(chan error, 32)
+	for range 32 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := v.Verify(context.Background(), token, srv.issuer()); err != nil {
+				failures <- err
+			}
+		}()
+	}
+	wg.Wait()
+	close(failures)
+	for err := range failures {
+		t.Fatalf("a request that overlapped the first fetch failed: %v", err)
+	}
+	if got := srv.jwksCalls.Load(); got != 1 {
+		t.Fatalf("cold start fetched %d times, want 1", got)
+	}
+}
+
+func TestMaxTokenAgeWithoutIAT(t *testing.T) {
+	clk := newClock()
+	srv := newIssuerServer(t, pubKey(t, RS256, "k1"))
+	v := newTestVerifier(t, clk, nil)
+	noIAT := func(exp time.Duration) string {
+		return mint(t, RS256, "k1", claimsAt(clk, srv.URL, func(m map[string]any) {
+			m["iat"], m["nbf"] = nil, nil
+			m["exp"] = clk.Now().Add(exp).Unix()
+		}))
+	}
+	if _, err := v.Verify(t.Context(), noIAT(30*time.Minute), srv.issuer()); err != nil {
+		t.Fatalf("short-lived token without iat: %v", err)
+	}
+	if _, err := v.Verify(t.Context(), noIAT(10*365*24*time.Hour), srv.issuer()); !errors.Is(err, ErrInvalidToken) {
+		t.Fatalf("a ten year token without iat err = %v", err)
+	}
+}

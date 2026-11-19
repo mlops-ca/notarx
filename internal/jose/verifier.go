@@ -14,8 +14,10 @@ import (
 	gojose "github.com/go-jose/go-jose/v4"
 )
 
-// Defaults of ADR 0019 (NOTARX_WORKLOAD_*). The zero value of an Options field means
-// "strictest" for skew, age and stale serving, and the default for the TTL and refetch interval.
+// Defaults of ADR 0019 (NOTARX_WORKLOAD_*). In Options a zero ClockSkew means no leeway, a zero
+// MaxTokenAge means no age cap (the environment settings cannot be zero, so the cap is always on
+// for workload tokens), a zero JWKSStaleMax means stale keys are never served, and a zero
+// JWKSTTL or KidRefetchInterval selects the default.
 const (
 	DefaultClockSkew        = 60 * time.Second
 	MaxClockSkew            = 5 * time.Minute
@@ -88,7 +90,7 @@ type TokenVerifier interface {
 // Verifier verifies JWTs and caches key sets per issuer.
 type Verifier struct {
 	opts Options
-	mu   sync.Mutex
+	mu   sync.RWMutex
 	sets map[string]*keySet
 }
 
@@ -222,21 +224,28 @@ func (v *Verifier) checkClaims(claims map[string]any, issuer Issuer) error {
 			return invalid("token not yet valid")
 		}
 	}
-	if raw, present := claims["iat"]; present {
-		iat, ok := numericDate(raw)
-		if !ok {
-			return invalid("iat is not a number")
+	maxAge := v.opts.MaxTokenAge
+	raw, hasIAT := claims["iat"]
+	if !hasIAT {
+		// Without iat the age is unknown, so the cap applies to the time the token still has left.
+		if maxAge > 0 && exp.Sub(now) > maxAge+skew {
+			return invalid("token without iat is valid for longer than the maximum age")
 		}
-		if iat.Add(-skew).After(now) {
-			return invalid("iat is in the future")
+		return nil
+	}
+	iat, ok := numericDate(raw)
+	if !ok {
+		return invalid("iat is not a number")
+	}
+	if iat.Add(-skew).After(now) {
+		return invalid("iat is in the future")
+	}
+	if maxAge > 0 {
+		if now.Sub(iat) > maxAge {
+			return invalid("token is older than the maximum age")
 		}
-		if maxAge := v.opts.MaxTokenAge; maxAge > 0 {
-			if now.Sub(iat) > maxAge {
-				return invalid("token is older than the maximum age")
-			}
-			if exp.Sub(iat) > maxAge {
-				return invalid("token lifetime exceeds the maximum age")
-			}
+		if exp.Sub(iat) > maxAge {
+			return invalid("token lifetime exceeds the maximum age")
 		}
 	}
 	return nil

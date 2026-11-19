@@ -127,6 +127,18 @@ func testWorkloadStoreContract(t *testing.T, store workloadContractStore) {
 		if err != nil || byIss.ID != issuer.ID {
 			t.Fatalf("GetWorkloadIssuerByIssuer = %+v, %v", byIss, err)
 		}
+		if upper, err := store.GetWorkloadIssuer(ctx, strings.ToUpper(issuer.ID)); err != nil || upper.ID != issuer.ID {
+			t.Fatalf("an upper-case identifier must find the issuer: %+v, %v", upper, err)
+		}
+		if _, err := store.ListWorkloadIssuers(ctx, -1, ""); !errors.Is(err, ErrWorkloadInvalid) {
+			t.Fatalf("negative limit err = %v", err)
+		}
+		if _, err := store.ListWorkloadTrustPolicies(ctx, -1, ""); !errors.Is(err, ErrWorkloadInvalid) {
+			t.Fatalf("negative policy limit err = %v", err)
+		}
+		if _, err := store.ListWorkloadIssuers(ctx, 10, "nope"); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("malformed cursor err = %v", err)
+		}
 		for _, missing := range []string{ids.New(), "not-a-uuid"} {
 			if _, err := store.GetWorkloadIssuer(ctx, missing); !errors.Is(err, ErrNotFound) {
 				t.Fatalf("Get(%q) err = %v", missing, err)
@@ -179,6 +191,14 @@ func testWorkloadStoreContract(t *testing.T, store workloadContractStore) {
 			"ttl too large":     func(p *WorkloadTrustPolicy) { p.MaxTokenTTLSeconds = 86401 },
 			"negative ttl":      func(p *WorkloadTrustPolicy) { p.MaxTokenTTLSeconds = -1 },
 			"unknown state":     func(p *WorkloadTrustPolicy) { p.State = "paused" },
+			"null condition":    func(p *WorkloadTrustPolicy) { p.Conditions = json.RawMessage("[null]") },
+			"claim shorthand": func(p *WorkloadTrustPolicy) {
+				p.Conditions = json.RawMessage(`[{"claim":"ref","op":"eq","values":["x"]}]`)
+			},
+			"bare glob": func(p *WorkloadTrustPolicy) {
+				p.Conditions = json.RawMessage(`[{"claim":["sub"],"op":"glob","values":["*"]}]`)
+			},
+			"bad policy id": func(p *WorkloadTrustPolicy) { p.ID = "x" },
 		}
 		for name, mutate := range mutations {
 			candidate := valid
@@ -417,6 +437,21 @@ func TestWorkloadMemoryStoreAuditsInTheSameStep(t *testing.T) {
 	if got, _ := store.GetWorkloadIssuer(ctx, issuer.ID); got.Version != "1" {
 		t.Fatalf("issuer changed by a failed audit: %+v", got)
 	}
+}
+
+func TestWorkloadMemoryStoreConcurrentReaders(t *testing.T) {
+	store := NewMemoryStore()
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = store.ListWorkloadIssuers(context.Background(), 10, "")
+			_, _ = store.GetWorkloadIssuerByIssuer(context.Background(), "https://x.example.test")
+			_, _ = store.ListActiveWorkloadTrustPolicies(context.Background(), ids.New(), time.Now())
+		}()
+	}
+	wg.Wait()
 }
 
 func TestWorkloadStoreReturnsCopies(t *testing.T) {

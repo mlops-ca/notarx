@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/mlops-ca/notarx/internal/authorization/workloadpolicy"
 	"github.com/mlops-ca/notarx/internal/jose"
 )
 
@@ -108,7 +109,9 @@ type WorkloadTrustPolicy struct {
 	UpdatedAt          time.Time
 }
 
-// WorkloadStore persists issuers, policies and single-use jti markers. Mutations take the audit
+// WorkloadStore persists issuers, policies and single-use jti markers. Stored conditions must
+// already be in canonical form (workloadpolicy.CheckCanonical); the management handler runs
+// workloadpolicy.Validate, which also applies the mandatory conditions of the issuer kind. Mutations take the audit
 // records to write in the same transaction (ADR 0023 section 1). Updates replace every mutable
 // field and require the version last read. Expired jti rows are deleted by the retention
 // janitor (internal/retention), not by this store.
@@ -151,6 +154,13 @@ func httpsURL(raw string) bool {
 
 // normalizeWorkloadIssuer applies defaults and validates an issuer before it is stored.
 func normalizeWorkloadIssuer(issuer WorkloadIssuer) (WorkloadIssuer, error) {
+	if issuer.ID != "" {
+		id, ok := canonicalUUID(issuer.ID)
+		if !ok {
+			return issuer, workloadInvalid("id must be a UUID")
+		}
+		issuer.ID = id
+	}
 	if !workloadSlug.MatchString(issuer.Name) {
 		return issuer, workloadInvalid("name must be a lower-case slug of at most 63 characters")
 	}
@@ -219,15 +229,20 @@ func normalizeWorkloadTrustPolicy(policy WorkloadTrustPolicy) (WorkloadTrustPoli
 	if !workloadSlug.MatchString(policy.Name) || policy.Name == WorkloadBasicUsernameAlias {
 		return policy, workloadInvalid("name must be a lower-case slug of at most 63 characters and not %q", WorkloadBasicUsernameAlias)
 	}
-	if _, err := uuid.Parse(policy.IssuerID); err != nil {
+	var ok bool
+	if policy.ID != "" {
+		if policy.ID, ok = canonicalUUID(policy.ID); !ok {
+			return policy, workloadInvalid("id must be a UUID")
+		}
+	}
+	if policy.IssuerID, ok = canonicalUUID(policy.IssuerID); !ok {
 		return policy, workloadInvalid("issuer_id must be a UUID")
 	}
-	if _, err := uuid.Parse(policy.ServiceAccountID); err != nil {
+	if policy.ServiceAccountID, ok = canonicalUUID(policy.ServiceAccountID); !ok {
 		return policy, workloadInvalid("service_account_id must be a UUID")
 	}
-	var conditions []json.RawMessage
-	if err := json.Unmarshal(policy.Conditions, &conditions); err != nil || len(conditions) == 0 {
-		return policy, workloadInvalid("conditions must be a non-empty JSON array")
+	if err := workloadpolicy.CheckCanonical(policy.Conditions); err != nil {
+		return policy, workloadInvalid("conditions: %v", err)
 	}
 	policy.Conditions = slices.Clone(policy.Conditions)
 	if policy.MaxTokenTTLSeconds == 0 {
@@ -245,12 +260,32 @@ func normalizeWorkloadTrustPolicy(policy WorkloadTrustPolicy) (WorkloadTrustPoli
 	return policy, nil
 }
 
-func checkJTIArguments(issuerID string, jtiHash []byte) error {
-	if _, err := uuid.Parse(issuerID); err != nil {
-		return workloadInvalid("issuer id must be a UUID")
+// canonicalUUID returns the lower-case hyphenated form PostgreSQL returns for a uuid, so both
+// stores treat spellings of one identifier alike.
+func canonicalUUID(id string) (string, bool) {
+	parsed, err := uuid.Parse(id)
+	if err != nil {
+		return "", false
+	}
+	return parsed.String(), true
+}
+
+// canonicalJTIArguments validates the arguments of RecordWorkloadJTI and returns the canonical issuer id.
+func canonicalJTIArguments(issuerID string, jtiHash []byte) (string, error) {
+	canonical, ok := canonicalUUID(issuerID)
+	if !ok {
+		return "", workloadInvalid("issuer id must be a UUID")
 	}
 	if len(jtiHash) != 32 {
-		return workloadInvalid("jti hash must be a SHA-256 digest")
+		return "", workloadInvalid("jti hash must be a SHA-256 digest")
+	}
+	return canonical, nil
+}
+
+// checkWorkloadLimit rejects a list limit PostgreSQL would reject, so the memory store agrees.
+func checkWorkloadLimit(limit int) error {
+	if limit < 0 {
+		return workloadInvalid("limit must not be negative")
 	}
 	return nil
 }

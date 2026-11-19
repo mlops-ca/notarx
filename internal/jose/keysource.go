@@ -1,9 +1,8 @@
 package jose
 
 import (
+	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -44,9 +43,26 @@ func (noMetrics) StaleKeysServed(string) {}
 func (noMetrics) StaticKeyMiss(string)   {}
 func (noMetrics) KeyFetchFailed(string)  {}
 
+// sourceConfig is the part of an Issuer that decides where keys come from; a change replaces the cached set.
+type sourceConfig struct {
+	issuer, mode, jwksURI, caBundle string
+	staticJWKS                      []byte
+	allowPrivate                    bool
+}
+
+func sourceOf(issuer Issuer) sourceConfig {
+	return sourceConfig{issuer: issuer.Issuer, mode: string(issuer.Mode), jwksURI: issuer.JWKSURI, caBundle: issuer.CABundlePEM, staticJWKS: issuer.StaticJWKS, allowPrivate: issuer.AllowPrivateNetwork}
+}
+
+// same compares without hashing or copying: it runs on every verification.
+func (s sourceConfig) same(o sourceConfig) bool {
+	return s.issuer == o.issuer && s.mode == o.mode && s.jwksURI == o.jwksURI && s.caBundle == o.caBundle &&
+		s.allowPrivate == o.allowPrivate && bytes.Equal(s.staticJWKS, o.staticJWKS)
+}
+
 type keySet struct {
-	fingerprint string
-	static      bool
+	source sourceConfig
+	static bool
 
 	flight singleflight.Group
 
@@ -58,27 +74,30 @@ type keySet struct {
 	negative     map[string]time.Time
 	jwksURI      string
 	client       *http.Client
-}
-
-func fingerprint(issuer Issuer) string {
-	sum := sha256.New()
-	for _, part := range []string{issuer.Issuer, string(issuer.Mode), issuer.JWKSURI, string(issuer.StaticJWKS), issuer.CABundlePEM, fmt.Sprint(issuer.AllowPrivateNetwork)} {
-		_, _ = sum.Write([]byte(part))
-		_, _ = sum.Write([]byte{0})
-	}
-	return hex.EncodeToString(sum.Sum(nil))
+	// fetching is true while a refresh runs; callers that arrive meanwhile join it instead of being
+	// rate limited. generation counts finished refreshes so a late joiner does not start another.
+	fetching   bool
+	generation uint64
+	lastErr    error
 }
 
 // keySetFor returns the cached key set of an issuer, replacing it when the issuer's key
 // source configuration changed.
 func (v *Verifier) keySetFor(issuer Issuer) (*keySet, error) {
-	fp := fingerprint(issuer)
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	if set, ok := v.sets[issuer.Issuer]; ok && set.fingerprint == fp {
+	source := sourceOf(issuer)
+	v.mu.RLock()
+	set, ok := v.sets[issuer.Issuer]
+	v.mu.RUnlock()
+	if ok && set.source.same(source) {
 		return set, nil
 	}
-	set := &keySet{fingerprint: fp, negative: map[string]time.Time{}}
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if set, ok := v.sets[issuer.Issuer]; ok && set.source.same(source) {
+		return set, nil
+	}
+	source.staticJWKS = bytes.Clone(source.staticJWKS)
+	set = &keySet{source: source, negative: map[string]time.Time{}}
 	if issuer.Mode == ModeStatic {
 		keys, err := ParseJWKS(issuer.StaticJWKS)
 		if err != nil {
@@ -161,24 +180,43 @@ func (v *Verifier) lookup(ctx context.Context, issuer Issuer, kid, alg string) (
 			set.mu.Unlock()
 			return Key{}, invalid("unknown kid")
 		}
-		if !set.lastKidFetch.IsZero() && now.Sub(set.lastKidFetch) < v.opts.KidRefetchInterval {
-			set.rememberMiss(kid, now.Add(v.opts.KidRefetchInterval))
-			set.mu.Unlock()
-			return Key{}, invalid("unknown kid")
+		if !set.fetching {
+			if !set.lastKidFetch.IsZero() && now.Sub(set.lastKidFetch) < v.opts.KidRefetchInterval {
+				set.rememberMiss(kid, now.Add(v.opts.KidRefetchInterval))
+				set.mu.Unlock()
+				return Key{}, invalid("unknown kid")
+			}
+			set.lastKidFetch = now
 		}
-		set.lastKidFetch = now
 		kidMiss = true
-	} else if !set.lastAttempt.IsZero() && now.Sub(set.lastAttempt) < v.opts.KidRefetchInterval {
+	} else if !set.fetching && !set.lastAttempt.IsZero() && now.Sub(set.lastAttempt) < v.opts.KidRefetchInterval {
 		// A refresh failed moments ago: do not hammer the issuer, use what we have.
 		key, err := v.staleKey(set, issuer, kid, alg, now, ttl)
 		set.mu.Unlock()
 		return key, err
 	}
-	set.lastAttempt = now
+	if !set.fetching {
+		set.fetching, set.lastAttempt = true, now
+	}
+	generation := set.generation
 	set.mu.Unlock()
 
+	// Callers that need a refresh while one runs wait for it (singleflight), so a restart or a key
+	// rotation does not turn the first concurrent requests into failures.
 	_, fetchErr, _ := set.flight.Do("fetch", func() (any, error) {
-		return nil, v.fetch(context.WithoutCancel(ctx), set, issuer)
+		set.mu.Lock()
+		if set.generation != generation {
+			err := set.lastErr
+			set.mu.Unlock()
+			return nil, err
+		}
+		set.mu.Unlock()
+		err := v.fetch(context.WithoutCancel(ctx), set, issuer)
+		set.mu.Lock()
+		set.generation++
+		set.fetching, set.lastErr = false, err
+		set.mu.Unlock()
+		return nil, err
 	})
 
 	set.mu.Lock()
