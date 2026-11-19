@@ -198,8 +198,9 @@ func TestRetiredPostCommitAuditHelpersAreRejected(t *testing.T) {
 		t.Fatalf("the audit of a request that changed nothing rejected: %v", err)
 	}
 	for name, body := range map[string]string{
-		"a call": "package app\nfunc h() { _ = recordMutationAudit }\n",
-		"a type": "package app\ntype r = mutationAuditRecorder\n",
+		"a reference": "package app\nfunc h() { _ = recordMutationAudit }\n",
+		"a call":      "package app\nfunc h(s interface{ recordMutationAudit() }) { s.recordMutationAudit() }\n",
+		"a type":      "package app\ntype r = mutationAuditRecorder\n",
 	} {
 		write("internal/app/handler.go", body)
 		if err := run(root, false); err == nil || !strings.Contains(err.Error(), "retired post-commit audit path") {
