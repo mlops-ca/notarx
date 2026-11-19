@@ -22,10 +22,31 @@ import (
 	"github.com/mlops-ca/notarx/internal/secrets"
 )
 
-type fixtureStore struct{ values map[string]Source }
+// fixtureStore is the in-memory source store. It records the audit of each change with the
+// change, or fails the change when fault rejects the audit (the memory twin of a failing
+// security_audit_log insert, ADR 0023 section 1).
+type fixtureStore struct {
+	values map[string]Source
+	audits []repository.AuditRecord
+	fault  func(repository.AuditRecord) error
+}
 
-func newFixtureStore() *fixtureStore { return &fixtureStore{map[string]Source{}} }
-func (s *fixtureStore) Create(_ context.Context, v Source) (Source, error) {
+func newFixtureStore() *fixtureStore { return &fixtureStore{values: map[string]Source{}} }
+func (s *fixtureStore) commitAudit(audit []repository.AuditRecord) error {
+	for _, record := range audit {
+		if s.fault != nil {
+			if err := s.fault(record); err != nil {
+				return err
+			}
+		}
+	}
+	s.audits = append(s.audits, audit...)
+	return nil
+}
+func (s *fixtureStore) Create(_ context.Context, v Source, audit ...repository.AuditRecord) (Source, error) {
+	if err := s.commitAudit(audit); err != nil {
+		return Source{}, err
+	}
 	v.Version = "1"
 	v.CreatedAt = time.Now().UTC()
 	v.UpdatedAt = v.CreatedAt
@@ -58,7 +79,7 @@ func (s *fixtureStore) List(_ context.Context, limit int, cursor string) ([]Sour
 	}
 	return out, next, nil
 }
-func (s *fixtureStore) Update(ctx context.Context, v Source, expected string) (Source, error) {
+func (s *fixtureStore) Update(ctx context.Context, v Source, expected string, audit ...repository.AuditRecord) (Source, error) {
 	old, err := s.Get(ctx, v.ID)
 	if err != nil {
 		return Source{}, err
@@ -66,19 +87,25 @@ func (s *fixtureStore) Update(ctx context.Context, v Source, expected string) (S
 	if old.Version != expected {
 		return Source{}, ErrVersionConflict
 	}
+	if err = s.commitAudit(audit); err != nil {
+		return Source{}, err
+	}
 	n, _ := strconv.Atoi(old.Version)
 	v.Version = strconv.Itoa(n + 1)
 	v.UpdatedAt = time.Now().UTC()
 	s.values[v.ID] = v
 	return v, nil
 }
-func (s *fixtureStore) Delete(ctx context.Context, id, expected string) error {
+func (s *fixtureStore) Delete(ctx context.Context, id, expected string, audit ...repository.AuditRecord) error {
 	v, err := s.Get(ctx, id)
 	if err != nil {
 		return err
 	}
 	if v.Version != expected {
 		return ErrVersionConflict
+	}
+	if err = s.commitAudit(audit); err != nil {
+		return err
 	}
 	delete(s.values, id)
 	return nil

@@ -7,6 +7,7 @@ import (
 	"errors"
 
 	"github.com/mlops-ca/notarx/internal/nexussource"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 type Store struct{ db *sql.DB }
@@ -25,8 +26,33 @@ func scan(row interface{ Scan(...any) error }) (nexussource.Source, error) {
 	}
 	return v, err
 }
-func (s *Store) Create(ctx context.Context, v nexussource.Source) (nexussource.Source, error) {
-	return scan(s.db.QueryRowContext(ctx, `INSERT INTO nexus_migration_sources(id,name,base_url,credential_ciphertext) VALUES($1,$2,$3,$4) RETURNING `+columns, v.ID, v.Name, v.BaseURL, v.CredentialCiphertext))
+
+// withAudit runs the change on the pool, or with audit in one transaction with the audit records so
+// a failing audit insert rolls the change back (ADR 0023 section 1).
+func (s *Store) withAudit(ctx context.Context, audit []repository.AuditRecord, change func(row func(string, ...any) *sql.Row) error) error {
+	if len(audit) == 0 {
+		return change(func(query string, args ...any) *sql.Row { return s.db.QueryRowContext(ctx, query, args...) })
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err = change(func(query string, args ...any) *sql.Row { return tx.QueryRowContext(ctx, query, args...) }); err != nil {
+		return err
+	}
+	if err = repository.InsertAuditsTx(ctx, tx, audit...); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+func (s *Store) Create(ctx context.Context, v nexussource.Source, audit ...repository.AuditRecord) (nexussource.Source, error) {
+	var out nexussource.Source
+	err := s.withAudit(ctx, audit, func(row func(string, ...any) *sql.Row) (err error) {
+		out, err = scan(row(`INSERT INTO nexus_migration_sources(id,name,base_url,credential_ciphertext) VALUES($1,$2,$3,$4) RETURNING `+columns, v.ID, v.Name, v.BaseURL, v.CredentialCiphertext))
+		return err
+	})
+	return out, err
 }
 func (s *Store) Get(ctx context.Context, id string) (nexussource.Source, error) {
 	return scan(s.db.QueryRowContext(ctx, `SELECT `+columns+` FROM nexus_migration_sources WHERE id=$1::uuid`, id))
@@ -55,16 +81,23 @@ func (s *Store) List(ctx context.Context, limit int, cursor string) ([]nexussour
 	}
 	return out, next, nil
 }
-func (s *Store) Update(ctx context.Context, v nexussource.Source, expected string) (nexussource.Source, error) {
-	out, err := scan(s.db.QueryRowContext(ctx, `UPDATE nexus_migration_sources SET name=$2,base_url=$3,credential_ciphertext=$4,version=version+1,updated_at=clock_timestamp() WHERE id=$1::uuid AND version=$5::text::bigint RETURNING `+columns, v.ID, v.Name, v.BaseURL, v.CredentialCiphertext, expected))
+func (s *Store) Update(ctx context.Context, v nexussource.Source, expected string, audit ...repository.AuditRecord) (nexussource.Source, error) {
+	var out nexussource.Source
+	err := s.withAudit(ctx, audit, func(row func(string, ...any) *sql.Row) (err error) {
+		out, err = scan(row(`UPDATE nexus_migration_sources SET name=$2,base_url=$3,credential_ciphertext=$4,version=version+1,updated_at=clock_timestamp() WHERE id=$1::uuid AND version=$5::text::bigint RETURNING `+columns, v.ID, v.Name, v.BaseURL, v.CredentialCiphertext, expected))
+		return err
+	})
 	return out, s.classify(ctx, v.ID, err)
 }
-func (s *Store) Delete(ctx context.Context, id, expected string) error {
-	var deleted string
-	err := s.db.QueryRowContext(ctx, `DELETE FROM nexus_migration_sources WHERE id=$1::uuid AND version=$2::text::bigint RETURNING id::text`, id, expected).Scan(&deleted)
-	if errors.Is(err, sql.ErrNoRows) {
-		err = nexussource.ErrNotFound
-	}
+func (s *Store) Delete(ctx context.Context, id, expected string, audit ...repository.AuditRecord) error {
+	err := s.withAudit(ctx, audit, func(row func(string, ...any) *sql.Row) error {
+		var deleted string
+		err := row(`DELETE FROM nexus_migration_sources WHERE id=$1::uuid AND version=$2::text::bigint RETURNING id::text`, id, expected).Scan(&deleted)
+		if errors.Is(err, sql.ErrNoRows) {
+			err = nexussource.ErrNotFound
+		}
+		return err
+	})
 	return s.classify(ctx, id, err)
 }
 func (s *Store) classify(ctx context.Context, id string, err error) error {

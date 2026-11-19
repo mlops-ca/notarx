@@ -45,6 +45,18 @@ type operation struct {
 	p        authorization.Principal
 	name, id string
 	status   int
+	// audited is set when the store wrote the audit of a successful state change in its own
+	// transaction (ADR 0023 section 1), so finish writes no second record for it.
+	audited bool
+}
+
+// audit is the record handed to the service call that changes state; the store writes it in the
+// transaction of the change, and a record without a resource names the created batch or schedule.
+func (op *operation) audit(status int) []repository.AuditRecord {
+	if op.h == nil || op.h.audit == nil {
+		return nil
+	}
+	return []repository.AuditRecord{{Actor: op.p.Actor, Operation: op.name, Resource: op.id, Format: "management", Outcome: repository.AuditResolved, Status: status, OccurredAt: time.Now().UTC(), CacheDisposition: "bypass"}}
 }
 
 func (h *BatchAdapter) begin(w http.ResponseWriter, r *http.Request, name, id string) (*operation, bool) {
@@ -77,7 +89,7 @@ func (h *BatchAdapter) begin(w http.ResponseWriter, r *http.Request, name, id st
 	return op, true
 }
 func (op *operation) finish() {
-	if op.h == nil || op.h.audit == nil {
+	if op.audited || op.h == nil || op.h.audit == nil {
 		return
 	}
 	outcome := repository.AuditResolved
@@ -182,10 +194,11 @@ func (h *BatchAdapter) StartNexusMigrationBatch(w http.ResponseWriter, r *http.R
 	if op.failed(w, json.Unmarshal(raw, &input)) {
 		return
 	}
-	b, err := h.service.Start(m.WithOperatorIdentity(r.Context(), m.OperatorIdentity{Actor: op.p.Actor, AuthenticationKind: string(op.p.AuthenticationKind), UserID: op.p.UserID}), input, op.p.Actor, params.IdempotencyKey)
+	b, err := h.service.Start(m.WithOperatorIdentity(r.Context(), m.OperatorIdentity{Actor: op.p.Actor, AuthenticationKind: string(op.p.AuthenticationKind), UserID: op.p.UserID}), input, op.p.Actor, params.IdempotencyKey, op.audit(202)...)
 	if op.failed(w, err) {
 		return
 	}
+	op.audited = true
 	op.id = b.ID
 	w.Header().Set("ETag", b.Version)
 	op.respond(w, 202, batchResponse(b))
@@ -272,10 +285,11 @@ func (h *BatchAdapter) control(w http.ResponseWriter, r *http.Request, id uuid.U
 		problem(w, 400, "invalid_request")
 		return
 	}
-	b, err := h.service.Control(r.Context(), id.String(), version, op.p.Actor, key, action, evidence)
+	b, err := h.service.Control(r.Context(), id.String(), version, op.p.Actor, key, action, evidence, op.audit(200)...)
 	if op.failed(w, err) {
 		return
 	}
+	op.audited = true
 	w.Header().Set("ETag", b.Version)
 	op.respond(w, 200, batchResponse(b))
 }

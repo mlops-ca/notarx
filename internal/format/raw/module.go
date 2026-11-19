@@ -63,7 +63,7 @@ type ReplicationStore interface {
 type PublicationStore interface {
 	LockRawObject(context.Context, string) (func(), error)
 	StageRawObject(context.Context, repository.RawObject) error
-	PutRawAssetIf(context.Context, repository.RawAsset, repository.RawWriteCondition) (repository.RawAsset, error)
+	PutRawAssetIf(context.Context, repository.RawAsset, repository.RawWriteCondition, ...repository.AuditRecord) (repository.RawAsset, error)
 	GetRawAsset(context.Context, string, string) (repository.RawAsset, error)
 }
 

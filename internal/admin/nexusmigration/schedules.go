@@ -29,10 +29,11 @@ func (h *BatchAdapter) CreateNexusMigrationSchedule(w http.ResponseWriter, r *ht
 	if !op.body(w, &input) {
 		return
 	}
-	p, err := h.schedules.Create(m.WithOperatorIdentity(r.Context(), m.OperatorIdentity{Actor: op.p.Actor, AuthenticationKind: string(op.p.AuthenticationKind), UserID: op.p.UserID}), input, op.p.Actor, params.IdempotencyKey)
+	p, err := h.schedules.Create(m.WithOperatorIdentity(r.Context(), m.OperatorIdentity{Actor: op.p.Actor, AuthenticationKind: string(op.p.AuthenticationKind), UserID: op.p.UserID}), input, op.p.Actor, params.IdempotencyKey, op.audit(http.StatusCreated)...)
 	if op.failed(w, err) {
 		return
 	}
+	op.audited = true
 	op.id = p.ID
 	w.Header().Set("ETag", p.Version)
 	op.respond(w, http.StatusCreated, p)
@@ -95,10 +96,11 @@ func (h *BatchAdapter) controlSchedule(w http.ResponseWriter, r *http.Request, i
 		problem(w, op.status, "invalid_request")
 		return
 	}
-	p, err := h.schedules.Control(r.Context(), id.String(), version, op.p.Actor, key, action, evidence)
+	p, err := h.schedules.Control(r.Context(), id.String(), version, op.p.Actor, key, action, evidence, op.audit(http.StatusOK)...)
 	if op.failed(w, err) {
 		return
 	}
+	op.audited = true
 	w.Header().Set("ETag", p.Version)
 	op.respond(w, http.StatusOK, p)
 }

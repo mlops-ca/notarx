@@ -53,7 +53,7 @@ func (s *Store) totals(ctx context.Context, b *m.Batch) error {
 	}
 	return s.db.QueryRowContext(ctx, `SELECT COALESCE(sum(size),0) FROM (SELECT DISTINCT e.format,a->>'sha256' AS sha256,(a->>'size')::bigint AS size FROM nexus_migration_entries e CROSS JOIN LATERAL jsonb_array_elements(e.assets) a WHERE e.batch_id=$1 AND a->>'verified'='true' AND e.state IN ('verified','committed','skipped')) verified`, b.ID).Scan(&b.VerifiedBytes)
 }
-func (s *Store) Create(ctx context.Context, b m.Batch, key, hash string) (m.Batch, error) {
+func (s *Store) Create(ctx context.Context, b m.Batch, key, hash string, audit ...repository.AuditRecord) (m.Batch, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return m.Batch{}, err
@@ -91,6 +91,9 @@ func (s *Store) Create(ctx context.Context, b m.Batch, key, hash string) (m.Batc
 		return m.Batch{}, err
 	}
 	if err = checkPyPIMigrationActor(ctx, tx, b.Actor, b.ActorKind, b.OwnerID, b.Mappings); err != nil {
+		return m.Batch{}, err
+	}
+	if err = repository.InsertAuditsTx(ctx, tx, audit...); err != nil {
 		return m.Batch{}, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -229,7 +232,7 @@ func (s *Store) PreviousEntries(ctx context.Context, b m.Batch) ([]m.Entry, erro
 }
 func mustJSON(v any) []byte { b, _ := json.Marshal(v); return b }
 
-func (s *Store) Control(ctx context.Context, id, expected, actor, key, action, hash string, evidence *m.CapacityEvidence) (m.Batch, error) {
+func (s *Store) Control(ctx context.Context, id, expected, actor, key, action, hash string, evidence *m.CapacityEvidence, audit ...repository.AuditRecord) (m.Batch, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return m.Batch{}, err
@@ -335,6 +338,9 @@ func (s *Store) Control(ctx context.Context, id, expected, actor, key, action, h
 		if err = checkPyPIMigrationActor(ctx, tx, b.Actor, b.ActorKind, b.OwnerID, b.Mappings); err != nil {
 			return b, err
 		}
+	}
+	if err = repository.InsertAuditsTx(ctx, tx, audit...); err != nil {
+		return b, err
 	}
 	if err = tx.Commit(); err != nil {
 		return b, err

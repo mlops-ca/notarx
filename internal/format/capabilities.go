@@ -73,7 +73,7 @@ type ImmutablePublication interface {
 	ValidatePublication(string, []NativeAsset) error
 	LockPublication(context.Context, []NativeAsset) (context.Context, func(), error)
 	StageVerifiedPublication(context.Context, NativeAsset, io.Reader) error
-	PublishPublication(context.Context, NativeAsset) error
+	PublishPublication(context.Context, NativeAsset, ...repository.AuditRecord) error
 	ReadPublication(context.Context, string, string) (NativeAsset, error)
 }
 

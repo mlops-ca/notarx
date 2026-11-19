@@ -22,6 +22,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/capacityplan"
 	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/nexussource"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 type Options struct {
@@ -85,7 +86,11 @@ func (s *Service) ValidateEvidence(e CapacityEvidence) error {
 	}
 	return nil
 }
-func (s *Service) Start(ctx context.Context, in StartInput, actor, key string) (Batch, error) {
+
+// Start creates the batch. The audit records, when given, are written by the store in the
+// transaction that creates the batch (ADR 0023 section 1) and name the batch when their resource
+// is empty; a replay of the idempotency key creates nothing and writes none.
+func (s *Service) Start(ctx context.Context, in StartInput, actor, key string, audit ...repository.AuditRecord) (Batch, error) {
 	if !validKey(key) || !validKey(actor) || in.PolicyVersion != PolicyVersion || len(in.Mappings) < 1 || len(in.Mappings) > 10 {
 		return Batch{}, Failed("invalid_request")
 	}
@@ -127,7 +132,19 @@ func (s *Service) Start(ctx context.Context, in StartInput, actor, key string) (
 	if err = s.publication.ValidateTargets(ctx, in.Mappings); err != nil {
 		return Batch{}, err
 	}
-	return s.store.Create(ctx, Batch{StartInput: in, ID: ids.New(), Actor: actor, ActorKind: kind, OwnerID: ownerID}, key, digest(in))
+	id := ids.New()
+	return s.store.Create(ctx, Batch{StartInput: in, ID: id, Actor: actor, ActorKind: kind, OwnerID: ownerID}, key, digest(in), auditResource(audit, id)...)
+}
+
+// auditResource returns the audit records with the resource set to id where it is empty.
+func auditResource(audit []repository.AuditRecord, id string) []repository.AuditRecord {
+	named := append([]repository.AuditRecord(nil), audit...)
+	for index := range named {
+		if named[index].Resource == "" {
+			named[index].Resource = id
+		}
+	}
+	return named
 }
 func (s *Service) Get(ctx context.Context, id string) (Batch, error) { return s.store.Get(ctx, id) }
 func (s *Service) List(ctx context.Context, limit int, cursor string) ([]Batch, string, error) {
@@ -155,7 +172,7 @@ func validPage(limit int, cursor string) bool {
 	}
 	return true
 }
-func (s *Service) Control(ctx context.Context, id, expected, actor, key, action string, evidence *CapacityEvidence) (Batch, error) {
+func (s *Service) Control(ctx context.Context, id, expected, actor, key, action string, evidence *CapacityEvidence, audit ...repository.AuditRecord) (Batch, error) {
 	if !validKey(key) || expected == "" {
 		return Batch{}, Failed("invalid_request")
 	}
@@ -207,7 +224,7 @@ func (s *Service) Control(ctx context.Context, id, expected, actor, key, action 
 			}
 		}
 	}
-	return s.store.Control(ctx, id, expected, actor, key, action, hash, evidence)
+	return s.store.Control(ctx, id, expected, actor, key, action, hash, evidence, audit...)
 }
 func (s *Service) allEntries(ctx context.Context, id string) ([]Entry, error) {
 	out := []Entry{}

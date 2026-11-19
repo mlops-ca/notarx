@@ -257,7 +257,7 @@ func (s *PostgresStore) MarkMavenPublishObject(ctx context.Context, id, name, ke
 	return tx.Commit()
 }
 func (s *PostgresStore) CommitMavenPublishSession(ctx context.Context, id string, assets []MavenAsset) (MavenArtifact, error) {
-	artifact, _, err := s.commitMavenPublishSession(ctx, id, "", "", assets)
+	artifact, _, err := s.commitMavenPublishSession(ctx, id, "", "", assets, nil)
 	return artifact, err
 }
 
@@ -407,11 +407,13 @@ func (s *PostgresStore) HasOpenMavenPublishSessions(ctx context.Context, reposit
 	return open, err
 }
 
-func (s *PostgresStore) CommitMavenPublishSessionIdempotently(ctx context.Context, id, key, payload string, assets []MavenAsset) (MavenArtifact, bool, error) {
-	return s.commitMavenPublishSession(ctx, id, key, payload, assets)
+// CommitMavenPublishSessionIdempotently commits the session; the audit records, when given, are written
+// in the transaction of the commit (ADR 0023 section 1), and a replay of the key writes none.
+func (s *PostgresStore) CommitMavenPublishSessionIdempotently(ctx context.Context, id, key, payload string, assets []MavenAsset, audit ...AuditRecord) (MavenArtifact, bool, error) {
+	return s.commitMavenPublishSession(ctx, id, key, payload, assets, audit)
 }
 
-func (s *PostgresStore) commitMavenPublishSession(ctx context.Context, id, key, payload string, assets []MavenAsset) (MavenArtifact, bool, error) {
+func (s *PostgresStore) commitMavenPublishSession(ctx context.Context, id, key, payload string, assets []MavenAsset, audit []AuditRecord) (MavenArtifact, bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return MavenArtifact{}, false, err
@@ -594,6 +596,9 @@ func (s *PostgresStore) commitMavenPublishSession(ctx context.Context, id, key, 
 		}
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE native_maven_publish_sessions SET state='committed' WHERE id=$1`, id); err != nil {
+		return MavenArtifact{}, false, err
+	}
+	if err = insertAudits(ctx, tx, audit); err != nil {
 		return MavenArtifact{}, false, err
 	}
 	if err = usage.reserve(ctx, tx); err != nil {

@@ -45,11 +45,11 @@ type Input struct {
 
 // Store is deliberately independent of the aggregate GatewayStore.
 type Store interface {
-	Create(context.Context, Source) (Source, error)
+	Create(context.Context, Source, ...repository.AuditRecord) (Source, error)
 	Get(context.Context, string) (Source, error)
 	List(context.Context, int, string) ([]Source, string, error)
-	Update(context.Context, Source, string) (Source, error)
-	Delete(context.Context, string, string) error
+	Update(context.Context, Source, string, ...repository.AuditRecord) (Source, error)
+	Delete(context.Context, string, string, ...repository.AuditRecord) error
 }
 type TargetReader interface {
 	GetHostedRepositoryByName(context.Context, string) (repository.HostedRepository, error)
@@ -129,12 +129,26 @@ func (s *Service) apply(in Input, old Source) (Source, error) {
 	}
 	return old, nil
 }
-func (s *Service) Create(ctx context.Context, in Input) (Source, error) {
+
+// Create, Update and Delete hand the audit records to the store, which writes them in the
+// transaction of the change (ADR 0023 section 1); a record without a resource names the source.
+func (s *Service) Create(ctx context.Context, in Input, audit ...repository.AuditRecord) (Source, error) {
 	v, err := s.apply(in, Source{})
 	if err != nil {
 		return Source{}, err
 	}
-	return s.store.Create(ctx, v)
+	return s.store.Create(ctx, v, auditResource(audit, v.ID)...)
+}
+
+// auditResource returns the audit records with the resource set to id where it is empty.
+func auditResource(audit []repository.AuditRecord, id string) []repository.AuditRecord {
+	named := append([]repository.AuditRecord(nil), audit...)
+	for index := range named {
+		if named[index].Resource == "" {
+			named[index].Resource = id
+		}
+	}
+	return named
 }
 func (s *Service) Get(ctx context.Context, id string) (Source, error) { return s.store.Get(ctx, id) }
 func (s *Service) List(ctx context.Context, limit int, cursor string) ([]Source, string, error) {
@@ -148,7 +162,7 @@ func (s *Service) List(ctx context.Context, limit int, cursor string) ([]Source,
 	}
 	return s.store.List(ctx, limit, cursor)
 }
-func (s *Service) Update(ctx context.Context, id string, in Input, expected string) (Source, error) {
+func (s *Service) Update(ctx context.Context, id string, in Input, expected string, audit ...repository.AuditRecord) (Source, error) {
 	if !version.MatchString(expected) {
 		return Source{}, fail("invalid_request")
 	}
@@ -163,13 +177,13 @@ func (s *Service) Update(ctx context.Context, id string, in Input, expected stri
 	if err != nil {
 		return Source{}, err
 	}
-	return s.store.Update(ctx, v, expected)
+	return s.store.Update(ctx, v, expected, auditResource(audit, id)...)
 }
-func (s *Service) Delete(ctx context.Context, id, expected string) error {
+func (s *Service) Delete(ctx context.Context, id, expected string, audit ...repository.AuditRecord) error {
 	if !version.MatchString(expected) {
 		return fail("invalid_request")
 	}
-	return s.store.Delete(ctx, id, expected)
+	return s.store.Delete(ctx, id, expected, auditResource(audit, id)...)
 }
 
 type Field struct{ Field, Disposition, Reason string }

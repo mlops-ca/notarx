@@ -43,11 +43,11 @@ func (m *Module) StageVerifiedPublication(ctx context.Context, asset formatmodul
 	}
 	return nil
 }
-func (m *Module) PublishPublication(ctx context.Context, asset formatmodule.NativeAsset) error {
+func (m *Module) PublishPublication(ctx context.Context, asset formatmodule.NativeAsset, audit ...repository.AuditRecord) error {
 	if m.publication == nil {
 		return repository.ErrDisabled
 	}
-	_, err := m.publication.PutRawAssetIf(ctx, repository.RawAsset{RepositoryID: asset.RepositoryID, Path: asset.Path, ObjectKey: asset.ObjectKey, Digest: asset.Digest, Size: asset.Size, ContentType: "application/octet-stream"}, repository.RawWriteCondition{RequireAbsent: true})
+	_, err := m.publication.PutRawAssetIf(ctx, repository.RawAsset{RepositoryID: asset.RepositoryID, Path: asset.Path, ObjectKey: asset.ObjectKey, Digest: asset.Digest, Size: asset.Size, ContentType: "application/octet-stream"}, repository.RawWriteCondition{RequireAbsent: true}, audit...)
 	return err
 }
 func (m *Module) ReadPublication(ctx context.Context, repositoryID, path string) (formatmodule.NativeAsset, error) {

@@ -41,6 +41,12 @@ func runAudited[T any](ctx context.Context, s *PostgresStore, audit []AuditRecor
 	return value, nil
 }
 
+// InsertAuditsTx writes the audit records inside the caller's transaction, for the stores of other
+// packages that make a management change and its audit atomic (ADR 0023 section 1).
+func InsertAuditsTx(ctx context.Context, tx *sql.Tx, audit ...AuditRecord) error {
+	return insertAudits(ctx, tx, audit)
+}
+
 // insertAudits writes the audit records inside the caller's transaction.
 func insertAudits(ctx context.Context, execer auditExecer, audit []AuditRecord) error {
 	for _, record := range audit {

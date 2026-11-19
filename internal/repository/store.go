@@ -327,7 +327,7 @@ type NativeMavenStore interface {
 	CompleteMavenProtocolPublications(context.Context, string, string, string, bool) error
 	HasOpenMavenPublishSessions(context.Context, string) (bool, error)
 	CommitMavenPublishSession(context.Context, string, []MavenAsset) (MavenArtifact, error)
-	CommitMavenPublishSessionIdempotently(context.Context, string, string, string, []MavenAsset) (MavenArtifact, bool, error)
+	CommitMavenPublishSessionIdempotently(context.Context, string, string, string, []MavenAsset, ...AuditRecord) (MavenArtifact, bool, error)
 	GetMavenAsset(context.Context, string, string) (MavenAsset, error)
 	ListMavenAssets(context.Context, string, string) ([]MavenAsset, error)
 	ListMavenArtifacts(context.Context, string) ([]MavenArtifact, error)
@@ -394,7 +394,7 @@ type NativeRawStore interface {
 	LockRawObject(context.Context, string) (func(), error)
 	StageRawObject(context.Context, RawObject) error
 	PutRawAsset(context.Context, RawAsset) (RawAsset, error)
-	PutRawAssetIf(context.Context, RawAsset, RawWriteCondition) (RawAsset, error)
+	PutRawAssetIf(context.Context, RawAsset, RawWriteCondition, ...AuditRecord) (RawAsset, error)
 	GetRawAsset(context.Context, string, string) (RawAsset, error)
 	ListRawAssets(context.Context, string, string, int, string, ...ArtifactSearchMatch) ([]RawAsset, error)
 	DeleteRawAsset(context.Context, string, string) error
