@@ -137,6 +137,8 @@ func configurationResult(cfg config.Config) Result {
 			"apt_signer_trusted_fingerprint_count":     len(cfg.APTSignerTrustedFingerprints),
 			"apt_signer_trusted_public_keys_validated": len(cfg.APTSignerTrustedPublicKeys) > 0,
 			"apt_signer_tls_trust_mode":                aptSignerTLSTrustMode(cfg),
+			"issuer_enabled":                           cfg.Issuer.Enabled,
+			"issuer_alg":                               issuerAlg(cfg),
 		},
 	}
 }
@@ -147,7 +149,21 @@ func policyResult(cfg config.Config) Result {
 			return Result{Name: "policy", Status: StatusFail, Summary: "proxy allowlist contains an invalid host"}
 		}
 	}
+	if cfg.Issuer.Enabled {
+		// The issuer seals its signing keys with the settings encryption key (ADR 0020), and the
+		// entra-workload upstream scheme depends on the issuer.
+		if err := secrets.ValidateRing(); err != nil {
+			return Result{Name: "policy", Status: StatusFail, Summary: "the OIDC issuer is enabled but the settings encryption key is missing or invalid"}
+		}
+	}
 	return Result{Name: "policy", Status: StatusPass, Summary: "proxy allowlists and configured quotas are valid"}
+}
+
+func issuerAlg(cfg config.Config) string {
+	if !cfg.Issuer.Enabled {
+		return ""
+	}
+	return cfg.Issuer.Alg
 }
 
 func validHost(host string) bool {

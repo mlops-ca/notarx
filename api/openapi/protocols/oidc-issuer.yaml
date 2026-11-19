@@ -1,0 +1,95 @@
+---
+x-gateway-protocol-overlay:
+  officialSpecification: https://openid.net/specs/openid-connect-discovery-1_0.html
+  gatewayDecision: >
+    notarx is a token source, not a browser identity provider: it publishes an OpenID
+    Provider Configuration document and a JSON Web Key Set so that Microsoft Entra ID and
+    peer notarx instances can verify the assertions it signs (ADR 0020). Both routes are
+    mounted at the server root, are anonymous and read-only, and answer 404 while
+    NOTARX_ISSUER_ENABLED is false. They are outside the /api/v2 management contract.
+openid_configuration:
+  servers:
+  - url: https://gateway.example.com
+  get:
+    operationId: getOpenIDConfiguration
+    summary: OpenID Provider Configuration
+    description: >
+      Returns the discovery document of the issuer. There is no authorization_endpoint or
+      token_endpoint. The strong ETag supports conditional requests.
+    security:
+    - {}
+    parameters:
+    - "$ref": "../components/parameters.yaml#/IfNoneMatch"
+    responses:
+      '200':
+        description: Discovery document
+        headers:
+          Cache-Control:
+            schema:
+              type: string
+              const: public, max-age=300
+          ETag:
+            schema:
+              type: string
+          Access-Control-Allow-Origin:
+            schema:
+              type: string
+              const: "*"
+        content:
+          application/json:
+            schema:
+              "$ref": "../components/schemas.yaml#/OpenIDConfiguration"
+      '304':
+        description: The cached document is current
+      '404':
+        description: The issuer is disabled (NOTARX_ISSUER_ENABLED=false)
+      '429':
+        description: Per-client rate limit exceeded
+        headers:
+          Retry-After:
+            schema:
+              type: integer
+jwks:
+  servers:
+  - url: https://gateway.example.com
+  get:
+    operationId: getIssuerJWKS
+    summary: JSON Web Key Set
+    description: >
+      Returns the public keys of the next, active and unexpired retired signing keys whose
+      integrity check passes. Private parameters are never present.
+    security:
+    - {}
+    parameters:
+    - "$ref": "../components/parameters.yaml#/IfNoneMatch"
+    responses:
+      '200':
+        description: Public key set
+        headers:
+          Cache-Control:
+            schema:
+              type: string
+              const: public, max-age=300
+          ETag:
+            schema:
+              type: string
+          Access-Control-Allow-Origin:
+            schema:
+              type: string
+              const: "*"
+        content:
+          application/json:
+            schema:
+              "$ref": "../components/schemas.yaml#/IssuerJWKS"
+      '304':
+        description: The cached document is current
+      '404':
+        description: The issuer is disabled (NOTARX_ISSUER_ENABLED=false)
+      '429':
+        description: Per-client rate limit exceeded
+        headers:
+          Retry-After:
+            schema:
+              type: integer
+      '503':
+        description: Signing keys are temporarily unavailable

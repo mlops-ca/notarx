@@ -313,6 +313,47 @@ not settings and are ignored.
 
 There is no second public-URL key and no `NOTARX_ENV`.
 
+## OIDC issuer signing keys
+
+Set `NOTARX_ISSUER_ENABLED=true` to make the deployment an OIDC token issuer (ADR 0020). It is off
+by default, and while it is off no route, worker or upstream scheme exists. Enabling it requires
+`NOTARX_SETTINGS_ENCRYPTION_KEY`, because the private signing keys are stored sealed in
+`token_signing_keys`, and an issuer URL: `NOTARX_ISSUER_URL`, which defaults to
+`NOTARX_PUBLIC_URL`. The URL must be https (plain http only for `localhost`, `127.0.0.1` and
+`::1`, with a warning), without query, fragment or user information; a trailing slash is
+removed. Startup refuses a URL that is also a trusted workload issuer unless
+`NOTARX_ISSUER_ALLOW_SELF_TRUST=true`, and warns when the URL differs from the last one this
+deployment used, because every federated credential that names the old issuer stops working.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `NOTARX_ISSUER_ALG` | `RS256` | Algorithm that signs new tokens (`RS256` or `ES256`). Entra needs `RS256`. |
+| `NOTARX_ISSUER_KEY_ROTATION_INTERVAL` | `720h` | How long a key stays active. |
+| `NOTARX_ISSUER_KEY_PUBLISH_LEAD` | `24h` | How long a `next` key is published before it may sign. Must be shorter than the rotation interval and longer than the JWKS `Cache-Control` max-age (300 s). |
+| `NOTARX_ISSUER_MAX_TOKEN_LIFETIME` | `10m` | Ceiling for any assertion; the hard maximum is 10 minutes. |
+| `NOTARX_ENTRA_AUTHORITY_HOST` | `https://login.microsoftonline.com` | Entra login host; the only host token requests go to. Sovereign clouds: `https://login.microsoftonline.us`, `https://login.partner.microsoftonline.cn`. |
+| `NOTARX_ENTRA_AUDIENCE` | derived | Overrides the federated credential audience (`api://AzureADTokenExchange`, `...USGov`, `...China`). Required for any other authority host. |
+
+Every node runs the rotation worker; one acts at a time under the PostgreSQL advisory lock
+`notarx:issuer-rotation`. A `next` key is generated at rotation interval minus publish lead and
+promoted only after it was published for the whole lead, so verifiers trust it before it signs. A
+retired key stays published until `retired_at` plus the maximum token lifetime plus the lead.
+Nodes cache the active key for at most 30 seconds. Switching `NOTARX_ISSUER_ALG` only changes which
+active key signs; the missing algorithm's key pair is created on the next pass.
+
+Each key row carries an `integrity_mac` keyed from the encryption key ring. Rows that fail it
+never sign, are left out of the JWKS and are logged at error level; changing the encryption key
+without resealing makes signing fail closed. Backups hold the private keys only as
+ciphertext, so a restore needs the same key ring. The reseal pass of the secrets key ring covers
+`token_signing_keys.private_sealed` and refreshes the MACs.
+
+`GET /.well-known/openid-configuration` and `GET /.well-known/jwks.json` are anonymous and cached
+(`Cache-Control: public, max-age=300`, strong `ETag`); they answer 404 while the issuer is
+disabled and are rate limited per client. The `entra-workload` upstream scheme and its Azure
+Container Registry variant (`registryKind: acr`, Entra scope
+`https://management.azure.com/.default`) exchange short-lived assertions signed by this issuer
+for Entra tokens; every exchange is audited with subject, tenant, client and repository.
+
 ## Standalone Fallback
 
 Local development and small installations continue to use:

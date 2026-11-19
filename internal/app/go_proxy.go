@@ -9,6 +9,7 @@ import (
 
 	"github.com/mlops-ca/notarx/internal/egress"
 	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/upstreamauth"
 )
 
 const goProxyUserAgent = "Go-http-client/2.0 notarx/1.0"
@@ -63,6 +64,10 @@ func (c UpstreamClient) FetchGo(ctx context.Context, method string, repo reposit
 		return nil
 	}
 	response, err := tracedHTTPClient(client).Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("fetch Go upstream content: %w", err)
+	}
+	response, err = upstreamauth.RetryUnauthorized(response, request, repo.Endpoint, repo.UpstreamAuth, tracedHTTPClient(client).Do)
 	if err != nil {
 		return nil, fmt.Errorf("fetch Go upstream content: %w", err)
 	}

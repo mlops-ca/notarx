@@ -17,34 +17,39 @@ const PublicURLEnv = "NOTARX_PUBLIC_URL"
 // https:// URL with a host and no trailing slash, user information, query or
 // fragment; http:// is accepted only for a loopback host.
 func ParsePublicURL(raw string) (*url.URL, error) {
+	return parseBaseURL(PublicURLEnv, raw)
+}
+
+// parseBaseURL applies the PublicURL rules to the setting named env.
+func parseBaseURL(env, raw string) (*url.URL, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return nil, nil
 	}
 	parsed, err := url.Parse(raw)
 	if err != nil {
-		return nil, fmt.Errorf("%s is not a valid URL", PublicURLEnv)
+		return nil, fmt.Errorf("%s is not a valid URL", env)
 	}
 	if !parsed.IsAbs() || parsed.Opaque != "" || parsed.Hostname() == "" {
-		return nil, fmt.Errorf("%s must be an absolute URL with a host", PublicURLEnv)
+		return nil, fmt.Errorf("%s must be an absolute URL with a host", env)
 	}
 	switch parsed.Scheme {
 	case "https":
 	case "http":
 		if !isLoopbackHost(parsed.Hostname()) {
-			return nil, fmt.Errorf("%s must use https unless the host is loopback", PublicURLEnv)
+			return nil, fmt.Errorf("%s must use https unless the host is loopback", env)
 		}
 	default:
-		return nil, fmt.Errorf("%s must use https unless the host is loopback", PublicURLEnv)
+		return nil, fmt.Errorf("%s must use https unless the host is loopback", env)
 	}
 	if parsed.User != nil {
-		return nil, fmt.Errorf("%s must not contain user information", PublicURLEnv)
+		return nil, fmt.Errorf("%s must not contain user information", env)
 	}
 	if parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" || strings.Contains(raw, "#") {
-		return nil, fmt.Errorf("%s must not contain a query or fragment", PublicURLEnv)
+		return nil, fmt.Errorf("%s must not contain a query or fragment", env)
 	}
 	if strings.HasSuffix(raw, "/") {
-		return nil, fmt.Errorf("%s must not end with a slash", PublicURLEnv)
+		return nil, fmt.Errorf("%s must not end with a slash", env)
 	}
 	return parsed, nil
 }

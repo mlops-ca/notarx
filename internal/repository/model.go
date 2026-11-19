@@ -2,8 +2,10 @@ package repository
 
 import (
 	"errors"
+	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -138,7 +140,51 @@ const (
 	UpstreamAuthSchemeNone   UpstreamAuthScheme = "none"
 	UpstreamAuthSchemeBasic  UpstreamAuthScheme = "basic"
 	UpstreamAuthSchemeBearer UpstreamAuthScheme = "bearer"
+	// UpstreamAuthSchemeEntraWorkload authenticates to Microsoft Entra ID with a short-lived
+	// assertion that notarx signs itself (ADR 0020). It carries no secret and is accepted only
+	// while the OIDC issuer is enabled.
+	UpstreamAuthSchemeEntraWorkload UpstreamAuthScheme = "entra-workload"
 )
+
+// RegistryKindACR marks an entra-workload upstream as Azure Container Registry, which needs
+// the registry specific token exchange after the Entra token.
+const RegistryKindACR = "acr"
+
+var (
+	entraWorkloadEnabled atomic.Bool
+	entraTenantPattern   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$`)
+	entraClientIDPattern = regexp.MustCompile(`^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$`)
+	entraSubjectPattern  = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,256}$`)
+)
+
+// AllowEntraWorkload records whether the OIDC issuer is enabled; UpstreamAuth.Validate rejects
+// the entra-workload scheme otherwise. The runtime sets it once at startup.
+func AllowEntraWorkload(enabled bool) { entraWorkloadEnabled.Store(enabled) }
+
+func (a *UpstreamAuth) validateEntraWorkload() error {
+	if !entraWorkloadEnabled.Load() {
+		return errors.New("upstream authentication scheme entra-workload requires NOTARX_ISSUER_ENABLED=true")
+	}
+	if a.Username != "" || a.Secret != "" {
+		return errors.New("upstream entra-workload authentication carries no username or secret")
+	}
+	if !entraTenantPattern.MatchString(a.TenantID) {
+		return errors.New("upstream entra-workload authentication requires a tenantId (a tenant GUID or domain)")
+	}
+	if !entraClientIDPattern.MatchString(a.ClientID) {
+		return errors.New("upstream entra-workload authentication requires a clientId that is a GUID")
+	}
+	if a.Scope == "" || len(a.Scope) > 512 || strings.IndexFunc(a.Scope, func(r rune) bool { return r <= ' ' || r == 0x7f }) >= 0 {
+		return errors.New("upstream entra-workload authentication requires a single scope without whitespace")
+	}
+	if a.Subject != "" && !entraSubjectPattern.MatchString(a.Subject) {
+		return errors.New("upstream entra-workload subject may only contain letters, digits and ._:-")
+	}
+	if a.RegistryKind != "" && a.RegistryKind != RegistryKindACR {
+		return errors.New("upstream entra-workload registryKind must be acr or empty")
+	}
+	return nil
+}
 
 // UpstreamAuth is the per-Proxy-Repository credential presented to the
 // upstream registry. Secret holds AES-256-GCM ciphertext (base64) sealed with
@@ -148,6 +194,20 @@ type UpstreamAuth struct {
 	Scheme   UpstreamAuthScheme `json:"scheme"`
 	Username string             `json:"username,omitempty"`
 	Secret   string             `json:"secret,omitempty"`
+	// The remaining fields configure entra-workload and are not secret (ADR 0020).
+	TenantID string `json:"tenantId,omitempty"`
+	ClientID string `json:"clientId,omitempty"`
+	// Scope is the Entra scope requested for the access token, for example
+	// https://storage.azure.com/.default.
+	Scope string `json:"scope,omitempty"`
+	// Subject is the exact sub claim of the assertion. Empty selects the built-in instance
+	// principal notarx:instance:<deployment-id>.
+	Subject string `json:"subject,omitempty"`
+	// RegistryKind is "acr" for Azure Container Registry, empty otherwise.
+	RegistryKind string `json:"registryKind,omitempty"`
+	// Repository names the repository the credential belongs to. It is filled when the
+	// repository is loaded, never persisted, and only feeds audit records.
+	Repository string `json:"-"`
 	// CredentialsConfigured is a response-only marker computed at encode time;
 	// it is never persisted.
 	CredentialsConfigured bool `json:"credentialsConfigured,omitempty"`
@@ -160,11 +220,16 @@ func (a *UpstreamAuth) Validate() error {
 	if a == nil {
 		return nil
 	}
+	if a.Scheme != UpstreamAuthSchemeEntraWorkload && (a.TenantID != "" || a.ClientID != "" || a.Scope != "" || a.Subject != "" || a.RegistryKind != "") {
+		return errors.New("tenantId, clientId, scope, subject and registryKind apply only to the entra-workload scheme")
+	}
 	switch a.Scheme {
 	case UpstreamAuthSchemeNone:
 		if a.Username != "" || a.Secret != "" {
 			return errors.New("upstream authentication scheme none must not carry credentials")
 		}
+	case UpstreamAuthSchemeEntraWorkload:
+		return a.validateEntraWorkload()
 	case UpstreamAuthSchemeBasic:
 		if strings.TrimSpace(a.Username) == "" {
 			return errors.New("upstream basic authentication requires a username")
@@ -180,7 +245,7 @@ func (a *UpstreamAuth) Validate() error {
 			return errors.New("upstream bearer authentication requires a secret")
 		}
 	default:
-		return errors.New("upstream authentication scheme must be basic or bearer")
+		return errors.New("upstream authentication scheme must be basic, bearer or entra-workload")
 	}
 	return nil
 }
@@ -193,6 +258,13 @@ func normalizeHostedRepository(repo HostedRepository) HostedRepository {
 		repo.AllowedHosts = []string{}
 	}
 	repo.Visibility = NormalizeVisibility(repo.Visibility)
+	if repo.UpstreamAuth != nil {
+		// The repository name travels with its credential so exchanges can be audited per
+		// repository; a copy keeps the caller's struct untouched.
+		attributed := *repo.UpstreamAuth
+		attributed.Repository = repo.Name
+		repo.UpstreamAuth = &attributed
+	}
 	return repo
 }
 

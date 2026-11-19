@@ -57,6 +57,47 @@ function showSettings(repo: Repository = ociProxy, locale = "en-CA") {
   return { client, updated };
 }
 
+describe("entra-workload upstream credentials", () => {
+  it("keeps the stored configuration when other settings are saved", async () => {
+    const user = userEvent.setup();
+    const entraProxy: Repository = {
+      ...ociProxy,
+      format: "raw",
+      ociBearer: undefined,
+      upstreamAuth: {
+        scheme: "entra-workload",
+        credentialsConfigured: true,
+        tenantId: "contoso.onmicrosoft.com",
+        clientId: "11111111-2222-3333-4444-555555555555",
+        scope: "https://storage.azure.com/.default",
+      },
+    };
+    mockUpdate.mockResolvedValue({ data: entraProxy } as never);
+    showSettings(entraProxy);
+    expect(screen.queryByLabelText("Upstream token")).not.toBeInTheDocument();
+    await user.clear(screen.getByLabelText("Allowed hosts"));
+    await user.type(
+      screen.getByLabelText("Allowed hosts"),
+      "acct.blob.core.windows.net",
+    );
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() =>
+      expect(mockUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.objectContaining({
+            upstreamAuth: {
+              scheme: "entra-workload",
+              tenantId: "contoso.onmicrosoft.com",
+              clientId: "11111111-2222-3333-4444-555555555555",
+              scope: "https://storage.azure.com/.default",
+            },
+          }),
+        }),
+      ),
+    );
+  });
+});
+
 describe("OCI upstream token service settings", () => {
   it("loads and edits the bound issuer without changing the egress allowlist", async () => {
     const user = userEvent.setup();

@@ -344,6 +344,13 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 	quotaReconciler := capacity.NewReconciler(databasePool, cfg.QuotaReconcileInterval, slog.Default())
 	metrics.WithQuotaDriftStats(quotaReconciler.Stats)
 	go quotaReconciler.Run(runtimeContext)
+	// Every node runs the issuer's key rotation worker; the database lock lets one act at a time.
+	issuerRuntime, err := setupIssuer(runtimeContext, cfg.Issuer, store)
+	if err != nil {
+		slog.Error("configure the OIDC issuer", "error", err)
+		return 1
+	}
+	issuerRuntime.StartRotation(runtimeContext)
 	// Losing the root lock means another process could write the same root.
 	rootLost := make(chan error, 1)
 	identityGuard.Watch(runtimeContext, 15*time.Second, func(err error) { rootLost <- err })
@@ -500,6 +507,7 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 			},
 			Metrics:  metrics,
 			Upstream: app.UpstreamClient{OCIBearerCache: app.NewOCIBearerTokenCache()},
+			Issuer:   issuerRuntime,
 		}
 		if cfg.HelmPreviewEnabled {
 			gatewayOptions.HelmPreviewEnabled = true

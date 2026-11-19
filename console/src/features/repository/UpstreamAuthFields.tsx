@@ -41,7 +41,11 @@ export function UpstreamAuthFields({
       <Radio.Group
         className="mt-3 flex flex-col gap-2"
         value={upstreamScheme}
-        onChange={(e) => setUpstreamScheme(e.target.value)}
+        onChange={(e) =>
+          setUpstreamScheme(
+            e.target.value as "none" | "basic" | "bearer" | "entra-workload",
+          )
+        }
       >
         <Radio value="none">
           <span className="text-sm text-fg">{t("repository.anonymous")}</span>
@@ -64,7 +68,7 @@ export function UpstreamAuthFields({
           </span>
         </Radio>
       </Radio.Group>
-      {upstreamScheme !== "none" && (
+      {upstreamScheme !== "none" && upstreamScheme !== "entra-workload" && (
         <Space
           orientation="vertical"
           size="middle"

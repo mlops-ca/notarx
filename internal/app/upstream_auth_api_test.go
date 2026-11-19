@@ -252,3 +252,86 @@ func TestRepositoryUpstreamAuthPurposeIsBound(t *testing.T) {
 		t.Fatalf("own-purpose ciphertext must open: value=%q err=%v", opened, err)
 	}
 }
+
+const entraAuthJSON = `{"scheme":"entra-workload","tenantId":"contoso.onmicrosoft.com","clientId":"11111111-2222-3333-4444-555555555555","scope":"https://storage.example.test/.default"}`
+
+func rawProxyBody(name, upstreamAuth string) string {
+	return `{"name":"` + name + `","format":"raw","type":"proxy","endpoint":"https://acct.blob.example.test/files","allowedHosts":["acct.blob.example.test"],"upstreamAuth":` + upstreamAuth + "}"
+}
+
+func TestRepositoryUpstreamAuthEntraWorkloadLifecycle(t *testing.T) {
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
+	repository.AllowEntraWorkload(true)
+	t.Cleanup(func() { repository.AllowEntraWorkload(false) })
+	store := repository.NewMemoryStore()
+	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
+	send := func(method, path, body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, path, strings.NewReader(body))
+		if method == http.MethodPost {
+			r.Header.Set("Idempotency-Key", uuid.NewString())
+		} else {
+			r.Header.Set("If-Match", "1")
+		}
+		authorize(r, "admin-secret")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, r)
+		return rec
+	}
+	created := send(http.MethodPost, "/api/v2/repositories", rawProxyBody("azure-blobs", entraAuthJSON))
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create=%d body=%s", created.Code, created.Body.String())
+	}
+	var response repository.HostedRepository
+	if err := json.Unmarshal(created.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if auth := response.UpstreamAuth; auth == nil || auth.Scheme != repository.UpstreamAuthSchemeEntraWorkload || auth.TenantID != "contoso.onmicrosoft.com" ||
+		auth.ClientID != "11111111-2222-3333-4444-555555555555" || !auth.CredentialsConfigured || auth.Secret != "" {
+		t.Fatalf("response upstreamAuth=%+v", response.UpstreamAuth)
+	}
+	persisted, _ := store.GetHostedRepository(context.Background(), response.ID)
+	if persisted.UpstreamAuth.Secret != "" {
+		t.Fatal("an entra-workload credential stores no secret")
+	}
+	// Changing the endpoint must repeat upstreamAuth explicitly: there is no secret to resubmit.
+	moved := `{"endpoint":"https://other.blob.example.test/files","allowedHosts":["other.blob.example.test"]}`
+	if rec := send(http.MethodPatch, "/api/v2/repositories/"+response.ID, moved); rec.Code != http.StatusBadRequest {
+		t.Fatalf("moving the token to a new destination silently: %d %s", rec.Code, rec.Body.String())
+	}
+	movedWithAuth := `{"endpoint":"https://other.blob.example.test/files","allowedHosts":["other.blob.example.test"],"upstreamAuth":` + entraAuthJSON + "}"
+	if rec := send(http.MethodPatch, "/api/v2/repositories/"+response.ID, movedWithAuth); rec.Code != http.StatusOK {
+		t.Fatalf("explicit rebind: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRepositoryUpstreamAuthEntraWorkloadAdmission(t *testing.T) {
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
+	store := repository.NewMemoryStore()
+	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
+	post := func(body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(http.MethodPost, "/api/v2/repositories", strings.NewReader(body))
+		r.Header.Set("Idempotency-Key", uuid.NewString())
+		authorize(r, "admin-secret")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, r)
+		return rec
+	}
+	if rec := post(rawProxyBody("a", entraAuthJSON)); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "NOTARX_ISSUER_ENABLED") {
+		t.Fatalf("the scheme needs the issuer: %d %s", rec.Code, rec.Body.String())
+	}
+	repository.AllowEntraWorkload(true)
+	t.Cleanup(func() { repository.AllowEntraWorkload(false) })
+	for name, body := range map[string]string{
+		"secret":                 rawProxyBody("b", `{"scheme":"entra-workload","secret":"s","tenantId":"t","clientId":"11111111-2222-3333-4444-555555555555","scope":"x"}`),
+		"missing tenant":         rawProxyBody("c", `{"scheme":"entra-workload","clientId":"11111111-2222-3333-4444-555555555555","scope":"x"}`),
+		"entra fields on bearer": rawProxyBody("d", `{"scheme":"bearer","secret":"s","tenantId":"t"}`),
+		"conan":                  `{"name":"conan-azure","format":"conan","type":"proxy","endpoint":"https://conan.example.com","allowedHosts":["conan.example.com"],"upstreamAuth":` + entraAuthJSON + "}",
+	} {
+		if rec := post(body); rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: %d %s", name, rec.Code, rec.Body.String())
+		}
+	}
+	if rec := post(rawProxyBody("ok", entraAuthJSON)); rec.Code != http.StatusCreated {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+}

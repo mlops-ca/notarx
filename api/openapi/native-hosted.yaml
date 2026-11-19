@@ -315,6 +315,10 @@ paths:
     "$ref": "./protocols/maven.yaml#/repository_maven_repository_coordinates_coordinate_commit"
   "/go/{repository}/{modulePath}":
     "$ref": "./protocols/go.yaml#/go_repository_modulePath"
+  "/.well-known/openid-configuration":
+    "$ref": "./protocols/oidc-issuer.yaml#/openid_configuration"
+  "/.well-known/jwks.json":
+    "$ref": "./protocols/oidc-issuer.yaml#/jwks"
   "/cargo/{repository}/{path}":
     "$ref": "./protocols/cargo.yaml#/cargo_repository_path"
   "/npm/{repository}/-/package/{package}/dist-tags":

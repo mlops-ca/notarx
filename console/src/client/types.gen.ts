@@ -3021,15 +3021,35 @@ export type EgressProxy = {
  */
 export type UpstreamAuth = {
   /**
-   * none removes any stored credential and reads the upstream anonymously; basic authenticates with an HTTP Basic credential (Conan exchanges it for a source token); bearer sends `Authorization - Bearer <secret>`.
+   * none removes any stored credential and reads the upstream anonymously; basic authenticates with an HTTP Basic credential (Conan exchanges it for a source token); bearer sends `Authorization - Bearer <secret>`; entra-workload exchanges a short-lived assertion that notarx signs itself for a Microsoft Entra access token (ADR 0020), needs no secret, is accepted only while NOTARX_ISSUER_ENABLED is true and is not available for Conan.
    */
-  scheme: "none" | "basic" | "bearer";
+  scheme: "none" | "basic" | "bearer" | "entra-workload";
   /**
    * basic only. Upstream account name. Rejected for bearer.
    */
   username?: string;
   /**
-   * True when an encrypted upstream credential is stored.
+   * entra-workload only. Entra tenant GUID or verified domain.
+   */
+  tenantId?: string;
+  /**
+   * entra-workload only. Application (client) id of the app registration that trusts the notarx issuer.
+   */
+  clientId?: string;
+  /**
+   * entra-workload only. Single Entra scope requested for the access token, for example `https://storage.azure.com/.default`. Use `https://management.azure.com/.default` for Azure Container Registry.
+   */
+  scope?: string;
+  /**
+   * entra-workload only. Exact `sub` claim of the assertion, matching the federated credential. Defaults to the instance principal `notarx:instance:<deployment-id>`.
+   */
+  subject?: string;
+  /**
+   * entra-workload only. `acr` adds the Azure Container Registry exchange of the Entra token for a registry access token.
+   */
+  registryKind?: "acr";
+  /**
+   * True when an encrypted upstream credential is stored, or when an entra-workload credential is configured.
    */
   readonly credentialsConfigured?: boolean;
 };
@@ -3910,9 +3930,9 @@ export type EgressProxyWritable = {
  */
 export type UpstreamAuthWritable = {
   /**
-   * none removes any stored credential and reads the upstream anonymously; basic authenticates with an HTTP Basic credential (Conan exchanges it for a source token); bearer sends `Authorization - Bearer <secret>`.
+   * none removes any stored credential and reads the upstream anonymously; basic authenticates with an HTTP Basic credential (Conan exchanges it for a source token); bearer sends `Authorization - Bearer <secret>`; entra-workload exchanges a short-lived assertion that notarx signs itself for a Microsoft Entra access token (ADR 0020), needs no secret, is accepted only while NOTARX_ISSUER_ENABLED is true and is not available for Conan.
    */
-  scheme: "none" | "basic" | "bearer";
+  scheme: "none" | "basic" | "bearer" | "entra-workload";
   /**
    * basic only. Upstream account name. Rejected for bearer.
    */
@@ -3921,6 +3941,26 @@ export type UpstreamAuthWritable = {
    * Upstream password or token. Write-only; stored encrypted. Omit on update to keep the stored secret only while its scheme and upstream destination binding are unchanged. Both schemes require a secret, so clear a stored credential by setting scheme to none rather than sending an empty secret.
    */
   secret?: string;
+  /**
+   * entra-workload only. Entra tenant GUID or verified domain.
+   */
+  tenantId?: string;
+  /**
+   * entra-workload only. Application (client) id of the app registration that trusts the notarx issuer.
+   */
+  clientId?: string;
+  /**
+   * entra-workload only. Single Entra scope requested for the access token, for example `https://storage.azure.com/.default`. Use `https://management.azure.com/.default` for Azure Container Registry.
+   */
+  scope?: string;
+  /**
+   * entra-workload only. Exact `sub` claim of the assertion, matching the federated credential. Defaults to the instance principal `notarx:instance:<deployment-id>`.
+   */
+  subject?: string;
+  /**
+   * entra-workload only. `acr` adds the Azure Container Registry exchange of the Entra token for a registry access token.
+   */
+  registryKind?: "acr";
 };
 
 /**
