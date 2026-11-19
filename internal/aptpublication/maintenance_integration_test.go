@@ -39,19 +39,24 @@ func (s *failOnceDeleteStore) Delete(ctx context.Context, key string) error {
 }
 
 // isolateReclaimQueue cancels every pending or retrying APT reclaim job that does not belong to the test
-// repository. The lifecycle queue is shared by every test of the database, and Schedule also expires and
-// enqueues the sessions of other tests (the expiry horizon is an hour ahead), so a claim of one job could
-// otherwise take a foreign job, or miss the test's own when a foreign retrying job falls due mid-test.
-func isolateReclaimQueue(ctx context.Context, t *testing.T, databaseURL, repositoryID string) {
+// repository, with the fields CancelLifecycleJob sets, and requires the test's own job to be queued. The
+// lifecycle queue is shared by every test of the database (the integration lane runs packages one at a time,
+// -p 1), and Schedule also expires and enqueues the sessions of other tests because its clock is an hour
+// ahead. The claim orders by next_attempt_at alone, so without this a limit-1 claim could take a foreign job,
+// or miss the test's own when a foreign retrying job fell due mid-test.
+func isolateReclaimQueue(ctx context.Context, t *testing.T, db *sql.DB, repositoryID string) {
 	t.Helper()
-	db, err := sql.Open("pgx", databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = db.Close() }()
-	if _, err = db.ExecContext(ctx, `UPDATE lifecycle_jobs SET state='cancelled',completed_at=now()
+	if _, err := db.ExecContext(ctx, `UPDATE lifecycle_jobs SET state='cancelled',completed_at=now(),next_attempt_at=NULL
 		WHERE kind='reclaim' AND payload->>'format'='apt' AND state IN ('pending','retrying') AND repository_id<>$1::uuid`, repositoryID); err != nil {
 		t.Fatal(err)
+	}
+	var own int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM lifecycle_jobs
+		WHERE kind='reclaim' AND state IN ('pending','retrying') AND repository_id=$1::uuid`, repositoryID).Scan(&own); err != nil {
+		t.Fatal(err)
+	}
+	if own == 0 {
+		t.Fatal("Schedule did not enqueue the test's reclaim job: its batch limit was spent on other sessions")
 	}
 }
 
@@ -80,6 +85,11 @@ func TestPostgresRustFSAPTReclaimSerializesWithPublicationAndRetriesDelete(t *te
 	if err = objects.EnsureBucket(ctx); err != nil {
 		t.Fatal(err)
 	}
+	db, err := sql.Open("pgx", databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
 	repo, err := storeA.CreateHostedRepository(ctx, repository.HostedRepository{
 		ID: uuid.NewString(), Name: "apt-reclaim-" + uuid.NewString(), Format: repository.FormatAPT, Type: repository.RepositoryTypeHosted,
 	})
@@ -110,7 +120,7 @@ func TestPostgresRustFSAPTReclaimSerializesWithPublicationAndRetriesDelete(t *te
 	if err = maintenanceA.Schedule(ctx); err != nil {
 		t.Fatal(err)
 	}
-	isolateReclaimQueue(ctx, t, databaseURL, repo.ID)
+	isolateReclaimQueue(ctx, t, db, repo.ID)
 
 	objectCtx, release, err := repository.LockObjectKeys(ctx, []string{objectKey}, storeA, repository.FormatAPT, storeA.LockAPTObject)
 	if err != nil {
@@ -187,7 +197,7 @@ func TestPostgresRustFSAPTReclaimSerializesWithPublicationAndRetriesDelete(t *te
 	if err = maintenanceA.Schedule(ctx); err != nil {
 		t.Fatal(err)
 	}
-	isolateReclaimQueue(ctx, t, databaseURL, repo.ID)
+	isolateReclaimQueue(ctx, t, db, repo.ID)
 	failingObjects := &failOnceDeleteStore{Store: objects, remaining: 1}
 	maintenanceB := Maintenance{Store: storeB, Objects: failingObjects}
 	if err = maintenanceB.RunReclaimJobs(ctx, 1); err == nil {
