@@ -104,6 +104,12 @@ func (s *PostgresStore) CreateHostedRepositoryIdempotently(ctx context.Context, 
 // hostedRepositoryColumns is the canonical projection for hosted_repositories
 // reads. allowed_hosts is projected through array_to_json so it scans into
 // []byte and decodes into []string without a pq dependency.
+// The hot hosted-repository reads, named for the plan-regression registry.
+const (
+	getHostedRepositoryByNameQuery = `SELECT ` + hostedRepositoryColumns + ` FROM hosted_repositories WHERE name=$1`
+	listHostedRepositoriesQuery    = `SELECT ` + hostedRepositoryColumns + ` FROM hosted_repositories WHERE ($1 = '' OR id > NULLIF($1, '')::uuid) ORDER BY id LIMIT $2`
+)
+
 const getHostedRepositoryQuery = `SELECT ` + hostedRepositoryColumns + ` FROM hosted_repositories WHERE id=$1::uuid`
 
 const hostedRepositoryColumns = `id::text, name, format, repo_type, endpoint, array_to_json(allowed_hosts), visibility, maven_strict_publication, state, version::text, created_at, egress_proxy, upstream_auth, oci_bearer`
@@ -197,7 +203,7 @@ func (s *PostgresStore) ListHostedRepositories(ctx context.Context, limit int, a
 			return nil, "", ErrNotFound
 		}
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT `+hostedRepositoryColumns+` FROM hosted_repositories WHERE ($1 = '' OR id > NULLIF($1, '')::uuid) ORDER BY id LIMIT $2`, after, limit+1)
+	rows, err := s.db.QueryContext(ctx, listHostedRepositoriesQuery, after, limit+1)
 	if err != nil {
 		return nil, "", err
 	}
@@ -223,7 +229,7 @@ func (s *PostgresStore) ListHostedRepositories(ctx context.Context, limit int, a
 
 func (s *PostgresStore) GetHostedRepositoryByName(ctx context.Context, name string) (HostedRepository, error) {
 	var repo HostedRepository
-	err := scanHostedRepository(s.db.QueryRowContext(ctx, `SELECT `+hostedRepositoryColumns+` FROM hosted_repositories WHERE name=$1`, name), &repo)
+	err := scanHostedRepository(s.db.QueryRowContext(ctx, getHostedRepositoryByNameQuery, name), &repo)
 	if errors.Is(err, sql.ErrNoRows) {
 		return HostedRepository{}, ErrNotFound
 	}
