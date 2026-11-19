@@ -80,6 +80,7 @@ func (r backgroundRuntime) startSchedulers(ctx context.Context, cfg config.Confi
 	}
 	app.QuotaAlertEvaluator{Store: r.store, Mail: repository.QuotaAlertMailConfig{Enabled: cfg.Email.Enabled, From: cfg.Email.From, ConsoleOrigin: cfg.Email.ConsoleOrigin}}.Start(ctx, 15*time.Second)
 	app.ScheduledTaskScheduler{Store: r.store}.Start(ctx, time.Minute)
+	app.LifecycleJobRecovery{Store: r.store, Replications: r.store}.Start(ctx, app.LifecycleLeaseRecoveryInterval)
 	app.UserSessionJanitor{Store: r.store}.Start(ctx, time.Hour)
 	r.taskQueue.StartCacheScheduler(ctx, 5*time.Minute)
 	app.NativeMavenMaintenance{Store: r.store, Objects: r.objects, Metrics: r.metrics}.StartScheduler(ctx, time.Hour)
@@ -100,9 +101,6 @@ func (r backgroundRuntime) startSchedulers(ctx context.Context, cfg config.Confi
 func (r backgroundRuntime) startWorkers(ctx context.Context, cfg config.Config, retention app.NativeRepositoryRetention) {
 	if r.migration != nil && cfg.WorkerKindEnabled("migration") {
 		r.migration.StartWorker(ctx, 5*time.Second, migrationWorkerFormats(cfg))
-	}
-	if cfg.WorkerKindEnabled("recovery") {
-		app.LifecycleJobRecovery{Store: r.store}.Start(ctx, time.Minute)
 	}
 	if cfg.WorkerKindEnabled("deletion") {
 		app.RepositoryDeletionWorker{Store: r.store}.Start(ctx, time.Minute)

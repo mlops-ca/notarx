@@ -174,7 +174,7 @@ func (m NativePyPIMaintenance) StartWorker(ctx context.Context, interval time.Du
 	}
 	go func() {
 		_ = m.RunReclaimJobs(ctx, 200)
-		wake := notificationWake(ctx, m.Store, "notarx_lifecycle_jobs")
+		wake := notificationWake(ctx, m.Store, repository.LifecycleJobChannel(repository.LifecycleJobReclaim))
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {

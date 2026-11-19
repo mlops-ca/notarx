@@ -9,11 +9,19 @@ import (
 	"github.com/mlops-ca/notarx/internal/database"
 )
 
-var postgresNotificationChannels = []string{
-	"notarx_audit_cleanup",
-	"notarx_lifecycle_jobs",
-	"notarx_replication_plans",
-	"notarx_repository_deletions",
+var postgresNotificationChannels = buildPostgresNotificationChannels()
+
+func buildPostgresNotificationChannels() []string {
+	channels := []string{
+		"notarx_audit_cleanup",
+		"notarx_replication_plans",
+		"notarx_repository_deletions",
+		WebhookDeliveryChannel,
+	}
+	for _, kind := range LifecycleJobKinds() {
+		channels = append(channels, LifecycleJobChannel(kind))
+	}
+	return channels
 }
 
 type postgresNotifier struct {

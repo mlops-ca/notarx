@@ -27,7 +27,11 @@ func (o BackgroundOperationQueueObserver) Start(ctx context.Context, interval ti
 	}
 	go func() {
 		_ = o.Run(ctx)
-		lifecycleWake := notificationWake(ctx, o.Store, "notarx_lifecycle_jobs")
+		lifecycleWakes := make([]<-chan struct{}, 0, len(repository.LifecycleJobKinds()))
+		for _, kind := range repository.LifecycleJobKinds() {
+			lifecycleWakes = append(lifecycleWakes, notificationWake(ctx, o.Store, repository.LifecycleJobChannel(kind)))
+		}
+		lifecycleWake := mergeWakes(ctx, lifecycleWakes)
 		replicationWake := notificationWake(ctx, o.Store, "notarx_replication_plans")
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()

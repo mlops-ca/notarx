@@ -227,7 +227,7 @@ func (m NativeGoPromotion) Start(ctx context.Context, interval time.Duration) {
 	}
 	go func() {
 		_ = m.RunJobs(ctx, 100)
-		wake := notificationWake(ctx, m.Store, "notarx_lifecycle_jobs")
+		wake := notificationWake(ctx, m.Store, repository.LifecycleJobChannel(repository.LifecycleJobPromotion))
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {

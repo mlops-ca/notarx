@@ -232,7 +232,7 @@ func (m NativeMaintenance) StartWorker(ctx context.Context, interval time.Durati
 	}
 	go func() {
 		_ = m.RunReclaimJobs(ctx, 100)
-		wake := notificationWake(ctx, m.Store, "notarx_lifecycle_jobs")
+		wake := notificationWake(ctx, m.Store, repository.LifecycleJobChannel(repository.LifecycleJobReclaim))
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
