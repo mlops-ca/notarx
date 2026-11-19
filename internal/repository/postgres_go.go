@@ -189,9 +189,7 @@ func (s *PostgresStore) ListGoModules(ctx context.Context, repositoryID, prefix 
 
 func (s *PostgresStore) GetGoModuleVersion(ctx context.Context, repositoryID, modulePath, version string) (GoModuleVersion, error) {
 	var item GoModuleVersion
-	err := scanGoModuleVersion(s.db.QueryRowContext(ctx, `SELECT `+prefixedGoModuleVersionColumns("v")+` FROM native_go_versions v
-		WHERE v.repository_id=$1::uuid AND v.module_path=$2 AND v.version=$3
-		  AND NOT EXISTS (SELECT 1 FROM artifact_tombstones t WHERE t.repository_id=v.repository_id AND t.format='go' AND t.coordinate=v.module_path || '@' || v.version)`, repositoryID, modulePath, version), &item)
+	err := scanGoModuleVersion(s.db.QueryRowContext(ctx, getGoModuleVersionQuery, repositoryID, modulePath, version), &item)
 	if errors.Is(err, sql.ErrNoRows) {
 		return GoModuleVersion{}, ErrNotFound
 	}
@@ -627,3 +625,9 @@ func nullableGoTime(value time.Time) any {
 	}
 	return value
 }
+
+// getGoModuleVersionQuery reads one module version unless it is tombstoned; the hot-query
+// registry plans it, tombstone lookup included.
+var getGoModuleVersionQuery = `SELECT ` + prefixedGoModuleVersionColumns("v") + ` FROM native_go_versions v
+		WHERE v.repository_id=$1::uuid AND v.module_path=$2 AND v.version=$3
+		  AND NOT EXISTS (SELECT 1 FROM artifact_tombstones t WHERE t.repository_id=v.repository_id AND t.format='go' AND t.coordinate=v.module_path || '@' || v.version)`

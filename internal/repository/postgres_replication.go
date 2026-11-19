@@ -103,13 +103,7 @@ func (s *PostgresStore) claimReplicationPlans(ctx context.Context, format Format
 	if limit <= 0 || limit > 100 {
 		limit = 100
 	}
-	rows, err := s.db.QueryContext(ctx, `
-		WITH candidates AS (
-			SELECT id FROM replication_plans WHERE ((state='pending' AND (next_attempt_at IS NULL OR next_attempt_at <= now())) OR (state='failed' AND next_attempt_at IS NOT NULL AND next_attempt_at <= now())) AND attempts < CASE WHEN max_attempts < 1 THEN 3 ELSE max_attempts END AND ($1='' OR format=$1) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT $2
-		)
-		UPDATE replication_plans p SET state='running',started_at=now(),completed_at=NULL,last_error='',next_attempt_at=NULL,lease_expires_at=now()+interval '10 minutes',lease_token=md5(random()::text || clock_timestamp()::text || p.id::text),attempts=attempts+1,max_attempts=CASE WHEN max_attempts < 1 THEN 3 ELSE max_attempts END
-		FROM candidates WHERE p.id=candidates.id
-		RETURNING p.id::text,p.source_repository_id::text,p.target_repository_id::text,p.format,p.coordinate,p.digest,p.idempotency_key,p.state,p.created_at,p.started_at,p.completed_at,p.last_error,p.next_attempt_at,p.lease_expires_at,p.lease_token,p.attempts,p.max_attempts,p.apt_target_suite`, format, limit)
+	rows, err := s.db.QueryContext(ctx, claimReplicationPlansQuery, format, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -374,3 +368,12 @@ func equivalentReplicationCheckpoints(existing, requested []ReplicationCheckpoin
 	}
 	return true
 }
+
+// claimReplicationPlansQuery takes due replication plans (format filter, limit); the hot-query registry plans it.
+const claimReplicationPlansQuery = `
+		WITH candidates AS (
+			SELECT id FROM replication_plans WHERE ((state='pending' AND (next_attempt_at IS NULL OR next_attempt_at <= now())) OR (state='failed' AND next_attempt_at IS NOT NULL AND next_attempt_at <= now())) AND attempts < CASE WHEN max_attempts < 1 THEN 3 ELSE max_attempts END AND ($1='' OR format=$1) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT $2
+		)
+		UPDATE replication_plans p SET state='running',started_at=now(),completed_at=NULL,last_error='',next_attempt_at=NULL,lease_expires_at=now()+interval '10 minutes',lease_token=md5(random()::text || clock_timestamp()::text || p.id::text),attempts=attempts+1,max_attempts=CASE WHEN max_attempts < 1 THEN 3 ELSE max_attempts END
+		FROM candidates WHERE p.id=candidates.id
+		RETURNING p.id::text,p.source_repository_id::text,p.target_repository_id::text,p.format,p.coordinate,p.digest,p.idempotency_key,p.state,p.created_at,p.started_at,p.completed_at,p.last_error,p.next_attempt_at,p.lease_expires_at,p.lease_token,p.attempts,p.max_attempts,p.apt_target_suite`

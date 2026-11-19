@@ -270,7 +270,7 @@ func (s *PostgresStore) CachePyPIProxyFile(ctx context.Context, incoming PyPIFil
 
 func (s *PostgresStore) getPyPIFileAnyState(ctx context.Context, repositoryID, filename string) (PyPIFile, error) {
 	var file PyPIFile
-	err := scanPyPIFile(s.db.QueryRowContext(ctx, `SELECT `+pypiFileColumns+` FROM native_pypi_files WHERE repository_id=$1::uuid AND filename=$2`, repositoryID, filename), &file)
+	err := scanPyPIFile(s.db.QueryRowContext(ctx, getPyPIFileQuery, repositoryID, filename), &file)
 	if errors.Is(err, sql.ErrNoRows) {
 		return PyPIFile{}, ErrNotFound
 	}
@@ -597,3 +597,6 @@ func (s *PostgresStore) MarkPyPIObjectCollected(ctx context.Context, objectKey s
 	}
 	return nil
 }
+
+// getPyPIFileQuery reads one distribution file by name in any state.
+const getPyPIFileQuery = `SELECT ` + pypiFileColumns + ` FROM native_pypi_files WHERE repository_id=$1::uuid AND filename=$2`

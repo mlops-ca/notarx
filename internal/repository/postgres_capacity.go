@@ -49,7 +49,7 @@ func (s *PostgresStore) GetRepositoryCapacity(ctx context.Context, id string) (R
 	if capacity.Covered(string(current.Format)) {
 		// A covered format reads its counter, like the overview and the quota alerts do; a
 		// repository that never reserved has no row and no usage.
-		err = s.db.QueryRowContext(ctx, `SELECT bytes,objects FROM repository_usage_counters WHERE repository_id=$1::uuid`, id).Scan(&current.UsedBytes, &current.ObjectCount)
+		err = s.db.QueryRowContext(ctx, getRepositoryUsageCountersQuery, id).Scan(&current.UsedBytes, &current.ObjectCount)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return RepositoryCapacity{}, err
 		}
@@ -158,3 +158,6 @@ func liveRepositoryBytes(ctx context.Context, q sqlRunner, repositoryID string) 
 	}
 	return bytes, nil
 }
+
+// getRepositoryUsageCountersQuery reads the quota counter row of a covered repository (ADR 0023 section 3).
+const getRepositoryUsageCountersQuery = `SELECT bytes,objects FROM repository_usage_counters WHERE repository_id=$1::uuid`

@@ -14,7 +14,7 @@ func (s *PostgresStore) LockAPTObject(ctx context.Context, objectKey string) (fu
 
 func (s *PostgresStore) GetAPTAsset(ctx context.Context, repositoryID, path string) (APTAsset, error) {
 	var asset APTAsset
-	err := scanAPTAsset(s.db.QueryRowContext(ctx, `SELECT `+aptAssetColumns+` FROM native_apt_assets WHERE repository_id=$1::uuid AND path=$2`, repositoryID, path), &asset)
+	err := scanAPTAsset(s.db.QueryRowContext(ctx, getAPTAssetQuery, repositoryID, path), &asset)
 	if errors.Is(err, sql.ErrNoRows) {
 		return APTAsset{}, ErrNotFound
 	}
@@ -107,3 +107,6 @@ const aptAssetColumns = `repository_id::text,path,digest,object_key,size,content
 func scanAPTAsset(row interface{ Scan(...any) error }, asset *APTAsset) error {
 	return row.Scan(&asset.RepositoryID, &asset.Path, &asset.Digest, &asset.ObjectKey, &asset.Size, &asset.ContentType, &asset.SourceURL, &asset.UpstreamETag, &asset.UpstreamModified, &asset.CachedAt, &asset.CreatedAt, &asset.SourceVersion)
 }
+
+// getAPTAssetQuery reads one pool or metadata file of a hosted APT repository.
+const getAPTAssetQuery = `SELECT ` + aptAssetColumns + ` FROM native_apt_assets WHERE repository_id=$1::uuid AND path=$2`

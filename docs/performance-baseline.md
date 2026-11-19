@@ -330,5 +330,9 @@ registry `internal/repository/hotqueries.go`, that the plan uses the named index
 (where one is registered) and contains no `Seq Scan` on the listed tables. Sequential
 scans are discouraged while planning, so a failure means no index can serve the
 statement at all. `make integration-test` runs the same test at a tenth of the size.
-To register a query, add an entry to the registry; the unit test rejects duplicates,
+The registry holds the top 30 statements (hosted repositories, sessions, API keys, grants,
+quota counters, the lifecycle, webhook and replication claims, usage, and the hot reads of
+the npm, Maven, OCI, PyPI, raw, Go, Conan and APT stores); a unit test pins the count. Where
+several indexes are equivalent for the seeded data an entry lists every one the planner may
+legitimately pick, so only a real regression fails. To register a query, add an entry to the registry; the unit test rejects duplicates,
 `OFFSET`, `COUNT(*)` and a placeholder count that does not match the arguments.

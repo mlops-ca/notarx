@@ -658,7 +658,7 @@ func (s *PostgresStore) ListReclaimableNPMObjects(ctx context.Context, before ti
 
 func (s *PostgresStore) NPMObjectHasVisibleReference(ctx context.Context, objectKey string) (bool, error) {
 	var referenced bool
-	err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM native_npm_versions WHERE object_key=$1 AND state='visible')`, objectKey).Scan(&referenced)
+	err := s.db.QueryRowContext(ctx, npmObjectHasVisibleReferenceQuery, objectKey).Scan(&referenced)
 	return referenced, err
 }
 
@@ -753,3 +753,6 @@ func scanNPMVersion(row interface{ Scan(...any) error }, version *NPMVersion) er
 	}
 	return err
 }
+
+// npmObjectHasVisibleReferenceQuery is the reference check the object collector runs; native_npm_versions_object_key_idx serves it.
+const npmObjectHasVisibleReferenceQuery = `SELECT EXISTS(SELECT 1 FROM native_npm_versions WHERE object_key=$1 AND state='visible')`

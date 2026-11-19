@@ -376,10 +376,10 @@ func (s *PostgresStore) PublishReplicatedOCIManifest(ctx context.Context, public
 }
 func (s *PostgresStore) GetOCIManifest(ctx context.Context, repositoryID, name, reference string) (OCIManifest, error) {
 	var v OCIManifest
-	query := `SELECT repository_id::text,name,digest,object_key,media_type,size,COALESCE(subject_digest,''),artifact_type FROM native_oci_manifests WHERE repository_id=$1::uuid AND name=$2 AND digest=$3`
+	query := getOCIManifestByDigestQuery
 	args := []any{repositoryID, name, reference}
 	if !strings.HasPrefix(reference, "sha256:") {
-		query = `SELECT m.repository_id::text,m.name,m.digest,m.object_key,m.media_type,m.size,COALESCE(m.subject_digest,''),m.artifact_type FROM native_oci_tags t JOIN native_oci_manifests m ON (m.repository_id=t.repository_id AND m.name=t.name AND m.digest=t.digest) WHERE t.repository_id=$1::uuid AND t.name=$2 AND t.tag=$3`
+		query = getOCIManifestByTagQuery
 	}
 	err := s.db.QueryRowContext(ctx, query, args...).Scan(&v.RepositoryID, &v.Name, &v.Digest, &v.ObjectKey, &v.MediaType, &v.Size, &v.SubjectDigest, &v.ArtifactType)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -650,3 +650,10 @@ func (s *PostgresStore) ListArtifactTombstones(ctx context.Context, repositoryID
 	}
 	return items, rows.Err()
 }
+
+// The two statements of GetOCIManifest, planned by the hot-query registry: a pull by
+// digest and a pull by tag.
+const (
+	getOCIManifestByDigestQuery = `SELECT repository_id::text,name,digest,object_key,media_type,size,COALESCE(subject_digest,''),artifact_type FROM native_oci_manifests WHERE repository_id=$1::uuid AND name=$2 AND digest=$3`
+	getOCIManifestByTagQuery    = `SELECT m.repository_id::text,m.name,m.digest,m.object_key,m.media_type,m.size,COALESCE(m.subject_digest,''),m.artifact_type FROM native_oci_tags t JOIN native_oci_manifests m ON (m.repository_id=t.repository_id AND m.name=t.name AND m.digest=t.digest) WHERE t.repository_id=$1::uuid AND t.name=$2 AND t.tag=$3`
+)

@@ -110,7 +110,7 @@ func putConanRecipeRevisionTx(ctx context.Context, tx *sql.Tx, revision ConanRec
 	if err = usage.reserve(ctx, tx); err != nil {
 		return ConanRecipeRevision{}, err
 	}
-	if err = scanConanRecipeRevision(tx.QueryRowContext(ctx, `SELECT repository_id::text,reference,revision,digest,state,created_at FROM native_conan_recipe_revisions WHERE repository_id=$1::uuid AND reference=$2 AND revision=$3`, revision.RepositoryID, revision.Reference, revision.Revision), &revision); err != nil {
+	if err = scanConanRecipeRevision(tx.QueryRowContext(ctx, getConanRecipeRevisionQuery, revision.RepositoryID, revision.Reference, revision.Revision), &revision); err != nil {
 		return ConanRecipeRevision{}, err
 	}
 	return revision, nil
@@ -677,3 +677,6 @@ func scanConanPackageRevision(scanner interface{ Scan(...any) error }, item *Con
 func scanConanAsset(scanner interface{ Scan(...any) error }, asset *ConanAsset) error {
 	return scanner.Scan(&asset.RepositoryID, &asset.Reference, &asset.RecipeRevision, &asset.PackageID, &asset.PackageRevision, &asset.Path, &asset.ObjectKey, &asset.Digest, &asset.Size)
 }
+
+// getConanRecipeRevisionQuery reads one recipe revision.
+const getConanRecipeRevisionQuery = `SELECT repository_id::text,reference,revision,digest,state,created_at FROM native_conan_recipe_revisions WHERE repository_id=$1::uuid AND reference=$2 AND revision=$3`
