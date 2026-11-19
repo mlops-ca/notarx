@@ -5,6 +5,7 @@ package aptpublication
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"os"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -62,9 +64,15 @@ func TestPostgresRustFSArchiveRestoreAcrossInstancesAndFailedAttemptReclamation(
 		t.Fatal(err)
 	}
 
-	// Force a final-transaction quota failure after every object was written.
+	db, err := sql.Open("pgx", os.Getenv("TEST_DATABASE_URL"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	// Force a final-transaction quota failure after every object was written. The quota API refuses a
+	// quota below the bytes the restore reserved at begin, so the race is simulated on the counter row.
 	hook := restoreCommitHookStore{managerStore: a, beforeCommit: func() {
-		if _, e := b.ReplaceRepositoryCapacityQuota(ctx, repo.ID, 1); e != nil {
+		if _, e := db.ExecContext(ctx, `UPDATE repository_usage_counters SET quota_bytes=1 WHERE repository_id=$1::uuid`, repo.ID); e != nil {
 			t.Fatal(e)
 		}
 	}}
@@ -89,9 +97,10 @@ func TestPostgresRustFSArchiveRestoreAcrossInstancesAndFailedAttemptReclamation(
 		if _, e = b.GetVisibleAPTRepositorySnapshot(ctx, repo.ID, "stable"); !errors.Is(e, repository.ErrNotFound) {
 			t.Fatalf("partial visibility: %v", e)
 		}
-		capacity, e := b.GetRepositoryCapacity(ctx, repo.ID)
-		if e != nil || capacity.UsedBytes != 0 {
-			t.Fatalf("partial package metadata: %#v %v", capacity, e)
+		// The restore holds a reservation in the counter; no package metadata is committed yet.
+		var packages int
+		if e = db.QueryRowContext(ctx, `SELECT count(*) FROM native_apt_package_revisions WHERE repository_id=$1::uuid`, repo.ID).Scan(&packages); e != nil || packages != 0 {
+			t.Fatalf("partial package metadata: %d %v", packages, e)
 		}
 	}
 	if _, err = NewSnapshotArchiveImporter(a, recorder, trust).Import(ctx, repo.ID, receipt, bytes.NewReader(body), "restore-admin"); err == nil {

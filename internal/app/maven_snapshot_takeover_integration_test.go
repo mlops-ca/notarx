@@ -94,7 +94,7 @@ func TestPostgresSnapshotCompletionExpiresWhileWaitingForQuota(t *testing.T) {
 	if err = barrier.QueryRowContext(ctx, `SELECT pg_backend_pid()`).Scan(&pid); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = barrier.ExecContext(ctx, `SELECT repository_id FROM repository_capacity_quotas WHERE repository_id=$1 FOR UPDATE`, repo.ID); err != nil {
+	if _, err = barrier.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "maven-capacity:"+repo.ID); err != nil {
 		t.Fatal(err)
 	}
 	done := make(chan *httptest.ResponseRecorder, 1)
@@ -104,7 +104,7 @@ func TestPostgresSnapshotCompletionExpiresWhileWaitingForQuota(t *testing.T) {
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		var blocked bool
-		if err = db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND $2=ANY(pg_blocking_pids(pid)) AND query LIKE '%repository_capacity_quotas%')`, label, pid).Scan(&blocked); err != nil {
+		if err = db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND $2=ANY(pg_blocking_pids(pid)) AND query LIKE '%pg_advisory_xact_lock%')`, label, pid).Scan(&blocked); err != nil {
 			t.Fatal(err)
 		}
 		if blocked {
@@ -338,8 +338,8 @@ func TestPostgresSnapshotTakeoverSerializesWithSourceTombstone(t *testing.T) {
 	if err = tx.QueryRowContext(ctx, `SELECT pg_backend_pid()`).Scan(&pid); err != nil {
 		t.Fatal(err)
 	}
-	// Match the production tombstone's quota-before-artifact order.
-	if _, err = tx.ExecContext(ctx, `SELECT repository_id FROM repository_capacity_quotas WHERE repository_id=$1 FOR UPDATE`, repo.ID); err != nil {
+	// Match the production tombstone's capacity-lock-before-artifact order.
+	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "maven-capacity:"+repo.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = tx.ExecContext(ctx, `SELECT id FROM native_maven_artifacts WHERE id=$1 FOR UPDATE`, items[0].ID); err != nil {
@@ -356,7 +356,7 @@ func TestPostgresSnapshotTakeoverSerializesWithSourceTombstone(t *testing.T) {
 		default:
 		}
 		var blocked bool
-		if err = db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid)) AND (query LIKE '%native_maven_artifacts%' OR query LIKE '%repository_capacity_quotas%'))`, pid).Scan(&blocked); err != nil {
+		if err = db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid)) AND (query LIKE '%native_maven_artifacts%' OR query LIKE '%pg_advisory_xact_lock%'))`, pid).Scan(&blocked); err != nil {
 			t.Fatal(err)
 		}
 		if blocked {
