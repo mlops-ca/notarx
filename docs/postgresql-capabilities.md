@@ -49,7 +49,7 @@ seam, but every implementation is raw PostgreSQL SQL. Counts from the tree on
 | --- | --- |
 | Advisory-lock calls (`pg_advisory_*`, `pg_try_advisory_*`) | about 41 lines in 26 files, wrapped by `internal/repository/postgres_advisory_lock.go` and used by `internal/cache/coordinator.go` |
 | `FOR UPDATE SKIP LOCKED` work-queue claims | about 27 sites in 21 files |
-| `LISTEN` and `pg_notify` | listener in `internal/database/notification.go`, `pg_notify` in `internal/app/postgres_cache_task_queue.go`, notify triggers in the baseline and `migrations/000020_queue_claiming.sql` |
+| `LISTEN` and `pg_notify` | listener in `internal/database/notification.go`, `pg_notify` in `internal/app/postgres_cache_task_queue.go`, notify triggers in the baseline and `migrations/000021_queue_claiming.sql` |
 | `CREATE TRIGGER` statements | 23 in `migrations/000001_baseline.sql` |
 | `gin_trgm_ops` (`pg_trgm`) indexes | 13 in the baseline |
 | `ON CONFLICT` / `RETURNING` | about 113 / 146 |
