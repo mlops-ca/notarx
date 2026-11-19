@@ -42,13 +42,13 @@ var (
 
 type HostedRepositoryStore interface {
 	CreateHostedRepository(context.Context, HostedRepository) (HostedRepository, error)
-	CreateHostedRepositoryIdempotently(context.Context, HostedRepository, string, string, string) (HostedRepository, bool, error)
+	CreateHostedRepositoryIdempotently(context.Context, HostedRepository, string, string, string, ...AuditRecord) (HostedRepository, bool, error)
 	ListHostedRepositories(context.Context, int, string) ([]HostedRepository, string, error)
 	GetHostedRepository(context.Context, string) (HostedRepository, error)
 	GetHostedRepositoryByName(context.Context, string) (HostedRepository, error)
 	DisableHostedRepository(context.Context, string) (HostedRepository, error)
 	FinalizeHostedRepositoryDeletion(context.Context, string) (HostedRepository, error)
-	UpdateHostedRepository(context.Context, HostedRepository, string) (HostedRepository, error)
+	UpdateHostedRepository(context.Context, HostedRepository, string, ...AuditRecord) (HostedRepository, error)
 }
 
 type PublicAccessPolicyStore interface {
@@ -118,11 +118,11 @@ type UserSessionStore interface {
 }
 
 type HostedGroupStore interface {
-	CreateHostedGroupIdempotently(context.Context, HostedGroup, string, string, string) (HostedGroup, bool, error)
+	CreateHostedGroupIdempotently(context.Context, HostedGroup, string, string, string, ...AuditRecord) (HostedGroup, bool, error)
 	ListHostedGroups(context.Context, int, string) ([]HostedGroup, string, error)
 	GetHostedGroup(context.Context, string) (HostedGroup, error)
 	GetHostedGroupByName(context.Context, string) (HostedGroup, error)
-	ReplaceHostedGroup(context.Context, HostedGroup, string) (HostedGroup, error)
+	ReplaceHostedGroup(context.Context, HostedGroup, string, ...AuditRecord) (HostedGroup, error)
 	ReplaceHostedGroupMembers(context.Context, string, []GroupMember, string) (HostedGroup, error)
 	DeleteHostedGroup(context.Context, string) error
 }
@@ -177,7 +177,7 @@ type RepositoryQuarantineReadPolicyStore interface {
 
 type RepositoryCapacityStore interface {
 	GetRepositoryCapacity(context.Context, string) (RepositoryCapacity, error)
-	ReplaceRepositoryCapacityQuota(context.Context, string, int64) (RepositoryCapacity, error)
+	ReplaceRepositoryCapacityQuota(context.Context, string, int64, ...AuditRecord) (RepositoryCapacity, error)
 }
 
 type RepositoryCapacityRecordStore interface {

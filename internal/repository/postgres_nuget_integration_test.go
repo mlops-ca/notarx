@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/testsupport"
 )
 
 func newPostgresNuGetStore(t *testing.T) *PostgresStore {
@@ -31,7 +32,10 @@ func TestPostgresNuGetStoreContract(t *testing.T) {
 }
 
 func TestPostgresNuGetSourceStoreContract(t *testing.T) {
-	testNuGetSourceStoreContract(t, newPostgresNuGetStore(t))
+	store := newPostgresNuGetStore(t)
+	testNuGetSourceStoreContract(t, store, func(t *testing.T, repository, actor string) func() {
+		return testsupport.FailSecurityAudits(t, store.db, repository, actor)
+	})
 }
 
 func TestPostgresNuGetPaginationAndReopen(t *testing.T) {

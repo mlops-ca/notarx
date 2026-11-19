@@ -137,7 +137,7 @@ func (s *MemoryStore) GetNuGetGroupAuthority(ctx context.Context, groupID, id, v
 	return in, nil
 }
 
-func (s *MemoryStore) RevalidateNuGetGroupAuthority(ctx context.Context, groupVersion, priorVersion string, in NuGetGroupAuthority) (NuGetGroupAuthority, error) {
+func (s *MemoryStore) RevalidateNuGetGroupAuthority(ctx context.Context, groupVersion, priorVersion string, in NuGetGroupAuthority, audit ...AuditRecord) (NuGetGroupAuthority, error) {
 	if !validNuGetAuthority(in) || in.Digest == "" {
 		return NuGetGroupAuthority{}, ErrInvalidNuGetPublication
 	}
@@ -165,6 +165,9 @@ func (s *MemoryStore) RevalidateNuGetGroupAuthority(ctx context.Context, groupVe
 		return NuGetGroupAuthority{}, ErrVersionConflict
 	}
 	if err := s.nuGetAuthorityOwnerLocked(group, in); err != nil {
+		return NuGetGroupAuthority{}, err
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
 		return NuGetGroupAuthority{}, err
 	}
 	prior.RepositoryVersion = in.RepositoryVersion

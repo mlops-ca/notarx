@@ -158,7 +158,7 @@ func (s *MemoryStore) mavenAssetVisibleLocked(asset MavenAsset) bool {
 	return false
 }
 
-func (s *MemoryStore) ReplaceRepositoryCapacityQuota(ctx context.Context, id string, quota int64) (RepositoryCapacity, error) {
+func (s *MemoryStore) ReplaceRepositoryCapacityQuota(ctx context.Context, id string, quota int64, audit ...AuditRecord) (RepositoryCapacity, error) {
 	if quota < 0 {
 		return RepositoryCapacity{}, ErrDisabled
 	}
@@ -166,6 +166,10 @@ func (s *MemoryStore) ReplaceRepositoryCapacityQuota(ctx context.Context, id str
 	if _, ok := s.hostedRepositories[id]; !ok {
 		s.mu.Unlock()
 		return RepositoryCapacity{}, ErrNotFound
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		s.mu.Unlock()
+		return RepositoryCapacity{}, err
 	}
 	s.capacityQuotas[id] = quota
 	s.mu.Unlock()

@@ -110,7 +110,7 @@ func (s *PostgresStore) GetNuGetGroupAuthority(ctx context.Context, group, id, v
 	return scanNuGetAuthority(s.db.QueryRowContext(ctx, `SELECT `+nuGetAuthorityColumns+` FROM native_nuget_group_authorities WHERE group_id=$1::uuid AND package_id=$2 AND version=$3`, group, id, version))
 }
 
-func (s *PostgresStore) RevalidateNuGetGroupAuthority(ctx context.Context, groupVersion, priorVersion string, in NuGetGroupAuthority) (NuGetGroupAuthority, error) {
+func (s *PostgresStore) RevalidateNuGetGroupAuthority(ctx context.Context, groupVersion, priorVersion string, in NuGetGroupAuthority, audit ...AuditRecord) (NuGetGroupAuthority, error) {
 	if !validNuGetAuthority(in) || in.Digest == "" {
 		return NuGetGroupAuthority{}, ErrInvalidNuGetPublication
 	}
@@ -145,6 +145,9 @@ func (s *PostgresStore) RevalidateNuGetGroupAuthority(ctx context.Context, group
 	}
 	prior, err = scanNuGetAuthority(tx.QueryRowContext(ctx, `UPDATE native_nuget_group_authorities SET repository_version=$4 WHERE group_id=$1::uuid AND package_id=$2 AND version=$3 RETURNING `+nuGetAuthorityColumns, in.GroupID, in.PackageID, in.Version, in.RepositoryVersion))
 	if err != nil {
+		return NuGetGroupAuthority{}, err
+	}
+	if err = insertAudits(ctx, tx, audit); err != nil {
 		return NuGetGroupAuthority{}, err
 	}
 	return prior, tx.Commit()

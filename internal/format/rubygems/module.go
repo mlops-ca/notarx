@@ -24,7 +24,7 @@ import (
 type RepositoryStore interface {
 	GetHostedRepository(context.Context, string) (repository.HostedRepository, error)
 	GetHostedRepositoryByName(context.Context, string) (repository.HostedRepository, error)
-	CreateHostedRepositoryIdempotently(context.Context, repository.HostedRepository, string, string, string) (repository.HostedRepository, bool, error)
+	CreateHostedRepositoryIdempotently(context.Context, repository.HostedRepository, string, string, string, ...repository.AuditRecord) (repository.HostedRepository, bool, error)
 }
 type AnonymousPolicy interface {
 	GetPublicAccessPolicy(context.Context) (repository.PublicAccessPolicy, error)

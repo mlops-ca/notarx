@@ -40,7 +40,7 @@ type NuGetSourceStore interface {
 	PutNuGetSourceDocument(context.Context, NuGetSourceDocument) error
 	BindNuGetGroupAuthority(context.Context, string, NuGetGroupAuthority) (NuGetGroupAuthority, error)
 	GetNuGetGroupAuthority(context.Context, string, string, string) (NuGetGroupAuthority, error)
-	RevalidateNuGetGroupAuthority(context.Context, string, string, NuGetGroupAuthority) (NuGetGroupAuthority, error)
+	RevalidateNuGetGroupAuthority(context.Context, string, string, NuGetGroupAuthority, ...AuditRecord) (NuGetGroupAuthority, error)
 }
 
 func validNuGetDocument(in NuGetSourceDocument) bool {

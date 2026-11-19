@@ -91,7 +91,7 @@ func (s *PostgresStore) ListRepositoryCapacityRecords(ctx context.Context) ([]Re
 	return records, rows.Err()
 }
 
-func (s *PostgresStore) ReplaceRepositoryCapacityQuota(ctx context.Context, id string, quota int64) (RepositoryCapacity, error) {
+func (s *PostgresStore) ReplaceRepositoryCapacityQuota(ctx context.Context, id string, quota int64, audit ...AuditRecord) (RepositoryCapacity, error) {
 	if quota < 0 {
 		return RepositoryCapacity{}, ErrDisabled
 	}
@@ -114,6 +114,9 @@ func (s *PostgresStore) ReplaceRepositoryCapacityQuota(ctx context.Context, id s
 		return RepositoryCapacity{}, ErrNotFound
 	}
 	if err = capacity.SetQuota(ctx, tx, repositoryID, quota); err != nil {
+		return RepositoryCapacity{}, err
+	}
+	if err = insertAudits(ctx, tx, audit); err != nil {
 		return RepositoryCapacity{}, err
 	}
 	if err = tx.Commit(); err != nil {

@@ -26,7 +26,7 @@ func (s *MemoryStore) CreateHostedRepository(_ context.Context, repo HostedRepos
 	return cloneHostedRepositoryOCIBearer(repo), nil
 }
 
-func (s *MemoryStore) CreateHostedRepositoryIdempotently(_ context.Context, repo HostedRepository, actor, key, payload string) (HostedRepository, bool, error) {
+func (s *MemoryStore) CreateHostedRepositoryIdempotently(ctx context.Context, repo HostedRepository, actor, key, payload string, audit ...AuditRecord) (HostedRepository, bool, error) {
 	repo = normalizeHostedRepository(repo)
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -41,6 +41,9 @@ func (s *MemoryStore) CreateHostedRepositoryIdempotently(_ context.Context, repo
 		if existing.Name == repo.Name {
 			return HostedRepository{}, false, ErrNameExists
 		}
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return HostedRepository{}, false, err
 	}
 	repo.State, repo.Version, repo.CreatedAt = RepositoryActive, "1", time.Now().UTC()
 	repo.OCIBearer = cloneOCIBearer(repo.OCIBearer)
@@ -146,7 +149,7 @@ func (s *MemoryStore) FinalizeHostedRepositoryDeletion(_ context.Context, id str
 	return cloneHostedRepositoryOCIBearer(repo), nil
 }
 
-func (s *MemoryStore) UpdateHostedRepository(_ context.Context, repo HostedRepository, expectedVersion string) (HostedRepository, error) {
+func (s *MemoryStore) UpdateHostedRepository(ctx context.Context, repo HostedRepository, expectedVersion string, audit ...AuditRecord) (HostedRepository, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	current, ok := s.hostedRepositories[repo.ID]
@@ -155,6 +158,9 @@ func (s *MemoryStore) UpdateHostedRepository(_ context.Context, repo HostedRepos
 	}
 	if current.Version != expectedVersion || current.State != RepositoryActive {
 		return HostedRepository{}, ErrVersionConflict
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return HostedRepository{}, err
 	}
 	current.Endpoint = repo.Endpoint
 	current.AllowedHosts = append([]string(nil), repo.AllowedHosts...)
@@ -196,6 +202,10 @@ func cloneHostedGroup(group HostedGroup) HostedGroup {
 	return group
 }
 
+// NextHostedVersion is the version a repository or group carries after one more update, so a
+// handler can name it in the audit record it hands to the store with the update.
+func NextHostedVersion(version string) string { return nextHostedGroupVersion(version) }
+
 func nextHostedGroupVersion(version string) string {
 	current, err := strconv.ParseInt(version, 10, 64)
 	if err != nil || current < 1 {
@@ -204,7 +214,7 @@ func nextHostedGroupVersion(version string) string {
 	return strconv.FormatInt(current+1, 10)
 }
 
-func (s *MemoryStore) CreateHostedGroupIdempotently(_ context.Context, group HostedGroup, actor, key, payload string) (HostedGroup, bool, error) {
+func (s *MemoryStore) CreateHostedGroupIdempotently(ctx context.Context, group HostedGroup, actor, key, payload string, audit ...AuditRecord) (HostedGroup, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	recordKey := actor + "\x00/groups\x00" + key
@@ -223,6 +233,9 @@ func (s *MemoryStore) CreateHostedGroupIdempotently(_ context.Context, group Hos
 		if err := s.preflightCargoGroupMembersLocked(group.ID, group.Members); err != nil {
 			return HostedGroup{}, false, err
 		}
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return HostedGroup{}, false, err
 	}
 	group.Version = "1"
 	group.Visibility = NormalizeVisibility(group.Visibility)
@@ -288,7 +301,7 @@ func (s *MemoryStore) GetHostedGroupByName(_ context.Context, name string) (Host
 	return HostedGroup{}, ErrNotFound
 }
 
-func (s *MemoryStore) ReplaceHostedGroup(_ context.Context, group HostedGroup, expectedVersion string) (HostedGroup, error) {
+func (s *MemoryStore) ReplaceHostedGroup(ctx context.Context, group HostedGroup, expectedVersion string, audit ...AuditRecord) (HostedGroup, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	stored, ok := s.hostedGroups[group.ID]
@@ -302,6 +315,9 @@ func (s *MemoryStore) ReplaceHostedGroup(_ context.Context, group HostedGroup, e
 		if err := s.preflightCargoGroupMembersLocked(group.ID, group.Members); err != nil {
 			return HostedGroup{}, err
 		}
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return HostedGroup{}, err
 	}
 	group.Version = nextHostedGroupVersion(stored.Version)
 	group.Visibility = NormalizeVisibility(group.Visibility)
