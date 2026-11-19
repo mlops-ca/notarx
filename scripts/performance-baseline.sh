@@ -4,7 +4,33 @@ set -Eeuo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 
-for binary in ab awk cmp curl dd docker go gzip jq openssl python3 rg sort wc; do
+# --load PROFILE runs the mixed load profile of ADR 0023 section 11 against a stack seeded
+# with that datagen profile and writes docs/perf/PROFILE.json (make perf-load) instead of
+# the artifact-size and single-endpoint baseline.
+load_profile=""
+case "${1:-}" in
+  "") ;;
+  --load)
+    load_profile=${2:-}
+    case "$load_profile" in
+      tiny | freetier | target) ;;
+      *)
+        printf '%s\n' 'Usage: performance-baseline.sh [--load tiny|freetier|target]' >&2
+        exit 2
+        ;;
+    esac
+    ;;
+  *)
+    printf '%s\n' 'Usage: performance-baseline.sh [--load tiny|freetier|target]' >&2
+    exit 2
+    ;;
+esac
+
+required_binaries=(ab awk cmp curl dd docker go gzip jq openssl python3 rg sort wc)
+if [[ -n $load_profile ]]; then
+  required_binaries=(awk curl docker go jq openssl python3 sort wc)
+fi
+for binary in "${required_binaries[@]}"; do
   if ! command -v "$binary" >/dev/null 2>&1; then
     printf 'Performance baseline requires %s.\n' "$binary" >&2
     exit 1
@@ -113,9 +139,10 @@ random_hex() {
 }
 
 admin_token="perf-admin-$(random_hex 24)"
+postgres_password=$(random_hex 24)
 umask 077
 {
-  printf 'NOTARX_POSTGRES_PASSWORD=%s\n' "$(random_hex 24)"
+  printf 'NOTARX_POSTGRES_PASSWORD=%s\n' "$postgres_password"
   printf 'NOTARX_ADMIN_TOKEN=%s\n' "$admin_token"
   printf 'NOTARX_RESOLVER_TOKEN=%s\n' "perf-resolver-$(random_hex 24)"
   printf 'RUSTFS_ACCESS_KEY=%s\n' "perfaccess$(random_hex 8)"
@@ -290,6 +317,59 @@ done
 notarx_url="http://127.0.0.1:${NOTARX_HTTP_PORT}"
 expect_http 204 GET "$notarx_url/livez" "$private_dir/livez.out"
 expect_http 204 GET "$notarx_url/readyz" "$private_dir/readyz.out"
+
+# run_load_profile seeds the stack's database, drives tools/perfload against the gateway
+# while sampling the CPU of the postgres container, and writes docs/perf/<profile>.json:
+# the perfload report plus the database CPU as a share of the host's CPUs.
+run_load_profile() {
+  local database_url="postgres://notarx:${postgres_password}@127.0.0.1:${NOTARX_POSTGRES_PORT}/notarx?sslmode=disable"
+  local report="$private_dir/perf-load.json" cpu_samples="$private_dir/postgres-cpu.txt"
+  local host_cpus sampler_pid publish_repository=perf-load-raw
+
+  printf 'Seeding the %s profile...\n' "$load_profile"
+  go run ./tools/datagen/cmd -profile "$load_profile" -database-url "$database_url"
+  expect_http 201 POST "$notarx_url/api/v2/repositories" "$private_dir/load-repository.json" \
+    -H "Authorization: Bearer $admin_token" \
+    -H 'Content-Type: application/json' \
+    -H 'Idempotency-Key: perf-load-raw-repository' \
+    --data "{\"name\":\"$publish_repository\",\"format\":\"raw\",\"type\":\"hosted\"}"
+
+  : >"$cpu_samples"
+  (
+    while true; do
+      docker stats --no-stream --format '{{.CPUPerc}}' "$postgres_id" >>"$cpu_samples" 2>/dev/null || true
+      sleep 1
+    done
+  ) &
+  sampler_pid=$!
+  printf 'Running the mixed load profile (%s)...\n' "$load_profile"
+  if ! NOTARX_ADMIN_TOKEN="$admin_token" go run ./tools/perfload/cmd -profile "$load_profile" \
+    -url "$notarx_url" -database-url "$database_url" -publish-repository "$publish_repository" -output "$report"; then
+    kill "$sampler_pid" 2>/dev/null || true
+    return 1
+  fi
+  kill "$sampler_pid" 2>/dev/null || true
+  wait "$sampler_pid" 2>/dev/null || true
+
+  host_cpus=$(docker info --format '{{.NCPU}}')
+  mkdir -p "$repo_root/docs/perf"
+  tr -d '% ' <"$cpu_samples" | awk -v cpus="$host_cpus" '
+    $1 ~ /^[0-9.]+$/ { n++; sum += $1; if ($1 > max) max = $1 }
+    END { printf "%d %.2f %.2f\n", n, (n ? sum / n / cpus : 0), max / cpus }' >"$private_dir/postgres-cpu-summary.txt"
+  read -r cpu_count cpu_avg cpu_max <"$private_dir/postgres-cpu-summary.txt"
+  jq --argjson samples "$cpu_count" --argjson avg "$cpu_avg" --argjson max "$cpu_max" --argjson cpus "$host_cpus" \
+    --arg commit "$(git rev-parse HEAD)" \
+    '. + {gitCommit: $commit, databaseCpu: {samples: $samples, averagePercentOfHost: $avg, maxPercentOfHost: $max, hostCpus: $cpus}}' \
+    "$report" >"$repo_root/docs/perf/${load_profile}.json"
+  jq -e '[.scenarios[].errors] | all(. == 0)' "$repo_root/docs/perf/${load_profile}.json" >/dev/null ||
+    { printf '%s\n' 'The load profile recorded failed requests.' >&2; return 1; }
+  printf 'Load profile report: docs/perf/%s.json\n' "$load_profile"
+}
+
+if [[ -n $load_profile ]]; then
+  run_load_profile
+  exit 0
+fi
 
 {
   worktree_dirty=false

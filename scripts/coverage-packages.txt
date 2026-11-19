@@ -17,5 +17,6 @@
 ./internal/identity/saml 85.0
 ./internal/database 80.0
 ./tools/datagen 95.0
+./tools/perfload 90.0
 ./internal/dialect/postgres 90.0
 ./internal/readcache 80.0

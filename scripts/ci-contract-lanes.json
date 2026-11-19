@@ -450,6 +450,25 @@
       "rawDirectories": [
         "output/nexus-pypi-migration-e2e"
       ]
+    },
+    "perf-load": {
+      "timeoutMinutes": 40,
+      "arm64": "mainline",
+      "needs": [],
+      "steps": [
+        {
+          "name": "perf-load-tiny",
+          "command": [
+            "make",
+            "perf-load",
+            "PROFILE=tiny"
+          ],
+          "timeoutSeconds": 2100
+        }
+      ],
+      "rawDirectories": [
+        "docs/perf"
+      ]
     }
   }
 }
