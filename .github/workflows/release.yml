@@ -189,7 +189,7 @@ jobs:
   build:
     needs: [plan, build-archives, build-images]
     # Skipped (not failed) when the gates failed, as before; only a started build is reported.
-    if: always() && needs.build-archives.result != 'skipped'
+    if: ${{ !cancelled() && needs.build-archives.result != 'skipped' }}
     runs-on: ubuntu-24.04
     steps:
       - name: Require every archive and image, with a rerun hint
@@ -202,8 +202,9 @@ jobs:
             exit 0
           fi
           # A hosted runner that is never acquired (for example a macOS capacity outage) ends
-          # its job as cancelled with no log; a real build failure shows as failure.
-          echo "::error::Archives or images did not all build. Native darwin/arm64 and darwin/amd64 archives are required. If a job shows 'not acquired by Runner' or was cancelled, no runner was assigned: re-run the failed jobs of this workflow run. A failed job is a real build failure; fix it first."
+          # its job with the annotation "not acquired by Runner". Other legs can also show as
+          # cancelled because the matrix is fail-fast, so the legs themselves must be inspected.
+          echo "::error::Archives or images did not all build. Native darwin/arm64 and darwin/amd64 archives are required. Open the failing legs of this run: if the only failure is 'The job was not acquired by Runner' (no log), no runner was assigned and re-running the failed jobs is the action. Any leg with a log and a failed step is a real build failure to fix first; legs cancelled after it are collateral."
           exit 1
 
   # --- publish: tag and pre-release in one call, as the last step ---------------------
