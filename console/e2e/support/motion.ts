@@ -22,6 +22,14 @@ export async function openSelect(page: Page, combobox: Locator) {
     .locator(".ant-select-dropdown")
     .filter({ has: page.locator(`[id="${listId}"]`) });
   await expect(dropdown).toBeVisible();
+  // An async Select (the artifact picker) fetches its options; while it does,
+  // the option nodes are replaced when the results land, so a click made
+  // before then is lost. AntD marks the root `ant-select-loading` meanwhile.
+  await expect(
+    combobox.locator(
+      "xpath=ancestor::div[contains(concat(' ', normalize-space(@class), ' '), ' ant-select ')][1]",
+    ),
+  ).not.toHaveClass(/ant-select-loading/);
   await expect(dropdown).not.toHaveClass(
     /ant-slide-(?:up|down)-(?:appear|enter)/,
   );
