@@ -1,10 +1,11 @@
 name: Install Playwright browser
 description: >-
   Installs the Playwright Chromium browser and its system dependencies in the
-  console directory (npm ci must have run). The browser download is cached by
-  runner OS, architecture and @playwright/test version. apt gets short network
-  timeouts and retries so a stalled Ubuntu mirror fails over instead of hanging
-  the step. The browser download is time-boxed to 5 minutes and the system dependencies to 10 with timeout(1) (composite steps have no timeout-minutes).
+  console directory (npm ci must have run). The browser download and the apt
+  packages for the dependencies are cached by runner image, architecture and
+  @playwright/test version. apt gets short network timeouts and retries. The
+  browser download is time-boxed to 5 minutes and the system dependencies to 10
+  with timeout(1) (composite steps have no timeout-minutes).
 
 runs:
   using: composite
@@ -18,22 +19,23 @@ runs:
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.cache/ms-playwright
-        key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
+        key: playwright-${{ env.ImageOS }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
     - name: Download browser
       shell: bash
       working-directory: console
       run: timeout 300 npx playwright install chromium
     # The system dependencies come from the runner's Ubuntu mirror, which is
     # sometimes slow enough to take longer than any sane step time (observed on
-    # PR 405 and 412). Keep the downloaded packages in a user-owned directory that
-    # actions/cache can restore, so a retry or the next run on the PR needs no
-    # download, and give apt network timeouts and retries.
-    - name: Restore apt packages for the browser dependencies
-      id: apt-cache
-      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+    # PR 405 and 412). apt update still contacts the mirror, but the package
+    # downloads, the slow part, come from a user-owned directory that
+    # actions/cache restores. The cache is saved only when the whole job
+    # succeeds, so a timed-out install never stores a partial package set under
+    # the immutable key.
+    - name: Cache apt packages for the browser dependencies
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.cache/playwright-apt
-        key: playwright-apt-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
+        key: playwright-apt-${{ env.ImageOS }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
     - name: Configure apt
       shell: bash
       run: |
@@ -43,11 +45,7 @@ runs:
       shell: bash
       working-directory: console
       run: timeout 600 npx playwright install-deps chromium
-    # Save even when the install timed out: the packages that did arrive make the
-    # next attempt on the pull request faster.
-    - name: Save apt packages for the browser dependencies
-      if: always() && steps.apt-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: ~/.cache/playwright-apt
-        key: playwright-apt-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
+    # apt ran as root; hand the files back so the cache save can read them.
+    - name: Hand the apt package cache back to the runner user
+      shell: bash
+      run: sudo chown -R "$(id -u):$(id -g)" ~/.cache/playwright-apt
