@@ -3622,6 +3622,7 @@
     "settings.removeClientSecret",
     "settings.removeLogo",
     "settings.removeSecret",
+    "settings.samlCertificateExpired",
     "settings.theCurrentSecretWillBeRemovedOnSave",
     "settings.theSecretIsNotRemovedUntilSettingsAre",
     "settings.themeInstalledThe32ThemeEnabledLimitHas",
