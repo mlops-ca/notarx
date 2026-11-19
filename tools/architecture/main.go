@@ -29,6 +29,11 @@ type baseline struct {
 	VisibilityAccessors []string `json:"visibilityAccessors"`
 }
 
+// retiredAuditHelpers are the post-commit audit helpers of internal/app. A management handler
+// passes its audit record to the store method that makes the change, so a failed audit fails
+// the change itself instead of answering 500 after it committed (ADR 0023 section 1).
+var retiredAuditHelpers = map[string]bool{"recordMutationAudit": true, "mutationAuditRecorder": true}
+
 type definition struct {
 	expression ast.Expr
 	imports    map[string]string
@@ -36,6 +41,7 @@ type definition struct {
 
 type inventory struct {
 	VisibilityAccessors []string
+	RetiredAuditUses    []string
 	Imports             map[string]map[string]bool
 	Members             []string
 	Metrics             map[string]int
@@ -67,6 +73,14 @@ func scan(root string) (inventory, error) {
 		}
 		if touchesVisibility(file) && !visibilityOwner(pkg) {
 			result.VisibilityAccessors = append(result.VisibilityAccessors, rel)
+		}
+		if pkg == "internal/app" {
+			ast.Inspect(file, func(node ast.Node) bool {
+				if ident, ok := node.(*ast.Ident); ok && retiredAuditHelpers[ident.Name] {
+					result.RetiredAuditUses = append(result.RetiredAuditUses, rel+": "+ident.Name)
+				}
+				return true
+			})
 		}
 		aliases := map[string]string{}
 		for _, spec := range file.Imports {
@@ -149,6 +163,7 @@ func scan(root string) (inventory, error) {
 	})
 	sort.Strings(result.Members)
 	sort.Strings(result.VisibilityAccessors)
+	sort.Strings(result.RetiredAuditUses)
 	result.Metrics["gatewayStoreMembers"] = len(result.Members)
 	return result, err
 }
@@ -370,6 +385,9 @@ func run(root string, metrics bool) error {
 	}
 	for _, member := range additions(current.GatewayStoreMembers, allowed.GatewayStoreMembers) {
 		failures = append(failures, "GatewayStore adds "+member)
+	}
+	for _, use := range inv.RetiredAuditUses {
+		failures = append(failures, use+" is the retired post-commit audit path; pass the audit record to the store method that makes the change")
 	}
 	for _, file := range additions(current.VisibilityAccessors, allowed.VisibilityAccessors) {
 		failures = append(failures, file+" reads repository visibility or the public-access policy outside internal/access; decide through access.Decide")
