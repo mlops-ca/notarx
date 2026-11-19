@@ -28,7 +28,6 @@ backpressure
 backupmanifest
 backupops
 basearch
-baselinefmt
 bidi
 binfmt
 breakpoint

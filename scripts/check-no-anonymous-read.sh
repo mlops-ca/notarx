@@ -19,7 +19,6 @@ hits=$(git grep -nIE "$pattern" -- . \
   ':(exclude)docs/release-records' \
   ':(exclude)docs/reports' \
   ':(exclude)migrations' \
-  ':(exclude)internal/tools/baselinefmt' \
   ':(exclude)console/src/messages' \
   ':(exclude)internal/repository/postgres_visibility_migration_integration_test.go' \
   ':(exclude)scripts/check-no-anonymous-read.sh' \
