@@ -60,6 +60,12 @@ while IFS=$'\t' read -r spec reason; do
 done < <("$check" --list-extra; "$check" --list-ag)
 passed=$((passed + 1)); printf 'ok   every extra allow-list entry has a reason\n'
 
+# Every abbreviation-only allowance names something that is tracked.
+while IFS=$'\t' read -r spec _; do
+  [[ -n "$(git -C "$root" ls-files -- "$spec")" ]] || { printf 'FAIL ag allow-list entry matches no tracked file: %s\n' "$spec" >&2; exit 1; }
+done < <("$check" --list-ag)
+passed=$((passed + 1)); printf 'ok   every ag allow-list entry names tracked files\n'
+
 new_repo clean
 plant README.md 'notarx is the product name'
 expect_pass 'a clean tree passes'
@@ -122,6 +128,10 @@ expect_pass 'longer words and the internal Console CSS names are accepted'
 new_repo ag-in-go
 plant internal/backupops/x.go 'project := "a''g-restore-x"'
 expect_fail 'flags the short abbreviation in Go code' 'internal/backupops/x.go'
+new_repo ag-digit-and-lower
+plant docs/a.md 'fixture a''g-1 and a''g-x'
+plant scripts/y.sh 'export A''G_1=1 A''G_foo=2'
+expect_fail 'flags digits and lower-case letters after the abbreviation' 'docs/a.md'
 new_repo ag-in-script
 plant scripts/x.sh 'export A''G_LOG=1'
 expect_fail 'flags the upper-case abbreviation in a script' 'scripts/x.sh'

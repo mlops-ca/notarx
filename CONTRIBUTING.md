@@ -440,7 +440,8 @@ metric and ledger prefix, or the short `ag-` / `AG_` abbreviation of the old
 product name, appears in a tracked file. The Console keeps its internal `ag-` CSS
 classes, `--ag-` custom properties and `ag.console.*` localStorage keys (a rename
 would touch thousands of selectors and break stored preferences); the gate allows
-`ag-` under `console/` and in the design notes that quote it. The allow-list is the one in the
+`ag-` only under `console/` and in the few design and tooling files named by
+`scripts/identity-check.sh --list-ag`, each with its reason. The allow-list is the one in the
 ADR plus a short documented list of legacy cases (the legacy environment refusal
 list and the recovery code that verifies pre-fork releases); each entry in the
 script carries its reason. Lines with frozen zh-CN text are not checked.

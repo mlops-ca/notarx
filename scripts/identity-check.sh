@@ -74,7 +74,7 @@ esac
 
 pattern='ccsert|[Aa]rtifact[ _-]?[Gg]ateway|ARTIFACT GATEWAY|GATEWAY_|agctl|gateway_'
 # The short abbreviation must not be glued to a longer word (`flag-x`, `stag_A`).
-ag_pattern='(^|[^[:alnum:]_])(ag-[a-z]|AG_[A-Z])'
+ag_pattern='(^|[^[:alnum:]_])(ag-[[:alnum:]]|AG_[[:alnum:]])'
 
 specs=(.)
 for entry in "${base_allow[@]}"; do specs+=(":(exclude)$entry"); done
