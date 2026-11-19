@@ -261,7 +261,7 @@ au flux réutilisable `contract-lane.yml`; aucun des deux flux de travail ne
 nomme donc de voie. Ajoutez ou déplacez une voie en modifiant seulement le JSON.
 
 Les tâches `contract` s’exécutent en parallèle avec `fail-fast: false`. La
-vérification `suite-ok` de `test-suite.yml` exige que chaque tâche de la suite réussisse
+tâche `suite-ok` de `test-suite.yml` exige que chaque tâche de la suite réussisse
 ou soit ignorée par la détection des changements; la CI des demandes de tirage et les
 barrières de publication (ADR 0024) appellent la même suite, et un push sur `main`
 n’exécute aucun test. L’ancienne voie `core` en série est scindée en

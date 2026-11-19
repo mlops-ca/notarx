@@ -55,8 +55,12 @@ release notes starts at the previous release or, before the first one, at the fo
 Jobs owned by other ADRs (channels, the public feeds) declare `needs: publish` and never change `plan`.
 
 A stable release (`scripts/release-plan.sh stable`) promotes the commit of a nightly tag and reads no check runs either. That
-commit was published only after the gates of its nightly run passed on it, so the stable run reuses those results; it never
-releases a commit whose release-run gates did not pass.
+commit was published only after the gates of its nightly run passed on it, so reusing that green nightly result for the same
+SHA is allowed, and the stable run's own `gates` (ADR 0024 slice 5) call the same suite on it. It never releases a commit whose
+release-run gates did not pass.
+
+Because the plan takes the tip of `main` without falling back to an older commit, a failing gate on the tip blocks the nightly
+until it is fixed forward; a push to `main` publishes the `main` archives and images untested. Watch the failed runs of `release.yml`.
 
 Adding a published image is one entry in `scripts/release-images.json` ; the manifest script fails unless
 every listed image has a recorded index digest.

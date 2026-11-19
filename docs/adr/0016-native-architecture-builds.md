@@ -173,7 +173,7 @@ Properties:
   partial publication because the tags are only created in stage 2.
 - The "Confirm this run still owns the main tip" guard of `mainline-images` moves
   into `image-manifest`, immediately before tagging.
-- `verify-candidate` in `release.yml` requires named check runs
+- `verify-candidate` in `release.yml` (removed; see the amendment at the end of this ADR) requires named check runs
   (`quality`, `contract-and-test`, `console`, `mainline-assets`, and one
   `mainline-images ` run per published image: two at v0.1.0, three once ADR 0030 slice 1b lands). Those names change; the check list is updated to the
   new job names and to require both architecture runs of each image.

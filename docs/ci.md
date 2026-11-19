@@ -9,8 +9,8 @@ five classes. Heavy jobs run only when their class changed.
 The test jobs are defined once, in the reusable workflow `.github/workflows/test-suite.yml`.
 Pull request CI calls it as the `tests` job with the classes of the change. The nightly
 release gates call it with every class on, on the planned commit (see
-[releasing](releasing.md)). **A push to `main` runs no tests** (ADR 0024, amendment of
-2026-11-19): it runs only `mainline-plan`, `mainline-assets` and `mainline-images`, which
+[releasing](releasing.md)). **A push to `main` runs no tests of this suite** (ADR 0024, amendment of
+2026-11-19; the separate path-filtered `oci-live` workflow below still runs on its own triggers): it runs only `mainline-plan`, `mainline-assets` and `mainline-images`, which
 build and publish the `main` archives and images, plus `ci-ok`. Real results come from pull
 request CI and from the nightly release gates. Inside a pull request run the suite's jobs
 show as `tests / <job>`.

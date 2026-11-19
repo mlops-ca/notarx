@@ -128,7 +128,7 @@ run_contract_lane() {
 }
 
 run_contract() {
-  printf '\n== contract-and-test (every lane in scripts/ci-contract-lanes.json) ==\n'
+  printf '\n== contract lanes (every lane in scripts/ci-contract-lanes.json) ==\n'
   while IFS= read -r lane; do
     run_contract_lane "$lane"
   done < <(python3 scripts/ci-contract.py list)

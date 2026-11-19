@@ -228,8 +228,8 @@ step timeouts, and the failure artefacts. `scripts/ci-contract.py matrix` turns
 it into the matrix that `test-suite.yml` feeds to the reusable `contract-lane.yml`, so
 neither workflow names a lane. Add or move a lane by editing the JSON only.
 
-The `contract` jobs run in parallel with `fail-fast: false`. The stable
-`suite-ok` check of `test-suite.yml` requires every job of the suite to succeed or
+The `contract` jobs run in parallel with `fail-fast: false`. The
+`suite-ok` job of `test-suite.yml` requires every job of the suite to succeed or
 be skipped by change detection; pull request CI and the release gates (ADR 0024) both
 call that suite, and a push to `main` runs no tests. The
 former serial `core` lane is split into `core-checks`, `core-email`,
