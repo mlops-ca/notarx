@@ -97,16 +97,13 @@ func (h generatedRepositoryAPIAdapter) CreateScheduledTask(w http.ResponseWriter
 		writeScheduledTaskValidationProblem(w, err)
 		return
 	}
-	created, err := h.scheduledTasks.CreateScheduledTask(r.Context(), task)
+	created, err := h.scheduledTasks.CreateScheduledTask(r.Context(), task, h.scheduledTaskAudit(r, principal, task, "scheduled_task.create", http.StatusCreated)...)
 	if errors.Is(err, repository.ErrNameExists) {
 		writeHostedProblem(w, http.StatusConflict, "name_exists", "scheduled task name already exists")
 		return
 	}
 	if err != nil {
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "create scheduled task failed")
-		return
-	}
-	if !h.auditScheduledTask(w, r, principal, created, "scheduled_task.create", http.StatusCreated) {
 		return
 	}
 	writeNativeMavenJSON(w, http.StatusCreated, scheduledTaskResponse(created))
@@ -164,7 +161,7 @@ func (h generatedRepositoryAPIAdapter) UpdateScheduledTask(w http.ResponseWriter
 		writeScheduledTaskValidationProblem(w, err)
 		return
 	}
-	updated, err := h.scheduledTasks.UpdateScheduledTask(r.Context(), task, string(params.IfMatch))
+	updated, err := h.scheduledTasks.UpdateScheduledTask(r.Context(), task, string(params.IfMatch), h.scheduledTaskAudit(r, principal, task, "scheduled_task.update", http.StatusOK)...)
 	if errors.Is(err, repository.ErrVersionConflict) {
 		writeHostedProblem(w, http.StatusPreconditionFailed, "version_conflict", "If-Match does not match the scheduled task version")
 		return
@@ -179,9 +176,6 @@ func (h generatedRepositoryAPIAdapter) UpdateScheduledTask(w http.ResponseWriter
 	}
 	if err != nil {
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "update scheduled task failed")
-		return
-	}
-	if !h.auditScheduledTask(w, r, principal, updated, "scheduled_task.update", http.StatusOK) {
 		return
 	}
 	writeNativeMavenJSON(w, http.StatusOK, scheduledTaskResponse(updated))
@@ -204,11 +198,12 @@ func (h generatedRepositoryAPIAdapter) DeleteScheduledTask(w http.ResponseWriter
 	if !h.authorizeScheduledTaskTarget(w, r, principal, task.RepositoryID) {
 		return
 	}
-	if err = h.scheduledTasks.DeleteScheduledTask(r.Context(), task.ID); err != nil {
+	if err = h.scheduledTasks.DeleteScheduledTask(r.Context(), task.ID, h.scheduledTaskAudit(r, principal, task, "scheduled_task.delete", http.StatusNoContent)...); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			writeHostedProblem(w, http.StatusNotFound, "not_found", "scheduled task not found")
+			return
+		}
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "delete scheduled task failed")
-		return
-	}
-	if !h.auditScheduledTask(w, r, principal, task, "scheduled_task.delete", http.StatusNoContent) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -231,15 +226,12 @@ func (h generatedRepositoryAPIAdapter) RunScheduledTask(w http.ResponseWriter, r
 	if !h.authorizeScheduledTaskTarget(w, r, principal, task.RepositoryID) {
 		return
 	}
-	run, err := (ScheduledTaskScheduler{Store: h.sessions.store}).RunNow(r.Context(), task.ID)
+	run, err := (ScheduledTaskScheduler{Store: h.sessions.store}).RunNow(r.Context(), task.ID, h.scheduledTaskAudit(r, principal, task, "scheduled_task.run", http.StatusAccepted)...)
 	if err != nil {
 		// Nothing was dispatched, so the audit stays best-effort and the real
 		// dispatch error reaches the caller.
 		h.bestEffortAuditScheduledTask(r, principal, task, "scheduled_task.run_failed", http.StatusConflict)
 		writeHostedProblem(w, http.StatusConflict, "dispatch_failed", truncateScheduledTaskError(err.Error()))
-		return
-	}
-	if !h.auditScheduledTask(w, r, principal, task, "scheduled_task.run", http.StatusAccepted) {
 		return
 	}
 	writeNativeMavenJSON(w, http.StatusAccepted, scheduledTaskRunResponse(run))
@@ -401,9 +393,10 @@ func (h generatedRepositoryAPIAdapter) bestEffortAuditScheduledTask(r *http.Requ
 	_ = h.audit.RecordAudit(r.Context(), h.scheduledTaskAuditRecord(r, principal, task, operation, status))
 }
 
-func (h generatedRepositoryAPIAdapter) auditScheduledTask(w http.ResponseWriter, r *http.Request, principal Principal, task repository.ScheduledTask, operation string, status int) bool {
+// scheduledTaskAudit builds the audit the store writes in the transaction of the mutation.
+func (h generatedRepositoryAPIAdapter) scheduledTaskAudit(r *http.Request, principal Principal, task repository.ScheduledTask, operation string, status int) []repository.AuditRecord {
 	if h.audit == nil {
-		return true
+		return nil
 	}
-	return recordMutationAudit(w, h.audit, r.Context(), h.scheduledTaskAuditRecord(r, principal, task, operation, status))
+	return []repository.AuditRecord{h.scheduledTaskAuditRecord(r, principal, task, operation, status)}
 }

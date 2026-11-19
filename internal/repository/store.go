@@ -58,7 +58,7 @@ type PublicAccessPolicyStore interface {
 
 type SiteSettingsStore interface {
 	GetSiteSettings(context.Context) (SiteSettings, error)
-	ReplaceSiteSettings(context.Context, SiteSettings, string) (SiteSettings, error)
+	ReplaceSiteSettings(context.Context, SiteSettings, string, ...AuditRecord) (SiteSettings, error)
 }
 
 // ConsoleThemeStore persists administrator-managed theme packages. Bundled
@@ -71,28 +71,28 @@ type ConsoleThemeStore interface {
 	LockConsoleThemeCatalog(context.Context) (func(), error)
 	ListConsoleThemePackages(context.Context) ([]ConsoleThemePackage, error)
 	GetConsoleThemePackage(context.Context, string) (ConsoleThemePackage, error)
-	CreateConsoleThemePackage(context.Context, ConsoleThemePackage) (ConsoleThemePackage, error)
-	ReplaceConsoleThemePackage(context.Context, ConsoleThemePackage, string) (ConsoleThemePackage, error)
-	DeleteConsoleThemePackage(context.Context, string, string) error
+	CreateConsoleThemePackage(context.Context, ConsoleThemePackage, ...AuditRecord) (ConsoleThemePackage, error)
+	ReplaceConsoleThemePackage(context.Context, ConsoleThemePackage, string, ...AuditRecord) (ConsoleThemePackage, error)
+	DeleteConsoleThemePackage(context.Context, string, string, ...AuditRecord) error
 }
 
 type OIDCSettingsStore interface {
 	GetOIDCSettings(context.Context) (OIDCSettings, error)
-	ReplaceOIDCSettings(context.Context, OIDCSettings, string) (OIDCSettings, error)
+	ReplaceOIDCSettings(context.Context, OIDCSettings, string, ...AuditRecord) (OIDCSettings, error)
 }
 
 type WebhookStore interface {
-	CreateWebhookSubscription(context.Context, WebhookSubscription) (WebhookSubscription, error)
+	CreateWebhookSubscription(context.Context, WebhookSubscription, ...AuditRecord) (WebhookSubscription, error)
 	ListWebhookSubscriptions(context.Context) ([]WebhookSubscription, error)
 	GetWebhookSubscription(context.Context, string) (WebhookSubscription, error)
-	UpdateWebhookSubscription(context.Context, WebhookSubscription, string) (WebhookSubscription, error)
+	UpdateWebhookSubscription(context.Context, WebhookSubscription, string, ...AuditRecord) (WebhookSubscription, error)
 	EnqueueWebhookEvent(context.Context, WebhookEvent) (WebhookEvent, error)
 	ListWebhookDeliveries(context.Context, WebhookDeliveryQuery) ([]WebhookDelivery, error)
 	GetWebhookDelivery(context.Context, string) (WebhookDelivery, error)
 	ClaimWebhookDeliveries(context.Context, string, time.Time, time.Duration, int) ([]WebhookDeliveryClaim, error)
 	CompleteWebhookDelivery(context.Context, string, string, int, time.Time) error
 	FailWebhookDelivery(context.Context, string, string, time.Time, time.Time, int, string, bool) error
-	ReplayWebhookDelivery(context.Context, string, time.Time) (WebhookDelivery, error)
+	ReplayWebhookDelivery(context.Context, string, time.Time, ...AuditRecord) (WebhookDelivery, error)
 }
 
 // UserIdentityStore links provider credentials to a local account. The
@@ -282,15 +282,15 @@ type RepositoryLifecycleJobStore interface {
 }
 
 type ScheduledTaskStore interface {
-	CreateScheduledTask(context.Context, ScheduledTask) (ScheduledTask, error)
+	CreateScheduledTask(context.Context, ScheduledTask, ...AuditRecord) (ScheduledTask, error)
 	ListScheduledTasks(context.Context) ([]ScheduledTask, error)
 	GetScheduledTask(context.Context, string) (ScheduledTask, error)
-	UpdateScheduledTask(context.Context, ScheduledTask, string) (ScheduledTask, error)
-	DeleteScheduledTask(context.Context, string) error
+	UpdateScheduledTask(context.Context, ScheduledTask, string, ...AuditRecord) (ScheduledTask, error)
+	DeleteScheduledTask(context.Context, string, ...AuditRecord) error
 	ClaimDueScheduledTasks(context.Context, time.Time, int) ([]ScheduledTaskClaim, error)
 	CreateScheduledTaskRun(context.Context, string, string, time.Time) (ScheduledTaskRun, error)
 	ListScheduledTaskRuns(context.Context, string, int) ([]ScheduledTaskRun, error)
-	UpdateScheduledTaskRun(context.Context, ScheduledTaskRun) error
+	UpdateScheduledTaskRun(context.Context, ScheduledTaskRun, ...AuditRecord) error
 }
 
 type ReplicationStore interface {

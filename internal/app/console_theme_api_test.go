@@ -32,18 +32,18 @@ func (s *catalogLockObservingStore) LockConsoleThemeCatalog(_ context.Context) (
 	}, nil
 }
 
-func (s *catalogLockObservingStore) ReplaceSiteSettings(ctx context.Context, settings repository.SiteSettings, expectedVersion string) (repository.SiteSettings, error) {
+func (s *catalogLockObservingStore) ReplaceSiteSettings(ctx context.Context, settings repository.SiteSettings, expectedVersion string, audit ...repository.AuditRecord) (repository.SiteSettings, error) {
 	s.observationMu.Lock()
 	s.replacedSettingsLocked = s.lockHeld
 	s.observationMu.Unlock()
-	return s.MemoryStore.ReplaceSiteSettings(ctx, settings, expectedVersion)
+	return s.MemoryStore.ReplaceSiteSettings(ctx, settings, expectedVersion, audit...)
 }
 
-func (s *catalogLockObservingStore) DeleteConsoleThemePackage(ctx context.Context, id, expectedVersion string) error {
+func (s *catalogLockObservingStore) DeleteConsoleThemePackage(ctx context.Context, id, expectedVersion string, audit ...repository.AuditRecord) error {
 	s.observationMu.Lock()
 	s.deletedThemeLocked = s.lockHeld
 	s.observationMu.Unlock()
-	return s.MemoryStore.DeleteConsoleThemePackage(ctx, id, expectedVersion)
+	return s.MemoryStore.DeleteConsoleThemePackage(ctx, id, expectedVersion, audit...)
 }
 
 const acmeDarkTheme = `{

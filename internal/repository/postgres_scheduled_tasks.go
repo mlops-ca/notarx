@@ -11,15 +11,17 @@ import (
 const scheduledTaskColumns = `id::text,name,description,kind,COALESCE(repository_id::text,''),interval_seconds,enabled,next_run_at,last_run_at,COALESCE(last_run_id::text,''),last_run_state,last_error,version,created_at,updated_at`
 const scheduledTaskRunColumns = `id::text,task_id::text,trigger,state,scheduled_at,created_at,completed_at,target_kind,target_id,last_error`
 
-func (s *PostgresStore) CreateScheduledTask(ctx context.Context, task ScheduledTask) (ScheduledTask, error) {
+func (s *PostgresStore) CreateScheduledTask(ctx context.Context, task ScheduledTask, audit ...AuditRecord) (ScheduledTask, error) {
 	if task.Version == "" {
 		task.Version = "1"
 	}
-	err := scanScheduledTask(s.db.QueryRowContext(ctx, `INSERT INTO scheduled_tasks (id,name,description,kind,repository_id,interval_seconds,enabled,next_run_at) VALUES ($1,$2,$3,$4,NULLIF($5,'')::uuid,$6,$7,$8) RETURNING `+scheduledTaskColumns, task.ID, task.Name, task.Description, task.Kind, task.RepositoryID, task.IntervalSeconds, task.Enabled, task.NextRunAt), &task)
-	if isUnique(err) {
-		return ScheduledTask{}, ErrNameExists
-	}
-	return task, err
+	return runAudited(ctx, s, audit, func(q sqlRunner) (ScheduledTask, error) {
+		err := scanScheduledTask(q.QueryRowContext(ctx, `INSERT INTO scheduled_tasks (id,name,description,kind,repository_id,interval_seconds,enabled,next_run_at) VALUES ($1,$2,$3,$4,NULLIF($5,'')::uuid,$6,$7,$8) RETURNING `+scheduledTaskColumns, task.ID, task.Name, task.Description, task.Kind, task.RepositoryID, task.IntervalSeconds, task.Enabled, task.NextRunAt), &task)
+		if isUnique(err) {
+			return ScheduledTask{}, ErrNameExists
+		}
+		return task, err
+	})
 }
 
 func (s *PostgresStore) ListScheduledTasks(ctx context.Context) ([]ScheduledTask, error) {
@@ -48,41 +50,46 @@ func (s *PostgresStore) GetScheduledTask(ctx context.Context, id string) (Schedu
 	return task, err
 }
 
-func (s *PostgresStore) UpdateScheduledTask(ctx context.Context, task ScheduledTask, expectedVersion string) (ScheduledTask, error) {
+func (s *PostgresStore) UpdateScheduledTask(ctx context.Context, task ScheduledTask, expectedVersion string, audit ...AuditRecord) (ScheduledTask, error) {
 	version, err := strconv.ParseInt(expectedVersion, 10, 64)
 	if err != nil || version < 1 {
 		return ScheduledTask{}, ErrVersionConflict
 	}
-	err = scanScheduledTask(s.db.QueryRowContext(ctx, `UPDATE scheduled_tasks SET name=$1,description=$2,kind=$3,repository_id=NULLIF($4,'')::uuid,interval_seconds=$5,enabled=$6,next_run_at=$7,version=version+1,updated_at=now() WHERE id=$8::uuid AND version=$9 AND kind NOT IN ('partition-manager','retention-janitor') RETURNING `+scheduledTaskColumns, task.Name, task.Description, task.Kind, task.RepositoryID, task.IntervalSeconds, task.Enabled, task.NextRunAt, task.ID, version), &task)
-	if errors.Is(err, sql.ErrNoRows) {
-		var exists bool
-		if checkErr := s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM scheduled_tasks WHERE id=$1::uuid)`, task.ID).Scan(&exists); checkErr != nil {
-			return ScheduledTask{}, checkErr
+	return runAudited(ctx, s, audit, func(q sqlRunner) (ScheduledTask, error) {
+		err = scanScheduledTask(q.QueryRowContext(ctx, `UPDATE scheduled_tasks SET name=$1,description=$2,kind=$3,repository_id=NULLIF($4,'')::uuid,interval_seconds=$5,enabled=$6,next_run_at=$7,version=version+1,updated_at=now() WHERE id=$8::uuid AND version=$9 AND kind NOT IN ('partition-manager','retention-janitor') RETURNING `+scheduledTaskColumns, task.Name, task.Description, task.Kind, task.RepositoryID, task.IntervalSeconds, task.Enabled, task.NextRunAt, task.ID, version), &task)
+		if errors.Is(err, sql.ErrNoRows) {
+			var exists bool
+			if checkErr := q.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM scheduled_tasks WHERE id=$1::uuid)`, task.ID).Scan(&exists); checkErr != nil {
+				return ScheduledTask{}, checkErr
+			}
+			if !exists {
+				return ScheduledTask{}, ErrNotFound
+			}
+			return ScheduledTask{}, ErrVersionConflict
 		}
-		if !exists {
-			return ScheduledTask{}, ErrNotFound
+		if isUnique(err) {
+			return ScheduledTask{}, ErrNameExists
 		}
-		return ScheduledTask{}, ErrVersionConflict
-	}
-	if isUnique(err) {
-		return ScheduledTask{}, ErrNameExists
-	}
-	return task, err
+		return task, err
+	})
 }
 
-func (s *PostgresStore) DeleteScheduledTask(ctx context.Context, id string) error {
-	result, err := s.db.ExecContext(ctx, `DELETE FROM scheduled_tasks WHERE id=$1::uuid AND kind NOT IN ('partition-manager','retention-janitor')`, id)
-	if err != nil {
-		return err
-	}
-	count, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if count == 0 {
-		return ErrNotFound
-	}
-	return nil
+func (s *PostgresStore) DeleteScheduledTask(ctx context.Context, id string, audit ...AuditRecord) error {
+	_, err := runAudited(ctx, s, audit, func(q sqlRunner) (struct{}, error) {
+		result, err := q.ExecContext(ctx, `DELETE FROM scheduled_tasks WHERE id=$1::uuid AND kind NOT IN ('partition-manager','retention-janitor')`, id)
+		if err != nil {
+			return struct{}{}, err
+		}
+		count, err := result.RowsAffected()
+		if err != nil {
+			return struct{}{}, err
+		}
+		if count == 0 {
+			return struct{}{}, ErrNotFound
+		}
+		return struct{}{}, nil
+	})
+	return err
 }
 
 func (s *PostgresStore) ClaimDueScheduledTasks(ctx context.Context, now time.Time, limit int) ([]ScheduledTaskClaim, error) {
@@ -149,7 +156,7 @@ func (s *PostgresStore) ListScheduledTaskRuns(ctx context.Context, taskID string
 	return items, rows.Err()
 }
 
-func (s *PostgresStore) UpdateScheduledTaskRun(ctx context.Context, run ScheduledTaskRun) error {
+func (s *PostgresStore) UpdateScheduledTaskRun(ctx context.Context, run ScheduledTaskRun, audit ...AuditRecord) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -164,6 +171,9 @@ func (s *PostgresStore) UpdateScheduledTaskRun(ctx context.Context, run Schedule
 		return err
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE scheduled_tasks SET last_run_state=$1,last_error=$2,updated_at=now() WHERE id=$3::uuid`, run.State, run.LastError, taskID); err != nil {
+		return err
+	}
+	if err = insertAudits(ctx, tx, audit); err != nil {
 		return err
 	}
 	return tx.Commit()

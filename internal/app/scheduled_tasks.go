@@ -48,7 +48,7 @@ func (s ScheduledTaskScheduler) RunDue(ctx context.Context, limit int) error {
 	return joined
 }
 
-func (s ScheduledTaskScheduler) RunNow(ctx context.Context, taskID string) (repository.ScheduledTaskRun, error) {
+func (s ScheduledTaskScheduler) RunNow(ctx context.Context, taskID string, audit ...repository.AuditRecord) (repository.ScheduledTaskRun, error) {
 	task, err := s.Store.GetScheduledTask(ctx, taskID)
 	if err != nil {
 		return repository.ScheduledTaskRun{}, err
@@ -57,10 +57,12 @@ func (s ScheduledTaskScheduler) RunNow(ctx context.Context, taskID string) (repo
 	if err != nil {
 		return repository.ScheduledTaskRun{}, err
 	}
-	return s.dispatch(ctx, task, run)
+	return s.dispatch(ctx, task, run, audit...)
 }
 
-func (s ScheduledTaskScheduler) dispatch(ctx context.Context, task repository.ScheduledTask, run repository.ScheduledTaskRun) (repository.ScheduledTaskRun, error) {
+// dispatch submits the run. The audit of a manual run is written in the transaction that
+// records the submitted state, so a failed audit leaves the run recorded as failed.
+func (s ScheduledTaskScheduler) dispatch(ctx context.Context, task repository.ScheduledTask, run repository.ScheduledTaskRun, audit ...repository.AuditRecord) (repository.ScheduledTaskRun, error) {
 	key := "scheduled-task:" + task.ID + ":" + run.ID
 	var targetKind, targetID string
 	var dispatchErr error
@@ -100,7 +102,7 @@ func (s ScheduledTaskScheduler) dispatch(ctx context.Context, task repository.Sc
 		return run, dispatchErr
 	}
 	run.State, run.TargetKind, run.TargetID, run.LastError = repository.ScheduledTaskSubmitted, targetKind, targetID, ""
-	if err := s.Store.UpdateScheduledTaskRun(ctx, run); err != nil {
+	if err := s.Store.UpdateScheduledTaskRun(ctx, run, audit...); err != nil {
 		return run, err
 	}
 	return run, nil

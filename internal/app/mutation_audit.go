@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -20,12 +21,34 @@ type mutationAuditRecorder interface {
 // and migrated handlers pass the repository.AuditRecord to the store method that makes the
 // change (a trailing optional argument; PostgreSQL writes it with insertAudit in the same
 // transaction through runAudited, the memory store through commitAuditLocked), so a failed
-// audit fails the change itself. The user and service account handlers and the local
-// login are migrated; the remaining handlers follow in their own slices.
+// audit fails the change itself. The user and service account, settings, theme, email,
+// webhook and scheduled task handlers and the local login are migrated; the remaining
+// handlers follow in their own slices.
 func recordMutationAudit(w http.ResponseWriter, recorder mutationAuditRecorder, ctx context.Context, record repository.AuditRecord) bool {
 	if err := recorder.RecordAudit(ctx, record); err != nil {
 		writeHostedProblem(w, http.StatusInternalServerError, "audit_failed", "audit record could not be written")
 		return false
 	}
 	return true
+}
+
+// auditFor returns the audit records a management handler hands to the store method that
+// makes the change, or none when audit is not configured.
+func (h generatedRepositoryAPIAdapter) auditFor(record repository.AuditRecord) []repository.AuditRecord {
+	if h.audit == nil {
+		return nil
+	}
+	if record.Outcome == "" {
+		record.Outcome = repository.AuditResolved
+	}
+	if record.OccurredAt.IsZero() {
+		record.OccurredAt = time.Now().UTC()
+	}
+	if record.Format == "" {
+		record.Format = "management"
+	}
+	if record.CacheDisposition == "" {
+		record.CacheDisposition = "bypass"
+	}
+	return []repository.AuditRecord{record}
 }

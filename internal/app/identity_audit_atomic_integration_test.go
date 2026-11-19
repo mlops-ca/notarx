@@ -65,3 +65,32 @@ func TestPostgresLocalLoginRollsBackWithItsAudit(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() })
 	runLoginAuditRollback(t, store, func(actor string) { testsupport.FailSecurityAudits(t, db, "", actor) })
 }
+
+// TestPostgresSettingsMutationsRollBackWithTheirAudit makes every insert into
+// security_audit_log by the management actor fail and drives the settings, theme, email,
+// webhook and scheduled task handlers: none may leave its change behind (ADR 0023 section 1).
+func TestPostgresSettingsMutationsRollBackWithTheirAudit(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is required for PostgreSQL integration tests")
+	}
+	store, err := repository.NewPostgresStore(databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = store.Close() }()
+	db, err := database.OpenPostgres(databaseURL, database.DefaultPoolConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	var restores []func()
+	runSettingsAuditRollback(t, store, func() {
+		// Management audits name no repository; scheduled task audits name "global".
+		restores = append(restores, testsupport.FailSecurityAudits(t, db, "", "alice"), testsupport.FailSecurityAudits(t, db, "global", "alice"))
+	}, func() {
+		for _, restore := range restores {
+			restore()
+		}
+	})
+}

@@ -19,7 +19,7 @@ type identityOIDCStub struct{ issuer string }
 func (s identityOIDCStub) Settings(context.Context) (OIDCSettingsView, error) {
 	return OIDCSettingsView{Issuer: s.issuer}, nil
 }
-func (identityOIDCStub) Replace(context.Context, OIDCSettingsUpdate, string) (OIDCSettingsView, error) {
+func (identityOIDCStub) Replace(context.Context, OIDCSettingsUpdate, string, ...repository.AuditRecord) (OIDCSettingsView, error) {
 	return OIDCSettingsView{}, errors.New("not used")
 }
 func (identityOIDCStub) Test(context.Context) (OIDCConnectionTest, error) {

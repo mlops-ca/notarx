@@ -25,7 +25,7 @@ func (s *PostgresStore) GetSiteSettings(ctx context.Context) (SiteSettings, erro
 	return settings, nil
 }
 
-func (s *PostgresStore) ReplaceSiteSettings(ctx context.Context, settings SiteSettings, expectedVersion string) (SiteSettings, error) {
+func (s *PostgresStore) ReplaceSiteSettings(ctx context.Context, settings SiteSettings, expectedVersion string, audit ...AuditRecord) (SiteSettings, error) {
 	version, err := strconv.ParseInt(expectedVersion, 10, 64)
 	if err != nil {
 		return SiteSettings{}, ErrVersionConflict
@@ -34,21 +34,23 @@ func (s *PostgresStore) ReplaceSiteSettings(ctx context.Context, settings SiteSe
 	if err != nil {
 		return SiteSettings{}, err
 	}
-	var nextVersion int64
-	err = s.db.QueryRowContext(ctx, `UPDATE site_settings
+	return runAudited(ctx, s, audit, func(q sqlRunner) (SiteSettings, error) {
+		var nextVersion int64
+		err = q.QueryRowContext(ctx, `UPDATE site_settings
 		SET site_name=$1, logo_url=$2, brand_mark=$3,
 			enabled_theme_ids=ARRAY(SELECT jsonb_array_elements_text($4::jsonb)),
 			default_theme_id=$5, version=version+1, updated_at=now()
 		WHERE singleton=true AND version=$6
 		RETURNING version, updated_at`,
-		settings.SiteName, settings.LogoURL, settings.BrandMark, enabledThemeIDs, settings.DefaultThemeID, version,
-	).Scan(&nextVersion, &settings.UpdatedAt)
-	if errors.Is(err, sql.ErrNoRows) {
-		return SiteSettings{}, ErrVersionConflict
-	}
-	if err != nil {
-		return SiteSettings{}, err
-	}
-	settings.Version = strconv.FormatInt(nextVersion, 10)
-	return settings, nil
+			settings.SiteName, settings.LogoURL, settings.BrandMark, enabledThemeIDs, settings.DefaultThemeID, version,
+		).Scan(&nextVersion, &settings.UpdatedAt)
+		if errors.Is(err, sql.ErrNoRows) {
+			return SiteSettings{}, ErrVersionConflict
+		}
+		if err != nil {
+			return SiteSettings{}, err
+		}
+		settings.Version = strconv.FormatInt(nextVersion, 10)
+		return settings, nil
+	})
 }

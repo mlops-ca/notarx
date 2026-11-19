@@ -136,7 +136,7 @@ func (h generatedRepositoryAPIAdapter) CreateWebhookSubscription(w http.Response
 	created, err := h.webhooks.CreateWebhookSubscription(r.Context(), repository.WebhookSubscription{
 		ID: id, Name: strings.TrimSpace(input.Name), EndpointURL: strings.TrimSpace(input.EndpointUrl),
 		SecretCiphertext: ciphertext, EventTypes: eventTypes, Enabled: input.Enabled,
-	})
+	}, h.auditFor(repository.AuditRecord{Actor: principal.Actor, Resource: id, Operation: "webhook.subscription.create", Status: http.StatusCreated})...)
 	if errors.Is(err, repository.ErrWebhookSubscriptionNameExists) {
 		writeHostedProblem(w, http.StatusConflict, "name_exists", "webhook subscription name already exists")
 		return
@@ -144,11 +144,6 @@ func (h generatedRepositoryAPIAdapter) CreateWebhookSubscription(w http.Response
 	if err != nil {
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "create webhook subscription failed")
 		return
-	}
-	if h.audit != nil {
-		if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: created.ID, Operation: "webhook.subscription.create", Status: http.StatusCreated, CacheDisposition: "bypass"}) {
-			return
-		}
 	}
 	w.Header().Set("ETag", created.Version)
 	writeNativeMavenJSON(w, http.StatusCreated, webhookSubscriptionResponse(created))
@@ -216,7 +211,7 @@ func (h generatedRepositoryAPIAdapter) UpdateWebhookSubscription(w http.Response
 	updated, err := h.webhooks.UpdateWebhookSubscription(r.Context(), repository.WebhookSubscription{
 		ID: current.ID, Name: strings.TrimSpace(input.Name), EndpointURL: strings.TrimSpace(input.EndpointUrl),
 		SecretCiphertext: ciphertext, EventTypes: eventTypes, Enabled: input.Enabled,
-	}, string(params.IfMatch))
+	}, string(params.IfMatch), h.auditFor(repository.AuditRecord{Actor: principal.Actor, Resource: current.ID, Operation: "webhook.subscription.update", Status: http.StatusOK})...)
 	if errors.Is(err, repository.ErrVersionConflict) {
 		writeHostedProblem(w, http.StatusPreconditionFailed, "version_conflict", "If-Match does not match current webhook subscription version")
 		return
@@ -228,11 +223,6 @@ func (h generatedRepositoryAPIAdapter) UpdateWebhookSubscription(w http.Response
 	if err != nil {
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "update webhook subscription failed")
 		return
-	}
-	if h.audit != nil {
-		if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: updated.ID, Operation: "webhook.subscription.update", Status: http.StatusOK, CacheDisposition: "bypass"}) {
-			return
-		}
 	}
 	w.Header().Set("ETag", updated.Version)
 	writeNativeMavenJSON(w, http.StatusOK, webhookSubscriptionResponse(updated))
@@ -285,7 +275,7 @@ func (h generatedRepositoryAPIAdapter) ReplayWebhookDelivery(w http.ResponseWrit
 	if !ok {
 		return
 	}
-	value, err := h.webhooks.ReplayWebhookDelivery(r.Context(), deliveryID.String(), time.Now().UTC())
+	value, err := h.webhooks.ReplayWebhookDelivery(r.Context(), deliveryID.String(), time.Now().UTC(), h.auditFor(repository.AuditRecord{Actor: principal.Actor, Resource: deliveryID.String(), Operation: "webhook.delivery.replay", Status: http.StatusOK})...)
 	if errors.Is(err, repository.ErrNotFound) {
 		writeHostedProblem(w, http.StatusNotFound, "not_found", "webhook delivery not found")
 		return
@@ -297,11 +287,6 @@ func (h generatedRepositoryAPIAdapter) ReplayWebhookDelivery(w http.ResponseWrit
 	if err != nil {
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "replay webhook delivery failed")
 		return
-	}
-	if h.audit != nil {
-		if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: value.ID, Operation: "webhook.delivery.replay", Status: http.StatusOK, CacheDisposition: "bypass"}) {
-			return
-		}
 	}
 	writeNativeMavenJSON(w, http.StatusOK, webhookDeliveryResponse(value))
 }

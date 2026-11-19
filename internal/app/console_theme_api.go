@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"slices"
-	"time"
 
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
 	"github.com/mlops-ca/notarx/internal/consoletheme"
@@ -191,7 +190,7 @@ func (h generatedRepositoryAPIAdapter) InstallConsoleThemePackage(w http.Respons
 		writeHostedProblem(w, http.StatusConflict, "console_theme_exists", message)
 		return
 	}
-	stored, err := h.consoleThemePackages.CreateConsoleThemePackage(r.Context(), repository.ConsoleThemePackage{ID: theme.ID, Payload: payload})
+	stored, err := h.consoleThemePackages.CreateConsoleThemePackage(r.Context(), repository.ConsoleThemePackage{ID: theme.ID, Payload: payload}, h.consoleThemeAudit(principal, theme.ID, "console-theme.install", http.StatusCreated)...)
 	if errors.Is(err, repository.ErrConsoleThemeExists) {
 		writeHostedProblem(w, http.StatusConflict, "console_theme_exists", "managed theme already exists")
 		return
@@ -203,9 +202,6 @@ func (h generatedRepositoryAPIAdapter) InstallConsoleThemePackage(w http.Respons
 	response, err := consoleThemeCatalogResponse(consoleThemeCatalogItem{Theme: theme, Source: adminopenapi.ConsoleThemeSourceManaged, Version: stored.Version})
 	if err != nil {
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "serialize Console theme failed")
-		return
-	}
-	if !h.recordConsoleThemeAudit(w, r.Context(), principal, theme.ID, "console-theme.install", http.StatusCreated) {
 		return
 	}
 	w.Header().Set("ETag", stored.Version)
@@ -230,7 +226,7 @@ func (h generatedRepositoryAPIAdapter) ReplaceConsoleThemePackage(w http.Respons
 		writeHostedProblem(w, http.StatusBadRequest, "invalid_theme_package", "theme package id must match the request path")
 		return
 	}
-	stored, err := h.consoleThemePackages.ReplaceConsoleThemePackage(r.Context(), repository.ConsoleThemePackage{ID: theme.ID, Payload: payload}, string(params.IfMatch))
+	stored, err := h.consoleThemePackages.ReplaceConsoleThemePackage(r.Context(), repository.ConsoleThemePackage{ID: theme.ID, Payload: payload}, string(params.IfMatch), h.consoleThemeAudit(principal, theme.ID, "console-theme.replace", http.StatusOK)...)
 	switch {
 	case errors.Is(err, repository.ErrConsoleThemeNotFound):
 		writeHostedProblem(w, http.StatusNotFound, "console_theme_not_found", "managed Console theme not found")
@@ -245,9 +241,6 @@ func (h generatedRepositoryAPIAdapter) ReplaceConsoleThemePackage(w http.Respons
 	response, err := consoleThemeCatalogResponse(consoleThemeCatalogItem{Theme: theme, Source: adminopenapi.ConsoleThemeSourceManaged, Version: stored.Version})
 	if err != nil {
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "serialize Console theme failed")
-		return
-	}
-	if !h.recordConsoleThemeAudit(w, r.Context(), principal, theme.ID, "console-theme.replace", http.StatusOK) {
 		return
 	}
 	w.Header().Set("ETag", stored.Version)
@@ -278,7 +271,7 @@ func (h generatedRepositoryAPIAdapter) DeleteConsoleThemePackage(w http.Response
 		writeHostedProblem(w, http.StatusConflict, "console_theme_in_use", "disable the theme in site settings before deleting it")
 		return
 	}
-	err = h.consoleThemePackages.DeleteConsoleThemePackage(r.Context(), themeID, string(params.IfMatch))
+	err = h.consoleThemePackages.DeleteConsoleThemePackage(r.Context(), themeID, string(params.IfMatch), h.consoleThemeAudit(principal, themeID, "console-theme.delete", http.StatusNoContent)...)
 	switch {
 	case errors.Is(err, repository.ErrConsoleThemeNotFound):
 		writeHostedProblem(w, http.StatusNotFound, "console_theme_not_found", "managed Console theme not found")
@@ -290,22 +283,9 @@ func (h generatedRepositoryAPIAdapter) DeleteConsoleThemePackage(w http.Response
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "delete Console theme failed")
 		return
 	}
-	if !h.recordConsoleThemeAudit(w, r.Context(), principal, themeID, "console-theme.delete", http.StatusNoContent) {
-		return
-	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h generatedRepositoryAPIAdapter) recordConsoleThemeAudit(w http.ResponseWriter, ctx context.Context, principal Principal, themeID, operation string, status int) bool {
-	if h.audit == nil {
-		return true
-	}
-	if !recordMutationAudit(w, h.audit, ctx, repository.AuditRecord{
-		Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(),
-		Format: "management", Resource: "console-theme:" + themeID, Operation: operation,
-		Status: status, CacheDisposition: "bypass",
-	}) {
-		return false
-	}
-	return true
+func (h generatedRepositoryAPIAdapter) consoleThemeAudit(principal Principal, themeID, operation string, status int) []repository.AuditRecord {
+	return h.auditFor(repository.AuditRecord{Actor: principal.Actor, Resource: "console-theme:" + themeID, Operation: operation, Status: status})
 }

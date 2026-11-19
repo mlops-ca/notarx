@@ -15,7 +15,7 @@ const scheduledTaskDispatchPendingError = "dispatch interrupted before submissio
 func cloneScheduledTask(task ScheduledTask) ScheduledTask         { return task }
 func cloneScheduledTaskRun(run ScheduledTaskRun) ScheduledTaskRun { return run }
 
-func (s *MemoryStore) CreateScheduledTask(_ context.Context, task ScheduledTask) (ScheduledTask, error) {
+func (s *MemoryStore) CreateScheduledTask(ctx context.Context, task ScheduledTask, audit ...AuditRecord) (ScheduledTask, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if task.ID == "" {
@@ -42,6 +42,9 @@ func (s *MemoryStore) CreateScheduledTask(_ context.Context, task ScheduledTask)
 			return ScheduledTask{}, ErrNameExists
 		}
 	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return ScheduledTask{}, err
+	}
 	s.scheduledTasks[task.ID] = task
 	return cloneScheduledTask(task), nil
 }
@@ -67,7 +70,7 @@ func (s *MemoryStore) GetScheduledTask(_ context.Context, id string) (ScheduledT
 	return cloneScheduledTask(task), nil
 }
 
-func (s *MemoryStore) UpdateScheduledTask(_ context.Context, task ScheduledTask, expectedVersion string) (ScheduledTask, error) {
+func (s *MemoryStore) UpdateScheduledTask(ctx context.Context, task ScheduledTask, expectedVersion string, audit ...AuditRecord) (ScheduledTask, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	current, ok := s.scheduledTasks[task.ID]
@@ -81,6 +84,9 @@ func (s *MemoryStore) UpdateScheduledTask(_ context.Context, task ScheduledTask,
 		if id != task.ID && strings.EqualFold(existing.Name, task.Name) {
 			return ScheduledTask{}, ErrNameExists
 		}
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return ScheduledTask{}, err
 	}
 	version, _ := strconv.ParseInt(current.Version, 10, 64)
 	if version < 1 {
@@ -96,11 +102,14 @@ func (s *MemoryStore) UpdateScheduledTask(_ context.Context, task ScheduledTask,
 	return cloneScheduledTask(task), nil
 }
 
-func (s *MemoryStore) DeleteScheduledTask(_ context.Context, id string) error {
+func (s *MemoryStore) DeleteScheduledTask(ctx context.Context, id string, audit ...AuditRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.scheduledTasks[id]; !ok {
 		return ErrNotFound
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return err
 	}
 	delete(s.scheduledTasks, id)
 	for runID, run := range s.scheduledTaskRuns {
@@ -175,7 +184,7 @@ func (s *MemoryStore) ListScheduledTaskRuns(_ context.Context, taskID string, li
 	return items, nil
 }
 
-func (s *MemoryStore) UpdateScheduledTaskRun(_ context.Context, run ScheduledTaskRun) error {
+func (s *MemoryStore) UpdateScheduledTaskRun(ctx context.Context, run ScheduledTaskRun, audit ...AuditRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	current, ok := s.scheduledTaskRuns[run.ID]
@@ -184,6 +193,9 @@ func (s *MemoryStore) UpdateScheduledTaskRun(_ context.Context, run ScheduledTas
 	}
 	if run.State != ScheduledTaskSubmitted && run.State != ScheduledTaskFailed {
 		return ErrVersionConflict
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return err
 	}
 	run.TaskID, run.CreatedAt, run.ScheduledAt = current.TaskID, current.CreatedAt, current.ScheduledAt
 	if run.CompletedAt.IsZero() {

@@ -41,7 +41,7 @@ type identityServiceAccountStore interface {
 
 type identityOIDCSettings interface {
 	Settings(context.Context) (OIDCSettingsView, error)
-	Replace(context.Context, OIDCSettingsUpdate, string) (OIDCSettingsView, error)
+	Replace(context.Context, OIDCSettingsUpdate, string, ...repository.AuditRecord) (OIDCSettingsView, error)
 	Test(context.Context) (OIDCConnectionTest, error)
 }
 

@@ -18,33 +18,35 @@ func (s *PostgresStore) GetOIDCSettings(ctx context.Context) (OIDCSettings, erro
 	return settings, err
 }
 
-func (s *PostgresStore) ReplaceOIDCSettings(ctx context.Context, settings OIDCSettings, expectedVersion string) (OIDCSettings, error) {
+func (s *PostgresStore) ReplaceOIDCSettings(ctx context.Context, settings OIDCSettings, expectedVersion string, audit ...AuditRecord) (OIDCSettings, error) {
 	settings = normalizeOIDCSettingsDefaults(settings)
 	scopes, adminSubjects, memberRoles, adminRoles, err := encodeOIDCSettingsLists(settings)
 	if err != nil {
 		return OIDCSettings{}, err
 	}
-	if expectedVersion == "0" {
-		err = scanOIDCSettings(s.db.QueryRowContext(ctx, `INSERT INTO oidc_settings
+	return runAudited(ctx, s, audit, func(q sqlRunner) (OIDCSettings, error) {
+		if expectedVersion == "0" {
+			err = scanOIDCSettings(q.QueryRowContext(ctx, `INSERT INTO oidc_settings
 			(singleton, enabled, issuer, audience, jwks_url, client_id, client_secret, redirect_url, scopes, admin_subjects, member_roles, admin_roles, provisioning_mode, email_linking_enabled, jit_default_role)
 			VALUES (true,$1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10::jsonb,$11::jsonb,$12,$13,$14)
 			ON CONFLICT (singleton) DO NOTHING RETURNING `+oidcSettingsColumns,
-			settings.Enabled, settings.Issuer, settings.Audience, settings.JWKSURL, settings.ClientID, settings.ClientSecret, settings.RedirectURL,
-			scopes, adminSubjects, memberRoles, adminRoles, settings.ProvisioningMode, settings.EmailLinkingEnabled, settings.JITDefaultRole), &settings)
-	} else {
-		err = scanOIDCSettings(s.db.QueryRowContext(ctx, `UPDATE oidc_settings SET
+				settings.Enabled, settings.Issuer, settings.Audience, settings.JWKSURL, settings.ClientID, settings.ClientSecret, settings.RedirectURL,
+				scopes, adminSubjects, memberRoles, adminRoles, settings.ProvisioningMode, settings.EmailLinkingEnabled, settings.JITDefaultRole), &settings)
+		} else {
+			err = scanOIDCSettings(q.QueryRowContext(ctx, `UPDATE oidc_settings SET
 			enabled=$1, issuer=$2, audience=$3, jwks_url=$4, client_id=$5, client_secret=$6, redirect_url=$7,
 			scopes=$8::jsonb, admin_subjects=$9::jsonb, member_roles=$10::jsonb, admin_roles=$11::jsonb,
 			provisioning_mode=$12, email_linking_enabled=$13, jit_default_role=$14,
 			version=version+1, updated_at=now()
 			WHERE singleton=true AND version=$15::text::bigint RETURNING `+oidcSettingsColumns,
-			settings.Enabled, settings.Issuer, settings.Audience, settings.JWKSURL, settings.ClientID, settings.ClientSecret, settings.RedirectURL,
-			scopes, adminSubjects, memberRoles, adminRoles, settings.ProvisioningMode, settings.EmailLinkingEnabled, settings.JITDefaultRole, expectedVersion), &settings)
-	}
-	if errors.Is(err, sql.ErrNoRows) {
-		return OIDCSettings{}, ErrVersionConflict
-	}
-	return settings, err
+				settings.Enabled, settings.Issuer, settings.Audience, settings.JWKSURL, settings.ClientID, settings.ClientSecret, settings.RedirectURL,
+				scopes, adminSubjects, memberRoles, adminRoles, settings.ProvisioningMode, settings.EmailLinkingEnabled, settings.JITDefaultRole, expectedVersion), &settings)
+		}
+		if errors.Is(err, sql.ErrNoRows) {
+			return OIDCSettings{}, ErrVersionConflict
+		}
+		return settings, err
+	})
 }
 
 func normalizeOIDCSettingsDefaults(settings OIDCSettings) OIDCSettings {

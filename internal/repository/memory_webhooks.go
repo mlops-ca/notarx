@@ -32,13 +32,16 @@ func cloneWebhookEvent(value WebhookEvent) WebhookEvent {
 	return value
 }
 
-func (s *MemoryStore) CreateWebhookSubscription(_ context.Context, value WebhookSubscription) (WebhookSubscription, error) {
+func (s *MemoryStore) CreateWebhookSubscription(ctx context.Context, value WebhookSubscription, audit ...AuditRecord) (WebhookSubscription, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, existing := range s.webhookSubscriptions {
 		if existing.Name == value.Name {
 			return WebhookSubscription{}, ErrWebhookSubscriptionNameExists
 		}
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return WebhookSubscription{}, err
 	}
 	now := time.Now().UTC()
 	value.Version, value.CreatedAt, value.UpdatedAt = "1", now, now
@@ -67,7 +70,7 @@ func (s *MemoryStore) GetWebhookSubscription(_ context.Context, id string) (Webh
 	return cloneWebhookSubscription(value), nil
 }
 
-func (s *MemoryStore) UpdateWebhookSubscription(_ context.Context, value WebhookSubscription, expectedVersion string) (WebhookSubscription, error) {
+func (s *MemoryStore) UpdateWebhookSubscription(ctx context.Context, value WebhookSubscription, expectedVersion string, audit ...AuditRecord) (WebhookSubscription, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	current, ok := s.webhookSubscriptions[value.ID]
@@ -81,6 +84,9 @@ func (s *MemoryStore) UpdateWebhookSubscription(_ context.Context, value Webhook
 		if id != value.ID && existing.Name == value.Name {
 			return WebhookSubscription{}, ErrWebhookSubscriptionNameExists
 		}
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return WebhookSubscription{}, err
 	}
 	value.Version = nextHostedGroupVersion(current.Version)
 	value.CreatedAt, value.UpdatedAt = current.CreatedAt, time.Now().UTC()
@@ -239,7 +245,7 @@ func (s *MemoryStore) FailWebhookDelivery(_ context.Context, id, leaseToken stri
 	return nil
 }
 
-func (s *MemoryStore) ReplayWebhookDelivery(_ context.Context, id string, now time.Time) (WebhookDelivery, error) {
+func (s *MemoryStore) ReplayWebhookDelivery(ctx context.Context, id string, now time.Time, audit ...AuditRecord) (WebhookDelivery, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	value, ok := s.webhookDeliveries[id]
@@ -248,6 +254,9 @@ func (s *MemoryStore) ReplayWebhookDelivery(_ context.Context, id string, now ti
 	}
 	if value.State != WebhookDeliveryDead {
 		return WebhookDelivery{}, ErrInvalidWebhookDeliveryState
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return WebhookDelivery{}, err
 	}
 	value.State, value.Attempts, value.NextAttemptAt, value.LastStatus, value.LastError, value.UpdatedAt = WebhookDeliveryPending, 0, now, 0, "", now
 	value.LeaseOwner, value.LeaseToken, value.LeaseExpiresAt = "", "", time.Time{}

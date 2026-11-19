@@ -32,17 +32,19 @@ func scanWebhookSubscription(scanner interface{ Scan(...any) error }) (WebhookSu
 	return value, nil
 }
 
-func (s *PostgresStore) CreateWebhookSubscription(ctx context.Context, value WebhookSubscription) (WebhookSubscription, error) {
+func (s *PostgresStore) CreateWebhookSubscription(ctx context.Context, value WebhookSubscription, audit ...AuditRecord) (WebhookSubscription, error) {
 	eventTypes, err := encodeWebhookEventTypes(value.EventTypes)
 	if err != nil {
 		return WebhookSubscription{}, err
 	}
-	created, err := scanWebhookSubscription(s.db.QueryRowContext(ctx, `INSERT INTO webhook_subscriptions (id,name,endpoint_url,secret_ciphertext,event_types,enabled)
+	return runAudited(ctx, s, audit, func(q sqlRunner) (WebhookSubscription, error) {
+		created, err := scanWebhookSubscription(q.QueryRowContext(ctx, `INSERT INTO webhook_subscriptions (id,name,endpoint_url,secret_ciphertext,event_types,enabled)
 VALUES ($1,$2,$3,$4,$5::jsonb,$6) RETURNING `+webhookSubscriptionColumns, value.ID, value.Name, value.EndpointURL, value.SecretCiphertext, eventTypes, value.Enabled))
-	if isUnique(err) {
-		return WebhookSubscription{}, ErrWebhookSubscriptionNameExists
-	}
-	return created, err
+		if isUnique(err) {
+			return WebhookSubscription{}, ErrWebhookSubscriptionNameExists
+		}
+		return created, err
+	})
 }
 
 func (s *PostgresStore) ListWebhookSubscriptions(ctx context.Context) ([]WebhookSubscription, error) {
@@ -70,12 +72,18 @@ func (s *PostgresStore) GetWebhookSubscription(ctx context.Context, id string) (
 	return value, err
 }
 
-func (s *PostgresStore) UpdateWebhookSubscription(ctx context.Context, value WebhookSubscription, expectedVersion string) (WebhookSubscription, error) {
+func (s *PostgresStore) UpdateWebhookSubscription(ctx context.Context, value WebhookSubscription, expectedVersion string, audit ...AuditRecord) (WebhookSubscription, error) {
 	eventTypes, err := encodeWebhookEventTypes(value.EventTypes)
 	if err != nil {
 		return WebhookSubscription{}, err
 	}
-	updated, err := scanWebhookSubscription(s.db.QueryRowContext(ctx, `UPDATE webhook_subscriptions
+	return runAudited(ctx, s, audit, func(q sqlRunner) (WebhookSubscription, error) {
+		return updateWebhookSubscription(ctx, q, value, expectedVersion, eventTypes)
+	})
+}
+
+func updateWebhookSubscription(ctx context.Context, q sqlRunner, value WebhookSubscription, expectedVersion string, eventTypes []byte) (WebhookSubscription, error) {
+	updated, err := scanWebhookSubscription(q.QueryRowContext(ctx, `UPDATE webhook_subscriptions
 SET name=$2,endpoint_url=$3,secret_ciphertext=$4,event_types=$5::jsonb,enabled=$6,version=version+1,updated_at=now()
 WHERE id=$1::uuid AND version=$7::text::bigint RETURNING `+webhookSubscriptionColumns,
 		value.ID, value.Name, value.EndpointURL, value.SecretCiphertext, eventTypes, value.Enabled, expectedVersion))
@@ -86,7 +94,7 @@ WHERE id=$1::uuid AND version=$7::text::bigint RETURNING `+webhookSubscriptionCo
 		return updated, err
 	}
 	var exists bool
-	if queryErr := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM webhook_subscriptions WHERE id=$1::uuid)`, value.ID).Scan(&exists); queryErr != nil {
+	if queryErr := q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM webhook_subscriptions WHERE id=$1::uuid)`, value.ID).Scan(&exists); queryErr != nil {
 		return WebhookSubscription{}, queryErr
 	}
 	if exists {
@@ -275,8 +283,14 @@ FROM clock WHERE id=$1::uuid AND state='delivering' AND lease_token=$2::uuid AND
 	return nil
 }
 
-func (s *PostgresStore) ReplayWebhookDelivery(ctx context.Context, id string, _ time.Time) (WebhookDelivery, error) {
-	value, err := scanWebhookDelivery(s.db.QueryRowContext(ctx, `WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS now), replayed AS (
+func (s *PostgresStore) ReplayWebhookDelivery(ctx context.Context, id string, _ time.Time, audit ...AuditRecord) (WebhookDelivery, error) {
+	return runAudited(ctx, s, audit, func(q sqlRunner) (WebhookDelivery, error) {
+		return replayWebhookDelivery(ctx, q, id)
+	})
+}
+
+func replayWebhookDelivery(ctx context.Context, q sqlRunner, id string) (WebhookDelivery, error) {
+	value, err := scanWebhookDelivery(q.QueryRowContext(ctx, `WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS now), replayed AS (
 UPDATE webhook_deliveries SET state='pending',attempts=0,next_attempt_at=clock.now,lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,last_status=NULL,last_error='',delivered_at=NULL,updated_at=clock.now
 FROM clock WHERE id=$1::uuid AND state='dead' RETURNING webhook_deliveries.*)
 SELECT d.id::text,d.event_id::text,e.event_type,d.subscription_id::text,d.state,d.attempts,d.next_attempt_at,d.lease_owner,d.lease_token::text,d.lease_expires_at,d.last_status,d.last_error,d.created_at,d.updated_at,d.delivered_at
@@ -285,7 +299,7 @@ FROM replayed d JOIN webhook_events e ON e.id=d.event_id`, id))
 		return value, err
 	}
 	var exists bool
-	if queryErr := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM webhook_deliveries WHERE id=$1::uuid)`, id).Scan(&exists); queryErr != nil {
+	if queryErr := q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM webhook_deliveries WHERE id=$1::uuid)`, id).Scan(&exists); queryErr != nil {
 		return WebhookDelivery{}, queryErr
 	}
 	if exists {

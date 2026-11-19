@@ -159,7 +159,7 @@ func (h generatedRepositoryAPIAdapter) UpdateRepositoryQuotaAlertRule(w http.Res
 		return
 	}
 	if v.Version != params.IfMatch {
-		if !h.emailAudit(w, r, p, v.ID, "quota.rule.update", 200) {
+		if !h.quotaRuleAudit(w, r, p, v.ID, "quota.rule.update", 200) {
 			return
 		}
 	}
@@ -176,7 +176,7 @@ func (h generatedRepositoryAPIAdapter) DeleteRepositoryQuotaAlertRule(w http.Res
 		return
 	}
 	if v.Version != params.IfMatch {
-		if !h.emailAudit(w, r, p, v.ID, "quota.rule.delete", 204) {
+		if !h.quotaRuleAudit(w, r, p, v.ID, "quota.rule.delete", 204) {
 			return
 		}
 	}
@@ -203,9 +203,18 @@ func (h generatedRepositoryAPIAdapter) CreateRepositoryQuotaAlertRule(w http.Res
 	if quotaProblem(w, err) {
 		return
 	}
-	if !h.emailAudit(w, r, principal, v.ID, "quota.rule.create", 201) {
+	if !h.quotaRuleAudit(w, r, principal, v.ID, "quota.rule.create", 201) {
 		return
 	}
 	w.Header().Set("ETag", v.Version)
 	writeNativeMavenJSON(w, 201, quotaRuleResponse(v))
+}
+
+// quotaRuleAudit is the legacy after-the-fact audit of the quota rule handlers, which a
+// later slice of ADR 0023 section 1 migrates.
+func (h generatedRepositoryAPIAdapter) quotaRuleAudit(w http.ResponseWriter, r *http.Request, p Principal, id, operation string, status int) bool {
+	if h.audit == nil {
+		return true
+	}
+	return recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{Actor: p.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: id, Operation: operation, Status: status, CacheDisposition: "bypass"})
 }
