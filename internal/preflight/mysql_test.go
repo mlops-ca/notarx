@@ -71,9 +71,18 @@ func TestMySQLCheckRunsInsteadOfPostgres(t *testing.T) {
 		return "", nil
 	}
 	runner.MySQLProbe = func(context.Context, config.Config) (MySQLFacts, error) { return goodFacts(), nil }
-	report := runner.Run(context.Background(), cfg, []string{"postgres", "pg_trgm", "mysql"})
-	if len(report.Results) != 1 || report.Results[0].Name != "mysql" || report.Results[0].Status != StatusPass {
-		t.Fatalf("results = %#v", report.Results)
+	report := runner.Run(context.Background(), cfg, nil)
+	for _, result := range report.Results {
+		if result.Name == "postgres" || result.Name == "pg_trgm" {
+			t.Fatalf("a PostgreSQL check ran on MySQL: %#v", result)
+		}
+		if result.Name == "mysql" && result.Status != StatusPass {
+			t.Fatalf("mysql = %#v", result)
+		}
+	}
+	named := runner.Run(context.Background(), cfg, []string{"postgres", "pg_trgm", "mysql"})
+	if len(named.Results) != 3 || named.Results[0].Status != StatusFail || named.Results[1].Status != StatusFail || named.Results[2].Name != "mysql" || named.Results[2].Status != StatusPass || !named.Failed() {
+		t.Fatalf("named results = %#v", named.Results)
 	}
 
 	pg := NewRunner()
@@ -82,8 +91,14 @@ func TestMySQLCheckRunsInsteadOfPostgres(t *testing.T) {
 		return MySQLFacts{}, nil
 	}
 	pg.PostgresPing = func(context.Context, string) error { return nil }
-	if report := pg.Run(context.Background(), testConfig(), []string{"postgres", "mysql"}); len(report.Results) != 1 || report.Results[0].Name != "postgres" {
+	report = pg.Run(context.Background(), testConfig(), []string{"postgres", "mysql"})
+	if len(report.Results) != 2 || report.Results[0].Status != StatusPass || report.Results[1].Name != "mysql" || report.Results[1].Status != StatusFail {
 		t.Fatalf("results = %#v", report.Results)
+	}
+	for _, result := range pg.Run(context.Background(), testConfig(), []string{"mysql"}).Results {
+		if result.Status != StatusFail {
+			t.Fatalf("an explicitly requested inapplicable check must fail: %#v", result)
+		}
 	}
 }
 

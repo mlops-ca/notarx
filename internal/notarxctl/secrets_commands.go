@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/mlops-ca/notarx/internal/database"
 	"github.com/mlops-ca/notarx/internal/secrets"
@@ -41,6 +42,9 @@ func secretsResealCommand() command {
 		run: func(ctx context.Context, env *commandContext) error {
 			if !env.globals.dryRun && !env.globals.yes {
 				return &UsageError{Message: secretsResealNeeds, Hint: secretsResealHint}
+			}
+			if strings.EqualFold(strings.TrimSpace(os.Getenv("NOTARX_DATABASE_DRIVER")), database.DriverMySQL) {
+				return &UsageError{Message: "secrets reseal supports PostgreSQL only: NOTARX_DATABASE_DRIVER=mysql has no store for it yet", Hint: "unset NOTARX_DATABASE_DRIVER or use a PostgreSQL database"}
 			}
 			databaseURL := os.Getenv(secretsDatabaseEnv)
 			if databaseURL == "" {

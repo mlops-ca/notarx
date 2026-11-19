@@ -27,10 +27,11 @@ func TestParseMySQLURLAcceptsTheURLForm(t *testing.T) {
 	if cfg.User != "notarx" || cfg.Passwd != "p@ss" || cfg.Addr != "db.internal:3307" || cfg.DBName != "notarx" || cfg.Net != "tcp" {
 		t.Fatalf("identity fields: %#v", cfg)
 	}
-	if !cfg.ParseTime || cfg.Loc != time.UTC || cfg.ClientFoundRows || cfg.MultiStatements || cfg.Collation != "utf8mb4_0900_bin" {
+	if !cfg.ParseTime || cfg.Loc != time.UTC || cfg.ClientFoundRows || cfg.MultiStatements || cfg.Collation != "" {
 		t.Fatalf("fixed parameters: %#v", cfg)
 	}
 	for key, want := range map[string]string{
+		"collation_connection":     "'utf8mb4_0900_bin'",
 		"time_zone":                "'+00:00'",
 		"transaction_isolation":    "'READ-COMMITTED'",
 		"innodb_lock_wait_timeout": "30",
@@ -179,6 +180,13 @@ func TestOpenSelectsTheDriverAndBoundsThePool(t *testing.T) {
 	if db.Stats().MaxOpenConnections != 3 {
 		t.Fatalf("stats = %#v", db.Stats())
 	}
+	for _, driver := range []string{"", DriverPostgres} {
+		pg, err := Open(driver, "postgres://u:p@localhost:5432/notarx?sslmode=disable", config)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = pg.Close()
+	}
 	pg, err := Open(DriverPostgres, "postgres://u:p@localhost:5432/notarx?sslmode=disable", config)
 	if err != nil {
 		t.Fatal(err)
@@ -202,6 +210,16 @@ func TestRedactionHidesPasswords(t *testing.T) {
 	raw := "mysql://notarx:s3cret@db:3306/notarx"
 	if got := RedactURL(raw); strings.Contains(got, "s3cret") || !strings.Contains(got, "notarx:xxxxx@db") {
 		t.Fatalf("RedactURL = %q", got)
+	}
+	encoded := "mysql://notarx:p%40ss%2Fword@db/notarx"
+	if got := RedactError(errors.New("auth failed for p%40ss%2Fword and p@ss/word"), encoded); strings.Contains(got, "ss") && strings.Contains(got, "word") {
+		t.Fatalf("encoded password: %q", got)
+	}
+	if got := RedactError(errors.New("abc"), ""); got != "abc" {
+		t.Fatalf("empty URL mangled the message: %q", got)
+	}
+	if got := RedactError(errors.New("a1b1"), "mysql://u:1@db/n"); got != "a1b1" {
+		t.Fatalf("short password mangled the message: %q", got)
 	}
 	if got := RedactURL("mysql://db/notarx"); got != "mysql://db/notarx" {
 		t.Fatalf("no password: %q", got)

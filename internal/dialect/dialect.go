@@ -39,7 +39,8 @@ type Locker interface {
 // Claimer builds queue claims: a worker takes up to limit unlocked rows for the
 // life of tx, a lease column makes a crashed worker's rows claimable again.
 type Claimer interface {
-	// ClaimRows runs selectSQL, a SELECT without a LIMIT or locking clause that
+	// ClaimRows runs selectSQL, a plain SELECT (no LIMIT, locking, DISTINCT,
+	// GROUP BY or set operation, which an implementation rejects) that
 	// uses the dialect's placeholders for args, and locks the rows it returns
 	// with skip-locked semantics, so concurrent claimers see disjoint rows.
 	ClaimRows(ctx context.Context, tx *sql.Tx, selectSQL string, limit int, args ...any) (*sql.Rows, error)

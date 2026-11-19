@@ -88,17 +88,21 @@ func (r Runner) Run(ctx context.Context, cfg config.Config, names []string) Repo
 		case "policy":
 			report.Results = append(report.Results, policyResult(cfg))
 		case "mysql":
-			if isMySQL(cfg) {
-				facts, err := r.MySQLProbe(ctx, cfg)
-				report.Results = append(report.Results, mysqlResult(cfg, facts, err))
+			if !isMySQL(cfg) {
+				report.Results = r.inapplicable(report.Results, name, names)
+				continue
 			}
+			facts, err := r.MySQLProbe(ctx, cfg)
+			report.Results = append(report.Results, mysqlResult(cfg, facts, err))
 		case "postgres":
 			if isMySQL(cfg) {
+				report.Results = r.inapplicable(report.Results, name, names)
 				continue
 			}
 			report.Results = append(report.Results, dependencyResult(name, "PostgreSQL is reachable", r.PostgresPing(ctx, cfg.DatabaseURL)))
 		case "pg_trgm":
 			if isMySQL(cfg) {
+				report.Results = r.inapplicable(report.Results, name, names)
 				continue
 			}
 			state, err := r.TrigramState(ctx, cfg.DatabaseURL)
@@ -110,6 +114,16 @@ func (r Runner) Run(ctx context.Context, cfg config.Config, names []string) Repo
 		}
 	}
 	return report
+}
+
+// inapplicable handles a check that belongs to the other database driver. A run
+// of all checks omits it; a check the operator asked for by name fails, so a
+// wrong NOTARX_DATABASE_DRIVER cannot produce a green report with no database check.
+func (Runner) inapplicable(results []Result, name string, requested []string) []Result {
+	if len(requested) == 0 {
+		return results
+	}
+	return append(results, Result{Name: name, Status: StatusFail, Summary: "check does not apply to the configured NOTARX_DATABASE_DRIVER"})
 }
 
 func selectedChecks(names []string) map[string]bool {

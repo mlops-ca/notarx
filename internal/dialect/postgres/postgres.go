@@ -7,8 +7,10 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"time"
 
@@ -22,7 +24,15 @@ func New() dialect.Set {
 	return dialect.Set{Name: database.DriverPostgres, Locker: Locker{}, Claimer: Claimer{}, Notifier: Notifier{}, Classifier: Classifier{}}
 }
 
-const sessionPollInterval = 50 * time.Millisecond
+const (
+	sessionPollInterval = 50 * time.Millisecond
+	unlistenTimeout     = 2 * time.Second
+)
+
+// claimForbidden matches clauses that conflict with the appended LIMIT and
+// FOR UPDATE SKIP LOCKED (PostgreSQL refuses FOR UPDATE with DISTINCT, GROUP BY,
+// UNION and aggregates), or that would be applied twice.
+var claimForbidden = regexp.MustCompile(`(?i)(;|--|/\*|\b(limit|offset|fetch|distinct|group\s+by|union|intersect|except|for\s+(update|share|no\s+key\s+update|key\s+share))\b)`)
 
 // Locker uses advisory locks keyed by hashtextextended(key, 0).
 type Locker struct{}
@@ -84,6 +94,9 @@ func (Claimer) ClaimRows(ctx context.Context, tx *sql.Tx, selectSQL string, limi
 	if limit <= 0 {
 		return nil, errors.New("claim limit must be positive")
 	}
+	if claimForbidden.MatchString(selectSQL) {
+		return nil, errors.New("claim query must be a plain SELECT without LIMIT, locking, set or grouping clauses")
+	}
 	query := fmt.Sprintf("%s LIMIT $%d FOR UPDATE SKIP LOCKED", selectSQL, len(args)+1)
 	return tx.QueryContext(ctx, query, append(slices.Clone(args), limit)...)
 }
@@ -109,7 +122,20 @@ func (s subscription) Wait(ctx context.Context) (string, error) {
 	return database.WaitForNotification(ctx, s.conn)
 }
 
-func (s subscription) Close() error { return s.conn.Close() }
+// Close drops the LISTEN registrations before the connection goes back to the
+// pool, so a later user of it receives no stray notifications; when that fails
+// the connection is discarded instead.
+func (s subscription) Close() error {
+	ctx, cancel := context.WithTimeout(context.Background(), unlistenTimeout)
+	defer cancel()
+	if _, err := s.conn.ExecContext(ctx, `UNLISTEN *`); err != nil {
+		_ = s.conn.Raw(func(any) error { return driver.ErrBadConn })
+	}
+	if err := s.conn.Close(); err != nil && !errors.Is(err, sql.ErrConnDone) {
+		return err
+	}
+	return nil
+}
 
 // Classifier maps SQLSTATE codes.
 type Classifier struct{}

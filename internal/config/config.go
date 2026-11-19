@@ -486,8 +486,6 @@ func Load() (Config, error) {
 	cfg.DatabaseCoordinatorPool.ConnMaxIdleTime = cfg.DatabasePool.ConnMaxIdleTime
 	cfg.DatabaseArtifactLockPool.ConnMaxLifetime = cfg.DatabasePool.ConnMaxLifetime
 	cfg.DatabaseArtifactLockPool.ConnMaxIdleTime = cfg.DatabasePool.ConnMaxIdleTime
-	cfg.DatabaseNotificationPool.ConnMaxLifetime = cfg.DatabasePool.ConnMaxLifetime
-	cfg.DatabaseNotificationPool.ConnMaxIdleTime = cfg.DatabasePool.ConnMaxIdleTime
 	if err := cfg.DatabasePool.Validate(); err != nil {
 		return Config{}, fmt.Errorf("invalid database pool configuration: %w", err)
 	}

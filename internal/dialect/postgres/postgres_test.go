@@ -209,6 +209,11 @@ func TestClaimRowsAppendsSkipLockedAndLimit(t *testing.T) {
 	if r.queries[0] != want || len(r.args[0]) != 3 || r.args[0][2].Value != int64(5) {
 		t.Fatalf("query %q args %v", r.queries[0], r.args[0])
 	}
+	for _, bad := range []string{"SELECT 1;", "SELECT id FROM t LIMIT 3", "SELECT id FROM t FOR UPDATE", "select distinct id from t", "SELECT id FROM t GROUP BY id", "SELECT 1 UNION SELECT 2", "SELECT 1 -- x"} {
+		if _, err := (Claimer{}).ClaimRows(ctx, tx, bad, 1); err == nil {
+			t.Errorf("%q accepted", bad)
+		}
+	}
 	if _, err := (Claimer{}).ClaimRows(ctx, tx, "SELECT 1", 0); err == nil {
 		t.Fatal("non-positive limit accepted")
 	}
@@ -272,5 +277,24 @@ func TestSubscribeClosesTheConnectionWhenListenFails(t *testing.T) {
 	}
 	if err := sub.Close(); err != nil {
 		t.Fatal(err)
+	}
+	if r2.queries[len(r2.queries)-1] != "UNLISTEN *" {
+		t.Fatalf("Close did not UNLISTEN: %v", r2.queries)
+	}
+
+	failing := &recorder{}
+	db3 := open(t, failing)
+	sub, err = (Notifier{}).Subscribe(ctx, db3, "queue")
+	if err != nil {
+		t.Fatal(err)
+	}
+	failing.mu.Lock()
+	failing.failOn = "UNLISTEN"
+	failing.mu.Unlock()
+	if err := sub.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if got := db3.Stats().OpenConnections; got != 0 {
+		t.Fatalf("a connection whose UNLISTEN failed went back to the pool (%d open)", got)
 	}
 }

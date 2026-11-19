@@ -11,10 +11,14 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
 )
+
+// warnTLSRequired limits the no-verification warning to once per process, not once per pool.
+var warnTLSRequired sync.Once
 
 // Driver names accepted by NOTARX_DATABASE_DRIVER.
 const (
@@ -47,7 +51,7 @@ func ValidDriver(name string) bool {
 // ADR 0022 and refuses the driver DSN form.
 func Open(driver, databaseURL string, config PoolConfig) (*sql.DB, error) {
 	switch driver {
-	case DriverPostgres:
+	case "", DriverPostgres:
 		return OpenPostgres(databaseURL, config)
 	case DriverMySQL:
 		return OpenMySQL(databaseURL, config)
@@ -67,7 +71,9 @@ func OpenMySQL(databaseURL string, config PoolConfig) (*sql.DB, error) {
 		return nil, err
 	}
 	if mode == TLSRequired {
-		slog.Warn("MySQL TLS mode required does not verify the server certificate; use tls=verify-ca or tls=verify-full")
+		warnTLSRequired.Do(func() {
+			slog.Warn("MySQL TLS mode required does not verify the server certificate; use tls=verify-ca or tls=verify-full")
+		})
 	}
 	connector, err := mysql.NewConnector(cfg)
 	if err != nil {
@@ -145,12 +151,14 @@ func ParseMySQLURL(raw, caFile string) (*mysql.Config, string, error) {
 	cfg.Net = "tcp"
 	cfg.Addr = net.JoinHostPort(host, port)
 	cfg.DBName = name
-	cfg.Collation = mysqlCollation
 	cfg.Loc = time.UTC
 	cfg.ParseTime = true
 	cfg.ClientFoundRows = false
 	cfg.MultiStatements = false
 	cfg.Params = map[string]string{
+		// go-sql-driver has no handshake id for utf8mb4_0900_bin, so the binary
+		// collation is set as a session variable after the handshake.
+		"collation_connection":     "'" + mysqlCollation + "'",
 		"time_zone":                "'+00:00'",
 		"transaction_isolation":    "'READ-COMMITTED'",
 		"sql_mode":                 "'" + mysqlSQLMode + "'",
@@ -239,16 +247,31 @@ func RedactURL(raw string) string {
 	return parsed.String()
 }
 
+// minRedactedSecret is the shortest password RedactError masks on its own.
+const minRedactedSecret = 4
+
 // RedactError removes every occurrence of the URL, and of its password, from
 // an error message produced by a driver.
 func RedactError(err error, raw string) string {
 	if err == nil {
 		return ""
 	}
-	message := strings.ReplaceAll(err.Error(), raw, RedactURL(raw))
+	message := err.Error()
+	if raw == "" {
+		return message
+	}
+	message = strings.ReplaceAll(message, raw, RedactURL(raw))
 	if parsed, parseErr := url.Parse(raw); parseErr == nil && parsed.User != nil {
-		if password, set := parsed.User.Password(); set && password != "" {
-			message = strings.ReplaceAll(message, password, "xxxxx")
+		if password, set := parsed.User.Password(); set {
+			// Both the decoded and the percent-encoded form can be echoed. A very short
+			// password is left alone: replacing every occurrence of one or two
+			// characters would only mangle the message.
+			_, encoded, _ := strings.Cut(parsed.User.String(), ":")
+			for _, secret := range []string{password, encoded} {
+				if len(secret) >= minRedactedSecret {
+					message = strings.ReplaceAll(message, secret, "xxxxx")
+				}
+			}
 		}
 	}
 	return message
