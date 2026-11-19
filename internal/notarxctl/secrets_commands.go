@@ -85,7 +85,7 @@ func secretsResealCommand() command {
 				return err
 			}
 			if errors.Is(runErr, reseal.ErrAuditMissing) {
-				fmt.Fprintln(env.stderr, "warning: sealed values were rewritten but the security audit record is missing; record this run manually")
+				_, _ = fmt.Fprintln(env.stderr, "warning: sealed values were rewritten but the security audit record is missing; record this run manually")
 			}
 			return runErr
 		},
