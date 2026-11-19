@@ -7,15 +7,15 @@ import (
 
 func TestDefaultRegistryMatchesADR(t *testing.T) {
 	registry := DefaultRegistry()
-	if len(registry) != 2 {
+	if len(registry) != 3 {
 		t.Fatalf("registry = %+v", registry)
 	}
-	want := map[string]time.Duration{"resolver_audit_log": 90 * 24 * time.Hour, "security_audit_log": 730 * 24 * time.Hour}
+	want := map[string]time.Duration{"resolver_audit_log": 90 * 24 * time.Hour, "security_audit_log": 730 * 24 * time.Hour, "artifact_scan_history": 180 * 24 * time.Hour}
 	for _, spec := range registry {
 		if err := spec.Validate(); err != nil {
 			t.Fatal(err)
 		}
-		if spec.Granularity != Month || spec.Column != "occurred_at" || spec.Retention != want[spec.Table] {
+		if spec.Granularity != Month || spec.Column != map[bool]string{true: "scanned_at", false: "occurred_at"}[spec.Table == "artifact_scan_history"] || spec.Retention != want[spec.Table] {
 			t.Errorf("unexpected spec %+v", spec)
 		}
 	}
