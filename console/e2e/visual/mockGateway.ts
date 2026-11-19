@@ -40,6 +40,7 @@ const routes: Record<string, Json> = {
   "/api/v2/service-accounts": fixtures.serviceAccounts,
   "/api/v2/users": fixtures.users,
   "/api/v2/authentication/providers": fixtures.identityProviders,
+  "/api/v2/security-settings": fixtures.securitySettings,
   "/api/v2/public/repositories": fixtures.publicRepositories,
   "/api/v2/repository-capacities": fixtures.repositoryCapacities,
   "/api/v2/service-accounts/sa-ci/credentials":

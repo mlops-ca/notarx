@@ -1,6 +1,7 @@
 import type {
   GetPublicAccessPolicyResponses,
   GetDiagnosticsResponses,
+  GetSecuritySettingsResponses,
   ListIdentityProvidersResponses,
   GetOverviewStatisticsResponses,
   GetRepositoryCapabilitiesResponses,
@@ -397,6 +398,11 @@ export const users = {
 export const identityProviders = {
   items: [],
 } satisfies ListIdentityProvidersResponses[200];
+
+export const securitySettings = {
+  authorizationCacheEnabled: true,
+  authorizationCacheTtlSeconds: 5,
+} satisfies GetSecuritySettingsResponses[200];
 
 /** Not in the management contract; Login reads it with plain fetch. */
 export const loginIdentityProviders = { items: [] };

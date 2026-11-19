@@ -52,9 +52,11 @@ func TestPostgresRustFSNuGetCredentialRotationAndRevocation(t *testing.T) {
 	if f.repo, err = store.UpdateHostedRepository(ctx, f.repo, f.repo.Version); err != nil {
 		t.Fatal(err)
 	}
-	cachedKeys := authorization.NewCachedAPIKeys(store, readcache.NewRegistry(0), store, time.Minute, nil)
+	var cachedKeys *authorization.CachedAPIKeys
 	serve := func() *httptest.Server {
 		t.Helper()
+		// A new wrapper per serve: the store is reopened between servers.
+		cachedKeys = authorization.NewCachedAPIKeys(store, readcache.NewRegistry(0), store, time.Minute, nil)
 		auth := authorization.Authenticator{APIKeys: cachedKeys, ServiceAccounts: store}
 		module, err := New(Options{Store: store, Repositories: store, Objects: f.objects, Authenticator: auth, Authorizer: authorization.RepositoryAuthorizer{Grants: store, Legacy: auth}, Audit: store, Anonymous: anonymous})
 		if err != nil {
