@@ -96,7 +96,8 @@ jobs:
   # debian:12 and rockylinux:9 containers and drive notarx-migrate against PostgreSQL 16.
   packages:
     needs: changes
-    if: needs.changes.outputs.ci == 'true'
+    # Packaged contents include migrations/ and the Go binaries, so a go change runs it too.
+    if: needs.changes.outputs.ci == 'true' || needs.changes.outputs.go == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -106,7 +107,9 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Install the package inspection tools
-        run: sudo apt-get install -y -qq --no-install-recommends rpm cpio
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends rpm cpio
       - name: Build the packages, assert their contents and run the container install test
         run: make package-install-test
 
@@ -508,6 +511,8 @@ jobs:
           echo "$NEEDS" | jq -e '[.[] | select(.result != "success" and .result != "skipped")] | length == 0' >/dev/null
           # A skip is legitimate only when change detection turned the job off;
           # a job skipped because something upstream failed must not pass.
+          packages=false
+          if [[ "$GO" == true || "$CI_CLASS" == true ]]; then packages=true; fi
           e2e=false
           if [[ "$GO" == true || "$CONSOLE" == true ]]; then e2e=true; fi
           # The merged report is required whenever the shards all passed; when a
@@ -515,7 +520,7 @@ jobs:
           report=false
           if [[ "$e2e" == true && $(echo "$NEEDS" | jq -r '.["console-e2e"].result') == success ]]; then report=true; fi
           status=0
-          for pair in quality:$GO quality-arm64:$GO object-store-contract:$GO contract-plan:$GO contract:$GO contract-and-test:$GO console:$CONSOLE console-e2e:$e2e console-e2e-report:$report build-images:$e2e docs:$DOCS image-test-stages:$IMAGES packages:$CI_CLASS oci-free-tier:$IMAGES oci-free-tier-tofu:$IMAGES; do
+          for pair in quality:$GO quality-arm64:$GO object-store-contract:$GO contract-plan:$GO contract:$GO contract-and-test:$GO console:$CONSOLE console-e2e:$e2e console-e2e-report:$report build-images:$e2e docs:$DOCS image-test-stages:$IMAGES packages:$packages oci-free-tier:$IMAGES oci-free-tier-tofu:$IMAGES; do
             job=${pair%%:*} class=${pair##*:}
             result=$(echo "$NEEDS" | jq -r --arg job "$job" '.[$job].result')
             if [[ "$class" == true && "$result" != success ]]; then

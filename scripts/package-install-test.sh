@@ -3,7 +3,7 @@
 # packages built for this host's architecture (scripts/package-check.sh --output DIR
 # writes them under DIR/<version>/).
 #
-#   scripts/package-install-test.sh --packages DIR [--images debian:12,rockylinux:9]
+#   scripts/package-install-test.sh --packages DIR [--images debian:12@<digest>,rockylinux:9@<digest>]
 #
 # For every image: install notarx and notarxctl (and notarx-console when present) from the local files,
 # check the service account, that the unit is installed but not enabled, the config
@@ -13,8 +13,10 @@
 set -euo pipefail
 
 packages=
-images=debian:12,rockylinux:9
-postgres_image=${PACKAGE_TEST_POSTGRES_IMAGE:-postgres:16}
+# Pinned by multi-arch index digest like every other external input of the release pipeline;
+# bump the digests together with the tags when the base images move.
+images=debian:12@sha256:268fb24c39bca92d326dd83ea3abebe4a3f7751c804ffef23bb6d857dd343ff8,rockylinux:9@sha256:03303863808e9cd79f0c58c833db3e5f9cde9f2abe16804a267b05dc54af86e4
+postgres_image=${PACKAGE_TEST_POSTGRES_IMAGE:-postgres:16@sha256:3950ad7c3148ca2175ef1b6c36c9efbf78957ae8fbe8b3a5d7c35af50500382f}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in

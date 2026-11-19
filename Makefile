@@ -414,9 +414,9 @@ package-check:
 # Installs the packages built by package-check in debian:12 and rockylinux:9 containers and
 # drives notarx-migrate against a PostgreSQL 16 container (needs Docker).
 package-install-test:
-	@dir=$(mktemp -d) && ./scripts/package-check.sh --output "$dir"; rc=$?; \
-	if [ $rc -eq 0 ]; then ./scripts/package-install-test.sh --packages "$dir/0.2.0-nightly.3"; rc=$?; fi; \
-	rm -rf "$dir"; exit $rc
+	@dir=$$(mktemp -d); ./scripts/package-check.sh --output "$$dir"; rc=$$?; \
+	if [ "$$rc" -eq 0 ]; then ./scripts/package-install-test.sh --packages "$$dir/$$(ls -1 "$$dir" | sort | tail -n 1)"; rc=$$?; fi; \
+	rm -rf "$$dir"; exit "$$rc"
 
 packages-signing-drill:
 	@./scripts/packages-signing-drill.sh

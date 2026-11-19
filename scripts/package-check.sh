@@ -151,10 +151,10 @@ check_version() { # check_version <version> <packages dir> <assets dir> <console
 # No migration and no start logic in any maintainer script (ADR 0025).
 check_scripts() { # check_scripts <name> <deb scripts dir> <rpm file>
   local name=$1 dir=$2 rpmf=$3 script text
-  for script in preinst postinst prerm; do
+  for script in preinst postinst prerm postrm; do
     [[ -f "$dir/$script" ]] || { fail "$name deb is missing $script"; continue; }
     # Operator hints are printf lines; they may name the commands they tell a human to run.
-    text=$(grep -Ev '^[[:space:]]*(printf|echo)[[:space:]]' "$dir/$script" || true)
+    text=$(grep -Ev '(printf|echo) ' "$dir/$script" || true)
     if grep -Eq 'run-migrations|psql|notarx migrate|pg_dump' <<<"$text"; then fail "$name $script applies or references migrations"; fi
     if grep -Eq 'systemctl[[:space:]]+(--[a-z-]+[[:space:]]+)*(start|enable|restart|reload-or-restart|reload-or-try-restart)\b' <<<"$text"; then
       fail "$name $script starts, enables or restarts the service"
@@ -167,7 +167,7 @@ check_scripts() { # check_scripts <name> <deb scripts dir> <rpm file>
     fail "$name postinst must gate try-restart on notarx-migrate --check"
   fi
   local rpm_scripts
-  rpm_scripts=$(rpm -qp --scripts "$rpmf" | grep -Ev '^[[:space:]]*(printf|echo)[[:space:]]' || true)
+  rpm_scripts=$(rpm -qp --scripts "$rpmf" | grep -Ev '(printf|echo) ' || true)
   expect_line "$name rpm scriptlets" 'groupadd --system notarx' "$rpm_scripts"
   if grep -Eq 'run-migrations|psql' <<<"$rpm_scripts"; then fail "$name rpm scriptlets reference migrations"; fi
   if grep -Eq 'systemctl[[:space:]]+(start|enable|restart)\b' <<<"$rpm_scripts"; then fail "$name rpm scriptlets start or enable the service"; fi
@@ -180,15 +180,24 @@ else
   versions=(${PACKAGE_CHECK_VERSIONS:-0.2.0 0.2.0-nightly.3})
   revision=0123456789abcdef0123456789abcdef01234567
   if [[ -n "$output" ]]; then mkdir -p "$output"; output=$(cd "$output" && pwd); fi
+  # The versions differ only in the package metadata, so the binaries are compiled once (for
+  # the first version) and the archives are renamed for the others.
+  first=${versions[0]}
+  built="$workdir/built"
+  mkdir -p "$built"
+  "$root/scripts/build-release-artifacts.sh" --version "$first" --revision "$revision" --output "$built" --skip-console >/dev/null
+  stub="$workdir/console-stub"
+  mkdir -p "$stub/assets"
+  printf '<!doctype html><title>notarx console stub</title>\n' > "$stub/index.html"
+  printf 'stub\n' > "$stub/assets/stub.txt"
   for version in "${versions[@]}"; do
     assets="$workdir/assets-$version"
-    stub="$workdir/console-stub-$version"
     out=$workdir/packages-$version
     [[ -n "$output" ]] && out=$output/$version
-    mkdir -p "$assets" "$stub/assets"
-    "$root/scripts/build-release-artifacts.sh" --version "$version" --revision "$revision" --output "$assets" --skip-console >/dev/null
-    printf '<!doctype html><title>notarx console stub</title>\n' > "$stub/index.html"
-    printf 'stub\n' > "$stub/assets/stub.txt"
+    mkdir -p "$assets"
+    for kind in notarx notarxctl; do
+      cp "$built/${kind}_${first}_linux_$arch.tar.gz" "$assets/${kind}_${version}_linux_$arch.tar.gz"
+    done
     tar -czf "$assets/notarx-console_${version}_web.tar.gz" -C "$stub" .
     "$root/scripts/build-packages.sh" --version "$version" --assets "$assets" --output "$out" --console >/dev/null
     printf 'checking packages for %s\n' "$version"

@@ -64,6 +64,7 @@ scripts:
   preinstall: packaging/preinst
   postinstall: packaging/postinst
   preremove: packaging/prerm
+  postremove: packaging/postrm
 overrides:
   deb:
     recommends:

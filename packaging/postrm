@@ -1,0 +1,9 @@
+#!/bin/sh
+# notarx postremove (deb postrm, rpm %postun). Drops the stale unit definition from
+# systemd after the files are gone. Never starts or enables anything.
+set -e
+
+if [ -d /run/systemd/system ]; then
+  systemctl daemon-reload || true
+fi
+exit 0

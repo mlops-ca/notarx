@@ -16,6 +16,13 @@ run_psql() {
   fi
 }
 
+# Name the real role and database in messages when a connection URI is used.
+if [ -n "${NOTARX_DATABASE_URL:-}" ]; then
+  session=$(run_psql -At -F ' ' -c 'SELECT current_user, current_database()')
+  pg_user=${session%% *}
+  pg_database=${session#* }
+fi
+
 file_sha256() {
   if command -v sha256sum >/dev/null 2>&1; then
     sha256sum "$1" | awk '{print $1}'
