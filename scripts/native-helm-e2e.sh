@@ -70,7 +70,7 @@ required={
  'TestPostgresHelmReplicationAuthorityMutationSerializesWithPublication',
  'TestPostgresHelmReplicationCredentialExpiryDuringFinalTransactionRollsBack',
  'TestPostgresHelmReplicationFinalGovernance',
-    'TestPostgresHelmReplicationReservesTargetBytes',
+ 'TestPostgresHelmReplicationReservesTargetBytes',
  'TestPostgresHelmReplicationStoreContract',
  'TestPostgresRustFSHelmReplicationBlockedCurrentUserAuthority',
  'TestPostgresRustFSHelmReplicationRepositoryOnlyKeyAuthority',
