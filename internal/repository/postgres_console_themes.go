@@ -40,7 +40,11 @@ func (s *PostgresStore) ListConsoleThemePackages(ctx context.Context) ([]Console
 }
 
 func (s *PostgresStore) GetConsoleThemePackage(ctx context.Context, id string) (ConsoleThemePackage, error) {
-	theme, err := scanConsoleThemePackage(s.db.QueryRowContext(ctx, `SELECT id, version, payload, created_at, updated_at FROM console_theme_packages WHERE id=$1`, id))
+	return getConsoleThemePackage(ctx, s.db, id)
+}
+
+func getConsoleThemePackage(ctx context.Context, q sqlRunner, id string) (ConsoleThemePackage, error) {
+	theme, err := scanConsoleThemePackage(q.QueryRowContext(ctx, `SELECT id, version, payload, created_at, updated_at FROM console_theme_packages WHERE id=$1`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return ConsoleThemePackage{}, ErrConsoleThemeNotFound
 	}
@@ -67,7 +71,7 @@ func (s *PostgresStore) ReplaceConsoleThemePackage(ctx context.Context, theme Co
 		if !errors.Is(err, sql.ErrNoRows) {
 			return replaced, err
 		}
-		if _, getErr := s.GetConsoleThemePackage(ctx, theme.ID); errors.Is(getErr, ErrConsoleThemeNotFound) {
+		if _, getErr := getConsoleThemePackage(ctx, q, theme.ID); errors.Is(getErr, ErrConsoleThemeNotFound) {
 			return ConsoleThemePackage{}, ErrConsoleThemeNotFound
 		} else if getErr != nil {
 			return ConsoleThemePackage{}, getErr
@@ -93,7 +97,7 @@ func (s *PostgresStore) DeleteConsoleThemePackage(ctx context.Context, id, expec
 		if deleted == 1 {
 			return struct{}{}, nil
 		}
-		if _, getErr := s.GetConsoleThemePackage(ctx, id); errors.Is(getErr, ErrConsoleThemeNotFound) {
+		if _, getErr := getConsoleThemePackage(ctx, q, id); errors.Is(getErr, ErrConsoleThemeNotFound) {
 			return struct{}{}, ErrConsoleThemeNotFound
 		} else if getErr != nil {
 			return struct{}{}, getErr

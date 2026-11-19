@@ -32,12 +32,9 @@ func recordMutationAudit(w http.ResponseWriter, recorder mutationAuditRecorder, 
 	return true
 }
 
-// auditFor returns the audit records a management handler hands to the store method that
-// makes the change, or none when audit is not configured.
-func (h generatedRepositoryAPIAdapter) auditFor(record repository.AuditRecord) []repository.AuditRecord {
-	if h.audit == nil {
-		return nil
-	}
+// managementAudit completes a management audit record: resolved outcome, the current time,
+// the management format and a bypassed cache. Every management audit goes through it.
+func managementAudit(record repository.AuditRecord) repository.AuditRecord {
 	if record.Outcome == "" {
 		record.Outcome = repository.AuditResolved
 	}
@@ -50,5 +47,14 @@ func (h generatedRepositoryAPIAdapter) auditFor(record repository.AuditRecord) [
 	if record.CacheDisposition == "" {
 		record.CacheDisposition = "bypass"
 	}
-	return []repository.AuditRecord{record}
+	return record
+}
+
+// auditFor returns the audit records a management handler hands to the store method that
+// makes the change, or none when audit is not configured.
+func (h generatedRepositoryAPIAdapter) auditFor(record repository.AuditRecord) []repository.AuditRecord {
+	if h.audit == nil {
+		return nil
+	}
+	return []repository.AuditRecord{managementAudit(record)}
 }

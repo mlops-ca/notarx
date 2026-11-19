@@ -122,18 +122,20 @@ func (s *PostgresStore) ClaimDueScheduledTasks(ctx context.Context, now time.Tim
 	return claims, rows.Err()
 }
 
-func (s *PostgresStore) CreateScheduledTaskRun(ctx context.Context, taskID, trigger string, now time.Time) (ScheduledTaskRun, error) {
-	var run ScheduledTaskRun
-	err := scanScheduledTaskRun(s.db.QueryRowContext(ctx, `WITH created AS (
+func (s *PostgresStore) CreateScheduledTaskRun(ctx context.Context, taskID, trigger string, now time.Time, audit ...AuditRecord) (ScheduledTaskRun, error) {
+	return runAudited(ctx, s, audit, func(q sqlRunner) (ScheduledTaskRun, error) {
+		var run ScheduledTaskRun
+		err := scanScheduledTaskRun(q.QueryRowContext(ctx, `WITH created AS (
 		INSERT INTO scheduled_task_runs (id,task_id,trigger,state,scheduled_at,created_at,last_error)
 		SELECT gen_random_uuid(),id,$2,'failed',$3,$3,'dispatch interrupted before submission' FROM scheduled_tasks WHERE id=$1::uuid RETURNING *
 	), touched AS (
 		UPDATE scheduled_tasks tasks SET last_run_at=$3,last_run_id=created.id,last_run_state='failed',last_error='dispatch interrupted before submission',updated_at=$3 FROM created WHERE tasks.id=created.task_id
     ) SELECT `+scheduledTaskRunColumns+` FROM created`, taskID, trigger, now.UTC()), &run)
-	if errors.Is(err, sql.ErrNoRows) {
-		return ScheduledTaskRun{}, ErrNotFound
-	}
-	return run, err
+		if errors.Is(err, sql.ErrNoRows) {
+			return ScheduledTaskRun{}, ErrNotFound
+		}
+		return run, err
+	})
 }
 
 func (s *PostgresStore) ListScheduledTaskRuns(ctx context.Context, taskID string, limit int) ([]ScheduledTaskRun, error) {
@@ -156,7 +158,7 @@ func (s *PostgresStore) ListScheduledTaskRuns(ctx context.Context, taskID string
 	return items, rows.Err()
 }
 
-func (s *PostgresStore) UpdateScheduledTaskRun(ctx context.Context, run ScheduledTaskRun, audit ...AuditRecord) error {
+func (s *PostgresStore) UpdateScheduledTaskRun(ctx context.Context, run ScheduledTaskRun) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -171,9 +173,6 @@ func (s *PostgresStore) UpdateScheduledTaskRun(ctx context.Context, run Schedule
 		return err
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE scheduled_tasks SET last_run_state=$1,last_error=$2,updated_at=now() WHERE id=$3::uuid`, run.State, run.LastError, taskID); err != nil {
-		return err
-	}
-	if err = insertAudits(ctx, tx, audit); err != nil {
 		return err
 	}
 	return tx.Commit()

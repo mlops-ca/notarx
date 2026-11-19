@@ -288,9 +288,9 @@ type ScheduledTaskStore interface {
 	UpdateScheduledTask(context.Context, ScheduledTask, string, ...AuditRecord) (ScheduledTask, error)
 	DeleteScheduledTask(context.Context, string, ...AuditRecord) error
 	ClaimDueScheduledTasks(context.Context, time.Time, int) ([]ScheduledTaskClaim, error)
-	CreateScheduledTaskRun(context.Context, string, string, time.Time) (ScheduledTaskRun, error)
+	CreateScheduledTaskRun(context.Context, string, string, time.Time, ...AuditRecord) (ScheduledTaskRun, error)
 	ListScheduledTaskRuns(context.Context, string, int) ([]ScheduledTaskRun, error)
-	UpdateScheduledTaskRun(context.Context, ScheduledTaskRun, ...AuditRecord) error
+	UpdateScheduledTaskRun(context.Context, ScheduledTaskRun) error
 }
 
 type ReplicationStore interface {

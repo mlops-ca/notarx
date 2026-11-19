@@ -151,12 +151,15 @@ func (s *MemoryStore) ClaimDueScheduledTasks(_ context.Context, now time.Time, l
 	return claims, nil
 }
 
-func (s *MemoryStore) CreateScheduledTaskRun(_ context.Context, taskID, trigger string, now time.Time) (ScheduledTaskRun, error) {
+func (s *MemoryStore) CreateScheduledTaskRun(ctx context.Context, taskID, trigger string, now time.Time, audit ...AuditRecord) (ScheduledTaskRun, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	task, ok := s.scheduledTasks[taskID]
 	if !ok {
 		return ScheduledTaskRun{}, ErrNotFound
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return ScheduledTaskRun{}, err
 	}
 	now = now.UTC()
 	run := ScheduledTaskRun{ID: ids.New(), TaskID: taskID, Trigger: trigger, State: ScheduledTaskFailed, ScheduledAt: now, CreatedAt: now, LastError: scheduledTaskDispatchPendingError}
@@ -184,7 +187,7 @@ func (s *MemoryStore) ListScheduledTaskRuns(_ context.Context, taskID string, li
 	return items, nil
 }
 
-func (s *MemoryStore) UpdateScheduledTaskRun(ctx context.Context, run ScheduledTaskRun, audit ...AuditRecord) error {
+func (s *MemoryStore) UpdateScheduledTaskRun(_ context.Context, run ScheduledTaskRun) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	current, ok := s.scheduledTaskRuns[run.ID]
@@ -193,9 +196,6 @@ func (s *MemoryStore) UpdateScheduledTaskRun(ctx context.Context, run ScheduledT
 	}
 	if run.State != ScheduledTaskSubmitted && run.State != ScheduledTaskFailed {
 		return ErrVersionConflict
-	}
-	if err := s.commitAuditLocked(ctx, audit); err != nil {
-		return err
 	}
 	run.TaskID, run.CreatedAt, run.ScheduledAt = current.TaskID, current.CreatedAt, current.ScheduledAt
 	if run.CompletedAt.IsZero() {

@@ -64,17 +64,18 @@ func (s *MemoryStore) SetAuditFault(fn func(AuditRecord) error) {
 // every validation and before the first state change, holding s.mu. When the audit
 // cannot be written the caller returns the error and has changed nothing.
 func (s *MemoryStore) commitAuditLocked(ctx context.Context, audit []AuditRecord) error {
+	records := make([]AuditRecord, len(audit))
 	for index := range audit {
-		audit[index] = withRequestContextAudit(ctx, audit[index])
+		records[index] = withRequestContextAudit(ctx, audit[index])
 	}
-	for _, record := range audit {
+	for _, record := range records {
 		if s.auditFault != nil {
 			if err := s.auditFault(record); err != nil {
 				return err
 			}
 		}
 	}
-	for _, record := range audit {
+	for _, record := range records {
 		s.appendAuditLocked(record)
 	}
 	return nil

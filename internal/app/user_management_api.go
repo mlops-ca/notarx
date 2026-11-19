@@ -578,7 +578,7 @@ func (h identityManagementHandler) auditRecords(r *http.Request, resource, opera
 	if h.audit == nil {
 		return nil
 	}
-	return []repository.AuditRecord{{Actor: h.auditActor(r), Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: resource, Operation: operation, Status: status, CacheDisposition: "bypass"}}
+	return []repository.AuditRecord{managementAudit(repository.AuditRecord{Actor: h.auditActor(r), Resource: resource, Operation: operation, Status: status})}
 }
 
 // bestEffortUserManagementAudit audits a read; a failure is not surfaced.

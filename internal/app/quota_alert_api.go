@@ -216,5 +216,5 @@ func (h generatedRepositoryAPIAdapter) quotaRuleAudit(w http.ResponseWriter, r *
 	if h.audit == nil {
 		return true
 	}
-	return recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{Actor: p.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: id, Operation: operation, Status: status, CacheDisposition: "bypass"})
+	return recordMutationAudit(w, h.audit, r.Context(), managementAudit(repository.AuditRecord{Actor: p.Actor, Resource: id, Operation: operation, Status: status}))
 }

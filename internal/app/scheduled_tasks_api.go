@@ -227,6 +227,14 @@ func (h generatedRepositoryAPIAdapter) RunScheduledTask(w http.ResponseWriter, r
 		return
 	}
 	run, err := (ScheduledTaskScheduler{Store: h.sessions.store}).RunNow(r.Context(), task.ID, h.scheduledTaskAudit(r, principal, task, "scheduled_task.run", http.StatusAccepted)...)
+	if errors.Is(err, ErrScheduledTaskRunNotRecorded) {
+		if errors.Is(err, repository.ErrNotFound) {
+			writeHostedProblem(w, http.StatusNotFound, "not_found", "scheduled task not found")
+			return
+		}
+		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "record scheduled task run failed")
+		return
+	}
 	if err != nil {
 		// Nothing was dispatched, so the audit stays best-effort and the real
 		// dispatch error reaches the caller.
@@ -382,7 +390,7 @@ func (h generatedRepositoryAPIAdapter) scheduledTaskAuditRecord(r *http.Request,
 			repositoryName = repo.Name
 		}
 	}
-	return repository.AuditRecord{Repository: repositoryName, GroupName: repositoryName, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: "scheduled-tasks/" + task.ID, Operation: operation, Status: status, CacheDisposition: "bypass"}
+	return managementAudit(repository.AuditRecord{Repository: repositoryName, GroupName: repositoryName, Actor: principal.Actor, Resource: "scheduled-tasks/" + task.ID, Operation: operation, Status: status})
 }
 
 // bestEffortAuditScheduledTask audits an outcome that changed nothing.

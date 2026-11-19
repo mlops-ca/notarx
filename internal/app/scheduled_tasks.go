@@ -53,16 +53,20 @@ func (s ScheduledTaskScheduler) RunNow(ctx context.Context, taskID string, audit
 	if err != nil {
 		return repository.ScheduledTaskRun{}, err
 	}
-	run, err := s.Store.CreateScheduledTaskRun(ctx, taskID, "manual", s.now())
+	// The audit of a manual run is written in the transaction that records the run, before
+	// anything is enqueued, so a failed audit dispatches nothing.
+	run, err := s.Store.CreateScheduledTaskRun(ctx, taskID, "manual", s.now(), audit...)
 	if err != nil {
-		return repository.ScheduledTaskRun{}, err
+		return repository.ScheduledTaskRun{}, fmt.Errorf("%w: %w", ErrScheduledTaskRunNotRecorded, err)
 	}
-	return s.dispatch(ctx, task, run, audit...)
+	return s.dispatch(ctx, task, run)
 }
 
-// dispatch submits the run. The audit of a manual run is written in the transaction that
-// records the submitted state, so a failed audit leaves the run recorded as failed.
-func (s ScheduledTaskScheduler) dispatch(ctx context.Context, task repository.ScheduledTask, run repository.ScheduledTaskRun, audit ...repository.AuditRecord) (repository.ScheduledTaskRun, error) {
+// ErrScheduledTaskRunNotRecorded marks a manual run that was refused before dispatch
+// because its run record (and audit) could not be written.
+var ErrScheduledTaskRunNotRecorded = errors.New("scheduled task run could not be recorded")
+
+func (s ScheduledTaskScheduler) dispatch(ctx context.Context, task repository.ScheduledTask, run repository.ScheduledTaskRun) (repository.ScheduledTaskRun, error) {
 	key := "scheduled-task:" + task.ID + ":" + run.ID
 	var targetKind, targetID string
 	var dispatchErr error
@@ -102,7 +106,7 @@ func (s ScheduledTaskScheduler) dispatch(ctx context.Context, task repository.Sc
 		return run, dispatchErr
 	}
 	run.State, run.TargetKind, run.TargetID, run.LastError = repository.ScheduledTaskSubmitted, targetKind, targetID, ""
-	if err := s.Store.UpdateScheduledTaskRun(ctx, run, audit...); err != nil {
+	if err := s.Store.UpdateScheduledTaskRun(ctx, run); err != nil {
 		return run, err
 	}
 	return run, nil

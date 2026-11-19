@@ -51,7 +51,7 @@ func (s *PostgresStore) UpdateEmailTarget(ctx context.Context, v EmailTarget, ve
 func (s *PostgresStore) updateEmailTarget(ctx context.Context, q sqlRunner, v EmailTarget, version string) (EmailTarget, error) {
 	out, err := scanEmailTarget(q.QueryRowContext(ctx, `UPDATE email_targets SET name=$2,locale=$3,recipient_ciphertext=$4,enabled=$5,version=version+1,updated_at=clock_timestamp() WHERE id=$1::uuid AND version=$6::text::bigint RETURNING `+emailTargetColumns, v.ID, v.Name, v.Locale, v.RecipientCiphertext, v.Enabled, version))
 	if errors.Is(err, ErrNotFound) {
-		if _, e := s.GetEmailTarget(ctx, v.ID); e == nil {
+		if _, e := scanEmailTarget(q.QueryRowContext(ctx, `SELECT `+emailTargetColumns+` FROM email_targets WHERE id=$1::uuid`, v.ID)); e == nil {
 			err = ErrVersionConflict
 		}
 	}

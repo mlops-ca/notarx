@@ -19,21 +19,15 @@ func (s *MemoryStore) ReplaceOIDCSettings(ctx context.Context, settings OIDCSett
 	settings = normalizeOIDCSettingsDefaults(settings)
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.oidcSettings == nil && expectedVersion != "0" || s.oidcSettings != nil && s.oidcSettings.Version != expectedVersion {
+		return OIDCSettings{}, ErrVersionConflict
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return OIDCSettings{}, err
+	}
 	if s.oidcSettings == nil {
-		if expectedVersion != "0" {
-			return OIDCSettings{}, ErrVersionConflict
-		}
-		if err := s.commitAuditLocked(ctx, audit); err != nil {
-			return OIDCSettings{}, err
-		}
 		settings.Version = "1"
 	} else {
-		if s.oidcSettings.Version != expectedVersion {
-			return OIDCSettings{}, ErrVersionConflict
-		}
-		if err := s.commitAuditLocked(ctx, audit); err != nil {
-			return OIDCSettings{}, err
-		}
 		version, _ := strconv.ParseInt(s.oidcSettings.Version, 10, 64)
 		settings.Version = strconv.FormatInt(version+1, 10)
 	}

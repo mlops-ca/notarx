@@ -274,3 +274,37 @@ func runSettingsAuditRollback(t *testing.T, store settingsRollbackStore, fail, c
 		t.Fatalf("site settings after audits work again: %d %s", response.Code, response.Body.String())
 	}
 }
+
+// TestEmailTestReplayWritesOneAudit proves an idempotent retry of the email test request
+// returns the first delivery and does not write a second audit.
+func TestEmailTestReplayWritesOneAudit(t *testing.T) {
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", "01234567890123456789012345678901")
+	store := repository.NewMemoryStore()
+	target, err := store.CreateEmailTarget(context.Background(), repository.EmailTarget{ID: uuid.NewString(), Name: "Ops", Locale: "en-CA", RecipientCiphertext: "synthetic", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := emailnotification.Config{Enabled: true, Host: "smtp.example.test", Port: 465, Mode: "implicit_tls", From: "gateway@example.test", ApprovedIPs: []string{"192.0.2.10"}}
+	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{Email: config}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
+	key := uuid.NewString()
+	for range 2 {
+		request := httptest.NewRequest(http.MethodPost, "/api/v2/email-notifications:test", strings.NewReader(`{"targetId":"`+target.ID+`","scenario":"warning"}`))
+		authorize(request, "admin-secret")
+		request.Header.Set("If-Match", target.Version)
+		request.Header.Set("Idempotency-Key", key)
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusAccepted {
+			t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+		}
+	}
+	count := 0
+	for _, record := range store.Audits {
+		if record.Operation == "email.test.enqueue" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("email.test.enqueue audits=%d, want 1", count)
+	}
+}
