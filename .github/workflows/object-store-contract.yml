@@ -9,6 +9,12 @@ name: Object store contract
 # upstream source revision with the Go toolchain of the repository.
 on:
   workflow_call:
+    inputs:
+      # Commit to test. Empty means the ref of the calling workflow; the release gates
+      # (ADR 0024) pass the planned commit.
+      sha:
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -33,6 +39,8 @@ jobs:
           - { backend: minio, mode: when_supported }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.sha }}
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod

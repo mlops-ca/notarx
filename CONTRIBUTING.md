@@ -225,12 +225,13 @@ The CI workflow is the final source of truth for the complete required matrix.
 `scripts/ci-contract-lanes.json` is the single source for the contract lanes:
 their names and order, the tools each needs (`rust`, `node`, `npm`), job and
 step timeouts, and the failure artefacts. `scripts/ci-contract.py matrix` turns
-it into the matrix that `ci.yml` feeds to the reusable `contract-lane.yml`, so
+it into the matrix that `test-suite.yml` feeds to the reusable `contract-lane.yml`, so
 neither workflow names a lane. Add or move a lane by editing the JSON only.
 
-The `contract` jobs run in parallel with `fail-fast: false`. The stable
-`contract-and-test` check (named by the release gate, ADR 0024) requires every
-lane to succeed; publication still waits for it, quality and Console. The
+The `contract` jobs run in parallel with `fail-fast: false`. The
+`suite-ok` job of `test-suite.yml` requires every job of the suite to succeed or
+be skipped by change detection; pull request CI and the release gates (ADR 0024) both
+call that suite, and a push to `main` runs no tests. The
 former serial `core` lane is split into `core-checks`, `core-email`,
 `core-native-e2e` and `core-backup`, followed by the native lanes (migration
 clients, inventory, NuGet, OCI migration and discovery, private-upstream

@@ -6,7 +6,7 @@
 #
 # Prints go=, console=, docs=, ci=, images= as true/false lines (suitable for
 # $GITHUB_OUTPUT). With no range, or when the range cannot be resolved, every
-# class is true (push to main, tags, manual runs). Any path that matches no
+# class is true (tags, manual runs). Any path that matches no
 # known class also turns everything on, so a new top-level directory can never
 # silently skip a job. See docs/ci.md.
 set -euo pipefail

@@ -1,5 +1,8 @@
 name: CI
 
+# Pull requests run the test suite. A push to main runs no tests (ADR 0024, amendment of
+# 2026-11-19): it only publishes the main archives and images. The release pipeline
+# (release.yml) tests the commit it releases with the same suite.
 on:
   pull_request:
   push:
@@ -19,8 +22,9 @@ concurrency:
 
 jobs:
   # Classifies the change (docs/ci.md). Heavy jobs run only when their class
-  # changed; pushes to main, tags and unresolvable ranges run everything.
+  # changed; an unresolvable range runs everything.
   changes:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     outputs:
       go: ${{ steps.classify.outputs.go }}
@@ -40,15 +44,15 @@ jobs:
       - name: Classify changed paths
         id: classify
         env:
-          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
-          HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || '' }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           scripts/ci-changes.sh "$BASE_SHA" "$HEAD_SHA" | tee -a "$GITHUB_OUTPUT"
       - name: Select the Console E2E specs the change affects
         id: select
         env:
-          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
-          HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || '' }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           scripts/ci-e2e-select.sh "$BASE_SHA" "$HEAD_SHA" | tee -a "$GITHUB_OUTPUT"
 
@@ -62,34 +66,6 @@ jobs:
         with:
           fetch-depth: 2
       - run: python3 scripts/check-no-chinese.py
-
-  docs:
-    needs: changes
-    if: needs.changes.outputs.docs == 'true'
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 2
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-      - name: Documentation i18n twins
-        run: node scripts/docs-i18n-check.mjs
-      - name: Documentation links
-        run: node scripts/docs-link-check.mjs
-      - name: Documentation capability claims
-        run: sh scripts/docs-capability-check.sh
-
-  # The image Dockerfiles carry an opt-in test stage that image builds skip;
-  # build it when the Dockerfiles or compose files changed so it cannot rot.
-  image-test-stages:
-    needs: changes
-    if: needs.changes.outputs.images == 'true'
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: make docker-test
 
   # Native deb and rpm packages (ADR 0025): build all three from release archives, assert
   # contents, modes, Version/Release fields and maintainer scripts, then install them in
@@ -159,378 +135,57 @@ jobs:
       - name: Format, validate and lint the module
         run: make oci-free-tier-tofu-check
 
-  # Builds the Compose images CI consumes once per run. Contract lanes and the
-  # Console E2E against notarx load them instead of each rebuilding from source
-  # (docs/ci.md). Each leg is native to its runner (ADR 0016): amd64 images build
-  # on ubuntu-24.04 and arm64 images on ubuntu-24.04-arm, and the artifact name
-  # carries the runner architecture so the two sets never clash.
-  build-images:
+  # The test jobs live in test-suite.yml, shared with the release gates (ADR 0024).
+  # Pull requests only: a push to main runs no tests.
+  tests:
     needs: changes
-    if: needs.changes.outputs.go == 'true' || needs.changes.outputs.console == 'true'
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        runner: [ubuntu-24.04, ubuntu-24.04-arm]
-        name: [notarx, apt-signer]
-        include:
-          - name: notarx
-            file: Dockerfile
-            tag: notarx:local
-          - name: apt-signer
-            file: Dockerfile.apt-signer
-            tag: notarx-reference-apt-signer:local
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      - name: Build the image and export it as a tarball
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: ${{ matrix.file }}
-          tags: ${{ matrix.tag }}
-          outputs: type=docker,dest=${{ runner.temp }}/${{ matrix.name }}.tar
-          cache-from: type=gha,scope=ci-${{ matrix.name }}-${{ runner.arch }}
-          cache-to: type=gha,mode=max,scope=ci-${{ matrix.name }}-${{ runner.arch }}
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: image-${{ runner.arch }}-${{ matrix.name }}
-          path: ${{ runner.temp }}/${{ matrix.name }}.tar
-          retention-days: 1
-          if-no-files-found: error
-
-  # The lane plan (scripts/ci-contract-lanes.json) is the single source for
-  # lane names, tool needs and timeouts; the matrix below is generated from it.
-  contract-plan:
-    needs: changes
-    if: needs.changes.outputs.go == 'true'
-    runs-on: ubuntu-24.04
-    outputs:
-      matrix: ${{ steps.plan.outputs.matrix }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # Every lane runs on amd64. The arm64 legs (ADR 0016) are the core lanes and
-      # the native-format smoke subset on every pull request, and every lane on
-      # pushes to main (the tiers live in scripts/ci-contract-lanes.json).
-      - id: plan
-        env:
-          SCOPE: ${{ github.event_name == 'pull_request' && 'pull-request' || 'mainline' }}
-        run: echo "matrix=$(python3 scripts/ci-contract.py matrix --scope "$SCOPE")" >> "$GITHUB_OUTPUT"
-
-  contract:
-    needs: [contract-plan, build-images]
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.contract-plan.outputs.matrix) }}
-    uses: ./.github/workflows/contract-lane.yml
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/test-suite.yml
     with:
-      lane: ${{ matrix.lane }}
-      timeout: ${{ matrix.timeout }}
-      rust: ${{ matrix.rust }}
-      node: ${{ matrix.node }}
-      npm: ${{ matrix.npm }}
-      runner: ${{ matrix.runner }}
-
-  # Stable check name required by the release gate (ADR 0024): every contract
-  # lane succeeded. Skipped only when change detection skipped the lanes.
-  contract-and-test:
-    if: always() && needs.contract-plan.result != 'skipped'
-    needs: [contract-plan, contract]
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Require every contract lane to succeed
-        env:
-          NEEDS: ${{ toJSON(needs) }}
-        run: |
-          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
-          echo "$NEEDS" | jq -e '[.[] | select(.result != "success")] | length == 0' >/dev/null
-
-  # The shared object store contract against each supported S3-compatible service
-  # (ADR 0017: RustFS and a second implementation). Runs with the Go class; needs no built images.
-  object-store-contract:
-    needs: changes
-    if: needs.changes.outputs.go == 'true'
-    uses: ./.github/workflows/object-store-contract.yml
-
-  # One definition of the Go checks for both architectures: the composite action
-  # holds setup, lint, vet and race. Two jobs, not a matrix, because the release
-  # gate requires a check named exactly `quality` (ADR 0024) and a matrix would
-  # rename it. The coverage floor, dependency audit and packaging checks are
-  # architecture independent and stay on amd64 only; make test runs on arm64 in
-  # the core lanes of the contract matrix.
-  quality:
-    needs: changes
-    if: needs.changes.outputs.go == 'true'
-    runs-on: ubuntu-24.04
-    # Steps inside the composite action cannot set their own timeout, so the job
-    # carries one (the npm installs used to be capped at 10 minutes each).
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          # migration-check compares migrations with the latest stable tag.
-          fetch-depth: 0
-      - name: Verify public npm lockfile sources
-        run: node scripts/npm-lockfile-check.mjs
-      - uses: ./.github/actions/go-quality
-        with:
-          openapi-tools: "true"
-      - name: Verify the native-build rules (no cross-compilation, no emulation)
-        run: make native-build-check
-      - name: Check migration immutability and sequencing
-        run: make migration-check
-      - name: Verify release version and artifact builder
-        run: make release-version-check stamp-version-test release-plan-test release-pipeline-test release-workflow-check release-artifacts-test
-      - name: Verify package signing runbook and environment checks
-        run: make packages-signing-drill packages-environments-test
-      - name: Enforce coverage floor
-        run: make coverage
-      - name: Audit dependencies
-        run: make dependency-audit
-
-  quality-arm64:
-    needs: changes
-    if: needs.changes.outputs.go == 'true'
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/go-quality
-
-  console:
-    needs: changes
-    if: needs.changes.outputs.console == 'true'
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-          cache-dependency-path: console/package-lock.json
-      - name: Verify public npm lockfile sources
-        run: node scripts/npm-lockfile-check.mjs
-      - run: npm ci --timing --loglevel=http
-        timeout-minutes: 10
-        working-directory: console
-      - name: Check generated API client
-        run: make console-api-check
-      - name: Type check console
-        run: make console-typecheck
-      - name: Lint and check Console formatting
-        run: make console-check
-      - name: Run Console unit tests
-        run: make console-test
-      - name: Build console
-        run: make console-build
-      - name: Build Console deployment image
-        run: make console-docker-build
-      - name: Install browser
-        run: npx playwright install --with-deps chromium
-        working-directory: console
-      - name: Verify built Console identity
-        run: npx playwright test --config playwright.build.config.ts
-        working-directory: console
-      - name: Compare Console visual baseline
-        run: make console-visual
-      - name: Upload Console visual diff
-        if: failure()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: console-visual-diff
-          path: console/test-results/
-          retention-days: 7
-
-  # notarx-backed Console and CLI E2E: runs when notarx or the Console
-  # changed, since both execute the real stack. The Playwright suite is split
-  # into three parallel shards (every spec lands in exactly one) and the
-  # CLI E2E runs as its own lane against its own notarx instance. A console-only change
-  # that touches nothing but spec files runs just those specs (docs/ci.md).
-  console-e2e:
-    name: console-e2e (${{ matrix.name }})
-    needs: [changes, build-images]
-    if: needs.changes.outputs.go == 'true' || needs.changes.outputs.console == 'true'
-    runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        # Each entry names its own shard fraction, so the total cannot drift
-        # from the list. Add or remove entries to change the shard count.
-        include:
-          - { name: '1', shard: 1/3 }
-          - { name: '2', shard: 2/3 }
-          - { name: '3', shard: 3/3 }
-          - { name: cli, shard: '' }
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        if: matrix.shard != ''
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-          cache-dependency-path: console/package-lock.json
-      - name: Verify public npm lockfile sources before install
-        if: matrix.shard != ''
-        run: node scripts/npm-lockfile-check.mjs
-      - run: npm ci --timing --loglevel=http
-        if: matrix.shard != ''
-        timeout-minutes: 10
-        working-directory: console
-      - name: Install browser
-        if: matrix.shard != ''
-        run: npx playwright install --with-deps chromium
-        working-directory: console
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          pattern: image-${{ runner.arch }}-*
-          path: ${{ runner.temp }}/images
-          merge-multiple: true
-      - name: Load the prebuilt images
-        run: for image in "$RUNNER_TEMP"/images/*.tar; do docker load --input "$image"; done
-      - name: Start notarx for Console E2E
-        env:
-          NOTARX_ENV_FILE: ${{ runner.temp }}/notarx.env
-        run: |
-          cat > "$NOTARX_ENV_FILE" <<'EOF'
-          NOTARX_HTTP_PORT=18080
-          NOTARX_POSTGRES_PASSWORD=ci-postgres-password
-          NOTARX_ADMIN_TOKEN=ci-admin-token
-          NOTARX_RESOLVER_TOKEN=ci-resolver-token
-          RUSTFS_ACCESS_KEY=ci-rustfs-user
-          RUSTFS_SECRET_KEY=ci-rustfs-password
-          RUSTFS_RPC_SECRET=ci-rustfs-independent-rpc-secret-0001
-          RUSTFS_API_PORT=19000
-          RUSTFS_CONSOLE_PORT=19001
-          NOTARX_OIDC_ISSUER=http://127.0.0.1:1/ci-cli-e2e
-          NOTARX_OIDC_AUDIENCE=ci-cli-e2e
-          NOTARX_OIDC_JWKS_URL=http://127.0.0.1:1/ci-cli-e2e/jwks
-          EOF
-          docker compose --env-file "$NOTARX_ENV_FILE" -f compose.yml up --no-build --wait --remove-orphans
-      - name: Run console E2E shard ${{ matrix.shard }}
-        id: console-e2e
-        if: matrix.shard != ''
-        env:
-          NOTARX_ENV_FILE: ${{ runner.temp }}/notarx.env
-          PLAYWRIGHT_BLOB_REPORT: '1'
-          CONSOLE_E2E_SPECS: ${{ needs.changes.outputs.e2e_specs }}
-          CONSOLE_E2E_SHARD: ${{ matrix.shard }}
-        run: make console-e2e
-      - name: Upload Console E2E blob report
-        if: ${{ !cancelled() && matrix.shard != '' && (steps.console-e2e.outcome == 'success' || steps.console-e2e.outcome == 'failure') }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: console-e2e-blob-${{ matrix.name }}
-          path: console/blob-report/
-          retention-days: 7
-          # A shard that a spec selection leaves empty writes no blob.
-          if-no-files-found: ignore
-      - name: Upload Console E2E traces
-        if: ${{ failure() && matrix.shard != '' }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: console-e2e-traces-${{ matrix.name }}
-          path: console/test-results/
-          retention-days: 7
-          if-no-files-found: ignore
-      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
-        if: matrix.shard == ''
-        with:
-          go-version-file: go.mod
-          cache: true
-      - name: Run notarxctl CLI E2E against the same instance
-        if: matrix.shard == ''
-        env:
-          CLI_E2E_SERVER: http://127.0.0.1:18080
-          CLI_E2E_TOKEN: ci-admin-token
-          CLI_E2E_RESOLVER_TOKEN: ci-resolver-token
-          CLI_E2E_OIDC_ISSUER: http://127.0.0.1:1/ci-cli-e2e
-        run: make cli-e2e
-      - name: Stop notarx after Console E2E
-        if: always()
-        env:
-          NOTARX_ENV_FILE: ${{ runner.temp }}/notarx.env
-        run: |
-          if [ -f "$NOTARX_ENV_FILE" ]; then
-            docker compose --env-file "$NOTARX_ENV_FILE" -f compose.yml down -v --remove-orphans
-          else
-            echo "Gateway environment file was not created; nothing to clean up."
-          fi
-
-  # Merges the shard blob reports into one HTML report (traces included). Runs
-  # when every shard passed; a failed shard already fails the gate and uploads
-  # its own blob report and traces.
-  console-e2e-report:
-    needs: [changes, console-e2e]
-    if: needs.console-e2e.result == 'success'
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-          cache-dependency-path: console/package-lock.json
-      - name: Verify public npm lockfile sources before install
-        run: node scripts/npm-lockfile-check.mjs
-      - run: npm ci --timing --loglevel=http
-        timeout-minutes: 10
-        working-directory: console
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          pattern: console-e2e-blob-*
-          path: ${{ runner.temp }}/blob-reports
-          merge-multiple: true
-      - name: Merge shard reports
-        run: npx playwright merge-reports --reporter html "$RUNNER_TEMP/blob-reports"
-        working-directory: console
-      - name: Upload merged Console E2E report
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: console-e2e-report
-          path: console/playwright-report/
-          retention-days: 7
-          if-no-files-found: error
+      scope: pull-request
+      go: ${{ needs.changes.outputs.go == 'true' }}
+      console: ${{ needs.changes.outputs.console == 'true' }}
+      docs: ${{ needs.changes.outputs.docs == 'true' }}
+      images: ${{ needs.changes.outputs.images == 'true' }}
+      e2e_specs: ${{ needs.changes.outputs.e2e_specs }}
 
   # The one stable required check: passes when every job succeeded or was
-  # skipped by change detection, fails on any failure or cancellation.
+  # skipped by change detection, fails on any failure or cancellation. On a push to
+  # main every job here is skipped, so it passes without running any test.
   ci-ok:
     if: always()
-    needs: [changes, no-chinese, docs, quality, quality-arm64, console, console-e2e, console-e2e-report, image-test-stages, packages, oci-free-tier, oci-free-tier-tofu, build-images, object-store-contract, contract-plan, contract, contract-and-test]
+    needs: [changes, no-chinese, tests, packages, oci-free-tier, oci-free-tier-tofu]
     runs-on: ubuntu-24.04
     steps:
       - name: Require every needed job to succeed or be skipped
         env:
           NEEDS: ${{ toJSON(needs) }}
-          GO: ${{ needs.changes.outputs.go }}
-          CONSOLE: ${{ needs.changes.outputs.console }}
-          DOCS: ${{ needs.changes.outputs.docs }}
+          EVENT: ${{ github.event_name }}
           IMAGES: ${{ needs.changes.outputs.images }}
+          GO: ${{ needs.changes.outputs.go }}
           CI_CLASS: ${{ needs.changes.outputs.ci }}
         run: |
           echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
           echo "$NEEDS" | jq -e '[.[] | select(.result != "success" and .result != "skipped")] | length == 0' >/dev/null
-          # A skip is legitimate only when change detection turned the job off;
+          # A skip is legitimate only when change detection turned the job off (the
+          # test suite checks its own classes) or the event runs no tests at all;
           # a job skipped because something upstream failed must not pass.
-          packages=false
-          if [[ "$GO" == true || "$CI_CLASS" == true ]]; then packages=true; fi
-          e2e=false
-          if [[ "$GO" == true || "$CONSOLE" == true ]]; then e2e=true; fi
-          # The merged report is required whenever the shards all passed; when a
-          # shard failed, that failure already fails the gate.
-          report=false
-          if [[ "$e2e" == true && $(echo "$NEEDS" | jq -r '.["console-e2e"].result') == success ]]; then report=true; fi
           status=0
-          for pair in quality:$GO quality-arm64:$GO object-store-contract:$GO contract-plan:$GO contract:$GO contract-and-test:$GO console:$CONSOLE console-e2e:$e2e console-e2e-report:$report build-images:$e2e docs:$DOCS image-test-stages:$IMAGES packages:$packages oci-free-tier:$IMAGES oci-free-tier-tofu:$IMAGES; do
-            job=${pair%%:*} class=${pair##*:}
+          required=()
+          if [[ "$EVENT" == pull_request ]]; then required+=(changes no-chinese tests); fi
+          if [[ "$IMAGES" == true ]]; then required+=(oci-free-tier oci-free-tier-tofu); fi
+          if [[ "$CI_CLASS" == true || "$GO" == true ]]; then required+=(packages); fi
+          for job in "${required[@]}"; do
             result=$(echo "$NEEDS" | jq -r --arg job "$job" '.[$job].result')
-            if [[ "$class" == true && "$result" != success ]]; then
-              echo "::error::$job was required by change detection but its result is $result"
+            if [[ "$result" != success ]]; then
+              echo "::error::$job is required here but its result is $result"
               status=1
             fi
           done
           exit $status
 
-  # Mainline publication (ADR 0016): both jobs call the reusable workflows that the
+  # Mainline publication (ADR 0016): the only jobs a push to main runs. No test runs here:
+  # the nightly release gates test the commit they release (ADR 0024). Both jobs call the reusable workflows that the
   # ADR 0024 release pipeline also calls. Archives build natively on four runners;
   # each image builds natively per architecture and is merged afterwards.
   mainline-plan:
@@ -556,7 +211,7 @@ jobs:
 
   mainline-assets:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [mainline-plan, contract-and-test, quality, console, console-e2e]
+    needs: mainline-plan
     uses: ./.github/workflows/release-archives.yml
     with:
       version: ${{ needs.mainline-plan.outputs.version }}
@@ -565,7 +220,7 @@ jobs:
 
   mainline-images:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [mainline-plan, contract-and-test, quality, console, console-e2e]
+    needs: mainline-plan
     permissions:
       contents: read
       packages: write

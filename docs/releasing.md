@@ -34,10 +34,13 @@ package or attestation. Only `publish` and `prune --apply` write. Commit parsing
 release notes starts at the previous release or, before the first one, at the fork commit recorded in `docs/upstream.md`
 (`scripts/release-plan.sh fork`), so upstream history never produces warnings. Its jobs:
 
-1. `plan` (read-only) runs `scripts/release-plan.sh nightly`: the newest of the last ten first-parent commits of `main` whose
-   required checks (`scripts/release-required-checks.txt`) are green. It skips, with a notice, when that commit was already
+1. `plan` (read-only) runs `scripts/release-plan.sh nightly`: the tip of `main`. It reads no check runs, because pushes to
+   `main` run no tests (ADR 0024, amendment of 2026-11-19). It skips, with a notice, when that commit was already
    released or when no releasing commit exists since the previous release.
-2. `gates` runs every contract lane on a native arm64 runner against the planned commit.
+2. `gates` runs the complete test suite (`.github/workflows/test-suite.yml`, the same definition pull request CI uses) on the
+   planned commit: `quality` and `quality-arm64`, `console`, the Console E2E shards, `object-store-contract`, `docs`,
+   `image-test-stages` and every contract lane on both architectures. A gate failure means no release that night; the
+   liveness alert covers a run of failed nights. Nothing is built or published before the gates pass.
 3. `build` calls the ADR 0016 reusable workflows: `image-build.yml` (per-architecture images, merged index, attestations)
    for every image in `scripts/release-images.json`, and `release-archives.yml` (four native runners). Each Linux runner also
    repacks the archives it built into `.deb` and `.rpm` packages with the pinned nfpm (`scripts/build-packages.sh`;
@@ -51,7 +54,15 @@ release notes starts at the previous release or, before the first one, at the fo
 
 Jobs owned by other ADRs (channels, the public feeds) declare `needs: publish` and never change `plan`.
 
-Adding a published image is one entry in `scripts/release-images.json` (plus its required-check name); the manifest script fails unless
+A stable release (`scripts/release-plan.sh stable`) promotes the commit of a nightly tag and reads no check runs either. That
+commit was published only after the gates of its nightly run passed on it, so reusing that green nightly result for the same
+SHA is allowed, and the stable run's own `gates` (ADR 0024 slice 5) call the same suite on it. It never releases a commit whose
+release-run gates did not pass.
+
+Because the plan takes the tip of `main` without falling back to an older commit, a failing gate on the tip blocks the nightly
+until it is fixed forward; a push to `main` publishes the `main` archives and images untested. Watch the failed runs of `release.yml`.
+
+Adding a published image is one entry in `scripts/release-images.json` ; the manifest script fails unless
 every listed image has a recorded index digest.
 
 ## Verifying a release

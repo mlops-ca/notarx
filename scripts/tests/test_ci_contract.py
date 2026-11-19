@@ -282,7 +282,7 @@ class PlanTests(unittest.TestCase):
             {'ubuntu-24.04', 'ubuntu-24.04-arm'})
 
     def test_workflows_name_no_lane_and_pin_no_upstream(self):
-        for path in ('ci.yml', 'contract-lane.yml'):
+        for path in ('ci.yml', 'test-suite.yml', 'release.yml', 'contract-lane.yml'):
             text = (ROOT / '.github/workflows' / path).read_text()
             for lane in ci.LANES:
                 self.assertNotRegex(text, r'(?<![\w-])' + re.escape(lane) + r'(?![\w-])', path + ' names lane ' + lane)
@@ -294,17 +294,23 @@ class PlanTests(unittest.TestCase):
         self.assertNotIn('fetch-depth', lane_workflow)  # default shallow checkout
         self.assertFalse((ROOT / '.github/workflows/contract-benchmark.yml').exists())
 
-    def test_workflow_keeps_stable_release_gate_names(self):
+    def test_pushes_to_main_run_no_tests_and_one_suite_is_shared(self):
         workflow = (ROOT / '.github/workflows/ci.yml').read_text()
-        self.assertIn('  contract-and-test:\n    if: always()', workflow)
-        # mainline-assets and mainline-images call the reusable workflows (ADR 0016) and
-        # wait for the same gates; mainline-plan only computes the stamped version.
-        self.assertEqual(workflow.count('    needs: [mainline-plan, contract-and-test, quality, console, console-e2e]'), 2)
+        suite = (ROOT / '.github/workflows/test-suite.yml').read_text()
+        release = (ROOT / '.github/workflows/release.yml').read_text()
+        # ADR 0024 amendment of 2026-11-19: a push to main only publishes. The test suite is
+        # called by pull requests (ci.yml) and by the release gates (release.yml) alone.
+        self.assertEqual(workflow.count('    needs: mainline-plan\n'), 2)
         self.assertIn('uses: ./.github/workflows/release-archives.yml', workflow)
         self.assertIn('uses: ./.github/workflows/image-build.yml', workflow)
+        self.assertIn("  tests:\n    needs: changes\n    if: github.event_name == 'pull_request'", workflow)
+        self.assertIn("  changes:\n    if: github.event_name == 'pull_request'", workflow)
+        self.assertEqual(workflow.count('uses: ./.github/workflows/test-suite.yml'), 1)
+        self.assertEqual(release.count('uses: ./.github/workflows/test-suite.yml'), 1)
         self.assertNotIn('platforms: linux/amd64,linux/arm64', workflow)
-        self.assertNotIn('continue-on-error', workflow)
-        self.assertIn('fromJSON(needs.contract-plan.outputs.matrix)', workflow)
+        self.assertNotIn('continue-on-error', workflow + suite + release)
+        self.assertIn('fromJSON(needs.contract-plan.outputs.matrix)', suite)
+        self.assertIn('sha: ${{ inputs.sha }}', suite)
 
     def test_toolchains_are_read_from_the_repository(self):
         self.assertIn('1.96.0', (ROOT / 'rust-toolchain.toml').read_text())

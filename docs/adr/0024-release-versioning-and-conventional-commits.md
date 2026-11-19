@@ -191,7 +191,8 @@ Nightly (`schedule`, default branch only):
 2. `sha` = the newest first-parent commit of `main` (looking back at most 10) whose
    required check runs are green. The required names are read from
    `scripts/release-required-checks.txt`, the single list that replaces the hard-coded
-   names in today's `verify-candidate`.
+   names in today's `verify-candidate`. (Superseded by the amendment of 2026-11-19 at the
+   end: `sha` is the tip of `main` and no check run is read.)
 3. Skip (success, with a notice) when `sha` equals the commit of the latest nightly tag,
    or when no `feat`, `fix`, `perf`, `revert` or breaking commit exists between that
    tag and `sha`.
@@ -202,7 +203,8 @@ Stable (`workflow_dispatch` inputs `nightly_tag` default latest verified nightly
 1. Resolve the nightly tag, its commit (`sha`) and its core; `version` = core, or the
    override. Refuse if `vX.Y.Z` already exists.
 2. Require `sha` to be an ancestor of `main` (not equal to its tip: the release must
-   work after `main` moved) and the required checks green on it.
+   work after `main` moved) and the required checks green on it (superseded by the amendment of 2026-11-19: no check
+   run of `main` is read; the gates of a release run decide).
 3. Require the nightly release to carry its build record (a `release-manifest.json`
    asset, below) whose `sha` matches, and require `gh attestation verify` to accept
    every image digest and archive in it against this repository's release workflow
@@ -399,7 +401,7 @@ accepts any workflow in the repository.
    Dependencies: ADR 0013 slices 2-3 (names). Replaces ADR 0013 slice 10.
 3. **Release plan script and git-cliff configuration.** Milestone: Foundation.
    Scope: `cliff.toml`, `scripts/release-plan.sh`, `scripts/release-plan-test.sh`
-   (fixture git repositories), `scripts/release-required-checks.txt`.
+   (fixture git repositories), `scripts/release-required-checks.txt` (removed by the amendment of 2026-11-19).
    - [ ] fixtures prove 0.x rules (feat to minor, fix to patch, breaking to minor), `0.1.0` before any stable tag, counter-by-maximum after pruned tags, skip on no releasing commits, skip on repeated commit, non-releasing types never bump
    - [ ] stable mode fixtures: nightly tag resolves to its commit and core, `version_override` rules, existing stable tag refused
    - [ ] git-cliff version is pinned and the test fails if its bump behaviour deviates (nightly tags must be invisible through the stable-only tag pattern)
@@ -464,3 +466,17 @@ accepts any workflow in the repository.
 **Q2 — Which `gh attestation verify` flags are correct for reusable-workflow attestations.** Decision: `--repo` plus the repo-qualified `--signer-workflow <owner>/<repo>/<path>`, adding `--source-ref` or `--cert-identity` only when pinning tags; confirmed by the slice 4 negative test. For a reusable workflow the signer is the called workflow, and `--signer-repo` alone is too loose.
 
 **Q3 — Do the 1.0.0 criteria get their own ADR.** Decision: yes, a separate "1.0 readiness" ADR written when 0.x scope nears completion; this ADR requires only an explicit `version_override` for `1.0.0`. Stability promises depend on APIs not yet settled and the override guard already prevents an accidental 1.0.
+
+## Amendment (2026-11-19): pushes to main run no tests; the release gates test the released commit
+
+Status: accepted (2026-11-19)
+
+Owner decision. CI runs no tests on pushes to `main`: every merge reran the full suite (66 jobs, about 225 runner-minutes) that pull request CI had just run, and it competed with pull requests for the concurrency limit of the public repository. Real results come from pull request CI and from the release run. This amendment supersedes the places above that read check runs of `main`:
+
+1. `ci.yml` on a push to `main` runs only `mainline-plan`, `mainline-assets`, `mainline-images` (the `main` archives and images of ADR 0016) and `ci-ok`. Pull request behaviour is unchanged.
+2. The test jobs live once, in the reusable workflow `test-suite.yml`, which pull request CI and the release gates both call. The `gates` job of `release.yml` runs the complete suite on the planned SHA: `quality`, `quality-arm64`, `console`, the Console E2E shards, `object-store-contract`, `docs`, `image-test-stages` and every mainline contract lane on both architectures (not only arm64). A gate failure means no release that night; the liveness alert covers a run of failed nights.
+3. Nightly step 2 becomes: `sha` = the tip of `main`. `release-plan.sh` reads no check runs and `scripts/release-required-checks.txt` is removed, as is the `green` mode. Skip rules (same commit as the latest nightly, no releasing commit) are unchanged.
+4. Stable step 2 no longer requires green checks on `main`; `release-plan.sh stable` reads no check runs. A stable run releases a commit only if the gates of a release run pass on it. The nightly tag it promotes exists only because those gates passed on that commit, so reusing that green nightly result for the same SHA is allowed. The stable workflow of slice 5 still runs its own `gates` (the "Stable runs the same job graph" section) by calling `test-suite.yml` on that SHA.
+5. Consequences accepted by the owner: a push to `main` publishes the `main` archives and images without any test having run on that commit (consumers of the `main` tag take that risk; the nightly is the tested channel), and a failing gate on the tip of `main` blocks every nightly until the tip is fixed forward, because the plan no longer falls back to an older green commit. The liveness alert detects only an inactive schedule, so a run of red nights is noticed through the failed workflow runs of `release.yml`.
+
+The "required check runs" language in the Context, in the `verify-candidate` description of the old workflow and in slice 3 describes the design before this amendment. ADR 0016's list of check names for `verify-candidate` is likewise historical.
