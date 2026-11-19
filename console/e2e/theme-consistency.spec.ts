@@ -263,8 +263,8 @@ test("theme and language preferences persist on the sign-in surface", async ({
   await page.route("**/auth/session", (route) =>
     route.fulfill({ json: { authenticated: false } }),
   );
-  await page.route("**/auth/oidc/config", (route) =>
-    route.fulfill({ json: { enabled: false } }),
+  await page.route("**/auth/idp", (route) =>
+    route.fulfill({ json: { items: [] } }),
   );
 
   await page.goto("/login");
@@ -380,8 +380,8 @@ test("sign-in artwork and animated backdrop fit desktop sizes", async ({
   await page.route("**/auth/session", (route) =>
     route.fulfill({ json: { authenticated: false } }),
   );
-  await page.route("**/auth/oidc/config", (route) =>
-    route.fulfill({ json: { enabled: false } }),
+  await page.route("**/auth/idp", (route) =>
+    route.fulfill({ json: { items: [] } }),
   );
 
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -505,8 +505,8 @@ test("sign-in artwork and controls update when switching to the light theme", as
   await page.route("**/auth/session", (route) =>
     route.fulfill({ json: { authenticated: false } }),
   );
-  await page.route("**/auth/oidc/config", (route) =>
-    route.fulfill({ json: { enabled: false } }),
+  await page.route("**/auth/idp", (route) =>
+    route.fulfill({ json: { items: [] } }),
   );
 
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -599,8 +599,8 @@ test("sign-in artwork stays unloaded and the backdrop stays inactive on mobile",
   await page.route("**/auth/session", (route) =>
     route.fulfill({ json: { authenticated: false } }),
   );
-  await page.route("**/auth/oidc/config", (route) =>
-    route.fulfill({ json: { enabled: false } }),
+  await page.route("**/auth/idp", (route) =>
+    route.fulfill({ json: { items: [] } }),
   );
   await page.goto("/login");
   await page.waitForLoadState("networkidle");
@@ -654,10 +654,10 @@ test("sign-in artwork remains ready with reduced motion and pending OIDC discove
   const oidcConfigPending = new Promise<void>((resolve) => {
     markOIDCConfigPending = resolve;
   });
-  await page.route("**/auth/oidc/config", async (route) => {
+  await page.route("**/auth/idp", async (route) => {
     markOIDCConfigPending();
     await oidcConfigRelease;
-    await route.fulfill({ json: { enabled: false } });
+    await route.fulfill({ json: { items: [] } });
   });
   try {
     await page.goto("/login");
@@ -668,8 +668,7 @@ test("sign-in artwork remains ready with reduced motion and pending OIDC discove
     ).toHaveAttribute("data-active", "false");
     await expect(page.locator(".ag-login-beams canvas")).toHaveCount(0);
     const oidcConfigResponse = page.waitForResponse(
-      (response) =>
-        response.url().endsWith("/auth/oidc/config") && response.ok(),
+      (response) => response.url().endsWith("/auth/idp") && response.ok(),
     );
     releaseOIDCConfig();
     await oidcConfigResponse;
@@ -685,11 +684,10 @@ test("OIDC, password, and token sign-in modes share a stable layout", async ({
   await page.route("**/auth/session", (route) =>
     route.fulfill({ json: { authenticated: false } }),
   );
-  await page.route("**/auth/oidc/config", (route) =>
+  await page.route("**/auth/idp", (route) =>
     route.fulfill({
       json: {
-        enabled: true,
-        issuer: "https://identity.example.test/realms/notarx",
+        items: [{ slug: "corp", displayName: "Corp SSO", kind: "oidc" }],
       },
     }),
   );

@@ -167,10 +167,12 @@ paths:
     "$ref": "./management/console-themes.yaml#/console_themes"
   "/console-themes/{themeId}":
     "$ref": "./management/console-themes.yaml#/console_themes_themeId"
-  "/authentication/oidc":
-    "$ref": "./management/authentication.yaml#/oidc_settings"
-  "/authentication/oidc:test":
-    "$ref": "./management/authentication.yaml#/oidc_settings_test"
+  "/authentication/providers":
+    "$ref": "./management/authentication.yaml#/identity_providers"
+  "/authentication/providers/{providerId}":
+    "$ref": "./management/authentication.yaml#/identity_providers_providerId"
+  "/authentication/providers/{providerId}:test":
+    "$ref": "./management/authentication.yaml#/identity_providers_providerId_test"
   "/webhook-subscriptions":
     "$ref": "./management/webhooks.yaml#/webhook_subscriptions"
   "/webhook-subscriptions/{subscriptionId}":
@@ -697,10 +699,22 @@ components:
       "$ref": "./components/schemas.yaml#/ConsoleTheme"
     ConsoleThemeToken:
       "$ref": "./components/schemas.yaml#/ConsoleThemeToken"
-    OIDCSettings:
-      "$ref": "./components/schemas.yaml#/OIDCSettings"
-    OIDCSettingsUpdate:
-      "$ref": "./components/schemas.yaml#/OIDCSettingsUpdate"
+    IdentityProviderKind:
+      "$ref": "./components/schemas.yaml#/IdentityProviderKind"
+    IdentityProviderAttributeMapping:
+      "$ref": "./components/schemas.yaml#/IdentityProviderAttributeMapping"
+    IdentityProviderOIDCSettings:
+      "$ref": "./components/schemas.yaml#/IdentityProviderOIDCSettings"
+    IdentityProviderOIDCInput:
+      "$ref": "./components/schemas.yaml#/IdentityProviderOIDCInput"
+    IdentityProvider:
+      "$ref": "./components/schemas.yaml#/IdentityProvider"
+    IdentityProviderList:
+      "$ref": "./components/schemas.yaml#/IdentityProviderList"
+    CreateIdentityProvider:
+      "$ref": "./components/schemas.yaml#/CreateIdentityProvider"
+    ReplaceIdentityProvider:
+      "$ref": "./components/schemas.yaml#/ReplaceIdentityProvider"
     OIDCConnectionTest:
       "$ref": "./components/schemas.yaml#/OIDCConnectionTest"
     AuditCleanupJob:
@@ -843,8 +857,10 @@ components:
       "$ref": "./components/responses.yaml#/PublicAccessPolicy"
     SiteSettings:
       "$ref": "./components/responses.yaml#/SiteSettings"
-    OIDCSettings:
-      "$ref": "./components/responses.yaml#/OIDCSettings"
+    IdentityProvider:
+      "$ref": "./components/responses.yaml#/IdentityProvider"
+    IdentityProviderList:
+      "$ref": "./components/responses.yaml#/IdentityProviderList"
     OIDCConnectionTest:
       "$ref": "./components/responses.yaml#/OIDCConnectionTest"
     AuditCleanupJob:

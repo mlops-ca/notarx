@@ -1,14 +1,54 @@
 ---
-oidc_settings:
+identity_providers:
   get:
-    operationId: getOIDCSettings
+    operationId: listIdentityProviders
     responses:
       '200':
-        "$ref": "../components/responses.yaml#/OIDCSettings"
+        "$ref": "../components/responses.yaml#/IdentityProviderList"
       '401':
         "$ref": "../components/responses.yaml#/Problem"
+      '403':
+        "$ref": "../components/responses.yaml#/Problem"
+  post:
+    operationId: createIdentityProvider
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            "$ref": "../components/schemas.yaml#/CreateIdentityProvider"
+    responses:
+      '201':
+        "$ref": "../components/responses.yaml#/IdentityProvider"
+      '400':
+        "$ref": "../components/responses.yaml#/Problem"
+      '401':
+        "$ref": "../components/responses.yaml#/Problem"
+      '403':
+        "$ref": "../components/responses.yaml#/Problem"
+      '409':
+        "$ref": "../components/responses.yaml#/Problem"
+      '503':
+        "$ref": "../components/responses.yaml#/Problem"
+identity_providers_providerId:
+  parameters:
+  - name: providerId
+    in: path
+    required: true
+    schema: {type: string, format: uuid}
+  get:
+    operationId: getIdentityProvider
+    responses:
+      '200':
+        "$ref": "../components/responses.yaml#/IdentityProvider"
+      '401':
+        "$ref": "../components/responses.yaml#/Problem"
+      '403':
+        "$ref": "../components/responses.yaml#/Problem"
+      '404':
+        "$ref": "../components/responses.yaml#/Problem"
   put:
-    operationId: replaceOIDCSettings
+    operationId: replaceIdentityProvider
     parameters:
     - "$ref": "../components/parameters.yaml#/IfMatch"
     requestBody:
@@ -16,28 +56,60 @@ oidc_settings:
       content:
         application/json:
           schema:
-            "$ref": "../components/schemas.yaml#/OIDCSettingsUpdate"
+            "$ref": "../components/schemas.yaml#/ReplaceIdentityProvider"
     responses:
       '200':
-        "$ref": "../components/responses.yaml#/OIDCSettings"
+        "$ref": "../components/responses.yaml#/IdentityProvider"
       '400':
         "$ref": "../components/responses.yaml#/Problem"
       '401':
+        "$ref": "../components/responses.yaml#/Problem"
+      '403':
+        "$ref": "../components/responses.yaml#/Problem"
+      '404':
+        "$ref": "../components/responses.yaml#/Problem"
+      '409':
         "$ref": "../components/responses.yaml#/Problem"
       '412':
         "$ref": "../components/responses.yaml#/Problem"
       '503':
         "$ref": "../components/responses.yaml#/Problem"
-
-oidc_settings_test:
+  delete:
+    operationId: deleteIdentityProvider
+    description: Deletes a provider that has no linked identities.
+    parameters:
+    - "$ref": "../components/parameters.yaml#/IfMatch"
+    responses:
+      '204':
+        description: Provider deleted
+      '401':
+        "$ref": "../components/responses.yaml#/Problem"
+      '403':
+        "$ref": "../components/responses.yaml#/Problem"
+      '404':
+        "$ref": "../components/responses.yaml#/Problem"
+      '409':
+        "$ref": "../components/responses.yaml#/Problem"
+      '412':
+        "$ref": "../components/responses.yaml#/Problem"
+identity_providers_providerId_test:
+  parameters:
+  - name: providerId
+    in: path
+    required: true
+    schema: {type: string, format: uuid}
   post:
-    operationId: testOIDCSettings
+    operationId: testIdentityProvider
     responses:
       '200':
         "$ref": "../components/responses.yaml#/OIDCConnectionTest"
       '400':
         "$ref": "../components/responses.yaml#/Problem"
       '401':
+        "$ref": "../components/responses.yaml#/Problem"
+      '403':
+        "$ref": "../components/responses.yaml#/Problem"
+      '404':
         "$ref": "../components/responses.yaml#/Problem"
       '503':
         "$ref": "../components/responses.yaml#/Problem"

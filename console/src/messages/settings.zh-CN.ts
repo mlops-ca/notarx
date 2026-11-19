@@ -72,7 +72,6 @@ export const settingsZhCN = {
   "settings.identityProviderConnectionFailed": "身份提供方连接失败",
   "settings.authentication": "身份认证",
   "settings.runtimeSettings": "运行时配置",
-  "settings.environmentBootstrap": "环境变量引导",
   "settings.configureAnExternalOIDCProviderBrowserSignIn":
     "配置外部 OIDC 身份提供方、浏览器登录与角色映射",
   "settings.runtimeStatus": "运行状态",
@@ -88,8 +87,6 @@ export const settingsZhCN = {
   "settings.lastUpdated": "最近更新",
   "settings.notPersisted": "尚未持久化",
   "settings.databaseSettingsAreShared": "数据库配置跨节点共享",
-  "settings.settingsCurrentlyComeFromTheEnvironmentTheFirst":
-    "当前读取环境变量；首次保存会创建数据库运行时配置。",
   "settings.connectionSucceededInMs": "连接成功，发现耗时 {latencyMs} ms",
   "settings.brandPreview": "品牌预览",
   "settings.livePreview": "实时预览",

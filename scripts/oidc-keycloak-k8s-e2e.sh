@@ -53,7 +53,7 @@ kubectl -n "$namespace" create configmap notarx-oidc-keycloak-realm \
   --from-file=notarx-realm.json="$work_dir/notarx-realm.json" \
   --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n "$namespace" create configmap notarx-oidc-test-config \
-  --from-literal="NOTARX_OIDC_REDIRECT_URL=http://127.0.0.1:${console_port}/auth/oidc/callback" \
+  --from-literal="NOTARX_OIDC_REDIRECT_URL=http://127.0.0.1:${console_port}/auth/oidc/default/callback" \
   --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n "$namespace" create configmap notarx-oidc-migrations \
   --from-file="$root/migrations" \
@@ -75,34 +75,40 @@ processes+=("$!")
 until curl --silent --show-error --fail "http://127.0.0.1:${notarx_port}/readyz" >/dev/null; do sleep 1; done
 until curl --silent --show-error --fail "http://127.0.0.1:${keycloak_port}/realms/notarx/.well-known/openid-configuration" >/dev/null; do sleep 1; done
 
-oidc_settings=$(jq -n \
+provider_request=$(jq -n \
   --arg issuer "http://127.0.0.1:${keycloak_port}/realms/notarx" \
-  --arg redirect "http://127.0.0.1:${console_port}/auth/oidc/callback" \
+  --arg redirect "http://127.0.0.1:${console_port}/auth/oidc/default/callback" \
   '{
+    slug: "default",
+    kind: "oidc",
+    displayName: "Keycloak",
     enabled: true,
-    issuer: $issuer,
-    audience: "notarx-api",
-    clientId: "notarx-console",
-    redirectUrl: $redirect,
-    scopes: ["openid", "profile", "email"],
-    adminSubjects: [],
-    readerRoles: ["artifact-reader"],
-    writerRoles: ["artifact-writer"],
-    adminRoles: ["artifact-admin"]
+    oidc: {
+      issuer: $issuer,
+      audience: "notarx-api",
+      clientId: "notarx-console",
+      redirectUrl: $redirect,
+      scopes: ["openid", "profile", "email"],
+      adminSubjects: [],
+      memberRoles: ["artifact-member"],
+      adminRoles: ["artifact-admin"]
+    }
   }')
-curl --silent --show-error --fail-with-body \
-  -X PUT \
+provider_id=$(curl --silent --show-error --fail-with-body \
+  -X POST \
   -H "Authorization: Bearer notarx-oidc-test-admin-token" \
   -H "Content-Type: application/json" \
-  -H "If-Match: 0" \
-  --data "$oidc_settings" \
-  "http://127.0.0.1:${notarx_port}/api/v2/authentication/oidc" \
-  | jq -e '.source == "database" and .version == "1" and .enabled == true' >/dev/null
+  --data "$provider_request" \
+  "http://127.0.0.1:${notarx_port}/api/v2/authentication/providers" \
+  | jq -er 'select(.slug == "default" and .version == "1" and .enabled == true) | .id')
 curl --silent --show-error --fail-with-body \
   -X POST \
   -H "Authorization: Bearer notarx-oidc-test-admin-token" \
-  "http://127.0.0.1:${notarx_port}/api/v2/authentication/oidc:test" \
+  "http://127.0.0.1:${notarx_port}/api/v2/authentication/providers/${provider_id}:test" \
   | jq -e '.reachable == true' >/dev/null
+curl --silent --show-error --fail \
+  "http://127.0.0.1:${notarx_port}/auth/idp" \
+  | jq -e '.items | length == 1 and .[0].slug == "default"' >/dev/null
 
 VITE_NOTARX_PROXY_TARGET="http://127.0.0.1:${notarx_port}" \
   npm --prefix "$root/console" run dev -- --host 127.0.0.1 --port "$console_port" >"$work_dir/console.log" 2>&1 &

@@ -55,8 +55,13 @@ type OIDCRoleMappingMatch struct {
 	GatewayRole  Role   `json:"gatewayRole"`
 }
 
+// OIDCValidatorSource supplies one validator per enabled identity provider
+// that accepts API bearer tokens (ADR 0018).
 type OIDCValidatorSource interface {
-	OIDCValidator(context.Context) (*OIDCValidator, error)
+	// OIDCValidators returns the validators worth trying for token: the ones of
+	// providers whose issuer matches the token's unverified iss claim, so a slow or
+	// unreachable provider never delays the tokens of another.
+	OIDCValidators(ctx context.Context, token string) ([]*OIDCValidator, error)
 }
 
 type Authenticator struct {
@@ -137,47 +142,63 @@ func (a Authenticator) AuthenticateContext(ctx context.Context, header string) (
 			return Principal{Actor: "user:" + user.Name, Admin: role == RoleAdmin, Role: role, AuthenticationKind: AuthenticationLocalSession, UserID: user.ID, SessionID: sessionID}, true
 		}
 	}
-	oidcValidator := a.OIDC
+	validators := []*OIDCValidator{a.OIDC}
 	if a.OIDCSource != nil {
-		if resolved, err := a.OIDCSource.OIDCValidator(ctx); err == nil {
-			oidcValidator = resolved
+		if resolved, err := a.OIDCSource.OIDCValidators(ctx, token); err == nil {
+			validators = resolved
 		}
 	}
-	if oidcValidator != nil {
-		if identity, ok := oidcValidator.Validate(ctx, token); ok {
-			if a.UserIdentities != nil {
-				user, _, err := a.UserIdentities.GetUserByOIDCIdentity(ctx, identity.Issuer, identity.Subject)
-				if err == nil {
-					if user.State != repository.UserActive {
-						return Principal{}, false
-					}
-					role := Role(user.Role)
-					if user.MustChangePassword {
-						return Principal{
-							Actor: "user:" + user.Name, RepositoryPatterns: a.RepositoryReaders["user:"+user.Name],
-							AuthenticationKind: AuthenticationOIDC, MustChangePassword: true, UserID: user.ID,
-						}, true
-					}
-					return Principal{
-						Actor: "user:" + user.Name, Admin: role == RoleAdmin, Role: role,
-						RepositoryPatterns: a.RepositoryReaders["user:"+user.Name], AuthenticationKind: AuthenticationOIDC,
-						OIDCAdminSubject: identity.AdminSubject, OIDCRoleMappings: identity.RoleMappings, UserID: user.ID,
-					}, true
-				}
-				if !errors.Is(err, repository.ErrNotFound) {
-					return Principal{}, false
-				}
-			}
-			principal := a.PrincipalForActor(identity.Subject)
-			principal.Admin = identity.Admin
-			principal.Role = identity.Role
-			principal.AuthenticationKind = AuthenticationOIDC
-			principal.OIDCAdminSubject = identity.AdminSubject
-			principal.OIDCRoleMappings = identity.RoleMappings
-			return principal, true
+	for _, validator := range validators {
+		if validator == nil {
+			continue
+		}
+		if identity, ok := validator.Validate(ctx, token); ok {
+			return a.oidcPrincipal(ctx, identity)
 		}
 	}
 	return Principal{}, false
+}
+
+// oidcPrincipal maps a validated API bearer token onto a principal. The identity
+// key is (provider id, subject); a token of a provider with no linked account
+// keeps the external-principal behavior.
+func (a Authenticator) oidcPrincipal(ctx context.Context, identity OIDCIdentity) (Principal, bool) {
+	if a.UserIdentities != nil && identity.ProviderID == "" {
+		// Identities are keyed by provider (ADR 0018). A validator that belongs to no
+		// provider cannot tell whether the subject is a linked, possibly disabled
+		// account, so it fails closed instead of trusting the token's role claims.
+		return Principal{}, false
+	}
+	if a.UserIdentities != nil {
+		user, _, err := a.UserIdentities.GetUserByProviderIdentity(ctx, identity.ProviderID, identity.Subject)
+		if err == nil {
+			if user.State != repository.UserActive {
+				return Principal{}, false
+			}
+			role := Role(user.Role)
+			if user.MustChangePassword {
+				return Principal{
+					Actor: "user:" + user.Name, RepositoryPatterns: a.RepositoryReaders["user:"+user.Name],
+					AuthenticationKind: AuthenticationOIDC, MustChangePassword: true, UserID: user.ID,
+				}, true
+			}
+			return Principal{
+				Actor: "user:" + user.Name, Admin: role == RoleAdmin, Role: role,
+				RepositoryPatterns: a.RepositoryReaders["user:"+user.Name], AuthenticationKind: AuthenticationOIDC,
+				OIDCAdminSubject: identity.AdminSubject, OIDCRoleMappings: identity.RoleMappings, UserID: user.ID,
+			}, true
+		}
+		if !errors.Is(err, repository.ErrNotFound) {
+			return Principal{}, false
+		}
+	}
+	principal := a.PrincipalForActor(identity.Subject)
+	principal.Admin = identity.Admin
+	principal.Role = identity.Role
+	principal.AuthenticationKind = AuthenticationOIDC
+	principal.OIDCAdminSubject = identity.AdminSubject
+	principal.OIDCRoleMappings = identity.RoleMappings
+	return principal, true
 }
 
 func (a Authenticator) principalForTokenActor(ctx context.Context, actor string) (Principal, bool) {

@@ -78,7 +78,6 @@ export const settingsEnCA = {
     "Identity provider connection failed",
   "settings.authentication": "Authentication",
   "settings.runtimeSettings": "Runtime settings",
-  "settings.environmentBootstrap": "Environment bootstrap",
   "settings.configureAnExternalOIDCProviderBrowserSignIn":
     "Configure an external OIDC provider, browser sign-in, and role mapping",
   "settings.runtimeStatus": "Runtime status",
@@ -94,8 +93,6 @@ export const settingsEnCA = {
   "settings.lastUpdated": "Last updated",
   "settings.notPersisted": "Not persisted",
   "settings.databaseSettingsAreShared": "Database settings are shared",
-  "settings.settingsCurrentlyComeFromTheEnvironmentTheFirst":
-    "Settings currently come from the environment. The first save creates runtime database settings.",
   "settings.connectionSucceededInMs": "Connection succeeded in {latencyMs} ms",
   "settings.brandPreview": "Brand preview",
   "settings.livePreview": "Live preview",

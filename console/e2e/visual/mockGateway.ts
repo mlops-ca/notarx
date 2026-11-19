@@ -39,12 +39,12 @@ const routes: Record<string, Json> = {
   "/api/v2/repository-grants": fixtures.repositoryGrants,
   "/api/v2/service-accounts": fixtures.serviceAccounts,
   "/api/v2/users": fixtures.users,
-  "/api/v2/authentication/oidc": fixtures.oidcSettings,
+  "/api/v2/authentication/providers": fixtures.identityProviders,
   "/api/v2/public/repositories": fixtures.publicRepositories,
   "/api/v2/repository-capacities": fixtures.repositoryCapacities,
   "/api/v2/service-accounts/sa-ci/credentials":
     fixtures.serviceAccountCredentials,
-  "/auth/oidc/config": fixtures.oidcLoginConfig,
+  "/auth/idp": fixtures.loginIdentityProviders,
 };
 
 for (const item of fixtures.repositories) {

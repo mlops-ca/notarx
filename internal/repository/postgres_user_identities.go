@@ -10,7 +10,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/ids"
 )
 
-const userIdentityColumns = `id::text,user_id::text,kind,issuer,subject,email,display_name,email_verified,last_login_at,created_at,updated_at`
+const userIdentityColumns = `id::text,user_id::text,kind,provider_id::text,issuer,COALESCE(subject,''),COALESCE(scim_external_id,''),email,display_name,email_verified,last_login_at,created_at,updated_at`
 
 type userIdentityScanner interface {
 	Scan(...any) error
@@ -18,8 +18,8 @@ type userIdentityScanner interface {
 
 func scanUserIdentity(scanner userIdentityScanner, identity *UserIdentity) error {
 	return scanner.Scan(
-		&identity.ID, &identity.UserID, &identity.Kind, &identity.Issuer,
-		&identity.Subject, &identity.Email, &identity.DisplayName,
+		&identity.ID, &identity.UserID, &identity.Kind, &identity.ProviderID, &identity.Issuer,
+		&identity.Subject, &identity.SCIMExternalID, &identity.Email, &identity.DisplayName,
 		&identity.EmailVerified, &identity.LastLoginAt, &identity.CreatedAt,
 		&identity.UpdatedAt,
 	)
@@ -54,8 +54,8 @@ func (s *PostgresStore) CreateUserIdentity(ctx context.Context, identity UserIde
 		if identity.ID == "" {
 			identity.ID = ids.New()
 		}
-		err := scanUserIdentity(q.QueryRowContext(ctx, `INSERT INTO user_identities (id,user_id,kind,issuer,subject,email,display_name,email_verified) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING `+userIdentityColumns,
-			identity.ID, identity.UserID, identity.Kind, identity.Issuer, identity.Subject,
+		err := scanUserIdentity(q.QueryRowContext(ctx, `INSERT INTO user_identities (id,user_id,kind,provider_id,issuer,subject,email,display_name,email_verified) VALUES ($1,$2,$3,$4::uuid,$5,$6,$7,$8,$9) RETURNING `+userIdentityColumns,
+			identity.ID, identity.UserID, identity.Kind, identity.ProviderID, identity.Issuer, identity.Subject,
 			identity.Email, identity.DisplayName, identity.EmailVerified,
 		), &identity)
 		if isUnique(err) {
@@ -79,23 +79,24 @@ func (s *PostgresStore) DeleteUserIdentity(ctx context.Context, userID, identity
 	return err
 }
 
-func (s *PostgresStore) GetUserByOIDCIdentity(ctx context.Context, issuer, subject string) (User, UserIdentity, error) {
+func (s *PostgresStore) GetUserByProviderIdentity(ctx context.Context, providerID, subject string) (User, UserIdentity, error) {
 	var identity UserIdentity
-	err := scanUserIdentity(s.db.QueryRowContext(ctx, `SELECT `+userIdentityColumns+` FROM user_identities WHERE kind=$1 AND issuer=$2 AND subject=$3`, UserIdentityOIDC, normalizeOIDCIssuer(issuer), strings.TrimSpace(subject)), &identity)
+	err := scanUserIdentity(s.db.QueryRowContext(ctx, `SELECT `+userIdentityColumns+` FROM user_identities WHERE provider_id=$1::uuid AND subject=$2`, providerID, strings.TrimSpace(subject)), &identity)
 	if errors.Is(err, sql.ErrNoRows) {
 		return User{}, UserIdentity{}, ErrNotFound
 	}
-	if err != nil {
-		return User{}, UserIdentity{}, err
+	if err == nil {
+		var user User
+		user, err = s.GetUser(ctx, identity.UserID)
+		return user, identity, err
 	}
-	user, err := s.GetUser(ctx, identity.UserID)
-	return user, identity, err
+	return User{}, UserIdentity{}, err
 }
 
 func (s *PostgresStore) ResolveOIDCIdentity(ctx context.Context, provision OIDCIdentityProvision) (User, UserIdentity, bool, error) {
 	provision.Issuer = normalizeOIDCIssuer(provision.Issuer)
 	provision.Subject = strings.TrimSpace(provision.Subject)
-	if provision.Issuer == "" || provision.Subject == "" {
+	if provision.ProviderID == "" || provision.Subject == "" {
 		return User{}, UserIdentity{}, false, ErrNotFound
 	}
 	now := provision.OccurredAt.UTC()
@@ -109,7 +110,7 @@ func (s *PostgresStore) ResolveOIDCIdentity(ctx context.Context, provision OIDCI
 	defer func() { _ = tx.Rollback() }()
 
 	var identity UserIdentity
-	err = scanUserIdentity(tx.QueryRowContext(ctx, `SELECT `+userIdentityColumns+` FROM user_identities WHERE kind=$1 AND issuer=$2 AND subject=$3 FOR UPDATE`, UserIdentityOIDC, provision.Issuer, provision.Subject), &identity)
+	err = scanUserIdentity(tx.QueryRowContext(ctx, `SELECT `+userIdentityColumns+` FROM user_identities WHERE provider_id=$1::uuid AND subject=$2 FOR UPDATE`, provision.ProviderID, provision.Subject), &identity)
 	if err == nil {
 		user, err := updateOIDCLogin(ctx, tx, identity, provision, now)
 		if err != nil {
@@ -178,7 +179,7 @@ func (s *PostgresStore) ResolveOIDCIdentity(ctx context.Context, provision OIDCI
 		created = true
 	} else {
 		var exists bool
-		if err = tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM user_identities WHERE user_id=$1 AND kind=$2 AND issuer=$3)`, user.ID, UserIdentityOIDC, provision.Issuer).Scan(&exists); err != nil {
+		if err = tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM user_identities WHERE user_id=$1 AND provider_id=$2::uuid)`, user.ID, provision.ProviderID).Scan(&exists); err != nil {
 			return User{}, UserIdentity{}, false, err
 		}
 		if exists {
@@ -190,11 +191,11 @@ func (s *PostgresStore) ResolveOIDCIdentity(ctx context.Context, provision OIDCI
 	}
 
 	identity = refreshUserIdentity(UserIdentity{
-		ID: ids.New(), UserID: user.ID, Kind: UserIdentityOIDC,
+		ID: ids.New(), UserID: user.ID, Kind: UserIdentityOIDC, ProviderID: provision.ProviderID,
 		Issuer: provision.Issuer, Subject: provision.Subject, CreatedAt: now,
 	}, provision, now)
-	err = scanUserIdentity(tx.QueryRowContext(ctx, `INSERT INTO user_identities (id,user_id,kind,issuer,subject,email,display_name,email_verified,last_login_at,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10) RETURNING `+userIdentityColumns,
-		identity.ID, identity.UserID, identity.Kind, identity.Issuer, identity.Subject,
+	err = scanUserIdentity(tx.QueryRowContext(ctx, `INSERT INTO user_identities (id,user_id,kind,provider_id,issuer,subject,email,display_name,email_verified,last_login_at,created_at,updated_at) VALUES ($1,$2,$3,$4::uuid,$5,$6,$7,$8,$9,$10,$11,$11) RETURNING `+userIdentityColumns,
+		identity.ID, identity.UserID, identity.Kind, identity.ProviderID, identity.Issuer, identity.Subject,
 		identity.Email, identity.DisplayName, identity.EmailVerified, identity.LastLoginAt, now,
 	), &identity)
 	if isUnique(err) {

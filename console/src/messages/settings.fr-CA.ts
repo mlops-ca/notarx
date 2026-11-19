@@ -81,7 +81,6 @@ export const settingsFrCA: Record<keyof typeof settingsEnCA, string> = {
     "Échec de la connexion au fournisseur d’identité",
   "settings.authentication": "Authentification",
   "settings.runtimeSettings": "Paramètres d’exécution",
-  "settings.environmentBootstrap": "Amorçage par l’environnement",
   "settings.configureAnExternalOIDCProviderBrowserSignIn":
     "Configurez un fournisseur OIDC externe, la connexion par navigateur et la correspondance des rôles",
   "settings.runtimeStatus": "État d’exécution",
@@ -98,8 +97,6 @@ export const settingsFrCA: Record<keyof typeof settingsEnCA, string> = {
   "settings.notPersisted": "Non persisté",
   "settings.databaseSettingsAreShared":
     "Les paramètres de la base de données sont partagés",
-  "settings.settingsCurrentlyComeFromTheEnvironmentTheFirst":
-    "Les paramètres proviennent actuellement de l’environnement. Le premier enregistrement crée les paramètres d’exécution dans la base de données.",
   "settings.connectionSucceededInMs": "Connexion réussie en {latencyMs} ms",
   "settings.brandPreview": "Aperçu de la marque",
   "settings.livePreview": "Aperçu en direct",

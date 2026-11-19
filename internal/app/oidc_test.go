@@ -71,14 +71,15 @@ func TestOIDCBearerIdentityUsesBoundLocalAccountRoleAndState(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err = store.CreateUserIdentity(context.Background(), repository.UserIdentity{
-		ID: "bound-identity", UserID: user.ID, Kind: repository.UserIdentityOIDC,
+		ID: "bound-identity", UserID: user.ID, Kind: repository.UserIdentityOIDC, ProviderID: "provider-1",
 		Issuer: "https://issuer.example.test", Subject: "provider-admin",
 	}); err != nil {
 		t.Fatal(err)
 	}
 	authenticator := Authenticator{
 		OIDC: NewOIDCValidator(OIDCConfig{
-			Issuer: "https://issuer.example.test", Audience: "notarx", JWKSURL: server.URL,
+			ProviderID: "provider-1",
+			Issuer:     "https://issuer.example.test", Audience: "notarx", JWKSURL: server.URL,
 			Roles: OIDCRoleMapping{Admin: []string{"provider-admin-role"}},
 		}),
 		Users: store, UserIdentities: store,
@@ -224,7 +225,7 @@ func TestOIDCSubjectIsRecordedForDeniedRepositoryRead(t *testing.T) {
 	}
 	authenticator := Authenticator{
 		RepositoryReaders: map[string][]string{"ci-user": {"team/allowed/*"}},
-		OIDC:              NewOIDCValidator(OIDCConfig{Issuer: "https://issuer.example.test", Audience: "notarx", JWKSURL: server.URL}),
+		OIDC:              NewOIDCValidator(OIDCConfig{ProviderID: "provider-1", Issuer: "https://issuer.example.test", Audience: "notarx", JWKSURL: server.URL}),
 	}
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, Adapter: TestAdapter{}, Authenticator: authenticator})
 	token := signedOIDCToken(t, privateKey, keyID, "https://issuer.example.test", "notarx", "ci-user", time.Now().Add(time.Minute))
@@ -280,4 +281,28 @@ func signedOIDCTokenWithClaims(t *testing.T, key *rsa.PrivateKey, keyID, issuer,
 		t.Fatal(err)
 	}
 	return payload + "." + base64.RawURLEncoding.EncodeToString(signature)
+}
+
+// An OIDC validator that belongs to no provider cannot tell whether the subject is a
+// linked account, so it must not authenticate a token while identities are stored: a
+// disabled account would otherwise pass on the role claims of the token.
+func TestOIDCBearerWithoutProviderFailsClosedWhenIdentitiesAreStored(t *testing.T) {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const keyID = "no-provider-key"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(oidcJWKS(t, keyID, &privateKey.PublicKey))
+	}))
+	defer server.Close()
+	validator := NewOIDCValidator(OIDCConfig{Issuer: "https://issuer.example.test", Audience: "notarx", JWKSURL: server.URL})
+	token := signedOIDCToken(t, privateKey, keyID, "https://issuer.example.test", "notarx", "someone", time.Now().Add(time.Minute))
+	if _, ok := (Authenticator{OIDC: validator}).Authenticate("Bearer " + token); !ok {
+		t.Fatal("without stored identities the external-principal behavior is unchanged")
+	}
+	stored := Authenticator{OIDC: validator, UserIdentities: repository.NewMemoryStore()}
+	if _, ok := stored.Authenticate("Bearer " + token); ok {
+		t.Fatal("a provider-less validator must fail closed while identities are stored")
+	}
 }

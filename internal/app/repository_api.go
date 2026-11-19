@@ -90,7 +90,7 @@ func isManagementObjectUpload(r *http.Request) bool {
 }
 
 func (m openAPIServeMux) HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) {
-	if m.handlePathParameterAction(pattern, "sessionId", "commit", handler) || m.handlePathParameterAction(pattern, "deliveryId", "replay", handler) {
+	if m.handlePathParameterAction(pattern, "sessionId", "commit", handler) || m.handlePathParameterAction(pattern, "deliveryId", "replay", handler) || m.handlePathParameterAction(pattern, "providerId", "test", handler) {
 		return
 	}
 	guarded := m.guarded(handler)
@@ -153,7 +153,7 @@ type GatewayStore interface {
 	repository.PublicAccessPolicyStore
 	repository.SiteSettingsStore
 	repository.ConsoleThemeStore
-	repository.OIDCSettingsStore
+	repository.IdentityProviderStore
 	repository.HostedGroupStore
 	repository.RepositoryGrantStore
 	repository.AuthorizationTemplateStore
@@ -220,8 +220,8 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	authenticator.UserIdentities = store
 	authenticator.UserSessions = store
 	authenticator.ServiceAccounts = store
-	if dependencies.OIDCRuntime != nil {
-		authenticator.OIDCSource = dependencies.OIDCRuntime
+	if dependencies.IdentityRuntime != nil {
+		authenticator.OIDCSource = dependencies.IdentityRuntime
 	}
 	api := apiHandler{store: store, repositories: store, resolver: resolver, authenticator: authenticator}
 	upstreamClient := OCIClient(UpstreamClient{OCIBearerCache: NewOCIBearerTokenCache()})
@@ -376,11 +376,11 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	accessAPI := newAccessManagementHandler(accessManagementOptions{Scope: scope, Grants: store, GrantRecords: grantRecords, Templates: store, Roles: store})
 	pypiYanks, _ := any(store).(repository.PyPIYankStore)
 	pypiYankAPI := pypiYankManagementHandler{managementScope: scope, files: store, yank: pypiYanks}
-	var identityOIDC identityOIDCSettings
-	if dependencies.OIDCRuntime != nil {
-		identityOIDC = dependencies.OIDCRuntime
+	var identityProviders identityProviderRuntime
+	if dependencies.IdentityRuntime != nil {
+		identityProviders = dependencies.IdentityRuntime
 	}
-	identityAPI := newIdentityManagementHandler(identityManagementOptions{Scope: scope, Users: store, APIKeys: store, ServiceAccounts: store, OIDC: identityOIDC})
+	identityAPI := newIdentityManagementHandler(identityManagementOptions{Scope: scope, Users: store, APIKeys: store, ServiceAccounts: store, IdentityProviders: identityProviders})
 	legacyAPI := generatedRepositoryAPIAdapter{BatchAdapter: migrationapi.New(dependencies.MigrationService, authenticator, store).WithSchedules(dependencies.MigrationSchedules), Adapter: sourceapi.New(dependencies.SourceService, authenticator, store), managementScope: scope, store: store, sessions: nativeMaven, npmRestore: options.NPMRestore, aptPublication: aptPublication, aptSnapshotPublisher: aptSnapshotPublisher, aptSnapshotImporter: aptSnapshotImporter, aptSnapshotExporter: aptpublication.SnapshotArchiveExporter{Store: store, Objects: nativeAPTObjects}, aptPublications: store, retentionPolicies: store, securityPolicies: store, quarantineReadPolicies: store, capacities: store, tombstones: store, intelligence: store, quarantine: store, lifecycleJobs: store, auditRetention: store, publicAccess: store, siteSettings: store, consoleThemePackages: store, consoleThemes: dependencies.ConsoleThemes, replication: store, oci: store, cargo: store, conan: store, audit: store, maintenance: maintenance, searchProjection: searchProjection, runtimeNodes: store, scheduledTasks: store, webhooks: store, emailTargets: store, quotaAlerts: store, queueStats: store, diagnostics: dependencies, objects: options.Storage, logBuffer: dependencies.LogBuffer, artifactScanner: dependencies.ArtifactScanner, artifactScanFormats: dependencies.ArtifactScannerFormats}
 	adminopenapi.HandlerWithOptions(managementServer{Boundary: helmapi.New(helmPreview), Adapter: nugetapi.New(nugetPreview), RubyGemsBoundary: rubygemsapi.New(rubyGemsPreview), repositoryManagementHandler: repositoriesAPI, artifactManagementHandler: artifactsAPI, accessManagementHandler: accessAPI, identityManagementHandler: identityAPI, pypiYankManagementHandler: pypiYankAPI, generatedRepositoryAPIAdapter: legacyAPI}, adminopenapi.StdHTTPServerOptions{
 		BaseURL:    "/api/v2",
@@ -478,19 +478,10 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	mux.HandleFunc("GET /auth/token", oci.Token)
 	mux.HandleFunc("POST /auth/login", userLoginHandler(store, store, authenticator))
 	mux.HandleFunc("POST /auth/change-password", userChangePasswordHandler(store, store, authenticator))
-	oidcLoginValidator := dependencies.OIDCLoginValidator
-	if oidcLoginValidator == nil {
-		// Keep embedded handlers compatible. The runtime supplies a dedicated
-		// validator because the browser client and API may use different audiences.
-		oidcLoginValidator = authenticator.OIDC
-	}
-	oidcLogin := oidcLoginHandler{
-		client: dependencies.OIDCClient, validator: oidcLoginValidator,
-		runtime: dependencies.OIDCRuntime, authenticator: authenticator, identities: store, sessions: store,
-	}
-	mux.HandleFunc("GET /auth/oidc/config", oidcLogin.config)
-	mux.HandleFunc("GET /auth/oidc/login", oidcLogin.start)
-	mux.HandleFunc("GET /auth/oidc/callback", oidcLogin.callback)
+	oidcLogin := oidcLoginHandler{runtime: dependencies.IdentityRuntime, authenticator: authenticator, identities: store, sessions: store}
+	mux.HandleFunc("GET /auth/idp", oidcLogin.providers)
+	mux.HandleFunc("GET /auth/oidc/{slug}/login", oidcLogin.start)
+	mux.HandleFunc("GET /auth/oidc/{slug}/callback", oidcLogin.callback)
 	mux.HandleFunc("GET /auth/session", oidcLogin.session)
 	mux.HandleFunc("POST /auth/logout", oidcLogin.logout)
 	return sessionCookieAuthentication(tracedHTTPHandler(dependencies.requestObservability(openAPIServeMux{mux: mux}))), nil

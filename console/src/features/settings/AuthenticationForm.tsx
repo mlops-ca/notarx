@@ -8,15 +8,14 @@ import {
   SaveOutlined,
 } from "@ant-design/icons";
 import { Button, Form, Input, Popconfirm, Space, Switch } from "antd";
-import type { OidcSettings, OidcSettingsUpdateWritable } from "../../client";
 import { Badge } from "../../components/ui/Badge";
 import { CopyableValue } from "../../components/ui/ConsolePrimitives";
 import { usePreferences } from "../../lib/preferences";
 import {
   authenticationFieldErrors,
   toFormValues,
-  toUpdateBody,
   type AuthenticationFormValues,
+  type AuthenticationSettings,
 } from "./authenticationModel";
 import {
   OidcProviderFields,
@@ -39,13 +38,13 @@ export function AuthenticationForm({
   onTest,
   onEdited,
 }: {
-  settings: OidcSettings;
+  settings: AuthenticationSettings;
   sourceLabel: string;
   clearSecret: boolean;
   setClearSecret: (clear: boolean) => void;
   saving: boolean;
   testing: boolean;
-  onSave: (body: OidcSettingsUpdateWritable) => Promise<void>;
+  onSave: (values: AuthenticationFormValues) => Promise<void>;
   onTest: () => void;
   onEdited: () => void;
 }) {
@@ -60,7 +59,7 @@ export function AuthenticationForm({
       form.setFields(errors);
       return;
     }
-    await onSave(toUpdateBody(values, clearSecret));
+    await onSave(values);
   };
 
   return (
@@ -171,13 +170,7 @@ export function AuthenticationForm({
               <div>
                 <dt>{t("settings.source")}</dt>
                 <dd>
-                  <Badge
-                    tone={
-                      settings.source === "database"
-                        ? "visualization-1"
-                        : "neutral"
-                    }
-                  >
+                  <Badge tone={settings.id ? "visualization-1" : "neutral"}>
                     {sourceLabel}
                   </Badge>
                 </dd>
@@ -214,7 +207,7 @@ export function AuthenticationForm({
           <Button
             icon={<ReloadOutlined />}
             loading={testing}
-            disabled={dirty || !settings.enabled}
+            disabled={dirty || !settings.enabled || !settings.id}
             onClick={onTest}
           >
             {t("settings.testSavedSettings")}

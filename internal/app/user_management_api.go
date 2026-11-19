@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
 	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/identity"
 	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -136,7 +137,7 @@ func userResponse(user repository.User) adminopenapi.User {
 func userIdentityResponse(identity repository.UserIdentity) adminopenapi.UserIdentity {
 	response := adminopenapi.UserIdentity{
 		Id: uuid.MustParse(identity.ID), UserId: uuid.MustParse(identity.UserID),
-		Kind: adminopenapi.UserIdentityKind(identity.Kind), Issuer: identity.Issuer,
+		Kind: adminopenapi.UserIdentityKind(identity.Kind), ProviderId: uuid.MustParse(identity.ProviderID), Issuer: identity.Issuer,
 		Subject: identity.Subject, Email: identity.Email, DisplayName: identity.DisplayName,
 		EmailVerified: identity.EmailVerified, CreatedAt: identity.CreatedAt,
 	}
@@ -519,18 +520,17 @@ func (h identityManagementHandler) CreateUserIdentity(w http.ResponseWriter, r *
 		return
 	}
 	issuer := normalizeOIDCIssuerForAPI(request.Issuer)
-	if h.oidcRuntime == nil {
-		writeHostedProblem(w, http.StatusServiceUnavailable, "not_supported", "runtime OIDC settings are unavailable")
+	if h.identityProviders == nil {
+		writeHostedProblem(w, http.StatusServiceUnavailable, "not_supported", "the identity provider registry is unavailable")
 		return
 	}
-	settings, err := h.oidcRuntime.Settings(r.Context())
-	if err != nil || normalizeOIDCIssuerForAPI(settings.Issuer) != issuer {
-		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "identity issuer must match the configured OIDC issuer")
+	provider, ok := h.linkProvider(w, r, request.ProviderId, issuer)
+	if !ok {
 		return
 	}
 	identityID := ids.New()
 	identity, err := h.users.CreateUserIdentity(r.Context(), repository.UserIdentity{
-		ID: identityID, UserID: userID, Kind: repository.UserIdentityOIDC,
+		ID: identityID, UserID: userID, Kind: repository.UserIdentityOIDC, ProviderID: provider.ID,
 		Issuer: issuer, Subject: strings.TrimSpace(request.Subject),
 	}, h.auditRecords(r, "users/"+userID+"/identities/"+identityID, "user.identity.link", http.StatusCreated)...)
 	if errors.Is(err, repository.ErrNotFound) {
@@ -546,6 +546,47 @@ func (h identityManagementHandler) CreateUserIdentity(w http.ResponseWriter, r *
 		return
 	}
 	writeNativeMavenJSON(w, http.StatusCreated, userIdentityResponse(identity))
+}
+
+// linkProvider resolves the provider a manual identity link belongs to: the one named
+// by providerId, or else the single OIDC provider whose issuer matches.
+func (h identityManagementHandler) linkProvider(w http.ResponseWriter, r *http.Request, providerID *openapi_types.UUID, issuer string) (identity.Provider, bool) {
+	if providerID != nil {
+		provider, err := h.identityProviders.Get(r.Context(), providerID.String())
+		if errors.Is(err, repository.ErrNotFound) {
+			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "providerId does not name an identity provider")
+			return identity.Provider{}, false
+		}
+		if err != nil {
+			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "load identity provider failed")
+			return identity.Provider{}, false
+		}
+		if settings, _ := provider.OIDC(); provider.Kind != identity.KindOIDC || normalizeOIDCIssuerForAPI(settings.Issuer) != issuer {
+			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "identity issuer must match the issuer of the provider")
+			return identity.Provider{}, false
+		}
+		return provider, true
+	}
+	providers, err := h.identityProviders.List(r.Context())
+	if err != nil {
+		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "list identity providers failed")
+		return identity.Provider{}, false
+	}
+	var matches []identity.Provider
+	for _, provider := range providers {
+		if settings, _ := provider.OIDC(); provider.Kind == identity.KindOIDC && normalizeOIDCIssuerForAPI(settings.Issuer) == issuer {
+			matches = append(matches, provider)
+		}
+	}
+	switch len(matches) {
+	case 1:
+		return matches[0], true
+	case 0:
+		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "identity issuer must match the issuer of a configured identity provider")
+	default:
+		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "several identity providers share this issuer; send providerId")
+	}
+	return identity.Provider{}, false
 }
 
 func (h identityManagementHandler) DeleteUserIdentity(w http.ResponseWriter, r *http.Request, userID, identityID string) {

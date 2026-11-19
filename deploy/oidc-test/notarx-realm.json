@@ -20,7 +20,7 @@
       "directAccessGrantsEnabled": false,
       "fullScopeAllowed": true,
       "redirectUris": [
-        "http://127.0.0.1:4173/auth/oidc/callback"
+        "http://127.0.0.1:4173/auth/oidc/default/callback"
       ],
       "webOrigins": [
         "http://127.0.0.1:4173"

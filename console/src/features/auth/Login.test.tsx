@@ -98,8 +98,8 @@ describe("LoginPage forced password change", () => {
     const fetchMock = vi.fn(
       async (input: RequestInfo | URL, init?: RequestInit) => {
         const target = String(input);
-        if (target === "/auth/oidc/config") {
-          return new Response(JSON.stringify({ enabled: false }), {
+        if (target === "/auth/idp") {
+          return new Response(JSON.stringify({ items: [] }), {
             status: 200,
             headers: { "Content-Type": "application/json" },
           });
@@ -170,8 +170,10 @@ describe("LoginPage forced password change", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) =>
-        String(input) === "/auth/oidc/config"
-          ? Response.json({ enabled: true, issuer: "https://id.example.com" })
+        String(input) === "/auth/idp"
+          ? Response.json({
+              items: [{ slug: "corp", displayName: "Corp SSO", kind: "oidc" }],
+            })
           : new Response(null, { status: 404 }),
       ),
     );
@@ -187,7 +189,7 @@ describe("LoginPage forced password change", () => {
       </TestQueryProvider>,
     );
 
-    expect(await screen.findByText("https://id.example.com")).toBeVisible();
+    expect(await screen.findByText("Corp SSO")).toBeVisible();
     expect(screen.getByRole("alert")).toBeVisible();
     await user.click(screen.getByText("Access Token"));
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();

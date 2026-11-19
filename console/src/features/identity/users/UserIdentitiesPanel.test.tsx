@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createUserIdentity,
   deleteUserIdentity,
-  getOidcSettings,
+  listIdentityProviders,
   listUserIdentities,
 } from "../../../client";
 import type { UserIdentity } from "../../../client";
@@ -19,22 +19,34 @@ import { PreferencesProvider } from "../../../lib/preferences";
 import { TestQueryProvider } from "../../../test/queryClient";
 import { UserIdentitiesPanel } from "./UserIdentitiesPanel";
 
+const providerList = (issuer: string) => ({
+  items: [
+    {
+      id: "00000000-0000-0000-0000-000000000201",
+      slug: "default",
+      kind: "oidc",
+      oidc: { issuer },
+    },
+  ],
+});
+
 vi.mock("../../../client", () => ({
   createUserIdentity: vi.fn(),
   deleteUserIdentity: vi.fn(),
-  getOidcSettings: vi.fn(),
+  listIdentityProviders: vi.fn(),
   listUserIdentities: vi.fn(),
 }));
 
 const mockCreateIdentity = vi.mocked(createUserIdentity);
 const mockDeleteIdentity = vi.mocked(deleteUserIdentity);
-const mockGetOidcSettings = vi.mocked(getOidcSettings);
+const mockListProviders = vi.mocked(listIdentityProviders);
 const mockListIdentities = vi.mocked(listUserIdentities);
 
 const identity: UserIdentity = {
   id: "00000000-0000-0000-0000-000000000101",
   userId: "00000000-0000-0000-0000-000000000001",
   kind: "oidc",
+  providerId: "00000000-0000-0000-0000-000000000201",
   issuer: "https://issuer.example.test",
   subject: "provider-subject",
   email: "alice@example.test",
@@ -66,8 +78,8 @@ describe("UserIdentitiesPanel", () => {
     mockListIdentities.mockResolvedValue({
       data: { items: [identity] },
     } as never);
-    mockGetOidcSettings.mockResolvedValue({
-      data: { issuer: identity.issuer },
+    mockListProviders.mockResolvedValue({
+      data: providerList(identity.issuer),
     } as never);
     mockCreateIdentity.mockResolvedValue({
       data: {
@@ -97,6 +109,7 @@ describe("UserIdentitiesPanel", () => {
       expect(mockCreateIdentity).toHaveBeenCalledWith({
         path: { userId: identity.userId },
         body: {
+          providerId: "00000000-0000-0000-0000-000000000201",
           issuer: "https://issuer.example.test",
           subject: "second-subject",
         },
@@ -120,9 +133,9 @@ describe("UserIdentitiesPanel", () => {
 
   it("clears a stale issuer when the OIDC provider is removed", async () => {
     mockListIdentities.mockResolvedValue({ data: { items: [] } } as never);
-    mockGetOidcSettings
-      .mockResolvedValueOnce({ data: { issuer: identity.issuer } } as never)
-      .mockResolvedValueOnce({ data: {} } as never);
+    mockListProviders
+      .mockResolvedValueOnce({ data: providerList(identity.issuer) } as never)
+      .mockResolvedValueOnce({ data: { items: [] } } as never);
 
     const user = userEvent.setup();
     renderPanel();
@@ -135,7 +148,7 @@ describe("UserIdentitiesPanel", () => {
     await user.click(
       screen.getByRole("button", { name: "Refresh external identities" }),
     );
-    await waitFor(() => expect(mockGetOidcSettings).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mockListProviders).toHaveBeenCalledTimes(2));
     await user.click(screen.getByText("Link identity", { selector: "span" }));
 
     expect(screen.getByLabelText("Issuer")).toHaveValue("");
@@ -151,7 +164,7 @@ describe("UserIdentitiesPanel", () => {
 
   it("shows the shared loading state while the first request is in flight", async () => {
     mockListIdentities.mockReturnValue(new Promise(() => {}) as never);
-    mockGetOidcSettings.mockReturnValue(new Promise(() => {}) as never);
+    mockListProviders.mockReturnValue(new Promise(() => {}) as never);
 
     render(
       <TestQueryProvider>
@@ -168,8 +181,8 @@ describe("UserIdentitiesPanel", () => {
 
   it("shares the console empty state", async () => {
     mockListIdentities.mockResolvedValue({ data: { items: [] } } as never);
-    mockGetOidcSettings.mockResolvedValue({
-      data: { issuer: "https://issuer.example.test" },
+    mockListProviders.mockResolvedValue({
+      data: providerList("https://issuer.example.test"),
     } as never);
 
     render(
@@ -188,8 +201,8 @@ describe("UserIdentitiesPanel", () => {
 
   it("reports a failed link inside the dialog that started it", async () => {
     mockListIdentities.mockResolvedValue({ data: { items: [] } } as never);
-    mockGetOidcSettings.mockResolvedValue({
-      data: { issuer: identity.issuer },
+    mockListProviders.mockResolvedValue({
+      data: providerList(identity.issuer),
     } as never);
     let rejectLink: (error: unknown) => void = () => {};
     mockCreateIdentity.mockImplementationOnce(

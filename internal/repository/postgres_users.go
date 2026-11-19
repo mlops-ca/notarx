@@ -134,7 +134,7 @@ func (s *PostgresStore) UpdateUser(ctx context.Context, update UserUpdate, expec
 		}
 	}
 	var updated User
-	err = scanUser(tx.QueryRowContext(ctx, `UPDATE users SET role=CASE WHEN $2 THEN $3 ELSE role END, state=CASE WHEN $4 THEN $5 ELSE state END, display_name=CASE WHEN $6 THEN $7 ELSE display_name END, email=CASE WHEN $8 THEN $9 ELSE email END, description=CASE WHEN $10 THEN $11 ELSE description END, version=version+1, updated_at=now() WHERE id=$1::uuid AND version=$12::text::bigint RETURNING `+userColumns,
+	err = scanUser(tx.QueryRowContext(ctx, `UPDATE users SET role=CASE WHEN $2 THEN $3 ELSE role END, state=CASE WHEN $4 THEN $5 ELSE state END, disabled_reason=CASE WHEN $4 THEN (CASE WHEN $5='disabled' THEN 'admin' END) ELSE disabled_reason END, display_name=CASE WHEN $6 THEN $7 ELSE display_name END, email=CASE WHEN $8 THEN $9 ELSE email END, description=CASE WHEN $10 THEN $11 ELSE description END, version=version+1, updated_at=now() WHERE id=$1::uuid AND version=$12::text::bigint RETURNING `+userColumns,
 		update.ID,
 		update.Role != nil, stringValue(update.Role),
 		update.State != nil, stringValue(update.State),

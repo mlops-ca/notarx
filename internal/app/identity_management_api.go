@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/mlops-ca/notarx/internal/identity"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -39,37 +40,41 @@ type identityServiceAccountStore interface {
 	RevokeServiceAccountCredential(context.Context, string, string, ...repository.AuditRecord) (repository.APIKey, error)
 }
 
-type identityOIDCSettings interface {
-	Settings(context.Context) (OIDCSettingsView, error)
-	Replace(context.Context, OIDCSettingsUpdate, string, ...repository.AuditRecord) (OIDCSettingsView, error)
-	Test(context.Context) (OIDCConnectionTest, error)
+// identityProviderRuntime is the registry service of the identity management API.
+type identityProviderRuntime interface {
+	List(context.Context) ([]identity.Provider, error)
+	Get(context.Context, string) (identity.Provider, error)
+	Create(context.Context, IdentityProviderInput, ...repository.AuditRecord) (identity.Provider, error)
+	Replace(ctx context.Context, id string, in IdentityProviderInput, expectedVersion int64, audit ...repository.AuditRecord) (identity.Provider, error)
+	Delete(ctx context.Context, id string, expectedVersion int64, audit ...repository.AuditRecord) error
+	Test(context.Context, string) (OIDCConnectionTest, error)
 }
 
 type identityManagementOptions struct {
-	Scope           managementScope
-	Users           identityUserStore
-	APIKeys         identityAPIKeyStore
-	ServiceAccounts identityServiceAccountStore
-	OIDC            identityOIDCSettings
+	Scope             managementScope
+	Users             identityUserStore
+	APIKeys           identityAPIKeyStore
+	ServiceAccounts   identityServiceAccountStore
+	IdentityProviders identityProviderRuntime
 }
 
 // identityManagementHandler owns identity administration; repository content,
 // lifecycle, operations and site persistence are not its dependencies.
 type identityManagementHandler struct {
 	managementScope
-	users           identityUserStore
-	apiKeys         identityAPIKeyStore
-	serviceAccounts identityServiceAccountStore
-	oidcRuntime     identityOIDCSettings
+	users             identityUserStore
+	apiKeys           identityAPIKeyStore
+	serviceAccounts   identityServiceAccountStore
+	identityProviders identityProviderRuntime
 }
 
 func newIdentityManagementHandler(options identityManagementOptions) identityManagementHandler {
 	return identityManagementHandler{
-		managementScope: options.Scope,
-		users:           options.Users,
-		apiKeys:         options.APIKeys,
-		serviceAccounts: options.ServiceAccounts,
-		oidcRuntime:     options.OIDC,
+		managementScope:   options.Scope,
+		users:             options.Users,
+		apiKeys:           options.APIKeys,
+		serviceAccounts:   options.ServiceAccounts,
+		identityProviders: options.IdentityProviders,
 	}
 }
 

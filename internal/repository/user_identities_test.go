@@ -21,7 +21,7 @@ func TestMemoryUserIdentityBindingAndResolution(t *testing.T) {
 
 	identity, err := store.CreateUserIdentity(ctx, UserIdentity{
 		ID: "identity-1", UserID: user.ID, Kind: UserIdentityOIDC,
-		Issuer: "https://issuer.example.test/", Subject: "  subject-1  ",
+		ProviderID: "provider-1", Issuer: "https://issuer.example.test/", Subject: "  subject-1  ",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -32,7 +32,7 @@ func TestMemoryUserIdentityBindingAndResolution(t *testing.T) {
 
 	if _, err := store.CreateUserIdentity(ctx, UserIdentity{
 		UserID: user.ID, Kind: UserIdentityOIDC,
-		Issuer: "https://issuer.example.test", Subject: "subject-2",
+		ProviderID: "provider-1", Issuer: "https://issuer.example.test", Subject: "subject-2",
 	}); !errors.Is(err, ErrIdentityExists) {
 		t.Fatalf("second identity for issuer error=%v want=%v", err, ErrIdentityExists)
 	}
@@ -42,14 +42,14 @@ func TestMemoryUserIdentityBindingAndResolution(t *testing.T) {
 	}
 	if _, err := store.CreateUserIdentity(ctx, UserIdentity{
 		UserID: other.ID, Kind: UserIdentityOIDC,
-		Issuer: "https://issuer.example.test", Subject: "subject-1",
+		ProviderID: "provider-1", Issuer: "https://issuer.example.test", Subject: "subject-1",
 	}); !errors.Is(err, ErrIdentityExists) {
 		t.Fatalf("duplicate provider subject error=%v want=%v", err, ErrIdentityExists)
 	}
 
 	occurredAt := time.Date(2026, time.August, 10, 8, 30, 0, 0, time.UTC)
 	resolved, refreshed, created, err := store.ResolveOIDCIdentity(ctx, OIDCIdentityProvision{
-		Issuer: "https://issuer.example.test/", Subject: "subject-1", Email: "alice@new.example",
+		ProviderID: "provider-1", Issuer: "https://issuer.example.test/", Subject: "subject-1", Email: "alice@new.example",
 		DisplayName: "Alice OIDC", EmailVerified: true, OccurredAt: occurredAt,
 	})
 	if err != nil || created || resolved.ID != user.ID {
@@ -58,7 +58,7 @@ func TestMemoryUserIdentityBindingAndResolution(t *testing.T) {
 	if refreshed.Email != "alice@new.example" || refreshed.DisplayName != "Alice OIDC" || !refreshed.EmailVerified || refreshed.LastLoginAt == nil || !refreshed.LastLoginAt.Equal(occurredAt) {
 		t.Fatalf("refreshed identity=%+v", refreshed)
 	}
-	loaded, loadedIdentity, err := store.GetUserByOIDCIdentity(ctx, "https://issuer.example.test", "subject-1")
+	loaded, loadedIdentity, err := store.GetUserByProviderIdentity(ctx, "provider-1", "subject-1")
 	if err != nil || loaded.ID != user.ID || loadedIdentity.ID != identity.ID {
 		t.Fatalf("loaded mapping user=%+v identity=%+v err=%v", loaded, loadedIdentity, err)
 	}
@@ -66,7 +66,7 @@ func TestMemoryUserIdentityBindingAndResolution(t *testing.T) {
 	if err := store.DeleteUserIdentity(ctx, user.ID, identity.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := store.GetUserByOIDCIdentity(ctx, identity.Issuer, identity.Subject); !errors.Is(err, ErrNotFound) {
+	if _, _, err := store.GetUserByProviderIdentity(ctx, identity.ProviderID, identity.Subject); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("deleted identity lookup error=%v want=%v", err, ErrNotFound)
 	}
 }
@@ -76,14 +76,14 @@ func TestMemoryUserIdentityJITProvisioningAndEmailSafety(t *testing.T) {
 	store := NewMemoryStore()
 
 	if _, _, _, err := store.ResolveOIDCIdentity(ctx, OIDCIdentityProvision{
-		Issuer: "https://issuer.example.test", Subject: "unlinked", Email: "new@example.test",
+		ProviderID: "provider-1", Issuer: "https://issuer.example.test", Subject: "unlinked", Email: "new@example.test",
 		Provision: false,
 	}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("disabled provisioning error=%v want=%v", err, ErrNotFound)
 	}
 
 	created, identity, wasCreated, err := store.ResolveOIDCIdentity(ctx, OIDCIdentityProvision{
-		Issuer: "https://issuer.example.test", Subject: "jit-subject", Email: "new@example.test",
+		ProviderID: "provider-1", Issuer: "https://issuer.example.test", Subject: "jit-subject", Email: "new@example.test",
 		DisplayName: "JIT User", PreferredUsername: "jit-user", EmailVerified: true,
 		Provision: true, DefaultRole: "member", OccurredAt: time.Now().UTC(),
 	})
@@ -95,7 +95,7 @@ func TestMemoryUserIdentityJITProvisioningAndEmailSafety(t *testing.T) {
 	}
 
 	second, refreshed, wasCreated, err := store.ResolveOIDCIdentity(ctx, OIDCIdentityProvision{
-		Issuer: identity.Issuer, Subject: identity.Subject, Email: "changed@example.test",
+		ProviderID: "provider-1", Issuer: identity.Issuer, Subject: identity.Subject, Email: "changed@example.test",
 		DisplayName: "Changed", EmailVerified: true, Provision: true,
 		OccurredAt: time.Now().UTC(),
 	})
@@ -113,7 +113,7 @@ func TestMemoryUserIdentityJITProvisioningAndEmailSafety(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, _, _, err := store.ResolveOIDCIdentity(ctx, OIDCIdentityProvision{
-		Issuer: "https://issuer.example.test", Subject: "ambiguous", Email: first.Email,
+		ProviderID: "provider-1", Issuer: "https://issuer.example.test", Subject: "ambiguous", Email: first.Email,
 		EmailVerified: true, Provision: true, MatchEmail: true,
 	}); !errors.Is(err, ErrIdentityAmbiguous) {
 		t.Fatalf("ambiguous email error=%v want=%v", err, ErrIdentityAmbiguous)
@@ -124,7 +124,7 @@ func TestMemoryUserIdentityJITPendingRoleCanBeApprovedAndRevoked(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryStore()
 	provision := OIDCIdentityProvision{
-		Issuer: "https://issuer.example.test", Subject: "pending-subject",
+		ProviderID: "provider-1", Issuer: "https://issuer.example.test", Subject: "pending-subject",
 		Email: "pending@example.test", DisplayName: "Pending User",
 		PreferredUsername: "pending", EmailVerified: true,
 		Provision: true, DefaultRole: "none", OccurredAt: time.Now().UTC(),
@@ -184,7 +184,7 @@ func TestMemoryUserIdentityJITRejectsRemovedLegacyLevels(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			subject := strings.ReplaceAll(tc.name, " ", "-")
 			user, _, created, err := store.ResolveOIDCIdentity(ctx, OIDCIdentityProvision{
-				Issuer: "https://issuer.example.test", Subject: subject,
+				ProviderID: "provider-1", Issuer: "https://issuer.example.test", Subject: subject,
 				Email: subject + "@example.test", PreferredUsername: subject,
 				Role: tc.mapped, DefaultRole: tc.fallback, Provision: true, OccurredAt: time.Now().UTC(),
 			})

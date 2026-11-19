@@ -102,7 +102,7 @@ func TestAuditedMutationLookupsUseTheTransaction(t *testing.T) {
 	if _, err := store.CreateServiceAccountCredential(ctx, APIKey{ID: uuid.NewString(), ServiceAccountID: missing, Name: "k", SecretHash: uuid.NewString(), Roles: []string{}}, audit); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("CreateServiceAccountCredential = %v, want ErrNotFound", err)
 	}
-	if _, err := store.CreateUserIdentity(ctx, UserIdentity{UserID: missing, Kind: UserIdentityOIDC, Issuer: "https://issuer.example", Subject: "x"}, audit); !errors.Is(err, ErrNotFound) {
+	if _, err := store.CreateUserIdentity(ctx, UserIdentity{UserID: missing, Kind: UserIdentityOIDC, ProviderID: missing, Issuer: "https://issuer.example", Subject: "x"}, audit); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("CreateUserIdentity = %v, want ErrNotFound", err)
 	}
 }

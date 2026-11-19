@@ -54,7 +54,7 @@ export const identityKeys = {
     [...identityKeys.all, "user-sessions", userId] as const,
   userIdentities: (userId: string) =>
     [...identityKeys.all, "user-identities", userId] as const,
-  oidcIssuer: () => [...identityKeys.all, "oidc-issuer"] as const,
+  linkProvider: () => [...identityKeys.all, "link-provider"] as const,
 };
 
 export const accessKeys = {
@@ -113,7 +113,7 @@ export const auditKeys = {
 
 export const settingsKeys = {
   all: ["settings"] as const,
-  oidc: () => [...settingsKeys.all, "oidc"] as const,
+  identityProviders: () => [...settingsKeys.all, "identity-providers"] as const,
 };
 
 export const dashboardKeys = {

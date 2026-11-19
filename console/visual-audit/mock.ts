@@ -777,10 +777,8 @@ export async function mockConsole(page: Page) {
       },
     }),
   );
-  await page.route("**/api/v2/authentication/oidc**", (route) =>
-    route.fulfill({
-      json: { enabled: false, issuerUrl: "", clientId: "" },
-    }),
+  await page.route("**/api/v2/authentication/providers**", (route) =>
+    route.fulfill({ json: { items: [] } }),
   );
   await page.route("**/api/v2/audit-retention-policy", (route) =>
     route.fulfill({

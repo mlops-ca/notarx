@@ -438,8 +438,8 @@ for (const width of [1440, 390]) {
       await route.fulfill({ status: 204 });
       completeLogout();
     });
-    await page.route("**/auth/oidc/config", (route) =>
-      route.fulfill({ json: { enabled: false } }),
+    await page.route("**/auth/idp", (route) =>
+      route.fulfill({ json: { items: [] } }),
     );
     await page.route("**/api/v2/formats", (route) =>
       route.fulfill({ json: { items: [] } }),
@@ -503,8 +503,8 @@ for (const width of [1440, 390]) {
         loggedOut = true;
         return route.fulfill({ status: 204 });
       });
-      await page.route("**/auth/oidc/config", (route) =>
-        route.fulfill({ json: { enabled: false } }),
+      await page.route("**/auth/idp", (route) =>
+        route.fulfill({ json: { items: [] } }),
       );
       await page.route("**/api/v2/formats", (route) =>
         route.fulfill({ json: { items: [] } }),

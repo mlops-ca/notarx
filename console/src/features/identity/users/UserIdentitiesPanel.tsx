@@ -23,7 +23,7 @@ import { Modal } from "../../../components/ui/Modal";
 import { formatDate } from "../../../lib/format";
 import { usePreferences } from "../../../lib/preferences";
 import { identityKeys } from "../../../lib/query/keys";
-import { useOidcIssuer, useUserIdentities } from "../userQueries";
+import { useLinkProvider, useUserIdentities } from "../userQueries";
 
 interface UserIdentitiesPanelProps {
   userId: string;
@@ -34,8 +34,9 @@ export function UserIdentitiesPanel({ userId }: UserIdentitiesPanelProps) {
   const { locale, t } = usePreferences();
   const queryClient = useQueryClient();
   const identitiesQuery = useUserIdentities(userId);
-  const issuerQuery = useOidcIssuer();
-  const issuer = issuerQuery.data ?? "";
+  const issuerQuery = useLinkProvider();
+  const issuer = issuerQuery.data?.issuer ?? "";
+  const providerId = issuerQuery.data?.providerId ?? "";
   const items = identitiesQuery.data?.items ?? [];
   const loading = identitiesQuery.isFetching;
   const [actionError, setActionError] = useState<unknown>(null);
@@ -59,6 +60,7 @@ export function UserIdentitiesPanel({ userId }: UserIdentitiesPanelProps) {
 
   const link = async () => {
     const body: CreateUserIdentity = {
+      ...(providerId ? { providerId } : {}),
       issuer: issuer.trim(),
       subject: subject.trim(),
     };

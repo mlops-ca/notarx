@@ -63,6 +63,20 @@ func Open(purpose, encoded string) (string, error) {
 	return ring.open(purpose, encoded)
 }
 
+// KeyIDs returns the non-secret ids of the ring: the current key first, then
+// the retired keys that still open values. The ids name keys in audit records
+// and never reveal key material.
+func KeyIDs() (current string, previous []string, err error) {
+	ring, err := loadRing()
+	if err != nil {
+		return "", nil, err
+	}
+	for _, key := range ring.keys[1:] {
+		previous = append(previous, key.id)
+	}
+	return ring.current.id, previous, nil
+}
+
 // NeedsReseal reports whether Reseal would change encoded: it is legacy or was
 // sealed with a key other than the current one.
 func NeedsReseal(encoded string) (bool, error) {

@@ -2163,20 +2163,35 @@ ConsoleThemeToken:
     colorPrimaryActive: {type: string, maxLength: 96}
     colorPrimaryBg: {type: string, maxLength: 96}
     controlOutline: {type: string, maxLength: 96}
-OIDCSettings:
+IdentityProviderKind:
+  type: string
+  enum: [oidc, saml]
+IdentityProviderAttributeMapping:
   type: object
-  required: [version, source, enabled, issuer, audience, clientId, clientSecretConfigured, redirectUrl, scopes, adminSubjects, memberRoles, adminRoles, provisioningMode, emailLinkingEnabled, jitDefaultRole]
+  description: >
+    Where each user attribute comes from: a claim of the ID token (OIDC) or an
+    attribute of the assertion (SAML). An empty value selects the protocol
+    default. subject may join two claims with a colon, which is how Entra ID
+    keeps its stable key (tid:oid).
   additionalProperties: false
   properties:
-    version: {type: string}
-    source: {type: string, enum: [environment, database]}
-    enabled: {type: boolean}
-    issuer: {type: string, format: uri}
+    subject: {type: string, maxLength: 200}
+    username: {type: string, maxLength: 200}
+    email: {type: string, maxLength: 200}
+    displayName: {type: string, maxLength: 200}
+    groups: {type: string, maxLength: 200}
+    externalId: {type: string, maxLength: 200}
+IdentityProviderOIDCSettings:
+  type: object
+  required: [issuer, audience, clientId, clientSecretConfigured, redirectUrl, scopes, adminSubjects, memberRoles, adminRoles, algorithms]
+  additionalProperties: false
+  properties:
+    issuer: {type: string}
     audience: {type: string}
-    jwksUrl: {type: string, format: uri}
+    jwksUrl: {type: string}
     clientId: {type: string}
     clientSecretConfigured: {type: boolean}
-    redirectUrl: {type: string, format: uri}
+    redirectUrl: {type: string}
     scopes:
       type: array
       items: {type: string}
@@ -2189,25 +2204,24 @@ OIDCSettings:
     adminRoles:
       type: array
       items: {type: string}
-    provisioningMode: {type: string, enum: [disabled, jit]}
-    emailLinkingEnabled: {type: boolean}
-    jitDefaultRole: {type: string, enum: [none, member, admin]}
-    updatedAt: {type: string, format: date-time}
-OIDCSettingsUpdate:
+    algorithms:
+      type: array
+      description: Allow-list of ID token signature algorithms. The default is RS256.
+      items: {type: string, enum: [RS256, ES256, EdDSA]}
+IdentityProviderOIDCInput:
   type: object
-  required: [enabled, issuer, audience, clientId, redirectUrl, scopes, adminSubjects, memberRoles, adminRoles, provisioningMode, emailLinkingEnabled, jitDefaultRole]
+  required: [issuer, audience, clientId, redirectUrl, scopes, adminSubjects, memberRoles, adminRoles]
   additionalProperties: false
   properties:
-    enabled: {type: boolean}
-    issuer: {type: string, format: uri}
+    issuer: {type: string}
     audience: {type: string}
-    jwksUrl: {type: string, format: uri}
+    jwksUrl: {type: string}
     clientId: {type: string}
     clientSecret:
       type: string
       writeOnly: true
     clearClientSecret: {type: boolean, default: false}
-    redirectUrl: {type: string, format: uri}
+    redirectUrl: {type: string}
     scopes:
       type: array
       items: {type: string}
@@ -2220,9 +2234,63 @@ OIDCSettingsUpdate:
     adminRoles:
       type: array
       items: {type: string}
-    provisioningMode: {type: string, enum: [disabled, jit]}
+    algorithms:
+      type: array
+      items: {type: string, enum: [RS256, ES256, EdDSA]}
+IdentityProvider:
+  type: object
+  required: [id, slug, kind, displayName, enabled, attributeMapping, provisioningMode, emailLinkingEnabled, jitDefaultRole, version, createdAt, updatedAt]
+  additionalProperties: false
+  properties:
+    id: {type: string, format: uuid}
+    slug: {type: string, pattern: '^[a-z0-9][a-z0-9-]{1,62}$'}
+    kind: {"$ref": "#/IdentityProviderKind"}
+    displayName: {type: string, minLength: 1, maxLength: 120}
+    enabled: {type: boolean}
+    oidc: {"$ref": "#/IdentityProviderOIDCSettings"}
+    attributeMapping: {"$ref": "#/IdentityProviderAttributeMapping"}
+    provisioningMode: {type: string, enum: [disabled, jit, scim_only]}
     emailLinkingEnabled: {type: boolean}
-    jitDefaultRole: {type: string, enum: [none, member, admin]}
+    jitDefaultRole: {type: string, enum: [none, member]}
+    version:
+      type: string
+      description: Optimistic concurrency version, also returned as the ETag header.
+    createdAt: {type: string, format: date-time}
+    updatedAt: {type: string, format: date-time}
+IdentityProviderList:
+  type: object
+  required: [items]
+  additionalProperties: false
+  properties:
+    items:
+      type: array
+      items: {"$ref": "#/IdentityProvider"}
+CreateIdentityProvider:
+  type: object
+  required: [slug, kind, displayName, enabled, oidc]
+  additionalProperties: false
+  properties:
+    slug: {type: string, pattern: '^[a-z0-9][a-z0-9-]{1,62}$'}
+    kind: {type: string, enum: [oidc]}
+    displayName: {type: string, minLength: 1, maxLength: 120}
+    enabled: {type: boolean}
+    oidc: {"$ref": "#/IdentityProviderOIDCInput"}
+    attributeMapping: {"$ref": "#/IdentityProviderAttributeMapping"}
+    provisioningMode: {type: string, enum: [disabled, jit, scim_only], default: disabled}
+    emailLinkingEnabled: {type: boolean, default: false}
+    jitDefaultRole: {type: string, enum: [none, member], default: none}
+ReplaceIdentityProvider:
+  type: object
+  required: [displayName, enabled, oidc, attributeMapping, provisioningMode, emailLinkingEnabled, jitDefaultRole]
+  additionalProperties: false
+  properties:
+    displayName: {type: string, minLength: 1, maxLength: 120}
+    enabled: {type: boolean}
+    oidc: {"$ref": "#/IdentityProviderOIDCInput"}
+    attributeMapping: {"$ref": "#/IdentityProviderAttributeMapping"}
+    provisioningMode: {type: string, enum: [disabled, jit, scim_only]}
+    emailLinkingEnabled: {type: boolean}
+    jitDefaultRole: {type: string, enum: [none, member]}
 OIDCConnectionTest:
   type: object
   required: [reachable, issuer, latencyMs, checkedAt]
@@ -2237,12 +2305,13 @@ OIDCConnectionTest:
     checkedAt: {type: string, format: date-time}
 UserIdentity:
   type: object
-  required: [id, userId, kind, issuer, subject, email, displayName, emailVerified, createdAt]
+  required: [id, userId, kind, providerId, issuer, subject, email, displayName, emailVerified, createdAt]
   additionalProperties: false
   properties:
     id: {type: string, format: uuid}
     userId: {type: string, format: uuid}
-    kind: {type: string, enum: [oidc]}
+    kind: {type: string, enum: [oidc, saml]}
+    providerId: {type: string, format: uuid}
     issuer: {type: string, format: uri}
     subject: {type: string, minLength: 1}
     email: {type: string}
@@ -2265,7 +2334,7 @@ UserSession:
   properties:
     id: {type: string, format: uuid}
     userId: {type: string, format: uuid}
-    kind: {type: string, enum: [local_session, oidc]}
+    kind: {type: string, enum: [local_session, oidc, saml]}
     ipAddress: {type: string, maxLength: 64}
     userAgent: {type: string, maxLength: 512}
     createdAt: {type: string, format: date-time}
@@ -2287,6 +2356,10 @@ CreateUserIdentity:
   required: [issuer, subject]
   additionalProperties: false
   properties:
+    providerId:
+      type: string
+      format: uuid
+      description: The identity provider that owns the subject. When omitted, the single provider whose issuer matches is used.
     issuer: {type: string, format: uri}
     subject: {type: string, minLength: 1, maxLength: 512}
 AuditCleanupJob:

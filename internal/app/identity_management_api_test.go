@@ -104,7 +104,7 @@ func TestIdentityManagementDomainIndependentHTTP(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("revoke service credential=%d %s", response.Code, response.Body.String())
 	}
-	response = call("admin-secret", http.MethodGet, "/authentication/oidc", "", "")
+	response = call("admin-secret", http.MethodGet, "/authentication/providers", "", "")
 	if response.Code != http.StatusServiceUnavailable || !strings.Contains(response.Body.String(), "not_supported") {
 		t.Fatalf("unconfigured OIDC=%d %s", response.Code, response.Body.String())
 	}
@@ -147,7 +147,8 @@ func TestIdentityManagementAuthorizesBeforeDomainStorage(t *testing.T) {
 		{http.MethodGet, "/service-accounts"}, {http.MethodPost, "/service-accounts"}, {http.MethodPut, "/service-accounts/" + id},
 		{http.MethodGet, "/service-accounts/" + id + "/credentials"}, {http.MethodPost, "/service-accounts/" + id + "/credentials"},
 		{http.MethodDelete, "/service-accounts/" + id + "/credentials/" + id},
-		{http.MethodGet, "/authentication/oidc"}, {http.MethodPut, "/authentication/oidc"}, {http.MethodPost, "/authentication/oidc:test"},
+		{http.MethodGet, "/authentication/providers"}, {http.MethodPost, "/authentication/providers"}, {http.MethodGet, "/authentication/providers/" + id},
+		{http.MethodPut, "/authentication/providers/" + id}, {http.MethodDelete, "/authentication/providers/" + id}, {http.MethodPost, "/authentication/providers/" + id + ":test"},
 	}
 	for _, credential := range []struct {
 		name, token string

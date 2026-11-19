@@ -1,7 +1,7 @@
 import type {
   GetPublicAccessPolicyResponses,
   GetDiagnosticsResponses,
-  GetOidcSettingsResponses,
+  ListIdentityProvidersResponses,
   GetOverviewStatisticsResponses,
   GetRepositoryCapabilitiesResponses,
   GetRepositoryCapacityResponses,
@@ -393,26 +393,12 @@ export const users = {
   limit: 50,
 } satisfies ListUsersResponses[200];
 
-export const oidcSettings = {
-  version: "1",
-  source: "database",
-  enabled: false,
-  issuer: "",
-  audience: "",
-  clientId: "",
-  clientSecretConfigured: false,
-  redirectUrl: "",
-  scopes: ["openid", "profile", "email"],
-  adminSubjects: [],
-  memberRoles: [],
-  adminRoles: [],
-  provisioningMode: "disabled",
-  emailLinkingEnabled: false,
-  jitDefaultRole: "none",
-} satisfies GetOidcSettingsResponses[200];
+export const identityProviders = {
+  items: [],
+} satisfies ListIdentityProvidersResponses[200];
 
 /** Not in the management contract; Login reads it with plain fetch. */
-export const oidcLoginConfig = { enabled: false };
+export const loginIdentityProviders = { items: [] };
 
 export const publicRepositories = {
   enabled: true,

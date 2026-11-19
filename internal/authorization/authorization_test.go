@@ -743,7 +743,7 @@ func TestAuthenticatorBoundOIDCWebSessionRechecksUserStateAndSessionVersion(t *t
 		t.Fatal(err)
 	}
 	if _, err = store.CreateUserIdentity(ctx, repository.UserIdentity{
-		ID: "bound-identity", UserID: user.ID, Kind: repository.UserIdentityOIDC,
+		ID: "bound-identity", UserID: user.ID, Kind: repository.UserIdentityOIDC, ProviderID: "provider-1",
 		Issuer: "https://issuer.example.test", Subject: "subject",
 	}); err != nil {
 		t.Fatal(err)

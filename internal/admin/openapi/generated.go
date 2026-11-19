@@ -818,6 +818,60 @@ func (e CreateConanPublishSessionKind) Valid() bool {
 	}
 }
 
+// Defines values for CreateIdentityProviderJitDefaultRole.
+const (
+	CreateIdentityProviderJitDefaultRoleMember CreateIdentityProviderJitDefaultRole = "member"
+	CreateIdentityProviderJitDefaultRoleNone   CreateIdentityProviderJitDefaultRole = "none"
+)
+
+// Valid indicates whether the value is a known member of the CreateIdentityProviderJitDefaultRole enum.
+func (e CreateIdentityProviderJitDefaultRole) Valid() bool {
+	switch e {
+	case CreateIdentityProviderJitDefaultRoleMember:
+		return true
+	case CreateIdentityProviderJitDefaultRoleNone:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateIdentityProviderKind.
+const (
+	CreateIdentityProviderKindOidc CreateIdentityProviderKind = "oidc"
+)
+
+// Valid indicates whether the value is a known member of the CreateIdentityProviderKind enum.
+func (e CreateIdentityProviderKind) Valid() bool {
+	switch e {
+	case CreateIdentityProviderKindOidc:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateIdentityProviderProvisioningMode.
+const (
+	CreateIdentityProviderProvisioningModeDisabled CreateIdentityProviderProvisioningMode = "disabled"
+	CreateIdentityProviderProvisioningModeJit      CreateIdentityProviderProvisioningMode = "jit"
+	CreateIdentityProviderProvisioningModeScimOnly CreateIdentityProviderProvisioningMode = "scim_only"
+)
+
+// Valid indicates whether the value is a known member of the CreateIdentityProviderProvisioningMode enum.
+func (e CreateIdentityProviderProvisioningMode) Valid() bool {
+	switch e {
+	case CreateIdentityProviderProvisioningModeDisabled:
+		return true
+	case CreateIdentityProviderProvisioningModeJit:
+		return true
+	case CreateIdentityProviderProvisioningModeScimOnly:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CreateMavenPublishSessionFormat.
 const (
 	CreateMavenPublishSessionFormatMaven CreateMavenPublishSessionFormat = "maven"
@@ -1369,16 +1423,16 @@ func (e EmailPreviewInputScenario) Valid() bool {
 
 // Defines values for EmailQueueDiagnosticsClock.
 const (
-	EmailQueueDiagnosticsClockDatabase    EmailQueueDiagnosticsClock = "database"
-	EmailQueueDiagnosticsClockMemoryStore EmailQueueDiagnosticsClock = "memory_store"
+	Database    EmailQueueDiagnosticsClock = "database"
+	MemoryStore EmailQueueDiagnosticsClock = "memory_store"
 )
 
 // Valid indicates whether the value is a known member of the EmailQueueDiagnosticsClock enum.
 func (e EmailQueueDiagnosticsClock) Valid() bool {
 	switch e {
-	case EmailQueueDiagnosticsClockDatabase:
+	case Database:
 		return true
-	case EmailQueueDiagnosticsClockMemoryStore:
+	case MemoryStore:
 		return true
 	default:
 		return false
@@ -2192,6 +2246,105 @@ func (e HelmPreviewUpstreamAuthStatusScheme) Valid() bool {
 	case HelmPreviewUpstreamAuthStatusSchemeBearer:
 		return true
 	case HelmPreviewUpstreamAuthStatusSchemeNone:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IdentityProviderJitDefaultRole.
+const (
+	IdentityProviderJitDefaultRoleMember IdentityProviderJitDefaultRole = "member"
+	IdentityProviderJitDefaultRoleNone   IdentityProviderJitDefaultRole = "none"
+)
+
+// Valid indicates whether the value is a known member of the IdentityProviderJitDefaultRole enum.
+func (e IdentityProviderJitDefaultRole) Valid() bool {
+	switch e {
+	case IdentityProviderJitDefaultRoleMember:
+		return true
+	case IdentityProviderJitDefaultRoleNone:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IdentityProviderProvisioningMode.
+const (
+	IdentityProviderProvisioningModeDisabled IdentityProviderProvisioningMode = "disabled"
+	IdentityProviderProvisioningModeJit      IdentityProviderProvisioningMode = "jit"
+	IdentityProviderProvisioningModeScimOnly IdentityProviderProvisioningMode = "scim_only"
+)
+
+// Valid indicates whether the value is a known member of the IdentityProviderProvisioningMode enum.
+func (e IdentityProviderProvisioningMode) Valid() bool {
+	switch e {
+	case IdentityProviderProvisioningModeDisabled:
+		return true
+	case IdentityProviderProvisioningModeJit:
+		return true
+	case IdentityProviderProvisioningModeScimOnly:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IdentityProviderKind.
+const (
+	IdentityProviderKindOidc IdentityProviderKind = "oidc"
+	IdentityProviderKindSaml IdentityProviderKind = "saml"
+)
+
+// Valid indicates whether the value is a known member of the IdentityProviderKind enum.
+func (e IdentityProviderKind) Valid() bool {
+	switch e {
+	case IdentityProviderKindOidc:
+		return true
+	case IdentityProviderKindSaml:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IdentityProviderOIDCInputAlgorithms.
+const (
+	IdentityProviderOIDCInputAlgorithmsES256 IdentityProviderOIDCInputAlgorithms = "ES256"
+	IdentityProviderOIDCInputAlgorithmsEdDSA IdentityProviderOIDCInputAlgorithms = "EdDSA"
+	IdentityProviderOIDCInputAlgorithmsRS256 IdentityProviderOIDCInputAlgorithms = "RS256"
+)
+
+// Valid indicates whether the value is a known member of the IdentityProviderOIDCInputAlgorithms enum.
+func (e IdentityProviderOIDCInputAlgorithms) Valid() bool {
+	switch e {
+	case IdentityProviderOIDCInputAlgorithmsES256:
+		return true
+	case IdentityProviderOIDCInputAlgorithmsEdDSA:
+		return true
+	case IdentityProviderOIDCInputAlgorithmsRS256:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IdentityProviderOIDCSettingsAlgorithms.
+const (
+	IdentityProviderOIDCSettingsAlgorithmsES256 IdentityProviderOIDCSettingsAlgorithms = "ES256"
+	IdentityProviderOIDCSettingsAlgorithmsEdDSA IdentityProviderOIDCSettingsAlgorithms = "EdDSA"
+	IdentityProviderOIDCSettingsAlgorithmsRS256 IdentityProviderOIDCSettingsAlgorithms = "RS256"
+)
+
+// Valid indicates whether the value is a known member of the IdentityProviderOIDCSettingsAlgorithms enum.
+func (e IdentityProviderOIDCSettingsAlgorithms) Valid() bool {
+	switch e {
+	case IdentityProviderOIDCSettingsAlgorithmsES256:
+		return true
+	case IdentityProviderOIDCSettingsAlgorithmsEdDSA:
+		return true
+	case IdentityProviderOIDCSettingsAlgorithmsRS256:
 		return true
 	default:
 		return false
@@ -3155,102 +3308,6 @@ func (e OIDCRoleMappingMatchGatewayRole) Valid() bool {
 	}
 }
 
-// Defines values for OIDCSettingsJitDefaultRole.
-const (
-	OIDCSettingsJitDefaultRoleAdmin  OIDCSettingsJitDefaultRole = "admin"
-	OIDCSettingsJitDefaultRoleMember OIDCSettingsJitDefaultRole = "member"
-	OIDCSettingsJitDefaultRoleNone   OIDCSettingsJitDefaultRole = "none"
-)
-
-// Valid indicates whether the value is a known member of the OIDCSettingsJitDefaultRole enum.
-func (e OIDCSettingsJitDefaultRole) Valid() bool {
-	switch e {
-	case OIDCSettingsJitDefaultRoleAdmin:
-		return true
-	case OIDCSettingsJitDefaultRoleMember:
-		return true
-	case OIDCSettingsJitDefaultRoleNone:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for OIDCSettingsProvisioningMode.
-const (
-	OIDCSettingsProvisioningModeDisabled OIDCSettingsProvisioningMode = "disabled"
-	OIDCSettingsProvisioningModeJit      OIDCSettingsProvisioningMode = "jit"
-)
-
-// Valid indicates whether the value is a known member of the OIDCSettingsProvisioningMode enum.
-func (e OIDCSettingsProvisioningMode) Valid() bool {
-	switch e {
-	case OIDCSettingsProvisioningModeDisabled:
-		return true
-	case OIDCSettingsProvisioningModeJit:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for OIDCSettingsSource.
-const (
-	OIDCSettingsSourceDatabase    OIDCSettingsSource = "database"
-	OIDCSettingsSourceEnvironment OIDCSettingsSource = "environment"
-)
-
-// Valid indicates whether the value is a known member of the OIDCSettingsSource enum.
-func (e OIDCSettingsSource) Valid() bool {
-	switch e {
-	case OIDCSettingsSourceDatabase:
-		return true
-	case OIDCSettingsSourceEnvironment:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for OIDCSettingsUpdateJitDefaultRole.
-const (
-	OIDCSettingsUpdateJitDefaultRoleAdmin  OIDCSettingsUpdateJitDefaultRole = "admin"
-	OIDCSettingsUpdateJitDefaultRoleMember OIDCSettingsUpdateJitDefaultRole = "member"
-	OIDCSettingsUpdateJitDefaultRoleNone   OIDCSettingsUpdateJitDefaultRole = "none"
-)
-
-// Valid indicates whether the value is a known member of the OIDCSettingsUpdateJitDefaultRole enum.
-func (e OIDCSettingsUpdateJitDefaultRole) Valid() bool {
-	switch e {
-	case OIDCSettingsUpdateJitDefaultRoleAdmin:
-		return true
-	case OIDCSettingsUpdateJitDefaultRoleMember:
-		return true
-	case OIDCSettingsUpdateJitDefaultRoleNone:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for OIDCSettingsUpdateProvisioningMode.
-const (
-	OIDCSettingsUpdateProvisioningModeDisabled OIDCSettingsUpdateProvisioningMode = "disabled"
-	OIDCSettingsUpdateProvisioningModeJit      OIDCSettingsUpdateProvisioningMode = "jit"
-)
-
-// Valid indicates whether the value is a known member of the OIDCSettingsUpdateProvisioningMode enum.
-func (e OIDCSettingsUpdateProvisioningMode) Valid() bool {
-	switch e {
-	case OIDCSettingsUpdateProvisioningModeDisabled:
-		return true
-	case OIDCSettingsUpdateProvisioningModeJit:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for PreviewWorkerFormat.
 const (
 	PreviewWorkerFormatHelm     PreviewWorkerFormat = "helm"
@@ -3455,6 +3512,45 @@ func (e PublishSessionState) Valid() bool {
 	case PublishSessionStateExpired:
 		return true
 	case PublishSessionStateOpen:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ReplaceIdentityProviderJitDefaultRole.
+const (
+	ReplaceIdentityProviderJitDefaultRoleMember ReplaceIdentityProviderJitDefaultRole = "member"
+	ReplaceIdentityProviderJitDefaultRoleNone   ReplaceIdentityProviderJitDefaultRole = "none"
+)
+
+// Valid indicates whether the value is a known member of the ReplaceIdentityProviderJitDefaultRole enum.
+func (e ReplaceIdentityProviderJitDefaultRole) Valid() bool {
+	switch e {
+	case ReplaceIdentityProviderJitDefaultRoleMember:
+		return true
+	case ReplaceIdentityProviderJitDefaultRoleNone:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ReplaceIdentityProviderProvisioningMode.
+const (
+	ReplaceIdentityProviderProvisioningModeDisabled ReplaceIdentityProviderProvisioningMode = "disabled"
+	ReplaceIdentityProviderProvisioningModeJit      ReplaceIdentityProviderProvisioningMode = "jit"
+	ReplaceIdentityProviderProvisioningModeScimOnly ReplaceIdentityProviderProvisioningMode = "scim_only"
+)
+
+// Valid indicates whether the value is a known member of the ReplaceIdentityProviderProvisioningMode enum.
+func (e ReplaceIdentityProviderProvisioningMode) Valid() bool {
+	switch e {
+	case ReplaceIdentityProviderProvisioningModeDisabled:
+		return true
+	case ReplaceIdentityProviderProvisioningModeJit:
+		return true
+	case ReplaceIdentityProviderProvisioningModeScimOnly:
 		return true
 	default:
 		return false
@@ -4682,12 +4778,15 @@ func (e UserState) Valid() bool {
 // Defines values for UserIdentityKind.
 const (
 	UserIdentityKindOidc UserIdentityKind = "oidc"
+	UserIdentityKindSaml UserIdentityKind = "saml"
 )
 
 // Valid indicates whether the value is a known member of the UserIdentityKind enum.
 func (e UserIdentityKind) Valid() bool {
 	switch e {
 	case UserIdentityKindOidc:
+		return true
+	case UserIdentityKindSaml:
 		return true
 	default:
 		return false
@@ -4698,6 +4797,7 @@ func (e UserIdentityKind) Valid() bool {
 const (
 	UserSessionKindLocalSession UserSessionKind = "local_session"
 	UserSessionKindOidc         UserSessionKind = "oidc"
+	UserSessionKindSaml         UserSessionKind = "saml"
 )
 
 // Valid indicates whether the value is a known member of the UserSessionKind enum.
@@ -4706,6 +4806,8 @@ func (e UserSessionKind) Valid() bool {
 	case UserSessionKindLocalSession:
 		return true
 	case UserSessionKindOidc:
+		return true
+	case UserSessionKindSaml:
 		return true
 	default:
 		return false
@@ -5841,6 +5943,29 @@ type CreateGroup struct {
 	Visibility *Visibility `json:"visibility,omitempty"`
 }
 
+// CreateIdentityProvider defines model for CreateIdentityProvider.
+type CreateIdentityProvider struct {
+	// AttributeMapping Where each user attribute comes from: a claim of the ID token (OIDC) or an attribute of the assertion (SAML). An empty value selects the protocol default. subject may join two claims with a colon, which is how Entra ID keeps its stable key (tid:oid).
+	AttributeMapping    *IdentityProviderAttributeMapping       `json:"attributeMapping,omitempty"`
+	DisplayName         string                                  `json:"displayName"`
+	EmailLinkingEnabled *bool                                   `json:"emailLinkingEnabled,omitempty"`
+	Enabled             bool                                    `json:"enabled"`
+	JitDefaultRole      *CreateIdentityProviderJitDefaultRole   `json:"jitDefaultRole,omitempty"`
+	Kind                CreateIdentityProviderKind              `json:"kind"`
+	Oidc                IdentityProviderOIDCInput               `json:"oidc"`
+	ProvisioningMode    *CreateIdentityProviderProvisioningMode `json:"provisioningMode,omitempty"`
+	Slug                string                                  `json:"slug"`
+}
+
+// CreateIdentityProviderJitDefaultRole defines model for CreateIdentityProvider.JitDefaultRole.
+type CreateIdentityProviderJitDefaultRole string
+
+// CreateIdentityProviderKind defines model for CreateIdentityProvider.Kind.
+type CreateIdentityProviderKind string
+
+// CreateIdentityProviderProvisioningMode defines model for CreateIdentityProvider.ProvisioningMode.
+type CreateIdentityProviderProvisioningMode string
+
 // CreateMavenPublishSession defines model for CreateMavenPublishSession.
 type CreateMavenPublishSession struct {
 	Coordinate string                          `json:"coordinate"`
@@ -5936,8 +6061,11 @@ type CreateUserRole string
 
 // CreateUserIdentity defines model for CreateUserIdentity.
 type CreateUserIdentity struct {
-	Issuer  string `json:"issuer"`
-	Subject string `json:"subject"`
+	Issuer string `json:"issuer"`
+
+	// ProviderId The identity provider that owns the subject. When omitted, the single provider whose issuer matches is used.
+	ProviderId *openapi_types.UUID `json:"providerId,omitempty"`
+	Subject    string              `json:"subject"`
 }
 
 // CreateWebhookSubscription defines model for CreateWebhookSubscription.
@@ -6956,6 +7084,89 @@ type HelmPreviewUpstreamAuthStatus struct {
 // HelmPreviewUpstreamAuthStatusScheme defines model for HelmPreviewUpstreamAuthStatus.Scheme.
 type HelmPreviewUpstreamAuthStatusScheme string
 
+// IdentityProvider defines model for IdentityProvider.
+type IdentityProvider struct {
+	// AttributeMapping Where each user attribute comes from: a claim of the ID token (OIDC) or an attribute of the assertion (SAML). An empty value selects the protocol default. subject may join two claims with a colon, which is how Entra ID keeps its stable key (tid:oid).
+	AttributeMapping    IdentityProviderAttributeMapping `json:"attributeMapping"`
+	CreatedAt           time.Time                        `json:"createdAt"`
+	DisplayName         string                           `json:"displayName"`
+	EmailLinkingEnabled bool                             `json:"emailLinkingEnabled"`
+	Enabled             bool                             `json:"enabled"`
+	Id                  openapi_types.UUID               `json:"id"`
+	JitDefaultRole      IdentityProviderJitDefaultRole   `json:"jitDefaultRole"`
+	Kind                IdentityProviderKind             `json:"kind"`
+	Oidc                *IdentityProviderOIDCSettings    `json:"oidc,omitempty"`
+	ProvisioningMode    IdentityProviderProvisioningMode `json:"provisioningMode"`
+	Slug                string                           `json:"slug"`
+	UpdatedAt           time.Time                        `json:"updatedAt"`
+
+	// Version Optimistic concurrency version, also returned as the ETag header.
+	Version string `json:"version"`
+}
+
+// IdentityProviderJitDefaultRole defines model for IdentityProvider.JitDefaultRole.
+type IdentityProviderJitDefaultRole string
+
+// IdentityProviderProvisioningMode defines model for IdentityProvider.ProvisioningMode.
+type IdentityProviderProvisioningMode string
+
+// IdentityProviderAttributeMapping Where each user attribute comes from: a claim of the ID token (OIDC) or an attribute of the assertion (SAML). An empty value selects the protocol default. subject may join two claims with a colon, which is how Entra ID keeps its stable key (tid:oid).
+type IdentityProviderAttributeMapping struct {
+	DisplayName *string `json:"displayName,omitempty"`
+	Email       *string `json:"email,omitempty"`
+	ExternalId  *string `json:"externalId,omitempty"`
+	Groups      *string `json:"groups,omitempty"`
+	Subject     *string `json:"subject,omitempty"`
+	Username    *string `json:"username,omitempty"`
+}
+
+// IdentityProviderKind defines model for IdentityProviderKind.
+type IdentityProviderKind string
+
+// IdentityProviderList defines model for IdentityProviderList.
+type IdentityProviderList struct {
+	Items []IdentityProvider `json:"items"`
+}
+
+// IdentityProviderOIDCInput defines model for IdentityProviderOIDCInput.
+type IdentityProviderOIDCInput struct {
+	AdminRoles        []string                               `json:"adminRoles"`
+	AdminSubjects     []string                               `json:"adminSubjects"`
+	Algorithms        *[]IdentityProviderOIDCInputAlgorithms `json:"algorithms,omitempty"`
+	Audience          string                                 `json:"audience"`
+	ClearClientSecret *bool                                  `json:"clearClientSecret,omitempty"`
+	ClientId          string                                 `json:"clientId"`
+	ClientSecret      *string                                `json:"clientSecret,omitempty"`
+	Issuer            string                                 `json:"issuer"`
+	JwksUrl           *string                                `json:"jwksUrl,omitempty"`
+	MemberRoles       []string                               `json:"memberRoles"`
+	RedirectUrl       string                                 `json:"redirectUrl"`
+	Scopes            []string                               `json:"scopes"`
+}
+
+// IdentityProviderOIDCInputAlgorithms defines model for IdentityProviderOIDCInput.Algorithms.
+type IdentityProviderOIDCInputAlgorithms string
+
+// IdentityProviderOIDCSettings defines model for IdentityProviderOIDCSettings.
+type IdentityProviderOIDCSettings struct {
+	AdminRoles    []string `json:"adminRoles"`
+	AdminSubjects []string `json:"adminSubjects"`
+
+	// Algorithms Allow-list of ID token signature algorithms. The default is RS256.
+	Algorithms             []IdentityProviderOIDCSettingsAlgorithms `json:"algorithms"`
+	Audience               string                                   `json:"audience"`
+	ClientId               string                                   `json:"clientId"`
+	ClientSecretConfigured bool                                     `json:"clientSecretConfigured"`
+	Issuer                 string                                   `json:"issuer"`
+	JwksUrl                *string                                  `json:"jwksUrl,omitempty"`
+	MemberRoles            []string                                 `json:"memberRoles"`
+	RedirectUrl            string                                   `json:"redirectUrl"`
+	Scopes                 []string                                 `json:"scopes"`
+}
+
+// IdentityProviderOIDCSettingsAlgorithms defines model for IdentityProviderOIDCSettings.Algorithms.
+type IdentityProviderOIDCSettingsAlgorithms string
+
 // LifecycleJob defines model for LifecycleJob.
 type LifecycleJob struct {
 	Attempts        int                  `json:"attempts"`
@@ -7848,61 +8059,6 @@ type OIDCRoleMappingMatch struct {
 // OIDCRoleMappingMatchGatewayRole defines model for OIDCRoleMappingMatch.GatewayRole.
 type OIDCRoleMappingMatchGatewayRole string
 
-// OIDCSettings defines model for OIDCSettings.
-type OIDCSettings struct {
-	AdminRoles             []string                     `json:"adminRoles"`
-	AdminSubjects          []string                     `json:"adminSubjects"`
-	Audience               string                       `json:"audience"`
-	ClientId               string                       `json:"clientId"`
-	ClientSecretConfigured bool                         `json:"clientSecretConfigured"`
-	EmailLinkingEnabled    bool                         `json:"emailLinkingEnabled"`
-	Enabled                bool                         `json:"enabled"`
-	Issuer                 string                       `json:"issuer"`
-	JitDefaultRole         OIDCSettingsJitDefaultRole   `json:"jitDefaultRole"`
-	JwksUrl                *string                      `json:"jwksUrl,omitempty"`
-	MemberRoles            []string                     `json:"memberRoles"`
-	ProvisioningMode       OIDCSettingsProvisioningMode `json:"provisioningMode"`
-	RedirectUrl            string                       `json:"redirectUrl"`
-	Scopes                 []string                     `json:"scopes"`
-	Source                 OIDCSettingsSource           `json:"source"`
-	UpdatedAt              *time.Time                   `json:"updatedAt,omitempty"`
-	Version                string                       `json:"version"`
-}
-
-// OIDCSettingsJitDefaultRole defines model for OIDCSettings.JitDefaultRole.
-type OIDCSettingsJitDefaultRole string
-
-// OIDCSettingsProvisioningMode defines model for OIDCSettings.ProvisioningMode.
-type OIDCSettingsProvisioningMode string
-
-// OIDCSettingsSource defines model for OIDCSettings.Source.
-type OIDCSettingsSource string
-
-// OIDCSettingsUpdate defines model for OIDCSettingsUpdate.
-type OIDCSettingsUpdate struct {
-	AdminRoles          []string                           `json:"adminRoles"`
-	AdminSubjects       []string                           `json:"adminSubjects"`
-	Audience            string                             `json:"audience"`
-	ClearClientSecret   *bool                              `json:"clearClientSecret,omitempty"`
-	ClientId            string                             `json:"clientId"`
-	ClientSecret        *string                            `json:"clientSecret,omitempty"`
-	EmailLinkingEnabled bool                               `json:"emailLinkingEnabled"`
-	Enabled             bool                               `json:"enabled"`
-	Issuer              string                             `json:"issuer"`
-	JitDefaultRole      OIDCSettingsUpdateJitDefaultRole   `json:"jitDefaultRole"`
-	JwksUrl             *string                            `json:"jwksUrl,omitempty"`
-	MemberRoles         []string                           `json:"memberRoles"`
-	ProvisioningMode    OIDCSettingsUpdateProvisioningMode `json:"provisioningMode"`
-	RedirectUrl         string                             `json:"redirectUrl"`
-	Scopes              []string                           `json:"scopes"`
-}
-
-// OIDCSettingsUpdateJitDefaultRole defines model for OIDCSettingsUpdate.JitDefaultRole.
-type OIDCSettingsUpdateJitDefaultRole string
-
-// OIDCSettingsUpdateProvisioningMode defines model for OIDCSettingsUpdate.ProvisioningMode.
-type OIDCSettingsUpdateProvisioningMode string
-
 // OverviewRepositoryStatistics defines model for OverviewRepositoryStatistics.
 type OverviewRepositoryStatistics struct {
 	Denied       OverviewWindowCounts `json:"denied"`
@@ -8091,6 +8247,24 @@ type QuarantineReadPolicy struct {
 	Enabled bool   `json:"enabled"`
 	Version string `json:"version"`
 }
+
+// ReplaceIdentityProvider defines model for ReplaceIdentityProvider.
+type ReplaceIdentityProvider struct {
+	// AttributeMapping Where each user attribute comes from: a claim of the ID token (OIDC) or an attribute of the assertion (SAML). An empty value selects the protocol default. subject may join two claims with a colon, which is how Entra ID keeps its stable key (tid:oid).
+	AttributeMapping    IdentityProviderAttributeMapping        `json:"attributeMapping"`
+	DisplayName         string                                  `json:"displayName"`
+	EmailLinkingEnabled bool                                    `json:"emailLinkingEnabled"`
+	Enabled             bool                                    `json:"enabled"`
+	JitDefaultRole      ReplaceIdentityProviderJitDefaultRole   `json:"jitDefaultRole"`
+	Oidc                IdentityProviderOIDCInput               `json:"oidc"`
+	ProvisioningMode    ReplaceIdentityProviderProvisioningMode `json:"provisioningMode"`
+}
+
+// ReplaceIdentityProviderJitDefaultRole defines model for ReplaceIdentityProvider.JitDefaultRole.
+type ReplaceIdentityProviderJitDefaultRole string
+
+// ReplaceIdentityProviderProvisioningMode defines model for ReplaceIdentityProvider.ProvisioningMode.
+type ReplaceIdentityProviderProvisioningMode string
 
 // ReplicationCheckpointProgress defines model for ReplicationCheckpointProgress.
 type ReplicationCheckpointProgress struct {
@@ -9119,6 +9293,7 @@ type UserIdentity struct {
 	Issuer        string             `json:"issuer"`
 	Kind          UserIdentityKind   `json:"kind"`
 	LastLoginAt   *time.Time         `json:"lastLoginAt,omitempty"`
+	ProviderId    openapi_types.UUID `json:"providerId"`
 	Subject       string             `json:"subject"`
 	UpdatedAt     *time.Time         `json:"updatedAt,omitempty"`
 	UserId        openapi_types.UUID `json:"userId"`
@@ -9388,8 +9563,13 @@ type ListAuditPageParams struct {
 // ListAuditPageParamsClass defines parameters for ListAuditPage.
 type ListAuditPageParamsClass string
 
-// ReplaceOIDCSettingsParams defines parameters for ReplaceOIDCSettings.
-type ReplaceOIDCSettingsParams struct {
+// DeleteIdentityProviderParams defines parameters for DeleteIdentityProvider.
+type DeleteIdentityProviderParams struct {
+	IfMatch IfMatch `json:"If-Match"`
+}
+
+// ReplaceIdentityProviderParams defines parameters for ReplaceIdentityProvider.
+type ReplaceIdentityProviderParams struct {
 	IfMatch IfMatch `json:"If-Match"`
 }
 
@@ -10067,8 +10247,11 @@ type CreateApiKeyJSONRequestBody = CreateAPIKey
 // ReplaceAuditRetentionPolicyJSONRequestBody defines body for ReplaceAuditRetentionPolicy for application/json ContentType.
 type ReplaceAuditRetentionPolicyJSONRequestBody = AuditRetentionPolicy
 
-// ReplaceOIDCSettingsJSONRequestBody defines body for ReplaceOIDCSettings for application/json ContentType.
-type ReplaceOIDCSettingsJSONRequestBody = OIDCSettingsUpdate
+// CreateIdentityProviderJSONRequestBody defines body for CreateIdentityProvider for application/json ContentType.
+type CreateIdentityProviderJSONRequestBody = CreateIdentityProvider
+
+// ReplaceIdentityProviderJSONRequestBody defines body for ReplaceIdentityProvider for application/json ContentType.
+type ReplaceIdentityProviderJSONRequestBody = ReplaceIdentityProvider
 
 // CreateAuthorizationRoleJSONRequestBody defines body for CreateAuthorizationRole for application/json ContentType.
 type CreateAuthorizationRoleJSONRequestBody = AuthorizationRoleWritable
@@ -11088,14 +11271,23 @@ type ServerInterface interface {
 	// (GET /audits/page)
 	ListAuditPage(w http.ResponseWriter, r *http.Request, params ListAuditPageParams)
 
-	// (GET /authentication/oidc)
-	GetOIDCSettings(w http.ResponseWriter, r *http.Request)
+	// (GET /authentication/providers)
+	ListIdentityProviders(w http.ResponseWriter, r *http.Request)
 
-	// (PUT /authentication/oidc)
-	ReplaceOIDCSettings(w http.ResponseWriter, r *http.Request, params ReplaceOIDCSettingsParams)
+	// (POST /authentication/providers)
+	CreateIdentityProvider(w http.ResponseWriter, r *http.Request)
 
-	// (POST /authentication/oidc:test)
-	TestOIDCSettings(w http.ResponseWriter, r *http.Request)
+	// (DELETE /authentication/providers/{providerId})
+	DeleteIdentityProvider(w http.ResponseWriter, r *http.Request, providerId openapi_types.UUID, params DeleteIdentityProviderParams)
+
+	// (GET /authentication/providers/{providerId})
+	GetIdentityProvider(w http.ResponseWriter, r *http.Request, providerId openapi_types.UUID)
+
+	// (PUT /authentication/providers/{providerId})
+	ReplaceIdentityProvider(w http.ResponseWriter, r *http.Request, providerId openapi_types.UUID, params ReplaceIdentityProviderParams)
+
+	// (POST /authentication/providers/{providerId}:test)
+	TestIdentityProvider(w http.ResponseWriter, r *http.Request, providerId openapi_types.UUID)
 
 	// (GET /authorization-roles)
 	ListAuthorizationRoles(w http.ResponseWriter, r *http.Request)
@@ -12385,11 +12577,11 @@ func (siw *ServerInterfaceWrapper) ListAuditPage(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
-// GetOIDCSettings operation middleware
-func (siw *ServerInterfaceWrapper) GetOIDCSettings(w http.ResponseWriter, r *http.Request) {
+// ListIdentityProviders operation middleware
+func (siw *ServerInterfaceWrapper) ListIdentityProviders(w http.ResponseWriter, r *http.Request) {
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetOIDCSettings(w, r)
+		siw.Handler.ListIdentityProviders(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -12399,14 +12591,37 @@ func (siw *ServerInterfaceWrapper) GetOIDCSettings(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
-// ReplaceOIDCSettings operation middleware
-func (siw *ServerInterfaceWrapper) ReplaceOIDCSettings(w http.ResponseWriter, r *http.Request) {
+// CreateIdentityProvider operation middleware
+func (siw *ServerInterfaceWrapper) CreateIdentityProvider(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateIdentityProvider(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteIdentityProvider operation middleware
+func (siw *ServerInterfaceWrapper) DeleteIdentityProvider(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
 
+	// ------------- Path parameter "providerId" -------------
+	var providerId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "providerId", r.PathValue("providerId"), &providerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "providerId", Err: err})
+		return
+	}
+
 	// Parameter object where we will unmarshal all parameters from the context
-	var params ReplaceOIDCSettingsParams
+	var params DeleteIdentityProviderParams
 
 	headers := r.Header
 
@@ -12434,7 +12649,7 @@ func (siw *ServerInterfaceWrapper) ReplaceOIDCSettings(w http.ResponseWriter, r 
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ReplaceOIDCSettings(w, r, params)
+		siw.Handler.DeleteIdentityProvider(w, r, providerId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -12444,11 +12659,103 @@ func (siw *ServerInterfaceWrapper) ReplaceOIDCSettings(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
-// TestOIDCSettings operation middleware
-func (siw *ServerInterfaceWrapper) TestOIDCSettings(w http.ResponseWriter, r *http.Request) {
+// GetIdentityProvider operation middleware
+func (siw *ServerInterfaceWrapper) GetIdentityProvider(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "providerId" -------------
+	var providerId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "providerId", r.PathValue("providerId"), &providerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "providerId", Err: err})
+		return
+	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.TestOIDCSettings(w, r)
+		siw.Handler.GetIdentityProvider(w, r, providerId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReplaceIdentityProvider operation middleware
+func (siw *ServerInterfaceWrapper) ReplaceIdentityProvider(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "providerId" -------------
+	var providerId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "providerId", r.PathValue("providerId"), &providerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "providerId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ReplaceIdentityProviderParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReplaceIdentityProvider(w, r, providerId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TestIdentityProvider operation middleware
+func (siw *ServerInterfaceWrapper) TestIdentityProvider(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "providerId" -------------
+	var providerId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "providerId", r.PathValue("providerId"), &providerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "providerId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TestIdentityProvider(w, r, providerId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -22533,9 +22840,12 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/console-themes", wrapper.InstallConsoleThemePackage)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/console-themes/{themeId}", wrapper.DeleteConsoleThemePackage)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/console-themes/{themeId}", wrapper.ReplaceConsoleThemePackage)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/authentication/oidc", wrapper.GetOIDCSettings)
-	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/authentication/oidc", wrapper.ReplaceOIDCSettings)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/authentication/oidc:test", wrapper.TestOIDCSettings)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/authentication/providers", wrapper.ListIdentityProviders)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/authentication/providers", wrapper.CreateIdentityProvider)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/authentication/providers/{providerId}", wrapper.DeleteIdentityProvider)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/authentication/providers/{providerId}", wrapper.GetIdentityProvider)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/authentication/providers/{providerId}", wrapper.ReplaceIdentityProvider)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/authentication/providers/{providerId}:test", wrapper.TestIdentityProvider)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/webhook-subscriptions", wrapper.ListWebhookSubscriptions)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/webhook-subscriptions", wrapper.CreateWebhookSubscription)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/webhook-subscriptions/{subscriptionId}", wrapper.GetWebhookSubscription)
@@ -22778,6 +23088,17 @@ type GroupCapacityJSONResponse GroupCapacity
 
 type GroupListJSONResponse GroupPage
 
+type IdentityProviderResponseHeaders struct {
+	ETag *string
+}
+type IdentityProviderJSONResponse struct {
+	Body IdentityProvider
+
+	Headers IdentityProviderResponseHeaders
+}
+
+type IdentityProviderListJSONResponse IdentityProviderList
+
 type LifecycleJobJSONResponse LifecycleJob
 
 type LifecycleJobListJSONResponse []LifecycleJob
@@ -22795,8 +23116,6 @@ type OCIImageListJSONResponse OCIImagePage
 type OCIManifestSummaryListJSONResponse OCIManifestSummaryPage
 
 type OIDCConnectionTestJSONResponse OIDCConnectionTest
-
-type OIDCSettingsJSONResponse OIDCSettings
 
 type ProblemApplicationProblemPlusJSONResponse Problem
 
@@ -23341,16 +23660,18 @@ func (response ListAuditPage401ApplicationProblemPlusJSONResponse) VisitListAudi
 	return err
 }
 
-type GetOIDCSettingsRequestObject struct {
+type ListIdentityProvidersRequestObject struct {
 }
 
-type GetOIDCSettingsResponseObject interface {
-	VisitGetOIDCSettingsResponse(w http.ResponseWriter) error
+type ListIdentityProvidersResponseObject interface {
+	VisitListIdentityProvidersResponse(w http.ResponseWriter) error
 }
 
-type GetOIDCSettings200JSONResponse struct{ OIDCSettingsJSONResponse }
+type ListIdentityProviders200JSONResponse struct {
+	IdentityProviderListJSONResponse
+}
 
-func (response GetOIDCSettings200JSONResponse) VisitGetOIDCSettingsResponse(w http.ResponseWriter) error {
+func (response ListIdentityProviders200JSONResponse) VisitListIdentityProvidersResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -23362,11 +23683,11 @@ func (response GetOIDCSettings200JSONResponse) VisitGetOIDCSettingsResponse(w ht
 	return err
 }
 
-type GetOIDCSettings401ApplicationProblemPlusJSONResponse struct {
+type ListIdentityProviders401ApplicationProblemPlusJSONResponse struct {
 	ProblemApplicationProblemPlusJSONResponse
 }
 
-func (response GetOIDCSettings401ApplicationProblemPlusJSONResponse) VisitGetOIDCSettingsResponse(w http.ResponseWriter) error {
+func (response ListIdentityProviders401ApplicationProblemPlusJSONResponse) VisitListIdentityProvidersResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -23378,34 +23699,50 @@ func (response GetOIDCSettings401ApplicationProblemPlusJSONResponse) VisitGetOID
 	return err
 }
 
-type ReplaceOIDCSettingsRequestObject struct {
-	Params ReplaceOIDCSettingsParams
-	Body   *ReplaceOIDCSettingsJSONRequestBody
-}
+type ListIdentityProviders403ApplicationProblemPlusJSONResponse Problem
 
-type ReplaceOIDCSettingsResponseObject interface {
-	VisitReplaceOIDCSettingsResponse(w http.ResponseWriter) error
-}
-
-type ReplaceOIDCSettings200JSONResponse struct{ OIDCSettingsJSONResponse }
-
-func (response ReplaceOIDCSettings200JSONResponse) VisitReplaceOIDCSettingsResponse(w http.ResponseWriter) error {
+func (response ListIdentityProviders403ApplicationProblemPlusJSONResponse) VisitListIdentityProvidersResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
 
-type ReplaceOIDCSettings400ApplicationProblemPlusJSONResponse struct {
+type CreateIdentityProviderRequestObject struct {
+	Body *CreateIdentityProviderJSONRequestBody
+}
+
+type CreateIdentityProviderResponseObject interface {
+	VisitCreateIdentityProviderResponse(w http.ResponseWriter) error
+}
+
+type CreateIdentityProvider201JSONResponse struct{ IdentityProviderJSONResponse }
+
+func (response CreateIdentityProvider201JSONResponse) VisitCreateIdentityProviderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.ETag != nil {
+		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
+	}
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateIdentityProvider400ApplicationProblemPlusJSONResponse struct {
 	ProblemApplicationProblemPlusJSONResponse
 }
 
-func (response ReplaceOIDCSettings400ApplicationProblemPlusJSONResponse) VisitReplaceOIDCSettingsResponse(w http.ResponseWriter) error {
+func (response CreateIdentityProvider400ApplicationProblemPlusJSONResponse) VisitCreateIdentityProviderResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -23417,9 +23754,9 @@ func (response ReplaceOIDCSettings400ApplicationProblemPlusJSONResponse) VisitRe
 	return err
 }
 
-type ReplaceOIDCSettings401ApplicationProblemPlusJSONResponse Problem
+type CreateIdentityProvider401ApplicationProblemPlusJSONResponse Problem
 
-func (response ReplaceOIDCSettings401ApplicationProblemPlusJSONResponse) VisitReplaceOIDCSettingsResponse(w http.ResponseWriter) error {
+func (response CreateIdentityProvider401ApplicationProblemPlusJSONResponse) VisitCreateIdentityProviderResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -23431,23 +23768,37 @@ func (response ReplaceOIDCSettings401ApplicationProblemPlusJSONResponse) VisitRe
 	return err
 }
 
-type ReplaceOIDCSettings412ApplicationProblemPlusJSONResponse Problem
+type CreateIdentityProvider403ApplicationProblemPlusJSONResponse Problem
 
-func (response ReplaceOIDCSettings412ApplicationProblemPlusJSONResponse) VisitReplaceOIDCSettingsResponse(w http.ResponseWriter) error {
+func (response CreateIdentityProvider403ApplicationProblemPlusJSONResponse) VisitCreateIdentityProviderResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(412)
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
 
-type ReplaceOIDCSettings503ApplicationProblemPlusJSONResponse Problem
+type CreateIdentityProvider409ApplicationProblemPlusJSONResponse Problem
 
-func (response ReplaceOIDCSettings503ApplicationProblemPlusJSONResponse) VisitReplaceOIDCSettingsResponse(w http.ResponseWriter) error {
+func (response CreateIdentityProvider409ApplicationProblemPlusJSONResponse) VisitCreateIdentityProviderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateIdentityProvider503ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateIdentityProvider503ApplicationProblemPlusJSONResponse) VisitCreateIdentityProviderResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -23459,46 +23810,28 @@ func (response ReplaceOIDCSettings503ApplicationProblemPlusJSONResponse) VisitRe
 	return err
 }
 
-type TestOIDCSettingsRequestObject struct {
+type DeleteIdentityProviderRequestObject struct {
+	ProviderId openapi_types.UUID `json:"providerId"`
+	Params     DeleteIdentityProviderParams
 }
 
-type TestOIDCSettingsResponseObject interface {
-	VisitTestOIDCSettingsResponse(w http.ResponseWriter) error
+type DeleteIdentityProviderResponseObject interface {
+	VisitDeleteIdentityProviderResponse(w http.ResponseWriter) error
 }
 
-type TestOIDCSettings200JSONResponse struct{ OIDCConnectionTestJSONResponse }
-
-func (response TestOIDCSettings200JSONResponse) VisitTestOIDCSettingsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
+type DeleteIdentityProvider204Response struct {
 }
 
-type TestOIDCSettings400ApplicationProblemPlusJSONResponse struct {
+func (response DeleteIdentityProvider204Response) VisitDeleteIdentityProviderResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteIdentityProvider401ApplicationProblemPlusJSONResponse struct {
 	ProblemApplicationProblemPlusJSONResponse
 }
 
-func (response TestOIDCSettings400ApplicationProblemPlusJSONResponse) VisitTestOIDCSettingsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(400)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type TestOIDCSettings401ApplicationProblemPlusJSONResponse Problem
-
-func (response TestOIDCSettings401ApplicationProblemPlusJSONResponse) VisitTestOIDCSettingsResponse(w http.ResponseWriter) error {
+func (response DeleteIdentityProvider401ApplicationProblemPlusJSONResponse) VisitDeleteIdentityProviderResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -23510,9 +23843,341 @@ func (response TestOIDCSettings401ApplicationProblemPlusJSONResponse) VisitTestO
 	return err
 }
 
-type TestOIDCSettings503ApplicationProblemPlusJSONResponse Problem
+type DeleteIdentityProvider403ApplicationProblemPlusJSONResponse Problem
 
-func (response TestOIDCSettings503ApplicationProblemPlusJSONResponse) VisitTestOIDCSettingsResponse(w http.ResponseWriter) error {
+func (response DeleteIdentityProvider403ApplicationProblemPlusJSONResponse) VisitDeleteIdentityProviderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteIdentityProvider404ApplicationProblemPlusJSONResponse Problem
+
+func (response DeleteIdentityProvider404ApplicationProblemPlusJSONResponse) VisitDeleteIdentityProviderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteIdentityProvider409ApplicationProblemPlusJSONResponse Problem
+
+func (response DeleteIdentityProvider409ApplicationProblemPlusJSONResponse) VisitDeleteIdentityProviderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteIdentityProvider412ApplicationProblemPlusJSONResponse Problem
+
+func (response DeleteIdentityProvider412ApplicationProblemPlusJSONResponse) VisitDeleteIdentityProviderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(412)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetIdentityProviderRequestObject struct {
+	ProviderId openapi_types.UUID `json:"providerId"`
+}
+
+type GetIdentityProviderResponseObject interface {
+	VisitGetIdentityProviderResponse(w http.ResponseWriter) error
+}
+
+type GetIdentityProvider200JSONResponse struct{ IdentityProviderJSONResponse }
+
+func (response GetIdentityProvider200JSONResponse) VisitGetIdentityProviderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.ETag != nil {
+		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetIdentityProvider401ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetIdentityProvider401ApplicationProblemPlusJSONResponse) VisitGetIdentityProviderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetIdentityProvider403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetIdentityProvider403ApplicationProblemPlusJSONResponse) VisitGetIdentityProviderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetIdentityProvider404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetIdentityProvider404ApplicationProblemPlusJSONResponse) VisitGetIdentityProviderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceIdentityProviderRequestObject struct {
+	ProviderId openapi_types.UUID `json:"providerId"`
+	Params     ReplaceIdentityProviderParams
+	Body       *ReplaceIdentityProviderJSONRequestBody
+}
+
+type ReplaceIdentityProviderResponseObject interface {
+	VisitReplaceIdentityProviderResponse(w http.ResponseWriter) error
+}
+
+type ReplaceIdentityProvider200JSONResponse struct{ IdentityProviderJSONResponse }
+
+func (response ReplaceIdentityProvider200JSONResponse) VisitReplaceIdentityProviderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.ETag != nil {
+		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceIdentityProvider400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response ReplaceIdentityProvider400ApplicationProblemPlusJSONResponse) VisitReplaceIdentityProviderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceIdentityProvider401ApplicationProblemPlusJSONResponse Problem
+
+func (response ReplaceIdentityProvider401ApplicationProblemPlusJSONResponse) VisitReplaceIdentityProviderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceIdentityProvider403ApplicationProblemPlusJSONResponse Problem
+
+func (response ReplaceIdentityProvider403ApplicationProblemPlusJSONResponse) VisitReplaceIdentityProviderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceIdentityProvider404ApplicationProblemPlusJSONResponse Problem
+
+func (response ReplaceIdentityProvider404ApplicationProblemPlusJSONResponse) VisitReplaceIdentityProviderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceIdentityProvider409ApplicationProblemPlusJSONResponse Problem
+
+func (response ReplaceIdentityProvider409ApplicationProblemPlusJSONResponse) VisitReplaceIdentityProviderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceIdentityProvider412ApplicationProblemPlusJSONResponse Problem
+
+func (response ReplaceIdentityProvider412ApplicationProblemPlusJSONResponse) VisitReplaceIdentityProviderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(412)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceIdentityProvider503ApplicationProblemPlusJSONResponse Problem
+
+func (response ReplaceIdentityProvider503ApplicationProblemPlusJSONResponse) VisitReplaceIdentityProviderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestIdentityProviderRequestObject struct {
+	ProviderId openapi_types.UUID `json:"providerId"`
+}
+
+type TestIdentityProviderResponseObject interface {
+	VisitTestIdentityProviderResponse(w http.ResponseWriter) error
+}
+
+type TestIdentityProvider200JSONResponse struct{ OIDCConnectionTestJSONResponse }
+
+func (response TestIdentityProvider200JSONResponse) VisitTestIdentityProviderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestIdentityProvider400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response TestIdentityProvider400ApplicationProblemPlusJSONResponse) VisitTestIdentityProviderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestIdentityProvider401ApplicationProblemPlusJSONResponse Problem
+
+func (response TestIdentityProvider401ApplicationProblemPlusJSONResponse) VisitTestIdentityProviderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestIdentityProvider403ApplicationProblemPlusJSONResponse Problem
+
+func (response TestIdentityProvider403ApplicationProblemPlusJSONResponse) VisitTestIdentityProviderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestIdentityProvider404ApplicationProblemPlusJSONResponse Problem
+
+func (response TestIdentityProvider404ApplicationProblemPlusJSONResponse) VisitTestIdentityProviderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestIdentityProvider503ApplicationProblemPlusJSONResponse Problem
+
+func (response TestIdentityProvider503ApplicationProblemPlusJSONResponse) VisitTestIdentityProviderResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -43320,14 +43985,23 @@ type StrictServerInterface interface {
 	// (GET /audits/page)
 	ListAuditPage(ctx context.Context, request ListAuditPageRequestObject) (ListAuditPageResponseObject, error)
 
-	// (GET /authentication/oidc)
-	GetOIDCSettings(ctx context.Context, request GetOIDCSettingsRequestObject) (GetOIDCSettingsResponseObject, error)
+	// (GET /authentication/providers)
+	ListIdentityProviders(ctx context.Context, request ListIdentityProvidersRequestObject) (ListIdentityProvidersResponseObject, error)
 
-	// (PUT /authentication/oidc)
-	ReplaceOIDCSettings(ctx context.Context, request ReplaceOIDCSettingsRequestObject) (ReplaceOIDCSettingsResponseObject, error)
+	// (POST /authentication/providers)
+	CreateIdentityProvider(ctx context.Context, request CreateIdentityProviderRequestObject) (CreateIdentityProviderResponseObject, error)
 
-	// (POST /authentication/oidc:test)
-	TestOIDCSettings(ctx context.Context, request TestOIDCSettingsRequestObject) (TestOIDCSettingsResponseObject, error)
+	// (DELETE /authentication/providers/{providerId})
+	DeleteIdentityProvider(ctx context.Context, request DeleteIdentityProviderRequestObject) (DeleteIdentityProviderResponseObject, error)
+
+	// (GET /authentication/providers/{providerId})
+	GetIdentityProvider(ctx context.Context, request GetIdentityProviderRequestObject) (GetIdentityProviderResponseObject, error)
+
+	// (PUT /authentication/providers/{providerId})
+	ReplaceIdentityProvider(ctx context.Context, request ReplaceIdentityProviderRequestObject) (ReplaceIdentityProviderResponseObject, error)
+
+	// (POST /authentication/providers/{providerId}:test)
+	TestIdentityProvider(ctx context.Context, request TestIdentityProviderRequestObject) (TestIdentityProviderResponseObject, error)
 
 	// (GET /authorization-roles)
 	ListAuthorizationRoles(ctx context.Context, request ListAuthorizationRolesRequestObject) (ListAuthorizationRolesResponseObject, error)
@@ -44382,23 +45056,23 @@ func (sh *strictHandler) ListAuditPage(w http.ResponseWriter, r *http.Request, p
 	}
 }
 
-// GetOIDCSettings operation middleware
-func (sh *strictHandler) GetOIDCSettings(w http.ResponseWriter, r *http.Request) {
-	var request GetOIDCSettingsRequestObject
+// ListIdentityProviders operation middleware
+func (sh *strictHandler) ListIdentityProviders(w http.ResponseWriter, r *http.Request) {
+	var request ListIdentityProvidersRequestObject
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetOIDCSettings(ctx, request.(GetOIDCSettingsRequestObject))
+		return sh.ssi.ListIdentityProviders(ctx, request.(ListIdentityProvidersRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetOIDCSettings")
+		handler = middleware(handler, "ListIdentityProviders")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetOIDCSettingsResponseObject); ok {
-		if err := validResponse.VisitGetOIDCSettingsResponse(w); err != nil {
+	} else if validResponse, ok := response.(ListIdentityProvidersResponseObject); ok {
+		if err := validResponse.VisitListIdentityProvidersResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -44406,13 +45080,11 @@ func (sh *strictHandler) GetOIDCSettings(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-// ReplaceOIDCSettings operation middleware
-func (sh *strictHandler) ReplaceOIDCSettings(w http.ResponseWriter, r *http.Request, params ReplaceOIDCSettingsParams) {
-	var request ReplaceOIDCSettingsRequestObject
+// CreateIdentityProvider operation middleware
+func (sh *strictHandler) CreateIdentityProvider(w http.ResponseWriter, r *http.Request) {
+	var request CreateIdentityProviderRequestObject
 
-	request.Params = params
-
-	var body ReplaceOIDCSettingsJSONRequestBody
+	var body CreateIdentityProviderJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
 		return
@@ -44420,18 +45092,18 @@ func (sh *strictHandler) ReplaceOIDCSettings(w http.ResponseWriter, r *http.Requ
 	request.Body = &body
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.ReplaceOIDCSettings(ctx, request.(ReplaceOIDCSettingsRequestObject))
+		return sh.ssi.CreateIdentityProvider(ctx, request.(CreateIdentityProviderRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "ReplaceOIDCSettings")
+		handler = middleware(handler, "CreateIdentityProvider")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(ReplaceOIDCSettingsResponseObject); ok {
-		if err := validResponse.VisitReplaceOIDCSettingsResponse(w); err != nil {
+	} else if validResponse, ok := response.(CreateIdentityProviderResponseObject); ok {
+		if err := validResponse.VisitCreateIdentityProviderResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -44439,23 +45111,112 @@ func (sh *strictHandler) ReplaceOIDCSettings(w http.ResponseWriter, r *http.Requ
 	}
 }
 
-// TestOIDCSettings operation middleware
-func (sh *strictHandler) TestOIDCSettings(w http.ResponseWriter, r *http.Request) {
-	var request TestOIDCSettingsRequestObject
+// DeleteIdentityProvider operation middleware
+func (sh *strictHandler) DeleteIdentityProvider(w http.ResponseWriter, r *http.Request, providerId openapi_types.UUID, params DeleteIdentityProviderParams) {
+	var request DeleteIdentityProviderRequestObject
+
+	request.ProviderId = providerId
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.TestOIDCSettings(ctx, request.(TestOIDCSettingsRequestObject))
+		return sh.ssi.DeleteIdentityProvider(ctx, request.(DeleteIdentityProviderRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "TestOIDCSettings")
+		handler = middleware(handler, "DeleteIdentityProvider")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(TestOIDCSettingsResponseObject); ok {
-		if err := validResponse.VisitTestOIDCSettingsResponse(w); err != nil {
+	} else if validResponse, ok := response.(DeleteIdentityProviderResponseObject); ok {
+		if err := validResponse.VisitDeleteIdentityProviderResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetIdentityProvider operation middleware
+func (sh *strictHandler) GetIdentityProvider(w http.ResponseWriter, r *http.Request, providerId openapi_types.UUID) {
+	var request GetIdentityProviderRequestObject
+
+	request.ProviderId = providerId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetIdentityProvider(ctx, request.(GetIdentityProviderRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetIdentityProvider")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetIdentityProviderResponseObject); ok {
+		if err := validResponse.VisitGetIdentityProviderResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ReplaceIdentityProvider operation middleware
+func (sh *strictHandler) ReplaceIdentityProvider(w http.ResponseWriter, r *http.Request, providerId openapi_types.UUID, params ReplaceIdentityProviderParams) {
+	var request ReplaceIdentityProviderRequestObject
+
+	request.ProviderId = providerId
+	request.Params = params
+
+	var body ReplaceIdentityProviderJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ReplaceIdentityProvider(ctx, request.(ReplaceIdentityProviderRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReplaceIdentityProvider")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReplaceIdentityProviderResponseObject); ok {
+		if err := validResponse.VisitReplaceIdentityProviderResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TestIdentityProvider operation middleware
+func (sh *strictHandler) TestIdentityProvider(w http.ResponseWriter, r *http.Request, providerId openapi_types.UUID) {
+	var request TestIdentityProviderRequestObject
+
+	request.ProviderId = providerId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TestIdentityProvider(ctx, request.(TestIdentityProviderRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TestIdentityProvider")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TestIdentityProviderResponseObject); ok {
+		if err := validResponse.VisitTestIdentityProviderResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
