@@ -56,7 +56,7 @@ func newEntraProxyFixture(t *testing.T, upstreamStatus func(authorization string
 		Type: repository.MemberProxy, Name: "azure", Endpoint: upstream.URL,
 		UpstreamAuth: &repository.UpstreamAuth{
 			Scheme: repository.UpstreamAuthSchemeEntraWorkload, TenantID: "contoso.onmicrosoft.com",
-			ClientID: "11111111-2222-3333-4444-555555555555", Scope: "https://storage.azure.com/.default", Repository: "azure",
+			ClientID: "11111111-2222-3333-4444-555555555555", Scope: "https://storage.example.test/.default", Repository: "azure",
 		},
 	}
 	return member, exchanges, upstreamCalls

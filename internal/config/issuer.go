@@ -86,6 +86,9 @@ func ParseIssuerURL(raw string, publicURL *url.URL) (issuer string, warnings []s
 	if parsed.Scheme == "http" {
 		warnings = append(warnings, fmt.Sprintf("%s uses plain http on a loopback host; only use this for local development", IssuerURLEnv))
 	}
+	if parsed.Path != "" {
+		warnings = append(warnings, fmt.Sprintf("%s has a path: discovery and the key set are served at the server root, so a reverse proxy must map %s/.well-known/ to them", IssuerURLEnv, parsed.String()))
+	}
 	return parsed.String(), warnings, nil
 }
 

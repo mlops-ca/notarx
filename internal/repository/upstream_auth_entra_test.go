@@ -8,7 +8,7 @@ import (
 func validEntraAuth() *UpstreamAuth {
 	return &UpstreamAuth{
 		Scheme: UpstreamAuthSchemeEntraWorkload, TenantID: "contoso.onmicrosoft.com",
-		ClientID: "11111111-2222-3333-4444-555555555555", Scope: "https://storage.azure.com/.default",
+		ClientID: "11111111-2222-3333-4444-555555555555", Scope: "https://storage.example.test/.default",
 	}
 }
 
@@ -79,7 +79,7 @@ func TestMemoryStoreFillsTheRepositoryNameOfUpstreamAuth(t *testing.T) {
 	t.Cleanup(func() { AllowEntraWorkload(false) })
 	store := NewMemoryStore()
 	created, err := store.CreateHostedRepository(t.Context(), HostedRepository{
-		ID: "r1", Name: "azure-blobs", Format: FormatRaw, Type: RepositoryTypeProxy, Endpoint: "https://x.blob.core.windows.net", UpstreamAuth: validEntraAuth(),
+		ID: "r1", Name: "azure-blobs", Format: FormatRaw, Type: RepositoryTypeProxy, Endpoint: "https://x.blob.example.test", UpstreamAuth: validEntraAuth(),
 	})
 	if err != nil {
 		t.Fatal(err)

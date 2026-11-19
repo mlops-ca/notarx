@@ -12,9 +12,17 @@ type KeyTx interface {
 	Delete(ctx context.Context, kid string) error
 }
 
+// PublicKeyReader lists key rows without their sealed private halves, for the anonymous
+// JWKS path that must never load private material.
+type PublicKeyReader interface {
+	// ListPublicKeys returns every row with PrivateSealed left empty.
+	ListPublicKeys(ctx context.Context) ([]KeyRecord, error)
+}
+
 // Store persists signing keys. The PostgreSQL implementation lives in internal/repository.
 type Store interface {
 	KeyReader
+	PublicKeyReader
 	// WithRotationLock runs fn in one transaction while holding the advisory lock
 	// pg_try_advisory_xact_lock(hashtextextended('notarx:issuer-rotation', 0)). It returns
 	// acquired=false without running fn when another node holds the lock. fn's error rolls the

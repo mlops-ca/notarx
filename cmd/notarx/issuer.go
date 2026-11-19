@@ -66,7 +66,8 @@ func enableEntraWorkload(cfg config.IssuerConfig, runtime *app.IssuerRuntime, au
 	repository.AllowEntraWorkload(true)
 	upstreamauth.SetEntra(&upstreamauth.Entra{
 		Signer: runtime.Signer, IssuerURL: cfg.URL, DeploymentID: runtime.DeploymentID,
-		AuthorityHost: cfg.EntraAuthorityHost, Audience: cfg.EntraAudience,
+		AuthorityHost: cfg.EntraAuthorityHost, Audience: cfg.EntraAudience, MaxLifetime: cfg.MaxTokenLifetime,
+		Do: app.EntraHTTPDoer(app.UpstreamClient{}),
 		Audit: func(ctx context.Context, event upstreamauth.EntraExchange) {
 			record := entraAuditRecord(event, time.Now().UTC())
 			if err := audit.RecordAudit(context.WithoutCancel(ctx), record); err != nil {
@@ -86,10 +87,14 @@ func entraAuditRecord(event upstreamauth.EntraExchange, now time.Time) repositor
 	if event.Registry != "" {
 		evidence["registry"] = event.Registry
 	}
+	outcome, status := repository.AuditResolved, http.StatusOK
+	if !event.Succeeded {
+		outcome, status = repository.AuditUpstreamError, http.StatusBadGateway
+	}
 	return repository.AuditRecord{
-		GroupName: event.Repository, Repository: event.Repository, Actor: "notarx-instance", Outcome: repository.AuditResolved,
+		GroupName: event.Repository, Repository: event.Repository, Actor: "notarx-instance", Outcome: outcome,
 		OccurredAt: now, Resource: event.TenantID + "/" + event.ClientID, Operation: "upstream." + event.Operation,
-		Status: http.StatusOK, CacheDisposition: "bypass", AuthorizationSource: "entra_workload", Evidence: evidence,
+		Status: status, CacheDisposition: "bypass", AuthorizationSource: "entra_workload", Evidence: evidence,
 	}
 }
 

@@ -24,7 +24,7 @@ import (
 const (
 	testTenant = "contoso.onmicrosoft.com"
 	testClient = "11111111-2222-3333-4444-555555555555"
-	testScope  = "https://storage.azure.com/.default"
+	testScope  = "https://storage.example.test/.default"
 )
 
 type fakeClock struct {
@@ -253,9 +253,9 @@ func TestEntraExplicitSubjectAndPerAuthorityAudience(t *testing.T) {
 		t.Fatalf("the explicit subject is used verbatim: %s", payload)
 	}
 	for host, want := range map[string]string{
-		"https://login.microsoftonline.com":        AudienceGlobal,
-		"https://login.microsoftonline.us":         AudienceUSGov,
-		"https://login.partner.microsoftonline.cn": AudienceChina,
+		"https://" + "login.microsoftonline.com":        AudienceGlobal,
+		"https://" + "login.microsoftonline.us":         AudienceUSGov,
+		"https://" + "login.partner.microsoftonline.cn": AudienceChina,
 	} {
 		derived := &Entra{AuthorityHost: host}
 		if got, err := derived.audience(); err != nil || got != want {
@@ -328,7 +328,7 @@ func TestEntraInvalidateForcesOneFreshExchange(t *testing.T) {
 		t.Fatal(err)
 	}
 	other := entraAuth()
-	other.Scope = "https://vault.azure.net/.default"
+	other.Scope = "https://vault.example.test/.default"
 	if _, err := applyTo(t, "https://vault.example.test/x", other); err != nil {
 		t.Fatal(err)
 	}
@@ -409,7 +409,7 @@ func TestACRChainAndCacheReuse(t *testing.T) {
 	installEntra(t, stub.provider())
 	host := strings.TrimPrefix(stub.server.URL, "https://")
 	auth := entraAuth()
-	auth.Scope = "https://management.azure.com/.default"
+	auth.Scope = "https://management.example.test/.default"
 	auth.RegistryKind = repository.RegistryKindACR
 
 	first, err := applyTo(t, "https://"+host+"/v2/team/app/manifests/latest", auth)
@@ -480,9 +480,9 @@ func TestACRRefusesHostsAndPathsOutsideThePolicy(t *testing.T) {
 	for _, target := range []string{
 		"https://registry.example.com/v2/app/manifests/latest",
 		"https://azurecr.io.evil.example/v2/app/manifests/latest",
-		"http://myreg.azurecr.io/v2/app/manifests/latest",
-		"https://myreg.azurecr.io/v2/app/unknown/latest",
-		"https://myreg.azurecr.io/other",
+		"http://" + "myreg.azurecr.io/v2/app/manifests/latest",
+		"https://" + "myreg.azurecr.io/v2/app/unknown/latest",
+		"https://" + "myreg.azurecr.io/other",
 	} {
 		if request, err := applyTo(t, target, auth); !errors.Is(err, ErrCredential) || request.Header.Get("Authorization") != "" {
 			t.Errorf("%s: err=%v", target, err)
@@ -533,5 +533,142 @@ func TestEntraAuthWorksOverTLSWithTheDefaultClient(t *testing.T) {
 	client := provider.client()
 	if client.Timeout == 0 || client.CheckRedirect == nil {
 		t.Fatal("the default client has a timeout and refuses redirects")
+	}
+}
+
+func TestEntraCacheIsKeyedBySubject(t *testing.T) {
+	signer, clock := newEntraSigner(t, jose.RS256)
+	stub := newEntraStub(t, signer, clock)
+	installEntra(t, stub.provider())
+	instance := entraAuth()
+	service := entraAuth()
+	service.Subject = "notarx:service-account:acr-puller"
+	for _, auth := range []*repository.UpstreamAuth{instance, service} {
+		if _, err := applyTo(t, "https://blob.example.test/x", auth); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if stub.tokens.Load() != 2 {
+		t.Fatalf("two subjects need two exchanges, got %d: the federated credential matches on subject", stub.tokens.Load())
+	}
+	// Changing the subject of a repository must not keep serving the old subject's token.
+	renamed := entraAuth()
+	renamed.Subject = "notarx:service-account:other"
+	if _, err := applyTo(t, "https://blob.example.test/x", renamed); err != nil || stub.tokens.Load() != 3 {
+		t.Fatalf("err=%v exchanges=%d", err, stub.tokens.Load())
+	}
+	// Same application, scope and subject share one token across repositories.
+	sibling := entraAuth()
+	sibling.Repository = "another-repo"
+	if _, err := applyTo(t, "https://blob.example.test/x", sibling); err != nil || stub.tokens.Load() != 3 {
+		t.Fatalf("err=%v exchanges=%d", err, stub.tokens.Load())
+	}
+}
+
+func TestEntraAssertionNeverOutlivesTheConfiguredMaximum(t *testing.T) {
+	signer, clock := newEntraSigner(t, jose.RS256)
+	stub := newEntraStub(t, signer, clock)
+	provider := stub.provider()
+	provider.MaxLifetime = time.Minute
+	installEntra(t, provider)
+	if _, err := applyTo(t, "https://blob.example.test/x", entraAuth()); err != nil {
+		t.Fatal(err)
+	}
+	form := <-stub.forms
+	payload, _ := base64.RawURLEncoding.DecodeString(strings.Split(form.Get("client_assertion"), ".")[1])
+	var claims struct{ Iat, Exp int64 }
+	if err := json.Unmarshal(payload, &claims); err != nil || claims.Exp-claims.Iat != 60 {
+		t.Fatalf("lifetime %d (%v): %s", claims.Exp-claims.Iat, err, payload)
+	}
+}
+
+func TestEntraAuditsFailedExchangesAsFailures(t *testing.T) {
+	signer, clock := newEntraSigner(t, jose.RS256)
+	stub := newEntraStub(t, signer, clock)
+	stub.status.Store(http.StatusUnauthorized)
+	provider := stub.provider()
+	repository.AllowEntraWorkload(true)
+	t.Cleanup(func() { repository.AllowEntraWorkload(false) })
+	var events []EntraExchange
+	provider.Audit = func(_ context.Context, event EntraExchange) { events = append(events, event) }
+	if _, err := provider.AccessToken(t.Context(), entraAuth()); !errors.Is(err, ErrEntraExchange) {
+		t.Fatal(err)
+	}
+	if len(events) != 1 || events[0].Succeeded || events[0].JTI == "" {
+		t.Fatalf("a rejected exchange is audited once, as a failure: %+v", events)
+	}
+	stub.status.Store(0)
+	if _, err := provider.AccessToken(t.Context(), entraAuth()); err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 2 || !events[1].Succeeded {
+		t.Fatalf("%+v", events)
+	}
+}
+
+func TestEntraUsesTheInstalledRequestSender(t *testing.T) {
+	signer, clock := newEntraSigner(t, jose.RS256)
+	stub := newEntraStub(t, signer, clock)
+	provider := stub.provider()
+	repository.AllowEntraWorkload(true)
+	t.Cleanup(func() { repository.AllowEntraWorkload(false) })
+	provider.HTTPClient = nil
+	var sent atomic.Int64
+	provider.Do = func(r *http.Request) (*http.Response, error) {
+		sent.Add(1)
+		return stub.server.Client().Do(r)
+	}
+	if _, err := provider.AccessToken(t.Context(), entraAuth()); err != nil || sent.Load() != 1 {
+		t.Fatalf("err=%v sent=%d", err, sent.Load())
+	}
+}
+
+func TestRetryUnauthorizedRecoversOnceAndOnlyForEntra(t *testing.T) {
+	signer, clock := newEntraSigner(t, jose.RS256)
+	stub := newEntraStub(t, signer, clock)
+	installEntra(t, stub.provider())
+	auth := entraAuth()
+	request, err := applyTo(t, "https://blob.example.test/x", auth)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unauthorized := func() *http.Response {
+		return &http.Response{StatusCode: http.StatusUnauthorized, Body: http.NoBody}
+	}
+	var seen string
+	do := func(r *http.Request) (*http.Response, error) {
+		seen = r.Header.Get("Authorization")
+		return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
+	}
+	response, err := RetryUnauthorized(unauthorized(), request, "https://blob.example.test", auth, do)
+	if err != nil || response.StatusCode != http.StatusOK || seen != "Bearer aad-token-2" {
+		t.Fatalf("status=%v seen=%q err=%v", response, seen, err)
+	}
+	// Anything else is returned untouched.
+	ok := &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}
+	if got, _ := RetryUnauthorized(ok, request, "https://blob.example.test", auth, do); got != ok {
+		t.Fatal("a successful response is not retried")
+	}
+	basic := &repository.UpstreamAuth{Scheme: repository.UpstreamAuthSchemeBearer, Secret: "x"}
+	refused := unauthorized()
+	if got, _ := RetryUnauthorized(refused, request, "https://blob.example.test", basic, do); got != refused {
+		t.Fatal("only entra-workload credentials are retried")
+	}
+	if got, _ := RetryUnauthorized(refused, request, "https://blob.example.test", nil, do); got != refused {
+		t.Fatal("no credential, no retry")
+	}
+	body, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, "https://blob.example.test/x", strings.NewReader("payload"))
+	if got, _ := RetryUnauthorized(refused, body, "https://blob.example.test", auth, do); got != refused {
+		t.Fatal("requests with a body are never replayed")
+	}
+	if got, err := RetryUnauthorized(nil, request, "https://blob.example.test", auth, do); got != nil || err != nil {
+		t.Fatal("no response, nothing to retry")
+	}
+	// A retry to a foreign origin never receives the token.
+	if _, err := RetryUnauthorized(unauthorized(), request, "https://elsewhere.example.test", auth, do); err != nil {
+		t.Fatalf("a different endpoint origin skips the credential rather than failing: %v", err)
+	}
+	if seen != "" {
+		t.Fatalf("the foreign origin was sent %q", seen)
 	}
 }

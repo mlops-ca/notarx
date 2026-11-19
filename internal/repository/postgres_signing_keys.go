@@ -60,6 +60,16 @@ func (s *PostgresStore) ListKeys(ctx context.Context) ([]tokenissuer.KeyRecord, 
 	return scanSigningKeys(rows)
 }
 
+// ListPublicKeys returns every key row without its sealed private half; the anonymous JWKS path
+// uses it so private material is never read into memory for a public request.
+func (s *PostgresStore) ListPublicKeys(ctx context.Context) ([]tokenissuer.KeyRecord, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT kid, alg, state, public_jwk::text, ''::text, sealing_ref, integrity_mac, created_at, published_at, activated_at, retired_at, expires_at FROM token_signing_keys ORDER BY created_at, kid`)
+	if err != nil {
+		return nil, err
+	}
+	return scanSigningKeys(rows)
+}
+
 // WithRotationLock runs fn in one transaction that holds the issuer rotation advisory lock.
 func (s *PostgresStore) WithRotationLock(ctx context.Context, fn func(context.Context, tokenissuer.KeyTx) error) (bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)

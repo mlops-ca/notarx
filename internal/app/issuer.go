@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"log/slog"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -23,10 +24,12 @@ const (
 	// issuerRotationInterval is how often every node checks whether keys must move.
 	issuerRotationInterval = time.Minute
 	issuerCacheControl     = "public, max-age=300"
-	// issuerRateLimit is the per-client budget of the anonymous issuer routes: a burst of 30
-	// requests, refilled at one request per two seconds.
-	issuerRateBurst    = 30
-	issuerRateInterval = 2 * time.Second
+	// The per-client budget of the anonymous issuer routes: a burst of 60 requests, refilled at
+	// one request per second. The client is the peer address of the connection, never a header a
+	// caller can set; behind a reverse proxy that is the proxy, which is fine for key set traffic
+	// of a few verifiers fetching every five minutes.
+	issuerRateBurst    = 60
+	issuerRateInterval = time.Second
 	issuerRateMaxHosts = 10000
 )
 
@@ -55,7 +58,10 @@ func NewIssuerRuntime(cfg config.IssuerConfig, store tokenissuer.Store, deployme
 	if err != nil {
 		return nil, err
 	}
-	manager := &tokenissuer.Manager{Store: store, Config: cfg.Lifecycle(), Changed: jwks.Invalidate}
+	manager := &tokenissuer.Manager{Store: store, Config: cfg.Lifecycle(), Changed: func() {
+		jwks.Invalidate()
+		signer.Invalidate() // a revoked or demoted key stops signing on this node at once
+	}}
 	if err := manager.Config.Validate(); err != nil {
 		return nil, err
 	}
@@ -123,7 +129,7 @@ func (r *IssuerRuntime) admit(w http.ResponseWriter, req *http.Request) bool {
 		http.NotFound(w, req)
 		return false
 	}
-	if !r.limiter.allow(requestIPAddress(req), time.Now()) {
+	if !r.limiter.allow(peerAddress(req), time.Now()) {
 		w.Header().Set("Retry-After", strconv.Itoa(int(issuerRateInterval/time.Second)))
 		http.Error(w, "too many requests", http.StatusTooManyRequests)
 		return false
@@ -159,6 +165,15 @@ func etagMatches(header, etag string) bool {
 	return false
 }
 
+// peerAddress is the host part of the connection's remote address.
+func peerAddress(req *http.Request) string {
+	host, _, err := net.SplitHostPort(req.RemoteAddr)
+	if err != nil {
+		return req.RemoteAddr
+	}
+	return host
+}
+
 // clientLimiter is a token bucket per client address with a bounded table, so a flood of
 // distinct addresses cannot grow memory without limit.
 type clientLimiter struct {
@@ -175,6 +190,15 @@ type limiterBucket struct {
 	last   time.Time
 }
 
+// evictIdle drops buckets that have refilled completely: forgetting them changes nothing.
+func (l *clientLimiter) evictIdle(now time.Time) {
+	for client, bucket := range l.buckets {
+		if bucket.tokens+float64(now.Sub(bucket.last))/float64(l.interval) >= l.burst {
+			delete(l.buckets, client)
+		}
+	}
+}
+
 func newClientLimiter(burst int, interval time.Duration, maxHosts int) *clientLimiter {
 	return &clientLimiter{burst: float64(burst), interval: interval, maxHosts: maxHosts, buckets: map[string]limiterBucket{}}
 }
@@ -185,9 +209,16 @@ func (l *clientLimiter) allow(client string, now time.Time) bool {
 	bucket, ok := l.buckets[client]
 	if !ok {
 		if len(l.buckets) >= l.maxHosts {
-			l.buckets = map[string]limiterBucket{}
+			l.evictIdle(now)
 		}
-		bucket = limiterBucket{tokens: l.burst, last: now}
+		if len(l.buckets) >= l.maxHosts {
+			// Still full of active clients: share one bucket instead of growing or wiping the table.
+			client = "\x00overflow"
+			bucket, ok = l.buckets[client]
+		}
+		if !ok {
+			bucket = limiterBucket{tokens: l.burst, last: now}
+		}
 	}
 	bucket.tokens = min(l.burst, bucket.tokens+float64(now.Sub(bucket.last))/float64(l.interval))
 	bucket.last = now

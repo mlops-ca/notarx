@@ -262,11 +262,12 @@ func TestLifecycleConfigValidate(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, mutate := range map[string]func(*LifecycleConfig){
-		"alg":      func(c *LifecycleConfig) { c.Alg = "EdDSA" },
-		"lead":     func(c *LifecycleConfig) { c.PublishLead = 0 },
-		"interval": func(c *LifecycleConfig) { c.RotationInterval = c.PublishLead },
-		"lifetime": func(c *LifecycleConfig) { c.MaxTokenLifetime = 11 * time.Minute },
-		"zero":     func(c *LifecycleConfig) { c.MaxTokenLifetime = 0 },
+		"alg":        func(c *LifecycleConfig) { c.Alg = "EdDSA" },
+		"lead":       func(c *LifecycleConfig) { c.PublishLead = 0 },
+		"short lead": func(c *LifecycleConfig) { c.PublishLead = 5 * time.Minute },
+		"interval":   func(c *LifecycleConfig) { c.RotationInterval = c.PublishLead },
+		"lifetime":   func(c *LifecycleConfig) { c.MaxTokenLifetime = 11 * time.Minute },
+		"zero":       func(c *LifecycleConfig) { c.MaxTokenLifetime = 0 },
 	} {
 		config := DefaultLifecycleConfig()
 		mutate(&config)
@@ -655,6 +656,11 @@ type countingStore struct {
 	lists int
 }
 
+func (s *countingStore) ListPublicKeys(ctx context.Context) ([]KeyRecord, error) {
+	s.lists++
+	return s.MemoryStore.ListPublicKeys(ctx)
+}
+
 func (s *countingStore) ListKeys(ctx context.Context) ([]KeyRecord, error) {
 	s.lists++
 	return s.MemoryStore.ListKeys(ctx)
@@ -722,5 +728,110 @@ func TestManagerRejectsInvalidConfig(t *testing.T) {
 	}
 	if _, err := manager.RotateNow(t.Context(), jose.RS256); err == nil {
 		t.Fatal("invalid config accepted")
+	}
+}
+
+func TestJWKSReadsPublicColumnsOnly(t *testing.T) {
+	setRing(t)
+	clock := newClock()
+	store := NewMemoryStore()
+	if _, _, err := newManager(store, clock, jose.ES256).Reconcile(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	public, err := store.ListPublicKeys(t.Context())
+	if err != nil || len(public) != 2 {
+		t.Fatal(len(public), err)
+	}
+	for _, record := range public {
+		if record.PrivateSealed != "" {
+			t.Fatal("the public listing must not carry sealed private keys")
+		}
+	}
+	full, _ := store.ListKeys(t.Context())
+	if full[0].PrivateSealed == "" {
+		t.Fatal("the full listing keeps them")
+	}
+	if err := public[0].VerifyIntegrity(); err != nil {
+		t.Fatalf("integrity does not depend on the private half: %v", err)
+	}
+}
+
+func TestRotationPausesWhenAnUntrustedRowHoldsTheSlot(t *testing.T) {
+	setRing(t)
+	clock := newClock()
+	store := NewMemoryStore()
+	manager := newManager(store, clock, jose.ES256)
+	if _, _, err := manager.Reconcile(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	active := states(t, store, jose.ES256)[StateActive]
+	tampered := active
+	tampered.IntegrityMAC = "m1:deadbeef:AAAA"
+	store.Put(tampered)
+	before := len(mustList(t, store))
+	// The failing active row holds the unique slot; creating another would collide, so the pass
+	// must pause for this algorithm without an error and without writing.
+	if _, changed, err := manager.Reconcile(t.Context()); err != nil || changed {
+		t.Fatalf("changed=%v err=%v", changed, err)
+	}
+	if len(mustList(t, store)) != before {
+		t.Fatal("nothing may be created while an untrusted row holds a slot")
+	}
+	// Revoking the failing row is the documented recovery: the next pass bootstraps again.
+	if err := manager.Revoke(t.Context(), active.KID); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := manager.Reconcile(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if got := states(t, store, jose.ES256)[StateActive].KID; got == active.KID || got == "" {
+		t.Fatalf("a new active key must replace the revoked one: %q", got)
+	}
+}
+
+func TestSignerNamesAnUndecryptableKeyAndInvalidatesItsCache(t *testing.T) {
+	setRing(t)
+	clock := newClock()
+	store := NewMemoryStore()
+	manager := newManager(store, clock, jose.ES256)
+	if _, _, err := manager.Reconcile(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	signer, _ := NewLocalSigner(store, SignerConfig{Alg: jose.ES256, Now: clock.Now})
+	claims, _ := ClaimBuilder{Issuer: "i", Now: clock.Now}.Build(ClaimRequest{Subject: "s", Audiences: []string{"a"}})
+	if _, _, err := signer.Sign(t.Context(), claims); err != nil {
+		t.Fatal(err)
+	}
+	// Drop the cache and corrupt the sealed key: the cause must be visible, not a bare "no key".
+	signer.Invalidate()
+	active := states(t, store, jose.ES256)[StateActive]
+	active.PrivateSealed = "v1:ffffffffffff:AAAA"
+	store.Put(active)
+	_, _, err := signer.Sign(t.Context(), claims)
+	if !errors.Is(err, ErrNoActiveKey) || !strings.Contains(err.Error(), active.KID) {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestRevokeInvalidatesTheSigningKeyCacheThroughChanged(t *testing.T) {
+	setRing(t)
+	clock := newClock()
+	store := NewMemoryStore()
+	manager := newManager(store, clock, jose.ES256)
+	signer, _ := NewLocalSigner(store, SignerConfig{Alg: jose.ES256, Now: clock.Now})
+	manager.Changed = signer.Invalidate
+	if _, _, err := manager.Reconcile(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	claims, _ := ClaimBuilder{Issuer: "i", Now: clock.Now}.Build(ClaimRequest{Subject: "s", Audiences: []string{"a"}})
+	_, revoked, err := signer.Sign(t.Context(), claims)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Revoke(t.Context(), revoked); err != nil {
+		t.Fatal(err)
+	}
+	if _, kid, err := signer.Sign(t.Context(), claims); err != nil || kid == revoked {
+		t.Fatalf("a revoked key must stop signing at once: kid=%s err=%v", kid, err)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -24,6 +25,11 @@ type countingKeyStore struct {
 func (s *countingKeyStore) ListKeys(ctx context.Context) ([]tokenissuer.KeyRecord, error) {
 	s.lists.Add(1)
 	return s.MemoryStore.ListKeys(ctx)
+}
+
+func (s *countingKeyStore) ListPublicKeys(ctx context.Context) ([]tokenissuer.KeyRecord, error) {
+	s.lists.Add(1)
+	return s.MemoryStore.ListPublicKeys(ctx)
 }
 
 func issuerTestConfig() config.IssuerConfig {
@@ -153,8 +159,8 @@ func TestIssuerJWKSConditionalGetAndHeaders(t *testing.T) {
 func TestIssuerAnonymousRequestsDoNotQueryTheStorePerRequest(t *testing.T) {
 	_, store, mux := newIssuerFixture(t)
 	store.lists.Store(0)
-	for i := range 20 {
-		if got := issuerGet(mux, issuerJWKSPath, map[string]string{"X-Forwarded-For": "198.51.100." + string(rune('1'+i%9))}).Code; got != http.StatusOK {
+	for range 20 {
+		if got := issuerGet(mux, issuerJWKSPath, nil).Code; got != http.StatusOK {
 			t.Fatal(got)
 		}
 		issuerGet(mux, issuerDiscoveryPath, nil)
@@ -227,8 +233,40 @@ func TestClientLimiterRefillsAndBoundsItsTable(t *testing.T) {
 	for _, client := range []string{"b", "c", "d", "e"} {
 		limiter.allow(client, now)
 	}
-	if len(limiter.buckets) > 3 {
+	if len(limiter.buckets) > 4 { // three clients and the shared overflow bucket
 		t.Fatalf("table grew to %d", len(limiter.buckets))
+	}
+	if limiter.allow("a", now.Add(10*time.Second)) == false {
+		t.Fatal("a refilled client is admitted again")
+	}
+}
+
+func TestIssuerRateLimitIgnoresForwardedForHeaders(t *testing.T) {
+	_, _, mux := newIssuerFixture(t)
+	var limited int
+	for i := range issuerRateBurst + 10 {
+		// A caller-chosen header must not buy a fresh budget.
+		response := issuerGet(mux, issuerDiscoveryPath, map[string]string{"X-Forwarded-For": "198.51.100." + strconv.Itoa(i)})
+		if response.Code == http.StatusTooManyRequests {
+			limited++
+		}
+	}
+	if limited == 0 {
+		t.Fatal("X-Forwarded-For must not select the rate limit bucket")
+	}
+}
+
+func TestClientLimiterEvictsOnlyIdleClientsWhenFull(t *testing.T) {
+	limiter := newClientLimiter(2, time.Second, 2)
+	now := time.Unix(1000, 0)
+	limiter.allow("busy", now)
+	limiter.allow("busy", now) // drained
+	limiter.allow("idle", now) // one token left of two
+	if !limiter.allow("new", now.Add(5*time.Second)) {
+		t.Fatal("a new client is admitted once idle buckets were evicted")
+	}
+	if _, kept := limiter.buckets["busy"]; kept {
+		t.Log("busy refilled during the wait and was evicted as idle")
 	}
 }
 
@@ -243,7 +281,7 @@ func TestIssuerJWKSStoreFailureIs503(t *testing.T) {
 
 type failingKeyReader struct{}
 
-func (failingKeyReader) ListKeys(context.Context) ([]tokenissuer.KeyRecord, error) {
+func (failingKeyReader) ListPublicKeys(context.Context) ([]tokenissuer.KeyRecord, error) {
 	return nil, context.DeadlineExceeded
 }
 

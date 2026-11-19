@@ -253,10 +253,10 @@ func TestRepositoryUpstreamAuthPurposeIsBound(t *testing.T) {
 	}
 }
 
-const entraAuthJSON = `{"scheme":"entra-workload","tenantId":"contoso.onmicrosoft.com","clientId":"11111111-2222-3333-4444-555555555555","scope":"https://storage.azure.com/.default"}`
+const entraAuthJSON = `{"scheme":"entra-workload","tenantId":"contoso.onmicrosoft.com","clientId":"11111111-2222-3333-4444-555555555555","scope":"https://storage.example.test/.default"}`
 
 func rawProxyBody(name, upstreamAuth string) string {
-	return `{"name":"` + name + `","format":"raw","type":"proxy","endpoint":"https://acct.blob.core.windows.net/files","allowedHosts":["acct.blob.core.windows.net"],"upstreamAuth":` + upstreamAuth + "}"
+	return `{"name":"` + name + `","format":"raw","type":"proxy","endpoint":"https://acct.blob.example.test/files","allowedHosts":["acct.blob.example.test"],"upstreamAuth":` + upstreamAuth + "}"
 }
 
 func TestRepositoryUpstreamAuthEntraWorkloadLifecycle(t *testing.T) {
@@ -294,11 +294,11 @@ func TestRepositoryUpstreamAuthEntraWorkloadLifecycle(t *testing.T) {
 		t.Fatal("an entra-workload credential stores no secret")
 	}
 	// Changing the endpoint must repeat upstreamAuth explicitly: there is no secret to resubmit.
-	moved := `{"endpoint":"https://other.blob.core.windows.net/files","allowedHosts":["other.blob.core.windows.net"]}`
+	moved := `{"endpoint":"https://other.blob.example.test/files","allowedHosts":["other.blob.example.test"]}`
 	if rec := send(http.MethodPatch, "/api/v2/repositories/"+response.ID, moved); rec.Code != http.StatusBadRequest {
 		t.Fatalf("moving the token to a new destination silently: %d %s", rec.Code, rec.Body.String())
 	}
-	movedWithAuth := `{"endpoint":"https://other.blob.core.windows.net/files","allowedHosts":["other.blob.core.windows.net"],"upstreamAuth":` + entraAuthJSON + "}"
+	movedWithAuth := `{"endpoint":"https://other.blob.example.test/files","allowedHosts":["other.blob.example.test"],"upstreamAuth":` + entraAuthJSON + "}"
 	if rec := send(http.MethodPatch, "/api/v2/repositories/"+response.ID, movedWithAuth); rec.Code != http.StatusOK {
 		t.Fatalf("explicit rebind: %d %s", rec.Code, rec.Body.String())
 	}

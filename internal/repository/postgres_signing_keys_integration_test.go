@@ -109,6 +109,18 @@ func TestSigningKeyConcurrentWorkersConverge(t *testing.T) {
 	if active != 1 || next != 1 || len(records) != 2 {
 		t.Fatalf("active=%d next=%d rows=%d", active, next, len(records))
 	}
+	public, err := store.ListPublicKeys(context.Background())
+	if err != nil || len(public) != 2 {
+		t.Fatalf("rows=%d err=%v", len(public), err)
+	}
+	for _, record := range public {
+		if record.PrivateSealed != "" {
+			t.Fatal("the public listing must not read sealed private keys")
+		}
+		if err := record.VerifyIntegrity(); err != nil {
+			t.Fatalf("integrity must not depend on the private half: %v", err)
+		}
+	}
 	signer, err := tokenissuer.NewLocalSigner(store, tokenissuer.SignerConfig{Alg: jose.RS256})
 	if err != nil {
 		t.Fatal(err)

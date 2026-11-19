@@ -125,7 +125,7 @@ func TestEntraAuditRecordCarriesSubjectTenantClientAndRepositoryButNoToken(t *te
 	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	record := entraAuditRecord(upstreamauth.EntraExchange{
 		Operation: "entra.token", Subject: "notarx:instance:dep", TenantID: "tenant", ClientID: "client", Repository: "azure-blobs",
-		Scope: "scope", KeyID: "kid-1", JTI: "jti-1",
+		Scope: "scope", KeyID: "kid-1", JTI: "jti-1", Succeeded: true,
 	}, now)
 	if record.Repository != "azure-blobs" || record.Operation != "upstream.entra.token" || record.Outcome != repository.AuditResolved || !record.OccurredAt.Equal(now) {
 		t.Fatalf("%+v", record)
@@ -134,6 +134,10 @@ func TestEntraAuditRecordCarriesSubjectTenantClientAndRepositoryButNoToken(t *te
 		if record.Evidence[key] != want {
 			t.Errorf("evidence[%s] = %q want %q", key, record.Evidence[key], want)
 		}
+	}
+	failed := entraAuditRecord(upstreamauth.EntraExchange{Operation: "entra.token", Repository: "azure-blobs"}, now)
+	if failed.Outcome != repository.AuditUpstreamError || failed.Status != http.StatusBadGateway {
+		t.Fatalf("a rejected exchange must not be recorded as resolved: %+v", failed)
 	}
 	acr := entraAuditRecord(upstreamauth.EntraExchange{Operation: "acr.access", Registry: "r.azurecr.io"}, now)
 	if acr.Evidence["registry"] != "r.azurecr.io" || acr.Evidence["jti"] != "" {
@@ -153,7 +157,7 @@ func TestSetupIssuerInstallsTheEntraSchemeAndAuditsExchanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	auth := &repository.UpstreamAuth{Scheme: repository.UpstreamAuthSchemeEntraWorkload, TenantID: "contoso.onmicrosoft.com",
-		ClientID: "11111111-2222-3333-4444-555555555555", Scope: "https://storage.azure.com/.default"}
+		ClientID: "11111111-2222-3333-4444-555555555555", Scope: "https://storage.example.test/.default"}
 	if err := auth.Validate(); err != nil {
 		t.Fatalf("the scheme is accepted once the issuer runs: %v", err)
 	}

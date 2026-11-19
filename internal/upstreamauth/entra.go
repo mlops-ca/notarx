@@ -57,6 +57,9 @@ type EntraExchange struct {
 	Registry string
 	// Operation is "entra.token" or "acr.refresh" or "acr.access".
 	Operation string
+	// Succeeded reports whether the token service answered with a usable token. The event is
+	// emitted either way, once the exchange finished.
+	Succeeded bool
 }
 
 // Entra exchanges notarx assertions for Entra access tokens and caches the results.
@@ -75,7 +78,13 @@ type Entra struct {
 	// ACRHostAllowed decides which registry hosts may receive an Entra token; nil allows
 	// *.azurecr.io, *.azurecr.us and *.azurecr.cn.
 	ACRHostAllowed func(host string) bool
-	// Audit receives one event per exchange.
+	// MaxLifetime is NOTARX_ISSUER_MAX_TOKEN_LIFETIME; assertions never outlive it. Zero means the
+	// hard maximum.
+	MaxLifetime time.Duration
+	// Do sends every exchange request; nil uses HTTPClient. The runtime installs the proxy egress
+	// path (pinned DNS, reserved-address refusal, environment proxy) here.
+	Do func(*http.Request) (*http.Response, error)
+	// Audit receives one event per exchange, after it finished, with its outcome.
 	Audit func(ctx context.Context, event EntraExchange)
 	Now   func() time.Time
 
@@ -183,7 +192,7 @@ func (e *Entra) Invalidate(auth *repository.UpstreamAuth) {
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	prefix := tokenBase(auth) + "\x01"
+	prefix := e.tokenBase(auth) + "\x01"
 	for key := range e.tokens {
 		if strings.HasPrefix(key, prefix) {
 			delete(e.tokens, key)
@@ -191,10 +200,12 @@ func (e *Entra) Invalidate(auth *repository.UpstreamAuth) {
 	}
 }
 
-// tokenBase identifies the Entra application and scope every cached token of auth derives from;
-// the fields cannot contain the 0x01 separator (validated) so prefixes never collide.
-func tokenBase(auth *repository.UpstreamAuth) string {
-	return auth.TenantID + "\x00" + auth.ClientID + "\x00" + auth.Scope
+// tokenBase identifies the Entra application, scope and assertion subject every cached token of
+// auth derives from; the fields cannot contain the 0x01 separator (validated) so prefixes never
+// collide. The subject is part of the key because the federated credential that accepts a token
+// is matched on it.
+func (e *Entra) tokenBase(auth *repository.UpstreamAuth) string {
+	return auth.TenantID + "\x00" + auth.ClientID + "\x00" + auth.Scope + "\x00" + e.subject(auth)
 }
 
 // Invalidate drops the cached Entra tokens of auth on the installed provider.
@@ -206,7 +217,7 @@ func (e *Entra) AccessToken(ctx context.Context, auth *repository.UpstreamAuth) 
 	if err := e.validate(auth); err != nil {
 		return "", err
 	}
-	key := tokenBase(auth) + "\x01aad"
+	key := e.tokenBase(auth) + "\x01aad"
 	if token, ok := e.cached(key); ok {
 		return token, nil
 	}
@@ -236,8 +247,12 @@ func (e *Entra) exchange(ctx context.Context, auth *repository.UpstreamAuth) (st
 		return "", time.Time{}, err
 	}
 	subject := e.subject(auth)
-	claims, err := tokenissuer.ClaimBuilder{Issuer: e.IssuerURL, MaxLifetime: assertionLifetime, Now: e.now}.Build(tokenissuer.ClaimRequest{
-		Subject: subject, Audiences: []string{audience}, Lifetime: assertionLifetime,
+	lifetime := assertionLifetime
+	if e.MaxLifetime > 0 {
+		lifetime = min(lifetime, e.MaxLifetime)
+	}
+	claims, err := tokenissuer.ClaimBuilder{Issuer: e.IssuerURL, MaxLifetime: lifetime, Now: e.now}.Build(tokenissuer.ClaimRequest{
+		Subject: subject, Audiences: []string{audience}, Lifetime: lifetime,
 	})
 	if err != nil {
 		return "", time.Time{}, ErrEntraExchange
@@ -246,9 +261,7 @@ func (e *Entra) exchange(ctx context.Context, auth *repository.UpstreamAuth) (st
 	if err != nil {
 		return "", time.Time{}, ErrEntraExchange
 	}
-	if e.Audit != nil {
-		e.Audit(ctx, EntraExchange{Operation: "entra.token", Subject: subject, TenantID: auth.TenantID, ClientID: auth.ClientID, Repository: auth.Repository, Scope: auth.Scope, KeyID: kid, JTI: claims.JTI})
-	}
+	event := EntraExchange{Operation: "entra.token", Subject: subject, TenantID: auth.TenantID, ClientID: auth.ClientID, Repository: auth.Repository, Scope: auth.Scope, KeyID: kid, JTI: claims.JTI}
 	endpoint, err := url.JoinPath(e.AuthorityHost, url.PathEscape(auth.TenantID), "oauth2", "v2.0", "token")
 	if err != nil {
 		return "", time.Time{}, ErrEntraExchange
@@ -263,12 +276,16 @@ func (e *Entra) exchange(ctx context.Context, auth *repository.UpstreamAuth) (st
 		ExpiresIn   json.RawMessage `json:"expires_in"`
 	}
 	if err := e.postForm(ctx, endpoint, e.AuthorityHost, form, &result); err != nil {
+		e.audit(ctx, event)
 		return "", time.Time{}, err
 	}
 	seconds, ok := parseSeconds(result.ExpiresIn)
 	if result.AccessToken == "" || !ok || (result.TokenType != "" && !strings.EqualFold(result.TokenType, "Bearer")) {
+		e.audit(ctx, event)
 		return "", time.Time{}, ErrEntraExchange
 	}
+	event.Succeeded = true
+	e.audit(ctx, event)
 	return result.AccessToken, e.now().Add(time.Duration(seconds) * time.Second), nil
 }
 
@@ -297,7 +314,11 @@ func (e *Entra) postForm(ctx context.Context, endpoint, allowedOrigin string, fo
 	}
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Set("Accept", "application/json")
-	response, err := e.client().Do(request)
+	do := e.Do
+	if do == nil {
+		do = e.client().Do
+	}
+	response, err := do(request)
 	if err != nil {
 		return ErrEntraExchange
 	}
@@ -353,8 +374,8 @@ func (e *Entra) ACRToken(ctx context.Context, auth *repository.UpstreamAuth, tar
 		return "", nil
 	}
 	origin := "https://" + target.Host
-	refreshKey := tokenBase(auth) + "\x01acr-refresh\x00" + target.Host
-	accessKey := tokenBase(auth) + "\x01acr-access\x00" + target.Host + "\x00" + scope
+	refreshKey := e.tokenBase(auth) + "\x01acr-refresh\x00" + target.Host
+	accessKey := e.tokenBase(auth) + "\x01acr-access\x00" + target.Host + "\x00" + scope
 	if token, ok := e.cached(accessKey); ok {
 		return token, nil
 	}
@@ -375,11 +396,12 @@ func (e *Entra) ACRToken(ctx context.Context, auth *repository.UpstreamAuth, tar
 			}
 			form := url.Values{"grant_type": {"access_token"}, "service": {target.Host}, "tenant": {auth.TenantID}, "access_token": {aad}}
 			if err := e.postForm(work, origin+"/oauth2/exchange", origin, form, &exchanged); err != nil || exchanged.RefreshToken == "" {
+				e.auditACR(work, auth, target.Host, "acr.refresh", false)
 				return "", ErrEntraExchange
 			}
 			refresh = exchanged.RefreshToken
 			e.store(refreshKey, refresh, e.tokenRefreshTime(refresh))
-			e.auditACR(work, auth, target.Host, "acr.refresh")
+			e.auditACR(work, auth, target.Host, "acr.refresh", true)
 		}
 		var issued struct {
 			AccessToken string `json:"access_token"`
@@ -388,10 +410,11 @@ func (e *Entra) ACRToken(ctx context.Context, auth *repository.UpstreamAuth, tar
 		if err := e.postForm(work, origin+"/oauth2/token", origin, form, &issued); err != nil || issued.AccessToken == "" {
 			// A refresh token the registry refuses must not be retried until it would expire.
 			e.dropKey(refreshKey)
+			e.auditACR(work, auth, target.Host, "acr.access", false)
 			return "", ErrEntraExchange
 		}
 		e.store(accessKey, issued.AccessToken, e.tokenRefreshTime(issued.AccessToken))
-		e.auditACR(work, auth, target.Host, "acr.access")
+		e.auditACR(work, auth, target.Host, "acr.access", true)
 		return issued.AccessToken, nil
 	})
 	if err != nil {
@@ -406,10 +429,14 @@ func (e *Entra) dropKey(key string) {
 	e.mu.Unlock()
 }
 
-func (e *Entra) auditACR(ctx context.Context, auth *repository.UpstreamAuth, host, operation string) {
+func (e *Entra) audit(ctx context.Context, event EntraExchange) {
 	if e.Audit != nil {
-		e.Audit(ctx, EntraExchange{Operation: operation, Subject: e.subject(auth), TenantID: auth.TenantID, ClientID: auth.ClientID, Repository: auth.Repository, Scope: auth.Scope, Registry: host})
+		e.Audit(ctx, event)
 	}
+}
+
+func (e *Entra) auditACR(ctx context.Context, auth *repository.UpstreamAuth, host, operation string, succeeded bool) {
+	e.audit(ctx, EntraExchange{Operation: operation, Subject: e.subject(auth), TenantID: auth.TenantID, ClientID: auth.ClientID, Repository: auth.Repository, Scope: auth.Scope, Registry: host, Succeeded: succeeded})
 }
 
 // tokenRefreshTime is when a registry token should be replaced: five minutes before the exp claim

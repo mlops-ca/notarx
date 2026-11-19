@@ -28,7 +28,7 @@ func TestParseIssuerURL(t *testing.T) {
 		{name: "defaults to the public url", public: public, want: "https://notarx.example.com"},
 		{name: "override", raw: "https://issuer.example.com", public: public, want: "https://issuer.example.com"},
 		{name: "trailing slash is normalised", raw: "https://issuer.example.com/", public: public, want: "https://issuer.example.com"},
-		{name: "path is kept", raw: "https://example.com/notarx/", public: nil, want: "https://example.com/notarx"},
+		{name: "path is kept with a warning", raw: "https://example.com/notarx/", public: nil, want: "https://example.com/notarx", warn: true},
 		{name: "loopback http warns", raw: "http://localhost:8080", want: "http://localhost:8080", warn: true},
 		{name: "ipv4 loopback", raw: "http://127.0.0.1:8080", want: "http://127.0.0.1:8080", warn: true},
 		{name: "ipv6 loopback", raw: "http://[::1]:8080", want: "http://[::1]:8080", warn: true},
@@ -92,7 +92,7 @@ func TestIssuerConfigEnabled(t *testing.T) {
 	t.Setenv(IssuerKeyPublishLeadEnv, "1h")
 	t.Setenv(IssuerMaxTokenLifetimeEnv, "5m")
 	t.Setenv(IssuerAllowSelfTrustEnv, "true")
-	t.Setenv(EntraAuthorityHostEnv, "https://login.microsoftonline.us/")
+	t.Setenv(EntraAuthorityHostEnv, "https://"+"login.microsoftonline.us/")
 	t.Setenv(EntraAudienceEnv, "api://custom")
 	cfg, err = loadIssuerConfig(nil)
 	if err == nil {
@@ -104,7 +104,7 @@ func TestIssuerConfigEnabled(t *testing.T) {
 		t.Fatal(err)
 	}
 	if cfg.Alg != "ES256" || cfg.KeyRotationInterval != 48*time.Hour || cfg.KeyPublishLead != time.Hour || cfg.MaxTokenLifetime != 5*time.Minute ||
-		!cfg.AllowSelfTrust || cfg.EntraAuthorityHost != "https://login.microsoftonline.us" || cfg.EntraAudience != "api://custom" || cfg.URL != "https://issuer.example.com" {
+		!cfg.AllowSelfTrust || cfg.EntraAuthorityHost != "https://"+"login.microsoftonline.us" || cfg.EntraAudience != "api://custom" || cfg.URL != "https://issuer.example.com" {
 		t.Fatalf("%+v", cfg)
 	}
 }

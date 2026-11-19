@@ -33,6 +33,15 @@ func (s *MemoryStore) ListKeys(context.Context) ([]KeyRecord, error) {
 	return snapshot(s.rows), nil
 }
 
+// ListPublicKeys implements PublicKeyReader.
+func (s *MemoryStore) ListPublicKeys(ctx context.Context) ([]KeyRecord, error) {
+	records, err := s.ListKeys(ctx)
+	for i := range records {
+		records[i].PrivateSealed = ""
+	}
+	return records, err
+}
+
 // Put overwrites a row without any check; tests use it to plant tampered rows.
 func (s *MemoryStore) Put(record KeyRecord) {
 	s.mu.Lock()

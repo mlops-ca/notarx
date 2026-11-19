@@ -17,6 +17,13 @@ const (
 	DefaultPublishLead      = 24 * time.Hour
 )
 
+// JWKSMaxAge is the Cache-Control max-age of the published key set.
+const JWKSMaxAge = 5 * time.Minute
+
+// MinPublishLead is the smallest publish lead that still outlasts verifier JWKS caches and the
+// node signing key cache.
+const MinPublishLead = JWKSMaxAge + DefaultKeyCacheTTL
+
 // ErrNoNextKey reports a manual rotation with no next key to promote.
 var ErrNoNextKey = errors.New("tokenissuer: there is no next key to promote")
 
@@ -43,8 +50,8 @@ func (c LifecycleConfig) Validate() error {
 	if c.Alg != jose.RS256 && c.Alg != jose.ES256 {
 		return errors.New("issuer algorithm must be RS256 or ES256")
 	}
-	if c.PublishLead <= 0 {
-		return errors.New("issuer key publish lead must be positive")
+	if c.PublishLead <= MinPublishLead {
+		return fmt.Errorf("issuer key publish lead must exceed %s: verifiers may cache the key set for %s and nodes cache the signing key for %s", MinPublishLead, JWKSMaxAge, DefaultKeyCacheTTL)
 	}
 	if c.RotationInterval <= c.PublishLead {
 		return errors.New("issuer key rotation interval must exceed the publish lead")
@@ -121,22 +128,27 @@ func (m *Manager) Run(ctx context.Context, interval time.Duration) {
 	}
 }
 
-// trusted returns the rows that pass the integrity check; failing rows raise the alert and
-// take no part in any decision.
-func (m *Manager) trusted(records []KeyRecord) []KeyRecord {
+// split separates the rows that pass the integrity check from those that fail it; failing rows
+// raise the alert and take no part in any decision.
+func (m *Manager) split(records []KeyRecord) (trusted, untrusted []KeyRecord) {
 	alert := m.Alert
 	if alert == nil {
 		alert = LogIntegrityAlert
 	}
-	out := records[:0:0]
 	for _, record := range records {
 		if err := record.VerifyIntegrity(); err != nil {
 			alert(record.KID, err)
+			untrusted = append(untrusted, record)
 			continue
 		}
-		out = append(out, record)
+		trusted = append(trusted, record)
 	}
-	return out
+	return trusted, untrusted
+}
+
+func (m *Manager) trusted(records []KeyRecord) []KeyRecord {
+	trusted, _ := m.split(records)
+	return trusted
 }
 
 func (m *Manager) reconcile(ctx context.Context, tx KeyTx) (bool, error) {
@@ -157,7 +169,8 @@ func (m *Manager) reconcile(ctx context.Context, tx KeyTx) (bool, error) {
 		}
 		live = append(live, record)
 	}
-	live = m.trusted(live)
+	var untrusted []KeyRecord
+	live, untrusted = m.split(live)
 	algs := []string{m.Config.Alg}
 	for _, record := range live {
 		if record.State == StateActive && !slices.Contains(algs, record.Alg) {
@@ -165,6 +178,14 @@ func (m *Manager) reconcile(ctx context.Context, tx KeyTx) (bool, error) {
 		}
 	}
 	for _, alg := range algs {
+		if blocked := untrustedSlots(untrusted, alg); len(blocked) > 0 {
+			// A row that fails its integrity check still holds the one active or next slot, so
+			// creating or promoting a key would collide with it. Fail closed and say why: the
+			// operator restores the key ring, reseals, or revokes the listed keys.
+			m.logger().Error("signing keys fail their integrity check; key rotation for this algorithm is paused",
+				"alg", alg, "kids", blocked, "remedy", "restore the encryption key ring and reseal, or revoke the listed keys")
+			continue
+		}
 		var forAlg []KeyRecord
 		for _, record := range live {
 			if record.Alg == alg {
@@ -178,6 +199,17 @@ func (m *Manager) reconcile(ctx context.Context, tx KeyTx) (bool, error) {
 		changed = changed || did
 	}
 	return changed, nil
+}
+
+// untrustedSlots lists the kids of untrusted rows that occupy an active or next slot of alg.
+func untrustedSlots(untrusted []KeyRecord, alg string) []string {
+	var kids []string
+	for _, record := range untrusted {
+		if record.Alg == alg && (record.State == StateActive || record.State == StateNext) {
+			kids = append(kids, record.KID)
+		}
+	}
+	return kids
 }
 
 func pick(records []KeyRecord, state State) *KeyRecord {
