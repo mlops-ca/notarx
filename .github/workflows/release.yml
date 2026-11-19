@@ -187,10 +187,25 @@ jobs:
       dry-run: ${{ needs.plan.outputs.publish != 'true' }}
 
   build:
-    needs: [build-archives, build-images]
+    needs: [plan, build-archives, build-images]
+    # Skipped (not failed) when the gates failed, as before; only a started build is reported.
+    if: ${{ !cancelled() && needs.build-archives.result != 'skipped' }}
     runs-on: ubuntu-24.04
     steps:
-      - run: echo "archives and images built (attested only when the run publishes)"
+      - name: Require every archive and image, with a rerun hint
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          if echo "$NEEDS" | jq -e '[.[] | select(.result != "success")] | length == 0' >/dev/null; then
+            echo "archives and images built (attested only when the run publishes)"
+            exit 0
+          fi
+          # A hosted runner that is never acquired (for example a macOS capacity outage) ends
+          # its job with the annotation "not acquired by Runner". Other legs can also show as
+          # cancelled because the matrix is fail-fast, so the legs themselves must be inspected.
+          echo "::error::Archives or images did not all build. Native darwin/arm64 and darwin/amd64 archives are required. Open the failing legs of this run: if the only failure is 'The job was not acquired by Runner' (no log), no runner was assigned and re-running the failed jobs is the action. Any leg with a log and a failed step is a real build failure to fix first; legs cancelled after it are collateral."
+          exit 1
 
   # --- publish: tag and pre-release in one call, as the last step ---------------------
   publish:

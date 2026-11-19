@@ -225,6 +225,9 @@ jobs:
       version: ${{ needs.mainline-plan.outputs.version }}
       sha: ${{ github.sha }}
       assets-artifact: notarx-${{ needs.mainline-plan.outputs.version }}
+      # Hosted macOS capacity outages must not turn main red (ADR 0016 amendment 2026-11-19):
+      # nothing on main consumes darwin archives; the release builds and requires them.
+      darwin: false
 
   mainline-images:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
