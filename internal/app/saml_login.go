@@ -197,7 +197,7 @@ func (h samlLoginHandler) acs(w http.ResponseWriter, r *http.Request) {
 	}
 	flow, hasFlow := h.flow(r, slug, runtime.saml.clock())
 	request := saml.Request{SAMLResponse: encoded}
-	target := "/"
+	var target string
 	if hasFlow {
 		if relay != flow.Relay {
 			h.fail(w, r, slug, "invalid_state", "relay_state_mismatch")
