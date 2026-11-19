@@ -84,18 +84,18 @@ func TestNormalizeGuardsOptionalExtension(t *testing.T) {
 	})
 }
 
-func TestNormalizeSeedHasExactlyTheFourSingletons(t *testing.T) {
+func TestNormalizeSeedHasExactlyTheSingletons(t *testing.T) {
 	forEachFixture(t, func(t *testing.T, got string) {
 		seed := got[strings.Index(got, "-- seed:"):]
-		if n := strings.Count(seed, "INSERT INTO"); n != 4 {
-			t.Fatalf("seed has %d INSERT statements, want 4", n)
+		if n := strings.Count(seed, "INSERT INTO"); n != 5 {
+			t.Fatalf("seed has %d INSERT statements, want 5", n)
 		}
-		for _, table := range []string{"audit_retention_policy", "anonymous_access_policy", "site_settings", "installation_repository_presets"} {
+		for _, table := range []string{"audit_retention_policy", "public_access_policy", "site_settings", "installation_repository_presets", "settings"} {
 			if !strings.Contains(seed, "INSERT INTO public."+table+" ") {
 				t.Errorf("seed missing %s", table)
 			}
 		}
-		for _, migration := range []string{"000049_", "000055_", "000107_", "000174_"} {
+		for _, migration := range []string{"000049_", "000055_", "000107_", "000174_", "000016_"} {
 			if !strings.Contains(seed, "Originating migration: "+migration) {
 				t.Errorf("seed does not name migration %s", migration)
 			}

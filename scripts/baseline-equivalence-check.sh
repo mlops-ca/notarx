@@ -106,10 +106,14 @@ strip_keys() { grep -v '^\\\(un\)\{0,1\}restrict '; }
 baseline_dump chain_a "${BASELINE_DUMP_SCHEMA_FLAGS[@]}" | strip_keys >"$baseline_work/chain_a.raw.sql"
 baseline_psql chain_a2 -q <"$baseline_work/chain_a.raw.sql" >/dev/null
 
-# The only seeded timestamp is site_settings.updated_at = now(); pin it so the
-# data comparison is about values, not about when each database was created.
+# The seeded timestamps (site_settings.updated_at = now(), settings.updated_at) and
+# the random deployment id are pinned, so the data comparison is about values,
+# not about when or by whom each database was created.
 for database in chain_a baseline_b; do
-  baseline_psql "$database" -q -c "UPDATE public.site_settings SET updated_at = 'epoch'"
+  baseline_psql "$database" -q <<'SQL'
+UPDATE public.site_settings SET updated_at = 'epoch';
+UPDATE public.settings SET updated_at = 'epoch', value = 'pinned' WHERE key = 'deployment_id';
+SQL
 done
 
 for database in chain_a chain_a2 baseline_b; do

@@ -306,22 +306,6 @@ func verifyRecoveryEmail(t *testing.T, ctx context.Context, target *OwnedTarget,
 		assertRecoverySafeAPI(t, path, data, f)
 		fixtureHTTP(t, ctx, endpoint, "GET", path, denied, nil, 403, "")
 	}
-	// A release that predates the locale tags restored the bare en tag. The
-	// worker below is the current code, so apply the migration an operator runs
-	// when upgrading (ADR 0014): it maps en to en-CA.
-	if restored.Locale == "en" {
-		migration, e := os.ReadFile("../../migrations/000004_email_locale_tags.sql")
-		if e != nil {
-			t.Fatal(e)
-		}
-		recoverySQL(t, ctx, target.database, string(migration))
-		// The fixture mirrors what the migration did, so later comparisons hold.
-		f.Target.Locale = "en-CA"
-		for id, delivery := range f.Deliveries {
-			delivery.Locale = "en-CA"
-			f.Deliveries[id] = delivery
-		}
-	}
 	// Restore always starts API-only, with no SMTP configuration or worker role.
 	fixture := testsupport.NewSMTPFixture(t, true)
 	config := emailnotification.Config{Enabled: true, Host: "smtp.example.test", Port: 465, Mode: "implicit_tls", From: "notarx@example.test", ConsoleOrigin: "https://console.example.invalid", ApprovedIPs: []string{"192.0.2.10"}, CAFile: fixture.CAFile}
