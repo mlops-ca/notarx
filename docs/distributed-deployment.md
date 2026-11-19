@@ -209,6 +209,7 @@ NOTARX_RETENTION_PROFILE=standard        # or freetier (the ADR 0017 reference s
 NOTARX_RETENTION_RUN_BUDGET=60s
 NOTARX_RETENTION_LIFECYCLE_JOBS=720h     # a table override: Go duration, 30d, or off
 NOTARX_RETENTION_SECURITY_AUDIT_LOG=1095d
+NOTARX_SCAN_HISTORY_RETENTION=180d      # artifact_scan_history (ADR 0030); NOTARX_RETENTION_ARTIFACT_SCAN_HISTORY wins when both are set
 ```
 
 `NOTARX_RETENTION_<TABLE>` (the table name in upper case) overrides the keep time of

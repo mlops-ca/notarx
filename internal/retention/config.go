@@ -79,6 +79,10 @@ func ParseProfile(value string) (Profile, error) {
 	return "", fmt.Errorf("%s must be standard or freetier, got %q", ProfileEnv, value)
 }
 
+// envAliases names the documented override key of a table whose ADR gave it a name other than
+// NOTARX_RETENTION_<TABLE>; the generic key wins when both are set.
+var envAliases = map[string]string{"artifact_scan_history": "NOTARX_SCAN_HISTORY_RETENTION"}
+
 // LoadConfig reads the profile, the run budget and the overrides for every table and
 // every entry label of the registry from lookup (os.LookupEnv in production). A label
 // override such as NOTARX_RETENTION_WEBHOOK_DELIVERIES_DEAD wins over the table key.
@@ -106,6 +110,10 @@ func LoadConfig(lookup func(string) (string, bool)) (Config, error) {
 	for key := range keys {
 		name := EnvName(key)
 		value, ok := lookup(name)
+		if alias, aliased := envAliases[key]; aliased && (!ok || strings.TrimSpace(value) == "") {
+			name = alias
+			value, ok = lookup(name)
+		}
 		if !ok || strings.TrimSpace(value) == "" {
 			continue
 		}

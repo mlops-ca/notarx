@@ -34,7 +34,7 @@ func TestRegistryIsValidAndHasNoProvenanceTables(t *testing.T) {
 			t.Errorf("%s holds provenance or aggregates and must not be pruned", table)
 		}
 	}
-	for _, table := range []string{"lifecycle_jobs", "webhook_deliveries", "user_sessions", "runtime_node_sessions", "scheduled_task_runs", "cache_tasks", "audit_cleanup_jobs", "replication_plans", "replication_checkpoints", "nexus_migration_entries", "email_test_deliveries", "repository_quota_alert_events", "repository_request_rollup", "hosted_repository_idempotency", "security_audit_log", "resolver_audit_log"} {
+	for _, table := range []string{"lifecycle_jobs", "webhook_deliveries", "user_sessions", "runtime_node_sessions", "scheduled_task_runs", "cache_tasks", "audit_cleanup_jobs", "replication_plans", "replication_checkpoints", "nexus_migration_entries", "email_test_deliveries", "repository_quota_alert_events", "repository_request_rollup", "hosted_repository_idempotency", "security_audit_log", "resolver_audit_log", "artifact_scan_history"} {
 		if !tables[table] {
 			t.Errorf("registry is missing %s", table)
 		}
@@ -47,6 +47,7 @@ func TestProfileDefaults(t *testing.T) {
 	want := map[string][2]time.Duration{
 		"resolver_audit_log":               {90 * day, 7 * day},
 		"security_audit_log":               {730 * day, 90 * day},
+		"artifact_scan_history":            {180 * day, 180 * day},
 		"repository_request_rollup":        {400 * day, 400 * day},
 		"webhook_deliveries_succeeded":     {14 * day, 3 * day},
 		"webhook_deliveries_dead":          {90 * day, 30 * day},
@@ -194,5 +195,25 @@ func TestEntryValidateRejectsUnsafeInput(t *testing.T) {
 	}
 	if _, err := New(nil, DefaultConfig(), Options{}); err == nil {
 		t.Error("New accepted a nil database")
+	}
+}
+
+func TestScanHistoryRetentionAliasAndPrecedence(t *testing.T) {
+	cfg, err := LoadConfig(lookupFrom(map[string]string{"NOTARX_SCAN_HISTORY_RETENTION": "30d"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if keep, on, err := cfg.KeepFor("artifact_scan_history"); err != nil || !on || keep != 30*day {
+		t.Fatalf("alias keep = %v %v %v", keep, on, err)
+	}
+	cfg, err = LoadConfig(lookupFrom(map[string]string{"NOTARX_SCAN_HISTORY_RETENTION": "30d", "NOTARX_RETENTION_ARTIFACT_SCAN_HISTORY": "off"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, on, _ := cfg.KeepFor("artifact_scan_history"); on {
+		t.Fatal("the generic key must win over the alias")
+	}
+	if _, err := LoadConfig(lookupFrom(map[string]string{"NOTARX_SCAN_HISTORY_RETENTION": "soon"})); err == nil {
+		t.Fatal("an invalid alias value must be refused")
 	}
 }

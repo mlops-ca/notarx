@@ -117,7 +117,7 @@ func (s *MemoryStore) InsertScanFindings(_ context.Context, findings []ScanFindi
 		}
 	}
 	for _, f := range normalized {
-		s.scan.findings[f.VulnerabilityID] = append(s.scan.findings[f.VulnerabilityID], f)
+		s.scan.findings[f.VulnerabilityID] = append(s.scan.findings[f.VulnerabilityID], cloneScanFinding(f))
 	}
 	return nil
 }
@@ -132,6 +132,9 @@ func (s *MemoryStore) SwapScanResult(_ context.Context, result ScanResult) (Scan
 	defer s.mu.Unlock()
 	previous, existed := s.scan.results[key]
 	swap := ScanSwap{}
+	if existed && previous.ScannedAt.After(result.ScannedAt) {
+		return ScanSwap{Superseded: true}, nil
+	}
 	if existed {
 		swap.PreviousID = previous.ID
 		delete(s.scan.currentIDs, previous.ID)
@@ -176,12 +179,33 @@ func (s *MemoryStore) ListScanFindings(_ context.Context, vulnerabilityID string
 		if after != nil && !scanFindingLess(*after, f.Cursor()) {
 			continue
 		}
-		out = append(out, f)
+		out = append(out, cloneScanFinding(f))
 		if len(out) == limit {
 			break
 		}
 	}
 	return out, nil
+}
+
+func (s *MemoryStore) ListAbandonedScanVulnerabilityIDs(_ context.Context, olderThan time.Time, limit int) ([]string, error) {
+	limit, err := scanLimit(limit)
+	if err != nil {
+		return nil, err
+	}
+	floor := scanVulnerabilityIDFloor(olderThan)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	candidates := []string{}
+	for id, rows := range s.scan.findings {
+		if len(rows) > 0 && id < floor && !s.scan.currentIDs[id] {
+			candidates = append(candidates, id)
+		}
+	}
+	sort.Strings(candidates)
+	if len(candidates) > limit {
+		candidates = candidates[:limit]
+	}
+	return candidates, nil
 }
 
 func scanFindingLess(a, b ScanFindingCursor) bool {
@@ -311,7 +335,7 @@ func (s *MemoryStore) LatestScannerDBGeneration(_ context.Context, kind string) 
 	defer s.mu.RUnlock()
 	var latest ScannerDBGeneration
 	for key, g := range s.scan.generations {
-		if key[0] == kind && (latest.ID == "" || g.BuiltAt.After(latest.BuiltAt)) {
+		if key[0] == kind && (latest.ID == "" || g.BuiltAt.After(latest.BuiltAt) || (g.BuiltAt.Equal(latest.BuiltAt) && g.ID > latest.ID)) {
 			latest = g
 		}
 	}

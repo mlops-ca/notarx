@@ -6,13 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/mlops-ca/notarx/internal/ids"
 )
 
 var _ ScanStore = (*PostgresStore)(nil)
 
-func nullString(value string) any {
+func scanNullable(value string) any {
 	if value == "" {
 		return nil
 	}
@@ -44,9 +45,9 @@ RETURNING id::text, created_at`,
 
 const scanSBOMColumns = `id::text, repository_id::text, artifact_digest, kind, source, generator, generator_version, spec_version, body_digest, body_size, body_key, body::text, component_count, created_at`
 
-type scanRow interface{ Scan(dest ...any) error }
+type scanRowReader interface{ Scan(dest ...any) error }
 
-func scanScanSBOM(row scanRow) (ScanSBOM, error) {
+func readScanSBOM(row scanRowReader) (ScanSBOM, error) {
 	var sbom ScanSBOM
 	var body sql.NullString
 	err := row.Scan(&sbom.ID, &sbom.RepositoryID, &sbom.ArtifactDigest, &sbom.Kind, &sbom.Source, &sbom.Generator, &sbom.GeneratorVersion,
@@ -62,7 +63,7 @@ func (s *PostgresStore) GetScanSBOM(ctx context.Context, repositoryID, artifactD
 	if err != nil {
 		return ScanSBOM{}, err
 	}
-	sbom, err := scanScanSBOM(s.db.QueryRowContext(ctx, `SELECT `+scanSBOMColumns+` FROM artifact_sbom WHERE repository_id = $1::uuid AND artifact_digest = $2 AND kind = $3 AND source = $4`,
+	sbom, err := readScanSBOM(s.db.QueryRowContext(ctx, `SELECT `+scanSBOMColumns+` FROM artifact_sbom WHERE repository_id = $1::uuid AND artifact_digest = $2 AND kind = $3 AND source = $4`,
 		repository, artifactDigest, kind, source))
 	if errors.Is(err, sql.ErrNoRows) {
 		return ScanSBOM{}, ErrNotFound
@@ -82,7 +83,7 @@ func (s *PostgresStore) ListScanSBOMs(ctx context.Context, repositoryID, artifac
 	defer func() { _ = rows.Close() }()
 	out := []ScanSBOM{}
 	for rows.Next() {
-		sbom, err := scanScanSBOM(rows)
+		sbom, err := readScanSBOM(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -118,8 +119,8 @@ func (s *PostgresStore) InsertScanFindings(ctx context.Context, findings []ScanF
 		}
 		sb.WriteByte(')')
 		args = append(args, f.VulnerabilityID, f.Ordinal, f.VulnID, f.Source, f.Severity, f.SeverityRank, f.Component, f.Version, f.FixedVersion,
-			f.Location, f.Title, nullString(f.Description), f.URL, f.CVSSScore, f.CVSSVector, f.Status, nullString(f.VEXStatus),
-			nullString(f.VEXJustification), f.EPSS, f.KEV)
+			f.Location, f.Title, scanNullable(f.Description), f.URL, f.CVSSScore, f.CVSSVector, f.Status, scanNullable(f.VEXStatus),
+			scanNullable(f.VEXJustification), f.EPSS, f.KEV)
 	}
 	_, err := s.db.ExecContext(ctx, sb.String(), args...)
 	return err
@@ -135,9 +136,9 @@ func (s *PostgresStore) SwapScanResult(ctx context.Context, result ScanResult) (
 		return ScanSwap{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	args := []any{result.ID, result.RepositoryID, result.ArtifactDigest, result.Scanner, result.ScannerVersion, nullString(result.DBGenerationID), result.Status,
+	args := []any{result.ID, result.RepositoryID, result.ArtifactDigest, result.Scanner, result.ScannerVersion, scanNullable(result.DBGenerationID), result.Status,
 		result.Critical, result.High, result.Medium, result.Low, result.Unknown, result.SuppressedCount, result.FindingsTotal, result.Truncated,
-		nullString(result.NotScannedReason), result.ScannedAt}
+		scanNullable(result.NotScannedReason), result.ScannedAt}
 	inserted, err := tx.ExecContext(ctx, `INSERT INTO artifact_vulnerability (id, repository_id, artifact_digest, scanner, scanner_version, db_generation_id, status, critical, high, medium, low, unknown, suppressed_count, findings_total, truncated, not_scanned_reason, scanned_at)
 VALUES ($1::uuid,$2::uuid,$3,$4,$5,$6::uuid,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) ON CONFLICT (repository_id, artifact_digest) DO NOTHING`, args...)
 	if err != nil {
@@ -150,9 +151,12 @@ VALUES ($1::uuid,$2::uuid,$3,$4,$5,$6::uuid,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16
 		swap.HistoryAppended = true
 	} else {
 		var previous ScanResult
-		if err := tx.QueryRowContext(ctx, `SELECT id::text, status, critical, high, medium, low, unknown FROM artifact_vulnerability WHERE repository_id = $1::uuid AND artifact_digest = $2 FOR UPDATE`,
-			result.RepositoryID, result.ArtifactDigest).Scan(&previous.ID, &previous.Status, &previous.Critical, &previous.High, &previous.Medium, &previous.Low, &previous.Unknown); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT id::text, status, critical, high, medium, low, unknown, scanned_at FROM artifact_vulnerability WHERE repository_id = $1::uuid AND artifact_digest = $2 FOR UPDATE`,
+			result.RepositoryID, result.ArtifactDigest).Scan(&previous.ID, &previous.Status, &previous.Critical, &previous.High, &previous.Medium, &previous.Low, &previous.Unknown, &previous.ScannedAt); err != nil {
 			return ScanSwap{}, err
+		}
+		if previous.ScannedAt.After(result.ScannedAt) {
+			return ScanSwap{Superseded: true}, nil
 		}
 		swap.PreviousID = previous.ID
 		swap.HistoryAppended = scanCountsChanged(previous, result)
@@ -164,7 +168,7 @@ VALUES ($1::uuid,$2::uuid,$3,$4,$5,$6::uuid,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16
 	if swap.HistoryAppended {
 		entry := scanHistoryEntry(result, ids.New())
 		if _, err := tx.ExecContext(ctx, `INSERT INTO artifact_scan_history (id, repository_id, artifact_digest, scanner_version, db_generation_id, status, critical, high, medium, low, unknown, scanned_at)
-VALUES ($1::uuid,$2::uuid,$3,$4,$5::uuid,$6,$7,$8,$9,$10,$11,$12)`, entry.ID, entry.RepositoryID, entry.ArtifactDigest, entry.ScannerVersion, nullString(entry.DBGenerationID),
+VALUES ($1::uuid,$2::uuid,$3,$4,$5::uuid,$6,$7,$8,$9,$10,$11,$12)`, entry.ID, entry.RepositoryID, entry.ArtifactDigest, entry.ScannerVersion, scanNullable(entry.DBGenerationID),
 			entry.Status, entry.Critical, entry.High, entry.Medium, entry.Low, entry.Unknown, entry.ScannedAt); err != nil {
 			return ScanSwap{}, err
 		}
@@ -201,7 +205,7 @@ func (s *PostgresStore) ListScanFindings(ctx context.Context, vulnerabilityID st
 FROM artifact_vulnerability_finding WHERE vulnerability_id = $1::uuid`
 	args := []any{id}
 	if after != nil {
-		query += ` AND (severity_rank, vuln_id, ordinal) > ($2::smallint, $3::varchar, $4::integer)`
+		query += ` AND (severity_rank, vuln_id, ordinal) > ($2::smallint, $3, $4::integer)`
 		args = append(args, after.SeverityRank, after.VulnID, after.Ordinal)
 	}
 	query += fmt.Sprintf(` ORDER BY severity_rank, vuln_id, ordinal LIMIT $%d`, len(args)+1)
@@ -243,8 +247,15 @@ func (s *PostgresStore) SweepScanFindings(ctx context.Context, vulnerabilityID s
 	if limit, err = scanLimit(limit); err != nil {
 		return 0, err
 	}
-	// The guard and the delete are one statement, so a concurrent swap cannot make the id current
-	// between them without the delete seeing it.
+	var current bool
+	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM artifact_vulnerability WHERE id = $1::uuid)`, id).Scan(&current); err != nil {
+		return 0, err
+	}
+	if current {
+		return 0, scanInvalid("vulnerability id %s is the current result", id)
+	}
+	// The statement repeats the guard, so a swap that makes the id current after the check above
+	// leaves its rows alone.
 	result, err := s.db.ExecContext(ctx, `DELETE FROM artifact_vulnerability_finding WHERE vulnerability_id = $1::uuid AND ordinal IN (
   SELECT ordinal FROM artifact_vulnerability_finding WHERE vulnerability_id = $1::uuid
     AND NOT EXISTS (SELECT 1 FROM artifact_vulnerability WHERE id = $1::uuid) LIMIT $2)`, id, limit)
@@ -253,6 +264,35 @@ func (s *PostgresStore) SweepScanFindings(ctx context.Context, vulnerabilityID s
 	}
 	n, err := result.RowsAffected()
 	return int(n), err
+}
+
+// ListAbandonedScanVulnerabilityIDs walks the distinct vulnerability ids older than the cutoff with
+// one index probe each (a loose index scan), so the cost follows the number of ids visited, not the
+// number of findings.
+func (s *PostgresStore) ListAbandonedScanVulnerabilityIDs(ctx context.Context, olderThan time.Time, limit int) ([]string, error) {
+	limit, err := scanLimit(limit)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx, `WITH RECURSIVE ids(id) AS (
+  (SELECT vulnerability_id FROM artifact_vulnerability_finding WHERE vulnerability_id < $1::uuid ORDER BY vulnerability_id LIMIT 1)
+  UNION ALL
+  SELECT (SELECT vulnerability_id FROM artifact_vulnerability_finding WHERE vulnerability_id > ids.id AND vulnerability_id < $1::uuid ORDER BY vulnerability_id LIMIT 1)
+    FROM ids WHERE ids.id IS NOT NULL)
+SELECT id::text FROM ids WHERE id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM artifact_vulnerability v WHERE v.id = ids.id) LIMIT $2`, scanVulnerabilityIDFloor(olderThan), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
 }
 
 func (s *PostgresStore) ReplaceScanLicenses(ctx context.Context, repositoryID, artifactDigest string, licenses []ScanLicense) error {
@@ -298,7 +338,7 @@ func (s *PostgresStore) ListScanLicenses(ctx context.Context, repositoryID, arti
 	query := `SELECT repository_id::text, artifact_digest, spdx_id, source, confidence FROM artifact_license WHERE repository_id = $1::uuid AND artifact_digest = $2`
 	args := []any{repository, artifactDigest}
 	if after != nil {
-		query += ` AND (spdx_id, source) > ($3::varchar, $4::varchar)`
+		query += ` AND (spdx_id, source) > ($3, $4)`
 		args = append(args, after.SPDXID, after.Source)
 	}
 	query += fmt.Sprintf(` ORDER BY spdx_id, source LIMIT $%d`, len(args)+1)
@@ -376,7 +416,7 @@ func (s *PostgresStore) PutVEXDocument(ctx context.Context, document VEXDocument
 		return VEXDocument{}, err
 	}
 	_, err = s.db.ExecContext(ctx, `INSERT INTO repository_vex_document (id, repository_id, format, body_digest, body_key, author, created_at, created_by) VALUES ($1::uuid,$2::uuid,$3,$4,$5,$6,$7,$8::uuid)`,
-		document.ID, document.RepositoryID, document.Format, document.BodyDigest, document.BodyKey, document.Author, document.CreatedAt, nullString(document.CreatedBy))
+		document.ID, document.RepositoryID, document.Format, document.BodyDigest, document.BodyKey, document.Author, document.CreatedAt, scanNullable(document.CreatedBy))
 	return document, err
 }
 

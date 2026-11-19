@@ -10,12 +10,20 @@ func TestDefaultRegistryMatchesADR(t *testing.T) {
 	if len(registry) != 3 {
 		t.Fatalf("registry = %+v", registry)
 	}
-	want := map[string]time.Duration{"resolver_audit_log": 90 * 24 * time.Hour, "security_audit_log": 730 * 24 * time.Hour, "artifact_scan_history": 180 * 24 * time.Hour}
+	type expectation struct {
+		column    string
+		retention time.Duration
+	}
+	want := map[string]expectation{
+		"resolver_audit_log":    {"occurred_at", 90 * 24 * time.Hour},
+		"security_audit_log":    {"occurred_at", 730 * 24 * time.Hour},
+		"artifact_scan_history": {"scanned_at", 180 * 24 * time.Hour},
+	}
 	for _, spec := range registry {
 		if err := spec.Validate(); err != nil {
 			t.Fatal(err)
 		}
-		if spec.Granularity != Month || spec.Column != map[bool]string{true: "scanned_at", false: "occurred_at"}[spec.Table == "artifact_scan_history"] || spec.Retention != want[spec.Table] {
+		if spec.Granularity != Month || spec.Column != want[spec.Table].column || spec.Retention != want[spec.Table].retention {
 			t.Errorf("unexpected spec %+v", spec)
 		}
 	}

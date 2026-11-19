@@ -82,7 +82,8 @@ CREATE INDEX artifact_vulnerability_generation_idx ON public.artifact_vulnerabil
 CREATE TABLE public.artifact_vulnerability_finding (
     vulnerability_id uuid NOT NULL,
     ordinal integer NOT NULL,
-    vuln_id varchar(128) NOT NULL,
+    -- COLLATE "C" (utf8mb4_bin on MySQL): byte order, so keyset cursors agree with every store.
+    vuln_id varchar(128) COLLATE "C" NOT NULL,
     source varchar(32) NOT NULL DEFAULT '',
     severity varchar(16) NOT NULL,
     severity_rank smallint NOT NULL,
@@ -111,15 +112,16 @@ CREATE INDEX artifact_vulnerability_finding_page_idx ON public.artifact_vulnerab
 CREATE TABLE public.artifact_license (
     repository_id uuid NOT NULL,
     artifact_digest varchar(80) NOT NULL,
-    spdx_id varchar(128) NOT NULL,
-    source varchar(32) NOT NULL,
+    spdx_id varchar(128) COLLATE "C" NOT NULL,
+    source varchar(32) COLLATE "C" NOT NULL,
     confidence numeric NOT NULL DEFAULT 1,
+    CONSTRAINT artifact_license_confidence_check CHECK (confidence >= 0 AND confidence <= 1),
     PRIMARY KEY (repository_id, artifact_digest, spdx_id, source)
 );
 
 -- Append-only and partitioned by month (ADR 0023 section 5): the partition key leads the primary key
 -- because MySQL requires it. internal/partitions keeps the partitions and drops them after
--- NOTARX_SCAN_HISTORY_RETENTION (default 180 days); rows outside every partition land in the DEFAULT one.
+-- NOTARX_SCAN_HISTORY_RETENTION (default 180 days; internal/retention aliases it to the table key); rows outside every partition land in the DEFAULT one.
 CREATE TABLE public.artifact_scan_history (
     id uuid NOT NULL,
     repository_id uuid NOT NULL,

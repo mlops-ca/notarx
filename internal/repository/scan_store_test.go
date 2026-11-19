@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -191,6 +192,91 @@ func testScanStoreContract(t *testing.T, store ScanStore) {
 		}
 		if _, err := store.SwapScanResult(ctx, ScanResult{ID: ids.New(), RepositoryID: repo, ArtifactDigest: artifact, Scanner: "trivy", Status: "weird"}); !errors.Is(err, ErrScanInvalid) {
 			t.Fatalf("bad status err = %v", err)
+		}
+	})
+
+	t.Run("an older scan never replaces a newer result and abandoned findings are listed", func(t *testing.T) {
+		artifact := "sha256:" + ids.New()
+		current := ids.New()
+		if _, err := store.SwapScanResult(ctx, ScanResult{ID: current, RepositoryID: repo, ArtifactDigest: artifact, Scanner: "trivy", Status: ScanStatusClean, ScannedAt: now}); err != nil {
+			t.Fatal(err)
+		}
+		stale := ids.New()
+		insertScanFindings(t, store, stale, 3)
+		swap, err := store.SwapScanResult(ctx, ScanResult{ID: stale, RepositoryID: repo, ArtifactDigest: artifact, Scanner: "trivy", Status: ScanStatusVulnerable, High: 3, ScannedAt: now.Add(-time.Hour)})
+		if err != nil || !swap.Superseded || swap.HistoryAppended {
+			t.Fatalf("stale swap = %+v, %v", swap, err)
+		}
+		if got, err := store.GetScanResult(ctx, repo, artifact); err != nil || got.ID != current || got.Status != ScanStatusClean {
+			t.Fatalf("result = %+v, %v", got, err)
+		}
+		contains := func(cutoff time.Time, id string) bool {
+			t.Helper()
+			listed, err := store.ListAbandonedScanVulnerabilityIDs(ctx, cutoff, 10000)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, candidate := range listed {
+				if candidate == id {
+					return true
+				}
+			}
+			return false
+		}
+		if !contains(time.Now().Add(time.Hour), stale) || contains(time.Now().Add(-time.Hour), stale) {
+			t.Fatal("an unswapped id is abandoned only once it is older than the cutoff")
+		}
+		insertScanFindings(t, store, current, 1)
+		if contains(time.Now().Add(time.Hour), current) {
+			t.Fatal("the current id must never be listed")
+		}
+		for {
+			n, err := store.SweepScanFindings(ctx, stale, 2)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if n == 0 {
+				break
+			}
+		}
+		if contains(time.Now().Add(time.Hour), stale) {
+			t.Fatal("a swept id must not be listed again")
+		}
+	})
+
+	t.Run("values are validated and isolated", func(t *testing.T) {
+		id := ids.New()
+		score := 1.5
+		long := make([]rune, 5000)
+		for i := range long {
+			long[i] = 'é'
+		}
+		if err := store.InsertScanFindings(ctx, []ScanFinding{{VulnerabilityID: id, Ordinal: 0, VulnID: "CVE-1", Severity: "low", Status: ScanFindingAffected, Description: string(long), CVSSScore: &score}}); err != nil {
+			t.Fatalf("a long description is truncated, not refused: %v", err)
+		}
+		page, err := store.ListScanFindings(ctx, id, nil, 10)
+		if err != nil || len(page) != 1 || len([]rune(page[0].Description)) != 4096 {
+			t.Fatalf("page = %+v, %v", page, err)
+		}
+		*page[0].CVSSScore = 99
+		again, _ := store.ListScanFindings(ctx, id, nil, 10)
+		if *again[0].CVSSScore != 1.5 {
+			t.Fatal("a returned finding must not share state with the store")
+		}
+		nan := math.NaN()
+		if err := store.InsertScanFindings(ctx, []ScanFinding{{VulnerabilityID: id, Ordinal: 1, VulnID: "CVE-2", Severity: "low", Status: ScanFindingAffected, EPSS: &nan}}); !errors.Is(err, ErrScanInvalid) {
+			t.Fatalf("NaN epss err = %v", err)
+		}
+		if err := store.ReplaceScanLicenses(ctx, repo, "sha256:x", []ScanLicense{{SPDXID: "MIT", Source: "sbom", Confidence: nan}}); !errors.Is(err, ErrScanInvalid) {
+			t.Fatalf("NaN confidence err = %v", err)
+		}
+		if err := store.ReplaceScanLicenses(ctx, repo, "sha256:x", []ScanLicense{{SPDXID: "MIT", Source: "sbom", Confidence: 2}}); !errors.Is(err, ErrScanInvalid) {
+			t.Fatalf("confidence above 1 err = %v", err)
+		}
+		for _, body := range []string{"{not json", `{"a":"\u0000"}`} {
+			if _, err := store.PutScanSBOM(ctx, ScanSBOM{RepositoryID: repo, ArtifactDigest: digest, Kind: ScanSBOMKindSPDX, Source: ScanSBOMSourceGenerated, BodyDigest: "d", Body: []byte(body)}); !errors.Is(err, ErrScanInvalid) {
+				t.Fatalf("body %q accepted: %v", body, err)
+			}
 		}
 	})
 

@@ -1,11 +1,15 @@
 package repository
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/mlops-ca/notarx/internal/ids"
 )
@@ -48,7 +52,10 @@ const (
 const MaxScanFindingBatch = 1000
 
 // ScanSBOM is one SBOM body of an artifact. A body above NOTARX_INLINE_MAX_BYTES lives in the object
-// store at BodyKey and Body is empty; a small one is kept inline.
+// store at BodyKey and Body is empty; a small one is kept inline. BodyDigest and BodySize always describe
+// the document as received (the object stored at BodyKey); an inline Body is held as jsonb (JSON on
+// MySQL, ADR 0030 section 2), so it is the same document but not necessarily the same bytes. Verify or
+// re-serve the exact bytes through BodyKey.
 type ScanSBOM struct {
 	ID               string
 	RepositoryID     string
@@ -184,6 +191,9 @@ type ScanSwap struct {
 	PreviousID string
 	// HistoryAppended reports whether a history row was written.
 	HistoryAppended bool
+	// Superseded reports that the current result is newer than the one offered (an older, slower scan
+	// finished last); nothing was changed and the offered findings are left to the abandoned-id sweep.
+	Superseded bool
 }
 
 // ScanStore persists the SBOM and vulnerability data of ADR 0030 section 2.
@@ -203,6 +213,11 @@ type ScanStore interface {
 	GetScanResult(ctx context.Context, repositoryID, artifactDigest string) (ScanResult, error)
 	// ListScanFindings pages the findings of a vulnerability id, worst severity first, after cursor.
 	ListScanFindings(ctx context.Context, vulnerabilityID string, after *ScanFindingCursor, limit int) ([]ScanFinding, error)
+	// ListAbandonedScanVulnerabilityIDs returns up to limit vulnerability ids that hold findings, are not the
+	// current result of any artifact and were created before olderThan (ids are UUIDv7, so their age is in
+	// the id): findings of replaced results whose sweep did not finish, and of scans that never reached
+	// SwapScanResult. Feed each id to SweepScanFindings.
+	ListAbandonedScanVulnerabilityIDs(ctx context.Context, olderThan time.Time, limit int) ([]string, error)
 	// SweepScanFindings deletes at most limit findings of a replaced vulnerability id and returns how
 	// many it deleted; callers repeat until it returns 0. It refuses the id of a current result.
 	SweepScanFindings(ctx context.Context, vulnerabilityID string, limit int) (int, error)
@@ -243,14 +258,55 @@ func scanOptionalUUID(name, value string) (string, error) {
 	return scanUUID(name, value)
 }
 
+// scanBounded counts characters, as the varchar limits of the schema do.
 func scanBounded(name, value string, maximum int, required bool) error {
 	if required && value == "" {
 		return scanInvalid("%s is required", name)
 	}
-	if len(value) > maximum {
-		return scanInvalid("%s is longer than %d bytes", name, maximum)
+	if utf8.RuneCountInString(value) > maximum {
+		return scanInvalid("%s is longer than %d characters", name, maximum)
 	}
 	return nil
+}
+
+func scanFinite(name string, values ...*float64) error {
+	for _, value := range values {
+		if value != nil && (math.IsNaN(*value) || math.IsInf(*value, 0)) {
+			return scanInvalid("%s must be a finite number", name)
+		}
+	}
+	return nil
+}
+
+// truncateRunes cuts value to at most maximum characters.
+func truncateRunes(value string, maximum int) string {
+	if utf8.RuneCountInString(value) <= maximum {
+		return value
+	}
+	return string([]rune(value)[:maximum])
+}
+
+// scanVulnerabilityIDFloor is the smallest UUID whose UUIDv7 timestamp is t: every id created before t sorts
+// below it as a uuid and as its canonical string.
+func scanVulnerabilityIDFloor(t time.Time) string {
+	ms := uint64(max(t.UnixMilli(), 0))
+	return fmt.Sprintf("%08x-%04x-0000-0000-000000000000", ms>>16, ms&0xffff)
+}
+
+func cloneScanFinding(f ScanFinding) ScanFinding {
+	if f.CVSSScore != nil {
+		v := *f.CVSSScore
+		f.CVSSScore = &v
+	}
+	if f.EPSS != nil {
+		v := *f.EPSS
+		f.EPSS = &v
+	}
+	if f.KEV != nil {
+		v := *f.KEV
+		f.KEV = &v
+	}
+	return f
 }
 
 func scanOneOf(name, value string, allowed ...string) error {
@@ -303,6 +359,9 @@ func normalizeScanSBOM(s ScanSBOM) (ScanSBOM, error) {
 	if len(s.Body) == 0 && s.BodyKey == "" {
 		return s, scanInvalid("an SBOM needs an inline body or an object store key")
 	}
+	if len(s.Body) > 0 && (!json.Valid(s.Body) || bytes.Contains(s.Body, []byte(`\u0000`))) {
+		return s, scanInvalid("an inline SBOM body must be valid JSON without NUL escapes")
+	}
 	if s.ID == "" {
 		s.ID = ids.New()
 	} else if s.ID, err = scanUUID("id", s.ID); err != nil {
@@ -350,10 +409,11 @@ func normalizeScanFinding(f ScanFinding) (ScanFinding, error) {
 		return f, scanInvalid("severity %q is not known", f.Severity)
 	}
 	f.SeverityRank = rank
+	f.Description = truncateRunes(f.Description, 4096)
 	for _, check := range []error{
+		scanFinite("cvss score and epss", f.CVSSScore, f.EPSS),
 		scanBounded("vuln id", f.VulnID, 128, true),
 		scanBounded("source", f.Source, 32, false),
-		scanBounded("description", f.Description, 4096, false),
 		scanBounded("vex status", f.VEXStatus, 32, false),
 		scanOneOf("status", f.Status, ScanFindingAffected, ScanFindingSuppressed, ScanFindingFixed),
 		scanCounts(f.Ordinal),
@@ -382,7 +442,10 @@ func normalizeScanLicenses(repositoryID, artifactDigest string, licenses []ScanL
 	unique := make([]ScanLicense, 0, len(licenses))
 	for _, l := range licenses {
 		if err := errors.Join(scanBounded("spdx id", l.SPDXID, 128, true), scanBounded("source", l.Source, 32, true)); err != nil {
-			return "", nil, errors.Join(ErrScanInvalid, err)
+			return "", nil, err
+		}
+		if math.IsNaN(l.Confidence) || l.Confidence < 0 || l.Confidence > 1 {
+			return "", nil, scanInvalid("confidence must be between 0 and 1")
 		}
 		key := [2]string{l.SPDXID, l.Source}
 		if seen[key] {

@@ -107,6 +107,7 @@ func DefaultRegistry() []Entry {
 	return []Entry{
 		{Table: "resolver_audit_log", TimeColumn: "occurred_at", Terminal: "TRUE", KeyColumns: []string{"id"}, Standard: 90 * day, FreeTier: 7 * day, PartitionedOnPostgres: true},
 		{Table: "security_audit_log", TimeColumn: "occurred_at", Terminal: "TRUE", KeyColumns: []string{"id"}, Standard: 730 * day, FreeTier: 90 * day, PartitionedOnPostgres: true},
+		{Table: "artifact_scan_history", TimeColumn: "scanned_at", Terminal: "TRUE", KeyColumns: []string{"scanned_at", "id"}, Standard: 180 * day, FreeTier: 180 * day, PartitionedOnPostgres: true},
 		{Table: "repository_request_rollup", TimeColumn: "bucket_start", Terminal: "TRUE", KeyColumns: []string{"repository_id", "bucket_start", "outcome"}, Standard: 400 * day, FreeTier: 400 * day},
 		{Table: "webhook_deliveries", Label: "webhook_deliveries_succeeded", TimeColumn: "updated_at", Terminal: "state = 'succeeded'", KeyColumns: []string{"id"}, Standard: 14 * day, FreeTier: 3 * day},
 		{Table: "webhook_deliveries", Label: "webhook_deliveries_dead", TimeColumn: "updated_at", Terminal: "state = 'dead'", KeyColumns: []string{"id"}, Standard: 90 * day, FreeTier: 30 * day},
