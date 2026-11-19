@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,21 +10,21 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/scanning"
 )
 
 // ADR 0023 section 1: when the audit of a management mutation cannot be
 // written the request fails instead of reporting success.
 func TestManagementMutationFailsWhenAuditCannotBeWritten(t *testing.T) {
 	store := failingAuditStore{repository.NewMemoryStore()}
-	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
+	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{ArtifactScanner: scanning.ScannerFunc(func(context.Context, scanning.Artifact) (scanning.Report, error) { return scanning.Report{}, nil }), ArtifactScannerFormats: []repository.Format{repository.FormatRaw}}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
 	repo, err := store.CreateHostedRepository(t.Context(), repository.HostedRepository{ID: uuid.NewString(), Name: "fail-closed", Format: repository.FormatRaw, Type: repository.RepositoryTypeHosted, State: repository.RepositoryActive})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Quarantine read policy is a legacy handler that still audits after the change; the
-	// migrated handlers are covered by the rollback tests.
-	request := httptest.NewRequest(http.MethodPut, "/api/v2/repositories/"+repo.ID+"/quarantine-read-policy", strings.NewReader(`{"version":"1","enabled":true}`))
-	request.Header.Set("If-Match", "1")
+	// A scan reconcile with no work changes nothing, so it is audited after the request through
+	// recordMutationAudit; the migrated handlers are covered by the rollback tests.
+	request := httptest.NewRequest(http.MethodPost, "/api/v2/repositories/"+repo.ID+"/artifact-scans:reconcile", nil)
 	authorize(request, "admin-secret")
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
