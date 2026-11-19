@@ -1,6 +1,7 @@
 package secrets
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -74,6 +75,28 @@ func (r Ring) byID(id string) (ringKey, bool) {
 	return ringKey{}, false
 }
 
+// ValidateRing checks that the configured ring is complete and well formed,
+// without sealing or opening anything.
+func ValidateRing() error {
+	_, err := loadRing()
+	return err
+}
+
+// invalidKeyError names the variable that holds the bad key.
+type invalidKeyError struct{ env, detail string }
+
+func (e *invalidKeyError) Error() string        { return e.env + " is invalid: " + e.detail }
+func (e *invalidKeyError) Is(target error) bool { return target == ErrInvalidKey }
+
+var (
+	ringMu     sync.Mutex
+	ringInput  string
+	ringCached Ring
+)
+
+// loadRing returns the ring for the source's current key material. Parsing and
+// key-id hashing are cached per distinct key material, because Open
+// runs on request paths.
 func loadRing() (Ring, error) {
 	sourceMu.RLock()
 	src := source
@@ -82,16 +105,31 @@ func loadRing() (Ring, error) {
 	if err != nil {
 		return Ring{}, err
 	}
-	material, err := parseKey(current)
+	input := current + "\x00" + strings.Join(previous, "\x00")
+	ringMu.Lock()
+	defer ringMu.Unlock()
+	if ringInput == input && len(ringCached.keys) > 0 {
+		return ringCached, nil
+	}
+	ring, err := buildRing(current, previous)
 	if err != nil {
 		return Ring{}, err
 	}
+	ringInput, ringCached = input, ring
+	return ring, nil
+}
+
+func buildRing(current string, previous []string) (Ring, error) {
+	material, err := parseKey(current)
+	if err != nil {
+		return Ring{}, &invalidKeyError{env: KeyEnv, detail: err.Error()}
+	}
 	ring := Ring{current: ringKey{id: keyID(material), material: material}}
 	ring.keys = []ringKey{ring.current}
-	for _, raw := range previous {
+	for index, raw := range previous {
 		material, err := parseKey(raw)
 		if err != nil {
-			return Ring{}, err
+			return Ring{}, &invalidKeyError{env: KeyPreviousEnv, detail: fmt.Sprintf("entry %d: %s", index+1, err)}
 		}
 		key := ringKey{id: keyID(material), material: material}
 		if _, dup := ring.byID(key.id); dup {

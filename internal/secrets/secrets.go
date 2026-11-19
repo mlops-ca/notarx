@@ -200,7 +200,7 @@ func parseKey(raw string) ([]byte, error) {
 	if len(raw) == 32 {
 		return []byte(raw), nil
 	}
-	return nil, fmt.Errorf("%w: must decode to 32 bytes (hex, base64, or raw)", ErrInvalidKey)
+	return nil, errors.New("must decode to 32 bytes (hex, base64, or raw)")
 }
 
 // keyID derives a stable, non-secret identifier from the key material. It is a

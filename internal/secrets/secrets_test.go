@@ -215,6 +215,35 @@ func TestSealRejectsInvalidEncryptionKey(t *testing.T) {
 	}
 }
 
+func TestInvalidPreviousKeyNamesItsVariable(t *testing.T) {
+	t.Setenv(KeyEnv, keyA)
+	t.Setenv(KeyPreviousEnv, keyB+",bad")
+	err := ValidateRing()
+	if !errors.Is(err, ErrInvalidKey) || !strings.Contains(err.Error(), KeyPreviousEnv+" is invalid: entry 2") {
+		t.Fatalf("err=%v", err)
+	}
+	t.Setenv(KeyPreviousEnv, "")
+	if err := ValidateRing(); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(KeyEnv, "short")
+	if err := ValidateRing(); err == nil || !strings.HasPrefix(err.Error(), KeyEnv+" is invalid") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestRingCacheFollowsKeyMaterial(t *testing.T) {
+	t.Setenv(KeyEnv, keyA)
+	first, _ := Seal("p", "v")
+	t.Setenv(KeyEnv, keyB)
+	second, _ := Seal("p", "v")
+	if kid1, _, _ := splitSealed(first); kid1 == "" {
+		t.Fatal("missing kid")
+	} else if kid2, _, _ := splitSealed(second); kid1 == kid2 {
+		t.Fatal("a changed key must not reuse the cached ring")
+	}
+}
+
 func TestKeyEncodingsAndPreviousList(t *testing.T) {
 	hexKey := strings.Repeat("ab", 32)
 	b64Key := base64.StdEncoding.EncodeToString([]byte(keyB))

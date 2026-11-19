@@ -308,7 +308,8 @@ not settings and are ignored.
 | --- | --- |
 | `NOTARX_PUBLIC_URL` | Externally visible base URL of this instance, shared by every feature that must emit absolute URLs. An absolute `https://` URL with no trailing slash, query or fragment; `http://` is accepted only for a loopback host. Empty is allowed: features that need it are disabled or refuse to start. An invalid value stops startup. Code reads it through `config.Config.PublicURL()`. |
 | `NOTARX_INSTANCE_ID` | Stable identifier of this node (default: derived from the host name). |
-| `NOTARX_SETTINGS_ENCRYPTION_KEY` | Key for encrypted stored settings, read through `internal/secrets` only. |
+| `NOTARX_SETTINGS_ENCRYPTION_KEY` | Current key for encrypted stored settings, read through `internal/secrets` only. |
+| `NOTARX_SETTINGS_ENCRYPTION_KEY_PREVIOUS` | Retired keys (comma-separated hex or base64) that stay readable until `notarxctl secrets reseal` has rewritten every value; see `docs/cli.md`. |
 
 There is no second public-URL key and no `NOTARX_ENV`.
 

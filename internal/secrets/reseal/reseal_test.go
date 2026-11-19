@@ -2,6 +2,7 @@ package reseal
 
 import (
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -10,9 +11,17 @@ import (
 // TestTargetsCoverSealedColumns fails when the baseline schema gains a column
 // that looks sealed but is not resealed, which would block dropping a key.
 func TestTargetsCoverSealedColumns(t *testing.T) {
-	baseline, err := os.ReadFile("../../../migrations/000001_baseline.sql")
-	if err != nil {
-		t.Fatal(err)
+	files, err := filepath.Glob("../../../migrations/*.sql")
+	if err != nil || len(files) == 0 {
+		t.Fatalf("migrations: %v %v", files, err)
+	}
+	var baseline []byte
+	for _, name := range files {
+		body, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		baseline = append(baseline, body...)
 	}
 	sealedColumn := regexp.MustCompile(`(?m)^\s+(\w*ciphertext|client_secret)\s+text`)
 	found := sealedColumn.FindAllStringSubmatch(string(baseline), -1)

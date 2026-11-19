@@ -3,6 +3,7 @@
 x-email-environment: &email-environment
   NOTARX_EMAIL_CONFIG_FILE: /etc/notarx-email/relay.json
   NOTARX_SETTINGS_ENCRYPTION_KEY: ${NOTARX_SETTINGS_ENCRYPTION_KEY:?set an independent settings encryption key}
+  NOTARX_SETTINGS_ENCRYPTION_KEY_PREVIOUS: ${NOTARX_SETTINGS_ENCRYPTION_KEY_PREVIOUS:-}
 
 x-email-volumes: &email-volumes
   - type: bind

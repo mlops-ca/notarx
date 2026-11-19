@@ -16,140 +16,171 @@ import (
 type Target struct {
 	// Name is the human label reported for the column, table.column.
 	Name string
-	// Select returns rows of (row key, purpose key, sealed value). Empty values
-	// are skipped. It must lock the rows (FOR UPDATE).
+	// Select returns rows of (row key, purpose key, sealed value) for every
+	// non-empty value. It takes no locks.
 	Select string
-	// Update takes (new value, row key) and rewrites one sealed value.
+	// Update takes (new value, row key, old value) and is a compare-and-set:
+	// it matches only while the stored value is still the one that was read, so
+	// a concurrent management write is never overwritten. Where the table has
+	// an optimistic-concurrency version it bumps it, so a writer that read the
+	// old ciphertext fails its If-Match instead of writing it back.
 	Update string
 	// Purpose derives the AAD purpose from the purpose key.
 	Purpose func(purposeKey string) string
 }
 
 // Targets lists every sealed column. A new sealed column must be added here;
-// TestTargetsCoverSealedColumns fails when a baseline column named like a
-// ciphertext is missing.
+// TestTargetsCoverSealedColumns fails when a migration declares a column named
+// like a ciphertext that is missing.
 func Targets() []Target {
 	return []Target{
 		{
 			Name:    "email_targets.recipient_ciphertext",
-			Select:  "SELECT id::text, id::text, recipient_ciphertext FROM email_targets WHERE recipient_ciphertext <> '' ORDER BY id FOR UPDATE",
-			Update:  "UPDATE email_targets SET recipient_ciphertext = $1 WHERE id = $2::uuid",
+			Select:  "SELECT id::text, id::text, recipient_ciphertext FROM email_targets WHERE recipient_ciphertext <> '' ORDER BY id",
+			Update:  "UPDATE email_targets SET recipient_ciphertext = $1, version = version + 1 WHERE id = $2::uuid AND recipient_ciphertext = $3",
 			Purpose: func(id string) string { return "email-target:" + id },
 		},
 		{
+			// Delivery rows snapshot the target ciphertext; their version is the
+			// worker's lease state and must not change.
 			Name:    "email_test_deliveries.recipient_ciphertext",
-			Select:  "SELECT id::text, target_id::text, recipient_ciphertext FROM email_test_deliveries WHERE recipient_ciphertext <> '' ORDER BY id FOR UPDATE",
-			Update:  "UPDATE email_test_deliveries SET recipient_ciphertext = $1 WHERE id = $2::uuid",
+			Select:  "SELECT id::text, target_id::text, recipient_ciphertext FROM email_test_deliveries WHERE recipient_ciphertext <> '' ORDER BY id",
+			Update:  "UPDATE email_test_deliveries SET recipient_ciphertext = $1 WHERE id = $2::uuid AND recipient_ciphertext = $3",
 			Purpose: func(targetID string) string { return "email-target:" + targetID },
 		},
 		{
 			Name:    "nexus_migration_sources.credential_ciphertext",
-			Select:  "SELECT id::text, id::text, credential_ciphertext FROM nexus_migration_sources WHERE credential_ciphertext <> '' ORDER BY id FOR UPDATE",
-			Update:  "UPDATE nexus_migration_sources SET credential_ciphertext = $1 WHERE id = $2::uuid",
+			Select:  "SELECT id::text, id::text, credential_ciphertext FROM nexus_migration_sources WHERE credential_ciphertext <> '' ORDER BY id",
+			Update:  "UPDATE nexus_migration_sources SET credential_ciphertext = $1, version = version + 1 WHERE id = $2::uuid AND credential_ciphertext = $3",
 			Purpose: func(id string) string { return "nexus-source:" + id },
 		},
 		{
 			Name:    "oidc_settings.client_secret",
-			Select:  "SELECT singleton::text, singleton::text, client_secret FROM oidc_settings WHERE client_secret <> '' FOR UPDATE",
-			Update:  "UPDATE oidc_settings SET client_secret = $1 WHERE singleton = $2::text::boolean",
+			Select:  "SELECT singleton::text, singleton::text, client_secret FROM oidc_settings WHERE client_secret <> ''",
+			Update:  "UPDATE oidc_settings SET client_secret = $1, version = version + 1 WHERE singleton = $2::text::boolean AND client_secret = $3",
 			Purpose: func(string) string { return "oidc.client-secret" },
 		},
 		{
 			Name:    "webhook_subscriptions.secret_ciphertext",
-			Select:  "SELECT id::text, id::text, secret_ciphertext FROM webhook_subscriptions WHERE secret_ciphertext <> '' ORDER BY id FOR UPDATE",
-			Update:  "UPDATE webhook_subscriptions SET secret_ciphertext = $1 WHERE id = $2::uuid",
+			Select:  "SELECT id::text, id::text, secret_ciphertext FROM webhook_subscriptions WHERE secret_ciphertext <> '' ORDER BY id",
+			Update:  "UPDATE webhook_subscriptions SET secret_ciphertext = $1, version = version + 1 WHERE id = $2::uuid AND secret_ciphertext = $3",
 			Purpose: func(id string) string { return "webhook-subscription:" + id },
 		},
 		{
 			Name:    "hosted_repositories.upstream_auth.secret",
-			Select:  "SELECT id::text, id::text, upstream_auth->>'secret' FROM hosted_repositories WHERE COALESCE(upstream_auth->>'secret', '') <> '' ORDER BY id FOR UPDATE",
-			Update:  "UPDATE hosted_repositories SET upstream_auth = jsonb_set(upstream_auth, '{secret}', to_jsonb($1::text)) WHERE id = $2::uuid",
+			Select:  "SELECT id::text, id::text, upstream_auth->>'secret' FROM hosted_repositories WHERE COALESCE(upstream_auth->>'secret', '') <> '' ORDER BY id",
+			Update:  "UPDATE hosted_repositories SET upstream_auth = jsonb_set(upstream_auth, '{secret}', to_jsonb($1::text)), version = version + 1 WHERE id = $2::uuid AND upstream_auth->>'secret' = $3",
 			Purpose: func(string) string { return "repository-upstream-auth" },
 		},
 	}
 }
 
-// Result counts one target's rows.
+// Result counts one target's rows. Failures names rows that could not be
+// resealed (never their contents).
 type Result struct {
-	Target    string `json:"target"`
-	Scanned   int    `json:"scanned"`
-	Resealed  int    `json:"resealed"`
-	Unchanged int    `json:"unchanged"`
+	Target    string   `json:"target"`
+	Scanned   int      `json:"scanned"`
+	Resealed  int      `json:"resealed"`
+	Unchanged int      `json:"unchanged"`
+	Failed    int      `json:"failed"`
+	Failures  []string `json:"failures,omitempty"`
 }
 
-// Run reseals every target. Each target is one transaction that holds its rows
-// locked, so a concurrent writer waits instead of being overwritten. With
-// dryRun nothing is committed; the counts show what a real run would change.
-// A value that cannot be opened with the ring aborts that target and the run,
-// naming the row but never its contents. The operation is idempotent: rerun it
-// after fixing the ring.
+// ErrRowsFailed reports that some values could not be resealed.
+var ErrRowsFailed = errors.New("some sealed values could not be resealed")
+
+// maxPasses bounds how often a target is re-read after concurrent writers made
+// compare-and-set updates miss.
+const maxPasses = 5
+
+// Run reseals every target and returns one Result per target. Each row is its
+// own compare-and-set statement, so no lock outlives a statement and a
+// concurrent management write simply wins and is picked up on the next pass.
+// With dryRun nothing is written; Resealed counts what a real run would
+// change. A value that cannot be opened with the ring is recorded under
+// Failures and skipped; every other row is still processed, and Run returns
+// ErrRowsFailed at the end. Reseal is idempotent: rerun it after fixing the ring.
 func Run(ctx context.Context, db *sql.DB, dryRun bool) ([]Result, error) {
 	results := []Result{}
+	var runErr error
 	for _, target := range Targets() {
 		result, err := runTarget(ctx, db, target, dryRun)
+		results = append(results, result)
 		if err != nil {
 			return results, fmt.Errorf("%s: %w", target.Name, err)
 		}
-		results = append(results, result)
+		if result.Failed > 0 {
+			runErr = ErrRowsFailed
+		}
 	}
-	return results, nil
+	return results, runErr
 }
 
 type row struct{ key, purposeKey, value string }
 
-func runTarget(ctx context.Context, db *sql.DB, target Target, dryRun bool) (result Result, err error) {
-	result.Target = target.Name
-	tx, err := db.BeginTx(ctx, nil)
+func readRows(ctx context.Context, db *sql.DB, query string) ([]row, error) {
+	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
-		return result, err
+		return nil, err
 	}
-	defer func() {
-		if err != nil || dryRun {
-			if rollbackErr := tx.Rollback(); rollbackErr != nil && !errors.Is(rollbackErr, sql.ErrTxDone) && err == nil {
-				err = rollbackErr
-			}
-		}
-	}()
-	rows, err := tx.QueryContext(ctx, target.Select)
-	if err != nil {
-		return result, err
-	}
-	var pending []row
+	defer func() { _ = rows.Close() }()
+	var out []row
 	for rows.Next() {
 		var r row
 		if err := rows.Scan(&r.key, &r.purposeKey, &r.value); err != nil {
-			_ = rows.Close()
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+func runTarget(ctx context.Context, db *sql.DB, target Target, dryRun bool) (Result, error) {
+	result := Result{Target: target.Name}
+	settled := map[string]bool{} // rows already counted in this result
+	for pass := 1; ; pass++ {
+		rows, err := readRows(ctx, db, target.Select)
+		if err != nil {
 			return result, err
 		}
-		pending = append(pending, r)
-	}
-	if err := rows.Err(); err != nil {
-		_ = rows.Close()
-		return result, err
-	}
-	if err := rows.Close(); err != nil {
-		return result, err
-	}
-	for _, r := range pending {
-		result.Scanned++
-		sealed, changed, err := secrets.Reseal(target.Purpose(r.purposeKey), r.value)
-		if err != nil {
-			return result, fmt.Errorf("row %s: %w", r.key, err)
+		retry := false
+		for _, r := range rows {
+			if settled[r.key] {
+				continue
+			}
+			sealed, changed, err := secrets.Reseal(target.Purpose(r.purposeKey), r.value)
+			switch {
+			case err != nil:
+				result.Failed++
+				result.Failures = append(result.Failures, fmt.Sprintf("row %s: %v", r.key, err))
+			case !changed:
+				result.Unchanged++
+			case dryRun:
+				result.Resealed++
+			default:
+				done, err := db.ExecContext(ctx, target.Update, sealed, r.key, r.value)
+				if err != nil {
+					return result, fmt.Errorf("row %s: %w", r.key, err)
+				}
+				n, err := done.RowsAffected()
+				if err != nil {
+					return result, err
+				}
+				if n == 0 {
+					// The row changed after it was read; look at it again.
+					retry = true
+					continue
+				}
+				result.Resealed++
+			}
+			settled[r.key] = true
+			result.Scanned++
 		}
-		if !changed {
-			result.Unchanged++
-			continue
+		if !retry {
+			return result, nil
 		}
-		result.Resealed++
-		if dryRun {
-			continue
-		}
-		if _, err := tx.ExecContext(ctx, target.Update, sealed, r.key); err != nil {
-			return result, fmt.Errorf("row %s: %w", r.key, err)
+		if pass >= maxPasses {
+			return result, errors.New("rows keep changing concurrently; retry when writes quiesce")
 		}
 	}
-	if dryRun {
-		return result, nil
-	}
-	return result, tx.Commit()
 }

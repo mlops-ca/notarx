@@ -35,7 +35,7 @@ func secretsResealCommand() command {
 			Mutating:     true,
 			MinimumRole:  "none",
 			OutputSchema: "ResealResult",
-			DryRun:       "client-plan",
+			DryRun:       "local-count",
 		},
 		run: func(ctx context.Context, env *commandContext) error {
 			if !env.globals.dryRun && !env.globals.yes {
@@ -45,7 +45,7 @@ func secretsResealCommand() command {
 			if databaseURL == "" {
 				return &UsageError{Message: secretsDatabaseEnv + " is not set", Hint: secretsResealDBHint}
 			}
-			if _, _, err := (secrets.EnvKeySource{}).Keys(); err != nil {
+			if err := secrets.ValidateRing(); err != nil {
 				return &UsageError{Message: err.Error(), Hint: "export " + secrets.KeyEnv + " (and " + secrets.KeyPreviousEnv + " while retired keys remain)"}
 			}
 			db, err := database.OpenPostgres(databaseURL, database.DefaultPoolConfig())
@@ -61,12 +61,19 @@ func secretsResealCommand() command {
 			payload := newListPayload(results)
 			meta := &envelopeMeta{Pagination: &paginationMeta{Mode: "none"}}
 			if err := env.render(payload, meta, func(w io.Writer) error {
-				rows := [][]string{{"COLUMN", "SCANNED", "RESEALED", "UNCHANGED"}}
+				rows := [][]string{{"COLUMN", "SCANNED", "RESEALED", "UNCHANGED", "FAILED"}}
 				for _, result := range results {
-					rows = append(rows, []string{result.Target, strconv.Itoa(result.Scanned), strconv.Itoa(result.Resealed), strconv.Itoa(result.Unchanged)})
+					rows = append(rows, []string{result.Target, strconv.Itoa(result.Scanned), strconv.Itoa(result.Resealed), strconv.Itoa(result.Unchanged), strconv.Itoa(result.Failed)})
 				}
 				if err := writeColumns(w, rows); err != nil {
 					return err
+				}
+				for _, result := range results {
+					for _, failure := range result.Failures {
+						if _, err := fmt.Fprintf(w, "%s %s\n", result.Target, failure); err != nil {
+							return err
+						}
+					}
 				}
 				if env.globals.dryRun {
 					_, err := fmt.Fprintln(w, "dry run: nothing was written")

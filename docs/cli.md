@@ -409,31 +409,39 @@ the process exits, and contention fails after ten seconds so callers can retry.
 A lax existing file is refused with a `chmod 600` hint. Profile and login
 output strips URL userinfo, query parameters, and fragments.
 
+The Windows lock implementation is compile-checked, but private profile
+persistence is not supported by the current POSIX permission validation:
+Windows file modes do not establish the required 0600 protection. Use file-less
+`--server`/`--token` or `NOTARXCTL_SERVER`/`NOTARXCTL_TOKEN` there; Windows profile runtime
+acceptance remains incomplete and is not claimed by this batch.
+
 ### `notarxctl secrets reseal`
 
 Rotates the settings encryption key. Sealed values (OIDC client secret, webhook
 signing secrets, email recipients, upstream credentials, Nexus migration
 credentials) are stored as `v1:<kid>:<base64>`, where `kid` names the ring key
 that sealed them; values from older releases (plain base64) stay readable.
+The new format is one-way: a release older than the key-ring cannot read a
+`v1:` value, so finish upgrading every node before the first write, and take
+a backup before upgrading if a rollback must stay possible.
 
 1. Set the new key as `NOTARX_SETTINGS_ENCRYPTION_KEY` and move the old one to
-   `NOTARX_SETTINGS_ENCRYPTION_KEY_PREVIOUS` (comma-separated when several
-   remain), then restart the Gateway. New writes use the new key; old values
-   still open.
+   `NOTARX_SETTINGS_ENCRYPTION_KEY_PREVIOUS` (comma-separated hex or base64
+   keys when several remain), then restart the Gateway. New writes use the new
+   key; old values still open.
 2. Run `notarxctl secrets reseal --yes` with the same two variables and
    `NOTARX_DATABASE_URL` exported. It connects to PostgreSQL directly (the
    management API never sees the keys), rewrites every sealed column with the
-   current key, and prints the rows scanned, resealed and unchanged.
-   `--dry-run` counts without writing. It is idempotent; if a value cannot be
-   opened the command names the row (never its contents) and fails.
-3. Remove the retired key from `NOTARX_SETTINGS_ENCRYPTION_KEY_PREVIOUS` and
-   restart.
-
-The Windows lock implementation is compile-checked, but private profile
-persistence is not supported by the current POSIX permission validation:
-Windows file modes do not establish the required 0600 protection. Use file-less
-`--server`/`--token` or `NOTARXCTL_SERVER`/`NOTARXCTL_TOKEN` there; Windows profile runtime
-acceptance remains incomplete and is not claimed by this batch.
+   current key, and prints the rows scanned, resealed, unchanged and failed.
+   Each rewrite is a compare-and-set that also bumps the row `version`, so a
+   concurrent management update is never overwritten and never writes an old
+   ciphertext back. `--dry-run` counts without writing. A value that cannot
+   be opened is reported by row (never its contents), the other rows are still
+   resealed, and the command exits non-zero. Reseal is idempotent.
+3. Run `notarxctl secrets reseal --dry-run` again and confirm `resealed` is 0
+   and `failed` is 0 in every row. Only then remove the retired key from
+   `NOTARX_SETTINGS_ENCRYPTION_KEY_PREVIOUS` and restart. A row that still
+   fails was sealed with a key that is lost; delete or re-enter that setting.
 
 ### `notarxctl repo`
 
