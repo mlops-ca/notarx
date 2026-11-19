@@ -398,4 +398,3 @@ func (s *MemoryStore) RevokeUserSessions(ctx context.Context, id, expectedVersio
 func timePointer(value time.Time) *time.Time {
 	return &value
 }
-

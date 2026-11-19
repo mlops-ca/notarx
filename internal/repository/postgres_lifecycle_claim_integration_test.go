@@ -74,39 +74,51 @@ func (f *claimFixture) running(repositoryID string) int {
 	return count
 }
 
-func TestPostgresLifecycleClaimCandidateQueryDoesNotSortThePendingSet(t *testing.T) {
+func TestPostgresLifecycleClaimCandidateQueriesDoNotSortThePendingSet(t *testing.T) {
 	store := openClaimStore(t)
-	tx, err := store.db.BeginTx(context.Background(), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	// Discourage the alternatives to the actionable partial index so the plan shows what the index can serve.
-	for _, setting := range []string{"enable_seqscan", "enable_bitmapscan"} {
-		if _, err = tx.Exec(`SET LOCAL ` + setting + ` = off`); err != nil {
-			t.Fatal(err)
-		}
-	}
-	var raw []byte
-	kinds := []string{string(LifecycleJobReclaim)}
-	if err = tx.QueryRow(`EXPLAIN (FORMAT JSON) `+claimLifecycleCandidatesQuery, kinds, "", []string{}, 10).Scan(&raw); err != nil {
-		t.Fatal(err)
-	}
-	var plans []struct {
-		Plan explainNode `json:"Plan"`
-	}
-	if err = json.Unmarshal(raw, &plans); err != nil || len(plans) != 1 {
-		t.Fatalf("explain output: %s %v", raw, err)
-	}
-	nodes := map[string]bool{}
-	plans[0].Plan.walk(func(n explainNode) { nodes[n.NodeType] = true })
-	for _, forbidden := range []string{"Sort", "Unique", "WindowAgg", "HashAggregate", "GroupAggregate"} {
-		if nodes[forbidden] {
-			t.Fatalf("claim candidate plan contains %s: %s", forbidden, raw)
-		}
-	}
-	if !strings.Contains(string(raw), "lifecycle_jobs_actionable_idx") {
-		t.Fatalf("claim candidate plan does not use the actionable partial index: %s", raw)
+	for _, tc := range []struct {
+		name  string
+		query string
+		args  []any
+		index string
+	}{
+		{"one kind", claimLifecycleCandidatesByKindQuery, []any{string(LifecycleJobReclaim), "", []string{}, 10}, "lifecycle_jobs_kind_actionable_idx"},
+		{"all kinds", claimLifecycleCandidatesAnyKindQuery, []any{"", []string{}, 10}, "lifecycle_jobs_actionable_idx"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tx, err := store.db.BeginTx(context.Background(), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = tx.Rollback() }()
+			// Discourage the alternatives to an ordered index scan so the plan shows what the indexes can serve,
+			// independent of how many rows other tests left behind.
+			for _, setting := range []string{"enable_seqscan", "enable_bitmapscan", "enable_sort", "enable_incrementalsort"} {
+				if _, err = tx.Exec(`SET LOCAL ` + setting + ` = off`); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var raw []byte
+			if err = tx.QueryRow(`EXPLAIN (FORMAT JSON) `+tc.query, tc.args...).Scan(&raw); err != nil {
+				t.Fatal(err)
+			}
+			var plans []struct {
+				Plan explainNode `json:"Plan"`
+			}
+			if err = json.Unmarshal(raw, &plans); err != nil || len(plans) != 1 {
+				t.Fatalf("explain output: %s %v", raw, err)
+			}
+			nodes := map[string]bool{}
+			plans[0].Plan.walk(func(n explainNode) { nodes[n.NodeType] = true })
+			for _, forbidden := range []string{"Sort", "Incremental Sort", "Unique", "WindowAgg", "HashAggregate", "GroupAggregate"} {
+				if nodes[forbidden] {
+					t.Fatalf("claim candidate plan contains %s: %s", forbidden, raw)
+				}
+			}
+			if !strings.Contains(string(raw), tc.index) {
+				t.Fatalf("claim candidate plan does not use %s: %s", tc.index, raw)
+			}
+		})
 	}
 }
 

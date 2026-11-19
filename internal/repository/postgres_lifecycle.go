@@ -174,14 +174,6 @@ func (s *PostgresStore) claimLifecycleJobs(ctx context.Context, kind LifecycleJo
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	var kinds []string
-	if kind != "" {
-		kinds = []string{string(kind)}
-	} else {
-		for _, known := range LifecycleJobKinds() {
-			kinds = append(kinds, string(known))
-		}
-	}
 	var (
 		claimed  = make([]LifecycleJob, 0, limit)
 		skipped  = []string{}
@@ -193,7 +185,7 @@ func (s *PostgresStore) claimLifecycleJobs(ctx context.Context, kind LifecycleJo
 		if remaining := QueueClaimScanCap - scanned; want > remaining {
 			want = remaining
 		}
-		candidates, err := selectLifecycleCandidates(ctx, tx, kinds, format, skipped, want)
+		candidates, err := selectLifecycleCandidates(ctx, tx, kind, format, skipped, want)
 		if err != nil {
 			return nil, err
 		}
@@ -218,12 +210,21 @@ func (s *PostgresStore) claimLifecycleJobs(ctx context.Context, kind LifecycleJo
 	return claimed, nil
 }
 
-// claimLifecycleCandidatesQuery is the candidate scan of the claim. It is served by lifecycle_jobs_actionable_idx
-// in next_attempt_at order, so it sorts nothing; the integration test asserts that plan.
-const claimLifecycleCandidatesQuery = `SELECT id::text,repository_id::text,kind FROM lifecycle_jobs
+// The candidate scans of the claim. A claim for one kind (every runtime) is served by
+// lifecycle_jobs_kind_actionable_idx (kind, next_attempt_at) in order; one for all kinds
+// (ClaimLifecycleJobs) by lifecycle_jobs_actionable_idx. Neither sorts the pending set, which is why the
+// order is next_attempt_at alone: a tie-breaker outside the index would need a sort. The integration
+// test asserts both plans.
+const (
+	claimLifecycleCandidatesByKindQuery = `SELECT id::text,repository_id::text,kind FROM lifecycle_jobs
         WHERE state IN ('pending','retrying') AND next_attempt_at<=now() AND attempts<max_attempts
-          AND kind=ANY($1::text[]) AND ($2='' OR payload->>'format'=$2) AND id<>ALL($3::text[]::uuid[])
-        ORDER BY next_attempt_at,created_at LIMIT $4 FOR UPDATE SKIP LOCKED`
+          AND kind=$1 AND ($2='' OR payload->>'format'=$2) AND id<>ALL($3::text[]::uuid[])
+        ORDER BY next_attempt_at LIMIT $4 FOR UPDATE SKIP LOCKED`
+	claimLifecycleCandidatesAnyKindQuery = `SELECT id::text,repository_id::text,kind FROM lifecycle_jobs
+        WHERE state IN ('pending','retrying') AND next_attempt_at<=now() AND attempts<max_attempts
+          AND ($1='' OR payload->>'format'=$1) AND id<>ALL($2::text[]::uuid[])
+        ORDER BY next_attempt_at LIMIT $3 FOR UPDATE SKIP LOCKED`
+)
 
 type lifecycleCandidate struct {
 	id           string
@@ -231,8 +232,14 @@ type lifecycleCandidate struct {
 	kind         LifecycleJobKind
 }
 
-func selectLifecycleCandidates(ctx context.Context, tx *sql.Tx, kinds []string, format Format, skipped []string, limit int) ([]lifecycleCandidate, error) {
-	rows, err := tx.QueryContext(ctx, claimLifecycleCandidatesQuery, kinds, string(format), skipped, limit)
+func selectLifecycleCandidates(ctx context.Context, tx *sql.Tx, kind LifecycleJobKind, format Format, skipped []string, limit int) ([]lifecycleCandidate, error) {
+	var rows *sql.Rows
+	var err error
+	if kind != "" {
+		rows, err = tx.QueryContext(ctx, claimLifecycleCandidatesByKindQuery, string(kind), string(format), skipped, limit)
+	} else {
+		rows, err = tx.QueryContext(ctx, claimLifecycleCandidatesAnyKindQuery, string(format), skipped, limit)
+	}
 	if err != nil {
 		return nil, err
 	}
