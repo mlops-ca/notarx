@@ -105,14 +105,14 @@ func (s *PostgresStore) ReserveNuGetPublication(ctx context.Context, in NuGetSes
 	if !errors.Is(err, ErrNotFound) {
 		return NuGetSession{}, false, err
 	}
+	// The reserved session holds its bytes in the counter until it commits or expires (ADR 0023
+	// section 3); this is the quota admission, taken before the row is inserted.
+	if err = capacity.Reserve(ctx, tx, in.RepositoryID, in.Size, 0); err != nil {
+		return NuGetSession{}, false, err
+	}
 	in.ObjectKey = nuGetSessionObjectKey(in)
 	in, err = scanNuGetSession(tx.QueryRowContext(ctx, `INSERT INTO native_nuget_publication_sessions(id,repository_id,package_id,version,digest,size,actor,state,object_key,expires_at,source_version)VALUES($1,$2,$3,$4,$5,$6,$7,'reserved',$8,$9,$10) RETURNING `+nuGetSessionColumns, in.ID, in.RepositoryID, in.PackageID, in.Version, in.Digest, in.Size, in.Actor, in.ObjectKey, in.ExpiresAt, in.SourceVersion))
 	if err != nil {
-		return NuGetSession{}, false, err
-	}
-	// The reserved session holds its bytes in the counter until it commits or expires (ADR 0023
-	// section 3); this is the quota admission.
-	if err = capacity.Reserve(ctx, tx, in.RepositoryID, in.Size, 0); err != nil {
 		return NuGetSession{}, false, err
 	}
 	return in, false, tx.Commit()

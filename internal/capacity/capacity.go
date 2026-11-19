@@ -83,7 +83,8 @@ func Reserve(ctx context.Context, tx Execer, repositoryID string, deltaBytes, de
 // Headroom reports ErrQuotaExceeded when extraBytes more would take the repository over its
 // quota, without changing the counter. It is the pre-flight of an operation that reserves its
 // bytes later, in smaller steps (a replication job reserves each item as it runs); the
-// admission itself is Reserve. A repository without a counter row or quota never fails.
+// admission itself is Reserve. The comparison mirrors ReserveStatement's guard (a NULL or zero quota
+// is unlimited); change both together. A repository without a counter row or quota never fails.
 func Headroom(ctx context.Context, q Execer, repositoryID string, extraBytes int64) error {
 	var bytes int64
 	var quota sql.NullInt64

@@ -92,14 +92,14 @@ func (s *PostgresStore) ReserveHelmPublication(ctx context.Context, in HelmSessi
 	if !errors.Is(err, ErrNotFound) {
 		return HelmSession{}, false, err
 	}
+	// The pending session holds its bytes in the counter until it commits or expires (ADR 0023
+	// section 3); this is the quota admission, taken before the row is inserted.
+	if err = capacity.Reserve(ctx, tx, in.RepositoryID, in.Size+in.ProvenanceSize, 0); err != nil {
+		return HelmSession{}, false, err
+	}
 	in.ObjectKey, in.ProvenanceKey = helmObjectKeys(in)
 	in, err = scanHelmSession(tx.QueryRowContext(ctx, `INSERT INTO native_helm_publication_sessions(id,repository_id,name,version,digest,size,provenance_digest,provenance_size,actor,state,object_key,provenance_key,metadata_json,chart_yaml,expires_at,source_version) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending',$10,$11,$12,$13,$14,$15) RETURNING `+helmSessionColumns, in.ID, in.RepositoryID, in.Name, in.Version, in.Digest, in.Size, in.ProvenanceDigest, in.ProvenanceSize, in.Actor, in.ObjectKey, in.ProvenanceKey, string(in.MetadataJSON), in.ChartYAML, in.ExpiresAt, in.SourceVersion))
 	if err != nil {
-		return HelmSession{}, false, err
-	}
-	// The pending session holds its bytes in the counter until it commits or expires (ADR 0023
-	// section 3); this is the quota admission.
-	if err = capacity.Reserve(ctx, tx, in.RepositoryID, in.Size+in.ProvenanceSize, 0); err != nil {
 		return HelmSession{}, false, err
 	}
 	return in, false, tx.Commit()
