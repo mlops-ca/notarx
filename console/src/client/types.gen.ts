@@ -2578,6 +2578,14 @@ export type ConsoleThemePackageValidation = {
   existingVersion?: string;
 };
 
+export type SecuritySettings = {
+  /**
+   * Revocation window in seconds (NOTARX_AUTHZ_CACHE_TTL). 0 means the read caches are disabled and every change is effective on the next request.
+   */
+  authorizationCacheTtlSeconds: number;
+  authorizationCacheEnabled: boolean;
+};
+
 /**
  * One pinned IdP signing certificate. notAfter is read from the PEM on every save. Any listed certificate verifies a response; next marks a certificate added before the IdP cuts over.
  *
@@ -9395,6 +9403,37 @@ export type ReplaceConsoleThemePackageResponses = {
 
 export type ReplaceConsoleThemePackageResponse =
   ReplaceConsoleThemePackageResponses[keyof ReplaceConsoleThemePackageResponses];
+
+export type GetSecuritySettingsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/security-settings";
+};
+
+export type GetSecuritySettingsErrors = {
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+};
+
+export type GetSecuritySettingsError =
+  GetSecuritySettingsErrors[keyof GetSecuritySettingsErrors];
+
+export type GetSecuritySettingsResponses = {
+  /**
+   * Current security settings.
+   */
+  200: SecuritySettings;
+};
+
+export type GetSecuritySettingsResponse =
+  GetSecuritySettingsResponses[keyof GetSecuritySettingsResponses];
 
 export type ListIdentityProvidersData = {
   body?: never;

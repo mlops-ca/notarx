@@ -22,7 +22,14 @@ func ListenChannels(ctx context.Context, conn *sql.Conn, channels ...string) err
 }
 
 func WaitForNotification(ctx context.Context, conn *sql.Conn) (string, error) {
-	var channel string
+	channel, _, err := WaitForNotificationPayload(ctx, conn)
+	return channel, err
+}
+
+// WaitForNotificationPayload is WaitForNotification that also returns the
+// NOTIFY payload, for channels that carry data (ADR 0023 section 6).
+func WaitForNotificationPayload(ctx context.Context, conn *sql.Conn) (string, string, error) {
+	var channel, payload string
 	err := conn.Raw(func(driverConn any) error {
 		provider, ok := driverConn.(interface{ Conn() *pgx.Conn })
 		if !ok {
@@ -35,8 +42,8 @@ func WaitForNotification(ctx context.Context, conn *sql.Conn) (string, error) {
 			}
 			return ctx.Err()
 		}
-		channel = notification.Channel
+		channel, payload = notification.Channel, notification.Payload
 		return nil
 	})
-	return channel, err
+	return channel, payload, err
 }

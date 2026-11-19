@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/readcache"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -55,12 +56,16 @@ func TestAuthenticatorRejectsExpiredAPIKeyAndRecordsSuccessfulUse(t *testing.T) 
 		t.Fatal(err)
 	}
 
-	authenticator := Authenticator{APIKeys: store}
+	cached := NewCachedAPIKeys(store, readcache.NewRegistry(time.Second), store, time.Minute, nil)
+	authenticator := Authenticator{APIKeys: cached}
 	if _, ok := authenticator.Authenticate("Bearer " + expiredToken); ok {
 		t.Fatal("expired API key authenticated")
 	}
 	if _, ok := authenticator.Authenticate("Bearer " + activeToken); !ok {
 		t.Fatal("active API key did not authenticate")
+	}
+	if err := cached.Flush(context.Background()); err != nil {
+		t.Fatal(err)
 	}
 	keys, err := store.ListAPIKeys(context.Background())
 	if err != nil {

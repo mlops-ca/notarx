@@ -25,7 +25,7 @@ type cacheCollectionHandler struct {
 }
 
 func (h cacheCollectionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	principal, ok := h.authenticator.Authenticate(r.Header.Get("Authorization"))
+	principal, ok := h.authenticator.AuthenticateContext(r.Context(), r.Header.Get("Authorization"))
 	if !ok || !principal.Admin {
 		http.Error(w, "administrator access required", http.StatusForbidden)
 		return
@@ -38,7 +38,7 @@ func (h cacheCollectionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 }
 
 func (h cacheOperationsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	principal, ok := h.authenticator.Authenticate(r.Header.Get("Authorization"))
+	principal, ok := h.authenticator.AuthenticateContext(r.Context(), r.Header.Get("Authorization"))
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "valid bearer token required")
 		return
@@ -69,7 +69,7 @@ type repositoryOperationsHandler struct {
 }
 
 func (h repositoryOperationsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	principal, ok := h.authenticator.Authenticate(r.Header.Get("Authorization"))
+	principal, ok := h.authenticator.AuthenticateContext(r.Context(), r.Header.Get("Authorization"))
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "valid bearer token required")
 		return
@@ -103,7 +103,7 @@ type auditAPIHandler struct {
 }
 
 func (a auditAPIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	principal, ok := a.authenticator.Authenticate(r.Header.Get("Authorization"))
+	principal, ok := a.authenticator.AuthenticateContext(r.Context(), r.Header.Get("Authorization"))
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "valid bearer token required")
 		return

@@ -35,10 +35,10 @@ func (s *MemoryStore) ListAPIKeys(_ context.Context) ([]APIKey, error) {
 }
 
 func (s *MemoryStore) FindActiveAPIKeyByHash(_ context.Context, hash string) (APIKey, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	now := time.Now().UTC()
-	for id, key := range s.apiKeys {
+	for _, key := range s.apiKeys {
 		if key.SecretHash == hash && key.RevokedAt == nil && (key.ExpiresAt == nil || now.Before(*key.ExpiresAt)) {
 			if key.ServiceAccountID != "" {
 				account, ok := s.serviceAccounts[key.ServiceAccountID]
@@ -46,8 +46,7 @@ func (s *MemoryStore) FindActiveAPIKeyByHash(_ context.Context, hash string) (AP
 					return APIKey{}, ErrNotFound
 				}
 			}
-			key.LastUsedAt = &now
-			s.apiKeys[id] = key
+			key.Roles = append([]string(nil), key.Roles...)
 			return key, nil
 		}
 	}
@@ -67,4 +66,21 @@ func (s *MemoryStore) RevokeAPIKey(_ context.Context, id string) (APIKey, error)
 		s.apiKeys[id] = key
 	}
 	return key, nil
+}
+
+// TouchAPIKeys records batched last-use times, skipping a key whose stored value
+// is not older than notBefore.
+func (s *MemoryStore) TouchAPIKeys(_ context.Context, uses []APIKeyUse, notBefore time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, use := range uses {
+		key, ok := s.apiKeys[use.ID]
+		if !ok || (key.LastUsedAt != nil && !key.LastUsedAt.Before(notBefore)) {
+			continue
+		}
+		at := use.At
+		key.LastUsedAt = &at
+		s.apiKeys[use.ID] = key
+	}
+	return nil
 }

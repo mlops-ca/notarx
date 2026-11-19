@@ -26,6 +26,10 @@ func TestSpecializedPoolDefaultsAreBounded(t *testing.T) {
 	if notifications.MaxOpenConns != 2 || notifications.MaxIdleConns != 2 {
 		t.Fatalf("notification pool=%+v", notifications)
 	}
+	shared := SharedNotificationPoolConfig()
+	if shared.MaxOpenConns != 3 || shared.MaxIdleConns != 3 || shared.Validate() != nil {
+		t.Fatalf("shared notification pool=%+v", shared)
+	}
 }
 
 func TestPoolConfigRejectsUnboundedOrInconsistentLimits(t *testing.T) {

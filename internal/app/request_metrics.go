@@ -14,6 +14,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/auditwriter"
 	"github.com/mlops-ca/notarx/internal/capacity"
 	"github.com/mlops-ca/notarx/internal/partitions"
+	"github.com/mlops-ca/notarx/internal/readcache"
 	"github.com/mlops-ca/notarx/internal/retention"
 )
 
@@ -151,6 +152,14 @@ func (m *Metrics) writeAuditWriterMetrics(w io.Writer) {
 	}
 	_, _ = io.WriteString(w, "notarx_audit_flush_seconds_bucket{le=\"+Inf\"} "+utoa(stats.FlushCount)+"\n")
 	_, _ = io.WriteString(w, "notarx_audit_flush_seconds_sum "+strconv.FormatFloat(stats.FlushSecondsSum, 'f', -1, 64)+"\nnotarx_audit_flush_seconds_count "+utoa(stats.FlushCount)+"\n")
+}
+
+// WithReadCacheStats exports notarx_cache_hits_total, notarx_cache_misses_total,
+// notarx_cache_evictions_total and notarx_cache_entries per read cache
+// (internal/readcache, ADR 0023 section 6).
+func (m *Metrics) WithReadCacheStats(stats func() []readcache.Stats) *Metrics {
+	m.readCacheStats = stats
+	return m
 }
 
 type namedDatabaseStats struct {

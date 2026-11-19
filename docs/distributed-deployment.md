@@ -102,7 +102,7 @@ is evaluated during reads and has no independent reclaim job.
    Every process start also receives a unique session ID, so duplicate instance
    IDs cannot overwrite sessions.
 4. Budget primary, cache coordinator, artifact lock, and notification pools per
-   replica. The default maximum is `32 + 8 + 4 + 2 = 46` connections per
+   replica. The default maximum is `32 + 8 + 4 + 3 = 47` connections per
    instance. Size the three database pool variables against PostgreSQL
    `max_connections`, leaving room for migrations and administration.
 5. `LISTEN/NOTIFY` is only a wake hint. Durable tables and leases are authoritative,
@@ -276,6 +276,49 @@ NOTARX_SHUTDOWN_FLUSH_TIMEOUT=10s
   `NOTARX_AUDIT_BUFFER_SIZE`. `notarx_audit_flush_seconds` is the flush latency histogram.
 
 Counters for a repository that was deleted or renamed before the flush are discarded. Text with a NUL byte or invalid UTF-8 never drops a record: it is rewritten to U+FFFD before insert in the audit row, the evidence and the usage keys, the record gets the evidence key `notarx_sanitized`, and `notarx_audit_sanitized_total` counts it. Records the database still rejects for another reason are dropped and counted in `notarx_audit_dropped_total{class="invalid"}` so they cannot stall the flush.
+
+## Read caches and the authorization window
+
+Each node keeps in-process read caches (ADR 0023 section 6): API-key principals by
+key hash and service-account state. Repositories, groups, grants, visibility and
+users are not cached yet. The caches remove the per-request database queries
+of an authenticated read; a warm cache issues no statement for credential
+lookup. No shared cache is involved.
+
+```env
+NOTARX_AUTHZ_CACHE_TTL=5s
+NOTARX_API_KEY_LAST_USED_INTERVAL=60s
+NOTARX_OVERVIEW_CACHE_TTL=30s
+```
+
+- **Revocation window.** A revoked key, a disabled service account or a revoked
+  service-account credential is rejected on every node within
+  `NOTARX_AUTHZ_CACHE_TTL` (default 5s, range 1s to 30s). The node that makes the
+  change evicts synchronously; the other nodes learn of it through a PostgreSQL
+  `NOTIFY` on the `notarx_cache` channel sent in the same transaction, normally
+  within 100 ms. The TTL is the hard upper bound when a notification is lost. A
+  listener that reconnects flushes every cache before it serves again. The window
+  is shown read-only in the Console on the Authentication page.
+- **Regulated profile.** Set `NOTARX_AUTHZ_CACHE_TTL=1s` to shorten the window,
+  or `0` where no staleness is acceptable: `0` disables every read cache, so a
+  change is effective on the next request at the cost of the per-request query
+  load. The revocation test runs at 5s, 1s and 0.
+- **Read-through paths.** Every write (any method other than `GET` and `HEAD`),
+  token minting, login and every management API authorization read the database
+  and never use these caches; only protocol reads do. A caller that supplies no
+  request context reads through too.
+- **Negative results** (unknown key) are cached for at most 1s, so a key created
+  on one node can take up to 1s to be accepted on another.
+- **Last used.** Authenticating a request writes nothing: `last_used_at` is
+  remembered in memory and written at most once per key every
+  `NOTARX_API_KEY_LAST_USED_INTERVAL` (default 60s), so the Console "last used"
+  value is accurate to that interval. A node that stops cleanly flushes it.
+- **Overview.** The overview statistics snapshot is reused for
+  `NOTARX_OVERVIEW_CACHE_TTL` (default 30s) and filtered per caller afterwards.
+- Metrics: `notarx_cache_hits_total{cache}`, `notarx_cache_misses_total{cache}`,
+  `notarx_cache_evictions_total{cache}` and `notarx_cache_entries{cache}`.
+  Sustained misses on `api_key_principals` point at an undersized window or a
+  credential flood.
 
 Repository request statistics and the overview read hourly rollups
 (`repository_request_rollup`, kept 400 days) with the outcome `allowed` or a

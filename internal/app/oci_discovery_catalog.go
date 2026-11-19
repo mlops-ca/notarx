@@ -66,7 +66,7 @@ func (h nativeOCIHandler) catalog(w http.ResponseWriter, r *http.Request) {
 		writeOCIError(w, 405, "UNSUPPORTED", "method not allowed")
 		return
 	}
-	p, authenticated := h.auth.Authenticate(r.Header.Get("Authorization"))
+	p, authenticated := h.auth.AuthenticateContext(r.Context(), r.Header.Get("Authorization"))
 	if !authenticated {
 		writeOCIChallenge(w, r)
 		return

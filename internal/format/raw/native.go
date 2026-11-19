@@ -181,14 +181,14 @@ func (h *Module) serveRepository(w http.ResponseWriter, r *http.Request) bool {
 }
 
 func (h *Module) protocolPrincipal(r *http.Request) (authorization.Principal, bool) {
-	if principal, ok := h.auth.Authenticate(r.Header.Get("Authorization")); ok {
+	if principal, ok := h.auth.AuthenticateContext(r.Context(), r.Header.Get("Authorization")); ok {
 		return principal, true
 	}
 	username, password, ok := r.BasicAuth()
 	if !ok {
 		return authorization.Principal{}, false
 	}
-	return h.auth.AuthenticateBasic(username, password)
+	return h.auth.AuthenticateBasicContext(r.Context(), username, password)
 }
 
 func (h *Module) startUpload(w http.ResponseWriter, r *http.Request, repo repository.HostedRepository, path string) {

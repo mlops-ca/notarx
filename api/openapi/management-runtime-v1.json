@@ -5678,6 +5678,31 @@
         }
       }
     },
+    "/security-settings": {
+      "get": {
+        "operationId": "getSecuritySettings",
+        "summary": "Read-only security settings of this deployment",
+        "description": "Returns the authorization cache window (NOTARX_AUTHZ_CACHE_TTL, ADR 0023 section 6): the longest time a revoked API key, a disabled service account or a revoked service-account credential can still be honoured by a node when an invalidation is lost. The value comes from the node's configuration and changes only by restarting it. Requires an administrator.",
+        "responses": {
+          "200": {
+            "description": "Current security settings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecuritySettings"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
     "/authentication/providers": {
       "get": {
         "operationId": "listIdentityProviders",
@@ -20271,6 +20296,25 @@
           "existingVersion": {
             "type": "string",
             "pattern": "^[1-9][0-9]*$"
+          }
+        }
+      },
+      "SecuritySettings": {
+        "type": "object",
+        "required": [
+          "authorizationCacheTtlSeconds",
+          "authorizationCacheEnabled"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "authorizationCacheTtlSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 30,
+            "description": "Revocation window in seconds (NOTARX_AUTHZ_CACHE_TTL). 0 means the read caches are disabled and every change is effective on the next request."
+          },
+          "authorizationCacheEnabled": {
+            "type": "boolean"
           }
         }
       },

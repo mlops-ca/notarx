@@ -76,7 +76,7 @@ func (h nativeConanPublishHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 }
 
 func (h nativeConanPublishHandler) create(w http.ResponseWriter, r *http.Request, repositoryID string) {
-	principal, ok := h.auth.Authenticate(r.Header.Get("Authorization"))
+	principal, ok := h.auth.AuthenticateContext(r.Context(), r.Header.Get("Authorization"))
 	if !ok {
 		writeHostedProblem(w, http.StatusUnauthorized, "access_denied", "authentication is required")
 		return
@@ -210,7 +210,7 @@ func (h nativeConanPublishHandler) withSession(w http.ResponseWriter, r *http.Re
 }
 
 func (h nativeConanPublishHandler) withRepositoryResource(w http.ResponseWriter, r *http.Request, id string, operation RepositoryOperation, resource string, next func(Principal, repository.HostedRepository)) {
-	principal, ok := h.auth.Authenticate(r.Header.Get("Authorization"))
+	principal, ok := h.auth.AuthenticateContext(r.Context(), r.Header.Get("Authorization"))
 	if !ok {
 		writeHostedProblem(w, http.StatusUnauthorized, "access_denied", "authentication is required")
 		return

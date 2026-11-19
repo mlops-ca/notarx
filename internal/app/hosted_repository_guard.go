@@ -53,14 +53,14 @@ func (h hostedRepositoryGuard) ServeHTTP(w http.ResponseWriter, r *http.Request)
 }
 
 func (h hostedRepositoryGuard) authenticated(r *http.Request) bool {
-	if _, ok := h.authenticator.Authenticate(r.Header.Get("Authorization")); ok {
+	if _, ok := h.authenticator.AuthenticateContext(r.Context(), r.Header.Get("Authorization")); ok {
 		return true
 	}
 	username, password, ok := r.BasicAuth()
 	if !ok {
 		return false
 	}
-	_, authenticated := h.authenticator.AuthenticateBasic(username, password)
+	_, authenticated := h.authenticator.AuthenticateBasicContext(r.Context(), username, password)
 	return authenticated
 }
 

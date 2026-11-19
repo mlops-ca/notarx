@@ -595,14 +595,14 @@ func (h MavenHandler) findConflict(ctx context.Context, groupName string, member
 }
 
 func (h MavenHandler) authenticate(request *http.Request) (Principal, bool) {
-	if principal, ok := h.Authenticator.Authenticate(request.Header.Get("Authorization")); ok {
+	if principal, ok := h.Authenticator.AuthenticateContext(request.Context(), request.Header.Get("Authorization")); ok {
 		return principal, true
 	}
 	username, password, ok := request.BasicAuth()
 	if !ok {
 		return Principal{}, false
 	}
-	return h.Authenticator.AuthenticateBasic(username, password)
+	return h.Authenticator.AuthenticateBasicContext(request.Context(), username, password)
 }
 
 func (h MavenHandler) audit(ctx context.Context, groupName, artifactPath, memberName, actor string, outcome repository.AuditOutcome) error {

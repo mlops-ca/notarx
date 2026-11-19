@@ -90,7 +90,7 @@ func (h nativeOCIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) bool
 		writeOCIError(w, http.StatusNotFound, "NAME_UNKNOWN", "repository name not known to registry")
 		return true
 	}
-	p, authenticated := h.auth.Authenticate(r.Header.Get("Authorization"))
+	p, authenticated := h.auth.AuthenticateContext(r.Context(), r.Header.Get("Authorization"))
 	if !authenticated {
 		if anonymousHostedRepositoryReadAllowed(r.Context(), h.store, repo, r.Method) {
 			p = anonymousPrincipal()
@@ -316,7 +316,7 @@ func (h nativeOCIHandler) startUpload(w http.ResponseWriter, r *http.Request, re
 		}
 		if sourceRoot, sourceName, found := strings.Cut(r.URL.Query().Get("from"), "/"); found && sourceRoot != "" && sourceName != "" {
 			source, err := h.repos.GetHostedRepositoryByName(r.Context(), sourceRoot)
-			principal, authenticated := h.auth.Authenticate(r.Header.Get("Authorization"))
+			principal, authenticated := h.auth.AuthenticateContext(r.Context(), r.Header.Get("Authorization"))
 			if err == nil && authenticated && source.Format == repository.FormatOCI && source.State == repository.RepositoryActive && h.authorizer.AuthorizeResource(r.Context(), principal, source, RepositoryRead, sourceName).Allowed {
 				blob, err := h.store.MountOCIBlobFrom(r.Context(), repo.ID, source.ID, digest)
 				if err == nil {

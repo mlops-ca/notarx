@@ -1141,14 +1141,14 @@ func (h nativeNPMHandler) proxyTarballWithAudit(w http.ResponseWriter, r *http.R
 }
 
 func (h nativeNPMHandler) protocolPrincipal(r *http.Request) (Principal, bool) {
-	if principal, ok := h.auth.Authenticate(r.Header.Get("Authorization")); ok {
+	if principal, ok := h.auth.AuthenticateContext(r.Context(), r.Header.Get("Authorization")); ok {
 		return principal, true
 	}
 	username, password, ok := r.BasicAuth()
 	if !ok {
 		return Principal{}, false
 	}
-	return h.auth.AuthenticateBasic(username, password)
+	return h.auth.AuthenticateBasicContext(r.Context(), username, password)
 }
 
 func (h nativeNPMHandler) tarballURL(r *http.Request, repositoryName, packageName, tarballName string) string {

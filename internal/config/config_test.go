@@ -197,6 +197,53 @@ func TestLoadRejectsInvalidAuditWriterSettings(t *testing.T) {
 	}
 }
 
+func TestLoadReadCacheSettings(t *testing.T) {
+	setCompleteConfiguration(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.AuthzCacheTTL != 5*time.Second || cfg.APIKeyLastUsedInterval != time.Minute || cfg.OverviewCacheTTL != 30*time.Second {
+		t.Fatalf("defaults: %+v", cfg)
+	}
+	for value, want := range map[string]time.Duration{"0": 0, "0s": 0, "1": time.Second, "1s": time.Second, "30s": 30 * time.Second, "12": 12 * time.Second} {
+		t.Setenv("NOTARX_AUTHZ_CACHE_TTL", value)
+		if cfg, err = Load(); err != nil || cfg.AuthzCacheTTL != want {
+			t.Fatalf("NOTARX_AUTHZ_CACHE_TTL=%s: %v err=%v", value, cfg.AuthzCacheTTL, err)
+		}
+	}
+	t.Setenv("NOTARX_API_KEY_LAST_USED_INTERVAL", "5m")
+	t.Setenv("NOTARX_OVERVIEW_CACHE_TTL", "10")
+	if cfg, err = Load(); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.APIKeyLastUsedInterval != 5*time.Minute || cfg.OverviewCacheTTL != 10*time.Second {
+		t.Fatalf("overrides: %+v", cfg)
+	}
+}
+
+func TestLoadRejectsInvalidReadCacheSettings(t *testing.T) {
+	for name, value := range map[string]string{
+		"NOTARX_AUTHZ_CACHE_TTL":            "500ms",
+		"NOTARX_API_KEY_LAST_USED_INTERVAL": "soon", "NOTARX_OVERVIEW_CACHE_TTL": "-1s",
+	} {
+		t.Run(name, func(t *testing.T) {
+			setCompleteConfiguration(t)
+			t.Setenv(name, value)
+			if _, err := Load(); err == nil {
+				t.Fatalf("%s=%s must be rejected", name, value)
+			}
+		})
+	}
+	setCompleteConfiguration(t)
+	for _, value := range []string{"-5", "31s", "1h"} {
+		t.Setenv("NOTARX_AUTHZ_CACHE_TTL", value)
+		if _, err := Load(); err == nil {
+			t.Fatalf("NOTARX_AUTHZ_CACHE_TTL=%s must be rejected", value)
+		}
+	}
+}
+
 func TestLoadRejectsInvalidPartitionAhead(t *testing.T) {
 	for _, value := range []string{"0", "-1", "many"} {
 		setCompleteConfiguration(t)

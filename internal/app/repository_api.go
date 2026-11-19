@@ -250,7 +250,9 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	authenticator.Users = store
 	authenticator.UserIdentities = store
 	authenticator.UserSessions = store
-	authenticator.ServiceAccounts = store
+	if authenticator.ServiceAccounts == nil {
+		authenticator.ServiceAccounts = store
+	}
 	if dependencies.IdentityRuntime != nil {
 		authenticator.OIDCSource = dependencies.IdentityRuntime
 	}
@@ -412,7 +414,7 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 		identityProviders = dependencies.IdentityRuntime
 	}
 	identityAPI := newIdentityManagementHandler(identityManagementOptions{Scope: scope, Users: store, APIKeys: store, ServiceAccounts: store, IdentityProviders: identityProviders})
-	legacyAPI := generatedRepositoryAPIAdapter{BatchAdapter: migrationapi.New(dependencies.MigrationService, authenticator, store).WithSchedules(dependencies.MigrationSchedules), Adapter: sourceapi.New(dependencies.SourceService, authenticator, store), managementScope: scope, store: store, sessions: nativeMaven, npmRestore: options.NPMRestore, aptPublication: aptPublication, aptSnapshotPublisher: aptSnapshotPublisher, aptSnapshotImporter: aptSnapshotImporter, aptSnapshotExporter: aptpublication.SnapshotArchiveExporter{Store: store, Objects: nativeAPTObjects}, aptPublications: store, retentionPolicies: store, securityPolicies: store, quarantineReadPolicies: store, capacities: store, tombstones: store, intelligence: store, quarantine: store, lifecycleJobs: store, auditRetention: store, publicAccess: store, siteSettings: store, consoleThemePackages: store, consoleThemes: dependencies.ConsoleThemes, replication: store, oci: store, cargo: store, conan: store, audit: store, maintenance: maintenance, searchProjection: searchProjection, runtimeNodes: store, scheduledTasks: store, webhooks: store, emailTargets: store, quotaAlerts: store, queueStats: store, diagnostics: dependencies, objects: options.Storage, logBuffer: dependencies.LogBuffer, artifactScanner: dependencies.ArtifactScanner, artifactScanFormats: dependencies.ArtifactScannerFormats}
+	legacyAPI := generatedRepositoryAPIAdapter{BatchAdapter: migrationapi.New(dependencies.MigrationService, authenticator, store).WithSchedules(dependencies.MigrationSchedules), Adapter: sourceapi.New(dependencies.SourceService, authenticator, store), managementScope: scope, store: store, sessions: nativeMaven, npmRestore: options.NPMRestore, aptPublication: aptPublication, aptSnapshotPublisher: aptSnapshotPublisher, aptSnapshotImporter: aptSnapshotImporter, aptSnapshotExporter: aptpublication.SnapshotArchiveExporter{Store: store, Objects: nativeAPTObjects}, aptPublications: store, retentionPolicies: store, securityPolicies: store, quarantineReadPolicies: store, capacities: store, tombstones: store, intelligence: store, quarantine: store, lifecycleJobs: store, auditRetention: store, publicAccess: store, siteSettings: store, overview: newOverviewCache(options.ReadCache, options.OverviewCacheTTL), authzCacheTTL: options.AuthzCacheTTL, consoleThemePackages: store, consoleThemes: dependencies.ConsoleThemes, replication: store, oci: store, cargo: store, conan: store, audit: store, maintenance: maintenance, searchProjection: searchProjection, runtimeNodes: store, scheduledTasks: store, webhooks: store, emailTargets: store, quotaAlerts: store, queueStats: store, diagnostics: dependencies, objects: options.Storage, logBuffer: dependencies.LogBuffer, artifactScanner: dependencies.ArtifactScanner, artifactScanFormats: dependencies.ArtifactScannerFormats}
 	adminopenapi.HandlerWithOptions(managementServer{Boundary: helmapi.New(helmPreview), Adapter: nugetapi.New(nugetPreview), RubyGemsBoundary: rubygemsapi.New(rubyGemsPreview), repositoryManagementHandler: repositoriesAPI, artifactManagementHandler: artifactsAPI, accessManagementHandler: accessAPI, identityManagementHandler: identityAPI, pypiYankManagementHandler: pypiYankAPI, generatedRepositoryAPIAdapter: legacyAPI}, adminopenapi.StdHTTPServerOptions{
 		BaseURL:    "/api/v2",
 		BaseRouter: openAPIServeMux{mux: mux, authorize: hostedRepositories.authenticateManagementRequest},
@@ -519,5 +521,5 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	mux.HandleFunc("GET /auth/saml/{slug}/metadata", samlLogin.metadata)
 	mux.HandleFunc("GET /auth/session", oidcLogin.session)
 	mux.HandleFunc("POST /auth/logout", oidcLogin.logout)
-	return sessionCookieAuthentication(tracedHTTPHandler(dependencies.requestObservability(openAPIServeMux{mux: mux}))), nil
+	return readThroughManagement(sessionCookieAuthentication(tracedHTTPHandler(dependencies.requestObservability(openAPIServeMux{mux: mux})))), nil
 }

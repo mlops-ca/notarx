@@ -165,6 +165,7 @@ the contract's server base. Planned commands omit the leading `notarxctl`.
 | `POST /console-themes`<br>`installConsoleThemePackage` | `theme install --remote` | #139 | M2 | A | W |
 | `PUT /console-themes/{themeId}`<br>`replaceConsoleThemePackage` | `theme replace --remote <id>` | #139 | M2 | A | C |
 | `DELETE /console-themes/{themeId}`<br>`deleteConsoleThemePackage` | `theme delete --remote <id>` | #139 | M2 | A | C |
+| `GET /security-settings`<br>`getSecuritySettings` | `security-settings show` | #139 | M2 | A | Q |
 | `GET /authentication/providers`<br>`listIdentityProviders` | `idp list` | #139 | M2 | A | Q |
 | `POST /authentication/providers`<br>`createIdentityProvider` | `idp create` | #139 | M2 | A | W |
 | `GET /authentication/providers/{providerId}`<br>`getIdentityProvider` | `idp show <id>` | #139 | M2 | A | Q |

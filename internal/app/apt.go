@@ -115,14 +115,14 @@ func (h nativeAPTHandler) withMetrics(metrics *Metrics) nativeAPTHandler {
 }
 
 func (h nativeAPTHandler) protocolPrincipal(r *http.Request) (Principal, bool) {
-	if principal, ok := h.auth.Authenticate(r.Header.Get("Authorization")); ok {
+	if principal, ok := h.auth.AuthenticateContext(r.Context(), r.Header.Get("Authorization")); ok {
 		return principal, true
 	}
 	username, password, ok := r.BasicAuth()
 	if !ok {
 		return Principal{}, false
 	}
-	return h.auth.AuthenticateBasic(username, password)
+	return h.auth.AuthenticateBasicContext(r.Context(), username, password)
 }
 
 func (h nativeAPTHandler) challenge(w http.ResponseWriter, status int, message string) {

@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/readcache"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -103,8 +104,12 @@ type Authenticator struct {
 	UserSessions    repository.UserSessionStore
 }
 
+// Authenticate reads credentials from the database, never from the read caches
+// (ADR 0023 section 6): a caller with no request context keeps the revocation
+// guarantee of an uncached lookup. Protocol read paths opt in to the caches with
+// AuthenticateContext and the request context.
 func (a Authenticator) Authenticate(header string) (Principal, bool) {
-	return a.AuthenticateContext(context.Background(), header)
+	return a.AuthenticateContext(readcache.Bypass(context.Background()), header)
 }
 
 // AuthenticateContext includes credential, account and OIDC lookups in the
@@ -225,6 +230,12 @@ func (a Authenticator) principalForTokenActor(ctx context.Context, actor string)
 // AuthenticateBasic validates the resolver credential used by Maven, Conan,
 // and native protocol clients, then returns the credential's actor principal.
 func (a Authenticator) AuthenticateBasic(username, password string) (Principal, bool) {
+	return a.AuthenticateBasicContext(readcache.Bypass(context.Background()), username, password)
+}
+
+// AuthenticateBasicContext is AuthenticateBasic that serves a service-account
+// credential from the read caches unless ctx asks to read through (Bypass).
+func (a Authenticator) AuthenticateBasicContext(ctx context.Context, username, password string) (Principal, bool) {
 	if username == "" {
 		return Principal{}, false
 	}
@@ -233,7 +244,7 @@ func (a Authenticator) AuthenticateBasic(username, password string) (Principal, 
 		principal.AuthenticationKind = AuthenticationStaticResolver
 		return principal, true
 	}
-	principal, ok := a.apiKeyPrincipal(context.Background(), password)
+	principal, ok := a.apiKeyPrincipal(ctx, password)
 	if !ok || principal.AuthenticationKind != AuthenticationServiceAccountCredential {
 		return Principal{}, false
 	}

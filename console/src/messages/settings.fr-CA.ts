@@ -110,6 +110,15 @@ export const settingsFrCA: Record<keyof typeof settingsEnCA, string> = {
     "Un certificat de {name} a expiré le {date}. Retirez-le ou remplacez-le par le certificat courant.",
   "settings.samlServiceProviderKeys":
     "Clés de signature du fournisseur de services publiées : {count}",
+  "settings.authorizationCache": "Cache d’autorisation",
+  "settings.authorizationCacheDescription":
+    "Chaque nœud conserve en mémoire les clés d’API et l’état des comptes de service. Une clé d’API révoquée, un compte de service désactivé ou un justificatif de compte de service révoqué prend effet sur tous les nœuds dans cette fenêtre, même si une notification de changement est perdue.",
+  "settings.authorizationCacheWindow": "Fenêtre de révocation",
+  "settings.authorizationCacheSeconds": "{seconds} s",
+  "settings.authorizationCacheDisabled":
+    "Cache désactivé\u00a0: effet immédiat",
+  "settings.authorizationCacheRegulatedProfile":
+    "Profil réglementé\u00a0: définissez NOTARX_AUTHZ_CACHE_TTL=1s, ou 0 lorsqu’aucun délai n’est acceptable, au prix d’un plus grand nombre de requêtes à la base de données par requête. Le paramètre ne change qu’au redémarrage du nœud.",
   "settings.lastUpdated": "Dernière mise à jour",
   "settings.notPersisted": "Non persisté",
   "settings.databaseSettingsAreShared":

@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/readcache"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -51,9 +52,12 @@ func TestPostgresRustFSNuGetCredentialRotationAndRevocation(t *testing.T) {
 	if f.repo, err = store.UpdateHostedRepository(ctx, f.repo, f.repo.Version); err != nil {
 		t.Fatal(err)
 	}
+	var cachedKeys *authorization.CachedAPIKeys
 	serve := func() *httptest.Server {
 		t.Helper()
-		auth := authorization.Authenticator{APIKeys: store, ServiceAccounts: store}
+		// A new wrapper per serve: the store is reopened between servers.
+		cachedKeys = authorization.NewCachedAPIKeys(store, readcache.NewRegistry(0), store, time.Minute, nil)
+		auth := authorization.Authenticator{APIKeys: cachedKeys, ServiceAccounts: store}
 		module, err := New(Options{Store: store, Repositories: store, Objects: f.objects, Authenticator: auth, Authorizer: authorization.RepositoryAuthorizer{Grants: store, Legacy: auth}, Audit: store, Anonymous: anonymous})
 		if err != nil {
 			t.Fatal(err)
@@ -157,6 +161,9 @@ func TestPostgresRustFSNuGetCredentialRotationAndRevocation(t *testing.T) {
 	assertAccess("account disabled", green, 401, 401)
 	if data := send(http.MethodGet, readPath, "", nil, 200); !bytes.Equal(data, body) {
 		t.Fatal("anonymous control did not read the same package")
+	}
+	if err = cachedKeys.Flush(ctx); err != nil {
+		t.Fatal(err)
 	}
 	keys, err := store.ListServiceAccountCredentials(ctx, account.ID, 10, "")
 	if err != nil || len(keys) != 2 {

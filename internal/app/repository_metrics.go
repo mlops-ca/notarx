@@ -10,6 +10,7 @@ import (
 
 	"github.com/mlops-ca/notarx/internal/aptpublication"
 	"github.com/mlops-ca/notarx/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/readcache"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -20,6 +21,7 @@ type Metrics struct {
 	retentionStats                 RetentionStatsFunc
 	quotaDriftStats                QuotaDriftStatsFunc
 	auditStats                     AuditWriterStatsFunc
+	readCacheStats                 func() []readcache.Stats
 	resolved                       atomic.Uint64
 	failed                         atomic.Uint64
 	ociCacheHit                    atomic.Uint64
@@ -542,6 +544,9 @@ func (m *Metrics) Handler(w http.ResponseWriter, _ *http.Request) {
 	m.writeRetentionMetrics(w)
 	m.writeQuotaDriftMetrics(w)
 	m.writeAuditWriterMetrics(w)
+	if m.readCacheStats != nil {
+		readcache.WriteMetrics(w, m.readCacheStats())
+	}
 	m.writeObjectStoreMetrics(w)
 	m.writeAPTSigningMetrics(w)
 	_, _ = w.Write([]byte("# TYPE notarx_cache_quota_rejections_total counter\nnotarx_cache_quota_rejections_total " + utoa(m.cacheQuotaDenied.Load()) + "\n# TYPE notarx_anonymous_reads_total counter\nnotarx_anonymous_reads_total " + utoa(m.anonymousReads.Load()) + "\n"))

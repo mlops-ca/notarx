@@ -9255,6 +9255,14 @@ type SecurityPolicyEvaluationRequest struct {
 	SourceRepositoryId openapi_types.UUID `json:"sourceRepositoryId"`
 }
 
+// SecuritySettings defines model for SecuritySettings.
+type SecuritySettings struct {
+	AuthorizationCacheEnabled bool `json:"authorizationCacheEnabled"`
+
+	// AuthorizationCacheTtlSeconds Revocation window in seconds (NOTARX_AUTHZ_CACHE_TTL). 0 means the read caches are disabled and every change is effective on the next request.
+	AuthorizationCacheTtlSeconds int `json:"authorizationCacheTtlSeconds"`
+}
+
 // ServiceAccount defines model for ServiceAccount.
 type ServiceAccount struct {
 	CreatedAt   time.Time           `json:"createdAt"`
@@ -12133,6 +12141,9 @@ type ServerInterface interface {
 
 	// (GET /scheduled-tasks/{taskId}/runs)
 	ListScheduledTaskRuns(w http.ResponseWriter, r *http.Request, taskId ScheduledTaskId, params ListScheduledTaskRunsParams)
+	// GetSecuritySettings Read-only security settings of this deployment
+	// (GET /security-settings)
+	GetSecuritySettings(w http.ResponseWriter, r *http.Request)
 
 	// (GET /service-accounts)
 	ListServiceAccounts(w http.ResponseWriter, r *http.Request, params ListServiceAccountsParams)
@@ -21860,6 +21871,20 @@ func (siw *ServerInterfaceWrapper) ListScheduledTaskRuns(w http.ResponseWriter, 
 	handler.ServeHTTP(w, r)
 }
 
+// GetSecuritySettings operation middleware
+func (siw *ServerInterfaceWrapper) GetSecuritySettings(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSecuritySettings(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListServiceAccounts operation middleware
 func (siw *ServerInterfaceWrapper) ListServiceAccounts(w http.ResponseWriter, r *http.Request) {
 
@@ -23071,6 +23096,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/console-themes", wrapper.InstallConsoleThemePackage)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/console-themes/{themeId}", wrapper.DeleteConsoleThemePackage)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/console-themes/{themeId}", wrapper.ReplaceConsoleThemePackage)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/security-settings", wrapper.GetSecuritySettings)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/authentication/providers", wrapper.ListIdentityProviders)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/authentication/providers", wrapper.CreateIdentityProvider)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/authentication/providers/{providerId}", wrapper.DeleteIdentityProvider)
@@ -42588,6 +42614,57 @@ func (response ListScheduledTaskRuns404ApplicationProblemPlusJSONResponse) Visit
 	return err
 }
 
+type GetSecuritySettingsRequestObject struct {
+}
+
+type GetSecuritySettingsResponseObject interface {
+	VisitGetSecuritySettingsResponse(w http.ResponseWriter) error
+}
+
+type GetSecuritySettings200JSONResponse SecuritySettings
+
+func (response GetSecuritySettings200JSONResponse) VisitGetSecuritySettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSecuritySettings401ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetSecuritySettings401ApplicationProblemPlusJSONResponse) VisitGetSecuritySettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSecuritySettings403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetSecuritySettings403ApplicationProblemPlusJSONResponse) VisitGetSecuritySettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListServiceAccountsRequestObject struct {
 	Params ListServiceAccountsParams
 }
@@ -45130,6 +45207,9 @@ type StrictServerInterface interface {
 
 	// (GET /scheduled-tasks/{taskId}/runs)
 	ListScheduledTaskRuns(ctx context.Context, request ListScheduledTaskRunsRequestObject) (ListScheduledTaskRunsResponseObject, error)
+	// GetSecuritySettings Read-only security settings of this deployment
+	// (GET /security-settings)
+	GetSecuritySettings(ctx context.Context, request GetSecuritySettingsRequestObject) (GetSecuritySettingsResponseObject, error)
 
 	// (GET /service-accounts)
 	ListServiceAccounts(ctx context.Context, request ListServiceAccountsRequestObject) (ListServiceAccountsResponseObject, error)
@@ -52176,6 +52256,30 @@ func (sh *strictHandler) ListScheduledTaskRuns(w http.ResponseWriter, r *http.Re
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListScheduledTaskRunsResponseObject); ok {
 		if err := validResponse.VisitListScheduledTaskRunsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetSecuritySettings operation middleware
+func (sh *strictHandler) GetSecuritySettings(w http.ResponseWriter, r *http.Request) {
+	var request GetSecuritySettingsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetSecuritySettings(ctx, request.(GetSecuritySettingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetSecuritySettings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetSecuritySettingsResponseObject); ok {
+		if err := validResponse.VisitGetSecuritySettingsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

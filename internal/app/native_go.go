@@ -962,14 +962,14 @@ func (h nativeGoHandler) recordAudit(r *http.Request, repo repository.HostedRepo
 }
 
 func (h nativeGoHandler) protocolPrincipal(r *http.Request) (Principal, bool) {
-	if principal, ok := h.auth.Authenticate(r.Header.Get("Authorization")); ok {
+	if principal, ok := h.auth.AuthenticateContext(r.Context(), r.Header.Get("Authorization")); ok {
 		return principal, true
 	}
 	username, password, ok := r.BasicAuth()
 	if !ok {
 		return Principal{}, false
 	}
-	return h.auth.AuthenticateBasic(username, password)
+	return h.auth.AuthenticateBasicContext(r.Context(), username, password)
 }
 
 func (h nativeGoHandler) challenge(w http.ResponseWriter, status int, message string) {

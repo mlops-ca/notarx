@@ -202,7 +202,7 @@ func (h nativeMavenHandler) deleteArtifact(w http.ResponseWriter, r *http.Reques
 }
 
 func (h nativeMavenHandler) admin(r *http.Request) (Principal, bool) {
-	p, ok := h.authenticator.Authenticate(r.Header.Get("Authorization"))
+	p, ok := h.authenticator.AuthenticateContext(r.Context(), r.Header.Get("Authorization"))
 	return p, ok && p.Admin
 }
 func (h nativeMavenHandler) create(w http.ResponseWriter, r *http.Request, repoID string) {
@@ -998,14 +998,14 @@ func (h nativeMavenHandler) validatePOM(ctx context.Context, s repository.MavenP
 }
 
 func (h nativeMavenHandler) protocolPrincipal(r *http.Request) (Principal, bool) {
-	if principal, ok := h.authenticator.Authenticate(r.Header.Get("Authorization")); ok {
+	if principal, ok := h.authenticator.AuthenticateContext(r.Context(), r.Header.Get("Authorization")); ok {
 		return principal, true
 	}
 	user, pass, ok := r.BasicAuth()
 	if !ok {
 		return Principal{}, false
 	}
-	return h.authenticator.AuthenticateBasic(user, pass)
+	return h.authenticator.AuthenticateBasicContext(r.Context(), user, pass)
 }
 
 func (h nativeMavenHandler) metadata(w http.ResponseWriter, r *http.Request, repo repository.HostedRepository, path, actor string) {

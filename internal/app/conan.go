@@ -636,14 +636,14 @@ func (h ConanHandler) authenticate(request *http.Request) (Principal, bool) {
 		}
 		return h.Authenticator.AuthenticateConanToken(request.Context(), request.Header.Get("Authorization"), repo.ID)
 	}
-	if principal, ok := h.Authenticator.Authenticate(request.Header.Get("Authorization")); ok {
+	if principal, ok := h.Authenticator.AuthenticateContext(request.Context(), request.Header.Get("Authorization")); ok {
 		return principal, true
 	}
 	username, password, ok := request.BasicAuth()
 	if !ok {
 		return Principal{}, false
 	}
-	return h.Authenticator.AuthenticateBasic(username, password)
+	return h.Authenticator.AuthenticateBasicContext(request.Context(), username, password)
 }
 
 func (h ConanHandler) resolve(ctx context.Context, group repository.Group, path, kind string, headers http.Header, principal Principal) (conanCacheEntry, int, error) {
