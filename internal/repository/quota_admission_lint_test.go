@@ -8,10 +8,10 @@ import (
 	"testing"
 )
 
-// quotaAdmissionExceptions lists the files that still decide quota admission with a SUM over
-// asset or session tables under the quota row lock instead of capacity.Reserve. Each one is a debt
-// of ADR 0023 section 3 (see docs/distributed-deployment.md, "Quota counters"); delete the entry
-// when the file moves to the counters. The test fails when an entry no longer matches.
+// quotaAdmissionExceptions lists the files allowed to decide quota admission with a SUM over asset or
+// session tables under the quota row lock instead of capacity.Reserve (ADR 0023 section 3). It is
+// empty: every Postgres store admits through the counter. Do not add to it; the test fails on a
+// stale entry.
 var quotaAdmissionExceptions = map[string]string{}
 
 var (

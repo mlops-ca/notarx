@@ -192,7 +192,6 @@ func rawCounterEquality(t *testing.T, ctx context.Context, store *PostgresStore,
 	}
 	check("complete upload d")
 	// Over the quota: rejected, counter unchanged.
-	helmSessionLifecycleEquality(t, ctx, store, repo, check)
 	var used int64
 	if err = store.db.QueryRow(`SELECT bytes FROM repository_usage_counters WHERE repository_id=$1::uuid`, repo.ID).Scan(&used); err != nil {
 		t.Fatal(err)
@@ -968,6 +967,7 @@ func helmCounterEquality(t *testing.T, ctx context.Context, store *PostgresStore
 		}
 		check(step)
 	}
+	helmSessionLifecycleEquality(t, ctx, store, repo, check)
 	var used int64
 	if err = store.db.QueryRow(`SELECT bytes FROM repository_usage_counters WHERE repository_id=$1::uuid`, repo.ID).Scan(&used); err != nil {
 		t.Fatal(err)

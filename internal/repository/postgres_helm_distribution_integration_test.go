@@ -280,40 +280,34 @@ func TestPostgresHelmReplicationCredentialExpiryDuringFinalTransactionRollsBack(
 }
 
 func TestPostgresHelmReplicationFinalGovernance(t *testing.T) {
-	for _, mode := range []string{"source-quarantine"} {
-		t.Run(mode, func(t *testing.T) {
-			s := newPostgresNuGetStore(t)
-			f := helmReplicationContractSetup(t, s)
-			if _, _, err := s.CreateHelmReplication(t.Context(), f.job, f.check); err != nil {
-				t.Fatal(err)
-			}
-			claim, err := s.ClaimHelmReplication(t.Context(), uuid.NewString(), time.Minute)
-			if err != nil {
-				t.Fatal(err)
-			}
-			session := helmReplicationContractStage(t, s, f, claim)
-			want := dist.ErrSourceChanged
-			_, err = s.TransitionHelmGovernance(t.Context(), HelmGovernanceChange{RepositoryID: f.source.ID, Name: f.publication.Name, Version: f.publication.Version, ExpectedDigest: f.publication.Digest, ExpectedVersion: f.publication.Governance.Version, Actor: "operator", Action: "quarantine", Reason: "changed after target reservation"})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err = s.CompleteHelmReplicationItem(t.Context(), claim.Lease, 0, dist.Commit{SessionID: session.ID}, f.check); !errors.Is(err, want) {
-				t.Fatalf("final %s=%v", mode, err)
-			}
-			if _, err = s.GetHelmPublication(t.Context(), f.target.ID, f.publication.Name, f.publication.Version); !errors.Is(err, ErrNotFound) {
-				t.Fatalf("rejected closure visible=%v", err)
-			}
-			saved, err := s.GetHelmReplication(t.Context(), f.job.ID)
-			if err != nil || saved.Items[0].State != "running" {
-				t.Fatalf("failed commit changed checkpoint=%+v %v", saved, err)
-			}
-			if err = s.FailHelmReplicationItem(t.Context(), claim.Lease, 0, "transfer_failed"); err != nil {
-				t.Fatal(err)
-			}
-			if _, err = s.FinishHelmReplication(t.Context(), claim.Lease); err != nil {
-				t.Fatal(err)
-			}
-		})
+	s := newPostgresNuGetStore(t)
+	f := helmReplicationContractSetup(t, s)
+	if _, _, err := s.CreateHelmReplication(t.Context(), f.job, f.check); err != nil {
+		t.Fatal(err)
+	}
+	claim, err := s.ClaimHelmReplication(t.Context(), uuid.NewString(), time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session := helmReplicationContractStage(t, s, f, claim)
+	if _, err = s.TransitionHelmGovernance(t.Context(), HelmGovernanceChange{RepositoryID: f.source.ID, Name: f.publication.Name, Version: f.publication.Version, ExpectedDigest: f.publication.Digest, ExpectedVersion: f.publication.Governance.Version, Actor: "operator", Action: "quarantine", Reason: "changed after target reservation"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.CompleteHelmReplicationItem(t.Context(), claim.Lease, 0, dist.Commit{SessionID: session.ID}, f.check); !errors.Is(err, dist.ErrSourceChanged) {
+		t.Fatalf("final governance check=%v", err)
+	}
+	if _, err = s.GetHelmPublication(t.Context(), f.target.ID, f.publication.Name, f.publication.Version); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("rejected closure visible=%v", err)
+	}
+	saved, err := s.GetHelmReplication(t.Context(), f.job.ID)
+	if err != nil || saved.Items[0].State != "running" {
+		t.Fatalf("failed commit changed checkpoint=%+v %v", saved, err)
+	}
+	if err = s.FailHelmReplicationItem(t.Context(), claim.Lease, 0, "transfer_failed"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.FinishHelmReplication(t.Context(), claim.Lease); err != nil {
+		t.Fatal(err)
 	}
 }
 

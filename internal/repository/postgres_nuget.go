@@ -79,7 +79,7 @@ func (s *PostgresStore) ReserveNuGetPublication(ctx context.Context, in NuGetSes
 	}
 	defer func() { _ = tx.Rollback() }()
 	// A lazily expired session releases the bytes it reserved at admission.
-	if err = releaseExpiredNuGetSessions(ctx, tx, `repository_id=$1::uuid AND state IN ('reserved','staged') AND expires_at<=now()`, in.RepositoryID); err != nil {
+	if err = releaseExpiredNuGetSessions(ctx, tx, `SELECT id FROM native_nuget_publication_sessions WHERE repository_id=$1::uuid AND state IN ('reserved','staged') AND expires_at<=now()`, in.RepositoryID); err != nil {
 		return NuGetSession{}, false, err
 	}
 	prior, err := scanNuGetSession(tx.QueryRowContext(ctx, `SELECT `+nuGetSessionColumns+` FROM native_nuget_publication_sessions WHERE id=$1::uuid`, in.ID))
@@ -118,31 +118,10 @@ func (s *PostgresStore) ReserveNuGetPublication(ctx context.Context, in NuGetSes
 	return in, false, tx.Commit()
 }
 
-// releaseExpiredNuGetSessions marks the reserved or staged sessions matching where as expired and
-// releases the bytes each reserved at admission. The where clause only ever matches live sessions,
-// so a session is released once, by the transition that ends its reservation.
-func releaseExpiredNuGetSessions(ctx context.Context, tx *sql.Tx, where string, args ...any) error {
-	rows, err := tx.QueryContext(ctx, `UPDATE native_nuget_publication_sessions SET state='expired' WHERE `+where+` RETURNING repository_id::text,size`, args...)
-	if err != nil {
-		return err
-	}
-	var released usageDelta
-	for rows.Next() {
-		var repo string
-		var size int64
-		if err = rows.Scan(&repo, &size); err != nil {
-			_ = rows.Close()
-			return err
-		}
-		released.add(repo, -size, 0)
-	}
-	if err = rows.Close(); err != nil {
-		return err
-	}
-	if err = rows.Err(); err != nil {
-		return err
-	}
-	return released.reserve(ctx, tx)
+// releaseExpiredNuGetSessions expires the reserved or staged sessions the candidates query selects
+// and releases the bytes each reserved at admission.
+func releaseExpiredNuGetSessions(ctx context.Context, tx *sql.Tx, candidates string, args ...any) error {
+	return releaseExpiredSessions(ctx, tx, "native_nuget_publication_sessions", "s.size", "'reserved','staged'", candidates, args...)
 }
 
 func (s *PostgresStore) GetNuGetSession(ctx context.Context, id string) (NuGetSession, error) {
@@ -272,7 +251,7 @@ func (s *PostgresStore) ExpireNuGetSessions(ctx context.Context, now time.Time, 
 	defer func() { _ = tx.Rollback() }()
 	// Live sessions past their deadline expire first and release their reservation; the sessions
 	// already expired lazily by a reservation are then collected with them.
-	if err = releaseExpiredNuGetSessions(ctx, tx, `id IN(SELECT id FROM native_nuget_publication_sessions WHERE state IN ('reserved','staged') AND expires_at<=$1 ORDER BY expires_at,id FOR UPDATE SKIP LOCKED LIMIT $2)`, now, limit); err != nil {
+	if err = releaseExpiredNuGetSessions(ctx, tx, `SELECT id FROM native_nuget_publication_sessions WHERE state IN ('reserved','staged') AND expires_at<=$1 ORDER BY expires_at,id FOR UPDATE SKIP LOCKED LIMIT $2`, now, limit); err != nil {
 		return nil, err
 	}
 	rows, err := tx.QueryContext(ctx, `WITH expired AS(SELECT id FROM native_nuget_publication_sessions WHERE collected_at IS NULL AND state='expired' ORDER BY expires_at,id FOR UPDATE SKIP LOCKED LIMIT $1) SELECT `+nuGetSessionColumns+` FROM native_nuget_publication_sessions WHERE id IN(SELECT id FROM expired) ORDER BY expires_at,id`, limit)

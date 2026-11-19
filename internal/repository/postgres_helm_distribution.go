@@ -253,7 +253,11 @@ func (s *PostgresStore) CreateHelmReplication(ctx context.Context, j dist.Job, c
 			extra += item.Size + item.ProvenanceSize
 		}
 	}
-	// Pre-flight only: each item reserves its bytes through its own session when it runs.
+	// Pre-flight only: each item reserves its bytes through its own session when it runs. Sessions of the
+	// target past their deadline release their bytes first, so abandoned ones do not refuse the job.
+	if err = releaseExpiredHelmSessions(ctx, tx, `SELECT id FROM native_helm_publication_sessions WHERE repository_id=$1::uuid AND state='pending' AND expires_at<=now()`, j.TargetRepositoryID); err != nil {
+		return dist.Job{}, false, err
+	}
 	if err = capacity.Headroom(ctx, tx, j.TargetRepositoryID, extra); err != nil {
 		return dist.Job{}, false, err
 	}

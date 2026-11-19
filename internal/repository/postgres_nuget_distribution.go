@@ -257,7 +257,11 @@ func (s *PostgresStore) CreateNuGetReplication(ctx context.Context, j dist.Job, 
 			extra += item.Size
 		}
 	}
-	// Pre-flight only: each item reserves its bytes through its own session when it runs.
+	// Pre-flight only: each item reserves its bytes through its own session when it runs. Sessions of the
+	// target past their deadline release their bytes first, so abandoned ones do not refuse the job.
+	if err = releaseExpiredNuGetSessions(ctx, tx, `SELECT id FROM native_nuget_publication_sessions WHERE repository_id=$1::uuid AND state IN ('reserved','staged') AND expires_at<=now()`, j.TargetRepositoryID); err != nil {
+		return dist.Job{}, false, err
+	}
 	if err = capacity.Headroom(ctx, tx, j.TargetRepositoryID, extra); err != nil {
 		return dist.Job{}, false, err
 	}

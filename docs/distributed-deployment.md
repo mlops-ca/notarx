@@ -178,8 +178,10 @@ node keeps its reservation, which the next reconciler pass corrects. Snapshot pu
 Helm and NuGet reserve the bytes of a pending session (chart plus provenance, or the package) with `Reserve`
 when the session is admitted and release them when it commits (the commit adds only the object count), expires
 lazily in the next reservation or is expired by the janitor; migration 000022 adds the bytes of sessions pending
-at upgrade time, and the same rolling-upgrade caveat applies. Creating a Helm or NuGet replication job only checks
-the counter (`capacity.Headroom`); each item reserves its bytes through its target session. A source test
+at upgrade time, and the same rolling-upgrade caveat applies. A session past its deadline keeps its bytes until the next reservation or replication job creation in that
+repository, or the janitor, expires it. Creating a Helm or NuGet replication job only checks
+the counter (`capacity.Headroom`; it admits several jobs that together exceed the quota, and the items beyond it
+fail when they reserve); each item reserves its bytes through its target session. A source test
 (`quota_admission_lint_test.go`, a textual heuristic over the Postgres stores) fails on a file that locks the quota
 row or sums rows and rejects with `ErrQuotaExceeded`; it has no exceptions.
 
