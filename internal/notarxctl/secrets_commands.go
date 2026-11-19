@@ -2,6 +2,7 @@ package notarxctl
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -54,7 +55,7 @@ func secretsResealCommand() command {
 				return fmt.Errorf("open database: invalid %s", secretsDatabaseEnv)
 			}
 			defer func() { _ = db.Close() }()
-			results, runErr := reseal.Run(ctx, db, env.globals.dryRun)
+			results, runErr := reseal.RunAudited(ctx, db, env.globals.dryRun)
 			if runErr != nil && len(results) == 0 {
 				return runErr
 			}
@@ -82,6 +83,9 @@ func secretsResealCommand() command {
 				return nil
 			}); err != nil {
 				return err
+			}
+			if errors.Is(runErr, reseal.ErrAuditMissing) {
+				fmt.Fprintln(env.stderr, "warning: sealed values were rewritten but the security audit record is missing; record this run manually")
 			}
 			return runErr
 		},

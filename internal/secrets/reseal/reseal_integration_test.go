@@ -5,6 +5,7 @@ package reseal_test
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/url"
 	"os"
@@ -35,6 +36,11 @@ var schemaDDL = []string{
 	"CREATE TABLE webhook_subscriptions (id uuid PRIMARY KEY, secret_ciphertext text NOT NULL, version bigint NOT NULL DEFAULT 1)",
 	"CREATE TABLE hosted_repositories (id uuid PRIMARY KEY, upstream_auth jsonb, version bigint NOT NULL DEFAULT 1)",
 	"CREATE TABLE token_signing_keys (kid text PRIMARY KEY, alg text NOT NULL, state text NOT NULL, public_jwk jsonb NOT NULL, private_sealed text NOT NULL, integrity_mac text NOT NULL)",
+	// A flat stand-in for the partitioned security_audit_log; insertAuditRow
+	// writes exactly these columns.
+	`CREATE TABLE security_audit_log (id bigserial PRIMARY KEY, group_name text NOT NULL, repository text NOT NULL, member_name text, outcome text NOT NULL, actor text NOT NULL,
+		occurred_at timestamptz NOT NULL DEFAULT now(), format text, resource text, representation text, member_type text, upstream_host text, operation text, http_status integer,
+		cache_disposition text, bytes bigint, request_id text, trace_id text, authorization_source text, authorization_reason text, evidence jsonb NOT NULL DEFAULT '{}'::jsonb)`,
 }
 
 func TestResealRotatesEverySealedColumn(t *testing.T) {
@@ -128,9 +134,48 @@ func TestResealRotatesEverySealedColumn(t *testing.T) {
 		t.Fatal("dry run must not write")
 	}
 
-	results, err := reseal.Run(ctx, db, false)
+	auditCount := func() int {
+		t.Helper()
+		var n int
+		if err := db.QueryRowContext(ctx, "SELECT count(*) FROM security_audit_log").Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	if _, err := reseal.RunAudited(ctx, db, true); err != nil || auditCount() != 0 {
+		t.Fatalf("a dry run must write no audit: %d %v", auditCount(), err)
+	}
+	results, err := reseal.RunAudited(ctx, db, false)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if auditCount() != 1 {
+		t.Fatalf("a real run must leave exactly one audit record, got %d", auditCount())
+	}
+	var actor, operation, outcome string
+	var evidenceJSON []byte
+	if err := db.QueryRowContext(ctx, "SELECT actor, operation, outcome, evidence FROM security_audit_log").Scan(&actor, &operation, &outcome, &evidenceJSON); err != nil {
+		t.Fatal(err)
+	}
+	var evidence map[string]string
+	if err := json.Unmarshal(evidenceJSON, &evidence); err != nil {
+		t.Fatal(err)
+	}
+	if actor != reseal.Actor || operation != reseal.Operation {
+		t.Fatalf("actor=%q operation=%q", actor, operation)
+	}
+	currentID, previousIDs, err := secrets.KeyIDs()
+	if err != nil || evidence["current_key_id"] != currentID || evidence["previous_key_ids"] != strings.Join(previousIDs, ",") {
+		t.Fatalf("key ids: %v %v", evidence, err)
+	}
+	if evidence["os_user"] == "" || evidence["host"] == "" || evidence["status"] != "complete" {
+		t.Fatalf("evidence: %v", evidence)
+	}
+	if evidence["table:webhook_subscriptions.secret_ciphertext"] != "resealed=1 skipped=0 failed=0" {
+		t.Fatalf("per-table counts: %v", evidence)
+	}
+	if strings.Contains(string(evidenceJSON), keyA) || strings.Contains(string(evidenceJSON), keyB) {
+		t.Fatal("audit leaked key material")
 	}
 	if total(results, func(r reseal.Result) int { return r.Resealed }) != 8 {
 		t.Fatalf("results: %+v", results)
@@ -258,6 +303,68 @@ func TestResealReportsUnreadableRowsAndContinues(t *testing.T) {
 		if result.Target == "webhook_subscriptions.secret_ciphertext" && (result.Failed != 1 || result.Resealed != 1) {
 			t.Fatalf("result=%+v", result)
 		}
+	}
+}
+
+func TestResealReportsMissingAudit(t *testing.T) {
+	raw := os.Getenv("TEST_DATABASE_URL")
+	if raw == "" {
+		t.Skip("TEST_DATABASE_URL is required")
+	}
+	if err := testsupport.ValidateIsolatedDatabaseURL(raw); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	control, err := sql.Open("pgx", raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = control.Close() })
+	schema := "reseal_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	if _, err := control.ExecContext(ctx, "CREATE SCHEMA "+schema); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = control.ExecContext(ctx, "DROP SCHEMA "+schema+" CASCADE") })
+	parsed, _ := url.Parse(raw)
+	query := parsed.Query()
+	query.Set("search_path", schema)
+	parsed.RawQuery = query.Encode()
+	db, err := sql.Open("pgx", parsed.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	db.SetMaxOpenConns(1)
+	// The audit table is absent: the audit insert fails, the resealed row stays.
+	for _, ddl := range schemaDDL {
+		if strings.Contains(ddl, "security_audit_log") {
+			continue
+		}
+		if _, err := db.ExecContext(ctx, ddl); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv(secrets.KeyEnv, keyA)
+	id := uuid.NewString()
+	sealed, _ := secrets.Seal("webhook-subscription:"+id, "hook-secret-32-bytes-long-enough!")
+	if _, err := db.ExecContext(ctx, "INSERT INTO webhook_subscriptions (id, secret_ciphertext) VALUES ($1, $2)", id, sealed); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(secrets.KeyEnv, keyB)
+	t.Setenv(secrets.KeyPreviousEnv, keyA)
+	results, err := reseal.RunAudited(ctx, db, false)
+	if !errors.Is(err, reseal.ErrAuditMissing) {
+		t.Fatalf("err=%v", err)
+	}
+	if total(results, func(r reseal.Result) int { return r.Resealed }) != 1 {
+		t.Fatalf("rows already resealed must be reported: %+v", results)
+	}
+	var stored string
+	if err := db.QueryRowContext(ctx, "SELECT secret_ciphertext FROM webhook_subscriptions WHERE id=$1", id).Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if need, _ := secrets.NeedsReseal(stored); need {
+		t.Fatal("rows resealed before the audit failure must stay resealed")
 	}
 }
 

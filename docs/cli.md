@@ -438,6 +438,15 @@ a backup before upgrading if a rollback must stay possible.
    ciphertext back. `--dry-run` counts without writing. A value that cannot
    be opened is reported by row (never its contents), the other rows are still
    resealed, and the command exits non-zero. Reseal is idempotent.
+   Every real run (not `--dry-run`) writes one `security_audit_log` record in
+   one transaction: actor `cli:secrets-reseal`, operation `secrets.reseal`,
+   and evidence with the OS user (`os_user`), `host`, the key ids
+   (`current_key_id`, `previous_key_ids`; ids only, never key material), a
+   `status` (`complete`, `rows_failed` or `aborted`), and one
+   `table:<table.column>` entry per sealed column with its `resealed`,
+   `skipped` (already current or unreadable) and `failed` counts. If the audit
+   cannot be written the command exits non-zero and says the audit record is
+   missing; rows already resealed stay resealed.
 3. Run `notarxctl secrets reseal --dry-run` again and confirm `resealed` is 0
    and `failed` is 0 in every row. Only then remove the retired key from
    `NOTARX_SETTINGS_ENCRYPTION_KEY_PREVIOUS` and restart. A row that still
