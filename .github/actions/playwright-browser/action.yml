@@ -5,7 +5,7 @@ description: >-
   packages for the dependencies are cached by runner image, architecture and
   @playwright/test version. apt gets short network timeouts and retries. The
   browser download is time-boxed to 5 minutes and the system dependencies to 10
-  with timeout(1) (composite steps have no timeout-minutes).
+  (3 on the regional mirror, then 7 on archive.ubuntu.com) with timeout(1) (composite steps have no timeout-minutes).
 
 runs:
   using: composite
@@ -46,7 +46,19 @@ runs:
     - name: Install browser system dependencies
       shell: bash
       working-directory: console
-      run: timeout 600 npx playwright install-deps chromium
+      run: |
+        # A mirror that trickles bytes defeats apt's inactivity timeout, so
+        # time-box the first attempt on the runner's regional mirror and, when it
+        # does not finish, retry against the canonical Ubuntu archives. Whole
+        # packages already downloaded stay in the cache directory.
+        if ! timeout 180 npx playwright install-deps chromium; then
+          echo "::warning::apt install on the regional mirror did not finish in 180s; falling back to archive.ubuntu.com"
+          sudo sed -i -E \
+            -e 's#mirror\+file:/etc/apt/apt-mirrors.txt#http://archive.ubuntu.com/ubuntu/#' \
+            -e 's#https?://[a-z0-9.-]+\.archive\.ubuntu\.com/ubuntu/?#http://archive.ubuntu.com/ubuntu/#' \
+            /etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list 2>/dev/null || true
+          timeout 420 npx playwright install-deps chromium
+        fi
     # apt ran as root; hand the files back so the cache save can read them, and
     # drop the root-only lock and partial downloads.
     - name: Hand the apt package cache back to the runner user
