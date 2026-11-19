@@ -136,7 +136,20 @@ out of the arm64 leg. See
 
 `build-images` builds the notarx and reference apt signer images once per run
 (one parallel matrix leg each, BuildKit layers cached in the GitHub Actions
-cache; the reference scanner has no CI consumer, so it is not built here) and uploads each as a tarball artifact named
+cache, and the Go module download cache restored with `actions/cache`, keyed by
+runner architecture and `go.sum` with a prefix fallback, then passed to the build as the
+`gomod-seed` build context: the Dockerfiles run `go mod download` with
+`GOPROXY=file:///gomod-seed,https://proxy.golang.org|direct`, so a warm run makes no request
+to the module proxy and a `go.sum` change fetches only the new modules. An exact cache hit runs
+`GOPROXY=off go mod download` first, which fails rather than fetches and is the proof that
+the warm path is network free. `go mod verify` runs on the runner and in the image, and
+`go.sum` still decides which bytes are accepted, so a poisoned cache cannot change the
+build. The BuildKit `/go/pkg/mod` cache mount is gone: it was never persisted between
+runners, and the layer now holds the modules. The seed is passed only by `build-images`;
+release image builds (`image-build.yml`) use the empty default seed and fetch from the
+proxy as before, so release digests and provenance (ADR 0016, ADR 0024) are unchanged. Module
+contents are fixed by `go.sum` and the compiled output does not depend on where they came from,
+so the images are expected to be byte-identical to a networked build; the reference scanner has no CI consumer, so it is not built here) and uploads each as a tarball artifact named
 `image-<runner arch>-<image>`. Every contract lane and `console-e2e` downloads
 the artifacts for its own runner architecture and `docker load`s them, so no job
 rebuilds an image from source. `compose.yml` names the images

@@ -1,18 +1,21 @@
+# Module download seed. Empty by default; CI passes the restored download cache
+# with --build-context gomod-seed=DIR so a warm run never asks the proxy
+# (docs/ci.md). go.sum still pins every module and go mod verify checks it.
+FROM scratch AS gomod-seed
+
 FROM golang:1.27.4-alpine@sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280 AS build
 ARG VERSION=dev
 ARG REVISION=unknown
 WORKDIR /src
 COPY go.mod go.sum ./
-RUN --mount=type=cache,id=notarx-go-mod,target=/go/pkg/mod,sharing=locked \
-    go mod download
+RUN --mount=type=bind,from=gomod-seed,target=/gomod-seed \
+    GOPROXY='file:///gomod-seed,https://proxy.golang.org|direct' go mod download && go mod verify
 COPY . .
-RUN --mount=type=cache,id=notarx-go-mod,target=/go/pkg/mod,sharing=locked \
-    --mount=type=cache,id=notarx-go-build,target=/root/.cache/go-build,sharing=locked \
+RUN --mount=type=cache,id=notarx-go-build,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 go build -trimpath -buildvcs=false \
     -ldflags="-s -w -X github.com/mlops-ca/notarx/internal/buildinfo.injectedVersion=$VERSION -X github.com/mlops-ca/notarx/internal/buildinfo.injectedRevision=$REVISION" \
     -o /notarx ./cmd/notarx
-RUN --mount=type=cache,id=notarx-go-mod,target=/go/pkg/mod,sharing=locked \
-    --mount=type=cache,id=notarx-go-build,target=/root/.cache/go-build,sharing=locked \
+RUN --mount=type=cache,id=notarx-go-build,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 go build -trimpath -buildvcs=false \
     -ldflags="-s -w -X github.com/mlops-ca/notarx/internal/buildinfo.injectedVersion=$VERSION -X github.com/mlops-ca/notarx/internal/buildinfo.injectedRevision=$REVISION" \
     -o /notarx-healthcheck ./cmd/healthcheck
@@ -21,8 +24,7 @@ RUN --mount=type=cache,id=notarx-go-mod,target=/go/pkg/mod,sharing=locked \
 # build does not depend on it, so BuildKit skips it; CI runs the suite once in
 # the contract and quality jobs instead of once per image build.
 FROM build AS test
-RUN --mount=type=cache,id=notarx-go-mod,target=/go/pkg/mod,sharing=locked \
-    --mount=type=cache,id=notarx-go-build,target=/root/.cache/go-build,sharing=locked \
+RUN --mount=type=cache,id=notarx-go-build,target=/root/.cache/go-build,sharing=locked \
     go test ./...
 
 FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab

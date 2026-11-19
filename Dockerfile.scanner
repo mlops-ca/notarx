@@ -2,23 +2,25 @@
 # digest was resolved from the official aquasec/trivy 0.72.0 image.
 ARG TRIVY_IMAGE=aquasec/trivy:0.72.0@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
 
+# Module download seed. Empty by default; CI passes the restored download cache
+# with --build-context gomod-seed=DIR so a warm run never asks the proxy
+# (docs/ci.md). go.sum still pins every module and go mod verify checks it.
+FROM scratch AS gomod-seed
+
 FROM golang:1.27.4-alpine@sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280 AS build
 WORKDIR /src
 COPY go.mod go.sum ./
-RUN --mount=type=cache,id=notarx-go-mod,target=/go/pkg/mod,sharing=locked \
-    go mod download
+RUN --mount=type=bind,from=gomod-seed,target=/gomod-seed \
+    GOPROXY='file:///gomod-seed,https://proxy.golang.org|direct' go mod download && go mod verify
 COPY . .
-RUN --mount=type=cache,id=notarx-go-mod,target=/go/pkg/mod,sharing=locked \
-    --mount=type=cache,id=notarx-go-build,target=/root/.cache/go-build,sharing=locked \
+RUN --mount=type=cache,id=notarx-go-build,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /reference-scanner ./cmd/reference-scanner
-RUN --mount=type=cache,id=notarx-go-mod,target=/go/pkg/mod,sharing=locked \
-    --mount=type=cache,id=notarx-go-build,target=/root/.cache/go-build,sharing=locked \
+RUN --mount=type=cache,id=notarx-go-build,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /reference-scanner-healthcheck ./cmd/reference-scanner-healthcheck
 
 # Opt-in test stage (`docker build --target test`); the image build skips it.
 FROM build AS test
-RUN --mount=type=cache,id=notarx-go-mod,target=/go/pkg/mod,sharing=locked \
-    --mount=type=cache,id=notarx-go-build,target=/root/.cache/go-build,sharing=locked \
+RUN --mount=type=cache,id=notarx-go-build,target=/root/.cache/go-build,sharing=locked \
     go test ./cmd/reference-scanner ./cmd/reference-scanner-healthcheck ./internal/refscanner
 
 FROM ${TRIVY_IMAGE}
