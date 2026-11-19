@@ -172,6 +172,7 @@ func (w WebhookDeliveryWorker) Start(ctx context.Context, interval time.Duration
 		interval = 5 * time.Second
 	}
 	go func() {
+		wake := notificationWake(ctx, w.Store, repository.WebhookDeliveryChannel)
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -186,6 +187,10 @@ func (w WebhookDeliveryWorker) Start(ctx context.Context, interval time.Duration
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+			case _, ok := <-wake:
+				if !ok {
+					wake = nil
+				}
 			}
 		}
 	}()

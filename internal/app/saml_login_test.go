@@ -206,8 +206,8 @@ func TestSAMLLoginEndToEndCreatesASAMLSession(t *testing.T) {
 	// A second sign-in of the same subject reuses the account.
 	again := f.begin("/")
 	f.post(&again, f.response(samltest.Response{RequestID: again.requestID, NameID: "persistent-1", AssertionID: "_second"}), again.relay)
-	if page, _ := f.store.ListUsers(t.Context(), repository.UserListQuery{Limit: 10}); page.Total != 1 {
-		t.Fatalf("users = %d, want 1", page.Total)
+	if page, _ := f.store.ListUsers(t.Context(), repository.UserListQuery{Limit: 10}); page.Total.Value != 1 {
+		t.Fatalf("users = %d, want 1", page.Total.Value)
 	}
 }
 
@@ -270,7 +270,7 @@ func TestSAMLACSRefusals(t *testing.T) {
 			if len(reasons) != 1 || reasons[0] != tc.reason {
 				t.Fatalf("audit reasons = %v, want [%s]", reasons, tc.reason)
 			}
-			if page, _ := f.store.ListUsers(t.Context(), repository.UserListQuery{Limit: 10}); page.Total != 0 {
+			if page, _ := f.store.ListUsers(t.Context(), repository.UserListQuery{Limit: 10}); page.Total.Value != 0 {
 				t.Fatal("a refused response created an account")
 			}
 			for _, record := range f.audit.records {
@@ -371,8 +371,8 @@ func TestSAMLProvisioningRules(t *testing.T) {
 		body := f.response(samltest.Response{RequestID: login.requestID, NameID: "Ada@Example.test", NameIDFormat: "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress"})
 		redirectParams(t, f.post(&login, body, login.relay))
 		page, _ := f.store.ListUsers(t.Context(), repository.UserListQuery{Limit: 10})
-		if page.Total != 2 {
-			t.Fatalf("users = %d: the sign-in must create its own account instead of taking over ada", page.Total)
+		if page.Total.Value != 2 {
+			t.Fatalf("users = %d: the sign-in must create its own account instead of taking over ada", page.Total.Value)
 		}
 		if _, link, err := f.store.GetUserByProviderIdentity(t.Context(), f.provider.ID, "ada@example.test"); err != nil || link.UserID == "" {
 			t.Fatalf("the lower-cased emailAddress NameID is the identity key: %+v %v", link, err)

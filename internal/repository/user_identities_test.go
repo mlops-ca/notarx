@@ -134,7 +134,7 @@ func TestMemoryUserIdentityJITPendingRoleCanBeApprovedAndRevoked(t *testing.T) {
 		t.Fatalf("pending JIT user=%+v identity=%+v created=%v err=%v", user, identity, created, err)
 	}
 	page, err := store.ListUsers(ctx, UserListQuery{Role: "none", Limit: 10})
-	if err != nil || page.Total != 1 || page.Items[0].ID != user.ID {
+	if err != nil || page.Total.Value != 1 || page.Items[0].ID != user.ID {
 		t.Fatalf("pending user list=%+v err=%v", page, err)
 	}
 	member := "member"

@@ -100,7 +100,7 @@ func TestOIDCBrowserJITRegistersPendingUserWithoutRepositoryAccess(t *testing.T)
 	}
 	cookie := signIn()
 	page, err := store.ListUsers(t.Context(), repository.UserListQuery{Role: "none", Limit: 10})
-	if err != nil || page.Total != 1 || page.Items[0].SecretHash != "" {
+	if err != nil || page.Total.Value != 1 || page.Items[0].SecretHash != "" {
 		t.Fatalf("pending users=%+v err=%v", page, err)
 	}
 	user := page.Items[0]
@@ -130,7 +130,7 @@ func TestOIDCBrowserJITRegistersPendingUserWithoutRepositoryAccess(t *testing.T)
 	}
 	_ = signIn()
 	all, err := store.ListUsers(t.Context(), repository.UserListQuery{Limit: 10})
-	if err != nil || all.Total != 1 || all.Items[0].Role != "member" {
+	if err != nil || all.Total.Value != 1 || all.Items[0].Role != "member" {
 		t.Fatalf("repeat sign-in users=%+v err=%v", all, err)
 	}
 	none := "none"
@@ -311,7 +311,7 @@ func TestOIDCTwoProvidersSignInIndependently(t *testing.T) {
 		}
 	}
 	users, err := store.ListUsers(t.Context(), repository.UserListQuery{Limit: 10})
-	if err != nil || users.Total != 2 {
+	if err != nil || users.Total.Value != 2 {
 		t.Fatalf("each provider must provision its own account: %+v err=%v", users, err)
 	}
 	alphaProvider, _ := runtime.store.GetIdentityProviderBySlug(t.Context(), "alpha")

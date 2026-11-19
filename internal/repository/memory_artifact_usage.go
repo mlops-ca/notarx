@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-// Keep only the offset plus one page while counting under the same read lock.
-// The maximum-address heap discards rows beyond that bounded window.
+// artifactUsageHeap is a max-heap by address that keeps only the smallest addresses seen: one page plus
+// the probe row that says whether another page follows.
 type artifactUsageHeap []ArtifactUsageStat
 
 func (h artifactUsageHeap) Len() int           { return len(h) }
@@ -22,10 +22,14 @@ func (s *MemoryStore) QueryArtifactUsage(ctx context.Context, repository string,
 	if err := query.Validate(repository); err != nil {
 		return page, err
 	}
+	afterResource, afterFormat, after, err := query.afterAddress(repository)
+	if err != nil {
+		return page, err
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	window := artifactUsageHeap{}
-	capacity := query.Offset + query.Limit
+	matching := artifactUsageHeap{}
+	var total int64
 	for _, stat := range s.artifactUsage {
 		if err := ctx.Err(); err != nil {
 			return page, err
@@ -39,18 +43,25 @@ func (s *MemoryStore) QueryArtifactUsage(ctx context.Context, repository string,
 		if !strings.Contains(stat.Resource, query.Query) {
 			continue
 		}
-		page.TotalCount++
-		if len(window) < capacity {
-			heap.Push(&window, stat)
-		} else if artifactUsageAddressLess(stat, window[0]) {
-			window[0] = stat
-			heap.Fix(&window, 0)
+		total++
+		if after && !artifactUsageAddressLess(ArtifactUsageStat{Resource: afterResource, Format: afterFormat}, stat) {
+			continue
+		}
+		if len(matching) < query.Limit+1 {
+			heap.Push(&matching, stat)
+		} else if artifactUsageAddressLess(stat, matching[0]) {
+			matching[0] = stat
+			heap.Fix(&matching, 0)
 		}
 	}
+	page.Total = BoundedListTotal(total)
+	window := []ArtifactUsageStat(matching)
 	sort.Slice(window, func(i, j int) bool { return artifactUsageAddressLess(window[i], window[j]) })
-	start := min(query.Offset, len(window))
-	page.Items = make([]ArtifactUsageStat, len(window)-start)
-	copy(page.Items, window[start:])
+	if len(window) > query.Limit {
+		window = window[:query.Limit]
+		page.NextPageToken = query.pageToken(repository, window[len(window)-1])
+	}
+	page.Items = append(make([]ArtifactUsageStat, 0, len(window)), window...)
 	return page, nil
 }
 

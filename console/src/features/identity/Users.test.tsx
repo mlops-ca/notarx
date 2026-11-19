@@ -127,7 +127,11 @@ describe("UsersPage", () => {
     "keeps a pending search when the %s control changes",
     async (key, value, label, index) => {
       mockListUsers.mockResolvedValue({
-        data: { items: [alice], total: 1, limit: 20, offset: 0 },
+        data: {
+          items: [alice],
+          total: { value: 1, relation: "eq" },
+          limit: 20,
+        },
       } as never);
       renderPage();
       await screen.findByText("Alice Chen");
@@ -152,7 +156,7 @@ describe("UsersPage", () => {
 
   it("keeps same-page search navigation and history synchronized", async () => {
     mockListUsers.mockResolvedValue({
-      data: { items: [alice], total: 1, limit: 20, offset: 0 },
+      data: { items: [alice], total: { value: 1, relation: "eq" }, limit: 20 },
     } as never);
     const user = userEvent.setup();
     renderPage({ entry: "/users?q=alice", destination: "/users?q=bob" });
@@ -177,7 +181,7 @@ describe("UsersPage", () => {
 
   it("discards a pending search draft when navigation clears the filters", async () => {
     mockListUsers.mockResolvedValue({
-      data: { items: [alice], total: 1, limit: 20, offset: 0 },
+      data: { items: [alice], total: { value: 1, relation: "eq" }, limit: 20 },
     } as never);
     const user = userEvent.setup();
     renderPage({ entry: "/users?q=alice", destination: "/users" });
@@ -203,14 +207,21 @@ describe("UsersPage", () => {
     "resets pagination when the URL %s filter changes",
     async (key, value) => {
       mockListUsers.mockResolvedValue({
-        data: { items: [alice], total: 100, limit: 20, offset: 0 },
+        data: {
+          items: [alice],
+          total: { value: 100, relation: "eq" },
+          limit: 20,
+          nextPageToken: "t2",
+        },
       } as never);
       const user = userEvent.setup();
       renderPage({ destination: `/users?${key}=${value}` });
       await screen.findByText("Alice Chen");
       await clickPage(user, 2);
       await waitFor(() =>
-        expect(mockListUsers.mock.calls.at(-1)?.[0]?.query?.offset).toBe(20),
+        expect(mockListUsers.mock.calls.at(-1)?.[0]?.query?.pageToken).toBe(
+          "t2",
+        ),
       );
       await user.click(
         screen.getByRole("button", { name: "Open filtered users" }),
@@ -218,7 +229,7 @@ describe("UsersPage", () => {
       await waitFor(() => {
         const query = mockListUsers.mock.calls.at(-1)?.[0]?.query;
         expect(query?.[key === "q" ? "search" : key]).toBe(value);
-        expect(query?.offset).toBe(0);
+        expect(query?.pageToken).toBeUndefined();
       });
     },
   );
@@ -237,9 +248,8 @@ describe("UsersPage", () => {
             passwordChangedAt: undefined,
           },
         ],
-        total: 1,
+        total: { value: 1, relation: "eq" },
         limit: 20,
-        offset: 0,
       },
     } as never);
     renderPage();
@@ -250,7 +260,7 @@ describe("UsersPage", () => {
 
   it("loads a server-paginated user list and opens the selected account", async () => {
     mockListUsers.mockResolvedValue({
-      data: { items: [alice], total: 1, limit: 20, offset: 0 },
+      data: { items: [alice], total: { value: 1, relation: "eq" }, limit: 20 },
     } as never);
     mockListUserIdentities.mockResolvedValue({ data: { items: [] } } as never);
     mockListRepositoryGrants.mockResolvedValue({ data: [] } as never);
@@ -271,7 +281,7 @@ describe("UsersPage", () => {
         role: undefined,
         state: undefined,
         limit: 20,
-        offset: 0,
+        pageToken: undefined,
       },
       signal: expect.any(AbortSignal),
     });
@@ -286,7 +296,7 @@ describe("UsersPage", () => {
 
   it("marks and clears the administrator-verified email of an account", async () => {
     mockListUsers.mockResolvedValue({
-      data: { items: [alice], total: 1, limit: 20, offset: 0 },
+      data: { items: [alice], total: { value: 1, relation: "eq" }, limit: 20 },
     } as never);
     mockListUserIdentities.mockResolvedValue({ data: { items: [] } } as never);
     mockListRepositoryGrants.mockResolvedValue({ data: [] } as never);
@@ -332,7 +342,7 @@ describe("UsersPage", () => {
 
   it("debounces search and sends it to the server", async () => {
     mockListUsers.mockResolvedValue({
-      data: { items: [], total: 0, limit: 20, offset: 0 },
+      data: { items: [], total: { value: 0, relation: "eq" }, limit: 20 },
     } as never);
     mockListUserIdentities.mockResolvedValue({ data: { items: [] } } as never);
     const user = userEvent.setup();
@@ -351,7 +361,7 @@ describe("UsersPage", () => {
           role: undefined,
           state: undefined,
           limit: 20,
-          offset: 0,
+          pageToken: undefined,
         },
         signal: expect.any(AbortSignal),
       });

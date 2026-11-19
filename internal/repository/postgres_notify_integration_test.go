@@ -38,7 +38,7 @@ func TestPostgresNotifierMultiplexesChannelsOnOneConnection(t *testing.T) {
 	defer func() { _ = store.Close() }()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	lifecycle := store.Listen(ctx, "notarx_lifecycle_jobs")
+	lifecycle := store.Listen(ctx, LifecycleJobChannel(LifecycleJobReclaim))
 	replication := store.Listen(ctx, "notarx_replication_plans")
 	deadline := time.Now().Add(5 * time.Second)
 	for notifications.Stats().InUse != 1 && time.Now().Before(deadline) {
@@ -68,11 +68,38 @@ func TestPostgresNotifierMultiplexesChannelsOnOneConnection(t *testing.T) {
 		return false
 	}
 	for channel, wake := range map[string]<-chan struct{}{
-		"notarx_lifecycle_jobs":    lifecycle,
-		"notarx_replication_plans": replication,
+		LifecycleJobChannel(LifecycleJobReclaim): lifecycle,
+		"notarx_replication_plans":               replication,
 	} {
 		if !delivered(channel, wake) {
 			t.Fatalf("notification %q was not delivered", channel)
 		}
 	}
+}
+
+func TestPostgresLifecycleEnqueueWakesOnlyThePerKindChannel(t *testing.T) {
+	store := openClaimStore(t)
+	fixture := newClaimFixture(t, store)
+	repo := fixture.repository("notify")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	reclaim := store.Listen(ctx, LifecycleJobChannel(LifecycleJobReclaim))
+	promotion := store.Listen(ctx, LifecycleJobChannel(LifecycleJobPromotion))
+	// LISTEN is issued after the notifier goroutine acquires its connection, so keep enqueuing until the
+	// subscribed channel answers; a notification sent before the subscription is not replayed.
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		fixture.enqueue(repo, LifecycleJobReclaim, 1)
+		select {
+		case <-reclaim:
+			select {
+			case <-promotion:
+				t.Fatal("a reclaim job woke the promotion channel")
+			default:
+			}
+			return
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
+	t.Fatal("the reclaim channel was not notified")
 }

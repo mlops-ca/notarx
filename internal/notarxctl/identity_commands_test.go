@@ -415,16 +415,30 @@ func TestUserIdentitySubjectUsesCharacterLimit(t *testing.T) {
 	}
 }
 
-func TestUserListOffsetWindow(t *testing.T) {
+func TestUserListCursorWindow(t *testing.T) {
 	api := newRouteAPI(t, "")
-	api.on("GET", "/api/v2/users", 200, `{"items":[`+userJSON("1")+`],"total":3,"offset":1,"limit":1}`)
-	code, stdout, _ := runCLI(t, "user", "list", "--role", "member", "--limit", "1", "--offset", "1", "--json")
-	meta := string(decodeEnvelope(t, stdout).Meta)
-	if code != ExitOK || !strings.Contains(meta, `"total": 3`) || !strings.Contains(meta, `"complete": false`) {
-		t.Fatalf("exit = %d, meta = %s", code, meta)
+	api.on("GET", "/api/v2/users", 200, `{"items":[`+userJSON("1")+`],"total":{"value":3,"relation":"eq"},"limit":1,"nextPageToken":"tok2"}`)
+	code, stdout, stderr := runCLI(t, "user", "list", "--role", "member", "--limit", "1", "--cursor", "tok1", "--json")
+	envelope := decodeEnvelope(t, stdout)
+	meta := string(envelope.Meta)
+	if code != ExitOK || !strings.Contains(meta, `"total": 3`) || !strings.Contains(meta, `"totalRelation": "eq"`) || !strings.Contains(meta, `"complete": false`) || !strings.Contains(string(envelope.Data), `"nextCursor": "tok2"`) {
+		t.Fatalf("exit = %d, meta = %s, data = %s, stderr = %s", code, meta, envelope.Data, stderr)
 	}
-	if query := api.recorded()[0].Query; query != "limit=1&offset=1&role=member" {
+	if query := api.recorded()[0].Query; query != "limit=1&pageToken=tok1&role=member" {
 		t.Fatalf("query = %s", query)
+	}
+	code, _, stderr = runCLI(t, "user", "list", "--role", "member", "--limit", "1")
+	if code != ExitOK || !strings.Contains(stderr, "notarxctl user list --role member --limit 1 --cursor tok2") {
+		t.Fatalf("the human output must say how to continue: exit = %d, stderr = %s", code, stderr)
+	}
+}
+
+func TestUserListReportsALowerBoundTotal(t *testing.T) {
+	api := newRouteAPI(t, "")
+	api.on("GET", "/api/v2/users", 200, `{"items":[`+userJSON("1")+`],"total":{"value":10001,"relation":"gte"},"limit":1,"nextPageToken":"tok2"}`)
+	code, _, stderr := runCLI(t, "user", "list", "--limit", "1")
+	if code != ExitOK || !strings.Contains(stderr, "total at least 10001") {
+		t.Fatalf("exit = %d, stderr = %s", code, stderr)
 	}
 }
 

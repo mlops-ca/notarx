@@ -107,6 +107,10 @@ is evaluated during reads and has no independent reclaim job.
    `max_connections`, leaving room for migrations and administration.
 5. `LISTEN/NOTIFY` is only a wake hint. Durable tables and leases are authoritative,
    and polling recovers work after lost notifications.
+6. Expired worker leases (lifecycle jobs and replication plans) are returned to
+   the queue by the `scheduler` role every 30 seconds, in batches; claims no
+   longer recover them. Run at least one `scheduler` node, or a crashed worker's
+   jobs stay `running` until one starts. The `recovery` worker kind was removed.
 
 ## Recommended Topology
 

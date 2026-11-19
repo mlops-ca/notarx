@@ -10,8 +10,6 @@ import (
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
-const jobNotificationChannel = "notarx_lifecycle_jobs"
-
 // Store is the narrow persistence seam required to execute lifecycle jobs.
 type Store interface {
 	ClaimLifecycleJobsByKindAndFormat(context.Context, repository.LifecycleJobKind, repository.Format, int) ([]repository.LifecycleJob, error)
@@ -160,7 +158,7 @@ func (r Runtime) Start(ctx context.Context, interval time.Duration, limit int, h
 		return
 	}
 	go func() {
-		wake := notificationWake(ctx, r.Store)
+		wake := notificationWake(ctx, r.Store, repository.LifecycleJobChannel(r.Kind))
 		_ = r.RunJobs(ctx, limit, handler)
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -185,9 +183,9 @@ type notificationSource interface {
 	Listen(context.Context, string) <-chan struct{}
 }
 
-func notificationWake(ctx context.Context, store Store) <-chan struct{} {
+func notificationWake(ctx context.Context, store Store, channel string) <-chan struct{} {
 	if source, ok := store.(notificationSource); ok {
-		return source.Listen(ctx, jobNotificationChannel)
+		return source.Listen(ctx, channel)
 	}
 	return nil
 }

@@ -20,6 +20,7 @@ import {
 import { formatDate } from "../../lib/format";
 import { usePreferences } from "../../lib/preferences";
 import { clearable } from "../../lib/clearable";
+import { pagerTotal, useKeysetPages } from "../../lib/keysetPaging";
 import { UserCreateDialog } from "./users/UserCreateDialog";
 import { UserDetailsDrawer } from "./users/UserDetailsDrawer";
 import { isUserLocked, roleTone } from "./users/userPresentation";
@@ -48,8 +49,10 @@ export function UsersPage() {
   const location = useLocation();
   // The box answers every keystroke; the list follows once typing pauses.
   const [searchInput, setSearchInput] = useState(search);
-  const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(CONSOLE_PAGE_SIZE);
+  const { page, pageToken, setPage, remember } = useKeysetPages(
+    JSON.stringify([search, role, state, pageSize]),
+  );
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [filterLocationKey, setFilterLocationKey] = useState(location.key);
@@ -71,17 +74,27 @@ export function UsersPage() {
       setPage(1);
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [search, searchInput, setFilters]);
+  }, [search, searchInput, setFilters, setPage]);
 
   const usersQuery = useUserPage({
     search: search || undefined,
     role,
     state,
     limit: pageSize,
-    offset: navigating ? 0 : (page - 1) * pageSize,
+    pageToken: navigating ? undefined : pageToken,
   });
   const users = usersQuery.data?.items ?? [];
-  const total = usersQuery.data?.total ?? 0;
+  const nextPageToken = usersQuery.data?.nextPageToken;
+  const total = pagerTotal(
+    usersQuery.data?.total,
+    page,
+    pageSize,
+    Boolean(nextPageToken),
+  );
+  const usersPlaceholder = usersQuery.isPlaceholderData;
+  useEffect(() => {
+    if (!usersPlaceholder) remember(nextPageToken);
+  }, [nextPageToken, usersPlaceholder, remember]);
   const loading = usersQuery.isFetching;
   const error = usersQuery.error;
   const userChanged = useUserChanged();

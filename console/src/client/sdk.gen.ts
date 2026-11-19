@@ -1862,6 +1862,9 @@ export const revokeServiceAccountCredential = <ThrowOnError extends boolean = fa
     ...options
 });
 
+/**
+ * Pages users by keyset on creation time then id: continue with the nextPageToken of the previous page, which is bound to the search, role and state filters. The total is exact up to 10000 users, then a lower bound or a planner estimate.
+ */
 export const listUsers = <ThrowOnError extends boolean = false>(options?: Options<ListUsersData, ThrowOnError>): RequestResult<ListUsersResponses, ListUsersErrors, ThrowOnError> => (options?.client ?? client).get<ListUsersResponses, ListUsersErrors, ThrowOnError>({
     security: [{
             key: 'bearerAuth',
@@ -3061,7 +3064,7 @@ export const listArtifacts = <ThrowOnError extends boolean = false>(options: Opt
 /**
  * Get paginated lifecycle download usage aggregated per artifact address
  *
- * Returns one live page ordered by resource then format (bytewise ascending). Download increments do not reorder addresses. New addresses between requests can move offset boundaries; refresh to restart browsing. Items, totalCount and whole-repository totals come from one consistent read snapshot.
+ * Returns one live page ordered by resource then format (bytewise ascending), continued with the nextPageToken of the previous page (keyset, bound to q). Download increments do not reorder addresses and new addresses never shift a later page. Items, total and whole-repository totals come from one consistent read snapshot.
  */
 export const listRepositoryArtifactUsage = <ThrowOnError extends boolean = false>(options: Options<ListRepositoryArtifactUsageData, ThrowOnError>): RequestResult<ListRepositoryArtifactUsageResponses, ListRepositoryArtifactUsageErrors, ThrowOnError> => (options.client ?? client).get<ListRepositoryArtifactUsageResponses, ListRepositoryArtifactUsageErrors, ThrowOnError>({
     security: [{

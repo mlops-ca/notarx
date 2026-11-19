@@ -314,6 +314,7 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 		WithNodeIdentity(cfg.InstanceID, nodeRoleStrings(cfg.NodeRoles)).
 		WithAuditWriterStats(auditWriter.Stats).
 		WithReadCacheStats(caches.registry.Stats)
+	store.SetQueueClaimObserver(metrics.ObserveQueueClaimScannedRows)
 	if fileStore, ok := objectStore.(*objectstore.FileStore); ok {
 		metrics = metrics.WithObjectStoreCapacity(fileStore.Capacity)
 	}

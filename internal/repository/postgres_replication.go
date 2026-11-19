@@ -103,9 +103,6 @@ func (s *PostgresStore) claimReplicationPlans(ctx context.Context, format Format
 	if limit <= 0 || limit > 100 {
 		limit = 100
 	}
-	if _, err := s.RecoverExpiredReplicationPlans(ctx, time.Now().UTC()); err != nil {
-		return nil, err
-	}
 	rows, err := s.db.QueryContext(ctx, `
 		WITH candidates AS (
 			SELECT id FROM replication_plans WHERE ((state='pending' AND (next_attempt_at IS NULL OR next_attempt_at <= now())) OR (state='failed' AND next_attempt_at IS NOT NULL AND next_attempt_at <= now())) AND attempts < CASE WHEN max_attempts < 1 THEN 3 ELSE max_attempts END AND ($1='' OR format=$1) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT $2

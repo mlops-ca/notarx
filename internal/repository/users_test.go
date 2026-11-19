@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -33,7 +34,7 @@ func TestMemoryUserProfileFilteringAndAuthenticationLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	page, err := store.ListUsers(ctx, UserListQuery{Search: "alice", Role: "member", State: UserActive, Limit: 10})
-	if err != nil || page.Total != 1 || len(page.Items) != 1 || page.Items[0].Email != "alice@example.test" {
+	if err != nil || page.Total.Value != 1 || len(page.Items) != 1 || page.Items[0].Email != "alice@example.test" {
 		t.Fatalf("filtered users page=%+v err=%v", page, err)
 	}
 
@@ -113,5 +114,61 @@ func TestMemoryUserStoreProtectsLastActiveAdministrator(t *testing.T) {
 	}
 	if err = store.DeleteUser(ctx, second.ID); !errors.Is(err, ErrLastActiveAdmin) {
 		t.Fatalf("delete remaining admin error=%v want=%v", err, ErrLastActiveAdmin)
+	}
+}
+
+func TestMemoryListUsersWalksKeysetPages(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemoryStore()
+	for i := 0; i < 7; i++ {
+		if _, err := store.CreateUser(ctx, User{ID: fmt.Sprintf("walker-id-%d", i), Name: fmt.Sprintf("walker-%d", i), Role: "member"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var seen []string
+	token := ""
+	for pages := 0; pages < 10; pages++ {
+		page, err := store.ListUsers(ctx, UserListQuery{Search: "walker", Limit: 3, PageToken: token})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if page.Total != (ListTotal{Value: 7, Relation: TotalExact}) {
+			t.Fatalf("total=%+v", page.Total)
+		}
+		for _, user := range page.Items {
+			seen = append(seen, user.Name)
+		}
+		if token = page.NextPageToken; token == "" {
+			break
+		}
+	}
+	unique := map[string]bool{}
+	for _, name := range seen {
+		unique[name] = true
+	}
+	if len(seen) != 7 || len(unique) != 7 {
+		t.Fatalf("a keyset walk must see each of 7 users once: %v", seen)
+	}
+	first, err := store.ListUsers(ctx, UserListQuery{Search: "walker", Limit: 3})
+	if err != nil || first.NextPageToken == "" {
+		t.Fatalf("first=%+v err=%v", first, err)
+	}
+	if _, err = store.ListUsers(ctx, UserListQuery{Search: "other", Limit: 3, PageToken: first.NextPageToken}); !errors.Is(err, ErrInvalidPageToken) {
+		t.Fatalf("a token for other filters was accepted: %v", err)
+	}
+	if _, err = store.ListUsers(ctx, UserListQuery{PageToken: "!"}); !errors.Is(err, ErrInvalidPageToken) {
+		t.Fatalf("a malformed token was accepted: %v", err)
+	}
+}
+
+func TestBoundedListTotal(t *testing.T) {
+	if got := BoundedListTotal(ListTotalCap); got != (ListTotal{Value: ListTotalCap, Relation: TotalExact}) {
+		t.Fatalf("at the cap: %+v", got)
+	}
+	if got := BoundedListTotal(ListTotalCap + 1); got != (ListTotal{Value: ListTotalCap + 1, Relation: TotalAtLeast}) {
+		t.Fatalf("above the cap: %+v", got)
+	}
+	if got := boundedCountSQL("users WHERE true"); got != "SELECT count(*) FROM (SELECT 1 FROM users WHERE true LIMIT 10001) bounded" {
+		t.Fatalf("bounded count SQL: %s", got)
 	}
 }

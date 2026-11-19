@@ -158,65 +158,169 @@ func (s *PostgresStore) ClaimLifecycleJobsByKindAndFormat(ctx context.Context, k
 	return s.claimLifecycleJobs(ctx, kind, format, limit)
 }
 
+// claimLifecycleJobs claims up to limit actionable jobs (ADR 0023 section 7). Candidates come from the
+// actionable partial index in next_attempt_at order with FOR UPDATE SKIP LOCKED, so nothing is sorted and no
+// DISTINCT ON runs. The per-repository advisory lock is taken after the LIMIT, only for rows already
+// selected; the row is then marked running and the running set of the repository is probed. A row over the
+// kind's RepoConcurrency is rolled back to its candidate state (a savepoint, so no notification and no
+// attempt is consumed) and excluded from later rounds, which keeps a hot repository from starving the
+// others. The scan stops at QueueClaimScanCap examined rows.
 func (s *PostgresStore) claimLifecycleJobs(ctx context.Context, kind LifecycleJobKind, format Format, limit int) ([]LifecycleJob, error) {
 	if limit <= 0 {
 		limit = 100
 	}
-	if _, err := s.RecoverExpiredLifecycleJobs(ctx, time.Now().UTC()); err != nil {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `WITH per_repository AS (
-        SELECT DISTINCT ON (jobs.repository_id) jobs.id,jobs.repository_id,jobs.next_attempt_at,jobs.created_at
-        FROM lifecycle_jobs jobs
-        WHERE jobs.state IN ('pending','retrying') AND COALESCE(jobs.next_attempt_at,jobs.created_at)<=now()
-          AND jobs.attempts < jobs.max_attempts
-          AND ($1='' OR jobs.kind=$1) AND ($2='' OR jobs.payload->>'format'=$2)
-          AND NOT EXISTS (SELECT 1 FROM lifecycle_jobs running WHERE running.repository_id=jobs.repository_id AND running.state='running')
-        ORDER BY jobs.repository_id,COALESCE(jobs.next_attempt_at,jobs.created_at),jobs.created_at
-    ), candidates AS (
-        SELECT id FROM per_repository
-        WHERE pg_try_advisory_xact_lock(hashtextextended(repository_id::text, 0))
-        ORDER BY COALESCE(next_attempt_at,created_at),created_at LIMIT $3
-    ) UPDATE lifecycle_jobs jobs SET state='running',started_at=now(),completed_at=NULL,next_attempt_at=NULL,
-        lease_expires_at=now()+interval '10 minutes',lease_token=gen_random_uuid()::text,attempts=jobs.attempts+1
-    FROM candidates WHERE jobs.id=candidates.id AND jobs.state IN ('pending','retrying')
-    RETURNING `+prefixedLifecycleJobColumns("jobs"), kind, format, limit)
+	defer func() { _ = tx.Rollback() }()
+	var (
+		claimed  = make([]LifecycleJob, 0, limit)
+		skipped  = []string{}
+		scanned  int
+		finished bool
+	)
+	for !finished && len(claimed) < limit && scanned < QueueClaimScanCap {
+		want := limit - len(claimed)
+		if remaining := QueueClaimScanCap - scanned; want > remaining {
+			want = remaining
+		}
+		candidates, err := selectLifecycleCandidates(ctx, tx, kind, format, skipped, want)
+		if err != nil {
+			return nil, err
+		}
+		scanned += len(candidates)
+		finished = len(candidates) < want
+		for _, candidate := range candidates {
+			job, ok, err := claimLifecycleCandidate(ctx, tx, candidate)
+			if err != nil {
+				return nil, err
+			}
+			if !ok {
+				skipped = append(skipped, candidate.id)
+				continue
+			}
+			claimed = append(claimed, job)
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	s.claimObserver.record(kind, scanned)
+	return claimed, nil
+}
+
+// The candidate scans of the claim. A claim for one kind (every runtime) is served by
+// lifecycle_jobs_kind_actionable_idx (kind, next_attempt_at) in order; one for all kinds
+// (ClaimLifecycleJobs) by lifecycle_jobs_actionable_idx. Neither sorts the pending set, which is why the
+// order is next_attempt_at alone: a tie-breaker outside the index would need a sort. The integration
+// test asserts both plans.
+const (
+	claimLifecycleCandidatesByKindQuery = `SELECT id::text,repository_id::text,kind FROM lifecycle_jobs
+        WHERE state IN ('pending','retrying') AND next_attempt_at<=now() AND attempts<max_attempts
+          AND kind=$1 AND ($2='' OR payload->>'format'=$2) AND id<>ALL($3::text[]::uuid[])
+        ORDER BY next_attempt_at LIMIT $4 FOR UPDATE SKIP LOCKED`
+	claimLifecycleCandidatesAnyKindQuery = `SELECT id::text,repository_id::text,kind FROM lifecycle_jobs
+        WHERE state IN ('pending','retrying') AND next_attempt_at<=now() AND attempts<max_attempts
+          AND ($1='' OR payload->>'format'=$1) AND id<>ALL($2::text[]::uuid[])
+        ORDER BY next_attempt_at LIMIT $3 FOR UPDATE SKIP LOCKED`
+)
+
+type lifecycleCandidate struct {
+	id           string
+	repositoryID string
+	kind         LifecycleJobKind
+}
+
+func selectLifecycleCandidates(ctx context.Context, tx *sql.Tx, kind LifecycleJobKind, format Format, skipped []string, limit int) ([]lifecycleCandidate, error) {
+	var rows *sql.Rows
+	var err error
+	if kind != "" {
+		rows, err = tx.QueryContext(ctx, claimLifecycleCandidatesByKindQuery, string(kind), string(format), skipped, limit)
+	} else {
+		rows, err = tx.QueryContext(ctx, claimLifecycleCandidatesAnyKindQuery, string(format), skipped, limit)
+	}
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	var jobs []LifecycleJob
+	var candidates []lifecycleCandidate
 	for rows.Next() {
-		var job LifecycleJob
-		if err := scanLifecycleJob(rows, &job); err != nil {
+		var candidate lifecycleCandidate
+		if err = rows.Scan(&candidate.id, &candidate.repositoryID, &candidate.kind); err != nil {
 			return nil, err
 		}
-		jobs = append(jobs, job)
+		candidates = append(candidates, candidate)
 	}
-	return jobs, rows.Err()
+	return candidates, rows.Err()
+}
+
+// claimLifecycleCandidate takes the repository lock, marks the row running and probes the running set. It
+// reports false, with the row left exactly as selected, when the repository has no room for the kind or
+// another claimer holds the repository lock.
+func claimLifecycleCandidate(ctx context.Context, tx *sql.Tx, candidate lifecycleCandidate) (LifecycleJob, bool, error) {
+	var locked bool
+	if err := tx.QueryRowContext(ctx, `SELECT pg_try_advisory_xact_lock(hashtextextended($1, 0))`, candidate.repositoryID).Scan(&locked); err != nil {
+		return LifecycleJob{}, false, err
+	}
+	if !locked {
+		return LifecycleJob{}, false, nil
+	}
+	if _, err := tx.ExecContext(ctx, `SAVEPOINT lifecycle_claim`); err != nil {
+		return LifecycleJob{}, false, err
+	}
+	var job LifecycleJob
+	err := scanLifecycleJob(tx.QueryRowContext(ctx, `UPDATE lifecycle_jobs SET state='running',started_at=now(),completed_at=NULL,next_attempt_at=NULL,
+        lease_expires_at=now()+interval '10 minutes',lease_token=gen_random_uuid()::text,attempts=attempts+1
+        WHERE id=$1::uuid RETURNING `+lifecycleJobColumns, candidate.id), &job)
+	if err != nil {
+		return LifecycleJob{}, false, err
+	}
+	var running int
+	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM lifecycle_jobs WHERE repository_id=$1::uuid AND state='running'`, candidate.repositoryID).Scan(&running); err != nil {
+		return LifecycleJob{}, false, err
+	}
+	if running > LifecycleJobRepoConcurrency(candidate.kind) {
+		_, err = tx.ExecContext(ctx, `ROLLBACK TO SAVEPOINT lifecycle_claim`)
+		return LifecycleJob{}, false, err
+	}
+	_, err = tx.ExecContext(ctx, `RELEASE SAVEPOINT lifecycle_claim`)
+	return job, err == nil, err
 }
 
 func prefixedLifecycleJobColumns(prefix string) string {
 	return prefix + `.id::text,` + prefix + `.repository_id::text,` + prefix + `.kind,` + prefix + `.idempotency_key,` + prefix + `.payload,` + prefix + `.state,` + prefix + `.created_at,` + prefix + `.started_at,` + prefix + `.completed_at,` + prefix + `.last_error,` + prefix + `.attempts,` + prefix + `.max_attempts,` + prefix + `.next_attempt_at,` + prefix + `.lease_expires_at,` + prefix + `.lease_token,` + prefix + `.progress_current,` + prefix + `.progress_total,` + prefix + `.progress_message`
 }
 
+// lifecycleRecoveryBatch bounds one recovery statement so the scheduler task never holds a long lock set.
+const lifecycleRecoveryBatch = 500
+
+// RecoverExpiredLifecycleJobs returns jobs whose worker lease expired before before to the queue, in batches.
+// It is called by the scheduler task only; claims do not recover leases (ADR 0023 section 7).
 func (s *PostgresStore) RecoverExpiredLifecycleJobs(ctx context.Context, before time.Time) (int, error) {
-	result, err := s.db.ExecContext(ctx, `WITH candidates AS (
+	total := 0
+	for {
+		result, err := s.db.ExecContext(ctx, `WITH candidates AS (
 		SELECT id FROM lifecycle_jobs
 		WHERE state='running' AND lease_expires_at IS NOT NULL AND lease_expires_at<=$1
 		AND pg_try_advisory_xact_lock(hashtextextended(format('lifecycle-job-lease:%s', id), 0))
+		ORDER BY lease_expires_at LIMIT $2
 		FOR UPDATE SKIP LOCKED
 	) UPDATE lifecycle_jobs jobs SET
         state=CASE WHEN attempts>=max_attempts THEN 'failed' ELSE 'retrying' END,
         completed_at=CASE WHEN attempts>=max_attempts THEN $1 ELSE NULL END,
         next_attempt_at=CASE WHEN attempts>=max_attempts THEN NULL ELSE $1+LEAST(interval '30 minutes',interval '30 seconds'*power(2,LEAST(GREATEST(attempts-1,0),6))) END,
         lease_expires_at=NULL,lease_token='',last_error='worker lease expired before completion'
-		FROM candidates WHERE jobs.id=candidates.id`, before.UTC())
-	if err != nil {
-		return 0, err
+		FROM candidates WHERE jobs.id=candidates.id`, before.UTC(), lifecycleRecoveryBatch)
+		if err != nil {
+			return total, err
+		}
+		count, err := result.RowsAffected()
+		total += int(count)
+		if err != nil || count < lifecycleRecoveryBatch {
+			return total, err
+		}
 	}
-	count, err := result.RowsAffected()
-	return int(count), err
 }
 
 func (s *PostgresStore) RunLifecycleJobNow(ctx context.Context, repositoryID, id string, audit ...AuditRecord) (LifecycleJob, error) {

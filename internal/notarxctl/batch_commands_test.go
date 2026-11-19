@@ -282,16 +282,19 @@ func TestArtifactIdentitiesIsBounded(t *testing.T) {
 	}
 }
 
-func TestArtifactUsageReportsOffsetWindow(t *testing.T) {
+func TestArtifactUsageReportsCursorWindow(t *testing.T) {
 	api := newRouteAPI(t, "")
-	api.on("GET", repoBase+"/artifact-usage", 200, `{"repositoryId":"`+testRepoID+`","generatedAt":"2026-10-15T08:00:00Z","totalCount":3,"totals":{"downloadCount":9,"totalBytes":4096,"resources":3},"items":[{"format":"raw","resource":"a.txt","downloadCount":4,"totalBytes":2048,"firstDownloadedAt":"2026-10-14T08:00:00Z","lastDownloadedAt":"2026-10-15T08:00:00Z"}]}`)
-	code, stdout, _ := runCLI(t, "artifact", "usage", "--repo", testRepoID, "--limit", "1", "--offset", "1", "--json")
+	api.on("GET", repoBase+"/artifact-usage", 200, `{"repositoryId":"`+testRepoID+`","generatedAt":"2026-10-15T08:00:00Z","total":{"value":3,"relation":"eq"},"nextPageToken":"tok2","totals":{"downloadCount":9,"totalBytes":4096,"resources":3},"items":[{"format":"raw","resource":"a.txt","downloadCount":4,"totalBytes":2048,"firstDownloadedAt":"2026-10-14T08:00:00Z","lastDownloadedAt":"2026-10-15T08:00:00Z"}]}`)
+	code, stdout, _ := runCLI(t, "artifact", "usage", "--repo", testRepoID, "--limit", "1", "--cursor", "tok1", "--json")
 	meta := string(decodeEnvelope(t, stdout).Meta)
-	if code != ExitOK || !strings.Contains(meta, `"mode": "offset"`) || !strings.Contains(meta, `"total": 3`) || !strings.Contains(meta, `"complete": false`) {
+	if code != ExitOK || !strings.Contains(meta, `"mode": "cursor"`) || !strings.Contains(meta, `"total": 3`) || !strings.Contains(meta, `"totalRelation": "eq"`) || !strings.Contains(meta, `"complete": false`) {
 		t.Fatalf("exit = %d, meta = %s", code, meta)
 	}
-	code, stdout, _ = runCLI(t, "artifact", "usage", "--repo", testRepoID, "--limit", "1", "--offset", "1")
-	if code != ExitOK || !strings.Contains(stdout, "continue with --offset 2") {
+	if query := api.recorded()[0].Query; query != "limit=1&pageToken=tok1" {
+		t.Fatalf("query = %s", query)
+	}
+	code, stdout, _ = runCLI(t, "artifact", "usage", "--repo", testRepoID, "--q", "my file", "--limit", "1")
+	if code != ExitOK || !strings.Contains(stdout, "--q 'my file' --limit 1 --cursor tok2") {
 		t.Fatalf("exit = %d, stdout = %s", code, stdout)
 	}
 	expectUsage(t, newRouteAPI(t, ""), []string{"artifact", "usage", "--repo", testRepoID, "--limit", "501"})

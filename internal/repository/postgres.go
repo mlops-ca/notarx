@@ -20,6 +20,12 @@ type PostgresStore struct {
 	auditRecorder atomic.Pointer[AuditRecorder]
 	// cacheInvalidator evicts local read-cache entries after a mutation commits.
 	cacheInvalidator atomic.Pointer[CacheInvalidator]
+	claimObserver    queueClaimObserverHolder
+}
+
+// SetQueueClaimObserver reports the rows each lifecycle claim examined (ADR 0023 section 7).
+func (s *PostgresStore) SetQueueClaimObserver(observer QueueClaimObserver) {
+	s.claimObserver.set(observer)
 }
 
 // SetAuditRecorder routes RecordAudit through recorder, the tiered audit writer

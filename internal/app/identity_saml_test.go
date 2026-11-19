@@ -415,8 +415,8 @@ func TestSAMLAdminLinkLetsAnExistingAccountSignIn(t *testing.T) {
 	if params.Get("oidc") != "success" {
 		t.Fatalf("the linked account must sign in: %v", params)
 	}
-	if page, _ := f.store.ListUsers(t.Context(), repository.UserListQuery{Limit: 10}); page.Total != 1 {
-		t.Fatalf("users = %d, the sign-in must reuse the linked account", page.Total)
+	if page, _ := f.store.ListUsers(t.Context(), repository.UserListQuery{Limit: 10}); page.Total.Value != 1 {
+		t.Fatalf("users = %d, the sign-in must reuse the linked account", page.Total.Value)
 	}
 }
 

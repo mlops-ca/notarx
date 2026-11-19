@@ -626,17 +626,17 @@ func artifactIdentitiesCommand() command {
 }
 
 func artifactUsageCommand() command {
-	var repo, query string
-	var limit, offset int
+	var repo, query, cursor string
+	var limit int
 	return command{
 		name:     "artifact usage",
 		synopsis: "show per-artifact download counts and bytes for a repository",
-		usage:    "notarxctl artifact usage --repo ID [--q PREFIX] [--limit N] [--offset N] [--json]",
+		usage:    "notarxctl artifact usage --repo ID [--q PREFIX] [--limit N] [--cursor TOKEN] [--json]",
 		setFlags: func(fs *flag.FlagSet) {
 			fs.StringVar(&repo, "repo", "", "repository ID")
 			fs.StringVar(&query, "q", "", "resource filter")
 			fs.IntVar(&limit, "limit", 100, "rows per window (1-500)")
-			fs.IntVar(&offset, "offset", 0, "rows to skip (0-1000000)")
+			fs.StringVar(&cursor, "cursor", "", "continue from the nextPageToken of an earlier page")
 		},
 		meta: commandMeta{
 			Resource:     "artifact",
@@ -654,20 +654,22 @@ func artifactUsageCommand() command {
 				if err := requireRepo(repo); err != nil {
 					return "", nil, err
 				}
-				if limit < 1 || limit > 500 || offset < 0 || offset > 1000000 {
-					return "", nil, &UsageError{Message: "--limit or --offset is out of range", Hint: "use --limit 1-500 and --offset 0-1000000"}
+				if limit < 1 || limit > 500 {
+					return "", nil, &UsageError{Message: "--limit is out of range", Hint: "use --limit 1-500"}
 				}
-				filters := url.Values{"limit": {strconv.Itoa(limit)}, "offset": {strconv.Itoa(offset)}}
+				filters := url.Values{"limit": {strconv.Itoa(limit)}}
+				if cursor != "" {
+					filters.Set("pageToken", cursor)
+				}
 				if query != "" {
 					filters.Set("q", query)
 				}
 				return repositorySubPath(repo, "artifact-usage"), filters, nil
 			},
 			meta: func(usage adminopenapi.RepositoryArtifactUsage) *envelopeMeta {
-				total := int(usage.TotalCount)
-				start := offset
-				complete := offset+len(usage.Items) >= total
-				return &envelopeMeta{Pagination: &paginationMeta{Mode: "offset", Limit: limit, Offset: &start, Total: &total, Complete: &complete}}
+				total := int(usage.Total.Value)
+				complete := usage.NextPageToken == nil
+				return &envelopeMeta{Pagination: &paginationMeta{Mode: "cursor", PageSize: limit, Pages: 1, Complete: &complete, Total: &total, TotalRelation: string(usage.Total.Relation)}}
 			},
 			render: func(w io.Writer, usage adminopenapi.RepositoryArtifactUsage) error {
 				if _, err := fmt.Fprintf(w, "%d resources, %d downloads, %s served (as of %s)\n", usage.Totals.Resources, usage.Totals.DownloadCount, humanBytes(usage.Totals.TotalBytes), usage.GeneratedAt.UTC().Format("2006-01-02T15:04:05Z")); err != nil {
@@ -684,8 +686,8 @@ func artifactUsageCommand() command {
 				if err := writeColumns(w, rows); err != nil {
 					return err
 				}
-				if next := offset + len(usage.Items); int64(next) < usage.TotalCount {
-					_, err := fmt.Fprintf(w, "rows %d-%d of %d; continue with --offset %d\n", offset+1, next, usage.TotalCount, next)
+				if usage.NextPageToken != nil {
+					_, err := fmt.Fprintf(w, "%d rows shown (total %s%d); more: %s\n", len(usage.Items), totalRelationPrefix(string(usage.Total.Relation)), usage.Total.Value, continueCommand("notarxctl artifact usage", [][2]string{{"--repo", repo}, {"--q", query}, {"--limit", strconv.Itoa(limit)}}, *usage.NextPageToken))
 					return err
 				}
 				return nil

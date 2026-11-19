@@ -258,9 +258,10 @@ With `--json`, stdout carries exactly one document — also on failure:
   command trees and endpoints that answer everything at once, `cursor` for
   server pages, which add `pageSize`, `pages` read, and `complete`; `bounded`
   for a window without a cursor, with its `limit` and `complete: true` only
-  when the window was not full; `offset` for an offset window with `limit`,
-  `offset`, and the server's `total`). A total the server does not report is
-  absent, never 0.
+  when the window was not full; `cursor` pages that also report the server's
+  `total` add `totalRelation`: `eq` for an exact count (up to 10000), `gte` for a
+  lower bound and `estimate` for a planner estimate). A total the server does
+  not report is absent, never 0.
 - `meta.scope` carries what a page says about the range it covers, such as
   `searchedRepositories` of a global search or the Group a browse page
   belongs to.
@@ -568,8 +569,10 @@ addressed by ID with `--repo`.
   canonical coordinate and digest pairs scanners or promotion accept. The
   endpoint has no cursor: `--limit` (1–200) bounds the window, and a full
   window may hide more.
-- `notarxctl artifact usage --repo ID [--limit N] [--offset N]` shows download
-  counts per resource in an offset window with the server's total.
+- `notarxctl artifact usage --repo ID [--limit N] [--cursor TOKEN]` shows download
+  counts per resource, one keyset page at a time, with the server's total and
+  its relation; continue with the `nextPageToken` of the page (the human output
+  prints the full command, filters included).
 - `notarxctl artifact intelligence show` and `notarxctl artifact quarantine show`
   read the record of one `--coordinate` and `--digest`; 404 means none is
   recorded.
@@ -833,7 +836,8 @@ no repository access by itself — repository access comes from grants
 (`user:<name>`).
 
 - `notarxctl user list [--search TEXT] [--role R] [--state S] [--limit N]
-  [--offset N]` reads an offset window with the server's total;
+  [--cursor TOKEN]` reads one keyset page with the server's total and its relation;
+  continue with the `nextCursor` of the page;
   `notarxctl user show ID` reads one user.
 - `notarxctl user create NAME --role R (--password-stdin | --password-file FILE)`
   creates a user. Passwords come only from bounded stdin or the first line

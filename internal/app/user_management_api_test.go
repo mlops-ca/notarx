@@ -45,11 +45,14 @@ func TestUserManagementProfilePasswordSessionsAndLastAdminProtection(t *testing.
 	if err := json.Unmarshal(createdResponse.Body.Bytes(), &created); err != nil || created.DisplayName != "Alice Example" || created.Email != "alice@example.test" || created.Description != "release owner" || !created.MustChangePassword {
 		t.Fatalf("created=%+v err=%v", created, err)
 	}
-	listed := adminRequest(http.MethodGet, "/api/v2/users?search=alice%40example.test&role=admin&state=active&limit=20&offset=0", "", "")
-	if listed.Code != http.StatusOK || !strings.Contains(listed.Body.String(), `"total":1`) || !strings.Contains(listed.Body.String(), `"limit":20`) {
+	listed := adminRequest(http.MethodGet, "/api/v2/users?search=alice%40example.test&role=admin&state=active&limit=20", "", "")
+	if listed.Code != http.StatusOK || !strings.Contains(listed.Body.String(), `"total":{"relation":"eq","value":1}`) || !strings.Contains(listed.Body.String(), `"limit":20`) {
 		t.Fatalf("list=%d body=%s", listed.Code, listed.Body.String())
 	}
 
+	if offset := adminRequest(http.MethodGet, "/api/v2/users?offset=1", "", ""); offset.Code != http.StatusBadRequest {
+		t.Fatalf("a retired offset parameter must be rejected: %d body=%s", offset.Code, offset.Body.String())
+	}
 	if demoted := adminRequest(http.MethodPatch, "/api/v2/users/"+created.ID, `{"role":"member"}`, created.Version); demoted.Code != http.StatusConflict {
 		t.Fatalf("last admin demotion=%d body=%s", demoted.Code, demoted.Body.String())
 	}

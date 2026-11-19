@@ -47,7 +47,7 @@ func TestPostgresUserGovernanceLifecycle(t *testing.T) {
 	}
 
 	page, err := store.ListUsers(ctx, UserListQuery{Search: "INTEGRATION@EXAMPLE.TEST", Role: "member", State: UserActive, Limit: 20})
-	if err != nil || page.Total != 1 || len(page.Items) != 1 || page.Items[0].ID != id {
+	if err != nil || page.Total.Value != 1 || len(page.Items) != 1 || page.Items[0].ID != id {
 		t.Fatalf("filtered users=%+v err=%v", page, err)
 	}
 
@@ -216,7 +216,7 @@ func TestPostgresUserIdentityBindingAndJITProvisioning(t *testing.T) {
 	}
 	defer func() { _ = store.DeleteUser(ctx, pending.ID) }()
 	page, err := store.ListUsers(ctx, UserListQuery{Search: pending.Name, Role: "none", Limit: 10})
-	if err != nil || page.Total != 1 || page.Items[0].ID != pending.ID {
+	if err != nil || page.Total.Value != 1 || page.Items[0].ID != pending.ID {
 		t.Fatalf("pending list=%+v err=%v", page, err)
 	}
 	member := "member"

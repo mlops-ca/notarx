@@ -2492,6 +2492,27 @@ func (e LifecycleJobState) Valid() bool {
 	}
 }
 
+// Defines values for ListTotalRelation.
+const (
+	Eq       ListTotalRelation = "eq"
+	Estimate ListTotalRelation = "estimate"
+	Gte      ListTotalRelation = "gte"
+)
+
+// Valid indicates whether the value is a known member of the ListTotalRelation enum.
+func (e ListTotalRelation) Valid() bool {
+	switch e {
+	case Eq:
+		return true
+	case Estimate:
+		return true
+	case Gte:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for LocalCapacityAlias.
 const (
 	Backups   LocalCapacityAlias = "backups"
@@ -7364,6 +7385,15 @@ type LifecycleJobReconciliation struct {
 	RequeuedJobIds []string           `json:"requeuedJobIds"`
 }
 
+// ListTotal The size of a listing without counting the whole table. relation eq is exact (at most 10000); gte means at least value; estimate is the planner estimate for an unfiltered large table.
+type ListTotal struct {
+	Relation ListTotalRelation `json:"relation"`
+	Value    int64             `json:"value"`
+}
+
+// ListTotalRelation defines model for ListTotal.Relation.
+type ListTotalRelation string
+
 // LocalCapacityAlias defines model for LocalCapacityAlias.
 type LocalCapacityAlias string
 
@@ -8540,14 +8570,17 @@ type RepositoryType string
 
 // RepositoryArtifactUsage defines model for RepositoryArtifactUsage.
 type RepositoryArtifactUsage struct {
-	GeneratedAt  time.Time           `json:"generatedAt"`
-	Items        []ArtifactUsageStat `json:"items"`
-	RepositoryId openapi_types.UUID  `json:"repositoryId"`
+	GeneratedAt time.Time           `json:"generatedAt"`
+	Items       []ArtifactUsageStat `json:"items"`
 
-	// TotalCount Number of artifact addresses matching q, independent of offset and limit.
-	TotalCount int64 `json:"totalCount"`
+	// NextPageToken Present while more addresses follow; pass it as pageToken for the next page.
+	NextPageToken *string            `json:"nextPageToken,omitempty"`
+	RepositoryId  openapi_types.UUID `json:"repositoryId"`
 
-	// Totals Lifetime totals for the whole repository, independent of q and offset.
+	// Total Number of artifact addresses matching q, independent of the page.
+	Total ListTotal `json:"total"`
+
+	// Totals Lifetime totals for the whole repository, independent of q and the page.
 	Totals ArtifactUsageTotals `json:"totals"`
 }
 
@@ -9487,10 +9520,14 @@ type UserIdentityList struct {
 
 // UserList defines model for UserList.
 type UserList struct {
-	Items  []User `json:"items"`
-	Limit  int    `json:"limit"`
-	Offset int    `json:"offset"`
-	Total  int    `json:"total"`
+	Items []User `json:"items"`
+	Limit int    `json:"limit"`
+
+	// NextPageToken Present while more users follow; pass it as pageToken for the next page.
+	NextPageToken *string `json:"nextPageToken,omitempty"`
+
+	// Total The size of a listing without counting the whole table. relation eq is exact (at most 10000); gte means at least value; estimate is the planner estimate for an unfiltered large table.
+	Total ListTotal `json:"total"`
 }
 
 // UserSession defines model for UserSession.
@@ -10131,8 +10168,8 @@ type SearchRepositoryArtifactsParamsMatch string
 
 // ListRepositoryArtifactUsageParams defines parameters for ListRepositoryArtifactUsage.
 type ListRepositoryArtifactUsageParams struct {
-	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+	Limit     *int       `form:"limit,omitempty" json:"limit,omitempty"`
+	PageToken *PageToken `form:"pageToken,omitempty" json:"pageToken,omitempty"`
 
 	// Q Case-sensitive literal substring of the artifact address. Surrounding whitespace is trimmed; SQL wildcard characters have no special meaning.
 	Q *string `form:"q,omitempty" json:"q,omitempty"`
@@ -10374,11 +10411,11 @@ type ReplaceSiteSettingsParams struct {
 
 // ListUsersParams defines parameters for ListUsers.
 type ListUsersParams struct {
-	Search *string               `form:"search,omitempty" json:"search,omitempty"`
-	Role   *ListUsersParamsRole  `form:"role,omitempty" json:"role,omitempty"`
-	State  *ListUsersParamsState `form:"state,omitempty" json:"state,omitempty"`
-	Limit  *int                  `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset *int                  `form:"offset,omitempty" json:"offset,omitempty"`
+	Search    *string               `form:"search,omitempty" json:"search,omitempty"`
+	Role      *ListUsersParamsRole  `form:"role,omitempty" json:"role,omitempty"`
+	State     *ListUsersParamsState `form:"state,omitempty" json:"state,omitempty"`
+	Limit     *int                  `form:"limit,omitempty" json:"limit,omitempty"`
+	PageToken *PageToken            `form:"pageToken,omitempty" json:"pageToken,omitempty"`
 }
 
 // ListUsersParamsRole defines parameters for ListUsers.
@@ -18849,15 +18886,15 @@ func (siw *ServerInterfaceWrapper) ListRepositoryArtifactUsage(w http.ResponseWr
 		return
 	}
 
-	// ------------- Optional query parameter "offset" -------------
+	// ------------- Optional query parameter "pageToken" -------------
 
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageToken", r.URL.Query(), &params.PageToken, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
 	if err != nil {
 		var requiredError *runtime.RequiredParameterError
 		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageToken"})
 		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageToken", Err: err})
 		}
 		return
 	}
@@ -22235,15 +22272,15 @@ func (siw *ServerInterfaceWrapper) ListUsers(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// ------------- Optional query parameter "offset" -------------
+	// ------------- Optional query parameter "pageToken" -------------
 
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageToken", r.URL.Query(), &params.PageToken, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
 	if err != nil {
 		var requiredError *runtime.RequiredParameterError
 		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageToken"})
 		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageToken", Err: err})
 		}
 		return
 	}

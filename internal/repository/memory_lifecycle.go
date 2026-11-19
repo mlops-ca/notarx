@@ -141,15 +141,14 @@ func (s *MemoryStore) claimLifecycleJobs(kind LifecycleJobKind, format Format, l
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now().UTC()
-	s.recoverExpiredLifecycleJobsLocked(now)
 	if limit <= 0 {
 		limit = 100
 	}
 	keys := make([]string, 0, len(s.lifecycleJobs))
-	claimedRepositories := make(map[string]bool)
+	runningByRepository := make(map[string]int)
 	for key, job := range s.lifecycleJobs {
 		if job.State == LifecycleJobRunning {
-			claimedRepositories[job.RepositoryID] = true
+			runningByRepository[job.RepositoryID]++
 		}
 		if (job.State == LifecycleJobPending || job.State == LifecycleJobRetrying) && (job.NextAttemptAt.IsZero() || !job.NextAttemptAt.After(now)) && (kind == "" || job.Kind == kind) && lifecycleJobMatchesFormat(job.Payload, format) {
 			keys = append(keys, key)
@@ -164,14 +163,14 @@ func (s *MemoryStore) claimLifecycleJobs(kind LifecycleJobKind, format Format, l
 			break
 		}
 		job := s.lifecycleJobs[key]
-		if claimedRepositories[job.RepositoryID] {
+		if runningByRepository[job.RepositoryID] >= LifecycleJobRepoConcurrency(job.Kind) {
 			continue
 		}
 		job.State, job.StartedAt, job.CompletedAt = LifecycleJobRunning, now, time.Time{}
 		job.NextAttemptAt, job.LeaseExpiresAt, job.LeaseToken = time.Time{}, now.Add(lifecycleJobLeaseDuration), uuid.NewString()
 		job.Attempts++
 		s.lifecycleJobs[key] = job
-		claimedRepositories[job.RepositoryID] = true
+		runningByRepository[job.RepositoryID]++
 		jobs = append(jobs, cloneLifecycleJob(job))
 	}
 	return jobs, nil

@@ -100,7 +100,6 @@ func (s *MemoryStore) claimReplicationPlans(limit int, format Format) ([]Replica
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now().UTC()
-	s.recoverExpiredReplicationPlansLocked(now)
 	out := []ReplicationPlan{}
 	ids := make([]string, 0, len(s.replicationPlans))
 	for id := range s.replicationPlans {

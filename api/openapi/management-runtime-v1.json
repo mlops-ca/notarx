@@ -6640,6 +6640,7 @@
     "/users": {
       "get": {
         "operationId": "listUsers",
+        "description": "Pages users by keyset on creation time then id: continue with the nextPageToken of the previous page, which is bound to the search, role and state filters. The total is exact up to 10000 users, then a lower bound or a planner estimate.",
         "parameters": [
           {
             "name": "search",
@@ -6683,13 +6684,7 @@
             }
           },
           {
-            "name": "offset",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0
-            }
+            "$ref": "#/components/parameters/PageToken"
           }
         ],
         "responses": {
@@ -9397,7 +9392,7 @@
       "get": {
         "operationId": "listRepositoryArtifactUsage",
         "summary": "Get paginated lifecycle download usage aggregated per artifact address",
-        "description": "Returns one live page ordered by resource then format (bytewise ascending). Download increments do not reorder addresses. New addresses between requests can move offset boundaries; refresh to restart browsing. Items, totalCount and whole-repository totals come from one consistent read snapshot.",
+        "description": "Returns one live page ordered by resource then format (bytewise ascending), continued with the nextPageToken of the previous page (keyset, bound to q). Download increments do not reorder addresses and new addresses never shift a later page. Items, total and whole-repository totals come from one consistent read snapshot.",
         "parameters": [
           {
             "name": "limit",
@@ -9410,14 +9405,7 @@
             }
           },
           {
-            "name": "offset",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 1000000,
-              "default": 0
-            }
+            "$ref": "#/components/parameters/PageToken"
           },
           {
             "name": "q",
@@ -15473,12 +15461,35 @@
           }
         }
       },
+      "ListTotal": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The size of a listing without counting the whole table. relation eq is exact (at most 10000); gte means at least value; estimate is the planner estimate for an unfiltered large table.",
+        "required": [
+          "value",
+          "relation"
+        ],
+        "properties": {
+          "value": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "relation": {
+            "type": "string",
+            "enum": [
+              "eq",
+              "gte",
+              "estimate"
+            ]
+          }
+        }
+      },
       "UserList": {
         "type": "object",
         "required": [
           "items",
           "total",
-          "offset",
           "limit"
         ],
         "properties": {
@@ -15489,16 +15500,15 @@
             }
           },
           "total": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "offset": {
-            "type": "integer",
-            "minimum": 0
+            "$ref": "#/components/schemas/ListTotal"
           },
           "limit": {
             "type": "integer",
             "minimum": 1
+          },
+          "nextPageToken": {
+            "type": "string",
+            "description": "Present while more users follow; pass it as pageToken for the next page."
           }
         }
       },
@@ -23280,7 +23290,7 @@
         "required": [
           "repositoryId",
           "totals",
-          "totalCount",
+          "total",
           "items",
           "generatedAt"
         ],
@@ -23291,13 +23301,15 @@
           },
           "totals": {
             "$ref": "#/components/schemas/ArtifactUsageTotals",
-            "description": "Lifetime totals for the whole repository, independent of q and offset."
+            "description": "Lifetime totals for the whole repository, independent of q and the page."
           },
-          "totalCount": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0,
-            "description": "Number of artifact addresses matching q, independent of offset and limit."
+          "total": {
+            "$ref": "#/components/schemas/ListTotal",
+            "description": "Number of artifact addresses matching q, independent of the page."
+          },
+          "nextPageToken": {
+            "type": "string",
+            "description": "Present while more addresses follow; pass it as pageToken for the next page."
           },
           "items": {
             "type": "array",

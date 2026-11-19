@@ -26,7 +26,9 @@ for (const width of [1440, 1024]) {
         queries.push(url.search);
         const q = url.searchParams.get("q") ?? "";
         const limit = Number(url.searchParams.get("limit") ?? 100);
-        const offset = Number(url.searchParams.get("offset") ?? 0);
+        const offset = Number(
+          (url.searchParams.get("pageToken") ?? "o:0").slice(2),
+        );
         const paths = Array.from(
           { length: 235 },
           (_, index) => `files/widget-${String(index).padStart(3, "0")}.zip`,
@@ -34,7 +36,9 @@ for (const width of [1440, 1024]) {
         return route.fulfill({
           json: {
             repositoryId,
-            totalCount: paths.length,
+            total: { value: paths.length, relation: "eq" },
+            nextPageToken:
+              offset + limit < paths.length ? `o:${offset + limit}` : undefined,
             totals: { resources: 235, downloadCount: 470, totalBytes: 481280 },
             generatedAt: "2026-10-06T00:00:00Z",
             items: paths.slice(offset, offset + limit).map((resource) => ({
@@ -89,7 +93,7 @@ for (const width of [1440, 1024]) {
     await expect(page.getByText("1-20 of 235 items")).toBeVisible();
     await page.locator(".ant-pagination-item-2").click();
     await expect(page.getByText("files/widget-020.zip")).toBeVisible();
-    expect(queries.at(-1)).toBe("?limit=20&offset=20");
+    expect(queries.at(-1)).toBe("?limit=20&pageToken=o%3A20");
     const search = page.getByRole("searchbox", {
       name: "Search artifact address",
     });
@@ -99,7 +103,7 @@ for (const width of [1440, 1024]) {
     await expect(
       page.getByText(/Whole repository: 235 addresses/),
     ).toBeVisible();
-    expect(queries.at(-1)).toBe("?limit=20&offset=0&q=widget-23");
+    expect(queries.at(-1)).toBe("?limit=20&q=widget-23");
     await search.fill("");
     await search.press("Enter");
     await expect(page.locator("tbody tr.ant-table-row")).toHaveCount(20);
@@ -108,7 +112,7 @@ for (const width of [1440, 1024]) {
     await pageSize.getByTitle("50 / page").click();
     await expect(page.locator("tbody tr.ant-table-row")).toHaveCount(50);
     expect(queries.length).toBe(countBefore + 1);
-    expect(queries.at(-1)).toBe("?limit=50&offset=0");
+    expect(queries.at(-1)).toBe("?limit=50");
     const geometry = await page
       .locator(".ag-page-stack")
       .last()

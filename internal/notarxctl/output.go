@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 )
 
 // outputSchemaVersion versions the JSON envelope. It only changes on a
@@ -39,6 +40,8 @@ type paginationMeta struct {
 	Limit  int  `json:"limit,omitempty"`
 	Offset *int `json:"offset,omitempty"`
 	Total  *int `json:"total,omitempty"`
+	// TotalRelation qualifies Total: eq (exact), gte (a lower bound) or estimate (ADR 0023 section 8).
+	TotalRelation string `json:"totalRelation,omitempty"`
 }
 
 type envelopeMeta struct {
@@ -127,4 +130,37 @@ func errorReportFrom(err error, knownSecrets ...string) *errorReport {
 		Hint:       redactText(errorHint(err), knownSecrets...),
 		RequestID:  redactText(errorRequestID(err), knownSecrets...),
 	}
+}
+
+// totalRelationPrefix renders a total relation for people: a lower bound reads "at least 10001".
+func totalRelationPrefix(relation string) string {
+	switch relation {
+	case "gte":
+		return "at least "
+	case "estimate":
+		return "about "
+	}
+	return ""
+}
+
+// continueCommand renders the command that reads the next page: the same filters plus the cursor, because a
+// page token is bound to the filters that issued it. Values with spaces or quotes are single-quoted.
+func continueCommand(base string, flags [][2]string, cursor string) string {
+	var out strings.Builder
+	out.WriteString(base)
+	for _, flag := range flags {
+		if flag[1] == "" {
+			continue
+		}
+		out.WriteString(" " + flag[0] + " " + shellWord(flag[1]))
+	}
+	out.WriteString(" --cursor " + shellWord(cursor))
+	return out.String()
+}
+
+func shellWord(value string) string {
+	if value != "" && strings.Trim(value, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.,:/=+@") == "" {
+		return value
+	}
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }

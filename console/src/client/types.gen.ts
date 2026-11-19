@@ -1213,11 +1213,22 @@ export type User = {
   version: string;
 };
 
+/**
+ * The size of a listing without counting the whole table. relation eq is exact (at most 10000); gte means at least value; estimate is the planner estimate for an unfiltered large table.
+ */
+export type ListTotal = {
+  value: number;
+  relation: "eq" | "gte" | "estimate";
+};
+
 export type UserList = {
   items: Array<User>;
-  total: number;
-  offset: number;
+  total: ListTotal;
   limit: number;
+  /**
+   * Present while more users follow; pass it as pageToken for the next page.
+   */
+  nextPageToken?: string;
 };
 
 export type CurrentIdentity = {
@@ -3569,13 +3580,17 @@ export type ArtifactUsageStat = {
 export type RepositoryArtifactUsage = {
   repositoryId: string;
   /**
-   * Lifetime totals for the whole repository, independent of q and offset.
+   * Lifetime totals for the whole repository, independent of q and the page.
    */
   totals: ArtifactUsageTotals;
   /**
-   * Number of artifact addresses matching q, independent of offset and limit.
+   * Number of artifact addresses matching q, independent of the page.
    */
-  totalCount: number;
+  total: ListTotal;
+  /**
+   * Present while more addresses follow; pass it as pageToken for the next page.
+   */
+  nextPageToken?: string;
   items: Array<ArtifactUsageStat>;
   generatedAt: string;
 };
@@ -10525,7 +10540,7 @@ export type ListUsersData = {
     role?: "none" | "member" | "admin";
     state?: "active" | "disabled";
     limit?: number;
-    offset?: number;
+    pageToken?: string;
   };
   url: "/users";
 };
@@ -13663,7 +13678,7 @@ export type ListRepositoryArtifactUsageData = {
   };
   query?: {
     limit?: number;
-    offset?: number;
+    pageToken?: string;
     /**
      * Case-sensitive literal substring of the artifact address. Surrounding whitespace is trimmed; SQL wildcard characters have no special meaning.
      */

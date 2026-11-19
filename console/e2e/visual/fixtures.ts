@@ -390,8 +390,7 @@ export const users = {
     user("user-alice", "alice", "Alice Chen", "admin", "2026-10-01T08:00:00Z"),
     user("user-bob", "bob", "Bob Li", "member", "2026-09-29T11:20:00Z"),
   ],
-  total: 2,
-  offset: 0,
+  total: { value: 2, relation: "eq" },
   limit: 50,
 } satisfies ListUsersResponses[200];
 
