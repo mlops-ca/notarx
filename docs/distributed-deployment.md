@@ -171,7 +171,7 @@ reserve the committed bytes in the counter at commit. APT reserves in the counte
 reserves its declared bytes with `Reserve` when it is admitted and releases them when it completes (the stored
 revision is then counted) or expires, and an archive restore reserves its planned bytes at begin and releases them
 when it commits, fails or expires. The reconciler counts those pending bytes (open or uploading sessions, preparing
-restores), so the counter equals its aggregation at every step, and migration 000020 adds the bytes of sessions
+restores), so the counter equals its aggregation at every step, and migration 000021 adds the bytes of sessions
 open at upgrade time. Upgrade every node together (stop-the-world, or let the reconciler run once after a rolling
 upgrade): a session opened by an older node reserves nothing and one reserved by a newer node but completed by an older
 node keeps its reservation, which the next reconciler pass corrects. Snapshot publication admits through the `Reserve` of its generated-object delta.
