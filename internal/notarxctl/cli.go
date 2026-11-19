@@ -544,6 +544,7 @@ func printUsage(w io.Writer) {
 var groupSynopses = map[string]string{
 	"auth":                  "authenticate, inspect the caller, and end the local session",
 	"config":                "manage local profiles in ~/.config/notarxctl/config.yaml",
+	"secrets":               "maintain the encryption of sealed settings in the database",
 	"access":                "explain effective access and manage the public access gate",
 	"api-key":               "list, create, and revoke platform API keys (secrets go only to --secret-output)",
 	"credential":            "list, issue, and revoke service account credentials (secrets go only to --secret-output)",
