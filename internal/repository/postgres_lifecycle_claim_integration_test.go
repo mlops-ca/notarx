@@ -93,7 +93,7 @@ func TestPostgresLifecycleClaimCandidateQueriesDoNotSortThePendingSet(t *testing
 			defer func() { _ = tx.Rollback() }()
 			// Discourage the alternatives to an ordered index scan so the plan shows what the indexes can serve,
 			// independent of how many rows other tests left behind.
-			for _, setting := range []string{"enable_seqscan", "enable_bitmapscan", "enable_sort", "enable_incrementalsort"} {
+			for _, setting := range []string{"enable_seqscan", "enable_bitmapscan", "enable_sort", "enable_incremental_sort"} {
 				if _, err = tx.Exec(`SET LOCAL ` + setting + ` = off`); err != nil {
 					t.Fatal(err)
 				}
