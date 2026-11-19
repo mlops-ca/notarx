@@ -1063,12 +1063,21 @@ User:
       format: date-time
     version:
       type: string
+ListTotal:
+  type: object
+  additionalProperties: false
+  description: >-
+    The size of a listing without counting the whole table. relation eq is exact (at most 10000);
+    gte means at least value; estimate is the planner estimate for an unfiltered large table.
+  required: [value, relation]
+  properties:
+    value: {type: integer, format: int64, minimum: 0}
+    relation: {type: string, enum: [eq, gte, estimate]}
 UserList:
   type: object
   required:
   - items
   - total
-  - offset
   - limit
   properties:
     items:
@@ -1076,14 +1085,13 @@ UserList:
       items:
         "$ref": "#/User"
     total:
-      type: integer
-      minimum: 0
-    offset:
-      type: integer
-      minimum: 0
+      "$ref": "#/ListTotal"
     limit:
       type: integer
       minimum: 1
+    nextPageToken:
+      type: string
+      description: Present while more users follow; pass it as pageToken for the next page.
 CreateUser:
   type: object
   required:
@@ -4352,17 +4360,18 @@ ArtifactUsageTotals:
 RepositoryArtifactUsage:
   type: object
   additionalProperties: false
-  required: [repositoryId, totals, totalCount, items, generatedAt]
+  required: [repositoryId, totals, total, items, generatedAt]
   properties:
     repositoryId: {type: string, format: uuid}
     totals:
       "$ref": "#/ArtifactUsageTotals"
-      description: Lifetime totals for the whole repository, independent of q and offset.
-    totalCount:
-      type: integer
-      format: int64
-      minimum: 0
-      description: Number of artifact addresses matching q, independent of offset and limit.
+      description: Lifetime totals for the whole repository, independent of q and the page.
+    total:
+      "$ref": "#/ListTotal"
+      description: Number of artifact addresses matching q, independent of the page.
+    nextPageToken:
+      type: string
+      description: Present while more addresses follow; pass it as pageToken for the next page.
     items:
       type: array
       items:

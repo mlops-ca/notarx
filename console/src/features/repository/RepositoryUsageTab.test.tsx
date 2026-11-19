@@ -47,7 +47,8 @@ describe("RepositoryUsageTab", () => {
           totalBytes: totalCount,
           resources: totalCount,
         },
-        totalCount,
+        total: { value: totalCount, relation: "eq" },
+        nextPageToken: totalCount > 20 ? "t2" : undefined,
         items: [],
       },
     });
@@ -69,12 +70,12 @@ describe("RepositoryUsageTab", () => {
     );
     expect(mockListRepositoryArtifactUsage.mock.calls[1][0]?.query).toEqual({
       limit: 20,
-      offset: 20,
+      pageToken: "t2",
       q: undefined,
     });
     expect(mockListRepositoryArtifactUsage.mock.calls[2][0]?.query).toEqual({
       limit: 20,
-      offset: 0,
+      pageToken: undefined,
       q: undefined,
     });
   });
@@ -88,7 +89,7 @@ describe("RepositoryUsageTab", () => {
           repositoryId: repository.id,
           generatedAt: "2026-09-17T08:00:00Z",
           totals: { downloadCount: 0, totalBytes: 0, resources: 0 },
-          totalCount: 0,
+          total: { value: 0, relation: "eq" },
           items: [],
         },
       } as never);
@@ -111,7 +112,7 @@ describe("RepositoryUsageTab", () => {
         repositoryId: repository.id,
         generatedAt: "2026-09-17T08:00:00Z",
         totals: { downloadCount: 2, totalBytes: 2, resources: 2 },
-        totalCount: 1,
+        total: { value: 1, relation: "eq" },
         items: [
           {
             format: "raw",
@@ -160,7 +161,8 @@ describe("RepositoryUsageTab", () => {
         repositoryId: repository.id,
         generatedAt: "2026-09-17T08:00:00Z",
         totals: { downloadCount: 400, totalBytes: 4096, resources: 201 },
-        totalCount: 201,
+        total: { value: 201, relation: "eq" },
+        nextPageToken: "t2",
         items: [],
       },
     } as never);
@@ -175,14 +177,14 @@ describe("RepositoryUsageTab", () => {
     expect(mockListRepositoryArtifactUsage).toHaveBeenCalledTimes(1);
     expect(mockListRepositoryArtifactUsage.mock.calls[0][0]?.query).toEqual({
       limit: 20,
-      offset: 0,
+      pageToken: undefined,
       q: undefined,
     });
     await clickPage(user, 2);
     await vi.waitFor(() =>
       expect(
         mockListRepositoryArtifactUsage.mock.calls.at(-1)?.[0]?.query,
-      ).toEqual({ limit: 20, offset: 20, q: undefined }),
+      ).toEqual({ limit: 20, pageToken: "t2", q: undefined }),
     );
     await user.type(
       screen.getByRole("searchbox", { name: "Search artifact address" }),
@@ -192,7 +194,7 @@ describe("RepositoryUsageTab", () => {
     await vi.waitFor(() =>
       expect(
         mockListRepositoryArtifactUsage.mock.calls.at(-1)?.[0]?.query,
-      ).toEqual({ limit: 20, offset: 0, q: "widget" }),
+      ).toEqual({ limit: 20, pageToken: undefined, q: "widget" }),
     );
     expect(screen.getByText("1-20 of 201 items")).toBeVisible();
     expect(screen.getByText(/Whole repository: 201 addresses/)).toBeVisible();
@@ -203,7 +205,7 @@ describe("RepositoryUsageTab", () => {
         repositoryId: repository.id,
         generatedAt: "2026-09-17T08:00:00Z",
         totals: { downloadCount: 12, totalBytes: 1536, resources: 2 },
-        totalCount: 2,
+        total: { value: 2, relation: "eq" },
         items: [
           {
             format: "npm",
@@ -249,7 +251,7 @@ describe("RepositoryUsageTab", () => {
         repositoryId: repository.id,
         generatedAt: "2026-09-17T08:00:00Z",
         totals: { downloadCount: 0, totalBytes: 0, resources: 0 },
-        totalCount: 0,
+        total: { value: 0, relation: "eq" },
         items: [],
       },
     } as never);
@@ -275,7 +277,7 @@ describe("RepositoryUsageTab", () => {
         repositoryId: repository.id,
         generatedAt: "2026-09-17T08:00:00Z",
         totals: { downloadCount: 0, totalBytes: 0, resources: 0 },
-        totalCount: 0,
+        total: { value: 0, relation: "eq" },
         items: [],
       },
     } as never);
@@ -302,7 +304,7 @@ describe("RepositoryUsageTab", () => {
           repositoryId: repository.id,
           generatedAt: "2026-09-17T08:00:00Z",
           totals: { downloadCount: 1, totalBytes: 512, resources: 1 },
-          totalCount: 1,
+          total: { value: 1, relation: "eq" },
           items: [
             {
               format: "npm",

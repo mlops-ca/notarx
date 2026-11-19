@@ -13,14 +13,41 @@ type UserListQuery struct {
 	Role   string
 	State  string
 	Limit  int
-	Offset int
+	// PageToken continues a listing from the NextPageToken of the previous page (keyset on created_at, id).
+	PageToken string
 }
 
 type UserPage struct {
-	Items  []User
-	Total  int
-	Offset int
-	Limit  int
+	Items []User
+	Total ListTotal
+	Limit int
+	// NextPageToken is set while more users follow the page.
+	NextPageToken string
+}
+
+// filterKey binds a page token to the filters that produced it.
+func (q UserListQuery) filterKey() string {
+	return "users\x00" + strings.TrimSpace(q.Search) + "\x00" + q.Role + "\x00" + q.State
+}
+
+// afterCursor decodes the page token into the (created_at, id) of the last user already served.
+func (q UserListQuery) afterCursor() (createdAt time.Time, id string, present bool, err error) {
+	if q.PageToken == "" {
+		return time.Time{}, "", false, nil
+	}
+	keys, err := DecodeKeysetToken(q.PageToken, q.filterKey(), 2)
+	if err != nil {
+		return time.Time{}, "", false, err
+	}
+	createdAt, err = time.Parse(time.RFC3339Nano, keys[0])
+	if err != nil || keys[1] == "" {
+		return time.Time{}, "", false, ErrInvalidPageToken
+	}
+	return createdAt, keys[1], true, nil
+}
+
+func userPageToken(q UserListQuery, last User) string {
+	return EncodeKeysetToken(q.filterKey(), last.CreatedAt.UTC().Format(time.RFC3339Nano), last.ID)
 }
 
 type UserUpdate struct {
@@ -144,15 +171,28 @@ func (s *MemoryStore) ListUsers(_ context.Context, query UserListQuery) (UserPag
 		}
 		return filtered[i].CreatedAt.Before(filtered[j].CreatedAt)
 	})
-	page := UserPage{Total: len(filtered), Offset: maxInt(query.Offset, 0), Limit: query.Limit}
+	afterAt, afterID, after, err := query.afterCursor()
+	if err != nil {
+		return UserPage{}, err
+	}
+	page := UserPage{Total: BoundedListTotal(int64(len(filtered))), Limit: query.Limit}
 	if page.Limit <= 0 || page.Limit > 500 {
 		page.Limit = 100
 	}
-	if page.Offset > len(filtered) {
-		page.Offset = len(filtered)
+	if after {
+		start := sort.Search(len(filtered), func(i int) bool {
+			if filtered[i].CreatedAt.Equal(afterAt) {
+				return filtered[i].ID > afterID
+			}
+			return filtered[i].CreatedAt.After(afterAt)
+		})
+		filtered = filtered[start:]
 	}
-	end := minInt(page.Offset+page.Limit, len(filtered))
-	page.Items = append([]User(nil), filtered[page.Offset:end]...)
+	if len(filtered) > page.Limit {
+		filtered = filtered[:page.Limit]
+		page.NextPageToken = userPageToken(query, filtered[len(filtered)-1])
+	}
+	page.Items = append([]User(nil), filtered...)
 	return page, nil
 }
 

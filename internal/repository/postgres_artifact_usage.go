@@ -16,21 +16,33 @@ func (s *PostgresStore) QueryArtifactUsage(ctx context.Context, repository strin
 		return page, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	// Aggregate in SQL without returning every address to the application.
-	err = tx.QueryRowContext(ctx, `SELECT COALESCE(SUM(download_count), 0), COALESCE(SUM(total_bytes), 0), COUNT(*),
-		COUNT(*) FILTER (WHERE strpos(resource, $2) > 0)
-		FROM artifact_usage_stats WHERE repository_id = (SELECT id FROM (`+repositoryNames+`) n WHERE n.name = $1)`, repository, query.Query).
-		Scan(&page.Totals.DownloadCount, &page.Totals.TotalBytes, &page.Totals.Resources, &page.TotalCount)
+	afterResource, afterFormat, after, err := query.afterAddress(repository)
 	if err != nil {
 		return page, err
+	}
+	// The lifetime totals are one aggregate over the repository; the matching total is bounded.
+	err = tx.QueryRowContext(ctx, `SELECT COALESCE(SUM(download_count), 0), COALESCE(SUM(total_bytes), 0), COUNT(*)
+		FROM artifact_usage_stats WHERE repository_id = (SELECT id FROM (`+repositoryNames+`) n WHERE n.name = $1)`, repository).
+		Scan(&page.Totals.DownloadCount, &page.Totals.TotalBytes, &page.Totals.Resources)
+	if err != nil {
+		return page, err
+	}
+	page.Total, err = boundedTotal(ctx, tx, "", `artifact_usage_stats s JOIN (`+repositoryNames+`) n ON n.id = s.repository_id WHERE n.name = $1 AND strpos(s.resource, $2) > 0`, repository, query.Query)
+	if err != nil {
+		return page, err
+	}
+	var cursorResource, cursorFormat sql.NullString
+	if after {
+		cursorResource, cursorFormat = sql.NullString{String: afterResource, Valid: true}, sql.NullString{String: afterFormat, Valid: true}
 	}
 	rows, err := tx.QueryContext(ctx, usageSelect+` FROM artifact_usage_stats s JOIN (`+repositoryNames+`) n ON n.id = s.repository_id
 		WHERE n.name = $1 AND strpos(s.resource, $2) > 0
-		ORDER BY s.resource COLLATE "C" ASC, s.format COLLATE "C" ASC LIMIT $3 OFFSET $4`, repository, query.Query, query.Limit, query.Offset)
+		  AND ($3::text IS NULL OR (s.resource COLLATE "C", s.format COLLATE "C") > ($3::text COLLATE "C", $4::text COLLATE "C"))
+		ORDER BY s.resource COLLATE "C" ASC, s.format COLLATE "C" ASC LIMIT $5`, repository, query.Query, cursorResource, cursorFormat, query.Limit+1)
 	if err != nil {
 		return page, err
 	}
-	page.Items = make([]ArtifactUsageStat, 0, query.Limit)
+	page.Items = make([]ArtifactUsageStat, 0, query.Limit+1)
 	for rows.Next() {
 		var stat ArtifactUsageStat
 		if err := rows.Scan(&stat.Repository, &stat.Format, &stat.Resource, &stat.DownloadCount, &stat.TotalBytes, &stat.FirstDownloadedAt, &stat.LastDownloadedAt, &stat.LastActor); err != nil {
@@ -43,6 +55,10 @@ func (s *PostgresStore) QueryArtifactUsage(ctx context.Context, repository strin
 	_ = rows.Close()
 	if err != nil {
 		return page, err
+	}
+	if len(page.Items) > query.Limit {
+		page.Items = page.Items[:query.Limit]
+		page.NextPageToken = query.pageToken(repository, page.Items[query.Limit-1])
 	}
 	return page, tx.Commit()
 }

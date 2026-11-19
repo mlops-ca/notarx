@@ -46,14 +46,15 @@ type ArtifactUsageStore interface {
 // ArtifactUsageQuery selects one live page. Ordering uses the immutable address
 // and format, so download increments cannot move existing rows between pages.
 type ArtifactUsageQuery struct {
-	Limit  int
-	Offset int
-	Query  string
+	Limit int
+	Query string
+	// PageToken continues a listing from the NextPageToken of the previous page (keyset on resource, format).
+	PageToken string
 }
 
 func (q ArtifactUsageQuery) Validate(repository string) error {
-	if repository == "" || q.Limit < 1 || q.Limit > 500 || q.Offset < 0 || q.Offset > 1000000 {
-		return fmt.Errorf("repository, limit (1-500) and offset (0-1000000) are required")
+	if repository == "" || q.Limit < 1 || q.Limit > 500 {
+		return fmt.Errorf("repository and limit (1-500) are required")
 	}
 	if !utf8.ValidString(q.Query) || utf8.RuneCountInString(q.Query) > 512 || strings.ContainsRune(q.Query, 0) {
 		return fmt.Errorf("q must be valid text of at most 512 characters without NUL")
@@ -61,12 +62,36 @@ func (q ArtifactUsageQuery) Validate(repository string) error {
 	return nil
 }
 
-// ArtifactUsagePage keeps filtered count and whole-repository totals distinct.
-// Each store captures all three parts under one consistent read snapshot.
+// filterKey binds a page token to the repository and filter that produced it.
+func (q ArtifactUsageQuery) filterKey(repository string) string {
+	return "usage\x00" + repository + "\x00" + q.Query
+}
+
+// afterAddress decodes the page token into the (resource, format) of the last address already served.
+func (q ArtifactUsageQuery) afterAddress(repository string) (resource, format string, present bool, err error) {
+	if q.PageToken == "" {
+		return "", "", false, nil
+	}
+	keys, err := DecodeKeysetToken(q.PageToken, q.filterKey(repository), 2)
+	if err != nil {
+		return "", "", false, err
+	}
+	return keys[0], keys[1], true, nil
+}
+
+func (q ArtifactUsageQuery) pageToken(repository string, last ArtifactUsageStat) string {
+	return EncodeKeysetToken(q.filterKey(repository), last.Resource, last.Format)
+}
+
+// ArtifactUsagePage keeps the filtered total and whole-repository totals distinct.
+// Each store captures all of them under one consistent read snapshot.
 type ArtifactUsagePage struct {
-	Items      []ArtifactUsageStat
-	TotalCount int64
-	Totals     ArtifactUsageTotals
+	Items []ArtifactUsageStat
+	// Total counts the addresses matching the query: exact up to ListTotalCap, then a lower bound.
+	Total  ListTotal
+	Totals ArtifactUsageTotals
+	// NextPageToken is set while more addresses follow the page.
+	NextPageToken string
 }
 
 func artifactUsageAddressLess(a, b ArtifactUsageStat) bool {

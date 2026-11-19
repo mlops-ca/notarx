@@ -147,17 +147,18 @@ func userConflictHint(err error, ifMatch, id string) {
 
 func userListCommand() command {
 	var search, role, state string
-	var limit, offset int
+	var limit int
+	var cursor string
 	return command{
 		name:     "user list",
 		synopsis: "list local users",
-		usage:    "notarxctl user list [--search TEXT] [--role none|member|admin] [--state active|disabled] [--limit N] [--offset N] [--json]",
+		usage:    "notarxctl user list [--search TEXT] [--role none|member|admin] [--state active|disabled] [--limit N] [--cursor TOKEN] [--json]",
 		setFlags: func(fs *flag.FlagSet) {
 			fs.StringVar(&search, "search", "", "match name, display name, or email")
 			fs.StringVar(&role, "role", "", "only this global role")
 			fs.StringVar(&state, "state", "", "only active or disabled users")
 			fs.IntVar(&limit, "limit", defaultPageSize, "users per window (1-200)")
-			fs.IntVar(&offset, "offset", 0, "users to skip")
+			fs.StringVar(&cursor, "cursor", "", "continue from the nextCursor of an earlier page")
 		},
 		meta: commandMeta{
 			Resource: "user", Scenarios: []string{"admin"}, Stage: "m1",
@@ -171,10 +172,13 @@ func userListCommand() command {
 			if state != "" && state != "active" && state != "disabled" {
 				return &UsageError{Message: fmt.Sprintf("invalid --state %q", state), Hint: "use active or disabled"}
 			}
-			if limit < 1 || limit > maxPageSize || offset < 0 {
-				return &UsageError{Message: "--limit must be 1-200 and --offset must not be negative", Hint: "page with --offset"}
+			if limit < 1 || limit > maxPageSize {
+				return &UsageError{Message: "--limit must be 1-200", Hint: "page with --cursor"}
 			}
-			query := url.Values{"limit": {strconv.Itoa(limit)}, "offset": {strconv.Itoa(offset)}}
+			query := url.Values{"limit": {strconv.Itoa(limit)}}
+			if cursor != "" {
+				query.Set("pageToken", cursor)
+			}
 			for name, value := range map[string]string{"search": search, "role": role, "state": state} {
 				if value != "" {
 					query.Set(name, value)
@@ -188,15 +192,19 @@ func userListCommand() command {
 			if err := client.getJSON(ctx, usersPath, query, &page); err != nil {
 				return err
 			}
-			total, start := page.Total, page.Offset
-			complete := page.Offset+len(page.Items) >= page.Total
-			meta := &envelopeMeta{Pagination: &paginationMeta{Mode: "offset", Limit: page.Limit, Offset: &start, Total: &total, Complete: &complete}}
-			return env.render(newListPayload(page.Items), meta, func(w io.Writer) error {
+			payload := newListPayload(page.Items)
+			if page.NextPageToken != nil {
+				payload.NextCursor = page.NextPageToken
+			}
+			complete := page.NextPageToken == nil
+			total := int(page.Total.Value)
+			meta := &envelopeMeta{Pagination: &paginationMeta{Mode: "cursor", PageSize: page.Limit, Pages: 1, Complete: &complete, Total: &total, TotalRelation: string(page.Total.Relation)}}
+			return env.render(payload, meta, func(w io.Writer) error {
 				if err := renderUsers(w, page.Items); err != nil {
 					return err
 				}
 				if !complete {
-					_, _ = fmt.Fprintf(env.stderr, "users %d-%d of %d; continue with --offset %d\n", start+1, start+len(page.Items), total, start+len(page.Items))
+					_, _ = fmt.Fprintf(env.stderr, "%d users shown (total %s%d); more: notarxctl user list --cursor %s\n", len(page.Items), totalRelationPrefix(string(page.Total.Relation)), page.Total.Value, *page.NextPageToken)
 				}
 				return nil
 			})

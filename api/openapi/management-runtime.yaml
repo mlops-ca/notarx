@@ -611,6 +611,8 @@ components:
       "$ref": "./components/schemas.yaml#/CreatedServiceAccountCredential"
     User:
       "$ref": "./components/schemas.yaml#/User"
+    ListTotal:
+      "$ref": "./components/schemas.yaml#/ListTotal"
     UserList:
       "$ref": "./components/schemas.yaml#/UserList"
     CurrentIdentity:

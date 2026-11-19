@@ -442,7 +442,7 @@ for (const width of [1440, 390]) {
             repositoryId,
             generatedAt: "2026-09-30T12:00:00Z",
             totals: { downloadCount: 1, totalBytes: 1024, resources: 1 },
-            totalCount: 1,
+            total: { value: 1, relation: "eq" },
             items: [
               {
                 format: "raw",

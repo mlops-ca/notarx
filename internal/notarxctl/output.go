@@ -39,6 +39,8 @@ type paginationMeta struct {
 	Limit  int  `json:"limit,omitempty"`
 	Offset *int `json:"offset,omitempty"`
 	Total  *int `json:"total,omitempty"`
+	// TotalRelation qualifies Total: eq (exact), gte (a lower bound) or estimate (ADR 0023 section 8).
+	TotalRelation string `json:"totalRelation,omitempty"`
 }
 
 type envelopeMeta struct {
@@ -127,4 +129,15 @@ func errorReportFrom(err error, knownSecrets ...string) *errorReport {
 		Hint:       redactText(errorHint(err), knownSecrets...),
 		RequestID:  redactText(errorRequestID(err), knownSecrets...),
 	}
+}
+
+// totalRelationPrefix renders a total relation for people: a lower bound reads "at least 10001".
+func totalRelationPrefix(relation string) string {
+	switch relation {
+	case "gte":
+		return "at least "
+	case "estimate":
+		return "about "
+	}
+	return ""
 }

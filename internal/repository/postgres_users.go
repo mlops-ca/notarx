@@ -48,15 +48,27 @@ func (s *PostgresStore) ListUsers(ctx context.Context, query UserListQuery) (Use
 	if query.Limit <= 0 || query.Limit > 500 {
 		query.Limit = 100
 	}
-	if query.Offset < 0 {
-		query.Offset = 0
-	}
-	const filter = ` WHERE ($1='' OR name ILIKE '%'||$1||'%' OR display_name ILIKE '%'||$1||'%' OR email ILIKE '%'||$1||'%') AND ($2='' OR role=$2) AND ($3='' OR state=$3)`
-	var total int
-	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM users`+filter, query.Search, query.Role, query.State).Scan(&total); err != nil {
+	afterAt, afterID, after, err := query.afterCursor()
+	if err != nil {
 		return UserPage{}, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT `+userColumns+` FROM users`+filter+` ORDER BY created_at, id LIMIT $4 OFFSET $5`, query.Search, query.Role, query.State, query.Limit, query.Offset)
+	const filter = ` WHERE ($1='' OR name ILIKE '%'||$1||'%' OR display_name ILIKE '%'||$1||'%' OR email ILIKE '%'||$1||'%') AND ($2='' OR role=$2) AND ($3='' OR state=$3)`
+	unfiltered := query.Search == "" && query.Role == "" && query.State == ""
+	estimateTable := ""
+	if unfiltered {
+		estimateTable = "users"
+	}
+	total, err := boundedTotal(ctx, s.db, estimateTable, `users`+filter, query.Search, query.Role, query.State)
+	if err != nil {
+		return UserPage{}, err
+	}
+	var cursorAt sql.NullTime
+	var cursorID sql.NullString
+	if after {
+		cursorAt, cursorID = sql.NullTime{Time: afterAt, Valid: true}, sql.NullString{String: afterID, Valid: true}
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT `+userColumns+` FROM users`+filter+` AND ($4::timestamptz IS NULL OR (created_at,id)>($4::timestamptz,$5::uuid)) ORDER BY created_at, id LIMIT $6`,
+		query.Search, query.Role, query.State, cursorAt, cursorID, query.Limit+1)
 	if err != nil {
 		return UserPage{}, err
 	}
@@ -72,7 +84,12 @@ func (s *PostgresStore) ListUsers(ctx context.Context, query UserListQuery) (Use
 	if err := rows.Err(); err != nil {
 		return UserPage{}, err
 	}
-	return UserPage{Items: users, Total: total, Offset: query.Offset, Limit: query.Limit}, nil
+	page := UserPage{Items: users, Total: total, Limit: query.Limit}
+	if len(users) > query.Limit {
+		page.Items = users[:query.Limit]
+		page.NextPageToken = userPageToken(query, page.Items[query.Limit-1])
+	}
+	return page, nil
 }
 
 func (s *PostgresStore) GetUser(ctx context.Context, id string) (User, error) {

@@ -45,8 +45,8 @@ func TestUserManagementProfilePasswordSessionsAndLastAdminProtection(t *testing.
 	if err := json.Unmarshal(createdResponse.Body.Bytes(), &created); err != nil || created.DisplayName != "Alice Example" || created.Email != "alice@example.test" || created.Description != "release owner" || !created.MustChangePassword {
 		t.Fatalf("created=%+v err=%v", created, err)
 	}
-	listed := adminRequest(http.MethodGet, "/api/v2/users?search=alice%40example.test&role=admin&state=active&limit=20&offset=0", "", "")
-	if listed.Code != http.StatusOK || !strings.Contains(listed.Body.String(), `"total":1`) || !strings.Contains(listed.Body.String(), `"limit":20`) {
+	listed := adminRequest(http.MethodGet, "/api/v2/users?search=alice%40example.test&role=admin&state=active&limit=20", "", "")
+	if listed.Code != http.StatusOK || !strings.Contains(listed.Body.String(), `"total":{"relation":"eq","value":1}`) || !strings.Contains(listed.Body.String(), `"limit":20`) {
 		t.Fatalf("list=%d body=%s", listed.Code, listed.Body.String())
 	}
 

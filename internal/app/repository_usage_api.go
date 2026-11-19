@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -25,8 +26,8 @@ func (h artifactManagementHandler) ListRepositoryArtifactUsage(w http.ResponseWr
 			limit = *params.Limit
 		}
 		query := repository.ArtifactUsageQuery{Limit: limit}
-		if params.Offset != nil {
-			query.Offset = *params.Offset
+		if params.PageToken != nil {
+			query.PageToken = *params.PageToken
 		}
 		if params.Q != nil {
 			query.Query = strings.TrimSpace(*params.Q)
@@ -36,6 +37,10 @@ func (h artifactManagementHandler) ListRepositoryArtifactUsage(w http.ResponseWr
 			return
 		}
 		page, err := usage.QueryArtifactUsage(r.Context(), repo.Name, query)
+		if errors.Is(err, repository.ErrInvalidPageToken) {
+			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "pageToken is not valid for this query")
+			return
+		}
 		if err != nil {
 			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "list artifact usage failed")
 			return
@@ -63,9 +68,10 @@ func (h artifactManagementHandler) ListRepositoryArtifactUsage(w http.ResponseWr
 				TotalBytes:    page.Totals.TotalBytes,
 				Resources:     page.Totals.Resources,
 			},
-			TotalCount:  page.TotalCount,
-			Items:       items,
-			GeneratedAt: time.Now().UTC(),
+			Total:         listTotalResponse(page.Total),
+			NextPageToken: optionalString(page.NextPageToken),
+			Items:         items,
+			GeneratedAt:   time.Now().UTC(),
 		})
 	})
 }

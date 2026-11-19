@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Input, Tag, Tooltip } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { type ArtifactUsageStat, type Repository } from "../../client";
@@ -7,6 +7,7 @@ import { formatDate, formatNumber } from "../../lib/format";
 import { useFormatters } from "../../lib/useFormatters";
 import { usePreferences } from "../../lib/preferences";
 import { clearable } from "../../lib/clearable";
+import { useKeysetPages } from "../../lib/keysetPaging";
 import { ConsoleTable, FilterBar } from "../../components/ui/ConsolePrimitives";
 import { CONSOLE_PAGE_SIZE } from "../../components/ui/useConsolePagination";
 import { useArtifactUsage } from "./repositoryQueries";
@@ -20,20 +21,27 @@ export function RepositoryUsageTab({ repo }: { repo: Repository }) {
 function RepositoryUsageContent({ repo }: { repo: Repository }) {
   const { formatBytes } = useFormatters();
   const { t, locale } = usePreferences();
-  const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(CONSOLE_PAGE_SIZE);
   const [input, setInput] = useState("");
   const [query, setQuery] = useState("");
-  const usageQuery = useArtifactUsage(repo.id, page, pageSize, query);
+  const { page, pageToken, setPage, remember } = useKeysetPages(
+    JSON.stringify([query, pageSize]),
+  );
+  const usageQuery = useArtifactUsage(repo.id, pageToken, pageSize, query);
   const usage = usageQuery.data ?? null;
   const error = usageQuery.error;
   const loading = usageQuery.isFetching;
   const load = () => usageQuery.refetch();
+  const nextPageToken = usage?.nextPageToken;
+  const placeholder = usageQuery.isPlaceholderData;
+  useEffect(() => {
+    if (!placeholder) remember(nextPageToken);
+  }, [nextPageToken, placeholder, remember]);
   // A live deletion can remove the last page; move back to the new last page.
   const lastPage = usage
-    ? Math.max(1, Math.ceil(usage.totalCount / pageSize))
+    ? Math.max(1, Math.ceil(usage.total.value / pageSize))
     : page;
-  if (!usageQuery.isPlaceholderData && page > lastPage) setPage(lastPage);
+  if (!placeholder && page > lastPage) setPage(lastPage);
 
   const columns: ColumnsType<UsageRow> = [
     {
@@ -130,7 +138,7 @@ function RepositoryUsageContent({ repo }: { repo: Repository }) {
         pagination={{
           current: page,
           pageSize,
-          total: usage.totalCount,
+          total: usage.total.value,
           onChange: (nextPage, nextSize) => {
             setPage(nextPage);
             setPageSize(nextSize);

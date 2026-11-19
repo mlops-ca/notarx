@@ -209,14 +209,18 @@ func (h identityManagementHandler) ListUsers(w http.ResponseWriter, r *http.Requ
 	if params.Limit != nil {
 		query.Limit = *params.Limit
 	}
-	if params.Offset != nil {
-		query.Offset = *params.Offset
+	if params.PageToken != nil {
+		query.PageToken = *params.PageToken
 	}
-	if query.Limit < 1 || query.Limit > 200 || query.Offset < 0 {
-		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "limit must be between 1 and 200 and offset must not be negative")
+	if query.Limit < 1 || query.Limit > 200 {
+		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "limit must be between 1 and 200")
 		return
 	}
 	page, err := h.users.ListUsers(r.Context(), query)
+	if errors.Is(err, repository.ErrInvalidPageToken) {
+		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "pageToken is not valid for these filters")
+		return
+	}
 	if err != nil {
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "list users failed")
 		return
@@ -225,7 +229,7 @@ func (h identityManagementHandler) ListUsers(w http.ResponseWriter, r *http.Requ
 	for _, user := range page.Items {
 		items = append(items, userResponse(user))
 	}
-	writeNativeMavenJSON(w, http.StatusOK, adminopenapi.UserList{Items: items, Total: page.Total, Offset: page.Offset, Limit: page.Limit})
+	writeNativeMavenJSON(w, http.StatusOK, adminopenapi.UserList{Items: items, Total: listTotalResponse(page.Total), Limit: page.Limit, NextPageToken: optionalString(page.NextPageToken)})
 }
 
 func (h identityManagementHandler) CreateUser(w http.ResponseWriter, r *http.Request) {

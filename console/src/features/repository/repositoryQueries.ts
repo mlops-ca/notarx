@@ -112,7 +112,7 @@ export function useRepositoryCapacity(repositoryId: string) {
 /** One page of a repository's download statistics. */
 export function useArtifactUsage(
   repositoryId: string,
-  page: number,
+  pageToken: string | undefined,
   pageSize: number,
   q: string,
 ) {
@@ -120,7 +120,7 @@ export function useArtifactUsage(
     queryKey: [
       ...repositoryKeys.detail(repositoryId),
       "usage",
-      { page, pageSize, q },
+      { pageToken, pageSize, q },
     ] as const,
     queryFn: ({ signal }) =>
       unwrap(
@@ -128,7 +128,7 @@ export function useArtifactUsage(
           path: { repositoryId },
           query: {
             limit: pageSize,
-            offset: (page - 1) * pageSize,
+            pageToken,
             q: q || undefined,
           },
           signal,

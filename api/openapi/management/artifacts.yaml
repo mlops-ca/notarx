@@ -19,10 +19,11 @@ repositories_repositoryId_artifact_usage:
     operationId: listRepositoryArtifactUsage
     summary: Get paginated lifecycle download usage aggregated per artifact address
     description: >-
-      Returns one live page ordered by resource then format (bytewise ascending).
-      Download increments do not reorder addresses. New addresses between requests
-      can move offset boundaries; refresh to restart browsing. Items, totalCount
-      and whole-repository totals come from one consistent read snapshot.
+      Returns one live page ordered by resource then format (bytewise ascending),
+      continued with the nextPageToken of the previous page (keyset, bound to q).
+      Download increments do not reorder addresses and new addresses never shift
+      a later page. Items, total and whole-repository totals come from one
+      consistent read snapshot.
     parameters:
     - name: limit
       in: query
@@ -31,9 +32,7 @@ repositories_repositoryId_artifact_usage:
         minimum: 1
         maximum: 500
         default: 100
-    - name: offset
-      in: query
-      schema: {type: integer, minimum: 0, maximum: 1000000, default: 0}
+    - "$ref": "../components/parameters.yaml#/PageToken"
     - name: q
       in: query
       description: Case-sensitive literal substring of the artifact address. Surrounding whitespace is trimmed; SQL wildcard characters have no special meaning.
