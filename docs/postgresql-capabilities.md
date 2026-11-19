@@ -49,8 +49,8 @@ seam, but every implementation is raw PostgreSQL SQL. Counts from the tree on
 | --- | --- |
 | Advisory-lock calls (`pg_advisory_*`, `pg_try_advisory_*`) | about 41 lines in 26 files, wrapped by `internal/repository/postgres_advisory_lock.go` and used by `internal/cache/coordinator.go` |
 | `FOR UPDATE SKIP LOCKED` work-queue claims | about 27 sites in 21 files |
-| `LISTEN` and `pg_notify` | listener in `internal/database/notification.go`, `pg_notify` in `internal/app/postgres_cache_task_queue.go`, notify triggers in the baseline and `migrations/000021_queue_claiming.sql` |
-| `CREATE TRIGGER` statements | 23 in `migrations/000001_baseline.sql` |
+| `LISTEN` and `pg_notify` | listener in `internal/database/notification.go`, `pg_notify` in `internal/app/postgres_cache_task_queue.go`, notify triggers in `migrations/000001_baseline.sql` |
+| `CREATE TRIGGER` statements | 10 in `migrations/000001_baseline.sql` |
 | `gin_trgm_ops` (`pg_trgm`) indexes | 13 in the baseline |
 | `ON CONFLICT` / `RETURNING` | about 113 / 146 |
 | `::` casts | about 1,400 |
@@ -58,10 +58,9 @@ seam, but every implementation is raw PostgreSQL SQL. Counts from the tree on
 | `pg_stat_statements` | preloaded by the Compose files and the isolated backup target; no Go code reads it |
 
 Migrations are a single baseline plus numbered migrations (ADR 0015), applied by
-`scripts/run-migrations.sh`. The baseline generator and the equivalence proof
-(`scripts/baseline-lib.sh`) pin `postgres:18-alpine` by digest; the dump normalizer is
-tested against a PostgreSQL 16 and a PostgreSQL 18 `pg_dump`, and the equivalence
-workflow also runs on the pinned 16 image while 16 remains supported.
+`scripts/run-migrations.sh`. The baseline was generated once from the migration chain
+with a PostgreSQL 18 `pg_dump` and proven equivalent to it on PostgreSQL 16 and 18
+before the generator and the proof were removed (ADR 0015 slice 7).
 
 ### Criteria for revisiting the single-database decision
 
@@ -83,7 +82,7 @@ meets every row. Providers that cannot meet every row are unsupported.
 
 | Requirement | Why | Failure mode |
 | --- | --- | --- |
-| PostgreSQL 16 or later | tested on 18 (Compose, Kubernetes, backup-ops and the schema baseline generator) and 16 (baseline equivalence proof and dump normalizer fixture) | unsupported |
+| PostgreSQL 16 or later | tested on 18 (Compose, Kubernetes, backup-ops); the baseline was proven on 16 and 18 | unsupported |
 | `CREATE EXTENSION pg_trgm` allowed | GIN trigram indexes in the baseline | the baseline fails; unsupported |
 | `pg_stat_statements` (optional) | created in a guarded block by the baseline (ADR 0015); no Go code reads it | statement statistics unavailable; the migration still succeeds |
 | Session-level connections (direct, or a pooler in session mode) | session advisory locks and `LISTEN/NOTIFY` | locks and notifications are lost behind a transaction-mode pooler; unsupported |
@@ -287,13 +286,13 @@ retention; that twin is written with the ADR 0022 store slices.
 
 | Area | Primary implementation |
 | --- | --- |
-| Partitioned audit tables | `internal/partitions`, `migrations/000002_partitioned_audit_logs.sql`, `internal/repository/postgres_audit.go` |
+| Partitioned audit tables | `internal/partitions`, partitioned `resolver_audit_log` and `security_audit_log` in `migrations/000001_baseline.sql`, `internal/repository/postgres_audit.go` |
 | Advisory locks | `internal/cache/coordinator.go`, `internal/repository/postgres_advisory_lock.go`, `postgres_{oci,raw,maven,npm}.go` |
 | `SKIP LOCKED` and leases | `internal/repository/postgres_lifecycle.go`, `postgres_replication.go`, `postgres_webhooks.go`, `postgres_scheduled_tasks.go` |
 | `LISTEN/NOTIFY` | `internal/database/notification.go`, notification triggers in `migrations/000001_baseline.sql` |
 | Extensions and indexes | extension header and trigram, BRIN and prefix-pattern indexes in `migrations/000001_baseline.sql` |
 | Cross-format search | `artifact_search_projection` view in `migrations/000001_baseline.sql` |
-| Capacity serialization | capacity functions and triggers in `migrations/000001_baseline.sql` |
+| Capacity serialization | `repository_usage_counters` and its functions in `migrations/000001_baseline.sql` |
 
 `scripts/run-migrations.sh` applies migrations in checksum order. Changes to
 startup settings such as `shared_preload_libraries` require a PostgreSQL restart

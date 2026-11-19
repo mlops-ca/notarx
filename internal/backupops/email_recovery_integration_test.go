@@ -211,6 +211,20 @@ func seedRecoveryEmail(t *testing.T, ctx context.Context, source *OwnedTarget, e
 	return f
 }
 
+// emailLocaleUpgradeSQL is what an operator ran when moving a release that predates the
+// locale tags to the current schema (ADR 0014): the legacy bare en tag becomes en-CA and the
+// locale checks and defaults follow. The migration that did it was folded into the baseline.
+const emailLocaleUpgradeSQL = `
+ALTER TABLE email_targets DROP CONSTRAINT IF EXISTS email_targets_locale_check;
+ALTER TABLE email_test_deliveries DROP CONSTRAINT IF EXISTS email_test_deliveries_locale_check;
+UPDATE email_targets SET locale = 'en-CA' WHERE locale = 'en';
+UPDATE email_test_deliveries SET locale = 'en-CA' WHERE locale = 'en';
+ALTER TABLE email_targets ALTER COLUMN locale SET DEFAULT 'en-CA';
+ALTER TABLE email_test_deliveries ALTER COLUMN locale SET DEFAULT 'en-CA';
+ALTER TABLE email_targets ADD CONSTRAINT email_targets_locale_check CHECK (locale IN ('en-CA', 'fr-CA', 'zh-CN'));
+ALTER TABLE email_test_deliveries ADD CONSTRAINT email_test_deliveries_locale_check CHECK (locale IN ('en-CA', 'fr-CA', 'zh-CN'));
+`
+
 func verifyRecoveryEmail(t *testing.T, ctx context.Context, target *OwnedTarget, endpoint, denied string, f recoveryEmail, bundle string) {
 	t.Helper()
 	s := recoveryStore(t, target.database)
@@ -307,15 +321,12 @@ func verifyRecoveryEmail(t *testing.T, ctx context.Context, target *OwnedTarget,
 		fixtureHTTP(t, ctx, endpoint, "GET", path, denied, nil, 403, "")
 	}
 	// A release that predates the locale tags restored the bare en tag. The
-	// worker below is the current code, so apply the migration an operator runs
-	// when upgrading (ADR 0014): it maps en to en-CA.
+	// worker below is the current code, so apply the data fix an operator runs
+	// when upgrading (ADR 0014): it maps en to en-CA. The migration that did it
+	// was folded into the baseline, so the statements are spelled out above.
 	if restored.Locale == "en" {
-		migration, e := os.ReadFile("../../migrations/000004_email_locale_tags.sql")
-		if e != nil {
-			t.Fatal(e)
-		}
-		recoverySQL(t, ctx, target.database, string(migration))
-		// The fixture mirrors what the migration did, so later comparisons hold.
+		recoverySQL(t, ctx, target.database, emailLocaleUpgradeSQL)
+		// The fixture mirrors what the fix did, so later comparisons hold.
 		f.Target.Locale = "en-CA"
 		for id, delivery := range f.Deliveries {
 			delivery.Locale = "en-CA"

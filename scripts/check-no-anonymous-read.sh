@@ -19,14 +19,24 @@ hits=$(git grep -nIE "$pattern" -- . \
   ':(exclude)docs/release-records' \
   ':(exclude)docs/reports' \
   ':(exclude)migrations' \
-  ':(exclude)internal/tools/baselinefmt' \
   ':(exclude)console/src/messages' \
-  ':(exclude)internal/repository/postgres_visibility_migration_integration_test.go' \
   ':(exclude)scripts/check-no-anonymous-read.sh' \
   ':(exclude)*.zh-CN.*' || true)
 
 if [[ -n "$hits" ]]; then
   printf 'retired anonymous-read names found (use visibility and public-access-policy, ADR 0029):\n%s\n' "$hits" >&2
   exit 1
+fi
+
+# The re-squashed baseline (ADR 0015 slice 7) must carry the visibility enum and
+# none of the retired names, so a regeneration never reintroduces them.
+baseline=migrations/000001_baseline.sql
+if [[ -f "$baseline" ]]; then
+  grep -q 'visibility character varying' "$baseline" || { printf '%s has no visibility column\n' "$baseline" >&2; exit 1; }
+  stale=$(grep -nE 'anonymous_read|anonymous_access_policy' "$baseline" || true)
+  if [[ -n "$stale" ]]; then
+    printf 'retired names in %s:\n%s\n' "$baseline" "$stale" >&2
+    exit 1
+  fi
 fi
 printf 'anonymous-read removal check: pass\n'

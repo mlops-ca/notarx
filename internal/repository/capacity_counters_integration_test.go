@@ -265,7 +265,7 @@ func TestCapacityOverviewListsRepositoryWithoutCounterRow(t *testing.T) {
 	}
 }
 
-// TestNoCapacityTriggerOrFunctionRemains proves migration 000014 dropped the capacity triggers
+// TestNoCapacityTriggerOrFunctionRemains proves the baseline has none of the capacity triggers
 // and functions: Reserve is the only quota enforcement (ADR 0023 section 3), and the quota API
 // still rejects a quota below the current usage, also when the counter drifted below it.
 func TestNoCapacityTriggerOrFunctionRemains(t *testing.T) {

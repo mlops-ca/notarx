@@ -21,101 +21,6 @@ END
 $$;
 
 --
--- Name: assert_apt_repository_capacity_trigger(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.assert_apt_repository_capacity_trigger() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-DECLARE
-    quota BIGINT;
-    used BIGINT;
-BEGIN
-    SELECT quota_bytes INTO quota FROM repository_capacity_quotas WHERE repository_id=NEW.repository_id FOR UPDATE;
-    IF quota IS NULL OR quota = 0 THEN RETURN NEW; END IF;
-    SELECT COALESCE(SUM(size),0) INTO used FROM native_apt_assets WHERE repository_id=NEW.repository_id;
-    IF used > quota THEN
-        RAISE EXCEPTION 'repository capacity quota exceeded' USING ERRCODE='P0001';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-
---
--- Name: assert_cargo_repository_capacity(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.assert_cargo_repository_capacity() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-DECLARE
-    quota BIGINT;
-    used BIGINT;
-BEGIN
-    SELECT quota_bytes INTO quota FROM repository_capacity_quotas
-        WHERE repository_id=NEW.repository_id FOR UPDATE;
-    IF quota IS NULL OR quota = 0 THEN RETURN NEW; END IF;
-    SELECT COALESCE(SUM(size), 0) INTO used FROM native_cargo_publications
-        WHERE repository_id=NEW.repository_id AND collected_at IS NULL;
-    IF used > quota THEN
-        RAISE EXCEPTION 'repository capacity quota exceeded' USING ERRCODE='P0001';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-
---
--- Name: assert_hosted_repository_capacity(uuid); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.assert_hosted_repository_capacity(p_repository_id uuid) RETURNS void
-    LANGUAGE plpgsql
-    AS $$
-DECLARE
-    quota BIGINT;
-    repository_format TEXT;
-    used BIGINT;
-BEGIN
-    SELECT quota_bytes INTO quota FROM repository_capacity_quotas WHERE repository_id=p_repository_id FOR UPDATE;
-    IF quota IS NULL OR quota = 0 THEN RETURN; END IF;
-    SELECT format INTO repository_format FROM hosted_repositories WHERE id=p_repository_id;
-    CASE repository_format
-    WHEN 'raw' THEN
-        SELECT COALESCE(SUM(o.size),0) INTO used FROM native_raw_assets a JOIN native_raw_objects o ON o.digest=a.digest WHERE a.repository_id=p_repository_id;
-    WHEN 'maven' THEN
-        SELECT COALESCE(SUM(a.size),0) INTO used FROM native_maven_assets a WHERE a.repository_id=p_repository_id AND EXISTS (SELECT 1 FROM native_maven_artifacts m WHERE m.repository_id=a.repository_id AND m.state='visible' AND left(a.path,length(replace(split_part(m.coordinate,':',1),'.','/') || '/' || split_part(m.coordinate,':',2) || '/' || split_part(m.coordinate,':',3) || '/'))=replace(split_part(m.coordinate,':',1),'.','/') || '/' || split_part(m.coordinate,':',2) || '/' || split_part(m.coordinate,':',3) || '/');
-    WHEN 'oci' THEN
-        SELECT COALESCE((SELECT SUM(size) FROM native_oci_manifests WHERE repository_id=p_repository_id),0)+COALESCE((SELECT SUM(b.size) FROM native_oci_repository_blobs rb JOIN native_oci_blobs b ON b.digest=rb.digest WHERE rb.repository_id=p_repository_id),0) INTO used;
-    WHEN 'conan' THEN
-        SELECT COALESCE(SUM(a.size),0) INTO used FROM native_conan_assets a JOIN native_conan_recipe_revisions r ON r.repository_id=a.repository_id AND r.reference=a.reference AND r.revision=a.recipe_revision LEFT JOIN native_conan_package_revisions p ON p.repository_id=a.repository_id AND p.reference=a.reference AND p.recipe_revision=a.recipe_revision AND p.package_id=a.package_id AND p.revision=a.package_revision WHERE a.repository_id=p_repository_id AND r.state='visible' AND (a.package_id='' OR p.state='visible');
-    WHEN 'npm' THEN
-        SELECT COALESCE(SUM(size),0) INTO used FROM native_npm_versions WHERE repository_id=p_repository_id AND state='visible';
-    WHEN 'pypi' THEN
-        SELECT COALESCE(SUM(size),0) INTO used FROM native_pypi_files WHERE repository_id=p_repository_id AND state='visible';
-    WHEN 'go' THEN
-        SELECT COALESCE(SUM(size),0) INTO used FROM native_go_assets WHERE repository_id=p_repository_id AND collected_at IS NULL;
-    ELSE RETURN;
-    END CASE;
-    IF used > quota THEN
-        RAISE EXCEPTION 'repository capacity quota exceeded' USING ERRCODE='P0001';
-    END IF;
-END;
-$$;
-
---
--- Name: assert_hosted_repository_capacity_trigger(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.assert_hosted_repository_capacity_trigger() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-    PERFORM assert_hosted_repository_capacity(NEW.repository_id);
-    RETURN NEW;
-END;
-$$;
-
---
 -- Name: cargo_promotion_state_webhook(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -180,6 +85,19 @@ END;
 $$;
 
 --
+-- Name: notarx_notify_job_kind(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.notarx_notify_job_kind() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    PERFORM pg_notify('notarx_jobs_' || NEW.kind, COALESCE(NEW.id::text, 'wake'));
+    RETURN NEW;
+END;
+$$;
+
+--
 -- Name: notarx_notify_queue(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -191,17 +109,6 @@ BEGIN
     RETURN NEW;
 END;
 $$;
-
---
--- Name: anonymous_access_policy; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.anonymous_access_policy (
-    singleton boolean DEFAULT true NOT NULL,
-    version bigint DEFAULT 1 NOT NULL,
-    enabled boolean DEFAULT false NOT NULL,
-    CONSTRAINT anonymous_access_policy_singleton_check CHECK (singleton)
-);
 
 --
 -- Name: api_keys; Type: TABLE; Schema: public; Owner: -
@@ -218,7 +125,8 @@ CREATE TABLE public.api_keys (
     last_used_at timestamp with time zone,
     service_account_id uuid,
     CONSTRAINT api_keys_roles_check CHECK ((roles <@ ARRAY['member'::text, 'admin'::text]))
-);
+)
+WITH (fillfactor='80', autovacuum_vacuum_scale_factor='0.02', autovacuum_analyze_scale_factor='0.02');
 
 --
 -- Name: artifact_intelligence; Type: TABLE; Schema: public; Owner: -
@@ -244,6 +152,19 @@ CREATE TABLE public.artifact_intelligence (
 );
 
 --
+-- Name: artifact_license; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.artifact_license (
+    repository_id uuid NOT NULL,
+    artifact_digest character varying(80) NOT NULL,
+    spdx_id character varying(128) NOT NULL COLLATE pg_catalog."C",
+    source character varying(32) NOT NULL COLLATE pg_catalog."C",
+    confidence numeric DEFAULT 1 NOT NULL,
+    CONSTRAINT artifact_license_confidence_check CHECK (((confidence >= (0)::numeric) AND (confidence <= (1)::numeric)))
+);
+
+--
 -- Name: artifact_quarantines; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -261,13 +182,77 @@ CREATE TABLE public.artifact_quarantines (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT artifact_quarantines_check CHECK ((((state = 'quarantined'::text) AND (released_at IS NULL)) OR ((state = 'released'::text) AND (released_at IS NOT NULL)))),
     CONSTRAINT artifact_quarantines_check1 CHECK (((format <> 'conan'::text) OR (coordinate ~ '^[^/#]+/[^/#]+/[^/#]+/[^/#]+#[^/#]+$'::text))),
-    CONSTRAINT artifact_quarantines_coordinate_check CHECK ((((char_length(coordinate) >= 1) AND (char_length(coordinate) <= 1024)) AND (btrim(coordinate) <> ''::text))),
+    CONSTRAINT artifact_quarantines_coordinate_check CHECK (((char_length(coordinate) >= 1) AND (char_length(coordinate) <= 1024) AND (btrim(coordinate) <> ''::text))),
     CONSTRAINT artifact_quarantines_digest_check CHECK ((digest ~ '^sha256:[a-f0-9]{64}$'::text)),
     CONSTRAINT artifact_quarantines_format_check CHECK ((format = ANY (ARRAY['raw'::text, 'oci'::text, 'maven'::text, 'conan'::text, 'npm'::text, 'pypi'::text, 'go'::text, 'apt'::text, 'cargo'::text]))),
-    CONSTRAINT artifact_quarantines_reason_check CHECK ((((char_length(reason) >= 1) AND (char_length(reason) <= 1024)) AND (btrim(reason) <> ''::text))),
+    CONSTRAINT artifact_quarantines_reason_check CHECK (((char_length(reason) >= 1) AND (char_length(reason) <= 1024) AND (btrim(reason) <> ''::text))),
     CONSTRAINT artifact_quarantines_state_check CHECK ((state = ANY (ARRAY['quarantined'::text, 'released'::text]))),
-    CONSTRAINT artifact_quarantines_updated_by_check CHECK ((((char_length(updated_by) >= 1) AND (char_length(updated_by) <= 512)) AND (btrim(updated_by) <> ''::text))),
+    CONSTRAINT artifact_quarantines_updated_by_check CHECK (((char_length(updated_by) >= 1) AND (char_length(updated_by) <= 512) AND (btrim(updated_by) <> ''::text))),
     CONSTRAINT artifact_quarantines_version_check CHECK ((version >= 1))
+);
+
+--
+-- Name: artifact_sbom; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.artifact_sbom (
+    id uuid NOT NULL,
+    repository_id uuid NOT NULL,
+    artifact_digest character varying(80) NOT NULL,
+    kind character varying(32) NOT NULL,
+    source character varying(16) NOT NULL,
+    generator character varying(64) DEFAULT ''::character varying NOT NULL,
+    generator_version character varying(32) DEFAULT ''::character varying NOT NULL,
+    spec_version character varying(16) DEFAULT ''::character varying NOT NULL,
+    body_digest character varying(80) NOT NULL,
+    body_size bigint NOT NULL,
+    body_key text DEFAULT ''::text NOT NULL,
+    body jsonb,
+    component_count integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT artifact_sbom_body_check CHECK (((body IS NOT NULL) OR (body_key <> ''::text))),
+    CONSTRAINT artifact_sbom_kind_check CHECK (((kind)::text = ANY ((ARRAY['cyclonedx-json'::character varying, 'spdx-json'::character varying])::text[]))),
+    CONSTRAINT artifact_sbom_size_check CHECK (((body_size >= 0) AND (component_count >= 0))),
+    CONSTRAINT artifact_sbom_source_check CHECK (((source)::text = ANY ((ARRAY['generated'::character varying, 'uploaded'::character varying, 'promoted'::character varying])::text[])))
+);
+
+--
+-- Name: artifact_scan_history; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.artifact_scan_history (
+    id uuid NOT NULL,
+    repository_id uuid NOT NULL,
+    artifact_digest character varying(80) NOT NULL,
+    scanner_version character varying(32) DEFAULT ''::character varying NOT NULL,
+    db_generation_id uuid,
+    status character varying(16) NOT NULL,
+    critical integer DEFAULT 0 NOT NULL,
+    high integer DEFAULT 0 NOT NULL,
+    medium integer DEFAULT 0 NOT NULL,
+    low integer DEFAULT 0 NOT NULL,
+    unknown integer DEFAULT 0 NOT NULL,
+    scanned_at timestamp with time zone NOT NULL
+)
+PARTITION BY RANGE (scanned_at);
+
+--
+-- Name: artifact_scan_history_default; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.artifact_scan_history_default (
+    id uuid CONSTRAINT artifact_scan_history_id_not_null NOT NULL,
+    repository_id uuid CONSTRAINT artifact_scan_history_repository_id_not_null NOT NULL,
+    artifact_digest character varying(80) CONSTRAINT artifact_scan_history_artifact_digest_not_null NOT NULL,
+    scanner_version character varying(32) DEFAULT ''::character varying CONSTRAINT artifact_scan_history_scanner_version_not_null NOT NULL,
+    db_generation_id uuid,
+    status character varying(16) CONSTRAINT artifact_scan_history_status_not_null NOT NULL,
+    critical integer DEFAULT 0 CONSTRAINT artifact_scan_history_critical_not_null NOT NULL,
+    high integer DEFAULT 0 CONSTRAINT artifact_scan_history_high_not_null NOT NULL,
+    medium integer DEFAULT 0 CONSTRAINT artifact_scan_history_medium_not_null NOT NULL,
+    low integer DEFAULT 0 CONSTRAINT artifact_scan_history_low_not_null NOT NULL,
+    unknown integer DEFAULT 0 CONSTRAINT artifact_scan_history_unknown_not_null NOT NULL,
+    scanned_at timestamp with time zone CONSTRAINT artifact_scan_history_scanned_at_not_null NOT NULL
 );
 
 --
@@ -340,29 +325,6 @@ CREATE TABLE public.native_apt_snapshot_assets (
 );
 
 --
--- Name: native_conan_publish_sessions; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.native_conan_publish_sessions (
-    id uuid NOT NULL,
-    repository_id uuid NOT NULL,
-    publisher text NOT NULL,
-    kind text NOT NULL,
-    reference text NOT NULL,
-    recipe_revision text NOT NULL,
-    package_id text DEFAULT ''::text NOT NULL,
-    package_revision text DEFAULT ''::text NOT NULL,
-    state text NOT NULL,
-    expires_at timestamp with time zone NOT NULL,
-    objects jsonb NOT NULL,
-    native boolean DEFAULT false NOT NULL,
-    version bigint DEFAULT 0 NOT NULL,
-    CONSTRAINT native_conan_publish_sessions_kind_check CHECK ((kind = ANY (ARRAY['recipe'::text, 'package'::text]))),
-    CONSTRAINT native_conan_publish_sessions_state_check CHECK ((state = ANY (ARRAY['open'::text, 'committed'::text, 'aborted'::text, 'expired'::text]))),
-    CONSTRAINT native_conan_publish_sessions_version_check CHECK ((version >= 0))
-);
-
---
 -- Name: native_conan_recipe_revisions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -373,6 +335,7 @@ CREATE TABLE public.native_conan_recipe_revisions (
     digest text NOT NULL,
     state text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
+    publisher text DEFAULT ''::text NOT NULL,
     CONSTRAINT native_conan_recipe_revisions_digest_check CHECK ((digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT native_conan_recipe_revisions_state_check CHECK ((state = ANY (ARRAY['visible'::text, 'deleted'::text])))
 );
@@ -430,26 +393,8 @@ CREATE TABLE public.native_maven_artifacts (
     build_number integer DEFAULT 0 NOT NULL,
     source_timestamp text DEFAULT ''::text NOT NULL,
     source_build_number integer DEFAULT 0 NOT NULL,
+    publisher text DEFAULT ''::text NOT NULL,
     CONSTRAINT native_maven_artifacts_state_check CHECK ((state = ANY (ARRAY['visible'::text, 'deleted'::text])))
-);
-
---
--- Name: native_maven_publish_sessions; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.native_maven_publish_sessions (
-    id uuid NOT NULL,
-    repository_id uuid NOT NULL,
-    publisher text NOT NULL,
-    coordinate text NOT NULL,
-    pom_object text NOT NULL,
-    state text NOT NULL,
-    expires_at timestamp with time zone NOT NULL,
-    objects jsonb NOT NULL,
-    client_timestamp text DEFAULT ''::text NOT NULL,
-    client_build_number integer DEFAULT 0 NOT NULL,
-    CONSTRAINT native_maven_publish_sessions_client_build_number_check CHECK ((client_build_number >= 0)),
-    CONSTRAINT native_maven_publish_sessions_state_check CHECK ((state = ANY (ARRAY['open'::text, 'committed'::text, 'aborted'::text, 'expired'::text])))
 );
 
 --
@@ -498,6 +443,10 @@ CREATE TABLE public.native_npm_versions (
     collected_at timestamp with time zone,
     deprecated text DEFAULT ''::text NOT NULL,
     collecting_at timestamp with time zone,
+    body_digest text,
+    body_size bigint,
+    body_key text,
+    CONSTRAINT native_npm_versions_body_ref_check CHECK ((((body_digest IS NULL) AND (body_size IS NULL) AND (body_key IS NULL)) OR ((body_digest IS NOT NULL) AND (body_size IS NOT NULL) AND (body_key IS NOT NULL) AND (body_size >= 0)))),
     CONSTRAINT native_npm_versions_cached_object_check CHECK ((((object_key = ''::text) AND (digest = ''::text) AND (size = 0) AND (cached_at IS NULL)) OR ((object_key <> ''::text) AND (digest <> ''::text) AND (size > 0) AND (cached_at IS NOT NULL)))),
     CONSTRAINT native_npm_versions_digest_check CHECK (((digest = ''::text) OR (digest ~ '^sha256:[0-9a-f]{64}$'::text))),
     CONSTRAINT native_npm_versions_integrity_check CHECK (((integrity = ''::text) OR (integrity ~ '^sha512-[A-Za-z0-9+/]+={0,2}$'::text))),
@@ -609,90 +558,80 @@ CREATE VIEW public.artifact_search_projection AS
             a.digest,
             a.created_at,
             NULL::bigint AS size,
-            COALESCE(p.publisher, ''::text) AS publisher,
+            a.publisher,
             a.build_number,
             NULL::text AS content_type,
             split_part(a.coordinate, ':'::text, 3) AS version
-           FROM (public.native_maven_artifacts a
-             LEFT JOIN LATERAL ( SELECT s.publisher
-                   FROM public.native_maven_publish_sessions s
-                  WHERE ((s.repository_id = a.repository_id) AND (s.coordinate = a.coordinate) AND (s.state = 'committed'::text))
-                  ORDER BY s.expires_at DESC
-                 LIMIT 1) p ON (true))
+           FROM public.native_maven_artifacts a
           WHERE (a.state = 'visible'::text)
         UNION ALL
          SELECT m.repository_id,
-            'oci'::text,
+            'oci'::text AS text,
             m.name,
             m.digest,
             m.created_at,
             m.size,
-            ''::text,
+            ''::text AS text,
             0,
             m.media_type,
-            NULL::text
+            NULL::text AS text
            FROM public.native_oci_manifests m
         UNION ALL
          SELECT r.repository_id,
-            'conan'::text,
+            'conan'::text AS text,
             r.reference,
             r.digest,
             r.created_at,
             NULL::bigint AS int8,
-            COALESCE(p.publisher, ''::text) AS "coalesce",
+            r.publisher,
             0,
             NULL::text AS text,
             split_part(r.reference, '/'::text, 2) AS split_part
-           FROM (public.native_conan_recipe_revisions r
-             LEFT JOIN LATERAL ( SELECT s.publisher
-                   FROM public.native_conan_publish_sessions s
-                  WHERE ((s.repository_id = r.repository_id) AND (s.reference = r.reference) AND (s.state = 'committed'::text))
-                  ORDER BY s.expires_at DESC
-                 LIMIT 1) p ON (true))
+           FROM public.native_conan_recipe_revisions r
           WHERE (r.state = 'visible'::text)
         UNION ALL
          SELECT a.repository_id,
-            'raw'::text,
+            'raw'::text AS text,
             a.path,
             a.digest,
             a.updated_at,
             o.size,
-            ''::text,
+            ''::text AS text,
             0,
             a.content_type,
-            NULL::text
+            NULL::text AS text
            FROM (public.native_raw_assets a
              JOIN public.native_raw_objects o ON ((o.digest = a.digest)))
         UNION ALL
          SELECT v.repository_id,
-            'npm'::text,
+            'npm'::text AS text,
             v.package_name,
             v.digest,
             v.created_at,
             v.size,
             v.publisher,
             0,
-            'application/octet-stream'::text,
+            'application/octet-stream'::text AS text,
             v.version
            FROM (public.native_npm_versions v
              JOIN public.native_npm_packages p ON (((p.repository_id = v.repository_id) AND (p.name = v.package_name))))
           WHERE ((NOT p.negative) AND (v.state = 'visible'::text))
         UNION ALL
          SELECT f.repository_id,
-            'pypi'::text,
+            'pypi'::text AS text,
             f.project,
             f.digest,
             f.created_at,
             f.size,
             f.publisher,
             0,
-            'application/octet-stream'::text,
+            'application/octet-stream'::text AS text,
             f.version
            FROM public.native_pypi_files f
           WHERE (f.state = 'visible'::text)
         UNION ALL
          SELECT v.repository_id,
-            'go'::text,
+            'go'::text AS text,
             v.module_path,
             COALESCE(a.digest, ''::text) AS "coalesce",
             v.created_at,
@@ -719,7 +658,7 @@ CREATE VIEW public.artifact_search_projection AS
                  LIMIT 1) a ON (true))
         UNION ALL
          SELECT a.repository_id,
-            'apt'::text,
+            'apt'::text AS text,
             a.path,
             a.digest,
             a.created_at,
@@ -727,11 +666,11 @@ CREATE VIEW public.artifact_search_projection AS
             ''::text AS text,
             0,
             a.content_type,
-            NULL::text
+            NULL::text AS text
            FROM public.native_apt_assets a
         UNION ALL
          SELECT a.repository_id,
-            'apt'::text,
+            'apt'::text AS text,
             a.path,
             a.digest,
             s.created_at,
@@ -739,7 +678,7 @@ CREATE VIEW public.artifact_search_projection AS
             ''::text AS text,
             0,
             a.content_type,
-            NULL::text
+            NULL::text AS text
            FROM (public.native_apt_snapshot_assets a
              JOIN public.native_apt_repository_snapshots s ON ((s.id = a.snapshot_id)))
           WHERE (s.state = 'visible'::text)) projection;
@@ -762,14 +701,70 @@ CREATE TABLE public.artifact_tombstones (
 --
 
 CREATE TABLE public.artifact_usage_stats (
-    repository text NOT NULL,
     format text NOT NULL,
     resource text NOT NULL,
     download_count bigint DEFAULT 0 NOT NULL,
     total_bytes bigint DEFAULT 0 NOT NULL,
     first_downloaded_at timestamp with time zone DEFAULT now() NOT NULL,
     last_downloaded_at timestamp with time zone DEFAULT now() NOT NULL,
-    last_actor text DEFAULT ''::text NOT NULL
+    last_actor text DEFAULT ''::text NOT NULL,
+    repository_id uuid NOT NULL
+)
+WITH (fillfactor='80', autovacuum_vacuum_scale_factor='0.02', autovacuum_analyze_scale_factor='0.02');
+
+--
+-- Name: artifact_vulnerability; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.artifact_vulnerability (
+    id uuid NOT NULL,
+    repository_id uuid NOT NULL,
+    artifact_digest character varying(80) NOT NULL,
+    scanner character varying(32) NOT NULL,
+    scanner_version character varying(32) DEFAULT ''::character varying NOT NULL,
+    db_generation_id uuid,
+    status character varying(16) NOT NULL,
+    critical integer DEFAULT 0 NOT NULL,
+    high integer DEFAULT 0 NOT NULL,
+    medium integer DEFAULT 0 NOT NULL,
+    low integer DEFAULT 0 NOT NULL,
+    unknown integer DEFAULT 0 NOT NULL,
+    suppressed_count integer DEFAULT 0 NOT NULL,
+    findings_total integer DEFAULT 0 NOT NULL,
+    truncated boolean DEFAULT false NOT NULL,
+    not_scanned_reason text,
+    scanned_at timestamp with time zone NOT NULL,
+    CONSTRAINT artifact_vulnerability_counts_check CHECK (((critical >= 0) AND (high >= 0) AND (medium >= 0) AND (low >= 0) AND (unknown >= 0) AND (suppressed_count >= 0) AND (findings_total >= 0))),
+    CONSTRAINT artifact_vulnerability_status_check CHECK (((status)::text = ANY ((ARRAY['clean'::character varying, 'vulnerable'::character varying, 'stale_db'::character varying, 'not_scanned'::character varying, 'error'::character varying])::text[])))
+);
+
+--
+-- Name: artifact_vulnerability_finding; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.artifact_vulnerability_finding (
+    vulnerability_id uuid NOT NULL,
+    ordinal integer NOT NULL,
+    vuln_id character varying(128) NOT NULL COLLATE pg_catalog."C",
+    source character varying(32) DEFAULT ''::character varying NOT NULL,
+    severity character varying(16) NOT NULL,
+    severity_rank smallint NOT NULL,
+    component text DEFAULT ''::text NOT NULL,
+    version text DEFAULT ''::text NOT NULL,
+    fixed_version text DEFAULT ''::text NOT NULL,
+    location text DEFAULT ''::text NOT NULL,
+    title text DEFAULT ''::text NOT NULL,
+    description character varying(4096),
+    url text DEFAULT ''::text NOT NULL,
+    cvss_score numeric,
+    cvss_vector text DEFAULT ''::text NOT NULL,
+    status character varying(16) NOT NULL,
+    vex_status character varying(32),
+    vex_justification text,
+    epss numeric,
+    kev boolean,
+    CONSTRAINT artifact_vulnerability_finding_severity_check CHECK (((severity)::text = ANY ((ARRAY['critical'::character varying, 'high'::character varying, 'medium'::character varying, 'low'::character varying, 'unknown'::character varying])::text[]))),
+    CONSTRAINT artifact_vulnerability_finding_status_check CHECK (((status)::text = ANY ((ARRAY['affected'::character varying, 'suppressed'::character varying, 'fixed'::character varying])::text[])))
 );
 
 --
@@ -788,7 +783,7 @@ CREATE TABLE public.audit_cleanup_jobs (
     started_at timestamp with time zone,
     completed_at timestamp with time zone,
     last_error text DEFAULT ''::text NOT NULL,
-    CONSTRAINT audit_cleanup_jobs_batch_size_check CHECK (((batch_size >= 1) AND (batch_size <= 1000))),
+    CONSTRAINT audit_cleanup_jobs_batch_size_check CHECK (((batch_size >= 1) AND (batch_size <= 50000))),
     CONSTRAINT audit_cleanup_jobs_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'running'::text, 'completed'::text, 'failed'::text])))
 );
 
@@ -799,8 +794,8 @@ CREATE TABLE public.audit_cleanup_jobs (
 CREATE TABLE public.audit_retention_policy (
     singleton boolean DEFAULT true NOT NULL,
     version bigint DEFAULT 1 NOT NULL,
-    enabled boolean DEFAULT false NOT NULL,
-    keep_days integer DEFAULT 0 NOT NULL,
+    enabled boolean DEFAULT true NOT NULL,
+    keep_days integer DEFAULT 90 NOT NULL,
     CONSTRAINT audit_retention_policy_keep_days_check CHECK ((keep_days >= 0)),
     CONSTRAINT audit_retention_policy_singleton_check CHECK (singleton)
 );
@@ -869,7 +864,8 @@ CREATE TABLE public.cache_tasks (
     completed_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT cache_tasks_attempts_check CHECK ((attempts >= 0))
-);
+)
+WITH (fillfactor='80', autovacuum_vacuum_scale_factor='0.02', autovacuum_analyze_scale_factor='0.02');
 
 --
 -- Name: conan_group_members; Type: TABLE; Schema: public; Owner: -
@@ -881,7 +877,6 @@ CREATE TABLE public.conan_group_members (
     member_type text NOT NULL,
     endpoint text NOT NULL,
     "position" integer NOT NULL,
-    anonymous boolean DEFAULT false NOT NULL,
     allowed_hosts text[] DEFAULT '{}'::text[] NOT NULL,
     repository_id uuid,
     CONSTRAINT conan_group_members_member_type_check CHECK ((member_type = ANY (ARRAY['hosted'::text, 'proxy'::text]))),
@@ -923,13 +918,13 @@ CREATE TABLE public.console_theme_packages (
 CREATE TABLE public.email_targets (
     id uuid NOT NULL,
     name text NOT NULL,
-    locale text NOT NULL,
+    locale text DEFAULT 'en-CA'::text NOT NULL,
     recipient_ciphertext text NOT NULL,
     enabled boolean DEFAULT false NOT NULL,
     version bigint DEFAULT 1 NOT NULL,
     created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
     updated_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
-    CONSTRAINT email_targets_locale_check CHECK ((locale = ANY (ARRAY['en'::text, 'zh-CN'::text]))),
+    CONSTRAINT email_targets_locale_check CHECK ((locale = ANY (ARRAY['en-CA'::text, 'fr-CA'::text, 'zh-CN'::text]))),
     CONSTRAINT email_targets_name_check CHECK (((length(name) >= 1) AND (length(name) <= 128)))
 );
 
@@ -944,7 +939,7 @@ CREATE TABLE public.email_test_deliveries (
     target_id uuid NOT NULL,
     target_version bigint NOT NULL,
     scenario text NOT NULL,
-    locale text NOT NULL,
+    locale text DEFAULT 'en-CA'::text NOT NULL,
     template_version text NOT NULL,
     recipient_ciphertext text NOT NULL,
     from_address text NOT NULL,
@@ -972,7 +967,7 @@ CREATE TABLE public.email_test_deliveries (
     CONSTRAINT email_test_deliveries_attempts_check CHECK (((attempts >= 0) AND (attempts <= 8))),
     CONSTRAINT email_test_deliveries_automatic_cancellation_code_check CHECK ((automatic_cancellation_code = ANY (ARRAY[''::text, 'rule_changed'::text, 'rule_disabled'::text, 'rule_deleted'::text]))),
     CONSTRAINT email_test_deliveries_kind_check CHECK ((kind = ANY (ARRAY['test'::text, 'repository_quota'::text]))),
-    CONSTRAINT email_test_deliveries_locale_check CHECK ((locale = ANY (ARRAY['en'::text, 'zh-CN'::text]))),
+    CONSTRAINT email_test_deliveries_locale_check CHECK ((locale = ANY (ARRAY['en-CA'::text, 'fr-CA'::text, 'zh-CN'::text]))),
     CONSTRAINT email_test_deliveries_scenario_check CHECK ((scenario = ANY (ARRAY['warning'::text, 'critical'::text, 'resolved'::text]))),
     CONSTRAINT email_test_deliveries_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'delivering'::text, 'retrying'::text, 'accepted'::text, 'dead'::text])))
 );
@@ -1037,9 +1032,10 @@ CREATE TABLE public.hosted_groups (
     format text NOT NULL,
     version bigint DEFAULT 1 NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    anonymous_read boolean DEFAULT false NOT NULL,
+    visibility character varying(16) DEFAULT 'private'::character varying NOT NULL,
     CONSTRAINT hosted_groups_format_check CHECK ((format = ANY (ARRAY['raw'::text, 'oci'::text, 'maven'::text, 'conan'::text, 'npm'::text, 'pypi'::text, 'go'::text, 'apt'::text, 'cargo'::text, 'nuget'::text, 'helm'::text]))),
-    CONSTRAINT hosted_groups_name_check CHECK ((name ~ '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$'::text))
+    CONSTRAINT hosted_groups_name_check CHECK ((name ~ '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$'::text)),
+    CONSTRAINT hosted_groups_visibility_check CHECK (((visibility)::text = ANY ((ARRAY['private'::character varying, 'authenticated'::character varying, 'public'::character varying])::text[])))
 );
 
 --
@@ -1056,17 +1052,18 @@ CREATE TABLE public.hosted_repositories (
     repo_type text DEFAULT 'hosted'::text NOT NULL,
     endpoint text DEFAULT ''::text NOT NULL,
     allowed_hosts text[] DEFAULT '{}'::text[] NOT NULL,
-    anonymous_read boolean DEFAULT false NOT NULL,
     egress_proxy jsonb,
     maven_strict_publication boolean DEFAULT false NOT NULL,
     upstream_auth jsonb,
     oci_bearer jsonb,
+    visibility character varying(16) DEFAULT 'private'::character varying NOT NULL,
     CONSTRAINT hosted_repositories_format_check CHECK ((format = ANY (ARRAY['raw'::text, 'oci'::text, 'maven'::text, 'conan'::text, 'npm'::text, 'pypi'::text, 'go'::text, 'apt'::text, 'cargo'::text, 'nuget'::text, 'helm'::text, 'rubygems'::text]))),
     CONSTRAINT hosted_repositories_maven_strict_publication_check CHECK (((NOT maven_strict_publication) OR ((format = 'maven'::text) AND (repo_type = 'hosted'::text)))),
     CONSTRAINT hosted_repositories_name_check CHECK ((name ~ '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$'::text)),
     CONSTRAINT hosted_repositories_repo_shape_check CHECK ((((repo_type = 'hosted'::text) AND (endpoint = ''::text)) OR ((repo_type = 'proxy'::text) AND (endpoint <> ''::text)))),
     CONSTRAINT hosted_repositories_repo_type_check CHECK ((repo_type = ANY (ARRAY['hosted'::text, 'proxy'::text]))),
-    CONSTRAINT hosted_repositories_state_check CHECK ((state = ANY (ARRAY['active'::text, 'deleting'::text, 'deleted'::text])))
+    CONSTRAINT hosted_repositories_state_check CHECK ((state = ANY (ARRAY['active'::text, 'deleting'::text, 'deleted'::text]))),
+    CONSTRAINT hosted_repositories_visibility_check CHECK (((visibility)::text = ANY ((ARRAY['private'::character varying, 'authenticated'::character varying, 'public'::character varying])::text[])))
 );
 
 --
@@ -1081,6 +1078,35 @@ CREATE TABLE public.hosted_repository_idempotency (
     repository_id uuid NOT NULL,
     expires_at timestamp with time zone NOT NULL,
     CONSTRAINT hosted_repository_idempotency_key_check CHECK (((char_length(key) >= 1) AND (char_length(key) <= 128)))
+);
+
+--
+-- Name: identity_providers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.identity_providers (
+    id uuid NOT NULL,
+    slug text NOT NULL,
+    kind text NOT NULL,
+    display_name text NOT NULL,
+    enabled boolean DEFAULT false NOT NULL,
+    settings jsonb DEFAULT '{}'::jsonb NOT NULL,
+    secrets_sealed text,
+    attribute_mapping jsonb DEFAULT '{}'::jsonb NOT NULL,
+    provisioning_mode text DEFAULT 'disabled'::text NOT NULL,
+    email_linking_enabled boolean DEFAULT false NOT NULL,
+    jit_default_role text DEFAULT 'none'::text NOT NULL,
+    version bigint DEFAULT 1 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT identity_providers_attribute_mapping_check CHECK ((jsonb_typeof(attribute_mapping) = 'object'::text)),
+    CONSTRAINT identity_providers_display_name_check CHECK (((length(btrim(display_name)) >= 1) AND (length(btrim(display_name)) <= 120))),
+    CONSTRAINT identity_providers_jit_default_role_check CHECK ((jit_default_role = ANY (ARRAY['none'::text, 'member'::text]))),
+    CONSTRAINT identity_providers_kind_check CHECK ((kind = ANY (ARRAY['oidc'::text, 'saml'::text]))),
+    CONSTRAINT identity_providers_provisioning_mode_check CHECK ((provisioning_mode = ANY (ARRAY['disabled'::text, 'jit'::text, 'scim_only'::text]))),
+    CONSTRAINT identity_providers_settings_check CHECK ((jsonb_typeof(settings) = 'object'::text)),
+    CONSTRAINT identity_providers_slug_check CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,62}$'::text)),
+    CONSTRAINT identity_providers_version_check CHECK ((version > 0))
 );
 
 --
@@ -1129,7 +1155,8 @@ CREATE TABLE public.lifecycle_jobs (
     CONSTRAINT lifecycle_jobs_progress_current_check CHECK ((progress_current >= 0)),
     CONSTRAINT lifecycle_jobs_progress_total_check CHECK ((progress_total >= 0)),
     CONSTRAINT lifecycle_jobs_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'running'::text, 'retrying'::text, 'completed'::text, 'failed'::text, 'cancelled'::text])))
-);
+)
+WITH (fillfactor='80', autovacuum_vacuum_scale_factor='0.02', autovacuum_analyze_scale_factor='0.02');
 
 --
 -- Name: maven_group_members; Type: TABLE; Schema: public; Owner: -
@@ -1141,7 +1168,6 @@ CREATE TABLE public.maven_group_members (
     member_type text NOT NULL,
     endpoint text NOT NULL,
     "position" integer NOT NULL,
-    anonymous boolean DEFAULT false NOT NULL,
     allowed_hosts text[] DEFAULT '{}'::text[] NOT NULL,
     repository_id uuid,
     CONSTRAINT maven_group_members_member_type_check CHECK ((member_type = ANY (ARRAY['hosted'::text, 'proxy'::text]))),
@@ -1439,6 +1465,10 @@ CREATE TABLE public.native_cargo_proxy_indexes (
     fetched_at timestamp with time zone NOT NULL,
     expires_at timestamp with time zone NOT NULL,
     source_version text DEFAULT ''::text NOT NULL,
+    body_digest text,
+    body_size bigint,
+    body_key text,
+    CONSTRAINT native_cargo_proxy_indexes_body_ref_check CHECK ((((body_digest IS NULL) AND (body_size IS NULL) AND (body_key IS NULL)) OR ((body_digest IS NOT NULL) AND (body_size IS NOT NULL) AND (body_key IS NOT NULL) AND (body_size >= 0)))),
     CONSTRAINT native_cargo_proxy_indexes_check CHECK ((((status = 200) AND (octet_length(body) > 0)) OR ((status <> 200) AND (octet_length(body) = 0)))),
     CONSTRAINT native_cargo_proxy_indexes_status_check CHECK ((status = ANY (ARRAY[200, 404, 410, 451])))
 );
@@ -1522,6 +1552,29 @@ CREATE TABLE public.native_conan_package_revisions (
 );
 
 --
+-- Name: native_conan_publish_sessions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.native_conan_publish_sessions (
+    id uuid NOT NULL,
+    repository_id uuid NOT NULL,
+    publisher text NOT NULL,
+    kind text NOT NULL,
+    reference text NOT NULL,
+    recipe_revision text NOT NULL,
+    package_id text DEFAULT ''::text NOT NULL,
+    package_revision text DEFAULT ''::text NOT NULL,
+    state text NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    objects jsonb NOT NULL,
+    native boolean DEFAULT false NOT NULL,
+    version bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT native_conan_publish_sessions_kind_check CHECK ((kind = ANY (ARRAY['recipe'::text, 'package'::text]))),
+    CONSTRAINT native_conan_publish_sessions_state_check CHECK ((state = ANY (ARRAY['open'::text, 'committed'::text, 'aborted'::text, 'expired'::text]))),
+    CONSTRAINT native_conan_publish_sessions_version_check CHECK ((version >= 0))
+);
+
+--
 -- Name: native_conan_publish_uploads; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1560,7 +1613,7 @@ CREATE TABLE public.native_helm_publication_sessions (
     state text NOT NULL,
     object_key text NOT NULL,
     provenance_key text DEFAULT ''::text NOT NULL,
-    metadata_json text NOT NULL,
+    metadata_json jsonb NOT NULL,
     chart_yaml bytea NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     expires_at timestamp with time zone NOT NULL,
@@ -1573,8 +1626,7 @@ CREATE TABLE public.native_helm_publication_sessions (
     CONSTRAINT native_helm_publication_sessions_check1 CHECK (((collected_at IS NULL) OR (state = 'expired'::text))),
     CONSTRAINT native_helm_publication_sessions_check2 CHECK (((state = 'committed'::text) = (committed_at IS NOT NULL))),
     CONSTRAINT native_helm_publication_sessions_digest_check CHECK ((digest ~ '^sha256:[0-9a-f]{64}$'::text)),
-    CONSTRAINT native_helm_publication_sessions_metadata_json_check CHECK ((jsonb_typeof((metadata_json)::jsonb) = 'object'::text)),
-    CONSTRAINT native_helm_publication_sessions_name_check CHECK ((((length(name) >= 1) AND (length(name) <= 63)) AND (name ~ '^[a-z0-9][a-z0-9-]*$'::text))),
+    CONSTRAINT native_helm_publication_sessions_name_check CHECK (((length(name) >= 1) AND (length(name) <= 63) AND (name ~ '^[a-z0-9][a-z0-9-]*$'::text))),
     CONSTRAINT native_helm_publication_sessions_provenance_size_check CHECK (((provenance_size >= 0) AND (provenance_size <= 1048576))),
     CONSTRAINT native_helm_publication_sessions_size_check CHECK (((size > 0) AND (size <= 67108864))),
     CONSTRAINT native_helm_publication_sessions_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'committed'::text, 'expired'::text]))),
@@ -1596,7 +1648,7 @@ CREATE TABLE public.native_helm_publications (
     provenance_digest text DEFAULT ''::text NOT NULL,
     provenance_key text DEFAULT ''::text NOT NULL,
     provenance_size bigint DEFAULT 0 NOT NULL,
-    metadata_json text NOT NULL,
+    metadata_json jsonb NOT NULL,
     chart_yaml bytea NOT NULL,
     publisher text NOT NULL,
     published_at timestamp with time zone NOT NULL,
@@ -1606,12 +1658,15 @@ CREATE TABLE public.native_helm_publications (
     governance_updated_at timestamp with time zone,
     governance_updated_by text DEFAULT ''::text NOT NULL,
     governance_reason text DEFAULT ''::text NOT NULL,
+    body_digest text,
+    body_size bigint,
+    body_key text,
     CONSTRAINT native_helm_governance_audit CHECK ((((governance_version = 1) AND (governance_updated_at IS NULL) AND (governance_updated_by = ''::text) AND (governance_reason = ''::text)) OR ((governance_version > 1) AND (governance_updated_at IS NOT NULL) AND (length(governance_updated_by) > 0) AND (length(btrim(governance_reason)) > 0)))),
+    CONSTRAINT native_helm_publications_body_ref_check CHECK ((((body_digest IS NULL) AND (body_size IS NULL) AND (body_key IS NULL)) OR ((body_digest IS NOT NULL) AND (body_size IS NOT NULL) AND (body_key IS NOT NULL) AND (body_size >= 0)))),
     CONSTRAINT native_helm_publications_chart_yaml_check CHECK ((octet_length(chart_yaml) > 0)),
     CONSTRAINT native_helm_publications_check CHECK ((((provenance_size = 0) AND (provenance_digest = ''::text) AND (provenance_key = ''::text)) OR ((provenance_size > 0) AND (provenance_digest ~ '^sha256:[0-9a-f]{64}$'::text) AND (provenance_key <> ''::text)))),
     CONSTRAINT native_helm_publications_digest_check CHECK ((digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT native_helm_publications_governance_version_check CHECK ((governance_version > 0)),
-    CONSTRAINT native_helm_publications_metadata_json_check CHECK ((jsonb_typeof((metadata_json)::jsonb) = 'object'::text)),
     CONSTRAINT native_helm_publications_provenance_size_check CHECK ((provenance_size >= 0)),
     CONSTRAINT native_helm_publications_size_check CHECK ((size > 0))
 );
@@ -1629,7 +1684,7 @@ CREATE TABLE public.native_helm_replication_items (
     size bigint NOT NULL,
     provenance_digest text DEFAULT ''::text NOT NULL,
     provenance_size bigint DEFAULT 0 NOT NULL,
-    source_governance_version bigint NOT NULL,
+    source_governance_version bigint CONSTRAINT native_helm_replication_item_source_governance_version_not_null NOT NULL,
     state text NOT NULL,
     attempts integer DEFAULT 0 NOT NULL,
     code text DEFAULT ''::text NOT NULL,
@@ -1642,7 +1697,7 @@ CREATE TABLE public.native_helm_replication_items (
     CONSTRAINT native_helm_replication_items_check2 CHECK (((state <> 'succeeded'::text) OR ((target_session_id IS NOT NULL) AND (result <> ''::text)))),
     CONSTRAINT native_helm_replication_items_digest_check CHECK ((digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT native_helm_replication_items_item_index_check CHECK (((item_index >= 0) AND (item_index <= 99))),
-    CONSTRAINT native_helm_replication_items_name_check CHECK ((((length(name) >= 1) AND (length(name) <= 63)) AND (name ~ '^[a-z0-9][a-z0-9-]*$'::text))),
+    CONSTRAINT native_helm_replication_items_name_check CHECK (((length(name) >= 1) AND (length(name) <= 63) AND (name ~ '^[a-z0-9][a-z0-9-]*$'::text))),
     CONSTRAINT native_helm_replication_items_provenance_size_check CHECK (((provenance_size >= 0) AND (provenance_size <= 1048576))),
     CONSTRAINT native_helm_replication_items_result_check CHECK ((result = ANY (ARRAY[''::text, 'published'::text, 'already_present'::text]))),
     CONSTRAINT native_helm_replication_items_size_check CHECK (((size >= 1) AND (size <= 67108864))),
@@ -1706,7 +1761,11 @@ CREATE TABLE public.native_helm_source_documents (
     last_modified text DEFAULT ''::text NOT NULL,
     fetched_at timestamp with time zone NOT NULL,
     expires_at timestamp with time zone NOT NULL,
+    body_digest text,
+    body_size bigint,
+    body_key text,
     CONSTRAINT native_helm_source_documents_body_check CHECK (((octet_length(body) >= 1) AND (octet_length(body) <= 1048576))),
+    CONSTRAINT native_helm_source_documents_body_ref_check CHECK ((((body_digest IS NULL) AND (body_size IS NULL) AND (body_key IS NULL)) OR ((body_digest IS NOT NULL) AND (body_size IS NOT NULL) AND (body_key IS NOT NULL) AND (body_size >= 0)))),
     CONSTRAINT native_helm_source_documents_digest_check CHECK ((digest ~ '^sha256:[0-9a-f]{64}$'::text))
 );
 
@@ -1791,6 +1850,25 @@ CREATE TABLE public.native_maven_publish_idempotency (
 );
 
 --
+-- Name: native_maven_publish_sessions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.native_maven_publish_sessions (
+    id uuid NOT NULL,
+    repository_id uuid NOT NULL,
+    publisher text NOT NULL,
+    coordinate text NOT NULL,
+    pom_object text NOT NULL,
+    state text NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    objects jsonb NOT NULL,
+    client_timestamp text DEFAULT ''::text NOT NULL,
+    client_build_number integer DEFAULT 0 NOT NULL,
+    CONSTRAINT native_maven_publish_sessions_client_build_number_check CHECK ((client_build_number >= 0)),
+    CONSTRAINT native_maven_publish_sessions_state_check CHECK ((state = ANY (ARRAY['open'::text, 'committed'::text, 'aborted'::text, 'expired'::text])))
+);
+
+--
 -- Name: native_maven_publish_uploads; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1843,10 +1921,10 @@ CREATE TABLE public.native_nuget_group_authorities (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT native_nuget_group_authorities_check CHECK (((digest = ''::text) = (size = 0))),
     CONSTRAINT native_nuget_group_authorities_digest_check CHECK (((digest = ''::text) OR (digest ~ '^sha256:[0-9a-f]{64}$'::text))),
-    CONSTRAINT native_nuget_group_authorities_package_id_check CHECK ((((length(package_id) >= 1) AND (length(package_id) <= 100)) AND (package_id ~ '^[a-z0-9_]+([.-][a-z0-9_]+)*$'::text))),
+    CONSTRAINT native_nuget_group_authorities_package_id_check CHECK (((length(package_id) >= 1) AND (length(package_id) <= 100) AND (package_id ~ '^[a-z0-9_]+([.-][a-z0-9_]+)*$'::text))),
     CONSTRAINT native_nuget_group_authorities_repository_version_check CHECK ((repository_version ~ '^[1-9][0-9]*$'::text)),
     CONSTRAINT native_nuget_group_authorities_size_check CHECK ((size >= 0)),
-    CONSTRAINT native_nuget_group_authorities_version_check CHECK ((((length(version) >= 1) AND (length(version) <= 256)) AND (version = lower(version))))
+    CONSTRAINT native_nuget_group_authorities_version_check CHECK (((length(version) >= 1) AND (length(version) <= 256) AND (version = lower(version))))
 );
 
 --
@@ -1863,7 +1941,7 @@ CREATE TABLE public.native_nuget_publication_sessions (
     actor text NOT NULL,
     state text NOT NULL,
     object_key text NOT NULL,
-    metadata_json text DEFAULT ''::text NOT NULL,
+    metadata_json jsonb DEFAULT '{}'::jsonb NOT NULL,
     nuspec bytea DEFAULT '\x'::bytea NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     expires_at timestamp with time zone NOT NULL,
@@ -1874,13 +1952,13 @@ CREATE TABLE public.native_nuget_publication_sessions (
     registration_url text DEFAULT ''::text NOT NULL,
     CONSTRAINT native_nuget_publication_sessions_actor_check CHECK ((actor <> ''::text)),
     CONSTRAINT native_nuget_publication_sessions_check CHECK (((collected_at IS NULL) OR (state = 'expired'::text))),
-    CONSTRAINT native_nuget_publication_sessions_check1 CHECK (((state <> ALL (ARRAY['staged'::text, 'committed'::text])) OR ((length(metadata_json) > 0) AND (jsonb_typeof((metadata_json)::jsonb) = 'object'::text) AND (octet_length(nuspec) > 0)))),
+    CONSTRAINT native_nuget_publication_sessions_check1 CHECK (((state <> ALL (ARRAY['staged'::text, 'committed'::text])) OR (octet_length(nuspec) > 0))),
     CONSTRAINT native_nuget_publication_sessions_check2 CHECK (((state = 'committed'::text) = (committed_at IS NOT NULL))),
     CONSTRAINT native_nuget_publication_sessions_digest_check CHECK ((digest ~ '^sha256:[0-9a-f]{64}$'::text)),
-    CONSTRAINT native_nuget_publication_sessions_package_id_check CHECK ((((length(package_id) >= 1) AND (length(package_id) <= 100)) AND (package_id ~ '^[a-z0-9_]+([.-][a-z0-9_]+)*$'::text))),
+    CONSTRAINT native_nuget_publication_sessions_package_id_check CHECK (((length(package_id) >= 1) AND (length(package_id) <= 100) AND (package_id ~ '^[a-z0-9_]+([.-][a-z0-9_]+)*$'::text))),
     CONSTRAINT native_nuget_publication_sessions_size_check CHECK (((size > 0) AND (size <= 268435456))),
     CONSTRAINT native_nuget_publication_sessions_state_check CHECK ((state = ANY (ARRAY['reserved'::text, 'staged'::text, 'committed'::text, 'expired'::text]))),
-    CONSTRAINT native_nuget_publication_sessions_version_check CHECK ((((length(version) >= 1) AND (length(version) <= 256)) AND (version = lower(version))))
+    CONSTRAINT native_nuget_publication_sessions_version_check CHECK (((length(version) >= 1) AND (length(version) <= 256) AND (version = lower(version))))
 );
 
 --
@@ -1895,7 +1973,7 @@ CREATE TABLE public.native_nuget_publications (
     digest text NOT NULL,
     object_key text NOT NULL,
     size bigint NOT NULL,
-    metadata_json text NOT NULL,
+    metadata_json jsonb NOT NULL,
     nuspec bytea NOT NULL,
     publisher text NOT NULL,
     published_at timestamp with time zone NOT NULL,
@@ -1909,11 +1987,14 @@ CREATE TABLE public.native_nuget_publications (
     governance_updated_at timestamp with time zone,
     governance_updated_by text DEFAULT ''::text NOT NULL,
     governance_reason text DEFAULT ''::text NOT NULL,
+    body_digest text,
+    body_size bigint,
+    body_key text,
+    CONSTRAINT native_nuget_publications_body_ref_check CHECK ((((body_digest IS NULL) AND (body_size IS NULL) AND (body_key IS NULL)) OR ((body_digest IS NOT NULL) AND (body_size IS NOT NULL) AND (body_key IS NOT NULL) AND (body_size >= 0)))),
     CONSTRAINT native_nuget_publications_digest_check CHECK ((digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT native_nuget_publications_governance_reason_check CHECK ((length(governance_reason) <= 2048)),
     CONSTRAINT native_nuget_publications_governance_updated_by_check CHECK ((length(governance_updated_by) <= 512)),
     CONSTRAINT native_nuget_publications_governance_version_check CHECK ((governance_version > 0)),
-    CONSTRAINT native_nuget_publications_metadata_json_check CHECK ((jsonb_typeof((metadata_json)::jsonb) = 'object'::text)),
     CONSTRAINT native_nuget_publications_nuspec_check CHECK ((octet_length(nuspec) > 0)),
     CONSTRAINT native_nuget_publications_size_check CHECK ((size > 0))
 );
@@ -1929,7 +2010,7 @@ CREATE TABLE public.native_nuget_replication_items (
     version text NOT NULL,
     digest text NOT NULL,
     size bigint NOT NULL,
-    source_governance_version bigint NOT NULL,
+    source_governance_version bigint CONSTRAINT native_nuget_replication_ite_source_governance_version_not_null NOT NULL,
     state text NOT NULL,
     attempts integer DEFAULT 0 NOT NULL,
     code text DEFAULT ''::text NOT NULL,
@@ -1942,7 +2023,7 @@ CREATE TABLE public.native_nuget_replication_items (
     CONSTRAINT native_nuget_replication_items_check1 CHECK (((state <> 'succeeded'::text) OR ((target_session_id IS NOT NULL) AND (result <> ''::text) AND (listed IS NOT NULL)))),
     CONSTRAINT native_nuget_replication_items_digest_check CHECK ((digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT native_nuget_replication_items_item_index_check CHECK (((item_index >= 0) AND (item_index <= 99))),
-    CONSTRAINT native_nuget_replication_items_package_id_check CHECK ((((length(package_id) >= 1) AND (length(package_id) <= 100)) AND (package_id ~ '^[a-z0-9_]+([.-][a-z0-9_]+)*$'::text))),
+    CONSTRAINT native_nuget_replication_items_package_id_check CHECK (((length(package_id) >= 1) AND (length(package_id) <= 100) AND (package_id ~ '^[a-z0-9_]+([.-][a-z0-9_]+)*$'::text))),
     CONSTRAINT native_nuget_replication_items_result_check CHECK ((result = ANY (ARRAY[''::text, 'published'::text, 'already_present'::text]))),
     CONSTRAINT native_nuget_replication_items_size_check CHECK (((size >= 1) AND (size <= 268435456))),
     CONSTRAINT native_nuget_replication_items_source_governance_version_check CHECK ((source_governance_version > 0)),
@@ -2007,7 +2088,11 @@ CREATE TABLE public.native_nuget_source_documents (
     last_modified text NOT NULL,
     fetched_at timestamp with time zone NOT NULL,
     expires_at timestamp with time zone NOT NULL,
+    body_digest text,
+    body_size bigint,
+    body_key text,
     CONSTRAINT native_nuget_source_documents_body_check CHECK ((octet_length(body) <= 8388608)),
+    CONSTRAINT native_nuget_source_documents_body_ref_check CHECK ((((body_digest IS NULL) AND (body_size IS NULL) AND (body_key IS NULL)) OR ((body_digest IS NOT NULL) AND (body_size IS NOT NULL) AND (body_key IS NOT NULL) AND (body_size >= 0)))),
     CONSTRAINT native_nuget_source_documents_check CHECK ((expires_at > fetched_at)),
     CONSTRAINT native_nuget_source_documents_check1 CHECK (((status = 200) OR (octet_length(body) = 0))),
     CONSTRAINT native_nuget_source_documents_digest_check CHECK ((digest ~ '^sha256:[0-9a-f]{64}$'::text)),
@@ -2154,7 +2239,7 @@ CREATE TABLE public.native_rubygems_replication_items (
     platform text NOT NULL,
     digest text NOT NULL,
     size bigint NOT NULL,
-    source_governance_version bigint NOT NULL,
+    source_governance_version bigint CONSTRAINT native_rubygems_replication__source_governance_version_not_null NOT NULL,
     state text NOT NULL,
     attempts integer DEFAULT 0 NOT NULL,
     code text DEFAULT ''::text NOT NULL,
@@ -2241,7 +2326,7 @@ CREATE TABLE public.native_rubygems_sessions (
     actor text NOT NULL,
     state text NOT NULL,
     object_key text NOT NULL,
-    metadata_json text NOT NULL,
+    metadata_json jsonb NOT NULL,
     metadata_yaml bytea NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     expires_at timestamp with time zone NOT NULL,
@@ -2259,7 +2344,6 @@ CREATE TABLE public.native_rubygems_sessions (
     CONSTRAINT native_rubygems_sessions_check1 CHECK (((collected_at IS NULL) OR (state = 'expired'::text))),
     CONSTRAINT native_rubygems_sessions_digest_check CHECK ((digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT native_rubygems_sessions_governance_version_check CHECK ((governance_version >= 1)),
-    CONSTRAINT native_rubygems_sessions_metadata_json_check CHECK ((jsonb_typeof((metadata_json)::jsonb) = 'object'::text)),
     CONSTRAINT native_rubygems_sessions_metadata_yaml_check CHECK (((octet_length(metadata_yaml) >= 1) AND (octet_length(metadata_yaml) <= 1048576))),
     CONSTRAINT native_rubygems_sessions_name_check CHECK (((length(name) >= 1) AND (length(name) <= 128))),
     CONSTRAINT native_rubygems_sessions_platform_check CHECK (((length(platform) >= 1) AND (length(platform) <= 128))),
@@ -2475,6 +2559,20 @@ CREATE TABLE public.nexus_migration_sources (
 );
 
 --
+-- Name: object_store_identity; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.object_store_identity (
+    singleton boolean DEFAULT true NOT NULL,
+    driver text NOT NULL,
+    root_id text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT object_store_identity_driver_check CHECK ((driver <> ''::text)),
+    CONSTRAINT object_store_identity_root_id_check CHECK ((root_id <> ''::text)),
+    CONSTRAINT object_store_identity_singleton_check CHECK (singleton)
+);
+
+--
 -- Name: oci_bound_objects; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2503,8 +2601,11 @@ CREATE TABLE public.oci_discovery_snapshots (
     payload jsonb NOT NULL,
     expires_at timestamp with time zone NOT NULL,
     created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
-    CONSTRAINT oci_discovery_snapshots_kind_check CHECK ((kind = ANY (ARRAY['catalog'::text, 'referrers'::text]))),
-    CONSTRAINT oci_discovery_snapshots_payload_check CHECK ((octet_length((payload)::text) <= 8388608))
+    body_digest text,
+    body_size bigint,
+    body_key text,
+    CONSTRAINT oci_discovery_snapshots_body_ref_check CHECK ((((body_digest IS NULL) AND (body_size IS NULL) AND (body_key IS NULL)) OR ((body_digest IS NOT NULL) AND (body_size IS NOT NULL) AND (body_key IS NOT NULL) AND (body_size >= 0)))),
+    CONSTRAINT oci_discovery_snapshots_kind_check CHECK ((kind = ANY (ARRAY['catalog'::text, 'referrers'::text])))
 );
 
 --
@@ -2517,7 +2618,6 @@ CREATE TABLE public.oci_group_members (
     member_type text NOT NULL,
     endpoint text NOT NULL,
     "position" integer NOT NULL,
-    anonymous boolean DEFAULT false NOT NULL,
     allowed_hosts text[] DEFAULT '{}'::text[] NOT NULL,
     repository_id uuid,
     CONSTRAINT oci_group_members_member_type_check CHECK ((member_type = ANY (ARRAY['hosted'::text, 'proxy'::text]))),
@@ -2548,41 +2648,19 @@ CREATE TABLE public.oci_subject_bindings (
     source_version bigint NOT NULL,
     payload jsonb NOT NULL,
     CONSTRAINT oci_subject_bindings_owner_check CHECK ((owner ~ '^[a-f0-9]{64}$'::text)),
-    CONSTRAINT oci_subject_bindings_payload_check CHECK ((octet_length((payload)::text) <= 8388608)),
     CONSTRAINT oci_subject_bindings_source_version_check CHECK ((source_version > 0)),
     CONSTRAINT oci_subject_bindings_subject_check CHECK ((subject ~ '^sha256:[a-f0-9]{64}$'::text))
 );
 
 --
--- Name: oidc_settings; Type: TABLE; Schema: public; Owner: -
+-- Name: public_access_policy; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.oidc_settings (
-    singleton boolean DEFAULT true NOT NULL,
-    version bigint DEFAULT 1 NOT NULL,
-    enabled boolean DEFAULT false NOT NULL,
-    issuer text DEFAULT ''::text NOT NULL,
-    audience text DEFAULT ''::text NOT NULL,
-    jwks_url text DEFAULT ''::text NOT NULL,
-    client_id text DEFAULT ''::text NOT NULL,
-    client_secret text DEFAULT ''::text NOT NULL,
-    redirect_url text DEFAULT ''::text NOT NULL,
-    scopes jsonb DEFAULT '["openid", "profile", "email"]'::jsonb NOT NULL,
-    admin_subjects jsonb DEFAULT '[]'::jsonb NOT NULL,
-    member_roles jsonb DEFAULT '[]'::jsonb NOT NULL,
-    admin_roles jsonb DEFAULT '[]'::jsonb NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    provisioning_mode text DEFAULT 'disabled'::text NOT NULL,
-    email_linking_enabled boolean DEFAULT false NOT NULL,
-    jit_default_role text DEFAULT 'reader'::text NOT NULL,
-    CONSTRAINT oidc_settings_admin_roles_check CHECK ((jsonb_typeof(admin_roles) = 'array'::text)),
-    CONSTRAINT oidc_settings_admin_subjects_check CHECK ((jsonb_typeof(admin_subjects) = 'array'::text)),
-    CONSTRAINT oidc_settings_jit_default_role_check CHECK ((jit_default_role = ANY (ARRAY['none'::text, 'member'::text, 'admin'::text]))),
-    CONSTRAINT oidc_settings_provisioning_mode_check CHECK ((provisioning_mode = ANY (ARRAY['disabled'::text, 'jit'::text]))),
-    CONSTRAINT oidc_settings_reader_roles_check CHECK ((jsonb_typeof(member_roles) = 'array'::text)),
-    CONSTRAINT oidc_settings_scopes_check CHECK ((jsonb_typeof(scopes) = 'array'::text)),
-    CONSTRAINT oidc_settings_singleton_check CHECK (singleton),
-    CONSTRAINT oidc_settings_version_check CHECK ((version > 0))
+CREATE TABLE public.public_access_policy (
+    singleton boolean DEFAULT true CONSTRAINT public_access_policy_singleton_not_null NOT NULL,
+    version bigint DEFAULT 1 CONSTRAINT public_access_policy_version_not_null NOT NULL,
+    enabled boolean DEFAULT false CONSTRAINT public_access_policy_enabled_not_null NOT NULL,
+    CONSTRAINT public_access_policy_singleton_check CHECK (singleton)
 );
 
 --
@@ -2595,7 +2673,6 @@ CREATE TABLE public.raw_group_members (
     member_type text NOT NULL,
     endpoint text NOT NULL,
     "position" integer NOT NULL,
-    anonymous boolean DEFAULT false NOT NULL,
     allowed_hosts text[] DEFAULT '{}'::text[] NOT NULL,
     repository_id uuid,
     CONSTRAINT raw_group_members_member_type_check CHECK ((member_type = ANY (ARRAY['hosted'::text, 'proxy'::text]))),
@@ -2667,7 +2744,8 @@ CREATE TABLE public.replication_plans (
     CONSTRAINT replication_plans_format_check CHECK ((format = ANY (ARRAY['maven'::text, 'oci'::text, 'raw'::text, 'conan'::text, 'npm'::text, 'pypi'::text, 'go'::text, 'apt'::text, 'cargo'::text]))),
     CONSTRAINT replication_plans_max_attempts_check CHECK (((max_attempts >= 1) AND (max_attempts <= 10))),
     CONSTRAINT replication_plans_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'running'::text, 'completed'::text, 'failed'::text, 'cancelled'::text])))
-);
+)
+WITH (fillfactor='80', autovacuum_vacuum_scale_factor='0.02', autovacuum_analyze_scale_factor='0.02');
 
 --
 -- Name: repository_capacity_quotas; Type: TABLE; Schema: public; Owner: -
@@ -2759,10 +2837,24 @@ CREATE TABLE public.repository_quota_alert_rules (
     CONSTRAINT repository_quota_alert_rules_policy_check CHECK (((jsonb_typeof(policy) = 'object'::text) AND (octet_length((policy)::text) <= 2048))),
     CONSTRAINT repository_quota_alert_rules_policy_check1 CHECK ((policy ?& ARRAY['warningBasisPoints'::text, 'criticalBasisPoints'::text, 'recoveryBelowBasisPoints'::text, 'warningForSeconds'::text, 'criticalForSeconds'::text, 'recoveryForSeconds'::text, 'maxSampleAgeSeconds'::text])),
     CONSTRAINT repository_quota_alert_rules_policy_check2 CHECK (((((policy ->> 'recoveryBelowBasisPoints'::text))::integer > 0) AND (((policy ->> 'recoveryBelowBasisPoints'::text))::integer < ((policy ->> 'warningBasisPoints'::text))::integer) AND (((policy ->> 'warningBasisPoints'::text))::integer < ((policy ->> 'criticalBasisPoints'::text))::integer) AND (((policy ->> 'criticalBasisPoints'::text))::integer <= 10000))),
-    CONSTRAINT repository_quota_alert_rules_policy_check3 CHECK ((((((policy ->> 'warningForSeconds'::text))::integer >= 1) AND (((policy ->> 'warningForSeconds'::text))::integer <= 86400)) AND ((((policy ->> 'criticalForSeconds'::text))::integer >= 1) AND (((policy ->> 'criticalForSeconds'::text))::integer <= 86400)) AND ((((policy ->> 'recoveryForSeconds'::text))::integer >= 1) AND (((policy ->> 'recoveryForSeconds'::text))::integer <= 86400)))),
+    CONSTRAINT repository_quota_alert_rules_policy_check3 CHECK (((((policy ->> 'warningForSeconds'::text))::integer >= 1) AND (((policy ->> 'warningForSeconds'::text))::integer <= 86400) AND ((((policy ->> 'criticalForSeconds'::text))::integer >= 1) AND (((policy ->> 'criticalForSeconds'::text))::integer <= 86400)) AND ((((policy ->> 'recoveryForSeconds'::text))::integer >= 1) AND (((policy ->> 'recoveryForSeconds'::text))::integer <= 86400)))),
     CONSTRAINT repository_quota_alert_rules_policy_check4 CHECK (((((policy ->> 'maxSampleAgeSeconds'::text))::integer >= 30) AND (((policy ->> 'maxSampleAgeSeconds'::text))::integer <= 3600))),
     CONSTRAINT repository_quota_alert_rules_sequence_check CHECK ((sequence >= 0)),
     CONSTRAINT repository_quota_alert_rules_state_check CHECK (((jsonb_typeof(state) = 'object'::text) AND (octet_length((state)::text) <= 4096)))
+);
+
+--
+-- Name: repository_request_rollup; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.repository_request_rollup (
+    repository_id uuid NOT NULL,
+    bucket_start timestamp with time zone NOT NULL,
+    outcome smallint NOT NULL,
+    requests bigint DEFAULT 0 NOT NULL,
+    bytes bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT repository_request_rollup_counts_check CHECK (((requests >= 0) AND (bytes >= 0))),
+    CONSTRAINT repository_request_rollup_outcome_check CHECK (((outcome >= 0) AND (outcome <= 6)))
 );
 
 --
@@ -2796,16 +2888,47 @@ CREATE TABLE public.repository_security_policies (
     version bigint DEFAULT 1 NOT NULL,
     enabled boolean DEFAULT false NOT NULL,
     require_signature boolean DEFAULT false NOT NULL,
-    require_verified_signature boolean DEFAULT false NOT NULL,
+    require_verified_signature boolean DEFAULT false CONSTRAINT repository_security_policie_require_verified_signature_not_null NOT NULL,
     require_sbom boolean DEFAULT false NOT NULL,
     require_provenance boolean DEFAULT false NOT NULL,
-    require_vulnerability_scan boolean DEFAULT false NOT NULL,
+    require_vulnerability_scan boolean DEFAULT false CONSTRAINT repository_security_policie_require_vulnerability_scan_not_null NOT NULL,
     max_allowed_severity text DEFAULT 'critical'::text NOT NULL,
     fail_on_scan_error boolean DEFAULT true NOT NULL,
     allowed_licenses text[] DEFAULT '{}'::text[] NOT NULL,
     auto_scan_on_publish boolean DEFAULT false NOT NULL,
     CONSTRAINT repository_security_policies_max_allowed_severity_check CHECK ((max_allowed_severity = ANY (ARRAY['none'::text, 'low'::text, 'medium'::text, 'high'::text, 'critical'::text]))),
     CONSTRAINT repository_security_policies_version_check CHECK ((version >= 1))
+);
+
+--
+-- Name: repository_usage_counters; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.repository_usage_counters (
+    repository_id uuid NOT NULL,
+    bytes bigint DEFAULT 0 NOT NULL,
+    objects bigint DEFAULT 0 NOT NULL,
+    quota_bytes bigint,
+    reconciled_at timestamp with time zone,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT repository_usage_counters_quota_check CHECK (((quota_bytes IS NULL) OR (quota_bytes >= 0)))
+)
+WITH (fillfactor='70');
+
+--
+-- Name: repository_vex_document; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.repository_vex_document (
+    id uuid NOT NULL,
+    repository_id uuid NOT NULL,
+    format character varying(16) NOT NULL,
+    body_digest character varying(80) NOT NULL,
+    body_key text NOT NULL,
+    author text DEFAULT ''::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    CONSTRAINT repository_vex_document_format_check CHECK (((format)::text = 'openvex'::text))
 );
 
 --
@@ -2834,8 +2957,10 @@ CREATE TABLE public.resolver_audit_log (
     authorization_source text,
     authorization_reason text,
     evidence jsonb DEFAULT '{}'::jsonb NOT NULL,
+    repository_id uuid,
     CONSTRAINT resolver_audit_log_evidence_check CHECK ((jsonb_typeof(evidence) = 'object'::text))
-);
+)
+PARTITION BY RANGE (occurred_at);
 
 --
 -- Name: resolver_audit_log_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -2853,6 +2978,36 @@ CREATE SEQUENCE public.resolver_audit_log_id_seq
 --
 
 ALTER SEQUENCE public.resolver_audit_log_id_seq OWNED BY public.resolver_audit_log.id;
+
+--
+-- Name: resolver_audit_log_default; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.resolver_audit_log_default (
+    id bigint DEFAULT nextval('public.resolver_audit_log_id_seq'::regclass) CONSTRAINT resolver_audit_log_id_not_null NOT NULL,
+    group_name text CONSTRAINT resolver_audit_log_group_name_not_null NOT NULL,
+    repository text CONSTRAINT resolver_audit_log_repository_not_null NOT NULL,
+    member_name text,
+    outcome text CONSTRAINT resolver_audit_log_outcome_not_null NOT NULL,
+    actor text CONSTRAINT resolver_audit_log_actor_not_null NOT NULL,
+    occurred_at timestamp with time zone DEFAULT now() CONSTRAINT resolver_audit_log_occurred_at_not_null NOT NULL,
+    format text,
+    resource text,
+    representation text,
+    member_type text,
+    upstream_host text,
+    operation text,
+    http_status integer,
+    cache_disposition text,
+    bytes bigint,
+    request_id text,
+    trace_id text,
+    authorization_source text,
+    authorization_reason text,
+    evidence jsonb DEFAULT '{}'::jsonb CONSTRAINT resolver_audit_log_evidence_not_null NOT NULL,
+    repository_id uuid,
+    CONSTRAINT resolver_audit_log_evidence_check CHECK ((jsonb_typeof(evidence) = 'object'::text))
+);
 
 --
 -- Name: runtime_node_sessions; Type: TABLE; Schema: public; Owner: -
@@ -2884,6 +3039,45 @@ CREATE TABLE public.runtime_nodes (
     last_seen_at timestamp with time zone NOT NULL,
     build_version text,
     build_revision text
+)
+WITH (fillfactor='80', autovacuum_vacuum_scale_factor='0.02', autovacuum_analyze_scale_factor='0.02');
+
+--
+-- Name: saml_assertion_ids; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.saml_assertion_ids (
+    provider_id uuid NOT NULL,
+    assertion_id text NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    CONSTRAINT saml_assertion_ids_assertion_id_check CHECK (((length(assertion_id) >= 1) AND (length(assertion_id) <= 256)))
+)
+WITH (fillfactor='80', autovacuum_vacuum_scale_factor='0.02', autovacuum_analyze_scale_factor='0.02');
+
+--
+-- Name: saml_request_state; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.saml_request_state (
+    id uuid NOT NULL,
+    provider_id uuid NOT NULL,
+    expires_at timestamp with time zone NOT NULL
+)
+WITH (fillfactor='80', autovacuum_vacuum_scale_factor='0.02', autovacuum_analyze_scale_factor='0.02');
+
+--
+-- Name: scanner_db_generation; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.scanner_db_generation (
+    id uuid NOT NULL,
+    kind character varying(16) NOT NULL,
+    oci_digest character varying(80) NOT NULL,
+    built_at timestamp with time zone NOT NULL,
+    observed_at timestamp with time zone NOT NULL,
+    source character varying(16) NOT NULL,
+    CONSTRAINT scanner_db_generation_kind_check CHECK (((kind)::text = ANY ((ARRAY['trivy-db'::character varying, 'java-db'::character varying, 'checks'::character varying])::text[]))),
+    CONSTRAINT scanner_db_generation_source_check CHECK (((source)::text = ANY ((ARRAY['upstream'::character varying, 'mirror'::character varying, 'feed'::character varying])::text[])))
 );
 
 --
@@ -2925,13 +3119,93 @@ CREATE TABLE public.scheduled_tasks (
     version bigint DEFAULT 1 NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT scheduled_tasks_check CHECK ((((kind = 'audit-retention'::text) AND (repository_id IS NULL)) OR ((kind = 'repository-retention'::text) AND (repository_id IS NOT NULL)))),
+    lease_owner text DEFAULT ''::text NOT NULL,
+    lease_until timestamp with time zone,
+    CONSTRAINT scheduled_tasks_check CHECK ((((kind = 'audit-retention'::text) AND (repository_id IS NULL)) OR ((kind = 'repository-retention'::text) AND (repository_id IS NOT NULL)) OR ((kind = ANY (ARRAY['partition-manager'::text, 'retention-janitor'::text])) AND (repository_id IS NULL) AND (NOT enabled)))),
     CONSTRAINT scheduled_tasks_description_check CHECK ((char_length(description) <= 500)),
     CONSTRAINT scheduled_tasks_interval_seconds_check CHECK (((interval_seconds >= 900) AND (interval_seconds <= 31536000))),
-    CONSTRAINT scheduled_tasks_kind_check CHECK ((kind = ANY (ARRAY['repository-retention'::text, 'audit-retention'::text]))),
+    CONSTRAINT scheduled_tasks_kind_check CHECK ((kind = ANY (ARRAY['repository-retention'::text, 'audit-retention'::text, 'partition-manager'::text, 'retention-janitor'::text]))),
     CONSTRAINT scheduled_tasks_last_run_state_check CHECK ((last_run_state = ANY (ARRAY['submitted'::text, 'failed'::text]))),
     CONSTRAINT scheduled_tasks_name_check CHECK (((char_length(name) >= 1) AND (char_length(name) <= 100))),
     CONSTRAINT scheduled_tasks_version_check CHECK ((version >= 1))
+);
+
+--
+-- Name: security_audit_log; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.security_audit_log (
+    id bigint NOT NULL,
+    group_name text NOT NULL,
+    repository text NOT NULL,
+    member_name text,
+    outcome text NOT NULL,
+    actor text NOT NULL,
+    occurred_at timestamp with time zone DEFAULT now() NOT NULL,
+    format text,
+    resource text,
+    representation text,
+    member_type text,
+    upstream_host text,
+    operation text,
+    http_status integer,
+    cache_disposition text,
+    bytes bigint,
+    request_id text,
+    trace_id text,
+    authorization_source text,
+    authorization_reason text,
+    evidence jsonb DEFAULT '{}'::jsonb NOT NULL,
+    repository_id uuid,
+    CONSTRAINT security_audit_log_evidence_check CHECK ((jsonb_typeof(evidence) = 'object'::text))
+)
+PARTITION BY RANGE (occurred_at);
+
+--
+-- Name: security_audit_log_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.security_audit_log_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+--
+-- Name: security_audit_log_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.security_audit_log_id_seq OWNED BY public.security_audit_log.id;
+
+--
+-- Name: security_audit_log_default; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.security_audit_log_default (
+    id bigint DEFAULT nextval('public.security_audit_log_id_seq'::regclass) CONSTRAINT security_audit_log_id_not_null NOT NULL,
+    group_name text CONSTRAINT security_audit_log_group_name_not_null NOT NULL,
+    repository text CONSTRAINT security_audit_log_repository_not_null NOT NULL,
+    member_name text,
+    outcome text CONSTRAINT security_audit_log_outcome_not_null NOT NULL,
+    actor text CONSTRAINT security_audit_log_actor_not_null NOT NULL,
+    occurred_at timestamp with time zone DEFAULT now() CONSTRAINT security_audit_log_occurred_at_not_null NOT NULL,
+    format text,
+    resource text,
+    representation text,
+    member_type text,
+    upstream_host text,
+    operation text,
+    http_status integer,
+    cache_disposition text,
+    bytes bigint,
+    request_id text,
+    trace_id text,
+    authorization_source text,
+    authorization_reason text,
+    evidence jsonb DEFAULT '{}'::jsonb CONSTRAINT security_audit_log_evidence_not_null NOT NULL,
+    repository_id uuid,
+    CONSTRAINT security_audit_log_evidence_check CHECK ((jsonb_typeof(evidence) = 'object'::text))
 );
 
 --
@@ -2950,15 +3224,25 @@ CREATE TABLE public.service_accounts (
 );
 
 --
+-- Name: settings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.settings (
+    key text NOT NULL,
+    value text NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--
 -- Name: site_settings; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.site_settings (
     singleton boolean DEFAULT true NOT NULL,
     version bigint DEFAULT 1 NOT NULL,
-    site_name text DEFAULT 'Artifact Gateway'::text NOT NULL,
+    site_name text DEFAULT 'notarx'::text NOT NULL,
     logo_url text DEFAULT ''::text NOT NULL,
-    brand_mark text DEFAULT 'AG'::text NOT NULL,
+    brand_mark text DEFAULT 'NX'::text NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     enabled_theme_ids text[] DEFAULT ARRAY['notarx-dark'::text, 'notarx-light'::text] NOT NULL,
     default_theme_id text DEFAULT 'notarx-dark'::text NOT NULL,
@@ -2972,6 +3256,28 @@ CREATE TABLE public.site_settings (
 );
 
 --
+-- Name: token_signing_keys; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.token_signing_keys (
+    kid text NOT NULL,
+    alg text NOT NULL,
+    state text NOT NULL,
+    public_jwk jsonb NOT NULL,
+    private_sealed text NOT NULL,
+    sealing_ref text DEFAULT 'local'::text NOT NULL,
+    integrity_mac text NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    published_at timestamp with time zone,
+    activated_at timestamp with time zone,
+    retired_at timestamp with time zone,
+    expires_at timestamp with time zone,
+    CONSTRAINT token_signing_keys_alg_check CHECK ((alg = ANY (ARRAY['RS256'::text, 'ES256'::text]))),
+    CONSTRAINT token_signing_keys_public_jwk_check CHECK ((jsonb_typeof(public_jwk) = 'object'::text)),
+    CONSTRAINT token_signing_keys_state_check CHECK ((state = ANY (ARRAY['next'::text, 'active'::text, 'retired'::text])))
+);
+
+--
 -- Name: user_identities; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2980,16 +3286,20 @@ CREATE TABLE public.user_identities (
     user_id uuid NOT NULL,
     kind text NOT NULL,
     issuer text NOT NULL,
-    subject text NOT NULL,
+    subject text,
     email text DEFAULT ''::text NOT NULL,
     display_name text DEFAULT ''::text NOT NULL,
     email_verified boolean DEFAULT false NOT NULL,
     last_login_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    provider_id uuid NOT NULL,
+    scim_external_id text,
     CONSTRAINT user_identities_issuer_check CHECK ((issuer <> ''::text)),
-    CONSTRAINT user_identities_kind_check CHECK ((kind = 'oidc'::text)),
-    CONSTRAINT user_identities_subject_check CHECK ((subject <> ''::text))
+    CONSTRAINT user_identities_key_check CHECK (((subject IS NOT NULL) OR (scim_external_id IS NOT NULL))),
+    CONSTRAINT user_identities_kind_check CHECK ((kind = ANY (ARRAY['oidc'::text, 'saml'::text]))),
+    CONSTRAINT user_identities_scim_external_id_check CHECK (((scim_external_id IS NULL) OR (scim_external_id <> ''::text))),
+    CONSTRAINT user_identities_subject_check CHECK (((subject IS NULL) OR (subject <> ''::text)))
 );
 
 --
@@ -3005,11 +3315,13 @@ CREATE TABLE public.user_sessions (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     expires_at timestamp with time zone NOT NULL,
     revoked_at timestamp with time zone,
+    idp_session_id text,
     CONSTRAINT user_sessions_check CHECK ((expires_at > created_at)),
     CONSTRAINT user_sessions_ip_address_check CHECK ((length(ip_address) <= 64)),
-    CONSTRAINT user_sessions_kind_check CHECK ((kind = ANY (ARRAY['local_session'::text, 'oidc'::text]))),
+    CONSTRAINT user_sessions_kind_check CHECK ((kind = ANY (ARRAY['local_session'::text, 'oidc'::text, 'saml'::text]))),
     CONSTRAINT user_sessions_user_agent_check CHECK ((length(user_agent) <= 512))
-);
+)
+WITH (fillfactor='80', autovacuum_vacuum_scale_factor='0.02', autovacuum_analyze_scale_factor='0.02');
 
 --
 -- Name: users; Type: TABLE; Schema: public; Owner: -
@@ -3033,6 +3345,12 @@ CREATE TABLE public.users (
     locked_until timestamp with time zone,
     must_change_password boolean DEFAULT false NOT NULL,
     session_version bigint DEFAULT 1 NOT NULL,
+    disabled_reason text,
+    email_verified_by_admin boolean DEFAULT false NOT NULL,
+    email_verified_at timestamp with time zone,
+    email_verified_by text DEFAULT ''::text NOT NULL,
+    CONSTRAINT users_disabled_reason_check CHECK (((disabled_reason IS NULL) OR (disabled_reason = ANY (ARRAY['admin'::text, 'scim'::text])))),
+    CONSTRAINT users_email_verified_audit_check CHECK (((email_verified_by_admin AND (email_verified_at IS NOT NULL) AND (email_verified_by <> ''::text) AND (email <> ''::text)) OR ((NOT email_verified_by_admin) AND (email_verified_at IS NULL) AND (email_verified_by = ''::text)))),
     CONSTRAINT users_failed_login_attempts_check CHECK ((failed_login_attempts >= 0)),
     CONSTRAINT users_role_check CHECK ((role = ANY (ARRAY['none'::text, 'member'::text, 'admin'::text]))),
     CONSTRAINT users_session_version_check CHECK ((session_version > 0))
@@ -3064,7 +3382,8 @@ CREATE TABLE public.webhook_deliveries (
     CONSTRAINT webhook_deliveries_last_error_check CHECK ((length(last_error) <= 1024)),
     CONSTRAINT webhook_deliveries_last_status_check CHECK (((last_status IS NULL) OR ((last_status >= 100) AND (last_status <= 599)))),
     CONSTRAINT webhook_deliveries_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'delivering'::text, 'retrying'::text, 'succeeded'::text, 'dead'::text])))
-);
+)
+WITH (fillfactor='80', autovacuum_vacuum_scale_factor='0.02', autovacuum_analyze_scale_factor='0.02');
 
 --
 -- Name: webhook_events; Type: TABLE; Schema: public; Owner: -
@@ -3102,6 +3421,85 @@ CREATE TABLE public.webhook_subscriptions (
 );
 
 --
+-- Name: workload_issuers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.workload_issuers (
+    id uuid NOT NULL,
+    name text NOT NULL,
+    kind text NOT NULL,
+    issuer text NOT NULL,
+    audiences text[] NOT NULL,
+    allowed_algs text[] DEFAULT '{RS256,ES256,EdDSA}'::text[] NOT NULL,
+    jwks_mode text NOT NULL,
+    jwks_uri text,
+    static_jwks jsonb,
+    ca_bundle_pem text,
+    allow_private_network boolean DEFAULT false NOT NULL,
+    state text DEFAULT 'active'::text NOT NULL,
+    version bigint DEFAULT 1 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT workload_issuers_allowed_algs_check CHECK (((cardinality(allowed_algs) > 0) AND (allowed_algs <@ ARRAY['RS256'::text, 'ES256'::text, 'EdDSA'::text]))),
+    CONSTRAINT workload_issuers_audiences_check CHECK ((cardinality(audiences) > 0)),
+    CONSTRAINT workload_issuers_jwks_mode_check CHECK ((jwks_mode = ANY (ARRAY['discovery'::text, 'static'::text]))),
+    CONSTRAINT workload_issuers_kind_check CHECK ((kind = ANY (ARRAY['github_actions'::text, 'gitlab_ci'::text, 'kubernetes'::text, 'generic'::text]))),
+    CONSTRAINT workload_issuers_state_check CHECK ((state = ANY (ARRAY['active'::text, 'disabled'::text]))),
+    CONSTRAINT workload_issuers_static_jwks_check CHECK (((jwks_mode <> 'static'::text) OR (static_jwks IS NOT NULL)))
+);
+
+--
+-- Name: workload_jti_seen; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.workload_jti_seen (
+    issuer_id uuid NOT NULL,
+    jti_hash bytea NOT NULL,
+    expires_at timestamp with time zone NOT NULL
+)
+WITH (fillfactor='80', autovacuum_vacuum_scale_factor='0.02', autovacuum_analyze_scale_factor='0.02');
+
+--
+-- Name: workload_trust_policies; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.workload_trust_policies (
+    id uuid NOT NULL,
+    name text NOT NULL,
+    issuer_id uuid NOT NULL,
+    service_account_id uuid NOT NULL,
+    conditions jsonb NOT NULL,
+    max_token_ttl_seconds integer DEFAULT 900 NOT NULL,
+    single_use boolean DEFAULT false NOT NULL,
+    state text DEFAULT 'active'::text NOT NULL,
+    version bigint DEFAULT 1 NOT NULL,
+    expires_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT workload_trust_policies_conditions_check CHECK ((jsonb_typeof(conditions) = 'array'::text)),
+    CONSTRAINT workload_trust_policies_state_check CHECK ((state = ANY (ARRAY['active'::text, 'disabled'::text]))),
+    CONSTRAINT workload_trust_policies_ttl_check CHECK ((max_token_ttl_seconds > 0))
+);
+
+--
+-- Name: artifact_scan_history_default; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.artifact_scan_history ATTACH PARTITION public.artifact_scan_history_default DEFAULT;
+
+--
+-- Name: resolver_audit_log_default; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.resolver_audit_log ATTACH PARTITION public.resolver_audit_log_default DEFAULT;
+
+--
+-- Name: security_audit_log_default; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.security_audit_log ATTACH PARTITION public.security_audit_log_default DEFAULT;
+
+--
 -- Name: email_test_requests id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -3114,11 +3512,10 @@ ALTER TABLE ONLY public.email_test_requests ALTER COLUMN id SET DEFAULT nextval(
 ALTER TABLE ONLY public.resolver_audit_log ALTER COLUMN id SET DEFAULT nextval('public.resolver_audit_log_id_seq'::regclass);
 
 --
--- Name: anonymous_access_policy anonymous_access_policy_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: security_audit_log id; Type: DEFAULT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.anonymous_access_policy
-    ADD CONSTRAINT anonymous_access_policy_pkey PRIMARY KEY (singleton);
+ALTER TABLE ONLY public.security_audit_log ALTER COLUMN id SET DEFAULT nextval('public.security_audit_log_id_seq'::regclass);
 
 --
 -- Name: api_keys api_keys_pkey; Type: CONSTRAINT; Schema: public; Owner: -
@@ -3142,11 +3539,46 @@ ALTER TABLE ONLY public.artifact_intelligence
     ADD CONSTRAINT artifact_intelligence_pkey PRIMARY KEY (repository_id, format, coordinate, digest);
 
 --
+-- Name: artifact_license artifact_license_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.artifact_license
+    ADD CONSTRAINT artifact_license_pkey PRIMARY KEY (repository_id, artifact_digest, spdx_id, source);
+
+--
 -- Name: artifact_quarantines artifact_quarantines_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.artifact_quarantines
     ADD CONSTRAINT artifact_quarantines_pkey PRIMARY KEY (repository_id, format, coordinate, digest);
+
+--
+-- Name: artifact_sbom artifact_sbom_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.artifact_sbom
+    ADD CONSTRAINT artifact_sbom_pkey PRIMARY KEY (id);
+
+--
+-- Name: artifact_sbom artifact_sbom_unique; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.artifact_sbom
+    ADD CONSTRAINT artifact_sbom_unique UNIQUE (repository_id, artifact_digest, kind, source);
+
+--
+-- Name: artifact_scan_history artifact_scan_history_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.artifact_scan_history
+    ADD CONSTRAINT artifact_scan_history_pkey PRIMARY KEY (scanned_at, id);
+
+--
+-- Name: artifact_scan_history_default artifact_scan_history_default_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.artifact_scan_history_default
+    ADD CONSTRAINT artifact_scan_history_default_pkey PRIMARY KEY (scanned_at, id);
 
 --
 -- Name: artifact_tombstones artifact_tombstones_pkey; Type: CONSTRAINT; Schema: public; Owner: -
@@ -3160,7 +3592,28 @@ ALTER TABLE ONLY public.artifact_tombstones
 --
 
 ALTER TABLE ONLY public.artifact_usage_stats
-    ADD CONSTRAINT artifact_usage_stats_pkey PRIMARY KEY (repository, format, resource);
+    ADD CONSTRAINT artifact_usage_stats_pkey PRIMARY KEY (repository_id, format, resource);
+
+--
+-- Name: artifact_vulnerability_finding artifact_vulnerability_finding_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.artifact_vulnerability_finding
+    ADD CONSTRAINT artifact_vulnerability_finding_pkey PRIMARY KEY (vulnerability_id, ordinal);
+
+--
+-- Name: artifact_vulnerability artifact_vulnerability_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.artifact_vulnerability
+    ADD CONSTRAINT artifact_vulnerability_pkey PRIMARY KEY (id);
+
+--
+-- Name: artifact_vulnerability artifact_vulnerability_unique; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.artifact_vulnerability
+    ADD CONSTRAINT artifact_vulnerability_unique UNIQUE (repository_id, artifact_digest);
 
 --
 -- Name: audit_cleanup_jobs audit_cleanup_jobs_idempotency_key_key; Type: CONSTRAINT; Schema: public; Owner: -
@@ -3343,6 +3796,20 @@ ALTER TABLE ONLY public.hosted_repositories
 
 ALTER TABLE ONLY public.hosted_repository_idempotency
     ADD CONSTRAINT hosted_repository_idempotency_pkey PRIMARY KEY (actor, target, key);
+
+--
+-- Name: identity_providers identity_providers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.identity_providers
+    ADD CONSTRAINT identity_providers_pkey PRIMARY KEY (id);
+
+--
+-- Name: identity_providers identity_providers_slug_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.identity_providers
+    ADD CONSTRAINT identity_providers_slug_key UNIQUE (slug);
 
 --
 -- Name: installation_repository_presets installation_repository_presets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
@@ -4115,6 +4582,13 @@ ALTER TABLE ONLY public.nexus_migration_sources
     ADD CONSTRAINT nexus_migration_sources_pkey PRIMARY KEY (id);
 
 --
+-- Name: object_store_identity object_store_identity_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.object_store_identity
+    ADD CONSTRAINT object_store_identity_pkey PRIMARY KEY (singleton);
+
+--
 -- Name: oci_bound_objects oci_bound_objects_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4157,11 +4631,11 @@ ALTER TABLE ONLY public.oci_subject_bindings
     ADD CONSTRAINT oci_subject_bindings_pkey PRIMARY KEY (scope, owner, image, subject);
 
 --
--- Name: oidc_settings oidc_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: public_access_policy public_access_policy_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.oidc_settings
-    ADD CONSTRAINT oidc_settings_pkey PRIMARY KEY (singleton);
+ALTER TABLE ONLY public.public_access_policy
+    ADD CONSTRAINT public_access_policy_pkey PRIMARY KEY (singleton);
 
 --
 -- Name: raw_group_members raw_group_members_group_name_name_key; Type: CONSTRAINT; Schema: public; Owner: -
@@ -4269,6 +4743,13 @@ ALTER TABLE ONLY public.repository_quota_alert_rules
     ADD CONSTRAINT repository_quota_alert_rules_pkey PRIMARY KEY (id);
 
 --
+-- Name: repository_request_rollup repository_request_rollup_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.repository_request_rollup
+    ADD CONSTRAINT repository_request_rollup_pkey PRIMARY KEY (repository_id, bucket_start, outcome);
+
+--
 -- Name: repository_retention_policies repository_retention_policies_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4283,11 +4764,32 @@ ALTER TABLE ONLY public.repository_security_policies
     ADD CONSTRAINT repository_security_policies_pkey PRIMARY KEY (repository_id);
 
 --
+-- Name: repository_usage_counters repository_usage_counters_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.repository_usage_counters
+    ADD CONSTRAINT repository_usage_counters_pkey PRIMARY KEY (repository_id);
+
+--
+-- Name: repository_vex_document repository_vex_document_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.repository_vex_document
+    ADD CONSTRAINT repository_vex_document_pkey PRIMARY KEY (id);
+
+--
 -- Name: resolver_audit_log resolver_audit_log_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.resolver_audit_log
-    ADD CONSTRAINT resolver_audit_log_pkey PRIMARY KEY (id);
+    ADD CONSTRAINT resolver_audit_log_pkey PRIMARY KEY (occurred_at, id);
+
+--
+-- Name: resolver_audit_log_default resolver_audit_log_default_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.resolver_audit_log_default
+    ADD CONSTRAINT resolver_audit_log_default_pkey PRIMARY KEY (occurred_at, id);
 
 --
 -- Name: runtime_node_sessions runtime_node_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
@@ -4304,6 +4806,34 @@ ALTER TABLE ONLY public.runtime_nodes
     ADD CONSTRAINT runtime_nodes_pkey PRIMARY KEY (instance_id);
 
 --
+-- Name: saml_assertion_ids saml_assertion_ids_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.saml_assertion_ids
+    ADD CONSTRAINT saml_assertion_ids_pkey PRIMARY KEY (provider_id, assertion_id);
+
+--
+-- Name: saml_request_state saml_request_state_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.saml_request_state
+    ADD CONSTRAINT saml_request_state_pkey PRIMARY KEY (id);
+
+--
+-- Name: scanner_db_generation scanner_db_generation_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.scanner_db_generation
+    ADD CONSTRAINT scanner_db_generation_pkey PRIMARY KEY (id);
+
+--
+-- Name: scanner_db_generation scanner_db_generation_unique; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.scanner_db_generation
+    ADD CONSTRAINT scanner_db_generation_unique UNIQUE (kind, oci_digest);
+
+--
 -- Name: scheduled_task_runs scheduled_task_runs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4318,11 +4848,32 @@ ALTER TABLE ONLY public.scheduled_tasks
     ADD CONSTRAINT scheduled_tasks_pkey PRIMARY KEY (id);
 
 --
+-- Name: security_audit_log security_audit_log_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.security_audit_log
+    ADD CONSTRAINT security_audit_log_pkey PRIMARY KEY (occurred_at, id);
+
+--
+-- Name: security_audit_log_default security_audit_log_default_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.security_audit_log_default
+    ADD CONSTRAINT security_audit_log_default_pkey PRIMARY KEY (occurred_at, id);
+
+--
 -- Name: service_accounts service_accounts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.service_accounts
     ADD CONSTRAINT service_accounts_pkey PRIMARY KEY (id);
+
+--
+-- Name: settings settings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.settings
+    ADD CONSTRAINT settings_pkey PRIMARY KEY (key);
 
 --
 -- Name: site_settings site_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
@@ -4332,11 +4883,11 @@ ALTER TABLE ONLY public.site_settings
     ADD CONSTRAINT site_settings_pkey PRIMARY KEY (singleton);
 
 --
--- Name: user_identities user_identities_kind_issuer_subject_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: token_signing_keys token_signing_keys_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.user_identities
-    ADD CONSTRAINT user_identities_kind_issuer_subject_key UNIQUE (kind, issuer, subject);
+ALTER TABLE ONLY public.token_signing_keys
+    ADD CONSTRAINT token_signing_keys_pkey PRIMARY KEY (kid);
 
 --
 -- Name: user_identities user_identities_pkey; Type: CONSTRAINT; Schema: public; Owner: -
@@ -4346,11 +4897,11 @@ ALTER TABLE ONLY public.user_identities
     ADD CONSTRAINT user_identities_pkey PRIMARY KEY (id);
 
 --
--- Name: user_identities user_identities_user_id_kind_issuer_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: user_identities user_identities_provider_user_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.user_identities
-    ADD CONSTRAINT user_identities_user_id_kind_issuer_key UNIQUE (user_id, kind, issuer);
+    ADD CONSTRAINT user_identities_provider_user_key UNIQUE (provider_id, user_id);
 
 --
 -- Name: user_sessions user_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
@@ -4409,10 +4960,58 @@ ALTER TABLE ONLY public.webhook_subscriptions
     ADD CONSTRAINT webhook_subscriptions_pkey PRIMARY KEY (id);
 
 --
+-- Name: workload_issuers workload_issuers_issuer_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.workload_issuers
+    ADD CONSTRAINT workload_issuers_issuer_key UNIQUE (issuer);
+
+--
+-- Name: workload_issuers workload_issuers_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.workload_issuers
+    ADD CONSTRAINT workload_issuers_name_key UNIQUE (name);
+
+--
+-- Name: workload_issuers workload_issuers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.workload_issuers
+    ADD CONSTRAINT workload_issuers_pkey PRIMARY KEY (id);
+
+--
+-- Name: workload_jti_seen workload_jti_seen_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.workload_jti_seen
+    ADD CONSTRAINT workload_jti_seen_pkey PRIMARY KEY (issuer_id, jti_hash);
+
+--
+-- Name: workload_trust_policies workload_trust_policies_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.workload_trust_policies
+    ADD CONSTRAINT workload_trust_policies_name_key UNIQUE (name);
+
+--
+-- Name: workload_trust_policies workload_trust_policies_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.workload_trust_policies
+    ADD CONSTRAINT workload_trust_policies_pkey PRIMARY KEY (id);
+
+--
 -- Name: api_keys_active_expiry_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX api_keys_active_expiry_idx ON public.api_keys USING btree (expires_at) WHERE (revoked_at IS NULL);
+
+--
+-- Name: api_keys_service_account_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX api_keys_service_account_id_fk_idx ON public.api_keys USING btree (service_account_id);
 
 --
 -- Name: api_keys_service_account_idx; Type: INDEX; Schema: public; Owner: -
@@ -4427,6 +5026,18 @@ CREATE INDEX api_keys_service_account_idx ON public.api_keys USING btree (servic
 CREATE INDEX artifact_intelligence_updated_idx ON public.artifact_intelligence USING btree (updated_at DESC);
 
 --
+-- Name: artifact_scan_history_artifact_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX artifact_scan_history_artifact_idx ON ONLY public.artifact_scan_history USING btree (repository_id, artifact_digest, scanned_at DESC);
+
+--
+-- Name: artifact_scan_history_default_repository_id_artifact_digest_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX artifact_scan_history_default_repository_id_artifact_digest_idx ON public.artifact_scan_history_default USING btree (repository_id, artifact_digest, scanned_at DESC);
+
+--
 -- Name: artifact_tombstones_tombstoned_at_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4436,19 +5047,37 @@ CREATE INDEX artifact_tombstones_tombstoned_at_idx ON public.artifact_tombstones
 -- Name: artifact_usage_stats_repository_address_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX artifact_usage_stats_repository_address_idx ON public.artifact_usage_stats USING btree (repository, resource COLLATE "C", format COLLATE "C");
+CREATE INDEX artifact_usage_stats_repository_address_idx ON public.artifact_usage_stats USING btree (repository_id, resource COLLATE "C", format COLLATE "C");
 
 --
 -- Name: artifact_usage_stats_repository_usage_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX artifact_usage_stats_repository_usage_idx ON public.artifact_usage_stats USING btree (repository, download_count DESC);
+CREATE INDEX artifact_usage_stats_repository_usage_idx ON public.artifact_usage_stats USING btree (repository_id, download_count DESC);
+
+--
+-- Name: artifact_vulnerability_finding_page_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX artifact_vulnerability_finding_page_idx ON public.artifact_vulnerability_finding USING btree (vulnerability_id, severity_rank, vuln_id, ordinal);
+
+--
+-- Name: artifact_vulnerability_generation_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX artifact_vulnerability_generation_idx ON public.artifact_vulnerability USING btree (db_generation_id, scanned_at, id);
 
 --
 -- Name: audit_cleanup_jobs_claim_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX audit_cleanup_jobs_claim_idx ON public.audit_cleanup_jobs USING btree (created_at) WHERE (state = ANY (ARRAY['pending'::text, 'failed'::text]));
+
+--
+-- Name: audit_cleanup_jobs_retention_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX audit_cleanup_jobs_retention_idx ON public.audit_cleanup_jobs USING btree (completed_at) WHERE (state = ANY (ARRAY['completed'::text, 'failed'::text]));
 
 --
 -- Name: audit_cleanup_jobs_running_started_idx; Type: INDEX; Schema: public; Owner: -
@@ -4511,6 +5140,18 @@ CREATE UNIQUE INDEX cache_tasks_active_dedupe_idx ON public.cache_tasks USING bt
 CREATE INDEX cache_tasks_claim_idx ON public.cache_tasks USING btree (task_type, available_at, created_at) WHERE (completed_at IS NULL);
 
 --
+-- Name: cache_tasks_retention_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX cache_tasks_retention_idx ON public.cache_tasks USING btree (completed_at) WHERE (completed_at IS NOT NULL);
+
+--
+-- Name: conan_group_members_repository_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX conan_group_members_repository_id_fk_idx ON public.conan_group_members USING btree (repository_id);
+
+--
 -- Name: conan_group_members_repository_id_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4521,6 +5162,24 @@ CREATE INDEX conan_group_members_repository_id_idx ON public.conan_group_members
 --
 
 CREATE INDEX email_quota_order ON public.email_test_deliveries USING btree (quota_rule_id, event_sequence) WHERE (kind = 'repository_quota'::text);
+
+--
+-- Name: email_test_deliveries_quota_rule_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX email_test_deliveries_quota_rule_id_fk_idx ON public.email_test_deliveries USING btree (quota_rule_id);
+
+--
+-- Name: email_test_deliveries_retention_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX email_test_deliveries_retention_idx ON public.email_test_deliveries USING btree (updated_at) WHERE (state = ANY (ARRAY['accepted'::text, 'dead'::text]));
+
+--
+-- Name: email_test_deliveries_target_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX email_test_deliveries_target_id_fk_idx ON public.email_test_deliveries USING btree (target_id);
 
 --
 -- Name: email_test_delivery_due; Type: INDEX; Schema: public; Owner: -
@@ -4535,16 +5194,52 @@ CREATE INDEX email_test_delivery_due ON public.email_test_deliveries USING btree
 CREATE INDEX email_test_requests_time ON public.email_test_requests USING btree (created_at);
 
 --
+-- Name: hosted_group_idempotency_group_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX hosted_group_idempotency_group_id_fk_idx ON public.hosted_group_idempotency USING btree (group_id);
+
+--
+-- Name: hosted_group_idempotency_retention_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX hosted_group_idempotency_retention_idx ON public.hosted_group_idempotency USING btree (expires_at);
+
+--
+-- Name: hosted_group_members_repository_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX hosted_group_members_repository_id_fk_idx ON public.hosted_group_members USING btree (repository_id);
+
+--
+-- Name: hosted_groups_visibility_name_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX hosted_groups_visibility_name_idx ON public.hosted_groups USING btree (visibility, name);
+
+--
 -- Name: hosted_repositories_created_at_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX hosted_repositories_created_at_idx ON public.hosted_repositories USING btree (created_at, id);
 
 --
+-- Name: hosted_repositories_visibility_name_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX hosted_repositories_visibility_name_idx ON public.hosted_repositories USING btree (visibility, name);
+
+--
 -- Name: hosted_repository_idempotency_expires_at_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX hosted_repository_idempotency_expires_at_idx ON public.hosted_repository_idempotency USING btree (expires_at);
+
+--
+-- Name: hosted_repository_idempotency_repository_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX hosted_repository_idempotency_repository_id_fk_idx ON public.hosted_repository_idempotency USING btree (repository_id);
 
 --
 -- Name: lifecycle_jobs_actionable_idx; Type: INDEX; Schema: public; Owner: -
@@ -4565,6 +5260,12 @@ CREATE INDEX lifecycle_jobs_artifact_scan_identity_idx ON public.lifecycle_jobs 
 CREATE INDEX lifecycle_jobs_created_at_brin_idx ON public.lifecycle_jobs USING brin (created_at) WITH (pages_per_range='128');
 
 --
+-- Name: lifecycle_jobs_kind_actionable_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX lifecycle_jobs_kind_actionable_idx ON public.lifecycle_jobs USING btree (kind, next_attempt_at) WHERE (state = ANY (ARRAY['pending'::text, 'retrying'::text]));
+
+--
 -- Name: lifecycle_jobs_lease_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4575,6 +5276,24 @@ CREATE INDEX lifecycle_jobs_lease_idx ON public.lifecycle_jobs USING btree (leas
 --
 
 CREATE INDEX lifecycle_jobs_pending_idx ON public.lifecycle_jobs USING btree (created_at) WHERE (state = 'pending'::text);
+
+--
+-- Name: lifecycle_jobs_retention_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX lifecycle_jobs_retention_idx ON public.lifecycle_jobs USING btree (completed_at) WHERE (state = ANY (ARRAY['completed'::text, 'failed'::text, 'cancelled'::text]));
+
+--
+-- Name: lifecycle_jobs_running_repository_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX lifecycle_jobs_running_repository_idx ON public.lifecycle_jobs USING btree (repository_id) WHERE (state = 'running'::text);
+
+--
+-- Name: maven_group_members_repository_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX maven_group_members_repository_id_fk_idx ON public.maven_group_members USING btree (repository_id);
 
 --
 -- Name: native_apt_archive_object_intents_object_idx; Type: INDEX; Schema: public; Owner: -
@@ -4589,6 +5308,12 @@ CREATE INDEX native_apt_archive_object_intents_object_idx ON public.native_apt_a
 CREATE INDEX native_apt_archive_object_intents_reclaim_idx ON public.native_apt_archive_object_intents USING btree (restore_id, object_key) WHERE ((reclaim_scheduled_at IS NULL) AND (collected_at IS NULL));
 
 --
+-- Name: native_apt_archive_object_intents_restore_id_repository_8_fk; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_apt_archive_object_intents_restore_id_repository_8_fk ON public.native_apt_archive_object_intents USING btree (restore_id, repository_id);
+
+--
 -- Name: native_apt_archive_restores_active_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4599,6 +5324,12 @@ CREATE UNIQUE INDEX native_apt_archive_restores_active_idx ON public.native_apt_
 --
 
 CREATE INDEX native_apt_archive_restores_expiry_idx ON public.native_apt_archive_restores USING btree (created_at, id) WHERE (state = 'preparing'::text);
+
+--
+-- Name: native_apt_archive_restores_repository_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_apt_archive_restores_repository_id_fk_idx ON public.native_apt_archive_restores USING btree (repository_id);
 
 --
 -- Name: native_apt_assets_digest_idx; Type: INDEX; Schema: public; Owner: -
@@ -4616,7 +5347,19 @@ CREATE INDEX native_apt_assets_path_idx ON public.native_apt_assets USING btree 
 -- Name: native_apt_assets_path_trgm_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX native_apt_assets_path_trgm_idx ON public.native_apt_assets USING gin (path public.gin_trgm_ops);
+CREATE INDEX native_apt_assets_path_trgm_idx ON public.native_apt_assets USING gin (path public.gin_trgm_ops) WITH (fastupdate='on', gin_pending_list_limit='1024');
+
+--
+-- Name: native_apt_lifecycle_results_repository_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_apt_lifecycle_results_repository_id_fk_idx ON public.native_apt_lifecycle_results USING btree (repository_id);
+
+--
+-- Name: native_apt_lifecycle_results_snapshot_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_apt_lifecycle_results_snapshot_id_fk_idx ON public.native_apt_lifecycle_results USING btree (snapshot_id);
 
 --
 -- Name: native_apt_package_deletions_repository_idx; Type: INDEX; Schema: public; Owner: -
@@ -4643,6 +5386,12 @@ CREATE INDEX native_apt_package_revisions_object_idx ON public.native_apt_packag
 CREATE INDEX native_apt_publication_idempotency_expiry_idx ON public.native_apt_publication_idempotency USING btree (expires_at);
 
 --
+-- Name: native_apt_publication_idempotency_session_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_apt_publication_idempotency_session_id_fk_idx ON public.native_apt_publication_idempotency USING btree (session_id);
+
+--
 -- Name: native_apt_publication_sessions_collection_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4655,10 +5404,22 @@ CREATE INDEX native_apt_publication_sessions_collection_idx ON public.native_apt
 CREATE INDEX native_apt_publication_sessions_expiry_idx ON public.native_apt_publication_sessions USING btree (expires_at, id) WHERE (state = ANY (ARRAY['open'::text, 'uploading'::text]));
 
 --
+-- Name: native_apt_publication_sessions_package_revision_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_apt_publication_sessions_package_revision_id_fk_idx ON public.native_apt_publication_sessions USING btree (package_revision_id);
+
+--
 -- Name: native_apt_publication_sessions_reclaim_schedule_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX native_apt_publication_sessions_reclaim_schedule_idx ON public.native_apt_publication_sessions USING btree (expires_at, id) WHERE ((state = 'aborted'::text) AND (object_key <> ''::text) AND (reclaim_scheduled_at IS NULL) AND (collected_at IS NULL));
+
+--
+-- Name: native_apt_publication_sessions_repository_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_apt_publication_sessions_repository_id_fk_idx ON public.native_apt_publication_sessions USING btree (repository_id);
 
 --
 -- Name: native_apt_repository_snapshots_visible_idx; Type: INDEX; Schema: public; Owner: -
@@ -4670,7 +5431,13 @@ CREATE UNIQUE INDEX native_apt_repository_snapshots_visible_idx ON public.native
 -- Name: native_apt_snapshot_assets_path_trgm_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX native_apt_snapshot_assets_path_trgm_idx ON public.native_apt_snapshot_assets USING gin (path public.gin_trgm_ops);
+CREATE INDEX native_apt_snapshot_assets_path_trgm_idx ON public.native_apt_snapshot_assets USING gin (path public.gin_trgm_ops) WITH (fastupdate='on', gin_pending_list_limit='1024');
+
+--
+-- Name: native_apt_snapshot_assets_snapshot_id_repository_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_apt_snapshot_assets_snapshot_id_repository_id_fk_idx ON public.native_apt_snapshot_assets USING btree (snapshot_id, repository_id);
 
 --
 -- Name: native_apt_snapshot_assets_visible_lookup_idx; Type: INDEX; Schema: public; Owner: -
@@ -4691,22 +5458,40 @@ CREATE INDEX native_apt_snapshot_object_intents_age_idx ON public.native_apt_sna
 CREATE INDEX native_apt_snapshot_object_intents_reclaim_idx ON public.native_apt_snapshot_object_intents USING btree (snapshot_id, object_key) WHERE ((reclaim_scheduled_at IS NULL) AND (collected_at IS NULL));
 
 --
+-- Name: native_apt_snapshot_object_intents_snapshot_id_reposito_16_fk; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_apt_snapshot_object_intents_snapshot_id_reposito_16_fk ON public.native_apt_snapshot_object_intents USING btree (snapshot_id, repository_id);
+
+--
 -- Name: native_apt_snapshot_packages_component_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX native_apt_snapshot_packages_component_idx ON public.native_apt_snapshot_packages USING btree (snapshot_id, component, architecture);
 
 --
+-- Name: native_apt_snapshot_packages_package_revision_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_apt_snapshot_packages_package_revision_id_fk_idx ON public.native_apt_snapshot_packages USING btree (package_revision_id);
+
+--
+-- Name: native_apt_snapshot_packages_publication_session_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_apt_snapshot_packages_publication_session_id_fk_idx ON public.native_apt_snapshot_packages USING btree (publication_session_id);
+
+--
 -- Name: native_cargo_names_name_trgm_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX native_cargo_names_name_trgm_idx ON public.native_cargo_names USING gin (name public.gin_trgm_ops);
+CREATE INDEX native_cargo_names_name_trgm_idx ON public.native_cargo_names USING gin (name public.gin_trgm_ops) WITH (fastupdate='on', gin_pending_list_limit='1024');
 
 --
 -- Name: native_cargo_proxy_indexes_positive_name_trgm_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX native_cargo_proxy_indexes_positive_name_trgm_idx ON public.native_cargo_proxy_indexes USING gin (name public.gin_trgm_ops) WHERE (status = 200);
+CREATE INDEX native_cargo_proxy_indexes_positive_name_trgm_idx ON public.native_cargo_proxy_indexes USING gin (name public.gin_trgm_ops) WITH (fastupdate='on', gin_pending_list_limit='1024') WHERE (status = 200);
 
 --
 -- Name: native_cargo_publications_reclaim_idx; Type: INDEX; Schema: public; Owner: -
@@ -4727,10 +5512,28 @@ CREATE INDEX native_conan_assets_object_key_idx ON public.native_conan_assets US
 CREATE INDEX native_conan_object_intents_collect_idx ON public.native_conan_object_intents USING btree (created_at) WHERE (collected_at IS NULL);
 
 --
+-- Name: native_conan_object_intents_repository_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_conan_object_intents_repository_id_fk_idx ON public.native_conan_object_intents USING btree (repository_id);
+
+--
 -- Name: native_conan_open_publication_identity; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX native_conan_open_publication_identity ON public.native_conan_publish_sessions USING btree (repository_id, publisher, kind, reference, recipe_revision, package_id, package_revision) WHERE (native AND (state = 'open'::text));
+
+--
+-- Name: native_conan_publish_sessions_committed_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_conan_publish_sessions_committed_idx ON public.native_conan_publish_sessions USING btree (repository_id, reference, expires_at DESC) WHERE (state = 'committed'::text);
+
+--
+-- Name: native_conan_publish_sessions_repository_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_conan_publish_sessions_repository_id_fk_idx ON public.native_conan_publish_sessions USING btree (repository_id);
 
 --
 -- Name: native_conan_recipe_revisions_created_at_brin_idx; Type: INDEX; Schema: public; Owner: -
@@ -4754,7 +5557,7 @@ CREATE INDEX native_conan_recipe_revisions_visible_reference_idx ON public.nativ
 -- Name: native_conan_recipe_revisions_visible_reference_trgm_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX native_conan_recipe_revisions_visible_reference_trgm_idx ON public.native_conan_recipe_revisions USING gin (reference public.gin_trgm_ops) WHERE (state = 'visible'::text);
+CREATE INDEX native_conan_recipe_revisions_visible_reference_trgm_idx ON public.native_conan_recipe_revisions USING gin (reference public.gin_trgm_ops) WITH (fastupdate='on', gin_pending_list_limit='1024') WHERE (state = 'visible'::text);
 
 --
 -- Name: native_conan_recipe_visible_reference_pattern_idx; Type: INDEX; Schema: public; Owner: -
@@ -4790,7 +5593,7 @@ CREATE INDEX native_go_versions_module_idx ON public.native_go_versions USING bt
 -- Name: native_go_versions_module_path_trgm_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX native_go_versions_module_path_trgm_idx ON public.native_go_versions USING gin (module_path public.gin_trgm_ops);
+CREATE INDEX native_go_versions_module_path_trgm_idx ON public.native_go_versions USING gin (module_path public.gin_trgm_ops) WITH (fastupdate='on', gin_pending_list_limit='1024');
 
 --
 -- Name: native_helm_active_identity; Type: INDEX; Schema: public; Owner: -
@@ -4811,10 +5614,34 @@ CREATE INDEX native_helm_expiry ON public.native_helm_publication_sessions USING
 CREATE UNIQUE INDEX native_helm_provenance_key ON public.native_helm_publication_sessions USING btree (provenance_key) WHERE (provenance_key <> ''::text);
 
 --
+-- Name: native_helm_publication_sessions_repository_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_helm_publication_sessions_repository_id_fk_idx ON public.native_helm_publication_sessions USING btree (repository_id);
+
+--
 -- Name: native_helm_replication_claim; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX native_helm_replication_claim ON public.native_helm_replication_jobs USING btree (created_at, id) WHERE (state = ANY (ARRAY['queued'::text, 'running'::text]));
+
+--
+-- Name: native_helm_replication_items_target_session_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_helm_replication_items_target_session_id_fk_idx ON public.native_helm_replication_items USING btree (target_session_id);
+
+--
+-- Name: native_helm_replication_jobs_source_repository_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_helm_replication_jobs_source_repository_id_fk_idx ON public.native_helm_replication_jobs USING btree (source_repository_id);
+
+--
+-- Name: native_helm_replication_jobs_target_repository_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_helm_replication_jobs_target_repository_id_fk_idx ON public.native_helm_replication_jobs USING btree (target_repository_id);
 
 --
 -- Name: native_helm_source_snapshots_view; Type: INDEX; Schema: public; Owner: -
@@ -4850,7 +5677,19 @@ CREATE INDEX native_maven_artifacts_visible_coordinate_pattern_idx ON public.nat
 -- Name: native_maven_artifacts_visible_coordinate_trgm_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX native_maven_artifacts_visible_coordinate_trgm_idx ON public.native_maven_artifacts USING gin (coordinate public.gin_trgm_ops) WHERE (state = 'visible'::text);
+CREATE INDEX native_maven_artifacts_visible_coordinate_trgm_idx ON public.native_maven_artifacts USING gin (coordinate public.gin_trgm_ops) WITH (fastupdate='on', gin_pending_list_limit='1024') WHERE (state = 'visible'::text);
+
+--
+-- Name: native_maven_assets_digest_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_maven_assets_digest_idx ON public.native_maven_assets USING btree (digest);
+
+--
+-- Name: native_maven_commit_idempotency_retention_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_maven_commit_idempotency_retention_idx ON public.native_maven_commit_idempotency USING btree (expires_at);
 
 --
 -- Name: native_maven_object_intents_collect_idx; Type: INDEX; Schema: public; Owner: -
@@ -4865,6 +5704,18 @@ CREATE INDEX native_maven_object_intents_collect_idx ON public.native_maven_obje
 CREATE INDEX native_maven_object_intents_deleted_at_idx ON public.native_maven_object_intents USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
 
 --
+-- Name: native_maven_object_intents_session_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_maven_object_intents_session_id_fk_idx ON public.native_maven_object_intents USING btree (session_id);
+
+--
+-- Name: native_maven_object_references_repository_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_maven_object_references_repository_id_fk_idx ON public.native_maven_object_references USING btree (repository_id);
+
+--
 -- Name: native_maven_open_publisher_coordinate_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4877,10 +5728,34 @@ CREATE UNIQUE INDEX native_maven_open_publisher_coordinate_idx ON public.native_
 CREATE INDEX native_maven_publish_idempotency_expires_at_idx ON public.native_maven_publish_idempotency USING btree (expires_at);
 
 --
+-- Name: native_maven_publish_idempotency_session_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_maven_publish_idempotency_session_id_fk_idx ON public.native_maven_publish_idempotency USING btree (session_id);
+
+--
+-- Name: native_maven_publish_sessions_committed_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_maven_publish_sessions_committed_idx ON public.native_maven_publish_sessions USING btree (repository_id, coordinate, expires_at DESC) WHERE (state = 'committed'::text);
+
+--
+-- Name: native_maven_publish_sessions_repository_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_maven_publish_sessions_repository_id_fk_idx ON public.native_maven_publish_sessions USING btree (repository_id);
+
+--
 -- Name: native_maven_snapshot_client_receipt_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX native_maven_snapshot_client_receipt_idx ON public.native_maven_publish_sessions USING btree (repository_id, coordinate, publisher, client_timestamp, client_build_number) WHERE (client_timestamp <> ''::text);
+
+--
+-- Name: native_maven_snapshot_imports_session_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_maven_snapshot_imports_session_id_fk_idx ON public.native_maven_snapshot_imports USING btree (session_id);
 
 --
 -- Name: native_maven_source_snapshot_identity; Type: INDEX; Schema: public; Owner: -
@@ -4898,7 +5773,7 @@ CREATE INDEX native_npm_packages_name_idx ON public.native_npm_packages USING bt
 -- Name: native_npm_packages_name_trgm_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX native_npm_packages_name_trgm_idx ON public.native_npm_packages USING gin (name public.gin_trgm_ops) WHERE (NOT negative);
+CREATE INDEX native_npm_packages_name_trgm_idx ON public.native_npm_packages USING gin (name public.gin_trgm_ops) WITH (fastupdate='on', gin_pending_list_limit='1024') WHERE (NOT negative);
 
 --
 -- Name: native_npm_packages_proxy_expiry_idx; Type: INDEX; Schema: public; Owner: -
@@ -4922,7 +5797,7 @@ CREATE INDEX native_npm_versions_reclaim_idx ON public.native_npm_versions USING
 -- Name: native_npm_versions_visible_name_trgm_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX native_npm_versions_visible_name_trgm_idx ON public.native_npm_versions USING gin (package_name public.gin_trgm_ops) WHERE (state = 'visible'::text);
+CREATE INDEX native_npm_versions_visible_name_trgm_idx ON public.native_npm_versions USING gin (package_name public.gin_trgm_ops) WITH (fastupdate='on', gin_pending_list_limit='1024') WHERE (state = 'visible'::text);
 
 --
 -- Name: native_nuget_active_identity; Type: INDEX; Schema: public; Owner: -
@@ -4937,10 +5812,40 @@ CREATE UNIQUE INDEX native_nuget_active_identity ON public.native_nuget_publicat
 CREATE INDEX native_nuget_expiry ON public.native_nuget_publication_sessions USING btree (expires_at, id) WHERE (state = ANY (ARRAY['reserved'::text, 'staged'::text]));
 
 --
+-- Name: native_nuget_group_authorities_repository_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_nuget_group_authorities_repository_id_fk_idx ON public.native_nuget_group_authorities USING btree (repository_id);
+
+--
+-- Name: native_nuget_publication_sessions_repository_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_nuget_publication_sessions_repository_id_fk_idx ON public.native_nuget_publication_sessions USING btree (repository_id);
+
+--
 -- Name: native_nuget_replication_claim; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX native_nuget_replication_claim ON public.native_nuget_replication_jobs USING btree (created_at, id) WHERE (state = ANY (ARRAY['queued'::text, 'running'::text]));
+
+--
+-- Name: native_nuget_replication_items_target_session_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_nuget_replication_items_target_session_id_fk_idx ON public.native_nuget_replication_items USING btree (target_session_id);
+
+--
+-- Name: native_nuget_replication_jobs_source_repository_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_nuget_replication_jobs_source_repository_id_fk_idx ON public.native_nuget_replication_jobs USING btree (source_repository_id);
+
+--
+-- Name: native_nuget_replication_jobs_target_repository_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_nuget_replication_jobs_target_repository_id_fk_idx ON public.native_nuget_replication_jobs USING btree (target_repository_id);
 
 --
 -- Name: native_oci_manifests_created_at_brin_idx; Type: INDEX; Schema: public; Owner: -
@@ -4958,7 +5863,7 @@ CREATE INDEX native_oci_manifests_digest_search_idx ON public.native_oci_manifes
 -- Name: native_oci_manifests_name_trgm_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX native_oci_manifests_name_trgm_idx ON public.native_oci_manifests USING gin (name public.gin_trgm_ops);
+CREATE INDEX native_oci_manifests_name_trgm_idx ON public.native_oci_manifests USING gin (name public.gin_trgm_ops) WITH (fastupdate='on', gin_pending_list_limit='1024');
 
 --
 -- Name: native_oci_manifests_referrers_idx; Type: INDEX; Schema: public; Owner: -
@@ -4979,16 +5884,40 @@ CREATE INDEX native_oci_manifests_repository_name_pattern_idx ON public.native_o
 CREATE INDEX native_oci_object_intents_reclaimable_idx ON public.native_oci_object_intents USING btree (repository_id, created_at) WHERE ((repository_id IS NOT NULL) AND (claimed_at IS NULL) AND (collected_at IS NULL));
 
 --
+-- Name: native_oci_object_intents_repository_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_oci_object_intents_repository_id_fk_idx ON public.native_oci_object_intents USING btree (repository_id);
+
+--
 -- Name: native_oci_object_intents_unclaimed_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX native_oci_object_intents_unclaimed_idx ON public.native_oci_object_intents USING btree (created_at) WHERE ((claimed_at IS NULL) AND (collected_at IS NULL));
 
 --
+-- Name: native_oci_repository_blobs_digest_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_oci_repository_blobs_digest_fk_idx ON public.native_oci_repository_blobs USING btree (digest);
+
+--
+-- Name: native_oci_tags_repository_id_digest_name_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_oci_tags_repository_id_digest_name_fk_idx ON public.native_oci_tags USING btree (repository_id, digest, name);
+
+--
 -- Name: native_oci_uploads_expiry_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX native_oci_uploads_expiry_idx ON public.native_oci_uploads USING btree (expires_at) WHERE (state = 'open'::text);
+
+--
+-- Name: native_oci_uploads_repository_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_oci_uploads_repository_id_fk_idx ON public.native_oci_uploads USING btree (repository_id);
 
 --
 -- Name: native_pypi_files_digest_idx; Type: INDEX; Schema: public; Owner: -
@@ -5012,7 +5941,7 @@ CREATE INDEX native_pypi_files_reclaim_idx ON public.native_pypi_files USING btr
 -- Name: native_pypi_files_visible_project_trgm_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX native_pypi_files_visible_project_trgm_idx ON public.native_pypi_files USING gin (project public.gin_trgm_ops) WHERE (state = 'visible'::text);
+CREATE INDEX native_pypi_files_visible_project_trgm_idx ON public.native_pypi_files USING gin (project public.gin_trgm_ops) WITH (fastupdate='on', gin_pending_list_limit='1024') WHERE (state = 'visible'::text);
 
 --
 -- Name: native_raw_asset_tombstones_deleted_at_idx; Type: INDEX; Schema: public; Owner: -
@@ -5030,7 +5959,7 @@ CREATE INDEX native_raw_assets_digest_idx ON public.native_raw_assets USING btre
 -- Name: native_raw_assets_path_trgm_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX native_raw_assets_path_trgm_idx ON public.native_raw_assets USING gin (path public.gin_trgm_ops);
+CREATE INDEX native_raw_assets_path_trgm_idx ON public.native_raw_assets USING gin (path public.gin_trgm_ops) WITH (fastupdate='on', gin_pending_list_limit='1024');
 
 --
 -- Name: native_raw_assets_repository_digest_search_idx; Type: INDEX; Schema: public; Owner: -
@@ -5051,6 +5980,12 @@ CREATE INDEX native_raw_assets_repository_path_pattern_idx ON public.native_raw_
 CREATE INDEX native_raw_objects_reclaimable_idx ON public.native_raw_objects USING btree (repository_id, created_at) WHERE ((repository_id IS NOT NULL) AND (collected_at IS NULL));
 
 --
+-- Name: native_raw_objects_repository_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_raw_objects_repository_id_fk_idx ON public.native_raw_objects USING btree (repository_id);
+
+--
 -- Name: native_raw_uploads_open_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5061,6 +5996,12 @@ CREATE INDEX native_raw_uploads_open_idx ON public.native_raw_uploads USING btre
 --
 
 CREATE INDEX native_raw_uploads_reclaim_idx ON public.native_raw_uploads USING btree (expires_at, id) WHERE ((state = 'open'::text) OR ((state = ANY (ARRAY['completed'::text, 'cancelled'::text])) AND (collected_at IS NULL)));
+
+--
+-- Name: native_raw_uploads_repository_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_raw_uploads_repository_id_fk_idx ON public.native_raw_uploads USING btree (repository_id);
 
 --
 -- Name: native_rubygems_active_identity; Type: INDEX; Schema: public; Owner: -
@@ -5081,6 +6022,30 @@ CREATE INDEX native_rubygems_expiry ON public.native_rubygems_sessions USING btr
 CREATE INDEX native_rubygems_replication_claim ON public.native_rubygems_replication_jobs USING btree (created_at, id) WHERE (state = ANY (ARRAY['queued'::text, 'running'::text]));
 
 --
+-- Name: native_rubygems_replication_items_target_session_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_rubygems_replication_items_target_session_id_fk_idx ON public.native_rubygems_replication_items USING btree (target_session_id);
+
+--
+-- Name: native_rubygems_replication_jobs_source_repository_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_rubygems_replication_jobs_source_repository_id_fk_idx ON public.native_rubygems_replication_jobs USING btree (source_repository_id);
+
+--
+-- Name: native_rubygems_replication_jobs_target_repository_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_rubygems_replication_jobs_target_repository_id_fk_idx ON public.native_rubygems_replication_jobs USING btree (target_repository_id);
+
+--
+-- Name: native_rubygems_sessions_repository_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_rubygems_sessions_repository_id_fk_idx ON public.native_rubygems_sessions USING btree (repository_id);
+
+--
 -- Name: native_rubygems_visible_filename; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5091,6 +6056,12 @@ CREATE UNIQUE INDEX native_rubygems_visible_filename ON public.native_rubygems_s
 --
 
 CREATE INDEX nexus_migration_batches_claim ON public.nexus_migration_batches USING btree (state, created_at);
+
+--
+-- Name: nexus_migration_entries_retention_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX nexus_migration_entries_retention_idx ON public.nexus_migration_entries USING btree (updated_at);
 
 --
 -- Name: nexus_migration_schedule_occurrence; Type: INDEX; Schema: public; Owner: -
@@ -5105,16 +6076,52 @@ CREATE UNIQUE INDEX nexus_migration_schedule_occurrence ON public.nexus_migratio
 CREATE INDEX nexus_migration_schedules_due ON public.nexus_migration_schedules USING btree (next_run_at) WHERE (state = 'active'::text);
 
 --
+-- Name: oci_bound_objects_scope_owner_image_subject_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX oci_bound_objects_scope_owner_image_subject_fk_idx ON public.oci_bound_objects USING btree (scope, owner, image, subject);
+
+--
+-- Name: oci_bound_objects_source_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX oci_bound_objects_source_id_fk_idx ON public.oci_bound_objects USING btree (source_id);
+
+--
 -- Name: oci_discovery_snapshot_owner_expiry; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX oci_discovery_snapshot_owner_expiry ON public.oci_discovery_snapshots USING btree (owner, expires_at);
 
 --
+-- Name: oci_group_members_repository_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX oci_group_members_repository_id_fk_idx ON public.oci_group_members USING btree (repository_id);
+
+--
+-- Name: oci_subject_bindings_source_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX oci_subject_bindings_source_id_fk_idx ON public.oci_subject_bindings USING btree (source_id);
+
+--
+-- Name: raw_group_members_repository_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX raw_group_members_repository_id_fk_idx ON public.raw_group_members USING btree (repository_id);
+
+--
 -- Name: replication_checkpoints_pending_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX replication_checkpoints_pending_idx ON public.replication_checkpoints USING btree (plan_id, state, updated_at);
+
+--
+-- Name: replication_checkpoints_retention_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX replication_checkpoints_retention_idx ON public.replication_checkpoints USING btree (updated_at);
 
 --
 -- Name: replication_checkpoints_updated_at_brin_idx; Type: INDEX; Schema: public; Owner: -
@@ -5129,10 +6136,46 @@ CREATE INDEX replication_checkpoints_updated_at_brin_idx ON public.replication_c
 CREATE INDEX replication_plans_claim_idx ON public.replication_plans USING btree (created_at) WHERE (state = ANY (ARRAY['pending'::text, 'failed'::text]));
 
 --
+-- Name: replication_plans_retention_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX replication_plans_retention_idx ON public.replication_plans USING btree (completed_at) WHERE (state = ANY (ARRAY['completed'::text, 'failed'::text, 'cancelled'::text]));
+
+--
 -- Name: replication_plans_retry_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX replication_plans_retry_idx ON public.replication_plans USING btree (next_attempt_at, created_at) WHERE (state = ANY (ARRAY['pending'::text, 'failed'::text]));
+
+--
+-- Name: replication_plans_source_repository_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX replication_plans_source_repository_id_fk_idx ON public.replication_plans USING btree (source_repository_id);
+
+--
+-- Name: repository_quota_alert_events_delivery_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX repository_quota_alert_events_delivery_id_fk_idx ON public.repository_quota_alert_events USING btree (delivery_id);
+
+--
+-- Name: repository_quota_alert_events_retention_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX repository_quota_alert_events_retention_idx ON public.repository_quota_alert_events USING btree (created_at);
+
+--
+-- Name: repository_quota_alert_events_target_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX repository_quota_alert_events_target_id_fk_idx ON public.repository_quota_alert_events USING btree (target_id);
+
+--
+-- Name: repository_quota_alert_rules_target_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX repository_quota_alert_rules_target_id_fk_idx ON public.repository_quota_alert_rules USING btree (target_id);
 
 --
 -- Name: repository_quota_rule_due; Type: INDEX; Schema: public; Owner: -
@@ -5147,34 +6190,46 @@ CREATE INDEX repository_quota_rule_due ON public.repository_quota_alert_rules US
 CREATE UNIQUE INDEX repository_quota_rule_scope ON public.repository_quota_alert_rules USING btree (repository_id) WHERE (NOT deleted);
 
 --
--- Name: resolver_audit_log_group_occurred_at_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: repository_request_rollup_bucket_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX resolver_audit_log_group_occurred_at_idx ON public.resolver_audit_log USING btree (group_name, occurred_at DESC);
+CREATE INDEX repository_request_rollup_bucket_idx ON public.repository_request_rollup USING btree (bucket_start);
 
 --
--- Name: resolver_audit_log_occurred_at_brin_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: repository_request_rollup_retention_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX resolver_audit_log_occurred_at_brin_idx ON public.resolver_audit_log USING brin (occurred_at) WITH (pages_per_range='128');
+CREATE INDEX repository_request_rollup_retention_idx ON public.repository_request_rollup USING btree (bucket_start);
 
 --
--- Name: resolver_audit_log_occurred_at_id_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: repository_vex_document_repository_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX resolver_audit_log_occurred_at_id_idx ON public.resolver_audit_log USING btree (occurred_at DESC, id DESC);
+CREATE INDEX repository_vex_document_repository_idx ON public.repository_vex_document USING btree (repository_id, created_at DESC, id);
 
 --
--- Name: resolver_audit_log_occurred_at_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: resolver_audit_log_actor_occurred_at_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX resolver_audit_log_occurred_at_idx ON public.resolver_audit_log USING btree (occurred_at);
+CREATE INDEX resolver_audit_log_actor_occurred_at_idx ON ONLY public.resolver_audit_log USING btree (actor, occurred_at DESC);
+
+--
+-- Name: resolver_audit_log_default_actor_occurred_at_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX resolver_audit_log_default_actor_occurred_at_idx ON public.resolver_audit_log_default USING btree (actor, occurred_at DESC);
 
 --
 -- Name: resolver_audit_log_repository_occurred_at_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX resolver_audit_log_repository_occurred_at_idx ON public.resolver_audit_log USING btree (repository, occurred_at DESC);
+CREATE INDEX resolver_audit_log_repository_occurred_at_idx ON ONLY public.resolver_audit_log USING btree (repository, occurred_at DESC);
+
+--
+-- Name: resolver_audit_log_default_repository_occurred_at_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX resolver_audit_log_default_repository_occurred_at_idx ON public.resolver_audit_log_default USING btree (repository, occurred_at DESC);
 
 --
 -- Name: runtime_node_sessions_instance_idx; Type: INDEX; Schema: public; Owner: -
@@ -5189,10 +6244,40 @@ CREATE INDEX runtime_node_sessions_instance_idx ON public.runtime_node_sessions 
 CREATE INDEX runtime_node_sessions_last_seen_idx ON public.runtime_node_sessions USING btree (last_seen_at DESC);
 
 --
+-- Name: runtime_node_sessions_retention_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX runtime_node_sessions_retention_idx ON public.runtime_node_sessions USING btree (stopped_at) WHERE (stopped_at IS NOT NULL);
+
+--
 -- Name: runtime_nodes_last_seen_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX runtime_nodes_last_seen_idx ON public.runtime_nodes USING btree (last_seen_at DESC);
+
+--
+-- Name: saml_assertion_ids_expires_at_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX saml_assertion_ids_expires_at_idx ON public.saml_assertion_ids USING btree (expires_at);
+
+--
+-- Name: saml_request_state_expires_at_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX saml_request_state_expires_at_idx ON public.saml_request_state USING btree (expires_at);
+
+--
+-- Name: scanner_db_generation_kind_built_at_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX scanner_db_generation_kind_built_at_idx ON public.scanner_db_generation USING btree (kind, built_at DESC);
+
+--
+-- Name: scheduled_task_runs_retention_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX scheduled_task_runs_retention_idx ON public.scheduled_task_runs USING btree (created_at);
 
 --
 -- Name: scheduled_task_runs_task_idx; Type: INDEX; Schema: public; Owner: -
@@ -5213,10 +6298,64 @@ CREATE INDEX scheduled_tasks_due_idx ON public.scheduled_tasks USING btree (next
 CREATE UNIQUE INDEX scheduled_tasks_name_idx ON public.scheduled_tasks USING btree (lower(name));
 
 --
+-- Name: scheduled_tasks_repository_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX scheduled_tasks_repository_id_fk_idx ON public.scheduled_tasks USING btree (repository_id);
+
+--
+-- Name: security_audit_log_actor_occurred_at_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX security_audit_log_actor_occurred_at_idx ON ONLY public.security_audit_log USING btree (actor, occurred_at DESC);
+
+--
+-- Name: security_audit_log_default_actor_occurred_at_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX security_audit_log_default_actor_occurred_at_idx ON public.security_audit_log_default USING btree (actor, occurred_at DESC);
+
+--
+-- Name: security_audit_log_repository_occurred_at_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX security_audit_log_repository_occurred_at_idx ON ONLY public.security_audit_log USING btree (repository, occurred_at DESC);
+
+--
+-- Name: security_audit_log_default_repository_occurred_at_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX security_audit_log_default_repository_occurred_at_idx ON public.security_audit_log_default USING btree (repository, occurred_at DESC);
+
+--
 -- Name: service_accounts_name_unique_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX service_accounts_name_unique_idx ON public.service_accounts USING btree (lower(name));
+
+--
+-- Name: token_signing_keys_one_active_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX token_signing_keys_one_active_idx ON public.token_signing_keys USING btree (alg) WHERE (state = 'active'::text);
+
+--
+-- Name: token_signing_keys_one_next_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX token_signing_keys_one_next_idx ON public.token_signing_keys USING btree (alg) WHERE (state = 'next'::text);
+
+--
+-- Name: user_identities_provider_scim_external_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX user_identities_provider_scim_external_id_idx ON public.user_identities USING btree (provider_id, scim_external_id) WHERE (scim_external_id IS NOT NULL);
+
+--
+-- Name: user_identities_provider_subject_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX user_identities_provider_subject_idx ON public.user_identities USING btree (provider_id, subject) WHERE (subject IS NOT NULL);
 
 --
 -- Name: user_identities_user_idx; Type: INDEX; Schema: public; Owner: -
@@ -5237,6 +6376,12 @@ CREATE INDEX user_sessions_expiry_idx ON public.user_sessions USING btree (expir
 CREATE INDEX user_sessions_user_active_idx ON public.user_sessions USING btree (user_id, created_at DESC, id) WHERE (revoked_at IS NULL);
 
 --
+-- Name: user_sessions_user_id_fk_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX user_sessions_user_id_fk_idx ON public.user_sessions USING btree (user_id);
+
+--
 -- Name: users_management_filter_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5255,16 +6400,82 @@ CREATE UNIQUE INDEX users_name_case_insensitive_idx ON public.users USING btree 
 CREATE INDEX webhook_deliveries_actionable_idx ON public.webhook_deliveries USING btree (COALESCE(next_attempt_at, lease_expires_at), created_at) WHERE (state = ANY (ARRAY['pending'::text, 'retrying'::text, 'delivering'::text]));
 
 --
+-- Name: webhook_deliveries_retention_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX webhook_deliveries_retention_idx ON public.webhook_deliveries USING btree (updated_at) WHERE (state = ANY (ARRAY['succeeded'::text, 'dead'::text]));
+
+--
 -- Name: webhook_deliveries_subscription_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX webhook_deliveries_subscription_idx ON public.webhook_deliveries USING btree (subscription_id, created_at DESC);
 
 --
--- Name: native_apt_assets apt_asset_capacity_check; Type: TRIGGER; Schema: public; Owner: -
+-- Name: workload_jti_seen_expires_at_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE TRIGGER apt_asset_capacity_check AFTER INSERT OR UPDATE ON public.native_apt_assets FOR EACH ROW EXECUTE FUNCTION public.assert_apt_repository_capacity_trigger();
+CREATE INDEX workload_jti_seen_expires_at_idx ON public.workload_jti_seen USING btree (expires_at);
+
+--
+-- Name: workload_trust_policies_issuer_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX workload_trust_policies_issuer_idx ON public.workload_trust_policies USING btree (issuer_id, state);
+
+--
+-- Name: workload_trust_policies_service_account_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX workload_trust_policies_service_account_idx ON public.workload_trust_policies USING btree (service_account_id);
+
+--
+-- Name: artifact_scan_history_default_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.artifact_scan_history_pkey ATTACH PARTITION public.artifact_scan_history_default_pkey;
+
+--
+-- Name: artifact_scan_history_default_repository_id_artifact_digest_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.artifact_scan_history_artifact_idx ATTACH PARTITION public.artifact_scan_history_default_repository_id_artifact_digest_idx;
+
+--
+-- Name: resolver_audit_log_default_actor_occurred_at_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.resolver_audit_log_actor_occurred_at_idx ATTACH PARTITION public.resolver_audit_log_default_actor_occurred_at_idx;
+
+--
+-- Name: resolver_audit_log_default_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.resolver_audit_log_pkey ATTACH PARTITION public.resolver_audit_log_default_pkey;
+
+--
+-- Name: resolver_audit_log_default_repository_occurred_at_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.resolver_audit_log_repository_occurred_at_idx ATTACH PARTITION public.resolver_audit_log_default_repository_occurred_at_idx;
+
+--
+-- Name: security_audit_log_default_actor_occurred_at_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.security_audit_log_actor_occurred_at_idx ATTACH PARTITION public.security_audit_log_default_actor_occurred_at_idx;
+
+--
+-- Name: security_audit_log_default_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.security_audit_log_pkey ATTACH PARTITION public.security_audit_log_default_pkey;
+
+--
+-- Name: security_audit_log_default_repository_occurred_at_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.security_audit_log_repository_occurred_at_idx ATTACH PARTITION public.security_audit_log_default_repository_occurred_at_idx;
 
 --
 -- Name: audit_cleanup_jobs audit_cleanup_jobs_notify_insert; Type: TRIGGER; Schema: public; Owner: -
@@ -5285,40 +6496,10 @@ CREATE TRIGGER audit_cleanup_jobs_notify_update AFTER UPDATE OF state ON public.
 CREATE TRIGGER cargo_promotion_state_webhook_after_update AFTER UPDATE ON public.lifecycle_jobs FOR EACH ROW EXECUTE FUNCTION public.cargo_promotion_state_webhook();
 
 --
--- Name: native_cargo_publications cargo_publication_capacity_check; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER cargo_publication_capacity_check AFTER INSERT ON public.native_cargo_publications FOR EACH ROW EXECUTE FUNCTION public.assert_cargo_repository_capacity();
-
---
 -- Name: replication_plans cargo_replication_state_webhook_after_update; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER cargo_replication_state_webhook_after_update AFTER UPDATE ON public.replication_plans FOR EACH ROW EXECUTE FUNCTION public.cargo_replication_state_webhook();
-
---
--- Name: native_conan_assets conan_asset_capacity_check; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER conan_asset_capacity_check AFTER INSERT OR UPDATE ON public.native_conan_assets FOR EACH ROW EXECUTE FUNCTION public.assert_hosted_repository_capacity_trigger();
-
---
--- Name: native_conan_package_revisions conan_package_capacity_check; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER conan_package_capacity_check AFTER INSERT OR UPDATE OF state ON public.native_conan_package_revisions FOR EACH ROW EXECUTE FUNCTION public.assert_hosted_repository_capacity_trigger();
-
---
--- Name: native_conan_recipe_revisions conan_recipe_capacity_check; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER conan_recipe_capacity_check AFTER INSERT OR UPDATE OF state ON public.native_conan_recipe_revisions FOR EACH ROW EXECUTE FUNCTION public.assert_hosted_repository_capacity_trigger();
-
---
--- Name: native_go_assets go_asset_capacity_check; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER go_asset_capacity_check AFTER INSERT OR UPDATE ON public.native_go_assets FOR EACH ROW EXECUTE FUNCTION public.assert_hosted_repository_capacity_trigger();
 
 --
 -- Name: hosted_repositories hosted_repositories_deletion_notify; Type: TRIGGER; Schema: public; Owner: -
@@ -5330,55 +6511,13 @@ CREATE TRIGGER hosted_repositories_deletion_notify AFTER UPDATE OF state ON publ
 -- Name: lifecycle_jobs lifecycle_jobs_notify_insert; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER lifecycle_jobs_notify_insert AFTER INSERT ON public.lifecycle_jobs FOR EACH ROW WHEN ((new.state = ANY (ARRAY['pending'::text, 'retrying'::text]))) EXECUTE FUNCTION public.notarx_notify_queue('notarx_lifecycle_jobs');
+CREATE TRIGGER lifecycle_jobs_notify_insert AFTER INSERT ON public.lifecycle_jobs FOR EACH ROW WHEN ((new.state = ANY (ARRAY['pending'::text, 'retrying'::text]))) EXECUTE FUNCTION public.notarx_notify_job_kind();
 
 --
 -- Name: lifecycle_jobs lifecycle_jobs_notify_update; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER lifecycle_jobs_notify_update AFTER UPDATE OF state, next_attempt_at ON public.lifecycle_jobs FOR EACH ROW WHEN (((new.state = ANY (ARRAY['pending'::text, 'retrying'::text])) AND (old.state IS DISTINCT FROM new.state))) EXECUTE FUNCTION public.notarx_notify_queue('notarx_lifecycle_jobs');
-
---
--- Name: native_maven_artifacts maven_artifact_capacity_check; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER maven_artifact_capacity_check AFTER INSERT OR UPDATE OF state ON public.native_maven_artifacts FOR EACH ROW EXECUTE FUNCTION public.assert_hosted_repository_capacity_trigger();
-
---
--- Name: native_maven_assets maven_asset_capacity_check; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER maven_asset_capacity_check AFTER INSERT OR UPDATE ON public.native_maven_assets FOR EACH ROW EXECUTE FUNCTION public.assert_hosted_repository_capacity_trigger();
-
---
--- Name: native_npm_versions npm_version_capacity_check; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER npm_version_capacity_check AFTER INSERT OR UPDATE ON public.native_npm_versions FOR EACH ROW EXECUTE FUNCTION public.assert_hosted_repository_capacity_trigger();
-
---
--- Name: native_oci_repository_blobs oci_blob_capacity_check; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER oci_blob_capacity_check AFTER INSERT OR UPDATE ON public.native_oci_repository_blobs FOR EACH ROW EXECUTE FUNCTION public.assert_hosted_repository_capacity_trigger();
-
---
--- Name: native_oci_manifests oci_manifest_capacity_check; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER oci_manifest_capacity_check AFTER INSERT OR UPDATE ON public.native_oci_manifests FOR EACH ROW EXECUTE FUNCTION public.assert_hosted_repository_capacity_trigger();
-
---
--- Name: native_pypi_files pypi_file_capacity_check; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER pypi_file_capacity_check AFTER INSERT OR UPDATE ON public.native_pypi_files FOR EACH ROW EXECUTE FUNCTION public.assert_hosted_repository_capacity_trigger();
-
---
--- Name: native_raw_assets raw_asset_capacity_check; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER raw_asset_capacity_check AFTER INSERT OR UPDATE ON public.native_raw_assets FOR EACH ROW EXECUTE FUNCTION public.assert_hosted_repository_capacity_trigger();
+CREATE TRIGGER lifecycle_jobs_notify_update AFTER UPDATE OF state, next_attempt_at ON public.lifecycle_jobs FOR EACH ROW WHEN (((new.state = ANY (ARRAY['pending'::text, 'retrying'::text])) AND (old.state IS DISTINCT FROM new.state))) EXECUTE FUNCTION public.notarx_notify_job_kind();
 
 --
 -- Name: replication_plans replication_plans_notify_insert; Type: TRIGGER; Schema: public; Owner: -
@@ -5393,10 +6532,10 @@ CREATE TRIGGER replication_plans_notify_insert AFTER INSERT ON public.replicatio
 CREATE TRIGGER replication_plans_notify_update AFTER UPDATE OF state, next_attempt_at ON public.replication_plans FOR EACH ROW WHEN (((new.state = 'pending'::text) AND (old.state IS DISTINCT FROM new.state))) EXECUTE FUNCTION public.notarx_notify_queue('notarx_replication_plans');
 
 --
--- Name: repository_capacity_quotas repository_capacity_quota_check; Type: TRIGGER; Schema: public; Owner: -
+-- Name: webhook_deliveries webhook_deliveries_notify_insert; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER repository_capacity_quota_check AFTER INSERT OR UPDATE OF quota_bytes ON public.repository_capacity_quotas FOR EACH ROW EXECUTE FUNCTION public.assert_hosted_repository_capacity_trigger();
+CREATE TRIGGER webhook_deliveries_notify_insert AFTER INSERT ON public.webhook_deliveries FOR EACH ROW WHEN ((new.state = 'pending'::text)) EXECUTE FUNCTION public.notarx_notify_queue('notarx_deliveries');
 
 --
 -- Name: api_keys api_keys_service_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
@@ -6337,6 +7476,13 @@ ALTER TABLE ONLY public.repository_security_policies
     ADD CONSTRAINT repository_security_policies_repository_id_fkey FOREIGN KEY (repository_id) REFERENCES public.hosted_repositories(id) ON DELETE CASCADE;
 
 --
+-- Name: repository_usage_counters repository_usage_counters_repository_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.repository_usage_counters
+    ADD CONSTRAINT repository_usage_counters_repository_id_fkey FOREIGN KEY (repository_id) REFERENCES public.hosted_repositories(id) ON DELETE CASCADE;
+
+--
 -- Name: scheduled_task_runs scheduled_task_runs_task_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6349,6 +7495,13 @@ ALTER TABLE ONLY public.scheduled_task_runs
 
 ALTER TABLE ONLY public.scheduled_tasks
     ADD CONSTRAINT scheduled_tasks_repository_id_fkey FOREIGN KEY (repository_id) REFERENCES public.hosted_repositories(id) ON DELETE CASCADE;
+
+--
+-- Name: user_identities user_identities_provider_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_identities
+    ADD CONSTRAINT user_identities_provider_id_fkey FOREIGN KEY (provider_id) REFERENCES public.identity_providers(id);
 
 --
 -- Name: user_identities user_identities_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
@@ -6378,22 +7531,37 @@ ALTER TABLE ONLY public.webhook_deliveries
 ALTER TABLE ONLY public.webhook_deliveries
     ADD CONSTRAINT webhook_deliveries_subscription_id_fkey FOREIGN KEY (subscription_id) REFERENCES public.webhook_subscriptions(id) ON DELETE CASCADE;
 
+--
+-- Name: workload_trust_policies workload_trust_policies_issuer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.workload_trust_policies
+    ADD CONSTRAINT workload_trust_policies_issuer_id_fkey FOREIGN KEY (issuer_id) REFERENCES public.workload_issuers(id);
+
+--
+-- Name: workload_trust_policies workload_trust_policies_service_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.workload_trust_policies
+    ADD CONSTRAINT workload_trust_policies_service_account_id_fkey FOREIGN KEY (service_account_id) REFERENCES public.service_accounts(id);
+
 
 -- seed: singleton rows the code expects to exist (ADR 0015, step 5).
 --
 -- Only rows of an empty installation are seeded. Backfills of pre-existing rows
--- (native OCI tombstones, repository grants, cargo webhook ids) and the
+-- (native OCI tombstones, repository grants, cargo webhook ids, visibility,
+-- identity providers, usage counters and rollups) and the
 -- skipped_existing branch of the presets seed do not apply to a fresh database.
 -- Data backfills belong in later numbered migrations, never in this baseline.
 
--- Originating migration: 000049_audit_retention.sql
+-- Originating migration: 000049_audit_retention.sql (defaults raised by 000008_retention_janitor.sql: enabled, 90 days)
 INSERT INTO public.audit_retention_policy (singleton) VALUES (true) ON CONFLICT DO NOTHING;
 
--- Originating migration: 000055_anonymous_access_policy.sql
--- Anonymous read stays disabled: enabled defaults to false.
-INSERT INTO public.anonymous_access_policy (singleton) VALUES (true) ON CONFLICT DO NOTHING;
+-- Originating migration: 000055_ (the instance public-access switch, renamed by 000006_repository_visibility.sql)
+-- Public access stays disabled: enabled defaults to false.
+INSERT INTO public.public_access_policy (singleton) VALUES (true) ON CONFLICT DO NOTHING;
 
--- Originating migration: 000107_site_settings.sql
+-- Originating migration: 000107_site_settings.sql (notarx defaults by 000013_brand_defaults.sql)
 INSERT INTO public.site_settings (singleton) VALUES (true) ON CONFLICT (singleton) DO NOTHING;
 
 -- Originating migration: 000174_installation_repository_presets.sql
@@ -6401,3 +7569,7 @@ INSERT INTO public.site_settings (singleton) VALUES (true) ON CONFLICT (singleto
 INSERT INTO public.installation_repository_presets (singleton, catalog_version, state)
 VALUES (true, 'standard-v1', 'pending')
 ON CONFLICT (singleton) DO NOTHING;
+
+-- Originating migration: 000016_token_signing_keys.sql
+-- The deployment identifier is generated once per installation.
+INSERT INTO public.settings (key, value) VALUES ('deployment_id', gen_random_uuid()::text) ON CONFLICT (key) DO NOTHING;

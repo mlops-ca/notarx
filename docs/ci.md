@@ -177,7 +177,7 @@ upgrade path from upstream. `scripts/upgrade-readiness.sh` (kept, with its make
 target) is parameterized on stable notarx release tags and reports a no-op until
 one exists; re-add the CI step once a second notarx release exists.
 `make backup-transfer-test` (lane `core-backup`) runs the same upgrade properties
-against the real migrations and a synthetic `000008` migration meanwhile.
+against the baseline and a synthetic `000002` migration meanwhile.
 
 ## Object store contract
 
@@ -271,17 +271,6 @@ It always enforces unique, gap-free, snake_case migration names. Once a stable
 `vX.Y.Z` tag exists it also fails any diff of a released migration against the
 latest stable tag; nightly tags are ignored. `make test` runs the script's bash
 fixtures.
-
-The temporary `baseline-equivalence` workflow
-(`.github/workflows/baseline-equivalence.yml`, ADR 0015 slice 3) runs on pull
-requests that touch `migrations/000001_baseline.sql` or the baseline tooling
-(an ordinary `000002+` migration does not trigger it; the script refuses a source
-chain that is only the baseline itself). On linux/amd64
-and linux/arm64 native runners it proves `migrations/000001_baseline.sql`
-equivalent to the migration chain at the pull request base (schema dump, data dump,
-catalogs, no PUBLIC privileges), then runs `make integration-test` and the
-`core-native-e2e`, `nuget`, `helm`, `rubygems` and `oci-discovery` lanes against
-the baseline. It is not part of `ci-ok` and is removed with the re-squash.
 
 Run `bash scripts/ci-changes-test.sh` to check the classifier fixtures.
 

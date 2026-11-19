@@ -247,7 +247,7 @@ reviewable. The lane runner controls run with
 `python3 -B -m unittest discover -s scripts/tests -p test_ci_contract.py`.
 A failing lane uploads `contract-<lane>-<attempt>` with its step logs and raw
 producer reports. `upgrade-readiness` is not run in CI until a stable notarx release tag exists (ADR
-0015); `make backup-transfer-test` runs the baseline-plus-synthetic-`000004`
+0015); `make backup-transfer-test` runs the baseline-plus-synthetic-`000002`
 upgrade fixture meanwhile.
 
 ## Documentation conventions
@@ -379,13 +379,14 @@ Rules (ADR 0015):
   drop or rename only objects that the previous minor release no longer reads.
   There is no Down section.
 - Data backfills live in numbered migrations, never in the baseline. The
-  baseline seeds only the four singleton rows the code expects.
+  baseline seeds only the singleton rows the code expects.
 - `pg_trgm` is required (trigram indexes). `make preflight` and the migration
   runner check that the extension is installed or creatable before the first
   statement.
 - Before the first stable release (`vX.Y.Z`, ADR 0024) databases are disposable:
-  the baseline is regenerated once before the tag, and you recreate your
-  development database. After that tag, released migrations are immutable.
+  the baseline was re-squashed from the whole chain just before the tag (ADR
+  0015 slice 7), so a database created earlier must be recreated. After that
+  tag, released migrations are immutable.
 
 `make migration-check` (`scripts/migration-immutability-check.sh`) runs in CI
 and in `make preflight`. It always rejects duplicate, out-of-sequence or gapped
