@@ -141,7 +141,7 @@ func TestPostgresIdentityProviderSeedIsNoOpWhenProvidersExist(t *testing.T) {
 	}
 }
 
-// TestIdentityProviderMigrationCopiesOIDCSettings replays migration 000016 over the
+// TestIdentityProviderMigrationCopiesOIDCSettings replays migration 000017 over the
 // pre-migration shape inside a rolled-back transaction: the oidc_settings singleton becomes
 // the 'default' provider with its sealed secret and version (a trailing slash on the saved
 // issuer does not stop stored identities from binding to it), identities keep their links,
@@ -149,7 +149,7 @@ func TestPostgresIdentityProviderSeedIsNoOpWhenProvidersExist(t *testing.T) {
 // default becomes 'member'.
 func TestIdentityProviderMigrationCopiesOIDCSettings(t *testing.T) {
 	store := openProviderStore(t)
-	migration, err := os.ReadFile("../../migrations/000016_identity_providers.sql")
+	migration, err := os.ReadFile("../../migrations/000017_identity_providers.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
