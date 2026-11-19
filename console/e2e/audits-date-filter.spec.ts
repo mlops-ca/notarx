@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { authenticateAsAdmin } from "./support/auth";
+import { openSelect } from "./support/motion";
 import { mockDefaultSiteSettings } from "./support/siteSettings";
 
 async function mockAudits(page: Page) {
@@ -169,10 +170,10 @@ test("audit refresh failure retains the previously loaded records", async ({
   const operationFilter = page.getByRole("combobox", {
     name: "Operation",
   });
-  await operationFilter.click();
+  const operationDropdown = await openSelect(page, operationFilter);
   await operationFilter.fill("repository.grants.upsert");
   await expect(
-    page.locator(".ant-select-item-option").filter({
+    operationDropdown.locator(".ant-select-item-option").filter({
       hasText: "Upsert repository grant",
     }),
   ).toBeVisible();

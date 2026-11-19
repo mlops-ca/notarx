@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { waitForModalOpen } from "./support/motion";
+import { openSelect, waitForModalOpen } from "./support/motion";
 
 /**
  * Operations against a live Gateway: each tab loads on its own, including
@@ -89,8 +89,11 @@ test("a scheduled task is created, paused, run, and deleted", async ({
     const dialog = page.getByRole("dialog", { name: "New scheduled task" });
     await waitForModalOpen(dialog);
     await dialog.getByPlaceholder("e.g. Daily snapshot cleanup").fill(name);
-    await dialog.getByRole("combobox").nth(1).click();
-    await page
+    const repositoryDropdown = await openSelect(
+      page,
+      dialog.getByRole("combobox").nth(1),
+    );
+    await repositoryDropdown
       .locator(".ant-select-item-option")
       .filter({ hasText: repositoryName })
       .click();

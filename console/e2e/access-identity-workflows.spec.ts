@@ -4,7 +4,7 @@ import {
   type APIRequestContext,
   type Page,
 } from "@playwright/test";
-import { waitForModalOpen } from "./support/motion";
+import { openSelect, waitForModalOpen } from "./support/motion";
 
 /**
  * Write flows of the access and identity pages against a live Gateway. Every
@@ -110,16 +110,22 @@ test("a repository grant is created, edited from Access Control, and removed", a
     .click();
   const dialog = page.getByRole("dialog", { name: "Add grant" });
   await waitForModalOpen(dialog);
-  await dialog.getByRole("combobox", { name: "Principal" }).click();
+  const principalDropdown = await openSelect(
+    page,
+    dialog.getByRole("combobox", { name: "Principal" }),
+  );
   await page.keyboard.type(grantAccountName);
   // Rich option labels: Ant Design names the accessible option by its value,
   // so pick the visible row that shows the account name.
-  await page
+  await principalDropdown
     .locator(".ant-select-item-option")
     .filter({ hasText: grantAccountName })
     .click();
-  await dialog.getByRole("combobox", { name: "Permission" }).click();
-  await page
+  const permissionDropdown = await openSelect(
+    page,
+    dialog.getByRole("combobox", { name: "Permission" }),
+  );
+  await permissionDropdown
     .locator(".ant-select-item-option")
     .filter({ hasText: "Read · browse / pull" })
     .click();
@@ -140,8 +146,11 @@ test("a repository grant is created, edited from Access Control, and removed", a
   await grantRow.getByRole("button", { name: /^Edit$/ }).click();
   const editor = page.getByRole("dialog", { name: "Edit grant" });
   await waitForModalOpen(editor);
-  await editor.getByRole("combobox", { name: "Permission" }).click();
-  await page
+  const editPermissionDropdown = await openSelect(
+    page,
+    editor.getByRole("combobox", { name: "Permission" }),
+  );
+  await editPermissionDropdown
     .locator(".ant-select-item-option")
     .filter({ hasText: "Write · publish / edit" })
     .click();
@@ -282,8 +291,11 @@ test("a custom role feeds a template that is applied to a repository", async ({
   });
   await waitForModalOpen(roleDialog);
   await roleDialog.getByLabel("Role name").fill(roleName);
-  await roleDialog.getByLabel("Permissions").click();
-  await page
+  const rolePermissions = await openSelect(
+    page,
+    roleDialog.getByLabel("Permissions"),
+  );
+  await rolePermissions
     .locator(".ant-select-item-option")
     .filter({ hasText: "Write" })
     .click();
@@ -307,8 +319,14 @@ test("a custom role feeds a template that is applied to a repository", async ({
   await waitForModalOpen(editor);
   await editor.getByPlaceholder("Template name").fill(templateName);
   await editor.getByRole("combobox").first().fill(principal);
-  await editor.getByText("Custom permissions").click();
-  await page
+  const roleDropdown = await openSelect(
+    page,
+    editor
+      .locator(".ant-select")
+      .filter({ hasText: "Custom permissions" })
+      .getByRole("combobox"),
+  );
+  await roleDropdown
     .locator(".ant-select-item-option")
     .filter({ hasText: roleName })
     .click();
@@ -322,9 +340,9 @@ test("a custom role feeds a template that is applied to a repository", async ({
     name: "Apply authorization template",
   });
   await waitForModalOpen(apply);
-  await apply.getByRole("combobox").click();
+  const applyDropdown = await openSelect(page, apply.getByRole("combobox"));
   await page.keyboard.type(repositoryName);
-  await page
+  await applyDropdown
     .locator(".ant-select-item-option")
     .filter({ hasText: repositoryName })
     .click();
@@ -412,9 +430,12 @@ test("the user drawer saves a profile and adds, narrows, and removes a repositor
 
   const editor = page.getByRole("dialog", { name: "Add repository grant" });
   await waitForModalOpen(editor);
-  await editor.getByRole("combobox").first().click();
+  const grantRepositoryDropdown = await openSelect(
+    page,
+    editor.getByRole("combobox").first(),
+  );
   await page.keyboard.type(repositoryName);
-  await page
+  await grantRepositoryDropdown
     .locator(".ant-select-item-option")
     .filter({ hasText: repositoryName })
     .click();
