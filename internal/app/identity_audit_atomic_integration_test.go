@@ -195,3 +195,28 @@ func TestPostgresDistributionMutationsRollBackWithTheirAudit(t *testing.T) {
 		restores = nil
 	})
 }
+
+// TestPostgresQuotaAlertRuleMutationsRollBackWithTheirAudit makes every insert into
+// security_audit_log by the management actor fail and drives the quota alert rule handlers:
+// none may leave its change behind (ADR 0023 section 1).
+func TestPostgresQuotaAlertRuleMutationsRollBackWithTheirAudit(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is required for PostgreSQL integration tests")
+	}
+	store, err := repository.NewPostgresStore(databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = store.Close() }()
+	db, err := database.OpenPostgres(databaseURL, database.DefaultPoolConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	var restore func()
+	runQuotaAlertAuditRollback(t, store, func() {
+		// testAuthenticator's administrator acts as "alice"; management audits name no repository.
+		restore = testsupport.FailSecurityAudits(t, db, "", "alice")
+	}, func() { restore() }, func(id string) { testsupport.PurgeRepository(t, db, id) })
+}

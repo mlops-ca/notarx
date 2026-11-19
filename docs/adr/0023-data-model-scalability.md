@@ -35,7 +35,7 @@ estimate until slice 17 produces numbers.
   audit rows per call; `QueryArtifactUsage` uses `strpos`, `COUNT(*)` and `OFFSET`
   (`postgres_artifact_usage.go:29`); `ListAuditPage` (`postgres_audit.go:103`)
   uses `($n='' OR col=$n)` catch-alls with no actor or outcome index.
-- **Quota triggers.** `assert_hosted_repository_capacity` (`000046`, bodies
+- **Quota triggers** (dropped by migration `000014` once every format reserved through `capacity.Reserve`). `assert_hosted_repository_capacity` (`000046`, bodies
   replaced in `000076`, `000080`, `000081`, `000090`, `000110`, `000126`,
   `000131`) runs `SELECT ... FOR UPDATE` on the quota row and then `SUM()`s the
   whole repository from `AFTER INSERT OR UPDATE ... FOR EACH ROW` triggers:
@@ -703,7 +703,7 @@ v0.1.0 land after the cut-over and before ADR 0015 slice 7 (re-squash).
    - [ ] the slice starts with an inventory of every hosted format and its quota coverage; every hosted format store calls `Reserve` and has the per-format equality test (publish, replace, delete, re-publish) against the reconciler query, and the format registry test fails for a hosted format without coverage
    - [ ] formats added later by ADRs 0026 to 0028 call `Reserve` in their own slices (their acceptance criteria cite this test)
    - [ ] concurrent publishes at the quota edge reject exactly the overflow; 1M-row repository publish is O(1) (plan assertion)
-   - [ ] ADR 0022 slice 7 `AssertRepositoryCapacity` is superseded by `Reserve`
+   - [ ] ADR 0022 slice 7 `AssertRepositoryCapacity` is superseded by `Reserve` (migration `000014_drop_capacity_triggers.sql` drops the capacity triggers and functions once every format is covered)
    - Depends on: slices 2a, 2b, 3a-3d, 4a-4c (every store that writes capacity-bearing rows).
 9. **Index hygiene, publisher persistence, vacuum settings.** Milestone: Foundation.
    - Scope: migration (adds, drops, partial trigram, `fillfactor`, autovacuum, `publisher` columns), FK-index schema test, `internal/repository/explaincheck` helper.

@@ -155,11 +155,13 @@ calls `capacity.Reserve` as the last statement of its transaction; a positive
 delta that would pass `quota_bytes` is rejected (HTTP 507, as before) and a release
 never is. The overview and quota alert evaluation read the counters, so they cost
 O(repositories). Every hosted format is covered (the registry in
-`internal/capacity/registry.go` lists each format as pending or covered), and every
-format keeps its capacity trigger until a later slice drops the triggers. Maven and Conan
+`internal/capacity/registry.go` lists each format as pending or covered), and
+migration 000014 dropped the capacity triggers and their functions: `Reserve` is the only
+quota enforcement, and it supersedes the `AssertRepositoryCapacity` of ADR 0022 slice 7. Lowering a
+quota below the current usage is rejected by the quota API against the live usage of the format (the counter can drift until the reconciler runs). Maven and Conan
 count an asset only while a visible artifact or revision covers it, so their writers bracket
 the transaction with a measurement of the touched coordinate or recipe revision under a
-per-repository advisory lock and reserve the difference. Helm, NuGet and RubyGems still reserve
+per-repository advisory lock and reserve the difference. Helm, NuGet and RubyGems reserve
 bytes for pending sessions at reservation time, as their store contracts assert, and
 reserve the committed bytes in the counter at commit.
 

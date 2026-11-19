@@ -19,10 +19,10 @@ type RepositoryQuotaAlertStore interface {
 	EvaluateNextRepositoryQuotaAlert(context.Context, QuotaAlertMailConfig, time.Duration) (bool, error)
 	ListRepositoryQuotaAlertEvents(context.Context, string) ([]RepositoryQuotaAlertEvent, error)
 	ListRepositoryQuotaAlertRules(context.Context) ([]RepositoryQuotaAlertRule, error)
-	CreateRepositoryQuotaAlertRule(context.Context, RepositoryQuotaAlertRule) (RepositoryQuotaAlertRule, error)
+	CreateRepositoryQuotaAlertRule(context.Context, RepositoryQuotaAlertRule, ...AuditRecord) (RepositoryQuotaAlertRule, error)
 	GetRepositoryQuotaAlertRule(context.Context, string) (RepositoryQuotaAlertRule, error)
-	UpdateRepositoryQuotaAlertRule(context.Context, RepositoryQuotaAlertRule, string) (RepositoryQuotaAlertRule, error)
-	DeleteRepositoryQuotaAlertRule(context.Context, string, string) (RepositoryQuotaAlertRule, error)
+	UpdateRepositoryQuotaAlertRule(context.Context, RepositoryQuotaAlertRule, string, ...AuditRecord) (RepositoryQuotaAlertRule, error)
+	DeleteRepositoryQuotaAlertRule(context.Context, string, string, ...AuditRecord) (RepositoryQuotaAlertRule, error)
 }
 
 type QuotaAlertMailConfig struct {

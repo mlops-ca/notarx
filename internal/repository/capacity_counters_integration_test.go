@@ -234,3 +234,39 @@ func TestCapacityOverviewListsRepositoryWithoutCounterRow(t *testing.T) {
 		t.Fatal("overview misses a repository without a counter row")
 	}
 }
+
+// TestNoCapacityTriggerOrFunctionRemains proves migration 000014 dropped the capacity triggers
+// and functions: Reserve is the only quota enforcement (ADR 0023 section 3), and the quota API
+// still rejects a quota below the current usage, also when the counter drifted below it.
+func TestNoCapacityTriggerOrFunctionRemains(t *testing.T) {
+	store := counterTestStore(t)
+	ctx := context.Background()
+	var triggers, functions int
+	if err := store.db.QueryRowContext(ctx, `SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal AND (tgname LIKE '%capacity%' OR tgfoid::regproc::text LIKE '%capacity%')`).Scan(&triggers); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.db.QueryRowContext(ctx, `SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND (p.proname LIKE '%capacity%' OR p.prosrc LIKE '%repository capacity quota exceeded%')`).Scan(&functions); err != nil {
+		t.Fatal(err)
+	}
+	if triggers != 0 || functions != 0 {
+		t.Fatalf("capacity triggers=%d functions=%d remain", triggers, functions)
+	}
+	repo := counterTestRepository(t, store, FormatRaw)
+	t.Cleanup(func() { testsupport.PurgeRepository(t, store.db, repo.ID) })
+	if _, err := store.PutRawAsset(ctx, rawFixture(repo, "a.bin", "0123456789")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ReplaceRepositoryCapacityQuota(ctx, repo.ID, 9); !errors.Is(err, ErrQuotaExceeded) {
+		t.Fatalf("quota below usage: %v", err)
+	}
+	// A counter that drifted below the real usage must not let a too small quota through.
+	if _, err := store.db.ExecContext(ctx, `UPDATE repository_usage_counters SET bytes=0 WHERE repository_id=$1::uuid`, repo.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ReplaceRepositoryCapacityQuota(ctx, repo.ID, 9); !errors.Is(err, ErrQuotaExceeded) {
+		t.Fatalf("quota below usage with a drifted counter: %v", err)
+	}
+	if _, err := store.ReplaceRepositoryCapacityQuota(ctx, repo.ID, 10); err != nil {
+		t.Fatalf("quota equal to usage: %v", err)
+	}
+}

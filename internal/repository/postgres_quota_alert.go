@@ -62,7 +62,7 @@ func scanQuotaRule(row interface{ Scan(...any) error }) (RepositoryQuotaAlertRul
 func (s *PostgresStore) GetRepositoryQuotaAlertRule(ctx context.Context, id string) (RepositoryQuotaAlertRule, error) {
 	return scanQuotaRule(s.db.QueryRowContext(ctx, `SELECT `+quotaRuleColumns+` FROM repository_quota_alert_rules WHERE id=$1::uuid`, id))
 }
-func (s *PostgresStore) UpdateRepositoryQuotaAlertRule(ctx context.Context, v RepositoryQuotaAlertRule, version string) (RepositoryQuotaAlertRule, error) {
+func (s *PostgresStore) UpdateRepositoryQuotaAlertRule(ctx context.Context, v RepositoryQuotaAlertRule, version string, audit ...AuditRecord) (RepositoryQuotaAlertRule, error) {
 	if err := v.Policy.Validate(); err != nil {
 		return v, err
 	}
@@ -114,9 +114,12 @@ func (s *PostgresStore) UpdateRepositoryQuotaAlertRule(ctx context.Context, v Re
 	if err = cancelQuotaDeliveries(ctx, tx, v.ID, code); err != nil {
 		return old, err
 	}
+	if err = insertAudits(ctx, tx, audit); err != nil {
+		return old, err
+	}
 	return out, tx.Commit()
 }
-func (s *PostgresStore) DeleteRepositoryQuotaAlertRule(ctx context.Context, id, version string) (RepositoryQuotaAlertRule, error) {
+func (s *PostgresStore) DeleteRepositoryQuotaAlertRule(ctx context.Context, id, version string, audit ...AuditRecord) (RepositoryQuotaAlertRule, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return RepositoryQuotaAlertRule{}, err
@@ -140,10 +143,13 @@ func (s *PostgresStore) DeleteRepositoryQuotaAlertRule(ctx context.Context, id, 
 	if err = cancelQuotaDeliveries(ctx, tx, id, "rule_deleted"); err != nil {
 		return old, err
 	}
+	if err = insertAudits(ctx, tx, audit); err != nil {
+		return old, err
+	}
 	return out, tx.Commit()
 }
 
-func (s *PostgresStore) CreateRepositoryQuotaAlertRule(ctx context.Context, v RepositoryQuotaAlertRule) (RepositoryQuotaAlertRule, error) {
+func (s *PostgresStore) CreateRepositoryQuotaAlertRule(ctx context.Context, v RepositoryQuotaAlertRule, audit ...AuditRecord) (RepositoryQuotaAlertRule, error) {
 	if err := v.Policy.Validate(); err != nil {
 		return v, err
 	}
@@ -193,6 +199,9 @@ func (s *PostgresStore) CreateRepositoryQuotaAlertRule(ctx context.Context, v Re
 		return v, ErrQuotaAlertConflict
 	}
 	if err != nil {
+		return v, err
+	}
+	if err = insertAudits(ctx, tx, audit); err != nil {
 		return v, err
 	}
 	return out, tx.Commit()

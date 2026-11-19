@@ -9,30 +9,23 @@ type FormatCoverage struct {
 	// Covered is true once every writer of the format calls Reserve and the
 	// per-format equality test (publish, replace, delete, re-publish) passes.
 	Covered bool
-	// Enforcement names how the format enforced its quota before counters.
-	Enforcement string
 }
-
-const (
-	byTrigger      = "capacity trigger"
-	bySessionStore = "session reservation code"
-)
 
 // registry lists every hosted format (ADR 0023 section 3). A format that lands
 // without an entry fails the registry test, so a new format cannot be unbounded.
 var registry = []FormatCoverage{
-	{Format: "raw", Covered: true, Enforcement: byTrigger},
-	{Format: "maven", Covered: true, Enforcement: byTrigger},
-	{Format: "oci", Covered: true, Enforcement: byTrigger},
-	{Format: "conan", Covered: true, Enforcement: byTrigger},
-	{Format: "npm", Covered: true, Enforcement: byTrigger},
-	{Format: "pypi", Covered: true, Enforcement: byTrigger},
-	{Format: "go", Covered: true, Enforcement: byTrigger},
-	{Format: "apt", Covered: true, Enforcement: byTrigger},
-	{Format: "cargo", Covered: true, Enforcement: byTrigger},
-	{Format: "helm", Covered: true, Enforcement: bySessionStore},
-	{Format: "nuget", Covered: true, Enforcement: bySessionStore},
-	{Format: "rubygems", Covered: true, Enforcement: bySessionStore},
+	{Format: "raw", Covered: true},
+	{Format: "maven", Covered: true},
+	{Format: "oci", Covered: true},
+	{Format: "conan", Covered: true},
+	{Format: "npm", Covered: true},
+	{Format: "pypi", Covered: true},
+	{Format: "go", Covered: true},
+	{Format: "apt", Covered: true},
+	{Format: "cargo", Covered: true},
+	{Format: "helm", Covered: true},
+	{Format: "nuget", Covered: true},
+	{Format: "rubygems", Covered: true},
 }
 
 // Formats returns the registry sorted by format.

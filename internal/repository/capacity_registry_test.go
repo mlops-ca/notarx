@@ -37,6 +37,6 @@ func TestCapacityRegistryListsEveryHostedFormat(t *testing.T) {
 		if entry.Covered {
 			state = "covered"
 		}
-		t.Logf("capacity counter coverage: %-9s %-8s (before counters: %s)", entry.Format, state, entry.Enforcement)
+		t.Logf("capacity counter coverage: %-9s %-8s ", entry.Format, state)
 	}
 }
