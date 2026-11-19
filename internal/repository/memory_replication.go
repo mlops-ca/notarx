@@ -13,7 +13,7 @@ const (
 	replicationMaxAttempts   = 3
 )
 
-func (s *MemoryStore) CreateReplicationPlan(_ context.Context, p ReplicationPlan, checks []ReplicationCheckpoint) (ReplicationPlan, bool, error) {
+func (s *MemoryStore) CreateReplicationPlan(ctx context.Context, p ReplicationPlan, checks []ReplicationCheckpoint, audit ...AuditRecord) (ReplicationPlan, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	key := p.TargetRepositoryID + "\x00" + p.IdempotencyKey
@@ -26,6 +26,9 @@ func (s *MemoryStore) CreateReplicationPlan(_ context.Context, p ReplicationPlan
 			return ReplicationPlan{}, false, ErrIdempotencyConflict
 		}
 		if replayablePark {
+			if err := s.commitAuditLocked(ctx, audit); err != nil {
+				return ReplicationPlan{}, false, err
+			}
 			now := time.Now().UTC()
 			if refreshablePyPIReplay {
 				refreshed := make(map[string]ReplicationCheckpoint, len(checks))
@@ -54,6 +57,9 @@ func (s *MemoryStore) CreateReplicationPlan(_ context.Context, p ReplicationPlan
 			s.replicationPlans[id] = existing
 		}
 		return existing, true, nil
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return ReplicationPlan{}, false, err
 	}
 	p.State = "pending"
 	p.CreatedAt = time.Now().UTC()

@@ -249,13 +249,13 @@ type PromotionPayload struct {
 	PromotionID        string            `json:"promotionId"`
 }
 
-func (m NativePromotion) Enqueue(ctx context.Context, targetRepositoryID, idempotencyKey string, payload PromotionPayload) (repository.LifecycleJob, bool, error) {
+func (m NativePromotion) Enqueue(ctx context.Context, targetRepositoryID, idempotencyKey string, payload PromotionPayload, audit ...repository.AuditRecord) (repository.LifecycleJob, bool, error) {
 	payload.Format = repository.FormatMaven
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return repository.LifecycleJob{}, false, err
 	}
-	return m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: ids.New(), RepositoryID: targetRepositoryID, Kind: repository.LifecycleJobPromotion, IdempotencyKey: idempotencyKey, Payload: encoded})
+	return m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: ids.New(), RepositoryID: targetRepositoryID, Kind: repository.LifecycleJobPromotion, IdempotencyKey: idempotencyKey, Payload: encoded}, audit...)
 }
 func (m NativePromotion) RunJobs(ctx context.Context, limit int) error {
 	jobs, err := m.Store.ClaimLifecycleJobsByKindAndFormat(ctx, repository.LifecycleJobPromotion, repository.FormatMaven, limit)

@@ -20,7 +20,7 @@ func cloneLifecycleJob(job LifecycleJob) LifecycleJob {
 	return job
 }
 
-func (s *MemoryStore) EnqueueLifecycleJob(_ context.Context, job LifecycleJob) (LifecycleJob, bool, error) {
+func (s *MemoryStore) EnqueueLifecycleJob(ctx context.Context, job LifecycleJob, audit ...AuditRecord) (LifecycleJob, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	key := lifecycleJobKey(job.RepositoryID, job.Kind, job.IdempotencyKey)
@@ -29,6 +29,9 @@ func (s *MemoryStore) EnqueueLifecycleJob(_ context.Context, job LifecycleJob) (
 			return LifecycleJob{}, false, ErrIdempotencyConflict
 		}
 		return cloneLifecycleJob(existing), true, nil
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return LifecycleJob{}, false, err
 	}
 	now := time.Now().UTC()
 	createdAt := now

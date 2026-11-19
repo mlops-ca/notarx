@@ -63,33 +63,34 @@ func (h generatedRepositoryAPIAdapter) CreateRepositoryPromotion(w http.Response
 				writeHostedProblem(w, http.StatusForbidden, "security_policy_denied", "promotion denied by security policy: "+strings.Join(evaluation.Reasons, ","))
 				return
 			}
+			promoteAudit := h.auditFor(repository.AuditRecord{Repository: source.Name, GroupName: source.Name, Actor: principal.Actor, Resource: request.Coordinate, Operation: "promote", Status: http.StatusAccepted})
 			var job repository.LifecycleJob
 			if capability, ok := formatmodule.Capability[formatmodule.Promotion](rawFormatRegistry(rawformat.Options{Store: h.sessions.store, Jobs: h.sessions.store}), source.Format); ok {
-				job, _, err = capability.EnqueuePromotion(r.Context(), source.ID, target.ID, request.Coordinate, request.Digest, string(params.IdempotencyKey))
+				job, _, err = capability.EnqueuePromotion(r.Context(), source.ID, target.ID, request.Coordinate, request.Digest, string(params.IdempotencyKey), promoteAudit...)
 			} else {
 				switch source.Format {
 				case repository.FormatAPT:
-					job, _, err = (aptpublication.Distribution{Store: h.sessions.store}).EnqueuePromotion(r.Context(), target.ID, string(params.IdempotencyKey), aptpublication.PromotionPayload{SourceRepositoryID: source.ID, Coordinate: request.Coordinate, Digest: request.Digest, TargetSuite: *request.AptTargetSuite, Actor: principal.Actor})
+					job, _, err = (aptpublication.Distribution{Store: h.sessions.store}).EnqueuePromotion(r.Context(), target.ID, string(params.IdempotencyKey), aptpublication.PromotionPayload{SourceRepositoryID: source.ID, Coordinate: request.Coordinate, Digest: request.Digest, TargetSuite: *request.AptTargetSuite, Actor: principal.Actor}, promoteAudit...)
 				case repository.FormatMaven:
 					promotionID := uuid.NewSHA1(uuid.NameSpaceURL, []byte("maven-promotion:"+target.ID+":"+string(params.IdempotencyKey))).String()
-					job, _, err = (mavenprotocol.NativePromotion{Store: h.sessions.store}).Enqueue(r.Context(), target.ID, string(params.IdempotencyKey), mavenprotocol.PromotionPayload{SourceRepositoryID: source.ID, Coordinate: request.Coordinate, Digest: request.Digest, PromotionID: promotionID})
+					job, _, err = (mavenprotocol.NativePromotion{Store: h.sessions.store}).Enqueue(r.Context(), target.ID, string(params.IdempotencyKey), mavenprotocol.PromotionPayload{SourceRepositoryID: source.ID, Coordinate: request.Coordinate, Digest: request.Digest, PromotionID: promotionID}, promoteAudit...)
 				case repository.FormatOCI:
-					job, _, err = (ociprotocol.NativePromotion{Store: h.sessions.store}).Enqueue(r.Context(), target.ID, string(params.IdempotencyKey), ociprotocol.PromotionPayload{SourceRepositoryID: source.ID, Name: request.Coordinate, Digest: request.Digest})
+					job, _, err = (ociprotocol.NativePromotion{Store: h.sessions.store}).Enqueue(r.Context(), target.ID, string(params.IdempotencyKey), ociprotocol.PromotionPayload{SourceRepositoryID: source.ID, Name: request.Coordinate, Digest: request.Digest}, promoteAudit...)
 				case repository.FormatConan:
 					reference, revision, _ := strings.Cut(request.Coordinate, "#")
-					job, _, err = (conanprotocol.NativePromotion{Store: h.sessions.store}).Enqueue(r.Context(), target.ID, string(params.IdempotencyKey), conanprotocol.PromotionPayload{SourceRepositoryID: source.ID, Reference: reference, Revision: revision, Digest: request.Digest})
+					job, _, err = (conanprotocol.NativePromotion{Store: h.sessions.store}).Enqueue(r.Context(), target.ID, string(params.IdempotencyKey), conanprotocol.PromotionPayload{SourceRepositoryID: source.ID, Reference: reference, Revision: revision, Digest: request.Digest}, promoteAudit...)
 				case repository.FormatNPM:
 					packageName, version, _ := parseNPMVersionCoordinate(request.Coordinate)
-					job, _, err = (npmprotocol.NativePromotion{Store: h.sessions.store}).Enqueue(r.Context(), target.ID, string(params.IdempotencyKey), npmprotocol.PromotionPayload{SourceRepositoryID: source.ID, PackageName: packageName, Version: version, Digest: request.Digest})
+					job, _, err = (npmprotocol.NativePromotion{Store: h.sessions.store}).Enqueue(r.Context(), target.ID, string(params.IdempotencyKey), npmprotocol.PromotionPayload{SourceRepositoryID: source.ID, PackageName: packageName, Version: version, Digest: request.Digest}, promoteAudit...)
 				case repository.FormatPyPI:
 					project, version, _ := parsePyPIVersionCoordinate(request.Coordinate)
-					job, _, err = (NativePyPIPromotion{Store: h.sessions.store}).Enqueue(r.Context(), target.ID, string(params.IdempotencyKey), PyPIPromotionPayload{SourceRepositoryID: source.ID, Project: project, Version: version, Digest: request.Digest})
+					job, _, err = (NativePyPIPromotion{Store: h.sessions.store}).Enqueue(r.Context(), target.ID, string(params.IdempotencyKey), PyPIPromotionPayload{SourceRepositoryID: source.ID, Project: project, Version: version, Digest: request.Digest}, promoteAudit...)
 				case repository.FormatGo:
 					modulePath, version, _ := parseGoModuleVersionCoordinate(request.Coordinate)
-					job, _, err = (NativeGoPromotion{Store: h.sessions.store}).Enqueue(r.Context(), target.ID, string(params.IdempotencyKey), GoPromotionPayload{SourceRepositoryID: source.ID, Module: modulePath, Version: version, Digest: request.Digest})
+					job, _, err = (NativeGoPromotion{Store: h.sessions.store}).Enqueue(r.Context(), target.ID, string(params.IdempotencyKey), GoPromotionPayload{SourceRepositoryID: source.ID, Module: modulePath, Version: version, Digest: request.Digest}, promoteAudit...)
 				case repository.FormatCargo:
 					name, version, _ := splitVersionCoordinate(request.Coordinate)
-					job, _, err = (NativeCargoPromotion{Store: h.sessions.store}).Enqueue(r.Context(), target.ID, string(params.IdempotencyKey), CargoPromotionPayload{SourceRepositoryID: source.ID, Name: name, Version: version, Digest: request.Digest})
+					job, _, err = (NativeCargoPromotion{Store: h.sessions.store}).Enqueue(r.Context(), target.ID, string(params.IdempotencyKey), CargoPromotionPayload{SourceRepositoryID: source.ID, Name: name, Version: version, Digest: request.Digest}, promoteAudit...)
 				}
 			}
 			if errors.Is(err, repository.ErrIdempotencyConflict) {
@@ -98,9 +99,6 @@ func (h generatedRepositoryAPIAdapter) CreateRepositoryPromotion(w http.Response
 			}
 			if err != nil {
 				writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "enqueue promotion job failed")
-				return
-			}
-			if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{Repository: source.Name, GroupName: source.Name, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: request.Coordinate, Operation: "promote", Status: http.StatusAccepted}) {
 				return
 			}
 			writeNativeMavenJSON(w, http.StatusAccepted, lifecycleJobResponse(job))
@@ -267,16 +265,14 @@ func (h generatedRepositoryAPIAdapter) CreateRepositoryReplication(w http.Respon
 					return
 				}
 			}
-			plan, _, err := h.replication.CreateReplicationPlan(r.Context(), repository.ReplicationPlan{ID: ids.New(), SourceRepositoryID: source.ID, TargetRepositoryID: target.ID, Format: format, APTTargetSuite: aptDistributionSuite(request.AptTargetSuite), Coordinate: request.Coordinate, Digest: request.Digest, IdempotencyKey: string(params.IdempotencyKey)}, checkpoints)
+			plan, _, err := h.replication.CreateReplicationPlan(r.Context(), repository.ReplicationPlan{ID: ids.New(), SourceRepositoryID: source.ID, TargetRepositoryID: target.ID, Format: format, APTTargetSuite: aptDistributionSuite(request.AptTargetSuite), Coordinate: request.Coordinate, Digest: request.Digest, IdempotencyKey: string(params.IdempotencyKey)}, checkpoints,
+				h.auditFor(repository.AuditRecord{Repository: source.Name, GroupName: source.Name, Actor: principal.Actor, Resource: request.Coordinate, Operation: "replicate", Status: http.StatusAccepted})...)
 			if errors.Is(err, repository.ErrIdempotencyConflict) {
 				writeHostedProblem(w, http.StatusConflict, "idempotency_conflict", "Idempotency-Key conflicts with an existing replication plan")
 				return
 			}
 			if err != nil {
 				writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "create replication plan failed")
-				return
-			}
-			if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{Repository: source.Name, GroupName: source.Name, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: request.Coordinate, Operation: "replicate", Status: http.StatusAccepted}) {
 				return
 			}
 			writeNativeMavenJSON(w, http.StatusAccepted, toOpenAPIReplicationPlan(plan))
@@ -546,7 +542,8 @@ func (h generatedRepositoryAPIAdapter) RestoreRepositoryArtifact(w http.Response
 				} else if stored.Digest != reservation.Digest {
 					err = repository.ErrDisabled
 				} else {
-					_, err = h.cargo.RestoreCargoPublication(r.Context(), repo.ID, name, version)
+					_, err = h.cargo.RestoreCargoPublication(r.Context(), repo.ID, name, version,
+						h.auditFor(repository.AuditRecord{GroupName: repo.Name, Repository: repo.Name, Actor: principal.Actor, Resource: request.Coordinate, Operation: "artifact.restore", Status: http.StatusNoContent})...)
 				}
 			}
 		}
@@ -557,14 +554,6 @@ func (h generatedRepositoryAPIAdapter) RestoreRepositoryArtifact(w http.Response
 		if err != nil {
 			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "restore artifact failed")
 			return
-		}
-		if repo.Format == repository.FormatCargo && h.audit != nil {
-			if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{GroupName: repo.Name, Repository: repo.Name,
-				Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(),
-				Format: "management", Resource: request.Coordinate, Operation: "artifact.restore",
-				Status: http.StatusNoContent, CacheDisposition: "bypass"}) {
-				return
-			}
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})

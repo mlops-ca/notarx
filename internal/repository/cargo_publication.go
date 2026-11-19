@@ -36,7 +36,7 @@ type NativeCargoStore interface {
 	ListCargoPublications(context.Context, string, string) ([]CargoPublication, error)
 	SetCargoYanked(context.Context, string, string, string, bool) (CargoPublication, bool, error)
 	TombstoneCargoPublication(context.Context, string, string, string) (CargoPublication, error)
-	RestoreCargoPublication(context.Context, string, string, string) (CargoPublication, error)
+	RestoreCargoPublication(context.Context, string, string, string, ...AuditRecord) (CargoPublication, error)
 	ListReclaimableCargoObjects(context.Context, time.Time, int, string) ([]CargoReclaimableObject, error)
 	CargoObjectHasVisibleReference(context.Context, string) (bool, error)
 	CargoObjectMatchesTombstone(context.Context, string, time.Time) (bool, error)

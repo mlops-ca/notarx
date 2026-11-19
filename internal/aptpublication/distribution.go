@@ -48,7 +48,7 @@ type PromotionPayload struct {
 	Actor              string            `json:"actor"`
 }
 
-func (d Distribution) EnqueuePromotion(ctx context.Context, targetID, key string, p PromotionPayload) (repository.LifecycleJob, bool, error) {
+func (d Distribution) EnqueuePromotion(ctx context.Context, targetID, key string, p PromotionPayload, audit ...repository.AuditRecord) (repository.LifecycleJob, bool, error) {
 	p.Format = repository.FormatAPT
 	if !validPromotionPayload(p) || targetID == p.SourceRepositoryID || key == "" || len(key) > 128 {
 		return repository.LifecycleJob{}, false, ErrInvalidSessionInput
@@ -57,7 +57,7 @@ func (d Distribution) EnqueuePromotion(ctx context.Context, targetID, key string
 	if err != nil {
 		return repository.LifecycleJob{}, false, err
 	}
-	return d.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: ids.New(), RepositoryID: targetID, Kind: repository.LifecycleJobPromotion, IdempotencyKey: key, Payload: body})
+	return d.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: ids.New(), RepositoryID: targetID, Kind: repository.LifecycleJobPromotion, IdempotencyKey: key, Payload: body}, audit...)
 }
 func validPromotionPayload(p PromotionPayload) bool {
 	return p.Format == repository.FormatAPT && p.SourceRepositoryID != "" && repository.ValidAPTArtifactCoordinate(p.Coordinate) && repository.ValidAPTSHA256Digest(p.Digest) && repository.ValidAPTPublicationScope(p.TargetSuite) && p.Actor != "" && len(p.Actor) <= 512

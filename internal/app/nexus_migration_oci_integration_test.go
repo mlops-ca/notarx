@@ -55,8 +55,8 @@ func newNexusOCIIntegrationFixture(t *testing.T) (*ownedNexusOCIStore, *objectst
 	return &ownedNexusOCIStore{PostgresStore: native, db: db, jobs: map[string]string{}}, objects
 }
 
-func (s *ownedNexusOCIStore) EnqueueLifecycleJob(ctx context.Context, job repository.LifecycleJob) (repository.LifecycleJob, bool, error) {
-	stored, created, err := s.PostgresStore.EnqueueLifecycleJob(ctx, job)
+func (s *ownedNexusOCIStore) EnqueueLifecycleJob(ctx context.Context, job repository.LifecycleJob, audit ...repository.AuditRecord) (repository.LifecycleJob, bool, error) {
+	stored, created, err := s.PostgresStore.EnqueueLifecycleJob(ctx, job, audit...)
 	if err == nil {
 		s.mu.Lock()
 		s.jobs[stored.ID] = stored.RepositoryID

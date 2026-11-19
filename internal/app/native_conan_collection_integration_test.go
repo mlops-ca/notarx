@@ -94,8 +94,8 @@ func (s *ownedPostgresConanCollectionWorker) StageConanObject(ctx context.Contex
 	return nil
 }
 
-func (s *ownedPostgresConanCollectionWorker) EnqueueLifecycleJob(ctx context.Context, job repository.LifecycleJob) (repository.LifecycleJob, bool, error) {
-	stored, created, err := s.PostgresStore.EnqueueLifecycleJob(ctx, job)
+func (s *ownedPostgresConanCollectionWorker) EnqueueLifecycleJob(ctx context.Context, job repository.LifecycleJob, audit ...repository.AuditRecord) (repository.LifecycleJob, bool, error) {
+	stored, created, err := s.PostgresStore.EnqueueLifecycleJob(ctx, job, audit...)
 	if err == nil {
 		s.state.mu.Lock()
 		s.state.jobs[stored.ID] = stored.RepositoryID

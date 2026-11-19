@@ -119,11 +119,11 @@ func matchesPatterns(patterns []*regexp.Regexp, value string, empty bool) bool {
 	}
 	return false
 }
-func (m *Module) EnqueuePromotion(ctx context.Context, sourceID, targetID, coordinate, digest, key string) (repository.LifecycleJob, bool, error) {
+func (m *Module) EnqueuePromotion(ctx context.Context, sourceID, targetID, coordinate, digest, key string, audit ...repository.AuditRecord) (repository.LifecycleJob, bool, error) {
 	if m.store == nil || m.jobs == nil {
 		return repository.LifecycleJob{}, false, repository.ErrDisabled
 	}
-	return (rawprotocol.NativePromotion{Store: m.jobs}).Enqueue(ctx, targetID, key, rawprotocol.PromotionPayload{SourceRepositoryID: sourceID, Path: coordinate, Digest: digest})
+	return (rawprotocol.NativePromotion{Store: m.jobs}).Enqueue(ctx, targetID, key, rawprotocol.PromotionPayload{SourceRepositoryID: sourceID, Path: coordinate, Digest: digest}, audit...)
 }
 func (m *Module) ReplicationCheckpoints(ctx context.Context, sourceID, coordinate, digest string) ([]repository.ReplicationCheckpoint, error) {
 	if m.store == nil {

@@ -30,7 +30,7 @@ type failingPublicationEnqueueStore struct {
 	auditContextErr error
 }
 
-func (s *failingPublicationEnqueueStore) EnqueueLifecycleJob(context.Context, repository.LifecycleJob) (repository.LifecycleJob, bool, error) {
+func (s *failingPublicationEnqueueStore) EnqueueLifecycleJob(context.Context, repository.LifecycleJob, ...repository.AuditRecord) (repository.LifecycleJob, bool, error) {
 	return repository.LifecycleJob{}, false, s.enqueueErr
 }
 

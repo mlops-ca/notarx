@@ -31,7 +31,7 @@ type GoPromotionPayload struct {
 	Digest             string            `json:"digest"`
 }
 
-func (m NativeGoPromotion) Enqueue(ctx context.Context, targetID, key string, payload GoPromotionPayload) (repository.LifecycleJob, bool, error) {
+func (m NativeGoPromotion) Enqueue(ctx context.Context, targetID, key string, payload GoPromotionPayload, audit ...repository.AuditRecord) (repository.LifecycleJob, bool, error) {
 	payload.Format = repository.FormatGo
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -39,7 +39,7 @@ func (m NativeGoPromotion) Enqueue(ctx context.Context, targetID, key string, pa
 	}
 	return m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{
 		ID: ids.New(), RepositoryID: targetID, Kind: repository.LifecycleJobPromotion, IdempotencyKey: key, Payload: body,
-	})
+	}, audit...)
 }
 
 func (m NativeGoPromotion) RunJobs(ctx context.Context, limit int) error {

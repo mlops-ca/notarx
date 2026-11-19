@@ -215,7 +215,7 @@ type ArtifactQuarantineStore interface {
 }
 
 type LifecycleJobStore interface {
-	EnqueueLifecycleJob(context.Context, LifecycleJob) (LifecycleJob, bool, error)
+	EnqueueLifecycleJob(context.Context, LifecycleJob, ...AuditRecord) (LifecycleJob, bool, error)
 	ListLifecycleJobs(context.Context, string, int) ([]LifecycleJob, error)
 	GetLifecycleJob(context.Context, string, string) (LifecycleJob, error)
 	GetLatestArtifactScanJob(context.Context, string, Format, string, string) (LifecycleJob, error)
@@ -294,7 +294,7 @@ type ScheduledTaskStore interface {
 }
 
 type ReplicationStore interface {
-	CreateReplicationPlan(context.Context, ReplicationPlan, []ReplicationCheckpoint) (ReplicationPlan, bool, error)
+	CreateReplicationPlan(context.Context, ReplicationPlan, []ReplicationCheckpoint, ...AuditRecord) (ReplicationPlan, bool, error)
 	ClaimReplicationPlans(context.Context, int) ([]ReplicationPlan, error)
 	ClaimReplicationPlansByFormat(context.Context, Format, int) ([]ReplicationPlan, error)
 	RecoverExpiredReplicationPlans(context.Context, time.Time) (int, error)

@@ -25,7 +25,7 @@ func (s *unavailableRawIntelligenceStore) ReplaceArtifactIntelligence(ctx contex
 	return s.MemoryStore.ReplaceArtifactIntelligence(ctx, value, expectedVersion)
 }
 
-func (s *unavailableRawIntelligenceStore) EnqueueLifecycleJob(context.Context, repository.LifecycleJob) (repository.LifecycleJob, bool, error) {
+func (s *unavailableRawIntelligenceStore) EnqueueLifecycleJob(context.Context, repository.LifecycleJob, ...repository.AuditRecord) (repository.LifecycleJob, bool, error) {
 	return repository.LifecycleJob{}, false, s.err
 }
 

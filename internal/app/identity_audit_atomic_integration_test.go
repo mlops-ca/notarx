@@ -158,3 +158,34 @@ func TestPostgresFormatPreviewMutationsRollBackWithTheirAudit(t *testing.T) {
 		restores = nil
 	})
 }
+
+// TestPostgresDistributionMutationsRollBackWithTheirAudit makes every insert into
+// security_audit_log for the source and Cargo repositories fail and drives the promote,
+// replicate and Cargo restore handlers: none may leave its change behind (ADR 0023 section 1).
+func TestPostgresDistributionMutationsRollBackWithTheirAudit(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is required for PostgreSQL integration tests")
+	}
+	store, err := repository.NewPostgresStore(databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = store.Close() }()
+	db, err := database.OpenPostgres(databaseURL, database.DefaultPoolConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	var restores []func()
+	runDistributionAuditRollback(t, store, func(names ...string) {
+		for _, name := range names {
+			restores = append(restores, testsupport.FailSecurityAudits(t, db, name, "alice"))
+		}
+	}, func() {
+		for _, restore := range restores {
+			restore()
+		}
+		restores = nil
+	})
+}

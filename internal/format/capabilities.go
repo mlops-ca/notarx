@@ -35,7 +35,7 @@ type Governance interface {
 	Restore(context.Context, string, string) error
 }
 type Promotion interface {
-	EnqueuePromotion(context.Context, string, string, string, string, string) (repository.LifecycleJob, bool, error)
+	EnqueuePromotion(context.Context, string, string, string, string, string, ...repository.AuditRecord) (repository.LifecycleJob, bool, error)
 }
 type Replication interface {
 	ReplicationCheckpoints(context.Context, string, string, string) ([]repository.ReplicationCheckpoint, error)

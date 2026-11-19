@@ -30,13 +30,13 @@ type PromotionPayload struct {
 	Digest             string            `json:"digest"`
 }
 
-func (m NativePromotion) Enqueue(ctx context.Context, targetID, key string, p PromotionPayload) (repository.LifecycleJob, bool, error) {
+func (m NativePromotion) Enqueue(ctx context.Context, targetID, key string, p PromotionPayload, audit ...repository.AuditRecord) (repository.LifecycleJob, bool, error) {
 	p.Format = repository.FormatRaw
 	body, err := json.Marshal(p)
 	if err != nil {
 		return repository.LifecycleJob{}, false, err
 	}
-	return m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: ids.New(), RepositoryID: targetID, Kind: repository.LifecycleJobPromotion, IdempotencyKey: key, Payload: body})
+	return m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: ids.New(), RepositoryID: targetID, Kind: repository.LifecycleJobPromotion, IdempotencyKey: key, Payload: body}, audit...)
 }
 func (m NativePromotion) RunJobs(ctx context.Context, limit int) error {
 	jobs, err := m.Store.ClaimLifecycleJobsByKindAndFormat(ctx, repository.LifecycleJobPromotion, repository.FormatRaw, limit)

@@ -18,14 +18,41 @@ const (
 
 const lifecycleJobColumns = `id::text,repository_id::text,kind,idempotency_key,payload,state,created_at,started_at,completed_at,last_error,attempts,max_attempts,next_attempt_at,lease_expires_at,lease_token,progress_current,progress_total,progress_message`
 
-func (s *PostgresStore) EnqueueLifecycleJob(ctx context.Context, job LifecycleJob) (LifecycleJob, bool, error) {
+// EnqueueLifecycleJob inserts the job, or returns the job of the same idempotency key. With audit, a
+// newly inserted job and its audit record commit together (ADR 0023 section 1); a replay of the key
+// changes nothing and writes no audit.
+func (s *PostgresStore) EnqueueLifecycleJob(ctx context.Context, job LifecycleJob, audit ...AuditRecord) (LifecycleJob, bool, error) {
+	if len(audit) == 0 {
+		return enqueueLifecycleJob(ctx, s.db, job)
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return LifecycleJob{}, false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	stored, replayed, err := enqueueLifecycleJob(ctx, tx, job)
+	if err != nil {
+		return LifecycleJob{}, false, err
+	}
+	if !replayed {
+		if err = insertAudits(ctx, tx, audit); err != nil {
+			return LifecycleJob{}, false, err
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		return LifecycleJob{}, false, err
+	}
+	return stored, replayed, nil
+}
+
+func enqueueLifecycleJob(ctx context.Context, q sqlRunner, job LifecycleJob) (LifecycleJob, bool, error) {
 	if job.MaxAttempts <= 0 {
 		job.MaxAttempts = DefaultLifecycleJobMaxAttempts
 	}
 	if job.ProgressTotal <= 0 && job.Kind != LifecycleJobRetention {
 		job.ProgressTotal = 1
 	}
-	err := scanLifecycleJob(s.db.QueryRowContext(ctx, `INSERT INTO lifecycle_jobs (id,repository_id,kind,idempotency_key,state,payload,max_attempts,next_attempt_at,progress_total) VALUES ($1,$2,$3,$4,'pending',$5,$6,now(),$7) ON CONFLICT (repository_id,kind,idempotency_key) DO NOTHING RETURNING `+lifecycleJobColumns, job.ID, job.RepositoryID, job.Kind, job.IdempotencyKey, job.Payload, job.MaxAttempts, job.ProgressTotal), &job)
+	err := scanLifecycleJob(q.QueryRowContext(ctx, `INSERT INTO lifecycle_jobs (id,repository_id,kind,idempotency_key,state,payload,max_attempts,next_attempt_at,progress_total) VALUES ($1,$2,$3,$4,'pending',$5,$6,now(),$7) ON CONFLICT (repository_id,kind,idempotency_key) DO NOTHING RETURNING `+lifecycleJobColumns, job.ID, job.RepositoryID, job.Kind, job.IdempotencyKey, job.Payload, job.MaxAttempts, job.ProgressTotal), &job)
 	if err == nil {
 		return job, false, nil
 	}
@@ -33,7 +60,7 @@ func (s *PostgresStore) EnqueueLifecycleJob(ctx context.Context, job LifecycleJo
 		return LifecycleJob{}, false, err
 	}
 	var existing LifecycleJob
-	err = scanLifecycleJob(s.db.QueryRowContext(ctx, `SELECT `+lifecycleJobColumns+` FROM lifecycle_jobs WHERE repository_id=$1::uuid AND kind=$2 AND idempotency_key=$3`, job.RepositoryID, job.Kind, job.IdempotencyKey), &existing)
+	err = scanLifecycleJob(q.QueryRowContext(ctx, `SELECT `+lifecycleJobColumns+` FROM lifecycle_jobs WHERE repository_id=$1::uuid AND kind=$2 AND idempotency_key=$3`, job.RepositoryID, job.Kind, job.IdempotencyKey), &existing)
 	if err != nil {
 		return LifecycleJob{}, false, err
 	}

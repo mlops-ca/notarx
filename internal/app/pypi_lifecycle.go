@@ -31,13 +31,13 @@ type PyPIPromotionPayload struct {
 	Digest             string            `json:"digest"`
 }
 
-func (m NativePyPIPromotion) Enqueue(ctx context.Context, targetID, key string, payload PyPIPromotionPayload) (repository.LifecycleJob, bool, error) {
+func (m NativePyPIPromotion) Enqueue(ctx context.Context, targetID, key string, payload PyPIPromotionPayload, audit ...repository.AuditRecord) (repository.LifecycleJob, bool, error) {
 	payload.Format = repository.FormatPyPI
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return repository.LifecycleJob{}, false, err
 	}
-	return m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: ids.New(), RepositoryID: targetID, Kind: repository.LifecycleJobPromotion, IdempotencyKey: key, Payload: body})
+	return m.Store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: ids.New(), RepositoryID: targetID, Kind: repository.LifecycleJobPromotion, IdempotencyKey: key, Payload: body}, audit...)
 }
 
 func (m NativePyPIPromotion) RunJobs(ctx context.Context, limit int) error {
