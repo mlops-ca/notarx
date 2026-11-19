@@ -258,6 +258,13 @@ func normalizeHostedRepository(repo HostedRepository) HostedRepository {
 		repo.AllowedHosts = []string{}
 	}
 	repo.Visibility = NormalizeVisibility(repo.Visibility)
+	if repo.UpstreamAuth != nil {
+		// The repository name travels with its credential so exchanges can be audited per
+		// repository; a copy keeps the caller's struct untouched.
+		attributed := *repo.UpstreamAuth
+		attributed.Repository = repo.Name
+		repo.UpstreamAuth = &attributed
+	}
 	return repo
 }
 

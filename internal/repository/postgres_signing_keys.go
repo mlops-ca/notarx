@@ -19,11 +19,6 @@ var ErrSettingNotFound = errors.New("setting not found")
 
 const signingKeyColumns = `kid, alg, state, public_jwk::text, private_sealed, sealing_ref, integrity_mac, created_at, published_at, activated_at, retired_at, expires_at`
 
-type signingKeyQuerier interface {
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-}
-
 func nullTime(value time.Time) any {
 	if value.IsZero() {
 		return nil

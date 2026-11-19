@@ -89,8 +89,8 @@ func (s *entraStub) serve(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	switch {
-	case r.URL.Path == "/"+testTenant+"/oauth2/v2.0/token":
+	switch r.URL.Path {
+	case "/" + testTenant + "/oauth2/v2.0/token":
 		if r.Method != http.MethodPost || r.Header.Get("Content-Type") != "application/x-www-form-urlencoded" {
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
@@ -106,17 +106,17 @@ func (s *entraStub) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		n := s.tokens.Add(1)
 		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": fmt.Sprintf("aad-token-%d", n), "token_type": "Bearer", "expires_in": 3600})
-	case r.URL.Path == "/oauth2/exchange":
+	case "/oauth2/exchange":
 		s.record("exchange " + r.PostForm.Get("grant_type") + " " + r.PostForm.Get("access_token") + " " + r.PostForm.Get("tenant") + " " + r.PostForm.Get("service"))
 		_ = json.NewEncoder(w).Encode(map[string]any{"refresh_token": jwtWithExp("refresh", s.clock.Now().Add(3*time.Hour))})
-	case r.URL.Path == "/oauth2/token":
+	case "/oauth2/token":
 		s.record("token " + r.PostForm.Get("grant_type") + " " + r.PostForm.Get("scope") + " " + r.PostForm.Get("service"))
 		if !strings.HasPrefix(r.PostForm.Get("refresh_token"), "e") { // a JWT header starts with "e"
 			http.Error(w, "bad refresh token", http.StatusUnauthorized)
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": jwtWithExp("access:"+r.PostForm.Get("scope"), s.clock.Now().Add(time.Hour))})
-	case r.URL.Path == "/redirect/oauth2/v2.0/token":
+	case "/redirect/oauth2/v2.0/token":
 		http.Redirect(w, r, "https://elsewhere.invalid/", http.StatusFound)
 	default:
 		http.NotFound(w, r)

@@ -173,7 +173,7 @@ func TestIssuerAnonymousRequestsDoNotQueryTheStorePerRequest(t *testing.T) {
 func TestIssuerRotationInvalidatesTheJWKSCache(t *testing.T) {
 	runtime, store, mux := newIssuerFixture(t)
 	before := issuerGet(mux, issuerJWKSPath, nil).Header().Get("ETag")
-	records, _ := store.MemoryStore.ListKeys(t.Context())
+	records, _ := store.ListKeys(t.Context())
 	if err := runtime.Manager.Revoke(t.Context(), records[0].KID); err != nil {
 		t.Fatal(err)
 	}
@@ -185,10 +185,10 @@ func TestIssuerRotationInvalidatesTheJWKSCache(t *testing.T) {
 
 func TestIssuerJWKSOmitsRowsFailingIntegrity(t *testing.T) {
 	runtime, store, mux := newIssuerFixture(t)
-	records, _ := store.MemoryStore.ListKeys(t.Context())
+	records, _ := store.ListKeys(t.Context())
 	forged := records[0]
 	forged.IntegrityMAC = records[1].IntegrityMAC
-	store.MemoryStore.Put(forged)
+	store.Put(forged)
 	runtime.JWKS.Invalidate()
 	var set struct {
 		Keys []map[string]any `json:"keys"`
@@ -224,7 +224,8 @@ func TestIssuerRoutesAreRateLimitedPerClient(t *testing.T) {
 func TestClientLimiterRefillsAndBoundsItsTable(t *testing.T) {
 	limiter := newClientLimiter(2, time.Second, 3)
 	now := time.Unix(1000, 0)
-	if !limiter.allow("a", now) || !limiter.allow("a", now) || limiter.allow("a", now) {
+	first, second, third := limiter.allow("a", now), limiter.allow("a", now), limiter.allow("a", now)
+	if !first || !second || third {
 		t.Fatal("burst of two")
 	}
 	if !limiter.allow("a", now.Add(time.Second)) {
