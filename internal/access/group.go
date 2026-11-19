@@ -1,6 +1,7 @@
 package access
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -35,6 +36,16 @@ func ParseGroupMode(value string) (GroupMode, error) {
 // Enforced reports whether writes are checked. The zero value enforces, so a
 // handler built without the option is strict.
 func (m GroupMode) Enforced() bool { return m != GroupLenient }
+
+// WithCeiling marks ctx so the store enforces the ceiling in the transaction of the
+// write (repository.WithGroupCeiling) when the mode is strict, and leaves it
+// unmarked in lenient mode.
+func (m GroupMode) WithCeiling(ctx context.Context) context.Context {
+	if m.Enforced() {
+		return repository.WithGroupCeiling(ctx)
+	}
+	return ctx
+}
 
 // BelowCeiling returns the member repositories whose own visibility is below
 // the group's: the members a strict-mode write must refuse. A group whose

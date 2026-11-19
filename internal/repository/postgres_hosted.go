@@ -301,13 +301,97 @@ func (s *PostgresStore) UpdateHostedRepository(ctx context.Context, repo HostedR
 	if err != nil {
 		return HostedRepository{}, err
 	}
-	return runAudited(ctx, s, audit, func(q sqlRunner) (HostedRepository, error) {
+	run := runAudited[HostedRepository]
+	if groupCeilingEnforced(ctx) {
+		// The lowering check and the write share one transaction.
+		run = runTransactional[HostedRepository]
+	}
+	return run(ctx, s, audit, func(q sqlRunner) (HostedRepository, error) {
 		return s.updateHostedRepository(ctx, q, repo, expectedVersion, egressProxy, upstreamAuth, ociBearer)
 	})
 }
 
+// ListGroupsAboveVisibility returns the groups that contain the repository and are
+// more visible than visibility, without their members. The query reaches the groups
+// through hosted_group_members_repository_id_fk_idx, so lowering a repository does not
+// read every group.
+func (s *PostgresStore) ListGroupsAboveVisibility(ctx context.Context, repositoryID string, visibility Visibility) ([]HostedGroup, error) {
+	return listGroupsAboveVisibility(ctx, s.db, repositoryID, visibility)
+}
+
+// The CASE is the SQL twin of Visibility.Rank.
+const groupsAboveVisibilityQuery = `SELECT g.id::text, g.name, g.format, g.visibility, g.version::text
+FROM hosted_groups g
+WHERE g.id IN (SELECT m.group_id FROM hosted_group_members m WHERE m.repository_id=$1::uuid)
+  AND (CASE g.visibility WHEN 'private' THEN 0 WHEN 'authenticated' THEN 1 WHEN 'public' THEN 2 ELSE -1 END) > $2
+ORDER BY g.id`
+
+func listGroupsAboveVisibility(ctx context.Context, q sqlRunner, repositoryID string, visibility Visibility) ([]HostedGroup, error) {
+	rows, err := q.QueryContext(ctx, groupsAboveVisibilityQuery, repositoryID, visibility.Rank())
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var groups []HostedGroup
+	for rows.Next() {
+		var group HostedGroup
+		if err := rows.Scan(&group.ID, &group.Name, &group.Format, &group.Visibility, &group.Version); err != nil {
+			return nil, err
+		}
+		groups = append(groups, group)
+	}
+	return groups, rows.Err()
+}
+
+// checkGroupCeiling locks the member repositories against a concurrent visibility
+// change (FOR SHARE, in id order) and returns the members whose visibility is below
+// the group's. A repository update takes the row exclusively before it looks for
+// groups, so one of the two sees the other: a group raise and a member lowering
+// cannot both commit.
+func checkGroupCeiling(ctx context.Context, q sqlRunner, visibility Visibility, members []GroupMember) error {
+	ceiling := NormalizeVisibility(visibility)
+	if ceiling.Rank() <= 0 || len(members) == 0 {
+		return nil
+	}
+	repositoryIDs := make([]string, 0, len(members))
+	for _, member := range members {
+		repositoryIDs = append(repositoryIDs, member.RepositoryID)
+	}
+	rows, err := q.QueryContext(ctx, `SELECT `+hostedRepositoryColumns+` FROM hosted_repositories WHERE id = ANY($1::text[]::uuid[]) ORDER BY id FOR SHARE`, repositoryIDs)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+	var conflicts []HostedRepository
+	for rows.Next() {
+		var repo HostedRepository
+		if err := scanHostedRepository(rows, &repo); err != nil {
+			return err
+		}
+		if repo.Visibility.Rank() < ceiling.Rank() {
+			conflicts = append(conflicts, repo)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if len(conflicts) > 0 {
+		return &VisibilityConflictError{Members: conflicts}
+	}
+	return nil
+}
+
 func (s *PostgresStore) updateHostedRepository(ctx context.Context, q sqlRunner, repo HostedRepository, expectedVersion string, egressProxy, upstreamAuth, ociBearer any) (HostedRepository, error) {
 	var updated HostedRepository
+	var previous Visibility
+	enforce := groupCeilingEnforced(ctx)
+	if enforce {
+		// Lock the row before reading it so the visibility compared is the one replaced.
+		err := q.QueryRowContext(ctx, `SELECT visibility FROM hosted_repositories WHERE id=$1::uuid AND state='active' AND version=$2::text::bigint FOR UPDATE`, repo.ID, expectedVersion).Scan(&previous)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return HostedRepository{}, err
+		}
+	}
 	err := scanHostedRepository(q.QueryRowContext(ctx, `UPDATE hosted_repositories SET endpoint=$2, allowed_hosts=COALESCE($3::text[], '{}'::text[]), visibility=$4, maven_strict_publication=$5, version=version+1, egress_proxy=$7, upstream_auth=$8, oci_bearer=$9 WHERE id=$1::uuid AND state='active' AND version=$6::text::bigint RETURNING `+hostedRepositoryColumns, repo.ID, repo.Endpoint, repo.AllowedHosts, repo.Visibility, repo.MavenStrictPublication, expectedVersion, egressProxy, upstreamAuth, ociBearer), &updated)
 	if errors.Is(err, sql.ErrNoRows) {
 		if _, getErr := s.GetHostedRepository(ctx, repo.ID); errors.Is(getErr, ErrNotFound) {
@@ -317,6 +401,15 @@ func (s *PostgresStore) updateHostedRepository(ctx context.Context, q sqlRunner,
 	}
 	if err != nil {
 		return HostedRepository{}, err
+	}
+	if enforce && NormalizeVisibility(updated.Visibility).Rank() < NormalizeVisibility(previous).Rank() {
+		groups, err := listGroupsAboveVisibility(ctx, q, updated.ID, updated.Visibility)
+		if err != nil {
+			return HostedRepository{}, err
+		}
+		if len(groups) > 0 {
+			return HostedRepository{}, &VisibilityConflictError{Lowering: true}
+		}
 	}
 	return updated, nil
 }
@@ -395,6 +488,11 @@ func (s *PostgresStore) CreateHostedGroupIdempotently(ctx context.Context, group
 			return HostedGroup{}, false, err
 		}
 		if err := preflightPostgresCargoGroupMembers(ctx, tx, group.ID, group.Members); err != nil {
+			return HostedGroup{}, false, err
+		}
+	}
+	if groupCeilingEnforced(ctx) {
+		if err = checkGroupCeiling(ctx, tx, group.Visibility, group.Members); err != nil {
 			return HostedGroup{}, false, err
 		}
 	}
@@ -509,6 +607,13 @@ func (s *PostgresStore) replaceHostedGroup(ctx context.Context, id, name string,
 	}
 	if group.Format == FormatCargo {
 		if err := preflightPostgresCargoGroupMembers(ctx, tx, id, members); err != nil {
+			return HostedGroup{}, err
+		}
+	}
+	if groupCeilingEnforced(ctx) {
+		// group.Visibility is the stored value after the update, so a members-only
+		// replacement is checked against the visibility it really runs under.
+		if err = checkGroupCeiling(ctx, tx, group.Visibility, members); err != nil {
 			return HostedGroup{}, err
 		}
 	}

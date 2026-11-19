@@ -228,7 +228,7 @@ func (m *Module) previewGroups(w http.ResponseWriter, r *http.Request, p authori
 		body, _ := json.Marshal(input)
 		sum := sha256.Sum256(body)
 		group.ID = ids.New()
-		group, _, err = m.groups.CreateHostedGroupIdempotently(ctx, group, p.Actor, "helm-preview:"+key, hex.EncodeToString(sum[:]),
+		group, _, err = m.groups.CreateHostedGroupIdempotently(m.groupMode.WithCeiling(ctx), group, p.Actor, "helm-preview:"+key, hex.EncodeToString(sum[:]),
 			auditRecords(repository.AuditRecord{Actor: p.Actor, Repository: group.Name, GroupName: group.Name, Format: "helm", Resource: group.ID, Operation: "helm.preview.group.create", Outcome: repository.AuditResolved, Status: 201, OccurredAt: time.Now().UTC()})...)
 		if err != nil {
 			m.failure(w, err)
@@ -267,7 +267,7 @@ func (m *Module) previewGroups(w http.ResponseWriter, r *http.Request, p authori
 			return
 		}
 		next.ID = group.ID
-		next, err = m.groups.ReplaceHostedGroup(r.Context(), next, input.Version,
+		next, err = m.groups.ReplaceHostedGroup(m.groupMode.WithCeiling(r.Context()), next, input.Version,
 			auditRecords(repository.AuditRecord{Actor: p.Actor, Repository: group.Name, GroupName: group.Name, Format: "helm", Resource: group.ID, Operation: "helm.preview.group.configure", Outcome: repository.AuditResolved, Status: 200, OccurredAt: time.Now().UTC(), Evidence: map[string]string{"version": repository.NextHostedVersion(input.Version)}})...)
 		if err != nil {
 			m.failure(w, err)

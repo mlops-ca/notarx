@@ -116,6 +116,26 @@ func (h repositoryManagementHandler) readGroup(w http.ResponseWriter, r *http.Re
 	return group, true
 }
 
+// withLessVisibleMembers fills LessVisibleMembers on the groups, the read-only
+// indicator of ADR 0029 lenient mode. It looks each member repository up once per
+// call. A member that cannot be read is skipped: the indicator is advisory and the
+// read itself must not fail because of it.
+func (h repositoryManagementHandler) withLessVisibleMembers(r *http.Request, groups ...repository.HostedGroup) []repository.HostedGroup {
+	repos := map[string]repository.HostedRepository{}
+	for index, group := range groups {
+		for _, member := range group.Members {
+			if _, seen := repos[member.RepositoryID]; seen || member.RepositoryID == "" {
+				continue
+			}
+			if repo, err := h.store.GetHostedRepository(r.Context(), member.RepositoryID); err == nil {
+				repos[member.RepositoryID] = repo
+			}
+		}
+		groups[index].LessVisibleMembers = repository.LessVisibleMembers(group, repos)
+	}
+	return groups
+}
+
 // groupListScanBudget bounds how many Groups one filtered list request checks,
 // so a caller who can read few Groups cannot make a single request scan the
 // whole catalog.
@@ -158,7 +178,7 @@ func (h repositoryManagementHandler) ListGroups(w http.ResponseWriter, r *http.R
 				visible = append(visible, item)
 			}
 		}
-		items = visible
+		items = h.withLessVisibleMembers(r, visible...)
 		writeNativeMavenJSON(w, http.StatusOK, map[string]any{"items": items, "nextPageToken": next})
 		return
 	}
@@ -197,7 +217,7 @@ func (h repositoryManagementHandler) ListGroups(w http.ResponseWriter, r *http.R
 	if hasMore {
 		next = scanned
 	}
-	writeNativeMavenJSON(w, http.StatusOK, map[string]any{"items": items, "nextPageToken": next})
+	writeNativeMavenJSON(w, http.StatusOK, map[string]any{"items": h.withLessVisibleMembers(r, items...), "nextPageToken": next})
 }
 
 func (h repositoryManagementHandler) CreateGroup(w http.ResponseWriter, r *http.Request, params adminopenapi.CreateGroupParams) {
@@ -215,9 +235,6 @@ func (h repositoryManagementHandler) CreateGroup(w http.ResponseWriter, r *http.
 	if !h.authorizeGroupMembership(w, r, principal, group.Name, group.Members) {
 		return
 	}
-	if h.rejectVisibilityConflict(w, r, principal, group) {
-		return
-	}
 	group.ID = ids.New()
 	payload, _ := json.Marshal(struct {
 		Name       string                   `json:"name"`
@@ -226,7 +243,10 @@ func (h repositoryManagementHandler) CreateGroup(w http.ResponseWriter, r *http.
 		Members    []repository.GroupMember `json:"members"`
 	}{group.Name, group.Format, repository.NormalizeVisibility(group.Visibility), group.Members})
 	digest := sha256.Sum256(payload)
-	created, _, err := h.groups.CreateHostedGroupIdempotently(r.Context(), group, principal.Actor, string(params.IdempotencyKey), base64.RawURLEncoding.EncodeToString(digest[:]))
+	created, _, err := h.groups.CreateHostedGroupIdempotently(h.groupMode.WithCeiling(r.Context()), group, principal.Actor, string(params.IdempotencyKey), base64.RawURLEncoding.EncodeToString(digest[:]))
+	if h.writeGroupVisibilityConflict(w, r, principal, err) {
+		return
+	}
 	if errors.Is(err, repository.ErrIdempotencyConflict) {
 		writeHostedProblem(w, http.StatusConflict, "idempotency_conflict", "Idempotency-Key was already used with a different request")
 		return
@@ -333,12 +353,9 @@ func (h repositoryManagementHandler) ReplaceGroup(w http.ResponseWriter, r *http
 	if !h.authorizeGroupMembership(w, r, principal, group.Name, append(append([]repository.GroupMember{}, current.Members...), group.Members...)) {
 		return
 	}
-	if h.rejectVisibilityConflict(w, r, principal, group) {
-		return
-	}
 	group.ID = id.String()
-	updated, err := h.groups.ReplaceHostedGroup(r.Context(), group, string(params.IfMatch))
-	h.writeGroupMutation(w, updated, err)
+	updated, err := h.groups.ReplaceHostedGroup(h.groupMode.WithCeiling(r.Context()), group, string(params.IfMatch))
+	h.writeGroupMutation(w, r, principal, updated, err)
 }
 
 func (h repositoryManagementHandler) ReplaceGroupMembers(w http.ResponseWriter, r *http.Request, id adminopenapi.GroupId, params adminopenapi.ReplaceGroupMembersParams) {
@@ -367,20 +384,20 @@ func (h repositoryManagementHandler) ReplaceGroupMembers(w http.ResponseWriter, 
 	if !h.authorizeGroupMembership(w, r, principal, group.Name, append(append([]repository.GroupMember{}, group.Members...), members...)) {
 		return
 	}
-	if h.rejectVisibilityConflict(w, r, principal, repository.HostedGroup{Name: group.Name, Format: group.Format, Visibility: group.Visibility, Members: members}) {
-		return
-	}
-	updated, err := h.groups.ReplaceHostedGroupMembers(r.Context(), id.String(), members, string(params.IfMatch))
-	h.writeGroupMutation(w, updated, err)
+	updated, err := h.groups.ReplaceHostedGroupMembers(h.groupMode.WithCeiling(r.Context()), id.String(), members, string(params.IfMatch))
+	h.writeGroupMutation(w, r, principal, updated, err)
 }
 
 func (h repositoryManagementHandler) writeGroup(w http.ResponseWriter, r *http.Request, id string) {
 	if group, ok := h.readGroup(w, r, id); ok {
-		writeNativeMavenJSON(w, 200, group)
+		writeNativeMavenJSON(w, 200, h.withLessVisibleMembers(r, group)[0])
 	}
 }
 
-func (h repositoryManagementHandler) writeGroupMutation(w http.ResponseWriter, group repository.HostedGroup, err error) {
+func (h repositoryManagementHandler) writeGroupMutation(w http.ResponseWriter, r *http.Request, principal Principal, group repository.HostedGroup, err error) {
+	if h.writeGroupVisibilityConflict(w, r, principal, err) {
+		return
+	}
 	if errors.Is(err, repository.ErrNotFound) {
 		writeHostedProblem(w, 404, "not_found", "group not found")
 		return

@@ -727,6 +727,10 @@ export type Group = {
   visibility: Visibility;
   members: MemberList;
   version: string;
+  /**
+   * Read-only, computed when the group is read (ADR 0029). The members whose own visibility is below the group's. Strict group mode refuses such a group on write; in lenient mode (NOTARX_GROUP_VISIBILITY_MODE=lenient) the callers of the group see it without those members, and the Console warns. Absent when there are none.
+   */
+  lessVisibleMembers?: Array<VisibilityConflictMember>;
 };
 
 export type CreateGroup = {

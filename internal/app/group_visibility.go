@@ -3,10 +3,10 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
-	"github.com/mlops-ca/notarx/internal/access"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -34,66 +34,32 @@ func (h managementScope) administeredBy(ctx context.Context, principal Principal
 	return kept
 }
 
-// rejectVisibilityConflict enforces strict group mode on a group write: the
-// group may not be more visible than its least visible member. It reports
-// whether it answered.
-func (h repositoryManagementHandler) rejectVisibilityConflict(w http.ResponseWriter, r *http.Request, principal Principal, group repository.HostedGroup) bool {
-	if !h.groupMode.Enforced() {
+// writeGroupVisibilityConflict answers a store refusal of a group write under
+// strict mode (repository.ErrVisibilityConflict) with 409 visibility_conflict. It
+// reports whether err was such a refusal.
+func (h managementScope) writeGroupVisibilityConflict(w http.ResponseWriter, r *http.Request, principal Principal, err error) bool {
+	var conflict *repository.VisibilityConflictError
+	if !errors.As(err, &conflict) || conflict.Lowering {
 		return false
 	}
-	members := make([]repository.HostedRepository, 0, len(group.Members))
-	for _, member := range group.Members {
-		repo, err := h.store.GetHostedRepository(r.Context(), member.RepositoryID)
-		if err != nil {
-			// validHostedGroup resolved every member, so a failure here is transient.
-			// Skipping the member would let a conflicting write through; fail closed.
-			writeHostedProblem(w, http.StatusServiceUnavailable, "internal_error", "group member lookup failed; retry the request")
-			return true
-		}
-		members = append(members, repo)
-	}
-	conflicts := access.BelowCeiling(group, members)
-	if len(conflicts) == 0 {
-		return false
-	}
-	named := h.administeredBy(r.Context(), principal, conflicts)
+	named := h.administeredBy(r.Context(), principal, conflict.Members)
 	message := "group visibility must not exceed the visibility of its least visible member"
-	if hidden := len(conflicts) - len(named); hidden > 0 {
+	if hidden := len(conflict.Members) - len(named); hidden > 0 {
 		message += "; " + strconv.Itoa(hidden) + " offending member(s) are repositories you do not administer and are not listed"
 	}
 	writeVisibilityConflict(w, message, named)
 	return true
 }
 
-// rejectLoweringBelowGroups enforces strict group mode when a repository's
-// visibility is lowered: no group that contains it may stay more visible than
-// it. It reports whether it answered.
-func (h hostedRepositoryAPIHandler) rejectLoweringBelowGroups(w http.ResponseWriter, r *http.Request, repo repository.HostedRepository, next repository.Visibility) bool {
-	if !h.groupMode.Enforced() || !access.LowersRepository(repo, next) {
+// writeLoweringVisibilityConflict answers a store refusal of a repository
+// visibility change that would leave a group more visible than the repository. The
+// caller administers the repository (the update requires it), so naming it
+// discloses nothing; the groups are not named.
+func writeLoweringVisibilityConflict(w http.ResponseWriter, err error, repo repository.HostedRepository, next repository.Visibility) bool {
+	var conflict *repository.VisibilityConflictError
+	if !errors.As(err, &conflict) || !conflict.Lowering {
 		return false
 	}
-	if h.groups == nil {
-		// Strict mode cannot be checked without the group store; refusing is the
-		// only answer that keeps the invariant.
-		writeHostedProblem(w, http.StatusServiceUnavailable, "internal_error", "group store unavailable; the visibility change cannot be checked against groups")
-		return true
-	}
-	after := ""
-	for {
-		groups, token, err := h.groups.ListHostedGroups(r.Context(), 200, after)
-		if err != nil {
-			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "list groups failed")
-			return true
-		}
-		if len(access.GroupsAbove(next, repo.ID, groups)) > 0 {
-			// The caller administers this repository (the update requires it), so
-			// naming it discloses nothing; the groups are not named.
-			writeVisibilityConflict(w, "a group that contains this repository is more visible than the requested visibility", []repository.VisibilityRef{repo.VisibilityRefAt(next)})
-			return true
-		}
-		if token == "" {
-			return false
-		}
-		after = token
-	}
+	writeVisibilityConflict(w, "a group that contains this repository is more visible than the requested visibility", []repository.VisibilityRef{repo.VisibilityRefAt(next)})
+	return true
 }

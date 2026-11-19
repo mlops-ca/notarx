@@ -71,9 +71,14 @@ repository's visibility only.
   member, and refuses lowering a repository below a group that contains it, with
   `409 visibility_conflict`. The response lists the offending member
   repositories the caller may administer. The Console shows the same message.
+  The check runs in the same database transaction as the write, so concurrent
+  group and repository changes cannot leave a group more visible than a member,
+  and it covers the NuGet and Helm preview group endpoints too.
 - `lenient` keeps the computed filtering only: members above the caller's class
   are silently invisible. It exists to migrate existing layouts and is not a
-  recommended steady state.
+  recommended steady state. Group reads (`GET /api/v2/groups` and
+  `GET /api/v2/groups/{groupId}`) carry a read-only `lessVisibleMembers` list
+  of those members, and the Console warns on the group row.
 
 Legacy protocol-specific Groups (OCI, Maven, Raw, Conan) carry no per-member
 visibility: a legacy Group marked anonymous resolves every member for an
