@@ -14,10 +14,11 @@ done
 # Maven plugins and dependencies come from the recorded Central fixture through
 # a loopback mirror (docs/ci.md, "Re-record the Maven and Gradle fixtures"), and
 # Maven refuses every other non-loopback host. The Gradle steps resolve only from
-# the Gateway under test and are not network-guarded yet. A path that was not
+# the Gateway under test. Every client and test below runs through
+# scripts/egress-guard.sh, which rejects non-private addresses in CI. A path that was not
 # recorded answers 404 and is reported.
 # Mandatory real clients: snapshot history/takeover and unchanged Hosted POMs from an empty cache.
-go test -v -count=1 -tags=mavenclient ./internal/app -run '^TestMavenClient(SnapshotHistoryTakeoverAndDeploy|HostedPOMCompatibilityColdCache)$'
+"$repo_root/scripts/egress-guard.sh" go test -v -count=1 -tags=mavenclient ./internal/app -run '^TestMavenClient(SnapshotHistoryTakeoverAndDeploy|HostedPOMCompatibilityColdCache)$'
 
 port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')
 notarx_url="http://127.0.0.1:${port}"
@@ -139,7 +140,7 @@ cat >"$maven_dir/pom.xml" <<EOF
 <project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0</modelVersion><groupId>org.example</groupId><artifactId>maven-widget</artifactId><version>1.2.3</version><distributionManagement><repository><id>native</id><url>${notarx_url}/repository/maven/deploys</url></repository></distributionManagement><build><plugins><plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-resources-plugin</artifactId><version>3.4.0</version></plugin><plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.15.0</version></plugin><plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId><version>3.5.4</version></plugin><plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-jar-plugin</artifactId><version>3.5.0</version></plugin><plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-install-plugin</artifactId><version>3.1.4</version></plugin><plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-deploy-plugin</artifactId><version>3.1.4</version></plugin></plugins></build></project>
 EOF
 mvn_status=0
-(cd "$maven_dir" && mvn --batch-mode --settings settings.xml -Dmaven.repo.local="$workdir/maven-deploy-repository" deploy) || mvn_status=$?
+(cd "$maven_dir" && "$repo_root/scripts/egress-guard.sh" mvn --batch-mode --settings settings.xml -Dmaven.repo.local="$workdir/maven-deploy-repository" deploy) || mvn_status=$?
 if [[ $mvn_status -ne 0 ]]; then fixture_misses || true; exit "$mvn_status"; fi
 expect_status 200 "${basic[@]}" "$notarx_url/repository/maven/deploys/org/example/maven-widget/1.2.3/maven-widget-1.2.3.jar"
 expect_status 409 "${basic[@]}" -H 'Idempotency-Key: direct-mode-does-not-commit' -H 'Content-Type: application/json' \
@@ -151,7 +152,7 @@ mkdir -p "$resolve_dir"
 cat >"$resolve_dir/pom.xml" <<EOF
 <project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0</modelVersion><groupId>fixture</groupId><artifactId>resolver</artifactId><version>1</version><repositories><repository><id>native</id><url>${notarx_url}/maven/maven-chain</url></repository></repositories><dependencies><dependency><groupId>org.example</groupId><artifactId>maven-widget</artifactId><version>1.2.3</version></dependency></dependencies></project>
 EOF
-(cd "$resolve_dir" && mvn --batch-mode --settings "$maven_dir/settings.xml" -Dmaven.repo.local="$workdir/maven-resolve-repository" org.apache.maven.plugins:maven-dependency-plugin:3.8.1:resolve) || mvn_status=$?
+(cd "$resolve_dir" && "$repo_root/scripts/egress-guard.sh" mvn --batch-mode --settings "$maven_dir/settings.xml" -Dmaven.repo.local="$workdir/maven-resolve-repository" org.apache.maven.plugins:maven-dependency-plugin:3.8.1:resolve) || mvn_status=$?
 if [[ $mvn_status -ne 0 ]]; then fixture_misses || true; exit "$mvn_status"; fi
 
 gradle_dir="$workdir/gradle"
@@ -194,11 +195,11 @@ configurations { nativeResolve }
 dependencies { nativeResolve 'org.example:gradle-widget:2.0.0-SNAPSHOT' }
 tasks.register('resolveNative') { doLast { configurations.nativeResolve.files.each { println it } } }
 EOF
-if ! (cd "$gradle_dir" && JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} $gradle_jvm_options" GRADLE_USER_HOME="$workdir/gradle-user-home" gradle --no-daemon --quiet publish); then
+if ! (cd "$gradle_dir" && JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} $gradle_jvm_options" GRADLE_USER_HOME="$workdir/gradle-user-home" "$repo_root/scripts/egress-guard.sh" gradle --no-daemon --quiet publish); then
   cat "$workdir/notarx.log" >&2
   exit 1
 fi
-(cd "$gradle_dir" && JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} $gradle_jvm_options" GRADLE_USER_HOME="$workdir/gradle-user-home" gradle --no-daemon --quiet resolveNative | grep -F 'gradle-widget-2.0.0-SNAPSHOT.jar')
+(cd "$gradle_dir" && JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} $gradle_jvm_options" GRADLE_USER_HOME="$workdir/gradle-user-home" "$repo_root/scripts/egress-guard.sh" gradle --no-daemon --quiet resolveNative | grep -F 'gradle-widget-2.0.0-SNAPSHOT.jar')
 
 expect_status 200 "${basic[@]}" "$notarx_url/repository/maven/deploys/org/example/maven-widget/1.2.3/maven-widget-1.2.3.jar.sha256"
 expect_status 200 "${basic[@]}" "$notarx_url/repository/maven/deploys/org/example/gradle-widget/2.0.0-SNAPSHOT/maven-metadata.xml"

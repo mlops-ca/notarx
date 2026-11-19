@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -344,6 +345,25 @@ func privateGradleAssets(t *testing.T) map[string]redirectCacheAsset {
 	return assets
 }
 
+// waitForProcessGroupExit returns once no process of the group led by pgid is
+// left, killing the group when it outlives the wait, so nothing started by the
+// client can write into the directories the test removes afterwards.
+func waitForProcessGroupExit(t *testing.T, pgid int) {
+	t.Helper()
+	deadline := time.NewTimer(30 * time.Second)
+	defer deadline.Stop()
+	tick := time.NewTicker(10 * time.Millisecond)
+	defer tick.Stop()
+	for syscall.Kill(-pgid, 0) == nil {
+		select {
+		case <-deadline.C:
+			_ = syscall.Kill(-pgid, syscall.SIGKILL)
+			t.Fatalf("Gradle process group %d outlived the client by more than 30s", pgid)
+		case <-tick.C:
+		}
+	}
+}
+
 func runPrivateGradleClient(t *testing.T, gradle, endpoint string, scheme repository.UpstreamAuthScheme, route, round string, assets map[string]redirectCacheAsset, success bool) []byte {
 	t.Helper()
 	work := t.TempDir()
@@ -388,13 +408,27 @@ tasks.register('resolvePrivate') {
 	// Gradle may start its own single-use JVM even with --no-daemon. Set both
 	// launcher and daemon homes; neither Java process may inherit ~/.gradle.
 	writeRedirectMavenClientFile(t, filepath.Join(gradleHome, "gradle.properties"), []byte("org.gradle.jvmargs=-Xmx256m -Duser.home="+home+" -Djava.io.tmpdir="+temporary+"\n"))
+	// Root cause of the TempDir cleanup race (issue #397): Gradle runs its user
+	// home cache cleanup (and closes the caches) in the single-use JVM after the
+	// build result reached the client, so that JVM kept writing into
+	// gradle-home/caches while t.TempDir removed it ("directory not empty").
+	// The home is empty and thrown away, so cleanup is switched off, and the
+	// run below waits for every process of the Gradle process group to exit
+	// before returning, so nothing is left writing into the home.
+	if err := os.Mkdir(filepath.Join(gradleHome, "init.d"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	writeRedirectMavenClientFile(t, filepath.Join(gradleHome, "init.d", "no-cache-cleanup.gradle"), []byte("import org.gradle.api.cache.Cleanup\nbeforeSettings { settings -> settings.caches { cleanup = Cleanup.DISABLED } }\n"))
 	ctx, cancel := context.WithTimeout(t.Context(), 90*time.Second)
 	defer cancel()
 	command := exec.CommandContext(ctx, gradle, "--no-daemon", "--no-watch-fs", "--no-build-cache", "--no-configuration-cache", "--max-workers=1", "--console=plain", "--warning-mode=fail", "resolvePrivate")
 	command.Dir = work
 	command.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + home, "GRADLE_USER_HOME=" + gradleHome,
 		"TMPDIR=" + temporary, "LANG=C", "GRADLE_OPTS=-Duser.home=" + home + " -Djava.io.tmpdir=" + temporary + " -Dorg.gradle.java.installations.auto-download=false"}
+	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	command.Cancel = func() error { return syscall.Kill(-command.Process.Pid, syscall.SIGKILL) }
 	out, err := command.CombinedOutput()
+	waitForProcessGroupExit(t, command.Process.Pid)
 	if ctx.Err() != nil || (err == nil) != success || bytes.Contains(out, []byte("PRIVATE_GRADLE_RESOLUTION_COMPLETE")) != success {
 		t.Fatalf("official Gradle %s expected success=%v: %v\n%s", round, success, err, out)
 	}
