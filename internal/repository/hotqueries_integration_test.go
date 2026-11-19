@@ -5,6 +5,7 @@ package repository
 import (
 	"context"
 	"os"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -87,8 +88,8 @@ func TestHotQueriesKeepTheirPlans(t *testing.T) {
 			if len(plan.Indexes()) == 0 {
 				t.Errorf("plan scans no index")
 			}
-			if query.indexContains != "" && !plan.UsesAnyIndexContaining(query.indexContains) {
-				t.Errorf("plan uses indexes %v, want one containing %q", plan.Indexes(), query.indexContains)
+			if len(query.indexContains) > 0 && !slices.ContainsFunc(query.indexContains, plan.UsesAnyIndexContaining) {
+				t.Errorf("plan uses indexes %v, want one containing any of %q", plan.Indexes(), query.indexContains)
 			}
 		})
 	}

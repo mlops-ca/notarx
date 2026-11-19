@@ -15,11 +15,11 @@ type hotQuery struct {
 	name string
 	// build returns the statement and its arguments for the seeded fixture.
 	build func(hotQueryFixture) (string, []any)
-	// indexContains, when set, must be a substring of an index name in the plan. When
-	// empty the plan must still scan some index; leave it empty where the planner may
-	// pick between equivalent indexes (partitioned audit tables, whose partition
-	// indexes carry their own names).
-	indexContains string
+	// indexContains, when set, lists substrings of index names; the plan must scan an
+	// index matching at least one. List every index the planner may legitimately pick
+	// between equivalent ones. When empty the plan must still scan some index; leave it
+	// empty for partitioned audit tables, whose partition indexes carry their own names.
+	indexContains []string
 	// noSeqScan lists the tables on which the plan must not contain a Seq Scan; a
 	// partition of a listed table counts as the table.
 	noSeqScan []string
@@ -52,19 +52,19 @@ var hotQueries = []hotQuery{
 	{
 		name:          "npm.package.get",
 		build:         fixed(getNPMPackageQuery, func(f hotQueryFixture) []any { return []any{f.repositoryID, f.packageName} }),
-		indexContains: "native_npm_packages_pkey",
+		indexContains: []string{"native_npm_packages_pkey", "native_npm_packages_name_idx"},
 		noSeqScan:     []string{"native_npm_packages"},
 	},
 	{
 		name:          "npm.versions.list",
 		build:         fixed(listNPMVersionsQuery, func(f hotQueryFixture) []any { return []any{f.repositoryID, f.packageName} }),
-		indexContains: "native_npm_versions_pkey",
+		indexContains: []string{"native_npm_versions_pkey"},
 		noSeqScan:     []string{"native_npm_versions"},
 	},
 	{
 		name:          "npm.version.get",
 		build:         fixed(getNPMVersionQuery, func(f hotQueryFixture) []any { return []any{f.repositoryID, f.packageName, f.version} }),
-		indexContains: "native_npm_versions_pkey",
+		indexContains: []string{"native_npm_versions_pkey"},
 		noSeqScan:     []string{"native_npm_versions"},
 	},
 	{
@@ -72,31 +72,31 @@ var hotQueries = []hotQuery{
 		build: fixed(getNPMVersionByTarballQuery, func(f hotQueryFixture) []any {
 			return []any{f.repositoryID, f.packageName, f.packageName + "-" + f.version + ".tgz"}
 		}),
-		indexContains: "native_npm_versions_repository_id_package_name_tarball_name_key",
+		indexContains: []string{"native_npm_versions_repository_id_package_name_tarball_name_key"},
 		noSeqScan:     []string{"native_npm_versions"},
 	},
 	{
 		name:          "repository.byName",
 		build:         fixed(getHostedRepositoryByNameQuery, func(f hotQueryFixture) []any { return []any{f.repositoryName} }),
-		indexContains: "hosted_repositories_name_key",
+		indexContains: []string{"hosted_repositories_name_key"},
 		noSeqScan:     []string{"hosted_repositories"},
 	},
 	{
 		name:          "repository.keysetPage",
 		build:         fixed(listHostedRepositoriesQuery, func(f hotQueryFixture) []any { return []any{f.repositoryID, 51} }),
-		indexContains: "hosted_repositories_pkey",
+		indexContains: []string{"hosted_repositories_pkey"},
 		noSeqScan:     []string{"hosted_repositories"},
 	},
 	{
 		name:          "lifecycle.claimByKind",
 		build:         fixed(claimLifecycleCandidatesByKindQuery, func(hotQueryFixture) []any { return []any{string(LifecycleJobKind("scan")), "", []string{}, 10} }),
-		indexContains: "lifecycle_jobs_kind_actionable_idx",
+		indexContains: []string{"lifecycle_jobs_kind_actionable_idx"},
 		noSeqScan:     []string{"lifecycle_jobs"},
 	},
 	{
 		name:          "lifecycle.claimAnyKind",
 		build:         fixed(claimLifecycleCandidatesAnyKindQuery, func(hotQueryFixture) []any { return []any{"", []string{}, 10} }),
-		indexContains: "lifecycle_jobs_actionable_idx",
+		indexContains: []string{"lifecycle_jobs_actionable_idx"},
 		noSeqScan:     []string{"lifecycle_jobs"},
 	},
 	{
