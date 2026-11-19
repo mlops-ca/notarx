@@ -43,6 +43,7 @@ func DefaultRegistry() []Spec {
 	return []Spec{
 		{Table: "resolver_audit_log", Column: "occurred_at", Granularity: Month, Retention: 90 * 24 * time.Hour},
 		{Table: "security_audit_log", Column: "occurred_at", Granularity: Month, Retention: 730 * 24 * time.Hour},
+		{Table: "artifact_scan_history", Column: "scanned_at", Granularity: Month, Retention: 180 * 24 * time.Hour},
 	}
 }
 
