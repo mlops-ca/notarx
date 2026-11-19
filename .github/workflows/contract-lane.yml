@@ -44,6 +44,9 @@ jobs:
       GOPROXY: https://proxy.golang.org|direct
       # Compose uses the images built once by ci.yml instead of rebuilding them.
       NOTARX_COMPOSE_BUILD_FLAG: --no-build
+      # Maven and Gradle clients run through scripts/egress-guard.sh, which rejects
+      # public addresses when this is set (docs/ci.md, hermetic Maven lanes).
+      NOTARX_EGRESS_GUARD: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

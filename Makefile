@@ -129,6 +129,7 @@ test:
 	@./scripts/integration-isolation-test.sh
 	@./scripts/migration-immutability-check-test.sh
 	@./scripts/identity-check-test.sh
+	@./scripts/egress-guard-test.sh
 	@./scripts/local-dev-test.sh
 	@./scripts/rustfs-only-contract-test.sh
 	@./scripts/run-rustfs-test.sh

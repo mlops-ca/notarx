@@ -202,6 +202,23 @@ machines lack, so it runs in CI as a manual workflow that normal CI never starts
 In record mode a miss is fetched from the upstream, stored and served, and an
 existing file is never replaced. To refresh a recording delete the file first.
 
+## Hermetic Maven and Gradle lanes
+
+The Maven and Gradle clients and the Go tests that drive them never reach the
+internet in CI. Besides the recorded fixtures and the in-client refusals above,
+`scripts/egress-guard.sh` enforces it in the kernel: `contract-lane.yml` sets
+`NOTARX_EGRESS_GUARD=1`, and `native-maven-e2e.sh`, `nexus-migration-client-e2e.sh`
+and `private-upstream-auth-e2e.sh` start their `mvn`, `gradle` and `go test`
+commands through it. The command runs with the group `notarx-egress` as its
+effective group, and an iptables (and ip6tables) owner match on that group
+rejects every packet except to loopback and private ranges (the fixture mirror,
+the service containers and the system under test). Before running, the guard
+proves it is in force by failing to connect to a public address and refuses to
+run the command otherwise. Tool downloads (the pinned Maven, Gradle and ORAS
+archives) happen outside the guard, before the clients run. Without the variable
+the guard runs the command unchanged, so local runs are not affected.
+`scripts/ci-contract.py` carries no Maven Central mirror.
+
 ## Migration checks
 
 The `quality` job runs `make migration-check`

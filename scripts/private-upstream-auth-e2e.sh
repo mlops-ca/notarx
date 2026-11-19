@@ -124,7 +124,7 @@ if ! TEST_DATABASE_URL="postgres://notarx:integration-password@${postgres_addres
 TEST_OBJECT_STORE_ENDPOINT="http://${rustfs_address}" \
 TEST_OBJECT_STORE_ACCESS_KEY=integration-rustfs \
 TEST_OBJECT_STORE_SECRET_KEY=integration-password \
-  go test -json -count=1 -tags='integration mavenclient ociclient gradleclient' ./internal/app \
+  "$root/scripts/egress-guard.sh" go test -json -count=1 -tags='integration mavenclient ociclient gradleclient' ./internal/app \
   -run '^Test(PostgresRustFSPrivateProxy(Credentials|OfficialClients|GradleOfficialClient)|Private.*)$' \
   >"$evidence/results.jsonl" 2>&1; then
   test_exit=1
