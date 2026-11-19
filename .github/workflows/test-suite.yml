@@ -238,8 +238,7 @@ jobs:
       - name: Build Console deployment image
         run: make console-docker-build
       - name: Install browser
-        run: npx playwright install --with-deps chromium
-        working-directory: console
+        uses: ./.github/actions/playwright-browser
       - name: Verify built Console identity
         run: npx playwright test --config playwright.build.config.ts
         working-directory: console
@@ -292,8 +291,7 @@ jobs:
         working-directory: console
       - name: Install browser
         if: matrix.shard != ''
-        run: npx playwright install --with-deps chromium
-        working-directory: console
+        uses: ./.github/actions/playwright-browser
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: image-${{ runner.arch }}-*
