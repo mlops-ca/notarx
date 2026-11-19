@@ -136,17 +136,19 @@ func buildCondition(kind Kind, item wireCondition) (Condition, error) {
 // It does not apply the per-kind mandatory conditions, which need the issuer kind and the
 // write-time acknowledgements; handlers call Validate for that.
 func CheckCanonical(raw []byte) error {
-	conditions, err := ParseConditions(KindGeneric, raw)
-	if err != nil {
+	if _, err := ParseConditions(KindGeneric, raw); err != nil {
 		return err
 	}
-	canonical, err := Canonical(conditions)
-	if err != nil {
+	// ParseConditions accepted it; what remains is that no claim uses a string spelling.
+	// Key order and whitespace do not matter: jsonb returns its own.
+	var wire []wireCondition
+	if err := json.Unmarshal(raw, &wire); err != nil {
 		return err
 	}
-	var compact bytes.Buffer
-	if err := json.Compact(&compact, raw); err != nil || !bytes.Equal(compact.Bytes(), canonical) {
-		return errors.New("conditions are not in canonical form; run Validate first")
+	for _, item := range wire {
+		if trimmed := bytes.TrimSpace(item.Claim); len(trimmed) == 0 || trimmed[0] != '[' {
+			return errors.New("conditions are not in canonical form (claims must be arrays of keys); run Validate first")
+		}
 	}
 	return nil
 }

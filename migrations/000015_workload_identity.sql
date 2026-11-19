@@ -62,8 +62,9 @@ CREATE TABLE public.workload_trust_policies (
 );
 
 -- The authenticator lists the active policies of one issuer; the service account index
--- serves the foreign key and "which policies map to this account".
-CREATE INDEX workload_trust_policies_issuer_idx ON public.workload_trust_policies USING btree (issuer_id) WHERE state = 'active';
+-- serves the foreign key and "which policies map to this account". Both indexes lead with
+-- their foreign key column (a partial index would not satisfy the schema index test).
+CREATE INDEX workload_trust_policies_issuer_idx ON public.workload_trust_policies USING btree (issuer_id, state);
 CREATE INDEX workload_trust_policies_service_account_idx ON public.workload_trust_policies USING btree (service_account_id);
 
 -- No foreign key to workload_issuers: the table is insert-hot and rows are short-lived.

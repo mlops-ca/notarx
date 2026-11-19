@@ -406,7 +406,11 @@ func TestCheckCanonical(t *testing.T) {
 	if err := CheckCanonical([]byte(spaced)); err != nil {
 		t.Fatalf("whitespace must not matter: %v", err)
 	}
-	for _, raw := range []string{`[{"claim":"sub","op":"eq","values":["a"]}]`, `[null]`, `[]`, `nope`, `[{"claim":["sub"],"values":["a"],"op":"eq"}]`} {
+	// PostgreSQL jsonb returns keys in its own order and with spaces after separators.
+	if err := CheckCanonical([]byte(`[{"op": "glob", "claim": ["sub"], "values": ["ci:*"]}]`)); err != nil {
+		t.Fatalf("jsonb order must be accepted: %v", err)
+	}
+	for _, raw := range []string{`[{"claim":"sub","op":"eq","values":["a"]}]`, `[{"claim":"/sub","op":"eq","values":["a"]}]`, `[null]`, `[]`, `nope`} {
 		if err := CheckCanonical([]byte(raw)); err == nil {
 			t.Errorf("CheckCanonical(%s) accepted", raw)
 		}
