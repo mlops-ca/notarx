@@ -138,7 +138,13 @@ type Config struct {
 	UsageFlushInterval          time.Duration
 	ShutdownFlushTimeout        time.Duration
 	DatabaseURL                 string
+	DatabaseDriver              string
+	DatabaseTLSCAFile           string
+	DatabaseMigrateURL          string
+	DatabasePollInterval        time.Duration
+	DatabaseExperimentalMySQL   bool
 	DatabasePool                database.PoolConfig
+	DatabaseNotificationPool    database.PoolConfig
 	DatabaseCoordinatorPool     database.PoolConfig
 	DatabaseArtifactLockPool    database.PoolConfig
 	ObjectStore                 objectstore.Config
@@ -367,8 +373,8 @@ func Load() (Config, error) {
 	if cfg.DatabaseURL == "" || cfg.AdminToken == "" || cfg.ResolverToken == "" {
 		return Config{}, fmt.Errorf("NOTARX_DATABASE_URL, NOTARX_ADMIN_TOKEN, and NOTARX_RESOLVER_TOKEN are required")
 	}
-	if _, err := url.ParseRequestURI(cfg.DatabaseURL); err != nil {
-		return Config{}, fmt.Errorf("NOTARX_DATABASE_URL is not a valid URL")
+	if err := configureDatabase(&cfg); err != nil {
+		return Config{}, err
 	}
 	objectConfig, err := loadObjectStore()
 	if err != nil {
@@ -480,6 +486,8 @@ func Load() (Config, error) {
 	cfg.DatabaseCoordinatorPool.ConnMaxIdleTime = cfg.DatabasePool.ConnMaxIdleTime
 	cfg.DatabaseArtifactLockPool.ConnMaxLifetime = cfg.DatabasePool.ConnMaxLifetime
 	cfg.DatabaseArtifactLockPool.ConnMaxIdleTime = cfg.DatabasePool.ConnMaxIdleTime
+	cfg.DatabaseNotificationPool.ConnMaxLifetime = cfg.DatabasePool.ConnMaxLifetime
+	cfg.DatabaseNotificationPool.ConnMaxIdleTime = cfg.DatabasePool.ConnMaxIdleTime
 	if err := cfg.DatabasePool.Validate(); err != nil {
 		return Config{}, fmt.Errorf("invalid database pool configuration: %w", err)
 	}
@@ -488,6 +496,11 @@ func Load() (Config, error) {
 	}
 	if err := cfg.DatabaseArtifactLockPool.Validate(); err != nil {
 		return Config{}, fmt.Errorf("invalid database artifact lock pool configuration: %w", err)
+	}
+	if cfg.DatabaseDriver != database.DriverMySQL {
+		if err := cfg.DatabaseNotificationPool.Validate(); err != nil {
+			return Config{}, fmt.Errorf("invalid database notification pool configuration: %w", err)
+		}
 	}
 	if raw := strings.TrimSpace(os.Getenv("NOTARX_RAW_CACHE_MAX_OBJECT_BYTES")); raw != "" {
 		bytes, err := strconv.ParseInt(raw, 10, 64)

@@ -16,3 +16,5 @@
 ./internal/tokenissuer 80.0
 ./internal/identity 80.0
 ./internal/identity/saml 85.0
+./internal/database 80.0
+./internal/dialect/postgres 90.0

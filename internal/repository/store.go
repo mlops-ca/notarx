@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/capacity"
+	"github.com/mlops-ca/notarx/internal/dialect"
 	"github.com/mlops-ca/notarx/internal/identity"
 )
 
@@ -19,6 +20,11 @@ var (
 	ErrIdentityProviderInUse         = errors.New("identity provider still has linked identities")
 	ErrLastActiveAdmin               = errors.New("last active administrator cannot be removed")
 	ErrQuotaExceeded                 = capacity.ErrQuotaExceeded
+	ErrUniqueViolation               = dialect.ErrUniqueViolation
+	ErrForeignKeyViolation           = dialect.ErrForeignKeyViolation
+	ErrDeadlock                      = dialect.ErrDeadlock
+	ErrSerializationFailure          = dialect.ErrSerializationFailure
+	ErrLockTimeout                   = dialect.ErrLockTimeout
 	ErrUpstreamChanged               = errors.New("upstream immutable artifact metadata changed")
 	ErrInvalidGoModulePublication    = errors.New("go module publication is invalid")
 	ErrInvalidCargoIdentity          = errors.New("cargo identity reservation is invalid")

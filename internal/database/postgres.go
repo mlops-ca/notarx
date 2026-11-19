@@ -15,6 +15,9 @@ type PoolConfig struct {
 	MaxIdleConns    int
 	ConnMaxLifetime time.Duration
 	ConnMaxIdleTime time.Duration
+	// TLSCAFile is the CA bundle for the MySQL server certificate; it is ignored
+	// by PostgreSQL, which takes its TLS settings from the URL.
+	TLSCAFile string
 }
 
 func DefaultPoolConfig() PoolConfig {

@@ -124,6 +124,23 @@ func TestEmbeddedStoreExpansionIncludesNewMethods(t *testing.T) {
 	}
 }
 
+func TestDialectSeamKeepsDriversOutOfTheInterfacePackage(t *testing.T) {
+	inv := inventory{Imports: map[string]map[string]bool{
+		"internal/dialect":          {"github.com/jackc/pgx/v5": true, "example.test/notarx/internal/repository": true, "database/sql": true},
+		"internal/dialect/postgres": {"github.com/jackc/pgx/v5": true, mysqlDriver: true},
+		"internal/database":         {mysqlDriver: true},
+		"internal/repository":       {mysqlDriver: true},
+	}}
+	want := []string{
+		"internal/dialect -> github.com/jackc/pgx/v5",
+		"internal/dialect -> internal/repository",
+		"internal/repository -> github.com/go-sql-driver/mysql",
+	}
+	if got := dialectViolations(inv, "example.test/notarx"); !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v; want %v", got, want)
+	}
+}
+
 func TestFutureFormatModulesCannotImportOtherFormats(t *testing.T) {
 	inv := inventory{Imports: map[string]map[string]bool{
 		"internal/format/raw": {"example.test/notarx/internal/protocol/raw": true, "example.test/notarx/internal/format/oci": true},

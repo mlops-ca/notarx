@@ -56,6 +56,7 @@ func (r Report) Failed() bool {
 type Runner struct {
 	PostgresPing     func(context.Context, string) error
 	TrigramState     func(context.Context, string) (string, error)
+	MySQLProbe       func(context.Context, config.Config) (MySQLFacts, error)
 	ObjectStoreCheck func(context.Context, config.Config) error
 	HTTPClient       *http.Client
 }
@@ -64,13 +65,14 @@ func NewRunner() Runner {
 	return Runner{
 		PostgresPing:     pingPostgres,
 		TrigramState:     probeTrigram,
+		MySQLProbe:       probeMySQL,
 		ObjectStoreCheck: checkObjectStore,
 		HTTPClient:       &http.Client{Timeout: 5 * time.Second},
 	}
 }
 
 func CheckNames() []string {
-	return []string{"configuration", "policy", "postgres", "pg_trgm", "object_store", "oidc_jwks"}
+	return []string{"configuration", "policy", "postgres", "pg_trgm", "mysql", "object_store", "oidc_jwks"}
 }
 
 func (r Runner) Run(ctx context.Context, cfg config.Config, names []string) Report {
@@ -85,9 +87,20 @@ func (r Runner) Run(ctx context.Context, cfg config.Config, names []string) Repo
 			report.Results = append(report.Results, configurationResult(cfg))
 		case "policy":
 			report.Results = append(report.Results, policyResult(cfg))
+		case "mysql":
+			if isMySQL(cfg) {
+				facts, err := r.MySQLProbe(ctx, cfg)
+				report.Results = append(report.Results, mysqlResult(cfg, facts, err))
+			}
 		case "postgres":
+			if isMySQL(cfg) {
+				continue
+			}
 			report.Results = append(report.Results, dependencyResult(name, "PostgreSQL is reachable", r.PostgresPing(ctx, cfg.DatabaseURL)))
 		case "pg_trgm":
+			if isMySQL(cfg) {
+				continue
+			}
 			state, err := r.TrigramState(ctx, cfg.DatabaseURL)
 			report.Results = append(report.Results, trigramResult(state, err))
 		case "object_store":
