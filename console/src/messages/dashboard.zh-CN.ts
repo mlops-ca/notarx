@@ -37,7 +37,6 @@ export const dashboardZhCN = {
     "产生访问或发布行为后，这里会列出最近的判定记录。",
   "dashboard.loadingAuditEvents": "正在加载审计事件…",
   "dashboard.overview": "总览",
-  "dashboard.artifactGatewayRuntimeAtAGlance": "Artifact Gateway 运行状态一览",
   "dashboard.statisticsWindow": "统计窗口",
   "dashboard.1Day": "1 天",
   "dashboard.7Days": "7 天",

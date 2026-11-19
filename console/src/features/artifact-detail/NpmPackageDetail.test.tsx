@@ -23,7 +23,7 @@ describe("NpmPackageDetail", () => {
           name: "@scope/widget",
           version: "1.2.3",
           dist: { integrity: "sha512-release", shasum: "release-sha1" },
-          _artifactGateway: {
+          _notarx: {
             digest: "sha256:release",
             publisher: "release-bot",
             size: 1024,
@@ -33,7 +33,7 @@ describe("NpmPackageDetail", () => {
           name: "@scope/widget",
           version: "2.0.0-beta.1",
           dist: { integrity: "sha512-next", shasum: "next-sha1" },
-          _artifactGateway: {
+          _notarx: {
             digest: "sha256:next",
             publisher: "next-bot",
             size: 2048,
@@ -99,7 +99,7 @@ describe("NpmPackageDetail", () => {
           name: "proxy-widget",
           version: "1.0.0",
           dist: { integrity: "sha512-release", shasum: "release-sha1" },
-          _artifactGateway: {
+          _notarx: {
             source: "proxy",
             cacheStatus: "metadata",
             publisher: "upstream:registry.npmjs.org",

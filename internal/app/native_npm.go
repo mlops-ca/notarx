@@ -289,7 +289,7 @@ func (h nativeNPMHandler) versionMetadata(w http.ResponseWriter, r *http.Request
 		pkg = resolved.Package
 		disposition = resolved.Disposition
 		if resolved.Stale {
-			w.Header().Set("Warning", `110 Artifact-Gateway "Response is stale"`)
+			w.Header().Set("Warning", `110 notarx "Response is stale"`)
 		}
 	} else {
 		var err error
@@ -460,7 +460,7 @@ func (h nativeNPMHandler) proxyPackument(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	if resolved.Stale {
-		w.Header().Set("Warning", `110 Artifact-Gateway "Response is stale"`)
+		w.Header().Set("Warning", `110 notarx "Response is stale"`)
 	}
 	h.writePackument(w, r, repo, repo.Name, resolved.Package, actor, resolved.Disposition)
 }
@@ -919,7 +919,7 @@ func (h nativeNPMHandler) npmVersionDocument(r *http.Request, registryName strin
 			metadata["cachedAt"] = version.CachedAt.Format(time.RFC3339Nano)
 		}
 	}
-	document["_artifactGateway"] = metadata
+	document["_notarx"] = metadata
 	return document, true
 }
 

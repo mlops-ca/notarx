@@ -114,14 +114,14 @@ func seedRecoveryEmail(t *testing.T, ctx context.Context, source *OwnedTarget, e
 	for i, repoID := range []string{cancelledRepo, liveRepo} {
 		quota := int64(17)
 		if i == 1 {
-			quota = 15
 			policy.CriticalBasisPoints = 9200
 			policy.CriticalForSeconds = 2
-			if source.spec.Release.NativeArchive != nil {
-				// Original runtime startup has no sub-second upper bound. Start
-				// in the warning-only band, then change the real quota below.
-				quota = 16
-			}
+			// Start in the warning-only band and change the real quota below.
+			// A critical window that opens together with the warning one would
+			// let a slow sample (the runtime's startup, a docker exec, a loaded
+			// runner) mature critical in the same evaluation and hide the
+			// warning event; the sleeps below only set lower bounds.
+			quota = 16
 		}
 		if source.spec.Release.NativeArchive != nil {
 			// A published release's schema predates repository_usage_counters (ADR 0023 section 3),
@@ -174,12 +174,12 @@ func seedRecoveryEmail(t *testing.T, ctx context.Context, source *OwnedTarget, e
 		if i == 1 {
 			if source.spec.Release.NativeArchive != nil {
 				fixtureHTTP(t, ctx, endpoint, "PUT", "/api/v2/repositories/"+repoID+"/capacity", source.spec.AdminToken, []byte(`{"quotaBytes":15}`), 200, "")
-				recoverySQL(t, ctx, source.database, `UPDATE repository_quota_alert_rules SET next_evaluate_at=clock_timestamp() WHERE id::text=$1`, r.ID)
-				sampleQuota()
-				time.Sleep(time.Duration(policy.CriticalForSeconds)*time.Second + 50*time.Millisecond)
-			} else {
-				time.Sleep(1050 * time.Millisecond)
+			} else if _, err = s.ReplaceRepositoryCapacityQuota(ctx, repoID, 15); err != nil {
+				t.Fatal(err)
 			}
+			recoverySQL(t, ctx, source.database, `UPDATE repository_quota_alert_rules SET next_evaluate_at=clock_timestamp() WHERE id::text=$1`, r.ID)
+			sampleQuota()
+			time.Sleep(time.Duration(policy.CriticalForSeconds)*time.Second + 50*time.Millisecond)
 			recoverySQL(t, ctx, source.database, `UPDATE repository_quota_alert_rules SET next_evaluate_at=clock_timestamp() WHERE id::text=$1`, r.ID)
 			sampleQuota()
 			ordered, e := s.ListRepositoryQuotaAlertEvents(ctx, r.ID)

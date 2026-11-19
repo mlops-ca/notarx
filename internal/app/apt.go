@@ -250,7 +250,7 @@ func (h nativeAPTHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if disposition == "stale" {
-		w.Header().Set("Warning", `110 Artifact-Gateway "Response is stale"`)
+		w.Header().Set("Warning", `110 notarx "Response is stale"`)
 	}
 	status, size, err := h.writeAsset(w, r, asset)
 	if err != nil {

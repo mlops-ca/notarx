@@ -56,7 +56,7 @@ async function mockPoliciesTab(page: Page) {
         version: 1,
         siteName: "notarx",
         logoUrl: "",
-        brandMark: "AG",
+        brandMark: "NX",
         enabledThemeIds: ["notarx-dark"],
         defaultThemeId: "notarx-dark",
         availableThemes: defaultConsoleThemes,

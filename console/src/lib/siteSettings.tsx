@@ -18,7 +18,7 @@ export const defaultSiteSettings: SiteSettings = {
   version: "1",
   siteName: productName,
   logoUrl: "",
-  brandMark: "AG",
+  brandMark: "NX",
   enabledThemeIds: ["notarx-dark", "notarx-light"],
   defaultThemeId: "notarx-dark",
   availableThemes: defaultConsoleThemes,

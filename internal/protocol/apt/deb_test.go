@@ -148,7 +148,7 @@ func TestParseDebianBinaryRejectsMissingOrInvalidIdentity(t *testing.T) {
 		control string
 	}{
 		{name: "missing version", control: "Package: notarx\nArchitecture: amd64\n"},
-		{name: "invalid package", control: "Package: Artifact_Gateway\nVersion: 1.0-1\nArchitecture: amd64\n"},
+		{name: "invalid package", control: "Package: Invalid_Package\nVersion: 1.0-1\nArchitecture: amd64\n"},
 		{name: "invalid version", control: "Package: notarx\nVersion: 1.0 1\nArchitecture: amd64\n"},
 		{name: "invalid architecture", control: "Package: notarx\nVersion: 1.0-1\nArchitecture: AMD64\n"},
 	}

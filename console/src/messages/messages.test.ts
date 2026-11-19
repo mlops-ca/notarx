@@ -112,7 +112,7 @@ describe("message dictionaries", () => {
     }
   });
 
-  it("keep zh-CN a subset of en-CA with the same placeholders", async () => {
+  it("keep zh-CN a subset of en-CA with the same placeholders, except {productName}", async () => {
     for (const { name, en, zh } of await featureDictionaries()) {
       if (!zh) continue;
       const stale = Object.keys(zh).filter((key) => !(key in en));
@@ -122,7 +122,20 @@ describe("message dictionaries", () => {
       ).toEqual([]);
       for (const [key, message] of Object.entries(zh)) {
         expect(message.trim(), key).not.toBe("");
-        expect(placeholders(message), key).toEqual(placeholders(en[key]));
+        // zh-CN is frozen (ADR 0014): it may spell out the product name that
+        // en-CA and fr-CA take from {productName}, but nothing else may differ.
+        const expected = placeholders(en[key]);
+        const actual = placeholders(message);
+        expect(
+          expected.filter((name) => !actual.includes(name)),
+          key,
+        ).toSatisfy((missing: string[]) =>
+          missing.every((name) => name === "productName"),
+        );
+        expect(
+          actual.filter((name) => !expected.includes(name)),
+          key,
+        ).toEqual([]);
       }
     }
   });

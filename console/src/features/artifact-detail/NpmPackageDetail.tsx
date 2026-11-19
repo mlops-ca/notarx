@@ -99,7 +99,7 @@ export function NpmPackageDetail({
       : manifest?.license?.type;
   const dependencyCount = Object.keys(manifest?.dependencies ?? {}).length;
   const snippets = npmUsage(repoName, packageName, selectedVersion);
-  const artifactMetadata = manifest?._artifactGateway;
+  const artifactMetadata = manifest?._notarx;
   const metadataOnly = artifactMetadata?.cacheStatus === "metadata";
   const versionTags = Object.entries(packument["dist-tags"])
     .filter(([tag, version]) => tag !== "latest" && version === selectedVersion)

@@ -21,7 +21,7 @@
       <aggregator>false</aggregator>
       <inheritedByDefault>true</inheritedByDefault>
       <phase>validate</phase>
-      <implementation>com.artifactgateway.fixture.ResolveMojo</implementation>
+      <implementation>com.notarx.fixture.ResolveMojo</implementation>
       <language>java</language>
       <instantiationStrategy>per-lookup</instantiationStrategy>
       <executionStrategy>once-per-session</executionStrategy>

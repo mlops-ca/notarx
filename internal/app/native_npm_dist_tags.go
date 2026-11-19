@@ -58,7 +58,7 @@ func (h nativeNPMHandler) listDistTags(w http.ResponseWriter, r *http.Request, r
 			return
 		}
 		if resolved.Stale {
-			w.Header().Set("Warning", `110 Artifact-Gateway "Response is stale"`)
+			w.Header().Set("Warning", `110 notarx "Response is stale"`)
 		}
 		pkg, disposition = resolved.Package, resolved.Disposition
 	} else {

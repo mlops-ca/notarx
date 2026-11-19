@@ -60,7 +60,7 @@ export interface NpmVersionManifest {
     integrity?: string;
     shasum?: string;
   };
-  _artifactGateway?: {
+  _notarx?: {
     digest?: string;
     publisher?: string;
     size?: number;

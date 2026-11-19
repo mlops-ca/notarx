@@ -160,7 +160,7 @@ func (h v2GroupNPMHandler) distTags(w http.ResponseWriter, r *http.Request, reso
 		return
 	}
 	if stale {
-		w.Header().Set("Warning", `110 Artifact-Gateway "Response is stale"`)
+		w.Header().Set("Warning", `110 notarx "Response is stale"`)
 	}
 	groupRepo := repository.HostedRepository{ID: group.ID, Name: group.Name, Format: repository.FormatNPM, Type: repository.RepositoryTypeHosted}
 	h.native.writeNPMMetadataJSON(w, r, groupRepo, packageName, actor, "bypass", npmAuditTarget{GroupName: group.Name, Repository: group.Name}, visibleNPMDistTags(merged))
@@ -179,7 +179,7 @@ func (h v2GroupNPMHandler) packument(w http.ResponseWriter, r *http.Request, res
 		return
 	}
 	if stale {
-		w.Header().Set("Warning", `110 Artifact-Gateway "Response is stale"`)
+		w.Header().Set("Warning", `110 notarx "Response is stale"`)
 	}
 	groupRepo := repository.HostedRepository{ID: group.ID, Name: group.Name, Format: repository.FormatNPM, Type: repository.RepositoryTypeHosted}
 	h.native.writePackument(w, r, groupRepo, group.Name, merged, actor, "bypass")
@@ -208,7 +208,7 @@ func (h v2GroupNPMHandler) versionMetadata(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if stale {
-		w.Header().Set("Warning", `110 Artifact-Gateway "Response is stale"`)
+		w.Header().Set("Warning", `110 notarx "Response is stale"`)
 	}
 	h.native.writeNPMVersionMetadataForTarget(w, r, source.repository, group.Name, version, actor, source.disposition, npmAuditTarget{GroupName: group.Name, Repository: group.Name, MemberName: source.repository.Name})
 }

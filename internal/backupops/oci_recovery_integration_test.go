@@ -5,11 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/rand/v2"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +20,14 @@ import (
 
 const registryFixtureImage = "registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373"
 const registryFixtureLabel = "notarx.recovery-test-owner"
+
+// The registry binds port 0 and the kernel of the daemon's host picks a free
+// port. A port chosen here could not be checked against the daemon's network
+// namespace (Docker Desktop runs the daemon in a VM), and a random pick from the
+// ephemeral range collides with outgoing connections.
+const registryFixtureAddr = "127.0.0.1:0"
+
+var registryListening = regexp.MustCompile(`listening on (127\.0\.0\.1:[0-9]+)`)
 
 type registryFixture struct {
 	docker                                               Docker
@@ -44,26 +52,30 @@ func integrationOCIRelease(t *testing.T, ctx context.Context, d Docker, release 
 		t.Fatal("remote OCI fixture daemon refused")
 	}
 	f := &registryFixture{docker: d, host: host, config: t.TempDir(), helpers: t.TempDir(), owner: uuid.NewString()}
-	f.name = "ag-oci-fixture-" + strings.ReplaceAll(f.owner, "-", "")
-	f.endpoint = fmt.Sprintf("127.0.0.1:%d", 49152+rand.IntN(16384))
-	f.imageTag = f.endpoint + "/" + f.name + ":fixture"
+	f.name = "notarx-oci-fixture-" + strings.ReplaceAll(f.owner, "-", "")
 	f.marker = filepath.Join(f.helpers, "invoked")
-	config, err := json.Marshal(map[string]any{"auths": map[string]any{f.endpoint: map[string]any{}, "gcr.io": map[string]any{}, "https://index.docker.io/v1/": map[string]any{}}})
-	if err != nil || os.WriteFile(filepath.Join(f.config, "config.json"), config, 0600) != nil {
-		t.Fatal("anonymous OCI fixture configuration unavailable")
+	writeConfig := func(registries ...string) {
+		t.Helper()
+		auths := map[string]any{"gcr.io": map[string]any{}, "https://index.docker.io/v1/": map[string]any{}}
+		for _, registry := range registries {
+			auths[registry] = map[string]any{}
+		}
+		config, err := json.Marshal(map[string]any{"auths": auths})
+		if err != nil || os.WriteFile(filepath.Join(f.config, "config.json"), config, 0600) != nil {
+			t.Fatal("anonymous OCI fixture configuration unavailable")
+		}
 	}
+	writeConfig()
 	// Docker auto-discovers a native credential helper for a wholly empty
 	// config. Trap every platform's default helper to prove none is consulted.
-	script := []byte("#!/bin/sh\n: > \"$AG_OCI_FIXTURE_HELPER_MARKER\"\nprintf '%s\\n' 'synthetic helper refuses credential access' >&2\nexit 1\n")
+	script := []byte("#!/bin/sh\n: > \"$NOTARX_OCI_FIXTURE_HELPER_MARKER\"\nprintf '%s\\n' 'synthetic helper refuses credential access' >&2\nexit 1\n")
 	for _, name := range []string{"pass", "docker-credential-pass", "docker-credential-secretservice", "docker-credential-osxkeychain", "docker-credential-wincred"} {
 		if os.WriteFile(filepath.Join(f.helpers, name), script, 0700) != nil {
 			t.Fatal("OCI fixture helper trap unavailable")
 		}
 	}
-	for _, entry := range []struct{ kind, name string }{{"container", f.name}, {"image", f.imageTag}} {
-		if _, err := d.output(ctx, entry.kind, "inspect", entry.name); err == nil {
-			t.Fatal("OCI fixture resource already exists")
-		}
+	if _, err := d.output(ctx, "container", "inspect", f.name); err == nil {
+		t.Fatal("OCI fixture resource already exists")
 	}
 	t.Cleanup(func() {
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -72,7 +84,7 @@ func integrationOCIRelease(t *testing.T, ctx context.Context, d Docker, release 
 	})
 	_, createErr := f.output(ctx, "create", "--name", f.name, "--label", registryFixtureLabel+"="+f.owner,
 		"--network", "host", "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
-		"--tmpfs", "/var/lib/registry:rw,noexec,nosuid,size=256m", "--env", "REGISTRY_HTTP_ADDR="+f.endpoint, registryFixtureImage)
+		"--tmpfs", "/var/lib/registry:rw,noexec,nosuid,size=256m", "--env", "REGISTRY_HTTP_ADDR="+registryFixtureAddr, registryFixtureImage)
 	// Register observed identity even if a create/build response was lost.
 	if c, ok := f.inspection(ctx, "container", f.name); ok && c.Config.Labels[registryFixtureLabel] == f.owner {
 		f.containerID = c.ID
@@ -86,7 +98,8 @@ func integrationOCIRelease(t *testing.T, ctx context.Context, d Docker, release 
 	deadline := time.Now().Add(20 * time.Second)
 	for {
 		logs, err := f.output(ctx, "logs", f.containerID)
-		if err == nil && strings.Contains(string(logs), "listening on "+f.endpoint) {
+		if match := registryListening.FindSubmatch(logs); err == nil && match != nil {
+			f.endpoint = string(match[1])
 			break
 		}
 		if ctx.Err() != nil || time.Now().After(deadline) {
@@ -98,6 +111,11 @@ func integrationOCIRelease(t *testing.T, ctx context.Context, d Docker, release 
 		case <-time.After(100 * time.Millisecond):
 		}
 	}
+	f.imageTag = f.endpoint + "/" + f.name + ":fixture"
+	if _, err := d.output(ctx, "image", "inspect", f.imageTag); err == nil {
+		t.Fatal("OCI fixture resource already exists")
+	}
+	writeConfig(f.endpoint)
 	dir := t.TempDir()
 	binary, err := os.ReadFile(filepath.Join(release.Directory, "notarx"))
 	if err != nil || os.WriteFile(filepath.Join(dir, "notarx"), binary, 0555) != nil {
@@ -137,7 +155,7 @@ func integrationOCIRelease(t *testing.T, ctx context.Context, d Docker, release 
 
 func (f *registryFixture) output(ctx context.Context, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "docker", append([]string{"--config", f.config, "--host", f.host}, args...)...)
-	cmd.Env = sanitizedEnvironment([]string{"PATH=" + f.helpers + string(os.PathListSeparator) + os.Getenv("PATH"), "AG_OCI_FIXTURE_HELPER_MARKER=" + f.marker})
+	cmd.Env = sanitizedEnvironment([]string{"PATH=" + f.helpers + string(os.PathListSeparator) + os.Getenv("PATH"), "NOTARX_OCI_FIXTURE_HELPER_MARKER=" + f.marker})
 	data, err := cmd.CombinedOutput()
 	if _, markerErr := os.Stat(f.marker); !os.IsNotExist(markerErr) {
 		return nil, fmt.Errorf("OCI fixture credential-helper isolation failed")
@@ -179,7 +197,7 @@ func (f *registryFixture) cleanup(t *testing.T, ctx context.Context) {
 	// A timed-out create/build can lose its response and cancel its receipt
 	// inspection. Reacquire only missing receipts with this independent cleanup
 	// context, then apply the same full identity checks below before removal.
-	if f.imageID == "" {
+	if f.imageID == "" && f.imageTag != "" {
 		if image, ok := f.inspection(ctx, "image", f.imageTag); ok && image.Config.Labels[registryFixtureLabel] == f.owner {
 			f.imageID = image.ID
 		}
@@ -201,7 +219,7 @@ func (f *registryFixture) cleanup(t *testing.T, ctx context.Context) {
 		c, ok := f.inspection(ctx, "container", f.containerID)
 		bound := false
 		for _, e := range c.Config.Env {
-			if e == "REGISTRY_HTTP_ADDR="+f.endpoint {
+			if e == "REGISTRY_HTTP_ADDR="+registryFixtureAddr {
 				bound = true
 			}
 		}

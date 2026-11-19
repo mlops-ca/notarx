@@ -6,6 +6,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -15,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/uploadspool"
 )
 
 func TestNativeOCIHostedUploadMountManifestRangeAndDelete(t *testing.T) {
@@ -635,6 +638,55 @@ func TestNativeOCIConcurrentPatchUsesUploadOffsetFence(t *testing.T) {
 	first, second := <-responses, <-responses
 	if (first != http.StatusAccepted || second != http.StatusRequestedRangeNotSatisfiable) && (second != http.StatusAccepted || first != http.StatusRequestedRangeNotSatisfiable) {
 		t.Fatalf("concurrent patch responses = %d, %d", first, second)
+	}
+}
+
+type failingUploadPartObjects struct {
+	ObjectStore
+	err error
+}
+
+func (s failingUploadPartObjects) PutReader(ctx context.Context, key string, reader io.Reader, size int64) error {
+	if strings.Contains(key, ".parts/") {
+		return s.err
+	}
+	return s.ObjectStore.PutReader(ctx, key, reader, size)
+}
+
+func TestNativeOCIUploadAppendReportsStorageFailuresApart(t *testing.T) {
+	for name, tc := range map[string]struct {
+		err    error
+		status int
+		code   string
+	}{
+		"object store failure": {err: errors.New("object store unavailable"), status: http.StatusInternalServerError, code: "UNKNOWN"},
+		"deadline":             {err: context.DeadlineExceeded, status: http.StatusServiceUnavailable, code: "UNKNOWN"},
+		"upload closed":        {err: repository.ErrNotFound, status: http.StatusNotFound, code: "BLOB_UPLOAD_UNKNOWN"},
+		"chunk too large":      {err: uploadspool.ErrTooLarge, status: http.StatusRequestEntityTooLarge, code: "SIZE_INVALID"},
+		"body ended early":     {err: io.ErrUnexpectedEOF, status: http.StatusBadRequest, code: "BLOB_UPLOAD_INVALID"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := repository.NewMemoryStore()
+			_, _ = store.CreateHostedRepository(context.Background(), repository.HostedRepository{ID: "oci-repo", Name: "team", Format: repository.FormatOCI})
+			objects := failingUploadPartObjects{ObjectStore: objectstore.NewMemoryStore(), err: tc.err}
+			handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator(), Storage: ObjectStores{repository.FormatOCI: objects, repository.FormatRaw: objects}})
+			start := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPost, "/v2/team/app/blobs/uploads/", nil)
+			authorize(request, "resolver-secret")
+			handler.ServeHTTP(start, request)
+			if start.Code != http.StatusAccepted {
+				t.Fatal(start.Code)
+			}
+			for _, method := range []string{http.MethodPatch, http.MethodPut} {
+				r := httptest.NewRequest(method, start.Header().Get("Location")+"?digest=sha256:"+strings.Repeat("0", 64), strings.NewReader("abc"))
+				authorize(r, "resolver-secret")
+				w := httptest.NewRecorder()
+				handler.ServeHTTP(w, r)
+				if w.Code != tc.status || !strings.Contains(w.Body.String(), tc.code) {
+					t.Fatalf("%s: response=%d %s", method, w.Code, w.Body.String())
+				}
+			}
+		})
 	}
 }
 
