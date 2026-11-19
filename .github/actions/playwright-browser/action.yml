@@ -31,25 +31,43 @@ runs:
     # job succeeds. Later runs restore it and install the packages with dpkg, so
     # shard start-up needs no network access to apt. The image version is part of
     # the key so a new runner image, whose installed baseline differs, is a miss.
-    - name: Cache apt packages for the browser dependencies
+    - name: Restore apt packages for the browser dependencies
       id: apt-cache
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.cache/playwright-deps
         key: playwright-deps-${{ env.ImageOS }}-${{ env.ImageVersion }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
+    # A warm cache installs with dpkg only. If dpkg refuses (the runner drifted
+    # from the image the packages came from), apt installs them instead; that
+    # path never saves, so a bad set is not written back.
     - name: Install browser system dependencies from the cache
       if: steps.apt-cache.outputs.cache-hit == 'true'
       shell: bash
-      run: sudo dpkg --install --skip-same-version "$HOME"/.cache/playwright-deps/*.deb
+      working-directory: console
+      run: |
+        sudo dpkg --install --skip-same-version --refuse-downgrade "$HOME"/.cache/playwright-deps/*.deb \
+          || timeout 600 npx playwright install-deps chromium
     - name: Install browser system dependencies with apt
+      id: apt-install
       if: steps.apt-cache.outputs.cache-hit != 'true'
       shell: bash
       working-directory: console
       run: |
         mkdir -p ~/.cache/playwright-deps/partial
-        printf 'Dir::Cache::Archives "%s/.cache/playwright-deps";\n' "$HOME" | sudo tee /etc/apt/apt.conf.d/80-ci-network >/dev/null
-        npx playwright install-deps chromium
+        printf 'Acquire::http::Timeout "20";\nAcquire::https::Timeout "20";\nAcquire::Retries "5";\nDir::Cache::Archives "%s/.cache/playwright-deps";\n' "$HOME" | sudo tee /etc/apt/apt.conf.d/80-playwright-deps >/dev/null
+        # The archive directory setting must not outlive this step.
+        trap 'sudo rm -f /etc/apt/apt.conf.d/80-playwright-deps' EXIT
+        timeout 600 npx playwright install-deps chromium
         # apt ran as root; hand the packages to the runner user so the cache
         # save can read them, and drop the root-only lock and partial downloads.
         sudo rm -rf ~/.cache/playwright-deps/partial ~/.cache/playwright-deps/lock
         sudo chown -R "$(id -u):$(id -g)" ~/.cache/playwright-deps
+    # Saved as soon as the install succeeds, not at the end of the job, so a
+    # later flaky test cannot keep the cache from being written. Nothing is
+    # saved when every package was already installed (no .deb was downloaded).
+    - name: Save apt packages for the browser dependencies
+      if: steps.apt-install.outcome == 'success' && hashFiles('~/.cache/playwright-deps/*.deb') != ''
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/playwright-deps
+        key: playwright-deps-${{ env.ImageOS }}-${{ env.ImageVersion }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
