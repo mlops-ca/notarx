@@ -177,7 +177,7 @@ upgrade): a session opened by an older node reserves nothing and one reserved by
 node keeps its reservation, which the next reconciler pass corrects. Snapshot publication admits through the `Reserve` of its generated-object delta.
 Helm and NuGet reserve the bytes of a pending session (chart plus provenance, or the package) with `Reserve`
 when the session is admitted and release them when it commits (the commit adds only the object count), expires
-lazily in the next reservation or is expired by the janitor; migration 000022 adds the bytes of sessions pending
+lazily in the next reservation or is expired by the janitor; migration 000023 adds the bytes of sessions pending
 at upgrade time, and the same rolling-upgrade caveat applies. A session past its deadline keeps its bytes until the next reservation or replication job creation in that
 repository, or the janitor, expires it. Creating a Helm or NuGet replication job only checks
 the counter (`capacity.Headroom`; it admits several jobs that together exceed the quota, and the items beyond it
