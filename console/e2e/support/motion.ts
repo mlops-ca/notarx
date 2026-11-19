@@ -7,19 +7,34 @@ export async function waitForModalOpen(dialog: Locator) {
 }
 
 /**
- * AntD mounts an opened Select list, then re-renders (and so replaces) its
- * option nodes when the dropdown motion starts, and visibility starts before
- * the slide has finished. Clicking an option before that replacement lands the
- * click on a detached node. Wait for the list to be open with its motion
- * finished.
+ * Opens an AntD Select and returns its dropdown once the list is usable.
+ * AntD mounts the list, then re-renders (and so replaces) its option nodes
+ * when the dropdown motion starts, and visibility starts before the slide has
+ * finished; a click on an option before then lands on a detached node. The
+ * dropdown is found through the combobox's own listbox, so another Select's
+ * closing list is never mistaken for it.
  */
-export async function waitForSelectDropdownOpen(page: Page) {
+export async function openSelect(page: Page, combobox: Locator) {
+  await combobox.click();
+  await expect(combobox).toHaveAttribute("aria-controls", /.+/);
+  const listId = (await combobox.getAttribute("aria-controls")) ?? "";
   const dropdown = page
-    .locator(".ant-select-dropdown:not(.ant-select-dropdown-hidden)")
-    .last();
+    .locator(".ant-select-dropdown")
+    .filter({ has: page.locator(`[id="${listId}"]`) });
   await expect(dropdown).toBeVisible();
-  await expect(dropdown).not.toHaveClass(/ant-slide-up-(?:appear|enter)/);
-  await waitForAnimationsToSettle(page);
+  await expect(dropdown).not.toHaveClass(
+    /ant-slide-(?:up|down)-(?:appear|enter)/,
+  );
+  await dropdown.evaluate(async (element) => {
+    await Promise.all(
+      element
+        .getAnimations({ subtree: true })
+        .filter((animation) =>
+          Number.isFinite(animation.effect?.getComputedTiming().endTime ?? 0),
+        )
+        .map((animation) => animation.finished.catch(() => undefined)),
+    );
+  });
   return dropdown;
 }
 
