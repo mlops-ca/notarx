@@ -23,7 +23,8 @@ func TestManagementMutationFailsWhenAuditCannotBeWritten(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A scan reconcile with no work changes nothing, so it is audited after the request through
-	// recordMutationAudit; the migrated handlers are covered by the rollback tests.
+	// recordUnchangedAudit, where 500 audit_failed is accurate; the handlers that change state are
+	// covered by the rollback tests.
 	request := httptest.NewRequest(http.MethodPost, "/api/v2/repositories/"+repo.ID+"/artifact-scans:reconcile", nil)
 	authorize(request, "admin-secret")
 	response := httptest.NewRecorder()

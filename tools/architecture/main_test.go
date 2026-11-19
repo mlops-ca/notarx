@@ -177,3 +177,33 @@ func TestVisibilityReadsStayInsideTheChokePoint(t *testing.T) {
 		t.Fatalf("a resolved accessor stayed in the baseline: %v", err)
 	}
 }
+
+func TestRetiredPostCommitAuditHelpersAreRejected(t *testing.T) {
+	root := t.TempDir()
+	write := func(name, body string) {
+		t.Helper()
+		path := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("go.mod", "module example.test/notarx\n")
+	write("internal/app/store.go", "package app\ntype GatewayStore interface { Read() error }\n")
+	write("tools/architecture/baseline.json", `{"violations":[],"gatewayStoreMembers":["Read func() error"],"effectiveStoreMethods":["internal/app.GatewayStore.Read func() error"],"visibilityAccessors":[]}`)
+	write("internal/app/handler.go", "package app\nfunc h() { recordUnchangedAudit() }\n")
+	if err := run(root, false); err != nil {
+		t.Fatalf("the audit of a request that changed nothing rejected: %v", err)
+	}
+	for name, body := range map[string]string{
+		"a call": "package app\nfunc h() { _ = recordMutationAudit }\n",
+		"a type": "package app\ntype r = mutationAuditRecorder\n",
+	} {
+		write("internal/app/handler.go", body)
+		if err := run(root, false); err == nil || !strings.Contains(err.Error(), "retired post-commit audit path") {
+			t.Fatalf("%s of a retired audit helper accepted: %v", name, err)
+		}
+	}
+}
