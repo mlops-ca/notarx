@@ -2,6 +2,7 @@ name: Baseline generate (temporary)
 
 # Temporary: generates the re-squashed baseline with scripts/baseline-generate.sh
 # on a runner that has docker (ADR 0015 slice 7). Removed before merge.
+# Regenerated after the migrations 000022 and 000023 landed on main.
 on:
   pull_request:
     paths:
