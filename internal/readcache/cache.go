@@ -327,6 +327,11 @@ func (c *Cache[K, V]) GetVersioned(ctx context.Context, key K, version uint64, l
 		// invalidation never joins a load that started before it.
 		sfKey := fmt.Sprintf("%v@%d@%d", key, version, epoch)
 		res, err, _ := c.group.Do(sfKey, func() (any, error) {
+			// A flight that ended between this caller's miss and its arrival has
+			// already stored the entry: read it instead of loading again.
+			if value, cachedErr, ok := c.lookup(key, version, c.reg.now()); ok {
+				return &loaded[V]{value: value, err: cachedErr}, nil
+			}
 			value, loadErr := load(ctx)
 			c.store(key, version, epoch, value, loadErr, ttl)
 			return &loaded[V]{value: value, err: loadErr}, nil
