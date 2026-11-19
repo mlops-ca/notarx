@@ -332,8 +332,9 @@ tournures du français de France, typographie, dérive de sens par rapport à en
 apparaissent sous forme d’annotations de vérification et d’un commentaire sur la
 demande de tirage, et la vérification échoue lorsqu’une clé `critical` fait
 l’objet d’un constat. Les clés qui passent sont consignées comme `reviewed` dans
-le fichier annexe, que le flux de travail valide sur la branche de la demande de
-tirage. Les demandes de tirage issues d’une bifurcation ne reçoivent aucun
+le fichier annexe au moment de la publication, et non sur la demande de tirage :
+le flux de travail ne pousse jamais sur sa branche (voir
+[le guide de CI](docs/ci.md#fr-ca-review-and-the-sidecar)). Les demandes de tirage issues d’une bifurcation ne reçoivent aucun
 secret : un mainteneur exécute donc le flux de travail avec `workflow_dispatch`
 et le numéro de la demande, et le résultat est publié comme statut de commit
 `i18n-review`. Le script qui détient la clé provient toujours de la révision de
