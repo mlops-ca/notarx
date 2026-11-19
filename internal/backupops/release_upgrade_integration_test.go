@@ -54,7 +54,7 @@ func TestLocalReleaseUpgrade(t *testing.T) {
 		}
 	}
 	makeSpec := func(release Release) TargetSpec {
-		return TargetSpec{Project: "ag-restore-" + uuid.NewString()[:18], Docker: d, Release: release, PostgresPassword: uuid.NewString(), AccessKey: "synthetic-test", SecretKey: uuid.NewString(), RPCSecret: uuid.NewString(), AdminToken: uuid.NewString(), ResolverToken: uuid.NewString(), RuntimeEnvironment: map[string]string{"NOTARX_SETTINGS_ENCRYPTION_KEY": recoveryEmailKey}}
+		return TargetSpec{Project: "notarx-restore-" + uuid.NewString()[:18], Docker: d, Release: release, PostgresPassword: uuid.NewString(), AccessKey: "synthetic-test", SecretKey: uuid.NewString(), RPCSecret: uuid.NewString(), AdminToken: uuid.NewString(), ResolverToken: uuid.NewString(), RuntimeEnvironment: map[string]string{"NOTARX_SETTINGS_ENCRYPTION_KEY": recoveryEmailKey}}
 	}
 	source, err := NewTarget(ctx, makeSpec(old))
 	if err != nil {
@@ -220,7 +220,7 @@ func runFixtureMigrations(t *testing.T, ctx context.Context, target *OwnedTarget
 	if id == "" {
 		t.Fatal("owned migration target missing")
 	}
-	stage := "/tmp/ag-migrations-" + uuid.NewString()
+	stage := "/tmp/notarx-migrations-" + uuid.NewString()
 	if _, err := target.spec.Docker.output(ctx, "cp", filepath.Join(dir, "migrations"), id+":"+stage); err != nil {
 		t.Fatal(err)
 	}

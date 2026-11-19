@@ -110,7 +110,7 @@ acceptance step, and downward migration is unsupported.
 The restore spec contains `project`, `docker`, `release`, `postgresPassword`,
 `accessKey`, `secretKey`, `rpcSecret`, `adminToken` and `resolverToken`. Supply
 temporary drill values yourself; the command does not mint credentials or
-change IAM/grants. `project` must be a fresh `ag-restore-...` name, at most 42
+change IAM/grants. `project` must be a fresh `notarx-restore-...` name, at most 42
 characters. Existing networks, volumes or service containers are refused even
 if empty. No arbitrary target DSN, endpoint, bucket or Compose `.env` is accepted.
 The adapter creates a dedicated local bridge network, two fresh local volumes,

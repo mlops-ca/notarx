@@ -2,11 +2,13 @@
 # Identity gate (ADR 0013, "Identity", slice 9). Fails when an upstream identity
 # string appears in a tracked file outside the allow-list: the upstream owner,
 # the upstream product name in its kebab, snake, spaced and camel spellings, the old env prefix,
-# the old CLI name and the old metric/ledger prefix.
+# the old CLI name, the old metric/ledger prefix and the short `ag-` / `AG_`
+# abbreviation of the old product name.
 #
 # Usage: scripts/identity-check.sh [--root DIR] [--list-base | --list-extra]
 #   --list-base   print the allow-list that ADR 0013 fixes (one pathspec per line)
 #   --list-extra  print the documented additions, as "pathspec<TAB>reason"
+#   --list-ag     print the additions that apply to the short abbreviation only
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -16,6 +18,7 @@ while (($# > 0)); do
     --root) root=$(cd "$2" && pwd); shift 2 ;;
     --list-base) mode=base; shift ;;
     --list-extra) mode=extra; shift ;;
+    --list-ag) mode=ag; shift ;;
     *) printf 'identity-check: unknown argument %s\n' "$1" >&2; exit 2 ;;
   esac
 done
@@ -51,16 +54,33 @@ extra_allow=(
   $'scripts/identity-check-test.sh\tThe fixture test plants those patterns on purpose.'
 )
 
+# Additions that apply to the short abbreviation only. The Console keeps its
+# internal `ag-` CSS classes and `--ag-` custom properties (a rename would touch
+# thousands of selectors and the frozen zh-CN design notes that quote them); its
+# localStorage keys `ag.console.*` are not matched by the pattern and stay too.
+ag_allow=(
+  $'console\tConsole CSS classes, custom properties and e2e selectors are internal and not renamed.'
+  $'DESIGN.md\tDesign notes quote the internal Console CSS names.'
+  $'.impeccable\tDesign tooling records quote the internal Console CSS names.'
+  $'.agents/skills/console-layout-guardrails\tThe layout guardrails name the internal Console CSS classes.'
+  $'scripts/email-console-browser-check.mjs\tBrowser check selecting internal Console CSS classes.'
+)
+
 case "$mode" in
+  ag) printf '%s\n' "${ag_allow[@]}"; exit 0 ;;
   base) printf '%s\n' "${base_allow[@]}"; exit 0 ;;
   extra) printf '%s\n' "${extra_allow[@]}"; exit 0 ;;
 esac
 
 pattern='ccsert|[Aa]rtifact[ _-]?[Gg]ateway|ARTIFACT GATEWAY|GATEWAY_|agctl|gateway_'
+# The short abbreviation must not be glued to a longer word (`flag-x`, `stag_A`).
+ag_pattern='(^|[^[:alnum:]_])(ag-[a-z]|AG_[A-Z])'
 
 specs=(.)
 for entry in "${base_allow[@]}"; do specs+=(":(exclude)$entry"); done
 for entry in "${extra_allow[@]}"; do specs+=(":(exclude)${entry%%$'\t'*}"); done
+ag_specs=("${specs[@]}")
+for entry in "${ag_allow[@]}"; do ag_specs+=(":(exclude)${entry%%$'\t'*}"); done
 
 cd "$root"
 # Line-level exemptions, applied after the search:
@@ -69,7 +89,9 @@ cd "$root"
 #    any other string on the same line is still checked;
 #  - the link target of ADR 0007, whose file name keeps the old CLI name;
 #  - the literal upstream trailer that cherry-picks carry (ADR 0013).
-found=$(git grep -InE -e "$pattern" -- "${specs[@]}" | PATTERN="$pattern" perl -CSD -ne '
+scan() { # pattern pathspec...
+  local scan_pattern=$1; shift
+  git grep -InE -e "$scan_pattern" -- "$@" | PATTERN="$scan_pattern" perl -CSD -ne '
   use utf8;
   my ($path, $line, $text) = split(/:/, $_, 3);
   my $t = $text;
@@ -83,7 +105,9 @@ found=$(git grep -InE -e "$pattern" -- "${specs[@]}" | PATTERN="$pattern" perl -
   $t =~ s{Upstream: ccsert/artifact-gateway\@}{}g;
   next unless $t =~ /$ENV{PATTERN}/;
   print;
-' || true)
+' || true
+}
+found=$(scan "$pattern" "${specs[@]}"; scan "$ag_pattern" "${ag_specs[@]}")
 
 if [[ -n "$found" ]]; then
   printf '%s\n' "$found" >&2

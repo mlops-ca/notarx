@@ -180,7 +180,7 @@ spec:
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:
-                name: ag-oidc-test-config
+                name: notarx-oidc-test-config
           env:
             - name: NOTARX_LISTEN_ADDRESS
               value: :8080
@@ -248,7 +248,7 @@ spec:
       volumes:
         - name: migrations
           configMap:
-            name: ag-oidc-migrations
+            name: notarx-oidc-migrations
         - name: keycloak-realm
           configMap:
-            name: ag-oidc-keycloak-realm
+            name: notarx-oidc-keycloak-realm

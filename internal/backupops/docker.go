@@ -175,7 +175,7 @@ type OwnedTarget struct {
 }
 
 func validateTargetSpec(spec TargetSpec) error {
-	if !resourceName.MatchString(spec.Project) || !strings.HasPrefix(spec.Project, "ag-restore-") || len(spec.Project) > 42 || spec.PostgresPassword == "" || spec.AdminToken == "" || spec.ResolverToken == "" || validateReadChecks(spec) != nil {
+	if !resourceName.MatchString(spec.Project) || !strings.HasPrefix(spec.Project, "notarx-restore-") || len(spec.Project) > 42 || spec.PostgresPassword == "" || spec.AdminToken == "" || spec.ResolverToken == "" || validateReadChecks(spec) != nil {
 		return errors.New("explicit isolated target settings required")
 	}
 	switch spec.ObjectDriver {
@@ -279,7 +279,7 @@ func NewTarget(ctx context.Context, spec TargetSpec) (_ *OwnedTarget, resultErr 
 	if spec.filesystem() {
 		// A new private directory owned by this user is the object root; the
 		// restored Gateway mounts it and runs as the same user.
-		if target.objectRoot, err = os.MkdirTemp("", "ag-restore-objects-"); err != nil {
+		if target.objectRoot, err = os.MkdirTemp("", "notarx-restore-objects-"); err != nil {
 			return nil, errors.New("object root unavailable")
 		}
 	} else {
@@ -631,7 +631,7 @@ func (t *OwnedTarget) StartGateway(ctx context.Context) (string, error) {
 	}
 	args := []string{"create", "--name", spec.Project + "-notarx", "--network", spec.Project + "-network", "--label", "notarx.restore-owner=" + t.owner, "-p", "127.0.0.1::8080", "--read-only", "--tmpfs", "/tmp:rw,noexec,nosuid,size=256m,mode=1777", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true"}
 	if g := spec.Release.Identity; g.Artifact != nil && g.Artifact.Kind == "binary" {
-		directory, err := os.MkdirTemp("", "ag-restore-release-")
+		directory, err := os.MkdirTemp("", "notarx-restore-release-")
 		if err != nil {
 			return "", errors.New("release staging unavailable")
 		}
@@ -722,7 +722,7 @@ func describeBinary(path string) (string, int64, error) {
 // without restoring it or selecting a target database. The temporary PG tool container has no network or mounts.
 func (d Docker) ValidateDump(ctx context.Context, r io.Reader) (resultErr error) {
 	owner := uuid.NewString()
-	name := "ag-dump-check-" + strings.ReplaceAll(owner, "-", "")
+	name := "notarx-dump-check-" + strings.ReplaceAll(owner, "-", "")
 	data, err := d.output(ctx, "create", "-i", "--name", name, "--label", "notarx.restore-owner="+owner, "--network", "none", "--read-only", "--tmpfs", "/var/lib/postgresql:rw,noexec,nosuid,size=1m", "--cap-drop", "ALL", postgresImage, "pg_restore", "--file=-", "--no-owner", "--no-privileges")
 	helper := &OwnedTarget{spec: TargetSpec{Docker: d}, owner: owner}
 	defer func() {

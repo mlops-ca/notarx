@@ -18,7 +18,7 @@ func TestCleanupRequiresCreatedContainersExactConfiguredNetwork(t *testing.T) {
 			name = "foreign configured network"
 		}
 		t.Run(name, func(t *testing.T) {
-			project, owner := "ag-restore-synthetic", "synthetic-owner"
+			project, owner := "notarx-restore-synthetic", "synthetic-owner"
 			networkID, containerID := strings.Repeat("b", 64), strings.Repeat("c", 64)
 			networkName := project + "-network"
 			key := networkName
