@@ -128,30 +128,19 @@ jobs:
         run: |
           docs=()
           while IFS= read -r file; do [ -n "$file" ] && docs+=(--doc "$file"); done < docs.txt
-          node base/scripts/i18n-review.mjs --root head --base-root base --write-sidecar --report report.json "${docs[@]}" | tee review.log
+          node base/scripts/i18n-review.mjs --root head --base-root base --report report.json "${docs[@]}" | tee review.log
       - name: Post the findings on the pull request
         if: always() && steps.gate.outputs.run == 'true' && hashFiles('report.json') != ''
         run: |
           {
             echo "### fr-CA review ($(jq -r .provider report.json))"
             echo
-            echo "$(jq '.reviewed | length' report.json) keys passed and are recorded as reviewed; $(jq '.findings | length' report.json) findings; $(jq '.criticalFailures | length' report.json) critical keys failing (these fail the check)."
+            echo "$(jq '.reviewed | length' report.json) keys passed; $(jq '.findings | length' report.json) findings; $(jq '.criticalFailures | length' report.json) critical keys failing (these fail the check)."
             echo
             jq -r '.findings[:50][] | "- `\(.id)` (\(.kind)): \(.message)"' report.json
           } > comment.md
           cat comment.md >> "$GITHUB_STEP_SUMMARY"
           gh pr comment "$PR_NUMBER" -R "$GITHUB_REPOSITORY" --edit-last --create-if-none --body-file comment.md
-      - name: Keep the updated sidecar as a workflow artifact
-        # Nothing is pushed to the pull request branch: a push made with
-        # GITHUB_TOKEN starts no workflows, which left the new head without CI
-        # (`ci-ok` missing). The passing keys are kept here and recorded in the
-        # committed sidecar at release time (docs/ci.md, "fr-CA review and the
-        # sidecar").
-        if: always() && steps.review.outcome != 'skipped'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: fr-CA-review-sidecar
-          path: head/console/src/messages/.review/fr-CA.json
       - name: Report the result as a commit status
         if: always() && github.event_name == 'workflow_dispatch'
         env:

@@ -75,14 +75,14 @@ head without a CI run and `ci-ok` missing until a maintainer re-ran the checks; 
 head now keeps exactly the commits its author pushed, and its required checks run on them. No
 personal access token and no GitHub App token is used.
 
-The keys that pass are recorded in a copy of `console/src/messages/.review/fr-CA.json`, uploaded as
-the `fr-CA-review-sidecar` artifact of the run. The committed sidecar is the input of
-`make i18n-release-check`, so it is updated at release time, in the release preparation pull request:
-run `node scripts/i18n-review.mjs --write-sidecar` (with `I18N_REVIEW_PROVIDER` and its key set),
-which reviews every key that is not yet reviewed or whose text changed, and commit the sidecar it
-writes (or copy the artifact of the last pull request run). `make i18n-release-check` then
-passes only when every key is reviewed for its current text. Fork pull requests are reviewed by a
-maintainer with `workflow_dispatch`; the result is the `i18n-review` commit status on the head.
+The review does not write the sidecar. The committed `console/src/messages/.review/fr-CA.json` is the
+input of `make i18n-release-check`, so it is updated at release time, in the release preparation
+pull request: run `node scripts/i18n-review.mjs --write-sidecar` (with `I18N_REVIEW_PROVIDER` and its
+key set) from the base branch, which reviews every key that is not yet reviewed for its current
+text, and commit the sidecar it writes. `make i18n-release-check` then passes only when every key is
+reviewed. A sidecar produced by a pull request is never copied in: its content comes from the pull
+request head. Fork pull requests are reviewed by a maintainer with `workflow_dispatch`; the result
+is the `i18n-review` commit status on the head.
 
 ## Contract lanes
 

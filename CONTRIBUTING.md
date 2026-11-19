@@ -291,8 +291,8 @@ or `cohere` and add its key as the secret `ANTHROPIC_API_KEY`,
 error. Findings (glossary avoid-terms, France-French wording, typography, meaning
 drift from en-CA) appear as check annotations and a pull request comment, and the
 check fails when a `critical` key has a finding. Keys that pass are recorded as
-`reviewed` in a copy of the sidecar that the workflow keeps as the
-`fr-CA-review-sidecar` artifact; it never pushes to the pull request branch (see
+`reviewed` in the sidecar at release time, not on the pull request: the
+workflow never pushes to the pull request branch (see
 [the CI guide](docs/ci.md#fr-ca-review-and-the-sidecar)). Fork pull requests get no secrets, so a maintainer runs the workflow with
 `workflow_dispatch` and the pull request number; the result is posted as the
 `i18n-review` commit status. The script that holds the key always comes from the
