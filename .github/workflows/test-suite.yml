@@ -193,6 +193,8 @@ jobs:
         run: make release-plan-test
       - name: Verify package signing runbook and environment checks
         run: make packages-signing-drill packages-environments-test
+      - name: Fuzz the SAML response verifier (60s, committed corpus)
+        run: make saml-fuzz
       - name: Enforce coverage floor
         run: make coverage
       - name: Audit dependencies
