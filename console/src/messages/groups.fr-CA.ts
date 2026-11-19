@@ -60,6 +60,8 @@ export const groupsFrCA: Record<keyof typeof groupsEnCA, string> = {
   "groups.publicGroups": "Groupes publics",
   "groups.visibilityConflict":
     "Un groupe ne peut pas être plus visible que son membre le moins visible ({members}). Abaissez d’abord la visibilité du groupe ou relevez celle du membre.",
+  "groups.lessVisibleMembersWarning":
+    "Les utilisateurs de ce groupe ne voient pas {members} : la visibilité propre de ce membre est inférieure à celle du groupe. Relevez la visibilité du membre ou abaissez celle du groupe.",
   "groups.visibilityCeilingHelp":
     "Un groupe est un plafond de visibilité : les appelants ne voient que les membres dont la visibilité propre les admet.",
   "groups.membersConfiguredOrder": "Membres (ordre configuré)",

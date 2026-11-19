@@ -6491,11 +6491,14 @@ type GrantList = []Grant
 
 // Group defines model for Group.
 type Group struct {
-	Format  Format             `json:"format"`
-	Id      openapi_types.UUID `json:"id"`
-	Members MemberList         `json:"members"`
-	Name    string             `json:"name"`
-	Version string             `json:"version"`
+	Format Format             `json:"format"`
+	Id     openapi_types.UUID `json:"id"`
+
+	// LessVisibleMembers Read-only, computed when the group is read (ADR 0029). The members whose own visibility is below the group's. Strict group mode refuses such a group on write; in lenient mode (NOTARX_GROUP_VISIBILITY_MODE=lenient) the callers of the group see it without those members, and the Console warns. Absent when there are none.
+	LessVisibleMembers *[]VisibilityConflictMember `json:"lessVisibleMembers,omitempty"`
+	Members            MemberList                  `json:"members"`
+	Name               string                      `json:"name"`
+	Version            string                      `json:"version"`
 
 	// Visibility Read visibility ceiling, ordered private < authenticated < public. private admits principals with a grant, authenticated admits any non-anonymous identity, public admits anyone while the global public-access gate is enabled (otherwise public behaves as authenticated). Omitted on create means private.
 	Visibility Visibility `json:"visibility"`

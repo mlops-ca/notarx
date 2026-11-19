@@ -529,13 +529,12 @@ func (h hostedRepositoryAPIHandler) update(w http.ResponseWriter, r *http.Reques
 			return
 		}
 	}
-	// The lowering check runs last, after every 400 and after the version check, so
-	// a stale or malformed request keeps its own status. A stale If-Match falls
-	// through to the store, which answers 412.
-	if request.Visibility != nil && ifMatch == repo.Version && h.rejectLoweringBelowGroups(w, r, repo, *request.Visibility) {
+	// The store checks the lowering in the transaction of the write, after the
+	// version check, so a stale or malformed request keeps its own status.
+	updated, err := h.store.UpdateHostedRepository(h.groupMode.WithCeiling(r.Context()), updatedRepo, ifMatch)
+	if request.Visibility != nil && writeLoweringVisibilityConflict(w, err, repo, *request.Visibility) {
 		return
 	}
-	updated, err := h.store.UpdateHostedRepository(r.Context(), updatedRepo, ifMatch)
 	if errors.Is(err, repository.ErrNotFound) {
 		writeHostedProblem(w, http.StatusNotFound, "not_found", "repository not found")
 		return

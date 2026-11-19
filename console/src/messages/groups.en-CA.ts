@@ -57,6 +57,8 @@ export const groupsEnCA = {
   "groups.publicGroups": "Public groups",
   "groups.visibilityConflict":
     "A group cannot be more visible than its least visible member ({members}). Lower the group's visibility or raise the member's first.",
+  "groups.lessVisibleMembersWarning":
+    "Callers of this group do not see {members}: their own visibility is below the group's. Raise the member's visibility or lower the group's.",
   "groups.visibilityCeilingHelp":
     "A group is a visibility ceiling: callers see only the members whose own visibility admits them.",
   "groups.membersConfiguredOrder": "Members (configured order)",

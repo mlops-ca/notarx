@@ -19,10 +19,15 @@ type sqlRunner interface {
 // one transaction, so a failing audit insert rolls the change back and the caller gets
 // the error instead of a change that took effect. Without audit, fn runs on the pool.
 func runAudited[T any](ctx context.Context, s *PostgresStore, audit []AuditRecord, fn func(sqlRunner) (T, error)) (T, error) {
-	var zero T
 	if len(audit) == 0 {
 		return fn(s.db)
 	}
+	return runTransactional(ctx, s, audit, fn)
+}
+
+// runTransactional runs fn and the audit inserts, if any, in one transaction.
+func runTransactional[T any](ctx context.Context, s *PostgresStore, audit []AuditRecord, fn func(sqlRunner) (T, error)) (T, error) {
+	var zero T
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return zero, err

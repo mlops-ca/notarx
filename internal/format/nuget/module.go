@@ -67,7 +67,10 @@ type Options struct {
 	Sources         repository.NuGetSourceStore
 	Configuration   ConfigurationStore
 	Groups          GroupStore
-	Upstream        Upstream
+	// GroupMode is how the group visibility ceiling is enforced on preview group
+	// writes (ADR 0029); the zero value is strict.
+	GroupMode access.GroupMode
+	Upstream  Upstream
 }
 type Module struct {
 	distribution  dist.Store
@@ -83,6 +86,7 @@ type Module struct {
 	sources       repository.NuGetSourceStore
 	configuration ConfigurationStore
 	groups        GroupStore
+	groupMode     access.GroupMode
 	upstream      Upstream
 }
 
@@ -118,7 +122,7 @@ func New(o Options) (*Module, error) {
 	if o.Sources != nil && (o.Configuration == nil || o.Groups == nil || o.Upstream == nil) {
 		return nil, errors.New("NuGet Proxy/Group requires explicit source, configuration, Group and upstream ports")
 	}
-	return &Module{distribution: o.Distribution, store: o.Store, repos: o.Repositories, objects: o.Objects, auth: o.Authenticator, access: o.Authorizer, audit: o.Audit, anonymous: o.Anonymous, capacities: o.Capacities, maxBytes: o.MaxPackageBytes, sources: o.Sources, configuration: o.Configuration, groups: o.Groups, upstream: o.Upstream}, nil
+	return &Module{distribution: o.Distribution, store: o.Store, repos: o.Repositories, objects: o.Objects, auth: o.Authenticator, access: o.Authorizer, audit: o.Audit, anonymous: o.Anonymous, capacities: o.Capacities, maxBytes: o.MaxPackageBytes, sources: o.Sources, configuration: o.Configuration, groups: o.Groups, groupMode: o.GroupMode, upstream: o.Upstream}, nil
 }
 func (*Module) Format() repository.Format { return repository.FormatNuGet }
 func (m *Module) Routes() []formatmodule.Route {
@@ -245,6 +249,8 @@ func auditRecords(record repository.AuditRecord) []repository.AuditRecord {
 
 func (m *Module) failure(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, repository.ErrVisibilityConflict):
+		m.problem(w, 409, "visibility_conflict")
 	case errors.Is(err, repository.ErrNotFound):
 		m.problem(w, 404, "not_found")
 	case errors.Is(err, repository.ErrNuGetPublicationConflict), errors.Is(err, repository.ErrIdempotencyConflict), errors.Is(err, repository.ErrNameExists), errors.Is(err, repository.ErrNuGetSourceChanged), errors.Is(err, repository.ErrVersionConflict):

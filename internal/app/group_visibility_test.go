@@ -211,34 +211,7 @@ func TestGroupVisibilityModeDefaultsToStrict(t *testing.T) {
 	}
 }
 
-func TestStrictGroupModeFailsClosedWhenAMemberCannotBeRead(t *testing.T) {
-	f := newVisibilityFixture(t, access.GroupStrict)
-	public := f.repo("public-repo", repository.VisibilityPublic, false)
-	private := f.repo("private-repo", repository.VisibilityPrivate, false)
-	// A store whose member lookups fail after the group was validated must not let
-	// a conflicting write through; the handler answers 503 instead.
-	h := repositoryManagementHandler{store: failingMemberStore{HostedRepositoryStore: f.store, failID: private.ID, after: 1}, groupMode: access.GroupStrict}
-	group := repository.HostedGroup{Name: "feed", Format: repository.FormatRaw, Visibility: repository.VisibilityPublic, Members: []repository.GroupMember{{RepositoryID: public.ID, Position: 0}, {RepositoryID: private.ID, Position: 1}}}
-	response := httptest.NewRecorder()
-	if !h.rejectVisibilityConflict(response, httptest.NewRequest(http.MethodPost, "/api/v2/groups", nil), Principal{Admin: true}, group) || response.Code != http.StatusServiceUnavailable {
-		t.Fatalf("a failing member lookup must fail closed: %d %s", response.Code, response.Body.String())
-	}
-}
-
-type failingMemberStore struct {
-	repository.HostedRepositoryStore
-	failID string
-	after  int
-}
-
-func (s failingMemberStore) GetHostedRepository(ctx context.Context, id string) (repository.HostedRepository, error) {
-	if id == s.failID {
-		return repository.HostedRepository{}, context.DeadlineExceeded
-	}
-	return s.HostedRepositoryStore.GetHostedRepository(ctx, id)
-}
-
-func TestStrictModeRefusesLoweringWithoutAGroupStoreAndKeepsStatusOrder(t *testing.T) {
+func TestStrictModeKeepsStatusOrderOnLowering(t *testing.T) {
 	f := newVisibilityFixture(t, access.GroupStrict)
 	public := f.repo("public-repo", repository.VisibilityPublic, false)
 	if created := f.call(http.MethodPost, "/api/v2/groups", groupBody("feed", repository.VisibilityPublic, public), ""); created.Code != http.StatusCreated {
@@ -251,10 +224,52 @@ func TestStrictModeRefusesLoweringWithoutAGroupStoreAndKeepsStatusOrder(t *testi
 	if bad := f.call(http.MethodPatch, "/api/v2/repositories/"+public.ID, `{"visibility":"hidden"}`, public.Version); bad.Code != http.StatusBadRequest {
 		t.Fatalf("an invalid visibility = %d %s, want 400", bad.Code, bad.Body.String())
 	}
-	// Without the group store the invariant cannot be checked, so strict mode refuses.
-	h := hostedRepositoryAPIHandler{store: f.store, groupMode: access.GroupStrict}
-	response := httptest.NewRecorder()
-	if !h.rejectLoweringBelowGroups(response, httptest.NewRequest(http.MethodPatch, "/", nil), public, repository.VisibilityPrivate) || response.Code != http.StatusServiceUnavailable {
-		t.Fatalf("lowering without a group store = %d %s", response.Code, response.Body.String())
+}
+
+// The lenient mode shows the members a group's callers cannot see on the read.
+func TestLenientGroupReadsNameTheLessVisibleMembers(t *testing.T) {
+	f := newVisibilityFixture(t, access.GroupLenient)
+	public := f.repo("public-repo", repository.VisibilityPublic, false)
+	private := f.repo("private-repo", repository.VisibilityPrivate, false)
+	created := f.call(http.MethodPost, "/api/v2/groups", groupBody("feed", repository.VisibilityPublic, public, private), "")
+	var group repository.HostedGroup
+	if created.Code != http.StatusCreated || json.Unmarshal(created.Body.Bytes(), &group) != nil || len(group.LessVisibleMembers) != 1 {
+		t.Fatalf("lenient create = %d %s", created.Code, created.Body.String())
+	}
+	read := f.call(http.MethodGet, "/api/v2/groups/"+group.ID, "", "")
+	var got repository.HostedGroup
+	if read.Code != http.StatusOK || json.Unmarshal(read.Body.Bytes(), &got) != nil {
+		t.Fatalf("read = %d %s", read.Code, read.Body.String())
+	}
+	if len(got.LessVisibleMembers) != 1 || got.LessVisibleMembers[0].Name != "private-repo" || got.LessVisibleMembers[0].Visibility != repository.VisibilityPrivate {
+		t.Fatalf("lessVisibleMembers = %+v", got.LessVisibleMembers)
+	}
+	list := f.call(http.MethodGet, "/api/v2/groups", "", "")
+	var page struct{ Items []repository.HostedGroup }
+	if list.Code != http.StatusOK || json.Unmarshal(list.Body.Bytes(), &page) != nil || len(page.Items) != 1 || len(page.Items[0].LessVisibleMembers) != 1 {
+		t.Fatalf("list = %d %s", list.Code, list.Body.String())
+	}
+	// A group whose members are all at least as visible carries no indicator.
+	clean := f.call(http.MethodPost, "/api/v2/groups", groupBody("clean", repository.VisibilityPrivate, public, private), "")
+	var cleanGroup repository.HostedGroup
+	_ = json.Unmarshal(clean.Body.Bytes(), &cleanGroup)
+	read = f.call(http.MethodGet, "/api/v2/groups/"+cleanGroup.ID, "", "")
+	if strings.Contains(read.Body.String(), "lessVisibleMembers") {
+		t.Fatalf("a clean group read = %s", read.Body.String())
+	}
+}
+
+// Strict mode refuses such groups on write, so reads skip the member lookups.
+func TestStrictGroupReadsSkipTheLessVisibleMembersIndicator(t *testing.T) {
+	f := newVisibilityFixture(t, access.GroupStrict)
+	public := f.repo("public-repo", repository.VisibilityPublic, false)
+	private := f.repo("private-repo", repository.VisibilityPrivate, false)
+	// A layout written before strict mode (no ceiling mark on the store write).
+	group, _, err := f.store.CreateHostedGroupIdempotently(context.Background(), repository.HostedGroup{ID: uuid.NewString(), Name: "legacy", Format: repository.FormatRaw, Visibility: repository.VisibilityPublic, Members: []repository.GroupMember{{RepositoryID: public.ID}, {RepositoryID: private.ID, Position: 1}}}, "test", uuid.NewString(), "p")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if read := f.call(http.MethodGet, "/api/v2/groups/"+group.ID, "", ""); read.Code != http.StatusOK || strings.Contains(read.Body.String(), "lessVisibleMembers") {
+		t.Fatalf("strict read = %d %s", read.Code, read.Body.String())
 	}
 }

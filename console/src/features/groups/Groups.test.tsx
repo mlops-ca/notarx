@@ -81,9 +81,9 @@ function clickMask() {
   fireEvent.click(mask as HTMLElement);
 }
 
-function renderPage() {
+function renderPage(groups: Group[] = [group]) {
   vi.mocked(listGroups).mockResolvedValue({
-    data: { items: [group] },
+    data: { items: groups },
   } as never);
   vi.mocked(listRepositories).mockResolvedValue({
     data: { items: [repository] },
@@ -361,5 +361,31 @@ describe("GroupsPage dialogs", () => {
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
+  });
+});
+
+describe("GroupsPage lenient warning", () => {
+  it("warns about members that callers of the group cannot see", async () => {
+    renderPage([
+      {
+        ...group,
+        visibility: "public",
+        lessVisibleMembers: [
+          {
+            repositoryId: repository.id,
+            name: "npm-lib",
+            visibility: "private",
+          },
+        ],
+      },
+    ]);
+    const warning = await screen.findByText(/do not see npm-lib/);
+    expect(warning.getAttribute("data-group-less-visible")).toBe(group.id);
+  });
+
+  it("shows no warning when every member is at least as visible as the group", async () => {
+    renderPage();
+    await screen.findByText("oci-mirror");
+    expect(document.querySelector("[data-group-less-visible]")).toBeNull();
   });
 });

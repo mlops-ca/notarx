@@ -1,6 +1,7 @@
 package access
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -36,39 +37,12 @@ func ParseGroupMode(value string) (GroupMode, error) {
 // handler built without the option is strict.
 func (m GroupMode) Enforced() bool { return m != GroupLenient }
 
-// BelowCeiling returns the member repositories whose own visibility is below
-// the group's: the members a strict-mode write must refuse. A group whose
-// visibility is private has no ceiling to violate.
-func BelowCeiling(group repository.HostedGroup, members []repository.HostedRepository) []repository.HostedRepository {
-	ceiling := repository.NormalizeVisibility(group.Visibility)
-	var below []repository.HostedRepository
-	for _, member := range members {
-		if member.Visibility.Rank() < ceiling.Rank() {
-			below = append(below, member)
-		}
+// WithCeiling marks ctx so the store enforces the ceiling in the transaction of the
+// write (repository.WithGroupCeiling) when the mode is strict, and leaves it
+// unmarked in lenient mode.
+func (m GroupMode) WithCeiling(ctx context.Context) context.Context {
+	if m.Enforced() {
+		return repository.WithGroupCeiling(ctx)
 	}
-	return below
-}
-
-// GroupsAbove returns the groups that contain repositoryID and are more visible
-// than lowered: the groups a repository cannot be lowered below in strict mode.
-func GroupsAbove(lowered repository.Visibility, repositoryID string, groups []repository.HostedGroup) []repository.HostedGroup {
-	var above []repository.HostedGroup
-	for _, group := range groups {
-		if repository.NormalizeVisibility(group.Visibility).Rank() <= lowered.Rank() {
-			continue
-		}
-		for _, member := range group.Members {
-			if member.RepositoryID == repositoryID {
-				above = append(above, group)
-				break
-			}
-		}
-	}
-	return above
-}
-
-// LowersRepository reports whether next is a lower tier than the repository's.
-func LowersRepository(repo repository.HostedRepository, next repository.Visibility) bool {
-	return repository.NormalizeVisibility(next).Rank() < repository.NormalizeVisibility(repo.Visibility).Rank()
+	return ctx
 }

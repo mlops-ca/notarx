@@ -159,6 +159,13 @@ func (s *MemoryStore) UpdateHostedRepository(ctx context.Context, repo HostedRep
 	if current.Version != expectedVersion || current.State != RepositoryActive {
 		return HostedRepository{}, ErrVersionConflict
 	}
+	if groupCeilingEnforced(ctx) && NormalizeVisibility(repo.Visibility).Rank() < NormalizeVisibility(current.Visibility).Rank() {
+		for _, group := range s.hostedGroups {
+			if NormalizeVisibility(group.Visibility).Rank() > NormalizeVisibility(repo.Visibility).Rank() && groupContains(group, repo.ID) {
+				return HostedRepository{}, &VisibilityConflictError{Lowering: true}
+			}
+		}
+	}
 	if err := s.commitAuditLocked(ctx, audit); err != nil {
 		return HostedRepository{}, err
 	}
@@ -197,6 +204,49 @@ func cloneUpstreamAuth(auth *UpstreamAuth) *UpstreamAuth {
 	return &cloned
 }
 
+func groupContains(group HostedGroup, repositoryID string) bool {
+	for _, member := range group.Members {
+		if member.RepositoryID == repositoryID {
+			return true
+		}
+	}
+	return false
+}
+
+// ListGroupsAboveVisibility returns the groups that contain the repository and are
+// more visible than visibility, without their members.
+func (s *MemoryStore) ListGroupsAboveVisibility(_ context.Context, repositoryID string, visibility Visibility) ([]HostedGroup, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var groups []HostedGroup
+	for _, group := range s.hostedGroups {
+		if NormalizeVisibility(group.Visibility).Rank() > NormalizeVisibility(visibility).Rank() && groupContains(group, repositoryID) {
+			group.Members = nil
+			groups = append(groups, group)
+		}
+	}
+	sort.Slice(groups, func(i, j int) bool { return groups[i].ID < groups[j].ID })
+	return groups, nil
+}
+
+// checkGroupCeilingLocked is the memory twin of checkGroupCeiling; hold s.mu.
+func (s *MemoryStore) checkGroupCeilingLocked(ctx context.Context, visibility Visibility, members []GroupMember) error {
+	if !groupCeilingEnforced(ctx) {
+		return nil
+	}
+	ceiling := NormalizeVisibility(visibility)
+	var conflicts []HostedRepository
+	for _, member := range members {
+		if repo, ok := s.hostedRepositories[member.RepositoryID]; ok && ceiling.Rank() > 0 && repo.Visibility.Rank() < ceiling.Rank() {
+			conflicts = append(conflicts, cloneHostedRepositoryOCIBearer(repo))
+		}
+	}
+	if len(conflicts) > 0 {
+		return &VisibilityConflictError{Members: conflicts}
+	}
+	return nil
+}
+
 func cloneHostedGroup(group HostedGroup) HostedGroup {
 	group.Members = append([]GroupMember(nil), group.Members...)
 	return group
@@ -228,6 +278,9 @@ func (s *MemoryStore) CreateHostedGroupIdempotently(ctx context.Context, group H
 		if existing.Name == group.Name {
 			return HostedGroup{}, false, ErrNameExists
 		}
+	}
+	if err := s.checkGroupCeilingLocked(ctx, group.Visibility, group.Members); err != nil {
+		return HostedGroup{}, false, err
 	}
 	if group.Format == FormatCargo {
 		if err := s.preflightCargoGroupMembersLocked(group.ID, group.Members); err != nil {
@@ -311,6 +364,9 @@ func (s *MemoryStore) ReplaceHostedGroup(ctx context.Context, group HostedGroup,
 	if stored.Version != expectedVersion {
 		return HostedGroup{}, ErrVersionConflict
 	}
+	if err := s.checkGroupCeilingLocked(ctx, group.Visibility, group.Members); err != nil {
+		return HostedGroup{}, err
+	}
 	if group.Format == FormatCargo {
 		if err := s.preflightCargoGroupMembersLocked(group.ID, group.Members); err != nil {
 			return HostedGroup{}, err
@@ -327,7 +383,7 @@ func (s *MemoryStore) ReplaceHostedGroup(ctx context.Context, group HostedGroup,
 	return cloneHostedGroup(group), nil
 }
 
-func (s *MemoryStore) ReplaceHostedGroupMembers(_ context.Context, id string, members []GroupMember, expectedVersion string) (HostedGroup, error) {
+func (s *MemoryStore) ReplaceHostedGroupMembers(ctx context.Context, id string, members []GroupMember, expectedVersion string) (HostedGroup, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	group, ok := s.hostedGroups[id]
@@ -336,6 +392,9 @@ func (s *MemoryStore) ReplaceHostedGroupMembers(_ context.Context, id string, me
 	}
 	if group.Version != expectedVersion {
 		return HostedGroup{}, ErrVersionConflict
+	}
+	if err := s.checkGroupCeilingLocked(ctx, group.Visibility, members); err != nil {
+		return HostedGroup{}, err
 	}
 	if group.Format == FormatCargo {
 		if err := s.preflightCargoGroupMembersLocked(group.ID, members); err != nil {

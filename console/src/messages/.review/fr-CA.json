@@ -804,6 +804,7 @@
     "groups.groupsAreUnavailable": "draft",
     "groups.hostedMembersComeFirstMembersOfTheSame": "draft",
     "groups.hostedMembersComeFirstMembersOfTheSame2": "draft",
+    "groups.lessVisibleMembersWarning": "draft",
     "groups.member": "draft",
     "groups.memberReferences": "draft",
     "groups.memberRepositories": "draft",

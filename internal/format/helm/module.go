@@ -51,6 +51,9 @@ type Options struct {
 	Sources       repository.HelmSourceStore
 	Configuration ConfigurationStore
 	Groups        GroupStore
+	// GroupMode is how the group visibility ceiling is enforced on preview group
+	// writes (ADR 0029); the zero value is strict.
+	GroupMode     access.GroupMode
 	Upstream      Upstream
 	Store         repository.NativeHelmStore
 	Governance    repository.HelmGovernanceStore
@@ -68,6 +71,7 @@ type Module struct {
 	sources       repository.HelmSourceStore
 	configuration ConfigurationStore
 	groups        GroupStore
+	groupMode     access.GroupMode
 	upstream      Upstream
 	store         repository.NativeHelmStore
 	governance    repository.HelmGovernanceStore
@@ -116,7 +120,7 @@ func New(o Options) (*Module, error) {
 	if o.MaxChartBytes < 1 || o.MaxChartBytes > helmprotocol.MaxChartBytes {
 		return nil, errors.New("helm compressed chart limit must be between 1 and 64 MiB")
 	}
-	return &Module{distribution: o.Distribution, sources: o.Sources, configuration: o.Configuration, groups: o.Groups, upstream: o.Upstream, store: o.Store, governance: o.Governance, repos: o.Repositories, objects: o.Objects, auth: o.Authenticator, access: o.Authorizer, audit: o.Audit, anonymous: o.Anonymous, capacities: o.Capacities, maxBytes: o.MaxChartBytes}, nil
+	return &Module{distribution: o.Distribution, sources: o.Sources, configuration: o.Configuration, groups: o.Groups, groupMode: o.GroupMode, upstream: o.Upstream, store: o.Store, governance: o.Governance, repos: o.Repositories, objects: o.Objects, auth: o.Authenticator, access: o.Authorizer, audit: o.Audit, anonymous: o.Anonymous, capacities: o.Capacities, maxBytes: o.MaxChartBytes}, nil
 }
 func (*Module) Format() repository.Format { return repository.FormatHelm }
 func (m *Module) Routes() []formatmodule.Route {
@@ -199,6 +203,8 @@ func auditRecords(record repository.AuditRecord) []repository.AuditRecord {
 
 func (m *Module) failure(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, repository.ErrVisibilityConflict):
+		m.problem(w, 409, "visibility_conflict")
 	case errors.Is(err, repository.ErrNotFound):
 		m.problem(w, 404, "not_found")
 	case errors.Is(err, repository.ErrInvalidHelmPublication), errors.Is(err, helmprotocol.ErrInvalidChart):

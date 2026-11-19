@@ -246,6 +246,9 @@ type HostedGroup struct {
 	Visibility Visibility    `json:"visibility"`
 	Members    []GroupMember `json:"members"`
 	Version    string        `json:"version"`
+	// LessVisibleMembers is computed by the management API when it reads a group,
+	// never stored: the members whose own visibility is below the group's.
+	LessVisibleMembers []VisibilityRef `json:"lessVisibleMembers,omitempty"`
 }
 
 // AsRepository projects a group onto the repository shape that authorization

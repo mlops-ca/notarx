@@ -68,10 +68,27 @@ export function groupColumns({
       dataIndex: "visibility",
       key: "visibility",
       width: 140,
-      render: (visibility: Visibility) => (
-        <Badge tone={visibility === "public" ? "success" : "neutral"}>
-          {visibilityText(t, visibility)}
-        </Badge>
+      render: (visibility: Visibility, group) => (
+        <div className="min-w-0">
+          <Badge tone={visibility === "public" ? "success" : "neutral"}>
+            {visibilityText(t, visibility)}
+          </Badge>
+          {(group.lessVisibleMembers ?? []).length > 0 && (
+            // Lenient group mode (ADR 0029): the group keeps members that its
+            // callers cannot see.
+            <p
+              role="status"
+              className="mt-1 text-xs text-[var(--ag-status-warning)]"
+              data-group-less-visible={group.id}
+            >
+              {t("groups.lessVisibleMembersWarning", {
+                members: (group.lessVisibleMembers ?? [])
+                  .map((member) => member.name)
+                  .join(", "),
+              })}
+            </p>
+          )}
+        </div>
       ),
     },
     {
