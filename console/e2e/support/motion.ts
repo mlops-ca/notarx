@@ -12,7 +12,8 @@ export async function waitForModalOpen(dialog: Locator) {
  * when the dropdown motion starts, and visibility starts before the slide has
  * finished; a click on an option before then lands on a detached node. The
  * dropdown is found through the combobox's own listbox, so another Select's
- * closing list is never mistaken for it.
+ * closing list is never mistaken for it. A Select that stays in the loading
+ * state while open will not satisfy this helper.
  */
 export async function openSelect(page: Page, combobox: Locator) {
   await combobox.click();
@@ -22,6 +23,15 @@ export async function openSelect(page: Page, combobox: Locator) {
     .locator(".ant-select-dropdown")
     .filter({ has: page.locator(`[id="${listId}"]`) });
   await expect(dropdown).toBeVisible();
+  // An async Select (the artifact picker starts its fetch on mount) replaces
+  // its option nodes when the results land, so wait for AntD to drop the
+  // `ant-select-loading` class from the root. The root must exist, or the
+  // negative check would pass vacuously.
+  const root = combobox.locator(
+    "xpath=ancestor::div[contains(concat(' ', normalize-space(@class), ' '), ' ant-select ')]",
+  );
+  await expect(root).toHaveCount(1);
+  await expect(root).not.toHaveClass(/ant-select-loading/);
   await expect(dropdown).not.toHaveClass(
     /ant-slide-(?:up|down)-(?:appear|enter)/,
   );
