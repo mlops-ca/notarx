@@ -13,6 +13,15 @@ func TestSecretsResealRequiresConfirmation(t *testing.T) {
 	}
 }
 
+func TestSecretsResealRefusesTheMySQLDriver(t *testing.T) {
+	t.Setenv(secretsDatabaseEnv, "mysql://user:hunter2@127.0.0.1:1/db")
+	t.Setenv("NOTARX_DATABASE_DRIVER", "mysql")
+	code, stdout, stderr := runCLI(t, "secrets", "reseal", "--yes")
+	if code != ExitUsage || !strings.Contains(stderr, "supports PostgreSQL only") || strings.Contains(stdout+stderr, "hunter2") {
+		t.Fatalf("code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+}
+
 func TestSecretsResealRequiresDatabaseURL(t *testing.T) {
 	t.Setenv(secretsDatabaseEnv, "")
 	code, _, stderr := runCLI(t, "secrets", "reseal", "--yes")

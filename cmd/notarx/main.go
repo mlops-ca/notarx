@@ -186,20 +186,26 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 			dependencies.ArtifactScannerFormats = append(dependencies.ArtifactScannerFormats, repository.Format(format))
 		}
 	}
-	databasePool, err := database.OpenPostgres(cfg.DatabaseURL, cfg.DatabasePool)
+	databaseBackend, err := selectDatabaseBackend(cfg)
+	if err != nil {
+		slog.Error("select database backend", "error", err)
+		return 1
+	}
+	slog.Info("database backend selected", "driver", databaseBackend.Name)
+	databasePool, err := database.Open(cfg.DatabaseDriver, cfg.DatabaseURL, cfg.DatabasePool)
 	if err != nil {
 		slog.Error("open PostgreSQL connection pool", "error", err)
 		return 1
 	}
 	defer func() { _ = databasePool.Close() }()
 	dependencies = dependencies.WithDatabasePool(databasePool)
-	notificationPool, err := database.OpenPostgres(cfg.DatabaseURL, database.NotificationPoolConfig())
+	notificationPool, err := database.Open(cfg.DatabaseDriver, cfg.DatabaseURL, cfg.DatabaseNotificationPool)
 	if err != nil {
 		slog.Error("open PostgreSQL notification pool", "error", err)
 		return 1
 	}
 	defer func() { _ = notificationPool.Close() }()
-	artifactLockPool, err := database.OpenPostgres(cfg.DatabaseURL, cfg.DatabaseArtifactLockPool)
+	artifactLockPool, err := database.Open(cfg.DatabaseDriver, cfg.DatabaseURL, cfg.DatabaseArtifactLockPool)
 	if err != nil {
 		slog.Error("open PostgreSQL artifact lock pool", "error", err)
 		return 1
@@ -259,7 +265,7 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 	identityRuntime.ConfigureSAML(app.SAMLRuntimeOptions{Config: cfg.SAML, PublicURL: publicURL, State: store})
 	dependencies.IdentityRuntime = identityRuntime
 	dependencies.AuditReadSync = cfg.AuditReadMode == "sync"
-	coordinatorPool, err := database.OpenPostgres(cfg.DatabaseURL, cfg.DatabaseCoordinatorPool)
+	coordinatorPool, err := database.Open(cfg.DatabaseDriver, cfg.DatabaseURL, cfg.DatabaseCoordinatorPool)
 	if err != nil {
 		slog.Error("open PostgreSQL cache coordinator pool", "error", err)
 		return 1

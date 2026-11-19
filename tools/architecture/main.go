@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -227,6 +228,31 @@ func formatPackage(pkg string) string {
 	return ""
 }
 
+// mysqlDriver is the only MySQL driver; ADR 0022 confines it to the packages
+// that own connections and dialect primitives.
+const mysqlDriver = "github.com/go-sql-driver/mysql"
+
+// dialectViolations enforces the ADR 0022 seam: internal/dialect is the
+// driver-free interface package (no driver, store or app import), and the
+// MySQL driver is imported only by internal/database and internal/dialect/*.
+func dialectViolations(inv inventory, module string) []string {
+	found := []string{}
+	for pkg, imports := range inv.Imports {
+		for target := range imports {
+			internal := strings.TrimPrefix(target, module+"/")
+			switch {
+			case pkg == "internal/dialect" && (strings.HasPrefix(target, "github.com/jackc/pgx") || target == mysqlDriver ||
+				internal == "internal/repository" || internal == "internal/app" || strings.HasPrefix(internal, "internal/repository/") || strings.HasPrefix(internal, "internal/app/")):
+				found = append(found, pkg+" -> "+internal)
+			case target == mysqlDriver && pkg != "internal/database" && !strings.HasPrefix(pkg, "internal/dialect/"):
+				found = append(found, pkg+" -> "+target)
+			}
+		}
+	}
+	sort.Strings(found)
+	return found
+}
+
 func violations(inv inventory, module string) []string {
 	found := map[string]bool{}
 	for source := range inv.Imports {
@@ -328,6 +354,11 @@ func effectiveMembers(inv inventory, module string) ([]string, error) {
 	return result, nil
 }
 
+func sortedUnique(items []string) []string {
+	sort.Strings(items)
+	return slices.Compact(items)
+}
+
 func additions(current, allowed []string) []string {
 	known := map[string]bool{}
 	for _, item := range allowed {
@@ -359,7 +390,7 @@ func run(root string, metrics bool) error {
 	if err != nil {
 		return err
 	}
-	current := baseline{Violations: violations(inv, fields[1]), GatewayStoreMembers: inv.Members, EffectiveStoreMethods: methods, VisibilityAccessors: inv.VisibilityAccessors}
+	current := baseline{Violations: sortedUnique(append(violations(inv, fields[1]), dialectViolations(inv, fields[1])...)), GatewayStoreMembers: inv.Members, EffectiveStoreMethods: methods, VisibilityAccessors: inv.VisibilityAccessors}
 	if metrics {
 		output, err := json.MarshalIndent(inv.Metrics, "", "  ")
 		if err != nil {
