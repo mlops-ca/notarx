@@ -143,6 +143,7 @@ func TestValidateFileKey(t *testing.T) {
 		"empty segment":     "a//b",
 		"top-level tmp":     "tmp/x",
 		"top-level meta":    "meta/x",
+		"meta lookalike":    "meta/sha25/x",
 		"bare tmp":          "tmp",
 		"nul":               "a\x00b",
 		"newline":           "a\nb",

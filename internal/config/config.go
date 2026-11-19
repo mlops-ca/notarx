@@ -135,6 +135,9 @@ type Config struct {
 	AuditSyncMaxInflight int
 	AuditDenialMode      string
 	AuditReadMode        string
+	// InlineMaxBytes is the largest payload kept inline in a database row; a larger
+	// one goes to the object store meta namespace (ADR 0023 section 9).
+	InlineMaxBytes       int
 	UsageFlushInterval   time.Duration
 	ShutdownFlushTimeout time.Duration
 	// AuthzCacheTTL is the revocation window of the read caches (ADR 0023
@@ -260,6 +263,7 @@ func Load() (Config, error) {
 		AuditSyncMaxInflight:        64,
 		AuditDenialMode:             "queue",
 		AuditReadMode:               "async",
+		InlineMaxBytes:              DefaultInlineMaxBytes,
 		UsageFlushInterval:          5 * time.Second,
 		ShutdownFlushTimeout:        10 * time.Second,
 		AuthzCacheTTL:               5 * time.Second,
@@ -611,6 +615,9 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if err := loadAuditWriterConfig(&cfg); err != nil {
+		return Config{}, err
+	}
+	if cfg.InlineMaxBytes, err = positiveIntEnv("NOTARX_INLINE_MAX_BYTES", cfg.InlineMaxBytes, true); err != nil {
 		return Config{}, err
 	}
 	if cfg.MigrationStoragePoolID != "" && !regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`).MatchString(cfg.MigrationStoragePoolID) {

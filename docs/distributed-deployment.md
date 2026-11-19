@@ -355,6 +355,20 @@ variables, tokens, or credentials. Operators can copy it from Console system dia
 
 Optional explicit directory capacity is described in [operational signal sources](operational-signals.md). It observes the responding API process's mount namespace only; Worker/Scheduler-only processes do not expose diagnostics. The values do not represent S3/NAS physical pools.
 
+## Large payloads and the meta namespace
+
+Metadata payloads above `NOTARX_INLINE_MAX_BYTES` (default 16384) are kept out of the
+database (ADR 0023 section 9). The row stores the payload digest, size and object key,
+and the bytes live in the object store under `meta/sha256/<hex>`: content-addressed
+and immutable, so a key can never change meaning. Every read re-verifies the digest
+and rejects a mismatch, and each node keeps a small in-process LRU of recent reads.
+A payload at or below the threshold stays inline in its row. `0` externalises every
+non-empty payload. Both object-store drivers (filesystem and S3) support the namespace.
+
+```env
+NOTARX_INLINE_MAX_BYTES=16384
+```
+
 ## Instance Identity, Public URL and Legacy Names
 
 Settings are read only under the `NOTARX_` prefix. There are no aliases and no
