@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -34,6 +36,23 @@ func (s *failOnceDeleteStore) Delete(ctx context.Context, key string) error {
 	}
 	s.mu.Unlock()
 	return s.Store.Delete(ctx, key)
+}
+
+// isolateReclaimQueue cancels every pending or retrying APT reclaim job that does not belong to the test
+// repository. The lifecycle queue is shared by every test of the database, and Schedule also expires and
+// enqueues the sessions of other tests (the expiry horizon is an hour ahead), so a claim of one job could
+// otherwise take a foreign job, or miss the test's own when a foreign retrying job falls due mid-test.
+func isolateReclaimQueue(ctx context.Context, t *testing.T, databaseURL, repositoryID string) {
+	t.Helper()
+	db, err := sql.Open("pgx", databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	if _, err = db.ExecContext(ctx, `UPDATE lifecycle_jobs SET state='cancelled',completed_at=now()
+		WHERE kind='reclaim' AND payload->>'format'='apt' AND state IN ('pending','retrying') AND repository_id<>$1::uuid`, repositoryID); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestPostgresRustFSAPTReclaimSerializesWithPublicationAndRetriesDelete(t *testing.T) {
@@ -91,6 +110,7 @@ func TestPostgresRustFSAPTReclaimSerializesWithPublicationAndRetriesDelete(t *te
 	if err = maintenanceA.Schedule(ctx); err != nil {
 		t.Fatal(err)
 	}
+	isolateReclaimQueue(ctx, t, databaseURL, repo.ID)
 
 	objectCtx, release, err := repository.LockObjectKeys(ctx, []string{objectKey}, storeA, repository.FormatAPT, storeA.LockAPTObject)
 	if err != nil {
@@ -167,6 +187,7 @@ func TestPostgresRustFSAPTReclaimSerializesWithPublicationAndRetriesDelete(t *te
 	if err = maintenanceA.Schedule(ctx); err != nil {
 		t.Fatal(err)
 	}
+	isolateReclaimQueue(ctx, t, databaseURL, repo.ID)
 	failingObjects := &failOnceDeleteStore{Store: objects, remaining: 1}
 	maintenanceB := Maintenance{Store: storeB, Objects: failingObjects}
 	if err = maintenanceB.RunReclaimJobs(ctx, 1); err == nil {
