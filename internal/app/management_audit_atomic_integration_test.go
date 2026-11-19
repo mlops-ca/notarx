@@ -33,6 +33,31 @@ func TestPostgresManagementMutationsRollBackWithTheirAudit(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
+	// The tombstoned raw object stays unreferenced; other tests list unreferenced raw objects
+	// across the whole database, so remove what this test leaves behind.
+	t.Cleanup(func() {
+		scope := `(SELECT id FROM hosted_repositories WHERE name LIKE 'audit-raw-%')`
+		tx, err := db.Begin()
+		if err != nil {
+			t.Errorf("cleanup: %v", err)
+			return
+		}
+		defer func() { _ = tx.Rollback() }()
+		for _, statement := range []string{
+			`CREATE TEMP TABLE audit_raw_digests ON COMMIT DROP AS SELECT digest FROM native_raw_assets WHERE repository_id IN ` + scope + ` UNION SELECT digest FROM native_raw_asset_tombstones WHERE repository_id IN ` + scope,
+			`DELETE FROM native_raw_asset_tombstones WHERE repository_id IN ` + scope,
+			`DELETE FROM native_raw_assets WHERE repository_id IN ` + scope,
+			`DELETE FROM native_raw_objects WHERE digest IN (SELECT digest FROM audit_raw_digests)`,
+		} {
+			if _, err := tx.Exec(statement); err != nil {
+				t.Errorf("cleanup %q: %v", statement, err)
+				return
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			t.Errorf("cleanup: %v", err)
+		}
+	})
 	started := time.Now().UTC().Add(-time.Second)
 	var restores []func()
 	runManagementAuditRollback(t, store, func(repositoryNames ...string) {
