@@ -4,7 +4,7 @@ description: >-
   console directory (npm ci must have run). The browser download is cached by
   runner OS, architecture and @playwright/test version. apt gets short network
   timeouts and retries so a stalled Ubuntu mirror fails over instead of hanging
-  the step. Each install step is time-boxed to 5 minutes with timeout(1) (composite steps have no timeout-minutes).
+  the step. The browser download is time-boxed to 5 minutes and the system dependencies to 10 with timeout(1) (composite steps have no timeout-minutes).
 
 runs:
   using: composite
@@ -23,11 +23,22 @@ runs:
       shell: bash
       working-directory: console
       run: timeout 300 npx playwright install chromium
-    - name: Configure apt network timeouts
+    # The system dependencies come from the runner's Ubuntu mirror, which is
+    # sometimes slow enough to take longer than any sane step time (observed on
+    # PR 405 and 412). Keep the downloaded packages in a user-owned directory that
+    # actions/cache can restore, so a retry or the next run on the PR needs no
+    # download, and give apt network timeouts and retries.
+    - name: Cache apt packages for the browser dependencies
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/playwright-apt
+        key: playwright-apt-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
+    - name: Configure apt
       shell: bash
       run: |
-        printf 'Acquire::http::Timeout "20";\nAcquire::https::Timeout "20";\nAcquire::Retries "5";\n' | sudo tee /etc/apt/apt.conf.d/80-ci-network >/dev/null
+        mkdir -p ~/.cache/playwright-apt/partial
+        printf 'Acquire::http::Timeout "20";\nAcquire::https::Timeout "20";\nAcquire::Retries "5";\nDir::Cache::Archives "%s/.cache/playwright-apt";\n' "$HOME" | sudo tee /etc/apt/apt.conf.d/80-ci-network >/dev/null
     - name: Install browser system dependencies
       shell: bash
       working-directory: console
-      run: timeout 300 npx playwright install-deps chromium
+      run: timeout 600 npx playwright install-deps chromium
