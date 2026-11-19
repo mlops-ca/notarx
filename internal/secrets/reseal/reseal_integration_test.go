@@ -10,12 +10,14 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/mlops-ca/notarx/internal/secrets"
 	"github.com/mlops-ca/notarx/internal/secrets/reseal"
 	"github.com/mlops-ca/notarx/internal/testsupport"
+	"github.com/mlops-ca/notarx/internal/tokenissuer"
 )
 
 const (
@@ -32,6 +34,7 @@ var schemaDDL = []string{
 	"CREATE TABLE oidc_settings (singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton), client_secret text NOT NULL DEFAULT '', version bigint NOT NULL DEFAULT 1)",
 	"CREATE TABLE webhook_subscriptions (id uuid PRIMARY KEY, secret_ciphertext text NOT NULL, version bigint NOT NULL DEFAULT 1)",
 	"CREATE TABLE hosted_repositories (id uuid PRIMARY KEY, upstream_auth jsonb, version bigint NOT NULL DEFAULT 1)",
+	"CREATE TABLE token_signing_keys (kid text PRIMARY KEY, alg text NOT NULL, state text NOT NULL, public_jwk jsonb NOT NULL, private_sealed text NOT NULL, integrity_mac text NOT NULL)",
 }
 
 func TestResealRotatesEverySealedColumn(t *testing.T) {
@@ -99,6 +102,13 @@ func TestResealRotatesEverySealedColumn(t *testing.T) {
 	exec("INSERT INTO hosted_repositories (id, upstream_auth) VALUES ($1, jsonb_build_object('scheme','bearer','secret',$2::text))", repo, seal("repository-upstream-auth", "upstream"))
 	exec("INSERT INTO hosted_repositories (id, upstream_auth) VALUES ($1, NULL)", uuid.NewString())
 
+	signingKey, err := tokenissuer.Generator{RSABits: 2048}.Generate("ES256", tokenissuer.StateActive, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	exec("INSERT INTO token_signing_keys (kid, alg, state, public_jwk, private_sealed, integrity_mac) VALUES ($1, $2, $3, $4::jsonb, $5, $6)",
+		signingKey.KID, signingKey.Alg, string(signingKey.State), string(signingKey.PublicJWK), signingKey.PrivateSealed, signingKey.IntegrityMAC)
+
 	// Rotate: B becomes current, A stays readable.
 	t.Setenv(secrets.KeyEnv, keyB)
 	t.Setenv(secrets.KeyPreviousEnv, keyA)
@@ -107,7 +117,7 @@ func TestResealRotatesEverySealedColumn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if total(dry, func(r reseal.Result) int { return r.Resealed }) != 6 {
+	if total(dry, func(r reseal.Result) int { return r.Resealed }) != 8 {
 		t.Fatalf("dry run results: %+v", dry)
 	}
 	var stored string
@@ -122,14 +132,14 @@ func TestResealRotatesEverySealedColumn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if total(results, func(r reseal.Result) int { return r.Resealed }) != 6 {
+	if total(results, func(r reseal.Result) int { return r.Resealed }) != 8 {
 		t.Fatalf("results: %+v", results)
 	}
 	again, err := reseal.Run(ctx, db, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if total(again, func(r reseal.Result) int { return r.Resealed }) != 0 || total(again, func(r reseal.Result) int { return r.Unchanged }) != 6 {
+	if total(again, func(r reseal.Result) int { return r.Resealed }) != 0 || total(again, func(r reseal.Result) int { return r.Unchanged }) != 8 {
 		t.Fatalf("second run must be a no-op: %+v", again)
 	}
 
@@ -150,6 +160,17 @@ func TestResealRotatesEverySealedColumn(t *testing.T) {
 	check("nexus-source:"+nexus, "SELECT credential_ciphertext FROM nexus_migration_sources WHERE id=$1", nexus)
 	check("oidc.client-secret", "SELECT client_secret FROM oidc_settings")
 	check("webhook-subscription:"+hook, "SELECT secret_ciphertext FROM webhook_subscriptions WHERE id=$1", hook)
+	var rowMAC, rowSealed string
+	if err := db.QueryRowContext(ctx, "SELECT private_sealed, integrity_mac FROM token_signing_keys WHERE kid=$1", signingKey.KID).Scan(&rowSealed, &rowMAC); err != nil {
+		t.Fatal(err)
+	}
+	signingKey.PrivateSealed, signingKey.IntegrityMAC = rowSealed, rowMAC
+	if err := signingKey.VerifyIntegrity(); err != nil {
+		t.Fatalf("the signing key MAC must survive dropping the retired key: %v", err)
+	}
+	if _, err := signingKey.Signer(); err != nil {
+		t.Fatalf("the signing key must still unseal: %v", err)
+	}
 	check("repository-upstream-auth", "SELECT upstream_auth->>'secret' FROM hosted_repositories WHERE id=$1", repo)
 	var version int
 	if err := db.QueryRowContext(ctx, "SELECT version FROM webhook_subscriptions WHERE id=$1", hook).Scan(&version); err != nil || version != 2 {

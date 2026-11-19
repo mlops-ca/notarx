@@ -41,8 +41,10 @@ export function useProxySettingsDraft(
   const [egressTestResult, setEgressTestResult] =
     useState<EgressProxyTestResult | null>(null);
 
+  // entra-workload is configured through the API (ADR 0020); the Console keeps it
+  // intact when other settings are saved and lets an operator replace it.
   const [upstreamScheme, setUpstreamScheme] = useState<
-    "none" | "basic" | "bearer"
+    "none" | "basic" | "bearer" | "entra-workload"
   >(repo.upstreamAuth?.scheme ?? "none");
   const [upstreamUsername, setUpstreamUsername] = useState(
     repo.upstreamAuth?.username ?? "",
@@ -109,6 +111,17 @@ export function useProxySettingsDraft(
   const buildUpstreamAuthBody = (): UpstreamAuthWritable => {
     if (upstreamScheme === "none") {
       return { scheme: "none" };
+    }
+    if (upstreamScheme === "entra-workload") {
+      const stored = repo.upstreamAuth;
+      return {
+        scheme: "entra-workload",
+        ...(stored?.tenantId ? { tenantId: stored.tenantId } : {}),
+        ...(stored?.clientId ? { clientId: stored.clientId } : {}),
+        ...(stored?.scope ? { scope: stored.scope } : {}),
+        ...(stored?.subject ? { subject: stored.subject } : {}),
+        ...(stored?.registryKind ? { registryKind: stored.registryKind } : {}),
+      };
     }
     return {
       scheme: upstreamScheme,
@@ -185,7 +198,9 @@ export function useProxySettingsDraft(
     egressTestResult,
     setEgressTestResult,
     upstreamScheme,
-    setUpstreamScheme: (scheme: "none" | "basic" | "bearer") => {
+    setUpstreamScheme: (
+      scheme: "none" | "basic" | "bearer" | "entra-workload",
+    ) => {
       setUpstreamScheme(scheme);
       setUpstreamSecret("");
     },

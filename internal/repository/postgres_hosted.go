@@ -171,6 +171,7 @@ func scanHostedRepository(row interface{ Scan(...any) error }, repo *HostedRepos
 		if err := json.Unmarshal(upstreamAuth, &auth); err != nil {
 			return err
 		}
+		auth.Repository = repo.Name
 		repo.UpstreamAuth = &auth
 	}
 	if len(ociBearer) > 0 {

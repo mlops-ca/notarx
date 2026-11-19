@@ -297,6 +297,9 @@ func (h hostedRepositoryAPIHandler) createWithIdempotencyKey(w http.ResponseWrit
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "upstream credential encryption key is not configured")
 		return
 	}
+	if err == nil && !upstreamAuthSchemeSupported(request.Format, upstreamAuth) {
+		err = errors.New("upstream authentication scheme entra-workload is not available for Conan")
+	}
 	if err != nil {
 		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
@@ -509,6 +512,9 @@ func (h hostedRepositoryAPIHandler) update(w http.ResponseWriter, r *http.Reques
 		if errors.Is(err, secrets.ErrKeyNotConfigured) {
 			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "upstream credential encryption key is not configured")
 			return
+		}
+		if err == nil && !upstreamAuthSchemeSupported(repo.Format, upstreamAuth) {
+			err = errors.New("upstream authentication scheme entra-workload is not available for Conan")
 		}
 		if err != nil {
 			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", err.Error())

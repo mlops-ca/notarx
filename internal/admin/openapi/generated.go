@@ -4601,11 +4601,27 @@ func (e UpdateUserState) Valid() bool {
 	}
 }
 
+// Defines values for UpstreamAuthRegistryKind.
+const (
+	Acr UpstreamAuthRegistryKind = "acr"
+)
+
+// Valid indicates whether the value is a known member of the UpstreamAuthRegistryKind enum.
+func (e UpstreamAuthRegistryKind) Valid() bool {
+	switch e {
+	case Acr:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UpstreamAuthScheme.
 const (
-	UpstreamAuthSchemeBasic  UpstreamAuthScheme = "basic"
-	UpstreamAuthSchemeBearer UpstreamAuthScheme = "bearer"
-	UpstreamAuthSchemeNone   UpstreamAuthScheme = "none"
+	UpstreamAuthSchemeBasic         UpstreamAuthScheme = "basic"
+	UpstreamAuthSchemeBearer        UpstreamAuthScheme = "bearer"
+	UpstreamAuthSchemeEntraWorkload UpstreamAuthScheme = "entra-workload"
+	UpstreamAuthSchemeNone          UpstreamAuthScheme = "none"
 )
 
 // Valid indicates whether the value is a known member of the UpstreamAuthScheme enum.
@@ -4614,6 +4630,8 @@ func (e UpstreamAuthScheme) Valid() bool {
 	case UpstreamAuthSchemeBasic:
 		return true
 	case UpstreamAuthSchemeBearer:
+		return true
+	case UpstreamAuthSchemeEntraWorkload:
 		return true
 	case UpstreamAuthSchemeNone:
 		return true
@@ -9031,20 +9049,38 @@ type UpdateWebhookSubscription struct {
 
 // UpstreamAuth Protected upstream credentials for Go, Maven, OCI, npm, PyPI, Cargo, APT, Raw and Conan Proxy repositories. Basic or Bearer authentication targets the bound upstream. Conan exchanges Basic credentials through its users/authenticate endpoint before reading protected metadata or files. When OCI ociBearer is configured, these credentials are sent only to its bound issuer and content requests use the exchanged pull token. Cross-origin redirects strip credentials. Rotation or clear invalidates credential-bound content and token caches. Changing the upstream URL or OCI issuer binding requires a fresh secret or scheme none; stored credentials are never implicitly rebound to a new destination. Hosted repositories and unsupported formats reject this field. `secret` is accepted on write over TLS and stored AES-256-GCM encrypted; responses never return it and carry `credentialsConfigured` instead.
 type UpstreamAuth struct {
-	// CredentialsConfigured True when an encrypted upstream credential is stored.
+	// ClientId entra-workload only. Application (client) id of the app registration that trusts the notarx issuer.
+	ClientId *openapi_types.UUID `json:"clientId,omitempty"`
+
+	// CredentialsConfigured True when an encrypted upstream credential is stored, or when an entra-workload credential is configured.
 	CredentialsConfigured *bool `json:"credentialsConfigured,omitempty"`
 
-	// Scheme none removes any stored credential and reads the upstream anonymously; basic authenticates with an HTTP Basic credential (Conan exchanges it for a source token); bearer sends `Authorization - Bearer <secret>`.
+	// RegistryKind entra-workload only. `acr` adds the Azure Container Registry exchange of the Entra token for a registry access token.
+	RegistryKind *UpstreamAuthRegistryKind `json:"registryKind,omitempty"`
+
+	// Scheme none removes any stored credential and reads the upstream anonymously; basic authenticates with an HTTP Basic credential (Conan exchanges it for a source token); bearer sends `Authorization - Bearer <secret>`; entra-workload exchanges a short-lived assertion that notarx signs itself for a Microsoft Entra access token (ADR 0020), needs no secret, is accepted only while NOTARX_ISSUER_ENABLED is true and is not available for Conan.
 	Scheme UpstreamAuthScheme `json:"scheme"`
+
+	// Scope entra-workload only. Single Entra scope requested for the access token, for example `https://storage.azure.com/.default`. Use `https://management.azure.com/.default` for Azure Container Registry.
+	Scope *string `json:"scope,omitempty"`
 
 	// Secret Upstream password or token. Write-only; stored encrypted. Omit on update to keep the stored secret only while its scheme and upstream destination binding are unchanged. Both schemes require a secret, so clear a stored credential by setting scheme to none rather than sending an empty secret.
 	Secret *string `json:"secret,omitempty"`
+
+	// Subject entra-workload only. Exact `sub` claim of the assertion, matching the federated credential. Defaults to the instance principal `notarx:instance:<deployment-id>`.
+	Subject *string `json:"subject,omitempty"`
+
+	// TenantId entra-workload only. Entra tenant GUID or verified domain.
+	TenantId *string `json:"tenantId,omitempty"`
 
 	// Username basic only. Upstream account name. Rejected for bearer.
 	Username *string `json:"username,omitempty"`
 }
 
-// UpstreamAuthScheme none removes any stored credential and reads the upstream anonymously; basic authenticates with an HTTP Basic credential (Conan exchanges it for a source token); bearer sends `Authorization - Bearer <secret>`.
+// UpstreamAuthRegistryKind entra-workload only. `acr` adds the Azure Container Registry exchange of the Entra token for a registry access token.
+type UpstreamAuthRegistryKind string
+
+// UpstreamAuthScheme none removes any stored credential and reads the upstream anonymously; basic authenticates with an HTTP Basic credential (Conan exchanges it for a source token); bearer sends `Authorization - Bearer <secret>`; entra-workload exchanges a short-lived assertion that notarx signs itself for a Microsoft Entra access token (ADR 0020), needs no secret, is accepted only while NOTARX_ISSUER_ENABLED is true and is not available for Conan.
 type UpstreamAuthScheme string
 
 // User defines model for User.

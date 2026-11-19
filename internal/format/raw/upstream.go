@@ -69,6 +69,10 @@ func (c Upstream) FetchRaw(ctx context.Context, method string, member repository
 	if err != nil {
 		return response, &rawFetchError{code: "upstream_transport_failed", err: err}
 	}
+	response, err = upstreamauth.RetryUnauthorized(response, r, member.Endpoint, member.UpstreamAuth, client.Do)
+	if err != nil {
+		return nil, &rawFetchError{code: "upstream_transport_failed", err: err}
+	}
 	return response, nil
 }
 

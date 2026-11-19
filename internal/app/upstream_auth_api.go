@@ -22,6 +22,12 @@ type upstreamAuthRequest struct {
 	Scheme   repository.UpstreamAuthScheme `json:"scheme"`
 	Username string                        `json:"username,omitempty"`
 	Secret   string                        `json:"secret,omitempty"`
+	// The entra-workload fields are not secret and are stored as given (ADR 0020).
+	TenantID     string `json:"tenantId,omitempty"`
+	ClientID     string `json:"clientId,omitempty"`
+	Scope        string `json:"scope,omitempty"`
+	Subject      string `json:"subject,omitempty"`
+	RegistryKind string `json:"registryKind,omitempty"`
 }
 
 // upstreamAuthSupported reports whether a format/type pair consumes upstream
@@ -55,6 +61,20 @@ func resolveUpstreamAuth(request *upstreamAuthRequest, existing *repository.Upst
 		}
 		return nil, nil
 	}
+	if request.Scheme == repository.UpstreamAuthSchemeEntraWorkload {
+		if request.Secret != "" {
+			return nil, errors.New("upstream entra-workload authentication carries no username or secret")
+		}
+		resolved := &repository.UpstreamAuth{Scheme: request.Scheme, Username: request.Username, TenantID: request.TenantID, ClientID: request.ClientID,
+			Scope: request.Scope, Subject: request.Subject, RegistryKind: request.RegistryKind}
+		if err := resolved.Validate(); err != nil {
+			return nil, err
+		}
+		return resolved, nil
+	}
+	if request.TenantID != "" || request.ClientID != "" || request.Scope != "" || request.Subject != "" || request.RegistryKind != "" {
+		return nil, errors.New("tenantId, clientId, scope, subject and registryKind apply only to the entra-workload scheme")
+	}
 	resolved := &repository.UpstreamAuth{Scheme: request.Scheme, Username: request.Username}
 	switch {
 	case request.Secret != "":
@@ -87,9 +107,20 @@ func upstreamCredentialBindingChanged(existing, next repository.HostedRepository
 	return *existing.OCIBearer != *next.OCIBearer
 }
 
+// upstreamAuthSchemeSupported rejects the entra-workload scheme for Conan, whose proxy exchanges
+// a Basic credential for its own source token and has no use for an Entra access token.
+func upstreamAuthSchemeSupported(format repository.Format, auth *repository.UpstreamAuth) bool {
+	return auth == nil || auth.Scheme != repository.UpstreamAuthSchemeEntraWorkload || format != repository.FormatConan
+}
+
 func upstreamCredentialRebindNeedsSecret(existing, next repository.HostedRepository, request *upstreamAuthRequest) bool {
 	if existing.UpstreamAuth == nil || existing.UpstreamAuth.Scheme == repository.UpstreamAuthSchemeNone || next.UpstreamAuth == nil || !upstreamCredentialBindingChanged(existing, next) {
 		return false
+	}
+	if next.UpstreamAuth.Scheme == repository.UpstreamAuthSchemeEntraWorkload {
+		// There is no secret to resubmit: moving the token to a new destination must be an explicit,
+		// repeated upstreamAuth in the same request.
+		return request == nil
 	}
 	return request == nil || request.Secret == ""
 }
@@ -102,7 +133,7 @@ func redactUpstreamAuth(repo repository.HostedRepository) repository.HostedRepos
 		return repo
 	}
 	redacted := *repo.UpstreamAuth
-	redacted.CredentialsConfigured = redacted.Secret != ""
+	redacted.CredentialsConfigured = redacted.Secret != "" || redacted.Scheme == repository.UpstreamAuthSchemeEntraWorkload
 	redacted.Secret = ""
 	repo.UpstreamAuth = &redacted
 	return repo

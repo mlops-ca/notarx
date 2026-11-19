@@ -15,6 +15,7 @@ import (
 
 	"github.com/mlops-ca/notarx/internal/egress"
 	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/upstreamauth"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
@@ -41,10 +42,31 @@ func (c UpstreamClient) upstreamEgressHooks() egress.Hooks {
 	return rawEgressHooks()
 }
 
-// doProxyUpstream applies one policy decision and a new pinned/proxied
+// doProxyUpstream runs doProxyUpstreamOnce and, for an entra-workload credential whose token the
+// upstream refused with 401, drops the cached token and retries exactly once with a fresh
+// exchange (ADR 0020). Requests with a body, and OCI requests that carry a registry scope token,
+// are never replayed.
+func (c UpstreamClient) doProxyUpstream(ctx context.Context, member repository.Member, request *http.Request) (*http.Response, error) {
+	response, err := c.doProxyUpstreamOnce(ctx, member, request)
+	if err != nil || member.OCIBearer != nil {
+		return response, err
+	}
+	retried, err := upstreamauth.RetryUnauthorized(response, request, member.Endpoint, member.UpstreamAuth, func(retry *http.Request) (*http.Response, error) {
+		return c.doProxyUpstreamOnce(ctx, member, retry)
+	})
+	if err != nil && !errors.Is(err, upstreamauth.ErrCredential) {
+		return nil, err
+	}
+	if err != nil {
+		return nil, &proxyFetchError{message: "proxy upstream credential unavailable", cause: err}
+	}
+	return retried, nil
+}
+
+// doProxyUpstreamOnce applies one policy decision and a new pinned/proxied
 // transport to each hop. A single context deadline covers DNS, redirects and
 // consumption of the final response; closing its body releases that budget.
-func (c UpstreamClient) doProxyUpstream(ctx context.Context, member repository.Member, request *http.Request) (*http.Response, error) {
+func (c UpstreamClient) doProxyUpstreamOnce(ctx context.Context, member repository.Member, request *http.Request) (*http.Response, error) {
 	base := c.HTTPClient
 	if base == nil {
 		base = &http.Client{Timeout: 30 * time.Second}

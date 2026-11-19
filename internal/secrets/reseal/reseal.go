@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"github.com/mlops-ca/notarx/internal/secrets"
+	"github.com/mlops-ca/notarx/internal/tokenissuer"
 )
 
 // Target describes one column that holds sealed values.
@@ -72,6 +73,14 @@ func Targets() []Target {
 			Update:  "UPDATE hosted_repositories SET upstream_auth = jsonb_set(upstream_auth, '{secret}', to_jsonb($1::text)), version = version + 1 WHERE id = $2::uuid AND upstream_auth->>'secret' = $3",
 			Purpose: func(string) string { return "repository-upstream-auth" },
 		},
+		{
+			// ADR 0020: signing keys are sealed per kid. The integrity MAC of the same rows is
+			// refreshed by resealIntegrityMACs, so dropping a retired key keeps them verifiable.
+			Name:    "token_signing_keys.private_sealed",
+			Select:  "SELECT kid, kid, private_sealed FROM token_signing_keys WHERE private_sealed <> '' ORDER BY kid",
+			Update:  "UPDATE token_signing_keys SET private_sealed = $1 WHERE kid = $2 AND private_sealed = $3",
+			Purpose: func(kid string) string { return tokenissuer.SealPurpose(kid) },
+		},
 	}
 }
 
@@ -113,7 +122,86 @@ func Run(ctx context.Context, db *sql.DB, dryRun bool) ([]Result, error) {
 			runErr = ErrRowsFailed
 		}
 	}
+	result, err := resealIntegrityMACs(ctx, db, dryRun)
+	results = append(results, result)
+	if err != nil {
+		return results, fmt.Errorf("%s: %w", result.Target, err)
+	}
+	if result.Failed > 0 {
+		runErr = ErrRowsFailed
+	}
 	return results, runErr
+}
+
+const macTargetName = "token_signing_keys.integrity_mac"
+
+// resealIntegrityMACs recomputes the integrity MAC of signing key rows that were MACed with a
+// retired ring key. A row whose current MAC does not verify is reported and left alone, so
+// reseal can never launder a tampered row into a valid one.
+func resealIntegrityMACs(ctx context.Context, db *sql.DB, dryRun bool) (Result, error) {
+	result := Result{Target: macTargetName}
+	for pass := 1; ; pass++ {
+		rows, err := db.QueryContext(ctx, "SELECT kid, alg, state, public_jwk::text, integrity_mac FROM token_signing_keys ORDER BY kid")
+		if err != nil {
+			return result, err
+		}
+		var records []tokenissuer.KeyRecord
+		for rows.Next() {
+			var record tokenissuer.KeyRecord
+			var state, jwk string
+			if err := rows.Scan(&record.KID, &record.Alg, &state, &jwk, &record.IntegrityMAC); err != nil {
+				_ = rows.Close()
+				return result, err
+			}
+			record.State, record.PublicJWK = tokenissuer.State(state), []byte(jwk)
+			records = append(records, record)
+		}
+		err = rows.Err()
+		_ = rows.Close()
+		if err != nil {
+			return result, err
+		}
+		result = Result{Target: macTargetName}
+		retry := false
+		for _, record := range records {
+			result.Scanned++
+			need, err := secrets.MACNeedsRefresh(record.IntegrityMAC)
+			if err == nil && need {
+				err = record.VerifyIntegrity()
+			}
+			switch {
+			case err != nil:
+				result.Failed++
+				result.Failures = append(result.Failures, fmt.Sprintf("row %s: %v", record.KID, err))
+			case !need:
+				result.Unchanged++
+			case dryRun:
+				result.Resealed++
+			default:
+				previous := record.IntegrityMAC
+				if err := record.Seal(); err != nil {
+					return result, err
+				}
+				done, err := db.ExecContext(ctx, "UPDATE token_signing_keys SET integrity_mac = $1 WHERE kid = $2 AND integrity_mac = $3 AND state = $4", record.IntegrityMAC, record.KID, previous, string(record.State))
+				if err != nil {
+					return result, fmt.Errorf("row %s: %w", record.KID, err)
+				}
+				if n, err := done.RowsAffected(); err != nil {
+					return result, err
+				} else if n == 0 {
+					retry = true // the rotation worker changed the row after it was read
+					continue
+				}
+				result.Resealed++
+			}
+		}
+		if !retry {
+			return result, nil
+		}
+		if pass >= maxPasses {
+			return result, errors.New("rows keep changing concurrently; retry when writes quiesce")
+		}
+	}
 }
 
 type row struct{ key, purposeKey, value string }

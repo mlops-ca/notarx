@@ -210,6 +210,7 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	mux := newRuntimeLogMux(dependencies.LogBuffer)
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	mux.HandleFunc("GET /readyz", dependencies.ready)
+	registerIssuerRoutes(mux, options.Issuer)
 	if metrics == nil {
 		metrics = &Metrics{}
 	}

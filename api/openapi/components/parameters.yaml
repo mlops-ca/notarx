@@ -176,3 +176,10 @@ NPMPackageName:
     type: string
     minLength: 1
     maxLength: 214
+IfNoneMatch:
+  name: If-None-Match
+  in: header
+  required: false
+  description: Entity tag of a cached representation; a match answers 304.
+  schema:
+    type: string

@@ -10,6 +10,7 @@ import (
 
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/secrets"
+	"github.com/mlops-ca/notarx/internal/upstreamauth"
 )
 
 // applyUpstreamAuth attaches the repository's configured credential to an
@@ -23,6 +24,10 @@ func applyUpstreamAuth(request *http.Request, auth *repository.UpstreamAuth) err
 	}
 	if auth == nil || auth.Scheme == repository.UpstreamAuthSchemeNone {
 		return nil
+	}
+	if auth.Scheme == repository.UpstreamAuthSchemeEntraWorkload {
+		// The credential is a short-lived token minted in-process, never a stored secret.
+		return upstreamauth.Apply(request, auth)
 	}
 	secret, err := secrets.Open(upstreamAuthSecretPurpose, auth.Secret)
 	if err != nil {

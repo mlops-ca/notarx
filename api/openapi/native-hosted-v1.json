@@ -11208,6 +11208,143 @@
       "x-gateway-visibility": "all_three_representations_committed_together",
       "x-gateway-publication": "notarx_specific_single_zip_put"
     },
+    "/.well-known/openid-configuration": {
+      "servers": [
+        {
+          "url": "https://gateway.example.com"
+        }
+      ],
+      "get": {
+        "operationId": "getOpenIDConfiguration",
+        "summary": "OpenID Provider Configuration",
+        "description": "Returns the discovery document of the issuer. There is no authorization_endpoint or token_endpoint. The strong ETag supports conditional requests.\n",
+        "security": [
+          {}
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfNoneMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Discovery document",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "public, max-age=300"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Access-Control-Allow-Origin": {
+                "schema": {
+                  "type": "string",
+                  "const": "*"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenIDConfiguration"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "The cached document is current"
+          },
+          "404": {
+            "description": "The issuer is disabled (NOTARX_ISSUER_ENABLED=false)"
+          },
+          "429": {
+            "description": "Per-client rate limit exceeded",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/.well-known/jwks.json": {
+      "servers": [
+        {
+          "url": "https://gateway.example.com"
+        }
+      ],
+      "get": {
+        "operationId": "getIssuerJWKS",
+        "summary": "JSON Web Key Set",
+        "description": "Returns the public keys of the next, active and unexpired retired signing keys whose integrity check passes. Private parameters are never present.\n",
+        "security": [
+          {}
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfNoneMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Public key set",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "public, max-age=300"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Access-Control-Allow-Origin": {
+                "schema": {
+                  "type": "string",
+                  "const": "*"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuerJWKS"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "The cached document is current"
+          },
+          "404": {
+            "description": "The issuer is disabled (NOTARX_ISSUER_ENABLED=false)"
+          },
+          "429": {
+            "description": "Per-client rate limit exceeded",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Signing keys are temporarily unavailable"
+          }
+        }
+      }
+    },
     "/cargo/{repository}/{path}": {
       "servers": [
         {
@@ -18622,9 +18759,10 @@
             "enum": [
               "none",
               "basic",
-              "bearer"
+              "bearer",
+              "entra-workload"
             ],
-            "description": "none removes any stored credential and reads the upstream anonymously; basic authenticates with an HTTP Basic credential (Conan exchanges it for a source token); bearer sends `Authorization - Bearer <secret>`."
+            "description": "none removes any stored credential and reads the upstream anonymously; basic authenticates with an HTTP Basic credential (Conan exchanges it for a source token); bearer sends `Authorization - Bearer <secret>`; entra-workload exchanges a short-lived assertion that notarx signs itself for a Microsoft Entra access token (ADR 0020), needs no secret, is accepted only while NOTARX_ISSUER_ENABLED is true and is not available for Conan."
           },
           "username": {
             "type": "string",
@@ -18635,10 +18773,38 @@
             "writeOnly": true,
             "description": "Upstream password or token. Write-only; stored encrypted. Omit on update to keep the stored secret only while its scheme and upstream destination binding are unchanged. Both schemes require a secret, so clear a stored credential by setting scheme to none rather than sending an empty secret."
           },
+          "tenantId": {
+            "type": "string",
+            "maxLength": 253,
+            "description": "entra-workload only. Entra tenant GUID or verified domain."
+          },
+          "clientId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "entra-workload only. Application (client) id of the app registration that trusts the notarx issuer."
+          },
+          "scope": {
+            "type": "string",
+            "maxLength": 512,
+            "description": "entra-workload only. Single Entra scope requested for the access token, for example `https://storage.azure.com/.default`. Use `https://management.azure.com/.default` for Azure Container Registry."
+          },
+          "subject": {
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9._:-]+$",
+            "description": "entra-workload only. Exact `sub` claim of the assertion, matching the federated credential. Defaults to the instance principal `notarx:instance:<deployment-id>`."
+          },
+          "registryKind": {
+            "type": "string",
+            "enum": [
+              "acr"
+            ],
+            "description": "entra-workload only. `acr` adds the Azure Container Registry exchange of the Entra token for a registry access token."
+          },
           "credentialsConfigured": {
             "type": "boolean",
             "readOnly": true,
-            "description": "True when an encrypted upstream credential is stored."
+            "description": "True when an encrypted upstream credential is stored, or when an entra-workload credential is configured."
           }
         }
       },
@@ -19849,6 +20015,124 @@
           }
         }
       },
+      "OpenIDConfiguration": {
+        "type": "object",
+        "required": [
+          "issuer",
+          "jwks_uri",
+          "id_token_signing_alg_values_supported",
+          "response_types_supported",
+          "subject_types_supported",
+          "claims_supported"
+        ],
+        "properties": {
+          "issuer": {
+            "type": "string",
+            "format": "uri",
+            "description": "Exactly the value of NOTARX_ISSUER_URL and of the iss claim."
+          },
+          "jwks_uri": {
+            "type": "string",
+            "format": "uri",
+            "description": "The issuer URL followed by /.well-known/jwks.json."
+          },
+          "id_token_signing_alg_values_supported": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "RS256",
+                "ES256"
+              ]
+            }
+          },
+          "response_types_supported": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "const": "id_token"
+            }
+          },
+          "subject_types_supported": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "const": "public"
+            }
+          },
+          "claims_supported": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "IssuerJWK": {
+        "type": "object",
+        "required": [
+          "kty",
+          "kid",
+          "use",
+          "alg"
+        ],
+        "properties": {
+          "kty": {
+            "type": "string",
+            "enum": [
+              "RSA",
+              "EC"
+            ]
+          },
+          "kid": {
+            "type": "string",
+            "description": "RFC 7638 SHA-256 thumbprint of the public key."
+          },
+          "use": {
+            "type": "string",
+            "const": "sig"
+          },
+          "alg": {
+            "type": "string",
+            "enum": [
+              "RS256",
+              "ES256"
+            ]
+          },
+          "n": {
+            "type": "string",
+            "description": "RSA modulus (base64url)."
+          },
+          "e": {
+            "type": "string",
+            "description": "RSA public exponent (base64url)."
+          },
+          "crv": {
+            "type": "string",
+            "const": "P-256"
+          },
+          "x": {
+            "type": "string"
+          },
+          "y": {
+            "type": "string"
+          }
+        }
+      },
+      "IssuerJWKS": {
+        "type": "object",
+        "required": [
+          "keys"
+        ],
+        "properties": {
+          "keys": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IssuerJWK"
+            }
+          }
+        }
+      },
       "NPMRegistryMetadata": {
         "type": "object",
         "required": [
@@ -20113,6 +20397,15 @@
         "schema": {
           "type": "string",
           "maxLength": 255
+        }
+      },
+      "IfNoneMatch": {
+        "name": "If-None-Match",
+        "in": "header",
+        "required": false,
+        "description": "Entity tag of a cached representation; a match answers 304.",
+        "schema": {
+          "type": "string"
         }
       }
     },

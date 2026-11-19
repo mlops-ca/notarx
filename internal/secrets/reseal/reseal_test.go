@@ -48,6 +48,7 @@ func TestPurposesMatchCallers(t *testing.T) {
 		"oidc_settings.client_secret":                   "oidc.client-secret",
 		"webhook_subscriptions.secret_ciphertext":       "webhook-subscription:X",
 		"hosted_repositories.upstream_auth.secret":      "repository-upstream-auth",
+		"token_signing_keys.private_sealed":             "token-signing-key:X",
 	}
 	for _, target := range Targets() {
 		if got := target.Purpose("X"); got != want[target.Name] {

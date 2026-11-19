@@ -204,3 +204,28 @@ func TestTrigramSQLMatchesMigrationRunner(t *testing.T) {
 		t.Fatalf("pg_trgm SQL differs between run-migrations.sh and internal/preflight/trigram.go\nscript: %s\ngo:     %s", got, want)
 	}
 }
+
+func TestPolicyRequiresTheEncryptionKeyWhileTheIssuerIsEnabled(t *testing.T) {
+	cfg := testConfig()
+	cfg.Issuer.Enabled, cfg.Issuer.Alg = true, "RS256"
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", "")
+	if result := policyResult(cfg); result.Status != StatusFail || !strings.Contains(result.Summary, "OIDC issuer") {
+		t.Fatalf("%+v", result)
+	}
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef")
+	if result := policyResult(cfg); result.Status != StatusPass {
+		t.Fatalf("%+v", result)
+	}
+	details := configurationResult(cfg).Details
+	if details["issuer_enabled"] != true || details["issuer_alg"] != "RS256" {
+		t.Fatalf("%v", details)
+	}
+	cfg.Issuer.Enabled = false
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", "")
+	if result := policyResult(cfg); result.Status != StatusPass {
+		t.Fatalf("a disabled issuer needs no key: %+v", result)
+	}
+	if got := configurationResult(cfg).Details["issuer_alg"]; got != "" {
+		t.Fatalf("%v", got)
+	}
+}

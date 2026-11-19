@@ -182,6 +182,9 @@ type Config struct {
 	OTLPLogsShutdownTimeout     time.Duration
 	OTELSamplingRatio           float64
 
+	// Issuer configures notarx as an OIDC token issuer (ADR 0020).
+	Issuer IssuerConfig
+
 	// publicURL is the validated NOTARX_PUBLIC_URL; read it through PublicURL.
 	publicURL *url.URL
 }
@@ -589,6 +592,9 @@ func Load() (Config, error) {
 	}
 	cfg.publicURL, err = ParsePublicURL(os.Getenv(PublicURLEnv))
 	if err != nil {
+		return Config{}, err
+	}
+	if cfg.Issuer, err = loadIssuerConfig(cfg.publicURL); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil

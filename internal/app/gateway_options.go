@@ -87,6 +87,9 @@ type GatewayOptions struct {
 	// another format's client port, that implementation is used for that format.
 	Upstream OCIClient
 	Metrics  *Metrics
+	// Issuer serves the OIDC discovery document and JWKS (ADR 0020). Nil, or a disabled
+	// issuer, answers 404 on both routes.
+	Issuer *IssuerRuntime
 }
 
 func (o GatewayOptions) validate() error {

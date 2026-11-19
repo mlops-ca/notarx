@@ -20,7 +20,7 @@ func (s *MemoryStore) CreateHostedRepository(_ context.Context, repo HostedRepos
 	repo.Version = "1"
 	repo.CreatedAt = time.Now().UTC()
 	repo.EgressProxy = cloneEgressProxy(repo.EgressProxy)
-	repo.UpstreamAuth = cloneUpstreamAuth(repo.UpstreamAuth)
+	repo.UpstreamAuth = cloneUpstreamAuth(repo.UpstreamAuth, repo.Name)
 	repo.OCIBearer = cloneOCIBearer(repo.OCIBearer)
 	s.hostedRepositories[repo.ID] = repo
 	return cloneHostedRepositoryOCIBearer(repo), nil
@@ -174,7 +174,7 @@ func (s *MemoryStore) UpdateHostedRepository(ctx context.Context, repo HostedRep
 	current.Visibility = repo.Visibility
 	current.MavenStrictPublication = repo.MavenStrictPublication
 	current.EgressProxy = cloneEgressProxy(repo.EgressProxy)
-	current.UpstreamAuth = cloneUpstreamAuth(repo.UpstreamAuth)
+	current.UpstreamAuth = cloneUpstreamAuth(repo.UpstreamAuth, current.Name)
 	current.OCIBearer = cloneOCIBearer(repo.OCIBearer)
 	current.Version = nextHostedGroupVersion(current.Version)
 	s.hostedRepositories[repo.ID] = current
@@ -195,12 +195,13 @@ func cloneEgressProxy(proxy *EgressProxy) *EgressProxy {
 
 // cloneUpstreamAuth deep-copies the pointer so stored repositories never share
 // mutable upstream credentials with caller-owned structs.
-func cloneUpstreamAuth(auth *UpstreamAuth) *UpstreamAuth {
+func cloneUpstreamAuth(auth *UpstreamAuth, repositoryName string) *UpstreamAuth {
 	if auth == nil {
 		return nil
 	}
 	cloned := *auth
 	cloned.CredentialsConfigured = false
+	cloned.Repository = repositoryName
 	return &cloned
 }
 
