@@ -6,7 +6,6 @@
 #
 #   scripts/release-plan.sh nightly
 #   scripts/release-plan.sh stable [--nightly-tag vX.Y.Z-nightly.N] [--version-override X.Y.Z]
-#   scripts/release-plan.sh green <sha>     # exit 0 when the required checks are green
 #
 #   scripts/release-plan.sh fork      # print the fork commit (empty when it is not in the repository)
 #
@@ -15,15 +14,17 @@
 #
 # Environment: RELEASE_PLAN_REPO (repository, default the current directory),
 # RELEASE_PLAN_REF (main branch ref, default HEAD), GIT_CLIFF (binary, default the
-# pinned one from scripts/install-git-cliff.sh), RELEASE_PLAN_CHECKS_DIR (tests: a
-# directory of <sha> files listing successful check names instead of the API).
+# pinned one from scripts/install-git-cliff.sh).
+#
+# The plan never reads check runs (ADR 0024, amendment of 2026-11-19): pushes to main run
+# no tests, so the release run's own gates test the planned commit before anything is built
+# or published.
 set -euo pipefail
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 repo=${RELEASE_PLAN_REPO:-$PWD}
 ref=${RELEASE_PLAN_REF:-HEAD}
 config=$script_dir/../cliff.toml
-required_file=${RELEASE_PLAN_REQUIRED_CHECKS:-$script_dir/release-required-checks.txt}
 stable_pattern='^v[0-9]+\.[0-9]+\.[0-9]+$'
 nightly_pattern='^v[0-9]+\.[0-9]+\.[0-9]+-nightly\.[0-9]+$'
 
@@ -87,50 +88,14 @@ releasing_commits() {
   cliff --tag-pattern "$stable_pattern" --context "$1" | jq '[.[].commits | length] | add // 0'
 }
 
-checks_names() {
-  local sha=$1
-  if [[ -n "${RELEASE_PLAN_CHECKS_DIR:-}" ]]; then
-    cat "$RELEASE_PLAN_CHECKS_DIR/$sha" 2>/dev/null || true
-    return 0
-  fi
-  [[ -n "${GITHUB_REPOSITORY:-}" ]] || fail 'GITHUB_REPOSITORY is not set'
-  gh api --paginate "repos/$GITHUB_REPOSITORY/commits/$sha/check-runs?per_page=100" \
-    --jq '.check_runs[] | select(.conclusion == "success") | .name'
-}
-
-# Succeeds when every entry of the required-checks list has a successful run.
-checks_green() {
-  local names line name count have
-  names=$(checks_names "$1") || fail "cannot read the check runs of $1"
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    line=$(printf '%s' "$line" | sed -e 's/[[:space:]]*$//')
-    [[ -n "$line" && "$line" != '#'* ]] || continue
-    if [[ "$line" =~ ^(.+)\*\ ([0-9]+)$ ]]; then
-      name=$(printf '%s' "${BASH_REMATCH[1]}" | sed -e 's/[[:space:]]*$//')
-      count=${BASH_REMATCH[2]}
-      have=$(printf '%s\n' "$names" | awk -v prefix="$name" 'index($0, prefix) == 1 { n++ } END { print n + 0 }')
-      [[ "$have" -ge "$count" ]] || return 1
-    else
-      printf '%s\n' "$names" | grep -q -F -x -e "$line" || return 1
-    fi
-  done < "$required_file"
-}
-
 normalise() { printf '%s' "$1" | sed -e 's/^v//'; }
 
 plan_nightly() {
-  local stable_tag latest_nightly sha candidate core number previous count fork
+  local stable_tag latest_nightly sha core number previous count fork
   stable_tag=$(latest_tag "$stable_pattern")
 
-  # The newest of the last 10 first-parent commits with green required checks.
-  sha=
-  for candidate in $(repo_git rev-list --first-parent -n 10 "$ref"); do
-    if checks_green "$candidate"; then
-      sha=$candidate
-      break
-    fi
-  done
-  [[ -n "$sha" ]] || skip 'no commit among the last 10 on main has green required checks' nightly
+  # The newest commit on main. The release run's gates test exactly this commit.
+  sha=$(repo_git rev-parse --verify --quiet "$ref^{commit}") || fail "cannot resolve $ref"
   fork=$(fork_commit)
 
   latest_nightly=$(latest_tag "$nightly_pattern")
@@ -217,7 +182,8 @@ plan_stable() {
     [[ "$highest" == "v$version" ]] || fail "v$version is not newer than $stable_tag"
   fi
   repo_git merge-base --is-ancestor "$sha" "$ref" || fail "$sha ($nightly_tag) is not an ancestor of main"
-  checks_green "$sha" || fail "the required checks are not green on $sha"
+  # No check-run lookup: the nightly was published only after its release run's gates passed
+  # on this very commit, so promoting that commit reuses those results.
   previous=$stable_tag
 
   emit skip false
@@ -236,9 +202,5 @@ case "$mode" in
   nightly) plan_nightly "$@" ;;
   stable) plan_stable "$@" ;;
   fork) fork_commit ;;
-  green)
-    [[ $# -eq 1 ]] || fail 'usage: release-plan.sh green <sha>'
-    checks_green "$1" || fail "the required checks are not green on $1"
-    ;;
-  *) fail 'usage: release-plan.sh nightly | stable [options] | green <sha> | fork' ;;
+  *) fail 'usage: release-plan.sh nightly | stable [options] | fork' ;;
 esac

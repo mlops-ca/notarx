@@ -256,14 +256,15 @@ finale pour la matrice obligatoire complète.
 `scripts/ci-contract-lanes.json` est la source unique des voies de contrat : leurs
 noms et leur ordre, les outils dont chacune a besoin (`rust`, `node`, `npm`), les
 délais des tâches et des étapes, et les artefacts d’échec.
-`scripts/ci-contract.py matrix` le transforme en la matrice que `ci.yml` fournit
+`scripts/ci-contract.py matrix` le transforme en la matrice que `test-suite.yml` fournit
 au flux réutilisable `contract-lane.yml`; aucun des deux flux de travail ne
 nomme donc de voie. Ajoutez ou déplacez une voie en modifiant seulement le JSON.
 
 Les tâches `contract` s’exécutent en parallèle avec `fail-fast: false`. La
-vérification stable `contract-and-test` (nommée par la barrière de publication,
-ADR 0024) exige que chaque voie réussisse; la publication attend aussi la
-qualité et la Console. L’ancienne voie `core` en série est scindée en
+vérification `suite-ok` de `test-suite.yml` exige que chaque tâche de la suite réussisse
+ou soit ignorée par la détection des changements; la CI des demandes de tirage et les
+barrières de publication (ADR 0024) appellent la même suite, et un push sur `main`
+n’exécute aucun test. L’ancienne voie `core` en série est scindée en
 `core-checks`, `core-email`, `core-native-e2e` et `core-backup`, suivies des voies
 natives (clients de migration, inventaire, NuGet, migration et découverte OCI,
 authentification en amont privé, migration npm, Helm, RubyGems, migration PyPI).

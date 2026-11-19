@@ -381,3 +381,9 @@ pattern is detected.
 **Q2 — Build the Console static bundle once and share it across both architecture images.** Decision: no; build natively per architecture with no exception. CI minutes are free for a public repository and one uniform rule keeps the guard simple.
 
 **Q3 — Self-hosted arm64 runners or single-arch PR CI if the repository becomes private.** Decision: neither applies: the repository is and stays public, and CI uses GitHub-hosted amd64 and arm64 runners on all runs (PRs, `main`, tags), with no self-hosted runners and no single-arch fallback. Hosted arm64 is free for public repositories and removes the trust and maintenance cost of self-hosting.
+
+## Amendment (2026-11-19): required checks on main are gone
+
+Status: accepted (2026-11-19)
+
+Pushes to `main` run no tests (ADR 0024, amendment of the same date), so no check run of `main` is required before a release any more and the list of check names under "Release archives" and the `verify-candidate` bullet is historical. The arm64 gate is now part of the complete test suite (`test-suite.yml`) that the release `gates` job runs on the planned commit, on both architectures. `mainline-assets` and `mainline-images` still build and publish the `main` archives and images on every push and no longer wait for tests.

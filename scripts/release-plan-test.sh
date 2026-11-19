@@ -34,8 +34,6 @@ expect_eq() {
 repo=
 new_repo() {
   repo=$(mktemp -d "$workdir/repo.XXXXXX")
-  export RELEASE_PLAN_CHECKS_DIR=$repo.checks
-  mkdir -p "$RELEASE_PLAN_CHECKS_DIR"
   git -C "$repo" init -q -b main
   git -C "$repo" commit -q --allow-empty -m "chore: root"
 }
@@ -46,17 +44,6 @@ commit() {
 
 tag() { git -C "$repo" tag "$1" "${2:-HEAD}"; }
 head_sha() { git -C "$repo" rev-parse HEAD; }
-
-# Marks a commit's required checks green (or a subset when names are given).
-green() {
-  local sha=${1:-$(head_sha)}
-  shift || true
-  if [[ $# -eq 0 ]]; then
-    printf '%s\n' quality contract-and-test console 'mainline-assets / assemble-release' 'mainline-images / image-manifest (notarx)' 'mainline-images / image-manifest (notarx-console)' > "$RELEASE_PLAN_CHECKS_DIR/$sha"
-  else
-    printf '%s\n' "$@" > "$RELEASE_PLAN_CHECKS_DIR/$sha"
-  fi
-}
 
 plan() {
   RELEASE_PLAN_REPO="$repo" RELEASE_PLAN_REF=main bash "$root/scripts/release-plan.sh" "$@" 2>"$workdir/stderr"
@@ -132,65 +119,60 @@ check_bump 'major stays 0 on breaking' v0.2.0 'feat!: big change'
 
 # --- nightly plans ----------------------------------------------------------
 
-new_repo; commit 'docs: only docs'; green
+new_repo; commit 'docs: only docs'
 nightly 'no releasing commit skips' skip=true
 nightly 'skip leaves no version' version=
 
-new_repo; commit 'feat(oci): first feature'; green
+new_repo; commit 'feat(oci): first feature'
 nightly 'first nightly before any stable' skip=false channel=nightly core=0.1.0 version=0.1.0-nightly.1 sha="$(head_sha)" previous=
 tag v0.1.0-nightly.1
 nightly 'repeated commit skips' skip=true
-commit 'docs: more docs'; green
+commit 'docs: more docs'
 nightly 'no new releasing commit skips' skip=true
-commit 'fix(oci): bug'; green
+commit 'fix(oci): bug'
 nightly 'second nightly keeps the core' skip=false core=0.1.0 version=0.1.0-nightly.2 previous=v0.1.0-nightly.1
 tag v0.1.0-nightly.2
-commit 'fix: another bug'; green
+commit 'fix: another bug'
 tag v0.1.0-nightly.7
 git -C "$repo" tag -d v0.1.0-nightly.1 v0.1.0-nightly.2 >/dev/null
-commit 'feat: new work'; green
+commit 'feat: new work'
 nightly 'counter is the maximum after pruned tags' version=0.1.0-nightly.8
 git -C "$repo" tag -d v0.1.0-nightly.7 >/dev/null
 nightly 'counter restarts when every tag is pruned' version=0.1.0-nightly.1
 tag v0.1.0-nightly.10
 tag v0.1.0-nightly.9 HEAD
-commit 'fix: x'; green
+commit 'fix: x'
 nightly 'counter compares numerically, not as text' version=0.1.0-nightly.11
 
 # A stable tag moves the core by the commits since it; nightly tags are invisible.
-new_repo; commit 'feat: first'; green; tag v0.1.0; tag v0.1.1-nightly.4
-commit 'fix: patch work'; green
+new_repo; commit 'feat: first'; tag v0.1.0; tag v0.1.1-nightly.4
+commit 'fix: patch work'
 nightly 'fix after stable bumps patch' core=0.1.1 version=0.1.1-nightly.5 previous=v0.1.1-nightly.4
-commit 'feat: minor work'; green
+commit 'feat: minor work'
 nightly 'feat after stable bumps minor and resets the counter' core=0.2.0 version=0.2.0-nightly.1 previous=v0.1.1-nightly.4
-commit 'refactor(api)!: breaking'; green
+commit 'refactor(api)!: breaking'
 nightly 'breaking after stable bumps minor, not major' core=0.2.0
-new_repo; commit 'feat: first'; green; tag v0.1.0
-commit 'chore: housekeeping'; commit 'ci: pipeline'; green
+new_repo; commit 'feat: first'; tag v0.1.0
+commit 'chore: housekeeping'; commit 'ci: pipeline'
 nightly 'only non-releasing commits after a stable skip' skip=true
-commit 'perf: faster'; green
+commit 'perf: faster'
 nightly 'perf releases a patch' core=0.1.1
-new_repo; commit 'feat: first'; green; tag v0.1.0
-commit 'revert: undo'; green
+new_repo; commit 'feat: first'; tag v0.1.0
+commit 'revert: undo'
 nightly 'revert releases a patch' core=0.1.1
 
-# Green required checks decide the commit.
-new_repo; commit 'feat: a'; older=$(head_sha); green "$older"
-commit 'fix: b'
-nightly 'newest commit without green checks falls back to the last green one' sha="$older" core=0.1.0
-green "$(head_sha)" quality contract-and-test console 'mainline-assets / assemble-release' 'mainline-images / image-manifest (notarx)'
-nightly 'a missing second image check is not green' sha="$older"
-green "$(head_sha)"
-nightly 'green tip is picked' sha="$(head_sha)"
-new_repo; commit 'feat: a'; green; for _ in 1 2 3 4 5 6 7 8 9 10; do commit 'docs: filler'; done
-nightly 'a green commit older than 10 first-parent commits is not considered' skip=true
-new_repo; commit 'feat: a'
-nightly 'no green commit skips' skip=true
+# The nightly plan reads no check runs: it always plans the tip of main.
+new_repo; commit 'feat: a'; commit 'fix: b'
+nightly 'the tip of main is planned without any check run' sha="$(head_sha)" core=0.1.0
+new_repo; commit 'feat: a'; for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do commit 'docs: filler'; done
+nightly 'a releasing commit deeper than 10 commits is still released with the tip' sha="$(head_sha)" skip=false
+new_repo; commit 'docs: a'
+nightly 'a tip without any releasing commit skips' skip=true
 
 # --- stable plans -----------------------------------------------------------
 
-new_repo; commit 'feat: first'; green; tag v0.1.0-nightly.1; nightly_sha=$(head_sha)
-commit 'docs: after the nightly'; green
+new_repo; commit 'feat: first'; tag v0.1.0-nightly.1; nightly_sha=$(head_sha)
+commit 'docs: after the nightly'
 STABLE_ARGS=(--nightly-tag v0.1.0-nightly.1)
 stable 'nightly tag resolves to its commit and core' skip=false channel=stable version=0.1.0 core=0.1.0 sha="$nightly_sha" previous= nightly_tag=v0.1.0-nightly.1
 STABLE_ARGS=()
@@ -205,7 +187,7 @@ expect_refused 'a stable tag name is not a nightly' stable --nightly-tag v0.1.0
 expect_refused 'a missing tag is refused' stable --nightly-tag v0.9.9-nightly.1
 expect_refused 'an option without a value is refused' stable --nightly-tag
 
-commit 'feat: next'; green; tag v0.2.0-nightly.1
+commit 'feat: next'; tag v0.2.0-nightly.1
 STABLE_ARGS=(--nightly-tag v0.2.0-nightly.1)
 stable 'a later stable promotes its own nightly' version=0.2.0 core=0.2.0 previous=v0.1.0
 STABLE_ARGS=(--nightly-tag v0.2.0-nightly.1 --version-override 1.0.0)
@@ -214,23 +196,25 @@ expect_refused 'version_override must be newer than the latest stable' stable --
 expect_refused 'version_override must be X.Y.Z' stable --nightly-tag v0.2.0-nightly.1 --version-override 1.0
 
 git -C "$repo" checkout -q -b side
-commit 'feat: side work'; green; tag v0.3.0-nightly.1
+commit 'feat: side work'; tag v0.3.0-nightly.1
 git -C "$repo" checkout -q main
 expect_refused 'a nightly outside main is refused' stable --nightly-tag v0.3.0-nightly.1
 
 new_repo; commit 'feat: a'; tag v0.1.0-nightly.1
-expect_refused 'a stable run needs green required checks' stable --nightly-tag v0.1.0-nightly.1
+STABLE_ARGS=(--nightly-tag v0.1.0-nightly.1)
+stable 'a stable run reads no check runs: the nightly release run already gated its commit' skip=false version=0.1.0
+STABLE_ARGS=()
 
 # --- the fork point: upstream history is never parsed ------------------------
 
 new_repo; commit 'feat: an upstream feature'; git -C "$repo" commit -q --allow-empty -m 'Update the upstream readme'
-fork=$(head_sha); commit 'chore: first notarx change'; green
+fork=$(head_sha); commit 'chore: first notarx change'
 upstream_doc=$repo.upstream.md
 printf '%s\n' "- Last upstream commit before the first notarx commit: \`$fork\`" > "$upstream_doc"
 expect_eq 'the fork commit is read from the upstream document' "$(RELEASE_PLAN_REPO="$repo" RELEASE_PLAN_UPSTREAM_DOC="$upstream_doc" bash "$root/scripts/release-plan.sh" fork)" "$fork"
 log=$(RELEASE_PLAN_REPO="$repo" RELEASE_PLAN_UPSTREAM_DOC="$upstream_doc" bash "$root/scripts/release-plan.sh" nightly 2>&1)
 expect_eq 'an upstream releasing commit before the fork does not release' "$(grep -c '^skip=true$' <<<"$log")" 1
-commit 'feat: first notarx feature'; green
+commit 'feat: first notarx feature'
 log=$(RELEASE_PLAN_REPO="$repo" RELEASE_PLAN_UPSTREAM_DOC="$upstream_doc" bash "$root/scripts/release-plan.sh" nightly 2>&1)
 expect_eq 'a releasing commit after the fork releases' "$(grep -c '^version=0.1.0-nightly.1$' <<<"$log")" 1
 expect_eq 'the range base is the fork commit before the first release' "$(grep '^base=' <<<"$log")" "base=$fork"
@@ -241,19 +225,13 @@ fi
 printf '%s\n' '- Last upstream commit before the first notarx commit: `0000000000000000000000000000000000000000`' > "$upstream_doc"
 expect_eq 'a fork commit missing from the repository bounds nothing' "$(RELEASE_PLAN_REPO="$repo" RELEASE_PLAN_UPSTREAM_DOC="$upstream_doc" bash "$root/scripts/release-plan.sh" fork)" ''
 
-# --- the required-checks gate -----------------------------------------------
-
-new_repo; commit 'feat: a'; sha=$(head_sha); green "$sha"
 cases=$((cases + 1))
-RELEASE_PLAN_REPO="$repo" bash "$root/scripts/release-plan.sh" green "$sha" >/dev/null 2>&1 || fail 'green rejected a green commit'
-printf '%s\n' quality > "$RELEASE_PLAN_CHECKS_DIR/$sha"
-cases=$((cases + 1))
-if RELEASE_PLAN_REPO="$repo" bash "$root/scripts/release-plan.sh" green "$sha" >/dev/null 2>&1; then
-  fail 'green accepted a commit that lacks required checks'
+if [[ -e "$root/scripts/release-required-checks.txt" ]] || grep -qE 'check-runs|checks_green' "$root/scripts/release-plan.sh"; then
+  fail 'the release plan must not depend on check runs of main'
 fi
 cases=$((cases + 1))
-if grep -n -E 'quality|contract-and-test|mainline-assets' "$root/.github/workflows/release.yml" | grep -v '^.*#' | grep -q 'for required in'; then
-  fail 'release.yml still hard-codes required check names'
+if bash "$root/scripts/release-plan.sh" green deadbeef >/dev/null 2>&1; then
+  fail 'the green mode was removed with the check-run dependency'
 fi
 
 if [[ "$failures" -ne 0 ]]; then

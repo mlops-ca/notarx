@@ -464,3 +464,16 @@ accepts any workflow in the repository.
 **Q2 — Which `gh attestation verify` flags are correct for reusable-workflow attestations.** Decision: `--repo` plus the repo-qualified `--signer-workflow <owner>/<repo>/<path>`, adding `--source-ref` or `--cert-identity` only when pinning tags; confirmed by the slice 4 negative test. For a reusable workflow the signer is the called workflow, and `--signer-repo` alone is too loose.
 
 **Q3 — Do the 1.0.0 criteria get their own ADR.** Decision: yes, a separate "1.0 readiness" ADR written when 0.x scope nears completion; this ADR requires only an explicit `version_override` for `1.0.0`. Stability promises depend on APIs not yet settled and the override guard already prevents an accidental 1.0.
+
+## Amendment (2026-11-19): pushes to main run no tests; the release gates test the released commit
+
+Status: accepted (2026-11-19)
+
+Owner decision. CI runs no tests on pushes to `main`: every merge reran the full suite (66 jobs, about 225 runner-minutes) that pull request CI had just run, and it competed with pull requests for the concurrency limit of the public repository. Real results come from pull request CI and from the release run. This amendment supersedes the places above that read check runs of `main`:
+
+1. `ci.yml` on a push to `main` runs only `mainline-plan`, `mainline-assets`, `mainline-images` (the `main` archives and images of ADR 0016) and `ci-ok`. Pull request behaviour is unchanged.
+2. The test jobs live once, in the reusable workflow `test-suite.yml`, which pull request CI and the release gates both call. The `gates` job of `release.yml` runs the complete suite on the planned SHA: `quality`, `quality-arm64`, `console`, the Console E2E shards, `object-store-contract`, `docs`, `image-test-stages` and every mainline contract lane on both architectures (not only arm64). A gate failure means no release that night; the liveness alert covers a run of failed nights.
+3. Nightly step 2 becomes: `sha` = the tip of `main`. `release-plan.sh` reads no check runs and `scripts/release-required-checks.txt` is removed, as is the `green` mode. Skip rules (same commit as the latest nightly, no releasing commit) are unchanged.
+4. Stable step 2 no longer requires green checks on `main`. A stable run releases a commit only if the gates of a release run pass on it. The nightly tag it promotes exists only because those gates passed on that commit, so reusing them is allowed; the stable run also repeats the gates itself as step 3 above says.
+
+The "required check runs" language in the Context, in the `verify-candidate` description of the old workflow and in slice 3 describes the design before this amendment. ADR 0016's list of check names for `verify-candidate` is likewise historical.

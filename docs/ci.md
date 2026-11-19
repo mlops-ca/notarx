@@ -6,17 +6,26 @@ CI runs only what a change needs. The `changes` job in `.github/workflows/ci.yml
 runs `scripts/ci-changes.sh` over the files a pull request touches and exposes
 five classes. Heavy jobs run only when their class changed.
 
+The test jobs are defined once, in the reusable workflow `.github/workflows/test-suite.yml`.
+Pull request CI calls it as the `tests` job with the classes of the change. The nightly
+release gates call it with every class on, on the planned commit (see
+[releasing](releasing.md)). **A push to `main` runs no tests** (ADR 0024, amendment of
+2026-11-19): it runs only `mainline-plan`, `mainline-assets` and `mainline-images`, which
+build and publish the `main` archives and images, plus `ci-ok`. Real results come from pull
+request CI and from the nightly release gates. Inside a pull request run the suite's jobs
+show as `tests / <job>`.
+
 | Class | Paths | Jobs it enables |
 | --- | --- | --- |
-| `go` | `*.go`, `go.mod`, `go.sum`, `migrations/`, `internal/`, `cmd/`, `contracts/`, `examples/`, `api/`, plus the files `release-version-check` reads (`CHANGELOG*.md`, `docs/cli*.md`, `VERSION`) | `quality`, `object-store-contract`, `contract-plan`, `contract`, `contract-and-test`, and `console-e2e` (it runs the real gateway) |
+| `go` | `*.go`, `go.mod`, `go.sum`, `migrations/`, `internal/`, `cmd/`, `contracts/`, `examples/`, `api/`, plus the files `release-version-check` reads (`CHANGELOG*.md`, `docs/cli*.md`, `VERSION`) | `quality`, `quality-arm64`, `object-store-contract`, `contract-plan`, `contract`, and `console-e2e` (it runs the real gateway) |
 | `console` | `console/`, `api/` (the generated client) | `console` (unit tests, build, visual) and `console-e2e` |
 | `docs` | `docs/`, `*.md`, `LICENSE`, `NOTICE` | `docs` (i18n twins, links, capability claims) |
 | `images` | `Dockerfile*`, `compose*.yml`, `deploy/` | everything that executes the product (`go` and `console` too) |
 | `ci` | `.github/`, `Makefile`, `scripts/`, `packaging/` | everything, including `packages` (native deb and rpm build, content assertions and container install test; ADR 0025) |
 
 A path that matches no class also runs everything, so a new top-level directory
-cannot silently skip a job. Pushes to `main`, tags and unresolvable ranges run
-everything, including the mainline asset and image publication jobs.
+cannot silently skip a job. An unresolvable range runs everything. The release gates
+call the suite with every class on. Pushes to `main` classify nothing and run no test.
 The `pr-title` check (Conventional Commit title, ADR 0024, `.github/workflows/pr-title.yml`) is a separate workflow that runs when a pull request is opened, edited, synchronized or reopened, so editing a title re-checks it without re-running CI. It is not part of `ci-ok`; require it in branch protection next to `ci-ok`.
 
 Code directories are matched before Markdown, so a `.md` fixture under `internal/` is Go, not docs. A docs-only pull request therefore runs `changes`, `docs` and
@@ -40,7 +49,7 @@ an existing top-level `console/e2e/*.spec.ts` file, only those specs run (still
 spread over the shards; a shard left without a spec passes and uploads no blob). Any other path (Console
 sources, `e2e/support`, fixtures, a deleted spec, Go, CI files) or an
 unresolvable range is uncertain and runs the full suite. No spec is skipped on
-`main`, tags or any non-selected change.
+any non-selected change, nor in the release gates.
 
 The `console` job (unit tests, build, mocked visual baseline) and `console-e2e`
 do not duplicate work: the visual config only matches `e2e/visual`, which the
@@ -48,10 +57,12 @@ behaviour config ignores, and the contract lanes never run Playwright.
 
 ## The ci-ok gate
 
-`ci-ok` depends on every other job and always runs. It passes when each needed
-job succeeded or was skipped by change detection, and fails on any failure or
-cancellation. A job that change detection required but that was skipped (for
-example because an upstream job failed) also fails the gate. Require `ci-ok` as the single branch-protection check; the set of
+`ci-ok` depends on `changes`, `no-chinese`, `tests` and the two `oci-free-tier` jobs and
+always runs. It passes when each needed job succeeded or was skipped, and fails on any
+failure or cancellation. On a pull request `changes`, `no-chinese` and `tests` must have
+succeeded; the `tests` job holds `suite-ok`, which fails a job that change detection
+required but that was skipped (for example because an upstream job failed). On a push to
+`main` every job behind `ci-ok` is skipped, so it passes without running a test. Require `ci-ok` as the single branch-protection check; the set of
 jobs behind it can change without editing the protection rule.
 
 ## Contract lanes
@@ -63,8 +74,8 @@ needs and their timeouts. The `contract-plan` job turns it into a matrix
 hosted runner limit applies). The former serial `core` lane (about 34 minutes)
 is split into four lanes by duration, so the full run is bound by its slowest
 lane instead of their sum. Every step of the old lane runs in exactly one lane;
-`upgrade-readiness` is the only step dropped (below). `contract-and-test` stays
-as the stable aggregate named by the release gate and requires every lane.
+`upgrade-readiness` is the only step dropped (below). The `suite-ok` job of
+`test-suite.yml` requires every lane.
 
 Each lane uses the default shallow checkout, warms the Go module cache once with
 retries (`GOPROXY=https://proxy.golang.org|direct`) and installs only the tools
@@ -79,15 +90,15 @@ carries the architecture.
 Every lane runs on amd64. The plan gives each lane an `arm64` tier: `pull-request`
 lanes (the four `core-*` lanes and the `six-format-auth` and `oci-discovery`
 smoke subset) also run on arm64 for every pull request, and `mainline` lanes join
-them on pushes to `main`. `scripts/ci-contract.py matrix --scope pull-request|mainline`
+them in the `mainline` scope, which the release gates use. `scripts/ci-contract.py matrix --scope pull-request|mainline`
 emits the matrix. A step that runs a third-party artifact published for one
 architecture only (`published-native-backup-test` executes the published amd64
 release binaries) declares `architectures` in the plan; other architectures skip
 and report it, nothing is emulated. `quality-arm64` runs lint, vet and the race detector on
 `ubuntu-24.04-arm`; the coverage floor stays on amd64. Both jobs call the local
 composite action `.github/actions/go-quality` for setup, lint, vet and race, so the
-steps have one definition. They stay two jobs, not a matrix, because the release gate
-requires a check named exactly `quality`. See
+steps have one definition. They stay two jobs, not a matrix, so the amd64-only steps stay
+out of the arm64 leg. See
 [native builds](native-builds.md).
 
 ## Shared images
@@ -105,7 +116,7 @@ rebuilds an image from source. `compose.yml` names the images
 `--build`, and unset (local runs) they still build from source. Scripts that
 build with their own version arguments (`backup-restore-readiness`,
 `performance-baseline`) keep a per-project image name so they never touch the
-shared tag. `ci-ok` requires `build-images` whenever `go` or `console`
+shared tag. `suite-ok` requires `build-images` whenever `go` or `console`
 changed. `build-images` runs each image on both native runners (`ubuntu-24.04`
 and `ubuntu-24.04-arm`), and a contract lane downloads the artifacts of its own
 runner architecture.
@@ -119,7 +130,7 @@ project's own images are gated by the release pipeline) and smoke-tests the stac
 pushing and pulling an OCI image and a Raw file through Caddy
 (`make oci-free-tier-smoke`). `oci-free-tier-tofu` formats, validates and lints the
 optional OpenTofu module (`make oci-free-tier-tofu-check`). `ci-ok` requires both
-whenever `images` changed.
+whenever `images` changed. They stay in `ci.yml` and are not part of the release gates.
 
 The Dockerfiles no longer run `go test` while building an image: the suite runs
 once in `core-checks` (`make test`) and `quality`. The tests live in an opt-in
@@ -136,7 +147,7 @@ against the real migrations and a synthetic `000008` migration meanwhile.
 ## Object store contract
 
 `object-store-contract` (`.github/workflows/object-store-contract.yml`, called from
-`ci.yml` with the `go` class) runs the shared object store contract
+`test-suite.yml` with the `go` class) runs the shared object store contract
 (`internal/objectstore/storetest`, ADR 0017) against the S3 driver on RustFS
 and on a second S3-compatible implementation, once per checksum mode where the
 service supports it. The same suite runs against the in-memory store in
@@ -245,8 +256,8 @@ Rules for every update, whether Dependabot or a person lands it:
 It is read-only and prints `skip`, `channel`, `version`, `core`, `sha` and `previous`.
 The bump comes from git-cliff, pinned in `scripts/git-cliff.version` and installed
 with a checksum check by `scripts/install-git-cliff.sh`; `cliff.toml` holds the
-0.x rules. `scripts/release-required-checks.txt` is the single list of check names
-that must be green on a commit before it is released. `make release-plan-test`
+0.x rules. The plan reads no check runs: pushes to `main` run no tests, so the nightly plans the tip of
+`main` and the gates of the release run test that commit. `make release-plan-test`
 runs the plan against fixture repositories and fails if git-cliff's bump behaviour
 deviates from the pinned expectations. `release.yml` runs the plan every night
 (see [releasing](releasing.md)); `make release-pipeline-test` covers the manifest, attestation
@@ -267,4 +278,5 @@ pushes, tags or attests, so push-by-digest, the pull back by digest, the tag mer
 the attestations are not rehearsed; they first run on `main` and on a release. It is path filtered, so it is not a required check and not
 part of `ci-ok`. `release.yml` itself (the nightly `plan`, `gates`, `build`, `publish` and `prune`
 jobs) is not callable: its structure is checked by `make release-pipeline-test` and it is first
-exercised by a real nightly or a `workflow_dispatch` dry run on `main`.
+exercised by a real nightly or a `workflow_dispatch` dry run on `main`. Its dry run runs the
+full `test-suite.yml` on the planned commit.
