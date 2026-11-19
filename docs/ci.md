@@ -205,7 +205,8 @@ the service containers and the system under test). Before running, the guard
 proves it is in force by failing to connect to a public address and refuses to
 run the command otherwise. Tool downloads (the pinned Maven, Gradle and ORAS
 archives) happen outside the guard, before the clients run. Without the variable
-the guard runs the command unchanged, so local runs are not affected. `scripts/ci-contract.py` carries no Maven Central mirror.
+the guard runs the command unchanged, so local runs are not affected.
+`scripts/ci-contract.py` carries no Maven Central mirror.
 
 ## Migration checks
 

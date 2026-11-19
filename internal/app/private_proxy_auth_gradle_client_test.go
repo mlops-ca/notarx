@@ -347,9 +347,10 @@ func privateGradleAssets(t *testing.T) map[string]redirectCacheAsset {
 
 // waitForProcessGroupExit returns once no process of the group led by pgid is
 // left, killing the group when it outlives the wait, so nothing started by the
-// client can write into the directories the test removes afterwards.
-func waitForProcessGroupExit(t *testing.T, pgid int) {
-	t.Helper()
+// client can write into the directories the test removes afterwards. A zombie
+// still counts as alive, which holds only where nothing reaps orphans (a
+// container without an init process); runners and developer machines reap them.
+func waitForProcessGroupExit(pgid int) error {
 	deadline := time.NewTimer(30 * time.Second)
 	defer deadline.Stop()
 	tick := time.NewTicker(10 * time.Millisecond)
@@ -358,10 +359,11 @@ func waitForProcessGroupExit(t *testing.T, pgid int) {
 		select {
 		case <-deadline.C:
 			_ = syscall.Kill(-pgid, syscall.SIGKILL)
-			t.Fatalf("Gradle process group %d outlived the client by more than 30s", pgid)
+			return fmt.Errorf("Gradle process group %d outlived the client by more than 30s", pgid)
 		case <-tick.C:
 		}
 	}
+	return nil
 }
 
 func runPrivateGradleClient(t *testing.T, gradle, endpoint string, scheme repository.UpstreamAuthScheme, route, round string, assets map[string]redirectCacheAsset, success bool) []byte {
@@ -428,7 +430,9 @@ tasks.register('resolvePrivate') {
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	command.Cancel = func() error { return syscall.Kill(-command.Process.Pid, syscall.SIGKILL) }
 	out, err := command.CombinedOutput()
-	waitForProcessGroupExit(t, command.Process.Pid)
+	if werr := waitForProcessGroupExit(command.Process.Pid); werr != nil {
+		t.Fatalf("%v\n%s", werr, out)
+	}
 	if ctx.Err() != nil || (err == nil) != success || bytes.Contains(out, []byte("PRIVATE_GRADLE_RESOLUTION_COMPLETE")) != success {
 		t.Fatalf("official Gradle %s expected success=%v: %v\n%s", round, success, err, out)
 	}

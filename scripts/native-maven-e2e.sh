@@ -15,8 +15,8 @@ done
 # a loopback mirror (docs/ci.md, "Re-record the Maven and Gradle fixtures"), and
 # Maven refuses every other non-loopback host. The Gradle steps resolve only from
 # the Gateway under test. Every client and test below runs through
-# scripts/egress-guard.sh, which rejects non-private addresses in CI. A path that was not
-# recorded answers 404 and is reported.
+# scripts/egress-guard.sh, which rejects non-private addresses in CI. A path
+# that was not recorded answers 404 and is reported.
 # Mandatory real clients: snapshot history/takeover and unchanged Hosted POMs from an empty cache.
 "$repo_root/scripts/egress-guard.sh" go test -v -count=1 -tags=mavenclient ./internal/app -run '^TestMavenClient(SnapshotHistoryTakeoverAndDeploy|HostedPOMCompatibilityColdCache)$'
 
