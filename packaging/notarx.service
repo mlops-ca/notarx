@@ -1,0 +1,36 @@
+[Unit]
+Description=notarx artifact repository
+Documentation=https://github.com/mlops-ca/notarx
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=notarx
+Group=notarx
+EnvironmentFile=/etc/notarx/notarx.env
+ExecStart=/usr/bin/notarx
+Restart=on-failure
+RestartSec=5s
+StateDirectory=notarx
+StateDirectoryMode=0750
+WorkingDirectory=/var/lib/notarx
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ReadWritePaths=/var/lib/notarx
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+LockPersonality=yes
+RestrictRealtime=yes
+
+[Install]
+WantedBy=multi-user.target

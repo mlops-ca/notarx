@@ -6,8 +6,14 @@ pg_host=${PGHOST:-postgres}
 pg_user=${PGUSER:-notarx}
 pg_database=${PGDATABASE:-notarx}
 
+# NOTARX_DATABASE_URL (a libpq URI, set by the notarx-migrate wrapper of the native
+# packages) replaces the PGHOST/PGUSER/PGDATABASE triple; PGPASSWORD still applies.
 run_psql() {
-  psql -X -h "$pg_host" -U "$pg_user" -d "$pg_database" -v ON_ERROR_STOP=1 "$@"
+  if [ -n "${NOTARX_DATABASE_URL:-}" ]; then
+    psql -X -d "$NOTARX_DATABASE_URL" -v ON_ERROR_STOP=1 "$@"
+  else
+    psql -X -h "$pg_host" -U "$pg_user" -d "$pg_database" -v ON_ERROR_STOP=1 "$@"
+  fi
 }
 
 file_sha256() {

@@ -1,0 +1,70 @@
+#!/bin/sh
+# notarx-migrate: applies the packaged PostgreSQL migrations (ADR 0025).
+#
+#   notarx-migrate           apply pending migrations; refuses on a checksum mismatch
+#   notarx-migrate --check   exit 0 only when every packaged migration is recorded with the same checksum
+#
+# The connection string comes from NOTARX_DATABASE_URL, taken from the environment
+# or else from /etc/notarx/notarx.env. The packages never run this themselves.
+# Until the Go runner (ADR 0022) lands this drives run-migrations.sh through psql.
+set -eu
+
+share_dir=${NOTARX_SHARE_DIR:-/usr/share/notarx}
+env_file=${NOTARX_ENV_FILE:-/etc/notarx/notarx.env}
+migration_dir=${share_dir}/migrations
+
+usage() {
+  printf '%s\n' 'Usage: notarx-migrate [--check]' >&2
+}
+
+mode=apply
+case "${1:-}" in
+  '') ;;
+  --check) mode=check ;;
+  -h|--help) usage; exit 0 ;;
+  *) usage; exit 2 ;;
+esac
+if [ "$#" -gt 1 ]; then
+  usage
+  exit 2
+fi
+
+if [ -z "${NOTARX_DATABASE_URL:-}" ] && [ -r "$env_file" ]; then
+  line=$(grep -E '^NOTARX_DATABASE_URL=' "$env_file" | tail -n 1 || true)
+  value=${line#NOTARX_DATABASE_URL=}
+  NOTARX_DATABASE_URL=$value
+fi
+if [ -z "${NOTARX_DATABASE_URL:-}" ]; then
+  printf 'notarx-migrate: NOTARX_DATABASE_URL is not set in the environment or in %s\n' "$env_file" >&2
+  exit 1
+fi
+export NOTARX_DATABASE_URL
+
+if ! command -v psql >/dev/null 2>&1; then
+  printf '%s\n' 'notarx-migrate: psql is required (install postgresql-client on Debian, postgresql on RHEL).' >&2
+  exit 1
+fi
+
+if [ "$mode" = apply ]; then
+  MIGRATION_DIR=$migration_dir exec "$share_dir/run-migrations.sh"
+fi
+
+file_sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
+
+recorded=$(psql -X -At -d "$NOTARX_DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -c "SELECT filename || ' ' || checksum FROM notarx_schema_migrations" 2>/dev/null) || exit 1
+for migration in "$migration_dir"/*.sql; do
+  filename=${migration##*/}
+  expected="$filename $(file_sha256 "$migration")"
+  if ! printf '%s\n' "$recorded" | grep -Fxq "$expected"; then
+    printf 'notarx-migrate: %s is not applied with the packaged checksum.\n' "$filename" >&2
+    exit 1
+  fi
+done
+printf '%s\n' 'notarx-migrate: the database matches the packaged migrations.'

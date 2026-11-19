@@ -39,8 +39,12 @@ release notes starts at the previous release or, before the first one, at the fo
    released or when no releasing commit exists since the previous release.
 2. `gates` runs every contract lane on a native arm64 runner against the planned commit.
 3. `build` calls the ADR 0016 reusable workflows: `image-build.yml` (per-architecture images, merged index, attestations)
-   for every image in `scripts/release-images.json`, and `release-archives.yml` (four native runners).
-4. `publish` writes `SHA256SUMS` and `release-manifest.json` (`scripts/release-manifest.sh`), attests the archives, verifies every
+   for every image in `scripts/release-images.json`, and `release-archives.yml` (four native runners). Each Linux runner also
+   repacks the archives it built into `.deb` and `.rpm` packages with the pinned nfpm (`scripts/build-packages.sh`;
+   `notarx` and `notarxctl` per architecture, `notarx-console` once on amd64), checks them (`scripts/package-check.sh`:
+   metadata, modes, maintainer scripts and binary hashes equal to the archive) and installs them in a container on that
+   architecture. Packages are not signed (ADR 0025 amendment); `apt install ./<file>.deb` or `dnf install ./<file>.rpm`.
+4. `publish` writes `SHA256SUMS` and `release-manifest.json` (`scripts/release-manifest.sh`), attests the archives and packages, verifies every
    attestation, and as its last step runs one `gh release create vX.Y.Z-nightly.N --prerelease --target <sha>`, which creates the
    tag and the pre-release together. A failed leg therefore leaves no tag and the next night retries.
 5. `prune` applies retention after a successful nightly, and as a dry run on `workflow_dispatch`.

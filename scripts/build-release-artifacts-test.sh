@@ -60,9 +60,13 @@ mkdir -p "$workdir/checksum-fixtures"
 cp "$archive" "$workdir/checksum-fixtures/${archive##*/}"
 cp "$archive" "$workdir/checksum-fixtures/notarx-console_${version}_web.tar.gz"
 cp "$archive" "$workdir/checksum-fixtures/notarx-openapi_${version}.tar.gz"
+cp "$archive" "$workdir/checksum-fixtures/notarx_${version}_amd64.deb"
+cp "$archive" "$workdir/checksum-fixtures/notarx-${version}.x86_64.rpm"
 printf '%s\n' 'not a release archive' > "$workdir/checksum-fixtures/ignored.txt"
 bash "$root/scripts/write-release-checksums.sh" "$workdir/checksum-fixtures"
-test "$(wc -l < "$workdir/checksum-fixtures/SHA256SUMS" | tr -d '[:space:]')" = 3
+test "$(wc -l < "$workdir/checksum-fixtures/SHA256SUMS" | tr -d '[:space:]')" = 5
+grep -F "notarx_${version}_amd64.deb" "$workdir/checksum-fixtures/SHA256SUMS" >/dev/null
+grep -F "notarx-${version}.x86_64.rpm" "$workdir/checksum-fixtures/SHA256SUMS" >/dev/null
 grep -F "notarx_${version}_${goos}_${goarch}" "$workdir/checksum-fixtures/SHA256SUMS" >/dev/null
 grep -F "notarx-console_${version}_web.tar.gz" "$workdir/checksum-fixtures/SHA256SUMS" >/dev/null
 grep -F "notarx-openapi_${version}.tar.gz" "$workdir/checksum-fixtures/SHA256SUMS" >/dev/null

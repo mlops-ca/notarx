@@ -11,7 +11,7 @@ output=$(cd "$output" && pwd)
 (
   cd "$output"
   : > SHA256SUMS
-  find . -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.zip' \) -print |
+  find . -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.zip' -o -name '*.deb' -o -name '*.rpm' \) -print |
     LC_ALL=C sort |
     while IFS= read -r artifact; do
       artifact=${artifact#./}

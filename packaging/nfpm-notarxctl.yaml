@@ -1,0 +1,22 @@
+# notarxctl command line client package (ADR 0025). Separate so workstations and
+# CI runners do not pull a service. Environment as in nfpm-notarx.yaml.
+name: notarxctl
+arch: ${ARCH}
+platform: linux
+version: ${VERSION}
+version_schema: none
+release: ${RELEASE}
+section: utils
+priority: optional
+maintainer: notarx maintainers <noreply@mlops.ca>
+description: |-
+  notarxctl, the notarx command line client for CI, platform management and agents.
+vendor: mlops-ca
+homepage: https://github.com/mlops-ca/notarx
+license: Apache-2.0
+contents:
+  - src: ${STAGE}/notarxctl
+    dst: /usr/bin/notarxctl
+    expand: true
+    file_info:
+      mode: 0755

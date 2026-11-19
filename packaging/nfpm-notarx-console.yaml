@@ -1,0 +1,30 @@
+# notarx console package (ADR 0025): static assets plus a reference nginx server
+# block. Architecture independent, so it is built once. Environment as in
+# nfpm-notarx.yaml; STAGE is the directory holding the extracted console archive.
+name: notarx-console
+arch: all
+platform: linux
+version: ${VERSION}
+version_schema: none
+release: ${RELEASE}
+section: web
+priority: optional
+maintainer: notarx maintainers <noreply@mlops.ca>
+description: |-
+  notarx web console static assets.
+  The notarx server does not serve the console. Put a web server in front of it;
+  /usr/share/doc/notarx-console/examples/nginx.conf proxies to 127.0.0.1:8080.
+vendor: mlops-ca
+homepage: https://github.com/mlops-ca/notarx
+license: Apache-2.0
+contents:
+  - src: ${STAGE}
+    dst: /usr/share/notarx/console
+    expand: true
+    type: tree
+  - src: packaging/nginx.conf
+    dst: /usr/share/doc/notarx-console/examples/nginx.conf
+    file_info:
+      mode: 0644
+recommends:
+  - nginx

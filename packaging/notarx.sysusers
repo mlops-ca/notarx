@@ -1,0 +1,3 @@
+# notarx service account (ADR 0025). The package preinst creates the same account
+# for hosts without systemd-sysusers; this entry keeps image builds consistent.
+u notarx - "notarx artifact repository" /var/lib/notarx /usr/sbin/nologin

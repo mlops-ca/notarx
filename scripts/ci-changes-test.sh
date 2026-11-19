@@ -20,6 +20,7 @@ check false,true,false,false,false console/src/App.tsx
 check true,true,false,false,false api/openapi/management.yaml
 check true,true,true,true,true .github/workflows/ci.yml
 check true,true,true,true,true Makefile
+check true,true,true,true,true packaging/nfpm-notarx.yaml
 check true,true,true,true,true scripts/ci-changes.sh
 check true,true,false,false,true Dockerfile
 check true,true,false,false,true deploy/oci/compose.yml

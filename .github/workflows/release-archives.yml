@@ -8,9 +8,13 @@ name: Release archives
 #   - per-leg artifacts named <product>-<version>-<goos>-<goarch>, one per
 #     archive (notarx, notarxctl); the linux/amd64 leg also uploads the
 #     architecture independent Console and OpenAPI archives;
+#   - each Linux leg also repacks its own archives into .deb and .rpm packages
+#     with nfpm (ADR 0025), verifies them, smoke-tests the install on that
+#     architecture and uploads packages-<version>-linux-<goarch>; the amd64 leg
+#     builds the architecture independent notarx-console packages once;
 #   - one combined artifact (input assets-artifact) holding the union of every
-#     archive plus the SHA256SUMS that scripts/write-release-checksums.sh writes
-#     over that union.
+#     archive and package plus the SHA256SUMS that
+#     scripts/write-release-checksums.sh writes over that union.
 on:
   workflow_call:
     inputs:
@@ -106,6 +110,21 @@ jobs:
           tar -xzf "dist/notarxctl_${VERSION}_$suffix.tar.gz" -C smoke/cli
           smoke/cli/notarxctl version | grep -F "notarxctl $VERSION (revision $REVISION,"
           smoke/server/notarx version | grep -F "notarx $VERSION"
+      # Linux legs repack the archives they just built, so the packaged binary is
+      # byte-identical to the archived one (package-check compares the hashes).
+      - name: Build, verify and smoke-test the native packages (ADR 0025)
+        if: matrix.goos == 'linux'
+        env:
+          VERSION: ${{ inputs.version }}
+          BUILD_CONSOLE: ${{ matrix.console }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends rpm cpio
+          args=()
+          if [ "$BUILD_CONSOLE" = true ]; then args+=(--console); fi
+          ./scripts/build-packages.sh --version "$VERSION" --assets dist --output packages "${args[@]}"
+          ./scripts/package-check.sh --verify --packages packages --assets dist --version "$VERSION" "${args[@]}"
+          ./scripts/package-install-test.sh --packages packages
       - name: Run the CLI unit tests (no Docker on hosted macOS)
         if: matrix.goos == 'darwin'
         run: make cli-test
@@ -121,6 +140,16 @@ jobs:
         with:
           name: notarxctl-${{ inputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/notarxctl_${{ inputs.version }}_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention-days }}
+      - name: Upload the native packages
+        if: matrix.goos == 'linux'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: packages-${{ inputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            packages/*.deb
+            packages/*.rpm
           if-no-files-found: error
           retention-days: ${{ inputs.retention-days }}
       - name: Upload the architecture independent archives
@@ -160,6 +189,12 @@ jobs:
         with:
           name: console-openapi-${{ inputs.version }}
           path: dist
+      - name: Download the native packages
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: packages-${{ inputs.version }}-*
+          path: dist
+          merge-multiple: true
       - name: Write one checksum file over the union
         env:
           VERSION: ${{ inputs.version }}
@@ -167,8 +202,10 @@ jobs:
           ls -1 dist
           # Four runners x two archives, plus the Console and OpenAPI archives.
           test "$(find dist -maxdepth 1 -name '*.tar.gz' | wc -l | tr -d ' ')" = 10
+          # Two Linux legs x (notarx, notarxctl) x (deb, rpm), plus the Console deb and rpm.
+          test "$(find dist -maxdepth 1 \( -name '*.deb' -o -name '*.rpm' \) | wc -l | tr -d ' ')" = 10
           ./scripts/write-release-checksums.sh dist
-          test "$(wc -l < dist/SHA256SUMS | tr -d ' ')" = 10
+          test "$(wc -l < dist/SHA256SUMS | tr -d ' ')" = 20
           (cd dist && sha256sum -c SHA256SUMS)
       - name: Upload the combined release assets
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
