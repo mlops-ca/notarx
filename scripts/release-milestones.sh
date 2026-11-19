@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Lists the milestones that were completed since the previous stable release, as a release-notes
 # section (ADR 0024: "the stable release notes list the milestones whose last issue closed since
-# the previous stable"). A milestone counts when it is closed, has no open issue and its closing
+# the previous stable"). A milestone counts when it is closed, has no open issue, has at least one
+# closed issue (an empty milestone completed no work) and its closing
 # time is after --since (an RFC 3339 UTC time; empty lists every closed milestone). Prints nothing
 # when there is none.
 #
@@ -33,7 +34,7 @@ raw=$("$gh_cli" api --paginate "repos/$repo/milestones?state=closed&per_page=100
 # --paginate prints one JSON array per page.
 listed=$(jq -s -r --arg since "$since" '
   [.[] | if type == "array" then .[] else . end
-   | select(.state == "closed" and .open_issues == 0 and .closed_at != null and ($since == "" or .closed_at > $since))]
+   | select(.state == "closed" and .open_issues == 0 and .closed_issues > 0 and .closed_at != null and ($since == "" or .closed_at > $since))]
   | sort_by(.closed_at)
   | map("- **" + .title + "**" + (if (.description // "") != "" then ": " + (.description | gsub("\\s+"; " ")) else "" end) + " ([milestone](" + .html_url + "))")
   | .[]' <<<"$raw") || fail 'unreadable milestone list'

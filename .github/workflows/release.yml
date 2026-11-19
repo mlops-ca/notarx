@@ -199,12 +199,8 @@ jobs:
           BASE: ${{ steps.plan.outputs.base }}
         run: node scripts/commit-policy-check.mjs --warn-range "${BASE:+$BASE..}$SHA"
 
-  # --- gates: the complete test suite on the planned commit -----------------------
-  # Pushes to main run no tests (ADR 0024, amendment of 2026-11-19), so this is where a
-  # commit is tested before anything is built or published. It is the same suite pull
-  # request CI runs (test-suite.yml), with every class on and the mainline contract
-  # scope: both architectures, every lane.
-  # A stable run first proves that the nightly it promotes was built and attested by this pipeline.
+  # --- verify-nightly: a stable run first proves that the nightly it promotes was built and
+  # attested by this pipeline (images are read from GHCR, as in publish). ----------------
   verify-nightly:
     needs: plan
     if: needs.plan.outputs.skip != 'true' && needs.plan.outputs.channel == 'stable'
@@ -212,8 +208,15 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+      packages: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Sign in to GitHub Container Registry
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Verify the nightly record and every attestation
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -223,6 +226,11 @@ jobs:
           ./scripts/promote-release.sh verify --repo "$GITHUB_REPOSITORY" --nightly-tag "$NIGHTLY_TAG" \
             --sha "$PLAN_SHA" --dir "$RUNNER_TEMP/nightly"
 
+  # --- gates: the complete test suite on the planned commit -----------------------
+  # Pushes to main run no tests (ADR 0024, amendment of 2026-11-19), so this is where a
+  # commit is tested before anything is built or published. It is the same suite pull
+  # request CI runs (test-suite.yml), with every class on and the mainline contract
+  # scope: both architectures, every lane.
   gates-suite:
     needs: [plan, verify-nightly]
     if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.skip != 'true' && (needs.verify-nightly.result == 'success' || needs.verify-nightly.result == 'skipped') }}
@@ -297,12 +305,17 @@ jobs:
           # cancelled because the matrix is fail-fast, so the legs themselves must be inspected.
           echo "::error::Archives or images did not all build. Native darwin/arm64 and darwin/amd64 archives are required. Open the failing legs of this run: if the only failure is 'The job was not acquired by Runner' (no log), no runner was assigned and re-running the failed jobs is the action. Any leg with a log and a failed step is a real build failure to fix first; legs cancelled after it are collateral."
           exit 1
-      # ADR 0024, version identity: no stable archive, package name or VERSION.txt reports a nightly.
-      # A stable dry run exercises this too; the image labels are checked in publish.
+      # ADR 0024, version identity: no stable archive, package or VERSION.txt reports a nightly.
+      # A stable dry run exercises this too; the image labels are checked in publish. The release
+      # tooling (scripts/) comes from this workflow's own commit, never from the rebuilt nightly
+      # commit, which may predate it; only the reusable builds check out the planned commit.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: needs.plan.outputs.channel == 'stable'
-        with:
-          ref: ${{ needs.plan.outputs.sha }}
+      - name: Install rpm (reads the .rpm headers)
+        if: needs.plan.outputs.channel == 'stable'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends rpm
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         if: needs.plan.outputs.channel == 'stable'
         with:
@@ -323,6 +336,8 @@ jobs:
       packages: read
       id-token: write
       attestations: write
+      # The milestones listed in the stable release notes (release-milestones.sh).
+      issues: read
     env:
       VERSION: ${{ needs.plan.outputs.version }}
       CORE: ${{ needs.plan.outputs.core }}
@@ -333,9 +348,10 @@ jobs:
       BASE: ${{ needs.plan.outputs.base }}
       IMAGES: ${{ needs.plan.outputs.images }}
     steps:
+      # The tooling of this workflow's commit; the full history still holds the planned commit,
+      # which the notes range and the tag name.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.plan.outputs.sha }}
           fetch-depth: 0
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -361,7 +377,10 @@ jobs:
           cat dist/release-manifest.json
       - name: Assert that no stable archive, package or image reports a nightly
         if: env.CHANNEL == 'stable'
-        run: ./scripts/check-no-nightly.sh --dir dist --manifest dist/release-manifest.json --registry "ghcr.io/$GITHUB_REPOSITORY_OWNER"
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends rpm
+          ./scripts/check-no-nightly.sh --dir dist --manifest dist/release-manifest.json --registry "ghcr.io/$GITHUB_REPOSITORY_OWNER"
       # Native packages are unsigned (ADR 0025 amendment); their integrity is SHA256SUMS plus
       # these keyless attestations, one per file.
       - name: Attest the archives and the native packages
@@ -446,9 +465,8 @@ jobs:
       IMAGES: ${{ needs.plan.outputs.images }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
+      # The tooling of this workflow's commit, not of the rebuilt nightly commit.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ needs.plan.outputs.sha }}
       - name: Point the verified nightly at the stable release
         run: ./scripts/promote-release.sh finish --repo "$GITHUB_REPOSITORY" --version "$VERSION" --nightly-tag "$NIGHTLY_TAG"
       - name: Sign in to GitHub Container Registry

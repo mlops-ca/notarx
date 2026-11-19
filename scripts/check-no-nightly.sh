@@ -7,11 +7,13 @@
 #
 # Checked in <dir>: every file name (release-manifest.json is exempt: it records the verified
 # nightly on purpose), SHA256SUMS, every archive member name, VERSION.txt of every archive and
-# every extracted file (the binaries) for a stamped nightly version (X.Y.Z-nightly.N; the bare
-# word is not searched there because a dependency may contain it). The .deb and .rpm packages
-# are checked by name; their payload equals the archive binaries (scripts/package-check.sh).
-# With --manifest, the labels of every image platform recorded in the manifest are read from
-# the registry and must not contain it either. DOCKER overrides the docker binary (tests).
+# every executable an archive holds (the binaries) for a stamped nightly version
+# (X.Y.Z-nightly.N; the bare word is not searched there because a dependency may contain it, and
+# documentation is not scanned). Every .deb and .rpm is checked by name and by its Version and
+# Release header fields (dpkg-deb -f, rpm -qp); their payload equals the archive binaries
+# (scripts/package-check.sh). With --manifest, the labels of every image platform recorded in
+# the manifest are read from the registry and must not contain it either. DOCKER, DPKG_DEB and
+# RPM override the docker, dpkg-deb and rpm binaries (tests).
 set -euo pipefail
 
 fail() {
@@ -50,7 +52,10 @@ while IFS= read -r path; do
       if grep -q -i nightly "$path"; then fail 'SHA256SUMS contains nightly'; fi
       ;;
     *.tar.gz)
-      if tar -tzf "$path" | grep -q -i nightly; then fail "$name holds a member whose name contains nightly"; fi
+      # The listing is captured first: grep -q in a pipe can make tar die of SIGPIPE, which
+      # pipefail would turn into a false "clean".
+      members=$(tar -tzf "$path") || fail "cannot list $name"
+      if grep -q -i nightly <<<"$members"; then fail "$name holds a member whose name contains nightly"; fi
       extract=$scratch/$name.d
       mkdir -p "$extract"
       tar -xzf "$path" -C "$extract"
@@ -58,9 +63,19 @@ while IFS= read -r path; do
         if [[ "$(basename "$file")" == VERSION.txt ]] && grep -q -i nightly "$file"; then
           fail "$name: VERSION.txt reports a nightly version"
         fi
-        if grep -a -q -E "$stamped" "$file"; then fail "$name: $(basename "$file") embeds a stamped nightly version"; fi
       done < <(find "$extract" -type f)
+      while IFS= read -r file; do
+        if grep -a -q -E "$stamped" "$file"; then fail "$name: $(basename "$file") embeds a stamped nightly version"; fi
+      done < <(find "$extract" -type f -perm -u+x)
       rm -rf "$extract"
+      ;;
+    *.deb)
+      fields=$("${DPKG_DEB:-dpkg-deb}" -f "$path" Version) || fail "cannot read the control fields of $name"
+      if grep -q -i nightly <<<"$fields"; then fail "$name: the package version '$fields' contains nightly"; fi
+      ;;
+    *.rpm)
+      fields=$("${RPM:-rpm}" -qp --nosignature --qf '%{VERSION}-%{RELEASE}' "$path") || fail "cannot read the header of $name"
+      if grep -q -i nightly <<<"$fields"; then fail "$name: the package version '$fields' contains nightly"; fi
       ;;
   esac
 done < <(find "$dir" -maxdepth 1 -type f | sort)

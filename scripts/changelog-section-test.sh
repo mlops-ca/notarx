@@ -93,6 +93,10 @@ out=$(section --version 0.2.1 --base v0.2.0)
 cases=$((cases + 1))
 grep -q 'No user-facing changes' <<<"$out" || fail 'an empty range has no placeholder'
 
+printf '#!/usr/bin/env bash\necho "cliff: broken config" >&2\nexit 3\n' >"$workdir/broken-cliff"
+chmod +x "$workdir/broken-cliff"
+expect_fail 'a failing git-cliff fails the render with its diagnostic' 'cliff: broken config' env GIT_CLIFF="$workdir/broken-cliff" bash "$root/scripts/changelog-section.sh" render --version 0.2.1 --base v0.2.0 --repo "$repo"
+
 # --- release-milestones.sh ---------------------------------------------------
 cat >"$workdir/gh" <<'STUB'
 #!/usr/bin/env bash
@@ -102,13 +106,14 @@ chmod +x "$workdir/gh"
 export GH_CLI=$workdir/gh MILESTONES=$workdir/milestones.json
 cat >"$MILESTONES" <<'JSON'
 [
-  {"title":"Foundation","description":"Fork charter,\nlocales and baseline","state":"closed","open_issues":0,"closed_at":"2026-11-20T10:00:00Z","html_url":"https://example.test/m/2"},
-  {"title":"Data scale","description":"","state":"closed","open_issues":0,"closed_at":"2026-12-01T10:00:00Z","html_url":"https://example.test/m/3"}
+  {"title":"Foundation","description":"Fork charter,\nlocales and baseline","state":"closed","open_issues":0,"closed_issues":3,"closed_at":"2026-11-20T10:00:00Z","html_url":"https://example.test/m/2"},
+  {"title":"Data scale","description":"","state":"closed","open_issues":0,"closed_issues":3,"closed_at":"2026-12-01T10:00:00Z","html_url":"https://example.test/m/3"}
 ]
 [
-  {"title":"Formats","description":"More formats","state":"closed","open_issues":0,"closed_at":"2026-10-01T10:00:00Z","html_url":"https://example.test/m/4"},
-  {"title":"Backlog","description":"x","state":"closed","open_issues":2,"closed_at":"2026-12-02T10:00:00Z","html_url":"https://example.test/m/5"},
-  {"title":"Open","description":"x","state":"open","open_issues":0,"closed_at":null,"html_url":"https://example.test/m/6"}
+  {"title":"Formats","description":"More formats","state":"closed","open_issues":0,"closed_issues":3,"closed_at":"2026-10-01T10:00:00Z","html_url":"https://example.test/m/4"},
+  {"title":"Backlog","description":"x","state":"closed","open_issues":2,"closed_issues":1,"closed_at":"2026-12-02T10:00:00Z","html_url":"https://example.test/m/5"},
+  {"title":"Empty","description":"x","state":"closed","open_issues":0,"closed_issues":0,"closed_at":"2026-11-25T10:00:00Z","html_url":"https://example.test/m/7"},
+  {"title":"Open","description":"x","state":"open","open_issues":0,"closed_issues":3,"closed_at":null,"html_url":"https://example.test/m/6"}
 ]
 JSON
 milestones() { bash "$root/scripts/release-milestones.sh" --repo o/r "$@"; }
@@ -119,6 +124,8 @@ expect_eq 'milestones closed since the previous stable, oldest first' "$out" '##
 - **Data scale** ([milestone](https://example.test/m/3))'
 expect_eq 'no previous stable lists every completed milestone' "$(milestones | grep -c '^- ')" 3
 expect_eq 'nothing completed since a late date prints nothing' "$(milestones --since 2027-01-01T00:00:00Z)" ''
+cases=$((cases + 1))
+if milestones | grep -q Empty; then fail 'a closed milestone without any issue is listed'; fi
 expect_fail 'a bad repository is refused' 'owner/repo' bash "$root/scripts/release-milestones.sh" --repo nope
 expect_fail 'a bad date is refused' 'RFC 3339' milestones --since yesterday
 

@@ -37,6 +37,13 @@ STUB
 chmod +x "$workdir/docker"
 export DOCKER="$workdir/docker"
 
+# Stub dpkg-deb and rpm that print the package version stored inside the stub package file.
+for tool in dpkg-deb rpm; do
+  printf '#!/usr/bin/env bash\nfor a; do if [[ -f "$a" ]]; then cat "$a"; fi; done\n' >"$workdir/$tool"
+  chmod +x "$workdir/$tool"
+done
+export DPKG_DEB="$workdir/dpkg-deb" RPM="$workdir/rpm"
+
 # new_release <version> <version text of VERSION.txt> <binary text>
 dir=
 new_release() {
@@ -46,8 +53,11 @@ new_release() {
   mkdir "$stage/notarx_${version}_linux_amd64"
   printf '%s\n' "$versiontxt" >"$stage/notarx_${version}_linux_amd64/VERSION.txt"
   printf '\000\001notarx %s\000' "$binary" >"$stage/notarx_${version}_linux_amd64/notarx"
+  chmod +x "$stage/notarx_${version}_linux_amd64/notarx"
+  printf 'Upgrading from 0.1.0-nightly.3 is supported.\n' >"$stage/notarx_${version}_linux_amd64/README.md"
   tar -czf "$dir/notarx_${version}_linux_amd64.tar.gz" -C "$stage" "notarx_${version}_linux_amd64"
-  printf 'deb' >"$dir/notarx_${version}_amd64.deb"
+  printf '%s' "$version" >"$dir/notarx_${version}_amd64.deb"
+  printf '%s-1' "$version" >"$dir/notarx-${version}-1.x86_64.rpm"
   bash "$root/scripts/write-release-checksums.sh" "$dir"
   printf '{"version":"%s","verified_nightly":"v0.1.0-nightly.1","images":{"notarx":"sha256:%064d"}}\n' "$version" 1 >"$dir/release-manifest.json"
   rm -rf "$stage"
@@ -56,6 +66,14 @@ check() { bash "$root/scripts/check-no-nightly.sh" --dir "$dir" "$@"; }
 
 new_release 0.1.0 0.1.0 0.1.0
 expect_ok 'a clean stable release passes (the manifest may name the verified nightly)' check
+
+new_release 0.1.0 0.1.0 0.1.0
+printf '0.1.0~nightly.3' >"$dir/notarx_0.1.0_amd64.deb"
+expect_fail 'a .deb whose Version field is a nightly fails' 'notarx_0\.1\.0_amd64\.deb: the package version' check
+
+new_release 0.1.0 0.1.0 0.1.0
+printf '0.1.0-0.nightly.3' >"$dir/notarx-0.1.0-1.x86_64.rpm"
+expect_fail 'an .rpm whose Release field is a nightly fails' 'x86_64\.rpm: the package version' check
 
 new_release 0.1.0 0.1.0-nightly.3 0.1.0
 expect_fail 'VERSION.txt reporting a nightly fails' 'VERSION\.txt reports a nightly' check

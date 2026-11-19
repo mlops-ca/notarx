@@ -41,7 +41,10 @@ git -C "$repo" rev-parse --verify --quiet "refs/tags/v$version" >/dev/null || fa
 render() {
   local cliff section
   cliff=${GIT_CLIFF:-$("$script_dir/install-git-cliff.sh")}
-  section=$("$cliff" --config "$script_dir/../cliff.toml" --repository "$repo" --strip all "${base:+$base..}v$version" 2>/dev/null)
+  # git-cliff's diagnostics reach the log; a failing call fails the job instead of rendering a placeholder.
+  section=$("$cliff" --config "$script_dir/../cliff.toml" --repository "$repo" --strip all "${base:+$base..}v$version") ||
+    fail "git-cliff failed for ${base:+$base..}v$version"
+  # An empty output is a valid range without any releasing commit: the heading alone, then the placeholder.
   if [[ -z "$section" ]]; then
     section=$(printf '## [%s] - %s' "$version" "$(git -C "$repo" log -1 --format=%cs "v$version")")
   fi

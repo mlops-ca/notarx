@@ -87,7 +87,9 @@ Inputs: `channel` (`nightly` or `stable`, default `nightly`), `nightly_tag` (def
    (see "Verifying a release"). A nightly without a manifest, with a failing attestation or on another commit is refused.
 3. `gates`, `build-archives` and `build-images` run the same suite and native matrix as a nightly at that commit.
    The image index carries the annotation `io.mlops.notarx.verified-nightly=<nightly tag>` and the tags `:X.Y.Z` and `:X.Y`;
-   `:0` is never published while the major is 0. `build` then runs `scripts/check-no-nightly.sh` over the built archives and packages.
+   `:0` is never published while the major is 0. `build` then runs `scripts/check-no-nightly.sh` over the built archives and packages
+   (names, the `.deb`/`.rpm` Version and Release fields, `VERSION.txt` and the binaries). Only the builds check out the nightly's
+   commit; the release scripts always come from the dispatched `main`, so a nightly older than the current tooling can be promoted.
 4. `publish` writes the manifest (with `verified_nightly`), attests and verifies everything, runs `scripts/check-no-nightly.sh`
    again including the image labels, and calls `scripts/promote-release.sh create`, which creates `vX.Y.Z` as a draft with every
    asset and then publishes it; publishing creates the tag on the verified commit. The notes list the milestones completed since the

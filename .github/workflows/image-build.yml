@@ -41,9 +41,10 @@ on:
         type: string
       annotations:
         description: >-
-          Newline-separated annotations for every image index, as [type:]key=value for
+          Newline-separated annotations for every image index, as [index:]key=value for
           docker buildx imagetools create --annotation (for example
-          index:io.mlops.notarx.verified-nightly=v0.1.0-nightly.1). Empty creates none.
+          index:io.mlops.notarx.verified-nightly=v0.1.0-nightly.1); any other type is refused
+          because only the index is verified. Empty creates none.
         default: ""
         type: string
       require-main-tip:
@@ -260,7 +261,15 @@ jobs:
             if [ -n "$tag" ]; then args+=(--tag "$IMAGE:$tag"); fi
           done <<<"$TAGS"
           while IFS= read -r annotation; do
-            if [ -n "$annotation" ]; then args+=(--annotation "$annotation"); fi
+            if [ -n "$annotation" ]; then
+              # The type prefix belongs to the part before the first "=", so a value may hold ":".
+              lhs=${annotation%%=*}
+              if [[ "$lhs" == *:* && "${lhs%%:*}" != index ]]; then
+                echo "::error::annotation '$annotation': only the index type is supported"
+                exit 1
+              fi
+              args+=(--annotation "$annotation")
+            fi
           done <<<"$ANNOTATIONS"
           docker buildx imagetools create "${args[@]}" "$IMAGE@$amd64" "$IMAGE@$arm64"
           first=$(sed -n '1p' <<<"$TAGS")
@@ -271,8 +280,8 @@ jobs:
           # Every requested annotation must be on the index (the verified-nightly record of a stable image).
           while IFS= read -r annotation; do
             if [ -n "$annotation" ]; then
-              pair=${annotation#*:}
-              jq -e --arg k "${pair%%=*}" --arg v "${pair#*=}" '.annotations[$k] == $v' <<<"$index" >/dev/null
+              lhs=${annotation%%=*}
+              jq -e --arg k "${lhs#index:}" --arg v "${annotation#*=}" '.annotations[$k] == $v' <<<"$index" >/dev/null
             fi
           done <<<"$ANNOTATIONS"
       - name: Attest the index provenance
