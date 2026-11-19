@@ -7456,8 +7456,7 @@
             "description": "The provider does not exist, is disabled, or is not a SAML provider"
           },
           "503": {
-            "description": "SAML sign-in is unavailable (no public URL",
-            "request state or key)": null
+            "description": "SAML sign-in is unavailable (no public URL, request state or key)"
           }
         }
       }
@@ -19377,10 +19376,7 @@
           "url": {
             "type": "string",
             "maxLength": 2048,
-            "description": "HTTPS URL of the IdP metadata",
-            "fetched through the SSRF guard (no private ranges": null,
-            "5 s timeout": null,
-            "1 MiB).": null
+            "description": "HTTPS URL of the IdP metadata, fetched through the SSRF guard (no private ranges, 5 s timeout, 1 MiB)."
           },
           "xml": {
             "type": "string",

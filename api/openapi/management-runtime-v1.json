@@ -20465,10 +20465,7 @@
           "url": {
             "type": "string",
             "maxLength": 2048,
-            "description": "HTTPS URL of the IdP metadata",
-            "fetched through the SSRF guard (no private ranges": null,
-            "5 s timeout": null,
-            "1 MiB).": null
+            "description": "HTTPS URL of the IdP metadata, fetched through the SSRF guard (no private ranges, 5 s timeout, 1 MiB)."
           },
           "xml": {
             "type": "string",

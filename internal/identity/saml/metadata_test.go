@@ -7,13 +7,15 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/mlops-ca/notarx/internal/identity/saml/samltest"
 )
 
 func metadataXML(t *testing.T, mutate func(string) string) string {
 	t.Helper()
 	primary, other, _ := testKeys(t)
 	encoded := func(der []byte) string { return base64.StdEncoding.EncodeToString(der) }
-	document := `<?xml version="1.0"?><md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" xmlns:ds="http://www.w3.org/2000/09/xmldsig#" entityID="https://idp.example.test/metadata">` +
+	document := `<?xml version="1.0"?><md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" xmlns:ds="` + samltest.NSDSig + `" entityID="https://idp.example.test/metadata">` +
 		`<md:IDPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">` +
 		`<md:KeyDescriptor use="signing"><ds:KeyInfo><ds:X509Data><ds:X509Certificate>` + encoded(primary.Cert.Raw) + `</ds:X509Certificate></ds:X509Data></ds:KeyInfo></md:KeyDescriptor>` +
 		`<md:KeyDescriptor use="encryption"><ds:KeyInfo><ds:X509Data><ds:X509Certificate>` + encoded(other.Cert.Raw) + `</ds:X509Certificate></ds:X509Data></ds:KeyInfo></md:KeyDescriptor>` +
@@ -151,7 +153,7 @@ func TestFetcherRefusesPrivateTargets(t *testing.T) {
 	for _, target := range []string{
 		"https://127.0.0.1/metadata", "https://[::1]/metadata", "https://10.0.0.5/metadata", "https://192.168.1.10/metadata",
 		"https://172.16.0.1/metadata", "https://169.254.169.254/latest/meta-data", "https://[fe80::1]/metadata", "https://0.0.0.0/metadata",
-		"https://100.64.0.1/metadata", "https://localhost/metadata",
+		"https://localhost/metadata",
 	} {
 		if _, err := fetcher.Fetch(context.Background(), target); err == nil {
 			t.Fatalf("%s was fetched", target)

@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	dsig "github.com/russellhaering/goxmldsig"
+
 	"github.com/mlops-ca/notarx/internal/secrets"
 )
 
@@ -94,7 +96,7 @@ func TestBuildLoginURLSignsTheQueryWithTheServiceProviderKey(t *testing.T) {
 	}
 	query, _ := inflateRequest(t, loginURL)
 	signature, err := base64.StdEncoding.DecodeString(query.Get("Signature"))
-	if err != nil || query.Get("SigAlg") != "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256" {
+	if err != nil || query.Get("SigAlg") != dsig.RSASHA256SignatureMethod {
 		t.Fatalf("signature = %v, SigAlg = %q", err, query.Get("SigAlg"))
 	}
 	signed := "SAMLRequest=" + url.QueryEscape(query.Get("SAMLRequest")) + "&RelayState=" + url.QueryEscape("relay") + "&SigAlg=" + url.QueryEscape(query.Get("SigAlg"))

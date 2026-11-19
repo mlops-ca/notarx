@@ -7317,7 +7317,7 @@ type IdentityProviderSAMLSettingsNameIdFormat string
 
 // ImportIdentityProviderMetadata Exactly one of url and xml.
 type ImportIdentityProviderMetadata struct {
-	// Url HTTPS URL of the IdP metadata
+	// Url HTTPS URL of the IdP metadata, fetched through the SSRF guard (no private ranges, 5 s timeout, 1 MiB).
 	Url *string `json:"url,omitempty"`
 
 	// Xml Pasted IdP metadata XML.

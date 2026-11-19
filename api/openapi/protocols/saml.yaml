@@ -30,7 +30,7 @@ saml_login:
     responses:
       '302': {description: Redirect to the identity provider}
       '404': {description: "The provider does not exist, is disabled, or is not a SAML provider"}
-      '503': {description: SAML sign-in is unavailable (no public URL, request state or key)}
+      '503': {description: "SAML sign-in is unavailable (no public URL, request state or key)"}
 saml_acs:
   servers: [{url: https://gateway.example.com}]
   parameters:

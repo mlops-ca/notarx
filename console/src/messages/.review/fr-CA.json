@@ -3013,7 +3013,7 @@
     "settings.roleMapping": "draft",
     "settings.runtimeSettings": "draft",
     "settings.runtimeStatus": "draft",
-    "settings.samlACSURL": "draft",
+    "settings.samlAssertionConsumerURL": "draft",
     "settings.samlCertificateActive": "draft",
     "settings.samlCertificateExpired": "draft",
     "settings.samlCertificateExpires": "draft",

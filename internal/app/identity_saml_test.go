@@ -36,7 +36,7 @@ func idpMetadata(entityID, sso string, keys ...samltest.Key) []byte {
 	for _, key := range keys {
 		certificates.WriteString(`<md:KeyDescriptor use="signing"><ds:KeyInfo><ds:X509Data><ds:X509Certificate>` + base64.StdEncoding.EncodeToString(key.Cert.Raw) + `</ds:X509Certificate></ds:X509Data></ds:KeyInfo></md:KeyDescriptor>`)
 	}
-	return []byte(`<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" xmlns:ds="http://www.w3.org/2000/09/xmldsig#" entityID="` + entityID + `"><md:IDPSSODescriptor>` + certificates.String() +
+	return []byte(`<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" xmlns:ds="` + samltest.NSDSig + `" entityID="` + entityID + `"><md:IDPSSODescriptor>` + certificates.String() +
 		`<md:SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" Location="` + sso + `"/></md:IDPSSODescriptor></md:EntityDescriptor>`)
 }
 

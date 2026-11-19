@@ -94,7 +94,7 @@ export const settingsEnCA = {
   "settings.samlProvidersDescription":
     "Register the service provider details below at each identity provider. The pinned signing certificates verify sign-in responses; add a new certificate as next before the identity provider cuts over.",
   "settings.samlMetadataURL": "Service provider metadata URL",
-  "settings.samlACSURL": "Assertion consumer service URL",
+  "settings.samlAssertionConsumerURL": "Assertion consumer service URL",
   "settings.samlPinnedCertificates": "Pinned signing certificates",
   "settings.samlNoCertificates": "No certificate is pinned yet.",
   "settings.samlCertificateActive": "Active",

@@ -23,6 +23,12 @@ import (
 	dsig "github.com/russellhaering/goxmldsig"
 )
 
+// XML namespaces and algorithm identifiers the tests build documents with.
+const (
+	NSDSig     = "http://www.w3.org/2000/09/xmldsig#"
+	NSMetadata = "urn:oasis:names:tc:SAML:2.0:metadata"
+)
+
 // Key is a throwaway IdP signing key with its self-signed certificate.
 type Key struct {
 	Cert *x509.Certificate

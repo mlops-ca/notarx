@@ -2624,7 +2624,7 @@ export type IdentityProviderSamlInput = {
  */
 export type ImportIdentityProviderMetadata = {
   /**
-   * HTTPS URL of the IdP metadata
+   * HTTPS URL of the IdP metadata, fetched through the SSRF guard (no private ranges, 5 s timeout, 1 MiB).
    */
   url?: string;
   /**

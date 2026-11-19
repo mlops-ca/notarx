@@ -58,7 +58,7 @@ func TestKeycloakSAMLClientResponse(t *testing.T) {
 
 func TestEntraIDResponse(t *testing.T) {
 	config := baseConfig(t)
-	config.EntityID = "https://sts.windows.net/72f988bf-86f1-41af-91ab-2d7cd011db47/"
+	config.EntityID = "https://sts.entra.example.test/72f988bf-86f1-41af-91ab-2d7cd011db47/"
 	config.ACSURL = "https://notarx.example.test/auth/saml/entra/acs"
 	config.SPEntityID = "https://notarx.example.test/auth/saml/entra/metadata"
 	config.Now = func() time.Time { return time.Date(2026, 11, 19, 10, 0, 30, 0, time.UTC) }

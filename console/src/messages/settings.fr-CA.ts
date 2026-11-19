@@ -97,7 +97,7 @@ export const settingsFrCA: Record<keyof typeof settingsEnCA, string> = {
   "settings.samlProvidersDescription":
     "Enregistrez les informations du fournisseur de services ci-dessous auprès de chaque fournisseur d’identité. Les certificats de signature épinglés vérifient les réponses de connexion; ajoutez un nouveau certificat comme suivant avant que le fournisseur d’identité ne bascule.",
   "settings.samlMetadataURL": "URL des métadonnées du fournisseur de services",
-  "settings.samlACSURL": "URL du service de consommation d’assertions",
+  "settings.samlAssertionConsumerURL": "URL du service de consommation d’assertions",
   "settings.samlPinnedCertificates": "Certificats de signature épinglés",
   "settings.samlNoCertificates": "Aucun certificat n’est encore épinglé.",
   "settings.samlCertificateActive": "Actif",

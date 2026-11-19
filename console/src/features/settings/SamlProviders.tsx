@@ -101,7 +101,7 @@ export function SamlProvidersCard() {
                 <dd>
                   <code>{provider.saml.metadataEndpoint || "-"}</code>
                 </dd>
-                <dt>{t("settings.samlACSURL")}</dt>
+                <dt>{t("settings.samlAssertionConsumerURL")}</dt>
                 <dd>
                   <code>{provider.saml.acsUrl || "-"}</code>
                 </dd>

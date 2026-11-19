@@ -2286,8 +2286,14 @@ ImportIdentityProviderMetadata:
   description: Exactly one of url and xml.
   additionalProperties: false
   properties:
-    url: {type: string, maxLength: 2048, description: HTTPS URL of the IdP metadata, fetched through the SSRF guard (no private ranges, 5 s timeout, 1 MiB).}
-    xml: {type: string, maxLength: 1048576, description: Pasted IdP metadata XML.}
+    url:
+      type: string
+      maxLength: 2048
+      description: "HTTPS URL of the IdP metadata, fetched through the SSRF guard (no private ranges, 5 s timeout, 1 MiB)."
+    xml:
+      type: string
+      maxLength: 1048576
+      description: Pasted IdP metadata XML.
 IdentityProviderOIDCInput:
   type: object
   required: [issuer, audience, clientId, redirectUrl, scopes, adminSubjects, memberRoles, adminRoles]

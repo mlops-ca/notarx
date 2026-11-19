@@ -117,6 +117,7 @@ agree with executable tests and the
 - [Anonymous access operations](anonymous-access-operations.md) — default-deny global, Group, and Repository gates.
 - [Local user governance](user-governance.md) — accounts, sessions, lockout, OIDC linkage, and audit.
 - [OIDC browser SSO](oidc-sso.md) — Code + PKCE, runtime configuration, role mapping, and session behaviour.
+- [SAML browser SSO](saml-sso.md) — SP-initiated Web SSO, metadata import, certificate rollover, signing keys and the response checks.
 - [Keycloak on Kubernetes](oidc-keycloak-k8s.md) — real browser callback acceptance.
 - [Repository Grant authorization](repository-grant-authorization-plan.md) — scoped runtime decisions and rollout.
 - [Service Account operations](service-account-operations.md) — stable machine principals and zero-downtime rotation.
