@@ -270,6 +270,26 @@ the guarantees and the settings.
 MySQL (ADR 0022) uses plain tables with an `AUTO_INCREMENT` key and batched
 retention; that twin is written with the ADR 0022 store slices.
 
+## pg_stat_statements
+
+The statement dashboard of `deploy/observability` and the hot-query registry
+(`internal/repository/hotqueries.go`, curated from the top statements of a `target`
+run) both start from the `pg_stat_statements` extension, which notarx does not require
+to run. To enable it:
+
+1. Preload the library and restart PostgreSQL: `shared_preload_libraries = 'pg_stat_statements'`
+   (managed providers expose it as a parameter or an extension toggle).
+2. Create the extension once in the notarx database:
+   `CREATE EXTENSION IF NOT EXISTS pg_stat_statements;`
+3. Run [postgres_exporter](https://github.com/prometheus-community/postgres_exporter) against
+   the database with the `stat_statements` and `stat_user_tables` collectors enabled, and have
+   Prometheus scrape it next to the notarx `/metrics` endpoint.
+
+The dashboard reads `pg_stat_statements_seconds_total`, `pg_stat_statements_calls_total`,
+`pg_stat_statements_rows_total` and `pg_stat_user_tables_n_dead_tup` from the exporter and
+`notarx_partitions`, `notarx_partition_default_rows`, `notarx_retention_lag_seconds`,
+`notarx_retention_deleted_rows_total` and `notarx_audit_flush_seconds` from notarx.
+
 ## Explicitly not used
 
 - **RLS:** tables do not yet share a tenant ID or consistent session tenant
