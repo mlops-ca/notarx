@@ -255,7 +255,8 @@ the sizes that matter, and two make targets reproduce them.
 `tools/datagen` against a migrated, empty PostgreSQL database. It bulk-loads
 repositories, packages, versions and audit rows with `COPY`, draws repository,
 package and actor popularity from a Zipf distribution so hot artifacts exist, and
-finishes with `ANALYZE`. The generation is deterministic for a seed.
+finishes with `ANALYZE`. The generation is deterministic for a seed and start time, and
+runs in one transaction, so a failed run leaves nothing behind and can be repeated.
 
 | Profile | Versions | Audit rows | Use |
 | --- | --- | --- | --- |

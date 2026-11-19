@@ -39,8 +39,17 @@ func run(ctx context.Context, profileName, databaseURL string, seed int64) error
 	}
 	defer func() { _ = conn.Close(ctx) }()
 	start := time.Now()
-	counts, err := datagen.Seed(ctx, conn, profile, seed, start)
+	// One transaction: a failure part-way leaves nothing behind, so the run can be repeated.
+	tx, err := conn.Begin(ctx)
 	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	counts, err := datagen.Seed(ctx, tx, profile, seed, start)
+	if err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return err
 	}
 	// Fresh statistics are what makes the plans of a seeded database meaningful.

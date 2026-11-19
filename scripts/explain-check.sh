@@ -17,4 +17,4 @@ cleanup
 "${compose[@]}" run --rm --no-deps migrate
 NOTARX_EXPLAIN_SCALE=1 NOTARX_EXPLAIN_PROFILE="${NOTARX_EXPLAIN_PROFILE:-tiny}" \
   "${compose[@]}" run --rm --no-deps -e NOTARX_EXPLAIN_SCALE -e NOTARX_EXPLAIN_PROFILE test \
-  go test -count=1 -tags=integration -run '^TestHotQueriesKeepTheirPlans$' ./internal/repository
+  go test -count=1 -timeout 3h -tags=integration -run '^TestHotQueriesKeepTheirPlans$' ./internal/repository

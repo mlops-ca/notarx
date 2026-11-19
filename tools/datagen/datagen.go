@@ -4,7 +4,8 @@
 //
 // Popularity is Zipfian: a handful of repositories, packages and actors receive most
 // of the traffic, so hot artifacts exist. Generation is deterministic for a given
-// profile and seed. The seed format is npm because its tables carry the widest
+// profile, seed and start time (repository identifiers are UUIDv7 values built from the
+// seeded generator and the start time). The seed format is npm because its tables carry the widest
 // per-version rows; further formats join as their catalogue slices land.
 package datagen
 
@@ -19,8 +20,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-
-	"github.com/mlops-ca/notarx/internal/ids"
 )
 
 // Profile sizes one seeding run.
@@ -60,8 +59,9 @@ func ParseProfile(name string) (Profile, error) {
 	return profile, nil
 }
 
-// Scaled returns the profile with every count divided by divisor (at least 1 each),
-// for runs that need the shape of a profile at a fraction of its cost.
+// Scaled returns the profile with its versions, audit rows and repositories divided
+// by divisor (at least 1 each), for runs that need the shape of a profile at a
+// fraction of its cost.
 func (p Profile) Scaled(divisor int) Profile {
 	if divisor <= 1 {
 		return p
@@ -69,7 +69,7 @@ func (p Profile) Scaled(divisor int) Profile {
 	scale := func(n int) int { return max(1, n/divisor) }
 	p.Versions = scale(p.Versions)
 	p.AuditRows = scale(p.AuditRows)
-	p.Repositories = max(1, min(p.Repositories, scale(p.Repositories*10)))
+	p.Repositories = scale(p.Repositories)
 	return p
 }
 
@@ -115,6 +115,22 @@ func plan(p Profile, rng *rand.Rand) []packagePlan {
 	return packages
 }
 
+// newID returns a UUIDv7 whose timestamp is now and whose remaining bits come from
+// rng, so a seeded run produces the same identifiers every time.
+func newID(rng *rand.Rand, now time.Time) uuid.UUID {
+	var id uuid.UUID
+	for i := range id {
+		id[i] = byte(rng.Intn(256))
+	}
+	ms := uint64(now.UnixMilli())
+	for i := 0; i < 6; i++ {
+		id[i] = byte(ms >> (8 * (5 - i)))
+	}
+	id[6] = id[6]&0x0f | 0x70
+	id[8] = id[8]&0x3f | 0x80
+	return id
+}
+
 func repositoryName(i int) string { return fmt.Sprintf("perf-npm-%04d", i) }
 func packageName(i int) string    { return fmt.Sprintf("perf-pkg-%08d", i) }
 
@@ -136,7 +152,7 @@ func Seed(ctx context.Context, db Copier, p Profile, seed int64, now time.Time) 
 	repositoryIDs := make([]uuid.UUID, p.Repositories)
 	repositoryRows := make([][]any, p.Repositories)
 	for i := range repositoryIDs {
-		repositoryIDs[i] = ids.NewUUID()
+		repositoryIDs[i] = newID(rng, now)
 		repositoryRows[i] = []any{pgtype.UUID{Bytes: repositoryIDs[i], Valid: true}, repositoryName(i), "npm"}
 	}
 	var err error

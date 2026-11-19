@@ -39,8 +39,7 @@ func TestHotQueriesKeepTheirPlans(t *testing.T) {
 		profile = profile.Scaled(divisor)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancel()
+	ctx := t.Context()
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -57,39 +56,39 @@ func TestHotQueriesKeepTheirPlans(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	for _, table := range []string{"hosted_repositories", "native_npm_packages", "native_npm_versions", "resolver_audit_log", "lifecycle_jobs"} {
+	for _, table := range []string{"hosted_repositories", "native_npm_packages", "native_npm_versions", "resolver_audit_log", "lifecycle_jobs", "security_audit_log"} {
 		if _, err := conn.ExecContext(ctx, "ANALYZE "+table); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	var fixture HotQueryFixture
-	fixture.RepositoryName = "perf-npm-0000"
+	fixture := hotQueryFixture{actor: "perf-actor-000"}
 	if err := conn.QueryRowContext(ctx, `
-		SELECT r.id::text, v.package_name, v.version
-		  FROM hosted_repositories r
-		  JOIN native_npm_versions v ON v.repository_id = r.id
-		 WHERE r.name = $1 ORDER BY v.package_name, v.version LIMIT 1`, fixture.RepositoryName).
-		Scan(&fixture.RepositoryID, &fixture.PackageName, &fixture.Version); err != nil {
+		SELECT r.id::text, r.name, v.package_name, v.version
+		  FROM native_npm_versions v
+		  JOIN hosted_repositories r ON r.id = v.repository_id
+		 WHERE r.name LIKE 'perf-npm-%' ORDER BY v.created_at DESC LIMIT 1`).
+		Scan(&fixture.repositoryID, &fixture.repositoryName, &fixture.packageName, &fixture.version); err != nil {
 		t.Fatalf("seeded fixture: %v", err)
 	}
-	fixture.Actor = "perf-actor-000"
 
-	for _, query := range HotQueries {
-		t.Run(query.Name, func(t *testing.T) {
-			plan, err := explaincheck.Plan(ctx, conn, query.SQL, query.Args(fixture)...)
+	for _, query := range hotQueries {
+		t.Run(query.name, func(t *testing.T) {
+			sql, args := query.build(fixture)
+			plan, err := explaincheck.Plan(ctx, conn, sql, args...)
 			if err != nil {
 				t.Fatal(err)
 			}
 			for _, table := range plan.SequentialScans() {
-				for _, listed := range query.NoSeqScan {
-					if table == listed {
-						t.Errorf("Seq Scan on %s", table)
-					}
+				if onListedTable(table, query.noSeqScan) {
+					t.Errorf("Seq Scan on %s", table)
 				}
 			}
-			if query.IndexContains != "" && !plan.UsesAnyIndexContaining(query.IndexContains) {
-				t.Errorf("plan uses indexes %v, want one containing %q", plan.Indexes(), query.IndexContains)
+			if len(plan.Indexes()) == 0 {
+				t.Errorf("plan scans no index")
+			}
+			if query.indexContains != "" && !plan.UsesAnyIndexContaining(query.indexContains) {
+				t.Errorf("plan uses indexes %v, want one containing %q", plan.Indexes(), query.indexContains)
 			}
 		})
 	}

@@ -425,10 +425,7 @@ func readNPMPackage(ctx context.Context, tx *sql.Tx, repositoryID, name string) 
 	var pkg NPMPackage
 	var tags []byte
 	var metadataExpiresAt, negativeExpiresAt sql.NullTime
-	err := tx.QueryRowContext(ctx, `
-		SELECT repository_id::text,name,dist_tags,source_endpoint,upstream_etag,upstream_modified,
-		       metadata_expires_at,negative_expires_at,negative,created_at,updated_at,revision,source_version
-		FROM native_npm_packages WHERE repository_id=$1::uuid AND name=$2`, repositoryID, name).
+	err := tx.QueryRowContext(ctx, getNPMPackageQuery, repositoryID, name).
 		Scan(&pkg.RepositoryID, &pkg.Name, &tags, &pkg.SourceEndpoint, &pkg.UpstreamETag, &pkg.UpstreamModified,
 			&metadataExpiresAt, &negativeExpiresAt, &pkg.Negative, &pkg.CreatedAt, &pkg.UpdatedAt, &pkg.Revision, &pkg.SourceVersion)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -473,13 +470,33 @@ func readNPMPackage(ctx context.Context, tx *sql.Tx, repositoryID, name string) 
 	return pkg, nil
 }
 
-func (s *PostgresStore) ListNPMVersions(ctx context.Context, repositoryID, name string) ([]NPMVersion, error) {
-	rows, err := s.db.QueryContext(ctx, `
+// The hot npm reads. They are named so the plan-regression registry (hotqueries_test.go)
+// plans exactly the statements the store runs.
+const (
+	getNPMPackageQuery = `
+		SELECT repository_id::text,name,dist_tags,source_endpoint,upstream_etag,upstream_modified,
+		       metadata_expires_at,negative_expires_at,negative,created_at,updated_at,revision,source_version
+		FROM native_npm_packages WHERE repository_id=$1::uuid AND name=$2`
+	listNPMVersionsQuery = `
 		SELECT repository_id::text,package_name,version,digest,integrity,shasum,
 		       tarball_name,upstream_tarball,object_key,size,manifest,publisher,state,cached_at,deleted_at,collected_at,created_at,deprecated,collecting_at
 		FROM native_npm_versions
 		WHERE repository_id=$1::uuid AND package_name=$2 AND state='visible'
-		ORDER BY created_at DESC,version DESC`, repositoryID, name)
+		ORDER BY created_at DESC,version DESC`
+	getNPMVersionQuery = `
+		SELECT repository_id::text,package_name,version,digest,integrity,shasum,
+		       tarball_name,upstream_tarball,object_key,size,manifest,publisher,state,cached_at,deleted_at,collected_at,created_at,deprecated,collecting_at
+		FROM native_npm_versions
+		WHERE repository_id=$1::uuid AND package_name=$2 AND version=$3 AND state='visible'`
+	getNPMVersionByTarballQuery = `
+		SELECT repository_id::text,package_name,version,digest,integrity,shasum,
+		       tarball_name,upstream_tarball,object_key,size,manifest,publisher,state,cached_at,deleted_at,collected_at,created_at,deprecated,collecting_at
+		FROM native_npm_versions
+		WHERE repository_id=$1::uuid AND package_name=$2 AND tarball_name=$3 AND state='visible'`
+)
+
+func (s *PostgresStore) ListNPMVersions(ctx context.Context, repositoryID, name string) ([]NPMVersion, error) {
+	rows, err := s.db.QueryContext(ctx, listNPMVersionsQuery, repositoryID, name)
 	if err != nil {
 		return nil, err
 	}
@@ -497,11 +514,7 @@ func (s *PostgresStore) ListNPMVersions(ctx context.Context, repositoryID, name 
 
 func (s *PostgresStore) GetNPMVersion(ctx context.Context, repositoryID, name, version string) (NPMVersion, error) {
 	var item NPMVersion
-	err := scanNPMVersion(s.db.QueryRowContext(ctx, `
-		SELECT repository_id::text,package_name,version,digest,integrity,shasum,
-		       tarball_name,upstream_tarball,object_key,size,manifest,publisher,state,cached_at,deleted_at,collected_at,created_at,deprecated,collecting_at
-		FROM native_npm_versions
-		WHERE repository_id=$1::uuid AND package_name=$2 AND version=$3 AND state='visible'`, repositoryID, name, version), &item)
+	err := scanNPMVersion(s.db.QueryRowContext(ctx, getNPMVersionQuery, repositoryID, name, version), &item)
 	if errors.Is(err, sql.ErrNoRows) {
 		return NPMVersion{}, ErrNotFound
 	}
@@ -669,11 +682,7 @@ func (s *PostgresStore) MarkNPMObjectCollected(ctx context.Context, objectKey st
 
 func (s *PostgresStore) GetNPMVersionByTarball(ctx context.Context, repositoryID, name, tarballName string) (NPMVersion, error) {
 	var version NPMVersion
-	err := scanNPMVersion(s.db.QueryRowContext(ctx, `
-		SELECT repository_id::text,package_name,version,digest,integrity,shasum,
-		       tarball_name,upstream_tarball,object_key,size,manifest,publisher,state,cached_at,deleted_at,collected_at,created_at,deprecated,collecting_at
-		FROM native_npm_versions
-		WHERE repository_id=$1::uuid AND package_name=$2 AND tarball_name=$3 AND state='visible'`, repositoryID, name, tarballName), &version)
+	err := scanNPMVersion(s.db.QueryRowContext(ctx, getNPMVersionByTarballQuery, repositoryID, name, tarballName), &version)
 	if errors.Is(err, sql.ErrNoRows) {
 		return NPMVersion{}, ErrNotFound
 	}

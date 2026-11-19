@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type fakeCopier struct {
@@ -58,7 +59,7 @@ func TestScaled(t *testing.T) {
 		t.Fatal("Scaled(1) changed the profile")
 	}
 	got := p.Scaled(100)
-	if got.Versions != 1000 || got.AuditRows != 10_000 || got.Repositories < 1 || got.Repositories > p.Repositories {
+	if got.Versions != 1000 || got.AuditRows != 10_000 || got.Repositories != 1 {
 		t.Fatalf("Scaled(100) = %+v", got)
 	}
 }
@@ -104,8 +105,15 @@ func TestSeedWritesConsistentRows(t *testing.T) {
 			t.Fatalf("size %d violates the cached-object check", size)
 		}
 	}
-	if again, err := Seed(context.Background(), &fakeCopier{}, p, 3, time.Unix(1_700_000_000, 0)); err != nil || again != counts {
-		t.Fatalf("seed is not deterministic: %+v vs %+v (%v)", again, counts, err)
+	again := &fakeCopier{}
+	if second, err := Seed(context.Background(), again, p, 3, time.Unix(1_700_000_000, 0)); err != nil || second != counts {
+		t.Fatalf("seed is not deterministic: %+v vs %+v (%v)", second, counts, err)
+	}
+	for i, row := range copier.rows["hosted_repositories"] {
+		first, second := row[0].(pgtype.UUID), again.rows["hosted_repositories"][i][0].(pgtype.UUID)
+		if first != second || !first.Valid || first.Bytes[6]>>4 != 7 || first.Bytes[8]>>6 != 2 {
+			t.Fatalf("repository id %d is not a deterministic UUIDv7: %x vs %x", i, first.Bytes, second.Bytes)
+		}
 	}
 }
 
