@@ -75,14 +75,16 @@ func has(conditions []Condition, claim string) bool { return len(find(conditions
 func checkMandatory(kind Kind, conditions []Condition, options ValidateOptions) error {
 	switch kind {
 	case KindGitHubActions:
-		if !exactID(conditions, "repository_id") && !(exactID(conditions, "repository_owner_id") && exactID(conditions, "repository")) {
+		identified := exactID(conditions, "repository_id") || (exactID(conditions, "repository_owner_id") && exactID(conditions, "repository"))
+		if !identified {
 			return invalidf("github_actions policies need an eq or in condition on repository_id, or on repository_owner_id together with an exact repository")
 		}
 		if !options.AllowAnyRef && !has(conditions, "ref") && !has(conditions, "environment") && !has(conditions, "job_workflow_ref") {
 			return invalidf("github_actions policies need a ref, environment or job_workflow_ref condition, or allow_any_ref")
 		}
 	case KindGitLabCI:
-		if !exactID(conditions, "project_id") && !(exactID(conditions, "namespace_id") && exactID(conditions, "project_path")) {
+		identified := exactID(conditions, "project_id") || (exactID(conditions, "namespace_id") && exactID(conditions, "project_path"))
+		if !identified {
 			return invalidf("gitlab_ci policies need an eq or in condition on project_id, or on namespace_id together with an exact project_path")
 		}
 		protected := slices.ContainsFunc(find(conditions, "ref_protected"), func(c Condition) bool {

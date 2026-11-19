@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"slices"
 	"strings"
@@ -261,7 +262,7 @@ func numericDate(raw any) (time.Time, bool) {
 		return time.Unix(seconds, 0), true
 	}
 	value, err := number.Float64()
-	if err != nil || value != value || value > 1<<40 || value < -(1<<40) {
+	if err != nil || math.IsNaN(value) || value > 1<<40 || value < -(1<<40) {
 		return time.Time{}, false
 	}
 	whole := int64(value)
