@@ -1,6 +1,4 @@
-# Module download seed. Empty by default; CI passes the restored download cache
-# with --build-context gomod-seed=DIR so a warm run never asks the proxy
-# (docs/ci.md). go.sum still pins every module and go mod verify checks it.
+# Module download seed (see Dockerfile); empty unless a build context replaces it.
 FROM scratch AS gomod-seed
 
 FROM golang:1.27.4-alpine@sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280 AS build

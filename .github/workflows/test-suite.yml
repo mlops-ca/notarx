@@ -104,16 +104,24 @@ jobs:
       # follows go.sum; a miss restores the newest older seed by prefix and only
       # the changed modules are fetched. go.sum and go mod verify still decide
       # which bytes are accepted (docs/ci.md).
+      # The month in the key starts a fresh seed each month, so modules the project
+      # dropped or upgraded cannot pile up through the prefix fallback.
+      - name: Locate the module download cache
+        id: gomod-dir
+        run: |
+          echo "dir=$(go env GOMODCACHE)/cache/download" >> "$GITHUB_OUTPUT"
+          echo "month=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
       - name: Restore the Go module download cache
         id: gomod-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/go/pkg/mod/cache/download
-          key: go-image-seed-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.sum') }}
-          restore-keys: go-image-seed-${{ runner.os }}-${{ runner.arch }}-
+          path: ${{ steps.gomod-dir.outputs.dir }}
+          key: go-image-seed-${{ runner.os }}-${{ runner.arch }}-${{ steps.gomod-dir.outputs.month }}-${{ hashFiles('go.mod', 'go.sum') }}
+          restore-keys: go-image-seed-${{ runner.os }}-${{ runner.arch }}-${{ steps.gomod-dir.outputs.month }}-
       - name: Fill and verify the module seed
         env:
           CACHE_HIT: ${{ steps.gomod-cache.outputs.cache-hit }}
+          GOMOD_DIR: ${{ steps.gomod-dir.outputs.dir }}
         run: |
           if [[ "$CACHE_HIT" == true ]]; then
             # An exact hit must hold every module: with the proxy switched off
@@ -124,7 +132,7 @@ jobs:
             go mod download
           fi
           go mod verify
-          echo "GOMOD_SEED=$(go env GOMODCACHE)/cache/download" >> "$GITHUB_ENV"
+          echo "GOMOD_SEED=$GOMOD_DIR" >> "$GITHUB_ENV"
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Build the image and export it as a tarball
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
