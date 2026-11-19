@@ -58,6 +58,15 @@ func (h artifactScanEnqueueHandler) serve(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if replayed {
+		// A replay changes nothing, so the store wrote no audit; the request is still audited, and
+		// a failure here is accurate because no change took effect.
+		if h.audit != nil && !recordMutationAudit(w, h.audit, r.Context(), auditRecordsWhen(true, repository.AuditRecord{
+			Repository: repo.Name, GroupName: repo.Name, Actor: principal.Actor,
+			Resource: request.Coordinate + "@" + request.Digest, Operation: "artifact.scan.enqueue",
+			Status: http.StatusAccepted,
+		})[0]) {
+			return
+		}
 		w.Header().Set("Idempotent-Replayed", "true")
 	}
 	writeNativeMavenJSON(w, http.StatusAccepted, lifecycleJobResponse(job))

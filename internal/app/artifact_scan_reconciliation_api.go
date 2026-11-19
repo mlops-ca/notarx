@@ -63,7 +63,7 @@ func (h generatedRepositoryAPIAdapter) ReconcileRepositoryArtifactScans(w http.R
 		}
 		for _, candidate := range candidates {
 			// Every job it creates or requeues carries its own audit record, written in the
-			// transaction of that change; a reconciliation that changes nothing writes none.
+			// transaction of that change; a reconciliation that changes nothing is audited once below.
 			audit := auditRecordsWhen(h.audit != nil, repository.AuditRecord{
 				Repository: repo.Name, GroupName: repo.Name, Actor: principal.Actor,
 				Resource: candidate.Coordinate, Representation: candidate.Digest, Operation: "artifact.scan.reconcile", Status: http.StatusOK,
@@ -113,6 +113,16 @@ func (h generatedRepositoryAPIAdapter) ReconcileRepositoryArtifactScans(w http.R
 			}
 			if err != nil {
 				writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "reconcile artifact scan queue failed")
+				return
+			}
+		}
+		if result.Enqueued+result.Retried == 0 && h.audit != nil {
+			// Nothing changed, so no store call carried an audit; the reconcile is still audited, and
+			// a failure here is accurate because no change took effect.
+			if !recordMutationAudit(w, h.audit, r.Context(), auditRecordsWhen(true, repository.AuditRecord{
+				Repository: repo.Name, GroupName: repo.Name, Actor: principal.Actor,
+				Resource: repo.Name, Operation: "artifact.scan.reconcile", Status: http.StatusOK,
+			})[0]) {
 				return
 			}
 		}

@@ -273,10 +273,12 @@ func (s *PostgresStore) controlLifecycleJob(ctx context.Context, repositoryID, i
 		if !errors.Is(err, sql.ErrNoRows) {
 			return LifecycleJob{}, err
 		}
-		if _, getErr := s.GetLifecycleJob(ctx, repositoryID, id); errors.Is(getErr, ErrNotFound) {
+		var exists bool
+		if queryErr := q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM lifecycle_jobs WHERE repository_id=$1::uuid AND id=$2::uuid)`, repositoryID, id).Scan(&exists); queryErr != nil {
+			return LifecycleJob{}, queryErr
+		}
+		if !exists {
 			return LifecycleJob{}, ErrNotFound
-		} else if getErr != nil {
-			return LifecycleJob{}, getErr
 		}
 		return LifecycleJob{}, ErrVersionConflict
 	})

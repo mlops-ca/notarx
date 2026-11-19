@@ -292,32 +292,27 @@ func (s *MemoryStore) TombstonePyPIVersion(ctx context.Context, repositoryID, pr
 	defer releaseDistribution()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	visible := false
-	for _, file := range s.pypiFiles {
+	keys := make([]string, 0, 2)
+	for key, file := range s.pypiFiles {
 		if file.RepositoryID == repositoryID && file.Project == project && file.Version == version && file.State == "visible" {
-			visible = true
-			break
+			keys = append(keys, key)
 		}
 	}
-	if !visible {
+	if len(keys) == 0 {
 		return nil, ErrNotFound
 	}
 	if err := s.commitAuditLocked(ctx, audit); err != nil {
 		return nil, err
 	}
 	now := time.Now().UTC()
-	files := make([]PyPIFile, 0)
-	for key, file := range s.pypiFiles {
-		if file.RepositoryID == repositoryID && file.Project == project && file.Version == version && file.State == "visible" {
-			file.State = "deleted"
-			file.DeletedAt = now
-			file.YankRevision++
-			s.pypiFiles[key] = file
-			files = append(files, file)
-		}
-	}
-	if len(files) == 0 {
-		return nil, ErrNotFound
+	files := make([]PyPIFile, 0, len(keys))
+	for _, key := range keys {
+		file := s.pypiFiles[key]
+		file.State = "deleted"
+		file.DeletedAt = now
+		file.YankRevision++
+		s.pypiFiles[key] = file
+		files = append(files, file)
 	}
 	coordinate := project + "@" + version
 	s.artifactTombstones[repositoryID+"\x00"+string(FormatPyPI)+"\x00"+coordinate] = ArtifactTombstone{RepositoryID: repositoryID, Format: FormatPyPI, Coordinate: coordinate, TombstonedAt: now}

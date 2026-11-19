@@ -17,6 +17,9 @@ type mutationAuditRecorder interface {
 // fails the request with 500 audit_failed when it cannot be written (ADR 0023 section 1).
 // It reports whether the handler may continue.
 //
+// It is also how a request that changed nothing (an idempotent replay, a reconcile with no
+// work) is audited, since there is no change for the audit to be atomic with.
+//
 // This is the legacy form: the change has already taken effect when the audit fails. New
 // and migrated handlers pass the repository.AuditRecord to the store method that makes the
 // change (a trailing optional argument; PostgreSQL writes it with insertAudit in the same

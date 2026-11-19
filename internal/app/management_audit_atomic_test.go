@@ -273,6 +273,23 @@ func runManagementAuditRollback(t *testing.T, store GatewayStore, failAudits fun
 	if response := call(http.MethodPost, repoPath+"/tombstones", `{"coordinate":"`+tombstoned.Path+`"}`, nil); response.Code != http.StatusNoContent {
 		t.Fatalf("tombstone after the fault cleared=%d %s", response.Code, response.Body.String())
 	}
+	// A replay of an idempotency key changes nothing, so the store writes no audit for it and the
+	// handler audits the request itself: both requests are audited.
+	scanBody := `{"coordinate":"` + enqueued.Path + `","digest":"` + enqueued.Digest + `"}`
+	for range 2 {
+		if response := call(http.MethodPost, repoPath+"/artifact-scans", scanBody, map[string]string{"Idempotency-Key": "replay-" + suffix}); response.Code != http.StatusAccepted {
+			t.Fatalf("scan enqueue after the fault cleared=%d %s", response.Code, response.Body.String())
+		}
+	}
+	enqueueAudits := 0
+	for _, record := range audits() {
+		if record.Actor == "alice" && record.Repository == repo.Name && record.Operation == "artifact.scan.enqueue" {
+			enqueueAudits++
+		}
+	}
+	if enqueueAudits != 2 {
+		t.Fatalf("enqueue and its replay must both be audited, got %d", enqueueAudits)
+	}
 	operations := map[string]bool{}
 	for _, record := range audits() {
 		if record.Actor == "alice" && record.Repository == repo.Name {
