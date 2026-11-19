@@ -13,6 +13,9 @@
 set -euo pipefail
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# Temp files of apply, removed on every exit (a failing render included).
+section_file='' out_file=''
+trap 'rm -f "$section_file" "$out_file"' EXIT
 
 fail() {
   printf 'changelog-section: %s\n' "$1" >&2
@@ -63,18 +66,16 @@ apply() {
     return 0
   fi
   local next
-  section=$(mktemp)
-  out=$(mktemp)
-  # Removed on every exit, including a failing render.
-  trap 'rm -f "$section" "$out"' EXIT
-  render >"$section"
+  section_file=$(mktemp)
+  out_file=$(mktemp)
+  render >"$section_file"
   next=$(grep -n -m 1 '^## ' "$file" | cut -d: -f1 || true)
   if [[ -n "$next" ]]; then
-    { head -n $((next - 1)) "$file"; cat "$section"; tail -n +"$next" "$file"; } >"$out"
+    { head -n $((next - 1)) "$file"; cat "$section_file"; tail -n +"$next" "$file"; } >"$out_file"
   else
-    { cat "$file"; printf '\n'; cat "$section"; } >"$out"
+    { cat "$file"; printf '\n'; cat "$section_file"; } >"$out_file"
   fi
-  cat "$out" >"$file"
+  cat "$out_file" >"$file"
 }
 
 case $command in
