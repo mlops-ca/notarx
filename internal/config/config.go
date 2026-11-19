@@ -17,6 +17,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/authorization"
 	"github.com/mlops-ca/notarx/internal/database"
 	"github.com/mlops-ca/notarx/internal/emailnotification"
+	"github.com/mlops-ca/notarx/internal/jose"
 	"github.com/mlops-ca/notarx/internal/localcapacity"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -112,6 +113,9 @@ type Config struct {
 	APTSignerTLSRootCertificates    []byte
 	RuntimeNodeRetention            time.Duration
 	RuntimeNodePruneInterval        time.Duration
+	// Workload is the JWT verification policy of workload identity federation
+	// (NOTARX_WORKLOAD_*, ADR 0019).
+	Workload WorkloadConfig
 	// QuotaReconcileInterval is how often the quota reconciler recomputes every
 	// repository's usage counter (NOTARX_QUOTA_RECONCILE_INTERVAL, ADR 0023 section 3).
 	QuotaReconcileInterval time.Duration
@@ -226,54 +230,58 @@ func Load() (Config, error) {
 		APTSignerTLSCAFile:              strings.TrimSpace(os.Getenv("NOTARX_APT_SIGNER_TLS_CA_FILE")),
 		RuntimeNodeRetention:            7 * 24 * time.Hour,
 		RuntimeNodePruneInterval:        time.Hour,
-		QuotaReconcileInterval:          6 * time.Hour,
-		PartitionAhead:                  3,
-		Retention:                       retention.DefaultConfig(),
-		AuditBufferSize:                 65536,
-		AuditBatchSize:                  1000,
-		AuditFlushInterval:              time.Second,
-		AuditSyncMaxInflight:            64,
-		AuditDenialMode:                 "queue",
-		AuditReadMode:                   "async",
-		UsageFlushInterval:              5 * time.Second,
-		ShutdownFlushTimeout:            10 * time.Second,
-		DatabaseURL:                     os.Getenv("NOTARX_DATABASE_URL"),
-		DatabasePool:                    database.DefaultPoolConfig(),
-		DatabaseCoordinatorPool:         database.DefaultCoordinatorPoolConfig(),
-		DatabaseArtifactLockPool:        database.DefaultArtifactLockPoolConfig(),
-		OCIProxyAllowedHosts:            splitCSV(os.Getenv("NOTARX_OCI_PROXY_ALLOWED_HOSTS")),
-		MavenProxyAllowedHosts:          splitCSV(os.Getenv("NOTARX_MAVEN_PROXY_ALLOWED_HOSTS")),
-		RawProxyAllowedHosts:            splitCSV(os.Getenv("NOTARX_RAW_PROXY_ALLOWED_HOSTS")),
-		RawCacheMaxObjectBytes:          1 << 30,
-		RawCacheMaxConcurrentSpools:     4,
-		ConanCacheMaxObjectBytes:        1 << 30,
-		OCICacheTTL:                     15 * time.Minute,
-		MavenCacheTTL:                   24 * time.Hour,
-		MavenMetadataCacheTTL:           15 * time.Minute,
-		MavenNegativeCacheTTL:           10 * time.Minute,
-		NPMMetadataCacheTTL:             15 * time.Minute,
-		NPMNegativeCacheTTL:             10 * time.Minute,
-		NPMProxyBreakerTTL:              30 * time.Second,
-		RawCacheTTL:                     15 * time.Minute,
-		ConanCacheTTL:                   15 * time.Minute,
-		AdminToken:                      os.Getenv("NOTARX_ADMIN_TOKEN"),
-		ResolverToken:                   os.Getenv("NOTARX_RESOLVER_TOKEN"),
-		ConanTokenSecret:                os.Getenv("NOTARX_CONAN_TOKEN_SECRET"),
-		AdminActor:                      value("NOTARX_ADMIN_ACTOR", "gateway-admin"),
-		ResolverActor:                   value("NOTARX_RESOLVER_ACTOR", "gateway-resolver"),
-		LocalAuthMaxFailedAttempts:      5,
-		LocalAuthLockoutDuration:        15 * time.Minute,
-		RepositoryReaders:               repositoryReaders(os.Getenv("NOTARX_REPOSITORY_READERS")),
-		LegacyReadPermissive:            legacyReadPermissive(os.Getenv("NOTARX_LEGACY_READ_DEFAULT")),
-		RepositoryCacheQuotas:           repositoryCacheQuotas(os.Getenv("NOTARX_REPOSITORY_CACHE_QUOTAS")),
-		OIDCIssuer:                      strings.TrimRight(strings.TrimSpace(os.Getenv("NOTARX_OIDC_ISSUER")), "/"),
-		OIDCAudience:                    strings.TrimSpace(os.Getenv("NOTARX_OIDC_AUDIENCE")),
-		OIDCJWKSURL:                     strings.TrimSpace(os.Getenv("NOTARX_OIDC_JWKS_URL")),
-		OIDCClientID:                    strings.TrimSpace(os.Getenv("NOTARX_OIDC_CLIENT_ID")),
-		OIDCClientSecret:                strings.TrimSpace(os.Getenv("NOTARX_OIDC_CLIENT_SECRET")),
-		OIDCRedirectURL:                 strings.TrimSpace(os.Getenv("NOTARX_OIDC_REDIRECT_URL")),
-		OIDCScopes:                      oidcScopes(os.Getenv("NOTARX_OIDC_SCOPES")),
-		OIDCAdminSubjects:               splitCSV(os.Getenv("NOTARX_OIDC_ADMIN_SUBJECTS")),
+		Workload: WorkloadConfig{
+			ClockSkew: jose.DefaultClockSkew, MaxTokenAge: jose.DefaultMaxTokenAge,
+			JWKSTTL: jose.DefaultJWKSTTL, JWKSStaleMax: jose.DefaultJWKSStaleMax,
+		},
+		QuotaReconcileInterval:      6 * time.Hour,
+		PartitionAhead:              3,
+		Retention:                   retention.DefaultConfig(),
+		AuditBufferSize:             65536,
+		AuditBatchSize:              1000,
+		AuditFlushInterval:          time.Second,
+		AuditSyncMaxInflight:        64,
+		AuditDenialMode:             "queue",
+		AuditReadMode:               "async",
+		UsageFlushInterval:          5 * time.Second,
+		ShutdownFlushTimeout:        10 * time.Second,
+		DatabaseURL:                 os.Getenv("NOTARX_DATABASE_URL"),
+		DatabasePool:                database.DefaultPoolConfig(),
+		DatabaseCoordinatorPool:     database.DefaultCoordinatorPoolConfig(),
+		DatabaseArtifactLockPool:    database.DefaultArtifactLockPoolConfig(),
+		OCIProxyAllowedHosts:        splitCSV(os.Getenv("NOTARX_OCI_PROXY_ALLOWED_HOSTS")),
+		MavenProxyAllowedHosts:      splitCSV(os.Getenv("NOTARX_MAVEN_PROXY_ALLOWED_HOSTS")),
+		RawProxyAllowedHosts:        splitCSV(os.Getenv("NOTARX_RAW_PROXY_ALLOWED_HOSTS")),
+		RawCacheMaxObjectBytes:      1 << 30,
+		RawCacheMaxConcurrentSpools: 4,
+		ConanCacheMaxObjectBytes:    1 << 30,
+		OCICacheTTL:                 15 * time.Minute,
+		MavenCacheTTL:               24 * time.Hour,
+		MavenMetadataCacheTTL:       15 * time.Minute,
+		MavenNegativeCacheTTL:       10 * time.Minute,
+		NPMMetadataCacheTTL:         15 * time.Minute,
+		NPMNegativeCacheTTL:         10 * time.Minute,
+		NPMProxyBreakerTTL:          30 * time.Second,
+		RawCacheTTL:                 15 * time.Minute,
+		ConanCacheTTL:               15 * time.Minute,
+		AdminToken:                  os.Getenv("NOTARX_ADMIN_TOKEN"),
+		ResolverToken:               os.Getenv("NOTARX_RESOLVER_TOKEN"),
+		ConanTokenSecret:            os.Getenv("NOTARX_CONAN_TOKEN_SECRET"),
+		AdminActor:                  value("NOTARX_ADMIN_ACTOR", "gateway-admin"),
+		ResolverActor:               value("NOTARX_RESOLVER_ACTOR", "gateway-resolver"),
+		LocalAuthMaxFailedAttempts:  5,
+		LocalAuthLockoutDuration:    15 * time.Minute,
+		RepositoryReaders:           repositoryReaders(os.Getenv("NOTARX_REPOSITORY_READERS")),
+		LegacyReadPermissive:        legacyReadPermissive(os.Getenv("NOTARX_LEGACY_READ_DEFAULT")),
+		RepositoryCacheQuotas:       repositoryCacheQuotas(os.Getenv("NOTARX_REPOSITORY_CACHE_QUOTAS")),
+		OIDCIssuer:                  strings.TrimRight(strings.TrimSpace(os.Getenv("NOTARX_OIDC_ISSUER")), "/"),
+		OIDCAudience:                strings.TrimSpace(os.Getenv("NOTARX_OIDC_AUDIENCE")),
+		OIDCJWKSURL:                 strings.TrimSpace(os.Getenv("NOTARX_OIDC_JWKS_URL")),
+		OIDCClientID:                strings.TrimSpace(os.Getenv("NOTARX_OIDC_CLIENT_ID")),
+		OIDCClientSecret:            strings.TrimSpace(os.Getenv("NOTARX_OIDC_CLIENT_SECRET")),
+		OIDCRedirectURL:             strings.TrimSpace(os.Getenv("NOTARX_OIDC_REDIRECT_URL")),
+		OIDCScopes:                  oidcScopes(os.Getenv("NOTARX_OIDC_SCOPES")),
+		OIDCAdminSubjects:           splitCSV(os.Getenv("NOTARX_OIDC_ADMIN_SUBJECTS")),
 		OIDCRoles: authorization.OIDCRoleMapping{
 			Member: splitCSV(os.Getenv("NOTARX_OIDC_MEMBER_ROLES")),
 			Admin:  splitCSV(os.Getenv("NOTARX_OIDC_ADMIN_ROLES")),
@@ -543,6 +551,11 @@ func Load() (Config, error) {
 		return Config{}, err
 	} else {
 		cfg.RuntimeNodeRetention = ttl
+	}
+	if workload, err := workloadConfigFromEnv(cfg.Workload); err != nil {
+		return Config{}, err
+	} else {
+		cfg.Workload = workload
 	}
 	if interval, err := durationEnv("NOTARX_RUNTIME_NODE_PRUNE_INTERVAL", cfg.RuntimeNodePruneInterval); err != nil {
 		return Config{}, err

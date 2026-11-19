@@ -185,7 +185,7 @@ func TestOIDCAuthenticatorDiscoversJWKS(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/.well-known/openid-configuration":
-			_ = json.NewEncoder(w).Encode(map[string]string{"jwks_uri": serverURL(r) + "/keys"})
+			_ = json.NewEncoder(w).Encode(map[string]string{"issuer": serverURL(r), "jwks_uri": serverURL(r) + "/keys"})
 		case "/keys":
 			_, _ = w.Write(jwks)
 		default:
@@ -193,8 +193,9 @@ func TestOIDCAuthenticatorDiscoversJWKS(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	// The request host is the test server, so discovery can derive its JWKS URI
-	// without closing over the server before it has been assigned.
+	// The request host is the test server, so discovery can derive its issuer and
+	// JWKS URI without closing over the server before it has been assigned. The
+	// discovery document must name the configured issuer (OIDC Discovery 4.3).
 	issuer := server.URL
 	token := signedOIDCToken(t, privateKey, keyID, issuer, "notarx", "ci-user", time.Now().Add(time.Minute))
 	authenticator := Authenticator{OIDC: NewOIDCValidator(OIDCConfig{Issuer: issuer, Audience: "notarx"})}

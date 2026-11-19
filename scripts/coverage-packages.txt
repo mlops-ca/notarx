@@ -10,3 +10,4 @@
 ./internal/replication 70.0
 ./internal/tools/baselinefmt 90.0
 ./internal/scanning 82.0
+./internal/jose 90.0
