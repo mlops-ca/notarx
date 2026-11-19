@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"reflect"
 	"testing"
 	"time"
 
@@ -113,6 +114,27 @@ func testScanStoreContract(t *testing.T, store ScanStore) {
 		}
 		if seen != total {
 			t.Fatalf("paged %d findings, want %d", seen, total)
+		}
+	})
+
+	t.Run("a vulnerability re-scan does not rewrite the sbom", func(t *testing.T) {
+		artifact := "sha256:" + ids.New()
+		before, err := store.PutScanSBOM(ctx, ScanSBOM{RepositoryID: repo, ArtifactDigest: artifact, Kind: ScanSBOMKindCycloneDX, Source: ScanSBOMSourceGenerated,
+			Generator: "trivy", BodyDigest: "sha256:aa", BodySize: 2, Body: []byte(`{}`), ComponentCount: 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := range 2 {
+			id := ids.New()
+			insertScanFindings(t, store, id, 3)
+			if _, err := store.SwapScanResult(ctx, ScanResult{ID: id, RepositoryID: repo, ArtifactDigest: artifact, Scanner: "trivy", Status: ScanStatusVulnerable,
+				High: 3, FindingsTotal: 3, ScannedAt: now.Add(time.Duration(i+1) * time.Minute)}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		after, err := store.GetScanSBOM(ctx, repo, artifact, ScanSBOMKindCycloneDX, ScanSBOMSourceGenerated)
+		if err != nil || !reflect.DeepEqual(after, before) {
+			t.Fatalf("sbom changed by re-scan: before=%+v after=%+v err=%v", before, after, err)
 		}
 	})
 
