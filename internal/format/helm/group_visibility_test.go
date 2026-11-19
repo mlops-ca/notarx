@@ -59,3 +59,35 @@ func TestHelmPreviewGroupsObeyTheGroupVisibilityMode(t *testing.T) {
 		})
 	}
 }
+
+// Lowering a preview repository below a group that contains it is refused in strict mode.
+func TestHelmPreviewRepositoryLoweringObeysTheGroupVisibilityMode(t *testing.T) {
+	for _, tc := range []struct {
+		mode   access.GroupMode
+		status int
+	}{{access.GroupStrict, 409}, {access.GroupLenient, 200}} {
+		t.Run(fmt.Sprintf("mode=%q", tc.mode), func(t *testing.T) {
+			feed := newHelmFeed(t, chartFixture(t, "owned", "1.0.0", "owned"), nil)
+			s := repository.NewMemoryStore()
+			o := moduleOptions(s, objectstore.NewMemoryStore())
+			o.Sources, o.Configuration, o.Groups, o.GroupMode = s, s, s, tc.mode
+			o.Upstream = helmSourceClient{feed.server.Client()}
+			m, err := New(o)
+			if err != nil {
+				t.Fatal(err)
+			}
+			hosted, err := s.CreateHostedRepository(t.Context(), repository.HostedRepository{ID: uuid.NewString(), Name: "public-hosted", Format: repository.FormatHelm, Type: repository.RepositoryTypeHosted, Visibility: repository.VisibilityPublic})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := s.CreateHostedGroupIdempotently(t.Context(), repository.HostedGroup{ID: uuid.NewString(), Name: "feed", Format: repository.FormatHelm, Visibility: repository.VisibilityPublic, Members: []repository.GroupMember{{RepositoryID: hosted.ID}}}, "test", uuid.NewString(), "p"); err != nil {
+				t.Fatal(err)
+			}
+			body, _ := json.Marshal(map[string]any{"name": "public-hosted", "visibility": "private", "version": hosted.Version})
+			w := request(t, m.Preview(), "PUT", "/api/v2/previews/helm/repositories/"+hosted.ID, body, map[string]string{"Authorization": "Bearer helm-owned-admin"})
+			if w.Code != tc.status {
+				t.Fatalf("lowering = %d %s, want %d", w.Code, w.Body.String(), tc.status)
+			}
+		})
+	}
+}

@@ -117,10 +117,16 @@ func (h repositoryManagementHandler) readGroup(w http.ResponseWriter, r *http.Re
 }
 
 // withLessVisibleMembers fills LessVisibleMembers on the groups, the read-only
-// indicator of ADR 0029 lenient mode. It looks each member repository up once per
-// call. A member that cannot be read is skipped: the indicator is advisory and the
-// read itself must not fail because of it.
+// indicator of ADR 0029 lenient mode; strict mode refuses such groups on write, so
+// it skips the member lookups there. It looks each member repository up once per
+// call. The names it carries need no filtering: a caller outside the platform tier
+// reads a group only when it administers every member (readGroup, ListGroups). A
+// member that cannot be read is skipped: the indicator is advisory and the read
+// itself must not fail because of it.
 func (h repositoryManagementHandler) withLessVisibleMembers(r *http.Request, groups ...repository.HostedGroup) []repository.HostedGroup {
+	if h.groupMode.Enforced() {
+		return groups
+	}
 	repos := map[string]repository.HostedRepository{}
 	for index, group := range groups {
 		for _, member := range group.Members {
@@ -263,7 +269,7 @@ func (h repositoryManagementHandler) CreateGroup(w http.ResponseWriter, r *http.
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "create group failed")
 		return
 	}
-	writeNativeMavenJSON(w, http.StatusCreated, created)
+	writeNativeMavenJSON(w, http.StatusCreated, h.withLessVisibleMembers(r, created)[0])
 }
 
 func (h repositoryManagementHandler) GetGroup(w http.ResponseWriter, r *http.Request, id adminopenapi.GroupId) {
@@ -414,7 +420,7 @@ func (h repositoryManagementHandler) writeGroupMutation(w http.ResponseWriter, r
 		writeHostedProblem(w, 500, "internal_error", "update group failed")
 		return
 	}
-	writeNativeMavenJSON(w, 200, group)
+	writeNativeMavenJSON(w, 200, h.withLessVisibleMembers(r, group)[0])
 }
 
 func (h repositoryManagementHandler) validHostedGroup(r *http.Request, group repository.HostedGroup) bool {

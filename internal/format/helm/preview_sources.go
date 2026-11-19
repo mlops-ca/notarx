@@ -162,7 +162,7 @@ func (m *Module) replacePreviewRepository(w http.ResponseWriter, r *http.Request
 		m.problem(w, 400, "invalid_source_configuration")
 		return
 	}
-	next, err = m.configuration.UpdateHostedRepository(r.Context(), next, input.Version,
+	next, err = m.configuration.UpdateHostedRepository(m.groupMode.WithCeiling(r.Context()), next, input.Version,
 		auditRecords(repository.AuditRecord{Actor: p.Actor, Repository: repo.Name, Format: "helm", Resource: repo.ID, Operation: "helm.preview.configure", Outcome: repository.AuditResolved, Status: 200, OccurredAt: time.Now().UTC(), Evidence: map[string]string{"version": repository.NextHostedVersion(input.Version)}})...)
 	if err != nil {
 		m.failure(w, err)

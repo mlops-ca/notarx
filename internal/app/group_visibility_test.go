@@ -233,7 +233,7 @@ func TestLenientGroupReadsNameTheLessVisibleMembers(t *testing.T) {
 	private := f.repo("private-repo", repository.VisibilityPrivate, false)
 	created := f.call(http.MethodPost, "/api/v2/groups", groupBody("feed", repository.VisibilityPublic, public, private), "")
 	var group repository.HostedGroup
-	if created.Code != http.StatusCreated || json.Unmarshal(created.Body.Bytes(), &group) != nil {
+	if created.Code != http.StatusCreated || json.Unmarshal(created.Body.Bytes(), &group) != nil || len(group.LessVisibleMembers) != 1 {
 		t.Fatalf("lenient create = %d %s", created.Code, created.Body.String())
 	}
 	read := f.call(http.MethodGet, "/api/v2/groups/"+group.ID, "", "")
@@ -256,5 +256,20 @@ func TestLenientGroupReadsNameTheLessVisibleMembers(t *testing.T) {
 	read = f.call(http.MethodGet, "/api/v2/groups/"+cleanGroup.ID, "", "")
 	if strings.Contains(read.Body.String(), "lessVisibleMembers") {
 		t.Fatalf("a clean group read = %s", read.Body.String())
+	}
+}
+
+// Strict mode refuses such groups on write, so reads skip the member lookups.
+func TestStrictGroupReadsSkipTheLessVisibleMembersIndicator(t *testing.T) {
+	f := newVisibilityFixture(t, access.GroupStrict)
+	public := f.repo("public-repo", repository.VisibilityPublic, false)
+	private := f.repo("private-repo", repository.VisibilityPrivate, false)
+	// A layout written before strict mode (no ceiling mark on the store write).
+	group, _, err := f.store.CreateHostedGroupIdempotently(context.Background(), repository.HostedGroup{ID: uuid.NewString(), Name: "legacy", Format: repository.FormatRaw, Visibility: repository.VisibilityPublic, Members: []repository.GroupMember{{RepositoryID: public.ID}, {RepositoryID: private.ID, Position: 1}}}, "test", uuid.NewString(), "p")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if read := f.call(http.MethodGet, "/api/v2/groups/"+group.ID, "", ""); read.Code != http.StatusOK || strings.Contains(read.Body.String(), "lessVisibleMembers") {
+		t.Fatalf("strict read = %d %s", read.Code, read.Body.String())
 	}
 }

@@ -220,7 +220,7 @@ func (s *MemoryStore) ListGroupsAboveVisibility(_ context.Context, repositoryID 
 	defer s.mu.RUnlock()
 	var groups []HostedGroup
 	for _, group := range s.hostedGroups {
-		if NormalizeVisibility(group.Visibility).Rank() > visibility.Rank() && groupContains(group, repositoryID) {
+		if NormalizeVisibility(group.Visibility).Rank() > NormalizeVisibility(visibility).Rank() && groupContains(group, repositoryID) {
 			group.Members = nil
 			groups = append(groups, group)
 		}

@@ -327,7 +327,7 @@ WHERE g.id IN (SELECT m.group_id FROM hosted_group_members m WHERE m.repository_
 ORDER BY g.id`
 
 func listGroupsAboveVisibility(ctx context.Context, q sqlRunner, repositoryID string, visibility Visibility) ([]HostedGroup, error) {
-	rows, err := q.QueryContext(ctx, groupsAboveVisibilityQuery, repositoryID, visibility.Rank())
+	rows, err := q.QueryContext(ctx, groupsAboveVisibilityQuery, repositoryID, NormalizeVisibility(visibility).Rank())
 	if err != nil {
 		return nil, err
 	}
@@ -344,10 +344,10 @@ func listGroupsAboveVisibility(ctx context.Context, q sqlRunner, repositoryID st
 }
 
 // checkGroupCeiling locks the member repositories against a concurrent visibility
-// change (FOR SHARE, in id order) and returns the members whose visibility is below
-// the group's. A repository update takes the row exclusively before it looks for
-// groups, so one of the two sees the other: a group raise and a member lowering
-// cannot both commit.
+// change (FOR SHARE, in id order) and refuses with the members whose visibility is
+// below the group's. Only the columns a refusal needs are read. A repository update
+// takes the row exclusively before it looks for groups, so one of the two sees the
+// other: a group raise and a member lowering cannot both commit.
 func checkGroupCeiling(ctx context.Context, q sqlRunner, visibility Visibility, members []GroupMember) error {
 	ceiling := NormalizeVisibility(visibility)
 	if ceiling.Rank() <= 0 || len(members) == 0 {
@@ -357,7 +357,7 @@ func checkGroupCeiling(ctx context.Context, q sqlRunner, visibility Visibility, 
 	for _, member := range members {
 		repositoryIDs = append(repositoryIDs, member.RepositoryID)
 	}
-	rows, err := q.QueryContext(ctx, `SELECT `+hostedRepositoryColumns+` FROM hosted_repositories WHERE id = ANY($1::text[]::uuid[]) ORDER BY id FOR SHARE`, repositoryIDs)
+	rows, err := q.QueryContext(ctx, `SELECT id::text, name, format, repo_type, visibility FROM hosted_repositories WHERE id = ANY($1::text[]::uuid[]) ORDER BY id FOR SHARE`, repositoryIDs)
 	if err != nil {
 		return err
 	}
@@ -365,7 +365,7 @@ func checkGroupCeiling(ctx context.Context, q sqlRunner, visibility Visibility, 
 	var conflicts []HostedRepository
 	for rows.Next() {
 		var repo HostedRepository
-		if err := scanHostedRepository(rows, &repo); err != nil {
+		if err := rows.Scan(&repo.ID, &repo.Name, &repo.Format, &repo.Type, &repo.Visibility); err != nil {
 			return err
 		}
 		if repo.Visibility.Rank() < ceiling.Rank() {

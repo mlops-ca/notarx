@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/access"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func previewGroupRequest(f fixture, method, path, body string) *httptest.ResponseRecorder {
@@ -52,6 +53,38 @@ func TestNuGetPreviewGroupsObeyTheGroupVisibilityMode(t *testing.T) {
 				if replace.Code != 409 || !strings.Contains(replace.Body.String(), "visibility_conflict") {
 					t.Fatalf("replace = %d %s", replace.Code, replace.Body.String())
 				}
+			}
+		})
+	}
+}
+
+// Lowering a preview repository below a group that contains it is refused in strict mode.
+func TestNuGetPreviewRepositoryLoweringObeysTheGroupVisibilityMode(t *testing.T) {
+	for _, tc := range []struct {
+		mode   access.GroupMode
+		status int
+	}{{access.GroupStrict, 409}, {access.GroupLenient, 200}} {
+		t.Run(fmt.Sprintf("mode=%q", tc.mode), func(t *testing.T) {
+			feed := newTestFeed(t, packageFixture(t, "Acme.Leaf", "1.0.0", ""))
+			f, _ := proxyFixture(t, feed)
+			module, err := New(Options{Store: f.store, Repositories: f.store, Objects: f.objects, Authenticator: f.module.auth, Authorizer: f.module.access, Audit: f.store, Anonymous: f.store, Capacities: f.store, Sources: f.store, Configuration: f.store, Groups: f.store, Upstream: testSourceClient{feed.server.Client()}, GroupMode: tc.mode})
+			if err != nil {
+				t.Fatal(err)
+			}
+			f.module = module
+			hosted, err := f.store.CreateHostedRepository(t.Context(), repository.HostedRepository{ID: uuid.NewString(), Name: "public-hosted", Format: repository.FormatNuGet, Type: repository.RepositoryTypeHosted, Visibility: repository.VisibilityPublic})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := f.store.CreateHostedGroupIdempotently(t.Context(), repository.HostedGroup{ID: uuid.NewString(), Name: "feed", Format: repository.FormatNuGet, Visibility: repository.VisibilityPublic, Members: []repository.GroupMember{{RepositoryID: hosted.ID}}}, "test", uuid.NewString(), "p"); err != nil {
+				t.Fatal(err)
+			}
+			r := httptest.NewRequest("PUT", "https://gateway.test/api/v2/previews/nuget/repositories/"+hosted.ID, strings.NewReader(fmt.Sprintf(`{"name":"public-hosted","visibility":"private","version":%q}`, hosted.Version)))
+			r.Header.Set("Authorization", "Bearer nuget-test-admin")
+			w := httptest.NewRecorder()
+			f.module.Preview().ServeHTTP(w, r)
+			if w.Code != tc.status {
+				t.Fatalf("lowering = %d %s, want %d", w.Code, w.Body.String(), tc.status)
 			}
 		})
 	}
