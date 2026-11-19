@@ -47,13 +47,19 @@ checked=0
 
 assets=()
 if [[ -n "$dir" ]]; then
-  while IFS= read -r path; do assets+=("$path"); done < <(find "$dir" -maxdepth 1 -type f | sort)
+  while IFS= read -r path; do
+    [[ "$(basename "$path")" != release-manifest.json ]] || continue
+    assets+=("$path")
+  done < <(find "$dir" -maxdepth 1 -type f | LC_ALL=C sort)
 fi
+# Every asset name first, so the report does not depend on which content check comes first.
 for path in ${assets[@]+"${assets[@]}"}; do
   name=$(basename "$path")
-  [[ "$name" != release-manifest.json ]] || continue
-  checked=$((checked + 1))
   if grep -q -i nightly <<<"$name"; then fail "asset name '$name' contains nightly"; fi
+done
+for path in ${assets[@]+"${assets[@]}"}; do
+  name=$(basename "$path")
+  checked=$((checked + 1))
   case $name in
     SHA256SUMS)
       if grep -q -i nightly "$path"; then fail 'SHA256SUMS contains nightly'; fi
