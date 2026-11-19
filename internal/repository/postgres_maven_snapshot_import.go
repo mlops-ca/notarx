@@ -68,11 +68,8 @@ func lockMavenCapacityTx(ctx context.Context, tx *sql.Tx, repositories ...string
 			continue
 		}
 		// The usage counter delta of a writer is the difference of two measurements, so
-		// writers of one repository run one at a time even when it has no quota row to lock.
+		// writers of one repository run one at a time under this advisory lock.
 		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "maven-capacity:"+repo); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `SELECT repository_id FROM repository_capacity_quotas WHERE repository_id=$1 FOR UPDATE`, repo); err != nil {
 			return err
 		}
 	}

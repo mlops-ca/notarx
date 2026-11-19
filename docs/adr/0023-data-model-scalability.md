@@ -355,6 +355,18 @@ format registry test fails when a hosted format has no counter coverage, so a ne
 format cannot land unbounded. Required test: for every hosted format, publish, replace, delete and re-publish through the store and
 assert `counter == SUM` from the reconciler query, so an uncovered writer fails CI.
 
+Pending reservations (slice 8 follow-up, #449): a writer that admits bytes before it
+commits reserves them in the counter at admission and releases them at the state
+transition that ends the reservation. APT publication sessions (open or uploading) and
+archive restores (preparing) work this way: the reconciler's aggregation counts their
+declared and reserved bytes, so `counter == SUM` holds at every step, and snapshot
+publication admits through the `Reserve` of its generated-object delta. A source test
+fails on any store query that locks the quota row `FOR UPDATE` or sums asset tables to
+reject with `ErrQuotaExceeded`. Exception: Helm and NuGet still sum their pending
+sessions under the quota row lock at reservation time (`helmQuota`, `nuGetQuota`), until
+#451 moves them to the same pattern; the exception is listed in the test and in
+`docs/distributed-deployment.md`.
+
 ### 4. Typed keys and identifiers
 
 - Bind uuid parameters as `uuid.UUID` (pgx) or `$n::uuid`, and scan uuid columns

@@ -592,25 +592,31 @@ type aptStaged struct {
 
 func aptPackage(t *testing.T, ctx context.Context, store *PostgresStore, repo HostedRepository, name string, size int64) (aptStaged, error) {
 	t.Helper()
-	digest := uniqueDigest()
-	objectKey := "native/apt/sha256/" + strings.TrimPrefix(digest, "sha256:")
-	objectName := name + "_1.0-1_amd64.deb"
-	session := APTPublicationSession{
-		ID: uuid.NewString(), RepositoryID: repo.ID, Suite: "stable", Component: "main", Publisher: "ci",
-		ObjectName: objectName, DeclaredDigest: digest, DeclaredSize: size,
-		State: APTPublicationSessionOpen, ExpiresAt: time.Now().Add(time.Hour),
-	}
-	if _, _, err := store.CreateAPTPublicationSessionIdempotently(ctx, session, "ci", "apt/"+repo.ID, "key-"+session.ID, "payload-"+session.ID); err != nil {
+	session, err := aptOpenSession(ctx, store, repo, name, size, time.Hour)
+	if err != nil {
 		return aptStaged{}, err
 	}
+	objectKey := "native/apt/sha256/" + strings.TrimPrefix(session.DeclaredDigest, "sha256:")
 	if err := store.BeginAPTPackageUpload(ctx, session.ID, objectKey); err != nil {
 		return aptStaged{}, err
 	}
 	revision, err := store.CompleteAPTPackageUpload(ctx, session.ID, APTPackageRevision{
 		ID: uuid.NewString(), RepositoryID: repo.ID, Package: name, Version: "1.0-1", Architecture: "amd64",
-		CanonicalIdentity: name + "@1.0-1#amd64", Digest: digest, ObjectKey: objectKey, Size: size, ObjectName: objectName, Publisher: "ci",
+		CanonicalIdentity: name + "@1.0-1#amd64", Digest: session.DeclaredDigest, ObjectKey: objectKey, Size: size, ObjectName: session.ObjectName, Publisher: "ci",
 	})
 	return aptStaged{Revision: revision, SessionID: session.ID}, err
+}
+
+// aptOpenSession admits one publication session of the declared size; admission reserves the
+// bytes in the usage counter until the session completes or expires.
+func aptOpenSession(ctx context.Context, store *PostgresStore, repo HostedRepository, name string, size int64, ttl time.Duration) (APTPublicationSession, error) {
+	session := APTPublicationSession{
+		ID: uuid.NewString(), RepositoryID: repo.ID, Suite: "stable", Component: "main", Publisher: "ci",
+		ObjectName: name + "_1.0-1_amd64.deb", DeclaredDigest: uniqueDigest(), DeclaredSize: size,
+		State: APTPublicationSessionOpen, ExpiresAt: time.Now().Add(ttl),
+	}
+	_, _, err := store.CreateAPTPublicationSessionIdempotently(ctx, session, "ci", "apt/"+repo.ID, "key-"+session.ID, "payload-"+session.ID)
+	return session, err
 }
 
 // aptPublishSnapshot publishes a visible snapshot of the suite holding the given
@@ -627,37 +633,45 @@ func aptPublishSnapshot(t *testing.T, ctx context.Context, store *PostgresStore,
 	if err != nil {
 		t.Fatal(err)
 	}
+	snapshot, assets, releaseBody := aptSnapshotFixture(snapshot, marker, revisions)
+	if _, err = store.PublishAPTRepositorySnapshotWithAudit(ctx, snapshot, assets, releaseBody, AuditRecord{Repository: repo.Name, Actor: "release-operator", Outcome: AuditResolved, Operation: "apt.repository_snapshot.publish", Status: 200}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// aptSnapshotFixture returns the visible snapshot, its assets and the Release body of a snapshot
+// of the given revisions: generated dists/ objects named by marker plus one pool object per revision.
+func aptSnapshotFixture(snapshot APTRepositorySnapshot, marker string, revisions []APTPackageRevision) (APTRepositorySnapshot, []APTSnapshotAsset, []byte) {
+	repoID, suite := snapshot.RepositoryID, snapshot.Suite
 	indexBody := []byte(marker + ":Packages")
 	indexSum := sha256.Sum256(indexBody)
 	indexDigest := "sha256:" + hex.EncodeToString(indexSum[:])
-	releaseBody := []byte(fmt.Sprintf("Suite: stable\nAcquire-By-Hash: yes\nSHA256:\n %s %16d main/binary-amd64/Packages\n", strings.TrimPrefix(indexDigest, "sha256:"), len(indexBody)))
+	releaseBody := []byte(fmt.Sprintf("Suite: %s\nAcquire-By-Hash: yes\nSHA256:\n %s %16d main/binary-amd64/Packages\n", suite, strings.TrimPrefix(indexDigest, "sha256:"), len(indexBody)))
 	bodies := map[string][]byte{
-		"dists/stable/Release": releaseBody, "dists/stable/InRelease": []byte(marker + ":InRelease"),
-		"dists/stable/Release.gpg": []byte(marker + ":Release.gpg"), "dists/stable/main/binary-amd64/Packages": indexBody,
-		"dists/stable/main/binary-amd64/by-hash/SHA256/" + strings.TrimPrefix(indexDigest, "sha256:"): indexBody,
+		"dists/" + suite + "/Release": releaseBody, "dists/" + suite + "/InRelease": []byte(marker + ":InRelease"),
+		"dists/" + suite + "/Release.gpg": []byte(marker + ":Release.gpg"), "dists/" + suite + "/main/binary-amd64/Packages": indexBody,
+		"dists/" + suite + "/main/binary-amd64/by-hash/SHA256/" + strings.TrimPrefix(indexDigest, "sha256:"): indexBody,
 	}
 	assets := make([]APTSnapshotAsset, 0, len(bodies)+len(revisions))
 	for path, body := range bodies {
 		sum := sha256.Sum256(body)
 		digest := "sha256:" + hex.EncodeToString(sum[:])
-		assets = append(assets, APTSnapshotAsset{SnapshotID: snapshot.ID, RepositoryID: repo.ID, Path: path, Digest: digest, ObjectKey: "native/apt/sha256/" + strings.TrimPrefix(digest, "sha256:"), Size: int64(len(body)), ContentType: "text/plain"})
+		assets = append(assets, APTSnapshotAsset{SnapshotID: snapshot.ID, RepositoryID: repoID, Path: path, Digest: digest, ObjectKey: "native/apt/sha256/" + strings.TrimPrefix(digest, "sha256:"), Size: int64(len(body)), ContentType: "text/plain"})
 	}
 	for _, revision := range revisions {
-		assets = append(assets, APTSnapshotAsset{SnapshotID: snapshot.ID, RepositoryID: repo.ID, Path: APTPoolPath("main", revision.Package, revision.ObjectName), Digest: revision.Digest, ObjectKey: revision.ObjectKey, Size: revision.Size, ContentType: "application/vnd.debian.binary-package"})
+		assets = append(assets, APTSnapshotAsset{SnapshotID: snapshot.ID, RepositoryID: repoID, Path: APTPoolPath("main", revision.Package, revision.ObjectName), Digest: revision.Digest, ObjectKey: revision.ObjectKey, Size: revision.Size, ContentType: "application/vnd.debian.binary-package"})
 	}
 	snapshot.State = APTRepositorySnapshotVisible
 	for _, asset := range assets {
 		switch asset.Path {
-		case "dists/stable/Release":
+		case "dists/" + suite + "/Release":
 			snapshot.ReleaseDigest = asset.Digest
-		case "dists/stable/InRelease":
+		case "dists/" + suite + "/InRelease":
 			snapshot.InReleaseDigest = asset.Digest
 		}
 	}
 	snapshot.SignerIdentity, snapshot.KeyFingerprint, snapshot.SignatureAlgorithm = "integration-signer", strings.Repeat("b", 40), "integration-fixture"
-	if _, err = store.PublishAPTRepositorySnapshotWithAudit(ctx, snapshot, assets, releaseBody, AuditRecord{Repository: repo.Name, Actor: "release-operator", Outcome: AuditResolved, Operation: "apt.repository_snapshot.publish", Status: 200}); err != nil {
-		t.Fatal(err)
-	}
+	return snapshot, assets, releaseBody
 }
 
 func aptCounterEquality(t *testing.T, ctx context.Context, store *PostgresStore, repo HostedRepository, check func(string)) {
@@ -677,6 +691,7 @@ func aptCounterEquality(t *testing.T, ctx context.Context, store *PostgresStore,
 	check("publish a second snapshot that retires the first")
 	aptPublishSnapshot(t, ctx, store, repo, 3, "two", []aptStaged{first, second})
 	check("publish a third snapshot with the same generated objects")
+	aptSessionAndRestoreEquality(t, ctx, store, repo, check)
 	// A proxy repository caches upstream objects; refreshed index files replace their bytes.
 	proxy, err := store.CreateHostedRepository(ctx, HostedRepository{ID: uuid.NewString(), Name: "apt-proxy-counter-" + uuid.NewString(), Format: FormatAPT, Type: RepositoryTypeProxy, Endpoint: "https://deb.example"})
 	if err != nil {
@@ -706,6 +721,91 @@ func aptCounterEquality(t *testing.T, ctx context.Context, store *PostgresStore,
 		t.Fatalf("stage over quota = %v, want quota exceeded", err)
 	}
 	check("rejected package over quota")
+}
+
+// aptSessionAndRestoreEquality drives the pending reservations of APT: an open session holds its
+// declared bytes in the counter until it expires, and an archive restore holds its reservation until
+// it fails or commits. The counter equals the reconciler aggregation after every step.
+func aptSessionAndRestoreEquality(t *testing.T, ctx context.Context, store *PostgresStore, repo HostedRepository, check func(string)) {
+	t.Helper()
+	before := counterBytes(t, store, repo)
+	session, err := aptOpenSession(ctx, store, repo, "pending", 33, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("open a publication session")
+	if got := counterBytes(t, store, repo); got != before+33 {
+		t.Fatalf("open session counter = %d, want %d", got, before+33)
+	}
+	if err = store.BeginAPTPackageUpload(ctx, session.ID, "native/apt/sha256/"+strings.TrimPrefix(session.DeclaredDigest, "sha256:")); err != nil {
+		t.Fatal(err)
+	}
+	check("begin the upload of the session")
+	if _, err = store.ExpireAPTPublicationSessions(ctx, time.Now().Add(2*time.Minute), 100); err != nil {
+		t.Fatal(err)
+	}
+	check("expire the abandoned session")
+	if got := counterBytes(t, store, repo); got != before {
+		t.Fatalf("expired session counter = %d, want %d", got, before)
+	}
+
+	// An archive restore of one new package into a suite of its own.
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	revision := APTPackageRevision{ID: uuid.NewString(), RepositoryID: repo.ID, Package: "restored", Version: "1.0-1", Architecture: "amd64",
+		CanonicalIdentity: "restored@1.0-1#amd64", Digest: uniqueDigest(), Size: 40, ObjectName: "restored_1.0-1_amd64.deb", Publisher: "ci", CreatedAt: now}
+	revision.ObjectKey = "native/apt/sha256/" + strings.TrimPrefix(revision.Digest, "sha256:")
+	snapshot := APTRepositorySnapshot{ID: uuid.NewString(), RepositoryID: repo.ID, Suite: "restored", Sequence: 1, State: APTRepositorySnapshotVisible, CreatedAt: now, PublishedAt: now}
+	snapshot, assets, release := aptSnapshotFixture(snapshot, "restored", []APTPackageRevision{revision})
+	plan := APTArchiveRestorePlan{ID: uuid.NewString(), ArchiveDigest: uniqueDigest(), Snapshot: snapshot, Packages: []APTArchivePackage{{Component: "main", Revision: revision}}, Assets: assets}
+	if err = store.BeginAPTArchiveRestore(ctx, plan); err != nil {
+		t.Fatal(err)
+	}
+	check("begin an archive restore")
+	if got := counterBytes(t, store, repo); got <= before {
+		t.Fatalf("archive restore reserved nothing: counter %d, before %d", got, before)
+	}
+	if err = store.FailAPTArchiveRestore(ctx, plan.ID); err != nil {
+		t.Fatal(err)
+	}
+	check("fail the archive restore")
+	if got := counterBytes(t, store, repo); got != before {
+		t.Fatalf("failed restore counter = %d, want %d", got, before)
+	}
+	// At the quota edge the restore is refused and reserves nothing.
+	if _, err = store.ReplaceRepositoryCapacityQuota(ctx, repo.ID, before); err != nil {
+		t.Fatal(err)
+	}
+	plan.ID = uuid.NewString()
+	if err = store.BeginAPTArchiveRestore(ctx, plan); !IsQuotaExceeded(err) {
+		t.Fatalf("restore over quota = %v, want quota exceeded", err)
+	}
+	check("refuse an archive restore over quota")
+	if _, err = store.ReplaceRepositoryCapacityQuota(ctx, repo.ID, 1<<30); err != nil {
+		t.Fatal(err)
+	}
+	if err = store.BeginAPTArchiveRestore(ctx, plan); err != nil {
+		t.Fatal(err)
+	}
+	committed := plan
+	committed.ID = uuid.NewString()
+	if err = store.BeginAPTArchiveRestore(ctx, committed); err != nil {
+		t.Fatal(err)
+	}
+	check("begin a second attempt that supersedes the first")
+	// Committing releases the reservation and counts the restored objects once.
+	if _, err = store.CommitAPTArchiveRestore(ctx, committed, release, AuditRecord{Repository: repo.Name, Actor: "release-operator", Outcome: AuditResolved, Operation: "apt.archive.restore", Status: 200}); err != nil {
+		t.Fatal(err)
+	}
+	check("commit the archive restore")
+}
+
+func counterBytes(t *testing.T, store *PostgresStore, repo HostedRepository) int64 {
+	t.Helper()
+	var bytes int64
+	if err := store.db.QueryRow(`SELECT bytes FROM repository_usage_counters WHERE repository_id=$1::uuid`, repo.ID).Scan(&bytes); err != nil {
+		t.Fatal(err)
+	}
+	return bytes
 }
 
 func aptCounterEdge(t *testing.T, ctx context.Context, store *PostgresStore, repo HostedRepository, size int64, workers int) (accepted, rejected int64) {

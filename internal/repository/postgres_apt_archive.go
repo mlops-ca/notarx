@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/capacity"
 	"github.com/mlops-ca/notarx/internal/ids"
 )
 
@@ -19,15 +20,8 @@ func loadAPTArchiveState(ctx context.Context, tx *sql.Tx, plan APTArchiveRestore
 	if err != nil {
 		return state, err
 	}
-	err = tx.QueryRowContext(ctx, `SELECT quota_bytes FROM repository_capacity_quotas WHERE repository_id=$1 FOR UPDATE`, repoID).Scan(&state.quota)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return state, err
-	}
-	err = tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT SUM(size) FROM native_apt_assets WHERE repository_id=$1),0)+COALESCE((SELECT SUM(size) FROM native_apt_package_revisions WHERE repository_id=$1),0),
- COALESCE((SELECT SUM(declared_size) FROM native_apt_publication_sessions WHERE repository_id=$1 AND state IN ('open','uploading')),0)+COALESCE((SELECT SUM(reserved_bytes) FROM native_apt_archive_restores WHERE repository_id=$1 AND snapshot_id<>$2 AND state='preparing'),0)`, repoID, plan.Snapshot.ID).Scan(&state.baseBytes, &state.reservedBytes)
-	if err != nil {
-		return state, err
-	}
+	// Quota admission is the counter reservation made by BeginAPTArchiveRestore, so the state carries
+	// no quota: checkAPTArchiveRestore only sizes the reservation.
 	state.deletions, err = listAPTPackageDeletions(ctx, tx, repoID, plan.Snapshot.Suite)
 	if err != nil {
 		return state, err
@@ -134,7 +128,14 @@ func (s *PostgresStore) BeginAPTArchiveRestore(ctx context.Context, plan APTArch
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE native_apt_archive_restores SET state='failed',reserved_bytes=0,finished_at=clock_timestamp() WHERE repository_id=$1 AND snapshot_id=$2 AND state='preparing'`, plan.Snapshot.RepositoryID, plan.Snapshot.ID)
+	// A new attempt supersedes the earlier preparing attempts of the snapshot: their reservations are
+	// replaced by this one.
+	var superseded int64
+	err = tx.QueryRowContext(ctx, `WITH old AS (
+		SELECT id,reserved_bytes FROM native_apt_archive_restores WHERE repository_id=$1 AND snapshot_id=$2 AND state='preparing' FOR UPDATE
+	), failed AS (
+		UPDATE native_apt_archive_restores r SET state='failed',reserved_bytes=0,finished_at=clock_timestamp() FROM old WHERE r.id=old.id RETURNING old.reserved_bytes
+	) SELECT COALESCE(SUM(reserved_bytes),0)::bigint FROM failed`, plan.Snapshot.RepositoryID, plan.Snapshot.ID).Scan(&superseded)
 	if err != nil {
 		return err
 	}
@@ -143,6 +144,9 @@ func (s *PostgresStore) BeginAPTArchiveRestore(ctx context.Context, plan APTArch
 		return ErrVersionConflict
 	}
 	if err != nil {
+		return err
+	}
+	if err = capacity.Reserve(ctx, tx, plan.Snapshot.RepositoryID, reserved-superseded, 0); err != nil {
 		return err
 	}
 	intents := aptArchiveObjectIntents(plan)
@@ -180,7 +184,8 @@ func (s *PostgresStore) CommitAPTArchiveRestore(ctx context.Context, plan APTArc
 		return APTRepositorySnapshot{}, err
 	}
 	var attemptState, digest string
-	err = tx.QueryRowContext(ctx, `SELECT state,plan_digest FROM native_apt_archive_restores WHERE id=$1 AND repository_id=$2 FOR UPDATE`, plan.ID, snapshot.RepositoryID).Scan(&attemptState, &digest)
+	var reservedBytes int64
+	err = tx.QueryRowContext(ctx, `SELECT state,plan_digest,reserved_bytes FROM native_apt_archive_restores WHERE id=$1 AND repository_id=$2 FOR UPDATE`, plan.ID, snapshot.RepositoryID).Scan(&attemptState, &digest, &reservedBytes)
 	if errors.Is(err, sql.ErrNoRows) {
 		return APTRepositorySnapshot{}, ErrNotFound
 	}
@@ -199,7 +204,12 @@ func (s *PostgresStore) CommitAPTArchiveRestore(ctx context.Context, plan APTArc
 			return APTRepositorySnapshot{}, err
 		}
 	}
-	// Capacity reservation and metadata become durable in the same transaction.
+	// Capacity reservation and metadata become durable in the same transaction. The attempt's
+	// reservation is released first and the restored objects are then reserved by their own deltas,
+	// so a restore that fits its reservation is never counted twice against the quota.
+	if err = capacity.Reserve(ctx, tx, snapshot.RepositoryID, -reservedBytes, 0); err != nil {
+		return APTRepositorySnapshot{}, err
+	}
 	_, err = tx.ExecContext(ctx, `UPDATE native_apt_archive_restores SET state='completed',reserved_bytes=0,finished_at=clock_timestamp() WHERE id=$1`, plan.ID)
 	if err != nil {
 		return APTRepositorySnapshot{}, err
@@ -266,15 +276,42 @@ func (s *PostgresStore) CommitAPTArchiveRestore(ctx context.Context, plan APTArc
 }
 
 func (s *PostgresStore) FailAPTArchiveRestore(ctx context.Context, id string) error {
-	result, err := s.db.ExecContext(ctx, `UPDATE native_apt_archive_restores SET state='failed',reserved_bytes=0,finished_at=COALESCE(finished_at,clock_timestamp()) WHERE id=$1 AND state IN ('preparing','failed')`, id)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	if n, _ := result.RowsAffected(); n != 1 {
+	defer func() { _ = tx.Rollback() }()
+	if err = failAPTArchiveRestoreTx(ctx, tx, id, nil); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// failAPTArchiveRestoreTx marks one preparing (or already failed) restore failed and releases the
+// bytes it reserved in the usage counter. A non-nil before limits it to restores created before
+// that time (ErrVersionConflict when the restore is not one that may be failed).
+func failAPTArchiveRestoreTx(ctx context.Context, tx *sql.Tx, id string, before *time.Time) error {
+	var repositoryID, state string
+	var reserved int64
+	err := tx.QueryRowContext(ctx, `SELECT repository_id::text,state,reserved_bytes FROM native_apt_archive_restores WHERE id=$1::uuid AND ($2::timestamptz IS NULL OR created_at<$2) FOR UPDATE`, id, before).Scan(&repositoryID, &state, &reserved)
+	if errors.Is(err, sql.ErrNoRows) {
 		return ErrVersionConflict
 	}
-	return nil
+	if err != nil {
+		return err
+	}
+	if state != "preparing" && (state != "failed" || before != nil) {
+		return ErrVersionConflict
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE native_apt_archive_restores SET state='failed',reserved_bytes=0,finished_at=COALESCE(finished_at,clock_timestamp()) WHERE id=$1::uuid`, id); err != nil {
+		return err
+	}
+	if reserved == 0 {
+		return nil
+	}
+	return capacity.Reserve(ctx, tx, repositoryID, -reserved, 0)
 }
+
 func (s *PostgresStore) ExpireAPTArchiveRestores(ctx context.Context, before time.Time, limit int) error {
 	if limit <= 0 {
 		limit = 100
@@ -302,7 +339,7 @@ func (s *PostgresStore) ExpireAPTArchiveRestores(ctx context.Context, before tim
 		if lockErr != nil {
 			return lockErr
 		}
-		_, err = s.db.ExecContext(ctx, `UPDATE native_apt_archive_restores SET state='failed',reserved_bytes=0,finished_at=clock_timestamp() WHERE id=$1 AND state='preparing' AND created_at<$2`, r.ID, before)
+		err = s.expireAPTArchiveRestore(ctx, r.ID, before)
 		release()
 		if err != nil {
 			return err
@@ -351,3 +388,19 @@ func (s *PostgresStore) markAPTArchiveObject(ctx context.Context, id, key, colum
 
 var _ NativeAPTArchiveRestoreStore = (*PostgresStore)(nil)
 var _ NativeAPTArchiveRestoreStore = (*MemoryStore)(nil)
+
+// expireAPTArchiveRestore fails one restore that is still preparing and older than before and
+// releases its reservation; a restore that finished meanwhile is left alone.
+func (s *PostgresStore) expireAPTArchiveRestore(ctx context.Context, id string, before time.Time) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err = failAPTArchiveRestoreTx(ctx, tx, id, &before); errors.Is(err, ErrVersionConflict) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	return tx.Commit()
+}

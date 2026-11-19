@@ -14,7 +14,7 @@ import (
 const conanSessionColumns = `id::text,repository_id::text,publisher,kind,reference,recipe_revision,package_id,package_revision,state,expires_at,objects,native,version`
 
 // Keep native, management, lifecycle and distribution writers in the same
-// repository/quota/recipe lock order. No object I/O occurs under these locks.
+// repository/recipe lock order. No object I/O occurs under these locks.
 func lockConanRepositoriesTx(ctx context.Context, tx *sql.Tx, ids ...string) error {
 	ordered := append([]string(nil), ids...)
 	sort.Strings(ordered)
@@ -26,9 +26,6 @@ func lockConanRepositoriesTx(ctx context.Context, tx *sql.Tx, ids ...string) err
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `SELECT id FROM hosted_repositories WHERE id=$1 FOR SHARE`, id); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `SELECT repository_id FROM repository_capacity_quotas WHERE repository_id=$1 FOR UPDATE`, id); err != nil {
 			return err
 		}
 	}

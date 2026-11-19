@@ -71,6 +71,15 @@ const UsageCTE = `WITH usage AS (
 		GROUP BY s.repository_id,a.object_key
 	) apt_snapshot_objects GROUP BY repository_id
 	UNION ALL
+	-- Bytes reserved by APT publication sessions still open or uploading and by archive restores
+	-- still preparing: they are in the counter from admission until the session completes,
+	-- expires or fails. They hold bytes, not objects.
+	SELECT repository_id,COALESCE(SUM(declared_size),0)::bigint,0::bigint
+	FROM native_apt_publication_sessions WHERE state IN ('open','uploading') GROUP BY repository_id
+	UNION ALL
+	SELECT repository_id,COALESCE(SUM(reserved_bytes),0)::bigint,0::bigint
+	FROM native_apt_archive_restores WHERE state='preparing' GROUP BY repository_id
+	UNION ALL
 	SELECT repository_id,COALESCE(SUM(size),0)::bigint,COUNT(*)::bigint
 	FROM native_rubygems_sessions WHERE state='committed' GROUP BY repository_id
 ), totals AS (
@@ -102,7 +111,9 @@ var formatUsage = map[string]string{
 	"apt": `SELECT
 			COALESCE((SELECT SUM(size) FROM native_apt_assets WHERE repository_id=$1::uuid),0)+
 			COALESCE((SELECT SUM(size) FROM native_apt_package_revisions WHERE repository_id=$1::uuid),0)+
-			COALESCE((SELECT SUM(size) FROM (SELECT MAX(a.size)::bigint AS size FROM native_apt_snapshot_assets a JOIN native_apt_repository_snapshots s ON s.id=a.snapshot_id WHERE a.repository_id=$1::uuid AND s.state='visible' AND a.path LIKE 'dists/%' GROUP BY a.object_key) generated),0),
+			COALESCE((SELECT SUM(size) FROM (SELECT MAX(a.size)::bigint AS size FROM native_apt_snapshot_assets a JOIN native_apt_repository_snapshots s ON s.id=a.snapshot_id WHERE a.repository_id=$1::uuid AND s.state='visible' AND a.path LIKE 'dists/%' GROUP BY a.object_key) generated),0)+
+			COALESCE((SELECT SUM(declared_size) FROM native_apt_publication_sessions WHERE repository_id=$1::uuid AND state IN ('open','uploading')),0)+
+			COALESCE((SELECT SUM(reserved_bytes) FROM native_apt_archive_restores WHERE repository_id=$1::uuid AND state='preparing'),0),
 			(SELECT COUNT(*) FROM native_apt_assets WHERE repository_id=$1::uuid)+
 			(SELECT COUNT(*) FROM native_apt_package_revisions WHERE repository_id=$1::uuid)+
 			(SELECT COUNT(*) FROM (SELECT a.object_key FROM native_apt_snapshot_assets a JOIN native_apt_repository_snapshots s ON s.id=a.snapshot_id WHERE a.repository_id=$1::uuid AND s.state='visible' AND a.path LIKE 'dists/%' GROUP BY a.object_key) generated)`,
