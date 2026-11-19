@@ -113,9 +113,9 @@ func (s *PostgresStore) InsertScanFindings(ctx context.Context, findings []ScanF
 			sb.WriteByte(',')
 		}
 		base := len(args)
-		sb.WriteString(fmt.Sprintf("($%d::uuid", base+1))
+		fmt.Fprintf(&sb, "($%d::uuid", base+1)
 		for k := 2; k <= scanFindingColumns; k++ {
-			sb.WriteString(fmt.Sprintf(",$%d", base+k))
+			fmt.Fprintf(&sb, ",$%d", base+k)
 		}
 		sb.WriteByte(')')
 		args = append(args, f.VulnerabilityID, f.Ordinal, f.VulnID, f.Source, f.Severity, f.SeverityRank, f.Component, f.Version, f.FixedVersion,
@@ -317,7 +317,7 @@ func (s *PostgresStore) ReplaceScanLicenses(ctx context.Context, repositoryID, a
 			if i > 0 {
 				sb.WriteByte(',')
 			}
-			sb.WriteString(fmt.Sprintf("($%d::uuid,$%d,$%d,$%d,$%d)", i*5+1, i*5+2, i*5+3, i*5+4, i*5+5))
+			fmt.Fprintf(&sb, "($%d::uuid,$%d,$%d,$%d,$%d)", i*5+1, i*5+2, i*5+3, i*5+4, i*5+5)
 			args = append(args, repository, artifactDigest, l.SPDXID, l.Source, l.Confidence)
 		}
 		if _, err := tx.ExecContext(ctx, sb.String(), args...); err != nil {
