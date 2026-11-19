@@ -21,6 +21,9 @@ func (h artifactManagementHandler) ListRepositoryArtifactUsage(w http.ResponseWr
 			writeHostedProblem(w, http.StatusNotImplemented, "not_supported", "artifact usage aggregation is unavailable")
 			return
 		}
+		if rejectOffsetParameter(w, r) {
+			return
+		}
 		limit := 100
 		if params.Limit != nil {
 			limit = *params.Limit

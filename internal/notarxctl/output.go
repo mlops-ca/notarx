@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 )
 
 // outputSchemaVersion versions the JSON envelope. It only changes on a
@@ -140,4 +141,26 @@ func totalRelationPrefix(relation string) string {
 		return "about "
 	}
 	return ""
+}
+
+// continueCommand renders the command that reads the next page: the same filters plus the cursor, because a
+// page token is bound to the filters that issued it. Values with spaces or quotes are single-quoted.
+func continueCommand(base string, flags [][2]string, cursor string) string {
+	var out strings.Builder
+	out.WriteString(base)
+	for _, flag := range flags {
+		if flag[1] == "" {
+			continue
+		}
+		out.WriteString(" " + flag[0] + " " + shellWord(flag[1]))
+	}
+	out.WriteString(" --cursor " + shellWord(cursor))
+	return out.String()
+}
+
+func shellWord(value string) string {
+	if value != "" && strings.Trim(value, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.,:/=+@") == "" {
+		return value
+	}
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }

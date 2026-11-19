@@ -20,7 +20,7 @@ import {
 import { formatDate } from "../../lib/format";
 import { usePreferences } from "../../lib/preferences";
 import { clearable } from "../../lib/clearable";
-import { useKeysetPages } from "../../lib/keysetPaging";
+import { pagerTotal, useKeysetPages } from "../../lib/keysetPaging";
 import { UserCreateDialog } from "./users/UserCreateDialog";
 import { UserDetailsDrawer } from "./users/UserDetailsDrawer";
 import { isUserLocked, roleTone } from "./users/userPresentation";
@@ -84,8 +84,13 @@ export function UsersPage() {
     pageToken: navigating ? undefined : pageToken,
   });
   const users = usersQuery.data?.items ?? [];
-  const total = usersQuery.data?.total.value ?? 0;
   const nextPageToken = usersQuery.data?.nextPageToken;
+  const total = pagerTotal(
+    usersQuery.data?.total,
+    page,
+    pageSize,
+    Boolean(nextPageToken),
+  );
   const usersPlaceholder = usersQuery.isPlaceholderData;
   useEffect(() => {
     if (!usersPlaceholder) remember(nextPageToken);

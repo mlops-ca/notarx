@@ -427,8 +427,8 @@ func TestUserListCursorWindow(t *testing.T) {
 	if query := api.recorded()[0].Query; query != "limit=1&pageToken=tok1&role=member" {
 		t.Fatalf("query = %s", query)
 	}
-	code, _, stderr = runCLI(t, "user", "list", "--limit", "1")
-	if code != ExitOK || !strings.Contains(stderr, "notarxctl user list --cursor tok2") {
+	code, _, stderr = runCLI(t, "user", "list", "--role", "member", "--limit", "1")
+	if code != ExitOK || !strings.Contains(stderr, "notarxctl user list --role member --limit 1 --cursor tok2") {
 		t.Fatalf("the human output must say how to continue: exit = %d, stderr = %s", code, stderr)
 	}
 }

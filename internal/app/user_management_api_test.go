@@ -50,6 +50,9 @@ func TestUserManagementProfilePasswordSessionsAndLastAdminProtection(t *testing.
 		t.Fatalf("list=%d body=%s", listed.Code, listed.Body.String())
 	}
 
+	if offset := adminRequest(http.MethodGet, "/api/v2/users?offset=1", "", ""); offset.Code != http.StatusBadRequest {
+		t.Fatalf("a retired offset parameter must be rejected: %d body=%s", offset.Code, offset.Body.String())
+	}
 	if demoted := adminRequest(http.MethodPatch, "/api/v2/users/"+created.ID, `{"role":"member"}`, created.Version); demoted.Code != http.StatusConflict {
 		t.Fatalf("last admin demotion=%d body=%s", demoted.Code, demoted.Body.String())
 	}

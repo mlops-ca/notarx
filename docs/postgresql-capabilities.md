@@ -25,7 +25,7 @@ semantics.
 | Session and transaction advisory locks | OCI/Raw uploads, object deduplication, cache fills, first Maven/npm publication, user administration, lifecycle serialization | Logical resources do not need a dedicated lock table; locks release with the connection or transaction |
 | `hashtextextended` lock keys | Maps repository names, object keys, upload IDs, and package coordinates into one stable 64-bit lock space | Every Gateway instance derives the same lock for the same logical resource |
 | `FOR UPDATE SKIP LOCKED` | Claims lifecycle, replication, cache, webhook, audit, upload-expiry, session-cleanup, and scheduled work | Workers claim different rows concurrently without a separate queue or lock convoy |
-| `LISTEN/NOTIFY` | Wakes lifecycle, replication, cache, audit-cleanup, and repository-deletion workers | Reduces polling latency while durable tables and leases remain authoritative |
+| `LISTEN/NOTIFY` | Wakes lifecycle (one channel per job kind, `notarx_jobs_<kind>`), webhook delivery (`notarx_deliveries`), replication, cache, audit-cleanup, and repository-deletion workers | Reduces polling latency while durable tables and leases remain authoritative |
 | PL/pgSQL triggers | Emits `pg_notify` when work becomes runnable and enforces selected capacity boundaries | State changes and wake hints share the database transaction boundary |
 | `ON CONFLICT`, unique constraints, and `RETURNING` | Idempotent publication, task deduplication, object references, node heartbeats, singleton settings, and tag movement | Existence checks, writes, and state readback remain one concurrency-safe statement |
 | JSONB and JSONB operators | npm manifests/tags, OIDC roles, scanner intelligence, webhook payloads, dynamic policy, runtime roles | Keeps relational identity while representing format-specific data with JSON type checks |
@@ -49,7 +49,7 @@ seam, but every implementation is raw PostgreSQL SQL. Counts from the tree on
 | --- | --- |
 | Advisory-lock calls (`pg_advisory_*`, `pg_try_advisory_*`) | about 41 lines in 26 files, wrapped by `internal/repository/postgres_advisory_lock.go` and used by `internal/cache/coordinator.go` |
 | `FOR UPDATE SKIP LOCKED` work-queue claims | about 27 sites in 21 files |
-| `LISTEN` and `pg_notify` | listener in `internal/database/notification.go`, `pg_notify` in `internal/app/postgres_cache_task_queue.go`, notify triggers in the baseline |
+| `LISTEN` and `pg_notify` | listener in `internal/database/notification.go`, `pg_notify` in `internal/app/postgres_cache_task_queue.go`, notify triggers in the baseline and `migrations/000020_queue_claiming.sql` |
 | `CREATE TRIGGER` statements | 23 in `migrations/000001_baseline.sql` |
 | `gin_trgm_ops` (`pg_trgm`) indexes | 13 in the baseline |
 | `ON CONFLICT` / `RETURNING` | about 113 / 146 |

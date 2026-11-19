@@ -7,7 +7,7 @@ import { formatDate, formatNumber } from "../../lib/format";
 import { useFormatters } from "../../lib/useFormatters";
 import { usePreferences } from "../../lib/preferences";
 import { clearable } from "../../lib/clearable";
-import { useKeysetPages } from "../../lib/keysetPaging";
+import { pagerTotal, useKeysetPages } from "../../lib/keysetPaging";
 import { ConsoleTable, FilterBar } from "../../components/ui/ConsolePrimitives";
 import { CONSOLE_PAGE_SIZE } from "../../components/ui/useConsolePagination";
 import { useArtifactUsage } from "./repositoryQueries";
@@ -37,10 +37,18 @@ function RepositoryUsageContent({ repo }: { repo: Repository }) {
   useEffect(() => {
     if (!placeholder) remember(nextPageToken);
   }, [nextPageToken, placeholder, remember]);
+  const total = pagerTotal(
+    usage?.total,
+    page,
+    pageSize,
+    Boolean(nextPageToken),
+  );
   // A live deletion can remove the last page; move back to the new last page.
-  const lastPage = usage
-    ? Math.max(1, Math.ceil(usage.total.value / pageSize))
-    : page;
+  // Only an exact total says where the last page is.
+  const lastPage =
+    usage?.total.relation === "eq"
+      ? Math.max(1, Math.ceil(usage.total.value / pageSize))
+      : page;
   if (!placeholder && page > lastPage) setPage(lastPage);
 
   const columns: ColumnsType<UsageRow> = [
@@ -138,7 +146,7 @@ function RepositoryUsageContent({ repo }: { repo: Repository }) {
         pagination={{
           current: page,
           pageSize,
-          total: usage.total.value,
+          total,
           onChange: (nextPage, nextSize) => {
             setPage(nextPage);
             setPageSize(nextSize);

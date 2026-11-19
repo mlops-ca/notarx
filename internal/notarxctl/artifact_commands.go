@@ -636,7 +636,7 @@ func artifactUsageCommand() command {
 			fs.StringVar(&repo, "repo", "", "repository ID")
 			fs.StringVar(&query, "q", "", "resource filter")
 			fs.IntVar(&limit, "limit", 100, "rows per window (1-500)")
-			fs.StringVar(&cursor, "cursor", "", "continue from the nextCursor of an earlier page")
+			fs.StringVar(&cursor, "cursor", "", "continue from the nextPageToken of an earlier page")
 		},
 		meta: commandMeta{
 			Resource:     "artifact",
@@ -687,7 +687,7 @@ func artifactUsageCommand() command {
 					return err
 				}
 				if usage.NextPageToken != nil {
-					_, err := fmt.Fprintf(w, "%d rows shown (total %s%d); more: notarxctl artifact usage --repo %s --cursor %s\n", len(usage.Items), totalRelationPrefix(string(usage.Total.Relation)), usage.Total.Value, repo, *usage.NextPageToken)
+					_, err := fmt.Fprintf(w, "%d rows shown (total %s%d); more: %s\n", len(usage.Items), totalRelationPrefix(string(usage.Total.Relation)), usage.Total.Value, continueCommand("notarxctl artifact usage", [][2]string{{"--repo", repo}, {"--q", query}, {"--limit", strconv.Itoa(limit)}}, *usage.NextPageToken))
 					return err
 				}
 				return nil

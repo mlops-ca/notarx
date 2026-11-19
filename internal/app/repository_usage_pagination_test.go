@@ -64,7 +64,7 @@ func TestRepositoryArtifactUsagePaginationAndSearch(t *testing.T) {
 		}
 		w := request(repo.ID, query, true)
 		var result struct {
-			Total         struct {
+			Total struct {
 				Value    int64  `json:"value"`
 				Relation string `json:"relation"`
 			} `json:"total"`
@@ -108,7 +108,7 @@ func TestRepositoryArtifactUsagePaginationAndSearch(t *testing.T) {
 					Value int64 `json:"value"`
 				} `json:"total"`
 				Totals repository.ArtifactUsageTotals `json:"totals"`
-				Items      []struct {
+				Items  []struct {
 					Resource string `json:"resource"`
 				} `json:"items"`
 			}
@@ -128,7 +128,7 @@ func TestRepositoryArtifactUsagePaginationAndSearch(t *testing.T) {
 			}
 		})
 	}
-	for _, query := range []string{"?limit=0", "?limit=501", "?pageToken=not-a-token", "?q=" + strings.Repeat("a", 513), "?q=%00", "?q=%FF"} {
+	for _, query := range []string{"?limit=0", "?limit=501", "?offset=1", "?pageToken=not-a-token", "?q=" + strings.Repeat("a", 513), "?q=%00", "?q=%FF"} {
 		if w := request(repo.ID, query, true); w.Code != 400 {
 			t.Errorf("%s: status=%d", query, w.Code)
 		}

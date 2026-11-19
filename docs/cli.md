@@ -571,7 +571,8 @@ addressed by ID with `--repo`.
   window may hide more.
 - `notarxctl artifact usage --repo ID [--limit N] [--cursor TOKEN]` shows download
   counts per resource, one keyset page at a time, with the server's total and
-  its relation; continue with the `nextCursor` of the page.
+  its relation; continue with the `nextPageToken` of the page (the human output
+  prints the full command, filters included).
 - `notarxctl artifact intelligence show` and `notarxctl artifact quarantine show`
   read the record of one `--coordinate` and `--digest`; 404 means none is
   recorded.

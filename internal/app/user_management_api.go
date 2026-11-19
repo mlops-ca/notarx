@@ -196,6 +196,9 @@ func (h identityManagementHandler) ListUsers(w http.ResponseWriter, r *http.Requ
 	if _, ok := h.authorize(w, r); !ok {
 		return
 	}
+	if rejectOffsetParameter(w, r) {
+		return
+	}
 	query := repository.UserListQuery{Limit: 50}
 	if params.Search != nil {
 		query.Search = strings.TrimSpace(*params.Search)

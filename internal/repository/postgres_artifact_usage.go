@@ -27,8 +27,10 @@ func (s *PostgresStore) QueryArtifactUsage(ctx context.Context, repository strin
 	if err != nil {
 		return page, err
 	}
-	page.Total, err = boundedTotal(ctx, tx, "", `artifact_usage_stats s JOIN (`+repositoryNames+`) n ON n.id = s.repository_id WHERE n.name = $1 AND strpos(s.resource, $2) > 0`, repository, query.Query)
-	if err != nil {
+	if query.Query == "" {
+		// Every address matches: the lifetime aggregate above already counted them.
+		page.Total = BoundedListTotal(page.Totals.Resources)
+	} else if page.Total, err = boundedTotal(ctx, tx, "", `artifact_usage_stats s JOIN (`+repositoryNames+`) n ON n.id = s.repository_id WHERE n.name = $1 AND strpos(s.resource, $2) > 0`, repository, query.Query); err != nil {
 		return page, err
 	}
 	var cursorResource, cursorFormat sql.NullString

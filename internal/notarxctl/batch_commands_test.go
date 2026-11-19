@@ -293,8 +293,8 @@ func TestArtifactUsageReportsCursorWindow(t *testing.T) {
 	if query := api.recorded()[0].Query; query != "limit=1&pageToken=tok1" {
 		t.Fatalf("query = %s", query)
 	}
-	code, stdout, _ = runCLI(t, "artifact", "usage", "--repo", testRepoID, "--limit", "1")
-	if code != ExitOK || !strings.Contains(stdout, "--cursor tok2") {
+	code, stdout, _ = runCLI(t, "artifact", "usage", "--repo", testRepoID, "--q", "my file", "--limit", "1")
+	if code != ExitOK || !strings.Contains(stdout, "--q 'my file' --limit 1 --cursor tok2") {
 		t.Fatalf("exit = %d, stdout = %s", code, stdout)
 	}
 	expectUsage(t, newRouteAPI(t, ""), []string{"artifact", "usage", "--repo", testRepoID, "--limit", "501"})

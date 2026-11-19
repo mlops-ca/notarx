@@ -204,7 +204,7 @@ func userListCommand() command {
 					return err
 				}
 				if !complete {
-					_, _ = fmt.Fprintf(env.stderr, "%d users shown (total %s%d); more: notarxctl user list --cursor %s\n", len(page.Items), totalRelationPrefix(string(page.Total.Relation)), page.Total.Value, *page.NextPageToken)
+					_, _ = fmt.Fprintf(env.stderr, "%d users shown (total %s%d); more: %s\n", len(page.Items), totalRelationPrefix(string(page.Total.Relation)), page.Total.Value, continueCommand("notarxctl user list", [][2]string{{"--search", search}, {"--role", role}, {"--state", state}, {"--limit", strconv.Itoa(limit)}}, *page.NextPageToken))
 				}
 				return nil
 			})

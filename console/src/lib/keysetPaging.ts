@@ -28,12 +28,17 @@ export function useKeysetPages(resetKey: string) {
     (next: string | undefined) =>
       setState((previous) => {
         if (previous.key !== resetKey) return previous;
-        const tokens = previous.tokens.slice(0, previous.page - 1);
-        if (next) tokens[previous.page - 1] = next;
-        const unchanged =
-          tokens.length === previous.tokens.length &&
-          tokens.every((token, index) => token === previous.tokens[index]);
-        return unchanged ? previous : { ...previous, tokens };
+        // Returning to an earlier page keeps the cursors already learned for the
+        // pages after it, unless this page now points somewhere else.
+        const tokens = previous.tokens.slice();
+        const index = previous.page - 1;
+        if (next && tokens[index] === next) return previous;
+        tokens.length = Math.min(tokens.length, index);
+        if (next) tokens[index] = next;
+        return tokens.length === previous.tokens.length &&
+          tokens.every((token, i) => token === previous.tokens[i])
+          ? previous
+          : { ...previous, tokens };
       }),
     [resetKey],
   );
@@ -56,4 +61,26 @@ export function useKeysetPages(resetKey: string) {
     setPage,
     remember,
   };
+}
+
+/** The {value, relation} total of a listing (ADR 0023 section 8). */
+export interface ListTotalValue {
+  value: number;
+  relation: "eq" | "gte" | "estimate";
+}
+
+/**
+ * The total the pager should show. An exact total is used as it is; a lower
+ * bound or an estimate never hides a page the server still offers, and never
+ * claims fewer items than the pages already read.
+ */
+export function pagerTotal(
+  total: ListTotalValue | undefined,
+  page: number,
+  pageSize: number,
+  hasNext: boolean,
+): number {
+  if (!total) return 0;
+  if (total.relation === "eq") return total.value;
+  return Math.max(total.value, page * pageSize + (hasNext ? 1 : 0));
 }
