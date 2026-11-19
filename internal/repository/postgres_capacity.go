@@ -116,8 +116,7 @@ func (s *PostgresStore) ReplaceRepositoryCapacityQuota(ctx context.Context, id s
 	if err = capacity.SetQuota(ctx, tx, repositoryID, quota); err != nil {
 		return RepositoryCapacity{}, err
 	}
-	// The capacity triggers that rejected a quota below the current usage are gone (migration
-	// 000014). The counter row SetQuota just locked makes a concurrent Reserve wait. The counter
+	// The capacity triggers that rejected a quota below the current usage are gone from the schema. The counter row SetQuota just locked makes a concurrent Reserve wait. The counter
 	// can drift until the reconciler corrects it, so the decision also uses the live aggregation
 	// of the format, as the triggers did; changing a quota is rare, so its cost does not matter.
 	if quota > 0 {

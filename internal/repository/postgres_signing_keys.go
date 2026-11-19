@@ -152,7 +152,7 @@ const (
 )
 
 // DeploymentID returns the stable id shared by every node of this deployment. It is created
-// by migration 000016; if the row is missing (restored partial schema) it is created here,
+// by the baseline seed; if the row is missing (restored partial schema) it is created here,
 // race free, so every node converges on one value.
 func (s *PostgresStore) DeploymentID(ctx context.Context) (string, error) {
 	if _, err := s.db.ExecContext(ctx, `INSERT INTO settings (key, value) VALUES ('deployment_id', gen_random_uuid()::text) ON CONFLICT (key) DO NOTHING`); err != nil {

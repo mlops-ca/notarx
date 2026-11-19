@@ -105,7 +105,7 @@ func TestSAMLPostgresIdentityContract(t *testing.T) {
 	testSAMLIdentityContract(t, store, provider.ID, suffix)
 	testSAMLEmailLinkContract(t, store, provider.ID, suffix)
 
-	// The consistency check of migration 000019 refuses a verified account without a verifier or a time.
+	// The consistency check of the schema refuses a verified account without a verifier or a time.
 	user, err := store.CreateUser(ctx, User{ID: ids.New(), Name: "check-" + suffix, Email: "check-" + suffix + "@example.test", Role: "member", State: UserActive})
 	if err != nil {
 		t.Fatal(err)

@@ -282,7 +282,7 @@ voie en échec téléverse `contract-<lane>-<attempt>` avec les journaux de ses
 étapes et les rapports bruts des producteurs. `upgrade-readiness` ne s’exécute pas
 à l’intégration continue tant qu’aucune étiquette de version stable de notarx
 n’existe (ADR 0015); entre-temps, `make backup-transfer-test` exécute le banc
-d’essai de mise à niveau « base de référence plus `000004` synthétique ».
+d’essai de mise à niveau « base de référence plus `000002` synthétique ».
 
 ## Conventions de documentation
 
@@ -436,14 +436,14 @@ Règles (ADR 0015) :
   objets et remplir des données. Elle ne peut supprimer ou renommer que des objets
   que la version mineure précédente ne lit plus. Il n’y a aucune section Down.
 - Les remplissages de données vivent dans des migrations numérotées, jamais dans
-  la base de référence. La base de référence n’amorce que les quatre lignes
+  la base de référence. La base de référence n’amorce que les lignes
   singleton qu’attend le code.
 - `pg_trgm` est requis (index trigrammes). `make preflight` et l’exécuteur de
   migrations vérifient que l’extension est installée ou peut être créée avant la
   première instruction.
 - Avant la première version stable (`vX.Y.Z`, ADR 0024), les bases de données
-  sont jetables : la base de référence est régénérée une fois avant l’étiquette,
-  et vous recréez votre base de développement. Après cette étiquette, les
+  sont jetables : la base de référence a été refondue à partir de toute la chaîne juste avant
+  l’étiquette (ADR 0015, tranche 7); une base créée plus tôt doit être recréée. Après cette étiquette, les
   migrations publiées sont immuables.
 
 `make migration-check` (`scripts/migration-immutability-check.sh`) s’exécute à

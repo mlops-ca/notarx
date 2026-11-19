@@ -18,11 +18,10 @@ import (
 )
 
 // syntheticUpgradeMigration is a migration the fixture candidate ships beyond
-// the real ones (000005 to 000007 are the audit writer rollups, repository visibility and group member visibility migrations). The fixture stands
-// in for the next real migration until a second notarx release exists (ADR
-// 0015, "Backup, restore and release modules"); renumber it when a real
-// migration takes this number.
-const syntheticUpgradeMigration = "000008_synthetic_upgrade_fixture.sql"
+// the baseline. The fixture stands in for the next real migration until a
+// second notarx release exists (ADR 0015, "Backup, restore and release
+// modules"); renumber it when a real migration takes this number.
+const syntheticUpgradeMigration = "000002_synthetic_upgrade_fixture.sql"
 const syntheticUpgradeSQL = "-- +goose Up\nCREATE TABLE synthetic_upgrade_fixture (id integer PRIMARY KEY, note text NOT NULL DEFAULT '');\nINSERT INTO synthetic_upgrade_fixture (id, note) VALUES (1, 'added by the candidate release');\n"
 
 var stableReleaseTag = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+$`)
@@ -33,7 +32,7 @@ var stableReleaseTag = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+$`)
 // pre-upgrade snapshot with the previous software, never a down migration.
 //
 // By default the previous release is the current build with only the baseline
-// migration and the candidate additionally ships a synthetic 000008 migration.
+// migration and the candidate additionally ships a synthetic 000002 migration.
 // With BACKUPOPS_UPGRADE_FROM_TAG=vX.Y.Z (see scripts/upgrade-readiness.sh) the
 // previous release is built from that stable notarx tag instead.
 func TestLocalReleaseUpgrade(t *testing.T) {

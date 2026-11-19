@@ -10,7 +10,7 @@
 # While no stable tag exists there is nothing to upgrade from and the gate
 # reports that and succeeds; it becomes meaningful once a second release exists
 # (0.2.0). Until then `make backup-transfer-test` runs the same properties
-# against a synthetic 000008 migration (TestLocalReleaseUpgrade).
+# against a synthetic 000002 migration (TestLocalReleaseUpgrade).
 set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root"

@@ -160,30 +160,23 @@ URL, then use the GitLab issuer and application ID as the client ID. When role
 mapping is required, include the relevant group claims in the ID token and map
 their exact values through the same member and administrator variables above.
 
-## Upgrade and rollback
+## Provider registry and removed endpoints
 
-The identity provider registry replaces the former `oidc_settings` singleton. The saved settings become the provider `default` (with their
-sealed client secret and version), stored identities stay bound to it, and
-`oidc_settings` is dropped. An identity whose issuer differs from the saved one
-is bound to its own disabled provider so no link is lost. A stored JIT default
-role of `admin` becomes `member`: an IdP-driven first login never mints an
-administrator. The `/api/v2/authentication/oidc` operations and
-`GET /auth/oidc/config`, `/auth/oidc/login` and `/auth/oidc/callback` are
-removed without aliases; update the redirect URI registered at the identity
-provider to `/auth/oidc/{slug}/callback`. `notarxctl secrets reseal` covers the
-sealed secret of every provider.
+Identity providers live in a registry; each provider has its own slug, sealed
+client secret and version, and stored identities are bound to a provider. A
+first IdP-driven login never mints an administrator: the JIT default role is
+`none` or `member`. The `/api/v2/authentication/oidc` operations and
+`GET /auth/oidc/config`, `/auth/oidc/login` and `/auth/oidc/callback` do not
+exist; register `/auth/oidc/{slug}/callback` as the redirect URI at the identity
+provider. `notarxctl secrets reseal` covers the sealed secret of every provider.
 
-The saved OIDC settings move to a single member role list. The reader list and
-the writer list merge into it, a stored JIT default of `reader` or `writer`
-becomes `member`, and `NOTARX_OIDC_READER_ROLES` and `NOTARX_OIDC_WRITER_ROLES`
-are replaced by `NOTARX_OIDC_MEMBER_ROLES`. An external realm role listed in
-either legacy variable has to be listed in the new one to keep matching.
+Role mapping uses a single member role list, `NOTARX_OIDC_MEMBER_ROLES`; the
+reader and writer variables of earlier builds (`NOTARX_OIDC_READER_ROLES`,
+`NOTARX_OIDC_WRITER_ROLES`) are no longer supported. An external realm role that used to
+be listed in either has to be listed in the member variable to keep matching.
 
-The migration replaces the reader and writer columns rather than leaving them
-behind, so an application-only rollback — deploying the previous image against
-the migrated schema — cannot read the saved settings. Roll back by restoring the
-pre-upgrade database and the matching binary, as the APT lifecycle migration
-also requires.
+Databases created before the baseline was re-squashed (ADR 0015 slice 7) must be
+recreated; there is no in-place upgrade path.
 
 ## Operational checks
 

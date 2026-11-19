@@ -2657,9 +2657,9 @@ CREATE TABLE public.oci_subject_bindings (
 --
 
 CREATE TABLE public.public_access_policy (
-    singleton boolean DEFAULT true CONSTRAINT anonymous_access_policy_singleton_not_null NOT NULL,
-    version bigint DEFAULT 1 CONSTRAINT anonymous_access_policy_version_not_null NOT NULL,
-    enabled boolean DEFAULT false CONSTRAINT anonymous_access_policy_enabled_not_null NOT NULL,
+    singleton boolean DEFAULT true CONSTRAINT public_access_policy_singleton_not_null NOT NULL,
+    version bigint DEFAULT 1 CONSTRAINT public_access_policy_version_not_null NOT NULL,
+    enabled boolean DEFAULT false CONSTRAINT public_access_policy_enabled_not_null NOT NULL,
     CONSTRAINT public_access_policy_singleton_check CHECK (singleton)
 );
 

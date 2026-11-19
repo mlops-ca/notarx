@@ -160,7 +160,7 @@ delta that would pass `quota_bytes` is rejected (HTTP 507, as before) and a rele
 never is. The overview and quota alert evaluation read the counters, so they cost
 O(repositories). Every hosted format is covered (the registry in
 `internal/capacity/registry.go` lists each format as pending or covered), and
-migration 000014 dropped the capacity triggers and their functions: `Reserve` is the only
+the schema has no capacity triggers or functions: `Reserve` is the only
 quota enforcement, and it supersedes the `AssertRepositoryCapacity` of ADR 0022 slice 7. Lowering a
 quota below the current usage is rejected by the quota API against the live usage of the format (the counter can drift until the reconciler runs). Maven and Conan
 count an asset only while a visible artifact or revision covers it, so their writers bracket
@@ -171,14 +171,12 @@ reserves the committed bytes in the counter at commit. APT reserves in the count
 reserves its declared bytes with `Reserve` when it is admitted and releases them when it completes (the stored
 revision is then counted) or expires, and an archive restore reserves its planned bytes at begin and releases them
 when it commits, fails or expires. The reconciler counts those pending bytes (open or uploading sessions, preparing
-restores), so the counter equals its aggregation at every step, and migration 000022 adds the bytes of sessions
-open at upgrade time. Upgrade every node together (stop-the-world, or let the reconciler run once after a rolling
+restores), so the counter equals its aggregation at every step. Upgrade every node together (stop-the-world, or let the reconciler run once after a rolling
 upgrade): a session opened by an older node reserves nothing and one reserved by a newer node but completed by an older
 node keeps its reservation, which the next reconciler pass corrects. Snapshot publication admits through the `Reserve` of its generated-object delta.
 Helm and NuGet reserve the bytes of a pending session (chart plus provenance, or the package) with `Reserve`
 when the session is admitted and release them when it commits (the commit adds only the object count), expires
-lazily in the next reservation or is expired by the janitor; migration 000023 adds the bytes of sessions pending
-at upgrade time, and the same rolling-upgrade caveat applies. A session past its deadline keeps its bytes until the next reservation or replication job creation in that
+lazily in the next reservation or is expired by the janitor; the same rolling-upgrade caveat applies. A session past its deadline keeps its bytes until the next reservation or replication job creation in that
 repository, or the janitor, expires it. Creating a Helm or NuGet replication job only checks
 the counter (`capacity.Headroom`; it admits several jobs that together exceed the quota, and the items beyond it
 fail when they reserve); each item reserves its bytes through its target session. A source test

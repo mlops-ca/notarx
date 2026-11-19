@@ -286,7 +286,7 @@ retention; that twin is written with the ADR 0022 store slices.
 
 | Area | Primary implementation |
 | --- | --- |
-| Partitioned audit tables | `internal/partitions`, partitioned `audit_logs` in `migrations/000001_baseline.sql`, `internal/repository/postgres_audit.go` |
+| Partitioned audit tables | `internal/partitions`, partitioned `resolver_audit_log` and `security_audit_log` in `migrations/000001_baseline.sql`, `internal/repository/postgres_audit.go` |
 | Advisory locks | `internal/cache/coordinator.go`, `internal/repository/postgres_advisory_lock.go`, `postgres_{oci,raw,maven,npm}.go` |
 | `SKIP LOCKED` and leases | `internal/repository/postgres_lifecycle.go`, `postgres_replication.go`, `postgres_webhooks.go`, `postgres_scheduled_tasks.go` |
 | `LISTEN/NOTIFY` | `internal/database/notification.go`, notification triggers in `migrations/000001_baseline.sql` |

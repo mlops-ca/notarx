@@ -20,7 +20,6 @@ hits=$(git grep -nIE "$pattern" -- . \
   ':(exclude)docs/reports' \
   ':(exclude)migrations' \
   ':(exclude)console/src/messages' \
-  ':(exclude)internal/repository/postgres_visibility_migration_integration_test.go' \
   ':(exclude)scripts/check-no-anonymous-read.sh' \
   ':(exclude)*.zh-CN.*' || true)
 
@@ -29,14 +28,12 @@ if [[ -n "$hits" ]]; then
   exit 1
 fi
 
-# The regenerated baseline (ADR 0015 slice 7) must carry the visibility enum and
-# none of the retired names, so the generator never reintroduces them. The only
-# tolerated mention is the name of a NOT NULL constraint: PostgreSQL 18 keeps the
-# constraint names of a renamed table (anonymous_access_policy_*_not_null).
+# The re-squashed baseline (ADR 0015 slice 7) must carry the visibility enum and
+# none of the retired names, so a regeneration never reintroduces them.
 baseline=migrations/000001_baseline.sql
 if [[ -f "$baseline" ]]; then
   grep -q 'visibility character varying' "$baseline" || { printf '%s has no visibility column\n' "$baseline" >&2; exit 1; }
-  stale=$(grep -nE 'anonymous_read|anonymous_access_policy' "$baseline" | grep -vE 'anonymous_access_policy_[a-z_]+_not_null' || true)
+  stale=$(grep -nE 'anonymous_read|anonymous_access_policy' "$baseline" || true)
   if [[ -n "$stale" ]]; then
     printf 'retired names in %s:\n%s\n' "$baseline" "$stale" >&2
     exit 1

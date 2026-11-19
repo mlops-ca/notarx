@@ -177,7 +177,7 @@ upgrade path from upstream. `scripts/upgrade-readiness.sh` (kept, with its make
 target) is parameterized on stable notarx release tags and reports a no-op until
 one exists; re-add the CI step once a second notarx release exists.
 `make backup-transfer-test` (lane `core-backup`) runs the same upgrade properties
-against the real migrations and a synthetic `000008` migration meanwhile.
+against the baseline and a synthetic `000002` migration meanwhile.
 
 ## Object store contract
 
