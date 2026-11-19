@@ -27,7 +27,12 @@ A milestone closes when its theme is complete. `scripts/repo-governance-apply.sh
 
 ## The nightly pipeline
 
-`.github/workflows/release.yml` runs at 03:17 UTC and on `workflow_dispatch` (`dry_run` defaults to true). Its jobs:
+`.github/workflows/release.yml` runs at 03:17 UTC and on `workflow_dispatch` (`dry_run` defaults to true). A dry run
+plans, runs the gates and builds the archives and images, so the gate and build paths are exercised on demand; it pushes no image
+(the images are built and checked natively and loaded locally), and it publishes nothing: no `publish` job, no release, tag,
+package or attestation. Only `publish` and `prune --apply` write. Commit parsing for the plan, the commit-policy warnings and the
+release notes starts at the previous release or, before the first one, at the fork commit recorded in `docs/upstream.md`
+(`scripts/release-plan.sh fork`), so upstream history never produces warnings. Its jobs:
 
 1. `plan` (read-only) runs `scripts/release-plan.sh nightly`: the newest of the last ten first-parent commits of `main` whose
    required checks (`scripts/release-required-checks.txt`) are green. It skips, with a notice, when that commit was already
@@ -67,10 +72,10 @@ another workflow and another repository are rejected. The same flags verify any 
 `scripts/prune-releases.sh` keeps the newest 14 nightlies, the newest nightly of every core and every nightly whose commit equals a
 stable tag's commit; it deletes the rest with `gh release delete --cleanup-tag` and never touches stable releases or tags.
 `scripts/prune-ghcr.mjs` is mark and sweep: it marks every tagged version that is not an expired nightly, plus its child manifests
-and its attestation (referrer) manifests, and deletes only unmarked versions older than seven days and older than the oldest
-retained nightly. It aborts when the mark set is empty and never uses a bulk "delete untagged" action, because the per-architecture
+and its attestation (referrer) manifests, and deletes only unmarked versions older than seven days (the in-flight build guard; there is no other age cutoff, so a long-lived
+retained nightly never holds the sweep back, and reachability from retained tags protects retained images). It aborts when the mark set is empty and never uses a bulk "delete untagged" action, because the per-architecture
 digests behind an index are untagged. Both scripts default to a dry run (the workflow applies them only after its own nightly was
-published). The ADR's "older than the oldest retained nightly" condition keeps the sweep cutoff pinned to long-lived retained nightlies; bounding it is tracked in issue 388. Mainline tags (`main`, `main-sha-*`) are treated as live and are not pruned by this slice. To rehearse:
+published). Mainline tags (`main`, `main-sha-*`) are treated as live and are not pruned by this slice. To rehearse:
 
 ```
 gh workflow run release.yml -f dry_run=true

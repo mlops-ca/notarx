@@ -13,9 +13,10 @@
 //          child manifests of an index, and the referrers (attestations, SBOMs) whose
 //          subject is a marked digest, including their own children. Stable and
 //          mainline versions are therefore always marked.
-//   Sweep  versions that are unmarked, older than 7 days (in-flight builds) and older than the
-//          oldest retained nightly. Expired nightly indexes go first; their children
-//          are orphans and follow in the same ordered pass.
+//   Sweep  versions that are unmarked and older than 7 days (the in-flight build guard; no
+//          other cutoff, so a long-lived retained nightly never holds the sweep back).
+//          Expired nightly indexes go first; their children are orphans and follow in the
+//          same ordered pass.
 //   Abort  when the mark set is empty (a read failure must never delete everything), or when
 //          nightly versions exist but the retained list is empty.
 //
@@ -80,13 +81,8 @@ export function plan({ versions, manifests, retainedNightlies, now = Date.now() 
   }
   if (marked.size === 0) throw new Error('the mark set is empty; refusing to prune');
 
-  // Oldest retained nightly: the cutoff below which an unmarked version may go (ADR 0024 wording;
-  // it lets old retained nightlies hold the cutoff back, tracked in issue 388).
-  const retainedTimes = versions
-    .filter((v) => tagsOf(v).some((t) => retainedNightlies.has(t)))
-    .map((v) => Date.parse(v.created_at));
-  const sevenDays = now - 7 * DAY_MS;
-  const cutoff = retainedTimes.length > 0 ? Math.min(sevenDays, ...retainedTimes) : sevenDays;
+  // The only age condition is the 7-day in-flight guard (ADR 0024, Retention and pruning).
+  const cutoff = now - 7 * DAY_MS;
 
   const sweep = versions
     .filter((v) => !marked.has(v.name) && Date.parse(v.created_at) < cutoff)

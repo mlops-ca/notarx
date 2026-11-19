@@ -221,6 +221,26 @@ expect_refused 'a nightly outside main is refused' stable --nightly-tag v0.3.0-n
 new_repo; commit 'feat: a'; tag v0.1.0-nightly.1
 expect_refused 'a stable run needs green required checks' stable --nightly-tag v0.1.0-nightly.1
 
+# --- the fork point: upstream history is never parsed ------------------------
+
+new_repo; commit 'feat: an upstream feature'; git -C "$repo" commit -q --allow-empty -m 'Update the upstream readme'
+fork=$(head_sha); commit 'chore: first notarx change'; green
+upstream_doc=$repo.upstream.md
+printf '%s\n' "- Last upstream commit before the first notarx commit: \`$fork\`" > "$upstream_doc"
+expect_eq 'the fork commit is read from the upstream document' "$(RELEASE_PLAN_REPO="$repo" RELEASE_PLAN_UPSTREAM_DOC="$upstream_doc" bash "$root/scripts/release-plan.sh" fork)" "$fork"
+log=$(RELEASE_PLAN_REPO="$repo" RELEASE_PLAN_UPSTREAM_DOC="$upstream_doc" bash "$root/scripts/release-plan.sh" nightly 2>&1)
+expect_eq 'an upstream releasing commit before the fork does not release' "$(grep -c '^skip=true$' <<<"$log")" 1
+commit 'feat: first notarx feature'; green
+log=$(RELEASE_PLAN_REPO="$repo" RELEASE_PLAN_UPSTREAM_DOC="$upstream_doc" bash "$root/scripts/release-plan.sh" nightly 2>&1)
+expect_eq 'a releasing commit after the fork releases' "$(grep -c '^version=0.1.0-nightly.1$' <<<"$log")" 1
+expect_eq 'the range base is the fork commit before the first release' "$(grep '^base=' <<<"$log")" "base=$fork"
+cases=$((cases + 1))
+if grep -q 'Update the upstream readme' <<<"$log"; then
+  fail 'a pre-fork commit was parsed and warned about'
+fi
+printf '%s\n' '- Last upstream commit before the first notarx commit: `0000000000000000000000000000000000000000`' > "$upstream_doc"
+expect_eq 'a fork commit missing from the repository bounds nothing' "$(RELEASE_PLAN_REPO="$repo" RELEASE_PLAN_UPSTREAM_DOC="$upstream_doc" bash "$root/scripts/release-plan.sh" fork)" ''
+
 # --- the required-checks gate -----------------------------------------------
 
 new_repo; commit 'feat: a'; sha=$(head_sha); green "$sha"

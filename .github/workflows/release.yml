@@ -2,7 +2,8 @@ name: Release
 
 # Nightly release pipeline (ADR 0024). One workflow, two triggers: schedule (a
 # nightly pre-release of the newest green commit of main) and workflow_dispatch
-# (a manual run; dry_run defaults to true and prints the plan without building).
+# (a manual run; dry_run defaults to true: it plans, runs the gates and builds the
+# archives and images without pushing anything, and publishes nothing).
 # The stable channel is added to this job graph by ADR 0024 slice 5. There is no tag
 # trigger: the workflow creates the tag itself as its last step, so a failed run
 # leaves only untagged digests and the next night retries.
@@ -25,7 +26,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: Print the plan and the intended tags only; build and publish nothing.
+        description: Plan, run the gates and build the archives and images (nothing is pushed); never publish, tag or attest.
         type: boolean
         default: true
 
@@ -63,9 +64,11 @@ jobs:
       core: ${{ steps.plan.outputs.core }}
       sha: ${{ steps.plan.outputs.sha }}
       previous: ${{ steps.plan.outputs.previous }}
+      # Where commit ranges start: the previous release, or the fork commit before the first one.
+      base: ${{ steps.plan.outputs.base }}
       tags: ${{ steps.tags.outputs.tags }}
       images: ${{ steps.tags.outputs.images }}
-      # true when the run builds and publishes; false for a skip and for a dry run.
+      # true when the run also publishes; false for a skip and for a dry run.
       publish: ${{ steps.tags.outputs.publish }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -123,13 +126,13 @@ jobs:
         if: steps.plan.outputs.skip != 'true'
         env:
           SHA: ${{ steps.plan.outputs.sha }}
-          PREVIOUS: ${{ steps.plan.outputs.previous }}
-        run: node scripts/commit-policy-check.mjs --warn-range "${PREVIOUS:+$PREVIOUS..}$SHA"
+          BASE: ${{ steps.plan.outputs.base }}
+        run: node scripts/commit-policy-check.mjs --warn-range "${BASE:+$BASE..}$SHA"
 
   # --- gates: the full arm64 contract-native run on the planned commit -----------
   gates-images:
     needs: plan
-    if: needs.plan.outputs.publish == 'true'
+    if: needs.plan.outputs.skip != 'true'
     runs-on: ubuntu-24.04-arm
     strategy:
       fail-fast: true
@@ -164,7 +167,7 @@ jobs:
 
   gates-plan:
     needs: plan
-    if: needs.plan.outputs.publish == 'true'
+    if: needs.plan.outputs.skip != 'true'
     runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
@@ -195,7 +198,7 @@ jobs:
       sha: ${{ needs.plan.outputs.sha }}
 
   gates:
-    if: ${{ !cancelled() && needs.plan.outputs.publish == 'true' }}
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.skip != 'true' }}
     needs: [plan, gates-images, gates-plan, gates-contract]
     runs-on: ubuntu-24.04
     steps:
@@ -214,7 +217,8 @@ jobs:
       version: ${{ needs.plan.outputs.version }}
       sha: ${{ needs.plan.outputs.sha }}
       assets-artifact: notarx-v${{ needs.plan.outputs.version }}
-      retention-days: 90
+      # A dry run keeps its archives for a day only.
+      retention-days: ${{ needs.plan.outputs.publish == 'true' && 90 || 1 }}
 
   # Image tags are public, so the tag merge runs only after the gate passed. Archives and
   # images build side by side; publish needs both.
@@ -231,16 +235,19 @@ jobs:
       sha: ${{ needs.plan.outputs.sha }}
       tags: ${{ needs.plan.outputs.tags }}
       images: ${{ needs.plan.outputs.images }}
+      # A dry run builds and checks the images natively but pushes, tags and attests nothing.
+      dry-run: ${{ needs.plan.outputs.publish != 'true' }}
 
   build:
     needs: [build-archives, build-images]
     runs-on: ubuntu-24.04
     steps:
-      - run: echo "archives and images built and attested"
+      - run: echo "archives and images built (attested only when the run publishes)"
 
   # --- publish: tag and pre-release in one call, as the last step ---------------------
   publish:
     needs: [plan, build]
+    if: needs.plan.outputs.publish == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -253,6 +260,7 @@ jobs:
       CORE: ${{ needs.plan.outputs.core }}
       SHA: ${{ needs.plan.outputs.sha }}
       PREVIOUS: ${{ needs.plan.outputs.previous }}
+      BASE: ${{ needs.plan.outputs.base }}
       IMAGES: ${{ needs.plan.outputs.images }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -292,7 +300,7 @@ jobs:
       - name: Generate the release notes
         run: |
           cliff=$(./scripts/install-git-cliff.sh)
-          "$cliff" --config cliff.toml "${PREVIOUS:+$PREVIOUS..}$SHA" --tag "v$VERSION" --strip all > notes.md
+          "$cliff" --config cliff.toml "${BASE:+$BASE..}$SHA" --tag "v$VERSION" --strip all > notes.md
           [ -s notes.md ] || echo "No user-facing changes." > notes.md
           {
             echo
