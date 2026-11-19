@@ -237,8 +237,18 @@ jobs:
         run: make console-build
       - name: Build Console deployment image
         run: make console-docker-build
+      - name: Resolve Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+        working-directory: console
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
       - name: Install browser
         run: npx playwright install --with-deps chromium
+        timeout-minutes: 5
         working-directory: console
       - name: Verify built Console identity
         run: npx playwright test --config playwright.build.config.ts
@@ -290,9 +300,21 @@ jobs:
         if: matrix.shard != ''
         timeout-minutes: 10
         working-directory: console
+      - name: Resolve Playwright version
+        id: playwright
+        if: matrix.shard != ''
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+        working-directory: console
+      - name: Cache Playwright browsers
+        if: matrix.shard != ''
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
       - name: Install browser
         if: matrix.shard != ''
         run: npx playwright install --with-deps chromium
+        timeout-minutes: 5
         working-directory: console
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:

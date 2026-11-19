@@ -59,6 +59,10 @@ behaviour config ignores, and the contract lanes never run Playwright.
 
 `make lint` runs `make actionlint-check`, which runs the pinned `rhysd/actionlint` image (actionlint, which also lints the shell in every `run` step) over every file in `.github/workflows`. Any finding fails the `quality` jobs, so a workflow warning cannot be merged.
 
+## Playwright browser install
+
+Every Playwright browser install step (the `console` job and the `console-e2e` shards) has its own `timeout-minutes: 5`, so a stuck download fails fast instead of holding a runner until the job timeout. The browser download directory (`~/.cache/ms-playwright`) is cached with `actions/cache`, keyed by runner OS, architecture and the resolved `@playwright/test` version, so a cache hit downloads no browser; `--with-deps` still installs the system packages on every run.
+
 ## The ci-ok gate
 
 `ci-ok` depends on `changes`, `no-chinese`, `tests` and the two `oci-free-tier` jobs and
