@@ -28,7 +28,7 @@ func (s *PostgresStore) GetArtifactQuarantine(ctx context.Context, repositoryID 
 	return value, err
 }
 
-func (s *PostgresStore) ReplaceArtifactQuarantine(ctx context.Context, value ArtifactQuarantine, expectedVersion string) (ArtifactQuarantine, error) {
+func (s *PostgresStore) ReplaceArtifactQuarantine(ctx context.Context, value ArtifactQuarantine, expectedVersion string, audit ...AuditRecord) (ArtifactQuarantine, error) {
 	if !validArtifactQuarantine(value) {
 		return ArtifactQuarantine{}, ErrInvalidArtifactQuarantine
 	}
@@ -72,6 +72,9 @@ RETURNING `+artifactQuarantineColumns, value.RepositoryID, value.Format, value.C
 		if err = enqueueWebhookEventPostgres(ctx, tx, artifactQuarantineWebhookEvent(created)); err != nil {
 			return ArtifactQuarantine{}, err
 		}
+		if err = insertAudits(ctx, tx, audit); err != nil {
+			return ArtifactQuarantine{}, err
+		}
 		if err = tx.Commit(); err != nil {
 			return ArtifactQuarantine{}, err
 		}
@@ -88,6 +91,9 @@ RETURNING `+artifactQuarantineColumns, value.RepositoryID, value.Format, value.C
 			return ArtifactQuarantine{}, err
 		}
 		if err = enqueueWebhookEventPostgres(ctx, tx, artifactQuarantineWebhookEvent(updated)); err != nil {
+			return ArtifactQuarantine{}, err
+		}
+		if err = insertAudits(ctx, tx, audit); err != nil {
 			return ArtifactQuarantine{}, err
 		}
 		if err = tx.Commit(); err != nil {

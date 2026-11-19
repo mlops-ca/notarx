@@ -15,7 +15,7 @@ func (s *MemoryStore) GetArtifactQuarantine(_ context.Context, repositoryID stri
 	return value, nil
 }
 
-func (s *MemoryStore) ReplaceArtifactQuarantine(_ context.Context, value ArtifactQuarantine, expectedVersion string) (ArtifactQuarantine, error) {
+func (s *MemoryStore) ReplaceArtifactQuarantine(ctx context.Context, value ArtifactQuarantine, expectedVersion string, audit ...AuditRecord) (ArtifactQuarantine, error) {
 	if !validArtifactQuarantine(value) {
 		return ArtifactQuarantine{}, ErrInvalidArtifactQuarantine
 	}
@@ -30,6 +30,9 @@ func (s *MemoryStore) ReplaceArtifactQuarantine(_ context.Context, value Artifac
 		if value.State != ArtifactQuarantineStateQuarantined {
 			return ArtifactQuarantine{}, ErrInvalidArtifactQuarantine
 		}
+		if err := s.commitAuditLocked(ctx, audit); err != nil {
+			return ArtifactQuarantine{}, err
+		}
 		now := time.Now().UTC()
 		value.Version = "1"
 		value.QuarantinedAt = now
@@ -41,6 +44,9 @@ func (s *MemoryStore) ReplaceArtifactQuarantine(_ context.Context, value Artifac
 	}
 	if current.Version != expectedVersion {
 		return ArtifactQuarantine{}, ErrVersionConflict
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return ArtifactQuarantine{}, err
 	}
 	value.Version = nextHostedGroupVersion(current.Version)
 	if value.State == ArtifactQuarantineStateQuarantined {

@@ -174,7 +174,7 @@ func (s *MemoryStore) GetGoModuleVersion(_ context.Context, repositoryID, module
 	return item, nil
 }
 
-func (s *MemoryStore) TombstoneGoModuleVersion(ctx context.Context, repositoryID, modulePath, version string) (GoModuleVersion, error) {
+func (s *MemoryStore) TombstoneGoModuleVersion(ctx context.Context, repositoryID, modulePath, version string, audit ...AuditRecord) (GoModuleVersion, error) {
 	s.mu.RLock()
 	_, exists := s.goVersions[goVersionKey(repositoryID, modulePath, version)]
 	alreadyTombstoned := s.goModuleVersionTombstonedLocked(repositoryID, modulePath, version)
@@ -199,6 +199,9 @@ func (s *MemoryStore) TombstoneGoModuleVersion(ctx context.Context, repositoryID
 	item, ok := s.goVersions[goVersionKey(repositoryID, modulePath, version)]
 	if !ok || s.goModuleVersionTombstonedLocked(repositoryID, modulePath, version) {
 		return GoModuleVersion{}, ErrNotFound
+	}
+	if err = s.commitAuditLocked(ctx, audit); err != nil {
+		return GoModuleVersion{}, err
 	}
 	digest := ""
 	for _, kind := range []string{"zip", "mod", "info"} {

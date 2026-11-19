@@ -68,7 +68,7 @@ type artifactConanStore interface {
 	SearchConanRecipeRevisions(context.Context, string, string, string, int, string) ([]repository.ConanRecipeRevision, error)
 	ListConanPackageRevisions(context.Context, string, string, string, string) ([]repository.ConanPackageRevision, error)
 	ListConanPackageIDs(context.Context, string, string, string) ([]string, error)
-	TombstoneConanPackageRevision(context.Context, string, string, string, string, string) (repository.ConanPackageRevision, error)
+	TombstoneConanPackageRevision(context.Context, string, string, string, string, string, ...repository.AuditRecord) (repository.ConanPackageRevision, error)
 }
 
 type artifactCargoReader interface {

@@ -360,7 +360,7 @@ func (s *PostgresStore) ListPyPIProjects(ctx context.Context, repositoryID, pref
 	return result, nil
 }
 
-func (s *PostgresStore) TombstonePyPIVersion(ctx context.Context, repositoryID, project, version string) ([]PyPIFile, error) {
+func (s *PostgresStore) TombstonePyPIVersion(ctx context.Context, repositoryID, project, version string, audit ...AuditRecord) ([]PyPIFile, error) {
 	releaseDistribution, err := lockArtifactDistributionCoordinates(ctx, s, repositoryID, FormatPyPI, []string{project + "@" + version})
 	if err != nil {
 		return nil, err
@@ -405,6 +405,9 @@ func (s *PostgresStore) TombstonePyPIVersion(ctx context.Context, repositoryID, 
 		}
 	}
 	if err = delta.reserve(ctx, tx); err != nil {
+		return nil, err
+	}
+	if err = insertAudits(ctx, tx, audit); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {

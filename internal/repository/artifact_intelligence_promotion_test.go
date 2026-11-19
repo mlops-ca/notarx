@@ -15,7 +15,7 @@ func (s *failingArtifactIntelligenceQueue) EnqueueLifecycleJob(context.Context, 
 	return LifecycleJob{}, false, s.err
 }
 
-func (s *failingArtifactIntelligenceQueue) ReplaceArtifactIntelligence(ctx context.Context, value ArtifactIntelligence, expectedVersion string) (ArtifactIntelligence, error) {
+func (s *failingArtifactIntelligenceQueue) ReplaceArtifactIntelligence(ctx context.Context, value ArtifactIntelligence, expectedVersion string, _ ...AuditRecord) (ArtifactIntelligence, error) {
 	if value.RepositoryID == "target" {
 		return ArtifactIntelligence{}, s.err
 	}

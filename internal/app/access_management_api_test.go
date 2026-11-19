@@ -81,7 +81,8 @@ func TestAccessManagementDomainIndependentHTTP(t *testing.T) {
 		t.Fatalf("revoked access=%d %s", response.Code, response.Body.String())
 	}
 	operations := map[string]int{}
-	for _, record := range audit.records {
+	// Mutations are audited by the store in the transaction of the change, denials by the handler.
+	for _, record := range append(append([]repository.AuditRecord{}, audit.records...), store.Audits...) {
 		operations[record.Operation]++
 		if record.Operation == "repository.grants.upsert" || record.Operation == "repository.grants.delete" {
 			if record.Actor != "alice" || record.Resource != "repositories/"+repo.ID+"/grants" {

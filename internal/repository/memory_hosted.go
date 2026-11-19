@@ -406,7 +406,7 @@ func (s *MemoryStore) ListRepositoryGrantRecords(_ context.Context) ([]Repositor
 	return records, nil
 }
 
-func (s *MemoryStore) ReplaceRepositoryGrants(_ context.Context, repositoryID string, grants []RepositoryGrant, expectedVersion string) (RepositoryGrantSet, error) {
+func (s *MemoryStore) ReplaceRepositoryGrants(ctx context.Context, repositoryID string, grants []RepositoryGrant, expectedVersion string, audit ...AuditRecord) (RepositoryGrantSet, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.hostedRepositories[repositoryID]; !ok {
@@ -419,6 +419,9 @@ func (s *MemoryStore) ReplaceRepositoryGrants(_ context.Context, repositoryID st
 	if set.Version != expectedVersion {
 		return RepositoryGrantSet{}, ErrVersionConflict
 	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return RepositoryGrantSet{}, err
+	}
 	set.Version = nextHostedGroupVersion(set.Version)
 	set.Grants = append([]RepositoryGrant{}, grants...)
 	for i := range set.Grants {
@@ -428,7 +431,7 @@ func (s *MemoryStore) ReplaceRepositoryGrants(_ context.Context, repositoryID st
 	return cloneRepositoryGrantSet(set), nil
 }
 
-func (s *MemoryStore) UpsertRepositoryGrant(_ context.Context, repositoryID string, grant RepositoryGrant) (RepositoryGrantSet, error) {
+func (s *MemoryStore) UpsertRepositoryGrant(ctx context.Context, repositoryID string, grant RepositoryGrant, audit ...AuditRecord) (RepositoryGrantSet, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.hostedRepositories[repositoryID]; !ok {
@@ -437,6 +440,9 @@ func (s *MemoryStore) UpsertRepositoryGrant(_ context.Context, repositoryID stri
 	set := s.repositoryGrants[repositoryID]
 	if set.Version == "" {
 		set.Version = "1"
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return RepositoryGrantSet{}, err
 	}
 	set.Version = nextHostedGroupVersion(set.Version)
 	grant.Scopes = append([]string(nil), grant.Scopes...)
@@ -455,7 +461,7 @@ func (s *MemoryStore) UpsertRepositoryGrant(_ context.Context, repositoryID stri
 	return cloneRepositoryGrantSet(set), nil
 }
 
-func (s *MemoryStore) DeleteRepositoryGrant(_ context.Context, repositoryID, principal, resourcePrefix string) (RepositoryGrantSet, error) {
+func (s *MemoryStore) DeleteRepositoryGrant(ctx context.Context, repositoryID, principal, resourcePrefix string, audit ...AuditRecord) (RepositoryGrantSet, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.hostedRepositories[repositoryID]; !ok {
@@ -476,6 +482,9 @@ func (s *MemoryStore) DeleteRepositoryGrant(_ context.Context, repositoryID, pri
 	}
 	if !found {
 		return RepositoryGrantSet{}, ErrNotFound
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return RepositoryGrantSet{}, err
 	}
 	set.Version = nextHostedGroupVersion(set.Version)
 	set.Grants = grants

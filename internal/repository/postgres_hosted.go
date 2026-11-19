@@ -621,7 +621,7 @@ func (s *PostgresStore) ListRepositoryGrantRecords(ctx context.Context) ([]Repos
 	return records, rows.Err()
 }
 
-func (s *PostgresStore) ReplaceRepositoryGrants(ctx context.Context, repositoryID string, grants []RepositoryGrant, expectedVersion string) (RepositoryGrantSet, error) {
+func (s *PostgresStore) ReplaceRepositoryGrants(ctx context.Context, repositoryID string, grants []RepositoryGrant, expectedVersion string, audit ...AuditRecord) (RepositoryGrantSet, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return RepositoryGrantSet{}, err
@@ -653,13 +653,16 @@ func (s *PostgresStore) ReplaceRepositoryGrants(ctx context.Context, repositoryI
 			return RepositoryGrantSet{}, err
 		}
 	}
+	if err = insertAudits(ctx, tx, audit); err != nil {
+		return RepositoryGrantSet{}, err
+	}
 	if err = tx.Commit(); err != nil {
 		return RepositoryGrantSet{}, err
 	}
 	return RepositoryGrantSet{Version: version, Grants: append([]RepositoryGrant{}, grants...)}, nil
 }
 
-func (s *PostgresStore) UpsertRepositoryGrant(ctx context.Context, repositoryID string, grant RepositoryGrant) (RepositoryGrantSet, error) {
+func (s *PostgresStore) UpsertRepositoryGrant(ctx context.Context, repositoryID string, grant RepositoryGrant, audit ...AuditRecord) (RepositoryGrantSet, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return RepositoryGrantSet{}, err
@@ -687,13 +690,16 @@ func (s *PostgresStore) UpsertRepositoryGrant(ctx context.Context, repositoryID 
 	if err != nil {
 		return RepositoryGrantSet{}, err
 	}
+	if err = insertAudits(ctx, tx, audit); err != nil {
+		return RepositoryGrantSet{}, err
+	}
 	if err = tx.Commit(); err != nil {
 		return RepositoryGrantSet{}, err
 	}
 	return set, nil
 }
 
-func (s *PostgresStore) DeleteRepositoryGrant(ctx context.Context, repositoryID, principal, resourcePrefix string) (RepositoryGrantSet, error) {
+func (s *PostgresStore) DeleteRepositoryGrant(ctx context.Context, repositoryID, principal, resourcePrefix string, audit ...AuditRecord) (RepositoryGrantSet, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return RepositoryGrantSet{}, err
@@ -723,6 +729,9 @@ func (s *PostgresStore) DeleteRepositoryGrant(ctx context.Context, repositoryID,
 	}
 	set, err := loadRepositoryGrants(ctx, tx, repositoryID, version)
 	if err != nil {
+		return RepositoryGrantSet{}, err
+	}
+	if err = insertAudits(ctx, tx, audit); err != nil {
 		return RepositoryGrantSet{}, err
 	}
 	if err = tx.Commit(); err != nil {

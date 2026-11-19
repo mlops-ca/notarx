@@ -464,13 +464,16 @@ func (s *MemoryStore) getConanAsset(repositoryID, reference, recipeRevision, pac
 	return asset, nil
 }
 
-func (s *MemoryStore) TombstoneConanRecipeRevision(_ context.Context, repositoryID, reference, revision string) (ConanRecipeRevision, error) {
+func (s *MemoryStore) TombstoneConanRecipeRevision(ctx context.Context, repositoryID, reference, revision string, audit ...AuditRecord) (ConanRecipeRevision, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	key := conanRecipeKey(repositoryID, reference, revision)
 	item, ok := s.conanRecipes[key]
 	if !ok {
 		return ConanRecipeRevision{}, ErrNotFound
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return ConanRecipeRevision{}, err
 	}
 	item.State = "deleted"
 	s.conanRecipes[key] = item
@@ -484,13 +487,16 @@ func (s *MemoryStore) TombstoneConanRecipeRevision(_ context.Context, repository
 	return item, nil
 }
 
-func (s *MemoryStore) TombstoneConanPackageRevision(_ context.Context, repositoryID, reference, recipeRevision, packageID, revision string) (ConanPackageRevision, error) {
+func (s *MemoryStore) TombstoneConanPackageRevision(ctx context.Context, repositoryID, reference, recipeRevision, packageID, revision string, audit ...AuditRecord) (ConanPackageRevision, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	key := conanPackageKey(repositoryID, reference, recipeRevision, packageID, revision)
 	item, ok := s.conanPackages[key]
 	if !ok {
 		return ConanPackageRevision{}, ErrNotFound
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return ConanPackageRevision{}, err
 	}
 	item.State = "deleted"
 	s.conanPackages[key] = item

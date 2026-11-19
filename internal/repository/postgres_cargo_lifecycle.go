@@ -24,7 +24,7 @@ func (s *PostgresStore) cargoObjectKey(ctx context.Context, repositoryID, name, 
 	return key, err
 }
 
-func (s *PostgresStore) TombstoneCargoPublication(ctx context.Context, repositoryID, name, version string) (CargoPublication, error) {
+func (s *PostgresStore) TombstoneCargoPublication(ctx context.Context, repositoryID, name, version string, audit ...AuditRecord) (CargoPublication, error) {
 	objectKey, err := s.cargoObjectKey(ctx, repositoryID, name, version)
 	if err != nil {
 		return CargoPublication{}, err
@@ -65,6 +65,9 @@ func (s *PostgresStore) TombstoneCargoPublication(ctx context.Context, repositor
 		return CargoPublication{}, rowsErr
 	} else if affected == 0 {
 		return CargoPublication{}, ErrNotFound
+	}
+	if err = insertAudits(ctx, tx, audit); err != nil {
+		return CargoPublication{}, err
 	}
 	if err := tx.Commit(); err != nil {
 		return CargoPublication{}, err

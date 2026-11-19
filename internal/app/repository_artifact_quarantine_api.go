@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
@@ -103,6 +102,10 @@ func (h generatedRepositoryAPIAdapter) ReplaceArtifactQuarantine(w http.Response
 			return
 		}
 
+		operation := "artifact.quarantine"
+		if state == repository.ArtifactQuarantineStateReleased {
+			operation = "artifact.release"
+		}
 		updated, err := h.quarantine.ReplaceArtifactQuarantine(r.Context(), repository.ArtifactQuarantine{
 			RepositoryID: repo.ID,
 			Format:       repo.Format,
@@ -111,7 +114,11 @@ func (h generatedRepositoryAPIAdapter) ReplaceArtifactQuarantine(w http.Response
 			State:        state,
 			Reason:       reason,
 			UpdatedBy:    principal.Actor,
-		}, expected)
+		}, expected, auditRecordsWhen(h.audit != nil, repository.AuditRecord{
+			GroupName: repo.Name, Repository: repo.Name, Actor: principal.Actor,
+			Format: string(repo.Format), Resource: coordinate, Representation: digest,
+			Operation: operation, Status: http.StatusOK, AuthorizationReason: reason,
+		})...)
 		if errors.Is(err, repository.ErrVersionConflict) {
 			writeHostedProblem(w, http.StatusPreconditionFailed, "version_conflict", "If-Match does not match current quarantine version")
 			return
@@ -127,21 +134,6 @@ func (h generatedRepositoryAPIAdapter) ReplaceArtifactQuarantine(w http.Response
 		if err != nil {
 			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "replace artifact quarantine failed")
 			return
-		}
-		if h.audit != nil {
-			operation := "artifact.quarantine"
-			if state == repository.ArtifactQuarantineStateReleased {
-				operation = "artifact.release"
-			}
-			if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{
-				GroupName: repo.Name, Repository: repo.Name, Actor: principal.Actor,
-				Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(),
-				Format: string(repo.Format), Resource: coordinate, Representation: digest,
-				Operation: operation, Status: http.StatusOK, AuthorizationReason: reason,
-				CacheDisposition: "bypass",
-			}) {
-				return
-			}
 		}
 		writeArtifactQuarantine(w, updated)
 	})

@@ -22,7 +22,7 @@ func (s *PostgresStore) GetRepositoryQuarantineReadPolicy(ctx context.Context, r
 	return policy, err
 }
 
-func (s *PostgresStore) ReplaceRepositoryQuarantineReadPolicy(ctx context.Context, repositoryID string, policy RepositoryQuarantineReadPolicy, expectedVersion string) (RepositoryQuarantineReadPolicy, error) {
+func (s *PostgresStore) ReplaceRepositoryQuarantineReadPolicy(ctx context.Context, repositoryID string, policy RepositoryQuarantineReadPolicy, expectedVersion string, audit ...AuditRecord) (RepositoryQuarantineReadPolicy, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return RepositoryQuarantineReadPolicy{}, err
@@ -46,6 +46,9 @@ func (s *PostgresStore) ReplaceRepositoryQuarantineReadPolicy(ctx context.Contex
 		return RepositoryQuarantineReadPolicy{}, ErrVersionConflict
 	}
 	if err != nil {
+		return RepositoryQuarantineReadPolicy{}, err
+	}
+	if err = insertAudits(ctx, tx, audit); err != nil {
 		return RepositoryQuarantineReadPolicy{}, err
 	}
 	if err = tx.Commit(); err != nil {

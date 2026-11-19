@@ -515,7 +515,7 @@ func (s *PostgresStore) getConanAsset(ctx context.Context, repositoryID, referen
 	return asset, err
 }
 
-func (s *PostgresStore) TombstoneConanRecipeRevision(ctx context.Context, repositoryID, reference, revision string) (ConanRecipeRevision, error) {
+func (s *PostgresStore) TombstoneConanRecipeRevision(ctx context.Context, repositoryID, reference, revision string, audit ...AuditRecord) (ConanRecipeRevision, error) {
 	var item ConanRecipeRevision
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -546,10 +546,13 @@ func (s *PostgresStore) TombstoneConanRecipeRevision(ctx context.Context, reposi
 	if err = usage.reserve(ctx, tx); err != nil {
 		return item, err
 	}
+	if err = insertAudits(ctx, tx, audit); err != nil {
+		return item, err
+	}
 	return item, tx.Commit()
 }
 
-func (s *PostgresStore) TombstoneConanPackageRevision(ctx context.Context, repositoryID, reference, recipeRevision, packageID, revision string) (ConanPackageRevision, error) {
+func (s *PostgresStore) TombstoneConanPackageRevision(ctx context.Context, repositoryID, reference, recipeRevision, packageID, revision string, audit ...AuditRecord) (ConanPackageRevision, error) {
 	var item ConanPackageRevision
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -575,6 +578,9 @@ func (s *PostgresStore) TombstoneConanPackageRevision(ctx context.Context, repos
 		return item, err
 	}
 	if err = usage.reserve(ctx, tx); err != nil {
+		return item, err
+	}
+	if err = insertAudits(ctx, tx, audit); err != nil {
 		return item, err
 	}
 	return item, tx.Commit()

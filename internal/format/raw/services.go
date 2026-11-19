@@ -42,11 +42,11 @@ func (m *Module) ResolveArtifactScan(ctx context.Context, repositoryID string, p
 		return reader, err
 	}}}}, nil
 }
-func (m *Module) Tombstone(ctx context.Context, repositoryID, coordinate string) error {
+func (m *Module) Tombstone(ctx context.Context, repositoryID, coordinate string, audit ...repository.AuditRecord) error {
 	if m.store == nil {
 		return repository.ErrDisabled
 	}
-	return m.store.DeleteRawAsset(ctx, repositoryID, coordinate)
+	return m.store.DeleteRawAsset(ctx, repositoryID, coordinate, audit...)
 }
 func (m *Module) Restore(ctx context.Context, repositoryID, coordinate string) error {
 	if m.store == nil {

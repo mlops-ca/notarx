@@ -742,13 +742,13 @@ func (s *PostgresStore) GetMavenArtifactByCoordinate(ctx context.Context, reposi
 	}
 	return artifact, err
 }
-func (s *PostgresStore) TombstoneMavenArtifact(ctx context.Context, repositoryID, artifactID string) (MavenArtifact, error) {
+func (s *PostgresStore) TombstoneMavenArtifact(ctx context.Context, repositoryID, artifactID string, audit ...AuditRecord) (MavenArtifact, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return MavenArtifact{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	return tombstoneMavenArtifactTx(ctx, tx, repositoryID, artifactID)
+	return tombstoneMavenArtifactTx(ctx, tx, repositoryID, artifactID, audit)
 }
 
 func (s *PostgresStore) TombstoneMavenArtifactForRetention(ctx context.Context, repositoryID, artifactID, policyVersion string) (MavenArtifact, error) {
@@ -768,10 +768,10 @@ func (s *PostgresStore) TombstoneMavenArtifactForRetention(ctx context.Context, 
 	if !allowed {
 		return MavenArtifact{}, ErrVersionConflict
 	}
-	return tombstoneMavenArtifactTx(ctx, tx, repositoryID, artifactID)
+	return tombstoneMavenArtifactTx(ctx, tx, repositoryID, artifactID, nil)
 }
 
-func tombstoneMavenArtifactTx(ctx context.Context, tx *sql.Tx, repositoryID, artifactID string) (MavenArtifact, error) {
+func tombstoneMavenArtifactTx(ctx context.Context, tx *sql.Tx, repositoryID, artifactID string, audit []AuditRecord) (MavenArtifact, error) {
 	if err := lockMavenCapacityTx(ctx, tx, repositoryID); err != nil {
 		return MavenArtifact{}, err
 	}
@@ -786,6 +786,9 @@ func tombstoneMavenArtifactTx(ctx context.Context, tx *sql.Tx, repositoryID, art
 		return MavenArtifact{}, err
 	}
 	if artifact.State == "deleted" {
+		if err = insertAudits(ctx, tx, audit); err != nil {
+			return MavenArtifact{}, err
+		}
 		return artifact, tx.Commit()
 	}
 	usage, err := openMavenUsageBracket(ctx, tx, repositoryID, artifact.Coordinate)
@@ -816,6 +819,9 @@ func tombstoneMavenArtifactTx(ctx context.Context, tx *sql.Tx, repositoryID, art
 	}
 	artifact.State = "deleted"
 	if err = usage.reserve(ctx, tx); err != nil {
+		return MavenArtifact{}, err
+	}
+	if err = insertAudits(ctx, tx, audit); err != nil {
 		return MavenArtifact{}, err
 	}
 	if err = tx.Commit(); err != nil {

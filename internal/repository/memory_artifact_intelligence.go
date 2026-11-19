@@ -32,7 +32,7 @@ func (s *MemoryStore) GetArtifactIntelligence(_ context.Context, repositoryID st
 	return cloneArtifactIntelligence(value), nil
 }
 
-func (s *MemoryStore) ReplaceArtifactIntelligence(_ context.Context, value ArtifactIntelligence, expectedVersion string) (ArtifactIntelligence, error) {
+func (s *MemoryStore) ReplaceArtifactIntelligence(ctx context.Context, value ArtifactIntelligence, expectedVersion string, audit ...AuditRecord) (ArtifactIntelligence, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	key := artifactIntelligenceKey(value.RepositoryID, value.Format, value.Coordinate, value.Digest)
@@ -42,6 +42,9 @@ func (s *MemoryStore) ReplaceArtifactIntelligence(_ context.Context, value Artif
 	}
 	if !exists && expectedVersion != "" && expectedVersion != "0" {
 		return ArtifactIntelligence{}, ErrVersionConflict
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return ArtifactIntelligence{}, err
 	}
 	now := time.Now().UTC()
 	if !exists {

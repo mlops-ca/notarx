@@ -508,7 +508,7 @@ func (s *PostgresStore) GetNPMVersion(ctx context.Context, repositoryID, name, v
 	return item, err
 }
 
-func (s *PostgresStore) TombstoneNPMVersion(ctx context.Context, repositoryID, name, version string) (NPMVersion, error) {
+func (s *PostgresStore) TombstoneNPMVersion(ctx context.Context, repositoryID, name, version string, audit ...AuditRecord) (NPMVersion, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return NPMVersion{}, err
@@ -519,6 +519,9 @@ func (s *PostgresStore) TombstoneNPMVersion(ctx context.Context, repositoryID, n
 	}
 	item, err := tombstoneNPMVersionTx(ctx, tx, repositoryID, name, version)
 	if err != nil {
+		return NPMVersion{}, err
+	}
+	if err = insertAudits(ctx, tx, audit); err != nil {
 		return NPMVersion{}, err
 	}
 	if err = tx.Commit(); err != nil {

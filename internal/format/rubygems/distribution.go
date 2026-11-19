@@ -35,13 +35,13 @@ func (g replicationGrants) GetRepositoryGrants(_ context.Context, id string) (re
 	}
 	return repository.RepositoryGrantSet{}, repository.ErrNotFound
 }
-func (replicationGrants) ReplaceRepositoryGrants(context.Context, string, []repository.RepositoryGrant, string) (repository.RepositoryGrantSet, error) {
+func (replicationGrants) ReplaceRepositoryGrants(context.Context, string, []repository.RepositoryGrant, string, ...repository.AuditRecord) (repository.RepositoryGrantSet, error) {
 	return repository.RepositoryGrantSet{}, dist.ErrAccessDenied
 }
-func (replicationGrants) UpsertRepositoryGrant(context.Context, string, repository.RepositoryGrant) (repository.RepositoryGrantSet, error) {
+func (replicationGrants) UpsertRepositoryGrant(context.Context, string, repository.RepositoryGrant, ...repository.AuditRecord) (repository.RepositoryGrantSet, error) {
 	return repository.RepositoryGrantSet{}, dist.ErrAccessDenied
 }
-func (replicationGrants) DeleteRepositoryGrant(context.Context, string, string, string) (repository.RepositoryGrantSet, error) {
+func (replicationGrants) DeleteRepositoryGrant(context.Context, string, string, string, ...repository.AuditRecord) (repository.RepositoryGrantSet, error) {
 	return repository.RepositoryGrantSet{}, dist.ErrAccessDenied
 }
 func replicationGrantSet(a dist.RepositoryAuthority) repository.RepositoryGrantSet {

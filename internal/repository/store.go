@@ -129,14 +129,14 @@ type HostedGroupStore interface {
 
 type RepositoryGrantStore interface {
 	GetRepositoryGrants(context.Context, string) (RepositoryGrantSet, error)
-	ReplaceRepositoryGrants(context.Context, string, []RepositoryGrant, string) (RepositoryGrantSet, error)
+	ReplaceRepositoryGrants(context.Context, string, []RepositoryGrant, string, ...AuditRecord) (RepositoryGrantSet, error)
 	// UpsertRepositoryGrant creates or replaces the single grant keyed by
 	// (principal, resource prefix) and leaves every other grant untouched, so
 	// concurrent editors of different principals never clobber each other.
-	UpsertRepositoryGrant(context.Context, string, RepositoryGrant) (RepositoryGrantSet, error)
+	UpsertRepositoryGrant(context.Context, string, RepositoryGrant, ...AuditRecord) (RepositoryGrantSet, error)
 	// DeleteRepositoryGrant removes the single grant keyed by (principal,
 	// resource prefix) and answers ErrNotFound when no such grant exists.
-	DeleteRepositoryGrant(context.Context, string, string, string) (RepositoryGrantSet, error)
+	DeleteRepositoryGrant(context.Context, string, string, string, ...AuditRecord) (RepositoryGrantSet, error)
 }
 
 type RepositoryGrantRecordStore interface {
@@ -144,20 +144,20 @@ type RepositoryGrantRecordStore interface {
 }
 
 type AuthorizationTemplateStore interface {
-	CreateAuthorizationTemplate(context.Context, AuthorizationTemplate) (AuthorizationTemplate, error)
+	CreateAuthorizationTemplate(context.Context, AuthorizationTemplate, ...AuditRecord) (AuthorizationTemplate, error)
 	ListAuthorizationTemplates(context.Context) ([]AuthorizationTemplate, error)
 	GetAuthorizationTemplate(context.Context, string) (AuthorizationTemplate, error)
-	UpdateAuthorizationTemplate(context.Context, AuthorizationTemplate, string) (AuthorizationTemplate, error)
-	DeleteAuthorizationTemplate(context.Context, string) error
-	ApplyAuthorizationTemplate(context.Context, string, string, string) (RepositoryGrantSet, error)
+	UpdateAuthorizationTemplate(context.Context, AuthorizationTemplate, string, ...AuditRecord) (AuthorizationTemplate, error)
+	DeleteAuthorizationTemplate(context.Context, string, ...AuditRecord) error
+	ApplyAuthorizationTemplate(context.Context, string, string, string, ...AuditRecord) (RepositoryGrantSet, error)
 }
 
 type AuthorizationRoleStore interface {
-	CreateAuthorizationRole(context.Context, AuthorizationRole) (AuthorizationRole, error)
+	CreateAuthorizationRole(context.Context, AuthorizationRole, ...AuditRecord) (AuthorizationRole, error)
 	ListAuthorizationRoles(context.Context) ([]AuthorizationRole, error)
 	GetAuthorizationRole(context.Context, string) (AuthorizationRole, error)
-	UpdateAuthorizationRole(context.Context, AuthorizationRole, string) (AuthorizationRole, error)
-	DeleteAuthorizationRole(context.Context, string) error
+	UpdateAuthorizationRole(context.Context, AuthorizationRole, string, ...AuditRecord) (AuthorizationRole, error)
+	DeleteAuthorizationRole(context.Context, string, ...AuditRecord) error
 }
 
 type RepositoryRetentionPolicyStore interface {
@@ -167,12 +167,12 @@ type RepositoryRetentionPolicyStore interface {
 
 type RepositorySecurityPolicyStore interface {
 	GetRepositorySecurityPolicy(context.Context, string) (RepositorySecurityPolicy, error)
-	ReplaceRepositorySecurityPolicy(context.Context, string, RepositorySecurityPolicy, string) (RepositorySecurityPolicy, error)
+	ReplaceRepositorySecurityPolicy(context.Context, string, RepositorySecurityPolicy, string, ...AuditRecord) (RepositorySecurityPolicy, error)
 }
 
 type RepositoryQuarantineReadPolicyStore interface {
 	GetRepositoryQuarantineReadPolicy(context.Context, string) (RepositoryQuarantineReadPolicy, error)
-	ReplaceRepositoryQuarantineReadPolicy(context.Context, string, RepositoryQuarantineReadPolicy, string) (RepositoryQuarantineReadPolicy, error)
+	ReplaceRepositoryQuarantineReadPolicy(context.Context, string, RepositoryQuarantineReadPolicy, string, ...AuditRecord) (RepositoryQuarantineReadPolicy, error)
 }
 
 type RepositoryCapacityStore interface {
@@ -206,12 +206,12 @@ type ArtifactTombstoneStore interface {
 
 type ArtifactIntelligenceStore interface {
 	GetArtifactIntelligence(context.Context, string, Format, string, string) (ArtifactIntelligence, error)
-	ReplaceArtifactIntelligence(context.Context, ArtifactIntelligence, string) (ArtifactIntelligence, error)
+	ReplaceArtifactIntelligence(context.Context, ArtifactIntelligence, string, ...AuditRecord) (ArtifactIntelligence, error)
 }
 
 type ArtifactQuarantineStore interface {
 	GetArtifactQuarantine(context.Context, string, Format, string, string) (ArtifactQuarantine, error)
-	ReplaceArtifactQuarantine(context.Context, ArtifactQuarantine, string) (ArtifactQuarantine, error)
+	ReplaceArtifactQuarantine(context.Context, ArtifactQuarantine, string, ...AuditRecord) (ArtifactQuarantine, error)
 }
 
 type LifecycleJobStore interface {
@@ -223,10 +223,10 @@ type LifecycleJobStore interface {
 	ClaimLifecycleJobsByKind(context.Context, LifecycleJobKind, int) ([]LifecycleJob, error)
 	ClaimLifecycleJobsByKindAndFormat(context.Context, LifecycleJobKind, Format, int) ([]LifecycleJob, error)
 	RecoverExpiredLifecycleJobs(context.Context, time.Time) (int, error)
-	RunLifecycleJobNow(context.Context, string, string) (LifecycleJob, error)
-	RetryLifecycleJob(context.Context, string, string) (LifecycleJob, error)
-	RequeueFailedLifecycleJobs(context.Context, string, LifecycleJobKind, int) ([]LifecycleJob, error)
-	CancelLifecycleJob(context.Context, string, string) (LifecycleJob, error)
+	RunLifecycleJobNow(context.Context, string, string, ...AuditRecord) (LifecycleJob, error)
+	RetryLifecycleJob(context.Context, string, string, ...AuditRecord) (LifecycleJob, error)
+	RequeueFailedLifecycleJobs(context.Context, string, LifecycleJobKind, int, ...AuditRecord) ([]LifecycleJob, error)
+	CancelLifecycleJob(context.Context, string, string, ...AuditRecord) (LifecycleJob, error)
 	UpdateLifecycleJobProgress(context.Context, string, string, int, int, string) error
 	RenewLifecycleJobLease(context.Context, string, string) error
 	LockLifecycleJobLease(context.Context, string, string) (func(), error)
@@ -334,7 +334,7 @@ type NativeMavenStore interface {
 	SearchMavenArtifacts(context.Context, string, string, int, MavenArtifactCursor, ...ArtifactSearchMatch) ([]MavenArtifact, error)
 	GetMavenArtifact(context.Context, string, string) (MavenArtifact, error)
 	GetMavenArtifactByCoordinate(context.Context, string, string) (MavenArtifact, error)
-	TombstoneMavenArtifact(context.Context, string, string) (MavenArtifact, error)
+	TombstoneMavenArtifact(context.Context, string, string, ...AuditRecord) (MavenArtifact, error)
 	TombstoneMavenArtifactForRetention(context.Context, string, string, string) (MavenArtifact, error)
 	RestoreMavenArtifact(context.Context, string, string) (MavenArtifact, error)
 	PromoteMavenArtifact(context.Context, MavenPromotion) (MavenArtifact, error)
@@ -376,7 +376,7 @@ type NativeOCIStore interface {
 	SearchOCIManifestNames(context.Context, string, string, int, string, ...ArtifactSearchMatch) ([]string, error)
 	ListOCITags(context.Context, string, string, int, string) ([]string, error)
 	DeleteOCITag(context.Context, string, string, string) error
-	DeleteOCIManifest(context.Context, string, string, string) error
+	DeleteOCIManifest(context.Context, string, string, string, ...AuditRecord) error
 	RestoreOCIManifest(context.Context, string, string, string) (OCIManifest, error)
 }
 
@@ -397,7 +397,7 @@ type NativeRawStore interface {
 	PutRawAssetIf(context.Context, RawAsset, RawWriteCondition, ...AuditRecord) (RawAsset, error)
 	GetRawAsset(context.Context, string, string) (RawAsset, error)
 	ListRawAssets(context.Context, string, string, int, string, ...ArtifactSearchMatch) ([]RawAsset, error)
-	DeleteRawAsset(context.Context, string, string) error
+	DeleteRawAsset(context.Context, string, string, ...AuditRecord) error
 	RestoreRawAsset(context.Context, string, string) (RawAsset, error)
 	ListUnreferencedRawObjects(context.Context, time.Time, int) ([]RawObject, error)
 	RawObjectIsUnreferenced(context.Context, string) (bool, error)
@@ -422,7 +422,7 @@ type NativeNPMStore interface {
 	GetNPMPackage(context.Context, string, string) (NPMPackage, error)
 	ListNPMVersions(context.Context, string, string) ([]NPMVersion, error)
 	GetNPMVersion(context.Context, string, string, string) (NPMVersion, error)
-	TombstoneNPMVersion(context.Context, string, string, string) (NPMVersion, error)
+	TombstoneNPMVersion(context.Context, string, string, string, ...AuditRecord) (NPMVersion, error)
 	ListReclaimableNPMObjects(context.Context, time.Time, int) ([]NPMObject, error)
 	NPMObjectHasVisibleReference(context.Context, string) (bool, error)
 	MarkNPMObjectCollected(context.Context, string) error
@@ -439,7 +439,7 @@ type NativePyPIStore interface {
 	GetPyPIFile(context.Context, string, string) (PyPIFile, error)
 	ListPyPIProjectFiles(context.Context, string, string) ([]PyPIFile, error)
 	ListPyPIProjects(context.Context, string, string, int, string, ...ArtifactSearchMatch) ([]PyPIProjectSummary, error)
-	TombstonePyPIVersion(context.Context, string, string, string) ([]PyPIFile, error)
+	TombstonePyPIVersion(context.Context, string, string, string, ...AuditRecord) ([]PyPIFile, error)
 	RestorePyPIVersion(context.Context, string, string, string) ([]PyPIFile, error)
 	ListReclaimablePyPIObjects(context.Context, time.Time, int) ([]PyPIObject, error)
 	PyPIObjectHasVisibleReference(context.Context, string) (bool, error)
@@ -453,7 +453,7 @@ type NativeGoStore interface {
 	ListGoModules(context.Context, string, string, int, string) ([]string, error)
 	ListGoModuleVersions(context.Context, string, string) ([]GoModuleVersion, error)
 	GetGoModuleVersion(context.Context, string, string, string) (GoModuleVersion, error)
-	TombstoneGoModuleVersion(context.Context, string, string, string) (GoModuleVersion, error)
+	TombstoneGoModuleVersion(context.Context, string, string, string, ...AuditRecord) (GoModuleVersion, error)
 	RestoreGoModuleVersion(context.Context, string, string, string) (GoModuleVersion, error)
 	CacheGoModuleAsset(context.Context, GoModuleAsset) (GoModuleAsset, error)
 	GetGoModuleAsset(context.Context, string, string, string, string) (GoModuleAsset, error)
@@ -597,8 +597,8 @@ type NativeConanStore interface {
 	ListConanPackageAssets(context.Context, string, string, string, string, string) ([]ConanAsset, error)
 	GetConanRecipeAsset(context.Context, string, string, string, string) (ConanAsset, error)
 	GetConanPackageAsset(context.Context, string, string, string, string, string, string) (ConanAsset, error)
-	TombstoneConanRecipeRevision(context.Context, string, string, string) (ConanRecipeRevision, error)
-	TombstoneConanPackageRevision(context.Context, string, string, string, string, string) (ConanPackageRevision, error)
+	TombstoneConanRecipeRevision(context.Context, string, string, string, ...AuditRecord) (ConanRecipeRevision, error)
+	TombstoneConanPackageRevision(context.Context, string, string, string, string, string, ...AuditRecord) (ConanPackageRevision, error)
 	RestoreConanRecipeRevision(context.Context, string, string, string) (ConanRecipeRevision, error)
 	RestoreConanPackageRevision(context.Context, string, string, string, string, string) (ConanPackageRevision, error)
 	PromoteConanRecipeRevision(context.Context, ConanPromotion) (ConanRecipeRevision, error)

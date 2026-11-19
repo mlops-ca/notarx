@@ -2,7 +2,6 @@ package app
 
 import (
 	"net/http"
-	"time"
 
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -14,7 +13,14 @@ func (h generatedRepositoryAPIAdapter) ReconcileRepositoryArtifactIntelligence(w
 		if params.Limit != nil {
 			limit = *params.Limit
 		}
-		jobs, err := h.lifecycleJobs.RequeueFailedLifecycleJobs(r.Context(), repo.ID, repository.LifecycleJobIntelligence, limit)
+		jobs, err := h.lifecycleJobs.RequeueFailedLifecycleJobs(r.Context(), repo.ID, repository.LifecycleJobIntelligence, limit, auditRecordsWhen(h.audit != nil, repository.AuditRecord{
+			Repository: repo.Name,
+			GroupName:  repo.Name,
+			Actor:      principal.Actor,
+			Resource:   "repositories/" + repo.ID + "/lifecycle-jobs:reconcile-intelligence",
+			Operation:  "lifecycle.intelligence_reconcile",
+			Status:     http.StatusOK,
+		})...)
 		if err != nil {
 			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "reconcile artifact intelligence jobs failed")
 			return
@@ -22,22 +28,6 @@ func (h generatedRepositoryAPIAdapter) ReconcileRepositoryArtifactIntelligence(w
 		jobIDs := make([]string, 0, len(jobs))
 		for _, job := range jobs {
 			jobIDs = append(jobIDs, job.ID)
-		}
-		if h.audit != nil {
-			if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{
-				Repository:       repo.Name,
-				GroupName:        repo.Name,
-				Actor:            principal.Actor,
-				Outcome:          repository.AuditResolved,
-				OccurredAt:       time.Now().UTC(),
-				Format:           "management",
-				Resource:         "repositories/" + repo.ID + "/lifecycle-jobs:reconcile-intelligence",
-				Operation:        "lifecycle.intelligence_reconcile",
-				Status:           http.StatusOK,
-				CacheDisposition: "bypass",
-			}) {
-				return
-			}
 		}
 		writeNativeMavenJSON(w, http.StatusOK, adminopenapi.LifecycleJobReconciliation{
 			RepositoryId:   repositoryID,

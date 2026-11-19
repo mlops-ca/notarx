@@ -82,7 +82,7 @@ func (s *PostgresStore) GetArtifactIntelligence(ctx context.Context, repositoryI
 	return value, err
 }
 
-func (s *PostgresStore) ReplaceArtifactIntelligence(ctx context.Context, value ArtifactIntelligence, expectedVersion string) (ArtifactIntelligence, error) {
+func (s *PostgresStore) ReplaceArtifactIntelligence(ctx context.Context, value ArtifactIntelligence, expectedVersion string, audit ...AuditRecord) (ArtifactIntelligence, error) {
 	signatures, sboms, provenance, licenses, vulnerability, err := marshalArtifactIntelligence(value)
 	if err != nil {
 		return ArtifactIntelligence{}, err
@@ -95,16 +95,18 @@ RETURNING ` + artifactIntelligenceColumns
 	if expectedVersion == "" {
 		expectedVersion = "0"
 	}
-	result, err := scanArtifactIntelligence(s.db.QueryRowContext(ctx, query, value.RepositoryID, value.Format, value.Coordinate, value.Digest, signatures, sboms, provenance, licenses, vulnerability, value.UpdatedBy, expectedVersion))
-	if errors.Is(err, sql.ErrNoRows) {
-		var exists bool
-		if queryErr := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM artifact_intelligence WHERE repository_id=$1::uuid AND format=$2 AND coordinate=$3 AND digest=$4)`, value.RepositoryID, value.Format, value.Coordinate, value.Digest).Scan(&exists); queryErr != nil {
-			return ArtifactIntelligence{}, queryErr
+	return runAudited(ctx, s, audit, func(q sqlRunner) (ArtifactIntelligence, error) {
+		result, err := scanArtifactIntelligence(q.QueryRowContext(ctx, query, value.RepositoryID, value.Format, value.Coordinate, value.Digest, signatures, sboms, provenance, licenses, vulnerability, value.UpdatedBy, expectedVersion))
+		if errors.Is(err, sql.ErrNoRows) {
+			var exists bool
+			if queryErr := q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM artifact_intelligence WHERE repository_id=$1::uuid AND format=$2 AND coordinate=$3 AND digest=$4)`, value.RepositoryID, value.Format, value.Coordinate, value.Digest).Scan(&exists); queryErr != nil {
+				return ArtifactIntelligence{}, queryErr
+			}
+			if exists {
+				return ArtifactIntelligence{}, ErrVersionConflict
+			}
+			return ArtifactIntelligence{}, ErrNotFound
 		}
-		if exists {
-			return ArtifactIntelligence{}, ErrVersionConflict
-		}
-		return ArtifactIntelligence{}, ErrNotFound
-	}
-	return result, err
+		return result, err
+	})
 }

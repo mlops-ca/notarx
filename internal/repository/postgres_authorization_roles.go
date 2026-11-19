@@ -24,14 +24,18 @@ func scanAuthorizationRole(scanner interface{ Scan(...any) error }) (Authorizati
 	return role, nil
 }
 
-func (s *PostgresStore) CreateAuthorizationRole(ctx context.Context, role AuthorizationRole) (AuthorizationRole, error) {
-	role.ID = ids.New()
-	role.Name = strings.TrimSpace(role.Name)
-	created, err := scanAuthorizationRole(s.db.QueryRowContext(ctx, `INSERT INTO authorization_roles (id,name,description,scopes) VALUES ($1,$2,$3,$4) RETURNING `+authorizationRoleColumns, role.ID, role.Name, role.Description, role.Scopes))
-	if isUnique(err) {
-		return AuthorizationRole{}, ErrAuthorizationRoleNameExists
+func (s *PostgresStore) CreateAuthorizationRole(ctx context.Context, role AuthorizationRole, audit ...AuditRecord) (AuthorizationRole, error) {
+	if role.ID == "" {
+		role.ID = ids.New()
 	}
-	return created, err
+	role.Name = strings.TrimSpace(role.Name)
+	return runAudited(ctx, s, audit, func(q sqlRunner) (AuthorizationRole, error) {
+		created, err := scanAuthorizationRole(q.QueryRowContext(ctx, `INSERT INTO authorization_roles (id,name,description,scopes) VALUES ($1,$2,$3,$4) RETURNING `+authorizationRoleColumns, role.ID, role.Name, role.Description, role.Scopes))
+		if isUnique(err) {
+			return AuthorizationRole{}, ErrAuthorizationRoleNameExists
+		}
+		return created, err
+	})
 }
 
 func (s *PostgresStore) ListAuthorizationRoles(ctx context.Context) ([]AuthorizationRole, error) {
@@ -59,36 +63,41 @@ func (s *PostgresStore) GetAuthorizationRole(ctx context.Context, id string) (Au
 	return role, err
 }
 
-func (s *PostgresStore) UpdateAuthorizationRole(ctx context.Context, role AuthorizationRole, expectedVersion string) (AuthorizationRole, error) {
+func (s *PostgresStore) UpdateAuthorizationRole(ctx context.Context, role AuthorizationRole, expectedVersion string, audit ...AuditRecord) (AuthorizationRole, error) {
 	role.Name = strings.TrimSpace(role.Name)
-	updated, err := scanAuthorizationRole(s.db.QueryRowContext(ctx, `UPDATE authorization_roles SET name=$1,description=$2,scopes=$3,version=version+1,updated_at=now() WHERE id=$4::uuid AND version=$5::text::bigint RETURNING `+authorizationRoleColumns, role.Name, role.Description, role.Scopes, role.ID, expectedVersion))
-	if errors.Is(err, sql.ErrNoRows) {
-		var exists bool
-		if queryErr := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM authorization_roles WHERE id=$1::uuid)`, role.ID).Scan(&exists); queryErr != nil {
-			return AuthorizationRole{}, queryErr
+	return runAudited(ctx, s, audit, func(q sqlRunner) (AuthorizationRole, error) {
+		updated, err := scanAuthorizationRole(q.QueryRowContext(ctx, `UPDATE authorization_roles SET name=$1,description=$2,scopes=$3,version=version+1,updated_at=now() WHERE id=$4::uuid AND version=$5::text::bigint RETURNING `+authorizationRoleColumns, role.Name, role.Description, role.Scopes, role.ID, expectedVersion))
+		if errors.Is(err, sql.ErrNoRows) {
+			var exists bool
+			if queryErr := q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM authorization_roles WHERE id=$1::uuid)`, role.ID).Scan(&exists); queryErr != nil {
+				return AuthorizationRole{}, queryErr
+			}
+			if !exists {
+				return AuthorizationRole{}, ErrNotFound
+			}
+			return AuthorizationRole{}, ErrVersionConflict
 		}
-		if !exists {
-			return AuthorizationRole{}, ErrNotFound
+		if isUnique(err) {
+			return AuthorizationRole{}, ErrAuthorizationRoleNameExists
 		}
-		return AuthorizationRole{}, ErrVersionConflict
-	}
-	if isUnique(err) {
-		return AuthorizationRole{}, ErrAuthorizationRoleNameExists
-	}
-	return updated, err
+		return updated, err
+	})
 }
 
-func (s *PostgresStore) DeleteAuthorizationRole(ctx context.Context, id string) error {
-	result, err := s.db.ExecContext(ctx, `DELETE FROM authorization_roles WHERE id=$1::uuid`, id)
-	if err != nil {
-		return err
-	}
-	count, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if count == 0 {
-		return ErrNotFound
-	}
-	return nil
+func (s *PostgresStore) DeleteAuthorizationRole(ctx context.Context, id string, audit ...AuditRecord) error {
+	_, err := runAudited(ctx, s, audit, func(q sqlRunner) (struct{}, error) {
+		result, err := q.ExecContext(ctx, `DELETE FROM authorization_roles WHERE id=$1::uuid`, id)
+		if err != nil {
+			return struct{}{}, err
+		}
+		count, err := result.RowsAffected()
+		if err != nil {
+			return struct{}{}, err
+		}
+		if count == 0 {
+			return struct{}{}, ErrNotFound
+		}
+		return struct{}{}, nil
+	})
+	return err
 }

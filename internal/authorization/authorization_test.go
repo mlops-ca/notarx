@@ -87,15 +87,15 @@ func (s grantStoreStub) GetRepositoryGrants(context.Context, string) (repository
 	return s.set, s.err
 }
 
-func (grantStoreStub) ReplaceRepositoryGrants(context.Context, string, []repository.RepositoryGrant, string) (repository.RepositoryGrantSet, error) {
+func (grantStoreStub) ReplaceRepositoryGrants(context.Context, string, []repository.RepositoryGrant, string, ...repository.AuditRecord) (repository.RepositoryGrantSet, error) {
 	panic("unexpected ReplaceRepositoryGrants call")
 }
 
-func (grantStoreStub) UpsertRepositoryGrant(context.Context, string, repository.RepositoryGrant) (repository.RepositoryGrantSet, error) {
+func (grantStoreStub) UpsertRepositoryGrant(context.Context, string, repository.RepositoryGrant, ...repository.AuditRecord) (repository.RepositoryGrantSet, error) {
 	panic("unexpected UpsertRepositoryGrant call")
 }
 
-func (grantStoreStub) DeleteRepositoryGrant(context.Context, string, string, string) (repository.RepositoryGrantSet, error) {
+func (grantStoreStub) DeleteRepositoryGrant(context.Context, string, string, string, ...repository.AuditRecord) (repository.RepositoryGrantSet, error) {
 	panic("unexpected DeleteRepositoryGrant call")
 }
 
@@ -421,15 +421,15 @@ func (s perRepositoryGrantStub) GetRepositoryGrants(_ context.Context, repositor
 	return set, nil
 }
 
-func (perRepositoryGrantStub) ReplaceRepositoryGrants(context.Context, string, []repository.RepositoryGrant, string) (repository.RepositoryGrantSet, error) {
+func (perRepositoryGrantStub) ReplaceRepositoryGrants(context.Context, string, []repository.RepositoryGrant, string, ...repository.AuditRecord) (repository.RepositoryGrantSet, error) {
 	panic("unexpected ReplaceRepositoryGrants call")
 }
 
-func (perRepositoryGrantStub) UpsertRepositoryGrant(context.Context, string, repository.RepositoryGrant) (repository.RepositoryGrantSet, error) {
+func (perRepositoryGrantStub) UpsertRepositoryGrant(context.Context, string, repository.RepositoryGrant, ...repository.AuditRecord) (repository.RepositoryGrantSet, error) {
 	panic("unexpected UpsertRepositoryGrant call")
 }
 
-func (perRepositoryGrantStub) DeleteRepositoryGrant(context.Context, string, string, string) (repository.RepositoryGrantSet, error) {
+func (perRepositoryGrantStub) DeleteRepositoryGrant(context.Context, string, string, string, ...repository.AuditRecord) (repository.RepositoryGrantSet, error) {
 	panic("unexpected DeleteRepositoryGrant call")
 }
 

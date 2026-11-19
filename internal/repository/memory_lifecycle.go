@@ -207,8 +207,8 @@ func (s *MemoryStore) recoverExpiredLifecycleJobsLocked(before time.Time) int {
 	return recovered
 }
 
-func (s *MemoryStore) RunLifecycleJobNow(_ context.Context, repositoryID, id string) (LifecycleJob, error) {
-	return s.updateLifecycleJobControl(repositoryID, id, func(job *LifecycleJob, now time.Time) error {
+func (s *MemoryStore) RunLifecycleJobNow(ctx context.Context, repositoryID, id string, audit ...AuditRecord) (LifecycleJob, error) {
+	return s.updateLifecycleJobControl(ctx, repositoryID, id, audit, func(job *LifecycleJob, now time.Time) error {
 		if job.State != LifecycleJobPending && job.State != LifecycleJobRetrying {
 			return ErrVersionConflict
 		}
@@ -217,8 +217,8 @@ func (s *MemoryStore) RunLifecycleJobNow(_ context.Context, repositoryID, id str
 	})
 }
 
-func (s *MemoryStore) RetryLifecycleJob(_ context.Context, repositoryID, id string) (LifecycleJob, error) {
-	return s.updateLifecycleJobControl(repositoryID, id, func(job *LifecycleJob, now time.Time) error {
+func (s *MemoryStore) RetryLifecycleJob(ctx context.Context, repositoryID, id string, audit ...AuditRecord) (LifecycleJob, error) {
+	return s.updateLifecycleJobControl(ctx, repositoryID, id, audit, func(job *LifecycleJob, now time.Time) error {
 		if job.State != LifecycleJobFailed && job.State != LifecycleJobCancelled {
 			return ErrVersionConflict
 		}
@@ -227,7 +227,7 @@ func (s *MemoryStore) RetryLifecycleJob(_ context.Context, repositoryID, id stri
 	})
 }
 
-func (s *MemoryStore) RequeueFailedLifecycleJobs(_ context.Context, repositoryID string, kind LifecycleJobKind, limit int) ([]LifecycleJob, error) {
+func (s *MemoryStore) RequeueFailedLifecycleJobs(ctx context.Context, repositoryID string, kind LifecycleJobKind, limit int, audit ...AuditRecord) ([]LifecycleJob, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if limit <= 0 || limit > 100 {
@@ -244,6 +244,9 @@ func (s *MemoryStore) RequeueFailedLifecycleJobs(_ context.Context, repositoryID
 	})
 	if len(keys) > limit {
 		keys = keys[:limit]
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return nil, err
 	}
 	now := time.Now().UTC()
 	jobs := make([]LifecycleJob, 0, len(keys))
@@ -263,8 +266,8 @@ func resetLifecycleJobForRetry(job *LifecycleJob, now time.Time) {
 	job.ProgressCurrent, job.ProgressMessage = 0, ""
 }
 
-func (s *MemoryStore) CancelLifecycleJob(_ context.Context, repositoryID, id string) (LifecycleJob, error) {
-	return s.updateLifecycleJobControl(repositoryID, id, func(job *LifecycleJob, now time.Time) error {
+func (s *MemoryStore) CancelLifecycleJob(ctx context.Context, repositoryID, id string, audit ...AuditRecord) (LifecycleJob, error) {
+	return s.updateLifecycleJobControl(ctx, repositoryID, id, audit, func(job *LifecycleJob, now time.Time) error {
 		if job.State != LifecycleJobPending && job.State != LifecycleJobRetrying {
 			return ErrVersionConflict
 		}
@@ -273,7 +276,7 @@ func (s *MemoryStore) CancelLifecycleJob(_ context.Context, repositoryID, id str
 	})
 }
 
-func (s *MemoryStore) updateLifecycleJobControl(repositoryID, id string, update func(*LifecycleJob, time.Time) error) (LifecycleJob, error) {
+func (s *MemoryStore) updateLifecycleJobControl(ctx context.Context, repositoryID, id string, audit []AuditRecord, update func(*LifecycleJob, time.Time) error) (LifecycleJob, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for key, job := range s.lifecycleJobs {
@@ -281,6 +284,9 @@ func (s *MemoryStore) updateLifecycleJobControl(repositoryID, id string, update 
 			continue
 		}
 		if err := update(&job, time.Now().UTC()); err != nil {
+			return LifecycleJob{}, err
+		}
+		if err := s.commitAuditLocked(ctx, audit); err != nil {
 			return LifecycleJob{}, err
 		}
 		s.lifecycleJobs[key] = job

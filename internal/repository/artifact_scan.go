@@ -12,7 +12,7 @@ import (
 
 // EnqueueArtifactScanJob creates an idempotent scan request for one immutable
 // artifact. The payload intentionally contains no object-store location.
-func EnqueueArtifactScanJob(ctx context.Context, store LifecycleJobStore, repositoryID, idempotencyKey string, payload ArtifactScanPayload) (LifecycleJob, bool, error) {
+func EnqueueArtifactScanJob(ctx context.Context, store LifecycleJobStore, repositoryID, idempotencyKey string, payload ArtifactScanPayload, audit ...AuditRecord) (LifecycleJob, bool, error) {
 	if locker, ok := store.(ArtifactScanIdentityLockStore); ok {
 		unlock, err := locker.LockArtifactScanIdentity(ctx, repositoryID, payload.Format, payload.Coordinate, payload.Digest)
 		if err != nil {
@@ -20,12 +20,12 @@ func EnqueueArtifactScanJob(ctx context.Context, store LifecycleJobStore, reposi
 		}
 		defer unlock()
 	}
-	return EnqueueArtifactScanJobLocked(ctx, store, repositoryID, idempotencyKey, payload)
+	return EnqueueArtifactScanJobLocked(ctx, store, repositoryID, idempotencyKey, payload, audit...)
 }
 
 // EnqueueArtifactScanJobLocked enqueues a scan while the caller holds the
 // artifact identity lock, avoiding a nested lock during reconciliation.
-func EnqueueArtifactScanJobLocked(ctx context.Context, store LifecycleJobStore, repositoryID, idempotencyKey string, payload ArtifactScanPayload) (LifecycleJob, bool, error) {
+func EnqueueArtifactScanJobLocked(ctx context.Context, store LifecycleJobStore, repositoryID, idempotencyKey string, payload ArtifactScanPayload, audit ...AuditRecord) (LifecycleJob, bool, error) {
 	idempotencyKey = strings.TrimSpace(idempotencyKey)
 	if idempotencyKey == "" || len(idempotencyKey) > 128 || payload.Format == "" || payload.Coordinate == "" || payload.Digest == "" {
 		return LifecycleJob{}, false, ErrInvalidArtifactIntelligence
@@ -45,5 +45,5 @@ func EnqueueArtifactScanJobLocked(ctx context.Context, store LifecycleJobStore, 
 	return store.EnqueueLifecycleJob(ctx, LifecycleJob{
 		ID: ids.New(), RepositoryID: repositoryID, Kind: LifecycleJobScan,
 		IdempotencyKey: idempotencyKey, Payload: body,
-	})
+	}, audit...)
 }

@@ -30,7 +30,7 @@ func (s *PostgresStore) GetRepositorySecurityPolicy(ctx context.Context, reposit
 	return policy, nil
 }
 
-func (s *PostgresStore) ReplaceRepositorySecurityPolicy(ctx context.Context, repositoryID string, policy RepositorySecurityPolicy, expectedVersion string) (RepositorySecurityPolicy, error) {
+func (s *PostgresStore) ReplaceRepositorySecurityPolicy(ctx context.Context, repositoryID string, policy RepositorySecurityPolicy, expectedVersion string, audit ...AuditRecord) (RepositorySecurityPolicy, error) {
 	if policy.MaxAllowedSeverity == "" {
 		policy.MaxAllowedSeverity = DefaultRepositorySecurityPolicy().MaxAllowedSeverity
 	}
@@ -57,6 +57,9 @@ func (s *PostgresStore) ReplaceRepositorySecurityPolicy(ctx context.Context, rep
 		return RepositorySecurityPolicy{}, ErrVersionConflict
 	}
 	if err != nil {
+		return RepositorySecurityPolicy{}, err
+	}
+	if err = insertAudits(ctx, tx, audit); err != nil {
 		return RepositorySecurityPolicy{}, err
 	}
 	if err = tx.Commit(); err != nil {

@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
@@ -105,7 +104,11 @@ func (h artifactManagementHandler) ReplaceArtifactIntelligence(w http.ResponseWr
 		if params.IfMatch != nil {
 			expected = string(*params.IfMatch)
 		}
-		updated, err := h.intelligence.ReplaceArtifactIntelligence(r.Context(), value, expected)
+		updated, err := h.intelligence.ReplaceArtifactIntelligence(r.Context(), value, expected, auditRecordsWhen(h.audit != nil, repository.AuditRecord{
+			GroupName: repo.Name, Repository: repo.Name, Actor: principal.Actor,
+			Format: string(repo.Format), Resource: coordinate, Representation: digest,
+			Operation: "artifact.intelligence.replace", Status: http.StatusOK,
+		})...)
 		if errors.Is(err, repository.ErrVersionConflict) {
 			writeHostedProblem(w, http.StatusPreconditionFailed, "version_conflict", "If-Match does not match current intelligence version")
 			return
@@ -117,17 +120,6 @@ func (h artifactManagementHandler) ReplaceArtifactIntelligence(w http.ResponseWr
 		if err != nil {
 			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "replace artifact intelligence failed")
 			return
-		}
-		if h.audit != nil {
-			if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{
-				GroupName: repo.Name, Repository: repo.Name, Actor: principal.Actor,
-				Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(),
-				Format: string(repo.Format), Resource: coordinate, Representation: digest,
-				Operation: "artifact.intelligence.replace", Status: http.StatusOK,
-				CacheDisposition: "bypass",
-			}) {
-				return
-			}
 		}
 		writeArtifactIntelligence(w, updated)
 	})
@@ -589,17 +581,12 @@ func (h artifactManagementHandler) DeleteConanPackageRevision(w http.ResponseWri
 			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "reference, recipeRevision, packageId, and revision must identify a Conan package revision")
 			return
 		}
-		if _, err := h.conan.TombstoneConanPackageRevision(r.Context(), repo.ID, reference, recipeRevision, packageID, revision); errors.Is(err, repository.ErrNotFound) {
+		if _, err := h.conan.TombstoneConanPackageRevision(r.Context(), repo.ID, reference, recipeRevision, packageID, revision, auditRecordsWhen(h.audit != nil, repository.AuditRecord{Repository: repo.Name, GroupName: repo.Name, Actor: principal.Actor, Resource: reference + "#" + recipeRevision + "/" + packageID + "#" + revision, Operation: "conan.package_revision.tombstone", Status: http.StatusNoContent})...); errors.Is(err, repository.ErrNotFound) {
 			writeHostedProblem(w, http.StatusNotFound, "not_found", "Conan package revision not found")
 			return
 		} else if err != nil {
 			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "tombstone Conan package revision failed")
 			return
-		}
-		if h.audit != nil {
-			if !recordMutationAudit(w, h.audit, r.Context(), repository.AuditRecord{Repository: repo.Name, GroupName: repo.Name, Actor: principal.Actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management", Resource: reference + "#" + recipeRevision + "/" + packageID + "#" + revision, Operation: "conan.package_revision.tombstone", Status: http.StatusNoContent}) {
-				return
-			}
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})
