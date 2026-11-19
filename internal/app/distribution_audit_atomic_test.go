@@ -20,7 +20,7 @@ import (
 // replicate and Cargo restore handlers on the memory store: a failing audit fails the change.
 func TestDistributionMutationsRollBackWithTheirAudit(t *testing.T) {
 	store := repository.NewMemoryStore()
-	runDistributionAuditRollback(t, store, func(...string) {
+	runDistributionAuditRollback(t, store, func(string) {}, func(...string) {
 		store.SetAuditFault(func(record repository.AuditRecord) error {
 			switch record.Operation {
 			case "promote", "replicate", "artifact.restore":
@@ -33,9 +33,11 @@ func TestDistributionMutationsRollBackWithTheirAudit(t *testing.T) {
 
 // runDistributionAuditRollback drives the promote, replicate and Cargo restore handlers while
 // audits fail, asserts the job, plan and tombstone removal did not take effect and the answer is
-// never audit_failed, then lets audits through and proves the same requests succeed. fail
-// receives the repository names whose audits must fail.
-func runDistributionAuditRollback(t *testing.T, store GatewayStore, fail func(names ...string), clear func()) {
+// never audit_failed, then lets audits through and proves the same requests succeed. created
+// receives the id of every repository the test creates, so a shared database can be cleaned up
+// (a pending job or plan would otherwise be claimed by the next test); fail receives the
+// repository names whose audits must fail.
+func runDistributionAuditRollback(t *testing.T, store GatewayStore, created func(id string), fail func(names ...string), clear func()) {
 	t.Helper()
 	ctx := context.Background()
 	suffix := uuid.NewString()[:8]
@@ -43,14 +45,17 @@ func runDistributionAuditRollback(t *testing.T, store GatewayStore, fail func(na
 	if err != nil {
 		t.Fatal(err)
 	}
+	created(source.ID)
 	target, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "dist-audit-target-" + suffix, Format: repository.FormatRaw})
 	if err != nil {
 		t.Fatal(err)
 	}
+	created(target.ID)
 	cargo, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "dist-audit-cargo-" + suffix, Format: repository.FormatCargo})
 	if err != nil {
 		t.Fatal(err)
 	}
+	created(cargo.ID)
 	body := []byte("distribute this Raw object " + suffix)
 	sum := sha256.Sum256(body)
 	digest := "sha256:" + fmt.Sprintf("%x", sum[:])

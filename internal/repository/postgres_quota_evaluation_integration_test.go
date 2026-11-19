@@ -183,11 +183,12 @@ func TestPostgresQuotaInvalidEvidenceCannotResolveAndReadFailureIsUnknown(t *tes
 	}
 	quotaPGDue(t, s, r)
 	// Failure injection is confined to the owned integration database.
-	if _, err = s.db.Exec(`ALTER TABLE native_raw_assets RENAME TO quota_fixture_raw_assets`); err != nil {
+	// Every format reads its usage counter, so the counter table is the capacity read to break.
+	if _, err = s.db.Exec(`ALTER TABLE repository_usage_counters RENAME TO quota_fixture_usage_counters`); err != nil {
 		t.Fatal(err)
 	}
 	_, evalErr := s.EvaluateNextRepositoryQuotaAlert(ctx, cfg, time.Second)
-	if _, err = s.db.Exec(`ALTER TABLE quota_fixture_raw_assets RENAME TO native_raw_assets`); err != nil {
+	if _, err = s.db.Exec(`ALTER TABLE quota_fixture_usage_counters RENAME TO repository_usage_counters`); err != nil {
 		t.Fatal(err)
 	}
 	if evalErr == nil {

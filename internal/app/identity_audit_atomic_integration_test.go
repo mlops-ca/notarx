@@ -178,7 +178,13 @@ func TestPostgresDistributionMutationsRollBackWithTheirAudit(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	var restores []func()
-	runDistributionAuditRollback(t, store, func(names ...string) {
+	runDistributionAuditRollback(t, store, func(id string) {
+		// Pending jobs and plans of this test must not be claimed by the next one.
+		t.Cleanup(func() {
+			_, _ = db.Exec(`DELETE FROM replication_plans WHERE source_repository_id=$1::uuid OR target_repository_id=$1::uuid`, id)
+			testsupport.PurgeRepository(t, db, id)
+		})
+	}, func(names ...string) {
 		for _, name := range names {
 			restores = append(restores, testsupport.FailSecurityAudits(t, db, name, "alice"))
 		}
