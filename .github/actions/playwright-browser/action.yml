@@ -1,0 +1,33 @@
+name: Install Playwright browser
+description: >-
+  Installs the Playwright Chromium browser and its system dependencies in the
+  console directory (npm ci must have run). The browser download is cached by
+  runner OS, architecture and @playwright/test version. apt gets short network
+  timeouts and retries so a stalled Ubuntu mirror fails over instead of hanging
+  the step. Each install step is time-boxed to 5 minutes with timeout(1) (composite steps have no timeout-minutes).
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve Playwright version
+      id: playwright
+      shell: bash
+      working-directory: console
+      run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+    - name: Cache Playwright browsers
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
+    - name: Download browser
+      shell: bash
+      working-directory: console
+      run: timeout 300 npx playwright install chromium
+    - name: Configure apt network timeouts
+      shell: bash
+      run: |
+        printf 'Acquire::http::Timeout "20";\nAcquire::https::Timeout "20";\nAcquire::Retries "5";\n' | sudo tee /etc/apt/apt.conf.d/80-ci-network >/dev/null
+    - name: Install browser system dependencies
+      shell: bash
+      working-directory: console
+      run: timeout 300 npx playwright install-deps chromium

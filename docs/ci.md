@@ -61,7 +61,7 @@ behaviour config ignores, and the contract lanes never run Playwright.
 
 ## Playwright browser install
 
-Every Playwright browser install step (the `console` job and the `console-e2e` shards) has its own `timeout-minutes: 5`, so a stuck download fails fast instead of holding a runner until the job timeout. The browser download directory (`~/.cache/ms-playwright`) is cached with `actions/cache`, keyed by runner OS, architecture and the resolved `@playwright/test` version, so a cache hit downloads no browser; `--with-deps` still installs the system packages on every run.
+Both Playwright installs (the `console` job and the `console-e2e` shards) use the `.github/actions/playwright-browser` composite action. The browser download and the system-dependency install are separate steps, each time-boxed to 5 minutes with `timeout 300` (composite action steps do not support `timeout-minutes`), so a stuck install fails fast instead of holding a runner until the job timeout. The browser download directory (`~/.cache/ms-playwright`) is cached with `actions/cache`, keyed by runner OS, architecture and the resolved `@playwright/test` version, so a cache hit downloads no browser. The system dependencies (`playwright install-deps`) install from apt on every run; the action first writes short apt network timeouts and retries (`Acquire::http::Timeout`, `Acquire::Retries`) because the observed hang was a stalled Ubuntu mirror download inside `--with-deps`, not the browser download.
 
 ## The ci-ok gate
 
