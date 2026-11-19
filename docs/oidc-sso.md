@@ -162,8 +162,7 @@ their exact values through the same member and administrator variables above.
 
 ## Upgrade and rollback
 
-Migration `000017_identity_providers.sql` replaces the `oidc_settings` singleton
-with the registry. The saved settings become the provider `default` (with their
+The identity provider registry replaces the former `oidc_settings` singleton. The saved settings become the provider `default` (with their
 sealed client secret and version), stored identities stay bound to it, and
 `oidc_settings` is dropped. An identity whose issuer differs from the saved one
 is bound to its own disabled provider so no link is lost. A stored JIT default

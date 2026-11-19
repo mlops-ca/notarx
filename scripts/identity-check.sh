@@ -46,8 +46,6 @@ extra_allow=(
   $'internal/backupops/release_module_test.go\tCovers the pre-fork module path verification above.'
   $'internal/backupops/testdata/published-native-provenance.json\tProvenance of pre-fork published release archives used by recovery tests.'
   $'scripts/published-native-backup-test.sh\tDownloads those pre-fork published release archives from the upstream repository.'
-  $'migrations/000001_baseline.sql\tThe generated baseline keeps the pre-fork column defaults; migration 000013 changes them.'
-  $'migrations/000013_brand_defaults.sql\tMoves stored pre-fork default names to the notarx ones, so it names the old default.'
   $'internal/refaptsigner/testdata\tSigned APT fixtures; editing the Origin field would break their signatures.'
   $'scripts/rename-module.sh\tThe cherry-pick rewrite tool (ADR 0013 Relationship with upstream) must name the old identity.'
   $'scripts/identity-check.sh\tThis gate spells the patterns it searches for.'
