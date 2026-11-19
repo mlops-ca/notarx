@@ -105,6 +105,14 @@ export function UserSecuritySummary({ user }: { user: User }) {
           ? t("identity.enabled")
           : t("identity.notEnabledExternalIdentity")}
       </Descriptions.Item>
+      <Descriptions.Item label={t("identity.emailVerifiedByAdministrator")}>
+        {user.emailVerifiedByAdmin
+          ? t("identity.emailVerifiedByOn", {
+              actor: user.emailVerifiedBy ?? "",
+              date: formatDate(user.emailVerifiedAt, locale),
+            })
+          : t("identity.no")}
+      </Descriptions.Item>
       <Descriptions.Item label={t("identity.changeRequired2")}>
         {user.mustChangePassword ? t("identity.yes") : t("identity.no")}
       </Descriptions.Item>

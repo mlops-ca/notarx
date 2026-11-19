@@ -346,5 +346,15 @@ export const identityFrCA: Record<keyof typeof identityEnCA, string> = {
   "identity.enterAnInitialPassword": "Saisissez un mot de passe initial",
   "identity.firstSignInRequirement": "Exigence à la première connexion",
   "identity.viewGrants": "Afficher les autorisations de dépôt",
+  "identity.emailVerifiedByAdministrator":
+    "Courriel vérifié par un administrateur",
+  "identity.emailVerifiedByOn": "Oui, par {actor} le {date}",
+  "identity.emailVerificationHelp":
+    "Une connexion par authentification unique ne peut lier ce compte par courriel que si un administrateur a vérifié l’adresse. Modifier le courriel annule la vérification.",
+  "identity.markEmailVerified": "Marquer le courriel comme vérifié",
+  "identity.clearEmailVerification": "Annuler la vérification du courriel",
+  "identity.emailVerificationSaved": "Vérification du courriel enregistrée",
+  "identity.failedToSaveEmailVerification":
+    "Échec de l’enregistrement de la vérification du courriel",
   "identity.viewRecentAudits": "Afficher les audits récents",
 };

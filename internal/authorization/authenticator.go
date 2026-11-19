@@ -89,13 +89,18 @@ type Authenticator struct {
 	// RepositoryWriters is intentionally separate from readers: Maven deploy
 	// must never turn a download grant into publication authority.
 	RepositoryWriters map[string][]string
-	OIDC              *OIDCValidator
-	OIDCSource        OIDCValidatorSource
-	APIKeys           repository.APIKeyStore
-	ServiceAccounts   repository.ServiceAccountStore
-	Users             repository.UserStore
-	UserIdentities    repository.UserIdentityStore
-	UserSessions      repository.UserSessionStore
+	// OIDC is a single fixed validator. Production wiring does not use it: cmd/notarx passes an
+	// OIDCSource (the identity provider registry), whose validators carry their provider id. A validator
+	// without a ProviderID fails closed while UserIdentities is set (see oidcPrincipal), so use OIDC only
+	// without stored identities.
+	OIDC *OIDCValidator
+	// OIDCSource supplies the per-provider validators of the identity provider registry (ADR 0018).
+	OIDCSource      OIDCValidatorSource
+	APIKeys         repository.APIKeyStore
+	ServiceAccounts repository.ServiceAccountStore
+	Users           repository.UserStore
+	UserIdentities  repository.UserIdentityStore
+	UserSessions    repository.UserSessionStore
 }
 
 func (a Authenticator) Authenticate(header string) (Principal, bool) {

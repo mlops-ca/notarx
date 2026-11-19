@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -377,10 +378,116 @@ func TestSAMLProvisioningRules(t *testing.T) {
 			t.Fatalf("the lower-cased emailAddress NameID is the identity key: %+v %v", link, err)
 		}
 	})
+	// ADR 0018 Decision 3: a verified-email account links only when the provider allows it, the account is
+	// not an administrator, has no local password, and exactly one such account matches the asserted email.
+	adminVerified := func(t *testing.T, f *samlFixture, name, role, secret string) repository.User {
+		t.Helper()
+		user, err := f.store.CreateUser(t.Context(), repository.User{ID: ids.New(), Name: name, Email: "ada@example.test", Role: role, SecretHash: secret, State: repository.UserActive})
+		if err != nil {
+			t.Fatal(err)
+		}
+		user, err = f.store.UpdateUser(t.Context(), repository.UserUpdate{ID: user.ID, EmailVerifiedByAdmin: samltest.Ptr(true), EmailVerifiedBy: "root"}, user.Version)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return user
+	}
+	signInWithEmail := func(t *testing.T, f *samlFixture, nameID, format string) url.Values {
+		t.Helper()
+		login := f.begin("/")
+		return redirectParams(t, f.post(&login, f.response(samltest.Response{
+			RequestID: login.requestID, NameID: nameID, NameIDFormat: format, Attributes: samltest.Attribute("email", "Ada@Example.test"),
+		}), login.relay))
+	}
+	for _, tc := range []struct {
+		name       string
+		linking    bool
+		role       string
+		secret     string
+		wantLinked bool
+		wantReason string
+	}{
+		{"verified passwordless member links", true, "member", "", true, "email_link_linked"},
+		{"provider without email linking", false, "member", "", false, ""},
+		{"administrator is never linked", true, "admin", "", false, "email_link_admin_account"},
+		{"local password is never linked", true, "member", "hash", false, "email_link_local_password"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newSAMLFixture(t, func(in *IdentityProviderInput) { in.EmailLinkingEnabled = tc.linking })
+			target := adminVerified(t, f, "ada", tc.role, tc.secret)
+			params := signInWithEmail(t, f, "opaque-persistent-id", "")
+			linkedTo, _, err := f.store.GetUserByProviderIdentity(t.Context(), f.provider.ID, "opaque-persistent-id")
+			if err != nil || (linkedTo.ID == target.ID) != tc.wantLinked {
+				t.Fatalf("linked user = %+v err=%v, want linked=%v params=%v", linkedTo, err, tc.wantLinked, params)
+			}
+			if tc.wantLinked && params.Get("oidc") != "success" {
+				t.Fatalf("params = %v", params)
+			}
+			f.audit.mu.Lock()
+			for _, record := range f.audit.records {
+				if record.Operation == "auth.saml.email_link" && record.Outcome != repository.AuditResolved {
+					t.Fatalf("the email-link decision must not count as an access denial: %+v", record)
+				}
+			}
+			f.audit.mu.Unlock()
+			reasons, found := f.audit.reasons(), false
+			for _, reason := range reasons {
+				if tc.wantReason != "" && reason == tc.wantReason {
+					found = true
+				}
+				if tc.wantReason == "" && strings.HasPrefix(reason, "email_link_") {
+					t.Fatalf("the email-link path is off but audited %v", reasons)
+				}
+			}
+			if tc.wantReason != "" && !found {
+				t.Fatalf("audit reasons = %v, want %s", reasons, tc.wantReason)
+			}
+		})
+	}
+	t.Run("a disabled account is refused before anything is bound", func(t *testing.T) {
+		f := newSAMLFixture(t, func(in *IdentityProviderInput) {
+			in.EmailLinkingEnabled = true
+			in.ProvisioningMode = identity.ProvisioningDisabled
+		})
+		target := adminVerified(t, f, "ada", "member", "")
+		disabled := repository.UserDisabled
+		if _, err := f.store.UpdateUser(t.Context(), repository.UserUpdate{ID: target.ID, State: &disabled}, target.Version); err != nil {
+			t.Fatal(err)
+		}
+		signInWithEmail(t, f, "opaque-persistent-id", "")
+		if identities, err := f.store.ListUserIdentities(t.Context(), target.ID); err != nil || len(identities) != 0 {
+			t.Fatalf("a disabled account must not get a foreign subject bound: %+v %v", identities, err)
+		}
+		if reasons := f.audit.reasons(); !slices.Contains(reasons, "email_link_account_disabled") {
+			t.Fatalf("audit reasons = %v", reasons)
+		}
+	})
+	t.Run("two verified accounts are ambiguous", func(t *testing.T) {
+		f := newSAMLFixture(t, func(in *IdentityProviderInput) { in.EmailLinkingEnabled = true })
+		adminVerified(t, f, "ada-one", "member", "")
+		adminVerified(t, f, "ada-two", "member", "")
+		if params := signInWithEmail(t, f, "opaque-persistent-id", ""); params.Get("oidc_error") != "identity_ambiguous" {
+			t.Fatalf("params = %v", params)
+		}
+	})
+	t.Run("an emailAddress NameID alone never links a verified account", func(t *testing.T) {
+		f := newSAMLFixture(t, func(in *IdentityProviderInput) { in.EmailLinkingEnabled = true })
+		target := adminVerified(t, f, "ada", "member", "")
+		login := f.begin("/")
+		redirectParams(t, f.post(&login, f.response(samltest.Response{
+			RequestID: login.requestID, NameID: "ada@example.test", NameIDFormat: "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress",
+			Attributes: samltest.Attribute("displayName", "Ada"),
+		}), login.relay))
+		user, _, err := f.store.GetUserByProviderIdentity(t.Context(), f.provider.ID, "ada@example.test")
+		if err != nil || user.ID == target.ID {
+			t.Fatalf("the NameID must not link the verified account: %+v %v", user, err)
+		}
+	})
 }
 
 // TestSAMLProvisionLinkingRules is the table of ADR 0018 section 3: no combination of provider options,
-// NameID format and asserted email makes the resolution match an existing account by email, and a role
+// NameID format and asserted email makes the resolution match an existing account by an asserted email,
+// the administrator-verified link path follows only the provider's email_linking_enabled, and a role
 // never comes from the assertion.
 func TestSAMLProvisionLinkingRules(t *testing.T) {
 	for _, tc := range []struct {
@@ -400,8 +507,8 @@ func TestSAMLProvisionLinkingRules(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			provider := identity.Provider{ID: "p", ProvisioningMode: tc.mode, EmailLinkingEnabled: tc.emailLinking, JITDefaultRole: identity.JITRoleMember}
 			claims := saml.Claims{NameID: "n", Email: "admin@example.test", Username: "admin", Groups: []string{"admins"}}
-			got := samlProvision(provider, identity.SAMLSettings{EntityID: "e", NameIDFormat: tc.format}, claims, samlTestNow)
-			if got.MatchEmail || got.EmailVerified || got.Provision != tc.wantProvision || got.Role != "" || got.Kind != repository.UserIdentitySAML || got.Subject != "n" || got.Issuer != "e" {
+			got := samlProvision(provider, identity.SAMLSettings{EntityID: "e", NameIDFormat: tc.format}, claims, samlTestNow, nil)
+			if got.MatchEmail || got.EmailVerified || got.LinkAdminVerifiedEmail != tc.emailLinking || got.Provision != tc.wantProvision || got.Role != "" || got.Kind != repository.UserIdentitySAML || got.Subject != "n" || got.Issuer != "e" {
 				t.Fatalf("provision = %+v", got)
 			}
 		})

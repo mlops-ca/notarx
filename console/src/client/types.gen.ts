@@ -1196,6 +1196,18 @@ export type User = {
   failedLoginAttempts: number;
   lockedUntil?: string;
   mustChangePassword: boolean;
+  /**
+   * Whether an administrator verified the account email. Only a verified email lets a SAML login link the account by email (ADR 0018 Decision 3). Changing the email clears it.
+   */
+  emailVerifiedByAdmin: boolean;
+  /**
+   * When the email was verified; present only while emailVerifiedByAdmin is true.
+   */
+  emailVerifiedAt?: string;
+  /**
+   * The administrator who verified the email; present only while emailVerifiedByAdmin is true.
+   */
+  emailVerifiedBy?: string;
   createdAt: string;
   updatedAt?: string;
   version: string;
@@ -1232,6 +1244,10 @@ export type UpdateUser = {
   description?: string;
   role?: "none" | "member" | "admin";
   state?: "active" | "disabled";
+  /**
+   * Set or clear the administrator verification of the account email. Setting it requires an email on the account, and it is cleared automatically when the email changes.
+   */
+  emailVerifiedByAdmin?: boolean;
 };
 
 export type ResetUserPassword = {

@@ -336,6 +336,15 @@ export const identityEnCA = {
   "identity.firstSignInRequirement": "First sign-in requirement",
   "identity.viewGrants": "View repository grants",
   "identity.viewRecentAudits": "View recent audits",
+  "identity.emailVerifiedByAdministrator": "Email verified by administrator",
+  "identity.emailVerifiedByOn": "Yes, by {actor} on {date}",
+  "identity.emailVerificationHelp":
+    "A single sign-on login can link this account by email only while an administrator has verified the address. Changing the email clears the verification.",
+  "identity.markEmailVerified": "Mark email verified",
+  "identity.clearEmailVerification": "Clear email verification",
+  "identity.emailVerificationSaved": "Email verification saved",
+  "identity.failedToSaveEmailVerification":
+    "Failed to save the email verification",
 };
 
 export type IdentityMessageKey = keyof typeof identityEnCA;

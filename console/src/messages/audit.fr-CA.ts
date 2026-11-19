@@ -73,6 +73,9 @@ export const auditFrCA: Record<keyof typeof auditEnCA, string> = {
   "audit.resetPassword": "Réinitialiser le mot de passe",
   "audit.createUser": "Créer un utilisateur",
   "audit.updateUser": "Modifier l’utilisateur",
+  "audit.verifyUserEmail": "Vérifier le courriel de l’utilisateur",
+  "audit.clearUserEmailVerification":
+    "Annuler la vérification du courriel de l’utilisateur",
   "audit.deleteUser": "Supprimer l’utilisateur",
   "audit.revokeAllSessions": "Révoquer toutes les sessions",
   "audit.listUserSessions": "Lister les sessions de l’utilisateur",

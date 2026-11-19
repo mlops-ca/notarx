@@ -125,26 +125,21 @@ func (s *PostgresStore) ResolveOIDCIdentity(ctx context.Context, provision OIDCI
 	if !errors.Is(err, sql.ErrNoRows) {
 		return User{}, UserIdentity{}, false, err
 	}
-	if !provision.Provision {
-		return User{}, UserIdentity{}, false, ErrNotFound
-	}
 
 	var user User
-	if provision.MatchEmail && provision.EmailVerified && strings.TrimSpace(provision.Email) != "" {
-		rows, err := tx.QueryContext(ctx, `SELECT `+userColumns+` FROM users WHERE lower(email)=lower($1) ORDER BY created_at,id LIMIT 2 FOR UPDATE`, strings.TrimSpace(provision.Email))
+	if provision.LinkAdminVerifiedEmail {
+		linked, err := postgresAdminVerifiedEmailLink(ctx, tx, provision)
 		if err != nil {
 			return User{}, UserIdentity{}, false, err
 		}
-		matches := make([]User, 0, 2)
-		for rows.Next() {
-			var candidate User
-			if err := scanUser(rows, &candidate); err != nil {
-				_ = rows.Close()
-				return User{}, UserIdentity{}, false, err
-			}
-			matches = append(matches, candidate)
-		}
-		if err := rows.Close(); err != nil {
+		user = linked
+	}
+	if user.ID == "" && !provision.Provision {
+		return User{}, UserIdentity{}, false, ErrNotFound
+	}
+	if user.ID == "" && provision.MatchEmail && provision.EmailVerified && strings.TrimSpace(provision.Email) != "" {
+		matches, err := postgresUsersByEmail(ctx, tx, provision.Email, 2, false)
+		if err != nil {
 			return User{}, UserIdentity{}, false, err
 		}
 		if len(matches) > 1 {
@@ -210,6 +205,67 @@ func (s *PostgresStore) ResolveOIDCIdentity(ctx context.Context, provision OIDCI
 	return user, identity, created, nil
 }
 
+// postgresUsersByEmail locks and returns up to limit accounts whose email matches case-insensitively.
+// With verifiedFirst the administrator-verified accounts come first, so an unverified duplicate cannot
+// push the verified account out of the limit.
+func postgresUsersByEmail(ctx context.Context, tx *sql.Tx, email string, limit int, verifiedFirst bool) ([]User, error) {
+	order := "created_at, id"
+	if verifiedFirst {
+		order = "email_verified_by_admin DESC, " + order
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT `+userColumns+` FROM users WHERE lower(email)=lower($1) ORDER BY `+order+` LIMIT $2 FOR UPDATE`, strings.TrimSpace(email), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	matches := make([]User, 0, limit)
+	for rows.Next() {
+		var candidate User
+		if err := scanUser(rows, &candidate); err != nil {
+			return nil, err
+		}
+		matches = append(matches, candidate)
+	}
+	return matches, rows.Err()
+}
+
+// postgresAdminVerifiedEmailLink evaluates the SAML email-link path. It returns the account to link, or a
+// zero user when the path refuses; ErrIdentityAmbiguous means two administrator-verified accounts match.
+// The decision is written to provision.EmailLink for the caller's audit record.
+func postgresAdminVerifiedEmailLink(ctx context.Context, tx *sql.Tx, provision OIDCIdentityProvision) (User, error) {
+	var matches []User
+	linkedAlready := map[string]bool{}
+	if strings.TrimSpace(provision.Email) != "" {
+		var err error
+		if matches, err = postgresUsersByEmail(ctx, tx, provision.Email, 3, true); err != nil {
+			return User{}, err
+		}
+		rows, err := tx.QueryContext(ctx, `SELECT user_id::text FROM user_identities WHERE provider_id=$1::uuid AND user_id IN (SELECT id FROM users WHERE lower(email)=lower($2))`, provision.ProviderID, strings.TrimSpace(provision.Email))
+		if err != nil {
+			return User{}, err
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var userID string
+			if err := rows.Scan(&userID); err != nil {
+				return User{}, err
+			}
+			linkedAlready[userID] = true
+		}
+		if err := rows.Err(); err != nil {
+			return User{}, err
+		}
+	}
+	linked, decision := decideEmailLink(provision.Email, matches, func(candidate User) bool { return linkedAlready[candidate.ID] })
+	if provision.EmailLink != nil {
+		*provision.EmailLink = decision
+	}
+	if decision.Reason == EmailLinkAmbiguous {
+		return User{}, ErrIdentityAmbiguous
+	}
+	return linked, nil
+}
+
 func updateOIDCLogin(ctx context.Context, tx *sql.Tx, identity UserIdentity, provision OIDCIdentityProvision, now time.Time) (User, error) {
 	identity = refreshUserIdentity(identity, provision, now)
 	if _, err := tx.ExecContext(ctx, `UPDATE user_identities SET email=$2,display_name=$3,email_verified=$4,last_login_at=$5,updated_at=$5 WHERE id=$1`, identity.ID, identity.Email, identity.DisplayName, identity.EmailVerified, now); err != nil {
@@ -218,6 +274,9 @@ func updateOIDCLogin(ctx context.Context, tx *sql.Tx, identity UserIdentity, pro
 	var user User
 	err := scanUser(tx.QueryRowContext(ctx, `UPDATE users SET last_login_at=$2,
 		display_name=CASE WHEN secret_hash='' AND $3<>'' THEN $3 ELSE display_name END,
+		email_verified_by_admin=email_verified_by_admin AND NOT (secret_hash='' AND $4 AND $5<>'' AND lower($5)<>lower(email)),
+		email_verified_at=CASE WHEN secret_hash='' AND $4 AND $5<>'' AND lower($5)<>lower(email) THEN NULL ELSE email_verified_at END,
+		email_verified_by=CASE WHEN secret_hash='' AND $4 AND $5<>'' AND lower($5)<>lower(email) THEN '' ELSE email_verified_by END,
 		email=CASE WHEN secret_hash='' AND $4 AND $5<>'' THEN $5 ELSE email END,
 		updated_at=$2,version=version+1 WHERE id=$1 RETURNING `+userColumns,
 		identity.UserID, now, identity.DisplayName, identity.EmailVerified, identity.Email), &user)

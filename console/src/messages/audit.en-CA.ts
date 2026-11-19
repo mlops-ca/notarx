@@ -66,6 +66,8 @@ export const auditEnCA = {
   "audit.resetPassword": "Reset password",
   "audit.createUser": "Create user",
   "audit.updateUser": "Update user",
+  "audit.verifyUserEmail": "Verify user email",
+  "audit.clearUserEmailVerification": "Clear user email verification",
   "audit.deleteUser": "Delete user",
   "audit.revokeAllSessions": "Revoke all sessions",
   "audit.listUserSessions": "List user sessions",

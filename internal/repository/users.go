@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"strings"
 	"time"
@@ -29,6 +30,58 @@ type UserUpdate struct {
 	Description *string
 	Role        *string
 	State       *string
+	// EmailVerifiedByAdmin sets or clears the administrator verification of the account's email.
+	// EmailVerifiedBy is the acting administrator, recorded when it is set. Changing the email
+	// clears an existing verification unless the same update sets it again.
+	EmailVerifiedByAdmin *bool
+	EmailVerifiedBy      string
+}
+
+// userRoleAdmin is the stored role of a platform administrator.
+const userRoleAdmin = "admin"
+
+// ErrVerifierRequired rejects verifying an email without naming the verifying administrator.
+var ErrVerifierRequired = errors.New("the email verification needs the acting administrator")
+
+// ErrEmailRequired rejects verifying an account that has no email to verify.
+var ErrEmailRequired = errors.New("the account has no email to verify")
+
+// applyEmailVerification applies the profile email and the verification flag of an update to a user in
+// memory with the rules the PostgreSQL store enforces in SQL: a changed email drops the verification, an
+// explicit request sets or clears it, and a verified account always names the verifier and the time.
+func applyEmailVerification(current User, update UserUpdate, now time.Time) (User, error) {
+	if update.Email != nil {
+		// A different address drops the verification; a case-only change is the same address, which
+		// every email match in the identity code already treats case-insensitively.
+		if !strings.EqualFold(strings.TrimSpace(*update.Email), strings.TrimSpace(current.Email)) {
+			current = clearEmailVerification(current)
+		}
+		current.Email = *update.Email
+	}
+	if update.EmailVerifiedByAdmin == nil {
+		return current, nil
+	}
+	if !*update.EmailVerifiedByAdmin {
+		return clearEmailVerification(current), nil
+	}
+	if strings.TrimSpace(current.Email) == "" {
+		return User{}, ErrEmailRequired
+	}
+	if current.EmailVerifiedByAdmin {
+		// Already verified: keep the original verifier and time instead of overwriting them.
+		return current, nil
+	}
+	if update.EmailVerifiedBy == "" {
+		return User{}, ErrVerifierRequired
+	}
+	current.EmailVerifiedByAdmin, current.EmailVerifiedBy = true, update.EmailVerifiedBy
+	current.EmailVerifiedAt = timePointer(now)
+	return current, nil
+}
+
+func clearEmailVerification(user User) User {
+	user.EmailVerifiedByAdmin, user.EmailVerifiedAt, user.EmailVerifiedBy = false, nil, ""
+	return user
 }
 
 // UserStore persists local user accounts. SecretHash is a bcrypt hash; it is
@@ -137,6 +190,11 @@ func (s *MemoryStore) UpdateUser(ctx context.Context, update UserUpdate, expecte
 	if removesLastActiveAdmin(current, update.Role, update.State) && !hasOtherActiveAdmin(s.users, current.ID) {
 		return User{}, ErrLastActiveAdmin
 	}
+	now := time.Now().UTC()
+	current, err := applyEmailVerification(current, update, now)
+	if err != nil {
+		return User{}, err
+	}
 	if err := s.commitAuditLocked(ctx, audit); err != nil {
 		return User{}, err
 	}
@@ -149,14 +207,11 @@ func (s *MemoryStore) UpdateUser(ctx context.Context, update UserUpdate, expecte
 	if update.DisplayName != nil {
 		current.DisplayName = *update.DisplayName
 	}
-	if update.Email != nil {
-		current.Email = *update.Email
-	}
 	if update.Description != nil {
 		current.Description = *update.Description
 	}
 	current.Version = nextHostedGroupVersion(current.Version)
-	current.UpdatedAt = time.Now().UTC()
+	current.UpdatedAt = now
 	s.users[update.ID] = current
 	return current, nil
 }

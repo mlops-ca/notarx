@@ -80,6 +80,8 @@ const AUDIT_OPERATION_LABELS: Record<string, MessageKey> = {
   "user.password.reset": "audit.resetPassword",
   "user.create": "audit.createUser",
   "user.update": "audit.updateUser",
+  "user.email_verification.set": "audit.verifyUserEmail",
+  "user.email_verification.clear": "audit.clearUserEmailVerification",
   "user.delete": "audit.deleteUser",
   "user.sessions.revoke": "audit.revokeAllSessions",
   "user.session.list": "audit.listUserSessions",
