@@ -158,6 +158,12 @@ func (v *Verifier) Verify(ctx context.Context, token string, issuer Issuer) (*Ve
 		return nil, invalid("malformed token or algorithm not allowed")
 	}
 	header := parsed.Signatures[0].Header
+	// RFC 7515 section 4.1.11: a recipient must reject critical extensions it does not
+	// understand. notarx understands none (go-jose would still accept "b64"), so any crit
+	// header is refused before an issuer lookup or key fetch.
+	if _, hasCrit := header.ExtraHeaders["crit"]; hasCrit {
+		return nil, invalid("crit header is not supported")
+	}
 	alg := header.Algorithm
 	// Cheap early rejection so a token for another issuer never triggers a key fetch.
 	unverified, err := decodeClaims(parsed.UnsafePayloadWithoutVerification())
