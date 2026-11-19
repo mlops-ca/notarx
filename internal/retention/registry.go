@@ -101,10 +101,10 @@ func (e Entry) Validate() error {
 
 // DefaultRegistry lists every table the janitor prunes.
 //
-// Tables of ADR 0018 (saml_*), ADR 0019 (workload_jti_seen) are optional until
-// their migrations land. promotion_evaluations, domain_events, import sessions
-// and the hf_* tables are added by the slices that create them, because their
-// columns are not part of the schema yet.
+// Tables of ADR 0018 (saml_*) are optional until their migrations land.
+// promotion_evaluations, domain_events, import sessions and the hf_* tables are
+// added by the slices that create them, because their columns are not part of the
+// schema yet.
 func DefaultRegistry() []Entry {
 	return []Entry{
 		{Table: "resolver_audit_log", TimeColumn: "occurred_at", Terminal: "TRUE", KeyColumns: []string{"id"}, Standard: 90 * day, FreeTier: 7 * day, PartitionedOnPostgres: true},
@@ -132,7 +132,9 @@ func DefaultRegistry() []Entry {
 		{Table: "native_apt_publication_idempotency", TimeColumn: "expires_at", Terminal: "TRUE", KeyColumns: []string{"actor", "target", "key"}, Standard: 1 * day, FreeTier: 1 * day},
 		{Table: "native_maven_commit_idempotency", TimeColumn: "expires_at", Terminal: "TRUE", KeyColumns: []string{"session_id"}, Standard: 1 * day, FreeTier: 1 * day},
 		{Table: "native_maven_publish_idempotency", TimeColumn: "expires_at", Terminal: "TRUE", KeyColumns: []string{"actor", "target", "key"}, Standard: 1 * day, FreeTier: 1 * day},
-		{Table: "workload_jti_seen", TimeColumn: "expires_at", Terminal: "TRUE", KeyColumns: []string{"jti"}, Optional: true},
+		// A single-use jti row is only needed until its token can no longer verify (expires_at is exp
+		// plus the clock skew); the hour is a grace period, and the predicate keeps live rows out.
+		{Table: "workload_jti_seen", TimeColumn: "expires_at", Terminal: "expires_at < now()", KeyColumns: []string{"issuer_id", "jti_hash"}, Standard: 1 * time.Hour, FreeTier: 1 * time.Hour},
 		{Table: "saml_assertion_ids", TimeColumn: "expires_at", Terminal: "TRUE", KeyColumns: []string{"assertion_id"}, Optional: true},
 		{Table: "saml_request_state", TimeColumn: "expires_at", Terminal: "TRUE", KeyColumns: []string{"request_id"}, Optional: true},
 	}

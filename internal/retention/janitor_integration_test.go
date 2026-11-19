@@ -376,6 +376,7 @@ func fixtures() map[string]fixture {
 		"native_apt_publication_idempotency": {},
 		"native_maven_commit_idempotency":    {},
 		"native_maven_publish_idempotency":   {},
+		"workload_jti_seen":                  {},
 	}
 }
 
@@ -518,6 +519,7 @@ func TestBatchSelectionsAreServedByAnIndex(t *testing.T) {
 		"hosted_repository_idempotency":      "hosted_repository_idempotency_expires_at_idx",
 		"native_apt_publication_idempotency": "native_apt_publication_idempotency_expiry_idx",
 		"native_maven_publish_idempotency":   "native_maven_publish_idempotency_expires_at_idx",
+		"workload_jti_seen":                  "workload_jti_seen_expires_at_idx",
 	}
 	for _, entry := range DefaultRegistry() {
 		if entry.PartitionedOnPostgres || entry.Optional {
