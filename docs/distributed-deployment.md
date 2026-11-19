@@ -167,7 +167,17 @@ count an asset only while a visible artifact or revision covers it, so their wri
 the transaction with a measurement of the touched coordinate or recipe revision under a
 per-repository advisory lock and reserve the difference. Helm, NuGet and RubyGems reserve
 bytes for pending sessions at reservation time, as their store contracts assert, and
-reserve the committed bytes in the counter at commit.
+reserve the committed bytes in the counter at commit. APT reserves in the counter itself: a publication session
+reserves its declared bytes with `Reserve` when it is admitted and releases them when it completes (the stored
+revision is then counted) or expires, and an archive restore reserves its planned bytes at begin and releases them
+when it commits, fails or expires. The reconciler counts those pending bytes (open or uploading sessions, preparing
+restores), so the counter equals its aggregation at every step, and migration 000022 adds the bytes of sessions
+open at upgrade time. Upgrade every node together (stop-the-world, or let the reconciler run once after a rolling
+upgrade): a session opened by an older node reserves nothing and one reserved by a newer node but completed by an older
+node keeps its reservation, which the next reconciler pass corrects. Snapshot publication admits through the `Reserve` of its generated-object delta.
+Helm and NuGet still sum their pending sessions under the quota row lock at reservation time, an exception
+tracked in a follow-up issue; a source test (`quota_admission_lint_test.go`, a textual heuristic over the Postgres stores) fails on a
+file that locks the quota row or sums rows and rejects with `ErrQuotaExceeded` outside that exception.
 
 A reconciler recomputes every repository's usage from the asset tables every
 `NOTARX_QUOTA_RECONCILE_INTERVAL` (default `6h`, jittered, in batches of 50 with

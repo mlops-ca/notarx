@@ -69,27 +69,6 @@ func (s *PostgresStore) createAPTPublicationSessionIdempotently(ctx context.Cont
 		existing, getErr := s.GetAPTPublicationSession(ctx, existingID)
 		return existing, true, getErr
 	}
-	var quota int64
-	err = tx.QueryRowContext(ctx, `SELECT quota_bytes FROM repository_capacity_quotas WHERE repository_id=$1 FOR UPDATE`, session.RepositoryID).Scan(&quota)
-	if errors.Is(err, sql.ErrNoRows) {
-		quota = 0
-	} else if err != nil {
-		return APTPublicationSession{}, false, err
-	}
-	if quota > 0 {
-		var used int64
-		if err = tx.QueryRowContext(ctx, `SELECT
-			COALESCE((SELECT sum(size) FROM native_apt_assets WHERE repository_id=$1),0)+
-			COALESCE((SELECT sum(size) FROM native_apt_package_revisions WHERE repository_id=$1),0)+
-			COALESCE((SELECT sum(declared_size) FROM native_apt_publication_sessions WHERE repository_id=$1 AND state IN ('open','uploading')),0)+
- COALESCE((SELECT SUM(reserved_bytes) FROM native_apt_archive_restores WHERE repository_id=$1 AND state='preparing'),0)+
- COALESCE((SELECT SUM(size) FROM (SELECT MAX(a.size)::bigint AS size FROM native_apt_snapshot_assets a JOIN native_apt_repository_snapshots s ON s.id=a.snapshot_id WHERE a.repository_id=$1 AND s.state='visible' AND a.path LIKE 'dists/%' GROUP BY a.object_key) generated),0)`, session.RepositoryID).Scan(&used); err != nil {
-			return APTPublicationSession{}, false, err
-		}
-		if used+session.DeclaredSize > quota {
-			return APTPublicationSession{}, false, ErrQuotaExceeded
-		}
-	}
 	var createdAt any
 	if !session.CreatedAt.IsZero() {
 		createdAt = session.CreatedAt
@@ -128,6 +107,11 @@ func (s *PostgresStore) createAPTPublicationSessionIdempotently(ctx context.Cont
 		if err = insertAudit(ctx, tx, *audit); err != nil {
 			return APTPublicationSession{}, false, err
 		}
+	}
+	// The declared bytes are reserved in the usage counter for as long as the session is open or
+	// uploading (ADR 0023 section 3); completion and expiry release them in their own transactions.
+	if err = capacity.Reserve(ctx, tx, session.RepositoryID, session.DeclaredSize, 0); err != nil {
+		return APTPublicationSession{}, false, err
 	}
 	if err = tx.Commit(); err != nil {
 		return APTPublicationSession{}, false, err
@@ -268,10 +252,15 @@ func (s *PostgresStore) completeAPTPackageUpload(ctx context.Context, id string,
 			return APTPackageRevision{}, err
 		}
 	}
+	// The session's declared bytes were reserved when it was admitted: release them and count the
+	// stored revision (a new one only; an existing revision is already counted).
+	released := usageDelta{}
+	released.add(session.RepositoryID, -session.DeclaredSize, 0)
 	if revisionInserted == 1 {
-		if err = capacity.Reserve(ctx, tx, stored.RepositoryID, stored.Size, 1); err != nil {
-			return APTPackageRevision{}, err
-		}
+		released.add(stored.RepositoryID, stored.Size, 1)
+	}
+	if err = released.reserve(ctx, tx); err != nil {
+		return APTPackageRevision{}, err
 	}
 	if err = tx.Commit(); err != nil {
 		return APTPackageRevision{}, err
@@ -337,17 +326,20 @@ func (s *PostgresStore) ExpireAPTPublicationSessions(ctx context.Context, before
 		WHERE state IN ('open','uploading') AND expires_at<=$1
 		ORDER BY expires_at,id FOR UPDATE SKIP LOCKED LIMIT $2
 	) UPDATE native_apt_publication_sessions s SET state='aborted'
-	FROM candidates c WHERE s.id=c.id RETURNING s.id::text,s.repository_id::text,s.object_key`, before, limit)
+	FROM candidates c WHERE s.id=c.id RETURNING s.id::text,s.repository_id::text,s.object_key,s.declared_size`, before, limit)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
 	candidates := make([]APTAbandonedUpload, 0)
+	released := usageDelta{}
 	for rows.Next() {
 		var candidate APTAbandonedUpload
-		if err = rows.Scan(&candidate.SessionID, &candidate.RepositoryID, &candidate.ObjectKey); err != nil {
+		var declared int64
+		if err = rows.Scan(&candidate.SessionID, &candidate.RepositoryID, &candidate.ObjectKey, &declared); err != nil {
 			return nil, err
 		}
+		released.add(candidate.RepositoryID, -declared, 0)
 		if candidate.ObjectKey != "" {
 			candidates = append(candidates, candidate)
 		}
@@ -367,6 +359,10 @@ func (s *PostgresStore) ExpireAPTPublicationSessions(ctx context.Context, before
 		if !referenced {
 			abandoned = append(abandoned, candidate)
 		}
+	}
+	// An aborted session no longer holds its reservation.
+	if err = released.reserve(ctx, tx); err != nil {
+		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
 		return nil, err
@@ -661,51 +657,7 @@ func publishAPTRepositorySnapshotTx(ctx context.Context, tx *sql.Tx, snapshot AP
 			barriers[d.Component+"\x00"+d.Revision.CanonicalIdentity] = true
 		}
 	}
-	var quota int64
-	if err = tx.QueryRowContext(ctx, `SELECT quota_bytes FROM repository_capacity_quotas WHERE repository_id=$1 FOR UPDATE`, snapshot.RepositoryID).Scan(&quota); errors.Is(err, sql.ErrNoRows) {
-		quota = 0
-	} else if err != nil {
-		return APTRepositorySnapshot{}, err
-	}
-	if quota > 0 {
-		var baseBytes int64
-		if err = tx.QueryRowContext(ctx, `SELECT
-			COALESCE((SELECT SUM(size) FROM native_apt_assets WHERE repository_id=$1),0)+
-			COALESCE((SELECT SUM(size) FROM native_apt_package_revisions WHERE repository_id=$1),0)+
- COALESCE((SELECT SUM(reserved_bytes) FROM native_apt_archive_restores WHERE repository_id=$1 AND state='preparing'),0)+
- COALESCE((SELECT SUM(declared_size) FROM native_apt_publication_sessions WHERE repository_id=$1 AND state IN ('open','uploading')),0)`, snapshot.RepositoryID).Scan(&baseBytes); err != nil {
-			return APTRepositorySnapshot{}, err
-		}
-		generated := aptSnapshotGeneratedObjects(assets)
-		rows, queryErr := tx.QueryContext(ctx, `SELECT a.object_key,MAX(a.size)::bigint
-			FROM native_apt_snapshot_assets a JOIN native_apt_repository_snapshots s ON s.id=a.snapshot_id
-			WHERE s.repository_id=$1 AND s.state='visible' AND s.suite<>$2 AND a.path LIKE 'dists/%'
-			GROUP BY a.object_key`, snapshot.RepositoryID, snapshot.Suite)
-		if queryErr != nil {
-			return APTRepositorySnapshot{}, queryErr
-		}
-		for rows.Next() {
-			var objectKey string
-			var size int64
-			if err = rows.Scan(&objectKey, &size); err != nil {
-				_ = rows.Close()
-				return APTRepositorySnapshot{}, err
-			}
-			generated[objectKey] = size
-		}
-		if err = rows.Err(); err != nil {
-			_ = rows.Close()
-			return APTRepositorySnapshot{}, err
-		}
-		_ = rows.Close()
-		var generatedBytes int64
-		for _, size := range generated {
-			generatedBytes += size
-		}
-		if baseBytes+generatedBytes > quota {
-			return APTRepositorySnapshot{}, ErrQuotaExceeded
-		}
-	}
+	// Quota admission is the Reserve of the generated-object delta at the end of this transaction.
 	expectedPool := make(map[string]APTSnapshotAsset)
 	packageRows, queryErr := tx.QueryContext(ctx, `SELECT sp.component,p.package_name,p.object_name,p.digest,p.object_key,p.size,p.canonical_identity
 		FROM native_apt_snapshot_packages sp JOIN native_apt_package_revisions p ON p.id=sp.package_revision_id

@@ -172,6 +172,36 @@ func TestCapacityReserveIsASinglePrimaryKeyUpdate(t *testing.T) {
 	}
 }
 
+// TestAPTSessionAdmissionTouchesOnlyTheCounter asserts that the one statement admitting an APT
+// publication session reads and writes only repository_usage_counters, whatever the repository
+// holds: admission does not read native_apt_assets or native_apt_package_revisions.
+func TestAPTSessionAdmissionTouchesOnlyTheCounter(t *testing.T) {
+	store := counterTestStore(t)
+	ctx := context.Background()
+	repo := counterTestRepository(t, store, FormatAPT)
+	if _, err := aptPackage(t, ctx, store, repo, "widget", 80); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	plan, err := explaincheck.Plan(ctx, tx, capacity.ReserveStatement, repo.ID, int64(33), int64(0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	touched := map[string]bool{}
+	plan.Walk(func(node explaincheck.Node) {
+		if node.Relation != "" {
+			touched[node.Relation] = true
+		}
+	})
+	if len(touched) != 1 || !touched["repository_usage_counters"] || touched["native_apt_assets"] || touched["native_apt_package_revisions"] {
+		t.Fatalf("APT session admission reads relations other than the counter row: %v", touched)
+	}
+}
+
 func TestCapacityReconcilerCorrectsDriftAndReportsIt(t *testing.T) {
 	store := counterTestStore(t)
 	ctx := context.Background()
