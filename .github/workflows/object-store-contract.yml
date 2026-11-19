@@ -54,7 +54,7 @@ jobs:
             --env RUSTFS_RPC_SECRET=contract-rustfs-independent-rpc-secret \
             --volume "$PWD/scripts/run-rustfs.sh:/usr/local/bin/run-rustfs:ro" \
             --entrypoint /bin/sh "$RUSTFS_IMAGE" /usr/local/bin/run-rustfs
-          for attempt in $(seq 1 60); do
+          for _ in $(seq 1 60); do
             curl --fail --silent http://127.0.0.1:19000/health >/dev/null && exit 0
             sleep 1
           done
@@ -68,7 +68,7 @@ jobs:
           MINIO_ROOT_USER=contract-access MINIO_ROOT_PASSWORD=contract-secret-password \
             nohup "$RUNNER_TEMP/bin/minio" server "$RUNNER_TEMP/minio-data" --address 127.0.0.1:19000 --console-address 127.0.0.1:19001 \
             >"$RUNNER_TEMP/minio.log" 2>&1 &
-          for attempt in $(seq 1 60); do
+          for _ in $(seq 1 60); do
             curl --fail --silent http://127.0.0.1:19000/minio/health/ready >/dev/null && exit 0
             sleep 1
           done
