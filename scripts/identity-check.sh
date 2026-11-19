@@ -47,8 +47,6 @@ extra_allow=(
   $'migrations/000013_brand_defaults.sql\tMoves stored pre-fork default names to the notarx ones, so it names the old default.'
   $'internal/refaptsigner/testdata\tSigned APT fixtures; editing the Origin field would break their signatures.'
   $'scripts/rename-module.sh\tThe cherry-pick rewrite tool (ADR 0013 Relationship with upstream) must name the old identity.'
-  $'internal/refaptsigner/testdata\tSigned legacy fixtures: rewriting the Origin line would break their signatures.'
-  $'migrations/000001_baseline.sql\tAn applied migration is immutable; migration 000011 moves the stored default site name.'
   $'scripts/identity-check.sh\tThis gate spells the patterns it searches for.'
   $'scripts/identity-check-test.sh\tThe fixture test plants those patterns on purpose.'
 )
@@ -58,7 +56,7 @@ case "$mode" in
   extra) printf '%s\n' "${extra_allow[@]}"; exit 0 ;;
 esac
 
-pattern='ccsert|[Aa]rtifact[ _-]?[Gg]ateway|ARTIFACT GATEWAY|artifact_gateway|GATEWAY_|agctl|gateway_'
+pattern='ccsert|[Aa]rtifact[ _-]?[Gg]ateway|ARTIFACT GATEWAY|GATEWAY_|agctl|gateway_'
 
 specs=(.)
 for entry in "${base_allow[@]}"; do specs+=(":(exclude)$entry"); done

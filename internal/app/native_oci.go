@@ -444,10 +444,13 @@ func writeOCIAppendError(w http.ResponseWriter, r *http.Request, repo repository
 	case errors.Is(err, errOCIUploadOffsetMismatch):
 		writeOCIError(w, http.StatusRequestedRangeNotSatisfiable, "RANGE_INVALID", "upload range is invalid")
 	case errors.Is(err, uploadspool.ErrTooLarge):
+		slog.Info("oci upload chunk rejected", fields...)
 		writeOCIError(w, http.StatusRequestEntityTooLarge, "SIZE_INVALID", "upload chunk is too large")
 	case errors.Is(err, io.ErrUnexpectedEOF):
+		slog.Info("oci upload body ended early", fields...)
 		writeOCIError(w, http.StatusBadRequest, "BLOB_UPLOAD_INVALID", "upload body ended early")
 	case errors.Is(err, repository.ErrNotFound):
+		slog.Info("oci upload closed during append", fields...)
 		writeOCIError(w, http.StatusNotFound, "BLOB_UPLOAD_UNKNOWN", "blob upload unknown to registry")
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		slog.Info("oci upload append interrupted", fields...)
