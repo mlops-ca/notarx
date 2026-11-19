@@ -385,6 +385,20 @@ oci-performance-e2e:
 performance-baseline:
 	@./scripts/performance-baseline.sh
 
+# Seed a migrated, empty PostgreSQL database with a datagen profile (ADR 0023 section 11):
+#   make perf-seed PROFILE=tiny|freetier|target NOTARX_DATABASE_URL=postgres://...
+.PHONY: perf-seed
+perf-seed:
+	@test -n "$(PROFILE)" || { echo "PROFILE=tiny|freetier|target is required" >&2; exit 2; }
+	@go run ./tools/datagen/cmd -profile "$(PROFILE)"
+
+# Plan-regression gate: seeds the whole tiny profile in a rolled-back transaction and
+# asserts every query of internal/repository/hotqueries.go keeps its index and plans no
+# Seq Scan on its tables. make integration-test runs the same test at a tenth of the size.
+.PHONY: explain-check
+explain-check:
+	@./scripts/explain-check.sh
+
 cache-operations-e2e:
 	@./scripts/cache-operations-e2e.sh
 

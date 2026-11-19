@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 // Node is one node of an EXPLAIN (FORMAT JSON) plan.
@@ -47,6 +48,17 @@ func (n Node) UsesIndex(name string) bool {
 	return false
 }
 
+// UsesAnyIndexContaining reports whether the plan scans an index whose name contains
+// part.
+func (n Node) UsesAnyIndexContaining(part string) bool {
+	for _, used := range n.Indexes() {
+		if strings.Contains(used, part) {
+			return true
+		}
+	}
+	return false
+}
+
 // SequentialScans returns the relations the plan reads with a sequential scan.
 func (n Node) SequentialScans() []string {
 	var relations []string
@@ -72,10 +84,17 @@ func Parse(raw []byte) (Node, error) {
 	return plans[0].Plan, nil
 }
 
-// Plan explains query with args inside tx with sequential scans discouraged, so the
-// plan shows whether an index can serve the statement at all, whatever the table
-// size. The caller rolls tx back.
-func Plan(ctx context.Context, tx *sql.Tx, query string, args ...any) (Node, error) {
+// Session is the part of *sql.Tx and *sql.Conn that Plan needs. Either way the caller
+// owns a transaction, so SET LOCAL ends with it.
+type Session interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// Plan explains query with args inside the caller's transaction with sequential scans
+// discouraged, so the plan shows whether an index can serve the statement at all,
+// whatever the table size. The caller rolls the transaction back.
+func Plan(ctx context.Context, tx Session, query string, args ...any) (Node, error) {
 	if _, err := tx.ExecContext(ctx, "SET LOCAL enable_seqscan = off"); err != nil {
 		return Node{}, err
 	}

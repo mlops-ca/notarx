@@ -21,6 +21,9 @@ func TestParseAndInspectPlan(t *testing.T) {
 	if got := plan.SequentialScans(); !slices.Equal(got, []string{"b"}) {
 		t.Errorf("sequential scans = %v", got)
 	}
+	if !plan.UsesAnyIndexContaining("_idx") || plan.UsesAnyIndexContaining("zzz") {
+		t.Errorf("substring match wrong for %v", plan.Indexes())
+	}
 	for _, bad := range []string{"", "[]", "{", "[{},{}]"} {
 		if _, err := Parse([]byte(bad)); err == nil {
 			t.Errorf("Parse(%q) succeeded", bad)

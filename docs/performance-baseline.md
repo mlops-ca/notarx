@@ -245,3 +245,34 @@ measure mixed reads and writes, ranges, larger objects, and spool saturation
 from many unique misses under an ephemeral-storage quota; capture heap and disk
 profiles; run a 30–60 minute soak; and compare one-node with split-role and
 multi-Gateway deployments.
+
+## Seeded datasets and plan regression
+
+The snapshot above measures an almost empty database. ADR 0023 section 11 defines
+the sizes that matter, and two make targets reproduce them.
+
+`make perf-seed PROFILE=tiny|freetier|target NOTARX_DATABASE_URL=...` runs
+`tools/datagen` against a migrated, empty PostgreSQL database. It bulk-loads
+repositories, packages, versions and audit rows with `COPY`, draws repository,
+package and actor popularity from a Zipf distribution so hot artifacts exist, and
+finishes with `ANALYZE`. The generation is deterministic for a seed.
+
+| Profile | Versions | Audit rows | Use |
+| --- | --- | --- | --- |
+| `tiny` | 100,000 | 1,000,000 | CI and local checks |
+| `freetier` | 1,000,000 | 20,000,000 | OCI free-tier sizing |
+| `target` | 10,000,000 | 100,000,000 | on-demand capacity runs (8 vCPU, 32 GB, NVMe) |
+
+The seed format is npm. The 20 million webhook deliveries of the `target` profile,
+the other formats and the mixed read/publish load profile are tracked as follow-up
+slices of ADR 0023 slice 17; the figures of ADR 0023 section 11 stay estimates until a
+`target` run replaces them.
+
+`make explain-check` is the plan-regression gate. It seeds the whole `tiny` profile
+inside a rolled-back transaction, runs `ANALYZE` and asserts, for every query in the
+registry `internal/repository/hotqueries.go`, that the plan uses the named index
+(where one is registered) and contains no `Seq Scan` on the listed tables. Sequential
+scans are discouraged while planning, so a failure means no index can serve the
+statement at all. `make integration-test` runs the same test at a tenth of the size.
+To register a query, add an entry to the registry; the unit test rejects duplicates,
+`OFFSET`, `COUNT(*)` and a placeholder count that does not match the arguments.
