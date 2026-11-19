@@ -103,7 +103,7 @@ func TestPostgresSettingsMutationsRollBackWithTheirAudit(t *testing.T) {
 			t.Fatal(err)
 		}
 		if _, err = db.ExecContext(ctx, `INSERT INTO email_test_deliveries (id, event_id, request_key, target_id, target_version, scenario, locale, template_version, recipient_ciphertext, from_address, console_origin, state, attempts, error_code)
-			VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::bigint, 'warning', 'en', 'v1', 'synthetic', 'gateway@example.test', 'https://console.example.test', 'dead', 8, 'smtp_permanent_rejection')`, emailID, uuid.NewString(), uuid.NewString(), target.ID, target.Version); err != nil {
+			VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::bigint, 'warning', 'en-CA', 'v1', 'synthetic', 'gateway@example.test', 'https://console.example.test', 'dead', 8, 'smtp_permanent_rejection')`, emailID, uuid.NewString(), uuid.NewString(), target.ID, target.Version); err != nil {
 			t.Fatal(err)
 		}
 		dead, err := store.GetEmailDelivery(ctx, emailID)

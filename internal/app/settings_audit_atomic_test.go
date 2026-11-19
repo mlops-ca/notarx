@@ -79,7 +79,7 @@ func runSettingsAuditRollback(t *testing.T, store settingsRollbackStore, seed de
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.DeleteConsoleThemePackage(ctx, theme.ID, theme.Version) })
-	target, err := store.CreateEmailTarget(ctx, repository.EmailTarget{ID: uuid.NewString(), Name: "Ops " + suffix, Locale: "en", RecipientCiphertext: "synthetic", Enabled: true})
+	target, err := store.CreateEmailTarget(ctx, repository.EmailTarget{ID: uuid.NewString(), Name: "Ops " + suffix, Locale: "en-CA", RecipientCiphertext: "synthetic", Enabled: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +155,7 @@ func runSettingsAuditRollback(t *testing.T, store settingsRollbackStore, seed de
 				t.Fatalf("theme deleted: %v", err)
 			}
 		}},
-		{"email target create", http.MethodPost, "/email-targets", `{"name":"` + newTarget + `","locale":"en","recipient":"private@example.test","enabled":true}`, "", func(t *testing.T) {
+		{"email target create", http.MethodPost, "/email-targets", `{"name":"` + newTarget + `","locale":"en-CA","recipient":"private@example.test","enabled":true}`, "", func(t *testing.T) {
 			targets, _ := store.ListEmailTargets(ctx)
 			for _, got := range targets {
 				if got.Name == newTarget {
@@ -163,7 +163,7 @@ func runSettingsAuditRollback(t *testing.T, store settingsRollbackStore, seed de
 				}
 			}
 		}},
-		{"email target update", http.MethodPut, "/email-targets/" + target.ID, `{"name":"renamed-` + suffix + `","locale":"en","enabled":true}`, target.Version, func(t *testing.T) {
+		{"email target update", http.MethodPut, "/email-targets/" + target.ID, `{"name":"renamed-` + suffix + `","locale":"en-CA","enabled":true}`, target.Version, func(t *testing.T) {
 			if got, _ := store.GetEmailTarget(ctx, target.ID); got.Version != target.Version {
 				t.Fatalf("email target changed: %+v", got)
 			}
