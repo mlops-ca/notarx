@@ -56,25 +56,6 @@ func (s *PostgresStore) helmTransaction(ctx context.Context, repo string) (*sql.
 	}
 	return tx, name, nil
 }
-func helmQuota(ctx context.Context, tx *sql.Tx, repo string, extra int64) error {
-	var quota int64
-	err := tx.QueryRowContext(ctx, `SELECT quota_bytes FROM repository_capacity_quotas WHERE repository_id=$1::uuid FOR UPDATE`, repo).Scan(&quota)
-	if errors.Is(err, sql.ErrNoRows) || err == nil && quota == 0 {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	var used int64
-	err = tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT SUM(size+provenance_size) FROM native_helm_publications WHERE repository_id=$1::uuid),0)+COALESCE((SELECT SUM(size+provenance_size) FROM native_helm_publication_sessions WHERE repository_id=$1::uuid AND state='pending' AND expires_at>now()),0)`, repo).Scan(&used)
-	if err != nil {
-		return err
-	}
-	if used > quota || extra > quota-used {
-		return ErrQuotaExceeded
-	}
-	return nil
-}
 func (s *PostgresStore) ReserveHelmPublication(ctx context.Context, in HelmSession) (HelmSession, bool, error) {
 	if !validHelmSession(in) || !in.ExpiresAt.After(time.Now()) || !in.CreatedAt.IsZero() || in.State != "" || in.ObjectKey != "" || in.ProvenanceKey != "" || !in.CommittedAt.IsZero() || !in.CollectedAt.IsZero() {
 		return HelmSession{}, false, ErrInvalidHelmPublication
@@ -84,7 +65,8 @@ func (s *PostgresStore) ReserveHelmPublication(ctx context.Context, in HelmSessi
 		return HelmSession{}, false, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err = tx.ExecContext(ctx, `UPDATE native_helm_publication_sessions SET state='expired' WHERE repository_id=$1::uuid AND state='pending' AND (expires_at<=now() OR source_version<>$2)`, in.RepositoryID, in.SourceVersion); err != nil {
+	// A lazily expired session releases the bytes it reserved at admission.
+	if err = releaseExpiredHelmSessions(ctx, tx, `SELECT id FROM native_helm_publication_sessions WHERE repository_id=$1::uuid AND state='pending' AND (expires_at<=now() OR source_version<>$2)`, in.RepositoryID, in.SourceVersion); err != nil {
 		return HelmSession{}, false, err
 	}
 	prior, err := scanHelmSession(tx.QueryRowContext(ctx, `SELECT `+helmSessionColumns+` FROM native_helm_publication_sessions WHERE id=$1::uuid`, in.ID))
@@ -110,7 +92,9 @@ func (s *PostgresStore) ReserveHelmPublication(ctx context.Context, in HelmSessi
 	if !errors.Is(err, ErrNotFound) {
 		return HelmSession{}, false, err
 	}
-	if err = helmQuota(ctx, tx, in.RepositoryID, in.Size+in.ProvenanceSize); err != nil {
+	// The pending session holds its bytes in the counter until it commits or expires (ADR 0023
+	// section 3); this is the quota admission, taken before the row is inserted.
+	if err = capacity.Reserve(ctx, tx, in.RepositoryID, in.Size+in.ProvenanceSize, 0); err != nil {
 		return HelmSession{}, false, err
 	}
 	in.ObjectKey, in.ProvenanceKey = helmObjectKeys(in)
@@ -153,9 +137,6 @@ func (s *PostgresStore) CommitHelmPublication(ctx context.Context, id, actor str
 	if in.State != "pending" {
 		return HelmPublication{}, false, ErrHelmSessionState
 	}
-	if err = helmQuota(ctx, tx, in.RepositoryID, 0); err != nil {
-		return HelmPublication{}, false, err
-	}
 	if _, err = tx.ExecContext(ctx, `UPDATE native_helm_publication_sessions SET state='committed',committed_at=now() WHERE id=$1::uuid`, id); err != nil {
 		return HelmPublication{}, false, err
 	}
@@ -172,14 +153,22 @@ func (s *PostgresStore) CommitHelmPublication(ctx context.Context, id, actor str
 	return p, false, tx.Commit()
 }
 
-// reserveHelmPublication adds a committed publication to the repository's usage counter
-// (ADR 0023 section 3): the chart object, plus the provenance object when there is one.
+// reserveHelmPublication counts a committed publication in the repository's usage counter
+// (ADR 0023 section 3). Its bytes were reserved when the session was admitted and stay in the
+// counter, so only the objects are added: the chart object, plus the provenance object when
+// there is one. Zero bytes are never rejected.
 func reserveHelmPublication(ctx context.Context, tx *sql.Tx, p HelmPublication) error {
 	objects := int64(1)
 	if p.ProvenanceSize > 0 {
 		objects++
 	}
-	return capacity.Reserve(ctx, tx, p.RepositoryID, p.Size+p.ProvenanceSize, objects)
+	return capacity.Reserve(ctx, tx, p.RepositoryID, 0, objects)
+}
+
+// releaseExpiredHelmSessions expires the pending sessions the candidates query selects and releases
+// the bytes (chart and provenance) each reserved at admission.
+func releaseExpiredHelmSessions(ctx context.Context, tx *sql.Tx, candidates string, args ...any) error {
+	return releaseExpiredSessions(ctx, tx, "native_helm_publication_sessions", "s.size+s.provenance_size", "'pending'", candidates, args...)
 }
 func (s *PostgresStore) GetHelmPublication(ctx context.Context, repo, name, version string) (HelmPublication, error) {
 	return scanHelmPublication(s.db.QueryRowContext(ctx, `SELECT `+helmPublicationColumns+` FROM native_helm_publications WHERE repository_id=$1::uuid AND name=$2 AND version=$3 AND EXISTS(SELECT 1 FROM hosted_repositories h WHERE h.id=repository_id AND h.format='helm' AND h.repo_type IN ('hosted','proxy') AND h.state='active')`, repo, name, version))
@@ -209,20 +198,36 @@ func (s *PostgresStore) ExpireHelmSessions(ctx context.Context, now time.Time, l
 	if limit < 1 || limit > 1000 {
 		limit = 100
 	}
-	rows, err := s.db.QueryContext(ctx, `WITH expired AS(SELECT id FROM native_helm_publication_sessions WHERE collected_at IS NULL AND (state='expired' OR state='pending' AND expires_at<=$1) ORDER BY expires_at,id FOR UPDATE SKIP LOCKED LIMIT $2) UPDATE native_helm_publication_sessions SET state='expired' WHERE id IN(SELECT id FROM expired) RETURNING `+helmSessionColumns, now, limit)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer func() { _ = tx.Rollback() }()
+	// Pending sessions past their deadline expire first and release their reservation; the sessions
+	// already expired lazily by a reservation are then collected with them.
+	if err = releaseExpiredHelmSessions(ctx, tx, `SELECT id FROM native_helm_publication_sessions WHERE state='pending' AND expires_at<=$1 ORDER BY expires_at,id FOR UPDATE SKIP LOCKED LIMIT $2`, now, limit); err != nil {
+		return nil, err
+	}
+	rows, err := tx.QueryContext(ctx, `WITH expired AS(SELECT id FROM native_helm_publication_sessions WHERE collected_at IS NULL AND state='expired' ORDER BY expires_at,id FOR UPDATE SKIP LOCKED LIMIT $1) SELECT `+helmSessionColumns+` FROM native_helm_publication_sessions WHERE id IN(SELECT id FROM expired) ORDER BY expires_at,id`, limit)
+	if err != nil {
+		return nil, err
+	}
 	out := []HelmSession{}
 	for rows.Next() {
 		in, e := scanHelmSession(rows)
 		if e != nil {
+			_ = rows.Close()
 			return nil, e
 		}
 		out = append(out, in)
 	}
-	return out, rows.Err()
+	if err = rows.Close(); err != nil {
+		return nil, err
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, tx.Commit()
 }
 func (s *PostgresStore) MarkHelmSessionCollected(ctx context.Context, id, key string) error {
 	result, err := s.db.ExecContext(ctx, `UPDATE native_helm_publication_sessions SET collected_at=COALESCE(collected_at,now()) WHERE id=$1::uuid AND object_key=$2 AND state='expired'`, id, key)

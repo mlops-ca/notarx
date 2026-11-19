@@ -59,6 +59,35 @@ func (d *usageDelta) reserve(ctx context.Context, tx *sql.Tx) error {
 	return nil
 }
 
+// releaseExpiredSessions marks the sessions the candidates query selects (one id column) as expired
+// and releases the bytes each reserved at admission, so a pending reservation ends with the state
+// transition and is released once: the update re-checks liveStates, so a session another
+// transaction has meanwhile committed or expired is left alone. table, bytesExpr (over alias s) and
+// liveStates are code constants, never request data.
+func releaseExpiredSessions(ctx context.Context, tx *sql.Tx, table, bytesExpr, liveStates, candidates string, args ...any) error {
+	rows, err := tx.QueryContext(ctx, `WITH c AS MATERIALIZED (`+candidates+`) UPDATE `+table+` s SET state='expired' FROM c WHERE s.id=c.id AND s.state IN (`+liveStates+`) RETURNING s.repository_id::text,`+bytesExpr, args...)
+	if err != nil {
+		return err
+	}
+	var released usageDelta
+	for rows.Next() {
+		var repo string
+		var size int64
+		if err = rows.Scan(&repo, &size); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		released.add(repo, -size, 0)
+	}
+	if err = rows.Close(); err != nil {
+		return err
+	}
+	if err = rows.Err(); err != nil {
+		return err
+	}
+	return released.reserve(ctx, tx)
+}
+
 // lockUsagePath takes a transaction-scoped advisory lock on key, so writers of one asset path
 // (including the first insert of an absent path) compute their usage delta from the row
 // the previous writer committed.

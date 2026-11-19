@@ -279,45 +279,88 @@ func TestPostgresHelmReplicationCredentialExpiryDuringFinalTransactionRollsBack(
 	}
 }
 
-func TestPostgresHelmReplicationFinalGovernanceAndClosureQuota(t *testing.T) {
-	for _, mode := range []string{"source-quarantine", "target-quota"} {
-		t.Run(mode, func(t *testing.T) {
-			s := newPostgresNuGetStore(t)
-			f := helmReplicationContractSetup(t, s)
-			if _, _, err := s.CreateHelmReplication(t.Context(), f.job, f.check); err != nil {
-				t.Fatal(err)
-			}
-			claim, err := s.ClaimHelmReplication(t.Context(), uuid.NewString(), time.Minute)
-			if err != nil {
-				t.Fatal(err)
-			}
-			session := helmReplicationContractStage(t, s, f, claim)
-			want := dist.ErrSourceChanged
-			if mode == "source-quarantine" {
-				_, err = s.TransitionHelmGovernance(t.Context(), HelmGovernanceChange{RepositoryID: f.source.ID, Name: f.publication.Name, Version: f.publication.Version, ExpectedDigest: f.publication.Digest, ExpectedVersion: f.publication.Governance.Version, Actor: "operator", Action: "quarantine", Reason: "changed after target reservation"})
-			} else {
-				_, err = s.ReplaceRepositoryCapacityQuota(t.Context(), f.target.ID, f.publication.Size)
-				want = ErrQuotaExceeded
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err = s.CompleteHelmReplicationItem(t.Context(), claim.Lease, 0, dist.Commit{SessionID: session.ID}, f.check); !errors.Is(err, want) {
-				t.Fatalf("final %s=%v", mode, err)
-			}
-			if _, err = s.GetHelmPublication(t.Context(), f.target.ID, f.publication.Name, f.publication.Version); !errors.Is(err, ErrNotFound) {
-				t.Fatalf("rejected closure visible=%v", err)
-			}
-			saved, err := s.GetHelmReplication(t.Context(), f.job.ID)
-			if err != nil || saved.Items[0].State != "running" {
-				t.Fatalf("failed commit changed checkpoint=%+v %v", saved, err)
-			}
-			if err = s.FailHelmReplicationItem(t.Context(), claim.Lease, 0, "transfer_failed"); err != nil {
-				t.Fatal(err)
-			}
-			if _, err = s.FinishHelmReplication(t.Context(), claim.Lease); err != nil {
-				t.Fatal(err)
-			}
-		})
+func TestPostgresHelmReplicationFinalGovernance(t *testing.T) {
+	s := newPostgresNuGetStore(t)
+	f := helmReplicationContractSetup(t, s)
+	if _, _, err := s.CreateHelmReplication(t.Context(), f.job, f.check); err != nil {
+		t.Fatal(err)
+	}
+	claim, err := s.ClaimHelmReplication(t.Context(), uuid.NewString(), time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session := helmReplicationContractStage(t, s, f, claim)
+	if _, err = s.TransitionHelmGovernance(t.Context(), HelmGovernanceChange{RepositoryID: f.source.ID, Name: f.publication.Name, Version: f.publication.Version, ExpectedDigest: f.publication.Digest, ExpectedVersion: f.publication.Governance.Version, Actor: "operator", Action: "quarantine", Reason: "changed after target reservation"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.CompleteHelmReplicationItem(t.Context(), claim.Lease, 0, dist.Commit{SessionID: session.ID}, f.check); !errors.Is(err, dist.ErrSourceChanged) {
+		t.Fatalf("final governance check=%v", err)
+	}
+	if _, err = s.GetHelmPublication(t.Context(), f.target.ID, f.publication.Name, f.publication.Version); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("rejected closure visible=%v", err)
+	}
+	saved, err := s.GetHelmReplication(t.Context(), f.job.ID)
+	if err != nil || saved.Items[0].State != "running" {
+		t.Fatalf("failed commit changed checkpoint=%+v %v", saved, err)
+	}
+	if err = s.FailHelmReplicationItem(t.Context(), claim.Lease, 0, "transfer_failed"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.FinishHelmReplication(t.Context(), claim.Lease); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestPostgresHelmReplicationReservesTargetBytes covers the replication paths of the usage counter
+// (ADR 0023 section 3): job creation is a pre-flight against the counter, the target session holds the
+// item's bytes from admission, the quota cannot be lowered below them, and completing the item counts
+// the publication without reserving its bytes a second time.
+func TestPostgresHelmReplicationReservesTargetBytes(t *testing.T) {
+	s := newPostgresNuGetStore(t)
+	f := helmReplicationContractSetup(t, s)
+	bytes := f.publication.Size + f.publication.ProvenanceSize
+	// Pre-flight: a target whose quota cannot hold the plan refuses the job and reserves nothing.
+	if _, err := s.ReplaceRepositoryCapacityQuota(t.Context(), f.target.ID, bytes-1); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.CreateHelmReplication(t.Context(), f.job, f.check); !IsQuotaExceeded(err) {
+		t.Fatalf("job over quota = %v, want quota exceeded", err)
+	}
+	assertCounterEqualsUsage(t, s, f.target, "refused replication job")
+	if got := counterBytes(t, s, f.target); got != 0 {
+		t.Fatalf("refused job reserved %d bytes", got)
+	}
+	if _, err := s.ReplaceRepositoryCapacityQuota(t.Context(), f.target.ID, bytes); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.CreateHelmReplication(t.Context(), f.job, f.check); err != nil {
+		t.Fatal(err)
+	}
+	assertCounterEqualsUsage(t, s, f.target, "created replication job")
+	if got := counterBytes(t, s, f.target); got != 0 {
+		t.Fatalf("job creation reserved %d bytes, want none until an item opens its session", got)
+	}
+	claim, err := s.ClaimHelmReplication(t.Context(), uuid.NewString(), time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session := helmReplicationContractStage(t, s, f, claim)
+	assertCounterEqualsUsage(t, s, f.target, "target session reserved")
+	if got := counterBytes(t, s, f.target); got != bytes {
+		t.Fatalf("target session counter = %d, want %d", got, bytes)
+	}
+	// The reservation is real: the quota cannot drop below it.
+	if _, err = s.ReplaceRepositoryCapacityQuota(t.Context(), f.target.ID, f.publication.Size); !IsQuotaExceeded(err) {
+		t.Fatalf("quota below the reservation = %v, want quota exceeded", err)
+	}
+	if _, err = s.CompleteHelmReplicationItem(t.Context(), claim.Lease, 0, dist.Commit{SessionID: session.ID}, f.check); err != nil {
+		t.Fatal(err)
+	}
+	assertCounterEqualsUsage(t, s, f.target, "replicated item committed")
+	if got := counterBytes(t, s, f.target); got != bytes {
+		t.Fatalf("committed counter = %d, want %d", got, bytes)
+	}
+	if _, err = s.FinishHelmReplication(t.Context(), claim.Lease); err != nil {
+		t.Fatal(err)
 	}
 }

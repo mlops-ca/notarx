@@ -843,6 +843,108 @@ func helmPublish(ctx context.Context, store *PostgresStore, repo HostedRepositor
 	return err
 }
 
+// helmOpen admits one pending Helm session; admission reserves its bytes in the usage counter.
+func helmOpen(ctx context.Context, store *PostgresStore, repo HostedRepository, name, version string, size, provenanceSize int64) (HelmSession, error) {
+	session := HelmSession{ID: uuid.NewString(), RepositoryID: repo.ID, Name: name, Version: version, Digest: uniqueDigest(), Size: size, Actor: "publisher",
+		MetadataJSON: []byte(`{"name":"` + name + `","version":"` + version + `"}`), ChartYAML: []byte("chart metadata"), ExpiresAt: time.Now().UTC().Add(time.Hour)}
+	if provenanceSize > 0 {
+		session.ProvenanceDigest, session.ProvenanceSize = uniqueDigest(), provenanceSize
+	}
+	reserved, _, err := store.ReserveHelmPublication(ctx, session)
+	return reserved, err
+}
+
+// helmSessionLifecycleEquality drives the pending reservation of Helm sessions: an open session holds
+// its bytes (chart and provenance) in the counter until it commits or expires, lazily when a later
+// reservation finds it past its deadline and through the janitor.
+func helmSessionLifecycleEquality(t *testing.T, ctx context.Context, store *PostgresStore, repo HostedRepository, check func(string)) {
+	t.Helper()
+	before := counterBytes(t, store, repo)
+	if _, err := helmOpen(ctx, store, repo, "pending", "1.0.0", 11, 4); err != nil {
+		t.Fatal(err)
+	}
+	check("open a session")
+	if got := counterBytes(t, store, repo); got != before+15 {
+		t.Fatalf("open session counter = %d, want %d", got, before+15)
+	}
+	stale, err := helmOpen(ctx, store, repo, "stale", "1.0.0", 9, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("open a second session")
+	if _, err = store.db.ExecContext(ctx, `UPDATE native_helm_publication_sessions SET expires_at=now()-interval '1 minute' WHERE id=$1::uuid`, stale.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = helmOpen(ctx, store, repo, "fresh", "1.0.0", 3, 0); err != nil {
+		t.Fatal(err)
+	}
+	check("open a session after another passed its deadline (lazy expiry)")
+	if got := counterBytes(t, store, repo); got != before+15+3 {
+		t.Fatalf("counter after lazy expiry = %d, want %d", got, before+15+3)
+	}
+	if _, err = store.ExpireHelmSessions(ctx, time.Now().Add(2*time.Hour), 100); err != nil {
+		t.Fatal(err)
+	}
+	check("expire the abandoned sessions")
+	if got := counterBytes(t, store, repo); got != before {
+		t.Fatalf("counter after the janitor = %d, want %d", got, before)
+	}
+	// Expiring again releases nothing twice.
+	if _, err = store.ExpireHelmSessions(ctx, time.Now().Add(2*time.Hour), 100); err != nil {
+		t.Fatal(err)
+	}
+	check("expire again")
+}
+
+func nugetOpen(ctx context.Context, store *PostgresStore, repo HostedRepository, packageID, version string, size int64) (NuGetSession, error) {
+	session := NuGetSession{ID: uuid.NewString(), RepositoryID: repo.ID, PackageID: strings.ToLower(packageID), Version: version, Digest: uniqueDigest(), Size: size, Actor: "publisher", ExpiresAt: time.Now().UTC().Add(time.Hour)}
+	reserved, _, err := store.ReserveNuGetPublication(ctx, session)
+	return reserved, err
+}
+
+// nugetSessionLifecycleEquality is the NuGet counterpart: reserved and staged sessions hold their
+// bytes until they commit or expire, lazily or through the janitor.
+func nugetSessionLifecycleEquality(t *testing.T, ctx context.Context, store *PostgresStore, repo HostedRepository, check func(string)) {
+	t.Helper()
+	before := counterBytes(t, store, repo)
+	staged, err := nugetOpen(ctx, store, repo, "Pending", "1.0.0", 12)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("reserve a session")
+	staged.Nuspec = []byte("nuspec")
+	staged.MetadataJSON = []byte(`{"id":"pending","version":"1.0.0","dependencyGroups":[]}`)
+	if _, err = store.StageNuGetPublication(ctx, staged); err != nil {
+		t.Fatal(err)
+	}
+	check("stage the session")
+	stale, err := nugetOpen(ctx, store, repo, "Stale", "1.0.0", 9)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.db.ExecContext(ctx, `UPDATE native_nuget_publication_sessions SET expires_at=now()-interval '1 minute' WHERE id=$1::uuid`, stale.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = nugetOpen(ctx, store, repo, "Fresh", "1.0.0", 3); err != nil {
+		t.Fatal(err)
+	}
+	check("reserve a session after another passed its deadline (lazy expiry)")
+	if got := counterBytes(t, store, repo); got != before+12+3 {
+		t.Fatalf("counter after lazy expiry = %d, want %d", got, before+12+3)
+	}
+	if _, err = store.ExpireNuGetSessions(ctx, time.Now().Add(2*time.Hour), 100); err != nil {
+		t.Fatal(err)
+	}
+	check("expire the abandoned sessions")
+	if got := counterBytes(t, store, repo); got != before {
+		t.Fatalf("counter after the janitor = %d, want %d", got, before)
+	}
+	if _, err = store.ExpireNuGetSessions(ctx, time.Now().Add(2*time.Hour), 100); err != nil {
+		t.Fatal(err)
+	}
+	check("expire again")
+}
+
 func helmCounterEquality(t *testing.T, ctx context.Context, store *PostgresStore, repo HostedRepository, check func(string)) {
 	for _, step := range []struct {
 		name, version string
@@ -865,6 +967,7 @@ func helmCounterEquality(t *testing.T, ctx context.Context, store *PostgresStore
 		}
 		check(step)
 	}
+	helmSessionLifecycleEquality(t, ctx, store, repo, check)
 	var used int64
 	if err = store.db.QueryRow(`SELECT bytes FROM repository_usage_counters WHERE repository_id=$1::uuid`, repo.ID).Scan(&used); err != nil {
 		t.Fatal(err)
@@ -924,6 +1027,7 @@ func nugetCounterEquality(t *testing.T, ctx context.Context, store *PostgresStor
 		}
 		check("publish " + step.id + " " + step.version)
 	}
+	nugetSessionLifecycleEquality(t, ctx, store, repo, check)
 	var used int64
 	if err := store.db.QueryRow(`SELECT bytes FROM repository_usage_counters WHERE repository_id=$1::uuid`, repo.ID).Scan(&used); err != nil {
 		t.Fatal(err)

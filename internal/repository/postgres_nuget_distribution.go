@@ -257,7 +257,12 @@ func (s *PostgresStore) CreateNuGetReplication(ctx context.Context, j dist.Job, 
 			extra += item.Size
 		}
 	}
-	if err = nuGetQuota(ctx, tx, j.TargetRepositoryID, extra); err != nil {
+	// Pre-flight only: each item reserves its bytes through its own session when it runs. Sessions of the
+	// target past their deadline release their bytes first, so abandoned ones do not refuse the job.
+	if err = releaseExpiredNuGetSessions(ctx, tx, `SELECT id FROM native_nuget_publication_sessions WHERE repository_id=$1::uuid AND state IN ('reserved','staged') AND expires_at<=now()`, j.TargetRepositoryID); err != nil {
+		return dist.Job{}, false, err
+	}
+	if err = capacity.Headroom(ctx, tx, j.TargetRepositoryID, extra); err != nil {
 		return dist.Job{}, false, err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO native_nuget_replication_jobs(id,plan_digest,source_repository_id,target_repository_id,actor,actor_kind,credential_id,state) VALUES($1,$2,$3,$4,$5,$6,$7,'queued')`, j.ID, j.PlanDigest, j.SourceRepositoryID, j.TargetRepositoryID, j.Actor, j.ActorKind, j.CredentialID)
@@ -480,9 +485,6 @@ func (s *PostgresStore) CompleteNuGetReplicationItem(ctx context.Context, lease 
 		if session.Actor != j.Actor || session.State != "staged" || !session.ExpiresAt.After(time.Now()) || !validNuGetStaging(session) {
 			return dist.Job{}, dist.ErrTargetBlocked
 		}
-		if err = nuGetQuota(ctx, tx, j.TargetRepositoryID, 0); err != nil {
-			return dist.Job{}, err
-		}
 		if _, err = tx.ExecContext(ctx, `UPDATE native_nuget_publication_sessions SET state='committed',committed_at=clock_timestamp() WHERE id=$1::uuid`, session.ID); err != nil {
 			return dist.Job{}, err
 		}
@@ -493,7 +495,7 @@ func (s *PostgresStore) CompleteNuGetReplicationItem(ctx context.Context, lease 
 		if err = insertAudit(ctx, tx, nuGetPublicationAudit(target, a.Target.Name)); err != nil {
 			return dist.Job{}, err
 		}
-		if err = capacity.Reserve(ctx, tx, target.RepositoryID, target.Size, 1); err != nil {
+		if err = capacity.Reserve(ctx, tx, target.RepositoryID, 0, 1); err != nil {
 			return dist.Job{}, err
 		}
 		item.Result = "published"

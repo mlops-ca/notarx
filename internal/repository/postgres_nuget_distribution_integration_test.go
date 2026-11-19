@@ -278,3 +278,54 @@ func TestPostgresNuGetReplicationCredentialExpiryDuringFinalTransactionRollsBack
 		t.Fatal(err)
 	}
 }
+
+// TestPostgresNuGetReplicationReservesTargetBytes covers the replication paths of the usage counter
+// (ADR 0023 section 3): job creation is a pre-flight against the counter, the target session holds the
+// package's bytes from admission, the quota cannot be lowered below them, and completing the item counts
+// the publication without reserving its bytes a second time.
+func TestPostgresNuGetReplicationReservesTargetBytes(t *testing.T) {
+	s := newPostgresNuGetStore(t)
+	f := replicationContractSetup(t, s)
+	size := f.publication.Size
+	if _, err := s.ReplaceRepositoryCapacityQuota(t.Context(), f.target.ID, size-1); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.CreateNuGetReplication(t.Context(), f.job, f.check); !IsQuotaExceeded(err) {
+		t.Fatalf("job over quota = %v, want quota exceeded", err)
+	}
+	assertCounterEqualsUsage(t, s, f.target, "refused replication job")
+	if got := counterBytes(t, s, f.target); got != 0 {
+		t.Fatalf("refused job reserved %d bytes", got)
+	}
+	if _, err := s.ReplaceRepositoryCapacityQuota(t.Context(), f.target.ID, size); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.CreateNuGetReplication(t.Context(), f.job, f.check); err != nil {
+		t.Fatal(err)
+	}
+	if got := counterBytes(t, s, f.target); got != 0 {
+		t.Fatalf("job creation reserved %d bytes, want none until an item opens its session", got)
+	}
+	claim, err := s.ClaimNuGetReplication(t.Context(), uuid.NewString(), time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session := replicationContractStage(t, s, f, claim)
+	assertCounterEqualsUsage(t, s, f.target, "target session staged")
+	if got := counterBytes(t, s, f.target); got != size {
+		t.Fatalf("target session counter = %d, want %d", got, size)
+	}
+	if _, err = s.ReplaceRepositoryCapacityQuota(t.Context(), f.target.ID, size-1); !IsQuotaExceeded(err) {
+		t.Fatalf("quota below the reservation = %v, want quota exceeded", err)
+	}
+	if _, err = s.CompleteNuGetReplicationItem(t.Context(), claim.Lease, 0, dist.Commit{SessionID: session.ID}, f.check); err != nil {
+		t.Fatal(err)
+	}
+	assertCounterEqualsUsage(t, s, f.target, "replicated item committed")
+	if got := counterBytes(t, s, f.target); got != size {
+		t.Fatalf("committed counter = %d, want %d", got, size)
+	}
+	if _, err = s.FinishNuGetReplication(t.Context(), claim.Lease); err != nil {
+		t.Fatal(err)
+	}
+}

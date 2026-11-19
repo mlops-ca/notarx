@@ -8,14 +8,11 @@ import (
 	"testing"
 )
 
-// quotaAdmissionExceptions lists the files that still decide quota admission with a SUM over
-// asset or session tables under the quota row lock instead of capacity.Reserve. Each one is a debt
-// of ADR 0023 section 3 (see docs/distributed-deployment.md, "Quota counters"); delete the entry
-// when the file moves to the counters. The test fails when an entry no longer matches.
-var quotaAdmissionExceptions = map[string]string{
-	"postgres_helm.go":  "locks the quota row and sums pending Helm sessions instead of reserving them",
-	"postgres_nuget.go": "locks the quota row and sums pending NuGet sessions instead of reserving them",
-}
+// quotaAdmissionExceptions lists the files allowed to decide quota admission with a SUM over asset or
+// session tables under the quota row lock instead of capacity.Reserve (ADR 0023 section 3). It is
+// empty: every Postgres store admits through the counter. Do not add to it; the test fails on a
+// stale entry.
+var quotaAdmissionExceptions = map[string]string{}
 
 var (
 	quotaRowLock = regexp.MustCompile(`(?is)repository_capacity_quotas[^\x60]*FOR\s+UPDATE`)
