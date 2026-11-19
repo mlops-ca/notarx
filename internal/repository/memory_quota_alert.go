@@ -50,7 +50,7 @@ func (s *MemoryStore) GetRepositoryQuotaAlertRule(_ context.Context, id string) 
 	}
 	return quotaRuleAt(v, time.Now()), nil
 }
-func (s *MemoryStore) UpdateRepositoryQuotaAlertRule(_ context.Context, v RepositoryQuotaAlertRule, version string) (RepositoryQuotaAlertRule, error) {
+func (s *MemoryStore) UpdateRepositoryQuotaAlertRule(ctx context.Context, v RepositoryQuotaAlertRule, version string, audit ...AuditRecord) (RepositoryQuotaAlertRule, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	old, ok := s.quotaAlertRules[v.ID]
@@ -82,6 +82,9 @@ func (s *MemoryStore) UpdateRepositoryQuotaAlertRule(_ context.Context, v Reposi
 	if quotaSameConfig(old, v) {
 		return quotaRuleAt(old, time.Now()), nil
 	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return old, err
+	}
 	old.TargetID, old.TargetVersion, old.Policy, old.Enabled = v.TargetID, v.TargetVersion, v.Policy, v.Enabled
 	quality := "disabled"
 	if old.Enabled {
@@ -98,7 +101,7 @@ func (s *MemoryStore) UpdateRepositoryQuotaAlertRule(_ context.Context, v Reposi
 	s.quotaAlertRules[old.ID] = old
 	return old, nil
 }
-func (s *MemoryStore) DeleteRepositoryQuotaAlertRule(_ context.Context, id, version string) (RepositoryQuotaAlertRule, error) {
+func (s *MemoryStore) DeleteRepositoryQuotaAlertRule(ctx context.Context, id, version string, audit ...AuditRecord) (RepositoryQuotaAlertRule, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	v, ok := s.quotaAlertRules[id]
@@ -111,6 +114,9 @@ func (s *MemoryStore) DeleteRepositoryQuotaAlertRule(_ context.Context, id, vers
 	if v.Deleted {
 		return v, nil
 	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return v, err
+	}
 	v.Deleted, v.Enabled = true, false
 	v.State = quotaalert.Reset(v.State, "deleted")
 	v.Version, v.StateVersion = nextHostedGroupVersion(v.Version), nextHostedGroupVersion(v.StateVersion)
@@ -120,7 +126,7 @@ func (s *MemoryStore) DeleteRepositoryQuotaAlertRule(_ context.Context, id, vers
 	return v, nil
 }
 
-func (s *MemoryStore) CreateRepositoryQuotaAlertRule(_ context.Context, v RepositoryQuotaAlertRule) (RepositoryQuotaAlertRule, error) {
+func (s *MemoryStore) CreateRepositoryQuotaAlertRule(ctx context.Context, v RepositoryQuotaAlertRule, audit ...AuditRecord) (RepositoryQuotaAlertRule, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	repo, ok := s.hostedRepositories[v.RepositoryID]
@@ -149,6 +155,9 @@ func (s *MemoryStore) CreateRepositoryQuotaAlertRule(_ context.Context, v Reposi
 		}
 	}
 	if err := v.Policy.Validate(); err != nil {
+		return v, err
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
 		return v, err
 	}
 	v.Version, v.StateVersion = "1", "1"

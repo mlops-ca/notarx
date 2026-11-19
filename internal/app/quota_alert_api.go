@@ -154,14 +154,9 @@ func (h generatedRepositoryAPIAdapter) UpdateRepositoryQuotaAlertRule(w http.Res
 	if quotaProblem(w, err) {
 		return
 	}
-	v, err := h.quotaAlerts.UpdateRepositoryQuotaAlertRule(r.Context(), repository.RepositoryQuotaAlertRule{ID: id.String(), RepositoryID: in.RepositoryID.String(), TargetID: target.ID, TargetVersion: target.Version, Policy: in.Policy, Enabled: in.Enabled}, params.IfMatch)
+	v, err := h.quotaAlerts.UpdateRepositoryQuotaAlertRule(r.Context(), repository.RepositoryQuotaAlertRule{ID: id.String(), RepositoryID: in.RepositoryID.String(), TargetID: target.ID, TargetVersion: target.Version, Policy: in.Policy, Enabled: in.Enabled}, params.IfMatch, h.quotaRuleAudit(p, id.String(), "quota.rule.update", 200)...)
 	if quotaProblem(w, err) {
 		return
-	}
-	if v.Version != params.IfMatch {
-		if !h.quotaRuleAudit(w, r, p, v.ID, "quota.rule.update", 200) {
-			return
-		}
 	}
 	w.Header().Set("ETag", v.Version)
 	writeNativeMavenJSON(w, 200, quotaRuleResponse(v))
@@ -171,20 +166,15 @@ func (h generatedRepositoryAPIAdapter) DeleteRepositoryQuotaAlertRule(w http.Res
 	if !ok {
 		return
 	}
-	v, err := h.quotaAlerts.DeleteRepositoryQuotaAlertRule(r.Context(), id.String(), params.IfMatch)
+	v, err := h.quotaAlerts.DeleteRepositoryQuotaAlertRule(r.Context(), id.String(), params.IfMatch, h.quotaRuleAudit(p, id.String(), "quota.rule.delete", 204)...)
 	if quotaProblem(w, err) {
 		return
-	}
-	if v.Version != params.IfMatch {
-		if !h.quotaRuleAudit(w, r, p, v.ID, "quota.rule.delete", 204) {
-			return
-		}
 	}
 	w.Header().Set("ETag", v.Version)
 	w.WriteHeader(204)
 }
 func (h generatedRepositoryAPIAdapter) CreateRepositoryQuotaAlertRule(w http.ResponseWriter, r *http.Request) {
-	principal, ok := h.emailAuthorize(w, r)
+	p, ok := h.emailAuthorize(w, r)
 	if !ok {
 		return
 	}
@@ -199,22 +189,17 @@ func (h generatedRepositoryAPIAdapter) CreateRepositoryQuotaAlertRule(w http.Res
 	if quotaProblem(w, err) {
 		return
 	}
-	v, err := h.quotaAlerts.CreateRepositoryQuotaAlertRule(r.Context(), repository.RepositoryQuotaAlertRule{ID: ids.New(), RepositoryID: in.RepositoryID.String(), TargetID: target.ID, TargetVersion: target.Version, Enabled: in.Enabled, Policy: in.Policy})
+	ruleID := ids.New()
+	v, err := h.quotaAlerts.CreateRepositoryQuotaAlertRule(r.Context(), repository.RepositoryQuotaAlertRule{ID: ruleID, RepositoryID: in.RepositoryID.String(), TargetID: target.ID, TargetVersion: target.Version, Enabled: in.Enabled, Policy: in.Policy}, h.quotaRuleAudit(p, ruleID, "quota.rule.create", 201)...)
 	if quotaProblem(w, err) {
-		return
-	}
-	if !h.quotaRuleAudit(w, r, principal, v.ID, "quota.rule.create", 201) {
 		return
 	}
 	w.Header().Set("ETag", v.Version)
 	writeNativeMavenJSON(w, 201, quotaRuleResponse(v))
 }
 
-// quotaRuleAudit is the legacy after-the-fact audit of the quota rule handlers, which a
-// later slice of ADR 0023 section 1 migrates.
-func (h generatedRepositoryAPIAdapter) quotaRuleAudit(w http.ResponseWriter, r *http.Request, p Principal, id, operation string, status int) bool {
-	if h.audit == nil {
-		return true
-	}
-	return recordMutationAudit(w, h.audit, r.Context(), managementAudit(repository.AuditRecord{Actor: p.Actor, Resource: id, Operation: operation, Status: status}))
+// quotaRuleAudit builds the audit the quota alert store writes in the transaction of the rule
+// change. An unchanged update or an already deleted rule changes nothing and writes none.
+func (h generatedRepositoryAPIAdapter) quotaRuleAudit(p Principal, id, operation string, status int) []repository.AuditRecord {
+	return h.auditFor(repository.AuditRecord{Actor: p.Actor, Resource: id, Operation: operation, Status: status})
 }
