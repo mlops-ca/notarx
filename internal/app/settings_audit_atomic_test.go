@@ -20,7 +20,7 @@ import (
 // theme, email, webhook and scheduled task handlers on the memory store.
 func TestSettingsMutationsRollBackWithTheirAudit(t *testing.T) {
 	store := repository.NewMemoryStore()
-	runSettingsAuditRollback(t, store, func() {
+	runSettingsAuditRollback(t, store, seedDeadDeliveriesThroughTheStore, func() {
 		store.SetAuditFault(func(record repository.AuditRecord) error {
 			if record.Format == "management" {
 				return errors.New("audit store unavailable")
@@ -44,7 +44,7 @@ type settingsRollbackCase struct {
 // while audits fail and asserts that the change did not take effect and that the answer
 // is never 500 audit_failed. clear lets the audit through again; the final check proves
 // the same requests then succeed, so the rollback was caused by the audit alone.
-func runSettingsAuditRollback(t *testing.T, store settingsRollbackStore, fail, clear func()) {
+func runSettingsAuditRollback(t *testing.T, store settingsRollbackStore, seed deadDeliverySeeder, fail, clear func()) {
 	t.Helper()
 	t.Setenv(secrets.KeyEnv, "0123456789abcdef0123456789abcdef")
 	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", "01234567890123456789012345678901")
@@ -72,53 +72,18 @@ func runSettingsAuditRollback(t *testing.T, store settingsRollbackStore, fail, c
 	if err != nil {
 		t.Fatal(err)
 	}
-	theme, err := store.CreateConsoleThemePackage(ctx, repository.ConsoleThemePackage{ID: "acme-dark", Payload: []byte(acmeDarkTheme)})
+	themeID := "acme-fix-" + suffix
+	fixtureTheme := strings.Replace(acmeDarkTheme, `"id":"acme-dark"`, `"id":"`+themeID+`"`, 1)
+	theme, err := store.CreateConsoleThemePackage(ctx, repository.ConsoleThemePackage{ID: themeID, Payload: []byte(fixtureTheme)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.DeleteConsoleThemePackage(ctx, theme.ID, theme.Version) })
-	target, err := store.CreateEmailTarget(ctx, repository.EmailTarget{ID: uuid.NewString(), Name: "Ops " + suffix, Locale: "en-CA", RecipientCiphertext: "synthetic", Enabled: true})
+	target, err := store.CreateEmailTarget(ctx, repository.EmailTarget{ID: uuid.NewString(), Name: "Ops " + suffix, Locale: "en", RecipientCiphertext: "synthetic", Enabled: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	subscription, err := store.CreateWebhookSubscription(ctx, repository.WebhookSubscription{ID: uuid.NewString(), Name: "hook-" + suffix, EndpointURL: "https://events.example.test/hooks", SecretCiphertext: "synthetic", EventTypes: []repository.WebhookEventType{repository.WebhookEventArtifactQuarantined}, Enabled: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = store.EnqueueWebhookEvent(ctx, repository.WebhookEvent{ID: uuid.NewString(), Type: repository.WebhookEventArtifactQuarantined, OccurredAt: time.Now().UTC(), Data: []byte(`{"repositoryId":"repo-1"}`)}); err != nil {
-		t.Fatal(err)
-	}
-	claims, err := store.ClaimWebhookDeliveries(ctx, "test-worker-"+suffix, time.Now().UTC().Add(time.Second), time.Minute, 100)
-	if err != nil || len(claims) == 0 {
-		t.Fatalf("claims=%#v err=%v", claims, err)
-	}
-	var deadWebhook string
-	for _, claim := range claims {
-		if claim.Delivery.SubscriptionID != subscription.ID {
-			continue
-		}
-		if err = store.FailWebhookDelivery(ctx, claim.Delivery.ID, claim.Delivery.LeaseToken, time.Now().UTC().Add(time.Second), time.Time{}, 503, "HTTP 503", true); err != nil {
-			t.Fatal(err)
-		}
-		deadWebhook = claim.Delivery.ID
-	}
-	if deadWebhook == "" {
-		t.Fatal("no webhook delivery for the fixture subscription")
-	}
-	if _, err = store.EnqueueEmailTest(ctx, repository.EmailTestRequest{ID: uuid.NewString(), EventID: uuid.NewString(), RequestKey: uuid.NewString(), TargetID: target.ID, TargetVersion: target.Version, Scenario: "warning", From: emailConfig.From, TemplateVersion: emailnotification.TemplateVersion}); err != nil {
-		t.Fatal(err)
-	}
-	claim, err := store.ClaimEmailDelivery(ctx, "synthetic/"+suffix)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = store.FinishEmailDelivery(ctx, claim.ID, claim.LeaseToken, repository.EmailAttemptResult{Code: "smtp_permanent_rejection", Permanent: true}); err != nil {
-		t.Fatal(err)
-	}
-	dead, err := store.GetEmailDelivery(ctx, claim.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	subscription, deadWebhook, dead := seed(t, store, target)
 	policy, err := store.GetAuditRetentionPolicy(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -150,8 +115,12 @@ func runSettingsAuditRollback(t *testing.T, store settingsRollbackStore, fail, c
 	}
 	t.Cleanup(func() { _ = store.DeleteScheduledTask(ctx, deleteTask.ID) })
 
+	oidcBefore := repository.OIDCSettings{Version: "0"}
+	if got, getErr := store.GetOIDCSettings(ctx); getErr == nil {
+		oidcBefore = got
+	}
 	themeBody := strings.Replace(acmeDarkTheme, `"id":"acme-dark"`, `"id":"acme-new-`+suffix+`"`, 1)
-	replaceThemeBody := strings.Replace(acmeDarkTheme, `"name":"Acme Dark"`, `"name":"Acme Changed"`, 1)
+	replaceThemeBody := strings.Replace(fixtureTheme, `"name":"Acme Dark"`, `"name":"Acme Changed"`, 1)
 	siteBody := `{"siteName":"changed-` + suffix + `","logoUrl":"","brandMark":"AG","enabledThemeIds":["notarx-dark"],"defaultThemeId":"notarx-dark"}`
 	oidcBody := `{"enabled":false,"issuer":"","audience":"","clientId":"","redirectUrl":"","scopes":["openid"],"adminSubjects":[],"memberRoles":[],"adminRoles":[]}`
 	webhookBody := `{"name":"%s","endpointUrl":"https://events.example.test/hooks","secret":"0123456789abcdef0123456789abcdef","eventTypes":["artifact.quarantined"],"enabled":true}`
@@ -166,9 +135,9 @@ func runSettingsAuditRollback(t *testing.T, store settingsRollbackStore, fail, c
 				t.Fatalf("site settings changed: %+v", got)
 			}
 		}},
-		{"oidc settings", http.MethodPut, "/authentication/oidc", oidcBody, "0", func(t *testing.T) {
-			if _, err := store.GetOIDCSettings(ctx); !errors.Is(err, repository.ErrNotFound) {
-				t.Fatalf("oidc settings stored: %v", err)
+		{"oidc settings", http.MethodPut, "/authentication/oidc", oidcBody, oidcBefore.Version, func(t *testing.T) {
+			if got, getErr := store.GetOIDCSettings(ctx); oidcBefore.Version == "0" && !errors.Is(getErr, repository.ErrNotFound) || oidcBefore.Version != "0" && got.Version != oidcBefore.Version {
+				t.Fatalf("oidc settings changed: %+v %v", got, getErr)
 			}
 		}},
 		{"theme install", http.MethodPost, "/console-themes", themeBody, "", func(t *testing.T) {
@@ -176,17 +145,17 @@ func runSettingsAuditRollback(t *testing.T, store settingsRollbackStore, fail, c
 				t.Fatalf("theme installed: %v", err)
 			}
 		}},
-		{"theme replace", http.MethodPut, "/console-themes/acme-dark", replaceThemeBody, theme.Version, func(t *testing.T) {
-			if got, _ := store.GetConsoleThemePackage(ctx, "acme-dark"); got.Version != theme.Version {
+		{"theme replace", http.MethodPut, "/console-themes/" + themeID, replaceThemeBody, theme.Version, func(t *testing.T) {
+			if got, _ := store.GetConsoleThemePackage(ctx, themeID); got.Version != theme.Version {
 				t.Fatalf("theme replaced: %+v", got)
 			}
 		}},
-		{"theme delete", http.MethodDelete, "/console-themes/acme-dark", "", theme.Version, func(t *testing.T) {
-			if _, err := store.GetConsoleThemePackage(ctx, "acme-dark"); err != nil {
+		{"theme delete", http.MethodDelete, "/console-themes/" + themeID, "", theme.Version, func(t *testing.T) {
+			if _, err := store.GetConsoleThemePackage(ctx, themeID); err != nil {
 				t.Fatalf("theme deleted: %v", err)
 			}
 		}},
-		{"email target create", http.MethodPost, "/email-targets", `{"name":"` + newTarget + `","locale":"en-CA","recipient":"private@example.test","enabled":true}`, "", func(t *testing.T) {
+		{"email target create", http.MethodPost, "/email-targets", `{"name":"` + newTarget + `","locale":"en","recipient":"private@example.test","enabled":true}`, "", func(t *testing.T) {
 			targets, _ := store.ListEmailTargets(ctx)
 			for _, got := range targets {
 				if got.Name == newTarget {
@@ -194,7 +163,7 @@ func runSettingsAuditRollback(t *testing.T, store settingsRollbackStore, fail, c
 				}
 			}
 		}},
-		{"email target update", http.MethodPut, "/email-targets/" + target.ID, `{"name":"renamed-` + suffix + `","locale":"en-CA","enabled":true}`, target.Version, func(t *testing.T) {
+		{"email target update", http.MethodPut, "/email-targets/" + target.ID, `{"name":"renamed-` + suffix + `","locale":"en","enabled":true}`, target.Version, func(t *testing.T) {
 			if got, _ := store.GetEmailTarget(ctx, target.ID); got.Version != target.Version {
 				t.Fatalf("email target changed: %+v", got)
 			}
@@ -307,4 +276,45 @@ func TestEmailTestReplayWritesOneAudit(t *testing.T) {
 	if count != 1 {
 		t.Fatalf("email.test.enqueue audits=%d, want 1", count)
 	}
+}
+
+// deadDeliverySeeder creates a webhook subscription with a dead delivery and a dead email
+// delivery for target, without disturbing deliveries other tests of a shared database own.
+type deadDeliverySeeder func(t *testing.T, store settingsRollbackStore, target repository.EmailTarget) (repository.WebhookSubscription, string, repository.EmailDelivery)
+
+// seedDeadDeliveriesThroughTheStore claims and fails the deliveries through the store API,
+// which is safe on a private memory store.
+func seedDeadDeliveriesThroughTheStore(t *testing.T, store settingsRollbackStore, target repository.EmailTarget) (repository.WebhookSubscription, string, repository.EmailDelivery) {
+	t.Helper()
+	ctx := context.Background()
+	suffix := uuid.NewString()[:8]
+	subscription, err := store.CreateWebhookSubscription(ctx, repository.WebhookSubscription{ID: uuid.NewString(), Name: "hook-" + suffix, EndpointURL: "https://events.example.test/hooks", SecretCiphertext: "synthetic", EventTypes: []repository.WebhookEventType{repository.WebhookEventArtifactQuarantined}, Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.EnqueueWebhookEvent(ctx, repository.WebhookEvent{ID: uuid.NewString(), Type: repository.WebhookEventArtifactQuarantined, OccurredAt: time.Now().UTC(), Data: []byte(`{"repositoryId":"repo-1"}`)}); err != nil {
+		t.Fatal(err)
+	}
+	claims, err := store.ClaimWebhookDeliveries(ctx, "test-worker-"+suffix, time.Now().UTC().Add(time.Second), time.Minute, 1)
+	if err != nil || len(claims) != 1 {
+		t.Fatalf("claims=%#v err=%v", claims, err)
+	}
+	if err = store.FailWebhookDelivery(ctx, claims[0].Delivery.ID, claims[0].Delivery.LeaseToken, time.Now().UTC().Add(time.Second), time.Time{}, 503, "HTTP 503", true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.EnqueueEmailTest(ctx, repository.EmailTestRequest{ID: uuid.NewString(), EventID: uuid.NewString(), RequestKey: uuid.NewString(), TargetID: target.ID, TargetVersion: target.Version, Scenario: "warning", From: "gateway@example.test", TemplateVersion: emailnotification.TemplateVersion}); err != nil {
+		t.Fatal(err)
+	}
+	claim, err := store.ClaimEmailDelivery(ctx, "synthetic/"+suffix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = store.FinishEmailDelivery(ctx, claim.ID, claim.LeaseToken, repository.EmailAttemptResult{Code: "smtp_permanent_rejection", Permanent: true}); err != nil {
+		t.Fatal(err)
+	}
+	dead, err := store.GetEmailDelivery(ctx, claim.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return subscription, claims[0].Delivery.ID, dead
 }

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/database"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/testsupport"
@@ -85,7 +86,38 @@ func TestPostgresSettingsMutationsRollBackWithTheirAudit(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	var restores []func()
-	runSettingsAuditRollback(t, store, func() {
+	seed := func(t *testing.T, store settingsRollbackStore, target repository.EmailTarget) (repository.WebhookSubscription, string, repository.EmailDelivery) {
+		t.Helper()
+		ctx := context.Background()
+		// The subscription is disabled so it never receives other tests' events, and the dead
+		// deliveries are inserted directly so no other test's pending delivery is claimed.
+		subscription, err := store.CreateWebhookSubscription(ctx, repository.WebhookSubscription{ID: uuid.NewString(), Name: "hook-" + uuid.NewString()[:8], EndpointURL: "https://events.example.test/hooks", SecretCiphertext: "synthetic", EventTypes: []repository.WebhookEventType{repository.WebhookEventArtifactQuarantined}, Enabled: false})
+		if err != nil {
+			t.Fatal(err)
+		}
+		eventID, webhookDeliveryID, emailID := uuid.NewString(), uuid.NewString(), uuid.NewString()
+		if _, err = db.ExecContext(ctx, `INSERT INTO webhook_events (id, event_type, occurred_at, payload) VALUES ($1::uuid, 'artifact.quarantined', now(), '{}'::jsonb)`, eventID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = db.ExecContext(ctx, `INSERT INTO webhook_deliveries (id, event_id, subscription_id, state, attempts, last_status, last_error) VALUES ($1::uuid, $2::uuid, $3::uuid, 'dead', 8, 503, 'HTTP 503')`, webhookDeliveryID, eventID, subscription.ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = db.ExecContext(ctx, `INSERT INTO email_test_deliveries (id, event_id, request_key, target_id, target_version, scenario, locale, template_version, recipient_ciphertext, from_address, console_origin, state, attempts, error_code)
+			VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::bigint, 'warning', 'en', 'v1', 'synthetic', 'gateway@example.test', 'https://console.example.test', 'dead', 8, 'smtp_permanent_rejection')`, emailID, uuid.NewString(), uuid.NewString(), target.ID, target.Version); err != nil {
+			t.Fatal(err)
+		}
+		dead, err := store.GetEmailDelivery(ctx, emailID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			_, _ = db.Exec(`DELETE FROM webhook_deliveries WHERE id=$1::uuid`, webhookDeliveryID)
+			_, _ = db.Exec(`DELETE FROM webhook_events WHERE id=$1::uuid`, eventID)
+			_, _ = db.Exec(`DELETE FROM email_test_deliveries WHERE id=$1::uuid`, emailID)
+		})
+		return subscription, webhookDeliveryID, dead
+	}
+	runSettingsAuditRollback(t, store, seed, func() {
 		// Management audits name no repository; scheduled task audits name "global".
 		restores = append(restores, testsupport.FailSecurityAudits(t, db, "", "alice"), testsupport.FailSecurityAudits(t, db, "global", "alice"))
 	}, func() {
