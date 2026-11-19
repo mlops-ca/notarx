@@ -57,7 +57,7 @@ behaviour config ignores, and the contract lanes never run Playwright.
 
 ## Workflow linting
 
-`make lint` runs `make actionlint-check`, which runs the pinned `rhysd/actionlint` image (actionlint with shellcheck) over every file in `.github/workflows`. Any finding fails the `quality` jobs, so a workflow warning cannot be merged.
+`make lint` runs `make actionlint-check`, which runs the pinned `rhysd/actionlint` image (actionlint, which also lints the shell in every `run` step) over every file in `.github/workflows`. Any finding fails the `quality` jobs, so a workflow warning cannot be merged.
 
 ## The ci-ok gate
 
