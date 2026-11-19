@@ -3,7 +3,7 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root"
 temporary=$(mktemp -d)
-project="ag-pypi-yank-$(python3 -c 'import uuid; print(uuid.uuid4().hex[:12])')"
+project="notarx-pypi-yank-$(python3 -c 'import uuid; print(uuid.uuid4().hex[:12])')"
 read -r postgres_port rustfs_port < <(python3 - <<'PY'
 import socket
 with socket.socket() as postgres, socket.socket() as rustfs:

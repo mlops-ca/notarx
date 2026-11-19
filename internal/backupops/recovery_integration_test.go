@@ -74,7 +74,7 @@ func runLocalRecoveryIntegration(t *testing.T, profile, sourceDriver, targetDriv
 		release = integrationOCIRelease(t, ctx, d, release)
 	}
 	spec := func(driver string) TargetSpec {
-		return TargetSpec{ObjectDriver: driver, Project: "ag-restore-" + uuid.NewString()[:18], Docker: d, Release: release,
+		return TargetSpec{ObjectDriver: driver, Project: "notarx-restore-" + uuid.NewString()[:18], Docker: d, Release: release,
 			PostgresPassword: uuid.NewString(), AccessKey: "synthetic-test", SecretKey: uuid.NewString(), RPCSecret: uuid.NewString(),
 			AdminToken: uuid.NewString(), ResolverToken: uuid.NewString(), RuntimeEnvironment: map[string]string{"NOTARX_SETTINGS_ENCRYPTION_KEY": recoveryEmailKey}}
 	}
@@ -697,9 +697,9 @@ func captureCreatedTarget(t *testing.T, ctx context.Context, s TargetSpec, stage
 				// The mount cannot authorize deletion of an arbitrary host path.
 				// Only a real private direct child of our fresh TMPDIR is owned.
 				dir := m.Source
-				prefix := "ag-restore-objects-"
+				prefix := "notarx-restore-objects-"
 				if m.Destination == "/notarx" {
-					dir, prefix = filepath.Dir(m.Source), "ag-restore-release-"
+					dir, prefix = filepath.Dir(m.Source), "notarx-restore-release-"
 				}
 				rel, err := filepath.Rel(stageRoot, dir)
 				info, statErr := os.Lstat(dir)

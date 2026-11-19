@@ -166,7 +166,7 @@ def run_lane(args):
     output.mkdir(parents=True, exist_ok=True)
     (output / 'logs').mkdir(exist_ok=True)
     raw_before = {str(p) for directory in lane['rawDirectories'] for p in (ROOT / directory).glob('*')}
-    work = Path(tempfile.mkdtemp(prefix='ag-contract-' + args.lane + '-'))
+    work = Path(tempfile.mkdtemp(prefix='notarx-contract-' + args.lane + '-'))
     env = dict(os.environ, TMPDIR=str(work))
     report = {'lane': args.lane, 'status': 'failure', 'steps': []}
     try:

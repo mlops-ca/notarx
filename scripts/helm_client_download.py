@@ -8,7 +8,7 @@ import tempfile
 
 
 def _curl_range(url, start, end):
-    with tempfile.TemporaryDirectory(prefix="ag-helm-range-") as work:
+    with tempfile.TemporaryDirectory(prefix="notarx-helm-range-") as work:
         headers = pathlib.Path(work) / "headers"
         body = pathlib.Path(work) / "part"
         result = subprocess.run(

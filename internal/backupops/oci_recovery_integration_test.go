@@ -366,7 +366,7 @@ func verifyOCIIdentityRejections(t *testing.T, ctx context.Context, d Docker, bu
 				wrong.ImageReference = "127.0.0.1:1/unavailable@" + artifact.SHA256
 			}
 			candidate := target
-			candidate.Project = "ag-restore-" + uuid.NewString()[:18]
+			candidate.Project = "notarx-restore-" + uuid.NewString()[:18]
 			candidate.Release = wrong
 			r, code, _ := fixtureBackupCommand(t, ctx, "restore", candidate, bundle)
 			if code != 1 || r.Status != "failed" || r.Reason != "release_schema_mismatch" {

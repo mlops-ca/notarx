@@ -11,7 +11,7 @@ import (
 )
 
 func filesystemTargetSpec() TargetSpec {
-	return TargetSpec{Project: "ag-restore-fstest0001", ObjectDriver: objectstore.DriverFilesystem, PostgresPassword: "p", AdminToken: "a", ResolverToken: "r"}
+	return TargetSpec{Project: "notarx-restore-fstest0001", ObjectDriver: objectstore.DriverFilesystem, PostgresPassword: "p", AdminToken: "a", ResolverToken: "r"}
 }
 
 func TestFilesystemTargetSpecNeedsNoS3Settings(t *testing.T) {
@@ -88,7 +88,7 @@ func TestFilesystemTargetRestoresIntoOwnedRootWithRecordedIdentity(t *testing.T)
 // A backup exported from a filesystem source carries a root ID; restoring it
 // into an S3 target must not fail on it.
 func TestS3TargetIgnoresRootID(t *testing.T) {
-	target := &OwnedTarget{spec: TargetSpec{Project: "ag-restore-s3test00001"}}
+	target := &OwnedTarget{spec: TargetSpec{Project: "notarx-restore-s3test00001"}}
 	if err := target.SetObjectRootID(uuid.NewString()); err != nil {
 		t.Fatalf("err = %v", err)
 	}

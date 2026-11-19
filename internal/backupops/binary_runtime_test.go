@@ -69,7 +69,7 @@ func TestStartGatewayUsesVerifiedBinaryRuntimePlatform(t *testing.T) {
 			}
 			t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 			sum := sha256.Sum256(binary)
-			target := &OwnedTarget{checked: true, spec: TargetSpec{Project: "ag-restore-synthetic", Docker: Docker{Context: "synthetic"}, Release: Release{Directory: dir, Identity: backupmanifest.GatewayIdentity{Artifact: &backupmanifest.SoftwareArtifact{Kind: "binary", Platform: tc.platform, SHA256: "sha256:" + hex.EncodeToString(sum[:])}}}}}
+			target := &OwnedTarget{checked: true, spec: TargetSpec{Project: "notarx-restore-synthetic", Docker: Docker{Context: "synthetic"}, Release: Release{Directory: dir, Identity: backupmanifest.GatewayIdentity{Artifact: &backupmanifest.SoftwareArtifact{Kind: "binary", Platform: tc.platform, SHA256: "sha256:" + hex.EncodeToString(sum[:])}}}}}
 			defer func() { _ = os.RemoveAll(target.directory) }()
 			if _, err := target.StartGateway(context.Background()); err == nil || err.Error() != "restored Gateway startup failed" {
 				t.Fatalf("did not reach the controlled Docker start boundary: %v", err)
@@ -105,7 +105,7 @@ func TestNewTargetRejectsUnsupportedBinaryPlatformBeforeDocker(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-			spec := TargetSpec{Project: "ag-restore-unsupported", Docker: Docker{Context: "synthetic"}, PostgresPassword: "fixture-password", AccessKey: "fixture-access", SecretKey: "fixture-secret", RPCSecret: strings.Repeat("r", 32), AdminToken: "fixture-admin", ResolverToken: "fixture-resolver", Release: Release{Identity: backupmanifest.GatewayIdentity{Artifact: &backupmanifest.SoftwareArtifact{Kind: "binary", Platform: platform}}}}
+			spec := TargetSpec{Project: "notarx-restore-unsupported", Docker: Docker{Context: "synthetic"}, PostgresPassword: "fixture-password", AccessKey: "fixture-access", SecretKey: "fixture-secret", RPCSecret: strings.Repeat("r", 32), AdminToken: "fixture-admin", ResolverToken: "fixture-resolver", Release: Release{Identity: backupmanifest.GatewayIdentity{Artifact: &backupmanifest.SoftwareArtifact{Kind: "binary", Platform: platform}}}}
 			if _, err := NewTarget(context.Background(), spec); err == nil || err.Error() != "unsupported binary runtime platform" {
 				t.Fatalf("unsupported platform outcome=%v", err)
 			}

@@ -49,13 +49,13 @@ docker build -t "$image" "$root"
 kubectl create namespace "$namespace" --dry-run=client -o yaml | kubectl apply -f -
 sed "s/127\\.0\\.0\\.1:4173/127.0.0.1:${console_port}/g" \
   "$root/deploy/oidc-test/notarx-realm.json" >"$work_dir/notarx-realm.json"
-kubectl -n "$namespace" create configmap ag-oidc-keycloak-realm \
+kubectl -n "$namespace" create configmap notarx-oidc-keycloak-realm \
   --from-file=notarx-realm.json="$work_dir/notarx-realm.json" \
   --dry-run=client -o yaml | kubectl apply -f -
-kubectl -n "$namespace" create configmap ag-oidc-test-config \
+kubectl -n "$namespace" create configmap notarx-oidc-test-config \
   --from-literal="NOTARX_OIDC_REDIRECT_URL=http://127.0.0.1:${console_port}/auth/oidc/callback" \
   --dry-run=client -o yaml | kubectl apply -f -
-kubectl -n "$namespace" create configmap ag-oidc-migrations \
+kubectl -n "$namespace" create configmap notarx-oidc-migrations \
   --from-file="$root/migrations" \
   --from-file=run-migrations.sh="$root/scripts/run-migrations.sh" \
   --dry-run=client -o yaml | kubectl apply -f -
