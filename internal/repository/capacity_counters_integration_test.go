@@ -234,3 +234,32 @@ func TestCapacityOverviewListsRepositoryWithoutCounterRow(t *testing.T) {
 		t.Fatal("overview misses a repository without a counter row")
 	}
 }
+
+// TestNoCapacityTriggerOrFunctionRemains proves migration 000014 dropped the capacity triggers
+// and functions: Reserve is the only quota enforcement (ADR 0023 section 3), and the quota API
+// still rejects a quota below the current usage against the counter row.
+func TestNoCapacityTriggerOrFunctionRemains(t *testing.T) {
+	store := counterTestStore(t)
+	ctx := context.Background()
+	var triggers, functions int
+	if err := store.db.QueryRowContext(ctx, `SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal AND (tgname LIKE '%capacity%' OR tgfoid::regproc::text LIKE '%repository_capacity%')`).Scan(&triggers); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.db.QueryRowContext(ctx, `SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname LIKE 'assert%repository_capacity%'`).Scan(&functions); err != nil {
+		t.Fatal(err)
+	}
+	if triggers != 0 || functions != 0 {
+		t.Fatalf("capacity triggers=%d functions=%d remain", triggers, functions)
+	}
+	repo := counterTestRepository(t, store, FormatRaw)
+	t.Cleanup(func() { testsupport.PurgeRepository(t, store.db, repo.ID) })
+	if err := reserveInTx(ctx, store.db, repo.ID, 100, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ReplaceRepositoryCapacityQuota(ctx, repo.ID, 99); !errors.Is(err, ErrQuotaExceeded) {
+		t.Fatalf("quota below usage: %v", err)
+	}
+	if _, err := store.ReplaceRepositoryCapacityQuota(ctx, repo.ID, 100); err != nil {
+		t.Fatalf("quota equal to usage: %v", err)
+	}
+}

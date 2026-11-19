@@ -116,6 +116,15 @@ func (s *PostgresStore) ReplaceRepositoryCapacityQuota(ctx context.Context, id s
 	if err = capacity.SetQuota(ctx, tx, repositoryID, quota); err != nil {
 		return RepositoryCapacity{}, err
 	}
+	// The capacity triggers that rejected a quota below the current usage are gone (migration
+	// 000014); the counter row SetQuota just locked holds the usage, so a concurrent Reserve waits.
+	var used int64
+	if err = tx.QueryRowContext(ctx, `SELECT bytes FROM repository_usage_counters WHERE repository_id=$1::uuid`, repositoryID).Scan(&used); err != nil {
+		return RepositoryCapacity{}, err
+	}
+	if quota > 0 && used > quota {
+		return RepositoryCapacity{}, ErrQuotaExceeded
+	}
 	if err = insertAudits(ctx, tx, audit); err != nil {
 		return RepositoryCapacity{}, err
 	}

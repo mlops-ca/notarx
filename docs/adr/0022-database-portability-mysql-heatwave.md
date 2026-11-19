@@ -386,7 +386,7 @@ creates them.
    - [ ] every store contract in this group runs and passes on MySQL; ported `RETURNING` sites listed in the PR
    - [ ] last-active-admin and idempotency-key tests under concurrency
    Depends on: slices 4 and 5.
-7. **Store group B: raw, generic hosted, versioned generic packages, Maven, capacity.** The versioned-Raw stores of ADR 0028 (`native_raw_versions`, `native_raw_version_properties`) are included: `VARCHAR(128)` keys and a binary collation so the path range scan stays on the primary key. Capacity uses `capacity.Reserve` from ADR 0023 slice 8 (no `AssertRepositoryCapacity`).
+7. **Store group B: raw, generic hosted, versioned generic packages, Maven, capacity.** The versioned-Raw stores of ADR 0028 (`native_raw_versions`, `native_raw_version_properties`) are included: `VARCHAR(128)` keys and a binary collation so the path range scan stays on the primary key. Capacity uses `capacity.Reserve` from ADR 0023 slice 8 (no `AssertRepositoryCapacity`); `Reserve` supersedes `AssertRepositoryCapacity`, and migration `000014` drops the PostgreSQL capacity triggers and functions.
    - [ ] raw contract (ADR 0010) passes; capacity quota test proves rejection under concurrent uploads
    Depends on: slice 6; ADR 0023 slice 8 (`capacity.Reserve`, pre-tag).
 8. **Store group C: npm, PyPI, Go, Cargo, Conan, OCI plus cache control store.**

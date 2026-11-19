@@ -192,7 +192,7 @@ issues, PRs and the Git repository.
 
 PostgreSQL checkpoints are durable in `native_maven_snapshot_imports`, bound to
 source ID, manifest SHA-256, Repository, target ID/binding and complete per-GAV
-plan. The native publish session, object intents, references, quota trigger and
+plan. The native publish session, object intents, references, quota counter reservation and
 lifecycle collector are reused. Importers serialize per GAV; importer I/O and
 GC deletion share an object lock. Live uploads protect deduplicated objects even
 when another session originally created their intent. Active GC claims reject

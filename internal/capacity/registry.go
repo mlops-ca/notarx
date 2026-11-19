@@ -9,7 +9,8 @@ type FormatCoverage struct {
 	// Covered is true once every writer of the format calls Reserve and the
 	// per-format equality test (publish, replace, delete, re-publish) passes.
 	Covered bool
-	// Enforcement names how the format enforced its quota before counters.
+	// Enforcement names how the format enforced its quota before counters. The capacity
+	// triggers it mentions were dropped by migration 000014: Reserve is the only enforcement.
 	Enforcement string
 }
 
