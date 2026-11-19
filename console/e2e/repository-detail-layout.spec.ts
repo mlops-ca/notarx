@@ -5,7 +5,7 @@ import {
   openRepositoryTask,
   repositoryNavigationState,
 } from "./support/repositoryTasks";
-import { waitForModalOpen } from "./support/motion";
+import { waitForModalOpen, waitForSelectDropdownOpen } from "./support/motion";
 import {
   attachThemeEvidence,
   recordThemeEvidence,
@@ -1258,6 +1258,7 @@ test("scanning selects a searchable immutable artifact before queuing", async ({
     name: "Search and select an artifact",
   });
   await picker.click();
+  await waitForSelectDropdownOpen(page);
   const option = page
     .locator(".ant-select-item-option")
     .filter({ hasText: coordinate })
@@ -1299,6 +1300,7 @@ test("promotion selects a source artifact and a compatible Hosted target", async
     name: "Search and select a source artifact",
   });
   await sourcePicker.click();
+  await waitForSelectDropdownOpen(page);
   const artifactOption = page
     .locator(".ant-select-item-option")
     .filter({ hasText: coordinate })
@@ -1310,6 +1312,7 @@ test("promotion selects a source artifact and a compatible Hosted target", async
     name: "Select target repository",
   });
   await targetPicker.click();
+  await waitForSelectDropdownOpen(page);
   await expect(
     page.locator(".ant-select-item-option").filter({
       hasText: "production-files",
