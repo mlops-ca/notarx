@@ -387,3 +387,9 @@ pattern is detected.
 Status: accepted (2026-11-19)
 
 Pushes to `main` run no tests (ADR 0024, amendment of the same date), so no check run of `main` is required before a release any more and the list of check names under "Release archives" and the `verify-candidate` bullet is historical. The arm64 gate is now part of the complete test suite (`test-suite.yml`) that the release `gates` job runs on the planned commit, on both architectures. `mainline-assets` and `mainline-images` still build and publish the `main` archives and images on every push and no longer wait for tests.
+
+## Amendment (2026-11-19): darwin archives are built by the release, not on main
+
+Status: accepted (2026-11-19)
+
+Main CI run 44557339551 went red only because `mainline-assets / archives (darwin/arm64)` waited 16 minutes for a hosted macOS arm64 runner that GitHub never assigned (capacity constraints). Native builds stay mandatory (cross-compiling darwin on Linux stays refused), but nothing consumes the darwin archives of a `main` build: they are a build check, and the release catches real darwin build failures. So `mainline-assets` now builds only the two Linux legs (the `darwin: false` input of `release-archives.yml`), and the release pipeline, which calls the workflow with all four runners, still requires native darwin/arm64 and darwin/amd64 archives. If a release runner is never acquired, the `build` job fails with a message that says to re-run the failed jobs.

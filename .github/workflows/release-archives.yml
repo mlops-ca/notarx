@@ -1,8 +1,8 @@
 name: Release archives
 
 # Reusable four-runner archive matrix (ADR 0016). Every archive is built natively
-# on its own runner: nothing is cross-compiled. Callers: ci.yml (mainline-assets)
-# and the ADR 0024 release pipeline.
+# on its own runner: nothing is cross-compiled. Callers: ci.yml (mainline-assets,
+# Linux only) and the ADR 0024 release pipeline (all four runners).
 #
 # Interface other slices build on (ADR 0024 slice 4, ADR 0025 slice 2):
 #   - per-leg artifacts named <product>-<version>-<goos>-<goarch>, one per
@@ -30,6 +30,10 @@ on:
         description: Name of the combined artifact (union of every archive plus SHA256SUMS).
         required: true
         type: string
+      darwin:
+        description: Also build the native darwin/arm64 and darwin/amd64 archives (ADR 0016 amendment 2026-11-19). The release pipeline requires them; pushes to main leave them to the release.
+        default: true
+        type: boolean
       retention-days:
         default: 30
         type: number
@@ -38,31 +42,43 @@ permissions:
   contents: read
 
 jobs:
+  # The leg list lives here once so that the darwin switch changes the matrix and the
+  # expected archive counts together.
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      archives: ${{ steps.plan.outputs.archives }}
+      packages: ${{ steps.plan.outputs.packages }}
+    steps:
+      - id: plan
+        env:
+          DARWIN: ${{ inputs.darwin }}
+        run: |
+          # The last x86_64 hosted macOS image is macos-15-intel; scripts/native-build-check.sh
+          # fails from 2027-09-01 while this label remains (ADR 0016).
+          linux='{"goos":"linux","goarch":"amd64","runner":"ubuntu-24.04","console":true},{"goos":"linux","goarch":"arm64","runner":"ubuntu-24.04-arm","console":false}'
+          darwin='{"goos":"darwin","goarch":"arm64","runner":"macos-15","console":false},{"goos":"darwin","goarch":"amd64","runner":"macos-15-intel","console":false}'
+          if [ "$DARWIN" = true ]; then
+            legs="$linux,$darwin"; runners=4
+          else
+            legs="$linux"; runners=2
+          fi
+          {
+            echo "matrix={\"include\":[$legs]}"
+            # Runners x two archives, plus the Console and OpenAPI archives.
+            echo "archives=$((runners * 2 + 2))"
+            # Two Linux legs x (notarx, notarxctl) x (deb, rpm), plus the Console deb and rpm.
+            echo "packages=10"
+          } >> "$GITHUB_OUTPUT"
+
   archives:
     name: archives (${{ matrix.goos }}/${{ matrix.goarch }})
+    needs: plan
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: true
-      matrix:
-        include:
-          - goos: linux
-            goarch: amd64
-            runner: ubuntu-24.04
-            console: true
-          - goos: linux
-            goarch: arm64
-            runner: ubuntu-24.04-arm
-            console: false
-          - goos: darwin
-            goarch: arm64
-            runner: macos-15
-            console: false
-          # The last x86_64 hosted macOS image; scripts/native-build-check.sh fails
-          # from 2027-09-01 while this label remains (ADR 0016).
-          - goos: darwin
-            goarch: amd64
-            runner: macos-15-intel
-            console: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -171,7 +187,7 @@ jobs:
           retention-days: ${{ inputs.retention-days }}
 
   assemble-release:
-    needs: archives
+    needs: [plan, archives]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -205,14 +221,14 @@ jobs:
       - name: Write one checksum file over the union
         env:
           VERSION: ${{ inputs.version }}
+          ARCHIVES: ${{ needs.plan.outputs.archives }}
+          PACKAGES: ${{ needs.plan.outputs.packages }}
         run: |
           ls -1 dist
-          # Four runners x two archives, plus the Console and OpenAPI archives.
-          test "$(find dist -maxdepth 1 -name '*.tar.gz' | wc -l | tr -d ' ')" = 10
-          # Two Linux legs x (notarx, notarxctl) x (deb, rpm), plus the Console deb and rpm.
-          test "$(find dist -maxdepth 1 \( -name '*.deb' -o -name '*.rpm' \) | wc -l | tr -d ' ')" = 10
+          test "$(find dist -maxdepth 1 -name '*.tar.gz' | wc -l | tr -d ' ')" = "$ARCHIVES"
+          test "$(find dist -maxdepth 1 \( -name '*.deb' -o -name '*.rpm' \) | wc -l | tr -d ' ')" = "$PACKAGES"
           ./scripts/write-release-checksums.sh dist
-          test "$(wc -l < dist/SHA256SUMS | tr -d ' ')" = 20
+          test "$(wc -l < dist/SHA256SUMS | tr -d ' ')" = "$((ARCHIVES + PACKAGES))"
           (cd dist && sha256sum -c SHA256SUMS)
       - name: Upload the combined release assets
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

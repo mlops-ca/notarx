@@ -32,6 +32,10 @@ Code directories are matched before Markdown, so a `.md` fixture under `internal
 `ci-ok` (plus the separate `pr-title` workflow). A Go-only pull request skips `console` (unit, build, visual) but still runs `console-e2e`; a console-only pull request
 skips every contract lane.
 
+## Hosted runner capacity (macOS)
+
+`mainline-assets` on a push to `main` builds only the Linux archives, packages and the Console and OpenAPI archives (the `darwin` input of `release-archives.yml` is false). Nothing on `main` consumes darwin archives, and GitHub-hosted macOS runners can go unassigned during capacity constraints (main run 44557339551), which used to turn `main` red with no code fault. The release workflow still builds and requires native darwin/arm64 and darwin/amd64 archives; its `build` job fails with an explicit message when any archive or image job did not succeed. Action: if a job shows "not acquired by Runner" or was cancelled, re-run the failed jobs of that workflow run; a job that failed is a real build failure. The darwin `make cli-test` step runs in the release. The ADR 0016 amendment of 2026-11-19 records the decision.
+
 ## Console E2E sharding and spec selection
 
 `console-e2e` is a matrix of four jobs. Shards `1`, `2` and `3` each start the

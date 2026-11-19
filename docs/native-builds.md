@@ -32,6 +32,8 @@ single-architecture fallback.
 Two reusable `workflow_call` workflows hold the build mechanics. `ci.yml`
 (`mainline-images`, `mainline-assets`) calls them on every push to `main`, and
 the release pipeline calls the same workflows rather than carrying its own copy.
+  Pushes to `main` build only the two Linux archive legs (`darwin: false`); the
+  release builds all four, so a macOS runner capacity outage cannot turn `main` red.
 
 - `.github/workflows/image-build.yml` takes `version`, `sha`, the `tags` to create
   and the `images` list (the only place that defines which images are
