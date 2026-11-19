@@ -15,7 +15,7 @@ set -euo pipefail
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # Temp files of apply, removed on every exit (a failing render included).
 section_file='' out_file=''
-trap 'rm -f "$section_file" "$out_file"' EXIT
+trap 'rm -f "${section_file:-}" "${out_file:-}"' EXIT
 
 fail() {
   printf 'changelog-section: %s\n' "$1" >&2
