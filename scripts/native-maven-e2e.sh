@@ -57,12 +57,17 @@ printf 'Maven Central fixture mirror: %s (a miss is logged in %s)\n' "$mirror_ur
 mirror_xml="<mirror><id>central-fixture</id><mirrorOf>central</mirrorOf><url>${mirror_url}/maven2</url></mirror>"
 # Outside record mode every non-loopback host is refused, so a stray external request fails.
 blocked_proxies=""
+gradle_jvm_options=""
 if [[ "${MAVEN_CENTRAL_FIXTURE_RECORD:-}" != "1" ]]; then
   blocked_proxies="<proxies>"
   for protocol in http https; do
     blocked_proxies+="<proxy><id>no-outbound-$protocol</id><active>true</active><protocol>$protocol</protocol><host>127.0.0.1</host><port>9</port><nonProxyHosts>127.0.0.1|localhost|[::1]</nonProxyHosts></proxy>"
   done
   blocked_proxies+="</proxies>"
+  # Gradle has no settings file for this: the same refusal goes in as JVM proxy
+  # properties, so a Gradle step that names an external host (a plugin portal or
+  # Central repository) fails at once instead of reaching the network.
+  gradle_jvm_options="-Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=9 -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=9 -Dhttp.nonProxyHosts=127.0.0.1|localhost|[::1]"
 fi
 # Prints the re-record hint for every unrecorded path the mirror answered 404 to
 # and returns 1 when there was one. A failing Maven run reports and fails with
@@ -189,11 +194,11 @@ configurations { nativeResolve }
 dependencies { nativeResolve 'org.example:gradle-widget:2.0.0-SNAPSHOT' }
 tasks.register('resolveNative') { doLast { configurations.nativeResolve.files.each { println it } } }
 EOF
-if ! (cd "$gradle_dir" && GRADLE_USER_HOME="$workdir/gradle-user-home" gradle --no-daemon --quiet publish); then
+if ! (cd "$gradle_dir" && JAVA_TOOL_OPTIONS="$gradle_jvm_options" GRADLE_USER_HOME="$workdir/gradle-user-home" gradle --no-daemon --quiet publish); then
   cat "$workdir/notarx.log" >&2
   exit 1
 fi
-(cd "$gradle_dir" && GRADLE_USER_HOME="$workdir/gradle-user-home" gradle --no-daemon --quiet resolveNative | grep -F 'gradle-widget-2.0.0-SNAPSHOT.jar')
+(cd "$gradle_dir" && JAVA_TOOL_OPTIONS="$gradle_jvm_options" GRADLE_USER_HOME="$workdir/gradle-user-home" gradle --no-daemon --quiet resolveNative | grep -F 'gradle-widget-2.0.0-SNAPSHOT.jar')
 
 expect_status 200 "${basic[@]}" "$notarx_url/repository/maven/deploys/org/example/maven-widget/1.2.3/maven-widget-1.2.3.jar.sha256"
 expect_status 200 "${basic[@]}" "$notarx_url/repository/maven/deploys/org/example/gradle-widget/2.0.0-SNAPSHOT/maven-metadata.xml"
