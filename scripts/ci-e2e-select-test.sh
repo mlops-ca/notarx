@@ -24,11 +24,14 @@ check "" console/package.json
 check "" ""
 
 # Selected paths must classify as console-only, the class that enables console-e2e.
-[[ "$(printf '%s\n' console/e2e/a.spec.ts | scripts/ci-changes.sh --files | paste -sd, -)" == go=false,console=true,docs=false,ci=false,images=false ]]
+[[ "$(printf '%s\n' console/e2e/a.spec.ts | scripts/ci-changes.sh --files | paste -sd, -)" == go=false,console=true,docs=false,ci=false,images=false,arm64=false ]] ||
+  { printf 'console/e2e/a.spec.ts must classify as console-only\n' >&2; exit 1; }
 
 # A spec that no longer exists is uncertain: full suite.
 unset CI_E2E_SELECT_ASSUME_EXISTS
-[[ "$(printf '%s\n' console/e2e/definitely-missing.spec.ts | scripts/ci-e2e-select.sh --files)" == "specs=" ]]
+[[ "$(printf '%s\n' console/e2e/definitely-missing.spec.ts | scripts/ci-e2e-select.sh --files)" == "specs=" ]] ||
+  { printf 'a missing spec must select the full suite\n' >&2; exit 1; }
 # No range: full suite.
-[[ "$(scripts/ci-e2e-select.sh)" == "specs=" ]]
+[[ "$(scripts/ci-e2e-select.sh)" == "specs=" ]] ||
+  { printf 'no range must select the full suite\n' >&2; exit 1; }
 printf 'ci-e2e-select checks passed.\n'

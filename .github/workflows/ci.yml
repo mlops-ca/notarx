@@ -32,6 +32,7 @@ jobs:
       docs: ${{ steps.classify.outputs.docs }}
       ci: ${{ steps.classify.outputs.ci }}
       images: ${{ steps.classify.outputs.images }}
+      arm64: ${{ steps.classify.outputs.arm64 }}
       e2e_specs: ${{ steps.select.outputs.specs }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -155,6 +156,7 @@ jobs:
       console: ${{ needs.changes.outputs.console == 'true' }}
       docs: ${{ needs.changes.outputs.docs == 'true' }}
       images: ${{ needs.changes.outputs.images == 'true' }}
+      arm64: ${{ needs.changes.outputs.arm64 == 'true' }}
       e2e_specs: ${{ needs.changes.outputs.e2e_specs }}
 
   # The one stable required check: passes when every job succeeded or was

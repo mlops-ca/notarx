@@ -28,6 +28,13 @@ on:
       images:
         default: true
         type: boolean
+      # Architecture-sensitive change (the arm64 class of scripts/ci-changes.sh): the
+      # arm64 contract lanes and arm64 lint run only when it is on. The release gates
+      # leave it on, and the mainline scope refuses it off (ADR 0016, amendment of
+      # 2026-11-19).
+      arm64:
+        default: true
+        type: boolean
       # Console E2E spec selection (scripts/ci-e2e-select.sh); empty runs every spec.
       e2e_specs:
         default: ""
@@ -163,12 +170,17 @@ jobs:
         with:
           ref: ${{ inputs.sha }}
       # Every lane runs on amd64. The arm64 legs (ADR 0016) are the core lanes and the
-      # native-format smoke subset for the pull-request scope and every lane for the
-      # mainline scope the release gates use (the tiers live in scripts/ci-contract-lanes.json).
+      # native-format smoke subset for an architecture-sensitive pull request, none for
+      # any other pull request, and every lane for the mainline scope the release gates
+      # use (the tiers live in scripts/ci-contract-lanes.json).
       - id: plan
         env:
           SCOPE: ${{ inputs.scope }}
-        run: echo "matrix=$(python3 scripts/ci-contract.py matrix --scope "$SCOPE")" >> "$GITHUB_OUTPUT"
+          ARM64: ${{ inputs.arm64 }}
+        run: |
+          args=(--scope "$SCOPE")
+          if [[ "$ARM64" != true ]]; then args+=(--no-arm64); fi
+          echo "matrix=$(python3 scripts/ci-contract.py matrix "${args[@]}")" >> "$GITHUB_OUTPUT"
 
   contract:
     needs: [contract-plan, build-images]
@@ -199,8 +211,9 @@ jobs:
   # architecture-independent checks (native-build rules, migrations, release and
   # packaging checks, SAML fuzzing, dependency audit); `quality` runs the unit tests
   # once, with the race detector and -coverprofile, and enforces every coverage floor
-  # from that one profile (make race-coverage). quality-arm64 runs lint, vet and race
-  # on arm64 (ADR 0016); make test runs on arm64 in the core lanes of the contract matrix.
+  # from that one profile (make race-coverage). quality-arm64 runs vet and race on arm64
+  # for every Go change and lint too for an architecture-sensitive one or in the release
+  # gates (ADR 0016); make test runs on arm64 in the core lanes of the contract matrix.
   lint:
     if: inputs.go
     runs-on: ubuntu-24.04
@@ -258,6 +271,10 @@ jobs:
           race: "false"
           race-coverage: "true"
 
+  # vet and the race detector run natively on arm64 for every Go change; lint (whose
+  # result differs only by architecture build constraints) runs on arm64 when the
+  # change is architecture-sensitive and in the release gates (ADR 0016, amendment of
+  # 2026-11-19).
   quality-arm64:
     if: inputs.go
     runs-on: ubuntu-24.04-arm
@@ -267,6 +284,8 @@ jobs:
         with:
           ref: ${{ inputs.sha }}
       - uses: ./.github/actions/go-quality
+        with:
+          lint: ${{ inputs.arm64 }}
 
   console:
     if: inputs.console

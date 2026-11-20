@@ -4,7 +4,7 @@
 
 CI runs only what a change needs. The `changes` job in `.github/workflows/ci.yml`
 runs `scripts/ci-changes.sh` over the files a pull request touches and exposes
-five classes. Heavy jobs run only when their class changed.
+six classes. Heavy jobs run only when their class changed.
 
 The test jobs are defined once, in the reusable workflow `.github/workflows/test-suite.yml`.
 Pull request CI calls it as the `tests` job with the classes of the change. The nightly
@@ -22,6 +22,7 @@ show as `tests / <job>`.
 | `docs` | `docs/`, `*.md`, `LICENSE`, `NOTICE` | `docs` (i18n twins, links, capability claims) |
 | `images` | `Dockerfile*`, `compose*.yml`, `deploy/` | everything that executes the product (`go` and `console` too) |
 | `ci` | `.github/`, `Makefile`, `scripts/`, `packaging/` | everything, including `packages` (native deb and rpm build, content assertions and container install test; ADR 0025) |
+| `arm64` | the `images` and `ci` paths, `go.mod`, `go.sum`, per-architecture Go sources and assembly (`*_amd64.go`, `*_arm64.go`, their `_test.go` and `.s` files), and any changed Go file whose `//go:build` line names `amd64` or `arm64` or that reads `runtime.GOARCH` | lint on arm64 (in `quality-arm64`) and the arm64 contract lanes (ADR 0016, amendment of 2026-11-19); `quality-arm64` vet and race and the arm64 image build run for every Go change |
 
 A path that matches no class also runs everything, so a new top-level directory
 cannot silently skip a job. An unresolvable range runs everything. The release gates
@@ -74,7 +75,8 @@ again with `-coverprofile`, then each floored package a third time with `-cover`
 The race detector now covers every package (`cmd/`, `contracts/`, `examples/` and
 `tools/` too), on both architectures: `make race` has the same scope. `make coverage`
 still runs a plain (non-race) pass with the same floors for local use. `quality-arm64`
-runs `make lint`, `make vet` and `make race` natively on arm64 (ADR 0016).
+runs `make vet` and `make race` natively on arm64 for every Go change, and `make lint`
+too for an architecture-sensitive one (ADR 0016, amendment of 2026-11-19).
 
 `make lint` is `make lint-checks` plus `make lint-tools-test` (the Go tests of
 `tools/architecture` and `tools/sqllint`). The amd64 `lint` job and
@@ -97,7 +99,7 @@ pass uses `-count=1`, so a restored build cache never replays an earlier test re
 
 ## Workflow linting
 
-`make lint` runs `make actionlint-check`, which runs the pinned `rhysd/actionlint` image (actionlint, which also lints the shell in every `run` step) over every file in `.github/workflows`. Any finding fails the `lint` and `quality-arm64` jobs, so a workflow warning cannot be merged.
+`make lint` runs `make actionlint-check`, which runs the pinned `rhysd/actionlint` image (actionlint, which also lints the shell in every `run` step) over every file in `.github/workflows`. Any finding fails the `lint` job (and `quality-arm64` when it lints), so a workflow warning cannot be merged.
 
 ## Playwright browser install
 
@@ -156,13 +158,15 @@ carries the architecture.
 
 Every lane runs on amd64. The plan gives each lane an `arm64` tier: `pull-request`
 lanes (the six `core-*` lanes and the `six-format-auth` and `oci-discovery`
-smoke subset) also run on arm64 for every pull request, and `mainline` lanes join
-them in the `mainline` scope, which the release gates use. `scripts/ci-contract.py matrix --scope pull-request|mainline`
-emits the matrix. A step that runs a third-party artifact published for one
+smoke subset) also run on arm64 for every pull request with the `arm64` class (an
+architecture-sensitive change), and `mainline` lanes join them in the `mainline` scope,
+which the release gates use. A pull request without the `arm64` class runs no arm64
+contract lane (ADR 0016, amendment of 2026-11-19). `scripts/ci-contract.py matrix --scope pull-request|mainline [--no-arm64]`
+emits the matrix; it refuses `--no-arm64` with the `mainline` scope. A step that runs a third-party artifact published for one
 architecture only (`published-native-backup-test` executes the published amd64
 release binaries) declares `architectures` in the plan; other architectures skip
-and report it, nothing is emulated. `quality-arm64` runs lint, vet and the race detector on
-`ubuntu-24.04-arm`; the coverage floor stays on amd64. The jobs call the local
+and report it, nothing is emulated. `quality-arm64` runs vet and the race detector on
+`ubuntu-24.04-arm` for every Go change, and lint as well for an architecture-sensitive change; the coverage floor stays on amd64. The jobs call the local
 composite action `.github/actions/go-quality` for setup, lint, vet and race, so the
 steps have one definition. They are separate jobs, not a matrix, so the amd64-only steps stay
 out of the arm64 leg. See

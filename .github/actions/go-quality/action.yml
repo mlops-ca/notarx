@@ -2,10 +2,11 @@ name: Go quality checks
 description: >-
   Sets up Go (and Node with the Console tools when lint runs) and runs the Go checks
   of test-suite.yml, so their setup has one definition (ADR 0016). Inputs choose the
-  checks: quality-arm64 runs lint, vet and race on ubuntu-24.04-arm; on amd64 the
-  lint job runs lint-checks and vet, and the quality job runs race-coverage (the unit
-  tests once, with the race detector and every coverage floor). The checkout stays in
-  the job. The caches are described in docs/ci.md (Go checks).
+  checks: quality-arm64 runs vet and race on ubuntu-24.04-arm, and lint too for an
+  architecture-sensitive change and in the release gates; on amd64 the lint job runs
+  lint-checks and vet, and the quality job runs race-coverage (the unit tests once,
+  with the race detector and every coverage floor). The checkout stays in the job.
+  The caches are described in docs/ci.md (Go checks).
 
 inputs:
   lint:

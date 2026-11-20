@@ -306,6 +306,18 @@ class PlanTests(unittest.TestCase):
                                         'core-integration-1', 'core-integration-2',
                                         'six-format-auth', 'oci-discovery'])
         self.assertEqual({lane['arm64'] for lane in ci.PLAN['lanes'].values()}, {'pull-request', 'mainline'})
+        # ADR 0016, amendment of 2026-11-19: a pull request that changes nothing
+        # architecture-sensitive runs no arm64 lane; the mainline scope cannot drop them.
+        amd64_only = json.loads(subprocess.check_output(
+            [sys.executable, str(ROOT / 'scripts/ci-contract.py'), 'matrix', '--scope', 'pull-request',
+             '--no-arm64']))['include']
+        self.assertEqual([e['lane'] for e in amd64_only], list(ci.PLAN['lanes']))
+        self.assertEqual({e['arch'] for e in amd64_only}, {'amd64'})
+        refused = subprocess.run([sys.executable, str(ROOT / 'scripts/ci-contract.py'), 'matrix', '--scope',
+                                  'mainline', '--no-arm64'], capture_output=True, text=True)
+        self.assertEqual(refused.returncode, 2, refused.stdout + refused.stderr)
+        with self.assertRaises(ValueError):
+            ci.matrix('mainline', arm64=False)
         self.assertEqual({e['runner'] for e in json.loads(subprocess.check_output(
             [sys.executable, str(ROOT / 'scripts/ci-contract.py'), 'matrix']))['include']},
             {'ubuntu-24.04', 'ubuntu-24.04-arm'})
