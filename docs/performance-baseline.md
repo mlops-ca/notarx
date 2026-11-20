@@ -276,7 +276,8 @@ one), and its packages are placed in them by popularity. Besides the version tab
 seed fills the rows they depend on: raw objects, Go assets (info, mod and zip per
 version), Cargo names and reservations, and the NuGet, Helm and RubyGems publication
 sessions. Go assets, Cargo and NuGet and Helm support tables add rows on top of the
-version budget. The `target` run and the ratification of the SLOs are tracked as
+version budget. The seed does not fill `artifact_catalog` yet (tracked in #504); run the
+catalog backfill before measuring search. The `target` run and the ratification of the SLOs are tracked as
 follow-up slices of ADR 0023 slice 17; the figures of ADR 0023 section 11 stay
 estimates until a `target` run replaces them.
 

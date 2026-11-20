@@ -26,6 +26,9 @@ var FormatMix = []FormatShare{
 	{"nuget", 4}, {"conan", 3}, {"helm", 2}, {"rubygems", 2}, {"apt", 1},
 }
 
+// formatRepositories is the number of repositories of each format other than npm.
+func formatRepositories(p Profile) int { return max(1, p.Repositories/10) }
+
 // minAllFormatsVersions is the smallest version budget of a profile that spreads versions across all formats: one
 // percent of it still gives the smallest share a row.
 const minAllFormatsVersions = 100
@@ -68,7 +71,14 @@ func (f *formatRun) created(c coordinate) time.Time {
 	return f.now.Add(-time.Duration(c.pkg*averageVersionsPerPackage+c.ver) * time.Second)
 }
 
-func (f *formatRun) size() int64 { return int64(1024 + f.rng.Intn(1<<20)) }
+// size is derived from the coordinate, so the rows of one version that carry its size agree and the output stays deterministic.
+func (f *formatRun) size(c coordinate) int64 {
+	var n int64
+	for _, b := range f.key(c) {
+		n = (n*31 + int64(b)) % (1 << 20)
+	}
+	return 1024 + n
+}
 
 func (f *formatRun) semver(c coordinate) string { return fmt.Sprintf("1.%d.0", c.ver) }
 
@@ -118,7 +128,7 @@ func formatTables(format string) []tableSpec {
 			row: func(f *formatRun, c coordinate, _ int) []any {
 				d := f.digest(c, "")
 				return []any{f.repo(c), fmt.Sprintf("perf/image-%08d", c.pkg), "sha256:" + d, "perf/oci/" + d,
-					"application/vnd.oci.image.manifest.v1+json", f.size(), f.created(c), ""}
+					"application/vnd.oci.image.manifest.v1+json", f.size(c), f.created(c), ""}
 			}}}
 	case "maven":
 		return []tableSpec{{table: "native_maven_artifacts",
@@ -133,7 +143,7 @@ func formatTables(format string) []tableSpec {
 			row: func(f *formatRun, c coordinate, _ int) []any {
 				project, d := fmt.Sprintf("perf-pkg-%08d", c.pkg), f.digest(c, "")
 				return []any{f.repo(c), project, f.semver(c), project + "-" + f.semver(c) + ".tar.gz", "sdist", "sha256:" + d, "perf/pypi/" + d,
-					f.size(), "perf-publisher", "visible", f.created(c), f.created(c)}
+					f.size(c), "perf-publisher", "visible", f.created(c), f.created(c)}
 			}}}
 	case "go":
 		kinds := []string{"info", "mod", "zip"}
@@ -148,7 +158,7 @@ func formatTables(format string) []tableSpec {
 				columns: []string{"repository_id", "module_path", "version", "kind", "digest", "object_key", "size", "source_url", "cached_at", "created_at"},
 				row: func(f *formatRun, c coordinate, k int) []any {
 					d := f.digest(c, kinds[k])
-					return []any{f.repo(c), module(c), "v" + f.semver(c), kinds[k], "sha256:" + d, "perf/go/" + d, f.size(), "", f.created(c), f.created(c)}
+					return []any{f.repo(c), module(c), "v" + f.semver(c), kinds[k], "sha256:" + d, "perf/go/" + d, f.size(c), "", f.created(c), f.created(c)}
 				}},
 		}
 	case "raw":
@@ -156,7 +166,7 @@ func formatTables(format string) []tableSpec {
 			{table: "native_raw_objects", columns: []string{"digest", "object_key", "size", "created_at", "repository_id"},
 				row: func(f *formatRun, c coordinate, _ int) []any {
 					d := f.digest(c, "")
-					return []any{"sha256:" + d, "perf/raw/" + d[:2] + "/" + d, f.size(), f.created(c), f.repo(c)}
+					return []any{"sha256:" + d, "perf/raw/" + d[:2] + "/" + d, f.size(c), f.created(c), f.repo(c)}
 				}},
 			{table: "native_raw_assets", columns: []string{"repository_id", "path", "digest", "content_type", "updated_at"},
 				row: func(f *formatRun, c coordinate, _ int) []any {
@@ -178,33 +188,16 @@ func formatTables(format string) []tableSpec {
 				columns: []string{"repository_id", "collision_key", "version_key", "object_key", "size", "index_row", "publisher", "published_at", "created_at", "updated_at", "description"},
 				row: func(f *formatRun, c coordinate, _ int) []any {
 					d := f.digest(c, "")
-					return []any{f.repo(c), crate(c), f.semver(c), "native/cargo/sha256/" + d, f.size(),
+					return []any{f.repo(c), crate(c), f.semver(c), "native/cargo/sha256/" + d, f.size(c),
 						fmt.Sprintf(`{"name":%q,"vers":%q,"cksum":%q}`, crate(c), f.semver(c), d), "perf-publisher", f.created(c), f.created(c), f.created(c), "synthetic crate"}
 				}},
 		}
 	case "nuget":
-		pkgID := func(c coordinate) string { return fmt.Sprintf("perf.pkg.%08d", c.pkg) }
-		metadata := func(f *formatRun, c coordinate) string {
-			return fmt.Sprintf(`{"id":%q,"version":%q}`, pkgID(c), f.semver(c))
-		}
-		nuspec := func(f *formatRun, c coordinate) []byte {
-			return []byte(fmt.Sprintf("<package><metadata><id>%s</id><version>%s</version></metadata></package>", pkgID(c), f.semver(c)))
-		}
-		return []tableSpec{
-			{table: "native_nuget_publication_sessions",
-				columns: []string{"id", "repository_id", "package_id", "version", "digest", "size", "actor", "state", "object_key", "metadata_json", "nuspec", "created_at", "expires_at", "committed_at"},
-				row: func(f *formatRun, c coordinate, _ int) []any {
-					d := f.digest(c, "")
-					return []any{f.id(c), f.repo(c), pkgID(c), f.semver(c), "sha256:" + d, f.size(), "perf-publisher", "committed", "perf/nuget/" + d,
-						metadata(f, c), nuspec(f, c), f.created(c), f.created(c).Add(24 * time.Hour), f.created(c)}
-				}},
-			{table: "native_nuget_publications",
-				columns: []string{"repository_id", "package_id", "version", "session_id", "digest", "object_key", "size", "metadata_json", "nuspec", "publisher", "published_at"},
-				row: func(f *formatRun, c coordinate, _ int) []any {
-					d := f.digest(c, "")
-					return []any{f.repo(c), pkgID(c), f.semver(c), f.id(c), "sha256:" + d, "perf/nuget/" + d, f.size(), metadata(f, c), nuspec(f, c), "perf-publisher", f.created(c)}
-				}},
-		}
+		return publicationTables("nuget", "native_nuget_publication_sessions", "native_nuget_publications", "package_id", "nuspec",
+			func(c coordinate) string { return fmt.Sprintf("perf.pkg.%08d", c.pkg) },
+			func(identity, version string) []byte {
+				return []byte(fmt.Sprintf("<package><metadata><id>%s</id><version>%s</version></metadata></package>", identity, version))
+			})
 	case "conan":
 		return []tableSpec{{table: "native_conan_recipe_revisions",
 			columns: []string{"repository_id", "reference", "revision", "digest", "state", "created_at", "publisher"},
@@ -213,34 +206,17 @@ func formatTables(format string) []tableSpec {
 				return []any{f.repo(c), fmt.Sprintf("perf-pkg-%08d/%s", c.pkg, f.semver(c)), d[:32], "sha256:" + d, "visible", f.created(c), "perf-publisher"}
 			}}}
 	case "helm":
-		chart := func(c coordinate) string { return fmt.Sprintf("perf-chart-%08d", c.pkg) }
-		metadata := func(f *formatRun, c coordinate) string {
-			return fmt.Sprintf(`{"name":%q,"version":%q}`, chart(c), f.semver(c))
-		}
-		chartYAML := func(f *formatRun, c coordinate) []byte {
-			return []byte(fmt.Sprintf("apiVersion: v2\nname: %s\nversion: %s\n", chart(c), f.semver(c)))
-		}
-		return []tableSpec{
-			{table: "native_helm_publication_sessions",
-				columns: []string{"id", "repository_id", "name", "version", "digest", "size", "actor", "state", "object_key", "metadata_json", "chart_yaml", "created_at", "expires_at", "committed_at"},
-				row: func(f *formatRun, c coordinate, _ int) []any {
-					d := f.digest(c, "")
-					return []any{f.id(c), f.repo(c), chart(c), f.semver(c), "sha256:" + d, f.size(), "perf-publisher", "committed", "perf/helm/" + d,
-						metadata(f, c), chartYAML(f, c), f.created(c), f.created(c).Add(24 * time.Hour), f.created(c)}
-				}},
-			{table: "native_helm_publications",
-				columns: []string{"repository_id", "name", "version", "session_id", "digest", "object_key", "size", "metadata_json", "chart_yaml", "publisher", "published_at"},
-				row: func(f *formatRun, c coordinate, _ int) []any {
-					d := f.digest(c, "")
-					return []any{f.repo(c), chart(c), f.semver(c), f.id(c), "sha256:" + d, "perf/helm/" + d, f.size(), metadata(f, c), chartYAML(f, c), "perf-publisher", f.created(c)}
-				}},
-		}
+		return publicationTables("helm", "native_helm_publication_sessions", "native_helm_publications", "name", "chart_yaml",
+			func(c coordinate) string { return fmt.Sprintf("perf-chart-%08d", c.pkg) },
+			func(identity, version string) []byte {
+				return []byte(fmt.Sprintf("apiVersion: v2\nname: %s\nversion: %s\n", identity, version))
+			})
 	case "rubygems":
 		return []tableSpec{{table: "native_rubygems_sessions",
 			columns: []string{"id", "repository_id", "name", "version", "canonical_version", "platform", "full_name", "digest", "size", "actor", "state", "object_key", "metadata_json", "metadata_yaml", "created_at", "expires_at", "committed_at"},
 			row: func(f *formatRun, c coordinate, _ int) []any {
 				name, d := fmt.Sprintf("perf-gem-%08d", c.pkg), f.digest(c, "")
-				return []any{f.id(c), f.repo(c), name, f.semver(c), f.semver(c), "ruby", name + "-" + f.semver(c), "sha256:" + d, f.size(), "perf-publisher", "committed",
+				return []any{f.id(c), f.repo(c), name, f.semver(c), f.semver(c), "ruby", name + "-" + f.semver(c), "sha256:" + d, f.size(c), "perf-publisher", "committed",
 					"perf/rubygems/" + d, fmt.Sprintf(`{"name":%q,"version":%q}`, name, f.semver(c)), []byte("--- !ruby/object:Gem::Specification\nname: " + name + "\n"),
 					f.created(c), f.created(c).Add(24 * time.Hour), f.created(c)}
 			}}}
@@ -250,10 +226,36 @@ func formatTables(format string) []tableSpec {
 			row: func(f *formatRun, c coordinate, _ int) []any {
 				d := f.digest(c, "")
 				return []any{f.repo(c), fmt.Sprintf("pool/main/p/perf-pkg-%08d/perf-pkg-%08d_%s_amd64.deb", c.pkg, c.pkg, f.semver(c)), "sha256:" + d, "perf/apt/" + d,
-					f.size(), "application/vnd.debian.binary-package", "", f.created(c), f.created(c)}
+					f.size(c), "application/vnd.debian.binary-package", "", f.created(c), f.created(c)}
 			}}}
 	}
 	return nil
+}
+
+// publicationTables returns the committed-session and publication tables of NuGet and Helm, which share a shape: a
+// publication references its session by id and repeats the digest, size, object key, metadata and document of it.
+// identityColumn is the name column of both tables and documentColumn the bytea column (nuspec or chart_yaml).
+func publicationTables(format, sessionTable, publicationTable, identityColumn, documentColumn string,
+	identity func(coordinate) string, document func(identity, version string) []byte) []tableSpec {
+	values := func(f *formatRun, c coordinate) (string, string, string, []byte, string) {
+		name, version, d := identity(c), f.semver(c), f.digest(c, "")
+		return name, "sha256:" + d, fmt.Sprintf(`{"name":%q,"version":%q}`, name, version), document(name, version), "perf/" + format + "/" + d
+	}
+	return []tableSpec{
+		{table: sessionTable,
+			columns: []string{"id", "repository_id", identityColumn, "version", "digest", "size", "actor", "state", "object_key", "metadata_json", documentColumn, "created_at", "expires_at", "committed_at"},
+			row: func(f *formatRun, c coordinate, _ int) []any {
+				name, digest, metadata, doc, key := values(f, c)
+				return []any{f.id(c), f.repo(c), name, f.semver(c), digest, f.size(c), "perf-publisher", "committed", key, metadata, doc,
+					f.created(c), f.created(c).Add(24 * time.Hour), f.created(c)}
+			}},
+		{table: publicationTable,
+			columns: []string{"repository_id", identityColumn, "version", "session_id", "digest", "object_key", "size", "metadata_json", documentColumn, "publisher", "published_at"},
+			row: func(f *formatRun, c coordinate, _ int) []any {
+				name, digest, metadata, doc, key := values(f, c)
+				return []any{f.repo(c), name, f.semver(c), f.id(c), digest, key, f.size(c), metadata, doc, "perf-publisher", f.created(c)}
+			}},
+	}
 }
 
 // seedFormats writes the versions of every format of FormatMix through bulk COPY, with Zipfian placement of

@@ -56,7 +56,7 @@ func run(ctx context.Context, profileName, databaseURL string, seed int64) error
 	if _, err := conn.Exec(ctx, "ANALYZE"); err != nil {
 		return err
 	}
-	fmt.Printf("seeded profile %s in %s: %d repositories, %d packages, %d npm versions, %d rows of other formats, %d audit rows, %d webhook subscriptions, %d webhook events, %d webhook deliveries\n",
+	fmt.Printf("seeded profile %s in %s: %d repositories (all formats), %d npm packages, %d npm versions, %d rows across the other formats and their support tables, %d audit rows, %d webhook subscriptions, %d webhook events, %d webhook deliveries\n",
 		profile.Name, time.Since(start).Round(time.Second), counts.Repositories, counts.Packages, counts.Versions, counts.FormatRows, counts.AuditRows,
 		counts.WebhookSubscriptions, counts.WebhookEvents, counts.WebhookDeliveries)
 	return nil

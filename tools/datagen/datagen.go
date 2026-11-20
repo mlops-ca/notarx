@@ -150,10 +150,7 @@ func newID(rng *rand.Rand, now time.Time) uuid.UUID {
 func uuidOf(id uuid.UUID) pgtype.UUID { return pgtype.UUID{Bytes: id, Valid: true} }
 
 func repositoryName(i int) string { return fmt.Sprintf("perf-npm-%04d", i) }
-
-// formatRepositories is the number of repositories of each format other than npm.
-func formatRepositories(p Profile) int { return max(1, p.Repositories/10) }
-func packageName(i int) string         { return fmt.Sprintf("perf-pkg-%08d", i) }
+func packageName(i int) string    { return fmt.Sprintf("perf-pkg-%08d", i) }
 
 func digestOf(seed string) string {
 	sum := sha256.Sum256([]byte(seed))

@@ -336,6 +336,17 @@ func TestSeedWritesEveryFormat(t *testing.T) {
 			t.Fatalf("nuget publication breaks a constraint: %v", row)
 		}
 	}
+	for _, pair := range [][2]string{{"native_nuget_publication_sessions", "native_nuget_publications"}, {"native_helm_publication_sessions", "native_helm_publications"}} {
+		sizes := map[pgtype.UUID]int64{}
+		for _, row := range copier.rows[pair[0]] {
+			sizes[row[0].(pgtype.UUID)] = row[5].(int64)
+		}
+		for _, row := range copier.rows[pair[1]] {
+			if sizes[row[3].(pgtype.UUID)] != row[6].(int64) {
+				t.Fatalf("%s size differs from its session", pair[1])
+			}
+		}
+	}
 	chart := regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 	sessions = map[pgtype.UUID]bool{}
 	for _, row := range copier.rows["native_helm_publication_sessions"] {
