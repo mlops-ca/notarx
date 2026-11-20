@@ -20,7 +20,7 @@ func sample() Catalogue {
 				"owner": {Type: "uuid", Nullable: true},
 			},
 			PrimaryKey:  []string{"id"},
-			Unique:      [][]string{{"name"}, {"owner", "slug"}},
+			Unique:      [][]string{{"name"}, {"slug", "owner"}},
 			ForeignKeys: []string{"owner -> owners(id)"},
 		},
 		"owners": {Columns: map[string]Column{"id": {Type: "uuid"}}, PrimaryKey: []string{"id"}},
@@ -45,7 +45,7 @@ func TestCatalogueRoundTrips(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(data)
-	for _, want := range []string{"version: 1", "id: uuid", "tags: array<text>?", "slug: text generated", "primaryKey: [id]", "unique: [[name], [owner, slug]]", "- owner -> owners(id)"} {
+	for _, want := range []string{"version: 1", "id: uuid", "tags: array<text>?", "slug: text generated", "primaryKey: [id]", "unique: [[name], [slug, owner]]", "- owner -> owners(id)"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("catalogue lacks %q:\n%s", want, text)
 		}
@@ -94,7 +94,7 @@ func TestCompareReportsEveryKindOfDrift(t *testing.T) {
 	delete(widgets.Columns, "tags")                           // missing
 	widgets.Columns["extra"] = Column{Type: "text"}           // not in the catalogue
 	widgets.PrimaryKey = []string{"name"}                     // key
-	widgets.Unique = [][]string{{"owner", "slug"}, {"extra"}} // lacks (name), extra set
+	widgets.Unique = [][]string{{"slug", "owner"}, {"extra"}} // lacks (name), extra set
 	widgets.ForeignKeys = nil                                 // foreign key
 	drift.Tables["widgets"] = widgets
 	delete(drift.Tables, "owners")

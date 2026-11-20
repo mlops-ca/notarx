@@ -35,7 +35,7 @@ WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') AND NOT c.relispartition 
 // the definition for the ones the catalogue lists under Special.
 const postgresIndexesSQL = `SELECT c.relname, ic.relname, i.indisunique, i.indpred IS NOT NULL, i.indexprs IS NOT NULL, am.amname,
   pg_get_indexdef(i.indexrelid),
-  COALESCE((SELECT string_agg(a.attname || CASE WHEN (i.indoption::int2[])[k.ord] & 1 = 1 THEN ' desc' ELSE '' END, ',' ORDER BY k.ord)
+  COALESCE((SELECT string_agg(a.attname || CASE WHEN (i.indoption::int2[])[k.ord - 1] & 1 = 1 THEN ' desc' ELSE '' END, ',' ORDER BY k.ord)
     FROM unnest(i.indkey::int2[]) WITH ORDINALITY AS k(attnum, ord)
     JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = k.attnum
     WHERE k.ord <= i.indnkeyatts AND k.attnum <> 0), '')
@@ -60,7 +60,8 @@ WHERE NOT t.tgisinternal AND n.nspname = 'public' AND c.relkind IN ('r', 'p') AN
 
 const postgresViewsSQL = `SELECT c.relname
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE n.nspname = 'public' AND c.relkind IN ('v', 'm')`
+WHERE n.nspname = 'public' AND c.relkind IN ('v', 'm')
+  AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = c.oid AND d.deptype = 'e')`
 
 var triggerDefinitionPrefix = regexp.MustCompile(`^CREATE (?:OR REPLACE )?(?:CONSTRAINT )?TRIGGER \S+ `)
 

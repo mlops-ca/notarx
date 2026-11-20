@@ -40,8 +40,7 @@ type Catalogue struct {
 type Table struct {
 	Columns    map[string]Column `yaml:"columns"`
 	PrimaryKey []string          `yaml:"primaryKey,omitempty,flow"`
-	// Unique lists the unique sets over plain columns, each sorted by column
-	// name. Partial and expression unique indexes are under Special: their
+	// Unique lists the unique sets over plain columns, each in key order, sorted by the joined names. Partial and expression unique indexes are under Special: their
 	// MySQL form is a generated column (ADR 0022), which the comparison allows.
 	Unique [][]string `yaml:"unique,omitempty,flow"`
 	// Partitioned marks a table range-partitioned on PostgreSQL. MySQL keeps a plain

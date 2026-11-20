@@ -67,10 +67,10 @@ func (c Catalogue) table(name string) Table {
 	return t
 }
 
-// addUnique records a unique set, sorted by column name, once.
+// addUnique records a unique set in its key order, once: the order decides which lookups
+// the index serves, so MySQL must declare the same one.
 func (t *Table) addUnique(columns []string) {
 	set := slices.Clone(columns)
-	slices.Sort(set)
 	for _, existing := range t.Unique {
 		if slices.Equal(existing, set) {
 			return

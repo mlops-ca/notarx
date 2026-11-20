@@ -1,0 +1,279 @@
+# MySQL decisions for the baseline generator (ADR 0022, slice 3c). Every entry carries its reason;
+# docs/mysql-schema-decisions.md is generated from this file and the catalogue.
+version: 1
+
+# VARCHAR width of an indexed text column (4 bytes per character against the 3072-byte key limit).
+# The API layer validates the lengths; a longer value is rejected, never truncated (strict sql_mode).
+defaultKeyWidth: 255
+keyWidths:
+  format: 32
+  kind: 32
+  member_type: 32
+  architecture: 32
+  component: 128
+  suite: 128
+  platform: 128
+  digest: 144
+  artifact_digest: 144
+  oci_digest: 144
+  subject: 144
+  cursor_sha256: 64
+  tag: 128
+  scope: 128
+  revision: 64
+  recipe_revision: 64
+  package_revision: 64
+  package_id: 100
+  request_key: 200
+  owner: 64
+  object_key: 512
+  body_key: 512
+  provenance_key: 512
+  resource_prefix: 512
+  secret_hash: 128
+  issuer: 512
+  slug: 128
+  session_id: 128
+  scenario: 64
+  source: 64
+  spdx_id: 128
+  client_timestamp: 64
+  source_timestamp: 64
+
+hashNames:
+  coordinate: "package coordinates are up to 1024 characters (artifact checks), above the 759 a key can hold next to a repository id"
+  path: "asset paths are up to 4096 bytes (Raw) or 2048 (APT)"
+  module_path: "Go module paths are up to 1024 characters"
+  source_path: "Nexus source paths are unbounded"
+  canonical_identity: "APT canonical identities are up to 1024 characters"
+  url: "source document URLs are up to 4096 characters"
+  identity: "Nexus migration entry identities embed a source path"
+  resource: "usage statistics are keyed by an artifact resource name that embeds a coordinate"
+
+columns:
+  native_conan_publish_sessions.publisher:
+    width: 128
+    reason: "keeps the open-publication identity (seven columns) under the 3072-byte key limit"
+  cache_control_entries.key:
+    hash: true
+    reason: "cache keys embed upstream URLs of unbounded length; prefix scans over keys are served by a prefix index added with the cache control store port"
+  native_go_assets.object_key:
+    width: 200
+    reason: "object keys are derived from the digest, and the reclaim index holds object key, module path hash and version"
+  repository_grants.resource_prefix:
+    width: 480
+    reason: "keeps the primary key (repository, principal, prefix) under the 3072-byte key limit"
+  native_go_versions.version:
+    width: 512
+    reason: "the schema allows Go versions up to 512 characters"
+  native_go_assets.version:
+    width: 512
+    reason: "the schema allows Go versions up to 512 characters"
+
+arrays:
+  api_keys.roles: "read whole; the one containment filter (roles contain admin) is JSON_CONTAINS without an index"
+  authorization_roles.scopes: "read whole by role id"
+  conan_group_members.allowed_hosts: "read whole with the member row; no element filter"
+  hosted_repositories.allowed_hosts: "read whole with the repository row; no element filter"
+  maven_group_members.allowed_hosts: "read whole with the member row; no element filter"
+  native_oci_manifest_tombstones.tags: "read whole with the tombstone; no element filter"
+  oci_group_members.allowed_hosts: "read whole with the member row; no element filter"
+  raw_group_members.allowed_hosts: "read whole with the member row; no element filter"
+  repository_grants.scopes: "read whole per grant; matching is done in Go"
+  repository_retention_policies.coordinate_patterns: "read whole per policy; patterns are evaluated in Go"
+  repository_retention_policies.protected_patterns: "read whole per policy; patterns are evaluated in Go"
+  repository_security_policies.allowed_licenses: "read whole per policy; compared in Go"
+  site_settings.enabled_theme_ids: "singleton row, read whole"
+  workload_issuers.allowed_algs: "read whole per issuer; compared in Go"
+  workload_issuers.audiences: "read whole per issuer; compared in Go"
+
+indexes:
+  authorization_roles_name_ci_idx:
+    action: generated
+    generated:
+      - {name: name_lower, type: "VARCHAR(255)", expression: "LOWER(`name`)"}
+    columns: [name_lower]
+    reason: "case-insensitive unique name: a virtual LOWER(name) column under the bin collation (ADR 0022); role names compare without case"
+  authorization_templates_name_ci_idx:
+    action: generated
+    generated:
+      - {name: name_lower, type: "VARCHAR(255)", expression: "LOWER(`name`)"}
+    columns: [name_lower]
+    reason: "case-insensitive unique name: a virtual LOWER(name) column under the bin collation (ADR 0022); template names compare without case"
+  scheduled_tasks_name_idx:
+    action: generated
+    generated:
+      - {name: name_lower, type: "VARCHAR(255)", expression: "LOWER(`name`)"}
+    columns: [name_lower]
+    reason: "case-insensitive unique name: a virtual LOWER(name) column under the bin collation (ADR 0022); task names compare without case"
+  service_accounts_name_unique_idx:
+    action: generated
+    generated:
+      - {name: name_lower, type: "VARCHAR(255)", expression: "LOWER(`name`)"}
+    columns: [name_lower]
+    reason: "case-insensitive unique name: a virtual LOWER(name) column under the bin collation (ADR 0022); service account names compare without case"
+  users_name_case_insensitive_idx:
+    action: generated
+    generated:
+      - {name: name_lower, type: "VARCHAR(255)", expression: "LOWER(`name`)"}
+    columns: [name_lower]
+    reason: "case-insensitive unique name: a virtual LOWER(name) column under the bin collation (ADR 0022); user names compare without case"
+  webhook_deliveries_actionable_idx:
+    action: generated
+    generated:
+      - {name: due_at, type: "DATETIME(6)", expression: "COALESCE(`next_attempt_at`, `lease_expires_at`)", nullable: true}
+    columns: [due_at, created_at]
+    reason: "the due time is COALESCE(next_attempt_at, lease_expires_at): a generated column holds it; the state predicate is dropped because the claim query filters by state"
+  lifecycle_jobs_actionable_idx:
+    action: flag
+    flag: actionable
+    reason: "queue claim on a generated actionable flag (ADR 0023 section 5)"
+  lifecycle_jobs_kind_actionable_idx:
+    action: flag
+    flag: actionable
+    reason: "queue claim (kind, next_attempt_at) on the generated actionable flag (ADR 0023 section 5)"
+  lifecycle_jobs_artifact_scan_identity_idx:
+    action: drop
+    reason: "indexes three JSON payload fields of scan jobs; the lifecycle store port adds generated columns for the lookup it needs"
+  cache_control_entries_proxy_browse_idx:
+    action: drop
+    reason: "an md5 and JSON expression index over proxy browse entries; the cache control store port decides its MySQL form"
+  webhook_subscriptions_name_bytes_idx:
+    action: drop
+    reason: "duplicates the unique key on name: the bin collation already orders bytes"
+checks:
+  native_cargo_publications_index_row_check:
+    sql: "(JSON_TYPE(CONVERT(`index_row` USING utf8mb4)) = 'OBJECT')"
+    reason: "index_row is a binary column: JSON_TYPE rejects binary strings, so it is converted to text first"
+defaults: {}
+
+triggers:
+  audit_cleanup_jobs_notify_insert:
+    disposition: dropped
+    reason: "the Notifier polls the queue tables (ADR 0022); no trigger"
+  audit_cleanup_jobs_notify_update:
+    disposition: dropped
+    reason: "the Notifier polls the queue tables (ADR 0022); no trigger"
+  cargo_promotion_state_webhook_after_update:
+    disposition: ported
+    reason: "the MySQL lifecycle and replication stores enqueue the webhook event in the same transaction as the state change (store group D); only the application writes these tables"
+  cargo_replication_state_webhook_after_update:
+    disposition: ported
+    reason: "the MySQL lifecycle and replication stores enqueue the webhook event in the same transaction as the state change (store group D); only the application writes these tables"
+  hosted_group_members_notify_cache_delete:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  hosted_group_members_notify_cache_insert:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  hosted_group_members_notify_cache_update:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  hosted_groups_notify_cache_delete:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  hosted_groups_notify_cache_insert:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  hosted_groups_notify_cache_update:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  hosted_repositories_deletion_notify:
+    disposition: dropped
+    reason: "the Notifier polls the queue tables (ADR 0022); no trigger"
+  hosted_repositories_notify_cache_delete:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  hosted_repositories_notify_cache_insert:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  hosted_repositories_notify_cache_update:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  lifecycle_jobs_notify_insert:
+    disposition: dropped
+    reason: "the Notifier polls the queue tables (ADR 0022); no trigger"
+  lifecycle_jobs_notify_update:
+    disposition: dropped
+    reason: "the Notifier polls the queue tables (ADR 0022); no trigger"
+  public_access_policy_notify_cache:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  replication_plans_notify_insert:
+    disposition: dropped
+    reason: "the Notifier polls the queue tables (ADR 0022); no trigger"
+  replication_plans_notify_update:
+    disposition: dropped
+    reason: "the Notifier polls the queue tables (ADR 0022); no trigger"
+  repository_grants_notify_cache_delete:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  repository_grants_notify_cache_insert:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  repository_grants_notify_cache_update:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  repository_quarantine_read_policies_notify_cache_delete:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  repository_quarantine_read_policies_notify_cache_insert:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  repository_quarantine_read_policies_notify_cache_update:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  repository_quota_alert_rules_notify_insert:
+    disposition: dropped
+    reason: "the Notifier polls the queue tables (ADR 0022); no trigger"
+  repository_quota_alert_rules_notify_update:
+    disposition: dropped
+    reason: "the Notifier polls the queue tables (ADR 0022); no trigger"
+  token_signing_keys_notify_cache_delete:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  token_signing_keys_notify_cache_insert:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  token_signing_keys_notify_cache_update:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  users_notify_cache_delete:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  users_notify_cache_insert:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  users_notify_cache_update:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  webhook_deliveries_notify_insert:
+    disposition: dropped
+    reason: "the Notifier polls the queue tables (ADR 0022); no trigger"
+  workload_issuers_notify_cache_delete:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  workload_issuers_notify_cache_insert:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  workload_issuers_notify_cache_update:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  workload_trust_policies_notify_cache_delete:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  workload_trust_policies_notify_cache_insert:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  workload_trust_policies_notify_cache_update:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+
+views:
+  artifact_search_projection:
+    disposition: ported
+    reason: "the search store (store group C) writes the union as a query over the format tables, or reads artifact_catalog; no view is created on MySQL"
+
+seeds:
+  settings:
+    value: "UUID()"

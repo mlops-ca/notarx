@@ -121,7 +121,7 @@ func TestIntrospectMySQL(t *testing.T) {
 	if widgets.Columns["slug"] != (Column{Type: "text", Generated: true}) || widgets.Columns["owner"] != (Column{Type: "uuid", Nullable: true}) || widgets.Columns["tags"].Type != "json" {
 		t.Fatalf("columns: %+v", widgets.Columns)
 	}
-	if !reflect.DeepEqual(widgets.PrimaryKey, []string{"id"}) || !reflect.DeepEqual(widgets.Unique, [][]string{{"name"}, {"owner", "slug"}}) || !reflect.DeepEqual(widgets.ForeignKeys, []string{"owner -> owners(id)"}) {
+	if !reflect.DeepEqual(widgets.PrimaryKey, []string{"id"}) || !reflect.DeepEqual(widgets.Unique, [][]string{{"name"}, {"slug", "owner"}}) || !reflect.DeepEqual(widgets.ForeignKeys, []string{"owner -> owners(id)"}) {
 		t.Fatalf("keys: %+v", widgets)
 	}
 	if _, ok := got.Tables["notarx_lock_buckets"]; ok || len(got.Tables) != 2 {
