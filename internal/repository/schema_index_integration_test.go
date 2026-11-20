@@ -6,7 +6,6 @@ import (
 	"context"
 	"database/sql"
 	"os"
-	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -90,40 +89,42 @@ func TestEveryForeignKeyHasALeadingIndexOrAReviewedAllowance(t *testing.T) {
 // TestAddedIndexesServeTheirQueries plans the production shape of each lookup the
 // ADR 0023 section 5 indexes were added for and asserts the planner scans the index.
 // The packages of an integration shard share one database, so the tables hold rows
-// that earlier tests left, and whether autovacuum has analyzed them yet decides which
-// index the planner prefers. Each case therefore analyzes its table inside the
-// transaction first (the new statistics roll back with it), so the plan follows the
-// data in the table, not the timing of autovacuum.
-var queryTable = regexp.MustCompile(`\bFROM ([a-z_]+)\b`)
-
+// that earlier tests left, and whether autovacuum had analyzed them yet decided which
+// index the planner preferred. Each case therefore analyzes its table inside the
+// transaction first (the statistics roll back with it), so the plan follows the data
+// in the table, not the timing of autovacuum. Fresh statistics of an empty table make
+// a sequential scan the cheapest plan, so sequential scans are switched off for the
+// transaction: the check is which index serves the lookup, not whether the table is
+// large enough to need one. The packages of a shard run one at a time (-p 1), so the
+// lock ANALYZE holds until the rollback waits for nobody.
 func TestAddedIndexesServeTheirQueries(t *testing.T) {
 	db := integrationDB(t)
 	const id = "00000000-0000-7000-8000-000000000001"
 	cases := []struct {
-		name, index, query string
-		args               []any
+		name, table, index, query string
+		args                      []any
 	}{
-		{"maven committed publisher", "native_maven_publish_sessions_committed_idx",
+		{"maven committed publisher", "native_maven_publish_sessions", "native_maven_publish_sessions_committed_idx",
 			"SELECT publisher FROM native_maven_publish_sessions WHERE repository_id=$1::uuid AND coordinate=$2 AND state='committed' ORDER BY expires_at DESC LIMIT 1", []any{id, "g:a:1"}},
-		{"conan committed publisher", "native_conan_publish_sessions_committed_idx",
+		{"conan committed publisher", "native_conan_publish_sessions", "native_conan_publish_sessions_committed_idx",
 			"SELECT publisher FROM native_conan_publish_sessions WHERE repository_id=$1::uuid AND reference=$2 AND state='committed' ORDER BY expires_at DESC LIMIT 1", []any{id, "pkg/1.0@u/c"}},
 		// A kind other than scan: lifecycle_jobs_artifact_scan_identity_idx is partial on kind='scan', and once
 		// the table holds scan jobs the planner may prefer it, so a scan claim would test the statistics.
-		{"lifecycle claim by kind", "lifecycle_jobs_kind_actionable_idx",
+		{"lifecycle claim by kind", "lifecycle_jobs", "lifecycle_jobs_kind_actionable_idx",
 			"SELECT id FROM lifecycle_jobs WHERE state IN ('pending','retrying') AND kind=$1 AND next_attempt_at<=now() ORDER BY next_attempt_at LIMIT 10", []any{"promotion"}},
-		{"maven assets by digest", "native_maven_assets_digest_idx",
+		{"maven assets by digest", "native_maven_assets", "native_maven_assets_digest_idx",
 			"SELECT repository_id FROM native_maven_assets WHERE digest=$1", []any{"sha256:x"}},
-		{"oci tags by digest", "native_oci_tags_repository_id_digest_name_fk_idx",
+		{"oci tags by digest", "native_oci_tags", "native_oci_tags_repository_id_digest_name_fk_idx",
 			"SELECT name FROM native_oci_tags WHERE repository_id=$1::uuid AND digest=$2", []any{id, "sha256:x"}},
-		{"oci repository blobs by digest", "native_oci_repository_blobs_digest_fk_idx",
+		{"oci repository blobs by digest", "native_oci_repository_blobs", "native_oci_repository_blobs_digest_fk_idx",
 			"SELECT repository_id FROM native_oci_repository_blobs WHERE digest=$1", []any{"sha256:x"}},
-		{"sessions of a user", "user_sessions_user_id_fk_idx",
+		{"sessions of a user", "user_sessions", "user_sessions_user_id_fk_idx",
 			"SELECT id FROM user_sessions WHERE user_id=$1::uuid", []any{id}},
-		{"raw uploads of a repository", "native_raw_uploads_repository_id_fk_idx",
+		{"raw uploads of a repository", "native_raw_uploads", "native_raw_uploads_repository_id_fk_idx",
 			"SELECT 1 FROM native_raw_uploads WHERE repository_id=$1::uuid", []any{id}},
-		{"replication plans by source", "replication_plans_source_repository_id_fk_idx",
+		{"replication plans by source", "replication_plans", "replication_plans_source_repository_id_fk_idx",
 			"SELECT id FROM replication_plans WHERE source_repository_id=$1::uuid", []any{id}},
-		{"maven search publisher is a column", "native_maven_artifacts_visible_coordinate_trgm_idx",
+		{"maven search publisher is a column", "native_maven_artifacts", "native_maven_artifacts_visible_coordinate_trgm_idx",
 			"SELECT publisher FROM native_maven_artifacts WHERE state='visible' AND coordinate ILIKE $1", []any{"%junit%"}},
 	}
 	for _, tc := range cases {
@@ -133,12 +134,13 @@ func TestAddedIndexesServeTheirQueries(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer func() { _ = tx.Rollback() }()
-			table := queryTable.FindStringSubmatch(tc.query)
-			if table == nil {
-				t.Fatalf("no FROM table in %q", tc.query)
+			if !strings.Contains(tc.query, " FROM "+tc.table+" ") {
+				t.Fatalf("case %q names table %s, which its query does not read", tc.name, tc.table)
 			}
-			if _, err := tx.ExecContext(t.Context(), "ANALYZE "+table[1]); err != nil {
-				t.Fatal(err)
+			for _, statement := range []string{"ANALYZE " + tc.table, "SET LOCAL enable_seqscan = off"} {
+				if _, err := tx.ExecContext(t.Context(), statement); err != nil {
+					t.Fatal(err)
+				}
 			}
 			plan, err := explaincheck.Plan(context.Background(), tx, tc.query, tc.args...)
 			if err != nil {
