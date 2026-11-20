@@ -143,13 +143,22 @@ It is a workflow of its own, so the `cancel-in-progress` group of `ci.yml` canno
 cancel it before it saves (a newer push waits for it), and it does not gate `main`; a
 failed warm shows as a failed `Go cache` run.
 
+Measured cost and effect: the first warm (run 44758544218, after the push of #529)
+took 2.0 minutes on amd64 and 2.7 on arm64, about 4.7 runner-minutes per push to
+`main` with a Go change, most of it restoring and saving the caches (0.7 GB on amd64,
+1.0 GB on arm64). The next Go pull request run restored that cache: `quality` took
+4.2 and 4.3 minutes and `quality-arm64` 3.8 and 3.3 (run 44759372025, attempts 1 and
+2), against 4.2 to 7.3 and 4.3 to 4.6 on the daily cache. The warm pays for itself
+once a push to `main` is followed by two or more Go pull request runs.
+
 The repository has a 10 GB cache quota, and beyond it GitHub evicts the least recently
 used entries (11.8 GB were in use on 2026-11-20, most of it BuildKit layers and
 Playwright browsers saved by pull requests; issue #518 took the runner image version
 out of the browser key). Every Go pull request restores the newest race and lint caches,
 so they stay recently used. A superseded daily lint entry is no longer restored and is
-the first to go; the warm deletes superseded race build caches itself (about 0.6 GB on
-amd64 and 0.9 GB on arm64 each).
+the first to go; the warm deletes superseded race build caches of its flavour itself (about 0.7 GB on
+amd64 and 1.0 GB on arm64 each). The daily race caches saved before issue #518 carry
+no flavour, so the warm leaves them to the eviction; no run restores them any more.
 
 ## Workflow linting
 
