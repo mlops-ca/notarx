@@ -187,10 +187,7 @@
     "core-backup": {
       "timeoutMinutes": 20,
       "arm64": "pull-request",
-      "needs": [
-        "rust",
-        "node"
-      ],
+      "needs": [],
       "steps": [
         {
           "name": "backup-transfer-test",
@@ -207,8 +204,7 @@
       "timeoutMinutes": 20,
       "arm64": "pull-request",
       "needs": [
-        "rust",
-        "node"
+        "rust"
       ],
       "steps": [
         {
@@ -237,10 +233,7 @@
     "core-integration-2": {
       "timeoutMinutes": 20,
       "arm64": "pull-request",
-      "needs": [
-        "rust",
-        "node"
-      ],
+      "needs": [],
       "steps": [
         {
           "name": "integration-test (shard 2)",

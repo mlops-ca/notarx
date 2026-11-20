@@ -72,7 +72,8 @@ for expected in 'down -v --remove-orphans' 'up -d --wait postgres rustfs' 'run -
 done
 
 # Every package with integration-tagged files belongs to exactly one shard, so the
-# sharded CI lanes run the same suite as the unsharded run.
+# sharded CI lanes run the same suite as the unsharded run. listed is not
+# deduplicated, so a package in two shards also fails the comparison.
 tagged=$(cd "$root" && grep -rlE '^//go:build.*\bintegration\b' --include='*.go' cmd internal | xargs -n1 dirname | sed 's|^|./|' | sort -u)
 listed=$("$root/scripts/integration-test.sh" --list | awk '{ print $2 }' | sort)
 if [[ "$tagged" != "$listed" ]]; then
@@ -80,7 +81,6 @@ if [[ "$tagged" != "$listed" ]]; then
     "$(diff <(printf '%s\n' "$tagged") <(printf '%s\n' "$listed") || true)" >&2
   exit 1
 fi
-[[ -z $("$root/scripts/integration-test.sh" --list | awk '{ print $2 }' | sort | uniq -d) ]]
 
 # Shard 1 holds ./internal/app and runs the official Cargo replay; shard 2 does not.
 for shard in 1 2; do
@@ -88,8 +88,8 @@ for shard in 1 2; do
   "$root/scripts/integration-test.sh" --shard "$shard" >/dev/null
   while read -r listed_shard package; do
     if [[ "$listed_shard" == "$shard" ]]; then
-      grep -Fq -- " $package" "$NOTARX_ISOLATION_LOG"
-    elif grep -Eq -- " $package( |$)" "$NOTARX_ISOLATION_LOG"; then
+      grep -Fqw -- "$package" "$NOTARX_ISOLATION_LOG"
+    elif grep -Fqw -- "$package" "$NOTARX_ISOLATION_LOG"; then
       printf 'shard %s ran %s of shard %s\n' "$shard" "$package" "$listed_shard" >&2
       exit 1
     fi

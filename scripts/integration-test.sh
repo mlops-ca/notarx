@@ -56,9 +56,11 @@ cleanup
 "${compose[@]}" run --rm --no-deps rustfs-ready
 "${compose[@]}" run --rm --no-deps migrate
 ./scripts/migration-runner-check.sh
-# -p 1 also serialises compilation, so the test binaries are built first with full
-# parallelism (-exec true builds and links them but runs nothing); the second go
-# test then only runs them, one package at a time.
+# -p 1 also serializes compilation, so the test binaries are built first with full
+# parallelism (-exec true builds and links them but runs nothing). The second go test
+# finds every compiled package in the build cache, so it only relinks or reuses each
+# test binary (seconds: ./internal/app took 44 s cold and 4 s warm) before running the
+# packages one at a time.
 "${compose[@]}" run --rm --no-deps test sh -ec '
   go test -count=1 -tags=integration -exec true "$@" >/dev/null
   go test -count=1 -p 1 -tags=integration "$@"

@@ -186,10 +186,11 @@ two shards balanced by measured test time; `--list` prints the assignment, and
 integration-tagged files is missing from the shards or listed twice. Each shard starts
 its own PostgreSQL and RustFS stack, so the shards cannot see each other's data; inside
 a shard the packages still run one at a time (`-p 1`), because they share that
-database. `-p 1` used to serialise compilation too (about two minutes of the
+database. `-p 1` used to serialize compilation too (about two minutes of the
 integration step): the script now builds every test binary first with full
-parallelism (`go test -exec true`, which builds and links but runs nothing) and then
-runs them with `-p 1`. Shard 1 holds `./internal/app` and runs the official Cargo
+parallelism (`go test -exec true`, which builds and links but runs nothing); the
+second `go test -p 1` finds every compiled package in the build cache, so it spends
+seconds per package relinking or reusing the binary before running it. Shard 1 holds `./internal/app` and runs the official Cargo
 replay on the host. Without `INTEGRATION_SHARD`, `make integration-test` runs every
 package in one stack, as before.
 

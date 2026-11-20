@@ -213,9 +213,13 @@ class PlanTests(unittest.TestCase):
     def test_integration_test_shards_are_planned_once_each(self):
         listed = subprocess.check_output([str(ROOT / 'scripts/integration-test.sh'), '--list'], text=True)
         shards = sorted({line.split()[0] for line in listed.splitlines()})
-        planned = sorted(arg.split('=', 1)[1] for lane in ci.PLAN['lanes'].values() for s in lane['steps']
-                         if s['command'][:2] == ['make', 'integration-test']
-                         for arg in s['command'][2:] if arg.startswith('INTEGRATION_SHARD='))
+        steps = [s['command'] for lane in ci.PLAN['lanes'].values() for s in lane['steps']
+                 if s['command'][:2] == ['make', 'integration-test']]
+        # An unsharded step would run every package a second time.
+        for command in steps:
+            self.assertEqual(len(command), 3, command)
+            self.assertRegex(command[2], r'^INTEGRATION_SHARD=\d+$', command)
+        planned = sorted(command[2].split('=', 1)[1] for command in steps)
         self.assertEqual(planned, shards, 'every integration shard runs in exactly one lane')
 
     def test_every_notarx_gate_stays_planned(self):
