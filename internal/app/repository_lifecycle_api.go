@@ -127,7 +127,7 @@ func (h generatedRepositoryAPIAdapter) administeredRepositoryIDs(r *http.Request
 	if !ok {
 		return nil, false, errGrantIndexUnavailable
 	}
-	candidates, err := index.ListRepositoryIDsGrantedToPrincipal(r.Context(), principal.Actor, "repositories:admin")
+	candidates, err := index.ListRepositoryIDsGrantedToPrincipal(r.Context(), principal.Actor, authorization.GrantScopeAdmin)
 	if err != nil {
 		return nil, false, err
 	}

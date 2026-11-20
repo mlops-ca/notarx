@@ -153,7 +153,7 @@ func (s *PostgresStore) ListEmailDeliveries(ctx context.Context, limit int) ([]E
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT `+emailDeliveryColumns+` FROM email_test_deliveries ORDER BY created_at DESC,id DESC LIMIT $1`, limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+emailDeliveryColumns+` FROM email_test_deliveries ORDER BY created_at DESC,email_test_deliveries.id DESC LIMIT $1`, limit)
 	if err != nil {
 		return nil, err
 	}

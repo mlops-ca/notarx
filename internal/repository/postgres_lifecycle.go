@@ -626,8 +626,15 @@ func (s *PostgresStore) CompleteLifecycleJob(ctx context.Context, id, leaseToken
 }
 
 func (s *PostgresStore) FailLifecycleJob(ctx context.Context, id, leaseToken, message string) error {
+	// A caller whose context was cancelled, as opposed to timed out, is stopping: the process is shutting down
+	// and the job did not fail by its own fault. It goes back to the queue with the attempt its claim counted
+	// returned, instead of consuming an attempt (and, at the last one, failing for good) because of a deploy.
+	interrupted := errors.Is(ctx.Err(), context.Canceled)
 	ctx, cancel := terminalWriteContext(ctx)
 	defer cancel()
+	if interrupted {
+		return s.requeueInterruptedLifecycleJob(ctx, id, leaseToken, message)
+	}
 	result, err := s.db.ExecContext(ctx, `UPDATE lifecycle_jobs SET
         state=CASE WHEN attempts>=max_attempts THEN 'failed' ELSE 'retrying' END,
         completed_at=CASE WHEN attempts>=max_attempts THEN now() ELSE NULL END,
@@ -643,6 +650,26 @@ func (s *PostgresStore) FailLifecycleJob(ctx context.Context, id, leaseToken, me
 	jobCtx, ids := requestcontext.WithRequest(ctx, id)
 	slog.LogAttrs(jobCtx, slog.LevelWarn, "lifecycle job failed or queued for retry",
 		slog.String("component", "lifecycle_worker"), slog.String("operation", "lifecycle.fail"),
+		slog.String("requestId", ids.RequestID), slog.String("traceId", ids.TraceID), slog.String("jobId", id),
+	)
+	return nil
+}
+
+// requeueInterruptedLifecycleJob hands a job whose worker was stopped back to the queue, pending and actionable
+// at once, with the attempt its claim counted returned and message kept as its last error.
+func (s *PostgresStore) requeueInterruptedLifecycleJob(ctx context.Context, id, leaseToken, message string) error {
+	result, err := s.db.ExecContext(ctx, `UPDATE lifecycle_jobs SET state='pending',
+		started_at=NULL,next_attempt_at=clock_timestamp(),lease_expires_at=NULL,lease_token='',attempts=GREATEST(attempts-1,0),last_error=$3
+		WHERE id=$1::uuid AND lease_token=$2 AND state='running'`, id, leaseToken, message)
+	if err != nil {
+		return err
+	}
+	if count, _ := result.RowsAffected(); count != 1 {
+		return ErrNotFound
+	}
+	jobCtx, ids := requestcontext.WithRequest(ctx, id)
+	slog.LogAttrs(jobCtx, slog.LevelInfo, "lifecycle job returned to the queue by a stopping worker",
+		slog.String("component", "lifecycle_worker"), slog.String("operation", "lifecycle.requeue"),
 		slog.String("requestId", ids.RequestID), slog.String("traceId", ids.TraceID), slog.String("jobId", id),
 	)
 	return nil

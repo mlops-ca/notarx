@@ -10,6 +10,12 @@ import (
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
+// GrantScopeAdmin is the repository grant scope that allows RepositoryAdmin. It is the only one: a cross-repository
+// view that looks for the repositories a principal administers by grant (the aggregate lifecycle job listing)
+// asks the grant index for this scope and then lets the authorizer decide on each candidate, so a scope that
+// ever implies admin must be added here and to grantAllows together (TestOnlyTheAdminScopeAllowsRepositoryAdmin).
+const GrantScopeAdmin = "repositories:admin"
+
 // RepositoryOperation is the protocol-independent action being authorized.
 type RepositoryOperation string
 
@@ -274,7 +280,7 @@ func grantAllows(scopes []string, operation RepositoryOperation) bool {
 				return true
 			}
 		case RepositoryAdmin:
-			if scope == "repositories:admin" {
+			if scope == GrantScopeAdmin {
 				return true
 			}
 		case RepositoryIntelligence:

@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+
+	"golang.org/x/sync/errgroup"
 )
 
 // PayloadStore is the object store namespace that holds payloads kept out of the database rows
@@ -111,4 +113,35 @@ func (s *PostgresStore) internalize(ctx context.Context, inline []byte, ref payl
 		return nil, ErrPayloadMismatch
 	}
 	return data, nil
+}
+
+// payloadFetchConcurrency bounds the object reads of one list.
+const payloadFetchConcurrency = 8
+
+// payloadSlot is one payload a list read still has to fetch: the reference a row carried and where its bytes go.
+type payloadSlot struct {
+	ref payloadRef
+	set func([]byte)
+}
+
+// resolvePayloads fetches the externalised payloads of slots. A list read scans its rows first and calls this
+// after the rows are closed, so no database cursor or connection waits on the object store, and the reads of
+// one list run concurrently, payloadFetchConcurrency at a time. Slots whose payload is inline are skipped.
+func (s *PostgresStore) resolvePayloads(ctx context.Context, slots []payloadSlot) error {
+	var group errgroup.Group
+	group.SetLimit(payloadFetchConcurrency)
+	for _, slot := range slots {
+		if !slot.ref.external() {
+			continue
+		}
+		group.Go(func() error {
+			data, err := s.internalize(ctx, nil, slot.ref)
+			if err != nil {
+				return err
+			}
+			slot.set(data)
+			return nil
+		})
+	}
+	return group.Wait()
 }

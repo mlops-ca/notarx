@@ -49,15 +49,19 @@ type backgroundRuntime struct {
 }
 
 // terminationGrace is the Kubernetes termination grace period of deploy/kubernetes/base/notarx.yaml less a
-// margin. The whole shutdown, the wait for the background loops included, stays inside it.
+// margin (TestTerminationGraceFollowsTheKubernetesManifest keeps the two in step). The whole shutdown, the wait
+// for the background loops included, stays inside it.
 const terminationGrace = 28 * time.Second
 
 // Start starts the background work of the node's roles and returns a function that waits for it to stop
 // before the stores close: every background loop started here and the claim broker's release of what it
 // still holds, once ctx ends. The wait is bounded and logs how it ended.
 func (r backgroundRuntime) Start(ctx context.Context, cfg config.Config) (wait func()) {
-	group := &background.Group{}
-	ctx = background.WithGroup(ctx, group)
+	group := background.GroupOf(ctx)
+	if group == nil {
+		group = &background.Group{}
+		ctx = background.WithGroup(ctx, group)
+	}
 	var stopped atomic.Pointer[time.Time]
 	context.AfterFunc(ctx, func() {
 		now := time.Now()

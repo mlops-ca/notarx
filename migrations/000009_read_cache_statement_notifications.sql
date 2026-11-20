@@ -17,37 +17,67 @@
 --
 -- MySQL (ADR 0022): the twin bumps the scope epoch once per statement; nothing changes for it here.
 
+-- The functions use static SQL over the transition tables, so PostgreSQL plans each statement once per session
+-- and a statement that changes one row pays for one small scan, not for a dynamic query. One function per key
+-- column: id for repositories and groups, group_id for the members of a group.
+
 -- +goose StatementBegin
-CREATE FUNCTION public.notarx_notify_cache_statement() RETURNS trigger
+CREATE FUNCTION public.notarx_announce_cache(scope text, keys text[]) RETURNS void
     LANGUAGE plpgsql
     AS $$
 DECLARE
-    -- TG_ARGV[0] is the scope, TG_ARGV[1] the key column the scope announces.
     flush_above constant integer := 64;
-    changed text;
-    keys text[];
     key text;
 BEGIN
-    IF TG_ARGV[1] NOT IN ('id', 'group_id') THEN
-        RAISE EXCEPTION 'notarx_notify_cache_statement: unsupported key column %', TG_ARGV[1];
-    END IF;
-    IF TG_OP = 'INSERT' THEN
-        changed := format('SELECT %1$I::text AS key FROM new_rows', TG_ARGV[1]);
-    ELSIF TG_OP = 'DELETE' THEN
-        changed := format('SELECT %1$I::text AS key FROM old_rows', TG_ARGV[1]);
-    ELSE
-        changed := format('SELECT %1$I::text AS key FROM new_rows UNION SELECT %1$I::text AS key FROM old_rows', TG_ARGV[1]);
-    END IF;
-    -- One more than the threshold is enough to know the statement is a bulk one.
-    EXECUTE format('SELECT COALESCE(array_agg(key), ARRAY[]::text[]) FROM (SELECT key FROM (%s) changed LIMIT %s) limited', changed, flush_above + 1)
-        INTO keys;
     IF cardinality(keys) > flush_above THEN
-        PERFORM pg_notify('notarx_cache', TG_ARGV[0] || ':');
-        RETURN NULL;
+        PERFORM pg_notify('notarx_cache', scope || ':');
+        RETURN;
     END IF;
     FOREACH key IN ARRAY keys LOOP
-        PERFORM pg_notify('notarx_cache', TG_ARGV[0] || ':' || COALESCE(key, ''));
+        PERFORM pg_notify('notarx_cache', scope || ':' || COALESCE(key, ''));
     END LOOP;
+END;
+$$;
+-- +goose StatementEnd
+
+-- +goose StatementBegin
+CREATE FUNCTION public.notarx_notify_cache_statement_id() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    -- One more than the announce threshold is enough to know the statement is a bulk one.
+    keys text[];
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        SELECT COALESCE(array_agg(k), ARRAY[]::text[]) INTO keys FROM (SELECT DISTINCT id::text AS k FROM new_rows LIMIT 65) limited;
+    ELSIF TG_OP = 'DELETE' THEN
+        SELECT COALESCE(array_agg(k), ARRAY[]::text[]) INTO keys FROM (SELECT DISTINCT id::text AS k FROM old_rows LIMIT 65) limited;
+    ELSE
+        SELECT COALESCE(array_agg(k), ARRAY[]::text[]) INTO keys FROM (
+            SELECT id::text AS k FROM new_rows UNION SELECT id::text FROM old_rows LIMIT 65) limited;
+    END IF;
+    PERFORM public.notarx_announce_cache(TG_ARGV[0], keys);
+    RETURN NULL;
+END;
+$$;
+-- +goose StatementEnd
+
+-- +goose StatementBegin
+CREATE FUNCTION public.notarx_notify_cache_statement_group_id() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    keys text[];
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        SELECT COALESCE(array_agg(k), ARRAY[]::text[]) INTO keys FROM (SELECT DISTINCT group_id::text AS k FROM new_rows LIMIT 65) limited;
+    ELSIF TG_OP = 'DELETE' THEN
+        SELECT COALESCE(array_agg(k), ARRAY[]::text[]) INTO keys FROM (SELECT DISTINCT group_id::text AS k FROM old_rows LIMIT 65) limited;
+    ELSE
+        SELECT COALESCE(array_agg(k), ARRAY[]::text[]) INTO keys FROM (
+            SELECT group_id::text AS k FROM new_rows UNION SELECT group_id::text FROM old_rows LIMIT 65) limited;
+    END IF;
+    PERFORM public.notarx_announce_cache(TG_ARGV[0], keys);
     RETURN NULL;
 END;
 $$;
@@ -58,14 +88,14 @@ DROP TRIGGER hosted_groups_notify_cache ON public.hosted_groups;
 DROP TRIGGER hosted_group_members_notify_cache ON public.hosted_group_members;
 
 -- A trigger with transition tables names one event, so each table has three.
-CREATE TRIGGER hosted_repositories_notify_cache_insert AFTER INSERT ON public.hosted_repositories REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION public.notarx_notify_cache_statement('repository', 'id');
-CREATE TRIGGER hosted_repositories_notify_cache_update AFTER UPDATE ON public.hosted_repositories REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION public.notarx_notify_cache_statement('repository', 'id');
-CREATE TRIGGER hosted_repositories_notify_cache_delete AFTER DELETE ON public.hosted_repositories REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION public.notarx_notify_cache_statement('repository', 'id');
+CREATE TRIGGER hosted_repositories_notify_cache_insert AFTER INSERT ON public.hosted_repositories REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION public.notarx_notify_cache_statement_id('repository');
+CREATE TRIGGER hosted_repositories_notify_cache_update AFTER UPDATE ON public.hosted_repositories REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION public.notarx_notify_cache_statement_id('repository');
+CREATE TRIGGER hosted_repositories_notify_cache_delete AFTER DELETE ON public.hosted_repositories REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION public.notarx_notify_cache_statement_id('repository');
 
-CREATE TRIGGER hosted_groups_notify_cache_insert AFTER INSERT ON public.hosted_groups REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION public.notarx_notify_cache_statement('group', 'id');
-CREATE TRIGGER hosted_groups_notify_cache_update AFTER UPDATE ON public.hosted_groups REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION public.notarx_notify_cache_statement('group', 'id');
-CREATE TRIGGER hosted_groups_notify_cache_delete AFTER DELETE ON public.hosted_groups REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION public.notarx_notify_cache_statement('group', 'id');
+CREATE TRIGGER hosted_groups_notify_cache_insert AFTER INSERT ON public.hosted_groups REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION public.notarx_notify_cache_statement_id('group');
+CREATE TRIGGER hosted_groups_notify_cache_update AFTER UPDATE ON public.hosted_groups REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION public.notarx_notify_cache_statement_id('group');
+CREATE TRIGGER hosted_groups_notify_cache_delete AFTER DELETE ON public.hosted_groups REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION public.notarx_notify_cache_statement_id('group');
 
-CREATE TRIGGER hosted_group_members_notify_cache_insert AFTER INSERT ON public.hosted_group_members REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION public.notarx_notify_cache_statement('group', 'group_id');
-CREATE TRIGGER hosted_group_members_notify_cache_update AFTER UPDATE ON public.hosted_group_members REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION public.notarx_notify_cache_statement('group', 'group_id');
-CREATE TRIGGER hosted_group_members_notify_cache_delete AFTER DELETE ON public.hosted_group_members REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION public.notarx_notify_cache_statement('group', 'group_id');
+CREATE TRIGGER hosted_group_members_notify_cache_insert AFTER INSERT ON public.hosted_group_members REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION public.notarx_notify_cache_statement_group_id('group');
+CREATE TRIGGER hosted_group_members_notify_cache_update AFTER UPDATE ON public.hosted_group_members REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION public.notarx_notify_cache_statement_group_id('group');
+CREATE TRIGGER hosted_group_members_notify_cache_delete AFTER DELETE ON public.hosted_group_members REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION public.notarx_notify_cache_statement_group_id('group');

@@ -894,7 +894,7 @@ func (s *PostgresStore) GetLatestVisibleAPTRepositorySnapshot(ctx context.Contex
 	var snapshot APTRepositorySnapshot
 	err := scanAPTRepositorySnapshot(s.db.QueryRowContext(ctx, `SELECT `+aptRepositorySnapshotColumns+`
 		FROM native_apt_repository_snapshots WHERE repository_id=$1::uuid AND state='visible'
-		ORDER BY published_at DESC,id DESC LIMIT 1`, repositoryID), &snapshot)
+		ORDER BY published_at DESC,native_apt_repository_snapshots.id DESC LIMIT 1`, repositoryID), &snapshot)
 	if errors.Is(err, sql.ErrNoRows) {
 		return APTRepositorySnapshot{}, ErrNotFound
 	}

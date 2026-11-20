@@ -476,15 +476,19 @@ func (s *PostgresStore) readNPMPackage(ctx context.Context, tx *sql.Tx, reposito
 		return NPMPackage{}, err
 	}
 	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		var version NPMVersion
-		if err = s.scanNPMVersion(ctx, rows, &version); err != nil {
-			return NPMPackage{}, err
-		}
+	scanned, err := scanNPMVersionRows(rows)
+	if err != nil {
+		return NPMPackage{}, err
+	}
+	_ = rows.Close()
+	if err = s.resolveNPMManifests(ctx, scanned); err != nil {
+		return NPMPackage{}, err
+	}
+	for _, version := range scanned {
 		if version.State == "deleted" {
-			pkg.TombstonedVersions = append(pkg.TombstonedVersions, version)
+			pkg.TombstonedVersions = append(pkg.TombstonedVersions, version.NPMVersion)
 		} else {
-			pkg.Versions = append(pkg.Versions, version)
+			pkg.Versions = append(pkg.Versions, version.NPMVersion)
 		}
 	}
 	if err = rows.Err(); err != nil {
@@ -524,15 +528,47 @@ func (s *PostgresStore) ListNPMVersions(ctx context.Context, repositoryID, name 
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	versions := make([]NPMVersion, 0)
+	scanned, err := scanNPMVersionRows(rows)
+	if err != nil {
+		return nil, err
+	}
+	_ = rows.Close()
+	if err = s.resolveNPMManifests(ctx, scanned); err != nil {
+		return nil, err
+	}
+	versions := make([]NPMVersion, 0, len(scanned))
+	for _, version := range scanned {
+		versions = append(versions, version.NPMVersion)
+	}
+	return versions, nil
+}
+
+// scannedNPMVersion is a version row whose manifest may still be in the object store.
+type scannedNPMVersion struct {
+	NPMVersion
+	ref payloadRef
+}
+
+// scanNPMVersionRows reads every row without touching the object store.
+func scanNPMVersionRows(rows *sql.Rows) ([]scannedNPMVersion, error) {
+	var out []scannedNPMVersion
 	for rows.Next() {
-		var version NPMVersion
-		if err = s.scanNPMVersion(ctx, rows, &version); err != nil {
+		var version scannedNPMVersion
+		if err := scanNPMVersionRef(rows, &version.NPMVersion, &version.ref); err != nil {
 			return nil, err
 		}
-		versions = append(versions, version)
+		out = append(out, version)
 	}
-	return versions, rows.Err()
+	return out, rows.Err()
+}
+
+// resolveNPMManifests fetches the externalised manifests of rows that are already read and closed.
+func (s *PostgresStore) resolveNPMManifests(ctx context.Context, versions []scannedNPMVersion) error {
+	slots := make([]payloadSlot, len(versions))
+	for i := range versions {
+		slots[i] = payloadSlot{ref: versions[i].ref, set: func(data []byte) { versions[i].Manifest = data }}
+	}
+	return s.resolvePayloads(ctx, slots)
 }
 
 func (s *PostgresStore) GetNPMVersion(ctx context.Context, repositoryID, name, version string) (NPMVersion, error) {
@@ -744,6 +780,7 @@ func (s *PostgresStore) SearchNPMPackages(ctx context.Context, repositoryID, pre
 	}
 	defer func() { _ = rows.Close() }()
 	summaries := make([]NPMPackageSummary, 0, limit)
+	refs := make([]payloadRef, 0, limit)
 	for rows.Next() {
 		var summary NPMPackageSummary
 		var latestCreated sql.NullTime
@@ -754,9 +791,7 @@ func (s *PostgresStore) SearchNPMPackages(ctx context.Context, repositoryID, pre
 			&summary.Latest.Publisher, &latestCreated, &ref.digest, &ref.size, &ref.key); err != nil {
 			return nil, err
 		}
-		if summary.Latest.Manifest, err = s.internalize(ctx, summary.Latest.Manifest, ref); err != nil {
-			return nil, err
-		}
+		refs = append(refs, ref)
 		summary.Latest.RepositoryID = summary.RepositoryID
 		summary.Latest.PackageName = summary.Name
 		if latestCreated.Valid {
@@ -764,19 +799,37 @@ func (s *PostgresStore) SearchNPMPackages(ctx context.Context, repositoryID, pre
 		}
 		summaries = append(summaries, summary)
 	}
-	return summaries, rows.Err()
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	_ = rows.Close()
+	slots := make([]payloadSlot, len(summaries))
+	for i := range summaries {
+		slots[i] = payloadSlot{ref: refs[i], set: func(data []byte) { summaries[i].Latest.Manifest = data }}
+	}
+	if err = s.resolvePayloads(ctx, slots); err != nil {
+		return nil, err
+	}
+	return summaries, nil
 }
 
 func (s *PostgresStore) scanNPMVersion(ctx context.Context, row interface{ Scan(...any) error }, version *NPMVersion) error {
-	var cachedAt, deletedAt, collectedAt, collectingAt sql.NullTime
 	var ref payloadRef
+	if err := scanNPMVersionRef(row, version, &ref); err != nil {
+		return err
+	}
+	var err error
+	version.Manifest, err = s.internalize(ctx, version.Manifest, ref)
+	return err
+}
+
+// scanNPMVersionRef reads a version row. The manifest of an externalised version is left empty; ref names it.
+func scanNPMVersionRef(row interface{ Scan(...any) error }, version *NPMVersion, ref *payloadRef) error {
+	var cachedAt, deletedAt, collectedAt, collectingAt sql.NullTime
 	err := row.Scan(&version.RepositoryID, &version.PackageName, &version.Version, &version.Digest,
 		&version.Integrity, &version.Shasum, &version.TarballName, &version.UpstreamTarball, &version.ObjectKey,
 		&version.Size, &version.Manifest, &version.Publisher, &version.State, &cachedAt, &deletedAt, &collectedAt, &version.CreatedAt, &version.Deprecated, &collectingAt, &ref.digest, &ref.size, &ref.key)
 	if err != nil {
-		return err
-	}
-	if version.Manifest, err = s.internalize(ctx, version.Manifest, ref); err != nil {
 		return err
 	}
 	if cachedAt.Valid {

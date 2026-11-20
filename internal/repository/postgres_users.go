@@ -75,7 +75,7 @@ func (s *PostgresStore) ListUsers(ctx context.Context, query UserListQuery) (Use
 	if after {
 		cursorAt, cursorID = sql.NullTime{Time: afterAt, Valid: true}, sql.NullString{String: afterID, Valid: true}
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT `+userColumns+` FROM users`+filter+` AND ($4::timestamptz IS NULL OR (created_at,id)>($4::timestamptz,$5::uuid)) ORDER BY created_at, id LIMIT $6`,
+	rows, err := s.db.QueryContext(ctx, `SELECT `+userColumns+` FROM users`+filter+` AND ($4::timestamptz IS NULL OR (created_at,id)>($4::timestamptz,$5::uuid)) ORDER BY created_at, users.id LIMIT $6`,
 		query.Search, query.Role, query.State, cursorAt, cursorID, query.Limit+1)
 	if err != nil {
 		return UserPage{}, err

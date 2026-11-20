@@ -5,14 +5,16 @@ package background
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
-// Group counts the goroutines started through Go whose context carries it.
+// Group counts the goroutines started through Go whose context carries it. Go is safe at any time,
+// also while another goroutine waits and also after every counted goroutine returned.
 type Group struct {
-	wg     sync.WaitGroup
-	active atomic.Int64
+	mu      sync.Mutex
+	running int
+	// idle is closed when running drops to zero; it exists only while a Wait is pending.
+	idle chan struct{}
 }
 
 type groupKey struct{}
@@ -22,39 +24,61 @@ func WithGroup(ctx context.Context, group *Group) context.Context {
 	return context.WithValue(ctx, groupKey{}, group)
 }
 
+// GroupOf returns the group ctx carries, or nil.
+func GroupOf(ctx context.Context) *Group {
+	group, _ := ctx.Value(groupKey{}).(*Group)
+	return group
+}
+
 // Go runs fn in a new goroutine. When ctx carries a Group the goroutine is counted by it, so Wait
 // returns only after fn did; without one it is a plain go statement.
 func Go(ctx context.Context, fn func()) {
-	group, _ := ctx.Value(groupKey{}).(*Group)
+	group := GroupOf(ctx)
 	if group == nil {
 		go fn()
 		return
 	}
-	group.wg.Add(1)
-	group.active.Add(1)
+	group.mu.Lock()
+	group.running++
+	group.mu.Unlock()
 	go func() {
-		defer group.wg.Done()
-		defer group.active.Add(-1)
+		defer group.done()
 		fn()
 	}()
+}
+
+func (g *Group) done() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.running--
+	if g.running == 0 && g.idle != nil {
+		close(g.idle)
+		g.idle = nil
+	}
 }
 
 // Wait blocks until every counted goroutine returned or bound passed and reports whether they all
 // returned. A bound of zero or less does not wait. Goroutines still running are not stopped: the
 // loops stop with their context, and the bound is the safety net for a call that ignores it.
 func (g *Group) Wait(bound time.Duration) bool {
-	if bound <= 0 {
-		return g.active.Load() == 0
+	g.mu.Lock()
+	if g.running == 0 {
+		g.mu.Unlock()
+		return true
 	}
-	done := make(chan struct{})
-	go func() {
-		g.wg.Wait()
-		close(done)
-	}()
+	if bound <= 0 {
+		g.mu.Unlock()
+		return false
+	}
+	if g.idle == nil {
+		g.idle = make(chan struct{})
+	}
+	idle := g.idle
+	g.mu.Unlock()
 	timer := time.NewTimer(bound)
 	defer timer.Stop()
 	select {
-	case <-done:
+	case <-idle:
 		return true
 	case <-timer.C:
 		return false

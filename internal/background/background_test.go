@@ -44,6 +44,30 @@ func TestWaitReturnsAfterEveryTrackedGoroutine(t *testing.T) {
 	}
 }
 
+// A loop that starts work after the others returned, while the process already waits, is counted too.
+func TestGoIsSafeWhileAWaitIsPending(t *testing.T) {
+	group := &Group{}
+	ctx := WithGroup(context.Background(), group)
+	if GroupOf(ctx) != group || GroupOf(context.Background()) != nil {
+		t.Fatal("GroupOf must return the group of the context")
+	}
+	release := make(chan struct{})
+	Go(ctx, func() { <-release })
+	waited := make(chan bool)
+	go func() { waited <- group.Wait(5 * time.Second) }()
+	for range 100 {
+		Go(ctx, func() {})
+	}
+	close(release)
+	if !<-waited {
+		t.Fatal("the group did not drain")
+	}
+	Go(ctx, func() {}) // after the group went idle
+	if !group.Wait(5 * time.Second) {
+		t.Fatal("the group did not drain again")
+	}
+}
+
 func TestWaitGivesUpAtTheBound(t *testing.T) {
 	group := &Group{}
 	release := make(chan struct{})

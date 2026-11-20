@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"os"
+	"regexp"
+	"strconv"
 	"testing"
 	"time"
 
@@ -110,5 +113,25 @@ func TestAwaitBackgroundGivesUpAtTheBound(t *testing.T) {
 	}
 	if awaitBackground(make(chan struct{}), &background.Group{}, 20*time.Millisecond) {
 		t.Fatal("a broker that never stops must hit the bound")
+	}
+}
+
+// terminationGrace is the Kubernetes grace period less a margin; the manifest and the constant must not drift.
+func TestTerminationGraceFollowsTheKubernetesManifest(t *testing.T) {
+	manifest, err := os.ReadFile("../../deploy/kubernetes/base/notarx.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	match := regexp.MustCompile(`terminationGracePeriodSeconds:\s*(\d+)`).FindSubmatch(manifest)
+	if match == nil {
+		t.Fatal("the manifest sets no terminationGracePeriodSeconds")
+	}
+	seconds, err := strconv.Atoi(string(match[1]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	grace := time.Duration(seconds) * time.Second
+	if terminationGrace >= grace || grace-terminationGrace > 5*time.Second {
+		t.Fatalf("terminationGrace=%s does not leave a small margin inside the manifest's %s", terminationGrace, grace)
 	}
 }

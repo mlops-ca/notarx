@@ -19,7 +19,7 @@ func (s *PostgresStore) EvaluateNextRepositoryQuotaAlert(ctx context.Context, cf
 		return false, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	rule, err := scanQuotaRule(tx.QueryRowContext(ctx, `SELECT `+quotaRuleColumns+` FROM repository_quota_alert_rules WHERE enabled AND NOT deleted AND next_evaluate_at<=clock_timestamp() ORDER BY next_evaluate_at,id FOR UPDATE SKIP LOCKED LIMIT 1`))
+	rule, err := scanQuotaRule(tx.QueryRowContext(ctx, `SELECT `+quotaRuleColumns+` FROM repository_quota_alert_rules WHERE enabled AND NOT deleted AND next_evaluate_at<=clock_timestamp() ORDER BY next_evaluate_at,repository_quota_alert_rules.id FOR UPDATE SKIP LOCKED LIMIT 1`))
 	if errors.Is(err, ErrNotFound) {
 		return false, nil
 	}

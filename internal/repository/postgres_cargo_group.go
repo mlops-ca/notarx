@@ -191,6 +191,8 @@ func (s *PostgresStore) preflightPostgresCargoGroupMembers(ctx context.Context, 
 			if err != nil {
 				return err
 			}
+			var bodies [][]byte
+			var refs []payloadRef
 			for rows.Next() {
 				var body []byte
 				var ref payloadRef
@@ -198,20 +200,26 @@ func (s *PostgresStore) preflightPostgresCargoGroupMembers(ctx context.Context, 
 					_ = rows.Close()
 					return err
 				}
-				body, err := s.internalize(ctx, body, ref)
-				if err != nil {
-					_ = rows.Close()
-					return err
-				}
-				if err := preflight.addIndex(cargoGroupKnownIndex{RepositoryID: member.RepositoryID, Body: body}); err != nil {
-					_ = rows.Close()
-					return err
-				}
+				bodies = append(bodies, body)
+				refs = append(refs, ref)
 			}
 			err = rows.Err()
 			_ = rows.Close()
 			if err != nil {
 				return err
+			}
+			// The bodies of externalised indexes are read once the cursor is closed.
+			slots := make([]payloadSlot, len(bodies))
+			for i := range bodies {
+				slots[i] = payloadSlot{ref: refs[i], set: func(data []byte) { bodies[i] = data }}
+			}
+			if err = s.resolvePayloads(ctx, slots); err != nil {
+				return err
+			}
+			for _, body := range bodies {
+				if err = preflight.addIndex(cargoGroupKnownIndex{RepositoryID: member.RepositoryID, Body: body}); err != nil {
+					return err
+				}
 			}
 		}
 	}

@@ -7,7 +7,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // memoryPayloadStore is an in-memory PayloadStore that counts its calls.
@@ -130,5 +132,76 @@ func TestInternalizeFailures(t *testing.T) {
 	store.SetPayloadStore(&failingPayloadStore{}, 1)
 	if _, _, err = store.externalize(t.Context(), []byte("0123456789")); err == nil {
 		t.Fatal("a failing store must fail the write")
+	}
+}
+
+func TestResolvePayloadsFetchesOnlyExternalisedSlotsWithinTheConcurrencyBound(t *testing.T) {
+	store := &PostgresStore{}
+	payloads := newMemoryPayloadStore()
+	store.SetPayloadStore(payloads, 1)
+	const count = 40
+	results := make([][]byte, count)
+	slots := make([]payloadSlot, count)
+	want := make([][]byte, count)
+	for i := range slots {
+		want[i] = []byte("payload-" + string(rune('a'+i%26)) + string(rune('a'+i/26)))
+		inline, ref, err := store.externalize(t.Context(), want[i])
+		if err != nil || len(inline) != 0 {
+			t.Fatalf("externalize %d: %q %v", i, inline, err)
+		}
+		slots[i] = payloadSlot{ref: ref, set: func(data []byte) { results[i] = data }}
+	}
+	// A slot whose payload is inline is never fetched and never set.
+	inlineSet := false
+	slots = append(slots, payloadSlot{set: func([]byte) { inlineSet = true }})
+
+	var inFlight, peak atomic.Int32
+	store.SetPayloadStore(&slowPayloadStore{memoryPayloadStore: payloads, inFlight: &inFlight, peak: &peak}, 1)
+	if err := store.resolvePayloads(t.Context(), slots); err != nil {
+		t.Fatal(err)
+	}
+	for i := range want {
+		if !bytes.Equal(results[i], want[i]) {
+			t.Fatalf("slot %d = %q, want %q", i, results[i], want[i])
+		}
+	}
+	if inlineSet {
+		t.Fatal("an inline slot must be skipped")
+	}
+	if got := peak.Load(); got > payloadFetchConcurrency || got < 2 {
+		t.Fatalf("peak concurrent reads = %d, want 2..%d", got, payloadFetchConcurrency)
+	}
+}
+
+// slowPayloadStore records how many reads run at once.
+type slowPayloadStore struct {
+	*memoryPayloadStore
+	inFlight, peak *atomic.Int32
+}
+
+func (s *slowPayloadStore) Get(ctx context.Context, digest string) ([]byte, error) {
+	now := s.inFlight.Add(1)
+	defer s.inFlight.Add(-1)
+	for {
+		peak := s.peak.Load()
+		if now <= peak || s.peak.CompareAndSwap(peak, now) {
+			break
+		}
+	}
+	time.Sleep(5 * time.Millisecond)
+	return s.memoryPayloadStore.Get(ctx, digest)
+}
+
+func TestResolvePayloadsReportsAFailedRead(t *testing.T) {
+	store := &PostgresStore{}
+	payloads := newMemoryPayloadStore()
+	store.SetPayloadStore(payloads, 1)
+	_, ref, err := store.externalize(t.Context(), []byte("0123456789"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	payloads.objects = map[string][]byte{}
+	if err := store.resolvePayloads(t.Context(), []payloadSlot{{ref: ref, set: func([]byte) {}}}); err == nil {
+		t.Fatal("a missing object must fail the list")
 	}
 }

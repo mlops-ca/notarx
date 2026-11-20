@@ -29,6 +29,16 @@ func scanHelmSession(row helmScanner) (HelmSession, error) {
 	return in, err
 }
 func (s *PostgresStore) scanHelmPublication(ctx context.Context, row helmScanner) (HelmPublication, error) {
+	in, ref, err := scanHelmPublicationRef(row)
+	if err != nil {
+		return in, err
+	}
+	in.ChartYAML, err = s.internalize(ctx, in.ChartYAML, ref)
+	return in, err
+}
+
+// scanHelmPublicationRef reads a publication row. The chart.yaml of an externalised one is left empty; ref names it.
+func scanHelmPublicationRef(row helmScanner) (HelmPublication, payloadRef, error) {
 	var in HelmPublication
 	var updated sql.NullTime
 	var ref payloadRef
@@ -37,13 +47,9 @@ func (s *PostgresStore) scanHelmPublication(ctx context.Context, row helmScanner
 		in.Governance.UpdatedAt = updated.Time
 	}
 	if errors.Is(err, sql.ErrNoRows) {
-		return in, ErrNotFound
+		return in, ref, ErrNotFound
 	}
-	if err != nil {
-		return in, err
-	}
-	in.ChartYAML, err = s.internalize(ctx, in.ChartYAML, ref)
-	return in, err
+	return in, ref, err
 }
 func (s *PostgresStore) helmTransaction(ctx context.Context, repo string) (*sql.Tx, string, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -190,14 +196,28 @@ func (s *PostgresStore) ListHelmPublications(ctx context.Context, repo string, l
 	}
 	defer func() { _ = rows.Close() }()
 	out := []HelmPublication{}
+	var refs []payloadRef
 	for rows.Next() {
-		p, e := s.scanHelmPublication(ctx, rows)
+		p, ref, e := scanHelmPublicationRef(rows)
 		if e != nil {
 			return nil, e
 		}
 		out = append(out, p)
+		refs = append(refs, ref)
 	}
-	return out, rows.Err()
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	// The chart.yaml objects are read after the rows are closed, so the cursor does not wait on the object store.
+	_ = rows.Close()
+	slots := make([]payloadSlot, len(out))
+	for i := range out {
+		slots[i] = payloadSlot{ref: refs[i], set: func(data []byte) { out[i].ChartYAML = data }}
+	}
+	if err = s.resolvePayloads(ctx, slots); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 func (s *PostgresStore) ExpireHelmSessions(ctx context.Context, now time.Time, limit int) ([]HelmSession, error) {
 	if limit < 1 || limit > 1000 {

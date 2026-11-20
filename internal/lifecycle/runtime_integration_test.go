@@ -41,11 +41,8 @@ func TestStoppingARuntimeWithAJobInFlightRecordsItsOutcome(t *testing.T) {
 	runCtx, stop := context.WithCancel(background.WithGroup(ctx, group))
 	defer stop()
 	inFlight := make(chan struct{})
-	runtime := Runtime{Store: store, Kind: repository.LifecycleJobReclaim, Formats: []repository.Format{repository.FormatRaw}, Name: "runtime stop test", Operation: "runtime_stop_test"}
+	runtime := Runtime{Store: onlyJobStore{PostgresStore: store, mine: job.ID}, Kind: repository.LifecycleJobReclaim, Formats: []repository.Format{repository.FormatRaw}, Name: "runtime stop test", Operation: "runtime_stop_test"}
 	runtime.Start(runCtx, time.Hour, 100, func(handlerCtx context.Context, claimed repository.LifecycleJob) error {
-		if claimed.ID != job.ID {
-			return nil
-		}
 		close(inFlight)
 		<-handlerCtx.Done()
 		return nil
@@ -63,4 +60,29 @@ func TestStoppingARuntimeWithAJobInFlightRecordsItsOutcome(t *testing.T) {
 	if err != nil || got.State != repository.LifecycleJobCompleted {
 		t.Fatalf("job after the stop = %+v err=%v, want completed rather than leased", got, err)
 	}
+}
+
+// onlyJobStore claims through the real store but keeps only one job: any other job a claim returns, left behind
+// by another test, is handed straight back so the test neither runs nor completes it.
+type onlyJobStore struct {
+	*repository.PostgresStore
+	mine string
+}
+
+func (s onlyJobStore) ClaimLifecycleJobsByKindAndFormat(ctx context.Context, kind repository.LifecycleJobKind, format repository.Format, limit int) ([]repository.LifecycleJob, error) {
+	jobs, err := s.PostgresStore.ClaimLifecycleJobsByKindAndFormat(ctx, kind, format, limit)
+	if err != nil {
+		return nil, err
+	}
+	kept := jobs[:0]
+	for _, job := range jobs {
+		if job.ID == s.mine {
+			kept = append(kept, job)
+			continue
+		}
+		if err := s.PostgresStore.ReleaseLifecycleJobLease(ctx, job.ID, job.LeaseToken); err != nil {
+			return nil, err
+		}
+	}
+	return kept, nil
 }

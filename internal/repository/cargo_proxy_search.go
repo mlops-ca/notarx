@@ -72,22 +72,36 @@ func (s *PostgresStore) SearchCargoProxyCrates(ctx context.Context, repositoryID
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	items := make([]CargoCrateSummary, 0, limit)
+	indexes := make([]CargoProxyIndex, 0, limit)
+	refs := make([]payloadRef, 0, limit)
 	for rows.Next() {
 		var index CargoProxyIndex
 		var ref payloadRef
 		if err := rows.Scan(&index.Name, &index.Body, &ref.digest, &ref.size, &ref.key); err != nil {
 			return nil, err
 		}
-		var err error
-		if index.Body, err = s.internalize(ctx, index.Body, ref); err != nil {
-			return nil, err
-		}
+		indexes = append(indexes, index)
+		refs = append(refs, ref)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	// The index bodies are read after the rows are closed, so the cursor does not wait on the object store.
+	_ = rows.Close()
+	slots := make([]payloadSlot, len(indexes))
+	for i := range indexes {
+		slots[i] = payloadSlot{ref: refs[i], set: func(data []byte) { indexes[i].Body = data }}
+	}
+	if err := s.resolvePayloads(ctx, slots); err != nil {
+		return nil, err
+	}
+	items := make([]CargoCrateSummary, 0, len(indexes))
+	for _, index := range indexes {
 		summary, err := cargoProxyCrateSummary(index)
 		if err != nil {
 			return nil, err
 		}
 		items = append(items, summary)
 	}
-	return items, rows.Err()
+	return items, nil
 }

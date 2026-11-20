@@ -17,6 +17,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/app"
 	"github.com/mlops-ca/notarx/internal/aptpublication"
 	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/backupops"
 	"github.com/mlops-ca/notarx/internal/buildinfo"
 	"github.com/mlops-ca/notarx/internal/capacity"
@@ -335,6 +336,17 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 	dependencies.MigrationSchedules = nexusmigration.NewSchedules(migrationLedger, dependencies.MigrationService)
 	runtimeContext, stopRuntime := signalContext()
 	defer stopRuntime()
+	// Every background loop, here and in backgroundRuntime.Start, registers with one group the process waits
+	// on, bounded, before the stores close. This defer covers an early return before Start; Start's wait
+	// covers the normal exit and logs how it ended.
+	loops := &background.Group{}
+	runtimeContext = background.WithGroup(runtimeContext, loops)
+	defer func() {
+		stopRuntime()
+		if !loops.Wait(shutdownWaitBound(0, cfg.ShutdownFlushTimeout)) {
+			slog.Warn("background loops did not stop before shutdown", "component", "background")
+		}
+	}()
 	// Partitions exist before this node reports ready; one node at a time runs the
 	// work (lease row), and a failure is logged rather than fatal because the
 	// DEFAULT partitions keep audit inserts working.
@@ -359,11 +371,13 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 	if err := partitionManager.Observe(runtimeContext); err != nil {
 		slog.Error("partition observation at start-up failed", "error", err)
 	}
-	go partitionManager.Run(runtimeContext, partitions.DefaultInterval)
+	background.Go(runtimeContext, func() { partitionManager.Run(runtimeContext, partitions.DefaultInterval) })
 	// The catalogue backfill resumes from its cursor and finishes in the background; the
 	// publish transactions already keep the rows they touch exact.
-	go runArtifactCatalogBackfill(runtimeContext, store, artifactCatalogBackfillRetry)
-	go identityRuntime.RunSAMLMetadataRefresh(runtimeContext, cfg.SAML.MetadataRefreshInterval)
+	background.Go(runtimeContext, func() { runArtifactCatalogBackfill(runtimeContext, store, artifactCatalogBackfillRetry) })
+	background.Go(runtimeContext, func() {
+		identityRuntime.RunSAMLMetadataRefresh(runtimeContext, cfg.SAML.MetadataRefreshInterval)
+	})
 	// The retention janitor prunes every other append-only or churning table in
 	// throttled batches; one node at a time runs a pass (lease row).
 	retentionJanitor, err := retention.New(databasePool, cfg.Retention, retention.Options{Owner: cfg.InstanceID + "/" + runtimeSessionID, Logger: slog.Default()})
@@ -372,12 +386,12 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 		return 1
 	}
 	metrics.WithRetentionStats(retentionJanitor.Stats)
-	go retentionJanitor.Run(runtimeContext, retention.DefaultInterval)
+	background.Go(runtimeContext, func() { retentionJanitor.Run(runtimeContext, retention.DefaultInterval) })
 	// The quota reconciler recomputes each repository's usage counter and corrects
 	// drift (ADR 0023 section 3); concurrent runs on several nodes are safe.
 	quotaReconciler := capacity.NewReconciler(databasePool, cfg.QuotaReconcileInterval, slog.Default())
 	metrics.WithQuotaDriftStats(quotaReconciler.Stats)
-	go quotaReconciler.Run(runtimeContext)
+	background.Go(runtimeContext, func() { quotaReconciler.Run(runtimeContext) })
 	// Every node runs the issuer's key rotation worker; the database lock lets one act at a time.
 	issuerRuntime, err := setupIssuer(runtimeContext, cfg.Issuer, store, caches.registry)
 	if err != nil {
