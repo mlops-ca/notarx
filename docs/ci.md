@@ -124,9 +124,9 @@ key too, so only the first save of a day stuck, and a pull request compiled agai
 every package that `main` had changed since: `quality` took 4.2 minutes on the
 morning's cache and 7.3 once `main` had moved (runs 44723845622 and 44740891885).
 
-Every push to `main` that changes more than documentation (embedded files change the
-build too) now runs the `Go cache` workflow (`go-cache.yml`), one job per
-architecture. It restores the newest race build cache of its flavour, compiles the
+Every push to `main` that changes Go code, modules, a directory that holds Go packages
+(embedded files change the build too) or the warm itself now runs the `Go cache`
+workflow (`go-cache.yml`), one job per architecture. It restores the newest race build cache of its flavour, compiles the
 build of `quality` (`make race-coverage-build`, amd64) or of `quality-arm64`
 (`make race-build`, and `make vet-build` for the plain build that `make vet`
 type-checks against, arm64) and saves it. The two targets run the commands of
@@ -143,22 +143,32 @@ It is a workflow of its own, so the `cancel-in-progress` group of `ci.yml` canno
 cancel it before it saves (a newer push waits for it), and it does not gate `main`; a
 failed warm shows as a failed `Go cache` run.
 
-Measured cost and effect: the first warm (run 44758544218, after the push of #529)
-took 2.0 minutes on amd64 and 2.7 on arm64, about 4.7 runner-minutes per push to
-`main` with a Go change, most of it restoring and saving the caches (0.7 GB on amd64,
-1.0 GB on arm64). The next Go pull request run restored that cache: `quality` took
-4.2 and 4.3 minutes and `quality-arm64` 3.8 and 3.3 (run 44759372025, attempts 1 and
-2), against 4.2 to 7.3 and 4.3 to 4.6 on the daily cache. The warm pays for itself
-once a push to `main` is followed by two or more Go pull request runs.
+Measured cost and effect (issue #518). The first warm (run 44758544218, after the push of
+#529) started from the morning's daily cache: 2.0 minutes on amd64 (1.3 of them for
+`make race-coverage-build`) and 2.7 on arm64 (1.0 each for `make vet-build` and
+`make race-build`), restore and save 8 to 16 seconds each. The next warm (run
+44767423075, after #533, which changed no Go code) took 1.3 and 1.4 minutes, the floor of
+setting up and linking every test binary again. Such pushes no longer start the warm:
+it runs only for a change to Go code, modules, the directories that hold Go packages
+or the warm itself. The draft Go pull request run 44759372025 restored the warm cache:
+`quality` took 4.2 and 4.3 minutes (attempts 1 and 2), `quality-arm64` 3.8 and 3.3.
+On the daily cache `quality` took 4.2 minutes on the morning's cache and 7.3 once
+`main` had moved (runs 44723845622 and 44740891885), `quality-arm64` 4.3 to 4.6
+(runs 44738044844 and 44740891885). A pull request run therefore saves about 1 minute
+when `main` has not moved since the last cache and up to about 4 when it has; against
+2.7 to 4.7 runner-minutes per warm, the warm pays off when Go pull request runs follow
+a push to `main` before the next one, which is the usual case on this repository.
 
 The repository has a 10 GB cache quota, and beyond it GitHub evicts the least recently
 used entries (11.8 GB were in use on 2026-11-20, most of it BuildKit layers and
 Playwright browsers saved by pull requests; issue #518 took the runner image version
 out of the browser key). Every Go pull request restores the newest race and lint caches,
 so they stay recently used. A superseded daily lint entry is no longer restored and is
-the first to go; the warm deletes superseded race build caches of its flavour itself (about 0.7 GB on
-amd64 and 1.0 GB on arm64 each). The daily race caches saved before issue #518 carry
-no flavour, so the warm leaves them to the eviction; no run restores them any more.
+the first to go. The warm deletes the race build caches of its architecture and flavour
+(any toolchain) that are older than the newest one before its own, so at most two of
+each stay, about 3.4 GB in all (0.7 GB on amd64, 1.0 GB on arm64 each). The two daily
+race caches saved before issue #518 carry no flavour and were deleted by hand on
+2026-11-20.
 
 ## Workflow linting
 

@@ -11,11 +11,22 @@ name: Go cache
 on:
   push:
     branches: [main]
-    # Embedded files (migrations, templates, fixtures) change the build too, so only
-    # documentation is left out.
-    paths-ignore:
-      - 'docs/**'
-      - '**.md'
+    # What the Go build reads: Go files, modules, and every file of the directories
+    # that hold Go packages (go:embed reads files of its package directory only; the Go
+    # packages of scripts/ and deploy/ embed nothing), plus the warm itself. Other
+    # pushes would only link the same binaries again (about 1.3 minutes per job).
+    paths:
+      - '**.go'
+      - go.mod
+      - go.sum
+      - 'cmd/**'
+      - 'contracts/**'
+      - 'internal/**'
+      - 'tools/**'
+      - Makefile
+      - scripts/coverage-check.sh
+      - '.github/actions/go-quality/**'
+      - .github/workflows/go-cache.yml
 
 permissions:
   contents: read

@@ -77,6 +77,7 @@ runs:
           race_arch="go-race-$RUNNER_OS-$RUNNER_ARCH-"
           race_prefix="$race_arch$FLAVOUR-$(go env GOVERSION)-"
           echo "race-arch-prefix=$race_arch"
+          echo "race-flavour-prefix=$race_arch$FLAVOUR-"
           echo "race-prefix=$race_prefix"
           echo "race-sum-prefix=$race_prefix$GO_SUM-"
           echo "race-key=$race_prefix$GO_SUM-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
@@ -182,7 +183,8 @@ runs:
       env:
         GH_TOKEN: ${{ github.token }}
         KEEP: ${{ steps.cache-dirs.outputs.race-key }}
-        PREFIX: ${{ steps.cache-dirs.outputs.race-prefix }}
+        # Every toolchain: after a Go update the older toolchain's caches are superseded too.
+        PREFIX: ${{ steps.cache-dirs.outputs.race-flavour-prefix }}
       run: |
         caches=$(gh cache list --repo "$GITHUB_REPOSITORY" --ref refs/heads/main --key "$PREFIX" --limit 100 --json key,createdAt)
         saved=$(jq -r --arg keep "$KEEP" '.[] | select(.key == $keep) | .createdAt' <<<"$caches")
