@@ -11,16 +11,18 @@
 # #518 therefore moved six small packages to shard 1, about 70 to 90 seconds of tests:
 # from shard 2 nexusmigration/pgstore (21 to 38 s), rubygemspublication/pgstore,
 # objectstore and aptpublication, from shard 3 format/helm and format/rubygems (14 to
-# 18 s each). They run before ./internal/app, whose tests restart the shared PostgreSQL
-# and RustFS. ./internal/capacity and ./internal/lifecycle joined shard 3 before they
-# were measured (under 0.1 s each since).
+# 18 s each). They run after ./internal/app, which must start on an empty database:
+# TestPostgresLifecycleClaimLimitsOneJobPerRepository claims every claimable lifecycle
+# job, and aptpublication leaves some behind. ./internal/capacity and
+# ./internal/lifecycle joined shard 3 before they were measured (under 0.1 s each
+# since).
+1 ./internal/app
 1 ./internal/aptpublication
 1 ./internal/objectstore
 1 ./internal/nexusmigration/pgstore
 1 ./internal/rubygemspublication/pgstore
 1 ./internal/format/helm
 1 ./internal/format/rubygems
-1 ./internal/app
 2 ./internal/repository
 2 ./internal/auditwriter
 2 ./internal/dialect/postgres
