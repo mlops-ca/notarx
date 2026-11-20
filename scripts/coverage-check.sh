@@ -35,8 +35,9 @@ if [[ -z "$profile" ]]; then
   trap 'rm -f "$profile" "$test_output"' EXIT
   packages=$(go list ./... | grep -v '/console/node_modules/')
   # One run produces the profile every floor below reads; nothing reruns the tests.
+  # -count=1: a restored build cache (CI) must not replay an earlier pass.
   # shellcheck disable=SC2086 # one argument per package
-  if ! go test ${race[@]+"${race[@]}"} $packages -coverprofile="$profile" >"$test_output" 2>&1; then
+  if ! go test -count=1 ${race[@]+"${race[@]}"} $packages -coverprofile="$profile" >"$test_output" 2>&1; then
     cat "$test_output" >&2
     exit 1
   fi

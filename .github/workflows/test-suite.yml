@@ -206,7 +206,7 @@ jobs:
     runs-on: ubuntu-24.04
     # Steps inside the composite action cannot set their own timeout, so the job
     # carries one (the npm installs used to be capped at 10 minutes each).
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -218,8 +218,8 @@ jobs:
       - uses: ./.github/actions/go-quality
         with:
           race: "false"
-          # The quality job runs these tests with every other package.
-          lint-go-tests: "false"
+          # The lint tools' own tests run in the quality job with every other package.
+          lint-target: lint-checks
           openapi-tools: "true"
       - name: Verify the native-build rules (no cross-compilation, no emulation)
         run: make native-build-check
@@ -246,7 +246,7 @@ jobs:
   quality:
     if: inputs.go
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

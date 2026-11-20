@@ -61,35 +61,39 @@ behaviour config ignores, and the contract lanes never run Playwright.
 
 ## Go checks: lint, quality and one unit-test pass
 
-The Go class runs three jobs. `lint` (amd64) is the fast signal: `make lint`
+The Go class runs three jobs. `lint` (amd64) is the fast signal: `make lint-checks`
 (`golangci-lint` and the repository lint tools), `make vet`, the native-build rules, the
 migration checks, the release and packaging checks, the 60-second SAML fuzz run and
 the dependency audit. `quality` (amd64) runs the unit tests exactly once:
-`make race-coverage` runs `go test -race -coverprofile` over every package and
+`make race-coverage` runs `go test -count=1 -race -coverprofile` over every package and
 `scripts/coverage-check.sh` reads that one profile for the repository-wide floor and
 for every per-package floor in `scripts/coverage-packages.txt` (covered statements
 over all statements of the package, the figure `go test -cover` prints). Before
 this, `quality` ran the race detector over `./internal/...`, then the whole suite
 again with `-coverprofile`, then each floored package a third time with `-cover`.
-`make coverage` still runs a plain (non-race) pass with the same floors for local
-use. `quality-arm64` runs lint, vet and `make race` natively on arm64 (ADR 0016).
+The race detector now covers every package (`cmd/`, `contracts/`, `examples/` and
+`tools/` too), on both architectures: `make race` has the same scope. `make coverage`
+still runs a plain (non-race) pass with the same floors for local use. `quality-arm64`
+runs `make lint`, `make vet` and `make race` natively on arm64 (ADR 0016).
+
+`make lint` is `make lint-checks` plus `make lint-tools-test` (the Go tests of
+`tools/architecture` and `tools/sqllint`). The amd64 `lint` job and
+`scripts/ci-local.sh` run `lint-checks`, because the unit-test pass next to them
+already runs those tests.
 
 `golangci-lint` runs in its pinned image as the calling user, against the host module
 and build caches (restored by `actions/setup-go`) and its own result cache in
-`GOLANGCI_LINT_CACHE` (default `~/.cache/notarx/golangci-lint`), which the composite
-action restores and saves with `actions/cache`. A warm run downloads no module and
-re-analyses only changed packages. The CI `lint` job sets `LINT_GO_TESTS=0`, so
-`make lint` skips the Go tests of `tools/architecture` and `tools/sqllint`, which
-`quality` runs with every other package; locally and on arm64 `make lint` runs them.
+`GOLANGCI_LINT_CACHE` (default `~/.cache/notarx/golangci-lint`). A warm run downloads
+no module and re-analyses only changed packages. The `quality` job keeps its own cache
+of the module and build caches (`go-race-*`), because the `actions/setup-go` cache is
+saved by `main` builds and never holds the race-instrumented build.
 
-The `quality` job keeps its own cache of the module and build caches
-(`go-race-*`), because the `actions/setup-go` cache is saved by `main` builds and a
-pull request restores it read-only, so it never holds the race-instrumented build.
-Both caches use daily keys (runner, toolchain or lint image, `go.sum`, the UTC date):
-an exact hit saves nothing, so a fixed key would freeze a cache at its first contents.
-The first run of a day misses once and saves a fresh cache, and the key prefixes
-restore the newest older one. A pull request can restore the caches the nightly
-release gates save on `main`; what a pull request saves stays in its own branch scope.
+Both caches are restored on every run and saved only by runs on `main` (the nightly
+release gates), under daily keys (runner, toolchain or lint image, `go.sum`, the UTC
+date): an exact hit saves nothing, so a fixed key would freeze a cache at its first
+contents, and a save from every pull request would crowd the repository's cache quota.
+A pull request restores the newest cache `main` saved, by key prefix. The unit-test
+pass uses `-count=1`, so a restored build cache never replays an earlier test result.
 
 ## Workflow linting
 

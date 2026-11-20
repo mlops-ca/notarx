@@ -100,7 +100,7 @@ notarx_ready() {
 run_quality() {
   printf '\n== quality ==\n'
   run "npm lockfile sources" node scripts/npm-lockfile-check.mjs
-  run "go lint" make lint
+  run "go lint (the lint tools' tests run with race-coverage below)" make lint-checks
   run "go vet" make vet
   run "release version and artifact builder" make release-version-check stamp-version-test release-plan-test release-pipeline-test release-artifacts-test
   if command -v yq >/dev/null 2>&1; then
@@ -159,7 +159,7 @@ run_console() {
 run_fast() {
   printf '\n== fast (inner loop) ==\n'
   run "native-build rules" make native-build-check
-  run "go lint" make lint
+  run "go lint (the lint tools' tests run with go test below)" make lint-checks
   run "go vet" make vet
   run "go tests" env GOFLAGS= go test ./... -count=1
   run "documentation links and capabilities" make docs-check
