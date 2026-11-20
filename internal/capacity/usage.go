@@ -90,6 +90,9 @@ const UsageCTE = `WITH usage AS (
 	UNION ALL
 	SELECT repository_id,COALESCE(SUM(size),0)::bigint,COUNT(*)::bigint
 	FROM native_rubygems_sessions WHERE state='committed' GROUP BY repository_id
+	UNION ALL
+	SELECT r.repository_id,COALESCE(SUM(b.size),0)::bigint,COUNT(*)::bigint
+	FROM hf_blobs b JOIN hf_repos r ON r.id=b.hf_repo_id GROUP BY r.repository_id
 ), totals AS (
 	SELECT repository_id,SUM(used_bytes)::bigint AS used_bytes,SUM(object_count)::bigint AS object_count
 	FROM usage GROUP BY repository_id
@@ -131,7 +134,8 @@ var formatUsage = map[string]string{
 			(SELECT COUNT(*) FROM native_apt_assets WHERE repository_id=$1::uuid)+
 			(SELECT COUNT(*) FROM native_apt_package_revisions WHERE repository_id=$1::uuid)+
 			(SELECT COUNT(*) FROM (SELECT a.object_key FROM native_apt_snapshot_assets a JOIN native_apt_repository_snapshots s ON s.id=a.snapshot_id WHERE a.repository_id=$1::uuid AND s.state='visible' AND a.path LIKE 'dists/%' GROUP BY a.object_key) generated)`,
-	"rubygems": `SELECT COALESCE(SUM(size),0),COUNT(*) FROM native_rubygems_sessions WHERE repository_id=$1::uuid AND state='committed'`,
+	"rubygems":    `SELECT COALESCE(SUM(size),0),COUNT(*) FROM native_rubygems_sessions WHERE repository_id=$1::uuid AND state='committed'`,
+	"huggingface": `SELECT COALESCE(SUM(b.size),0),COUNT(*) FROM hf_blobs b JOIN hf_repos r ON r.id=b.hf_repo_id WHERE r.repository_id=$1::uuid`,
 }
 
 // UsageQuery returns the aggregation query of one hosted format and whether the

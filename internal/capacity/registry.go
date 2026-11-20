@@ -26,6 +26,7 @@ var registry = []FormatCoverage{
 	{Format: "helm", Covered: true},
 	{Format: "nuget", Covered: true},
 	{Format: "rubygems", Covered: true},
+	{Format: "huggingface", Covered: true},
 }
 
 // Formats returns the registry sorted by format.

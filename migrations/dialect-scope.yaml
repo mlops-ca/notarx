@@ -45,3 +45,6 @@ migrations:
   000013_raw_versioned_layout.sql:
     dialect: postgres
     reason: adds the Raw layout columns, the version and property tables and the internal lease kind of scheduled_tasks with PostgreSQL constraint rewrites; the catalogue carries the schema into the slice 3c MySQL baseline
+  000014_huggingface_repositories.sql:
+    dialect: postgres
+    reason: extends the repository and group format checks and creates the hf_* tables with PostgreSQL constraint rewrites; the catalogue carries the schema into the MySQL baseline

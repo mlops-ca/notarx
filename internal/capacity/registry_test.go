@@ -4,8 +4,8 @@ import "testing"
 
 func TestRegistryHelpers(t *testing.T) {
 	formats := Formats()
-	if len(formats) != 12 {
-		t.Fatalf("registry holds %d formats, want every hosted format (12)", len(formats))
+	if len(formats) != 13 {
+		t.Fatalf("registry holds %d formats, want every hosted format (13)", len(formats))
 	}
 	for index := 1; index < len(formats); index++ {
 		if formats[index-1].Format >= formats[index].Format {

@@ -437,6 +437,78 @@ CREATE TABLE `email_test_requests` (
   KEY `ix_email_test_requests_created_at` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
+CREATE TABLE `hf_blobs` (
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `hf_repo_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `sha256` VARCHAR(64) NOT NULL,
+  `size` BIGINT NOT NULL,
+  PRIMARY KEY (`hf_repo_id`, `sha256`),
+  KEY `ix_hf_blobs_sha256` (`sha256`),
+  CONSTRAINT `hf_blobs_sha256_check` CHECK (REGEXP_LIKE(`sha256`, '^[0-9a-f]{64}\\z', 'cn')),
+  CONSTRAINT `hf_blobs_size_check` CHECK ((`size` >= 0))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
+CREATE TABLE `hf_commits` (
+  `author` TEXT NULL,
+  `commit_sha` VARCHAR(40) NOT NULL,
+  `committed_at` DATETIME(6) NOT NULL,
+  `file_count` INT NULL,
+  `hf_repo_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `last_read_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `message` TEXT NULL,
+  `parent_sha` TEXT NULL,
+  `source` TEXT NOT NULL,
+  `total_bytes` BIGINT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_hf_commits_hf_repo_id_commit_sha` (`hf_repo_id`, `commit_sha`),
+  KEY `ix_hf_commits_hf_repo_id_committed_at_desc_id_desc` (`hf_repo_id`, `committed_at` DESC, `id` DESC),
+  KEY `ix_hf_commits_last_read_at` (`last_read_at`),
+  CONSTRAINT `hf_commits_counts_check` CHECK ((((`file_count` IS NULL) OR (`file_count` >= 0)) AND ((`total_bytes` IS NULL) OR (`total_bytes` >= 0)))),
+  CONSTRAINT `hf_commits_parent_check` CHECK (((`parent_sha` IS NULL) OR REGEXP_LIKE(`parent_sha`, '^[0-9a-f]{40}\\z', 'cn'))),
+  CONSTRAINT `hf_commits_sha_check` CHECK (REGEXP_LIKE(`commit_sha`, '^[0-9a-f]{40}\\z', 'cn')),
+  CONSTRAINT `hf_commits_source_check` CHECK ((`source` IN ('upstream', 'hosted', 'promoted')))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
+CREATE TABLE `hf_files` (
+  `cached` TINYINT(1) NOT NULL DEFAULT 0,
+  `commit_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `git_blob_id` TEXT NULL,
+  `lfs` TINYINT(1) NOT NULL DEFAULT 0,
+  `path` VARCHAR(512) NOT NULL,
+  `pickle_flag` TINYINT(1) NOT NULL DEFAULT 0,
+  `sha256` VARCHAR(64) NULL,
+  `size` BIGINT NOT NULL,
+  PRIMARY KEY (`commit_id`, `path`),
+  KEY `ix_hf_files_sha256` (`sha256`),
+  CONSTRAINT `hf_files_sha256_check` CHECK (((`sha256` IS NULL) OR REGEXP_LIKE(`sha256`, '^[0-9a-f]{64}\\z', 'cn'))),
+  CONSTRAINT `hf_files_size_check` CHECK ((`size` >= 0))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
+CREATE TABLE `hf_refs` (
+  `checked_at` DATETIME(6) NOT NULL,
+  `commit_sha` TEXT NOT NULL,
+  `expires_at` DATETIME(6) NOT NULL,
+  `hf_repo_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `ref_kind` VARCHAR(8) NOT NULL,
+  `ref_name` VARCHAR(255) NOT NULL,
+  PRIMARY KEY (`hf_repo_id`, `ref_kind`, `ref_name`),
+  KEY `ix_hf_refs_expires_at` (`expires_at`),
+  CONSTRAINT `hf_refs_kind_check` CHECK ((`ref_kind` IN ('branch', 'tag'))),
+  CONSTRAINT `hf_refs_sha_check` CHECK (REGEXP_LIKE(`commit_sha`, '^[0-9a-f]{40}\\z', 'cn'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
+CREATE TABLE `hf_repos` (
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `repo_name` VARCHAR(255) NOT NULL,
+  `repo_type` VARCHAR(16) NOT NULL,
+  `repository_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_hf_repos_repository_id_repo_type_repo_name` (`repository_id`, `repo_type`, `repo_name`),
+  CONSTRAINT `hf_repos_repo_type_check` CHECK ((`repo_type` IN ('model', 'dataset')))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
 CREATE TABLE `hosted_group_idempotency` (
   `actor` VARCHAR(255) NOT NULL,
   `expires_at` DATETIME(6) NOT NULL,
@@ -469,7 +541,7 @@ CREATE TABLE `hosted_groups` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_hosted_groups_name` (`name`),
   KEY `ix_hosted_groups_visibility_name` (`visibility`, `name`),
-  CONSTRAINT `hosted_groups_format_check` CHECK ((`format` IN ('raw', 'oci', 'maven', 'conan', 'npm', 'pypi', 'go', 'apt', 'cargo', 'nuget', 'helm'))),
+  CONSTRAINT `hosted_groups_format_check` CHECK ((`format` IN ('raw', 'oci', 'maven', 'conan', 'npm', 'pypi', 'go', 'apt', 'cargo', 'nuget', 'helm', 'huggingface'))),
   CONSTRAINT `hosted_groups_name_check` CHECK (REGEXP_LIKE(`name`, '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\z', 'cn')),
   CONSTRAINT `hosted_groups_visibility_check` CHECK ((`visibility` IN ('private', 'authenticated', 'public')))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
@@ -497,7 +569,7 @@ CREATE TABLE `hosted_repositories` (
   UNIQUE KEY `uq_hosted_repositories_name` (`name`),
   KEY `ix_hosted_repositories_created_at_id` (`created_at`, `id`),
   KEY `ix_hosted_repositories_visibility_name` (`visibility`, `name`),
-  CONSTRAINT `hosted_repositories_format_check` CHECK ((`format` IN ('raw', 'oci', 'maven', 'conan', 'npm', 'pypi', 'go', 'apt', 'cargo', 'nuget', 'helm', 'rubygems'))),
+  CONSTRAINT `hosted_repositories_format_check` CHECK ((`format` IN ('raw', 'oci', 'maven', 'conan', 'npm', 'pypi', 'go', 'apt', 'cargo', 'nuget', 'helm', 'rubygems', 'huggingface'))),
   CONSTRAINT `hosted_repositories_maven_strict_publication_check` CHECK (((NOT `maven_strict_publication`) OR ((`format` = 'maven') AND (`repo_type` = 'hosted')))),
   CONSTRAINT `hosted_repositories_name_check` CHECK (REGEXP_LIKE(`name`, '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\z', 'cn')),
   CONSTRAINT `hosted_repositories_raw_layout_check` CHECK ((`raw_layout` IN ('path', 'versioned'))),
@@ -3039,6 +3111,11 @@ ALTER TABLE `conan_group_members` ADD CONSTRAINT `fk_conan_group_members_group_n
 ALTER TABLE `conan_group_members` ADD CONSTRAINT `fk_conan_group_members_repository_id` FOREIGN KEY (`repository_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;
 ALTER TABLE `email_test_deliveries` ADD CONSTRAINT `fk_email_test_deliveries_quota_rule_id` FOREIGN KEY (`quota_rule_id`) REFERENCES `repository_quota_alert_rules` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;
 ALTER TABLE `email_test_deliveries` ADD CONSTRAINT `fk_email_test_deliveries_target_id` FOREIGN KEY (`target_id`) REFERENCES `email_targets` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;
+ALTER TABLE `hf_blobs` ADD CONSTRAINT `fk_hf_blobs_hf_repo_id` FOREIGN KEY (`hf_repo_id`) REFERENCES `hf_repos` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
+ALTER TABLE `hf_commits` ADD CONSTRAINT `fk_hf_commits_hf_repo_id` FOREIGN KEY (`hf_repo_id`) REFERENCES `hf_repos` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
+ALTER TABLE `hf_files` ADD CONSTRAINT `fk_hf_files_commit_id` FOREIGN KEY (`commit_id`) REFERENCES `hf_commits` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
+ALTER TABLE `hf_refs` ADD CONSTRAINT `fk_hf_refs_hf_repo_id` FOREIGN KEY (`hf_repo_id`) REFERENCES `hf_repos` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
+ALTER TABLE `hf_repos` ADD CONSTRAINT `fk_hf_repos_repository_id` FOREIGN KEY (`repository_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;
 ALTER TABLE `hosted_group_idempotency` ADD CONSTRAINT `fk_hosted_group_idempotency_group_id` FOREIGN KEY (`group_id`) REFERENCES `hosted_groups` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE `hosted_group_members` ADD CONSTRAINT `fk_hosted_group_members_group_id` FOREIGN KEY (`group_id`) REFERENCES `hosted_groups` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE `hosted_group_members` ADD CONSTRAINT `fk_hosted_group_members_repository_id` FOREIGN KEY (`repository_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;

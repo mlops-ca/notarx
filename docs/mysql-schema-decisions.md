@@ -94,6 +94,12 @@ An indexed text column is `VARCHAR(255)` unless its name is listed here or it ha
 
 | Column | MySQL type | Reason |
 | --- | --- | --- |
+| hf_blobs.sha256 | VARCHAR(64) | a sha256 digest is 64 hexadecimal characters |
+| hf_commits.commit_sha | VARCHAR(40) | a git commit sha is 40 hexadecimal characters |
+| hf_files.path | VARCHAR(512) | Hugging Face file paths are bounded at 512 characters (2048 bytes in utf8mb4_0900_bin), inside the key with the 36-byte commit id; longer paths are rejected (ADR 0027) |
+| hf_files.sha256 | VARCHAR(64) | a sha256 digest is 64 hexadecimal characters |
+| hf_refs.ref_kind | VARCHAR(8) | branch or tag |
+| hf_repos.repo_type | VARCHAR(16) | model or dataset |
 | native_conan_publish_sessions.publisher | VARCHAR(128) | keeps the open-publication identity (seven columns) under the 3072-byte key limit |
 | native_go_assets.object_key | VARCHAR(200) | object keys are derived from the digest, and the reclaim index holds object key, module path hash and version |
 | native_go_assets.version | VARCHAR(512) | the schema allows Go versions up to 512 characters |
