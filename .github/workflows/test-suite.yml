@@ -259,8 +259,10 @@ jobs:
   # debian:12 and rockylinux:9 containers and drive notarx-migrate against PostgreSQL
   # 16. The release checks used to follow lint in the lint job and held its verdict
   # back by about 2.5 minutes, and the packages were a job of their own in ci.yml; here
-  # they share one setup and still finish long before the contract lanes (docs/ci.md,
-  # issue #500).
+  # they share one setup and still finish before the contract lanes (docs/ci.md, issue
+  # #500). The package steps run also when a release check failed, so one run reports
+  # both, and only for pull requests: the release gates build and install-test the
+  # packages in release-archives.yml already.
   release-checks:
     if: inputs.go
     runs-on: ubuntu-24.04
@@ -272,7 +274,6 @@ jobs:
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
-          cache: true
       # Node runs the prune-ghcr and release manifest tests; stamp-version-test needs
       # the OpenAPI tools.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -301,15 +302,18 @@ jobs:
       - name: Fuzz the SAML response verifier (60s, committed corpus)
         run: make saml-fuzz
       - name: Cache the pinned nfpm
+        if: ${{ !cancelled() && inputs.scope == 'pull-request' }}
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/notarx/nfpm
           key: nfpm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/nfpm.version', 'scripts/install-nfpm.sh') }}
       - name: Install the package inspection tools
+        if: ${{ !cancelled() && inputs.scope == 'pull-request' }}
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq --no-install-recommends rpm cpio
       - name: Build the packages, assert their contents and run the container install test
+        if: ${{ !cancelled() && inputs.scope == 'pull-request' }}
         env:
           # Authenticated download of the pinned nfpm (scripts/lib/github-release.sh).
           GH_TOKEN: ${{ github.token }}

@@ -21,7 +21,7 @@ show as `tests / <job>`.
 | `console` | `console/`, `api/` (the generated client) | `console` (unit tests, build, visual) and `console-e2e` |
 | `docs` | `docs/`, `*.md`, `LICENSE`, `NOTICE` | `docs` (i18n twins, links, capability claims) |
 | `images` | `Dockerfile*`, `compose*.yml`, `deploy/` | everything that executes the product (`go` and `console` too) |
-| `ci` | `.github/`, `Makefile`, `scripts/`, `packaging/` | everything, including the package checks of `release-checks` (native deb and rpm build, content assertions and container install test; ADR 0025), which every Go change runs too |
+| `ci` | `.github/`, `Makefile`, `scripts/`, `packaging/` | everything, including the package steps of `release-checks` (native deb and rpm build, content assertions and container install test; ADR 0025). A Go change runs them too, since `ci` turns `go` on and packages hold the Go binaries and `migrations/` |
 | `arm64` | the `images` and `ci` paths, `go.mod`, `go.sum`, per-architecture Go sources and assembly (`*_amd64.go`, `*_arm64.go`, their `_test.go` and `.s` files), and any changed Go file whose `//go:build` line names `amd64` or `arm64` or that reads `runtime.GOARCH` | lint on arm64 (in `quality-arm64`) and the arm64 contract lanes (ADR 0016, amendment of 2026-11-19); `quality-arm64` vet and race and the arm64 image build run for every Go change |
 
 A path that matches no class also runs everything, so a new top-level directory
@@ -68,7 +68,12 @@ behaviour config ignores, and the contract lanes never run Playwright.
 The Go class runs three jobs. `lint` (amd64) is the fast signal: `make lint-checks`
 (`golangci-lint` and the repository lint tools), `make vet`, the native-build rules, the
 migration checks and the dependency audit. `release-checks` (amd64) runs the
-architecture-independent release and packaging checks and the 60-second SAML fuzz run.
+architecture-independent release and packaging checks, the 60-second SAML fuzz run and,
+on pull requests, the native deb and rpm package build with its content assertions and
+the debian:12 and rockylinux:9 container install test (`make package-install-test`, ADR
+0025; it needs Docker and the pinned nfpm, and runs also when a release check failed).
+The release gates skip the package steps there, because `release-archives.yml` builds
+and install-tests the packages of the release on both architectures.
 Those used to follow lint in `lint` and held its verdict back by about 2.5 minutes. A
 first cut of issue #500 moved them behind the unit tests in `quality`, which made that
 job the slowest of the suite (13.4 minutes, run 44684290400), so they have a job of
@@ -263,7 +268,7 @@ Four targets of the issue were left open: a verdict (wall) in 12 minutes or less
 
 ## Measured effect (issue #500)
 
-Issue #500 removed the wait of every contract lane for all four image builds (the contract groups and the per-architecture image jobs above), split the integration suite into three shards, folded the CLI E2E into a Console shard and gave the release checks a job of their own. A Go-only pull request now plans 25 jobs. The first run of the change itself (44684290400, with the `arm64` class on, so with every arm64 lane: 39 jobs, 172 runner-minutes, the longest queue 3.9 minutes) shows the new shape:
+Issue #500 removed the wait of every contract lane for all four image builds (the contract groups and the per-architecture image jobs above), split the integration suite into three shards, folded the CLI E2E into a Console shard and gave the release checks a job of their own. A Go-only pull request now runs 25 jobs (26 in the measurement below, which predates folding `packages` into `release-checks`). The first run of the change itself (44684290400, with the `arm64` class on, so with every arm64 lane: 39 jobs, 172 runner-minutes, the longest queue 3.9 minutes) shows the new shape:
 
 | Signal | #482 (`arm64` class on, run 44670328253) | #500 first run (44684290400) |
 | --- | --- | --- |
@@ -278,7 +283,7 @@ The Go-only measurement: the three attempts of run 44692652060 (draft #512, a co
 | Run | Wall (min) | Longest queue (min) | Lint verdict (min) | Unit tests and coverage (min) | Runner-minutes | Jobs |
 | --- | --- | --- | --- | --- | --- | --- |
 | #482 after, attempts 1 to 3 (run 44673768958) | 17.1 to 19.1 | 2.0 to 6.5 | 6.5 to 9.9 | 6.9 to 11.8 | 104 to 122 | 29 |
-| #500, attempt 1 | 16.8 | 6.5 | 4.5 | 10.7 | 116 | 26 |
+| #500 (before the `packages` fold), attempt 1 | 16.8 | 6.5 | 4.5 | 10.7 | 116 | 26 |
 | #500, attempt 2 | 13.2 | 2.9 | 5.0 | 7.2 | 112 | 26 |
 | #500, attempt 3 | 12.4 | 0.1 | 3.7 | 6.9 | 108 | 26 |
 
@@ -299,7 +304,7 @@ Issue #482 reshaped the pull request suite (ADR 0016 and ADR 0024, amendments of
 | --- | --- | --- |
 | `no-chinese` | a step of `changes` that records its verdict without failing the job; `ci-ok` fails on a violation, and the rest of the suite still runs | not part of the gates (as before) |
 | `changes`, `oci-free-tier`, `oci-free-tier-tofu` | unchanged | unchanged |
-| `packages` | steps of `release-checks` (issue #500) | `release-checks` (the gates did not run it before) |
+| `packages` | steps of `release-checks` (issue #500) | not in the suite; `release-archives.yml` builds and install-tests the release packages, as before |
 | `quality`: lint, vet, native-build rules, migration, release and packaging checks, SAML fuzz, dependency audit | `lint` (lint, vet, native-build rules, migration checks, dependency audit); `release-checks` (release and packaging checks, SAML fuzz; issue #500) | the same |
 | `quality`: `make race`, `make coverage` and the per-package coverage reruns | `quality`: `make race-coverage`, one pass with the race detector and every floor | `quality` |
 | `quality-arm64`: lint, vet, race | `quality-arm64`: vet and race for every Go change; lint with the `arm64` class | `quality-arm64`: lint, vet, race |
