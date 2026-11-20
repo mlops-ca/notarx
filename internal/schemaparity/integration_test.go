@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/database"
+	"github.com/mlops-ca/notarx/internal/migrate"
 )
 
 // TEST_DATABASE_URL is the PostgreSQL that scripts/run-migrations.sh migrated;
@@ -57,9 +58,17 @@ func scratchDatabase(t *testing.T, driver, adminURL, create, drop string) *sql.D
 	return openDB(t, driver, parsed.String())
 }
 
-// TestCheckedInCatalogueMatchesMigratedPostgres is the parity check on the reference backend.
+// TestCheckedInCatalogueMatchesMigratedPostgres is the parity check on the reference backend. It migrates a
+// database of its own: the shared test database holds the rows other packages wrote.
 func TestCheckedInCatalogueMatchesMigratedPostgres(t *testing.T) {
-	db := openDB(t, database.DriverPostgres, requireURL(t, "TEST_DATABASE_URL"))
+	db := scratchDatabase(t, database.DriverPostgres, requireURL(t, "TEST_DATABASE_URL"), "CREATE DATABASE %s", "DROP DATABASE IF EXISTS %s WITH (FORCE)")
+	files, err := migrate.LoadDir(filepath.Join("..", "..", "migrations", "postgres"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := migrate.Run(context.Background(), db, migrate.DialectPostgres, files, migrate.Options{}); err != nil {
+		t.Fatal(err)
+	}
 	want, err := Load(filepath.Join("..", "..", "migrations", "catalogue.yaml"))
 	if err != nil {
 		t.Fatal(err)
