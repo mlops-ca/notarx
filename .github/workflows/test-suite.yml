@@ -392,6 +392,9 @@ jobs:
     needs: build-images-amd64
     if: inputs.go || inputs.console
     runs-on: ubuntu-24.04
+    # A shard takes about 6 minutes (issue #518); a hung spec or CLI gateway must
+    # not hold suite-ok for the six-hour default.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:

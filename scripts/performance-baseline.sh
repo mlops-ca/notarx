@@ -81,6 +81,7 @@ project=${NOTARX_PERF_PROJECT:-notarx-perf-$(date -u +%Y%m%d%H%M%S)-$$}
 loaded_image=${NOTARX_IMAGE:-notarx:local}
 export NOTARX_IMAGE="${project}-notarx"
 image_tagged=0
+image_source="compose build of the working tree"
 if [[ ! "$project" =~ ^notarx-perf-[a-z0-9-]+$ ]]; then
   printf 'NOTARX_PERF_PROJECT must start with notarx-perf-: %s\n' "$project" >&2
   exit 1
@@ -120,9 +121,9 @@ cleanup() {
   if [[ $stack_started == 1 ]]; then
     "${compose[@]}" down -v --remove-orphans >/dev/null 2>&1
   fi
+  # A leftover tag has a unique per-project name, so it cannot disturb later runs.
   if [[ $image_tagged == 1 ]] && ! docker image rm "$NOTARX_IMAGE" >/dev/null 2>&1; then
-    printf 'Performance baseline could not remove its image tag %s; a container of the project may remain.\n' "$NOTARX_IMAGE" >&2
-    [[ $exit_code != 0 ]] || exit_code=1
+    printf 'Performance baseline could not remove its image tag %s.\n' "$NOTARX_IMAGE" >&2
   fi
   if [[ -n "$upstream_pid" ]]; then
     kill "$upstream_pid" >/dev/null 2>&1 || true
@@ -318,6 +319,7 @@ if [[ "${NOTARX_COMPOSE_BUILD_FLAG---build}" == --no-build ]]; then
   printf '%s\n' 'Starting the isolated Gateway/PostgreSQL/RustFS core stack from the loaded image...'
   docker image tag "$loaded_image" "$NOTARX_IMAGE"
   image_tagged=1
+  image_source="prebuilt $loaded_image $(docker image inspect --format '{{.Id}}' "$loaded_image")"
   stack_started=1
   "${compose[@]}" up -d --no-build --wait --remove-orphans
 else
@@ -407,6 +409,7 @@ fi
   docker info --format 'docker_server_arch={{.Architecture}} docker_server_cpus={{.NCPU}} docker_server_memory_bytes={{.MemTotal}}'
   printf 'compose_project=%s\n' "$project"
   printf 'core_services=notarx,postgres,rustfs\n'
+  printf 'notarx_image_source=%s\n' "$image_source"
   printf 'raw_upstream=https://host.docker.internal:%s\n' "$raw_upstream_port"
   printf 'raw_egress_proxy=http://host.docker.internal:%s\n' "$raw_proxy_port"
 } >"$output_dir/environment.txt"
