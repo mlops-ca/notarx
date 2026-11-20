@@ -17,7 +17,7 @@ show as `tests / <job>`.
 
 | Class | Paths | Jobs it enables |
 | --- | --- | --- |
-| `go` | `*.go`, `go.mod`, `go.sum`, `migrations/`, `internal/`, `cmd/`, `contracts/`, `examples/`, `api/`, plus the files `release-version-check` reads (`CHANGELOG*.md`, `docs/cli*.md`, `VERSION`) | `quality`, `quality-arm64`, `object-store-contract`, `contract-plan`, `contract`, and `console-e2e` (it runs the real gateway) |
+| `go` | `*.go`, `go.mod`, `go.sum`, `migrations/`, `internal/`, `cmd/`, `contracts/`, `examples/`, `api/`, plus the files `release-version-check` reads (`CHANGELOG*.md`, `docs/cli*.md`, `VERSION`) | `lint`, `quality`, `quality-arm64`, `object-store-contract`, `contract-plan`, `contract`, and `console-e2e` (it runs the real gateway) |
 | `console` | `console/`, `api/` (the generated client) | `console` (unit tests, build, visual) and `console-e2e` |
 | `docs` | `docs/`, `*.md`, `LICENSE`, `NOTICE` | `docs` (i18n twins, links, capability claims) |
 | `images` | `Dockerfile*`, `compose*.yml`, `deploy/` | everything that executes the product (`go` and `console` too) |
@@ -59,9 +59,32 @@ The `console` job (unit tests, build, mocked visual baseline) and `console-e2e`
 do not duplicate work: the visual config only matches `e2e/visual`, which the
 behaviour config ignores, and the contract lanes never run Playwright.
 
+## Go checks: lint, quality and one unit-test pass
+
+The Go class runs three jobs. `lint` (amd64) is the fast signal: `make lint`
+(golangci-lint and the repository linters), `make vet`, the native-build rules, the
+migration checks, the release and packaging checks, the 60-second SAML fuzz run and
+the dependency audit. `quality` (amd64) runs the unit tests exactly once:
+`make race-coverage` runs `go test -race -coverprofile` over every package and
+`scripts/coverage-check.sh` reads that one profile for the repository-wide floor and
+for every per-package floor in `scripts/coverage-packages.txt` (covered statements
+over all statements of the package, the figure `go test -cover` prints). Before
+this, `quality` ran the race detector over `./internal/...`, then the whole suite
+again with `-coverprofile`, then each floored package a third time with `-cover`.
+`make coverage` still runs a plain (non-race) pass with the same floors for local
+use. `quality-arm64` runs lint, vet and `make race` natively on arm64 (ADR 0016).
+
+golangci-lint runs in its pinned image as the calling user, against the host module
+and build caches (restored by `actions/setup-go`) and its own result cache in
+`GOLANGCI_LINT_CACHE` (default `~/.cache/notarx/golangci-lint`), which the composite
+action restores and saves with `actions/cache`, keyed by the lint image, `go.sum` and
+`.golangci.yml`. A warm run downloads no module and re-analyses only changed
+packages. Cache scopes are per branch, so the first run of a pull request is cold for
+this cache and later pushes are warm.
+
 ## Workflow linting
 
-`make lint` runs `make actionlint-check`, which runs the pinned `rhysd/actionlint` image (actionlint, which also lints the shell in every `run` step) over every file in `.github/workflows`. Any finding fails the `quality` jobs, so a workflow warning cannot be merged.
+`make lint` runs `make actionlint-check`, which runs the pinned `rhysd/actionlint` image (actionlint, which also lints the shell in every `run` step) over every file in `.github/workflows`. Any finding fails the `lint` and `quality-arm64` jobs, so a workflow warning cannot be merged.
 
 ## Playwright browser install
 
@@ -126,9 +149,9 @@ emits the matrix. A step that runs a third-party artifact published for one
 architecture only (`published-native-backup-test` executes the published amd64
 release binaries) declares `architectures` in the plan; other architectures skip
 and report it, nothing is emulated. `quality-arm64` runs lint, vet and the race detector on
-`ubuntu-24.04-arm`; the coverage floor stays on amd64. Both jobs call the local
+`ubuntu-24.04-arm`; the coverage floor stays on amd64. The jobs call the local
 composite action `.github/actions/go-quality` for setup, lint, vet and race, so the
-steps have one definition. They stay two jobs, not a matrix, so the amd64-only steps stay
+steps have one definition. They are separate jobs, not a matrix, so the amd64-only steps stay
 out of the arm64 leg. See
 [native builds](native-builds.md).
 
@@ -265,7 +288,7 @@ version file and installer script, so most runs make no network call.
 
 ## Migration checks
 
-The `quality` job runs `make migration-check`
+The `lint` job runs `make migration-check`
 (`scripts/migration-immutability-check.sh`, checkout with full history and tags).
 It always enforces unique, gap-free, snake_case migration names. Once a stable
 `vX.Y.Z` tag exists it also fails any diff of a released migration against the

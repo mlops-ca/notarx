@@ -114,8 +114,7 @@ run_quality() {
     printf 'SKIPPED package signing drill and environment checks: gpg is not installed (CI runs it)\n'
     run "package environment checks" make packages-environments-test
   fi
-  run "race detector" make race
-  run "coverage floor" make coverage
+  run "unit tests once with the race detector and the coverage floors" make race-coverage
   run "dependency audit" make dependency-audit
 }
 

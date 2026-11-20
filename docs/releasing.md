@@ -38,7 +38,7 @@ release notes starts at the previous release or, before the first one, at the fo
    `main` run no tests (ADR 0024, amendment of 2026-11-19). It skips, with a notice, when that commit was already
    released or when no releasing commit exists since the previous release.
 2. `gates` runs the complete test suite (`.github/workflows/test-suite.yml`, the same definition pull request CI uses) on the
-   planned commit: `quality` and `quality-arm64`, `console`, the Console E2E shards, `object-store-contract`, `docs`,
+   planned commit: `lint`, `quality` and `quality-arm64`, `console`, the Console E2E shards, `object-store-contract`, `docs`,
    `image-test-stages` and every contract lane on both architectures. A gate failure means no release that night; the
    liveness alert covers a run of failed nights. Nothing is built or published before the gates pass.
 3. `build` calls the ADR 0016 reusable workflows: `image-build.yml` (per-architecture images, merged index, attestations)

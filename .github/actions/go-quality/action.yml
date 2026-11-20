@@ -1,14 +1,25 @@
 name: Go quality checks
 description: >-
-  Sets up Go and Node, installs the Console tools and runs the lint, vet and race
-  checks that every architecture runs (ADR 0016). The quality job in ci.yml calls
-  it on ubuntu-24.04 and ubuntu-24.04-arm so the two cannot drift; the checkout
-  stays in the job. Steps that are architecture independent (coverage floor,
-  dependency audit, packaging checks) stay in the amd64 job.
+  Sets up Go (and Node with the Console tools when lint runs) and runs the lint, vet
+  and race checks that every architecture runs (ADR 0016). quality-arm64 in
+  test-suite.yml runs all three on ubuntu-24.04-arm; on amd64 the lint job runs lint
+  and vet, and the quality job runs the race detector together with the coverage
+  floors in one pass (make race-coverage). The checkout stays in the job. Steps that
+  are architecture independent (coverage floor, dependency audit, packaging checks)
+  stay in the amd64 jobs.
 
 inputs:
+  lint:
+    description: Run make lint (needs the Console tools for the en-CA spell check).
+    default: "true"
+  vet:
+    description: Run make vet.
+    default: "true"
+  race:
+    description: Run make race.
+    default: "true"
   openapi-tools:
-    description: Also install tools/openapi (needed by the amd64 job's later steps).
+    description: Also install tools/openapi (needed by the amd64 lint job's later steps).
     default: "false"
 
 runs:
@@ -19,26 +30,52 @@ runs:
         go-version-file: go.mod
         cache: true
     # make lint runs the en-CA spell check, which needs the Console tools.
-    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+    - if: inputs.lint == 'true' || inputs.openapi-tools == 'true'
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
         node-version-file: .nvmrc
         cache: npm
         cache-dependency-path: |
           console/package-lock.json
           tools/openapi/package-lock.json
-    - run: npm ci --ignore-scripts --no-audit --no-fund --timing --loglevel=http
+    - if: inputs.lint == 'true'
+      run: npm ci --ignore-scripts --no-audit --no-fund --timing --loglevel=http
       shell: bash
       working-directory: console
     - if: inputs.openapi-tools == 'true'
       run: npm ci --ignore-scripts --no-audit --no-fund --timing --loglevel=http
       shell: bash
       working-directory: tools/openapi
-    - name: Run Go lint
+    # golangci-lint keeps its analysis results in GOLANGCI_LINT_CACHE (Makefile). Entries
+    # are content addressed, so an older cache is safe to restore: a pull request saves
+    # one cache per go.sum and lint configuration (cache scopes are per branch), and the
+    # prefix restores the newest older one.
+    - if: inputs.lint == 'true'
+      name: Locate the golangci-lint cache
+      id: lint-cache-dir
       shell: bash
+      run: |
+        echo "dir=$HOME/.cache/notarx/golangci-lint" >> "$GITHUB_OUTPUT"
+        echo "version=$(sed -n 's/^LINT_IMAGE := //p' Makefile)" >> "$GITHUB_OUTPUT"
+    - if: inputs.lint == 'true'
+      name: Restore the golangci-lint cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.lint-cache-dir.outputs.dir }}
+        key: golangci-lint-${{ runner.os }}-${{ runner.arch }}-${{ steps.lint-cache-dir.outputs.version }}-${{ hashFiles('go.sum', '.golangci.yml') }}
+        restore-keys: |
+          golangci-lint-${{ runner.os }}-${{ runner.arch }}-${{ steps.lint-cache-dir.outputs.version }}-
+    - if: inputs.lint == 'true'
+      name: Run Go lint
+      shell: bash
+      env:
+        GOLANGCI_LINT_CACHE: ${{ steps.lint-cache-dir.outputs.dir }}
       run: make lint
-    - name: Run Go vet
+    - if: inputs.vet == 'true'
+      name: Run Go vet
       shell: bash
       run: make vet
-    - name: Run race detector
+    - if: inputs.race == 'true'
+      name: Run race detector
       shell: bash
       run: make race

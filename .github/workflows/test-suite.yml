@@ -194,16 +194,19 @@ jobs:
       sha: ${{ inputs.sha }}
 
   # One definition of the Go checks for both architectures: the composite action
-  # holds setup, lint, vet and race. Two jobs, not a matrix, so the amd64-only steps
-  # stay out of the arm64 leg. The coverage floor, dependency audit and packaging
-  # checks are architecture independent and stay on amd64 only; make test runs on
-  # arm64 in the core lanes of the contract matrix.
-  quality:
+  # holds setup, lint, vet and race. On amd64 the work is split so the unit tests run
+  # once and a fast signal arrives early: `lint` runs lint, vet and the
+  # architecture-independent checks (native-build rules, migrations, release and
+  # packaging checks, SAML fuzzing, dependency audit); `quality` runs the unit tests
+  # once, with the race detector and -coverprofile, and enforces every coverage floor
+  # from that one profile (make race-coverage). quality-arm64 runs lint, vet and race
+  # on arm64 (ADR 0016); make test runs on arm64 in the core lanes of the contract matrix.
+  lint:
     if: inputs.go
     runs-on: ubuntu-24.04
     # Steps inside the composite action cannot set their own timeout, so the job
     # carries one (the npm installs used to be capped at 10 minutes each).
-    timeout-minutes: 60
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -214,6 +217,7 @@ jobs:
         run: node scripts/npm-lockfile-check.mjs
       - uses: ./.github/actions/go-quality
         with:
+          race: "false"
           openapi-tools: "true"
       - name: Verify the native-build rules (no cross-compilation, no emulation)
         run: make native-build-check
@@ -234,10 +238,23 @@ jobs:
         run: make packages-signing-drill packages-environments-test
       - name: Fuzz the SAML response verifier (60s, committed corpus)
         run: make saml-fuzz
-      - name: Enforce coverage floor
-        run: make coverage
       - name: Audit dependencies
         run: make dependency-audit
+
+  quality:
+    if: inputs.go
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.sha }}
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Run the unit tests once with the race detector and enforce the coverage floors
+        run: make race-coverage
 
   quality-arm64:
     if: inputs.go
@@ -450,7 +467,7 @@ jobs:
   # any failure or cancellation.
   suite-ok:
     if: always()
-    needs: [docs, image-test-stages, build-images, object-store-contract, contract-plan, contract, quality, quality-arm64, console, console-e2e, console-e2e-report]
+    needs: [docs, image-test-stages, build-images, object-store-contract, contract-plan, contract, lint, quality, quality-arm64, console, console-e2e, console-e2e-report]
     runs-on: ubuntu-24.04
     steps:
       - name: Require every needed job to succeed or be skipped
@@ -472,7 +489,7 @@ jobs:
           report=false
           if [[ "$e2e" == true && $(echo "$NEEDS" | jq -r '.["console-e2e"].result') == success ]]; then report=true; fi
           status=0
-          for pair in quality:$GO quality-arm64:$GO object-store-contract:$GO contract-plan:$GO contract:$GO console:$CONSOLE console-e2e:$e2e console-e2e-report:$report build-images:$e2e docs:$DOCS image-test-stages:$IMAGES; do
+          for pair in lint:$GO quality:$GO quality-arm64:$GO object-store-contract:$GO contract-plan:$GO contract:$GO console:$CONSOLE console-e2e:$e2e console-e2e-report:$report build-images:$e2e docs:$DOCS image-test-stages:$IMAGES; do
             job=${pair%%:*} class=${pair##*:}
             result=$(echo "$NEEDS" | jq -r --arg job "$job" '.[$job].result')
             if [[ "$class" == true && "$result" != success ]]; then
