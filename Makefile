@@ -15,10 +15,10 @@ OPENAPI_BUNDLE := api/openapi/native-hosted-v1.json
 VERSION ?= $(shell tr -d '[:space:]' < VERSION)
 CLI_REVISION ?= $(shell git rev-parse --verify HEAD 2>/dev/null || printf 'unknown')
 CLI_LDFLAGS = -s -w -X github.com/mlops-ca/notarx/internal/buildinfo.injectedVersion=$(VERSION) -X github.com/mlops-ca/notarx/internal/buildinfo.injectedRevision=$(CLI_REVISION)
-.PHONY: i18n-release-check i18n-tooling-test help dev-bootstrap dev dev-status dev-down local-dev-test rustfs-only-check kubernetes-local-check kubernetes-local-up kubernetes-local-status kubernetes-local-verify kubernetes-local-down reference-scanner-smoke cargo-contract openapi-dependency-test openapi-tools-ready console-codegen-ready raw-e2e conan-e2e native-maven-e2e native-oci-e2e native-raw-e2e native-npm-e2e native-pypi-e2e native-go-e2e native-apt-e2e apt-signer-rotation-e2e readiness-e2e resolver-rotation-e2e service-account-rotation-e2e oci-performance-e2e performance-baseline cache-operations-e2e backup-restore-readiness backup-transfer-test upgrade-readiness release-readiness-check release-version-check stamp-version-test release-plan-test release-pipeline-test release-workflow-check release-artifacts release-artifacts-test package-check package-install-test packages-signing-drill packages-environments-test docs-check actionlint-check commit-policy-check identity-check saml-dependency-floor-check saml-fuzz external-network-test-check preflight migration-check schema-parity evidence up down test api-contract cli-contract-check cli-test cli-e2e cli-runtime-e2e integration-test integration-test-mysql integration-down lint lint-checks lint-tools-test spellcheck vet race coverage race-coverage dependency-audit fmt cli-build build docker-build docker-test console-docker-build cli-docker-build migrate backup-drill restore-drill console-build console-typecheck console-check console-test console-api-check console-e2e console-visual console-visual-update openapi-bundle openapi-generate-admin openapi-check
+.PHONY: i18n-release-check i18n-tooling-test help dev-bootstrap dev dev-status dev-down local-dev-test rustfs-only-check kubernetes-local-check kubernetes-local-up kubernetes-local-status kubernetes-local-verify kubernetes-local-down reference-scanner-smoke cargo-contract openapi-dependency-test openapi-tools-ready console-codegen-ready raw-e2e conan-e2e native-maven-e2e native-oci-e2e native-raw-e2e native-npm-e2e native-pypi-e2e native-go-e2e native-apt-e2e apt-signer-rotation-e2e readiness-e2e resolver-rotation-e2e service-account-rotation-e2e oci-performance-e2e performance-baseline cache-operations-e2e backup-restore-readiness backup-transfer-test upgrade-readiness release-readiness-check release-version-check stamp-version-test release-plan-test release-pipeline-test release-workflow-check release-artifacts release-artifacts-test package-check package-install-test packages-signing-drill packages-environments-test docs-check actionlint-check commit-policy-check identity-check saml-dependency-floor-check saml-fuzz external-network-test-check preflight migration-check schema-parity evidence up down test api-contract cli-contract-check cli-test cli-e2e cli-runtime-e2e integration-test integration-test-mysql integration-down lint lint-checks lint-tools-test spellcheck vet vet-build race coverage race-coverage race-build race-coverage-build dependency-audit fmt cli-build build docker-build docker-test console-docker-build cli-docker-build migrate backup-drill restore-drill console-build console-typecheck console-check console-test console-api-check console-e2e console-visual console-visual-update openapi-bundle openapi-generate-admin openapi-check
 
 help:
-	@printf '%s\n' 'Targets: native-rubygems-e2e, native-helm-e2e, native-oci-discovery-e2e, nexus-migration-client-e2e, nexus-inventory-scan-e2e, native-nuget-e2e, nexus-oci-migration-e2e, nexus-conan-migration-e2e, nexus-npm-migration-e2e, nexus-pypi-migration-e2e, private-upstream-auth-e2e, private-upstream-formats-e2e, dev-bootstrap, dev, dev-status, dev-down, kubernetes-local-check, kubernetes-local-up, kubernetes-local-status, kubernetes-local-verify, kubernetes-local-down, reference-scanner-smoke, cargo-contract, up, down, test, api-contract, cli-contract-check, cli-test, cli-e2e, cli-runtime-e2e, integration-test, integration-test-mysql, integration-down, lint, lint-checks, lint-tools-test, actionlint-check, spellcheck, vet, race, coverage, race-coverage, dependency-audit, fmt, cli-build, build, docker-build, docker-test, console-docker-build, cli-docker-build, migrate, backup-drill, restore-drill, preflight, migration-check, schema-parity, evidence, raw-e2e, conan-e2e, native-maven-e2e, native-oci-e2e, native-raw-e2e, native-npm-e2e, native-pypi-e2e, native-go-e2e, native-apt-e2e, apt-signer-rotation-e2e, readiness-e2e, resolver-rotation-e2e, service-account-rotation-e2e, oci-performance-e2e, performance-baseline, perf-load, perf-seed, explain-check, cache-operations-e2e, backup-restore-readiness, backup-transfer-test, published-native-backup-test, oci-free-tier-check, oci-free-tier-images-check, oci-free-tier-smoke, oci-free-tier-tofu-check, upgrade-readiness, release-readiness-check, release-version-check, stamp-version-test, release-plan-test, release-pipeline-test, release-workflow-check, release-artifacts, release-artifacts-test, package-check, package-install-test, packages-signing-drill, packages-environments-test, docs-check, commit-policy-check, identity-check, saml-dependency-floor-check, saml-fuzz, external-network-test-check, console-build, console-typecheck, console-check, console-test, i18n-release-check, i18n-tooling-test, console-api-check, console-e2e, console-visual, console-visual-update, openapi-bundle, openapi-generate-admin, openapi-check, native-build-check'
+	@printf '%s\n' 'Targets: native-rubygems-e2e, native-helm-e2e, native-oci-discovery-e2e, nexus-migration-client-e2e, nexus-inventory-scan-e2e, native-nuget-e2e, nexus-oci-migration-e2e, nexus-conan-migration-e2e, nexus-npm-migration-e2e, nexus-pypi-migration-e2e, private-upstream-auth-e2e, private-upstream-formats-e2e, dev-bootstrap, dev, dev-status, dev-down, kubernetes-local-check, kubernetes-local-up, kubernetes-local-status, kubernetes-local-verify, kubernetes-local-down, reference-scanner-smoke, cargo-contract, up, down, test, api-contract, cli-contract-check, cli-test, cli-e2e, cli-runtime-e2e, integration-test, integration-test-mysql, integration-down, lint, lint-checks, lint-tools-test, actionlint-check, spellcheck, vet, vet-build, race, race-build, coverage, race-coverage, race-coverage-build, dependency-audit, fmt, cli-build, build, docker-build, docker-test, console-docker-build, cli-docker-build, migrate, backup-drill, restore-drill, preflight, migration-check, schema-parity, evidence, raw-e2e, conan-e2e, native-maven-e2e, native-oci-e2e, native-raw-e2e, native-npm-e2e, native-pypi-e2e, native-go-e2e, native-apt-e2e, apt-signer-rotation-e2e, readiness-e2e, resolver-rotation-e2e, service-account-rotation-e2e, oci-performance-e2e, performance-baseline, perf-load, perf-seed, explain-check, cache-operations-e2e, backup-restore-readiness, backup-transfer-test, published-native-backup-test, oci-free-tier-check, oci-free-tier-images-check, oci-free-tier-smoke, oci-free-tier-tofu-check, upgrade-readiness, release-readiness-check, release-version-check, stamp-version-test, release-plan-test, release-pipeline-test, release-workflow-check, release-artifacts, release-artifacts-test, package-check, package-install-test, packages-signing-drill, packages-environments-test, docs-check, commit-policy-check, identity-check, saml-dependency-floor-check, saml-fuzz, external-network-test-check, console-build, console-typecheck, console-check, console-test, i18n-release-check, i18n-tooling-test, console-api-check, console-e2e, console-visual, console-visual-update, openapi-bundle, openapi-generate-admin, openapi-check, native-build-check'
 
 dev-bootstrap:
 	@./scripts/local-dev.sh bootstrap-env
@@ -294,10 +294,24 @@ lint-checks: architecture-check sqllint-check actionlint-check commit-policy-che
 vet:
 	@packages="$$(go list ./... | grep -v '/console/node_modules/')"; go vet $$packages
 
+# Compile only, run no test or vet: the plain build of every package and its tests, which
+# make vet type-checks against (the build-only cache warm of quality-arm64, ADR 0024).
+vet-build:
+	@packages="$$(go list ./... | grep -v '/console/node_modules/')"; go test -c -o /dev/null $$packages
+
 # Every package, the scope of make coverage; -count=1 so a restored build cache never
 # replays an earlier result.
+# make race-build runs the same command with -c -o /dev/null: it compiles and links the
+# test binaries and runs no test. The build cache only hits on identical flags, so both
+# targets share RACE_TEST.
+RACE_TEST = go test -count=1 -race
 race:
-	@packages="$$(go list ./... | grep -v '/console/node_modules/')"; go test -count=1 -race $$packages
+	@packages="$$(go list ./... | grep -v '/console/node_modules/')"; $(RACE_TEST) $$packages
+
+# Compile only, run no test: the builds of make race and make race-coverage, for the
+# build-only cache warm on pushes to main (docs/ci.md, Go checks; ADR 0024).
+race-build:
+	@packages="$$(go list ./... | grep -v '/console/node_modules/')"; $(RACE_TEST) -c -o /dev/null $$packages
 
 coverage:
 	@./scripts/coverage-check.sh
@@ -306,6 +320,9 @@ coverage:
 # feeds every floor of make coverage (docs/ci.md), so the tests do not run twice.
 race-coverage:
 	@./scripts/coverage-check.sh --race
+
+race-coverage-build:
+	@./scripts/coverage-check.sh --race --build-only
 
 dependency-audit:
 	@node --test scripts/npm-audit-policy.test.mjs

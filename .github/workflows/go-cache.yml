@@ -1,0 +1,55 @@
+name: Go cache
+
+# The build-only Go cache warm of a push to main (ADR 0024, amendment of 2026-11-20;
+# docs/ci.md, Go checks). It compiles the race builds of the quality jobs for the new
+# tip and saves them, so the next pull request compiles only what it changed. It runs
+# no test, vet or lint: make race-build, make race-coverage-build and make vet-build add
+# -c -o /dev/null to the go test commands of make race and make race-coverage, or
+# compile the plain build make vet checks. It is a workflow of its own so
+# that the cancel-in-progress group of ci.yml does not cancel a warm before it saves,
+# and it does not gate main.
+on:
+  push:
+    branches: [main]
+    # Embedded files (migrations, templates, fixtures) change the build too, so only
+    # documentation is left out.
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+
+permissions:
+  contents: read
+
+env:
+  GOPROXY: https://proxy.golang.org|direct
+
+# One warm runs at a time; a newer push waits and replaces any older waiting one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  warm:
+    name: warm (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      # The warm deletes the race build caches its save supersedes.
+      actions: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # quality-arm64 also runs make vet, so its warm compiles the plain build too.
+          - { arch: amd64, runner: ubuntu-24.04, vet: 'false', race: 'false', race-coverage: 'true' }
+          - { arch: arm64, runner: ubuntu-24.04-arm, vet: 'true', race: 'true', race-coverage: 'false' }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/go-quality
+        with:
+          lint: 'false'
+          vet: ${{ matrix.vet }}
+          race: ${{ matrix.race }}
+          race-coverage: ${{ matrix.race-coverage }}
+          build-only: 'true'

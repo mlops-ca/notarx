@@ -5,6 +5,10 @@
 #   scripts/coverage-check.sh           run the unit tests once with -coverprofile
 #   scripts/coverage-check.sh --race    the same single run with the race detector on
 #                                       (the CI quality job: unit tests run once, docs/ci.md)
+#   scripts/coverage-check.sh [--race] --build-only
+#                                       the same go test command with -c -o /dev/null:
+#                                       compile and link the test binaries, run no test
+#                                       (the cache warm of pushes to main, ADR 0024)
 #   scripts/coverage-check.sh --profile FILE
 #                                       check an existing profile without running tests
 set -euo pipefail
@@ -15,9 +19,11 @@ cd "$root"
 minimum=${NOTARX_MIN_COVERAGE:-40.0}
 race=()
 profile=
+build_only=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --race) race=(-race); shift ;;
+    --build-only) build_only=1; shift ;;
     --profile)
       [[ $# -ge 2 ]] || { printf 'coverage-check: --profile needs a file\n' >&2; exit 2; }
       profile=$2; shift 2 ;;
@@ -28,6 +34,10 @@ if [[ -n "$profile" && ${#race[@]} -gt 0 ]]; then
   printf 'coverage-check: --race runs the tests, --profile reads an existing profile; pass one of them\n' >&2
   exit 2
 fi
+if [[ -n "$profile" && $build_only == 1 ]]; then
+  printf 'coverage-check: --build-only compiles the tests, --profile reads an existing profile; pass one of them\n' >&2
+  exit 2
+fi
 
 if [[ -z "$profile" ]]; then
   profile=$(mktemp)
@@ -36,10 +46,18 @@ if [[ -z "$profile" ]]; then
   packages=$(go list ./... | grep -v '/console/node_modules/')
   # One run produces the profile every floor below reads; nothing reruns the tests.
   # -count=1: a restored build cache (CI) must not replay an earlier pass.
+  # The build-only mode adds -c -o /dev/null to the same command, so the build cache it
+  # fills is the one the test run hits.
+  build=()
+  if [[ $build_only == 1 ]]; then build=(-c -o /dev/null); fi
   # shellcheck disable=SC2086 # one argument per package
-  if ! go test -count=1 ${race[@]+"${race[@]}"} $packages -coverprofile="$profile" >"$test_output" 2>&1; then
+  if ! go test -count=1 ${race[@]+"${race[@]}"} ${build[@]+"${build[@]}"} $packages -coverprofile="$profile" >"$test_output" 2>&1; then
     cat "$test_output" >&2
     exit 1
+  fi
+  if [[ $build_only == 1 ]]; then
+    printf 'Go coverage build compiled; no test ran.\n'
+    exit 0
   fi
 fi
 [[ -s "$profile" ]] || { printf 'coverage-check: profile %s is empty or missing\n' "$profile" >&2; exit 1; }

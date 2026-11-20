@@ -110,19 +110,46 @@ holds the race-instrumented build. `quality-arm64` used the `actions/setup-go` c
 until issue #518, so its race pass compiled every package with the race detector on
 every run.
 
-Both caches are restored on every run and saved only by runs on `main` (the nightly
-release gates), under daily keys (runner, toolchain or lint image, `go.sum`, the UTC
-date): an exact hit saves nothing, so a fixed key would freeze a cache at its first
-contents, and a save from every pull request would crowd the repository's cache quota.
-A pull request restores the newest cache `main` saved, by key prefix. The unit-test
-pass uses `-count=1`, so a restored build cache never replays an earlier test result.
+Both caches are restored on every run and saved only by runs on `main`: an exact hit
+saves nothing, so a fixed key would freeze a cache at its first contents, and a save
+from every pull request would crowd the repository's cache quota. A pull request
+restores the newest cache `main` saved, by key prefix. The unit-test pass uses
+`-count=1`, so a restored build cache never replays an earlier test result.
+
+The lint cache has a daily key (runner, lint image, `go.sum` and `.golangci.yml`, the
+UTC date) and the release gates save it. The race build cache has a key per run
+(runner, build flavour `race` or `race-coverage`, toolchain, `go.sum`, the run id and
+attempt). Until issue #518 it had a daily
+key too, so only the first save of a day stuck, and a pull request compiled again
+every package that `main` had changed since: `quality` took 4.2 minutes on the
+morning's cache and 7.3 once `main` had moved (runs 44723845622 and 44740891885).
+
+Every push to `main` that changes more than documentation (embedded files change the
+build too) now runs the `Go cache` workflow (`go-cache.yml`), one job per
+architecture. It restores the newest race build cache of its flavour, compiles the
+build of `quality` (`make race-coverage-build`, amd64) or of `quality-arm64`
+(`make race-build`, and `make vet-build` for the plain build that `make vet`
+type-checks against, arm64) and saves it. The two targets run the commands of
+`make race-coverage` and `make race` with `-c -o /dev/null` added (`RACE_TEST` in the
+Makefile, `--build-only` in `scripts/coverage-check.sh`), so the cache they fill is the
+one the test run hits; they compile and link the test binaries and run no test, no
+vet and no lint. The owner rule that a push to `main` runs no tests (ADR 0024,
+amendment of 2026-11-19) allows this build-only warm as long as it stays cheap (ADR
+0024, amendment of 2026-11-20). The warm then deletes the race build caches of its
+architecture and flavour on `main` that were created before the one it saved, except
+the newest of them, which a pull request may be restoring at that moment; a newer one
+stays.
+It is a workflow of its own, so the `cancel-in-progress` group of `ci.yml` cannot
+cancel it before it saves (a newer push waits for it), and it does not gate `main`; a
+failed warm shows as a failed `Go cache` run.
 
 The repository has a 10 GB cache quota, and beyond it GitHub evicts the least recently
 used entries (11.8 GB were in use on 2026-11-20, most of it BuildKit layers and
 Playwright browsers saved by pull requests; issue #518 took the runner image version
 out of the browser key). Every Go pull request restores the newest race and lint caches,
-so they stay recently used; a superseded daily entry is no longer restored and is the
-first to go.
+so they stay recently used. A superseded daily lint entry is no longer restored and is
+the first to go; the warm deletes superseded race build caches itself (about 0.6 GB on
+amd64 and 0.9 GB on arm64 each).
 
 ## Workflow linting
 
