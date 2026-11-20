@@ -308,7 +308,7 @@ dependency-audit:
 	@node ./scripts/npm-audit-check.mjs console tools/openapi
 
 fmt:
-	@docker run --rm -v "$(CURDIR):/src" -w /src $(GO_IMAGE) gofmt -w cmd internal
+	@docker run --rm -v "$(CURDIR):/src" -w /src $(GO_IMAGE) gofmt -w .
 
 cli-build:
 	@mkdir -p dist
