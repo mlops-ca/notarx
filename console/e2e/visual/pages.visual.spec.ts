@@ -233,7 +233,14 @@ const surfaces: Surface[] = [
   {
     name: "authentication",
     path: "/identity-providers",
-    ready: (page) => page.getByText("OIDC").first(),
+    // The SAML providers and authorization cache sections load from requests
+    // of their own; waiting only for the provider form let the screenshot race
+    // them. The SAML card renders nothing without a SAML provider, so the page
+    // also waits for every request to settle.
+    ready: (page) => page.getByText("Authorization cache").first(),
+    prepare: async (page) => {
+      await page.waitForLoadState("networkidle");
+    },
   },
 ];
 
