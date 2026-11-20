@@ -80,83 +80,28 @@ jobs:
 
   # Builds the Compose images CI consumes once per run. Contract lanes and the
   # Console E2E against notarx load them instead of each rebuilding from source
-  # (docs/ci.md). Each leg is native to its runner (ADR 0016): amd64 images build
-  # on ubuntu-24.04 and arm64 images on ubuntu-24.04-arm, and the artifact name
+  # (docs/ci.md). Each architecture is its own job, native to its runner (ADR 0016):
+  # amd64 images build on ubuntu-24.04 and arm64 images on ubuntu-24.04-arm, so an
+  # amd64 job waits only for the amd64 images. One job builds both images of its
+  # architecture in parallel (.github/actions/ci-images), and the artifact name
   # carries the runner architecture so the two sets never clash.
-  build-images:
+  build-images-amd64:
     if: inputs.go || inputs.console
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        runner: [ubuntu-24.04, ubuntu-24.04-arm]
-        name: [notarx, apt-signer]
-        include:
-          - name: notarx
-            file: Dockerfile
-            tag: notarx:local
-          - name: apt-signer
-            file: Dockerfile.apt-signer
-            tag: notarx-reference-apt-signer:local
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.sha }}
-      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+      - uses: ./.github/actions/ci-images
+
+  build-images-arm64:
+    if: inputs.go || inputs.console
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          go-version-file: go.mod
-          cache: false
-      # The image build seeds go mod download from this directory (the gomod-seed
-      # build context), so a warm run never contacts the module proxy. The key
-      # follows go.sum; a miss restores the newest older seed by prefix and only
-      # the changed modules are fetched. go.sum and go mod verify still decide
-      # which bytes are accepted (docs/ci.md).
-      # The month in the key starts a fresh seed each month, so modules the project
-      # dropped or upgraded cannot pile up through the prefix fallback.
-      - name: Locate the module download cache
-        id: gomod-dir
-        run: |
-          echo "dir=$(go env GOMODCACHE)/cache/download" >> "$GITHUB_OUTPUT"
-          echo "month=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
-      - name: Restore the Go module download cache
-        id: gomod-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ steps.gomod-dir.outputs.dir }}
-          key: go-image-seed-${{ runner.os }}-${{ runner.arch }}-${{ steps.gomod-dir.outputs.month }}-${{ hashFiles('go.mod', 'go.sum') }}
-          restore-keys: go-image-seed-${{ runner.os }}-${{ runner.arch }}-${{ steps.gomod-dir.outputs.month }}-
-      - name: Fill and verify the module seed
-        env:
-          CACHE_HIT: ${{ steps.gomod-cache.outputs.cache-hit }}
-          GOMOD_DIR: ${{ steps.gomod-dir.outputs.dir }}
-        run: |
-          if [[ "$CACHE_HIT" == true ]]; then
-            # An exact hit must hold every module: with the proxy switched off
-            # this fails instead of fetching, which proves the warm path.
-            GOPROXY=off go mod download
-            echo "warm module seed: no requests to proxy.golang.org"
-          else
-            go mod download
-          fi
-          go mod verify
-          echo "GOMOD_SEED=$GOMOD_DIR" >> "$GITHUB_ENV"
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      - name: Build the image and export it as a tarball
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: ${{ matrix.file }}
-          tags: ${{ matrix.tag }}
-          outputs: type=docker,dest=${{ runner.temp }}/${{ matrix.name }}.tar
-          build-contexts: gomod-seed=${{ env.GOMOD_SEED }}
-          cache-from: type=gha,scope=ci-${{ matrix.name }}-${{ runner.arch }}
-          cache-to: type=gha,mode=max,scope=ci-${{ matrix.name }}-${{ runner.arch }}
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: image-${{ runner.arch }}-${{ matrix.name }}
-          path: ${{ runner.temp }}/${{ matrix.name }}.tar
-          retention-days: 1
-          if-no-files-found: error
+          ref: ${{ inputs.sha }}
+      - uses: ./.github/actions/ci-images
 
   # The lane plan (scripts/ci-contract-lanes.json) is the single source for
   # lane names, tool needs and timeouts; the matrix below is generated from it.
@@ -164,7 +109,12 @@ jobs:
     if: inputs.go
     runs-on: ubuntu-24.04
     outputs:
-      matrix: ${{ steps.plan.outputs.matrix }}
+      early: ${{ steps.plan.outputs.early }}
+      early-jobs: ${{ steps.plan.outputs.early-jobs }}
+      amd64: ${{ steps.plan.outputs.amd64 }}
+      amd64-jobs: ${{ steps.plan.outputs.amd64-jobs }}
+      arm64: ${{ steps.plan.outputs.arm64 }}
+      arm64-jobs: ${{ steps.plan.outputs.arm64-jobs }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -172,7 +122,9 @@ jobs:
       # Every lane runs on amd64. The arm64 legs (ADR 0016) are the core lanes and the
       # native-format smoke subset for an architecture-sensitive pull request, none for
       # any other pull request, and every lane for the mainline scope the release gates
-      # use (the tiers live in scripts/ci-contract-lanes.json).
+      # use (the tiers live in scripts/ci-contract-lanes.json). The plan is split in
+      # three groups so each job waits only for the images it loads: early (lanes
+      # that load no prebuilt image, both architectures), amd64 and arm64.
       - id: plan
         env:
           SCOPE: ${{ inputs.scope }}
@@ -180,18 +132,61 @@ jobs:
         run: |
           args=(--scope "$SCOPE")
           if [[ "$ARM64" != true ]]; then args+=(--no-arm64); fi
-          echo "matrix=$(python3 scripts/ci-contract.py matrix "${args[@]}")" >> "$GITHUB_OUTPUT"
+          for group in early amd64 arm64; do
+            matrix=$(python3 scripts/ci-contract.py matrix "${args[@]}" --group "$group")
+            echo "$group=$matrix" >> "$GITHUB_OUTPUT"
+            echo "$group-jobs=$(jq '.include | length' <<<"$matrix")" >> "$GITHUB_OUTPUT"
+          done
 
-  contract:
-    needs: [contract-plan, build-images]
+  # Lanes that load no prebuilt image start as soon as the plan exists.
+  contract-early:
+    needs: contract-plan
+    if: needs.contract-plan.outputs.early-jobs != '0'
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.contract-plan.outputs.matrix) }}
+      matrix: ${{ fromJSON(needs.contract-plan.outputs.early) }}
     uses: ./.github/workflows/contract-lane.yml
     with:
       job: ${{ matrix.job }}
       lanes: ${{ matrix.lanes }}
       timeout: ${{ matrix.timeout }}
+      images: ${{ matrix.images }}
+      rust: ${{ matrix.rust }}
+      node: ${{ matrix.node }}
+      npm: ${{ matrix.npm }}
+      runner: ${{ matrix.runner }}
+      sha: ${{ inputs.sha }}
+
+  contract-amd64:
+    needs: [contract-plan, build-images-amd64]
+    if: needs.contract-plan.outputs.amd64-jobs != '0'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.contract-plan.outputs.amd64) }}
+    uses: ./.github/workflows/contract-lane.yml
+    with:
+      job: ${{ matrix.job }}
+      lanes: ${{ matrix.lanes }}
+      timeout: ${{ matrix.timeout }}
+      images: ${{ matrix.images }}
+      rust: ${{ matrix.rust }}
+      node: ${{ matrix.node }}
+      npm: ${{ matrix.npm }}
+      runner: ${{ matrix.runner }}
+      sha: ${{ inputs.sha }}
+
+  contract-arm64:
+    needs: [contract-plan, build-images-arm64]
+    if: needs.contract-plan.outputs.arm64-jobs != '0'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.contract-plan.outputs.arm64) }}
+    uses: ./.github/workflows/contract-lane.yml
+    with:
+      job: ${{ matrix.job }}
+      lanes: ${{ matrix.lanes }}
+      timeout: ${{ matrix.timeout }}
+      images: ${{ matrix.images }}
       rust: ${{ matrix.rust }}
       node: ${{ matrix.node }}
       npm: ${{ matrix.npm }}
@@ -215,6 +210,8 @@ jobs:
   # from that one profile (make race-coverage). quality-arm64 runs vet and race on arm64
   # for every Go change and lint too for an architecture-sensitive one or in the release
   # gates (ADR 0016); make test runs on arm64 in the core lanes of the contract matrix.
+  # The release, packaging and SAML fuzz checks run in release-checks, so neither
+  # verdict waits for them (docs/ci.md).
   lint:
     if: inputs.go
     runs-on: ubuntu-24.04
@@ -234,26 +231,10 @@ jobs:
           race: "false"
           # The lint tools' own tests run in the quality job with every other package.
           lint-target: lint-checks
-          openapi-tools: "true"
       - name: Verify the native-build rules (no cross-compilation, no emulation)
         run: make native-build-check
       - name: Check migration immutability and sequencing
         run: make migration-check
-      - name: Cache the pinned git-cliff
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/notarx/git-cliff
-          key: git-cliff-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/git-cliff.version', 'scripts/install-git-cliff.sh') }}
-      - name: Verify release version and artifact builder
-        run: make release-version-check stamp-version-test release-pipeline-test release-workflow-check release-artifacts-test
-      - name: Verify the release plan against the pinned git-cliff
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: make release-plan-test
-      - name: Verify package signing runbook and environment checks
-        run: make packages-signing-drill packages-environments-test
-      - name: Fuzz the SAML response verifier (60s, committed corpus)
-        run: make saml-fuzz
       - name: Audit dependencies
         run: make dependency-audit
 
@@ -271,6 +252,49 @@ jobs:
           vet: "false"
           race: "false"
           race-coverage: "true"
+
+  # The architecture-independent release, packaging and SAML fuzz checks. They used to
+  # follow lint in the lint job and held its verdict back by about 2.5 minutes, and
+  # after the unit tests in quality they made that job the slowest of the suite; on
+  # their own they finish long before the contract lanes (docs/ci.md, issue #500).
+  release-checks:
+    if: inputs.go
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.sha }}
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+      # Node runs the prune-ghcr and release manifest tests; stamp-version-test needs
+      # the OpenAPI tools.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: tools/openapi/package-lock.json
+      - name: Verify public npm lockfile sources before install
+        run: node scripts/npm-lockfile-check.mjs
+      - run: npm ci --ignore-scripts --no-audit --no-fund --timing --loglevel=http
+        timeout-minutes: 10
+        working-directory: tools/openapi
+      - name: Cache the pinned git-cliff
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/notarx/git-cliff
+          key: git-cliff-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/git-cliff.version', 'scripts/install-git-cliff.sh') }}
+      - name: Verify release version and artifact builder
+        run: make release-version-check stamp-version-test release-pipeline-test release-workflow-check release-artifacts-test
+      - name: Verify the release plan against the pinned git-cliff
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: make release-plan-test
+      - name: Verify package signing runbook and environment checks
+        run: make packages-signing-drill packages-environments-test
+      - name: Fuzz the SAML response verifier (60s, committed corpus)
+        run: make saml-fuzz
 
   # vet and the race detector run natively on arm64 for every Go change; lint (whose
   # result differs only by architecture build constraints) runs on arm64 when the
@@ -334,50 +358,48 @@ jobs:
 
   # notarx-backed Console and CLI E2E: runs when notarx or the Console
   # changed, since both execute the real stack. The Playwright suite is split
-  # into three parallel shards (every spec lands in exactly one) and the
-  # CLI E2E runs as its own lane against its own notarx instance. A console-only change
-  # that touches nothing but spec files runs just those specs (docs/ci.md).
+  # into three parallel shards (every spec lands in exactly one); the shard marked
+  # cli also runs the CLI E2E, against a gateway of its own, after its specs. A
+  # console-only change that touches nothing but spec files runs just those specs
+  # (docs/ci.md).
   console-e2e:
     name: console-e2e (${{ matrix.name }})
-    needs: build-images
+    needs: build-images-amd64
     if: inputs.go || inputs.console
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
         # Each entry names its own shard fraction, so the total cannot drift
-        # from the list. Add or remove entries to change the shard count.
+        # from the list. Add or remove entries to change the shard count. Exactly one
+        # entry runs the CLI E2E (cli: true) after its specs, so it needs no job of
+        # its own.
         include:
-          - { name: '1', shard: 1/3 }
-          - { name: '2', shard: 2/3 }
-          - { name: '3', shard: 3/3 }
-          - { name: cli, shard: '' }
+          - { name: '1', shard: 1/3, cli: false }
+          - { name: '2', shard: 2/3, cli: true }
+          - { name: '3', shard: 3/3, cli: false }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.sha }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        if: matrix.shard != ''
         with:
           node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: console/package-lock.json
       - name: Verify public npm lockfile sources before install
-        if: matrix.shard != ''
         run: node scripts/npm-lockfile-check.mjs
       - run: npm ci --timing --loglevel=http
-        if: matrix.shard != ''
         timeout-minutes: 10
         working-directory: console
       - name: Install browser
-        if: matrix.shard != ''
         uses: ./.github/actions/playwright-browser
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          pattern: image-${{ runner.arch }}-*
+          name: image-${{ runner.arch }}
           path: ${{ runner.temp }}/images
-          merge-multiple: true
       - name: Load the prebuilt images
+        id: load-images
         run: for image in "$RUNNER_TEMP"/images/*.tar; do docker load --input "$image"; done
       - name: Start notarx for Console E2E
         env:
@@ -400,7 +422,6 @@ jobs:
           docker compose --env-file "$NOTARX_ENV_FILE" -f compose.yml up --no-build --wait --remove-orphans
       - name: Run console E2E shard ${{ matrix.shard }}
         id: console-e2e
-        if: matrix.shard != ''
         env:
           NOTARX_ENV_FILE: ${{ runner.temp }}/notarx.env
           PLAYWRIGHT_BLOB_REPORT: '1'
@@ -408,7 +429,7 @@ jobs:
           CONSOLE_E2E_SHARD: ${{ matrix.shard }}
         run: make console-e2e
       - name: Upload Console E2E blob report
-        if: ${{ !cancelled() && matrix.shard != '' && (steps.console-e2e.outcome == 'success' || steps.console-e2e.outcome == 'failure') }}
+        if: ${{ !cancelled() && (steps.console-e2e.outcome == 'success' || steps.console-e2e.outcome == 'failure') }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: console-e2e-blob-${{ matrix.name }}
@@ -417,25 +438,27 @@ jobs:
           # A shard that a spec selection leaves empty writes no blob.
           if-no-files-found: ignore
       - name: Upload Console E2E traces
-        if: ${{ failure() && matrix.shard != '' }}
+        if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: console-e2e-traces-${{ matrix.name }}
           path: console/test-results/
           retention-days: 7
           if-no-files-found: ignore
+      # The CLI E2E boots its own isolated gateway from the loaded images (a Compose
+      # project of its own on free ports), so the state the specs of this shard left
+      # behind cannot reach it. It runs even when a spec failed, so both verdicts show,
+      # but not without the loaded images it starts from.
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
-        if: matrix.shard == ''
+        if: ${{ !cancelled() && matrix.cli && steps.load-images.outcome == 'success' }}
         with:
           go-version-file: go.mod
           cache: true
-      - name: Run notarxctl CLI E2E against the same instance
-        if: matrix.shard == ''
+      - name: Run notarxctl CLI E2E against its own gateway
+        if: ${{ !cancelled() && matrix.cli && steps.load-images.outcome == 'success' }}
         env:
-          CLI_E2E_SERVER: http://127.0.0.1:18080
-          CLI_E2E_TOKEN: ci-admin-token
-          CLI_E2E_RESOLVER_TOKEN: ci-resolver-token
-          CLI_E2E_OIDC_ISSUER: http://127.0.0.1:1/ci-cli-e2e
+          NOTARX_ENV_FILE: ${{ runner.temp }}/notarx.env
+          NOTARX_COMPOSE_BUILD_FLAG: --no-build
         run: make cli-e2e
       - name: Stop notarx after Console E2E
         if: always()
@@ -489,7 +512,7 @@ jobs:
   # any failure or cancellation.
   suite-ok:
     if: always()
-    needs: [docs, image-test-stages, build-images, object-store-contract, contract-plan, contract, lint, quality, quality-arm64, console, console-e2e, console-e2e-report]
+    needs: [docs, image-test-stages, build-images-amd64, build-images-arm64, object-store-contract, contract-plan, contract-early, contract-amd64, contract-arm64, lint, quality, release-checks, quality-arm64, console, console-e2e, console-e2e-report]
     runs-on: ubuntu-24.04
     steps:
       - name: Require every needed job to succeed or be skipped
@@ -499,6 +522,11 @@ jobs:
           CONSOLE: ${{ inputs.console }}
           DOCS: ${{ inputs.docs }}
           IMAGES: ${{ inputs.images }}
+          # Jobs per contract group (scripts/ci-contract.py matrix --group); a group
+          # without a job is skipped by design.
+          EARLY_JOBS: ${{ needs.contract-plan.outputs.early-jobs }}
+          AMD64_JOBS: ${{ needs.contract-plan.outputs.amd64-jobs }}
+          ARM64_JOBS: ${{ needs.contract-plan.outputs.arm64-jobs }}
         run: |
           echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
           echo "$NEEDS" | jq -e '[.[] | select(.result != "success" and .result != "skipped")] | length == 0' >/dev/null
@@ -510,8 +538,13 @@ jobs:
           # shard failed, that failure already fails the gate.
           report=false
           if [[ "$e2e" == true && $(echo "$NEEDS" | jq -r '.["console-e2e"].result') == success ]]; then report=true; fi
+          # A contract group is required when the plan gave it a job. With the Go class
+          # on, the plan must have run; an empty count then means it failed, which the
+          # contract-plan check already reports.
+          group() { if [[ "$GO" == true && "${1:-0}" != 0 ]]; then echo true; else echo false; fi; }
+          early=$(group "$EARLY_JOBS") amd64=$(group "$AMD64_JOBS") arm64=$(group "$ARM64_JOBS")
           status=0
-          for pair in lint:$GO quality:$GO quality-arm64:$GO object-store-contract:$GO contract-plan:$GO contract:$GO console:$CONSOLE console-e2e:$e2e console-e2e-report:$report build-images:$e2e docs:$DOCS image-test-stages:$IMAGES; do
+          for pair in lint:$GO quality:$GO release-checks:$GO quality-arm64:$GO object-store-contract:$GO contract-plan:$GO contract-early:$early contract-amd64:$amd64 contract-arm64:$arm64 console:$CONSOLE console-e2e:$e2e console-e2e-report:$report build-images-amd64:$e2e build-images-arm64:$e2e docs:$DOCS image-test-stages:$IMAGES; do
             job=${pair%%:*} class=${pair##*:}
             result=$(echo "$NEEDS" | jq -r --arg job "$job" '.[$job].result')
             if [[ "$class" == true && "$result" != success ]]; then

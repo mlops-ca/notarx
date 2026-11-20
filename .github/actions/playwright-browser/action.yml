@@ -19,6 +19,11 @@ runs:
         # ImageOS and ImageVersion are runner environment variables, not
         # expression contexts, so the cache keys read them from this output.
         echo "image=${ImageOS}-${ImageVersion}-${RUNNER_ARCH}-$version" >> "$GITHUB_OUTPUT"
+        # The system dependency packages of every runner image version share a
+        # prefix, so a runner image no cache was saved for starts from the packages
+        # of another one (docs/ci.md, Playwright browser install).
+        echo "deps-prefix=${ImageOS}-${RUNNER_ARCH}-$version" >> "$GITHUB_OUTPUT"
+        echo "deps=${ImageOS}-${RUNNER_ARCH}-$version-${ImageVersion}" >> "$GITHUB_OUTPUT"
     - name: Cache Playwright browsers
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
@@ -41,8 +46,15 @@ runs:
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.cache/playwright-deps
-        key: playwright-deps-${{ steps.playwright.outputs.image }}
-        restore-keys: playwright-deps-${{ steps.playwright.outputs.image }}-partial-
+        key: playwright-deps-${{ steps.playwright.outputs.deps }}
+        # Not a hit, so the apt path below runs: apt reuses every restored package
+        # whose version still matches and downloads only the rest. The pull request
+        # scope can restore only what main (the nightly release gates) or this pull
+        # request saved, and runner image versions change often, so without the
+        # second key a pull request usually started from nothing.
+        restore-keys: |
+          playwright-deps-${{ steps.playwright.outputs.deps }}-partial-
+          playwright-deps-${{ steps.playwright.outputs.deps-prefix }}-
     # A warm cache (exact key) installs with dpkg only. If dpkg refuses (the
     # runner drifted from the image the packages came from), apt installs them
     # instead; that path never saves, so a bad set is not written back.
@@ -68,7 +80,33 @@ runs:
         # The archive directory setting must not outlive this step, and apt ran
         # as root: hand the packages to the runner user so the cache save can
         # read them, and drop the root-only lock and partial downloads.
-        trap 'sudo rm -f /etc/apt/apt.conf.d/80-playwright-deps; sudo rm -rf ~/.cache/playwright-deps/partial ~/.cache/playwright-deps/lock; sudo chown -R "$(id -u):$(id -g)" ~/.cache/playwright-deps; ls ~/.cache/playwright-deps/*.deb >/dev/null 2>&1 && echo "debs=true" >> "$GITHUB_OUTPUT"' EXIT
+        # Packages restored from another runner image version that apt did not
+        # use are dropped before the save, so the cache holds one version of each
+        # package and does not grow with every image: a package installed at
+        # another version always goes, and after a successful install so does
+        # every package that is not installed. A failed install keeps those for
+        # the next run to resume from.
+        finish() {
+          local status=$? deb name arch version installed
+          sudo rm -f /etc/apt/apt.conf.d/80-playwright-deps
+          sudo rm -rf ~/.cache/playwright-deps/partial ~/.cache/playwright-deps/lock
+          sudo chown -R "$(id -u):$(id -g)" ~/.cache/playwright-deps
+          for deb in ~/.cache/playwright-deps/*.deb; do
+            [[ -e "$deb" ]] || continue
+            read -r name arch version < <(dpkg-deb --show --showformat='${Package} ${Architecture} ${Version}\n' "$deb") || continue
+            if [[ "$arch" != all ]]; then name="$name:$arch"; fi
+            installed=$(dpkg-query --show --showformat='${Version}' "$name" 2>/dev/null || true)
+            # A package installed under another architecture qualifier still counts.
+            if [[ -z "$installed" ]]; then
+              installed=$(dpkg-query --show --showformat='${Version}\n' "${name%%:*}" 2>/dev/null | head -n 1 || true)
+            fi
+            if [[ -n "$installed" && "$installed" != "$version" ]] || [[ "$status" == 0 && -z "$installed" ]]; then
+              rm -f "$deb"
+            fi
+          done
+          if ls ~/.cache/playwright-deps/*.deb >/dev/null 2>&1; then echo "debs=true" >> "$GITHUB_OUTPUT"; fi
+        }
+        trap finish EXIT
         timeout 480 npx playwright install-deps chromium
     # Saved as soon as the step ends, not at the end of the job, so a later flaky
     # test cannot keep the cache from being written. Nothing is saved when no
@@ -78,10 +116,10 @@ runs:
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.cache/playwright-deps
-        key: playwright-deps-${{ steps.playwright.outputs.image }}
+        key: playwright-deps-${{ steps.playwright.outputs.deps }}
     - name: Save the partial apt download
       if: always() && steps.apt-install.outcome == 'failure' && steps.apt-install.outputs.debs == 'true'
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.cache/playwright-deps
-        key: playwright-deps-${{ steps.playwright.outputs.image }}-partial-${{ github.run_id }}-${{ github.run_attempt }}-${{ runner.name }}
+        key: playwright-deps-${{ steps.playwright.outputs.deps }}-partial-${{ github.run_id }}-${{ github.run_attempt }}-${{ runner.name }}

@@ -187,7 +187,7 @@ cli-e2e:
 cli-runtime-e2e:
 	@python3 ./scripts/cli-runtime-e2e.py
 
-# INTEGRATION_SHARD=1 or 2 runs one shard of the suite (the CI core-integration lanes);
+# INTEGRATION_SHARD=1, 2 or 3 runs one shard of the suite (the CI core-integration lanes);
 # without it every package runs.
 integration-test:
 	@./scripts/integration-test.sh $(if $(INTEGRATION_SHARD),--shard $(INTEGRATION_SHARD))

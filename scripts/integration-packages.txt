@@ -2,27 +2,32 @@
 # line per package with integration-tagged test files. Every such package is listed
 # exactly once (contracts/integration_entrypoint_test.go and make test check it). CI
 # runs each shard as its own contract lane; the packages of a shard share one database
-# and run one at a time. The shards are balanced by measured test time (CI run
-# 44640058817: shard 1 about 3.4 minutes of tests, shard 2 about 3.3 minutes). Shard 1
-# holds ./internal/app, so it also runs the official Cargo replay.
+# and run one at a time. The shards are balanced by the time of their whole CI job,
+# not by test time alone: shard 1 (./internal/app, about 2 minutes of tests) also runs
+# the official Cargo replay and is packed after perf-load, shard 2 also runs the
+# published backup test and shard 3 the Conan E2E. Each shard pays about 1.5 minutes
+# to start its stack and compile. Run 44684290400 (amd64): 6.0, 5.9 and 5.3 minutes
+# per job. ./internal/capacity and ./internal/lifecycle joined shard 3 before they
+# were measured. Shard 1 holds ./internal/app, so it also runs the official Cargo
+# replay.
 1 ./internal/app
-1 ./internal/repository
-1 ./internal/aptpublication
-1 ./internal/auditwriter
-1 ./internal/partitions
-1 ./internal/retention
-1 ./internal/objectstore
-1 ./cmd/notarx
+2 ./internal/repository
+2 ./internal/aptpublication
+2 ./internal/auditwriter
+2 ./internal/partitions
+2 ./internal/retention
+2 ./internal/objectstore
+2 ./cmd/notarx
 2 ./internal/access
-2 ./internal/backupops
 2 ./internal/nexusmigration/pgstore
 2 ./internal/nexussource/pgstore
 2 ./internal/secrets/reseal
 2 ./internal/repositorypreset/pgstore
-2 ./internal/format/nuget
-2 ./internal/format/helm
-2 ./internal/format/rubygems
 2 ./internal/rubygemspublication/pgstore
 2 ./internal/preflight
-2 ./internal/capacity
-2 ./internal/lifecycle
+3 ./internal/backupops
+3 ./internal/format/nuget
+3 ./internal/format/helm
+3 ./internal/format/rubygems
+3 ./internal/capacity
+3 ./internal/lifecycle

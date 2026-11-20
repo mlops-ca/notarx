@@ -228,12 +228,14 @@ step timeouts, and the failure artefacts. `scripts/ci-contract.py matrix` turns
 it into the matrix that `test-suite.yml` feeds to the reusable `contract-lane.yml`, so
 neither workflow names a lane. Add or move a lane by editing the JSON only.
 
-The `contract` jobs run in parallel with `fail-fast: false`. The
+The contract jobs (`contract-early` for lanes that load no prebuilt image,
+`contract-amd64` and `contract-arm64` for the others, each waiting only for the
+image build of its architecture) run in parallel with `fail-fast: false`. The
 `suite-ok` job of `test-suite.yml` requires every job of the suite to succeed or
 be skipped by change detection; pull request CI and the release gates (ADR 0024) both
 call that suite, and a push to `main` runs no tests. The
 former serial `core` lane is split into `core-checks`, `core-email`,
-`core-native-e2e`, `core-backup`, `core-integration-1` and `core-integration-2`, followed by the native lanes (migration
+`core-native-e2e`, `core-backup`, `core-integration-1`, `core-integration-2` and `core-integration-3`, followed by the native lanes (migration
 clients, inventory, NuGet, OCI migration and discovery, private-upstream
 authentication, npm migration, Helm, RubyGems, PyPI migration). Each lane
 installs only the toolchains it declares, read from `go.mod`,
