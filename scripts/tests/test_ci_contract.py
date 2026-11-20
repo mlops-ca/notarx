@@ -202,7 +202,35 @@ class PlanTests(unittest.TestCase):
         for target in targets:
             self.assertRegex(makefile, r'(?m)^(?:[\w.-]+ )*' + re.escape(target) + r'(?: [\w.-]+)*::?(?!=)',
                              'planned make target is not defined in the Makefile: ' + target)
-        self.assertEqual(len(targets), len(set(targets)), 'a make target is planned in two lanes')
+        # A target may appear more than once only with different variables (the shards of
+        # integration-test); the same invocation twice would run the same tests twice.
+        invocations = [tuple(s['command'][1:]) for lane in ci.PLAN['lanes'].values()
+                       for s in lane['steps'] if s['command'][0] == 'make']
+        self.assertEqual(len(invocations), len(set(invocations)), 'a make invocation is planned in two lanes')
+        for target in set(targets) - {'integration-test'}:
+            self.assertEqual(targets.count(target), 1, 'a make target is planned in two lanes: ' + target)
+
+    def test_integration_test_shards_are_planned_once_each(self):
+        listed = subprocess.check_output([str(ROOT / 'scripts/integration-test.sh'), '--list'], text=True)
+        shards = sorted({line.split()[0] for line in listed.splitlines()})
+        steps = [s['command'] for lane in ci.PLAN['lanes'].values() for s in lane['steps']
+                 if s['command'][:2] == ['make', 'integration-test']]
+        # An unsharded step would run every package a second time.
+        for command in steps:
+            self.assertEqual(len(command), 3, command)
+            self.assertRegex(command[2], r'^INTEGRATION_SHARD=\d+$', command)
+        planned = sorted(command[2].split('=', 1)[1] for command in steps)
+        self.assertEqual(planned, shards, 'every integration shard runs in exactly one lane')
+        # The shard that holds ./internal/app runs the official Cargo replay on the
+        # host, which needs the pinned Rust toolchain; the other shards need nothing.
+        app_shard = next(line.split()[0] for line in listed.splitlines()
+                         if line.split()[1] == './internal/app')
+        for name, lane in ci.PLAN['lanes'].items():
+            for step in lane['steps']:
+                if step['command'][:2] == ['make', 'integration-test']:
+                    shard = step['command'][2].split('=', 1)[1]
+                    self.assertEqual('rust' in lane.get('needs', []), shard == app_shard,
+                                     f'{name} runs shard {shard}; only the shard with ./internal/app needs rust')
 
     def test_every_notarx_gate_stays_planned(self):
         targets = {s['command'][1] for lane in ci.PLAN['lanes'].values()
@@ -275,6 +303,7 @@ class PlanTests(unittest.TestCase):
             if e['arch'] == 'arm64']
         # ADR 0016: every core lane plus the native-format smoke subset on each pull request.
         self.assertEqual(pull_request, ['core-checks', 'core-email', 'core-native-e2e', 'core-backup',
+                                        'core-integration-1', 'core-integration-2',
                                         'six-format-auth', 'oci-discovery'])
         self.assertEqual({lane['arm64'] for lane in ci.PLAN['lanes'].values()}, {'pull-request', 'mainline'})
         self.assertEqual({e['runner'] for e in json.loads(subprocess.check_output(

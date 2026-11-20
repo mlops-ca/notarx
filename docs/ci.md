@@ -155,7 +155,7 @@ the plan. A failing lane uploads its step logs and raw reports under a name that
 carries the architecture.
 
 Every lane runs on amd64. The plan gives each lane an `arm64` tier: `pull-request`
-lanes (the four `core-*` lanes and the `six-format-auth` and `oci-discovery`
+lanes (the six `core-*` lanes and the `six-format-auth` and `oci-discovery`
 smoke subset) also run on arm64 for every pull request, and `mainline` lanes join
 them in the `mainline` scope, which the release gates use. `scripts/ci-contract.py matrix --scope pull-request|mainline`
 emits the matrix. A step that runs a third-party artifact published for one
@@ -167,6 +167,33 @@ composite action `.github/actions/go-quality` for setup, lint, vet and race, so 
 steps have one definition. They are separate jobs, not a matrix, so the amd64-only steps stay
 out of the arm64 leg. See
 [native builds](native-builds.md).
+
+## The backup and integration lanes
+
+The former `core-backup` lane ran the Conan E2E, `make backup-transfer-test`,
+`make published-native-backup-test` and `make integration-test` one after another
+(about 20 minutes, the longest job of a pull request). It is three lanes now:
+
+| Lane | Steps | Measured before the split |
+| --- | --- | --- |
+| `core-backup` | `make backup-transfer-test` | 6.4 min |
+| `core-integration-1` | `make integration-test INTEGRATION_SHARD=1`, `make published-native-backup-test` | integration 9.9 min in total, published 1.6 min |
+| `core-integration-2` | `make integration-test INTEGRATION_SHARD=2`, `make conan-e2e` | Conan 2.2 min |
+
+`scripts/integration-packages.txt` holds the integration package list and assigns each
+package to one of two shards balanced by measured test time; `scripts/integration-test.sh --list`
+prints it. `TestRequiredIntegrationCommandCoversIntegrationTaggedPackages` (`contracts/`)
+and `make test` (`scripts/integration-isolation-test.sh`) fail when a package with
+integration-tagged files is missing from the list or listed twice. Each shard starts
+its own PostgreSQL and RustFS stack, so the shards cannot see each other's data; inside
+a shard the packages still run one at a time (`-p 1`), because they share that
+database. `-p 1` used to serialize compilation too (about two minutes of the
+integration step): the script now builds every test binary first with full
+parallelism (`go test -exec true`, which builds and links but runs nothing); the
+second `go test -p 1` finds every compiled package in the build cache, so it spends
+seconds per package relinking or reusing the binary before running it. Shard 1 holds `./internal/app` and runs the official Cargo
+replay on the host. Without `INTEGRATION_SHARD`, `make integration-test` runs every
+package in one stack, as before.
 
 ## Shared images
 

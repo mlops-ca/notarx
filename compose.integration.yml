@@ -45,7 +45,9 @@ services:
       # profile; make explain-check overrides it to 1 for the whole profile.
       NOTARX_EXPLAIN_SCALE: ${NOTARX_EXPLAIN_SCALE:-10}
     working_dir: /src
-    command: ["go", "test", "-count=1", "-p", "1", "-tags=integration", "./internal/app", "./internal/aptpublication", "./internal/auditwriter", "./internal/partitions", "./internal/retention", "./internal/repository", "./internal/objectstore", "./cmd/notarx", "./internal/nexussource/pgstore", "./internal/nexusmigration/pgstore", "./internal/secrets/reseal", "./internal/repositorypreset/pgstore", "./internal/format/nuget", "./internal/format/helm", "./internal/format/rubygems", "./internal/rubygemspublication/pgstore", "./internal/backupops", "./internal/preflight"]
+    # No command: callers pass the go test invocation (scripts/integration-test.sh,
+    # which runs the packages and shards of scripts/integration-packages.txt, and
+    # scripts/explain-check.sh).
     volumes:
       - ./:/src:ro
       - notarx-go-mod:/go/pkg/mod

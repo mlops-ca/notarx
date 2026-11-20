@@ -1,0 +1,25 @@
+# The tagged integration suite (scripts/integration-test.sh): one "<shard> <package>"
+# line per package with integration-tagged test files. Every such package is listed
+# exactly once (contracts/integration_entrypoint_test.go and make test check it). CI
+# runs each shard as its own contract lane; the packages of a shard share one database
+# and run one at a time. The shards are balanced by measured test time (CI run
+# 44640058817: shard 1 about 3.4 minutes of tests, shard 2 about 3.3 minutes). Shard 1
+# holds ./internal/app, so it also runs the official Cargo replay.
+1 ./internal/app
+1 ./internal/repository
+1 ./internal/aptpublication
+1 ./internal/auditwriter
+1 ./internal/partitions
+1 ./internal/retention
+1 ./internal/objectstore
+1 ./cmd/notarx
+2 ./internal/backupops
+2 ./internal/nexusmigration/pgstore
+2 ./internal/nexussource/pgstore
+2 ./internal/secrets/reseal
+2 ./internal/repositorypreset/pgstore
+2 ./internal/format/nuget
+2 ./internal/format/helm
+2 ./internal/format/rubygems
+2 ./internal/rubygemspublication/pgstore
+2 ./internal/preflight

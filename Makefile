@@ -187,8 +187,10 @@ cli-e2e:
 cli-runtime-e2e:
 	@python3 ./scripts/cli-runtime-e2e.py
 
+# INTEGRATION_SHARD=1 or 2 runs one shard of the suite (the CI core-integration lanes);
+# without it every package runs.
 integration-test:
-	@./scripts/integration-test.sh
+	@./scripts/integration-test.sh $(if $(INTEGRATION_SHARD),--shard $(INTEGRATION_SHARD))
 
 .PHONY: nexus-migration-client-e2e nexus-inventory-scan-e2e nexus-oci-migration-e2e nexus-conan-migration-e2e private-upstream-auth-e2e private-upstream-formats-e2e native-nuget-e2e
 nexus-migration-client-e2e:
