@@ -27,6 +27,38 @@ func TestWorkloadConfigDefaultsAndOverrides(t *testing.T) {
 	}
 }
 
+func TestWorkloadConfigEnablementAndExchangeSettings(t *testing.T) {
+	defaults := WorkloadConfig{ExchangeMaxTTL: DefaultWorkloadExchangeMaxTTL, ExchangeRate: DefaultWorkloadExchangeRate}
+	got, err := workloadConfigFromEnv(defaults)
+	if err != nil || got.Enabled || got.AllowPrivateNetwork || got.ExchangeMaxTTL != 15*time.Minute || got.ExchangeRate != 60 {
+		t.Fatalf("defaults = %+v, %v", got, err)
+	}
+	t.Setenv("NOTARX_WORKLOAD_ENABLED", "true")
+	t.Setenv("NOTARX_WORKLOAD_ALLOW_PRIVATE_NETWORK", "true")
+	t.Setenv("NOTARX_WORKLOAD_EXCHANGE_MAX_TTL", "1h")
+	t.Setenv("NOTARX_WORKLOAD_EXCHANGE_RATE", "5")
+	got, err = workloadConfigFromEnv(defaults)
+	if err != nil || !got.Enabled || !got.AllowPrivateNetwork || got.ExchangeMaxTTL != time.Hour || got.ExchangeRate != 5 {
+		t.Fatalf("overrides = %+v, %v", got, err)
+	}
+}
+
+func TestWorkloadConfigRejectsInvalidExchangeSettings(t *testing.T) {
+	for name, value := range map[string]string{
+		"NOTARX_WORKLOAD_ENABLED":               "yes",
+		"NOTARX_WORKLOAD_ALLOW_PRIVATE_NETWORK": "1",
+		"NOTARX_WORKLOAD_EXCHANGE_MAX_TTL":      "2h",
+		"NOTARX_WORKLOAD_EXCHANGE_RATE":         "0",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv(name, value)
+			if _, err := workloadConfigFromEnv(WorkloadConfig{}); err == nil {
+				t.Fatalf("%s=%s accepted", name, value)
+			}
+		})
+	}
+}
+
 func TestWorkloadConfigRejectsInvalidValues(t *testing.T) {
 	for name, value := range map[string]string{
 		"NOTARX_WORKLOAD_CLOCK_SKEW":     "6m",

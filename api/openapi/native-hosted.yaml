@@ -205,6 +205,18 @@ paths:
     "$ref": "./protocols/saml.yaml#/saml_acs"
   "/auth/saml/{slug}/metadata":
     "$ref": "./protocols/saml.yaml#/saml_metadata"
+  "/workload-identity/issuers":
+    "$ref": "./management/workload-identity.yaml#/workload_identity_issuers"
+  "/workload-identity/issuers/{issuerId}":
+    "$ref": "./management/workload-identity.yaml#/workload_identity_issuers_issuerId"
+  "/workload-identity/issuers:probe":
+    "$ref": "./management/workload-identity.yaml#/workload_identity_issuers_probe"
+  "/workload-identity/policies":
+    "$ref": "./management/workload-identity.yaml#/workload_identity_policies"
+  "/workload-identity/policies/{policyId}":
+    "$ref": "./management/workload-identity.yaml#/workload_identity_policies_policyId"
+  "/workload-identity/policies:test":
+    "$ref": "./management/workload-identity.yaml#/workload_identity_policies_test"
   "/authentication/providers":
     "$ref": "./management/authentication.yaml#/identity_providers"
   "/authentication/providers/{providerId}":
@@ -357,6 +369,8 @@ paths:
     "$ref": "./protocols/oidc-issuer.yaml#/openid_configuration"
   "/.well-known/jwks.json":
     "$ref": "./protocols/oidc-issuer.yaml#/jwks"
+  "/auth/token-exchange":
+    "$ref": "./protocols/token-exchange.yaml#/token_exchange"
   "/cargo/{repository}/{path}":
     "$ref": "./protocols/cargo.yaml#/cargo_repository_path"
   "/npm/{repository}/-/package/{package}/dist-tags":

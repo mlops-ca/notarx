@@ -807,6 +807,20 @@ issues it.
   `notarxctl service-account update ID [--description TEXT] [--state
   active|disabled]` is conditional on `--if-match` or the version read from
   the list; disabling stops every credential of the account.
+- Workload identity federation (ADR 0019) replaces stored secrets with the short-lived
+  tokens CI platforms issue. `notarxctl workload issuer list|show|create|update|delete|probe`
+  manages the trusted issuers (GitHub Actions, GitLab CI, Kubernetes, generic OIDC) and
+  `notarxctl workload policy list|show|create|update|delete|test` the trust policies that map a
+  token's claims to a service account. Creates are not retried; updates and deletes are
+  conditional on `--if-match` or the version read just before, and deletes need `--yes`.
+  `--condition CLAIM:OP:VALUE` repeats (the value is everything after the operator, so a
+  Kubernetes subject keeps its colons; `in` splits on commas) or `--conditions-file` holds the
+  whole list. `--single-use` needs a `jti` and, on a generic issuer, `--sample-token-file` (the token
+  is never stored and never printed). `notarxctl workload policy test --token-file FILE` dry-runs a token
+  (its signature is checked) or `--claims-file FILE` a claim set and prints the failing condition.
+  `notarxctl auth login --workload-token-file FILE [--workload-policy NAME] (--profile NAME |
+  --secret-output FILE)` exchanges the workload token at `POST /auth/token-exchange` and stores the
+  short-lived result like any session token; the exchange is not retried.
 - `notarxctl credential list --service-account ID` and `notarxctl api-key list` never
   show secrets.
 - `notarxctl credential issue --service-account ID --name NAME --secret-output

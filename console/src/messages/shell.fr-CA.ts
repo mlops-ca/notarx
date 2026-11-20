@@ -28,6 +28,7 @@ export const shellFrCA: Record<keyof typeof shellEnCA, string> = {
   "account.kind.local_session": "Connexion par mot de passe",
   "account.kind.api_key": "Clé d’API",
   "account.kind.oidc": "Authentification unique",
+  "account.kind.workload_federation": "Jeton de charge de travail",
   "account.kind.service_account_credential":
     "Justificatif d’identité de compte de service",
   "account.role.admin": "Administrateur",
@@ -50,6 +51,7 @@ export const shellFrCA: Record<keyof typeof shellEnCA, string> = {
   "nav.users": "Utilisateurs",
   "nav.authentication": "Authentification",
   "nav.siteSettings": "Paramètres du site",
+  "nav.workloadIdentity": "Identité de charge de travail",
   "nav.expand": "Développer la navigation",
   "nav.collapse": "Réduire la navigation",
   "nav.open": "Ouvrir la navigation",

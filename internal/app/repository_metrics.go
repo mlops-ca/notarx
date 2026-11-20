@@ -57,6 +57,7 @@ type Metrics struct {
 	rawSpoolRejected               atomic.Uint64
 	huggingFaceFetches             [len(huggingFaceFetchOutcomes)]atomic.Uint64
 	huggingFaceXetOnly             atomic.Uint64
+	workload                       workloadCounters
 	conanGetRequests               atomic.Uint64
 	conanHeadRequests              atomic.Uint64
 	conanOtherRequests             atomic.Uint64
@@ -584,6 +585,7 @@ func (m *Metrics) Handler(w http.ResponseWriter, _ *http.Request) {
 	m.writeObjectStoreMetrics(w)
 	m.writeAPTSigningMetrics(w)
 	m.writeHuggingFaceMetrics(w)
+	m.writeWorkloadMetrics(w)
 	_, _ = w.Write([]byte("# TYPE notarx_cache_quota_rejections_total counter\nnotarx_cache_quota_rejections_total " + utoa(m.cacheQuotaDenied.Load()) + "\n# TYPE notarx_anonymous_reads_total counter\nnotarx_anonymous_reads_total " + utoa(m.anonymousReads.Load()) + "\n"))
 	_, _ = w.Write([]byte("# TYPE notarx_repository_authorization_denials_total counter\n"))
 	for formatIndex, format := range repositoryAuthorizationFormats {

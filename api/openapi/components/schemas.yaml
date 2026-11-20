@@ -1739,7 +1739,7 @@ EffectiveAccessPermissions:
     intelligence: {"$ref": "#/EffectiveAccessDecision"}
 AuthenticationKind:
   type: string
-  enum: [static_admin, static_resolver, local_session, api_key, service_account_credential, oidc]
+  enum: [static_admin, static_resolver, local_session, api_key, service_account_credential, oidc, workload_federation]
 OIDCRoleMappingMatch:
   type: object
   required: [externalRole, gatewayRole]

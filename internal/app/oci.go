@@ -16,6 +16,7 @@ import (
 
 	"github.com/mlops-ca/notarx/internal/egress"
 	ociprotocol "github.com/mlops-ca/notarx/internal/protocol/oci"
+	"github.com/mlops-ca/notarx/internal/readcache"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -755,7 +756,8 @@ func writeOCIError(w http.ResponseWriter, status int, code, message string) {
 
 func (h OCIHandler) Token(w http.ResponseWriter, request *http.Request) {
 	username, password, ok := request.BasicAuth()
-	if principal, authenticated := h.Authenticator.AuthenticateBasic(username, password); ok && authenticated {
+	// Token minting reads through to the database (readcache.Bypass), so a disabled policy never gets a new token.
+	if principal, authenticated := h.Authenticator.AuthenticateBasicContext(readcache.Bypass(request.Context()), username, password); ok && authenticated {
 		token := h.Authenticator.IssuePrincipalToken(principal)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"token": token, "access_token": token, "expires_in": 300, "issued_at": time.Now().UTC().Format(time.RFC3339)})

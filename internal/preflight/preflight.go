@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/mlops-ca/notarx/internal/config"
+	"github.com/mlops-ca/notarx/internal/jose"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/secrets"
 )
@@ -58,7 +59,10 @@ type Runner struct {
 	TrigramState     func(context.Context, string) (string, error)
 	MySQLProbe       func(context.Context, config.Config) (MySQLFacts, error)
 	ObjectStoreCheck func(context.Context, config.Config) error
-	HTTPClient       *http.Client
+	// WorkloadIssuers lists the active workload issuers (ADR 0019); WorkloadProbe reads one issuer's keys.
+	WorkloadIssuers func(context.Context, config.Config) ([]WorkloadIssuer, error)
+	WorkloadProbe   func(context.Context, jose.Issuer) (jose.ProbeResult, error)
+	HTTPClient      *http.Client
 }
 
 func NewRunner() Runner {
@@ -67,12 +71,16 @@ func NewRunner() Runner {
 		TrigramState:     probeTrigram,
 		MySQLProbe:       probeMySQL,
 		ObjectStoreCheck: checkObjectStore,
-		HTTPClient:       &http.Client{Timeout: 5 * time.Second},
+		WorkloadIssuers:  listWorkloadIssuers,
+		WorkloadProbe: func(ctx context.Context, issuer jose.Issuer) (jose.ProbeResult, error) {
+			return jose.Probe(ctx, issuer, nil)
+		},
+		HTTPClient: &http.Client{Timeout: 5 * time.Second},
 	}
 }
 
 func CheckNames() []string {
-	return []string{"configuration", "policy", "postgres", "pg_trgm", "mysql", "object_store", "oidc_jwks"}
+	return []string{"configuration", "policy", "postgres", "pg_trgm", "mysql", "object_store", "oidc_jwks", "workload_issuers"}
 }
 
 func (r Runner) Run(ctx context.Context, cfg config.Config, names []string) Report {
@@ -111,6 +119,8 @@ func (r Runner) Run(ctx context.Context, cfg config.Config, names []string) Repo
 			report.Results = append(report.Results, dependencyResult(name, "object storage bucket is reachable", r.ObjectStoreCheck(ctx, cfg)))
 		case "oidc_jwks":
 			report.Results = append(report.Results, r.checkOIDC(ctx, cfg))
+		case "workload_issuers":
+			report.Results = append(report.Results, r.checkWorkloadIssuers(ctx, cfg))
 		}
 	}
 	return report

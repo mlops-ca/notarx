@@ -1,0 +1,195 @@
+---
+workload_identity_issuers:
+  get:
+    operationId: listWorkloadIssuers
+    parameters:
+    - "$ref": "../components/parameters.yaml#/PageSize"
+    - "$ref": "../components/parameters.yaml#/PageToken"
+    responses:
+      '200':
+        description: Workload issuers
+        content:
+          application/json:
+            schema: {"$ref": "../components/workload-identity.yaml#/WorkloadIssuerList"}
+      '401': {"$ref": "../components/responses.yaml#/Problem"}
+      '403': {"$ref": "../components/responses.yaml#/Problem"}
+  post:
+    operationId: createWorkloadIssuer
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {"$ref": "../components/workload-identity.yaml#/CreateWorkloadIssuer"}
+    responses:
+      '201':
+        description: Workload issuer created
+        content:
+          application/json:
+            schema: {"$ref": "../components/workload-identity.yaml#/WorkloadIssuer"}
+      '400': {"$ref": "../components/responses.yaml#/Problem"}
+      '401': {"$ref": "../components/responses.yaml#/Problem"}
+      '403': {"$ref": "../components/responses.yaml#/Problem"}
+      '409': {"$ref": "../components/responses.yaml#/Problem"}
+workload_identity_issuers_issuerId:
+  parameters:
+  - name: issuerId
+    in: path
+    required: true
+    schema: {type: string, format: uuid}
+  get:
+    operationId: getWorkloadIssuer
+    responses:
+      '200':
+        description: Workload issuer
+        content:
+          application/json:
+            schema: {"$ref": "../components/workload-identity.yaml#/WorkloadIssuer"}
+      '401': {"$ref": "../components/responses.yaml#/Problem"}
+      '403': {"$ref": "../components/responses.yaml#/Problem"}
+      '404': {"$ref": "../components/responses.yaml#/Problem"}
+  patch:
+    operationId: updateWorkloadIssuer
+    parameters:
+    - "$ref": "../components/parameters.yaml#/IfMatch"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {"$ref": "../components/workload-identity.yaml#/UpdateWorkloadIssuer"}
+    responses:
+      '200':
+        description: Workload issuer updated
+        content:
+          application/json:
+            schema: {"$ref": "../components/workload-identity.yaml#/WorkloadIssuer"}
+      '400': {"$ref": "../components/responses.yaml#/Problem"}
+      '401': {"$ref": "../components/responses.yaml#/Problem"}
+      '403': {"$ref": "../components/responses.yaml#/Problem"}
+      '404': {"$ref": "../components/responses.yaml#/Problem"}
+      '412': {"$ref": "../components/responses.yaml#/Problem"}
+  delete:
+    operationId: deleteWorkloadIssuer
+    parameters:
+    - "$ref": "../components/parameters.yaml#/IfMatch"
+    responses:
+      '204': {description: Workload issuer deleted}
+      '401': {"$ref": "../components/responses.yaml#/Problem"}
+      '403': {"$ref": "../components/responses.yaml#/Problem"}
+      '404': {"$ref": "../components/responses.yaml#/Problem"}
+      '409': {"$ref": "../components/responses.yaml#/Problem"}
+      '412': {"$ref": "../components/responses.yaml#/Problem"}
+workload_identity_issuers_probe:
+  post:
+    operationId: probeWorkloadIssuer
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {"$ref": "../components/workload-identity.yaml#/ProbeWorkloadIssuerRequest"}
+    responses:
+      '200':
+        description: Probe result; reachable is false with the error when the issuer could not be read
+        content:
+          application/json:
+            schema: {"$ref": "../components/workload-identity.yaml#/WorkloadIssuerProbe"}
+      '400': {"$ref": "../components/responses.yaml#/Problem"}
+      '401': {"$ref": "../components/responses.yaml#/Problem"}
+      '403': {"$ref": "../components/responses.yaml#/Problem"}
+      '404': {"$ref": "../components/responses.yaml#/Problem"}
+workload_identity_policies:
+  get:
+    operationId: listWorkloadTrustPolicies
+    parameters:
+    - "$ref": "../components/parameters.yaml#/PageSize"
+    - "$ref": "../components/parameters.yaml#/PageToken"
+    responses:
+      '200':
+        description: Workload trust policies
+        content:
+          application/json:
+            schema: {"$ref": "../components/workload-identity.yaml#/WorkloadTrustPolicyList"}
+      '401': {"$ref": "../components/responses.yaml#/Problem"}
+      '403': {"$ref": "../components/responses.yaml#/Problem"}
+  post:
+    operationId: createWorkloadTrustPolicy
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {"$ref": "../components/workload-identity.yaml#/CreateWorkloadTrustPolicy"}
+    responses:
+      '201':
+        description: Workload trust policy created
+        content:
+          application/json:
+            schema: {"$ref": "../components/workload-identity.yaml#/WorkloadTrustPolicy"}
+      '400': {"$ref": "../components/responses.yaml#/Problem"}
+      '401': {"$ref": "../components/responses.yaml#/Problem"}
+      '403': {"$ref": "../components/responses.yaml#/Problem"}
+      '404': {"$ref": "../components/responses.yaml#/Problem"}
+      '409': {"$ref": "../components/responses.yaml#/Problem"}
+workload_identity_policies_policyId:
+  parameters:
+  - name: policyId
+    in: path
+    required: true
+    schema: {type: string, format: uuid}
+  get:
+    operationId: getWorkloadTrustPolicy
+    responses:
+      '200':
+        description: Workload trust policy
+        content:
+          application/json:
+            schema: {"$ref": "../components/workload-identity.yaml#/WorkloadTrustPolicy"}
+      '401': {"$ref": "../components/responses.yaml#/Problem"}
+      '403': {"$ref": "../components/responses.yaml#/Problem"}
+      '404': {"$ref": "../components/responses.yaml#/Problem"}
+  patch:
+    operationId: updateWorkloadTrustPolicy
+    parameters:
+    - "$ref": "../components/parameters.yaml#/IfMatch"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {"$ref": "../components/workload-identity.yaml#/UpdateWorkloadTrustPolicy"}
+    responses:
+      '200':
+        description: Workload trust policy updated
+        content:
+          application/json:
+            schema: {"$ref": "../components/workload-identity.yaml#/WorkloadTrustPolicy"}
+      '400': {"$ref": "../components/responses.yaml#/Problem"}
+      '401': {"$ref": "../components/responses.yaml#/Problem"}
+      '403': {"$ref": "../components/responses.yaml#/Problem"}
+      '404': {"$ref": "../components/responses.yaml#/Problem"}
+      '412': {"$ref": "../components/responses.yaml#/Problem"}
+  delete:
+    operationId: deleteWorkloadTrustPolicy
+    parameters:
+    - "$ref": "../components/parameters.yaml#/IfMatch"
+    responses:
+      '204': {description: Workload trust policy deleted}
+      '401': {"$ref": "../components/responses.yaml#/Problem"}
+      '403': {"$ref": "../components/responses.yaml#/Problem"}
+      '404': {"$ref": "../components/responses.yaml#/Problem"}
+      '412': {"$ref": "../components/responses.yaml#/Problem"}
+workload_identity_policies_test:
+  post:
+    operationId: testWorkloadTrustPolicy
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {"$ref": "../components/workload-identity.yaml#/TestWorkloadPolicyRequest"}
+    responses:
+      '200':
+        description: Dry-run result
+        content:
+          application/json:
+            schema: {"$ref": "../components/workload-identity.yaml#/WorkloadPolicyTest"}
+      '400': {"$ref": "../components/responses.yaml#/Problem"}
+      '401': {"$ref": "../components/responses.yaml#/Problem"}
+      '403': {"$ref": "../components/responses.yaml#/Problem"}
+      '404': {"$ref": "../components/responses.yaml#/Problem"}

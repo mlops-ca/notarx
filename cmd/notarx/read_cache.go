@@ -92,6 +92,10 @@ func (s *cachedStore) GetWorkloadIssuerByIssuer(ctx context.Context, issuer stri
 	return s.access.GetWorkloadIssuerByIssuer(ctx, issuer)
 }
 
+func (s *cachedStore) GetWorkloadTrustPolicy(ctx context.Context, id string) (repository.WorkloadTrustPolicy, error) {
+	return s.access.GetWorkloadTrustPolicy(ctx, id)
+}
+
 func (s *cachedStore) ListActiveWorkloadTrustPolicies(ctx context.Context, issuerID string, now time.Time) ([]repository.WorkloadTrustPolicy, error) {
 	return s.access.ListActiveWorkloadTrustPolicies(ctx, issuerID, now)
 }

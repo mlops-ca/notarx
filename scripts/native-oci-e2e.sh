@@ -12,7 +12,7 @@ fixture_pid=""
 cleanup() { local status=$?; [[ -z "$fixture_pid" ]] || { kill "$fixture_pid" 2>/dev/null || true; wait "$fixture_pid" 2>/dev/null || true; }; rm -rf "$workdir"; trap - EXIT; exit "$status"; }
 trap cleanup EXIT
 go build -o "$workdir/native-oci-fixture" ./cmd/native-oci-fixture
-LISTEN_ADDR="127.0.0.1:${port}" "$workdir/native-oci-fixture" >"$workdir/notarx.log" 2>&1 &
+WORKLOAD_TOKEN_FILE="$workdir/workload.jwt" LISTEN_ADDR="127.0.0.1:${port}" "$workdir/native-oci-fixture" >"$workdir/notarx.log" 2>&1 &
 fixture_pid=$!
 until curl --silent --show-error --fail "$notarx_url/livez" >/dev/null; do kill -0 "$fixture_pid" 2>/dev/null || { cat "$workdir/notarx.log" >&2; exit 1; }; sleep 0.1; done
 
@@ -49,4 +49,16 @@ expect 204 "${auth[@]}" -X DELETE "$notarx_url$cancel_location"
 expect 404 "${auth[@]}" -X PATCH --data-binary 'cancelled' "$notarx_url$cancel_location"
 expect 202 "${auth[@]}" -X DELETE "$notarx_url/v2/team/widget/manifests/$manifest_digest"
 expect 404 "${auth[@]}" "$notarx_url/v2/team/widget/manifests/latest"
+
+# Workload identity federation (ADR 0019): docker login -u oidc -p <workload JWT> is Basic credentials on /auth/token.
+workload_jwt=$(cat "$workdir/workload.jwt")
+test -n "$workload_jwt"
+expect 200 --user "oidc:$workload_jwt" "$notarx_url/auth/token"
+workload_token=$(sed -n 's/.*"token":"\([^"]*\)".*/\1/p' "$workdir/response")
+test -n "$workload_token"
+expect 200 -H "Authorization: Bearer $workload_token" "$notarx_url/v2/"
+expect 200 --user "publish:$workload_jwt" "$notarx_url/auth/token"
+expect 401 --user "deploy:$workload_jwt" "$notarx_url/auth/token"
+# A token with a damaged signature (the last base64url character carries padding bits, so damage earlier ones).
+expect 401 --user "oidc:${workload_jwt:0:${#workload_jwt}-20}AAAAAAAAAAAAAAAAAAAA" "$notarx_url/auth/token"
 printf 'Native OCI Registry V2 E2E passed through %s\n' "$notarx_url"

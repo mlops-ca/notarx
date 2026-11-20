@@ -560,6 +560,17 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 				"detail", "NOTARX_REPOSITORY_READERS is empty and NOTARX_LEGACY_READ_DEFAULT=allow, so any authenticated caller may read a legacy repository with no grant",
 				"change", "unset NOTARX_LEGACY_READ_DEFAULT to deny unmatched readers once every reading actor has a reader pattern or a per-repository grant")
 		}
+		if cfg.Workload.Enabled {
+			if err := checkWorkloadIssuerOverlap(runtimeContext, store, store); err != nil {
+				slog.Error("workload federation is enabled but its issuers overlap the identity providers", "error", err)
+				return 1
+			}
+		}
+		workload, err := setupWorkload(cfg.Workload, gatewayStore, caches.accounts, store, caches.registry, metrics)
+		if err != nil {
+			slog.Error("set up workload federation", "error", err)
+			return 1
+		}
 		gatewayOptions := app.GatewayOptions{
 			HuggingFace:       huggingFace,
 			HuggingFaceConfig: huggingFaceConfig,
@@ -572,11 +583,13 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 			OCIDiscoveryStore: store,
 			Storage:           app.SharedObjectStores(objectStore),
 			// Load validated the mode; an unreadable value stays strict.
-			GroupVisibilityMode: access.GroupMode(cfg.GroupVisibilityMode),
-			OverviewCacheTTL:    cfg.OverviewCacheTTL,
-			ReadCache:           caches.registry,
-			AuthzCacheTTL:       cfg.AuthzCacheTTL,
-			Adapter:             app.TestAdapter{},
+			GroupVisibilityMode:         access.GroupMode(cfg.GroupVisibilityMode),
+			OverviewCacheTTL:            cfg.OverviewCacheTTL,
+			ReadCache:                   caches.registry,
+			AuthzCacheTTL:               cfg.AuthzCacheTTL,
+			WorkloadAllowPrivateNetwork: cfg.Workload.AllowPrivateNetwork,
+			WorkloadExchange:            app.WorkloadExchangeOptions{MaxTTL: cfg.Workload.ExchangeMaxTTL, Rate: cfg.Workload.ExchangeRate},
+			Adapter:                     app.TestAdapter{},
 			Authenticator: app.Authenticator{
 				AdminToken:           cfg.AdminToken,
 				ResolverToken:        cfg.ResolverToken,
@@ -590,6 +603,7 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 				OIDCSource:           identityRuntime,
 				APIKeys:              caches.keys,
 				ServiceAccounts:      caches.accounts,
+				Workload:             workload,
 			},
 			Caches: app.GatewayCaches{
 				OCI: ociCache,

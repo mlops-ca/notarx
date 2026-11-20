@@ -53,7 +53,14 @@ type identityProviderRuntime interface {
 	SAMLView(identity.Provider) SAMLView
 }
 
+// workloadIssuerLookup finds a workload issuer (ADR 0019) by its exact iss value; the identity provider API uses it
+// to keep the human and workload registries from overlapping.
+type workloadIssuerLookup interface {
+	GetWorkloadIssuerByIssuer(context.Context, string) (repository.WorkloadIssuer, error)
+}
+
 type identityManagementOptions struct {
+	WorkloadIssuers   workloadIssuerLookup
 	Scope             managementScope
 	Users             identityUserStore
 	APIKeys           identityAPIKeyStore
@@ -69,6 +76,7 @@ type identityManagementHandler struct {
 	apiKeys           identityAPIKeyStore
 	serviceAccounts   identityServiceAccountStore
 	identityProviders identityProviderRuntime
+	workloadIssuers   workloadIssuerLookup
 }
 
 func newIdentityManagementHandler(options identityManagementOptions) identityManagementHandler {
@@ -78,6 +86,7 @@ func newIdentityManagementHandler(options identityManagementOptions) identityMan
 		apiKeys:           options.APIKeys,
 		serviceAccounts:   options.ServiceAccounts,
 		identityProviders: options.IdentityProviders,
+		workloadIssuers:   options.WorkloadIssuers,
 	}
 }
 

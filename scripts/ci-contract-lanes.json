@@ -163,6 +163,14 @@
           "timeoutSeconds": null
         },
         {
+          "name": "workload-identity-e2e",
+          "command": [
+            "make",
+            "workload-identity-e2e"
+          ],
+          "timeoutSeconds": null
+        },
+        {
           "name": "native-raw-e2e",
           "command": [
             "make",
