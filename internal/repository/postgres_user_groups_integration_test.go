@@ -57,7 +57,7 @@ func TestPostgresUserGroupLifecycleAndRules(t *testing.T) {
 	if _, err := store.CreateUserGroup(ctx, UserGroup{DisplayName: " " + name + " ", Source: UserGroupSourceLocal}); !errors.Is(err, ErrUserGroupNameExists) {
 		t.Fatalf("duplicate local name err=%v", err)
 	}
-	if _, err := store.CreateUserGroup(ctx, UserGroup{DisplayName: "x", Source: UserGroupSourceSCIM, ProviderID: uuid.NewString(), ExternalID: "x"}); !errors.Is(err, ErrNotFound) {
+	if _, err := store.CreateUserGroup(ctx, UserGroup{DisplayName: "x", Source: UserGroupSourceSCIM, ProviderID: uuid.NewString(), ExternalID: "x"}); !errors.Is(err, ErrUserGroupProviderNotFound) {
 		t.Fatalf("a group of an unknown provider err=%v", err)
 	}
 
