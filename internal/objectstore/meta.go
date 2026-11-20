@@ -27,11 +27,15 @@ func IsMetaObjectKey(key string) bool {
 		return false
 	}
 	for _, c := range hexPart {
-		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+		if !isLowerHex(c) {
 			return false
 		}
 	}
 	return true
+}
+
+func isLowerHex(c rune) bool {
+	return c >= '0' && c <= '9' || c >= 'a' && c <= 'f'
 }
 
 // MetaKey returns the object key of a "sha256:<hex>" digest.
