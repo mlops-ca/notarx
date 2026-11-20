@@ -4,7 +4,7 @@
 
 Step-by-step setup of Microsoft Entra ID, Okta and Keycloak as human identity providers for the Console and
 the API, over OpenID Connect (OIDC) or SAML 2.0. Both protocols register through the same provider registry
-(ADR 0018, `/api/v2/authentication/providers`, or Console Settings, Authentication). Protocol details live in
+(ADR 0018, `/api/v2/authentication/providers`, or the Console Identity providers page). Protocol details live in
 [OIDC SSO](oidc-sso.md) and [SAML SSO](saml-sso.md); user groups are described in
 [Local user governance](user-governance.md).
 
@@ -42,7 +42,7 @@ The Console wizard offers the same fields with the issuer and attribute defaults
 
 ### Microsoft Entra ID (OIDC)
 
-1. Entra admin center, App registrations, New registration. Platform Web, redirect URI
+1. In the Microsoft Entra portal, App registrations, New registration. Platform Web, redirect URI
    `$NOTARX_PUBLIC_URL/auth/oidc/{slug}/callback`.
 2. Certificates and secrets: create a client secret and copy its value.
 3. Issuer: `https://login.microsoftonline.com/{tenant}/v2.0` (a tenant id, never `common`). Audience and client id:

@@ -96,7 +96,12 @@ function mockReads() {
   vi.mocked(listIdentityProviders).mockResolvedValue({
     data: {
       items: [
-        { id: claims.providerId, slug: "entra", displayName: "Entra ID" },
+        {
+          id: claims.providerId,
+          slug: "entra",
+          kind: "oidc",
+          displayName: "Entra ID",
+        },
       ],
     },
   } as never);

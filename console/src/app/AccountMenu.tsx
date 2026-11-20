@@ -115,6 +115,21 @@ export function AccountMenu({
               },
             },
             { type: "divider" },
+            // Signing out of an SSO session cannot end the identity provider session (no Single Logout).
+            ...(identity?.kind === "oidc"
+              ? [
+                  {
+                    key: "sso-notice",
+                    disabled: true,
+                    className: "ag-account-sso-notice",
+                    label: (
+                      <span className="whitespace-normal text-xs">
+                        {t("providers.sloSignOut")}
+                      </span>
+                    ),
+                  },
+                ]
+              : []),
             {
               key: "sign-out",
               icon: <LogoutOutlined />,

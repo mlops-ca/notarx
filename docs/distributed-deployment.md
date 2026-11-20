@@ -344,7 +344,7 @@ NOTARX_OVERVIEW_CACHE_TTL=30s
   that changes many repositories or groups at once (a bulk import or a secrets
   reseal) sends at most 64 notifications: above that it announces the scope once
   and every node flushes the scope, negative results included. The window
-  is shown read-only in the Console on the Authentication page.
+  is shown read-only in the Console on the Identity providers page.
 - **Regulated profile.** Set `NOTARX_AUTHZ_CACHE_TTL=1s` to shorten the window,
   or `0` where no staleness is acceptable: `0` disables every read cache, so a
   change is effective on the next request at the cost of the per-request query

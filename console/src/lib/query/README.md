@@ -164,7 +164,7 @@ an action, not a cached read, and is not listed.
 - [x] `features/repository/RepositorySecurityTab.tsx`
 - [x] `features/repository/RepositoryUsageTab.tsx`
 - [x] `features/search/Search.tsx`
-- [x] `features/settings/Authentication.tsx`
+- [x] `features/settings/IdentityProviders.tsx`
 - [x] `features/settings/SiteSettings.tsx`
 - [x] `lib/preferences.tsx` — its effects sync the document language, stored
       preferences and theme fallback; it reads no server data.

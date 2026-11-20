@@ -80,7 +80,7 @@ Validated OIDC identities can be bound to local accounts by identity provider an
 stable subject (`sub`, or the mapped subject). The same subject string at two
 providers is two different identities, and one account holds at most one
 identity per provider. Administrators may manage links from the Users page. The
-runtime Authentication settings can also enable just-in-time account creation,
+Identity providers page can also enable just-in-time account creation,
 choose its default role, and opt into linking an existing account by a unique
 verified email claim. These provisioning options default to disabled.
 
@@ -182,7 +182,7 @@ recreated; there is no in-place upgrade path.
 
 `notarx preflight` reports `oidc_enabled`, `oidc_browser_login_enabled`, and
 whether the runtime settings encryption key is configured. The Console can
-test the saved discovery document from the Authentication page. Runtime saves
+test the saved discovery document from the Identity providers page. Runtime saves
 take effect immediately on the current node; other API nodes observe the new
 database version after the bounded settings-cache window. No Gateway restart
 or Console rebuild is required.

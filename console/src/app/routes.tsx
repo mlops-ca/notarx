@@ -167,8 +167,8 @@ export const consoleRoutes: readonly ConsoleRoute[] = [
     path: "/identity-providers",
     access: "admin",
     lazy: async () => ({
-      Component: (await import("../features/settings/Authentication"))
-        .AuthenticationPage,
+      Component: (await import("../features/settings/IdentityProviders"))
+        .IdentityProvidersPage,
     }),
     nav: {
       label: "nav.authentication",

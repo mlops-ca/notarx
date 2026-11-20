@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import {
   addUserGroupMember,
   createUserGroup,
-  listIdentityProviders,
   listUsers,
   removeUserGroupMember,
   renameUserGroup,
@@ -26,8 +25,8 @@ import { ConfirmDanger, Modal } from "../../../components/ui/Modal";
 import { formatDate } from "../../../lib/format";
 import { usePreferences } from "../../../lib/preferences";
 import { unwrap } from "../../../lib/query/client";
-import { settingsKeys } from "../../../lib/query/keys";
 import { isActiveUserPrincipal } from "../../../lib/accessPrincipals";
+import { useIdentityProviders } from "../../settings/providers/providerQueries";
 import { useUserGroupMemberPages } from "./userGroupQueries";
 
 type GlobalRole = UserGroup["globalRole"];
@@ -66,12 +65,7 @@ export function CreateUserGroupDialog({
   const [source, setSource] = useState<"local" | "claims">("local");
   const [providerId, setProviderId] = useState<string | undefined>();
   const [externalId, setExternalId] = useState("");
-  const providers = useQuery({
-    queryKey: settingsKeys.identityProviders(),
-    queryFn: async ({ signal }) =>
-      (await unwrap(listIdentityProviders({ signal })))?.items ?? [],
-    enabled: open && source === "claims",
-  });
+  const providers = useIdentityProviders();
   const complete =
     name.trim() !== "" &&
     (source === "local" ||
@@ -140,10 +134,12 @@ export function CreateUserGroupDialog({
                 loading={providers.isPending}
                 placeholder={t("userGroups.providerPlaceholder")}
                 onChange={setProviderId}
-                options={(providers.data ?? []).map((provider) => ({
-                  value: provider.id,
-                  label: provider.displayName,
-                }))}
+                options={(providers.data ?? [])
+                  .filter((provider) => provider.kind === "oidc")
+                  .map((provider) => ({
+                    value: provider.id,
+                    label: provider.displayName,
+                  }))}
               />
             </Field>
             <Field
