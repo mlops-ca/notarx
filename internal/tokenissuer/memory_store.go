@@ -21,6 +21,15 @@ type MemoryStore struct {
 	lock sync.Mutex // the rotation lock
 	mu   sync.RWMutex
 	rows map[string]KeyRecord
+	// audits are the events of committed transactions, oldest first.
+	audits []AuditEvent
+}
+
+// Audits returns the audit events written by committed transactions.
+func (s *MemoryStore) Audits() []AuditEvent {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return slices.Clone(s.audits)
 }
 
 // NewMemoryStore returns an empty store.
@@ -71,16 +80,26 @@ func (s *MemoryStore) WithRotationLock(ctx context.Context, fn func(context.Cont
 		work[kid] = record
 	}
 	s.mu.RUnlock()
-	if err := fn(ctx, &memoryTx{rows: work}); err != nil {
+	tx := &memoryTx{rows: work}
+	if err := fn(ctx, tx); err != nil {
 		return true, err
 	}
 	s.mu.Lock()
+	s.audits = append(s.audits, tx.audits...)
 	s.rows = work
 	s.mu.Unlock()
 	return true, nil
 }
 
-type memoryTx struct{ rows map[string]KeyRecord }
+type memoryTx struct {
+	rows   map[string]KeyRecord
+	audits []AuditEvent
+}
+
+func (t *memoryTx) Audit(_ context.Context, event AuditEvent) error {
+	t.audits = append(t.audits, event)
+	return nil
+}
 
 func (t *memoryTx) List(context.Context) ([]KeyRecord, error) { return snapshot(t.rows), nil }
 

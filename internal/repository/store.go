@@ -11,9 +11,11 @@ import (
 )
 
 var (
-	ErrNotFound                      = errors.New("group not found")
-	ErrDisabled                      = errors.New("group is disabled")
-	ErrNameExists                    = errors.New("group name already exists")
+	ErrNotFound   = errors.New("group not found")
+	ErrDisabled   = errors.New("group is disabled")
+	ErrNameExists = errors.New("group name already exists")
+	// ErrAssertionSubjectReserved reports an assertion subject that an account holds or once held (ADR 0020).
+	ErrAssertionSubjectReserved      = errors.New("assertion subject is reserved")
 	ErrIdempotencyConflict           = errors.New("idempotency key conflicts with request")
 	ErrVersionConflict               = errors.New("resource version conflicts with current state")
 	ErrIdentityProviderSlugExists    = errors.New("identity provider slug already exists")

@@ -6,7 +6,7 @@ import (
 	"errors"
 )
 
-const serviceAccountColumns = `id::text, name, description, state, created_at, updated_at, version::text`
+const serviceAccountColumns = `id::text, name, description, state, created_at, updated_at, version::text, COALESCE(assertion_subject, '')`
 
 // The id-keyset listings qualify ORDER BY with the table: a bare id would resolve to the selected
 // id::text output column and sort the text instead of reading the uuid primary key in order.
@@ -24,18 +24,21 @@ func scanServiceAccount(row interface{ Scan(...any) error }, account *ServiceAcc
 		&account.CreatedAt,
 		&account.UpdatedAt,
 		&account.Version,
+		&account.AssertionSubject,
 	)
 }
 
 func (s *PostgresStore) CreateServiceAccount(ctx context.Context, account ServiceAccount, audit ...AuditRecord) (ServiceAccount, error) {
 	return runAudited(ctx, s, audit, func(q sqlRunner) (ServiceAccount, error) {
+		subject := account.AssertionSubject
 		err := scanServiceAccount(
 			q.QueryRowContext(
 				ctx,
-				`INSERT INTO service_accounts (id, name, description) VALUES ($1,$2,$3) RETURNING `+serviceAccountColumns,
+				`INSERT INTO service_accounts (id, name, description, assertion_subject) VALUES ($1,$2,$3,NULLIF($4,'')) RETURNING `+serviceAccountColumns,
 				account.ID,
 				account.Name,
 				account.Description,
+				subject,
 			),
 			&account,
 		)
@@ -44,6 +47,17 @@ func (s *PostgresStore) CreateServiceAccount(ctx context.Context, account Servic
 		}
 		if err != nil {
 			return ServiceAccount{}, err
+		}
+		if subject != "" {
+			// The reservation outlives the account (ON DELETE SET NULL), so a later account of the same name
+			// cannot inherit the trust that was built on the subject.
+			_, err := q.ExecContext(ctx, `INSERT INTO service_account_assertion_subjects (subject, service_account_id) VALUES ($1,$2::uuid)`, subject, account.ID)
+			if isUnique(err) {
+				return ServiceAccount{}, ErrAssertionSubjectReserved
+			}
+			if err != nil {
+				return ServiceAccount{}, err
+			}
 		}
 		return account, nil
 	})
@@ -203,4 +217,73 @@ func (s *PostgresStore) RevokeServiceAccountCredential(ctx context.Context, acco
 		s.invalidateLocal(CacheScopeAPIKey, key.ID)
 	}
 	return key, err
+}
+
+const assertionAudienceColumns = `service_account_id::text, audience, max_lifetime_seconds, created_at`
+
+func scanAssertionAudience(row interface{ Scan(...any) error }, entry *AssertionAudience) error {
+	return row.Scan(&entry.ServiceAccountID, &entry.Audience, &entry.MaxLifetimeSeconds, &entry.CreatedAt)
+}
+
+func (s *PostgresStore) ListAssertionAudiences(ctx context.Context, accountID string) ([]AssertionAudience, error) {
+	if _, err := s.GetServiceAccount(ctx, accountID); err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT `+assertionAudienceColumns+` FROM service_account_assertion_audiences WHERE service_account_id=$1::uuid ORDER BY audience`, accountID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	entries := []AssertionAudience{}
+	for rows.Next() {
+		var entry AssertionAudience
+		if err := scanAssertionAudience(rows, &entry); err != nil {
+			return nil, err
+		}
+		entries = append(entries, entry)
+	}
+	return entries, rows.Err()
+}
+
+func (s *PostgresStore) GetAssertionAudience(ctx context.Context, accountID, audience string) (AssertionAudience, error) {
+	var entry AssertionAudience
+	err := scanAssertionAudience(s.db.QueryRowContext(ctx, `SELECT `+assertionAudienceColumns+` FROM service_account_assertion_audiences WHERE service_account_id=$1::uuid AND audience=$2`, accountID, audience), &entry)
+	if errors.Is(err, sql.ErrNoRows) {
+		return AssertionAudience{}, ErrNotFound
+	}
+	return entry, err
+}
+
+func (s *PostgresStore) PutAssertionAudience(ctx context.Context, entry AssertionAudience, audit ...AuditRecord) (AssertionAudience, bool, error) {
+	type result struct {
+		entry   AssertionAudience
+		created bool
+	}
+	out, err := runAudited(ctx, s, audit, func(q sqlRunner) (result, error) {
+		if _, err := getServiceAccountOn(ctx, q, entry.ServiceAccountID); err != nil {
+			return result{}, err
+		}
+		var created bool
+		err := q.QueryRowContext(ctx, `INSERT INTO service_account_assertion_audiences (service_account_id, audience, max_lifetime_seconds) VALUES ($1::uuid,$2,$3)
+			ON CONFLICT (service_account_id, audience) DO UPDATE SET max_lifetime_seconds=EXCLUDED.max_lifetime_seconds
+			RETURNING `+assertionAudienceColumns+`, (xmax = 0)`, entry.ServiceAccountID, entry.Audience, entry.MaxLifetimeSeconds).Scan(&entry.ServiceAccountID, &entry.Audience, &entry.MaxLifetimeSeconds, &entry.CreatedAt, &created)
+		return result{entry: entry, created: created}, err
+	})
+	return out.entry, out.created, err
+}
+
+func (s *PostgresStore) DeleteAssertionAudience(ctx context.Context, accountID, audience string, audit ...AuditRecord) error {
+	_, err := runAudited(ctx, s, audit, func(q sqlRunner) (struct{}, error) {
+		done, err := q.ExecContext(ctx, `DELETE FROM service_account_assertion_audiences WHERE service_account_id=$1::uuid AND audience=$2`, accountID, audience)
+		if err != nil {
+			return struct{}{}, err
+		}
+		if n, err := done.RowsAffected(); err != nil {
+			return struct{}{}, err
+		} else if n == 0 {
+			return struct{}{}, ErrNotFound
+		}
+		return struct{}{}, nil
+	})
+	return err
 }

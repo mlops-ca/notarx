@@ -31,6 +31,7 @@ export function CreateServiceAccountDialog({
   const [createError, setCreateError] = useState<unknown>(null);
   const [accountName, setAccountName] = useState("");
   const [accountDescription, setAccountDescription] = useState("");
+  const [assertionSubject, setAssertionSubject] = useState("");
 
   const submitAccount = async () => {
     setBusy(true);
@@ -40,6 +41,7 @@ export function CreateServiceAccountDialog({
         body: {
           name: accountName.trim(),
           description: accountDescription.trim() || undefined,
+          assertionSubject: assertionSubject.trim() || undefined,
         },
       });
       if (createError || !data) {
@@ -48,6 +50,7 @@ export function CreateServiceAccountDialog({
       }
       setAccountName("");
       setAccountDescription("");
+      setAssertionSubject("");
       await onCreated(data);
     } catch (nextError) {
       setCreateError(nextError);
@@ -96,6 +99,16 @@ export function CreateServiceAccountDialog({
             maxLength={1024}
             rows={3}
             onChange={(event) => setAccountDescription(event.target.value)}
+          />
+        </Field>
+        <Field
+          label={t("assertions.customSubject")}
+          hint={t("assertions.customSubjectHint")}
+        >
+          <Input
+            value={assertionSubject}
+            maxLength={255}
+            onChange={(event) => setAssertionSubject(event.target.value)}
           />
         </Field>
       </div>

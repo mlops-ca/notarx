@@ -45,6 +45,8 @@ const routes: Record<string, Json> = {
   "/api/v2/repository-capacities": fixtures.repositoryCapacities,
   "/api/v2/service-accounts/sa-ci/credentials":
     fixtures.serviceAccountCredentials,
+  "/api/v2/service-accounts/sa-ci/assertion-audiences":
+    fixtures.serviceAccountAssertionAudiences,
   "/auth/idp": fixtures.loginIdentityProviders,
 };
 

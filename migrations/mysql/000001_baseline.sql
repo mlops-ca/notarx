@@ -2845,7 +2845,27 @@ CREATE TABLE `security_audit_log` (
   CONSTRAINT `security_audit_log_evidence_check` CHECK ((JSON_TYPE(`evidence`) = 'OBJECT'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
+CREATE TABLE `service_account_assertion_audiences` (
+  `audience` VARCHAR(255) NOT NULL,
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `max_lifetime_seconds` INT NOT NULL DEFAULT 600,
+  `service_account_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  PRIMARY KEY (`service_account_id`, `audience`),
+  CONSTRAINT `service_account_assertion_audiences_audience_check` CHECK ((CHAR_LENGTH(TRIM(`audience`)) >= 1)),
+  CONSTRAINT `service_account_assertion_audiences_lifetime_check` CHECK (((`max_lifetime_seconds` >= 60) AND (`max_lifetime_seconds` <= 600)))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
+CREATE TABLE `service_account_assertion_subjects` (
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `service_account_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  `subject` VARCHAR(255) NOT NULL,
+  PRIMARY KEY (`subject`),
+  KEY `ix_service_account_assertion_subjects_service_account_id` (`service_account_id`),
+  CONSTRAINT `service_account_assertion_subjects_subject_check` CHECK ((CHAR_LENGTH(TRIM(`subject`)) >= 1))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
 CREATE TABLE `service_accounts` (
+  `assertion_subject` TEXT NULL,
   `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   `description` TEXT NOT NULL DEFAULT (''),
   `id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
@@ -3288,6 +3308,8 @@ ALTER TABLE `repository_security_policies` ADD CONSTRAINT `fk_repository_securit
 ALTER TABLE `repository_usage_counters` ADD CONSTRAINT `fk_repository_usage_counters_repository_id` FOREIGN KEY (`repository_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE `scheduled_task_runs` ADD CONSTRAINT `fk_scheduled_task_runs_task_id` FOREIGN KEY (`task_id`) REFERENCES `scheduled_tasks` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE `scheduled_tasks` ADD CONSTRAINT `fk_scheduled_tasks_repository_id` FOREIGN KEY (`repository_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
+ALTER TABLE `service_account_assertion_audiences` ADD CONSTRAINT `fk_service_account_assertion_audiences_service_account_id` FOREIGN KEY (`service_account_id`) REFERENCES `service_accounts` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
+ALTER TABLE `service_account_assertion_subjects` ADD CONSTRAINT `fk_service_account_assertion_subjects_service_account_id` FOREIGN KEY (`service_account_id`) REFERENCES `service_accounts` (`id`) ON DELETE SET NULL ON UPDATE NO ACTION;
 ALTER TABLE `user_group_members` ADD CONSTRAINT `fk_user_group_members_group_id` FOREIGN KEY (`group_id`) REFERENCES `user_groups` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE `user_group_members` ADD CONSTRAINT `fk_user_group_members_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE `user_groups` ADD CONSTRAINT `fk_user_groups_provider_id` FOREIGN KEY (`provider_id`) REFERENCES `identity_providers` (`id`) ON DELETE SET NULL ON UPDATE NO ACTION;

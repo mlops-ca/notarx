@@ -2456,6 +2456,81 @@ func (e IdentityProviderSAMLSettingsNameIdFormat) Valid() bool {
 	}
 }
 
+// Defines values for IssuerKeyAlg.
+const (
+	IssuerKeyAlgES256 IssuerKeyAlg = "ES256"
+	IssuerKeyAlgRS256 IssuerKeyAlg = "RS256"
+)
+
+// Valid indicates whether the value is a known member of the IssuerKeyAlg enum.
+func (e IssuerKeyAlg) Valid() bool {
+	switch e {
+	case IssuerKeyAlgES256:
+		return true
+	case IssuerKeyAlgRS256:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IssuerKeyState.
+const (
+	IssuerKeyStateActive  IssuerKeyState = "active"
+	IssuerKeyStateNext    IssuerKeyState = "next"
+	IssuerKeyStateRetired IssuerKeyState = "retired"
+)
+
+// Valid indicates whether the value is a known member of the IssuerKeyState enum.
+func (e IssuerKeyState) Valid() bool {
+	switch e {
+	case IssuerKeyStateActive:
+		return true
+	case IssuerKeyStateNext:
+		return true
+	case IssuerKeyStateRetired:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IssuerRotationAlgorithm.
+const (
+	IssuerRotationAlgorithmES256 IssuerRotationAlgorithm = "ES256"
+	IssuerRotationAlgorithmRS256 IssuerRotationAlgorithm = "RS256"
+)
+
+// Valid indicates whether the value is a known member of the IssuerRotationAlgorithm enum.
+func (e IssuerRotationAlgorithm) Valid() bool {
+	switch e {
+	case IssuerRotationAlgorithmES256:
+		return true
+	case IssuerRotationAlgorithmRS256:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IssuerStatusAlgorithm.
+const (
+	IssuerStatusAlgorithmES256 IssuerStatusAlgorithm = "ES256"
+	IssuerStatusAlgorithmRS256 IssuerStatusAlgorithm = "RS256"
+)
+
+// Valid indicates whether the value is a known member of the IssuerStatusAlgorithm enum.
+func (e IssuerStatusAlgorithm) Valid() bool {
+	switch e {
+	case IssuerStatusAlgorithmES256:
+		return true
+	case IssuerStatusAlgorithmRS256:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for LifecycleJobKind.
 const (
 	LifecycleJobKindIntelligence LifecycleJobKind = "intelligence"
@@ -4220,6 +4295,24 @@ func (e RetentionDryRunCandidatesVersionType) Valid() bool {
 	}
 }
 
+// Defines values for RotateIssuerKeysAlgorithm.
+const (
+	RotateIssuerKeysAlgorithmES256 RotateIssuerKeysAlgorithm = "ES256"
+	RotateIssuerKeysAlgorithmRS256 RotateIssuerKeysAlgorithm = "RS256"
+)
+
+// Valid indicates whether the value is a known member of the RotateIssuerKeysAlgorithm enum.
+func (e RotateIssuerKeysAlgorithm) Valid() bool {
+	switch e {
+	case RotateIssuerKeysAlgorithmES256:
+		return true
+	case RotateIssuerKeysAlgorithmRS256:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RubyGemsPreviewGovernanceChangeAction.
 const (
 	RubyGemsPreviewGovernanceChangeActionQuarantine RubyGemsPreviewGovernanceChangeAction = "quarantine"
@@ -4850,6 +4943,21 @@ func (e ServiceAccountState) Valid() bool {
 	case ServiceAccountStateActive:
 		return true
 	case ServiceAccountStateDisabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ServiceAccountAssertionTokenType.
+const (
+	JWT ServiceAccountAssertionTokenType = "JWT"
+)
+
+// Valid indicates whether the value is a known member of the ServiceAccountAssertionTokenType enum.
+func (e ServiceAccountAssertionTokenType) Valid() bool {
+	switch e {
+	case JWT:
 		return true
 	default:
 		return false
@@ -6454,8 +6562,10 @@ type CreateScheduledTaskKind string
 
 // CreateServiceAccount defines model for CreateServiceAccount.
 type CreateServiceAccount struct {
-	Description *string `json:"description,omitempty"`
-	Name        string  `json:"name"`
+	// AssertionSubject Custom assertion subject, for migrating an existing Entra federated credential. Defaults to notarx:service-account:<name>. A subject that an account holds or once held is reserved and is refused with 409.
+	AssertionSubject *string `json:"assertionSubject,omitempty"`
+	Description      *string `json:"description,omitempty"`
+	Name             string  `json:"name"`
 }
 
 // CreateServiceAccountCredential defines model for CreateServiceAccountCredential.
@@ -7715,6 +7825,49 @@ type ImportIdentityProviderMetadata struct {
 	Xml *string `json:"xml,omitempty"`
 }
 
+// IssuerKey defines model for IssuerKey.
+type IssuerKey struct {
+	ActivatedAt *time.Time     `json:"activatedAt,omitempty"`
+	Alg         IssuerKeyAlg   `json:"alg"`
+	CreatedAt   time.Time      `json:"createdAt"`
+	ExpiresAt   *time.Time     `json:"expiresAt,omitempty"`
+	Kid         string         `json:"kid"`
+	PublishedAt *time.Time     `json:"publishedAt,omitempty"`
+	RetiredAt   *time.Time     `json:"retiredAt,omitempty"`
+	State       IssuerKeyState `json:"state"`
+}
+
+// IssuerKeyAlg defines model for IssuerKey.Alg.
+type IssuerKeyAlg string
+
+// IssuerKeyState defines model for IssuerKey.State.
+type IssuerKeyState string
+
+// IssuerRotation defines model for IssuerRotation.
+type IssuerRotation struct {
+	Activated string                  `json:"activated"`
+	Algorithm IssuerRotationAlgorithm `json:"algorithm"`
+	Retired   *string                 `json:"retired,omitempty"`
+	Warning   *string                 `json:"warning,omitempty"`
+}
+
+// IssuerRotationAlgorithm defines model for IssuerRotation.Algorithm.
+type IssuerRotationAlgorithm string
+
+// IssuerStatus defines model for IssuerStatus.
+type IssuerStatus struct {
+	Algorithm        *IssuerStatusAlgorithm `json:"algorithm,omitempty"`
+	Enabled          bool                   `json:"enabled"`
+	IssuerUrl        *string                `json:"issuerUrl,omitempty"`
+	Keys             []IssuerKey            `json:"keys"`
+	MaxTokenLifetime *string                `json:"maxTokenLifetime,omitempty"`
+	PublishLead      *string                `json:"publishLead,omitempty"`
+	RotationInterval *string                `json:"rotationInterval,omitempty"`
+}
+
+// IssuerStatusAlgorithm defines model for IssuerStatus.Algorithm.
+type IssuerStatusAlgorithm string
+
 // LifecycleJob defines model for LifecycleJob.
 type LifecycleJob struct {
 	Attempts        int                  `json:"attempts"`
@@ -8018,6 +8171,12 @@ type MigrationSourceUnsupportedAsset struct {
 	Path       string `json:"path"`
 	Reason     string `json:"reason"`
 	Repository string `json:"repository"`
+}
+
+// MintServiceAccountAssertion defines model for MintServiceAccountAssertion.
+type MintServiceAccountAssertion struct {
+	Audience        string `json:"audience"`
+	LifetimeSeconds *int   `json:"lifetimeSeconds,omitempty"`
 }
 
 // NexusMigrationAsset defines model for NexusMigrationAsset.
@@ -8790,6 +8949,12 @@ type PublishSession struct {
 // PublishSessionState defines model for PublishSession.State.
 type PublishSessionState string
 
+// PutServiceAccountAssertionAudience defines model for PutServiceAccountAssertionAudience.
+type PutServiceAccountAssertionAudience struct {
+	Audience           string `json:"audience"`
+	MaxLifetimeSeconds *int   `json:"maxLifetimeSeconds,omitempty"`
+}
+
 // PyPIYankFile defines model for PyPIYankFile.
 type PyPIYankFile struct {
 	Digest   string `json:"digest"`
@@ -9403,6 +9568,15 @@ type RetentionVersionTypeCounts struct {
 	Version  int `json:"version"`
 }
 
+// RotateIssuerKeys defines model for RotateIssuerKeys.
+type RotateIssuerKeys struct {
+	// Algorithm Defaults to the configured signing algorithm.
+	Algorithm *RotateIssuerKeysAlgorithm `json:"algorithm,omitempty"`
+}
+
+// RotateIssuerKeysAlgorithm Defaults to the configured signing algorithm.
+type RotateIssuerKeysAlgorithm string
+
 // RubyGemsPreviewCapacity defines model for RubyGemsPreviewCapacity.
 type RubyGemsPreviewCapacity struct {
 	ObjectCount  int64 `json:"objectCount"`
@@ -9819,17 +9993,48 @@ type SecuritySettings struct {
 
 // ServiceAccount defines model for ServiceAccount.
 type ServiceAccount struct {
-	CreatedAt   time.Time           `json:"createdAt"`
-	Description string              `json:"description"`
-	Id          openapi_types.UUID  `json:"id"`
-	Name        string              `json:"name"`
-	State       ServiceAccountState `json:"state"`
-	UpdatedAt   time.Time           `json:"updatedAt"`
-	Version     string              `json:"version"`
+	// AssertionSubject The sub claim of the assertions the account mints (ADR 0020). It is stored when the account is created and never changes; a rename does not touch it. Absent for an account that has none.
+	AssertionSubject *string             `json:"assertionSubject,omitempty"`
+	CreatedAt        time.Time           `json:"createdAt"`
+	Description      string              `json:"description"`
+	Id               openapi_types.UUID  `json:"id"`
+	Name             string              `json:"name"`
+	State            ServiceAccountState `json:"state"`
+	UpdatedAt        time.Time           `json:"updatedAt"`
+	Version          string              `json:"version"`
 }
 
 // ServiceAccountState defines model for ServiceAccount.State.
 type ServiceAccountState string
+
+// ServiceAccountAssertion defines model for ServiceAccountAssertion.
+type ServiceAccountAssertion struct {
+	Audience  string    `json:"audience"`
+	ExpiresAt time.Time `json:"expiresAt"`
+	Jti       string    `json:"jti"`
+	Kid       string    `json:"kid"`
+	Subject   string    `json:"subject"`
+
+	// Token The compact JWT. It is returned only by this response and is never logged or audited.
+	Token     string                           `json:"token"`
+	TokenType ServiceAccountAssertionTokenType `json:"tokenType"`
+}
+
+// ServiceAccountAssertionTokenType defines model for ServiceAccountAssertion.TokenType.
+type ServiceAccountAssertionTokenType string
+
+// ServiceAccountAssertionAudience defines model for ServiceAccountAssertionAudience.
+type ServiceAccountAssertionAudience struct {
+	Audience           string             `json:"audience"`
+	CreatedAt          time.Time          `json:"createdAt"`
+	MaxLifetimeSeconds int                `json:"maxLifetimeSeconds"`
+	ServiceAccountId   openapi_types.UUID `json:"serviceAccountId"`
+}
+
+// ServiceAccountAssertionAudienceList defines model for ServiceAccountAssertionAudienceList.
+type ServiceAccountAssertionAudienceList struct {
+	Items []ServiceAccountAssertionAudience `json:"items"`
+}
 
 // ServiceAccountCredential defines model for ServiceAccountCredential.
 type ServiceAccountCredential struct {
@@ -11218,6 +11423,11 @@ type UpdateServiceAccountParams struct {
 	IfMatch IfMatch `json:"If-Match"`
 }
 
+// DeleteServiceAccountAssertionAudienceParams defines parameters for DeleteServiceAccountAssertionAudience.
+type DeleteServiceAccountAssertionAudienceParams struct {
+	Audience string `form:"audience" json:"audience"`
+}
+
 // ListServiceAccountCredentialsParams defines parameters for ListServiceAccountCredentials.
 type ListServiceAccountCredentialsParams struct {
 	PageSize  *PageSize  `form:"pageSize,omitempty" json:"pageSize,omitempty"`
@@ -11396,6 +11606,9 @@ type ReplaceGroupJSONRequestBody = Group
 
 // ReplaceGroupMembersJSONRequestBody defines body for ReplaceGroupMembers for application/json ContentType.
 type ReplaceGroupMembersJSONRequestBody = MemberList
+
+// RotateIssuerKeysJSONRequestBody defines body for RotateIssuerKeys for application/json ContentType.
+type RotateIssuerKeysJSONRequestBody = RotateIssuerKeys
 
 // CreateMigrationSourceJSONRequestBody defines body for CreateMigrationSource for application/json ContentType.
 type CreateMigrationSourceJSONRequestBody = MigrationSourceInput
@@ -11618,6 +11831,12 @@ type CreateServiceAccountJSONRequestBody = CreateServiceAccount
 
 // UpdateServiceAccountJSONRequestBody defines body for UpdateServiceAccount for application/json ContentType.
 type UpdateServiceAccountJSONRequestBody = UpdateServiceAccount
+
+// PutServiceAccountAssertionAudienceJSONRequestBody defines body for PutServiceAccountAssertionAudience for application/json ContentType.
+type PutServiceAccountAssertionAudienceJSONRequestBody = PutServiceAccountAssertionAudience
+
+// MintServiceAccountAssertionJSONRequestBody defines body for MintServiceAccountAssertion for application/json ContentType.
+type MintServiceAccountAssertionJSONRequestBody = MintServiceAccountAssertion
 
 // CreateServiceAccountCredentialJSONRequestBody defines body for CreateServiceAccountCredential for application/json ContentType.
 type CreateServiceAccountCredentialJSONRequestBody = CreateServiceAccountCredential
@@ -12621,6 +12840,15 @@ type ServerInterface interface {
 	// (GET /identity)
 	GetCurrentIdentity(w http.ResponseWriter, r *http.Request)
 
+	// (GET /issuer)
+	GetIssuerStatus(w http.ResponseWriter, r *http.Request)
+
+	// (POST /issuer/keys/{kid}/revoke)
+	RevokeIssuerKey(w http.ResponseWriter, r *http.Request, kid string)
+
+	// (POST /issuer/rotation)
+	RotateIssuerKeys(w http.ResponseWriter, r *http.Request)
+
 	// (GET /lifecycle-jobs)
 	ListLifecycleJobs(w http.ResponseWriter, r *http.Request, params ListLifecycleJobsParams)
 
@@ -13196,6 +13424,18 @@ type ServerInterface interface {
 
 	// (PUT /service-accounts/{serviceAccountId})
 	UpdateServiceAccount(w http.ResponseWriter, r *http.Request, serviceAccountId openapi_types.UUID, params UpdateServiceAccountParams)
+
+	// (DELETE /service-accounts/{serviceAccountId}/assertion-audiences)
+	DeleteServiceAccountAssertionAudience(w http.ResponseWriter, r *http.Request, serviceAccountId openapi_types.UUID, params DeleteServiceAccountAssertionAudienceParams)
+
+	// (GET /service-accounts/{serviceAccountId}/assertion-audiences)
+	ListServiceAccountAssertionAudiences(w http.ResponseWriter, r *http.Request, serviceAccountId openapi_types.UUID)
+
+	// (POST /service-accounts/{serviceAccountId}/assertion-audiences)
+	PutServiceAccountAssertionAudience(w http.ResponseWriter, r *http.Request, serviceAccountId openapi_types.UUID)
+
+	// (POST /service-accounts/{serviceAccountId}/assertions)
+	MintServiceAccountAssertion(w http.ResponseWriter, r *http.Request, serviceAccountId openapi_types.UUID)
 
 	// (GET /service-accounts/{serviceAccountId}/credentials)
 	ListServiceAccountCredentials(w http.ResponseWriter, r *http.Request, serviceAccountId openapi_types.UUID, params ListServiceAccountCredentialsParams)
@@ -15419,6 +15659,60 @@ func (siw *ServerInterfaceWrapper) GetCurrentIdentity(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetCurrentIdentity(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetIssuerStatus operation middleware
+func (siw *ServerInterfaceWrapper) GetIssuerStatus(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetIssuerStatus(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RevokeIssuerKey operation middleware
+func (siw *ServerInterfaceWrapper) RevokeIssuerKey(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "kid" -------------
+	var kid string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "kid", r.PathValue("kid"), &kid, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kid", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevokeIssuerKey(w, r, kid)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RotateIssuerKeys operation middleware
+func (siw *ServerInterfaceWrapper) RotateIssuerKeys(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RotateIssuerKeys(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -23569,6 +23863,126 @@ func (siw *ServerInterfaceWrapper) UpdateServiceAccount(w http.ResponseWriter, r
 	handler.ServeHTTP(w, r)
 }
 
+// DeleteServiceAccountAssertionAudience operation middleware
+func (siw *ServerInterfaceWrapper) DeleteServiceAccountAssertionAudience(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "serviceAccountId" -------------
+	var serviceAccountId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "serviceAccountId", r.PathValue("serviceAccountId"), &serviceAccountId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "serviceAccountId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteServiceAccountAssertionAudienceParams
+
+	// ------------- Required query parameter "audience" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "audience", r.URL.Query(), &params.Audience, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "audience"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "audience", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteServiceAccountAssertionAudience(w, r, serviceAccountId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListServiceAccountAssertionAudiences operation middleware
+func (siw *ServerInterfaceWrapper) ListServiceAccountAssertionAudiences(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "serviceAccountId" -------------
+	var serviceAccountId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "serviceAccountId", r.PathValue("serviceAccountId"), &serviceAccountId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "serviceAccountId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListServiceAccountAssertionAudiences(w, r, serviceAccountId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutServiceAccountAssertionAudience operation middleware
+func (siw *ServerInterfaceWrapper) PutServiceAccountAssertionAudience(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "serviceAccountId" -------------
+	var serviceAccountId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "serviceAccountId", r.PathValue("serviceAccountId"), &serviceAccountId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "serviceAccountId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutServiceAccountAssertionAudience(w, r, serviceAccountId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// MintServiceAccountAssertion operation middleware
+func (siw *ServerInterfaceWrapper) MintServiceAccountAssertion(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "serviceAccountId" -------------
+	var serviceAccountId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "serviceAccountId", r.PathValue("serviceAccountId"), &serviceAccountId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "serviceAccountId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.MintServiceAccountAssertion(w, r, serviceAccountId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListServiceAccountCredentials operation middleware
 func (siw *ServerInterfaceWrapper) ListServiceAccountCredentials(w http.ResponseWriter, r *http.Request) {
 
@@ -25503,6 +25917,13 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/service-accounts/{serviceAccountId}/credentials", wrapper.ListServiceAccountCredentials)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/service-accounts/{serviceAccountId}/credentials", wrapper.CreateServiceAccountCredential)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/service-accounts/{serviceAccountId}/credentials/{credentialId}", wrapper.RevokeServiceAccountCredential)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/service-accounts/{serviceAccountId}/assertions", wrapper.MintServiceAccountAssertion)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/service-accounts/{serviceAccountId}/assertion-audiences", wrapper.DeleteServiceAccountAssertionAudience)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/service-accounts/{serviceAccountId}/assertion-audiences", wrapper.ListServiceAccountAssertionAudiences)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/service-accounts/{serviceAccountId}/assertion-audiences", wrapper.PutServiceAccountAssertionAudience)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/issuer", wrapper.GetIssuerStatus)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/issuer/rotation", wrapper.RotateIssuerKeys)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/issuer/keys/{kid}/revoke", wrapper.RevokeIssuerKey)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/users", wrapper.ListUsers)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/users", wrapper.CreateUser)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/users/{userId}", wrapper.DeleteUser)
@@ -25754,6 +26175,10 @@ type IdentityProviderJSONResponse struct {
 
 type IdentityProviderListJSONResponse IdentityProviderList
 
+type IssuerRotationJSONResponse IssuerRotation
+
+type IssuerStatusJSONResponse IssuerStatus
+
 type LifecycleJobJSONResponse LifecycleJob
 
 type LifecycleJobListJSONResponse LifecycleJobPage
@@ -25842,6 +26267,12 @@ type SecurityPolicyJSONResponse struct {
 type SecurityPolicyEvaluationJSONResponse SecurityPolicyEvaluation
 
 type ServiceAccountJSONResponse ServiceAccount
+
+type ServiceAccountAssertionJSONResponse ServiceAccountAssertion
+
+type ServiceAccountAssertionAudienceJSONResponse ServiceAccountAssertionAudience
+
+type ServiceAccountAssertionAudienceListJSONResponse ServiceAccountAssertionAudienceList
 
 type ServiceAccountCredentialJSONResponse ServiceAccountCredential
 
@@ -30150,6 +30581,225 @@ func (response GetCurrentIdentity401ApplicationProblemPlusJSONResponse) VisitGet
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetIssuerStatusRequestObject struct {
+}
+
+type GetIssuerStatusResponseObject interface {
+	VisitGetIssuerStatusResponse(w http.ResponseWriter) error
+}
+
+type GetIssuerStatus200JSONResponse struct{ IssuerStatusJSONResponse }
+
+func (response GetIssuerStatus200JSONResponse) VisitGetIssuerStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetIssuerStatus401ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetIssuerStatus401ApplicationProblemPlusJSONResponse) VisitGetIssuerStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetIssuerStatus403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetIssuerStatus403ApplicationProblemPlusJSONResponse) VisitGetIssuerStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeIssuerKeyRequestObject struct {
+	Kid string `json:"kid"`
+}
+
+type RevokeIssuerKeyResponseObject interface {
+	VisitRevokeIssuerKeyResponse(w http.ResponseWriter) error
+}
+
+type RevokeIssuerKey204Response struct {
+}
+
+func (response RevokeIssuerKey204Response) VisitRevokeIssuerKeyResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RevokeIssuerKey401ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response RevokeIssuerKey401ApplicationProblemPlusJSONResponse) VisitRevokeIssuerKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeIssuerKey403ApplicationProblemPlusJSONResponse Problem
+
+func (response RevokeIssuerKey403ApplicationProblemPlusJSONResponse) VisitRevokeIssuerKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeIssuerKey404ApplicationProblemPlusJSONResponse Problem
+
+func (response RevokeIssuerKey404ApplicationProblemPlusJSONResponse) VisitRevokeIssuerKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeIssuerKey409ApplicationProblemPlusJSONResponse Problem
+
+func (response RevokeIssuerKey409ApplicationProblemPlusJSONResponse) VisitRevokeIssuerKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RotateIssuerKeysRequestObject struct {
+	Body *RotateIssuerKeysJSONRequestBody
+}
+
+type RotateIssuerKeysResponseObject interface {
+	VisitRotateIssuerKeysResponse(w http.ResponseWriter) error
+}
+
+type RotateIssuerKeys200JSONResponse struct{ IssuerRotationJSONResponse }
+
+func (response RotateIssuerKeys200JSONResponse) VisitRotateIssuerKeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RotateIssuerKeys400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response RotateIssuerKeys400ApplicationProblemPlusJSONResponse) VisitRotateIssuerKeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RotateIssuerKeys401ApplicationProblemPlusJSONResponse Problem
+
+func (response RotateIssuerKeys401ApplicationProblemPlusJSONResponse) VisitRotateIssuerKeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RotateIssuerKeys403ApplicationProblemPlusJSONResponse Problem
+
+func (response RotateIssuerKeys403ApplicationProblemPlusJSONResponse) VisitRotateIssuerKeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RotateIssuerKeys404ApplicationProblemPlusJSONResponse Problem
+
+func (response RotateIssuerKeys404ApplicationProblemPlusJSONResponse) VisitRotateIssuerKeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RotateIssuerKeys409ApplicationProblemPlusJSONResponse Problem
+
+func (response RotateIssuerKeys409ApplicationProblemPlusJSONResponse) VisitRotateIssuerKeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -46128,6 +46778,371 @@ func (response UpdateServiceAccount412ApplicationProblemPlusJSONResponse) VisitU
 	return err
 }
 
+type DeleteServiceAccountAssertionAudienceRequestObject struct {
+	ServiceAccountId openapi_types.UUID `json:"serviceAccountId"`
+	Params           DeleteServiceAccountAssertionAudienceParams
+}
+
+type DeleteServiceAccountAssertionAudienceResponseObject interface {
+	VisitDeleteServiceAccountAssertionAudienceResponse(w http.ResponseWriter) error
+}
+
+type DeleteServiceAccountAssertionAudience204Response struct {
+}
+
+func (response DeleteServiceAccountAssertionAudience204Response) VisitDeleteServiceAccountAssertionAudienceResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteServiceAccountAssertionAudience400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteServiceAccountAssertionAudience400ApplicationProblemPlusJSONResponse) VisitDeleteServiceAccountAssertionAudienceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteServiceAccountAssertionAudience401ApplicationProblemPlusJSONResponse Problem
+
+func (response DeleteServiceAccountAssertionAudience401ApplicationProblemPlusJSONResponse) VisitDeleteServiceAccountAssertionAudienceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteServiceAccountAssertionAudience403ApplicationProblemPlusJSONResponse Problem
+
+func (response DeleteServiceAccountAssertionAudience403ApplicationProblemPlusJSONResponse) VisitDeleteServiceAccountAssertionAudienceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteServiceAccountAssertionAudience404ApplicationProblemPlusJSONResponse Problem
+
+func (response DeleteServiceAccountAssertionAudience404ApplicationProblemPlusJSONResponse) VisitDeleteServiceAccountAssertionAudienceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListServiceAccountAssertionAudiencesRequestObject struct {
+	ServiceAccountId openapi_types.UUID `json:"serviceAccountId"`
+}
+
+type ListServiceAccountAssertionAudiencesResponseObject interface {
+	VisitListServiceAccountAssertionAudiencesResponse(w http.ResponseWriter) error
+}
+
+type ListServiceAccountAssertionAudiences200JSONResponse struct {
+	ServiceAccountAssertionAudienceListJSONResponse
+}
+
+func (response ListServiceAccountAssertionAudiences200JSONResponse) VisitListServiceAccountAssertionAudiencesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListServiceAccountAssertionAudiences401ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response ListServiceAccountAssertionAudiences401ApplicationProblemPlusJSONResponse) VisitListServiceAccountAssertionAudiencesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListServiceAccountAssertionAudiences403ApplicationProblemPlusJSONResponse Problem
+
+func (response ListServiceAccountAssertionAudiences403ApplicationProblemPlusJSONResponse) VisitListServiceAccountAssertionAudiencesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListServiceAccountAssertionAudiences404ApplicationProblemPlusJSONResponse Problem
+
+func (response ListServiceAccountAssertionAudiences404ApplicationProblemPlusJSONResponse) VisitListServiceAccountAssertionAudiencesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutServiceAccountAssertionAudienceRequestObject struct {
+	ServiceAccountId openapi_types.UUID `json:"serviceAccountId"`
+	Body             *PutServiceAccountAssertionAudienceJSONRequestBody
+}
+
+type PutServiceAccountAssertionAudienceResponseObject interface {
+	VisitPutServiceAccountAssertionAudienceResponse(w http.ResponseWriter) error
+}
+
+type PutServiceAccountAssertionAudience200JSONResponse struct {
+	ServiceAccountAssertionAudienceJSONResponse
+}
+
+func (response PutServiceAccountAssertionAudience200JSONResponse) VisitPutServiceAccountAssertionAudienceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutServiceAccountAssertionAudience201JSONResponse ServiceAccountAssertionAudience
+
+func (response PutServiceAccountAssertionAudience201JSONResponse) VisitPutServiceAccountAssertionAudienceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutServiceAccountAssertionAudience400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PutServiceAccountAssertionAudience400ApplicationProblemPlusJSONResponse) VisitPutServiceAccountAssertionAudienceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutServiceAccountAssertionAudience401ApplicationProblemPlusJSONResponse Problem
+
+func (response PutServiceAccountAssertionAudience401ApplicationProblemPlusJSONResponse) VisitPutServiceAccountAssertionAudienceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutServiceAccountAssertionAudience403ApplicationProblemPlusJSONResponse Problem
+
+func (response PutServiceAccountAssertionAudience403ApplicationProblemPlusJSONResponse) VisitPutServiceAccountAssertionAudienceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutServiceAccountAssertionAudience404ApplicationProblemPlusJSONResponse Problem
+
+func (response PutServiceAccountAssertionAudience404ApplicationProblemPlusJSONResponse) VisitPutServiceAccountAssertionAudienceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutServiceAccountAssertionAudience409ApplicationProblemPlusJSONResponse Problem
+
+func (response PutServiceAccountAssertionAudience409ApplicationProblemPlusJSONResponse) VisitPutServiceAccountAssertionAudienceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MintServiceAccountAssertionRequestObject struct {
+	ServiceAccountId openapi_types.UUID `json:"serviceAccountId"`
+	Body             *MintServiceAccountAssertionJSONRequestBody
+}
+
+type MintServiceAccountAssertionResponseObject interface {
+	VisitMintServiceAccountAssertionResponse(w http.ResponseWriter) error
+}
+
+type MintServiceAccountAssertion200JSONResponse struct {
+	ServiceAccountAssertionJSONResponse
+}
+
+func (response MintServiceAccountAssertion200JSONResponse) VisitMintServiceAccountAssertionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MintServiceAccountAssertion400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response MintServiceAccountAssertion400ApplicationProblemPlusJSONResponse) VisitMintServiceAccountAssertionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MintServiceAccountAssertion401ApplicationProblemPlusJSONResponse Problem
+
+func (response MintServiceAccountAssertion401ApplicationProblemPlusJSONResponse) VisitMintServiceAccountAssertionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MintServiceAccountAssertion403ApplicationProblemPlusJSONResponse Problem
+
+func (response MintServiceAccountAssertion403ApplicationProblemPlusJSONResponse) VisitMintServiceAccountAssertionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MintServiceAccountAssertion404ApplicationProblemPlusJSONResponse Problem
+
+func (response MintServiceAccountAssertion404ApplicationProblemPlusJSONResponse) VisitMintServiceAccountAssertionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MintServiceAccountAssertion409ApplicationProblemPlusJSONResponse Problem
+
+func (response MintServiceAccountAssertion409ApplicationProblemPlusJSONResponse) VisitMintServiceAccountAssertionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MintServiceAccountAssertion503ApplicationProblemPlusJSONResponse Problem
+
+func (response MintServiceAccountAssertion503ApplicationProblemPlusJSONResponse) VisitMintServiceAccountAssertionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListServiceAccountCredentialsRequestObject struct {
 	ServiceAccountId openapi_types.UUID `json:"serviceAccountId"`
 	Params           ListServiceAccountCredentialsParams
@@ -49601,6 +50616,15 @@ type StrictServerInterface interface {
 	// (GET /identity)
 	GetCurrentIdentity(ctx context.Context, request GetCurrentIdentityRequestObject) (GetCurrentIdentityResponseObject, error)
 
+	// (GET /issuer)
+	GetIssuerStatus(ctx context.Context, request GetIssuerStatusRequestObject) (GetIssuerStatusResponseObject, error)
+
+	// (POST /issuer/keys/{kid}/revoke)
+	RevokeIssuerKey(ctx context.Context, request RevokeIssuerKeyRequestObject) (RevokeIssuerKeyResponseObject, error)
+
+	// (POST /issuer/rotation)
+	RotateIssuerKeys(ctx context.Context, request RotateIssuerKeysRequestObject) (RotateIssuerKeysResponseObject, error)
+
 	// (GET /lifecycle-jobs)
 	ListLifecycleJobs(ctx context.Context, request ListLifecycleJobsRequestObject) (ListLifecycleJobsResponseObject, error)
 
@@ -50176,6 +51200,18 @@ type StrictServerInterface interface {
 
 	// (PUT /service-accounts/{serviceAccountId})
 	UpdateServiceAccount(ctx context.Context, request UpdateServiceAccountRequestObject) (UpdateServiceAccountResponseObject, error)
+
+	// (DELETE /service-accounts/{serviceAccountId}/assertion-audiences)
+	DeleteServiceAccountAssertionAudience(ctx context.Context, request DeleteServiceAccountAssertionAudienceRequestObject) (DeleteServiceAccountAssertionAudienceResponseObject, error)
+
+	// (GET /service-accounts/{serviceAccountId}/assertion-audiences)
+	ListServiceAccountAssertionAudiences(ctx context.Context, request ListServiceAccountAssertionAudiencesRequestObject) (ListServiceAccountAssertionAudiencesResponseObject, error)
+
+	// (POST /service-accounts/{serviceAccountId}/assertion-audiences)
+	PutServiceAccountAssertionAudience(ctx context.Context, request PutServiceAccountAssertionAudienceRequestObject) (PutServiceAccountAssertionAudienceResponseObject, error)
+
+	// (POST /service-accounts/{serviceAccountId}/assertions)
+	MintServiceAccountAssertion(ctx context.Context, request MintServiceAccountAssertionRequestObject) (MintServiceAccountAssertionResponseObject, error)
 
 	// (GET /service-accounts/{serviceAccountId}/credentials)
 	ListServiceAccountCredentials(ctx context.Context, request ListServiceAccountCredentialsRequestObject) (ListServiceAccountCredentialsResponseObject, error)
@@ -52020,6 +53056,90 @@ func (sh *strictHandler) GetCurrentIdentity(w http.ResponseWriter, r *http.Reque
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetCurrentIdentityResponseObject); ok {
 		if err := validResponse.VisitGetCurrentIdentityResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetIssuerStatus operation middleware
+func (sh *strictHandler) GetIssuerStatus(w http.ResponseWriter, r *http.Request) {
+	var request GetIssuerStatusRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetIssuerStatus(ctx, request.(GetIssuerStatusRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetIssuerStatus")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetIssuerStatusResponseObject); ok {
+		if err := validResponse.VisitGetIssuerStatusResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RevokeIssuerKey operation middleware
+func (sh *strictHandler) RevokeIssuerKey(w http.ResponseWriter, r *http.Request, kid string) {
+	var request RevokeIssuerKeyRequestObject
+
+	request.Kid = kid
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RevokeIssuerKey(ctx, request.(RevokeIssuerKeyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RevokeIssuerKey")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RevokeIssuerKeyResponseObject); ok {
+		if err := validResponse.VisitRevokeIssuerKeyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RotateIssuerKeys operation middleware
+func (sh *strictHandler) RotateIssuerKeys(w http.ResponseWriter, r *http.Request) {
+	var request RotateIssuerKeysRequestObject
+
+	var body RotateIssuerKeysJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RotateIssuerKeys(ctx, request.(RotateIssuerKeysRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RotateIssuerKeys")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RotateIssuerKeysResponseObject); ok {
+		if err := validResponse.VisitRotateIssuerKeysResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -57642,6 +58762,125 @@ func (sh *strictHandler) UpdateServiceAccount(w http.ResponseWriter, r *http.Req
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateServiceAccountResponseObject); ok {
 		if err := validResponse.VisitUpdateServiceAccountResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteServiceAccountAssertionAudience operation middleware
+func (sh *strictHandler) DeleteServiceAccountAssertionAudience(w http.ResponseWriter, r *http.Request, serviceAccountId openapi_types.UUID, params DeleteServiceAccountAssertionAudienceParams) {
+	var request DeleteServiceAccountAssertionAudienceRequestObject
+
+	request.ServiceAccountId = serviceAccountId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteServiceAccountAssertionAudience(ctx, request.(DeleteServiceAccountAssertionAudienceRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteServiceAccountAssertionAudience")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteServiceAccountAssertionAudienceResponseObject); ok {
+		if err := validResponse.VisitDeleteServiceAccountAssertionAudienceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListServiceAccountAssertionAudiences operation middleware
+func (sh *strictHandler) ListServiceAccountAssertionAudiences(w http.ResponseWriter, r *http.Request, serviceAccountId openapi_types.UUID) {
+	var request ListServiceAccountAssertionAudiencesRequestObject
+
+	request.ServiceAccountId = serviceAccountId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListServiceAccountAssertionAudiences(ctx, request.(ListServiceAccountAssertionAudiencesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListServiceAccountAssertionAudiences")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListServiceAccountAssertionAudiencesResponseObject); ok {
+		if err := validResponse.VisitListServiceAccountAssertionAudiencesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutServiceAccountAssertionAudience operation middleware
+func (sh *strictHandler) PutServiceAccountAssertionAudience(w http.ResponseWriter, r *http.Request, serviceAccountId openapi_types.UUID) {
+	var request PutServiceAccountAssertionAudienceRequestObject
+
+	request.ServiceAccountId = serviceAccountId
+
+	var body PutServiceAccountAssertionAudienceJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutServiceAccountAssertionAudience(ctx, request.(PutServiceAccountAssertionAudienceRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutServiceAccountAssertionAudience")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutServiceAccountAssertionAudienceResponseObject); ok {
+		if err := validResponse.VisitPutServiceAccountAssertionAudienceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// MintServiceAccountAssertion operation middleware
+func (sh *strictHandler) MintServiceAccountAssertion(w http.ResponseWriter, r *http.Request, serviceAccountId openapi_types.UUID) {
+	var request MintServiceAccountAssertionRequestObject
+
+	request.ServiceAccountId = serviceAccountId
+
+	var body MintServiceAccountAssertionJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.MintServiceAccountAssertion(ctx, request.(MintServiceAccountAssertionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "MintServiceAccountAssertion")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(MintServiceAccountAssertionResponseObject); ok {
+		if err := validResponse.VisitMintServiceAccountAssertionResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -714,3 +714,33 @@ HuggingFaceError:
         required: [error]
         properties:
           error: {type: string}
+ServiceAccountAssertion:
+  description: A signed assertion. The token is returned only by this response and the response is never cached.
+  content:
+    application/json:
+      schema:
+        "$ref": "../components/schemas.yaml#/ServiceAccountAssertion"
+ServiceAccountAssertionAudience:
+  description: Assertion audience of a service account
+  content:
+    application/json:
+      schema:
+        "$ref": "../components/schemas.yaml#/ServiceAccountAssertionAudience"
+ServiceAccountAssertionAudienceList:
+  description: Assertion audience allow-list of a service account
+  content:
+    application/json:
+      schema:
+        "$ref": "../components/schemas.yaml#/ServiceAccountAssertionAudienceList"
+IssuerStatus:
+  description: The OIDC issuer and its signing keys
+  content:
+    application/json:
+      schema:
+        "$ref": "../components/schemas.yaml#/IssuerStatus"
+IssuerRotation:
+  description: The outcome of a manual key rotation
+  content:
+    application/json:
+      schema:
+        "$ref": "../components/schemas.yaml#/IssuerRotation"

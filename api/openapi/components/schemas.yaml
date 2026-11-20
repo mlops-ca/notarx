@@ -928,6 +928,11 @@ ServiceAccount:
     createdAt: {type: string, format: date-time}
     updatedAt: {type: string, format: date-time}
     version: {type: string}
+    assertionSubject:
+      type: string
+      description: >-
+        The sub claim of the assertions the account mints (ADR 0020). It is stored when the account is created and
+        never changes; a rename does not touch it. Absent for an account that has none.
 ServiceAccountList:
   type: object
   required: [items]
@@ -945,6 +950,13 @@ CreateServiceAccount:
   properties:
     name: {type: string, minLength: 1, maxLength: 128}
     description: {type: string, maxLength: 1024, default: ""}
+    assertionSubject:
+      type: string
+      minLength: 1
+      maxLength: 255
+      description: >-
+        Custom assertion subject, for migrating an existing Entra federated credential. Defaults to
+        notarx:service-account:<name>. A subject that an account holds or once held is reserved and is refused with 409.
 UpdateServiceAccount:
   type: object
   minProperties: 1
@@ -984,6 +996,94 @@ CreateServiceAccountCredential:
       type: string
       format: date-time
       description: Optional expiry. Defaults to 90 days and cannot exceed 365 days.
+MintServiceAccountAssertion:
+  type: object
+  required: [audience]
+  additionalProperties: false
+  properties:
+    audience: {type: string, minLength: 1, maxLength: 255}
+    lifetimeSeconds:
+      type: integer
+      minimum: 1
+      maximum: 600
+      default: 300
+ServiceAccountAssertion:
+  type: object
+  required: [token, tokenType, audience, subject, expiresAt, jti, kid]
+  additionalProperties: false
+  properties:
+    token: {type: string, description: The compact JWT. It is returned only by this response and is never logged or audited.}
+    tokenType: {type: string, enum: [JWT]}
+    audience: {type: string}
+    subject: {type: string}
+    expiresAt: {type: string, format: date-time}
+    jti: {type: string}
+    kid: {type: string}
+ServiceAccountAssertionAudience:
+  type: object
+  required: [serviceAccountId, audience, maxLifetimeSeconds, createdAt]
+  additionalProperties: false
+  properties:
+    serviceAccountId: {type: string, format: uuid}
+    audience: {type: string}
+    maxLifetimeSeconds: {type: integer, minimum: 60, maximum: 600}
+    createdAt: {type: string, format: date-time}
+ServiceAccountAssertionAudienceList:
+  type: object
+  required: [items]
+  additionalProperties: false
+  properties:
+    items:
+      type: array
+      items: {"$ref": "#/ServiceAccountAssertionAudience"}
+PutServiceAccountAssertionAudience:
+  type: object
+  required: [audience]
+  additionalProperties: false
+  properties:
+    audience: {type: string, minLength: 1, maxLength: 255}
+    maxLifetimeSeconds: {type: integer, minimum: 60, maximum: 600, default: 600}
+IssuerKey:
+  type: object
+  required: [kid, alg, state, createdAt]
+  additionalProperties: false
+  properties:
+    kid: {type: string}
+    alg: {type: string, enum: [RS256, ES256]}
+    state: {type: string, enum: [next, active, retired]}
+    createdAt: {type: string, format: date-time}
+    publishedAt: {type: string, format: date-time}
+    activatedAt: {type: string, format: date-time}
+    retiredAt: {type: string, format: date-time}
+    expiresAt: {type: string, format: date-time}
+IssuerStatus:
+  type: object
+  required: [enabled, keys]
+  additionalProperties: false
+  properties:
+    enabled: {type: boolean}
+    issuerUrl: {type: string}
+    algorithm: {type: string, enum: [RS256, ES256]}
+    rotationInterval: {type: string}
+    publishLead: {type: string}
+    maxTokenLifetime: {type: string}
+    keys:
+      type: array
+      items: {"$ref": "#/IssuerKey"}
+RotateIssuerKeys:
+  type: object
+  additionalProperties: false
+  properties:
+    algorithm: {type: string, enum: [RS256, ES256], description: Defaults to the configured signing algorithm.}
+IssuerRotation:
+  type: object
+  required: [algorithm, activated]
+  additionalProperties: false
+  properties:
+    algorithm: {type: string, enum: [RS256, ES256]}
+    retired: {type: string}
+    activated: {type: string}
+    warning: {type: string}
 CreatedServiceAccountCredential:
   allOf:
   - "$ref": "#/ServiceAccountCredential"

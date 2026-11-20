@@ -32,6 +32,10 @@ vi.mock("../../client", async () => {
     createServiceAccountCredential: vi.fn(),
     listServiceAccounts: vi.fn(),
     listServiceAccountCredentials: vi.fn(),
+    // The allow-list card of the detail reads it; these tests are about the credentials.
+    listServiceAccountAssertionAudiences: vi
+      .fn()
+      .mockResolvedValue({ data: { items: [] } }),
     revokeServiceAccountCredential: vi.fn(),
     updateServiceAccount: vi.fn(),
   };

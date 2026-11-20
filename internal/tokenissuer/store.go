@@ -10,6 +10,16 @@ type KeyTx interface {
 	// Update rewrites state, timestamps and integrity_mac of the row with record.KID.
 	Update(ctx context.Context, record KeyRecord) error
 	Delete(ctx context.Context, kid string) error
+	// Audit writes the audit event of the change in the same transaction, so a change whose audit cannot be written
+	// does not happen (ADR 0023 section 1).
+	Audit(ctx context.Context, event AuditEvent) error
+}
+
+// AuditEvent is the audit record of an operator-driven key change. It never carries key material.
+type AuditEvent struct {
+	Actor     string
+	Operation string
+	Evidence  map[string]string
 }
 
 // PublicKeyReader lists key rows without their sealed private halves, for the anonymous

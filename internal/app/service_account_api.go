@@ -106,14 +106,24 @@ func (h identityManagementHandler) CreateServiceAccount(w http.ResponseWriter, r
 		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "service account name or description is invalid")
 		return
 	}
+	subject, problem := h.assertionSubjectFor(name, request.AssertionSubject)
+	if problem != "" {
+		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", problem)
+		return
+	}
 	accountID := ids.New()
 	account, err := h.serviceAccounts.CreateServiceAccount(r.Context(), repository.ServiceAccount{
-		ID:          accountID,
-		Name:        name,
-		Description: description,
+		ID:               accountID,
+		Name:             name,
+		Description:      description,
+		AssertionSubject: subject,
 	}, h.auditRecords(r, "service-accounts/"+accountID, "service_account.create", http.StatusCreated)...)
 	if errors.Is(err, repository.ErrNameExists) {
 		writeHostedProblem(w, http.StatusConflict, "name_exists", "service account name already exists")
+		return
+	}
+	if errors.Is(err, repository.ErrAssertionSubjectReserved) {
+		writeHostedProblem(w, http.StatusConflict, problemAssertionSubjectReserved, "the assertion subject is held by another service account or was held by a deleted one")
 		return
 	}
 	if err != nil {
@@ -289,15 +299,39 @@ func (h identityManagementHandler) RevokeServiceAccountCredential(w http.Respons
 	writeNativeMavenJSON(w, http.StatusOK, serviceAccountCredentialResponse(credential))
 }
 
+// assertionSubjectFor picks the assertion subject stored with a new service account (ADR 0020): the custom subject when
+// one is given, otherwise notarx:service-account:<name>. A name with characters outside [A-Za-z0-9._:-] has no default
+// subject: it is refused while the issuer is enabled and created without one otherwise.
+func (h identityManagementHandler) assertionSubjectFor(name string, custom *string) (subject, problem string) {
+	if custom != nil {
+		if !validAssertionText(*custom) {
+			return "", "assertionSubject must be 1 to 255 printable characters without surrounding spaces"
+		}
+		return *custom, ""
+	}
+	if subject, ok := repository.DefaultAssertionSubject(name); ok {
+		return subject, ""
+	}
+	if h.issuer.Enabled() {
+		return "", "the name of a service account may contain only letters, digits and . _ : - while the OIDC issuer is enabled; choose another name or set assertionSubject"
+	}
+	return "", ""
+}
+
 func serviceAccountResponse(account repository.ServiceAccount) adminopenapi.ServiceAccount {
+	var subject *string
+	if account.AssertionSubject != "" {
+		subject = &account.AssertionSubject
+	}
 	return adminopenapi.ServiceAccount{
-		Id:          uuid.MustParse(account.ID),
-		Name:        account.Name,
-		Description: account.Description,
-		State:       adminopenapi.ServiceAccountState(account.State),
-		CreatedAt:   account.CreatedAt,
-		UpdatedAt:   account.UpdatedAt,
-		Version:     account.Version,
+		AssertionSubject: subject,
+		Id:               uuid.MustParse(account.ID),
+		Name:             account.Name,
+		Description:      account.Description,
+		State:            adminopenapi.ServiceAccountState(account.State),
+		CreatedAt:        account.CreatedAt,
+		UpdatedAt:        account.UpdatedAt,
+		Version:          account.Version,
 	}
 }
 

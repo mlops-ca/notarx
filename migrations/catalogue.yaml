@@ -3799,8 +3799,38 @@ tables:
       - repository,occurred_at desc
     checks:
       security_audit_log_evidence_check: (jsonb_typeof(evidence) = 'object'::text)
+  service_account_assertion_audiences:
+    columns:
+      audience: text
+      created_at: timestamp
+      max_lifetime_seconds: int32
+      service_account_id: uuid
+    primaryKey: [service_account_id, audience]
+    foreignKeys:
+      - service_account_id -> service_accounts(id) on delete cascade
+    defaults:
+      created_at: now()
+      max_lifetime_seconds: "600"
+    checks:
+      service_account_assertion_audiences_audience_check: (length(btrim((audience)::text)) >= 1)
+      service_account_assertion_audiences_lifetime_check: ((max_lifetime_seconds >= 60) AND (max_lifetime_seconds <= 600))
+  service_account_assertion_subjects:
+    columns:
+      created_at: timestamp
+      service_account_id: uuid?
+      subject: text
+    primaryKey: [subject]
+    foreignKeys:
+      - service_account_id -> service_accounts(id) on delete set null
+    defaults:
+      created_at: now()
+    indexes:
+      - service_account_id
+    checks:
+      service_account_assertion_subjects_subject_check: (length(btrim((subject)::text)) >= 1)
   service_accounts:
     columns:
+      assertion_subject: text?
       created_at: timestamp
       description: text
       id: uuid

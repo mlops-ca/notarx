@@ -30,11 +30,16 @@ var ErrAuditMissing = errors.New("the security audit record of this reseal run i
 // returned error wraps ErrAuditMissing, so the caller can say the audit is
 // missing.
 func RunAudited(ctx context.Context, db *sql.DB, dryRun bool) ([]Result, error) {
-	results, runErr := Run(ctx, db, dryRun)
+	return RunAuditedScoped(ctx, db, dryRun, Everything)
+}
+
+// RunAuditedScoped is RunAudited limited to the columns of scope; the audit record carries the scope's actor and operation.
+func RunAuditedScoped(ctx context.Context, db *sql.DB, dryRun bool, scope Scope) ([]Result, error) {
+	results, runErr := RunScoped(ctx, db, dryRun, scope)
 	if dryRun {
 		return results, runErr
 	}
-	if err := writeAudit(ctx, db, results, runErr); err != nil {
+	if err := writeAudit(ctx, db, scope, results, runErr); err != nil {
 		return results, errors.Join(runErr, fmt.Errorf("%w: %w", ErrAuditMissing, err))
 	}
 	return results, runErr
@@ -44,6 +49,10 @@ func RunAudited(ctx context.Context, db *sql.DB, dryRun bool) ([]Result, error) 
 // and the per-table counts of resealed and skipped rows. Skipped rows are the
 // ones left as they were: already current or unreadable.
 func auditRecord(results []Result, runErr error) (repository.AuditRecord, error) {
+	return scopedAuditRecord(Everything, results, runErr)
+}
+
+func scopedAuditRecord(scope Scope, results []Result, runErr error) (repository.AuditRecord, error) {
 	current, previous, err := secrets.KeyIDs()
 	if err != nil {
 		return repository.AuditRecord{}, err
@@ -74,13 +83,13 @@ func auditRecord(results []Result, runErr error) (repository.AuditRecord, error)
 		evidence["table:"+result.Target] = "resealed=" + strconv.Itoa(result.Resealed) +
 			" skipped=" + strconv.Itoa(result.Unchanged+result.Failed) + " failed=" + strconv.Itoa(result.Failed)
 	}
-	audit := repository.ManagementAudit(Actor, Operation, "secrets", 200)
+	audit := repository.ManagementAudit(scope.Actor, scope.Operation, scope.Resource, 200)
 	audit.Evidence = evidence
 	return audit, nil
 }
 
-func writeAudit(ctx context.Context, db *sql.DB, results []Result, runErr error) error {
-	audit, err := auditRecord(results, runErr)
+func writeAudit(ctx context.Context, db *sql.DB, scope Scope, results []Result, runErr error) error {
+	audit, err := scopedAuditRecord(scope, results, runErr)
 	if err != nil {
 		return err
 	}

@@ -140,6 +140,7 @@ type MemoryStore struct {
 	lifecycleLeaseFence    sync.RWMutex
 	apiKeys                map[string]APIKey
 	serviceAccounts        map[string]ServiceAccount
+	assertions             memoryAssertionState
 	workload               *memoryWorkloadState
 	saml                   *memorySAMLState
 	scan                   *memoryScanState

@@ -132,6 +132,7 @@
         { "id": "oidc-keycloak", "title": { "en": "Keycloak on Kubernetes", "zh-CN": "Kubernetes 上的 Keycloak" }, "en": "docs/oidc-keycloak-k8s.md", "zh-CN": "docs/oidc-keycloak-k8s.zh-CN.md" },
         { "id": "repository-grants", "title": { "en": "Repository grant authorization", "zh-CN": "仓库授权" }, "en": "docs/repository-grant-authorization-plan.md", "zh-CN": "docs/repository-grant-authorization-plan.zh-CN.md" },
         { "id": "workload-identity", "title": { "en": "Workload identity federation" }, "en": "docs/workload-identity.md" },
+        { "id": "oidc-issuer", "title": { "en": "notarx as an OIDC issuer and Microsoft Entra setup" }, "en": "docs/oidc-issuer.md" },
         { "id": "service-accounts", "title": { "en": "Service account operations", "zh-CN": "Service Account 运维" }, "en": "docs/service-account-operations.md", "zh-CN": "docs/service-account-operations.zh-CN.md" },
         { "id": "cli", "title": { "en": "notarxctl CLI", "zh-CN": "agctl 命令行" }, "en": "docs/cli.md", "zh-CN": "docs/cli.zh-CN.md" },
         { "id": "cli-command-map", "title": { "en": "notarxctl command map", "zh-CN": "agctl 命令地图" }, "en": "docs/cli-command-map.md", "zh-CN": "docs/cli-command-map.zh-CN.md" },

@@ -105,6 +105,7 @@ An indexed text column is `VARCHAR(255)` unless its name is listed here or it ha
 | native_go_assets.version | VARCHAR(512) | the schema allows Go versions up to 512 characters |
 | native_go_versions.version | VARCHAR(512) | the schema allows Go versions up to 512 characters |
 | repository_grants.resource_prefix | VARCHAR(480) | keeps the primary key (repository, principal, prefix) under the 3072-byte key limit |
+| service_account_assertion_subjects.subject | VARCHAR(255) | an assertion subject is at most 255 characters: the default is notarx:service-account: plus a service account name of up to 128 characters, so the shared 144 width for subject is too narrow (ADR 0020) |
 
 ## Hashed keys
 

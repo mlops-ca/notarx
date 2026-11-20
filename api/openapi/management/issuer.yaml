@@ -1,0 +1,69 @@
+---
+issuer:
+  get:
+    operationId: getIssuerStatus
+    tags: [issuer]
+    description: >-
+      Reports the OIDC issuer of this deployment (ADR 0020): whether it is enabled, the issuer URL, the signing
+      algorithm and the lifecycle of every signing key. Key material is never returned. Administrator only.
+    responses:
+      '200':
+        "$ref": "../components/responses.yaml#/IssuerStatus"
+      '401':
+        "$ref": "../components/responses.yaml#/Problem"
+      '403':
+        "$ref": "../components/responses.yaml#/Problem"
+issuer_rotation:
+  post:
+    operationId: rotateIssuerKeys
+    tags: [issuer]
+    description: >-
+      Rotates the signing key of an algorithm at once: the active key becomes retired, the next key becomes active and a
+      fresh next key is created. The publish lead is a warning only, because verifiers may not trust a key that was
+      published for less than the lead time yet. Administrator only; 404 while the issuer is disabled.
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            "$ref": "../components/schemas.yaml#/RotateIssuerKeys"
+    responses:
+      '200':
+        "$ref": "../components/responses.yaml#/IssuerRotation"
+      '400':
+        "$ref": "../components/responses.yaml#/Problem"
+      '401':
+        "$ref": "../components/responses.yaml#/Problem"
+      '403':
+        "$ref": "../components/responses.yaml#/Problem"
+      '404':
+        "$ref": "../components/responses.yaml#/Problem"
+      '409':
+        "$ref": "../components/responses.yaml#/Problem"
+issuer_keys_kid_revoke:
+  parameters:
+  - name: kid
+    in: path
+    required: true
+    schema:
+      type: string
+      minLength: 1
+      maxLength: 128
+  post:
+    operationId: revokeIssuerKey
+    tags: [issuer]
+    description: >-
+      Emergency revocation of a compromised signing key: the key leaves the key set at once and a revoked active key is
+      replaced by its next key. Tokens that Entra already exchanged stay valid until their own expiry. Administrator
+      only; 404 while the issuer is disabled or for an unknown key.
+    responses:
+      '204':
+        description: The key was revoked
+      '401':
+        "$ref": "../components/responses.yaml#/Problem"
+      '403':
+        "$ref": "../components/responses.yaml#/Problem"
+      '404':
+        "$ref": "../components/responses.yaml#/Problem"
+      '409':
+        "$ref": "../components/responses.yaml#/Problem"

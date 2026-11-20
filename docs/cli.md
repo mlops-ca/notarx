@@ -416,6 +416,25 @@ Windows file modes do not establish the required 0600 protection. Use file-less
 `--server`/`--token` or `NOTARXCTL_SERVER`/`NOTARXCTL_TOKEN` there; Windows profile runtime
 acceptance remains incomplete and is not claimed by this batch.
 
+### `notarxctl issuer`
+
+The OIDC issuer commands (ADR 0020; the procedure is in [the issuer guide](oidc-issuer.md)) talk to the
+management API as a platform administrator, except `issuer reseal`.
+
+- `notarxctl issuer status` prints whether the issuer is enabled, its URL, signing algorithm and lifetimes, and
+  every signing key with its state (`next`, `active`, `retired`) and timestamps. It never shows key material.
+- `notarxctl issuer rotate --yes [--algorithm RS256|ES256]` retires the active key of the algorithm and
+  promotes its next key at once, then creates a new next key. It prints a warning when the promoted key was
+  published for less than the publish lead. It is not retried, and `--dry-run` shows the request.
+- `notarxctl issuer revoke KID --yes` removes a compromised key from the published key set at once and
+  replaces it. Assertions that Entra already exchanged stay valid until they expire.
+- `notarxctl issuer reseal --yes [--dry-run]` re-encrypts the sealed private signing keys and refreshes their
+  integrity MACs with the current key of the encryption key ring. Like `secrets reseal` it connects to
+  PostgreSQL directly (`NOTARX_DATABASE_URL`), writes one audit record (actor `cli:issuer-reseal`, operation
+  `issuer.reseal`) and covers only `token_signing_keys`.
+
+Rotating and revoking are audited in the transaction of the key change (`issuer.rotate`, `issuer.revoke`).
+
 ### `notarxctl secrets reseal`
 
 Rotates the settings encryption key. Sealed values (OIDC client secret, webhook
@@ -807,6 +826,10 @@ issues it.
   `notarxctl service-account update ID [--description TEXT] [--state
   active|disabled]` is conditional on `--if-match` or the version read from
   the list; disabling stops every credential of the account.
+- `notarxctl service-account assertion-audience list|add|remove ID` manages the audiences a service account may
+  mint OIDC assertions for (ADR 0020, see [the issuer guide](oidc-issuer.md)); `add` replaces the lifetime of an
+  audience that is already allowed, and `remove` needs `--yes`. `notarxctl service-account show` prints the
+  immutable assertion subject, and `service-account create --assertion-subject SUBJECT` sets a custom one.
 - Workload identity federation (ADR 0019) replaces stored secrets with the short-lived
   tokens CI platforms issue. `notarxctl workload issuer list|show|create|update|delete|probe`
   manages the trusted issuers (GitHub Actions, GitLab CI, Kubernetes, generic OIDC) and

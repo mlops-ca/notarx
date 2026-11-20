@@ -34,6 +34,13 @@ Store credentials in the CI platform's secret store. Never put them in a
 Jenkinsfile, npm configuration committed to Git, Maven `settings.xml` in the
 repository, a container image, shell tracing, or a release record.
 
+## OIDC assertions
+
+A Service Account can also mint short-lived signed JWT assertions for an audience that an administrator
+allowed for it, for example to authenticate to Microsoft Entra ID without a stored secret. Its
+assertion subject is stored at creation and never changes, including when the account is renamed. See
+[notarx as an OIDC issuer](oidc-issuer.md) for the audience allow-list, the subject rules and the Entra procedure.
+
 ## Create and grant
 
 Create an account in **Management → Service Accounts**, then issue its first

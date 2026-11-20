@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/mlops-ca/notarx/internal/identity"
 	"github.com/mlops-ca/notarx/internal/secrets"
@@ -111,9 +112,35 @@ const maxPasses = 5
 // Failures and skipped; every other row is still processed, and Run returns
 // ErrRowsFailed at the end. Reseal is idempotent: rerun it after fixing the ring.
 func Run(ctx context.Context, db *sql.DB, dryRun bool) ([]Result, error) {
+	return RunScoped(ctx, db, dryRun, Everything)
+}
+
+// Scope narrows a run to some of the sealed columns and names the audit record of the run.
+type Scope struct {
+	// Includes reports whether the column named table.column is part of the run.
+	Includes func(name string) bool
+	// Actor, Operation and Resource identify the run in security_audit_log.
+	Actor, Operation, Resource string
+}
+
+// Everything is the scope of notarxctl secrets reseal: every sealed column.
+var Everything = Scope{Includes: func(string) bool { return true }, Actor: Actor, Operation: Operation, Resource: "secrets"}
+
+// SigningKeys is the scope of notarxctl issuer reseal: the sealed private keys of the OIDC issuer and the integrity
+// MACs of the same rows (ADR 0020).
+var SigningKeys = Scope{
+	Includes: func(name string) bool { return strings.HasPrefix(name, "token_signing_keys.") },
+	Actor:    "cli:issuer-reseal", Operation: "issuer.reseal", Resource: "issuer",
+}
+
+// RunScoped is Run limited to the columns of scope.
+func RunScoped(ctx context.Context, db *sql.DB, dryRun bool, scope Scope) ([]Result, error) {
 	results := []Result{}
 	var runErr error
 	for _, target := range Targets() {
+		if !scope.Includes(target.Name) {
+			continue
+		}
 		result, err := runTarget(ctx, db, target, dryRun)
 		results = append(results, result)
 		if err != nil {
@@ -122,6 +149,9 @@ func Run(ctx context.Context, db *sql.DB, dryRun bool) ([]Result, error) {
 		if result.Failed > 0 {
 			runErr = ErrRowsFailed
 		}
+	}
+	if !scope.Includes(macTargetName) {
+		return results, runErr
 	}
 	result, err := resealIntegrityMACs(ctx, db, dryRun)
 	results = append(results, result)

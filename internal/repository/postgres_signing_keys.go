@@ -116,6 +116,14 @@ func (t signingKeyTx) Update(ctx context.Context, record tokenissuer.KeyRecord) 
 	return nil
 }
 
+// Audit writes the audit event of an operator action in the transaction of the key change.
+func (t signingKeyTx) Audit(ctx context.Context, event tokenissuer.AuditEvent) error {
+	return insertAudit(ctx, t.tx, AuditRecord{
+		Class: AuditClassSync, Outcome: AuditResolved, Actor: event.Actor, OccurredAt: time.Now().UTC(), Format: "management",
+		Resource: "issuer", Operation: event.Operation, Status: 200, CacheDisposition: "bypass", Evidence: event.Evidence,
+	})
+}
+
 func (t signingKeyTx) Delete(ctx context.Context, kid string) error {
 	_, err := t.tx.ExecContext(ctx, `DELETE FROM token_signing_keys WHERE kid=$1`, kid)
 	return err

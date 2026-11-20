@@ -49,6 +49,12 @@ export const identityKeys = {
       serviceAccountId,
       "credentials",
     ] as const,
+  assertionAudiences: (serviceAccountId: string) =>
+    [
+      ...identityKeys.serviceAccounts(),
+      serviceAccountId,
+      "assertion-audiences",
+    ] as const,
   users: () => [...identityKeys.all, "users"] as const,
   userSessions: (userId: string) =>
     [...identityKeys.all, "user-sessions", userId] as const,

@@ -612,7 +612,15 @@ export async function mockConsole(page: Page) {
     }),
   );
   await page.route("**/api/v2/service-accounts**", (route) =>
-    route.fulfill({ json: { items: serviceAccounts } }),
+    route.fulfill({
+      json: {
+        items: new URL(route.request().url()).pathname.endsWith(
+          "/assertion-audiences",
+        )
+          ? []
+          : serviceAccounts,
+      },
+    }),
   );
   await page.route("**/api/v2/api-keys**", (route) =>
     route.fulfill({ json: { items: apiKeys } }),

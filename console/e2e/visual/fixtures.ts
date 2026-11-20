@@ -19,6 +19,7 @@ import type {
   ListRepositoryGrantsResponses,
   ListRuntimeNodesResponses,
   ListScheduledTasksResponses,
+  ListServiceAccountAssertionAudiencesResponses,
   ListServiceAccountCredentialsResponses,
   ListServiceAccountsResponses,
   ListUsersResponses,
@@ -356,9 +357,21 @@ export const serviceAccounts = {
       createdAt: "2026-07-01T00:00:00Z",
       updatedAt: "2026-09-01T00:00:00Z",
       version: "2",
+      assertionSubject: "notarx:service-account:ci-publisher",
     },
   ],
 } satisfies ListServiceAccountsResponses[200];
+
+export const serviceAccountAssertionAudiences = {
+  items: [
+    {
+      serviceAccountId: "sa-ci",
+      audience: "api://AzureADTokenExchange",
+      maxLifetimeSeconds: 300,
+      createdAt: "2026-09-15T00:00:00Z",
+    },
+  ],
+} satisfies ListServiceAccountAssertionAudiencesResponses[200];
 
 function user(
   id: string,

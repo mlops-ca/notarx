@@ -28,6 +28,7 @@ import {
   CreateServiceAccountDialog,
   IssueCredentialDialog,
 } from "./ServiceAccountDialogs";
+import { AssertionAudiences } from "./AssertionAudiences";
 import { ServiceAccountDetail, credentialState } from "./ServiceAccountDetail";
 import {
   flattenPages,
@@ -251,18 +252,23 @@ export function ServiceAccountsPage() {
               recoveryKeys={[selectedAccount, credentialsQuery.data]}
               onReset={() => credentialsQuery.refetch({ throwOnError: true })}
             >
-              <ServiceAccountDetail
-                account={selectedAccount}
-                credentials={credentials}
-                credentialsError={credentialsError}
-                nextCredentialsPageToken={nextCredentialsPageToken}
-                loadingMoreCredentials={credentialsQuery.isFetchingNextPage}
-                onRefresh={loadCredentials}
-                onMoreCredentials={() => void credentialsQuery.fetchNextPage()}
-                onIssue={credentialDialog.show}
-                onRevoke={setCredentialToRevoke}
-                onToggleState={() => setAccountStateChange(selectedAccount)}
-              />
+              <div className="space-y-4">
+                <ServiceAccountDetail
+                  account={selectedAccount}
+                  credentials={credentials}
+                  credentialsError={credentialsError}
+                  nextCredentialsPageToken={nextCredentialsPageToken}
+                  loadingMoreCredentials={credentialsQuery.isFetchingNextPage}
+                  onRefresh={loadCredentials}
+                  onMoreCredentials={() =>
+                    void credentialsQuery.fetchNextPage()
+                  }
+                  onIssue={credentialDialog.show}
+                  onRevoke={setCredentialToRevoke}
+                  onToggleState={() => setAccountStateChange(selectedAccount)}
+                />
+                <AssertionAudiences account={selectedAccount} />
+              </div>
             </SectionBoundary>
           )}
         </div>
