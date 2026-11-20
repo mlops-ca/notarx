@@ -36,12 +36,22 @@ jobs:
       images: ${{ steps.classify.outputs.images }}
       arm64: ${{ steps.classify.outputs.arm64 }}
       e2e_specs: ${{ steps.select.outputs.specs }}
+      no_chinese: ${{ steps.no-chinese.outputs.result }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      # The policy check must not hold back the classification every other job needs:
+      # a violation is recorded here, the suite still runs, and ci-ok fails.
       - name: Reject added Chinese content
-        run: python3 scripts/check-no-chinese.py
+        id: no-chinese
+        run: |
+          if python3 scripts/check-no-chinese.py; then
+            echo result=success >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::the change adds Chinese content; ci-ok fails on it"
+            echo result=failure >> "$GITHUB_OUTPUT"
+          fi
       - name: Verify the classifier fixtures
         run: |
           bash scripts/ci-changes-test.sh
@@ -167,8 +177,13 @@ jobs:
           IMAGES: ${{ needs.changes.outputs.images }}
           GO: ${{ needs.changes.outputs.go }}
           CI_CLASS: ${{ needs.changes.outputs.ci }}
+          NO_CHINESE: ${{ needs.changes.outputs.no_chinese }}
         run: |
           echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          if [[ "$EVENT" == pull_request && "$NO_CHINESE" != success ]]; then
+            echo "::error::the change adds Chinese content (see the changes job), or the check did not run: $NO_CHINESE"
+            exit 1
+          fi
           echo "$NEEDS" | jq -e '[.[] | select(.result != "success" and .result != "skipped")] | length == 0' >/dev/null
           # A skip is legitimate only when change detection turned the job off (the
           # test suite checks its own classes) or the event runs no tests at all;

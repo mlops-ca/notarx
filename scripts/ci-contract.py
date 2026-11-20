@@ -191,9 +191,10 @@ def matrix(scope='mainline', arm64=True):
     def on_arm64(lane):
         return scope == 'mainline' or (arm64 and PLAN['lanes'][lane]['arm64'] == 'pull-request')
 
-    include = [entry(name, lanes, 'amd64') for name, lanes in jobs()]
+    planned = jobs()
+    include = [entry(name, lanes, 'amd64') for name, lanes in planned]
     # A packed job's arm64 leg runs only the lanes of the job that run on arm64.
-    for name, lanes in jobs():
+    for name, lanes in planned:
         arm64_lanes = [lane for lane in lanes if on_arm64(lane)]
         if arm64_lanes:
             include.append(entry(name, arm64_lanes, 'arm64'))
@@ -248,28 +249,45 @@ def run_lanes(args):
     """Run each lane of a CI job in order; a failed lane does not stop the next one.
 
     One lane writes its evidence into --output as before; several lanes write one
-    subdirectory each. The per-lane verdict goes to the job's step summary.
+    subdirectory each. Each lane's verdict goes to the job's step summary as soon as
+    the lane ends, so a job that is cut short still shows the lanes it finished. A
+    lane that raises is reported as failed and the next lane runs; a cancelled lane
+    (the job was cancelled) stops the job, and the lanes after it are reported as not
+    run.
     """
-    rows, status = [], 0
-    for name in args.lanes:
-        output = args.output if len(args.lanes) == 1 else args.output / name
-        lane_args = type('LaneArgs', (), {'lane': name, 'output': output, 'local': args.local,
-                                          'keep_going': args.keep_going})()
-        started = time.monotonic()
-        code = run_lane(lane_args)
-        status = status or code
-        report = json.loads((output / 'report.json').read_text())
-        failed = [s['name'] for s in report['steps'] if s['status'] not in ('success', 'skipped')]
-        rows.append((name, report['status'], time.monotonic() - started, ', '.join(failed)))
-    for name, verdict, seconds, failed in rows:
-        print(f'Contract lane {name}: {verdict} in {seconds / 60:.1f} min' + (f' (failed: {failed})' if failed else ''),
-              flush=True)
     summary = os.environ.get('GITHUB_STEP_SUMMARY')
+
+    def record(name, verdict, seconds, failed):
+        print(f'Contract lane {name}: {verdict}' + (f' in {seconds / 60:.1f} min' if seconds is not None else '')
+              + (f' (failed: {failed})' if failed else ''), flush=True)
+        if summary:
+            with open(summary, 'a', encoding='utf-8') as handle:
+                minutes = f'{seconds / 60:.1f}' if seconds is not None else '-'
+                handle.write(f'| {name} | {verdict} | {minutes} | {failed or "-"} |\n')
+
     if summary:
         with open(summary, 'a', encoding='utf-8') as handle:
             handle.write('| Contract lane | Result | Minutes | Failed steps |\n| --- | --- | --- | --- |\n')
-            for name, verdict, seconds, failed in rows:
-                handle.write(f'| {name} | {verdict} | {seconds / 60:.1f} | {failed or "-"} |\n')
+    status = 0
+    for index, name in enumerate(args.lanes):
+        output = args.output if len(args.lanes) == 1 else args.output / name
+        started = time.monotonic()
+        try:
+            code = run_lane(argparse.Namespace(lane=name, output=output, local=args.local,
+                                               keep_going=args.keep_going))
+            report = json.loads((output / 'report.json').read_text())
+        except Exception as error:  # noqa: BLE001 - a lane's crash is its verdict, not the job's
+            status = 1
+            record(name, 'error', time.monotonic() - started, f'{type(error).__name__}: {error}')
+            continue
+        status = status or code
+        steps = report['steps']
+        record(name, report['status'], time.monotonic() - started,
+               ', '.join(s['name'] for s in steps if s['status'] not in ('success', 'skipped')))
+        if any(s['status'] == 'cancelled' for s in steps):
+            for skipped in args.lanes[index + 1:]:
+                record(skipped, 'not run (cancelled)', None, '')
+            return status or 1
     return status
 
 

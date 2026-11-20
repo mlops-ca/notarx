@@ -1,3 +1,4 @@
+import argparse
 import importlib.util
 import json
 import os
@@ -197,8 +198,7 @@ class RunLaneTests(unittest.TestCase):
         plan = {'lanes': {name: {'timeoutMinutes': 1, 'needs': [], 'rawDirectories': [],
                                  'steps': [self.step('only', code)]}
                           for name, code in (('first', 'raise SystemExit(3)'), ('second', 'print(2)'))}}
-        args = type('Args', (), {'lanes': ['first', 'second'], 'output': output, 'local': False,
-                                 'keep_going': False})()
+        args = argparse.Namespace(lanes=['first', 'second'], output=output, local=False, keep_going=False)
         with patch.object(ci, 'PLAN', plan), patch.dict(os.environ, {'GITHUB_STEP_SUMMARY': str(summary)}):
             status = ci.run_lanes(args)
         self.assertEqual(status, 1)
@@ -208,6 +208,38 @@ class RunLaneTests(unittest.TestCase):
         self.assertIn('| first | failure |', table)
         self.assertIn('| only |', table)
         self.assertIn('| second | success |', table)
+
+    def test_a_crashing_lane_fails_and_a_cancelled_lane_stops_the_job(self):
+        work = tempfile.TemporaryDirectory()
+        self.addCleanup(work.cleanup)
+        output = Path(work.name) / 'out'
+        summary = Path(work.name) / 'summary.md'
+        ran = []
+
+        def fake_run_lane(lane_args):
+            ran.append(lane_args.lane)
+            if lane_args.lane == 'crashes':
+                raise RuntimeError('group did not settle')
+            verdict = 'cancelled' if lane_args.lane == 'cancelled' else 'success'
+            lane_args.output.mkdir(parents=True)
+            (lane_args.output / 'report.json').write_text(json.dumps(
+                {'status': 'success' if verdict == 'success' else 'failure',
+                 'steps': [{'name': 'only', 'status': verdict}]}))
+            return 0 if verdict == 'success' else 1
+
+        args = argparse.Namespace(lanes=['crashes', 'passes', 'cancelled', 'never'], output=output,
+                                  local=False, keep_going=False)
+        with patch.object(ci, 'run_lane', fake_run_lane), \
+                patch.dict(os.environ, {'GITHUB_STEP_SUMMARY': str(summary)}):
+            status = ci.run_lanes(args)
+        self.assertEqual(status, 1)
+        self.assertEqual(ran, ['crashes', 'passes', 'cancelled'])
+        table = summary.read_text()
+        self.assertIn('| crashes | error |', table)
+        self.assertIn('RuntimeError: group did not settle', table)
+        self.assertIn('| passes | success |', table)
+        self.assertIn('| cancelled | failure |', table)
+        self.assertIn('| never | not run (cancelled) | - |', table)
 
     def test_step_timeout_fails_the_lane(self):
         status, report, _ = self.run_lane([self.step('slow', 'import time; time.sleep(30)', 0.1)])
@@ -308,6 +340,8 @@ class PlanTests(unittest.TestCase):
             # Every lane runs on amd64 exactly once, packed or alone.
             amd64_lanes = [lane for e in amd64 for lane in e['lanes'].split()]
             self.assertEqual(sorted(amd64_lanes), sorted(ci.PLAN['lanes']))
+            # In plan order: the lanes of each job, the jobs in the order of their first lane.
+            self.assertEqual(amd64_lanes, [lane for _, lanes in ci.jobs() for lane in lanes])
             self.assertEqual(len(amd64_lanes), len(set(amd64_lanes)))
             self.assertEqual([e['job'] for e in amd64], [name for name, _ in ci.jobs()])
             for entry in include:
@@ -333,12 +367,14 @@ class PlanTests(unittest.TestCase):
         mainline = [lane for e in json.loads(subprocess.check_output(
             [sys.executable, str(ROOT / 'scripts/ci-contract.py'), 'matrix', '--scope', 'mainline']))['include']
             if e['arch'] == 'arm64' for lane in e['lanes'].split()]
-        self.assertEqual(sorted(mainline), sorted(ci.PLAN['lanes']))
+        self.assertEqual(mainline, [lane for _, lanes in ci.jobs() for lane in lanes])
         pull_request = [lane for e in json.loads(subprocess.check_output(
             [sys.executable, str(ROOT / 'scripts/ci-contract.py'), 'matrix', '--scope', 'pull-request']))['include']
             if e['arch'] == 'arm64' for lane in e['lanes'].split()]
         # ADR 0016: every core lane plus the native-format smoke subset on each
         # architecture-sensitive pull request; a packed job's arm64 leg runs only those.
+        self.assertEqual(pull_request, [lane for _, lanes in ci.jobs() for lane in lanes
+                                        if ci.PLAN['lanes'][lane]['arm64'] == 'pull-request'])
         self.assertEqual(sorted(pull_request), sorted(['core-checks', 'core-email', 'core-native-e2e', 'core-backup',
                                                        'core-integration-1', 'core-integration-2',
                                                        'six-format-auth', 'oci-discovery']))

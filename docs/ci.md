@@ -169,7 +169,13 @@ on arm64 in that scope.
 | `packed-inventory-helm-pypi` | `inventory`, `helm`, `pypi-migration` | 2.6 + 1.7 + 1.4 |
 
 A job's timeout is the sum of its lanes' timeouts and it installs the union of their
-tool needs. Move a lane in or out of a pack by editing `jobs` only; the workflows
+tool needs. A packed job takes longer than its longest lane (`packed-nuget-migrations`
+about 7 minutes against 5), so only lanes that stay well under the critical path of
+the suite (Console, `core-native-e2e`, about 9 to 11 minutes) are packed. The lanes of
+a job share one runner and Docker daemon: each lane's scripts own their Compose
+projects and tear them down on exit, and a cancelled job stops after the lane that
+was running (the lanes after it are reported as not run). A lane that crashes is
+reported as an error and the next lane runs. Move a lane in or out of a pack by editing `jobs` only; the workflows
 name no lane and no job.
 
 Each lane uses the default shallow checkout, warms the Go module cache once with
@@ -206,7 +212,7 @@ Issue #482 reshaped the pull request suite (ADR 0016 and ADR 0024, amendments of
 
 | Earlier job | Now (pull request) | Release gates (`mainline` scope) |
 | --- | --- | --- |
-| `no-chinese` | a step of `changes` | not part of the gates (as before) |
+| `no-chinese` | a step of `changes` that records its verdict without failing the job; `ci-ok` fails on a violation, and the rest of the suite still runs | not part of the gates (as before) |
 | `changes`, `packages`, `oci-free-tier`, `oci-free-tier-tofu` | unchanged | unchanged |
 | `quality`: lint, vet, native-build rules, migration, release and packaging checks, SAML fuzz, dependency audit | `lint` | `lint` |
 | `quality`: `make race`, `make coverage` and the per-package coverage reruns | `quality`: `make race-coverage`, one pass with the race detector and every floor | `quality` |
@@ -219,7 +225,7 @@ Issue #482 reshaped the pull request suite (ADR 0016 and ADR 0024, amendments of
 | `contract (maven-oci-auth)`, `contract (migration-clients)` | `packed-maven-clients` | the same, both architectures |
 | `contract (rubygems)`, `contract (oci-discovery)` | `packed-rubygems-discovery` | the same, both architectures |
 | `contract (inventory)`, `contract (helm)`, `contract (pypi-migration)` | `packed-inventory-helm-pypi` | the same, both architectures |
-| `contract (core-email)`, `contract (core-native-e2e)` | unchanged | unchanged |
+| `contract (core-email)`, `contract (core-native-e2e)`, `contract (perf-load)`, and any lane not in `jobs` | unchanged: a job named after the lane | unchanged |
 | the seven arm64 contract legs | only with the `arm64` class (architecture-sensitive change) | always, every lane |
 | `contract-plan`, `suite-ok`, `ci-ok` | unchanged (`suite-ok` also requires `lint`) | unchanged |
 
@@ -311,7 +317,7 @@ stop the next one. The same suite runs against the in-memory store in
 `./internal/objectstore` coverage floor in `scripts/coverage-packages.txt` is set
 so it fails if the suite stops running. The second service has no published
 container image, so the job builds it from a pinned upstream revision with the
-repository Go toolchain; bump `MINIO_VERSION` in the workflow to move it.
+repository Go toolchain, in the background while RustFS starts; bump `MINIO_VERSION` in the workflow to move it.
 `scripts/rustfs-only-contract-test.sh` exempts that one workflow file.
 
 ## OCI live run
