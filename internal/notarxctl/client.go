@@ -401,9 +401,15 @@ func parseAPIError(response *apiResponse, knownSecrets ...string) *APIError {
 		Code      string `json:"code"`
 		Message   string `json:"message"`
 		RequestID string `json:"requestId"`
+		// RFC 6749 section 5.2 error answers (the token exchange endpoint).
+		OAuthError       string `json:"error"`
+		OAuthDescription string `json:"error_description"`
 	}
 	api := &APIError{HTTPStatus: response.StatusCode, Hint: hintForStatus(response.StatusCode)}
-	if err := json.Unmarshal(response.Body, &problem); err == nil && (problem.Code != "" || problem.Message != "" || problem.Title != "") {
+	if err := json.Unmarshal(response.Body, &problem); err == nil && problem.Code == "" && problem.OAuthError != "" {
+		problem.Code, problem.Message = problem.OAuthError, problem.OAuthDescription
+	}
+	if problem.Code != "" || problem.Message != "" || problem.Title != "" {
 		api.Code = problem.Code
 		api.Message = problem.Message
 		if api.Message == "" {

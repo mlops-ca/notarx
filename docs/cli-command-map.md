@@ -166,6 +166,19 @@ the contract's server base. Planned commands omit the leading `notarxctl`.
 | `PUT /console-themes/{themeId}`<br>`replaceConsoleThemePackage` | `theme replace --remote <id>` | #139 | M2 | A | C |
 | `DELETE /console-themes/{themeId}`<br>`deleteConsoleThemePackage` | `theme delete --remote <id>` | #139 | M2 | A | C |
 | `GET /security-settings`<br>`getSecuritySettings` | `security-settings show` | #139 | M2 | A | Q |
+| `GET /workload-identity/issuers`<br>`listWorkloadIssuers` | `workload issuer list` | #68 | M2 implemented | A | Q |
+| `POST /workload-identity/issuers`<br>`createWorkloadIssuer` | `workload issuer create` | #68 | M2 implemented | A | W |
+| `GET /workload-identity/issuers/{issuerId}`<br>`getWorkloadIssuer` | `workload issuer show <id>` | #68 | M2 implemented | A | Q |
+| `PATCH /workload-identity/issuers/{issuerId}`<br>`updateWorkloadIssuer` | `workload issuer update <id>` | #68 | M2 implemented | A | C |
+| `DELETE /workload-identity/issuers/{issuerId}`<br>`deleteWorkloadIssuer` | `workload issuer delete <id>` | #68 | M2 implemented | A | W |
+| `POST /workload-identity/issuers:probe`<br>`probeWorkloadIssuer` | `workload issuer probe` | #68 | M2 implemented | A | Q |
+| `GET /workload-identity/policies`<br>`listWorkloadTrustPolicies` | `workload policy list` | #68 | M2 implemented | A | Q |
+| `POST /workload-identity/policies`<br>`createWorkloadTrustPolicy` | `workload policy create` | #68 | M2 implemented | A | W |
+| `GET /workload-identity/policies/{policyId}`<br>`getWorkloadTrustPolicy` | `workload policy show <id>` | #68 | M2 implemented | A | Q |
+| `PATCH /workload-identity/policies/{policyId}`<br>`updateWorkloadTrustPolicy` | `workload policy update <id>` | #68 | M2 implemented | A | C |
+| `DELETE /workload-identity/policies/{policyId}`<br>`deleteWorkloadTrustPolicy` | `workload policy delete <id>` | #68 | M2 implemented | A | W |
+| `POST /workload-identity/policies:test`<br>`testWorkloadTrustPolicy` | `workload policy test` | #68 | M2 implemented | A | Q |
+| `POST /auth/token-exchange`<br>`exchangeWorkloadToken` | `auth login --workload-token-file FILE` (RFC 8693 exchange; ADR 0019) | #68 | M2 implemented | anonymous | S |
 | `GET /authentication/providers`<br>`listIdentityProviders` | `idp list` | #139 | M2 | A | Q |
 | `POST /authentication/providers`<br>`createIdentityProvider` | `idp create` | #139 | M2 | A | W |
 | `GET /authentication/providers/{providerId}`<br>`getIdentityProvider` | `idp show <id>` | #139 | M2 | A | Q |

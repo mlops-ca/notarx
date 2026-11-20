@@ -129,6 +129,53 @@ func clearStoredToken(env *commandContext, token string) (string, error) {
 	return cleared, nil
 }
 
+// checkProfileTarget returns the normalized login target. A session token must never land in a
+// profile that targets a different server: later invocations would send it elsewhere.
+func checkProfileTarget(env *commandContext, profile string, stored profileConfig) (string, error) {
+	target, err := normalizeServerTarget(env.settings.Server)
+	if err != nil {
+		return "", err
+	}
+	if stored.Server != "" {
+		bound, err := normalizeServerTarget(stored.Server)
+		if err != nil || bound != target {
+			return "", &UsageError{
+				Message: fmt.Sprintf("profile %q targets %s but this login targets %s", profile, redactServerURL(stored.Server, stored.Token), redactServerURL(env.settings.Server, env.settings.Token)),
+				Hint:    "update the profile first, or log in to the profile's own target",
+			}
+		}
+	}
+	return target, nil
+}
+
+// storeProfileToken saves a session token in the profile once the login answered.
+func storeProfileToken(env *commandContext, profile, target, token string) error {
+	return mutateConfigFile(env.configPath, func(config *configFile) error {
+		profileConfig, ok := config.Profiles[profile]
+		if !ok {
+			return &UsageError{Message: fmt.Sprintf("profile %q does not exist", profile)}
+		}
+		// The profile may have been edited while the login request was
+		// in flight; refuse instead of binding the token to a target
+		// that changed under it.
+		if profileConfig.Server != "" {
+			storedTarget, err := normalizeServerTarget(profileConfig.Server)
+			if err != nil || storedTarget != target {
+				return &UsageError{
+					Message: fmt.Sprintf("profile %q changed target while login was in flight; the session token was not stored", profile),
+					Hint:    fmt.Sprintf("re-run notarxctl auth login for the current target of profile %s", profile),
+				}
+			}
+		}
+		profileConfig.Token = token
+		if profileConfig.Server == "" {
+			profileConfig.Server = env.settings.Server
+		}
+		config.Profiles[profile] = profileConfig
+		return nil
+	})
+}
+
 type authLoginResult struct {
 	// Profile names where the token was stored; with --secret-output it is
 	// absent and SecretOutput says where the token went.
@@ -139,16 +186,22 @@ type authLoginResult struct {
 	Role               string          `json:"role,omitempty"`
 	MustChangePassword bool            `json:"mustChangePassword"`
 	SecretOutput       *secretDelivery `json:"secretOutput,omitempty"`
+	// AuthenticationKind and ExpiresIn describe a workload login: the token is short-lived and
+	// there is no user.
+	AuthenticationKind string `json:"authenticationKind,omitempty"`
+	ExpiresIn          int    `json:"expiresIn,omitempty"`
 }
 
 func authLoginCommand() command {
-	var username, secretOutput string
+	var username, secretOutput, workloadTokenFile, workloadPolicy string
 	var passwordStdin bool
 	return command{
 		name:     "auth login",
-		synopsis: "authenticate with a username and password and store the session token in a profile or a private file",
-		usage:    "notarxctl auth login --username NAME (--profile NAME | --secret-output FILE) --password-stdin",
+		synopsis: "authenticate with a username and password, or exchange a workload token, and store the session token in a profile or a private file",
+		usage:    "notarxctl auth login (--username NAME --password-stdin | --workload-token-file FILE [--workload-policy NAME]) (--profile NAME | --secret-output FILE)",
 		setFlags: func(fs *flag.FlagSet) {
+			fs.StringVar(&workloadTokenFile, "workload-token-file", "", "exchange the workload JWT in this file (GitHub Actions, GitLab CI, Kubernetes) for a short-lived token instead of a password")
+			fs.StringVar(&workloadPolicy, "workload-policy", "", "with --workload-token-file: the one trust policy that may match")
 			fs.StringVar(&username, "username", "", "local username to authenticate")
 			fs.BoolVar(&passwordStdin, "password-stdin", false, "read the password from stdin (bounded, never echoed)")
 			fs.StringVar(&secretOutput, "secret-output", "", "write the session token to this new private file instead of a profile (mode 0600; never overwritten)")
@@ -157,7 +210,7 @@ func authLoginCommand() command {
 			Resource:     "auth",
 			Scenarios:    []string{"ci", "admin"},
 			Stage:        "m1",
-			Endpoints:    []string{"POST /auth/login"},
+			Endpoints:    []string{"POST /auth/login", "POST /auth/token-exchange"},
 			Mutating:     true,
 			MinimumRole:  "anonymous",
 			InputSchema:  "LoginRequest",
@@ -165,6 +218,15 @@ func authLoginCommand() command {
 			DryRun:       "unsupported",
 		},
 		run: func(ctx context.Context, env *commandContext) error {
+			if env.flagSet["workload-token-file"] {
+				if username != "" || passwordStdin {
+					return &UsageError{Message: "choose one of --workload-token-file or --username with --password-stdin", Hint: "a workload login has no password"}
+				}
+				return loginWithWorkloadToken(ctx, env, workloadTokenFile, workloadPolicy, secretOutput)
+			}
+			if env.flagSet["workload-policy"] {
+				return &UsageError{Message: "--workload-policy needs --workload-token-file", Hint: "pass the token file to exchange"}
+			}
 			if env.flagSet["secret-output"] {
 				if env.flagSet["profile"] {
 					return &UsageError{Message: "choose one of --profile or --secret-output for the session token", Hint: "--profile stores it in the config file; --secret-output writes it to a new private file"}
@@ -175,20 +237,9 @@ func authLoginCommand() command {
 			if err != nil {
 				return err
 			}
-			// A session token must never land in a profile that targets a
-			// different server: later invocations would send it elsewhere.
-			target, err := normalizeServerTarget(env.settings.Server)
+			target, err := checkProfileTarget(env, profile, stored)
 			if err != nil {
 				return err
-			}
-			if stored.Server != "" {
-				bound, err := normalizeServerTarget(stored.Server)
-				if err != nil || bound != target {
-					return &UsageError{
-						Message: fmt.Sprintf("profile %q targets %s but this login targets %s", profile, redactServerURL(stored.Server, stored.Token), redactServerURL(env.settings.Server, env.settings.Token)),
-						Hint:    "update the profile first, or log in to the profile's own target",
-					}
-				}
 			}
 			if strings.TrimSpace(username) == "" {
 				return &UsageError{Message: "auth login requires --username", Hint: "pass --username NAME"}
@@ -228,30 +279,7 @@ func authLoginCommand() command {
 			}
 			env.addKnownSecret(login.Token)
 
-			if err := mutateConfigFile(env.configPath, func(config *configFile) error {
-				profileConfig, ok := config.Profiles[profile]
-				if !ok {
-					return &UsageError{Message: fmt.Sprintf("profile %q does not exist", profile)}
-				}
-				// The profile may have been edited while the login request was
-				// in flight; refuse instead of binding the token to a target
-				// that changed under it.
-				if profileConfig.Server != "" {
-					storedTarget, err := normalizeServerTarget(profileConfig.Server)
-					if err != nil || storedTarget != target {
-						return &UsageError{
-							Message: fmt.Sprintf("profile %q changed target while login was in flight; the session token was not stored", profile),
-							Hint:    fmt.Sprintf("re-run notarxctl auth login for the current target of profile %s", profile),
-						}
-					}
-				}
-				profileConfig.Token = login.Token
-				if profileConfig.Server == "" {
-					profileConfig.Server = env.settings.Server
-				}
-				config.Profiles[profile] = profileConfig
-				return nil
-			}); err != nil {
+			if err := storeProfileToken(env, profile, target, login.Token); err != nil {
 				return err
 			}
 			result := authLoginResult{
