@@ -199,14 +199,6 @@ func (s *PostgresStore) ClaimLifecycleJobsByKindAndFormat(ctx context.Context, k
 	return s.claimLifecycleJobs(ctx, kind, formatList(format), limit)
 }
 
-// formatList is the format filter of a single-format claim: an empty format claims every format.
-func formatList(format Format) []Format {
-	if format == "" {
-		return nil
-	}
-	return []Format{format}
-}
-
 // ClaimLifecycleJobsByKindAndFormats claims jobs of one kind for any of formats in a single claim; an empty
 // formats list means every format. It is the call of the per-process claimer (lifecycle.ClaimBroker).
 func (s *PostgresStore) ClaimLifecycleJobsByKindAndFormats(ctx context.Context, kind LifecycleJobKind, formats []Format, limit int) ([]LifecycleJob, error) {
@@ -303,15 +295,19 @@ func (c *lifecycleClaimScan) run(ctx context.Context, kind LifecycleJobKind, bud
 }
 
 // claimFormatsRoundRobin serves a claim for several formats of one kind with the share plan of
-// claimFormatShares. The whole claim examines at most QueueClaimScanCap rows: the opening scan may use all of
-// it, each share an equal part of what is left, and the remainder the rest.
+// claimFormatShares. The whole claim examines at most QueueClaimScanCap rows. Each format beyond the first
+// has an equal part of the cap reserved for its share, so a deep backlog the opening scan meets cannot use the
+// shares' budget; the opening scan has the rest, and the remainder what the earlier batches left.
 func (c *lifecycleClaimScan) claimFormatsRoundRobin(ctx context.Context, kind LifecycleJobKind, formats []Format, rotation uint64) error {
 	limit := c.limit
 	defer func() { c.formats, c.limit = formats, limit }()
 	perFormat := max(QueueClaimScanCap/(len(formats)+1), 1)
 	return claimFormatShares(ctx, formats, limit, rotation, func(ctx context.Context, phase formatClaimPhase, batch []Format, want int) ([]Format, bool, error) {
 		budget := QueueClaimScanCap - c.scanned
-		if phase == formatClaimShare {
+		switch phase {
+		case formatClaimOpening:
+			budget = QueueClaimScanCap - perFormat*(len(formats)-1)
+		case formatClaimShare:
 			budget = min(perFormat, budget)
 		}
 		if budget <= 0 {

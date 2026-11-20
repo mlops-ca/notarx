@@ -73,3 +73,12 @@ func claimFormatShares(ctx context.Context, formats []Format, limit int, rotatio
 	}
 	return err
 }
+
+// formatList is the format filter of a single-format claim: an empty format claims every format, as the
+// single-format claims did before format lists (their SQL read an empty format as no filter).
+func formatList(format Format) []Format {
+	if format == "" {
+		return nil
+	}
+	return []Format{format}
+}
