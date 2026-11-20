@@ -80,7 +80,7 @@ for path in ${assets[@]+"${assets[@]}"}; do
       extract=$scratch/$name.d
       mkdir -p "$extract"
       tar -xzf "$path" -C "$extract" || fail "cannot extract $name"
-      find "$extract" -type f -print0 >"$lists/members" || fail "cannot list the members of $name"
+      find "$extract" -type f -print0 >"$lists/$name.members" || fail "cannot list the members of $name"
       while IFS= read -r -d '' file; do
         if [[ "$(basename "$file")" == VERSION.txt ]] && grep -q -i nightly "$file"; then
           fail "$name: VERSION.txt reports a nightly version"
@@ -89,7 +89,7 @@ for path in ${assets[@]+"${assets[@]}"}; do
           *.md | LICENSE* | NOTICE*) continue ;;
         esac
         if grep -a -q -E "$stamped" "$file"; then fail "$name: $(basename "$file") embeds a stamped nightly version"; fi
-      done <"$lists/members"
+      done <"$lists/$name.members"
       rm -rf "$extract"
       ;;
     *.deb)

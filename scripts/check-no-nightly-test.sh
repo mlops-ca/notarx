@@ -118,6 +118,11 @@ mv "$dir/notarx_0.1.0_linux_amd64.tar.gz" "$dir/notarx_0.1.0
 linux_amd64.tar.gz"
 expect_fail 'a name holding a newline is checked as one asset' 'embeds a stamped nightly' check
 
+new_release 0.1.0 0.1.0 0.1.0
+mv "$dir/notarx_0.1.0_linux_amd64.tar.gz" "$dir/notarx_0.1.0
+nightly_linux_amd64.tar.gz"
+expect_fail 'a nightly on the second line of a name fails the name check' "asset name 'notarx_0\.1\.0" check
+
 printf '{"images":' >"$workdir/broken-manifest.json"
 expect_fail 'an unreadable manifest fails' 'unreadable manifest' bash "$root/scripts/check-no-nightly.sh" --manifest "$workdir/broken-manifest.json" --registry ghcr.io/o
 
