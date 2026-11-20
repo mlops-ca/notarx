@@ -1,8 +1,12 @@
 package huggingface
 
 import (
+	"errors"
 	"net/http/httptest"
 	"testing"
+	"time"
+
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 func newRecorder() *httptest.ResponseRecorder { return httptest.NewRecorder() }
@@ -75,5 +79,94 @@ func TestHubErrorShape(t *testing.T) {
 	}
 	if recorder.Code != 404 || recorder.Header().Get("X-Error-Code") != "EntryNotFound" || recorder.Body.String() != "{\"error\":\"Entry Not Found\"}\n" {
 		t.Fatalf("response = %d %v %q", recorder.Code, recorder.Header(), recorder.Body.String())
+	}
+}
+
+func TestAuditOutcomeClassifiesStatuses(t *testing.T) {
+	for status, want := range map[int]repository.AuditOutcome{
+		200: repository.AuditResolved, 206: repository.AuditResolved, 416: repository.AuditResolved,
+		400: repository.AuditProxyDenied, 405: repository.AuditProxyDenied, 413: repository.AuditProxyDenied,
+		401: repository.AuditAccessDenied, 403: repository.AuditAccessDenied,
+		404: repository.AuditNotFound,
+		500: repository.AuditStorageError,
+		502: repository.AuditUpstreamError, 503: repository.AuditUpstreamError, 504: repository.AuditUpstreamError, 507: repository.AuditUpstreamError,
+	} {
+		if got := auditOutcome(status); got != want {
+			t.Errorf("auditOutcome(%d) = %q, want %q", status, got, want)
+		}
+	}
+}
+
+func TestMissCacheIsBoundedAndExpires(t *testing.T) {
+	var cache missCache
+	if cache.has("a") {
+		t.Fatal("an empty cache reported a miss")
+	}
+	cache.add("a")
+	if !cache.has("a") || cache.has("b") {
+		t.Fatal("a recorded miss must be found and only that one")
+	}
+	cache.mu.Lock()
+	cache.entries["a"] = time.Now().Add(-time.Second)
+	cache.mu.Unlock()
+	if cache.has("a") {
+		t.Fatal("an expired miss was reported")
+	}
+	for i := 0; i < missCapacity+10; i++ {
+		cache.add(string(rune('a'+i%26)) + time.Duration(i).String())
+	}
+	cache.mu.Lock()
+	size := len(cache.entries)
+	cache.mu.Unlock()
+	if size > missCapacity {
+		t.Fatalf("the cache grew to %d entries, above its bound %d", size, missCapacity)
+	}
+}
+
+func TestReadProtocolRequiresPostgreSQL(t *testing.T) {
+	_, err := newReader(ReadOptions{}, NewStore(nil, MySQL), nil)
+	if !errors.Is(err, ErrDialectUnsupported) {
+		t.Fatalf("err = %v, want ErrDialectUnsupported", err)
+	}
+	module := &Module{store: NewStore(nil, MySQL)}
+	if err := module.EnableRead(ReadOptions{}); !errors.Is(err, ErrDialectUnsupported) {
+		t.Fatalf("EnableRead = %v", err)
+	}
+	if routes := module.Routes(); len(routes) != 0 {
+		t.Fatalf("a module whose read protocol is off mounted %d routes", len(routes))
+	}
+}
+
+func TestFlightKeyKeepsRepositoriesApart(t *testing.T) {
+	lfs := File{SHA256: digestSHA}
+	a := flightKey(Object{RepositoryID: "repo-a", CommitID: "c1", Path: "w.bin"}, lfs)
+	b := flightKey(Object{RepositoryID: "repo-b", CommitID: "c1", Path: "w.bin"}, lfs)
+	same := flightKey(Object{RepositoryID: "repo-a", CommitID: "c2", Path: "other.bin"}, lfs)
+	if a == b {
+		t.Fatal("two repositories share a flight: the joiner would inherit the other's quota and credential")
+	}
+	if a != same {
+		t.Fatal("one repository must share a flight per digest across commits and paths")
+	}
+	regular := File{}
+	if flightKey(Object{RepositoryID: "repo-a", CommitID: "c1", Path: "a"}, regular) == flightKey(Object{RepositoryID: "repo-a", CommitID: "c1", Path: "b"}, regular) {
+		t.Fatal("regular files without a digest must be keyed by their path")
+	}
+}
+
+func TestHeaderWriterAppliesHeadersOnTheFirstWriteOnly(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	applied := 0
+	writer := &headerWriter{ResponseWriter: recorder, apply: func() { applied++; recorder.Header().Set("X-Repo-Commit", "abc") }}
+	if recorder.Header().Get("X-Repo-Commit") != "" {
+		t.Fatal("headers applied before a write")
+	}
+	writer.WriteHeader(206)
+	_, _ = writer.Write([]byte("x"))
+	if applied != 1 || recorder.Header().Get("X-Repo-Commit") != "abc" || recorder.Code != 206 {
+		t.Fatalf("applied %d times, code %d, headers %v", applied, recorder.Code, recorder.Header())
+	}
+	if writer.Unwrap() != recorder {
+		t.Fatal("Unwrap must reach the underlying writer for http.ResponseController")
 	}
 }

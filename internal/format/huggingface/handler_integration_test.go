@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/authorization"
@@ -475,3 +476,82 @@ func (d *digestWriter) Write(p []byte) (int, error) {
 func (d *digestWriter) hex() string { return hex.EncodeToString(d.sum.Sum(nil)) }
 
 func btoa(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
+
+func TestUnknownUpstreamRepositoryCreatesNoRowAndIsNotAskedAgain(t *testing.T) {
+	env := newProtocolEnv(t, repository.RepositoryTypeProxy, protocolFiles(), nil)
+	for range 3 {
+		response, body := env.do(t, http.MethodGet, "nobody/nothing/resolve/main/x.bin", nil)
+		requireHubError(t, response, body, http.StatusNotFound, "RevisionNotFound")
+	}
+	var rows int
+	if err := env.f.db.QueryRowContext(context.Background(), env.f.store.rebind("SELECT COUNT(*) FROM hf_repos WHERE repository_id = ?"), env.f.repositoryID).Scan(&rows); err != nil || rows != 0 {
+		t.Fatalf("hf_repos rows = %d, %v: a name upstream does not know must not create a row", rows, err)
+	}
+	if asked := env.hub.count("GET /api/models/nobody/nothing/revision/"); asked != 1 {
+		t.Fatalf("upstream was asked %d times for the same missing repository", asked)
+	}
+	// A real repository still works and creates its row.
+	if response, _ := env.do(t, http.MethodHead, "acme/widget/resolve/main/config.json", nil); response.StatusCode != 200 {
+		t.Fatalf("real repository = %d", response.StatusCode)
+	}
+	if err := env.f.db.QueryRowContext(context.Background(), env.f.store.rebind("SELECT COUNT(*) FROM hf_repos WHERE repository_id = ?"), env.f.repositoryID).Scan(&rows); err != nil || rows != 1 {
+		t.Fatalf("hf_repos rows = %d, %v", rows, err)
+	}
+}
+
+func TestReadsUpdateLastReadAtAtMostOncePerInterval(t *testing.T) {
+	f := newFixture(t)
+	hub, shaA := hubWithFiles(t)
+	ingest, repo, clk := newIngest(t, f, hub)
+	ctx := context.Background()
+	first, err := ingest.ResolveRevision(ctx, repo, shaA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	read := func() time.Time {
+		commit, err := f.store.GetCommit(ctx, repo.ID, shaA)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return commit.LastReadAt
+	}
+	created := read()
+	clk.advance(10 * time.Minute)
+	if _, err := ingest.ResolveRevision(ctx, repo, shaA); err != nil {
+		t.Fatal(err)
+	}
+	if !read().Equal(created) {
+		t.Fatal("a read within the interval wrote last_read_at: a snapshot download would update one row per file")
+	}
+	f.exec("UPDATE hf_commits SET last_read_at = ? WHERE id = ?", clk.Now().Add(-2*time.Hour), first.Commit.ID)
+	stale := read()
+	if _, err := ingest.ResolveRevision(ctx, repo, shaA); err != nil {
+		t.Fatal(err)
+	}
+	if !read().After(stale) {
+		t.Fatal("a read after the interval must refresh last_read_at")
+	}
+}
+
+func TestResolveForReadPinsOnlyWithinTheWindow(t *testing.T) {
+	f := newFixture(t)
+	hub, shaA := hubWithFiles(t)
+	shaB := commitID(0xb2)
+	hub.addCommit(shaB, "", map[string]*hubFile{"config.json": {Content: []byte("v2")}})
+	ingest, repo, clk := newIngest(t, f, hub)
+	ingest.Config.RefTTL = 0
+	ctx := context.Background()
+	if _, err := ingest.ResolveRevision(ctx, repo, "main"); err != nil {
+		t.Fatal(err)
+	}
+	hub.setRef("main", shaB)
+	pinned, err := ingest.ResolveForRead(ctx, repo, "main")
+	if err != nil || pinned.Commit.SHA != shaA || !pinned.Cached {
+		t.Fatalf("within the window = %+v, %v", pinned, err)
+	}
+	clk.advance(pinWindow + time.Second)
+	moved, err := ingest.ResolveForRead(ctx, repo, "main")
+	if err != nil || moved.Commit.SHA != shaB {
+		t.Fatalf("after the window the ref must be revalidated: %+v, %v", moved, err)
+	}
+}

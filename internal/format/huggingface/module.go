@@ -55,6 +55,10 @@ func New(options Options) (*Module, error) {
 	return module, nil
 }
 
+// ErrDialectUnsupported means the read protocol is not available on the configured database:
+// capacity.Reserve, which commits every cached blob, is PostgreSQL SQL until the counters are ported.
+var ErrDialectUnsupported = errors.New("the Hugging Face read protocol requires PostgreSQL until the capacity counters are ported to MySQL")
+
 // EnableRead turns on the read protocol (resolve and HEAD under /hf/). The composition root calls
 // it once, before the routes are mounted, with the authentication and authorization ports of the
 // gateway.

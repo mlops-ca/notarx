@@ -75,6 +75,13 @@ func (m *Module) collectRepo(ctx context.Context, repo Repo) error {
 			if otherRepos {
 				continue
 			}
+			// A fetch in another repository may have stored this object after the transaction above;
+			// the check narrows that window, and a cached file whose object is missing repairs itself.
+			if held, err := m.store.BlobHeldAnywhere(ctx, digest); err != nil {
+				return err
+			} else if held {
+				continue
+			}
 			if err := m.objects.Delete(ctx, BlobKey(digest)); err != nil && !errors.Is(err, objectstore.ErrNotFound) {
 				return err
 			}

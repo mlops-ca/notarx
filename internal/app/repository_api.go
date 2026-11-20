@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"errors"
+	"log/slog"
 	"maps"
 	"net/http"
 	"strings"
@@ -363,7 +365,9 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 		if err := options.HuggingFace.EnableRead(huggingfaceformat.ReadOptions{
 			Repositories: store, Authenticator: authenticator, Authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator},
 			Audit: store, Anonymous: store, Config: huggingFaceConfig, Hooks: egress.DefaultHooks(), Locker: options.HuggingFaceLocker, Metrics: metrics,
-		}); err != nil {
+		}); errors.Is(err, huggingfaceformat.ErrDialectUnsupported) {
+			slog.Warn("Hugging Face repositories are served only on PostgreSQL; the /hf/ routes are not mounted", "error", err)
+		} else if err != nil {
 			return nil, err
 		}
 		modules = append(modules, options.HuggingFace)

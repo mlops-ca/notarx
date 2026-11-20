@@ -468,3 +468,110 @@ func TestUpstreamFailureBeforeAnyByteIsAnOrdinaryError(t *testing.T) {
 func sha256Of(content []byte) string {
 	return (&hubFile{Content: content}).sha256()
 }
+
+type failingObjects struct {
+	objectstore.Store
+	err error
+}
+
+func (f failingObjects) OpenRange(context.Context, string, int64, int64) (io.ReadCloser, int64, error) {
+	return nil, 0, f.err
+}
+
+func TestACachedFileWhoseObjectIsGoneIsFetchedAgain(t *testing.T) {
+	content := weights(2000)
+	env := newFetchEnv(t, map[string]*hubFile{"model.safetensors": {Content: content, LFS: true}})
+	if _, body, err := env.get(t, "model.safetensors", nil); err != nil || string(body) != string(content) {
+		t.Fatalf("first fetch: %v", err)
+	}
+	file, _ := env.f.store.GetFile(context.Background(), env.commit.ID, "model.safetensors")
+	if err := env.objects.Delete(context.Background(), BlobKey(file.SHA256)); err != nil {
+		t.Fatal(err)
+	}
+	response, body, err := env.get(t, "model.safetensors", nil)
+	if err != nil || response.StatusCode != 200 || string(body) != string(content) {
+		t.Fatalf("a lost object must be repaired, not a permanent 500: %v %v", response, err)
+	}
+	if env.hub.count("GET /cdn/") != 2 {
+		t.Fatalf("CDN requests = %d, want the repair to fetch once more", env.hub.count("GET /cdn/"))
+	}
+	if bytes, objects := env.f.counter(); bytes != 2000 || objects != 1 {
+		t.Fatalf("counter = %d/%d: the forgotten blob must be released before it is counted again", bytes, objects)
+	}
+	if _, err := env.objects.Stat(context.Background(), BlobKey(file.SHA256)); err != nil {
+		t.Fatalf("object not restored: %v", err)
+	}
+}
+
+func TestOpenFailureLeavesACleanErrorResponse(t *testing.T) {
+	env := newFetchEnv(t, map[string]*hubFile{"model.safetensors": {Content: weights(2000), LFS: true}})
+	if _, _, err := env.get(t, "model.safetensors", nil); err != nil {
+		t.Fatal(err)
+	}
+	env.fetcher.Objects = failingObjects{Store: env.objects, err: errors.New("object store unavailable")}
+	response, body, err := env.get(t, "model.safetensors", nil)
+	if err != nil || response.StatusCode != http.StatusBadGateway {
+		t.Fatalf("status = %v err = %v", response, err)
+	}
+	if response.Header.Get("ETag") != "" || response.Header.Get("Accept-Ranges") != "" || response.Header.Get("Content-Range") != "" || int(response.ContentLength) != len(body) {
+		t.Fatalf("success headers leaked onto the error response: %v (body %d bytes)", response.Header, len(body))
+	}
+}
+
+func TestTheSameDigestInANewCommitNeedsNoFetchAndNoSecondReservation(t *testing.T) {
+	content := weights(3000)
+	env := newFetchEnv(t, map[string]*hubFile{"model.safetensors": {Content: content, LFS: true}})
+	if _, _, err := env.get(t, "model.safetensors", nil); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	file, _ := env.f.store.GetFile(ctx, env.commit.ID, "model.safetensors")
+	second, err := env.f.store.EnsureCommit(ctx, Commit{HFRepoID: env.repo.ID, SHA: commitID(0x78), Source: SourceUpstream})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := env.f.store.ReplaceTree(ctx, second.ID, []File{{Path: "model.safetensors", Size: file.Size, SHA256: file.SHA256, LFS: true, GitBlobID: file.GitBlobID}}); err != nil {
+		t.Fatal(err)
+	}
+	inherited, _ := env.f.store.GetFile(ctx, second.ID, "model.safetensors")
+	if !inherited.Cached {
+		t.Fatal("a digest the repository already holds must be cached in the new commit's row")
+	}
+	// A quota that only fits the first copy: the second commit must not need headroom.
+	if err := capacity.SetQuota(ctx, env.f.db, env.f.repositoryID, 3000); err != nil {
+		t.Fatal(err)
+	}
+	object := Object{RepositoryID: env.f.repositoryID, HFRepoID: env.repo.ID, CommitID: second.ID, Path: "model.safetensors", Size: file.Size,
+		Open: func(context.Context) (*http.Response, error) { return nil, errors.New("must not go upstream") }}
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	if written, err := env.fetcher.Serve(recorder, request, object, http.Header{"ETag": {`"x"`}}); err != nil || !written || recorder.Body.Len() != 3000 {
+		t.Fatalf("Serve = %v %v, %d bytes", written, err, recorder.Body.Len())
+	}
+	if env.hub.count("GET /cdn/") != 1 {
+		t.Fatal("the second commit was fetched again")
+	}
+	if bytes, objects := env.f.counter(); bytes != 3000 || objects != 1 {
+		t.Fatalf("counter = %d/%d", bytes, objects)
+	}
+}
+
+func TestAFinishedFlightIsRetiredBeforeReadersSeeItDone(t *testing.T) {
+	env := newFetchEnv(t, map[string]*hubFile{"model.safetensors": {Content: weights(2000), LFS: true}})
+	for range 20 {
+		if _, _, err := env.get(t, "model.safetensors", nil); err != nil {
+			t.Fatal(err)
+		}
+		env.fetcher.mu.Lock()
+		left := len(env.fetcher.flights)
+		env.fetcher.mu.Unlock()
+		if left != 0 {
+			t.Fatalf("%d flights remain after the response completed: a late joiner would attach to a closed staging file", left)
+		}
+		// Make the next round cold again.
+		file, _ := env.f.store.GetFile(context.Background(), env.commit.ID, "model.safetensors")
+		_ = env.f.store.ForgetBlob(context.Background(), env.f.repositoryID, env.repo.ID, file.SHA256)
+		_ = env.objects.Delete(context.Background(), BlobKey(file.SHA256))
+	}
+	env.requireNoStaging(t)
+}

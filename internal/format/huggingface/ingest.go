@@ -57,7 +57,7 @@ func (i *Ingest) ResolveRevision(ctx context.Context, repo Repo, rev string) (Re
 	if ValidCommit(rev) {
 		commit, err := i.Store.GetCommit(ctx, repo.ID, rev)
 		if err == nil {
-			_ = i.Store.TouchCommit(ctx, commit.ID)
+			i.touch(ctx, commit)
 			return Resolution{Commit: commit, Cached: true}, nil
 		}
 		if !errors.Is(err, ErrNotFound) {
@@ -86,7 +86,7 @@ func (i *Ingest) ResolveRevision(ctx context.Context, repo Repo, rev string) (Re
 	if known && now.Before(ref.ExpiresAt) {
 		commit, err := i.Store.GetCommit(ctx, repo.ID, ref.CommitSHA)
 		if err == nil {
-			_ = i.Store.TouchCommit(ctx, commit.ID)
+			i.touch(ctx, commit)
 			return Resolution{Commit: commit, Cached: true}, nil
 		}
 		if !errors.Is(err, ErrNotFound) {
@@ -99,7 +99,7 @@ func (i *Ingest) ResolveRevision(ctx context.Context, repo Repo, rev string) (Re
 		var upstream *UpstreamError
 		if known && i.Config.ServeStale && errors.As(err, &upstream) && upstream.Code == CodeUpstreamUnavailable {
 			if commit, getErr := i.Store.GetCommit(ctx, repo.ID, ref.CommitSHA); getErr == nil {
-				_ = i.Store.TouchCommit(ctx, commit.ID)
+				i.touch(ctx, commit)
 				return Resolution{Commit: commit, Stale: true, Cached: true}, nil
 			}
 		}
@@ -119,9 +119,20 @@ func (i *Ingest) ResolveRevision(ctx context.Context, repo Repo, rev string) (Re
 }
 
 // pinWindow is how long a ref resolution pins file reads: a GET that names a mutable ref uses the
-// resolution a recent HEAD returned, however short NOTARX_HF_REF_TTL is, so the bytes of a file
+// resolution of the HEAD that just preceded it, however short NOTARX_HF_REF_TTL is, so the bytes of a file
 // never come from another commit than the one its headers named.
-const pinWindow = 15 * time.Minute
+const pinWindow = time.Minute
+
+// touchInterval is how often a read updates last_read_at: retention measures days, and a snapshot
+// download resolves the same commit once per file.
+const touchInterval = time.Hour
+
+// touch records a read of the commit, at most once per touchInterval.
+func (i *Ingest) touch(ctx context.Context, commit Commit) {
+	if i.now().Sub(commit.LastReadAt) >= touchInterval {
+		_ = i.Store.TouchCommit(ctx, commit.ID)
+	}
+}
 
 // ResolveForRead is ResolveRevision for a byte request. A mutable ref that was resolved within
 // pinWindow answers without revalidation; only an unknown or older ref goes upstream.
@@ -129,7 +140,7 @@ func (i *Ingest) ResolveForRead(ctx context.Context, repo Repo, rev string) (Res
 	if !ValidCommit(rev) && rev != "" {
 		if ref, _, err := i.lookupRef(ctx, repo, rev); err == nil && i.now().Sub(ref.CheckedAt) < pinWindow {
 			if commit, err := i.Store.GetCommit(ctx, repo.ID, ref.CommitSHA); err == nil {
-				_ = i.Store.TouchCommit(ctx, commit.ID)
+				i.touch(ctx, commit)
 				return Resolution{Commit: commit, Cached: true}, nil
 			}
 		}

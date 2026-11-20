@@ -262,11 +262,27 @@ func (f *Fetcher) Serve(w http.ResponseWriter, r *http.Request, obj Object, head
 	if file.Size != obj.Size {
 		return false, fmt.Errorf("hugging face file size changed: %d != %d", file.Size, obj.Size)
 	}
-	if file.Cached && file.SHA256 != "" {
+	cached := file.Cached && file.SHA256 != ""
+	if !cached && file.SHA256 != "" {
+		// The repository may already hold this digest from another commit.
+		if held, err := f.Store.HasBlob(ctx, obj.HFRepoID, file.SHA256); err == nil && held {
+			cached = true
+		}
+	}
+	if cached {
 		f.record(FetchHit)
-		return f.serveRanges(w, r, obj.Size, headers, func(ctx context.Context, offset, length int64) (io.ReadCloser, int64, error) {
+		written, err := f.serveRanges(w, r, obj.Size, headers, func(ctx context.Context, offset, length int64) (io.ReadCloser, int64, error) {
 			return f.Objects.OpenRange(ctx, BlobKey(file.SHA256), offset, length)
 		})
+		if err == nil || written || !errors.Is(err, objectstore.ErrNotFound) {
+			return written, err
+		}
+		// The object is gone although the database says it is cached (collected by a racing
+		// sweep, or lost): forget the blob and fetch it again.
+		if err := f.Store.ForgetBlob(ctx, obj.RepositoryID, obj.HFRepoID, file.SHA256); err != nil {
+			return false, err
+		}
+		file.Cached = false
 	}
 	fl, release, err := f.join(ctx, obj, file)
 	if err != nil {
@@ -285,11 +301,18 @@ func (f *Fetcher) Serve(w http.ResponseWriter, r *http.Request, obj Object, head
 }
 
 // join returns the flight of the object's digest, starting it when none is running.
-func (f *Fetcher) join(ctx context.Context, obj Object, file File) (*flight, func(), error) {
-	key := file.SHA256
-	if key == "" {
-		key = "git:" + obj.CommitID + ":" + obj.Path
+// flightKey identifies one fetch. It includes the repository: a joiner must not inherit the quota,
+// credential or bookkeeping of another repository's fetch. A regular file has no digest before it is
+// read, so it is keyed by its place in the commit.
+func flightKey(obj Object, file File) string {
+	if file.SHA256 != "" {
+		return obj.RepositoryID + ":" + file.SHA256
 	}
+	return obj.RepositoryID + ":git:" + obj.CommitID + ":" + obj.Path
+}
+
+func (f *Fetcher) join(ctx context.Context, obj Object, file File) (*flight, func(), error) {
+	key := flightKey(obj, file)
 	f.mu.Lock()
 	if f.flights == nil {
 		f.flights = map[string]*flight{}
@@ -315,21 +338,25 @@ func (f *Fetcher) join(ctx context.Context, obj Object, file File) (*flight, fun
 	go func() {
 		defer releaseSlot()
 		f.run(fl, obj, file)
-		f.mu.Lock()
-		delete(f.flights, key)
-		f.mu.Unlock()
 	}()
 	return fl, release, nil
 }
 
-// fail ends a flight that never produced bytes or lost them.
-func (fl *flight) fail(err error) {
+// end retires the flight from the table first, so a request that arrives afterwards sees the committed
+// object (or starts a new fetch) instead of joining a flight that is about to close its staging file,
+// then wakes every reader. A nil err is success.
+func (f *Fetcher) end(fl *flight, err error) {
+	f.mu.Lock()
+	delete(f.flights, fl.key)
+	f.mu.Unlock()
 	fl.mu.Lock()
 	fl.done, fl.err = true, err
 	fl.cleanupLocked()
 	fl.signal()
 	fl.mu.Unlock()
-	fl.markReady(err)
+	if err != nil {
+		fl.markReady(err)
+	}
 }
 
 func (fl *flight) markReady(err error) {
@@ -353,7 +380,7 @@ func (f *Fetcher) run(fl *flight, obj Object, file File) {
 	ctx, unlock, err := f.Locker.Acquire(ctx, "huggingface-fetch:"+fl.key)
 	if err != nil {
 		f.record(FetchUpstreamError)
-		fl.fail(err)
+		f.end(fl, err)
 		return
 	}
 	defer func() { _ = unlock() }()
@@ -364,24 +391,24 @@ func (f *Fetcher) run(fl *flight, obj Object, file File) {
 	}
 	if err := f.Store.Headroom(ctx, obj.RepositoryID, obj.Size); err != nil {
 		f.record(FetchQuota)
-		fl.fail(err)
+		f.end(fl, err)
 		return
 	}
 	response, err := obj.Open(ctx)
 	if err != nil {
 		f.record(FetchUpstreamError)
-		fl.fail(err)
+		f.end(fl, err)
 		return
 	}
 	defer response.Body.Close()
 	if response.ContentLength >= 0 && response.ContentLength != obj.Size {
 		f.record(FetchUpstreamError)
-		fl.fail(fmt.Errorf("%w: upstream announced %d bytes, the tree says %d", ErrDigestMismatch, response.ContentLength, obj.Size))
+		f.end(fl, fmt.Errorf("%w: upstream announced %d bytes, the tree says %d", ErrDigestMismatch, response.ContentLength, obj.Size))
 		return
 	}
 	staging, err := os.CreateTemp("", "notarx-hf-*")
 	if err != nil {
-		fl.fail(err)
+		f.end(fl, err)
 		return
 	}
 	fl.mu.Lock()
@@ -402,7 +429,7 @@ func (f *Fetcher) run(fl *flight, obj Object, file File) {
 		if n > 0 {
 			if _, err := staging.WriteAt(buffer[:n], total); err != nil {
 				f.record(FetchUpstreamError)
-				fl.fail(err)
+				f.end(fl, err)
 				return
 			}
 			sum.Write(buffer[:n])
@@ -423,20 +450,20 @@ func (f *Fetcher) run(fl *flight, obj Object, file File) {
 				readErr = io.ErrUnexpectedEOF
 			}
 			f.record(FetchUpstreamError)
-			fl.fail(readErr)
+			f.end(fl, readErr)
 			return
 		}
 	}
 	// A body longer than the tree says is as wrong as a short one.
 	if extra, _ := response.Body.Read(buffer[:1]); extra > 0 {
 		f.record(FetchDigestMismatch)
-		fl.fail(fmt.Errorf("%w: upstream sent more than %d bytes", ErrDigestMismatch, obj.Size))
+		f.end(fl, fmt.Errorf("%w: upstream sent more than %d bytes", ErrDigestMismatch, obj.Size))
 		return
 	}
 	digest := hex.EncodeToString(sum.Sum(nil))
 	if (file.SHA256 != "" && digest != file.SHA256) || (blob != nil && hex.EncodeToString(blob.Sum(nil)) != file.GitBlobID) {
 		f.record(FetchDigestMismatch)
-		fl.fail(ErrDigestMismatch)
+		f.end(fl, ErrDigestMismatch)
 		return
 	}
 	if err := f.commit(ctx, obj, digest, staging); err != nil {
@@ -445,15 +472,11 @@ func (f *Fetcher) run(fl *flight, obj Object, file File) {
 		} else {
 			f.record(FetchUpstreamError)
 		}
-		fl.fail(err)
+		f.end(fl, err)
 		return
 	}
 	f.record(FetchFetched)
-	fl.mu.Lock()
-	fl.done = true
-	fl.cleanupLocked()
-	fl.signal()
-	fl.mu.Unlock()
+	f.end(fl, nil)
 }
 
 // serveFromStoreOnce ends a flight whose object another node cached while this one waited for the
@@ -462,14 +485,14 @@ func (f *Fetcher) run(fl *flight, obj Object, file File) {
 func (f *Fetcher) serveFromStoreOnce(fl *flight, digest string) {
 	staging, err := os.CreateTemp("", "notarx-hf-*")
 	if err != nil {
-		fl.fail(err)
+		f.end(fl, err)
 		return
 	}
 	reader, _, err := f.Objects.Open(context.Background(), BlobKey(digest))
 	if err != nil {
 		_ = staging.Close()
 		_ = os.Remove(staging.Name())
-		fl.fail(err)
+		f.end(fl, err)
 		return
 	}
 	defer reader.Close()
@@ -483,7 +506,7 @@ func (f *Fetcher) serveFromStoreOnce(fl *flight, digest string) {
 		n, readErr := reader.Read(buffer)
 		if n > 0 {
 			if _, err := staging.WriteAt(buffer[:n], total); err != nil {
-				fl.fail(err)
+				f.end(fl, err)
 				return
 			}
 			total += int64(n)
@@ -494,22 +517,20 @@ func (f *Fetcher) serveFromStoreOnce(fl *flight, digest string) {
 		}
 		if readErr != nil {
 			if !errors.Is(readErr, io.EOF) {
-				fl.fail(readErr)
+				f.end(fl, readErr)
 				return
 			}
 			break
 		}
 	}
 	fl.mu.Lock()
-	if total != fl.size {
-		fl.mu.Unlock()
-		fl.fail(io.ErrUnexpectedEOF)
+	complete := total == fl.size
+	fl.mu.Unlock()
+	if !complete {
+		f.end(fl, io.ErrUnexpectedEOF)
 		return
 	}
-	fl.done = true
-	fl.cleanupLocked()
-	fl.signal()
-	fl.mu.Unlock()
+	f.end(fl, nil)
 }
 
 // commit stores the verified bytes and records the blob. The object goes in first, under a
@@ -534,31 +555,46 @@ func (f *Fetcher) commit(ctx context.Context, obj Object, digest string, staging
 
 // serveRanges writes a 200, 206 or 416 response for a representation of size bytes read
 // through open. It is the Raw range grammar (single and multiple ranges, If-Range) shared
-// through internal/spool.
-func (f *Fetcher) serveRanges(w http.ResponseWriter, r *http.Request, size int64, headers http.Header, open spool.RangeOpener) (bool, error) {
-	for name, values := range headers {
+// through internal/spool. The response headers are applied only once the source has been
+// opened, so a failure to open leaves the writer untouched for an error response.
+func (f *Fetcher) serveRanges(w http.ResponseWriter, r *http.Request, size int64, raw http.Header, open spool.RangeOpener) (bool, error) {
+	// Header names are canonicalized, so a caller's map literal and Get agree.
+	headers := http.Header{}
+	for name, values := range raw {
 		for _, value := range values {
-			w.Header().Add(name, value)
+			headers.Add(name, value)
 		}
+	}
+	apply := func(target http.Header) {
+		for name, values := range headers {
+			if name == "Content-Type" && target.Get("Content-Type") != "" {
+				continue
+			}
+			target.Del(name)
+			for _, value := range values {
+				target.Add(name, value)
+			}
+		}
+		target.Set("Accept-Ranges", "bytes")
 	}
 	ranges := r.Header.Values("Range")
 	if r.Method != http.MethodGet {
 		ranges = nil
 	}
-	if len(ranges) > 0 && (len(r.Header.Values("If-Range")) > 1 || !spool.IfRangeMatches(r.Header.Get("If-Range"), w.Header().Get("ETag"))) {
+	if len(ranges) > 0 && (len(r.Header.Values("If-Range")) > 1 || !spool.IfRangeMatches(r.Header.Get("If-Range"), headers.Get("ETag"))) {
 		ranges = nil
 	}
-	w.Header().Set("Accept-Ranges", "bytes")
 	if len(ranges) > 0 {
 		intervals, ok := spool.ParseRanges(ranges[0], size)
 		if len(ranges) != 1 || !ok {
+			apply(w.Header())
 			w.Header().Set("Content-Range", "bytes */"+strconv.FormatInt(size, 10))
 			w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
 			return true, nil
 		}
 		if len(intervals) > 1 {
-			contentType := w.Header().Get("Content-Type")
-			if err := spool.WriteMultipart(w, r.Context(), contentType, size, intervals, open); err != nil {
+			lazy := &headerWriter{ResponseWriter: w, apply: func() { apply(w.Header()) }}
+			if err := spool.WriteMultipart(lazy, r.Context(), headers.Get("Content-Type"), size, intervals, open); err != nil {
 				return false, err
 			}
 			return true, nil
@@ -570,14 +606,16 @@ func (f *Fetcher) serveRanges(w http.ResponseWriter, r *http.Request, size int64
 			return false, err
 		}
 		defer body.Close()
+		apply(w.Header())
 		w.Header().Set("Content-Range", "bytes "+strconv.FormatInt(start, 10)+"-"+strconv.FormatInt(end, 10)+"/"+strconv.FormatInt(size, 10))
 		w.Header().Set("Content-Length", strconv.FormatInt(length, 10))
 		w.WriteHeader(http.StatusPartialContent)
 		_, err = io.CopyN(newFlushWriter(w), body, length)
 		return true, err
 	}
-	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
 	if r.Method == http.MethodHead {
+		apply(w.Header())
+		w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
 		w.WriteHeader(http.StatusOK)
 		return true, nil
 	}
@@ -586,10 +624,40 @@ func (f *Fetcher) serveRanges(w http.ResponseWriter, r *http.Request, size int64
 		return false, err
 	}
 	defer body.Close()
+	apply(w.Header())
+	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
 	w.WriteHeader(http.StatusOK)
 	_, err = io.CopyN(newFlushWriter(w), body, size)
 	return true, err
 }
+
+// headerWriter applies the response headers on the first write, after the multipart writer has
+// opened its first range and cannot fail any more.
+type headerWriter struct {
+	http.ResponseWriter
+	apply   func()
+	applied bool
+}
+
+func (h *headerWriter) once() {
+	if !h.applied {
+		h.applied = true
+		h.apply()
+	}
+}
+
+func (h *headerWriter) WriteHeader(code int) {
+	h.once()
+	h.ResponseWriter.WriteHeader(code)
+}
+
+func (h *headerWriter) Write(p []byte) (int, error) {
+	h.once()
+	return h.ResponseWriter.Write(p)
+}
+
+// Unwrap lets http.ResponseController reach the underlying writer.
+func (h *headerWriter) Unwrap() http.ResponseWriter { return h.ResponseWriter }
 
 // flushWriter pushes every chunk to the client at once: a cold object is streamed as the fetch
 // delivers it, and the client must see the headers and the first bytes without waiting for a

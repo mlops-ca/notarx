@@ -297,6 +297,11 @@ func (s *Store) ReplaceTree(ctx context.Context, commitID string, files []File) 
 	if n, _ := result.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
+	// A digest the repository already holds (the same LFS file in an earlier commit) is cached
+	// already: the new commit needs neither a fetch nor a second reservation.
+	if _, err := s.exec(ctx, tx, "UPDATE hf_files SET cached = ? WHERE commit_id = ? AND sha256 IN (SELECT b.sha256 FROM hf_blobs b JOIN hf_commits c ON c.hf_repo_id = b.hf_repo_id WHERE c.id = ?)", true, commitID, commitID); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -547,6 +552,35 @@ func (s *Store) SetMaxObjectBytes(ctx context.Context, repositoryID string, limi
 // authoritative reservation is CommitBlob. PostgreSQL only until the counters are ported.
 func (s *Store) Headroom(ctx context.Context, repositoryID string, extraBytes int64) error {
 	return capacity.Headroom(ctx, s.DB, repositoryID, extraBytes)
+}
+
+// ForgetBlob removes a blob row whose object is gone from the object store, releases its bytes
+// and marks every file of the repository with that digest as not cached, so the next read
+// fetches it again. It is the repair path of a cached file whose object has disappeared.
+func (s *Store) ForgetBlob(ctx context.Context, repositoryID, hfRepoID, sha256 string) error {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := s.exec(ctx, tx, "UPDATE hf_files SET cached = ? WHERE sha256 = ? AND commit_id IN (SELECT id FROM hf_commits WHERE hf_repo_id = ?)", false, sha256, hfRepoID); err != nil {
+		return err
+	}
+	var size int64
+	err = s.row(ctx, tx, "SELECT size FROM hf_blobs WHERE hf_repo_id = ? AND sha256 = ?", hfRepoID, sha256).Scan(&size)
+	if errors.Is(err, sql.ErrNoRows) {
+		return tx.Commit()
+	}
+	if err != nil {
+		return err
+	}
+	if _, err := s.exec(ctx, tx, "DELETE FROM hf_blobs WHERE hf_repo_id = ? AND sha256 = ?", hfRepoID, sha256); err != nil {
+		return err
+	}
+	if err := capacity.Reserve(ctx, tx, repositoryID, -size, -1); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // SearchCommits lists commits of a notarx repository for browsing, ordered by repo type,

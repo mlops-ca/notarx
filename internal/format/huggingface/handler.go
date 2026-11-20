@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/access"
@@ -87,10 +88,14 @@ type ReadOptions struct {
 type reader struct {
 	ReadOptions
 	fetcher *Fetcher
+	misses  missCache
 }
 
 // newReader validates the options of the read protocol.
 func newReader(options ReadOptions, store *Store, objects objectstore.Store) (*reader, error) {
+	if store.Dialect == MySQL {
+		return nil, ErrDialectUnsupported
+	}
 	if options.Repositories == nil || options.Audit == nil || options.Anonymous == nil || options.Authorizer.Grants == nil {
 		return nil, errors.New("huggingface read protocol requires repository, authorization, audit and anonymous-policy ports")
 	}
@@ -320,36 +325,57 @@ func isNilHub(hub Hub) bool {
 // tree on first use, and answers HEAD from rows (so a cached commit works offline) or streams
 // the bytes through the fetcher, always for the commit the headers name.
 func (rd *reader) resolve(w http.ResponseWriter, r *http.Request, repo repository.HostedRepository, parsed route, principal authorization.Principal) {
-	// An aborted transfer panics out of respond; the deferred record keeps its failure status.
-	status, bytes := http.StatusBadGateway, int64(0)
-	defer func() {
-		outcome := repository.AuditResolved
-		switch {
-		case status == http.StatusNotFound:
-			outcome = repository.AuditNotFound
-		case status >= 500:
-			outcome = repository.AuditUpstreamError
+	status, bytes, abort := rd.respond(w, r, repo, parsed, rd.fetcher.Store, r.Context())
+	if abort != nil {
+		// Bytes are on the wire: the only honest answer is a broken connection. A client that went
+		// away is not an upstream failure.
+		status = statusClientClosed
+		if r.Context().Err() == nil {
+			status = http.StatusBadGateway
 		}
-		rd.audit(r, repo, parsed, principal.Actor, outcome, status, bytes)
-	}()
-	status, bytes = rd.respond(w, r, repo, parsed, rd.fetcher.Store, r.Context())
+	}
+	rd.audit(r, repo, parsed, principal.Actor, auditOutcome(status), status, bytes)
+	if abort != nil {
+		panic(http.ErrAbortHandler)
+	}
 }
 
-func (rd *reader) respond(w http.ResponseWriter, r *http.Request, repo repository.HostedRepository, parsed route, store *Store, ctx context.Context) (int, int64) {
-	var hfRepo Repo
-	var err error
-	if repo.Type == repository.RepositoryTypeProxy {
-		hfRepo, err = store.EnsureRepo(ctx, repo.ID, parsed.repoType, parsed.repoName)
-	} else {
-		hfRepo, err = store.GetRepo(ctx, repo.ID, parsed.repoType, parsed.repoName)
+// statusClientClosed is the audit status of a transfer the client abandoned (the nginx convention).
+const statusClientClosed = 499
+
+// auditOutcome classifies a response status for the audit log.
+func auditOutcome(status int) repository.AuditOutcome {
+	switch {
+	case status == http.StatusUnauthorized || status == http.StatusForbidden:
+		return repository.AuditAccessDenied
+	case status == http.StatusNotFound:
+		return repository.AuditNotFound
+	case status == http.StatusInternalServerError:
+		return repository.AuditStorageError
+	case status >= http.StatusInternalServerError:
+		return repository.AuditUpstreamError
+	case status == http.StatusBadRequest || status == http.StatusRequestEntityTooLarge || status == http.StatusMethodNotAllowed:
+		return repository.AuditProxyDenied
+	}
+	return repository.AuditResolved
+}
+
+// respond writes the response and returns its status, the bytes served and, when a transfer broke
+// after bytes were committed, the error that broke it.
+func (rd *reader) respond(w http.ResponseWriter, r *http.Request, repo repository.HostedRepository, parsed route, store *Store, ctx context.Context) (int, int64, error) {
+	ingest := rd.ingest(repo, store)
+	hfRepo, err := store.GetRepo(ctx, repo.ID, parsed.repoType, parsed.repoName)
+	if errors.Is(err, ErrNotFound) && repo.Type == repository.RepositoryTypeProxy {
+		// No row exists until upstream has confirmed the repo and the revision, so a request for a
+		// name that does not exist can neither grow hf_repos nor go upstream again within a minute.
+		hfRepo, err = rd.confirmUpstream(ctx, ingest, repo, parsed, store)
 	}
 	if errors.Is(err, ErrNotFound) {
-		return hubError(w, http.StatusNotFound, hubRepoNotFound, "Repository Not Found"), 0
+		return hubError(w, http.StatusNotFound, hubRepoNotFound, "Repository Not Found"), 0, nil
 	}
 	if err != nil {
-		return rd.fail(w, err), 0
+		return rd.fail(w, revisionError(err)), 0, nil
 	}
-	ingest := rd.ingest(repo, store)
 	var resolution Resolution
 	if r.Method == http.MethodGet {
 		resolution, err = ingest.ResolveForRead(ctx, hfRepo, parsed.rev)
@@ -357,18 +383,18 @@ func (rd *reader) respond(w http.ResponseWriter, r *http.Request, repo repositor
 		resolution, err = ingest.ResolveRevision(ctx, hfRepo, parsed.rev)
 	}
 	if err != nil {
-		return rd.fail(w, revisionError(err)), 0
+		return rd.fail(w, revisionError(err)), 0, nil
 	}
 	commit, err := ingest.EnsureTree(ctx, hfRepo, resolution.Commit)
 	if err != nil {
-		return rd.fail(w, err), 0
+		return rd.fail(w, err), 0, nil
 	}
 	file, err := store.GetFile(ctx, commit.ID, parsed.path)
 	if errors.Is(err, ErrNotFound) {
-		return hubError(w, http.StatusNotFound, hubEntryNotFound, "Entry Not Found"), 0
+		return hubError(w, http.StatusNotFound, hubEntryNotFound, "Entry Not Found"), 0, nil
 	}
 	if err != nil {
-		return rd.fail(w, err), 0
+		return rd.fail(w, err), 0, nil
 	}
 	headers := fileHeaders(commit, file)
 	if resolution.Stale {
@@ -381,7 +407,7 @@ func (rd *reader) respond(w http.ResponseWriter, r *http.Request, repo repositor
 		w.Header().Set("Accept-Ranges", "bytes")
 		w.Header().Set("Content-Length", strconv.FormatInt(file.Size, 10))
 		w.WriteHeader(http.StatusOK)
-		return http.StatusOK, 0
+		return http.StatusOK, 0, nil
 	}
 	upstream := rd.upstreamFor(repo)
 	object := Object{RepositoryID: repo.ID, HFRepoID: hfRepo.ID, CommitID: commit.ID, Path: file.Path, Size: file.Size,
@@ -394,12 +420,59 @@ func (rd *reader) respond(w http.ResponseWriter, r *http.Request, repo repositor
 	written, err := rd.fetcher.Serve(w, r, object, headers)
 	if err != nil {
 		if written {
-			// Bytes are on the wire: the only honest answer is a broken connection.
-			panic(http.ErrAbortHandler)
+			return http.StatusOK, 0, err
 		}
-		return rd.fail(w, err), 0
+		return rd.fail(w, err), 0, nil
 	}
-	return http.StatusOK, file.Size
+	return http.StatusOK, file.Size, nil
+}
+
+// confirmUpstream asks upstream whether the repo and revision exist and only then creates the repo
+// row. A miss is remembered for a minute.
+func (rd *reader) confirmUpstream(ctx context.Context, ingest *Ingest, repo repository.HostedRepository, parsed route, store *Store) (Repo, error) {
+	key := repo.ID + "|" + parsed.repoType + "|" + parsed.repoName + "|" + parsed.rev
+	if rd.misses.has(key) {
+		return Repo{}, errRevisionNotFound
+	}
+	if _, err := ingest.Hub.Revision(ctx, parsed.repoType, parsed.repoName, parsed.rev); err != nil {
+		var failure *UpstreamError
+		if errors.As(err, &failure) && failure.Code == CodeUpstreamNotFound {
+			rd.misses.add(key)
+		}
+		return Repo{}, err
+	}
+	return store.EnsureRepo(ctx, repo.ID, parsed.repoType, parsed.repoName)
+}
+
+// missCache remembers upstream "not found" answers for a short time and a bounded number of keys.
+type missCache struct {
+	mu      sync.Mutex
+	entries map[string]time.Time
+}
+
+const (
+	missTTL      = time.Minute
+	missCapacity = 4096
+)
+
+func (c *missCache) has(key string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	expires, ok := c.entries[key]
+	if ok && time.Now().Before(expires) {
+		return true
+	}
+	delete(c.entries, key)
+	return false
+}
+
+func (c *missCache) add(key string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.entries == nil || len(c.entries) >= missCapacity {
+		c.entries = make(map[string]time.Time, 64)
+	}
+	c.entries[key] = time.Now().Add(missTTL)
 }
 
 // fileHeaders are the headers huggingface_hub reads from the first response: the commit, the
