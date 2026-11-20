@@ -60,10 +60,10 @@ func TestLoadConfigRejectsInvalidValues(t *testing.T) {
 
 func TestCDNAllowlistAppliesOnlyToTheDefaultUpstream(t *testing.T) {
 	cfg := DefaultConfig()
-	if got := cfg.CDNAllowlistFor("https://huggingface.co"); len(got) != len(DefaultCDNAllowlist) {
+	if got := cfg.CDNAllowlistFor(DefaultUpstream); len(got) != len(DefaultCDNAllowlist) {
 		t.Fatalf("default upstream allowlist = %v", got)
 	}
-	if got := cfg.CDNAllowlistFor("https://HuggingFace.co/"); len(got) == 0 {
+	if got := cfg.CDNAllowlistFor("https://" + strings.ToUpper(strings.TrimPrefix(DefaultUpstream, "https://")) + "/"); len(got) == 0 {
 		t.Fatalf("host comparison must ignore case: %v", got)
 	}
 	if got := cfg.CDNAllowlistFor("https://hub.mirror.example"); len(got) != 0 {

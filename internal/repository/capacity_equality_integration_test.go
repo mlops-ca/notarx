@@ -54,7 +54,8 @@ var counterEqualityCases = map[string]counterEquality{
 // counterEqualityElsewhere names the equality tests of covered formats whose store lives in
 // another package (it imports this one, so its test cannot be listed above).
 var counterEqualityElsewhere = map[string]struct{ file, test string }{
-	"rubygems": {file: "../rubygemspublication/pgstore/capacity_integration_test.go", test: "TestRubyGemsCounterEquality"},
+	"rubygems":    {file: "../rubygemspublication/pgstore/capacity_integration_test.go", test: "TestRubyGemsCounterEquality"},
+	"huggingface": {file: "../format/huggingface/capacity_integration_test.go", test: "TestHuggingFaceCounterEquality"},
 }
 
 // assertCounterEqualsUsage fails when the repository's counter differs from the

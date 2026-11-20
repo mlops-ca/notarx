@@ -210,18 +210,18 @@ func TestHuggingFaceAdmissionCreatesHostedProxyAndGroup(t *testing.T) {
 	if hosted.Format != repository.FormatHuggingFace || hosted.Type != repository.RepositoryTypeHosted {
 		t.Fatalf("Hosted=%+v", hosted)
 	}
-	if response := call("/api/v2/repositories", `{"name":"hf-hosted-endpoint","format":"huggingface","endpoint":"https://huggingface.co"}`); response.Code != http.StatusBadRequest {
+	if response := call("/api/v2/repositories", `{"name":"hf-hosted-endpoint","format":"huggingface","endpoint":"`+defaultHuggingFaceEndpoint+`"}`); response.Code != http.StatusBadRequest {
 		t.Fatalf("Hosted with an upstream endpoint=%d %s", response.Code, response.Body.String())
 	}
 	defaulted := create(`{"name":"hf-proxy-default","format":"huggingface","type":"proxy"}`)
-	if defaulted.Endpoint != "https://huggingface.co" {
+	if defaulted.Endpoint != defaultHuggingFaceEndpoint {
 		t.Fatalf("a Proxy without an endpoint must default to the Hub, got %q", defaulted.Endpoint)
 	}
 	mirror := create(`{"name":"hf-proxy-mirror","format":"huggingface","type":"proxy","endpoint":"https://hub.mirror.example"}`)
 	if mirror.Endpoint != "https://hub.mirror.example" {
 		t.Fatalf("a configured mirror was replaced: %q", mirror.Endpoint)
 	}
-	if response := call("/api/v2/repositories", `{"name":"hf-proxy-http","format":"huggingface","type":"proxy","endpoint":"http://huggingface.co"}`); response.Code != http.StatusBadRequest {
+	if response := call("/api/v2/repositories", `{"name":"hf-proxy-http","format":"huggingface","type":"proxy","endpoint":"http://hub.mirror.example"}`); response.Code != http.StatusBadRequest {
 		t.Fatalf("a plain http upstream=%d %s", response.Code, response.Body.String())
 	}
 	if response := call("/api/v2/repositories", `{"name":"hf-hosted-default","format":"raw","type":"proxy"}`); response.Code != http.StatusBadRequest {

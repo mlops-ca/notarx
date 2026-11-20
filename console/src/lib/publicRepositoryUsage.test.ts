@@ -7,7 +7,7 @@ import {
 
 const english = createTranslator("en-CA");
 
-function usage(format: PublicRepositoryFormat) {
+function usage(format: PublicRepositoryFormat | "huggingface") {
   return publicRepositoryUsage({
     format,
     repositoryName: "releases",
@@ -75,5 +75,15 @@ describe("public repository usage", () => {
     expect(snippets.map((snippet) => snippet.code).join("\n")).not.toContain(
       "Bearer ",
     );
+  });
+
+  it("tells Hugging Face clients which endpoint to use and keeps the token a placeholder", () => {
+    expect(usage("huggingface")).toEqual([
+      {
+        label: "HF_ENDPOINT",
+        code: "export HF_ENDPOINT=https://gateway.test/hf/releases",
+      },
+      { label: "HF_TOKEN", code: "export HF_TOKEN=<token>" },
+    ]);
   });
 });
