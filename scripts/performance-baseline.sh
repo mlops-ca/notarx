@@ -76,8 +76,11 @@ if [[ $(printf '%s\n' "${ports[@]}" | sort -u | wc -l | tr -d ' ') != 6 ]]; then
 fi
 
 project=${NOTARX_PERF_PROJECT:-notarx-perf-$(date -u +%Y%m%d%H%M%S)-$$}
-# The baseline inspects the image Compose builds for this project.
+# The baseline inspects the image Compose builds for this project (in CI lanes, the
+# loaded prebuilt image under this project's name; see below).
+loaded_image=${NOTARX_IMAGE:-notarx:local}
 export NOTARX_IMAGE="${project}-notarx"
+image_tagged=0
 if [[ ! "$project" =~ ^notarx-perf-[a-z0-9-]+$ ]]; then
   printf 'NOTARX_PERF_PROJECT must start with notarx-perf-: %s\n' "$project" >&2
   exit 1
@@ -116,6 +119,9 @@ cleanup() {
   fi
   if [[ $stack_started == 1 ]]; then
     "${compose[@]}" down -v --remove-orphans >/dev/null 2>&1
+  fi
+  if [[ $image_tagged == 1 ]]; then
+    docker image rm "$NOTARX_IMAGE" >/dev/null 2>&1
   fi
   if [[ -n "$upstream_pid" ]]; then
     kill "$upstream_pid" >/dev/null 2>&1 || true
@@ -300,9 +306,19 @@ expect_http() {
   fi
 }
 
-printf '%s\n' 'Building and starting the isolated Gateway/PostgreSQL/RustFS core stack...'
 stack_started=1
-"${compose[@]}" up -d --build --wait --remove-orphans
+if [[ "${NOTARX_COMPOSE_BUILD_FLAG---build}" == --no-build ]]; then
+  # CI lanes load the prebuilt image (docs/ci.md, Shared images): give it this
+  # project's name instead of rebuilding it from the same Dockerfile. The cleanup
+  # removes only that tag; the loaded image keeps its own.
+  printf '%s\n' 'Starting the isolated Gateway/PostgreSQL/RustFS core stack from the loaded image...'
+  docker image tag "$loaded_image" "$NOTARX_IMAGE"
+  image_tagged=1
+  "${compose[@]}" up -d --no-build --wait --remove-orphans
+else
+  printf '%s\n' 'Building and starting the isolated Gateway/PostgreSQL/RustFS core stack...'
+  "${compose[@]}" up -d --build --wait --remove-orphans
+fi
 
 notarx_id=$("${compose[@]}" ps -q notarx)
 postgres_id=$("${compose[@]}" ps -q postgres)

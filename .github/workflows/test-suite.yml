@@ -383,7 +383,7 @@ jobs:
 
   # notarx-backed Console and CLI E2E: runs when notarx or the Console
   # changed, since both execute the real stack. The Playwright suite is split
-  # into three parallel shards (every spec lands in exactly one); the shard marked
+  # into two parallel shards (every spec lands in exactly one); the shard marked
   # cli also runs the CLI E2E, against a gateway of its own, after its specs. A
   # console-only change that touches nothing but spec files runs just those specs
   # (docs/ci.md).
@@ -398,11 +398,12 @@ jobs:
         # Each entry names its own shard fraction, so the total cannot drift
         # from the list. Add or remove entries to change the shard count. Exactly one
         # entry runs the CLI E2E (cli: true) after its specs, so it needs no job of
-        # its own.
+        # its own. Two shards of four Playwright workers each (one per CPU of the
+        # hosted runner) replace three shards of two (issue #518): every shard pays
+        # about 1.4 minutes of setup before its specs run.
         include:
-          - { name: '1', shard: 1/3, cli: false }
-          - { name: '2', shard: 2/3, cli: true }
-          - { name: '3', shard: 3/3, cli: false }
+          - { name: '1', shard: 1/2, cli: true }
+          - { name: '2', shard: 2/2, cli: false }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -452,6 +453,7 @@ jobs:
           PLAYWRIGHT_BLOB_REPORT: '1'
           CONSOLE_E2E_SPECS: ${{ inputs.e2e_specs }}
           CONSOLE_E2E_SHARD: ${{ matrix.shard }}
+          CONSOLE_E2E_WORKERS: '4'
         run: make console-e2e
       - name: Upload Console E2E blob report
         if: ${{ !cancelled() && (steps.console-e2e.outcome == 'success' || steps.console-e2e.outcome == 'failure') }}

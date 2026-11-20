@@ -37,9 +37,16 @@ func TestPostgresRustFSPrivateProxyGradleOfficialClient(t *testing.T) {
 	if !filepath.IsAbs(gradle) {
 		t.Fatal("private Gradle acceptance requires the pinned, owned distribution")
 	}
+	// Every contract owns its repositories, buckets, source fixture and Gateway, so
+	// the four run in parallel: each one starts the official client eight times
+	// with a fresh Gradle home, and run one after another they took about 4.4 minutes
+	// of the maven-oci-auth lane (issue #518). The key is set here because a
+	// parallel test cannot set the environment itself.
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
 	for _, scheme := range []repository.UpstreamAuthScheme{repository.UpstreamAuthSchemeBasic, repository.UpstreamAuthSchemeBearer} {
 		for _, route := range []string{"proxy", "group"} {
 			t.Run(string(scheme)+"/"+route, func(t *testing.T) {
+				t.Parallel()
 				privateGradleCredentialsContract(t, gradle, scheme, route)
 			})
 		}
@@ -48,7 +55,6 @@ func TestPostgresRustFSPrivateProxyGradleOfficialClient(t *testing.T) {
 
 func privateGradleCredentialsContract(t *testing.T, gradle string, scheme repository.UpstreamAuthScheme, route string) {
 	t.Helper()
-	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
 	const firstSecret = "synthetic-gradle-source-v1"
 	const secondSecret = "synthetic-gradle-source-v2"
 	const wrongSecret = "synthetic-gradle-source-wrong"
