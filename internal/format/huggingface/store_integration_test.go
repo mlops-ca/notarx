@@ -413,6 +413,13 @@ func TestSearchCommitsAndModuleBrowse(t *testing.T) {
 	if _, err := module.Search(ctx, f.repositoryID, repository.ArtifactSearchQuery{}, 2, "not-a-coordinate"); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("bad cursor = %v", err)
 	}
+	contains, _ := module.Search(ctx, f.repositoryID, repository.ArtifactSearchQuery{Mode: repository.ArtifactSearchByCoordinate, Value: "amm", Match: repository.ArtifactSearchContains}, 100, "")
+	if len(contains) != 2 || !strings.Contains(contains[0].Coordinate, "gamma") {
+		t.Fatalf("a contains search = %+v", contains)
+	}
+	if byDigest, err := module.Search(ctx, f.repositoryID, repository.ArtifactSearchQuery{Mode: repository.ArtifactSearchByDigest, Value: "abc"}, 100, ""); err != nil || len(byDigest) != 0 {
+		t.Fatalf("a digest search must not list the repository: %+v, %v", byDigest, err)
+	}
 	wild, _ := module.Search(ctx, f.repositoryID, repository.ArtifactSearchQuery{Mode: repository.ArtifactSearchByCoordinate, Value: "model/%"}, 100, "")
 	if len(wild) != 0 {
 		t.Fatalf("a LIKE wildcard in the prefix matched %d items", len(wild))

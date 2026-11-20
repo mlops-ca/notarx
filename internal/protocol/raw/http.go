@@ -182,7 +182,7 @@ func ServeContent(w http.ResponseWriter, r *http.Request, name string, content C
 			contentType := content.ContentType
 			if err := spool.WriteMultipart(statusWriter, r.Context(), contentType, size, intervals, func(ctx context.Context, offset, length int64) (io.ReadCloser, int64, error) {
 				return openContentRange(ctx, content, offset, length)
-			}); err != nil {
+			}); errors.Is(err, spool.ErrUnavailable) {
 				http.Error(statusWriter, "Raw object unavailable", http.StatusInternalServerError)
 			}
 			return statusWriter.result()

@@ -681,7 +681,7 @@ HuggingFaceError:
     RepoNotFound, RevisionNotFound, EntryNotFound, authentication_required, access_denied,
     unsupported_repo_type, xet_not_supported, upstream_unavailable, upstream_gated,
     upstream_tree_too_large, upstream_path_too_long, upstream_xet_only, upstream_redirect_rejected,
-    upstream_digest_mismatch, quota_exceeded, object_too_large and fetch_capacity.
+    upstream_digest_mismatch, quota_exceeded, object_too_large, fetch_capacity, fetch_in_progress and group_not_supported.
   headers:
     X-Error-Code:
       schema: {type: string}

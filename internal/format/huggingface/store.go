@@ -584,15 +584,19 @@ func (s *Store) ForgetBlob(ctx context.Context, repositoryID, hfRepoID, sha256 s
 }
 
 // SearchCommits lists commits of a notarx repository for browsing, ordered by repo type,
-// repo name and commit sha, after the cursor (a coordinate). prefix filters by
-// "<repo_type>/<org>/<name>" prefix.
-func (s *Store) SearchCommits(ctx context.Context, repositoryID, prefix string, limit int, after string) ([]Commit, []Repo, error) {
+// repo name and commit sha, after the cursor (a coordinate). term filters
+// "<repo_type>/<org>/<name>" by prefix, or by substring when contains is set.
+func (s *Store) SearchCommits(ctx context.Context, repositoryID, term string, contains bool, limit int, after string) ([]Commit, []Repo, error) {
 	query := "SELECT r.id, r.repository_id, r.repo_type, r.repo_name, r.created_at, " + prefixed("c", commitColumns) +
 		" FROM hf_commits c JOIN hf_repos r ON r.id = c.hf_repo_id WHERE r.repository_id = ?"
 	args := []any{repositoryID}
-	if prefix != "" {
+	if term != "" {
 		query += " AND CONCAT(r.repo_type, '/', r.repo_name) LIKE ? ESCAPE '!'"
-		args = append(args, likeEscape(prefix)+"%")
+		if contains {
+			args = append(args, "%"+likeEscape(term)+"%")
+		} else {
+			args = append(args, likeEscape(term)+"%")
+		}
 	}
 	if after != "" {
 		cursor, ok := ParseCoordinate(after)

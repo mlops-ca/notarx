@@ -102,7 +102,7 @@ func newProtocolEnv(t *testing.T, repoType repository.RepositoryType, files map[
 	objects := objectstore.NewMemoryStore()
 	upstream := hub.upstream()
 	module, err := New(Options{Store: f.store, Objects: objects, Read: &ReadOptions{
-		Repositories: repos, Authenticator: auth, Authorizer: authorization.RepositoryAuthorizer{Grants: repos, Legacy: auth},
+		Repositories: repos, Groups: repos, Authenticator: auth, Authorizer: authorization.RepositoryAuthorizer{Grants: repos, Legacy: auth},
 		Audit: audit, Anonymous: repos, Config: cfg, Metrics: metrics,
 		Upstream: func(repository.HostedRepository) *Upstream { return upstream },
 	}})
@@ -553,5 +553,34 @@ func TestResolveForReadPinsOnlyWithinTheWindow(t *testing.T) {
 	moved, err := ingest.ResolveForRead(ctx, repo, "main")
 	if err != nil || moved.Commit.SHA != shaB {
 		t.Fatalf("after the window the ref must be revalidated: %+v, %v", moved, err)
+	}
+}
+
+func TestAGroupAnswersNotImplementedInsteadOfLookingAbsent(t *testing.T) {
+	env := newProtocolEnv(t, repository.RepositoryTypeProxy, protocolFiles(), nil)
+	_, _, err := env.repos.CreateHostedGroupIdempotently(context.Background(), repository.HostedGroup{
+		Name: "hf-group", Format: repository.FormatHuggingFace, Visibility: repository.VisibilityPrivate,
+		Members: []repository.GroupMember{{RepositoryID: env.repo.ID, Position: 0}},
+	}, "admin", uuid.NewString(), "hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, _ := http.NewRequest(http.MethodGet, env.server.URL+"/hf/hf-group/acme/widget/resolve/main/config.json", nil)
+	request.Header.Set("Authorization", "Bearer "+adminToken)
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNotImplemented || response.Header.Get("X-Error-Code") != "group_not_supported" {
+		t.Fatalf("group read = %d %q", response.StatusCode, response.Header.Get("X-Error-Code"))
+	}
+	anonymous, err := http.Get(env.server.URL + "/hf/hf-group/acme/widget/resolve/main/config.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer anonymous.Body.Close()
+	if anonymous.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("an anonymous caller must not learn that a group exists: %d", anonymous.StatusCode)
 	}
 }

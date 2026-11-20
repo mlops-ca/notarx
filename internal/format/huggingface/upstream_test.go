@@ -136,45 +136,29 @@ func TestTreeRejectsLongPathsAndForeignPaginationLinks(t *testing.T) {
 	}
 }
 
-func TestHeadCapturesMetadataWithoutFollowingTheRedirect(t *testing.T) {
-	hub, sha := hubWithFiles(t)
-	meta, err := hub.upstream().Head(context.Background(), RepoTypeModel, hubModel, "main", "model.safetensors")
-	if err != nil {
-		t.Fatal(err)
-	}
-	file := hub.commits[sha]["model.safetensors"]
-	if meta.Status != 302 || meta.Commit != sha || meta.LinkedETag != file.sha256() || meta.LinkedSize != 1000 || meta.XetOnly || !strings.HasPrefix(meta.Location, "https://example.com/cdn/") {
-		t.Fatalf("meta = %+v", meta)
-	}
-	if hub.count("HEAD /cdn/") != 0 {
-		t.Fatal("HEAD followed the redirect")
-	}
-	regular, err := hub.upstream().Head(context.Background(), RepoTypeModel, hubModel, sha, "config.json")
-	if err != nil || regular.Status != 200 || regular.ETag != hub.commits[sha]["config.json"].gitBlob() || regular.Size != 7 {
-		t.Fatalf("regular = %+v, %v", regular, err)
-	}
-	if _, err := hub.upstream().Head(context.Background(), RepoTypeModel, hubModel, sha, "missing.bin"); !errors.Is(err, &UpstreamError{Code: CodeUpstreamNotFound}) {
-		t.Fatalf("missing = %v", err)
-	}
-	if _, err := hub.upstream().Head(context.Background(), RepoTypeModel, hubModel, sha, "../etc/passwd"); !errors.Is(err, ErrInvalid) {
-		t.Fatalf("path traversal = %v", err)
-	}
-}
-
-func TestHeadDetectsAXetOnlyFile(t *testing.T) {
+func TestOpenDetectsAXetOnlyFileAndServesABridgedOne(t *testing.T) {
 	hub := newFakeHub(t)
 	sha := commitID(9)
 	hub.addCommit(sha, "main", map[string]*hubFile{
 		"bridged.bin": {Content: []byte("bridge"), LFS: true, Xet: true},
 		"xet.bin":     {Content: []byte("xet"), LFS: true, Xet: true, XetOnly: true},
 	})
-	bridged, err := hub.upstream().Head(context.Background(), RepoTypeModel, hubModel, sha, "bridged.bin")
-	if err != nil || bridged.XetOnly || bridged.Location == "" {
-		t.Fatalf("a Xet file with a plain redirect is served over the bridge: %+v, %v", bridged, err)
+	bridged, err := hub.upstream().Open(context.Background(), RepoTypeModel, hubModel, sha, "bridged.bin", nil)
+	if err != nil {
+		t.Fatalf("a Xet file with a plain redirect is served over the Git LFS bridge: %v", err)
 	}
-	only, err := hub.upstream().Head(context.Background(), RepoTypeModel, hubModel, sha, "xet.bin")
-	if err != nil || !only.XetOnly {
-		t.Fatalf("a Xet file without a plain route must be flagged: %+v, %v", only, err)
+	body, _ := io.ReadAll(bridged.Body)
+	_ = bridged.Body.Close()
+	if string(body) != "bridge" {
+		t.Fatalf("bridged body = %q", body)
+	}
+	_, err = hub.upstream().Open(context.Background(), RepoTypeModel, hubModel, sha, "xet.bin", nil)
+	if !errors.Is(err, ErrXetOnly) {
+		t.Fatalf("a Xet file without a plain route = %v, want ErrXetOnly", err)
+	}
+	var failure *UpstreamError
+	if !errors.As(err, &failure) || failure.Code != "upstream_xet_only" {
+		t.Fatalf("code = %v", err)
 	}
 }
 

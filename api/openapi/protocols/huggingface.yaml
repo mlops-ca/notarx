@@ -12,7 +12,7 @@ x-gateway-protocol-overlay:
     verification, and Range and If-Range are served from the staging file or the store. Xet is
     not implemented: X-Xet-Hash and Xet link headers are never forwarded, the Xet read-token
     route is 404, and a file served only through Xet fails with 502 upstream_xet_only. Spaces are
-    not supported (404 unsupported_repo_type). Errors use the Hub shape, a JSON body with an
+    not supported (404 unsupported_repo_type), and reading through a group answers 501 group_not_supported until group resolution exists. Errors use the Hub shape, a JSON body with an
     error message and an X-Error-Code header.
 huggingface_model_resolve:
   servers: [{url: https://gateway.example.com}]
@@ -46,6 +46,7 @@ huggingface_model_resolve:
       '404': {$ref: '../components/responses.yaml#/HuggingFaceError'}
       '413': {$ref: '../components/responses.yaml#/HuggingFaceError'}
       '416': {description: The range cannot be satisfied}
+      '501': {$ref: '../components/responses.yaml#/HuggingFaceError'}
       '502': {$ref: '../components/responses.yaml#/HuggingFaceError'}
       '503': {$ref: '../components/responses.yaml#/HuggingFaceError'}
       '504': {$ref: '../components/responses.yaml#/HuggingFaceError'}
@@ -86,6 +87,7 @@ huggingface_dataset_resolve:
       '404': {$ref: '../components/responses.yaml#/HuggingFaceError'}
       '413': {$ref: '../components/responses.yaml#/HuggingFaceError'}
       '416': {description: The range cannot be satisfied}
+      '501': {$ref: '../components/responses.yaml#/HuggingFaceError'}
       '502': {$ref: '../components/responses.yaml#/HuggingFaceError'}
       '503': {$ref: '../components/responses.yaml#/HuggingFaceError'}
       '504': {$ref: '../components/responses.yaml#/HuggingFaceError'}

@@ -6,6 +6,7 @@ package spool
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -102,8 +103,13 @@ func ParseRanges(value string, size int64) ([]Interval, bool) {
 type RangeOpener func(ctx context.Context, offset, length int64) (io.ReadCloser, int64, error)
 
 // ErrUnavailable means the representation could not be opened before any
-// response byte was written; the caller may still answer with an error status.
+// response byte was written; the caller may still answer with an error status. It wraps the
+// open error.
 var ErrUnavailable = errors.New("range source unavailable")
+
+// ErrTruncated means a later interval failed after the response was committed: the body is
+// incomplete and its advertised length is never satisfied. It wraps the cause.
+var ErrTruncated = errors.New("multipart response truncated")
 
 // MaxMultipartBytes is the aggregate payload limit of a multipart/byteranges
 // response.
@@ -137,7 +143,10 @@ func WriteMultipart(w http.ResponseWriter, ctx context.Context, contentType stri
 		if reader != nil {
 			_ = reader.Close()
 		}
-		return ErrUnavailable
+		if err == nil {
+			err = errors.New("representation size changed")
+		}
+		return fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	w.Header().Set("Content-Type", "multipart/byteranges; boundary="+boundary)
 	w.Header().Set("Accept-Ranges", "bytes")
@@ -146,31 +155,35 @@ func WriteMultipart(w http.ResponseWriter, ctx context.Context, contentType stri
 	w.WriteHeader(http.StatusPartialContent)
 	for i, interval := range intervals {
 		if i > 0 {
-			if ctx.Err() != nil {
-				return nil
+			if err := ctx.Err(); err != nil {
+				return fmt.Errorf("%w: %w", ErrTruncated, err)
 			}
 			reader, sourceSize, err = open(ctx, interval.Start, interval.End-interval.Start+1)
 			if err != nil || sourceSize != size {
 				if reader != nil {
 					_ = reader.Close()
 				}
-				return nil
+				if err == nil {
+					err = errors.New("representation size changed")
+				}
+				return fmt.Errorf("%w: %w", ErrTruncated, err)
 			}
 		}
 		if _, err := io.WriteString(w, prefixes[i]); err != nil {
 			_ = reader.Close()
-			return nil
+			return fmt.Errorf("%w: %w", ErrTruncated, err)
 		}
 		_, err = io.CopyN(w, ContextReader{Ctx: ctx, Reader: reader}, interval.End-interval.Start+1)
 		_ = reader.Close()
 		if err != nil {
 			// Do not write a closing delimiter after a failed or short read.
-			return nil
+			return fmt.Errorf("%w: %w", ErrTruncated, err)
 		}
 	}
-	if ctx.Err() == nil {
-		_, _ = io.WriteString(w, closing)
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("%w: %w", ErrTruncated, err)
 	}
+	_, _ = io.WriteString(w, closing)
 	return nil
 }
 

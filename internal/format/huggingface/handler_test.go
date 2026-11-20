@@ -1,6 +1,7 @@
 package huggingface
 
 import (
+	"context"
 	"errors"
 	"net/http/httptest"
 	"testing"
@@ -168,5 +169,49 @@ func TestHeaderWriterAppliesHeadersOnTheFirstWriteOnly(t *testing.T) {
 	}
 	if writer.Unwrap() != recorder {
 		t.Fatal("Unwrap must reach the underlying writer for http.ResponseController")
+	}
+}
+
+func TestFailMapsErrorsToStableResponses(t *testing.T) {
+	rd := &reader{}
+	cases := []struct {
+		err    error
+		status int
+		code   string
+	}{
+		{ErrFetchInProgress, 503, "fetch_in_progress"},
+		{ErrFetchCapacity, 503, "fetch_capacity"},
+		{ErrUnverifiable, 502, "upstream_invalid_response"},
+		{ErrDigestMismatch, 502, "upstream_digest_mismatch"},
+		{ErrObjectTooLarge, 413, "object_too_large"},
+		{ErrXetOnly, 502, "upstream_xet_only"},
+		{ErrTreeTooLarge, 502, "upstream_tree_too_large"},
+		{&UpstreamError{Code: CodeUpstreamGated, Status: 403}, 403, "upstream_gated"},
+		{&UpstreamError{Code: CodeUpstreamUnavailable}, 504, "upstream_unavailable"},
+		{errors.New("boom"), 500, "internal_error"},
+	}
+	for _, tc := range cases {
+		recorder := httptest.NewRecorder()
+		if status := rd.fail(recorder, tc.err); status != tc.status || recorder.Code != tc.status || recorder.Header().Get("X-Error-Code") != tc.code {
+			t.Errorf("%v = %d %q, want %d %q", tc.err, status, recorder.Header().Get("X-Error-Code"), tc.status, tc.code)
+		}
+	}
+	recorder := httptest.NewRecorder()
+	rd.fail(recorder, ErrFetchInProgress)
+	if recorder.Header().Get("Retry-After") == "" {
+		t.Error("a busy answer must tell the client when to retry")
+	}
+}
+
+func TestFailWritesNothingForAClientThatWentAway(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	if status := (&reader{}).fail(recorder, context.Canceled); status != statusClientClosed {
+		t.Fatalf("status = %d", status)
+	}
+	if recorder.Body.Len() != 0 || recorder.Header().Get("X-Error-Code") != "" {
+		t.Fatal("an error body was written to a client that is gone")
+	}
+	if auditOutcome(statusClientClosed) != repository.AuditResolved {
+		t.Fatal("an abandoned download is not an upstream error")
 	}
 }

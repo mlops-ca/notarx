@@ -13,6 +13,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/capacity"
@@ -28,6 +29,12 @@ var (
 	// ErrObjectTooLarge means the object exceeds NOTARX_HF_MAX_OBJECT_BYTES or the limit of the
 	// repository.
 	ErrObjectTooLarge = errors.New("hugging face object exceeds the size limit")
+	// ErrFetchInProgress means another node is fetching the same object; the client retries and is
+	// then served from the store. Waiting would hold a slot and a silent connection for the whole transfer.
+	ErrFetchInProgress = errors.New("hugging face object is being fetched by another node")
+	// ErrUnverifiable means the tree names neither a sha256 nor a git blob id for the file, so its bytes
+	// could not be verified; nothing is fetched.
+	ErrUnverifiable = errors.New("hugging face file has no digest to verify against")
 	// ErrFetchCapacity means every cold fetch slot of the process is busy (NOTARX_HF_MAX_CONCURRENT_FETCHES).
 	ErrFetchCapacity = spool.ErrCapacity
 )
@@ -49,6 +56,9 @@ const (
 	defaultHoldBack = 256 << 10
 	// defaultFetchTimeout bounds one cold fetch, however large the object.
 	defaultFetchTimeout = 12 * time.Hour
+	// defaultIdleTimeout cancels a fetch that receives no byte for this long, so a stalled upstream
+	// cannot hold a slot until the fetch timeout.
+	defaultIdleTimeout = 2 * time.Minute
 )
 
 // Metrics receives the outcome of every object request. Implementations must not block.
@@ -83,6 +93,8 @@ type Fetcher struct {
 	HoldBack int64
 	// FetchTimeout overrides the bound of one cold fetch; zero selects 12 hours.
 	FetchTimeout time.Duration
+	// IdleTimeout overrides the time without a received byte after which a fetch is cancelled; zero selects 2 minutes.
+	IdleTimeout time.Duration
 
 	mu      sync.Mutex
 	flights map[string]*flight
@@ -375,18 +387,37 @@ func (f *Fetcher) run(fl *flight, obj Object, file File) {
 	if timeout <= 0 {
 		timeout = defaultFetchTimeout
 	}
+	idle := f.IdleTimeout
+	if idle <= 0 {
+		idle = defaultIdleTimeout
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	ctx, unlock, err := f.Locker.Acquire(ctx, "huggingface-fetch:"+fl.key)
+	if file.SHA256 == "" && file.GitBlobID == "" {
+		f.record(FetchDigestMismatch)
+		f.end(fl, ErrUnverifiable)
+		return
+	}
+	// Another node may have finished this object already.
+	if f.cachedElsewhere(ctx, fl, obj) {
+		return
+	}
+	ctx, unlock, err := f.Locker.TryAcquire(ctx, "huggingface-fetch:"+fl.key)
+	if errors.Is(err, spool.ErrLocked) {
+		// Another node holds the fetch. Waiting would leave every client without a byte for the
+		// whole transfer, so they are asked to retry; the retry is served from the store.
+		f.record(FetchCapacity)
+		f.end(fl, ErrFetchInProgress)
+		return
+	}
 	if err != nil {
 		f.record(FetchUpstreamError)
 		f.end(fl, err)
 		return
 	}
 	defer func() { _ = unlock() }()
-	// Another node may have finished this object while this one waited for the lock.
-	if current, err := f.Store.GetFile(ctx, obj.CommitID, obj.Path); err == nil && current.Cached && current.SHA256 != "" {
-		f.serveFromStoreOnce(fl, current.SHA256)
+	// The other node may have finished between the check and the lock.
+	if f.cachedElsewhere(ctx, fl, obj) {
 		return
 	}
 	if err := f.Store.Headroom(ctx, obj.RepositoryID, obj.Size); err != nil {
@@ -394,13 +425,27 @@ func (f *Fetcher) run(fl *flight, obj Object, file File) {
 		f.end(fl, err)
 		return
 	}
-	response, err := obj.Open(ctx)
+	// A watchdog cancels the transfer when no byte arrives for idle: it also covers a connection that
+	// never delivers response headers.
+	fetchCtx, cancelFetch := context.WithCancel(ctx)
+	defer cancelFetch()
+	var stalled atomic.Bool
+	watchdog := time.AfterFunc(idle, func() { stalled.Store(true); cancelFetch() })
+	defer watchdog.Stop()
+	failure := func(err error) error {
+		if stalled.Load() {
+			return &UpstreamError{Code: CodeUpstreamUnavailable, Err: fmt.Errorf("no data received for %s", idle)}
+		}
+		return err
+	}
+	response, err := obj.Open(fetchCtx)
 	if err != nil {
 		f.record(FetchUpstreamError)
-		f.end(fl, err)
+		f.end(fl, failure(err))
 		return
 	}
 	defer response.Body.Close()
+	watchdog.Reset(idle)
 	if response.ContentLength >= 0 && response.ContentLength != obj.Size {
 		f.record(FetchUpstreamError)
 		f.end(fl, fmt.Errorf("%w: upstream announced %d bytes, the tree says %d", ErrDigestMismatch, response.ContentLength, obj.Size))
@@ -427,6 +472,7 @@ func (f *Fetcher) run(fl *flight, obj Object, file File) {
 	for total < obj.Size {
 		n, readErr := response.Body.Read(buffer[:min(int64(len(buffer)), obj.Size-total)])
 		if n > 0 {
+			watchdog.Reset(idle)
 			if _, err := staging.WriteAt(buffer[:n], total); err != nil {
 				f.record(FetchUpstreamError)
 				f.end(fl, err)
@@ -450,7 +496,7 @@ func (f *Fetcher) run(fl *flight, obj Object, file File) {
 				readErr = io.ErrUnexpectedEOF
 			}
 			f.record(FetchUpstreamError)
-			f.end(fl, readErr)
+			f.end(fl, failure(readErr))
 			return
 		}
 	}
@@ -479,21 +525,30 @@ func (f *Fetcher) run(fl *flight, obj Object, file File) {
 	f.end(fl, nil)
 }
 
+// cachedElsewhere ends the flight from the object store when the file turned out to be cached already,
+// for example by another node. It reports whether it did.
+func (f *Fetcher) cachedElsewhere(ctx context.Context, fl *flight, obj Object) bool {
+	current, err := f.Store.GetFile(ctx, obj.CommitID, obj.Path)
+	if err != nil || !current.Cached || current.SHA256 == "" {
+		return false
+	}
+	return f.serveFromStoreOnce(fl, current.SHA256)
+}
+
 // serveFromStoreOnce ends a flight whose object another node cached while this one waited for the
 // lock: the verified object is copied into the staging file, so the waiting readers share the
 // one code path.
-func (f *Fetcher) serveFromStoreOnce(fl *flight, digest string) {
-	staging, err := os.CreateTemp("", "notarx-hf-*")
-	if err != nil {
-		f.end(fl, err)
-		return
-	}
+func (f *Fetcher) serveFromStoreOnce(fl *flight, digest string) bool {
 	reader, _, err := f.Objects.Open(context.Background(), BlobKey(digest))
 	if err != nil {
-		_ = staging.Close()
-		_ = os.Remove(staging.Name())
+		// The object is not there (yet): the caller fetches it.
+		return false
+	}
+	staging, err := os.CreateTemp("", "notarx-hf-*")
+	if err != nil {
+		_ = reader.Close()
 		f.end(fl, err)
-		return
+		return true
 	}
 	defer reader.Close()
 	fl.mu.Lock()
@@ -507,7 +562,7 @@ func (f *Fetcher) serveFromStoreOnce(fl *flight, digest string) {
 		if n > 0 {
 			if _, err := staging.WriteAt(buffer[:n], total); err != nil {
 				f.end(fl, err)
-				return
+				return true
 			}
 			total += int64(n)
 			fl.mu.Lock()
@@ -518,7 +573,7 @@ func (f *Fetcher) serveFromStoreOnce(fl *flight, digest string) {
 		if readErr != nil {
 			if !errors.Is(readErr, io.EOF) {
 				f.end(fl, readErr)
-				return
+				return true
 			}
 			break
 		}
@@ -528,9 +583,10 @@ func (f *Fetcher) serveFromStoreOnce(fl *flight, digest string) {
 	fl.mu.Unlock()
 	if !complete {
 		f.end(fl, io.ErrUnexpectedEOF)
-		return
+		return true
 	}
 	f.end(fl, nil)
+	return true
 }
 
 // commit stores the verified bytes and records the blob. The object goes in first, under a
@@ -595,7 +651,9 @@ func (f *Fetcher) serveRanges(w http.ResponseWriter, r *http.Request, size int64
 		if len(intervals) > 1 {
 			lazy := &headerWriter{ResponseWriter: w, apply: func() { apply(w.Header()) }}
 			if err := spool.WriteMultipart(lazy, r.Context(), headers.Get("Content-Type"), size, intervals, open); err != nil {
-				return false, err
+				// Unavailable before any byte: the caller may still answer or repair. Anything else
+				// left a committed, incomplete body.
+				return !errors.Is(err, spool.ErrUnavailable), err
 			}
 			return true, nil
 		}

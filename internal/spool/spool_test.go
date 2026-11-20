@@ -123,8 +123,8 @@ func TestWriteMultipartTruncatesWhenLaterIntervalFails(t *testing.T) {
 		return io.NopCloser(strings.NewReader("ab")), 10, nil
 	}
 	recorder := httptest.NewRecorder()
-	if err := WriteMultipart(recorder, context.Background(), "", 10, []Interval{{0, 1}, {5, 6}}, open); err != nil {
-		t.Fatal(err)
+	if err := WriteMultipart(recorder, context.Background(), "", 10, []Interval{{0, 1}, {5, 6}}, open); !errors.Is(err, ErrTruncated) {
+		t.Fatalf("err = %v, want ErrTruncated so a caller can abort the connection", err)
 	}
 	if strings.HasSuffix(recorder.Body.String(), "--\r\n") {
 		t.Fatal("closing delimiter written after a failure")
@@ -330,6 +330,38 @@ func TestLockerRenewalFailureCancelsAndReports(t *testing.T) {
 	}
 	if err := release(); err == nil {
 		t.Fatal("renewal failure not reported")
+	}
+}
+
+func TestLockerTryAcquireDoesNotWait(t *testing.T) {
+	coordinator := &stubCoordinator{}
+	locker := Locker{Coordinator: coordinator, Lease: time.Second, RenewEvery: time.Second}
+	_, release, err := locker.TryAcquire(context.Background(), "k")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := locker.TryAcquire(context.Background(), "k"); !errors.Is(err, ErrLocked) {
+		t.Fatalf("second TryAcquire = %v, want ErrLocked", err)
+	}
+	if err := release(); err != nil {
+		t.Fatal(err)
+	}
+	_, again, err := locker.TryAcquire(context.Background(), "k")
+	if err != nil {
+		t.Fatalf("after release: %v", err)
+	}
+	_ = again()
+	if _, noop, err := (Locker{}).TryAcquire(context.Background(), "k"); err != nil || noop() != nil {
+		t.Fatalf("no-op TryAcquire: %v", err)
+	}
+}
+
+func TestWriteMultipartWrapsTheOpenError(t *testing.T) {
+	cause := errors.New("object gone")
+	failing := func(context.Context, int64, int64) (io.ReadCloser, int64, error) { return nil, 0, cause }
+	err := WriteMultipart(httptest.NewRecorder(), context.Background(), "", 10, []Interval{{0, 1}, {5, 6}}, failing)
+	if !errors.Is(err, ErrUnavailable) || !errors.Is(err, cause) {
+		t.Fatalf("err = %v, want ErrUnavailable wrapping the cause so callers can repair a missing object", err)
 	}
 }
 

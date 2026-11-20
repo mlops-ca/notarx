@@ -29,9 +29,6 @@ const (
 	maxTreePages             = 10000
 	defaultUpstreamTimeout   = 60 * time.Second
 	upstreamUserAgent        = "notarx-huggingface-proxy"
-	headerRepoCommit         = "X-Repo-Commit"
-	headerLinkedETag         = "X-Linked-Etag"
-	headerLinkedSize         = "X-Linked-Size"
 	headerXetHash            = "X-Xet-Hash"
 	headerXetLink            = "X-Xet-Refresh-Route"
 	treeEntryTypeFile        = "file"
@@ -105,20 +102,6 @@ type Upstream struct {
 type Revision struct {
 	SHA          string
 	LastModified time.Time
-}
-
-// FileMeta is what the first upstream response of a resolve request tells about a file.
-type FileMeta struct {
-	Status     int
-	Commit     string
-	ETag       string
-	LinkedETag string
-	LinkedSize int64
-	Size       int64
-	Location   string
-	// XetOnly is true when upstream advertises a Xet hash but offers no plain HTTP route
-	// to the bytes.
-	XetOnly bool
 }
 
 func (u *Upstream) base() *http.Client {
@@ -315,6 +298,9 @@ func (u *Upstream) Tree(ctx context.Context, repoType, repoName, sha string, max
 				}
 				file.LFS, file.SHA256, file.Size = true, entry.LFS.Oid, entry.LFS.Size
 			}
+			if file.SHA256 == "" && file.GitBlobID == "" {
+				return nil, &UpstreamError{Code: CodeUpstreamInvalid, Err: fmt.Errorf("tree entry %q names neither an lfs digest nor a git blob id", entry.Path)}
+			}
 			files = append(files, file)
 			if len(files) > maxFiles {
 				return nil, ErrTreeTooLarge
@@ -346,50 +332,6 @@ func nextLink(header http.Header, origin *url.URL) (string, error) {
 		}
 	}
 	return "", nil
-}
-
-// Head performs the HEAD request of the proxy without following redirects and captures the
-// metadata of the first response: commit, ETag, linked ETag and size, and the location of
-// the bytes. The Xet headers are read to detect a Xet-only file and are never passed on.
-func (u *Upstream) Head(ctx context.Context, repoType, repoName, rev, filePath string) (FileMeta, error) {
-	path, err := resolvePath(repoType, repoName, rev, filePath)
-	if err != nil {
-		return FileMeta{}, err
-	}
-	client, err := u.client(ctx)
-	if err != nil {
-		return FileMeta{}, err
-	}
-	request, err := u.newRequest(ctx, http.MethodHead, u.endpointURL(path), nil)
-	if err != nil {
-		return FileMeta{}, err
-	}
-	response, err := client.Do(request)
-	if err != nil {
-		return FileMeta{}, &UpstreamError{Code: CodeUpstreamUnavailable, Err: err}
-	}
-	defer response.Body.Close()
-	if response.StatusCode >= 400 {
-		return FileMeta{}, upstreamStatusError(response.StatusCode)
-	}
-	meta := FileMeta{
-		Status:     response.StatusCode,
-		Commit:     response.Header.Get(headerRepoCommit),
-		ETag:       strings.Trim(response.Header.Get("ETag"), `"`),
-		LinkedETag: strings.Trim(response.Header.Get(headerLinkedETag), `"`),
-		Location:   response.Header.Get("Location"),
-		Size:       response.ContentLength,
-	}
-	if value := response.Header.Get(headerLinkedSize); value != "" {
-		if _, err := fmt.Sscanf(value, "%d", &meta.LinkedSize); err != nil || meta.LinkedSize < 0 {
-			return FileMeta{}, &UpstreamError{Code: CodeUpstreamInvalid, Err: errors.New("invalid X-Linked-Size")}
-		}
-	}
-	if meta.Commit != "" && !ValidCommit(meta.Commit) {
-		return FileMeta{}, &UpstreamError{Code: CodeUpstreamInvalid, Err: errors.New("invalid X-Repo-Commit")}
-	}
-	meta.XetOnly = (response.Header.Get(headerXetHash) != "" || response.Header.Get(headerXetLink) != "") && meta.Location == ""
-	return meta, nil
 }
 
 // Open starts the byte fetch of a file at a commit. A redirect is followed exactly once, to

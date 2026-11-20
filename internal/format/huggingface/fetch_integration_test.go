@@ -98,7 +98,8 @@ func newFetchEnv(t *testing.T, files map[string]*hubFile) *fetchEnv {
 				panic(http.ErrAbortHandler)
 			}
 			switch {
-			case errors.Is(err, ErrFetchCapacity):
+			case errors.Is(err, ErrFetchCapacity), errors.Is(err, ErrFetchInProgress):
+				w.Header().Set("Retry-After", "5")
 				http.Error(w, err.Error(), http.StatusServiceUnavailable)
 			case errors.Is(err, capacity.ErrQuotaExceeded):
 				http.Error(w, err.Error(), http.StatusInsufficientStorage)
@@ -574,4 +575,126 @@ func TestAFinishedFlightIsRetiredBeforeReadersSeeItDone(t *testing.T) {
 		_ = env.objects.Delete(context.Background(), BlobKey(file.SHA256))
 	}
 	env.requireNoStaging(t)
+}
+
+type heldCoordinator struct {
+	mu    sync.Mutex
+	held  bool
+	tries int
+	owner string
+}
+
+func (c *heldCoordinator) Acquire(context.Context, string, time.Duration) (string, bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.tries++
+	if c.held {
+		return "", false, nil
+	}
+	c.held = true
+	return "me", true, nil
+}
+func (c *heldCoordinator) Renew(context.Context, string, string, time.Duration) (bool, error) {
+	return true, nil
+}
+func (c *heldCoordinator) Release(context.Context, string, string) error {
+	c.mu.Lock()
+	c.held = false
+	c.mu.Unlock()
+	return nil
+}
+func (*heldCoordinator) CircuitOpen(context.Context, string) (bool, error)        { return false, nil }
+func (*heldCoordinator) OpenCircuit(context.Context, string, time.Duration) error { return nil }
+func (*heldCoordinator) CloseCircuit(context.Context, string) error               { return nil }
+
+func TestAnotherNodeFetchingTheObjectFailsFastInsteadOfHangingTheClient(t *testing.T) {
+	content := weights(2000)
+	env := newFetchEnv(t, map[string]*hubFile{"model.safetensors": {Content: content, LFS: true}})
+	coordinator := &heldCoordinator{held: true}
+	env.fetcher.Locker = spool.Locker{Coordinator: coordinator, Lease: time.Minute, RenewEvery: time.Minute, Prefix: "t:"}
+	response, body, err := env.get(t, "model.safetensors", nil)
+	if err != nil || response.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("status = %v err = %v: a cold object another node is fetching must answer 503, not wait", response, err)
+	}
+	if response.Header.Get("Retry-After") == "" || !strings.Contains(string(body), "another node") {
+		t.Fatalf("headers = %v body = %q", response.Header, body)
+	}
+	if env.hub.count("GET /cdn/") != 0 {
+		t.Fatal("the node fetched an object another node holds")
+	}
+	// The other node finishes: the retry is served from the store without a second transfer.
+	coordinator.mu.Lock()
+	coordinator.held = false
+	coordinator.mu.Unlock()
+	if _, got, err := env.get(t, "model.safetensors", nil); err != nil || string(got) != string(content) {
+		t.Fatalf("retry after the other node: %v", err)
+	}
+	env.requireNoStaging(t)
+}
+
+func TestAStalledUpstreamIsCancelledAndFreesItsSlot(t *testing.T) {
+	env := newFetchEnv(t, map[string]*hubFile{"a.bin": {Content: weights(2000), LFS: true}, "b.bin": {Content: weights(2001), LFS: true}})
+	env.fetcher.IdleTimeout = 300 * time.Millisecond
+	env.fetcher.Slots = spool.NewSlots(1)
+	gate := make(chan struct{}) // never opened: the CDN delivers half the body and goes silent
+	env.hub.mu.Lock()
+	env.hub.cdnSlow = gate
+	env.hub.mu.Unlock()
+	t.Cleanup(func() { close(gate) })
+	start := time.Now()
+	response, body, err := env.get(t, "a.bin", nil)
+	if err == nil && response.StatusCode == 200 && len(body) == 2000 {
+		t.Fatal("a stalled transfer produced a complete body")
+	}
+	if time.Since(start) > 20*time.Second {
+		t.Fatalf("the stalled fetch took %s: the idle timeout did not fire", time.Since(start))
+	}
+	// The slot is free again: a different object starts a fetch instead of getting 503 fetch_capacity.
+	env.hub.mu.Lock()
+	env.hub.cdnSlow = nil
+	env.hub.mu.Unlock()
+	if second, got, err := env.get(t, "b.bin", nil); err != nil || second.StatusCode != 200 || len(got) != 2001 {
+		t.Fatalf("second fetch after the stall: %v %v", second, err)
+	}
+	if env.metrics.count(FetchUpstreamError) == 0 {
+		t.Fatalf("outcomes = %v", env.metrics.outcomes)
+	}
+	env.requireNoStaging(t)
+}
+
+func TestAFileWithNoDigestIsNeverCached(t *testing.T) {
+	env := newFetchEnv(t, map[string]*hubFile{"a.bin": {Content: weights(100), LFS: true}})
+	ctx := context.Background()
+	if err := env.f.store.ReplaceTree(ctx, env.commit.ID, []File{{Path: "nodigest.bin", Size: 100}}); err != nil {
+		t.Fatal(err)
+	}
+	response, _, _ := env.get(t, "nodigest.bin", nil)
+	if response.StatusCode != http.StatusBadGateway {
+		t.Fatalf("status = %d: bytes with nothing to verify them against must not be cached", response.StatusCode)
+	}
+	if env.hub.count("GET /cdn/") != 0 {
+		t.Fatal("an unverifiable file was fetched")
+	}
+	if objects, _ := env.objects.List(ctx, "huggingface/"); len(objects) != 0 {
+		t.Fatalf("objects = %v", objects)
+	}
+}
+
+func TestMultiRangeOfAMissingObjectIsRepaired(t *testing.T) {
+	content := weights(3000)
+	env := newFetchEnv(t, map[string]*hubFile{"model.safetensors": {Content: content, LFS: true}})
+	if _, _, err := env.get(t, "model.safetensors", nil); err != nil {
+		t.Fatal(err)
+	}
+	file, _ := env.f.store.GetFile(context.Background(), env.commit.ID, "model.safetensors")
+	if err := env.objects.Delete(context.Background(), BlobKey(file.SHA256)); err != nil {
+		t.Fatal(err)
+	}
+	response, body, err := env.get(t, "model.safetensors", http.Header{"Range": {"bytes=0-3,100-103"}})
+	if err != nil || response.StatusCode != http.StatusPartialContent || !strings.Contains(string(body), string(content[100:104])) {
+		t.Fatalf("a multi range of a missing object must be repaired like a single one: %v %v", response, err)
+	}
+	if env.hub.count("GET /cdn/") != 2 {
+		t.Fatalf("CDN requests = %d", env.hub.count("GET /cdn/"))
+	}
 }

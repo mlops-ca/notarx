@@ -105,22 +105,6 @@ func (f *RedirectFollower) Follow(ctx context.Context, from *http.Request, resp 
 	return next, nil
 }
 
-// Do sends req with redirects disabled and, when upstream answers with a
-// redirect, performs the single permitted hop.
-func (f *RedirectFollower) Do(ctx context.Context, req *http.Request) (*http.Response, error) {
-	client := f.Client
-	if client == nil {
-		client = &http.Client{}
-	}
-	origin := *client
-	origin.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	resp, err := origin.Do(req.WithContext(ctx))
-	if err != nil || !IsRedirect(resp.StatusCode) {
-		return resp, err
-	}
-	return f.Follow(ctx, req, resp)
-}
-
 func (f *RedirectFollower) allowed(host string) bool {
 	host = strings.ToLower(strings.TrimSuffix(host, "."))
 	if host == "" {

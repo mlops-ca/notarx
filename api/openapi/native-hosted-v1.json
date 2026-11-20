@@ -11043,6 +11043,9 @@
           "416": {
             "description": "The range cannot be satisfied"
           },
+          "501": {
+            "$ref": "#/components/responses/HuggingFaceError"
+          },
           "502": {
             "$ref": "#/components/responses/HuggingFaceError"
           },
@@ -11192,6 +11195,9 @@
           },
           "416": {
             "description": "The range cannot be satisfied"
+          },
+          "501": {
+            "$ref": "#/components/responses/HuggingFaceError"
           },
           "502": {
             "$ref": "#/components/responses/HuggingFaceError"
@@ -23265,7 +23271,7 @@
         }
       },
       "HuggingFaceError": {
-        "description": "Hub-shaped error: a JSON body with an error message and an X-Error-Code header. Codes include RepoNotFound, RevisionNotFound, EntryNotFound, authentication_required, access_denied, unsupported_repo_type, xet_not_supported, upstream_unavailable, upstream_gated, upstream_tree_too_large, upstream_path_too_long, upstream_xet_only, upstream_redirect_rejected, upstream_digest_mismatch, quota_exceeded, object_too_large and fetch_capacity.",
+        "description": "Hub-shaped error: a JSON body with an error message and an X-Error-Code header. Codes include RepoNotFound, RevisionNotFound, EntryNotFound, authentication_required, access_denied, unsupported_repo_type, xet_not_supported, upstream_unavailable, upstream_gated, upstream_tree_too_large, upstream_path_too_long, upstream_xet_only, upstream_redirect_rejected, upstream_digest_mismatch, quota_exceeded, object_too_large, fetch_capacity, fetch_in_progress and group_not_supported.",
         "headers": {
           "X-Error-Code": {
             "schema": {

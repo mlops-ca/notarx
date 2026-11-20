@@ -133,11 +133,11 @@ func (*Module) SearchQuery(query repository.ArtifactSearchQuery) repository.Arti
 
 // Search lists commits as artifacts, ordered by coordinate.
 func (m *Module) Search(ctx context.Context, repositoryID string, query repository.ArtifactSearchQuery, limit int, after string) ([]formatmodule.ArtifactSummary, error) {
-	prefix := ""
-	if query.Mode == repository.ArtifactSearchByCoordinate {
-		prefix = query.Value
+	if query.Mode != "" && query.Mode != repository.ArtifactSearchByCoordinate {
+		// A commit has no digest of its own; only coordinates are searchable.
+		return nil, nil
 	}
-	commits, repos, err := m.store.SearchCommits(ctx, repositoryID, prefix, limit, after)
+	commits, repos, err := m.store.SearchCommits(ctx, repositoryID, query.Value, query.Match == repository.ArtifactSearchContains, limit, after)
 	if err != nil {
 		return nil, err
 	}

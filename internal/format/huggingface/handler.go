@@ -38,6 +38,8 @@ const (
 	codeQuota            = "quota_exceeded"
 	codeTooLarge         = "object_too_large"
 	codeBusy             = "fetch_capacity"
+	codeInProgress       = "fetch_in_progress"
+	codeGroupUnsupported = "group_not_supported"
 	codeDigest           = "upstream_digest_mismatch"
 	codeInternal         = "internal_error"
 	headerStale          = "X-Notarx-Stale"
@@ -46,6 +48,11 @@ const (
 // RepositoryLookup finds the notarx repository a request addresses.
 type RepositoryLookup interface {
 	GetHostedRepositoryByName(context.Context, string) (repository.HostedRepository, error)
+}
+
+// GroupLookup finds a group, so a request for one is answered honestly until group reads exist.
+type GroupLookup interface {
+	GetHostedGroupByName(context.Context, string) (repository.HostedGroup, error)
 }
 
 // AuditRecorder stores audit records.
@@ -67,7 +74,9 @@ type ProtocolMetrics interface {
 
 // ReadOptions configures the read protocol (resolve and HEAD) of the module.
 type ReadOptions struct {
-	Repositories  RepositoryLookup
+	Repositories RepositoryLookup
+	// Groups is optional; with it a Hugging Face group answers 501 instead of looking absent.
+	Groups        GroupLookup
 	Authenticator authorization.Authenticator
 	Authorizer    authorization.RepositoryAuthorizer
 	Audit         AuditRecorder
@@ -215,6 +224,11 @@ func (rd *reader) serve(w http.ResponseWriter, r *http.Request) {
 	absent := err != nil || repo.Format != repository.FormatHuggingFace || repo.State != repository.RepositoryActive ||
 		(repo.Type != repository.RepositoryTypeHosted && repo.Type != repository.RepositoryTypeProxy)
 	principal, allowed := rd.authorize(r, repo, parsed, absent)
+	if absent && principal.Actor != "" && rd.isHuggingFaceGroup(r.Context(), parsed.repository) {
+		// Groups are created and administered, but reading through one is a later slice (ADR 0027).
+		hubError(w, http.StatusNotImplemented, codeGroupUnsupported, "Reading through a Hugging Face group is not implemented yet")
+		return
+	}
 	if !allowed {
 		if r.Header.Get("Authorization") == "" || principal.Actor == "" {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="notarx Hugging Face"`)
@@ -268,6 +282,14 @@ func (rd *reader) principal(r *http.Request) (authorization.Principal, bool) {
 		return rd.Authenticator.AuthenticateContext(r.Context(), header)
 	}
 	return authorization.Principal{}, false
+}
+
+func (rd *reader) isHuggingFaceGroup(ctx context.Context, name string) bool {
+	if rd.Groups == nil {
+		return false
+	}
+	group, err := rd.Groups.GetHostedGroupByName(ctx, name)
+	return err == nil && group.Format == repository.FormatHuggingFace
 }
 
 func (rd *reader) hubFor(repo repository.HostedRepository) Hub {
@@ -507,6 +529,9 @@ var errRevisionNotFound = errors.New("revision not found")
 func (rd *reader) fail(w http.ResponseWriter, err error) int {
 	var upstream *UpstreamError
 	switch {
+	case errors.Is(err, context.Canceled):
+		// The client went away (or the request context ended): there is nobody to answer.
+		return statusClientClosed
 	case errors.Is(err, errRevisionNotFound):
 		return hubError(w, http.StatusNotFound, hubRevisionNotFound, "Invalid rev id")
 	case errors.Is(err, ErrNotFound):
@@ -520,6 +545,11 @@ func (rd *reader) fail(w http.ResponseWriter, err error) int {
 	case errors.Is(err, ErrFetchCapacity):
 		w.Header().Set("Retry-After", "5")
 		return hubError(w, http.StatusServiceUnavailable, codeBusy, "Too many downloads in progress")
+	case errors.Is(err, ErrFetchInProgress):
+		w.Header().Set("Retry-After", "5")
+		return hubError(w, http.StatusServiceUnavailable, codeInProgress, "The file is being fetched by another node; retry")
+	case errors.Is(err, ErrUnverifiable):
+		return hubError(w, http.StatusBadGateway, CodeUpstreamInvalid, "Upstream did not name a digest for the file")
 	case errors.Is(err, ErrDigestMismatch):
 		return hubError(w, http.StatusBadGateway, codeDigest, "Upstream bytes do not match their digest")
 	case errors.As(err, &upstream):
