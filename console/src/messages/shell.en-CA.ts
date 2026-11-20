@@ -46,6 +46,7 @@ export const shellEnCA = {
   "nav.users": "Users",
   "nav.authentication": "Authentication",
   "nav.siteSettings": "Site Settings",
+  "nav.workloadIdentity": "Workload Identity",
   "nav.expand": "Expand navigation",
   "nav.collapse": "Collapse navigation",
   "nav.open": "Open navigation",

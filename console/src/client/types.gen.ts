@@ -2639,6 +2639,230 @@ export type SecuritySettings = {
   authorizationCacheEnabled: boolean;
 };
 
+export type WorkloadIssuerKind =
+  "github_actions" | "gitlab_ci" | "kubernetes" | "generic";
+
+export type WorkloadAlgorithm = "RS256" | "ES256" | "EdDSA";
+
+export type WorkloadJwksMode = "discovery" | "static";
+
+export type WorkloadState = "active" | "disabled";
+
+export type WorkloadIssuer = {
+  id: string;
+  /**
+   * Slug used by the CLI and the console.
+   */
+  name: string;
+  kind: WorkloadIssuerKind;
+  /**
+   * The exact iss value of the tokens.
+   */
+  issuer: string;
+  audiences: Array<string>;
+  allowedAlgs: Array<WorkloadAlgorithm>;
+  jwksMode: WorkloadJwksMode;
+  jwksUri?: string;
+  /**
+   * The stored JWKS of a static issuer.
+   */
+  staticJwks?: {
+    [key: string]: unknown;
+  };
+  caBundlePem?: string;
+  allowPrivateNetwork: boolean;
+  state: WorkloadState;
+  version: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WorkloadIssuerList = {
+  items: Array<WorkloadIssuer>;
+  nextPageToken?: string;
+};
+
+export type CreateWorkloadIssuer = {
+  name: string;
+  kind: WorkloadIssuerKind;
+  issuer: string;
+  audiences: Array<string>;
+  allowedAlgs?: Array<WorkloadAlgorithm>;
+  jwksMode: WorkloadJwksMode;
+  jwksUri?: string;
+  staticJwks?: {
+    [key: string]: unknown;
+  };
+  caBundlePem?: string;
+  allowPrivateNetwork?: boolean;
+  state?: WorkloadState;
+};
+
+/**
+ * The name, kind and issuer URL are fixed at creation.
+ */
+export type UpdateWorkloadIssuer = {
+  audiences?: Array<string>;
+  allowedAlgs?: Array<WorkloadAlgorithm>;
+  jwksMode?: WorkloadJwksMode;
+  jwksUri?: string;
+  staticJwks?: {
+    [key: string]: unknown;
+  };
+  caBundlePem?: string;
+  allowPrivateNetwork?: boolean;
+  state?: WorkloadState;
+};
+
+/**
+ * Probe a registered issuer by id, or an unsaved configuration.
+ */
+export type ProbeWorkloadIssuerRequest = {
+  issuerId?: string;
+  issuer?: string;
+  jwksMode?: WorkloadJwksMode;
+  jwksUri?: string;
+  staticJwks?: {
+    [key: string]: unknown;
+  };
+  caBundlePem?: string;
+  allowPrivateNetwork?: boolean;
+};
+
+export type WorkloadIssuerProbeKey = {
+  keyId?: string;
+  keyType: string;
+  algorithm?: string;
+};
+
+export type WorkloadIssuerProbe = {
+  reachable: boolean;
+  jwksUri?: string;
+  keys: Array<WorkloadIssuerProbeKey>;
+  algorithms: Array<string>;
+  error?: string;
+};
+
+export type WorkloadConditionOp = "eq" | "in" | "glob" | "prefix";
+
+export type WorkloadCondition = {
+  /**
+   * A claim path: a JSON array of keys, a slash-delimited pointer, or a dotted shorthand. Responses always use the canonical array form.
+   *
+   */
+  claim: string | Array<string>;
+  op: WorkloadConditionOp;
+  values: Array<string>;
+};
+
+export type WorkloadTrustPolicy = {
+  id: string;
+  /**
+   * Also the Basic username alias that pins this policy.
+   */
+  name: string;
+  issuerId: string;
+  serviceAccountId: string;
+  conditions: Array<WorkloadCondition>;
+  maxTokenTtlSeconds: number;
+  singleUse: boolean;
+  state: WorkloadState;
+  version: string;
+  expiresAt?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WorkloadTrustPolicyList = {
+  items: Array<WorkloadTrustPolicy>;
+  nextPageToken?: string;
+};
+
+export type CreateWorkloadTrustPolicy = {
+  name: string;
+  issuerId: string;
+  serviceAccountId: string;
+  conditions: Array<WorkloadCondition>;
+  maxTokenTtlSeconds?: number;
+  singleUse?: boolean;
+  state?: WorkloadState;
+  expiresAt?: string;
+  /**
+   * Acknowledges that no ref, environment or workflow restriction is wanted (github_actions, gitlab_ci).
+   */
+  allowAnyRef?: boolean;
+  /**
+   * Required to map onto a service account that holds an administrator grant.
+   */
+  allowAdmin?: boolean;
+  /**
+   * A token of the issuer, used only to check that it carries a jti before single_use is saved. It is never stored. Required for single_use on a generic issuer.
+   *
+   */
+  sampleToken?: string;
+};
+
+export type UpdateWorkloadTrustPolicy = {
+  serviceAccountId?: string;
+  conditions?: Array<WorkloadCondition>;
+  maxTokenTtlSeconds?: number;
+  singleUse?: boolean;
+  state?: WorkloadState;
+  expiresAt?: string;
+  /**
+   * Removes the expiry.
+   */
+  clearExpiresAt?: boolean;
+  allowAnyRef?: boolean;
+  allowAdmin?: boolean;
+  sampleToken?: string;
+};
+
+/**
+ * Dry run: a pasted token or a claim set is evaluated against one policy or against every active policy of an issuer. Nothing is stored and no single-use marker is consumed.
+ *
+ */
+export type TestWorkloadPolicyRequest = {
+  token?: string;
+  claims?: {
+    [key: string]: unknown;
+  };
+  issuerId?: string;
+  policyId?: string;
+};
+
+export type WorkloadPolicyTestFailure = {
+  /**
+   * -1 when the subject claim itself is missing.
+   */
+  conditionIndex: number;
+  claim: Array<string>;
+  reason: string;
+};
+
+export type WorkloadPolicyTestResult = {
+  policyId: string;
+  policyName: string;
+  matched: boolean;
+  failure?: WorkloadPolicyTestFailure;
+};
+
+export type WorkloadPolicyTest = {
+  /**
+   * True when a pasted token verified against its issuer. A claim set is never verified.
+   */
+  signatureVerified: boolean;
+  verificationError?: string;
+  issuerId?: string;
+  matchedPolicyId?: string;
+  /**
+   * True when policies of different service accounts matched, which real authentication refuses.
+   */
+  ambiguous?: boolean;
+  results: Array<WorkloadPolicyTestResult>;
+  warnings: Array<string>;
+};
+
 /**
  * One pinned IdP signing certificate. notAfter is read from the PEM on every save. Any listed certificate verifies a response; next marks a certificate added before the IdP cuts over.
  *
@@ -9668,6 +9892,496 @@ export type GetSecuritySettingsResponses = {
 
 export type GetSecuritySettingsResponse =
   GetSecuritySettingsResponses[keyof GetSecuritySettingsResponses];
+
+export type ListWorkloadIssuersData = {
+  body?: never;
+  path?: never;
+  query?: {
+    pageSize?: number;
+    pageToken?: string;
+  };
+  url: "/workload-identity/issuers";
+};
+
+export type ListWorkloadIssuersErrors = {
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+};
+
+export type ListWorkloadIssuersError =
+  ListWorkloadIssuersErrors[keyof ListWorkloadIssuersErrors];
+
+export type ListWorkloadIssuersResponses = {
+  /**
+   * Workload issuers
+   */
+  200: WorkloadIssuerList;
+};
+
+export type ListWorkloadIssuersResponse =
+  ListWorkloadIssuersResponses[keyof ListWorkloadIssuersResponses];
+
+export type CreateWorkloadIssuerData = {
+  body: CreateWorkloadIssuer;
+  path?: never;
+  query?: never;
+  url: "/workload-identity/issuers";
+};
+
+export type CreateWorkloadIssuerErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+};
+
+export type CreateWorkloadIssuerError =
+  CreateWorkloadIssuerErrors[keyof CreateWorkloadIssuerErrors];
+
+export type CreateWorkloadIssuerResponses = {
+  /**
+   * Workload issuer created
+   */
+  201: WorkloadIssuer;
+};
+
+export type CreateWorkloadIssuerResponse =
+  CreateWorkloadIssuerResponses[keyof CreateWorkloadIssuerResponses];
+
+export type DeleteWorkloadIssuerData = {
+  body?: never;
+  headers: {
+    "If-Match": string;
+  };
+  path: {
+    issuerId: string;
+  };
+  query?: never;
+  url: "/workload-identity/issuers/{issuerId}";
+};
+
+export type DeleteWorkloadIssuerErrors = {
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+  /**
+   * Problem response
+   */
+  412: Problem;
+};
+
+export type DeleteWorkloadIssuerError =
+  DeleteWorkloadIssuerErrors[keyof DeleteWorkloadIssuerErrors];
+
+export type DeleteWorkloadIssuerResponses = {
+  /**
+   * Workload issuer deleted
+   */
+  204: void;
+};
+
+export type DeleteWorkloadIssuerResponse =
+  DeleteWorkloadIssuerResponses[keyof DeleteWorkloadIssuerResponses];
+
+export type GetWorkloadIssuerData = {
+  body?: never;
+  path: {
+    issuerId: string;
+  };
+  query?: never;
+  url: "/workload-identity/issuers/{issuerId}";
+};
+
+export type GetWorkloadIssuerErrors = {
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+};
+
+export type GetWorkloadIssuerError =
+  GetWorkloadIssuerErrors[keyof GetWorkloadIssuerErrors];
+
+export type GetWorkloadIssuerResponses = {
+  /**
+   * Workload issuer
+   */
+  200: WorkloadIssuer;
+};
+
+export type GetWorkloadIssuerResponse =
+  GetWorkloadIssuerResponses[keyof GetWorkloadIssuerResponses];
+
+export type UpdateWorkloadIssuerData = {
+  body: UpdateWorkloadIssuer;
+  headers: {
+    "If-Match": string;
+  };
+  path: {
+    issuerId: string;
+  };
+  query?: never;
+  url: "/workload-identity/issuers/{issuerId}";
+};
+
+export type UpdateWorkloadIssuerErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  412: Problem;
+};
+
+export type UpdateWorkloadIssuerError =
+  UpdateWorkloadIssuerErrors[keyof UpdateWorkloadIssuerErrors];
+
+export type UpdateWorkloadIssuerResponses = {
+  /**
+   * Workload issuer updated
+   */
+  200: WorkloadIssuer;
+};
+
+export type UpdateWorkloadIssuerResponse =
+  UpdateWorkloadIssuerResponses[keyof UpdateWorkloadIssuerResponses];
+
+export type ProbeWorkloadIssuerData = {
+  body: ProbeWorkloadIssuerRequest;
+  path?: never;
+  query?: never;
+  url: "/workload-identity/issuers:probe";
+};
+
+export type ProbeWorkloadIssuerErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+};
+
+export type ProbeWorkloadIssuerError =
+  ProbeWorkloadIssuerErrors[keyof ProbeWorkloadIssuerErrors];
+
+export type ProbeWorkloadIssuerResponses = {
+  /**
+   * Probe result; reachable is false with the error when the issuer could not be read
+   */
+  200: WorkloadIssuerProbe;
+};
+
+export type ProbeWorkloadIssuerResponse =
+  ProbeWorkloadIssuerResponses[keyof ProbeWorkloadIssuerResponses];
+
+export type ListWorkloadTrustPoliciesData = {
+  body?: never;
+  path?: never;
+  query?: {
+    pageSize?: number;
+    pageToken?: string;
+  };
+  url: "/workload-identity/policies";
+};
+
+export type ListWorkloadTrustPoliciesErrors = {
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+};
+
+export type ListWorkloadTrustPoliciesError =
+  ListWorkloadTrustPoliciesErrors[keyof ListWorkloadTrustPoliciesErrors];
+
+export type ListWorkloadTrustPoliciesResponses = {
+  /**
+   * Workload trust policies
+   */
+  200: WorkloadTrustPolicyList;
+};
+
+export type ListWorkloadTrustPoliciesResponse =
+  ListWorkloadTrustPoliciesResponses[keyof ListWorkloadTrustPoliciesResponses];
+
+export type CreateWorkloadTrustPolicyData = {
+  body: CreateWorkloadTrustPolicy;
+  path?: never;
+  query?: never;
+  url: "/workload-identity/policies";
+};
+
+export type CreateWorkloadTrustPolicyErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+};
+
+export type CreateWorkloadTrustPolicyError =
+  CreateWorkloadTrustPolicyErrors[keyof CreateWorkloadTrustPolicyErrors];
+
+export type CreateWorkloadTrustPolicyResponses = {
+  /**
+   * Workload trust policy created
+   */
+  201: WorkloadTrustPolicy;
+};
+
+export type CreateWorkloadTrustPolicyResponse =
+  CreateWorkloadTrustPolicyResponses[keyof CreateWorkloadTrustPolicyResponses];
+
+export type DeleteWorkloadTrustPolicyData = {
+  body?: never;
+  headers: {
+    "If-Match": string;
+  };
+  path: {
+    policyId: string;
+  };
+  query?: never;
+  url: "/workload-identity/policies/{policyId}";
+};
+
+export type DeleteWorkloadTrustPolicyErrors = {
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  412: Problem;
+};
+
+export type DeleteWorkloadTrustPolicyError =
+  DeleteWorkloadTrustPolicyErrors[keyof DeleteWorkloadTrustPolicyErrors];
+
+export type DeleteWorkloadTrustPolicyResponses = {
+  /**
+   * Workload trust policy deleted
+   */
+  204: void;
+};
+
+export type DeleteWorkloadTrustPolicyResponse =
+  DeleteWorkloadTrustPolicyResponses[keyof DeleteWorkloadTrustPolicyResponses];
+
+export type GetWorkloadTrustPolicyData = {
+  body?: never;
+  path: {
+    policyId: string;
+  };
+  query?: never;
+  url: "/workload-identity/policies/{policyId}";
+};
+
+export type GetWorkloadTrustPolicyErrors = {
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+};
+
+export type GetWorkloadTrustPolicyError =
+  GetWorkloadTrustPolicyErrors[keyof GetWorkloadTrustPolicyErrors];
+
+export type GetWorkloadTrustPolicyResponses = {
+  /**
+   * Workload trust policy
+   */
+  200: WorkloadTrustPolicy;
+};
+
+export type GetWorkloadTrustPolicyResponse =
+  GetWorkloadTrustPolicyResponses[keyof GetWorkloadTrustPolicyResponses];
+
+export type UpdateWorkloadTrustPolicyData = {
+  body: UpdateWorkloadTrustPolicy;
+  headers: {
+    "If-Match": string;
+  };
+  path: {
+    policyId: string;
+  };
+  query?: never;
+  url: "/workload-identity/policies/{policyId}";
+};
+
+export type UpdateWorkloadTrustPolicyErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  412: Problem;
+};
+
+export type UpdateWorkloadTrustPolicyError =
+  UpdateWorkloadTrustPolicyErrors[keyof UpdateWorkloadTrustPolicyErrors];
+
+export type UpdateWorkloadTrustPolicyResponses = {
+  /**
+   * Workload trust policy updated
+   */
+  200: WorkloadTrustPolicy;
+};
+
+export type UpdateWorkloadTrustPolicyResponse =
+  UpdateWorkloadTrustPolicyResponses[keyof UpdateWorkloadTrustPolicyResponses];
+
+export type TestWorkloadTrustPolicyData = {
+  body: TestWorkloadPolicyRequest;
+  path?: never;
+  query?: never;
+  url: "/workload-identity/policies:test";
+};
+
+export type TestWorkloadTrustPolicyErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+};
+
+export type TestWorkloadTrustPolicyError =
+  TestWorkloadTrustPolicyErrors[keyof TestWorkloadTrustPolicyErrors];
+
+export type TestWorkloadTrustPolicyResponses = {
+  /**
+   * Dry-run result
+   */
+  200: WorkloadPolicyTest;
+};
+
+export type TestWorkloadTrustPolicyResponse =
+  TestWorkloadTrustPolicyResponses[keyof TestWorkloadTrustPolicyResponses];
 
 export type ListIdentityProvidersData = {
   body?: never;

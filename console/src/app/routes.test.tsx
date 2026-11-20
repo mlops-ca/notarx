@@ -57,6 +57,7 @@ describe("console route table", () => {
       "/identity-providers",
       "/site-settings",
       "/keys",
+      "/workload-identity",
       "/service-accounts",
       "/users",
     ]);

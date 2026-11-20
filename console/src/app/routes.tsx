@@ -1,5 +1,6 @@
 import {
   ClockCircleOutlined,
+  ApiOutlined,
   DashboardOutlined,
   FileSearchOutlined,
   InboxOutlined,
@@ -194,6 +195,19 @@ export const consoleRoutes: readonly ConsoleRoute[] = [
       Component: (await import("../features/identity/ApiKeys")).ApiKeysPage,
     }),
     nav: { label: "nav.apiKeys", icon: <KeyOutlined />, group: "management" },
+  },
+  {
+    path: "/workload-identity",
+    access: "admin",
+    lazy: async () => ({
+      Component: (await import("../features/workload/WorkloadIdentity"))
+        .WorkloadIdentityPage,
+    }),
+    nav: {
+      label: "nav.workloadIdentity",
+      icon: <ApiOutlined />,
+      group: "management",
+    },
   },
   {
     path: "/service-accounts",

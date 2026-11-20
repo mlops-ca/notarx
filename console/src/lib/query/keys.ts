@@ -57,6 +57,12 @@ export const identityKeys = {
   linkProvider: () => [...identityKeys.all, "link-provider"] as const,
 };
 
+export const workloadKeys = {
+  all: ["workload-identity"] as const,
+  issuers: () => [...workloadKeys.all, "issuers"] as const,
+  policies: () => [...workloadKeys.all, "policies"] as const,
+};
+
 export const accessKeys = {
   all: ["access"] as const,
   grants: () => [...accessKeys.all, "grants"] as const,
