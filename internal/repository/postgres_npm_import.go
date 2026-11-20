@@ -15,12 +15,7 @@ func (s *PostgresStore) PublishNPMImport(ctx context.Context, c NPMImportClosure
 	for _, v := range c.Versions {
 		keys = append(keys, artifactScanLockKey(c.RepositoryID, FormatNPM, c.PackageName+"@"+v.Version, v.Digest))
 	}
-	ctx, release, err := s.lockPostgresAdvisoryKeys(ctx, keys)
-	if err != nil {
-		return err
-	}
-	defer release()
-	// Large manifests go to the object store before the transaction opens, so its locks never wait on it.
+	// Large manifests go to the object store before the publication advisory lock is taken, so neither the lock nor its connection waits on the object store.
 	manifests := make(map[string]npmManifest, len(c.Versions))
 	for _, v := range c.Versions {
 		inline, ref, err := s.externalizeJSON(ctx, v.Manifest, "{}")
@@ -30,11 +25,31 @@ func (s *PostgresStore) PublishNPMImport(ctx context.Context, c NPMImportClosure
 		manifests[v.Version] = npmManifest{inline: inline, ref: ref}
 	}
 	// The manifests of the versions already stored are compared with the incoming ones, so they are read before the
-	// transaction opens too.
-	prefetched, err := s.prefetchNPMManifests(ctx, c)
+	// lock too. A version imported between the read and the lock makes the locked transaction ask for a manifest it
+	// does not hold; the import then starts over with a fresh read instead of waiting on the object store under the lock.
+	for attempt := 1; ; attempt++ {
+		prefetched, err := s.prefetchNPMManifests(ctx, c)
+		if err != nil {
+			return err
+		}
+		// The last attempt reads a missing manifest under the lock rather than fail an import that is only racing others.
+		err = s.publishNPMImportLocked(ctx, c, keys, manifests, prefetched, attempt == npmImportPrefetchAttempts)
+		if !errors.Is(err, errPayloadNotPrefetched) {
+			return err
+		}
+	}
+}
+
+// npmImportPrefetchAttempts bounds how often an import starts over because a stored manifest was not prefetched.
+const npmImportPrefetchAttempts = 3
+
+// publishNPMImportLocked runs the import under the publication advisory locks of its versions.
+func (s *PostgresStore) publishNPMImportLocked(ctx context.Context, c NPMImportClosure, keys []string, manifests map[string]npmManifest, prefetched payloadPrefetch, mayReadStore bool) error {
+	ctx, release, err := s.lockPostgresAdvisoryKeys(ctx, keys)
 	if err != nil {
 		return err
 	}
+	defer release()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -90,8 +105,8 @@ func (s *PostgresStore) PublishNPMImport(ctx context.Context, c NPMImportClosure
 		}
 		if old, exists := oldVersions[v.Version]; exists {
 			if old.State == "" || old.State == "visible" {
-				// A manifest that changed since the prefetch is read here, the behaviour before prefetching.
-				if old.Manifest, err = s.internalizeWith(ctx, old.Manifest, read.refs[v.Version], prefetched); err != nil {
+				// A manifest stored since the prefetch restarts the import (errPayloadNotPrefetched) instead of reading the object store here.
+				if old.Manifest, err = s.internalizeStored(ctx, old.Manifest, read.refs[v.Version], prefetched, mayReadStore); err != nil {
 					return err
 				}
 			}

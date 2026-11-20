@@ -158,6 +158,61 @@ func (s *PostgresStore) stagePayload(ctx context.Context, data []byte) (stagedPa
 	return stagedPayload{data: data, inline: inline, ref: ref, staged: true}, nil
 }
 
+type stagedPayloadContextKey struct{}
+
+// HelmChartStager and NuGetNuspecStager are implemented by a store that can externalise a payload ahead of its commit
+// (PostgresStore). The stage methods return a context that carries the result, so the commit made with that context (or
+// one derived from it, such as the one a publication advisory lock returns) finds the object already stored and never
+// calls the object store itself. A version that is already published stages nothing, so an idempotent replay or a
+// conflicting push writes no object; a request refused later (quota, a conflicting session) leaves the staged object
+// unreferenced for the sweep of unreferenced objects, like a rolled-back transaction does.
+type HelmChartStager interface {
+	StageHelmChart(ctx context.Context, repo, name, version string, chartYAML []byte) (context.Context, error)
+}
+
+// NuGetNuspecStager is HelmChartStager for the nuspec of a NuGet package.
+type NuGetNuspecStager interface {
+	StageNuGetNuspec(ctx context.Context, repo, id, version string, nuspec []byte) (context.Context, error)
+}
+
+var (
+	_ HelmChartStager   = (*PostgresStore)(nil)
+	_ NuGetNuspecStager = (*PostgresStore)(nil)
+)
+
+// StageHelmChart stages chartYAML on store when it supports staging and returns ctx unchanged otherwise.
+func StageHelmChart(ctx context.Context, store NativeHelmStore, repo, name, version string, chartYAML []byte) (context.Context, error) {
+	if stager, ok := store.(HelmChartStager); ok {
+		return stager.StageHelmChart(ctx, repo, name, version, chartYAML)
+	}
+	return ctx, nil
+}
+
+// StageNuGetNuspec stages nuspec on store when it supports staging and returns ctx unchanged otherwise.
+func StageNuGetNuspec(ctx context.Context, store NativeNuGetStore, repo, id, version string, nuspec []byte) (context.Context, error) {
+	if stager, ok := store.(NuGetNuspecStager); ok {
+		return stager.StageNuGetNuspec(ctx, repo, id, version, nuspec)
+	}
+	return ctx, nil
+}
+
+// stageOnContext externalises data now and returns a context that carries the result.
+func (s *PostgresStore) stageOnContext(ctx context.Context, data []byte) (context.Context, error) {
+	staged, err := s.stagePayload(ctx, data)
+	if err != nil {
+		return ctx, err
+	}
+	return context.WithValue(ctx, stagedPayloadContextKey{}, staged), nil
+}
+
+// stagedFor returns the payload staged on ctx by StagePayload when it holds data, and stages data now otherwise.
+func (s *PostgresStore) stagedFor(ctx context.Context, data []byte) (stagedPayload, error) {
+	if staged, ok := ctx.Value(stagedPayloadContextKey{}).(stagedPayload); ok && staged.staged && bytes.Equal(staged.data, data) {
+		return staged, nil
+	}
+	return s.stagePayload(ctx, data)
+}
+
 // externalizeIn returns the staged result when data is the staged payload. When the row changed after the payload
 // was staged it externalises data now through q, the transaction's connection (see PostgresStore.externalizeIn),
 // the behaviour before staging; the object staged for the old bytes is left for the sweep.
@@ -186,6 +241,33 @@ func (s *PostgresStore) internalizeWith(ctx context.Context, inline []byte, ref 
 		return data, nil
 	}
 	return s.internalize(ctx, inline, ref)
+}
+
+// errPayloadNotPrefetched reports an externalised payload a transaction needs that was not prefetched, so the caller
+// can read it outside the transaction and start over.
+var errPayloadNotPrefetched = errors.New("externalised payload was not prefetched")
+
+// internalizePrefetched is internalizeWith that never reads the object store: a reference that is not in the prefetch
+// is errPayloadNotPrefetched.
+func (s *PostgresStore) internalizePrefetched(inline []byte, ref payloadRef, pre payloadPrefetch) ([]byte, error) {
+	if !ref.external() {
+		return inline, nil
+	}
+	if data, ok := pre[ref.digest.String]; ok && int64(len(data)) == ref.size.Int64 {
+		return data, nil
+	}
+	if s.payloads.Load() == nil {
+		return nil, ErrPayloadStoreUnavailable
+	}
+	return nil, errPayloadNotPrefetched
+}
+
+// internalizeStored is internalizePrefetched that falls back to reading the object store when mayReadStore is set.
+func (s *PostgresStore) internalizeStored(ctx context.Context, inline []byte, ref payloadRef, pre payloadPrefetch, mayReadStore bool) ([]byte, error) {
+	if mayReadStore {
+		return s.internalizeWith(ctx, inline, ref, pre)
+	}
+	return s.internalizePrefetched(inline, ref, pre)
 }
 
 // internalize returns the payload of a row: inline when ref is empty, otherwise the verified

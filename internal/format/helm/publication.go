@@ -108,7 +108,14 @@ func (m *Module) upload(w http.ResponseWriter, r *http.Request, repo repository.
 		in.ProvenanceDigest = prov.Digest()
 		in.ProvenanceSize = prov.Size()
 	}
-	ctx, release, err := m.store.LockHelmPublication(r.Context(), repo.ID, name, version)
+	// A large chart.yaml goes to the object store before the publication lock is taken, so the lock and its
+	// connection never wait on the store while the commit runs.
+	staged, err := repository.StageHelmChart(r.Context(), m.store, repo.ID, name, version, inspection.ChartYAML)
+	if err != nil {
+		m.failure(w, err)
+		return
+	}
+	ctx, release, err := m.store.LockHelmPublication(staged, repo.ID, name, version)
 	if err != nil {
 		m.failure(w, err)
 		return
