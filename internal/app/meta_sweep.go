@@ -244,7 +244,7 @@ func (c *MetaSweepCounters) RecordMetaSweepRun(outcome string) {
 	}
 }
 
-func (c *MetaSweepCounters) write(w interface{ Write([]byte) (int, error) }) {
+func (c *MetaSweepCounters) writeMetaSweepMetrics(w interface{ Write([]byte) (int, error) }) {
 	_, _ = w.Write([]byte("# TYPE notarx_meta_sweep_objects_total counter\n" +
 		"notarx_meta_sweep_objects_total{outcome=\"deleted\"} " + utoa(c.deleted.Load()) + "\n" +
 		"notarx_meta_sweep_objects_total{outcome=\"referenced\"} " + utoa(c.referenced.Load()) + "\n" +

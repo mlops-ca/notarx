@@ -245,7 +245,7 @@ func TestMetaSweepCountersRenderTheOutcomes(t *testing.T) {
 	counters.RecordMetaSweepRun("failed")
 	counters.RecordMetaSweepRun("failed")
 	recorder := &bodyRecorder{}
-	counters.write(recorder)
+	counters.writeMetaSweepMetrics(recorder)
 	for _, want := range []string{
 		"notarx_meta_sweep_objects_total{outcome=\"deleted\"} 2",
 		"notarx_meta_sweep_objects_total{outcome=\"referenced\"} 1",
