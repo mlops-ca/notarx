@@ -18,7 +18,7 @@ import (
 )
 
 // leaseTask is the lease row of the manager in scheduled_tasks.
-var leaseTask = tasklease.Task{ID: "00000000-0000-7000-8000-0000000000a1", Name: "internal:partition-manager", Kind: "partition-manager", Description: "Internal lease row for the partition manager"}
+var leaseTask = tasklease.Task{ID: "00000000-0000-7000-8000-0000000000a1", Name: "internal:partition-manager", Kind: "partition-manager", Description: "Internal lease row for the partition manager", IntervalSeconds: 21600}
 
 const (
 	// DefaultInterval is how often the manager runs after start-up.

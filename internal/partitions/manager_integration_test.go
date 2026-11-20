@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/database"
+	"github.com/mlops-ca/notarx/internal/tasklease"
 	"github.com/mlops-ca/notarx/internal/testsupport"
 )
 
@@ -347,7 +348,7 @@ func TestRunObservesOnEveryNodeAndTakesOverWhenLeaseExpires(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		_, _ = db.ExecContext(context.Background(), `UPDATE scheduled_tasks SET lease_owner='',lease_until=NULL WHERE id=$1::uuid`, leaseTask.ID)
+		_ = tasklease.Leaser{DB: db, Dialect: tasklease.Postgres}.Release(context.Background(), leaseTask, "node-held", false)
 	})
 	for i := 0; i < 2; i++ {
 		if _, err := db.ExecContext(t.Context(), `INSERT INTO `+spec.Table+`(occurred_at) VALUES ($1)`, now.Add(time.Duration(i)*time.Hour)); err != nil {

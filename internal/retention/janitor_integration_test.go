@@ -245,7 +245,7 @@ func TestOneRunnerAtATimeAndLeaseExpiry(t *testing.T) {
 		t.Fatalf("first acquire = %v, %v", held, err)
 	}
 	t.Cleanup(func() {
-		_, _ = db.ExecContext(context.Background(), `UPDATE scheduled_tasks SET lease_owner='',lease_until=NULL WHERE id=$1::uuid AND lease_owner=$2`, leaseTask.ID, "node-a")
+		_ = holder.leaser().Release(context.Background(), leaseTask, "node-a", false)
 	})
 	var wg sync.WaitGroup
 	reports := make([]Report, 3)

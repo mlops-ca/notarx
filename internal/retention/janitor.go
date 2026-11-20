@@ -18,14 +18,14 @@ import (
 // leaseTask is the lease row of the janitor in scheduled_tasks.
 var leaseTask = tasklease.Task{ID: "00000000-0000-7000-8000-0000000000a2", Name: "internal:retention-janitor", Kind: "retention-janitor", Description: "Internal lease row for the retention janitor"}
 
-// Dialect selects the SQL the janitor generates.
-type Dialect string
+// Dialect selects the SQL the janitor generates and its lease statements.
+type Dialect = tasklease.Dialect
 
 const (
 	// Postgres deletes by ctid with FOR UPDATE SKIP LOCKED.
-	Postgres Dialect = "postgres"
+	Postgres = tasklease.Postgres
 	// MySQL deletes with ORDER BY ... LIMIT in key range order.
-	MySQL Dialect = "mysql"
+	MySQL = tasklease.MySQL
 )
 
 const (
@@ -345,7 +345,7 @@ func (j *Janitor) tableExists(ctx context.Context, table string) (bool, error) {
 
 // leaser is the shared scheduled_tasks lease (internal/tasklease) in the janitor's dialect.
 func (j *Janitor) leaser() tasklease.Leaser {
-	return tasklease.Leaser{DB: j.db, Dialect: tasklease.Dialect(j.opts.Dialect)}
+	return tasklease.Leaser{DB: j.db, Dialect: j.opts.Dialect}
 }
 
 // acquire takes or renews the lease row; the row is created on first use and is never due as a scheduled task.

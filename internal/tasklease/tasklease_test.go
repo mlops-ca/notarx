@@ -150,6 +150,24 @@ func TestAcquireMySQL(t *testing.T) {
 	}
 }
 
+func TestAcquireIgnoresLastRunWithoutMinimumInterval(t *testing.T) {
+	for _, dialect := range []Dialect{Postgres, MySQL} {
+		rec := &recorder{affected: []int64{1}, returned: "a"}
+		if _, err := (Leaser{DB: open(t, rec), Dialect: dialect}).Acquire(t.Context(), task, "a", time.Minute, 0); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(rec.log[0], "<=0 OR last_run_at IS NULL") {
+			t.Fatalf("%s: a zero minimum interval must not depend on last_run_at: %s", dialect, rec.log[0])
+		}
+	}
+}
+
+func TestIntervalDefault(t *testing.T) {
+	if (Task{}).interval() != 900 || (Task{IntervalSeconds: 21600}).interval() != 21600 {
+		t.Fatal("interval defaults to 900 and honours the task")
+	}
+}
+
 func TestRelease(t *testing.T) {
 	for _, dialect := range []Dialect{Postgres, MySQL} {
 		rec := &recorder{}
