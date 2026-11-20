@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/jose"
+	"github.com/mlops-ca/notarx/internal/readcache"
 	"github.com/mlops-ca/notarx/internal/secrets"
 )
 
@@ -625,7 +626,9 @@ func TestJWKSServiceCachesAndInvalidates(t *testing.T) {
 		t.Fatal(err)
 	}
 	store.lists = 0
-	service := &JWKSService{Store: store, Now: clock.Now}
+	registry := readcache.NewRegistry(DefaultJWKSCacheTTL)
+	registry.SetClock(clock.Now)
+	service := &JWKSService{Store: store, Registry: registry, Now: clock.Now}
 	body, etag, err := service.Document(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -648,6 +651,70 @@ func TestJWKSServiceCachesAndInvalidates(t *testing.T) {
 	_, _, _ = service.Document(t.Context())
 	if store.lists != 3 {
 		t.Fatalf("invalidate and ttl expiry must reload: %d", store.lists)
+	}
+}
+
+// The published key set lives in the shared read cache: a key change announced for the scope (the row trigger's
+// NOTIFY on another node) evicts it before the window, a lost notification still ends it at the window, and a
+// failed load is never cached.
+func TestJWKSServiceIsEvictedByTheScopeNotificationAndBoundedByTheWindow(t *testing.T) {
+	setRing(t)
+	clock := newClock()
+	store := &countingStore{MemoryStore: NewMemoryStore()}
+	if _, _, err := newManager(store, clock, jose.ES256).Reconcile(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	for _, window := range []time.Duration{5 * time.Second, time.Second} {
+		registry := readcache.NewRegistry(window)
+		registry.SetClock(clock.Now)
+		service := &JWKSService{Store: store, Registry: registry, Now: clock.Now}
+		store.lists = 0
+		_, _, _ = service.Document(t.Context())
+		_, _, _ = service.Document(t.Context())
+		if store.lists != 1 {
+			t.Fatalf("window %v: %d store reads for two requests", window, store.lists)
+		}
+		registry.HandleNotification(readcache.Payload(CacheScope, ""))
+		_, _, _ = service.Document(t.Context())
+		if store.lists != 2 {
+			t.Fatalf("window %v: the scope notification must evict the key set: %d reads", window, store.lists)
+		}
+		clock.Advance(window)
+		_, _, _ = service.Document(t.Context())
+		if store.lists != 3 {
+			t.Fatalf("window %v: a lost notification must end at the window: %d reads", window, store.lists)
+		}
+	}
+	registry := readcache.NewRegistry(0)
+	service := &JWKSService{Store: store, Registry: registry, Now: clock.Now}
+	store.lists = 0
+	_, _, _ = service.Document(t.Context())
+	_, _, _ = service.Document(t.Context())
+	if store.lists != 2 {
+		t.Fatalf("a window of 0 must read through: %d reads", store.lists)
+	}
+}
+
+type failingKeyReader struct {
+	calls int
+	err   error
+}
+
+func (r *failingKeyReader) ListPublicKeys(context.Context) ([]KeyRecord, error) {
+	r.calls++
+	return nil, r.err
+}
+
+func TestJWKSServiceNeverCachesAFailedLoad(t *testing.T) {
+	reader := &failingKeyReader{err: errors.New("database down")}
+	service := &JWKSService{Store: reader}
+	for range 3 {
+		if _, _, err := service.Document(t.Context()); err == nil {
+			t.Fatal("a failed key read must fail the request")
+		}
+	}
+	if reader.calls != 3 {
+		t.Fatalf("a failure was cached: %d reads for 3 requests", reader.calls)
 	}
 }
 

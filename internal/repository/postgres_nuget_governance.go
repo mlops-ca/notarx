@@ -43,6 +43,14 @@ func (s *PostgresStore) TransitionNuGetGovernance(ctx context.Context, in NuGetG
 }
 
 func (s *PostgresStore) ReplaceNuGetQuarantineReadPolicy(ctx context.Context, id string, policy RepositoryQuarantineReadPolicy, expectedVersion, actor string) (RepositoryQuarantineReadPolicy, error) {
+	policy, err := s.replaceNuGetQuarantineReadPolicyMutation(ctx, id, policy, expectedVersion, actor)
+	if err == nil {
+		s.invalidateLocal(CacheScopeQuarantine, id)
+	}
+	return policy, err
+}
+
+func (s *PostgresStore) replaceNuGetQuarantineReadPolicyMutation(ctx context.Context, id string, policy RepositoryQuarantineReadPolicy, expectedVersion, actor string) (RepositoryQuarantineReadPolicy, error) {
 	repo, err := s.GetHostedRepository(ctx, id)
 	if err != nil || repo.Format != FormatNuGet {
 		if err == nil {

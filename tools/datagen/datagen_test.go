@@ -48,7 +48,8 @@ func TestParseProfile(t *testing.T) {
 		t.Fatal("unknown profile accepted")
 	}
 	if Profiles["tiny"].Versions != 100_000 || Profiles["tiny"].AuditRows != 1_000_000 ||
-		Profiles["freetier"].Versions != 1_000_000 || Profiles["target"].AuditRows != 100_000_000 {
+		Profiles["freetier"].Versions != 1_000_000 || Profiles["target"].AuditRows != 100_000_000 ||
+		Profiles["target"].WebhookDeliveries != 20_000_000 {
 		t.Fatal("profile sizes drifted from ADR 0023 section 11")
 	}
 }
@@ -59,8 +60,11 @@ func TestScaled(t *testing.T) {
 		t.Fatal("Scaled(1) changed the profile")
 	}
 	got := p.Scaled(100)
-	if got.Versions != 1000 || got.AuditRows != 10_000 || got.Repositories != 1 {
+	if got.Versions != 1000 || got.AuditRows != 10_000 || got.Repositories != 1 || got.WebhookDeliveries != 200 || got.WebhookSubscriptions != 1 {
 		t.Fatalf("Scaled(100) = %+v", got)
+	}
+	if none := (Profile{Versions: 10, AuditRows: 10, Repositories: 2}).Scaled(10); none.WebhookDeliveries != 0 || none.WebhookSubscriptions != 0 {
+		t.Fatalf("a profile without webhooks gained some: %+v", none)
 	}
 }
 
@@ -117,14 +121,69 @@ func TestSeedWritesConsistentRows(t *testing.T) {
 	}
 }
 
+// The webhook rows satisfy the table constraints (state against lease, delivery time and next attempt), hold
+// distinct subscriptions per event and are deterministic.
+func TestSeedWritesConsistentWebhookRows(t *testing.T) {
+	p := Profile{Name: "unit", Versions: 10, AuditRows: 0, Repositories: 3, AuditWindow: time.Hour, WebhookSubscriptions: 6, WebhookDeliveries: 2000}
+	copier := &fakeCopier{}
+	counts, err := Seed(context.Background(), copier, p, 5, time.Unix(1_700_000_000, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if counts.WebhookSubscriptions != 6 || counts.WebhookEvents != 500 || counts.WebhookDeliveries != 2000 {
+		t.Fatalf("counts = %+v", counts)
+	}
+	states := map[string]int{}
+	pairs := map[[2]pgtype.UUID]bool{}
+	for _, row := range copier.rows["webhook_deliveries"] {
+		state := row[3].(string)
+		states[state]++
+		next, leaseOwner, leaseToken, leaseExpires, delivered := row[5], row[6], row[7], row[8], row[11]
+		if (state == "delivering") != (leaseOwner != nil && leaseToken != nil && leaseExpires != nil) {
+			t.Fatalf("%s row breaks the lease constraint", state)
+		}
+		if (state == "succeeded") != (delivered != nil) {
+			t.Fatalf("%s row breaks the delivered_at constraint", state)
+		}
+		if (state == "pending" || state == "retrying") != (next != nil) {
+			t.Fatalf("%s row breaks the next_attempt_at constraint", state)
+		}
+		if attempts := row[4].(int32); attempts < 0 || attempts > 8 {
+			t.Fatalf("attempts %d out of range", attempts)
+		}
+		pair := [2]pgtype.UUID{row[1].(pgtype.UUID), row[2].(pgtype.UUID)}
+		if pairs[pair] {
+			t.Fatal("an event was delivered twice to one subscription")
+		}
+		pairs[pair] = true
+	}
+	for _, state := range []string{"succeeded", "pending", "retrying", "dead", "delivering"} {
+		if states[state] == 0 {
+			t.Fatalf("no %s deliveries in %v", state, states)
+		}
+	}
+	if states["succeeded"] < 1700 {
+		t.Fatalf("succeeded deliveries should dominate: %v", states)
+	}
+	again := &fakeCopier{}
+	if second, err := Seed(context.Background(), again, p, 5, time.Unix(1_700_000_000, 0)); err != nil || second != counts {
+		t.Fatalf("webhook seed is not deterministic: %+v vs %+v (%v)", second, counts, err)
+	}
+}
+
 func TestSeedErrors(t *testing.T) {
-	good := Profile{Name: "unit", Versions: 10, AuditRows: 10, Repositories: 2, AuditWindow: time.Hour}
-	for _, table := range []string{"hosted_repositories", "native_npm_packages", "native_npm_versions", "resolver_audit_log"} {
+	good := Profile{Name: "unit", Versions: 10, AuditRows: 10, Repositories: 2, AuditWindow: time.Hour, WebhookSubscriptions: 2, WebhookDeliveries: 10}
+	for _, table := range []string{"hosted_repositories", "native_npm_packages", "native_npm_versions", "resolver_audit_log", "webhook_subscriptions", "webhook_events", "webhook_deliveries"} {
 		if _, err := Seed(context.Background(), &fakeCopier{fail: table}, good, 1, time.Now()); err == nil {
 			t.Errorf("failure of %s not reported", table)
 		}
 	}
 	if _, err := Seed(context.Background(), &fakeCopier{}, Profile{Name: "bad"}, 1, time.Now()); err == nil {
 		t.Error("empty profile accepted")
+	}
+	noSubscribers := good
+	noSubscribers.WebhookSubscriptions = 0
+	if _, err := Seed(context.Background(), &fakeCopier{}, noSubscribers, 1, time.Now()); err == nil {
+		t.Error("webhook deliveries without subscriptions accepted")
 	}
 }

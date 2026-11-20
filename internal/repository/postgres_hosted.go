@@ -22,7 +22,7 @@ func (s *PostgresStore) createHostedRepositoryMutation(ctx context.Context, repo
 	if err != nil {
 		return HostedRepository{}, err
 	}
-	err = s.db.QueryRowContext(ctx, `INSERT INTO hosted_repositories (id, name, format, repo_type, endpoint, allowed_hosts, visibility, maven_strict_publication, state, version, egress_proxy, upstream_auth, oci_bearer) VALUES ($1,$2,$3,$4,$5,COALESCE($6::text[], '{}'::text[]),$7,$8,'active',1,$9,$10,$11) RETURNING state, version, created_at`, repo.ID, repo.Name, repo.Format, repo.Type, repo.Endpoint, repo.AllowedHosts, repo.Visibility, repo.MavenStrictPublication, egressProxy, upstreamAuth, ociBearer).Scan(&repo.State, &repo.Version, &repo.CreatedAt)
+	err = s.db.QueryRowContext(ctx, `INSERT INTO hosted_repositories (id, name, format, repo_type, endpoint, allowed_hosts, visibility, maven_strict_publication, state, version, egress_proxy, upstream_auth, oci_bearer) VALUES ($1,$2,$3,$4,$5,COALESCE($6::text[], '{}'::text[]),$7,$8,'active',1,$9,$10,$11) RETURNING state, version, created_at, grants_version`, repo.ID, repo.Name, repo.Format, repo.Type, repo.Endpoint, repo.AllowedHosts, repo.Visibility, repo.MavenStrictPublication, egressProxy, upstreamAuth, ociBearer).Scan(&repo.State, &repo.Version, &repo.CreatedAt, &repo.GrantsVersion)
 	if isUnique(err) {
 		return HostedRepository{}, ErrNameExists
 	}
@@ -81,7 +81,7 @@ func (s *PostgresStore) createHostedRepositoryIdempotentlyMutation(ctx context.C
 	if !errors.Is(err, sql.ErrNoRows) {
 		return HostedRepository{}, false, err
 	}
-	err = tx.QueryRowContext(ctx, `INSERT INTO hosted_repositories (id, name, format, repo_type, endpoint, allowed_hosts, visibility, maven_strict_publication, state, version, egress_proxy, upstream_auth, oci_bearer) VALUES ($1,$2,$3,$4,$5,COALESCE($6::text[], '{}'::text[]),$7,$8,'active',1,$9,$10,$11) RETURNING state, version, created_at`, repo.ID, repo.Name, repo.Format, repo.Type, repo.Endpoint, repo.AllowedHosts, repo.Visibility, repo.MavenStrictPublication, egressProxy, upstreamAuth, ociBearer).Scan(&repo.State, &repo.Version, &repo.CreatedAt)
+	err = tx.QueryRowContext(ctx, `INSERT INTO hosted_repositories (id, name, format, repo_type, endpoint, allowed_hosts, visibility, maven_strict_publication, state, version, egress_proxy, upstream_auth, oci_bearer) VALUES ($1,$2,$3,$4,$5,COALESCE($6::text[], '{}'::text[]),$7,$8,'active',1,$9,$10,$11) RETURNING state, version, created_at, grants_version`, repo.ID, repo.Name, repo.Format, repo.Type, repo.Endpoint, repo.AllowedHosts, repo.Visibility, repo.MavenStrictPublication, egressProxy, upstreamAuth, ociBearer).Scan(&repo.State, &repo.Version, &repo.CreatedAt, &repo.GrantsVersion)
 	if isUnique(err) {
 		return HostedRepository{}, false, ErrNameExists
 	}
@@ -116,7 +116,7 @@ const getHostedRepositoryQuery = `SELECT ` + hostedRepositoryColumns + ` FROM ho
 // hostedRepositoryColumns is the canonical projection for hosted_repositories
 // reads. allowed_hosts is projected through array_to_json so it scans into
 // []byte and decodes into []string without a pq dependency.
-const hostedRepositoryColumns = `id::text, name, format, repo_type, endpoint, array_to_json(allowed_hosts), visibility, maven_strict_publication, state, version::text, created_at, egress_proxy, upstream_auth, oci_bearer`
+const hostedRepositoryColumns = `id::text, name, format, repo_type, endpoint, array_to_json(allowed_hosts), visibility, maven_strict_publication, state, version::text, created_at, egress_proxy, upstream_auth, oci_bearer, grants_version`
 
 // marshalEgressProxy encodes the egress proxy configuration for the JSONB
 // column. The response-only CredentialsConfigured marker is never persisted.
@@ -163,7 +163,7 @@ func marshalOCIBearer(config *OCIBearer) (any, error) {
 
 func scanHostedRepository(row interface{ Scan(...any) error }, repo *HostedRepository) error {
 	var allowedHosts, egressProxy, upstreamAuth, ociBearer []byte
-	if err := row.Scan(&repo.ID, &repo.Name, &repo.Format, &repo.Type, &repo.Endpoint, &allowedHosts, &repo.Visibility, &repo.MavenStrictPublication, &repo.State, &repo.Version, &repo.CreatedAt, &egressProxy, &upstreamAuth, &ociBearer); err != nil {
+	if err := row.Scan(&repo.ID, &repo.Name, &repo.Format, &repo.Type, &repo.Endpoint, &allowedHosts, &repo.Visibility, &repo.MavenStrictPublication, &repo.State, &repo.Version, &repo.CreatedAt, &egressProxy, &upstreamAuth, &ociBearer, &repo.GrantsVersion); err != nil {
 		return err
 	}
 	if err := json.Unmarshal(allowedHosts, &repo.AllowedHosts); err != nil {
@@ -803,6 +803,14 @@ func (s *PostgresStore) ListRepositoryGrantRecords(ctx context.Context) ([]Repos
 }
 
 func (s *PostgresStore) ReplaceRepositoryGrants(ctx context.Context, repositoryID string, grants []RepositoryGrant, expectedVersion string, audit ...AuditRecord) (RepositoryGrantSet, error) {
+	set, err := s.replaceRepositoryGrantsMutation(ctx, repositoryID, grants, expectedVersion, audit...)
+	if err == nil {
+		s.invalidateGrants(repositoryID)
+	}
+	return set, err
+}
+
+func (s *PostgresStore) replaceRepositoryGrantsMutation(ctx context.Context, repositoryID string, grants []RepositoryGrant, expectedVersion string, audit ...AuditRecord) (RepositoryGrantSet, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return RepositoryGrantSet{}, err
@@ -826,6 +834,9 @@ func (s *PostgresStore) ReplaceRepositoryGrants(ctx context.Context, repositoryI
 	if err != nil {
 		return RepositoryGrantSet{}, err
 	}
+	if err = bumpGrantsVersion(ctx, tx, repositoryID); err != nil {
+		return RepositoryGrantSet{}, err
+	}
 	if _, err = tx.ExecContext(ctx, `DELETE FROM repository_grants WHERE repository_id=$1::uuid`, repositoryID); err != nil {
 		return RepositoryGrantSet{}, err
 	}
@@ -844,6 +855,14 @@ func (s *PostgresStore) ReplaceRepositoryGrants(ctx context.Context, repositoryI
 }
 
 func (s *PostgresStore) UpsertRepositoryGrant(ctx context.Context, repositoryID string, grant RepositoryGrant, audit ...AuditRecord) (RepositoryGrantSet, error) {
+	set, err := s.upsertRepositoryGrantMutation(ctx, repositoryID, grant, audit...)
+	if err == nil {
+		s.invalidateGrants(repositoryID)
+	}
+	return set, err
+}
+
+func (s *PostgresStore) upsertRepositoryGrantMutation(ctx context.Context, repositoryID string, grant RepositoryGrant, audit ...AuditRecord) (RepositoryGrantSet, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return RepositoryGrantSet{}, err
@@ -867,6 +886,9 @@ func (s *PostgresStore) UpsertRepositoryGrant(ctx context.Context, repositoryID 
 	if err = tx.QueryRowContext(ctx, `UPDATE repository_grant_sets SET version=version+1 WHERE repository_id=$1::uuid RETURNING version::text`, repositoryID).Scan(&version); err != nil {
 		return RepositoryGrantSet{}, err
 	}
+	if err = bumpGrantsVersion(ctx, tx, repositoryID); err != nil {
+		return RepositoryGrantSet{}, err
+	}
 	set, err := loadRepositoryGrants(ctx, tx, repositoryID, version)
 	if err != nil {
 		return RepositoryGrantSet{}, err
@@ -881,6 +903,14 @@ func (s *PostgresStore) UpsertRepositoryGrant(ctx context.Context, repositoryID 
 }
 
 func (s *PostgresStore) DeleteRepositoryGrant(ctx context.Context, repositoryID, principal, resourcePrefix string, audit ...AuditRecord) (RepositoryGrantSet, error) {
+	set, err := s.deleteRepositoryGrantMutation(ctx, repositoryID, principal, resourcePrefix, audit...)
+	if err == nil {
+		s.invalidateGrants(repositoryID)
+	}
+	return set, err
+}
+
+func (s *PostgresStore) deleteRepositoryGrantMutation(ctx context.Context, repositoryID, principal, resourcePrefix string, audit ...AuditRecord) (RepositoryGrantSet, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return RepositoryGrantSet{}, err
@@ -908,6 +938,9 @@ func (s *PostgresStore) DeleteRepositoryGrant(ctx context.Context, repositoryID,
 	if err = tx.QueryRowContext(ctx, `UPDATE repository_grant_sets SET version=version+1 WHERE repository_id=$1::uuid RETURNING version::text`, repositoryID).Scan(&version); err != nil {
 		return RepositoryGrantSet{}, err
 	}
+	if err = bumpGrantsVersion(ctx, tx, repositoryID); err != nil {
+		return RepositoryGrantSet{}, err
+	}
 	set, err := loadRepositoryGrants(ctx, tx, repositoryID, version)
 	if err != nil {
 		return RepositoryGrantSet{}, err
@@ -919,6 +952,13 @@ func (s *PostgresStore) DeleteRepositoryGrant(ctx context.Context, repositoryID,
 		return RepositoryGrantSet{}, err
 	}
 	return set, nil
+}
+
+// bumpGrantsVersion is the version stamp of the grant-set read cache (ADR 0023 section 6): every transaction
+// that changes the grants of a repository bumps it, so a cached grant set read under the old value is a miss.
+func bumpGrantsVersion(ctx context.Context, q sqlRunner, repositoryID string) error {
+	_, err := q.ExecContext(ctx, `UPDATE hosted_repositories SET grants_version=grants_version+1 WHERE id=$1::uuid`, repositoryID)
+	return err
 }
 
 func (s *PostgresStore) GetRepositoryRetentionPolicy(ctx context.Context, repositoryID string) (RepositoryRetentionPolicy, error) {

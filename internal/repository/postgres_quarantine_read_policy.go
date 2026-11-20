@@ -23,6 +23,14 @@ func (s *PostgresStore) GetRepositoryQuarantineReadPolicy(ctx context.Context, r
 }
 
 func (s *PostgresStore) ReplaceRepositoryQuarantineReadPolicy(ctx context.Context, repositoryID string, policy RepositoryQuarantineReadPolicy, expectedVersion string, audit ...AuditRecord) (RepositoryQuarantineReadPolicy, error) {
+	policy, err := s.replaceRepositoryQuarantineReadPolicyMutation(ctx, repositoryID, policy, expectedVersion, audit...)
+	if err == nil {
+		s.invalidateLocal(CacheScopeQuarantine, repositoryID)
+	}
+	return policy, err
+}
+
+func (s *PostgresStore) replaceRepositoryQuarantineReadPolicyMutation(ctx context.Context, repositoryID string, policy RepositoryQuarantineReadPolicy, expectedVersion string, audit ...AuditRecord) (RepositoryQuarantineReadPolicy, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return RepositoryQuarantineReadPolicy{}, err

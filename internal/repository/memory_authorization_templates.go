@@ -130,5 +130,6 @@ func (s *MemoryStore) ApplyAuthorizationTemplate(ctx context.Context, templateID
 	set.Version = nextHostedGroupVersion(set.Version)
 	set.Grants = cloneAuthorizationTemplate(template).Grants
 	s.repositoryGrants[repositoryID] = set
+	s.bumpGrantsVersionLocked(repositoryID)
 	return cloneRepositoryGrantSet(set), nil
 }

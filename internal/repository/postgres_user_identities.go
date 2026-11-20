@@ -94,6 +94,14 @@ func (s *PostgresStore) GetUserByProviderIdentity(ctx context.Context, providerI
 }
 
 func (s *PostgresStore) ResolveOIDCIdentity(ctx context.Context, provision OIDCIdentityProvision) (User, UserIdentity, bool, error) {
+	user, identity, created, err := s.resolveOIDCIdentityMutation(ctx, provision)
+	if err == nil {
+		s.invalidateLocal(CacheScopeUser, user.ID)
+	}
+	return user, identity, created, err
+}
+
+func (s *PostgresStore) resolveOIDCIdentityMutation(ctx context.Context, provision OIDCIdentityProvision) (User, UserIdentity, bool, error) {
 	provision.Issuer = normalizeOIDCIssuer(provision.Issuer)
 	provision.Subject = strings.TrimSpace(provision.Subject)
 	if provision.ProviderID == "" || provision.Subject == "" {

@@ -26,6 +26,10 @@ const (
 	DefaultJWKSTTL          = 10 * time.Minute
 	DefaultJWKSStaleMax     = 24 * time.Hour
 	DefaultKidRefetchWindow = 30 * time.Second
+	// DefaultFailedFetchRetry is how soon after a failed key fetch the next verification may fetch again. It is
+	// the negative-result bound of ADR 0023 section 6: a failure is never remembered longer than a second, while
+	// the singleflight of a refresh still collapses a burst into one request to the issuer.
+	DefaultFailedFetchRetry = time.Second
 	maxTokenBytes           = 16 << 10
 )
 
@@ -58,6 +62,8 @@ type Options struct {
 	JWKSStaleMax time.Duration
 	// KidRefetchInterval rate limits kid-miss refetches (and failed refreshes) per issuer.
 	KidRefetchInterval time.Duration
+	// FailedFetchRetry rate limits the next fetch after a failed one; zero selects DefaultFailedFetchRetry.
+	FailedFetchRetry time.Duration
 	// HTTPClient replaces the SSRF-guarded client. It is meant for operator-configured
 	// issuers that predate the guard (the human OIDC validator) and for tests.
 	HTTPClient *http.Client
@@ -69,7 +75,7 @@ type Options struct {
 func DefaultOptions() Options {
 	return Options{
 		ClockSkew: DefaultClockSkew, MaxTokenAge: DefaultMaxTokenAge, JWKSTTL: DefaultJWKSTTL,
-		JWKSStaleMax: DefaultJWKSStaleMax, KidRefetchInterval: DefaultKidRefetchWindow,
+		JWKSStaleMax: DefaultJWKSStaleMax, KidRefetchInterval: DefaultKidRefetchWindow, FailedFetchRetry: DefaultFailedFetchRetry,
 	}
 }
 
@@ -102,7 +108,7 @@ func NewVerifier(opts Options) (*Verifier, error) {
 	if opts.ClockSkew < 0 || opts.ClockSkew > MaxClockSkew {
 		return nil, badConfig(fmt.Sprintf("clock skew must be between 0 and %s", MaxClockSkew))
 	}
-	if opts.MaxTokenAge < 0 || opts.JWKSTTL < 0 || opts.JWKSStaleMax < 0 || opts.KidRefetchInterval < 0 {
+	if opts.MaxTokenAge < 0 || opts.JWKSTTL < 0 || opts.JWKSStaleMax < 0 || opts.KidRefetchInterval < 0 || opts.FailedFetchRetry < 0 {
 		return nil, badConfig("durations must not be negative")
 	}
 	if opts.JWKSTTL == 0 {
@@ -110,6 +116,9 @@ func NewVerifier(opts Options) (*Verifier, error) {
 	}
 	if opts.KidRefetchInterval == 0 {
 		opts.KidRefetchInterval = DefaultKidRefetchWindow
+	}
+	if opts.FailedFetchRetry == 0 {
+		opts.FailedFetchRetry = DefaultFailedFetchRetry
 	}
 	if opts.Metrics == nil {
 		opts.Metrics = noMetrics{}

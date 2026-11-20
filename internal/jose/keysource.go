@@ -189,8 +189,9 @@ func (v *Verifier) lookup(ctx context.Context, issuer Issuer, kid, alg string) (
 			set.lastKidFetch = now
 		}
 		kidMiss = true
-	} else if !set.fetching && !set.lastAttempt.IsZero() && now.Sub(set.lastAttempt) < v.opts.KidRefetchInterval {
-		// A refresh failed moments ago: do not hammer the issuer, use what we have.
+	} else if !set.fetching && !set.lastAttempt.IsZero() && now.Sub(set.lastAttempt) < v.opts.FailedFetchRetry {
+		// A refresh failed moments ago: do not hammer the issuer, use what we have. The failure is remembered for
+		// FailedFetchRetry only (one second by default), so an issuer that recovers is served again at once.
 		key, err := v.staleKey(set, issuer, kid, alg, now, ttl)
 		set.mu.Unlock()
 		return key, err

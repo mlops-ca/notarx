@@ -55,6 +55,14 @@ func (s *PostgresStore) TransitionHelmGovernance(ctx context.Context, in HelmGov
 }
 
 func (s *PostgresStore) ReplaceHelmQuarantineReadPolicy(ctx context.Context, id string, policy RepositoryQuarantineReadPolicy, expectedVersion, actor string) (RepositoryQuarantineReadPolicy, error) {
+	policy, err := s.replaceHelmQuarantineReadPolicyMutation(ctx, id, policy, expectedVersion, actor)
+	if err == nil {
+		s.invalidateLocal(CacheScopeQuarantine, id)
+	}
+	return policy, err
+}
+
+func (s *PostgresStore) replaceHelmQuarantineReadPolicyMutation(ctx context.Context, id string, policy RepositoryQuarantineReadPolicy, expectedVersion, actor string) (RepositoryQuarantineReadPolicy, error) {
 	if !sourceVersionValid(expectedVersion) || !validHelmGovernanceActor(actor) {
 		return RepositoryQuarantineReadPolicy{}, ErrInvalidHelmPublication
 	}

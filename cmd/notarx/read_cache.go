@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/mlops-ca/notarx/internal/access"
 	"github.com/mlops-ca/notarx/internal/authorization"
@@ -65,6 +66,34 @@ func (s *cachedStore) GetHostedGroup(ctx context.Context, id string) (repository
 
 func (s *cachedStore) GetHostedGroupByName(ctx context.Context, name string) (repository.HostedGroup, error) {
 	return s.access.GetHostedGroupByName(ctx, name)
+}
+
+func (s *cachedStore) GetUser(ctx context.Context, id string) (repository.User, error) {
+	return s.access.GetUser(ctx, id)
+}
+
+func (s *cachedStore) GetUserByName(ctx context.Context, name string) (repository.User, error) {
+	return s.access.GetUserByName(ctx, name)
+}
+
+func (s *cachedStore) GetRepositoryQuarantineReadPolicy(ctx context.Context, repositoryID string) (repository.RepositoryQuarantineReadPolicy, error) {
+	return s.access.GetRepositoryQuarantineReadPolicy(ctx, repositoryID)
+}
+
+func (s *cachedStore) GetRepositoryGrants(ctx context.Context, repositoryID string) (repository.RepositoryGrantSet, error) {
+	return s.access.GetRepositoryGrants(ctx, repositoryID)
+}
+
+func (s *cachedStore) GetWorkloadIssuer(ctx context.Context, id string) (repository.WorkloadIssuer, error) {
+	return s.access.GetWorkloadIssuer(ctx, id)
+}
+
+func (s *cachedStore) GetWorkloadIssuerByIssuer(ctx context.Context, issuer string) (repository.WorkloadIssuer, error) {
+	return s.access.GetWorkloadIssuerByIssuer(ctx, issuer)
+}
+
+func (s *cachedStore) ListActiveWorkloadTrustPolicies(ctx context.Context, issuerID string, now time.Time) ([]repository.WorkloadTrustPolicy, error) {
+	return s.access.ListActiveWorkloadTrustPolicies(ctx, issuerID, now)
 }
 
 func (s *cachedStore) GetPublicAccessPolicy(ctx context.Context) (repository.PublicAccessPolicy, error) {

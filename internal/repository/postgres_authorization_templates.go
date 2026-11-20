@@ -111,6 +111,14 @@ func (s *PostgresStore) DeleteAuthorizationTemplate(ctx context.Context, id stri
 }
 
 func (s *PostgresStore) ApplyAuthorizationTemplate(ctx context.Context, templateID, repositoryID, expectedVersion string, audit ...AuditRecord) (RepositoryGrantSet, error) {
+	set, err := s.applyAuthorizationTemplateMutation(ctx, templateID, repositoryID, expectedVersion, audit...)
+	if err == nil {
+		s.invalidateGrants(repositoryID)
+	}
+	return set, err
+}
+
+func (s *PostgresStore) applyAuthorizationTemplateMutation(ctx context.Context, templateID, repositoryID, expectedVersion string, audit ...AuditRecord) (RepositoryGrantSet, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return RepositoryGrantSet{}, err
@@ -151,6 +159,9 @@ func (s *PostgresStore) ApplyAuthorizationTemplate(ctx context.Context, template
 		return RepositoryGrantSet{}, ErrVersionConflict
 	}
 	if err != nil {
+		return RepositoryGrantSet{}, err
+	}
+	if err = bumpGrantsVersion(ctx, tx, repositoryID); err != nil {
 		return RepositoryGrantSet{}, err
 	}
 	if _, err = tx.ExecContext(ctx, `DELETE FROM repository_grants WHERE repository_id=$1::uuid`, repositoryID); err != nil {

@@ -18,6 +18,7 @@ func (s *MemoryStore) CreateHostedRepository(_ context.Context, repo HostedRepos
 	}
 	repo.State = RepositoryActive
 	repo.Version = "1"
+	repo.GrantsVersion = 1
 	repo.CreatedAt = time.Now().UTC()
 	repo.EgressProxy = cloneEgressProxy(repo.EgressProxy)
 	repo.UpstreamAuth = cloneUpstreamAuth(repo.UpstreamAuth, repo.Name)
@@ -45,7 +46,7 @@ func (s *MemoryStore) CreateHostedRepositoryIdempotently(ctx context.Context, re
 	if err := s.commitAuditLocked(ctx, audit); err != nil {
 		return HostedRepository{}, false, err
 	}
-	repo.State, repo.Version, repo.CreatedAt = RepositoryActive, "1", time.Now().UTC()
+	repo.State, repo.Version, repo.CreatedAt, repo.GrantsVersion = RepositoryActive, "1", time.Now().UTC(), 1
 	repo.OCIBearer = cloneOCIBearer(repo.OCIBearer)
 	s.hostedRepositories[repo.ID] = repo
 	s.idempotencyRecords[recordKey] = idempotencyRecord{payload: payload, repositoryID: repo.ID, expiresAt: time.Now().UTC().Add(24 * time.Hour)}
@@ -484,6 +485,7 @@ func (s *MemoryStore) ReplaceRepositoryGrants(ctx context.Context, repositoryID 
 		set.Grants[i].Scopes = append([]string(nil), set.Grants[i].Scopes...)
 	}
 	s.repositoryGrants[repositoryID] = set
+	s.bumpGrantsVersionLocked(repositoryID)
 	return cloneRepositoryGrantSet(set), nil
 }
 
@@ -514,6 +516,7 @@ func (s *MemoryStore) UpsertRepositoryGrant(ctx context.Context, repositoryID st
 		set.Grants = append(set.Grants, grant)
 	}
 	s.repositoryGrants[repositoryID] = set
+	s.bumpGrantsVersionLocked(repositoryID)
 	return cloneRepositoryGrantSet(set), nil
 }
 
@@ -545,7 +548,16 @@ func (s *MemoryStore) DeleteRepositoryGrant(ctx context.Context, repositoryID, p
 	set.Version = nextHostedGroupVersion(set.Version)
 	set.Grants = grants
 	s.repositoryGrants[repositoryID] = set
+	s.bumpGrantsVersionLocked(repositoryID)
 	return cloneRepositoryGrantSet(set), nil
+}
+
+// bumpGrantsVersionLocked is the in-memory twin of the grants_version bump the PostgreSQL grant mutations run
+// in their transaction. The caller holds s.mu.
+func (s *MemoryStore) bumpGrantsVersionLocked(repositoryID string) {
+	repo := s.hostedRepositories[repositoryID]
+	repo.GrantsVersion++
+	s.hostedRepositories[repositoryID] = repo
 }
 
 func defaultRepositoryRetentionPolicy() RepositoryRetentionPolicy {
