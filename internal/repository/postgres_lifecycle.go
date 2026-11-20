@@ -12,10 +12,20 @@ import (
 
 // Hot queries are named so the integration tests can EXPLAIN the production statement.
 const (
-	listLifecycleJobsQuery = `SELECT ` + lifecycleJobColumns + ` FROM lifecycle_jobs WHERE repository_id=$1::uuid ORDER BY created_at DESC LIMIT $2`
-	getLifecycleJobQuery   = `SELECT ` + lifecycleJobColumns + ` FROM lifecycle_jobs WHERE repository_id=$1::uuid AND id=$2::uuid`
+	listLifecycleJobsQuery      = `SELECT ` + lifecycleJobColumns + ` FROM lifecycle_jobs WHERE repository_id=$1::uuid ORDER BY lifecycle_jobs.created_at DESC,lifecycle_jobs.id DESC LIMIT $2`
+	listLifecycleJobsAfterQuery = `SELECT ` + lifecycleJobColumns + ` FROM lifecycle_jobs WHERE repository_id=$1::uuid AND (created_at,id)<($2::timestamptz,$3::uuid) ORDER BY lifecycle_jobs.created_at DESC,lifecycle_jobs.id DESC LIMIT $4`
+	getLifecycleJobQuery        = `SELECT ` + lifecycleJobColumns + ` FROM lifecycle_jobs WHERE repository_id=$1::uuid AND id=$2::uuid`
 )
 
+const allLifecycleJobsFilter = "lifecycle-jobs-all"
+
+var (
+	listAllLifecycleJobsQuery      = `SELECT h.name,` + prefixedLifecycleJobColumns("jobs") + ` FROM lifecycle_jobs jobs JOIN hosted_repositories h ON h.id=jobs.repository_id WHERE ($1::text[] IS NULL OR jobs.repository_id=ANY($1::text[]::uuid[])) ORDER BY jobs.created_at DESC,jobs.id DESC LIMIT $2`
+	listAllLifecycleJobsAfterQuery = `SELECT h.name,` + prefixedLifecycleJobColumns("jobs") + ` FROM lifecycle_jobs jobs JOIN hosted_repositories h ON h.id=jobs.repository_id WHERE ($1::text[] IS NULL OR jobs.repository_id=ANY($1::text[]::uuid[])) AND (jobs.created_at,jobs.id)<($2::timestamptz,$3::uuid) ORDER BY jobs.created_at DESC,jobs.id DESC LIMIT $4`
+)
+
+// lifecycleJobColumns selects id::text as the output column id: a query on it orders by lifecycle_jobs.id, as a
+// bare id would sort the text.
 const lifecycleJobColumns = `id::text,repository_id::text,kind,idempotency_key,payload,state,created_at,started_at,completed_at,last_error,attempts,max_attempts,next_attempt_at,lease_expires_at,lease_token,progress_current,progress_total,progress_message`
 
 // EnqueueLifecycleJob inserts the job, or returns the job of the same idempotency key. With audit, a
@@ -70,58 +80,89 @@ func enqueueLifecycleJob(ctx context.Context, q sqlRunner, job LifecycleJob) (Li
 	return existing, true, nil
 }
 
+// ListLifecycleJobs returns the newest window of a repository's jobs, the first page of PageLifecycleJobs.
 func (s *PostgresStore) ListLifecycleJobs(ctx context.Context, repositoryID string, limit int) ([]LifecycleJob, error) {
-	if limit <= 0 || limit > 100 {
-		limit = 100
-	}
-	rows, err := s.db.QueryContext(ctx, listLifecycleJobsQuery, repositoryID, limit)
+	page, err := s.PageLifecycleJobs(ctx, repositoryID, LifecycleJobListQuery{Limit: limit})
+	return page.Items, err
+}
+
+func lifecycleJobsFilter(repositoryID string) string { return "lifecycle-jobs\x00" + repositoryID }
+
+// PageLifecycleJobs pages a repository's jobs newest first by keyset on (created_at, id).
+func (s *PostgresStore) PageLifecycleJobs(ctx context.Context, repositoryID string, query LifecycleJobListQuery) (LifecycleJobPage, error) {
+	limit := pageLimit(query.Limit, 100, 100)
+	cursorAt, cursorID, after, err := decodeCreatedAtToken(query.PageToken, lifecycleJobsFilter(repositoryID))
 	if err != nil {
-		return nil, err
+		return LifecycleJobPage{}, err
+	}
+	statement, args := listLifecycleJobsQuery, []any{repositoryID, limit + 1}
+	if after {
+		statement, args = listLifecycleJobsAfterQuery, []any{repositoryID, cursorAt, cursorID, limit + 1}
+	}
+	rows, err := s.db.QueryContext(ctx, statement, args...)
+	if err != nil {
+		return LifecycleJobPage{}, err
 	}
 	defer func() { _ = rows.Close() }()
-	jobs := make([]LifecycleJob, 0, limit)
+	jobs := make([]LifecycleJob, 0, limit+1)
 	for rows.Next() {
 		var job LifecycleJob
 		if err := scanLifecycleJob(rows, &job); err != nil {
-			return nil, err
+			return LifecycleJobPage{}, err
 		}
 		jobs = append(jobs, job)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return LifecycleJobPage{}, err
 	}
-	for _, job := range jobs {
-		jobCtx, ids := requestcontext.WithRequest(ctx, job.ID)
-		slog.LogAttrs(jobCtx, slog.LevelInfo, "lifecycle job claimed",
-			slog.String("component", "lifecycle_worker"), slog.String("operation", "lifecycle.claim"),
-			slog.String("requestId", ids.RequestID), slog.String("traceId", ids.TraceID),
-			slog.String("jobId", job.ID), slog.String("kind", string(job.Kind)), slog.String("repositoryId", job.RepositoryID), slog.Int("attempt", job.Attempts),
-		)
+	page := LifecycleJobPage{Items: jobs}
+	if len(jobs) > limit {
+		page.Items = jobs[:limit]
+		last := page.Items[limit-1]
+		page.NextPageToken = encodeCreatedAtToken(lifecycleJobsFilter(repositoryID), last.CreatedAt, last.ID)
 	}
-	return jobs, nil
+	return page, nil
 }
 
-func (s *PostgresStore) ListAllLifecycleJobs(ctx context.Context, limit int) ([]RepositoryLifecycleJob, error) {
-	if limit <= 0 || limit > 500 {
-		limit = 500
-	}
-	rows, err := s.db.QueryContext(ctx, `SELECT h.name,`+prefixedLifecycleJobColumns("jobs")+`
-		FROM lifecycle_jobs jobs
-		JOIN hosted_repositories h ON h.id=jobs.repository_id
-		ORDER BY jobs.created_at DESC LIMIT $1`, limit)
+// PageAllLifecycleJobs pages the jobs of every repository newest first by keyset on (created_at, id).
+func (s *PostgresStore) PageAllLifecycleJobs(ctx context.Context, query LifecycleJobListQuery) (RepositoryLifecycleJobPage, error) {
+	limit := pageLimit(query.Limit, 500, 500)
+	cursorAt, cursorID, after, err := decodeCreatedAtToken(query.PageToken, allLifecycleJobsFilter)
 	if err != nil {
-		return nil, err
+		return RepositoryLifecycleJobPage{}, err
+	}
+	// A nil set (every repository) is a SQL NULL array; an empty one matches nothing.
+	var repositories any
+	if query.RepositoryIDs != nil {
+		repositories = query.RepositoryIDs
+	}
+	statement, args := listAllLifecycleJobsQuery, []any{repositories, limit + 1}
+	if after {
+		statement, args = listAllLifecycleJobsAfterQuery, []any{repositories, cursorAt, cursorID, limit + 1}
+	}
+	rows, err := s.db.QueryContext(ctx, statement, args...)
+	if err != nil {
+		return RepositoryLifecycleJobPage{}, err
 	}
 	defer func() { _ = rows.Close() }()
-	records := make([]RepositoryLifecycleJob, 0, limit)
+	records := make([]RepositoryLifecycleJob, 0, limit+1)
 	for rows.Next() {
 		var record RepositoryLifecycleJob
 		if err := scanRepositoryLifecycleJob(rows, &record); err != nil {
-			return nil, err
+			return RepositoryLifecycleJobPage{}, err
 		}
 		records = append(records, record)
 	}
-	return records, rows.Err()
+	if err := rows.Err(); err != nil {
+		return RepositoryLifecycleJobPage{}, err
+	}
+	page := RepositoryLifecycleJobPage{Items: records}
+	if len(records) > limit {
+		page.Items = records[:limit]
+		last := page.Items[limit-1].Job
+		page.NextPageToken = encodeCreatedAtToken(allLifecycleJobsFilter, last.CreatedAt, last.ID)
+	}
+	return page, nil
 }
 
 func (s *PostgresStore) GetLifecycleJob(ctx context.Context, repositoryID, id string) (LifecycleJob, error) {
@@ -139,7 +180,7 @@ func (s *PostgresStore) GetLatestArtifactScanJob(ctx context.Context, repository
 		FROM lifecycle_jobs
 		WHERE repository_id=$1::uuid AND kind='scan'
 		  AND payload->>'format'=$2 AND payload->>'coordinate'=$3 AND payload->>'digest'=$4
-		ORDER BY created_at DESC,id DESC LIMIT 1`, repositoryID, format, coordinate, digest), &job)
+		ORDER BY lifecycle_jobs.created_at DESC,lifecycle_jobs.id DESC LIMIT 1`, repositoryID, format, coordinate, digest), &job)
 	if errors.Is(err, sql.ErrNoRows) {
 		return LifecycleJob{}, ErrNotFound
 	}
@@ -147,15 +188,21 @@ func (s *PostgresStore) GetLatestArtifactScanJob(ctx context.Context, repository
 }
 
 func (s *PostgresStore) ClaimLifecycleJobs(ctx context.Context, limit int) ([]LifecycleJob, error) {
-	return s.claimLifecycleJobs(ctx, "", "", limit)
+	return s.claimLifecycleJobs(ctx, "", nil, limit)
 }
 
 func (s *PostgresStore) ClaimLifecycleJobsByKind(ctx context.Context, kind LifecycleJobKind, limit int) ([]LifecycleJob, error) {
-	return s.claimLifecycleJobs(ctx, kind, "", limit)
+	return s.claimLifecycleJobs(ctx, kind, nil, limit)
 }
 
 func (s *PostgresStore) ClaimLifecycleJobsByKindAndFormat(ctx context.Context, kind LifecycleJobKind, format Format, limit int) ([]LifecycleJob, error) {
-	return s.claimLifecycleJobs(ctx, kind, format, limit)
+	return s.claimLifecycleJobs(ctx, kind, []Format{format}, limit)
+}
+
+// ClaimLifecycleJobsByKindAndFormats claims jobs of one kind for any of formats in a single claim; an empty
+// formats list means every format. It is the call of the per-process claimer (lifecycle.ClaimBroker).
+func (s *PostgresStore) ClaimLifecycleJobsByKindAndFormats(ctx context.Context, kind LifecycleJobKind, formats []Format, limit int) ([]LifecycleJob, error) {
+	return s.claimLifecycleJobs(ctx, kind, formats, limit)
 }
 
 // claimLifecycleJobs claims up to limit actionable jobs (ADR 0023 section 7). Candidates come from the
@@ -164,8 +211,9 @@ func (s *PostgresStore) ClaimLifecycleJobsByKindAndFormat(ctx context.Context, k
 // selected; the row is then marked running and the running set of the repository is probed. A row over the
 // kind's RepoConcurrency is rolled back to its candidate state (a savepoint, so no notification and no
 // attempt is consumed) and excluded from later rounds, which keeps a hot repository from starving the
-// others. The scan stops at QueueClaimScanCap examined rows.
-func (s *PostgresStore) claimLifecycleJobs(ctx context.Context, kind LifecycleJobKind, format Format, limit int) ([]LifecycleJob, error) {
+// others. The scan stops at QueueClaimScanCap examined rows. A claim across all kinds that hits the cap
+// continues kind by kind in rotating order (claimKindsRoundRobin), so one kind cannot consume the budget.
+func (s *PostgresStore) claimLifecycleJobs(ctx context.Context, kind LifecycleJobKind, formats []Format, limit int) ([]LifecycleJob, error) {
 	if limit <= 0 {
 		limit = 100
 	}
@@ -174,40 +222,119 @@ func (s *PostgresStore) claimLifecycleJobs(ctx context.Context, kind LifecycleJo
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	var (
-		claimed  = make([]LifecycleJob, 0, limit)
-		skipped  = []string{}
-		scanned  int
-		finished bool
-	)
-	for !finished && len(claimed) < limit && scanned < QueueClaimScanCap {
-		want := limit - len(claimed)
-		if remaining := QueueClaimScanCap - scanned; want > remaining {
-			want = remaining
-		}
-		candidates, err := selectLifecycleCandidates(ctx, tx, kind, format, skipped, want)
-		if err != nil {
+	scan := lifecycleClaimScan{tx: tx, formats: formats, limit: limit, claimed: make([]LifecycleJob, 0, limit), skipped: []string{}}
+	if kind != "" && len(formats) > 1 {
+		err = scan.claimFormatsRoundRobin(ctx, kind, formats, s.claimRotation.Add(1))
+	} else {
+		err = scan.run(ctx, kind, QueueClaimScanCap)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if kind == "" && scan.scanned >= QueueClaimScanCap && len(scan.claimed) < limit {
+		if err = scan.claimKindsRoundRobin(ctx, s.claimRotation.Add(1)); err != nil {
 			return nil, err
-		}
-		scanned += len(candidates)
-		finished = len(candidates) < want
-		for _, candidate := range candidates {
-			job, ok, err := claimLifecycleCandidate(ctx, tx, candidate)
-			if err != nil {
-				return nil, err
-			}
-			if !ok {
-				skipped = append(skipped, candidate.id)
-				continue
-			}
-			claimed = append(claimed, job)
 		}
 	}
 	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
-	s.claimObserver.record(kind, scanned)
-	return claimed, nil
+	s.claimObserver.record(kind, scan.scanned)
+	for _, job := range scan.claimed {
+		jobCtx, ids := requestcontext.WithRequest(ctx, job.ID)
+		slog.LogAttrs(jobCtx, slog.LevelInfo, "lifecycle job claimed",
+			slog.String("component", "lifecycle_worker"), slog.String("operation", "lifecycle.claim"),
+			slog.String("requestId", ids.RequestID), slog.String("traceId", ids.TraceID),
+			slog.String("jobId", job.ID), slog.String("kind", string(job.Kind)), slog.String("repositoryId", job.RepositoryID), slog.Int("attempt", job.Attempts),
+		)
+	}
+	return scan.claimed, nil
+}
+
+// lifecycleClaimScan is the state of one claim transaction.
+type lifecycleClaimScan struct {
+	tx      *sql.Tx
+	formats []Format
+	limit   int
+	claimed []LifecycleJob
+	skipped []string
+	scanned int
+	// exhausted is true when the last run saw fewer candidates than it asked for: nothing more is pending.
+	exhausted bool
+}
+
+// run examines candidates of kind (every kind when empty) until the claim is full, the candidates run out or
+// budget rows were examined.
+func (c *lifecycleClaimScan) run(ctx context.Context, kind LifecycleJobKind, budget int) error {
+	var used int
+	for len(c.claimed) < c.limit && used < budget {
+		want := min(c.limit-len(c.claimed), budget-used)
+		candidates, err := selectLifecycleCandidates(ctx, c.tx, kind, c.formats, c.skipped, want)
+		if err != nil {
+			return err
+		}
+		used += len(candidates)
+		c.scanned += len(candidates)
+		for _, candidate := range candidates {
+			job, ok, err := claimLifecycleCandidate(ctx, c.tx, candidate)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				c.skipped = append(c.skipped, candidate.id)
+				continue
+			}
+			c.claimed = append(c.claimed, job)
+		}
+		c.exhausted = len(candidates) < want
+		if c.exhausted {
+			return nil
+		}
+	}
+	return nil
+}
+
+// claimFormatsRoundRobin serves a claim for several formats of one kind with the share plan of
+// claimFormatShares. The opening scan may examine QueueClaimScanCap rows, each share an equal part of it, and
+// the remainder what the earlier batches left of it.
+func (c *lifecycleClaimScan) claimFormatsRoundRobin(ctx context.Context, kind LifecycleJobKind, formats []Format, rotation uint64) error {
+	limit := c.limit
+	defer func() { c.formats, c.limit = formats, limit }()
+	perFormat := max(QueueClaimScanCap/(len(formats)+1), 1)
+	return claimFormatShares(ctx, formats, limit, rotation, func(ctx context.Context, phase formatClaimPhase, batch []Format, want int) ([]Format, bool, error) {
+		budget := QueueClaimScanCap
+		switch phase {
+		case formatClaimShare:
+			budget = perFormat
+		case formatClaimRemainder:
+			if budget = QueueClaimScanCap - c.scanned; budget <= 0 {
+				return nil, false, nil
+			}
+		}
+		before := len(c.claimed)
+		c.formats, c.limit = batch, before+want
+		if err := c.run(ctx, kind, budget); err != nil {
+			return nil, false, err
+		}
+		claimed := make([]Format, 0, len(c.claimed)-before)
+		for _, job := range c.claimed[before:] {
+			claimed = append(claimed, LifecycleJobFormat(job))
+		}
+		return claimed, c.exhausted, nil
+	})
+}
+
+// claimKindsRoundRobin spreads what is left of the claim over the kinds in rotating order, each kind within an
+// equal share of the scan cap, so a kind whose backlog heads the all-kinds index cannot starve the others.
+func (c *lifecycleClaimScan) claimKindsRoundRobin(ctx context.Context, rotation uint64) error {
+	kinds := LifecycleJobKinds()
+	share := max(QueueClaimScanCap/len(kinds), 1)
+	for i := 0; i < len(kinds) && len(c.claimed) < c.limit; i++ {
+		if err := c.run(ctx, kinds[(int(rotation%uint64(len(kinds)))+i)%len(kinds)], share); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // The candidate scans of the claim. A claim for one kind (every runtime) is served by
@@ -218,11 +345,11 @@ func (s *PostgresStore) claimLifecycleJobs(ctx context.Context, kind LifecycleJo
 const (
 	claimLifecycleCandidatesByKindQuery = `SELECT id::text,repository_id::text,kind FROM lifecycle_jobs
         WHERE state IN ('pending','retrying') AND next_attempt_at<=now() AND attempts<max_attempts
-          AND kind=$1 AND ($2='' OR payload->>'format'=$2) AND id<>ALL($3::text[]::uuid[])
+          AND kind=$1 AND (cardinality($2::text[])=0 OR payload->>'format'=ANY($2::text[])) AND id<>ALL($3::text[]::uuid[])
         ORDER BY next_attempt_at LIMIT $4 FOR UPDATE SKIP LOCKED`
 	claimLifecycleCandidatesAnyKindQuery = `SELECT id::text,repository_id::text,kind FROM lifecycle_jobs
         WHERE state IN ('pending','retrying') AND next_attempt_at<=now() AND attempts<max_attempts
-          AND ($1='' OR payload->>'format'=$1) AND id<>ALL($2::text[]::uuid[])
+          AND (cardinality($1::text[])=0 OR payload->>'format'=ANY($1::text[])) AND id<>ALL($2::text[]::uuid[])
         ORDER BY next_attempt_at LIMIT $3 FOR UPDATE SKIP LOCKED`
 )
 
@@ -232,13 +359,17 @@ type lifecycleCandidate struct {
 	kind         LifecycleJobKind
 }
 
-func selectLifecycleCandidates(ctx context.Context, tx *sql.Tx, kind LifecycleJobKind, format Format, skipped []string, limit int) ([]lifecycleCandidate, error) {
+func selectLifecycleCandidates(ctx context.Context, tx *sql.Tx, kind LifecycleJobKind, formats []Format, skipped []string, limit int) ([]lifecycleCandidate, error) {
+	names := make([]string, len(formats))
+	for i, format := range formats {
+		names[i] = string(format)
+	}
 	var rows *sql.Rows
 	var err error
 	if kind != "" {
-		rows, err = tx.QueryContext(ctx, claimLifecycleCandidatesByKindQuery, string(kind), string(format), skipped, limit)
+		rows, err = tx.QueryContext(ctx, claimLifecycleCandidatesByKindQuery, string(kind), names, skipped, limit)
 	} else {
-		rows, err = tx.QueryContext(ctx, claimLifecycleCandidatesAnyKindQuery, string(format), skipped, limit)
+		rows, err = tx.QueryContext(ctx, claimLifecycleCandidatesAnyKindQuery, names, skipped, limit)
 	}
 	if err != nil {
 		return nil, err
@@ -407,6 +538,22 @@ func (s *PostgresStore) UpdateLifecycleJobProgress(ctx context.Context, id, leas
 func (s *PostgresStore) RenewLifecycleJobLease(ctx context.Context, id, leaseToken string) error {
 	result, err := s.db.ExecContext(ctx, `UPDATE lifecycle_jobs SET
 		lease_expires_at=GREATEST(lease_expires_at+interval '1 microsecond',clock_timestamp()+interval '10 minutes')
+		WHERE id=$1::uuid AND lease_token=$2 AND state='running' AND lease_expires_at>clock_timestamp()`, id, leaseToken)
+	if err != nil {
+		return err
+	}
+	if count, _ := result.RowsAffected(); count != 1 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// ReleaseLifecycleJobLease hands a claimed job that never ran back to the queue: it is pending and actionable
+// at once, the state "run now" gives, and the attempt its claim counted is returned; its last error stays. A
+// lease that is no longer the caller's, or has expired, is ErrNotFound.
+func (s *PostgresStore) ReleaseLifecycleJobLease(ctx context.Context, id, leaseToken string) error {
+	result, err := s.db.ExecContext(ctx, `UPDATE lifecycle_jobs SET state='pending',
+		started_at=NULL,next_attempt_at=clock_timestamp(),lease_expires_at=NULL,lease_token='',attempts=GREATEST(attempts-1,0)
 		WHERE id=$1::uuid AND lease_token=$2 AND state='running' AND lease_expires_at>clock_timestamp()`, id, leaseToken)
 	if err != nil {
 		return err

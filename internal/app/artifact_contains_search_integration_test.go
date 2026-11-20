@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -85,13 +86,45 @@ func TestPostgresContainsArtifactSearchHTTP(t *testing.T) {
 	}
 }
 
+// countedSearchStore counts the projection probes of the repositories in counted: the shared database holds
+// public repositories of other integration tests, which every search reads too.
 type countedSearchStore struct {
 	GatewayStore
-	probes int
+	counted map[string]bool
+	mu      sync.Mutex
+	probes  int
+	probed  map[string]bool
+	all     int
+}
+
+// reset starts a new count. The search probes inline, so a count read after ServeHTTP returns is complete.
+func (s *countedSearchStore) reset() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.probes, s.probed, s.all = 0, map[string]bool{}, 0
+}
+
+// probeCount is what one search probed.
+type probeCount struct {
+	ownProbes             int // probes of the counted repositories
+	ownRepositoriesProbed int // counted repositories probed at least once
+	allProbes             int // probes of every repository
+}
+
+func (s *countedSearchStore) count() probeCount {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return probeCount{ownProbes: s.probes, ownRepositoriesProbed: len(s.probed), allProbes: s.all}
 }
 
 func (s *countedSearchStore) SearchArtifactProjection(ctx context.Context, id string, format repository.Format, query repository.ArtifactSearchQuery, limit int, after repository.ArtifactSearchPosition) ([]repository.ArtifactSearchItem, error) {
-	s.probes++
+	s.mu.Lock()
+	s.all++
+	if s.counted[id] {
+		s.probes++
+		s.probed[id] = true
+	}
+	s.mu.Unlock()
 	return s.GatewayStore.(repository.ArtifactSearchStore).SearchArtifactProjection(ctx, id, format, query, limit, after)
 }
 
@@ -113,12 +146,15 @@ func TestPostgresContainsGlobalSearchProbeBudget(t *testing.T) {
 	ctx := context.Background()
 	actor := "probe-reader-" + uuid.NewString()
 	// Fixed workload and budget: three readable repositories, 20k paths each,
-	// page sizes 1/50/200, <=5s HTTP, <=6 projection probes including lookahead.
+	// page sizes 1/50/200, <=5s HTTP, <=6 projection probes of them including
+	// lookahead.
+	own := map[string]bool{}
 	for i := 0; i < 3; i++ {
 		repo, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "probe-" + uuid.NewString(), Format: repository.FormatRaw})
 		if err != nil {
 			t.Fatal(err)
 		}
+		own[repo.ID] = true
 		digest := fmt.Sprintf("sha256:%x", sha256.Sum256([]byte("contains-probe-"+actor)))
 		if _, err = store.PutRawAsset(ctx, repository.RawAsset{RepositoryID: repo.ID, Path: "needle/alpha.bin", Digest: digest, ObjectKey: "probe/" + repo.ID, Size: 7}); err != nil {
 			t.Fatal(err)
@@ -130,12 +166,14 @@ func TestPostgresContainsGlobalSearchProbeBudget(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	counted := &countedSearchStore{GatewayStore: store}
+	counted := &countedSearchStore{GatewayStore: store, counted: own, probed: map[string]bool{}}
 	auth := testAuthenticator()
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: counted, NPMMetadata: store, NPMRestore: store, Adapter: TestAdapter{}, Authenticator: auth})
-	for _, q := range []string{"needle", "artifact", "absent-keyword", "x", "ph", "/", "a:b", "1.0"} {
+	// matchesNothing is unique to this run and so in no repository: its search probes every readable one.
+	matchesNothing := "absent-" + uuid.NewString()
+	for _, q := range []string{"needle", "artifact", matchesNothing, "x", "ph", "/", "a:b", "1.0"} {
 		for _, size := range []string{"1", "50", "200"} {
-			counted.probes = 0
+			counted.reset()
 			values := url.Values{"q": {q}, "match": {"contains"}, "format": {"raw"}, "pageSize": {size}}
 			req := httptest.NewRequest("GET", "/api/v2/artifact-search?"+values.Encode(), nil)
 			authorize(req, auth.IssueToken(actor))
@@ -143,10 +181,25 @@ func TestPostgresContainsGlobalSearchProbeBudget(t *testing.T) {
 			started := time.Now()
 			handler.ServeHTTP(res, req)
 			elapsed := time.Since(started)
-			if res.Code != 200 || elapsed > 5*time.Second || counted.probes > 6 {
-				t.Fatalf("q=%q size=%s probes=%d elapsed=%s status=%d body=%s", q, size, counted.probes, elapsed, res.Code, res.Body.String())
+			if res.Code != 200 {
+				t.Fatalf("q=%q size=%s: status %d body=%s", q, size, res.Code, res.Body.String())
 			}
-			t.Logf("q=%q pageSize=%s projectionProbes=%d HTTP=%s", q, size, counted.probes, elapsed)
+			var page struct {
+				Items                *[]json.RawMessage `json:"items"`
+				SearchedRepositories int                `json:"searchedRepositories"`
+			}
+			if err := json.Unmarshal(res.Body.Bytes(), &page); err != nil {
+				t.Fatalf("q=%q size=%s: decode %s: %v", q, size, res.Body.String(), err)
+			}
+			// Every search reads the three repositories of this test and probes them at most six times. A
+			// page can fill in other tests' repositories first, except for the query nothing matches, which
+			// probes each of the three.
+			got := counted.count()
+			// The same two probes per repository bound the whole search, other tests' repositories included.
+			if elapsed > 5*time.Second || page.SearchedRepositories < 3 || got.ownProbes > 6 || got.allProbes > 2*page.SearchedRepositories || (q == matchesNothing && (page.Items == nil || len(*page.Items) != 0 || got.ownRepositoriesProbed != 3)) {
+				t.Fatalf("q=%q size=%s: ownProbes=%d ownRepositoriesProbed=%d allProbes=%d searchedRepositories=%d elapsed=%s status=%d body=%s", q, size, got.ownProbes, got.ownRepositoriesProbed, got.allProbes, page.SearchedRepositories, elapsed, res.Code, res.Body.String())
+			}
+			t.Logf("q=%q pageSize=%s projectionProbes=%d HTTP=%s", q, size, got.ownProbes, elapsed)
 		}
 	}
 }

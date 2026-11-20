@@ -561,3 +561,25 @@ func TestMemoryMavenArtifactSearchCursorPreservesSnapshotBuilds(t *testing.T) {
 		t.Fatalf("second=%#v err=%v", second, err)
 	}
 }
+
+// The memory store pages groups by keyset like PostgreSQL: a canonical uuid cursor whose group is gone
+// continues at the next id, and a cursor that names no group and is no canonical uuid is ErrNotFound.
+func TestMemoryHostedGroupsPageByKeyset(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemoryStore()
+	ids := []string{"aaaaaaaa-0000-4000-8000-000000000001", "aaaaaaaa-0000-4000-8000-000000000003"}
+	for i, id := range ids {
+		if _, _, err := store.CreateHostedGroupIdempotently(ctx, HostedGroup{ID: id, Name: "keyset-" + id, Format: FormatRaw}, "admin", "keyset-"+strings.Repeat("k", i+1), "payload"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	page, _, err := store.ListHostedGroups(ctx, 1, "aaaaaaaa-0000-4000-8000-000000000002")
+	if err != nil || len(page) != 1 || page[0].ID != ids[1] {
+		t.Fatalf("page after a vanished cursor = %v, %v; want the next group", page, err)
+	}
+	for _, cursor := range []string{"garbage", strings.ToUpper(ids[0])} {
+		if _, _, err := store.ListHostedGroups(ctx, 1, cursor); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("cursor %q: %v, want ErrNotFound", cursor, err)
+		}
+	}
+}

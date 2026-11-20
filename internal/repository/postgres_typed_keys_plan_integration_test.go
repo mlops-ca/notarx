@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -32,11 +33,22 @@ func TestPostgresTypedKeyQueriesUseIndexes(t *testing.T) {
 		relation string
 		query    string
 		args     []any
+		// ordered asserts the keyset order comes from the index: no Sort node anywhere in the plan.
+		ordered bool
 	}{
-		{"lifecycle_jobs by repository", "lifecycle_jobs", listLifecycleJobsQuery, []any{id, 50}},
-		{"lifecycle_jobs by repository and id", "lifecycle_jobs", getLifecycleJobQuery, []any{id, id}},
-		{"user_sessions by id and user", "user_sessions", getUserSessionQuery, []any{id, id}},
-		{"hosted_repositories by id", "hosted_repositories", getHostedRepositoryQuery, []any{id}},
+		{"lifecycle_jobs by repository", "lifecycle_jobs", listLifecycleJobsQuery, []any{id, 50}, true},
+		{"lifecycle_jobs by repository after a cursor", "lifecycle_jobs", listLifecycleJobsAfterQuery, []any{id, time.Now().UTC(), id, 50}, true},
+		{"lifecycle_jobs across repositories", "lifecycle_jobs", listAllLifecycleJobsQuery, []any{nil, 50}, true},
+		{"lifecycle_jobs across repositories after a cursor", "lifecycle_jobs", listAllLifecycleJobsAfterQuery, []any{nil, time.Now().UTC(), id, 50}, true},
+		{"lifecycle_jobs across administered repositories", "lifecycle_jobs", listAllLifecycleJobsQuery, []any{[]string{id}, 50}, false},
+		{"lifecycle_jobs by repository and id", "lifecycle_jobs", getLifecycleJobQuery, []any{id, id}, false},
+		{"user_sessions by id and user", "user_sessions", getUserSessionQuery, []any{id, id}, false},
+		{"hosted_repositories by id", "hosted_repositories", getHostedRepositoryQuery, []any{id}, false},
+		{"hosted_repositories first page", "hosted_repositories", listHostedRepositoriesQuery, []any{"", 50}, true},
+		{"hosted_repositories after a cursor", "hosted_repositories", listHostedRepositoriesQuery, []any{id, 50}, true},
+		{"hosted_groups first page", "hosted_groups", listHostedGroupsQuery, []any{"", 50}, true},
+		{"hosted_groups after a cursor", "hosted_groups", listHostedGroupsQuery, []any{id, 50}, true},
+		{"hosted_group_members of a page", "hosted_group_members", listHostedGroupMembersQuery, []any{[]string{id, uuid.NewString()}}, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -58,14 +70,18 @@ func TestPostgresTypedKeyQueriesUseIndexes(t *testing.T) {
 			if err = json.Unmarshal(raw, &plans); err != nil || len(plans) != 1 {
 				t.Fatalf("explain output: %s %v", raw, err)
 			}
-			indexed, sequential := false, false
+			indexed, sequential, sorted := false, false, false
 			plans[0].Plan.walk(func(n explainNode) {
+				sorted = sorted || strings.Contains(n.NodeType, "Sort")
 				if n.Relation != tc.relation {
 					return
 				}
 				indexed = indexed || strings.Contains(n.NodeType, "Index") || strings.Contains(n.NodeType, "Bitmap")
 				sequential = sequential || n.NodeType == "Seq Scan"
 			})
+			if tc.ordered && sorted {
+				t.Fatalf("%s sorts instead of reading the keyset order from an index: %s", tc.name, raw)
+			}
 			if !indexed || sequential {
 				t.Fatalf("%s does not use an index on %s: %s", tc.name, tc.relation, raw)
 			}

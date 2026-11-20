@@ -310,7 +310,8 @@ func TestWebhookRuntimeResponsesConformToOpenAPI(t *testing.T) {
 	}
 
 	request(http.MethodPost, "/api/v2/webhook-subscriptions", `{"name":"contract-webhook","endpointUrl":"https://events.example.test/artifacts","secret":"0123456789abcdef0123456789abcdef","eventTypes":["artifact.quarantined"],"enabled":true}`, "", http.StatusCreated)
-	subscriptions, err := store.ListWebhookSubscriptions(ctx)
+	subscriptionsPage, err := store.PageWebhookSubscriptions(ctx, repository.WebhookSubscriptionQuery{})
+	subscriptions := subscriptionsPage.Items
 	if err != nil || len(subscriptions) != 1 {
 		t.Fatalf("subscriptions=%#v err=%v", subscriptions, err)
 	}

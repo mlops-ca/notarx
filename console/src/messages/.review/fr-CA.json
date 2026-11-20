@@ -1698,6 +1698,7 @@
     "operations.onlineNodes": "draft",
     "operations.onlyActiveHostedRepositoriesWithRetentionSupportAre": "draft",
     "operations.operations": "draft",
+    "operations.pageScopeNotice": "draft",
     "operations.pauseFollow": "draft",
     "operations.pauseNewDeliveries": "draft",
     "operations.pausePreservesTheCursorForResumeReadingAbove": "draft",

@@ -267,7 +267,7 @@ async function mockRepositoryDetail(
       });
     }
     if (path.endsWith("/lifecycle-jobs")) {
-      return route.fulfill({ json: [] });
+      return route.fulfill({ json: { items: [] } });
     }
     if (path.endsWith("/security-policy")) {
       return route.fulfill({

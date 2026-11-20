@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"slices"
 	"sort"
 	"time"
 
@@ -89,12 +90,15 @@ func replicationCheckpointValues(checks map[string]ReplicationCheckpoint) []Repl
 	return values
 }
 func (s *MemoryStore) ClaimReplicationPlans(_ context.Context, limit int) ([]ReplicationPlan, error) {
-	return s.claimReplicationPlans(limit, "")
+	return s.claimReplicationPlans(limit, nil)
 }
 func (s *MemoryStore) ClaimReplicationPlansByFormat(_ context.Context, format Format, limit int) ([]ReplicationPlan, error) {
-	return s.claimReplicationPlans(limit, format)
+	return s.claimReplicationPlans(limit, []Format{format})
 }
-func (s *MemoryStore) claimReplicationPlans(limit int, format Format) ([]ReplicationPlan, error) {
+func (s *MemoryStore) ClaimReplicationPlansByFormats(_ context.Context, formats []Format, limit int) ([]ReplicationPlan, error) {
+	return s.claimReplicationPlans(limit, formats)
+}
+func (s *MemoryStore) claimReplicationPlans(limit int, formats []Format) ([]ReplicationPlan, error) {
 	s.replicationLeaseFence.Lock()
 	defer s.replicationLeaseFence.Unlock()
 	s.mu.Lock()
@@ -113,7 +117,7 @@ func (s *MemoryStore) claimReplicationPlans(limit int, format Format) ([]Replica
 		}
 		nextAttemptDue := !p.NextAttemptAt.IsZero() && !now.Before(p.NextAttemptAt)
 		claimable := (p.State == "pending" && (p.NextAttemptAt.IsZero() || nextAttemptDue)) || (p.State == "failed" && nextAttemptDue)
-		if (format == "" || p.Format == format) && claimable && p.Attempts < p.MaxAttempts {
+		if (len(formats) == 0 || slices.Contains(formats, p.Format)) && claimable && p.Attempts < p.MaxAttempts {
 			p.State = "running"
 			p.StartedAt = now
 			p.CompletedAt = time.Time{}

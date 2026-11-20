@@ -21,6 +21,8 @@ type PostgresStore struct {
 	// cacheInvalidator evicts local read-cache entries after a mutation commits.
 	cacheInvalidator atomic.Pointer[CacheInvalidator]
 	claimObserver    queueClaimObserverHolder
+	// claimRotation rotates the first kind of the round-robin continuation of an all-kinds claim.
+	claimRotation atomic.Uint64
 }
 
 // SetQueueClaimObserver reports the rows each lifecycle claim examined (ADR 0023 section 7).

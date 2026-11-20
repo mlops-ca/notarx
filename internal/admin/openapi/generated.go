@@ -7378,6 +7378,14 @@ type LifecycleJobDetails struct {
 	SourceRepositoryId *openapi_types.UUID `json:"sourceRepositoryId,omitempty"`
 }
 
+// LifecycleJobPage defines model for LifecycleJobPage.
+type LifecycleJobPage struct {
+	Items []LifecycleJob `json:"items"`
+
+	// NextPageToken Present while older jobs follow; pass it as pageToken for the next page.
+	NextPageToken *string `json:"nextPageToken,omitempty"`
+}
+
 // LifecycleJobReconciliation defines model for LifecycleJobReconciliation.
 type LifecycleJobReconciliation struct {
 	RepositoryId   openapi_types.UUID `json:"repositoryId"`
@@ -8685,8 +8693,13 @@ type RepositoryLifecycleJob struct {
 	RepositoryName string             `json:"repositoryName"`
 }
 
-// RepositoryLifecycleJobList defines model for RepositoryLifecycleJobList.
-type RepositoryLifecycleJobList = []RepositoryLifecycleJob
+// RepositoryLifecycleJobPage defines model for RepositoryLifecycleJobPage.
+type RepositoryLifecycleJobPage struct {
+	Items []RepositoryLifecycleJob `json:"items"`
+
+	// NextPageToken Present while older jobs follow; pass it as pageToken for the next page.
+	NextPageToken *string `json:"nextPageToken,omitempty"`
+}
 
 // RepositoryOperation defines model for RepositoryOperation.
 type RepositoryOperation string
@@ -9578,11 +9591,19 @@ type WebhookDelivery struct {
 	NextAttemptAt  *time.Time           `json:"nextAttemptAt,omitempty"`
 	State          WebhookDeliveryState `json:"state"`
 	SubscriptionId openapi_types.UUID   `json:"subscriptionId"`
-	UpdatedAt      time.Time            `json:"updatedAt"`
+
+	// SubscriptionName Name of the subscription, set in the delivery listing.
+	SubscriptionName *string   `json:"subscriptionName,omitempty"`
+	UpdatedAt        time.Time `json:"updatedAt"`
 }
 
-// WebhookDeliveryList defines model for WebhookDeliveryList.
-type WebhookDeliveryList = []WebhookDelivery
+// WebhookDeliveryPage defines model for WebhookDeliveryPage.
+type WebhookDeliveryPage struct {
+	Items []WebhookDelivery `json:"items"`
+
+	// NextPageToken Present while older deliveries follow; pass it as pageToken for the next page.
+	NextPageToken *string `json:"nextPageToken,omitempty"`
+}
 
 // WebhookDeliveryState defines model for WebhookDeliveryState.
 type WebhookDeliveryState string
@@ -9603,8 +9624,13 @@ type WebhookSubscription struct {
 	Version          string             `json:"version"`
 }
 
-// WebhookSubscriptionList defines model for WebhookSubscriptionList.
-type WebhookSubscriptionList = []WebhookSubscription
+// WebhookSubscriptionPage defines model for WebhookSubscriptionPage.
+type WebhookSubscriptionPage struct {
+	Items []WebhookSubscription `json:"items"`
+
+	// NextPageToken Present while older subscriptions follow; pass it as pageToken for the next page.
+	NextPageToken *string `json:"nextPageToken,omitempty"`
+}
 
 // ArtifactSearchMatch defines model for ArtifactSearchMatch.
 type ArtifactSearchMatch string
@@ -9688,7 +9714,7 @@ type EgressProxyTest = EgressProxyTestResult
 type GroupList = GroupPage
 
 // LifecycleJobList defines model for LifecycleJobList.
-type LifecycleJobList = []LifecycleJob
+type LifecycleJobList = LifecycleJobPage
 
 // MavenCoordinateList defines model for MavenCoordinateList.
 type MavenCoordinateList = MavenCoordinatePage
@@ -9699,8 +9725,17 @@ type OCIImageList = OCIImagePage
 // OCIManifestSummaryList defines model for OCIManifestSummaryList.
 type OCIManifestSummaryList = OCIManifestSummaryPage
 
+// RepositoryLifecycleJobList defines model for RepositoryLifecycleJobList.
+type RepositoryLifecycleJobList = RepositoryLifecycleJobPage
+
 // RepositoryList defines model for RepositoryList.
 type RepositoryList = RepositoryPage
+
+// WebhookDeliveryList defines model for WebhookDeliveryList.
+type WebhookDeliveryList = WebhookDeliveryPage
+
+// WebhookSubscriptionList defines model for WebhookSubscriptionList.
+type WebhookSubscriptionList = WebhookSubscriptionPage
 
 // SearchArtifactsParams defines parameters for SearchArtifacts.
 type SearchArtifactsParams struct {
@@ -9867,7 +9902,8 @@ type ReplaceGroupMembersParams struct {
 
 // ListLifecycleJobsParams defines parameters for ListLifecycleJobs.
 type ListLifecycleJobsParams struct {
-	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+	Limit     *int       `form:"limit,omitempty" json:"limit,omitempty"`
+	PageToken *PageToken `form:"pageToken,omitempty" json:"pageToken,omitempty"`
 }
 
 // ListMigrationSourcesParams defines parameters for ListMigrationSources.
@@ -10263,6 +10299,12 @@ type ReplaceGrantsParams struct {
 	IfMatch IfMatch `json:"If-Match"`
 }
 
+// ListRepositoryLifecycleJobsParams defines parameters for ListRepositoryLifecycleJobs.
+type ListRepositoryLifecycleJobsParams struct {
+	Limit     *int       `form:"limit,omitempty" json:"limit,omitempty"`
+	PageToken *PageToken `form:"pageToken,omitempty" json:"pageToken,omitempty"`
+}
+
 // ReconcileRepositoryArtifactIntelligenceParams defines parameters for ReconcileRepositoryArtifactIntelligence.
 type ReconcileRepositoryArtifactIntelligenceParams struct {
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
@@ -10449,6 +10491,13 @@ type ListWebhookDeliveriesParams struct {
 	SubscriptionId *openapi_types.UUID   `form:"subscriptionId,omitempty" json:"subscriptionId,omitempty"`
 	State          *WebhookDeliveryState `form:"state,omitempty" json:"state,omitempty"`
 	Limit          *int                  `form:"limit,omitempty" json:"limit,omitempty"`
+	PageToken      *PageToken            `form:"pageToken,omitempty" json:"pageToken,omitempty"`
+}
+
+// ListWebhookSubscriptionsParams defines parameters for ListWebhookSubscriptions.
+type ListWebhookSubscriptionsParams struct {
+	Limit     *int       `form:"limit,omitempty" json:"limit,omitempty"`
+	PageToken *PageToken `form:"pageToken,omitempty" json:"pageToken,omitempty"`
 }
 
 // UpdateWebhookSubscriptionParams defines parameters for UpdateWebhookSubscription.
@@ -12042,7 +12091,7 @@ type ServerInterface interface {
 	ReplaceGrants(w http.ResponseWriter, r *http.Request, repositoryId RepositoryId, params ReplaceGrantsParams)
 
 	// (GET /repositories/{repositoryId}/lifecycle-jobs)
-	ListRepositoryLifecycleJobs(w http.ResponseWriter, r *http.Request, repositoryId RepositoryId)
+	ListRepositoryLifecycleJobs(w http.ResponseWriter, r *http.Request, repositoryId RepositoryId, params ListRepositoryLifecycleJobsParams)
 
 	// (POST /repositories/{repositoryId}/lifecycle-jobs/{lifecycleJobId}/cancel)
 	CancelRepositoryLifecycleJob(w http.ResponseWriter, r *http.Request, repositoryId RepositoryId, lifecycleJobId LifecycleJobId)
@@ -12252,7 +12301,7 @@ type ServerInterface interface {
 	ReplayWebhookDelivery(w http.ResponseWriter, r *http.Request, deliveryId openapi_types.UUID)
 
 	// (GET /webhook-subscriptions)
-	ListWebhookSubscriptions(w http.ResponseWriter, r *http.Request)
+	ListWebhookSubscriptions(w http.ResponseWriter, r *http.Request, params ListWebhookSubscriptionsParams)
 
 	// (POST /webhook-subscriptions)
 	CreateWebhookSubscription(w http.ResponseWriter, r *http.Request)
@@ -14377,6 +14426,19 @@ func (siw *ServerInterfaceWrapper) ListLifecycleJobs(w http.ResponseWriter, r *h
 			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
 		} else {
 			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "pageToken" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageToken", r.URL.Query(), &params.PageToken, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageToken"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageToken", Err: err})
 		}
 		return
 	}
@@ -20011,8 +20073,37 @@ func (siw *ServerInterfaceWrapper) ListRepositoryLifecycleJobs(w http.ResponseWr
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListRepositoryLifecycleJobsParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "pageToken" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageToken", r.URL.Query(), &params.PageToken, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageToken"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageToken", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListRepositoryLifecycleJobs(w, r, repositoryId)
+		siw.Handler.ListRepositoryLifecycleJobs(w, r, repositoryId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -22736,6 +22827,19 @@ func (siw *ServerInterfaceWrapper) ListWebhookDeliveries(w http.ResponseWriter, 
 		return
 	}
 
+	// ------------- Optional query parameter "pageToken" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageToken", r.URL.Query(), &params.PageToken, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageToken"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageToken", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListWebhookDeliveries(w, r, params)
 	}))
@@ -22802,8 +22906,40 @@ func (siw *ServerInterfaceWrapper) ReplayWebhookDelivery(w http.ResponseWriter, 
 // ListWebhookSubscriptions operation middleware
 func (siw *ServerInterfaceWrapper) ListWebhookSubscriptions(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListWebhookSubscriptionsParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "pageToken" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageToken", r.URL.Query(), &params.PageToken, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageToken"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageToken", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListWebhookSubscriptions(w, r)
+		siw.Handler.ListWebhookSubscriptions(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -23397,7 +23533,7 @@ type IdentityProviderListJSONResponse IdentityProviderList
 
 type LifecycleJobJSONResponse LifecycleJob
 
-type LifecycleJobListJSONResponse []LifecycleJob
+type LifecycleJobListJSONResponse LifecycleJobPage
 
 type MavenCacheRefreshResultJSONResponse MavenCacheRefreshResult
 
@@ -23448,7 +23584,7 @@ type RepositoryEffectiveAccessJSONResponse RepositoryEffectiveAccess
 
 type RepositoryGrantRecordListJSONResponse RepositoryGrantRecordList
 
-type RepositoryLifecycleJobListJSONResponse RepositoryLifecycleJobList
+type RepositoryLifecycleJobListJSONResponse RepositoryLifecycleJobPage
 
 type RepositoryListJSONResponse RepositoryPage
 
@@ -23507,7 +23643,7 @@ type UserSessionListJSONResponse UserSessionList
 
 type WebhookDeliveryJSONResponse WebhookDelivery
 
-type WebhookDeliveryListJSONResponse WebhookDeliveryList
+type WebhookDeliveryListJSONResponse WebhookDeliveryPage
 
 type WebhookSubscriptionResponseHeaders struct {
 	ETag string
@@ -23518,7 +23654,7 @@ type WebhookSubscriptionJSONResponse struct {
 	Headers WebhookSubscriptionResponseHeaders
 }
 
-type WebhookSubscriptionListJSONResponse WebhookSubscriptionList
+type WebhookSubscriptionListJSONResponse WebhookSubscriptionPage
 
 type ListApiKeysRequestObject struct {
 }
@@ -27800,9 +27936,23 @@ func (response ListLifecycleJobs200JSONResponse) VisitListLifecycleJobsResponse(
 	return err
 }
 
-type ListLifecycleJobs401ApplicationProblemPlusJSONResponse struct {
+type ListLifecycleJobs400ApplicationProblemPlusJSONResponse struct {
 	ProblemApplicationProblemPlusJSONResponse
 }
+
+func (response ListLifecycleJobs400ApplicationProblemPlusJSONResponse) VisitListLifecycleJobsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListLifecycleJobs401ApplicationProblemPlusJSONResponse Problem
 
 func (response ListLifecycleJobs401ApplicationProblemPlusJSONResponse) VisitListLifecycleJobsResponse(w http.ResponseWriter) error {
 
@@ -39556,6 +39706,7 @@ func (response ReplaceGrants412ApplicationProblemPlusJSONResponse) VisitReplaceG
 
 type ListRepositoryLifecycleJobsRequestObject struct {
 	RepositoryId RepositoryId `json:"repositoryId"`
+	Params       ListRepositoryLifecycleJobsParams
 }
 
 type ListRepositoryLifecycleJobsResponseObject interface {
@@ -39576,9 +39727,23 @@ func (response ListRepositoryLifecycleJobs200JSONResponse) VisitListRepositoryLi
 	return err
 }
 
-type ListRepositoryLifecycleJobs403ApplicationProblemPlusJSONResponse struct {
+type ListRepositoryLifecycleJobs400ApplicationProblemPlusJSONResponse struct {
 	ProblemApplicationProblemPlusJSONResponse
 }
+
+func (response ListRepositoryLifecycleJobs400ApplicationProblemPlusJSONResponse) VisitListRepositoryLifecycleJobsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRepositoryLifecycleJobs403ApplicationProblemPlusJSONResponse Problem
 
 func (response ListRepositoryLifecycleJobs403ApplicationProblemPlusJSONResponse) VisitListRepositoryLifecycleJobsResponse(w http.ResponseWriter) error {
 
@@ -44163,6 +44328,7 @@ func (response ReplayWebhookDelivery409ApplicationProblemPlusJSONResponse) Visit
 }
 
 type ListWebhookSubscriptionsRequestObject struct {
+	Params ListWebhookSubscriptionsParams
 }
 
 type ListWebhookSubscriptionsResponseObject interface {
@@ -44185,9 +44351,23 @@ func (response ListWebhookSubscriptions200JSONResponse) VisitListWebhookSubscrip
 	return err
 }
 
-type ListWebhookSubscriptions401ApplicationProblemPlusJSONResponse struct {
+type ListWebhookSubscriptions400ApplicationProblemPlusJSONResponse struct {
 	ProblemApplicationProblemPlusJSONResponse
 }
+
+func (response ListWebhookSubscriptions400ApplicationProblemPlusJSONResponse) VisitListWebhookSubscriptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWebhookSubscriptions401ApplicationProblemPlusJSONResponse Problem
 
 func (response ListWebhookSubscriptions401ApplicationProblemPlusJSONResponse) VisitListWebhookSubscriptionsResponse(w http.ResponseWriter) error {
 
@@ -50994,10 +51174,11 @@ func (sh *strictHandler) ReplaceGrants(w http.ResponseWriter, r *http.Request, r
 }
 
 // ListRepositoryLifecycleJobs operation middleware
-func (sh *strictHandler) ListRepositoryLifecycleJobs(w http.ResponseWriter, r *http.Request, repositoryId RepositoryId) {
+func (sh *strictHandler) ListRepositoryLifecycleJobs(w http.ResponseWriter, r *http.Request, repositoryId RepositoryId, params ListRepositoryLifecycleJobsParams) {
 	var request ListRepositoryLifecycleJobsRequestObject
 
 	request.RepositoryId = repositoryId
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.ListRepositoryLifecycleJobs(ctx, request.(ListRepositoryLifecycleJobsRequestObject))
@@ -52982,8 +53163,10 @@ func (sh *strictHandler) ReplayWebhookDelivery(w http.ResponseWriter, r *http.Re
 }
 
 // ListWebhookSubscriptions operation middleware
-func (sh *strictHandler) ListWebhookSubscriptions(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) ListWebhookSubscriptions(w http.ResponseWriter, r *http.Request, params ListWebhookSubscriptionsParams) {
 	var request ListWebhookSubscriptionsRequestObject
+
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.ListWebhookSubscriptions(ctx, request.(ListWebhookSubscriptionsRequestObject))

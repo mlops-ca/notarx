@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { EditOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
 import { Button, Space, Switch, Tooltip } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { updateWebhookSubscription } from "../../client";
 import type { WebhookEventType, WebhookSubscription } from "../../client";
 import { usePreferences } from "../../lib/preferences";
+import { KeysetPager } from "../../components/ui/KeysetPager";
+import { pagerChange, useKeysetPages } from "../../lib/keysetPaging";
 import { Badge } from "../../components/ui/Badge";
 import { EmptyState, ErrorBanner, Loading } from "../../components/ui/Feedback";
 import { Card, CardHeader } from "../../components/ui/Layout";
@@ -16,11 +18,26 @@ import {
 import { SubscriptionEditorDialog } from "./SubscriptionEditorDialog";
 import { WebhookDeliveryLog } from "./WebhookDeliveryLog";
 
-/** Webhook subscriptions and their recent deliveries. */
+const SUBSCRIPTION_PAGE_SIZE = 100;
+const SUBSCRIPTION_PAGE_SIZES = [20, 50, 100, 500];
+
+/**
+ * Webhook subscriptions, by name and one cursor page at a time, and their
+ * recent deliveries.
+ */
 export function WebhookDeliveriesPanel() {
   const { t } = usePreferences();
-  const subscriptionsQuery = useWebhookSubscriptions();
-  const subscriptions = subscriptionsQuery.data ?? null;
+  const [pageSize, setPageSize] = useState(SUBSCRIPTION_PAGE_SIZE);
+  const { page, pageToken, setPage, remember } = useKeysetPages(
+    JSON.stringify([pageSize]),
+  );
+  const subscriptionsQuery = useWebhookSubscriptions(pageToken, pageSize);
+  const subscriptions = subscriptionsQuery.data?.items ?? null;
+  const nextPageToken = subscriptionsQuery.data?.nextPageToken;
+  const subscriptionsPlaceholder = subscriptionsQuery.isPlaceholderData;
+  useEffect(() => {
+    if (!subscriptionsPlaceholder) remember(nextPageToken);
+  }, [nextPageToken, subscriptionsPlaceholder, remember]);
   const loading = subscriptionsQuery.isFetching;
   const invalidate = useInvalidateWebhooks();
   const [actionError, setActionError] = useState<unknown>(null);
@@ -195,7 +212,7 @@ export function WebhookDeliveriesPanel() {
           error ? null : (
             <Loading label={t("operations.loadingWebhooks")} />
           )
-        ) : subscriptions.length === 0 ? (
+        ) : subscriptions.length === 0 && page === 1 ? (
           <EmptyState
             title={t("operations.noWebhookSubscriptionsYet")}
             hint={t(
@@ -211,9 +228,20 @@ export function WebhookDeliveriesPanel() {
             scroll={{ x: 1080 }}
           />
         )}
+        {subscriptions ? (
+          <KeysetPager
+            page={page}
+            pageSize={pageSize}
+            itemCount={subscriptions.length}
+            hasNext={Boolean(nextPageToken)}
+            onChange={pagerChange(pageSize, setPageSize, setPage)}
+            disabled={loading}
+            pageSizeOptions={SUBSCRIPTION_PAGE_SIZES}
+          />
+        ) : null}
       </Card>
 
-      <WebhookDeliveryLog subscriptions={subscriptions} />
+      <WebhookDeliveryLog />
       {editor && (
         <SubscriptionEditorDialog
           key={editor.session}

@@ -63,6 +63,21 @@ export function useKeysetPages(resetKey: string) {
   };
 }
 
+/**
+ * The handler for a pager that may change the page size: a new size starts again
+ * from page 1, because every cursor is bound to the size that issued it.
+ */
+export function pagerChange(
+  pageSize: number,
+  setPageSize: (size: number) => void,
+  setPage: (page: number) => void,
+) {
+  return (nextPage: number, nextSize: number) => {
+    setPageSize(nextSize);
+    setPage(nextSize === pageSize ? nextPage : 1);
+  };
+}
+
 /** The {value, relation} total of a listing (ADR 0023 section 8). */
 export interface ListTotalValue {
   value: number;

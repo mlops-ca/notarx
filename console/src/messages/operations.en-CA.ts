@@ -55,6 +55,8 @@ export const operationsEnCA = {
   "operations.allRepositories": "All repositories",
   "operations.loadingJobStatus": "Loading job status…",
   "operations.noMatchingJobs": "No matching jobs",
+  "operations.pageScopeNotice":
+    "The summary and filters cover the {length} jobs loaded on this page only. Older jobs are on further pages; use the pager to load them.",
   "operations.adjustTheFiltersOrRefreshAfterNewJobs":
     "Adjust the filters or refresh after new jobs are created.",
   "operations.everyMinutes": "Every {minutes} minutes",

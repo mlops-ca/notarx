@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 
@@ -183,5 +184,36 @@ func TestPostgresListGroupsAboveVisibilityUsesTheMemberIndex(t *testing.T) {
 	}
 	if scans := plan.SequentialScans(); len(scans) != 0 {
 		t.Fatalf("the lowering scan reads %v sequentially", scans)
+	}
+}
+
+// The groups listing pages by keyset in PostgreSQL: a canonical cursor whose group is gone continues at the
+// next id with each group's members, and a cursor in another spelling is ErrNotFound.
+func TestPostgresHostedGroupsPageByKeyset(t *testing.T) {
+	store := ceilingStore(t)
+	ctx := context.Background()
+	member := ceilingRepo(t, store, VisibilityPrivate)
+	group, err := ceilingGroup(t, store, VisibilityPrivate, member)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vanished := uuid.Nil.String() // sorts before every group id
+	page, _, err := store.ListHostedGroups(ctx, 200, vanished)
+	if err != nil {
+		t.Fatalf("page after a vanished cursor: %v", err)
+	}
+	found := false
+	for _, listed := range page {
+		if listed.ID == group.ID {
+			found = len(listed.Members) == 1 && listed.Members[0].RepositoryID == member.ID
+		}
+	}
+	if !found && len(page) < 200 {
+		t.Fatalf("group %s with its member missing from the page after a vanished cursor: %v", group.ID, page)
+	}
+	for _, cursor := range []string{"garbage", strings.ToUpper(group.ID), "urn:uuid:" + group.ID} {
+		if _, _, err := store.ListHostedGroups(ctx, 1, cursor); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("cursor %q: %v, want ErrNotFound", cursor, err)
+		}
 	}
 }

@@ -1,15 +1,22 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ClearOutlined, ReloadOutlined } from "@ant-design/icons";
 import { Button, Select } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { Card } from "../../components/ui/Layout";
-import { EmptyState, ErrorBanner, Loading } from "../../components/ui/Feedback";
+import {
+  EmptyState,
+  ErrorBanner,
+  Loading,
+  Notice,
+} from "../../components/ui/Feedback";
 import {
   ConsoleTable,
   FilterBar,
   FilterField,
   MetricStrip,
 } from "../../components/ui/ConsolePrimitives";
+import { KeysetPager } from "../../components/ui/KeysetPager";
+import { pagerChange, useKeysetPages } from "../../lib/keysetPaging";
 import { usePreferences } from "../../lib/preferences";
 import {
   KIND_LABELS,
@@ -29,10 +36,15 @@ import {
 import { useControlJob, useOperationJobs } from "./operationQueries";
 import "./operations.css";
 
+const JOB_PAGE_SIZE = 100;
+const JOB_PAGE_SIZES = [20, 50, 100, 500];
+
 /**
  * Background jobs across repositories. Reads on mount, so a deep link to the
  * tab loads too, and polls every 15 seconds while a job is active and the
- * tab is the one on screen.
+ * tab is the one on screen. Jobs page by cursor, newest first; the
+ * audit-retention jobs show under the first page. The status summary and the
+ * filters work over what is on screen.
  */
 export function JobHistoryPanel({ active }: { active: boolean }) {
   const { locale, t } = usePreferences();
@@ -41,7 +53,16 @@ export function JobHistoryPanel({ active }: { active: boolean }) {
     const labels = KIND_LABELS[kind];
     return labels ? t(labels) : kind;
   };
-  const jobs = useOperationJobs({ poll: active });
+  const [pageSize, setPageSize] = useState(JOB_PAGE_SIZE);
+  const { page, pageToken, setPage, remember } = useKeysetPages(
+    JSON.stringify([pageSize]),
+  );
+  const jobs = useOperationJobs({ poll: active, pageSize, pageToken });
+  const jobsPlaceholder = jobs.isPlaceholderData;
+  const nextPageToken = jobs.nextPageToken;
+  useEffect(() => {
+    if (!jobsPlaceholder) remember(nextPageToken);
+  }, [nextPageToken, jobsPlaceholder, remember]);
   const rows = jobs.rows;
   const loading = jobs.isFetching;
   const control = useControlJob();
@@ -71,28 +92,49 @@ export function JobHistoryPanel({ active }: { active: boolean }) {
     }
   };
 
-  const visibleRows = useMemo(
-    () =>
-      (rows ?? []).filter(
-        (row) =>
-          (stateFilter === "all" || row.state === stateFilter) &&
-          (kindFilter === "all" || row.kind === kindFilter) &&
-          (repositoryFilter === "all" || row.repositoryId === repositoryFilter),
-      ),
-    [kindFilter, repositoryFilter, rows, stateFilter],
+  const auditRows = jobs.auditRows;
+  const matchesFilters = useCallback(
+    (row: OperationRow) =>
+      (stateFilter === "all" || row.state === stateFilter) &&
+      (kindFilter === "all" || row.kind === kindFilter) &&
+      (repositoryFilter === "all" || row.repositoryId === repositoryFilter),
+    [kindFilter, repositoryFilter, stateFilter],
   );
-  const running = (rows ?? []).filter((row) => row.state === "running").length;
-  const failed = (rows ?? []).filter((row) => row.state === "failed").length;
-  const pending = (rows ?? []).filter(
+  const visibleRows = useMemo(
+    () => (rows ?? []).filter(matchesFilters),
+    [matchesFilters, rows],
+  );
+  const visibleAuditRows = useMemo(
+    () => auditRows.filter(matchesFilters),
+    [auditRows, matchesFilters],
+  );
+  // The summary covers what is on screen: the page of jobs, plus the
+  // audit-retention jobs (an unpaged list) on the first page only.
+  const summarized = [...(rows ?? []), ...auditRows];
+  const running = summarized.filter((row) => row.state === "running").length;
+  const failed = summarized.filter((row) => row.state === "failed").length;
+  const pending = summarized.filter(
     (row) => row.state === "pending" || row.state === "retrying",
   ).length;
   const kindOptions = Array.from(
-    new Set((rows ?? []).map((row) => row.kind)),
+    new Set(summarized.map((row) => row.kind)),
   ).sort();
   const toggleJobDetails = (row: OperationRow) => {
     const rowKey = operationRowKey(row);
     setExpandedJobKey((current) => (current === rowKey ? null : rowKey));
   };
+
+  const pager = (
+    <KeysetPager
+      page={page}
+      pageSize={pageSize}
+      itemCount={rows?.length ?? 0}
+      hasNext={Boolean(nextPageToken)}
+      onChange={pagerChange(pageSize, setPageSize, setPage)}
+      disabled={loading}
+      pageSizeOptions={JOB_PAGE_SIZES}
+    />
+  );
 
   const columns: ColumnsType<OperationRow> = [
     {
@@ -132,6 +174,40 @@ export function JobHistoryPanel({ active }: { active: boolean }) {
     },
   ];
 
+  const renderRows = (list: OperationRow[], virtual: boolean) =>
+    compactLayout ? (
+      <div className="ag-operation-mobile-list">
+        {list.map((row) => (
+          <OperationMobileCard
+            key={operationRowKey(row)}
+            row={row}
+            locale={locale}
+            kindLabel={kindLabel}
+            acting={actingJob === row.id}
+            detailsOpen={expandedJobKey === operationRowKey(row)}
+            t={t}
+            onInspect={toggleJobDetails}
+            onAction={(target, action) => void controlJob(target, action)}
+          />
+        ))}
+      </div>
+    ) : (
+      <ConsoleTable<OperationRow>
+        className="ag-operation-desktop-table"
+        rowKey={operationRowKey}
+        dataSource={list}
+        columns={columns}
+        expandable={{
+          expandedRowKeys: expandedJobKey ? [expandedJobKey] : [],
+          showExpandColumn: false,
+          expandedRowRender: (row) => <OperationDetailsPanel row={row} t={t} />,
+        }}
+        pagination={false}
+        virtual={virtual}
+        scroll={virtual ? { x: 840, y: 520 } : { x: 840 }}
+      />
+    );
+
   return (
     <div className="ag-page-stack">
       <div className="ag-operation-summary">
@@ -139,7 +215,7 @@ export function JobHistoryPanel({ active }: { active: boolean }) {
           items={[
             {
               label: t("operations.jobs"),
-              value: rows?.length ?? "—",
+              value: rows ? summarized.length : "—",
               hint: t("operations.currentRetentionWindow"),
             },
             {
@@ -273,6 +349,14 @@ export function JobHistoryPanel({ active }: { active: boolean }) {
             />
           </FilterField>
         </FilterBar>
+        {rows && !error && nextPageToken ? (
+          <div className="px-4 pt-3">
+            <Notice
+              tone="info"
+              title={t("operations.pageScopeNotice", { length: rows.length })}
+            />
+          </div>
+        ) : null}
         {error ? (
           <div className="p-4">
             <ErrorBanner error={error} onRetry={load} />
@@ -288,40 +372,18 @@ export function JobHistoryPanel({ active }: { active: boolean }) {
               hint={t("operations.adjustTheFiltersOrRefreshAfterNewJobs")}
             />
           </div>
-        ) : compactLayout ? (
-          <div className="ag-operation-mobile-list">
-            {visibleRows.map((row) => (
-              <OperationMobileCard
-                key={operationRowKey(row)}
-                row={row}
-                locale={locale}
-                kindLabel={kindLabel}
-                acting={actingJob === row.id}
-                detailsOpen={expandedJobKey === operationRowKey(row)}
-                t={t}
-                onInspect={toggleJobDetails}
-                onAction={(target, action) => void controlJob(target, action)}
-              />
-            ))}
-          </div>
         ) : (
-          <ConsoleTable<OperationRow>
-            className="ag-operation-desktop-table"
-            rowKey={operationRowKey}
-            dataSource={visibleRows}
-            columns={columns}
-            expandable={{
-              expandedRowKeys: expandedJobKey ? [expandedJobKey] : [],
-              showExpandColumn: false,
-              expandedRowRender: (row) => (
-                <OperationDetailsPanel row={row} t={t} />
-              ),
-            }}
-            pagination={false}
-            virtual
-            scroll={{ x: 840, y: 520 }}
-          />
+          renderRows(visibleRows, true)
         )}
+        {rows && !error ? pager : null}
+        {rows && !error && visibleAuditRows.length > 0 ? (
+          <div className="border-t border-line">
+            <h3 className="px-5 pt-4 text-sm font-semibold text-fg-strong">
+              {t("operations.auditRetention")}
+            </h3>
+            {renderRows(visibleAuditRows, false)}
+          </div>
+        ) : null}
       </Card>
     </div>
   );

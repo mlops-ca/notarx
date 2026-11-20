@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { RedoOutlined } from "@ant-design/icons";
 import { Button, Select, Tooltip } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -7,36 +7,46 @@ import type {
   WebhookDelivery,
   WebhookDeliveryState,
   WebhookEventType,
-  WebhookSubscription,
 } from "../../client";
 import { StateBadge } from "../../components/ui/Badge";
 import { EmptyState, ErrorBanner, Loading } from "../../components/ui/Feedback";
 import { Card, CardHeader } from "../../components/ui/Layout";
 import { ConsoleTable } from "../../components/ui/ConsolePrimitives";
 import { formatDate } from "../../lib/format";
+import { KeysetPager } from "../../components/ui/KeysetPager";
+import { CONSOLE_PAGE_SIZE } from "../../components/ui/useConsolePagination";
+import { pagerChange, useKeysetPages } from "../../lib/keysetPaging";
 import { usePreferences } from "../../lib/preferences";
 import { DELIVERY_STATES } from "./webhookModel";
 import { useWebhookDeliveries } from "./webhookQueries";
 
-/** Recent deliveries for one state filter, with replay. */
-export function WebhookDeliveryLog({
-  subscriptions,
-}: {
-  subscriptions: WebhookSubscription[] | null;
-}) {
+/**
+ * Recent deliveries for one state filter, one cursor page at a time, with
+ * replay. Each delivery carries its subscription's name.
+ */
+export function WebhookDeliveryLog() {
   const { locale, t } = usePreferences();
   const [stateFilter, setStateFilter] = useState<WebhookDeliveryState | "all">(
     "all",
   );
-  const deliveriesQuery = useWebhookDeliveries(stateFilter);
-  const deliveries = deliveriesQuery.data ?? null;
+  const [pageSize, setPageSize] = useState(CONSOLE_PAGE_SIZE);
+  const { page, pageToken, setPage, remember } = useKeysetPages(
+    JSON.stringify([stateFilter, pageSize]),
+  );
+  const deliveriesQuery = useWebhookDeliveries(
+    stateFilter,
+    pageToken,
+    pageSize,
+  );
+  const deliveries = deliveriesQuery.data?.items ?? null;
+  const nextPageToken = deliveriesQuery.data?.nextPageToken;
+  const deliveriesPlaceholder = deliveriesQuery.isPlaceholderData;
+  useEffect(() => {
+    if (!deliveriesPlaceholder) remember(nextPageToken);
+  }, [nextPageToken, deliveriesPlaceholder, remember]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [replayError, setReplayError] = useState<unknown>(null);
   const error = replayError ?? deliveriesQuery.error;
-  const subscriptionById = useMemo(
-    () => new Map((subscriptions ?? []).map((item) => [item.id, item])),
-    [subscriptions],
-  );
 
   const replay = async (delivery: WebhookDelivery) => {
     setBusyId(delivery.id);
@@ -63,9 +73,9 @@ export function WebhookDeliveryLog({
       dataIndex: "subscriptionId",
       key: "subscription",
       width: 190,
-      render: (subscriptionId: string) => (
+      render: (subscriptionId: string, delivery) => (
         <span className="text-xs text-fg-secondary">
-          {subscriptionById.get(subscriptionId)?.name ?? subscriptionId}
+          {delivery.subscriptionName ?? subscriptionId}
         </span>
       ),
     },
@@ -182,7 +192,7 @@ export function WebhookDeliveryLog({
         error ? null : (
           <Loading label={t("operations.loadingDeliveries")} />
         )
-      ) : deliveries.length === 0 ? (
+      ) : deliveries.length === 0 && page === 1 ? (
         <EmptyState
           compact
           title={t("operations.noDeliveriesYet")}
@@ -199,6 +209,16 @@ export function WebhookDeliveryLog({
           scroll={{ x: 1140, y: 480 }}
         />
       )}
+      {deliveries ? (
+        <KeysetPager
+          page={page}
+          pageSize={pageSize}
+          itemCount={deliveries.length}
+          hasNext={Boolean(nextPageToken)}
+          onChange={pagerChange(pageSize, setPageSize, setPage)}
+          disabled={deliveriesQuery.isFetching}
+        />
+      ) : null}
     </Card>
   );
 }

@@ -47,6 +47,9 @@ func webhookDeliveryResponse(value repository.WebhookDelivery) adminopenapi.Webh
 	if !value.DeliveredAt.IsZero() {
 		response.DeliveredAt = &value.DeliveredAt
 	}
+	if value.SubscriptionName != "" {
+		response.SubscriptionName = &value.SubscriptionName
+	}
 	return response
 }
 
@@ -86,18 +89,32 @@ func validateWebhookSubscriptionInput(name, endpoint, secret string, eventTypes 
 	return values, nil
 }
 
-func (h generatedRepositoryAPIAdapter) ListWebhookSubscriptions(w http.ResponseWriter, r *http.Request) {
+func (h generatedRepositoryAPIAdapter) ListWebhookSubscriptions(w http.ResponseWriter, r *http.Request, params adminopenapi.ListWebhookSubscriptionsParams) {
 	if _, ok := h.authorize(w, r); !ok {
 		return
 	}
-	values, err := h.webhooks.ListWebhookSubscriptions(r.Context())
+	query := repository.WebhookSubscriptionQuery{}
+	if params.Limit != nil {
+		query.Limit = *params.Limit
+	}
+	if params.PageToken != nil {
+		query.PageToken = *params.PageToken
+	}
+	if !validListLimit(w, params.Limit, 500) {
+		return
+	}
+	page, err := h.webhooks.PageWebhookSubscriptions(r.Context(), query)
+	if errors.Is(err, repository.ErrInvalidPageToken) {
+		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "pageToken is not valid for this listing")
+		return
+	}
 	if err != nil {
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "list webhook subscriptions failed")
 		return
 	}
-	response := make(adminopenapi.WebhookSubscriptionList, 0, len(values))
-	for _, value := range values {
-		response = append(response, webhookSubscriptionResponse(value))
+	response := adminopenapi.WebhookSubscriptionPage{Items: make([]adminopenapi.WebhookSubscription, 0, len(page.Items)), NextPageToken: optionalString(page.NextPageToken)}
+	for _, value := range page.Items {
+		response.Items = append(response.Items, webhookSubscriptionResponse(value))
 	}
 	writeNativeMavenJSON(w, http.StatusOK, response)
 }
@@ -242,14 +259,24 @@ func (h generatedRepositoryAPIAdapter) ListWebhookDeliveries(w http.ResponseWrit
 	if params.Limit != nil {
 		query.Limit = *params.Limit
 	}
-	values, err := h.webhooks.ListWebhookDeliveries(r.Context(), query)
+	if params.PageToken != nil {
+		query.PageToken = *params.PageToken
+	}
+	if !validListLimit(w, params.Limit, 500) {
+		return
+	}
+	page, err := h.webhooks.PageWebhookDeliveries(r.Context(), query)
+	if errors.Is(err, repository.ErrInvalidPageToken) {
+		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "pageToken is not valid for these filters")
+		return
+	}
 	if err != nil {
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "list webhook deliveries failed")
 		return
 	}
-	response := make(adminopenapi.WebhookDeliveryList, 0, len(values))
-	for _, value := range values {
-		response = append(response, webhookDeliveryResponse(value))
+	response := adminopenapi.WebhookDeliveryPage{Items: make([]adminopenapi.WebhookDelivery, 0, len(page.Items)), NextPageToken: optionalString(page.NextPageToken)}
+	for _, value := range page.Items {
+		response.Items = append(response.Items, webhookDeliveryResponse(value))
 	}
 	writeNativeMavenJSON(w, http.StatusOK, response)
 }

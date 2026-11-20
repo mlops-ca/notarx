@@ -565,38 +565,42 @@ type lifecycleJobRow struct {
 	Job            adminopenapi.LifecycleJob `json:"job"`
 }
 
-// readLifecycleJobs reads the newest jobs of one repository, or of every
-// repository the caller administers. Neither endpoint pages: the global one
-// limits before permission filtering; the repository one returns at most 100.
-func readLifecycleJobs(ctx context.Context, client *apiClient, repo string, limit int) ([]lifecycleJobRow, *paginationMeta, error) {
+// lifecycleJobPage is one keyset page of lifecycle jobs; the next token is
+// nil on the last page. Both endpoints page newest first.
+type lifecycleJobPage struct {
+	rows []lifecycleJobRow
+	next *string
+}
+
+// readLifecycleJobs reads one page of the newest jobs of one repository, or of
+// every repository the caller administers, continuing from cursor. The server
+// leaves out the repositories the caller does not administer before it cuts the
+// page, and the token says whether older jobs follow.
+func readLifecycleJobs(ctx context.Context, client *apiClient, repo string, limit int, cursor string) (lifecycleJobPage, error) {
+	query := url.Values{"limit": {strconv.Itoa(limit)}}
+	if cursor != "" {
+		query.Set("pageToken", cursor)
+	}
 	if repo != "" {
-		var jobs []adminopenapi.LifecycleJob
-		if err := client.getJSON(ctx, repositorySubPath(repo, "lifecycle-jobs"), nil, &jobs); err != nil {
-			return nil, nil, err
+		var page adminopenapi.LifecycleJobPage
+		if err := client.getJSON(ctx, repositorySubPath(repo, "lifecycle-jobs"), query, &page); err != nil {
+			return lifecycleJobPage{}, err
 		}
-		rows := make([]lifecycleJobRow, 0, len(jobs))
-		for _, job := range jobs {
+		rows := make([]lifecycleJobRow, 0, len(page.Items))
+		for _, job := range page.Items {
 			rows = append(rows, lifecycleJobRow{RepositoryID: repo, Job: job})
 		}
-		meta := &paginationMeta{Mode: "bounded", Limit: repositoryLifecycleLimit}
-		if len(rows) < repositoryLifecycleLimit {
-			complete := true
-			meta.Complete = &complete
-		}
-		return rows, meta, nil
+		return lifecycleJobPage{rows: rows, next: page.NextPageToken}, nil
 	}
-	var jobs []adminopenapi.RepositoryLifecycleJob
-	if err := client.getJSON(ctx, lifecycleJobsPath, url.Values{"limit": {strconv.Itoa(limit)}}, &jobs); err != nil {
-		return nil, nil, err
+	var page adminopenapi.RepositoryLifecycleJobPage
+	if err := client.getJSON(ctx, lifecycleJobsPath, query, &page); err != nil {
+		return lifecycleJobPage{}, err
 	}
-	rows := make([]lifecycleJobRow, 0, len(jobs))
-	for _, item := range jobs {
+	rows := make([]lifecycleJobRow, 0, len(page.Items))
+	for _, item := range page.Items {
 		rows = append(rows, lifecycleJobRow{RepositoryID: item.RepositoryId.String(), RepositoryName: item.RepositoryName, Job: item.Job})
 	}
-	meta := &paginationMeta{Mode: "bounded", Limit: limit}
-	// Fewer visible rows do not prove that older visible jobs do not exist:
-	// the server applies its limit before filtering repository permissions.
-	return rows, meta, nil
+	return lifecycleJobPage{rows: rows, next: page.NextPageToken}, nil
 }
 
 func renderLifecycleJobs(w io.Writer, rows []lifecycleJobRow) error {
@@ -618,33 +622,42 @@ func renderLifecycleJobs(w io.Writer, rows []lifecycleJobRow) error {
 	return writeColumns(w, table)
 }
 
-func lifecycleJobFlags(repo *string, limit *int) func(*flag.FlagSet) {
+func lifecycleJobFlags(repo *string, limit *int, cursor *string) func(*flag.FlagSet) {
 	return func(fs *flag.FlagSet) {
 		fs.StringVar(repo, "repo", "", "only this repository (needs repositories:admin on it)")
-		fs.IntVar(limit, "limit", maxLifecycleLimit, "newest jobs across repositories to read (1-500; without --repo)")
+		fs.IntVar(limit, "limit", maxLifecycleLimit, "jobs per page (1-500 across repositories, 1-100 with --repo; default 500, or 100 with --repo)")
+		if cursor != nil {
+			fs.StringVar(cursor, "cursor", "", "continue from the nextCursor of an earlier page")
+		}
 	}
 }
 
-func validLifecycleLimit(env *commandContext, repo string, limit int) error {
-	if repo != "" && env.flagSet["limit"] {
-		return &UsageError{Message: "--limit only applies without --repo", Hint: "the repository endpoint returns its newest jobs without a limit"}
+// lifecyclePageLimit is the page size to ask for: the flag, or the endpoint's
+// own maximum when it was not given.
+func lifecyclePageLimit(env *commandContext, repo string, limit int) (int, error) {
+	maximum := maxLifecycleLimit
+	if repo != "" {
+		maximum = repositoryLifecycleLimit
+		if !env.flagSet["limit"] {
+			limit = maximum
+		}
 	}
-	if limit < 1 || limit > maxLifecycleLimit {
-		return &UsageError{Message: fmt.Sprintf("--limit %d is out of range", limit), Hint: "use a limit from 1 to 500"}
+	if limit < 1 || limit > maximum {
+		return 0, &UsageError{Message: fmt.Sprintf("--limit %d is out of range", limit), Hint: fmt.Sprintf("use a limit from 1 to %d", maximum)}
 	}
-	return nil
+	return limit, nil
 }
 
 var lifecycleJobEndpoints = []string{"GET " + lifecycleJobsPath, "GET " + repositoriesPath + "/{repositoryId}/lifecycle-jobs"}
 
 func lifecycleJobListCommand() command {
-	var repo string
+	var repo, cursor string
 	var limit int
 	return command{
 		name:     "lifecycle-job list",
 		synopsis: "list the newest lifecycle jobs (retention, promotion, replication, reclaim, scans)",
-		usage:    "notarxctl lifecycle-job list [--repo ID | --limit N] [--json]",
-		setFlags: lifecycleJobFlags(&repo, &limit),
+		usage:    "notarxctl lifecycle-job list [--repo ID] [--limit N] [--cursor TOKEN] [--json]",
+		setFlags: lifecycleJobFlags(&repo, &limit, &cursor),
 		meta: commandMeta{
 			Resource:     "lifecycle-job",
 			Scenarios:    []string{"admin"},
@@ -657,45 +670,62 @@ func lifecycleJobListCommand() command {
 			Retry:        true,
 		},
 		run: func(ctx context.Context, env *commandContext) error {
-			if err := validLifecycleLimit(env, repo, limit); err != nil {
+			pageLimit, err := lifecyclePageLimit(env, repo, limit)
+			if err != nil {
 				return err
 			}
 			client, err := env.client()
 			if err != nil {
 				return err
 			}
-			rows, pagination, err := readLifecycleJobs(ctx, client, repo, limit)
+			page, err := readLifecycleJobs(ctx, client, repo, pageLimit, cursor)
 			if err != nil {
 				return err
 			}
-			scope := map[string]any{"limitAppliedBeforeAuthorization": true}
-			window := fmt.Sprintf("up to %d newest global jobs, filtered to administered repositories", limit)
+			payload := newListPayload(page.rows)
+			if page.next != nil {
+				payload.NextCursor = page.next
+			}
+			complete := page.next == nil
+			scope := map[string]any{"filteredToAdministeredRepositories": true}
+			window := fmt.Sprintf("page of up to %d newest jobs, filtered to administered repositories", pageLimit)
 			if repo != "" {
 				scope = map[string]any{"repositoryId": repo}
-				window = fmt.Sprintf("up to %d newest jobs of repository %s", repositoryLifecycleLimit, repo)
+				window = fmt.Sprintf("page of up to %d newest jobs of repository %s", pageLimit, repo)
 			}
-			return env.render(newListPayload(rows), &envelopeMeta{Pagination: pagination, Scope: scope}, func(w io.Writer) error {
+			meta := &envelopeMeta{Pagination: &paginationMeta{Mode: "cursor", PageSize: pageLimit, Pages: 1, Complete: &complete}, Scope: scope}
+			return env.render(payload, meta, func(w io.Writer) error {
 				if _, err := fmt.Fprintln(w, "window: "+window); err != nil {
 					return err
 				}
-				return renderLifecycleJobs(w, rows)
+				if err := renderLifecycleJobs(w, page.rows); err != nil {
+					return err
+				}
+				if page.next != nil {
+					_, _ = fmt.Fprintf(env.stderr, "%d jobs shown; more: %s\n", len(page.rows), continueCommand("notarxctl lifecycle-job list", [][2]string{{"--repo", repo}, {"--limit", strconv.Itoa(pageLimit)}}, *page.next))
+				}
+				return nil
 			})
 		},
 	}
 }
 
-// lifecycleJobShowCommand finds one job in the same lists; there is no
-// endpoint for a single job.
+// lifecycleJobShowMaxPages bounds how many pages lifecycle-job show reads, so a mistyped or pruned id does not
+// walk the whole table through the API; --repo narrows the search to one repository.
+const lifecycleJobShowMaxPages = 20
+
+// lifecycleJobShowCommand finds one job in the same lists, page by page until
+// it is found or the list is exhausted; there is no endpoint for a single job.
 func lifecycleJobShowCommand() command {
 	var repo string
 	var limit int
 	return command{
 		name:        "lifecycle-job show",
-		synopsis:    "show one lifecycle job, found among the newest jobs",
-		usage:       "notarxctl lifecycle-job show JOB_ID [--repo ID | --limit N] [--json]",
+		synopsis:    "show one lifecycle job, found by paging the newest jobs",
+		usage:       "notarxctl lifecycle-job show JOB_ID [--repo ID] [--limit N] [--json]",
 		positionals: 1,
 		argsUsage:   "JOB_ID",
-		setFlags:    lifecycleJobFlags(&repo, &limit),
+		setFlags:    lifecycleJobFlags(&repo, &limit, nil),
 		meta: commandMeta{
 			Resource:     "lifecycle-job",
 			Scenarios:    []string{"admin"},
@@ -707,32 +737,40 @@ func lifecycleJobShowCommand() command {
 			Retry:        true,
 		},
 		run: func(ctx context.Context, env *commandContext) error {
-			if err := validLifecycleLimit(env, repo, limit); err != nil {
+			pageLimit, err := lifecyclePageLimit(env, repo, limit)
+			if err != nil {
 				return err
 			}
 			client, err := env.client()
 			if err != nil {
 				return err
 			}
-			rows, _, err := readLifecycleJobs(ctx, client, repo, limit)
-			if err != nil {
-				return err
-			}
-			for _, row := range rows {
-				if row.Job.Id != env.args[0] {
-					continue
+			cursor := ""
+			for pages := 0; pages < lifecycleJobShowMaxPages; pages++ {
+				page, err := readLifecycleJobs(ctx, client, repo, pageLimit, cursor)
+				if err != nil {
+					return err
 				}
-				return env.render(row, nil, func(w io.Writer) error { return renderLifecycleJob(w, row) })
+				for _, row := range page.rows {
+					if row.Job.Id != env.args[0] {
+						continue
+					}
+					return env.render(row, nil, func(w io.Writer) error { return renderLifecycleJob(w, row) })
+				}
+				if page.next == nil || *page.next == cursor {
+					break
+				}
+				cursor = *page.next
 			}
-			scope := fmt.Sprintf("the global window of %d newest jobs after repository-permission filtering", limit)
+			scope := "every job of the repositories you administer"
 			if repo != "" {
-				scope = fmt.Sprintf("the %d newest jobs of repository %s", repositoryLifecycleLimit, repo)
+				scope = fmt.Sprintf("the jobs of repository %s", repo)
 			}
 			return &APIError{
 				Code:       "not_found",
 				HTTPStatus: http.StatusNotFound,
 				Message:    fmt.Sprintf("lifecycle job %s is not among %s", env.args[0], scope),
-				Hint:       "an older job may fall outside the list; pass --repo to search one repository's jobs",
+				Hint:       "the job may belong to a repository you do not administer, or be older than the newest jobs searched; pass --repo to search one repository's jobs",
 			}
 		},
 	}

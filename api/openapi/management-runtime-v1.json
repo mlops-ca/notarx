@@ -5984,9 +5984,28 @@
     "/webhook-subscriptions": {
       "get": {
         "operationId": "listWebhookSubscriptions",
+        "description": "Lists subscriptions by name, paged by keyset on the unique name; continue with the nextPageToken of the previous page.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 500
+            }
+          },
+          {
+            "$ref": "#/components/parameters/PageToken"
+          }
+        ],
         "responses": {
           "200": {
             "$ref": "#/components/responses/WebhookSubscriptionList"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
           },
           "401": {
             "$ref": "#/components/responses/Problem"
@@ -6110,6 +6129,7 @@
     "/webhook-deliveries": {
       "get": {
         "operationId": "listWebhookDeliveries",
+        "description": "Lists deliveries newest first, paged by keyset on creation time then id; continue with the nextPageToken of the previous page, which is bound to the subscription and state filters.",
         "parameters": [
           {
             "name": "subscriptionId",
@@ -6135,6 +6155,9 @@
               "maximum": 500,
               "default": 100
             }
+          },
+          {
+            "$ref": "#/components/parameters/PageToken"
           }
         ],
         "responses": {
@@ -7649,7 +7672,7 @@
     "/lifecycle-jobs": {
       "get": {
         "operationId": "listLifecycleJobs",
-        "description": "Lists the newest lifecycle jobs across repositories for the administrator console. A platform administrator sees every repository; any other caller sees only the repositories it administers, so a repository it cannot administer contributes no rows and is indistinguishable from one that does not exist.",
+        "description": "Lists the newest lifecycle jobs across repositories for the administrator console, paged by keyset on creation time then id (newest first): continue with the nextPageToken of the previous page. A platform administrator sees every repository; any other caller sees only the repositories it administers, so a repository it cannot administer contributes no rows and is indistinguishable from one that does not exist. Rows are filtered before the page is cut, so every page holds limit rows until the last one.",
         "parameters": [
           {
             "name": "limit",
@@ -7660,11 +7683,17 @@
               "maximum": 500,
               "default": 500
             }
+          },
+          {
+            "$ref": "#/components/parameters/PageToken"
           }
         ],
         "responses": {
           "200": {
             "$ref": "#/components/responses/RepositoryLifecycleJobList"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
           },
           "401": {
             "$ref": "#/components/responses/Problem"
@@ -8625,9 +8654,28 @@
       ],
       "get": {
         "operationId": "listRepositoryLifecycleJobs",
+        "description": "Lists a repository's lifecycle jobs newest first, paged by keyset on creation time then id; continue with the nextPageToken of the previous page.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 100
+            }
+          },
+          {
+            "$ref": "#/components/parameters/PageToken"
+          }
+        ],
         "responses": {
           "200": {
             "$ref": "#/components/responses/LifecycleJobList"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
           },
           "403": {
             "$ref": "#/components/responses/Problem"
@@ -20612,10 +20660,22 @@
           }
         }
       },
-      "WebhookSubscriptionList": {
-        "type": "array",
-        "items": {
-          "$ref": "#/components/schemas/WebhookSubscription"
+      "WebhookSubscriptionPage": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WebhookSubscription"
+            }
+          },
+          "nextPageToken": {
+            "type": "string",
+            "description": "Present while older subscriptions follow; pass it as pageToken for the next page."
+          }
         }
       },
       "CreateWebhookSubscription": {
@@ -20733,6 +20793,11 @@
             "type": "string",
             "format": "uuid"
           },
+          "subscriptionName": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Name of the subscription, set in the delivery listing."
+          },
           "state": {
             "$ref": "#/components/schemas/WebhookDeliveryState"
           },
@@ -20768,10 +20833,22 @@
           }
         }
       },
-      "WebhookDeliveryList": {
-        "type": "array",
-        "items": {
-          "$ref": "#/components/schemas/WebhookDelivery"
+      "WebhookDeliveryPage": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WebhookDelivery"
+            }
+          },
+          "nextPageToken": {
+            "type": "string",
+            "description": "Present while older deliveries follow; pass it as pageToken for the next page."
+          }
         }
       },
       "RuntimeNode": {
@@ -22487,10 +22564,22 @@
           }
         }
       },
-      "RepositoryLifecycleJobList": {
-        "type": "array",
-        "items": {
-          "$ref": "#/components/schemas/RepositoryLifecycleJob"
+      "RepositoryLifecycleJobPage": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RepositoryLifecycleJob"
+            }
+          },
+          "nextPageToken": {
+            "type": "string",
+            "description": "Present while older jobs follow; pass it as pageToken for the next page."
+          }
         }
       },
       "CreateScheduledTask": {
@@ -22730,6 +22819,24 @@
             "minLength": 1,
             "maxLength": 128,
             "description": "Required only for APT Hosted operator preview. Appends the immutable pool package to this target suite using the target signer. The pool coordinate preserves its component."
+          }
+        }
+      },
+      "LifecycleJobPage": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LifecycleJob"
+            }
+          },
+          "nextPageToken": {
+            "type": "string",
+            "description": "Present while older jobs follow; pass it as pageToken for the next page."
           }
         }
       },
@@ -24865,14 +24972,11 @@
         }
       },
       "LifecycleJobList": {
-        "description": "Lifecycle jobs for one repository, newest first",
+        "description": "A page of lifecycle jobs for one repository, newest first",
         "content": {
           "application/json": {
             "schema": {
-              "type": "array",
-              "items": {
-                "$ref": "#/components/schemas/LifecycleJob"
-              }
+              "$ref": "#/components/schemas/LifecycleJobPage"
             }
           }
         }
@@ -25261,7 +25365,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "$ref": "#/components/schemas/WebhookSubscriptionList"
+              "$ref": "#/components/schemas/WebhookSubscriptionPage"
             }
           }
         }
@@ -25289,7 +25393,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "$ref": "#/components/schemas/WebhookDeliveryList"
+              "$ref": "#/components/schemas/WebhookDeliveryPage"
             }
           }
         }
@@ -25465,11 +25569,11 @@
         }
       },
       "RepositoryLifecycleJobList": {
-        "description": "Lifecycle jobs across all repositories, newest first",
+        "description": "A page of lifecycle jobs across all repositories, newest first",
         "content": {
           "application/json": {
             "schema": {
-              "$ref": "#/components/schemas/RepositoryLifecycleJobList"
+              "$ref": "#/components/schemas/RepositoryLifecycleJobPage"
             }
           }
         }

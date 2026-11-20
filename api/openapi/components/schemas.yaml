@@ -1965,10 +1965,28 @@ RepositoryLifecycleJob:
     repositoryId: {type: string, format: uuid}
     repositoryName: {type: string}
     job: {"$ref": "#/LifecycleJob"}
-RepositoryLifecycleJobList:
-  type: array
-  items:
-    "$ref": "#/RepositoryLifecycleJob"
+LifecycleJobPage:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        "$ref": "#/LifecycleJob"
+    nextPageToken:
+      type: string
+      description: Present while older jobs follow; pass it as pageToken for the next page.
+RepositoryLifecycleJobPage:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        "$ref": "#/RepositoryLifecycleJob"
+    nextPageToken:
+      type: string
+      description: Present while older jobs follow; pass it as pageToken for the next page.
 CreateScheduledTask:
   type: object
   required: [name, kind, intervalMinutes, enabled]
@@ -3691,9 +3709,17 @@ UpdateWebhookSubscription:
       uniqueItems: true
       items: {"$ref": "#/WebhookEventType"}
     enabled: {type: boolean}
-WebhookSubscriptionList:
-  type: array
-  items: {"$ref": "#/WebhookSubscription"}
+WebhookSubscriptionPage:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        "$ref": "#/WebhookSubscription"
+    nextPageToken:
+      type: string
+      description: Present while older subscriptions follow; pass it as pageToken for the next page.
 WebhookDeliveryState:
   type: string
   enum: [pending, delivering, retrying, succeeded, dead]
@@ -3705,6 +3731,10 @@ WebhookDelivery:
     eventId: {type: string, format: uuid}
     eventType: {"$ref": "#/WebhookEventType"}
     subscriptionId: {type: string, format: uuid}
+    subscriptionName:
+      type: string
+      maxLength: 128
+      description: Name of the subscription, set in the delivery listing.
     state: {"$ref": "#/WebhookDeliveryState"}
     attempts: {type: integer, minimum: 0, maximum: 8}
     nextAttemptAt: {type: string, format: date-time}
@@ -3713,9 +3743,17 @@ WebhookDelivery:
     deliveredAt: {type: string, format: date-time}
     createdAt: {type: string, format: date-time}
     updatedAt: {type: string, format: date-time}
-WebhookDeliveryList:
-  type: array
-  items: {"$ref": "#/WebhookDelivery"}
+WebhookDeliveryPage:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        "$ref": "#/WebhookDelivery"
+    nextPageToken:
+      type: string
+      description: Present while older deliveries follow; pass it as pageToken for the next page.
 PyPIYankUpdate:
   type: object
   additionalProperties: false

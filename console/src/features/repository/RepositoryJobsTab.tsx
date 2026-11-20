@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { SyncOutlined } from "@ant-design/icons";
 import { Button, Popconfirm } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -17,17 +17,35 @@ import {
   isNotFound,
 } from "../../components/ui/Feedback";
 import { formatDate } from "../../lib/format";
+import { KeysetPager } from "../../components/ui/KeysetPager";
+import { pagerChange, useKeysetPages } from "../../lib/keysetPaging";
 import { usePreferences } from "../../lib/preferences";
 import { RepositoryFeatureUnavailable } from "./RepositoryFeatureUnavailable";
 import { ConsoleTable } from "../../components/ui/ConsolePrimitives";
 
 import { useLifecycleJobs } from "./repositoryQueries";
 
-/** The repository's lifecycle jobs, polled every 10 seconds, with reconciles. */
+const JOBS_PAGE_SIZE = 100;
+const JOBS_PAGE_SIZES = [20, 50, 100];
+
+/**
+ * The repository's lifecycle jobs, newest first, one cursor page at a time and
+ * polled every 10 seconds, with reconciles. The reconcile hint counts the
+ * failed intelligence jobs on the page on screen.
+ */
 export function RepositoryJobsTab({ repo }: { repo: Repository }) {
   const { t } = usePreferences();
-  const jobsQuery = useLifecycleJobs(repo.id);
-  const jobs = jobsQuery.data ?? null;
+  const [pageSize, setPageSize] = useState(JOBS_PAGE_SIZE);
+  const { page, pageToken, setPage, remember } = useKeysetPages(
+    JSON.stringify([pageSize]),
+  );
+  const jobsQuery = useLifecycleJobs(repo.id, pageToken, pageSize);
+  const jobs = jobsQuery.data?.items ?? null;
+  const nextPageToken = jobsQuery.data?.nextPageToken;
+  const jobsPlaceholder = jobsQuery.isPlaceholderData;
+  useEffect(() => {
+    if (!jobsPlaceholder) remember(nextPageToken);
+  }, [nextPageToken, jobsPlaceholder, remember]);
   const error = jobsQuery.error;
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   const [reconcileError, setReconcileError] = useState<unknown>(null);
@@ -110,7 +128,7 @@ export function RepositoryJobsTab({ repo }: { repo: Repository }) {
     );
 
   if (!jobs) return <Loading />;
-  if (jobs.length === 0)
+  if (jobs.length === 0 && page === 1)
     return (
       <EmptyState
         title={t("repository.noLifecycleJobs")}
@@ -260,6 +278,15 @@ export function RepositoryJobsTab({ repo }: { repo: Repository }) {
         }}
         pagination={false}
         scroll={{ x: 1100 }}
+      />
+      <KeysetPager
+        page={page}
+        pageSize={pageSize}
+        itemCount={jobs.length}
+        hasNext={Boolean(nextPageToken)}
+        onChange={pagerChange(pageSize, setPageSize, setPage)}
+        disabled={jobsQuery.isFetching}
+        pageSizeOptions={JOBS_PAGE_SIZES}
       />
     </div>
   );

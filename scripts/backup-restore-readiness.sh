@@ -229,7 +229,7 @@ promotion_completed() {
   for _ in $(seq 1 90); do
     detail=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" \
       "$notarx_url/api/v2/repositories/$repository_id/lifecycle-jobs") || return 1
-    if python3 -c 'import json,sys; jobs=json.load(sys.stdin); wanted=sys.argv[1]; sys.exit(not any(job["id"]==wanted and job["state"]=="completed" for job in jobs))' "$job_id" <<<"$detail"; then
+    if python3 -c 'import json,sys; jobs=json.load(sys.stdin)["items"]; wanted=sys.argv[1]; sys.exit(not any(job["id"]==wanted and job["state"]=="completed" for job in jobs))' "$job_id" <<<"$detail"; then
       return 0
     fi
     sleep 1
@@ -369,7 +369,7 @@ go_reclaim_job_ids=$(python3 -c '
 import json
 import sys
 
-jobs = [job for job in json.load(sys.stdin) if job.get("kind") == "reclaim"]
+jobs = [job for job in json.load(sys.stdin)["items"] if job.get("kind") == "reclaim"]
 if len(jobs) != 3:
     raise SystemExit(f"expected three Go publication reclaim intents, got {len(jobs)}")
 print(",".join(sorted(job["id"] for job in jobs)))
@@ -544,7 +544,7 @@ restored_cargo_members=$(cargo_psql "SELECT string_agg(repository_id::text, ',' 
 [[ "$restored_cargo_members" == "$cargo_source_id,$cargo_other_id" ]] || { printf '%s\n' 'Restored Cargo Group member order changed.' >&2; exit 1; }
 restored_cargo_jobs=$(curl --silent --show-error --fail -H "Authorization: Bearer $NOTARX_ADMIN_TOKEN" \
   "$notarx_url/api/v2/repositories/$cargo_promotion_id/lifecycle-jobs")
-python3 -c 'import json,sys; wanted=sys.argv[1]; jobs=json.load(sys.stdin); sys.exit(not any(job["id"]==wanted and job["state"]=="completed" for job in jobs))' \
+python3 -c 'import json,sys; wanted=sys.argv[1]; jobs=json.load(sys.stdin)["items"]; sys.exit(not any(job["id"]==wanted and job["state"]=="completed" for job in jobs))' \
   "$cargo_promotion_job_id" <<<"$restored_cargo_jobs" || { printf '%s\n' 'Restored Cargo promotion job lost completion state.' >&2; exit 1; }
 assert_restored_replication_completion "$cargo_replication_id" "$cargo_replication_plan_id"
 
@@ -580,7 +580,7 @@ import json
 import sys
 
 expected = set(sys.argv[1].split(","))
-actual = {job["id"] for job in json.load(sys.stdin) if job.get("kind") == "reclaim"}
+actual = {job["id"] for job in json.load(sys.stdin)["items"] if job.get("kind") == "reclaim"}
 missing = sorted(expected - actual)
 if missing:
     raise SystemExit(f"restored Go lifecycle jobs are missing: {missing}")

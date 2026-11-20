@@ -304,6 +304,7 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 	conanCache := app.NewDefaultConanCache(cacheStore, nil).WithCoordinator(coordinator).WithQuota(quota).WithMaxObjectBytes(cfg.ConanCacheMaxObjectBytes).WithTTL(cfg.ConanCacheTTL)
 	maintenance := app.NewCacheMaintenanceWithRaw(cacheStore, ociCache, rawCache).WithConan(conanCache)
 	caches := newReadCaches(cfg, store)
+	gatewayStore := caches.cachedStore(store)
 	caches.start(notificationPool)
 	defer caches.stop()
 	metrics := (&app.Metrics{}).
@@ -480,8 +481,8 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 		}
 		rubyGemsReplication = &worker
 	}
-	(backgroundRuntime{
-		store: store, objects: objectStore, taskQueue: taskQueue, maintenance: maintenance, metrics: metrics,
+	waitBackground := (backgroundRuntime{
+		store: newBrokeredStore(store), objects: objectStore, taskQueue: taskQueue, maintenance: maintenance, metrics: metrics,
 		scanner: dependencies.ArtifactScanner, scanResolver: dependencies.ArtifactScanResolver,
 		scannerFormats:      dependencies.ArtifactScannerFormats,
 		workerSessionID:     runtimeSessionID,
@@ -495,6 +496,13 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 		rubyGemsMaintenance: rubyGemsMaintenance,
 		rubyGemsReplication: rubyGemsReplication,
 	}).Start(runtimeContext, cfg)
+	// Deferred after the stores' closes, so it runs before them on every return: end the runtime context and
+	// wait for the claim broker to release what it holds while the database is still open. The other
+	// background loops are not awaited; they stop with the context.
+	defer func() {
+		stopRuntime()
+		waitBackground()
+	}()
 	handler := http.Handler(app.NewOperationalHandler(dependencies, metrics))
 	if startAPI {
 		if len(cfg.RepositoryReaders) == 0 && cfg.LegacyReadPermissive {
@@ -504,7 +512,7 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 		}
 		gatewayOptions := app.GatewayOptions{
 			Dependencies:      dependencies,
-			Store:             store,
+			Store:             gatewayStore,
 			ConanPublications: store,
 			NPMMetadata:       store,
 			NPMRestore:        store,

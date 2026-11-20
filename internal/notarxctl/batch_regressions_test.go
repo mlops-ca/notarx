@@ -2,7 +2,7 @@ package notarxctl
 
 import (
 	"encoding/json"
-	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 	"testing"
@@ -88,21 +88,23 @@ func TestRepoConnectGoNetrcRetainsExplicitPort(t *testing.T) {
 	t.Fatalf("Go's netrc URL prefix must retain its port: %+v", guide.Snippets)
 }
 
-func TestLifecycleJobListReportsItsRealWindow(t *testing.T) {
-	full := make([]string, 100)
-	for i := range full {
-		full[i] = strings.Replace(lifecycleJob, "job-1", fmt.Sprintf("job-%d", i), 1)
+func TestLifecycleJobListPagesByCursor(t *testing.T) {
+	global := func(id string) string {
+		return `{"repositoryId":"` + testRepoID + `","repositoryName":"raw-hosted","job":` + strings.Replace(lifecycleJob, "job-1", id, 1) + `}`
 	}
 	for _, tc := range []struct {
 		name, path, body string
 		args             []string
-		limit            int
+		query            string
 		complete         bool
+		next             string
 	}{
-		{"filtered global empty", "/api/v2/lifecycle-jobs", "[]", []string{"--limit", "10"}, 10, false},
-		{"filtered global short", "/api/v2/lifecycle-jobs", `[{"repositoryId":"` + testRepoID + `","repositoryName":"raw-hosted","job":` + lifecycleJob + `}]`, []string{"--limit", "10"}, 10, false},
-		{"repository full", repoBase + "/lifecycle-jobs", "[" + strings.Join(full, ",") + "]", []string{"--repo", testRepoID}, 100, false},
-		{"repository short", repoBase + "/lifecycle-jobs", "[" + lifecycleJob + "]", []string{"--repo", testRepoID}, 100, true},
+		// A global page can be empty yet still have a next token: the server cuts the page
+		// before it drops rows of repositories the caller does not administer.
+		{"global short page keeps its token", "/api/v2/lifecycle-jobs", `{"items":[],"nextPageToken":"tok-2"}`, []string{"--limit", "10"}, "limit=10", false, "tok-2"},
+		{"global continued", "/api/v2/lifecycle-jobs", `{"items":[` + global("job-7") + `]}`, []string{"--cursor", "tok-2"}, "limit=500&pageToken=tok-2", true, ""},
+		{"repository first page", repoBase + "/lifecycle-jobs", `{"items":[` + lifecycleJob + `],"nextPageToken":"tok-3"}`, []string{"--repo", testRepoID}, "limit=100", false, "tok-3"},
+		{"repository last page", repoBase + "/lifecycle-jobs", `{"items":[` + lifecycleJob + `]}`, []string{"--repo", testRepoID, "--limit", "7", "--cursor", "tok-3"}, "limit=7&pageToken=tok-3", true, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			api := newRouteAPI(t, "")
@@ -110,20 +112,63 @@ func TestLifecycleJobListReportsItsRealWindow(t *testing.T) {
 			args := append([]string{"lifecycle-job", "list"}, tc.args...)
 			code, stdout, _ := runCLI(t, append(args, "--json")...)
 			var meta envelopeMeta
-			if err := json.Unmarshal(decodeEnvelope(t, stdout).Meta, &meta); err != nil {
+			envelope := decodeEnvelope(t, stdout)
+			if err := json.Unmarshal(envelope.Meta, &meta); err != nil {
 				t.Fatal(err)
 			}
-			if code != ExitOK || meta.Pagination == nil || meta.Pagination.Mode != "bounded" || meta.Pagination.Limit != tc.limit {
-				t.Fatalf("the server window must remain bounded: exit = %d, stdout = %s", code, stdout)
+			if code != ExitOK || meta.Pagination == nil || meta.Pagination.Mode != "cursor" || meta.Pagination.Complete == nil || *meta.Pagination.Complete != tc.complete {
+				t.Fatalf("pagination meta: exit = %d, stdout = %s", code, stdout)
 			}
-			if tc.complete {
-				if meta.Pagination.Complete == nil || !*meta.Pagination.Complete {
-					t.Fatalf("the short repository window is complete: stdout = %s", stdout)
-				}
-			} else if meta.Pagination.Complete != nil {
-				t.Fatalf("a filtered global or full repository window has unknown completeness: stdout = %s", stdout)
+			if got := api.recorded()[0].Query; got != tc.query {
+				t.Fatalf("query = %s, want %s", got, tc.query)
+			}
+			var data struct {
+				NextCursor *string `json:"nextCursor"`
+			}
+			if err := json.Unmarshal(envelope.Data, &data); err != nil {
+				t.Fatal(err)
+			}
+			if (tc.next == "") != (data.NextCursor == nil) || (data.NextCursor != nil && *data.NextCursor != tc.next) {
+				t.Fatalf("nextCursor = %v, want %q: stdout = %s", data.NextCursor, tc.next, stdout)
 			}
 		})
+	}
+}
+
+func TestLifecycleJobListHumanOutputPrintsTheContinuation(t *testing.T) {
+	api := newRouteAPI(t, "")
+	api.on("GET", repoBase+"/lifecycle-jobs", 200, `{"items":[`+lifecycleJob+`],"nextPageToken":"tok-2"}`)
+	code, _, stderr := runCLI(t, "lifecycle-job", "list", "--repo", testRepoID)
+	want := "notarxctl lifecycle-job list --repo " + testRepoID + " --limit 100 --cursor tok-2"
+	if code != ExitOK || !strings.Contains(stderr, want) {
+		t.Fatalf("exit = %d, stderr = %s, want %q", code, stderr, want)
+	}
+}
+
+func TestLifecycleJobShowPagesUntilFoundOrExhausted(t *testing.T) {
+	api := newRouteAPI(t, "")
+	api.onFunc("GET", repoBase+"/lifecycle-jobs", func(r *http.Request) (int, string) {
+		switch r.URL.Query().Get("pageToken") {
+		case "":
+			return 200, `{"items":[` + strings.Replace(lifecycleJob, "job-1", "job-a", 1) + `],"nextPageToken":"tok-2"}`
+		case "tok-2":
+			return 200, `{"items":[` + strings.Replace(lifecycleJob, "job-1", "job-b", 1) + `],"nextPageToken":"tok-3"}`
+		}
+		return 200, `{"items":[` + strings.Replace(lifecycleJob, "job-1", "job-c", 1) + `]}`
+	})
+	code, stdout, _ := runCLI(t, "lifecycle-job", "show", "job-c", "--repo", testRepoID, "--json")
+	if code != ExitOK || !strings.Contains(stdout, "job-c") {
+		t.Fatalf("a job on the third page must be found: exit = %d, stdout = %s", code, stdout)
+	}
+	if got := len(api.recorded()); got != 3 {
+		t.Fatalf("requests = %d, want 3 pages", got)
+	}
+	code, stdout, _ = runCLI(t, "lifecycle-job", "show", "job-z", "--repo", testRepoID, "--json")
+	if code != ExitNotFound {
+		t.Fatalf("an exhausted listing is a not-found: exit = %d, stdout = %s", code, stdout)
+	}
+	if got := len(api.recorded()); got != 6 {
+		t.Fatalf("requests = %d, want every page read before giving up", got)
 	}
 }
 

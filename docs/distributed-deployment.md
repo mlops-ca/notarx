@@ -88,6 +88,16 @@ API, Scheduler and email Worker must share the same email configuration and
 settings encryption key. See the [opt-in Compose email example](email-notification-delivery.md#opt-in-compose-example);
 API email capability is local configuration readiness, not cluster sender health.
 
+A Worker process claims once per queue kind, not once per format: one claimer per
+kind hands the claimed jobs (and replication plans) to the format workers of the
+process, so a node that enables many formats issues one claim per kind and round.
+A claim asks only for the formats whose worker called in the last five minutes and
+whose waiting jobs are fewer than one claim; a job that has waited five minutes for
+its worker, or whose worker stopped calling, goes back to the queue with its attempt
+returned, so a busy node never holds work an idle node could run.
+Quota alert evaluation wakes on the `notarx_evaluations` channel and polls as the
+fallback.
+
 Filters constrain Workers only; the Scheduler discovers work for every format.
 Cache reclaim is claimed separately for OCI, Raw, and Conan. Maven cache expiry
 is evaluated during reads and has no independent reclaim job.
@@ -299,10 +309,19 @@ Counters for a repository that was deleted or renamed before the flush are disca
 ## Read caches and the authorization window
 
 Each node keeps in-process read caches (ADR 0023 section 6): API-key principals by
-key hash and service-account state. Repositories, groups, grants, visibility and
-users are not cached yet. The caches remove the per-request database queries
-of an authenticated read; a warm cache issues no statement for credential
-lookup. No shared cache is involved.
+key hash and service-account state, hosted repositories by id and by name
+(visibility included), hosted groups with their members and the public access
+gate (the access-decision inputs of ADR 0029). Grants, users and quarantine state
+are not cached yet. The caches remove the per-request database queries of a
+protocol read; a warm cache issues no statement for credential, repository, group
+or policy lookup. No shared cache is involved. A change to a repository, group or
+the public access gate is announced by a database trigger in the mutating
+transaction, so no write path can forget it. A cached group holds its member ids
+only and every member is read through the repository cache, so a repository change
+evicts that repository and leaves the groups cached. The serving node's own writes
+(the management API) also evict synchronously; the first-install repository presets
+are written before the caches start, and `notarxctl secrets reseal` runs in its own
+process, so both rely on the trigger notification alone.
 
 ```env
 NOTARX_AUTHZ_CACHE_TTL=5s
@@ -326,8 +345,11 @@ NOTARX_OVERVIEW_CACHE_TTL=30s
   token minting, login and every management API authorization read the database
   and never use these caches; only protocol reads do. A caller that supplies no
   request context reads through too.
-- **Negative results** (unknown key) are cached for at most 1s, so a key created
-  on one node can take up to 1s to be accepted on another.
+- **Negative results** (unknown key, unknown repository or group name) are cached
+  for at most 1s, so a key created on one node can take up to 1s to be accepted on
+  another; a repository or group created on the node that serves the request is
+  visible at once, because the invalidation of any repository clears the cached
+  not-found results.
 - **Last used.** Authenticating a request writes nothing: `last_used_at` is
   remembered in memory and written at most once per key every
   `NOTARX_API_KEY_LAST_USED_INTERVAL` (default 60s), so the Console "last used"

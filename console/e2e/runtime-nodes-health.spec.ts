@@ -19,7 +19,7 @@ test("operations survives legacy runtime node null arrays", async ({
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify([]),
+      body: JSON.stringify({ items: [] }),
     }),
   );
   await page.route("**/api/v2/audit-retention/jobs**", (route) =>
@@ -330,35 +330,37 @@ test("job history uses one compact and consistent detail path", async ({
   );
   await page.route("**/api/v2/lifecycle-jobs**", (route) =>
     route.fulfill({
-      json: [
-        {
-          repositoryId: "repo-oci",
-          repositoryName: "images-production-with-a-long-name",
-          job: {
-            id: "job-failed-001",
-            kind: "promotion",
-            state: "failed",
-            createdAt: "2026-08-08T08:00:00Z",
-            completedAt: "2026-08-08T08:02:00Z",
-            attempts: 3,
-            maxAttempts: 3,
-            lastError: "The target repository rejected the promotion request",
+      json: {
+        items: [
+          {
+            repositoryId: "repo-oci",
+            repositoryName: "images-production-with-a-long-name",
+            job: {
+              id: "job-failed-001",
+              kind: "promotion",
+              state: "failed",
+              createdAt: "2026-08-08T08:00:00Z",
+              completedAt: "2026-08-08T08:02:00Z",
+              attempts: 3,
+              maxAttempts: 3,
+              lastError: "The target repository rejected the promotion request",
+            },
           },
-        },
-        {
-          repositoryId: "repo-maven",
-          repositoryName: "maven-releases",
-          job: {
-            id: "job-completed-001",
-            kind: "retention",
-            state: "completed",
-            createdAt: "2026-08-08T07:00:00Z",
-            completedAt: "2026-08-08T07:02:00Z",
-            attempts: 1,
-            maxAttempts: 3,
+          {
+            repositoryId: "repo-maven",
+            repositoryName: "maven-releases",
+            job: {
+              id: "job-completed-001",
+              kind: "retention",
+              state: "completed",
+              createdAt: "2026-08-08T07:00:00Z",
+              completedAt: "2026-08-08T07:02:00Z",
+              attempts: 1,
+              maxAttempts: 3,
+            },
           },
-        },
-      ],
+        ],
+      },
     }),
   );
   await page.route("**/api/v2/audit-retention/jobs**", (route) =>
@@ -407,23 +409,25 @@ test("job history keeps the record path compact on mobile", async ({
   );
   await page.route("**/api/v2/lifecycle-jobs**", (route) =>
     route.fulfill({
-      json: [
-        {
-          repositoryId: "repo-oci",
-          repositoryName: "images-production-with-a-long-name",
-          job: {
-            id: "job-failed-001",
-            kind: "promotion",
-            state: "failed",
-            createdAt: "2026-08-08T08:00:00Z",
-            startedAt: "2026-08-08T08:01:00Z",
-            completedAt: "2026-08-08T08:02:00Z",
-            attempts: 3,
-            maxAttempts: 3,
-            lastError: "The target repository rejected the promotion request",
+      json: {
+        items: [
+          {
+            repositoryId: "repo-oci",
+            repositoryName: "images-production-with-a-long-name",
+            job: {
+              id: "job-failed-001",
+              kind: "promotion",
+              state: "failed",
+              createdAt: "2026-08-08T08:00:00Z",
+              startedAt: "2026-08-08T08:01:00Z",
+              completedAt: "2026-08-08T08:02:00Z",
+              attempts: 3,
+              maxAttempts: 3,
+              lastError: "The target repository rejected the promotion request",
+            },
           },
-        },
-      ],
+        ],
+      },
     }),
   );
   await page.route("**/api/v2/audit-retention/jobs**", (route) =>

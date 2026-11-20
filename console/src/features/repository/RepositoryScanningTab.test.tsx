@@ -63,16 +63,18 @@ afterEach(() => {
 describe("RepositoryScanningTab", () => {
   it("labels scan jobs as a bounded recent window without claiming a complete total", async () => {
     mockListJobs.mockResolvedValue({
-      data: Array.from({ length: 100 }, (_, index) => ({
-        id: `recent-job-${index}`,
-        kind: index < 26 ? "scan" : "intelligence",
-        state: "pending",
-        createdAt: "2026-08-12T06:00:00Z",
-        attempts: 0,
-        maxAttempts: 3,
-        progressCurrent: 0,
-        progressTotal: 0,
-      })),
+      data: {
+        items: Array.from({ length: 100 }, (_, index) => ({
+          id: `recent-job-${index}`,
+          kind: index < 26 ? "scan" : "intelligence",
+          state: "pending",
+          createdAt: "2026-08-12T06:00:00Z",
+          attempts: 0,
+          maxAttempts: 3,
+          progressCurrent: 0,
+          progressTotal: 0,
+        })),
+      },
     } as never);
     const { container } = render(
       <TestQueryProvider>
@@ -104,7 +106,9 @@ describe("RepositoryScanningTab", () => {
 
   it("searches, selects, and queues a repository artifact without manual identity input", async () => {
     const user = userEvent.setup();
-    mockListJobs.mockResolvedValue({ data: [] } as never);
+    mockListJobs.mockResolvedValue({
+      data: { items: [] },
+    } as never);
     mockListArtifactIdentities.mockResolvedValue({
       data: {
         items: [
@@ -188,7 +192,9 @@ describe("RepositoryScanningTab", () => {
 
   it("sends artifact picker text to the canonical identity query", async () => {
     const user = userEvent.setup();
-    mockListJobs.mockResolvedValue({ data: [] } as never);
+    mockListJobs.mockResolvedValue({
+      data: { items: [] },
+    } as never);
 
     render(
       <TestQueryProvider>
@@ -222,7 +228,9 @@ describe("RepositoryScanningTab", () => {
 
   it("keeps exact coordinate and digest entry as an advanced fallback", async () => {
     const user = userEvent.setup();
-    mockListJobs.mockResolvedValue({ data: [] } as never);
+    mockListJobs.mockResolvedValue({
+      data: { items: [] },
+    } as never);
     mockCreateScan.mockResolvedValue({
       data: {
         id: "manual-scan-job",
@@ -276,7 +284,9 @@ describe("RepositoryScanningTab", () => {
   });
 
   it("explains scanner configuration when the repository cannot scan", async () => {
-    mockListJobs.mockResolvedValue({ data: [] } as never);
+    mockListJobs.mockResolvedValue({
+      data: { items: [] },
+    } as never);
 
     render(
       <TestQueryProvider>
@@ -310,7 +320,9 @@ describe("RepositoryScanningTab", () => {
 
   it("backfills visible publications from the same scanning workspace", async () => {
     const user = userEvent.setup();
-    mockListJobs.mockResolvedValue({ data: [] } as never);
+    mockListJobs.mockResolvedValue({
+      data: { items: [] },
+    } as never);
     mockReconcileScans.mockResolvedValue({
       data: {
         repositoryId: repository.id,
@@ -439,7 +451,9 @@ describe("RepositoryScanningTab", () => {
   it("localizes the coordinate placeholder for formats without a canonical example", async () => {
     const user = userEvent.setup();
     localStorage.setItem("ag.console.locale", "en-CA");
-    mockListJobs.mockResolvedValue({ data: [] } as never);
+    mockListJobs.mockResolvedValue({
+      data: { items: [] },
+    } as never);
 
     render(
       <TestQueryProvider>

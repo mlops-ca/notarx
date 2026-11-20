@@ -60,6 +60,11 @@ type Options[V any] struct {
 	// IgnoreBypass makes the cache serve even a Bypass context: for aggregates that
 	// carry no authorization decision (the overview statistics).
 	IgnoreBypass bool
+	// InvalidateNegatives makes an invalidation of any entity also drop every negative result of this cache. A
+	// negative result carries no entity to match, and the entity it denied may be the one just created (a
+	// repository whose name was looked up before it existed). Caches of credentials leave it off so an
+	// unrelated revocation does not empty the flood absorber.
+	InvalidateNegatives bool
 	// IsNegative reports a load error that is a cacheable negative result (not
 	// found, denied). Any other error is never cached.
 	IsNegative func(error) bool
@@ -264,6 +269,13 @@ func (c *Cache[K, V]) invalidate(id string) {
 			c.remove(el)
 		}
 		el = next
+	}
+	if c.opts.InvalidateNegatives {
+		for el := c.negOrder.Front(); el != nil; {
+			next := el.Next()
+			c.remove(el)
+			el = next
+		}
 	}
 	c.mu.Unlock()
 }

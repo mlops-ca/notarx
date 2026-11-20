@@ -521,12 +521,12 @@ const lifecycleJob = `{"id":"job-1","kind":"retention","state":"completed","crea
 func TestLifecycleJobs(t *testing.T) {
 	api := newRouteAPI(t, "")
 	expectUsage(t, api,
-		[]string{"lifecycle-job", "list", "--repo", testRepoID, "--limit", "5"},
+		[]string{"lifecycle-job", "list", "--repo", testRepoID, "--limit", "101"},
 		[]string{"lifecycle-job", "list", "--limit", "0"},
 		[]string{"lifecycle-job", "show"},
 	)
-	api.on("GET", "/api/v2/lifecycle-jobs", 200, `[{"repositoryId":"`+testRepoID+`","repositoryName":"raw-hosted","job":`+lifecycleJob+`}]`)
-	api.on("GET", repoBase+"/lifecycle-jobs", 200, `[`+lifecycleJob+`]`)
+	api.on("GET", "/api/v2/lifecycle-jobs", 200, `{"items":[{"repositoryId":"`+testRepoID+`","repositoryName":"raw-hosted","job":`+lifecycleJob+`}],"nextPageToken":"tok-2"}`)
+	api.on("GET", repoBase+"/lifecycle-jobs", 200, `{"items":[`+lifecycleJob+`]}`)
 	code, stdout, _ := runCLI(t, "lifecycle-job", "list", "--limit", "10", "--json")
 	if code != ExitOK {
 		t.Fatalf("exit = %d, stdout = %s", code, stdout)
@@ -539,9 +539,9 @@ func TestLifecycleJobs(t *testing.T) {
 	if code != ExitOK || !strings.Contains(stdout, "retention") || !strings.Contains(stdout, "4/4") {
 		t.Fatalf("show exit = %d, stdout = %s", code, stdout)
 	}
-	code, stdout, _ = runCLI(t, "lifecycle-job", "show", "job-9", "--json")
+	code, stdout, _ = runCLI(t, "lifecycle-job", "show", "job-9", "--repo", testRepoID, "--json")
 	envelope := decodeEnvelope(t, stdout)
-	if code != ExitNotFound || !strings.Contains(envelope.Error.Message, "newest jobs") {
+	if code != ExitNotFound || !strings.Contains(envelope.Error.Message, "is not among") {
 		t.Fatalf("missing job exit = %d, stdout = %s", code, stdout)
 	}
 }

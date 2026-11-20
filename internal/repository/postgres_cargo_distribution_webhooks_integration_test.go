@@ -88,7 +88,8 @@ func TestPostgresCargoDistributionWebhooksCommitWithTerminalState(t *testing.T) 
 	}
 	assert := func(eventType WebhookEventType, operationID, state string, attempts, total int) {
 		t.Helper()
-		deliveries, listErr := second.ListWebhookDeliveries(ctx, WebhookDeliveryQuery{SubscriptionID: subscription.ID, Limit: 20})
+		deliveriesPage, listErr := second.PageWebhookDeliveries(ctx, WebhookDeliveryQuery{SubscriptionID: subscription.ID, Limit: 20})
+		deliveries := deliveriesPage.Items
 		if listErr != nil || len(deliveries) != total {
 			t.Fatalf("deliveries=%+v err=%v want=%d", deliveries, listErr, total)
 		}
@@ -116,7 +117,8 @@ func TestPostgresCargoDistributionWebhooksCommitWithTerminalState(t *testing.T) 
 	}
 	assertNoNew := func(total int) {
 		t.Helper()
-		deliveries, listErr := second.ListWebhookDeliveries(ctx, WebhookDeliveryQuery{SubscriptionID: subscription.ID, Limit: 20})
+		deliveriesPage, listErr := second.PageWebhookDeliveries(ctx, WebhookDeliveryQuery{SubscriptionID: subscription.ID, Limit: 20})
+		deliveries := deliveriesPage.Items
 		if listErr != nil || len(deliveries) != total {
 			t.Fatalf("premature deliveries=%+v err=%v want=%d", deliveries, listErr, total)
 		}

@@ -117,7 +117,8 @@ func TestMemoryCargoDistributionEventsFollowTerminalStates(t *testing.T) {
 func assertCargoWebhookDelivery(t *testing.T, store *MemoryStore, subscriptionID string, eventType WebhookEventType, operationID, state string, attempts, expectedTotal int) {
 	t.Helper()
 	ctx := context.Background()
-	deliveries, err := store.ListWebhookDeliveries(ctx, WebhookDeliveryQuery{SubscriptionID: subscriptionID, Limit: 20})
+	deliveriesPage, err := store.PageWebhookDeliveries(ctx, WebhookDeliveryQuery{SubscriptionID: subscriptionID, Limit: 20})
+	deliveries := deliveriesPage.Items
 	if err != nil || len(deliveries) != expectedTotal {
 		t.Fatalf("deliveries=%+v err=%v, want %d", deliveries, err, expectedTotal)
 	}
@@ -158,7 +159,8 @@ func TestMemoryCargoPromotionLeaseExpiryEmitsOnlyFinalFailure(t *testing.T) {
 	if failed, err := store.GetLifecycleJob(ctx, job.RepositoryID, job.ID); err != nil || failed.State != LifecycleJobFailed {
 		t.Fatalf("failed=%+v err=%v", failed, err)
 	}
-	deliveries, err := store.ListWebhookDeliveries(ctx, WebhookDeliveryQuery{Limit: 10})
+	deliveriesPage, err := store.PageWebhookDeliveries(ctx, WebhookDeliveryQuery{Limit: 10})
+	deliveries := deliveriesPage.Items
 	if err != nil || len(deliveries) != 1 || deliveries[0].EventType != WebhookEventCargoPromotionFailed {
 		t.Fatalf("expiry deliveries=%+v err=%v", deliveries, err)
 	}

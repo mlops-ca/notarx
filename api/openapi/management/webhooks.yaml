@@ -1,9 +1,18 @@
 webhook_subscriptions:
   get:
     operationId: listWebhookSubscriptions
+    description: >-
+      Lists subscriptions by name, paged by keyset on the unique name; continue with the nextPageToken of the previous page.
+    parameters:
+    - name: limit
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 500, default: 500}
+    - "$ref": "../components/parameters.yaml#/PageToken"
     responses:
       '200':
         "$ref": "../components/responses.yaml#/WebhookSubscriptionList"
+      '400':
+        "$ref": "../components/responses.yaml#/Problem"
       '401':
         "$ref": "../components/responses.yaml#/Problem"
       '403':
@@ -78,6 +87,8 @@ webhook_subscriptions_subscriptionId:
 webhook_deliveries:
   get:
     operationId: listWebhookDeliveries
+    description: >-
+      Lists deliveries newest first, paged by keyset on creation time then id; continue with the nextPageToken of the previous page, which is bound to the subscription and state filters.
     parameters:
     - name: subscriptionId
       in: query
@@ -89,6 +100,7 @@ webhook_deliveries:
     - name: limit
       in: query
       schema: {type: integer, minimum: 1, maximum: 500, default: 100}
+    - "$ref": "../components/parameters.yaml#/PageToken"
     responses:
       '200':
         "$ref": "../components/responses.yaml#/WebhookDeliveryList"

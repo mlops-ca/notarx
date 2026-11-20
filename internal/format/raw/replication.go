@@ -35,7 +35,7 @@ func (r Replication) Start(ctx context.Context, interval time.Duration) {
 	}
 	go func() {
 		_ = r.RunJobs(ctx, 100)
-		wake := notificationWake(ctx, r.Store, "notarx_replication_plans")
+		wake := notificationWake(ctx, r.Store, repository.ReplicationPlanChannel)
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {

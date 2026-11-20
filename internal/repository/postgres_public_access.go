@@ -32,5 +32,6 @@ func (s *PostgresStore) ReplacePublicAccessPolicy(ctx context.Context, policy Pu
 		return PublicAccessPolicy{}, err
 	}
 	policy.Version = strconv.FormatInt(nextVersion, 10)
+	s.invalidateLocalScope(CacheScopePolicy)
 	return policy, nil
 }

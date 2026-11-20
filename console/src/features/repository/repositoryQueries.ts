@@ -1,4 +1,5 @@
 import {
+  keepPreviousData,
   useInfiniteQuery,
   useQuery,
   useQueryClient,
@@ -329,19 +330,36 @@ export function useScanJobs(repositoryId: string, enabled: boolean) {
         await unwrap(
           listRepositoryLifecycleJobs({ path: { repositoryId }, signal }),
         )
-      ).filter((job) => job.kind === "scan"),
+      ).items.filter((job) => job.kind === "scan"),
     enabled,
     refetchInterval: 10_000,
     staleTime: 0,
   });
 }
 
-/** Every lifecycle job of a repository, polled every 10 seconds while shown. */
-export function useLifecycleJobs(repositoryId: string) {
+/**
+ * One cursor page of a repository's lifecycle jobs, newest first, polled every
+ * 10 seconds while shown.
+ */
+export function useLifecycleJobs(
+  repositoryId: string,
+  pageToken: string | undefined,
+  pageSize: number,
+) {
   return useQuery({
-    queryKey: repositoryKeys.lifecycleJobs(repositoryId),
+    queryKey: [
+      ...repositoryKeys.lifecycleJobs(repositoryId),
+      { pageToken, pageSize },
+    ] as const,
     queryFn: ({ signal }) =>
-      unwrap(listRepositoryLifecycleJobs({ path: { repositoryId }, signal })),
+      unwrap(
+        listRepositoryLifecycleJobs({
+          path: { repositoryId },
+          query: { limit: pageSize, pageToken },
+          signal,
+        }),
+      ),
+    placeholderData: keepPreviousData,
     refetchInterval: 10_000,
     staleTime: 0,
   });

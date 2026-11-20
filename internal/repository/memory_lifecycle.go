@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"sort"
 	"time"
 
@@ -50,44 +51,62 @@ func (s *MemoryStore) EnqueueLifecycleJob(ctx context.Context, job LifecycleJob,
 	return cloneLifecycleJob(job), false, nil
 }
 
-func (s *MemoryStore) ListLifecycleJobs(_ context.Context, repositoryID string, limit int) ([]LifecycleJob, error) {
+func (s *MemoryStore) ListLifecycleJobs(ctx context.Context, repositoryID string, limit int) ([]LifecycleJob, error) {
+	page, err := s.PageLifecycleJobs(ctx, repositoryID, LifecycleJobListQuery{Limit: limit})
+	return page.Items, err
+}
+
+func (s *MemoryStore) PageLifecycleJobs(_ context.Context, repositoryID string, query LifecycleJobListQuery) (LifecycleJobPage, error) {
+	limit := pageLimit(query.Limit, 100, 100)
+	cursorAt, cursorID, after, err := decodeCreatedAtToken(query.PageToken, lifecycleJobsFilter(repositoryID))
+	if err != nil {
+		return LifecycleJobPage{}, err
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if limit <= 0 || limit > 100 {
-		limit = 100
-	}
 	jobs := make([]LifecycleJob, 0, limit)
 	for _, job := range s.lifecycleJobs {
-		if job.RepositoryID == repositoryID {
+		if job.RepositoryID == repositoryID && (!after || createdAtBefore(job.CreatedAt, job.ID, cursorAt, cursorID)) {
 			jobs = append(jobs, cloneLifecycleJob(job))
 		}
 	}
-	sort.Slice(jobs, func(i, j int) bool { return jobs[i].CreatedAt.After(jobs[j].CreatedAt) })
+	sort.Slice(jobs, func(i, j int) bool { return newerFirst(jobs[i].CreatedAt, jobs[i].ID, jobs[j].CreatedAt, jobs[j].ID) })
+	page := LifecycleJobPage{Items: jobs}
 	if len(jobs) > limit {
-		jobs = jobs[:limit]
+		page.Items = jobs[:limit]
+		last := page.Items[limit-1]
+		page.NextPageToken = encodeCreatedAtToken(lifecycleJobsFilter(repositoryID), last.CreatedAt, last.ID)
 	}
-	return jobs, nil
+	return page, nil
 }
 
-func (s *MemoryStore) ListAllLifecycleJobs(_ context.Context, limit int) ([]RepositoryLifecycleJob, error) {
+func (s *MemoryStore) PageAllLifecycleJobs(_ context.Context, query LifecycleJobListQuery) (RepositoryLifecycleJobPage, error) {
+	limit := pageLimit(query.Limit, 500, 500)
+	cursorAt, cursorID, after, err := decodeCreatedAtToken(query.PageToken, allLifecycleJobsFilter)
+	if err != nil {
+		return RepositoryLifecycleJobPage{}, err
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if limit <= 0 || limit > 500 {
-		limit = 500
-	}
 	records := make([]RepositoryLifecycleJob, 0, len(s.lifecycleJobs))
 	for _, job := range s.lifecycleJobs {
 		repo, ok := s.hostedRepositories[job.RepositoryID]
-		if !ok {
+		if !ok || (after && !createdAtBefore(job.CreatedAt, job.ID, cursorAt, cursorID)) ||
+			(query.RepositoryIDs != nil && !slices.Contains(query.RepositoryIDs, job.RepositoryID)) {
 			continue
 		}
 		records = append(records, RepositoryLifecycleJob{RepositoryName: repo.Name, Job: cloneLifecycleJob(job)})
 	}
-	sort.Slice(records, func(i, j int) bool { return records[i].Job.CreatedAt.After(records[j].Job.CreatedAt) })
+	sort.Slice(records, func(i, j int) bool {
+		return newerFirst(records[i].Job.CreatedAt, records[i].Job.ID, records[j].Job.CreatedAt, records[j].Job.ID)
+	})
+	page := RepositoryLifecycleJobPage{Items: records}
 	if len(records) > limit {
-		records = records[:limit]
+		page.Items = records[:limit]
+		last := page.Items[limit-1].Job
+		page.NextPageToken = encodeCreatedAtToken(allLifecycleJobsFilter, last.CreatedAt, last.ID)
 	}
-	return records, nil
+	return page, nil
 }
 
 func (s *MemoryStore) GetLifecycleJob(_ context.Context, repositoryID, id string) (LifecycleJob, error) {
@@ -124,18 +143,22 @@ func (s *MemoryStore) GetLatestArtifactScanJob(_ context.Context, repositoryID s
 }
 
 func (s *MemoryStore) ClaimLifecycleJobs(_ context.Context, limit int) ([]LifecycleJob, error) {
-	return s.claimLifecycleJobs("", "", limit)
+	return s.claimLifecycleJobs("", nil, limit)
 }
 
 func (s *MemoryStore) ClaimLifecycleJobsByKind(_ context.Context, kind LifecycleJobKind, limit int) ([]LifecycleJob, error) {
-	return s.claimLifecycleJobs(kind, "", limit)
+	return s.claimLifecycleJobs(kind, nil, limit)
 }
 
 func (s *MemoryStore) ClaimLifecycleJobsByKindAndFormat(_ context.Context, kind LifecycleJobKind, format Format, limit int) ([]LifecycleJob, error) {
-	return s.claimLifecycleJobs(kind, format, limit)
+	return s.claimLifecycleJobs(kind, []Format{format}, limit)
 }
 
-func (s *MemoryStore) claimLifecycleJobs(kind LifecycleJobKind, format Format, limit int) ([]LifecycleJob, error) {
+func (s *MemoryStore) ClaimLifecycleJobsByKindAndFormats(_ context.Context, kind LifecycleJobKind, formats []Format, limit int) ([]LifecycleJob, error) {
+	return s.claimLifecycleJobs(kind, formats, limit)
+}
+
+func (s *MemoryStore) claimLifecycleJobs(kind LifecycleJobKind, formats []Format, limit int) ([]LifecycleJob, error) {
 	s.lifecycleLeaseFence.Lock()
 	defer s.lifecycleLeaseFence.Unlock()
 	s.mu.Lock()
@@ -150,7 +173,7 @@ func (s *MemoryStore) claimLifecycleJobs(kind LifecycleJobKind, format Format, l
 		if job.State == LifecycleJobRunning {
 			runningByRepository[job.RepositoryID]++
 		}
-		if (job.State == LifecycleJobPending || job.State == LifecycleJobRetrying) && (job.NextAttemptAt.IsZero() || !job.NextAttemptAt.After(now)) && (kind == "" || job.Kind == kind) && lifecycleJobMatchesFormat(job.Payload, format) {
+		if (job.State == LifecycleJobPending || job.State == LifecycleJobRetrying) && (job.NextAttemptAt.IsZero() || !job.NextAttemptAt.After(now)) && (kind == "" || job.Kind == kind) && lifecycleJobMatchesFormats(job.Payload, formats) {
 			keys = append(keys, key)
 		}
 	}
@@ -349,14 +372,13 @@ func renewedLifecycleLeaseExpiry(current, now time.Time) time.Time {
 	return next
 }
 
-func lifecycleJobMatchesFormat(payload []byte, format Format) bool {
-	if format == "" {
+// lifecycleJobMatchesFormats reports whether the job payload names one of formats; an empty list matches all.
+func lifecycleJobMatchesFormats(payload []byte, formats []Format) bool {
+	if len(formats) == 0 {
 		return true
 	}
-	var value struct {
-		Format Format `json:"format"`
-	}
-	return json.Unmarshal(payload, &value) == nil && value.Format == format
+	format, ok := lifecyclePayloadFormat(payload)
+	return ok && slices.Contains(formats, format)
 }
 
 func (s *MemoryStore) CompleteLifecycleJob(_ context.Context, id, leaseToken string) error {

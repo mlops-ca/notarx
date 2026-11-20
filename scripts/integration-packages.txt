@@ -13,6 +13,7 @@
 1 ./internal/retention
 1 ./internal/objectstore
 1 ./cmd/notarx
+2 ./internal/access
 2 ./internal/backupops
 2 ./internal/nexusmigration/pgstore
 2 ./internal/nexussource/pgstore

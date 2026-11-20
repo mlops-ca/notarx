@@ -46,6 +46,8 @@ func (s *PostgresStore) EvaluateNextRepositoryQuotaAlert(ctx context.Context, cf
 		_ = tx.Rollback()
 		// Fence a best-effort unknown state against a newer evaluation/configuration.
 		reset, _ := json.Marshal(quotaalert.Reset(rule.State, "unknown"))
+		// Every evaluator write stamps evaluated_at: the wake-up trigger of migration 000004 skips such rows, so
+		// the evaluator never notifies itself.
 		_, _ = s.db.ExecContext(ctx, `UPDATE repository_quota_alert_rules SET state=$4,state_version=state_version+1,evaluated_at=clock_timestamp(),next_evaluate_at=clock_timestamp()+$5::bigint*interval '1 millisecond' WHERE id=$1::uuid AND version=$2::text::bigint AND state_version=$3::text::bigint`, rule.ID, rule.Version, rule.StateVersion, reset, interval.Milliseconds())
 		return true, err
 	}
@@ -91,6 +93,7 @@ func (s *PostgresStore) EvaluateNextRepositoryQuotaAlert(ctx context.Context, cf
 		}
 	}
 	state, _ := json.Marshal(rule.State)
+	// Stamps evaluated_at, which keeps the wake-up trigger of migration 000004 quiet for the evaluator's own write.
 	_, err = tx.ExecContext(ctx, `UPDATE repository_quota_alert_rules SET state=$2,state_version=state_version+1,active_episode_id=NULLIF($3,'')::uuid,last_event_id=NULLIF($4,'')::uuid,sequence=$5,evaluated_at=$6::timestamptz,next_evaluate_at=$6::timestamptz+$7::bigint*interval '1 millisecond' WHERE id=$1::uuid`, rule.ID, state, rule.ActiveEpisodeID, rule.LastEventID, rule.Sequence, now, interval.Milliseconds())
 	if err != nil {
 		return true, err

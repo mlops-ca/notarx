@@ -58,8 +58,9 @@ func TestPostgresWebhookOutboxCommitsWithQuarantineAndClaimsOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	deliveries, err := second.ListWebhookDeliveries(ctx, WebhookDeliveryQuery{SubscriptionID: subscription.ID, Limit: 10})
-	if err != nil || len(deliveries) != 1 || deliveries[0].EventType != WebhookEventArtifactQuarantined {
+	deliveriesPage, err := second.PageWebhookDeliveries(ctx, WebhookDeliveryQuery{SubscriptionID: subscription.ID, Limit: 10})
+	deliveries := deliveriesPage.Items
+	if err != nil || len(deliveries) != 1 || deliveries[0].EventType != WebhookEventArtifactQuarantined || deliveries[0].SubscriptionName != subscription.Name {
 		t.Fatalf("transactional delivery = %#v, err=%v", deliveries, err)
 	}
 
@@ -100,7 +101,8 @@ func TestPostgresWebhookOutboxCommitsWithQuarantineAndClaimsOnce(t *testing.T) {
 	}, quarantined.Version); err != nil {
 		t.Fatal(err)
 	}
-	deliveries, err = second.ListWebhookDeliveries(ctx, WebhookDeliveryQuery{SubscriptionID: subscription.ID, Limit: 10})
+	deliveriesPage, err = second.PageWebhookDeliveries(ctx, WebhookDeliveryQuery{SubscriptionID: subscription.ID, Limit: 10})
+	deliveries = deliveriesPage.Items
 	if err != nil || len(deliveries) != 2 || deliveries[0].EventType != WebhookEventArtifactReleased || deliveries[1].State != WebhookDeliverySucceeded {
 		t.Fatalf("release deliveries = %#v, err=%v", deliveries, err)
 	}
@@ -182,3 +184,61 @@ func TestPostgresWebhookOutboxCommitsWithQuarantineAndClaimsOnce(t *testing.T) {
 }
 
 const httpStatusNoContent = 204
+
+// Subscriptions page by name in byte order, whatever the database collation: the pages follow each other in
+// order with no gap and no repeat.
+func TestPostgresWebhookSubscriptionsPageByName(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is required for PostgreSQL integration tests")
+	}
+	store, err := NewPostgresStore(databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	prefix := "webhook-paging-" + uuid.NewString() + "-"
+	ids := []string{}
+	t.Cleanup(func() {
+		for _, id := range ids {
+			_, _ = store.db.ExecContext(context.Background(), `DELETE FROM webhook_subscriptions WHERE id=$1`, id)
+		}
+		_ = store.Close()
+	})
+	for _, suffix := range []string{"c", "a", "B", "_b"} {
+		created, err := store.CreateWebhookSubscription(ctx, WebhookSubscription{
+			ID: uuid.NewString(), Name: prefix + suffix, EndpointURL: "https://events.example.test/artifacts",
+			SecretCiphertext: "encrypted-secret", EventTypes: []WebhookEventType{WebhookEventArtifactQuarantined}, Enabled: true,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, created.ID)
+	}
+	var mine []string
+	seen := map[string]bool{}
+	previous := ""
+	for token, pages := "", 0; pages == 0 || token != ""; pages++ {
+		page, err := store.PageWebhookSubscriptions(ctx, WebhookSubscriptionQuery{Limit: 2, PageToken: token})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, item := range page.Items {
+			if previous != "" && item.Name <= previous {
+				t.Fatalf("%q follows %q: not in byte order", item.Name, previous)
+			}
+			previous = item.Name
+			if seen[item.ID] {
+				t.Fatalf("subscription %q served on two pages", item.Name)
+			}
+			seen[item.ID] = true
+			if strings.HasPrefix(item.Name, prefix) {
+				mine = append(mine, strings.TrimPrefix(item.Name, prefix))
+			}
+		}
+		token = page.NextPageToken
+	}
+	if strings.Join(mine, ",") != "B,_b,a,c" {
+		t.Fatalf("subscriptions of this test in order %v, want byte order B,_b,a,c", mine)
+	}
+}

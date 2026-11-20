@@ -15,22 +15,24 @@ for (const theme of ["dark", "light"] as const) {
     const gateway = await mockGateway(page, { authenticated: true });
     await page.route("**/api/v2/lifecycle-jobs**", (route) =>
       route.fulfill({
-        json: [
-          {
-            repositoryId: "repo-maven-releases",
-            repositoryName: "maven-releases",
-            job: {
-              id: "synthetic-job",
-              kind: "retention",
-              state: "completed",
-              attempts: 1,
-              maxAttempts: 3,
-              progressCurrent: 1,
-              progressTotal: 1,
-              createdAt: "2026-10-01T00:00:00Z",
+        json: {
+          items: [
+            {
+              repositoryId: "repo-maven-releases",
+              repositoryName: "maven-releases",
+              job: {
+                id: "synthetic-job",
+                kind: "retention",
+                state: "completed",
+                attempts: 1,
+                maxAttempts: 3,
+                progressCurrent: 1,
+                progressTotal: 1,
+                createdAt: "2026-10-01T00:00:00Z",
+              },
             },
-          },
-        ],
+          ],
+        },
       }),
     );
     await page.route("**/api/v2/audit-retention/jobs**", (route) =>

@@ -68,7 +68,8 @@ func TestWebhookDeliveryWorkerSignsRetriesAndCompletes(t *testing.T) {
 	if count, err := worker.RunOnce(ctx); err != nil || count != 1 {
 		t.Fatalf("first run count=%d err=%v", count, err)
 	}
-	deliveries, err := store.ListWebhookDeliveries(ctx, repository.WebhookDeliveryQuery{Limit: 10})
+	deliveriesPage, err := store.PageWebhookDeliveries(ctx, repository.WebhookDeliveryQuery{Limit: 10})
+	deliveries := deliveriesPage.Items
 	if err != nil || len(deliveries) != 1 || deliveries[0].State != repository.WebhookDeliveryRetrying || deliveries[0].Attempts != 1 || !deliveries[0].NextAttemptAt.Equal(now.Add(5*time.Second)) {
 		t.Fatalf("retry delivery=%#v err=%v", deliveries, err)
 	}
@@ -92,7 +93,8 @@ func TestWebhookDeliveryWorkerSignsRetriesAndCompletes(t *testing.T) {
 	if count, err := worker.RunOnce(ctx); err != nil || count != 1 {
 		t.Fatalf("second run count=%d err=%v", count, err)
 	}
-	deliveries, err = store.ListWebhookDeliveries(ctx, repository.WebhookDeliveryQuery{Limit: 10})
+	deliveriesPage, err = store.PageWebhookDeliveries(ctx, repository.WebhookDeliveryQuery{Limit: 10})
+	deliveries = deliveriesPage.Items
 	if err != nil || deliveries[0].State != repository.WebhookDeliverySucceeded || deliveries[0].Attempts != 2 || deliveries[0].LastStatus != http.StatusNoContent {
 		t.Fatalf("completed delivery=%#v err=%v", deliveries, err)
 	}
@@ -144,7 +146,8 @@ func TestWebhookDeliveryWorkerSendsCargoPromotionOutcome(t *testing.T) {
 	if count, err := worker.RunOnce(ctx); err != nil || count != 1 {
 		t.Fatalf("delivery count=%d err=%v", count, err)
 	}
-	deliveries, err := store.ListWebhookDeliveries(ctx, repository.WebhookDeliveryQuery{SubscriptionID: subscriptionID, Limit: 10})
+	deliveriesPage, err := store.PageWebhookDeliveries(ctx, repository.WebhookDeliveryQuery{SubscriptionID: subscriptionID, Limit: 10})
+	deliveries := deliveriesPage.Items
 	if err != nil || len(deliveries) != 1 || deliveries[0].State != repository.WebhookDeliverySucceeded {
 		t.Fatalf("deliveries=%+v err=%v", deliveries, err)
 	}
@@ -179,7 +182,8 @@ func TestWebhookDeliveryWorkerMarksAttemptEightDeadWithoutPersistingResponseBody
 		if count, runErr := worker.RunOnce(ctx); runErr != nil || count != 1 {
 			t.Fatalf("attempt %d count=%d err=%v", attempt, count, runErr)
 		}
-		deliveries, listErr := store.ListWebhookDeliveries(ctx, repository.WebhookDeliveryQuery{Limit: 1})
+		deliveriesPage, listErr := store.PageWebhookDeliveries(ctx, repository.WebhookDeliveryQuery{Limit: 1})
+		deliveries := deliveriesPage.Items
 		if listErr != nil {
 			t.Fatal(listErr)
 		}
@@ -231,7 +235,8 @@ func TestWebhookDeliveryWorkerDoesNotPreclaimSerialQueue(t *testing.T) {
 	if count, runErr := worker.RunOnce(ctx); runErr != nil || count != 1 {
 		t.Fatalf("run count=%d err=%v", count, runErr)
 	}
-	deliveries, err := store.ListWebhookDeliveries(ctx, repository.WebhookDeliveryQuery{Limit: 10})
+	deliveriesPage, err := store.PageWebhookDeliveries(ctx, repository.WebhookDeliveryQuery{Limit: 10})
+	deliveries := deliveriesPage.Items
 	if err != nil || len(deliveries) != 2 {
 		t.Fatalf("deliveries=%#v err=%v", deliveries, err)
 	}

@@ -8,7 +8,7 @@ import (
 	"fmt"
 )
 
-func (s *PostgresStore) CreateHostedRepository(ctx context.Context, repo HostedRepository) (HostedRepository, error) {
+func (s *PostgresStore) createHostedRepositoryMutation(ctx context.Context, repo HostedRepository) (HostedRepository, error) {
 	repo = normalizeHostedRepository(repo)
 	egressProxy, err := marshalEgressProxy(repo.EgressProxy)
 	if err != nil {
@@ -32,7 +32,7 @@ func (s *PostgresStore) CreateHostedRepository(ctx context.Context, repo HostedR
 	return repo, nil
 }
 
-func (s *PostgresStore) CreateHostedRepositoryIdempotently(ctx context.Context, repo HostedRepository, actor, key, payload string, audit ...AuditRecord) (HostedRepository, bool, error) {
+func (s *PostgresStore) createHostedRepositoryIdempotentlyMutation(ctx context.Context, repo HostedRepository, actor, key, payload string, audit ...AuditRecord) (HostedRepository, bool, error) {
 	repo = normalizeHostedRepository(repo)
 	egressProxy, err := marshalEgressProxy(repo.EgressProxy)
 	if err != nil {
@@ -101,17 +101,21 @@ func (s *PostgresStore) CreateHostedRepositoryIdempotently(ctx context.Context, 
 	return repo, false, nil
 }
 
-// hostedRepositoryColumns is the canonical projection for hosted_repositories
-// reads. allowed_hosts is projected through array_to_json so it scans into
-// []byte and decodes into []string without a pq dependency.
-// The hot hosted-repository reads, named for the plan-regression registry.
+// The hot hosted-repository reads, named for the plan-regression registry. The listing orders by the table's
+// id: a bare id names the selected id::text and would sort as text instead of reading the primary key.
 const (
 	getHostedRepositoryByNameQuery = `SELECT ` + hostedRepositoryColumns + ` FROM hosted_repositories WHERE name=$1`
-	listHostedRepositoriesQuery    = `SELECT ` + hostedRepositoryColumns + ` FROM hosted_repositories WHERE ($1 = '' OR id > NULLIF($1, '')::uuid) ORDER BY id LIMIT $2`
+	listHostedRepositoriesQuery    = `SELECT ` + hostedRepositoryColumns + ` FROM hosted_repositories WHERE ($1 = '' OR id > NULLIF($1, '')::uuid) ORDER BY hosted_repositories.id LIMIT $2`
 )
+
+// listHostedGroupsQuery pages the groups by id, in the primary key's order.
+const listHostedGroupsQuery = `SELECT id::text, name, format, visibility, version::text FROM hosted_groups WHERE ($1='' OR id>NULLIF($1,'')::uuid) ORDER BY hosted_groups.id LIMIT $2`
 
 const getHostedRepositoryQuery = `SELECT ` + hostedRepositoryColumns + ` FROM hosted_repositories WHERE id=$1::uuid`
 
+// hostedRepositoryColumns is the canonical projection for hosted_repositories
+// reads. allowed_hosts is projected through array_to_json so it scans into
+// []byte and decodes into []string without a pq dependency.
 const hostedRepositoryColumns = `id::text, name, format, repo_type, endpoint, array_to_json(allowed_hosts), visibility, maven_strict_publication, state, version::text, created_at, egress_proxy, upstream_auth, oci_bearer`
 
 // marshalEgressProxy encodes the egress proxy configuration for the JSONB
@@ -251,7 +255,7 @@ func (s *PostgresStore) GetHostedRepository(ctx context.Context, id string) (Hos
 	return repo, nil
 }
 
-func (s *PostgresStore) DisableHostedRepository(ctx context.Context, id string) (HostedRepository, error) {
+func (s *PostgresStore) disableHostedRepositoryMutation(ctx context.Context, id string) (HostedRepository, error) {
 	var repo HostedRepository
 	err := scanHostedRepository(s.db.QueryRowContext(ctx, `UPDATE hosted_repositories SET state='deleting', version=version+1 WHERE id=$1::uuid AND state='active' RETURNING `+hostedRepositoryColumns, id), &repo)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -273,7 +277,7 @@ func (s *PostgresStore) DisableHostedRepository(ctx context.Context, id string) 
 	return repo, nil
 }
 
-func (s *PostgresStore) FinalizeHostedRepositoryDeletion(ctx context.Context, id string) (HostedRepository, error) {
+func (s *PostgresStore) finalizeHostedRepositoryDeletionMutation(ctx context.Context, id string) (HostedRepository, error) {
 	var repo HostedRepository
 	err := scanHostedRepository(s.db.QueryRowContext(ctx, `UPDATE hosted_repositories SET state='deleted', version=version+1 WHERE id=$1::uuid AND state='deleting' RETURNING `+hostedRepositoryColumns, id), &repo)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -295,7 +299,7 @@ func (s *PostgresStore) FinalizeHostedRepositoryDeletion(ctx context.Context, id
 	return repo, nil
 }
 
-func (s *PostgresStore) UpdateHostedRepository(ctx context.Context, repo HostedRepository, expectedVersion string, audit ...AuditRecord) (HostedRepository, error) {
+func (s *PostgresStore) updateHostedRepositoryMutation(ctx context.Context, repo HostedRepository, expectedVersion string, audit ...AuditRecord) (HostedRepository, error) {
 	egressProxy, err := marshalEgressProxy(repo.EgressProxy)
 	if err != nil {
 		return HostedRepository{}, err
@@ -364,7 +368,7 @@ func checkGroupCeiling(ctx context.Context, q sqlRunner, visibility Visibility, 
 	for _, member := range members {
 		repositoryIDs = append(repositoryIDs, member.RepositoryID)
 	}
-	rows, err := q.QueryContext(ctx, `SELECT id::text, name, format, repo_type, visibility FROM hosted_repositories WHERE id = ANY($1::text[]::uuid[]) ORDER BY id FOR SHARE`, repositoryIDs)
+	rows, err := q.QueryContext(ctx, `SELECT id::text, name, format, repo_type, visibility FROM hosted_repositories WHERE id = ANY($1::text[]::uuid[]) ORDER BY hosted_repositories.id FOR SHARE`, repositoryIDs)
 	if err != nil {
 		return err
 	}
@@ -440,6 +444,44 @@ func scanHostedGroupMembers(ctx context.Context, query interface {
 	return rows.Err()
 }
 
+// listHostedGroupMembersQuery reads the members of several groups in their order, along the primary key
+// (group_id, position).
+const listHostedGroupMembersQuery = `SELECT group_id::text, repository_id::text, position FROM hosted_group_members WHERE group_id=ANY($1::text[]::uuid[]) ORDER BY hosted_group_members.group_id, hosted_group_members.position`
+
+// scanHostedGroupsMembers sets the members of every group of a page, read in one query. The ids are the
+// canonical text PostgreSQL returns, as the page query selected them.
+func scanHostedGroupsMembers(ctx context.Context, query interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}, groups []HostedGroup) error {
+	if len(groups) == 0 {
+		return nil
+	}
+	ids := make([]string, len(groups))
+	index := make(map[string]int, len(groups))
+	for i := range groups {
+		groups[i].Members = nil
+		ids[i], index[groups[i].ID] = groups[i].ID, i
+	}
+	rows, err := query.QueryContext(ctx, listHostedGroupMembersQuery, ids)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var groupID string
+		var member GroupMember
+		if err := rows.Scan(&groupID, &member.RepositoryID, &member.Position); err != nil {
+			return err
+		}
+		i, ok := index[groupID]
+		if !ok {
+			return fmt.Errorf("group members: unexpected group %s", groupID)
+		}
+		groups[i].Members = append(groups[i].Members, member)
+	}
+	return rows.Err()
+}
+
 func (s *PostgresStore) getHostedGroup(ctx context.Context, query interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
@@ -458,7 +500,7 @@ func (s *PostgresStore) getHostedGroup(ctx context.Context, query interface {
 	return group, nil
 }
 
-func (s *PostgresStore) CreateHostedGroupIdempotently(ctx context.Context, group HostedGroup, actor, key, payload string, audit ...AuditRecord) (HostedGroup, bool, error) {
+func (s *PostgresStore) createHostedGroupIdempotentlyMutation(ctx context.Context, group HostedGroup, actor, key, payload string, audit ...AuditRecord) (HostedGroup, bool, error) {
 	group.Visibility = NormalizeVisibility(group.Visibility)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -529,27 +571,24 @@ func (s *PostgresStore) CreateHostedGroupIdempotently(ctx context.Context, group
 	return group, false, nil
 }
 
+// ListHostedGroups pages the groups by id with a keyset: the page after a cursor starts at the next id,
+// whether or not the cursor's group still exists. A cursor that is not a uuid in the canonical form the
+// listing hands out is ErrNotFound. The page and its members are read in one read-only snapshot, so every
+// group comes with the members of its version.
 func (s *PostgresStore) ListHostedGroups(ctx context.Context, limit int, after string) ([]HostedGroup, string, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id::text, name, format, visibility, version::text FROM hosted_groups WHERE ($1='' OR id>NULLIF($1,'')::uuid) ORDER BY id LIMIT $2`, after, limit+1)
+	if after != "" && !isCanonicalUUID(after) {
+		return nil, "", ErrNotFound
+	}
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	if err != nil {
 		return nil, "", err
 	}
-	defer func() { _ = rows.Close() }()
-	groups := make([]HostedGroup, 0, limit)
-	for rows.Next() {
-		var group HostedGroup
-		if err := rows.Scan(&group.ID, &group.Name, &group.Format, &group.Visibility, &group.Version); err != nil {
-			return nil, "", err
-		}
-		if err := scanHostedGroupMembers(ctx, s.db, &group); err != nil {
-			return nil, "", err
-		}
-		groups = append(groups, group)
-	}
-	if err := rows.Err(); err != nil {
+	defer func() { _ = tx.Rollback() }()
+	groups, err := listHostedGroupsPage(ctx, tx, after, limit+1)
+	if err != nil {
 		return nil, "", err
 	}
 	next := ""
@@ -557,7 +596,37 @@ func (s *PostgresStore) ListHostedGroups(ctx context.Context, limit int, after s
 		next = groups[limit-1].ID
 		groups = groups[:limit]
 	}
+	if err := scanHostedGroupsMembers(ctx, tx, groups); err != nil {
+		return nil, "", err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, "", err
+	}
 	return groups, next, nil
+}
+
+// isCanonicalUUID tells whether s is a uuid in the lowercase hyphenated form PostgreSQL prints.
+func isCanonicalUUID(s string) bool {
+	canonical, ok := canonicalUUID(s)
+	return ok && canonical == s
+}
+
+// listHostedGroupsPage reads up to limit groups after the cursor, without their members.
+func listHostedGroupsPage(ctx context.Context, tx *sql.Tx, after string, limit int) ([]HostedGroup, error) {
+	rows, err := tx.QueryContext(ctx, listHostedGroupsQuery, after, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	groups := make([]HostedGroup, 0, limit)
+	for rows.Next() {
+		var group HostedGroup
+		if err := rows.Scan(&group.ID, &group.Name, &group.Format, &group.Visibility, &group.Version); err != nil {
+			return nil, err
+		}
+		groups = append(groups, group)
+	}
+	return groups, rows.Err()
 }
 
 func (s *PostgresStore) GetHostedGroup(ctx context.Context, id string) (HostedGroup, error) {
@@ -642,17 +711,17 @@ func (s *PostgresStore) replaceHostedGroup(ctx context.Context, id, name string,
 	return group, nil
 }
 
-func (s *PostgresStore) ReplaceHostedGroup(ctx context.Context, group HostedGroup, expectedVersion string, audit ...AuditRecord) (HostedGroup, error) {
+func (s *PostgresStore) replaceHostedGroupMutation(ctx context.Context, group HostedGroup, expectedVersion string, audit ...AuditRecord) (HostedGroup, error) {
 	return s.replaceHostedGroup(ctx, group.ID, group.Name, group.Format, NormalizeVisibility(group.Visibility), group.Members, expectedVersion, true, audit...)
 }
-func (s *PostgresStore) ReplaceHostedGroupMembers(ctx context.Context, id string, members []GroupMember, expectedVersion string) (HostedGroup, error) {
+func (s *PostgresStore) replaceHostedGroupMembersMutation(ctx context.Context, id string, members []GroupMember, expectedVersion string) (HostedGroup, error) {
 	current, err := s.GetHostedGroup(ctx, id)
 	if err != nil {
 		return HostedGroup{}, err
 	}
 	return s.replaceHostedGroup(ctx, id, current.Name, current.Format, current.Visibility, members, expectedVersion, false)
 }
-func (s *PostgresStore) DeleteHostedGroup(ctx context.Context, id string) error {
+func (s *PostgresStore) deleteHostedGroupMutation(ctx context.Context, id string) error {
 	result, err := s.db.ExecContext(ctx, `DELETE FROM hosted_groups WHERE id=$1::uuid`, id)
 	if err != nil {
 		return err
@@ -928,3 +997,76 @@ func (s *PostgresStore) ReplaceRepositoryRetentionPolicy(ctx context.Context, re
 
 // listRepositoryGrantsQuery reads the grants of one repository for the authorization decision.
 const listRepositoryGrantsQuery = `SELECT principal, array_to_json(scopes), resource_prefix FROM repository_grants WHERE repository_id=$1::uuid ORDER BY principal, resource_prefix`
+
+func (s *PostgresStore) CreateHostedRepository(ctx context.Context, repo HostedRepository) (HostedRepository, error) {
+	created, err := s.createHostedRepositoryMutation(ctx, repo)
+	if err == nil {
+		s.invalidateLocal(CacheScopeRepository, created.ID)
+	}
+	return created, err
+}
+
+func (s *PostgresStore) CreateHostedRepositoryIdempotently(ctx context.Context, repo HostedRepository, actor, key, payload string, audit ...AuditRecord) (HostedRepository, bool, error) {
+	created, replayed, err := s.createHostedRepositoryIdempotentlyMutation(ctx, repo, actor, key, payload, audit...)
+	if err == nil {
+		s.invalidateLocal(CacheScopeRepository, created.ID)
+	}
+	return created, replayed, err
+}
+
+func (s *PostgresStore) DisableHostedRepository(ctx context.Context, id string) (HostedRepository, error) {
+	repo, err := s.disableHostedRepositoryMutation(ctx, id)
+	if err == nil {
+		s.invalidateLocal(CacheScopeRepository, repo.ID)
+	}
+	return repo, err
+}
+
+func (s *PostgresStore) FinalizeHostedRepositoryDeletion(ctx context.Context, id string) (HostedRepository, error) {
+	repo, err := s.finalizeHostedRepositoryDeletionMutation(ctx, id)
+	if err == nil {
+		s.invalidateLocal(CacheScopeRepository, repo.ID)
+	}
+	return repo, err
+}
+
+func (s *PostgresStore) UpdateHostedRepository(ctx context.Context, repo HostedRepository, expectedVersion string, audit ...AuditRecord) (HostedRepository, error) {
+	updated, err := s.updateHostedRepositoryMutation(ctx, repo, expectedVersion, audit...)
+	if err == nil {
+		s.invalidateLocal(CacheScopeRepository, updated.ID)
+	}
+	return updated, err
+}
+
+func (s *PostgresStore) CreateHostedGroupIdempotently(ctx context.Context, group HostedGroup, actor, key, payload string, audit ...AuditRecord) (HostedGroup, bool, error) {
+	created, replayed, err := s.createHostedGroupIdempotentlyMutation(ctx, group, actor, key, payload, audit...)
+	if err == nil {
+		s.invalidateLocal(CacheScopeGroup, created.ID)
+	}
+	return created, replayed, err
+}
+
+func (s *PostgresStore) ReplaceHostedGroup(ctx context.Context, group HostedGroup, expectedVersion string, audit ...AuditRecord) (HostedGroup, error) {
+	replaced, err := s.replaceHostedGroupMutation(ctx, group, expectedVersion, audit...)
+	if err == nil {
+		s.invalidateLocal(CacheScopeGroup, replaced.ID)
+	}
+	return replaced, err
+}
+
+func (s *PostgresStore) ReplaceHostedGroupMembers(ctx context.Context, id string, members []GroupMember, expectedVersion string) (HostedGroup, error) {
+	replaced, err := s.replaceHostedGroupMembersMutation(ctx, id, members, expectedVersion)
+	if err == nil {
+		s.invalidateLocal(CacheScopeGroup, replaced.ID)
+	}
+	return replaced, err
+}
+
+// DeleteHostedGroup deletes the group and evicts it from this process's read caches once it committed.
+func (s *PostgresStore) DeleteHostedGroup(ctx context.Context, id string) error {
+	err := s.deleteHostedGroupMutation(ctx, id)
+	if err == nil {
+		s.invalidateLocal(CacheScopeGroup, id)
+	}
+	return err
+}

@@ -447,15 +447,18 @@ func TestPostgresLifecycleJobStatusManagementHTTP(t *testing.T) {
 	if response.Code != http.StatusOK || strings.Contains(response.Body.String(), "private-object-key") {
 		t.Fatalf("lifecycle jobs=%d body=%s", response.Code, response.Body.String())
 	}
-	var jobs []struct {
-		ID        string `json:"id"`
-		Kind      string `json:"kind"`
-		State     string `json:"state"`
-		CreatedAt string `json:"createdAt"`
+	var page struct {
+		Items []struct {
+			ID        string `json:"id"`
+			Kind      string `json:"kind"`
+			State     string `json:"state"`
+			CreatedAt string `json:"createdAt"`
+		} `json:"items"`
 	}
-	if err := json.NewDecoder(response.Body).Decode(&jobs); err != nil {
+	if err := json.NewDecoder(response.Body).Decode(&page); err != nil {
 		t.Fatal(err)
 	}
+	jobs := page.Items
 	if len(jobs) != 1 || jobs[0].ID != job.ID || jobs[0].Kind != "reclaim" || jobs[0].State != "pending" || jobs[0].CreatedAt == "" {
 		t.Fatalf("jobs=%#v", jobs)
 	}

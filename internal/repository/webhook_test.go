@@ -36,7 +36,8 @@ func TestMemoryWebhookSubscriptionCASAndDeliveryLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	deliveries, err := store.ListWebhookDeliveries(ctx, WebhookDeliveryQuery{Limit: 10})
+	deliveriesPage, err := store.PageWebhookDeliveries(ctx, WebhookDeliveryQuery{Limit: 10})
+	deliveries := deliveriesPage.Items
 	if err != nil || len(deliveries) != 1 || deliveries[0].EventID != event.ID || deliveries[0].State != WebhookDeliveryPending {
 		t.Fatalf("pending deliveries = %#v, err=%v", deliveries, err)
 	}
@@ -69,7 +70,8 @@ func TestMemoryWebhookSubscriptionCASAndDeliveryLifecycle(t *testing.T) {
 	if err = store.CompleteWebhookDelivery(ctx, claims[0].Delivery.ID, claims[0].Delivery.LeaseToken, 204, now.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
-	deliveries, err = store.ListWebhookDeliveries(ctx, WebhookDeliveryQuery{Limit: 10})
+	deliveriesPage, err = store.PageWebhookDeliveries(ctx, WebhookDeliveryQuery{Limit: 10})
+	deliveries = deliveriesPage.Items
 	if err != nil || len(deliveries) != 1 || deliveries[0].State != WebhookDeliverySucceeded || deliveries[0].LastStatus != 204 {
 		t.Fatalf("completed deliveries = %#v, err=%v", deliveries, err)
 	}
@@ -98,7 +100,8 @@ func TestMemoryArtifactQuarantineCreatesMatchingWebhookEventAtomically(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	deliveries, err := store.ListWebhookDeliveries(ctx, WebhookDeliveryQuery{Limit: 10})
+	deliveriesPage, err := store.PageWebhookDeliveries(ctx, WebhookDeliveryQuery{Limit: 10})
+	deliveries := deliveriesPage.Items
 	if err != nil || len(deliveries) != 1 || deliveries[0].EventType != WebhookEventArtifactQuarantined {
 		t.Fatalf("quarantine deliveries = %#v, err=%v", deliveries, err)
 	}
@@ -108,7 +111,8 @@ func TestMemoryArtifactQuarantineCreatesMatchingWebhookEventAtomically(t *testin
 	}, quarantined.Version); err != nil {
 		t.Fatal(err)
 	}
-	deliveries, err = store.ListWebhookDeliveries(ctx, WebhookDeliveryQuery{Limit: 10})
+	deliveriesPage, err = store.PageWebhookDeliveries(ctx, WebhookDeliveryQuery{Limit: 10})
+	deliveries = deliveriesPage.Items
 	if err != nil || len(deliveries) != 2 || deliveries[0].EventType != WebhookEventArtifactReleased {
 		t.Fatalf("release deliveries = %#v, err=%v", deliveries, err)
 	}
