@@ -14,6 +14,7 @@ import (
 	"time"
 
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -237,6 +238,10 @@ func (h rawVersionManagementHandler) ListRawVersions(w http.ResponseWriter, r *h
 		if params.PageToken != nil && *params.PageToken != "" {
 			keys, err := repository.DecodeKeysetToken(*params.PageToken, filter, 2)
 			if err != nil {
+				writeHostedProblem(w, http.StatusBadRequest, "invalid_page_token", "page token is invalid or expired")
+				return
+			}
+			if !ids.Valid(keys[1]) {
 				writeHostedProblem(w, http.StatusBadRequest, "invalid_page_token", "page token is invalid or expired")
 				return
 			}

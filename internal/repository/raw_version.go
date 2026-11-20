@@ -51,6 +51,10 @@ const (
 	RawVersionTombstoned RawVersionState = "tombstoned"
 )
 
+// MaxRawFilesPerVersion is the largest files-per-version cap a deployment can configure; the file read of a version is
+// bounded by it.
+const MaxRawFilesPerVersion = 100000
+
 // DefaultRawMaxFilesPerVersion is the files-per-version cap when the store is not configured (ADR 0028 configuration).
 const DefaultRawMaxFilesPerVersion = 1000
 
@@ -78,6 +82,8 @@ var (
 	ErrVersionFileImmutable = errors.New("file of a strict repository cannot be deleted")
 	// ErrVersionFileLimit reports a write beyond the files-per-version cap.
 	ErrVersionFileLimit = errors.New("version file count limit reached")
+	// ErrVersionTooLarge reports a version with more files than MaxRawFilesPerVersion, whose listing would be truncated.
+	ErrVersionTooLarge = errors.New("version has more files than can be listed")
 	// ErrVersionEmpty reports a seal of a version without files.
 	ErrVersionEmpty = errors.New("version has no files")
 	// ErrChecksumMismatch reports an expected file list or checksums file that disagrees with the stored files.

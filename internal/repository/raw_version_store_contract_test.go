@@ -293,6 +293,33 @@ func runRawVersionStoreContract(t *testing.T, newStore rawVersionContractFactory
 			t.Fatalf("version after the race: %#v, accepted %d", v, accepted)
 		}
 	})
+	t.Run("identical_bytes_in_concurrent_writers_and_deleters_do_not_deadlock", func(t *testing.T) {
+		store := factory(t)
+		repo := newRepo(t, store, nil)
+		for round := 0; round < 25; round++ {
+			version := fmt.Sprintf("1.0.%d", round)
+			mustPut(t, store, repo.ID, "tool/"+version+"/first", "shared bytes")
+			var wg sync.WaitGroup
+			errs := make(chan error, 2)
+			wg.Add(2)
+			go func() {
+				defer wg.Done()
+				errs <- store.DeleteRawAsset(ctx, repo.ID, "tool/"+version+"/first")
+			}()
+			go func() {
+				defer wg.Done()
+				_, err := put(t, store, repo.ID, "tool/"+version+"/second", "shared bytes")
+				errs <- err
+			}()
+			wg.Wait()
+			close(errs)
+			for err := range errs {
+				if err != nil {
+					t.Fatalf("round %d: %v", round, err)
+				}
+			}
+		}
+	})
 	t.Run("files_per_version_cap", func(t *testing.T) {
 		store := factory(t)
 		store.SetRawMaxFilesPerVersion(2)
@@ -414,8 +441,15 @@ func runRawVersionStoreContract(t *testing.T, newStore rawVersionContractFactory
 		if _, err = store.SetRawVersionProperties(ctx, repo.ID, "tool", "1.0.0", map[string]string{"k": "v"}); !errors.Is(err, repository.ErrVersionSealed) {
 			t.Fatalf("properties after seal: %v", err)
 		}
-		if _, _, err = store.CreateRawVersion(ctx, repository.RawVersion{RepositoryID: repo.ID, Name: "tool", Version: "1.0.0"}); !errors.Is(err, repository.ErrVersionSealed) {
-			t.Fatalf("create of a sealed version: %v", err)
+		again2, isNew, err := store.CreateRawVersion(ctx, repository.RawVersion{RepositoryID: repo.ID, Name: "tool", Version: "1.0.0"})
+		if err != nil || isNew || again2.ManifestDigest != want {
+			t.Fatalf("a create that repeats a sealed version must answer it unchanged: %#v %v %v", again2, isNew, err)
+		}
+		if same, _, err := store.CreateRawVersion(ctx, repository.RawVersion{RepositoryID: repo.ID, Name: "tool", Version: "1.0.0", Properties: map[string]string{"git.sha": "abc"}}); err != nil || same.State != repository.RawVersionSealed {
+			t.Fatalf("a create with the sealed properties: %#v %v", same, err)
+		}
+		if _, _, err = store.CreateRawVersion(ctx, repository.RawVersion{RepositoryID: repo.ID, Name: "tool", Version: "1.0.0", Properties: map[string]string{"git.sha": "other"}}); !errors.Is(err, repository.ErrVersionSealed) {
+			t.Fatalf("a create that would change a sealed version: %v", err)
 		}
 		files, err := store.ListRawVersionFiles(ctx, repo.ID, "tool", "1.0.0")
 		if err != nil || len(files) != 2 || files[0].Path != "tool/1.0.0/a.txt" || files[1].Path != "tool/1.0.0/bin/b.txt" {

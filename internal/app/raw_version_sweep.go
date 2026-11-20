@@ -87,6 +87,10 @@ func (s RawVersionSweeper) Run(ctx context.Context) (sealed int, err error) {
 			slog.Warn("release raw idle seal lease", "component", "raw_idle_seal", "error", releaseErr)
 		}
 	}()
+	// A version that cannot be sealed is reported and skipped by the store, so it never keeps the younger versions
+	// waiting; such a run still completes, which starts the interval, like the meta sweep that reports what it
+	// could not sweep. Only an interruption (the context, a lost lease) releases the lease uncompleted.
+	var failures error
 	for {
 		if err = ctx.Err(); err != nil {
 			s.run("failed", sealed)
@@ -95,8 +99,11 @@ func (s RawVersionSweeper) Run(ctx context.Context) (sealed int, err error) {
 		batch, sealErr := s.Store.SealIdleRawVersions(ctx, s.now().Add(-s.Idle), rawIdleSealBatch)
 		sealed += len(batch)
 		if sealErr != nil {
-			s.run("failed", sealed)
-			return sealed, sealErr
+			if ctx.Err() != nil {
+				s.run("failed", sealed)
+				return sealed, errors.Join(failures, sealErr)
+			}
+			failures = errors.Join(failures, sealErr)
 		}
 		if len(batch) < rawIdleSealBatch {
 			break
@@ -109,6 +116,10 @@ func (s RawVersionSweeper) Run(ctx context.Context) (sealed int, err error) {
 		}
 	}
 	completed = true
+	if failures != nil {
+		s.run("failed", sealed)
+		return sealed, failures
+	}
 	s.run("completed", sealed)
 	return sealed, nil
 }

@@ -92,10 +92,14 @@ func (s *PostgresStore) CompleteRawUploadIf(ctx context.Context, id string, asse
 	if repoID != asset.RepositoryID || path != asset.Path {
 		return asset, ErrNotFound
 	}
+	version, err := s.beginVersionedWrite(ctx, tx, asset, condition, rawWriteActor(ctx))
+	if err != nil {
+		return asset, err
+	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO native_raw_objects (digest,repository_id,object_key,size) VALUES ($1,$2,$3,$4) ON CONFLICT (digest) DO UPDATE SET repository_id=EXCLUDED.repository_id,collected_at=NULL`, asset.Digest, asset.RepositoryID, asset.ObjectKey, asset.Size); err != nil {
 		return asset, err
 	}
-	current, delta, replaceErr := s.replaceRawAssetIf(ctx, tx, asset, condition, rawWriteActor(ctx))
+	current, delta, replaceErr := s.replaceRawAssetIf(ctx, tx, asset, condition, version)
 	if replaceErr != nil {
 		if rawWriteRefused(replaceErr) {
 			return current, replaceErr
@@ -195,13 +199,19 @@ func (s *PostgresStore) PutRawAssetIf(ctx context.Context, v RawAsset, condition
 	if err = checkNativePublicationGuard(ctx, tx); err != nil {
 		return v, err
 	}
+	// A write to a versioned repository takes the version row lock before any object row, so every writer and
+	// deleter of a version orders its locks the same way and two files with identical bytes cannot deadlock.
+	version, err := s.beginVersionedWrite(ctx, tx, v, condition, rawWriteActor(ctx))
+	if err != nil {
+		return v, err
+	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO native_raw_objects (digest,repository_id,object_key,size) VALUES ($1,$2,$3,$4) ON CONFLICT (digest) DO UPDATE SET repository_id=EXCLUDED.repository_id,collected_at=NULL`, v.Digest, v.RepositoryID, v.ObjectKey, v.Size); err != nil {
 		return v, err
 	}
 	if err = tx.QueryRowContext(ctx, `SELECT object_key,size FROM native_raw_objects WHERE digest=$1`, v.Digest).Scan(&v.ObjectKey, &v.Size); err != nil {
 		return v, err
 	}
-	current, delta, replaceErr := s.replaceRawAssetIf(ctx, tx, v, condition, rawWriteActor(ctx))
+	current, delta, replaceErr := s.replaceRawAssetIf(ctx, tx, v, condition, version)
 	if replaceErr != nil {
 		if rawWriteRefused(replaceErr) {
 			return current, replaceErr
@@ -260,13 +270,9 @@ func lockRawPath(ctx context.Context, tx *sql.Tx, repositoryID, path string) (si
 // re-evaluates the condition against the reference the winner committed.
 // It returns the usage delta (new object minus replaced object) for the caller to
 // reserve before commit (ADR 0023 section 3).
-func (s *PostgresStore) replaceRawAssetIf(ctx context.Context, tx *sql.Tx, asset RawAsset, condition RawWriteCondition, actor string) (RawAsset, rawUsageDelta, error) {
-	layout, _, err := rawRepositoryLayout(ctx, tx, asset.RepositoryID)
-	if err != nil {
-		return RawAsset{}, rawUsageDelta{}, err
-	}
-	if layout == RawLayoutVersioned {
-		return s.replaceVersionedRawAsset(ctx, tx, asset, condition, actor)
+func (s *PostgresStore) replaceRawAssetIf(ctx context.Context, tx *sql.Tx, asset RawAsset, condition RawWriteCondition, version *RawVersion) (RawAsset, rawUsageDelta, error) {
+	if version != nil {
+		return s.replaceVersionedRawAsset(ctx, tx, asset, *version)
 	}
 	previousSize, existed, err := lockRawPath(ctx, tx, asset.RepositoryID, asset.Path)
 	if err != nil {
@@ -361,7 +367,7 @@ func (s *PostgresStore) DeleteRawAsset(ctx context.Context, repositoryID, path s
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	layout, strict, err := rawRepositoryLayout(ctx, tx, repositoryID)
+	layout, strict, err := s.rawRepositoryLayout(ctx, tx, repositoryID)
 	if err != nil {
 		return err
 	}
@@ -409,7 +415,7 @@ func (s *PostgresStore) RestoreRawAsset(ctx context.Context, repositoryID, path 
 		return RawAsset{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	layout, _, err := rawRepositoryLayout(ctx, tx, repositoryID)
+	layout, _, err := s.rawRepositoryLayout(ctx, tx, repositoryID)
 	if err != nil {
 		return RawAsset{}, err
 	}

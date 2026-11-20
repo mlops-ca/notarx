@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -128,7 +129,7 @@ func TestRawVersionSweepReportsStaleOpenVersionsAndNeverRemovesThem(t *testing.T
 	if _, err := sweeper.Run(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if !metrics.gaugeSet || metrics.stale != 2 || metrics.oldest < (10*24*time.Hour - time.Minute).Seconds() {
+	if !metrics.gaugeSet || metrics.stale != 2 || metrics.oldest < (10*24*time.Hour-time.Minute).Seconds() {
 		t.Fatalf("gauges: stale=%d oldest=%v", metrics.stale, metrics.oldest)
 	}
 	// The repository is in explicit mode, so an open version ten days old is reported and nothing else.
@@ -192,6 +193,39 @@ func TestRawVersionSweepRunsOnOneNodeAtATime(t *testing.T) {
 	}
 	if total != 1 {
 		t.Fatalf("one version, %d seals across the fleet: %v", total, results)
+	}
+}
+
+// poisonedSweepStore reports a failure for one version of every call while the others are sealed, as the stores do.
+type poisonedSweepStore struct {
+	*repository.MemoryStore
+	err error
+}
+
+func (s poisonedSweepStore) SealIdleRawVersions(ctx context.Context, idleBefore time.Time, limit int) ([]repository.RawVersion, error) {
+	sealed, err := s.MemoryStore.SealIdleRawVersions(ctx, idleBefore, limit)
+	return sealed, errors.Join(err, s.err)
+}
+
+func TestRawVersionSweepReportsAFailedSealButStillCompletes(t *testing.T) {
+	f := newSweepFixture(t)
+	f.put(t, f.idle, "tool/1.0.0/a")
+	metrics := &sweepMetrics{}
+	failure := errors.New("seal tool@0.0.1 of repository idle-feed: audit unavailable")
+	sweeper := RawVersionSweeper{Store: poisonedSweepStore{f.store, failure}, Metrics: metrics, Owner: "node-a", Idle: 5 * time.Minute, Interval: time.Hour, StaleAfter: time.Hour, Now: func() time.Time { return f.now.Add(time.Hour) }}
+	sealed, err := sweeper.Run(context.Background())
+	if sealed != 1 || !errors.Is(err, failure) {
+		t.Fatalf("the healthy version is sealed and the failure reported: %d %v", sealed, err)
+	}
+	if f.state(t, f.idle, "tool", "1.0.0") != repository.RawVersionSealed {
+		t.Fatal("a failing version must not keep the others from being sealed")
+	}
+	if metrics.runs["failed"] != 1 || metrics.runs["completed"] != 0 {
+		t.Fatalf("run metrics: %#v", metrics.runs)
+	}
+	// The run counts as completed for the lease, so the fleet waits out the interval instead of retrying every tick.
+	if held, _ := f.store.AcquireInternalTaskLease(context.Background(), rawIdleSealLease, "node-b", time.Minute, time.Hour); held {
+		t.Fatal("a run with a reported failure must still start the minimum interval")
 	}
 }
 

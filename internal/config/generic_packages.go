@@ -9,6 +9,8 @@ import (
 const (
 	// DefaultGenericMaxFilesPerVersion keeps the manifest of a version under 256 KiB.
 	DefaultGenericMaxFilesPerVersion = 1000
+	// MaxGenericMaxFilesPerVersion is the largest cap the file read of a version can honour.
+	MaxGenericMaxFilesPerVersion = 100000
 	// DefaultGenericAutosealIdle is how long an open version of an idle-mode repository saw no write before the
 	// sweep seals it.
 	DefaultGenericAutosealIdle = 300 * time.Second
@@ -28,6 +30,9 @@ func loadGenericPackagesConfig(cfg *Config) error {
 	var err error
 	if cfg.GenericMaxFilesPerVersion, err = positiveIntEnv("NOTARX_GENERIC_MAX_FILES_PER_VERSION", cfg.GenericMaxFilesPerVersion, false); err != nil {
 		return err
+	}
+	if cfg.GenericMaxFilesPerVersion > MaxGenericMaxFilesPerVersion {
+		return fmt.Errorf("NOTARX_GENERIC_MAX_FILES_PER_VERSION must be at most %d", MaxGenericMaxFilesPerVersion)
 	}
 	if cfg.GenericAutosealIdle, err = durationEnv("NOTARX_GENERIC_AUTOSEAL_IDLE", cfg.GenericAutosealIdle); err != nil {
 		return err

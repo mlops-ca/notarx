@@ -11,7 +11,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -310,8 +312,14 @@ func TestVersionSealChecksVerifiesAndFreezes(t *testing.T) {
 	if response := h.api(http.MethodPut, "/packages/tool/versions/1.0.0/properties", h.writer, `{"properties":{"k":"late"}}`); response.Code != http.StatusConflict || problemCodeOf(t, response) != "version_sealed" {
 		t.Fatalf("properties after seal=%d %s", response.Code, response.Body.String())
 	}
-	if response := h.api(http.MethodPut, "/packages/tool/versions/1.0.0", h.writer, ""); response.Code != http.StatusConflict {
-		t.Fatalf("create of a sealed version=%d", response.Code)
+	if response := h.api(http.MethodPut, "/packages/tool/versions/1.0.0", h.writer, ""); response.Code != http.StatusOK {
+		t.Fatalf("a create that repeats a sealed version must be idempotent=%d", response.Code)
+	}
+	if response := h.api(http.MethodPut, "/packages/tool/versions/1.0.0", h.writer, `{"properties":{"final":"yes"}}`); response.Code != http.StatusOK {
+		t.Fatalf("a create with the sealed properties=%d", response.Code)
+	}
+	if response := h.api(http.MethodPut, "/packages/tool/versions/1.0.0", h.writer, `{"properties":{"final":"no"}}`); response.Code != http.StatusConflict || problemCodeOf(t, response) != "version_sealed" {
+		t.Fatalf("a create that would change a sealed version=%d", response.Code)
 	}
 	if response := h.api(http.MethodPut, "/packages/Bad_Name/versions/1.0.0", h.writer, ""); response.Code != http.StatusUnprocessableEntity || problemCodeOf(t, response) != "invalid_generic_path" {
 		t.Fatalf("invalid name=%d %s", response.Code, response.Body.String())
@@ -392,6 +400,44 @@ func TestVersionListsFilterAndPage(t *testing.T) {
 	}
 	if response := h.api(http.MethodGet, "/packages?pageSize=1", h.reader, ""); response.Code != http.StatusOK {
 		t.Fatalf("packages=%d", response.Code)
+	}
+}
+
+func TestVersionListRejectsAForgedCursor(t *testing.T) {
+	h := newRawVersionHarness(t, nil)
+	h.upload("tool/1.0.0/f", "x")
+	h.upload("tool/2.0.0/f", "y")
+	first := decodeJSON[adminopenapi.RawVersionPage](t, h.api(http.MethodGet, "/packages/tool/versions?pageSize=1", h.reader, ""))
+	if first.NextPageToken == nil {
+		t.Fatal("expected a second page")
+	}
+	filter := strings.Join([]string{"raw-versions", h.repoID, "tool", ""}, "\x00")
+	for name, keys := range map[string][]string{"not a uuid": {"", "not-a-uuid"}, "bad time": {"yesterday", uuid.NewString()}} {
+		token := repository.EncodeKeysetToken(filter, keys...)
+		if response := h.api(http.MethodGet, "/packages/tool/versions?pageSize=1&pageToken="+token, h.reader, ""); response.Code != http.StatusBadRequest || problemCodeOf(t, response) != "invalid_page_token" {
+			t.Errorf("%s: %d %s", name, response.Code, response.Body.String())
+		}
+	}
+}
+
+func TestVersionedRepositoriesAreOutsidePathRetentionAndPathTombstones(t *testing.T) {
+	h := newRawVersionHarness(t, nil)
+	h.upload("tool/1.0.0/f", "x")
+	h.api(http.MethodPost, "/packages/tool/versions/1.0.0:seal", "admin-secret", "")
+	for _, path := range []string{"/tombstones", "/restore"} {
+		response := h.api(http.MethodPost, path, "admin-secret", `{"coordinate":"tool/1.0.0/f"}`)
+		if response.Code != http.StatusUnprocessableEntity || problemCodeOf(t, response) != "layout_mismatch" {
+			t.Errorf("%s: %d %s", path, response.Code, response.Body.String())
+		}
+	}
+	if _, err := h.store.GetRawAsset(context.Background(), h.repoID, "tool/1.0.0/f"); err != nil {
+		t.Fatalf("a refused tombstone must leave the file: %v", err)
+	}
+	retentionPolicyForTest(t, h.store, h.repoID, repository.RepositoryRetentionPolicy{Enabled: true, KeepDays: 1})
+	retention := NativeRepositoryRetention{Store: h.store, Now: func() time.Time { return time.Now().Add(365 * 24 * time.Hour) }}
+	candidates, err := retention.PlanRepositoryDetailed(context.Background(), h.repoID, repository.FormatRaw)
+	if err != nil || len(candidates) != 0 {
+		t.Fatalf("path retention must not plan files of a versioned repository: %#v %v", candidates, err)
 	}
 }
 

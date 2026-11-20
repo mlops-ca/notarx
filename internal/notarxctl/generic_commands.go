@@ -354,6 +354,20 @@ func genericPushCommand() command {
 						return
 					}
 					target := rawObjectPath(repo.Name, object.remote)
+					// Files are create-only: what the version already holds is read back by digest, so identical
+					// bytes are not sent again and different bytes are a conflict before any upload starts.
+					digest, exists, headErr := remoteDigest(ctx, client, target)
+					switch {
+					case headErr != nil:
+						item.Status, item.Error, item.Code = "failed", redactText(headErr.Error(), client.token), localErrorCode(headErr)
+						return
+					case exists && digest == object.digest:
+						item.Status = "unchanged"
+						return
+					case exists:
+						item.Status, item.Code, item.Error = "conflict", "version_file_exists", "the version already holds different bytes at this path"
+						return
+					}
 					var uploadErr error
 					replayed := false
 					if resumable {

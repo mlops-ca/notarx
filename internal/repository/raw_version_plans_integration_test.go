@@ -3,6 +3,9 @@
 package repository
 
 import (
+	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,7 +20,7 @@ func TestRawSweepQueriesAreIndexBacked(t *testing.T) {
 		sql  string
 		args []any
 	}{
-		"idle seal candidates": {rawIdleCandidatesQuery, []any{time.Now(), 100}},
+		"idle seal candidates": {rawIdleCandidatesQuery, []any{time.Now(), 100, time.Unix(0, 0).UTC(), "00000000-0000-0000-0000-000000000000"}},
 		"open version stats":   {rawOpenStatsQuery, []any{time.Now()}},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -119,5 +122,36 @@ func TestRawVersionListingsAreIndexBacked(t *testing.T) {
 				t.Fatalf("sequential scans on %v", scans)
 			}
 		})
+	}
+}
+
+// TestRawVersionFileReadRefusesATruncatedListing seeds one more file than the read limit and checks that the read fails
+// instead of answering with a truncated list that a seal would turn into a wrong manifest digest.
+func TestRawVersionFileReadRefusesATruncatedListing(t *testing.T) {
+	db := integrationDB(t)
+	tx, err := db.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	const repositoryID = "00000000-0000-7000-8000-0000000000b2"
+	for _, statement := range []string{
+		`INSERT INTO hosted_repositories (id,name,format) VALUES ('` + repositoryID + `'::uuid,'plan-seed-limit','raw')`,
+		`INSERT INTO native_raw_objects (digest,repository_id,object_key,size) VALUES ('sha256:` + strings.Repeat("a", 64) + `','` + repositoryID + `'::uuid,'plan-seed-limit',1)`,
+		`INSERT INTO native_raw_assets (repository_id,path,digest,content_type) SELECT '` + repositoryID + `'::uuid, 'big/1.0.0/f'||g, 'sha256:` + strings.Repeat("a", 64) + `', 'x' FROM generate_series(1,` + fmt.Sprint(rawVersionFilesHardLimit+1) + `) g`,
+	} {
+		if _, err := tx.ExecContext(t.Context(), statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := listRawVersionFiles(t.Context(), tx, repositoryID, "big", "1.0.0"); !errors.Is(err, ErrVersionTooLarge) {
+		t.Fatalf("a listing over the limit: %v", err)
+	}
+	if _, err := tx.ExecContext(t.Context(), `DELETE FROM native_raw_assets WHERE repository_id='`+repositoryID+`'::uuid AND path='big/1.0.0/f1'`); err != nil {
+		t.Fatal(err)
+	}
+	files, err := listRawVersionFiles(t.Context(), tx, repositoryID, "big", "1.0.0")
+	if err != nil || len(files) != rawVersionFilesHardLimit {
+		t.Fatalf("a listing exactly at the limit: %d %v", len(files), err)
 	}
 }

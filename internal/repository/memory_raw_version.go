@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"time"
 
@@ -56,6 +57,10 @@ func (s *MemoryStore) admitVersionedWriteLocked(asset RawAsset, condition RawWri
 	if condition.RequirePresent || len(condition.MatchDigests) > 0 {
 		return RawAsset{}, false, ErrPreconditionFailed
 	}
+	version, exists := s.rawVersions[rawVersionKey(asset.RepositoryID, parsed.Name, parsed.Version)]
+	if exists && version.State == RawVersionTombstoned {
+		return RawAsset{}, false, ErrVersionTombstoned
+	}
 	if existing, ok := s.rawAssets[rawAssetKey(asset.RepositoryID, asset.Path)]; ok {
 		if existing.Digest == asset.Digest {
 			existing.Replayed = true
@@ -63,14 +68,10 @@ func (s *MemoryStore) admitVersionedWriteLocked(asset RawAsset, condition RawWri
 		}
 		return existing, false, ErrVersionFileExists
 	}
-	version, exists := s.rawVersions[rawVersionKey(asset.RepositoryID, parsed.Name, parsed.Version)]
 	if !exists {
 		return RawAsset{}, false, nil
 	}
-	switch version.State {
-	case RawVersionTombstoned:
-		return RawAsset{}, false, ErrVersionTombstoned
-	case RawVersionSealed:
+	if version.State == RawVersionSealed {
 		return RawAsset{}, false, ErrVersionSealed
 	}
 	if version.FileCount >= s.maxFilesPerVersionLocked() {
@@ -276,11 +277,16 @@ func (s *MemoryStore) CreateRawVersion(ctx context.Context, version RawVersion, 
 	}
 	key := rawVersionKey(version.RepositoryID, version.Name, version.Version)
 	if existing, ok := s.rawVersions[key]; ok {
-		switch existing.State {
-		case RawVersionTombstoned:
+		if existing.State == RawVersionTombstoned {
 			return RawVersion{}, false, ErrVersionTombstoned
-		case RawVersionSealed:
-			return RawVersion{}, false, ErrVersionSealed
+		}
+		if existing.State == RawVersionSealed {
+			// A create that repeats what a sealed version already is changes nothing, so a retried publisher is safe.
+			if version.Properties != nil && !equalRawVersionProperties(existing.Properties, version.Properties) {
+				return RawVersion{}, false, ErrVersionSealed
+			}
+			existing.Properties = cloneRawVersionProperties(existing.Properties)
+			return existing, false, nil
 		}
 		if version.Properties != nil && !equalRawVersionProperties(existing.Properties, version.Properties) {
 			if err := s.commitAuditLocked(ctx, audit); err != nil {
@@ -389,25 +395,35 @@ func (s *MemoryStore) SealIdleRawVersions(ctx context.Context, idleBefore time.T
 	candidates := make([]string, 0)
 	for key, version := range s.rawVersions {
 		repo, ok := s.hostedRepositories[version.RepositoryID]
-		if ok && repo.SealMode == RawSealIdle && version.State == RawVersionOpen && version.FileCount > 0 && version.UpdatedAt.Before(idleBefore) {
+		if ok && repo.State == RepositoryActive && repo.SealMode == RawSealIdle && version.State == RawVersionOpen && version.FileCount > 0 && version.UpdatedAt.Before(idleBefore) {
 			candidates = append(candidates, key)
 		}
 	}
-	sort.Strings(candidates)
-	if len(candidates) > limit {
-		candidates = candidates[:limit]
-	}
-	sealed := make([]RawVersion, 0, len(candidates))
+	// Oldest write first, as the PostgreSQL sweep reads them.
+	sort.Slice(candidates, func(i, j int) bool {
+		a, b := s.rawVersions[candidates[i]], s.rawVersions[candidates[j]]
+		if !a.UpdatedAt.Equal(b.UpdatedAt) {
+			return a.UpdatedAt.Before(b.UpdatedAt)
+		}
+		return a.ID < b.ID
+	})
+	sealed := make([]RawVersion, 0, limit)
+	var failures error
 	now := time.Now().UTC()
 	for _, key := range candidates {
+		if len(sealed) >= limit {
+			break
+		}
 		version := s.rawVersions[key]
 		result, err := s.sealRawVersionLocked(ctx, key, version, SealRawVersionInput{Actor: rawVersionSweepActor, Audit: rawVersionIdleSealAudit(s.hostedRepositories[version.RepositoryID].Name)}, now)
 		if err != nil {
+			// One version that cannot be sealed must not keep the younger ones from being sealed.
+			failures = errors.Join(failures, err)
 			continue
 		}
 		sealed = append(sealed, result)
 	}
-	return sealed, nil
+	return sealed, failures
 }
 
 func (s *MemoryStore) RawOpenVersionStats(_ context.Context, staleBefore time.Time) (RawOpenVersionStats, error) {

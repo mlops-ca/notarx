@@ -13049,6 +13049,10 @@ export type RestoreRepositoryArtifactErrors = {
    * Collection has started or retained object bytes are unavailable
    */
   409: Problem;
+  /**
+   * The repository has the versioned Raw layout (layout_mismatch); versions are restored by the version API
+   */
+  422: Problem;
 };
 
 export type RestoreRepositoryArtifactError =
@@ -13431,6 +13435,16 @@ export type TombstoneRepositoryArtifactData = {
   query?: never;
   url: "/repositories/{repositoryId}/tombstones";
 };
+
+export type TombstoneRepositoryArtifactErrors = {
+  /**
+   * The repository has the versioned Raw layout (layout_mismatch); versions are tombstoned by the version API
+   */
+  422: Problem;
+};
+
+export type TombstoneRepositoryArtifactError =
+  TombstoneRepositoryArtifactErrors[keyof TombstoneRepositoryArtifactErrors];
 
 export type TombstoneRepositoryArtifactResponses = {
   /**

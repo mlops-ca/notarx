@@ -272,6 +272,12 @@ func (h generatedRepositoryAPIAdapter) ListRepositoryTombstones(w http.ResponseW
 
 func (h generatedRepositoryAPIAdapter) TombstoneRepositoryArtifact(w http.ResponseWriter, r *http.Request, repositoryID adminopenapi.RepositoryId) {
 	h.withRepositoryScope(w, r, repositoryID.String(), RepositoryAdmin, func(principal Principal, repo repository.HostedRepository) {
+		if repo.Format == repository.FormatRaw && repo.RawLayout == repository.RawLayoutVersioned {
+			// Versions are tombstoned and restored as a unit by the version API of ADR 0028 slice 4; the
+			// path-level operation would delete single files out of a version.
+			writeHostedProblem(w, http.StatusUnprocessableEntity, "layout_mismatch", "a versioned Raw repository tombstones and restores whole versions; the path-level operation does not apply")
+			return
+		}
 		if repo.Type != repository.RepositoryTypeHosted || !repository.FormatSupportsOperation(repo.Format, repo.Type, repository.RepositoryOperationDelete) {
 			writeHostedProblem(w, http.StatusConflict, "unsupported_operation", "artifact deletion is not supported for this repository")
 			return

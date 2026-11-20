@@ -176,6 +176,14 @@ func (g *genericGateway) serveRaw(w http.ResponseWriter, r *http.Request, rest s
 		g.files[key][path] = string(body)
 		w.Header().Set("ETag", `"sha256:`+digest+`"`)
 		w.WriteHeader(http.StatusCreated)
+	case http.MethodHead:
+		content, ok := g.files[key][path]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("ETag", `"sha256-`+hexSHA(content)+`"`)
+		w.WriteHeader(http.StatusOK)
 	case http.MethodGet:
 		content, ok := g.files[key][path]
 		if !ok {
@@ -214,6 +222,21 @@ func (g *genericGateway) serveVersions(w http.ResponseWriter, r *http.Request, r
 	case r.Method == http.MethodPut && action == "":
 		var request struct{ Properties map[string]string }
 		_ = json.Unmarshal(body, &request)
+		if g.state[key] == "sealed" {
+			// A create that repeats a sealed version is idempotent; one that would change it is refused.
+			if len(request.Properties) != len(g.props[key]) {
+				writeProblem(w, http.StatusConflict, "version_sealed", "version is sealed")
+				return
+			}
+			for name, value := range request.Properties {
+				if g.props[key][name] != value {
+					writeProblem(w, http.StatusConflict, "version_sealed", "version is sealed")
+					return
+				}
+			}
+			writeJSON(w, http.StatusOK, g.versionJSON(key, false))
+			return
+		}
 		g.props[key] = request.Properties
 		writeJSON(w, http.StatusOK, g.versionJSON(key, false))
 	case r.Method == http.MethodPut && action == "properties":
@@ -328,7 +351,11 @@ func TestGenericPushUploadsAndSealsWithTheExpectedFileList(t *testing.T) {
 	if len(files) != 2 || seal["checksumsFile"] != nil {
 		t.Fatalf("seal body: %v", seal)
 	}
-	// A retry of a push that already finished is safe: the same bytes are unchanged and the seal answers the same digest.
+	// A retry of a push that already finished is safe, properties included: the same bytes are unchanged and the seal
+	// answers the same digest. Another value for a property of a sealed version is refused as a conflict.
+	if code, stdout, _ = runCLI(t, pushArgs(dir, "--property", "git.sha=different", "--property", "channel=stable")...); code != ExitConflict {
+		t.Fatalf("a changed property of a sealed version: exit=%d %s", code, stdout)
+	}
 	code, stdout, _ = runCLI(t, pushArgs(dir, "--property", "git.sha=abc123", "--property", "channel=stable")...)
 	statuses, again := decodePush(t, stdout)
 	if code != ExitOK || statuses["tool/1.0.0/README"] != "unchanged" || again.ManifestDigest != result.ManifestDigest {

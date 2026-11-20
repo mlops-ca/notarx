@@ -23,3 +23,9 @@ repositories_repositoryId_tombstones:
     responses:
       '204':
         description: Artifact tombstoned
+      '422':
+        description: The repository has the versioned Raw layout (layout_mismatch); versions are tombstoned by the version API
+        content:
+          application/problem+json:
+            schema:
+              "$ref": "../components/schemas.yaml#/Problem"

@@ -42594,6 +42594,20 @@ func (response RestoreRepositoryArtifact409ApplicationProblemPlusJSONResponse) V
 	return err
 }
 
+type RestoreRepositoryArtifact422ApplicationProblemPlusJSONResponse Problem
+
+func (response RestoreRepositoryArtifact422ApplicationProblemPlusJSONResponse) VisitRestoreRepositoryArtifactResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetRetentionPolicyRequestObject struct {
 	RepositoryId RepositoryId `json:"repositoryId"`
 }
@@ -42994,6 +43008,20 @@ type TombstoneRepositoryArtifact204Response struct {
 func (response TombstoneRepositoryArtifact204Response) VisitTombstoneRepositoryArtifactResponse(w http.ResponseWriter) error {
 	w.WriteHeader(204)
 	return nil
+}
+
+type TombstoneRepositoryArtifact422ApplicationProblemPlusJSONResponse Problem
+
+func (response TombstoneRepositoryArtifact422ApplicationProblemPlusJSONResponse) VisitTombstoneRepositoryArtifactResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 type ListRepositoryCapacitiesRequestObject struct {

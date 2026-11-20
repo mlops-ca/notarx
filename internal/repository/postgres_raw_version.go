@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/capacity"
 	"github.com/mlops-ca/notarx/internal/ids"
 )
@@ -23,15 +24,17 @@ const rawVersionColumns = `v.id::text,v.repository_id::text,v.name,v.version,v.s
 // no LIKE, so an underscore in a name needs no escaping.
 const rawVersionFilesQuery = `SELECT a.repository_id::text,a.path,a.digest,o.object_key,o.size,a.content_type,a.updated_at FROM native_raw_assets a JOIN native_raw_objects o ON o.digest=a.digest WHERE a.repository_id=$1::uuid AND a.path ~>=~ $2 AND a.path ~<~ $3 LIMIT $4`
 
-// rawIdleCandidatesQuery selects the open versions the idle sweep may seal, oldest write first
-// (native_raw_versions_state_updated_idx); sealRawVersion re-checks each one under its row lock.
-const rawIdleCandidatesQuery = `SELECT v.repository_id::text,v.name,v.version,r.name FROM native_raw_versions v JOIN hosted_repositories r ON r.id=v.repository_id WHERE v.state='open' AND v.file_count>0 AND v.updated_at<$1 AND r.seal_mode='idle' AND r.state='active' ORDER BY v.updated_at LIMIT $2`
+// rawIdleCandidatesQuery selects one page of the open versions the idle sweep may seal, oldest write first
+// (native_raw_versions_state_updated_idx), after the (updated_at, id) cursor of the previous page; sealRawVersion
+// re-checks each one under its row lock.
+const rawIdleCandidatesQuery = `SELECT v.repository_id::text,v.name,v.version,r.name,v.updated_at,v.id::text FROM native_raw_versions v JOIN hosted_repositories r ON r.id=v.repository_id WHERE v.state='open' AND v.file_count>0 AND v.updated_at<$1 AND (v.updated_at,v.id)>($3::timestamptz,$4::uuid) AND r.seal_mode='idle' AND r.state='active' ORDER BY v.updated_at,v.id LIMIT $2`
 
 // rawOpenStatsQuery counts the stale open versions and finds the oldest one (native_raw_versions_state_created_idx).
 const rawOpenStatsQuery = `SELECT count(CASE WHEN created_at<$1 THEN 1 END),min(created_at) FROM native_raw_versions WHERE state='open'`
 
-// rawVersionFilesHardLimit bounds the file read of one version; the files-per-version cap keeps real versions far below.
-const rawVersionFilesHardLimit = 100000
+// rawVersionFilesHardLimit bounds the file read of one version. NOTARX_GENERIC_MAX_FILES_PER_VERSION cannot exceed it,
+// and a read that finds more files fails instead of answering with a truncated list.
+const rawVersionFilesHardLimit = MaxRawFilesPerVersion
 
 // SetRawMaxFilesPerVersion sets the files-per-version cap; zero or less restores the default.
 func (s *PostgresStore) SetRawMaxFilesPerVersion(limit int) { s.rawMaxFiles.Store(int64(limit)) }
@@ -43,16 +46,30 @@ func (s *PostgresStore) maxFilesPerVersion() int {
 	return DefaultRawMaxFilesPerVersion
 }
 
-// rawRepositoryLayout reads the layout and strict flag of a repository inside tx. A repository row that does not
-// exist (a store used without one) has the path layout.
-func rawRepositoryLayout(ctx context.Context, tx *sql.Tx, repositoryID string) (RawLayout, bool, error) {
-	var layout RawLayout
-	var strict bool
-	err := tx.QueryRowContext(ctx, `SELECT raw_layout,raw_strict FROM hosted_repositories WHERE id=$1::uuid`, repositoryID).Scan(&layout, &strict)
+// rawLayoutEntry is the layout of a repository, which never changes after its creation.
+type rawLayoutEntry struct {
+	layout RawLayout
+	strict bool
+}
+
+// rawRepositoryLayout reads the layout and strict flag of a repository. Both are fixed when the repository is
+// created and repository ids are never reused, so a found row is cached for the life of the process and a write pays
+// the lookup once. A repository row that does not exist (a store used without one) has the path layout and is not cached.
+func (s *PostgresStore) rawRepositoryLayout(ctx context.Context, tx *sql.Tx, repositoryID string) (RawLayout, bool, error) {
+	if cached, ok := s.rawLayouts.Load(repositoryID); ok {
+		entry := cached.(rawLayoutEntry)
+		return entry.layout, entry.strict, nil
+	}
+	var entry rawLayoutEntry
+	err := tx.QueryRowContext(ctx, `SELECT raw_layout,raw_strict FROM hosted_repositories WHERE id=$1::uuid`, repositoryID).Scan(&entry.layout, &entry.strict)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RawLayoutPath, false, nil
 	}
-	return layout, strict, err
+	if err != nil {
+		return "", false, err
+	}
+	s.rawLayouts.Store(repositoryID, entry)
+	return entry.layout, entry.strict, nil
 }
 
 func scanRawVersion(scanner interface{ Scan(...any) error }, version *RawVersion) error {
@@ -77,15 +94,20 @@ func lockRawVersion(ctx context.Context, tx *sql.Tx, repositoryID, name, version
 	return found, err == nil, err
 }
 
-// lockOrCreateRawVersion locks the version row, creating the open row first when it is absent. Two writers of a new
-// version serialise on the unique index; the loser then locks the winner's row.
+// lockOrCreateRawVersion locks the version row, creating the open row first when it is absent. The common write finds
+// the row and locks it without an insert. Two writers of a new version serialise on the unique index; the loser then
+// locks the winner's row.
 func lockOrCreateRawVersion(ctx context.Context, tx *sql.Tx, repositoryID, name, version, actor string) (RawVersion, bool, error) {
+	found, ok, err := lockRawVersion(ctx, tx, repositoryID, name, version)
+	if err != nil || ok {
+		return found, false, err
+	}
 	result, err := tx.ExecContext(ctx, `INSERT INTO native_raw_versions (id,repository_id,name,version,state,created_by) VALUES ($1::uuid,$2::uuid,$3,$4,'open',$5) ON CONFLICT (repository_id,name,version) DO NOTHING`, ids.New(), repositoryID, name, version, actor)
 	if err != nil {
 		return RawVersion{}, false, err
 	}
 	created, _ := result.RowsAffected()
-	found, ok, err := lockRawVersion(ctx, tx, repositoryID, name, version)
+	found, ok, err = lockRawVersion(ctx, tx, repositoryID, name, version)
 	if err == nil && !ok {
 		err = errors.New("raw version row vanished under its own lock")
 	}
@@ -136,25 +158,36 @@ func replaceRawVersionProperties(ctx context.Context, tx *sql.Tx, version RawVer
 	return nil
 }
 
-// replaceVersionedRawAsset is the store-level guard of ADR 0028 for a write to a versioned repository: path
-// validation, create-only files, the state of the version and the files cap, all under the version row lock, which
-// is taken before the path lock so every writer of a version orders its locks alike. A write that finds the same
-// digest at the path changes nothing and returns it with Replayed set.
-func (s *PostgresStore) replaceVersionedRawAsset(ctx context.Context, tx *sql.Tx, asset RawAsset, condition RawWriteCondition, actor string) (RawAsset, rawUsageDelta, error) {
+// beginVersionedWrite is the first half of the store-level guard of ADR 0028 for a write to a versioned repository:
+// path validation, the preconditions a create-only write can never satisfy, and the version row lock, which is taken
+// before the path lock and before any object row so every writer of a version orders its locks alike. It returns nil
+// for a path repository. The locked version is passed to replaceVersionedRawAsset.
+func (s *PostgresStore) beginVersionedWrite(ctx context.Context, tx *sql.Tx, asset RawAsset, condition RawWriteCondition, actor string) (*RawVersion, error) {
+	layout, _, err := s.rawRepositoryLayout(ctx, tx, asset.RepositoryID)
+	if err != nil || layout != RawLayoutVersioned {
+		return nil, err
+	}
 	parsed, err := ParseRawVersionPath(asset.Path)
 	if err != nil {
-		return RawAsset{}, rawUsageDelta{}, err
+		return nil, err
 	}
 	if condition.RequirePresent || len(condition.MatchDigests) > 0 {
-		return RawAsset{}, rawUsageDelta{}, ErrPreconditionFailed
+		return nil, ErrPreconditionFailed
 	}
 	version, _, err := lockOrCreateRawVersion(ctx, tx, asset.RepositoryID, parsed.Name, parsed.Version, actor)
 	if err != nil {
-		return RawAsset{}, rawUsageDelta{}, err
+		return nil, err
 	}
 	if version.State == RawVersionTombstoned {
-		return RawAsset{}, rawUsageDelta{}, ErrVersionTombstoned
+		return nil, ErrVersionTombstoned
 	}
+	return &version, nil
+}
+
+// replaceVersionedRawAsset is the second half of the guard: create-only files, the state of the locked version and the
+// files cap. A write that finds the same digest at the path changes nothing and returns it with Replayed set.
+func (s *PostgresStore) replaceVersionedRawAsset(ctx context.Context, tx *sql.Tx, asset RawAsset, version RawVersion) (RawAsset, rawUsageDelta, error) {
+	var err error
 	if _, _, err = lockRawPath(ctx, tx, asset.RepositoryID, asset.Path); err != nil {
 		return RawAsset{}, rawUsageDelta{}, err
 	}
@@ -343,7 +376,7 @@ type rawVersionQuerier interface {
 
 func listRawVersionFiles(ctx context.Context, q rawVersionQuerier, repositoryID, name, version string) ([]RawAsset, error) {
 	from, to := RawVersionPathRange(name, version)
-	rows, err := q.QueryContext(ctx, rawVersionFilesQuery, repositoryID, from, to, rawVersionFilesHardLimit)
+	rows, err := q.QueryContext(ctx, rawVersionFilesQuery, repositoryID, from, to, rawVersionFilesHardLimit+1)
 	if err != nil {
 		return nil, err
 	}
@@ -358,6 +391,10 @@ func listRawVersionFiles(ctx context.Context, q rawVersionQuerier, repositoryID,
 	}
 	if err = rows.Err(); err != nil {
 		return nil, err
+	}
+	if len(files) > rawVersionFilesHardLimit {
+		// Never answer, seal or digest a truncated listing.
+		return nil, ErrVersionTooLarge
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
 	return files, nil
@@ -379,7 +416,7 @@ func (s *PostgresStore) CreateRawVersion(ctx context.Context, version RawVersion
 		return RawVersion{}, false, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	layout, _, err := rawRepositoryLayout(ctx, tx, version.RepositoryID)
+	layout, _, err := s.rawRepositoryLayout(ctx, tx, version.RepositoryID)
 	if err != nil {
 		return RawVersion{}, false, err
 	}
@@ -390,14 +427,18 @@ func (s *PostgresStore) CreateRawVersion(ctx context.Context, version RawVersion
 	if err != nil {
 		return RawVersion{}, false, err
 	}
-	switch found.State {
-	case RawVersionTombstoned:
+	if found.State == RawVersionTombstoned {
 		return RawVersion{}, false, ErrVersionTombstoned
-	case RawVersionSealed:
-		return RawVersion{}, false, ErrVersionSealed
 	}
 	if err = loadRawVersionProperties(ctx, tx, &found); err != nil {
 		return RawVersion{}, false, err
+	}
+	if found.State == RawVersionSealed {
+		// A create that repeats what a sealed version already is changes nothing, so a retried publisher is safe.
+		if version.Properties != nil && !equalRawVersionProperties(found.Properties, version.Properties) {
+			return RawVersion{}, false, ErrVersionSealed
+		}
+		return found, false, nil
 	}
 	if created || version.Properties != nil && !equalRawVersionProperties(found.Properties, version.Properties) {
 		if version.Properties != nil {
@@ -520,41 +561,59 @@ func (s *PostgresStore) sealRawVersion(ctx context.Context, input SealRawVersion
 	return found, tx.Commit()
 }
 
+// rawIdleSealMaxPages bounds how many candidate pages one call reads, so versions whose seal keeps failing cannot make a
+// call read the whole table.
+const rawIdleSealMaxPages = 20
+
 func (s *PostgresStore) SealIdleRawVersions(ctx context.Context, idleBefore time.Time, limit int) ([]RawVersion, error) {
 	if limit <= 0 {
 		limit = 100
 	}
-	rows, err := s.db.QueryContext(ctx, rawIdleCandidatesQuery, idleBefore, limit)
-	if err != nil {
-		return nil, err
+	type candidate struct {
+		repositoryID, name, version, repositoryName, id string
+		updatedAt                                       time.Time
 	}
-	type candidate struct{ repositoryID, name, version, repositoryName string }
-	var candidates []candidate
-	for rows.Next() {
-		var c candidate
-		if err = rows.Scan(&c.repositoryID, &c.name, &c.version, &c.repositoryName); err != nil {
-			_ = rows.Close()
-			return nil, err
+	var sealed []RawVersion
+	var failures error
+	cursorAt, cursorID := time.Unix(0, 0).UTC(), uuid.Nil.String()
+	for page := 0; page < rawIdleSealMaxPages && len(sealed) < limit; page++ {
+		rows, err := s.db.QueryContext(ctx, rawIdleCandidatesQuery, idleBefore, limit, cursorAt, cursorID)
+		if err != nil {
+			return sealed, errors.Join(failures, err)
 		}
-		candidates = append(candidates, c)
-	}
-	if err = rows.Err(); err != nil {
-		_ = rows.Close()
-		return nil, err
-	}
-	_ = rows.Close()
-	sealed := make([]RawVersion, 0, len(candidates))
-	for _, c := range candidates {
-		version, sealErr := s.sealRawVersion(ctx, SealRawVersionInput{RepositoryID: c.repositoryID, Name: c.name, Version: c.version, Actor: rawVersionSweepActor, Audit: rawVersionIdleSealAudit(c.repositoryName)}, idleBefore)
-		if sealErr != nil {
-			if errors.Is(sealErr, errRawSealSkipped) || errors.Is(sealErr, ErrVersionEmpty) || errors.Is(sealErr, ErrNotFound) {
-				continue
+		var candidates []candidate
+		for rows.Next() {
+			var c candidate
+			if err = rows.Scan(&c.repositoryID, &c.name, &c.version, &c.repositoryName, &c.updatedAt, &c.id); err != nil {
+				_ = rows.Close()
+				return sealed, errors.Join(failures, err)
 			}
-			return sealed, sealErr
+			candidates = append(candidates, c)
 		}
-		sealed = append(sealed, version)
+		err = rows.Err()
+		_ = rows.Close()
+		if err != nil {
+			return sealed, errors.Join(failures, err)
+		}
+		for _, c := range candidates {
+			version, sealErr := s.sealRawVersion(ctx, SealRawVersionInput{RepositoryID: c.repositoryID, Name: c.name, Version: c.version, Actor: rawVersionSweepActor, Audit: rawVersionIdleSealAudit(c.repositoryName)}, idleBefore)
+			switch {
+			case sealErr == nil:
+				sealed = append(sealed, version)
+			case errors.Is(sealErr, errRawSealSkipped) || errors.Is(sealErr, ErrVersionEmpty) || errors.Is(sealErr, ErrNotFound):
+			case ctx.Err() != nil:
+				return sealed, errors.Join(failures, ctx.Err())
+			default:
+				// One version that cannot be sealed must not keep the younger ones from being sealed: report it and go on.
+				failures = errors.Join(failures, fmt.Errorf("seal %s@%s of repository %s: %w", c.name, c.version, c.repositoryName, sealErr))
+			}
+			cursorAt, cursorID = c.updatedAt, c.id
+		}
+		if len(candidates) < limit {
+			break
+		}
 	}
-	return sealed, nil
+	return sealed, failures
 }
 
 func (s *PostgresStore) RawOpenVersionStats(ctx context.Context, staleBefore time.Time) (RawOpenVersionStats, error) {
