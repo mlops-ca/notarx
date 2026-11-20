@@ -73,6 +73,9 @@ func (h *Module) serveRepository(w http.ResponseWriter, r *http.Request) bool {
 		h.list(w, r, repo, prefix)
 		return true
 	}
+	if versioned(repo) {
+		r = r.WithContext(repository.WithRawWriteActor(r.Context(), principal.Actor))
+	}
 	if id := r.URL.Query().Get("uploadId"); id != "" {
 		// The store binds the upload id as a uuid, so a malformed one is a client
 		// error rather than a database error (ADR 0023 section 4).
@@ -84,10 +87,15 @@ func (h *Module) serveRepository(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	}
 	if r.Method == http.MethodPost && r.URL.Query().Get("resumable") == "1" {
+		if rejectInvalidVersionedPath(w, repo, path) {
+			return true
+		}
 		h.startUpload(w, r, repo, path)
 		return true
 	}
-	if rawChecksumExtension(path) != "" {
+	// In a versioned repository a name ending in .sha256 or .sha512 is an ordinary file of its version, not a
+	// verification sidecar of a path: release trees commonly ship such files.
+	if rawChecksumExtension(path) != "" && !versioned(repo) {
 		switch r.Method {
 		case http.MethodGet, http.MethodHead:
 			h.checksum(w, r, repo, path, principal)
@@ -112,7 +120,7 @@ func (h *Module) serveRepository(w http.ResponseWriter, r *http.Request) bool {
 		}
 		h.serveAsset(w, r, path, asset)
 	case http.MethodPut:
-		condition, ok := h.checkRawWriteCondition(w, r, repo, path)
+		condition, ok := h.checkRawWriteCondition(w, r, repo, path, principal.Actor, true)
 		if !ok {
 			return true
 		}
@@ -150,9 +158,14 @@ func (h *Module) serveRepository(w http.ResponseWriter, r *http.Request) bool {
 		if contentType == "" {
 			contentType = "application/octet-stream"
 		}
-		if _, err = h.store.PutRawAssetIf(r.Context(), repository.RawAsset{RepositoryID: repo.ID, Path: path, Digest: digest, ObjectKey: key, Size: spool.Size(), ContentType: contentType}, condition); err != nil {
+		asset, err := h.store.PutRawAssetIf(r.Context(), repository.RawAsset{RepositoryID: repo.ID, Path: path, Digest: digest, ObjectKey: key, Size: spool.Size(), ContentType: contentType}, condition)
+		if err != nil {
 			if errors.Is(err, repository.ErrPreconditionFailed) {
 				writeRawPreconditionFailed(w)
+				return true
+			}
+			h.auditRefusedOverwrite(r, repo, path, principal.Actor, err)
+			if writeVersionedProblem(w, err) {
 				return true
 			}
 			if repository.IsQuotaExceeded(err) {
@@ -164,12 +177,15 @@ func (h *Module) serveRepository(w http.ResponseWriter, r *http.Request) bool {
 		}
 		w.Header().Set("ETag", `"`+digest+`"`)
 		w.Header().Set("Digest", "sha-256="+base64.StdEncoding.EncodeToString(spool.DigestBytes()))
-		if h.publicationScanner != nil {
+		if h.publicationScanner != nil && !asset.Replayed {
 			_ = h.publicationScanner.Schedule(r.Context(), repo, path, digest, principal.Actor)
 		}
-		w.WriteHeader(http.StatusCreated)
+		w.WriteHeader(rawWriteStatus(asset))
 	case http.MethodDelete:
 		if err := h.store.DeleteRawAsset(r.Context(), repo.ID, path); err != nil {
+			if writeVersionedProblem(w, err) {
+				return true
+			}
 			http.NotFound(w, r)
 			return true
 		}
@@ -241,7 +257,7 @@ func (h *Module) upload(w http.ResponseWriter, r *http.Request, repo repository.
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		condition, ok := h.checkRawWriteCondition(w, r, repo, path)
+		condition, ok := h.checkRawWriteCondition(w, r, repo, path, actor, false)
 		if !ok {
 			return
 		}
@@ -290,6 +306,19 @@ func (h *Module) upload(w http.ResponseWriter, r *http.Request, repo repository.
 			writeRawPreconditionFailed(w)
 			return
 		}
+		h.auditRefusedOverwrite(r, repo, path, actor, err)
+		if versionedRefusal(err) {
+			// The refusal is final for these bytes. Closing the upload frees its staged bytes and stops it from
+			// holding the version open against the idle sweep until it expires.
+			if cancelled, cancelErr := h.store.CancelRawUpload(r.Context(), id); cancelErr == nil {
+				if deleteErr := uploadspool.DeleteUpload(r.Context(), h.objects, cancelled.ObjectKey); deleteErr == nil {
+					_ = h.store.MarkRawUploadCollected(r.Context(), cancelled.ID)
+				}
+			}
+		}
+		if writeVersionedProblem(w, err) {
+			return
+		}
 		if err != nil {
 			http.Error(w, "raw upload cannot be completed", http.StatusConflict)
 			return
@@ -299,10 +328,10 @@ func (h *Module) upload(w http.ResponseWriter, r *http.Request, repo repository.
 		}
 		w.Header().Set("ETag", `"`+asset.Digest+`"`)
 		w.Header().Set("Digest", expected)
-		if h.publicationScanner != nil {
+		if h.publicationScanner != nil && !asset.Replayed {
 			_ = h.publicationScanner.Schedule(r.Context(), repo, asset.Path, asset.Digest, actor)
 		}
-		w.WriteHeader(http.StatusCreated)
+		w.WriteHeader(rawWriteStatus(asset))
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}

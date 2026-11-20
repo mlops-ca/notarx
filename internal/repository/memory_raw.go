@@ -79,21 +79,34 @@ func (s *MemoryStore) CompleteRawUpload(ctx context.Context, id string, asset Ra
 // CompleteRawUploadIf publishes an open upload only when the path's current
 // reference satisfies condition. A failed condition leaves the upload open so
 // the client can cancel it or let reclaim collect its staged bytes.
-func (s *MemoryStore) CompleteRawUploadIf(_ context.Context, id string, asset RawAsset, condition RawWriteCondition) (RawAsset, error) {
+func (s *MemoryStore) CompleteRawUploadIf(ctx context.Context, id string, asset RawAsset, condition RawWriteCondition) (RawAsset, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	v, ok := s.rawUploads[id]
 	if !ok || v.State != "open" || time.Now().After(v.ExpiresAt) || v.RepositoryID != asset.RepositoryID || v.Path != asset.Path {
 		return RawAsset{}, ErrNotFound
 	}
-	current, exists := s.rawAssets[rawAssetKey(asset.RepositoryID, asset.Path)]
-	if !condition.Allows(current, exists) {
+	_, versioned := s.versionedRepositoryLocked(asset.RepositoryID)
+	if versioned {
+		current, replay, err := s.admitVersionedWriteLocked(asset, condition)
+		if err != nil {
+			return current, err
+		}
+		if replay {
+			v.State = "completed"
+			s.rawUploads[id] = v
+			return current, nil
+		}
+	} else if current, exists := s.rawAssets[rawAssetKey(asset.RepositoryID, asset.Path)]; !condition.Allows(current, exists) {
 		return current, ErrPreconditionFailed
 	}
 	now := time.Now().UTC()
 	asset.UpdatedAt = now
 	s.rawObjects[asset.Digest] = RawObject{RepositoryID: asset.RepositoryID, Digest: asset.Digest, ObjectKey: asset.ObjectKey, Size: asset.Size, CreatedAt: now}
 	s.rawAssets[rawAssetKey(asset.RepositoryID, asset.Path)] = asset
+	if versioned {
+		s.recordVersionedWriteLocked(asset, rawWriteActor(ctx))
+	}
 	v.State = "completed"
 	s.rawUploads[id] = v
 	return asset, nil
@@ -173,7 +186,16 @@ func (s *MemoryStore) PutRawAsset(ctx context.Context, asset RawAsset) (RawAsset
 func (s *MemoryStore) PutRawAssetIf(ctx context.Context, asset RawAsset, condition RawWriteCondition, audit ...AuditRecord) (RawAsset, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if current, exists := s.rawAssets[rawAssetKey(asset.RepositoryID, asset.Path)]; !condition.Allows(current, exists) {
+	_, versioned := s.versionedRepositoryLocked(asset.RepositoryID)
+	if versioned {
+		current, replay, err := s.admitVersionedWriteLocked(asset, condition)
+		if err != nil {
+			return current, err
+		}
+		if replay {
+			return current, nil
+		}
+	} else if current, exists := s.rawAssets[rawAssetKey(asset.RepositoryID, asset.Path)]; !condition.Allows(current, exists) {
 		return current, ErrPreconditionFailed
 	}
 	if err := s.commitAuditLocked(ctx, audit); err != nil {
@@ -190,6 +212,9 @@ func (s *MemoryStore) PutRawAssetIf(ctx context.Context, asset RawAsset, conditi
 		s.rawObjects[asset.Digest] = RawObject{RepositoryID: asset.RepositoryID, Digest: asset.Digest, ObjectKey: asset.ObjectKey, Size: asset.Size, CreatedAt: time.Now().UTC()}
 	}
 	s.rawAssets[rawAssetKey(asset.RepositoryID, asset.Path)] = asset
+	if versioned {
+		s.recordVersionedWriteLocked(asset, rawWriteActor(ctx))
+	}
 	return asset, nil
 }
 func (s *MemoryStore) GetRawAsset(_ context.Context, repositoryID, path string) (RawAsset, error) {
@@ -222,6 +247,9 @@ func (s *MemoryStore) ListRawAssets(_ context.Context, repositoryID, prefix stri
 func (s *MemoryStore) DeleteRawAsset(ctx context.Context, repositoryID, path string, audit ...AuditRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if repo, versioned := s.versionedRepositoryLocked(repositoryID); versioned {
+		return s.deleteVersionedRawAssetLocked(ctx, repo, path, audit)
+	}
 	key := rawAssetKey(repositoryID, path)
 	asset, ok := s.rawAssets[key]
 	if !ok {
@@ -244,6 +272,9 @@ func (s *MemoryStore) DeleteRawAsset(ctx context.Context, repositoryID, path str
 func (s *MemoryStore) RestoreRawAsset(_ context.Context, repositoryID, path string) (RawAsset, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if _, versioned := s.versionedRepositoryLocked(repositoryID); versioned {
+		return RawAsset{}, ErrRawLayoutMismatch
+	}
 	key := rawAssetKey(repositoryID, path)
 	asset, ok := s.rawAssetTombstones[key]
 	if !ok {

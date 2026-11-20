@@ -439,6 +439,30 @@ while it runs.
 The sweep exposes `notarx_meta_sweep_objects_total{outcome}` (`deleted`, `referenced`, `young`,
 `failed`) and `notarx_meta_sweep_runs_total{outcome}` (`completed`, `failed`).
 
+## Versioned Raw Packages (ADR 0028)
+
+A Raw repository created with `layout: versioned` stores `<name>/<version>/<file>` paths as create-only
+files of sealable versions. The layout, the seal mode and the `strict` flag are chosen when the repository is
+created and never change. In a repository with `sealMode: idle`, one scheduler node at a time (a lease row of
+`scheduled_tasks`, at most once per interval) seals the open versions that saw no write for the idle period,
+for publishers such as plain `curl` that never call seal. A version with a resumable upload still open is left
+open however long the upload takes; a single plain `PUT` that streams for longer than the idle period is not
+visible to the sweep until it commits, so keep `NOTARX_GENERIC_AUTOSEAL_IDLE` above the longest transfer of one
+file. Nothing ever tombstones or deletes an open version: an abandoned one is only reported.
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `NOTARX_GENERIC_MAX_FILES_PER_VERSION` | `1000` | Files one version may hold, at most 20000; a larger upload is refused with `422 version_file_limit`. The default keeps the manifest under 256 KiB. |
+| `NOTARX_GENERIC_AUTOSEAL_IDLE` | `300s` | Time without a write after which the sweep seals an open version of an idle-mode repository. At least 60 seconds. |
+| `NOTARX_GENERIC_AUTOSEAL_INTERVAL` | `60s` | Time between two completed sweeps of the fleet. At least 10 seconds. |
+| `NOTARX_GENERIC_STALE_OPEN_AFTER` | `7d` | Age after which an open version counts as stale in the metrics below. Report only. |
+
+The sweep exposes `notarx_generic_autoseal_versions_total`, `notarx_generic_autoseal_runs_total{outcome}`
+(`completed`, `failed`) and two gauges, `notarx_generic_open_versions_stale` and
+`notarx_generic_open_version_oldest_age_seconds`. Every node reads the gauges from the database, so they agree
+across nodes and a change of leader leaves no stale value; alert on the maximum across nodes. The same
+stale open versions are listed by `GET /api/v2/repositories/{id}/packages/{name}/versions?state=open&olderThanDays=N`.
+
 ## Instance Identity, Public URL and Legacy Names
 
 Settings are read only under the `NOTARX_` prefix. There are no aliases and no

@@ -14,7 +14,7 @@ This page classifies the full contract; it does not describe the installed
 binary. Apart from the #125 skeleton (`version`, `info`, `commands`) and the
 rows whose phase says `implemented` (the #130 repository and Group commands,
 the #131 artifact and format views, the #132 Raw and Maven publishing
-commands, the #133 service account, credential,
+commands, the #223 versioned generic package commands, the #133 service account, credential,
 and API key commands, the #134 grant, role, template, access check, and
 anonymous-switch commands, the #336 quota alert and email commands (M2), the #335 user, session, and identity commands, and the read-only #135 audit, status,
 diagnostics, runtime-node and runtime-log, overview, and lifecycle-job
@@ -277,6 +277,14 @@ the contract's server base. Planned commands omit the leading `notarxctl`.
 | `GET /repositories/{repositoryId}/tombstones`<br>`listRepositoryTombstones` | `tombstone list --repo <id>` | #138 | M2 | RA | Q |
 | `POST /repositories/{repositoryId}/tombstones`<br>`tombstoneRepositoryArtifact` | `artifact tombstone --repo <id>` | #138 | M2 | RA | W |
 | `GET /repositories/{repositoryId}/capabilities`<br>`getRepositoryCapabilities` | `repo capabilities <id>` | #130 | M1 implemented | R | Q |
+| `GET /repositories/{repositoryId}/packages`<br>`listRawPackages` | `generic list --repo <id>` | #223 | M2 implemented | R | Q |
+| `GET /repositories/{repositoryId}/packages/{name}/versions`<br>`listRawVersions` | `generic list --repo <id> --name <package>` | #223 | M2 implemented | R | Q: state, property and stale-open (`--older-than-days`) filters, keyset cursor |
+| `GET /repositories/{repositoryId}/packages/{name}/versions/{version}`<br>`getRawVersion` | `generic show --repo <id>` | #223 | M2 implemented | R | Q |
+| `PUT /repositories/{repositoryId}/packages/{name}/versions/{version}`<br>`createRawVersion` | `generic push --repo <id>` | #223 | M2 implemented | W | U: properties set before the upload; an idempotent create |
+| `PUT /repositories/{repositoryId}/packages/{name}/versions/{version}/properties`<br>`setRawVersionProperties` | `generic properties --repo <id>` | #223 | M2 implemented | W | W: open versions only; a sealed version answers 409 |
+| `POST /repositories/{repositoryId}/packages/{name}/versions/{version}:seal`<br>`sealRawVersion` | `generic seal --repo <id>` | #223 | M2 implemented | W | U: expected file list and checksums file verified by the server; seal twice returns one digest |
+| `GET /repositories/{repositoryId}/packages/{name}/versions/{version}/manifest`<br>`getRawVersionManifest` | `generic show --repo <id> --manifest` | #223 | M2 implemented | R | Q: the digest of the printed bytes is the manifest digest |
+| `GET /repositories/{repositoryId}/packages/{name}/versions/{version}/checksums`<br>`getRawVersionChecksums` | `generic show --repo <id> --checksums` | #223 | M2 implemented | R | Q: verified with `sha256sum -c` |
 | `GET /repositories/{repositoryId}/effective-access`<br>`getRepositoryEffectiveAccess` | `access check --repo <id>` | #134 | M1 implemented | I/A | Q |
 | `GET /groups`<br>`listGroups` | `group list` | #130 | M1 implemented | A | Q |
 | `POST /groups`<br>`createGroup` | `group create` | #130 | M1 implemented | G | W |
@@ -421,6 +429,7 @@ only, never that notarxctl implements it:
 | notarx preflight backup --input | #137, reusing #200 | LOCAL, already exists | explicit backup manifest and private file reads; integrity/compatibility verification; readyz cannot substitute |
 | notarx backup export/restore --spec --bundle | #137 points at the existing operations; #200/#201 keep the remaining scope | LOCAL, already exists; remote BLOCKED | additional PG/S3/file/Docker privileges and explicit isolated targets; digest/software/schema/semantic read-back; never overwrites an existing target implicitly |
 | notarx evidence collect --gateway-url --output | #137 points at the existing collection; #135 reuses it read-only for remote | LOCAL, already exists | explicit target and output directory plus administrator credentials; redacted evidence and version identity; not a durable server-side job |
+| generic delete/restore of a version (tombstone and restore, ADR 0028 slice 4) | `generic delete` and `generic restore`, #220 (the commands of #223 end at list, show, seal, properties, push and pull) | BLOCKED | no management API for version tombstone or restore has shipped; no invented endpoint may claim coverage; the commands arrive with the operations and an administrator-only purge |
 | gateway snapshot-import verify/dry-run/apply/takeover | #137 documentation, related #257/#259/#202 | LOCAL, already exists; online migration BLOCKED | frozen Maven bundle / private spec / target DB-S3 privileges; identity/bytes/checkpoint/capacity; no appends after takeover, no Nexus enumeration |
 | gateway apt-snapshot verify | #138 documentation; remote archive/restore see the table above | LOCAL, already exists | local archive read and digest integrity; the output signatures=not_checked must not pretend trusted signature verification passed |
 | gateway theme validate/install/list | #139 distinguishes the local directory from remote managed | LOCAL, already exists | explicit local directory/file privileges; package validation and ownership; a remote admin token does not buy local write access |

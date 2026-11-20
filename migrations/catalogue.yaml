@@ -379,7 +379,10 @@ tables:
       maven_strict_publication: bool
       name: text
       oci_bearer: json?
+      raw_layout: text
+      raw_strict: bool
       repo_type: text
+      seal_mode: text
       state: text
       upstream_auth: json?
       version: int64
@@ -1468,6 +1471,33 @@ tables:
       state: text
     primaryKey: [id]
     unique: [[object_key]]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_raw_version_properties:
+    columns:
+      prop_key: text
+      prop_value: text
+      repository_id: uuid
+      version_id: uuid
+    primaryKey: [version_id, prop_key]
+    foreignKeys:
+      - version_id -> native_raw_versions(id)
+  native_raw_versions:
+    columns:
+      created_at: timestamp
+      created_by: text
+      file_count: int32
+      id: uuid
+      manifest_digest: text?
+      name: text
+      repository_id: uuid
+      sealed_at: timestamp?
+      size_bytes: int64
+      state: text
+      updated_at: timestamp
+      version: text
+    primaryKey: [id]
+    unique: [[name, repository_id, version]]
     foreignKeys:
       - repository_id -> hosted_repositories(id)
   native_rubygems_quotas:

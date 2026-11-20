@@ -135,7 +135,7 @@ func putResumableRawObject(ctx context.Context, client *apiClient, target string
 	if err == nil && response.StatusCode >= 300 {
 		err = parseAPIError(response, client.token)
 	}
-	if err == nil && (response.StatusCode != http.StatusCreated || normalizeRawETag(response.Header.Get("ETag")) != object.digest || response.Header.Get("Digest") != "sha-256="+base64.StdEncoding.EncodeToString(object.raw)) {
+	if err == nil && ((response.StatusCode != http.StatusCreated && response.StatusCode != http.StatusOK) || normalizeRawETag(response.Header.Get("ETag")) != object.digest || response.Header.Get("Digest") != "sha-256="+base64.StdEncoding.EncodeToString(object.raw)) {
 		err = incompleteResponse(response, client, "Raw upload completion")
 	}
 	if err != nil {

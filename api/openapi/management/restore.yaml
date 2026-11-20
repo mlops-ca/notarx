@@ -25,3 +25,9 @@ repositories_repositoryId_restore:
           application/problem+json:
             schema:
               "$ref": "../components/schemas.yaml#/Problem"
+      '422':
+        description: The repository has the versioned Raw layout (layout_mismatch); versions are restored by the version API
+        content:
+          application/problem+json:
+            schema:
+              "$ref": "../components/schemas.yaml#/Problem"

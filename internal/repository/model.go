@@ -44,19 +44,24 @@ const (
 )
 
 type HostedRepository struct {
-	ID                     string          `json:"id"`
-	Name                   string          `json:"name"`
-	Format                 Format          `json:"format"`
-	Type                   RepositoryType  `json:"type"`
-	Endpoint               string          `json:"endpoint,omitempty"`
-	AllowedHosts           []string        `json:"allowedHosts,omitempty"`
-	EgressProxy            *EgressProxy    `json:"egressProxy,omitempty"`
-	UpstreamAuth           *UpstreamAuth   `json:"upstreamAuth,omitempty"`
-	OCIBearer              *OCIBearer      `json:"ociBearer,omitempty"`
-	Visibility             Visibility      `json:"visibility"`
-	MavenStrictPublication bool            `json:"mavenStrictPublication"`
-	State                  RepositoryState `json:"state"`
-	Version                string          `json:"version"`
+	ID                     string         `json:"id"`
+	Name                   string         `json:"name"`
+	Format                 Format         `json:"format"`
+	Type                   RepositoryType `json:"type"`
+	Endpoint               string         `json:"endpoint,omitempty"`
+	AllowedHosts           []string       `json:"allowedHosts,omitempty"`
+	EgressProxy            *EgressProxy   `json:"egressProxy,omitempty"`
+	UpstreamAuth           *UpstreamAuth  `json:"upstreamAuth,omitempty"`
+	OCIBearer              *OCIBearer     `json:"ociBearer,omitempty"`
+	Visibility             Visibility     `json:"visibility"`
+	MavenStrictPublication bool           `json:"mavenStrictPublication"`
+	// RawLayout, SealMode and RawStrict apply to hosted Raw repositories only (ADR 0028): they are chosen at
+	// creation and immutable afterwards. Other repositories leave them zero.
+	RawLayout RawLayout       `json:"layout,omitempty"`
+	SealMode  RawSealMode     `json:"sealMode,omitempty"`
+	RawStrict bool            `json:"strict,omitempty"`
+	State     RepositoryState `json:"state"`
+	Version   string          `json:"version"`
 	// GrantsVersion counts the changes of the repository grant set. Every grant mutation bumps it in its own
 	// transaction, so the read cache of grant sets (ADR 0023 section 6) keys on it and a bump is a miss.
 	GrantsVersion int64     `json:"-"`
@@ -261,6 +266,7 @@ func normalizeHostedRepository(repo HostedRepository) HostedRepository {
 		repo.AllowedHosts = []string{}
 	}
 	repo.Visibility = NormalizeVisibility(repo.Visibility)
+	repo = normalizeRawLayout(repo)
 	if repo.UpstreamAuth != nil {
 		// The repository name travels with its credential so exchanges can be audited per
 		// repository; a copy keeps the caller's struct untouched.
@@ -432,6 +438,9 @@ type RawAsset struct {
 	RepositoryID, Path, Digest, ObjectKey, ContentType string
 	Size                                               int64
 	UpdatedAt                                          time.Time
+	// Replayed is set by a write to a versioned repository that found the same digest already stored at the
+	// path: nothing changed and the caller answers 200 instead of 201. It is never persisted.
+	Replayed bool
 }
 type RawObject struct {
 	RepositoryID, Digest, ObjectKey string

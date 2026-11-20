@@ -8642,6 +8642,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "The repository has the versioned Raw layout (layout_mismatch); versions are restored by the version API",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         }
       }
@@ -9006,6 +9016,397 @@
         "responses": {
           "204": {
             "description": "Artifact tombstoned"
+          },
+          "422": {
+            "description": "The repository has the versioned Raw layout (layout_mismatch); versions are tombstoned by the version API",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/repositories/{repositoryId}/packages": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/RepositoryId"
+        }
+      ],
+      "get": {
+        "operationId": "listRawPackages",
+        "description": "Lists the packages of a versioned Raw repository (ADR 0028) with their latest sealed version and version count, ordered by name with keyset pagination. Requires repository read permission. `latestVersion` is the newest sealed version by seal time, not the highest semantic version. Tombstoned versions are not counted, and a package whose versions are all tombstoned is not listed. A repository with the `path` layout answers `422 layout_mismatch`.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "$ref": "#/components/parameters/PageToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/RawPackagePage"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/repositories/{repositoryId}/packages/{name}/versions": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/RepositoryId"
+        },
+        {
+          "$ref": "#/components/parameters/RawPackageName"
+        }
+      ],
+      "get": {
+        "operationId": "listRawVersions",
+        "description": "Lists the versions of one package, newest seal first with unsealed versions last, using keyset pagination. Requires repository read permission. `state` keeps only open or sealed versions. `property` filters on a frozen or open property as `key:value` and may repeat, all filters must match. `olderThanDays` keeps only open versions created more than N days ago, so stale open versions can be reported and acted on by an operator; it requires `state=open`. Tombstoned versions are never listed.",
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/RawVersionState"
+            }
+          },
+          {
+            "name": "property",
+            "in": "query",
+            "description": "Property filter `key:value`; repeat the parameter to require several, which combine with AND.",
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "maxItems": 32,
+              "items": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 330
+              }
+            }
+          },
+          {
+            "name": "olderThanDays",
+            "in": "query",
+            "description": "Only open versions created more than this many days ago. Requires `state=open`.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 36500
+            }
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "$ref": "#/components/parameters/PageToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/RawVersionPage"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/repositories/{repositoryId}/packages/{name}/versions/{version}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/RepositoryId"
+        },
+        {
+          "$ref": "#/components/parameters/RawPackageName"
+        },
+        {
+          "$ref": "#/components/parameters/RawVersionIdentifier"
+        }
+      ],
+      "get": {
+        "operationId": "getRawVersion",
+        "description": "Returns one version with its files (path, size, sha256, content type), properties, state and, once sealed, the manifest digest. `createdAt` is the creation time and `lastWriteAt` the time of the last file, property or seal change, so a stale open version can be told from an active one. Requires repository read permission. A tombstoned version is `404`.",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/RawVersion"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "put": {
+        "operationId": "createRawVersion",
+        "description": "Creates an `open` version explicitly, optionally with properties, before or without any file upload. Idempotent while the version is open, and then replaces the properties when the body carries them. Requires repository write permission. A sealed version answers `409 version_sealed`, a tombstoned one `409 version_tombstoned`, and a properties map outside its bounds `422 invalid_properties`.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RawVersionCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/RawVersion"
+          },
+          "201": {
+            "$ref": "#/components/responses/RawVersion"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/repositories/{repositoryId}/packages/{name}/versions/{version}/properties": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/RepositoryId"
+        },
+        {
+          "$ref": "#/components/parameters/RawPackageName"
+        },
+        {
+          "$ref": "#/components/parameters/RawVersionIdentifier"
+        }
+      ],
+      "put": {
+        "operationId": "setRawVersionProperties",
+        "description": "Replaces the whole property map of an open version. Requires repository write permission. At most 32 keys, keys match `^[a-z][a-z0-9._-]{0,63}$`, values are at most 256 bytes of UTF-8 without control or bidirectional characters, 8 KiB in total, otherwise `422 invalid_properties`. Properties freeze at seal and are part of the manifest digest, so a sealed version answers `409 version_sealed`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RawVersionProperties"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/RawVersion"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/repositories/{repositoryId}/packages/{name}/versions/{version}:seal": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/RepositoryId"
+        },
+        {
+          "$ref": "#/components/parameters/RawPackageName"
+        },
+        {
+          "$ref": "#/components/parameters/RawVersionIdentifier"
+        }
+      ],
+      "post": {
+        "operationId": "sealRawVersion",
+        "description": "Seals a version under its row lock, which serialises the seal against concurrent uploads. Requires repository write permission. An empty version is `422 version_empty`. `files` is an expected file list that must equal the stored set exactly, and `checksumsFile` names a stored file parsed as `sha256sum` output whose every entry must match a stored file; a difference is `422 checksum_mismatch`. `properties`, when present, replace the open version's properties before they freeze. The manifest digest is always computed on the server from the stored digests. Sealing twice is idempotent and returns the same digest.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RawVersionSeal"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/RawVersion"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/repositories/{repositoryId}/packages/{name}/versions/{version}/manifest": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/RepositoryId"
+        },
+        {
+          "$ref": "#/components/parameters/RawPackageName"
+        },
+        {
+          "$ref": "#/components/parameters/RawVersionIdentifier"
+        }
+      ],
+      "get": {
+        "operationId": "getRawVersionManifest",
+        "description": "Returns the canonical manifest of a sealed version, derived on request and never stored, as UTF-8 JSON with sorted keys and no insignificant whitespace. The `sha256` of exactly these bytes is the manifest digest. Requires repository read permission. An open version answers `409 version_not_sealed`; a tombstoned one is `404`.",
+        "responses": {
+          "200": {
+            "description": "The canonical manifest bytes.",
+            "headers": {
+              "ETag": {
+                "description": "The strong entity tag, the manifest digest as `\"sha256:<hex>\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RawVersionManifest"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/repositories/{repositoryId}/packages/{name}/versions/{version}/checksums": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/RepositoryId"
+        },
+        {
+          "$ref": "#/components/parameters/RawPackageName"
+        },
+        {
+          "$ref": "#/components/parameters/RawVersionIdentifier"
+        }
+      ],
+      "get": {
+        "operationId": "getRawVersionChecksums",
+        "description": "Returns `sha256sum -c` compatible text for the files of a version, one `<hex>  <path>` line per file sorted by path, with paths relative to the version. Requires repository read permission. Available for open and sealed versions; a tombstoned one is `404`.",
+        "responses": {
+          "200": {
+            "description": "The checksums text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
           }
         }
       }
@@ -13780,6 +14181,17 @@
             "default": false,
             "description": "Maven Hosted only. When false (the default), successful standard Maven/Gradle PUTs are published directly. When true, uploaded coordinates remain unreadable until the Gateway coordinate commit succeeds."
           },
+          "layout": {
+            "$ref": "#/components/schemas/RawLayout"
+          },
+          "sealMode": {
+            "$ref": "#/components/schemas/RawSealMode"
+          },
+          "strict": {
+            "type": "boolean",
+            "default": false,
+            "description": "Hosted Raw only, and only with the versioned layout. True when files of open versions cannot be deleted either (create-only end to end); fixed at creation."
+          },
           "egressProxy": {
             "$ref": "#/components/schemas/EgressProxy"
           },
@@ -13844,6 +14256,17 @@
             "type": "boolean",
             "default": false,
             "description": "Maven Hosted only. Opt in to Gateway coordinate commits and atomic per-coordinate visibility. The default false mode accepts standard Maven/Gradle publishing without a companion integration."
+          },
+          "layout": {
+            "$ref": "#/components/schemas/RawLayout"
+          },
+          "sealMode": {
+            "$ref": "#/components/schemas/RawSealMode"
+          },
+          "strict": {
+            "type": "boolean",
+            "default": false,
+            "description": "Hosted Raw with the versioned layout only. Makes files of open versions create-only too, so a file DELETE answers 409 version_file_immutable and a failed upload needs a new version. Fixed at creation."
           },
           "egressProxy": {
             "$ref": "#/components/schemas/EgressProxy"
@@ -15108,6 +15531,17 @@
           "publicationScanning": {
             "type": "boolean",
             "description": "True when new publications in this repository can automatically enqueue scanner jobs."
+          },
+          "layout": {
+            "$ref": "#/components/schemas/RawLayout"
+          },
+          "versions": {
+            "type": "boolean",
+            "description": "Hosted Raw only. True when the repository has the versioned layout and serves the package and version management API."
+          },
+          "strict": {
+            "type": "boolean",
+            "description": "Hosted Raw only. True when files of open versions are create-only too (file DELETE answers 409 version_file_immutable)."
           }
         }
       },
@@ -16016,7 +16450,19 @@
               "untrusted_archive",
               "snapshot_corrupt",
               "internal_error",
-              "visibility_conflict"
+              "visibility_conflict",
+              "layout_immutable",
+              "layout_mismatch",
+              "invalid_generic_path",
+              "invalid_properties",
+              "version_file_exists",
+              "version_file_immutable",
+              "version_file_limit",
+              "version_sealed",
+              "version_tombstoned",
+              "version_not_sealed",
+              "version_empty",
+              "checksum_mismatch"
             ]
           },
           "message": {
@@ -22129,6 +22575,22 @@
           }
         }
       },
+      "RawLayout": {
+        "type": "string",
+        "enum": [
+          "path",
+          "versioned"
+        ],
+        "description": "Hosted Raw only. `path` is the default, a path is a mutable pointer to a digest. `versioned` enforces `<name>/<version>/<file>`, create-only files and sealable versions (ADR 0028). Chosen at creation and immutable."
+      },
+      "RawSealMode": {
+        "type": "string",
+        "enum": [
+          "explicit",
+          "idle"
+        ],
+        "description": "Hosted Raw with the versioned layout only. `explicit` seals only on request. `idle` also seals an open version that saw no write for the idle period, for publishers that never call seal. Chosen at creation and immutable."
+      },
       "EgressProxy": {
         "type": "object",
         "description": "Per-Proxy-Repository egress network proxy configuration. Only meaningful when the repository type is proxy. `password` is accepted on write (plaintext over TLS) and stored AES-256-GCM encrypted; responses never return it and carry `credentialsConfigured` instead.",
@@ -22638,7 +23100,7 @@
       },
       "UpdateRepository": {
         "type": "object",
-        "description": "Editable repository management policy and proxy configuration. Hosted repositories accept visibility updates and Maven Hosted repositories also accept mavenStrictPublication updates; name, format, and type are immutable after creation.",
+        "description": "Editable repository management policy and proxy configuration. Hosted repositories accept visibility updates and Maven Hosted repositories also accept mavenStrictPublication updates; name, format, type, and the layout of a Raw repository are immutable after creation.",
         "additionalProperties": false,
         "properties": {
           "endpoint": {
@@ -22658,6 +23120,16 @@
           "mavenStrictPublication": {
             "type": "boolean",
             "description": "Maven Hosted only. False publishes successful standard PUTs directly; true requires a Gateway coordinate commit before reads can resolve the uploaded coordinate."
+          },
+          "layout": {
+            "$ref": "#/components/schemas/RawLayout"
+          },
+          "sealMode": {
+            "$ref": "#/components/schemas/RawSealMode"
+          },
+          "strict": {
+            "type": "boolean",
+            "description": "The layout, seal mode and strict flag of a Raw repository are fixed at creation. They are accepted here only with their current value, which changes nothing; any other value answers 409 layout_immutable. Other repositories answer 400."
           },
           "egressProxy": {
             "$ref": "#/components/schemas/EgressProxy"
@@ -22940,6 +23412,241 @@
             }
           }
         }
+      },
+      "RawPackage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "versionCount"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "latestVersion": {
+            "type": "string",
+            "description": "The newest sealed version by seal time, not by semantic version. Absent while no version is sealed."
+          },
+          "versionCount": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Open and sealed versions of the package."
+          }
+        }
+      },
+      "RawPackagePage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RawPackage"
+            }
+          },
+          "nextPageToken": {
+            "type": "string"
+          }
+        }
+      },
+      "RawVersionState": {
+        "type": "string",
+        "enum": [
+          "open",
+          "sealed"
+        ],
+        "description": "An open version accepts files and properties; a sealed one is immutable and has a manifest digest. A tombstoned version is not visible through this API."
+      },
+      "RawVersionPropertyMap": {
+        "type": "object",
+        "maxProperties": 32,
+        "propertyNames": {
+          "pattern": "^[a-z][a-z0-9._-]{0,63}$"
+        },
+        "additionalProperties": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "description": "Untrusted text. At most 32 keys and 8 KiB in total, values of at most 256 bytes without control or bidirectional characters. Escape on display."
+      },
+      "RawVersionFile": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "sha256",
+          "size"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Path relative to the version."
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "contentType": {
+            "type": "string"
+          }
+        }
+      },
+      "RawVersion": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "version",
+          "state",
+          "fileCount",
+          "sizeBytes",
+          "properties",
+          "createdAt",
+          "lastWriteAt"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/RawVersionState"
+          },
+          "fileCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "manifestDigest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "description": "Present once the version is sealed. Computed on the server from the stored file digests and the frozen properties."
+          },
+          "properties": {
+            "$ref": "#/components/schemas/RawVersionPropertyMap"
+          },
+          "createdBy": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastWriteAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The last file, property or seal change."
+          },
+          "sealedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RawVersionFile"
+            },
+            "description": "Present in the version detail, sorted by path; absent in listings."
+          }
+        }
+      },
+      "RawVersionPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RawVersion"
+            }
+          },
+          "nextPageToken": {
+            "type": "string"
+          }
+        }
+      },
+      "RawVersionCreate": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "properties": {
+            "$ref": "#/components/schemas/RawVersionPropertyMap"
+          }
+        }
+      },
+      "RawVersionProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "properties"
+        ],
+        "properties": {
+          "properties": {
+            "$ref": "#/components/schemas/RawVersionPropertyMap"
+          }
+        }
+      },
+      "RawVersionSealFile": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "sha256"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Path relative to the version."
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[A-Fa-f0-9]{64}$"
+          }
+        }
+      },
+      "RawVersionSeal": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "files": {
+            "type": "array",
+            "maxItems": 20000,
+            "items": {
+              "$ref": "#/components/schemas/RawVersionSealFile"
+            },
+            "description": "The expected file list. The stored file set must equal it exactly."
+          },
+          "checksumsFile": {
+            "type": "string",
+            "description": "Relative path of a stored file, usually SHA256SUMS, parsed as sha256sum output. Every listed file must exist with that digest."
+          },
+          "properties": {
+            "$ref": "#/components/schemas/RawVersionPropertyMap"
+          }
+        }
+      },
+      "RawVersionManifest": {
+        "type": "object",
+        "additionalProperties": true,
+        "description": "The canonical manifest, keys sorted and without insignificant whitespace. `name`, `version`, `files` (`path`, `sha256`, `size`, sorted by path) and `properties`."
       },
       "EffectiveAccessDecision": {
         "type": "object",
@@ -24688,6 +25395,26 @@
           "format": "uuid"
         }
       },
+      "RawPackageName": {
+        "name": "name",
+        "in": "path",
+        "required": true,
+        "description": "Package name of a versioned Raw repository, lower case ASCII.",
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+        }
+      },
+      "RawVersionIdentifier": {
+        "name": "version",
+        "in": "path",
+        "required": true,
+        "description": "Version identifier of a versioned Raw repository; semantic versioning is not required.",
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+~-]{0,127}$"
+        }
+      },
       "SnapshotId": {
         "name": "snapshotId",
         "in": "path",
@@ -25612,6 +26339,36 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/LifecycleJob"
+            }
+          }
+        }
+      },
+      "RawPackagePage": {
+        "description": "A page of packages",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/RawPackagePage"
+            }
+          }
+        }
+      },
+      "RawVersionPage": {
+        "description": "A page of versions",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/RawVersionPage"
+            }
+          }
+        }
+      },
+      "RawVersion": {
+        "description": "A version",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/RawVersion"
             }
           }
         }

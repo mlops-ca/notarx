@@ -1235,6 +1235,14 @@ Repository:
       type: boolean
       default: false
       description: Maven Hosted only. When false (the default), successful standard Maven/Gradle PUTs are published directly. When true, uploaded coordinates remain unreadable until the Gateway coordinate commit succeeds.
+    layout:
+      "$ref": "#/RawLayout"
+    sealMode:
+      "$ref": "#/RawSealMode"
+    strict:
+      type: boolean
+      default: false
+      description: Hosted Raw only, and only with the versioned layout. True when files of open versions cannot be deleted either (create-only end to end); fixed at creation.
     egressProxy:
       "$ref": "#/EgressProxy"
     upstreamAuth:
@@ -1284,6 +1292,14 @@ CreateRepository:
       type: boolean
       default: false
       description: Maven Hosted only. Opt in to Gateway coordinate commits and atomic per-coordinate visibility. The default false mode accepts standard Maven/Gradle publishing without a companion integration.
+    layout:
+      "$ref": "#/RawLayout"
+    sealMode:
+      "$ref": "#/RawSealMode"
+    strict:
+      type: boolean
+      default: false
+      description: Hosted Raw with the versioned layout only. Makes files of open versions create-only too, so a file DELETE answers 409 version_file_immutable and a failed upload needs a new version. Fixed at creation.
     egressProxy:
       "$ref": "#/EgressProxy"
     upstreamAuth:
@@ -1292,7 +1308,7 @@ CreateRepository:
       "$ref": "#/OCIBearer"
 UpdateRepository:
   type: object
-  description: Editable repository management policy and proxy configuration. Hosted repositories accept visibility updates and Maven Hosted repositories also accept mavenStrictPublication updates; name, format, and type are immutable after creation.
+  description: Editable repository management policy and proxy configuration. Hosted repositories accept visibility updates and Maven Hosted repositories also accept mavenStrictPublication updates; name, format, type, and the layout of a Raw repository are immutable after creation.
   additionalProperties: false
   properties:
     endpoint:
@@ -1309,6 +1325,13 @@ UpdateRepository:
     mavenStrictPublication:
       type: boolean
       description: Maven Hosted only. False publishes successful standard PUTs directly; true requires a Gateway coordinate commit before reads can resolve the uploaded coordinate.
+    layout:
+      "$ref": "#/RawLayout"
+    sealMode:
+      "$ref": "#/RawSealMode"
+    strict:
+      type: boolean
+      description: The layout, seal mode and strict flag of a Raw repository are fixed at creation. They are accepted here only with their current value, which changes nothing; any other value answers 409 layout_immutable. Other repositories answer 400.
     egressProxy:
       "$ref": "#/EgressProxy"
     upstreamAuth:
@@ -2639,6 +2662,14 @@ RepositoryCapabilities:
     publicationScanning:
       type: boolean
       description: True when new publications in this repository can automatically enqueue scanner jobs.
+    layout:
+      "$ref": "#/RawLayout"
+    versions:
+      type: boolean
+      description: Hosted Raw only. True when the repository has the versioned layout and serves the package and version management API.
+    strict:
+      type: boolean
+      description: Hosted Raw only. True when files of open versions are create-only too (file DELETE answers 409 version_file_immutable).
 GroupResolution:
   type: object
   additionalProperties: false
@@ -3858,6 +3889,18 @@ Problem:
       - snapshot_corrupt
       - internal_error
       - visibility_conflict
+      - layout_immutable
+      - layout_mismatch
+      - invalid_generic_path
+      - invalid_properties
+      - version_file_exists
+      - version_file_immutable
+      - version_file_limit
+      - version_sealed
+      - version_tombstoned
+      - version_not_sealed
+      - version_empty
+      - checksum_mismatch
     message:
       type: string
     requestId:
@@ -4547,3 +4590,185 @@ IssuerJWK:
       type: string
     y:
       type: string
+RawLayout:
+  type: string
+  enum:
+  - path
+  - versioned
+  description: Hosted Raw only. `path` is the default, a path is a mutable pointer to a digest. `versioned` enforces `<name>/<version>/<file>`, create-only files and sealable versions (ADR 0028). Chosen at creation and immutable.
+RawSealMode:
+  type: string
+  enum:
+  - explicit
+  - idle
+  description: Hosted Raw with the versioned layout only. `explicit` seals only on request. `idle` also seals an open version that saw no write for the idle period, for publishers that never call seal. Chosen at creation and immutable.
+RawVersionState:
+  type: string
+  enum:
+  - open
+  - sealed
+  description: An open version accepts files and properties; a sealed one is immutable and has a manifest digest. A tombstoned version is not visible through this API.
+RawPackage:
+  type: object
+  additionalProperties: false
+  required:
+  - name
+  - versionCount
+  properties:
+    name:
+      type: string
+    latestVersion:
+      type: string
+      description: The newest sealed version by seal time, not by semantic version. Absent while no version is sealed.
+    versionCount:
+      type: integer
+      minimum: 1
+      description: Open and sealed versions of the package.
+RawPackagePage:
+  type: object
+  additionalProperties: false
+  required:
+  - items
+  properties:
+    items:
+      type: array
+      items:
+        "$ref": "#/RawPackage"
+    nextPageToken:
+      type: string
+RawVersionFile:
+  type: object
+  additionalProperties: false
+  required:
+  - path
+  - sha256
+  - size
+  properties:
+    path:
+      type: string
+      description: Path relative to the version.
+    sha256:
+      type: string
+      pattern: "^[a-f0-9]{64}$"
+    size:
+      type: integer
+      format: int64
+      minimum: 0
+    contentType:
+      type: string
+RawVersionProperties:
+  type: object
+  additionalProperties: false
+  required:
+  - properties
+  properties:
+    properties:
+      "$ref": "#/RawVersionPropertyMap"
+RawVersionPropertyMap:
+  type: object
+  maxProperties: 32
+  propertyNames:
+    pattern: "^[a-z][a-z0-9._-]{0,63}$"
+  additionalProperties:
+    type: string
+    maxLength: 256
+  description: Untrusted text. At most 32 keys and 8 KiB in total, values of at most 256 bytes without control or bidirectional characters. Escape on display.
+RawVersionCreate:
+  type: object
+  additionalProperties: false
+  properties:
+    properties:
+      "$ref": "#/RawVersionPropertyMap"
+RawVersionSealFile:
+  type: object
+  additionalProperties: false
+  required:
+  - path
+  - sha256
+  properties:
+    path:
+      type: string
+      description: Path relative to the version.
+    sha256:
+      type: string
+      pattern: "^[A-Fa-f0-9]{64}$"
+RawVersionSeal:
+  type: object
+  additionalProperties: false
+  properties:
+    files:
+      type: array
+      maxItems: 20000
+      items:
+        "$ref": "#/RawVersionSealFile"
+      description: The expected file list. The stored file set must equal it exactly.
+    checksumsFile:
+      type: string
+      description: Relative path of a stored file, usually SHA256SUMS, parsed as sha256sum output. Every listed file must exist with that digest.
+    properties:
+      "$ref": "#/RawVersionPropertyMap"
+RawVersion:
+  type: object
+  additionalProperties: false
+  required:
+  - name
+  - version
+  - state
+  - fileCount
+  - sizeBytes
+  - properties
+  - createdAt
+  - lastWriteAt
+  properties:
+    name:
+      type: string
+    version:
+      type: string
+    state:
+      "$ref": "#/RawVersionState"
+    fileCount:
+      type: integer
+      minimum: 0
+    sizeBytes:
+      type: integer
+      format: int64
+      minimum: 0
+    manifestDigest:
+      type: string
+      pattern: "^sha256:[a-f0-9]{64}$"
+      description: Present once the version is sealed. Computed on the server from the stored file digests and the frozen properties.
+    properties:
+      "$ref": "#/RawVersionPropertyMap"
+    createdBy:
+      type: string
+    createdAt:
+      type: string
+      format: date-time
+    lastWriteAt:
+      type: string
+      format: date-time
+      description: The last file, property or seal change.
+    sealedAt:
+      type: string
+      format: date-time
+    files:
+      type: array
+      items:
+        "$ref": "#/RawVersionFile"
+      description: Present in the version detail, sorted by path; absent in listings.
+RawVersionPage:
+  type: object
+  additionalProperties: false
+  required:
+  - items
+  properties:
+    items:
+      type: array
+      items:
+        "$ref": "#/RawVersion"
+    nextPageToken:
+      type: string
+RawVersionManifest:
+  type: object
+  additionalProperties: true
+  description: The canonical manifest, keys sorted and without insignificant whitespace. `name`, `version`, `files` (`path`, `sha256`, `size`, sorted by path) and `properties`.

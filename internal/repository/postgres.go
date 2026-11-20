@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -23,6 +24,10 @@ type PostgresStore struct {
 	claimObserver    queueClaimObserverHolder
 	// claimRotation rotates the first kind of the round-robin continuation of an all-kinds claim.
 	claimRotation atomic.Uint64
+	// rawMaxFiles is the files-per-version cap of versioned Raw repositories; zero means the default.
+	rawMaxFiles atomic.Int64
+	// rawLayouts caches the immutable layout of each Raw repository a write has touched.
+	rawLayouts sync.Map
 	// payloads moves large payloads to the object store meta namespace (ADR 0023 section 9).
 	payloads atomic.Pointer[payloadSettings]
 }

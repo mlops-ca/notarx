@@ -25,7 +25,7 @@ func (s *PostgresStore) CreateScheduledTask(ctx context.Context, task ScheduledT
 }
 
 func (s *PostgresStore) ListScheduledTasks(ctx context.Context) ([]ScheduledTask, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+scheduledTaskColumns+` FROM scheduled_tasks WHERE kind NOT IN ('partition-manager','retention-janitor') ORDER BY created_at DESC`)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+scheduledTaskColumns+` FROM scheduled_tasks WHERE kind NOT IN (`+internalScheduledTaskKinds+`) ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +43,7 @@ func (s *PostgresStore) ListScheduledTasks(ctx context.Context) ([]ScheduledTask
 
 func (s *PostgresStore) GetScheduledTask(ctx context.Context, id string) (ScheduledTask, error) {
 	var task ScheduledTask
-	err := scanScheduledTask(s.db.QueryRowContext(ctx, `SELECT `+scheduledTaskColumns+` FROM scheduled_tasks WHERE id=$1::uuid AND kind NOT IN ('partition-manager','retention-janitor')`, id), &task)
+	err := scanScheduledTask(s.db.QueryRowContext(ctx, `SELECT `+scheduledTaskColumns+` FROM scheduled_tasks WHERE id=$1::uuid AND kind NOT IN (`+internalScheduledTaskKinds+`)`, id), &task)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ScheduledTask{}, ErrNotFound
 	}
@@ -56,7 +56,7 @@ func (s *PostgresStore) UpdateScheduledTask(ctx context.Context, task ScheduledT
 		return ScheduledTask{}, ErrVersionConflict
 	}
 	return runAudited(ctx, s, audit, func(q sqlRunner) (ScheduledTask, error) {
-		err = scanScheduledTask(q.QueryRowContext(ctx, `UPDATE scheduled_tasks SET name=$1,description=$2,kind=$3,repository_id=NULLIF($4,'')::uuid,interval_seconds=$5,enabled=$6,next_run_at=$7,version=version+1,updated_at=now() WHERE id=$8::uuid AND version=$9 AND kind NOT IN ('partition-manager','retention-janitor') RETURNING `+scheduledTaskColumns, task.Name, task.Description, task.Kind, task.RepositoryID, task.IntervalSeconds, task.Enabled, task.NextRunAt, task.ID, version), &task)
+		err = scanScheduledTask(q.QueryRowContext(ctx, `UPDATE scheduled_tasks SET name=$1,description=$2,kind=$3,repository_id=NULLIF($4,'')::uuid,interval_seconds=$5,enabled=$6,next_run_at=$7,version=version+1,updated_at=now() WHERE id=$8::uuid AND version=$9 AND kind NOT IN (`+internalScheduledTaskKinds+`) RETURNING `+scheduledTaskColumns, task.Name, task.Description, task.Kind, task.RepositoryID, task.IntervalSeconds, task.Enabled, task.NextRunAt, task.ID, version), &task)
 		if errors.Is(err, sql.ErrNoRows) {
 			var exists bool
 			if checkErr := q.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM scheduled_tasks WHERE id=$1::uuid)`, task.ID).Scan(&exists); checkErr != nil {
@@ -76,7 +76,7 @@ func (s *PostgresStore) UpdateScheduledTask(ctx context.Context, task ScheduledT
 
 func (s *PostgresStore) DeleteScheduledTask(ctx context.Context, id string, audit ...AuditRecord) error {
 	_, err := runAudited(ctx, s, audit, func(q sqlRunner) (struct{}, error) {
-		result, err := q.ExecContext(ctx, `DELETE FROM scheduled_tasks WHERE id=$1::uuid AND kind NOT IN ('partition-manager','retention-janitor')`, id)
+		result, err := q.ExecContext(ctx, `DELETE FROM scheduled_tasks WHERE id=$1::uuid AND kind NOT IN (`+internalScheduledTaskKinds+`)`, id)
 		if err != nil {
 			return struct{}{}, err
 		}

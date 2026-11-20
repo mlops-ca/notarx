@@ -908,6 +908,39 @@ no repository access by itself — repository access comes from grants
   `notarxctl publish status SESSION`. Uploads are content-addressed and retried;
   the commit is not retried (a repeat answers 409), and a lost commit answer
   is settled by reading the session back: `committed` confirms it.
+- `notarxctl generic push SOURCE --repo ID --name N --version V [--add PATH]…
+  [--property k=v]… [--checksums] [--no-seal]` publishes the files of one
+  version of a package to a Raw repository created with the `versioned`
+  layout (ADR 0028), then seals it. Files land at `N/V/<file>` (a directory
+  keeps its tree, at most eight levels deep; `.notarx` is reserved) and are
+  create-only: the same bytes again answer `unchanged`, other bytes at a
+  stored path are a conflict that exits 7 with the code `version_file_exists`
+  and never seal the version. `--property` values are set before the upload
+  and freeze at seal. `--checksums` writes a `SHA256SUMS` file next to the
+  files and has the server verify it, and the exact file list, at seal; the
+  seal then answers the manifest digest that identifies the release.
+  `--no-seal` leaves the version open. A failed or unconfirmed upload exits 3
+  and re-running the same command finishes the push. `publish raw` refuses a
+  versioned repository with a hint to use this command.
+- `notarxctl generic pull --repo ID --name N --version V [--file PATH]…
+  [--to DIR] [--allow-open]` downloads the files of a version, checking each
+  file's size and SHA-256 against the version detail before it is moved into
+  place, and, for a sealed version, that the canonical manifest hashes to the
+  manifest digest and lists every downloaded file. A file or manifest that
+  fails verification is discarded (exit 1, code `verification_failed`); a path
+  that would leave the destination is refused. An open version needs
+  `--allow-open`. Files already in place with the right digest are
+  `unchanged`.
+- `notarxctl generic list --repo ID [--name N [--state open|sealed]
+  [--property k=v]… [--older-than-days N]]` lists the packages of a repository
+  with their newest sealed version, or the versions of one package, newest
+  seal first (`--older-than-days` with `--state open` reports stale open
+  versions). `notarxctl generic show --repo ID --name N --version V
+  [--manifest | --checksums]` shows a version, its canonical manifest or its
+  `sha256sum -c` text. `notarxctl generic seal` seals an open version with an
+  optional `--expect PATH=SHA256` list or `--checksums-file`, and
+  `notarxctl generic properties` replaces the properties of an open version.
+  Tombstone and restore of a version arrive with their management API.
 - Other formats publish with their native clients; `notarxctl repo connect`
   prints their configuration.
 

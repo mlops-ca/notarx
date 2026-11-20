@@ -151,6 +151,8 @@ func (r backgroundRuntime) startSchedulers(ctx context.Context, cfg config.Confi
 	r.taskQueue.StartCacheScheduler(ctx, 5*time.Minute)
 	// One scheduler at a time deletes the meta objects no row references (ADR 0023 section 9).
 	app.NewMetaSweeper(r.store, r.metaObjects, r.metrics, cfg).Start(ctx)
+	// One scheduler at a time seals the idle open versions of versioned Raw repositories (ADR 0028).
+	app.NewRawVersionSweeper(r.store, r.metrics, cfg).Start(ctx)
 	app.NativeMavenMaintenance{Store: r.store, Objects: r.objects, Metrics: r.metrics}.StartScheduler(ctx, time.Hour)
 	app.NativeOCIMaintenance{Store: r.store, Objects: r.objects, Metrics: r.metrics}.StartScheduler(ctx, time.Hour)
 	modules := r.formatModules()

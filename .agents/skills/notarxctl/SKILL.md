@@ -97,6 +97,16 @@ re-running after a partial failure is safe):
 notarxctl publish raw ./dist --repo REPOSITORY_ID --to releases/1.0.0 --json
 ```
 
+Files of one version of a package in a `versioned` Raw repository (files are
+create-only, so re-running a finished push answers `unchanged`; a conflict
+exits 7 and never seals; `--checksums` has the server verify a `SHA256SUMS`
+file at seal):
+
+```sh
+notarxctl generic push ./dist --repo REPOSITORY_ID --name tool --version 1.4.2 --checksums --json
+notarxctl generic pull --repo REPOSITORY_ID --name tool --version 1.4.2 --to ./out --json
+```
+
 One Maven coordinate through a publish session (resume an interrupted run
 with the same `--idempotency-key`):
 

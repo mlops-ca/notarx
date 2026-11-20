@@ -272,6 +272,9 @@ func (h generatedRepositoryAPIAdapter) ListRepositoryTombstones(w http.ResponseW
 
 func (h generatedRepositoryAPIAdapter) TombstoneRepositoryArtifact(w http.ResponseWriter, r *http.Request, repositoryID adminopenapi.RepositoryId) {
 	h.withRepositoryScope(w, r, repositoryID.String(), RepositoryAdmin, func(principal Principal, repo repository.HostedRepository) {
+		if rejectVersionedPathOperation(w, repo) {
+			return
+		}
 		if repo.Type != repository.RepositoryTypeHosted || !repository.FormatSupportsOperation(repo.Format, repo.Type, repository.RepositoryOperationDelete) {
 			writeHostedProblem(w, http.StatusConflict, "unsupported_operation", "artifact deletion is not supported for this repository")
 			return

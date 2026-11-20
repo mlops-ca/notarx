@@ -141,11 +141,18 @@ type Config struct {
 	// MetaSweepGrace, MetaSweepBatchSize and MetaSweepInterval tune the sweep that deletes unreferenced meta
 	// objects (ADR 0023 section 9): the age an object must reach, the objects examined per lease renewal and
 	// the time between two completed sweeps.
-	MetaSweepGrace       time.Duration
-	MetaSweepBatchSize   int
-	MetaSweepInterval    time.Duration
-	UsageFlushInterval   time.Duration
-	ShutdownFlushTimeout time.Duration
+	MetaSweepGrace     time.Duration
+	MetaSweepBatchSize int
+	MetaSweepInterval  time.Duration
+	// GenericMaxFilesPerVersion caps the files of one version of a versioned Raw repository, GenericAutosealIdle is
+	// the write-free time after which the idle sweep seals an open version, GenericAutosealInterval the period of
+	// that sweep and GenericStaleOpenAfter the age at which an open version counts as stale (ADR 0028).
+	GenericMaxFilesPerVersion int
+	GenericAutosealIdle       time.Duration
+	GenericAutosealInterval   time.Duration
+	GenericStaleOpenAfter     time.Duration
+	UsageFlushInterval        time.Duration
+	ShutdownFlushTimeout      time.Duration
 	// AuthzCacheTTL is the revocation window of the read caches (ADR 0023
 	// section 6); zero disables every cache.
 	AuthzCacheTTL               time.Duration
@@ -273,6 +280,10 @@ func Load() (Config, error) {
 		MetaSweepGrace:              DefaultMetaSweepGrace,
 		MetaSweepBatchSize:          DefaultMetaSweepBatchSize,
 		MetaSweepInterval:           DefaultMetaSweepInterval,
+		GenericMaxFilesPerVersion:   DefaultGenericMaxFilesPerVersion,
+		GenericAutosealIdle:         DefaultGenericAutosealIdle,
+		GenericAutosealInterval:     DefaultGenericAutosealInterval,
+		GenericStaleOpenAfter:       DefaultGenericStaleOpenAfter,
 		UsageFlushInterval:          5 * time.Second,
 		ShutdownFlushTimeout:        10 * time.Second,
 		AuthzCacheTTL:               5 * time.Second,
@@ -630,6 +641,9 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if err := loadMetaSweepConfig(&cfg); err != nil {
+		return Config{}, err
+	}
+	if err := loadGenericPackagesConfig(&cfg); err != nil {
 		return Config{}, err
 	}
 	if cfg.MigrationStoragePoolID != "" && !regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`).MatchString(cfg.MigrationStoragePoolID) {
