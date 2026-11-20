@@ -202,7 +202,21 @@ class PlanTests(unittest.TestCase):
         for target in targets:
             self.assertRegex(makefile, r'(?m)^(?:[\w.-]+ )*' + re.escape(target) + r'(?: [\w.-]+)*::?(?!=)',
                              'planned make target is not defined in the Makefile: ' + target)
-        self.assertEqual(len(targets), len(set(targets)), 'a make target is planned in two lanes')
+        # A target may appear more than once only with different variables (the shards of
+        # integration-test); the same invocation twice would run the same tests twice.
+        invocations = [tuple(s['command'][1:]) for lane in ci.PLAN['lanes'].values()
+                       for s in lane['steps'] if s['command'][0] == 'make']
+        self.assertEqual(len(invocations), len(set(invocations)), 'a make invocation is planned in two lanes')
+        for target in set(targets) - {'integration-test'}:
+            self.assertEqual(targets.count(target), 1, 'a make target is planned in two lanes: ' + target)
+
+    def test_integration_test_shards_are_planned_once_each(self):
+        listed = subprocess.check_output([str(ROOT / 'scripts/integration-test.sh'), '--list'], text=True)
+        shards = sorted({line.split()[0] for line in listed.splitlines()})
+        planned = sorted(arg.split('=', 1)[1] for lane in ci.PLAN['lanes'].values() for s in lane['steps']
+                         if s['command'][:2] == ['make', 'integration-test']
+                         for arg in s['command'][2:] if arg.startswith('INTEGRATION_SHARD='))
+        self.assertEqual(planned, shards, 'every integration shard runs in exactly one lane')
 
     def test_every_notarx_gate_stays_planned(self):
         targets = {s['command'][1] for lane in ci.PLAN['lanes'].values()
@@ -275,6 +289,7 @@ class PlanTests(unittest.TestCase):
             if e['arch'] == 'arm64']
         # ADR 0016: every core lane plus the native-format smoke subset on each pull request.
         self.assertEqual(pull_request, ['core-checks', 'core-email', 'core-native-e2e', 'core-backup',
+                                        'core-integration-1', 'core-integration-2',
                                         'six-format-auth', 'oci-discovery'])
         self.assertEqual({lane['arm64'] for lane in ci.PLAN['lanes'].values()}, {'pull-request', 'mainline'})
         self.assertEqual({e['runner'] for e in json.loads(subprocess.check_output(

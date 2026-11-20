@@ -70,4 +70,39 @@ make --no-print-directory -C "$root" integration-down >/dev/null
 for expected in 'down -v --remove-orphans' 'up -d --wait postgres rustfs' 'run --rm --no-deps test' 'port postgres 5432' 'port rustfs 9000' 'official Cargo persistent replay invoked'; do
   grep -Fq -- "$expected" "$NOTARX_ISOLATION_LOG"
 done
+
+# Every package with integration-tagged files belongs to exactly one shard, so the
+# sharded CI lanes run the same suite as the unsharded run.
+tagged=$(cd "$root" && grep -rlE '^//go:build.*\bintegration\b' --include='*.go' cmd internal | xargs -n1 dirname | sed 's|^|./|' | sort -u)
+listed=$("$root/scripts/integration-test.sh" --list | awk '{ print $2 }' | sort)
+if [[ "$tagged" != "$listed" ]]; then
+  printf 'integration shards do not list every integration package exactly once:\n%s\n' \
+    "$(diff <(printf '%s\n' "$tagged") <(printf '%s\n' "$listed") || true)" >&2
+  exit 1
+fi
+[[ -z $("$root/scripts/integration-test.sh" --list | awk '{ print $2 }' | sort | uniq -d) ]]
+
+# Shard 1 holds ./internal/app and runs the official Cargo replay; shard 2 does not.
+for shard in 1 2; do
+  : >"$NOTARX_ISOLATION_LOG"
+  "$root/scripts/integration-test.sh" --shard "$shard" >/dev/null
+  while read -r listed_shard package; do
+    if [[ "$listed_shard" == "$shard" ]]; then
+      grep -Fq -- " $package" "$NOTARX_ISOLATION_LOG"
+    elif grep -Eq -- " $package( |$)" "$NOTARX_ISOLATION_LOG"; then
+      printf 'shard %s ran %s of shard %s\n' "$shard" "$package" "$listed_shard" >&2
+      exit 1
+    fi
+  done < <("$root/scripts/integration-test.sh" --list)
+  if [[ "$shard" == 1 ]]; then
+    grep -Fq 'official Cargo persistent replay invoked' "$NOTARX_ISOLATION_LOG"
+  elif grep -Fq 'official Cargo persistent replay invoked' "$NOTARX_ISOLATION_LOG"; then
+    printf 'shard 2 ran the Cargo replay, which belongs to shard 1\n' >&2
+    exit 1
+  fi
+done
+if "$root/scripts/integration-test.sh" --shard 3 >/dev/null 2>&1; then
+  printf 'integration-test.sh accepted a shard that does not exist\n' >&2
+  exit 1
+fi
 printf 'Integration Compose isolation passed with an unrelated exported project name.\n'

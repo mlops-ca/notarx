@@ -185,7 +185,7 @@
       "rawDirectories": []
     },
     "core-backup": {
-      "timeoutMinutes": 25,
+      "timeoutMinutes": 20,
       "arm64": "pull-request",
       "needs": [
         "rust",
@@ -193,18 +193,30 @@
       ],
       "steps": [
         {
-          "name": "conan-e2e",
-          "command": [
-            "make",
-            "conan-e2e"
-          ],
-          "timeoutSeconds": null
-        },
-        {
           "name": "backup-transfer-test",
           "command": [
             "make",
             "backup-transfer-test"
+          ],
+          "timeoutSeconds": null
+        }
+      ],
+      "rawDirectories": []
+    },
+    "core-integration-1": {
+      "timeoutMinutes": 20,
+      "arm64": "pull-request",
+      "needs": [
+        "rust",
+        "node"
+      ],
+      "steps": [
+        {
+          "name": "integration-test (shard 1)",
+          "command": [
+            "make",
+            "integration-test",
+            "INTEGRATION_SHARD=1"
           ],
           "timeoutSeconds": null
         },
@@ -218,12 +230,32 @@
           "architectures": [
             "amd64"
           ]
-        },
+        }
+      ],
+      "rawDirectories": []
+    },
+    "core-integration-2": {
+      "timeoutMinutes": 20,
+      "arm64": "pull-request",
+      "needs": [
+        "rust",
+        "node"
+      ],
+      "steps": [
         {
-          "name": "integration-test",
+          "name": "integration-test (shard 2)",
           "command": [
             "make",
-            "integration-test"
+            "integration-test",
+            "INTEGRATION_SHARD=2"
+          ],
+          "timeoutSeconds": null
+        },
+        {
+          "name": "conan-e2e",
+          "command": [
+            "make",
+            "conan-e2e"
           ],
           "timeoutSeconds": null
         }

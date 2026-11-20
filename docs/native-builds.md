@@ -58,7 +58,7 @@ release builds all four, so a macOS runner capacity outage cannot turn `main` re
 `quality` runs the race detector and the coverage floors in one pass); the
 coverage floor is enforced on amd64 only because coverage is architecture
 independent. Contract lanes take a `runner` input. Every lane runs on amd64. On
-arm64 the four core lanes and the native-format smoke subset (`six-format-auth`,
+arm64 the six core lanes and the native-format smoke subset (`six-format-auth`,
 `oci-discovery`) run on every pull request, and the remaining lanes join on pushes
 to `main`. The tiers live in `scripts/ci-contract-lanes.json`; evidence and
 artifact names carry the architecture so legs never collide. See
