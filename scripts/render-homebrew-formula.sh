@@ -2,12 +2,15 @@
 # Renders the Homebrew formula of notarxctl (ADR 0025 slice 7) from the SHA256SUMS of a stable
 # release.
 #
-#   scripts/render-homebrew-formula.sh --version X.Y.Z --sums SHA256SUMS [--repo owner/repo] [--output FILE]
+#   scripts/render-homebrew-formula.sh --version X.Y.Z --sums SHA256SUMS [--repo owner/repo] [--output FILE] [--keep-newer]
 #
 # The url of each of the four archives (darwin and linux, amd64 and arm64) is the release asset
 # notarxctl_X.Y.Z_<os>_<arch>.tar.gz and its sha256 is read from SHA256SUMS; a missing or
 # duplicated archive fails. The formula's test block runs "notarxctl version". Without --output
-# the formula goes to stdout. The tap (mlops-ca/homebrew-tap) only ever receives stable versions.
+# the formula goes to stdout. The formula has no version stanza: Homebrew reads the version from the
+# url (an explicit one would be flagged by brew audit as redundant). With --keep-newer an existing
+# --output file whose url names a newer version is left alone, so re-running an older release never
+# downgrades the tap. The tap (mlops-ca/homebrew-tap) only ever receives stable versions.
 set -euo pipefail
 
 fail() {
@@ -19,7 +22,13 @@ version=''
 sums=''
 repo=mlops-ca/notarx
 output=''
+keep_newer=0
 while [[ $# -gt 0 ]]; do
+  if [[ "$1" == --keep-newer ]]; then
+    keep_newer=1
+    shift
+    continue
+  fi
   [[ $# -ge 2 ]] || fail "$1 needs a value"
   case $1 in
     --version) version=$2 ;;
@@ -59,7 +68,6 @@ formula=$(
 class Notarxctl < Formula
   desc "Command-line client for the notarx artifact repository"
   homepage "https://github.com/$repo"
-  version "$version"
   license "MIT"
 
   on_macos do
@@ -90,6 +98,14 @@ $(block linux amd64 "$sum_linux_amd64")
 end
 HEAD
 )
+
+if [[ "$keep_newer" == 1 && -n "$output" && -f "$output" ]]; then
+  existing=$(sed -n 's|^ *url ".*/releases/download/v\([0-9][0-9.]*\)/.*$|\1|p' "$output" | head -n 1)
+  if [[ -n "$existing" && "$existing" != "$version" && "$(printf '%s\n%s\n' "$existing" "$version" | sort -V | tail -n 1)" == "$existing" ]]; then
+    printf 'render-homebrew-formula: %s already carries %s, newer than %s: left unchanged\n' "$output" "$existing" "$version"
+    exit 0
+  fi
+fi
 
 if [[ -n "$output" ]]; then
   mkdir -p "$(dirname "$output")"

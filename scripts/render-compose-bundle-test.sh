@@ -8,32 +8,8 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 workdir=$(mktemp -d)
 trap 'rm -rf "$workdir"' EXIT
 
-failures=0
-cases=0
-fail() {
-  failures=$((failures + 1))
-  printf 'FAIL: %s\n' "$1" >&2
-}
-expect_ok() {
-  local name=$1
-  shift
-  cases=$((cases + 1))
-  "$@" >"$workdir/out" 2>&1 || fail "$name: expected success, got: $(cat "$workdir/out")"
-}
-expect_fail() {
-  local name=$1 pattern=$2
-  shift 2
-  cases=$((cases + 1))
-  if "$@" >"$workdir/out" 2>&1; then
-    fail "$name: expected failure"
-  elif ! grep -q -E "$pattern" "$workdir/out"; then
-    fail "$name: failure message does not match [$pattern]: $(cat "$workdir/out")"
-  fi
-}
-expect_eq() {
-  cases=$((cases + 1))
-  [[ "$2" == "$3" ]] || fail "$1: got [$2], want [$3]"
-}
+# shellcheck source=lib/test-helpers.sh
+source "$root/scripts/lib/test-helpers.sh"
 
 d1=sha256:$(printf 'a%.0s' $(seq 64))
 d2=sha256:$(printf 'b%.0s' $(seq 64))
@@ -74,6 +50,16 @@ if grep -r -l -E 'BEGIN [A-Z ]*PRIVATE KEY' "$dir" >/dev/null; then fail 'privat
 cases=$((cases + 1))
 grep -q "ghcr.io/mlops-ca/notarx@$d1" "$dir/README.md" || fail 'the README does not list the image digests'
 
+# The documented extraction (docs/install.md, the runbook) flattens the bundle into the target directory.
+mkdir "$workdir/flat"
+tar -xzf "$bundle" -C "$workdir/flat" --strip-components=1
+cases=$((cases + 1))
+[[ -f "$workdir/flat/compose.yml" && -f "$workdir/flat/.env.example" && -d "$workdir/flat/migrations" ]] || fail '--strip-components=1 does not flatten the bundle'
+cases=$((cases + 1))
+grep -q 'tar -xzf "notarx-compose-$version.tar.gz" -C /opt/notarx --strip-components=1' "$root/docs/install.md" || fail 'docs/install.md no longer documents the strip-components extraction this test proves'
+cases=$((cases + 1))
+grep -q 'sudo tar -xzf "notarx-compose-$version.tar.gz" -C /opt/notarx --strip-components=1' "$root/docs/deployment/oci-free-tier.md" || fail 'the runbook no longer documents the strip-components extraction this test proves'
+
 # The tar holds one top-level directory, with fixed owners and no timestamps from the build.
 expect_eq 'one top-level directory' "$(tar -tzf "$bundle" | sed -e 's|^\./||' -e 's|/.*||' | sort -u | grep -c -v -E '^\.?$')" 1
 
@@ -84,6 +70,10 @@ expect_ok 'the version identity gate accepts the bundle' "$root/scripts/check-no
 # Deterministic: the same inputs give the same bytes.
 expect_ok 'renders again' "$render" --version 0.1.0 --output "$workdir/out2" --image "notarx-console=$d2" --image "notarx=$d1"
 expect_eq 'the bundle is deterministic' "$(shasum -a 256 <"$bundle")" "$(shasum -a 256 <"$workdir/out2/notarx-compose-0.1.0.tar.gz")"
+
+# The README tells users how to prepare the data directories.
+cases=$((cases + 1))
+grep -q 'chown 65532:65532 /srv/notarx/objects' "$dir/README.md" || fail 'the README does not say how to prepare the data directories'
 
 # The docker model: required variables come from a placeholder .env, as in the images check.
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
@@ -109,6 +99,12 @@ expect_fail 'a tag instead of a digest' 'no usable index digest' "$render" --ver
 expect_fail 'a duplicate image' 'given twice' "$render" --version 0.1.0 --output "$workdir/o" --image "notarx=$d1" --image "notarx=$d2" --image "notarx-console=$d2"
 expect_fail 'an unused image' 'does not use it' "$render" --version 0.1.0 --output "$workdir/o" --image "notarx=$d1" --image "notarx-console=$d2" --image "other=$d1"
 expect_ok 'the optional scanner image is accepted' "$render" --version 0.1.0 --output "$workdir/o3" --image "notarx=$d1" --image "notarx-console=$d2" --image "notarx-scanner=$d1"
+# --registry points the pins at another registry (a fork or a mirror); the source prefix is still recognised.
+expect_ok 'another registry' "$render" --version 0.1.0 --output "$workdir/o4" --registry ghcr.io/example --image "notarx=$d1" --image "notarx-console=$d2"
+mkdir "$workdir/y"
+tar -xzf "$workdir/o4/notarx-compose-0.1.0.tar.gz" -C "$workdir/y"
+cases=$((cases + 1))
+grep -q "ghcr.io/example/notarx@$d1" "$workdir/y/notarx-compose-0.1.0/compose.yml" || fail '--registry is not applied to the pins'
 expect_fail 'no output' 'output is required' "$render" --version 0.1.0 --image "notarx=$d1" --image "notarx-console=$d2"
 expect_fail 'an unknown argument' 'unknown argument' "$render" --bogus x
 
@@ -139,8 +135,4 @@ for entry in "$root"/deploy/oci-free-tier/* "$root"/deploy/oci-free-tier/.env.ex
   grep -q "\`$name\`" "$runbook" || fail "the runbook layout table does not name the directory entry $name"
 done
 
-if [[ "$failures" -ne 0 ]]; then
-  printf '%d of %d render-compose-bundle check(s) failed\n' "$failures" "$cases" >&2
-  exit 1
-fi
-printf 'render-compose-bundle-test passed (%d checks).\n' "$cases"
+finish render-compose-bundle-test

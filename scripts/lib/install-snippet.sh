@@ -7,7 +7,8 @@
 # The snippet is the fenced block that follows <!-- install-snippet: <id> -->. Every line is one
 # "apt install ./file" or "dnf install ./file" command; <version> and <arch> are substituted, a
 # leading sudo is dropped (the container runs as root), trailing comments are removed, and a line
-# whose file is not in the staging directory (the optional console package) is skipped. apt and dnf
+# whose file is not in the staging directory is skipped only for the optional console package; for
+# any other package it is an error. apt and dnf
 # get their non-interactive flags. Any other command in a snippet is an error.
 install_commands() {
   local doc=$1 id=$2 staging=$3 version=$4 arch=$5 block line word present
@@ -30,7 +31,15 @@ install_commands() {
         ./*) [[ -f "$staging/${word#./}" ]] || present=0 ;;
       esac
     done
-    [[ "$present" == 1 ]] || continue
+    if [[ "$present" != 1 ]]; then
+      # Only the console package is built on one leg alone (amd64) and may be absent; a missing
+      # server or client package is a failure, not a skipped line.
+      case $line in
+        *notarx-console*) continue ;;
+      esac
+      printf 'install_commands: the file of this snippet line is not in %s: %s\n' "$staging" "$line" >&2
+      return 1
+    fi
     case $line in
       'apt install '*) printf 'apt-get install -y -qq %s\n' "${line#apt install }" ;;
       'dnf install '*) printf 'dnf install -y -q %s\n' "${line#dnf install }" ;;

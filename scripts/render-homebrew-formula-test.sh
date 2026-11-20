@@ -7,35 +7,20 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 workdir=$(mktemp -d)
 trap 'rm -rf "$workdir"' EXIT
 
-failures=0
-cases=0
-fail() {
-  failures=$((failures + 1))
-  printf 'FAIL: %s\n' "$1" >&2
-}
-expect_ok() {
-  local name=$1
-  shift
-  cases=$((cases + 1))
-  "$@" >"$workdir/out" 2>&1 || fail "$name: expected success, got: $(cat "$workdir/out")"
-}
-expect_fail() {
-  local name=$1 pattern=$2
-  shift 2
-  cases=$((cases + 1))
-  if "$@" >"$workdir/out" 2>&1; then
-    fail "$name: expected failure"
-  elif ! grep -q -E "$pattern" "$workdir/out"; then
-    fail "$name: failure message does not match [$pattern]: $(cat "$workdir/out")"
-  fi
-}
-expect_has() {
-  cases=$((cases + 1))
-  grep -q -F -- "$2" "$1" || fail "$1 does not contain: $2"
-}
+# shellcheck source=lib/test-helpers.sh
+source "$root/scripts/lib/test-helpers.sh"
 
 render=$root/scripts/render-homebrew-formula.sh
 sums=$workdir/SHA256SUMS
+sums_for() { # sums_for <version> <file>: a SHA256SUMS of the four notarxctl archives of that version
+  local target
+  : >"$2"
+  for target in darwin_amd64 darwin_arm64 linux_amd64 linux_arm64; do
+    printf '%s  notarxctl_%s_%s.tar.gz\n' "$(printf '%s' "$target" | shasum -a 256 | cut -d' ' -f1)" "$1" "$target" >>"$2"
+  done
+}
+sums_for 0.1.9 "$workdir/older"
+sums_for 0.10.0 "$workdir/newer"
 : >"$sums"
 for target in darwin_amd64 darwin_arm64 linux_amd64 linux_arm64; do
   printf '%s  notarxctl_0.2.0_%s.tar.gz\n' "$(printf '%s' "$target" | shasum -a 256 | cut -d' ' -f1)" "$target" >>"$sums"
@@ -46,7 +31,8 @@ printf '%s  notarx_0.2.0_amd64.deb\n' "$(printf 'deb' | shasum -a 256 | cut -d' 
 expect_ok 'renders a formula' "$render" --version 0.2.0 --sums "$sums" --output "$workdir/Formula/notarxctl.rb"
 formula=$workdir/Formula/notarxctl.rb
 expect_has "$formula" 'class Notarxctl < Formula'
-expect_has "$formula" 'version "0.2.0"'
+cases=$((cases + 1))
+if grep -q '^  version ' "$formula"; then fail 'the formula has a version stanza (brew audit flags it as redundant with the url)'; fi
 expect_has "$formula" 'license "MIT"'
 expect_has "$formula" 'bin.install "notarxctl"'
 expect_has "$formula" 'shell_output("#{bin}/notarxctl version")'
@@ -71,6 +57,19 @@ cases=$((cases + 1))
 repo_formula=$("$render" --version 0.2.0 --sums "$sums" --repo example/notarx)
 grep -q 'github.com/example/notarx/releases/download/v0.2.0/' <<<"$repo_formula" || fail '--repo is not used'
 
+# --keep-newer: an older release never downgrades the tap; the same or a newer one rewrites it.
+before=$(shasum -a 256 <"$formula")
+expect_ok 'an older release is kept out (message)' "$render" --version 0.1.9 --sums "$workdir/older" --output "$formula" --keep-newer
+cases=$((cases + 1))
+[[ "$(shasum -a 256 <"$formula")" == "$before" ]] || fail '--keep-newer rewrote a newer formula'
+cases=$((cases + 1))
+grep -q 'left unchanged' "$workdir/out" || fail '--keep-newer did not say it left the formula alone'
+expect_ok 'a newer release replaces the formula' "$render" --version 0.10.0 --sums "$workdir/newer" --output "$formula" --keep-newer
+expect_has "$formula" 'releases/download/v0.10.0/notarxctl_0.10.0_linux_arm64.tar.gz'
+expect_ok 'the same release is rendered again' "$render" --version 0.10.0 --sums "$workdir/newer" --output "$formula" --keep-newer
+expect_ok 'a new file is written' "$render" --version 0.2.0 --sums "$sums" --output "$workdir/fresh/notarxctl.rb" --keep-newer
+expect_has "$workdir/fresh/notarxctl.rb" 'releases/download/v0.2.0/'
+
 expect_fail 'a nightly version' 'stable X.Y.Z' "$render" --version 0.2.0-nightly.3 --sums "$sums"
 expect_fail 'no sums file' 'is not a file' "$render" --version 0.2.0 --sums "$workdir/none"
 expect_fail 'a version without archives' 'no entry for notarxctl_0.3.0_darwin_arm64' "$render" --version 0.3.0 --sums "$sums"
@@ -83,8 +82,4 @@ expect_fail 'a malformed checksum' 'not a SHA-256 digest' "$render" --version 0.
 expect_fail 'a bad repo' 'owner/repo' "$render" --version 0.2.0 --sums "$sums" --repo nope
 expect_fail 'an unknown argument' 'unknown argument' "$render" --bogus x
 
-if [[ "$failures" -ne 0 ]]; then
-  printf '%d of %d render-homebrew-formula check(s) failed\n' "$failures" "$cases" >&2
-  exit 1
-fi
-printf 'render-homebrew-formula-test passed (%d checks).\n' "$cases"
+finish render-homebrew-formula-test

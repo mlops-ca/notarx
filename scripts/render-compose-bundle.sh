@@ -11,9 +11,13 @@
 # multi-arch index of the run that built it, so a moved tag cannot change a deployed stack; the
 # third-party images must already be pinned by digest in the source. The bundle is produced for a
 # stable run only (a nightly version is refused), carries no secret and is deterministic.
-# REPO_ROOT overrides the source tree (tests).
+# --registry is where the pinned images are pulled from (default: the project's own registry); the
+# project images of compose.yml are recognised by the project registry prefix below. REPO_ROOT
+# overrides the source tree (tests).
 set -euo pipefail
 
+# The registry the images of deploy/oci-free-tier/compose.yml are written against.
+source_registry=ghcr.io/mlops-ca
 root=${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}
 script_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 # shellcheck source=lib/tar-gz.sh
@@ -82,8 +86,8 @@ while IFS= read -r line; do
   [[ "$line" =~ ^[[:space:]]*image:[[:space:]]*\$\{([A-Z_]+):-([^}]+)\}[[:space:]]*$ ]] || fail "image line is not one \${VARIABLE:-reference} expression: $line"
   variable=${BASH_REMATCH[1]}
   reference=${BASH_REMATCH[2]}
-  if [[ "$reference" == "$registry"/* ]]; then
-    image=${reference#"$registry"/}
+  if [[ "$reference" == "$source_registry"/* ]]; then
+    image=${reference#"$source_registry"/}
     image=${image%%[:@]*}
     [[ -n "$(digest_of "$image")" ]] || fail "no digest given for $registry/$image (needed by $variable)"
     compose=${compose//"$reference"/"$registry/$image@$(digest_of "$image")"}
@@ -92,14 +96,14 @@ while IFS= read -r line; do
     fail "third-party image $reference ($variable) is not pinned by digest in deploy/oci-free-tier/compose.yml"
   fi
 done < <(grep -E '^[[:space:]]*image:' <<<"$compose")
-for name in "${names[@]}"; do
+[[ "${#pinned[@]}" -gt 0 ]] || fail 'compose.yml references no project image'
+for name in ${names[@]+"${names[@]}"}; do
   case " ${pinned[*]} " in
     *" $name "*) ;;
     # The optional scanner image is not part of the Compose file; it is accepted and not pinned.
     *) [[ "$name" == notarx-scanner ]] || fail "image $name is given but compose.yml does not use it" ;;
   esac
 done
-[[ "${#pinned[@]}" -gt 0 ]] || fail 'compose.yml references no project image'
 printf '%s\n' "$compose" >"$stage/compose.yml"
 # No image is left that a tag could move.
 if grep -E '^[[:space:]]*image:' "$stage/compose.yml" | grep -v '@sha256:[0-9a-f]\{64\}'; then
@@ -134,7 +138,16 @@ when a tag moves.
 | `cloud-init.yaml` | Installs Docker, mounts the data volume and installs the systemd units. |
 | `migrations/`, `run-migrations.sh` | The schema the `migrate` service applies before notarx starts. |
 
-Start: `install -m 0600 .env.example .env`, edit `.env`, then `docker compose up -d`.
+Data directories: `cloud-init.yaml` creates them on the OCI reference VM. On any other Docker host create
+them first (`NOTARX_DATA_DIR`, default `/srv/notarx`, relocates them); the notarx container runs as
+uid 65532 and needs a private object root:
+
+    sudo mkdir -p /srv/notarx/postgres /srv/notarx/objects
+    sudo chown 65532:65532 /srv/notarx/objects
+    sudo chmod 0700 /srv/notarx/objects
+
+Start: `install -m 0600 .env.example .env`, edit `.env`, then `docker compose up -d`. Setting an image
+variable in `.env` replaces the digest pin of that image.
 Runbook: https://github.com/mlops-ca/notarx/blob/main/docs/deployment/oci-free-tier.md
 README
   printf '\nImages of this bundle:\n\n'
@@ -147,5 +160,6 @@ chmod 0644 "$stage/README.md"
 
 mkdir -p "$output"
 output=$(cd "$output" && pwd)
-create_tar_gz "$workdir" "$output/$bundle.tar.gz"
+# Plain member names ("notarx-compose-X/compose.yml"), so tar --strip-components=1 flattens the bundle.
+create_tar_gz "$workdir" "$output/$bundle.tar.gz" plain
 printf 'wrote %s/%s.tar.gz\n' "$output" "$bundle"

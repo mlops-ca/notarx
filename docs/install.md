@@ -169,8 +169,19 @@ sudo mkdir -p /opt/notarx
 sudo tar -xzf "notarx-compose-$version.tar.gz" -C /opt/notarx --strip-components=1
 ```
 
+On the OCI reference VM, cloud-init has created the data directories. On any other Docker host
+create them first (the notarx container runs as uid 65532 and needs a private object root; set
+`NOTARX_DATA_DIR` in `.env` to use another location):
+
+```sh
+sudo mkdir -p /srv/notarx/postgres /srv/notarx/objects
+sudo chown 65532:65532 /srv/notarx/objects
+sudo chmod 0700 /srv/notarx/objects
+```
+
 Then copy `.env.example` to `.env` (mode 0600), fill in the domain and the secrets, and start the
-stack as described in the runbook. The migration runs as a Compose job before notarx starts, so
+stack as described in the runbook. Leave the image variables of `.env` unset: setting one replaces
+that image's digest pin. The migration runs as a Compose job before notarx starts, so
 no manual `notarx-migrate` step is needed on this path. The `.deb` packages above are the
 alternative for a host that already runs PostgreSQL and a reverse proxy.
 
