@@ -11,22 +11,24 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/mlops-ca/notarx/internal/tasklease"
 )
 
-// Dialect selects the SQL the janitor generates.
-type Dialect string
+// leaseTask is the lease row of the janitor in scheduled_tasks.
+var leaseTask = tasklease.Task{ID: "00000000-0000-7000-8000-0000000000a2", Name: "internal:retention-janitor", Kind: "retention-janitor", Description: "Internal lease row for the retention janitor"}
+
+// Dialect selects the SQL the janitor generates and its lease statements.
+type Dialect = tasklease.Dialect
 
 const (
 	// Postgres deletes by ctid with FOR UPDATE SKIP LOCKED.
-	Postgres Dialect = "postgres"
+	Postgres = tasklease.Postgres
 	// MySQL deletes with ORDER BY ... LIMIT in key range order.
-	MySQL Dialect = "mysql"
+	MySQL = tasklease.MySQL
 )
 
 const (
-	// leaseTaskID and leaseTaskName identify the lease row in scheduled_tasks.
-	leaseTaskID   = "00000000-0000-7000-8000-0000000000a2"
-	leaseTaskName = "internal:retention-janitor"
 	// DefaultInterval is how often a node tries to run a pass.
 	DefaultInterval = 15 * time.Minute
 	minSleep        = 100 * time.Millisecond
@@ -191,7 +193,7 @@ func (j *Janitor) RunOnce(ctx context.Context) (Report, error) {
 	defer func() {
 		releaseContext, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
-		_, _ = j.db.ExecContext(releaseContext, j.releaseSQL(), leaseTaskID, j.opts.Owner)
+		_ = j.leaser().Release(releaseContext, leaseTask, j.opts.Owner, false)
 	}()
 	var errs []error
 	for _, entry := range j.entries {
@@ -341,36 +343,14 @@ func (j *Janitor) tableExists(ctx context.Context, table string) (bool, error) {
 	return exists, err
 }
 
-// acquire takes or renews the lease row in one statement. The row is created on
-// first use and is never due as a scheduled task (enabled=false).
+// leaser is the shared scheduled_tasks lease (internal/tasklease) in the janitor's dialect.
+func (j *Janitor) leaser() tasklease.Leaser {
+	return tasklease.Leaser{DB: j.db, Dialect: j.opts.Dialect}
+}
+
+// acquire takes or renews the lease row; the row is created on first use and is never due as a scheduled task.
 func (j *Janitor) acquire(ctx context.Context) (bool, error) {
-	var owner string
-	if j.opts.Dialect == MySQL {
-		ttl := j.opts.LeaseTTL.Milliseconds()
-		if _, err := j.db.ExecContext(ctx, `INSERT INTO scheduled_tasks (id,name,description,kind,interval_seconds,enabled,next_run_at,lease_owner,lease_until)
-VALUES (?,?,'Internal lease row for the retention janitor','retention-janitor',900,false,NOW(6),?,DATE_ADD(NOW(6),INTERVAL ? MICROSECOND))
-ON DUPLICATE KEY UPDATE
- lease_owner=IF(lease_until IS NULL OR lease_until<=NOW(6) OR lease_owner=VALUES(lease_owner),VALUES(lease_owner),lease_owner),
- lease_until=IF(lease_owner=VALUES(lease_owner),VALUES(lease_until),lease_until)`, leaseTaskID, leaseTaskName, j.opts.Owner, ttl*1000); err != nil {
-			return false, err
-		}
-		if err := j.db.QueryRowContext(ctx, "SELECT lease_owner FROM scheduled_tasks WHERE id = ?", leaseTaskID).Scan(&owner); err != nil {
-			return false, err
-		}
-		return owner == j.opts.Owner, nil
-	}
-	err := j.db.QueryRowContext(ctx, `INSERT INTO scheduled_tasks (id,name,description,kind,interval_seconds,enabled,next_run_at,lease_owner,lease_until)
-VALUES ($1::uuid,$2,'Internal lease row for the retention janitor','retention-janitor',900,false,now(),$3,now()+$4::bigint*interval '1 millisecond')
-ON CONFLICT (id) DO UPDATE SET lease_owner=EXCLUDED.lease_owner,lease_until=EXCLUDED.lease_until
-WHERE scheduled_tasks.lease_until IS NULL OR scheduled_tasks.lease_until<=now() OR scheduled_tasks.lease_owner=EXCLUDED.lease_owner
-RETURNING lease_owner`, leaseTaskID, leaseTaskName, j.opts.Owner, j.opts.LeaseTTL.Milliseconds()).Scan(&owner)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return owner == j.opts.Owner, nil
+	return j.leaser().Acquire(ctx, leaseTask, j.opts.Owner, j.opts.LeaseTTL, 0)
 }
 
 // renew extends the lease once a quarter of its time to live has passed, so small
@@ -388,11 +368,4 @@ func (j *Janitor) renew(ctx context.Context) error {
 	}
 	j.leasedAt = j.opts.Now()
 	return nil
-}
-
-func (j *Janitor) releaseSQL() string {
-	if j.opts.Dialect == MySQL {
-		return "UPDATE scheduled_tasks SET lease_owner='',lease_until=NULL WHERE id=? AND lease_owner=?"
-	}
-	return "UPDATE scheduled_tasks SET lease_owner='',lease_until=NULL WHERE id=$1::uuid AND lease_owner=$2"
 }

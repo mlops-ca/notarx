@@ -13,12 +13,14 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/mlops-ca/notarx/internal/tasklease"
 )
 
+// leaseTask is the lease row of the manager in scheduled_tasks.
+var leaseTask = tasklease.Task{ID: "00000000-0000-7000-8000-0000000000a1", Name: "internal:partition-manager", Kind: "partition-manager", Description: "Internal lease row for the partition manager", IntervalSeconds: 21600}
+
 const (
-	// leaseTaskID and leaseTaskName identify the lease row in scheduled_tasks.
-	leaseTaskID   = "00000000-0000-7000-8000-0000000000a1"
-	leaseTaskName = "internal:partition-manager"
 	// DefaultInterval is how often the manager runs after start-up.
 	DefaultInterval = 6 * time.Hour
 
@@ -228,7 +230,7 @@ func (m *Manager) Maintain(ctx context.Context) (Report, error) {
 	defer func() {
 		releaseContext, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
-		_, _ = m.db.ExecContext(releaseContext, `UPDATE scheduled_tasks SET lease_owner='',lease_until=NULL WHERE id=$1::uuid AND lease_owner=$2`, leaseTaskID, m.opts.Owner)
+		_ = m.leaser().Release(releaseContext, leaseTask, m.opts.Owner, false)
 	}()
 	var errs []error
 	for _, spec := range m.specs {
@@ -248,19 +250,14 @@ func (m *Manager) Maintain(ctx context.Context) (Report, error) {
 	return report, errors.Join(errs...)
 }
 
-// acquire takes or renews the lease row in one statement. The row is created on
-// first use and is never enabled, so the task scheduler never claims it.
+// acquire takes or renews the lease row; the row is created on first use and is never enabled, so the task scheduler
+// never claims it.
 func (m *Manager) acquire(ctx context.Context) (bool, error) {
-	var owner string
-	err := m.db.QueryRowContext(ctx, `INSERT INTO scheduled_tasks (id,name,description,kind,interval_seconds,enabled,next_run_at,lease_owner,lease_until)
-VALUES ($1::uuid,$2,'Internal lease row for the partition manager','partition-manager',21600,false,now(),$3,now()+$4::bigint*interval '1 millisecond')
-ON CONFLICT (id) DO UPDATE SET lease_owner=EXCLUDED.lease_owner,lease_until=EXCLUDED.lease_until
-WHERE scheduled_tasks.lease_until IS NULL OR scheduled_tasks.lease_until<=now() OR scheduled_tasks.lease_owner=EXCLUDED.lease_owner
-RETURNING lease_owner`, leaseTaskID, leaseTaskName, m.opts.Owner, m.opts.LeaseTTL.Milliseconds()).Scan(&owner)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-	return err == nil && owner == m.opts.Owner, err
+	return m.leaser().Acquire(ctx, leaseTask, m.opts.Owner, m.opts.LeaseTTL, 0)
+}
+
+func (m *Manager) leaser() tasklease.Leaser {
+	return tasklease.Leaser{DB: m.db, Dialect: tasklease.Postgres}
 }
 
 func quote(identifier string) string { return `"` + identifier + `"` }

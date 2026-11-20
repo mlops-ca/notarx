@@ -4,14 +4,13 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"github.com/mlops-ca/notarx/internal/tasklease"
 )
 
 // InternalTaskLease names the lease row of a background job that one node at a time runs. The row lives in
 // scheduled_tasks, is never due and is hidden from the management API (ADR 0023 section 2).
-type InternalTaskLease struct {
-	// ID is the fixed uuid of the row, Name its unique name, Kind one of the internal kinds of the table's check.
-	ID, Name, Kind, Description string
-}
+type InternalTaskLease = tasklease.Task
 
 // InternalTaskLeaseStore elects the one node that runs an internal job.
 type InternalTaskLeaseStore interface {

@@ -244,7 +244,9 @@ func TestOneRunnerAtATimeAndLeaseExpiry(t *testing.T) {
 	if held, err := holder.acquire(t.Context()); err != nil || !held {
 		t.Fatalf("first acquire = %v, %v", held, err)
 	}
-	t.Cleanup(func() { _, _ = db.ExecContext(context.Background(), holder.releaseSQL(), leaseTaskID, "node-a") })
+	t.Cleanup(func() {
+		_ = holder.leaser().Release(context.Background(), leaseTask, "node-a", false)
+	})
 	var wg sync.WaitGroup
 	reports := make([]Report, 3)
 	for i := range reports {
@@ -263,7 +265,7 @@ func TestOneRunnerAtATimeAndLeaseExpiry(t *testing.T) {
 	if got := count(t, db, "SELECT count(*) FROM "+table); got != 4 {
 		t.Fatalf("rows = %d, nothing may be deleted by a runner without the lease", got)
 	}
-	if _, err := db.ExecContext(t.Context(), "UPDATE scheduled_tasks SET lease_until = now() - interval '1 second' WHERE id=$1::uuid", leaseTaskID); err != nil {
+	if _, err := db.ExecContext(t.Context(), "UPDATE scheduled_tasks SET lease_until = now() - interval '1 second' WHERE id=$1::uuid", leaseTask.ID); err != nil {
 		t.Fatal(err)
 	}
 	report, err := newJanitor(t, db, "node-b", DefaultConfig(), entry).RunOnce(t.Context())
