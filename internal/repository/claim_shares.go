@@ -34,7 +34,8 @@ const (
 	formatClaimRemainder
 )
 
-// formatClaimBatch claims up to want more items of formats for phase. It returns the format of each item it
+// formatClaimBatch claims up to want more items of formats for phase; a batch may also bound its own scan by
+// phase, as the lifecycle claim does with claimPhaseBudget. It returns the format of each item it
 // claimed, and empty when the queue held fewer candidates than it asked for.
 type formatClaimBatch func(ctx context.Context, phase formatClaimPhase, formats []Format, want int) (claimed []Format, empty bool, err error)
 

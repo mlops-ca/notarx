@@ -301,15 +301,8 @@ func (c *lifecycleClaimScan) run(ctx context.Context, kind LifecycleJobKind, bud
 func (c *lifecycleClaimScan) claimFormatsRoundRobin(ctx context.Context, kind LifecycleJobKind, formats []Format, rotation uint64) error {
 	limit := c.limit
 	defer func() { c.formats, c.limit = formats, limit }()
-	perFormat := max(QueueClaimScanCap/(len(formats)+1), 1)
 	return claimFormatShares(ctx, formats, limit, rotation, func(ctx context.Context, phase formatClaimPhase, batch []Format, want int) ([]Format, bool, error) {
-		budget := QueueClaimScanCap - c.scanned
-		switch phase {
-		case formatClaimOpening:
-			budget = QueueClaimScanCap - perFormat*(len(formats)-1)
-		case formatClaimShare:
-			budget = min(perFormat, budget)
-		}
+		budget := claimPhaseBudget(phase, len(formats), c.scanned)
 		if budget <= 0 {
 			return nil, false, nil
 		}
@@ -325,6 +318,22 @@ func (c *lifecycleClaimScan) claimFormatsRoundRobin(ctx context.Context, kind Li
 		}
 		return claimed, c.exhausted, nil
 	})
+}
+
+// claimPhaseBudget is how many rows a phase of a claim for formats formats may examine once scanned rows were:
+// a share is QueueClaimScanCap/(formats+1), the opening scan the cap less a share for every other format but
+// never less than one share, and every phase at most what is left of the cap.
+func claimPhaseBudget(phase formatClaimPhase, formats, scanned int) int {
+	perFormat := max(QueueClaimScanCap/(formats+1), 1)
+	left := QueueClaimScanCap - scanned
+	switch phase {
+	case formatClaimOpening:
+		return min(max(QueueClaimScanCap-perFormat*(formats-1), perFormat), left)
+	case formatClaimShare:
+		return min(perFormat, left)
+	default:
+		return left
+	}
 }
 
 // claimKindsRoundRobin spreads what is left of the claim over the kinds in rotating order, each kind within an
