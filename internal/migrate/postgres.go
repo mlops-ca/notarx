@@ -34,19 +34,36 @@ WHERE t.schemaname = 'public'
   AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = (quote_ident(t.schemaname) || '.' || quote_ident(t.tablename))::regclass AND d.deptype = 'e')
   AND NOT EXISTS (SELECT 1 FROM notarx_schema_migrations)`
 
+// postgresLockKey is the session advisory lock that serialises runners of one database. The script has
+// no lock; two script runs race on the ledger. Holding it changes nothing in the ledger.
+const postgresLockKey int64 = 0x6e78_6d69_6772 // "nxmigr"
+
 func runPostgres(ctx context.Context, db *sql.DB, files []File, out io.Writer) error {
+	// One connection for the lock and every statement: the advisory lock belongs to the session.
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("open a migration connection: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
 	var role, database string
-	if err := db.QueryRowContext(ctx, "SELECT current_user, current_database()").Scan(&role, &database); err != nil {
+	if err := conn.QueryRowContext(ctx, "SELECT current_user, current_database()").Scan(&role, &database); err != nil {
 		return fmt.Errorf("read the database session: %w", err)
 	}
-	if err := checkTrigram(ctx, db, role, database); err != nil {
+	if err := checkTrigram(ctx, conn, role, database); err != nil {
 		return err
 	}
-	if _, err := db.ExecContext(ctx, postgresLedgerSQL); err != nil {
+	if _, err := conn.ExecContext(ctx, "SELECT pg_advisory_lock($1)", postgresLockKey); err != nil {
+		return fmt.Errorf("take the migration lock: %w", err)
+	}
+	// Closing the connection releases the lock too, so a cancelled context cannot leave it behind.
+	defer func() {
+		_, _ = conn.ExecContext(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock($1)", postgresLockKey)
+	}()
+	if _, err := conn.ExecContext(ctx, postgresLedgerSQL); err != nil {
 		return fmt.Errorf("create the migration ledger: %w", err)
 	}
 	var foreign int
-	if err := db.QueryRowContext(ctx, postgresForeignTablesSQL).Scan(&foreign); err != nil {
+	if err := conn.QueryRowContext(ctx, postgresForeignTablesSQL).Scan(&foreign); err != nil {
 		return fmt.Errorf("check for foreign tables: %w", err)
 	}
 	if foreign != 0 {
@@ -54,7 +71,7 @@ func runPostgres(ctx context.Context, db *sql.DB, files []File, out io.Writer) e
 	}
 	for _, file := range files {
 		var recorded string
-		err := db.QueryRowContext(ctx, "SELECT checksum FROM notarx_schema_migrations WHERE filename = $1", file.Name).Scan(&recorded)
+		err := conn.QueryRowContext(ctx, "SELECT checksum FROM notarx_schema_migrations WHERE filename = $1", file.Name).Scan(&recorded)
 		switch {
 		case err == nil:
 			if recorded != file.Checksum {
@@ -66,16 +83,16 @@ func runPostgres(ctx context.Context, db *sql.DB, files []File, out io.Writer) e
 			return fmt.Errorf("read the ledger row of %s: %w", file.Name, err)
 		}
 		_, _ = fmt.Fprintf(out, "Applying migration %s.\n", file.Name)
-		if err := applyPostgres(ctx, db, file); err != nil {
+		if err := applyPostgres(ctx, conn, file); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func checkTrigram(ctx context.Context, db *sql.DB, role, database string) error {
+func checkTrigram(ctx context.Context, conn *sql.Conn, role, database string) error {
 	var state string
-	if err := db.QueryRowContext(ctx, trigramStateSQL).Scan(&state); err != nil {
+	if err := conn.QueryRowContext(ctx, trigramStateSQL).Scan(&state); err != nil {
 		return fmt.Errorf("check the pg_trgm extension: %w", err)
 	}
 	switch state {
@@ -89,8 +106,8 @@ func checkTrigram(ctx context.Context, db *sql.DB, role, database string) error 
 }
 
 // applyPostgres runs one file and its ledger row in one transaction, like psql --single-transaction.
-func applyPostgres(ctx context.Context, db *sql.DB, file File) (err error) {
-	tx, err := db.BeginTx(ctx, nil)
+func applyPostgres(ctx context.Context, conn *sql.Conn, file File) (err error) {
+	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin migration %s: %w", file.Name, err)
 	}

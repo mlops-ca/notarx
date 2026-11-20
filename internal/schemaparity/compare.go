@@ -108,14 +108,14 @@ func sortedKeys[V any](m map[string]V) []string {
 func CompareSeeds(want, got map[string][]map[string]string) []string {
 	var problems []string
 	for _, name := range sortedKeys(want) {
-		wantRows, gotRows := rowKeys(want[name]), rowKeys(got[name])
-		for _, row := range wantRows {
-			if !slices.Contains(gotRows, row) {
-				problems = append(problems, fmt.Sprintf("seed row {%s} of %s is missing", row, name))
+		wantRows, gotRows := rowCounts(want[name]), rowCounts(got[name])
+		for _, row := range sortedKeys(wantRows) {
+			if gotRows[row] != wantRows[row] {
+				problems = append(problems, fmt.Sprintf("seed row {%s} of %s is present %d time(s); the catalogue has it %d time(s)", row, name, gotRows[row], wantRows[row]))
 			}
 		}
-		for _, row := range gotRows {
-			if !slices.Contains(wantRows, row) {
+		for _, row := range sortedKeys(gotRows) {
+			if _, ok := wantRows[row]; !ok {
 				problems = append(problems, fmt.Sprintf("seed row {%s} of %s is not in the catalogue", row, name))
 			}
 		}
@@ -128,10 +128,11 @@ func CompareSeeds(want, got map[string][]map[string]string) []string {
 	return problems
 }
 
-func rowKeys(rows []map[string]string) []string {
-	keys := make([]string, len(rows))
-	for i, row := range rows {
-		keys[i] = rowKey(row)
+// rowCounts counts the seed rows by content, so a duplicated row is a difference.
+func rowCounts(rows []map[string]string) map[string]int {
+	counts := map[string]int{}
+	for _, row := range rows {
+		counts[rowKey(row)]++
 	}
-	return keys
+	return counts
 }

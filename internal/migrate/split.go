@@ -85,18 +85,38 @@ func parseStatements(src string) ([]statement, error) {
 	return statements, nil
 }
 
+// createModifiers are the words that may sit between CREATE and the kind of object it creates.
+var createModifiers = map[string]bool{
+	"OR": true, "REPLACE": true, "TEMPORARY": true, "UNIQUE": true, "FULLTEXT": true, "SPATIAL": true, "DEFINER": true, "CURRENT_USER": true,
+	"SQL": true, "SECURITY": true, "INVOKER": true, "ALGORITHM": true, "UNDEFINED": true, "MERGE": true, "TEMPTABLE": true, "AGGREGATE": true,
+}
+
+// createKind returns what a CREATE statement creates (TABLE, INDEX, VIEW, TRIGGER, ...), or "" for any other statement.
+// Words such as EVENT or FUNCTION are only keywords right after the modifiers; later they are plain identifiers.
+func createKind(words []string) string {
+	if len(words) == 0 || words[0] != "CREATE" {
+		return ""
+	}
+	for _, word := range words[1:] {
+		if createModifiers[word] || strings.HasPrefix(word, "@") {
+			continue
+		}
+		return word
+	}
+	return ""
+}
+
 // compound reports a CREATE of a routine, an event, or a trigger whose body is a
 // BEGIN ... END block, none of which can be split on semicolons.
 func compound(s statement) bool {
 	words := s.words()
-	if len(words) == 0 || words[0] != "CREATE" {
-		return false
-	}
-	head := words[:min(len(words), 8)]
-	if slices.ContainsFunc(head, func(w string) bool { return w == "PROCEDURE" || w == "FUNCTION" || w == "EVENT" }) {
+	switch createKind(words) {
+	case "PROCEDURE", "FUNCTION", "EVENT":
 		return true
+	case "TRIGGER":
+		return slices.Contains(words, "BEGIN")
 	}
-	return slices.Contains(head, "TRIGGER") && slices.Contains(words, "BEGIN")
+	return false
 }
 
 // words returns the upper-cased word tokens at parenthesis depth 0.

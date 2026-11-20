@@ -396,17 +396,18 @@ Rules (ADR 0015):
   tag, released migrations are immutable.
 
 `notarx migrate` (`internal/migrate`, ADR 0022) is the Go runner. On PostgreSQL it
-applies each file in one transaction and writes the same `notarx_schema_migrations`
-ledger as `scripts/run-migrations.sh`, which stays the deployed runner; the integration
+applies each file in one transaction, under a session advisory lock, and writes the same
+`notarx_schema_migrations` ledger as `scripts/run-migrations.sh`, which stays the deployed runner; the integration
 job compares the two ledgers on every run (`scripts/migration-runner-check.sh`). On
 MySQL, which has no transactional DDL, it holds `GET_LOCK("notarx-migrate:<db>")`,
 records each file as `applying` with the number of statements done, and marks it
 `applied` at the end. After a crash `notarx migrate --repair` shows where the file
 stopped; confirm whether the next statement took effect, then resume with
-`notarx migrate --repair --completed N`. `notarx migrate lint` (also a unit test over
+`notarx migrate --repair --completed N`. The same command adopts a half-applied file that
+you corrected after the failure. A file whose statements were all recorded finishes by itself. `notarx migrate lint` (also a unit test over
 `migrations/mysql`) requires every MySQL file after the baseline to be re-runnable: one
 specification per `ALTER TABLE`, `INSERT ... ON DUPLICATE KEY UPDATE` instead of
-`INSERT IGNORE` or `REPLACE`, `WHERE` on every `UPDATE` and `DELETE`, and the
+`INSERT IGNORE` or `REPLACE`, no `TRUNCATE`, `WHERE` on every `UPDATE` and `DELETE`, and the
 `IF [NOT] EXISTS` guards MySQL offers.
 
 The neutral schema catalogue `migrations/catalogue.yaml` (ADR 0022) lists every table with

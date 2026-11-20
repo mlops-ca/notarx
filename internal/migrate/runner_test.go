@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func testFile(name, body string) File {
@@ -30,8 +31,10 @@ func mysqlScript(ledger fakeResult, overrides map[string]func() (fakeResult, err
 			return one("d", "notarx"), nil
 		case strings.HasPrefix(query, "SELECT GET_LOCK"):
 			return one("l", int64(1)), nil
+		case strings.HasPrefix(query, "SELECT @@SESSION.sql_mode"):
+			return one("m", "STRICT_ALL_TABLES,NO_ZERO_DATE"), nil
 		case strings.Contains(query, "information_schema.tables"):
-			return one("c", int64(0)), nil
+			return one("o,l", int64(0), int64(0)), nil
 		case strings.HasPrefix(query, "SELECT checksum, state"):
 			return ledger, nil
 		}
@@ -80,12 +83,46 @@ func TestMySQLSkipsAppliedAndRefusesChangedFiles(t *testing.T) {
 	if out.String() != "Skipping applied migration 000001_baseline.sql.\n" || len(server.Logged("CREATE TABLE a")) != 0 {
 		t.Fatalf("an applied migration ran again: %q %v", out.String(), server.Log)
 	}
-	for _, state := range []string{StateApplied, StateApplying} {
-		changed := &fakeServer{Handler: mysqlScript(ledgerRow(strings.Repeat("0", 64), state, 1), nil)}
-		err := Run(context.Background(), changed.Open(t), DialectMySQL, []File{file}, Options{Repair: true})
-		if !errors.Is(err, ErrChecksumChanged) {
-			t.Fatalf("state %s: err = %v", state, err)
+	stale := strings.Repeat("0", 64)
+	for name, opts := range map[string]Options{"applied": {Repair: true}, "applying without repair": {}} {
+		state := StateApplied
+		if name != "applied" {
+			state = StateApplying
 		}
+		changed := &fakeServer{Handler: mysqlScript(ledgerRow(stale, state, 1), nil)}
+		if err := Run(context.Background(), changed.Open(t), DialectMySQL, []File{file}, opts); !errors.Is(err, ErrChecksumChanged) {
+			t.Fatalf("%s: err = %v", name, err)
+		}
+	}
+}
+
+func TestMySQLRepairAdoptsACorrectedHalfAppliedFile(t *testing.T) {
+	file := testFile("000002_more.sql", "SELECT 1;\nSELECT 2;\nSELECT 3;")
+	ledger := ledgerRow(strings.Repeat("0", 64), StateApplying, 1)
+	show := &fakeServer{Handler: mysqlScript(ledger, nil)}
+	var out bytes.Buffer
+	if err := Run(context.Background(), show.Open(t), DialectMySQL, []File{file}, Options{Repair: true, Out: &out}); !errors.Is(err, ErrRepairRequired) || !strings.Contains(out.String(), "The file changed since it started") {
+		t.Fatalf("err = %v out = %q", err, out.String())
+	}
+	resume := &fakeServer{Handler: mysqlScript(ledger, nil)}
+	one := 1
+	if err := Run(context.Background(), resume.Open(t), DialectMySQL, []File{file}, Options{Repair: true, Completed: &one}); err != nil {
+		t.Fatal(err)
+	}
+	if got := resume.Logged("SET statements_done = ?, checksum = ? WHERE filename = ? | 1," + file.Checksum + ",000002_more.sql"); len(got) != 1 {
+		t.Fatalf("the corrected file's checksum is not adopted: %v", resume.Log)
+	}
+}
+
+func TestMySQLFinishesAMigrationWhoseLastStatementWasRecorded(t *testing.T) {
+	file := testFile("000002_more.sql", "SELECT 1;\nSELECT 2;")
+	server := &fakeServer{Handler: mysqlScript(ledgerRow(file.Checksum, StateApplying, 2), nil)}
+	var out bytes.Buffer
+	if err := Run(context.Background(), server.Open(t), DialectMySQL, []File{file}, Options{Out: &out}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "Completing migration 000002_more.sql") || len(server.Logged("state = 'applied'")) != 1 || len(server.Logged("SELECT 1")) != 0 {
+		t.Fatalf("out = %q log = %v", out.String(), server.Log)
 	}
 }
 
@@ -127,7 +164,7 @@ func TestMySQLRepairShowsTheOffsetThenResumes(t *testing.T) {
 		if err := Run(context.Background(), resume.Open(t), DialectMySQL, []File{file}, Options{Repair: true, Completed: &n, Out: &out}); err != nil {
 			t.Fatal(err)
 		}
-		if len(resume.Logged("SET statements_done = ? WHERE filename = ? | "+strconv.Itoa(completed)+",000002_more.sql")) == 0 {
+		if len(resume.Logged("SET statements_done = ?, checksum = ? WHERE filename = ? | "+strconv.Itoa(completed)+","+file.Checksum+",000002_more.sql")) == 0 {
 			t.Fatalf("the confirmed count is not stored: %v", resume.Log)
 		}
 		for _, want := range wantRun {
@@ -191,7 +228,12 @@ func TestMySQLRefusesForeignSchemasAndLockProblems(t *testing.T) {
 		want     error
 		text     string
 	}{
-		"foreign tables": {map[string]func() (fakeResult, error){"information_schema.tables": func() (fakeResult, error) { return one("c", int64(3)), nil }}, ErrForeignSchema, "holds 3 table"},
+		"foreign tables": {map[string]func() (fakeResult, error){"information_schema.tables": func() (fakeResult, error) { return one("o,l", int64(3), int64(0)), nil }}, ErrForeignSchema, "holds 3 table"},
+		"empty ledger":   {map[string]func() (fakeResult, error){"information_schema.tables": func() (fakeResult, error) { return one("o,l", int64(3), int64(1)), nil }, "SELECT COUNT(*) FROM notarx": func() (fakeResult, error) { return one("c", int64(0)), nil }}, ErrForeignSchema, "holds 3 table"},
+		"ledger count":   {map[string]func() (fakeResult, error){"information_schema.tables": func() (fakeResult, error) { return one("o,l", int64(3), int64(1)), nil }, "SELECT COUNT(*) FROM notarx": func() (fakeResult, error) { return fakeResult{}, errors.New("denied") }}, nil, "check for foreign tables"},
+		"unsafe mode":    {map[string]func() (fakeResult, error){"@@SESSION.sql_mode": func() (fakeResult, error) { return one("m", "ANSI_QUOTES,STRICT_ALL_TABLES"), nil }}, nil, "ANSI_QUOTES"},
+		"backslash mode": {map[string]func() (fakeResult, error){"@@SESSION.sql_mode": func() (fakeResult, error) { return one("m", "NO_BACKSLASH_ESCAPES"), nil }}, nil, "NO_BACKSLASH_ESCAPES"},
+		"mode query":     {map[string]func() (fakeResult, error){"@@SESSION.sql_mode": func() (fakeResult, error) { return fakeResult{}, errors.New("boom") }}, nil, "read the session sql_mode"},
 		"lock held":      {map[string]func() (fakeResult, error){"GET_LOCK": func() (fakeResult, error) { return one("l", int64(0)), nil }}, ErrLockHeld, "notarx-migrate:notarx"},
 		"lock error":     {map[string]func() (fakeResult, error){"GET_LOCK": func() (fakeResult, error) { return one("l", nil), nil }}, nil, "server reported an error"},
 		"lock query":     {map[string]func() (fakeResult, error){"GET_LOCK": func() (fakeResult, error) { return fakeResult{}, errors.New("boom") }}, nil, "take the migration lock"},
@@ -208,6 +250,11 @@ func TestMySQLRefusesForeignSchemasAndLockProblems(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), tc.text) || (tc.want != nil && !errors.Is(err, tc.want)) {
 				t.Fatalf("err = %v", err)
 			}
+			if strings.Contains(name, "foreign") || strings.Contains(name, "empty") {
+				if len(server.Logged("CREATE TABLE IF NOT EXISTS")) != 0 {
+					t.Fatal("a refused database was given a ledger table")
+				}
+			}
 			if tc.want == ErrLockHeld && len(server.Logged("GET_LOCK", "| notarx-migrate:notarx,1")) != 1 {
 				t.Fatalf("the lock wait is not passed in seconds: %v", server.Log)
 			}
@@ -217,6 +264,28 @@ func TestMySQLRefusesForeignSchemasAndLockProblems(t *testing.T) {
 	server := &fakeServer{Handler: mysqlScript(none(), nil)}
 	if err := Run(context.Background(), server.Open(t), DialectMySQL, []File{unsplittable}, Options{}); err == nil || !strings.Contains(err.Error(), "DELIMITER") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestMySQLAcceptsADatabaseWithLedgerRows(t *testing.T) {
+	file := testFile("000002_more.sql", "SELECT 1;")
+	server := &fakeServer{Handler: mysqlScript(ledgerRow(file.Checksum, StateApplied, 1), map[string]func() (fakeResult, error){
+		"information_schema.tables":   func() (fakeResult, error) { return one("o,l", int64(30), int64(1)), nil },
+		"SELECT COUNT(*) FROM notarx": func() (fakeResult, error) { return one("c", int64(1)), nil },
+	})}
+	if err := Run(context.Background(), server.Open(t), DialectMySQL, []File{file}, Options{}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPreviewKeepsWholeCharacters(t *testing.T) {
+	long := strings.Repeat("é", maxPreview+5)
+	got := preview("SELECT '" + long + "'")
+	if !strings.HasSuffix(got, "...") || !utf8.ValidString(got) || utf8.RuneCountInString(got) != maxPreview+3 {
+		t.Fatalf("preview = %q", got)
+	}
+	if preview("SELECT   1\n FROM  t") != "SELECT 1 FROM t" {
+		t.Fatal("whitespace is not collapsed")
 	}
 }
 
@@ -275,6 +344,23 @@ func TestPostgresAppliesEachFileInOneTransaction(t *testing.T) {
 	}
 	if len(server.Logged("ALTER TABLE")) != 0 {
 		t.Fatal("an applied migration ran again")
+	}
+}
+
+func TestPostgresHoldsAnAdvisoryLockForTheWholeRun(t *testing.T) {
+	file := testFile("000001_baseline.sql", "CREATE TABLE a (id int);")
+	server := &fakeServer{Handler: postgresScript("installed", nil, nil)}
+	if err := Run(context.Background(), server.Open(t), DialectPostgres, []File{file}, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Join(server.Log, "\n")
+	lock, ledger, body, unlock := strings.Index(got, "pg_advisory_lock"), strings.Index(got, "CREATE TABLE IF NOT EXISTS notarx_schema_migrations"), strings.Index(got, "CREATE TABLE a"), strings.Index(got, "pg_advisory_unlock")
+	if lock < 0 || lock > ledger || ledger > body || body > unlock {
+		t.Fatalf("the lock does not surround the run: %v", server.Log)
+	}
+	failing := &fakeServer{Handler: postgresScript("installed", nil, map[string]func() (fakeResult, error){"pg_advisory_lock": func() (fakeResult, error) { return fakeResult{}, errors.New("boom") }})}
+	if err := Run(context.Background(), failing.Open(t), DialectPostgres, []File{file}, Options{}); err == nil || !strings.Contains(err.Error(), "take the migration lock") {
+		t.Fatalf("err = %v", err)
 	}
 }
 

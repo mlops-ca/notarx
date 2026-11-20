@@ -74,6 +74,20 @@ func TestVerifiedBytesDoNotProveConsistentBackup(t *testing.T) {
 	}
 }
 
+// A manifest written before ADR 0022 has no dialect and is a PostgreSQL backup, so it must verify as before.
+func TestManifestWithoutDialectVerifiesAsPostgres(t *testing.T) {
+	dir, m := fixture(t)
+	m.Database.Dialect = ""
+	raw, err := json.Marshal(m)
+	if err != nil || strings.Contains(string(raw), "dialect") {
+		t.Fatalf("an empty dialect must not be written: %v %s", err, raw)
+	}
+	r := Verify(context.Background(), dir, m)
+	if r.Integrity != Verified {
+		t.Fatalf("a manifest without a dialect no longer verifies: %+v", r)
+	}
+}
+
 func TestWriterDeclarationsCannotHideIncompleteScopeOrTimeCoverage(t *testing.T) {
 	cases := map[string]func(*Manifest){
 		"no writers":                func(m *Manifest) { m.Writers.Writers = nil },

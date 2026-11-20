@@ -20,12 +20,15 @@ const mysqlLedgerSQL = `CREATE TABLE IF NOT EXISTS notarx_schema_migrations (
     PRIMARY KEY (filename)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin`
 
-const mysqlForeignTablesSQL = `SELECT COUNT(*)
+// mysqlTableCountsSQL counts the base tables other than the ledger, and the ledger itself (0 or 1).
+const mysqlTableCountsSQL = `SELECT
+  COALESCE(SUM(t.table_name <> 'notarx_schema_migrations'), 0),
+  COALESCE(SUM(t.table_name = 'notarx_schema_migrations'), 0)
 FROM information_schema.tables t
-WHERE t.table_schema = DATABASE()
-  AND t.table_type = 'BASE TABLE'
-  AND t.table_name <> 'notarx_schema_migrations'
-  AND NOT EXISTS (SELECT 1 FROM notarx_schema_migrations)`
+WHERE t.table_schema = DATABASE() AND t.table_type = 'BASE TABLE'`
+
+// mysqlUnsafeModes change how the splitter must read a file: backslash is a literal and double quotes quote identifiers.
+var mysqlUnsafeModes = []string{"NO_BACKSLASH_ESCAPES", "ANSI_QUOTES"}
 
 // maxLockName is the longest name GET_LOCK accepts.
 const maxLockName = 64
@@ -54,20 +57,25 @@ func runMySQL(ctx context.Context, db *sql.DB, files []File, opts Options) error
 	if err := conn.QueryRowContext(ctx, "SELECT DATABASE()").Scan(&database); err != nil || !database.Valid {
 		return errors.New("the connection names no database; put the database name in the URL")
 	}
+	var mode string
+	if err := conn.QueryRowContext(ctx, "SELECT @@SESSION.sql_mode").Scan(&mode); err != nil {
+		return fmt.Errorf("read the session sql_mode: %w", err)
+	}
+	for _, unsafe := range mysqlUnsafeModes {
+		if strings.Contains(mode, unsafe) {
+			return fmt.Errorf("the session sql_mode has %s, which the statement splitter does not support", unsafe)
+		}
+	}
 	release, err := acquireLock(ctx, conn, lockName(database.String), opts)
 	if err != nil {
 		return err
 	}
 	defer release()
+	if err := refuseForeignSchema(ctx, conn, database.String); err != nil {
+		return err
+	}
 	if _, err := conn.ExecContext(ctx, mysqlLedgerSQL); err != nil {
 		return fmt.Errorf("create the migration ledger: %w", err)
-	}
-	var foreign int
-	if err := conn.QueryRowContext(ctx, mysqlForeignTablesSQL).Scan(&foreign); err != nil {
-		return fmt.Errorf("check for foreign tables: %w", err)
-	}
-	if foreign != 0 {
-		return fmt.Errorf("database %s already holds %d table(s) but no notarx migration ledger; upgrading from another schema is not supported, use an empty database or restore a notarx backup: %w", database.String, foreign, ErrForeignSchema)
 	}
 	for _, file := range files {
 		if err := applyMySQL(ctx, conn, file, opts, out); err != nil {
@@ -75,6 +83,28 @@ func runMySQL(ctx context.Context, db *sql.DB, files []File, opts Options) error
 		}
 	}
 	return nil
+}
+
+// refuseForeignSchema fails for a database that holds tables but no notarx ledger rows. It runs before the
+// ledger is created, so a refused database is left as it was found.
+func refuseForeignSchema(ctx context.Context, conn *sql.Conn, database string) error {
+	var others, ledgers int
+	if err := conn.QueryRowContext(ctx, mysqlTableCountsSQL).Scan(&others, &ledgers); err != nil {
+		return fmt.Errorf("check for foreign tables: %w", err)
+	}
+	if others == 0 {
+		return nil
+	}
+	var rows int
+	if ledgers > 0 {
+		if err := conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM notarx_schema_migrations").Scan(&rows); err != nil {
+			return fmt.Errorf("check for foreign tables: %w", err)
+		}
+	}
+	if rows > 0 {
+		return nil
+	}
+	return fmt.Errorf("database %s already holds %d table(s) but no notarx migration ledger; upgrading from another schema is not supported, use an empty database or restore a notarx backup: %w", database, others, ErrForeignSchema)
 }
 
 func acquireLock(ctx context.Context, conn *sql.Conn, name string, opts Options) (func(), error) {
@@ -106,7 +136,9 @@ func applyMySQL(ctx context.Context, conn *sql.Conn, file File, opts Options, ou
 		return fmt.Errorf("read the ledger row of %s: %w", file.Name, err)
 	}
 	known := err == nil
-	if known && recorded != file.Checksum {
+	changed := known && recorded != file.Checksum
+	// A file that finished never changes; a file that stopped half way may be corrected, which --repair accepts.
+	if changed && (state == StateApplied || !opts.Repair) {
 		return changedError(file.Name, recorded, file.Checksum)
 	}
 	if known && state == StateApplied {
@@ -122,8 +154,11 @@ func applyMySQL(ctx context.Context, conn *sql.Conn, file File, opts Options, ou
 			return fmt.Errorf("record migration %s: %w", file.Name, err)
 		}
 		_, _ = fmt.Fprintf(out, "Applying migration %s.\n", file.Name)
+	} else if done == len(statements) && !changed {
+		// Every statement is recorded: only the last update to applied was lost, so nothing needs confirming.
+		_, _ = fmt.Fprintf(out, "Completing migration %s: all %d statements were recorded.\n", file.Name, done)
 	} else {
-		if done, err = repair(ctx, conn, file.Name, statements, done, opts, out); err != nil {
+		if done, err = repair(ctx, conn, file.Name, file.Checksum, changed, statements, done, opts, out); err != nil {
 			return err
 		}
 		_, _ = fmt.Fprintf(out, "Resuming migration %s after statement %d of %d.\n", file.Name, done, len(statements))
@@ -145,7 +180,7 @@ func applyMySQL(ctx context.Context, conn *sql.Conn, file File, opts Options, ou
 // repair decides where a half-applied migration resumes. Without --repair it
 // refuses; with --repair and no --completed it shows the offset and refuses;
 // with both it validates the operator's count and stores it.
-func repair(ctx context.Context, conn *sql.Conn, name string, statements []string, done int, opts Options, out io.Writer) (int, error) {
+func repair(ctx context.Context, conn *sql.Conn, name, checksum string, changed bool, statements []string, done int, opts Options, out io.Writer) (int, error) {
 	if done > len(statements) {
 		return 0, fmt.Errorf("migration %s records %d statements done but the file has %d: %w", name, done, len(statements), ErrChecksumChanged)
 	}
@@ -154,6 +189,9 @@ func repair(ctx context.Context, conn *sql.Conn, name string, statements []strin
 	}
 	if opts.Completed == nil {
 		_, _ = fmt.Fprintf(out, "Migration %s stopped after statement %d of %d.\n", name, done, len(statements))
+		if changed {
+			_, _ = fmt.Fprintf(out, "The file changed since it started: confirming a count adopts the new file, so check that it keeps the first %d statements.\n", done)
+		}
 		if done > 0 {
 			_, _ = fmt.Fprintf(out, "Last recorded statement (%d): %s\n", done, preview(statements[done-1]))
 		}
@@ -167,18 +205,19 @@ func repair(ctx context.Context, conn *sql.Conn, name string, statements []strin
 	if completed < done || completed > done+1 || completed > len(statements) {
 		return 0, fmt.Errorf("--completed %d is not valid for migration %s: it must be %d or %d (of %d statements)", completed, name, done, done+1, len(statements))
 	}
-	if _, err := conn.ExecContext(ctx, "UPDATE notarx_schema_migrations SET statements_done = ? WHERE filename = ?", completed, name); err != nil {
+	if _, err := conn.ExecContext(ctx, "UPDATE notarx_schema_migrations SET statements_done = ?, checksum = ? WHERE filename = ?", completed, checksum, name); err != nil {
 		return 0, fmt.Errorf("store the confirmed statement count of %s: %w", name, err)
 	}
 	return completed, nil
 }
 
+// maxPreview is the longest statement preview, in characters.
 const maxPreview = 160
 
 func preview(statement string) string {
-	collapsed := strings.Join(strings.Fields(statement), " ")
+	collapsed := []rune(strings.Join(strings.Fields(statement), " "))
 	if len(collapsed) > maxPreview {
-		return collapsed[:maxPreview] + "..."
+		return string(collapsed[:maxPreview]) + "..."
 	}
-	return collapsed
+	return string(collapsed)
 }

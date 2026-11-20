@@ -150,9 +150,12 @@ func TestCompareSeeds(t *testing.T) {
 	if problems := CompareSeeds(want, want); len(problems) != 0 {
 		t.Fatal(problems)
 	}
+	if problems := CompareSeeds(want, map[string][]map[string]string{"a": {{"k": "1"}, {"k": "1"}}, "b": {{"k": "2"}}}); len(problems) != 1 || !strings.Contains(problems[0], "present 2 time(s); the catalogue has it 1") {
+		t.Fatalf("a duplicated seed row was not reported: %v", problems)
+	}
 	got := map[string][]map[string]string{"a": {{"k": "9"}}, "c": {{"k": "3"}}}
 	problems := strings.Join(CompareSeeds(want, got), "\n")
-	for _, expected := range []string{"seed row {k=1;} of a is missing", "seed row {k=9;} of a is not in the catalogue", "seed row {k=2;} of b is missing", "table c holds seed rows"} {
+	for _, expected := range []string{"seed row {k=1;} of a is present 0 time(s); the catalogue has it 1 time(s)", "seed row {k=9;} of a is not in the catalogue", "seed row {k=2;} of b is present 0 time(s)", "table c holds seed rows"} {
 		if !strings.Contains(problems, expected) {
 			t.Errorf("missing %q in\n%s", expected, problems)
 		}

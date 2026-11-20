@@ -211,6 +211,39 @@ func TestPostgresRunnerRefusalsAndRollback(t *testing.T) {
 	}
 }
 
+func TestPostgresRunnersExcludeEachOther(t *testing.T) {
+	_, first := postgresDatabase(t)
+	dir := fixtureDir(t, map[string]string{"000001_baseline.sql": "CREATE TABLE widgets (id int PRIMARY KEY);\nSELECT pg_sleep(2);\nCREATE TABLE gadgets (id int PRIMARY KEY);\n"})
+	files := load(t, dir)
+	// A second pool on the same database, as a second replica would have.
+	var name string
+	if err := first.QueryRow("SELECT current_database()").Scan(&name); err != nil {
+		t.Fatal(err)
+	}
+	second := openDB(t, database.DriverPostgres, withDatabase(t, requireURL(t, "TEST_DATABASE_URL"), name))
+
+	var outputs [2]bytes.Buffer
+	var errs [2]error
+	var wg sync.WaitGroup
+	for i, db := range []*sql.DB{first, second} {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs[i] = Run(context.Background(), db, DialectPostgres, files, Options{Out: &outputs[i]})
+		}()
+	}
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	both := outputs[0].String() + outputs[1].String()
+	if strings.Count(both, "Applying migration ") != 1 || strings.Count(both, "Skipping applied migration ") != 1 {
+		t.Fatalf("two runners did not take turns:\n%s", both)
+	}
+}
+
 func TestMySQLAppliesAndSkips(t *testing.T) {
 	_, _, db := mysqlDatabase(t)
 	dir := fixtureDir(t, map[string]string{
@@ -278,6 +311,33 @@ func TestMySQLCrashLeavesApplyingAndRepairResumes(t *testing.T) {
 	}
 }
 
+func TestMySQLRepairAdoptsACorrectedFile(t *testing.T) {
+	_, _, db := mysqlDatabase(t)
+	dir := fixtureDir(t, map[string]string{
+		"000001_baseline.sql": "CREATE TABLE widgets (id INT PRIMARY KEY);\n",
+		"000002_more.sql":     "CREATE TABLE IF NOT EXISTS first_done (id INT);\nALTER TABLE typo_table ADD COLUMN x INT;\n",
+	})
+	if err := Run(context.Background(), db, DialectMySQL, load(t, dir), Options{}); err == nil {
+		t.Fatal("the broken statement ran")
+	}
+	// The developer corrects the file; the ledger keeps the first version until --repair adopts the new one.
+	if err := os.WriteFile(filepath.Join(dir, "000002_more.sql"), []byte("CREATE TABLE IF NOT EXISTS first_done (id INT);\nALTER TABLE widgets ADD COLUMN x INT;\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	files := load(t, dir)
+	if err := Run(context.Background(), db, DialectMySQL, files, Options{}); !errors.Is(err, ErrChecksumChanged) {
+		t.Fatalf("err = %v", err)
+	}
+	one := 1
+	if err := Run(context.Background(), db, DialectMySQL, files, Options{Repair: true, Completed: &one}); err != nil {
+		t.Fatal(err)
+	}
+	got := rowsOf(t, db, "SELECT state, statements_done, checksum FROM notarx_schema_migrations WHERE filename = '000002_more.sql'")
+	if len(got) != 1 || got[0] != "applied 2 "+files[1].Checksum {
+		t.Fatalf("ledger = %v", got)
+	}
+}
+
 func TestMySQLRunnersExcludeEachOther(t *testing.T) {
 	name, databaseURL, first := mysqlDatabase(t)
 	second := openDB(t, database.DriverMySQL, databaseURL)
@@ -335,5 +395,8 @@ func TestMySQLRunnerRefusesAForeignSchema(t *testing.T) {
 	dir := fixtureDir(t, map[string]string{"000001_baseline.sql": "CREATE TABLE widgets (id INT);\n"})
 	if err := Run(context.Background(), db, DialectMySQL, load(t, dir), Options{}); !errors.Is(err, ErrForeignSchema) {
 		t.Fatalf("err = %v", err)
+	}
+	if got := rowsOf(t, db, "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'notarx_schema_migrations'"); got[0] != "0" {
+		t.Fatal("the refused database was given a ledger table")
 	}
 }

@@ -24,7 +24,6 @@ DROP INDEX old_idx ON widgets;
 ALTER TABLE widgets ADD CONSTRAINT fk FOREIGN KEY (id) REFERENCES other (id) ON DELETE CASCADE;
 RENAME TABLE a TO b;
 SET @x = 1;
-TRUNCATE TABLE scratch;
 `
 	if findings := LintSQL("000002_ok.sql", body); len(findings) != 0 {
 		t.Fatalf("unexpected findings: %v", findings)
@@ -47,6 +46,8 @@ func TestLintFlagsNonRerunnableStatements(t *testing.T) {
 		"ALTER DATABASE d CHARACTER SET utf8mb4":                         "only ALTER TABLE",
 		"GRANT ALL ON *.* TO x":                                          "not allowed",
 		"CREATE USER u":                                                  "unsupported CREATE",
+		"TRUNCATE TABLE scratch":                                         "TRUNCATE",
+		"/*!50001 DROP TABLE x */":                                       "executable comments",
 		"DELIMITER //":                                                   "DELIMITER",
 		"CREATE PROCEDURE p() SELECT 1":                                  "stored routines",
 	}
@@ -57,6 +58,16 @@ func TestLintFlagsNonRerunnableStatements(t *testing.T) {
 				t.Fatalf("findings = %v; want one containing %q", findings, want)
 			}
 		})
+	}
+}
+
+func TestLintAndSplitterTreatKeywordsAsIdentifiersAfterTheKind(t *testing.T) {
+	body := "CREATE TABLE IF NOT EXISTS event (id INT);\nCREATE TABLE IF NOT EXISTS function (id INT);\nCREATE INDEX event_idx ON event (id);\nCREATE DEFINER=`root`@`%` TRIGGER IF NOT EXISTS t BEFORE INSERT ON event FOR EACH ROW SET NEW.id = 1;\nCREATE UNIQUE INDEX u ON event (id);"
+	if _, err := SplitStatements(body); err != nil {
+		t.Fatal(err)
+	}
+	if findings := LintSQL("000002_x.sql", body); len(findings) != 0 {
+		t.Fatalf("findings: %v", findings)
 	}
 }
 

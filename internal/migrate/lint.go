@@ -66,12 +66,17 @@ func LintSQL(name, body string) []Finding {
 }
 
 func lintStatement(s statement) []string {
+	if slices.ContainsFunc(s.tokens, func(t token) bool { return t.kind == tokHint }) {
+		return []string{"executable comments (/*! ... */) are not linted; write the statement plainly"}
+	}
 	words := s.words()
 	if len(words) == 0 {
 		return nil
 	}
 	has := func(sequence ...string) bool { return containsSequence(words, sequence) }
 	switch words[0] {
+	case "TRUNCATE":
+		return []string{"TRUNCATE would wipe rows a later statement backfilled when it is replayed; use DELETE ... WHERE"}
 	case "CREATE":
 		return lintCreate(words, has)
 	case "ALTER":
@@ -85,7 +90,7 @@ func lintStatement(s statement) []string {
 		if len(words) > 1 && (words[1] == "TABLE" || words[1] == "VIEW" || words[1] == "TRIGGER") && !has("IF", "EXISTS") {
 			return []string{"DROP " + words[1] + " needs IF EXISTS"}
 		}
-	case "RENAME", "TRUNCATE", "SET":
+	case "RENAME", "SET":
 	case "INSERT":
 		if len(words) > 1 && words[1] == "IGNORE" {
 			return []string{"INSERT IGNORE also swallows foreign-key and truncation errors; use ON DUPLICATE KEY UPDATE"}
@@ -106,21 +111,20 @@ func lintStatement(s statement) []string {
 }
 
 func lintCreate(words []string, has func(...string) bool) []string {
-	head := words[:min(len(words), 8)]
-	switch {
-	case slices.Contains(head, "TABLE"):
+	switch createKind(words) {
+	case "TABLE":
 		if !has("IF", "NOT", "EXISTS") {
 			return []string{"CREATE TABLE needs IF NOT EXISTS"}
 		}
-	case slices.Contains(head, "VIEW"):
+	case "VIEW":
 		if !has("OR", "REPLACE") {
 			return []string{"CREATE VIEW needs OR REPLACE"}
 		}
-	case slices.Contains(head, "TRIGGER"):
+	case "TRIGGER":
 		if !has("IF", "NOT", "EXISTS") {
 			return []string{"CREATE TRIGGER needs IF NOT EXISTS"}
 		}
-	case slices.Contains(head, "INDEX"):
+	case "INDEX":
 		// MySQL has no guard for an index: the statement counter covers it.
 	default:
 		return []string{"unsupported CREATE statement"}
