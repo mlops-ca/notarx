@@ -96,6 +96,10 @@ runs:
             read -r name arch version < <(dpkg-deb --show --showformat='${Package} ${Architecture} ${Version}\n' "$deb") || continue
             if [[ "$arch" != all ]]; then name="$name:$arch"; fi
             installed=$(dpkg-query --show --showformat='${Version}' "$name" 2>/dev/null || true)
+            # A package installed under another architecture qualifier still counts.
+            if [[ -z "$installed" ]]; then
+              installed=$(dpkg-query --show --showformat='${Version}\n' "${name%%:*}" 2>/dev/null | head -n 1 || true)
+            fi
             if [[ -n "$installed" && "$installed" != "$version" ]] || [[ "$status" == 0 && -z "$installed" ]]; then
               rm -f "$deb"
             fi

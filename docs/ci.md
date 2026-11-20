@@ -259,7 +259,21 @@ How to read the columns:
 - **Runner-minutes** fell by 32 to 46 percent (122 against 179 at worst, 104 against 192 at best).
 - **The `arm64` class:** a pull request with it on (run 44670328253, the branch of #491) took 14.7 minutes, with 41 jobs and 173 runner-minutes. It is faster than the Go-only attempts although its longest queue was longer (4.8 minutes), because its slowest lane, `core-integration-1` on amd64, took 6.6 minutes, against 9.4 in attempt 1. That lane's time varies from run to run, and #500 evens out the integration shards.
 
-Four targets of the issue are still open: a verdict (wall) in 12 minutes or less, half the runner-minutes, 25 jobs or fewer, and a lint signal in 5 minutes. Issue #500 tracks them. The largest remaining lever is that every contract lane waits for all four `build-images` legs, about 4.9 minutes into the run.
+Four targets of the issue were left open: a verdict (wall) in 12 minutes or less, half the runner-minutes, 25 jobs or fewer, and a lint signal in 5 minutes. Issue #500 tracks them.
+
+## Measured effect (issue #500)
+
+Issue #500 removed the wait of every contract lane for all four image builds (the contract groups and the per-architecture image jobs above), split the integration suite into three shards, folded the CLI E2E into a Console shard and gave the release checks a job of their own. A Go-only pull request now plans 25 jobs. The first run of the change itself (44684290400, with the `arm64` class on, so with every arm64 lane: 39 jobs, 172 runner-minutes, the longest queue 3.9 minutes) shows the new shape:
+
+| Signal | #482 (`arm64` class on, run 44670328253) | #500 first run (44684290400) |
+| --- | --- | --- |
+| First contract lane created (min) | 2.4 (after all four image legs) | 0.5 (`contract-early`) |
+| amd64 images ready (min) | 2.4 (all four legs) | 2.9 (both amd64 images in one job) |
+| Every integration and backup lane done (min) | 13.8 | 8.0 |
+| Lint verdict (min) | 6.0 | 3.6 |
+| Wall (min) | 14.0 | 15.0 (`core-native-e2e` queued 3.9 minutes; `quality` 13.4 with the release checks, since moved out) |
+
+The Go-only measurement (three attempts of one draft pull request, as for #482) is recorded here when it has run. Run 44670328253 had cold queues (the issue's figure of 4.9 minutes before the first lane is from the Go-only draft #496, whose image legs queued).
 
 ## Where every former check runs (issue #482)
 

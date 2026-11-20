@@ -231,7 +231,6 @@ jobs:
           race: "false"
           # The lint tools' own tests run in the quality job with every other package.
           lint-target: lint-checks
-          openapi-tools: "true"
       - name: Verify the native-build rules (no cross-compilation, no emulation)
         run: make native-build-check
       - name: Check migration immutability and sequencing
@@ -276,6 +275,8 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: tools/openapi/package-lock.json
+      - name: Verify public npm lockfile sources before install
+        run: node scripts/npm-lockfile-check.mjs
       - run: npm ci --ignore-scripts --no-audit --no-fund --timing --loglevel=http
         timeout-minutes: 10
         working-directory: tools/openapi
@@ -398,6 +399,7 @@ jobs:
           name: image-${{ runner.arch }}
           path: ${{ runner.temp }}/images
       - name: Load the prebuilt images
+        id: load-images
         run: for image in "$RUNNER_TEMP"/images/*.tar; do docker load --input "$image"; done
       - name: Start notarx for Console E2E
         env:
@@ -445,14 +447,15 @@ jobs:
           if-no-files-found: ignore
       # The CLI E2E boots its own isolated gateway from the loaded images (a Compose
       # project of its own on free ports), so the state the specs of this shard left
-      # behind cannot reach it. It runs even when a spec failed, so both verdicts show.
+      # behind cannot reach it. It runs even when a spec failed, so both verdicts show,
+      # but not without the loaded images it starts from.
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
-        if: ${{ !cancelled() && matrix.cli }}
+        if: ${{ !cancelled() && matrix.cli && steps.load-images.outcome == 'success' }}
         with:
           go-version-file: go.mod
           cache: true
       - name: Run notarxctl CLI E2E against its own gateway
-        if: ${{ !cancelled() && matrix.cli }}
+        if: ${{ !cancelled() && matrix.cli && steps.load-images.outcome == 'success' }}
         env:
           NOTARX_ENV_FILE: ${{ runner.temp }}/notarx.env
           NOTARX_COMPOSE_BUILD_FLAG: --no-build

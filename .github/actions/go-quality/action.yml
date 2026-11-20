@@ -29,7 +29,7 @@ inputs:
       coverage floors), with a build cache of its own for the race-instrumented build.
     default: "false"
   openapi-tools:
-    description: Also install tools/openapi (needed by the amd64 lint job's later steps).
+    description: Also install tools/openapi (no caller needs it now; the release checks install it in their own job).
     default: "false"
 
 runs:

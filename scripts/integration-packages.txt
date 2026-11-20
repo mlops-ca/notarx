@@ -2,11 +2,14 @@
 # line per package with integration-tagged test files. Every such package is listed
 # exactly once (contracts/integration_entrypoint_test.go and make test check it). CI
 # runs each shard as its own contract lane; the packages of a shard share one database
-# and run one at a time. The shards are balanced by measured test time (CI run
-# 44675064060: shard 1 about 2.9 minutes of tests with the Cargo replay, shard 2 about
-# 3.4 minutes, shard 3 about 2.6 minutes; each shard also pays about 1.5 minutes to
-# start its stack and compile). Shard 1 holds ./internal/app, so it also runs the
-# official Cargo replay.
+# and run one at a time. The shards are balanced by the time of their whole CI job,
+# not by test time alone: shard 1 (./internal/app, about 2 minutes of tests) also runs
+# the official Cargo replay and is packed after perf-load, shard 2 also runs the
+# published backup test and shard 3 the Conan E2E. Each shard pays about 1.5 minutes
+# to start its stack and compile. Run 44684290400 (amd64): 6.0, 5.9 and 5.3 minutes
+# per job. ./internal/capacity and ./internal/lifecycle joined shard 3 before they
+# were measured. Shard 1 holds ./internal/app, so it also runs the official Cargo
+# replay.
 1 ./internal/app
 2 ./internal/repository
 2 ./internal/aptpublication
