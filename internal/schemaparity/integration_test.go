@@ -137,7 +137,7 @@ func execAll(t *testing.T, db *sql.DB, script string) {
 
 func fixtureCatalogue() Catalogue {
 	return Catalogue{Version: CatalogueVersion, Tables: map[string]Table{
-		"owners": {Columns: map[string]Column{"id": {Type: "uuid"}, "enabled": {Type: "bool"}}, PrimaryKey: []string{"id"}},
+		"owners": {Columns: map[string]Column{"id": {Type: "uuid"}, "enabled": {Type: "bool"}}, PrimaryKey: []string{"id"}, Defaults: map[string]string{"enabled": "true"}},
 		"widgets": {
 			Columns: map[string]Column{
 				"id": {Type: "uuid"}, "name": {Type: "text"}, "tags": {Type: "array<text>", Nullable: true}, "size": {Type: "int32", Nullable: true},
@@ -146,6 +146,8 @@ func fixtureCatalogue() Catalogue {
 			PrimaryKey:  []string{"id"},
 			Unique:      [][]string{{"name", "owner_id"}},
 			ForeignKeys: []string{"owner_id -> owners(id)"},
+			Defaults:    map[string]string{"doc": "'{}'", "created_at": "now()"},
+			Special:     map[string]string{"widgets_slug_live": "unique USING btree (slug) WHERE (size IS NOT NULL)"},
 		},
 	}, Seeds: map[string][]map[string]string{"owners": {{"enabled": "true"}}}}
 }

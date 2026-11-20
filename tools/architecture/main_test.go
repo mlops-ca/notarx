@@ -142,7 +142,7 @@ func TestDialectSeamKeepsDriversOutOfTheInterfacePackage(t *testing.T) {
 }
 
 func TestMigrateAndSchemaParityStayLeaves(t *testing.T) {
-	for _, pkg := range []string{"internal/migrate", "internal/schemaparity"} {
+	for _, pkg := range []string{"internal/migrate", "internal/schemaparity", "internal/mysqlbaseline", "internal/dialect/dialecttest"} {
 		inv := inventory{Imports: map[string]map[string]bool{
 			pkg: {"database/sql": true, "example.test/notarx/internal/database": true, "github.com/jackc/pgx/v5": true, mysqlDriver: true,
 				"example.test/notarx/internal/config": true, "example.test/notarx/internal/repository": true, "example.test/notarx/internal/app/x": true},

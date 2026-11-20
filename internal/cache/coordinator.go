@@ -5,11 +5,9 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
-	"database/sql/driver"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/database"
@@ -37,13 +35,7 @@ type PostgresCoordinator struct {
 	stateDB     *sql.DB
 	ownsDB      bool
 	ownsStateDB bool
-	mu          sync.Mutex
-	leases      map[string]postgresLease
-}
-
-type postgresLease struct {
-	key  string
-	conn *sql.Conn
+	leases      *leaseTable
 }
 
 func NewPostgresCoordinator(databaseURL string) (*PostgresCoordinator, error) {
@@ -56,14 +48,14 @@ func NewPostgresCoordinator(databaseURL string) (*PostgresCoordinator, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("open PostgreSQL cache coordinator state: %w", err)
 	}
-	return &PostgresCoordinator{db: db, stateDB: stateDB, ownsDB: true, ownsStateDB: true, leases: make(map[string]postgresLease)}, nil
+	return &PostgresCoordinator{db: db, stateDB: stateDB, ownsDB: true, ownsStateDB: true, leases: newLeaseTable()}, nil
 }
 
 func NewPostgresCoordinatorWithPools(lockDB, stateDB *sql.DB) (*PostgresCoordinator, error) {
 	if lockDB == nil || stateDB == nil {
 		return nil, errors.New("PostgreSQL cache coordinator requires lock and state database pools")
 	}
-	return &PostgresCoordinator{db: lockDB, stateDB: stateDB, leases: make(map[string]postgresLease)}, nil
+	return &PostgresCoordinator{db: lockDB, stateDB: stateDB, leases: newLeaseTable()}, nil
 }
 
 func (c *PostgresCoordinator) Acquire(ctx context.Context, key string, _ time.Duration) (string, bool, error) {
@@ -82,30 +74,16 @@ func (c *PostgresCoordinator) Acquire(ctx context.Context, key string, _ time.Du
 		_ = conn.Close()
 		return owner, false, err
 	}
-	c.mu.Lock()
-	c.leases[owner] = postgresLease{key: lockKey, conn: conn}
-	c.mu.Unlock()
+	c.leases.add(owner, sessionLease{key: lockKey, conn: conn})
 	return owner, true, nil
 }
 
 func (c *PostgresCoordinator) Renew(ctx context.Context, _ string, owner string, _ time.Duration) (bool, error) {
-	c.mu.Lock()
-	lease, exists := c.leases[owner]
-	c.mu.Unlock()
-	if !exists {
-		return false, nil
-	}
-	if err := lease.conn.PingContext(ctx); err != nil {
-		return false, err
-	}
-	return true, nil
+	return c.leases.renew(ctx, owner)
 }
 
 func (c *PostgresCoordinator) Release(ctx context.Context, _ string, owner string) error {
-	c.mu.Lock()
-	lease, exists := c.leases[owner]
-	delete(c.leases, owner)
-	c.mu.Unlock()
+	lease, exists := c.leases.take(owner)
 	if !exists {
 		return nil
 	}
@@ -129,14 +107,10 @@ func (c *PostgresCoordinator) CloseCircuit(ctx context.Context, key string) erro
 }
 
 func (c *PostgresCoordinator) Close() error {
-	c.mu.Lock()
-	leases := c.leases
-	c.leases = make(map[string]postgresLease)
-	c.mu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var closeErr error
-	for _, lease := range leases {
+	for _, lease := range c.leases.drain() {
 		closeErr = joinErrors(closeErr, releasePostgresLease(ctx, lease))
 	}
 	if c.ownsDB {
@@ -148,16 +122,13 @@ func (c *PostgresCoordinator) Close() error {
 	return closeErr
 }
 
-func releasePostgresLease(ctx context.Context, lease postgresLease) error {
+func releasePostgresLease(ctx context.Context, lease sessionLease) error {
 	var unlocked bool
 	err := lease.conn.QueryRowContext(ctx, `SELECT pg_advisory_unlock(hashtextextended($1, 0))`, lease.key).Scan(&unlocked)
 	if err == nil && !unlocked {
 		err = errors.New("PostgreSQL cache advisory lock was not held")
 	}
-	if err != nil {
-		_ = lease.conn.Raw(func(any) error { return driver.ErrBadConn })
-	}
-	return joinErrors(err, lease.conn.Close())
+	return closeLease(lease.conn, err)
 }
 
 func newOwner() (string, error) {

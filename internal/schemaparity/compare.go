@@ -22,12 +22,22 @@ func Compare(want, got Catalogue, dialect string) []string {
 			add("table %s is missing", name)
 			continue
 		}
+		if dialect != DialectMySQL && wantTable.Partitioned != gotTable.Partitioned {
+			add("table %s partitioned=%t; the catalogue has partitioned=%t", name, gotTable.Partitioned, wantTable.Partitioned)
+		}
 		compareColumns(name, wantTable, gotTable, dialect, add)
 		compareKeys(name, wantTable, gotTable, dialect, add)
+		compareDDL(name, wantTable, gotTable, dialect, add)
 	}
 	for _, name := range got.TableNames() {
 		if _, ok := want.Tables[name]; !ok {
 			add("table %s is not in the catalogue", name)
+		}
+	}
+	if dialect != DialectMySQL {
+		compareMaps("(database)", "trigger", want.Triggers, got.Triggers, add)
+		if !slices.Equal(want.Views, got.Views) {
+			add("the database has the views %v; the catalogue has %v", got.Views, want.Views)
 		}
 	}
 	return problems
@@ -84,6 +94,54 @@ func compareKeys(table string, want, got Table, dialect string, add func(string,
 	if !slices.Equal(want.ForeignKeys, got.ForeignKeys) {
 		add("table %s has foreign keys %v; the catalogue has %v", table, got.ForeignKeys, want.ForeignKeys)
 	}
+}
+
+// compareDDL compares what the catalogue records beyond keys. PostgreSQL must match
+// exactly. MySQL must carry every plain index and may carry more: InnoDB adds an index for
+// a foreign key and the baseline adds generated-column indexes. Defaults, special indexes
+// and CHECK constraints are not introspected on MySQL: the baseline is generated from them.
+func compareDDL(table string, want, got Table, dialect string, add func(string, ...any)) {
+	wantIndexes, gotIndexes := stringSet(want.Indexes), stringSet(got.Indexes)
+	for index := range wantIndexes {
+		if !gotIndexes[index] {
+			add("table %s lacks the index (%s)", table, index)
+		}
+	}
+	if dialect == DialectMySQL {
+		return
+	}
+	for index := range gotIndexes {
+		if !wantIndexes[index] {
+			add("table %s has the index (%s), which the catalogue lacks", table, index)
+		}
+	}
+	compareMaps(table, "default of column", want.Defaults, got.Defaults, add)
+	compareMaps(table, "special index", want.Special, got.Special, add)
+	compareMaps(table, "check constraint", want.Checks, got.Checks, add)
+}
+
+func compareMaps(table, what string, want, got map[string]string, add func(string, ...any)) {
+	for _, name := range sortedKeys(want) {
+		switch value, ok := got[name]; {
+		case !ok:
+			add("table %s lacks the %s %s", table, what, name)
+		case value != want[name]:
+			add("table %s has the %s %s as %q; the catalogue has %q", table, what, name, value, want[name])
+		}
+	}
+	for _, name := range sortedKeys(got) {
+		if _, ok := want[name]; !ok {
+			add("table %s has the %s %s, which the catalogue lacks", table, what, name)
+		}
+	}
+}
+
+func stringSet(values []string) map[string]bool {
+	out := map[string]bool{}
+	for _, value := range values {
+		out[value] = true
+	}
+	return out
 }
 
 func setOf(sets [][]string) map[string]bool {

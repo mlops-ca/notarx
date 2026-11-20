@@ -23,6 +23,14 @@ const CatalogueVersion = 1
 type Catalogue struct {
 	Version int              `yaml:"version"`
 	Tables  map[string]Table `yaml:"tables"`
+	// Triggers maps each trigger name to "table: definition" in its PostgreSQL form, with
+	// the table and function schema removed. MySQL does not mirror them: each one has a
+	// decision in migrations/mysql-decisions.yaml (polling, application code or a MySQL
+	// trigger), and PostgreSQL is compared exactly.
+	Triggers map[string]string `yaml:"triggers,omitempty"`
+	// Views lists the views of PostgreSQL. MySQL gets none of them: each one has a decision
+	// in migrations/mysql-decisions.yaml.
+	Views []string `yaml:"views,omitempty"`
 	// Seeds are the rows a freshly migrated database holds: the singleton rows
 	// the code expects. Timestamps and generated identifiers are left out.
 	Seeds map[string][]map[string]string `yaml:"seeds,omitempty"`
@@ -32,12 +40,32 @@ type Catalogue struct {
 type Table struct {
 	Columns    map[string]Column `yaml:"columns"`
 	PrimaryKey []string          `yaml:"primaryKey,omitempty,flow"`
-	// Unique lists the unique sets over plain columns, each sorted by column
-	// name. Partial and expression indexes are not in the catalogue: their
+	// Unique lists the unique sets over plain columns, each in key order, sorted by the joined names. Partial and expression unique indexes are under Special: their
 	// MySQL form is a generated column (ADR 0022), which the comparison allows.
 	Unique [][]string `yaml:"unique,omitempty,flow"`
-	// ForeignKeys are written "col[,col] -> table(col[,col])", sorted.
+	// Partitioned marks a table range-partitioned on PostgreSQL. MySQL keeps a plain
+	// InnoDB table with the same keys (ADR 0022, ADR 0023): the comparison does not
+	// introspect partitions there.
+	Partitioned bool `yaml:"partitioned,omitempty"`
+	// ForeignKeys are written "col[,col] -> table(col[,col])", sorted, followed by
+	// " on delete <action>" and " on update <action>" when the action is not NO ACTION.
 	ForeignKeys []string `yaml:"foreignKeys,omitempty"`
+	// Defaults maps a column to its normalized default: a literal, "now()", "uuid()"
+	// (a generated identifier), "identity" (a sequence) or an expression. See
+	// normalizeDefault. PostgreSQL is compared exactly; the MySQL baseline is generated
+	// from them, so MySQL is not introspected for defaults.
+	Defaults map[string]string `yaml:"defaults,omitempty"`
+	// Indexes are the plain secondary btree indexes (no predicate, no expression, no
+	// operator class), each "col[ desc][,col[ desc]]", sorted. MySQL must carry every one
+	// of them and may carry more (InnoDB adds an index for a foreign key).
+	Indexes []string `yaml:"indexes,omitempty"`
+	// Special maps the name of every other index (partial, expression, trigram, operator
+	// class) to its normalized PostgreSQL definition. The MySQL form of each is a decision
+	// of migrations/mysql-decisions.yaml; PostgreSQL is compared exactly.
+	Special map[string]string `yaml:"special,omitempty"`
+	// Checks maps a CHECK constraint name to its PostgreSQL expression. The MySQL form is
+	// translated by internal/mysqlbaseline, with the exceptions of the decisions file.
+	Checks map[string]string `yaml:"checks,omitempty"`
 }
 
 // Column is a logical type with its nullability and generated flag. In the
@@ -89,8 +117,11 @@ const Header = `# The dialect-neutral schema catalogue (ADR 0022, slice 3b).
 # and verified against PostgreSQL and MySQL with
 #   make schema-parity
 # Do not edit by hand. Column types are logical types (see internal/schemaparity/types.go):
-# "?" marks a nullable column, "generated" a computed one. Partial and expression
-# indexes are not listed.
+# "?" marks a nullable column, "generated" a computed one. Plain secondary indexes are
+# listed under "indexes"; every other index (partial, expression, trigram, operator class)
+# under "special", and CHECK constraints under "checks", in their PostgreSQL form.
+# The MySQL baseline migrations/mysql/000001_baseline.sql is generated from this file
+# and migrations/mysql-decisions.yaml with: go run ./tools/mysqlbaseline
 `
 
 // Load reads a catalogue file.

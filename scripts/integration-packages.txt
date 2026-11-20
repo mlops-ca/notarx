@@ -14,6 +14,7 @@
 2 ./internal/repository
 2 ./internal/aptpublication
 2 ./internal/auditwriter
+2 ./internal/dialect/postgres
 2 ./internal/partitions
 2 ./internal/retention
 2 ./internal/objectstore

@@ -119,4 +119,27 @@ for shard in 0 01 "$missing_shard" x; do
     exit 1
   fi
 done
+# The MySQL lane (ADR 0022) has a stack of its own: PostgreSQL stays out, the Go runner migrates
+# migrations/mysql, the PostgreSQL-only suites see no TEST_DATABASE_URL, and a suite that finds no
+# database fails instead of skipping.
+: >"$NOTARX_ISOLATION_LOG"
+"$root/scripts/integration-test.sh" --driver mysql >/dev/null
+for expected in 'down -v --remove-orphans' 'up -d --wait mysql' 'NOTARX_DATABASE_DRIVER=mysql' 'migrate --dir migrations/mysql' \
+  'TEST_DATABASE_DRIVER=mysql' 'TEST_DATABASE_URL= --env' 'TEST_DATABASE_REQUIRED=1' 'go test -count=1 -p 1 -v -tags=integration "$@"'; do
+  expect_logged "$expected"
+done
+if grep -Fq 'postgres' "$NOTARX_ISOLATION_LOG"; then
+  printf 'the MySQL lane started or used PostgreSQL\n' >&2
+  exit 1
+fi
+while read -r package; do
+  grep -Fqw -- "$package" "$NOTARX_ISOLATION_LOG" || { printf 'the MySQL lane did not run %s\n' "$package" >&2; exit 1; }
+done < <("$root/scripts/integration-test.sh" --driver mysql --list)
+for arguments in '--driver mysql --shard 1' '--driver oracle'; do
+  # shellcheck disable=SC2086 # the words are the arguments
+  if "$root/scripts/integration-test.sh" $arguments >/dev/null 2>&1; then
+    printf 'integration-test.sh accepted %s\n' "$arguments" >&2
+    exit 1
+  fi
+done
 printf 'Integration Compose isolation passed with an unrelated exported project name.\n'

@@ -270,6 +270,11 @@ def run_lanes(args):
     """
     summary = os.environ.get('GITHUB_STEP_SUMMARY')
 
+    def allowed(name):
+        """A lane with allowFailure reports its verdict but never fails the job (ADR 0022: the MySQL
+        suites may fail until the support claim of slice 11)."""
+        return bool(PLAN['lanes'].get(name, {}).get('allowFailure'))
+
     def record(name, verdict, seconds, failed):
         print(f'Contract lane {name}: {verdict}' + (f' in {seconds / 60:.1f} min' if seconds is not None else '')
               + (f' (failed: {failed})' if failed else ''), flush=True)
@@ -290,12 +295,15 @@ def run_lanes(args):
                                                keep_going=args.keep_going))
             report = json.loads((output / 'report.json').read_text())
         except Exception as error:  # noqa: BLE001 - a lane's crash is its verdict, not the job's
-            status = 1
-            record(name, 'error', time.monotonic() - started, f'{type(error).__name__}: {error}')
+            status = status or (0 if allowed(name) else 1)
+            record(name, 'error' + (' (allowed to fail)' if allowed(name) else ''), time.monotonic() - started,
+                   f'{type(error).__name__}: {error}')
             continue
-        status = status or code
+        tolerated = allowed(name) and report['status'] != 'success' \
+            and not any(s['status'] == 'cancelled' for s in report['steps'])
+        status = status or (0 if tolerated else code)
         steps = report['steps']
-        record(name, report['status'], time.monotonic() - started,
+        record(name, report['status'] + (' (allowed to fail)' if tolerated else ''), time.monotonic() - started,
                ', '.join(s['name'] for s in steps if s['status'] not in ('success', 'skipped')))
         if any(s['status'] == 'cancelled' for s in steps):
             for skipped in args.lanes[index + 1:]:

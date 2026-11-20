@@ -9,6 +9,10 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// This file is PostgreSQL only: LISTEN/NOTIFY through pgx. Callers outside internal/dialect/postgres
+// reach it through dialect.Notifier, which MySQL implements by polling (internal/dialect/mysql).
+
+// ListenChannels issues LISTEN for every channel on conn.
 func ListenChannels(ctx context.Context, conn *sql.Conn, channels ...string) error {
 	for _, channel := range channels {
 		if channel == "" {

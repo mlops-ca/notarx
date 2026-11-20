@@ -5,8 +5,11 @@
 # and verified against PostgreSQL and MySQL with
 #   make schema-parity
 # Do not edit by hand. Column types are logical types (see internal/schemaparity/types.go):
-# "?" marks a nullable column, "generated" a computed one. Partial and expression
-# indexes are not listed.
+# "?" marks a nullable column, "generated" a computed one. Plain secondary indexes are
+# listed under "indexes"; every other index (partial, expression, trigram, operator class)
+# under "special", and CHECK constraints under "checks", in their PostgreSQL form.
+# The MySQL baseline migrations/mysql/000001_baseline.sql is generated from this file
+# and migrations/mysql-decisions.yaml with: go run ./tools/mysqlbaseline
 version: 1
 tables:
   api_keys:
@@ -24,6 +27,15 @@ tables:
     unique: [[secret_hash]]
     foreignKeys:
       - service_account_id -> service_accounts(id)
+    defaults:
+      created_at: now()
+    indexes:
+      - service_account_id
+    special:
+      api_keys_active_expiry_idx: USING btree (expires_at) WHERE (revoked_at IS NULL)
+      api_keys_service_account_idx: USING btree (service_account_id, id) WHERE (service_account_id IS NOT NULL)
+    checks:
+      api_keys_roles_check: (roles <@ ARRAY['member'::text, 'admin'::text])
   artifact_catalog:
     columns:
       coordinate: text
@@ -38,6 +50,15 @@ tables:
     primaryKey: [repository_id, format, coordinate]
     foreignKeys:
       - repository_id -> hosted_repositories(id)
+    defaults:
+      latest_digest: ''''''
+      latest_version: ''''''
+      publisher: ''''''
+      version_count: "0"
+    special:
+      artifact_catalog_coordinate_trgm_idx: USING gin (coordinate gin_trgm_ops) WITH (fastupdate='on', gin_pending_list_limit='1024')
+    checks:
+      artifact_catalog_version_count_check: (version_count >= 0)
   artifact_catalog_backfill:
     columns:
       completed_at: timestamp?
@@ -46,6 +67,10 @@ tables:
       format: text
       updated_at: timestamp
     primaryKey: [format]
+    defaults:
+      cursor_key: ''''''
+      cursor_repository_id: '''00000000-0000-0000-0000-000000000000'''
+      updated_at: now()
   artifact_intelligence:
     columns:
       body_digest: text?
@@ -66,7 +91,24 @@ tables:
       vulnerability: json?
     primaryKey: [repository_id, format, coordinate, digest]
     foreignKeys:
-      - repository_id -> hosted_repositories(id)
+      - repository_id -> hosted_repositories(id) on delete cascade
+    defaults:
+      created_at: now()
+      licenses: '''[]'''
+      sboms: '''[]'''
+      signatures: '''[]'''
+      updated_at: now()
+      updated_by: ''''''
+      version: "1"
+    indexes:
+      - updated_at desc
+    special:
+      artifact_intelligence_body_key_idx: USING btree (body_key) WHERE (body_key IS NOT NULL)
+    checks:
+      artifact_intelligence_body_ref_check: (((body_digest IS NULL) AND (body_size IS NULL) AND (body_key IS NULL)) OR ((body_digest IS NOT NULL) AND (body_size IS NOT NULL) AND (body_key IS NOT NULL) AND (body_size >= 0)))
+      artifact_intelligence_coordinate_check: ((char_length(coordinate) >= 1) AND (char_length(coordinate) <= 1024))
+      artifact_intelligence_digest_check: (digest ~ '^sha256:[a-f0-9]{64}$'::text)
+      artifact_intelligence_version_check: (version >= 1)
   artifact_license:
     columns:
       artifact_digest: text
@@ -75,6 +117,10 @@ tables:
       source: text
       spdx_id: text
     primaryKey: [repository_id, artifact_digest, spdx_id, source]
+    defaults:
+      confidence: "1"
+    checks:
+      artifact_license_confidence_check: ((confidence >= (0)::numeric) AND (confidence <= (1)::numeric))
   artifact_quarantines:
     columns:
       coordinate: text
@@ -90,7 +136,21 @@ tables:
       version: int64
     primaryKey: [repository_id, format, coordinate, digest]
     foreignKeys:
-      - repository_id -> hosted_repositories(id)
+      - repository_id -> hosted_repositories(id) on delete cascade
+    defaults:
+      quarantined_at: now()
+      updated_at: now()
+      version: "1"
+    checks:
+      artifact_quarantines_check: (((state = 'quarantined'::text) AND (released_at IS NULL)) OR ((state = 'released'::text) AND (released_at IS NOT NULL)))
+      artifact_quarantines_check1: ((format <> 'conan'::text) OR (coordinate ~ '^[^/#]+/[^/#]+/[^/#]+/[^/#]+#[^/#]+$'::text))
+      artifact_quarantines_coordinate_check: ((char_length(coordinate) >= 1) AND (char_length(coordinate) <= 1024) AND (btrim(coordinate) <> ''::text))
+      artifact_quarantines_digest_check: (digest ~ '^sha256:[a-f0-9]{64}$'::text)
+      artifact_quarantines_format_check: (format = ANY (ARRAY['raw'::text, 'oci'::text, 'maven'::text, 'conan'::text, 'npm'::text, 'pypi'::text, 'go'::text, 'apt'::text, 'cargo'::text]))
+      artifact_quarantines_reason_check: ((char_length(reason) >= 1) AND (char_length(reason) <= 1024) AND (btrim(reason) <> ''::text))
+      artifact_quarantines_state_check: (state = ANY (ARRAY['quarantined'::text, 'released'::text]))
+      artifact_quarantines_updated_by_check: ((char_length(updated_by) >= 1) AND (char_length(updated_by) <= 512) AND (btrim(updated_by) <> ''::text))
+      artifact_quarantines_version_check: (version >= 1)
   artifact_sbom:
     columns:
       artifact_digest: text
@@ -108,7 +168,21 @@ tables:
       source: text
       spec_version: text
     primaryKey: [id]
-    unique: [[artifact_digest, kind, repository_id, source]]
+    unique: [[repository_id, artifact_digest, kind, source]]
+    defaults:
+      body_key: ''''''
+      component_count: "0"
+      created_at: now()
+      generator: ''''''
+      generator_version: ''''''
+      spec_version: ''''''
+    special:
+      artifact_sbom_body_key_idx: USING btree (body_key) WHERE (body_key <> ''::text)
+    checks:
+      artifact_sbom_body_check: ((body IS NOT NULL) OR (body_key <> ''::text))
+      artifact_sbom_kind_check: ((kind)::text = ANY (ARRAY[('cyclonedx-json'::character varying)::text, ('spdx-json'::character varying)::text]))
+      artifact_sbom_size_check: ((body_size >= 0) AND (component_count >= 0))
+      artifact_sbom_source_check: ((source)::text = ANY (ARRAY[('generated'::character varying)::text, ('uploaded'::character varying)::text, ('promoted'::character varying)::text]))
   artifact_scan_history:
     columns:
       artifact_digest: text
@@ -124,6 +198,16 @@ tables:
       status: text
       unknown: int32
     primaryKey: [scanned_at, id]
+    partitioned: true
+    defaults:
+      critical: "0"
+      high: "0"
+      low: "0"
+      medium: "0"
+      scanner_version: ''''''
+      unknown: "0"
+    indexes:
+      - repository_id,artifact_digest,scanned_at desc
   artifact_tombstones:
     columns:
       coordinate: text
@@ -134,6 +218,13 @@ tables:
     primaryKey: [repository_id, format, coordinate]
     foreignKeys:
       - repository_id -> hosted_repositories(id)
+    defaults:
+      digest: ''''''
+      tombstoned_at: now()
+    indexes:
+      - tombstoned_at
+    checks:
+      artifact_tombstones_format_check: (format = ANY (ARRAY['raw'::text, 'oci'::text, 'maven'::text, 'conan'::text, 'npm'::text, 'pypi'::text, 'go'::text, 'apt'::text, 'cargo'::text]))
   artifact_usage_stats:
     columns:
       download_count: int64
@@ -145,6 +236,16 @@ tables:
       resource: text
       total_bytes: int64
     primaryKey: [repository_id, format, resource]
+    defaults:
+      download_count: "0"
+      first_downloaded_at: now()
+      last_actor: ''''''
+      last_downloaded_at: now()
+      total_bytes: "0"
+    indexes:
+      - repository_id,download_count desc
+    special:
+      artifact_usage_stats_repository_address_idx: USING btree (repository_id, resource COLLATE "C", format COLLATE "C")
   artifact_vulnerability:
     columns:
       artifact_digest: text
@@ -165,7 +266,22 @@ tables:
       truncated: bool
       unknown: int32
     primaryKey: [id]
-    unique: [[artifact_digest, repository_id]]
+    unique: [[repository_id, artifact_digest]]
+    defaults:
+      critical: "0"
+      findings_total: "0"
+      high: "0"
+      low: "0"
+      medium: "0"
+      scanner_version: ''''''
+      suppressed_count: "0"
+      truncated: "false"
+      unknown: "0"
+    indexes:
+      - db_generation_id,scanned_at,id
+    checks:
+      artifact_vulnerability_counts_check: ((critical >= 0) AND (high >= 0) AND (medium >= 0) AND (low >= 0) AND (unknown >= 0) AND (suppressed_count >= 0) AND (findings_total >= 0))
+      artifact_vulnerability_status_check: ((status)::text = ANY (ARRAY[('clean'::character varying)::text, ('vulnerable'::character varying)::text, ('stale_db'::character varying)::text, ('not_scanned'::character varying)::text, ('error'::character varying)::text]))
   artifact_vulnerability_finding:
     columns:
       component: text
@@ -189,6 +305,20 @@ tables:
       vuln_id: text
       vulnerability_id: uuid
     primaryKey: [vulnerability_id, ordinal]
+    defaults:
+      component: ''''''
+      cvss_vector: ''''''
+      fixed_version: ''''''
+      location: ''''''
+      source: ''''''
+      title: ''''''
+      url: ''''''
+      version: ''''''
+    indexes:
+      - vulnerability_id,severity_rank,vuln_id,ordinal
+    checks:
+      artifact_vulnerability_finding_severity_check: ((severity)::text = ANY (ARRAY[('critical'::character varying)::text, ('high'::character varying)::text, ('medium'::character varying)::text, ('low'::character varying)::text, ('unknown'::character varying)::text]))
+      artifact_vulnerability_finding_status_check: ((status)::text = ANY (ARRAY[('affected'::character varying)::text, ('suppressed'::character varying)::text, ('fixed'::character varying)::text]))
   audit_cleanup_jobs:
     columns:
       batch_size: int32
@@ -204,6 +334,17 @@ tables:
       state: text
     primaryKey: [id]
     unique: [[idempotency_key]]
+    defaults:
+      created_at: now()
+      deleted: "0"
+      last_error: ''''''
+    special:
+      audit_cleanup_jobs_claim_idx: USING btree (created_at) WHERE (state = ANY (ARRAY['pending'::text, 'failed'::text]))
+      audit_cleanup_jobs_retention_idx: USING btree (completed_at) WHERE (state = ANY (ARRAY['completed'::text, 'failed'::text]))
+      audit_cleanup_jobs_running_started_idx: USING btree (started_at) WHERE (state = 'running'::text)
+    checks:
+      audit_cleanup_jobs_batch_size_check: ((batch_size >= 1) AND (batch_size <= 50000))
+      audit_cleanup_jobs_state_check: (state = ANY (ARRAY['pending'::text, 'running'::text, 'completed'::text, 'failed'::text]))
   audit_retention_policy:
     columns:
       enabled: bool
@@ -211,6 +352,14 @@ tables:
       singleton: bool
       version: int64
     primaryKey: [singleton]
+    defaults:
+      enabled: "true"
+      keep_days: "90"
+      singleton: "true"
+      version: "1"
+    checks:
+      audit_retention_policy_keep_days_check: (keep_days >= 0)
+      audit_retention_policy_singleton_check: singleton
   authorization_roles:
     columns:
       created_at: timestamp
@@ -221,6 +370,17 @@ tables:
       updated_at: timestamp
       version: int64
     primaryKey: [id]
+    defaults:
+      created_at: now()
+      description: ''''''
+      updated_at: now()
+      version: "1"
+    indexes:
+      - updated_at desc,id desc
+    special:
+      authorization_roles_name_ci_idx: unique USING btree (lower(name))
+    checks:
+      authorization_roles_scopes_nonempty: (cardinality(scopes) > 0)
   authorization_templates:
     columns:
       created_at: timestamp
@@ -231,18 +391,37 @@ tables:
       updated_at: timestamp
       version: int64
     primaryKey: [id]
+    defaults:
+      created_at: now()
+      description: ''''''
+      grants: '''[]'''
+      updated_at: now()
+      version: "1"
+    indexes:
+      - updated_at desc,id desc
+    special:
+      authorization_templates_name_ci_idx: unique USING btree (lower(name))
   cache_circuit_breakers:
     columns:
       expires_at: timestamp
       key: text
       updated_at: timestamp
     primaryKey: [key]
+    defaults:
+      updated_at: now()
+    indexes:
+      - expires_at
   cache_control_entries:
     columns:
       key: text
       updated_at: timestamp
       value: json
     primaryKey: [key]
+    defaults:
+      updated_at: now()
+    special:
+      cache_control_entries_key_prefix_idx: USING btree (key text_pattern_ops)
+      cache_control_entries_proxy_browse_idx: USING btree (md5(COALESCE((value ->> 'repository'::text), (value ->> 'Repository'::text))), md5(COALESCE((value ->> 'endpoint'::text), (value ->> 'Endpoint'::text))), "left"(COALESCE((value ->> 'path'::text), (value ->> 'Path'::text)), 256) text_pattern_ops) WHERE ((key ~~ 'maven/index/%'::text) OR (key ~~ 'raw/index/%'::text))
   cache_tasks:
     columns:
       attempts: int32
@@ -255,6 +434,16 @@ tables:
       id: uuid
       task_type: text
     primaryKey: [id]
+    defaults:
+      attempts: "0"
+      available_at: now()
+      created_at: now()
+    special:
+      cache_tasks_active_dedupe_idx: unique USING btree (dedupe_key) WHERE (completed_at IS NULL)
+      cache_tasks_claim_idx: USING btree (task_type, available_at, created_at) WHERE (completed_at IS NULL)
+      cache_tasks_retention_idx: USING btree (completed_at) WHERE (completed_at IS NOT NULL)
+    checks:
+      cache_tasks_attempts_check: (attempts >= 0)
   conan_group_members:
     columns:
       allowed_hosts: array<text>
@@ -267,8 +456,18 @@ tables:
     primaryKey: [group_name, position]
     unique: [[group_name, name]]
     foreignKeys:
-      - group_name -> conan_groups(name)
+      - group_name -> conan_groups(name) on delete cascade
       - repository_id -> hosted_repositories(id)
+    defaults:
+      allowed_hosts: '''[]'''
+    indexes:
+      - repository_id
+    special:
+      conan_group_members_repository_id_idx: USING btree (repository_id) WHERE (repository_id IS NOT NULL)
+    checks:
+      conan_group_members_member_type_check: (member_type = ANY (ARRAY['hosted'::text, 'proxy'::text]))
+      conan_group_members_position_check: ("position" >= 0)
+      conan_group_proxy_allowlist_required: ((member_type <> 'proxy'::text) OR (cardinality(allowed_hosts) > 0))
   conan_groups:
     columns:
       anonymous: bool
@@ -277,6 +476,13 @@ tables:
       enabled: bool
       name: text
     primaryKey: [name]
+    defaults:
+      anonymous: "false"
+      cache_quota_bytes: "1073741824"
+      created_at: now()
+      enabled: "true"
+    checks:
+      conan_groups_cache_quota_bytes_check: (cache_quota_bytes > 0)
   console_theme_packages:
     columns:
       created_at: timestamp
@@ -285,6 +491,14 @@ tables:
       updated_at: timestamp
       version: int64
     primaryKey: [id]
+    defaults:
+      created_at: now()
+      updated_at: now()
+      version: "1"
+    checks:
+      console_theme_packages_id_valid: (id ~ '^[a-z0-9][a-z0-9-]{1,63}$'::text)
+      console_theme_packages_payload_object: (jsonb_typeof(payload) = 'object'::text)
+      console_theme_packages_version_check: (version > 0)
   email_targets:
     columns:
       created_at: timestamp
@@ -296,6 +510,15 @@ tables:
       updated_at: timestamp
       version: int64
     primaryKey: [id]
+    defaults:
+      created_at: now()
+      enabled: "false"
+      locale: '''en-CA'''
+      updated_at: now()
+      version: "1"
+    checks:
+      email_targets_locale_check: (locale = ANY (ARRAY['en-CA'::text, 'fr-CA'::text, 'zh-CN'::text]))
+      email_targets_name_check: ((length(name) >= 1) AND (length(name) <= 128))
   email_test_deliveries:
     columns:
       accepted_at: timestamp?
@@ -332,11 +555,45 @@ tables:
     foreignKeys:
       - quota_rule_id -> repository_quota_alert_rules(id)
       - target_id -> email_targets(id)
+    defaults:
+      attempts: "0"
+      automatic_cancellation_code: ''''''
+      created_at: now()
+      error_code: ''''''
+      kind: '''test'''
+      lease_owner: ''''''
+      locale: '''en-CA'''
+      next_attempt_at: now()
+      possible_duplicate: "false"
+      state: '''pending'''
+      updated_at: now()
+      version: "1"
+    indexes:
+      - quota_rule_id
+      - target_id
+    special:
+      email_quota_order: USING btree (quota_rule_id, event_sequence) WHERE (kind = 'repository_quota'::text)
+      email_test_deliveries_retention_idx: USING btree (updated_at) WHERE (state = ANY (ARRAY['accepted'::text, 'dead'::text]))
+      email_test_delivery_due: USING btree (next_attempt_at) WHERE (state = ANY (ARRAY['pending'::text, 'retrying'::text, 'delivering'::text]))
+    checks:
+      email_quota_descriptor_shape: (((kind = 'test'::text) AND (quota_rule_id IS NULL) AND (episode_id IS NULL) AND (event_sequence IS NULL) AND (quota_descriptor IS NULL)) OR ((kind = 'repository_quota'::text) AND (quota_rule_id IS NOT NULL) AND (episode_id IS NOT NULL) AND (event_sequence > 0) AND (quota_descriptor IS NOT NULL) AND (octet_length((quota_descriptor)::text) <= 8192)))
+      email_quota_sequence_required: ((kind <> 'repository_quota'::text) OR (event_sequence IS NOT NULL))
+      email_test_deliveries_attempts_check: ((attempts >= 0) AND (attempts <= 8))
+      email_test_deliveries_automatic_cancellation_code_check: (automatic_cancellation_code = ANY (ARRAY[''::text, 'rule_changed'::text, 'rule_disabled'::text, 'rule_deleted'::text]))
+      email_test_deliveries_kind_check: (kind = ANY (ARRAY['test'::text, 'repository_quota'::text]))
+      email_test_deliveries_locale_check: (locale = ANY (ARRAY['en-CA'::text, 'fr-CA'::text, 'zh-CN'::text]))
+      email_test_deliveries_scenario_check: (scenario = ANY (ARRAY['warning'::text, 'critical'::text, 'resolved'::text]))
+      email_test_deliveries_state_check: (state = ANY (ARRAY['pending'::text, 'delivering'::text, 'retrying'::text, 'accepted'::text, 'dead'::text]))
   email_test_requests:
     columns:
       created_at: timestamp
       id: int64
     primaryKey: [id]
+    defaults:
+      created_at: now()
+      id: identity
+    indexes:
+      - created_at
   hosted_group_idempotency:
     columns:
       actor: text
@@ -346,7 +603,12 @@ tables:
       payload_hash: text
     primaryKey: [actor, key]
     foreignKeys:
-      - group_id -> hosted_groups(id)
+      - group_id -> hosted_groups(id) on delete cascade
+    indexes:
+      - expires_at
+      - group_id
+    checks:
+      hosted_group_idempotency_key_check: ((char_length(key) >= 1) AND (char_length(key) <= 128))
   hosted_group_members:
     columns:
       group_id: uuid
@@ -355,8 +617,12 @@ tables:
     primaryKey: [group_id, position]
     unique: [[group_id, repository_id]]
     foreignKeys:
-      - group_id -> hosted_groups(id)
+      - group_id -> hosted_groups(id) on delete cascade
       - repository_id -> hosted_repositories(id)
+    indexes:
+      - repository_id
+    checks:
+      hosted_group_members_position_check: ("position" >= 0)
   hosted_groups:
     columns:
       created_at: timestamp
@@ -367,6 +633,16 @@ tables:
       visibility: text
     primaryKey: [id]
     unique: [[name]]
+    defaults:
+      created_at: now()
+      version: "1"
+      visibility: '''private'''
+    indexes:
+      - visibility,name
+    checks:
+      hosted_groups_format_check: (format = ANY (ARRAY['raw'::text, 'oci'::text, 'maven'::text, 'conan'::text, 'npm'::text, 'pypi'::text, 'go'::text, 'apt'::text, 'cargo'::text, 'nuget'::text, 'helm'::text]))
+      hosted_groups_name_check: (name ~ '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$'::text)
+      hosted_groups_visibility_check: ((visibility)::text = ANY (ARRAY[('private'::character varying)::text, ('authenticated'::character varying)::text, ('public'::character varying)::text]))
   hosted_repositories:
     columns:
       allowed_hosts: array<text>
@@ -389,6 +665,33 @@ tables:
       visibility: text
     primaryKey: [id]
     unique: [[name]]
+    defaults:
+      allowed_hosts: '''[]'''
+      created_at: now()
+      endpoint: ''''''
+      grants_version: "1"
+      maven_strict_publication: "false"
+      raw_layout: '''path'''
+      raw_strict: "false"
+      repo_type: '''hosted'''
+      seal_mode: '''explicit'''
+      state: '''active'''
+      version: "1"
+      visibility: '''private'''
+    indexes:
+      - created_at,id
+      - visibility,name
+    checks:
+      hosted_repositories_format_check: (format = ANY (ARRAY['raw'::text, 'oci'::text, 'maven'::text, 'conan'::text, 'npm'::text, 'pypi'::text, 'go'::text, 'apt'::text, 'cargo'::text, 'nuget'::text, 'helm'::text, 'rubygems'::text]))
+      hosted_repositories_maven_strict_publication_check: ((NOT maven_strict_publication) OR ((format = 'maven'::text) AND (repo_type = 'hosted'::text)))
+      hosted_repositories_name_check: (name ~ '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$'::text)
+      hosted_repositories_raw_layout_check: (raw_layout = ANY (ARRAY['path'::text, 'versioned'::text]))
+      hosted_repositories_raw_layout_shape_check: (((raw_layout = 'path'::text) AND (seal_mode = 'explicit'::text) AND (NOT raw_strict)) OR ((raw_layout = 'versioned'::text) AND (format = 'raw'::text) AND (repo_type = 'hosted'::text)))
+      hosted_repositories_repo_shape_check: (((repo_type = 'hosted'::text) AND (endpoint = ''::text)) OR ((repo_type = 'proxy'::text) AND (endpoint <> ''::text)))
+      hosted_repositories_repo_type_check: (repo_type = ANY (ARRAY['hosted'::text, 'proxy'::text]))
+      hosted_repositories_seal_mode_check: (seal_mode = ANY (ARRAY['explicit'::text, 'idle'::text]))
+      hosted_repositories_state_check: (state = ANY (ARRAY['active'::text, 'deleting'::text, 'deleted'::text]))
+      hosted_repositories_visibility_check: ((visibility)::text = ANY (ARRAY[('private'::character varying)::text, ('authenticated'::character varying)::text, ('public'::character varying)::text]))
   hosted_repository_idempotency:
     columns:
       actor: text
@@ -400,6 +703,11 @@ tables:
     primaryKey: [actor, target, key]
     foreignKeys:
       - repository_id -> hosted_repositories(id)
+    indexes:
+      - expires_at
+      - repository_id
+    checks:
+      hosted_repository_idempotency_key_check: ((char_length(key) >= 1) AND (char_length(key) <= 128))
   identity_providers:
     columns:
       attribute_mapping: json
@@ -418,6 +726,25 @@ tables:
       version: int64
     primaryKey: [id]
     unique: [[slug]]
+    defaults:
+      attribute_mapping: '''{}'''
+      created_at: now()
+      email_linking_enabled: "false"
+      enabled: "false"
+      jit_default_role: '''none'''
+      provisioning_mode: '''disabled'''
+      settings: '''{}'''
+      updated_at: now()
+      version: "1"
+    checks:
+      identity_providers_attribute_mapping_check: (jsonb_typeof(attribute_mapping) = 'object'::text)
+      identity_providers_display_name_check: ((length(btrim(display_name)) >= 1) AND (length(btrim(display_name)) <= 120))
+      identity_providers_jit_default_role_check: (jit_default_role = ANY (ARRAY['none'::text, 'member'::text]))
+      identity_providers_kind_check: (kind = ANY (ARRAY['oidc'::text, 'saml'::text]))
+      identity_providers_provisioning_mode_check: (provisioning_mode = ANY (ARRAY['disabled'::text, 'jit'::text, 'scim_only'::text]))
+      identity_providers_settings_check: (jsonb_typeof(settings) = 'object'::text)
+      identity_providers_slug_check: (slug ~ '^[a-z0-9][a-z0-9-]{1,62}$'::text)
+      identity_providers_version_check: (version > 0)
   installation_repository_presets:
     columns:
       catalog_version: text
@@ -427,6 +754,15 @@ tables:
       singleton: bool
       state: text
     primaryKey: [singleton]
+    defaults:
+      groups_created: "0"
+      repositories_created: "0"
+      singleton: "true"
+    checks:
+      installation_repository_presets_groups_created_check: (groups_created >= 0)
+      installation_repository_presets_repositories_created_check: (repositories_created >= 0)
+      installation_repository_presets_singleton_check: singleton
+      installation_repository_presets_state_check: (state = ANY (ARRAY['pending'::text, 'applied'::text, 'skipped_existing'::text]))
   lifecycle_jobs:
     columns:
       attempts: int32
@@ -448,9 +784,38 @@ tables:
       started_at: timestamp?
       state: text
     primaryKey: [id]
-    unique: [[idempotency_key, kind, repository_id]]
+    unique: [[repository_id, kind, idempotency_key]]
     foreignKeys:
       - repository_id -> hosted_repositories(id)
+    defaults:
+      attempts: "0"
+      created_at: now()
+      last_error: ''''''
+      lease_token: ''''''
+      max_attempts: "3"
+      payload: '''{}'''
+      progress_current: "0"
+      progress_message: ''''''
+      progress_total: "0"
+    indexes:
+      - created_at desc,id desc
+      - repository_id,created_at desc,id desc
+    special:
+      lifecycle_jobs_actionable_idx: USING btree (next_attempt_at, created_at) WHERE (state = ANY (ARRAY['pending'::text, 'retrying'::text]))
+      lifecycle_jobs_artifact_scan_identity_idx: USING btree (repository_id, ((payload ->> 'format'::text)), ((payload ->> 'coordinate'::text)), ((payload ->> 'digest'::text)), created_at DESC) WHERE (kind = 'scan'::text)
+      lifecycle_jobs_created_at_brin_idx: USING brin (created_at) WITH (pages_per_range='128')
+      lifecycle_jobs_kind_actionable_idx: USING btree (kind, next_attempt_at) WHERE (state = ANY (ARRAY['pending'::text, 'retrying'::text]))
+      lifecycle_jobs_lease_idx: USING btree (lease_expires_at) WHERE (state = 'running'::text)
+      lifecycle_jobs_pending_idx: USING btree (created_at) WHERE (state = 'pending'::text)
+      lifecycle_jobs_retention_idx: USING btree (completed_at) WHERE (state = ANY (ARRAY['completed'::text, 'failed'::text, 'cancelled'::text]))
+      lifecycle_jobs_running_repository_idx: USING btree (repository_id) WHERE (state = 'running'::text)
+    checks:
+      lifecycle_jobs_attempts_check: (attempts >= 0)
+      lifecycle_jobs_kind_check: (kind = ANY (ARRAY['retention'::text, 'promotion'::text, 'replication'::text, 'reclaim'::text, 'intelligence'::text, 'scan'::text]))
+      lifecycle_jobs_max_attempts_check: ((max_attempts >= 1) AND (max_attempts <= 20))
+      lifecycle_jobs_progress_current_check: (progress_current >= 0)
+      lifecycle_jobs_progress_total_check: (progress_total >= 0)
+      lifecycle_jobs_state_check: (state = ANY (ARRAY['pending'::text, 'running'::text, 'retrying'::text, 'completed'::text, 'failed'::text, 'cancelled'::text]))
   maven_group_members:
     columns:
       allowed_hosts: array<text>
@@ -463,8 +828,15 @@ tables:
     primaryKey: [group_name, position]
     unique: [[group_name, name]]
     foreignKeys:
-      - group_name -> maven_groups(name)
+      - group_name -> maven_groups(name) on delete cascade
       - repository_id -> hosted_repositories(id)
+    defaults:
+      allowed_hosts: '''[]'''
+    indexes:
+      - repository_id
+    checks:
+      maven_group_members_member_type_check: (member_type = ANY (ARRAY['hosted'::text, 'proxy'::text]))
+      maven_group_members_position_check: ("position" >= 0)
   maven_groups:
     columns:
       anonymous: bool
@@ -472,12 +844,18 @@ tables:
       enabled: bool
       name: text
     primaryKey: [name]
+    defaults:
+      anonymous: "false"
+      created_at: now()
+      enabled: "true"
   meta_object_pins:
     columns:
       digest: text
       seen_at: timestamp
       unreferenced_since: timestamp?
     primaryKey: [digest]
+    defaults:
+      seen_at: now()
   meta_sweep_lease:
     columns:
       expires_at: timestamp
@@ -496,7 +874,16 @@ tables:
       size: int64
     primaryKey: [restore_id, object_key]
     foreignKeys:
-      - repository_id,restore_id -> native_apt_archive_restores(repository_id,id)
+      - repository_id,restore_id -> native_apt_archive_restores(repository_id,id) on delete cascade
+    indexes:
+      - object_key
+      - restore_id,repository_id
+    special:
+      native_apt_archive_object_intents_reclaim_idx: USING btree (restore_id, object_key) WHERE ((reclaim_scheduled_at IS NULL) AND (collected_at IS NULL))
+    checks:
+      native_apt_archive_object_intents_check: (object_key = ('native/apt/sha256/'::text || substr(digest, 8)))
+      native_apt_archive_object_intents_digest_check: (digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_apt_archive_object_intents_size_check: ((size >= 0) AND (size <= 1073741824) AND ((size > 0) OR (digest = 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'::text)))
   native_apt_archive_restores:
     columns:
       created_at: timestamp
@@ -510,7 +897,18 @@ tables:
     primaryKey: [id]
     unique: [[id, repository_id]]
     foreignKeys:
-      - repository_id -> hosted_repositories(id)
+      - repository_id -> hosted_repositories(id) on delete cascade
+    defaults:
+      created_at: now()
+    indexes:
+      - repository_id
+    special:
+      native_apt_archive_restores_active_idx: unique USING btree (snapshot_id) WHERE (state = 'preparing'::text)
+      native_apt_archive_restores_expiry_idx: USING btree (created_at, id) WHERE (state = 'preparing'::text)
+    checks:
+      native_apt_archive_restores_plan_digest_check: (plan_digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_apt_archive_restores_reserved_bytes_check: (reserved_bytes >= 0)
+      native_apt_archive_restores_state_check: (state = ANY (ARRAY['preparing'::text, 'completed'::text, 'failed'::text]))
   native_apt_assets:
     columns:
       cached_at: timestamp
@@ -528,6 +926,23 @@ tables:
     primaryKey: [repository_id, path]
     foreignKeys:
       - repository_id -> hosted_repositories(id)
+    defaults:
+      cached_at: now()
+      content_type: ''''''
+      created_at: now()
+      source_version: ''''''
+      upstream_etag: ''''''
+      upstream_modified: ''''''
+    indexes:
+      - repository_id,digest,path
+    special:
+      native_apt_assets_path_idx: USING btree (repository_id, path text_pattern_ops)
+      native_apt_assets_path_trgm_idx: USING gin (path gin_trgm_ops) WITH (fastupdate='on', gin_pending_list_limit='1024')
+    checks:
+      native_apt_assets_digest_check: (digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_apt_assets_object_key_check: (object_key <> ''::text)
+      native_apt_assets_path_check: ((path <> ''::text) AND (length(path) <= 2048) AND (path !~ '(^|/)[.][.]?(/|$)'::text))
+      native_apt_assets_size_check: (size >= 0)
   native_apt_lifecycle_results:
     columns:
       id: uuid
@@ -536,8 +951,11 @@ tables:
       snapshot_id: uuid
     primaryKey: [id]
     foreignKeys:
-      - repository_id -> hosted_repositories(id)
+      - repository_id -> hosted_repositories(id) on delete cascade
       - snapshot_id -> native_apt_repository_snapshots(id)
+    indexes:
+      - repository_id
+      - snapshot_id
   native_apt_package_deletions:
     columns:
       collected_at: timestamp?
@@ -548,7 +966,9 @@ tables:
       suite: text
     primaryKey: [id]
     foreignKeys:
-      - repository_id -> hosted_repositories(id)
+      - repository_id -> hosted_repositories(id) on delete cascade
+    indexes:
+      - repository_id,suite
   native_apt_package_revisions:
     columns:
       architecture: text
@@ -564,9 +984,24 @@ tables:
       size: int64
       version: text
     primaryKey: [id]
-    unique: [[canonical_identity, repository_id]]
+    unique: [[repository_id, canonical_identity]]
     foreignKeys:
-      - repository_id -> hosted_repositories(id)
+      - repository_id -> hosted_repositories(id) on delete cascade
+    defaults:
+      created_at: now()
+    indexes:
+      - object_key
+      - repository_id,digest
+    checks:
+      native_apt_package_revisions_architecture_check: (architecture ~ '^[a-z0-9][a-z0-9-]*$'::text)
+      native_apt_package_revisions_check: ((canonical_identity = ((((package_name || '@'::text) || version) || '#'::text) || architecture)) AND (length(canonical_identity) <= 1024))
+      native_apt_package_revisions_check1: (object_key = ('native/apt/sha256/'::text || substr(digest, 8)))
+      native_apt_package_revisions_digest_check: (digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_apt_package_revisions_object_name_check: ((object_name <> ''::text) AND (length(object_name) <= 255) AND (object_name !~ '/'::text) AND (object_name ~~ '%.deb'::text))
+      native_apt_package_revisions_package_name_check: (package_name ~ '^[a-z0-9][a-z0-9+.-]+$'::text)
+      native_apt_package_revisions_publisher_check: ((publisher <> ''::text) AND (length(publisher) <= 512))
+      native_apt_package_revisions_size_check: ((size > 0) AND (size <= 1073741824))
+      native_apt_package_revisions_version_check: ((version ~ '^([0-9]+:)?[0-9][A-Za-z0-9.+:~-]*$'::text) AND (length(version) <= 255))
   native_apt_pool_paths:
     columns:
       content_type: text
@@ -577,7 +1012,13 @@ tables:
       size: int64
     primaryKey: [repository_id, path]
     foreignKeys:
-      - repository_id -> hosted_repositories(id)
+      - repository_id -> hosted_repositories(id) on delete cascade
+    checks:
+      native_apt_pool_paths_check: (object_key = ('native/apt/sha256/'::text || substr(digest, 8)))
+      native_apt_pool_paths_content_type_check: ((content_type <> ''::text) AND (length(content_type) <= 255))
+      native_apt_pool_paths_digest_check: (digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_apt_pool_paths_path_check: ((path ~ '^pool/'::text) AND (length(path) <= 2048))
+      native_apt_pool_paths_size_check: ((size > 0) AND (size <= 1073741824))
   native_apt_publication_idempotency:
     columns:
       actor: text
@@ -588,7 +1029,10 @@ tables:
       target: text
     primaryKey: [actor, target, key]
     foreignKeys:
-      - session_id -> native_apt_publication_sessions(id)
+      - session_id -> native_apt_publication_sessions(id) on delete cascade
+    indexes:
+      - expires_at
+      - session_id
   native_apt_publication_sessions:
     columns:
       collected_at: timestamp?
@@ -610,7 +1054,28 @@ tables:
     primaryKey: [id]
     foreignKeys:
       - package_revision_id -> native_apt_package_revisions(id)
-      - repository_id -> hosted_repositories(id)
+      - repository_id -> hosted_repositories(id) on delete cascade
+    defaults:
+      created_at: now()
+      expected_identity: ''''''
+      object_key: ''''''
+    indexes:
+      - package_revision_id
+      - repository_id
+    special:
+      native_apt_publication_sessions_collection_idx: USING btree (expires_at, id) WHERE ((state = 'aborted'::text) AND (object_key <> ''::text) AND (collected_at IS NULL))
+      native_apt_publication_sessions_expiry_idx: USING btree (expires_at, id) WHERE (state = ANY (ARRAY['open'::text, 'uploading'::text]))
+      native_apt_publication_sessions_reclaim_schedule_idx: USING btree (expires_at, id) WHERE ((state = 'aborted'::text) AND (object_key <> ''::text) AND (reclaim_scheduled_at IS NULL) AND (collected_at IS NULL))
+    checks:
+      native_apt_publication_sessions_check: (((state = 'open'::text) AND (object_key = ''::text) AND (package_revision_id IS NULL)) OR ((state = 'uploading'::text) AND (object_key = ('native/apt/sha256/'::text || substr(declared_digest, 8))) AND (package_revision_id IS NULL)) OR ((state = 'staged'::text) AND (object_key = ('native/apt/sha256/'::text || substr(declared_digest, 8))) AND (package_revision_id IS NOT NULL)) OR (state = 'aborted'::text))
+      native_apt_publication_sessions_component_check: (component ~ '^[a-z0-9][a-z0-9+.-]{0,127}$'::text)
+      native_apt_publication_sessions_declared_digest_check: (declared_digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_apt_publication_sessions_declared_size_check: ((declared_size > 0) AND (declared_size <= 1073741824))
+      native_apt_publication_sessions_expected_identity_check: (length(expected_identity) <= 1024)
+      native_apt_publication_sessions_object_name_check: ((object_name <> ''::text) AND (length(object_name) <= 255) AND (object_name !~ '/'::text) AND (object_name ~~ '%.deb'::text))
+      native_apt_publication_sessions_publisher_check: ((publisher <> ''::text) AND (length(publisher) <= 512))
+      native_apt_publication_sessions_state_check: (state = ANY (ARRAY['open'::text, 'uploading'::text, 'staged'::text, 'aborted'::text]))
+      native_apt_publication_sessions_suite_check: (suite ~ '^[a-z0-9][a-z0-9+.-]{0,127}$'::text)
   native_apt_repository_snapshots:
     columns:
       created_at: timestamp
@@ -627,9 +1092,25 @@ tables:
       state: text
       suite: text
     primaryKey: [id]
-    unique: [[id, repository_id], [repository_id, sequence, suite]]
+    unique: [[id, repository_id], [repository_id, suite, sequence]]
     foreignKeys:
-      - repository_id -> hosted_repositories(id)
+      - repository_id -> hosted_repositories(id) on delete cascade
+    defaults:
+      created_at: now()
+      inrelease_digest: ''''''
+      key_fingerprint: ''''''
+      release_digest: ''''''
+      signature_algorithm: ''''''
+      signer_identity: ''''''
+    special:
+      native_apt_repository_snapshots_visible_idx: unique USING btree (repository_id, suite) WHERE (state = 'visible'::text)
+    checks:
+      native_apt_repository_snapshots_check: (((state = ANY (ARRAY['building'::text, 'signed'::text, 'failed'::text])) AND (published_at IS NULL)) OR ((state = ANY (ARRAY['visible'::text, 'retired'::text, 'pruned'::text])) AND (published_at IS NOT NULL)))
+      native_apt_repository_snapshots_inrelease_digest_check: ((inrelease_digest = ''::text) OR (inrelease_digest ~ '^sha256:[0-9a-f]{64}$'::text))
+      native_apt_repository_snapshots_release_digest_check: ((release_digest = ''::text) OR (release_digest ~ '^sha256:[0-9a-f]{64}$'::text))
+      native_apt_repository_snapshots_sequence_check: (sequence > 0)
+      native_apt_repository_snapshots_state_check: (state = ANY (ARRAY['building'::text, 'signed'::text, 'visible'::text, 'retired'::text, 'failed'::text, 'pruned'::text]))
+      native_apt_repository_snapshots_suite_check: (suite ~ '^[a-z0-9][a-z0-9+.-]{0,127}$'::text)
   native_apt_snapshot_assets:
     columns:
       content_type: text
@@ -641,8 +1122,20 @@ tables:
       snapshot_id: uuid
     primaryKey: [snapshot_id, path]
     foreignKeys:
-      - repository_id -> hosted_repositories(id)
-      - repository_id,snapshot_id -> native_apt_repository_snapshots(repository_id,id)
+      - repository_id -> hosted_repositories(id) on delete cascade
+      - repository_id,snapshot_id -> native_apt_repository_snapshots(repository_id,id) on delete cascade
+    indexes:
+      - repository_id,path,snapshot_id
+      - snapshot_id,repository_id
+    special:
+      native_apt_snapshot_assets_path_trgm_idx: USING gin (path gin_trgm_ops) WITH (fastupdate='on', gin_pending_list_limit='1024')
+    checks:
+      native_apt_snapshot_assets_check: (object_key = ('native/apt/sha256/'::text || substr(digest, 8)))
+      native_apt_snapshot_assets_content_type_check: ((content_type <> ''::text) AND (length(content_type) <= 255))
+      native_apt_snapshot_assets_digest_check: (digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_apt_snapshot_assets_path_check: ((path <> ''::text) AND (length(path) <= 2048) AND (path !~ '(^/|(^|/)\.\.?(/|$)|[\\\r\n\t?#])'::text))
+      native_apt_snapshot_assets_path_root_check: (path ~ '^(dists|pool)/'::text)
+      native_apt_snapshot_assets_size_check: ((size >= 0) AND (size <= 1073741824) AND ((size > 0) OR (digest = 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'::text)))
   native_apt_snapshot_object_intents:
     columns:
       collected_at: timestamp?
@@ -655,7 +1148,18 @@ tables:
       snapshot_id: uuid
     primaryKey: [snapshot_id, object_key]
     foreignKeys:
-      - repository_id,snapshot_id -> native_apt_repository_snapshots(repository_id,id)
+      - repository_id,snapshot_id -> native_apt_repository_snapshots(repository_id,id) on delete cascade
+    defaults:
+      created_at: now()
+    indexes:
+      - snapshot_id,repository_id
+    special:
+      native_apt_snapshot_object_intents_age_idx: USING btree (created_at, snapshot_id) WHERE (collected_at IS NULL)
+      native_apt_snapshot_object_intents_reclaim_idx: USING btree (snapshot_id, object_key) WHERE ((reclaim_scheduled_at IS NULL) AND (collected_at IS NULL))
+    checks:
+      native_apt_snapshot_object_intents_check: (object_key = ('native/apt/sha256/'::text || substr(digest, 8)))
+      native_apt_snapshot_object_intents_digest_check: (digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_apt_snapshot_object_intents_size_check: ((size >= 0) AND (size <= 1073741824) AND ((size > 0) OR (digest = 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'::text)))
   native_apt_snapshot_packages:
     columns:
       architecture: text
@@ -664,11 +1168,18 @@ tables:
       publication_session_id: uuid
       snapshot_id: uuid
     primaryKey: [snapshot_id, publication_session_id]
-    unique: [[architecture, component, package_revision_id, snapshot_id]]
+    unique: [[snapshot_id, package_revision_id, component, architecture]]
     foreignKeys:
       - package_revision_id -> native_apt_package_revisions(id)
       - publication_session_id -> native_apt_publication_sessions(id)
-      - snapshot_id -> native_apt_repository_snapshots(id)
+      - snapshot_id -> native_apt_repository_snapshots(id) on delete cascade
+    indexes:
+      - package_revision_id
+      - publication_session_id
+      - snapshot_id,component,architecture
+    checks:
+      native_apt_snapshot_packages_architecture_check: (architecture ~ '^[a-z0-9][a-z0-9-]*$'::text)
+      native_apt_snapshot_packages_component_check: (component ~ '^[a-z0-9][a-z0-9+.-]{0,127}$'::text)
   native_cargo_group_versions:
     columns:
       checksum: text
@@ -681,7 +1192,10 @@ tables:
       version_key: text
     primaryKey: [group_id, collision_key, version_key]
     foreignKeys:
-      - group_id -> hosted_groups(id)
+      - group_id -> hosted_groups(id) on delete cascade
+    checks:
+      native_cargo_group_versions_checksum_check: (checksum ~ '^[0-9a-f]{64}$'::text)
+      native_cargo_group_versions_index_row_check: (octet_length(index_row) > 0)
   native_cargo_identity_reservations:
     columns:
       collision_key: text
@@ -693,7 +1207,14 @@ tables:
       version_key: text
     primaryKey: [repository_id, collision_key, version_key]
     foreignKeys:
-      - collision_key,repository_id -> native_cargo_names(collision_key,repository_id)
+      - collision_key,repository_id -> native_cargo_names(collision_key,repository_id) on delete cascade
+    defaults:
+      created_at: now()
+    checks:
+      native_cargo_identity_reservations_check: (version_key = split_part(version, '+'::text, 1))
+      native_cargo_identity_reservations_digest_check: (digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_cargo_identity_reservations_metadata_digest_check: (metadata_digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_cargo_identity_reservations_version_check: ((length(version) >= 1) AND (length(version) <= 256))
   native_cargo_names:
     columns:
       collision_key: text
@@ -703,7 +1224,15 @@ tables:
       repository_id: uuid
     primaryKey: [repository_id, collision_key]
     foreignKeys:
-      - repository_id -> hosted_repositories(id)
+      - repository_id -> hosted_repositories(id) on delete cascade
+    defaults:
+      created_at: now()
+    special:
+      native_cargo_names_name_trgm_idx: USING gin (name gin_trgm_ops) WITH (fastupdate='on', gin_pending_list_limit='1024')
+    checks:
+      native_cargo_names_check: (normalized_name = lower(name))
+      native_cargo_names_check1: (collision_key = replace(normalized_name, '_'::text, '-'::text))
+      native_cargo_names_name_check: (name ~ '^[A-Za-z][A-Za-z0-9_-]{0,63}$'::text)
   native_cargo_proxy_configs:
     columns:
       download_template: text
@@ -714,7 +1243,10 @@ tables:
       source_version: text
     primaryKey: [repository_id]
     foreignKeys:
-      - repository_id -> hosted_repositories(id)
+      - repository_id -> hosted_repositories(id) on delete cascade
+    defaults:
+      search_api: ''''''
+      source_version: ''''''
   native_cargo_proxy_crates:
     columns:
       cached_at: timestamp
@@ -730,7 +1262,13 @@ tables:
     primaryKey: [repository_id, collision_key, version_key]
     foreignKeys:
       - collision_key,repository_id -> native_cargo_proxy_indexes(collision_key,repository_id)
-      - repository_id -> hosted_repositories(id)
+      - repository_id -> hosted_repositories(id) on delete cascade
+    defaults:
+      source_version: ''''''
+    checks:
+      native_cargo_proxy_crates_checksum_check: (checksum ~ '^[0-9a-f]{64}$'::text)
+      native_cargo_proxy_crates_object_key_check: (object_key ~ '^native/cargo-proxy/sha256/[0-9a-f]{64}$'::text)
+      native_cargo_proxy_crates_size_check: (size > 0)
   native_cargo_proxy_indexes:
     columns:
       body: bytes
@@ -748,7 +1286,19 @@ tables:
       upstream_modified: text
     primaryKey: [repository_id, collision_key]
     foreignKeys:
-      - repository_id -> hosted_repositories(id)
+      - repository_id -> hosted_repositories(id) on delete cascade
+    defaults:
+      body: '''\x'''
+      source_version: ''''''
+      upstream_etag: ''''''
+      upstream_modified: ''''''
+    special:
+      native_cargo_proxy_indexes_body_key_idx: USING btree (body_key) WHERE (body_key IS NOT NULL)
+      native_cargo_proxy_indexes_positive_name_trgm_idx: USING gin (name gin_trgm_ops) WITH (fastupdate='on', gin_pending_list_limit='1024') WHERE (status = 200)
+    checks:
+      native_cargo_proxy_indexes_body_ref_check: (((body_digest IS NULL) AND (body_size IS NULL) AND (body_key IS NULL)) OR ((body_digest IS NOT NULL) AND (body_size IS NOT NULL) AND (body_key IS NOT NULL) AND (body_size >= 0)))
+      native_cargo_proxy_indexes_check: (((status = 200) AND (octet_length(body) > 0)) OR ((status = 200) AND (body_digest IS NOT NULL) AND (octet_length(body) = 0)) OR ((status <> 200) AND (octet_length(body) = 0)))
+      native_cargo_proxy_indexes_status_check: (status = ANY (ARRAY[200, 404, 410, 451]))
   native_cargo_publications:
     columns:
       collected_at: timestamp?
@@ -767,7 +1317,20 @@ tables:
       yanked: bool
     primaryKey: [repository_id, collision_key, version_key]
     foreignKeys:
-      - collision_key,repository_id,version_key -> native_cargo_identity_reservations(collision_key,repository_id,version_key)
+      - collision_key,repository_id,version_key -> native_cargo_identity_reservations(collision_key,repository_id,version_key) on delete cascade
+    defaults:
+      created_at: now()
+      description: ''''''
+      updated_at: now()
+      yanked: "false"
+    special:
+      native_cargo_publications_reclaim_idx: USING btree (object_key) WHERE (collected_at IS NULL)
+    checks:
+      native_cargo_publications_collection_check: ((collecting_at IS NULL) OR (collected_at IS NULL))
+      native_cargo_publications_index_row_check: (jsonb_typeof((index_row)::jsonb) = 'object'::text)
+      native_cargo_publications_object_key_check: (object_key ~ '^native/cargo/sha256/[0-9a-f]{64}$'::text)
+      native_cargo_publications_publisher_check: (publisher <> ''::text)
+      native_cargo_publications_size_check: (size > 0)
   native_conan_assets:
     columns:
       digest: text
@@ -783,6 +1346,14 @@ tables:
     foreignKeys:
       - object_key -> native_conan_object_intents(object_key)
       - repository_id -> hosted_repositories(id)
+    defaults:
+      package_id: ''''''
+      package_revision: ''''''
+    indexes:
+      - object_key
+    checks:
+      native_conan_assets_digest_check: (digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_conan_assets_size_check: (size >= 0)
   native_conan_object_intents:
     columns:
       claimed_at: timestamp?
@@ -796,6 +1367,15 @@ tables:
     primaryKey: [object_key]
     foreignKeys:
       - repository_id -> hosted_repositories(id)
+    defaults:
+      created_at: now()
+    indexes:
+      - repository_id
+    special:
+      native_conan_object_intents_collect_idx: USING btree (created_at) WHERE (collected_at IS NULL)
+    checks:
+      native_conan_object_intents_digest_check: (digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_conan_object_intents_size_check: (size >= 0)
   native_conan_package_revisions:
     columns:
       created_at: timestamp
@@ -810,6 +1390,11 @@ tables:
     foreignKeys:
       - recipe_revision,reference,repository_id -> native_conan_recipe_revisions(revision,reference,repository_id)
       - repository_id -> hosted_repositories(id)
+    defaults:
+      created_at: now()
+    checks:
+      native_conan_package_revisions_digest_check: (digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_conan_package_revisions_state_check: (state = ANY (ARRAY['visible'::text, 'deleted'::text]))
   native_conan_publish_sessions:
     columns:
       expires_at: timestamp
@@ -828,6 +1413,20 @@ tables:
     primaryKey: [id]
     foreignKeys:
       - repository_id -> hosted_repositories(id)
+    defaults:
+      native: "false"
+      package_id: ''''''
+      package_revision: ''''''
+      version: "0"
+    indexes:
+      - repository_id
+    special:
+      native_conan_open_publication_identity: unique USING btree (repository_id, publisher, kind, reference, recipe_revision, package_id, package_revision) WHERE (native AND (state = 'open'::text))
+      native_conan_publish_sessions_committed_idx: USING btree (repository_id, reference, expires_at DESC) WHERE (state = 'committed'::text)
+    checks:
+      native_conan_publish_sessions_kind_check: (kind = ANY (ARRAY['recipe'::text, 'package'::text]))
+      native_conan_publish_sessions_state_check: (state = ANY (ARRAY['open'::text, 'committed'::text, 'aborted'::text, 'expired'::text]))
+      native_conan_publish_sessions_version_check: (version >= 0)
   native_conan_publish_uploads:
     columns:
       object_key: text
@@ -835,7 +1434,7 @@ tables:
       session_id: uuid
     primaryKey: [session_id, object_name]
     foreignKeys:
-      - session_id -> native_conan_publish_sessions(id)
+      - session_id -> native_conan_publish_sessions(id) on delete cascade
   native_conan_recipe_revisions:
     columns:
       created_at: timestamp
@@ -848,6 +1447,18 @@ tables:
     primaryKey: [repository_id, reference, revision]
     foreignKeys:
       - repository_id -> hosted_repositories(id)
+    defaults:
+      created_at: now()
+      publisher: ''''''
+    special:
+      native_conan_recipe_revisions_created_at_brin_idx: USING brin (created_at) WITH (pages_per_range='128')
+      native_conan_recipe_revisions_digest_search_idx: USING btree (repository_id, digest, reference, created_at DESC) WHERE (state = 'visible'::text)
+      native_conan_recipe_revisions_visible_reference_idx: USING btree (repository_id, reference) WHERE (state = 'visible'::text)
+      native_conan_recipe_revisions_visible_reference_trgm_idx: USING gin (reference gin_trgm_ops) WITH (fastupdate='on', gin_pending_list_limit='1024') WHERE (state = 'visible'::text)
+      native_conan_recipe_visible_reference_pattern_idx: USING btree (repository_id, reference text_pattern_ops) WHERE (state = 'visible'::text)
+    checks:
+      native_conan_recipe_revisions_digest_check: (digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_conan_recipe_revisions_state_check: (state = ANY (ARRAY['visible'::text, 'deleted'::text]))
   native_go_assets:
     columns:
       cached_at: timestamp
@@ -864,7 +1475,20 @@ tables:
       version: text
     primaryKey: [repository_id, module_path, version, kind]
     foreignKeys:
-      - module_path,repository_id,version -> native_go_versions(module_path,repository_id,version)
+      - module_path,repository_id,version -> native_go_versions(module_path,repository_id,version) on delete cascade
+    defaults:
+      cached_at: now()
+      created_at: now()
+    indexes:
+      - repository_id,collected_at,module_path,version
+      - repository_id,digest,module_path,version
+    special:
+      native_go_assets_object_reclaim_idx: USING btree (object_key, module_path, version) WHERE (collected_at IS NULL)
+    checks:
+      native_go_assets_digest_check: (digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_go_assets_kind_check: (kind = ANY (ARRAY['info'::text, 'mod'::text, 'zip'::text]))
+      native_go_assets_object_key_check: (object_key <> ''::text)
+      native_go_assets_size_check: (size > 0)
   native_go_versions:
     columns:
       cached_at: timestamp
@@ -877,6 +1501,16 @@ tables:
     primaryKey: [repository_id, module_path, version]
     foreignKeys:
       - repository_id -> hosted_repositories(id)
+    defaults:
+      cached_at: now()
+      created_at: now()
+      publisher: ''''''
+    special:
+      native_go_versions_module_idx: USING btree (repository_id, module_path text_pattern_ops, version)
+      native_go_versions_module_path_trgm_idx: USING gin (module_path gin_trgm_ops) WITH (fastupdate='on', gin_pending_list_limit='1024')
+    checks:
+      native_go_versions_module_path_check: ((module_path <> ''::text) AND (length(module_path) <= 1024))
+      native_go_versions_version_check: ((version <> ''::text) AND (length(version) <= 512))
   native_helm_group_authorities:
     columns:
       created_at: timestamp
@@ -887,6 +1521,8 @@ tables:
     primaryKey: [group_id, name, version]
     foreignKeys:
       - group_id -> hosted_groups(id)
+    defaults:
+      created_at: now()
   native_helm_publication_sessions:
     columns:
       actor: text
@@ -911,7 +1547,31 @@ tables:
     primaryKey: [id]
     unique: [[object_key]]
     foreignKeys:
-      - repository_id -> hosted_repositories(id)
+      - repository_id -> hosted_repositories(id) on delete cascade
+    defaults:
+      created_at: now()
+      provenance_digest: ''''''
+      provenance_key: ''''''
+      provenance_size: "0"
+      source_version: ''''''
+    indexes:
+      - repository_id
+    special:
+      native_helm_active_identity: unique USING btree (repository_id, name, version) WHERE (state = ANY (ARRAY['pending'::text, 'committed'::text]))
+      native_helm_expiry: USING btree (expires_at, id) WHERE (state = 'pending'::text)
+      native_helm_provenance_key: unique USING btree (provenance_key) WHERE (provenance_key <> ''::text)
+    checks:
+      native_helm_publication_sessions_actor_check: (actor <> ''::text)
+      native_helm_publication_sessions_chart_yaml_check: ((octet_length(chart_yaml) >= 1) AND (octet_length(chart_yaml) <= 1048576))
+      native_helm_publication_sessions_check: (((provenance_size = 0) AND (provenance_digest = ''::text) AND (provenance_key = ''::text)) OR ((provenance_size > 0) AND (provenance_digest ~ '^sha256:[0-9a-f]{64}$'::text) AND (provenance_key <> ''::text)))
+      native_helm_publication_sessions_check1: ((collected_at IS NULL) OR (state = 'expired'::text))
+      native_helm_publication_sessions_check2: ((state = 'committed'::text) = (committed_at IS NOT NULL))
+      native_helm_publication_sessions_digest_check: (digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_helm_publication_sessions_name_check: ((length(name) >= 1) AND (length(name) <= 63) AND (name ~ '^[a-z0-9][a-z0-9-]*$'::text))
+      native_helm_publication_sessions_provenance_size_check: ((provenance_size >= 0) AND (provenance_size <= 1048576))
+      native_helm_publication_sessions_size_check: ((size > 0) AND (size <= 67108864))
+      native_helm_publication_sessions_state_check: (state = ANY (ARRAY['pending'::text, 'committed'::text, 'expired'::text]))
+      native_helm_publication_sessions_version_check: ((length(version) >= 1) AND (length(version) <= 256))
   native_helm_publications:
     columns:
       body_digest: text?
@@ -940,8 +1600,28 @@ tables:
     primaryKey: [repository_id, name, version]
     unique: [[session_id]]
     foreignKeys:
-      - repository_id -> hosted_repositories(id)
+      - repository_id -> hosted_repositories(id) on delete cascade
       - session_id -> native_helm_publication_sessions(id)
+    defaults:
+      governance_reason: ''''''
+      governance_updated_by: ''''''
+      governance_version: "1"
+      provenance_digest: ''''''
+      provenance_key: ''''''
+      provenance_size: "0"
+      quarantined: "false"
+      tombstoned: "false"
+    special:
+      native_helm_publications_body_key_idx: USING btree (body_key) WHERE (body_key IS NOT NULL)
+    checks:
+      native_helm_governance_audit: (((governance_version = 1) AND (governance_updated_at IS NULL) AND (governance_updated_by = ''::text) AND (governance_reason = ''::text)) OR ((governance_version > 1) AND (governance_updated_at IS NOT NULL) AND (length(governance_updated_by) > 0) AND (length(btrim(governance_reason)) > 0)))
+      native_helm_publications_body_ref_check: (((body_digest IS NULL) AND (body_size IS NULL) AND (body_key IS NULL)) OR ((body_digest IS NOT NULL) AND (body_size IS NOT NULL) AND (body_key IS NOT NULL) AND (body_size >= 0)))
+      native_helm_publications_chart_yaml_check: ((octet_length(chart_yaml) > 0) OR ((body_digest IS NOT NULL) AND (octet_length(chart_yaml) = 0)))
+      native_helm_publications_check: (((provenance_size = 0) AND (provenance_digest = ''::text) AND (provenance_key = ''::text)) OR ((provenance_size > 0) AND (provenance_digest ~ '^sha256:[0-9a-f]{64}$'::text) AND (provenance_key <> ''::text)))
+      native_helm_publications_digest_check: (digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_helm_publications_governance_version_check: (governance_version > 0)
+      native_helm_publications_provenance_size_check: (provenance_size >= 0)
+      native_helm_publications_size_check: (size > 0)
   native_helm_replication_items:
     columns:
       attempts: int32
@@ -964,6 +1644,27 @@ tables:
     foreignKeys:
       - job_id -> native_helm_replication_jobs(id)
       - target_session_id -> native_helm_publication_sessions(id)
+    defaults:
+      attempts: "0"
+      code: ''''''
+      provenance_digest: ''''''
+      provenance_size: "0"
+      result: ''''''
+    indexes:
+      - target_session_id
+    checks:
+      native_helm_replication_items_attempts_check: (attempts >= 0)
+      native_helm_replication_items_check: (((provenance_size = 0) AND (provenance_digest = ''::text)) OR ((provenance_size > 0) AND (provenance_digest ~ '^sha256:[0-9a-f]{64}$'::text)))
+      native_helm_replication_items_check1: ((state = ANY (ARRAY['succeeded'::text, 'failed'::text])) = (completed_at IS NOT NULL))
+      native_helm_replication_items_check2: ((state <> 'succeeded'::text) OR ((target_session_id IS NOT NULL) AND (result <> ''::text)))
+      native_helm_replication_items_digest_check: (digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_helm_replication_items_item_index_check: ((item_index >= 0) AND (item_index <= 99))
+      native_helm_replication_items_name_check: ((length(name) >= 1) AND (length(name) <= 63) AND (name ~ '^[a-z0-9][a-z0-9-]*$'::text))
+      native_helm_replication_items_provenance_size_check: ((provenance_size >= 0) AND (provenance_size <= 1048576))
+      native_helm_replication_items_result_check: (result = ANY (ARRAY[''::text, 'published'::text, 'already_present'::text]))
+      native_helm_replication_items_size_check: ((size >= 1) AND (size <= 67108864))
+      native_helm_replication_items_source_governance_version_check: (source_governance_version > 0)
+      native_helm_replication_items_state_check: (state = ANY (ARRAY['pending'::text, 'running'::text, 'succeeded'::text, 'failed'::text]))
   native_helm_replication_jobs:
     columns:
       actor: text
@@ -985,6 +1686,28 @@ tables:
     foreignKeys:
       - source_repository_id -> hosted_repositories(id)
       - target_repository_id -> hosted_repositories(id)
+    defaults:
+      created_at: now()
+      credential_id: ''''''
+      lease_fence: "0"
+      lease_owner: ''''''
+      lease_token: ''''''
+      updated_at: now()
+      version: "1"
+    indexes:
+      - source_repository_id
+      - target_repository_id
+    special:
+      native_helm_replication_claim: USING btree (created_at, id) WHERE (state = ANY (ARRAY['queued'::text, 'running'::text]))
+    checks:
+      native_helm_replication_jobs_actor_check: ((length(actor) >= 1) AND (length(actor) <= 512))
+      native_helm_replication_jobs_actor_kind_check: (actor_kind = ANY (ARRAY['static_admin'::text, 'static_resolver'::text, 'local_session'::text, 'oidc'::text, 'api_key'::text, 'service_account_credential'::text]))
+      native_helm_replication_jobs_check: (source_repository_id <> target_repository_id)
+      native_helm_replication_jobs_check1: ((state = 'running'::text) = ((lease_owner <> ''::text) AND (lease_token <> ''::text) AND (lease_until IS NOT NULL)))
+      native_helm_replication_jobs_lease_fence_check: (lease_fence >= 0)
+      native_helm_replication_jobs_plan_digest_check: (plan_digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_helm_replication_jobs_state_check: (state = ANY (ARRAY['queued'::text, 'running'::text, 'succeeded'::text, 'failed'::text]))
+      native_helm_replication_jobs_version_check: (version > 0)
   native_helm_replication_retries:
     columns:
       created_at: timestamp
@@ -994,6 +1717,11 @@ tables:
     primaryKey: [job_id, request_key]
     foreignKeys:
       - job_id -> native_helm_replication_jobs(id)
+    defaults:
+      created_at: now()
+    checks:
+      native_helm_replication_retries_payload_digest_check: (payload_digest ~ '^[0-9a-f]{64}$'::text)
+      native_helm_replication_retries_request_key_check: ((length(request_key) >= 1) AND (length(request_key) <= 200))
   native_helm_source_documents:
     columns:
       body: bytes
@@ -1010,6 +1738,15 @@ tables:
     primaryKey: [repository_id]
     foreignKeys:
       - repository_id -> hosted_repositories(id)
+    defaults:
+      etag: ''''''
+      last_modified: ''''''
+    special:
+      native_helm_source_documents_body_key_idx: USING btree (body_key) WHERE (body_key IS NOT NULL)
+    checks:
+      native_helm_source_documents_body_check: (((octet_length(body) >= 1) AND (octet_length(body) <= 1048576)) OR ((body_digest IS NOT NULL) AND (octet_length(body) = 0)))
+      native_helm_source_documents_body_ref_check: (((body_digest IS NULL) AND (body_size IS NULL) AND (body_key IS NULL)) OR ((body_digest IS NOT NULL) AND (body_size IS NOT NULL) AND (body_key IS NOT NULL) AND (body_size >= 0)))
+      native_helm_source_documents_digest_check: (digest ~ '^sha256:[0-9a-f]{64}$'::text)
   native_helm_source_snapshots:
     columns:
       created_at: timestamp
@@ -1019,6 +1756,13 @@ tables:
       view_id: uuid
       view_version: text
     primaryKey: [id]
+    defaults:
+      created_at: now()
+    indexes:
+      - view_id
+    checks:
+      native_helm_source_snapshots_digest_check: (digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_helm_source_snapshots_entries_json_check: (octet_length((entries_json)::text) <= 8388608)
   native_maven_artifacts:
     columns:
       build_number: int32
@@ -1032,9 +1776,23 @@ tables:
       source_timestamp: text
       state: text
     primaryKey: [id]
-    unique: [[build_number, coordinate, repository_id]]
+    unique: [[repository_id, coordinate, build_number]]
     foreignKeys:
       - repository_id -> hosted_repositories(id)
+    defaults:
+      build_number: "0"
+      created_at: now()
+      publisher: ''''''
+      source_build_number: "0"
+      source_timestamp: ''''''
+    special:
+      native_maven_artifacts_digest_search_idx: USING btree (repository_id, digest, coordinate, build_number) WHERE (state = 'visible'::text)
+      native_maven_artifacts_visible_coordinate_idx: USING btree (repository_id, coordinate, build_number) WHERE (state = 'visible'::text)
+      native_maven_artifacts_visible_coordinate_pattern_idx: USING btree (repository_id, coordinate text_pattern_ops, build_number) WHERE (state = 'visible'::text)
+      native_maven_artifacts_visible_coordinate_trgm_idx: USING gin (coordinate gin_trgm_ops) WITH (fastupdate='on', gin_pending_list_limit='1024') WHERE (state = 'visible'::text)
+      native_maven_source_snapshot_identity: unique USING btree (repository_id, coordinate, source_timestamp, source_build_number) WHERE (source_timestamp <> ''::text)
+    checks:
+      native_maven_artifacts_state_check: (state = ANY (ARRAY['visible'::text, 'deleted'::text]))
   native_maven_assets:
     columns:
       digest: text
@@ -1045,6 +1803,10 @@ tables:
     primaryKey: [repository_id, path]
     foreignKeys:
       - repository_id -> hosted_repositories(id)
+    indexes:
+      - digest
+    checks:
+      native_maven_assets_size_check: (size >= 0)
   native_maven_commit_idempotency:
     columns:
       expires_at: timestamp
@@ -1054,6 +1816,10 @@ tables:
     primaryKey: [session_id]
     foreignKeys:
       - session_id -> native_maven_publish_sessions(id)
+    indexes:
+      - expires_at
+    checks:
+      native_maven_commit_idempotency_key_check: ((char_length(key) >= 1) AND (char_length(key) <= 128))
   native_maven_object_intents:
     columns:
       claimed_at: timestamp?
@@ -1066,7 +1832,16 @@ tables:
       size: int64
     primaryKey: [object_key]
     foreignKeys:
-      - session_id -> native_maven_publish_sessions(id)
+      - session_id -> native_maven_publish_sessions(id) on delete cascade
+    defaults:
+      created_at: now()
+    indexes:
+      - session_id
+    special:
+      native_maven_object_intents_collect_idx: USING btree (created_at) WHERE (claimed_at IS NULL)
+      native_maven_object_intents_deleted_at_idx: USING btree (deleted_at) WHERE (deleted_at IS NOT NULL)
+    checks:
+      native_maven_object_intents_size_check: (size >= 0)
   native_maven_object_references:
     columns:
       created_at: timestamp
@@ -1074,8 +1849,12 @@ tables:
       repository_id: uuid
     primaryKey: [object_key]
     foreignKeys:
-      - object_key -> native_maven_object_intents(object_key)
+      - object_key -> native_maven_object_intents(object_key) on delete cascade
       - repository_id -> hosted_repositories(id)
+    defaults:
+      created_at: now()
+    indexes:
+      - repository_id
   native_maven_publish_idempotency:
     columns:
       actor: text
@@ -1087,6 +1866,11 @@ tables:
     primaryKey: [actor, target, key]
     foreignKeys:
       - session_id -> native_maven_publish_sessions(id)
+    indexes:
+      - expires_at
+      - session_id
+    checks:
+      native_maven_publish_idempotency_key_check: ((char_length(key) >= 1) AND (char_length(key) <= 128))
   native_maven_publish_sessions:
     columns:
       client_build_number: int32
@@ -1102,6 +1886,18 @@ tables:
     primaryKey: [id]
     foreignKeys:
       - repository_id -> hosted_repositories(id)
+    defaults:
+      client_build_number: "0"
+      client_timestamp: ''''''
+    indexes:
+      - repository_id
+    special:
+      native_maven_open_publisher_coordinate_idx: unique USING btree (repository_id, coordinate, publisher) WHERE ((state = 'open'::text) AND (client_timestamp = ''::text))
+      native_maven_publish_sessions_committed_idx: USING btree (repository_id, coordinate, expires_at DESC) WHERE (state = 'committed'::text)
+      native_maven_snapshot_client_receipt_idx: unique USING btree (repository_id, coordinate, publisher, client_timestamp, client_build_number) WHERE (client_timestamp <> ''::text)
+    checks:
+      native_maven_publish_sessions_client_build_number_check: (client_build_number >= 0)
+      native_maven_publish_sessions_state_check: (state = ANY (ARRAY['open'::text, 'committed'::text, 'aborted'::text, 'expired'::text]))
   native_maven_publish_uploads:
     columns:
       object_key: text
@@ -1109,7 +1905,7 @@ tables:
       session_id: uuid
     primaryKey: [session_id, object_name]
     foreignKeys:
-      - session_id -> native_maven_publish_sessions(id)
+      - session_id -> native_maven_publish_sessions(id) on delete cascade
   native_maven_snapshot_imports:
     columns:
       actor: text
@@ -1134,6 +1930,18 @@ tables:
     foreignKeys:
       - repository_id -> hosted_repositories(id)
       - session_id -> native_maven_publish_sessions(id)
+    defaults:
+      created_at: now()
+      current_aliases: '''{}'''
+      current_build_number: "0"
+      takeover_actor: ''''''
+      takeover_key: ''''''
+    indexes:
+      - session_id
+    checks:
+      native_maven_snapshot_imports_current_build_number_check: (current_build_number >= 0)
+      native_maven_snapshot_imports_state_check: (state = ANY (ARRAY['staged'::text, 'committed'::text]))
+      native_maven_takeover_receipt_consistent: (((taken_over_at IS NULL) AND (takeover_key = ''::text) AND (takeover_actor = ''::text) AND (current_build_number = 0)) OR ((taken_over_at IS NOT NULL) AND (state = 'committed'::text) AND (takeover_key <> ''::text) AND (takeover_actor <> ''::text)))
   native_npm_packages:
     columns:
       created_at: timestamp
@@ -1152,6 +1960,23 @@ tables:
     primaryKey: [repository_id, name]
     foreignKeys:
       - repository_id -> hosted_repositories(id)
+    defaults:
+      created_at: now()
+      dist_tags: '''{}'''
+      negative: "false"
+      revision: "1"
+      source_endpoint: ''''''
+      source_version: ''''''
+      updated_at: now()
+      upstream_etag: ''''''
+      upstream_modified: ''''''
+    special:
+      native_npm_packages_name_idx: USING btree (repository_id, name text_pattern_ops)
+      native_npm_packages_name_trgm_idx: USING gin (name gin_trgm_ops) WITH (fastupdate='on', gin_pending_list_limit='1024') WHERE (NOT negative)
+      native_npm_packages_proxy_expiry_idx: USING btree (repository_id, metadata_expires_at, negative_expires_at) WHERE (source_endpoint <> ''::text)
+    checks:
+      native_npm_packages_dist_tags_check: (jsonb_typeof(dist_tags) = 'object'::text)
+      native_npm_packages_revision_check: (revision > 0)
   native_npm_versions:
     columns:
       body_digest: text?
@@ -1177,9 +2002,35 @@ tables:
       upstream_tarball: text
       version: text
     primaryKey: [repository_id, package_name, version]
-    unique: [[package_name, repository_id, tarball_name]]
+    unique: [[repository_id, package_name, tarball_name]]
     foreignKeys:
-      - package_name,repository_id -> native_npm_packages(name,repository_id)
+      - package_name,repository_id -> native_npm_packages(name,repository_id) on delete cascade
+    defaults:
+      created_at: now()
+      deprecated: ''''''
+      digest: ''''''
+      integrity: ''''''
+      object_key: ''''''
+      publisher: ''''''
+      shasum: ''''''
+      size: "0"
+      state: '''visible'''
+      upstream_tarball: ''''''
+    special:
+      native_npm_versions_body_key_idx: USING btree (body_key) WHERE (body_key IS NOT NULL)
+      native_npm_versions_digest_idx: USING btree (repository_id, digest, package_name, version) WHERE (digest <> ''::text)
+      native_npm_versions_object_key_idx: USING btree (object_key) WHERE (state = 'visible'::text)
+      native_npm_versions_reclaim_idx: USING btree (deleted_at, object_key) WHERE ((state = 'deleted'::text) AND (collected_at IS NULL) AND (object_key <> ''::text))
+      native_npm_versions_visible_name_trgm_idx: USING gin (package_name gin_trgm_ops) WITH (fastupdate='on', gin_pending_list_limit='1024') WHERE (state = 'visible'::text)
+    checks:
+      native_npm_versions_body_ref_check: (((body_digest IS NULL) AND (body_size IS NULL) AND (body_key IS NULL)) OR ((body_digest IS NOT NULL) AND (body_size IS NOT NULL) AND (body_key IS NOT NULL) AND (body_size >= 0)))
+      native_npm_versions_cached_object_check: (((object_key = ''::text) AND (digest = ''::text) AND (size = 0) AND (cached_at IS NULL)) OR ((object_key <> ''::text) AND (digest <> ''::text) AND (size > 0) AND (cached_at IS NOT NULL)))
+      native_npm_versions_digest_check: ((digest = ''::text) OR (digest ~ '^sha256:[0-9a-f]{64}$'::text))
+      native_npm_versions_integrity_check: ((integrity = ''::text) OR (integrity ~ '^sha512-[A-Za-z0-9+/]+={0,2}$'::text))
+      native_npm_versions_manifest_check: (jsonb_typeof(manifest) = 'object'::text)
+      native_npm_versions_shasum_check: ((shasum = ''::text) OR (shasum ~ '^[0-9a-f]{40}$'::text))
+      native_npm_versions_size_check: (size >= 0)
+      native_npm_versions_state_check: (state = ANY (ARRAY['visible'::text, 'deleted'::text]))
   native_nuget_group_authorities:
     columns:
       created_at: timestamp
@@ -1192,8 +2043,19 @@ tables:
       version: text
     primaryKey: [group_id, package_id, version]
     foreignKeys:
-      - group_id -> hosted_groups(id)
+      - group_id -> hosted_groups(id) on delete cascade
       - repository_id -> hosted_repositories(id)
+    defaults:
+      created_at: now()
+    indexes:
+      - repository_id
+    checks:
+      native_nuget_group_authorities_check: ((digest = ''::text) = (size = 0))
+      native_nuget_group_authorities_digest_check: ((digest = ''::text) OR (digest ~ '^sha256:[0-9a-f]{64}$'::text))
+      native_nuget_group_authorities_package_id_check: ((length(package_id) >= 1) AND (length(package_id) <= 100) AND (package_id ~ '^[a-z0-9_]+([.-][a-z0-9_]+)*$'::text))
+      native_nuget_group_authorities_repository_version_check: (repository_version ~ '^[1-9][0-9]*$'::text)
+      native_nuget_group_authorities_size_check: (size >= 0)
+      native_nuget_group_authorities_version_check: ((length(version) >= 1) AND (length(version) <= 256) AND (version = lower(version)))
   native_nuget_publication_sessions:
     columns:
       actor: text
@@ -1217,7 +2079,29 @@ tables:
     primaryKey: [id]
     unique: [[object_key]]
     foreignKeys:
-      - repository_id -> hosted_repositories(id)
+      - repository_id -> hosted_repositories(id) on delete cascade
+    defaults:
+      created_at: now()
+      metadata_json: '''{}'''
+      nuspec: '''\x'''
+      registration_url: ''''''
+      source_url: ''''''
+      source_version: ''''''
+    indexes:
+      - repository_id
+    special:
+      native_nuget_active_identity: unique USING btree (repository_id, package_id, version, source_version) WHERE (state = ANY (ARRAY['reserved'::text, 'staged'::text, 'committed'::text]))
+      native_nuget_expiry: USING btree (expires_at, id) WHERE (state = ANY (ARRAY['reserved'::text, 'staged'::text]))
+    checks:
+      native_nuget_publication_sessions_actor_check: (actor <> ''::text)
+      native_nuget_publication_sessions_check: ((collected_at IS NULL) OR (state = 'expired'::text))
+      native_nuget_publication_sessions_check1: ((state <> ALL (ARRAY['staged'::text, 'committed'::text])) OR (octet_length(nuspec) > 0))
+      native_nuget_publication_sessions_check2: ((state = 'committed'::text) = (committed_at IS NOT NULL))
+      native_nuget_publication_sessions_digest_check: (digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_nuget_publication_sessions_package_id_check: ((length(package_id) >= 1) AND (length(package_id) <= 100) AND (package_id ~ '^[a-z0-9_]+([.-][a-z0-9_]+)*$'::text))
+      native_nuget_publication_sessions_size_check: ((size > 0) AND (size <= 268435456))
+      native_nuget_publication_sessions_state_check: (state = ANY (ARRAY['reserved'::text, 'staged'::text, 'committed'::text, 'expired'::text]))
+      native_nuget_publication_sessions_version_check: ((length(version) >= 1) AND (length(version) <= 256) AND (version = lower(version)))
   native_nuget_publications:
     columns:
       body_digest: text?
@@ -1247,8 +2131,28 @@ tables:
     primaryKey: [repository_id, package_id, version, source_version]
     unique: [[session_id]]
     foreignKeys:
-      - repository_id -> hosted_repositories(id)
+      - repository_id -> hosted_repositories(id) on delete cascade
       - session_id -> native_nuget_publication_sessions(id)
+    defaults:
+      governance_reason: ''''''
+      governance_updated_by: ''''''
+      governance_version: "1"
+      listed: "true"
+      quarantined: "false"
+      registration_url: ''''''
+      source_url: ''''''
+      source_version: ''''''
+      tombstoned: "false"
+    special:
+      native_nuget_publications_body_key_idx: USING btree (body_key) WHERE (body_key IS NOT NULL)
+    checks:
+      native_nuget_publications_body_ref_check: (((body_digest IS NULL) AND (body_size IS NULL) AND (body_key IS NULL)) OR ((body_digest IS NOT NULL) AND (body_size IS NOT NULL) AND (body_key IS NOT NULL) AND (body_size >= 0)))
+      native_nuget_publications_digest_check: (digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_nuget_publications_governance_reason_check: (length(governance_reason) <= 2048)
+      native_nuget_publications_governance_updated_by_check: (length(governance_updated_by) <= 512)
+      native_nuget_publications_governance_version_check: (governance_version > 0)
+      native_nuget_publications_nuspec_check: ((octet_length(nuspec) > 0) OR ((body_digest IS NOT NULL) AND (octet_length(nuspec) = 0)))
+      native_nuget_publications_size_check: (size > 0)
   native_nuget_replication_items:
     columns:
       attempts: int32
@@ -1270,6 +2174,23 @@ tables:
     foreignKeys:
       - job_id -> native_nuget_replication_jobs(id)
       - target_session_id -> native_nuget_publication_sessions(id)
+    defaults:
+      attempts: "0"
+      code: ''''''
+      result: ''''''
+    indexes:
+      - target_session_id
+    checks:
+      native_nuget_replication_items_attempts_check: (attempts >= 0)
+      native_nuget_replication_items_check: ((state = ANY (ARRAY['succeeded'::text, 'failed'::text])) = (completed_at IS NOT NULL))
+      native_nuget_replication_items_check1: ((state <> 'succeeded'::text) OR ((target_session_id IS NOT NULL) AND (result <> ''::text) AND (listed IS NOT NULL)))
+      native_nuget_replication_items_digest_check: (digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_nuget_replication_items_item_index_check: ((item_index >= 0) AND (item_index <= 99))
+      native_nuget_replication_items_package_id_check: ((length(package_id) >= 1) AND (length(package_id) <= 100) AND (package_id ~ '^[a-z0-9_]+([.-][a-z0-9_]+)*$'::text))
+      native_nuget_replication_items_result_check: (result = ANY (ARRAY[''::text, 'published'::text, 'already_present'::text]))
+      native_nuget_replication_items_size_check: ((size >= 1) AND (size <= 268435456))
+      native_nuget_replication_items_source_governance_version_check: (source_governance_version > 0)
+      native_nuget_replication_items_state_check: (state = ANY (ARRAY['pending'::text, 'running'::text, 'succeeded'::text, 'failed'::text]))
   native_nuget_replication_jobs:
     columns:
       actor: text
@@ -1291,6 +2212,28 @@ tables:
     foreignKeys:
       - source_repository_id -> hosted_repositories(id)
       - target_repository_id -> hosted_repositories(id)
+    defaults:
+      created_at: now()
+      credential_id: ''''''
+      lease_fence: "0"
+      lease_owner: ''''''
+      lease_token: ''''''
+      updated_at: now()
+      version: "1"
+    indexes:
+      - source_repository_id
+      - target_repository_id
+    special:
+      native_nuget_replication_claim: USING btree (created_at, id) WHERE (state = ANY (ARRAY['queued'::text, 'running'::text]))
+    checks:
+      native_nuget_replication_jobs_actor_check: ((length(actor) >= 1) AND (length(actor) <= 512))
+      native_nuget_replication_jobs_actor_kind_check: (actor_kind = ANY (ARRAY['static_admin'::text, 'static_resolver'::text, 'local_session'::text, 'oidc'::text, 'api_key'::text, 'service_account_credential'::text]))
+      native_nuget_replication_jobs_check: (source_repository_id <> target_repository_id)
+      native_nuget_replication_jobs_check1: ((state = 'running'::text) = ((lease_owner <> ''::text) AND (lease_token <> ''::text) AND (lease_until IS NOT NULL)))
+      native_nuget_replication_jobs_lease_fence_check: (lease_fence >= 0)
+      native_nuget_replication_jobs_plan_digest_check: (plan_digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_nuget_replication_jobs_state_check: (state = ANY (ARRAY['queued'::text, 'running'::text, 'succeeded'::text, 'failed'::text]))
+      native_nuget_replication_jobs_version_check: (version > 0)
   native_nuget_replication_retries:
     columns:
       created_at: timestamp
@@ -1300,6 +2243,11 @@ tables:
     primaryKey: [job_id, request_key]
     foreignKeys:
       - job_id -> native_nuget_replication_jobs(id)
+    defaults:
+      created_at: now()
+    checks:
+      native_nuget_replication_retries_payload_digest_check: (payload_digest ~ '^[0-9a-f]{64}$'::text)
+      native_nuget_replication_retries_request_key_check: ((length(request_key) >= 1) AND (length(request_key) <= 200))
   native_nuget_source_documents:
     columns:
       body: bytes
@@ -1317,7 +2265,18 @@ tables:
       url: text
     primaryKey: [repository_id, source_version, url]
     foreignKeys:
-      - repository_id -> hosted_repositories(id)
+      - repository_id -> hosted_repositories(id) on delete cascade
+    special:
+      native_nuget_source_documents_body_key_idx: USING btree (body_key) WHERE (body_key IS NOT NULL)
+    checks:
+      native_nuget_source_documents_body_check: (octet_length(body) <= 8388608)
+      native_nuget_source_documents_body_ref_check: (((body_digest IS NULL) AND (body_size IS NULL) AND (body_key IS NULL)) OR ((body_digest IS NOT NULL) AND (body_size IS NOT NULL) AND (body_key IS NOT NULL) AND (body_size >= 0)))
+      native_nuget_source_documents_check: (expires_at > fetched_at)
+      native_nuget_source_documents_check1: ((status = 200) OR (octet_length(body) = 0))
+      native_nuget_source_documents_digest_check: (digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_nuget_source_documents_source_version_check: (source_version ~ '^[1-9][0-9]*$'::text)
+      native_nuget_source_documents_status_check: (status = ANY (ARRAY[200, 404]))
+      native_nuget_source_documents_url_check: ((length(url) >= 1) AND (length(url) <= 4096))
   native_oci_blobs:
     columns:
       created_at: timestamp
@@ -1326,6 +2285,11 @@ tables:
       size: int64
     primaryKey: [digest]
     unique: [[object_key]]
+    defaults:
+      created_at: now()
+    checks:
+      native_oci_blobs_digest_check: (digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_oci_blobs_size_check: (size >= 0)
   native_oci_manifest_tombstones:
     columns:
       artifact_type: text
@@ -1341,6 +2305,13 @@ tables:
     primaryKey: [repository_id, name, digest]
     foreignKeys:
       - repository_id -> hosted_repositories(id)
+    defaults:
+      artifact_type: ''''''
+      deleted_at: now()
+      tags: '''[]'''
+    checks:
+      native_oci_manifest_tombstones_digest_check: (digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_oci_manifest_tombstones_size_check: (size >= 0)
   native_oci_manifests:
     columns:
       artifact_type: text
@@ -1356,6 +2327,19 @@ tables:
     unique: [[object_key]]
     foreignKeys:
       - repository_id -> hosted_repositories(id)
+    defaults:
+      artifact_type: ''''''
+      created_at: now()
+    indexes:
+      - repository_id,digest,name,created_at desc
+    special:
+      native_oci_manifests_created_at_brin_idx: USING brin (created_at) WITH (pages_per_range='128')
+      native_oci_manifests_name_trgm_idx: USING gin (name gin_trgm_ops) WITH (fastupdate='on', gin_pending_list_limit='1024')
+      native_oci_manifests_referrers_idx: USING btree (repository_id, name, subject_digest, digest) WHERE (subject_digest IS NOT NULL)
+      native_oci_manifests_repository_name_pattern_idx: USING btree (repository_id, name text_pattern_ops)
+    checks:
+      native_oci_manifests_digest_check: (digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_oci_manifests_size_check: (size >= 0)
   native_oci_object_intents:
     columns:
       claimed_at: timestamp?
@@ -1368,6 +2352,16 @@ tables:
     primaryKey: [object_key]
     foreignKeys:
       - repository_id -> hosted_repositories(id)
+    defaults:
+      created_at: now()
+    indexes:
+      - repository_id
+    special:
+      native_oci_object_intents_reclaimable_idx: USING btree (repository_id, created_at) WHERE ((repository_id IS NOT NULL) AND (claimed_at IS NULL) AND (collected_at IS NULL))
+      native_oci_object_intents_unclaimed_idx: USING btree (created_at) WHERE ((claimed_at IS NULL) AND (collected_at IS NULL))
+    checks:
+      native_oci_object_intents_digest_check: (digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_oci_object_intents_size_check: (size >= 0)
   native_oci_repository_blobs:
     columns:
       digest: text
@@ -1376,6 +2370,8 @@ tables:
     foreignKeys:
       - digest -> native_oci_blobs(digest)
       - repository_id -> hosted_repositories(id)
+    indexes:
+      - digest
   native_oci_tags:
     columns:
       digest: text
@@ -1386,6 +2382,10 @@ tables:
     primaryKey: [repository_id, name, tag]
     foreignKeys:
       - digest,name,repository_id -> native_oci_manifests(digest,name,repository_id)
+    defaults:
+      updated_at: now()
+    indexes:
+      - repository_id,digest,name
   native_oci_uploads:
     columns:
       byte_offset: int64
@@ -1400,6 +2400,15 @@ tables:
     unique: [[object_key]]
     foreignKeys:
       - repository_id -> hosted_repositories(id)
+    defaults:
+      byte_offset: "0"
+    indexes:
+      - repository_id
+    special:
+      native_oci_uploads_expiry_idx: USING btree (expires_at) WHERE (state = 'open'::text)
+    checks:
+      native_oci_uploads_byte_offset_check: (byte_offset >= 0)
+      native_oci_uploads_state_check: (state = ANY (ARRAY['open'::text, 'completed'::text, 'expired'::text]))
   native_pypi_files:
     columns:
       cached_at: timestamp?
@@ -1426,6 +2435,34 @@ tables:
     primaryKey: [repository_id, filename]
     foreignKeys:
       - repository_id -> hosted_repositories(id)
+    defaults:
+      created_at: now()
+      file_type: ''''''
+      object_key: ''''''
+      publisher: ''''''
+      python_version: ''''''
+      requires_python: ''''''
+      size: "0"
+      source_url: ''''''
+      source_version: ''''''
+      state: '''visible'''
+      yank_reason: ''''''
+      yank_revision: "1"
+      yanked: "false"
+    special:
+      native_pypi_files_digest_idx: USING btree (repository_id, digest, project, version) WHERE (state = 'visible'::text)
+      native_pypi_files_project_idx: USING btree (repository_id, project text_pattern_ops, created_at DESC) WHERE (state = 'visible'::text)
+      native_pypi_files_reclaim_idx: USING btree (deleted_at, object_key) WHERE ((state = 'deleted'::text) AND (collected_at IS NULL) AND (object_key <> ''::text))
+      native_pypi_files_visible_project_trgm_idx: USING gin (project gin_trgm_ops) WITH (fastupdate='on', gin_pending_list_limit='1024') WHERE (state = 'visible'::text)
+    checks:
+      native_pypi_files_check: (((object_key = ''::text) AND (size = 0) AND (cached_at IS NULL)) OR ((object_key <> ''::text) AND (size > 0) AND (cached_at IS NOT NULL)))
+      native_pypi_files_digest_check: (digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_pypi_files_project_check: (project ~ '^[a-z0-9]([a-z0-9-]{0,253}[a-z0-9])?$'::text)
+      native_pypi_files_size_check: (size >= 0)
+      native_pypi_files_state_check: (state = ANY (ARRAY['visible'::text, 'deleted'::text]))
+      native_pypi_files_yank_revision_check: (yank_revision > 0)
+      native_pypi_unyanked_reason: (yanked OR (yank_reason = ''::text))
+      native_pypi_yank_reason_size: (octet_length(yank_reason) <= 1024)
   native_raw_asset_tombstones:
     columns:
       content_type: text
@@ -1436,6 +2473,10 @@ tables:
     primaryKey: [repository_id, path]
     foreignKeys:
       - repository_id -> hosted_repositories(id)
+    defaults:
+      deleted_at: now()
+    indexes:
+      - deleted_at
   native_raw_assets:
     columns:
       content_type: text
@@ -1447,6 +2488,14 @@ tables:
     foreignKeys:
       - digest -> native_raw_objects(digest)
       - repository_id -> hosted_repositories(id)
+    defaults:
+      updated_at: now()
+    indexes:
+      - digest
+      - repository_id,digest,path
+    special:
+      native_raw_assets_path_trgm_idx: USING gin (path gin_trgm_ops) WITH (fastupdate='on', gin_pending_list_limit='1024')
+      native_raw_assets_repository_path_pattern_idx: USING btree (repository_id, path text_pattern_ops)
   native_raw_objects:
     columns:
       collected_at: timestamp?
@@ -1459,6 +2508,15 @@ tables:
     unique: [[object_key]]
     foreignKeys:
       - repository_id -> hosted_repositories(id)
+    defaults:
+      created_at: now()
+    indexes:
+      - repository_id
+    special:
+      native_raw_objects_reclaimable_idx: USING btree (repository_id, created_at) WHERE ((repository_id IS NOT NULL) AND (collected_at IS NULL))
+    checks:
+      native_raw_objects_digest_check: (digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_raw_objects_size_check: (size >= 0)
   native_raw_uploads:
     columns:
       byte_offset: int64
@@ -1473,6 +2531,16 @@ tables:
     unique: [[object_key]]
     foreignKeys:
       - repository_id -> hosted_repositories(id)
+    defaults:
+      byte_offset: "0"
+    indexes:
+      - repository_id
+    special:
+      native_raw_uploads_open_idx: USING btree (repository_id, expires_at) WHERE (state = 'open'::text)
+      native_raw_uploads_reclaim_idx: USING btree (expires_at, id) WHERE ((state = 'open'::text) OR ((state = ANY (ARRAY['completed'::text, 'cancelled'::text])) AND (collected_at IS NULL)))
+    checks:
+      native_raw_uploads_byte_offset_check: (byte_offset >= 0)
+      native_raw_uploads_state_check: (state = ANY (ARRAY['open'::text, 'completed'::text, 'cancelled'::text]))
   native_raw_version_properties:
     columns:
       prop_key: text
@@ -1481,7 +2549,9 @@ tables:
       version_id: uuid
     primaryKey: [version_id, prop_key]
     foreignKeys:
-      - version_id -> native_raw_versions(id)
+      - version_id -> native_raw_versions(id) on delete cascade
+    indexes:
+      - repository_id,prop_key,prop_value
   native_raw_versions:
     columns:
       created_at: timestamp
@@ -1497,16 +2567,33 @@ tables:
       updated_at: timestamp
       version: text
     primaryKey: [id]
-    unique: [[name, repository_id, version]]
+    unique: [[repository_id, name, version]]
     foreignKeys:
       - repository_id -> hosted_repositories(id)
+    defaults:
+      created_at: now()
+      created_by: ''''''
+      file_count: "0"
+      size_bytes: "0"
+      state: '''open'''
+      updated_at: now()
+    indexes:
+      - repository_id,name,sealed_at desc,id desc
+      - repository_id,state,sealed_at
+      - state,created_at
+      - state,updated_at
+    checks:
+      native_raw_versions_counts_check: ((file_count >= 0) AND (size_bytes >= 0))
+      native_raw_versions_state_check: (state = ANY (ARRAY['open'::text, 'sealed'::text, 'tombstoned'::text]))
   native_rubygems_quotas:
     columns:
       quota_bytes: int64
       repository_id: uuid
     primaryKey: [repository_id]
     foreignKeys:
-      - repository_id -> hosted_repositories(id)
+      - repository_id -> hosted_repositories(id) on delete cascade
+    checks:
+      native_rubygems_quotas_quota_bytes_check: (quota_bytes >= 0)
   native_rubygems_replication_items:
     columns:
       attempts: int32
@@ -1525,10 +2612,30 @@ tables:
       target_session_id: uuid?
       version: text
     primaryKey: [job_id, item_index]
-    unique: [[canonical_version, job_id, name, platform]]
+    unique: [[job_id, name, canonical_version, platform]]
     foreignKeys:
       - job_id -> native_rubygems_replication_jobs(id)
       - target_session_id -> native_rubygems_sessions(id)
+    defaults:
+      attempts: "0"
+      code: ''''''
+      result: ''''''
+    indexes:
+      - target_session_id
+    checks:
+      native_rubygems_replication_ite_source_governance_version_check: (source_governance_version > 0)
+      native_rubygems_replication_items_attempts_check: (attempts >= 0)
+      native_rubygems_replication_items_check: ((state = ANY (ARRAY['succeeded'::text, 'failed'::text])) = (completed_at IS NOT NULL))
+      native_rubygems_replication_items_check1: ((state <> 'succeeded'::text) OR ((target_session_id IS NOT NULL) AND (result <> ''::text)))
+      native_rubygems_replication_items_code_check: (code = ANY (ARRAY[''::text, 'access_denied'::text, 'source_changed'::text, 'target_conflict'::text, 'identity_conflict'::text, 'quota_exceeded'::text, 'transfer_failed'::text]))
+      native_rubygems_replication_items_digest_check: (digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_rubygems_replication_items_item_index_check: ((item_index >= 0) AND (item_index <= 99))
+      native_rubygems_replication_items_name_check: ((length(name) >= 1) AND (length(name) <= 128))
+      native_rubygems_replication_items_platform_check: ((length(platform) >= 1) AND (length(platform) <= 128))
+      native_rubygems_replication_items_result_check: (result = ANY (ARRAY[''::text, 'published'::text, 'already_present'::text]))
+      native_rubygems_replication_items_size_check: ((size >= 1) AND (size <= 67108864))
+      native_rubygems_replication_items_state_check: (state = ANY (ARRAY['pending'::text, 'running'::text, 'succeeded'::text, 'failed'::text]))
+      native_rubygems_replication_items_version_check: ((length(version) >= 1) AND (length(version) <= 128))
   native_rubygems_replication_jobs:
     columns:
       actor: text
@@ -1554,6 +2661,32 @@ tables:
     foreignKeys:
       - source_repository_id -> hosted_repositories(id)
       - target_repository_id -> hosted_repositories(id)
+    defaults:
+      created_at: now()
+      credential_id: ''''''
+      lease_fence: "0"
+      lease_owner: ''''''
+      lease_token: ''''''
+      session_id: ''''''
+      session_version: "0"
+      updated_at: now()
+      user_id: ''''''
+      version: "1"
+    indexes:
+      - source_repository_id
+      - target_repository_id
+    special:
+      native_rubygems_replication_claim: USING btree (created_at, id) WHERE (state = ANY (ARRAY['queued'::text, 'running'::text]))
+    checks:
+      native_rubygems_replication_jobs_actor_check: ((length(actor) >= 1) AND (length(actor) <= 256))
+      native_rubygems_replication_jobs_actor_kind_check: (actor_kind = ANY (ARRAY['static_admin'::text, 'static_resolver'::text, 'local_session'::text, 'oidc'::text, 'api_key'::text, 'service_account_credential'::text]))
+      native_rubygems_replication_jobs_check: (source_repository_id <> target_repository_id)
+      native_rubygems_replication_jobs_check1: ((state = 'running'::text) = ((lease_owner <> ''::text) AND (lease_token <> ''::text) AND (lease_until IS NOT NULL)))
+      native_rubygems_replication_jobs_lease_fence_check: (lease_fence >= 0)
+      native_rubygems_replication_jobs_plan_digest_check: (plan_digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_rubygems_replication_jobs_session_version_check: (session_version >= 0)
+      native_rubygems_replication_jobs_state_check: (state = ANY (ARRAY['queued'::text, 'running'::text, 'succeeded'::text, 'failed'::text]))
+      native_rubygems_replication_jobs_version_check: (version > 0)
   native_rubygems_replication_retries:
     columns:
       created_at: timestamp
@@ -1563,6 +2696,11 @@ tables:
     primaryKey: [job_id, request_key]
     foreignKeys:
       - job_id -> native_rubygems_replication_jobs(id)
+    defaults:
+      created_at: now()
+    checks:
+      native_rubygems_replication_retries_payload_digest_check: (payload_digest ~ '^[0-9a-f]{64}$'::text)
+      native_rubygems_replication_retries_request_key_check: ((length(request_key) >= 1) AND (length(request_key) <= 200))
   native_rubygems_sessions:
     columns:
       actor: text
@@ -1592,7 +2730,33 @@ tables:
     primaryKey: [id]
     unique: [[object_key]]
     foreignKeys:
-      - repository_id -> hosted_repositories(id)
+      - repository_id -> hosted_repositories(id) on delete cascade
+    defaults:
+      created_at: now()
+      governance_reason: ''''''
+      governance_updated_by: ''''''
+      governance_version: "1"
+      quarantined: "false"
+      yanked: "false"
+    indexes:
+      - repository_id
+    special:
+      native_rubygems_active_identity: unique USING btree (repository_id, name, canonical_version, platform) WHERE (state = ANY (ARRAY['pending'::text, 'committed'::text]))
+      native_rubygems_expiry: USING btree (expires_at, id) WHERE ((collected_at IS NULL) AND (state <> 'committed'::text))
+      native_rubygems_visible_filename: unique USING btree (repository_id, full_name) WHERE (state = 'committed'::text)
+    checks:
+      native_rubygems_governance_state: (((governance_version = 1) AND (NOT yanked) AND (governance_updated_at IS NULL) AND (governance_updated_by = ''::text) AND (governance_reason = ''::text)) OR ((governance_version > 1) AND (state = 'committed'::text) AND (governance_updated_at IS NOT NULL) AND ((length(governance_updated_by) >= 1) AND (length(governance_updated_by) <= 256)) AND ((length(governance_reason) >= 1) AND (length(governance_reason) <= 2048))))
+      native_rubygems_sessions_actor_check: (actor <> ''::text)
+      native_rubygems_sessions_check: ((state = 'committed'::text) = (committed_at IS NOT NULL))
+      native_rubygems_sessions_check1: ((collected_at IS NULL) OR (state = 'expired'::text))
+      native_rubygems_sessions_digest_check: (digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      native_rubygems_sessions_governance_version_check: (governance_version >= 1)
+      native_rubygems_sessions_metadata_yaml_check: ((octet_length(metadata_yaml) >= 1) AND (octet_length(metadata_yaml) <= 1048576))
+      native_rubygems_sessions_name_check: ((length(name) >= 1) AND (length(name) <= 128))
+      native_rubygems_sessions_platform_check: ((length(platform) >= 1) AND (length(platform) <= 128))
+      native_rubygems_sessions_size_check: ((size >= 1) AND (size <= 67108864))
+      native_rubygems_sessions_state_check: (state = ANY (ARRAY['pending'::text, 'committed'::text, 'expired'::text]))
+      native_rubygems_sessions_version_check: ((length(version) >= 1) AND (length(version) <= 128))
   nexus_migration_batches:
     columns:
       actor: text
@@ -1628,6 +2792,34 @@ tables:
     unique: [[actor, idempotency_key]]
     foreignKeys:
       - schedule_id -> nexus_migration_schedules(id)
+    defaults:
+      actor_kind: ''''''
+      cancel_requested: "false"
+      created_at: now()
+      entry_count: "0"
+      last_error: ''''''
+      lease_epoch: "0"
+      lease_token: ''''''
+      manifest_sha256: ''''''
+      metadata_discovered: "0"
+      pause_requested: "false"
+      scan_complete: "false"
+      source_verification_bytes: "0"
+      state: '''scanning'''
+      updated_at: now()
+      version: "1"
+    indexes:
+      - state,created_at
+    special:
+      nexus_migration_schedule_occurrence: unique USING btree (schedule_id, schedule_epoch) WHERE (schedule_id IS NOT NULL)
+    checks:
+      nexus_migration_batches_actor_kind_check: (actor_kind = ANY (ARRAY[''::text, 'static_admin'::text, 'static_resolver'::text, 'local_session'::text, 'oidc'::text, 'api_key'::text, 'service_account_credential'::text]))
+      nexus_migration_batches_entry_count_check: (entry_count >= 0)
+      nexus_migration_batches_last_scan_failure_check: ((last_scan_failure IS NULL) OR (jsonb_typeof(last_scan_failure) = 'object'::text))
+      nexus_migration_batches_metadata_discovered_check: (metadata_discovered >= 0)
+      nexus_migration_batches_source_verification_bytes_check: (source_verification_bytes >= 0)
+      nexus_migration_batches_state_check: (state = ANY (ARRAY['scanning'::text, 'ready'::text, 'running'::text, 'pausing'::text, 'paused'::text, 'blocked'::text, 'completed'::text, 'failed'::text, 'cancelled'::text]))
+      nexus_migration_batches_total_bytes_check: (total_bytes >= 0)
   nexus_migration_controls:
     columns:
       actor: text
@@ -1658,9 +2850,27 @@ tables:
       verified_bytes: int64
       visible_identities: int64
     primaryKey: [id]
-    unique: [[batch_id, identity, target_repository_id], [batch_id, ordinal]]
+    unique: [[batch_id, ordinal], [batch_id, target_repository_id, identity]]
     foreignKeys:
-      - batch_id -> nexus_migration_batches(id)
+      - batch_id -> nexus_migration_batches(id) on delete cascade
+    defaults:
+      attempts: "0"
+      last_error: ''''''
+      session_id: ''''''
+      transferred_bytes: "0"
+      updated_at: now()
+      verified_bytes: "0"
+      visible_identities: "0"
+    indexes:
+      - updated_at
+    checks:
+      nexus_migration_entries_attempts_check: ((attempts >= 0) AND (attempts <= 3))
+      nexus_migration_entries_format_check: (format = ANY (ARRAY['raw'::text, 'maven'::text, 'oci'::text, 'conan'::text, 'npm'::text, 'pypi'::text]))
+      nexus_migration_entries_ordinal_check: (ordinal >= 0)
+      nexus_migration_entries_state_check: (state = ANY (ARRAY['pending'::text, 'uploaded'::text, 'verified'::text, 'committed'::text, 'skipped'::text, 'conflict'::text, 'failed'::text, 'unsupported'::text, 'source_missing'::text, 'source_deleted'::text]))
+      nexus_migration_entries_transferred_bytes_check: (transferred_bytes >= 0)
+      nexus_migration_entries_verified_bytes_check: (verified_bytes >= 0)
+      nexus_migration_entries_visible_identities_check: (visible_identities >= 0)
   nexus_migration_scan_pages:
     columns:
       batch_id: uuid
@@ -1671,9 +2881,15 @@ tables:
       page_sha256: text
       source_repository: text
     primaryKey: [batch_id, ordinal]
-    unique: [[batch_id, cursor_sha256, source_repository]]
+    unique: [[batch_id, source_repository, cursor_sha256]]
     foreignKeys:
-      - batch_id -> nexus_migration_scans(batch_id)
+      - batch_id -> nexus_migration_scans(batch_id) on delete cascade
+    checks:
+      nexus_migration_scan_pages_cursor_check: (length(cursor) <= 4096)
+      nexus_migration_scan_pages_cursor_sha256_check: (cursor_sha256 ~ '^[0-9a-f]{64}$'::text)
+      nexus_migration_scan_pages_ordinal_check: (ordinal >= 0)
+      nexus_migration_scan_pages_page_check: (jsonb_typeof(page) = 'object'::text)
+      nexus_migration_scan_pages_page_sha256_check: (page_sha256 ~ '^[0-9a-f]{64}$'::text)
   nexus_migration_scan_paths:
     columns:
       batch_id: uuid
@@ -1681,7 +2897,7 @@ tables:
       source_repository: text
     primaryKey: [batch_id, source_repository, source_path]
     foreignKeys:
-      - batch_id -> nexus_migration_scans(batch_id)
+      - batch_id -> nexus_migration_scans(batch_id) on delete cascade
   nexus_migration_scans:
     columns:
       asset_count: int64
@@ -1695,7 +2911,23 @@ tables:
       verified_pages: int64
     primaryKey: [batch_id]
     foreignKeys:
-      - batch_id -> nexus_migration_batches(id)
+      - batch_id -> nexus_migration_batches(id) on delete cascade
+    defaults:
+      asset_count: "0"
+      cursor: ''''''
+      metadata_bytes: "0"
+      page_count: "0"
+      repository_index: "0"
+      verified_pages: "0"
+    checks:
+      nexus_migration_scans_asset_count_check: (asset_count >= 0)
+      nexus_migration_scans_binding_sha256_check: (binding_sha256 ~ '^[0-9a-f]{64}$'::text)
+      nexus_migration_scans_check: ((verified_pages >= 0) AND (verified_pages <= page_count))
+      nexus_migration_scans_cursor_check: (length(cursor) <= 4096)
+      nexus_migration_scans_metadata_bytes_check: (metadata_bytes >= 0)
+      nexus_migration_scans_page_count_check: (page_count >= 0)
+      nexus_migration_scans_repositories_check: (jsonb_typeof(repositories) = 'array'::text)
+      nexus_migration_scans_repository_index_check: (repository_index >= 0)
   nexus_migration_schedule_controls:
     columns:
       actor: text
@@ -1737,6 +2969,25 @@ tables:
     foreignKeys:
       - active_batch_id -> nexus_migration_batches(id)
       - last_batch_id -> nexus_migration_batches(id)
+    defaults:
+      actor_kind: ''''''
+      created_at: now()
+      dispatch_attempts: "0"
+      last_error: ''''''
+      lease_epoch: "0"
+      lease_token: ''''''
+      updated_at: now()
+      version: "1"
+    special:
+      nexus_migration_schedules_due: USING btree (next_run_at) WHERE (state = 'active'::text)
+    checks:
+      nexus_migration_schedules_actor_kind_check: (actor_kind = ANY (ARRAY[''::text, 'static_admin'::text, 'static_resolver'::text, 'local_session'::text, 'oidc'::text, 'api_key'::text, 'service_account_credential'::text]))
+      nexus_migration_schedules_check: ((state = 'stopped'::text) = (next_run_at IS NULL))
+      nexus_migration_schedules_dispatch_attempts_check: ((dispatch_attempts >= 0) AND (dispatch_attempts <= 3))
+      nexus_migration_schedules_interval_seconds_check: ((interval_seconds >= 60) AND (interval_seconds <= 2592000))
+      nexus_migration_schedules_last_error_check: (length(last_error) <= 128)
+      nexus_migration_schedules_state_check: (state = ANY (ARRAY['active'::text, 'waiting_capacity'::text, 'paused'::text, 'blocked'::text, 'stopped'::text]))
+      nexus_migration_schedules_version_check: (version > 0)
   nexus_migration_sources:
     columns:
       base_url: text
@@ -1747,6 +2998,15 @@ tables:
       updated_at: timestamp
       version: int64
     primaryKey: [id]
+    defaults:
+      created_at: now()
+      credential_ciphertext: ''''''
+      updated_at: now()
+      version: "1"
+    checks:
+      nexus_migration_sources_base_url_check: ((base_url ~~ 'https://%'::text) AND (length(base_url) <= 2048))
+      nexus_migration_sources_name_check: ((length(name) >= 1) AND (length(name) <= 128))
+      nexus_migration_sources_version_check: (version > 0)
   object_store_identity:
     columns:
       created_at: timestamp
@@ -1754,6 +3014,13 @@ tables:
       root_id: text
       singleton: bool
     primaryKey: [singleton]
+    defaults:
+      created_at: now()
+      singleton: "true"
+    checks:
+      object_store_identity_driver_check: (driver <> ''::text)
+      object_store_identity_root_id_check: (root_id <> ''::text)
+      object_store_identity_singleton_check: singleton
   oci_bound_objects:
     columns:
       digest: text
@@ -1768,6 +3035,13 @@ tables:
     foreignKeys:
       - image,owner,scope,subject -> oci_subject_bindings(image,owner,scope,subject)
       - source_id -> hosted_repositories(id)
+    indexes:
+      - scope,owner,image,subject
+      - source_id
+    checks:
+      oci_bound_objects_digest_check: (digest ~ '^sha256:[a-f0-9]{64}$'::text)
+      oci_bound_objects_owner_check: (owner ~ '^[a-f0-9]{64}$'::text)
+      oci_bound_objects_source_version_check: (source_version > 0)
   oci_discovery_snapshots:
     columns:
       body_digest: text?
@@ -1780,6 +3054,15 @@ tables:
       owner: text
       payload: json
     primaryKey: [id]
+    defaults:
+      created_at: now()
+    indexes:
+      - owner,expires_at
+    special:
+      oci_discovery_snapshots_body_key_idx: USING btree (body_key) WHERE (body_key IS NOT NULL)
+    checks:
+      oci_discovery_snapshots_body_ref_check: (((body_digest IS NULL) AND (body_size IS NULL) AND (body_key IS NULL)) OR ((body_digest IS NOT NULL) AND (body_size IS NOT NULL) AND (body_key IS NOT NULL) AND (body_size >= 0)))
+      oci_discovery_snapshots_kind_check: (kind = ANY (ARRAY['catalog'::text, 'referrers'::text]))
   oci_group_members:
     columns:
       allowed_hosts: array<text>
@@ -1792,8 +3075,15 @@ tables:
     primaryKey: [group_name, position]
     unique: [[group_name, name]]
     foreignKeys:
-      - group_name -> oci_groups(name)
+      - group_name -> oci_groups(name) on delete cascade
       - repository_id -> hosted_repositories(id)
+    defaults:
+      allowed_hosts: '''[]'''
+    indexes:
+      - repository_id
+    checks:
+      oci_group_members_member_type_check: (member_type = ANY (ARRAY['hosted'::text, 'proxy'::text]))
+      oci_group_members_position_check: ("position" >= 0)
   oci_groups:
     columns:
       anonymous: bool
@@ -1801,6 +3091,10 @@ tables:
       enabled: bool
       name: text
     primaryKey: [name]
+    defaults:
+      anonymous: "false"
+      created_at: now()
+      enabled: "true"
   oci_subject_bindings:
     columns:
       image: text
@@ -1813,12 +3107,24 @@ tables:
     primaryKey: [scope, owner, image, subject]
     foreignKeys:
       - source_id -> hosted_repositories(id)
+    indexes:
+      - source_id
+    checks:
+      oci_subject_bindings_owner_check: (owner ~ '^[a-f0-9]{64}$'::text)
+      oci_subject_bindings_source_version_check: (source_version > 0)
+      oci_subject_bindings_subject_check: (subject ~ '^sha256:[a-f0-9]{64}$'::text)
   public_access_policy:
     columns:
       enabled: bool
       singleton: bool
       version: int64
     primaryKey: [singleton]
+    defaults:
+      enabled: "false"
+      singleton: "true"
+      version: "1"
+    checks:
+      public_access_policy_singleton_check: singleton
   raw_group_members:
     columns:
       allowed_hosts: array<text>
@@ -1831,8 +3137,16 @@ tables:
     primaryKey: [group_name, position]
     unique: [[group_name, name]]
     foreignKeys:
-      - group_name -> raw_groups(name)
+      - group_name -> raw_groups(name) on delete cascade
       - repository_id -> hosted_repositories(id)
+    defaults:
+      allowed_hosts: '''[]'''
+    indexes:
+      - repository_id
+    checks:
+      raw_group_members_member_type_check: (member_type = ANY (ARRAY['hosted'::text, 'proxy'::text]))
+      raw_group_members_position_check: ("position" >= 0)
+      raw_group_proxy_allowlist_required: ((member_type <> 'proxy'::text) OR (cardinality(allowed_hosts) > 0))
   raw_groups:
     columns:
       anonymous: bool
@@ -1841,6 +3155,13 @@ tables:
       enabled: bool
       name: text
     primaryKey: [name]
+    defaults:
+      anonymous: "false"
+      cache_quota_bytes: "1073741824"
+      created_at: now()
+      enabled: "true"
+    checks:
+      raw_groups_cache_quota_bytes_check: (cache_quota_bytes > 0)
   replication_checkpoints:
     columns:
       attempts: int32
@@ -1856,7 +3177,24 @@ tables:
       verified_at: timestamp?
     primaryKey: [plan_id, object_key]
     foreignKeys:
-      - plan_id -> replication_plans(id)
+      - plan_id -> replication_plans(id) on delete cascade
+    defaults:
+      attempts: "0"
+      byte_offset: "0"
+      last_error: ''''''
+      state: '''pending'''
+      updated_at: now()
+    indexes:
+      - plan_id,state,updated_at
+      - updated_at
+    special:
+      replication_checkpoints_updated_at_brin_idx: USING brin (updated_at) WITH (pages_per_range='128')
+    checks:
+      replication_checkpoints_attempts_check: (attempts >= 0)
+      replication_checkpoints_byte_offset_check: (byte_offset >= 0)
+      replication_checkpoints_digest_check: (digest ~ '^sha256:[0-9a-f]{64}$'::text)
+      replication_checkpoints_size_check: (size >= 0)
+      replication_checkpoints_state_check: (state = ANY (ARRAY['pending'::text, 'copying'::text, 'verified'::text, 'failed'::text]))
   replication_plans:
     columns:
       apt_target_suite: text
@@ -1878,24 +3216,53 @@ tables:
       state: text
       target_repository_id: uuid
     primaryKey: [id]
-    unique: [[idempotency_key, target_repository_id]]
+    unique: [[target_repository_id, idempotency_key]]
     foreignKeys:
       - source_repository_id -> hosted_repositories(id)
       - target_repository_id -> hosted_repositories(id)
+    defaults:
+      apt_target_suite: ''''''
+      attempts: "0"
+      coordinate: ''''''
+      created_at: now()
+      digest: ''''''
+      last_error: ''''''
+      max_attempts: "3"
+      next_attempt_at: now()
+      state: '''pending'''
+    indexes:
+      - source_repository_id
+    special:
+      replication_plans_claim_idx: USING btree (created_at) WHERE (state = ANY (ARRAY['pending'::text, 'failed'::text]))
+      replication_plans_retention_idx: USING btree (completed_at) WHERE (state = ANY (ARRAY['completed'::text, 'failed'::text, 'cancelled'::text]))
+      replication_plans_retry_idx: USING btree (next_attempt_at, created_at) WHERE (state = ANY (ARRAY['pending'::text, 'failed'::text]))
+    checks:
+      replication_apt_target_suite_format: ((apt_target_suite = ''::text) OR ((format = 'apt'::text) AND (apt_target_suite ~ '^[a-z0-9][a-z0-9.+-]*$'::text) AND (length(apt_target_suite) <= 128)))
+      replication_plans_artifact_identity_check: (((coordinate = ''::text) AND (digest = ''::text)) OR ((coordinate <> ''::text) AND (digest ~ '^sha256:[a-f0-9]{64}$'::text)))
+      replication_plans_attempts_check: (attempts >= 0)
+      replication_plans_format_check: (format = ANY (ARRAY['maven'::text, 'oci'::text, 'raw'::text, 'conan'::text, 'npm'::text, 'pypi'::text, 'go'::text, 'apt'::text, 'cargo'::text]))
+      replication_plans_max_attempts_check: ((max_attempts >= 1) AND (max_attempts <= 10))
+      replication_plans_state_check: (state = ANY (ARRAY['pending'::text, 'running'::text, 'completed'::text, 'failed'::text, 'cancelled'::text]))
   repository_capacity_quotas:
     columns:
       quota_bytes: int64
       repository_id: uuid
     primaryKey: [repository_id]
     foreignKeys:
-      - repository_id -> hosted_repositories(id)
+      - repository_id -> hosted_repositories(id) on delete cascade
+    defaults:
+      quota_bytes: "0"
+    checks:
+      repository_capacity_quotas_quota_bytes_check: (quota_bytes >= 0)
   repository_grant_sets:
     columns:
       repository_id: uuid
       version: int64
     primaryKey: [repository_id]
     foreignKeys:
-      - repository_id -> hosted_repositories(id)
+      - repository_id -> hosted_repositories(id) on delete cascade
+    defaults:
+      version: "1"
   repository_grants:
     columns:
       principal: text
@@ -1904,7 +3271,11 @@ tables:
       scopes: array<text>
     primaryKey: [repository_id, principal, resource_prefix]
     foreignKeys:
-      - repository_id -> repository_grant_sets(repository_id)
+      - repository_id -> repository_grant_sets(repository_id) on delete cascade
+    defaults:
+      resource_prefix: ''''''
+    special:
+      repository_grants_principal_idx: USING btree (principal, repository_id) WHERE (resource_prefix = ''::text)
   repository_quarantine_read_policies:
     columns:
       enabled: bool
@@ -1912,7 +3283,12 @@ tables:
       version: int64
     primaryKey: [repository_id]
     foreignKeys:
-      - repository_id -> hosted_repositories(id)
+      - repository_id -> hosted_repositories(id) on delete cascade
+    defaults:
+      enabled: "false"
+      version: "1"
+    checks:
+      repository_quarantine_read_policies_version_check: (version >= 1)
   repository_quota_alert_events:
     columns:
       created_at: timestamp
@@ -1933,6 +3309,17 @@ tables:
       - delivery_id -> email_test_deliveries(id)
       - rule_id -> repository_quota_alert_rules(id)
       - target_id -> email_targets(id)
+    defaults:
+      created_at: now()
+    indexes:
+      - created_at
+      - delivery_id
+      - target_id
+    checks:
+      repository_quota_alert_events_notification_code_check: (notification_code = ANY (ARRAY['queued'::text, 'queue_full'::text, 'email_disabled'::text, 'encryption_key_unavailable'::text, 'target_disabled'::text, 'target_changed'::text, 'target_unavailable'::text]))
+      repository_quota_alert_events_scenario_check: (scenario = ANY (ARRAY['warning'::text, 'critical'::text, 'resolved'::text]))
+      repository_quota_alert_events_sequence_check: (sequence > 0)
+      repository_quota_alert_events_snapshot_check: (octet_length((snapshot)::text) <= 8192)
   repository_quota_alert_rules:
     columns:
       active_episode_id: uuid?
@@ -1955,6 +3342,29 @@ tables:
     primaryKey: [id]
     foreignKeys:
       - target_id -> email_targets(id)
+    defaults:
+      created_at: now()
+      deleted: "false"
+      enabled: "false"
+      next_evaluate_at: now()
+      sequence: "0"
+      state_version: "1"
+      updated_at: now()
+      version: "1"
+    indexes:
+      - target_id
+    special:
+      repository_quota_rule_due: USING btree (next_evaluate_at, id) WHERE (enabled AND (NOT deleted))
+      repository_quota_rule_scope: unique USING btree (repository_id) WHERE (NOT deleted)
+    checks:
+      repository_quota_alert_rules_check: ((NOT deleted) OR (NOT enabled))
+      repository_quota_alert_rules_policy_check: ((jsonb_typeof(policy) = 'object'::text) AND (octet_length((policy)::text) <= 2048))
+      repository_quota_alert_rules_policy_check1: (policy ?& ARRAY['warningBasisPoints'::text, 'criticalBasisPoints'::text, 'recoveryBelowBasisPoints'::text, 'warningForSeconds'::text, 'criticalForSeconds'::text, 'recoveryForSeconds'::text, 'maxSampleAgeSeconds'::text])
+      repository_quota_alert_rules_policy_check2: ((((policy ->> 'recoveryBelowBasisPoints'::text))::integer > 0) AND (((policy ->> 'recoveryBelowBasisPoints'::text))::integer < ((policy ->> 'warningBasisPoints'::text))::integer) AND (((policy ->> 'warningBasisPoints'::text))::integer < ((policy ->> 'criticalBasisPoints'::text))::integer) AND (((policy ->> 'criticalBasisPoints'::text))::integer <= 10000))
+      repository_quota_alert_rules_policy_check3: ((((policy ->> 'warningForSeconds'::text))::integer >= 1) AND (((policy ->> 'warningForSeconds'::text))::integer <= 86400) AND ((((policy ->> 'criticalForSeconds'::text))::integer >= 1) AND (((policy ->> 'criticalForSeconds'::text))::integer <= 86400)) AND ((((policy ->> 'recoveryForSeconds'::text))::integer >= 1) AND (((policy ->> 'recoveryForSeconds'::text))::integer <= 86400)))
+      repository_quota_alert_rules_policy_check4: ((((policy ->> 'maxSampleAgeSeconds'::text))::integer >= 30) AND (((policy ->> 'maxSampleAgeSeconds'::text))::integer <= 3600))
+      repository_quota_alert_rules_sequence_check: (sequence >= 0)
+      repository_quota_alert_rules_state_check: ((jsonb_typeof(state) = 'object'::text) AND (octet_length((state)::text) <= 4096))
   repository_request_rollup:
     columns:
       bucket_start: timestamp
@@ -1963,6 +3373,14 @@ tables:
       repository_id: uuid
       requests: int64
     primaryKey: [repository_id, bucket_start, outcome]
+    defaults:
+      bytes: "0"
+      requests: "0"
+    indexes:
+      - bucket_start
+    checks:
+      repository_request_rollup_counts_check: ((requests >= 0) AND (bytes >= 0))
+      repository_request_rollup_outcome_check: ((outcome >= 0) AND (outcome <= 6))
   repository_retention_policies:
     columns:
       coordinate_patterns: array<text>
@@ -1977,7 +3395,21 @@ tables:
       version: int64
     primaryKey: [repository_id]
     foreignKeys:
-      - repository_id -> hosted_repositories(id)
+      - repository_id -> hosted_repositories(id) on delete cascade
+    defaults:
+      coordinate_patterns: '''[]'''
+      enabled: "false"
+      keep_downloaded_days: "0"
+      maximum_versions: "0"
+      protected_patterns: '''[]'''
+      snapshot_keep_days: "30"
+      version: "1"
+    checks:
+      repository_retention_policies_keep_days_check: (keep_days >= 1)
+      repository_retention_policies_maximum_versions_check: (maximum_versions >= 0)
+      repository_retention_policies_minimum_versions_check: (minimum_versions >= 1)
+      repository_retention_policies_snapshot_keep_days_check: (snapshot_keep_days >= 1)
+      repository_retention_versions_valid: ((maximum_versions = 0) OR (maximum_versions >= minimum_versions))
   repository_security_policies:
     columns:
       allowed_licenses: array<text>
@@ -1994,7 +3426,22 @@ tables:
       version: int64
     primaryKey: [repository_id]
     foreignKeys:
-      - repository_id -> hosted_repositories(id)
+      - repository_id -> hosted_repositories(id) on delete cascade
+    defaults:
+      allowed_licenses: '''[]'''
+      auto_scan_on_publish: "false"
+      enabled: "false"
+      fail_on_scan_error: "true"
+      max_allowed_severity: '''critical'''
+      require_provenance: "false"
+      require_sbom: "false"
+      require_signature: "false"
+      require_verified_signature: "false"
+      require_vulnerability_scan: "false"
+      version: "1"
+    checks:
+      repository_security_policies_max_allowed_severity_check: (max_allowed_severity = ANY (ARRAY['none'::text, 'low'::text, 'medium'::text, 'high'::text, 'critical'::text]))
+      repository_security_policies_version_check: (version >= 1)
   repository_usage_counters:
     columns:
       bytes: int64
@@ -2005,7 +3452,13 @@ tables:
       updated_at: timestamp
     primaryKey: [repository_id]
     foreignKeys:
-      - repository_id -> hosted_repositories(id)
+      - repository_id -> hosted_repositories(id) on delete cascade
+    defaults:
+      bytes: "0"
+      objects: "0"
+      updated_at: now()
+    checks:
+      repository_usage_counters_quota_check: ((quota_bytes IS NULL) OR (quota_bytes >= 0))
   repository_vex_document:
     columns:
       author: text
@@ -2017,6 +3470,15 @@ tables:
       id: uuid
       repository_id: uuid
     primaryKey: [id]
+    defaults:
+      author: ''''''
+      created_at: now()
+    indexes:
+      - repository_id,created_at desc,id
+    special:
+      repository_vex_document_body_key_idx: USING btree (body_key) WHERE (body_key <> ''::text)
+    checks:
+      repository_vex_document_format_check: ((format)::text = 'openvex'::text)
   resolver_audit_log:
     columns:
       actor: text
@@ -2042,6 +3504,16 @@ tables:
       trace_id: text?
       upstream_host: text?
     primaryKey: [occurred_at, id]
+    partitioned: true
+    defaults:
+      evidence: '''{}'''
+      id: identity
+      occurred_at: now()
+    indexes:
+      - actor,occurred_at desc
+      - repository,occurred_at desc
+    checks:
+      resolver_audit_log_evidence_check: (jsonb_typeof(evidence) = 'object'::text)
   runtime_node_sessions:
     columns:
       build_revision: text?
@@ -2055,6 +3527,15 @@ tables:
       worker_formats: json
       worker_kinds: json
     primaryKey: [session_id]
+    defaults:
+      roles: '''[]'''
+      worker_formats: '''[]'''
+      worker_kinds: '''[]'''
+    indexes:
+      - instance_id,last_seen_at desc
+      - last_seen_at desc
+    special:
+      runtime_node_sessions_retention_idx: USING btree (stopped_at) WHERE (stopped_at IS NOT NULL)
   runtime_nodes:
     columns:
       build_revision: text?
@@ -2066,18 +3547,30 @@ tables:
       worker_formats: json
       worker_kinds: json
     primaryKey: [instance_id]
+    defaults:
+      roles: '''[]'''
+      worker_formats: '''[]'''
+      worker_kinds: '''[]'''
+    indexes:
+      - last_seen_at desc
   saml_assertion_ids:
     columns:
       assertion_id: text
       expires_at: timestamp
       provider_id: uuid
     primaryKey: [provider_id, assertion_id]
+    indexes:
+      - expires_at
+    checks:
+      saml_assertion_ids_assertion_id_check: ((length(assertion_id) >= 1) AND (length(assertion_id) <= 256))
   saml_request_state:
     columns:
       expires_at: timestamp
       id: uuid
       provider_id: uuid
     primaryKey: [id]
+    indexes:
+      - expires_at
   scanner_db_generation:
     columns:
       built_at: timestamp
@@ -2088,6 +3581,11 @@ tables:
       source: text
     primaryKey: [id]
     unique: [[kind, oci_digest]]
+    indexes:
+      - kind,built_at desc
+    checks:
+      scanner_db_generation_kind_check: ((kind)::text = ANY (ARRAY[('trivy-db'::character varying)::text, ('java-db'::character varying)::text, ('checks'::character varying)::text]))
+      scanner_db_generation_source_check: ((source)::text = ANY (ARRAY[('upstream'::character varying)::text, ('mirror'::character varying)::text, ('feed'::character varying)::text]))
   scheduled_task_runs:
     columns:
       completed_at: timestamp?
@@ -2102,7 +3600,18 @@ tables:
       trigger: text
     primaryKey: [id]
     foreignKeys:
-      - task_id -> scheduled_tasks(id)
+      - task_id -> scheduled_tasks(id) on delete cascade
+    defaults:
+      created_at: now()
+      last_error: ''''''
+      target_id: ''''''
+      target_kind: ''''''
+    indexes:
+      - created_at
+      - task_id,created_at desc
+    checks:
+      scheduled_task_runs_state_check: (state = ANY (ARRAY['submitted'::text, 'failed'::text]))
+      scheduled_task_runs_trigger_check: (trigger = ANY (ARRAY['scheduled'::text, 'manual'::text]))
   scheduled_tasks:
     columns:
       created_at: timestamp
@@ -2124,7 +3633,29 @@ tables:
       version: int64
     primaryKey: [id]
     foreignKeys:
-      - repository_id -> hosted_repositories(id)
+      - repository_id -> hosted_repositories(id) on delete cascade
+    defaults:
+      created_at: now()
+      description: ''''''
+      enabled: "true"
+      last_error: ''''''
+      last_run_state: '''failed'''
+      lease_owner: ''''''
+      updated_at: now()
+      version: "1"
+    indexes:
+      - repository_id
+    special:
+      scheduled_tasks_due_idx: USING btree (next_run_at) WHERE enabled
+      scheduled_tasks_name_idx: unique USING btree (lower(name))
+    checks:
+      scheduled_tasks_check: (((kind = 'audit-retention'::text) AND (repository_id IS NULL)) OR ((kind = 'repository-retention'::text) AND (repository_id IS NOT NULL)) OR ((kind = ANY (ARRAY['partition-manager'::text, 'retention-janitor'::text, 'raw-idle-seal'::text])) AND (repository_id IS NULL) AND (NOT enabled)))
+      scheduled_tasks_description_check: (char_length(description) <= 500)
+      scheduled_tasks_interval_seconds_check: ((interval_seconds >= 900) AND (interval_seconds <= 31536000))
+      scheduled_tasks_kind_check: (kind = ANY (ARRAY['repository-retention'::text, 'audit-retention'::text, 'partition-manager'::text, 'retention-janitor'::text, 'raw-idle-seal'::text]))
+      scheduled_tasks_last_run_state_check: (last_run_state = ANY (ARRAY['submitted'::text, 'failed'::text]))
+      scheduled_tasks_name_check: ((char_length(name) >= 1) AND (char_length(name) <= 100))
+      scheduled_tasks_version_check: (version >= 1)
   security_audit_log:
     columns:
       actor: text
@@ -2150,6 +3681,16 @@ tables:
       trace_id: text?
       upstream_host: text?
     primaryKey: [occurred_at, id]
+    partitioned: true
+    defaults:
+      evidence: '''{}'''
+      id: identity
+      occurred_at: now()
+    indexes:
+      - actor,occurred_at desc
+      - repository,occurred_at desc
+    checks:
+      security_audit_log_evidence_check: (jsonb_typeof(evidence) = 'object'::text)
   service_accounts:
     columns:
       created_at: timestamp
@@ -2160,12 +3701,24 @@ tables:
       updated_at: timestamp
       version: int64
     primaryKey: [id]
+    defaults:
+      created_at: now()
+      description: ''''''
+      state: '''active'''
+      updated_at: now()
+      version: "1"
+    special:
+      service_accounts_name_unique_idx: unique USING btree (lower(name))
+    checks:
+      service_accounts_state_check: (state = ANY (ARRAY['active'::text, 'disabled'::text]))
   settings:
     columns:
       key: text
       updated_at: timestamp
       value: text
     primaryKey: [key]
+    defaults:
+      updated_at: now()
   site_settings:
     columns:
       brand_mark: text
@@ -2177,6 +3730,23 @@ tables:
       updated_at: timestamp
       version: int64
     primaryKey: [singleton]
+    defaults:
+      brand_mark: '''NX'''
+      default_theme_id: '''notarx-dark'''
+      enabled_theme_ids: '''["notarx-dark","notarx-light"]'''
+      logo_url: ''''''
+      singleton: "true"
+      site_name: '''notarx'''
+      updated_at: now()
+      version: "1"
+    checks:
+      site_settings_brand_mark_check: ((length(btrim(brand_mark)) >= 1) AND (length(btrim(brand_mark)) <= 8))
+      site_settings_default_theme_nonempty: ((length(btrim(default_theme_id)) >= 2) AND (length(btrim(default_theme_id)) <= 64))
+      site_settings_enabled_themes_nonempty: ((cardinality(enabled_theme_ids) >= 1) AND (cardinality(enabled_theme_ids) <= 32))
+      site_settings_logo_url_check: (length(logo_url) <= 262144)
+      site_settings_singleton_check: singleton
+      site_settings_site_name_check: ((length(btrim(site_name)) >= 1) AND (length(btrim(site_name)) <= 80))
+      site_settings_version_check: (version > 0)
   token_signing_keys:
     columns:
       activated_at: timestamp?
@@ -2192,6 +3762,15 @@ tables:
       sealing_ref: text
       state: text
     primaryKey: [kid]
+    defaults:
+      sealing_ref: '''local'''
+    special:
+      token_signing_keys_one_active_idx: unique USING btree (alg) WHERE (state = 'active'::text)
+      token_signing_keys_one_next_idx: unique USING btree (alg) WHERE (state = 'next'::text)
+    checks:
+      token_signing_keys_alg_check: (alg = ANY (ARRAY['RS256'::text, 'ES256'::text]))
+      token_signing_keys_public_jwk_check: (jsonb_typeof(public_jwk) = 'object'::text)
+      token_signing_keys_state_check: (state = ANY (ARRAY['next'::text, 'active'::text, 'retired'::text]))
   user_identities:
     columns:
       created_at: timestamp
@@ -2211,7 +3790,24 @@ tables:
     unique: [[provider_id, user_id]]
     foreignKeys:
       - provider_id -> identity_providers(id)
-      - user_id -> users(id)
+      - user_id -> users(id) on delete cascade
+    defaults:
+      created_at: now()
+      display_name: ''''''
+      email: ''''''
+      email_verified: "false"
+      updated_at: now()
+    indexes:
+      - user_id,created_at,id
+    special:
+      user_identities_provider_scim_external_id_idx: unique USING btree (provider_id, scim_external_id) WHERE (scim_external_id IS NOT NULL)
+      user_identities_provider_subject_idx: unique USING btree (provider_id, subject) WHERE (subject IS NOT NULL)
+    checks:
+      user_identities_issuer_check: (issuer <> ''::text)
+      user_identities_key_check: ((subject IS NOT NULL) OR (scim_external_id IS NOT NULL))
+      user_identities_kind_check: (kind = ANY (ARRAY['oidc'::text, 'saml'::text]))
+      user_identities_scim_external_id_check: ((scim_external_id IS NULL) OR (scim_external_id <> ''::text))
+      user_identities_subject_check: ((subject IS NULL) OR (subject <> ''::text))
   user_sessions:
     columns:
       created_at: timestamp
@@ -2225,7 +3821,21 @@ tables:
       user_id: uuid
     primaryKey: [id]
     foreignKeys:
-      - user_id -> users(id)
+      - user_id -> users(id) on delete cascade
+    defaults:
+      created_at: now()
+      ip_address: ''''''
+      user_agent: ''''''
+    indexes:
+      - expires_at,id
+      - user_id
+    special:
+      user_sessions_user_active_idx: USING btree (user_id, created_at DESC, id) WHERE (revoked_at IS NULL)
+    checks:
+      user_sessions_check: (expires_at > created_at)
+      user_sessions_ip_address_check: (length(ip_address) <= 64)
+      user_sessions_kind_check: (kind = ANY (ARRAY['local_session'::text, 'oidc'::text, 'saml'::text]))
+      user_sessions_user_agent_check: (length(user_agent) <= 512)
   users:
     columns:
       created_at: timestamp
@@ -2251,6 +3861,29 @@ tables:
       version: int64
     primaryKey: [id]
     unique: [[name]]
+    defaults:
+      created_at: now()
+      description: ''''''
+      display_name: ''''''
+      email: ''''''
+      email_verified_by: ''''''
+      email_verified_by_admin: "false"
+      failed_login_attempts: "0"
+      must_change_password: "false"
+      session_version: "1"
+      state: '''active'''
+      updated_at: now()
+      version: "1"
+    indexes:
+      - state,role,created_at,id
+    special:
+      users_name_case_insensitive_idx: unique USING btree (lower(name))
+    checks:
+      users_disabled_reason_check: ((disabled_reason IS NULL) OR (disabled_reason = ANY (ARRAY['admin'::text, 'scim'::text])))
+      users_email_verified_audit_check: ((email_verified_by_admin AND (email_verified_at IS NOT NULL) AND (email_verified_by <> ''::text) AND (email <> ''::text)) OR ((NOT email_verified_by_admin) AND (email_verified_at IS NULL) AND (email_verified_by = ''::text)))
+      users_failed_login_attempts_check: (failed_login_attempts >= 0)
+      users_role_check: (role = ANY (ARRAY['none'::text, 'member'::text, 'admin'::text]))
+      users_session_version_check: (session_version > 0)
   webhook_deliveries:
     columns:
       attempts: int32
@@ -2270,8 +3903,28 @@ tables:
     primaryKey: [id]
     unique: [[event_id, subscription_id]]
     foreignKeys:
-      - event_id -> webhook_events(id)
-      - subscription_id -> webhook_subscriptions(id)
+      - event_id -> webhook_events(id) on delete cascade
+      - subscription_id -> webhook_subscriptions(id) on delete cascade
+    defaults:
+      attempts: "0"
+      created_at: now()
+      last_error: ''''''
+      state: '''pending'''
+      updated_at: now()
+    indexes:
+      - created_at desc,id desc
+      - subscription_id,created_at desc,id desc
+    special:
+      webhook_deliveries_actionable_idx: USING btree (COALESCE(next_attempt_at, lease_expires_at), created_at) WHERE (state = ANY (ARRAY['pending'::text, 'retrying'::text, 'delivering'::text]))
+      webhook_deliveries_retention_idx: USING btree (updated_at) WHERE (state = ANY (ARRAY['succeeded'::text, 'dead'::text]))
+    checks:
+      webhook_deliveries_attempts_check: ((attempts >= 0) AND (attempts <= 8))
+      webhook_deliveries_check: ((state = 'delivering'::text) = ((lease_owner IS NOT NULL) AND (lease_token IS NOT NULL) AND (lease_expires_at IS NOT NULL)))
+      webhook_deliveries_check1: ((state = 'succeeded'::text) = (delivered_at IS NOT NULL))
+      webhook_deliveries_check2: ((state = ANY (ARRAY['pending'::text, 'retrying'::text])) = (next_attempt_at IS NOT NULL))
+      webhook_deliveries_last_error_check: (length(last_error) <= 1024)
+      webhook_deliveries_last_status_check: ((last_status IS NULL) OR ((last_status >= 100) AND (last_status <= 599)))
+      webhook_deliveries_state_check: (state = ANY (ARRAY['pending'::text, 'delivering'::text, 'retrying'::text, 'succeeded'::text, 'dead'::text]))
   webhook_events:
     columns:
       created_at: timestamp
@@ -2280,6 +3933,11 @@ tables:
       occurred_at: timestamp
       payload: json
     primaryKey: [id]
+    defaults:
+      created_at: now()
+    checks:
+      webhook_events_event_type_check: (event_type = ANY (ARRAY['artifact.quarantined'::text, 'artifact.released'::text, 'cargo.promotion.completed'::text, 'cargo.promotion.failed'::text, 'cargo.replication.completed'::text, 'cargo.replication.failed'::text]))
+      webhook_events_payload_check: (jsonb_typeof(payload) = 'object'::text)
   webhook_subscriptions:
     columns:
       created_at: timestamp
@@ -2293,6 +3951,19 @@ tables:
       version: int64
     primaryKey: [id]
     unique: [[name]]
+    defaults:
+      created_at: now()
+      enabled: "true"
+      updated_at: now()
+      version: "1"
+    special:
+      webhook_subscriptions_name_bytes_idx: USING btree (name COLLATE "C")
+    checks:
+      webhook_subscriptions_endpoint_url_check: ((length(endpoint_url) >= 1) AND (length(endpoint_url) <= 2048))
+      webhook_subscriptions_event_types_check: ((jsonb_typeof(event_types) = 'array'::text) AND (jsonb_array_length(event_types) > 0) AND (event_types <@ '["artifact.quarantined", "artifact.released", "cargo.promotion.completed", "cargo.promotion.failed", "cargo.replication.completed", "cargo.replication.failed"]'::jsonb))
+      webhook_subscriptions_name_check: ((length(name) >= 1) AND (length(name) <= 128))
+      webhook_subscriptions_secret_ciphertext_check: (secret_ciphertext <> ''::text)
+      webhook_subscriptions_version_check: (version >= 1)
   workload_issuers:
     columns:
       allow_private_network: bool
@@ -2312,12 +3983,28 @@ tables:
       version: int64
     primaryKey: [id]
     unique: [[issuer], [name]]
+    defaults:
+      allow_private_network: "false"
+      allowed_algs: '''["RS256","ES256","EdDSA"]'''
+      created_at: now()
+      state: '''active'''
+      updated_at: now()
+      version: "1"
+    checks:
+      workload_issuers_allowed_algs_check: ((cardinality(allowed_algs) > 0) AND (allowed_algs <@ ARRAY['RS256'::text, 'ES256'::text, 'EdDSA'::text]))
+      workload_issuers_audiences_check: (cardinality(audiences) > 0)
+      workload_issuers_jwks_mode_check: (jwks_mode = ANY (ARRAY['discovery'::text, 'static'::text]))
+      workload_issuers_kind_check: (kind = ANY (ARRAY['github_actions'::text, 'gitlab_ci'::text, 'kubernetes'::text, 'generic'::text]))
+      workload_issuers_state_check: (state = ANY (ARRAY['active'::text, 'disabled'::text]))
+      workload_issuers_static_jwks_check: ((jwks_mode <> 'static'::text) OR (static_jwks IS NOT NULL))
   workload_jti_seen:
     columns:
       expires_at: timestamp
       issuer_id: uuid
       jti_hash: bytes
     primaryKey: [issuer_id, jti_hash]
+    indexes:
+      - expires_at
   workload_trust_policies:
     columns:
       conditions: json
@@ -2337,6 +4024,63 @@ tables:
     foreignKeys:
       - issuer_id -> workload_issuers(id)
       - service_account_id -> service_accounts(id)
+    defaults:
+      created_at: now()
+      max_token_ttl_seconds: "900"
+      single_use: "false"
+      state: '''active'''
+      updated_at: now()
+      version: "1"
+    indexes:
+      - issuer_id,state
+      - service_account_id
+    checks:
+      workload_trust_policies_conditions_check: (jsonb_typeof(conditions) = 'array'::text)
+      workload_trust_policies_state_check: (state = ANY (ARRAY['active'::text, 'disabled'::text]))
+      workload_trust_policies_ttl_check: (max_token_ttl_seconds > 0)
+triggers:
+  audit_cleanup_jobs_notify_insert: 'audit_cleanup_jobs: AFTER INSERT ON audit_cleanup_jobs FOR EACH ROW WHEN ((new.state = ''pending''::text)) EXECUTE FUNCTION notarx_notify_queue(''notarx_audit_cleanup'')'
+  audit_cleanup_jobs_notify_update: 'audit_cleanup_jobs: AFTER UPDATE OF state ON audit_cleanup_jobs FOR EACH ROW WHEN (((new.state = ''pending''::text) AND (old.state IS DISTINCT FROM new.state))) EXECUTE FUNCTION notarx_notify_queue(''notarx_audit_cleanup'')'
+  cargo_promotion_state_webhook_after_update: 'lifecycle_jobs: AFTER UPDATE ON lifecycle_jobs FOR EACH ROW EXECUTE FUNCTION cargo_promotion_state_webhook()'
+  cargo_replication_state_webhook_after_update: 'replication_plans: AFTER UPDATE ON replication_plans FOR EACH ROW EXECUTE FUNCTION cargo_replication_state_webhook()'
+  hosted_group_members_notify_cache_delete: 'hosted_group_members: AFTER DELETE ON hosted_group_members REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_group_id(''group'')'
+  hosted_group_members_notify_cache_insert: 'hosted_group_members: AFTER INSERT ON hosted_group_members REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_group_id(''group'')'
+  hosted_group_members_notify_cache_update: 'hosted_group_members: AFTER UPDATE ON hosted_group_members REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_group_id(''group'')'
+  hosted_groups_notify_cache_delete: 'hosted_groups: AFTER DELETE ON hosted_groups REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_id(''group'')'
+  hosted_groups_notify_cache_insert: 'hosted_groups: AFTER INSERT ON hosted_groups REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_id(''group'')'
+  hosted_groups_notify_cache_update: 'hosted_groups: AFTER UPDATE ON hosted_groups REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_id(''group'')'
+  hosted_repositories_deletion_notify: 'hosted_repositories: AFTER UPDATE OF state ON hosted_repositories FOR EACH ROW WHEN ((new.state = ''deleting''::text)) EXECUTE FUNCTION notarx_notify_queue(''notarx_repository_deletions'')'
+  hosted_repositories_notify_cache_delete: 'hosted_repositories: AFTER DELETE ON hosted_repositories REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_id(''repository'')'
+  hosted_repositories_notify_cache_insert: 'hosted_repositories: AFTER INSERT ON hosted_repositories REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_id(''repository'')'
+  hosted_repositories_notify_cache_update: 'hosted_repositories: AFTER UPDATE ON hosted_repositories REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_id(''repository'')'
+  lifecycle_jobs_notify_insert: 'lifecycle_jobs: AFTER INSERT ON lifecycle_jobs FOR EACH ROW WHEN ((new.state = ANY (ARRAY[''pending''::text, ''retrying''::text]))) EXECUTE FUNCTION notarx_notify_job_kind()'
+  lifecycle_jobs_notify_update: 'lifecycle_jobs: AFTER UPDATE OF state, next_attempt_at ON lifecycle_jobs FOR EACH ROW WHEN (((new.state = ANY (ARRAY[''pending''::text, ''retrying''::text])) AND (old.state IS DISTINCT FROM new.state))) EXECUTE FUNCTION notarx_notify_job_kind()'
+  public_access_policy_notify_cache: 'public_access_policy: AFTER INSERT OR DELETE OR UPDATE ON public_access_policy FOR EACH ROW EXECUTE FUNCTION notarx_notify_cache(''policy'', '''')'
+  replication_plans_notify_insert: 'replication_plans: AFTER INSERT ON replication_plans FOR EACH ROW WHEN ((new.state = ANY (ARRAY[''pending''::text, ''failed''::text]))) EXECUTE FUNCTION notarx_notify_queue(''notarx_replication_plans'')'
+  replication_plans_notify_update: 'replication_plans: AFTER UPDATE OF state, next_attempt_at ON replication_plans FOR EACH ROW WHEN (((new.state = ''pending''::text) AND (old.state IS DISTINCT FROM new.state))) EXECUTE FUNCTION notarx_notify_queue(''notarx_replication_plans'')'
+  repository_grants_notify_cache_delete: 'repository_grants: AFTER DELETE ON repository_grants REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_repository_id(''grants'')'
+  repository_grants_notify_cache_insert: 'repository_grants: AFTER INSERT ON repository_grants REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_repository_id(''grants'')'
+  repository_grants_notify_cache_update: 'repository_grants: AFTER UPDATE ON repository_grants REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_repository_id(''grants'')'
+  repository_quarantine_read_policies_notify_cache_delete: 'repository_quarantine_read_policies: AFTER DELETE ON repository_quarantine_read_policies REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_repository_id(''quarantine'')'
+  repository_quarantine_read_policies_notify_cache_insert: 'repository_quarantine_read_policies: AFTER INSERT ON repository_quarantine_read_policies REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_repository_id(''quarantine'')'
+  repository_quarantine_read_policies_notify_cache_update: 'repository_quarantine_read_policies: AFTER UPDATE ON repository_quarantine_read_policies REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_repository_id(''quarantine'')'
+  repository_quota_alert_rules_notify_insert: 'repository_quota_alert_rules: AFTER INSERT ON repository_quota_alert_rules FOR EACH ROW WHEN ((new.enabled AND (NOT new.deleted) AND (new.next_evaluate_at <= clock_timestamp()))) EXECUTE FUNCTION notarx_notify_queue(''notarx_evaluations'')'
+  repository_quota_alert_rules_notify_update: 'repository_quota_alert_rules: AFTER UPDATE OF enabled, next_evaluate_at ON repository_quota_alert_rules FOR EACH ROW WHEN ((new.enabled AND (NOT new.deleted) AND (new.next_evaluate_at <= clock_timestamp()) AND (NOT (old.evaluated_at IS DISTINCT FROM new.evaluated_at)) AND ((old.enabled IS DISTINCT FROM new.enabled) OR (old.next_evaluate_at IS DISTINCT FROM new.next_evaluate_at)))) EXECUTE FUNCTION notarx_notify_queue(''notarx_evaluations'')'
+  token_signing_keys_notify_cache_delete: 'token_signing_keys: AFTER DELETE ON token_signing_keys REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_scope(''signing_keys'')'
+  token_signing_keys_notify_cache_insert: 'token_signing_keys: AFTER INSERT ON token_signing_keys REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_scope(''signing_keys'')'
+  token_signing_keys_notify_cache_update: 'token_signing_keys: AFTER UPDATE ON token_signing_keys REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_scope(''signing_keys'')'
+  users_notify_cache_delete: 'users: AFTER DELETE ON users REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_id(''user'')'
+  users_notify_cache_insert: 'users: AFTER INSERT ON users REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_id(''user'')'
+  users_notify_cache_update: 'users: AFTER UPDATE ON users REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_id(''user'')'
+  webhook_deliveries_notify_insert: 'webhook_deliveries: AFTER INSERT ON webhook_deliveries FOR EACH ROW WHEN ((new.state = ''pending''::text)) EXECUTE FUNCTION notarx_notify_queue(''notarx_deliveries'')'
+  workload_issuers_notify_cache_delete: 'workload_issuers: AFTER DELETE ON workload_issuers REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_id(''workload_issuer'')'
+  workload_issuers_notify_cache_insert: 'workload_issuers: AFTER INSERT ON workload_issuers REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_id(''workload_issuer'')'
+  workload_issuers_notify_cache_update: 'workload_issuers: AFTER UPDATE ON workload_issuers REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_id(''workload_issuer'')'
+  workload_trust_policies_notify_cache_delete: 'workload_trust_policies: AFTER DELETE ON workload_trust_policies REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_id(''workload_policy'')'
+  workload_trust_policies_notify_cache_insert: 'workload_trust_policies: AFTER INSERT ON workload_trust_policies REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_id(''workload_policy'')'
+  workload_trust_policies_notify_cache_update: 'workload_trust_policies: AFTER UPDATE ON workload_trust_policies REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_id(''workload_policy'')'
+views:
+  - artifact_search_projection
 seeds:
   audit_retention_policy:
     - enabled: "true"

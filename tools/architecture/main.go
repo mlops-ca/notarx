@@ -237,6 +237,9 @@ const mysqlDriver = "github.com/go-sql-driver/mysql"
 // MySQL driver is imported only by internal/database and internal/dialect/*.
 // internal/migrate and internal/schemaparity are leaves too: they run SQL through a *sql.DB
 // they are handed, so they import no driver, no store, no application layer and no configuration.
+// internal/mysqlbaseline is a generator over the catalogue and imports none of them either, and
+// internal/dialect/dialecttest, the shared contract suite, reaches an engine only through the
+// *sql.DB and dialect.Set its harness hands it.
 func dialectViolations(inv inventory, module string) []string {
 	found := []string{}
 	for pkg, imports := range inv.Imports {
@@ -246,7 +249,7 @@ func dialectViolations(inv inventory, module string) []string {
 			case pkg == "internal/dialect" && (strings.HasPrefix(target, "github.com/jackc/pgx") || target == mysqlDriver ||
 				internal == "internal/repository" || internal == "internal/app" || strings.HasPrefix(internal, "internal/repository/") || strings.HasPrefix(internal, "internal/app/")):
 				found = append(found, pkg+" -> "+internal)
-			case (pkg == "internal/migrate" || pkg == "internal/schemaparity") && (strings.HasPrefix(target, "github.com/jackc/pgx") || target == mysqlDriver || internal == "internal/config" ||
+			case (pkg == "internal/migrate" || pkg == "internal/schemaparity" || pkg == "internal/mysqlbaseline" || pkg == "internal/dialect/dialecttest") && (strings.HasPrefix(target, "github.com/jackc/pgx") || target == mysqlDriver || internal == "internal/config" ||
 				internal == "internal/repository" || internal == "internal/app" || strings.HasPrefix(internal, "internal/repository/") || strings.HasPrefix(internal, "internal/app/")):
 				found = append(found, pkg+" -> "+internal)
 			case target == mysqlDriver && pkg != "internal/database" && !strings.HasPrefix(pkg, "internal/dialect/"):

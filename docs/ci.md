@@ -399,6 +399,35 @@ runner parity check of `scripts/migration-runner-check.sh`, which applies the Po
 migrations with the Go runner and compares the ledger with `run-migrations.sh`. Without
 `INTEGRATION_SHARD`, `make integration-test` runs every package in one stack, as before.
 
+### The MySQL lane
+
+ADR 0022 adds MySQL 8.4 as a second backend, and its integration suites run in a lane of their own,
+`core-integration-mysql`, on both architectures (the `arm64` tier of a core lane). The step is
+`make integration-test-mysql`, which is `scripts/integration-test.sh --driver mysql`; that script checks the driver
+and hands over to `scripts/integration-test-mysql.sh`, which owns the stack, the migration and the tests:
+
+- the stack is the `mysql` service of `compose.integration.yml` and nothing else: no PostgreSQL and no RustFS;
+- the Go runner migrates `migrations/mysql`, as a deployment would (`notarx migrate --dir migrations/mysql`);
+- the packages are the ones of `scripts/integration-packages-mysql.txt`, one package per line. A package joins it
+  when its suites run on either engine or on MySQL only; the store groups of ADR 0022 add theirs as they land.
+  `TestRequiredIntegrationCommandCoversIntegrationTaggedPackages` fails when a package in the list has no
+  integration-tagged files, and when a package with such files is in neither list;
+- `TEST_DATABASE_DRIVER=mysql` selects the engine for the suites that run on either engine (`internal/testsupport`:
+  `Database`, `RunPerDriver`). PostgreSQL is the default and keeps its variables. `TEST_DATABASE_URL` is left empty for this
+  lane, so the PostgreSQL-only suites skip themselves, and `TEST_DATABASE_REQUIRED=1` turns a suite that finds no
+  database into a failure, so a skipped suite cannot pass for green;
+- every database URL the suites read must name a database that ends in `_test`, for both engines. The guard checks the
+  configured URL only: a suite that creates databases of its own (the baseline and migration runner suites) does it
+  on that server and drops them again.
+
+The lane is allowed to fail until the support claim of ADR 0022 slice 11: its plan entry has
+`"allowFailure": true`, `scripts/ci-contract.py` reports its verdict as `failure (allowed to fail)` in the step
+summary and exits 0, and no other lane may carry the flag (`test_only_the_mysql_lane_may_fail`). The shared dialect
+contract (`internal/dialect/dialecttest`) runs against PostgreSQL in shard 2 (`./internal/dialect/postgres`) and
+against MySQL in this lane (`./internal/dialect/mysql`), so the two engines cannot drift apart. The shard that holds
+`./internal/migrate` still starts MySQL for the runner and schema parity tests, and `make schema-parity` checks the
+generated MySQL baseline against the catalogue on every pull request.
+
 ## Shared images
 
 `build-images-amd64` and `build-images-arm64` build the notarx and reference apt signer

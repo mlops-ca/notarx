@@ -36,6 +36,7 @@ agree with executable tests and the
 - [Install notarx](install.md) — one path per channel: packages, Homebrew, archives, images and the compose bundle, with verification and stable versus nightly.
 - [Deploy on Oracle Cloud Always Free](deployment/oci-free-tier.md) — reference deployment on one Ampere A1 VM: Compose stack, runbook, backups and variants.
 - [Object storage configuration](object-storage.md) — drivers, `NOTARX_OBJECT_STORE_*` keys, checksum modes, and OCI settings.
+- [MySQL schema decisions](mysql-schema-decisions.md) — how the MySQL 8.4 baseline is generated from the schema catalogue: types, key widths and hashes, indexes, CHECK constraints, triggers and views.
 - [PostgreSQL capabilities](postgresql-capabilities.md) — locks, leases, queues, notifications, JSONB, search, observability, the code's PostgreSQL footprint, and the managed-PostgreSQL support matrix.
 - [Native Hosted contract](native-hosted-contract.md) — metadata authority, object lifecycle, transactions, and idempotency.
 - [V2 contract](v2-contract.md) — historical Raw, Conan 2, anonymous-policy, and migration context.
