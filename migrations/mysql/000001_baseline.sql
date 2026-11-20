@@ -2931,6 +2931,7 @@ CREATE TABLE `user_groups` (
   `name_lower` VARCHAR(255) GENERATED ALWAYS AS (IF(`source` = 'local', LOWER(`display_name`), NULL)) VIRTUAL NULL,
   `live_user_groups_provider_external_id_idx` TINYINT(1) GENERATED ALWAYS AS (IF((`external_id` <> ''), 1, NULL)) VIRTUAL NULL,
   PRIMARY KEY (`id`),
+  KEY `ix_user_groups_provider_id_id` (`provider_id`, `id`),
   UNIQUE KEY `uq_user_groups_name_local_idx` (`name_lower`),
   UNIQUE KEY `uq_user_groups_provider_external_id_idx` (`provider_id`, `external_id`, `live_user_groups_provider_external_id_idx`),
   CONSTRAINT `user_groups_display_name_check` CHECK (((CHAR_LENGTH(TRIM(`display_name`)) >= 1) AND (CHAR_LENGTH(TRIM(`display_name`)) <= 255))),

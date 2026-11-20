@@ -32,6 +32,10 @@ CREATE TABLE public.user_groups (
 CREATE UNIQUE INDEX user_groups_name_local_idx ON public.user_groups USING btree (lower(display_name)) WHERE (source = 'local'::text);
 CREATE UNIQUE INDEX user_groups_provider_external_id_idx ON public.user_groups USING btree (provider_id, external_id) WHERE (external_id <> ''::text);
 
+-- The foreign key to identity_providers: deleting a provider (ON DELETE SET NULL) and listing the groups of a provider
+-- find them through it.
+CREATE INDEX user_groups_provider_idx ON public.user_groups USING btree (provider_id, id);
+
 CREATE TABLE public.user_group_members (
     group_id uuid NOT NULL,
     user_id uuid NOT NULL,

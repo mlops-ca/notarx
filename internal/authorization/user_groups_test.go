@@ -263,6 +263,11 @@ func TestPrincipalTokensCarryNoGroupIDsAndGroupsAreResolvedAgainEachRequest(t *t
 	if !ok || len(fromToken.GroupIDs) != 1 || !f.decide(fromToken, RepositoryRead).Allowed {
 		t.Fatalf("token principal = %#v ok=%v", fromToken, ok)
 	}
+	// A protocol token names the account but is not a session: code that tells a static credential from a user
+	// session (the Nexus migration authority) relies on the token principal carrying no UserID.
+	if fromToken.UserID != "" {
+		t.Fatalf("a protocol token principal carries the user id %q", fromToken.UserID)
+	}
 	if err := f.store.RemoveUserGroupMember(context.Background(), team.ID, f.user.ID); err != nil {
 		t.Fatal(err)
 	}

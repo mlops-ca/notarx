@@ -3915,6 +3915,8 @@ tables:
       global_role: '''none'''
       updated_at: now()
       version: "1"
+    indexes:
+      - provider_id,id
     special:
       user_groups_name_local_idx: unique USING btree (lower(display_name)) WHERE (source = 'local'::text)
       user_groups_provider_external_id_idx: unique USING btree (provider_id, external_id) WHERE (external_id <> ''::text)

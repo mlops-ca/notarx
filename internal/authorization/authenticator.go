@@ -151,10 +151,15 @@ func (a Authenticator) AuthenticateContext(ctx context.Context, header string) (
 // lookup leaves the account with its own authority only: a group can only ever add access, so failing to read
 // one never widens it.
 func (a Authenticator) WithUserGroups(ctx context.Context, principal Principal) Principal {
-	if a.UserGroups == nil || principal.UserID == "" || principal.MustChangePassword {
+	return a.applyUserGroups(ctx, principal, principal.UserID)
+}
+
+// applyUserGroups is WithUserGroups for the account userID, which a protocol-token principal does not carry.
+func (a Authenticator) applyUserGroups(ctx context.Context, principal Principal, userID string) Principal {
+	if a.UserGroups == nil || userID == "" || principal.MustChangePassword {
 		return principal
 	}
-	memberships, err := a.UserGroups.ListUserGroupMemberships(ctx, principal.UserID)
+	memberships, err := a.UserGroups.ListUserGroupMemberships(ctx, userID)
 	if err != nil || len(memberships) == 0 {
 		return principal
 	}
@@ -286,9 +291,11 @@ func (a Authenticator) principalForTokenActor(ctx context.Context, actor string)
 	}
 	role := Role(user.Role)
 	if user.MustChangePassword {
-		return Principal{Actor: actor, RepositoryPatterns: a.RepositoryReaders[actor], AuthenticationKind: AuthenticationLocalSession, MustChangePassword: true, UserID: user.ID}, true
+		return Principal{Actor: actor, RepositoryPatterns: a.RepositoryReaders[actor], AuthenticationKind: AuthenticationLocalSession, MustChangePassword: true}, true
 	}
-	return Principal{Actor: actor, Admin: role == RoleAdmin, Role: role, RepositoryPatterns: a.RepositoryReaders[actor], AuthenticationKind: AuthenticationLocalSession, UserID: user.ID}, true
+	// A protocol token names the account, not its session, so the principal carries no UserID (code that tells a
+	// static credential from a user session relies on that); its groups are resolved here, from the account.
+	return a.applyUserGroups(ctx, Principal{Actor: actor, Admin: role == RoleAdmin, Role: role, RepositoryPatterns: a.RepositoryReaders[actor], AuthenticationKind: AuthenticationLocalSession}, user.ID), true
 }
 
 // AuthenticateBasic validates the resolver credential used by Maven, Conan,
