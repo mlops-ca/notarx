@@ -52,8 +52,6 @@ func runContract(t *testing.T, driver, url string) {
 	}
 	reset(t)
 	t.Cleanup(func() { _, _ = db.Exec("DELETE FROM scheduled_tasks WHERE name = "+bind, contractTask.Name) })
-		_, _ = db.Exec("DELETE FROM scheduled_tasks WHERE name = "+placeholder(driver, 1), contractTask.Name)
-	})
 	acquire := func(t *testing.T, owner string, ttl, interval time.Duration) bool {
 		t.Helper()
 		held, err := leaser.Acquire(ctx, contractTask, owner, ttl, interval)
