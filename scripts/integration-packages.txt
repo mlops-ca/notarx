@@ -34,3 +34,4 @@
 3 ./internal/lifecycle
 3 ./internal/migrate
 3 ./internal/schemaparity
+3 ./internal/tasklease

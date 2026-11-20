@@ -7,3 +7,4 @@
 # reported in the job summary and does not fail the pull request (docs/ci.md).
 ./internal/mysqlbaseline
 ./internal/dialect/mysql
+./internal/tasklease
