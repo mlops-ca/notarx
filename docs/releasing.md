@@ -90,12 +90,16 @@ Inputs: `channel` (`nightly` or `stable`, default `nightly`), `nightly_tag` (def
    `:0` is never published while the major is 0. A stable dry run then runs `scripts/check-no-nightly.sh` in `build` over the built archives and packages
    (names, the `.deb`/`.rpm` Version and Release fields, `VERSION.txt` and the binaries). Only the builds check out the nightly's
    commit; the release scripts always come from the dispatched `main`, so a nightly older than the current tooling can be promoted.
-4. `publish` writes the manifest (with `verified_nightly`), attests and verifies everything, runs `scripts/check-no-nightly.sh`
+4. `publish` first renders the compose bundle `notarx-compose-X.Y.Z.tar.gz` (`scripts/render-compose-bundle.sh`, stable only): the
+   OCI free-tier stack with every image pinned by the index digest this run just built, so it is checksummed, attested and attached
+   like an archive. It then writes the manifest (with `verified_nightly`), attests and verifies everything, runs `scripts/check-no-nightly.sh`
    once over every final asset, the package headers and the pushed image labels, and calls `scripts/promote-release.sh create`, which creates `vX.Y.Z` as a draft with every
    asset and then publishes it; publishing creates the tag on the verified commit. The notes list the milestones completed since the
    previous stable release (`scripts/release-milestones.sh`) and name the nightly that was rebuilt.
 5. `promote` edits the verified nightly's notes to point at the stable release and then moves `:latest` (only when no newer stable
-   exists). `changelog` opens the changelog pull request (below). Both are idempotent.
+   exists). `homebrew` renders `Formula/notarxctl.rb` from the release's `SHA256SUMS` (`scripts/render-homebrew-formula.sh`) and pushes it to
+   `mlops-ca/homebrew-tap` with a token that only reaches that repository (below). `changelog` opens the changelog pull request
+   (below). All three are idempotent.
 
 A dry run executes 1 to 3 (and the nightly-version assertion on the archives) and publishes, tags and attests nothing. A failure
 before the tag is repaired by dispatching again: a leftover draft is replaced and `:X.Y.Z` and `:X.Y` may be re-pointed while
@@ -176,6 +180,16 @@ the App.
 3. Set the repository variable `RELEASE_APP_ID` and the secret `RELEASE_APP_PRIVATE_KEY` (the PEM key).
 4. Run the governance script with `--app-id`. Until step 3 the workflow falls back to the workflow token for tag creation and
    pruning; after step 4 only the App can create or delete release tags.
+
+### Homebrew tap App registration (manual, once)
+
+1. Create a second GitHub App owned by the organization with the repository permission Contents: read and write only.
+2. Install it on `mlops-ca/homebrew-tap` only; note the numeric App id.
+3. Set the repository variable `TAP_APP_ID` and the secret `TAP_APP_PRIVATE_KEY` on this repository.
+
+The `homebrew` job fails with an explicit error until step 3 is done; re-run the job once it is. The App token is minted with
+`repositories: homebrew-tap`, so even a broader installation cannot reach another repository. The tap's own workflow audits and tests
+the formula on Linux and macOS (`brew audit --strict`, `brew install`, `brew test`).
 
 ## Scheduled-workflow liveness
 

@@ -453,7 +453,8 @@ release-plan-test:
 
 # Release pipeline pieces that cannot run a real release (ADR 0024): manifest and attestation
 # verification, retention (releases, tags, GHCR mark and sweep), repository governance and the
-# stable promotion (first-release gate, version identity, publication helpers).
+# stable promotion (first-release gate, version identity, publication helpers) and the
+# stable-only channel renderers (compose bundle, Homebrew formula; ADR 0025).
 release-pipeline-test:
 	@./scripts/release-manifest-test.sh
 	@./scripts/prune-releases-test.sh
@@ -462,6 +463,9 @@ release-pipeline-test:
 	@./scripts/baseline-gate-test.sh
 	@./scripts/check-no-nightly-test.sh
 	@./scripts/promote-release-test.sh
+	@./scripts/render-compose-bundle-test.sh
+	@./scripts/render-homebrew-formula-test.sh
+	@./scripts/install-snippet-test.sh
 
 # Structure of release.yml; needs mikefarah yq (preinstalled on hosted runners).
 release-workflow-check:
