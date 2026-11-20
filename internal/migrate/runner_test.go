@@ -426,7 +426,7 @@ func TestPostgresSQLMatchesRunMigrationsScript(t *testing.T) {
 		t.Fatal(err)
 	}
 	script := string(data)
-	heredoc := regexp.MustCompile("(?s)<<'SQL'\\n(.*?)\\nSQL\\n")
+	heredoc := regexp.MustCompile(`(?s)<<'SQL'\n(.*?)\nSQL\n`)
 	blocks := heredoc.FindAllStringSubmatch(script, -1)
 	find := func(prefix string) string {
 		for _, block := range blocks {

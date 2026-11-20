@@ -49,7 +49,7 @@ func compareColumns(table string, want, got Table, dialect string, add func(stri
 		}
 	}
 	for _, name := range sortedKeys(got.Columns) {
-		if _, ok := want.Columns[name]; !ok && !(dialect == DialectMySQL && got.Columns[name].Generated) {
+		if _, ok := want.Columns[name]; !ok && (dialect != DialectMySQL || !got.Columns[name].Generated) {
 			add("column %s.%s is not in the catalogue", table, name)
 		}
 	}
