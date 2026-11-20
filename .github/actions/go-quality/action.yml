@@ -56,8 +56,7 @@ runs:
     # lint cache has a daily key (the release gates save it). The race build cache gets
     # a key per run, saved by the build-only warm of a push to main that changes the Go
     # build (go-cache.yml) and by the release gates; the warm deletes the entries it
-    # supersedes. Pull requests restore
-    # main's newest cache by prefix.
+    # supersedes. Pull requests restore main's newest cache by prefix.
     - if: inputs.lint == 'true' || inputs.race == 'true' || inputs.race-coverage == 'true'
       name: Locate the Go caches
       id: cache-dirs
