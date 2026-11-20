@@ -45,10 +45,9 @@ services:
       # profile; make explain-check overrides it to 1 for the whole profile.
       NOTARX_EXPLAIN_SCALE: ${NOTARX_EXPLAIN_SCALE:-10}
     working_dir: /src
-    # No default command: callers pass the go test invocation. The integration package
-    # list and its CI shards live in scripts/integration-packages.txt, which
-    # scripts/integration-test.sh runs.
-    command: ["sh", "-ec", "echo 'pass a go test command (scripts/integration-test.sh, scripts/explain-check.sh)' >&2; exit 2"]
+    # No command: callers pass the go test invocation (scripts/integration-test.sh,
+    # which runs the packages and shards of scripts/integration-packages.txt, and
+    # scripts/explain-check.sh).
     volumes:
       - ./:/src:ro
       - notarx-go-mod:/go/pkg/mod

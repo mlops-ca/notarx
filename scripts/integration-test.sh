@@ -26,7 +26,9 @@ while [[ $# -gt 0 ]]; do
     *) printf 'integration-test: unknown argument %s\n' "$1" >&2; exit 2 ;;
   esac
 done
-if [[ -n "$shard" ]] && ! awk -v shard="$shard" '$1 == shard { found = 1 } END { exit !found }' <<<"$assignments"; then
+# Shards are compared as strings below, so only canonical numbers are accepted.
+if [[ -n "$shard" ]] && { [[ ! "$shard" =~ ^[1-9][0-9]*$ ]] ||
+  ! awk -v shard="$shard" '$1 "" == shard "" { found = 1 } END { exit !found }' <<<"$assignments"; }; then
   printf 'integration-test: scripts/integration-packages.txt has no shard %s\n' "$shard" >&2
   exit 2
 fi
@@ -54,9 +56,10 @@ cleanup
 ./scripts/migration-runner-check.sh
 # -p 1 also serializes compilation, so the test binaries are built first with full
 # parallelism (-exec true builds and links them but runs nothing). The second go test
-# finds every compiled package in the build cache, so it only relinks or reuses each
-# test binary (seconds: ./internal/app took 44 s cold and 4 s warm) before running the
-# packages one at a time.
+# finds every compiled package in the build cache and only relinks each test binary
+# (Go does not cache linked test binaries) before running the packages one at a time.
+# The second link is the price of the parallel compile: ./internal/app took 44 s cold
+# and 4 s warm, and the whole shard compiles several times faster in parallel.
 "${compose[@]}" run --rm --no-deps test sh -ec '
   go test -count=1 -tags=integration -exec true "$@" >/dev/null
   go test -count=1 -p 1 -tags=integration "$@"

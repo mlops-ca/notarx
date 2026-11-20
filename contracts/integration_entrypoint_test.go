@@ -19,9 +19,9 @@ func TestRequiredIntegrationCommandCoversIntegrationTaggedPackages(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(script), "go test -count=1 -p 1 -tags=integration") ||
-		!strings.Contains(string(script), "scripts/integration-packages.txt") {
-		t.Fatal("scripts/integration-test.sh must run the Go integration tests of scripts/integration-packages.txt")
+	// scripts/integration-isolation-test.sh (make test) checks what the script runs.
+	if !strings.Contains(string(script), "scripts/integration-packages.txt") {
+		t.Fatal("scripts/integration-test.sh must run the packages of scripts/integration-packages.txt")
 	}
 	list, err := os.ReadFile(filepath.Join("..", "scripts", "integration-packages.txt"))
 	if err != nil {
@@ -52,7 +52,7 @@ func TestRequiredIntegrationCommandCoversIntegrationTaggedPackages(t *testing.T)
 	integration := baseline
 	integration.BuildTags = []string{"integration"}
 	required := map[string]bool{}
-	err = filepath.WalkDir(filepath.Join("..", "internal"), func(path string, entry fs.DirEntry, walkErr error) error {
+	walk := func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -76,9 +76,11 @@ func TestRequiredIntegrationCommandCoversIntegrationTaggedPackages(t *testing.T)
 			required["./"+filepath.ToSlash(relative)] = true
 		}
 		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
+	}
+	for _, root := range []string{"cmd", "internal"} {
+		if err := filepath.WalkDir(filepath.Join("..", root), walk); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if len(required) == 0 {
 		t.Fatal("integration-tagged packages were not discovered")
@@ -86,6 +88,11 @@ func TestRequiredIntegrationCommandCoversIntegrationTaggedPackages(t *testing.T)
 	for pkg := range required {
 		if listed[pkg] != 1 {
 			t.Errorf("%s has integration-tagged tests and must be listed exactly once in scripts/integration-packages.txt, not %d times", pkg, listed[pkg])
+		}
+	}
+	for pkg := range listed {
+		if !required[pkg] {
+			t.Errorf("scripts/integration-packages.txt lists %s, which has no integration-tagged tests", pkg)
 		}
 	}
 }

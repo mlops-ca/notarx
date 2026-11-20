@@ -221,6 +221,16 @@ class PlanTests(unittest.TestCase):
             self.assertRegex(command[2], r'^INTEGRATION_SHARD=\d+$', command)
         planned = sorted(command[2].split('=', 1)[1] for command in steps)
         self.assertEqual(planned, shards, 'every integration shard runs in exactly one lane')
+        # The shard that holds ./internal/app runs the official Cargo replay on the
+        # host, which needs the pinned Rust toolchain; the other shards need nothing.
+        app_shard = next(line.split()[0] for line in listed.splitlines()
+                         if line.split()[1] == './internal/app')
+        for name, lane in ci.PLAN['lanes'].items():
+            for step in lane['steps']:
+                if step['command'][:2] == ['make', 'integration-test']:
+                    shard = step['command'][2].split('=', 1)[1]
+                    self.assertEqual('rust' in lane.get('needs', []), shard == app_shard,
+                                     f'{name} runs shard {shard}; only the shard with ./internal/app needs rust')
 
     def test_every_notarx_gate_stays_planned(self):
         targets = {s['command'][1] for lane in ci.PLAN['lanes'].values()

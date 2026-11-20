@@ -67,42 +67,41 @@ NOTARX_ISOLATION_LATEST=$(find "$root/migrations" -maxdepth 1 -name '*.sql' | so
 NOTARX_ISOLATION_LATEST=${NOTARX_ISOLATION_LATEST##*/}
 "$root/scripts/integration-test.sh" >/dev/null
 make --no-print-directory -C "$root" integration-down >/dev/null
+expect_logged() {
+  grep -Fq -- "$1" "$NOTARX_ISOLATION_LOG" || { printf 'integration-test.sh did not run: %s\n' "$1" >&2; exit 1; }
+}
 for expected in 'down -v --remove-orphans' 'up -d --wait postgres rustfs' 'run --rm --no-deps test' 'port postgres 5432' 'port rustfs 9000' 'official Cargo persistent replay invoked'; do
-  grep -Fq -- "$expected" "$NOTARX_ISOLATION_LOG"
+  expect_logged "$expected"
 done
+# The packages share one database, so they must run one at a time.
+expect_logged 'go test -count=1 -p 1 -tags=integration "$@"'
 
-# Every package with integration-tagged files belongs to exactly one shard, so the
-# sharded CI lanes run the same suite as the unsharded run. listed is not
-# deduplicated, so a package in two shards also fails the comparison.
-tagged=$(cd "$root" && grep -rlE '^//go:build.*\bintegration\b' --include='*.go' cmd internal | xargs -n1 dirname | sed 's|^|./|' | sort -u)
-listed=$("$root/scripts/integration-test.sh" --list | awk '{ print $2 }' | sort)
-if [[ "$tagged" != "$listed" ]]; then
-  printf 'integration shards do not list every integration package exactly once:\n%s\n' \
-    "$(diff <(printf '%s\n' "$tagged") <(printf '%s\n' "$listed") || true)" >&2
-  exit 1
-fi
-
-# Shard 1 holds ./internal/app and runs the official Cargo replay; shard 2 does not.
-for shard in 1 2; do
+# Every package is in exactly one shard (contracts/integration_entrypoint_test.go checks
+# that the list matches the integration-tagged packages). Each shard runs only its own
+# packages, and only the shard that holds ./internal/app runs the official Cargo replay.
+app_shard=$("$root/scripts/integration-test.sh" --list | awk '$2 == "./internal/app" { print $1 }')
+while read -r shard; do
   : >"$NOTARX_ISOLATION_LOG"
   "$root/scripts/integration-test.sh" --shard "$shard" >/dev/null
   while read -r listed_shard package; do
     if [[ "$listed_shard" == "$shard" ]]; then
-      grep -Fqw -- "$package" "$NOTARX_ISOLATION_LOG"
+      grep -Fqw -- "$package" "$NOTARX_ISOLATION_LOG" || { printf 'shard %s did not run %s\n' "$shard" "$package" >&2; exit 1; }
     elif grep -Fqw -- "$package" "$NOTARX_ISOLATION_LOG"; then
       printf 'shard %s ran %s of shard %s\n' "$shard" "$package" "$listed_shard" >&2
       exit 1
     fi
   done < <("$root/scripts/integration-test.sh" --list)
-  if [[ "$shard" == 1 ]]; then
-    grep -Fq 'official Cargo persistent replay invoked' "$NOTARX_ISOLATION_LOG"
+  if [[ "$shard" == "$app_shard" ]]; then
+    expect_logged 'official Cargo persistent replay invoked'
   elif grep -Fq 'official Cargo persistent replay invoked' "$NOTARX_ISOLATION_LOG"; then
-    printf 'shard 2 ran the Cargo replay, which belongs to shard 1\n' >&2
+    printf 'shard %s ran the Cargo replay, which belongs to shard %s\n' "$shard" "$app_shard" >&2
+    exit 1
+  fi
+done < <("$root/scripts/integration-test.sh" --list | awk '{ print $1 }' | sort -u)
+for shard in 0 01 3 x; do
+  if "$root/scripts/integration-test.sh" --shard "$shard" >/dev/null 2>&1; then
+    printf 'integration-test.sh accepted shard %s, which does not exist\n' "$shard" >&2
     exit 1
   fi
 done
-if "$root/scripts/integration-test.sh" --shard 3 >/dev/null 2>&1; then
-  printf 'integration-test.sh accepted a shard that does not exist\n' >&2
-  exit 1
-fi
 printf 'Integration Compose isolation passed with an unrelated exported project name.\n'
