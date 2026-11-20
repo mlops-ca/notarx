@@ -95,7 +95,7 @@ func TestPostgresCargoProxyIndexAboveAndBelowTheThreshold(t *testing.T) {
 	}
 	ctx := context.Background()
 	repo, err := store.CreateHostedRepository(ctx, HostedRepository{ID: uuid.NewString(), Name: "cargo-external-" + uuid.NewString()[:8],
-		Format: FormatCargo, Type: RepositoryTypeProxy, Endpoint: "https://index.crates.io"})
+		Format: FormatCargo, Type: RepositoryTypeProxy, Endpoint: "https://index.example.test"})
 	if err != nil {
 		_ = store.Close()
 		t.Fatal(err)
@@ -105,7 +105,7 @@ func TestPostgresCargoProxyIndexAboveAndBelowTheThreshold(t *testing.T) {
 		_ = store.Close()
 	})
 	now := time.Now().UTC()
-	if err := store.PutCargoProxyConfig(ctx, CargoProxyConfig{RepositoryID: repo.ID, SourceVersion: repo.Version, DownloadTemplate: "https://static.crates.io/crates", FetchedAt: now, ExpiresAt: now.Add(time.Hour)}); err != nil {
+	if err := store.PutCargoProxyConfig(ctx, CargoProxyConfig{RepositoryID: repo.ID, SourceVersion: repo.Version, DownloadTemplate: "https://static.example.test/crates", FetchedAt: now, ExpiresAt: now.Add(time.Hour)}); err != nil {
 		t.Fatal(err)
 	}
 	payloads := newMemoryPayloadStore()

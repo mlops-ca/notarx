@@ -401,8 +401,8 @@ Both object-store drivers (filesystem and S3) support the namespace. These paylo
 they exceed the threshold: SBOM bodies, the findings of an artifact's vulnerability result (the
 counts stay in the row), NuGet `nuspec` and Helm `chart_yaml` of published packages, the cached
 NuGet and Helm source documents, Cargo proxy index bodies, OCI discovery snapshots and npm
-version manifests. Rows written before the move stay inline and keep working. A node reads an
-externalised payload through the object store, so the `meta/` objects belong in every backup
+version manifests. Rows written before the move stay inline and keep working. A node reads a
+payload that was moved through the object store, so the `meta/` objects belong in every backup
 of the object store, and a database restored without them cannot serve those rows.
 
 ```env

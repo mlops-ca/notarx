@@ -24,3 +24,5 @@
 2 ./internal/format/rubygems
 2 ./internal/rubygemspublication/pgstore
 2 ./internal/preflight
+2 ./internal/capacity
+2 ./internal/lifecycle
