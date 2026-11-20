@@ -1,5 +1,30 @@
 {
   "schemaVersion": 2,
+  "$comment": "jobs packs short lanes into one CI job each (docs/ci.md, Contract lane packing); every other lane is a job of its own.",
+  "jobs": {
+    "packed-checks-auth": [
+      "core-checks",
+      "six-format-auth"
+    ],
+    "packed-nuget-migrations": [
+      "nuget",
+      "oci-migration",
+      "npm-migration"
+    ],
+    "packed-maven-clients": [
+      "maven-oci-auth",
+      "migration-clients"
+    ],
+    "packed-rubygems-discovery": [
+      "rubygems",
+      "oci-discovery"
+    ],
+    "packed-inventory-helm-pypi": [
+      "inventory",
+      "helm",
+      "pypi-migration"
+    ]
+  },
   "lanes": {
     "core-checks": {
       "timeoutMinutes": 30,

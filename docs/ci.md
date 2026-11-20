@@ -107,10 +107,11 @@ Both Playwright installs (the `console` job and the `console-e2e` shards) use th
 
 ## The ci-ok gate
 
-`ci-ok` depends on `changes`, `no-chinese`, `tests` and the two `oci-free-tier` jobs and
+`ci-ok` depends on `changes`, `tests`, `packages` and the two `oci-free-tier` jobs and
 always runs. It passes when each needed job succeeded or was skipped, and fails on any
-failure or cancellation. On a pull request `changes`, `no-chinese` and `tests` must have
-succeeded; the `tests` job holds `suite-ok`, which fails a job that change detection
+failure or cancellation. On a pull request `changes` and `tests` must have
+succeeded; `changes` also runs `scripts/check-no-chinese.py` (the owner rule that no
+Chinese content may be added; it was a separate `no-chinese` job); the `tests` job holds `suite-ok`, which fails a job that change detection
 required but that was skipped (for example because an upstream job failed). On a push to
 `main` every job behind `ci-ok` is skipped, so it passes without running a test. Require `ci-ok` as the single branch-protection check; the set of
 jobs behind it can change without editing the protection rule.
@@ -145,6 +146,31 @@ is split into four lanes by duration, so the full run is bound by its slowest
 lane instead of their sum. Every step of the old lane runs in exactly one lane;
 `upgrade-readiness` is the only step dropped (below). The `suite-ok` job of
 `test-suite.yml` requires every lane.
+
+### Contract lane packing
+
+A lane is the unit of the plan; a CI job runs one lane or, for short lanes, several.
+The `jobs` object of `scripts/ci-contract-lanes.json` packs lanes of a few minutes
+into one job, so they share one checkout, toolchain setup and image load instead of
+each paying it (about 0.6 minutes per job) and holding a runner of the 20 the
+repository may use at once. Every other lane is a job named after itself.
+`scripts/ci-contract.py run <lane>...` runs the lanes of a job in order, keeps going
+after a failed lane, writes each lane's evidence to its own directory and lists every
+lane's verdict, duration and failed steps in the job's step summary; the job fails
+when any lane failed. The arm64 leg of a packed job runs only the lanes whose tier runs
+on arm64 in that scope.
+
+| Job | Lanes | Lane step minutes (run 44640058817 and the three before it) |
+| --- | --- | --- |
+| `packed-checks-auth` | `core-checks`, `six-format-auth` | 1.9 + 1.7 |
+| `packed-nuget-migrations` | `nuget`, `oci-migration`, `npm-migration` | 5.0 + 1.0 + 1.1 |
+| `packed-maven-clients` | `maven-oci-auth`, `migration-clients` | 5.3 + 1.3 |
+| `packed-rubygems-discovery` | `rubygems`, `oci-discovery` | 3.0 + 3.1 |
+| `packed-inventory-helm-pypi` | `inventory`, `helm`, `pypi-migration` | 2.6 + 1.7 + 1.4 |
+
+A job's timeout is the sum of its lanes' timeouts and it installs the union of their
+tool needs. Move a lane in or out of a pack by editing `jobs` only; the workflows
+name no lane and no job.
 
 Each lane uses the default shallow checkout, warms the Go module cache once with
 retries (`GOPROXY=https://proxy.golang.org|direct`) and installs only the tools
@@ -252,7 +278,10 @@ against the baseline and a synthetic `000002` migration meanwhile.
 `test-suite.yml` with the `go` class) runs the shared object store contract
 (`internal/objectstore/storetest`, ADR 0017) against the S3 driver on RustFS
 and on a second S3-compatible implementation, once per checksum mode where the
-service supports it. The same suite runs against the in-memory store in
+service supports it. The three configurations (RustFS, and the second service with each
+checksum mode) run one after another in one job that starts both services once and
+lists each configuration's result in the step summary; a failed configuration does not
+stop the next one. The same suite runs against the in-memory store in
 `make test` and against RustFS in `make integration-test`; the
 `./internal/objectstore` coverage floor in `scripts/coverage-packages.txt` is set
 so it fails if the suite stops running. The second service has no published

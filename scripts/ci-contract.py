@@ -143,6 +143,33 @@ RUNNERS = {'amd64': 'ubuntu-24.04', 'arm64': 'ubuntu-24.04-arm'}
 SCOPES = ('pull-request', 'mainline')
 
 
+def jobs():
+    """The CI jobs of the plan, in lane order: (name, lanes).
+
+    `jobs` in the plan packs short lanes into one job that shares a single setup
+    (checkout, toolchains, image load); every other lane is a job of its own,
+    named after the lane. A lane is in at most one job.
+    """
+    packs = PLAN.get('jobs', {})
+    owner = {}
+    for name, lanes in packs.items():
+        if name in PLAN['lanes']:
+            raise ValueError('job ' + name + ' has the name of a lane')
+        for lane in lanes:
+            if lane not in PLAN['lanes']:
+                raise ValueError('job ' + name + ' packs unknown lane ' + lane)
+            if lane in owner:
+                raise ValueError('lane ' + lane + ' is packed into ' + owner[lane] + ' and ' + name)
+            owner[lane] = name
+    result, seen = [], set()
+    for lane in PLAN['lanes']:
+        name = owner.get(lane, lane)
+        if name not in seen:
+            seen.add(name)
+            result.append((name, list(packs.get(name, [lane]))))
+    return result
+
+
 def matrix(scope='mainline', arm64=True):
     """The GitHub Actions matrix, straight from the plan (ADR 0016).
 
@@ -155,13 +182,21 @@ def matrix(scope='mainline', arm64=True):
     """
     if scope == 'mainline' and not arm64:
         raise ValueError('the mainline scope runs every arm64 lane; --no-arm64 is for pull requests')
-    def entry(name, lane, arch):
-        return {'lane': name, 'timeout': lane['timeoutMinutes'], 'arch': arch, 'runner': RUNNERS[arch],
-                **{need: need in lane['needs'] for need in TOOL_NEEDS}}
+    def entry(name, lanes, arch):
+        plans = [PLAN['lanes'][lane] for lane in lanes]
+        return {'job': name, 'lanes': ' '.join(lanes), 'timeout': sum(p['timeoutMinutes'] for p in plans),
+                'arch': arch, 'runner': RUNNERS[arch],
+                **{need: any(need in p['needs'] for p in plans) for need in TOOL_NEEDS}}
 
-    include = [entry(name, lane, 'amd64') for name, lane in PLAN['lanes'].items()]
-    include += [entry(name, lane, 'arm64') for name, lane in PLAN['lanes'].items()
-                if scope == 'mainline' or (arm64 and lane['arm64'] == 'pull-request')]
+    def on_arm64(lane):
+        return scope == 'mainline' or (arm64 and PLAN['lanes'][lane]['arm64'] == 'pull-request')
+
+    include = [entry(name, lanes, 'amd64') for name, lanes in jobs()]
+    # A packed job's arm64 leg runs only the lanes of the job that run on arm64.
+    for name, lanes in jobs():
+        arm64_lanes = [lane for lane in lanes if on_arm64(lane)]
+        if arm64_lanes:
+            include.append(entry(name, arm64_lanes, 'arm64'))
     return {'include': include}
 
 
@@ -209,11 +244,40 @@ def run_lane(args):
     return 0 if report['status'] == 'success' else 1
 
 
+def run_lanes(args):
+    """Run each lane of a CI job in order; a failed lane does not stop the next one.
+
+    One lane writes its evidence into --output as before; several lanes write one
+    subdirectory each. The per-lane verdict goes to the job's step summary.
+    """
+    rows, status = [], 0
+    for name in args.lanes:
+        output = args.output if len(args.lanes) == 1 else args.output / name
+        lane_args = type('LaneArgs', (), {'lane': name, 'output': output, 'local': args.local,
+                                          'keep_going': args.keep_going})()
+        started = time.monotonic()
+        code = run_lane(lane_args)
+        status = status or code
+        report = json.loads((output / 'report.json').read_text())
+        failed = [s['name'] for s in report['steps'] if s['status'] not in ('success', 'skipped')]
+        rows.append((name, report['status'], time.monotonic() - started, ', '.join(failed)))
+    for name, verdict, seconds, failed in rows:
+        print(f'Contract lane {name}: {verdict} in {seconds / 60:.1f} min' + (f' (failed: {failed})' if failed else ''),
+              flush=True)
+    summary = os.environ.get('GITHUB_STEP_SUMMARY')
+    if summary:
+        with open(summary, 'a', encoding='utf-8') as handle:
+            handle.write('| Contract lane | Result | Minutes | Failed steps |\n| --- | --- | --- | --- |\n')
+            for name, verdict, seconds, failed in rows:
+                handle.write(f'| {name} | {verdict} | {seconds / 60:.1f} | {failed or "-"} |\n')
+    return status
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
     lane = commands.add_parser('run')
-    lane.add_argument('lane', choices=LANES)
+    lane.add_argument('lanes', nargs='+', choices=LANES, metavar='lane')
     lane.add_argument('--output', required=True, type=Path)
     lane.add_argument('--local', action='store_true')
     lane.add_argument('--keep-going', action='store_true')
@@ -225,7 +289,9 @@ def main():
                              help='pull-request scope only: the change is not architecture-sensitive')
     args = parser.parse_args()
     if args.command == 'run':
-        return run_lane(args)
+        if len(set(args.lanes)) != len(args.lanes):
+            parser.error('a lane is named twice')
+        return run_lanes(args)
     if args.command == 'openapi-fresh':
         openapi_fresh()
     elif args.command == 'list':

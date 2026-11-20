@@ -22,7 +22,9 @@ concurrency:
 
 jobs:
   # Classifies the change (docs/ci.md). Heavy jobs run only when their class
-  # changed; an unresolvable range runs everything.
+  # changed; an unresolvable range runs everything. It also enforces the owner rule
+  # that no Chinese content may be added anywhere (zh-CN deletions are allowed), on
+  # every pull request, not only when docs changed; it used to be a job of its own.
   changes:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
@@ -38,6 +40,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      - name: Reject added Chinese content
+        run: python3 scripts/check-no-chinese.py
       - name: Verify the classifier fixtures
         run: |
           bash scripts/ci-changes-test.sh
@@ -56,17 +60,6 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           scripts/ci-e2e-select.sh "$BASE_SHA" "$HEAD_SHA" | tee -a "$GITHUB_OUTPUT"
-
-  # Owner rule: no Chinese content may be added anywhere (zh-CN deletions are
-  # allowed). Runs on every pull request, not only when docs changed.
-  no-chinese:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 2
-      - run: python3 scripts/check-no-chinese.py
 
   # Native deb and rpm packages (ADR 0025): build all three from release archives, assert
   # contents, modes, Version/Release fields and maintainer scripts, then install them in
@@ -164,7 +157,7 @@ jobs:
   # main every job here is skipped, so it passes without running any test.
   ci-ok:
     if: always()
-    needs: [changes, no-chinese, tests, packages, oci-free-tier, oci-free-tier-tofu]
+    needs: [changes, tests, packages, oci-free-tier, oci-free-tier-tofu]
     runs-on: ubuntu-24.04
     steps:
       - name: Require every needed job to succeed or be skipped
@@ -182,7 +175,7 @@ jobs:
           # a job skipped because something upstream failed must not pass.
           status=0
           required=()
-          if [[ "$EVENT" == pull_request ]]; then required+=(changes no-chinese tests); fi
+          if [[ "$EVENT" == pull_request ]]; then required+=(changes tests); fi
           if [[ "$IMAGES" == true ]]; then required+=(oci-free-tier oci-free-tier-tofu); fi
           if [[ "$CI_CLASS" == true || "$GO" == true ]]; then required+=(packages); fi
           for job in "${required[@]}"; do

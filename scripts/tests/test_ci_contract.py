@@ -189,6 +189,26 @@ class RunLaneTests(unittest.TestCase):
         status, report, _ = self.run_lane(steps, keep_going=True)
         self.assertEqual((status, report['status'], len(report['steps'])), (1, 'failure', 2))
 
+    def test_a_packed_job_runs_every_lane_and_summarizes_each(self):
+        work = tempfile.TemporaryDirectory()
+        self.addCleanup(work.cleanup)
+        output = Path(work.name) / 'out'
+        summary = Path(work.name) / 'summary.md'
+        plan = {'lanes': {name: {'timeoutMinutes': 1, 'needs': [], 'rawDirectories': [],
+                                 'steps': [self.step('only', code)]}
+                          for name, code in (('first', 'raise SystemExit(3)'), ('second', 'print(2)'))}}
+        args = type('Args', (), {'lanes': ['first', 'second'], 'output': output, 'local': False,
+                                 'keep_going': False})()
+        with patch.object(ci, 'PLAN', plan), patch.dict(os.environ, {'GITHUB_STEP_SUMMARY': str(summary)}):
+            status = ci.run_lanes(args)
+        self.assertEqual(status, 1)
+        self.assertEqual(json.loads((output / 'first/report.json').read_text())['status'], 'failure')
+        self.assertEqual(json.loads((output / 'second/report.json').read_text())['status'], 'success')
+        table = summary.read_text()
+        self.assertIn('| first | failure |', table)
+        self.assertIn('| only |', table)
+        self.assertIn('| second | success |', table)
+
     def test_step_timeout_fails_the_lane(self):
         status, report, _ = self.run_lane([self.step('slow', 'import time; time.sleep(30)', 0.1)])
         self.assertEqual((status, report['steps'][0]['status']), (1, 'timed_out'))
@@ -285,33 +305,50 @@ class PlanTests(unittest.TestCase):
 
         for include in (generate(), generate('--scope', 'mainline'), generate('--scope', 'pull-request')):
             amd64 = [e for e in include if e['arch'] == 'amd64']
-            self.assertEqual([e['lane'] for e in amd64], list(ci.PLAN['lanes']))
+            # Every lane runs on amd64 exactly once, packed or alone.
+            amd64_lanes = [lane for e in amd64 for lane in e['lanes'].split()]
+            self.assertEqual(sorted(amd64_lanes), sorted(ci.PLAN['lanes']))
+            self.assertEqual(len(amd64_lanes), len(set(amd64_lanes)))
+            self.assertEqual([e['job'] for e in amd64], [name for name, _ in ci.jobs()])
             for entry in include:
-                lane = ci.PLAN['lanes'][entry['lane']]
-                self.assertEqual(entry['timeout'], lane['timeoutMinutes'])
+                lanes = [ci.PLAN['lanes'][name] for name in entry['lanes'].split()]
+                self.assertEqual(entry['timeout'], sum(lane['timeoutMinutes'] for lane in lanes))
                 self.assertEqual(entry['runner'], ci.RUNNERS[entry['arch']])
                 for need in ci.TOOL_NEEDS:
-                    self.assertEqual(entry[need], need in lane['needs'])
+                    self.assertEqual(entry[need], any(need in lane['needs'] for lane in lanes))
+
+    def test_packed_jobs_follow_the_plan(self):
+        packs = ci.PLAN['jobs']
+        packed = [lane for lanes in packs.values() for lane in lanes]
+        self.assertEqual(len(packed), len(set(packed)), 'a lane is packed into two jobs')
+        self.assertTrue(set(packed) <= set(ci.PLAN['lanes']))
+        self.assertFalse(set(packs) & set(ci.PLAN['lanes']), 'a job may not take the name of a lane')
+        for name, lanes in ci.jobs():
+            self.assertEqual(lanes, packs.get(name, [name]))
+        for broken in ({'x': ['core-email'], 'y': ['core-email']}, {'x': ['no-such-lane']}, {'core-email': ['helm']}):
+            with patch.object(ci, 'PLAN', dict(ci.PLAN, jobs=broken)), self.assertRaises(ValueError):
+                ci.jobs()
 
     def test_arm64_legs_follow_the_plan_tiers(self):
-        mainline = [e['lane'] for e in json.loads(subprocess.check_output(
+        mainline = [lane for e in json.loads(subprocess.check_output(
             [sys.executable, str(ROOT / 'scripts/ci-contract.py'), 'matrix', '--scope', 'mainline']))['include']
-            if e['arch'] == 'arm64']
-        self.assertEqual(mainline, list(ci.PLAN['lanes']))
-        pull_request = [e['lane'] for e in json.loads(subprocess.check_output(
+            if e['arch'] == 'arm64' for lane in e['lanes'].split()]
+        self.assertEqual(sorted(mainline), sorted(ci.PLAN['lanes']))
+        pull_request = [lane for e in json.loads(subprocess.check_output(
             [sys.executable, str(ROOT / 'scripts/ci-contract.py'), 'matrix', '--scope', 'pull-request']))['include']
-            if e['arch'] == 'arm64']
-        # ADR 0016: every core lane plus the native-format smoke subset on each pull request.
-        self.assertEqual(pull_request, ['core-checks', 'core-email', 'core-native-e2e', 'core-backup',
-                                        'core-integration-1', 'core-integration-2',
-                                        'six-format-auth', 'oci-discovery'])
+            if e['arch'] == 'arm64' for lane in e['lanes'].split()]
+        # ADR 0016: every core lane plus the native-format smoke subset on each
+        # architecture-sensitive pull request; a packed job's arm64 leg runs only those.
+        self.assertEqual(sorted(pull_request), sorted(['core-checks', 'core-email', 'core-native-e2e', 'core-backup',
+                                                       'core-integration-1', 'core-integration-2',
+                                                       'six-format-auth', 'oci-discovery']))
         self.assertEqual({lane['arm64'] for lane in ci.PLAN['lanes'].values()}, {'pull-request', 'mainline'})
         # ADR 0016, amendment of 2026-11-19: a pull request that changes nothing
         # architecture-sensitive runs no arm64 lane; the mainline scope cannot drop them.
         amd64_only = json.loads(subprocess.check_output(
             [sys.executable, str(ROOT / 'scripts/ci-contract.py'), 'matrix', '--scope', 'pull-request',
              '--no-arm64']))['include']
-        self.assertEqual([e['lane'] for e in amd64_only], list(ci.PLAN['lanes']))
+        self.assertEqual(sorted(lane for e in amd64_only for lane in e['lanes'].split()), sorted(ci.PLAN['lanes']))
         self.assertEqual({e['arch'] for e in amd64_only}, {'amd64'})
         refused = subprocess.run([sys.executable, str(ROOT / 'scripts/ci-contract.py'), 'matrix', '--scope',
                                   'mainline', '--no-arm64'], capture_output=True, text=True)
@@ -325,7 +362,7 @@ class PlanTests(unittest.TestCase):
     def test_workflows_name_no_lane_and_pin_no_upstream(self):
         for path in ('ci.yml', 'test-suite.yml', 'release.yml', 'contract-lane.yml'):
             text = (ROOT / '.github/workflows' / path).read_text()
-            for lane in ci.LANES:
+            for lane in list(ci.LANES) + list(ci.PLAN.get('jobs', {})):
                 self.assertNotRegex(text, r'(?<![\w-])' + re.escape(lane) + r'(?![\w-])', path + ' names lane ' + lane)
             self.assertNotIn('cc' + 'sert', text)
         lane_workflow = (ROOT / '.github/workflows/contract-lane.yml').read_text()

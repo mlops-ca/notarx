@@ -1,12 +1,17 @@
 name: Contract lane
 
-# One lane of the plan in scripts/ci-contract-lanes.json. The caller passes the
-# matrix entry produced by `scripts/ci-contract.py matrix`; this workflow names
-# no lane and installs only the tools the lane declares it needs.
+# One job of the plan in scripts/ci-contract-lanes.json: a lane, or several short
+# lanes packed into one job that shares this setup (docs/ci.md). The caller passes
+# the matrix entry produced by `scripts/ci-contract.py matrix`; this workflow names
+# no lane and installs only the tools the job's lanes declare they need.
 on:
   workflow_call:
     inputs:
-      lane:
+      # The job name, and its lanes separated by spaces.
+      job:
+        required: true
+        type: string
+      lanes:
         required: true
         type: string
       timeout:
@@ -37,7 +42,7 @@ permissions:
 
 jobs:
   lane:
-    name: contract/${{ inputs.lane }} (${{ inputs.runner }})
+    name: contract/${{ inputs.job }} (${{ inputs.runner }})
     runs-on: ${{ inputs.runner }}
     timeout-minutes: ${{ inputs.timeout }}
     env:
@@ -89,18 +94,23 @@ jobs:
           npm ci --ignore-scripts --no-audit --no-fund --timing --loglevel=http --prefix tools/openapi
           npm ci --ignore-scripts --no-audit --no-fund --timing --loglevel=http --prefix console
         timeout-minutes: 10
+      # Every lane of the job runs, even after one fails; the step summary lists the
+      # verdict of each lane.
       - name: Run the lane steps
         env:
           # Authenticated download of the pinned ORAS and crane clients
           # (scripts/lib/github-release.sh); the egress guard wraps only the clients.
           GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/ci-contract.py run "${{ inputs.lane }}" --output "$RUNNER_TEMP/lane"
+          LANES: ${{ inputs.lanes }}
+        run: |
+          read -ra lanes <<<"$LANES"
+          python3 scripts/ci-contract.py run "${lanes[@]}" --output "$RUNNER_TEMP/lane"
       - name: Preserve lane logs and raw reports on failure
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           # The architecture keeps evidence unique when both legs of a lane fail.
-          name: contract-${{ inputs.lane }}-${{ runner.arch }}-${{ github.run_attempt }}
+          name: contract-${{ inputs.job }}-${{ runner.arch }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/lane/
           if-no-files-found: ignore
           retention-days: 7
