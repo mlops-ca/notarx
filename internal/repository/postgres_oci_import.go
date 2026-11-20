@@ -155,6 +155,9 @@ func (s *PostgresStore) PublishOCIImportClosure(ctx context.Context, c OCIImport
 			return err
 		}
 	}
+	if err = refreshArtifactCatalog(ctx, tx, c.RepositoryID, FormatOCI, c.Name); err != nil {
+		return err
+	}
 	if err = imported.reserve(ctx, tx); err != nil {
 		return err
 	}

@@ -270,6 +270,30 @@ the guarantees and the settings.
 MySQL (ADR 0022) uses plain tables with an `AUTO_INCREMENT` key and batched
 retention; that twin is written with the ADR 0022 store slices.
 
+## Artifact catalogue
+
+`artifact_catalog(repository_id, format, coordinate, latest_version, latest_digest,
+latest_published_at, publisher, version_count, size_bytes)` holds one row per coordinate
+(ADR 0023 section 8), with a trigram index on `coordinate`, so artifact search can rank "latest
+per coordinate" with a column instead of `row_number()` windows over the per-format rows.
+
+- **Writes.** Every publish, replace, replicate, promote, import, proxy cache fill, yank,
+  restore, tombstone and delete recomputes the rows of the coordinates it touched inside its own
+  transaction, from `artifact_search_projection`. The statement first inserts the row or takes
+  its row lock in key order, so two concurrent writers of one coordinate queue and the second
+  reads the first's commit. A coordinate with no visible row has no catalogue row.
+- **Coverage.** Maven, OCI, Conan, raw, npm, PyPI, Go and APT are covered. Cargo, Helm, NuGet
+  and RubyGems are not part of `artifact_search_projection` yet and join in a later wave; the
+  registry `artifactCatalogRegistry` fails a unit test for any admitted format without an entry.
+  The view stays until the last format is covered.
+- **Backfill.** Rows that existed before the migration are filled by a background pass at start-up
+  (`BackfillArtifactCatalog`), in batches of 500 coordinates per format, resumable from the cursor in
+  `artifact_catalog_backfill`. It recomputes each batch under the same row locks as a publish, so it is
+  idempotent and safe beside live writes and on several nodes at once. The log line "artifact
+  catalogue backfill complete" marks the end.
+- **MySQL.** The port `ArtifactCatalogStore` is registered in the MySQL start-up gate of ADR 0022,
+  which lists it as missing until the MySQL twin lands with the ADR 0022 store slices.
+
 ## pg_stat_statements
 
 The statement dashboard of `deploy/observability` and the hot-query registry

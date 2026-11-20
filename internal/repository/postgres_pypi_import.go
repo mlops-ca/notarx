@@ -134,6 +134,9 @@ func (s *PostgresStore) PublishPyPIImport(ctx context.Context, c PyPIImportClosu
 	if err = completeNativePublication(ctx, tx); err != nil {
 		return err
 	}
+	if err = refreshArtifactCatalog(ctx, tx, c.RepositoryID, FormatPyPI, c.Project); err != nil {
+		return err
+	}
 	if err = delta.reserve(ctx, tx); err != nil {
 		return err
 	}

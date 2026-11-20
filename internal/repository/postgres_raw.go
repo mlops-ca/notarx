@@ -264,6 +264,9 @@ func replaceRawAssetIf(ctx context.Context, tx *sql.Tx, asset RawAsset, conditio
 	if err != nil {
 		return current, rawUsageDelta{}, err
 	}
+	if err = refreshArtifactCatalog(ctx, tx, asset.RepositoryID, FormatRaw, asset.Path); err != nil {
+		return RawAsset{}, rawUsageDelta{}, err
+	}
 	return current, delta, nil
 }
 
@@ -361,6 +364,9 @@ func (s *PostgresStore) DeleteRawAsset(ctx context.Context, repositoryID, path s
 	if _, err = tx.ExecContext(ctx, `DELETE FROM native_raw_assets WHERE repository_id=$1::uuid AND path=$2`, repositoryID, path); err != nil {
 		return err
 	}
+	if err = refreshArtifactCatalog(ctx, tx, repositoryID, FormatRaw, path); err != nil {
+		return err
+	}
 	if err = capacity.Reserve(ctx, tx, repositoryID, -asset.Size, -1); err != nil {
 		return err
 	}
@@ -404,6 +410,9 @@ func (s *PostgresStore) RestoreRawAsset(ctx context.Context, repositoryID, path 
 		return RawAsset{}, err
 	}
 	asset.UpdatedAt = time.Now().UTC()
+	if err = refreshArtifactCatalog(ctx, tx, repositoryID, FormatRaw, path); err != nil {
+		return RawAsset{}, err
+	}
 	if err = capacity.Reserve(ctx, tx, repositoryID, asset.Size, 1); err != nil {
 		return RawAsset{}, err
 	}

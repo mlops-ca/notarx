@@ -67,6 +67,9 @@ func (s *PostgresStore) CacheAPTAsset(ctx context.Context, incoming APTAsset) (A
 	if stored.Digest != incoming.Digest || stored.ObjectKey != incoming.ObjectKey || stored.Size != incoming.Size || stored.SourceURL != incoming.SourceURL {
 		return APTAsset{}, ErrUpstreamChanged
 	}
+	if err = refreshArtifactCatalog(ctx, tx, stored.RepositoryID, FormatAPT, stored.Path); err != nil {
+		return APTAsset{}, err
+	}
 	delta := measuredUsage{bytes: stored.Size - previousSize}
 	if !previousExisted {
 		delta.objects = 1

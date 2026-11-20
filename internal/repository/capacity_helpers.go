@@ -114,6 +114,10 @@ type usageBracket struct {
 	repositoryID string
 	measure      func(context.Context, *sql.Tx) (measuredUsage, error)
 	before       measuredUsage
+	// catalogFormat and catalogCoordinate name the coordinate whose artifact_catalog row the
+	// writer changes (ADR 0023 section 8); reserve refreshes it before the reservation.
+	catalogFormat     Format
+	catalogCoordinate string
 }
 
 func openUsageBracket(ctx context.Context, tx *sql.Tx, repositoryID string, measure func(context.Context, *sql.Tx) (measuredUsage, error)) (*usageBracket, error) {
@@ -124,8 +128,14 @@ func openUsageBracket(ctx context.Context, tx *sql.Tx, repositoryID string, meas
 	return &usageBracket{repositoryID: repositoryID, measure: measure, before: before}, nil
 }
 
-// reserve measures again and applies the difference to the repository's counter.
+// reserve refreshes the coordinate's catalogue row, measures again and applies the
+// difference to the repository's counter.
 func (b *usageBracket) reserve(ctx context.Context, tx *sql.Tx) error {
+	if b.catalogFormat != "" {
+		if err := refreshArtifactCatalog(ctx, tx, b.repositoryID, b.catalogFormat, b.catalogCoordinate); err != nil {
+			return err
+		}
+	}
 	after, err := b.measure(ctx, tx)
 	if err != nil {
 		return err

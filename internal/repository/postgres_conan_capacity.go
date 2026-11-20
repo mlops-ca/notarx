@@ -27,5 +27,10 @@ WHERE a.repository_id=$1::uuid AND a.reference=$2 AND a.recipe_revision=$3
 // openConanUsageBracket starts the measurement of the recipe revision; call it after
 // lockConanRepositoriesTx and before the first change of the transaction.
 func openConanUsageBracket(ctx context.Context, tx *sql.Tx, repositoryID, reference, recipeRevision string) (*usageBracket, error) {
-	return openUsageBracket(ctx, tx, repositoryID, conanRevisionUsage(repositoryID, reference, recipeRevision))
+	bracket, err := openUsageBracket(ctx, tx, repositoryID, conanRevisionUsage(repositoryID, reference, recipeRevision))
+	if err != nil {
+		return nil, err
+	}
+	bracket.catalogFormat, bracket.catalogCoordinate = FormatConan, reference
+	return bracket, nil
 }

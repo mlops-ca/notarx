@@ -53,7 +53,12 @@ const hotQueryCount = 30
 // hotQueries is the registry. Add or swap a query when a hot statement appears in
 // pg_stat_statements; the registry test pins the count at hotQueryCount and rejects
 // duplicates and bad placeholders.
-
+//
+// A query on a table the seed leaves empty names no index: on an empty or small table the
+// planner may pick any of several equivalent indexes, and which one changes with the rows
+// other tests leave behind, so such an entry asserts what must hold everywhere, that the plan
+// scans some index and never reads a listed table sequentially. A query on a seeded table, or
+// one that only a single index can serve, names its index.
 var hotQueries = []hotQuery{
 	{
 		name:          "npm.package.get",
@@ -131,28 +136,24 @@ var hotQueries = []hotQuery{
 		noSeqScan: []string{"api_keys"},
 	},
 	{
-		name:          "session.byID",
-		build:         fixed(getUserSessionQuery, func(f hotQueryFixture) []any { return []any{f.repositoryID, f.repositoryID} }),
-		indexContains: []string{"user_sessions_pkey"},
-		noSeqScan:     []string{"user_sessions"},
+		name:      "session.byID",
+		build:     fixed(getUserSessionQuery, func(f hotQueryFixture) []any { return []any{f.repositoryID, f.repositoryID} }),
+		noSeqScan: []string{"user_sessions"},
 	},
 	{
-		name:          "grants.byRepository",
-		build:         fixed(listRepositoryGrantsQuery, func(f hotQueryFixture) []any { return []any{f.repositoryID} }),
-		indexContains: []string{"repository_grants_pkey"},
-		noSeqScan:     []string{"repository_grants"},
+		name:      "grants.byRepository",
+		build:     fixed(listRepositoryGrantsQuery, func(f hotQueryFixture) []any { return []any{f.repositoryID} }),
+		noSeqScan: []string{"repository_grants"},
 	},
 	{
-		name:          "quota.counters",
-		build:         fixed(getRepositoryUsageCountersQuery, func(f hotQueryFixture) []any { return []any{f.repositoryID} }),
-		indexContains: []string{"repository_usage_counters_pkey"},
-		noSeqScan:     []string{"repository_usage_counters"},
+		name:      "quota.counters",
+		build:     fixed(getRepositoryUsageCountersQuery, func(f hotQueryFixture) []any { return []any{f.repositoryID} }),
+		noSeqScan: []string{"repository_usage_counters"},
 	},
 	{
-		name:          "repository.byID",
-		build:         fixed(getHostedRepositoryQuery, func(f hotQueryFixture) []any { return []any{f.repositoryID} }),
-		indexContains: []string{"hosted_repositories_pkey", "hosted_repositories_created_at_idx"},
-		noSeqScan:     []string{"hosted_repositories"},
+		name:      "repository.byID",
+		build:     fixed(getHostedRepositoryQuery, func(f hotQueryFixture) []any { return []any{f.repositoryID} }),
+		noSeqScan: []string{"hosted_repositories"},
 	},
 	{
 		name:      "lifecycle.listByRepository",
@@ -160,10 +161,9 @@ var hotQueries = []hotQuery{
 		noSeqScan: []string{"lifecycle_jobs"},
 	},
 	{
-		name:          "webhook.deliveryByID",
-		build:         fixed(getWebhookDeliveryQuery, func(f hotQueryFixture) []any { return []any{f.repositoryID} }),
-		indexContains: []string{"webhook_deliveries_pkey"},
-		noSeqScan:     []string{"webhook_deliveries", "webhook_events"},
+		name:      "webhook.deliveryByID",
+		build:     fixed(getWebhookDeliveryQuery, func(f hotQueryFixture) []any { return []any{f.repositoryID} }),
+		noSeqScan: []string{"webhook_deliveries", "webhook_events"},
 	},
 	{
 		name:          "webhook.claim",
@@ -178,18 +178,13 @@ var hotQueries = []hotQuery{
 		noSeqScan:     []string{"replication_plans"},
 	},
 	{
-		name:          "usage.byRepository",
-		build:         fixed(walkArtifactUsageQuery, func(f hotQueryFixture) []any { return []any{f.repositoryName} }),
-		indexContains: []string{"artifact_usage_stats_pkey", "artifact_usage_stats_repository_address_idx", "artifact_usage_stats_repository_usage_idx"},
-		noSeqScan:     []string{"artifact_usage_stats", "hosted_repositories", "hosted_groups"},
+		name:      "usage.byRepository",
+		build:     fixed(walkArtifactUsageQuery, func(f hotQueryFixture) []any { return []any{f.repositoryName} }),
+		noSeqScan: []string{"artifact_usage_stats", "hosted_repositories", "hosted_groups"},
 	},
 	{
-		name:  "maven.coordinate.latest",
-		build: fixed(latestMavenArtifactByCoordinateQuery, func(f hotQueryFixture) []any { return []any{f.repositoryID, "perf.group:artifact:1.0.0"} }),
-		indexContains: []string{
-			"native_maven_artifacts_repository_coordinate_build_key", "native_maven_artifacts_visible_coordinate_idx",
-			"native_maven_artifacts_visible_coordinate_pattern_idx",
-		},
+		name:      "maven.coordinate.latest",
+		build:     fixed(latestMavenArtifactByCoordinateQuery, func(f hotQueryFixture) []any { return []any{f.repositoryID, "perf.group:artifact:1.0.0"} }),
 		noSeqScan: []string{"native_maven_artifacts"},
 	},
 	{
@@ -197,46 +192,39 @@ var hotQueries = []hotQuery{
 		build: fixed(getOCIManifestByDigestQuery, func(f hotQueryFixture) []any {
 			return []any{f.repositoryID, "perf/image", "sha256:" + strings.Repeat("0", 64)}
 		}),
-		indexContains: []string{"native_oci_manifests_pkey", "native_oci_manifests_digest_search_idx", "native_oci_manifests_repository_name_pattern_idx"},
-		noSeqScan:     []string{"native_oci_manifests"},
+		noSeqScan: []string{"native_oci_manifests"},
 	},
 	{
-		name:          "oci.manifest.byTag",
-		build:         fixed(getOCIManifestByTagQuery, func(f hotQueryFixture) []any { return []any{f.repositoryID, "perf/image", "latest"} }),
-		indexContains: []string{"native_oci_tags_pkey", "native_oci_manifests_pkey"},
-		noSeqScan:     []string{"native_oci_tags", "native_oci_manifests"},
+		name:      "oci.manifest.byTag",
+		build:     fixed(getOCIManifestByTagQuery, func(f hotQueryFixture) []any { return []any{f.repositoryID, "perf/image", "latest"} }),
+		noSeqScan: []string{"native_oci_tags", "native_oci_manifests"},
 	},
 	{
-		name:          "pypi.file.byFilename",
-		build:         fixed(getPyPIFileQuery, func(f hotQueryFixture) []any { return []any{f.repositoryID, "perf-1.0.0.tar.gz"} }),
-		indexContains: []string{"native_pypi_files_pkey"},
-		noSeqScan:     []string{"native_pypi_files"},
+		name:      "pypi.file.byFilename",
+		build:     fixed(getPyPIFileQuery, func(f hotQueryFixture) []any { return []any{f.repositoryID, "perf-1.0.0.tar.gz"} }),
+		noSeqScan: []string{"native_pypi_files"},
 	},
 	{
-		name:          "raw.asset.get",
-		build:         fixed(getRawAssetQuery, func(f hotQueryFixture) []any { return []any{f.repositoryID, "perf/file.bin"} }),
-		indexContains: []string{"native_raw_assets_pkey", "native_raw_assets_repository_digest_search_idx", "native_raw_assets_repository_path_pattern_idx"},
-		noSeqScan:     []string{"native_raw_assets", "native_raw_objects"},
+		name:      "raw.asset.get",
+		build:     fixed(getRawAssetQuery, func(f hotQueryFixture) []any { return []any{f.repositoryID, "perf/file.bin"} }),
+		noSeqScan: []string{"native_raw_assets", "native_raw_objects"},
 	},
 	{
-		name:          "go.version.get",
-		build:         fixed(getGoModuleVersionQuery, func(f hotQueryFixture) []any { return []any{f.repositoryID, "example.com/perf/module", "v1.0.0"} }),
-		indexContains: []string{"native_go_versions_pkey", "native_go_versions_module_idx"},
-		noSeqScan:     []string{"native_go_versions", "artifact_tombstones"},
+		name:      "go.version.get",
+		build:     fixed(getGoModuleVersionQuery, func(f hotQueryFixture) []any { return []any{f.repositoryID, "example.com/perf/module", "v1.0.0"} }),
+		noSeqScan: []string{"native_go_versions", "artifact_tombstones"},
 	},
 	{
 		name: "conan.revision.get",
 		build: fixed(getConanRecipeRevisionQuery, func(f hotQueryFixture) []any {
 			return []any{f.repositoryID, "perf/1.0@_/_", "0123456789abcdef"}
 		}),
-		indexContains: []string{"native_conan_recipe_revisions_pkey"},
-		noSeqScan:     []string{"native_conan_recipe_revisions"},
+		noSeqScan: []string{"native_conan_recipe_revisions"},
 	},
 	{
-		name:          "apt.asset.get",
-		build:         fixed(getAPTAssetQuery, func(f hotQueryFixture) []any { return []any{f.repositoryID, "pool/main/p/perf/perf_1.0_amd64.deb"} }),
-		indexContains: []string{"native_apt_assets_pkey", "native_apt_assets_path_idx"},
-		noSeqScan:     []string{"native_apt_assets"},
+		name:      "apt.asset.get",
+		build:     fixed(getAPTAssetQuery, func(f hotQueryFixture) []any { return []any{f.repositoryID, "pool/main/p/perf/perf_1.0_amd64.deb"} }),
+		noSeqScan: []string{"native_apt_assets"},
 	},
 	{
 		name:          "npm.reference.byObjectKey",

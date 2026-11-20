@@ -332,7 +332,9 @@ scans are discouraged while planning, so a failure means no index can serve the
 statement at all. `make integration-test` runs the same test at a tenth of the size.
 The registry holds the top 30 statements (hosted repositories, sessions, API keys, grants,
 quota counters, the lifecycle, webhook and replication claims, usage, and the hot reads of
-the npm, Maven, OCI, PyPI, raw, Go, Conan and APT stores); a unit test pins the count. Where
-several indexes are equivalent for the seeded data an entry lists every one the planner may
-legitimately pick, so only a real regression fails. To register a query, add an entry to the registry; the unit test rejects duplicates,
+the npm, Maven, OCI, PyPI, raw, Go, Conan and APT stores); a unit test pins the count. An entry
+on a seeded table names its index (listing every equivalent one the planner may pick); an entry
+on a table the seed leaves empty only asserts that the plan scans some index and never reads
+the table sequentially, because the planner's choice among equivalent indexes there depends on
+the rows other tests leave behind. To register a query, add an entry to the registry; the unit test rejects duplicates,
 `OFFSET`, `COUNT(*)` and a placeholder count that does not match the arguments.

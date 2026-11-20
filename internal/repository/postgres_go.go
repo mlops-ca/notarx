@@ -33,11 +33,21 @@ func (s *PostgresStore) SyncGoProxyVersions(ctx context.Context, repositoryID, m
 			return err
 		}
 	}
+	if len(versions) > 0 {
+		if err = refreshArtifactCatalog(ctx, tx, repositoryID, FormatGo, modulePath); err != nil {
+			return err
+		}
+	}
 	return tx.Commit()
 }
 
 func (s *PostgresStore) PutGoModuleVersion(ctx context.Context, version GoModuleVersion) (GoModuleVersion, error) {
-	err := scanGoModuleVersion(s.db.QueryRowContext(ctx, `INSERT INTO native_go_versions
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return GoModuleVersion{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	err = scanGoModuleVersion(tx.QueryRowContext(ctx, `INSERT INTO native_go_versions
 		(repository_id,module_path,version,published_at,publisher,cached_at)
 		VALUES ($1,$2,$3,$4,$5,now())
 		ON CONFLICT (repository_id,module_path,version) DO UPDATE SET
@@ -46,7 +56,13 @@ func (s *PostgresStore) PutGoModuleVersion(ctx context.Context, version GoModule
 		cached_at=now()
 		RETURNING `+goModuleVersionColumns,
 		version.RepositoryID, version.Module, version.Version, nullableGoTime(version.PublishedAt), version.Publisher), &version)
-	return version, err
+	if err != nil {
+		return version, err
+	}
+	if err = refreshArtifactCatalog(ctx, tx, version.RepositoryID, FormatGo, version.Module); err != nil {
+		return version, err
+	}
+	return version, tx.Commit()
 }
 
 func (s *PostgresStore) PublishGoModule(ctx context.Context, incoming GoModulePublication) (GoModuleVersion, bool, error) {
@@ -128,6 +144,9 @@ func (s *PostgresStore) PublishGoModule(ctx context.Context, incoming GoModulePu
 			return GoModuleVersion{}, false, err
 		}
 		delta.add(asset.RepositoryID, asset.Size, 1)
+	}
+	if err = refreshArtifactCatalog(ctx, tx, version.RepositoryID, FormatGo, version.Module); err != nil {
+		return GoModuleVersion{}, false, err
 	}
 	if err = delta.reserve(ctx, tx); err != nil {
 		return GoModuleVersion{}, false, err
@@ -293,6 +312,9 @@ func (s *PostgresStore) tombstoneGoModuleVersionLocked(ctx context.Context, repo
 	} else if affected != 1 {
 		return GoModuleVersion{}, false, ErrNotFound
 	}
+	if err = refreshArtifactCatalog(ctx, tx, repositoryID, FormatGo, modulePath); err != nil {
+		return GoModuleVersion{}, false, err
+	}
 	if err = insertAudits(ctx, tx, audit); err != nil {
 		return GoModuleVersion{}, false, err
 	}
@@ -412,6 +434,9 @@ func (s *PostgresStore) restoreGoModuleVersionLocked(ctx context.Context, reposi
 		WHERE repository_id=$1::uuid AND format='go' AND coordinate=$2`, repositoryID, goModuleCoordinate(modulePath, version)); err != nil {
 		return GoModuleVersion{}, false, err
 	}
+	if err = refreshArtifactCatalog(ctx, tx, repositoryID, FormatGo, modulePath); err != nil {
+		return GoModuleVersion{}, false, err
+	}
 	if err = tx.Commit(); err != nil {
 		return GoModuleVersion{}, false, err
 	}
@@ -447,6 +472,9 @@ func (s *PostgresStore) CacheGoModuleAsset(ctx context.Context, asset GoModuleAs
 	}
 	// An asset cached again counts once; a conflicting insert reserved nothing.
 	if inserted {
+		if err = refreshArtifactCatalog(ctx, tx, incoming.RepositoryID, FormatGo, incoming.Module); err != nil {
+			return GoModuleAsset{}, err
+		}
 		if err = capacity.Reserve(ctx, tx, incoming.RepositoryID, incoming.Size, 1); err != nil {
 			return GoModuleAsset{}, err
 		}

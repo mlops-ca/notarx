@@ -307,6 +307,9 @@ func (s *PostgresStore) PutOCIManifest(ctx context.Context, v OCIManifest, refer
 		return v, err
 	}
 	if added, _ := insertedManifest.RowsAffected(); added == 1 {
+		if err = refreshArtifactCatalog(ctx, tx, v.RepositoryID, FormatOCI, v.Name); err != nil {
+			return v, err
+		}
 		if err = capacity.Reserve(ctx, tx, v.RepositoryID, v.Size, 1); err != nil {
 			return v, err
 		}
@@ -369,6 +372,9 @@ func (s *PostgresStore) PublishReplicatedOCIManifest(ctx context.Context, public
 		return OCIManifest{}, err
 	}
 	replicated.add(publication.Manifest.RepositoryID, publication.Manifest.Size, 1)
+	if err = refreshArtifactCatalog(ctx, tx, publication.Manifest.RepositoryID, FormatOCI, publication.Manifest.Name); err != nil {
+		return OCIManifest{}, err
+	}
 	if err = replicated.reserve(ctx, tx); err != nil {
 		return OCIManifest{}, err
 	}
@@ -525,6 +531,9 @@ func (s *PostgresStore) DeleteOCIManifest(ctx context.Context, repositoryID, nam
 	if n, _ := result.RowsAffected(); n != 1 {
 		return ErrNotFound
 	}
+	if err = refreshArtifactCatalog(ctx, tx, repositoryID, FormatOCI, name); err != nil {
+		return err
+	}
 	// The deleted manifest leaves the usage; its blob references stay until the blobs are reclaimed.
 	if err = capacity.Reserve(ctx, tx, repositoryID, -deletedSize, -1); err != nil {
 		return err
@@ -615,6 +624,9 @@ func (s *PostgresStore) RestoreOCIManifest(ctx context.Context, repositoryID, na
 		return OCIManifest{}, err
 	}
 	if added, _ := restoredManifest.RowsAffected(); added == 1 {
+		if err = refreshArtifactCatalog(ctx, tx, repositoryID, FormatOCI, manifest.Name); err != nil {
+			return OCIManifest{}, err
+		}
 		if err = capacity.Reserve(ctx, tx, repositoryID, manifest.Size, 1); err != nil {
 			return OCIManifest{}, err
 		}
