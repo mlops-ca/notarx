@@ -442,7 +442,7 @@ func (f *Fetcher) run(fl *flight, obj Object, file File) {
 		f.end(fl, failure(err))
 		return
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	watchdog.Reset(idle)
 	if response.ContentLength >= 0 && response.ContentLength != obj.Size {
 		f.record(FetchUpstreamError)
@@ -564,7 +564,7 @@ func (f *Fetcher) serveFromStoreOnce(ctx context.Context, fl *flight, digest str
 		// The object is not there (yet): the caller fetches it.
 		return false
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 	staging, err := os.CreateTemp("", "notarx-hf-*")
 	if err != nil {
 		f.end(fl, err)
@@ -730,7 +730,7 @@ func (f *Fetcher) serveRanges(w http.ResponseWriter, r *http.Request, size int64
 		if err != nil {
 			return false, err
 		}
-		defer body.Close()
+		defer func() { _ = body.Close() }()
 		apply(w.Header())
 		w.Header().Set("Content-Range", "bytes "+strconv.FormatInt(start, 10)+"-"+strconv.FormatInt(end, 10)+"/"+strconv.FormatInt(size, 10))
 		w.Header().Set("Content-Length", strconv.FormatInt(length, 10))
@@ -748,7 +748,7 @@ func (f *Fetcher) serveRanges(w http.ResponseWriter, r *http.Request, size int64
 	if err != nil {
 		return false, err
 	}
-	defer body.Close()
+	defer func() { _ = body.Close() }()
 	apply(w.Header())
 	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
 	w.WriteHeader(http.StatusOK)

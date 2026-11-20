@@ -333,7 +333,7 @@ func (s *Store) ListFiles(ctx context.Context, commitID, after string, limit int
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var files []File
 	for rows.Next() {
 		f, err := scanFile(rows)
@@ -441,7 +441,7 @@ func (s *Store) UnreferencedBlobs(ctx context.Context, hfRepoID string, limit in
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var digests []string
 	for rows.Next() {
 		var d string
@@ -505,7 +505,7 @@ func (s *Store) ListRepos(ctx context.Context, after string, limit int) ([]Repo,
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var repos []Repo
 	for rows.Next() {
 		repo, err := scanRepo(rows)
@@ -612,7 +612,7 @@ func (s *Store) SearchCommits(ctx context.Context, repositoryID, term string, co
 	if err != nil {
 		return nil, nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var commits []Commit
 	var repos []Repo
 	for rows.Next() {

@@ -135,7 +135,7 @@ func (e *protocolEnv) do(t *testing.T, method, rest string, header http.Header) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	body, _ := io.ReadAll(response.Body)
 	return response, body
 }
@@ -355,7 +355,7 @@ func TestAuthenticationAndAuthorizationAreHubShaped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusNotFound || response.Header.Get("X-Error-Code") != "RepoNotFound" {
 		t.Fatalf("missing repository = %d %q", response.StatusCode, response.Header.Get("X-Error-Code"))
 	}
@@ -363,7 +363,7 @@ func TestAuthenticationAndAuthorizationAreHubShaped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer noCredentials.Body.Close()
+	defer func() { _ = noCredentials.Body.Close() }()
 	if noCredentials.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("a missing repository must look like a private one to an anonymous caller: %d", noCredentials.StatusCode)
 	}
@@ -428,7 +428,7 @@ func TestLargeObjectStreamsThroughTheTee(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != 200 || response.ContentLength != size {
 		t.Fatalf("status %d length %d, want %d", response.StatusCode, response.ContentLength, size)
 	}
@@ -571,7 +571,7 @@ func TestAGroupAnswersNotImplementedInsteadOfLookingAbsent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusNotImplemented || response.Header.Get("X-Error-Code") != "group_not_supported" {
 		t.Fatalf("group read = %d %q", response.StatusCode, response.Header.Get("X-Error-Code"))
 	}
@@ -579,7 +579,7 @@ func TestAGroupAnswersNotImplementedInsteadOfLookingAbsent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer anonymous.Body.Close()
+	defer func() { _ = anonymous.Body.Close() }()
 	if anonymous.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("an anonymous caller must not learn that a group exists: %d", anonymous.StatusCode)
 	}

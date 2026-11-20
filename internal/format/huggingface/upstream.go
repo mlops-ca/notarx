@@ -223,7 +223,7 @@ func (u *Upstream) getJSON(ctx context.Context, client *http.Client, rawURL stri
 	if err != nil {
 		return nil, &UpstreamError{Code: CodeUpstreamUnavailable, Err: err}
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, upstreamErrorBodyPreview))
 		return nil, upstreamStatusError(response.StatusCode)

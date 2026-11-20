@@ -73,7 +73,7 @@ func TestFollowOnceFollowsOneAllowlistedHopAndStripsCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Follow: %v", err)
 	}
-	defer got.Body.Close()
+	defer func() { _ = got.Body.Close() }()
 	if got.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", got.StatusCode)
 	}

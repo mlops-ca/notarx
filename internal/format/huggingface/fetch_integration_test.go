@@ -124,7 +124,7 @@ func (e *fetchEnv) get(t *testing.T, path string, header http.Header) (*http.Res
 	if err != nil {
 		return nil, nil, err
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	body, err := io.ReadAll(response.Body)
 	return response, body, err
 }
@@ -209,7 +209,7 @@ func TestTeeServesTheFirstClientWhileTheObjectIsStillStaging(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	// The CDN sent half and is blocked: the client already has bytes, but not the withheld tail.
 	got := make([]byte, 900)
 	if _, err := io.ReadFull(response.Body, got); err != nil {
@@ -240,7 +240,7 @@ func TestRangeOnAnInFlightObjectIsServedFromStaging(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer leaderResponse.Body.Close()
+	defer func() { _ = leaderResponse.Body.Close() }()
 	ranged, body, err := env.get(t, "model.safetensors", http.Header{"Range": {"bytes=100-199"}})
 	if err != nil || ranged.StatusCode != http.StatusPartialContent || string(body) != string(content[100:200]) || ranged.Header.Get("Content-Range") != "bytes 100-199/2000" {
 		t.Fatalf("range = %v %v %q %v", ranged.StatusCode, ranged.Header, body, err)
@@ -442,7 +442,7 @@ func TestColdFetchesAreBoundedPerProcess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer first.Body.Close()
+	defer func() { _ = first.Body.Close() }()
 	second, _, _ := env.get(t, "b.bin", nil)
 	if second.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("second cold fetch = %d, want 503 while the only slot is busy", second.StatusCode)
@@ -747,7 +747,7 @@ func TestTheObjectStoreUploadRunsWhileTheBytesArrive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	first := make([]byte, 1000)
 	if _, err := io.ReadFull(response.Body, first); err != nil {
 		t.Fatal(err)

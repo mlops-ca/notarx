@@ -345,7 +345,7 @@ the contract's server base. Planned commands omit the leading `notarxctl`.
 ## Additional protocol operations in the native bundle
 
 Management operations repeat in the native bundle and reuse the table above;
-they are not implemented twice. The 43 additional operations below are
+they are not implemented twice. The 48 additional operations below are
 classified one by one. Native URLs follow each protocol's server override and
 real routes and must not be joined to `/api/v2` blindly. Retired Nexus repository aliases are not part of this contract.
 
@@ -376,6 +376,11 @@ real routes and must not be joined to `/api/v2` blindly. Retired Nexus repositor
 | `GET /raw/{repository}/`<br>`listRawRootDirectory` | no separate CLI protocol client; native client and onboarding configuration | #130 | N/A | native-format authorization | N: the CLI neither registers nor sends this protocol action |
 | `GET /apt/{repository}/{path}`<br>`getAptAsset` | no separate CLI protocol client; native client and onboarding configuration | #130 | N/A | native-format authorization | N: the CLI neither registers nor sends this protocol action |
 | `HEAD /apt/{repository}/{path}`<br>`headAptAsset` | no separate CLI protocol client; native client and onboarding configuration | #130 | N/A | native-format authorization | N: the CLI neither registers nor sends this protocol action |
+| `GET /hf/{repository}/{org}/{name}/resolve/{revision}/{path}`<br>`resolveHuggingFaceModelFile` | no separate CLI protocol client; native client and onboarding configuration | #165 | N/A | native-format authorization | N: the CLI neither registers nor sends this protocol action |
+| `HEAD /hf/{repository}/{org}/{name}/resolve/{revision}/{path}`<br>`headHuggingFaceModelFile` | no separate CLI protocol client; native client and onboarding configuration | #165 | N/A | native-format authorization | N: the CLI neither registers nor sends this protocol action |
+| `GET /hf/{repository}/datasets/{org}/{name}/resolve/{revision}/{path}`<br>`resolveHuggingFaceDatasetFile` | no separate CLI protocol client; native client and onboarding configuration | #165 | N/A | native-format authorization | N: the CLI neither registers nor sends this protocol action |
+| `HEAD /hf/{repository}/datasets/{org}/{name}/resolve/{revision}/{path}`<br>`headHuggingFaceDatasetFile` | no separate CLI protocol client; native client and onboarding configuration | #165 | N/A | native-format authorization | N: the CLI neither registers nor sends this protocol action |
+| `GET /hf/{repository}/api/{repoType}/{org}/{name}/xet-read-token/{revision}`<br>`getHuggingFaceXetReadToken` | no separate CLI protocol client; native client and onboarding configuration | #165 | N/A | native-format authorization | N: the CLI neither registers nor sends this protocol action |
 | `GET /v2/_catalog`<br>`listOCICatalog` | Native ORAS/OCI discovery; no separate notarxctl registry client | #315 | N/A | explicit repository-resource discovery authorization | N: official OCI clients own Catalog/Referrers; notarxctl neither registers nor sends this protocol action |
 | `HEAD /v2/_catalog`<br>`headOCICatalog` | Native ORAS/OCI discovery; no separate notarxctl registry client | #315 | N/A | explicit repository-resource discovery authorization | N: official OCI clients own Catalog/Referrers; notarxctl neither registers nor sends this protocol action |
 | `GET /v2/{name}/referrers/{digest}`<br>`listOCIReferrers` | Native ORAS/OCI discovery; no separate notarxctl registry client | #316 | N/A | explicit repository-resource discovery authorization | N: official OCI clients own Catalog/Referrers; notarxctl neither registers nor sends this protocol action |
