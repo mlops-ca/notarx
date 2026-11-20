@@ -63,6 +63,7 @@ runs:
       shell: bash
       env:
         GO_SUM: ${{ hashFiles('go.sum') }}
+        FLAVOUR: ${{ inputs.race-coverage == 'true' && 'race-coverage' || 'race' }}
       run: |
         {
           echo "day=$(date -u +%Y-%m-%d)"
@@ -70,9 +71,12 @@ runs:
           echo "lint-image=$(sed -n 's/^LINT_IMAGE := //p' Makefile)"
           echo "gomodcache=$(go env GOMODCACHE)"
           echo "gocache=$(go env GOCACHE)"
-          echo "go=$(go env GOVERSION)"
-          # The race build cache: one key per run, restored by the newest prefix match.
-          race_prefix="go-race-$RUNNER_OS-$RUNNER_ARCH-$(go env GOVERSION)-"
+          # The race build cache: one key per run and per build flavour (the race or
+          # the race-coverage build compile differently), restored by the newest
+          # prefix match, of the same flavour first.
+          race_arch="go-race-$RUNNER_OS-$RUNNER_ARCH-"
+          race_prefix="$race_arch$FLAVOUR-$(go env GOVERSION)-"
+          echo "race-arch-prefix=$race_arch"
           echo "race-prefix=$race_prefix"
           echo "race-sum-prefix=$race_prefix$GO_SUM-"
           echo "race-key=$race_prefix$GO_SUM-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
@@ -90,6 +94,7 @@ runs:
         restore-keys: |
           ${{ steps.cache-dirs.outputs.race-sum-prefix }}
           ${{ steps.cache-dirs.outputs.race-prefix }}
+          ${{ steps.cache-dirs.outputs.race-arch-prefix }}
     # make lint runs the en-CA spell check, which needs the Console tools.
     - if: inputs.lint == 'true' || inputs.openapi-tools == 'true'
       uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -131,7 +136,7 @@ runs:
       with:
         path: ${{ steps.cache-dirs.outputs.lint }}
         key: golangci-lint-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-dirs.outputs.lint-image }}-${{ hashFiles('go.sum', '.golangci.yml') }}-${{ steps.cache-dirs.outputs.day }}
-    - if: inputs.vet == 'true'
+    - if: inputs.vet == 'true' && inputs.build-only != 'true'
       name: Run Go vet
       shell: bash
       run: make vet
@@ -143,6 +148,12 @@ runs:
       name: Run the unit tests once with the race detector and enforce the coverage floors
       shell: bash
       run: make race-coverage
+    # The build-only warm compiles what make vet would need (the plain build of every
+    # package and its tests) but runs no vet.
+    - if: inputs.vet == 'true' && inputs.build-only == 'true'
+      name: Compile the plain test build for vet (no test or vet runs)
+      shell: bash
+      run: make vet-build
     - if: inputs.race == 'true' && inputs.build-only == 'true'
       name: Compile the race build (no test runs)
       shell: bash
@@ -160,17 +171,18 @@ runs:
           ${{ steps.cache-dirs.outputs.gocache }}
         key: ${{ steps.cache-dirs.outputs.race-key }}
     # Only the newest race build cache of an architecture is ever restored (by prefix),
-    # so the warm deletes the ones created before the cache it saved. A newer cache (a
-    # later warm, or the release gates) is kept, and a run whose save did not happen
-    # deletes nothing. An entry that is already gone (deleted by a concurrent warm or
-    # evicted) is only a warning: the cache this run saved is in place.
+    # so the warm deletes the ones of its flavour created before the cache it saved,
+    # except the newest of them, which a pull request may be restoring at that moment.
+    # A newer cache (a later warm, or the release gates) is kept, and a run whose save
+    # did not happen deletes nothing. An entry that is already gone (deleted by a
+    # concurrent warm or evicted) is only a warning: the cache this run saved is in place.
     - if: inputs.build-only == 'true' && github.ref == 'refs/heads/main'
       name: Delete the superseded race build caches (main only)
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
         KEEP: ${{ steps.cache-dirs.outputs.race-key }}
-        PREFIX: go-race-${{ runner.os }}-${{ runner.arch }}-
+        PREFIX: ${{ steps.cache-dirs.outputs.race-prefix }}
       run: |
         caches=$(gh cache list --repo "$GITHUB_REPOSITORY" --ref refs/heads/main --key "$PREFIX" --limit 100 --json key,createdAt)
         saved=$(jq -r --arg keep "$KEEP" '.[] | select(.key == $keep) | .createdAt' <<<"$caches")
@@ -178,7 +190,7 @@ runs:
           echo "::warning::the race build cache $KEEP was not saved; nothing is deleted"
           exit 0
         fi
-        jq -r --arg saved "$saved" '.[] | select(.createdAt < $saved) | .key' <<<"$caches" |
+        jq -r --arg saved "$saved" '[.[] | select(.createdAt < $saved)] | sort_by(.createdAt) | .[:-1][] | .key' <<<"$caches" |
           while read -r key; do
             gh cache delete --repo "$GITHUB_REPOSITORY" "$key" || echo "::warning::could not delete the race build cache $key"
           done

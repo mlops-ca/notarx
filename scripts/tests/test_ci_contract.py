@@ -540,6 +540,15 @@ class PlanTests(unittest.TestCase):
         self.assertIn('$(RACE_TEST) $$packages\n', makefile)
         self.assertIn('$(RACE_TEST) -c -o /dev/null $$packages\n', makefile)
         self.assertIn('race-coverage-build:\n\t@./scripts/coverage-check.sh --race --build-only\n', makefile)
+        self.assertIn('vet-build:\n\t@packages="$$(go list ./... | grep -v \'/console/node_modules/\')"; go test -c -o /dev/null $$packages\n', makefile)
+        # In the go-quality action, build-only switches every running step off.
+        action = (ROOT / '.github/actions/go-quality/action.yml').read_text()
+        for command in ('make race\n', 'make race-coverage\n', 'make vet\n'):
+            step = action[:action.index('      run: ' + command)]
+            self.assertIn("inputs.build-only != 'true'", step[step.rindex('    - if: '):])
+        for command in ('make race-build\n', 'make race-coverage-build\n', 'make vet-build\n'):
+            step = action[:action.index('      run: ' + command)]
+            self.assertIn("inputs.build-only == 'true'", step[step.rindex('    - if: '):])
         self.assertNotIn('platforms: linux/amd64,linux/arm64', workflow)
         self.assertNotIn('continue-on-error', workflow + suite + release)
         for group in ci.GROUPS:
