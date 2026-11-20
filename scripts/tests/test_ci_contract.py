@@ -425,7 +425,7 @@ class PlanTests(unittest.TestCase):
         # architecture-sensitive pull request; a packed job's arm64 leg runs only those.
         self.assertEqual(pull_request, [lane for _, lanes in ci.jobs() for lane in lanes
                                         if ci.PLAN['lanes'][lane]['arm64'] == 'pull-request'])
-        self.assertEqual(sorted(pull_request), sorted(['core-checks', 'core-email', 'core-native-e2e', 'core-backup',
+        self.assertEqual(sorted(pull_request), sorted(['core-checks', 'core-email', 'core-native-e2e-1', 'core-native-e2e-2', 'core-backup',
                                                        'core-integration-1', 'core-integration-2',
                                                        'core-integration-3',
                                                        'six-format-auth', 'oci-discovery']))

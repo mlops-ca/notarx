@@ -10,24 +10,31 @@
       "core-checks",
       "core-backup"
     ],
+    "packed-native-discovery": [
+      "core-native-e2e-1",
+      "oci-discovery"
+    ],
+    "packed-native-auth-pypi": [
+      "core-native-e2e-2",
+      "six-format-auth",
+      "pypi-migration"
+    ],
+    "packed-email-clients": [
+      "core-email",
+      "migration-clients"
+    ],
     "packed-nuget-migrations": [
       "nuget",
       "oci-migration",
       "npm-migration"
     ],
-    "packed-maven-clients": [
+    "packed-maven-helm": [
       "maven-oci-auth",
-      "migration-clients"
+      "helm"
     ],
-    "packed-rubygems-discovery-auth": [
-      "rubygems",
-      "oci-discovery",
-      "six-format-auth"
-    ],
-    "packed-inventory-helm-pypi": [
+    "packed-inventory-rubygems": [
       "inventory",
-      "helm",
-      "pypi-migration"
+      "rubygems"
     ]
   },
   "lanes": {
@@ -134,8 +141,8 @@
       ],
       "rawDirectories": []
     },
-    "core-native-e2e": {
-      "timeoutMinutes": 30,
+    "core-native-e2e-1": {
+      "timeoutMinutes": 20,
       "arm64": "pull-request",
       "needs": [
         "node"
@@ -183,18 +190,29 @@
           "timeoutSeconds": null
         },
         {
-          "name": "native-pypi-e2e",
-          "command": [
-            "make",
-            "native-pypi-e2e"
-          ],
-          "timeoutSeconds": null
-        },
-        {
           "name": "native-go-e2e",
           "command": [
             "make",
             "native-go-e2e"
+          ],
+          "timeoutSeconds": null
+        }
+      ],
+      "rawDirectories": []
+    },
+    "core-native-e2e-2": {
+      "timeoutMinutes": 20,
+      "arm64": "pull-request",
+      "needs": [
+        "node"
+      ],
+      "images": true,
+      "steps": [
+        {
+          "name": "native-pypi-e2e",
+          "command": [
+            "make",
+            "native-pypi-e2e"
           ],
           "timeoutSeconds": null
         },

@@ -98,9 +98,12 @@ already runs those tests.
 `golangci-lint` runs in its pinned image as the calling user, against the host module
 and build caches (restored by `actions/setup-go`) and its own result cache in
 `GOLANGCI_LINT_CACHE` (default `~/.cache/notarx/golangci-lint`). A warm run downloads
-no module and re-analyses only changed packages. The `quality` job keeps its own cache
-of the module and build caches (`go-race-*`), because the `actions/setup-go` cache is
-saved by `main` builds and never holds the race-instrumented build.
+no module and re-analyses only changed packages. The `quality` and `quality-arm64` jobs
+keep their own cache of the module and build caches (`go-race-*`, one per runner
+architecture), because the `actions/setup-go` cache is saved by `main` builds and never
+holds the race-instrumented build. `quality-arm64` used the `actions/setup-go` cache
+until issue #518, so its race pass compiled every package with the race detector on
+every run.
 
 Both caches are restored on every run and saved only by runs on `main` (the nightly
 release gates), under daily keys (runner, toolchain or lint image, `go.sum`, the UTC
@@ -189,19 +192,31 @@ lane's verdict, duration and failed steps in the job's step summary; the job fai
 when any lane failed. The arm64 leg of a packed job runs only the lanes whose tier runs
 on arm64 in that scope.
 
-| Job | Lanes | Lane step minutes (run 44640058817 and the three before it) |
+| Job | Lanes | Lane step minutes (run 44692652060, attempt 1) |
 | --- | --- | --- |
-| `packed-perf-integration` | `perf-load`, `core-integration-1` | 1.6 + about 4.5 (shard 1 alone, estimated from run 44675064060) |
-| `packed-checks-backup` | `core-checks`, `core-backup` | 1.9 + 5.2 |
-| `packed-nuget-migrations` | `nuget`, `oci-migration`, `npm-migration` | 5.0 + 1.0 + 1.1 |
-| `packed-maven-clients` | `maven-oci-auth`, `migration-clients` | 5.3 + 1.3 |
-| `packed-rubygems-discovery-auth` | `rubygems`, `oci-discovery`, `six-format-auth` | 3.0 + 3.1 + 1.7 |
-| `packed-inventory-helm-pypi` | `inventory`, `helm`, `pypi-migration` | 2.6 + 1.7 + 1.4 |
+| `packed-perf-integration` | `perf-load`, `core-integration-1` | 2.1 + 4.6 |
+| `packed-checks-backup` | `core-checks`, `core-backup` | 1.9 + 4.3 |
+| `packed-native-discovery` | `core-native-e2e-1`, `oci-discovery` | about 3.8 + 2.0 |
+| `packed-native-auth-pypi` | `core-native-e2e-2`, `six-format-auth`, `pypi-migration` | about 4.1 + 1.1 + 0.6 |
+| `packed-email-clients` | `core-email`, `migration-clients` | 6.8 (with the image rebuild described below) + 0.8 |
+| `packed-nuget-migrations` | `nuget`, `oci-migration`, `npm-migration` | 4.2 + 0.5 + 0.6 |
+| `packed-maven-helm` | `maven-oci-auth`, `helm` | 4.5 + 1.7 |
+| `packed-inventory-rubygems` | `inventory`, `rubygems` | 3.5 + 2.7 |
+
+The former `core-native-e2e` lane (about 8 minutes, the critical path of a Go-only pull
+request after #500) is two lanes now, split by step duration: `core-native-e2e-1` runs
+`cli-runtime-e2e`, `native-oci-e2e`, `native-raw-e2e`, `native-maven-e2e`,
+`native-npm-e2e` and `native-go-e2e`, and `core-native-e2e-2` runs `native-pypi-e2e`,
+`native-apt-e2e` and `apt-signer-rotation-e2e`. Both keep the `pull-request` arm64 tier.
+`email-compose-check` (lane `core-email`) used to rebuild the notarx image from source
+for its per-project fixture name; under `NOTARX_COMPOSE_BUILD_FLAG=--no-build` it now
+tags the loaded image with that name and removes the tag when it cleans up (issue #518).
+The six image jobs keep the job count of #500.
 
 A job's timeout is the sum of its lanes' timeouts and it installs the union of their
 tool needs. A packed job takes longer than its longest lane (`packed-nuget-migrations`
 about 7 minutes against 5), so only lanes that stay well under the critical path of
-the suite (Console, `core-native-e2e`, about 9 to 11 minutes) are packed. The lanes of
+the suite (the Console shards, about 9 to 11 minutes after the start) are packed. The lanes of
 a job share one runner and Docker daemon: each lane's scripts own their Compose
 projects and tear them down on exit, and a cancelled job stops after the lane that
 was running (the lanes after it are reported as not run). A lane that crashes is
@@ -313,13 +328,15 @@ Issue #482 reshaped the pull request suite (ADR 0016 and ADR 0024, amendments of
 | `console-e2e` shards `1` to `3` and `cli` | shards `1` to `3`; shard `2` runs the CLI E2E after its specs (issue #500) | the same |
 | `object-store-contract` (3 jobs: RustFS, MinIO twice) | one `object-store-contract` job running the three configurations in turn | the same job |
 | `contract (core-backup)` | `core-backup` (in `packed-checks-backup`), `core-integration-1` (in `packed-perf-integration`), `core-integration-2`, `core-integration-3`, all in `contract-early` | the same four lanes on both architectures |
-| `contract (core-checks)`, `contract (six-format-auth)` | `core-checks` in `packed-checks-backup` (`contract-early`), `six-format-auth` in `packed-rubygems-discovery-auth` (issue #500) | the same, both architectures |
+| `contract (core-checks)`, `contract (six-format-auth)` | `core-checks` in `packed-checks-backup` (`contract-early`), `six-format-auth` in `packed-native-auth-pypi` (issue #518; `packed-rubygems-discovery-auth` after #500) | the same, both architectures |
 | `contract (nuget)`, `contract (oci-migration)`, `contract (npm-migration)` | `packed-nuget-migrations` | the same, both architectures |
-| `contract (maven-oci-auth)`, `contract (migration-clients)` | `packed-maven-clients` | the same, both architectures |
-| `contract (rubygems)`, `contract (oci-discovery)` | `packed-rubygems-discovery-auth` | the same, both architectures |
-| `contract (inventory)`, `contract (helm)`, `contract (pypi-migration)` | `packed-inventory-helm-pypi` | the same, both architectures |
+| `contract (maven-oci-auth)`, `contract (migration-clients)` | `maven-oci-auth` in `packed-maven-helm`, `migration-clients` in `packed-email-clients` (issue #518) | the same, both architectures |
+| `contract (rubygems)`, `contract (oci-discovery)` | `rubygems` in `packed-inventory-rubygems`, `oci-discovery` in `packed-native-discovery` (issue #518) | the same, both architectures |
+| `contract (inventory)`, `contract (helm)`, `contract (pypi-migration)` | `inventory` in `packed-inventory-rubygems`, `helm` in `packed-maven-helm`, `pypi-migration` in `packed-native-auth-pypi` (issue #518) | the same, both architectures |
 | `contract (perf-load)` | `packed-perf-integration`, before `core-integration-1` (issue #500) | the same on both architectures |
-| `contract (core-email)`, `contract (core-native-e2e)`, and any lane not in `jobs` | unchanged: a job named after the lane | unchanged |
+| `contract (core-email)` | `core-email` in `packed-email-clients` (issue #518) | the same, both architectures |
+| `contract (core-native-e2e)` | split into `core-native-e2e-1` (in `packed-native-discovery`) and `core-native-e2e-2` (in `packed-native-auth-pypi`), every step in exactly one of them (issue #518) | the same, both architectures |
+| any lane not in `jobs` | unchanged: a job named after the lane | unchanged |
 | every contract job | `contract-early` (lanes that load no prebuilt image), `contract-amd64` or `contract-arm64` (issue #500) | the same three groups |
 | the seven arm64 contract legs | only with the `arm64` class (architecture-sensitive change) | always, every lane |
 | (new) | `release-checks` | `release-checks` |

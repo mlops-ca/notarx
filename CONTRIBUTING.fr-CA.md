@@ -268,7 +268,7 @@ tâche `suite-ok` de `test-suite.yml` exige que chaque tâche de la suite réuss
 ou soit ignorée par la détection des changements; la CI des demandes de tirage et les
 barrières de publication (ADR 0024) appellent la même suite, et un push sur `main`
 n’exécute aucun test. L’ancienne voie `core` en série est scindée en
-`core-checks`, `core-email`, `core-native-e2e`, `core-backup`, `core-integration-1`, `core-integration-2` et `core-integration-3`, suivies des voies
+`core-checks`, `core-email`, `core-native-e2e-1`, `core-native-e2e-2`, `core-backup`, `core-integration-1`, `core-integration-2` et `core-integration-3`, suivies des voies
 natives (clients de migration, inventaire, NuGet, migration et découverte OCI,
 authentification en amont privé, migration npm, Helm, RubyGems, migration PyPI).
 Chaque voie n’installe que les chaînes d’outils qu’elle déclare, lues dans

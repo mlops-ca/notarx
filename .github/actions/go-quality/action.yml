@@ -26,7 +26,8 @@ inputs:
   race-coverage:
     description: >-
       Run make race-coverage (the unit tests once, with the race detector and the
-      coverage floors), with a build cache of its own for the race-instrumented build.
+      coverage floors). Like race, it uses a build cache of its own for the
+      race-instrumented build.
     default: "false"
   openapi-tools:
     description: Also install tools/openapi (no caller needs it now; the release checks install it in their own job).
@@ -35,19 +36,19 @@ inputs:
 runs:
   using: composite
   steps:
-    # The race-coverage build keeps its own cache (below): the setup-go cache is the
-    # one main's builds save, and a pull request restores it read-only, so it never
-    # holds race-instrumented packages.
+    # A race or race-coverage run keeps its own build cache (below): the setup-go cache
+    # is the one main's builds save, and a pull request restores it read-only, so it
+    # never holds race-instrumented packages.
     - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
       with:
         go-version-file: go.mod
-        cache: ${{ inputs.race-coverage != 'true' }}
+        cache: ${{ inputs.race != 'true' && inputs.race-coverage != 'true' }}
     # The lint results and the race build are restored on every run but saved only by
     # runs on main (the nightly release gates), under a daily key: an exact hit saves
     # nothing, so a fixed key would freeze the cache, and saves from every pull request
     # would crowd the repository's cache quota. Pull requests restore main's newest
     # cache by prefix.
-    - if: inputs.lint == 'true' || inputs.race-coverage == 'true'
+    - if: inputs.lint == 'true' || inputs.race == 'true' || inputs.race-coverage == 'true'
       name: Locate the Go caches
       id: cache-dirs
       shell: bash
@@ -60,7 +61,9 @@ runs:
           echo "gocache=$(go env GOCACHE)"
           echo "go=$(go env GOVERSION)"
         } >> "$GITHUB_OUTPUT"
-    - if: inputs.race-coverage == 'true'
+    # The key carries the runner architecture, so quality (amd64) and quality-arm64
+    # each restore the cache their own architecture saved.
+    - if: inputs.race == 'true' || inputs.race-coverage == 'true'
       name: Restore the race build cache
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
@@ -124,7 +127,7 @@ runs:
       name: Run the unit tests once with the race detector and enforce the coverage floors
       shell: bash
       run: make race-coverage
-    - if: inputs.race-coverage == 'true' && github.ref == 'refs/heads/main'
+    - if: (inputs.race == 'true' || inputs.race-coverage == 'true') && github.ref == 'refs/heads/main'
       name: Save the race build cache (main only)
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
