@@ -107,6 +107,20 @@ new_release 0.1.0 0.1.0 0.1.0
 printf 'x' >"$dir/notarx_0.1.0_windows_amd64.zip"
 expect_fail 'an asset type without a check fails' 'zip: no nightly-version check' check
 
+new_release 0.1.0 0.1.0 0.1.0
+printf 'not a gzip stream' >"$dir/notarx_0.1.0_linux_amd64.tar.gz"
+expect_fail 'a corrupt archive fails with a message' 'cannot list notarx_0\.1\.0_linux_amd64\.tar\.gz' check
+
+new_release 0.1.0 0.1.0 0.1.0
+printf 'x' >"$dir/notarx_0.1.0
+nightly.tar.gz"
+expect_fail 'a name holding a newline is checked as one asset' "asset name 'notarx_0\.1\.0" check
+
+new_release 0.1.0 0.1.0 0.1.0
+printf '{"images":' >"$dir/broken-manifest.json"
+mv "$dir/broken-manifest.json" "$workdir/broken-manifest.json"
+expect_fail 'an unreadable manifest fails' 'unreadable manifest' bash "$root/scripts/check-no-nightly.sh" --manifest "$workdir/broken-manifest.json" --registry ghcr.io/o
+
 mkdir "$workdir/empty"
 expect_fail 'an empty directory fails' 'no asset' bash "$root/scripts/check-no-nightly.sh" --dir "$workdir/empty"
 expect_fail 'a missing directory fails' 'not a directory' bash "$root/scripts/check-no-nightly.sh" --dir "$workdir/none"

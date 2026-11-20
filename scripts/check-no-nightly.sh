@@ -10,12 +10,14 @@
 # nightly on purpose), SHA256SUMS, every archive member name, VERSION.txt of every archive and
 # every other extracted file (the binaries) for a stamped nightly version (X.Y.Z-nightly.N; the
 # bare word is not searched there because a dependency may contain it). Documentation (*.md,
-# LICENSE*, NOTICE*) is exempt from that scan: it may quote an upgrade from a nightly. Every .deb and .rpm is checked by name and by its Version and
-# Release header fields (dpkg-deb -f, rpm -qp); their payload equals the archive binaries
-# (scripts/package-check.sh). With --manifest, the labels of every image platform recorded in
-# the manifest are read from the registry and must not contain it either; --dir and --manifest
-# may be given together. DOCKER, DPKG_DEB and
-# RPM override the docker, dpkg-deb and rpm binaries (tests).
+# LICENSE*, NOTICE*) is exempt from that scan: it may quote an upgrade from a nightly. Every
+# .deb and .rpm is checked by name and by its Version and Release header fields (dpkg-deb -f,
+# rpm -qp); their payload equals the archive binaries (scripts/package-check.sh). Any other
+# asset type fails: a release holds only these (release-archives.yml counts them), so a new
+# type must get its own check first. Names are read NUL-separated, so no name can hide a file.
+# With --manifest, the labels of every image platform recorded in the manifest are read from
+# the registry and must not contain it either; --dir and --manifest may be given together.
+# DOCKER, DPKG_DEB and RPM override the docker, dpkg-deb and rpm binaries (tests).
 set -euo pipefail
 
 fail() {
@@ -46,13 +48,15 @@ trap 'rm -rf "$scratch"' EXIT
 
 assets=()
 if [[ -n "$dir" ]]; then
-  # Listed first so that a failing find or sort fails the check instead of shortening the list.
-  listing=$(find "$dir" -maxdepth 1 -type f | LC_ALL=C sort) || fail "cannot list $dir"
-  while IFS= read -r path; do
-    [[ -n "$path" && "$(basename "$path")" != release-manifest.json ]] || continue
+  # Listed into a file first so that a failing find or sort fails the check instead of
+  # shortening the list; NUL-separated so that a name holding a newline stays one path.
+  { find "$dir" -maxdepth 1 -type f -print0 | LC_ALL=C sort -z >"$scratch/assets"; } || fail "cannot list $dir"
+  while IFS= read -r -d '' path; do
+    [[ "$(basename "$path")" != release-manifest.json ]] || continue
     assets+=("$path")
-  done <<<"$listing"
+  done <"$scratch/assets"
 fi
+# Every failure below exits, so a finished run has checked each listed asset.
 checked=${#assets[@]}
 # Every asset name first, so the report does not depend on which content check comes first.
 for path in ${assets[@]+"${assets[@]}"}; do
@@ -72,10 +76,9 @@ for path in ${assets[@]+"${assets[@]}"}; do
       if grep -q -i nightly <<<"$members"; then fail "$name holds a member whose name contains nightly"; fi
       extract=$scratch/$name.d
       mkdir -p "$extract"
-      tar -xzf "$path" -C "$extract"
-      files=$(find "$extract" -type f) || fail "cannot list the members of $name"
-      while IFS= read -r file; do
-        [[ -n "$file" ]] || continue
+      tar -xzf "$path" -C "$extract" || fail "cannot extract $name"
+      find "$extract" -type f -print0 >"$scratch/members" || fail "cannot list the members of $name"
+      while IFS= read -r -d '' file; do
         if [[ "$(basename "$file")" == VERSION.txt ]] && grep -q -i nightly "$file"; then
           fail "$name: VERSION.txt reports a nightly version"
         fi
@@ -83,7 +86,7 @@ for path in ${assets[@]+"${assets[@]}"}; do
           *.md | LICENSE* | NOTICE*) continue ;;
         esac
         if grep -a -q -E "$stamped" "$file"; then fail "$name: $(basename "$file") embeds a stamped nightly version"; fi
-      done <<<"$files"
+      done <"$scratch/members"
       rm -rf "$extract"
       ;;
     *.deb)
