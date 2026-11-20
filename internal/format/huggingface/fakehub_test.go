@@ -212,6 +212,11 @@ func (h *fakeHub) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch {
+	case strings.HasPrefix(r.URL.Path, "/api/models/old/widget/"):
+		// A renamed repository: the Hub redirects within its own origin.
+		http.Redirect(w, r, strings.Replace(r.URL.Path, "/old/widget/", "/"+hubModel+"/", 1), http.StatusTemporaryRedirect)
+	case strings.HasPrefix(r.URL.Path, "/old/widget/resolve/"):
+		http.Redirect(w, r, strings.Replace(r.URL.Path, "/old/widget/", "/"+hubModel+"/", 1), http.StatusMovedPermanently)
 	case strings.HasPrefix(r.URL.Path, "/api/models/"+hubModel+"/revision/"):
 		h.serveRevision(w, r)
 	case strings.HasPrefix(r.URL.Path, "/api/models/"+hubModel+"/tree/"):
@@ -259,7 +264,7 @@ func (h *fakeHub) serveTree(w http.ResponseWriter, r *http.Request) {
 	sort.Strings(names)
 	start, _ := strconv.Atoi(r.URL.Query().Get("cursor"))
 	end := min(start+page, len(names))
-	entries := []map[string]any{{"type": "directory", "oid": commitID(1), "path": "dir"}}
+	entries := []map[string]any{{"type": "directory", "oid": commitID(1), "path": "dir"}, {"type": "unknown", "oid": commitID(2), "path": "submodule"}}
 	for _, name := range names[start:end] {
 		file := files[name]
 		entry := map[string]any{"type": "file", "oid": file.gitBlob(), "size": file.size(), "path": name}

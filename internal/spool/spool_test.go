@@ -365,6 +365,29 @@ func TestWriteMultipartWrapsTheOpenError(t *testing.T) {
 	}
 }
 
+type blockingCoordinator struct{ stubCoordinator }
+
+func (*blockingCoordinator) Acquire(ctx context.Context, _ string, _ time.Duration) (string, bool, error) {
+	<-ctx.Done() // a coordinator whose connection pool is exhausted waits for a connection
+	return "", false, ctx.Err()
+}
+
+func TestLockerTryAcquireTreatsAnExhaustedPoolAsHeld(t *testing.T) {
+	locker := Locker{Coordinator: &blockingCoordinator{}, Lease: time.Second, RenewEvery: time.Second, TryTimeout: 20 * time.Millisecond}
+	start := time.Now()
+	if _, _, err := locker.TryAcquire(context.Background(), "k"); !errors.Is(err, ErrLocked) {
+		t.Fatalf("err = %v, want ErrLocked: a fail-fast acquire must not wait behind a full pool", err)
+	}
+	if time.Since(start) > 2*time.Second {
+		t.Fatalf("TryAcquire waited %s", time.Since(start))
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, _, err := locker.TryAcquire(ctx, "k"); errors.Is(err, ErrLocked) {
+		t.Fatal("a cancelled caller is not a held lock")
+	}
+}
+
 func TestLockerAcquireHonoursCancellation(t *testing.T) {
 	coordinator := &stubCoordinator{held: true}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)

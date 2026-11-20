@@ -584,3 +584,13 @@ func TestAGroupAnswersNotImplementedInsteadOfLookingAbsent(t *testing.T) {
 		t.Fatalf("an anonymous caller must not learn that a group exists: %d", anonymous.StatusCode)
 	}
 }
+
+func TestTheFirstRequestForARepositoryAsksUpstreamForTheRevisionOnce(t *testing.T) {
+	env := newProtocolEnv(t, repository.RepositoryTypeProxy, protocolFiles(), nil)
+	if response, _ := env.do(t, http.MethodHead, "acme/widget/resolve/main/config.json", nil); response.StatusCode != 200 {
+		t.Fatalf("status = %d", response.StatusCode)
+	}
+	if asked := env.hub.count("GET /api/models/" + hubModel + "/revision/"); asked != 1 {
+		t.Fatalf("revision requests = %d: confirming the repository and resolving it must share one upstream call", asked)
+	}
+}

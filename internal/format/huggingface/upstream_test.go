@@ -247,3 +247,53 @@ func TestUpstreamRefusesAPrivateEndpoint(t *testing.T) {
 		t.Fatalf("private upstream = %v", err)
 	}
 }
+
+func TestARenamedRepositoryIsFollowedWithinTheUpstreamOrigin(t *testing.T) {
+	hub, sha := hubWithFiles(t)
+	upstream := hub.upstream()
+	revision, err := upstream.Revision(context.Background(), RepoTypeModel, "old/widget", "main")
+	if err != nil || revision.SHA != sha {
+		t.Fatalf("Revision through a rename = %+v, %v", revision, err)
+	}
+	for _, value := range hub.authSeen("/api/models/" + hubModel + "/revision/main") {
+		if value != "Bearer upstream-secret" {
+			t.Fatalf("the credential was not applied again on the same origin: %q", value)
+		}
+	}
+	files, err := upstream.Tree(context.Background(), RepoTypeModel, "old/widget", sha, 100)
+	if err != nil || len(files) != 3 {
+		t.Fatalf("Tree through a rename = %d files, %v", len(files), err)
+	}
+}
+
+func TestOpenFollowsARenamedRepositoryButNeverAnObjectPathOnTheSameHost(t *testing.T) {
+	hub, sha := hubWithFiles(t)
+	response, err := hub.upstream().Open(context.Background(), RepoTypeModel, "old/widget", sha, "config.json", nil)
+	if err != nil {
+		t.Fatalf("a renamed repository must resolve: %v", err)
+	}
+	body, _ := io.ReadAll(response.Body)
+	_ = response.Body.Close()
+	if string(body) != `{"a":1}` {
+		t.Fatalf("body = %q", body)
+	}
+	// The CDN lives on the Hub's host in this fixture: with an empty allowlist its redirect is still not followed.
+	upstream := hub.upstream()
+	upstream.CDNAllowlist = nil
+	if _, err := upstream.Open(context.Background(), RepoTypeModel, hubModel, sha, "model.safetensors", nil); err == nil {
+		t.Fatal("an object-path redirect on the upstream host was followed with an empty allowlist")
+	}
+}
+
+func TestTreeSkipsEntriesThatHoldNoBytes(t *testing.T) {
+	hub, sha := hubWithFiles(t)
+	files, err := hub.upstream().Tree(context.Background(), RepoTypeModel, hubModel, sha, 100)
+	if err != nil {
+		t.Fatalf("a submodule entry must not fail the commit: %v", err)
+	}
+	for _, f := range files {
+		if f.Path == "submodule" || f.Path == "dir" {
+			t.Fatalf("entry %q became a file", f.Path)
+		}
+	}
+}

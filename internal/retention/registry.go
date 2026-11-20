@@ -143,7 +143,8 @@ func DefaultRegistry() []Entry {
 		// is terminal when no ref points at it and it is not one of the three newest commits of its
 		// repository; its age is its last read. Hosted and promoted commits are content, never pruned.
 		// The ranking sits in a derived table, which MySQL materializes, so the DELETE may read the table
-		// it deletes from.
+		// it deletes from. It reads every commit row once per batch (hf_commits_repo_committed_idx serves the
+		// ordering); the table holds only commits somebody read, and this entry is what keeps it bounded.
 		{Table: "hf_refs", TimeColumn: "expires_at", Terminal: "TRUE", KeyColumns: []string{"hf_repo_id", "ref_kind", "ref_name"}, Standard: 30 * day, FreeTier: 7 * day},
 		{Table: "hf_commits", TimeColumn: "last_read_at", Terminal: "source = 'upstream' AND NOT EXISTS (SELECT 1 FROM hf_refs r WHERE r.hf_repo_id = hf_commits.hf_repo_id AND r.commit_sha = hf_commits.commit_sha) AND hf_commits.id NOT IN (SELECT k.id FROM (SELECT c.id AS id, ROW_NUMBER() OVER (PARTITION BY c.hf_repo_id ORDER BY c.committed_at DESC, c.id DESC) AS rn FROM hf_commits c) k WHERE k.rn <= 3)", KeyColumns: []string{"id"}, Standard: 30 * day, FreeTier: 7 * day},
 		{Table: "saml_request_state", TimeColumn: "expires_at", Terminal: "expires_at < now()", KeyColumns: []string{"id"}, Standard: time.Minute, FreeTier: time.Minute},

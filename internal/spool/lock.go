@@ -21,6 +21,9 @@ type Locker struct {
 	RenewEvery  time.Duration
 	// Prefix namespaces keys, for example "cache-request:".
 	Prefix string
+	// TryTimeout bounds the wait of TryAcquire for a database connection (the pool of the coordinator
+	// may be exhausted by long holders); on expiry the lock counts as held. Zero selects 3 seconds.
+	TryTimeout time.Duration
 }
 
 // ErrLocked reports that another holder has the lock.
@@ -49,8 +52,18 @@ func (l Locker) TryAcquire(ctx context.Context, key string) (context.Context, fu
 		return ctx, func() error { return nil }, nil
 	}
 	lockKey := l.Prefix + key
-	owner, acquired, err := l.Coordinator.Acquire(ctx, lockKey, l.Lease)
+	wait := l.TryTimeout
+	if wait <= 0 {
+		wait = 3 * time.Second
+	}
+	acquireCtx, cancelAcquire := context.WithTimeout(ctx, wait)
+	owner, acquired, err := l.Coordinator.Acquire(acquireCtx, lockKey, l.Lease)
+	cancelAcquire()
 	if err != nil {
+		if ctx.Err() == nil && errors.Is(err, context.DeadlineExceeded) {
+			// No connection became free in time: treat the lock as held rather than wait behind it.
+			return nil, nil, ErrLocked
+		}
 		return nil, nil, err
 	}
 	if !acquired {

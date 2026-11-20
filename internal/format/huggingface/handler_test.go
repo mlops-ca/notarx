@@ -90,7 +90,8 @@ func TestAuditOutcomeClassifiesStatuses(t *testing.T) {
 		401: repository.AuditAccessDenied, 403: repository.AuditAccessDenied,
 		404: repository.AuditNotFound,
 		500: repository.AuditStorageError,
-		502: repository.AuditUpstreamError, 503: repository.AuditUpstreamError, 504: repository.AuditUpstreamError, 507: repository.AuditUpstreamError,
+		502: repository.AuditUpstreamError, 503: repository.AuditUpstreamError, 504: repository.AuditUpstreamError,
+		507: repository.AuditProxyDenied, 499: repository.AuditResolved,
 	} {
 		if got := auditOutcome(status); got != want {
 			t.Errorf("auditOutcome(%d) = %q, want %q", status, got, want)

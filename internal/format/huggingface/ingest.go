@@ -148,6 +148,19 @@ func (i *Ingest) ResolveForRead(ctx context.Context, repo Repo, rev string) (Res
 	return i.ResolveRevision(ctx, repo, rev)
 }
 
+// Seed records a revision that has just been resolved upstream, so the request that follows answers
+// from the store instead of asking upstream again.
+func (i *Ingest) Seed(ctx context.Context, repo Repo, rev string, revision Revision) error {
+	if _, err := i.ensureCommit(ctx, repo, revision); err != nil {
+		return err
+	}
+	if ValidCommit(rev) {
+		return nil
+	}
+	now := i.now()
+	return i.Store.PutRef(ctx, Ref{HFRepoID: repo.ID, Kind: RefBranch, Name: rev, CommitSHA: revision.SHA, CheckedAt: now, ExpiresAt: now.Add(i.Config.RefTTL)})
+}
+
 // lookupRef finds the stored ref for rev; a tag and a branch may share a name, the branch
 // wins as it does on the Hub.
 func (i *Ingest) lookupRef(ctx context.Context, repo Repo, rev string) (Ref, string, error) {

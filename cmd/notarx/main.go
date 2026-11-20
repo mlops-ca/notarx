@@ -322,6 +322,14 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 		slog.Error("configure Hugging Face format", "error", err)
 		return 1
 	}
+	// Every cold fetch holds a coordinator connection for its whole transfer (a session advisory lock), like
+	// a Raw spool does. Keep a few connections free for the short locks of the other formats.
+	if available := max(1, cfg.DatabaseCoordinatorPool.MaxOpenConns-cfg.RawCacheMaxConcurrentSpools-2); huggingFaceConfig.MaxConcurrentFetches > available {
+		slog.Warn("reducing NOTARX_HF_MAX_CONCURRENT_FETCHES to fit the coordinator connection pool",
+			"configured", huggingFaceConfig.MaxConcurrentFetches, "effective", available,
+			"raise", "NOTARX_DATABASE_COORDINATOR_MAX_OPEN_CONNS")
+		huggingFaceConfig.MaxConcurrentFetches = available
+	}
 	huggingFace, err := huggingfaceformat.New(huggingfaceformat.Options{Store: huggingfaceformat.NewStore(databasePool, huggingFaceDialect(cfg.DatabaseDriver)), Objects: objectStore})
 	if err != nil {
 		slog.Error("configure Hugging Face format", "error", err)

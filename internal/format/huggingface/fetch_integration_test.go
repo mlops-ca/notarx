@@ -698,3 +698,87 @@ func TestMultiRangeOfAMissingObjectIsRepaired(t *testing.T) {
 		t.Fatalf("CDN requests = %d", env.hub.count("GET /cdn/"))
 	}
 }
+
+// slowFinish is an object store whose uploads are observable: it records how many bytes the upload had
+// read when the CDN was still holding back the second half of the object.
+type observedObjects struct {
+	objectstore.Store
+	mu   sync.Mutex
+	read int64
+}
+
+func (o *observedObjects) PutVerifiedReader(ctx context.Context, key string, r io.Reader, size int64, digest string) error {
+	counting := &countingReader{r: r, onRead: func(n int64) {
+		o.mu.Lock()
+		o.read += n
+		o.mu.Unlock()
+	}}
+	return o.Store.PutVerifiedReader(ctx, key, counting, size, digest)
+}
+
+func (o *observedObjects) bytesRead() int64 {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.read
+}
+
+type countingReader struct {
+	r      io.Reader
+	onRead func(int64)
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.onRead(int64(n))
+	return n, err
+}
+
+func TestTheObjectStoreUploadRunsWhileTheBytesArrive(t *testing.T) {
+	content := weights(4000)
+	env := newFetchEnv(t, map[string]*hubFile{"model.safetensors": {Content: content, LFS: true}})
+	observed := &observedObjects{Store: env.objects}
+	env.fetcher.Objects = observed
+	gate := make(chan struct{})
+	env.hub.mu.Lock()
+	env.hub.cdnSlow = gate
+	env.hub.mu.Unlock()
+	request, _ := http.NewRequest(http.MethodGet, env.server.URL+"/?p=model.safetensors", nil)
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	first := make([]byte, 1000)
+	if _, err := io.ReadFull(response.Body, first); err != nil {
+		t.Fatal(err)
+	}
+	// The CDN holds back the second half: if the upload only started after the last byte, nothing was read yet.
+	deadline := time.Now().Add(5 * time.Second)
+	for observed.bytesRead() < 1000 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if observed.bytesRead() < 1000 {
+		t.Fatalf("the upload had read %d bytes while the transfer was still running: readers would wait for a full copy after the last byte", observed.bytesRead())
+	}
+	close(gate)
+	if rest, err := io.ReadAll(response.Body); err != nil || string(first)+string(rest) != string(content) {
+		t.Fatalf("body: %v", err)
+	}
+	file, _ := env.f.store.GetFile(context.Background(), env.commit.ID, "model.safetensors")
+	if !file.Cached {
+		t.Fatal("not cached after the stream")
+	}
+}
+
+func TestAFailureBeforeTheFirstReadableByteIsAProperErrorResponse(t *testing.T) {
+	// 10 bytes are below the hold-back (16): nothing is readable until the digest verified, so headers
+	// are not committed and the mismatch can still be a clean 502.
+	env := newFetchEnv(t, map[string]*hubFile{"tiny.bin": {Content: weights(10), Corrupt: true}})
+	response, body, err := env.get(t, "tiny.bin", nil)
+	if err != nil || response.StatusCode != http.StatusBadGateway {
+		t.Fatalf("status = %v err = %v, want a clean 502 rather than a dropped connection", response, err)
+	}
+	if !strings.Contains(string(body), "digest") && !strings.Contains(string(body), "match") {
+		t.Fatalf("body = %q", body)
+	}
+}

@@ -83,6 +83,10 @@ func (f *RedirectFollower) Follow(ctx context.Context, from *http.Request, resp 
 		return nil, fmt.Errorf("%w: %w", ErrRedirectRejected, err)
 	}
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	if transport, ok := client.Transport.(*http.Transport); ok {
+		// The hop is a single request on a transport built for it; an idle connection would only linger.
+		transport.DisableKeepAlives = true
+	}
 	hop, err := http.NewRequestWithContext(ctx, from.Method, location.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrRedirectRejected, err)

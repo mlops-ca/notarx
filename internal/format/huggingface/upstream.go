@@ -111,13 +111,45 @@ func (u *Upstream) base() *http.Client {
 	return &http.Client{Timeout: defaultUpstreamTimeout}
 }
 
-func (u *Upstream) client(ctx context.Context) (*http.Client, error) {
+// client returns an egress-checked client that never follows redirects itself. Each call pins a new
+// transport, so a client serves one operation (all pages of a tree, one byte fetch): oneShot disables
+// keep-alive for a single request, and the others are closed with CloseIdleConnections when done.
+func (u *Upstream) client(ctx context.Context, oneShot bool) (*http.Client, error) {
 	client, err := egress.ApplyContext(ctx, u.base(), u.Proxy, u.Endpoint, u.Hooks)
 	if err != nil {
 		return nil, &UpstreamError{Code: CodeUpstreamUnavailable, Err: err}
 	}
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	if transport, ok := client.Transport.(*http.Transport); ok && oneShot {
+		transport.DisableKeepAlives = true
+	}
 	return client, nil
+}
+
+// roundTrip sends request and follows one redirect that stays on the upstream origin: the Hub answers
+// 301 or 307 with a relative Location for a renamed repository. The credential is applied again, as
+// the origin is the same. accept limits which same-origin targets count (a byte fetch follows Hub
+// resolve URLs only, never an object path). Any other redirect is returned to the caller, which owns
+// the CDN hop.
+func (u *Upstream) roundTrip(client *http.Client, request *http.Request, accept func(*url.URL) bool) (*http.Response, error) {
+	response, err := client.Do(request)
+	if err != nil || !egress.IsRedirect(response.StatusCode) {
+		return response, err
+	}
+	origin, originErr := url.Parse(u.Endpoint)
+	target, locationErr := response.Location()
+	if originErr != nil || locationErr != nil || target.Scheme != origin.Scheme || !strings.EqualFold(target.Host, origin.Host) || !accept(target) {
+		return response, nil
+	}
+	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, upstreamErrorBodyPreview))
+	_ = response.Body.Close()
+	header := request.Header.Clone()
+	header.Del("Authorization")
+	next, err := u.newRequest(request.Context(), request.Method, target.String(), header)
+	if err != nil {
+		return nil, err
+	}
+	return client.Do(next)
 }
 
 func repoTypeSegment(repoType string) (string, bool) {
@@ -182,16 +214,12 @@ func (u *Upstream) endpointURL(path string) string {
 
 // getJSON performs a GET and decodes a bounded JSON body. It returns the response headers
 // for pagination.
-func (u *Upstream) getJSON(ctx context.Context, rawURL string, out any) (http.Header, error) {
-	client, err := u.client(ctx)
-	if err != nil {
-		return nil, err
-	}
+func (u *Upstream) getJSON(ctx context.Context, client *http.Client, rawURL string, out any) (http.Header, error) {
 	request, err := u.newRequest(ctx, http.MethodGet, rawURL, http.Header{"Accept": {"application/json"}})
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.Do(request)
+	response, err := u.roundTrip(client, request, func(*url.URL) bool { return true })
 	if err != nil {
 		return nil, &UpstreamError{Code: CodeUpstreamUnavailable, Err: err}
 	}
@@ -226,7 +254,11 @@ func (u *Upstream) Revision(ctx context.Context, repoType, repoName, rev string)
 		SHA          string `json:"sha"`
 		LastModified string `json:"lastModified"`
 	}
-	if _, err := u.getJSON(ctx, u.endpointURL(path), &payload); err != nil {
+	client, err := u.client(ctx, true)
+	if err != nil {
+		return Revision{}, err
+	}
+	if _, err := u.getJSON(ctx, client, u.endpointURL(path), &payload); err != nil {
 		return Revision{}, err
 	}
 	if !ValidCommit(payload.SHA) {
@@ -264,6 +296,11 @@ func (u *Upstream) Tree(ctx context.Context, repoType, repoName, sha string, max
 	if err != nil {
 		return nil, &UpstreamError{Code: CodeUpstreamInvalid, Err: err}
 	}
+	client, err := u.client(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+	defer client.CloseIdleConnections()
 	next := u.endpointURL(path) + "?recursive=true&expand=false"
 	var files []File
 	for page := 0; next != ""; page++ {
@@ -271,16 +308,14 @@ func (u *Upstream) Tree(ctx context.Context, repoType, repoName, sha string, max
 			return nil, ErrTreeTooLarge
 		}
 		var entries []treeEntry
-		header, err := u.getJSON(ctx, next, &entries)
+		header, err := u.getJSON(ctx, client, next, &entries)
 		if err != nil {
 			return nil, err
 		}
 		for _, entry := range entries {
-			if entry.Type == treeEntryTypeDirectory {
-				continue
-			}
 			if entry.Type != treeEntryTypeFile {
-				return nil, &UpstreamError{Code: CodeUpstreamInvalid, Err: fmt.Errorf("unknown tree entry type %q", entry.Type)}
+				// Directories, and entries of a type notarx does not serve (a submodule is "unknown"), hold no bytes.
+				continue
 			}
 			if len([]rune(entry.Path)) > MaxPathLength {
 				return nil, &UpstreamError{Code: CodePathTooLong, Err: ErrPathTooLong}
@@ -342,7 +377,7 @@ func (u *Upstream) Open(ctx context.Context, repoType, repoName, rev, filePath s
 	if err != nil {
 		return nil, err
 	}
-	client, err := u.client(ctx)
+	client, err := u.client(ctx, true)
 	if err != nil {
 		return nil, err
 	}
@@ -353,7 +388,7 @@ func (u *Upstream) Open(ctx context.Context, repoType, repoName, rev, filePath s
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.Do(request)
+	response, err := u.roundTrip(client, request, func(target *url.URL) bool { return strings.Contains(target.Path, "/resolve/") })
 	if err != nil {
 		return nil, &UpstreamError{Code: CodeUpstreamUnavailable, Err: err}
 	}

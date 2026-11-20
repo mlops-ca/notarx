@@ -366,9 +366,7 @@ func (f *Fetcher) end(fl *flight, err error) {
 	fl.cleanupLocked()
 	fl.signal()
 	fl.mu.Unlock()
-	if err != nil {
-		fl.markReady(err)
-	}
+	fl.markReady(err)
 }
 
 func (fl *flight) markReady(err error) {
@@ -399,7 +397,7 @@ func (f *Fetcher) run(fl *flight, obj Object, file File) {
 		return
 	}
 	// Another node may have finished this object already.
-	if f.cachedElsewhere(ctx, fl, obj) {
+	if f.cachedElsewhere(ctx, fl, obj, idle) {
 		return
 	}
 	ctx, unlock, err := f.Locker.TryAcquire(ctx, "huggingface-fetch:"+fl.key)
@@ -417,7 +415,7 @@ func (f *Fetcher) run(fl *flight, obj Object, file File) {
 	}
 	defer func() { _ = unlock() }()
 	// The other node may have finished between the check and the lock.
-	if f.cachedElsewhere(ctx, fl, obj) {
+	if f.cachedElsewhere(ctx, fl, obj, idle) {
 		return
 	}
 	if err := f.Store.Headroom(ctx, obj.RepositoryID, obj.Size); err != nil {
@@ -459,8 +457,14 @@ func (f *Fetcher) run(fl *flight, obj Object, file File) {
 	fl.mu.Lock()
 	fl.file = staging
 	fl.mu.Unlock()
-	fl.markReady(nil)
 
+	// An LFS file has a known digest, so its upload to the object store can run while the bytes arrive:
+	// the store verifies the same digest, and the final wait after the last byte is short.
+	var upload *uploader
+	if file.SHA256 != "" {
+		upload = f.startUpload(fetchCtx, file.SHA256, obj.Size)
+		defer upload.abort()
+	}
 	sum := sha256.New()
 	var blob hash.Hash
 	if file.SHA256 == "" && file.GitBlobID != "" {
@@ -479,14 +483,23 @@ func (f *Fetcher) run(fl *flight, obj Object, file File) {
 				return
 			}
 			sum.Write(buffer[:n])
+			if upload != nil {
+				upload.write(buffer[:n])
+			}
 			if blob != nil {
 				blob.Write(buffer[:n])
 			}
 			total += int64(n)
 			fl.mu.Lock()
 			fl.written = total
+			readable := fl.readable() > 0
 			fl.signal()
 			fl.mu.Unlock()
+			if readable {
+				// Headers go out only once there is a byte to send, so a failure before that is still a
+				// proper error response.
+				fl.markReady(nil)
+			}
 		}
 		if readErr != nil {
 			if errors.Is(readErr, io.EOF) && total == obj.Size {
@@ -512,7 +525,8 @@ func (f *Fetcher) run(fl *flight, obj Object, file File) {
 		f.end(fl, ErrDigestMismatch)
 		return
 	}
-	if err := f.commit(ctx, obj, digest, staging); err != nil {
+	uploaded := upload != nil && upload.finish() == nil
+	if err := f.commit(ctx, obj, digest, staging, uploaded); err != nil {
 		if errors.Is(err, capacity.ErrQuotaExceeded) {
 			f.record(FetchQuota)
 		} else {
@@ -527,39 +541,44 @@ func (f *Fetcher) run(fl *flight, obj Object, file File) {
 
 // cachedElsewhere ends the flight from the object store when the file turned out to be cached already,
 // for example by another node. It reports whether it did.
-func (f *Fetcher) cachedElsewhere(ctx context.Context, fl *flight, obj Object) bool {
+func (f *Fetcher) cachedElsewhere(ctx context.Context, fl *flight, obj Object, idle time.Duration) bool {
 	current, err := f.Store.GetFile(ctx, obj.CommitID, obj.Path)
 	if err != nil || !current.Cached || current.SHA256 == "" {
 		return false
 	}
-	return f.serveFromStoreOnce(fl, current.SHA256)
+	return f.serveFromStoreOnce(ctx, fl, current.SHA256, idle)
 }
 
-// serveFromStoreOnce ends a flight whose object another node cached while this one waited for the
-// lock: the verified object is copied into the staging file, so the waiting readers share the
-// one code path.
-func (f *Fetcher) serveFromStoreOnce(fl *flight, digest string) bool {
-	reader, _, err := f.Objects.Open(context.Background(), BlobKey(digest))
+// serveFromStoreOnce ends a flight whose object another node cached: the verified object is copied
+// into the staging file, so the waiting readers share the one code path. The copy is bounded by ctx
+// and cancelled when no byte arrives for idle. It reports false, having done nothing, when the object
+// is not in the store.
+func (f *Fetcher) serveFromStoreOnce(ctx context.Context, fl *flight, digest string, idle time.Duration) bool {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var stalled atomic.Bool
+	watchdog := time.AfterFunc(idle, func() { stalled.Store(true); cancel() })
+	defer watchdog.Stop()
+	reader, _, err := f.Objects.Open(ctx, BlobKey(digest))
 	if err != nil {
 		// The object is not there (yet): the caller fetches it.
 		return false
 	}
+	defer reader.Close()
 	staging, err := os.CreateTemp("", "notarx-hf-*")
 	if err != nil {
-		_ = reader.Close()
 		f.end(fl, err)
 		return true
 	}
-	defer reader.Close()
 	fl.mu.Lock()
 	fl.file = staging
 	fl.mu.Unlock()
-	fl.markReady(nil)
 	var total int64
 	buffer := make([]byte, spool.StreamCopyBufferSize)
 	for {
 		n, readErr := reader.Read(buffer)
 		if n > 0 {
+			watchdog.Reset(idle)
 			if _, err := staging.WriteAt(buffer[:n], total); err != nil {
 				f.end(fl, err)
 				return true
@@ -569,9 +588,13 @@ func (f *Fetcher) serveFromStoreOnce(fl *flight, digest string) bool {
 			fl.written = total
 			fl.signal()
 			fl.mu.Unlock()
+			fl.markReady(nil)
 		}
 		if readErr != nil {
 			if !errors.Is(readErr, io.EOF) {
+				if stalled.Load() {
+					readErr = &UpstreamError{Code: CodeUpstreamUnavailable, Err: fmt.Errorf("the object store sent no data for %s", idle)}
+				}
 				f.end(fl, readErr)
 				return true
 			}
@@ -589,13 +612,57 @@ func (f *Fetcher) serveFromStoreOnce(fl *flight, digest string) bool {
 	return true
 }
 
+// uploader streams the bytes of an LFS file to the object store while they are being fetched.
+type uploader struct {
+	pw     *io.PipeWriter
+	done   chan error
+	failed bool
+}
+
+func (f *Fetcher) startUpload(ctx context.Context, digest string, size int64) *uploader {
+	pr, pw := io.Pipe()
+	u := &uploader{pw: pw, done: make(chan error, 1)}
+	go func() {
+		err := f.Objects.PutVerifiedReader(ctx, BlobKey(digest), pr, size, "sha256:"+digest)
+		_ = pr.CloseWithError(err)
+		u.done <- err
+	}()
+	return u
+}
+
+// write feeds the upload; once the store failed it stops, and commit uploads from the staging file instead.
+func (u *uploader) write(p []byte) {
+	if u.failed {
+		return
+	}
+	if _, err := u.pw.Write(p); err != nil {
+		u.failed = true
+	}
+}
+
+// finish ends the stream and returns the result of the upload.
+func (u *uploader) finish() error {
+	if u.failed {
+		return <-u.done
+	}
+	_ = u.pw.Close()
+	return <-u.done
+}
+
+// abort stops an upload that is no longer wanted.
+func (u *uploader) abort() { _ = u.pw.CloseWithError(errUploadAborted) }
+
+var errUploadAborted = errors.New("upload aborted")
+
 // commit stores the verified bytes and records the blob. The object goes in first, under a
 // key that holds exactly this digest; the database transaction that follows reserves the
 // bytes as its last statement, so an over-quota commit leaves nothing counted.
-func (f *Fetcher) commit(ctx context.Context, obj Object, digest string, staging *os.File) error {
-	reader := io.NewSectionReader(staging, 0, obj.Size)
-	if err := f.Objects.PutVerifiedReader(ctx, BlobKey(digest), reader, obj.Size, "sha256:"+digest); err != nil {
-		return err
+func (f *Fetcher) commit(ctx context.Context, obj Object, digest string, staging *os.File, uploaded bool) error {
+	if !uploaded {
+		reader := io.NewSectionReader(staging, 0, obj.Size)
+		if err := f.Objects.PutVerifiedReader(ctx, BlobKey(digest), reader, obj.Size, "sha256:"+digest); err != nil {
+			return err
+		}
 	}
 	if err := f.Store.CommitBlob(ctx, obj.RepositoryID, obj.HFRepoID, obj.CommitID, obj.Path, digest, obj.Size); err != nil {
 		if errors.Is(err, capacity.ErrQuotaExceeded) {

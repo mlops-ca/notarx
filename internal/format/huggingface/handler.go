@@ -374,10 +374,14 @@ func auditOutcome(status int) repository.AuditOutcome {
 		return repository.AuditNotFound
 	case status == http.StatusInternalServerError:
 		return repository.AuditStorageError
+	case status == http.StatusBadRequest || status == http.StatusRequestEntityTooLarge || status == http.StatusMethodNotAllowed || status == http.StatusInsufficientStorage:
+		// Refused by policy (size limit, quota, method), not an upstream failure.
+		return repository.AuditProxyDenied
+	case status == statusClientClosed:
+		// No outcome enum names an abandoned download; the 499 status in the record tells it apart.
+		return repository.AuditResolved
 	case status >= http.StatusInternalServerError:
 		return repository.AuditUpstreamError
-	case status == http.StatusBadRequest || status == http.StatusRequestEntityTooLarge || status == http.StatusMethodNotAllowed:
-		return repository.AuditProxyDenied
 	}
 	return repository.AuditResolved
 }
@@ -456,14 +460,20 @@ func (rd *reader) confirmUpstream(ctx context.Context, ingest *Ingest, repo repo
 	if rd.misses.has(key) {
 		return Repo{}, errRevisionNotFound
 	}
-	if _, err := ingest.Hub.Revision(ctx, parsed.repoType, parsed.repoName, parsed.rev); err != nil {
+	revision, err := ingest.Hub.Revision(ctx, parsed.repoType, parsed.repoName, parsed.rev)
+	if err != nil {
 		var failure *UpstreamError
 		if errors.As(err, &failure) && failure.Code == CodeUpstreamNotFound {
 			rd.misses.add(key)
 		}
 		return Repo{}, err
 	}
-	return store.EnsureRepo(ctx, repo.ID, parsed.repoType, parsed.repoName)
+	hfRepo, err := store.EnsureRepo(ctx, repo.ID, parsed.repoType, parsed.repoName)
+	if err != nil {
+		return Repo{}, err
+	}
+	// The revision just resolved is stored, so the resolution that follows does not ask upstream again.
+	return hfRepo, ingest.Seed(ctx, hfRepo, parsed.rev, revision)
 }
 
 // missCache remembers upstream "not found" answers for a short time and a bounded number of keys.
