@@ -445,8 +445,10 @@ A Raw repository created with `layout: versioned` stores `<name>/<version>/<file
 files of sealable versions. The layout, the seal mode and the `strict` flag are chosen when the repository is
 created and never change. In a repository with `sealMode: idle`, one scheduler node at a time (a lease row of
 `scheduled_tasks`, at most once per interval) seals the open versions that saw no write for the idle period,
-for publishers such as plain `curl` that never call seal. Nothing ever tombstones or deletes an open version:
-an abandoned one is only reported.
+for publishers such as plain `curl` that never call seal. A version with a resumable upload still open is left
+open however long the upload takes; a single plain `PUT` that streams for longer than the idle period is not
+visible to the sweep until it commits, so keep `NOTARX_GENERIC_AUTOSEAL_IDLE` above the longest transfer of one
+file. Nothing ever tombstones or deletes an open version: an abandoned one is only reported.
 
 | Key | Default | Meaning |
 | --- | --- | --- |

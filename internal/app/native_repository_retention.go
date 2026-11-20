@@ -265,7 +265,7 @@ func (m NativeRepositoryRetention) PlanRepositoryDetailed(ctx context.Context, r
 	if !policy.Enabled {
 		return []RepositoryRetentionCandidate{}, nil
 	}
-	if repo.Format == repository.FormatRaw && repo.RawLayout == repository.RawLayoutVersioned {
+	if isVersionedRaw(repo) {
 		// A versioned repository retains whole sealed versions (ADR 0028 slice 4). Until that lands nothing is
 		// planned: path retention would delete single files out of sealed and open versions.
 		return []RepositoryRetentionCandidate{}, nil

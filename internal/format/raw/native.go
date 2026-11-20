@@ -93,7 +93,9 @@ func (h *Module) serveRepository(w http.ResponseWriter, r *http.Request) bool {
 		h.startUpload(w, r, repo, path)
 		return true
 	}
-	if rawChecksumExtension(path) != "" {
+	// In a versioned repository a name ending in .sha256 or .sha512 is an ordinary file of its version, not a
+	// verification sidecar of a path: release trees commonly ship such files.
+	if rawChecksumExtension(path) != "" && !versioned(repo) {
 		switch r.Method {
 		case http.MethodGet, http.MethodHead:
 			h.checksum(w, r, repo, path, principal)

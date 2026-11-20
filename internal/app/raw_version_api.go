@@ -71,6 +71,24 @@ func (h rawVersionManagementHandler) scoped(w http.ResponseWriter, r *http.Reque
 	})
 }
 
+// versionedPathOperationRefusal is the answer of a path-level tombstone or restore in a versioned Raw repository.
+const versionedPathOperationRefusal = "a versioned Raw repository tombstones and restores whole versions; the path-level operation does not apply"
+
+// isVersionedRaw reports whether repo is a Raw repository with the versioned layout, whose files belong to versions
+// that the version API tombstones, restores and retains as a unit (ADR 0028 slice 4).
+func isVersionedRaw(repo repository.HostedRepository) bool {
+	return repo.Format == repository.FormatRaw && repo.RawLayout == repository.RawLayoutVersioned
+}
+
+// rejectVersionedPathOperation answers a path-level operation on a versioned repository and reports whether it did.
+func rejectVersionedPathOperation(w http.ResponseWriter, repo repository.HostedRepository) bool {
+	if !isVersionedRaw(repo) {
+		return false
+	}
+	writeHostedProblem(w, http.StatusUnprocessableEntity, "layout_mismatch", versionedPathOperationRefusal)
+	return true
+}
+
 func writeRawVersionError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, repository.ErrNotFound):

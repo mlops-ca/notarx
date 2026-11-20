@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -58,6 +59,27 @@ func TestHostedRepositoriesRawLayoutShapeCheck(t *testing.T) {
 		if err == nil {
 			t.Errorf("%s must be rejected by the shape check", name)
 		}
+	}
+}
+
+// TestPostgresIdleSealSkipsAVersionSealedInTheMeantime seals a version between the candidate read and the row lock of the
+// sweep and checks that the sweep does not claim the seal.
+func TestPostgresIdleSealSkipsAVersionSealedInTheMeantime(t *testing.T) {
+	store := rawVersionIntegrationStore(t)
+	ctx := context.Background()
+	repo, err := store.CreateHostedRepository(ctx, HostedRepository{ID: uuid.NewString(), Name: "raw-idle-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:12], Format: FormatRaw, RawLayout: RawLayoutVersioned, SealMode: RawSealIdle})
+	if err != nil {
+		t.Fatal(err)
+	}
+	asset := RawAsset{RepositoryID: repo.ID, Path: "tool/1.0.0/a", Digest: "sha256:" + strings.Repeat("d", 63) + "2", ObjectKey: "native/raw/sha256/d2", Size: 1, ContentType: "text/plain"}
+	if _, err = store.PutRawAssetIf(ctx, asset, RawWriteCondition{RequireAbsent: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.SealRawVersion(ctx, SealRawVersionInput{RepositoryID: repo.ID, Name: "tool", Version: "1.0.0"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.sealRawVersion(ctx, SealRawVersionInput{RepositoryID: repo.ID, Name: "tool", Version: "1.0.0"}, time.Now().Add(time.Hour)); !errors.Is(err, errRawSealSkipped) {
+		t.Fatalf("the sweep claimed a seal it did not make: %v", err)
 	}
 }
 

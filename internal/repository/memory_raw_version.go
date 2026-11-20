@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/ids"
@@ -365,6 +366,12 @@ func (s *MemoryStore) sealRawVersionLocked(ctx context.Context, key string, vers
 		if input.Properties != nil && !equalRawVersionProperties(version.Properties, input.Properties) {
 			return RawVersion{}, ErrVersionSealed
 		}
+		// A repeated seal still has to agree with the files that were sealed.
+		if input.Expected != nil || input.ChecksumsFile != "" {
+			if err := verifyRawVersionSeal(input, s.rawVersionFilesLocked(version.RepositoryID, version.Name, version.Version)); err != nil {
+				return RawVersion{}, err
+			}
+		}
 		return version, nil
 	}
 	files := s.rawVersionFilesLocked(version.RepositoryID, version.Name, version.Version)
@@ -395,7 +402,7 @@ func (s *MemoryStore) SealIdleRawVersions(ctx context.Context, idleBefore time.T
 	candidates := make([]string, 0)
 	for key, version := range s.rawVersions {
 		repo, ok := s.hostedRepositories[version.RepositoryID]
-		if ok && repo.State == RepositoryActive && repo.SealMode == RawSealIdle && version.State == RawVersionOpen && version.FileCount > 0 && version.UpdatedAt.Before(idleBefore) {
+		if ok && repo.State == RepositoryActive && repo.SealMode == RawSealIdle && version.State == RawVersionOpen && version.FileCount > 0 && version.UpdatedAt.Before(idleBefore) && !s.rawVersionUploadingLocked(version) {
 			candidates = append(candidates, key)
 		}
 	}
@@ -442,4 +449,17 @@ func (s *MemoryStore) RawOpenVersionStats(_ context.Context, staleBefore time.Ti
 		}
 	}
 	return stats, nil
+}
+
+// rawVersionUploadingLocked reports whether a resumable upload of a file of the version is still open; the idle sweep
+// leaves such a version open however long the upload takes.
+func (s *MemoryStore) rawVersionUploadingLocked(version RawVersion) bool {
+	prefix, _ := RawVersionPathRange(version.Name, version.Version)
+	now := time.Now()
+	for _, upload := range s.rawUploads {
+		if upload.RepositoryID == version.RepositoryID && upload.State == "open" && now.Before(upload.ExpiresAt) && strings.HasPrefix(upload.Path, prefix) {
+			return true
+		}
+	}
+	return false
 }

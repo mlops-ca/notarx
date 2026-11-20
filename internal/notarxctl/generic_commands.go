@@ -78,7 +78,7 @@ func (g genericIdentity) validate(needVersion bool) error {
 		return err
 	}
 	if !genericVersionPattern.MatchString(g.version) {
-		return &UsageError{Message: fmt.Sprintf("invalid version %q", g.version), Hint: "use 1-128 letters, digits, dot, plus, tilde, underscore-free dash, starting with a letter or digit"}
+		return &UsageError{Message: fmt.Sprintf("invalid version %q", g.version), Hint: "use 1-128 letters, digits, dot, underscore, plus, tilde or dash, starting with a letter or digit"}
 	}
 	return nil
 }

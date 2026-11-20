@@ -3,14 +3,16 @@ package config
 import (
 	"fmt"
 	"time"
+
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 // Defaults of the versioned Raw repositories (ADR 0028, Configuration).
 const (
 	// DefaultGenericMaxFilesPerVersion keeps the manifest of a version under 256 KiB.
-	DefaultGenericMaxFilesPerVersion = 1000
+	DefaultGenericMaxFilesPerVersion = repository.DefaultRawMaxFilesPerVersion
 	// MaxGenericMaxFilesPerVersion is the largest cap the file read of a version can honour.
-	MaxGenericMaxFilesPerVersion = 100000
+	MaxGenericMaxFilesPerVersion = repository.MaxRawFilesPerVersion
 	// DefaultGenericAutosealIdle is how long an open version of an idle-mode repository saw no write before the
 	// sweep seals it.
 	DefaultGenericAutosealIdle = 300 * time.Second

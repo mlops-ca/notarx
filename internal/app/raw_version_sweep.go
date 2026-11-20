@@ -70,9 +70,12 @@ func (s RawVersionSweeper) now() time.Time {
 // Run reports the open-version gauges and, when this node can take the lease, seals the idle versions. It seals
 // nothing and returns no error when another node holds the lease or the last sweep is younger than the interval.
 func (s RawVersionSweeper) Run(ctx context.Context) (sealed int, err error) {
-	// The gauges are read from the database by every node, so each node reports the same values and a change of
-	// leader leaves no stale gauge behind; alert on the maximum across nodes.
-	defer func() { err = errors.Join(err, s.reportOpenVersions(ctx)) }()
+	sealed, err = s.sweep(ctx)
+	return sealed, errors.Join(err, s.reportOpenVersions(ctx))
+}
+
+// sweep seals the idle versions when this node can take the lease.
+func (s RawVersionSweeper) sweep(ctx context.Context) (sealed int, err error) {
 	acquired, err := s.Store.AcquireInternalTaskLease(ctx, rawIdleSealLease, s.Owner, rawIdleSealLeaseTTL, s.Interval)
 	if err != nil || !acquired {
 		return 0, err
@@ -124,6 +127,8 @@ func (s RawVersionSweeper) Run(ctx context.Context) (sealed int, err error) {
 	return sealed, nil
 }
 
+// reportOpenVersions publishes the open-version gauges. Every node reads them from the database, so each node reports the
+// same values and a change of leader leaves no stale gauge behind; alert on the maximum across nodes.
 func (s RawVersionSweeper) reportOpenVersions(ctx context.Context) error {
 	now := s.now()
 	stats, err := s.Store.RawOpenVersionStats(ctx, now.Add(-s.StaleAfter))
@@ -156,12 +161,19 @@ func (s RawVersionSweeper) Start(ctx context.Context) {
 	background.Go(ctx, func() {
 		ticker := time.NewTicker(tick)
 		defer ticker.Stop()
+		// The gauges are refreshed once per interval, not once per tick, so a fleet does not run the aggregate on
+		// every node every few seconds.
+		var reported time.Time
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				sealed, err := s.Run(ctx)
+				sealed, err := s.sweep(ctx)
+				if now := s.now(); now.Sub(reported) >= s.Interval {
+					reported = now
+					err = errors.Join(err, s.reportOpenVersions(ctx))
+				}
 				switch {
 				case err != nil && ctx.Err() == nil:
 					slog.Warn("raw idle seal sweep failed", "component", "raw_idle_seal", "error", err)

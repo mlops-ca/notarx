@@ -438,6 +438,18 @@ func runRawVersionStoreContract(t *testing.T, newStore rawVersionContractFactory
 		if err != nil || again.ManifestDigest != want {
 			t.Fatalf("second seal: %#v %v", again, err)
 		}
+		hexOf := func(digest string) string { return strings.TrimPrefix(digest, "sha256:") }
+		matching := []repository.RawVersionFileRef{{Path: "a.txt", SHA256: hexOf(a.Digest)}, {Path: "bin/b.txt", SHA256: hexOf(b.Digest)}}
+		if repeated, err := store.SealRawVersion(ctx, repository.SealRawVersionInput{RepositoryID: repo.ID, Name: "tool", Version: "1.0.0", Expected: matching}); err != nil || repeated.ManifestDigest != want {
+			t.Fatalf("a repeated seal that agrees with the sealed files: %#v %v", repeated, err)
+		}
+		// A repeated seal is verified against the files that were sealed, not waved through.
+		if _, err = store.SealRawVersion(ctx, repository.SealRawVersionInput{RepositoryID: repo.ID, Name: "tool", Version: "1.0.0", Expected: matching[:1]}); !errors.Is(err, repository.ErrChecksumMismatch) {
+			t.Fatalf("a repeated seal with a file set that differs from the sealed one: %v", err)
+		}
+		if _, err = store.SealRawVersion(ctx, repository.SealRawVersionInput{RepositoryID: repo.ID, Name: "tool", Version: "1.0.0", ChecksumsFile: "missing", ChecksumsDigest: a.Digest}); !errors.Is(err, repository.ErrChecksumsChanged) {
+			t.Fatalf("a repeated seal naming a checksums file the version does not hold: %v", err)
+		}
 		if _, err = store.SetRawVersionProperties(ctx, repo.ID, "tool", "1.0.0", map[string]string{"k": "v"}); !errors.Is(err, repository.ErrVersionSealed) {
 			t.Fatalf("properties after seal: %v", err)
 		}
@@ -713,6 +725,25 @@ func runRawVersionStoreContract(t *testing.T, newStore rawVersionContractFactory
 		}
 		if empty := version(t, store, idle.ID, "tool", "3.0.0"); empty.State != repository.RawVersionOpen {
 			t.Fatalf("an empty version is never sealed: %#v", empty)
+		}
+	})
+	t.Run("idle_sweep_leaves_a_version_with_an_open_upload", func(t *testing.T) {
+		store := factory(t)
+		repo := newRepo(t, store, func(r *repository.HostedRepository) { r.SealMode = repository.RawSealIdle })
+		mustPut(t, store, repo.ID, "tool/1.0.0/first", "first")
+		upload, err := store.CreateRawUpload(ctx, repository.RawUpload{ID: uuid.NewString(), RepositoryID: repo.ID, Path: "tool/1.0.0/slow", ObjectKey: "native/raw/uploads/" + uuid.NewString(), State: "open", ExpiresAt: time.Now().Add(time.Hour)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		future := time.Now().Add(time.Minute)
+		if sealed, err := store.SealIdleRawVersions(ctx, future, 10); err != nil || len(sealed) != 0 {
+			t.Fatalf("a version whose upload has not finished must stay open: %#v %v", sealed, err)
+		}
+		if _, err = store.CancelRawUpload(ctx, upload.ID); err != nil {
+			t.Fatal(err)
+		}
+		if sealed, err := store.SealIdleRawVersions(ctx, future, 10); err != nil || len(sealed) != 1 {
+			t.Fatalf("with the upload gone the version is idle: %#v %v", sealed, err)
 		}
 	})
 	t.Run("manifest_is_canonical", func(t *testing.T) {

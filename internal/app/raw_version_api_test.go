@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -121,12 +122,18 @@ func TestRawRepositoryLayoutIsChosenAtCreationAndImmutable(t *testing.T) {
 		t.Fatalf("created repository: %s", created.Body.String())
 	}
 	capabilities := decodeJSON[adminopenapi.RepositoryCapabilities](t, call(http.MethodGet, "/api/v2/repositories/"+repo.Id+"/capabilities", "", ""))
+	if slices.Contains(capabilities.Operations, adminopenapi.RepositoryOperationDelete) || slices.Contains(capabilities.Operations, adminopenapi.RepositoryOperationRestore) || !slices.Contains(capabilities.Operations, adminopenapi.RepositoryOperationPublish) {
+		t.Fatalf("a versioned repository advertises no path-level delete or restore: %v", capabilities.Operations)
+	}
 	if capabilities.Layout == nil || *capabilities.Layout != adminopenapi.RawLayoutVersioned || capabilities.Versions == nil || !*capabilities.Versions || capabilities.Strict == nil || !*capabilities.Strict {
 		t.Fatalf("capabilities: %#v", capabilities)
 	}
 	path := call(http.MethodPost, "/api/v2/repositories", `{"name":"plain-raw","format":"raw"}`, "k2")
 	pathRepo := decodeJSON[adminopenapi.Repository](t, path)
 	pathCapabilities := decodeJSON[adminopenapi.RepositoryCapabilities](t, call(http.MethodGet, "/api/v2/repositories/"+pathRepo.Id+"/capabilities", "", ""))
+	if !slices.Contains(pathCapabilities.Operations, adminopenapi.RepositoryOperationDelete) {
+		t.Fatalf("a path repository keeps its delete operation: %v", pathCapabilities.Operations)
+	}
 	if pathCapabilities.Layout == nil || *pathCapabilities.Layout != adminopenapi.RawLayoutPath || pathCapabilities.Versions == nil || *pathCapabilities.Versions || pathCapabilities.Strict == nil || *pathCapabilities.Strict {
 		t.Fatalf("path capabilities: %#v", pathCapabilities)
 	}

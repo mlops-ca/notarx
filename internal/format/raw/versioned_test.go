@@ -159,6 +159,18 @@ func TestVersionedRawResumableCompletionObeysCreateOnly(t *testing.T) {
 	}
 }
 
+func TestVersionedRawStoresChecksumNamedFilesAsOrdinaryFiles(t *testing.T) {
+	_, mux := versionedFixture(t, false)
+	for path, content := range map[string]string{"tool/1.0.0/tool.tar.gz": "archive", "tool/1.0.0/tool.tar.gz.sha256": "abcd  tool.tar.gz\n", "tool/1.0.0/tool.tar.gz.sha512": "ef01  tool.tar.gz\n"} {
+		if put := request(mux, http.MethodPut, "/raw/releases/"+path, content, nil); put.Code != http.StatusCreated {
+			t.Fatalf("put %s=%d %s", path, put.Code, put.Body.String())
+		}
+		if got := request(mux, http.MethodGet, "/raw/releases/"+path, "", nil); got.Code != http.StatusOK || got.Body.String() != content {
+			t.Fatalf("a file named %s must be served as stored: %d %q", path, got.Code, got.Body.String())
+		}
+	}
+}
+
 func TestPathRepositoriesStillOverwriteByDefault(t *testing.T) {
 	_, _, mux := fixture(t)
 	for _, content := range []string{"one", "two"} {

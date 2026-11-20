@@ -27,10 +27,14 @@ const rawVersionFilesQuery = `SELECT a.repository_id::text,a.path,a.digest,o.obj
 // rawIdleCandidatesQuery selects one page of the open versions the idle sweep may seal, oldest write first
 // (native_raw_versions_state_updated_idx), after the (updated_at, id) cursor of the previous page; sealRawVersion
 // re-checks each one under its row lock.
-const rawIdleCandidatesQuery = `SELECT v.repository_id::text,v.name,v.version,r.name,v.updated_at,v.id::text FROM native_raw_versions v JOIN hosted_repositories r ON r.id=v.repository_id WHERE v.state='open' AND v.file_count>0 AND v.updated_at<$1 AND (v.updated_at,v.id)>($3::timestamptz,$4::uuid) AND r.seal_mode='idle' AND r.state='active' ORDER BY v.updated_at,v.id LIMIT $2`
+const rawIdleCandidatesQuery = `SELECT v.repository_id::text,v.name,v.version,r.name,v.updated_at,v.id::text FROM native_raw_versions v JOIN hosted_repositories r ON r.id=v.repository_id WHERE v.state='open' AND v.file_count>0 AND v.updated_at<$1 AND (v.updated_at,v.id)>($3::timestamptz,$4::uuid) AND r.seal_mode='idle' AND r.state='active' AND NOT EXISTS (SELECT 1 FROM native_raw_uploads u WHERE u.repository_id=v.repository_id AND u.state='open' AND u.expires_at>now() AND substr(u.path,1,length(v.name)+length(v.version)+2)=v.name||'/'||v.version||'/') ORDER BY v.updated_at,v.id LIMIT $2`
 
 // rawOpenStatsQuery counts the stale open versions and finds the oldest one (native_raw_versions_state_created_idx).
 const rawOpenStatsQuery = `SELECT count(CASE WHEN created_at<$1 THEN 1 END),min(created_at) FROM native_raw_versions WHERE state='open'`
+
+// rawVersionOpenUploadQuery reports whether a resumable upload of a file of the version ($2 is name/version/) is still
+// open, so the idle sweep does not seal a version in the middle of a multi-file publish.
+const rawVersionOpenUploadQuery = `SELECT EXISTS (SELECT 1 FROM native_raw_uploads u WHERE u.repository_id=$1::uuid AND u.state='open' AND u.expires_at>now() AND substr(u.path,1,length($2))=$2)`
 
 // rawVersionFilesHardLimit bounds the file read of one version. NOTARX_GENERIC_MAX_FILES_PER_VERSION cannot exceed it,
 // and a read that finds more files fails instead of answering with a truncated list.
@@ -526,13 +530,38 @@ func (s *PostgresStore) sealRawVersion(ctx context.Context, input SealRawVersion
 	case RawVersionTombstoned:
 		return RawVersion{}, ErrVersionTombstoned
 	case RawVersionSealed:
+		if !idleBefore.IsZero() {
+			// A publisher sealed it between the candidate read and this lock: the sweep did not seal it.
+			return RawVersion{}, errRawSealSkipped
+		}
 		if input.Properties != nil && !equalRawVersionProperties(found.Properties, input.Properties) {
 			return RawVersion{}, ErrVersionSealed
 		}
+		// A repeated seal still has to agree with the files that were sealed: a client whose file set differs from
+		// the release must not be told that its set is the one that was sealed.
+		if input.Expected != nil || input.ChecksumsFile != "" {
+			files, err := listRawVersionFiles(ctx, tx, input.RepositoryID, input.Name, input.Version)
+			if err != nil {
+				return RawVersion{}, err
+			}
+			if err = verifyRawVersionSeal(input, files); err != nil {
+				return RawVersion{}, err
+			}
+		}
 		return found, nil
 	}
-	if !idleBefore.IsZero() && !found.UpdatedAt.Before(idleBefore) {
-		return RawVersion{}, errRawSealSkipped
+	if !idleBefore.IsZero() {
+		if !found.UpdatedAt.Before(idleBefore) {
+			return RawVersion{}, errRawSealSkipped
+		}
+		// An upload that has started but not finished holds the version open however long it takes.
+		var uploading bool
+		if err = tx.QueryRowContext(ctx, rawVersionOpenUploadQuery, input.RepositoryID, input.Name+"/"+input.Version+"/").Scan(&uploading); err != nil {
+			return RawVersion{}, err
+		}
+		if uploading {
+			return RawVersion{}, errRawSealSkipped
+		}
 	}
 	files, err := listRawVersionFiles(ctx, tx, input.RepositoryID, input.Name, input.Version)
 	if err != nil {

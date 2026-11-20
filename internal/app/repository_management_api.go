@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
 
 	"github.com/mlops-ca/notarx/internal/access"
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
@@ -156,6 +157,13 @@ func (h repositoryManagementHandler) GetRepositoryCapabilities(w http.ResponseWr
 		if repo.Format == repository.FormatRaw && repo.Type == repository.RepositoryTypeHosted && repo.RawLayout != "" {
 			layout, versions, strict := adminopenapi.RawLayout(repo.RawLayout), repo.RawLayout == repository.RawLayoutVersioned, repo.RawStrict
 			capabilities.Layout, capabilities.Versions, capabilities.Strict = &layout, &versions, &strict
+			if versions {
+				// A version is tombstoned and restored as a unit by the version API (ADR 0028 slice 4); the
+				// path-level operations do not apply, so they are not advertised.
+				capabilities.Operations = slices.DeleteFunc(capabilities.Operations, func(operation adminopenapi.RepositoryOperation) bool {
+					return operation == adminopenapi.RepositoryOperationDelete || operation == adminopenapi.RepositoryOperationRestore
+				})
+			}
 		}
 		writeNativeMavenJSON(w, http.StatusOK, capabilities)
 	})
