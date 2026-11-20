@@ -504,8 +504,8 @@ Issue #482, after the amendment above. The release gates call the same `test-sui
 
 Status: accepted (2026-11-20)
 
-Issue #518. Owner decision: the rule of the amendment "pushes to main run no tests" stands, and a push to `main` may also compile, without running any test, to warm the build cache that pull request CI restores. Item 1 of that amendment gains a job:
+Issue #518. Owner decision: the rule of the amendment "pushes to main run no tests" stands, and a push to `main` may also compile, without running any test, to warm the build cache that pull request CI restores. Item 1 of that amendment gains one workflow:
 
-1. `ci.yml` on a push to `main` also runs `mainline-go-cache`, one job per architecture. It restores the newest race build cache, runs `make race-coverage-build` (amd64) or `make race-build` (arm64), which pass `go test -c -o /dev/null` and so compile and link the test binaries of `quality` and `quality-arm64` without running them, saves the cache under a key per run and deletes the older race build caches of its architecture.
-2. The warm runs no test, no `TestMain` and no vet or lint. Anything that would run code under test does not belong in it.
-3. It must stay cheap: it compiles only what changed since the cache it restored. `docs/ci.md` (Go checks) records its measured cost. It does not gate `main`, so `ci-ok` does not need it.
+1. A push to `main` that changes Go code, `go.sum` or the Go build tooling also runs the `Go cache` workflow (`go-cache.yml`), one job per architecture. It restores the newest race build cache, runs `make race-coverage-build` (amd64) or `make race-build` (arm64) and saves the cache under a key per run. These targets run the commands of `make race-coverage` and `make race` with `go test -c -o /dev/null`, so they compile and link the test binaries of `quality` and `quality-arm64` without running them. The job then deletes the race build caches of its architecture that its save superseded.
+2. The warm only compiles (`go test -c`, `go build` or `go test -run=^$` style builds). It runs no test, no vet and no lint. Anything that would run code under test does not belong in it.
+3. It must stay cheap: it compiles only what changed since the cache it restored, and `docs/ci.md` (Go checks) records its measured cost. It does not gate `main`; a failed warm is a failed `Go cache` run.

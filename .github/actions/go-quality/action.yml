@@ -54,13 +54,15 @@ runs:
     # runs on main: an exact hit saves nothing, so a fixed key would freeze the cache,
     # and saves from every pull request would crowd the repository's cache quota. The
     # lint cache has a daily key (the release gates save it). The race build cache gets
-    # a key per run, saved by the build-only warm of every push to main and by the
-    # release gates; the warm deletes the entries it supersedes. Pull requests restore
+    # a key per run, saved by the build-only warm of every push to main (go-cache.yml)
+    # and by the release gates; the warm deletes the entries it supersedes. Pull requests restore
     # main's newest cache by prefix.
     - if: inputs.lint == 'true' || inputs.race == 'true' || inputs.race-coverage == 'true'
       name: Locate the Go caches
       id: cache-dirs
       shell: bash
+      env:
+        GO_SUM: ${{ hashFiles('go.sum') }}
       run: |
         {
           echo "day=$(date -u +%Y-%m-%d)"
@@ -69,6 +71,11 @@ runs:
           echo "gomodcache=$(go env GOMODCACHE)"
           echo "gocache=$(go env GOCACHE)"
           echo "go=$(go env GOVERSION)"
+          # The race build cache: one key per run, restored by the newest prefix match.
+          race_prefix="go-race-$RUNNER_OS-$RUNNER_ARCH-$(go env GOVERSION)-"
+          echo "race-prefix=$race_prefix"
+          echo "race-sum-prefix=$race_prefix$GO_SUM-"
+          echo "race-key=$race_prefix$GO_SUM-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
         } >> "$GITHUB_OUTPUT"
     # The key carries the runner architecture, so quality (amd64) and quality-arm64
     # each restore the cache their own architecture saved.
@@ -79,10 +86,10 @@ runs:
         path: |
           ${{ steps.cache-dirs.outputs.gomodcache }}
           ${{ steps.cache-dirs.outputs.gocache }}
-        key: go-race-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-dirs.outputs.go }}-${{ hashFiles('go.sum') }}-${{ steps.cache-dirs.outputs.day }}-${{ github.run_id }}-${{ github.run_attempt }}
+        key: ${{ steps.cache-dirs.outputs.race-key }}
         restore-keys: |
-          go-race-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-dirs.outputs.go }}-${{ hashFiles('go.sum') }}-
-          go-race-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-dirs.outputs.go }}-
+          ${{ steps.cache-dirs.outputs.race-sum-prefix }}
+          ${{ steps.cache-dirs.outputs.race-prefix }}
     # make lint runs the en-CA spell check, which needs the Console tools.
     - if: inputs.lint == 'true' || inputs.openapi-tools == 'true'
       uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -151,18 +158,27 @@ runs:
         path: |
           ${{ steps.cache-dirs.outputs.gomodcache }}
           ${{ steps.cache-dirs.outputs.gocache }}
-        key: go-race-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-dirs.outputs.go }}-${{ hashFiles('go.sum') }}-${{ steps.cache-dirs.outputs.day }}-${{ github.run_id }}-${{ github.run_attempt }}
+        key: ${{ steps.cache-dirs.outputs.race-key }}
     # Only the newest race build cache of an architecture is ever restored (by prefix),
-    # so the warm deletes the older ones instead of leaving them to the quota's eviction.
+    # so the warm deletes the ones created before the cache it saved. A newer cache (a
+    # later warm, or the release gates) is kept, and a run whose save did not happen
+    # deletes nothing. An entry that is already gone (deleted by a concurrent warm or
+    # evicted) is only a warning: the cache this run saved is in place.
     - if: inputs.build-only == 'true' && github.ref == 'refs/heads/main'
       name: Delete the superseded race build caches (main only)
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
-        KEEP: go-race-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-dirs.outputs.go }}-${{ hashFiles('go.sum') }}-${{ steps.cache-dirs.outputs.day }}-${{ github.run_id }}-${{ github.run_attempt }}
+        KEEP: ${{ steps.cache-dirs.outputs.race-key }}
         PREFIX: go-race-${{ runner.os }}-${{ runner.arch }}-
       run: |
-        gh cache list --repo "$GITHUB_REPOSITORY" --ref refs/heads/main --key "$PREFIX" --limit 100 --json key --jq '.[].key' |
+        caches=$(gh cache list --repo "$GITHUB_REPOSITORY" --ref refs/heads/main --key "$PREFIX" --limit 100 --json key,createdAt)
+        saved=$(jq -r --arg keep "$KEEP" '.[] | select(.key == $keep) | .createdAt' <<<"$caches")
+        if [[ -z "$saved" ]]; then
+          echo "::warning::the race build cache $KEEP was not saved; nothing is deleted"
+          exit 0
+        fi
+        jq -r --arg saved "$saved" '.[] | select(.createdAt < $saved) | .key' <<<"$caches" |
           while read -r key; do
-            [[ "$key" == "$KEEP" ]] || gh cache delete --repo "$GITHUB_REPOSITORY" "$key"
+            gh cache delete --repo "$GITHUB_REPOSITORY" "$key" || echo "::warning::could not delete the race build cache $key"
           done
