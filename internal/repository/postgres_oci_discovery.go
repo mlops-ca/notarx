@@ -46,6 +46,46 @@ func checkPostgresOCIGuards(ctx context.Context, tx *sql.Tx, guards []discovery.
 }
 
 func (s *PostgresStore) SaveOCIDiscoverySnapshot(ctx context.Context, snapshot discovery.Snapshot) error {
+	return s.saveOCIDiscoverySnapshot(ctx, snapshot, nil)
+}
+
+// saveOCIDiscoverySnapshot saves the snapshot. A snapshot id that is already stored with different bytes needs the
+// stored payload to decide whether it is the same snapshot; the transaction never reads the object store for it, so
+// it returns errPayloadNotPrefetched, the payload is read outside the transaction (prefetchOCIDiscoveryPayload) and the
+// save starts over with it.
+func (s *PostgresStore) saveOCIDiscoverySnapshot(ctx context.Context, snapshot discovery.Snapshot, prefetched payloadPrefetch) error {
+	err := s.saveOCIDiscoverySnapshotOnce(ctx, snapshot, prefetched)
+	if !errors.Is(err, errPayloadNotPrefetched) || prefetched != nil {
+		return err
+	}
+	prefetched, err = s.prefetchOCIDiscoveryPayload(ctx, snapshot.ID)
+	if err != nil {
+		return err
+	}
+	return s.saveOCIDiscoverySnapshotOnce(ctx, snapshot, prefetched)
+}
+
+// prefetchOCIDiscoveryPayload reads the externalised payload of the stored snapshot id, outside any transaction.
+func (s *PostgresStore) prefetchOCIDiscoveryPayload(ctx context.Context, id string) (payloadPrefetch, error) {
+	var ref payloadRef
+	err := s.db.QueryRowContext(ctx, `SELECT body_digest,body_size,body_key FROM oci_discovery_snapshots WHERE id=$1`, id).Scan(&ref.digest, &ref.size, &ref.key)
+	if errors.Is(err, sql.ErrNoRows) || err == nil && !ref.external() {
+		// Gone or inline since: the retry decides without a payload.
+		return payloadPrefetch{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	data, err := s.internalize(ctx, nil, ref)
+	if err != nil {
+		return nil, err
+	}
+	prefetched := payloadPrefetch{}
+	prefetched.add(ref, data)
+	return prefetched, nil
+}
+
+func (s *PostgresStore) saveOCIDiscoverySnapshotOnce(ctx context.Context, snapshot discovery.Snapshot, prefetched payloadPrefetch) error {
 	if err := discovery.ValidateSnapshot(snapshot, time.Now().UTC()); err != nil {
 		return err
 	}
@@ -74,7 +114,11 @@ func (s *PostgresStore) SaveOCIDiscoverySnapshot(ctx context.Context, snapshot d
 	var priorRef payloadRef
 	err = tx.QueryRowContext(ctx, `SELECT payload,body_digest,body_size,body_key FROM oci_discovery_snapshots WHERE id=$1`, snapshot.ID).Scan(&prior, &priorRef.digest, &priorRef.size, &priorRef.key)
 	if err == nil {
-		if !s.sameStoredOCISnapshot(prior, priorRef, data, ref, snapshot) {
+		same, err := s.sameStoredOCISnapshot(prior, priorRef, data, ref, snapshot, prefetched)
+		if err != nil {
+			return err
+		}
+		if !same {
 			return discovery.ErrChanged
 		}
 		return tx.Commit()
@@ -101,16 +145,23 @@ func (s *PostgresStore) SaveOCIDiscoverySnapshot(ctx context.Context, snapshot d
 	return tx.Commit()
 }
 
-// sameStoredOCISnapshot reports whether the stored row (its inline payload and reference) holds the snapshot being saved,
-// without reading the object store, so the save transaction never waits on it. An externalised payload is the exact
-// bytes data of a snapshot (discovery.Payload), so two payloads are equal when their digests are; an inline payload is
-// jsonb, which normalises the text, so it is compared as a snapshot.
-func (s *PostgresStore) sameStoredOCISnapshot(prior []byte, priorRef payloadRef, data []byte, ref payloadRef, snapshot discovery.Snapshot) bool {
+// sameStoredOCISnapshot reports whether the stored row (its inline payload and reference) holds the snapshot being
+// saved, without reading the object store, so the save transaction never waits on it. An externalised payload is the
+// exact bytes data of a snapshot (discovery.Payload), so equal digests mean the same snapshot; otherwise the stored
+// payload is compared as a snapshot, which needs it prefetched (errPayloadNotPrefetched). An inline payload is jsonb,
+// which normalises the text, so it is compared as a snapshot too.
+func (s *PostgresStore) sameStoredOCISnapshot(prior []byte, priorRef payloadRef, data []byte, ref payloadRef, snapshot discovery.Snapshot, prefetched payloadPrefetch) (bool, error) {
 	if priorRef.external() {
-		return payloadsEqual(nil, priorRef, data, ref)
+		if payloadsEqual(nil, priorRef, data, ref) {
+			return true, nil
+		}
+		var err error
+		if prior, err = s.internalizePrefetched(prior, priorRef, prefetched); err != nil {
+			return false, err
+		}
 	}
 	var existing discovery.Snapshot
-	return json.Unmarshal(prior, &existing) == nil && sameOCISnapshot(existing, snapshot)
+	return json.Unmarshal(prior, &existing) == nil && sameOCISnapshot(existing, snapshot), nil
 }
 
 // GetOCIDiscoverySnapshot reads the snapshot row, resolves an externalised payload, and only then opens the
@@ -142,6 +193,10 @@ func (s *PostgresStore) GetOCIDiscoverySnapshot(ctx context.Context, id, owner s
 	}
 	if err := tx.Commit(); err != nil {
 		return discovery.Snapshot{}, err
+	}
+	// The row was selected before the object read: a snapshot that expired meanwhile is gone.
+	if !snapshot.ExpiresAt.After(time.Now()) {
+		return discovery.Snapshot{}, discovery.ErrNotFound
 	}
 	return snapshot, nil
 }

@@ -287,9 +287,10 @@ func (s *PostgresStore) helmWriteTransaction(ctx context.Context, id, version st
 	return s.helmTransaction(ctx, id)
 }
 
-// stageHelmChart externalises the chart.yaml of a session before the transaction that commits it opens. A commit the
-// transaction would refuse (another actor, a session that is not pending or has expired) stages nothing, so a
-// rejected request never writes an object.
+// stageHelmChart externalises the chart.yaml of a session before the transaction that commits it opens, unless the
+// handler already staged it on ctx (StagePayload, before the publication lock). A commit the transaction would refuse
+// (another actor, a session that is not pending or has expired) stages nothing here; an object a handler staged for a
+// request refused later stays unreferenced until the sweep removes it.
 func (s *PostgresStore) stageHelmChart(ctx context.Context, session HelmSession, actor string) (stagedPayload, error) {
 	if session.State != "pending" || session.Actor != actor || !session.ExpiresAt.After(time.Now()) {
 		return stagedPayload{}, nil

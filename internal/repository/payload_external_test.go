@@ -5,7 +5,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
+	discovery "github.com/mlops-ca/notarx/internal/ocidiscovery"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -364,5 +366,77 @@ func TestStagePayloadIgnoresStoresThatCannotStageAndReportsFailures(t *testing.T
 	store.SetPayloadStore(&failingPayloadStore{}, 1)
 	if _, err := StagePayload(ctx, store, []byte("large payload")); err == nil {
 		t.Fatal("a failed put must fail the staging")
+	}
+}
+
+func TestInternalizePrefetchedNeverReadsTheStore(t *testing.T) {
+	payloads := newMemoryPayloadStore()
+	store := &PostgresStore{}
+	store.SetPayloadStore(payloads, 1)
+	data := []byte("manifest above the threshold")
+	_, ref, err := store.externalize(context.Background(), data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pre := payloadPrefetch{}
+	if got, err := store.internalizePrefetched([]byte("inline"), payloadRef{}, pre); err != nil || string(got) != "inline" {
+		t.Fatalf("an inline payload is returned as is: %q %v", got, err)
+	}
+	if _, err := store.internalizePrefetched(nil, ref, pre); !errors.Is(err, errPayloadNotPrefetched) {
+		t.Fatalf("a payload missing from the prefetch must ask for one: %v", err)
+	}
+	pre.add(ref, data)
+	if got, err := store.internalizePrefetched(nil, ref, pre); err != nil || !bytes.Equal(got, data) {
+		t.Fatalf("prefetched payload: %q %v", got, err)
+	}
+	if payloads.gets != 0 {
+		t.Fatalf("the object store was read %d times", payloads.gets)
+	}
+	store.SetPayloadStore(nil, 0)
+	if _, err := store.internalizePrefetched(nil, ref, payloadPrefetch{}); !errors.Is(err, ErrPayloadStoreUnavailable) {
+		t.Fatalf("without a payload store: %v", err)
+	}
+}
+
+func TestSameStoredOCISnapshotNeedsThePriorPayloadOnlyWhenDigestsDiffer(t *testing.T) {
+	payloads := newMemoryPayloadStore()
+	store := &PostgresStore{}
+	store.SetPayloadStore(payloads, 1)
+	mk := func(owner string) discovery.Snapshot {
+		return discovery.Snapshot{ID: "6f1c8a52-0000-4000-8000-000000000001", Owner: owner, Kind: "catalog"}
+	}
+	encode := func(s discovery.Snapshot) ([]byte, payloadRef) {
+		data, err := json.Marshal(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, ref, err := store.externalize(context.Background(), data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return data, ref
+	}
+	snapshot := mk("alice")
+	data, ref := encode(snapshot)
+	// Equal digests: the same snapshot, decided without any payload.
+	if same, err := store.sameStoredOCISnapshot(nil, ref, data, ref, snapshot, nil); err != nil || !same {
+		t.Fatalf("equal digests: %v %v", same, err)
+	}
+	other := mk("bob")
+	otherData, otherRef := encode(other)
+	if _, err := store.sameStoredOCISnapshot(nil, ref, otherData, otherRef, other, nil); !errors.Is(err, errPayloadNotPrefetched) {
+		t.Fatalf("different digests need the stored payload: %v", err)
+	}
+	pre := payloadPrefetch{}
+	pre.add(ref, data)
+	if same, err := store.sameStoredOCISnapshot(nil, ref, otherData, otherRef, other, pre); err != nil || same {
+		t.Fatalf("a different snapshot must not match: %v %v", same, err)
+	}
+	// An inline prior is compared as a snapshot.
+	if same, err := store.sameStoredOCISnapshot(data, payloadRef{}, data, ref, snapshot, nil); err != nil || !same {
+		t.Fatalf("inline prior: %v %v", same, err)
+	}
+	if same, _ := store.sameStoredOCISnapshot(data, payloadRef{}, otherData, otherRef, other, nil); same {
+		t.Fatal("an inline prior of another snapshot must not match")
 	}
 }

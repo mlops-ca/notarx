@@ -160,6 +160,8 @@ func (s *PostgresStore) stagePayload(ctx context.Context, data []byte) (stagedPa
 
 type stagedPayloadContextKey struct{}
 
+var _ PayloadStager = (*PostgresStore)(nil)
+
 // PayloadStager is implemented by a store that can externalise a payload ahead of its commit (PostgresStore).
 type PayloadStager interface {
 	// StagePayload externalises data now and returns a context that carries the result, so the commit made with
@@ -224,6 +226,25 @@ func (s *PostgresStore) internalizeWith(ctx context.Context, inline []byte, ref 
 		return data, nil
 	}
 	return s.internalize(ctx, inline, ref)
+}
+
+// errPayloadNotPrefetched reports an externalised payload a transaction needs that was not prefetched, so the caller
+// can read it outside the transaction and start over.
+var errPayloadNotPrefetched = errors.New("externalised payload was not prefetched")
+
+// internalizePrefetched is internalizeWith that never reads the object store: a reference that is not in the prefetch
+// is errPayloadNotPrefetched.
+func (s *PostgresStore) internalizePrefetched(inline []byte, ref payloadRef, pre payloadPrefetch) ([]byte, error) {
+	if !ref.external() {
+		return inline, nil
+	}
+	if data, ok := pre[ref.digest.String]; ok && int64(len(data)) == ref.size.Int64 {
+		return data, nil
+	}
+	if s.payloads.Load() == nil {
+		return nil, ErrPayloadStoreUnavailable
+	}
+	return nil, errPayloadNotPrefetched
 }
 
 // internalize returns the payload of a row: inline when ref is empty, otherwise the verified

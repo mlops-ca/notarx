@@ -24,11 +24,26 @@ func (s *PostgresStore) PublishNPMImport(ctx context.Context, c NPMImportClosure
 		}
 		manifests[v.Version] = npmManifest{inline: inline, ref: ref}
 	}
-	// The manifests of the versions already stored are compared with the incoming ones, so they are read before the lock too.
-	prefetched, err := s.prefetchNPMManifests(ctx, c)
-	if err != nil {
-		return err
+	// The manifests of the versions already stored are compared with the incoming ones, so they are read before the
+	// lock too. A version imported between the read and the lock makes the locked transaction ask for a manifest it
+	// does not hold; the import then starts over with a fresh read instead of waiting on the object store under the lock.
+	for attempt := 1; ; attempt++ {
+		prefetched, err := s.prefetchNPMManifests(ctx, c)
+		if err != nil {
+			return err
+		}
+		err = s.publishNPMImportLocked(ctx, c, keys, manifests, prefetched)
+		if !errors.Is(err, errPayloadNotPrefetched) || attempt == npmImportPrefetchAttempts {
+			return err
+		}
 	}
+}
+
+// npmImportPrefetchAttempts bounds how often an import starts over because a stored manifest was not prefetched.
+const npmImportPrefetchAttempts = 3
+
+// publishNPMImportLocked runs the import under the publication advisory locks of its versions.
+func (s *PostgresStore) publishNPMImportLocked(ctx context.Context, c NPMImportClosure, keys []string, manifests map[string]npmManifest, prefetched payloadPrefetch) error {
 	ctx, release, err := s.lockPostgresAdvisoryKeys(ctx, keys)
 	if err != nil {
 		return err
@@ -89,8 +104,8 @@ func (s *PostgresStore) PublishNPMImport(ctx context.Context, c NPMImportClosure
 		}
 		if old, exists := oldVersions[v.Version]; exists {
 			if old.State == "" || old.State == "visible" {
-				// A manifest that changed since the prefetch is read here, the behaviour before prefetching.
-				if old.Manifest, err = s.internalizeWith(ctx, old.Manifest, read.refs[v.Version], prefetched); err != nil {
+				// A manifest stored since the prefetch restarts the import (errPayloadNotPrefetched): the object store is never read here.
+				if old.Manifest, err = s.internalizePrefetched(old.Manifest, read.refs[v.Version], prefetched); err != nil {
 					return err
 				}
 			}
