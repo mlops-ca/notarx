@@ -559,6 +559,17 @@ becomes `jsonb` (MySQL `JSON`); object-shape validation moves to Go and the
 dropped. Queries select only the columns they need so TOAST values are not
 detoasted. On the free tier this also keeps cached proxy bodies out of the 50 GB.
 
+A writer never calls the object store from inside a transaction, and a handler that knows the payload before it
+takes a publication advisory lock stages it first (`repository.StageHelmChart`, `repository.StageNuGetNuspec`), so the lock and its dedicated
+connection do not wait on the store: Helm and NuGet uploads, NuGet preview session commits and Helm replication
+items do. Three paths hold the lock without staging, each by design. Proxy caching (`nuget/source.go`,
+`helm/source.go`) learns the nuspec or chart.yaml only from the upstream package it fetches under the lock, which
+exists to make concurrent nodes fetch a package once, so the lock already spans the upstream transfer and the
+artifact object write and one more small object put does not widen it. Expired-session maintenance
+(`nuget/maintenance.go`, `helm/maintenance.go`) deletes artifact objects and writes no payload. NuGet replication
+(`nuget/distribution.go`) takes no publication lock; its completion stages the nuspec before its transaction.
+Readers (`read.go`) and governance transitions take the lock but write no payload.
+
 ### 10. Connections and locks
 
 - Pools are sized by `NOTARX_NODE_ROLES`: a node with only the API role runs
