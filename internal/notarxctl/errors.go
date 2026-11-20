@@ -136,6 +136,10 @@ func exitCodeFor(err error) int {
 	if errors.As(err, &wait) {
 		return ExitConnection
 	}
+	var verification *VerificationError
+	if errors.As(err, &verification) {
+		return ExitFailure
+	}
 	var denied *accessDeniedError
 	if errors.As(err, &denied) {
 		return ExitForbidden
@@ -169,6 +173,10 @@ func localErrorCode(err error) string {
 	var wait *WaitTimeoutError
 	if errors.As(err, &wait) {
 		return "wait_timeout"
+	}
+	var verification *VerificationError
+	if errors.As(err, &verification) {
+		return "verification_failed"
 	}
 	var emailFailed *emailDeliveryFailedError
 	if errors.As(err, &emailFailed) {

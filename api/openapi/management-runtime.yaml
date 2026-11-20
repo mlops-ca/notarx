@@ -305,6 +305,20 @@ paths:
     "$ref": "./management/lifecycle.yaml#/repositories_repositoryId_lifecycle_jobs_lifecycleJobId_cancel"
   "/repositories/{repositoryId}/tombstones":
     "$ref": "./management/tombstones.yaml#/repositories_repositoryId_tombstones"
+  "/repositories/{repositoryId}/packages":
+    "$ref": "./management/raw-versions.yaml#/repositories_repositoryId_packages"
+  "/repositories/{repositoryId}/packages/{name}/versions":
+    "$ref": "./management/raw-versions.yaml#/repositories_repositoryId_packages_name_versions"
+  "/repositories/{repositoryId}/packages/{name}/versions/{version}":
+    "$ref": "./management/raw-versions.yaml#/repositories_repositoryId_packages_name_versions_version"
+  "/repositories/{repositoryId}/packages/{name}/versions/{version}/properties":
+    "$ref": "./management/raw-versions.yaml#/repositories_repositoryId_packages_name_versions_version_properties"
+  "/repositories/{repositoryId}/packages/{name}/versions/{version}:seal":
+    "$ref": "./management/raw-versions.yaml#/repositories_repositoryId_packages_name_versions_version_seal"
+  "/repositories/{repositoryId}/packages/{name}/versions/{version}/manifest":
+    "$ref": "./management/raw-versions.yaml#/repositories_repositoryId_packages_name_versions_version_manifest"
+  "/repositories/{repositoryId}/packages/{name}/versions/{version}/checksums":
+    "$ref": "./management/raw-versions.yaml#/repositories_repositoryId_packages_name_versions_version_checksums"
   "/repositories/{repositoryId}/capabilities":
     "$ref": "./management/capabilities.yaml#/repositories_repositoryId_capabilities"
   "/repositories/{repositoryId}/effective-access":

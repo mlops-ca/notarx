@@ -376,6 +376,9 @@ func publicationTarget(ctx context.Context, client *apiClient, id string, format
 	if !slices.Contains(capabilities.Operations, adminopenapi.RepositoryOperationPublish) {
 		return repo, &APIError{Code: "not_supported", HTTPStatus: http.StatusNotImplemented, Message: "the target does not advertise the publish operation"}
 	}
+	if capabilities.Layout != nil && *capabilities.Layout == adminopenapi.RawLayoutVersioned {
+		return repo, &UsageError{Message: fmt.Sprintf("repository %s has the versioned layout: files are published as versions", repo.Name), Hint: "use notarxctl generic push --repo ID --name N --version V SOURCE; publish raw is for path repositories"}
+	}
 	return repo, nil
 }
 

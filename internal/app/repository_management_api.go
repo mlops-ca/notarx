@@ -152,7 +152,12 @@ func (h repositoryManagementHandler) GetRepositoryCapabilities(w http.ResponseWr
 		}
 		artifactScanning := h.artifactScanner != nil && scanFormatEnabled(h.artifactScanFormats, repo.Format) && scanRepositoryAssetsAvailable(repo)
 		publicationScanning := artifactScanning && publicationScanSupported(repo)
-		writeNativeMavenJSON(w, http.StatusOK, repositoryCapabilities(repo.Format, repo.Type, artifactScanning, publicationScanning))
+		capabilities := repositoryCapabilities(repo.Format, repo.Type, artifactScanning, publicationScanning)
+		if repo.Format == repository.FormatRaw && repo.Type == repository.RepositoryTypeHosted && repo.RawLayout != "" {
+			layout, versions, strict := adminopenapi.RawLayout(repo.RawLayout), repo.RawLayout == repository.RawLayoutVersioned, repo.RawStrict
+			capabilities.Layout, capabilities.Versions, capabilities.Strict = &layout, &versions, &strict
+		}
+		writeNativeMavenJSON(w, http.StatusOK, capabilities)
 	})
 }
 

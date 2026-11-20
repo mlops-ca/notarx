@@ -43,6 +43,10 @@ type createHostedRepositoryRequest struct {
 	OCIBearer              json.RawMessage       `json:"ociBearer,omitempty"`
 	Visibility             repository.Visibility `json:"visibility,omitempty"`
 	MavenStrictPublication bool                  `json:"mavenStrictPublication,omitempty"`
+	// Layout, SealMode and Strict choose the Raw layout (ADR 0028) and are fixed at creation.
+	Layout   repository.RawLayout   `json:"layout,omitempty"`
+	SealMode repository.RawSealMode `json:"sealMode,omitempty"`
+	Strict   bool                   `json:"strict,omitempty"`
 }
 
 type updateHostedRepositoryRequest struct {
@@ -53,6 +57,10 @@ type updateHostedRepositoryRequest struct {
 	OCIBearer              json.RawMessage        `json:"ociBearer,omitempty"`
 	Visibility             *repository.Visibility `json:"visibility,omitempty"`
 	MavenStrictPublication *bool                  `json:"mavenStrictPublication,omitempty"`
+	// Layout, SealMode and Strict are accepted only with their current value; a different one is layout_immutable.
+	Layout   *repository.RawLayout   `json:"layout,omitempty"`
+	SealMode *repository.RawSealMode `json:"sealMode,omitempty"`
+	Strict   *bool                   `json:"strict,omitempty"`
 }
 
 type repositoryPage struct {
@@ -316,13 +324,17 @@ func (h hostedRepositoryAPIHandler) createWithIdempotencyKey(w http.ResponseWrit
 	}
 	payload, _ := json.Marshal(request)
 	digest := sha256.Sum256(payload)
-	repo, _, err := h.store.CreateHostedRepositoryIdempotently(r.Context(), repository.HostedRepository{ID: ids.New(), Name: request.Name, Format: request.Format, Type: repoType, Endpoint: request.Endpoint, AllowedHosts: request.AllowedHosts, EgressProxy: egressProxy, UpstreamAuth: upstreamAuth, OCIBearer: ociBearer, Visibility: repository.NormalizeVisibility(request.Visibility), MavenStrictPublication: request.MavenStrictPublication}, principal.Actor, key, base64.RawURLEncoding.EncodeToString(digest[:]))
+	repo, _, err := h.store.CreateHostedRepositoryIdempotently(r.Context(), repository.HostedRepository{ID: ids.New(), Name: request.Name, Format: request.Format, Type: repoType, Endpoint: request.Endpoint, AllowedHosts: request.AllowedHosts, EgressProxy: egressProxy, UpstreamAuth: upstreamAuth, OCIBearer: ociBearer, Visibility: repository.NormalizeVisibility(request.Visibility), MavenStrictPublication: request.MavenStrictPublication, RawLayout: request.Layout, SealMode: request.SealMode, RawStrict: request.Strict}, principal.Actor, key, base64.RawURLEncoding.EncodeToString(digest[:]))
 	if errors.Is(err, repository.ErrIdempotencyConflict) {
 		writeHostedProblem(w, http.StatusConflict, "idempotency_conflict", "Idempotency-Key was already used with a different request")
 		return
 	}
 	if errors.Is(err, repository.ErrNameExists) {
 		writeHostedProblem(w, http.StatusConflict, "version_conflict", "repository name already exists")
+		return
+	}
+	if errors.Is(err, repository.ErrRawLayoutMismatch) {
+		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "layout, sealMode and strict apply to Raw Hosted repositories, and sealMode idle and strict need the versioned layout")
 		return
 	}
 	if err != nil {
@@ -451,6 +463,11 @@ func (h hostedRepositoryAPIHandler) update(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	updatedRepo.OCIBearer = ociBearer
+	layoutRequested := request.Layout != nil || request.SealMode != nil || request.Strict != nil
+	if layoutRequested && (request.Layout != nil && *request.Layout != repo.RawLayout || request.SealMode != nil && *request.SealMode != repo.SealMode || request.Strict != nil && *request.Strict != repo.RawStrict) {
+		writeHostedProblem(w, http.StatusConflict, "layout_immutable", "the layout, seal mode and strict flag of a repository are fixed at creation")
+		return
+	}
 	if request.Visibility != nil {
 		if !request.Visibility.Valid() {
 			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "visibility must be private, authenticated or public")
@@ -530,7 +547,7 @@ func (h hostedRepositoryAPIHandler) update(w http.ResponseWriter, r *http.Reques
 			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "hosted repositories only support visibility and Maven publication policy updates")
 			return
 		}
-		if request.Visibility == nil && request.MavenStrictPublication == nil {
+		if request.Visibility == nil && request.MavenStrictPublication == nil && !layoutRequested {
 			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "an editable hosted repository setting is required")
 			return
 		}
@@ -577,12 +594,27 @@ func validHostedRepository(request createHostedRepositoryRequest) bool {
 	case repository.RepositoryTypeHosted:
 		// Hosted repositories serve local content only; an upstream endpoint or
 		// egress allow-list would be meaningless and likely a client mistake.
-		return request.Endpoint == "" && len(request.AllowedHosts) == 0 && (!request.MavenStrictPublication || request.Format == repository.FormatMaven)
+		return request.Endpoint == "" && len(request.AllowedHosts) == 0 && (!request.MavenStrictPublication || request.Format == repository.FormatMaven) && validRawLayoutRequest(request)
 	case repository.RepositoryTypeProxy:
-		return !request.MavenStrictPublication && validProxyConfiguration(request.Format, request.Endpoint, request.AllowedHosts)
+		return !request.MavenStrictPublication && request.Layout == "" && request.SealMode == "" && !request.Strict && validProxyConfiguration(request.Format, request.Endpoint, request.AllowedHosts)
 	default:
 		return false
 	}
+}
+
+// validRawLayoutRequest accepts the layout fields only for Raw: a layout of path or versioned, a seal mode of explicit
+// or idle, and the idle mode and strict flag only with the versioned layout (ADR 0028).
+func validRawLayoutRequest(request createHostedRepositoryRequest) bool {
+	if request.Layout == "" && request.SealMode == "" && !request.Strict {
+		return true
+	}
+	if request.Format != repository.FormatRaw || (request.Layout != "" && !request.Layout.Valid()) || (request.SealMode != "" && !request.SealMode.Valid()) {
+		return false
+	}
+	if request.Layout != repository.RawLayoutVersioned {
+		return (request.SealMode == "" || request.SealMode == repository.RawSealExplicit) && !request.Strict
+	}
+	return true
 }
 
 func validProxyEndpoint(endpoint string) bool {

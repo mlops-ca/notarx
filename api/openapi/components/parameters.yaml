@@ -160,6 +160,22 @@ OptionalIfMatch:
   required: false
   schema:
     type: string
+RawPackageName:
+  name: name
+  in: path
+  required: true
+  description: Package name of a versioned Raw repository, lower case ASCII.
+  schema:
+    type: string
+    pattern: "^[a-z0-9][a-z0-9._-]{0,127}$"
+RawVersionIdentifier:
+  name: version
+  in: path
+  required: true
+  description: Version identifier of a versioned Raw repository; semantic versioning is not required.
+  schema:
+    type: string
+    pattern: "^[A-Za-z0-9][A-Za-z0-9._+~-]{0,127}$"
 SnapshotId:
   name: snapshotId
   in: path

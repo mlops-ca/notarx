@@ -9,6 +9,9 @@ import (
 )
 
 func (s *PostgresStore) createHostedRepositoryMutation(ctx context.Context, repo HostedRepository) (HostedRepository, error) {
+	if err := ValidateRawLayout(repo); err != nil {
+		return HostedRepository{}, err
+	}
 	repo = normalizeHostedRepository(repo)
 	egressProxy, err := marshalEgressProxy(repo.EgressProxy)
 	if err != nil {
@@ -22,7 +25,8 @@ func (s *PostgresStore) createHostedRepositoryMutation(ctx context.Context, repo
 	if err != nil {
 		return HostedRepository{}, err
 	}
-	err = s.db.QueryRowContext(ctx, `INSERT INTO hosted_repositories (id, name, format, repo_type, endpoint, allowed_hosts, visibility, maven_strict_publication, state, version, egress_proxy, upstream_auth, oci_bearer) VALUES ($1,$2,$3,$4,$5,COALESCE($6::text[], '{}'::text[]),$7,$8,'active',1,$9,$10,$11) RETURNING state, version, created_at, grants_version`, repo.ID, repo.Name, repo.Format, repo.Type, repo.Endpoint, repo.AllowedHosts, repo.Visibility, repo.MavenStrictPublication, egressProxy, upstreamAuth, ociBearer).Scan(&repo.State, &repo.Version, &repo.CreatedAt, &repo.GrantsVersion)
+	layout, sealMode, rawStrict := rawLayoutColumns(repo)
+	err = s.db.QueryRowContext(ctx, `INSERT INTO hosted_repositories (id, name, format, repo_type, endpoint, allowed_hosts, visibility, maven_strict_publication, state, version, egress_proxy, upstream_auth, oci_bearer, raw_layout, seal_mode, raw_strict) VALUES ($1,$2,$3,$4,$5,COALESCE($6::text[], '{}'::text[]),$7,$8,'active',1,$9,$10,$11,$12,$13,$14) RETURNING state, version, created_at, grants_version`, repo.ID, repo.Name, repo.Format, repo.Type, repo.Endpoint, repo.AllowedHosts, repo.Visibility, repo.MavenStrictPublication, egressProxy, upstreamAuth, ociBearer, layout, sealMode, rawStrict).Scan(&repo.State, &repo.Version, &repo.CreatedAt, &repo.GrantsVersion)
 	if isUnique(err) {
 		return HostedRepository{}, ErrNameExists
 	}
@@ -33,6 +37,9 @@ func (s *PostgresStore) createHostedRepositoryMutation(ctx context.Context, repo
 }
 
 func (s *PostgresStore) createHostedRepositoryIdempotentlyMutation(ctx context.Context, repo HostedRepository, actor, key, payload string, audit ...AuditRecord) (HostedRepository, bool, error) {
+	if err := ValidateRawLayout(repo); err != nil {
+		return HostedRepository{}, false, err
+	}
 	repo = normalizeHostedRepository(repo)
 	egressProxy, err := marshalEgressProxy(repo.EgressProxy)
 	if err != nil {
@@ -46,6 +53,7 @@ func (s *PostgresStore) createHostedRepositoryIdempotentlyMutation(ctx context.C
 	if err != nil {
 		return HostedRepository{}, false, err
 	}
+	layout, sealMode, rawStrict := rawLayoutColumns(repo)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return HostedRepository{}, false, err
@@ -81,7 +89,7 @@ func (s *PostgresStore) createHostedRepositoryIdempotentlyMutation(ctx context.C
 	if !errors.Is(err, sql.ErrNoRows) {
 		return HostedRepository{}, false, err
 	}
-	err = tx.QueryRowContext(ctx, `INSERT INTO hosted_repositories (id, name, format, repo_type, endpoint, allowed_hosts, visibility, maven_strict_publication, state, version, egress_proxy, upstream_auth, oci_bearer) VALUES ($1,$2,$3,$4,$5,COALESCE($6::text[], '{}'::text[]),$7,$8,'active',1,$9,$10,$11) RETURNING state, version, created_at, grants_version`, repo.ID, repo.Name, repo.Format, repo.Type, repo.Endpoint, repo.AllowedHosts, repo.Visibility, repo.MavenStrictPublication, egressProxy, upstreamAuth, ociBearer).Scan(&repo.State, &repo.Version, &repo.CreatedAt, &repo.GrantsVersion)
+	err = tx.QueryRowContext(ctx, `INSERT INTO hosted_repositories (id, name, format, repo_type, endpoint, allowed_hosts, visibility, maven_strict_publication, state, version, egress_proxy, upstream_auth, oci_bearer, raw_layout, seal_mode, raw_strict) VALUES ($1,$2,$3,$4,$5,COALESCE($6::text[], '{}'::text[]),$7,$8,'active',1,$9,$10,$11,$12,$13,$14) RETURNING state, version, created_at, grants_version`, repo.ID, repo.Name, repo.Format, repo.Type, repo.Endpoint, repo.AllowedHosts, repo.Visibility, repo.MavenStrictPublication, egressProxy, upstreamAuth, ociBearer, layout, sealMode, rawStrict).Scan(&repo.State, &repo.Version, &repo.CreatedAt, &repo.GrantsVersion)
 	if isUnique(err) {
 		return HostedRepository{}, false, ErrNameExists
 	}
@@ -116,7 +124,7 @@ const getHostedRepositoryQuery = `SELECT ` + hostedRepositoryColumns + ` FROM ho
 // hostedRepositoryColumns is the canonical projection for hosted_repositories
 // reads. allowed_hosts is projected through array_to_json so it scans into
 // []byte and decodes into []string without a pq dependency.
-const hostedRepositoryColumns = `id::text, name, format, repo_type, endpoint, array_to_json(allowed_hosts), visibility, maven_strict_publication, state, version::text, created_at, egress_proxy, upstream_auth, oci_bearer, grants_version`
+const hostedRepositoryColumns = `id::text, name, format, repo_type, endpoint, array_to_json(allowed_hosts), visibility, maven_strict_publication, state, version::text, created_at, egress_proxy, upstream_auth, oci_bearer, grants_version, raw_layout, seal_mode, raw_strict`
 
 // marshalEgressProxy encodes the egress proxy configuration for the JSONB
 // column. The response-only CredentialsConfigured marker is never persisted.
@@ -163,7 +171,7 @@ func marshalOCIBearer(config *OCIBearer) (any, error) {
 
 func scanHostedRepository(row interface{ Scan(...any) error }, repo *HostedRepository) error {
 	var allowedHosts, egressProxy, upstreamAuth, ociBearer []byte
-	if err := row.Scan(&repo.ID, &repo.Name, &repo.Format, &repo.Type, &repo.Endpoint, &allowedHosts, &repo.Visibility, &repo.MavenStrictPublication, &repo.State, &repo.Version, &repo.CreatedAt, &egressProxy, &upstreamAuth, &ociBearer, &repo.GrantsVersion); err != nil {
+	if err := row.Scan(&repo.ID, &repo.Name, &repo.Format, &repo.Type, &repo.Endpoint, &allowedHosts, &repo.Visibility, &repo.MavenStrictPublication, &repo.State, &repo.Version, &repo.CreatedAt, &egressProxy, &upstreamAuth, &ociBearer, &repo.GrantsVersion, &repo.RawLayout, &repo.SealMode, &repo.RawStrict); err != nil {
 		return err
 	}
 	if err := json.Unmarshal(allowedHosts, &repo.AllowedHosts); err != nil {
@@ -191,6 +199,7 @@ func scanHostedRepository(row interface{ Scan(...any) error }, repo *HostedRepos
 		}
 		repo.OCIBearer = &config
 	}
+	*repo = normalizeRawLayout(*repo)
 	return nil
 }
 

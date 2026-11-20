@@ -3436,6 +3436,7 @@ const (
 	ProblemCodeAccessDenied                     ProblemCode = "access_denied"
 	ProblemCodeArtifactQuarantined              ProblemCode = "artifact_quarantined"
 	ProblemCodeAuthorizationPending             ProblemCode = "authorization_pending"
+	ProblemCodeChecksumMismatch                 ProblemCode = "checksum_mismatch"
 	ProblemCodeCoordinateExists                 ProblemCode = "coordinate_exists"
 	ProblemCodeDigestMismatch                   ProblemCode = "digest_mismatch"
 	ProblemCodeEncryptionKeyUnavailable         ProblemCode = "encryption_key_unavailable"
@@ -3444,11 +3445,15 @@ const (
 	ProblemCodeInternalError                    ProblemCode = "internal_error"
 	ProblemCodeInvalidCursor                    ProblemCode = "invalid_cursor"
 	ProblemCodeInvalidFilter                    ProblemCode = "invalid_filter"
+	ProblemCodeInvalidGenericPath               ProblemCode = "invalid_generic_path"
 	ProblemCodeInvalidLimit                     ProblemCode = "invalid_limit"
 	ProblemCodeInvalidPageToken                 ProblemCode = "invalid_page_token"
+	ProblemCodeInvalidProperties                ProblemCode = "invalid_properties"
 	ProblemCodeInvalidRequest                   ProblemCode = "invalid_request"
 	ProblemCodeInvalidState                     ProblemCode = "invalid_state"
 	ProblemCodeInvalidTimeWindow                ProblemCode = "invalid_time_window"
+	ProblemCodeLayoutImmutable                  ProblemCode = "layout_immutable"
+	ProblemCodeLayoutMismatch                   ProblemCode = "layout_mismatch"
 	ProblemCodeLogBufferUnavailable             ProblemCode = "log_buffer_unavailable"
 	ProblemCodeLogCursorScopeChanged            ProblemCode = "log_cursor_scope_changed"
 	ProblemCodeLogQueryTimeout                  ProblemCode = "log_query_timeout"
@@ -3468,6 +3473,13 @@ const (
 	ProblemCodeUntrustedArchive                 ProblemCode = "untrusted_archive"
 	ProblemCodeUpstreamCredentialRebindRequired ProblemCode = "upstream_credential_rebind_required"
 	ProblemCodeVersionConflict                  ProblemCode = "version_conflict"
+	ProblemCodeVersionEmpty                     ProblemCode = "version_empty"
+	ProblemCodeVersionFileExists                ProblemCode = "version_file_exists"
+	ProblemCodeVersionFileImmutable             ProblemCode = "version_file_immutable"
+	ProblemCodeVersionFileLimit                 ProblemCode = "version_file_limit"
+	ProblemCodeVersionNotSealed                 ProblemCode = "version_not_sealed"
+	ProblemCodeVersionSealed                    ProblemCode = "version_sealed"
+	ProblemCodeVersionTombstoned                ProblemCode = "version_tombstoned"
 	ProblemCodeVisibilityConflict               ProblemCode = "visibility_conflict"
 )
 
@@ -3479,6 +3491,8 @@ func (e ProblemCode) Valid() bool {
 	case ProblemCodeArtifactQuarantined:
 		return true
 	case ProblemCodeAuthorizationPending:
+		return true
+	case ProblemCodeChecksumMismatch:
 		return true
 	case ProblemCodeCoordinateExists:
 		return true
@@ -3496,15 +3510,23 @@ func (e ProblemCode) Valid() bool {
 		return true
 	case ProblemCodeInvalidFilter:
 		return true
+	case ProblemCodeInvalidGenericPath:
+		return true
 	case ProblemCodeInvalidLimit:
 		return true
 	case ProblemCodeInvalidPageToken:
+		return true
+	case ProblemCodeInvalidProperties:
 		return true
 	case ProblemCodeInvalidRequest:
 		return true
 	case ProblemCodeInvalidState:
 		return true
 	case ProblemCodeInvalidTimeWindow:
+		return true
+	case ProblemCodeLayoutImmutable:
+		return true
+	case ProblemCodeLayoutMismatch:
 		return true
 	case ProblemCodeLogBufferUnavailable:
 		return true
@@ -3543,6 +3565,20 @@ func (e ProblemCode) Valid() bool {
 	case ProblemCodeUpstreamCredentialRebindRequired:
 		return true
 	case ProblemCodeVersionConflict:
+		return true
+	case ProblemCodeVersionEmpty:
+		return true
+	case ProblemCodeVersionFileExists:
+		return true
+	case ProblemCodeVersionFileImmutable:
+		return true
+	case ProblemCodeVersionFileLimit:
+		return true
+	case ProblemCodeVersionNotSealed:
+		return true
+	case ProblemCodeVersionSealed:
+		return true
+	case ProblemCodeVersionTombstoned:
 		return true
 	case ProblemCodeVisibilityConflict:
 		return true
@@ -3614,6 +3650,60 @@ func (e PublishSessionState) Valid() bool {
 	case PublishSessionStateExpired:
 		return true
 	case PublishSessionStateOpen:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RawLayout.
+const (
+	RawLayoutPath      RawLayout = "path"
+	RawLayoutVersioned RawLayout = "versioned"
+)
+
+// Valid indicates whether the value is a known member of the RawLayout enum.
+func (e RawLayout) Valid() bool {
+	switch e {
+	case RawLayoutPath:
+		return true
+	case RawLayoutVersioned:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RawSealMode.
+const (
+	Explicit RawSealMode = "explicit"
+	Idle     RawSealMode = "idle"
+)
+
+// Valid indicates whether the value is a known member of the RawSealMode enum.
+func (e RawSealMode) Valid() bool {
+	switch e {
+	case Explicit:
+		return true
+	case Idle:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RawVersionState.
+const (
+	RawVersionStateOpen   RawVersionState = "open"
+	RawVersionStateSealed RawVersionState = "sealed"
+)
+
+// Valid indicates whether the value is a known member of the RawVersionState enum.
+func (e RawVersionState) Valid() bool {
+	switch e {
+	case RawVersionStateOpen:
+		return true
+	case RawVersionStateSealed:
 		return true
 	default:
 		return false
@@ -6097,12 +6187,21 @@ type CreateRepository struct {
 	Endpoint *string `json:"endpoint,omitempty"`
 	Format   Format  `json:"format"`
 
+	// Layout Hosted Raw only. `path` is the default, a path is a mutable pointer to a digest. `versioned` enforces `<name>/<version>/<file>`, create-only files and sealable versions (ADR 0028). Chosen at creation and immutable.
+	Layout *RawLayout `json:"layout,omitempty"`
+
 	// MavenStrictPublication Maven Hosted only. Opt in to Gateway coordinate commits and atomic per-coordinate visibility. The default false mode accepts standard Maven/Gradle publishing without a companion integration.
 	MavenStrictPublication *bool  `json:"mavenStrictPublication,omitempty"`
 	Name                   string `json:"name"`
 
 	// OciBearer Optional upstream Bearer challenge exchange for OCI Proxy repositories. Without this configuration content requests use the explicit upstreamAuth setting. The realm and service bind the approved issuer and audience. With this configuration upstreamAuth credentials are sent only to the bound issuer; this object contains no credentials or cached tokens. It does not add the realm to allowedHosts or grant network access. A cross-origin realm still needs explicit permission under the existing egress policy. On update omit the field to preserve it, or send null to clear it. Setting an object replaces both fields together. Hosted and other formats reject this property, including null. Changing this binding while protected upstream credentials are configured requires a fresh upstreamAuth.secret or upstreamAuth.scheme none in the same request.
 	OciBearer *OCIBearer `json:"ociBearer,omitempty"`
+
+	// SealMode Hosted Raw with the versioned layout only. `explicit` seals only on request. `idle` also seals an open version that saw no write for the idle period, for publishers that never call seal. Chosen at creation and immutable.
+	SealMode *RawSealMode `json:"sealMode,omitempty"`
+
+	// Strict Hosted Raw with the versioned layout only. Makes files of open versions create-only too, so a file DELETE answers 409 version_file_immutable and a failed upload needs a new version. Fixed at creation.
+	Strict *bool `json:"strict,omitempty"`
 
 	// Type APT hosted is accepted as a management-only preview repository; it is not advertised as protocol-capable until signed snapshots are implemented.
 	Type *CreateRepositoryType `json:"type,omitempty"`
@@ -8443,6 +8542,110 @@ type QuarantineReadPolicy struct {
 	Version string `json:"version"`
 }
 
+// RawLayout Hosted Raw only. `path` is the default, a path is a mutable pointer to a digest. `versioned` enforces `<name>/<version>/<file>`, create-only files and sealable versions (ADR 0028). Chosen at creation and immutable.
+type RawLayout string
+
+// RawPackage defines model for RawPackage.
+type RawPackage struct {
+	// LatestVersion The newest sealed version by seal time, not by semantic version. Absent while no version is sealed.
+	LatestVersion *string `json:"latestVersion,omitempty"`
+	Name          string  `json:"name"`
+
+	// VersionCount Open and sealed versions of the package.
+	VersionCount int `json:"versionCount"`
+}
+
+// RawPackagePage defines model for RawPackagePage.
+type RawPackagePage struct {
+	Items         []RawPackage `json:"items"`
+	NextPageToken *string      `json:"nextPageToken,omitempty"`
+}
+
+// RawSealMode Hosted Raw with the versioned layout only. `explicit` seals only on request. `idle` also seals an open version that saw no write for the idle period, for publishers that never call seal. Chosen at creation and immutable.
+type RawSealMode string
+
+// RawVersion defines model for RawVersion.
+type RawVersion struct {
+	CreatedAt time.Time `json:"createdAt"`
+	CreatedBy *string   `json:"createdBy,omitempty"`
+	FileCount int       `json:"fileCount"`
+
+	// Files Present in the version detail, sorted by path; absent in listings.
+	Files *[]RawVersionFile `json:"files,omitempty"`
+
+	// LastWriteAt The last file, property or seal change.
+	LastWriteAt time.Time `json:"lastWriteAt"`
+
+	// ManifestDigest Present once the version is sealed. Computed on the server from the stored file digests and the frozen properties.
+	ManifestDigest *string `json:"manifestDigest,omitempty"`
+	Name           string  `json:"name"`
+
+	// Properties Untrusted text. At most 32 keys and 8 KiB in total, values of at most 256 bytes without control or bidirectional characters. Escape on display.
+	Properties RawVersionPropertyMap `json:"properties"`
+	SealedAt   *time.Time            `json:"sealedAt,omitempty"`
+	SizeBytes  int64                 `json:"sizeBytes"`
+
+	// State An open version accepts files and properties; a sealed one is immutable and has a manifest digest. A tombstoned version is not visible through this API.
+	State   RawVersionState `json:"state"`
+	Version string          `json:"version"`
+}
+
+// RawVersionCreate defines model for RawVersionCreate.
+type RawVersionCreate struct {
+	// Properties Untrusted text. At most 32 keys and 8 KiB in total, values of at most 256 bytes without control or bidirectional characters. Escape on display.
+	Properties *RawVersionPropertyMap `json:"properties,omitempty"`
+}
+
+// RawVersionFile defines model for RawVersionFile.
+type RawVersionFile struct {
+	ContentType *string `json:"contentType,omitempty"`
+
+	// Path Path relative to the version.
+	Path   string `json:"path"`
+	Sha256 string `json:"sha256"`
+	Size   int64  `json:"size"`
+}
+
+// RawVersionManifest The canonical manifest, keys sorted and without insignificant whitespace. `name`, `version`, `files` (`path`, `sha256`, `size`, sorted by path) and `properties`.
+type RawVersionManifest map[string]interface{}
+
+// RawVersionPage defines model for RawVersionPage.
+type RawVersionPage struct {
+	Items         []RawVersion `json:"items"`
+	NextPageToken *string      `json:"nextPageToken,omitempty"`
+}
+
+// RawVersionProperties defines model for RawVersionProperties.
+type RawVersionProperties struct {
+	// Properties Untrusted text. At most 32 keys and 8 KiB in total, values of at most 256 bytes without control or bidirectional characters. Escape on display.
+	Properties RawVersionPropertyMap `json:"properties"`
+}
+
+// RawVersionPropertyMap Untrusted text. At most 32 keys and 8 KiB in total, values of at most 256 bytes without control or bidirectional characters. Escape on display.
+type RawVersionPropertyMap map[string]string
+
+// RawVersionSeal defines model for RawVersionSeal.
+type RawVersionSeal struct {
+	// ChecksumsFile Relative path of a stored file, usually SHA256SUMS, parsed as sha256sum output. Every listed file must exist with that digest.
+	ChecksumsFile *string `json:"checksumsFile,omitempty"`
+
+	// Files The expected file list. The stored file set must equal it exactly.
+	Files *[]RawVersionSealFile `json:"files,omitempty"`
+
+	// Properties Untrusted text. At most 32 keys and 8 KiB in total, values of at most 256 bytes without control or bidirectional characters. Escape on display.
+	Properties *RawVersionPropertyMap `json:"properties,omitempty"`
+}
+
+// RawVersionSealFile defines model for RawVersionSealFile.
+type RawVersionSealFile struct {
+	// Path Path relative to the version.
+	Path   string `json:"path"`
+	Sha256 string `json:"sha256"`
+}
+
+// RawVersionState An open version accepts files and properties; a sealed one is immutable and has a manifest digest. A tombstoned version is not visible through this API.
+type RawVersionState string
+
 // ReplaceIdentityProvider The settings object that matches the provider's kind is required; the other is rejected.
 type ReplaceIdentityProvider struct {
 	// AttributeMapping Where each user attribute comes from: a claim of the ID token (OIDC) or an attribute of the assertion (SAML). An empty value selects the protocol default. subject may join two claims with a colon, which is how Entra ID keeps its stable key (tid:oid).
@@ -8549,6 +8752,9 @@ type Repository struct {
 	Format      Format       `json:"format"`
 	Id          string       `json:"id"`
 
+	// Layout Hosted Raw only. `path` is the default, a path is a mutable pointer to a digest. `versioned` enforces `<name>/<version>/<file>`, create-only files and sealable versions (ADR 0028). Chosen at creation and immutable.
+	Layout *RawLayout `json:"layout,omitempty"`
+
 	// MavenStrictPublication Maven Hosted only. When false (the default), successful standard Maven/Gradle PUTs are published directly. When true, uploaded coordinates remain unreadable until the Gateway coordinate commit succeeds.
 	MavenStrictPublication bool   `json:"mavenStrictPublication"`
 	Name                   string `json:"name"`
@@ -8556,8 +8762,14 @@ type Repository struct {
 	// OciBearer Optional upstream Bearer challenge exchange for OCI Proxy repositories. Without this configuration content requests use the explicit upstreamAuth setting. The realm and service bind the approved issuer and audience. With this configuration upstreamAuth credentials are sent only to the bound issuer; this object contains no credentials or cached tokens. It does not add the realm to allowedHosts or grant network access. A cross-origin realm still needs explicit permission under the existing egress policy. On update omit the field to preserve it, or send null to clear it. Setting an object replaces both fields together. Hosted and other formats reject this property, including null. Changing this binding while protected upstream credentials are configured requires a fresh upstreamAuth.secret or upstreamAuth.scheme none in the same request.
 	OciBearer *OCIBearer `json:"ociBearer,omitempty"`
 
+	// SealMode Hosted Raw with the versioned layout only. `explicit` seals only on request. `idle` also seals an open version that saw no write for the idle period, for publishers that never call seal. Chosen at creation and immutable.
+	SealMode *RawSealMode `json:"sealMode,omitempty"`
+
 	// State Deletion is asynchronous. Protocol access stops in deleting; the worker advances it to deleted. The metadata row remains as an audit anchor.
 	State RepositoryState `json:"state"`
+
+	// Strict Hosted Raw only, and only with the versioned layout. True when files of open versions cannot be deleted either (create-only end to end); fixed at creation.
+	Strict *bool `json:"strict,omitempty"`
 
 	// Type APT hosted is accepted as a management-only preview repository; it is not advertised as protocol-capable until signed snapshots are implemented.
 	Type *RepositoryType `json:"type,omitempty"`
@@ -8595,13 +8807,22 @@ type RepositoryArtifactUsage struct {
 // RepositoryCapabilities defines model for RepositoryCapabilities.
 type RepositoryCapabilities struct {
 	// ArtifactScanning True when a scanner is configured for this repository format and its assets can be resolved.
-	ArtifactScanning bool                  `json:"artifactScanning"`
-	Format           Format                `json:"format"`
-	Operations       []RepositoryOperation `json:"operations"`
+	ArtifactScanning bool   `json:"artifactScanning"`
+	Format           Format `json:"format"`
+
+	// Layout Hosted Raw only. `path` is the default, a path is a mutable pointer to a digest. `versioned` enforces `<name>/<version>/<file>`, create-only files and sealable versions (ADR 0028). Chosen at creation and immutable.
+	Layout     *RawLayout            `json:"layout,omitempty"`
+	Operations []RepositoryOperation `json:"operations"`
 
 	// PublicationScanning True when new publications in this repository can automatically enqueue scanner jobs.
-	PublicationScanning bool                       `json:"publicationScanning"`
-	Type                RepositoryCapabilitiesType `json:"type"`
+	PublicationScanning bool `json:"publicationScanning"`
+
+	// Strict Hosted Raw only. True when files of open versions are create-only too (file DELETE answers 409 version_file_immutable).
+	Strict *bool                      `json:"strict,omitempty"`
+	Type   RepositoryCapabilitiesType `json:"type"`
+
+	// Versions Hosted Raw only. True when the repository has the versioned layout and serves the package and version management API.
+	Versions *bool `json:"versions,omitempty"`
 }
 
 // RepositoryCapabilitiesType defines model for RepositoryCapabilities.Type.
@@ -9373,7 +9594,7 @@ type SiteSettingsUpdate struct {
 	SiteName string `json:"siteName"`
 }
 
-// UpdateRepository Editable repository management policy and proxy configuration. Hosted repositories accept visibility updates and Maven Hosted repositories also accept mavenStrictPublication updates; name, format, and type are immutable after creation.
+// UpdateRepository Editable repository management policy and proxy configuration. Hosted repositories accept visibility updates and Maven Hosted repositories also accept mavenStrictPublication updates; name, format, type, and the layout of a Raw repository are immutable after creation.
 type UpdateRepository struct {
 	// AllowedHosts Hosts the proxy may egress to. Required for raw, conan, and npm proxies. npm tarball redirects are limited to this list.
 	AllowedHosts *[]string `json:"allowedHosts,omitempty"`
@@ -9384,11 +9605,20 @@ type UpdateRepository struct {
 	// Endpoint Upstream base URL (https). Required for proxy repositories.
 	Endpoint *string `json:"endpoint,omitempty"`
 
+	// Layout Hosted Raw only. `path` is the default, a path is a mutable pointer to a digest. `versioned` enforces `<name>/<version>/<file>`, create-only files and sealable versions (ADR 0028). Chosen at creation and immutable.
+	Layout *RawLayout `json:"layout,omitempty"`
+
 	// MavenStrictPublication Maven Hosted only. False publishes successful standard PUTs directly; true requires a Gateway coordinate commit before reads can resolve the uploaded coordinate.
 	MavenStrictPublication *bool `json:"mavenStrictPublication,omitempty"`
 
 	// OciBearer Optional upstream Bearer challenge exchange for OCI Proxy repositories. Without this configuration content requests use the explicit upstreamAuth setting. The realm and service bind the approved issuer and audience. With this configuration upstreamAuth credentials are sent only to the bound issuer; this object contains no credentials or cached tokens. It does not add the realm to allowedHosts or grant network access. A cross-origin realm still needs explicit permission under the existing egress policy. On update omit the field to preserve it, or send null to clear it. Setting an object replaces both fields together. Hosted and other formats reject this property, including null. Changing this binding while protected upstream credentials are configured requires a fresh upstreamAuth.secret or upstreamAuth.scheme none in the same request.
 	OciBearer *OCIBearer `json:"ociBearer,omitempty"`
+
+	// SealMode Hosted Raw with the versioned layout only. `explicit` seals only on request. `idle` also seals an open version that saw no write for the idle period, for publishers that never call seal. Chosen at creation and immutable.
+	SealMode *RawSealMode `json:"sealMode,omitempty"`
+
+	// Strict The layout, seal mode and strict flag of a Raw repository are fixed at creation. They are accepted here only with their current value; any other value answers 409 layout_immutable.
+	Strict *bool `json:"strict,omitempty"`
 
 	// UpstreamAuth Protected upstream credentials for Go, Maven, OCI, npm, PyPI, Cargo, APT, Raw and Conan Proxy repositories. Basic or Bearer authentication targets the bound upstream. Conan exchanges Basic credentials through its users/authenticate endpoint before reading protected metadata or files. When OCI ociBearer is configured, these credentials are sent only to its bound issuer and content requests use the exchanged pull token. Cross-origin redirects strip credentials. Rotation or clear invalidates credential-bound content and token caches. Changing the upstream URL or OCI issuer binding requires a fresh secret or scheme none; stored credentials are never implicitly rebound to a new destination. Hosted repositories and unsupported formats reject this field. `secret` is accepted on write over TLS and stored AES-256-GCM encrypted; responses never return it and carry `credentialsConfigured` instead.
 	UpstreamAuth *UpstreamAuth `json:"upstreamAuth,omitempty"`
@@ -9673,6 +9903,12 @@ type PageSize = int
 
 // PageToken defines model for PageToken.
 type PageToken = string
+
+// RawPackageName defines model for RawPackageName.
+type RawPackageName = string
+
+// RawVersionIdentifier defines model for RawVersionIdentifier.
+type RawVersionIdentifier = string
 
 // ReplicationPlanId defines model for ReplicationPlanId.
 type ReplicationPlanId = openapi_types.UUID
@@ -10334,6 +10570,25 @@ type ListOCIManifestsParams struct {
 	PageToken *PageToken `form:"pageToken,omitempty" json:"pageToken,omitempty"`
 }
 
+// ListRawPackagesParams defines parameters for ListRawPackages.
+type ListRawPackagesParams struct {
+	PageSize  *PageSize  `form:"pageSize,omitempty" json:"pageSize,omitempty"`
+	PageToken *PageToken `form:"pageToken,omitempty" json:"pageToken,omitempty"`
+}
+
+// ListRawVersionsParams defines parameters for ListRawVersions.
+type ListRawVersionsParams struct {
+	State *RawVersionState `form:"state,omitempty" json:"state,omitempty"`
+
+	// Property Property filter `key:value`; repeat the parameter to require several, which combine with AND.
+	Property *[]string `form:"property,omitempty" json:"property,omitempty"`
+
+	// OlderThanDays Only open versions created more than this many days ago. Requires `state=open`.
+	OlderThanDays *int       `form:"olderThanDays,omitempty" json:"olderThanDays,omitempty"`
+	PageSize      *PageSize  `form:"pageSize,omitempty" json:"pageSize,omitempty"`
+	PageToken     *PageToken `form:"pageToken,omitempty" json:"pageToken,omitempty"`
+}
+
 // CreateRepositoryPromotionParams defines parameters for CreateRepositoryPromotion.
 type CreateRepositoryPromotionParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
@@ -10729,6 +10984,15 @@ type UpsertGrantJSONRequestBody = Grant
 
 // ReplaceGrantsJSONRequestBody defines body for ReplaceGrants for application/json ContentType.
 type ReplaceGrantsJSONRequestBody = GrantList
+
+// CreateRawVersionJSONRequestBody defines body for CreateRawVersion for application/json ContentType.
+type CreateRawVersionJSONRequestBody = RawVersionCreate
+
+// SetRawVersionPropertiesJSONRequestBody defines body for SetRawVersionProperties for application/json ContentType.
+type SetRawVersionPropertiesJSONRequestBody = RawVersionProperties
+
+// SealRawVersionJSONRequestBody defines body for SealRawVersion for application/json ContentType.
+type SealRawVersionJSONRequestBody = RawVersionSeal
 
 // CreateRepositoryPromotionJSONRequestBody defines body for CreateRepositoryPromotion for application/json ContentType.
 type CreateRepositoryPromotionJSONRequestBody = PromotionRequest
@@ -12113,6 +12377,30 @@ type ServerInterface interface {
 
 	// (GET /repositories/{repositoryId}/oci/manifests)
 	ListOCIManifests(w http.ResponseWriter, r *http.Request, repositoryId RepositoryId, params ListOCIManifestsParams)
+
+	// (GET /repositories/{repositoryId}/packages)
+	ListRawPackages(w http.ResponseWriter, r *http.Request, repositoryId RepositoryId, params ListRawPackagesParams)
+
+	// (GET /repositories/{repositoryId}/packages/{name}/versions)
+	ListRawVersions(w http.ResponseWriter, r *http.Request, repositoryId RepositoryId, name RawPackageName, params ListRawVersionsParams)
+
+	// (GET /repositories/{repositoryId}/packages/{name}/versions/{version})
+	GetRawVersion(w http.ResponseWriter, r *http.Request, repositoryId RepositoryId, name RawPackageName, version RawVersionIdentifier)
+
+	// (PUT /repositories/{repositoryId}/packages/{name}/versions/{version})
+	CreateRawVersion(w http.ResponseWriter, r *http.Request, repositoryId RepositoryId, name RawPackageName, version RawVersionIdentifier)
+
+	// (GET /repositories/{repositoryId}/packages/{name}/versions/{version}/checksums)
+	GetRawVersionChecksums(w http.ResponseWriter, r *http.Request, repositoryId RepositoryId, name RawPackageName, version RawVersionIdentifier)
+
+	// (GET /repositories/{repositoryId}/packages/{name}/versions/{version}/manifest)
+	GetRawVersionManifest(w http.ResponseWriter, r *http.Request, repositoryId RepositoryId, name RawPackageName, version RawVersionIdentifier)
+
+	// (PUT /repositories/{repositoryId}/packages/{name}/versions/{version}/properties)
+	SetRawVersionProperties(w http.ResponseWriter, r *http.Request, repositoryId RepositoryId, name RawPackageName, version RawVersionIdentifier)
+
+	// (POST /repositories/{repositoryId}/packages/{name}/versions/{version}:seal)
+	SealRawVersion(w http.ResponseWriter, r *http.Request, repositoryId RepositoryId, name RawPackageName, version RawVersionIdentifier)
 
 	// (POST /repositories/{repositoryId}/promotions)
 	CreateRepositoryPromotion(w http.ResponseWriter, r *http.Request, repositoryId RepositoryId, params CreateRepositoryPromotionParams)
@@ -20464,6 +20752,428 @@ func (siw *ServerInterfaceWrapper) ListOCIManifests(w http.ResponseWriter, r *ht
 	handler.ServeHTTP(w, r)
 }
 
+// ListRawPackages operation middleware
+func (siw *ServerInterfaceWrapper) ListRawPackages(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "repositoryId" -------------
+	var repositoryId RepositoryId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "repositoryId", r.PathValue("repositoryId"), &repositoryId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "repositoryId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListRawPackagesParams
+
+	// ------------- Optional query parameter "pageSize" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageSize", r.URL.Query(), &params.PageSize, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageSize"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageSize", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "pageToken" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageToken", r.URL.Query(), &params.PageToken, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageToken"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageToken", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListRawPackages(w, r, repositoryId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListRawVersions operation middleware
+func (siw *ServerInterfaceWrapper) ListRawVersions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "repositoryId" -------------
+	var repositoryId RepositoryId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "repositoryId", r.PathValue("repositoryId"), &repositoryId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "repositoryId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "name" -------------
+	var name RawPackageName
+
+	err = runtime.BindStyledParameterWithOptions("simple", "name", r.PathValue("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListRawVersionsParams
+
+	// ------------- Optional query parameter "state" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "state", r.URL.Query(), &params.State, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "state"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "state", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "property" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "property", r.URL.Query(), &params.Property, runtime.BindQueryParameterOptions{Type: "array", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "property"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "property", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "olderThanDays" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "olderThanDays", r.URL.Query(), &params.OlderThanDays, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "olderThanDays"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "olderThanDays", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "pageSize" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageSize", r.URL.Query(), &params.PageSize, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageSize"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageSize", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "pageToken" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageToken", r.URL.Query(), &params.PageToken, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageToken"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageToken", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListRawVersions(w, r, repositoryId, name, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetRawVersion operation middleware
+func (siw *ServerInterfaceWrapper) GetRawVersion(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "repositoryId" -------------
+	var repositoryId RepositoryId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "repositoryId", r.PathValue("repositoryId"), &repositoryId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "repositoryId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "name" -------------
+	var name RawPackageName
+
+	err = runtime.BindStyledParameterWithOptions("simple", "name", r.PathValue("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "version" -------------
+	var version RawVersionIdentifier
+
+	err = runtime.BindStyledParameterWithOptions("simple", "version", r.PathValue("version"), &version, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "version", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetRawVersion(w, r, repositoryId, name, version)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateRawVersion operation middleware
+func (siw *ServerInterfaceWrapper) CreateRawVersion(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "repositoryId" -------------
+	var repositoryId RepositoryId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "repositoryId", r.PathValue("repositoryId"), &repositoryId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "repositoryId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "name" -------------
+	var name RawPackageName
+
+	err = runtime.BindStyledParameterWithOptions("simple", "name", r.PathValue("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "version" -------------
+	var version RawVersionIdentifier
+
+	err = runtime.BindStyledParameterWithOptions("simple", "version", r.PathValue("version"), &version, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "version", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateRawVersion(w, r, repositoryId, name, version)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetRawVersionChecksums operation middleware
+func (siw *ServerInterfaceWrapper) GetRawVersionChecksums(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "repositoryId" -------------
+	var repositoryId RepositoryId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "repositoryId", r.PathValue("repositoryId"), &repositoryId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "repositoryId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "name" -------------
+	var name RawPackageName
+
+	err = runtime.BindStyledParameterWithOptions("simple", "name", r.PathValue("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "version" -------------
+	var version RawVersionIdentifier
+
+	err = runtime.BindStyledParameterWithOptions("simple", "version", r.PathValue("version"), &version, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "version", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetRawVersionChecksums(w, r, repositoryId, name, version)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetRawVersionManifest operation middleware
+func (siw *ServerInterfaceWrapper) GetRawVersionManifest(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "repositoryId" -------------
+	var repositoryId RepositoryId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "repositoryId", r.PathValue("repositoryId"), &repositoryId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "repositoryId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "name" -------------
+	var name RawPackageName
+
+	err = runtime.BindStyledParameterWithOptions("simple", "name", r.PathValue("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "version" -------------
+	var version RawVersionIdentifier
+
+	err = runtime.BindStyledParameterWithOptions("simple", "version", r.PathValue("version"), &version, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "version", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetRawVersionManifest(w, r, repositoryId, name, version)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetRawVersionProperties operation middleware
+func (siw *ServerInterfaceWrapper) SetRawVersionProperties(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "repositoryId" -------------
+	var repositoryId RepositoryId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "repositoryId", r.PathValue("repositoryId"), &repositoryId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "repositoryId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "name" -------------
+	var name RawPackageName
+
+	err = runtime.BindStyledParameterWithOptions("simple", "name", r.PathValue("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "version" -------------
+	var version RawVersionIdentifier
+
+	err = runtime.BindStyledParameterWithOptions("simple", "version", r.PathValue("version"), &version, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "version", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetRawVersionProperties(w, r, repositoryId, name, version)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SealRawVersion operation middleware
+func (siw *ServerInterfaceWrapper) SealRawVersion(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "repositoryId" -------------
+	var repositoryId RepositoryId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "repositoryId", r.PathValue("repositoryId"), &repositoryId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "repositoryId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "name" -------------
+	var name RawPackageName
+
+	err = runtime.BindStyledParameterWithOptions("simple", "name", r.PathValue("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "version" -------------
+	var version RawVersionIdentifier
+
+	err = runtime.BindStyledParameterWithOptions("simple", "version", r.PathValue("version"), &version, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "version", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SealRawVersion(w, r, repositoryId, name, version)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // CreateRepositoryPromotion operation middleware
 func (siw *ServerInterfaceWrapper) CreateRepositoryPromotion(w http.ResponseWriter, r *http.Request) {
 
@@ -23374,6 +24084,14 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/repositories/{repositoryId}/lifecycle-jobs/{lifecycleJobId}/cancel", wrapper.CancelRepositoryLifecycleJob)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/repositories/{repositoryId}/tombstones", wrapper.ListRepositoryTombstones)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/repositories/{repositoryId}/tombstones", wrapper.TombstoneRepositoryArtifact)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/repositories/{repositoryId}/packages", wrapper.ListRawPackages)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/repositories/{repositoryId}/packages/{name}/versions", wrapper.ListRawVersions)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/repositories/{repositoryId}/packages/{name}/versions/{version}", wrapper.GetRawVersion)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/repositories/{repositoryId}/packages/{name}/versions/{version}", wrapper.CreateRawVersion)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/repositories/{repositoryId}/packages/{name}/versions/{version}/properties", wrapper.SetRawVersionProperties)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/repositories/{repositoryId}/packages/{name}/versions/{version}:seal", wrapper.SealRawVersion)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/repositories/{repositoryId}/packages/{name}/versions/{version}/manifest", wrapper.GetRawVersionManifest)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/repositories/{repositoryId}/packages/{name}/versions/{version}/checksums", wrapper.GetRawVersionChecksums)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/repositories/{repositoryId}/capabilities", wrapper.GetRepositoryCapabilities)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/repositories/{repositoryId}/effective-access", wrapper.GetRepositoryEffectiveAccess)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/groups", wrapper.ListGroups)
@@ -23569,6 +24287,12 @@ type QuarantineReadPolicyJSONResponse struct {
 
 	Headers QuarantineReadPolicyResponseHeaders
 }
+
+type RawPackagePageJSONResponse RawPackagePage
+
+type RawVersionJSONResponse RawVersion
+
+type RawVersionPageJSONResponse RawVersionPage
 
 type RepositoryJSONResponse Repository
 
@@ -40230,6 +40954,811 @@ func (response ListOCIManifests501ApplicationProblemPlusJSONResponse) VisitListO
 	return err
 }
 
+type ListRawPackagesRequestObject struct {
+	RepositoryId RepositoryId `json:"repositoryId"`
+	Params       ListRawPackagesParams
+}
+
+type ListRawPackagesResponseObject interface {
+	VisitListRawPackagesResponse(w http.ResponseWriter) error
+}
+
+type ListRawPackages200JSONResponse struct{ RawPackagePageJSONResponse }
+
+func (response ListRawPackages200JSONResponse) VisitListRawPackagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRawPackages400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response ListRawPackages400ApplicationProblemPlusJSONResponse) VisitListRawPackagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRawPackages401ApplicationProblemPlusJSONResponse Problem
+
+func (response ListRawPackages401ApplicationProblemPlusJSONResponse) VisitListRawPackagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRawPackages403ApplicationProblemPlusJSONResponse Problem
+
+func (response ListRawPackages403ApplicationProblemPlusJSONResponse) VisitListRawPackagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRawPackages404ApplicationProblemPlusJSONResponse Problem
+
+func (response ListRawPackages404ApplicationProblemPlusJSONResponse) VisitListRawPackagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRawPackages422ApplicationProblemPlusJSONResponse Problem
+
+func (response ListRawPackages422ApplicationProblemPlusJSONResponse) VisitListRawPackagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRawVersionsRequestObject struct {
+	RepositoryId RepositoryId   `json:"repositoryId"`
+	Name         RawPackageName `json:"name"`
+	Params       ListRawVersionsParams
+}
+
+type ListRawVersionsResponseObject interface {
+	VisitListRawVersionsResponse(w http.ResponseWriter) error
+}
+
+type ListRawVersions200JSONResponse struct{ RawVersionPageJSONResponse }
+
+func (response ListRawVersions200JSONResponse) VisitListRawVersionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRawVersions400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response ListRawVersions400ApplicationProblemPlusJSONResponse) VisitListRawVersionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRawVersions401ApplicationProblemPlusJSONResponse Problem
+
+func (response ListRawVersions401ApplicationProblemPlusJSONResponse) VisitListRawVersionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRawVersions403ApplicationProblemPlusJSONResponse Problem
+
+func (response ListRawVersions403ApplicationProblemPlusJSONResponse) VisitListRawVersionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRawVersions404ApplicationProblemPlusJSONResponse Problem
+
+func (response ListRawVersions404ApplicationProblemPlusJSONResponse) VisitListRawVersionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRawVersions422ApplicationProblemPlusJSONResponse Problem
+
+func (response ListRawVersions422ApplicationProblemPlusJSONResponse) VisitListRawVersionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRawVersionRequestObject struct {
+	RepositoryId RepositoryId         `json:"repositoryId"`
+	Name         RawPackageName       `json:"name"`
+	Version      RawVersionIdentifier `json:"version"`
+}
+
+type GetRawVersionResponseObject interface {
+	VisitGetRawVersionResponse(w http.ResponseWriter) error
+}
+
+type GetRawVersion200JSONResponse struct{ RawVersionJSONResponse }
+
+func (response GetRawVersion200JSONResponse) VisitGetRawVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRawVersion401ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetRawVersion401ApplicationProblemPlusJSONResponse) VisitGetRawVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRawVersion403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetRawVersion403ApplicationProblemPlusJSONResponse) VisitGetRawVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRawVersion404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetRawVersion404ApplicationProblemPlusJSONResponse) VisitGetRawVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRawVersion422ApplicationProblemPlusJSONResponse Problem
+
+func (response GetRawVersion422ApplicationProblemPlusJSONResponse) VisitGetRawVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateRawVersionRequestObject struct {
+	RepositoryId RepositoryId         `json:"repositoryId"`
+	Name         RawPackageName       `json:"name"`
+	Version      RawVersionIdentifier `json:"version"`
+	Body         *CreateRawVersionJSONRequestBody
+}
+
+type CreateRawVersionResponseObject interface {
+	VisitCreateRawVersionResponse(w http.ResponseWriter) error
+}
+
+type CreateRawVersion200JSONResponse struct{ RawVersionJSONResponse }
+
+func (response CreateRawVersion200JSONResponse) VisitCreateRawVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateRawVersion201JSONResponse RawVersion
+
+func (response CreateRawVersion201JSONResponse) VisitCreateRawVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateRawVersion400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response CreateRawVersion400ApplicationProblemPlusJSONResponse) VisitCreateRawVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateRawVersion401ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateRawVersion401ApplicationProblemPlusJSONResponse) VisitCreateRawVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateRawVersion403ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateRawVersion403ApplicationProblemPlusJSONResponse) VisitCreateRawVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateRawVersion404ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateRawVersion404ApplicationProblemPlusJSONResponse) VisitCreateRawVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateRawVersion409ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateRawVersion409ApplicationProblemPlusJSONResponse) VisitCreateRawVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateRawVersion422ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateRawVersion422ApplicationProblemPlusJSONResponse) VisitCreateRawVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRawVersionChecksumsRequestObject struct {
+	RepositoryId RepositoryId         `json:"repositoryId"`
+	Name         RawPackageName       `json:"name"`
+	Version      RawVersionIdentifier `json:"version"`
+}
+
+type GetRawVersionChecksumsResponseObject interface {
+	VisitGetRawVersionChecksumsResponse(w http.ResponseWriter) error
+}
+
+type GetRawVersionChecksums200TextResponse string
+
+func (response GetRawVersionChecksums200TextResponse) VisitGetRawVersionChecksumsResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(200)
+
+	_, err := w.Write([]byte(fmt.Sprint(response)))
+	return err
+}
+
+type GetRawVersionChecksums401ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetRawVersionChecksums401ApplicationProblemPlusJSONResponse) VisitGetRawVersionChecksumsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRawVersionChecksums403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetRawVersionChecksums403ApplicationProblemPlusJSONResponse) VisitGetRawVersionChecksumsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRawVersionChecksums404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetRawVersionChecksums404ApplicationProblemPlusJSONResponse) VisitGetRawVersionChecksumsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRawVersionChecksums422ApplicationProblemPlusJSONResponse Problem
+
+func (response GetRawVersionChecksums422ApplicationProblemPlusJSONResponse) VisitGetRawVersionChecksumsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRawVersionManifestRequestObject struct {
+	RepositoryId RepositoryId         `json:"repositoryId"`
+	Name         RawPackageName       `json:"name"`
+	Version      RawVersionIdentifier `json:"version"`
+}
+
+type GetRawVersionManifestResponseObject interface {
+	VisitGetRawVersionManifestResponse(w http.ResponseWriter) error
+}
+
+type GetRawVersionManifest200ResponseHeaders struct {
+	ETag *string
+}
+
+type GetRawVersionManifest200JSONResponse struct {
+	Body    RawVersionManifest
+	Headers GetRawVersionManifest200ResponseHeaders
+}
+
+func (response GetRawVersionManifest200JSONResponse) VisitGetRawVersionManifestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.ETag != nil {
+		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRawVersionManifest401ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetRawVersionManifest401ApplicationProblemPlusJSONResponse) VisitGetRawVersionManifestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRawVersionManifest403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetRawVersionManifest403ApplicationProblemPlusJSONResponse) VisitGetRawVersionManifestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRawVersionManifest404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetRawVersionManifest404ApplicationProblemPlusJSONResponse) VisitGetRawVersionManifestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRawVersionManifest409ApplicationProblemPlusJSONResponse Problem
+
+func (response GetRawVersionManifest409ApplicationProblemPlusJSONResponse) VisitGetRawVersionManifestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRawVersionManifest422ApplicationProblemPlusJSONResponse Problem
+
+func (response GetRawVersionManifest422ApplicationProblemPlusJSONResponse) VisitGetRawVersionManifestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetRawVersionPropertiesRequestObject struct {
+	RepositoryId RepositoryId         `json:"repositoryId"`
+	Name         RawPackageName       `json:"name"`
+	Version      RawVersionIdentifier `json:"version"`
+	Body         *SetRawVersionPropertiesJSONRequestBody
+}
+
+type SetRawVersionPropertiesResponseObject interface {
+	VisitSetRawVersionPropertiesResponse(w http.ResponseWriter) error
+}
+
+type SetRawVersionProperties200JSONResponse struct{ RawVersionJSONResponse }
+
+func (response SetRawVersionProperties200JSONResponse) VisitSetRawVersionPropertiesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetRawVersionProperties400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response SetRawVersionProperties400ApplicationProblemPlusJSONResponse) VisitSetRawVersionPropertiesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetRawVersionProperties401ApplicationProblemPlusJSONResponse Problem
+
+func (response SetRawVersionProperties401ApplicationProblemPlusJSONResponse) VisitSetRawVersionPropertiesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetRawVersionProperties403ApplicationProblemPlusJSONResponse Problem
+
+func (response SetRawVersionProperties403ApplicationProblemPlusJSONResponse) VisitSetRawVersionPropertiesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetRawVersionProperties404ApplicationProblemPlusJSONResponse Problem
+
+func (response SetRawVersionProperties404ApplicationProblemPlusJSONResponse) VisitSetRawVersionPropertiesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetRawVersionProperties409ApplicationProblemPlusJSONResponse Problem
+
+func (response SetRawVersionProperties409ApplicationProblemPlusJSONResponse) VisitSetRawVersionPropertiesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetRawVersionProperties422ApplicationProblemPlusJSONResponse Problem
+
+func (response SetRawVersionProperties422ApplicationProblemPlusJSONResponse) VisitSetRawVersionPropertiesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SealRawVersionRequestObject struct {
+	RepositoryId RepositoryId         `json:"repositoryId"`
+	Name         RawPackageName       `json:"name"`
+	Version      RawVersionIdentifier `json:"version"`
+	Body         *SealRawVersionJSONRequestBody
+}
+
+type SealRawVersionResponseObject interface {
+	VisitSealRawVersionResponse(w http.ResponseWriter) error
+}
+
+type SealRawVersion200JSONResponse struct{ RawVersionJSONResponse }
+
+func (response SealRawVersion200JSONResponse) VisitSealRawVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SealRawVersion400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response SealRawVersion400ApplicationProblemPlusJSONResponse) VisitSealRawVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SealRawVersion401ApplicationProblemPlusJSONResponse Problem
+
+func (response SealRawVersion401ApplicationProblemPlusJSONResponse) VisitSealRawVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SealRawVersion403ApplicationProblemPlusJSONResponse Problem
+
+func (response SealRawVersion403ApplicationProblemPlusJSONResponse) VisitSealRawVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SealRawVersion404ApplicationProblemPlusJSONResponse Problem
+
+func (response SealRawVersion404ApplicationProblemPlusJSONResponse) VisitSealRawVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SealRawVersion409ApplicationProblemPlusJSONResponse Problem
+
+func (response SealRawVersion409ApplicationProblemPlusJSONResponse) VisitSealRawVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SealRawVersion422ApplicationProblemPlusJSONResponse Problem
+
+func (response SealRawVersion422ApplicationProblemPlusJSONResponse) VisitSealRawVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type CreateRepositoryPromotionRequestObject struct {
 	RepositoryId RepositoryId `json:"repositoryId"`
 	Params       CreateRepositoryPromotionParams
@@ -45310,6 +46839,30 @@ type StrictServerInterface interface {
 
 	// (GET /repositories/{repositoryId}/oci/manifests)
 	ListOCIManifests(ctx context.Context, request ListOCIManifestsRequestObject) (ListOCIManifestsResponseObject, error)
+
+	// (GET /repositories/{repositoryId}/packages)
+	ListRawPackages(ctx context.Context, request ListRawPackagesRequestObject) (ListRawPackagesResponseObject, error)
+
+	// (GET /repositories/{repositoryId}/packages/{name}/versions)
+	ListRawVersions(ctx context.Context, request ListRawVersionsRequestObject) (ListRawVersionsResponseObject, error)
+
+	// (GET /repositories/{repositoryId}/packages/{name}/versions/{version})
+	GetRawVersion(ctx context.Context, request GetRawVersionRequestObject) (GetRawVersionResponseObject, error)
+
+	// (PUT /repositories/{repositoryId}/packages/{name}/versions/{version})
+	CreateRawVersion(ctx context.Context, request CreateRawVersionRequestObject) (CreateRawVersionResponseObject, error)
+
+	// (GET /repositories/{repositoryId}/packages/{name}/versions/{version}/checksums)
+	GetRawVersionChecksums(ctx context.Context, request GetRawVersionChecksumsRequestObject) (GetRawVersionChecksumsResponseObject, error)
+
+	// (GET /repositories/{repositoryId}/packages/{name}/versions/{version}/manifest)
+	GetRawVersionManifest(ctx context.Context, request GetRawVersionManifestRequestObject) (GetRawVersionManifestResponseObject, error)
+
+	// (PUT /repositories/{repositoryId}/packages/{name}/versions/{version}/properties)
+	SetRawVersionProperties(ctx context.Context, request SetRawVersionPropertiesRequestObject) (SetRawVersionPropertiesResponseObject, error)
+
+	// (POST /repositories/{repositoryId}/packages/{name}/versions/{version}:seal)
+	SealRawVersion(ctx context.Context, request SealRawVersionRequestObject) (SealRawVersionResponseObject, error)
 
 	// (POST /repositories/{repositoryId}/promotions)
 	CreateRepositoryPromotion(ctx context.Context, request CreateRepositoryPromotionRequestObject) (CreateRepositoryPromotionResponseObject, error)
@@ -51382,6 +52935,256 @@ func (sh *strictHandler) ListOCIManifests(w http.ResponseWriter, r *http.Request
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListOCIManifestsResponseObject); ok {
 		if err := validResponse.VisitListOCIManifestsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListRawPackages operation middleware
+func (sh *strictHandler) ListRawPackages(w http.ResponseWriter, r *http.Request, repositoryId RepositoryId, params ListRawPackagesParams) {
+	var request ListRawPackagesRequestObject
+
+	request.RepositoryId = repositoryId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListRawPackages(ctx, request.(ListRawPackagesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListRawPackages")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListRawPackagesResponseObject); ok {
+		if err := validResponse.VisitListRawPackagesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListRawVersions operation middleware
+func (sh *strictHandler) ListRawVersions(w http.ResponseWriter, r *http.Request, repositoryId RepositoryId, name RawPackageName, params ListRawVersionsParams) {
+	var request ListRawVersionsRequestObject
+
+	request.RepositoryId = repositoryId
+	request.Name = name
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListRawVersions(ctx, request.(ListRawVersionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListRawVersions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListRawVersionsResponseObject); ok {
+		if err := validResponse.VisitListRawVersionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetRawVersion operation middleware
+func (sh *strictHandler) GetRawVersion(w http.ResponseWriter, r *http.Request, repositoryId RepositoryId, name RawPackageName, version RawVersionIdentifier) {
+	var request GetRawVersionRequestObject
+
+	request.RepositoryId = repositoryId
+	request.Name = name
+	request.Version = version
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetRawVersion(ctx, request.(GetRawVersionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetRawVersion")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetRawVersionResponseObject); ok {
+		if err := validResponse.VisitGetRawVersionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateRawVersion operation middleware
+func (sh *strictHandler) CreateRawVersion(w http.ResponseWriter, r *http.Request, repositoryId RepositoryId, name RawPackageName, version RawVersionIdentifier) {
+	var request CreateRawVersionRequestObject
+
+	request.RepositoryId = repositoryId
+	request.Name = name
+	request.Version = version
+
+	var body CreateRawVersionJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateRawVersion(ctx, request.(CreateRawVersionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateRawVersion")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateRawVersionResponseObject); ok {
+		if err := validResponse.VisitCreateRawVersionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetRawVersionChecksums operation middleware
+func (sh *strictHandler) GetRawVersionChecksums(w http.ResponseWriter, r *http.Request, repositoryId RepositoryId, name RawPackageName, version RawVersionIdentifier) {
+	var request GetRawVersionChecksumsRequestObject
+
+	request.RepositoryId = repositoryId
+	request.Name = name
+	request.Version = version
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetRawVersionChecksums(ctx, request.(GetRawVersionChecksumsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetRawVersionChecksums")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetRawVersionChecksumsResponseObject); ok {
+		if err := validResponse.VisitGetRawVersionChecksumsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetRawVersionManifest operation middleware
+func (sh *strictHandler) GetRawVersionManifest(w http.ResponseWriter, r *http.Request, repositoryId RepositoryId, name RawPackageName, version RawVersionIdentifier) {
+	var request GetRawVersionManifestRequestObject
+
+	request.RepositoryId = repositoryId
+	request.Name = name
+	request.Version = version
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetRawVersionManifest(ctx, request.(GetRawVersionManifestRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetRawVersionManifest")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetRawVersionManifestResponseObject); ok {
+		if err := validResponse.VisitGetRawVersionManifestResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SetRawVersionProperties operation middleware
+func (sh *strictHandler) SetRawVersionProperties(w http.ResponseWriter, r *http.Request, repositoryId RepositoryId, name RawPackageName, version RawVersionIdentifier) {
+	var request SetRawVersionPropertiesRequestObject
+
+	request.RepositoryId = repositoryId
+	request.Name = name
+	request.Version = version
+
+	var body SetRawVersionPropertiesJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SetRawVersionProperties(ctx, request.(SetRawVersionPropertiesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetRawVersionProperties")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SetRawVersionPropertiesResponseObject); ok {
+		if err := validResponse.VisitSetRawVersionPropertiesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SealRawVersion operation middleware
+func (sh *strictHandler) SealRawVersion(w http.ResponseWriter, r *http.Request, repositoryId RepositoryId, name RawPackageName, version RawVersionIdentifier) {
+	var request SealRawVersionRequestObject
+
+	request.RepositoryId = repositoryId
+	request.Name = name
+	request.Version = version
+
+	var body SealRawVersionJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SealRawVersion(ctx, request.(SealRawVersionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SealRawVersion")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SealRawVersionResponseObject); ok {
+		if err := validResponse.VisitSealRawVersionResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

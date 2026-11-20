@@ -8,6 +8,9 @@ import (
 )
 
 func (s *MemoryStore) CreateHostedRepository(_ context.Context, repo HostedRepository) (HostedRepository, error) {
+	if err := ValidateRawLayout(repo); err != nil {
+		return HostedRepository{}, err
+	}
 	repo = normalizeHostedRepository(repo)
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -28,6 +31,9 @@ func (s *MemoryStore) CreateHostedRepository(_ context.Context, repo HostedRepos
 }
 
 func (s *MemoryStore) CreateHostedRepositoryIdempotently(ctx context.Context, repo HostedRepository, actor, key, payload string, audit ...AuditRecord) (HostedRepository, bool, error) {
+	if err := ValidateRawLayout(repo); err != nil {
+		return HostedRepository{}, false, err
+	}
 	repo = normalizeHostedRepository(repo)
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -170,6 +170,43 @@ func TestLoadInlineMaxBytes(t *testing.T) {
 	}
 }
 
+func TestLoadGenericPackagesSettings(t *testing.T) {
+	setCompleteConfiguration(t)
+	cfg, err := Load()
+	if err != nil || cfg.GenericMaxFilesPerVersion != 1000 || cfg.GenericAutosealIdle != 300*time.Second || cfg.GenericAutosealInterval != 60*time.Second || cfg.GenericStaleOpenAfter != 7*24*time.Hour {
+		t.Fatalf("defaults = %d %v %v %v, %v", cfg.GenericMaxFilesPerVersion, cfg.GenericAutosealIdle, cfg.GenericAutosealInterval, cfg.GenericStaleOpenAfter, err)
+	}
+	t.Setenv("NOTARX_GENERIC_MAX_FILES_PER_VERSION", "250")
+	t.Setenv("NOTARX_GENERIC_AUTOSEAL_IDLE", "10m")
+	t.Setenv("NOTARX_GENERIC_AUTOSEAL_INTERVAL", "30")
+	t.Setenv("NOTARX_GENERIC_STALE_OPEN_AFTER", "48h")
+	if cfg, err = Load(); err != nil || cfg.GenericMaxFilesPerVersion != 250 || cfg.GenericAutosealIdle != 10*time.Minute || cfg.GenericAutosealInterval != 30*time.Second || cfg.GenericStaleOpenAfter != 48*time.Hour {
+		t.Fatalf("overrides = %d %v %v %v, %v", cfg.GenericMaxFilesPerVersion, cfg.GenericAutosealIdle, cfg.GenericAutosealInterval, cfg.GenericStaleOpenAfter, err)
+	}
+	for name, bad := range map[string][]string{
+		"NOTARX_GENERIC_MAX_FILES_PER_VERSION": {"0", "-1", "many"},
+		// The idle period has a floor of 60s so a slow upload is not sealed in the middle of its transfer.
+		"NOTARX_GENERIC_AUTOSEAL_IDLE":     {"59s", "1", "soon"},
+		"NOTARX_GENERIC_AUTOSEAL_INTERVAL": {"5s", "0", "often"},
+		"NOTARX_GENERIC_STALE_OPEN_AFTER":  {"0", "-1h", "never"},
+	} {
+		for _, value := range bad {
+			t.Run(name+"="+value, func(t *testing.T) {
+				setCompleteConfiguration(t)
+				t.Setenv(name, value)
+				if _, err := Load(); err == nil {
+					t.Errorf("%s=%q accepted", name, value)
+				}
+			})
+		}
+	}
+	setCompleteConfiguration(t)
+	t.Setenv("NOTARX_GENERIC_AUTOSEAL_IDLE", "60s")
+	if cfg, err = Load(); err != nil || cfg.GenericAutosealIdle != time.Minute {
+		t.Fatalf("the floor itself must be accepted: %v %v", cfg.GenericAutosealIdle, err)
+	}
+}
+
 func TestLoadMetaSweepSettings(t *testing.T) {
 	setCompleteConfiguration(t)
 	cfg, err := Load()

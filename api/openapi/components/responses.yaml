@@ -582,3 +582,21 @@ RepositoryArtifactUsage:
     application/json:
       schema:
         "$ref": "../components/schemas.yaml#/RepositoryArtifactUsage"
+RawPackagePage:
+  description: A page of packages
+  content:
+    application/json:
+      schema:
+        "$ref": "../components/schemas.yaml#/RawPackagePage"
+RawVersionPage:
+  description: A page of versions
+  content:
+    application/json:
+      schema:
+        "$ref": "../components/schemas.yaml#/RawVersionPage"
+RawVersion:
+  description: A version
+  content:
+    application/json:
+      schema:
+        "$ref": "../components/schemas.yaml#/RawVersion"

@@ -234,6 +234,7 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 	// vulnerability findings, large SBOMs) go to the object store meta namespace (ADR 0023 section 9).
 	metaObjects := objectstore.NewMetaStore(objectStore, 0)
 	store.SetPayloadStore(metaObjects, cfg.InlineMaxBytes)
+	store.SetRawMaxFilesPerVersion(cfg.GenericMaxFilesPerVersion)
 	auditWriter := startAuditWriter(cfg, store)
 	defer func() {
 		if err := stopAuditWriter(auditWriter, store, cfg.ShutdownFlushTimeout); err != nil {

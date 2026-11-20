@@ -685,6 +685,12 @@ export type Repository = {
    * Maven Hosted only. When false (the default), successful standard Maven/Gradle PUTs are published directly. When true, uploaded coordinates remain unreadable until the Gateway coordinate commit succeeds.
    */
   mavenStrictPublication: boolean;
+  layout?: RawLayout;
+  sealMode?: RawSealMode;
+  /**
+   * Hosted Raw only, and only with the versioned layout. True when files of open versions cannot be deleted either (create-only end to end); fixed at creation.
+   */
+  strict?: boolean;
   egressProxy?: EgressProxy;
   upstreamAuth?: UpstreamAuth;
   ociBearer?: OciBearer;
@@ -715,6 +721,12 @@ export type CreateRepository = {
    * Maven Hosted only. Opt in to Gateway coordinate commits and atomic per-coordinate visibility. The default false mode accepts standard Maven/Gradle publishing without a companion integration.
    */
   mavenStrictPublication?: boolean;
+  layout?: RawLayout;
+  sealMode?: RawSealMode;
+  /**
+   * Hosted Raw with the versioned layout only. Makes files of open versions create-only too, so a file DELETE answers 409 version_file_immutable and a failed upload needs a new version. Fixed at creation.
+   */
+  strict?: boolean;
   egressProxy?: EgressProxy;
   upstreamAuth?: UpstreamAuth;
   ociBearer?: OciBearer;
@@ -1095,6 +1107,15 @@ export type RepositoryCapabilities = {
    * True when new publications in this repository can automatically enqueue scanner jobs.
    */
   publicationScanning: boolean;
+  layout?: RawLayout;
+  /**
+   * Hosted Raw only. True when the repository has the versioned layout and serves the package and version management API.
+   */
+  versions?: boolean;
+  /**
+   * Hosted Raw only. True when files of open versions are create-only too (file DELETE answers 409 version_file_immutable).
+   */
+  strict?: boolean;
 };
 
 export type ApiKey = {
@@ -1399,7 +1420,19 @@ export type Problem = {
     | "untrusted_archive"
     | "snapshot_corrupt"
     | "internal_error"
-    | "visibility_conflict";
+    | "visibility_conflict"
+    | "layout_immutable"
+    | "layout_mismatch"
+    | "invalid_generic_path"
+    | "invalid_properties"
+    | "version_file_exists"
+    | "version_file_immutable"
+    | "version_file_limit"
+    | "version_sealed"
+    | "version_tombstoned"
+    | "version_not_sealed"
+    | "version_empty"
+    | "checksum_mismatch";
   message: string;
   requestId: string;
   /**
@@ -3168,6 +3201,16 @@ export type OverviewStatistics = {
 };
 
 /**
+ * Hosted Raw only. `path` is the default, a path is a mutable pointer to a digest. `versioned` enforces `<name>/<version>/<file>`, create-only files and sealable versions (ADR 0028). Chosen at creation and immutable.
+ */
+export type RawLayout = "path" | "versioned";
+
+/**
+ * Hosted Raw with the versioned layout only. `explicit` seals only on request. `idle` also seals an open version that saw no write for the idle period, for publishers that never call seal. Chosen at creation and immutable.
+ */
+export type RawSealMode = "explicit" | "idle";
+
+/**
  * Per-Proxy-Repository egress network proxy configuration. Only meaningful when the repository type is proxy. `password` is accepted on write (plaintext over TLS) and stored AES-256-GCM encrypted; responses never return it and carry `credentialsConfigured` instead.
  */
 export type EgressProxy = {
@@ -3366,7 +3409,7 @@ export type CreateScheduledTask = {
 export type UpdateScheduledTask = CreateScheduledTask;
 
 /**
- * Editable repository management policy and proxy configuration. Hosted repositories accept visibility updates and Maven Hosted repositories also accept mavenStrictPublication updates; name, format, and type are immutable after creation.
+ * Editable repository management policy and proxy configuration. Hosted repositories accept visibility updates and Maven Hosted repositories also accept mavenStrictPublication updates; name, format, type, and the layout of a Raw repository are immutable after creation.
  */
 export type UpdateRepository = {
   /**
@@ -3382,6 +3425,12 @@ export type UpdateRepository = {
    * Maven Hosted only. False publishes successful standard PUTs directly; true requires a Gateway coordinate commit before reads can resolve the uploaded coordinate.
    */
   mavenStrictPublication?: boolean;
+  layout?: RawLayout;
+  sealMode?: RawSealMode;
+  /**
+   * The layout, seal mode and strict flag of a Raw repository are fixed at creation. They are accepted here only with their current value; any other value answers 409 layout_immutable.
+   */
+  strict?: boolean;
   egressProxy?: EgressProxy;
   upstreamAuth?: UpstreamAuth;
   ociBearer?: OciBearer;
@@ -3480,6 +3529,109 @@ export type LifecycleJobReconciliation = {
   repositoryId: string;
   requeued: number;
   requeuedJobIds: Array<string>;
+};
+
+export type RawPackage = {
+  name: string;
+  /**
+   * The newest sealed version by seal time, not by semantic version. Absent while no version is sealed.
+   */
+  latestVersion?: string;
+  /**
+   * Open and sealed versions of the package.
+   */
+  versionCount: number;
+};
+
+export type RawPackagePage = {
+  items: Array<RawPackage>;
+  nextPageToken?: string;
+};
+
+/**
+ * An open version accepts files and properties; a sealed one is immutable and has a manifest digest. A tombstoned version is not visible through this API.
+ */
+export type RawVersionState = "open" | "sealed";
+
+/**
+ * Untrusted text. At most 32 keys and 8 KiB in total, values of at most 256 bytes without control or bidirectional characters. Escape on display.
+ */
+export type RawVersionPropertyMap = {
+  [key: string]: string;
+};
+
+export type RawVersionFile = {
+  /**
+   * Path relative to the version.
+   */
+  path: string;
+  sha256: string;
+  size: number;
+  contentType?: string;
+};
+
+export type RawVersion = {
+  name: string;
+  version: string;
+  state: RawVersionState;
+  fileCount: number;
+  sizeBytes: number;
+  /**
+   * Present once the version is sealed. Computed on the server from the stored file digests and the frozen properties.
+   */
+  manifestDigest?: string;
+  properties: RawVersionPropertyMap;
+  createdBy?: string;
+  createdAt: string;
+  /**
+   * The last file, property or seal change.
+   */
+  lastWriteAt: string;
+  sealedAt?: string;
+  /**
+   * Present in the version detail, sorted by path; absent in listings.
+   */
+  files?: Array<RawVersionFile>;
+};
+
+export type RawVersionPage = {
+  items: Array<RawVersion>;
+  nextPageToken?: string;
+};
+
+export type RawVersionCreate = {
+  properties?: RawVersionPropertyMap;
+};
+
+export type RawVersionProperties = {
+  properties: RawVersionPropertyMap;
+};
+
+export type RawVersionSealFile = {
+  /**
+   * Path relative to the version.
+   */
+  path: string;
+  sha256: string;
+};
+
+export type RawVersionSeal = {
+  /**
+   * The expected file list. The stored file set must equal it exactly.
+   */
+  files?: Array<RawVersionSealFile>;
+  /**
+   * Relative path of a stored file, usually SHA256SUMS, parsed as sha256sum output. Every listed file must exist with that digest.
+   */
+  checksumsFile?: string;
+  properties?: RawVersionPropertyMap;
+};
+
+/**
+ * The canonical manifest, keys sorted and without insignificant whitespace. `name`, `version`, `files` (`path`, `sha256`, `size`, sorted by path) and `properties`.
+ */
+export type RawVersionManifest = {
+  [key: string]: unknown;
 };
 
 export type EffectiveAccessDecision = {
@@ -3988,6 +4140,12 @@ export type RepositoryWritable = {
    * Maven Hosted only. When false (the default), successful standard Maven/Gradle PUTs are published directly. When true, uploaded coordinates remain unreadable until the Gateway coordinate commit succeeds.
    */
   mavenStrictPublication: boolean;
+  layout?: RawLayout;
+  sealMode?: RawSealMode;
+  /**
+   * Hosted Raw only, and only with the versioned layout. True when files of open versions cannot be deleted either (create-only end to end); fixed at creation.
+   */
+  strict?: boolean;
   egressProxy?: EgressProxyWritable;
   upstreamAuth?: UpstreamAuthWritable;
   ociBearer?: OciBearer;
@@ -4018,6 +4176,12 @@ export type CreateRepositoryWritable = {
    * Maven Hosted only. Opt in to Gateway coordinate commits and atomic per-coordinate visibility. The default false mode accepts standard Maven/Gradle publishing without a companion integration.
    */
   mavenStrictPublication?: boolean;
+  layout?: RawLayout;
+  sealMode?: RawSealMode;
+  /**
+   * Hosted Raw with the versioned layout only. Makes files of open versions create-only too, so a file DELETE answers 409 version_file_immutable and a failed upload needs a new version. Fixed at creation.
+   */
+  strict?: boolean;
   egressProxy?: EgressProxyWritable;
   upstreamAuth?: UpstreamAuthWritable;
   ociBearer?: OciBearer;
@@ -4199,7 +4363,7 @@ export type UpstreamAuthWritable = {
 };
 
 /**
- * Editable repository management policy and proxy configuration. Hosted repositories accept visibility updates and Maven Hosted repositories also accept mavenStrictPublication updates; name, format, and type are immutable after creation.
+ * Editable repository management policy and proxy configuration. Hosted repositories accept visibility updates and Maven Hosted repositories also accept mavenStrictPublication updates; name, format, type, and the layout of a Raw repository are immutable after creation.
  */
 export type UpdateRepositoryWritable = {
   /**
@@ -4215,6 +4379,12 @@ export type UpdateRepositoryWritable = {
    * Maven Hosted only. False publishes successful standard PUTs directly; true requires a Gateway coordinate commit before reads can resolve the uploaded coordinate.
    */
   mavenStrictPublication?: boolean;
+  layout?: RawLayout;
+  sealMode?: RawSealMode;
+  /**
+   * The layout, seal mode and strict flag of a Raw repository are fixed at creation. They are accepted here only with their current value; any other value answers 409 layout_immutable.
+   */
+  strict?: boolean;
   egressProxy?: EgressProxyWritable;
   upstreamAuth?: UpstreamAuthWritable;
   ociBearer?: OciBearer;
@@ -4281,6 +4451,16 @@ export type ScheduledTaskId = string;
 export type OptionalIfMatch = string;
 
 export type LifecycleJobId = string;
+
+/**
+ * Package name of a versioned Raw repository, lower case ASCII.
+ */
+export type RawPackageName = string;
+
+/**
+ * Version identifier of a versioned Raw repository; semantic versioning is not required.
+ */
+export type RawVersionIdentifier = string;
 
 export type SnapshotId = string;
 
@@ -13261,6 +13441,440 @@ export type TombstoneRepositoryArtifactResponses = {
 
 export type TombstoneRepositoryArtifactResponse =
   TombstoneRepositoryArtifactResponses[keyof TombstoneRepositoryArtifactResponses];
+
+export type ListRawPackagesData = {
+  body?: never;
+  path: {
+    repositoryId: string;
+  };
+  query?: {
+    pageSize?: number;
+    pageToken?: string;
+  };
+  url: "/repositories/{repositoryId}/packages";
+};
+
+export type ListRawPackagesErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  422: Problem;
+};
+
+export type ListRawPackagesError =
+  ListRawPackagesErrors[keyof ListRawPackagesErrors];
+
+export type ListRawPackagesResponses = {
+  /**
+   * A page of packages
+   */
+  200: RawPackagePage;
+};
+
+export type ListRawPackagesResponse =
+  ListRawPackagesResponses[keyof ListRawPackagesResponses];
+
+export type ListRawVersionsData = {
+  body?: never;
+  path: {
+    repositoryId: string;
+    /**
+     * Package name of a versioned Raw repository, lower case ASCII.
+     */
+    name: string;
+  };
+  query?: {
+    state?: RawVersionState;
+    /**
+     * Property filter `key:value`; repeat the parameter to require several, which combine with AND.
+     */
+    property?: Array<string>;
+    /**
+     * Only open versions created more than this many days ago. Requires `state=open`.
+     */
+    olderThanDays?: number;
+    pageSize?: number;
+    pageToken?: string;
+  };
+  url: "/repositories/{repositoryId}/packages/{name}/versions";
+};
+
+export type ListRawVersionsErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  422: Problem;
+};
+
+export type ListRawVersionsError =
+  ListRawVersionsErrors[keyof ListRawVersionsErrors];
+
+export type ListRawVersionsResponses = {
+  /**
+   * A page of versions
+   */
+  200: RawVersionPage;
+};
+
+export type ListRawVersionsResponse =
+  ListRawVersionsResponses[keyof ListRawVersionsResponses];
+
+export type GetRawVersionData = {
+  body?: never;
+  path: {
+    repositoryId: string;
+    /**
+     * Package name of a versioned Raw repository, lower case ASCII.
+     */
+    name: string;
+    /**
+     * Version identifier of a versioned Raw repository; semantic versioning is not required.
+     */
+    version: string;
+  };
+  query?: never;
+  url: "/repositories/{repositoryId}/packages/{name}/versions/{version}";
+};
+
+export type GetRawVersionErrors = {
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  422: Problem;
+};
+
+export type GetRawVersionError = GetRawVersionErrors[keyof GetRawVersionErrors];
+
+export type GetRawVersionResponses = {
+  /**
+   * A version
+   */
+  200: RawVersion;
+};
+
+export type GetRawVersionResponse =
+  GetRawVersionResponses[keyof GetRawVersionResponses];
+
+export type CreateRawVersionData = {
+  body?: RawVersionCreate;
+  path: {
+    repositoryId: string;
+    /**
+     * Package name of a versioned Raw repository, lower case ASCII.
+     */
+    name: string;
+    /**
+     * Version identifier of a versioned Raw repository; semantic versioning is not required.
+     */
+    version: string;
+  };
+  query?: never;
+  url: "/repositories/{repositoryId}/packages/{name}/versions/{version}";
+};
+
+export type CreateRawVersionErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+  /**
+   * Problem response
+   */
+  422: Problem;
+};
+
+export type CreateRawVersionError =
+  CreateRawVersionErrors[keyof CreateRawVersionErrors];
+
+export type CreateRawVersionResponses = {
+  /**
+   * A version
+   */
+  200: RawVersion;
+  /**
+   * A version
+   */
+  201: RawVersion;
+};
+
+export type CreateRawVersionResponse =
+  CreateRawVersionResponses[keyof CreateRawVersionResponses];
+
+export type SetRawVersionPropertiesData = {
+  body: RawVersionProperties;
+  path: {
+    repositoryId: string;
+    /**
+     * Package name of a versioned Raw repository, lower case ASCII.
+     */
+    name: string;
+    /**
+     * Version identifier of a versioned Raw repository; semantic versioning is not required.
+     */
+    version: string;
+  };
+  query?: never;
+  url: "/repositories/{repositoryId}/packages/{name}/versions/{version}/properties";
+};
+
+export type SetRawVersionPropertiesErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+  /**
+   * Problem response
+   */
+  422: Problem;
+};
+
+export type SetRawVersionPropertiesError =
+  SetRawVersionPropertiesErrors[keyof SetRawVersionPropertiesErrors];
+
+export type SetRawVersionPropertiesResponses = {
+  /**
+   * A version
+   */
+  200: RawVersion;
+};
+
+export type SetRawVersionPropertiesResponse =
+  SetRawVersionPropertiesResponses[keyof SetRawVersionPropertiesResponses];
+
+export type SealRawVersionData = {
+  body?: RawVersionSeal;
+  path: {
+    repositoryId: string;
+    /**
+     * Package name of a versioned Raw repository, lower case ASCII.
+     */
+    name: string;
+    /**
+     * Version identifier of a versioned Raw repository; semantic versioning is not required.
+     */
+    version: string;
+  };
+  query?: never;
+  url: "/repositories/{repositoryId}/packages/{name}/versions/{version}:seal";
+};
+
+export type SealRawVersionErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+  /**
+   * Problem response
+   */
+  422: Problem;
+};
+
+export type SealRawVersionError =
+  SealRawVersionErrors[keyof SealRawVersionErrors];
+
+export type SealRawVersionResponses = {
+  /**
+   * A version
+   */
+  200: RawVersion;
+};
+
+export type SealRawVersionResponse =
+  SealRawVersionResponses[keyof SealRawVersionResponses];
+
+export type GetRawVersionManifestData = {
+  body?: never;
+  path: {
+    repositoryId: string;
+    /**
+     * Package name of a versioned Raw repository, lower case ASCII.
+     */
+    name: string;
+    /**
+     * Version identifier of a versioned Raw repository; semantic versioning is not required.
+     */
+    version: string;
+  };
+  query?: never;
+  url: "/repositories/{repositoryId}/packages/{name}/versions/{version}/manifest";
+};
+
+export type GetRawVersionManifestErrors = {
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+  /**
+   * Problem response
+   */
+  422: Problem;
+};
+
+export type GetRawVersionManifestError =
+  GetRawVersionManifestErrors[keyof GetRawVersionManifestErrors];
+
+export type GetRawVersionManifestResponses = {
+  /**
+   * The canonical manifest bytes.
+   */
+  200: RawVersionManifest;
+};
+
+export type GetRawVersionManifestResponse =
+  GetRawVersionManifestResponses[keyof GetRawVersionManifestResponses];
+
+export type GetRawVersionChecksumsData = {
+  body?: never;
+  path: {
+    repositoryId: string;
+    /**
+     * Package name of a versioned Raw repository, lower case ASCII.
+     */
+    name: string;
+    /**
+     * Version identifier of a versioned Raw repository; semantic versioning is not required.
+     */
+    version: string;
+  };
+  query?: never;
+  url: "/repositories/{repositoryId}/packages/{name}/versions/{version}/checksums";
+};
+
+export type GetRawVersionChecksumsErrors = {
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  422: Problem;
+};
+
+export type GetRawVersionChecksumsError =
+  GetRawVersionChecksumsErrors[keyof GetRawVersionChecksumsErrors];
+
+export type GetRawVersionChecksumsResponses = {
+  /**
+   * The checksums text.
+   */
+  200: string;
+};
+
+export type GetRawVersionChecksumsResponse =
+  GetRawVersionChecksumsResponses[keyof GetRawVersionChecksumsResponses];
 
 export type GetRepositoryCapabilitiesData = {
   body?: never;

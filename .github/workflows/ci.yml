@@ -71,6 +71,36 @@ jobs:
         run: |
           scripts/ci-e2e-select.sh "$BASE_SHA" "$HEAD_SHA" | tee -a "$GITHUB_OUTPUT"
 
+  # Native deb and rpm packages (ADR 0025): build all three from release archives, assert
+  # contents, modes, Version/Release fields and maintainer scripts, then install them in
+  # debian:12 and rockylinux:9 containers and drive notarx-migrate against PostgreSQL 16.
+  packages:
+    needs: changes
+    # Packaged contents include migrations/ and the Go binaries, so a go change runs it too.
+    if: needs.changes.outputs.ci == 'true' || needs.changes.outputs.go == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Cache the pinned nfpm
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/notarx/nfpm
+          key: nfpm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/nfpm.version', 'scripts/install-nfpm.sh') }}
+      - name: Install the package inspection tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends rpm cpio
+      - name: Build the packages, assert their contents and run the container install test
+        env:
+          # Authenticated download of the pinned nfpm (scripts/lib/github-release.sh).
+          GH_TOKEN: ${{ github.token }}
+        run: make package-install-test
+
   # The OCI Always Free reference deployment (ADR 0017, deploy/oci-free-tier):
   # rendered Compose model and limits, arm64 manifests of every third-party
   # image, and a smoke run on a native arm64 runner (the A1 VM is arm64) that
@@ -137,7 +167,7 @@ jobs:
   # main every job here is skipped, so it passes without running any test.
   ci-ok:
     if: always()
-    needs: [changes, tests, oci-free-tier, oci-free-tier-tofu]
+    needs: [changes, tests, packages, oci-free-tier, oci-free-tier-tofu]
     runs-on: ubuntu-24.04
     steps:
       - name: Require every needed job to succeed or be skipped
@@ -145,6 +175,8 @@ jobs:
           NEEDS: ${{ toJSON(needs) }}
           EVENT: ${{ github.event_name }}
           IMAGES: ${{ needs.changes.outputs.images }}
+          GO: ${{ needs.changes.outputs.go }}
+          CI_CLASS: ${{ needs.changes.outputs.ci }}
           NO_CHINESE: ${{ needs.changes.outputs.no_chinese }}
         run: |
           echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
@@ -160,6 +192,7 @@ jobs:
           required=()
           if [[ "$EVENT" == pull_request ]]; then required+=(changes tests); fi
           if [[ "$IMAGES" == true ]]; then required+=(oci-free-tier oci-free-tier-tofu); fi
+          if [[ "$CI_CLASS" == true || "$GO" == true ]]; then required+=(packages); fi
           for job in "${required[@]}"; do
             result=$(echo "$NEEDS" | jq -r --arg job "$job" '.[$job].result')
             if [[ "$result" != success ]]; then

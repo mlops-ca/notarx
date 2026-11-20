@@ -79,6 +79,9 @@ type MemoryStore struct {
 	rawAssets              map[string]RawAsset
 	rawObjects             map[string]RawObject
 	rawAssetTombstones     map[string]RawAsset
+	rawVersions            map[string]RawVersion
+	internalLeases         memoryInternalLeases
+	rawMaxFilesPerVersion  int
 	rawObjectLocks         map[string]chan struct{}
 	rawUploads             map[string]RawUpload
 	rawUploadLocks         map[string]chan struct{}

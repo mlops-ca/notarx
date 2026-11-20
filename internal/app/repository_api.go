@@ -91,7 +91,7 @@ func isManagementObjectUpload(r *http.Request) bool {
 }
 
 func (m openAPIServeMux) HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) {
-	if m.handlePathParameterAction(pattern, "sessionId", "commit", handler) || m.handlePathParameterAction(pattern, "deliveryId", "replay", handler) ||
+	if m.handlePathParameterAction(pattern, "sessionId", "commit", handler) || m.handlePathParameterAction(pattern, "version", "seal", handler) || m.handlePathParameterAction(pattern, "deliveryId", "replay", handler) ||
 		m.handlePathParameterAction(pattern, "providerId", "test", handler) || m.handlePathParameterAction(pattern, "providerId", "import-metadata", handler) ||
 		m.handlePathParameterAction(pattern, "providerId", "rotate-sp-key", handler) {
 		return
@@ -146,12 +146,15 @@ func (m openAPIServeMux) handlePathParameterAction(pattern, parameter, action st
 		return true
 	}
 	m.mux.HandleFunc(prefix, m.guarded(func(w http.ResponseWriter, r *http.Request) {
-		value := strings.TrimPrefix(r.URL.Path, pathPrefix)
+		// The prefix can carry wildcards of its own (.../packages/{name}/versions/), so the action segment is the
+		// last one and the request must have exactly as many segments as the prefix.
+		value := r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
+		nested := strings.Count(r.URL.Path, "/") != strings.Count(pathPrefix, "/")
 		id, name, found := strings.Cut(value, ":")
 		route.mu.RLock()
 		next, known := route.handlers[name]
 		route.mu.RUnlock()
-		if id == "" || strings.Contains(value, "/") || !found || !known {
+		if id == "" || nested || !found || !known {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
@@ -409,13 +412,15 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	accessAPI := newAccessManagementHandler(accessManagementOptions{Scope: scope, Grants: store, GrantRecords: grantRecords, Templates: store, Roles: store})
 	pypiYanks, _ := any(store).(repository.PyPIYankStore)
 	pypiYankAPI := pypiYankManagementHandler{managementScope: scope, files: store, yank: pypiYanks}
+	rawVersions, _ := any(store).(repository.NativeRawVersionStore)
+	rawVersionAPI := rawVersionManagementHandler{managementScope: scope, versions: rawVersions, objects: options.Storage[repository.FormatRaw]}
 	var identityProviders identityProviderRuntime
 	if dependencies.IdentityRuntime != nil {
 		identityProviders = dependencies.IdentityRuntime
 	}
 	identityAPI := newIdentityManagementHandler(identityManagementOptions{Scope: scope, Users: store, APIKeys: store, ServiceAccounts: store, IdentityProviders: identityProviders})
 	legacyAPI := generatedRepositoryAPIAdapter{BatchAdapter: migrationapi.New(dependencies.MigrationService, authenticator, store).WithSchedules(dependencies.MigrationSchedules), Adapter: sourceapi.New(dependencies.SourceService, authenticator, store), managementScope: scope, store: store, sessions: nativeMaven, npmRestore: options.NPMRestore, aptPublication: aptPublication, aptSnapshotPublisher: aptSnapshotPublisher, aptSnapshotImporter: aptSnapshotImporter, aptSnapshotExporter: aptpublication.SnapshotArchiveExporter{Store: store, Objects: nativeAPTObjects}, aptPublications: store, retentionPolicies: store, securityPolicies: store, quarantineReadPolicies: store, capacities: store, tombstones: store, intelligence: store, quarantine: store, lifecycleJobs: store, auditRetention: store, publicAccess: store, siteSettings: store, overview: newOverviewCache(options.ReadCache, options.OverviewCacheTTL), authzCacheTTL: options.AuthzCacheTTL, consoleThemePackages: store, consoleThemes: dependencies.ConsoleThemes, replication: store, oci: store, cargo: store, conan: store, audit: store, maintenance: maintenance, searchProjection: searchProjection, runtimeNodes: store, scheduledTasks: store, webhooks: store, emailTargets: store, quotaAlerts: store, queueStats: store, diagnostics: dependencies, objects: options.Storage, logBuffer: dependencies.LogBuffer, artifactScanner: dependencies.ArtifactScanner, artifactScanFormats: dependencies.ArtifactScannerFormats}
-	adminopenapi.HandlerWithOptions(managementServer{Boundary: helmapi.New(helmPreview), Adapter: nugetapi.New(nugetPreview), RubyGemsBoundary: rubygemsapi.New(rubyGemsPreview), repositoryManagementHandler: repositoriesAPI, artifactManagementHandler: artifactsAPI, accessManagementHandler: accessAPI, identityManagementHandler: identityAPI, pypiYankManagementHandler: pypiYankAPI, generatedRepositoryAPIAdapter: legacyAPI}, adminopenapi.StdHTTPServerOptions{
+	adminopenapi.HandlerWithOptions(managementServer{Boundary: helmapi.New(helmPreview), Adapter: nugetapi.New(nugetPreview), RubyGemsBoundary: rubygemsapi.New(rubyGemsPreview), repositoryManagementHandler: repositoriesAPI, artifactManagementHandler: artifactsAPI, accessManagementHandler: accessAPI, identityManagementHandler: identityAPI, pypiYankManagementHandler: pypiYankAPI, rawVersionManagementHandler: rawVersionAPI, generatedRepositoryAPIAdapter: legacyAPI}, adminopenapi.StdHTTPServerOptions{
 		BaseURL:    "/api/v2",
 		BaseRouter: openAPIServeMux{mux: mux, authorize: hostedRepositories.authenticateManagementRequest},
 		ErrorHandlerFunc: func(w http.ResponseWriter, _ *http.Request, err error) {
