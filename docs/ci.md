@@ -395,7 +395,7 @@ loads a prebuilt image, so they run in `contract-early` and start right after th
 | Lane | Steps | Lane step minutes, run 44675064060 (two shards then) |
 | --- | --- | --- |
 | `core-backup` (packed after `core-checks`) | `make backup-transfer-test` | 6.6 |
-| `core-integration-1` | `make integration-test INTEGRATION_SHARD=1` (`./internal/app` and the Cargo replay) | was 9.3 with `./internal/repository`, the small packages and the published backup test |
+| `core-integration-1` | `make integration-test INTEGRATION_SHARD=1` (`./internal/app`, six small packages since issue #518, and the Cargo replay) | was 9.3 with `./internal/repository`, the small packages and the published backup test |
 | `core-integration-2` | `make integration-test INTEGRATION_SHARD=2`, `make published-native-backup-test` | new; `./internal/repository` took 2.4 minutes of tests, the published backup test 1.6 |
 | `core-integration-3` | `make integration-test INTEGRATION_SHARD=3`, `make conan-e2e` | was 7.3 as shard 2 with the small packages; Conan 2.1 |
 
@@ -407,7 +407,8 @@ test (1.6). Issue #500 gives `./internal/app` a shard of its own and moves the p
 backup test to the new middle shard.
 
 `scripts/integration-packages.txt` holds the integration package list and assigns each
-package to one of three shards balanced by measured test time; `scripts/integration-test.sh --list`
+package to one of three shards balanced by measured job time (its header records the
+measurements); `scripts/integration-test.sh --list`
 prints it. `TestRequiredIntegrationCommandCoversIntegrationTaggedPackages` (`contracts/`)
 and `make test` (`scripts/integration-isolation-test.sh`) fail when a package with
 integration-tagged files is missing from the list or listed twice. Each shard starts
