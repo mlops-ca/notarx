@@ -25,6 +25,7 @@ type RetentionCandidate struct {
 	Reasons                                   []string
 	AgeDays                                   int
 }
+
 // Retention plans and applies retention. Its Tombstone is the Governance method of the same
 // module, which is why it accepts the audit records of a management tombstone; retention is a
 // system action and passes none.
