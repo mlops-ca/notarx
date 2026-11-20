@@ -43,15 +43,17 @@ done
 stamped='[0-9]+\.[0-9]+\.[0-9]+-nightly\.[0-9]+'
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
-checked=0
 
 assets=()
 if [[ -n "$dir" ]]; then
+  # Listed first so that a failing find or sort fails the check instead of shortening the list.
+  listing=$(find "$dir" -maxdepth 1 -type f | LC_ALL=C sort) || fail "cannot list $dir"
   while IFS= read -r path; do
-    [[ "$(basename "$path")" != release-manifest.json ]] || continue
+    [[ -n "$path" && "$(basename "$path")" != release-manifest.json ]] || continue
     assets+=("$path")
-  done < <(find "$dir" -maxdepth 1 -type f | LC_ALL=C sort)
+  done <<<"$listing"
 fi
+checked=${#assets[@]}
 # Every asset name first, so the report does not depend on which content check comes first.
 for path in ${assets[@]+"${assets[@]}"}; do
   name=$(basename "$path")
@@ -59,7 +61,6 @@ for path in ${assets[@]+"${assets[@]}"}; do
 done
 for path in ${assets[@]+"${assets[@]}"}; do
   name=$(basename "$path")
-  checked=$((checked + 1))
   case $name in
     SHA256SUMS)
       if grep -q -i nightly "$path"; then fail 'SHA256SUMS contains nightly'; fi
@@ -72,7 +73,9 @@ for path in ${assets[@]+"${assets[@]}"}; do
       extract=$scratch/$name.d
       mkdir -p "$extract"
       tar -xzf "$path" -C "$extract"
+      files=$(find "$extract" -type f) || fail "cannot list the members of $name"
       while IFS= read -r file; do
+        [[ -n "$file" ]] || continue
         if [[ "$(basename "$file")" == VERSION.txt ]] && grep -q -i nightly "$file"; then
           fail "$name: VERSION.txt reports a nightly version"
         fi
@@ -80,7 +83,7 @@ for path in ${assets[@]+"${assets[@]}"}; do
           *.md | LICENSE* | NOTICE*) continue ;;
         esac
         if grep -a -q -E "$stamped" "$file"; then fail "$name: $(basename "$file") embeds a stamped nightly version"; fi
-      done < <(find "$extract" -type f)
+      done <<<"$files"
       rm -rf "$extract"
       ;;
     *.deb)
@@ -91,6 +94,8 @@ for path in ${assets[@]+"${assets[@]}"}; do
       fields=$("${RPM:-rpm}" -qp --nosignature --qf '%{VERSION}-%{RELEASE}' "$path") || fail "cannot read the header of $name"
       if grep -q -i nightly <<<"$fields"; then fail "$name: the package version '$fields' contains nightly"; fi
       ;;
+    # A release holds only these types (release-archives.yml); a new one must get its own check.
+    *) fail "$name: no nightly-version check for this asset type" ;;
   esac
 done
 [[ -z "$dir" || "$checked" -gt 0 ]] || fail "no asset found in $dir"
@@ -98,12 +103,14 @@ done
 images=0
 if [[ -n "$manifest" ]]; then
   docker_cli=${DOCKER:-docker}
+  entries=$(jq -r '.images | to_entries[] | [.key, .value] | @tsv' "$manifest") || fail "unreadable manifest $manifest"
   while IFS=$'\t' read -r image digest; do
+    [[ -n "$image" ]] || continue
     labels=$("$docker_cli" buildx imagetools inspect "$registry/$image@$digest" --format '{{ json .Image }}') || fail "cannot inspect $image@$digest"
     values=$(jq -r '[.. | .Labels? // empty | objects | .[]] | .[]' <<<"$labels") || fail "unreadable image config of $image"
     if grep -q -i nightly <<<"$values"; then fail "a label of image $image contains nightly"; fi
     images=$((images + 1))
-  done < <(jq -r '.images | to_entries[] | [.key, .value] | @tsv' "$manifest")
+  done <<<"$entries"
   [[ "$images" -gt 0 ]] || fail "the manifest lists no image"
 fi
 printf 'check-no-nightly: %d asset(s) and %d image(s) carry no nightly version\n' "$checked" "$images"

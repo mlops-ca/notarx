@@ -103,6 +103,10 @@ new_release 0.1.0 0.1.0 0.1.0
 printf 'deadbeef  notarx_0.1.0-nightly.1.tar.gz\n' >>"$dir/SHA256SUMS"
 expect_fail 'SHA256SUMS naming a nightly fails' 'SHA256SUMS contains nightly' check
 
+new_release 0.1.0 0.1.0 0.1.0
+printf 'x' >"$dir/notarx_0.1.0_windows_amd64.zip"
+expect_fail 'an asset type without a check fails' 'zip: no nightly-version check' check
+
 mkdir "$workdir/empty"
 expect_fail 'an empty directory fails' 'no asset' bash "$root/scripts/check-no-nightly.sh" --dir "$workdir/empty"
 expect_fail 'a missing directory fails' 'not a directory' bash "$root/scripts/check-no-nightly.sh" --dir "$workdir/none"
