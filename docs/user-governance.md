@@ -69,6 +69,46 @@ verified `email` claim to link an existing account. Email linking requires
 unlinked subject retains the legacy external-principal behaviour and is not
 silently attached to a local account.
 
+## User Groups
+
+A user group is a persisted set of accounts that a repository grant can name as the
+principal `group:<id>`, so a team gets the same access as the sum of its members' grants
+without listing every account. The name is `user_groups` because a Group elsewhere in
+notarx is a repository group.
+
+| Source | How it is populated |
+| --- | --- |
+| `local` | An administrator creates the group and edits its members. |
+| `scim` | The identity provider's SCIM server writes it (ADR 0018). |
+| `claims` | An administrator registers the group with its provider and external id; the groups claim of an OIDC sign-in, or the groups attribute of a SAML assertion, adds and removes the membership. |
+
+A claim only ever matches a `claims` group of the signing-in provider by its external id,
+never by display name, and never a group that has a global role. Microsoft Entra ID drops
+the `groups` claim for a user in too many groups (`_claim_names` or `hasgroups`);
+notarx does not chase it through Microsoft Graph, so such a sign-in carries no groups (never
+a partial list), an `auth.oidc.groups_overage` audit event is written, and large
+directories should provision groups through SCIM or use app roles instead.
+
+A group may carry a global role (`none`, `member` or `admin`). An account's level is the
+highest of its own role and the roles of its groups, evaluated on every request and never
+copied into a credential, so removing a membership, clearing the role or deleting the
+group takes effect on the next request (within `NOTARX_AUTHZ_CACHE_TTL` on other nodes). A
+disabled account stays blocked whatever its groups say, a pending account is not lifted by a
+grant, and OCI and Conan protocol tokens carry no group ids. New groups start at `none`;
+SCIM can never create a group with, or set, `admin`, an administrator may flag an existing
+group (audited), and deleting a group clears the flag. At most 512 groups count per account.
+
+| Endpoint (relative to `/api/v2`) | Purpose |
+| --- | --- |
+| `GET`, `POST /user-groups` | List (keyset paged) and create a local or claims group |
+| `GET`, `PUT`, `DELETE /user-groups/{groupId}` | Read, rename (`If-Match`) and delete |
+| `PUT /user-groups/{groupId}/global-role` | Flag the group with a global role (`If-Match`) |
+| `GET`, `POST /user-groups/{groupId}/members` | List and add members |
+| `DELETE /user-groups/{groupId}/members/{userId}` | Remove a member |
+
+The effective-access simulation of a `user:<name>` actor includes the groups of that
+account.
+
 ## Lockout Policy
 
 `NOTARX_LOCAL_AUTH_MAX_FAILED_ATTEMPTS` controls consecutive failures before a

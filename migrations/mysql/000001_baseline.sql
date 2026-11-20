@@ -2908,6 +2908,37 @@ CREATE TABLE `token_signing_keys` (
   CONSTRAINT `token_signing_keys_state_check` CHECK ((`state` IN ('next', 'active', 'retired')))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
+CREATE TABLE `user_group_members` (
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `group_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `source` TEXT NOT NULL,
+  `user_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  PRIMARY KEY (`group_id`, `user_id`),
+  KEY `ix_user_group_members_user_id_group_id` (`user_id`, `group_id`),
+  CONSTRAINT `user_group_members_source_check` CHECK ((`source` IN ('local', 'scim', 'claims')))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
+CREATE TABLE `user_groups` (
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `display_name` TEXT NOT NULL,
+  `external_id` VARCHAR(255) NOT NULL DEFAULT '',
+  `global_role` TEXT NOT NULL DEFAULT ('none'),
+  `id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `provider_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  `source` TEXT NOT NULL,
+  `updated_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `version` BIGINT NOT NULL DEFAULT 1,
+  `name_lower` VARCHAR(255) GENERATED ALWAYS AS (IF(`source` = 'local', LOWER(`display_name`), NULL)) VIRTUAL NULL,
+  `live_user_groups_provider_external_id_idx` TINYINT(1) GENERATED ALWAYS AS (IF((`external_id` <> ''), 1, NULL)) VIRTUAL NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_user_groups_name_local_idx` (`name_lower`),
+  UNIQUE KEY `uq_user_groups_provider_external_id_idx` (`provider_id`, `external_id`, `live_user_groups_provider_external_id_idx`),
+  CONSTRAINT `user_groups_display_name_check` CHECK (((CHAR_LENGTH(TRIM(`display_name`)) >= 1) AND (CHAR_LENGTH(TRIM(`display_name`)) <= 255))),
+  CONSTRAINT `user_groups_global_role_check` CHECK ((`global_role` IN ('none', 'member', 'admin'))),
+  CONSTRAINT `user_groups_source_check` CHECK ((`source` IN ('local', 'scim', 'claims'))),
+  CONSTRAINT `user_groups_version_check` CHECK ((`version` > 0))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
 CREATE TABLE `user_identities` (
   `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   `display_name` TEXT NOT NULL DEFAULT (''),
@@ -3256,6 +3287,9 @@ ALTER TABLE `repository_security_policies` ADD CONSTRAINT `fk_repository_securit
 ALTER TABLE `repository_usage_counters` ADD CONSTRAINT `fk_repository_usage_counters_repository_id` FOREIGN KEY (`repository_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE `scheduled_task_runs` ADD CONSTRAINT `fk_scheduled_task_runs_task_id` FOREIGN KEY (`task_id`) REFERENCES `scheduled_tasks` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE `scheduled_tasks` ADD CONSTRAINT `fk_scheduled_tasks_repository_id` FOREIGN KEY (`repository_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
+ALTER TABLE `user_group_members` ADD CONSTRAINT `fk_user_group_members_group_id` FOREIGN KEY (`group_id`) REFERENCES `user_groups` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
+ALTER TABLE `user_group_members` ADD CONSTRAINT `fk_user_group_members_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
+ALTER TABLE `user_groups` ADD CONSTRAINT `fk_user_groups_provider_id` FOREIGN KEY (`provider_id`) REFERENCES `identity_providers` (`id`) ON DELETE SET NULL ON UPDATE NO ACTION;
 ALTER TABLE `user_identities` ADD CONSTRAINT `fk_user_identities_provider_id` FOREIGN KEY (`provider_id`) REFERENCES `identity_providers` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;
 ALTER TABLE `user_identities` ADD CONSTRAINT `fk_user_identities_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE `user_sessions` ADD CONSTRAINT `fk_user_sessions_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;

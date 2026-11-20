@@ -46,6 +46,7 @@ type MemoryStore struct {
 	repositoryGrants       map[string]RepositoryGrantSet
 	authorizationTemplates map[string]AuthorizationTemplate
 	authorizationRoles     map[string]AuthorizationRole
+	userGroupState         *memoryUserGroupState
 	retentionPolicies      map[string]RepositoryRetentionPolicy
 	securityPolicies       map[string]RepositorySecurityPolicy
 	quarantineReadPolicies map[string]RepositoryQuarantineReadPolicy

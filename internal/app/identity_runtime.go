@@ -253,6 +253,7 @@ func (s *oidcProviderState) validatorConfig(audience, discoveredJWKS string) aut
 		ProviderID: s.provider.ID, Issuer: s.settings.Issuer, Audience: audience, JWKSURL: jwksURL,
 		AdminSubjects: s.settings.AdminSubjects, Algorithms: s.settings.Algorithms,
 		SubjectClaims: s.provider.AttributeMapping.SubjectClaims(),
+		GroupsClaim:   s.provider.AttributeMapping.Groups,
 		Roles:         authorization.OIDCRoleMapping{Member: s.settings.MemberRoles, Admin: s.settings.AdminRoles},
 	}
 }

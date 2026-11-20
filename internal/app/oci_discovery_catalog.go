@@ -216,7 +216,7 @@ func (h nativeOCIHandler) catalogEligible(ctx context.Context, p Principal, repo
 	}
 	guards = append(guards, discovery.Guard{Kind: "grants", ID: repo.ID, Version: set.Version})
 	for _, grant := range set.Grants {
-		if grant.Principal != p.Actor {
+		if !p.NamesGrantPrincipal(grant.Principal) {
 			continue
 		}
 		for _, scope := range grant.Scopes {

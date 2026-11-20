@@ -234,6 +234,7 @@ type GatewayStore interface {
 	repository.APIKeyStore
 	repository.ServiceAccountStore
 	repository.UserStore
+	repository.UserGroupStore
 	repository.UserIdentityStore
 	repository.UserSessionStore
 	repository.RuntimeNodeStore
@@ -269,6 +270,7 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	mux.Handle("GET /api/v2/public/repositories", publicRepositoryCatalogHandler{repositories: store, groups: store, anonymous: store})
 	authenticator.Users = store
 	authenticator.UserIdentities = store
+	authenticator.UserGroups = store
 	authenticator.UserSessions = store
 	if authenticator.ServiceAccounts == nil {
 		authenticator.ServiceAccounts = store
@@ -441,7 +443,7 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 		ProxyOperations: proxyCacheBrowse, ProxyDirectory: proxyCacheBrowse.directoryStore(), MavenProxyOperations: mavenProxyOperations, MavenCache: mavenCache,
 	})
 	grantRecords, _ := any(store).(repository.RepositoryGrantRecordStore)
-	accessAPI := newAccessManagementHandler(accessManagementOptions{Scope: scope, Grants: store, GrantRecords: grantRecords, Templates: store, Roles: store})
+	accessAPI := newAccessManagementHandler(accessManagementOptions{Scope: scope, Grants: store, GrantRecords: grantRecords, Templates: store, Roles: store, UserGroups: store})
 	pypiYanks, _ := any(store).(repository.PyPIYankStore)
 	pypiYankAPI := pypiYankManagementHandler{managementScope: scope, files: store, yank: pypiYanks}
 	rawVersions, _ := any(store).(repository.NativeRawVersionStore)
@@ -561,11 +563,11 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	}
 	mux.HandleFunc("POST /auth/login", userLoginHandler(store, store, authenticator))
 	mux.HandleFunc("POST /auth/change-password", userChangePasswordHandler(store, store, authenticator))
-	oidcLogin := oidcLoginHandler{runtime: dependencies.IdentityRuntime, authenticator: authenticator, identities: store, sessions: store}
+	oidcLogin := oidcLoginHandler{runtime: dependencies.IdentityRuntime, authenticator: authenticator, identities: store, sessions: store, groups: store, audit: store}
 	mux.HandleFunc("GET /auth/idp", oidcLogin.providers)
 	mux.HandleFunc("GET /auth/oidc/{slug}/login", oidcLogin.start)
 	mux.HandleFunc("GET /auth/oidc/{slug}/callback", oidcLogin.callback)
-	samlLogin := samlLoginHandler{runtime: dependencies.IdentityRuntime, authenticator: authenticator, identities: store, sessions: store, audit: store, limiter: &samlRateLimiter{}}
+	samlLogin := samlLoginHandler{runtime: dependencies.IdentityRuntime, authenticator: authenticator, identities: store, sessions: store, groups: store, audit: store, limiter: &samlRateLimiter{}}
 	mux.HandleFunc("GET /auth/saml/{slug}/login", samlLogin.start)
 	mux.HandleFunc("POST /auth/saml/{slug}/acs", samlLogin.acs)
 	mux.HandleFunc("GET /auth/saml/{slug}/metadata", samlLogin.metadata)

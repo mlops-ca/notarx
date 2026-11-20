@@ -8,6 +8,7 @@ type accessManagementOptions struct {
 	GrantRecords repository.RepositoryGrantRecordStore
 	Templates    repository.AuthorizationTemplateStore
 	Roles        repository.AuthorizationRoleStore
+	UserGroups   repository.UserGroupStore
 }
 
 // accessManagementHandler owns grants, roles, templates and access explanation.
@@ -18,8 +19,9 @@ type accessManagementHandler struct {
 	grantRecords       repository.RepositoryGrantRecordStore
 	templates          repository.AuthorizationTemplateStore
 	authorizationRoles repository.AuthorizationRoleStore
+	userGroups         repository.UserGroupStore
 }
 
 func newAccessManagementHandler(options accessManagementOptions) accessManagementHandler {
-	return accessManagementHandler{managementScope: options.Scope, grants: options.Grants, grantRecords: options.GrantRecords, templates: options.Templates, authorizationRoles: options.Roles}
+	return accessManagementHandler{managementScope: options.Scope, grants: options.Grants, grantRecords: options.GrantRecords, templates: options.Templates, authorizationRoles: options.Roles, userGroups: options.UserGroups}
 }

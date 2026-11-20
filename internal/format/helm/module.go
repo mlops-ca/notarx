@@ -147,7 +147,7 @@ func (m *Module) authorize(w http.ResponseWriter, r *http.Request, repo reposito
 	if !decision.Allowed && collection && p.AccountStateReason() == "" {
 		if set, err := m.access.Grants.GetRepositoryGrants(r.Context(), repo.ID); err == nil {
 			for _, grant := range set.Grants {
-				if grant.Principal == p.Actor && grant.ResourcePrefix != "" {
+				if p.NamesGrantPrincipal(grant.Principal) && grant.ResourcePrefix != "" {
 					candidate := m.access.AuthorizeResource(r.Context(), p, repo, operation, grant.ResourcePrefix)
 					if candidate.Allowed {
 						decision = candidate

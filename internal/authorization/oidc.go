@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/jose"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 const oidcJWKSCacheTTL = 5 * time.Minute
@@ -38,6 +39,8 @@ type OIDCConfig struct {
 	// SubjectClaims are the claims whose values, joined with a colon, form the
 	// login subject (Entra ID: tid and oid). Empty means the sub claim.
 	SubjectClaims []string
+	// GroupsClaim names the claim that carries the user's groups; empty means "groups" (ADR 0018 Decision 2).
+	GroupsClaim string
 	// Realm-role mappings are opt-in. When a token contains several mapped
 	// roles, the validator grants the most privileged one.
 	Roles OIDCRoleMapping
@@ -55,6 +58,12 @@ type OIDCIdentity struct {
 	Role          Role
 	AdminSubject  bool
 	RoleMappings  []OIDCRoleMappingMatch
+	// Groups are the group values the token asserts, at most repository.MaxClaimsGroups. They only ever
+	// match claims-sourced groups of this provider by external id (ADR 0018 Decision 5).
+	Groups []string
+	// GroupsOverage reports that the token could not carry the full group list (Entra ID's _claim_names and
+	// hasgroups, or more values than the bound). Groups is then empty: never a partial list.
+	GroupsOverage bool
 }
 
 type OIDCValidator struct {
@@ -161,6 +170,7 @@ func (v *OIDCValidator) validate(ctx context.Context, token, expectedNonce strin
 	for _, resource := range claims.ResourceAccess {
 		roles = append(roles, resource.Roles...)
 	}
+	identity.Groups, identity.GroupsOverage = claimGroups(verified.Claims, v.config.GroupsClaim)
 	identity.RoleMappings = matchedOIDCRoleMappings(roles, v.config.Roles)
 	if containsMappedGatewayRole(identity.RoleMappings, RoleAdmin) {
 		identity.Admin = true
@@ -169,6 +179,46 @@ func (v *OIDCValidator) validate(ctx context.Context, token, expectedNonce strin
 		identity.Role = RoleMember
 	}
 	return identity, true
+}
+
+// claimGroups reads the group values of a verified token. Microsoft Entra ID replaces the groups claim with
+// _claim_names (and hasgroups) when a user is in too many groups; resolving them through Microsoft Graph is out of
+// scope, so an overage yields no groups at all and the caller audits it. A claim of an unexpected shape or longer
+// than repository.MaxClaimsGroups is treated the same way: never a partial list.
+func claimGroups(claims map[string]any, name string) (groups []string, overage bool) {
+	if name = strings.TrimSpace(name); name == "" {
+		name = "groups"
+	}
+	if names, ok := claims["_claim_names"].(map[string]any); ok {
+		if _, present := names[name]; present {
+			return nil, true
+		}
+	}
+	if has, _ := claims["hasgroups"].(bool); has {
+		return nil, true
+	}
+	raw, present := claims[name]
+	if !present {
+		return nil, false
+	}
+	values, ok := raw.([]any)
+	if !ok || len(values) > repository.MaxClaimsGroups {
+		return nil, true
+	}
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		text, isString := value.(string)
+		if !isString {
+			return nil, true
+		}
+		if text = strings.TrimSpace(text); text != "" {
+			if _, duplicate := seen[text]; !duplicate {
+				seen[text] = struct{}{}
+				groups = append(groups, text)
+			}
+		}
+	}
+	return groups, false
 }
 
 // UnverifiedIssuer reads the iss claim of a JWT without verifying anything. It is only

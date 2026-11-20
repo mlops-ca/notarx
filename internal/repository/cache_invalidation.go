@@ -29,6 +29,10 @@ const (
 	// CacheScopeWorkloadIssuer and CacheScopeWorkloadPolicy are the workload issuers and trust policies of ADR 0019.
 	CacheScopeWorkloadIssuer = "workload_issuer"
 	CacheScopeWorkloadPolicy = "workload_policy"
+	// CacheScopeUserGroup is the group ids of an account (ADR 0018 Decision 5, ADR 0023 section 6). A membership change
+	// announces the user id; a change to a group row announces the whole scope. Both come from the statement
+	// triggers of migration 000015.
+	CacheScopeUserGroup = "user_group"
 )
 
 // CacheInvalidator evicts the cached entries of one entity in this process.

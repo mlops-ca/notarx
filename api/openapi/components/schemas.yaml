@@ -1093,6 +1093,130 @@ UserList:
     nextPageToken:
       type: string
       description: Present while more users follow; pass it as pageToken for the next page.
+UserGroup:
+  type: object
+  required: [id, displayName, source, globalRole, version, createdAt, updatedAt]
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+      format: uuid
+    displayName:
+      type: string
+      minLength: 1
+      maxLength: 255
+    source:
+      type: string
+      enum: [local, scim, claims]
+    providerId:
+      type: string
+      format: uuid
+      description: The identity provider of a provisioned or claims-sourced group; absent for a local group.
+    externalId:
+      type: string
+      description: The provider's identifier of the group, the only key a login claim or a SCIM request matches on.
+    globalRole:
+      type: string
+      enum: [none, member, admin]
+    version:
+      type: string
+    createdAt:
+      type: string
+      format: date-time
+    updatedAt:
+      type: string
+      format: date-time
+UserGroupList:
+  type: object
+  required: [items, limit]
+  additionalProperties: false
+  properties:
+    items:
+      type: array
+      items:
+        "$ref": "#/UserGroup"
+    limit:
+      type: integer
+      minimum: 1
+    nextPageToken:
+      type: string
+      description: Present while more groups follow; pass it as pageToken for the next page.
+CreateUserGroup:
+  type: object
+  required: [displayName]
+  additionalProperties: false
+  properties:
+    displayName:
+      type: string
+      minLength: 1
+      maxLength: 255
+    source:
+      type: string
+      enum: [local, claims]
+      default: local
+    providerId:
+      type: string
+      format: uuid
+      description: Required for a claims-sourced group, not allowed for a local one.
+    externalId:
+      type: string
+      maxLength: 255
+      description: Required for a claims-sourced group; the value a login's groups claim carries.
+RenameUserGroup:
+  type: object
+  required: [displayName]
+  additionalProperties: false
+  properties:
+    displayName:
+      type: string
+      minLength: 1
+      maxLength: 255
+SetUserGroupGlobalRole:
+  type: object
+  required: [globalRole]
+  additionalProperties: false
+  properties:
+    globalRole:
+      type: string
+      enum: [none, member, admin]
+UserGroupMember:
+  type: object
+  required: [userId, userName, source, createdAt]
+  additionalProperties: false
+  properties:
+    userId:
+      type: string
+      format: uuid
+    userName:
+      type: string
+    source:
+      type: string
+      enum: [local, scim, claims]
+    createdAt:
+      type: string
+      format: date-time
+UserGroupMemberList:
+  type: object
+  required: [items, limit]
+  additionalProperties: false
+  properties:
+    items:
+      type: array
+      items:
+        "$ref": "#/UserGroupMember"
+    limit:
+      type: integer
+      minimum: 1
+    nextPageToken:
+      type: string
+AddUserGroupMember:
+  type: object
+  required: [userId]
+  additionalProperties: false
+  properties:
+    userId:
+      type: string
+      format: uuid
 CreateUser:
   type: object
   required:
@@ -1769,6 +1893,10 @@ CurrentIdentity:
       type: string
       enum: [none, member, admin]
     administrator: {type: boolean}
+    groupIds:
+      type: array
+      description: The user groups of the account, resolved for this request (ADR 0018). Their global roles are already part of role.
+      items: {type: string, format: uuid}
     oidc: {"$ref": "#/OIDCIdentityDetails"}
 RepositoryEffectiveAccess:
   type: object

@@ -262,6 +262,8 @@ Every PostgreSQL partial, expression, trigram or operator-class index and what M
 | service_accounts | service_accounts_name_unique_idx | generated | case-insensitive unique name: a virtual LOWER(name) column under the bin collation (ADR 0022); service account names compare without case |
 | token_signing_keys | token_signing_keys_one_active_idx | unique-flag | a unique index over a predicate becomes a generated column that is NULL outside it (ADR 0022) |
 | token_signing_keys | token_signing_keys_one_next_idx | unique-flag | a unique index over a predicate becomes a generated column that is NULL outside it (ADR 0022) |
+| user_groups | user_groups_name_local_idx | generated | case-insensitive unique name of a local group: a virtual column that is LOWER(display_name) for a local group and NULL otherwise, under the bin collation (ADR 0022); it keys on source, not provider_id, because MySQL refuses a foreign key on the base column of an indexed virtual column and provider_id carries one; a local group is exactly the one without a provider |
+| user_groups | user_groups_provider_external_id_idx | unique-flag | a unique index over a predicate becomes a generated column that is NULL outside it (ADR 0022) |
 | user_identities | user_identities_provider_scim_external_id_idx | unique-flag | a unique index over a predicate becomes a generated column that is NULL outside it (ADR 0022) |
 | user_identities | user_identities_provider_subject_idx | unique-flag | a unique index over a predicate becomes a generated column that is NULL outside it (ADR 0022) |
 | user_sessions | user_sessions_user_active_idx | full | a partial index becomes a full index: MySQL has no partial index and the table is small or the predicate selective enough |
@@ -320,6 +322,12 @@ Each PostgreSQL trigger is dropped (polling or counters replace it), ported to a
 | token_signing_keys | token_signing_keys_notify_cache_delete | dropped | MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger |
 | token_signing_keys | token_signing_keys_notify_cache_insert | dropped | MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger |
 | token_signing_keys | token_signing_keys_notify_cache_update | dropped | MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger |
+| user_group_members | user_group_members_notify_cache_delete | dropped | MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger |
+| user_group_members | user_group_members_notify_cache_insert | dropped | MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger |
+| user_group_members | user_group_members_notify_cache_update | dropped | MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger |
+| user_groups | user_groups_notify_cache_delete | dropped | MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger |
+| user_groups | user_groups_notify_cache_insert | dropped | MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger |
+| user_groups | user_groups_notify_cache_update | dropped | MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger |
 | users | users_notify_cache_delete | dropped | MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger |
 | users | users_notify_cache_insert | dropped | MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger |
 | users | users_notify_cache_update | dropped | MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger |

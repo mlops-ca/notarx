@@ -48,3 +48,6 @@ migrations:
   000014_huggingface_repositories.sql:
     dialect: postgres
     reason: extends the repository and group format checks and creates the hf_* tables with PostgreSQL constraint rewrites; the catalogue carries the schema into the MySQL baseline
+  000015_user_groups.sql:
+    dialect: postgres
+    reason: creates user_groups and user_group_members with partial and expression unique indexes and statement-level NOTIFY triggers; the catalogue carries the tables into the MySQL baseline, which polls cache_epochs instead

@@ -7503,6 +7503,310 @@
         }
       }
     },
+    "/user-groups": {
+      "get": {
+        "operationId": "listUserGroups",
+        "description": "Pages user groups by keyset on creation time then id: continue with the nextPageToken of the previous page. A user group is a set of accounts that a repository grant can name as the principal group:<id> (ADR 0018). Administrator only.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            }
+          },
+          {
+            "$ref": "#/components/parameters/PageToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/UserGroupList"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createUserGroup",
+        "description": "Creates a local group, or a claims-sourced group that a login matches by the external id of its provider. SCIM groups are created only by the SCIM server and every new group starts with global role none.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserGroup"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/UserGroup"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/user-groups/{groupId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/UserGroupId"
+        }
+      ],
+      "get": {
+        "operationId": "getUserGroup",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/UserGroup"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "put": {
+        "operationId": "renameUserGroup",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameUserGroup"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/UserGroup"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteUserGroup",
+        "description": "Deletes the group with its memberships. A group recreated afterwards starts again at global role none.",
+        "responses": {
+          "204": {
+            "description": "User group deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/user-groups/{groupId}/global-role": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/UserGroupId"
+        }
+      ],
+      "put": {
+        "operationId": "setUserGroupGlobalRole",
+        "description": "Flags the group with a global role that raises the level of its members (the highest of the account's own role and the roles of its groups) at authentication time. A claims-sourced group only ever has role none.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetUserGroupGlobalRole"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/UserGroup"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/user-groups/{groupId}/members": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/UserGroupId"
+        }
+      ],
+      "get": {
+        "operationId": "listUserGroupMembers",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            }
+          },
+          {
+            "$ref": "#/components/parameters/PageToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/UserGroupMemberList"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "post": {
+        "operationId": "addUserGroupMember",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddUserGroupMember"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Member added"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/user-groups/{groupId}/members/{userId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/UserGroupId"
+        },
+        {
+          "name": "userId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "delete": {
+        "operationId": "removeUserGroupMember",
+        "description": "Removes the membership; the account loses what the group granted on its next request.",
+        "responses": {
+          "204": {
+            "description": "Member removed"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
     "/audits": {
       "get": {
         "operationId": "listAudits",
@@ -16456,6 +16760,14 @@
           "administrator": {
             "type": "boolean"
           },
+          "groupIds": {
+            "type": "array",
+            "description": "The user groups of the account, resolved for this request (ADR 0018). Their global roles are already part of role.",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
           "oidc": {
             "$ref": "#/components/schemas/OIDCIdentityDetails"
           }
@@ -23538,6 +23850,220 @@
           }
         }
       },
+      "UserGroup": {
+        "type": "object",
+        "required": [
+          "id",
+          "displayName",
+          "source",
+          "globalRole",
+          "version",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "local",
+              "scim",
+              "claims"
+            ]
+          },
+          "providerId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The identity provider of a provisioned or claims-sourced group; absent for a local group."
+          },
+          "externalId": {
+            "type": "string",
+            "description": "The provider's identifier of the group, the only key a login claim or a SCIM request matches on."
+          },
+          "globalRole": {
+            "type": "string",
+            "enum": [
+              "none",
+              "member",
+              "admin"
+            ]
+          },
+          "version": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "UserGroupList": {
+        "type": "object",
+        "required": [
+          "items",
+          "limit"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserGroup"
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nextPageToken": {
+            "type": "string",
+            "description": "Present while more groups follow; pass it as pageToken for the next page."
+          }
+        }
+      },
+      "CreateUserGroup": {
+        "type": "object",
+        "required": [
+          "displayName"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "local",
+              "claims"
+            ],
+            "default": "local"
+          },
+          "providerId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Required for a claims-sourced group, not allowed for a local one."
+          },
+          "externalId": {
+            "type": "string",
+            "maxLength": 255,
+            "description": "Required for a claims-sourced group; the value a login's groups claim carries."
+          }
+        }
+      },
+      "RenameUserGroup": {
+        "type": "object",
+        "required": [
+          "displayName"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        }
+      },
+      "SetUserGroupGlobalRole": {
+        "type": "object",
+        "required": [
+          "globalRole"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "globalRole": {
+            "type": "string",
+            "enum": [
+              "none",
+              "member",
+              "admin"
+            ]
+          }
+        }
+      },
+      "UserGroupMember": {
+        "type": "object",
+        "required": [
+          "userId",
+          "userName",
+          "source",
+          "createdAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "userName": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "local",
+              "scim",
+              "claims"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "UserGroupMemberList": {
+        "type": "object",
+        "required": [
+          "items",
+          "limit"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserGroupMember"
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nextPageToken": {
+            "type": "string"
+          }
+        }
+      },
+      "AddUserGroupMember": {
+        "type": "object",
+        "required": [
+          "userId"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "AuditPage": {
         "type": "object",
         "required": [
@@ -26455,6 +26981,15 @@
           ]
         }
       },
+      "UserGroupId": {
+        "name": "groupId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
       "AuthorizationTemplateId": {
         "name": "templateId",
         "in": "path",
@@ -27335,6 +27870,44 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/UserIdentity"
+            }
+          }
+        }
+      },
+      "UserGroupList": {
+        "description": "A page of user groups",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/UserGroupList"
+            }
+          }
+        }
+      },
+      "UserGroup": {
+        "description": "A user group",
+        "headers": {
+          "ETag": {
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/UserGroup"
+            }
+          }
+        }
+      },
+      "UserGroupMemberList": {
+        "description": "A page of the members of a user group",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/UserGroupMemberList"
             }
           }
         }

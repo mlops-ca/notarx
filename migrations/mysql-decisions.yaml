@@ -130,6 +130,12 @@ indexes:
       - {name: name_lower, type: "VARCHAR(255)", expression: "LOWER(`name`)"}
     columns: [name_lower]
     reason: "case-insensitive unique name: a virtual LOWER(name) column under the bin collation (ADR 0022); service account names compare without case"
+  user_groups_name_local_idx:
+    action: generated
+    generated:
+      - {name: name_lower, type: "VARCHAR(255)", expression: "IF(`source` = 'local', LOWER(`display_name`), NULL)", nullable: true}
+    columns: [name_lower]
+    reason: "case-insensitive unique name of a local group: a virtual column that is LOWER(display_name) for a local group and NULL otherwise, under the bin collation (ADR 0022); it keys on source, not provider_id, because MySQL refuses a foreign key on the base column of an indexed virtual column and provider_id carries one; a local group is exactly the one without a provider"
   users_name_case_insensitive_idx:
     action: generated
     generated:
@@ -254,6 +260,24 @@ triggers:
     disposition: dropped
     reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
   token_signing_keys_notify_cache_update:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  user_group_members_notify_cache_insert:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  user_group_members_notify_cache_update:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  user_group_members_notify_cache_delete:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  user_groups_notify_cache_insert:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  user_groups_notify_cache_update:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  user_groups_notify_cache_delete:
     disposition: dropped
     reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
   users_notify_cache_delete:

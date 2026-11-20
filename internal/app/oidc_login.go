@@ -30,6 +30,10 @@ type oidcLoginHandler struct {
 	authenticator Authenticator
 	identities    repository.UserIdentityStore
 	sessions      repository.UserSessionStore
+	// groups receives the claims-sourced group memberships of a login (ADR 0018 Decision 5); nil disables them.
+	groups repository.UserGroupStore
+	// audit records the decisions a login makes about groups; nil records nothing.
+	audit samlAuditor
 }
 
 type oidcFlowState struct {
@@ -172,6 +176,10 @@ func (h oidcLoginHandler) callback(w http.ResponseWriter, r *http.Request) {
 				h.redirectError(w, r, "account_disabled")
 				return
 			}
+			if !h.syncClaimsGroups(ctx, r, provider.provider, user.ID, verified) {
+				h.redirectError(w, r, "identity_unavailable")
+				return
+			}
 			principal := h.authenticator.PrincipalForActor("user:" + user.Name)
 			principal.Admin = user.Role == string(authorization.RoleAdmin)
 			principal.Role = authorization.Role(user.Role)
@@ -215,6 +223,28 @@ func (h oidcLoginHandler) callback(w http.ResponseWriter, r *http.Request) {
 	h.setWebSessionCookie(w, client, session)
 	values := url.Values{"oidc": {"success"}, "redirect": {safeConsoleRedirect(flow.Redirect)}}
 	http.Redirect(w, r, "/login?"+values.Encode(), http.StatusFound)
+}
+
+// syncClaimsGroups replaces the claims-sourced memberships of the account with the groups the token asserts. A
+// token that overflowed its groups claim (Entra ID overage) asserts none, and the overage is audited; it reports
+// false only when the store failed, so a membership the provider withdrew is never left in place unknowingly.
+func (h oidcLoginHandler) syncClaimsGroups(ctx context.Context, r *http.Request, provider identity.Provider, userID string, verified authorization.OIDCIdentity) bool {
+	if h.groups == nil {
+		return true
+	}
+	groups := verified.Groups
+	if verified.GroupsOverage {
+		groups = nil
+		if h.audit != nil {
+			_ = h.audit.RecordAudit(ctx, repository.AuditRecord{
+				Class: repository.AuditClassSync, Actor: "oidc:" + provider.Slug, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management",
+				Resource: "auth/oidc/" + provider.Slug, Operation: "auth.oidc.groups_overage", Status: http.StatusFound, CacheDisposition: "bypass",
+				AuthorizationSource: "oidc", AuthorizationReason: "groups_overage", RequestID: r.Header.Get("X-Request-Id"),
+			})
+		}
+	}
+	_, err := h.groups.SyncClaimsUserGroups(ctx, repository.ClaimsGroupSync{ProviderID: provider.ID, UserID: userID, ExternalIDs: groups})
+	return err == nil
 }
 
 func (h oidcLoginHandler) setWebSessionCookie(w http.ResponseWriter, client *authorization.OIDCClient, session string) {

@@ -235,6 +235,16 @@ paths:
     "$ref": "./management/users.yaml#/users_userId_identities"
   "/users/{userId}/identities/{identityId}":
     "$ref": "./management/users.yaml#/users_userId_identities_identityId"
+  "/user-groups":
+    "$ref": "./management/user-groups.yaml#/user_groups"
+  "/user-groups/{groupId}":
+    "$ref": "./management/user-groups.yaml#/user_groups_groupId"
+  "/user-groups/{groupId}/global-role":
+    "$ref": "./management/user-groups.yaml#/user_groups_groupId_global_role"
+  "/user-groups/{groupId}/members":
+    "$ref": "./management/user-groups.yaml#/user_groups_groupId_members"
+  "/user-groups/{groupId}/members/{userId}":
+    "$ref": "./management/user-groups.yaml#/user_groups_groupId_members_userId"
   "/audits":
     "$ref": "./management/audits.yaml#/audits"
   "/audits/page":

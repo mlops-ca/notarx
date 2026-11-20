@@ -22632,6 +22632,14 @@
           "administrator": {
             "type": "boolean"
           },
+          "groupIds": {
+            "type": "array",
+            "description": "The user groups of the account, resolved for this request (ADR 0018). Their global roles are already part of role.",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
           "oidc": {
             "$ref": "#/components/schemas/OIDCIdentityDetails"
           }
