@@ -568,6 +568,7 @@ exists to make concurrent nodes fetch a package once, so the lock already spans 
 artifact object write and one more small object put does not widen it. Expired-session maintenance
 (`nuget/maintenance.go`, `helm/maintenance.go`) deletes artifact objects and writes no payload. NuGet replication
 (`nuget/distribution.go`) takes no publication lock; its completion stages the nuspec before its transaction.
+Readers (`read.go`) and governance transitions take the lock but write no payload.
 
 ### 10. Connections and locks
 

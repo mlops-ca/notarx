@@ -293,10 +293,10 @@ func (m *Module) servePreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// A commit stores a large nuspec in the object store before the publication lock is taken, so the lock and its
-	// connection never wait on the store. The commit re-reads the session under the lock and stores again only if
-	// the nuspec changed meanwhile.
+	// connection never wait on the store. A session the commit would refuse (not staged, expired) stages nothing.
+	// The commit re-reads the session under the lock and stores again only if the nuspec changed meanwhile.
 	staged := r.Context()
-	if parts[3] == "commit" && r.Method == http.MethodPost && session.State == "staged" {
+	if parts[3] == "commit" && r.Method == http.MethodPost && session.State == "staged" && session.ExpiresAt.After(time.Now()) {
 		if staged, err = repository.StagePayload(staged, m.store, session.Nuspec); err != nil {
 			m.failure(w, err)
 			return
