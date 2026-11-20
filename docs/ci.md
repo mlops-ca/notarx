@@ -62,7 +62,7 @@ behaviour config ignores, and the contract lanes never run Playwright.
 ## Go checks: lint, quality and one unit-test pass
 
 The Go class runs three jobs. `lint` (amd64) is the fast signal: `make lint`
-(golangci-lint and the repository linters), `make vet`, the native-build rules, the
+(`golangci-lint` and the repository lint tools), `make vet`, the native-build rules, the
 migration checks, the release and packaging checks, the 60-second SAML fuzz run and
 the dependency audit. `quality` (amd64) runs the unit tests exactly once:
 `make race-coverage` runs `go test -race -coverprofile` over every package and
@@ -74,7 +74,7 @@ again with `-coverprofile`, then each floored package a third time with `-cover`
 `make coverage` still runs a plain (non-race) pass with the same floors for local
 use. `quality-arm64` runs lint, vet and `make race` natively on arm64 (ADR 0016).
 
-golangci-lint runs in its pinned image as the calling user, against the host module
+`golangci-lint` runs in its pinned image as the calling user, against the host module
 and build caches (restored by `actions/setup-go`) and its own result cache in
 `GOLANGCI_LINT_CACHE` (default `~/.cache/notarx/golangci-lint`), which the composite
 action restores and saves with `actions/cache`. A warm run downloads no module and
