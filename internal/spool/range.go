@@ -1,4 +1,7 @@
-package raw
+// Package spool holds the byte-range, staging, concurrency and single-flight
+// helpers shared by formats that cache large upstream objects (Raw, Hugging
+// Face). It has no format knowledge.
+package spool
 
 import (
 	"context"
@@ -7,6 +10,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -16,17 +20,18 @@ const (
 	maxMultipartBytes   = 64 << 20
 )
 
-type byteInterval struct{ start, end int64 }
+// Interval is an inclusive byte range.
+type Interval struct{ Start, End int64 }
 
-// parseRanges bounds work before allocating interval metadata. Duplicate,
+// ParseRanges bounds work before allocating interval metadata. Duplicate,
 // overlapping and adjacent ranges coalesce, so a client cannot amplify bytes
 // by repeating an interval. Invalid syntax rejects the entire field; valid
 // non-overlapping intervals outside the representation are ignored.
-func parseRanges(value string, size int64) ([]byteInterval, bool) {
+func ParseRanges(value string, size int64) ([]Interval, bool) {
 	if size <= 0 || len(value) > maxRangeHeaderBytes || !strings.HasPrefix(value, "bytes=") || strings.Count(value, ",") >= maxRangeCount {
 		return nil, false
 	}
-	var intervals []byteInterval
+	var intervals []Interval
 	for _, member := range strings.Split(strings.TrimPrefix(value, "bytes="), ",") {
 		member = strings.TrimSpace(member)
 		parts := strings.SplitN(member, "-", 2)
@@ -50,20 +55,20 @@ func parseRanges(value string, size int64) ([]byteInterval, bool) {
 				continue
 			}
 		}
-		start, end, ok := parseRange("bytes="+member, size)
+		start, end, ok := ParseRange("bytes="+member, size)
 		if !ok {
 			return nil, false
 		}
-		intervals = append(intervals, byteInterval{start, end})
+		intervals = append(intervals, Interval{start, end})
 	}
 	if len(intervals) == 0 {
 		return nil, false
 	}
-	slices.SortFunc(intervals, func(a, b byteInterval) int {
-		if a.start < b.start {
+	slices.SortFunc(intervals, func(a, b Interval) int {
+		if a.Start < b.Start {
 			return -1
 		}
-		if a.start > b.start {
+		if a.Start > b.Start {
 			return 1
 		}
 		return 0
@@ -71,8 +76,8 @@ func parseRanges(value string, size int64) ([]byteInterval, bool) {
 	merged := intervals[:1]
 	for _, interval := range intervals[1:] {
 		last := &merged[len(merged)-1]
-		if interval.start <= last.end+1 {
-			last.end = max(last.end, interval.end)
+		if interval.Start <= last.End+1 {
+			last.End = max(last.End, interval.End)
 		} else {
 			merged = append(merged, interval)
 		}
@@ -82,7 +87,7 @@ func parseRanges(value string, size int64) ([]byteInterval, bool) {
 	if len(merged) > 1 {
 		var total int64
 		for _, interval := range merged {
-			length := interval.end - interval.start + 1
+			length := interval.End - interval.Start + 1
 			if length > maxMultipartBytes-total {
 				return nil, false
 			}
@@ -92,84 +97,99 @@ func parseRanges(value string, size int64) ([]byteInterval, bool) {
 	return merged, true
 }
 
-func serveMultipart(w *statusWriter, r *http.Request, content Content, size int64, intervals []byteInterval) ServeResult {
+// RangeOpener opens length bytes at offset of one immutable representation and
+// reports its total size.
+type RangeOpener func(ctx context.Context, offset, length int64) (io.ReadCloser, int64, error)
+
+// ErrUnavailable means the representation could not be opened before any
+// response byte was written; the caller may still answer with an error status.
+var ErrUnavailable = errors.New("range source unavailable")
+
+// MaxMultipartBytes is the aggregate payload limit of a multipart/byteranges
+// response.
+const MaxMultipartBytes = maxMultipartBytes
+
+// WriteMultipart writes a multipart/byteranges response for intervals. Only
+// the first interval is opened before headers are committed; ErrUnavailable
+// reports a failure at that point. Later failures truncate the body so the
+// advertised Content-Length is never satisfied by a partial representation.
+func WriteMultipart(w http.ResponseWriter, ctx context.Context, contentType string, size int64, intervals []Interval, open RangeOpener) error {
 	boundary := multipart.NewWriter(io.Discard).Boundary()
-	contentType := content.ContentType
 	if contentType == "" || len(contentType) > 1024 || strings.ContainsAny(contentType, "\r\n") {
 		contentType = "application/octet-stream"
 	}
 	prefixes := make([]string, len(intervals))
 	var length int64
 	for i, interval := range intervals {
-		prefix := "--" + boundary + "\r\nContent-Range: bytes " + utoa(uint64(interval.start)) + "-" + utoa(uint64(interval.end)) + "/" + utoa(uint64(size)) + "\r\nContent-Type: " + contentType + "\r\n\r\n"
+		prefix := "--" + boundary + "\r\nContent-Range: bytes " + strconv.FormatInt(interval.Start, 10) + "-" + strconv.FormatInt(interval.End, 10) + "/" + strconv.FormatInt(size, 10) + "\r\nContent-Type: " + contentType + "\r\n\r\n"
 		if i > 0 {
 			prefix = "\r\n" + prefix
 		}
 		prefixes[i] = prefix
-		length += int64(len(prefix)) + interval.end - interval.start + 1
+		length += int64(len(prefix)) + interval.End - interval.Start + 1
 	}
 	closing := "\r\n--" + boundary + "--\r\n"
 	length += int64(len(closing))
 	// Open only the first interval before committing headers. Later streams
 	// open sequentially against this same immutable source, never the path.
-	reader, sourceSize, err := openContentRange(r.Context(), content, intervals[0].start, intervals[0].end-intervals[0].start+1)
+	reader, sourceSize, err := open(ctx, intervals[0].Start, intervals[0].End-intervals[0].Start+1)
 	if err != nil || sourceSize != size {
 		if reader != nil {
 			_ = reader.Close()
 		}
-		http.Error(w, "Raw object unavailable", http.StatusInternalServerError)
-		return w.result()
+		return ErrUnavailable
 	}
 	w.Header().Set("Content-Type", "multipart/byteranges; boundary="+boundary)
 	w.Header().Set("Accept-Ranges", "bytes")
-	w.Header().Set("Content-Length", utoa(uint64(length)))
+	w.Header().Set("Content-Length", strconv.FormatInt(length, 10))
 	w.Header().Del("Content-Range")
 	w.WriteHeader(http.StatusPartialContent)
 	for i, interval := range intervals {
 		if i > 0 {
-			if r.Context().Err() != nil {
-				return w.result()
+			if ctx.Err() != nil {
+				return nil
 			}
-			reader, sourceSize, err = openContentRange(r.Context(), content, interval.start, interval.end-interval.start+1)
+			reader, sourceSize, err = open(ctx, interval.Start, interval.End-interval.Start+1)
 			if err != nil || sourceSize != size {
 				if reader != nil {
 					_ = reader.Close()
 				}
-				return w.result()
+				return nil
 			}
 		}
 		if _, err := io.WriteString(w, prefixes[i]); err != nil {
 			_ = reader.Close()
-			return w.result()
+			return nil
 		}
-		_, err = io.CopyN(w, contextReader{ctx: r.Context(), Reader: reader}, interval.end-interval.start+1)
+		_, err = io.CopyN(w, ContextReader{Ctx: ctx, Reader: reader}, interval.End-interval.Start+1)
 		_ = reader.Close()
 		if err != nil {
-			// Do not write a closing delimiter after a failed/short read. The
-			// advertised length remains incomplete so clients cannot accept a
-			// successful multipart representation with missing bytes.
-			return w.result()
+			// Do not write a closing delimiter after a failed or short read.
+			return nil
 		}
 	}
-	if r.Context().Err() == nil {
+	if ctx.Err() == nil {
 		_, _ = io.WriteString(w, closing)
 	}
-	return w.result()
+	return nil
 }
 
-type contextReader struct {
-	ctx context.Context
+// ContextReader fails reads once ctx is done.
+type ContextReader struct {
+	Ctx context.Context
 	io.Reader
 }
 
-func (r contextReader) Read(p []byte) (int, error) {
-	if err := r.ctx.Err(); err != nil {
+func (r ContextReader) Read(p []byte) (int, error) {
+	if err := r.Ctx.Err(); err != nil {
 		return 0, err
 	}
 	return r.Reader.Read(p)
 }
 
-func ifRangeMatches(value, etag string) bool {
+// IfRangeMatches reports whether an If-Range validator (strong ETag form)
+// permits serving a range for the representation tagged etag.
+func IfRangeMatches(value, etag string) bool {
 	if value == "" {
 		return true
 	}
@@ -177,7 +197,8 @@ func ifRangeMatches(value, etag string) bool {
 	return etag != "" && value == etag && !strings.HasPrefix(value, "W/") && !strings.HasPrefix(etag, "W/")
 }
 
-func parseRange(value string, size int64) (int64, int64, bool) {
+// ParseRange parses a single satisfiable Range value, returning inclusive bounds.
+func ParseRange(value string, size int64) (int64, int64, bool) {
 	if size < 0 || !strings.HasPrefix(value, "bytes=") {
 		return 0, 0, false
 	}

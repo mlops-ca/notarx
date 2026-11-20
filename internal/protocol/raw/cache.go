@@ -19,18 +19,19 @@ import (
 	cache "github.com/mlops-ca/notarx/internal/cache"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/spool"
 )
 
 var ErrCacheMiss = errors.New("raw cache miss")
 var ErrNegativeCache = errors.New("raw negative cache hit")
-var ErrObjectTooLarge = errors.New("raw object exceeds size limit")
-var ErrSpoolCapacity = errors.New("raw spool capacity is full")
+var ErrObjectTooLarge = spool.ErrObjectTooLarge
+var ErrSpoolCapacity = spool.ErrCapacity
 
 const defaultCacheTTL = 15 * time.Minute
 const defaultNegativeCacheTTL = time.Minute
 const defaultMaxObjectBytes = int64(1 << 30)
-const distributedLockLease = 35 * time.Second
-const streamCopyBufferSize = 128 << 10
+const distributedLockLease = spool.DefaultLockLease
+const streamCopyBufferSize = spool.StreamCopyBufferSize
 const defaultMaxConcurrentSpools = 4
 
 type cacheIndex struct {
@@ -83,35 +84,11 @@ type CachedContent struct {
 // while computing its digest. The caller owns Cleanup after the content has
 // either been published or served.
 func StageContent(reader io.Reader, maxBytes int64) (CachedContent, error) {
-	if maxBytes < 0 {
-		return CachedContent{}, ErrObjectTooLarge
-	}
-	file, err := os.CreateTemp("", "notarx-raw-*")
+	staged, err := spool.Stage(reader, maxBytes, "notarx-raw-*")
 	if err != nil {
 		return CachedContent{}, err
 	}
-	fail := func(err error) (CachedContent, error) {
-		name := file.Name()
-		_ = file.Close()
-		_ = os.Remove(name)
-		return CachedContent{}, err
-	}
-	limit := maxBytes
-	if maxBytes < int64(^uint64(0)>>1) {
-		limit++
-	}
-	hash := sha256.New()
-	written, err := io.CopyBuffer(io.MultiWriter(file, hash), io.LimitReader(reader, limit), make([]byte, streamCopyBufferSize))
-	if err != nil {
-		return fail(err)
-	}
-	if written > maxBytes {
-		return fail(ErrObjectTooLarge)
-	}
-	if err := file.Close(); err != nil {
-		return fail(err)
-	}
-	return CachedContent{Digest: hex.EncodeToString(hash.Sum(nil)), Size: written, tempPath: file.Name()}, nil
+	return CachedContent{Digest: staged.Digest, Size: staged.Size, tempPath: staged.Path}, nil
 }
 
 func (c CachedContent) Open(ctx context.Context) (io.ReadCloser, int64, error) {
@@ -180,7 +157,7 @@ type Cache struct {
 	lockLease        time.Duration
 	lockRenewEvery   time.Duration
 	publicationMu    sync.Mutex
-	spoolSlots       chan struct{}
+	spoolSlots       *spool.Slots
 }
 
 func NewCache(store objectstore.Store, ttl, negativeTTL time.Duration, hosts []string) *Cache {
@@ -190,7 +167,7 @@ func NewCache(store objectstore.Store, ttl, negativeTTL time.Duration, hosts []s
 			allowed[host] = struct{}{}
 		}
 	}
-	return &Cache{store: store, ttl: ttl, negativeTTL: negativeTTL, maxObjectBytes: defaultMaxObjectBytes, allowed: allowed, lockLease: distributedLockLease, lockRenewEvery: distributedLockLease / 3, spoolSlots: make(chan struct{}, defaultMaxConcurrentSpools)}
+	return &Cache{store: store, ttl: ttl, negativeTTL: negativeTTL, maxObjectBytes: defaultMaxObjectBytes, allowed: allowed, lockLease: distributedLockLease, lockRenewEvery: distributedLockLease / 3, spoolSlots: spool.NewSlots(defaultMaxConcurrentSpools)}
 }
 
 func NewDefaultCache(store objectstore.Store, hosts []string) *Cache {
@@ -213,7 +190,7 @@ func (c *Cache) WithMaxObjectBytes(limit int64) *Cache {
 // owned by this Gateway process. Configure it before serving requests.
 func (c *Cache) WithMaxConcurrentSpools(limit int) *Cache {
 	if limit > 0 {
-		c.spoolSlots = make(chan struct{}, limit)
+		c.spoolSlots = spool.NewSlots(limit)
 	}
 	return c
 }
@@ -222,18 +199,10 @@ func (c *Cache) WithMaxConcurrentSpools(limit int) *Cache {
 // is deliberately fail-fast so a saturated Gateway does not start another
 // potentially large upstream transfer.
 func (c *Cache) AcquireSpool() (func(), error) {
-	if c == nil || c.spoolSlots == nil {
+	if c == nil {
 		return func() {}, nil
 	}
-	select {
-	case c.spoolSlots <- struct{}{}:
-		var once sync.Once
-		return func() {
-			once.Do(func() { <-c.spoolSlots })
-		}, nil
-	default:
-		return nil, ErrSpoolCapacity
-	}
+	return c.spoolSlots.Acquire()
 }
 
 func (c *Cache) WithLockTiming(lease, renewEvery time.Duration) *Cache {
@@ -402,64 +371,7 @@ func (c *Cache) CollectGarbage(ctx context.Context) error {
 }
 
 func (c *Cache) AcquireRequestLock(ctx context.Context, key string) (context.Context, func() error, error) {
-	if c.coordinator == nil {
-		return ctx, func() error { return nil }, nil
-	}
-	lockKey := "cache-request:" + key
-	for {
-		owner, acquired, err := c.coordinator.Acquire(ctx, lockKey, c.lockLease)
-		if err != nil {
-			return nil, nil, err
-		}
-		if acquired {
-			workCtx, cancel := context.WithCancel(ctx)
-			renewalFailed := make(chan struct{})
-			stopped := make(chan struct{})
-			go c.renewRequestLock(workCtx, lockKey, owner, renewalFailed, stopped, cancel)
-			var once sync.Once
-			var releaseErr error
-			release := func() error {
-				once.Do(func() {
-					cancel()
-					<-stopped
-					select {
-					case <-renewalFailed:
-						releaseErr = errors.New("raw distributed request lock renewal failed")
-					default:
-					}
-					releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-					defer cancel()
-					releaseErr = errors.Join(releaseErr, c.coordinator.Release(releaseCtx, lockKey, owner))
-				})
-				return releaseErr
-			}
-			return workCtx, release, nil
-		}
-		select {
-		case <-ctx.Done():
-			return nil, nil, ctx.Err()
-		case <-time.After(20 * time.Millisecond):
-		}
-	}
-}
-
-func (c *Cache) renewRequestLock(ctx context.Context, key, owner string, failed chan<- struct{}, stopped chan<- struct{}, cancel context.CancelFunc) {
-	defer close(stopped)
-	ticker := time.NewTicker(c.lockRenewEvery)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			ok, err := c.coordinator.Renew(ctx, key, owner, c.lockLease)
-			if err != nil || !ok {
-				close(failed)
-				cancel()
-				return
-			}
-		}
-	}
+	return spool.Locker{Coordinator: c.coordinator, Lease: c.lockLease, RenewEvery: c.lockRenewEvery, Prefix: "cache-request:"}.Acquire(ctx, key)
 }
 
 func (c *Cache) ProxyAllowed(endpoint string) bool {
