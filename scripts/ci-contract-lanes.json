@@ -1,11 +1,7 @@
 {
   "schemaVersion": 2,
-  "$comment": "jobs packs short lanes into one CI job each (docs/ci.md, Contract lane packing); every other lane is a job of its own. images: false marks a lane that loads no prebuilt image, so its jobs start without waiting for build-images. A pack runs its lanes in the listed order on one Docker daemon, so perf-load comes first and measures a clean daemon.",
+  "$comment": "jobs packs short lanes into one CI job each (docs/ci.md, Contract lane packing); every other lane is a job of its own. images: false marks a lane that loads no prebuilt image, so its jobs start without waiting for build-images. A pack runs its lanes in the listed order on one Docker daemon, so perf-load comes first and measures a daemon on which no other lane has run.",
   "jobs": {
-    "packed-perf-integration": [
-      "perf-load",
-      "core-integration-1"
-    ],
     "packed-checks-backup": [
       "core-checks",
       "core-backup"
@@ -14,7 +10,8 @@
       "core-email",
       "migration-clients"
     ],
-    "packed-native-pypi": [
+    "packed-perf-native-pypi": [
+      "perf-load",
       "core-native-e2e-2",
       "pypi-migration"
     ],
@@ -563,7 +560,7 @@
       "timeoutMinutes": 40,
       "arm64": "mainline",
       "needs": [],
-      "images": false,
+      "images": true,
       "steps": [
         {
           "name": "perf-load-tiny",

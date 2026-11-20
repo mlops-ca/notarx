@@ -39,9 +39,13 @@ skips every contract lane.
 
 ## Console E2E sharding and spec selection
 
-`console-e2e` is a matrix of three jobs. Shards `1`, `2` and `3` each start the
-shared prebuilt gateway images and run `playwright test --shard=i/3`, so every
-spec runs in exactly one shard. The entry marked `cli: true` (shard `2`) then runs the
+`console-e2e` is a matrix of two jobs. Shards `1` and `2` each start the
+shared prebuilt gateway images and run `playwright test --shard=i/2`, so every
+spec runs in exactly one shard. Until issue #518 there were three shards: each paid
+about 1.4 minutes of setup (npm install, browser, image load, gateway start) for about
+3 minutes of specs. Playwright runs half as many workers as the runner has CPUs (two
+on the hosted runner); four workers per shard ran no more specs per minute (136 specs
+in 3.9 and 5.2 minutes, run 44726897998, against about 90 in 2.9 minutes with two). The entry marked `cli: true` (shard `1`) then runs the
 `notarxctl` CLI E2E, also when one of its specs failed, so both verdicts show. The CLI
 E2E boots its own isolated gateway from the loaded images (`scripts/cli-e2e.sh` without
 `CLI_E2E_SERVER`: a Compose project of its own on free ports), so the state the specs of
@@ -173,9 +177,11 @@ loads (`matrix --group`), so no job waits for an image it never loads:
 | `contract-amd64` | amd64 jobs with a lane that loads the prebuilt images | `build-images-amd64` |
 | `contract-arm64` | arm64 jobs with a lane that loads the prebuilt images | `build-images-arm64` |
 
-Every lane declares `images`. The integration shards, `core-backup`, `core-checks` and
-`perf-load` declare `false`: they run `compose.integration.yml`, build their binaries
-from source, stub Docker in their script tests or build their own per-project image. A job without images downloads and loads
+Every lane declares `images`. The integration shards, `core-backup` and `core-checks`
+declare `false`: they run `compose.integration.yml`, build their binaries
+from source or stub Docker in their script tests. `perf-load` declared `false` and
+rebuilt the notarx image from source (about 1.3 minutes) until issue #518; it now loads
+the prebuilt image and gives it its per-project name. A job without images downloads and loads
 nothing, and Compose still runs with `--no-build`, so a lane that wrongly declares
 `false` fails on the missing image instead of building it. A group the plan leaves
 empty (`contract-arm64` on a pull request without the `arm64` class) is skipped, and
@@ -200,14 +206,13 @@ lane's verdict, duration and failed steps in the job's step summary; the job fai
 when any lane failed. The arm64 leg of a packed job runs only the lanes whose tier runs
 on arm64 in that scope.
 
-| Job | Lanes | Lane step minutes (run 44692652060 attempt 1, the halves and `core-email` from run 44710459152) |
+| Job | Lanes | Lane step minutes (run 44692652060 attempt 1, the halves and `core-email` from run 44710459152, `perf-load` and `maven-oci-auth` from run 44732449869) |
 | --- | --- | --- |
-| `packed-perf-integration` | `perf-load`, `core-integration-1` | 2.1 + 4.6 |
 | `packed-checks-backup` | `core-checks`, `core-backup` | 1.9 + 4.3 |
 | `packed-email-clients` | `core-email`, `migration-clients` | 5.4 + 0.8 |
-| `packed-native-pypi` | `core-native-e2e-2`, `pypi-migration` | 4.9 + 0.6 |
+| `packed-perf-native-pypi` | `perf-load`, `core-native-e2e-2`, `pypi-migration` | 0.8 (2.3 when it rebuilt the image) + 4.3 + 0.7 |
 | `packed-native-auth-oci` | `core-native-e2e-1`, `six-format-auth`, `oci-migration` | 3.9 + 1.1 + 0.5 |
-| `packed-maven-helm-npm` | `maven-oci-auth`, `helm`, `npm-migration` | 4.5 + 1.7 + 0.6 |
+| `packed-maven-helm-npm` | 5.2 (6.2 with the Gradle contracts one after another, run 44723845622) + 1.7 + 0.6 |
 | `packed-nuget-rubygems` | `nuget`, `rubygems` | 4.2 + 2.7 |
 | `packed-discovery-inventory` | `oci-discovery`, `inventory` | 2.0 + 3.5 |
 
@@ -232,8 +237,8 @@ a job share one runner and Docker daemon: each lane's scripts own their Compose
 projects and tear them down on exit, and a cancelled job stops after the lane that
 was running (the lanes after it are reported as not run). A lane that crashes is
 reported as an error and the next lane runs. The lanes run in the listed order, so
-`perf-load` comes before `core-integration-1` and measures a daemon that no other lane
-has used yet; it has no latency threshold, only a zero-failed-requests check, but its
+`perf-load` comes first in its pack and measures a daemon on which no other lane
+has run yet (it holds only the loaded prebuilt images); it has no latency threshold, only a zero-failed-requests check, but its
 evidence numbers stay comparable between runs. Move a lane in or out of a pack by editing `jobs` only; the workflows
 name no lane and no job.
 
@@ -336,17 +341,17 @@ Issue #482 reshaped the pull request suite (ADR 0016 and ADR 0024, amendments of
 | `quality-arm64`: lint, vet, race | `quality-arm64`: vet and race for every Go change; lint with the `arm64` class | `quality-arm64`: lint, vet, race |
 | `console`, `docs`, `image-test-stages`, `console-e2e-report` | unchanged | unchanged |
 | `build-images` (4: two images on two architectures) | `build-images-amd64` and `build-images-arm64`, each building both images of its architecture (issue #500) | the same |
-| `console-e2e` shards `1` to `3` and `cli` | shards `1` to `3`; shard `2` runs the CLI E2E after its specs (issue #500) | the same |
+| `console-e2e` shards `1` to `3` and `cli` | shards `1` and `2`; shard `1` runs the CLI E2E after its specs (issues #500 and #518) | the same |
 | `object-store-contract` (3 jobs: RustFS, MinIO twice) | one `object-store-contract` job running the three configurations in turn | the same job |
-| `contract (core-backup)` | `core-backup` (in `packed-checks-backup`), `core-integration-1` (in `packed-perf-integration`), `core-integration-2`, `core-integration-3`, all in `contract-early` | the same four lanes on both architectures |
+| `contract (core-backup)` | `core-backup` (in `packed-checks-backup`), `core-integration-1` (a job of its own since issue #518; in `packed-perf-integration` after #500), `core-integration-2`, `core-integration-3`, all in `contract-early` | the same four lanes on both architectures |
 | `contract (core-checks)`, `contract (six-format-auth)` | `core-checks` in `packed-checks-backup` (`contract-early`), `six-format-auth` in `packed-native-auth-oci` (issue #518; `packed-rubygems-discovery-auth` after #500) | the same, both architectures |
 | `contract (nuget)`, `contract (oci-migration)`, `contract (npm-migration)` | `nuget` in `packed-nuget-rubygems`, `oci-migration` in `packed-native-auth-oci`, `npm-migration` in `packed-maven-helm-npm` (issue #518) | the same, both architectures |
 | `contract (maven-oci-auth)`, `contract (migration-clients)` | `maven-oci-auth` in `packed-maven-helm-npm`, `migration-clients` in `packed-email-clients` (issue #518) | the same, both architectures |
 | `contract (rubygems)`, `contract (oci-discovery)` | `rubygems` in `packed-nuget-rubygems`, `oci-discovery` in `packed-discovery-inventory` (issue #518) | the same, both architectures |
-| `contract (inventory)`, `contract (helm)`, `contract (pypi-migration)` | `inventory` in `packed-discovery-inventory`, `helm` in `packed-maven-helm-npm`, `pypi-migration` in `packed-native-pypi` (issue #518) | the same, both architectures |
-| `contract (perf-load)` | `packed-perf-integration`, before `core-integration-1` (issue #500) | the same on both architectures |
+| `contract (inventory)`, `contract (helm)`, `contract (pypi-migration)` | `inventory` in `packed-discovery-inventory`, `helm` in `packed-maven-helm-npm`, `pypi-migration` in `packed-perf-native-pypi` (issue #518) | the same, both architectures |
+| `contract (perf-load)` | `packed-perf-native-pypi`, first, with the prebuilt image (issue #518; before `core-integration-1` after #500) | the same on both architectures |
 | `contract (core-email)` | `core-email` in `packed-email-clients` (issue #518) | the same, both architectures |
-| `contract (core-native-e2e)` | split into `core-native-e2e-1` (in `packed-native-auth-oci`) and `core-native-e2e-2` (in `packed-native-pypi`), every step in exactly one of them (issue #518) | the same, both architectures |
+| `contract (core-native-e2e)` | split into `core-native-e2e-1` (in `packed-native-auth-oci`) and `core-native-e2e-2` (in `packed-perf-native-pypi`), every step in exactly one of them (issue #518) | the same, both architectures |
 | any lane not in `jobs` | unchanged: a job named after the lane | unchanged |
 | every contract job | `contract-early` (lanes that load no prebuilt image), `contract-amd64` or `contract-arm64` (issue #500) | the same three groups |
 | the seven arm64 contract legs | only with the `arm64` class (architecture-sensitive change) | always, every lane |
@@ -363,7 +368,7 @@ loads a prebuilt image, so they run in `contract-early` and start right after th
 | Lane | Steps | Lane step minutes, run 44675064060 (two shards then) |
 | --- | --- | --- |
 | `core-backup` (packed after `core-checks`) | `make backup-transfer-test` | 6.6 |
-| `core-integration-1` (packed after `perf-load`) | `make integration-test INTEGRATION_SHARD=1` (`./internal/app` and the Cargo replay) | was 9.3 with `./internal/repository`, the small packages and the published backup test |
+| `core-integration-1` | `make integration-test INTEGRATION_SHARD=1` (`./internal/app` and the Cargo replay) | was 9.3 with `./internal/repository`, the small packages and the published backup test |
 | `core-integration-2` | `make integration-test INTEGRATION_SHARD=2`, `make published-native-backup-test` | new; `./internal/repository` took 2.4 minutes of tests, the published backup test 1.6 |
 | `core-integration-3` | `make integration-test INTEGRATION_SHARD=3`, `make conan-e2e` | was 7.3 as shard 2 with the small packages; Conan 2.1 |
 
@@ -410,9 +415,11 @@ one artifact named `image-<runner arch>`. Every contract job that loads images a
 `NOTARX_APT_SIGNER_IMAGE`, `NOTARX_SCANNER_IMAGE`). Lanes set
 `NOTARX_COMPOSE_BUILD_FLAG=--no-build`; the e2e scripts use it in place of
 `--build`, and unset (local runs) they still build from source. Scripts that
-build with their own version arguments (`backup-restore-readiness`,
-`performance-baseline`) keep a per-project image name so they never touch the
-shared tag. `suite-ok` requires both image jobs whenever `go` or `console`
+build with their own version arguments (`backup-restore-readiness`) keep a
+per-project image name so they never touch the shared tag. `performance-baseline`
+(lane `perf-load`) and `email-compose-check` (lane `core-email`) inspect an image of
+their own name: under `--no-build` they tag the loaded image with it and remove only
+that tag when they clean up. `suite-ok` requires both image jobs whenever `go` or `console`
 changed. They used to be four matrix legs (one per image and architecture) behind a
 single `needs`, so an amd64 lane waited for the arm64 builds too (issue #500). The
 arm64 job runs on every Go change even when no arm64 lane does (a pull request without

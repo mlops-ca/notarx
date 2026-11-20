@@ -4,7 +4,7 @@
 # runs each shard as its own contract lane; the packages of a shard share one database
 # and run one at a time. The shards are balanced by the time of their whole CI job,
 # not by test time alone: shard 1 (./internal/app, about 2 minutes of tests) also runs
-# the official Cargo replay and is packed after perf-load, shard 2 also runs the
+# the official Cargo replay and runs as a job of its own, shard 2 also runs the
 # published backup test and shard 3 the Conan E2E. Each shard pays about 1.5 minutes
 # to start its stack and compile. Run 44684290400 (amd64): 6.0, 5.9 and 5.3 minutes
 # per job. ./internal/capacity and ./internal/lifecycle joined shard 3 before they

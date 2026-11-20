@@ -383,7 +383,7 @@ jobs:
 
   # notarx-backed Console and CLI E2E: runs when notarx or the Console
   # changed, since both execute the real stack. The Playwright suite is split
-  # into three parallel shards (every spec lands in exactly one); the shard marked
+  # into two parallel shards (every spec lands in exactly one); the shard marked
   # cli also runs the CLI E2E, against a gateway of its own, after its specs. A
   # console-only change that touches nothing but spec files runs just those specs
   # (docs/ci.md).
@@ -392,17 +392,23 @@ jobs:
     needs: build-images-amd64
     if: inputs.go || inputs.console
     runs-on: ubuntu-24.04
+    # A shard takes about 6 minutes (issue #518); a hung spec or CLI gateway must
+    # not hold suite-ok for the six-hour default.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         # Each entry names its own shard fraction, so the total cannot drift
         # from the list. Add or remove entries to change the shard count. Exactly one
         # entry runs the CLI E2E (cli: true) after its specs, so it needs no job of
-        # its own.
+        # its own. Two shards replace three (issue #518): every shard pays about
+        # 1.4 minutes of setup before its specs run. Four Playwright workers per
+        # shard ran no more specs per minute than the default two (half the CPUs),
+        # so the default stays. The cli shard ends about a minute after the other
+        # one, well before the contract lanes.
         include:
-          - { name: '1', shard: 1/3, cli: false }
-          - { name: '2', shard: 2/3, cli: true }
-          - { name: '3', shard: 3/3, cli: false }
+          - { name: '1', shard: 1/2, cli: true }
+          - { name: '2', shard: 2/2, cli: false }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

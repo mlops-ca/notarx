@@ -37,18 +37,34 @@ func TestPostgresRustFSPrivateProxyGradleOfficialClient(t *testing.T) {
 	if !filepath.IsAbs(gradle) {
 		t.Fatal("private Gradle acceptance requires the pinned, owned distribution")
 	}
+	// Every contract owns its repositories, buckets, isolated source fixture and
+	// Gateway, so the four run in parallel. Each starts the official client eight
+	// times with a fresh Gradle home; one after another they took 262 s of the
+	// maven-oci-auth lane, in parallel 204 s (issue #518, the official client is
+	// CPU-bound: a run takes about 25 s instead of 8 s, well inside its 90 s limit). The key is set here because a
+	// parallel test cannot set the environment itself.
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
 	for _, scheme := range []repository.UpstreamAuthScheme{repository.UpstreamAuthSchemeBasic, repository.UpstreamAuthSchemeBearer} {
 		for _, route := range []string{"proxy", "group"} {
 			t.Run(string(scheme)+"/"+route, func(t *testing.T) {
+				t.Parallel()
 				privateGradleCredentialsContract(t, gradle, scheme, route)
 			})
 		}
 	}
 }
 
+// newIsolatedProxyRedirectFixture leaves the package-level egress hooks alone and
+// hands its hooks only to its own UpstreamClient, so parallel tests can each own
+// one. A path that read the package-level hooks instead would resolve the
+// synthetic hosts through real DNS and fail.
+func newIsolatedProxyRedirectFixture(t *testing.T, handler http.HandlerFunc) *proxyRedirectFixture {
+	t.Helper()
+	return newProxyRedirectFixtureHooks(t, handler, false)
+}
+
 func privateGradleCredentialsContract(t *testing.T, gradle string, scheme repository.UpstreamAuthScheme, route string) {
 	t.Helper()
-	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
 	const firstSecret = "synthetic-gradle-source-v1"
 	const secondSecret = "synthetic-gradle-source-v2"
 	const wrongSecret = "synthetic-gradle-source-wrong"
@@ -58,7 +74,7 @@ func privateGradleCredentialsContract(t *testing.T, gradle string, scheme reposi
 	var expected atomic.Value
 	expected.Store(privateProxyAuthorization(scheme, firstSecret))
 	var refusal, fallbackVisits, sourceRefusals, lastSourceRefusal atomic.Int32
-	upstream := newProxyRedirectFixture(t, func(w http.ResponseWriter, r *http.Request) {
+	upstream := newIsolatedProxyRedirectFixture(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Proxy-Authorization") != "" || r.Header.Get("Cookie") != "" {
 			t.Error("client or egress credentials escaped into the source request")
 		}
