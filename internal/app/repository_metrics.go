@@ -175,6 +175,7 @@ const (
 	backgroundOperationGo
 	backgroundOperationCargo
 	backgroundOperationAPT
+	backgroundOperationHuggingFace
 	backgroundOperationFormatCount
 )
 
@@ -222,6 +223,7 @@ const (
 	repositoryAuthorizationFormatGo
 	repositoryAuthorizationFormatCargo
 	repositoryAuthorizationFormatAPT
+	repositoryAuthorizationFormatHuggingFace
 	repositoryAuthorizationFormatCount
 )
 
@@ -233,7 +235,7 @@ const (
 	repositoryGrantDenialReasonCount
 )
 
-var repositoryAuthorizationFormats = [...]string{"management", "maven", "oci", "raw", "conan", "npm", "pypi", "go", "cargo", "apt"}
+var repositoryAuthorizationFormats = [...]string{"management", "maven", "oci", "raw", "conan", "npm", "pypi", "go", "cargo", "apt", "huggingface"}
 var repositoryGrantDenialReasons = [...]string{"scope_not_granted", "grant_lookup_failed"}
 
 const maxRepositoryMetrics = 1000

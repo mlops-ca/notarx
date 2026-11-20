@@ -15066,7 +15066,8 @@
           "pypi",
           "go",
           "cargo",
-          "apt"
+          "apt",
+          "huggingface"
         ]
       },
       "FormatProfile": {

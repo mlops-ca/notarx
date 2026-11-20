@@ -137,6 +137,17 @@ var supportedFormatProfiles = []FormatProfile{
 		},
 	},
 	{
+		Format:              FormatAPT,
+		PublicationScanning: true,
+		RepositoryTypes:     []RepositoryType{RepositoryTypeProxy},
+		GroupSupported:      true,
+		PublicVisibility:    true,
+		ProxyOperations: []RepositoryOperation{
+			RepositoryOperationRead,
+			RepositoryOperationBrowse,
+		},
+	},
+	{
 		// Hosted commits and LFS upload arrive in a later phase (ADR 0027); the
 		// profile advertises what the read path implements today.
 		Format:           FormatHuggingFace,
@@ -147,17 +158,6 @@ var supportedFormatProfiles = []FormatProfile{
 			RepositoryOperationRead,
 			RepositoryOperationBrowse,
 		},
-		ProxyOperations: []RepositoryOperation{
-			RepositoryOperationRead,
-			RepositoryOperationBrowse,
-		},
-	},
-	{
-		Format:              FormatAPT,
-		PublicationScanning: true,
-		RepositoryTypes:     []RepositoryType{RepositoryTypeProxy},
-		GroupSupported:      true,
-		PublicVisibility:    true,
 		ProxyOperations: []RepositoryOperation{
 			RepositoryOperationRead,
 			RepositoryOperationBrowse,

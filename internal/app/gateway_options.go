@@ -8,6 +8,7 @@ import (
 
 	"github.com/mlops-ca/notarx/internal/access"
 	helmformat "github.com/mlops-ca/notarx/internal/format/helm"
+	huggingfaceformat "github.com/mlops-ca/notarx/internal/format/huggingface"
 	nugetformat "github.com/mlops-ca/notarx/internal/format/nuget"
 	helmdist "github.com/mlops-ca/notarx/internal/helmdistribution"
 	dist "github.com/mlops-ca/notarx/internal/nugetdistribution"
@@ -92,9 +93,12 @@ type GatewayOptions struct {
 	RubyGemsStore          rubygemspublication.Store
 	RubyGemsDistribution   rubydist.Store
 	RubyGemsObjects        ObjectStore
-	Adapter                Adapter
-	Authenticator          Authenticator
-	Caches                 GatewayCaches
+	// HuggingFace is the Hugging Face format module (ADR 0027); nil leaves the format
+	// registered for management only, without a protocol surface.
+	HuggingFace   *huggingfaceformat.Module
+	Adapter       Adapter
+	Authenticator Authenticator
+	Caches        GatewayCaches
 	// Upstream defaults to the standard HTTP transport. If it also implements
 	// another format's client port, that implementation is used for that format.
 	Upstream OCIClient

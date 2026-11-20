@@ -353,6 +353,9 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 		modules = append(modules, rubyGemsModule)
 		rubyGemsPreview = rubyGemsModule.Preview()
 	}
+	if options.HuggingFace != nil {
+		modules = append(modules, options.HuggingFace)
+	}
 	formatModules, err := formatmodule.New(modules...)
 	if err != nil {
 		return nil, err

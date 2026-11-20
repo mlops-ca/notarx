@@ -26,6 +26,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/database"
 	"github.com/mlops-ca/notarx/internal/evidence"
 	helmformat "github.com/mlops-ca/notarx/internal/format/helm"
+	huggingfaceformat "github.com/mlops-ca/notarx/internal/format/huggingface"
 	nugetformat "github.com/mlops-ca/notarx/internal/format/nuget"
 	rubygemsformat "github.com/mlops-ca/notarx/internal/format/rubygems"
 	helmdist "github.com/mlops-ca/notarx/internal/helmdistribution"
@@ -540,7 +541,13 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 				"detail", "NOTARX_REPOSITORY_READERS is empty and NOTARX_LEGACY_READ_DEFAULT=allow, so any authenticated caller may read a legacy repository with no grant",
 				"change", "unset NOTARX_LEGACY_READ_DEFAULT to deny unmatched readers once every reading actor has a reader pattern or a per-repository grant")
 		}
+		huggingFace, setupErr := huggingfaceformat.New(huggingfaceformat.Options{Store: huggingfaceformat.NewStore(databasePool, huggingFaceDialect(cfg.DatabaseDriver))})
+		if setupErr != nil {
+			slog.Error("configure Hugging Face format", "error", setupErr)
+			return 1
+		}
 		gatewayOptions := app.GatewayOptions{
+			HuggingFace:       huggingFace,
 			Dependencies:      dependencies,
 			Store:             gatewayStore,
 			ConanPublications: store,
@@ -667,4 +674,13 @@ func nodeRoleStrings(roles []config.NodeRole) []string {
 		values = append(values, string(role))
 	}
 	return values
+}
+
+// huggingFaceDialect maps the configured database driver to the SQL variant of the
+// Hugging Face store; an empty driver is PostgreSQL, as database.Open reads it.
+func huggingFaceDialect(driver string) huggingfaceformat.Dialect {
+	if driver == database.DriverMySQL {
+		return huggingfaceformat.MySQL
+	}
+	return huggingfaceformat.Postgres
 }

@@ -1573,15 +1573,16 @@ func (e EmailTestInputScenario) Valid() bool {
 
 // Defines values for Format.
 const (
-	FormatApt   Format = "apt"
-	FormatCargo Format = "cargo"
-	FormatConan Format = "conan"
-	FormatGo    Format = "go"
-	FormatMaven Format = "maven"
-	FormatNpm   Format = "npm"
-	FormatOci   Format = "oci"
-	FormatPypi  Format = "pypi"
-	FormatRaw   Format = "raw"
+	FormatApt         Format = "apt"
+	FormatCargo       Format = "cargo"
+	FormatConan       Format = "conan"
+	FormatGo          Format = "go"
+	FormatHuggingface Format = "huggingface"
+	FormatMaven       Format = "maven"
+	FormatNpm         Format = "npm"
+	FormatOci         Format = "oci"
+	FormatPypi        Format = "pypi"
+	FormatRaw         Format = "raw"
 )
 
 // Valid indicates whether the value is a known member of the Format enum.
@@ -1594,6 +1595,8 @@ func (e Format) Valid() bool {
 	case FormatConan:
 		return true
 	case FormatGo:
+		return true
+	case FormatHuggingface:
 		return true
 	case FormatMaven:
 		return true
