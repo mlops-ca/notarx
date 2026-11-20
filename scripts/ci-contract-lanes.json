@@ -10,31 +10,31 @@
       "core-checks",
       "core-backup"
     ],
-    "packed-native-discovery": [
-      "core-native-e2e-1",
-      "oci-discovery"
-    ],
-    "packed-native-auth-pypi": [
-      "core-native-e2e-2",
-      "six-format-auth",
-      "pypi-migration"
-    ],
     "packed-email-clients": [
       "core-email",
       "migration-clients"
     ],
-    "packed-nuget-migrations": [
-      "nuget",
-      "oci-migration",
+    "packed-native-pypi": [
+      "core-native-e2e-2",
+      "pypi-migration"
+    ],
+    "packed-native-auth-oci": [
+      "core-native-e2e-1",
+      "six-format-auth",
+      "oci-migration"
+    ],
+    "packed-maven-helm-npm": [
+      "maven-oci-auth",
+      "helm",
       "npm-migration"
     ],
-    "packed-maven-helm": [
-      "maven-oci-auth",
-      "helm"
-    ],
-    "packed-inventory-rubygems": [
-      "inventory",
+    "packed-nuget-rubygems": [
+      "nuget",
       "rubygems"
+    ],
+    "packed-discovery-inventory": [
+      "oci-discovery",
+      "inventory"
     ]
   },
   "lanes": {

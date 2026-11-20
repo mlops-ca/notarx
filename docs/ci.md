@@ -200,16 +200,16 @@ lane's verdict, duration and failed steps in the job's step summary; the job fai
 when any lane failed. The arm64 leg of a packed job runs only the lanes whose tier runs
 on arm64 in that scope.
 
-| Job | Lanes | Lane step minutes (run 44692652060, attempt 1) |
+| Job | Lanes | Lane step minutes (run 44692652060 attempt 1, the halves and `core-email` from run 44710459152) |
 | --- | --- | --- |
 | `packed-perf-integration` | `perf-load`, `core-integration-1` | 2.1 + 4.6 |
 | `packed-checks-backup` | `core-checks`, `core-backup` | 1.9 + 4.3 |
-| `packed-native-discovery` | `core-native-e2e-1`, `oci-discovery` | about 3.8 + 2.0 |
-| `packed-native-auth-pypi` | `core-native-e2e-2`, `six-format-auth`, `pypi-migration` | about 4.1 + 1.1 + 0.6 |
-| `packed-email-clients` | `core-email`, `migration-clients` | 6.8 (with the image rebuild described below) + 0.8 |
-| `packed-nuget-migrations` | `nuget`, `oci-migration`, `npm-migration` | 4.2 + 0.5 + 0.6 |
-| `packed-maven-helm` | `maven-oci-auth`, `helm` | 4.5 + 1.7 |
-| `packed-inventory-rubygems` | `inventory`, `rubygems` | 3.5 + 2.7 |
+| `packed-email-clients` | `core-email`, `migration-clients` | 5.4 + 0.8 |
+| `packed-native-pypi` | `core-native-e2e-2`, `pypi-migration` | 4.9 + 0.6 |
+| `packed-native-auth-oci` | `core-native-e2e-1`, `six-format-auth`, `oci-migration` | 3.9 + 1.1 + 0.5 |
+| `packed-maven-helm-npm` | `maven-oci-auth`, `helm`, `npm-migration` | 4.5 + 1.7 + 0.6 |
+| `packed-nuget-rubygems` | `nuget`, `rubygems` | 4.2 + 2.7 |
+| `packed-discovery-inventory` | `oci-discovery`, `inventory` | 2.0 + 3.5 |
 
 The former `core-native-e2e` lane (about 8 minutes, the critical path of a Go-only pull
 request after #500) is two lanes now, split by step duration: `core-native-e2e-1` runs
@@ -222,9 +222,11 @@ tags the loaded image with that name and removes the tag when it cleans up (issu
 The six image jobs keep the job count of #500.
 
 A job's timeout is the sum of its lanes' timeouts and it installs the union of their
-tool needs. A packed job takes longer than its longest lane (`packed-nuget-migrations`
-about 7 minutes against 5), so only lanes that stay well under the critical path of
-the suite (the Console shards, about 9 to 11 minutes after the start) are packed. The lanes of
+tool needs. A packed job takes the sum of its lanes plus about 0.7 minutes of setup.
+The image jobs start when the amd64 images are ready, about 3 minutes into the run, so
+each is packed to about 6 minutes of lane steps and ends by about 10 minutes, under
+the 12-minute verdict of issue #500; lane times vary by a minute or more between runs
+(`oci-discovery` took 2.0 and 3.2 minutes in two runs). The lanes of
 a job share one runner and Docker daemon: each lane's scripts own their Compose
 projects and tear them down on exit, and a cancelled job stops after the lane that
 was running (the lanes after it are reported as not run). A lane that crashes is
@@ -336,14 +338,14 @@ Issue #482 reshaped the pull request suite (ADR 0016 and ADR 0024, amendments of
 | `console-e2e` shards `1` to `3` and `cli` | shards `1` to `3`; shard `2` runs the CLI E2E after its specs (issue #500) | the same |
 | `object-store-contract` (3 jobs: RustFS, MinIO twice) | one `object-store-contract` job running the three configurations in turn | the same job |
 | `contract (core-backup)` | `core-backup` (in `packed-checks-backup`), `core-integration-1` (in `packed-perf-integration`), `core-integration-2`, `core-integration-3`, all in `contract-early` | the same four lanes on both architectures |
-| `contract (core-checks)`, `contract (six-format-auth)` | `core-checks` in `packed-checks-backup` (`contract-early`), `six-format-auth` in `packed-native-auth-pypi` (issue #518; `packed-rubygems-discovery-auth` after #500) | the same, both architectures |
-| `contract (nuget)`, `contract (oci-migration)`, `contract (npm-migration)` | `packed-nuget-migrations` | the same, both architectures |
-| `contract (maven-oci-auth)`, `contract (migration-clients)` | `maven-oci-auth` in `packed-maven-helm`, `migration-clients` in `packed-email-clients` (issue #518) | the same, both architectures |
-| `contract (rubygems)`, `contract (oci-discovery)` | `rubygems` in `packed-inventory-rubygems`, `oci-discovery` in `packed-native-discovery` (issue #518) | the same, both architectures |
-| `contract (inventory)`, `contract (helm)`, `contract (pypi-migration)` | `inventory` in `packed-inventory-rubygems`, `helm` in `packed-maven-helm`, `pypi-migration` in `packed-native-auth-pypi` (issue #518) | the same, both architectures |
+| `contract (core-checks)`, `contract (six-format-auth)` | `core-checks` in `packed-checks-backup` (`contract-early`), `six-format-auth` in `packed-native-auth-oci` (issue #518; `packed-rubygems-discovery-auth` after #500) | the same, both architectures |
+| `contract (nuget)`, `contract (oci-migration)`, `contract (npm-migration)` | `nuget` in `packed-nuget-rubygems`, `oci-migration` in `packed-native-auth-oci`, `npm-migration` in `packed-maven-helm-npm` (issue #518) | the same, both architectures |
+| `contract (maven-oci-auth)`, `contract (migration-clients)` | `maven-oci-auth` in `packed-maven-helm-npm`, `migration-clients` in `packed-email-clients` (issue #518) | the same, both architectures |
+| `contract (rubygems)`, `contract (oci-discovery)` | `rubygems` in `packed-nuget-rubygems`, `oci-discovery` in `packed-discovery-inventory` (issue #518) | the same, both architectures |
+| `contract (inventory)`, `contract (helm)`, `contract (pypi-migration)` | `inventory` in `packed-discovery-inventory`, `helm` in `packed-maven-helm-npm`, `pypi-migration` in `packed-native-pypi` (issue #518) | the same, both architectures |
 | `contract (perf-load)` | `packed-perf-integration`, before `core-integration-1` (issue #500) | the same on both architectures |
 | `contract (core-email)` | `core-email` in `packed-email-clients` (issue #518) | the same, both architectures |
-| `contract (core-native-e2e)` | split into `core-native-e2e-1` (in `packed-native-discovery`) and `core-native-e2e-2` (in `packed-native-auth-pypi`), every step in exactly one of them (issue #518) | the same, both architectures |
+| `contract (core-native-e2e)` | split into `core-native-e2e-1` (in `packed-native-auth-oci`) and `core-native-e2e-2` (in `packed-native-pypi`), every step in exactly one of them (issue #518) | the same, both architectures |
 | any lane not in `jobs` | unchanged: a job named after the lane | unchanged |
 | every contract job | `contract-early` (lanes that load no prebuilt image), `contract-amd64` or `contract-arm64` (issue #500) | the same three groups |
 | the seven arm64 contract legs | only with the `arm64` class (architecture-sensitive change) | always, every lane |
