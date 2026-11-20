@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -181,7 +182,7 @@ func (m NativeCargoMaintenance) StartScheduler(ctx context.Context, interval tim
 	if interval <= 0 {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		window := m.RecoveryWindow
 		if window <= 0 {
 			window = 24 * time.Hour
@@ -201,14 +202,14 @@ func (m NativeCargoMaintenance) StartScheduler(ctx context.Context, interval tim
 				_ = m.EnqueueReclaimJobs(ctx, now().UTC().Add(-window), 200)
 			}
 		}
-	}()
+	})
 }
 
 func (m NativeCargoMaintenance) StartWorker(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		_ = m.RunReclaimJobs(ctx, 100)
 		wake := notificationWake(ctx, m.Store, repository.LifecycleJobChannel(repository.LifecycleJobReclaim))
 		ticker := time.NewTicker(interval)
@@ -223,5 +224,5 @@ func (m NativeCargoMaintenance) StartWorker(ctx context.Context, interval time.D
 				_ = m.RunReclaimJobs(ctx, 100)
 			}
 		}
-	}()
+	})
 }

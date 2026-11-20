@@ -9,7 +9,7 @@ import (
 )
 
 const helmSessionColumns = `id::text,repository_id::text,name,version,digest,size,provenance_digest,provenance_size,actor,state,object_key,provenance_key,metadata_json,chart_yaml,created_at,expires_at,committed_at,collected_at,source_version`
-const helmPublicationColumns = `repository_id::text,name,version,session_id::text,digest,object_key,size,provenance_digest,provenance_key,provenance_size,metadata_json,chart_yaml,publisher,published_at,governance_version::text,tombstoned,quarantined,governance_updated_at,governance_updated_by,governance_reason`
+const helmPublicationColumns = `repository_id::text,name,version,session_id::text,digest,object_key,size,provenance_digest,provenance_key,provenance_size,metadata_json,chart_yaml,publisher,published_at,governance_version::text,tombstoned,quarantined,governance_updated_at,governance_updated_by,governance_reason,body_digest,body_size,body_key`
 
 type helmScanner interface{ Scan(...any) error }
 
@@ -28,17 +28,28 @@ func scanHelmSession(row helmScanner) (HelmSession, error) {
 	}
 	return in, err
 }
-func scanHelmPublication(row helmScanner) (HelmPublication, error) {
+func (s *PostgresStore) scanHelmPublication(ctx context.Context, row helmScanner) (HelmPublication, error) {
+	in, ref, err := scanHelmPublicationRef(row)
+	if err != nil {
+		return in, err
+	}
+	in.ChartYAML, err = s.internalize(ctx, in.ChartYAML, ref)
+	return in, err
+}
+
+// scanHelmPublicationRef reads a publication row. The chart.yaml of an externalised one is left empty; ref names it.
+func scanHelmPublicationRef(row helmScanner) (HelmPublication, payloadRef, error) {
 	var in HelmPublication
 	var updated sql.NullTime
-	err := row.Scan(&in.RepositoryID, &in.Name, &in.Version, &in.SessionID, &in.Digest, &in.ObjectKey, &in.Size, &in.ProvenanceDigest, &in.ProvenanceKey, &in.ProvenanceSize, &in.MetadataJSON, &in.ChartYAML, &in.Publisher, &in.PublishedAt, &in.Governance.Version, &in.Governance.Tombstoned, &in.Governance.Quarantined, &updated, &in.Governance.UpdatedBy, &in.Governance.Reason)
+	var ref payloadRef
+	err := row.Scan(&in.RepositoryID, &in.Name, &in.Version, &in.SessionID, &in.Digest, &in.ObjectKey, &in.Size, &in.ProvenanceDigest, &in.ProvenanceKey, &in.ProvenanceSize, &in.MetadataJSON, &in.ChartYAML, &in.Publisher, &in.PublishedAt, &in.Governance.Version, &in.Governance.Tombstoned, &in.Governance.Quarantined, &updated, &in.Governance.UpdatedBy, &in.Governance.Reason, &ref.digest, &ref.size, &ref.key)
 	if updated.Valid {
 		in.Governance.UpdatedAt = updated.Time
 	}
 	if errors.Is(err, sql.ErrNoRows) {
-		err = ErrNotFound
+		return in, ref, ErrNotFound
 	}
-	return in, err
+	return in, ref, err
 }
 func (s *PostgresStore) helmTransaction(ctx context.Context, repo string) (*sql.Tx, string, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -125,7 +136,7 @@ func (s *PostgresStore) CommitHelmPublication(ctx context.Context, id, actor str
 		return HelmPublication{}, false, ErrHelmPublicationConflict
 	}
 	if in.State == "committed" {
-		p, e := scanHelmPublication(tx.QueryRowContext(ctx, `SELECT `+helmPublicationColumns+` FROM native_helm_publications WHERE session_id=$1::uuid`, id))
+		p, e := s.scanHelmPublication(ctx, tx.QueryRowContext(ctx, `SELECT `+helmPublicationColumns+` FROM native_helm_publications WHERE session_id=$1::uuid`, id))
 		if e != nil {
 			return HelmPublication{}, false, e
 		}
@@ -140,7 +151,7 @@ func (s *PostgresStore) CommitHelmPublication(ctx context.Context, id, actor str
 	if _, err = tx.ExecContext(ctx, `UPDATE native_helm_publication_sessions SET state='committed',committed_at=now() WHERE id=$1::uuid`, id); err != nil {
 		return HelmPublication{}, false, err
 	}
-	p, err := scanHelmPublication(tx.QueryRowContext(ctx, `INSERT INTO native_helm_publications(repository_id,name,version,session_id,digest,object_key,size,provenance_digest,provenance_key,provenance_size,metadata_json,chart_yaml,publisher,published_at) SELECT repository_id,name,version,id,digest,object_key,size,provenance_digest,provenance_key,provenance_size,metadata_json,chart_yaml,actor,committed_at FROM native_helm_publication_sessions WHERE id=$1::uuid RETURNING `+helmPublicationColumns, id))
+	p, err := s.insertHelmPublicationFromSession(ctx, tx, in)
 	if err != nil {
 		return HelmPublication{}, false, err
 	}
@@ -171,7 +182,7 @@ func releaseExpiredHelmSessions(ctx context.Context, tx *sql.Tx, candidates stri
 	return releaseExpiredSessions(ctx, tx, "native_helm_publication_sessions", "s.size+s.provenance_size", "'pending'", candidates, args...)
 }
 func (s *PostgresStore) GetHelmPublication(ctx context.Context, repo, name, version string) (HelmPublication, error) {
-	return scanHelmPublication(s.db.QueryRowContext(ctx, `SELECT `+helmPublicationColumns+` FROM native_helm_publications WHERE repository_id=$1::uuid AND name=$2 AND version=$3 AND EXISTS(SELECT 1 FROM hosted_repositories h WHERE h.id=repository_id AND h.format='helm' AND h.repo_type IN ('hosted','proxy') AND h.state='active')`, repo, name, version))
+	return s.scanHelmPublication(ctx, s.db.QueryRowContext(ctx, `SELECT `+helmPublicationColumns+` FROM native_helm_publications WHERE repository_id=$1::uuid AND name=$2 AND version=$3 AND EXISTS(SELECT 1 FROM hosted_repositories h WHERE h.id=repository_id AND h.format='helm' AND h.repo_type IN ('hosted','proxy') AND h.state='active')`, repo, name, version))
 }
 func (s *PostgresStore) ListHelmPublications(ctx context.Context, repo string, limit int) ([]HelmPublication, error) {
 	if limit < 1 || limit > 4097 {
@@ -185,14 +196,28 @@ func (s *PostgresStore) ListHelmPublications(ctx context.Context, repo string, l
 	}
 	defer func() { _ = rows.Close() }()
 	out := []HelmPublication{}
+	var refs []payloadRef
 	for rows.Next() {
-		p, e := scanHelmPublication(rows)
+		p, ref, e := scanHelmPublicationRef(rows)
 		if e != nil {
 			return nil, e
 		}
 		out = append(out, p)
+		refs = append(refs, ref)
 	}
-	return out, rows.Err()
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	// The chart.yaml objects are read after the rows are closed, so the cursor does not wait on the object store.
+	_ = rows.Close()
+	slots := make([]payloadSlot, len(out))
+	for i := range out {
+		slots[i] = payloadSlot{ref: refs[i], set: func(data []byte) { out[i].ChartYAML = data }}
+	}
+	if err = s.resolvePayloads(ctx, slots); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 func (s *PostgresStore) ExpireHelmSessions(ctx context.Context, now time.Time, limit int) ([]HelmSession, error) {
 	if limit < 1 || limit > 1000 {
@@ -249,4 +274,16 @@ func (s *PostgresStore) helmWriteTransaction(ctx context.Context, id, version st
 		return s.helmSourceTransaction(ctx, id, version)
 	}
 	return s.helmTransaction(ctx, id)
+}
+
+// insertHelmPublicationFromSession publishes a committed session: the row copies the session's
+// metadata and moves chart.yaml to the object store when it is above the inline threshold. The object is
+// written inside the commit transaction (issue #501 moves it out).
+func (s *PostgresStore) insertHelmPublicationFromSession(ctx context.Context, tx *sql.Tx, session HelmSession) (HelmPublication, error) {
+	chart, ref, err := s.externalize(ctx, session.ChartYAML)
+	if err != nil {
+		return HelmPublication{}, err
+	}
+	bodyDigest, bodySize, bodyKey := ref.columns()
+	return s.scanHelmPublication(ctx, tx.QueryRowContext(ctx, `INSERT INTO native_helm_publications(repository_id,name,version,session_id,digest,object_key,size,provenance_digest,provenance_key,provenance_size,metadata_json,chart_yaml,publisher,published_at,body_digest,body_size,body_key) SELECT repository_id,name,version,id,digest,object_key,size,provenance_digest,provenance_key,provenance_size,metadata_json,$2::bytea,actor,committed_at,$3::text,$4::bigint,$5::text FROM native_helm_publication_sessions WHERE id=$1::uuid RETURNING `+helmPublicationColumns, session.ID, chart, bodyDigest, bodySize, bodyKey))
 }

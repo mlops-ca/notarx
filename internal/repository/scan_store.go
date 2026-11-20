@@ -55,7 +55,7 @@ const MaxScanFindingBatch = 1000
 // store at BodyKey and Body is empty; a small one is kept inline. BodyDigest and BodySize always describe
 // the document as received (the object stored at BodyKey); an inline Body is held as jsonb (JSON on
 // MySQL, ADR 0030 section 2), so it is the same document but not necessarily the same bytes. Verify or
-// re-serve the exact bytes through BodyKey.
+// re-serve the exact bytes through BodyKey. ScanStore.ScanSBOMBody resolves either form.
 type ScanSBOM struct {
 	ID               string
 	RepositoryID     string
@@ -203,6 +203,10 @@ type ScanStore interface {
 	PutScanSBOM(ctx context.Context, sbom ScanSBOM) (ScanSBOM, error)
 	GetScanSBOM(ctx context.Context, repositoryID, artifactDigest, kind, source string) (ScanSBOM, error)
 	ListScanSBOMs(ctx context.Context, repositoryID, artifactDigest string) ([]ScanSBOM, error)
+	// ScanSBOMBody returns the document of a stored SBOM: its inline body, or the object at its BodyKey read
+	// through the store's payload store (ErrPayloadStoreUnavailable when none is configured). Get and List
+	// leave Body empty for a document above NOTARX_INLINE_MAX_BYTES.
+	ScanSBOMBody(ctx context.Context, sbom ScanSBOM) ([]byte, error)
 
 	// InsertScanFindings stores at most MaxScanFindingBatch findings under their vulnerability id. It is
 	// not visible through GetScanResult until SwapScanResult points the artifact at that id.

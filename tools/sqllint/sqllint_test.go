@@ -126,3 +126,61 @@ func TestCheckNewStringsRatchet(t *testing.T) {
 		t.Error("FormatNewStringAllowlist lost an entry")
 	}
 }
+
+func TestBareIDOrder(t *testing.T) {
+	cases := []struct {
+		sql  string
+		want bool
+	}{
+		{"SELECT id::text, name FROM t ORDER BY id", true},
+		{"SELECT id::text, name FROM t WHERE id > $1::uuid ORDER BY id LIMIT $2", true},
+		{"SELECT id::text FROM t ORDER BY created_at DESC, id DESC LIMIT 1", true},
+		{"SELECT id::text FROM t ORDER BY created_at, id FOR UPDATE SKIP LOCKED", true},
+		{"SELECT id::text FROM t ORDER BY t.id", false},
+		{"SELECT id::text FROM t ORDER BY created_at", false},
+		{"SELECT id::text FROM t ORDER BY id_hint", false},
+		{"SELECT id FROM t ORDER BY id", false},
+		{"SELECT repository_id::text FROM t ORDER BY id", false},
+		{"SELECT 1 FROM t WHERE x IN (SELECT id FROM u ORDER BY id) ", false},
+	}
+	for _, c := range cases {
+		if got := BareIDOrder(c.sql); got != c.want {
+			t.Errorf("BareIDOrder(%q) = %v, want %v", c.sql, got, c.want)
+		}
+	}
+}
+
+func TestScanExpandsStringConstantsAndReportsBareIDOrder(t *testing.T) {
+	root := t.TempDir()
+	write := func(rel string, lines ...string) {
+		path := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tick := "`"
+	write("internal/a/columns.go", "package a", "const columns = "+tick+"id::text, name"+tick, "const alias = columns")
+	write("internal/a/bad.go", "package a", "const bad = "+tick+"SELECT "+tick+" + alias + "+tick+" FROM t ORDER BY id"+tick, "var inline = "+tick+"SELECT id::text FROM t ORDER BY id"+tick)
+	write("internal/a/good.go", "package a",
+		"const good = ("+tick+"SELECT "+tick+" + columns + "+tick+" FROM t ORDER BY t.id"+tick+")",
+		"var dynamic = "+tick+"SELECT "+tick+" + columns + suffix() + "+tick+" ORDER BY t.id"+tick,
+		"var number = 1 + 2",
+		"func suffix() string { return \"\" }")
+	write("internal/a/bad_test.go", "package a", "var q = "+tick+"SELECT id::text FROM t ORDER BY id"+tick)
+	write("internal/b/other.go", "package b", "var q = "+tick+"SELECT "+tick+" + columns + "+tick+" FROM t ORDER BY id"+tick, "const columns = "+tick+"id::text"+tick)
+	result, err := Scan(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"internal/a/bad.go:2:13", "internal/a/bad.go:3:14", "internal/b/other.go:2:9"}
+	if strings.Join(result.BareIDOrder, ",") != strings.Join(want, ",") {
+		t.Fatalf("BareIDOrder = %v, want %v", result.BareIDOrder, want)
+	}
+	problems := strings.Join(Check(Result{BareIDOrder: result.BareIDOrder}), "\n")
+	if !strings.Contains(problems, "internal/a/bad.go:2:13: the statement selects id::text and orders by a bare id") {
+		t.Fatalf("Check output:\n%s", problems)
+	}
+}

@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/config"
 	"github.com/mlops-ca/notarx/internal/jose"
 	"github.com/mlops-ca/notarx/internal/readcache"
@@ -96,7 +97,7 @@ func (r *IssuerRuntime) StartRotation(ctx context.Context) {
 	if !r.Enabled() {
 		return
 	}
-	go r.Manager.Run(ctx, issuerRotationInterval)
+	background.Go(ctx, func() { r.Manager.Run(ctx, issuerRotationInterval) })
 }
 
 // registerIssuerRoutes mounts the two anonymous routes. They are always registered so that a

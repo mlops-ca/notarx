@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -73,7 +74,7 @@ func (m NativePromotion) Start(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -84,7 +85,7 @@ func (m NativePromotion) Start(ctx context.Context, interval time.Duration) {
 				_ = m.RunJobs(ctx, 100)
 			}
 		}
-	}()
+	})
 }
 func (m NativePromotion) run(ctx context.Context, job repository.LifecycleJob) error {
 	var p PromotionPayload

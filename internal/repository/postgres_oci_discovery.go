@@ -53,6 +53,12 @@ func (s *PostgresStore) SaveOCIDiscoverySnapshot(ctx context.Context, snapshot d
 	if err != nil {
 		return err
 	}
+	// A payload above the inline threshold goes to the object store; the row then holds JSON null.
+	inline, ref, err := s.externalizeJSON(ctx, data, "null")
+	if err != nil {
+		return err
+	}
+	bodyDigest, bodySize, bodyKey := ref.columns()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -65,9 +71,13 @@ func (s *PostgresStore) SaveOCIDiscoverySnapshot(ctx context.Context, snapshot d
 		return err
 	}
 	var prior []byte
-	err = tx.QueryRowContext(ctx, `SELECT payload FROM oci_discovery_snapshots WHERE id=$1`, snapshot.ID).Scan(&prior)
+	var priorRef payloadRef
+	err = tx.QueryRowContext(ctx, `SELECT payload,body_digest,body_size,body_key FROM oci_discovery_snapshots WHERE id=$1`, snapshot.ID).Scan(&prior, &priorRef.digest, &priorRef.size, &priorRef.key)
 	if err == nil {
 		var existing discovery.Snapshot
+		if prior, err = s.internalize(ctx, prior, priorRef); err != nil {
+			return err
+		}
 		if json.Unmarshal(prior, &existing) != nil || !sameOCISnapshot(existing, snapshot) {
 			return discovery.ErrChanged
 		}
@@ -86,7 +96,7 @@ func (s *PostgresStore) SaveOCIDiscoverySnapshot(ctx context.Context, snapshot d
 	if active >= 32 {
 		return discovery.ErrLimit
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO oci_discovery_snapshots(id,owner,kind,payload,expires_at) VALUES ($1,$2,$3,$4::jsonb,$5)`, snapshot.ID, snapshot.Owner, snapshot.Kind, string(data), snapshot.ExpiresAt); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO oci_discovery_snapshots(id,owner,kind,payload,expires_at,body_digest,body_size,body_key) VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7,$8)`, snapshot.ID, snapshot.Owner, snapshot.Kind, inline, snapshot.ExpiresAt, bodyDigest, bodySize, bodyKey); err != nil {
 		return err
 	}
 	if err := insertAudit(ctx, tx, ociSnapshotAudit(snapshot)); err != nil {
@@ -102,11 +112,15 @@ func (s *PostgresStore) GetOCIDiscoverySnapshot(ctx context.Context, id, owner s
 	}
 	defer func() { _ = tx.Rollback() }()
 	var data []byte
-	err = tx.QueryRowContext(ctx, `SELECT payload FROM oci_discovery_snapshots WHERE id=$1::uuid AND owner=$2 AND expires_at>clock_timestamp()`, id, owner).Scan(&data)
+	var ref payloadRef
+	err = tx.QueryRowContext(ctx, `SELECT payload,body_digest,body_size,body_key FROM oci_discovery_snapshots WHERE id=$1::uuid AND owner=$2 AND expires_at>clock_timestamp()`, id, owner).Scan(&data, &ref.digest, &ref.size, &ref.key)
 	if errors.Is(err, sql.ErrNoRows) {
 		return discovery.Snapshot{}, discovery.ErrNotFound
 	}
 	if err != nil {
+		return discovery.Snapshot{}, err
+	}
+	if data, err = s.internalize(ctx, data, ref); err != nil {
 		return discovery.Snapshot{}, err
 	}
 	var snapshot discovery.Snapshot

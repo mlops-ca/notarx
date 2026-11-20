@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/testsupport"
 )
 
 // TestPostgresTypedKeyQueriesUseIndexes plans the production statements of the hot
@@ -94,5 +95,76 @@ func TestPostgresTypedKeyQueriesUseIndexes(t *testing.T) {
 				t.Fatalf("%s does not use an index on %s: %s", tc.name, tc.relation, raw)
 			}
 		})
+	}
+}
+
+// TestPostgresIDKeysetListingsReadTheKeyInOrder plans the id-keyset listings. Each selects id::text,
+// so a bare ORDER BY id would sort that text output column and add a Sort node on every page; the
+// listings qualify the column and read the primary key in order instead (ADR 0023 sections 4 and 8).
+func TestPostgresIDKeysetListingsReadTheKeyInOrder(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is required for PostgreSQL integration tests")
+	}
+	store, err := NewPostgresStore(databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	id := uuid.NewString()
+	for _, tc := range []struct {
+		name, relation, query string
+		args                  []any
+	}{
+		{"workload issuers", "workload_issuers", listWorkloadIssuersQuery, []any{id, 50}},
+		{"workload trust policies", "workload_trust_policies", listWorkloadPoliciesQuery, []any{id, 50}},
+		{"service accounts", "service_accounts", listServiceAccountsQuery, []any{id, 50}},
+		{"service account API keys", "api_keys", listServiceAccountKeysQuery, []any{id, id, 50}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			testsupport.RequireOrderedByIndex(t, store.db, tc.relation, tc.query, tc.args...)
+		})
+	}
+}
+
+// TestPostgresGrantIndexQueryScansItsIndex plans the candidate query of the aggregate lifecycle job listing with
+// sequential, bitmap and sort plans discouraged and expects it to find a principal's grants through
+// repository_grants_principal_idx (the primary key leads with repository_id and cannot serve it).
+func TestPostgresGrantIndexQueryScansItsIndex(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is required for PostgreSQL integration tests")
+	}
+	store, err := NewPostgresStore(databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	tx, err := store.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, setting := range []string{"enable_seqscan", "enable_bitmapscan"} {
+		if _, err = tx.Exec("SET LOCAL " + setting + " = off"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var raw []byte
+	if err = tx.QueryRow("EXPLAIN (FORMAT JSON) "+listRepositoriesGrantedToPrincipalQuery, "alice", "repositories:admin").Scan(&raw); err != nil {
+		t.Fatal(err)
+	}
+	var plans []struct {
+		Plan explainNode `json:"Plan"`
+	}
+	if err = json.Unmarshal(raw, &plans); err != nil || len(plans) != 1 {
+		t.Fatalf("explain output: %s %v", raw, err)
+	}
+	found := false
+	plans[0].Plan.walk(func(n explainNode) {
+		found = found || n.Relation == "repository_grants" && strings.Contains(n.IndexName, "repository_grants_principal_idx")
+	})
+	if !found {
+		t.Fatalf("the candidate query does not scan repository_grants_principal_idx: %s", raw)
 	}
 }

@@ -208,7 +208,7 @@ func (s *PostgresStore) CreateRepositoryQuotaAlertRule(ctx context.Context, v Re
 }
 
 func (s *PostgresStore) ListRepositoryQuotaAlertRules(ctx context.Context) ([]RepositoryQuotaAlertRule, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+quotaRuleColumns+` FROM repository_quota_alert_rules ORDER BY id LIMIT 100`)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+quotaRuleColumns+` FROM repository_quota_alert_rules ORDER BY repository_quota_alert_rules.id LIMIT 100`)
 	if err != nil {
 		return nil, err
 	}

@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/background"
 	formatmodule "github.com/mlops-ca/notarx/internal/format"
 	rawformat "github.com/mlops-ca/notarx/internal/format/raw"
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -123,7 +124,7 @@ func (m *CacheMaintenance) Start(ctx context.Context, interval time.Duration) <-
 		close(done)
 		return done
 	}
-	go func() {
+	background.Go(ctx, func() {
 		defer close(done)
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -138,7 +139,7 @@ func (m *CacheMaintenance) Start(ctx context.Context, interval time.Duration) <-
 				_ = m.Run(ctx)
 			}
 		}
-	}()
+	})
 	return done
 }
 

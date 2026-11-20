@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/replication"
@@ -176,7 +177,7 @@ func (m NativePyPIPromotion) Start(ctx context.Context, interval time.Duration) 
 	if interval <= 0 {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		_ = m.RunJobs(ctx, 100)
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -188,7 +189,7 @@ func (m NativePyPIPromotion) Start(ctx context.Context, interval time.Duration) 
 				_ = m.RunJobs(ctx, 100)
 			}
 		}
-	}()
+	})
 }
 
 type PyPIReplication struct {
@@ -243,7 +244,7 @@ func (r PyPIReplication) Start(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		_ = r.RunJobs(ctx, 100)
 		wake := notificationWake(ctx, r.Store, repository.ReplicationPlanChannel)
 		ticker := time.NewTicker(interval)
@@ -258,7 +259,7 @@ func (r PyPIReplication) Start(ctx context.Context, interval time.Duration) {
 				_ = r.RunJobs(ctx, 100)
 			}
 		}
-	}()
+	})
 }
 
 func (r PyPIReplication) publish(ctx context.Context, plan repository.ReplicationPlan, checkpoints []repository.ReplicationCheckpoint) error {

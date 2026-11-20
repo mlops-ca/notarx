@@ -340,7 +340,10 @@ NOTARX_OVERVIEW_CACHE_TTL=30s
   change evicts synchronously; the other nodes learn of it through a PostgreSQL
   `NOTIFY` on the `notarx_cache` channel sent in the same transaction, normally
   within 100 ms. The TTL is the hard upper bound when a notification is lost. A
-  listener that reconnects flushes every cache before it serves again. The window
+  listener that reconnects flushes every cache before it serves again. A statement
+  that changes many repositories or groups at once (a bulk import or a secrets
+  reseal) sends at most 64 notifications: above that it announces the scope once
+  and every node flushes the scope, negative results included. The window
   is shown read-only in the Console on the Authentication page.
 - **Regulated profile.** Set `NOTARX_AUTHZ_CACHE_TTL=1s` to shorten the window,
   or `0` where no staleness is acceptable: `0` disables every read cache, so a
@@ -392,12 +395,16 @@ the database: the row stores the payload digest, size and object key, and the by
 object store under `meta/sha256/<hex>`, content-addressed and immutable, so a key can never
 change meaning. Every read re-verifies the digest and rejects a mismatch, and each node keeps a
 small in-process LRU of recent reads. A payload at or below the threshold stays inline in its row.
-`0` moves every non-empty payload out of the database.
+`0` moves every non-empty payload out of the database. A value above 1 MiB
+(1048576) counts as 1 MiB, the size limit of the smallest inline column.
 
-The setting and the namespace are in place and both object-store drivers (filesystem and S3)
-support the namespace. The writers of each payload kind (SBOMs and other intelligence documents,
-`nuspec` and `chart_yaml`, proxy documents, npm version manifests) adopt them in the following
-slices of ADR 0023, so today no payload is moved by this setting.
+Both object-store drivers (filesystem and S3) support the namespace. These payloads move when
+they exceed the threshold: SBOM bodies, the findings of an artifact's vulnerability result (the
+counts stay in the row), NuGet `nuspec` and Helm `chart_yaml` of published packages, the cached
+NuGet and Helm source documents, Cargo proxy index bodies, OCI discovery snapshots and npm
+version manifests. Rows written before the move stay inline and keep working. A node reads a
+payload that was moved through the object store, so the `meta/` objects belong in every backup
+of the object store, and a database restored without them cannot serve those rows.
 
 ```env
 NOTARX_INLINE_MAX_BYTES=16384

@@ -29,7 +29,7 @@ func (s *PostgresStore) ListUserIdentities(ctx context.Context, userID string) (
 	if _, err := s.GetUser(ctx, userID); err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT `+userIdentityColumns+` FROM user_identities WHERE user_id=$1::uuid ORDER BY created_at,id`, userID)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+userIdentityColumns+` FROM user_identities WHERE user_id=$1::uuid ORDER BY created_at,user_identities.id`, userID)
 	if err != nil {
 		return nil, err
 	}

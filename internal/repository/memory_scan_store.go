@@ -382,3 +382,12 @@ func (s *MemoryStore) ListVEXDocuments(_ context.Context, repositoryID string) (
 	sort.SliceStable(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
 	return out, nil
 }
+
+// ScanSBOMBody returns the inline body. The memory store keeps no payload store, so a document that lives at
+// a BodyKey cannot be resolved here.
+func (s *MemoryStore) ScanSBOMBody(_ context.Context, sbom ScanSBOM) ([]byte, error) {
+	if len(sbom.Body) == 0 && sbom.BodyKey != "" {
+		return nil, ErrPayloadStoreUnavailable
+	}
+	return append([]byte(nil), sbom.Body...), nil
+}

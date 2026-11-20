@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -212,7 +213,7 @@ func (m NativeMaintenance) StartScheduler(ctx context.Context, interval time.Dur
 	if interval <= 0 {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -223,14 +224,14 @@ func (m NativeMaintenance) StartScheduler(ctx context.Context, interval time.Dur
 				_ = m.Schedule(ctx)
 			}
 		}
-	}()
+	})
 }
 
 func (m NativeMaintenance) StartWorker(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		_ = m.RunReclaimJobs(ctx, 100)
 		wake := notificationWake(ctx, m.Store, repository.LifecycleJobChannel(repository.LifecycleJobReclaim))
 		ticker := time.NewTicker(interval)
@@ -245,7 +246,7 @@ func (m NativeMaintenance) StartWorker(ctx context.Context, interval time.Durati
 				_ = m.RunReclaimJobs(ctx, 100)
 			}
 		}
-	}()
+	})
 }
 
 type notificationSource interface {

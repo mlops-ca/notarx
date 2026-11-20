@@ -217,3 +217,51 @@ func TestPostgresHostedGroupsPageByKeyset(t *testing.T) {
 		}
 	}
 }
+
+// The repositories listing shares the groups' keyset contract: a canonical cursor whose repository is gone
+// continues at the next id, and a cursor in another spelling is ErrNotFound.
+func TestPostgresHostedRepositoriesPageByKeyset(t *testing.T) {
+	store := ceilingStore(t)
+	ctx := context.Background()
+	repo := ceilingRepo(t, store, VisibilityPrivate)
+	vanished := uuid.Nil.String() // sorts before every repository id
+	page, _, err := store.ListHostedRepositories(ctx, 200, vanished)
+	if err != nil {
+		t.Fatalf("page after a vanished cursor: %v", err)
+	}
+	found := false
+	for _, listed := range page {
+		found = found || listed.ID == repo.ID
+	}
+	if !found && len(page) < 200 {
+		t.Fatalf("repository %s missing from the page after a vanished cursor", repo.ID)
+	}
+	for _, cursor := range []string{"garbage", strings.ToUpper(repo.ID), "urn:uuid:" + repo.ID} {
+		if _, _, err := store.ListHostedRepositories(ctx, 1, cursor); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("cursor %q: %v, want ErrNotFound", cursor, err)
+		}
+	}
+}
+
+func TestPostgresRepositoryGrantIndexListsWholeRepositoryGrantsOfOnePrincipal(t *testing.T) {
+	store := ceilingStore(t)
+	ctx := context.Background()
+	admin, read, prefixed := ceilingRepo(t, store, VisibilityPrivate), ceilingRepo(t, store, VisibilityPrivate), ceilingRepo(t, store, VisibilityPrivate)
+	principal := "grant-index-" + uuid.NewString()
+	for repo, grant := range map[string]RepositoryGrant{
+		admin.ID:    {Principal: principal, Scopes: []string{"repositories:admin"}},
+		read.ID:     {Principal: principal, Scopes: []string{"repositories:read"}},
+		prefixed.ID: {Principal: principal, Scopes: []string{"repositories:admin"}, ResourcePrefix: "packages/"},
+	} {
+		if _, err := store.UpsertRepositoryGrant(ctx, repo, grant); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := store.ListRepositoriesGrantedToPrincipal(ctx, principal, "repositories:admin")
+	if err != nil || len(got) != 1 || got[0].ID != admin.ID || got[0].Name != admin.Name {
+		t.Fatalf("administered = %v, %v; want only %s", got, err, admin.ID)
+	}
+	if got, err = store.ListRepositoriesGrantedToPrincipal(ctx, "nobody-"+uuid.NewString(), "repositories:admin"); err != nil || len(got) != 0 {
+		t.Fatalf("a principal without grants has %v, %v", got, err)
+	}
+}

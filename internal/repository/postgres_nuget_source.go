@@ -8,16 +8,26 @@ import (
 
 func (s *PostgresStore) GetNuGetSourceDocument(ctx context.Context, repo, version, url string) (NuGetSourceDocument, error) {
 	var out NuGetSourceDocument
-	err := s.db.QueryRowContext(ctx, `SELECT d.repository_id::text,d.source_version,d.url,d.status,d.body,d.digest,d.etag,d.last_modified,d.fetched_at,d.expires_at FROM native_nuget_source_documents d JOIN hosted_repositories h ON h.id=d.repository_id WHERE d.repository_id=$1::uuid AND d.source_version=$2 AND d.url=$3 AND h.format='nuget' AND h.repo_type='proxy' AND h.state='active' AND h.version::text=d.source_version`, repo, version, url).Scan(&out.RepositoryID, &out.SourceVersion, &out.URL, &out.Status, &out.Body, &out.Digest, &out.ETag, &out.LastModified, &out.FetchedAt, &out.ExpiresAt)
+	var ref payloadRef
+	err := s.db.QueryRowContext(ctx, `SELECT d.repository_id::text,d.source_version,d.url,d.status,d.body,d.digest,d.etag,d.last_modified,d.fetched_at,d.expires_at,d.body_digest,d.body_size,d.body_key FROM native_nuget_source_documents d JOIN hosted_repositories h ON h.id=d.repository_id WHERE d.repository_id=$1::uuid AND d.source_version=$2 AND d.url=$3 AND h.format='nuget' AND h.repo_type='proxy' AND h.state='active' AND h.version::text=d.source_version`, repo, version, url).Scan(&out.RepositoryID, &out.SourceVersion, &out.URL, &out.Status, &out.Body, &out.Digest, &out.ETag, &out.LastModified, &out.FetchedAt, &out.ExpiresAt, &ref.digest, &ref.size, &ref.key)
 	if errors.Is(err, sql.ErrNoRows) {
-		err = ErrNotFound
+		return out, ErrNotFound
 	}
+	if err != nil {
+		return out, err
+	}
+	out.Body, err = s.internalize(ctx, out.Body, ref)
 	return out, err
 }
 func (s *PostgresStore) PutNuGetSourceDocument(ctx context.Context, in NuGetSourceDocument) error {
 	if !validNuGetDocument(in) {
 		return ErrInvalidNuGetPublication
 	}
+	body, ref, err := s.externalize(ctx, in.Body)
+	if err != nil {
+		return err
+	}
+	bodyDigest, bodySize, bodyKey := ref.columns()
 	tx, _, err := s.nuGetTransaction(ctx, in.RepositoryID, in.SourceVersion)
 	if err != nil {
 		return err
@@ -27,13 +37,13 @@ func (s *PostgresStore) PutNuGetSourceDocument(ctx context.Context, in NuGetSour
 		return err
 	}
 	var count, total int64
-	if err = tx.QueryRowContext(ctx, `SELECT count(*),COALESCE(SUM(octet_length(body)),0) FROM native_nuget_source_documents WHERE repository_id=$1::uuid AND url<>$2`, in.RepositoryID, in.URL).Scan(&count, &total); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT count(*),COALESCE(SUM(GREATEST(octet_length(body),COALESCE(body_size,0))),0) FROM native_nuget_source_documents WHERE repository_id=$1::uuid AND url<>$2`, in.RepositoryID, in.URL).Scan(&count, &total); err != nil {
 		return err
 	}
 	if count >= 4096 || total+int64(len(in.Body)) > 64<<20 {
 		return ErrNuGetCacheLimit
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO native_nuget_source_documents(repository_id,source_version,url,status,body,digest,etag,last_modified,fetched_at,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(repository_id,source_version,url) DO UPDATE SET status=EXCLUDED.status,body=EXCLUDED.body,digest=EXCLUDED.digest,etag=EXCLUDED.etag,last_modified=EXCLUDED.last_modified,fetched_at=EXCLUDED.fetched_at,expires_at=EXCLUDED.expires_at`, in.RepositoryID, in.SourceVersion, in.URL, in.Status, in.Body, in.Digest, in.ETag, in.LastModified, in.FetchedAt, in.ExpiresAt)
+	_, err = tx.ExecContext(ctx, `INSERT INTO native_nuget_source_documents(repository_id,source_version,url,status,body,digest,etag,last_modified,fetched_at,expires_at,body_digest,body_size,body_key) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT(repository_id,source_version,url) DO UPDATE SET status=EXCLUDED.status,body=EXCLUDED.body,digest=EXCLUDED.digest,etag=EXCLUDED.etag,last_modified=EXCLUDED.last_modified,fetched_at=EXCLUDED.fetched_at,expires_at=EXCLUDED.expires_at,body_digest=EXCLUDED.body_digest,body_size=EXCLUDED.body_size,body_key=EXCLUDED.body_key`, in.RepositoryID, in.SourceVersion, in.URL, in.Status, body, in.Digest, in.ETag, in.LastModified, in.FetchedAt, in.ExpiresAt, bodyDigest, bodySize, bodyKey)
 	if err != nil {
 		return err
 	}

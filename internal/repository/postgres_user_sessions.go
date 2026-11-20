@@ -53,7 +53,7 @@ func (s *PostgresStore) ListUserSessions(ctx context.Context, userID string, inc
 	if _, err := s.GetUser(ctx, userID); err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT `+userSessionColumns+` FROM user_sessions WHERE user_id=$1::uuid AND ($2 OR (revoked_at IS NULL AND expires_at>now())) ORDER BY created_at DESC,id`, userID, includeInactive)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+userSessionColumns+` FROM user_sessions WHERE user_id=$1::uuid AND ($2 OR (revoked_at IS NULL AND expires_at>now())) ORDER BY created_at DESC,user_sessions.id`, userID, includeInactive)
 	if err != nil {
 		return nil, err
 	}

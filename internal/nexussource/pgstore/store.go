@@ -18,6 +18,10 @@ var _ nexussource.Store = (*Store)(nil)
 
 const columns = `id::text,name,base_url,credential_ciphertext,version::text,created_at,updated_at`
 
+// listQuery pages the sources by id. ORDER BY names the table column: a bare id would resolve to the
+// selected id::text output column and sort the text on every page.
+const listQuery = `SELECT ` + columns + ` FROM nexus_migration_sources WHERE ($1='' OR id > NULLIF($1,'')::uuid) ORDER BY nexus_migration_sources.id LIMIT $2`
+
 func scan(row interface{ Scan(...any) error }) (nexussource.Source, error) {
 	var v nexussource.Source
 	err := row.Scan(&v.ID, &v.Name, &v.BaseURL, &v.CredentialCiphertext, &v.Version, &v.CreatedAt, &v.UpdatedAt)
@@ -63,7 +67,7 @@ func (s *Store) Get(ctx context.Context, id string) (nexussource.Source, error) 
 	return scan(s.db.QueryRowContext(ctx, `SELECT `+columns+` FROM nexus_migration_sources WHERE id=$1::uuid`, id))
 }
 func (s *Store) List(ctx context.Context, limit int, cursor string) ([]nexussource.Source, string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+columns+` FROM nexus_migration_sources WHERE ($1='' OR id > NULLIF($1,'')::uuid) ORDER BY id LIMIT $2`, cursor, limit+1)
+	rows, err := s.db.QueryContext(ctx, listQuery, cursor, limit+1)
 	if err != nil {
 		return nil, "", err
 	}

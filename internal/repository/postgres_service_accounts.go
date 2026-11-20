@@ -8,6 +8,13 @@ import (
 
 const serviceAccountColumns = `id::text, name, description, state, created_at, updated_at, version::text`
 
+// The id-keyset listings qualify ORDER BY with the table: a bare id would resolve to the selected
+// id::text output column and sort the text instead of reading the uuid primary key in order.
+const (
+	listServiceAccountsQuery    = `SELECT ` + serviceAccountColumns + ` FROM service_accounts WHERE ($1='' OR id>$1::uuid) ORDER BY service_accounts.id LIMIT $2`
+	listServiceAccountKeysQuery = `SELECT id::text, service_account_id::text, name, array_to_json(roles), created_at, revoked_at, expires_at, last_used_at FROM api_keys WHERE service_account_id=$1::uuid AND ($2='' OR id>$2::uuid) ORDER BY api_keys.id LIMIT $3`
+)
+
 func scanServiceAccount(row interface{ Scan(...any) error }, account *ServiceAccount) error {
 	return row.Scan(
 		&account.ID,
@@ -43,7 +50,7 @@ func (s *PostgresStore) CreateServiceAccount(ctx context.Context, account Servic
 }
 
 func (s *PostgresStore) ListServiceAccounts(ctx context.Context, limit int, afterID string) ([]ServiceAccount, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+serviceAccountColumns+` FROM service_accounts WHERE ($1='' OR id>$1::uuid) ORDER BY id LIMIT $2`, afterID, limit)
+	rows, err := s.db.QueryContext(ctx, listServiceAccountsQuery, afterID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +163,7 @@ func (s *PostgresStore) ListServiceAccountCredentials(ctx context.Context, accou
 	if _, err := s.GetServiceAccount(ctx, accountID); err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id::text, service_account_id::text, name, array_to_json(roles), created_at, revoked_at, expires_at, last_used_at FROM api_keys WHERE service_account_id=$1::uuid AND ($2='' OR id>$2::uuid) ORDER BY id LIMIT $3`, accountID, afterID, limit)
+	rows, err := s.db.QueryContext(ctx, listServiceAccountKeysQuery, accountID, afterID, limit)
 	if err != nil {
 		return nil, err
 	}

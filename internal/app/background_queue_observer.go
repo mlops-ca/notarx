@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -25,7 +26,7 @@ func (o BackgroundOperationQueueObserver) Start(ctx context.Context, interval ti
 	if o.Store == nil || o.Metrics == nil || interval <= 0 {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		_ = o.Run(ctx)
 		lifecycleWakes := make([]<-chan struct{}, 0, len(repository.LifecycleJobKinds()))
 		for _, kind := range repository.LifecycleJobKinds() {
@@ -47,5 +48,5 @@ func (o BackgroundOperationQueueObserver) Start(ctx context.Context, interval ti
 				_ = o.Run(ctx)
 			}
 		}
-	}()
+	})
 }

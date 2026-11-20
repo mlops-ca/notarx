@@ -1,0 +1,231 @@
+//go:build integration
+
+package repository
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"os"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
+	"github.com/mlops-ca/notarx/internal/testsupport"
+)
+
+// externalizeEverything makes every payload above one byte go to the object store, so the shared
+// store contracts below run the externalised path of each payload kind. The inline path is the
+// default run of the same contracts.
+func externalizeEverything(t *testing.T, store *PostgresStore) *memoryPayloadStore {
+	t.Helper()
+	payloads := newMemoryPayloadStore()
+	store.SetPayloadStore(payloads, 1)
+	return payloads
+}
+
+func requireExternalized(t *testing.T, payloads *memoryPayloadStore) {
+	t.Helper()
+	if payloads.puts == 0 || payloads.gets == 0 {
+		t.Fatalf("the run never wrote (%d) and read (%d) an externalised payload", payloads.puts, payloads.gets)
+	}
+}
+
+func TestPostgresExternalizedNuGetPayloadsRoundTrip(t *testing.T) {
+	store := newPostgresNuGetStore(t)
+	payloads := externalizeEverything(t, store)
+	testNuGetStoreContract(t, store)
+	testNuGetSourceStoreContract(t, store, func(t *testing.T, repository, actor string) func() {
+		return testsupport.FailSecurityAudits(t, store.db, repository, actor)
+	})
+	requireExternalized(t, payloads)
+	var inlineNuspec int
+	if err := store.db.QueryRow(`SELECT count(*) FROM native_nuget_publications WHERE body_digest IS NOT NULL AND octet_length(nuspec)<>0`).Scan(&inlineNuspec); err != nil || inlineNuspec != 0 {
+		t.Fatalf("an externalised nuspec kept inline bytes: %d %v", inlineNuspec, err)
+	}
+}
+
+func TestPostgresExternalizedHelmPayloadsRoundTrip(t *testing.T) {
+	store := newPostgresNuGetStore(t)
+	payloads := externalizeEverything(t, store)
+	testHelmStoreContract(t, store)
+	testHelmSourceStoreContract(t, store)
+	requireExternalized(t, payloads)
+	var inlineChart int
+	if err := store.db.QueryRow(`SELECT count(*) FROM native_helm_publications WHERE body_digest IS NOT NULL AND octet_length(chart_yaml)<>0`).Scan(&inlineChart); err != nil || inlineChart != 0 {
+		t.Fatalf("an externalised chart.yaml kept inline bytes: %d %v", inlineChart, err)
+	}
+}
+
+func TestPostgresExternalizedOCIDiscoveryRoundTrip(t *testing.T) {
+	store := openDiscoveryPostgres(t)
+	payloads := externalizeEverything(t, store)
+	testOCIDiscoveryStore(t, store, store)
+	requireExternalized(t, payloads)
+}
+
+func TestPostgresExternalizedNPMManifestsRoundTrip(t *testing.T) {
+	store, second, repo := openPostgresNPMDistTagStores(t)
+	payloads := externalizeEverything(t, store)
+	secondPayloads := externalizeEverything(t, second)
+	secondPayloads.objects = payloads.objects
+	exerciseNPMMetadataContract(t, store, repo.ID)
+	requireExternalized(t, payloads)
+	pkg, err := second.GetNPMPackage(context.Background(), repo.ID, "@scope/governed")
+	if err != nil || len(pkg.TombstonedVersions) != 2 {
+		t.Fatalf("the other instance cannot read the externalised manifests: %#v %v", pkg, err)
+	}
+	for _, version := range pkg.TombstonedVersions {
+		if !strings.HasPrefix(string(version.Manifest), "{") {
+			t.Fatalf("manifest of %s was not resolved: %q", version.Version, version.Manifest)
+		}
+	}
+}
+
+func TestPostgresCargoProxyIndexAboveAndBelowTheThreshold(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is required")
+	}
+	store, err := NewPostgresStore(databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	repo, err := store.CreateHostedRepository(ctx, HostedRepository{ID: uuid.NewString(), Name: "cargo-external-" + uuid.NewString()[:8],
+		Format: FormatCargo, Type: RepositoryTypeProxy, Endpoint: "https://index.example.test"})
+	if err != nil {
+		_ = store.Close()
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = store.db.ExecContext(context.Background(), `DELETE FROM hosted_repositories WHERE id=$1`, repo.ID)
+		_ = store.Close()
+	})
+	now := time.Now().UTC()
+	if err := store.PutCargoProxyConfig(ctx, CargoProxyConfig{RepositoryID: repo.ID, SourceVersion: repo.Version, DownloadTemplate: "https://static.example.test/crates", FetchedAt: now, ExpiresAt: now.Add(time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+	payloads := newMemoryPayloadStore()
+	store.SetPayloadStore(payloads, 1000)
+	body := func(name string, versions int) []byte {
+		var out bytes.Buffer
+		for i := range versions {
+			fmt.Fprintf(&out, `{"name":%q,"vers":"1.0.%d","cksum":%q,"yanked":false}`+"\n", name, i, strings.Repeat("a", 64))
+		}
+		return out.Bytes()
+	}
+	for name, versions := range map[string]int{"small": 1, "large": 20} {
+		index := CargoProxyIndex{RepositoryID: repo.ID, SourceVersion: repo.Version, Name: name, Body: body(name, versions), Status: 200, FetchedAt: now, ExpiresAt: now.Add(time.Hour)}
+		if err := store.PutCargoProxyIndex(ctx, index); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		saved, err := store.GetCargoProxyIndex(ctx, repo.ID, name)
+		if err != nil || !bytes.Equal(saved.Body, index.Body) {
+			t.Fatalf("%s did not round trip: %q %v", name, saved.Body, err)
+		}
+		var external bool
+		var inlineBytes int
+		if err := store.db.QueryRowContext(ctx, `SELECT body_digest IS NOT NULL,octet_length(body) FROM native_cargo_proxy_indexes WHERE repository_id=$1::uuid AND name=$2`, repo.ID, name).Scan(&external, &inlineBytes); err != nil {
+			t.Fatal(err)
+		}
+		if external != (versions > 1) || (external && inlineBytes != 0) || (!external && inlineBytes != len(index.Body)) {
+			t.Fatalf("%s: external=%v inline bytes=%d for a %d byte body", name, external, inlineBytes, len(index.Body))
+		}
+	}
+	if payloads.puts != 1 {
+		t.Fatalf("only the large body belongs in the object store, got %d writes", payloads.puts)
+	}
+	found, err := store.SearchCargoProxyCrates(ctx, repo.ID, "large", 10, "")
+	if err != nil || len(found) != 1 {
+		t.Fatalf("search must read an externalised index: %+v %v", found, err)
+	}
+}
+
+func TestPostgresArtifactIntelligenceFindingsAboveAndBelowTheThreshold(t *testing.T) {
+	fixture := newPostgresArtifactScanFixture(t)
+	payloads := newMemoryPayloadStore()
+	fixture.store.SetPayloadStore(payloads, 1000)
+	finding := func(i int) ArtifactVulnerabilityFinding {
+		return ArtifactVulnerabilityFinding{ID: fmt.Sprintf("CVE-2026-%04d", i), Source: "nvd", Severity: ArtifactVulnerabilitySeverityCritical,
+			Component: "pkg:generic/widget@1.0.0", Version: "1.0.0", FixedVersion: "1.0.1", Location: "widget.bin"}
+	}
+	for name, count := range map[string]int{"small": 1, "large": 40} {
+		findings := make([]ArtifactVulnerabilityFinding, count)
+		for i := range findings {
+			findings[i] = finding(i)
+		}
+		coordinate, digest := "releases/"+name+".bin", "sha256:"+strings.Repeat(map[string]string{"small": "1", "large": "2"}[name], 64)
+		written, err := fixture.store.ReplaceArtifactIntelligence(fixture.ctx, ArtifactIntelligence{
+			RepositoryID: fixture.repo.ID, Format: FormatRaw, Coordinate: coordinate, Digest: digest,
+			Vulnerability: &ArtifactVulnerabilitySummary{Scanner: "grype", Status: "affected", Critical: count, Findings: findings},
+			UpdatedBy:     "scanner:grype",
+		}, "")
+		if err != nil || written.Version != "1" {
+			t.Fatalf("%s: %#v %v", name, written, err)
+		}
+		loaded, err := fixture.store.GetArtifactIntelligence(fixture.ctx, fixture.repo.ID, FormatRaw, coordinate, digest)
+		if err != nil || loaded.Vulnerability == nil || len(loaded.Vulnerability.Findings) != count || loaded.Vulnerability.Critical != count {
+			t.Fatalf("%s did not round trip: %#v %v", name, loaded.Vulnerability, err)
+		}
+		var external bool
+		var inlineCritical int
+		var inlineFindings int
+		if err := fixture.store.db.QueryRowContext(fixture.ctx, `SELECT body_digest IS NOT NULL,(vulnerability->>'critical')::int,COALESCE(jsonb_array_length(vulnerability->'findings'),0) FROM artifact_intelligence WHERE repository_id=$1::uuid AND coordinate=$2 AND digest=$3`, fixture.repo.ID, coordinate, digest).Scan(&external, &inlineCritical, &inlineFindings); err != nil {
+			t.Fatal(err)
+		}
+		if external != (count > 1) || inlineCritical != count || (external && inlineFindings != 0) || (!external && inlineFindings != count) {
+			t.Fatalf("%s: external=%v inline critical=%d inline findings=%d", name, external, inlineCritical, inlineFindings)
+		}
+		// Replacing an externalised result with a small one clears the reference.
+		if count > 1 {
+			replaced, err := fixture.store.ReplaceArtifactIntelligence(fixture.ctx, ArtifactIntelligence{
+				RepositoryID: fixture.repo.ID, Format: FormatRaw, Coordinate: coordinate, Digest: digest,
+				Vulnerability: &ArtifactVulnerabilitySummary{Scanner: "grype", Status: "clean"}, UpdatedBy: "scanner:grype",
+			}, written.Version)
+			if err != nil || replaced.Vulnerability == nil || len(replaced.Vulnerability.Findings) != 0 || replaced.Vulnerability.Status != "clean" {
+				t.Fatalf("replace with a small result: %#v %v", replaced.Vulnerability, err)
+			}
+		}
+	}
+	if payloads.puts != 1 {
+		t.Fatalf("only the large result belongs in the object store, got %d writes", payloads.puts)
+	}
+}
+
+func TestPostgresScanSBOMBodyAboveAndBelowTheThreshold(t *testing.T) {
+	store := samlStore(t)
+	payloads := newMemoryPayloadStore()
+	store.SetPayloadStore(payloads, 64)
+	ctx := context.Background()
+	repo, artifact := ids.New(), "sha256:"+strings.Repeat("c", 64)
+	small := []byte(`{"bomFormat":"CycloneDX"}`)
+	large := []byte(`{"bomFormat":"CycloneDX","components":[` + strings.Repeat(`{"name":"component","version":"1.0.0"},`, 8) + `{"name":"last"}]}`)
+	for name, body := range map[string][]byte{"small": small, "large": large} {
+		kind := ScanSBOMKindCycloneDX
+		source := ScanSBOMSourceGenerated
+		if name == "large" {
+			source = ScanSBOMSourceUploaded
+		}
+		put, err := store.PutScanSBOM(ctx, ScanSBOM{RepositoryID: repo, ArtifactDigest: artifact, Kind: kind, Source: source, BodyDigest: "sha256:" + strings.Repeat("0", 64), BodySize: int64(len(body)), Body: body, ComponentCount: 9})
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		got, err := store.GetScanSBOM(ctx, repo, artifact, kind, source)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if (name == "large") != (got.BodyKey != "" && len(got.Body) == 0) || (name == "small") != (got.BodyKey == "" && len(got.Body) > 0) {
+			t.Fatalf("%s: stored as key=%q inline=%d bytes (put returned key=%q)", name, got.BodyKey, len(got.Body), put.BodyKey)
+		}
+		resolved, err := store.ScanSBOMBody(ctx, got)
+		if err != nil || !bytes.Equal(bytes.ReplaceAll(resolved, []byte(" "), nil), bytes.ReplaceAll(body, []byte(" "), nil)) {
+			t.Fatalf("%s body did not resolve: %q %v", name, resolved, err)
+		}
+	}
+	if payloads.puts != 1 {
+		t.Fatalf("only the large SBOM belongs in the object store, got %d writes", payloads.puts)
+	}
+}

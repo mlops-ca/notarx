@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -116,7 +117,7 @@ func (r Runtime) startLeaseHeartbeat(ctx context.Context, cancelJob context.Canc
 	if interval <= 0 {
 		interval = 3 * time.Minute
 	}
-	go func() {
+	background.Go(heartbeatCtx, func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -138,7 +139,7 @@ func (r Runtime) startLeaseHeartbeat(ctx context.Context, cancelJob context.Canc
 				return
 			}
 		}
-	}()
+	})
 	var once sync.Once
 	var stopErr error
 	return func() error {
@@ -157,7 +158,7 @@ func (r Runtime) Start(ctx context.Context, interval time.Duration, limit int, h
 	if interval <= 0 || r.Store == nil || handler == nil {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		wake := notificationWake(ctx, r.Store, repository.LifecycleJobChannel(r.Kind))
 		_ = r.RunJobs(ctx, limit, handler)
 		ticker := time.NewTicker(interval)
@@ -176,7 +177,7 @@ func (r Runtime) Start(ctx context.Context, interval time.Duration, limit int, h
 				_ = r.RunJobs(ctx, limit, handler)
 			}
 		}
-	}()
+	})
 }
 
 type notificationSource interface {

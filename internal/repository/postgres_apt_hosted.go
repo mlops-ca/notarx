@@ -377,7 +377,7 @@ func (s *PostgresStore) ListUncollectedAPTPublicationObjects(ctx context.Context
 	rows, err := s.db.QueryContext(ctx, `SELECT id::text,repository_id::text,object_key
 		FROM native_apt_publication_sessions
 		WHERE state='aborted' AND object_key<>'' AND collected_at IS NULL
-		ORDER BY expires_at,id LIMIT $1`, limit)
+		ORDER BY expires_at,native_apt_publication_sessions.id LIMIT $1`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -400,7 +400,7 @@ func (s *PostgresStore) ListUnscheduledAPTPublicationObjects(ctx context.Context
 	rows, err := s.db.QueryContext(ctx, `SELECT id::text,repository_id::text,object_key
 		FROM native_apt_publication_sessions
 		WHERE state='aborted' AND object_key<>'' AND reclaim_scheduled_at IS NULL AND collected_at IS NULL
-		ORDER BY expires_at,id LIMIT $1`, limit)
+		ORDER BY expires_at,native_apt_publication_sessions.id LIMIT $1`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -784,7 +784,7 @@ func (s *PostgresStore) ExpireAPTRepositorySnapshots(ctx context.Context, before
 		limit = 100
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT id::text FROM native_apt_repository_snapshots
-		WHERE state='building' AND created_at<$1 ORDER BY id LIMIT $2`, before, limit)
+		WHERE state='building' AND created_at<$1 ORDER BY native_apt_repository_snapshots.id LIMIT $2`, before, limit)
 	if err != nil {
 		return err
 	}
@@ -894,7 +894,7 @@ func (s *PostgresStore) GetLatestVisibleAPTRepositorySnapshot(ctx context.Contex
 	var snapshot APTRepositorySnapshot
 	err := scanAPTRepositorySnapshot(s.db.QueryRowContext(ctx, `SELECT `+aptRepositorySnapshotColumns+`
 		FROM native_apt_repository_snapshots WHERE repository_id=$1::uuid AND state='visible'
-		ORDER BY published_at DESC,id DESC LIMIT 1`, repositoryID), &snapshot)
+		ORDER BY published_at DESC,native_apt_repository_snapshots.id DESC LIMIT 1`, repositoryID), &snapshot)
 	if errors.Is(err, sql.ErrNoRows) {
 		return APTRepositorySnapshot{}, ErrNotFound
 	}

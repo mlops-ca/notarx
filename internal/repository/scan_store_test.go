@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,6 +20,34 @@ func testScanStoreContract(t *testing.T, store ScanStore) {
 	repo := ids.New()
 	digest := "sha256:" + ids.New()
 	now := time.Now().UTC().Truncate(time.Microsecond)
+
+	t.Run("sbom body resolves inline and reports a missing payload store", func(t *testing.T) {
+		inlineDigest := "sha256:" + ids.New()
+		inline, err := store.PutScanSBOM(ctx, ScanSBOM{RepositoryID: repo, ArtifactDigest: inlineDigest, Kind: ScanSBOMKindCycloneDX, Source: ScanSBOMSourceGenerated,
+			BodyDigest: "sha256:aa", BodySize: 2, Body: []byte(`{}`), ComponentCount: 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := store.GetScanSBOM(ctx, repo, inlineDigest, ScanSBOMKindCycloneDX, ScanSBOMSourceGenerated)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := store.ScanSBOMBody(ctx, got)
+		if err != nil || strings.ReplaceAll(string(body), " ", "") != `{}` {
+			t.Fatalf("inline body = %q, %v (put %+v)", body, err, inline)
+		}
+		keyed := ScanSBOM{RepositoryID: repo, ArtifactDigest: inlineDigest, Kind: ScanSBOMKindSPDX, Source: ScanSBOMSourceUploaded, BodyDigest: "sha256:bb", BodyKey: "meta/sha256/bb"}
+		if _, err = store.PutScanSBOM(ctx, keyed); err != nil {
+			t.Fatal(err)
+		}
+		got, err = store.GetScanSBOM(ctx, repo, inlineDigest, ScanSBOMKindSPDX, ScanSBOMSourceUploaded)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = store.ScanSBOMBody(ctx, got); !errors.Is(err, ErrPayloadStoreUnavailable) {
+			t.Fatalf("a document at a key without a payload store: %v, want ErrPayloadStoreUnavailable", err)
+		}
+	})
 
 	t.Run("sbom upsert keeps identity and lists by kind", func(t *testing.T) {
 		first, err := store.PutScanSBOM(ctx, ScanSBOM{RepositoryID: repo, ArtifactDigest: digest, Kind: ScanSBOMKindCycloneDX, Source: ScanSBOMSourceGenerated,

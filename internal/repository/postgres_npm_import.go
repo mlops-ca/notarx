@@ -20,6 +20,15 @@ func (s *PostgresStore) PublishNPMImport(ctx context.Context, c NPMImportClosure
 		return err
 	}
 	defer release()
+	// Large manifests go to the object store before the transaction opens, so its locks never wait on it.
+	manifests := make(map[string]npmManifest, len(c.Versions))
+	for _, v := range c.Versions {
+		inline, ref, err := s.externalizeJSON(ctx, v.Manifest, "{}")
+		if err != nil {
+			return err
+		}
+		manifests[v.Version] = npmManifest{inline: inline, ref: ref}
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -42,7 +51,7 @@ func (s *PostgresStore) PublishNPMImport(ctx context.Context, c NPMImportClosure
 	if _, err = tx.ExecContext(ctx, `INSERT INTO native_npm_packages(repository_id,name,dist_tags)VALUES($1,$2,'{}'::jsonb)ON CONFLICT DO NOTHING`, c.RepositoryID, c.PackageName); err != nil {
 		return err
 	}
-	pkg, err := readNPMPackage(ctx, tx, c.RepositoryID, c.PackageName)
+	pkg, err := s.readNPMPackage(ctx, tx, c.RepositoryID, c.PackageName)
 	if err != nil {
 		return err
 	}
@@ -78,7 +87,9 @@ func (s *PostgresStore) PublishNPMImport(ctx context.Context, c NPMImportClosure
 			}
 			continue
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO native_npm_versions(repository_id,package_name,version,digest,integrity,shasum,tarball_name,object_key,size,manifest,publisher,cached_at,deprecated)VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,now(),$12)`, c.RepositoryID, c.PackageName, v.Version, v.Digest, v.Integrity, v.Shasum, v.TarballName, v.ObjectKey, v.Size, v.Manifest, v.Publisher, v.Deprecated)
+		manifest := manifests[v.Version]
+		bodyDigest, bodySize, bodyKey := manifest.ref.columns()
+		_, err = tx.ExecContext(ctx, `INSERT INTO native_npm_versions(repository_id,package_name,version,digest,integrity,shasum,tarball_name,object_key,size,manifest,publisher,cached_at,deprecated,body_digest,body_size,body_key)VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,now(),$12,$13,$14,$15)`, c.RepositoryID, c.PackageName, v.Version, v.Digest, v.Integrity, v.Shasum, v.TarballName, v.ObjectKey, v.Size, manifest.inline, v.Publisher, v.Deprecated, bodyDigest, bodySize, bodyKey)
 		if isUnique(err) {
 			return ErrNameExists
 		}

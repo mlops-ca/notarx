@@ -39,7 +39,7 @@ func (s *PostgresStore) CreateAuthorizationRole(ctx context.Context, role Author
 }
 
 func (s *PostgresStore) ListAuthorizationRoles(ctx context.Context) ([]AuthorizationRole, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+authorizationRoleColumns+` FROM authorization_roles ORDER BY name,id`)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+authorizationRoleColumns+` FROM authorization_roles ORDER BY name,authorization_roles.id`)
 	if err != nil {
 		return nil, err
 	}

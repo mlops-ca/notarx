@@ -161,6 +161,10 @@ func encodeAssets(in []m.Asset) []byte {
 
 const entryColumns = `id::text,batch_id::text,source_repository,target_repository_id::text,format,identity,state,attempts,assets,session_id,transferred_bytes,verified_bytes,visible_identities,last_error,updated_at`
 
+// listEntriesQuery pages the entries of a batch by id. ORDER BY names the table column: a bare id would
+// resolve to the selected id::text output column and sort the text on every page.
+const listEntriesQuery = `SELECT ` + entryColumns + ` FROM nexus_migration_entries WHERE batch_id=$1::uuid AND ($2='' OR id>NULLIF($2,'')::uuid) ORDER BY nexus_migration_entries.id LIMIT $3`
+
 func scanEntry(row scanner) (m.Entry, error) {
 	var e m.Entry
 	var raw []byte
@@ -184,7 +188,7 @@ func scanEntry(row scanner) (m.Entry, error) {
 	return e, nil
 }
 func (s *Store) Entries(ctx context.Context, id string, limit int, cursor string) ([]m.Entry, string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+entryColumns+` FROM nexus_migration_entries WHERE batch_id=$1::uuid AND ($2='' OR id>NULLIF($2,'')::uuid) ORDER BY id LIMIT $3`, id, cursor, limit+1)
+	rows, err := s.db.QueryContext(ctx, listEntriesQuery, id, cursor, limit+1)
 	if err != nil {
 		return nil, "", err
 	}

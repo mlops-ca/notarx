@@ -320,7 +320,7 @@ func (s *PostgresStore) ExpireAPTArchiveRestores(ctx context.Context, before tim
 	if limit <= 0 {
 		limit = 100
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id::text,snapshot_id::text FROM native_apt_archive_restores WHERE state='preparing' AND created_at<$1 ORDER BY id LIMIT $2`, before, limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT id::text,snapshot_id::text FROM native_apt_archive_restores WHERE state='preparing' AND created_at<$1 ORDER BY native_apt_archive_restores.id LIMIT $2`, before, limit)
 	if err != nil {
 		return err
 	}

@@ -198,14 +198,10 @@ func (s *PostgresStore) ListHostedRepositories(ctx context.Context, limit int, a
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	if after != "" {
-		var exists bool
-		if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM hosted_repositories WHERE id=$1::uuid)`, after).Scan(&exists); err != nil {
-			return nil, "", err
-		}
-		if !exists {
-			return nil, "", ErrNotFound
-		}
+	// A keyset, as ListHostedGroups: a canonical uuid cursor continues at the next id whether or not its
+	// repository still exists, so no lookup of the cursor row is needed; any other cursor is ErrNotFound.
+	if after != "" && !isCanonicalUUID(after) {
+		return nil, "", ErrNotFound
 	}
 	rows, err := s.db.QueryContext(ctx, listHostedRepositoriesQuery, after, limit+1)
 	if err != nil {
@@ -536,7 +532,7 @@ func (s *PostgresStore) createHostedGroupIdempotentlyMutation(ctx context.Contex
 		if err := lockCargoGroupRepositories(ctx, tx, group.Members); err != nil {
 			return HostedGroup{}, false, err
 		}
-		if err := preflightPostgresCargoGroupMembers(ctx, tx, group.ID, group.Members); err != nil {
+		if err := s.preflightPostgresCargoGroupMembers(ctx, tx, group.ID, group.Members); err != nil {
 			return HostedGroup{}, false, err
 		}
 	}
@@ -682,7 +678,7 @@ func (s *PostgresStore) replaceHostedGroup(ctx context.Context, id, name string,
 		return HostedGroup{}, err
 	}
 	if group.Format == FormatCargo {
-		if err := preflightPostgresCargoGroupMembers(ctx, tx, id, members); err != nil {
+		if err := s.preflightPostgresCargoGroupMembers(ctx, tx, id, members); err != nil {
 			return HostedGroup{}, err
 		}
 	}

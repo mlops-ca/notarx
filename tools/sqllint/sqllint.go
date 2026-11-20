@@ -1,11 +1,16 @@
 // Package sqllint enforces the typed-key rules of ADR 0023 section 4.
 //
-// Three rules are checked over the Go source below internal/:
+// Four rules are checked over the Go source below internal/:
 //
 //   - SQL string literals in non-test files must not compare a column cast to
 //     text with a parameter (`col::text = $1`, `$1::text = col`, or `id::text` after
 //     WHERE). Such comparisons defeat the btree on uuid columns. Existing
 //     violations are recorded per file in an allowlist that may only shrink.
+//   - A statement whose select list holds `id::text` must not order by a bare `id`. PostgreSQL
+//     resolves a bare name in ORDER BY to an output column first, so the statement sorts the
+//     text instead of reading the uuid key in order and every page of a keyset listing adds a
+//     Sort node. Qualify the column (`ORDER BY <table>.id`). A column list kept in a package
+//     level string constant is expanded before the check. There is no allowlist.
 //   - `uuid.New()` and `uuid.NewRandom()` (random UUIDv4), also under an import alias,
 //     are forbidden outside internal/ids so every new identifier is a UUIDv7
 //     created by ids.New. `uuid.Must(uuid.NewRandom())` is caught by the same rule.
@@ -49,6 +54,8 @@ type Result struct {
 	// Casts maps a slash-separated, root-relative file path to its number of
 	// text-cast comparisons in non-test SQL literals.
 	Casts map[string]int
+	// BareIDOrder lists file:line positions of statements that select id::text and order by a bare id.
+	BareIDOrder []string
 	// UUIDNew lists file:line positions of uuid.New() calls outside internal/ids.
 	UUIDNew []string
 	// NewStrings maps a file path to its number of uuid.NewString() calls in
@@ -89,10 +96,14 @@ func CountCasts(sql string) int {
 	return count
 }
 
-// Scan walks root/internal and applies both rules.
+// Scan walks root/internal and applies the rules.
 func Scan(root string) (Result, error) {
 	result := Result{Casts: map[string]int{}, NewStrings: map[string]int{}}
-	err := filepath.WalkDir(filepath.Join(root, "internal"), func(path string, entry fs.DirEntry, walkErr error) error {
+	consts, err := packageStringConsts(root)
+	if err != nil {
+		return Result{}, err
+	}
+	err = filepath.WalkDir(filepath.Join(root, "internal"), func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -104,6 +115,7 @@ func Scan(root string) (Result, error) {
 			return err
 		}
 		rel = filepath.ToSlash(rel)
+		dirConsts := consts[filepath.ToSlash(filepath.Dir(rel))]
 		isTest := strings.HasSuffix(rel, "_test.go")
 		inIDs := strings.HasPrefix(rel, IDsPackage+"/")
 		set := token.NewFileSet()
@@ -124,6 +136,20 @@ func Scan(root string) (Result, error) {
 		}
 		ast.Inspect(file, func(node ast.Node) bool {
 			switch n := node.(type) {
+			case *ast.BinaryExpr:
+				// A statement built from literals and string constants is checked as a whole.
+				if isTest || n.Op != token.ADD {
+					return true
+				}
+				if value, ok := evalStringExpr(n, dirConsts, 0); ok {
+					if c := CountCasts(value); c > 0 {
+						result.Casts[rel] += c
+					}
+					if BareIDOrder(value) {
+						result.BareIDOrder = append(result.BareIDOrder, set.Position(n.Pos()).String())
+					}
+					return false
+				}
 			case *ast.BasicLit:
 				if isTest || n.Kind != token.STRING {
 					return true
@@ -131,6 +157,9 @@ func Scan(root string) (Result, error) {
 				if value, err := strconv.Unquote(n.Value); err == nil {
 					if c := CountCasts(value); c > 0 {
 						result.Casts[rel] += c
+					}
+					if BareIDOrder(value) {
+						result.BareIDOrder = append(result.BareIDOrder, set.Position(n.Pos()).String())
 					}
 				}
 			case *ast.CallExpr:
@@ -160,8 +189,114 @@ func Scan(root string) (Result, error) {
 			result.UUIDNew[i] = filepath.ToSlash(rel)
 		}
 	}
+	for i, position := range result.BareIDOrder {
+		if rel, err := filepath.Rel(root, position); err == nil {
+			result.BareIDOrder[i] = filepath.ToSlash(rel)
+		}
+	}
 	sort.Strings(result.UUIDNew)
+	sort.Strings(result.BareIDOrder)
 	return result, nil
+}
+
+var (
+	selectList    = regexp.MustCompile(`(?is)\bselect\b(.*?)\bfrom\b`)
+	orderByClause = regexp.MustCompile(`(?is)\border\s+by\b(.*?)(\blimit\b|\bfor\s+(update|share)\b|\boffset\b|\)|$)`)
+	bareIDTerm    = regexp.MustCompile(`(?i)(^|,)\s*id(\s+(asc|desc))?\s*(,|$)`)
+)
+
+// BareIDOrder reports whether a statement selects id::text and orders by an unqualified id. PostgreSQL
+// resolves that name to the selected text column, not to the uuid column.
+func BareIDOrder(sql string) bool {
+	list := selectList.FindStringSubmatch(sql)
+	if list == nil || !bareIDCast.MatchString(list[1]) {
+		return false
+	}
+	for _, clause := range orderByClause.FindAllStringSubmatch(sql, -1) {
+		if bareIDTerm.MatchString(clause[1]) {
+			return true
+		}
+	}
+	return false
+}
+
+// packageStringConsts maps each package directory below root/internal to its string constants, by name, so a
+// statement built from a column-list constant can be checked as one string.
+func packageStringConsts(root string) (map[string]map[string]ast.Expr, error) {
+	out := map[string]map[string]ast.Expr{}
+	err := filepath.WalkDir(filepath.Join(root, "internal"), func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		dir := filepath.ToSlash(filepath.Dir(rel))
+		file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		if err != nil {
+			return err
+		}
+		for _, decl := range file.Decls {
+			gen, ok := decl.(*ast.GenDecl)
+			if !ok || gen.Tok != token.CONST {
+				continue
+			}
+			for _, spec := range gen.Specs {
+				value, ok := spec.(*ast.ValueSpec)
+				if !ok || len(value.Names) != len(value.Values) {
+					continue
+				}
+				for i, name := range value.Names {
+					if out[dir] == nil {
+						out[dir] = map[string]ast.Expr{}
+					}
+					out[dir][name.Name] = value.Values[i]
+				}
+			}
+		}
+		return nil
+	})
+	return out, err
+}
+
+// evalStringExpr folds a concatenation of string literals and package string constants. It reports false for
+// anything else (a call, a variable, a constant of another package), so such a statement is only checked piece
+// by piece.
+func evalStringExpr(expr ast.Expr, consts map[string]ast.Expr, depth int) (string, bool) {
+	if depth > 16 {
+		return "", false
+	}
+	switch e := expr.(type) {
+	case *ast.BasicLit:
+		if e.Kind != token.STRING {
+			return "", false
+		}
+		value, err := strconv.Unquote(e.Value)
+		return value, err == nil
+	case *ast.ParenExpr:
+		return evalStringExpr(e.X, consts, depth+1)
+	case *ast.Ident:
+		value, ok := consts[e.Name]
+		if !ok {
+			return "", false
+		}
+		return evalStringExpr(value, consts, depth+1)
+	case *ast.BinaryExpr:
+		if e.Op != token.ADD {
+			return "", false
+		}
+		left, ok := evalStringExpr(e.X, consts, depth+1)
+		if !ok {
+			return "", false
+		}
+		right, ok := evalStringExpr(e.Y, consts, depth+1)
+		return left + right, ok
+	}
+	return "", false
 }
 
 // ParseAllowlist reads lines of "<path> <count>"; blank lines and lines
@@ -196,6 +331,9 @@ func Check(result Result) []string {
 	var problems []string
 	for _, position := range result.UUIDNew {
 		problems = append(problems, position+": uuid.New() and uuid.NewRandom() are forbidden outside "+IDsPackage+"; use ids.New() (ADR 0023 section 4)")
+	}
+	for _, position := range result.BareIDOrder {
+		problems = append(problems, position+": the statement selects id::text and orders by a bare id, which sorts the text; write ORDER BY <table>.id (ADR 0023 section 4)")
 	}
 	for _, file := range sortedKeys(result.Casts) {
 		problems = append(problems, fmt.Sprintf("%s: %d text-cast comparison(s); bind uuid parameters as uuid.UUID or $n::uuid instead of col::text = $n", file, result.Casts[file]))

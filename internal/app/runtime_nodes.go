@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -54,7 +55,7 @@ func (h *RuntimeNodeHeartbeat) Start(ctx context.Context, interval time.Duration
 		close(done)
 		return done
 	}
-	go func() {
+	background.Go(ctx, func() {
 		defer close(done)
 		_ = h.Record(ctx)
 		ticker := time.NewTicker(interval)
@@ -76,6 +77,6 @@ func (h *RuntimeNodeHeartbeat) Start(ctx context.Context, interval time.Duration
 				_, _ = h.Store.PruneRuntimeNodes(ctx, h.now().Add(-h.Retention))
 			}
 		}
-	}()
+	})
 	return done
 }

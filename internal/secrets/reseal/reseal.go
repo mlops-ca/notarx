@@ -38,7 +38,7 @@ func Targets() []Target {
 	return []Target{
 		{
 			Name:    "email_targets.recipient_ciphertext",
-			Select:  "SELECT id::text, id::text, recipient_ciphertext FROM email_targets WHERE recipient_ciphertext <> '' ORDER BY id",
+			Select:  "SELECT id::text, id::text, recipient_ciphertext FROM email_targets WHERE recipient_ciphertext <> '' ORDER BY email_targets.id",
 			Update:  "UPDATE email_targets SET recipient_ciphertext = $1, version = version + 1 WHERE id = $2::uuid AND recipient_ciphertext = $3",
 			Purpose: func(id string) string { return "email-target:" + id },
 		},
@@ -46,31 +46,31 @@ func Targets() []Target {
 			// Delivery rows snapshot the target ciphertext; their version is the
 			// worker's lease state and must not change.
 			Name:    "email_test_deliveries.recipient_ciphertext",
-			Select:  "SELECT id::text, target_id::text, recipient_ciphertext FROM email_test_deliveries WHERE recipient_ciphertext <> '' ORDER BY id",
+			Select:  "SELECT id::text, target_id::text, recipient_ciphertext FROM email_test_deliveries WHERE recipient_ciphertext <> '' ORDER BY email_test_deliveries.id",
 			Update:  "UPDATE email_test_deliveries SET recipient_ciphertext = $1 WHERE id = $2::uuid AND recipient_ciphertext = $3",
 			Purpose: func(targetID string) string { return "email-target:" + targetID },
 		},
 		{
 			Name:    "nexus_migration_sources.credential_ciphertext",
-			Select:  "SELECT id::text, id::text, credential_ciphertext FROM nexus_migration_sources WHERE credential_ciphertext <> '' ORDER BY id",
+			Select:  "SELECT id::text, id::text, credential_ciphertext FROM nexus_migration_sources WHERE credential_ciphertext <> '' ORDER BY nexus_migration_sources.id",
 			Update:  "UPDATE nexus_migration_sources SET credential_ciphertext = $1, version = version + 1 WHERE id = $2::uuid AND credential_ciphertext = $3",
 			Purpose: func(id string) string { return "nexus-source:" + id },
 		},
 		{
 			Name:    "identity_providers.secrets_sealed",
-			Select:  "SELECT id::text, id::text, secrets_sealed FROM identity_providers WHERE COALESCE(secrets_sealed, '') <> '' ORDER BY id",
+			Select:  "SELECT id::text, id::text, secrets_sealed FROM identity_providers WHERE COALESCE(secrets_sealed, '') <> '' ORDER BY identity_providers.id",
 			Update:  "UPDATE identity_providers SET secrets_sealed = $1, version = version + 1 WHERE id = $2::uuid AND secrets_sealed = $3",
 			Purpose: func(string) string { return identity.SecretPurpose },
 		},
 		{
 			Name:    "webhook_subscriptions.secret_ciphertext",
-			Select:  "SELECT id::text, id::text, secret_ciphertext FROM webhook_subscriptions WHERE secret_ciphertext <> '' ORDER BY id",
+			Select:  "SELECT id::text, id::text, secret_ciphertext FROM webhook_subscriptions WHERE secret_ciphertext <> '' ORDER BY webhook_subscriptions.id",
 			Update:  "UPDATE webhook_subscriptions SET secret_ciphertext = $1, version = version + 1 WHERE id = $2::uuid AND secret_ciphertext = $3",
 			Purpose: func(id string) string { return "webhook-subscription:" + id },
 		},
 		{
 			Name:    "hosted_repositories.upstream_auth.secret",
-			Select:  "SELECT id::text, id::text, upstream_auth->>'secret' FROM hosted_repositories WHERE COALESCE(upstream_auth->>'secret', '') <> '' ORDER BY id",
+			Select:  "SELECT id::text, id::text, upstream_auth->>'secret' FROM hosted_repositories WHERE COALESCE(upstream_auth->>'secret', '') <> '' ORDER BY hosted_repositories.id",
 			Update:  "UPDATE hosted_repositories SET upstream_auth = jsonb_set(upstream_auth, '{secret}', to_jsonb($1::text)), version = version + 1 WHERE id = $2::uuid AND upstream_auth->>'secret' = $3",
 			Purpose: func(string) string { return "repository-upstream-auth" },
 		},

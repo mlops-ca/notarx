@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -149,7 +150,7 @@ func (m NativePyPIMaintenance) StartScheduler(ctx context.Context, interval time
 	if interval <= 0 {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		window := m.RecoveryWindow
 		if window <= 0 {
 			window = 24 * time.Hour
@@ -165,14 +166,14 @@ func (m NativePyPIMaintenance) StartScheduler(ctx context.Context, interval time
 				_ = m.EnqueueReclaimJobs(ctx, time.Now().UTC().Add(-window), 200)
 			}
 		}
-	}()
+	})
 }
 
 func (m NativePyPIMaintenance) StartWorker(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		_ = m.RunReclaimJobs(ctx, 200)
 		wake := notificationWake(ctx, m.Store, repository.LifecycleJobChannel(repository.LifecycleJobReclaim))
 		ticker := time.NewTicker(interval)
@@ -187,5 +188,5 @@ func (m NativePyPIMaintenance) StartWorker(ctx context.Context, interval time.Du
 				_ = m.RunReclaimJobs(ctx, 200)
 			}
 		}
-	}()
+	})
 }

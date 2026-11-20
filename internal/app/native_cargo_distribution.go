@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/protocol/cargo"
 	"github.com/mlops-ca/notarx/internal/replication"
@@ -164,7 +165,7 @@ func (m NativeCargoPromotion) Start(ctx context.Context, interval time.Duration)
 	if interval <= 0 {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		_ = m.RunJobs(ctx, 100)
 		wake := notificationWake(ctx, m.Store, repository.LifecycleJobChannel(repository.LifecycleJobPromotion))
 		ticker := time.NewTicker(interval)
@@ -179,7 +180,7 @@ func (m NativeCargoPromotion) Start(ctx context.Context, interval time.Duration)
 				_ = m.RunJobs(ctx, 100)
 			}
 		}
-	}()
+	})
 }
 
 func cargoDistributionTarget(source repository.CargoPublication, repositoryID string) repository.CargoPublication {
@@ -237,7 +238,7 @@ func (r CargoReplication) Start(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		_ = r.RunJobs(ctx, 100)
 		wake := notificationWake(ctx, r.Store, repository.ReplicationPlanChannel)
 		ticker := time.NewTicker(interval)
@@ -252,7 +253,7 @@ func (r CargoReplication) Start(ctx context.Context, interval time.Duration) {
 				_ = r.RunJobs(ctx, 100)
 			}
 		}
-	}()
+	})
 }
 
 func (r CargoReplication) admissionSnapshot(ctx context.Context, plan repository.ReplicationPlan, checkpoints []repository.ReplicationCheckpoint) ([]string, bool, error) {

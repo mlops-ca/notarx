@@ -400,3 +400,31 @@ func TestInvalidateNegativesIsOptIn(t *testing.T) {
 		}
 	}
 }
+
+// A bulk statement announces its scope once with the payload "scope:" (an empty id). The listener evicts the
+// whole scope in one step: one epoch bump, every entry and every negative result gone.
+func TestScopeFlushPayloadEvictsTheScopeOnce(t *testing.T) {
+	reg, cache, _ := newTestCache(5*time.Second, Options[string]{
+		Match:               func(value, id string) bool { return value == id },
+		IsNegative:          func(err error) bool { return errors.Is(err, errMissing) },
+		InvalidateNegatives: true,
+	})
+	other := New[string, string](reg, Options[string]{Name: "other", Scope: "other"})
+	var calls atomic.Int32
+	for _, key := range []string{"a", "b", "c"} {
+		_, _ = cache.Get(context.Background(), key, counting(key, &calls))
+	}
+	_, _ = cache.Get(context.Background(), "unknown", func(context.Context) (string, error) { return "", errMissing })
+	_, _ = other.Get(context.Background(), "x", counting("x", &calls))
+	before := reg.Epoch("thing")
+	reg.HandleNotification(Payload("thing", ""))
+	if got := reg.Epoch("thing") - before; got != 1 {
+		t.Fatalf("a scope flush bumped the epoch %d times, want once", got)
+	}
+	if cache.Len() != 0 {
+		t.Fatalf("the scope kept %d entries after a flush", cache.Len())
+	}
+	if other.Len() != 1 {
+		t.Fatal("a flush of one scope emptied another")
+	}
+}

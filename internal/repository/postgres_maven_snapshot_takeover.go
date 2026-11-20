@@ -309,7 +309,7 @@ func (s *PostgresStore) CompleteMavenSnapshotDeployment(ctx context.Context, id,
 }
 
 func lockMavenSnapshotArtifactsTx(ctx context.Context, tx *sql.Tx, repo, coordinate string) ([]MavenArtifact, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT id::text,repository_id::text,coordinate,digest,state,created_at,build_number,source_timestamp,source_build_number FROM native_maven_artifacts WHERE repository_id=$1 AND coordinate=$2 ORDER BY id FOR SHARE`, repo, coordinate)
+	rows, err := tx.QueryContext(ctx, `SELECT id::text,repository_id::text,coordinate,digest,state,created_at,build_number,source_timestamp,source_build_number FROM native_maven_artifacts WHERE repository_id=$1 AND coordinate=$2 ORDER BY native_maven_artifacts.id FOR SHARE`, repo, coordinate)
 	if err != nil {
 		return nil, err
 	}

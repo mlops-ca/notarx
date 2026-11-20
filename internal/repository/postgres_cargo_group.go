@@ -159,7 +159,7 @@ func lockCargoGroupRepositories(ctx context.Context, tx *sql.Tx, memberSets ...[
 	return nil
 }
 
-func preflightPostgresCargoGroupMembers(ctx context.Context, tx *sql.Tx, groupID string, members []GroupMember, additional ...cargoGroupKnownIndex) error {
+func (s *PostgresStore) preflightPostgresCargoGroupMembers(ctx context.Context, tx *sql.Tx, groupID string, members []GroupMember, additional ...cargoGroupKnownIndex) error {
 	preflight := newCargoGroupPreflight(groupID)
 	ownerRows, err := tx.QueryContext(ctx, `SELECT group_id::text,source_repository_id::text,name,version,checksum,index_row
 		FROM native_cargo_group_versions WHERE group_id=$1::uuid`, groupID)
@@ -184,28 +184,42 @@ func preflightPostgresCargoGroupMembers(ctx context.Context, tx *sql.Tx, groupID
 	}
 	for _, member := range members {
 		for _, query := range []string{
-			`SELECT index_row FROM native_cargo_publications WHERE repository_id=$1::uuid`,
-			`SELECT body FROM native_cargo_proxy_indexes WHERE repository_id=$1::uuid AND status=200`,
+			`SELECT index_row,NULL::text,NULL::bigint,NULL::text FROM native_cargo_publications WHERE repository_id=$1::uuid`,
+			`SELECT body,body_digest,body_size,body_key FROM native_cargo_proxy_indexes WHERE repository_id=$1::uuid AND status=200`,
 		} {
 			rows, err := tx.QueryContext(ctx, query, member.RepositoryID)
 			if err != nil {
 				return err
 			}
+			var bodies [][]byte
+			var refs []payloadRef
 			for rows.Next() {
 				var body []byte
-				if err := rows.Scan(&body); err != nil {
+				var ref payloadRef
+				if err := rows.Scan(&body, &ref.digest, &ref.size, &ref.key); err != nil {
 					_ = rows.Close()
 					return err
 				}
-				if err := preflight.addIndex(cargoGroupKnownIndex{RepositoryID: member.RepositoryID, Body: body}); err != nil {
-					_ = rows.Close()
-					return err
-				}
+				bodies = append(bodies, body)
+				refs = append(refs, ref)
 			}
 			err = rows.Err()
 			_ = rows.Close()
 			if err != nil {
 				return err
+			}
+			// The bodies of externalised indexes are read once the cursor is closed.
+			slots := make([]payloadSlot, len(bodies))
+			for i := range bodies {
+				slots[i] = payloadSlot{ref: refs[i], set: func(data []byte) { bodies[i] = data }}
+			}
+			if err = s.resolvePayloads(ctx, slots); err != nil {
+				return err
+			}
+			for _, body := range bodies {
+				if err = preflight.addIndex(cargoGroupKnownIndex{RepositoryID: member.RepositoryID, Body: body}); err != nil {
+					return err
+				}
 			}
 		}
 	}

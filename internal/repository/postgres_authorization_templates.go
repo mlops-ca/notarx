@@ -43,7 +43,7 @@ func (s *PostgresStore) CreateAuthorizationTemplate(ctx context.Context, templat
 }
 
 func (s *PostgresStore) ListAuthorizationTemplates(ctx context.Context) ([]AuthorizationTemplate, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+authorizationTemplateColumns+` FROM authorization_templates ORDER BY name, id`)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+authorizationTemplateColumns+` FROM authorization_templates ORDER BY name, authorization_templates.id`)
 	if err != nil {
 		return nil, err
 	}

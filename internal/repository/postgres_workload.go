@@ -20,6 +20,13 @@ var (
 
 const workloadIssuerColumns = `id::text, name, kind, issuer, array_to_json(audiences), array_to_json(allowed_algs), jwks_mode, COALESCE(jwks_uri,''), static_jwks, COALESCE(ca_bundle_pem,''), allow_private_network, state, version::text, created_at, updated_at`
 
+// The id-keyset listings qualify ORDER BY with the table: a bare id would resolve to the selected
+// id::text output column and sort the text instead of reading the uuid primary key in order.
+const (
+	listWorkloadIssuersQuery  = `SELECT ` + workloadIssuerColumns + ` FROM workload_issuers WHERE ($1='' OR id>$1::uuid) ORDER BY workload_issuers.id LIMIT $2`
+	listWorkloadPoliciesQuery = `SELECT ` + workloadPolicyColumns + ` FROM workload_trust_policies WHERE ($1='' OR id>$1::uuid) ORDER BY workload_trust_policies.id LIMIT $2`
+)
+
 const workloadPolicyColumns = `id::text, name, issuer_id::text, service_account_id::text, conditions, max_token_ttl_seconds, single_use, state, version::text, expires_at, created_at, updated_at`
 
 func scanWorkloadIssuer(row interface{ Scan(...any) error }, issuer *WorkloadIssuer) error {
@@ -145,7 +152,7 @@ func (s *PostgresStore) ListWorkloadIssuers(ctx context.Context, limit int, afte
 	if err := checkWorkloadLimit(limit); err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT `+workloadIssuerColumns+` FROM workload_issuers WHERE ($1='' OR id>$1::uuid) ORDER BY id LIMIT $2`, afterID, limit)
+	rows, err := s.db.QueryContext(ctx, listWorkloadIssuersQuery, afterID, limit)
 	if err != nil {
 		return nil, mapMalformedUUID(err)
 	}
@@ -301,7 +308,7 @@ func (s *PostgresStore) ListWorkloadTrustPolicies(ctx context.Context, limit int
 	if err := checkWorkloadLimit(limit); err != nil {
 		return nil, err
 	}
-	return s.listWorkloadPolicies(ctx, `SELECT `+workloadPolicyColumns+` FROM workload_trust_policies WHERE ($1='' OR id>$1::uuid) ORDER BY id LIMIT $2`, afterID, limit)
+	return s.listWorkloadPolicies(ctx, listWorkloadPoliciesQuery, afterID, limit)
 }
 
 func (s *PostgresStore) ListActiveWorkloadTrustPolicies(ctx context.Context, issuerID string, now time.Time) ([]WorkloadTrustPolicy, error) {

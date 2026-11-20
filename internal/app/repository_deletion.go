@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -54,7 +55,7 @@ func (w RepositoryDeletionWorker) Start(ctx context.Context, interval time.Durat
 	if w.Store == nil || interval <= 0 {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		_, _ = w.Run(ctx)
 		wake := notificationWake(ctx, w.Store, "notarx_repository_deletions")
 		ticker := time.NewTicker(interval)
@@ -69,5 +70,5 @@ func (w RepositoryDeletionWorker) Start(ctx context.Context, interval time.Durat
 				_, _ = w.Run(ctx)
 			}
 		}
-	}()
+	})
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/lifecycle"
 	"github.com/mlops-ca/notarx/internal/objectstore"
@@ -187,7 +188,7 @@ func (m Maintenance) StartScheduler(ctx context.Context, interval time.Duration)
 	if interval <= 0 {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		_ = m.Schedule(ctx)
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -199,7 +200,7 @@ func (m Maintenance) StartScheduler(ctx context.Context, interval time.Duration)
 				_ = m.Schedule(ctx)
 			}
 		}
-	}()
+	})
 }
 
 func (m Maintenance) StartWorker(ctx context.Context, interval time.Duration) {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -150,7 +151,7 @@ func (m NativeNPMMaintenance) StartScheduler(ctx context.Context, interval time.
 	if interval <= 0 {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -165,14 +166,14 @@ func (m NativeNPMMaintenance) StartScheduler(ctx context.Context, interval time.
 				_ = m.EnqueueReclaimJobs(ctx, now().UTC().Add(-24*time.Hour), 100)
 			}
 		}
-	}()
+	})
 }
 
 func (m NativeNPMMaintenance) StartWorker(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		_ = m.RunReclaimJobs(ctx, 100)
 		wake := notificationWake(ctx, m.Store, repository.LifecycleJobChannel(repository.LifecycleJobReclaim))
 		ticker := time.NewTicker(interval)
@@ -187,5 +188,5 @@ func (m NativeNPMMaintenance) StartWorker(ctx context.Context, interval time.Dur
 				_ = m.RunReclaimJobs(ctx, 100)
 			}
 		}
-	}()
+	})
 }

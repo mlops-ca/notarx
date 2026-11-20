@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/replication"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -29,7 +30,7 @@ func (r NPMReplication) Start(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		_ = r.RunJobs(ctx, 100)
 		wake := notificationWake(ctx, r.Store, repository.ReplicationPlanChannel)
 		ticker := time.NewTicker(interval)
@@ -44,7 +45,7 @@ func (r NPMReplication) Start(ctx context.Context, interval time.Duration) {
 				_ = r.RunJobs(ctx, 100)
 			}
 		}
-	}()
+	})
 }
 
 func (r NPMReplication) publish(ctx context.Context, plan repository.ReplicationPlan, checkpoints []repository.ReplicationCheckpoint) error {

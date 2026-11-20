@@ -9,6 +9,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/background"
 	formatmodule "github.com/mlops-ca/notarx/internal/format"
 	rawformat "github.com/mlops-ca/notarx/internal/format/raw"
 	"github.com/mlops-ca/notarx/internal/ids"
@@ -647,7 +648,7 @@ func (m NativeRepositoryRetention) StartScheduler(ctx context.Context, interval 
 	if interval <= 0 {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		collectionTicker := time.NewTicker(interval)
 		defer collectionTicker.Stop()
 		for {
@@ -658,14 +659,14 @@ func (m NativeRepositoryRetention) StartScheduler(ctx context.Context, interval 
 				_ = m.Schedule(ctx)
 			}
 		}
-	}()
+	})
 }
 
 func (m NativeRepositoryRetention) StartWorker(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		_ = m.RunJobs(ctx, 200)
 		wake := notificationWake(ctx, m.Store, repository.LifecycleJobChannel(repository.LifecycleJobRetention))
 		jobInterval := time.Minute
@@ -684,7 +685,7 @@ func (m NativeRepositoryRetention) StartWorker(ctx context.Context, interval tim
 				_ = m.RunJobs(ctx, 200)
 			}
 		}
-	}()
+	})
 }
 
 func supportsRepositoryRetention(format repository.Format) bool {

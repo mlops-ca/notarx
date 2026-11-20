@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -164,7 +165,7 @@ func (m NativeConanMaintenance) StartScheduler(ctx context.Context, interval tim
 	if interval <= 0 {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -179,7 +180,7 @@ func (m NativeConanMaintenance) StartScheduler(ctx context.Context, interval tim
 				_ = m.EnqueueReclaimJobs(ctx, now().UTC().Add(-24*time.Hour), 100)
 			}
 		}
-	}()
+	})
 }
 
 // StartWorker only claims and executes Conan reclaim jobs.
@@ -187,7 +188,7 @@ func (m NativeConanMaintenance) StartWorker(ctx context.Context, interval time.D
 	if interval <= 0 {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		_ = m.RunReclaimJobs(ctx, 100)
 		wake := notificationWake(ctx, m.Store, repository.LifecycleJobChannel(repository.LifecycleJobReclaim))
 		ticker := time.NewTicker(interval)
@@ -202,5 +203,5 @@ func (m NativeConanMaintenance) StartWorker(ctx context.Context, interval time.D
 				_ = m.RunReclaimJobs(ctx, 100)
 			}
 		}
-	}()
+	})
 }
