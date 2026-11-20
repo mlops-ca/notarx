@@ -8,7 +8,9 @@ import (
 func TestTranslate(t *testing.T) {
 	for _, tc := range []struct{ in, want string }{
 		{"(size >= 0)", "(`size` >= 0)"},
-		{"singleton", "`singleton`"},
+		{"singleton", "(`singleton` <> 0)"},
+		{"(singleton)", "(`singleton` <> 0)"},
+		{"(singleton AND (a > 1))", "(`singleton` AND (`a` > 1))"},
 		{"(state = ANY (ARRAY['a'::text, 'b'::text]))", "(`state` IN ('a', 'b'))"},
 		{"((visibility)::text = ANY ((ARRAY['private'::character varying, 'public'::character varying])::text[]))", "(`visibility` IN ('private', 'public'))"},
 		{"(kind <> ALL (ARRAY['x'::text]))", "(`kind` NOT IN ('x'))"},

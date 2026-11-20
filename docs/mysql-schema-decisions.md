@@ -274,7 +274,9 @@ None.
 
 MySQL rejects a CHECK on a column that a foreign key action rewrites, so the generator leaves these out and the store validates the value.
 
-None.
+| Table | Constraint | Reason |
+| --- | --- | --- |
+| scheduled_tasks | scheduled_tasks_check | the column is in the referential action of the foreign key `repository_id -> hosted_repositories(id) on delete cascade`; MySQL refuses a CHECK on it (error 3823); the store validates it |
 
 ## Triggers
 

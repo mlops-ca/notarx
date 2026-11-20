@@ -280,13 +280,17 @@ func (g *generator) indexItems(t *tablePlan, parts []keyPart) (columns, items []
 	return columns, items
 }
 
+// referentialNoOp reports whether a foreign key action leaves the child row alone: MySQL refuses a CHECK
+// on a column that any other action rewrites or removes (error 3823).
+func referentialNoOp(action string) bool { return action == "NO ACTION" || action == "RESTRICT" }
+
 // checkLines translates the CHECK constraints of a table.
 func (g *generator) checkLines(t *tablePlan) []string {
 	restricted := map[string]string{} // column -> foreign key action that forbids a CHECK on it
 	for _, fk := range t.table.ForeignKeys {
 		local, _ := parseForeignKey(fk)
 		onDelete, onUpdate := foreignKeyActions(fk)
-		if onDelete == "SET NULL" || onDelete == "SET DEFAULT" || onUpdate == "CASCADE" || onUpdate == "SET NULL" || onUpdate == "SET DEFAULT" {
+		if !referentialNoOp(onDelete) || !referentialNoOp(onUpdate) {
 			for _, c := range local.columns {
 				restricted[c] = fk
 			}
@@ -455,6 +459,9 @@ func (g *generator) orderForeignKey(child, parent *tablePlan, local, remote []st
 			if child.hashed[l] != parent.hashed[r] {
 				g.problemf("%s: the foreign key column %s and %s.%s must both be hashed or neither", child.name, l, parent.name, r)
 			}
+			if a, b := typeFamily(child.types[l]), typeFamily(parent.types[r]); a != b {
+				g.problemf("%s: the foreign key column %s is %s but %s.%s is %s; MySQL needs matching types", child.name, l, child.types[l], parent.name, r, parent.types[r])
+			}
 			localOrdered = append(localOrdered, child.keyColumn(l))
 			remoteOrdered = append(remoteOrdered, parent.keyColumn(r))
 		}
@@ -468,4 +475,12 @@ func sameSet(a, b []string) bool {
 	slices.Sort(x)
 	slices.Sort(y)
 	return slices.Equal(x, y)
+}
+
+// typeFamily is the type of a column as a foreign key sees it: the length of a string type does not matter, the rest does.
+func typeFamily(mysqlType string) string {
+	if strings.HasPrefix(mysqlType, "VARCHAR(") {
+		return "VARCHAR"
+	}
+	return mysqlType
 }

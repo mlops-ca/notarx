@@ -101,7 +101,7 @@ tables:
       updated_by: ''''''
       version: "1"
     indexes:
-      - updated_at
+      - updated_at desc
     special:
       artifact_intelligence_body_key_idx: USING btree (body_key) WHERE (body_key IS NOT NULL)
     checks:
@@ -168,7 +168,7 @@ tables:
       source: text
       spec_version: text
     primaryKey: [id]
-    unique: [[artifact_digest, kind, repository_id, source]]
+    unique: [[repository_id, artifact_digest, kind, source]]
     defaults:
       body_key: ''''''
       component_count: "0"
@@ -207,7 +207,7 @@ tables:
       scanner_version: ''''''
       unknown: "0"
     indexes:
-      - repository_id,artifact_digest desc,scanned_at
+      - repository_id,artifact_digest,scanned_at desc
   artifact_tombstones:
     columns:
       coordinate: text
@@ -243,7 +243,7 @@ tables:
       last_downloaded_at: now()
       total_bytes: "0"
     indexes:
-      - repository_id desc,download_count
+      - repository_id,download_count desc
     special:
       artifact_usage_stats_repository_address_idx: USING btree (repository_id, resource COLLATE "C", format COLLATE "C")
   artifact_vulnerability:
@@ -266,7 +266,7 @@ tables:
       truncated: bool
       unknown: int32
     primaryKey: [id]
-    unique: [[artifact_digest, repository_id]]
+    unique: [[repository_id, artifact_digest]]
     defaults:
       critical: "0"
       findings_total: "0"
@@ -376,7 +376,7 @@ tables:
       updated_at: now()
       version: "1"
     indexes:
-      - updated_at desc,id
+      - updated_at desc,id desc
     special:
       authorization_roles_name_ci_idx: unique USING btree (lower(name))
     checks:
@@ -398,7 +398,7 @@ tables:
       updated_at: now()
       version: "1"
     indexes:
-      - updated_at desc,id
+      - updated_at desc,id desc
     special:
       authorization_templates_name_ci_idx: unique USING btree (lower(name))
   cache_circuit_breakers:
@@ -784,7 +784,7 @@ tables:
       started_at: timestamp?
       state: text
     primaryKey: [id]
-    unique: [[idempotency_key, kind, repository_id]]
+    unique: [[repository_id, kind, idempotency_key]]
     foreignKeys:
       - repository_id -> hosted_repositories(id)
     defaults:
@@ -798,8 +798,8 @@ tables:
       progress_message: ''''''
       progress_total: "0"
     indexes:
-      - created_at desc,id
-      - repository_id desc,created_at desc,id
+      - created_at desc,id desc
+      - repository_id,created_at desc,id desc
     special:
       lifecycle_jobs_actionable_idx: USING btree (next_attempt_at, created_at) WHERE (state = ANY (ARRAY['pending'::text, 'retrying'::text]))
       lifecycle_jobs_artifact_scan_identity_idx: USING btree (repository_id, ((payload ->> 'format'::text)), ((payload ->> 'coordinate'::text)), ((payload ->> 'digest'::text)), created_at DESC) WHERE (kind = 'scan'::text)
@@ -984,7 +984,7 @@ tables:
       size: int64
       version: text
     primaryKey: [id]
-    unique: [[canonical_identity, repository_id]]
+    unique: [[repository_id, canonical_identity]]
     foreignKeys:
       - repository_id -> hosted_repositories(id) on delete cascade
     defaults:
@@ -1092,7 +1092,7 @@ tables:
       state: text
       suite: text
     primaryKey: [id]
-    unique: [[id, repository_id], [repository_id, sequence, suite]]
+    unique: [[id, repository_id], [repository_id, suite, sequence]]
     foreignKeys:
       - repository_id -> hosted_repositories(id) on delete cascade
     defaults:
@@ -1168,7 +1168,7 @@ tables:
       publication_session_id: uuid
       snapshot_id: uuid
     primaryKey: [snapshot_id, publication_session_id]
-    unique: [[architecture, component, package_revision_id, snapshot_id]]
+    unique: [[snapshot_id, package_revision_id, component, architecture]]
     foreignKeys:
       - package_revision_id -> native_apt_package_revisions(id)
       - publication_session_id -> native_apt_publication_sessions(id)
@@ -1776,7 +1776,7 @@ tables:
       source_timestamp: text
       state: text
     primaryKey: [id]
-    unique: [[build_number, coordinate, repository_id]]
+    unique: [[repository_id, coordinate, build_number]]
     foreignKeys:
       - repository_id -> hosted_repositories(id)
     defaults:
@@ -2002,7 +2002,7 @@ tables:
       upstream_tarball: text
       version: text
     primaryKey: [repository_id, package_name, version]
-    unique: [[package_name, repository_id, tarball_name]]
+    unique: [[repository_id, package_name, tarball_name]]
     foreignKeys:
       - package_name,repository_id -> native_npm_packages(name,repository_id) on delete cascade
     defaults:
@@ -2331,7 +2331,7 @@ tables:
       artifact_type: ''''''
       created_at: now()
     indexes:
-      - repository_id,digest,name desc,created_at
+      - repository_id,digest,name,created_at desc
     special:
       native_oci_manifests_created_at_brin_idx: USING brin (created_at) WITH (pages_per_range='128')
       native_oci_manifests_name_trgm_idx: USING gin (name gin_trgm_ops) WITH (fastupdate='on', gin_pending_list_limit='1024')
@@ -2567,7 +2567,7 @@ tables:
       updated_at: timestamp
       version: text
     primaryKey: [id]
-    unique: [[name, repository_id, version]]
+    unique: [[repository_id, name, version]]
     foreignKeys:
       - repository_id -> hosted_repositories(id)
     defaults:
@@ -2578,7 +2578,7 @@ tables:
       state: '''open'''
       updated_at: now()
     indexes:
-      - repository_id,name desc,sealed_at desc,id
+      - repository_id,name,sealed_at desc,id desc
       - repository_id,state,sealed_at
       - state,created_at
       - state,updated_at
@@ -2612,7 +2612,7 @@ tables:
       target_session_id: uuid?
       version: text
     primaryKey: [job_id, item_index]
-    unique: [[canonical_version, job_id, name, platform]]
+    unique: [[job_id, name, canonical_version, platform]]
     foreignKeys:
       - job_id -> native_rubygems_replication_jobs(id)
       - target_session_id -> native_rubygems_sessions(id)
@@ -2850,7 +2850,7 @@ tables:
       verified_bytes: int64
       visible_identities: int64
     primaryKey: [id]
-    unique: [[batch_id, identity, target_repository_id], [batch_id, ordinal]]
+    unique: [[batch_id, ordinal], [batch_id, target_repository_id, identity]]
     foreignKeys:
       - batch_id -> nexus_migration_batches(id) on delete cascade
     defaults:
@@ -2881,7 +2881,7 @@ tables:
       page_sha256: text
       source_repository: text
     primaryKey: [batch_id, ordinal]
-    unique: [[batch_id, cursor_sha256, source_repository]]
+    unique: [[batch_id, source_repository, cursor_sha256]]
     foreignKeys:
       - batch_id -> nexus_migration_scans(batch_id) on delete cascade
     checks:
@@ -3216,7 +3216,7 @@ tables:
       state: text
       target_repository_id: uuid
     primaryKey: [id]
-    unique: [[idempotency_key, target_repository_id]]
+    unique: [[target_repository_id, idempotency_key]]
     foreignKeys:
       - source_repository_id -> hosted_repositories(id)
       - target_repository_id -> hosted_repositories(id)
@@ -3474,7 +3474,7 @@ tables:
       author: ''''''
       created_at: now()
     indexes:
-      - repository_id desc,created_at,id
+      - repository_id,created_at desc,id
     special:
       repository_vex_document_body_key_idx: USING btree (body_key) WHERE (body_key <> ''::text)
     checks:
@@ -3510,8 +3510,8 @@ tables:
       id: identity
       occurred_at: now()
     indexes:
-      - actor desc,occurred_at
-      - repository desc,occurred_at
+      - actor,occurred_at desc
+      - repository,occurred_at desc
     checks:
       resolver_audit_log_evidence_check: (jsonb_typeof(evidence) = 'object'::text)
   runtime_node_sessions:
@@ -3532,8 +3532,8 @@ tables:
       worker_formats: '''[]'''
       worker_kinds: '''[]'''
     indexes:
-      - instance_id desc,last_seen_at
-      - last_seen_at
+      - instance_id,last_seen_at desc
+      - last_seen_at desc
     special:
       runtime_node_sessions_retention_idx: USING btree (stopped_at) WHERE (stopped_at IS NOT NULL)
   runtime_nodes:
@@ -3552,7 +3552,7 @@ tables:
       worker_formats: '''[]'''
       worker_kinds: '''[]'''
     indexes:
-      - last_seen_at
+      - last_seen_at desc
   saml_assertion_ids:
     columns:
       assertion_id: text
@@ -3582,7 +3582,7 @@ tables:
     primaryKey: [id]
     unique: [[kind, oci_digest]]
     indexes:
-      - kind desc,built_at
+      - kind,built_at desc
     checks:
       scanner_db_generation_kind_check: ((kind)::text = ANY (ARRAY[('trivy-db'::character varying)::text, ('java-db'::character varying)::text, ('checks'::character varying)::text]))
       scanner_db_generation_source_check: ((source)::text = ANY (ARRAY[('upstream'::character varying)::text, ('mirror'::character varying)::text, ('feed'::character varying)::text]))
@@ -3608,7 +3608,7 @@ tables:
       target_kind: ''''''
     indexes:
       - created_at
-      - task_id desc,created_at
+      - task_id,created_at desc
     checks:
       scheduled_task_runs_state_check: (state = ANY (ARRAY['submitted'::text, 'failed'::text]))
       scheduled_task_runs_trigger_check: (trigger = ANY (ARRAY['scheduled'::text, 'manual'::text]))
@@ -3687,8 +3687,8 @@ tables:
       id: identity
       occurred_at: now()
     indexes:
-      - actor desc,occurred_at
-      - repository desc,occurred_at
+      - actor,occurred_at desc
+      - repository,occurred_at desc
     checks:
       security_audit_log_evidence_check: (jsonb_typeof(evidence) = 'object'::text)
   service_accounts:
@@ -3912,8 +3912,8 @@ tables:
       state: '''pending'''
       updated_at: now()
     indexes:
-      - created_at desc,id
-      - subscription_id desc,created_at desc,id
+      - created_at desc,id desc
+      - subscription_id,created_at desc,id desc
     special:
       webhook_deliveries_actionable_idx: USING btree (COALESCE(next_attempt_at, lease_expires_at), created_at) WHERE (state = ANY (ARRAY['pending'::text, 'retrying'::text, 'delivering'::text]))
       webhook_deliveries_retention_idx: USING btree (updated_at) WHERE (state = ANY (ARRAY['succeeded'::text, 'dead'::text]))

@@ -73,7 +73,7 @@ CREATE TABLE `artifact_intelligence` (
   `vulnerability` JSON NULL,
   `coordinate_sha256` BINARY(32) GENERATED ALWAYS AS (UNHEX(SHA2(`coordinate`, 256))) STORED NOT NULL,
   PRIMARY KEY (`repository_id`, `format`, `coordinate_sha256`, `digest`),
-  KEY `ix_artifact_intelligence_updated_at` (`updated_at`),
+  KEY `ix_artifact_intelligence_updated_at` (`updated_at` DESC),
   KEY `ix_artifact_intelligence_body_key_idx` (`body_key`),
   CONSTRAINT `artifact_intelligence_body_ref_check` CHECK (((((`body_digest` IS NULL) AND (`body_size` IS NULL)) AND (`body_key` IS NULL)) OR ((((`body_digest` IS NOT NULL) AND (`body_size` IS NOT NULL)) AND (`body_key` IS NOT NULL)) AND (`body_size` >= 0)))),
   CONSTRAINT `artifact_intelligence_coordinate_check` CHECK (((CHAR_LENGTH(`coordinate`) >= 1) AND (CHAR_LENGTH(`coordinate`) <= 1024))),
@@ -132,7 +132,7 @@ CREATE TABLE `artifact_sbom` (
   `source` VARCHAR(64) NOT NULL,
   `spec_version` TEXT NOT NULL DEFAULT (''),
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_artifact_sbom_artifact_digest_kind_repository_id_source` (`artifact_digest`, `kind`, `repository_id`, `source`),
+  UNIQUE KEY `uq_artifact_sbom_repository_id_artifact_digest_kind_source` (`repository_id`, `artifact_digest`, `kind`, `source`),
   KEY `ix_artifact_sbom_body_key_idx` (`body_key`),
   CONSTRAINT `artifact_sbom_body_check` CHECK (((`body` IS NOT NULL) OR (`body_key` <> ''))),
   CONSTRAINT `artifact_sbom_kind_check` CHECK ((`kind` IN ('cyclonedx-json', 'spdx-json'))),
@@ -154,7 +154,7 @@ CREATE TABLE `artifact_scan_history` (
   `status` TEXT NOT NULL,
   `unknown` INT NOT NULL DEFAULT 0,
   PRIMARY KEY (`scanned_at`, `id`),
-  KEY `ix_artifact_scan_history_repository_id_artifact_digest__c364873d` (`repository_id`, `artifact_digest` DESC, `scanned_at`)
+  KEY `ix_artifact_scan_history_repository_id_artifact_digest__c364873d` (`repository_id`, `artifact_digest`, `scanned_at` DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `artifact_tombstones` (
@@ -180,7 +180,7 @@ CREATE TABLE `artifact_usage_stats` (
   `total_bytes` BIGINT NOT NULL DEFAULT 0,
   `resource_sha256` BINARY(32) GENERATED ALWAYS AS (UNHEX(SHA2(`resource`, 256))) STORED NOT NULL,
   PRIMARY KEY (`repository_id`, `format`, `resource_sha256`),
-  KEY `ix_artifact_usage_stats_repository_id_download_count` (`repository_id` DESC, `download_count`)
+  KEY `ix_artifact_usage_stats_repository_id_download_count` (`repository_id`, `download_count` DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `artifact_vulnerability` (
@@ -202,7 +202,7 @@ CREATE TABLE `artifact_vulnerability` (
   `truncated` TINYINT(1) NOT NULL DEFAULT 0,
   `unknown` INT NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_artifact_vulnerability_artifact_digest_repository_id` (`artifact_digest`, `repository_id`),
+  UNIQUE KEY `uq_artifact_vulnerability_repository_id_artifact_digest` (`repository_id`, `artifact_digest`),
   KEY `ix_artifact_vulnerability_db_generation_id_scanned_at_id` (`db_generation_id`, `scanned_at`, `id`),
   CONSTRAINT `artifact_vulnerability_counts_check` CHECK ((((((((`critical` >= 0) AND (`high` >= 0)) AND (`medium` >= 0)) AND (`low` >= 0)) AND (`unknown` >= 0)) AND (`suppressed_count` >= 0)) AND (`findings_total` >= 0))),
   CONSTRAINT `artifact_vulnerability_status_check` CHECK ((`status` IN ('clean', 'vulnerable', 'stale_db', 'not_scanned', 'error')))
@@ -263,7 +263,7 @@ CREATE TABLE `audit_retention_policy` (
   `version` BIGINT NOT NULL DEFAULT 1,
   PRIMARY KEY (`singleton`),
   CONSTRAINT `audit_retention_policy_keep_days_check` CHECK ((`keep_days` >= 0)),
-  CONSTRAINT `audit_retention_policy_singleton_check` CHECK (`singleton`)
+  CONSTRAINT `audit_retention_policy_singleton_check` CHECK ((`singleton` <> 0))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `authorization_roles` (
@@ -276,7 +276,7 @@ CREATE TABLE `authorization_roles` (
   `version` BIGINT NOT NULL DEFAULT 1,
   `name_lower` VARCHAR(255) GENERATED ALWAYS AS (LOWER(`name`)) VIRTUAL NOT NULL,
   PRIMARY KEY (`id`),
-  KEY `ix_authorization_roles_updated_at_id` (`updated_at` DESC, `id`),
+  KEY `ix_authorization_roles_updated_at_id` (`updated_at` DESC, `id` DESC),
   UNIQUE KEY `uq_authorization_roles_name_ci_idx` (`name_lower`),
   CONSTRAINT `authorization_roles_scopes_nonempty` CHECK ((JSON_LENGTH(`scopes`) > 0))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
@@ -291,7 +291,7 @@ CREATE TABLE `authorization_templates` (
   `version` BIGINT NOT NULL DEFAULT 1,
   `name_lower` VARCHAR(255) GENERATED ALWAYS AS (LOWER(`name`)) VIRTUAL NOT NULL,
   PRIMARY KEY (`id`),
-  KEY `ix_authorization_templates_updated_at_id` (`updated_at` DESC, `id`),
+  KEY `ix_authorization_templates_updated_at_id` (`updated_at` DESC, `id` DESC),
   UNIQUE KEY `uq_authorization_templates_name_ci_idx` (`name_lower`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -559,7 +559,7 @@ CREATE TABLE `installation_repository_presets` (
   PRIMARY KEY (`singleton`),
   CONSTRAINT `installation_repository_presets_groups_created_check` CHECK ((`groups_created` >= 0)),
   CONSTRAINT `installation_repository_presets_repositories_created_check` CHECK ((`repositories_created` >= 0)),
-  CONSTRAINT `installation_repository_presets_singleton_check` CHECK (`singleton`),
+  CONSTRAINT `installation_repository_presets_singleton_check` CHECK ((`singleton` <> 0)),
   CONSTRAINT `installation_repository_presets_state_check` CHECK ((`state` IN ('pending', 'applied', 'skipped_existing')))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -584,9 +584,9 @@ CREATE TABLE `lifecycle_jobs` (
   `state` TEXT NOT NULL,
   `actionable` TINYINT(1) GENERATED ALWAYS AS (IF((`state` IN ('pending', 'retrying')), 1, 0)) VIRTUAL NOT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_lifecycle_jobs_idempotency_key_kind_repository_id` (`idempotency_key`, `kind`, `repository_id`),
-  KEY `ix_lifecycle_jobs_created_at_id` (`created_at` DESC, `id`),
-  KEY `ix_lifecycle_jobs_repository_id_created_at_id` (`repository_id` DESC, `created_at` DESC, `id`),
+  UNIQUE KEY `uq_lifecycle_jobs_repository_id_kind_idempotency_key` (`repository_id`, `kind`, `idempotency_key`),
+  KEY `ix_lifecycle_jobs_created_at_id` (`created_at` DESC, `id` DESC),
+  KEY `ix_lifecycle_jobs_repository_id_created_at_id` (`repository_id`, `created_at` DESC, `id` DESC),
   KEY `ix_lifecycle_jobs_actionable_idx` (`actionable`, `next_attempt_at`, `created_at`),
   KEY `ix_lifecycle_jobs_kind_actionable_idx` (`actionable`, `kind`, `next_attempt_at`),
   KEY `ix_lifecycle_jobs_lease_idx` (`lease_expires_at`),
@@ -734,7 +734,7 @@ CREATE TABLE `native_apt_package_revisions` (
   `version` TEXT NOT NULL,
   `canonical_identity_sha256` BINARY(32) GENERATED ALWAYS AS (UNHEX(SHA2(`canonical_identity`, 256))) STORED NOT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_native_apt_package_revisions_canonical_identity_sha2_ca2d334b` (`canonical_identity_sha256`, `repository_id`),
+  UNIQUE KEY `uq_native_apt_package_revisions_repository_id_canonical_3e4a9fe5` (`repository_id`, `canonical_identity_sha256`),
   KEY `ix_native_apt_package_revisions_object_key` (`object_key`),
   KEY `ix_native_apt_package_revisions_repository_id_digest` (`repository_id`, `digest`),
   CONSTRAINT `native_apt_package_revisions_architecture_check` CHECK (REGEXP_LIKE(`architecture`, '^[a-z0-9][a-z0-9-]*$', 'c')),
@@ -827,7 +827,7 @@ CREATE TABLE `native_apt_repository_snapshots` (
   `live_native_apt_repository_snapshots_visible_idx` TINYINT(1) GENERATED ALWAYS AS (IF((`state` = 'visible'), 1, NULL)) VIRTUAL NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_native_apt_repository_snapshots_id_repository_id` (`id`, `repository_id`),
-  UNIQUE KEY `uq_native_apt_repository_snapshots_repository_id_sequence_suite` (`repository_id`, `sequence`, `suite`),
+  UNIQUE KEY `uq_native_apt_repository_snapshots_repository_id_suite_sequence` (`repository_id`, `suite`, `sequence`),
   UNIQUE KEY `uq_native_apt_repository_snapshots_visible_idx` (`repository_id`, `suite`, `live_native_apt_repository_snapshots_visible_idx`),
   CONSTRAINT `native_apt_repository_snapshots_check` CHECK ((((`state` IN ('building', 'signed', 'failed')) AND (`published_at` IS NULL)) OR ((`state` IN ('visible', 'retired', 'pruned')) AND (`published_at` IS NOT NULL)))),
   CONSTRAINT `native_apt_repository_snapshots_inrelease_digest_check` CHECK (((`inrelease_digest` = '') OR REGEXP_LIKE(`inrelease_digest`, '^sha256:[0-9a-f]{64}$', 'c'))),
@@ -882,7 +882,7 @@ CREATE TABLE `native_apt_snapshot_packages` (
   `publication_session_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   `snapshot_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   PRIMARY KEY (`snapshot_id`, `publication_session_id`),
-  UNIQUE KEY `uq_native_apt_snapshot_packages_architecture_component__96b32368` (`architecture`, `component`, `package_revision_id`, `snapshot_id`),
+  UNIQUE KEY `uq_native_apt_snapshot_packages_snapshot_id_package_rev_3333c8e6` (`snapshot_id`, `package_revision_id`, `component`, `architecture`),
   KEY `ix_native_apt_snapshot_packages_package_revision_id` (`package_revision_id`),
   KEY `ix_native_apt_snapshot_packages_publication_session_id` (`publication_session_id`),
   KEY `ix_native_apt_snapshot_packages_snapshot_id_component_a_f6ede7fc` (`snapshot_id`, `component`, `architecture`),
@@ -1343,7 +1343,7 @@ CREATE TABLE `native_maven_artifacts` (
   `coordinate_sha256` BINARY(32) GENERATED ALWAYS AS (UNHEX(SHA2(`coordinate`, 256))) STORED NOT NULL,
   `live_native_maven_source_snapshot_identity` TINYINT(1) GENERATED ALWAYS AS (IF((`source_timestamp` <> ''), 1, NULL)) VIRTUAL NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_native_maven_artifacts_build_number_coordinate_sha25_c3a11f15` (`build_number`, `coordinate_sha256`, `repository_id`),
+  UNIQUE KEY `uq_native_maven_artifacts_repository_id_coordinate_sha2_4785dcfc` (`repository_id`, `coordinate_sha256`, `build_number`),
   UNIQUE KEY `uq_native_maven_source_snapshot_identity` (`repository_id`, `coordinate_sha256`, `source_timestamp`, `source_build_number`, `live_native_maven_source_snapshot_identity`),
   CONSTRAINT `native_maven_artifacts_state_check` CHECK ((`state` IN ('visible', 'deleted')))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
@@ -1509,7 +1509,7 @@ CREATE TABLE `native_npm_versions` (
   `upstream_tarball` TEXT NOT NULL DEFAULT (''),
   `version` VARCHAR(255) NOT NULL,
   PRIMARY KEY (`repository_id`, `package_name`, `version`),
-  UNIQUE KEY `uq_native_npm_versions_package_name_repository_id_tarball_name` (`package_name`, `repository_id`, `tarball_name`),
+  UNIQUE KEY `uq_native_npm_versions_repository_id_package_name_tarball_name` (`repository_id`, `package_name`, `tarball_name`),
   KEY `ix_native_npm_versions_body_key_idx` (`body_key`),
   KEY `ix_native_npm_versions_digest_idx` (`repository_id`, `digest`, `package_name`, `version`),
   KEY `ix_native_npm_versions_object_key_idx` (`object_key`),
@@ -1753,7 +1753,7 @@ CREATE TABLE `native_oci_manifests` (
   `subject_digest` VARCHAR(255) NULL,
   PRIMARY KEY (`repository_id`, `name`, `digest`),
   UNIQUE KEY `uq_native_oci_manifests_object_key` (`object_key`),
-  KEY `ix_native_oci_manifests_repository_id_digest_name_created_at` (`repository_id`, `digest`, `name` DESC, `created_at`),
+  KEY `ix_native_oci_manifests_repository_id_digest_name_created_at` (`repository_id`, `digest`, `name`, `created_at` DESC),
   KEY `ix_native_oci_manifests_name_trgm_idx` (`name`),
   KEY `ix_native_oci_manifests_referrers_idx` (`repository_id`, `name`, `subject_digest`, `digest`),
   KEY `ix_native_oci_manifests_repository_name_pattern_idx` (`repository_id`, `name`),
@@ -1927,8 +1927,8 @@ CREATE TABLE `native_raw_versions` (
   `updated_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   `version` VARCHAR(255) NOT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_native_raw_versions_name_repository_id_version` (`name`, `repository_id`, `version`),
-  KEY `ix_native_raw_versions_repository_id_name_sealed_at_id` (`repository_id`, `name` DESC, `sealed_at` DESC, `id`),
+  UNIQUE KEY `uq_native_raw_versions_repository_id_name_version` (`repository_id`, `name`, `version`),
+  KEY `ix_native_raw_versions_repository_id_name_sealed_at_id` (`repository_id`, `name`, `sealed_at` DESC, `id` DESC),
   KEY `ix_native_raw_versions_repository_id_state_sealed_at` (`repository_id`, `state`, `sealed_at`),
   KEY `ix_native_raw_versions_state_created_at` (`state`, `created_at`),
   KEY `ix_native_raw_versions_state_updated_at` (`state`, `updated_at`),
@@ -1960,7 +1960,7 @@ CREATE TABLE `native_rubygems_replication_items` (
   `target_session_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL,
   `version` TEXT NOT NULL,
   PRIMARY KEY (`job_id`, `item_index`),
-  UNIQUE KEY `uq_native_rubygems_replication_items_canonical_version__84b57b47` (`canonical_version`, `job_id`, `name`, `platform`),
+  UNIQUE KEY `uq_native_rubygems_replication_items_job_id_name_canoni_7ad1e928` (`job_id`, `name`, `canonical_version`, `platform`),
   KEY `ix_native_rubygems_replication_items_target_session_id` (`target_session_id`),
   CONSTRAINT `native_rubygems_replication_ite_source_governance_version_check` CHECK ((`source_governance_version` > 0)),
   CONSTRAINT `native_rubygems_replication_items_attempts_check` CHECK ((`attempts` >= 0)),
@@ -2142,8 +2142,8 @@ CREATE TABLE `nexus_migration_entries` (
   `visible_identities` BIGINT NOT NULL DEFAULT 0,
   `identity_sha256` BINARY(32) GENERATED ALWAYS AS (UNHEX(SHA2(`identity`, 256))) STORED NOT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_nexus_migration_entries_batch_id_identity_sha256_tar_9e2708cd` (`batch_id`, `identity_sha256`, `target_repository_id`),
   UNIQUE KEY `uq_nexus_migration_entries_batch_id_ordinal` (`batch_id`, `ordinal`),
+  UNIQUE KEY `uq_nexus_migration_entries_batch_id_target_repository_i_4dda1a3e` (`batch_id`, `target_repository_id`, `identity_sha256`),
   KEY `ix_nexus_migration_entries_updated_at` (`updated_at`),
   CONSTRAINT `nexus_migration_entries_attempts_check` CHECK (((`attempts` >= 0) AND (`attempts` <= 3))),
   CONSTRAINT `nexus_migration_entries_format_check` CHECK ((`format` IN ('raw', 'maven', 'oci', 'conan', 'npm', 'pypi'))),
@@ -2163,7 +2163,7 @@ CREATE TABLE `nexus_migration_scan_pages` (
   `page_sha256` TEXT NOT NULL,
   `source_repository` VARCHAR(255) NOT NULL,
   PRIMARY KEY (`batch_id`, `ordinal`),
-  UNIQUE KEY `uq_nexus_migration_scan_pages_batch_id_cursor_sha256_so_545027a5` (`batch_id`, `cursor_sha256`, `source_repository`),
+  UNIQUE KEY `uq_nexus_migration_scan_pages_batch_id_source_repositor_58204a41` (`batch_id`, `source_repository`, `cursor_sha256`),
   CONSTRAINT `nexus_migration_scan_pages_cursor_check` CHECK ((CHAR_LENGTH(`cursor`) <= 4096)),
   CONSTRAINT `nexus_migration_scan_pages_cursor_sha256_check` CHECK (REGEXP_LIKE(`cursor_sha256`, '^[0-9a-f]{64}$', 'c')),
   CONSTRAINT `nexus_migration_scan_pages_ordinal_check` CHECK ((`ordinal` >= 0)),
@@ -2268,7 +2268,7 @@ CREATE TABLE `object_store_identity` (
   PRIMARY KEY (`singleton`),
   CONSTRAINT `object_store_identity_driver_check` CHECK ((`driver` <> '')),
   CONSTRAINT `object_store_identity_root_id_check` CHECK ((`root_id` <> '')),
-  CONSTRAINT `object_store_identity_singleton_check` CHECK (`singleton`)
+  CONSTRAINT `object_store_identity_singleton_check` CHECK ((`singleton` <> 0))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `oci_bound_objects` (
@@ -2348,7 +2348,7 @@ CREATE TABLE `public_access_policy` (
   `singleton` TINYINT(1) NOT NULL DEFAULT 1,
   `version` BIGINT NOT NULL DEFAULT 1,
   PRIMARY KEY (`singleton`),
-  CONSTRAINT `public_access_policy_singleton_check` CHECK (`singleton`)
+  CONSTRAINT `public_access_policy_singleton_check` CHECK ((`singleton` <> 0))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `raw_group_members` (
@@ -2419,7 +2419,7 @@ CREATE TABLE `replication_plans` (
   `state` TEXT NOT NULL DEFAULT ('pending'),
   `target_repository_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_replication_plans_idempotency_key_target_repository_id` (`idempotency_key`, `target_repository_id`),
+  UNIQUE KEY `uq_replication_plans_target_repository_id_idempotency_key` (`target_repository_id`, `idempotency_key`),
   KEY `ix_replication_plans_source_repository_id` (`source_repository_id`),
   KEY `ix_replication_plans_claim_idx` (`created_at`),
   KEY `ix_replication_plans_retention_idx` (`completed_at`),
@@ -2590,7 +2590,7 @@ CREATE TABLE `repository_vex_document` (
   `id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   `repository_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   PRIMARY KEY (`id`),
-  KEY `ix_repository_vex_document_repository_id_created_at_id` (`repository_id` DESC, `created_at`, `id`),
+  KEY `ix_repository_vex_document_repository_id_created_at_id` (`repository_id`, `created_at` DESC, `id`),
   KEY `ix_repository_vex_document_body_key_idx` (`body_key`),
   CONSTRAINT `repository_vex_document_format_check` CHECK ((`format` = 'openvex'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
@@ -2619,8 +2619,8 @@ CREATE TABLE `resolver_audit_log` (
   `trace_id` TEXT NULL,
   `upstream_host` TEXT NULL,
   PRIMARY KEY (`occurred_at`, `id`),
-  KEY `ix_resolver_audit_log_actor_occurred_at` (`actor` DESC, `occurred_at`),
-  KEY `ix_resolver_audit_log_repository_occurred_at` (`repository` DESC, `occurred_at`),
+  KEY `ix_resolver_audit_log_actor_occurred_at` (`actor`, `occurred_at` DESC),
+  KEY `ix_resolver_audit_log_repository_occurred_at` (`repository`, `occurred_at` DESC),
   KEY `ix_resolver_audit_log_id` (`id`),
   CONSTRAINT `resolver_audit_log_evidence_check` CHECK ((JSON_TYPE(`evidence`) = 'OBJECT'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
@@ -2637,8 +2637,8 @@ CREATE TABLE `runtime_node_sessions` (
   `worker_formats` JSON NOT NULL DEFAULT (CAST('[]' AS JSON)),
   `worker_kinds` JSON NOT NULL DEFAULT (CAST('[]' AS JSON)),
   PRIMARY KEY (`session_id`),
-  KEY `ix_runtime_node_sessions_instance_id_last_seen_at` (`instance_id` DESC, `last_seen_at`),
-  KEY `ix_runtime_node_sessions_last_seen_at` (`last_seen_at`),
+  KEY `ix_runtime_node_sessions_instance_id_last_seen_at` (`instance_id`, `last_seen_at` DESC),
+  KEY `ix_runtime_node_sessions_last_seen_at` (`last_seen_at` DESC),
   KEY `ix_runtime_node_sessions_retention_idx` (`stopped_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -2652,7 +2652,7 @@ CREATE TABLE `runtime_nodes` (
   `worker_formats` JSON NOT NULL DEFAULT (CAST('[]' AS JSON)),
   `worker_kinds` JSON NOT NULL DEFAULT (CAST('[]' AS JSON)),
   PRIMARY KEY (`instance_id`),
-  KEY `ix_runtime_nodes_last_seen_at` (`last_seen_at`)
+  KEY `ix_runtime_nodes_last_seen_at` (`last_seen_at` DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `saml_assertion_ids` (
@@ -2681,7 +2681,7 @@ CREATE TABLE `scanner_db_generation` (
   `source` TEXT NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_scanner_db_generation_kind_oci_digest` (`kind`, `oci_digest`),
-  KEY `ix_scanner_db_generation_kind_built_at` (`kind` DESC, `built_at`),
+  KEY `ix_scanner_db_generation_kind_built_at` (`kind`, `built_at` DESC),
   CONSTRAINT `scanner_db_generation_kind_check` CHECK ((`kind` IN ('trivy-db', 'java-db', 'checks'))),
   CONSTRAINT `scanner_db_generation_source_check` CHECK ((`source` IN ('upstream', 'mirror', 'feed')))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
@@ -2699,7 +2699,7 @@ CREATE TABLE `scheduled_task_runs` (
   `trigger` TEXT NOT NULL,
   PRIMARY KEY (`id`),
   KEY `ix_scheduled_task_runs_created_at` (`created_at`),
-  KEY `ix_scheduled_task_runs_task_id_created_at` (`task_id` DESC, `created_at`),
+  KEY `ix_scheduled_task_runs_task_id_created_at` (`task_id`, `created_at` DESC),
   CONSTRAINT `scheduled_task_runs_state_check` CHECK ((`state` IN ('submitted', 'failed'))),
   CONSTRAINT `scheduled_task_runs_trigger_check` CHECK ((`trigger` IN ('scheduled', 'manual')))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
@@ -2727,7 +2727,6 @@ CREATE TABLE `scheduled_tasks` (
   KEY `ix_scheduled_tasks_repository_id` (`repository_id`),
   KEY `ix_scheduled_tasks_due_idx` (`next_run_at`),
   UNIQUE KEY `uq_scheduled_tasks_name_idx` (`name_lower`),
-  CONSTRAINT `scheduled_tasks_check` CHECK (((((`kind` = 'audit-retention') AND (`repository_id` IS NULL)) OR ((`kind` = 'repository-retention') AND (`repository_id` IS NOT NULL))) OR (((`kind` IN ('partition-manager', 'retention-janitor', 'raw-idle-seal')) AND (`repository_id` IS NULL)) AND (NOT `enabled`)))),
   CONSTRAINT `scheduled_tasks_description_check` CHECK ((CHAR_LENGTH(`description`) <= 500)),
   CONSTRAINT `scheduled_tasks_interval_seconds_check` CHECK (((`interval_seconds` >= 900) AND (`interval_seconds` <= 31536000))),
   CONSTRAINT `scheduled_tasks_kind_check` CHECK ((`kind` IN ('repository-retention', 'audit-retention', 'partition-manager', 'retention-janitor', 'raw-idle-seal'))),
@@ -2760,8 +2759,8 @@ CREATE TABLE `security_audit_log` (
   `trace_id` TEXT NULL,
   `upstream_host` TEXT NULL,
   PRIMARY KEY (`occurred_at`, `id`),
-  KEY `ix_security_audit_log_actor_occurred_at` (`actor` DESC, `occurred_at`),
-  KEY `ix_security_audit_log_repository_occurred_at` (`repository` DESC, `occurred_at`),
+  KEY `ix_security_audit_log_actor_occurred_at` (`actor`, `occurred_at` DESC),
+  KEY `ix_security_audit_log_repository_occurred_at` (`repository`, `occurred_at` DESC),
   KEY `ix_security_audit_log_id` (`id`),
   CONSTRAINT `security_audit_log_evidence_check` CHECK ((JSON_TYPE(`evidence`) = 'OBJECT'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
@@ -2801,7 +2800,7 @@ CREATE TABLE `site_settings` (
   CONSTRAINT `site_settings_default_theme_nonempty` CHECK (((CHAR_LENGTH(TRIM(`default_theme_id`)) >= 2) AND (CHAR_LENGTH(TRIM(`default_theme_id`)) <= 64))),
   CONSTRAINT `site_settings_enabled_themes_nonempty` CHECK (((JSON_LENGTH(`enabled_theme_ids`) >= 1) AND (JSON_LENGTH(`enabled_theme_ids`) <= 32))),
   CONSTRAINT `site_settings_logo_url_check` CHECK ((CHAR_LENGTH(`logo_url`) <= 262144)),
-  CONSTRAINT `site_settings_singleton_check` CHECK (`singleton`),
+  CONSTRAINT `site_settings_singleton_check` CHECK ((`singleton` <> 0)),
   CONSTRAINT `site_settings_site_name_check` CHECK (((CHAR_LENGTH(TRIM(`site_name`)) >= 1) AND (CHAR_LENGTH(TRIM(`site_name`)) <= 80))),
   CONSTRAINT `site_settings_version_check` CHECK ((`version` > 0))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
@@ -2929,8 +2928,8 @@ CREATE TABLE `webhook_deliveries` (
   `due_at` DATETIME(6) GENERATED ALWAYS AS (COALESCE(`next_attempt_at`, `lease_expires_at`)) VIRTUAL NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_webhook_deliveries_event_id_subscription_id` (`event_id`, `subscription_id`),
-  KEY `ix_webhook_deliveries_created_at_id` (`created_at` DESC, `id`),
-  KEY `ix_webhook_deliveries_subscription_id_created_at_id` (`subscription_id` DESC, `created_at` DESC, `id`),
+  KEY `ix_webhook_deliveries_created_at_id` (`created_at` DESC, `id` DESC),
+  KEY `ix_webhook_deliveries_subscription_id_created_at_id` (`subscription_id`, `created_at` DESC, `id` DESC),
   KEY `ix_webhook_deliveries_actionable_idx` (`due_at`, `created_at`),
   KEY `ix_webhook_deliveries_retention_idx` (`updated_at`),
   CONSTRAINT `webhook_deliveries_attempts_check` CHECK (((`attempts` >= 0) AND (`attempts` <= 8))),

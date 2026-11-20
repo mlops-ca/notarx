@@ -108,6 +108,7 @@ type node struct {
 	items    []string // set for an ARRAY[...] literal: the translated elements
 	array    bool
 	num      bool     // a number literal
+	ident    bool     // a bare column reference
 	strs     []string // set for an ARRAY of string literals: the decoded values
 	jsonType bool     // JSON_TYPE(...) of jsonb_typeof(...)
 }
@@ -141,6 +142,10 @@ func Translate(expression string) (Translation, error) {
 	}
 	if n.array {
 		return Translation{}, fmt.Errorf("a bare ARRAY in %q", expression)
+	}
+	if n.ident {
+		// MySQL refuses a CHECK whose whole expression is a column ("non-boolean type", error 3812).
+		n.sql = "(" + n.sql + " <> 0)"
 	}
 	columns := make([]string, 0, len(p.columns))
 	for c := range p.columns {
@@ -530,7 +535,7 @@ func (p *parser) primary() (node, error) {
 			if inner.array || inner.str != nil {
 				return inner, nil
 			}
-			return node{sql: inner.sql, jsonType: inner.jsonType, num: inner.num}, nil
+			return node{sql: inner.sql, jsonType: inner.jsonType, num: inner.num, ident: inner.ident}, nil
 		}
 		return node{}, fmt.Errorf("unexpected %q", t.text)
 	case tokIdent:
@@ -612,7 +617,7 @@ func (p *parser) word(word string) (node, error) {
 		return node{sql: name + "(" + strings.Join(args, ", ") + ")"}, nil
 	}
 	p.columns[word] = true
-	return node{sql: "`" + word + "`"}, nil
+	return node{sql: "`" + word + "`", ident: true}, nil
 }
 
 // escapeLiteral escapes the body of a MySQL string literal: backslash is an escape
