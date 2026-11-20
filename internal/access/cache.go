@@ -37,6 +37,7 @@ type Source interface {
 	GetRepositoryGrants(context.Context, string) (repository.RepositoryGrantSet, error)
 	GetWorkloadIssuer(context.Context, string) (repository.WorkloadIssuer, error)
 	GetWorkloadIssuerByIssuer(context.Context, string) (repository.WorkloadIssuer, error)
+	GetWorkloadTrustPolicy(context.Context, string) (repository.WorkloadTrustPolicy, error)
 	ListActiveWorkloadTrustPolicies(ctx context.Context, issuerID string, now time.Time) ([]repository.WorkloadTrustPolicy, error)
 }
 
@@ -68,6 +69,7 @@ type ReadCaches struct {
 	issuersByID    *readcache.Cache[string, repository.WorkloadIssuer]
 	issuersByIss   *readcache.Cache[string, repository.WorkloadIssuer]
 	issuerPolicies *readcache.Cache[string, []repository.WorkloadTrustPolicy]
+	policiesByID   *readcache.Cache[string, repository.WorkloadTrustPolicy]
 }
 
 func notFound(err error) bool { return errors.Is(err, repository.ErrNotFound) }
@@ -105,6 +107,9 @@ func NewReadCaches(source Source, registry *readcache.Registry) *ReadCaches {
 		// A new or moved policy belongs to a list that does not hold it yet, so any policy change flushes the cache.
 		issuerPolicies: readcache.New[string, []repository.WorkloadTrustPolicy](registry, readcache.Options[[]repository.WorkloadTrustPolicy]{
 			Name: "workload_trust_policies", Scope: repository.CacheScopeWorkloadPolicy}),
+		policiesByID: readcache.New[string, repository.WorkloadTrustPolicy](registry, readcache.Options[repository.WorkloadTrustPolicy]{
+			Name: "workload_trust_policies_by_id", Scope: repository.CacheScopeWorkloadPolicy,
+			Match: func(policy repository.WorkloadTrustPolicy, id string) bool { return policy.ID == id }, IsNegative: notFound, InvalidateNegatives: true}),
 	}
 }
 
@@ -241,6 +246,15 @@ func (c *ReadCaches) GetWorkloadIssuerByIssuer(ctx context.Context, issuerURL st
 		return c.source.GetWorkloadIssuerByIssuer(ctx, issuerURL)
 	})
 	return cloneIssuer(issuer), err
+}
+
+// GetWorkloadTrustPolicy returns the trust policy by id, active or not. The revalidation of an issued
+// workload token reads it, so a disabled policy stops the token within the authorization window.
+func (c *ReadCaches) GetWorkloadTrustPolicy(ctx context.Context, id string) (repository.WorkloadTrustPolicy, error) {
+	policy, err := c.policiesByID.Get(ctx, id, func(ctx context.Context) (repository.WorkloadTrustPolicy, error) {
+		return c.source.GetWorkloadTrustPolicy(ctx, id)
+	})
+	return cloneTrustPolicy(policy), err
 }
 
 // ListActiveWorkloadTrustPolicies returns the active policies of an issuer that have not expired at now. The

@@ -4,6 +4,9 @@ package huggingface
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -21,6 +24,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/jose"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -366,6 +370,82 @@ func TestAuthenticationAndAuthorizationAreHubShaped(t *testing.T) {
 	defer func() { _ = noCredentials.Body.Close() }()
 	if noCredentials.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("a missing repository must look like a private one to an anonymous caller: %d", noCredentials.StatusCode)
+	}
+}
+
+// ADR 0019 slice 4: a workload JWT and the principal token the OCI token endpoint exchanges it for
+// authenticate through the same Authenticator as every other bearer, and failures are Hub-shaped.
+func TestWorkloadJWTAndExchangedTokenAuthenticateThroughTheSameAuthenticator(t *testing.T) {
+	env := newProtocolEnv(t, repository.RepositoryTypeProxy, protocolFiles(), nil)
+	ctx := context.Background()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer, err := jose.NewSigner(jose.ES256, key, "k1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	public, err := jose.PublicKey(key.Public(), "k1", jose.ES256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jwks, err := jose.MarshalJWKS(public)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const issuerURL, audience, account = "https://ci.example.test", "https://notarx.example.test", "66666666-6666-4666-8666-666666666666"
+	issuer, err := env.repos.CreateWorkloadIssuer(ctx, repository.WorkloadIssuer{
+		Name: "ci", Kind: repository.WorkloadKindGeneric, Issuer: issuerURL, Audiences: []string{audience},
+		AllowedAlgs: []string{jose.ES256}, JWKSMode: repository.WorkloadJWKSStatic, StaticJWKS: jwks,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.repos.CreateServiceAccount(ctx, repository.ServiceAccount{ID: account, Name: "ci"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.repos.CreateWorkloadTrustPolicy(ctx, repository.WorkloadTrustPolicy{
+		Name: "pull", IssuerID: issuer.ID, ServiceAccountID: account, Conditions: []byte(`[{"claim":["sub"],"op":"eq","values":["repo:acme/app"]}]`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	verifier, err := jose.NewVerifier(jose.DefaultOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	workload, err := authorization.NewWorkloadAuthenticator(authorization.WorkloadOptions{Store: env.repos, Accounts: env.repos, Verifier: verifier})
+	if err != nil {
+		t.Fatal(err)
+	}
+	env.module.read.Authenticator.Workload = workload
+	now := time.Now()
+	jwt, err := signer.Sign(map[string]any{"iss": issuerURL, "sub": "repo:acme/app", "aud": audience, "iat": now.Unix(), "exp": now.Add(10 * time.Minute).Unix()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bearer := func(token string) http.Header { return http.Header{"Authorization": {"Bearer " + token}} }
+
+	// The service account has no grant yet: authenticated, then denied in the Hub shape.
+	denied, deniedBody := env.do(t, http.MethodGet, "acme/widget/resolve/main/config.json", bearer(jwt))
+	requireHubError(t, denied, deniedBody, http.StatusForbidden, "access_denied")
+	forged, forgedBody := env.do(t, http.MethodGet, "acme/widget/resolve/main/config.json", bearer(jwt[:len(jwt)-20]+"AAAAAAAAAAAAAAAAAAAA"))
+	requireHubError(t, forged, forgedBody, http.StatusUnauthorized, "authentication_required")
+
+	if _, err := env.repos.ReplaceRepositoryGrants(ctx, env.repo.ID, []repository.RepositoryGrant{{Principal: "service-account:" + account, Scopes: []string{"repositories:read"}}}, "1"); err != nil {
+		t.Fatal(err)
+	}
+	direct, directBody := env.do(t, http.MethodGet, "acme/widget/resolve/main/config.json", bearer(jwt))
+	if direct.StatusCode != 200 || string(directBody) != `{"k":1}` {
+		t.Fatalf("workload JWT = %d %q", direct.StatusCode, directBody)
+	}
+	principal, ok := env.module.read.Authenticator.Authenticate("Bearer " + jwt)
+	if !ok {
+		t.Fatal("the workload JWT did not authenticate")
+	}
+	exchanged, exchangedBody := env.do(t, http.MethodGet, "acme/widget/resolve/main/config.json", bearer(env.module.read.Authenticator.IssuePrincipalToken(principal)))
+	if exchanged.StatusCode != 200 || string(exchangedBody) != `{"k":1}` {
+		t.Fatalf("exchanged principal token = %d %q", exchanged.StatusCode, exchangedBody)
 	}
 }
 

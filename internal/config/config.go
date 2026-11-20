@@ -265,6 +265,7 @@ func Load() (Config, error) {
 		Workload: WorkloadConfig{
 			ClockSkew: jose.DefaultClockSkew, MaxTokenAge: jose.DefaultMaxTokenAge,
 			JWKSTTL: jose.DefaultJWKSTTL, JWKSStaleMax: jose.DefaultJWKSStaleMax,
+			ExchangeMaxTTL: DefaultWorkloadExchangeMaxTTL, ExchangeRate: DefaultWorkloadExchangeRate,
 		},
 		SAML:                        DefaultSAMLConfig(),
 		QuotaReconcileInterval:      6 * time.Hour,

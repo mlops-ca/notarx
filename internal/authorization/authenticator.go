@@ -31,6 +31,8 @@ type Principal struct {
 	SessionID          string
 	// CredentialID is a non-secret revocable service credential identity.
 	CredentialID string
+	// WorkloadClaims is the bounded audit summary of a workload_federation principal; nil otherwise.
+	WorkloadClaims *WorkloadClaims
 }
 
 // AuthenticationKind is the bounded credential source retained after
@@ -46,6 +48,7 @@ const (
 	AuthenticationAPIKey                   AuthenticationKind = "api_key"
 	AuthenticationServiceAccountCredential AuthenticationKind = "service_account_credential"
 	AuthenticationOIDC                     AuthenticationKind = "oidc"
+	// AuthenticationWorkloadFederation is declared with the workload authenticator (workload.go).
 )
 
 // OIDCRoleMappingMatch records only configured realm-role mappings that were
@@ -96,7 +99,10 @@ type Authenticator struct {
 	// without stored identities.
 	OIDC *OIDCValidator
 	// OIDCSource supplies the per-provider validators of the identity provider registry (ADR 0018).
-	OIDCSource      OIDCValidatorSource
+	OIDCSource OIDCValidatorSource
+	// Workload authenticates workload JWTs (ADR 0019). Nil disables workload federation
+	// (NOTARX_WORKLOAD_ENABLED=false), so JWTs reach only the human OIDC path.
+	Workload        *WorkloadAuthenticator
 	APIKeys         repository.APIKeyStore
 	ServiceAccounts repository.ServiceAccountStore
 	Users           repository.UserStore
@@ -151,6 +157,9 @@ func (a Authenticator) AuthenticateContext(ctx context.Context, header string) (
 			}
 			return Principal{Actor: "user:" + user.Name, Admin: role == RoleAdmin, Role: role, AuthenticationKind: AuthenticationLocalSession, UserID: user.ID, SessionID: sessionID}, true
 		}
+	}
+	if principal, ok := a.Workload.Authenticate(ctx, token, ""); ok {
+		return principal, true
 	}
 	validators := []*OIDCValidator{a.OIDC}
 	if a.OIDCSource != nil {
@@ -244,11 +253,13 @@ func (a Authenticator) AuthenticateBasicContext(ctx context.Context, username, p
 		principal.AuthenticationKind = AuthenticationStaticResolver
 		return principal, true
 	}
-	principal, ok := a.apiKeyPrincipal(ctx, password)
-	if !ok || principal.AuthenticationKind != AuthenticationServiceAccountCredential {
-		return Principal{}, false
+	if principal, ok := a.apiKeyPrincipal(ctx, password); ok {
+		if principal.AuthenticationKind != AuthenticationServiceAccountCredential {
+			return Principal{}, false
+		}
+		return principal, true
 	}
-	return principal, true
+	return a.Workload.AuthenticateBasic(ctx, username, password)
 }
 
 func (a Authenticator) apiKeyPrincipal(ctx context.Context, token string) (Principal, bool) {
@@ -429,7 +440,17 @@ func (a Authenticator) IsAnonymousToken(header string) bool {
 // authenticated principal's role. Legacy actor-only tokens remain supported
 // through IssueToken for existing clients and tests.
 func (a Authenticator) IssuePrincipalToken(principal Principal) string {
-	expiresAt := time.Now().UTC().Add(5 * time.Minute).Unix()
+	return a.IssuePrincipalTokenFor(principal, 5*time.Minute)
+}
+
+// IssuePrincipalTokenFor is IssuePrincipalToken with an explicit lifetime. A workload_federation
+// principal carries its policy id, which revalidation checks on every use.
+func (a Authenticator) IssuePrincipalTokenFor(principal Principal, lifetime time.Duration) string {
+	expiresAt := time.Now().UTC().Add(lifetime).Unix()
+	var policyID string
+	if principal.AuthenticationKind == AuthenticationWorkloadFederation {
+		policyID = principal.CredentialID
+	}
 	claims, _ := json.Marshal(struct {
 		Actor            string                 `json:"a"`
 		Role             Role                   `json:"r,omitempty"`
@@ -437,10 +458,11 @@ func (a Authenticator) IssuePrincipalToken(principal Principal) string {
 		Authentication   AuthenticationKind     `json:"k,omitempty"`
 		OIDCAdminSubject bool                   `json:"s,omitempty"`
 		OIDCRoleMappings []OIDCRoleMappingMatch `json:"m,omitempty"`
+		PolicyID         string                 `json:"p,omitempty"`
 	}{
 		Actor: principal.Actor, Role: principal.Role, Admin: principal.Admin,
 		Authentication: principal.AuthenticationKind, OIDCAdminSubject: principal.OIDCAdminSubject,
-		OIDCRoleMappings: principal.OIDCRoleMappings,
+		OIDCRoleMappings: principal.OIDCRoleMappings, PolicyID: policyID,
 	})
 	payload := "v2." + base64.RawURLEncoding.EncodeToString(claims) + "." + strconv.FormatInt(expiresAt, 10)
 	mac := hmac.New(sha256.New, []byte(a.ResolverToken))
@@ -688,6 +710,7 @@ func (a Authenticator) principalToken(ctx context.Context, token string) (Princi
 		Authentication   AuthenticationKind     `json:"k"`
 		OIDCAdminSubject bool                   `json:"s"`
 		OIDCRoleMappings []OIDCRoleMappingMatch `json:"m"`
+		PolicyID         string                 `json:"p"`
 	}
 	if json.Unmarshal(raw, &claims) != nil || claims.Actor == "" {
 		return Principal{}, false
@@ -715,6 +738,16 @@ func (a Authenticator) principalToken(ctx context.Context, token string) (Princi
 			return Principal{}, false
 		}
 	}
+	var credentialID string
+	if claims.Authentication == AuthenticationWorkloadFederation {
+		// A workload token is revalidated on every use: disabling its policy, issuer or service account ends it
+		// within the revocation window, not at token expiry. A deployment that turned workload federation off
+		// refuses the tokens it issued earlier.
+		if claims.Admin || claims.Role != "" || claims.PolicyID == "" || !a.Workload.Revalidate(ctx, claims.PolicyID, claims.Actor) {
+			return Principal{}, false
+		}
+		credentialID = claims.PolicyID
+	}
 	return Principal{
 		Actor:              claims.Actor,
 		Admin:              claims.Admin,
@@ -723,6 +756,7 @@ func (a Authenticator) principalToken(ctx context.Context, token string) (Princi
 		AuthenticationKind: claims.Authentication,
 		OIDCAdminSubject:   claims.OIDCAdminSubject,
 		OIDCRoleMappings:   claims.OIDCRoleMappings,
+		CredentialID:       credentialID,
 	}, true
 }
 
@@ -741,7 +775,7 @@ func validGatewayRole(role Role) bool {
 
 func validAuthenticationKind(kind AuthenticationKind) bool {
 	switch kind {
-	case "", AuthenticationStaticAdmin, AuthenticationStaticResolver, AuthenticationLocalSession, AuthenticationAPIKey, AuthenticationServiceAccountCredential, AuthenticationOIDC:
+	case "", AuthenticationStaticAdmin, AuthenticationStaticResolver, AuthenticationLocalSession, AuthenticationAPIKey, AuthenticationServiceAccountCredential, AuthenticationOIDC, AuthenticationWorkloadFederation:
 		return true
 	default:
 		return false
