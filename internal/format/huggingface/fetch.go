@@ -469,7 +469,7 @@ func (f *Fetcher) run(fl *flight, obj Object, file File) {
 	var blob hash.Hash
 	if file.SHA256 == "" && file.GitBlobID != "" {
 		blob = sha1.New() //nolint:gosec
-		fmt.Fprintf(blob, "blob %d\x00", obj.Size)
+		_, _ = fmt.Fprintf(blob, "blob %d\x00", obj.Size)
 	}
 	buffer := make([]byte, spool.StreamCopyBufferSize)
 	var total int64

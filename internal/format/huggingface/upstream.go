@@ -70,10 +70,10 @@ func (e *UpstreamError) Is(target error) bool {
 }
 
 func upstreamStatusError(status int) *UpstreamError {
-	switch {
-	case status == http.StatusNotFound || status == http.StatusGone:
+	switch status {
+	case http.StatusNotFound, http.StatusGone:
 		return &UpstreamError{Code: CodeUpstreamNotFound, Status: http.StatusNotFound}
-	case status == http.StatusUnauthorized || status == http.StatusForbidden:
+	case http.StatusUnauthorized, http.StatusForbidden:
 		return &UpstreamError{Code: CodeUpstreamGated, Status: status}
 	default:
 		return &UpstreamError{Code: CodeUpstreamUnavailable, Status: status}

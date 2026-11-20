@@ -99,16 +99,9 @@ func writeSynth(w io.Writer, size int64) error {
 	return nil
 }
 
-// newSynthFile returns a synthetic LFS file of the given size with its digest computed.
-func newSynthFile(size int64) *hubFile {
-	sum := sha256.New()
-	_ = writeSynth(sum, size)
-	return &hubFile{Synth: size, SynthDigest: hex.EncodeToString(sum.Sum(nil)), LFS: true}
-}
-
 func (f *hubFile) gitBlob() string {
 	h := sha1.New() //nolint:gosec
-	fmt.Fprintf(h, "blob %d\x00", f.size())
+	_, _ = fmt.Fprintf(h, "blob %d\x00", f.size())
 	h.Write(f.Content)
 	return hex.EncodeToString(h.Sum(nil))
 }
@@ -133,12 +126,6 @@ func (h *fakeHub) addCommit(sha, rev string, files map[string]*hubFile) {
 	if rev != "" {
 		h.refs[rev] = sha
 	}
-}
-
-func (h *fakeHub) setRef(rev, sha string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.refs[rev] = sha
 }
 
 func (h *fakeHub) setDown(down bool) {
