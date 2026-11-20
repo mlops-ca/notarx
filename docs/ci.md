@@ -287,7 +287,7 @@ The Go-only measurement: the three attempts of run 44692652060 (draft #512, a co
 | #500, attempt 2 | 13.2 | 2.9 | 5.0 | 7.2 | 112 | 26 |
 | #500, attempt 3 | 12.4 | 0.1 | 3.7 | 6.9 | 108 | 26 |
 
-Attempt 3 failed on a planner-statistics flake in `./internal/repository` that the resharding exposed (fixed in #515); its timing is complete. The jobs count `packages`, which ci.yml ran next to the suite for every Go change; it is now a set of steps of `release-checks`, so a Go-only pull request runs 25 jobs.
+Attempt 3 failed on a planner-statistics flake in `./internal/repository` that the new shard layout exposed (fixed in #515); its timing is complete. The jobs count `packages`, which ci.yml ran next to the suite for every Go change; it is now a set of steps of `release-checks`, so a Go-only pull request runs 25 jobs.
 
 - **Lint verdict**: 3.7 to 5.0 minutes, on target.
 - **Wall**: 12.4 minutes with no queue, 13.2 and 16.8 with queues of 2.9 and 6.5 minutes. The amd64 image lanes still queue for runners (the repository may use 20 at once and the other open pull requests share them), and `core-native-e2e` (about 8 minutes after the amd64 images at about 2.6) is the critical path without queue.
