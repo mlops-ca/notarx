@@ -42,3 +42,6 @@ migrations:
   000012_meta_object_sweep.sql:
     dialect: postgres
     reason: creates meta_object_pins, which the catalogue carries into the MySQL baseline
+  000013_raw_versioned_layout.sql:
+    dialect: postgres
+    reason: adds the Raw layout columns, the version and property tables and the internal lease kind of scheduled_tasks with PostgreSQL constraint rewrites; the catalogue carries the schema into the slice 3c MySQL baseline
