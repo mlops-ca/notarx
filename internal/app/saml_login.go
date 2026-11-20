@@ -18,8 +18,8 @@ import (
 
 const samlFlowCookieName = "ag_saml_state"
 
-// samlAuditor records the precise reason of a sign-in decision; the browser only ever sees a generic code.
-type samlAuditor interface {
+// loginAuditor records the precise reason of a sign-in decision (SAML and OIDC); the browser only ever sees a generic code.
+type loginAuditor interface {
 	RecordAudit(context.Context, repository.AuditRecord) error
 }
 
@@ -32,7 +32,7 @@ type samlLoginHandler struct {
 	sessions      repository.UserSessionStore
 	// groups receives the claims-sourced group memberships of a sign-in (ADR 0018 Decision 5); nil disables them.
 	groups  repository.UserGroupStore
-	audit   samlAuditor
+	audit   loginAuditor
 	limiter *samlRateLimiter
 }
 
@@ -318,7 +318,7 @@ func (h samlLoginHandler) signIn(w http.ResponseWriter, r *http.Request, provide
 	// The assertion's groups replace the claims-sourced memberships of this provider; a list longer than the bound
 	// is treated as no groups, never a partial one (the same rule as an OIDC groups overage).
 	if h.groups != nil {
-		groups, overage := boundedSAMLGroups(claims.Groups)
+		groups, overage := repository.BoundClaimsGroups(claims.Groups)
 		if overage {
 			h.recordGroupsOverage(r, provider.provider.Slug)
 		}
@@ -350,26 +350,13 @@ func (h samlLoginHandler) signIn(w http.ResponseWriter, r *http.Request, provide
 	http.Redirect(w, r, "/login?"+values.Encode(), http.StatusFound)
 }
 
-// boundedSAMLGroups returns the groups an assertion asserts, or none and true when it asserts more than
-// repository.MaxClaimsGroups: never a partial list.
-func boundedSAMLGroups(groups []string) ([]string, bool) {
-	if len(groups) > repository.MaxClaimsGroups {
-		return nil, true
-	}
-	return groups, false
-}
-
 // recordGroupsOverage audits an assertion that carried more groups than the bound: it asserts no groups, never a
 // partial list, so an administrator can tell why the account lost its claims-sourced memberships.
 func (h samlLoginHandler) recordGroupsOverage(r *http.Request, slug string) {
 	if h.audit == nil {
 		return
 	}
-	_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{
-		Class: repository.AuditClassSync, Actor: "saml:" + slug, Outcome: repository.AuditResolved, OccurredAt: h.runtimeNow(), Format: "management",
-		Resource: "auth/saml/" + strings.ToLower(slug), Operation: "auth.saml.groups_overage", Status: http.StatusFound, CacheDisposition: "bypass",
-		AuthorizationSource: "saml", AuthorizationReason: "groups_overage",
-	})
+	_ = h.audit.RecordAudit(r.Context(), repository.GroupsOverageAudit("saml", slug, h.runtimeNow(), http.StatusFound, ""))
 }
 
 func (h samlLoginHandler) runtimeNow() time.Time {

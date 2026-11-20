@@ -363,6 +363,45 @@ func BenchmarkResolveAndDecideAtOneHundredGroups(b *testing.B) {
 	}
 }
 
+func TestClaimGroupsPresentTellsAnAbsentClaimFromAnEmptyOne(t *testing.T) {
+	for name, tc := range map[string]struct {
+		claims  map[string]any
+		present bool
+	}{
+		"absent":      {map[string]any{}, false},
+		"empty list":  {map[string]any{"groups": []any{}}, true},
+		"overage":     {map[string]any{"hasgroups": true}, true},
+		"odd shape":   {map[string]any{"groups": 7}, true},
+		"other claim": {map[string]any{"roles": []any{"x"}}, false},
+	} {
+		if _, _, present := claimGroupsPresent(tc.claims, ""); present != tc.present {
+			t.Errorf("%s: present=%t, want %t", name, present, tc.present)
+		}
+	}
+}
+
+func TestTolerantStringsNeverRejectsAToken(t *testing.T) {
+	for raw, want := range map[string]int{"": 1} {
+		_ = raw
+		_ = want
+	}
+	cases := []struct {
+		raw  any
+		want []string
+	}{
+		{"eng", []string{"eng"}},
+		{[]any{"a", 7, "b"}, []string{"a", "b"}},
+		{7, nil},
+		{nil, nil},
+		{map[string]any{"a": "b"}, nil},
+	}
+	for _, tc := range cases {
+		if got := tolerantStrings(tc.raw); strings.Join(got, ",") != strings.Join(tc.want, ",") {
+			t.Errorf("tolerantStrings(%#v) = %v, want %v", tc.raw, got, tc.want)
+		}
+	}
+}
+
 func TestClaimGroupsReadsTheGroupsClaimAndTreatsOverageAsNoGroups(t *testing.T) {
 	cases := []struct {
 		name        string

@@ -33,7 +33,7 @@ type oidcLoginHandler struct {
 	// groups receives the claims-sourced group memberships of a login (ADR 0018 Decision 5); nil disables them.
 	groups repository.UserGroupStore
 	// audit records the decisions a login makes about groups; nil records nothing.
-	audit samlAuditor
+	audit loginAuditor
 }
 
 type oidcFlowState struct {
@@ -236,11 +236,7 @@ func (h oidcLoginHandler) syncClaimsGroups(ctx context.Context, r *http.Request,
 	if verified.GroupsOverage {
 		groups = nil
 		if h.audit != nil {
-			_ = h.audit.RecordAudit(ctx, repository.AuditRecord{
-				Class: repository.AuditClassSync, Actor: "oidc:" + provider.Slug, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: "management",
-				Resource: "auth/oidc/" + provider.Slug, Operation: "auth.oidc.groups_overage", Status: http.StatusFound, CacheDisposition: "bypass",
-				AuthorizationSource: "oidc", AuthorizationReason: "groups_overage", RequestID: r.Header.Get("X-Request-Id"),
-			})
+			_ = h.audit.RecordAudit(ctx, repository.GroupsOverageAudit("oidc", provider.Slug, time.Now(), http.StatusFound, r.Header.Get("X-Request-Id")))
 		}
 	}
 	_, err := h.groups.SyncClaimsUserGroups(ctx, repository.ClaimsGroupSync{ProviderID: provider.ID, UserID: userID, ExternalIDs: groups})

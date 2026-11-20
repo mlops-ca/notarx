@@ -779,12 +779,13 @@ func validRepositoryGrants(grants []repository.RepositoryGrant, format repositor
 // template editor all accept exactly this shape, so a grant one of them
 // creates can always be addressed and removed by another.
 func validGrantPrincipal(principal string) bool {
-	trimmed := strings.TrimSpace(principal)
-	if id, isGroup := strings.CutPrefix(trimmed, authorization.GroupPrincipalPrefix); isGroup {
-		// A group principal names a user group by its id; any other spelling could never match a membership.
-		_, err := uuid.Parse(id)
-		return err == nil && id == strings.ToLower(id)
+	if id, isGroup := strings.CutPrefix(principal, authorization.GroupPrincipalPrefix); isGroup {
+		// A group principal names a user group by its canonical id (lower-case, hyphenated, no surrounding space):
+		// any other spelling (urn:uuid:, braces, no hyphens, upper case) could never match a membership.
+		parsed, err := uuid.Parse(id)
+		return err == nil && parsed.String() == id
 	}
+	trimmed := strings.TrimSpace(principal)
 	return trimmed != "" && len(trimmed) <= 512 && !strings.ContainsAny(trimmed, "\x00\r\n")
 }
 

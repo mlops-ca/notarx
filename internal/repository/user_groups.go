@@ -111,6 +111,27 @@ type UserGroupStore interface {
 	SyncClaimsUserGroups(ctx context.Context, sync ClaimsGroupSync, audit ...AuditRecord) (int, error)
 }
 
+// GroupsOverageAudit is the audit record of a login or token that asserted more groups than it could carry (the Entra
+// ID overage markers, or more values than MaxClaimsGroups): it asserted none, and this is the one place the shape
+// of that event is defined. kind is "oidc" or "saml" and slug the provider's slug.
+func GroupsOverageAudit(kind, slug string, at time.Time, status int, requestID string) AuditRecord {
+	slug = strings.ToLower(slug)
+	return AuditRecord{
+		Class: AuditClassSync, Actor: kind + ":" + slug, Outcome: AuditResolved, OccurredAt: at.UTC(), Format: "management",
+		Resource: "auth/" + kind + "/" + slug, Operation: "auth." + kind + ".groups_overage", Status: status, CacheDisposition: "bypass",
+		AuthorizationSource: kind, AuthorizationReason: "groups_overage", RequestID: requestID,
+	}
+}
+
+// BoundClaimsGroups returns the groups a login asserts, or none and true when it asserts more than MaxClaimsGroups:
+// never a partial list.
+func BoundClaimsGroups(groups []string) ([]string, bool) {
+	if len(groups) > MaxClaimsGroups {
+		return nil, true
+	}
+	return groups, false
+}
+
 // ValidUserGroupRole reports whether role is a global role a group may carry.
 func ValidUserGroupRole(role string) bool {
 	switch role {

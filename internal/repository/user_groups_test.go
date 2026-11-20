@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -356,6 +357,67 @@ func TestGrantIndexListsRepositoriesOfAnyOfSeveralPrincipalsOnce(t *testing.T) {
 	}
 	if none, err := store.ListRepositoriesGrantedToPrincipals(ctx, nil, "repositories:admin"); err != nil || len(none) != 0 {
 		t.Fatalf("no principals = %d, %v", len(none), err)
+	}
+}
+
+func TestGroupsOfADeletedProviderAreInertAndTemplatesLoseTheDeletedGroup(t *testing.T) {
+	store, user := newGroupFixture(t)
+	ctx := context.Background()
+	orphan, err := store.CreateUserGroup(ctx, UserGroup{DisplayName: "scim-team", Source: UserGroupSourceSCIM, ProviderID: groupProviderA, ExternalID: "1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	local, err := store.CreateUserGroup(ctx, UserGroup{DisplayName: "local-team", Source: UserGroupSourceLocal})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, group := range []UserGroup{orphan, local} {
+		if err := store.AddUserGroupMember(ctx, group.ID, user.ID, UserGroupSourceLocal); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// What deleting the provider does to its groups (ON DELETE SET NULL).
+	store.userGroupState.groups[orphan.ID] = func() UserGroup { g := orphan; g.ProviderID = ""; return g }()
+	memberships, err := store.ListUserGroupMemberships(ctx, user.ID)
+	if err != nil || len(memberships) != 1 || memberships[0].GroupID != local.ID {
+		t.Fatalf("memberships = %#v, %v, want only the local group: a provider-less provisioned group grants nothing", memberships, err)
+	}
+
+	principal := "group:" + local.ID
+	template, err := store.CreateAuthorizationTemplate(ctx, AuthorizationTemplate{Name: "ops", Grants: []RepositoryGrant{
+		{Principal: principal, Scopes: []string{"repositories:read"}},
+		{Principal: "user:keeper", Scopes: []string{"repositories:read"}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DeleteUserGroup(ctx, local.ID); err != nil {
+		t.Fatal(err)
+	}
+	after, err := store.GetAuthorizationTemplate(ctx, template.ID)
+	if err != nil || len(after.Grants) != 1 || after.Grants[0].Principal != "user:keeper" || after.Version == template.Version {
+		t.Fatalf("template after the group was deleted = %#v, %v", after, err)
+	}
+}
+
+func TestBoundClaimsGroupsAndTheOverageAudit(t *testing.T) {
+	if got, overage := BoundClaimsGroups([]string{"a"}); overage || len(got) != 1 {
+		t.Fatalf("got=%v overage=%t", got, overage)
+	}
+	if got, overage := BoundClaimsGroups(make([]string, MaxClaimsGroups+1)); !overage || got != nil {
+		t.Fatalf("got %d groups overage=%t", len(got), overage)
+	}
+	record := GroupsOverageAudit("saml", "Corp", time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC), 302, "req-1")
+	if record.Actor != "saml:corp" || record.Resource != "auth/saml/corp" || record.Operation != "auth.saml.groups_overage" || record.AuthorizationReason != "groups_overage" || record.Status != 302 || record.RequestID != "req-1" {
+		t.Fatalf("record = %#v", record)
+	}
+}
+
+func TestPageTokensMustCarryAnID(t *testing.T) {
+	store, _ := newGroupFixture(t)
+	bad := encodeUserGroupCursor(time.Now(), "not-a-uuid")
+	if _, _, err := store.ListUserGroups(context.Background(), 10, bad); !errors.Is(err, ErrUserGroupInvalid) {
+		t.Fatalf("a token with a malformed id err=%v", err)
 	}
 }
 

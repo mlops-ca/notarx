@@ -36,7 +36,7 @@ func decodeUserGroupCursor(cursor string) (time.Time, string, bool) {
 		return time.Time{}, "", false
 	}
 	nanos, id, found := strings.Cut(string(raw), "|")
-	if !found || id == "" {
+	if !found || !isUUID(id) {
 		return time.Time{}, "", false
 	}
 	value, err := strconv.ParseInt(nanos, 10, 64)
@@ -190,6 +190,7 @@ func (s *MemoryStore) DeleteUserGroup(ctx context.Context, id string, audit ...A
 	delete(state.groups, id)
 	delete(state.members, id)
 	s.removeGroupGrantsLocked(groupPrincipal(id))
+	s.removeGroupTemplateGrantsLocked(groupPrincipal(id))
 	return nil
 }
 
@@ -211,6 +212,23 @@ func (s *MemoryStore) removeGroupGrantsLocked(principal string) {
 		if repo, ok := s.hostedRepositories[repositoryID]; ok {
 			repo.GrantsVersion++
 			s.hostedRepositories[repositoryID] = repo
+		}
+	}
+}
+
+// removeGroupTemplateGrantsLocked drops the template grants that name a deleted group.
+func (s *MemoryStore) removeGroupTemplateGrantsLocked(principal string) {
+	for id, template := range s.authorizationTemplates {
+		kept := make([]RepositoryGrant, 0, len(template.Grants))
+		for _, grant := range template.Grants {
+			if grant.Principal != principal {
+				kept = append(kept, grant)
+			}
+		}
+		if len(kept) != len(template.Grants) {
+			template.Grants = kept
+			template.Version = nextHostedGroupVersion(template.Version)
+			s.authorizationTemplates[id] = template
 		}
 	}
 }
@@ -296,6 +314,9 @@ func (s *MemoryStore) ListUserGroupMemberships(_ context.Context, userID string)
 			continue
 		}
 		group := s.userGroupState.groups[groupID]
+		if group.Source != UserGroupSourceLocal && group.ProviderID == "" {
+			continue // the provider is gone: the group is inert
+		}
 		items = append(items, UserGroupMembership{GroupID: groupID, GroupSource: group.Source, GlobalRole: group.GlobalRole, MemberSource: member.Source})
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].GroupID < items[j].GroupID })

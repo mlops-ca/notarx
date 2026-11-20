@@ -309,6 +309,17 @@ func TestOIDCLoginPopulatesClaimsGroupsAndTreatsEntraOverageAsNoGroups(t *testin
 	if memberships, _ = store.ListUserGroupMemberships(t.Context(), user.ID); len(memberships) != 0 {
 		t.Fatalf("memberships after an overage login = %#v, want none", memberships)
 	}
+	// A groups claim that is a plain string is one group, and an unexpected shape asserts none without failing the sign-in.
+	idp.setExtraClaims(map[string]any{"groups": "engineers"})
+	completeStubLogin(t, handler, idp, "corp")
+	if memberships, _ = store.ListUserGroupMemberships(t.Context(), user.ID); len(memberships) != 1 || memberships[0].GroupID != engineers.ID {
+		t.Fatalf("memberships after a string groups claim = %#v", memberships)
+	}
+	idp.setExtraClaims(map[string]any{"groups": map[string]any{"unexpected": true}})
+	completeStubLogin(t, handler, idp, "corp")
+	if memberships, _ = store.ListUserGroupMemberships(t.Context(), user.ID); len(memberships) != 0 {
+		t.Fatalf("memberships after a claim of an unexpected shape = %#v", memberships)
+	}
 	overage := 0
 	for _, record := range store.Audits {
 		if record.Operation == "auth.oidc.groups_overage" && record.AuthorizationReason == "groups_overage" && record.Actor == "oidc:corp" && record.Resource == "auth/oidc/corp" {
@@ -321,12 +332,12 @@ func TestOIDCLoginPopulatesClaimsGroupsAndTreatsEntraOverageAsNoGroups(t *testin
 }
 
 func TestSAMLGroupsOverTheBoundAssertNoneAndAreAudited(t *testing.T) {
-	few, overage := boundedSAMLGroups([]string{"a", "b"})
+	few, overage := repository.BoundClaimsGroups([]string{"a", "b"})
 	if overage || len(few) != 2 {
 		t.Fatalf("few = %v overage=%t", few, overage)
 	}
 	many := make([]string, repository.MaxClaimsGroups+1)
-	if got, overage := boundedSAMLGroups(many); !overage || got != nil {
+	if got, overage := repository.BoundClaimsGroups(many); !overage || got != nil {
 		t.Fatalf("many = %d groups overage=%t, want none and an overage", len(got), overage)
 	}
 	audit := &capturedAudit{}
@@ -363,5 +374,42 @@ func TestUserGroupStoreErrorsMapToDistinctAnswers(t *testing.T) {
 	accessManagementHandler{}.writeUserGroupError(recorder, repository.ErrNotFound, "add", "user not found")
 	if recorder.Code != http.StatusNotFound || !strings.Contains(recorder.Body.String(), "user not found") {
 		t.Errorf("custom not-found message = %d %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestGroupPrincipalGrantSpellingsMustBeCanonical(t *testing.T) {
+	id := uuid.NewString()
+	for principal, want := range map[string]bool{
+		"group:" + id:                  true,
+		"user:ada":                     true,
+		"group:" + strings.ToUpper(id): false,
+		"group:" + strings.ReplaceAll(id, "-", ""): false,
+		"group:{" + id + "}":                       false,
+		"group:urn:uuid:" + id:                     false,
+		"group: " + id:                             false,
+		"group:" + id + " ":                        false,
+		"group:":                                   false,
+		"group:not-a-uuid":                         false,
+		"":                                         false,
+	} {
+		if got := validGrantPrincipal(principal); got != want {
+			t.Errorf("validGrantPrincipal(%q) = %t, want %t", principal, got, want)
+		}
+	}
+}
+
+func TestDiscoveryOwnerSeparatesAccountsByGroups(t *testing.T) {
+	base := Principal{Actor: "user:ada", Role: RoleMember}
+	withGroups := base
+	withGroups.GroupIDs = []string{"b", "a"}
+	reordered := base
+	reordered.GroupIDs = []string{"a", "b"}
+	other := base
+	other.GroupIDs = []string{"a"}
+	if discoveryOwner(base, true) == discoveryOwner(withGroups, true) || discoveryOwner(withGroups, true) == discoveryOwner(other, true) {
+		t.Fatal("principals with different groups share a catalog snapshot owner")
+	}
+	if discoveryOwner(withGroups, true) != discoveryOwner(reordered, true) {
+		t.Fatal("the order of the groups changed the owner")
 	}
 }

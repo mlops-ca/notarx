@@ -39,13 +39,16 @@ type ClaimsGroupRefresher struct {
 	interval time.Duration
 	now      func() time.Time
 
-	mu   sync.Mutex
-	last map[string]claimsRefresh
+	mu       sync.Mutex
+	last     map[string]claimsRefresh
+	inflight map[string][sha256.Size]byte
 }
 
 type claimsRefresh struct {
 	fingerprint [sha256.Size]byte
 	at          time.Time
+	// failed marks an attempt that did not reach the store.
+	failed bool
 }
 
 // NewClaimsGroupRefresher returns a refresher; interval <= 0 means DefaultClaimsGroupRefreshInterval and a nil
@@ -54,13 +57,18 @@ func NewClaimsGroupRefresher(syncer ClaimsGroupSyncer, audit ClaimsGroupAuditor,
 	if interval <= 0 {
 		interval = DefaultClaimsGroupRefreshInterval
 	}
-	return &ClaimsGroupRefresher{syncer: syncer, audit: audit, interval: interval, now: time.Now, last: map[string]claimsRefresh{}}
+	return &ClaimsGroupRefresher{syncer: syncer, audit: audit, interval: interval, now: time.Now, last: map[string]claimsRefresh{}, inflight: map[string][sha256.Size]byte{}}
 }
 
 // Refresh applies the groups the identity asserts to the account. A failed write is retried on the next request
 // and never fails the authentication: it can only leave the account with the memberships it already had.
 func (r *ClaimsGroupRefresher) Refresh(ctx context.Context, identity OIDCIdentity, userID string) {
 	if r == nil || r.syncer == nil || identity.ProviderID == "" || userID == "" {
+		return
+	}
+	if !identity.GroupsPresent && !identity.GroupsOverage {
+		// A token without the claim says nothing about groups: an access token from a provider whose groups
+		// mapper is not configured must not wipe the memberships a sign-in established.
 		return
 	}
 	groups := identity.Groups
@@ -75,25 +83,40 @@ func (r *ClaimsGroupRefresher) Refresh(ctx context.Context, identity OIDCIdentit
 
 	r.mu.Lock()
 	previous, seen := r.last[key]
-	r.mu.Unlock()
+	if inflight, busy := r.inflight[key]; busy && inflight == fingerprint {
+		r.mu.Unlock()
+		return
+	}
 	if seen && previous.fingerprint == fingerprint && now.Sub(previous.at) < r.interval {
+		r.mu.Unlock()
 		return
 	}
-	if _, err := r.syncer.SyncClaimsUserGroups(ctx, repository.ClaimsGroupSync{ProviderID: identity.ProviderID, UserID: userID, ExternalIDs: groups}); err != nil {
+	r.inflight[key] = fingerprint
+	r.mu.Unlock()
+	_, err := r.syncer.SyncClaimsUserGroups(ctx, repository.ClaimsGroupSync{ProviderID: identity.ProviderID, UserID: userID, ExternalIDs: groups})
+	r.mu.Lock()
+	delete(r.inflight, key)
+	r.mu.Unlock()
+	if err != nil {
+		// A failing store is retried at the pace of the interval, not on every request; a change of the asserted
+		// groups is still tried at once.
+		r.remember(key, fingerprint, now, true)
 		return
 	}
-	if identity.GroupsOverage && (!seen || previous.fingerprint != fingerprint) && r.audit != nil {
+	if identity.GroupsOverage && (!seen || previous.fingerprint != fingerprint || previous.failed) && r.audit != nil {
 		slug := identity.ProviderSlug
 		if slug == "" {
 			slug = identity.ProviderID
 		}
-		_ = r.audit.RecordAudit(ctx, repository.AuditRecord{
-			Class: repository.AuditClassSync, Actor: "oidc:" + slug, Outcome: repository.AuditResolved, OccurredAt: now.UTC(), Format: "management",
-			Resource: "auth/oidc/" + slug, Operation: "auth.oidc.groups_overage", Status: 200, CacheDisposition: "bypass",
-			AuthorizationSource: "oidc", AuthorizationReason: "groups_overage",
-		})
+		_ = r.audit.RecordAudit(ctx, repository.GroupsOverageAudit("oidc", slug, now, 200, ""))
 	}
+	r.remember(key, fingerprint, now, false)
+}
+
+// remember records an attempt for the account, keeping the table bounded.
+func (r *ClaimsGroupRefresher) remember(key string, fingerprint [sha256.Size]byte, now time.Time, failed bool) {
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	if len(r.last) >= maxClaimsRefreshEntries {
 		for k, v := range r.last {
 			if now.Sub(v.at) >= r.interval {
@@ -104,8 +127,7 @@ func (r *ClaimsGroupRefresher) Refresh(ctx context.Context, identity OIDCIdentit
 			r.last = map[string]claimsRefresh{}
 		}
 	}
-	r.last[key] = claimsRefresh{fingerprint: fingerprint, at: now}
-	r.mu.Unlock()
+	r.last[key] = claimsRefresh{fingerprint: fingerprint, at: now, failed: failed}
 }
 
 func boolText(value bool) string {

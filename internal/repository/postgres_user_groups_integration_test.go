@@ -251,8 +251,18 @@ func TestPostgresProviderDeleteLeavesProvisionedGroupsOutOfTheLocalNamespace(t *
 		provisioned = append(provisioned, group)
 		t.Cleanup(func() { _ = store.DeleteUserGroup(context.Background(), group.ID) })
 	}
+	member := userGroupTestUser(t, store)
+	if err := store.AddUserGroupMember(ctx, provisioned[0].ID, member.ID, UserGroupSourceSCIM); err != nil {
+		t.Fatal(err)
+	}
+	if memberships, _ := store.ListUserGroupMemberships(ctx, member.ID); len(memberships) != 1 {
+		t.Fatalf("memberships before the provider was deleted = %#v", memberships)
+	}
 	if _, err := store.db.ExecContext(ctx, `DELETE FROM identity_providers WHERE id=$1::uuid`, providerID); err != nil {
 		t.Fatalf("deleting the provider failed because of its groups: %v", err)
+	}
+	if memberships, err := store.ListUserGroupMemberships(ctx, member.ID); err != nil || len(memberships) != 0 {
+		t.Fatalf("a group of a deleted provider still grants through its members: %#v, %v", memberships, err)
 	}
 	for _, group := range provisioned {
 		orphan, err := store.GetUserGroup(ctx, group.ID)
@@ -290,6 +300,14 @@ func TestPostgresDeletingAGroupRemovesItsGrantsAndVersionsTheGrantSet(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
+	template, err := store.CreateAuthorizationTemplate(ctx, AuthorizationTemplate{Name: "tmpl-" + uuid.NewString()[:8], Grants: []RepositoryGrant{
+		{Principal: principal, Scopes: []string{"repositories:read"}},
+		{Principal: "user:keeper", Scopes: []string{"repositories:read"}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.DeleteAuthorizationTemplate(context.Background(), template.ID) })
 	// The multi-principal candidate query finds the repository through the group principal, using the principal index.
 	found, err := store.ListRepositoriesGrantedToPrincipals(ctx, []string{"user:nobody", principal}, "repositories:admin")
 	if err != nil || len(found) != 1 || found[0].ID != repo.ID {
@@ -311,6 +329,10 @@ func TestPostgresDeletingAGroupRemovesItsGrantsAndVersionsTheGrantSet(t *testing
 	after, err := store.GetRepositoryGrants(ctx, repo.ID)
 	if err != nil || len(after.Grants) != 1 || after.Grants[0].Principal != "user:keeper" || after.Version == before.Version {
 		t.Fatalf("grants after the delete = %#v (was %s), %v", after, before.Version, err)
+	}
+	cleaned, err := store.GetAuthorizationTemplate(ctx, template.ID)
+	if err != nil || len(cleaned.Grants) != 1 || cleaned.Grants[0].Principal != "user:keeper" || cleaned.Version == template.Version {
+		t.Fatalf("template after the delete = %#v (was %s), %v", cleaned, template.Version, err)
 	}
 	reloaded, err := store.GetHostedRepository(ctx, repo.ID)
 	if err != nil || reloaded.GrantsVersion <= repo.GrantsVersion {

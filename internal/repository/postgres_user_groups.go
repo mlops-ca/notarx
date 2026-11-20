@@ -163,9 +163,9 @@ func (s *PostgresStore) SetUserGroupGlobalRole(ctx context.Context, id, role, ex
 	return updated, err
 }
 
-// DeleteUserGroup deletes the group with its memberships and the repository grants that name group:<id>, so no
-// grant is left naming a principal that can never match again; the grant sets of the affected repositories are
-// versioned like any grant change.
+// DeleteUserGroup deletes the group with its memberships and the repository grants and authorization template
+// grants that name group:<id>, so no grant is left naming a principal that can never match again; the grant sets of
+// the affected repositories are versioned like any grant change.
 func (s *PostgresStore) DeleteUserGroup(ctx context.Context, id string, audit ...AuditRecord) error {
 	repositoryIDs, err := runAudited(ctx, s, audit, func(q sqlRunner) ([]string, error) {
 		if !isUUID(id) {
@@ -177,6 +177,11 @@ func (s *PostgresStore) DeleteUserGroup(ctx context.Context, id string, audit ..
 		}
 		if affected, _ := result.RowsAffected(); affected == 0 {
 			return nil, ErrNotFound
+		}
+		// Templates that name the group would recreate dangling grants when applied.
+		if _, err := q.ExecContext(ctx, `UPDATE authorization_templates SET grants=COALESCE((SELECT jsonb_agg(g) FROM jsonb_array_elements(grants) g WHERE g->>'principal' <> $1),'[]'::jsonb),version=version+1,updated_at=now()
+WHERE grants @> jsonb_build_array(jsonb_build_object('principal',$1::text))`, groupPrincipal(id)); err != nil {
+			return nil, err
 		}
 		rows, err := q.QueryContext(ctx, `WITH removed AS (DELETE FROM repository_grants WHERE principal=$1 RETURNING repository_id),
 touched AS (SELECT DISTINCT repository_id FROM removed),
@@ -288,10 +293,12 @@ func (s *PostgresStore) ListUserGroupMembers(ctx context.Context, groupID string
 
 // userGroupMembershipsQuery is the per-request lookup of ADR 0018 Decision 5. It is served by
 // user_group_members_user_idx (user_id, group_id) and bounded by MaxUserGroupMemberships, so an account in
-// more groups loses authority at the bound and never gains it.
+// more groups loses authority at the bound and never gains it. A SCIM or claims group whose provider was deleted
+// (provider_id is NULL) is inert: no login or SCIM request can maintain it any more, so it must not keep
+// granting what its last members held. An administrator can still see and delete it.
 const userGroupMembershipsQuery = `SELECT m.group_id::text,g.source,g.global_role,m.source
 FROM user_group_members m JOIN user_groups g ON g.id=m.group_id
-WHERE m.user_id=$1::uuid
+WHERE m.user_id=$1::uuid AND (g.source='local' OR g.provider_id IS NOT NULL)
 ORDER BY m.group_id
 LIMIT $2`
 

@@ -60,9 +60,11 @@ func TestBearerTokensRefreshClaimsGroupsThrottledAndOnChange(t *testing.T) {
 	refresher.now = func() time.Time { return now }
 	authenticator := Authenticator{Users: store, UserIdentities: store, UserGroups: store, ClaimsGroups: refresher}
 
+	withClaim := true
 	bearer := func(identity OIDCIdentity) Principal {
 		t.Helper()
 		identity.ProviderID, identity.ProviderSlug, identity.Subject = refreshProvider, "corp", "ada-sub"
+		identity.GroupsPresent = identity.GroupsPresent || withClaim
 		principal, ok := authenticator.oidcPrincipal(ctx, identity)
 		if !ok {
 			t.Fatal("bearer principal was refused")
@@ -100,13 +102,37 @@ func TestBearerTokensRefreshClaimsGroupsThrottledAndOnChange(t *testing.T) {
 		t.Fatalf("an overage token carried groups: %#v", principal)
 	}
 
-	// A failing store never fails the authentication and is retried on the next request.
-	syncer.fail = true
+	// A token that does not carry the claim says nothing about groups: nothing is written, nothing is wiped.
 	before := syncer.calls
+	withClaim = false
+	for range 3 {
+		if principal := bearer(OIDCIdentity{}); len(principal.GroupIDs) != 0 {
+			t.Fatalf("principal = %#v", principal)
+		}
+	}
+	withClaim = true
+	if syncer.calls != before {
+		t.Fatalf("a token without the groups claim wrote: %d calls", syncer.calls-before)
+	}
+
+	// A failing store never fails the authentication; the retry is paced by the interval, and a change of the
+	// asserted groups is tried at once.
+	syncer.fail = true
+	now = now.Add(2 * time.Minute)
+	before = syncer.calls
 	bearer(OIDCIdentity{Groups: []string{"engineers"}})
 	bearer(OIDCIdentity{Groups: []string{"engineers"}})
+	if syncer.calls != before+1 {
+		t.Fatalf("failed syncs were retried on every request: %d calls", syncer.calls-before)
+	}
+	bearer(OIDCIdentity{Groups: []string{"engineers", "ops"}})
 	if syncer.calls != before+2 {
-		t.Fatalf("failed syncs were not retried: %d calls", syncer.calls-before)
+		t.Fatalf("a change of groups was not tried at once: %d calls", syncer.calls-before)
+	}
+	now = now.Add(2 * time.Minute)
+	bearer(OIDCIdentity{Groups: []string{"engineers", "ops"}})
+	if syncer.calls != before+3 {
+		t.Fatalf("a failed sync was not retried after the interval: %d calls", syncer.calls-before)
 	}
 }
 
@@ -119,8 +145,8 @@ func TestClaimsGroupRefresherIgnoresMissingInputsAndBoundsItsMemory(t *testing.T
 	if refresher.interval != DefaultClaimsGroupRefreshInterval {
 		t.Fatalf("interval = %v", refresher.interval)
 	}
-	refresher.Refresh(context.Background(), OIDCIdentity{}, "u")
-	refresher.Refresh(context.Background(), OIDCIdentity{ProviderID: "p"}, "")
+	refresher.Refresh(context.Background(), OIDCIdentity{GroupsPresent: true}, "u")
+	refresher.Refresh(context.Background(), OIDCIdentity{ProviderID: "p", GroupsPresent: true}, "")
 	if syncer.calls != 0 {
 		t.Fatalf("a refresh without a provider or a user wrote: %d calls", syncer.calls)
 	}
@@ -128,7 +154,7 @@ func TestClaimsGroupRefresherIgnoresMissingInputsAndBoundsItsMemory(t *testing.T
 	for i := range maxClaimsRefreshEntries + 5 {
 		syncer.fail = false
 		refresher.syncer = okSyncer{}
-		refresher.Refresh(context.Background(), OIDCIdentity{ProviderID: "p"}, uuid.NewString()+string(rune(i%7)))
+		refresher.Refresh(context.Background(), OIDCIdentity{ProviderID: "p", GroupsPresent: true}, uuid.NewString()+string(rune(i%7)))
 	}
 	if len(refresher.last) > maxClaimsRefreshEntries {
 		t.Fatalf("the refresher remembers %d accounts, want at most %d", len(refresher.last), maxClaimsRefreshEntries)
