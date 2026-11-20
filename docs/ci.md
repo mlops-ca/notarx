@@ -198,6 +198,31 @@ steps have one definition. They are separate jobs, not a matrix, so the amd64-on
 out of the arm64 leg. See
 [native builds](native-builds.md).
 
+## Where every former check runs (issue #482)
+
+Issue #482 reshaped the pull request suite (ADR 0016 and ADR 0024, amendments of
+2026-11-19). No check was dropped; this table maps every job of the earlier layout
+(run 44640058817) to where it runs now.
+
+| Earlier job | Now (pull request) | Release gates (`mainline` scope) |
+| --- | --- | --- |
+| `no-chinese` | a step of `changes` | not part of the gates (as before) |
+| `changes`, `packages`, `oci-free-tier`, `oci-free-tier-tofu` | unchanged | unchanged |
+| `quality`: lint, vet, native-build rules, migration, release and packaging checks, SAML fuzz, dependency audit | `lint` | `lint` |
+| `quality`: `make race`, `make coverage` and the per-package coverage reruns | `quality`: `make race-coverage`, one pass with the race detector and every floor | `quality` |
+| `quality-arm64`: lint, vet, race | `quality-arm64`: vet and race for every Go change; lint with the `arm64` class | `quality-arm64`: lint, vet, race |
+| `console`, `docs`, `image-test-stages`, `build-images` (4), `console-e2e` shards, `console-e2e-report` | unchanged | unchanged |
+| `object-store-contract` (3 jobs: RustFS, MinIO twice) | one `object-store-contract` job running the three configurations in turn | the same job |
+| `contract (core-backup)` | `core-backup`, `core-integration-1`, `core-integration-2` | the same three lanes on both architectures |
+| `contract (core-checks)`, `contract (six-format-auth)` | `packed-checks-auth` | `packed-checks-auth` on both architectures |
+| `contract (nuget)`, `contract (oci-migration)`, `contract (npm-migration)` | `packed-nuget-migrations` | the same, both architectures |
+| `contract (maven-oci-auth)`, `contract (migration-clients)` | `packed-maven-clients` | the same, both architectures |
+| `contract (rubygems)`, `contract (oci-discovery)` | `packed-rubygems-discovery` | the same, both architectures |
+| `contract (inventory)`, `contract (helm)`, `contract (pypi-migration)` | `packed-inventory-helm-pypi` | the same, both architectures |
+| `contract (core-email)`, `contract (core-native-e2e)` | unchanged | unchanged |
+| the seven arm64 contract legs | only with the `arm64` class (architecture-sensitive change) | always, every lane |
+| `contract-plan`, `suite-ok`, `ci-ok` | unchanged (`suite-ok` also requires `lint`) | unchanged |
+
 ## The backup and integration lanes
 
 The former `core-backup` lane ran the Conan E2E, `make backup-transfer-test`,

@@ -490,3 +490,12 @@ Issue #482 (pull request feedback took 26 to 35 minutes). The `quality` job of `
 1. `lint` runs `make lint-checks`, `make vet`, the native-build rules (`make native-build-check`, which ADR 0016's Guard section places in "the `quality` CI job"), the migration checks, the release and packaging checks, the SAML fuzz run and the dependency audit.
 2. `quality` runs `make race-coverage`: the unit tests of every package once, with the race detector and `-coverprofile`, and every coverage floor computed from that profile.
 3. Pull request CI and the release gates call the same suite, so both run both jobs; `suite-ok` requires `lint` with the Go class. Nothing that `quality` checked before is dropped.
+
+## Amendment (2026-11-19): packed contract jobs and the pull request arm64 rule
+
+Status: accepted (2026-11-19)
+
+Issue #482, after the amendment above. The release gates call the same `test-suite.yml` with the `mainline` scope, and two more changes reach them:
+
+1. Contract lanes of a few minutes run packed into one job (`jobs` in `scripts/ci-contract-lanes.json`, for example `packed-checks-auth` runs `core-checks` and `six-format-auth`). A lane stays the unit of the plan, of its evidence directory and of its verdict. A packed job runs every lane even after one fails, and it fails when any lane failed. The gate list in item 2 above names jobs of the suite, not lanes, so it is unchanged. The `object-store-contract` matrix becomes one job that runs its three configurations in turn.
+2. Pull requests run the arm64 contract lanes and arm64 lint only for an architecture-sensitive change (ADR 0016, amendment of 2026-11-19). The `mainline` scope refuses `--no-arm64`, so the release gates always run every lane on both architectures. A release therefore still never ships code that has not passed every test on both architectures. `docs/ci.md` maps every earlier job to where it runs now.
