@@ -96,7 +96,7 @@ func (s *PostgresStore) ClaimReplicationPlans(ctx context.Context, limit int) ([
 }
 
 func (s *PostgresStore) ClaimReplicationPlansByFormat(ctx context.Context, format Format, limit int) ([]ReplicationPlan, error) {
-	return s.claimReplicationPlans(ctx, []Format{format}, limit)
+	return s.claimReplicationPlans(ctx, formatList(format), limit)
 }
 
 // ClaimReplicationPlansByFormats claims plans of any of formats in one claim (every format when empty); it is

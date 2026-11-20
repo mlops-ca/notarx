@@ -41,12 +41,13 @@ type formatClaimBatch func(ctx context.Context, phase formatClaimPhase, formats 
 // claimFormatShares is the claim of the per-process claimer for several formats of one queue (ADR 0023
 // section 7), shared by the lifecycle job and replication plan claims. One scan over every format takes about
 // half of the claim; an empty queue ends there, so an idle queue costs one query however many formats a node
-// serves. When work exists, each format the scan did not reach then gets an equal share, in rotating order,
+// serves, and so does a queue the scan drained (it held fewer candidates than it asked for). When more work
+// exists, each format the scan did not reach then gets an equal share, in rotating order,
 // and only what is left is open to every format again. A deep, older backlog of one format therefore cannot
 // starve the others the way one oldest-first scan would.
 func claimFormatShares(ctx context.Context, formats []Format, limit int, rotation uint64, batch formatClaimBatch) error {
 	opening, empty, err := batch(ctx, formatClaimOpening, formats, max((limit+1)/2, 1))
-	if err != nil || (len(opening) == 0 && empty) {
+	if err != nil || empty {
 		return err
 	}
 	total := len(opening)

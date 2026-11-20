@@ -196,7 +196,15 @@ func (s *PostgresStore) ClaimLifecycleJobsByKind(ctx context.Context, kind Lifec
 }
 
 func (s *PostgresStore) ClaimLifecycleJobsByKindAndFormat(ctx context.Context, kind LifecycleJobKind, format Format, limit int) ([]LifecycleJob, error) {
-	return s.claimLifecycleJobs(ctx, kind, []Format{format}, limit)
+	return s.claimLifecycleJobs(ctx, kind, formatList(format), limit)
+}
+
+// formatList is the format filter of a single-format claim: an empty format claims every format.
+func formatList(format Format) []Format {
+	if format == "" {
+		return nil
+	}
+	return []Format{format}
 }
 
 // ClaimLifecycleJobsByKindAndFormats claims jobs of one kind for any of formats in a single claim; an empty
@@ -295,22 +303,21 @@ func (c *lifecycleClaimScan) run(ctx context.Context, kind LifecycleJobKind, bud
 }
 
 // claimFormatsRoundRobin serves a claim for several formats of one kind with the share plan of
-// claimFormatShares. The opening scan may examine QueueClaimScanCap rows, each share an equal part of it, and
-// the remainder what the earlier batches left of it.
+// claimFormatShares. The whole claim examines at most QueueClaimScanCap rows: the opening scan may use all of
+// it, each share an equal part of what is left, and the remainder the rest.
 func (c *lifecycleClaimScan) claimFormatsRoundRobin(ctx context.Context, kind LifecycleJobKind, formats []Format, rotation uint64) error {
 	limit := c.limit
 	defer func() { c.formats, c.limit = formats, limit }()
 	perFormat := max(QueueClaimScanCap/(len(formats)+1), 1)
 	return claimFormatShares(ctx, formats, limit, rotation, func(ctx context.Context, phase formatClaimPhase, batch []Format, want int) ([]Format, bool, error) {
-		budget := QueueClaimScanCap
-		switch phase {
-		case formatClaimShare:
-			budget = perFormat
-		case formatClaimRemainder:
-			if budget = QueueClaimScanCap - c.scanned; budget <= 0 {
-				return nil, false, nil
-			}
+		budget := QueueClaimScanCap - c.scanned
+		if phase == formatClaimShare {
+			budget = min(perFormat, budget)
 		}
+		if budget <= 0 {
+			return nil, false, nil
+		}
+		c.exhausted = false
 		before := len(c.claimed)
 		c.formats, c.limit = batch, before+want
 		if err := c.run(ctx, kind, budget); err != nil {

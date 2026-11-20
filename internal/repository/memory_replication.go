@@ -93,7 +93,7 @@ func (s *MemoryStore) ClaimReplicationPlans(_ context.Context, limit int) ([]Rep
 	return s.claimReplicationPlans(limit, nil)
 }
 func (s *MemoryStore) ClaimReplicationPlansByFormat(_ context.Context, format Format, limit int) ([]ReplicationPlan, error) {
-	return s.claimReplicationPlans(limit, []Format{format})
+	return s.claimReplicationPlans(limit, formatList(format))
 }
 func (s *MemoryStore) ClaimReplicationPlansByFormats(_ context.Context, formats []Format, limit int) ([]ReplicationPlan, error) {
 	return s.claimReplicationPlans(limit, formats)

@@ -60,6 +60,14 @@ func TestPostgresTypedKeyQueriesUseIndexes(t *testing.T) {
 			if _, err = tx.Exec("SET LOCAL enable_seqscan = off"); err != nil {
 				t.Fatal(err)
 			}
+			// On a small table a bitmap scan plus a sort can cost less than the ordered index scan. With both
+			// discouraged, the planner reads the index in order whenever one serves the ORDER BY, so a Sort
+			// left in the plan means no index does, whatever the table statistics are.
+			if tc.ordered {
+				if _, err = tx.Exec("SET LOCAL enable_bitmapscan = off; SET LOCAL enable_sort = off"); err != nil {
+					t.Fatal(err)
+				}
+			}
 			var raw []byte
 			if err = tx.QueryRow("EXPLAIN (FORMAT JSON) "+tc.query, tc.args...).Scan(&raw); err != nil {
 				t.Fatal(err)

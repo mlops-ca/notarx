@@ -151,7 +151,7 @@ func (s *MemoryStore) ClaimLifecycleJobsByKind(_ context.Context, kind Lifecycle
 }
 
 func (s *MemoryStore) ClaimLifecycleJobsByKindAndFormat(_ context.Context, kind LifecycleJobKind, format Format, limit int) ([]LifecycleJob, error) {
-	return s.claimLifecycleJobs(kind, []Format{format}, limit)
+	return s.claimLifecycleJobs(kind, formatList(format), limit)
 }
 
 func (s *MemoryStore) ClaimLifecycleJobsByKindAndFormats(_ context.Context, kind LifecycleJobKind, formats []Format, limit int) ([]LifecycleJob, error) {
