@@ -229,7 +229,7 @@ How to read the columns:
 
 - **Wall time** fell by about a third: medians of 27.8 and 18.8 minutes. With the longest queue subtracted it still fell by about a third, from about 20 to about 13.5 minutes.
 - **Runner-minutes** fell by 32 to 46 percent (122 against 179 at worst, 104 against 192 at best).
-- **The `arm64` class:** a pull request with it on (run 44670328253, the branch of #491) took 14.7 minutes, with 41 jobs and 173 runner-minutes. It is faster than the Go-only attempts only because it ran on a quieter runner pool: its longest queue was 4.8 minutes.
+- **The `arm64` class:** a pull request with it on (run 44670328253, the branch of #491) took 14.7 minutes, with 41 jobs and 173 runner-minutes. It is faster than the Go-only attempts although its longest queue was longer (4.8 minutes), because its slowest lane, `core-integration-1` on amd64, took 6.6 minutes, against 9.4 in attempt 1. That lane's time varies from run to run, and #500 evens out the integration shards.
 
 Four targets of the issue are still open: a verdict (wall) in 12 minutes or less, half the runner-minutes, 25 jobs or fewer, and a lint signal in 5 minutes. Issue #500 tracks them. The largest remaining lever is that every contract lane waits for all four `build-images` legs, about 4.9 minutes into the run.
 
