@@ -150,7 +150,7 @@ the version policy, commit policy and repository governance.
     `scanner` (`cmd/notarx-scanner`, the Trivy pin and its image, ADR 0030),
     `access` (`internal/access`, ADR 0029), `repository` (`internal/repository`, the
     repository and group model);
-  - meta: `deps`, `docs`, `ci`, `release`, `security`, `repo`.
+  - meta: `deps`, `docs`, `ci`, `release`, `changelog` (the generated `docs(changelog): vX.Y.Z` pull request), `security`, `repo`.
 - The policy lives in one file, `.github/commit-policy.json` (types, releasing types,
   scopes). `scripts/commit-policy-check.mjs` (tested like the other `scripts/*.mjs`)
   validates a title against it; a `pr-title` workflow runs it on `opened`, `edited`,

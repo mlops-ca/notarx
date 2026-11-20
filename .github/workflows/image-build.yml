@@ -39,6 +39,14 @@ on:
           version-command is true when the image answers the version subcommand.
         required: true
         type: string
+      annotations:
+        description: >-
+          Newline-separated annotations for every image index, as [index:]key=value for
+          docker buildx imagetools create --annotation (for example
+          index:io.mlops.notarx.verified-nightly=v0.1.0-nightly.1); any other type is refused
+          because only the index is verified. Empty creates none.
+        default: ""
+        type: string
       require-main-tip:
         description: Fail instead of tagging when sha is no longer the tip of main (mainline path).
         default: false
@@ -236,6 +244,7 @@ jobs:
         env:
           REVISION: ${{ inputs.sha }}
           TAGS: ${{ inputs.tags }}
+          ANNOTATIONS: ${{ inputs.annotations }}
           IMAGE_NAME: ${{ matrix.image }}
         run: |
           amd64=$(cat "$RUNNER_TEMP/digests/digest-$IMAGE_NAME-amd64/digest")
@@ -248,15 +257,35 @@ jobs:
             fi
           done
           args=()
+          annotations=()
           while IFS= read -r tag; do
             if [ -n "$tag" ]; then args+=(--tag "$IMAGE:$tag"); fi
           done <<<"$TAGS"
+          while IFS= read -r annotation; do
+            if [ -n "$annotation" ]; then
+              # Normalised to index:key=value (the type prefix sits before the first "=", so a value
+              # may hold ":"); the verification below reads the index, so no other type is allowed.
+              lhs=${annotation%%=*}
+              if [[ "$lhs" != *:* ]]; then annotation="index:$annotation"; lhs="index:$lhs"; fi
+              if [[ "${lhs%%:*}" != index || "${lhs#index:}" == *:* ]]; then
+                echo "::error::annotation '$annotation': only index annotations with a key without ':' are supported"
+                exit 1
+              fi
+              args+=(--annotation "$annotation")
+              annotations+=("$annotation")
+            fi
+          done <<<"$ANNOTATIONS"
           docker buildx imagetools create "${args[@]}" "$IMAGE@$amd64" "$IMAGE@$arm64"
           first=$(sed -n '1p' <<<"$TAGS")
           index=$(docker buildx imagetools inspect "$IMAGE:$first" --format '{{ json .Manifest }}')
           echo "digest=$(jq -r .digest <<<"$index")" >> "$GITHUB_OUTPUT"
           # Both platforms must be present with their platform fields set.
           jq -e '[.manifests[] | .platform | select(.os == "linux") | .architecture] | sort == ["amd64", "arm64"]' <<<"$index" >/dev/null
+          # Every requested annotation must be on the index (the verified-nightly record of a stable image).
+          for annotation in ${annotations[@]+"${annotations[@]}"}; do
+            lhs=${annotation%%=*}
+            jq -e --arg k "${lhs#index:}" --arg v "${annotation#*=}" '.annotations[$k] == $v' <<<"$index" >/dev/null
+          done
       - name: Attest the index provenance
         if: ${{ !inputs.dry-run }}
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2

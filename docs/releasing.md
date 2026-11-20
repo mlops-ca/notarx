@@ -4,8 +4,8 @@
 
 The release design is [ADR 0024](adr/0024-release-versioning-and-conventional-commits.md). This page is the
 operator runbook: how versions are chosen, what runs when, how to verify a release and how to keep the
-pipeline alive. The stable channel (a manual rebuild of a verified nightly commit) arrives with a later slice of the
-ADR; today the pipeline publishes nightly pre-releases.
+pipeline alive. The pipeline publishes nightly pre-releases and, on a manual dispatch, stable releases that
+rebuild the commit of a verified nightly.
 
 ## Versions (the 0.x rules)
 
@@ -62,12 +62,68 @@ release-run gates did not pass.
 Because the plan takes the tip of `main` without falling back to an older commit, a failing gate on the tip blocks the nightly
 until it is fixed forward; a push to `main` publishes the `main` archives and images untested. Watch the failed runs of `release.yml`.
 
+## The stable release
+
+A stable release is one manual dispatch of the same workflow. It promotes the **commit** of a verified nightly, not its bytes:
+the commit is rebuilt with the clean `X.Y.Z` stamped, so `notarx version`, `notarxctl version`, `VERSION.txt`, the image
+label, the archive names and the `.deb`/`.rpm` versions never say `nightly`.
+
+```
+gh workflow run release.yml -f channel=stable -f dry_run=true                      # rehearsal: the latest nightly
+gh workflow run release.yml -f channel=stable -f nightly_tag=v0.1.0-nightly.7 -f dry_run=false
+gh workflow run release.yml -f channel=stable -f version_override=0.1.0 -f dry_run=false   # the first release
+```
+
+Inputs: `channel` (`nightly` or `stable`, default `nightly`), `nightly_tag` (default: the latest nightly), `version_override`
+(an explicit `X.Y.Z`; `1.0.0` is only ever released this way) and `dry_run` (default true). Jobs, in order:
+
+1. `plan` runs `scripts/release-plan.sh stable` and, for the first release, `scripts/baseline-gate.sh`. It fails when the
+   nightly tag is missing, when the commit is not an ancestor of `main`, when `vX.Y.Z` already exists, or when
+   `version_override` is not newer than the latest stable tag. While no stable tag exists the gate requires `migrations/` to hold
+   exactly `000001_baseline.sql` at that commit and rejects a `version_override` other than `0.1.0`; after `v0.1.0` exists
+   `scripts/migration-immutability-check.sh` governs.
+2. `verify-nightly` (`scripts/promote-release.sh verify`) downloads the nightly's `release-manifest.json` and assets, requires the
+   manifest to record the same commit and version, and verifies the attestation of every image digest and archive
+   (see "Verifying a release"). A nightly without a manifest, with a failing attestation or on another commit is refused.
+3. `gates`, `build-archives` and `build-images` run the same suite and native matrix as a nightly at that commit.
+   The image index carries the annotation `io.mlops.notarx.verified-nightly=<nightly tag>` and the tags `:X.Y.Z` and `:X.Y`;
+   `:0` is never published while the major is 0. A stable dry run then runs `scripts/check-no-nightly.sh` in `build` over the built archives and packages
+   (names, the `.deb`/`.rpm` Version and Release fields, `VERSION.txt` and the binaries). Only the builds check out the nightly's
+   commit; the release scripts always come from the dispatched `main`, so a nightly older than the current tooling can be promoted.
+4. `publish` writes the manifest (with `verified_nightly`), attests and verifies everything, runs `scripts/check-no-nightly.sh`
+   once over every final asset, the package headers and the pushed image labels, and calls `scripts/promote-release.sh create`, which creates `vX.Y.Z` as a draft with every
+   asset and then publishes it; publishing creates the tag on the verified commit. The notes list the milestones completed since the
+   previous stable release (`scripts/release-milestones.sh`) and name the nightly that was rebuilt.
+5. `promote` edits the verified nightly's notes to point at the stable release and then moves `:latest` (only when no newer stable
+   exists). `changelog` opens the changelog pull request (below). Both are idempotent.
+
+A dry run executes 1 to 3 (and the nightly-version assertion on the archives) and publishes, tags and attests nothing. A failure
+before the tag is repaired by dispatching again: a leftover draft is replaced and `:X.Y.Z` and `:X.Y` may be re-pointed while
+`vX.Y.Z` does not exist. A failure after the tag is repaired with "Re-run failed jobs"; once `vX.Y.Z` exists nothing is rewritten and a
+new dispatch for the same version fails in `plan`. The optional `stable-release` environment (required reviewers) is applied by
+`scripts/repo-governance-apply.sh` but is not attached to a job yet; the manual dispatch by a writer is the approval.
+
+### The first release (v0.1.0)
+
+Before the real run: the re-squashed baseline is the only migration, a nightly of that commit exists with a manifest, the release App
+is registered (below) and `scripts/migration-immutability-check.sh` is in place. Rehearse with `dry_run=true`, then dispatch with
+`-f channel=stable -f version_override=0.1.0 -f dry_run=false`. Check afterwards that `v0.1.0` targets the nightly's commit and that
+`ghcr.io/mlops-ca/notarx:0.1.0`, `:0.1` and `:latest` report `0.1.0`.
+
+### The changelog pull request
+
+`CHANGELOG.md` records stable releases only. After the tag, the `changelog` job opens `docs(changelog): vX.Y.Z` on the branch
+`changelog/vX.Y.Z` with the git-cliff section for the commits since the previous stable tag (`scripts/changelog-section.sh`; the same
+text as the release notes, dated by the tag). It uses the release App token because a pull request opened with the workflow token
+starts no CI; without `RELEASE_APP_ID` the job fails with a message and can be re-run after registration. Re-running it changes
+nothing once `CHANGELOG.md` holds the section or the pull request is open.
+
 Adding a published image is one entry in `scripts/release-images.json` ; the manifest script fails unless
 every listed image has a recorded index digest.
 
 ## Verifying a release
 
-Download the release assets, then:
+Download the release assets (a stable release uses the same commands), then:
 
 ```
 gh attestation verify notarx_<version>_linux_amd64.tar.gz --repo mlops-ca/notarx   --signer-workflow mlops-ca/notarx/.github/workflows/release.yml
