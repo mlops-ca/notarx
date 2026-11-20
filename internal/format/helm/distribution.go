@@ -230,6 +230,11 @@ func (m *Module) ReplicateHelmItem(ctx context.Context, job dist.Job, item dist.
 	if err != nil || source.Digest != item.Digest || source.Size != item.Size || source.ProvenanceDigest != item.ProvenanceDigest || source.ProvenanceSize != item.ProvenanceSize || source.Governance.Version != item.SourceGovernanceVersion || source.Governance.Tombstoned || source.Governance.Quarantined {
 		return dist.ErrSourceChanged
 	}
+	// A large chart.yaml goes to the object store before the publication lock is taken, so the lock and its
+	// connection never wait on the store while the fenced commit runs.
+	if ctx, err = repository.StageHelmChart(ctx, m.store, job.TargetRepositoryID, item.Name, item.Version, source.ChartYAML); err != nil {
+		return err
+	}
 	chart, prov, err := m.verify(ctx, publicationSession(source))
 	if err != nil {
 		return err
@@ -240,11 +245,6 @@ func (m *Module) ReplicateHelmItem(ctx context.Context, job dist.Job, item dist.
 			_ = prov.Close()
 		}
 	}()
-	// A large chart.yaml goes to the object store before the publication lock is taken, so the lock and its
-	// connection never wait on the store while the fenced commit runs.
-	if ctx, err = repository.StageHelmChart(ctx, m.store, job.TargetRepositoryID, item.Name, item.Version, source.ChartYAML); err != nil {
-		return err
-	}
 	// The same publication lock is held by ordinary uploads and maintenance.
 	// It covers reservation, both target writes, readback and fenced commit.
 	ctx, release, err := m.store.LockHelmPublication(ctx, job.TargetRepositoryID, item.Name, item.Version)

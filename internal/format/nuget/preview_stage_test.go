@@ -77,6 +77,11 @@ func TestNuGetPreviewCommitStagesTheNuspecBeforeThePublicationLock(t *testing.T)
 	if err != nil || len(store.staged) != 1 || string(store.staged[0]) != string(got.Nuspec) {
 		t.Fatalf("staged %q, session nuspec %q, err %v", store.staged, got.Nuspec, err)
 	}
+	// A retried commit of the committed session stages nothing, and neither does a read.
+	store.events = nil
+	if w := request(t, m.Preview(), "POST", base+"/"+session.ID+"/commit", nil, bearer); w.Code != 200 || len(store.events) != 1 || store.events[0] != "lock-unstaged" {
+		t.Fatalf("retry=%d events=%v", w.Code, store.events)
+	}
 	// A read stages nothing.
 	store.events = nil
 	if w := request(t, m.Preview(), "GET", base+"/"+session.ID, nil, bearer); w.Code != 200 || len(store.events) != 0 {
