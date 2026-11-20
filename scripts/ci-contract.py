@@ -143,6 +143,33 @@ RUNNERS = {'amd64': 'ubuntu-24.04', 'arm64': 'ubuntu-24.04-arm'}
 SCOPES = ('pull-request', 'mainline')
 
 
+def jobs():
+    """The CI jobs of the plan, in lane order: (name, lanes).
+
+    `jobs` in the plan packs short lanes into one job that shares a single setup
+    (checkout, toolchains, image load); every other lane is a job of its own,
+    named after the lane. A lane is in at most one job.
+    """
+    packs = PLAN.get('jobs', {})
+    owner = {}
+    for name, lanes in packs.items():
+        if name in PLAN['lanes']:
+            raise ValueError('job ' + name + ' has the name of a lane')
+        for lane in lanes:
+            if lane not in PLAN['lanes']:
+                raise ValueError('job ' + name + ' packs unknown lane ' + lane)
+            if lane in owner:
+                raise ValueError('lane ' + lane + ' is packed into ' + owner[lane] + ' and ' + name)
+            owner[lane] = name
+    result, seen = [], set()
+    for lane in PLAN['lanes']:
+        name = owner.get(lane, lane)
+        if name not in seen:
+            seen.add(name)
+            result.append((name, list(packs.get(name, [lane]))))
+    return result
+
+
 def matrix(scope='mainline', arm64=True):
     """The GitHub Actions matrix, straight from the plan (ADR 0016).
 
@@ -155,13 +182,22 @@ def matrix(scope='mainline', arm64=True):
     """
     if scope == 'mainline' and not arm64:
         raise ValueError('the mainline scope runs every arm64 lane; --no-arm64 is for pull requests')
-    def entry(name, lane, arch):
-        return {'lane': name, 'timeout': lane['timeoutMinutes'], 'arch': arch, 'runner': RUNNERS[arch],
-                **{need: need in lane['needs'] for need in TOOL_NEEDS}}
+    def entry(name, lanes, arch):
+        plans = [PLAN['lanes'][lane] for lane in lanes]
+        return {'job': name, 'lanes': ' '.join(lanes), 'timeout': sum(p['timeoutMinutes'] for p in plans),
+                'arch': arch, 'runner': RUNNERS[arch],
+                **{need: any(need in p['needs'] for p in plans) for need in TOOL_NEEDS}}
 
-    include = [entry(name, lane, 'amd64') for name, lane in PLAN['lanes'].items()]
-    include += [entry(name, lane, 'arm64') for name, lane in PLAN['lanes'].items()
-                if scope == 'mainline' or (arm64 and lane['arm64'] == 'pull-request')]
+    def on_arm64(lane):
+        return scope == 'mainline' or (arm64 and PLAN['lanes'][lane]['arm64'] == 'pull-request')
+
+    planned = jobs()
+    include = [entry(name, lanes, 'amd64') for name, lanes in planned]
+    # A packed job's arm64 leg runs only the lanes of the job that run on arm64.
+    for name, lanes in planned:
+        arm64_lanes = [lane for lane in lanes if on_arm64(lane)]
+        if arm64_lanes:
+            include.append(entry(name, arm64_lanes, 'arm64'))
     return {'include': include}
 
 
@@ -209,11 +245,57 @@ def run_lane(args):
     return 0 if report['status'] == 'success' else 1
 
 
+def run_lanes(args):
+    """Run each lane of a CI job in order; a failed lane does not stop the next one.
+
+    One lane writes its evidence into --output as before; several lanes write one
+    subdirectory each. Each lane's verdict goes to the job's step summary as soon as
+    the lane ends, so a job that is cut short still shows the lanes it finished. A
+    lane that raises is reported as failed and the next lane runs; a cancelled lane
+    (the job was cancelled) stops the job, and the lanes after it are reported as not
+    run.
+    """
+    summary = os.environ.get('GITHUB_STEP_SUMMARY')
+
+    def record(name, verdict, seconds, failed):
+        print(f'Contract lane {name}: {verdict}' + (f' in {seconds / 60:.1f} min' if seconds is not None else '')
+              + (f' (failed: {failed})' if failed else ''), flush=True)
+        if summary:
+            with open(summary, 'a', encoding='utf-8') as handle:
+                minutes = f'{seconds / 60:.1f}' if seconds is not None else '-'
+                handle.write(f'| {name} | {verdict} | {minutes} | {failed or "-"} |\n')
+
+    if summary:
+        with open(summary, 'a', encoding='utf-8') as handle:
+            handle.write('| Contract lane | Result | Minutes | Failed steps |\n| --- | --- | --- | --- |\n')
+    status = 0
+    for index, name in enumerate(args.lanes):
+        output = args.output if len(args.lanes) == 1 else args.output / name
+        started = time.monotonic()
+        try:
+            code = run_lane(argparse.Namespace(lane=name, output=output, local=args.local,
+                                               keep_going=args.keep_going))
+            report = json.loads((output / 'report.json').read_text())
+        except Exception as error:  # noqa: BLE001 - a lane's crash is its verdict, not the job's
+            status = 1
+            record(name, 'error', time.monotonic() - started, f'{type(error).__name__}: {error}')
+            continue
+        status = status or code
+        steps = report['steps']
+        record(name, report['status'], time.monotonic() - started,
+               ', '.join(s['name'] for s in steps if s['status'] not in ('success', 'skipped')))
+        if any(s['status'] == 'cancelled' for s in steps):
+            for skipped in args.lanes[index + 1:]:
+                record(skipped, 'not run (cancelled)', None, '')
+            return status or 1
+    return status
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
     lane = commands.add_parser('run')
-    lane.add_argument('lane', choices=LANES)
+    lane.add_argument('lanes', nargs='+', choices=LANES, metavar='lane')
     lane.add_argument('--output', required=True, type=Path)
     lane.add_argument('--local', action='store_true')
     lane.add_argument('--keep-going', action='store_true')
@@ -225,7 +307,9 @@ def main():
                              help='pull-request scope only: the change is not architecture-sensitive')
     args = parser.parse_args()
     if args.command == 'run':
-        return run_lane(args)
+        if len(set(args.lanes)) != len(args.lanes):
+            parser.error('a lane is named twice')
+        return run_lanes(args)
     if args.command == 'openapi-fresh':
         openapi_fresh()
     elif args.command == 'list':

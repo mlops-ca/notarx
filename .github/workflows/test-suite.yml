@@ -189,7 +189,8 @@ jobs:
       matrix: ${{ fromJSON(needs.contract-plan.outputs.matrix) }}
     uses: ./.github/workflows/contract-lane.yml
     with:
-      lane: ${{ matrix.lane }}
+      job: ${{ matrix.job }}
+      lanes: ${{ matrix.lanes }}
       timeout: ${{ matrix.timeout }}
       rust: ${{ matrix.rust }}
       node: ${{ matrix.node }}

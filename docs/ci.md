@@ -107,10 +107,11 @@ Both Playwright installs (the `console` job and the `console-e2e` shards) use th
 
 ## The ci-ok gate
 
-`ci-ok` depends on `changes`, `no-chinese`, `tests` and the two `oci-free-tier` jobs and
+`ci-ok` depends on `changes`, `tests`, `packages` and the two `oci-free-tier` jobs and
 always runs. It passes when each needed job succeeded or was skipped, and fails on any
-failure or cancellation. On a pull request `changes`, `no-chinese` and `tests` must have
-succeeded; the `tests` job holds `suite-ok`, which fails a job that change detection
+failure or cancellation. On a pull request `changes` and `tests` must have
+succeeded; `changes` also runs `scripts/check-no-chinese.py` (the owner rule that no
+Chinese content may be added; it was a separate `no-chinese` job); the `tests` job holds `suite-ok`, which fails a job that change detection
 required but that was skipped (for example because an upstream job failed). On a push to
 `main` every job behind `ci-ok` is skipped, so it passes without running a test. Require `ci-ok` as the single branch-protection check; the set of
 jobs behind it can change without editing the protection rule.
@@ -146,6 +147,37 @@ lane instead of their sum. Every step of the old lane runs in exactly one lane;
 `upgrade-readiness` is the only step dropped (below). The `suite-ok` job of
 `test-suite.yml` requires every lane.
 
+### Contract lane packing
+
+A lane is the unit of the plan; a CI job runs one lane or, for short lanes, several.
+The `jobs` object of `scripts/ci-contract-lanes.json` packs lanes of a few minutes
+into one job, so they share one checkout, toolchain setup and image load instead of
+each paying it (about 0.6 minutes per job) and holding a runner of the 20 the
+repository may use at once. Every other lane is a job named after itself.
+`scripts/ci-contract.py run <lane>...` runs the lanes of a job in order, keeps going
+after a failed lane, writes each lane's evidence to its own directory and lists every
+lane's verdict, duration and failed steps in the job's step summary; the job fails
+when any lane failed. The arm64 leg of a packed job runs only the lanes whose tier runs
+on arm64 in that scope.
+
+| Job | Lanes | Lane step minutes (run 44640058817 and the three before it) |
+| --- | --- | --- |
+| `packed-checks-auth` | `core-checks`, `six-format-auth` | 1.9 + 1.7 |
+| `packed-nuget-migrations` | `nuget`, `oci-migration`, `npm-migration` | 5.0 + 1.0 + 1.1 |
+| `packed-maven-clients` | `maven-oci-auth`, `migration-clients` | 5.3 + 1.3 |
+| `packed-rubygems-discovery` | `rubygems`, `oci-discovery` | 3.0 + 3.1 |
+| `packed-inventory-helm-pypi` | `inventory`, `helm`, `pypi-migration` | 2.6 + 1.7 + 1.4 |
+
+A job's timeout is the sum of its lanes' timeouts and it installs the union of their
+tool needs. A packed job takes longer than its longest lane (`packed-nuget-migrations`
+about 7 minutes against 5), so only lanes that stay well under the critical path of
+the suite (Console, `core-native-e2e`, about 9 to 11 minutes) are packed. The lanes of
+a job share one runner and Docker daemon: each lane's scripts own their Compose
+projects and tear them down on exit, and a cancelled job stops after the lane that
+was running (the lanes after it are reported as not run). A lane that crashes is
+reported as an error and the next lane runs. Move a lane in or out of a pack by editing `jobs` only; the workflows
+name no lane and no job.
+
 Each lane uses the default shallow checkout, warms the Go module cache once with
 retries (`GOPROXY=https://proxy.golang.org|direct`) and installs only the tools
 it declares: Rust from `rust-toolchain.toml`, Node from `.nvmrc`, Go from
@@ -171,6 +203,31 @@ composite action `.github/actions/go-quality` for setup, lint, vet and race, so 
 steps have one definition. They are separate jobs, not a matrix, so the amd64-only steps stay
 out of the arm64 leg. See
 [native builds](native-builds.md).
+
+## Where every former check runs (issue #482)
+
+Issue #482 reshaped the pull request suite (ADR 0016 and ADR 0024, amendments of
+2026-11-19). No check was dropped; this table maps every job of the earlier layout
+(run 44640058817) to where it runs now.
+
+| Earlier job | Now (pull request) | Release gates (`mainline` scope) |
+| --- | --- | --- |
+| `no-chinese` | a step of `changes` that records its verdict without failing the job; `ci-ok` fails on a violation, and the rest of the suite still runs | not part of the gates (as before) |
+| `changes`, `packages`, `oci-free-tier`, `oci-free-tier-tofu` | unchanged | unchanged |
+| `quality`: lint, vet, native-build rules, migration, release and packaging checks, SAML fuzz, dependency audit | `lint` | `lint` |
+| `quality`: `make race`, `make coverage` and the per-package coverage reruns | `quality`: `make race-coverage`, one pass with the race detector and every floor | `quality` |
+| `quality-arm64`: lint, vet, race | `quality-arm64`: vet and race for every Go change; lint with the `arm64` class | `quality-arm64`: lint, vet, race |
+| `console`, `docs`, `image-test-stages`, `build-images` (4), `console-e2e` shards, `console-e2e-report` | unchanged | unchanged |
+| `object-store-contract` (3 jobs: RustFS, MinIO twice) | one `object-store-contract` job running the three configurations in turn | the same job |
+| `contract (core-backup)` | `core-backup`, `core-integration-1`, `core-integration-2` | the same three lanes on both architectures |
+| `contract (core-checks)`, `contract (six-format-auth)` | `packed-checks-auth` | `packed-checks-auth` on both architectures |
+| `contract (nuget)`, `contract (oci-migration)`, `contract (npm-migration)` | `packed-nuget-migrations` | the same, both architectures |
+| `contract (maven-oci-auth)`, `contract (migration-clients)` | `packed-maven-clients` | the same, both architectures |
+| `contract (rubygems)`, `contract (oci-discovery)` | `packed-rubygems-discovery` | the same, both architectures |
+| `contract (inventory)`, `contract (helm)`, `contract (pypi-migration)` | `packed-inventory-helm-pypi` | the same, both architectures |
+| `contract (core-email)`, `contract (core-native-e2e)`, `contract (perf-load)`, and any lane not in `jobs` | unchanged: a job named after the lane | unchanged |
+| the seven arm64 contract legs | only with the `arm64` class (architecture-sensitive change) | always, every lane |
+| `contract-plan`, `suite-ok`, `ci-ok` | unchanged (`suite-ok` also requires `lint`) | unchanged |
 
 ## The backup and integration lanes
 
@@ -252,12 +309,15 @@ against the baseline and a synthetic `000002` migration meanwhile.
 `test-suite.yml` with the `go` class) runs the shared object store contract
 (`internal/objectstore/storetest`, ADR 0017) against the S3 driver on RustFS
 and on a second S3-compatible implementation, once per checksum mode where the
-service supports it. The same suite runs against the in-memory store in
+service supports it. The three configurations (RustFS, and the second service with each
+checksum mode) run one after another in one job that starts both services once and
+lists each configuration's result in the step summary; a failed configuration does not
+stop the next one. The same suite runs against the in-memory store in
 `make test` and against RustFS in `make integration-test`; the
 `./internal/objectstore` coverage floor in `scripts/coverage-packages.txt` is set
 so it fails if the suite stops running. The second service has no published
 container image, so the job builds it from a pinned upstream revision with the
-repository Go toolchain; bump `MINIO_VERSION` in the workflow to move it.
+repository Go toolchain, in the background while RustFS starts; bump `MINIO_VERSION` in the workflow to move it.
 `scripts/rustfs-only-contract-test.sh` exempts that one workflow file.
 
 ## OCI live run

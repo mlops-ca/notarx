@@ -26,17 +26,15 @@ env:
   MINIO_VERSION: v0.0.0-20260212201848-7aac2a2c5b7c
 
 jobs:
+  # One job for the three configurations (each was a job of its own): they share the
+  # checkout, the Go setup and one compiled test binary, and each configuration still
+  # reports its own verdict in the step summary. A failed configuration does not stop
+  # the next one.
   contract:
-    name: object-store-contract (${{ matrix.backend }}, ${{ matrix.mode }})
+    name: object-store-contract
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { backend: rustfs, mode: when_required }
-          - { backend: minio, mode: when_required }
-          - { backend: minio, mode: when_supported }
+    # The old three jobs had 20 minutes each; one configuration takes about a minute.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -45,8 +43,12 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      # The MinIO compile (minutes) runs in the background while RustFS starts.
+      - name: Start the MinIO build
+        run: |
+          (GOBIN="$RUNNER_TEMP/bin" go install "github.com/minio/minio@$MINIO_VERSION" >"$RUNNER_TEMP/minio-build.log" 2>&1
+           echo $? >"$RUNNER_TEMP/minio-build.status") &
       - name: Start RustFS
-        if: matrix.backend == 'rustfs'
         run: |
           docker run --detach --name object-store --publish 127.0.0.1:19000:9000 \
             --env RUSTFS_VOLUMES=/data --env RUSTFS_ADDRESS=0.0.0.0:9000 --env RUSTFS_CONSOLE_ENABLE=false \
@@ -60,24 +62,43 @@ jobs:
           done
           docker logs object-store
           exit 1
-      - name: Build and start MinIO
-        if: matrix.backend == 'minio'
+      - name: Finish the MinIO build and start MinIO
         run: |
-          GOBIN="$RUNNER_TEMP/bin" go install "github.com/minio/minio@$MINIO_VERSION"
+          for _ in $(seq 1 900); do
+            [[ -f "$RUNNER_TEMP/minio-build.status" ]] && break
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/minio-build.log"
+          [[ "$(cat "$RUNNER_TEMP/minio-build.status" 2>/dev/null)" == 0 ]] || { echo "::error::the MinIO build failed or did not finish"; exit 1; }
           mkdir -p "$RUNNER_TEMP/minio-data"
           MINIO_ROOT_USER=contract-access MINIO_ROOT_PASSWORD=contract-secret-password \
-            nohup "$RUNNER_TEMP/bin/minio" server "$RUNNER_TEMP/minio-data" --address 127.0.0.1:19000 --console-address 127.0.0.1:19001 \
+            nohup "$RUNNER_TEMP/bin/minio" server "$RUNNER_TEMP/minio-data" --address 127.0.0.1:19002 --console-address 127.0.0.1:19003 \
             >"$RUNNER_TEMP/minio.log" 2>&1 &
           for _ in $(seq 1 60); do
-            curl --fail --silent http://127.0.0.1:19000/minio/health/ready >/dev/null && exit 0
+            curl --fail --silent http://127.0.0.1:19002/minio/health/ready >/dev/null && exit 0
             sleep 1
           done
           cat "$RUNNER_TEMP/minio.log"
           exit 1
-      - name: Run the contract suite against the S3 driver
+      - name: Run the contract suite against the S3 driver on each service
         env:
-          TEST_OBJECT_STORE_ENDPOINT: http://127.0.0.1:19000
           TEST_OBJECT_STORE_ACCESS_KEY: contract-access
           TEST_OBJECT_STORE_SECRET_KEY: contract-secret-password
-          TEST_OBJECT_STORE_CHECKSUM_MODE: ${{ matrix.mode }}
-        run: go test -count=1 -tags integration -run '^TestS3StoreContract$' -v ./internal/objectstore
+        run: |
+          status=0
+          printf '| Backend | Checksum mode | Result |\n| --- | --- | --- |\n' >> "$GITHUB_STEP_SUMMARY"
+          for config in rustfs:19000:when_required minio:19002:when_required minio:19002:when_supported; do
+            IFS=: read -r backend port mode <<<"$config"
+            echo "::group::object-store-contract ($backend, $mode)"
+            if TEST_OBJECT_STORE_ENDPOINT="http://127.0.0.1:$port" TEST_OBJECT_STORE_CHECKSUM_MODE="$mode" \
+                go test -count=1 -tags integration -run '^TestS3StoreContract$' -v ./internal/objectstore; then
+              result=success
+            else
+              result=failure
+              status=1
+              echo "::error::object-store-contract ($backend, $mode) failed"
+            fi
+            echo "::endgroup::"
+            printf '| %s | %s | %s |\n' "$backend" "$mode" "$result" >> "$GITHUB_STEP_SUMMARY"
+          done
+          exit $status
