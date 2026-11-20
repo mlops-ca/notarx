@@ -285,14 +285,14 @@ func TestStagedPayloadStoresOnceAndFallsBackOnChange(t *testing.T) {
 	if err != nil || !staged.ref.external() || payloads.puts != 1 {
 		t.Fatalf("staged=%+v puts=%d err=%v", staged, payloads.puts, err)
 	}
-	inline, ref, err := staged.externalize(t.Context(), store, large)
+	inline, ref, err := staged.externalizeIn(t.Context(), store, nil, large)
 	if err != nil || !ref.external() || len(inline) != 0 || payloads.puts != 1 {
 		t.Fatalf("unchanged payload must reuse the staged object: puts=%d err=%v", payloads.puts, err)
 	}
-	if _, ref, err = staged.externalize(t.Context(), store, []byte("a different payload above it")); err != nil || !ref.external() || payloads.puts != 2 {
+	if _, ref, err = staged.externalizeIn(t.Context(), store, nil, []byte("a different payload above it")); err != nil || !ref.external() || payloads.puts != 2 {
 		t.Fatalf("changed payload must be stored now: puts=%d err=%v", payloads.puts, err)
 	}
-	if inline, ref, err = (stagedPayload{}).externalize(t.Context(), store, []byte("tiny")); err != nil || ref.external() || string(inline) != "tiny" {
+	if inline, ref, err = (stagedPayload{}).externalizeIn(t.Context(), store, nil, []byte("tiny")); err != nil || ref.external() || string(inline) != "tiny" {
 		t.Fatalf("a small payload stays inline: %q %v", inline, err)
 	}
 	store.SetPayloadStore(&failingPayloadStore{}, 1)
