@@ -48,8 +48,24 @@ type proxyRedirectFixture struct {
 
 // These hooks describe only synthetic hosts and connect only to the fixture's
 // own TLS listener. They never resolve DNS or dial an upstream outside the test.
-// TLS still verifies the synthetic host against the fixture certificate.
+// TLS still verifies the synthetic host against the fixture certificate. The
+// fixture also installs its hooks as the package-level egress hooks, which the
+// Raw, Go and Conan paths read, so a test that uses it must not run in parallel.
 func newProxyRedirectFixture(t *testing.T, handler http.HandlerFunc) *proxyRedirectFixture {
+	t.Helper()
+	return newProxyRedirectFixtureHooks(t, handler, true)
+}
+
+// newIsolatedProxyRedirectFixture leaves the package-level egress hooks alone and
+// hands its hooks only to its own UpstreamClient, so parallel tests can each own
+// one. A path that read the package-level hooks instead would resolve the
+// synthetic hosts through real DNS and fail.
+func newIsolatedProxyRedirectFixture(t *testing.T, handler http.HandlerFunc) *proxyRedirectFixture {
+	t.Helper()
+	return newProxyRedirectFixtureHooks(t, handler, false)
+}
+
+func newProxyRedirectFixtureHooks(t *testing.T, handler http.HandlerFunc, global bool) *proxyRedirectFixture {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -86,8 +102,7 @@ func newProxyRedirectFixture(t *testing.T, handler http.HandlerFunc) *proxyRedir
 	addresses := map[string]string{
 		redirectOrigin: "93.184.216.10", redirectCDN: "93.184.216.11", redirectDenied: "93.184.216.12", redirectProxy: "93.184.216.13",
 	}
-	oldLookup, oldDial, oldProxy := rawProxyLookupIP, rawProxyDialContext, rawProxyFromEnvironment
-	rawProxyLookupIP = func(_ context.Context, _, host string) ([]net.IP, error) {
+	lookup := func(_ context.Context, _, host string) ([]net.IP, error) {
 		address, ok := addresses[host]
 		if !ok {
 			return nil, errors.New("unmapped synthetic fixture host")
@@ -111,17 +126,21 @@ func newProxyRedirectFixture(t *testing.T, handler http.HandlerFunc) *proxyRedir
 		}
 		return (&net.Dialer{}).DialContext(ctx, network, fixture.upstreamAddress)
 	}
-	rawProxyDialContext = dial
-	rawProxyFromEnvironment = func(*http.Request) (*url.URL, error) { return nil, nil }
+	noProxy := func(*http.Request) (*url.URL, error) { return nil, nil }
+	hooks := egress.Hooks{LookupIP: lookup, DialContext: dial, ProxyFromEnvironment: noProxy}
+	if global {
+		oldLookup, oldDial, oldProxy := rawProxyLookupIP, rawProxyDialContext, rawProxyFromEnvironment
+		rawProxyLookupIP, rawProxyDialContext, rawProxyFromEnvironment = lookup, dial, noProxy
+		t.Cleanup(func() { rawProxyLookupIP, rawProxyDialContext, rawProxyFromEnvironment = oldLookup, oldDial, oldProxy })
+		hooks = rawEgressHooks()
+	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil
 	transport.DialContext = dial
 	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}
-	hooks := rawEgressHooks()
 	fixture.hooks = &hooks
 	fixture.client = UpstreamClient{HTTPClient: &http.Client{Transport: transport, Timeout: time.Second}, EgressHooks: fixture.hooks}
 	t.Cleanup(func() {
-		rawProxyLookupIP, rawProxyDialContext, rawProxyFromEnvironment = oldLookup, oldDial, oldProxy
 		transport.CloseIdleConnections()
 		server.Close()
 	})

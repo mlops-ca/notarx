@@ -10,9 +10,7 @@ source "$env_file"
 notarx_port=${NOTARX_HTTP_PORT:-8080}
 curl --silent --show-error --fail "http://127.0.0.1:${notarx_port}/readyz" >/dev/null
 console_port=$(python3 -c 'import socket; listener = socket.socket(); listener.bind(("127.0.0.1", 0)); print(listener.getsockname()[1]); listener.close()')
-# CONSOLE_E2E_SPECS (selected specs), CONSOLE_E2E_SHARD (i/N) and CONSOLE_E2E_WORKERS
-# (Playwright workers per shard, a number or a percentage of the CPUs; Playwright's
-# default is half the CPUs) come from the CI matrix.
+# CONSOLE_E2E_SPECS (selected specs) and CONSOLE_E2E_SHARD (i/N) come from the CI matrix.
 # Specs become anchored, escaped path filters: Playwright treats positional
 # arguments as regular expressions.
 e2e_args=()
@@ -24,5 +22,4 @@ if [[ -n "${CONSOLE_E2E_SHARD:-}" ]]; then
   # A selected subset can leave a shard without specs.
   if [[ ${#e2e_args[@]} -gt 1 ]]; then e2e_args+=(--pass-with-no-tests); fi
 fi
-if [[ -n "${CONSOLE_E2E_WORKERS:-}" ]]; then e2e_args+=("--workers=$CONSOLE_E2E_WORKERS"); fi
 NOTARX_ADMIN_TOKEN="$NOTARX_ADMIN_TOKEN" PLAYWRIGHT_PORT="$console_port" VITE_NOTARX_PROXY_TARGET="http://127.0.0.1:${notarx_port}" npm --prefix "$root/console" run e2e -- ${e2e_args[@]+"${e2e_args[@]}"}

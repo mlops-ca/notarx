@@ -398,11 +398,11 @@ jobs:
         # Each entry names its own shard fraction, so the total cannot drift
         # from the list. Add or remove entries to change the shard count. Exactly one
         # entry runs the CLI E2E (cli: true) after its specs, so it needs no job of
-        # its own. Two shards with one Playwright worker per CPU of the runner
-        # replace three shards of Playwright's default of half the CPUs (issue #518):
-        # every shard pays about 1.4 minutes of setup before its specs run. The
-        # cli shard ends about a minute after the other one, well before the
-        # contract lanes.
+        # its own. Two shards replace three (issue #518): every shard pays about
+        # 1.4 minutes of setup before its specs run. Four Playwright workers per
+        # shard ran no more specs per minute than the default two (half the CPUs),
+        # so the default stays. The cli shard ends about a minute after the other
+        # one, well before the contract lanes.
         include:
           - { name: '1', shard: 1/2, cli: true }
           - { name: '2', shard: 2/2, cli: false }
@@ -455,7 +455,6 @@ jobs:
           PLAYWRIGHT_BLOB_REPORT: '1'
           CONSOLE_E2E_SPECS: ${{ inputs.e2e_specs }}
           CONSOLE_E2E_SHARD: ${{ matrix.shard }}
-          CONSOLE_E2E_WORKERS: 100%
         run: make console-e2e
       - name: Upload Console E2E blob report
         if: ${{ !cancelled() && (steps.console-e2e.outcome == 'success' || steps.console-e2e.outcome == 'failure') }}

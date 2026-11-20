@@ -40,12 +40,12 @@ skips every contract lane.
 ## Console E2E sharding and spec selection
 
 `console-e2e` is a matrix of two jobs. Shards `1` and `2` each start the
-shared prebuilt gateway images and run `playwright test --shard=i/2 --workers=100%`
-(`CONSOLE_E2E_WORKERS`, one worker per CPU of the runner), so every
-spec runs in exactly one shard. Until issue #518 there were three shards with
-Playwright's default of two workers (half the CPUs): each shard paid about 1.4 minutes
-of setup (npm install, browser, image load, gateway start) for about 3 minutes of
-specs. The entry marked `cli: true` (shard `1`) then runs the
+shared prebuilt gateway images and run `playwright test --shard=i/2`, so every
+spec runs in exactly one shard. Until issue #518 there were three shards: each paid
+about 1.4 minutes of setup (npm install, browser, image load, gateway start) for about
+3 minutes of specs. Playwright runs half as many workers as the runner has CPUs (two
+on the hosted runner); four workers per shard ran no more specs per minute (136 specs
+in 3.9 and 5.2 minutes, run 44726897998, against about 90 in 2.9 minutes with two). The entry marked `cli: true` (shard `1`) then runs the
 `notarxctl` CLI E2E, also when one of its specs failed, so both verdicts show. The CLI
 E2E boots its own isolated gateway from the loaded images (`scripts/cli-e2e.sh` without
 `CLI_E2E_SERVER`: a Compose project of its own on free ports), so the state the specs of
@@ -341,7 +341,7 @@ Issue #482 reshaped the pull request suite (ADR 0016 and ADR 0024, amendments of
 | `quality-arm64`: lint, vet, race | `quality-arm64`: vet and race for every Go change; lint with the `arm64` class | `quality-arm64`: lint, vet, race |
 | `console`, `docs`, `image-test-stages`, `console-e2e-report` | unchanged | unchanged |
 | `build-images` (4: two images on two architectures) | `build-images-amd64` and `build-images-arm64`, each building both images of its architecture (issue #500) | the same |
-| `console-e2e` shards `1` to `3` and `cli` | shards `1` and `2` with one Playwright worker per CPU; shard `1` runs the CLI E2E after its specs (issues #500 and #518) | the same |
+| `console-e2e` shards `1` to `3` and `cli` | shards `1` and `2`; shard `1` runs the CLI E2E after its specs (issues #500 and #518) | the same |
 | `object-store-contract` (3 jobs: RustFS, MinIO twice) | one `object-store-contract` job running the three configurations in turn | the same job |
 | `contract (core-backup)` | `core-backup` (in `packed-checks-backup`), `core-integration-1` (a job of its own since issue #518; in `packed-perf-integration` after #500), `core-integration-2`, `core-integration-3`, all in `contract-early` | the same four lanes on both architectures |
 | `contract (core-checks)`, `contract (six-format-auth)` | `core-checks` in `packed-checks-backup` (`contract-early`), `six-format-auth` in `packed-native-auth-oci` (issue #518; `packed-rubygems-discovery-auth` after #500) | the same, both architectures |
