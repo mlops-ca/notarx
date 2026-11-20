@@ -17,6 +17,13 @@ on:
       timeout:
         required: true
         type: number
+      # Whether a lane of the job loads the prebuilt images (the images field of
+      # scripts/ci-contract-lanes.json). A job without them starts before the image
+      # build ends; Compose still runs with --no-build, so a lane that does need an
+      # image fails instead of building it.
+      images:
+        default: true
+        type: boolean
       rust:
         default: false
         type: boolean
@@ -47,7 +54,7 @@ jobs:
     timeout-minutes: ${{ inputs.timeout }}
     env:
       GOPROXY: https://proxy.golang.org|direct
-      # Compose uses the images built once by ci.yml instead of rebuilding them.
+      # Compose uses the images built once by test-suite.yml instead of rebuilding them.
       NOTARX_COMPOSE_BUILD_FLAG: --no-build
       # Maven and Gradle clients run through scripts/egress-guard.sh, which rejects
       # public addresses when this is set (docs/ci.md, hermetic Maven lanes).
@@ -57,11 +64,12 @@ jobs:
         with:
           ref: ${{ inputs.sha }}
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: inputs.images
         with:
-          pattern: image-${{ runner.arch }}-*
+          name: image-${{ runner.arch }}
           path: ${{ runner.temp }}/images
-          merge-multiple: true
       - name: Load the prebuilt images
+        if: inputs.images
         run: for image in "$RUNNER_TEMP"/images/*.tar; do docker load --input "$image"; done
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:

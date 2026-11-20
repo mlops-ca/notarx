@@ -19,6 +19,11 @@ runs:
         # ImageOS and ImageVersion are runner environment variables, not
         # expression contexts, so the cache keys read them from this output.
         echo "image=${ImageOS}-${ImageVersion}-${RUNNER_ARCH}-$version" >> "$GITHUB_OUTPUT"
+        # The system dependency packages of every runner image version share a
+        # prefix, so a runner image no cache was saved for starts from the packages
+        # of another one (docs/ci.md, Playwright browser install).
+        echo "deps-prefix=${ImageOS}-${RUNNER_ARCH}-$version" >> "$GITHUB_OUTPUT"
+        echo "deps=${ImageOS}-${RUNNER_ARCH}-$version-${ImageVersion}" >> "$GITHUB_OUTPUT"
     - name: Cache Playwright browsers
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
@@ -41,8 +46,15 @@ runs:
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.cache/playwright-deps
-        key: playwright-deps-${{ steps.playwright.outputs.image }}
-        restore-keys: playwright-deps-${{ steps.playwright.outputs.image }}-partial-
+        key: playwright-deps-${{ steps.playwright.outputs.deps }}
+        # Not a hit, so the apt path below runs: apt reuses every restored package
+        # whose version still matches and downloads only the rest. The pull request
+        # scope can restore only what main (the nightly release gates) or this pull
+        # request saved, and runner image versions change often, so without the
+        # second key a pull request usually started from nothing.
+        restore-keys: |
+          playwright-deps-${{ steps.playwright.outputs.deps }}-partial-
+          playwright-deps-${{ steps.playwright.outputs.deps-prefix }}-
     # A warm cache (exact key) installs with dpkg only. If dpkg refuses (the
     # runner drifted from the image the packages came from), apt installs them
     # instead; that path never saves, so a bad set is not written back.
@@ -78,10 +90,10 @@ runs:
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.cache/playwright-deps
-        key: playwright-deps-${{ steps.playwright.outputs.image }}
+        key: playwright-deps-${{ steps.playwright.outputs.deps }}
     - name: Save the partial apt download
       if: always() && steps.apt-install.outcome == 'failure' && steps.apt-install.outputs.debs == 'true'
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.cache/playwright-deps
-        key: playwright-deps-${{ steps.playwright.outputs.image }}-partial-${{ github.run_id }}-${{ github.run_attempt }}-${{ runner.name }}
+        key: playwright-deps-${{ steps.playwright.outputs.deps }}-partial-${{ github.run_id }}-${{ github.run_attempt }}-${{ runner.name }}

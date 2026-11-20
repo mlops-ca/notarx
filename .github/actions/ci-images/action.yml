@@ -1,0 +1,67 @@
+name: Build the CI images
+description: >-
+  Builds the notarx and reference apt signer images that the contract lanes and the
+  Console E2E load, natively on the runner's architecture (ADR 0016), in parallel
+  with docker buildx bake (.github/ci-images.hcl), and uploads both tarballs as one
+  artifact named image-<runner arch>. The checkout stays in the job. docs/ci.md,
+  Shared images.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+      with:
+        go-version-file: go.mod
+        cache: false
+    # The image build seeds go mod download from this directory (the gomod-seed
+    # build context), so a warm run never contacts the module proxy. The key
+    # follows go.sum; a miss restores the newest older seed by prefix and only
+    # the changed modules are fetched. go.sum and go mod verify still decide
+    # which bytes are accepted (docs/ci.md).
+    # The month in the key starts a fresh seed each month, so modules the project
+    # dropped or upgraded cannot pile up through the prefix fallback.
+    - name: Locate the module download cache
+      id: gomod-dir
+      shell: bash
+      run: |
+        echo "dir=$(go env GOMODCACHE)/cache/download" >> "$GITHUB_OUTPUT"
+        echo "month=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
+    - name: Restore the Go module download cache
+      id: gomod-cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.gomod-dir.outputs.dir }}
+        key: go-image-seed-${{ runner.os }}-${{ runner.arch }}-${{ steps.gomod-dir.outputs.month }}-${{ hashFiles('go.mod', 'go.sum') }}
+        restore-keys: go-image-seed-${{ runner.os }}-${{ runner.arch }}-${{ steps.gomod-dir.outputs.month }}-
+    - name: Fill and verify the module seed
+      shell: bash
+      env:
+        CACHE_HIT: ${{ steps.gomod-cache.outputs.cache-hit }}
+        GOMOD_DIR: ${{ steps.gomod-dir.outputs.dir }}
+      run: |
+        if [[ "$CACHE_HIT" == true ]]; then
+          # An exact hit must hold every module: with the proxy switched off
+          # this fails instead of fetching, which proves the warm path.
+          GOPROXY=off go mod download
+          echo "warm module seed: no requests to proxy.golang.org"
+        else
+          go mod download
+        fi
+        go mod verify
+        echo "GOMOD_SEED=$GOMOD_DIR" >> "$GITHUB_ENV"
+    - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+    # Both images build at once on one builder: the job ends when the slower one
+    # is done, instead of each image paying its own runner and setup.
+    - name: Build the images and export them as tarballs
+      uses: docker/bake-action@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7.5.0
+      env:
+        OUTPUT_DIR: ${{ runner.temp }}/images
+      with:
+        source: .
+        files: .github/ci-images.hcl
+    - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: image-${{ runner.arch }}
+        path: ${{ runner.temp }}/images/
+        retention-days: 1
+        if-no-files-found: error

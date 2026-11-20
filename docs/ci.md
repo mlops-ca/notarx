@@ -17,7 +17,7 @@ show as `tests / <job>`.
 
 | Class | Paths | Jobs it enables |
 | --- | --- | --- |
-| `go` | `*.go`, `go.mod`, `go.sum`, `migrations/`, `internal/`, `cmd/`, `contracts/`, `examples/`, `api/`, plus the files `release-version-check` reads (`CHANGELOG*.md`, `docs/cli*.md`, `VERSION`) | `lint`, `quality`, `quality-arm64`, `object-store-contract`, `contract-plan`, `contract`, and `console-e2e` (it runs the real gateway) |
+| `go` | `*.go`, `go.mod`, `go.sum`, `migrations/`, `internal/`, `cmd/`, `contracts/`, `examples/`, `api/`, plus the files `release-version-check` reads (`CHANGELOG*.md`, `docs/cli*.md`, `VERSION`) | `lint`, `quality`, `quality-arm64`, `object-store-contract`, `contract-plan`, the contract jobs (`contract-early`, `contract-amd64`, `contract-arm64`), and `console-e2e` (it runs the real gateway) |
 | `console` | `console/`, `api/` (the generated client) | `console` (unit tests, build, visual) and `console-e2e` |
 | `docs` | `docs/`, `*.md`, `LICENSE`, `NOTICE` | `docs` (i18n twins, links, capability claims) |
 | `images` | `Dockerfile*`, `compose*.yml`, `deploy/` | everything that executes the product (`go` and `console` too) |
@@ -39,11 +39,12 @@ skips every contract lane.
 
 ## Console E2E sharding and spec selection
 
-`console-e2e` is a matrix of four jobs. Shards `1`, `2` and `3` each start the
+`console-e2e` is a matrix of three jobs. Shards `1`, `2` and `3` each start the
 shared prebuilt gateway images and run `playwright test --shard=i/3`, so every
-spec runs in exactly one shard; the fourth entry, `cli`, runs the `notarxctl` CLI
-E2E against its own gateway instead of serializing it behind the Playwright
-suite. Each matrix entry carries its own shard fraction, so add or renumber entries together. Each
+spec runs in exactly one shard. The entry marked `cli: true` (shard `2`) then runs the
+`notarxctl` CLI E2E against the same gateway, also when one of its specs failed, so
+both verdicts show. The CLI E2E used to be a fourth job with a gateway of its own; it
+takes about 0.4 minutes, less than that job's setup (issue #500). Each matrix entry carries its own shard fraction, so add or renumber entries together. Each
 shard uploads a Playwright blob report; `console-e2e-report` merges them with
 `playwright merge-reports` into one HTML report artifact (`console-e2e-report`),
 (it runs when every shard passed; failed shards upload their own blob report and traces) (`console-e2e-traces-<shard>`).
@@ -64,8 +65,11 @@ behaviour config ignores, and the contract lanes never run Playwright.
 
 The Go class runs three jobs. `lint` (amd64) is the fast signal: `make lint-checks`
 (`golangci-lint` and the repository lint tools), `make vet`, the native-build rules, the
-migration checks, the release and packaging checks, the 60-second SAML fuzz run and
-the dependency audit. `quality` (amd64) runs the unit tests exactly once:
+migration checks and the dependency audit. `quality` (amd64) runs the unit tests exactly once,
+then the architecture-independent release and packaging checks and the 60-second SAML
+fuzz run. Those used to follow lint in `lint` and held its verdict back by about
+2.5 minutes; `quality` ends later than `lint` anyway and stays off the critical path
+of the suite (issue #500). The unit-test pass of `quality`:
 `make race-coverage` runs `go test -count=1 -race -coverprofile` over every package and
 `scripts/coverage-check.sh` reads that one profile for the repository-wide floor and
 for every per-package floor in `scripts/coverage-packages.txt` (covered statements
@@ -103,7 +107,7 @@ pass uses `-count=1`, so a restored build cache never replays an earlier test re
 
 ## Playwright browser install
 
-Both Playwright installs (the `console` job and the `console-e2e` shards) use the `.github/actions/playwright-browser` composite action. The browser download is time-boxed with `timeout` (5 minutes; composite action steps do not support `timeout-minutes`) and its directory (`~/.cache/ms-playwright`) is cached with `actions/cache`, keyed by runner image (`ImageOS`), architecture and the resolved `@playwright/test` version, so a cache hit downloads no browser. The system dependencies (`playwright install-deps`) are .deb packages from the runner's Ubuntu mirror, which was observed hanging or failing (apt exit 100) in CI. The first run for a runner image version (`ImageVersion`), architecture and Playwright version installs them with apt, pointed at a user-owned archive directory (`~/.cache/playwright-deps`); the step removes `partial` and `lock` and hands ownership back from root so tar can read the files, and the directory is saved right after the install step (when at least one .deb was downloaded), not at the end of the job. Every later run restores it and installs the packages with `dpkg --install --skip-same-version --refuse-downgrade`, so a warm runner never contacts apt; if dpkg refuses because the runner drifted from the image, the step installs through apt instead and does not save. A new runner image version changes the key, because its installed baseline can differ. There is no retry loop, fallback mirror or sleep: the cold apt install is time-boxed to 8 minutes with `timeout`. When it fails, the whole packages downloaded so far are saved under a `-partial-` key and the next run restores them by prefix (not a hit, so it still runs apt, which skips what it already holds), so a slow mirror converges instead of restarting. The cache keys read `ImageOS`, `ImageVersion` and the architecture from the environment in a step, because those are runner environment variables, not expression contexts (the earlier `env.ImageOS` key expanded to an empty string). We chose this over running the browser tests in the official Playwright container image, which would need a digest that cannot be verified from a pull request.
+Both Playwright installs (the `console` job and the `console-e2e` shards) use the `.github/actions/playwright-browser` composite action. The browser download is time-boxed with `timeout` (5 minutes; composite action steps do not support `timeout-minutes`) and its directory (`~/.cache/ms-playwright`) is cached with `actions/cache`, keyed by runner image (`ImageOS`), architecture and the resolved `@playwright/test` version, so a cache hit downloads no browser. The system dependencies (`playwright install-deps`) are .deb packages from the runner's Ubuntu mirror, which was observed hanging or failing (apt exit 100) in CI. The first run for a runner image version (`ImageVersion`), architecture and Playwright version installs them with apt, pointed at a user-owned archive directory (`~/.cache/playwright-deps`); the step removes `partial` and `lock` and hands ownership back from root so tar can read the files, and the directory is saved right after the install step (when at least one .deb was downloaded), not at the end of the job. Every later run restores it and installs the packages with `dpkg --install --skip-same-version --refuse-downgrade`, so a warm runner never contacts apt; if dpkg refuses because the runner drifted from the image, the step installs through apt instead and does not save. A new runner image version changes the key, because its installed baseline can differ. The key is `playwright-deps-<ImageOS>-<arch>-<Playwright version>-<ImageVersion>`, so a runner image version that has no cache of its own restores the newest packages saved for another image version by prefix. That is not a hit: the step installs through apt, which reuses every restored package whose version still matches and downloads only the rest, then saves the exact key. A pull request can restore only what `main` (the nightly release gates) or the pull request itself saved, and hosted runners of three or four image versions serve the repository at once, so with the image version in the middle of the key a pull request usually missed and fetched every package from the mirror, which took up to 7.7 minutes (run 44675064060; issue #500). There is no retry loop, fallback mirror or sleep: the cold apt install is time-boxed to 8 minutes with `timeout`. When it fails, the whole packages downloaded so far are saved under a `-partial-` key and the next run restores them by prefix (not a hit, so it still runs apt, which skips what it already holds), so a slow mirror converges instead of restarting. The cache keys read `ImageOS`, `ImageVersion` and the architecture from the environment in a step, because those are runner environment variables, not expression contexts (the earlier `env.ImageOS` key expanded to an empty string). We chose this over running the browser tests in the official Playwright container image, which would need a digest that cannot be verified from a pull request.
 
 ## The ci-ok gate
 
@@ -139,9 +143,26 @@ is the `i18n-review` commit status on the head.
 
 `scripts/ci-contract-lanes.json` is the only place that names lanes, their tool
 needs and their timeouts. The `contract-plan` job turns it into a matrix
-(`scripts/ci-contract.py matrix`) and `contract` runs one reusable
+(`scripts/ci-contract.py matrix`) and three jobs run one reusable
 `contract-lane.yml` job per entry in parallel (no `max-parallel` cap; the free
-hosted runner limit applies). The former serial `core` lane (about 34 minutes)
+hosted runner limit applies). The plan is split into groups by the images a job
+loads (`matrix --group`), so no job waits for an image it never loads:
+
+| Job | Group | Waits for |
+| --- | --- | --- |
+| `contract-early` | jobs whose lanes all declare `"images": false` (both architectures) | `contract-plan` only |
+| `contract-amd64` | amd64 jobs with a lane that loads the prebuilt images | `build-images-amd64` |
+| `contract-arm64` | arm64 jobs with a lane that loads the prebuilt images | `build-images-arm64` |
+
+Every lane declares `images`. The integration shards, `core-backup` and `perf-load`
+declare `false`: they run `compose.integration.yml`, build their binaries from source
+or build their own per-project image. A job without images downloads and loads
+nothing, and Compose still runs with `--no-build`, so a lane that wrongly declares
+`false` fails on the missing image instead of building it. A group the plan leaves
+empty (`contract-arm64` on a pull request without the `arm64` class) is skipped, and
+`suite-ok` requires each group that has a job. Before issue #500 a single `contract`
+job waited for all four image builds, the two arm64 ones included, about 4.9 minutes
+into the run. The former serial `core` lane (about 34 minutes)
 is split into four lanes by duration, so the full run is bound by its slowest
 lane instead of their sum. Every step of the old lane runs in exactly one lane;
 `upgrade-readiness` is the only step dropped (below). The `suite-ok` job of
@@ -162,6 +183,7 @@ on arm64 in that scope.
 
 | Job | Lanes | Lane step minutes (run 44640058817 and the three before it) |
 | --- | --- | --- |
+| `packed-integration-perf` | `core-integration-1`, `perf-load` | about 4.5 (shard 1 alone, estimated from run 44675064060) + 1.6 |
 | `packed-checks-auth` | `core-checks`, `six-format-auth` | 1.9 + 1.7 |
 | `packed-nuget-migrations` | `nuget`, `oci-migration`, `npm-migration` | 5.0 + 1.0 + 1.1 |
 | `packed-maven-clients` | `maven-oci-auth`, `migration-clients` | 5.3 + 1.3 |
@@ -243,18 +265,22 @@ Issue #482 reshaped the pull request suite (ADR 0016 and ADR 0024, amendments of
 | --- | --- | --- |
 | `no-chinese` | a step of `changes` that records its verdict without failing the job; `ci-ok` fails on a violation, and the rest of the suite still runs | not part of the gates (as before) |
 | `changes`, `packages`, `oci-free-tier`, `oci-free-tier-tofu` | unchanged | unchanged |
-| `quality`: lint, vet, native-build rules, migration, release and packaging checks, SAML fuzz, dependency audit | `lint` | `lint` |
+| `quality`: lint, vet, native-build rules, migration, release and packaging checks, SAML fuzz, dependency audit | `lint` (lint, vet, native-build rules, migration checks, dependency audit); the release and packaging checks and the SAML fuzz run in `quality` after the unit tests (issue #500) | the same |
 | `quality`: `make race`, `make coverage` and the per-package coverage reruns | `quality`: `make race-coverage`, one pass with the race detector and every floor | `quality` |
 | `quality-arm64`: lint, vet, race | `quality-arm64`: vet and race for every Go change; lint with the `arm64` class | `quality-arm64`: lint, vet, race |
-| `console`, `docs`, `image-test-stages`, `build-images` (4), `console-e2e` shards, `console-e2e-report` | unchanged | unchanged |
+| `console`, `docs`, `image-test-stages`, `console-e2e-report` | unchanged | unchanged |
+| `build-images` (4: two images on two architectures) | `build-images-amd64` and `build-images-arm64`, each building both images of its architecture (issue #500) | the same |
+| `console-e2e` shards `1` to `3` and `cli` | shards `1` to `3`; shard `2` runs the CLI E2E after its specs (issue #500) | the same |
 | `object-store-contract` (3 jobs: RustFS, MinIO twice) | one `object-store-contract` job running the three configurations in turn | the same job |
-| `contract (core-backup)` | `core-backup`, `core-integration-1`, `core-integration-2` | the same three lanes on both architectures |
+| `contract (core-backup)` | `core-backup`, `core-integration-1` (in `packed-integration-perf`), `core-integration-2`, `core-integration-3`, all in `contract-early` | the same four lanes on both architectures |
 | `contract (core-checks)`, `contract (six-format-auth)` | `packed-checks-auth` | `packed-checks-auth` on both architectures |
 | `contract (nuget)`, `contract (oci-migration)`, `contract (npm-migration)` | `packed-nuget-migrations` | the same, both architectures |
 | `contract (maven-oci-auth)`, `contract (migration-clients)` | `packed-maven-clients` | the same, both architectures |
 | `contract (rubygems)`, `contract (oci-discovery)` | `packed-rubygems-discovery` | the same, both architectures |
 | `contract (inventory)`, `contract (helm)`, `contract (pypi-migration)` | `packed-inventory-helm-pypi` | the same, both architectures |
-| `contract (core-email)`, `contract (core-native-e2e)`, `contract (perf-load)`, and any lane not in `jobs` | unchanged: a job named after the lane | unchanged |
+| `contract (perf-load)` | `packed-integration-perf`, after `core-integration-1` (issue #500) | the same on both architectures |
+| `contract (core-email)`, `contract (core-native-e2e)`, and any lane not in `jobs` | unchanged: a job named after the lane | unchanged |
+| every contract job | `contract-early` (lanes that load no prebuilt image), `contract-amd64` or `contract-arm64` (issue #500) | the same three groups |
 | the seven arm64 contract legs | only with the `arm64` class (architecture-sensitive change) | always, every lane |
 | `contract-plan`, `suite-ok`, `ci-ok` | unchanged (`suite-ok` also requires `lint`) | unchanged |
 
@@ -262,16 +288,25 @@ Issue #482 reshaped the pull request suite (ADR 0016 and ADR 0024, amendments of
 
 The former `core-backup` lane ran the Conan E2E, `make backup-transfer-test`,
 `make published-native-backup-test` and `make integration-test` one after another
-(about 20 minutes, the longest job of a pull request). It is three lanes now:
+(about 20 minutes, the longest job of a pull request). It is four lanes now. None of them
+loads a prebuilt image, so they run in `contract-early` and start right after the plan:
 
-| Lane | Steps | Measured before the split |
+| Lane | Steps | Lane step minutes, run 44675064060 (two shards then) |
 | --- | --- | --- |
-| `core-backup` | `make backup-transfer-test` | 6.4 min |
-| `core-integration-1` | `make integration-test INTEGRATION_SHARD=1`, `make published-native-backup-test` | integration 9.9 min in total, published 1.6 min |
-| `core-integration-2` | `make integration-test INTEGRATION_SHARD=2`, `make conan-e2e` | Conan 2.2 min |
+| `core-backup` | `make backup-transfer-test` | 6.6 |
+| `core-integration-1` (packed with `perf-load`) | `make integration-test INTEGRATION_SHARD=1` (`./internal/app` and the Cargo replay) | was 9.3 with `./internal/repository`, the small packages and the published backup test |
+| `core-integration-2` | `make integration-test INTEGRATION_SHARD=2`, `make published-native-backup-test` | new; `./internal/repository` took 2.4 minutes of tests, the published backup test 1.6 |
+| `core-integration-3` | `make integration-test INTEGRATION_SHARD=3`, `make conan-e2e` | was 7.3 as shard 2 with the small packages; Conan 2.1 |
+
+The two-shard layout of #482 left `core-integration-1` at 9.3 to 11.3 minutes, the
+slowest job of the suite: `./internal/app` (2.0 minutes of tests) and
+`./internal/repository` (2.4) were in the same shard, after about 1.5 minutes of stack
+start and compilation, followed by the Cargo replay (0.9) and the published backup
+test (1.6). Issue #500 gives `./internal/app` a shard of its own and moves the published
+backup test to the new middle shard.
 
 `scripts/integration-packages.txt` holds the integration package list and assigns each
-package to one of two shards balanced by measured test time; `scripts/integration-test.sh --list`
+package to one of three shards balanced by measured test time; `scripts/integration-test.sh --list`
 prints it. `TestRequiredIntegrationCommandCoversIntegrationTaggedPackages` (`contracts/`)
 and `make test` (`scripts/integration-isolation-test.sh`) fail when a package with
 integration-tagged files is missing from the list or listed twice. Each shard starts
@@ -281,33 +316,37 @@ database. `-p 1` used to serialize compilation too (about two minutes of the
 integration step): the script now builds every test binary first with full
 parallelism (`go test -exec true`, which builds and links but runs nothing); the
 second `go test -p 1` finds every compiled package in the build cache, so it spends
-seconds per package relinking or reusing the binary before running it. Shard 1 holds `./internal/app` and runs the official Cargo
+seconds per package relinking or reusing the binary before running it. Each shard pays
+the stack start and its own compilation, about 1.5 minutes, which is why there are
+three shards and not more. Shard 1 holds `./internal/app` and runs the official Cargo
 replay on the host. Without `INTEGRATION_SHARD`, `make integration-test` runs every
 package in one stack, as before.
 
 ## Shared images
 
-`build-images` builds the notarx and reference apt signer images once per run
-(one parallel matrix leg each, BuildKit layers cached in the GitHub Actions
-cache; the reference scanner has no CI consumer, so it is not built here) and uploads each as a tarball artifact named
-`image-<runner arch>-<image>`. Every contract lane and `console-e2e` downloads
-the artifacts for its own runner architecture and `docker load`s them, so no job
-rebuilds an image from source. `compose.yml` names the images
-(`notarx-gateway:local`, `notarx-reference-apt-signer:local`,
+`build-images-amd64` and `build-images-arm64` build the notarx and reference apt signer
+images once per run, natively on `ubuntu-24.04` and `ubuntu-24.04-arm`. Each job
+builds both images in parallel with `docker buildx bake` (`.github/ci-images.hcl`,
+through the `.github/actions/ci-images` composite action; BuildKit layers cached in
+the GitHub Actions cache, one scope per image and architecture; the reference
+scanner has no CI consumer, so it is not built here) and uploads both tarballs as
+one artifact named `image-<runner arch>`. Every contract job that loads images and
+`console-e2e` download the artifact of their own runner architecture and
+`docker load` it, so no job rebuilds an image from source. `compose.yml` names the images
+(`notarx:local`, `notarx-reference-apt-signer:local`,
 `notarx-reference-scanner:local`; override with `NOTARX_IMAGE`,
 `NOTARX_APT_SIGNER_IMAGE`, `NOTARX_SCANNER_IMAGE`). Lanes set
 `NOTARX_COMPOSE_BUILD_FLAG=--no-build`; the e2e scripts use it in place of
 `--build`, and unset (local runs) they still build from source. Scripts that
 build with their own version arguments (`backup-restore-readiness`,
 `performance-baseline`) keep a per-project image name so they never touch the
-shared tag. `suite-ok` requires `build-images` whenever `go` or `console`
-changed. `build-images` runs each image on both native runners (`ubuntu-24.04`
-and `ubuntu-24.04-arm`), and a contract lane downloads the artifacts of its own
-runner architecture.
+shared tag. `suite-ok` requires both image jobs whenever `go` or `console`
+changed. They used to be four matrix legs (one per image and architecture) behind a
+single `needs`, so an amd64 lane waited for the arm64 builds too (issue #500).
 
 ### Go module cache for image builds
 
-BuildKit cache mounts do not survive between hosted runners, so the image build used to fetch every module from proxy.golang.org whenever `go.mod` or `go.sum` changed, and one proxy error failed the job. `build-images` now restores the module download directory with `actions/cache` (key: runner architecture, month, hash of `go.mod` and `go.sum`; the prefix fallback is limited to the same month, so dropped modules cannot pile up). It passes the directory to the build as the `gomod-seed` build context. Each Dockerfile runs `GOPROXY=file:///gomod-seed,https://proxy.golang.org|direct go mod download && go mod verify`, so a warm run makes no request to the proxy and a `go.sum` change fetches only the new modules. On an exact cache hit the job first runs `GOPROXY=off go mod download`, which fails instead of fetching and is the proof that the warm path is network free. `go.sum` and `go mod verify` still decide which bytes are accepted, so a poisoned cache cannot change the build, and there is no retry loop. The BuildKit `/go/pkg/mod` cache mount is gone, because the layer now holds the modules; local `make` image targets pass the host module cache as the same seed. A seed that changes content (a cache miss) also invalidates the cached download layer, which is correct since `go.mod` changed. Release image builds (`image-build.yml`) use the empty default seed and fetch from the proxy, as they did before on their fresh runners, so release digests and provenance (ADR 0016, ADR 0024) are unaffected; module contents are fixed by `go.sum`, so the compiled output does not depend on where the modules came from.
+BuildKit cache mounts do not survive between hosted runners, so the image build used to fetch every module from proxy.golang.org whenever `go.mod` or `go.sum` changed, and one proxy error failed the job. The image jobs (`.github/actions/ci-images`) restore the module download directory with `actions/cache` (key: runner architecture, month, hash of `go.mod` and `go.sum`; the prefix fallback is limited to the same month, so dropped modules cannot pile up). It passes the directory to the build as the `gomod-seed` build context. Each Dockerfile runs `GOPROXY=file:///gomod-seed,https://proxy.golang.org|direct go mod download && go mod verify`, so a warm run makes no request to the proxy and a `go.sum` change fetches only the new modules. On an exact cache hit the job first runs `GOPROXY=off go mod download`, which fails instead of fetching and is the proof that the warm path is network free. `go.sum` and `go mod verify` still decide which bytes are accepted, so a poisoned cache cannot change the build, and there is no retry loop. The BuildKit `/go/pkg/mod` cache mount is gone, because the layer now holds the modules; local `make` image targets pass the host module cache as the same seed. A seed that changes content (a cache miss) also invalidates the cached download layer, which is correct since `go.mod` changed. Release image builds (`image-build.yml`) use the empty default seed and fetch from the proxy, as they did before on their fresh runners, so release digests and provenance (ADR 0016, ADR 0024) are unaffected; module contents are fixed by `go.sum`, so the compiled output does not depend on where the modules came from.
 
 The `oci-free-tier` and `oci-free-tier-tofu` jobs run when the `images` class changed
 (`deploy/` is in it). `oci-free-tier` runs on the native arm64 runner, because the

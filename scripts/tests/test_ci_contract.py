@@ -309,6 +309,7 @@ class PlanTests(unittest.TestCase):
                 self.assertGreater(lane['timeoutMinutes'], 0)
                 self.assertLessEqual(lane['timeoutMinutes'], 60)
                 self.assertLessEqual(set(lane['needs']), set(ci.TOOL_NEEDS))
+                self.assertIsInstance(lane['images'], bool)
                 names = [s['name'] for s in lane['steps']]
                 self.assertEqual(len(names), len(set(names)))
                 for step in lane['steps']:
@@ -348,8 +349,36 @@ class PlanTests(unittest.TestCase):
                 lanes = [ci.PLAN['lanes'][name] for name in entry['lanes'].split()]
                 self.assertEqual(entry['timeout'], sum(lane['timeoutMinutes'] for lane in lanes))
                 self.assertEqual(entry['runner'], ci.RUNNERS[entry['arch']])
+                self.assertEqual(entry['images'], any(lane['images'] for lane in lanes))
                 for need in ci.TOOL_NEEDS:
                     self.assertEqual(entry[need], any(need in lane['needs'] for lane in lanes))
+
+    def test_groups_split_the_matrix_by_the_images_each_job_loads(self):
+        def generate(*args):
+            return json.loads(subprocess.check_output(
+                [sys.executable, str(ROOT / 'scripts/ci-contract.py'), 'matrix', *args]))['include']
+
+        for scope in (['--scope', 'mainline'], ['--scope', 'pull-request'], ['--scope', 'pull-request', '--no-arm64']):
+            whole = generate(*scope)
+            groups = {group: generate(*scope, '--group', group) for group in ci.GROUPS}
+            # Every entry is in exactly one group, in plan order within the group.
+            self.assertEqual(sorted(json.dumps(e, sort_keys=True) for g in groups.values() for e in g),
+                             sorted(json.dumps(e, sort_keys=True) for e in whole))
+            for group, entries in groups.items():
+                self.assertEqual(entries, [e for e in whole if ci.group_of(e) == group])
+            # early jobs load no image; amd64 and arm64 jobs wait for their own build.
+            self.assertTrue(all(not e['images'] for e in groups['early']))
+            self.assertTrue(all(e['images'] and e['arch'] == 'amd64' for e in groups['amd64']))
+            self.assertTrue(all(e['images'] and e['arch'] == 'arm64' for e in groups['arm64']))
+        # The lanes that drive the gateway image load it; the integration shards, the
+        # backup lane and the load test build what they run.
+        early = {lane for e in generate('--group', 'early') for lane in e['lanes'].split()}
+        self.assertEqual(early, {'core-backup', 'core-integration-1', 'core-integration-2', 'core-integration-3',
+                                 'perf-load'})
+        self.assertEqual(generate('--scope', 'pull-request', '--no-arm64', '--group', 'arm64'), [])
+        refused = subprocess.run([sys.executable, str(ROOT / 'scripts/ci-contract.py'), 'matrix', '--group', 'x'],
+                                 capture_output=True, text=True)
+        self.assertEqual(refused.returncode, 2, refused.stdout + refused.stderr)
 
     def test_packed_jobs_follow_the_plan(self):
         packs = ci.PLAN['jobs']
@@ -377,6 +406,7 @@ class PlanTests(unittest.TestCase):
                                         if ci.PLAN['lanes'][lane]['arm64'] == 'pull-request'])
         self.assertEqual(sorted(pull_request), sorted(['core-checks', 'core-email', 'core-native-e2e', 'core-backup',
                                                        'core-integration-1', 'core-integration-2',
+                                                       'core-integration-3',
                                                        'six-format-auth', 'oci-discovery']))
         self.assertEqual({lane['arm64'] for lane in ci.PLAN['lanes'].values()}, {'pull-request', 'mainline'})
         # ADR 0016, amendment of 2026-11-19: a pull request that changes nothing
@@ -423,7 +453,8 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(release.count('uses: ./.github/workflows/test-suite.yml'), 1)
         self.assertNotIn('platforms: linux/amd64,linux/arm64', workflow)
         self.assertNotIn('continue-on-error', workflow + suite + release)
-        self.assertIn('fromJSON(needs.contract-plan.outputs.matrix)', suite)
+        for group in ci.GROUPS:
+            self.assertIn('fromJSON(needs.contract-plan.outputs.' + group + ')', suite)
         self.assertIn('sha: ${{ inputs.sha }}', suite)
 
     def test_toolchains_are_read_from_the_repository(self):

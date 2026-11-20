@@ -1,7 +1,11 @@
 {
   "schemaVersion": 2,
-  "$comment": "jobs packs short lanes into one CI job each (docs/ci.md, Contract lane packing); every other lane is a job of its own.",
+  "$comment": "jobs packs short lanes into one CI job each (docs/ci.md, Contract lane packing); every other lane is a job of its own. images: false marks a lane that loads no prebuilt image, so its jobs start without waiting for build-images.",
   "jobs": {
+    "packed-integration-perf": [
+      "core-integration-1",
+      "perf-load"
+    ],
     "packed-checks-auth": [
       "core-checks",
       "six-format-auth"
@@ -34,6 +38,7 @@
         "node",
         "npm"
       ],
+      "images": true,
       "steps": [
         {
           "name": "CI lane control contracts",
@@ -115,6 +120,7 @@
       "needs": [
         "node"
       ],
+      "images": true,
       "steps": [
         {
           "name": "email-compose-check",
@@ -133,6 +139,7 @@
       "needs": [
         "node"
       ],
+      "images": true,
       "steps": [
         {
           "name": "cli-runtime-e2e",
@@ -213,6 +220,7 @@
       "timeoutMinutes": 20,
       "arm64": "pull-request",
       "needs": [],
+      "images": false,
       "steps": [
         {
           "name": "backup-transfer-test",
@@ -231,6 +239,7 @@
       "needs": [
         "rust"
       ],
+      "images": false,
       "steps": [
         {
           "name": "integration-test (shard 1)",
@@ -238,6 +247,24 @@
             "make",
             "integration-test",
             "INTEGRATION_SHARD=1"
+          ],
+          "timeoutSeconds": null
+        }
+      ],
+      "rawDirectories": []
+    },
+    "core-integration-2": {
+      "timeoutMinutes": 20,
+      "arm64": "pull-request",
+      "needs": [],
+      "images": false,
+      "steps": [
+        {
+          "name": "integration-test (shard 2)",
+          "command": [
+            "make",
+            "integration-test",
+            "INTEGRATION_SHARD=2"
           ],
           "timeoutSeconds": null
         },
@@ -255,17 +282,18 @@
       ],
       "rawDirectories": []
     },
-    "core-integration-2": {
+    "core-integration-3": {
       "timeoutMinutes": 20,
       "arm64": "pull-request",
       "needs": [],
+      "images": false,
       "steps": [
         {
-          "name": "integration-test (shard 2)",
+          "name": "integration-test (shard 3)",
           "command": [
             "make",
             "integration-test",
-            "INTEGRATION_SHARD=2"
+            "INTEGRATION_SHARD=3"
           ],
           "timeoutSeconds": null
         },
@@ -288,6 +316,7 @@
       "needs": [
         "node"
       ],
+      "images": true,
       "steps": [
         {
           "name": "nexus-migration-client-e2e",
@@ -306,6 +335,7 @@
       "needs": [
         "node"
       ],
+      "images": true,
       "steps": [
         {
           "name": "nexus-inventory-scan-e2e",
@@ -326,6 +356,7 @@
       "needs": [
         "node"
       ],
+      "images": true,
       "steps": [
         {
           "name": "native-nuget-e2e",
@@ -346,6 +377,7 @@
       "needs": [
         "node"
       ],
+      "images": true,
       "steps": [
         {
           "name": "nexus-oci-migration-e2e",
@@ -366,6 +398,7 @@
       "needs": [
         "node"
       ],
+      "images": true,
       "steps": [
         {
           "name": "private-upstream-auth-e2e",
@@ -387,6 +420,7 @@
         "rust",
         "node"
       ],
+      "images": true,
       "steps": [
         {
           "name": "private-upstream-formats-e2e",
@@ -407,6 +441,7 @@
       "needs": [
         "node"
       ],
+      "images": true,
       "steps": [
         {
           "name": "native-oci-discovery-e2e",
@@ -427,6 +462,7 @@
       "needs": [
         "node"
       ],
+      "images": true,
       "steps": [
         {
           "name": "nexus-npm-migration-e2e",
@@ -447,6 +483,7 @@
       "needs": [
         "node"
       ],
+      "images": true,
       "steps": [
         {
           "name": "native-helm-e2e",
@@ -467,6 +504,7 @@
       "needs": [
         "node"
       ],
+      "images": true,
       "steps": [
         {
           "name": "native-rubygems-e2e",
@@ -487,6 +525,7 @@
       "needs": [
         "node"
       ],
+      "images": true,
       "steps": [
         {
           "name": "nexus-pypi-migration-e2e",
@@ -505,6 +544,7 @@
       "timeoutMinutes": 40,
       "arm64": "mainline",
       "needs": [],
+      "images": false,
       "steps": [
         {
           "name": "perf-load-tiny",

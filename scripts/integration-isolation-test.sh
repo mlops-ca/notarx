@@ -98,7 +98,9 @@ while read -r shard; do
     exit 1
   fi
 done < <("$root/scripts/integration-test.sh" --list | awk '{ print $1 }' | sort -u)
-for shard in 0 01 3 x; do
+# The shard after the last one, so the check follows the list when shards are added.
+missing_shard=$(( $("$root/scripts/integration-test.sh" --list | awk '{ print $1 }' | sort -n | tail -n 1) + 1 ))
+for shard in 0 01 "$missing_shard" x; do
   if "$root/scripts/integration-test.sh" --shard "$shard" >/dev/null 2>&1; then
     printf 'integration-test.sh accepted shard %s, which does not exist\n' "$shard" >&2
     exit 1

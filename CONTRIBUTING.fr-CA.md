@@ -260,12 +260,15 @@ délais des tâches et des étapes, et les artefacts d’échec.
 au flux réutilisable `contract-lane.yml`; aucun des deux flux de travail ne
 nomme donc de voie. Ajoutez ou déplacez une voie en modifiant seulement le JSON.
 
-Les tâches `contract` s’exécutent en parallèle avec `fail-fast: false`. La
+Les tâches de contrat (`contract-early` pour les voies qui ne chargent aucune image
+préconstruite, `contract-amd64` et `contract-arm64` pour les autres, chacune
+n’attendant que la construction des images de son architecture) s’exécutent en
+parallèle avec `fail-fast: false`. La
 tâche `suite-ok` de `test-suite.yml` exige que chaque tâche de la suite réussisse
 ou soit ignorée par la détection des changements; la CI des demandes de tirage et les
 barrières de publication (ADR 0024) appellent la même suite, et un push sur `main`
 n’exécute aucun test. L’ancienne voie `core` en série est scindée en
-`core-checks`, `core-email`, `core-native-e2e`, `core-backup`, `core-integration-1` et `core-integration-2`, suivies des voies
+`core-checks`, `core-email`, `core-native-e2e`, `core-backup`, `core-integration-1`, `core-integration-2` et `core-integration-3`, suivies des voies
 natives (clients de migration, inventaire, NuGet, migration et découverte OCI,
 authentification en amont privé, migration npm, Helm, RubyGems, migration PyPI).
 Chaque voie n’installe que les chaînes d’outils qu’elle déclare, lues dans

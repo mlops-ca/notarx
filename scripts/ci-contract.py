@@ -141,6 +141,14 @@ HOST_ARCH = {'x86_64': 'amd64', 'amd64': 'amd64', 'aarch64': 'arm64', 'arm64': '
     platform.machine().lower(), platform.machine().lower())
 RUNNERS = {'amd64': 'ubuntu-24.04', 'arm64': 'ubuntu-24.04-arm'}
 SCOPES = ('pull-request', 'mainline')
+# The matrix groups test-suite.yml runs as separate jobs, so each job waits only for
+# the images it loads: `early` jobs load no prebuilt image and start right after the
+# plan; `amd64` and `arm64` jobs wait for the image build of their own architecture.
+GROUPS = ('early', 'amd64', 'arm64')
+
+
+def group_of(entry):
+    return entry['arch'] if entry['images'] else 'early'
 
 
 def jobs():
@@ -170,7 +178,7 @@ def jobs():
     return result
 
 
-def matrix(scope='mainline', arm64=True):
+def matrix(scope='mainline', arm64=True, group=None):
     """The GitHub Actions matrix, straight from the plan (ADR 0016).
 
     Every lane runs on amd64. A lane also runs natively on arm64 when its
@@ -179,13 +187,16 @@ def matrix(scope='mainline', arm64=True):
     architecture-sensitive (`arm64=False`, the arm64 class of
     scripts/ci-changes.sh) runs no arm64 lane; ADR 0016, amendment of 2026-11-19.
     The mainline scope always runs every arm64 lane. Nothing is emulated.
+
+    A job loads the prebuilt images when any of its lanes declares `images`;
+    `group` keeps only the entries of one of GROUPS (all of them when None).
     """
     if scope == 'mainline' and not arm64:
         raise ValueError('the mainline scope runs every arm64 lane; --no-arm64 is for pull requests')
     def entry(name, lanes, arch):
         plans = [PLAN['lanes'][lane] for lane in lanes]
         return {'job': name, 'lanes': ' '.join(lanes), 'timeout': sum(p['timeoutMinutes'] for p in plans),
-                'arch': arch, 'runner': RUNNERS[arch],
+                'arch': arch, 'runner': RUNNERS[arch], 'images': any(p['images'] for p in plans),
                 **{need: any(need in p['needs'] for p in plans) for need in TOOL_NEEDS}}
 
     def on_arm64(lane):
@@ -198,6 +209,8 @@ def matrix(scope='mainline', arm64=True):
         arm64_lanes = [lane for lane in lanes if on_arm64(lane)]
         if arm64_lanes:
             include.append(entry(name, arm64_lanes, 'arm64'))
+    if group is not None:
+        include = [e for e in include if group_of(e) == group]
     return {'include': include}
 
 
@@ -305,6 +318,8 @@ def main():
     plan_matrix.add_argument('--scope', choices=SCOPES, default='mainline')
     plan_matrix.add_argument('--no-arm64', dest='arm64', action='store_false',
                              help='pull-request scope only: the change is not architecture-sensitive')
+    plan_matrix.add_argument('--group', choices=GROUPS,
+                             help='only the jobs of one group: early (no prebuilt image), amd64 or arm64')
     args = parser.parse_args()
     if args.command == 'run':
         if len(set(args.lanes)) != len(args.lanes):
@@ -316,7 +331,7 @@ def main():
         print('\n'.join(LANES))
     else:
         try:
-            plan = matrix(args.scope, args.arm64)
+            plan = matrix(args.scope, args.arm64, args.group)
         except ValueError as error:
             parser.error(str(error))
         print(json.dumps(plan))
