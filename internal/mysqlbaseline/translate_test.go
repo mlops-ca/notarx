@@ -15,9 +15,9 @@ func TestTranslate(t *testing.T) {
 		{"((visibility)::text = ANY ((ARRAY['private'::character varying, 'public'::character varying])::text[]))", "(`visibility` IN ('private', 'public'))"},
 		{"(kind <> ALL (ARRAY['x'::text]))", "(`kind` NOT IN ('x'))"},
 		{"((length(name) >= 1) AND (length(name) <= 128))", "((CHAR_LENGTH(`name`) >= 1) AND (CHAR_LENGTH(`name`) <= 128))"},
-		{"(digest ~ '^sha256:[0-9a-f]{64}$'::text)", "REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c')"},
-		{"(path !~ '\\.\\.'::text)", "(NOT REGEXP_LIKE(`path`, '\\\\.\\\\.', 'c'))"},
-		{"(name ~* 'x')", "REGEXP_LIKE(`name`, 'x', 'i')"},
+		{"(digest ~ '^sha256:[0-9a-f]{64}$'::text)", "REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\\\z', 'cn')"},
+		{"(path !~ '\\.\\.'::text)", "(NOT REGEXP_LIKE(`path`, '\\\\.\\\\.', 'cn'))"},
+		{"(name ~* 'x')", "REGEXP_LIKE(`name`, 'x', 'in')"},
 		{"(object_name ~~ 'a%'::text)", "(`object_name` LIKE 'a%')"},
 		{"(object_name !~~ 'a%')", "(`object_name` NOT LIKE 'a%')"},
 		{"(object_name ~~* 'a%')", "(LOWER(`object_name`) LIKE LOWER('a%'))"},
@@ -65,6 +65,50 @@ func TestTranslate(t *testing.T) {
 	got, err := Translate("((a = 1) AND (length(b) > 2) AND (a > 0))")
 	if err != nil || strings.Join(got.Columns, ",") != "a,b" {
 		t.Errorf("columns = %v, %v", got.Columns, err)
+	}
+}
+
+func TestRegexToICU(t *testing.T) {
+	for in, want := range map[string]string{
+		"^abc$":               `^abc\z`,
+		"^(a|b)$":             `^(a|b)\z`,
+		"(^|/)x(/|$)":         `(^|/)x(/|\z)`,
+		`^cost\$$`:            `^cost\$\z`,
+		"[$]x$":               `[$]x\z`,
+		"[^$]+$":              `[^$]+\z`,
+		"[]$]$":               `[]$]\z`,
+		"[[:alnum:]$]+$":      `[[:alnum:]$]+\z`,
+		"[[:alnum:":           "[[:alnum:",
+		`a\\$`:                `a\\\z`,
+		"no anchor":           "no anchor",
+		`trailing backslash\`: `trailing backslash\`,
+	} {
+		if got := regexToICU(in); got != want {
+			t.Errorf("regexToICU(%q) = %q; want %q", in, got, want)
+		}
+	}
+}
+
+func TestCastDoesNotSwallowTheNextKeyword(t *testing.T) {
+	for in, want := range map[string]string{
+		"((x)::text IS NOT NULL)":                     "(`x` IS NOT NULL)",
+		"((x)::character varying(10) IS NULL)":        "(`x` IS NULL)",
+		"((x)::timestamp with time zone IS NOT NULL)": "(`x` IS NOT NULL)",
+		"((x)::timestamp without time zone IS NULL)":  "(`x` IS NULL)",
+		"((x)::double precision > 1)":                 "(CAST(`x` AS DECIMAL(30,10)) > 1)",
+		"(((x)::text = 'a') AND ((y)::text <> 'b'))":  "((`x` = 'a') AND (`y` <> 'b'))",
+		"((x)::bit varying IS NULL)":                  "(`x` IS NULL)",
+	} {
+		got, err := Translate(in)
+		if err != nil || got.SQL != want {
+			t.Errorf("Translate(%q) = %q, %v; want %q", in, got.SQL, err, want)
+		}
+	}
+	if _, err := Translate("(btrim(a, 'xy') = 'z')"); err == nil || !strings.Contains(err.Error(), "btrim") {
+		t.Errorf("a two-argument btrim was accepted: %v", err)
+	}
+	if got, err := Translate("(btrim(a) = 'z')"); err != nil || got.SQL != "(TRIM(`a`) = 'z')" {
+		t.Errorf("btrim(a) = %q, %v", got.SQL, err)
 	}
 }
 

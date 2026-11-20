@@ -97,7 +97,10 @@ func RunPerDriver(t *testing.T, suites map[string]func(t *testing.T, databaseURL
 	t.Helper()
 	driver, url := Database(t)
 	suite, ok := suites[driver]
-	if !ok {
+	switch {
+	case !ok && os.Getenv(EnvRequired) == "1":
+		t.Fatalf("this suite has no %s implementation, and %s=1 does not allow a skip", driver, EnvRequired)
+	case !ok:
 		t.Skipf("this suite has no %s implementation yet", driver)
 	}
 	t.Run(driver, func(t *testing.T) { suite(t, url) })

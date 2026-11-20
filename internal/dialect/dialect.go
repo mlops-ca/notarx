@@ -24,6 +24,11 @@ var (
 	ErrLockTimeout          = errors.New("database lock wait timed out")
 )
 
+// LockBuckets is the number of rows of notarx_lock_buckets, the table MySQL's transaction locks lock (ADR 0022).
+// internal/dialect/mysql hashes keys modulo it and the MySQL baseline migration seeds that many rows, so both read
+// this one constant: changing it changes the hash and the seed together.
+const LockBuckets = 4096
+
 // Locker serialises critical sections.
 type Locker interface {
 	// LockTx takes transaction-scoped locks on every key, released at commit or

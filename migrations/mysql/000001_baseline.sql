@@ -77,7 +77,7 @@ CREATE TABLE `artifact_intelligence` (
   KEY `ix_artifact_intelligence_body_key_idx` (`body_key`),
   CONSTRAINT `artifact_intelligence_body_ref_check` CHECK (((((`body_digest` IS NULL) AND (`body_size` IS NULL)) AND (`body_key` IS NULL)) OR ((((`body_digest` IS NOT NULL) AND (`body_size` IS NOT NULL)) AND (`body_key` IS NOT NULL)) AND (`body_size` >= 0)))),
   CONSTRAINT `artifact_intelligence_coordinate_check` CHECK (((CHAR_LENGTH(`coordinate`) >= 1) AND (CHAR_LENGTH(`coordinate`) <= 1024))),
-  CONSTRAINT `artifact_intelligence_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[a-f0-9]{64}$', 'c')),
+  CONSTRAINT `artifact_intelligence_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[a-f0-9]{64}\\z', 'cn')),
   CONSTRAINT `artifact_intelligence_version_check` CHECK ((`version` >= 1))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -106,9 +106,9 @@ CREATE TABLE `artifact_quarantines` (
   `coordinate_sha256` BINARY(32) GENERATED ALWAYS AS (UNHEX(SHA2(`coordinate`, 256))) STORED NOT NULL,
   PRIMARY KEY (`repository_id`, `format`, `coordinate_sha256`, `digest`),
   CONSTRAINT `artifact_quarantines_check` CHECK ((((`state` = 'quarantined') AND (`released_at` IS NULL)) OR ((`state` = 'released') AND (`released_at` IS NOT NULL)))),
-  CONSTRAINT `artifact_quarantines_check1` CHECK (((`format` <> 'conan') OR REGEXP_LIKE(`coordinate`, '^[^/#]+/[^/#]+/[^/#]+/[^/#]+#[^/#]+$', 'c'))),
+  CONSTRAINT `artifact_quarantines_check1` CHECK (((`format` <> 'conan') OR REGEXP_LIKE(`coordinate`, '^[^/#]+/[^/#]+/[^/#]+/[^/#]+#[^/#]+\\z', 'cn'))),
   CONSTRAINT `artifact_quarantines_coordinate_check` CHECK ((((CHAR_LENGTH(`coordinate`) >= 1) AND (CHAR_LENGTH(`coordinate`) <= 1024)) AND (TRIM(`coordinate`) <> ''))),
-  CONSTRAINT `artifact_quarantines_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[a-f0-9]{64}$', 'c')),
+  CONSTRAINT `artifact_quarantines_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[a-f0-9]{64}\\z', 'cn')),
   CONSTRAINT `artifact_quarantines_format_check` CHECK ((`format` IN ('raw', 'oci', 'maven', 'conan', 'npm', 'pypi', 'go', 'apt', 'cargo'))),
   CONSTRAINT `artifact_quarantines_reason_check` CHECK ((((CHAR_LENGTH(`reason`) >= 1) AND (CHAR_LENGTH(`reason`) <= 1024)) AND (TRIM(`reason`) <> ''))),
   CONSTRAINT `artifact_quarantines_state_check` CHECK ((`state` IN ('quarantined', 'released'))),
@@ -363,7 +363,7 @@ CREATE TABLE `console_theme_packages` (
   `updated_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   `version` BIGINT NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`),
-  CONSTRAINT `console_theme_packages_id_valid` CHECK (REGEXP_LIKE(`id`, '^[a-z0-9][a-z0-9-]{1,63}$', 'c')),
+  CONSTRAINT `console_theme_packages_id_valid` CHECK (REGEXP_LIKE(`id`, '^[a-z0-9][a-z0-9-]{1,63}\\z', 'cn')),
   CONSTRAINT `console_theme_packages_payload_object` CHECK ((JSON_TYPE(`payload`) = 'OBJECT')),
   CONSTRAINT `console_theme_packages_version_check` CHECK ((`version` > 0))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
@@ -470,7 +470,7 @@ CREATE TABLE `hosted_groups` (
   UNIQUE KEY `uq_hosted_groups_name` (`name`),
   KEY `ix_hosted_groups_visibility_name` (`visibility`, `name`),
   CONSTRAINT `hosted_groups_format_check` CHECK ((`format` IN ('raw', 'oci', 'maven', 'conan', 'npm', 'pypi', 'go', 'apt', 'cargo', 'nuget', 'helm'))),
-  CONSTRAINT `hosted_groups_name_check` CHECK (REGEXP_LIKE(`name`, '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$', 'c')),
+  CONSTRAINT `hosted_groups_name_check` CHECK (REGEXP_LIKE(`name`, '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\z', 'cn')),
   CONSTRAINT `hosted_groups_visibility_check` CHECK ((`visibility` IN ('private', 'authenticated', 'public')))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -499,7 +499,7 @@ CREATE TABLE `hosted_repositories` (
   KEY `ix_hosted_repositories_visibility_name` (`visibility`, `name`),
   CONSTRAINT `hosted_repositories_format_check` CHECK ((`format` IN ('raw', 'oci', 'maven', 'conan', 'npm', 'pypi', 'go', 'apt', 'cargo', 'nuget', 'helm', 'rubygems'))),
   CONSTRAINT `hosted_repositories_maven_strict_publication_check` CHECK (((NOT `maven_strict_publication`) OR ((`format` = 'maven') AND (`repo_type` = 'hosted')))),
-  CONSTRAINT `hosted_repositories_name_check` CHECK (REGEXP_LIKE(`name`, '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$', 'c')),
+  CONSTRAINT `hosted_repositories_name_check` CHECK (REGEXP_LIKE(`name`, '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\z', 'cn')),
   CONSTRAINT `hosted_repositories_raw_layout_check` CHECK ((`raw_layout` IN ('path', 'versioned'))),
   CONSTRAINT `hosted_repositories_raw_layout_shape_check` CHECK (((((`raw_layout` = 'path') AND (`seal_mode` = 'explicit')) AND (NOT `raw_strict`)) OR (((`raw_layout` = 'versioned') AND (`format` = 'raw')) AND (`repo_type` = 'hosted')))),
   CONSTRAINT `hosted_repositories_repo_shape_check` CHECK ((((`repo_type` = 'hosted') AND (`endpoint` = '')) OR ((`repo_type` = 'proxy') AND (`endpoint` <> '')))),
@@ -545,7 +545,7 @@ CREATE TABLE `identity_providers` (
   CONSTRAINT `identity_providers_kind_check` CHECK ((`kind` IN ('oidc', 'saml'))),
   CONSTRAINT `identity_providers_provisioning_mode_check` CHECK ((`provisioning_mode` IN ('disabled', 'jit', 'scim_only'))),
   CONSTRAINT `identity_providers_settings_check` CHECK ((JSON_TYPE(`settings`) = 'OBJECT')),
-  CONSTRAINT `identity_providers_slug_check` CHECK (REGEXP_LIKE(`slug`, '^[a-z0-9][a-z0-9-]{1,62}$', 'c')),
+  CONSTRAINT `identity_providers_slug_check` CHECK (REGEXP_LIKE(`slug`, '^[a-z0-9][a-z0-9-]{1,62}\\z', 'cn')),
   CONSTRAINT `identity_providers_version_check` CHECK ((`version` > 0))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -652,7 +652,7 @@ CREATE TABLE `native_apt_archive_object_intents` (
   KEY `ix_native_apt_archive_object_intents_restore_id_repository_id` (`restore_id`, `repository_id`),
   KEY `ix_native_apt_archive_object_intents_reclaim_idx` (`restore_id`, `object_key`),
   CONSTRAINT `native_apt_archive_object_intents_check` CHECK ((`object_key` = CONCAT('native/apt/sha256/', SUBSTR(`digest`, 8)))),
-  CONSTRAINT `native_apt_archive_object_intents_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_apt_archive_object_intents_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_apt_archive_object_intents_size_check` CHECK ((((`size` >= 0) AND (`size` <= 1073741824)) AND ((`size` > 0) OR (`digest` = 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'))))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -671,7 +671,7 @@ CREATE TABLE `native_apt_archive_restores` (
   KEY `ix_native_apt_archive_restores_repository_id` (`repository_id`),
   UNIQUE KEY `uq_native_apt_archive_restores_active_idx` (`snapshot_id`, `live_native_apt_archive_restores_active_idx`),
   KEY `ix_native_apt_archive_restores_expiry_idx` (`created_at`, `id`),
-  CONSTRAINT `native_apt_archive_restores_plan_digest_check` CHECK (REGEXP_LIKE(`plan_digest`, '^sha256:[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_apt_archive_restores_plan_digest_check` CHECK (REGEXP_LIKE(`plan_digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_apt_archive_restores_reserved_bytes_check` CHECK ((`reserved_bytes` >= 0)),
   CONSTRAINT `native_apt_archive_restores_state_check` CHECK ((`state` IN ('preparing', 'completed', 'failed')))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
@@ -692,9 +692,9 @@ CREATE TABLE `native_apt_assets` (
   `path_sha256` BINARY(32) GENERATED ALWAYS AS (UNHEX(SHA2(`path`, 256))) STORED NOT NULL,
   PRIMARY KEY (`repository_id`, `path_sha256`),
   KEY `ix_native_apt_assets_repository_id_digest_path_sha256` (`repository_id`, `digest`, `path_sha256`),
-  CONSTRAINT `native_apt_assets_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_apt_assets_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_apt_assets_object_key_check` CHECK ((`object_key` <> '')),
-  CONSTRAINT `native_apt_assets_path_check` CHECK ((((`path` <> '') AND (CHAR_LENGTH(`path`) <= 2048)) AND (NOT REGEXP_LIKE(`path`, '(^|/)[.][.]?(/|$)', 'c')))),
+  CONSTRAINT `native_apt_assets_path_check` CHECK ((((`path` <> '') AND (CHAR_LENGTH(`path`) <= 2048)) AND (NOT REGEXP_LIKE(`path`, '(^|/)[.][.]?(/|\\z)', 'cn')))),
   CONSTRAINT `native_apt_assets_size_check` CHECK ((`size` >= 0))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -737,15 +737,15 @@ CREATE TABLE `native_apt_package_revisions` (
   UNIQUE KEY `uq_native_apt_package_revisions_repository_id_canonical_3e4a9fe5` (`repository_id`, `canonical_identity_sha256`),
   KEY `ix_native_apt_package_revisions_object_key` (`object_key`),
   KEY `ix_native_apt_package_revisions_repository_id_digest` (`repository_id`, `digest`),
-  CONSTRAINT `native_apt_package_revisions_architecture_check` CHECK (REGEXP_LIKE(`architecture`, '^[a-z0-9][a-z0-9-]*$', 'c')),
+  CONSTRAINT `native_apt_package_revisions_architecture_check` CHECK (REGEXP_LIKE(`architecture`, '^[a-z0-9][a-z0-9-]*\\z', 'cn')),
   CONSTRAINT `native_apt_package_revisions_check` CHECK (((`canonical_identity` = CONCAT(CONCAT(CONCAT(CONCAT(`package_name`, '@'), `version`), '#'), `architecture`)) AND (CHAR_LENGTH(`canonical_identity`) <= 1024))),
   CONSTRAINT `native_apt_package_revisions_check1` CHECK ((`object_key` = CONCAT('native/apt/sha256/', SUBSTR(`digest`, 8)))),
-  CONSTRAINT `native_apt_package_revisions_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c')),
-  CONSTRAINT `native_apt_package_revisions_object_name_check` CHECK (((((`object_name` <> '') AND (CHAR_LENGTH(`object_name`) <= 255)) AND (NOT REGEXP_LIKE(`object_name`, '/', 'c'))) AND (`object_name` LIKE '%.deb'))),
-  CONSTRAINT `native_apt_package_revisions_package_name_check` CHECK (REGEXP_LIKE(`package_name`, '^[a-z0-9][a-z0-9+.-]+$', 'c')),
+  CONSTRAINT `native_apt_package_revisions_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
+  CONSTRAINT `native_apt_package_revisions_object_name_check` CHECK (((((`object_name` <> '') AND (CHAR_LENGTH(`object_name`) <= 255)) AND (NOT REGEXP_LIKE(`object_name`, '/', 'cn'))) AND (`object_name` LIKE '%.deb'))),
+  CONSTRAINT `native_apt_package_revisions_package_name_check` CHECK (REGEXP_LIKE(`package_name`, '^[a-z0-9][a-z0-9+.-]+\\z', 'cn')),
   CONSTRAINT `native_apt_package_revisions_publisher_check` CHECK (((`publisher` <> '') AND (CHAR_LENGTH(`publisher`) <= 512))),
   CONSTRAINT `native_apt_package_revisions_size_check` CHECK (((`size` > 0) AND (`size` <= 1073741824))),
-  CONSTRAINT `native_apt_package_revisions_version_check` CHECK ((REGEXP_LIKE(`version`, '^([0-9]+:)?[0-9][A-Za-z0-9.+:~-]*$', 'c') AND (CHAR_LENGTH(`version`) <= 255)))
+  CONSTRAINT `native_apt_package_revisions_version_check` CHECK ((REGEXP_LIKE(`version`, '^([0-9]+:)?[0-9][A-Za-z0-9.+:~-]*\\z', 'cn') AND (CHAR_LENGTH(`version`) <= 255)))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `native_apt_pool_paths` (
@@ -759,8 +759,8 @@ CREATE TABLE `native_apt_pool_paths` (
   PRIMARY KEY (`repository_id`, `path_sha256`),
   CONSTRAINT `native_apt_pool_paths_check` CHECK ((`object_key` = CONCAT('native/apt/sha256/', SUBSTR(`digest`, 8)))),
   CONSTRAINT `native_apt_pool_paths_content_type_check` CHECK (((`content_type` <> '') AND (CHAR_LENGTH(`content_type`) <= 255))),
-  CONSTRAINT `native_apt_pool_paths_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c')),
-  CONSTRAINT `native_apt_pool_paths_path_check` CHECK ((REGEXP_LIKE(`path`, '^pool/', 'c') AND (CHAR_LENGTH(`path`) <= 2048))),
+  CONSTRAINT `native_apt_pool_paths_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
+  CONSTRAINT `native_apt_pool_paths_path_check` CHECK ((REGEXP_LIKE(`path`, '^pool/', 'cn') AND (CHAR_LENGTH(`path`) <= 2048))),
   CONSTRAINT `native_apt_pool_paths_size_check` CHECK (((`size` > 0) AND (`size` <= 1073741824)))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -800,14 +800,14 @@ CREATE TABLE `native_apt_publication_sessions` (
   KEY `ix_native_apt_publication_sessions_expiry_idx` (`expires_at`, `id`),
   KEY `ix_native_apt_publication_sessions_reclaim_schedule_idx` (`expires_at`, `id`),
   CONSTRAINT `native_apt_publication_sessions_check` CHECK (((((((`state` = 'open') AND (`object_key` = '')) AND (`package_revision_id` IS NULL)) OR (((`state` = 'uploading') AND (`object_key` = CONCAT('native/apt/sha256/', SUBSTR(`declared_digest`, 8)))) AND (`package_revision_id` IS NULL))) OR (((`state` = 'staged') AND (`object_key` = CONCAT('native/apt/sha256/', SUBSTR(`declared_digest`, 8)))) AND (`package_revision_id` IS NOT NULL))) OR (`state` = 'aborted'))),
-  CONSTRAINT `native_apt_publication_sessions_component_check` CHECK (REGEXP_LIKE(`component`, '^[a-z0-9][a-z0-9+.-]{0,127}$', 'c')),
-  CONSTRAINT `native_apt_publication_sessions_declared_digest_check` CHECK (REGEXP_LIKE(`declared_digest`, '^sha256:[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_apt_publication_sessions_component_check` CHECK (REGEXP_LIKE(`component`, '^[a-z0-9][a-z0-9+.-]{0,127}\\z', 'cn')),
+  CONSTRAINT `native_apt_publication_sessions_declared_digest_check` CHECK (REGEXP_LIKE(`declared_digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_apt_publication_sessions_declared_size_check` CHECK (((`declared_size` > 0) AND (`declared_size` <= 1073741824))),
   CONSTRAINT `native_apt_publication_sessions_expected_identity_check` CHECK ((CHAR_LENGTH(`expected_identity`) <= 1024)),
-  CONSTRAINT `native_apt_publication_sessions_object_name_check` CHECK (((((`object_name` <> '') AND (CHAR_LENGTH(`object_name`) <= 255)) AND (NOT REGEXP_LIKE(`object_name`, '/', 'c'))) AND (`object_name` LIKE '%.deb'))),
+  CONSTRAINT `native_apt_publication_sessions_object_name_check` CHECK (((((`object_name` <> '') AND (CHAR_LENGTH(`object_name`) <= 255)) AND (NOT REGEXP_LIKE(`object_name`, '/', 'cn'))) AND (`object_name` LIKE '%.deb'))),
   CONSTRAINT `native_apt_publication_sessions_publisher_check` CHECK (((`publisher` <> '') AND (CHAR_LENGTH(`publisher`) <= 512))),
   CONSTRAINT `native_apt_publication_sessions_state_check` CHECK ((`state` IN ('open', 'uploading', 'staged', 'aborted'))),
-  CONSTRAINT `native_apt_publication_sessions_suite_check` CHECK (REGEXP_LIKE(`suite`, '^[a-z0-9][a-z0-9+.-]{0,127}$', 'c'))
+  CONSTRAINT `native_apt_publication_sessions_suite_check` CHECK (REGEXP_LIKE(`suite`, '^[a-z0-9][a-z0-9+.-]{0,127}\\z', 'cn'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `native_apt_repository_snapshots` (
@@ -830,11 +830,11 @@ CREATE TABLE `native_apt_repository_snapshots` (
   UNIQUE KEY `uq_native_apt_repository_snapshots_repository_id_suite_sequence` (`repository_id`, `suite`, `sequence`),
   UNIQUE KEY `uq_native_apt_repository_snapshots_visible_idx` (`repository_id`, `suite`, `live_native_apt_repository_snapshots_visible_idx`),
   CONSTRAINT `native_apt_repository_snapshots_check` CHECK ((((`state` IN ('building', 'signed', 'failed')) AND (`published_at` IS NULL)) OR ((`state` IN ('visible', 'retired', 'pruned')) AND (`published_at` IS NOT NULL)))),
-  CONSTRAINT `native_apt_repository_snapshots_inrelease_digest_check` CHECK (((`inrelease_digest` = '') OR REGEXP_LIKE(`inrelease_digest`, '^sha256:[0-9a-f]{64}$', 'c'))),
-  CONSTRAINT `native_apt_repository_snapshots_release_digest_check` CHECK (((`release_digest` = '') OR REGEXP_LIKE(`release_digest`, '^sha256:[0-9a-f]{64}$', 'c'))),
+  CONSTRAINT `native_apt_repository_snapshots_inrelease_digest_check` CHECK (((`inrelease_digest` = '') OR REGEXP_LIKE(`inrelease_digest`, '^sha256:[0-9a-f]{64}\\z', 'cn'))),
+  CONSTRAINT `native_apt_repository_snapshots_release_digest_check` CHECK (((`release_digest` = '') OR REGEXP_LIKE(`release_digest`, '^sha256:[0-9a-f]{64}\\z', 'cn'))),
   CONSTRAINT `native_apt_repository_snapshots_sequence_check` CHECK ((`sequence` > 0)),
   CONSTRAINT `native_apt_repository_snapshots_state_check` CHECK ((`state` IN ('building', 'signed', 'visible', 'retired', 'failed', 'pruned'))),
-  CONSTRAINT `native_apt_repository_snapshots_suite_check` CHECK (REGEXP_LIKE(`suite`, '^[a-z0-9][a-z0-9+.-]{0,127}$', 'c'))
+  CONSTRAINT `native_apt_repository_snapshots_suite_check` CHECK (REGEXP_LIKE(`suite`, '^[a-z0-9][a-z0-9+.-]{0,127}\\z', 'cn'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `native_apt_snapshot_assets` (
@@ -851,9 +851,9 @@ CREATE TABLE `native_apt_snapshot_assets` (
   KEY `ix_native_apt_snapshot_assets_snapshot_id_repository_id` (`snapshot_id`, `repository_id`),
   CONSTRAINT `native_apt_snapshot_assets_check` CHECK ((`object_key` = CONCAT('native/apt/sha256/', SUBSTR(`digest`, 8)))),
   CONSTRAINT `native_apt_snapshot_assets_content_type_check` CHECK (((`content_type` <> '') AND (CHAR_LENGTH(`content_type`) <= 255))),
-  CONSTRAINT `native_apt_snapshot_assets_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c')),
-  CONSTRAINT `native_apt_snapshot_assets_path_check` CHECK ((((`path` <> '') AND (CHAR_LENGTH(`path`) <= 2048)) AND (NOT REGEXP_LIKE(`path`, '(^/|(^|/)\\.\\.?(/|$)|[\\\\\\r\\n\\t?#])', 'c')))),
-  CONSTRAINT `native_apt_snapshot_assets_path_root_check` CHECK (REGEXP_LIKE(`path`, '^(dists|pool)/', 'c')),
+  CONSTRAINT `native_apt_snapshot_assets_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
+  CONSTRAINT `native_apt_snapshot_assets_path_check` CHECK ((((`path` <> '') AND (CHAR_LENGTH(`path`) <= 2048)) AND (NOT REGEXP_LIKE(`path`, '(^/|(^|/)\\.\\.?(/|\\z)|[\\\\\\r\\n\\t?#])', 'cn')))),
+  CONSTRAINT `native_apt_snapshot_assets_path_root_check` CHECK (REGEXP_LIKE(`path`, '^(dists|pool)/', 'cn')),
   CONSTRAINT `native_apt_snapshot_assets_size_check` CHECK ((((`size` >= 0) AND (`size` <= 1073741824)) AND ((`size` > 0) OR (`digest` = 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'))))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -871,7 +871,7 @@ CREATE TABLE `native_apt_snapshot_object_intents` (
   KEY `ix_native_apt_snapshot_object_intents_age_idx` (`created_at`, `snapshot_id`),
   KEY `ix_native_apt_snapshot_object_intents_reclaim_idx` (`snapshot_id`, `object_key`),
   CONSTRAINT `native_apt_snapshot_object_intents_check` CHECK ((`object_key` = CONCAT('native/apt/sha256/', SUBSTR(`digest`, 8)))),
-  CONSTRAINT `native_apt_snapshot_object_intents_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_apt_snapshot_object_intents_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_apt_snapshot_object_intents_size_check` CHECK ((((`size` >= 0) AND (`size` <= 1073741824)) AND ((`size` > 0) OR (`digest` = 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'))))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -886,8 +886,8 @@ CREATE TABLE `native_apt_snapshot_packages` (
   KEY `ix_native_apt_snapshot_packages_package_revision_id` (`package_revision_id`),
   KEY `ix_native_apt_snapshot_packages_publication_session_id` (`publication_session_id`),
   KEY `ix_native_apt_snapshot_packages_snapshot_id_component_a_f6ede7fc` (`snapshot_id`, `component`, `architecture`),
-  CONSTRAINT `native_apt_snapshot_packages_architecture_check` CHECK (REGEXP_LIKE(`architecture`, '^[a-z0-9][a-z0-9-]*$', 'c')),
-  CONSTRAINT `native_apt_snapshot_packages_component_check` CHECK (REGEXP_LIKE(`component`, '^[a-z0-9][a-z0-9+.-]{0,127}$', 'c'))
+  CONSTRAINT `native_apt_snapshot_packages_architecture_check` CHECK (REGEXP_LIKE(`architecture`, '^[a-z0-9][a-z0-9-]*\\z', 'cn')),
+  CONSTRAINT `native_apt_snapshot_packages_component_check` CHECK (REGEXP_LIKE(`component`, '^[a-z0-9][a-z0-9+.-]{0,127}\\z', 'cn'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `native_cargo_group_versions` (
@@ -900,7 +900,7 @@ CREATE TABLE `native_cargo_group_versions` (
   `version` TEXT NOT NULL,
   `version_key` VARCHAR(255) NOT NULL,
   PRIMARY KEY (`group_id`, `collision_key`, `version_key`),
-  CONSTRAINT `native_cargo_group_versions_checksum_check` CHECK (REGEXP_LIKE(`checksum`, '^[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_cargo_group_versions_checksum_check` CHECK (REGEXP_LIKE(`checksum`, '^[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_cargo_group_versions_index_row_check` CHECK ((LENGTH(`index_row`) > 0))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -914,8 +914,8 @@ CREATE TABLE `native_cargo_identity_reservations` (
   `version_key` VARCHAR(255) NOT NULL,
   PRIMARY KEY (`repository_id`, `collision_key`, `version_key`),
   CONSTRAINT `native_cargo_identity_reservations_check` CHECK ((`version_key` = SUBSTRING_INDEX(`version`, '+', 1))),
-  CONSTRAINT `native_cargo_identity_reservations_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c')),
-  CONSTRAINT `native_cargo_identity_reservations_metadata_digest_check` CHECK (REGEXP_LIKE(`metadata_digest`, '^sha256:[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_cargo_identity_reservations_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
+  CONSTRAINT `native_cargo_identity_reservations_metadata_digest_check` CHECK (REGEXP_LIKE(`metadata_digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_cargo_identity_reservations_version_check` CHECK (((CHAR_LENGTH(`version`) >= 1) AND (CHAR_LENGTH(`version`) <= 256)))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -929,7 +929,7 @@ CREATE TABLE `native_cargo_names` (
   KEY `ix_native_cargo_names_name_trgm_idx` (`name`),
   CONSTRAINT `native_cargo_names_check` CHECK ((`normalized_name` = LOWER(`name`))),
   CONSTRAINT `native_cargo_names_check1` CHECK ((`collision_key` = REPLACE(`normalized_name`, '_', '-'))),
-  CONSTRAINT `native_cargo_names_name_check` CHECK (REGEXP_LIKE(`name`, '^[A-Za-z][A-Za-z0-9_-]{0,63}$', 'c'))
+  CONSTRAINT `native_cargo_names_name_check` CHECK (REGEXP_LIKE(`name`, '^[A-Za-z][A-Za-z0-9_-]{0,63}\\z', 'cn'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `native_cargo_proxy_configs` (
@@ -954,8 +954,8 @@ CREATE TABLE `native_cargo_proxy_crates` (
   `version` TEXT NOT NULL,
   `version_key` VARCHAR(255) NOT NULL,
   PRIMARY KEY (`repository_id`, `collision_key`, `version_key`),
-  CONSTRAINT `native_cargo_proxy_crates_checksum_check` CHECK (REGEXP_LIKE(`checksum`, '^[0-9a-f]{64}$', 'c')),
-  CONSTRAINT `native_cargo_proxy_crates_object_key_check` CHECK (REGEXP_LIKE(`object_key`, '^native/cargo-proxy/sha256/[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_cargo_proxy_crates_checksum_check` CHECK (REGEXP_LIKE(`checksum`, '^[0-9a-f]{64}\\z', 'cn')),
+  CONSTRAINT `native_cargo_proxy_crates_object_key_check` CHECK (REGEXP_LIKE(`object_key`, '^native/cargo-proxy/sha256/[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_cargo_proxy_crates_size_check` CHECK ((`size` > 0))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -1000,7 +1000,7 @@ CREATE TABLE `native_cargo_publications` (
   KEY `ix_native_cargo_publications_reclaim_idx` (`object_key`),
   CONSTRAINT `native_cargo_publications_collection_check` CHECK (((`collecting_at` IS NULL) OR (`collected_at` IS NULL))),
   CONSTRAINT `native_cargo_publications_index_row_check` CHECK ((JSON_TYPE(CONVERT(`index_row` USING utf8mb4)) = 'OBJECT')),
-  CONSTRAINT `native_cargo_publications_object_key_check` CHECK (REGEXP_LIKE(`object_key`, '^native/cargo/sha256/[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_cargo_publications_object_key_check` CHECK (REGEXP_LIKE(`object_key`, '^native/cargo/sha256/[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_cargo_publications_publisher_check` CHECK ((`publisher` <> '')),
   CONSTRAINT `native_cargo_publications_size_check` CHECK ((`size` > 0))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
@@ -1018,7 +1018,7 @@ CREATE TABLE `native_conan_assets` (
   `path_sha256` BINARY(32) GENERATED ALWAYS AS (UNHEX(SHA2(`path`, 256))) STORED NOT NULL,
   PRIMARY KEY (`repository_id`, `reference`, `recipe_revision`, `package_id`, `package_revision`, `path_sha256`),
   KEY `ix_native_conan_assets_object_key` (`object_key`),
-  CONSTRAINT `native_conan_assets_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_conan_assets_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_conan_assets_size_check` CHECK ((`size` >= 0))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -1034,7 +1034,7 @@ CREATE TABLE `native_conan_object_intents` (
   PRIMARY KEY (`object_key`),
   KEY `ix_native_conan_object_intents_repository_id` (`repository_id`),
   KEY `ix_native_conan_object_intents_collect_idx` (`created_at`),
-  CONSTRAINT `native_conan_object_intents_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_conan_object_intents_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_conan_object_intents_size_check` CHECK ((`size` >= 0))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -1048,7 +1048,7 @@ CREATE TABLE `native_conan_package_revisions` (
   `revision` VARCHAR(64) NOT NULL,
   `state` TEXT NOT NULL,
   PRIMARY KEY (`repository_id`, `reference`, `recipe_revision`, `package_id`, `revision`),
-  CONSTRAINT `native_conan_package_revisions_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_conan_package_revisions_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_conan_package_revisions_state_check` CHECK ((`state` IN ('visible', 'deleted')))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -1096,7 +1096,7 @@ CREATE TABLE `native_conan_recipe_revisions` (
   KEY `ix_native_conan_recipe_revisions_visible_reference_idx` (`repository_id`, `reference`),
   KEY `ix_native_conan_recipe_revisions_visible_reference_trgm_idx` (`reference`),
   KEY `ix_native_conan_recipe_visible_reference_pattern_idx` (`repository_id`, `reference`),
-  CONSTRAINT `native_conan_recipe_revisions_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_conan_recipe_revisions_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_conan_recipe_revisions_state_check` CHECK ((`state` IN ('visible', 'deleted')))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -1117,7 +1117,7 @@ CREATE TABLE `native_go_assets` (
   PRIMARY KEY (`repository_id`, `module_path_sha256`, `version`, `kind`),
   KEY `ix_native_go_assets_repository_id_collected_at_module_p_e80c1ef2` (`repository_id`, `collected_at`, `module_path_sha256`, `version`),
   KEY `ix_native_go_assets_repository_id_digest_module_path_sh_37dc7f82` (`repository_id`, `digest`, `module_path_sha256`, `version`),
-  CONSTRAINT `native_go_assets_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_go_assets_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_go_assets_kind_check` CHECK ((`kind` IN ('info', 'mod', 'zip'))),
   CONSTRAINT `native_go_assets_object_key_check` CHECK ((`object_key` <> '')),
   CONSTRAINT `native_go_assets_size_check` CHECK ((`size` > 0))
@@ -1176,11 +1176,11 @@ CREATE TABLE `native_helm_publication_sessions` (
   UNIQUE KEY `uq_native_helm_provenance_key` (`provenance_key`, `live_native_helm_provenance_key`),
   CONSTRAINT `native_helm_publication_sessions_actor_check` CHECK ((`actor` <> '')),
   CONSTRAINT `native_helm_publication_sessions_chart_yaml_check` CHECK (((LENGTH(`chart_yaml`) >= 1) AND (LENGTH(`chart_yaml`) <= 1048576))),
-  CONSTRAINT `native_helm_publication_sessions_check` CHECK (((((`provenance_size` = 0) AND (`provenance_digest` = '')) AND (`provenance_key` = '')) OR (((`provenance_size` > 0) AND REGEXP_LIKE(`provenance_digest`, '^sha256:[0-9a-f]{64}$', 'c')) AND (`provenance_key` <> '')))),
+  CONSTRAINT `native_helm_publication_sessions_check` CHECK (((((`provenance_size` = 0) AND (`provenance_digest` = '')) AND (`provenance_key` = '')) OR (((`provenance_size` > 0) AND REGEXP_LIKE(`provenance_digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')) AND (`provenance_key` <> '')))),
   CONSTRAINT `native_helm_publication_sessions_check1` CHECK (((`collected_at` IS NULL) OR (`state` = 'expired'))),
   CONSTRAINT `native_helm_publication_sessions_check2` CHECK (((`state` = 'committed') = (`committed_at` IS NOT NULL))),
-  CONSTRAINT `native_helm_publication_sessions_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c')),
-  CONSTRAINT `native_helm_publication_sessions_name_check` CHECK ((((CHAR_LENGTH(`name`) >= 1) AND (CHAR_LENGTH(`name`) <= 63)) AND REGEXP_LIKE(`name`, '^[a-z0-9][a-z0-9-]*$', 'c'))),
+  CONSTRAINT `native_helm_publication_sessions_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
+  CONSTRAINT `native_helm_publication_sessions_name_check` CHECK ((((CHAR_LENGTH(`name`) >= 1) AND (CHAR_LENGTH(`name`) <= 63)) AND REGEXP_LIKE(`name`, '^[a-z0-9][a-z0-9-]*\\z', 'cn'))),
   CONSTRAINT `native_helm_publication_sessions_provenance_size_check` CHECK (((`provenance_size` >= 0) AND (`provenance_size` <= 1048576))),
   CONSTRAINT `native_helm_publication_sessions_size_check` CHECK (((`size` > 0) AND (`size` <= 67108864))),
   CONSTRAINT `native_helm_publication_sessions_state_check` CHECK ((`state` IN ('pending', 'committed', 'expired'))),
@@ -1217,8 +1217,8 @@ CREATE TABLE `native_helm_publications` (
   CONSTRAINT `native_helm_governance_audit` CHECK ((((((`governance_version` = 1) AND (`governance_updated_at` IS NULL)) AND (`governance_updated_by` = '')) AND (`governance_reason` = '')) OR ((((`governance_version` > 1) AND (`governance_updated_at` IS NOT NULL)) AND (CHAR_LENGTH(`governance_updated_by`) > 0)) AND (CHAR_LENGTH(TRIM(`governance_reason`)) > 0)))),
   CONSTRAINT `native_helm_publications_body_ref_check` CHECK (((((`body_digest` IS NULL) AND (`body_size` IS NULL)) AND (`body_key` IS NULL)) OR ((((`body_digest` IS NOT NULL) AND (`body_size` IS NOT NULL)) AND (`body_key` IS NOT NULL)) AND (`body_size` >= 0)))),
   CONSTRAINT `native_helm_publications_chart_yaml_check` CHECK (((LENGTH(`chart_yaml`) > 0) OR ((`body_digest` IS NOT NULL) AND (LENGTH(`chart_yaml`) = 0)))),
-  CONSTRAINT `native_helm_publications_check` CHECK (((((`provenance_size` = 0) AND (`provenance_digest` = '')) AND (`provenance_key` = '')) OR (((`provenance_size` > 0) AND REGEXP_LIKE(`provenance_digest`, '^sha256:[0-9a-f]{64}$', 'c')) AND (`provenance_key` <> '')))),
-  CONSTRAINT `native_helm_publications_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_helm_publications_check` CHECK (((((`provenance_size` = 0) AND (`provenance_digest` = '')) AND (`provenance_key` = '')) OR (((`provenance_size` > 0) AND REGEXP_LIKE(`provenance_digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')) AND (`provenance_key` <> '')))),
+  CONSTRAINT `native_helm_publications_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_helm_publications_governance_version_check` CHECK ((`governance_version` > 0)),
   CONSTRAINT `native_helm_publications_provenance_size_check` CHECK ((`provenance_size` >= 0)),
   CONSTRAINT `native_helm_publications_size_check` CHECK ((`size` > 0))
@@ -1244,12 +1244,12 @@ CREATE TABLE `native_helm_replication_items` (
   UNIQUE KEY `uq_native_helm_replication_items_job_id_name_version` (`job_id`, `name`, `version`),
   KEY `ix_native_helm_replication_items_target_session_id` (`target_session_id`),
   CONSTRAINT `native_helm_replication_items_attempts_check` CHECK ((`attempts` >= 0)),
-  CONSTRAINT `native_helm_replication_items_check` CHECK ((((`provenance_size` = 0) AND (`provenance_digest` = '')) OR ((`provenance_size` > 0) AND REGEXP_LIKE(`provenance_digest`, '^sha256:[0-9a-f]{64}$', 'c')))),
+  CONSTRAINT `native_helm_replication_items_check` CHECK ((((`provenance_size` = 0) AND (`provenance_digest` = '')) OR ((`provenance_size` > 0) AND REGEXP_LIKE(`provenance_digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')))),
   CONSTRAINT `native_helm_replication_items_check1` CHECK (((`state` IN ('succeeded', 'failed')) = (`completed_at` IS NOT NULL))),
   CONSTRAINT `native_helm_replication_items_check2` CHECK (((`state` <> 'succeeded') OR ((`target_session_id` IS NOT NULL) AND (`result` <> '')))),
-  CONSTRAINT `native_helm_replication_items_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_helm_replication_items_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_helm_replication_items_item_index_check` CHECK (((`item_index` >= 0) AND (`item_index` <= 99))),
-  CONSTRAINT `native_helm_replication_items_name_check` CHECK ((((CHAR_LENGTH(`name`) >= 1) AND (CHAR_LENGTH(`name`) <= 63)) AND REGEXP_LIKE(`name`, '^[a-z0-9][a-z0-9-]*$', 'c'))),
+  CONSTRAINT `native_helm_replication_items_name_check` CHECK ((((CHAR_LENGTH(`name`) >= 1) AND (CHAR_LENGTH(`name`) <= 63)) AND REGEXP_LIKE(`name`, '^[a-z0-9][a-z0-9-]*\\z', 'cn'))),
   CONSTRAINT `native_helm_replication_items_provenance_size_check` CHECK (((`provenance_size` >= 0) AND (`provenance_size` <= 1048576))),
   CONSTRAINT `native_helm_replication_items_result_check` CHECK ((`result` IN ('', 'published', 'already_present'))),
   CONSTRAINT `native_helm_replication_items_size_check` CHECK (((`size` >= 1) AND (`size` <= 67108864))),
@@ -1282,7 +1282,7 @@ CREATE TABLE `native_helm_replication_jobs` (
   CONSTRAINT `native_helm_replication_jobs_check` CHECK ((`source_repository_id` <> `target_repository_id`)),
   CONSTRAINT `native_helm_replication_jobs_check1` CHECK (((`state` = 'running') = (((`lease_owner` <> '') AND (`lease_token` <> '')) AND (`lease_until` IS NOT NULL)))),
   CONSTRAINT `native_helm_replication_jobs_lease_fence_check` CHECK ((`lease_fence` >= 0)),
-  CONSTRAINT `native_helm_replication_jobs_plan_digest_check` CHECK (REGEXP_LIKE(`plan_digest`, '^sha256:[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_helm_replication_jobs_plan_digest_check` CHECK (REGEXP_LIKE(`plan_digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_helm_replication_jobs_state_check` CHECK ((`state` IN ('queued', 'running', 'succeeded', 'failed'))),
   CONSTRAINT `native_helm_replication_jobs_version_check` CHECK ((`version` > 0))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
@@ -1293,7 +1293,7 @@ CREATE TABLE `native_helm_replication_retries` (
   `payload_digest` TEXT NOT NULL,
   `request_key` VARCHAR(200) NOT NULL,
   PRIMARY KEY (`job_id`, `request_key`),
-  CONSTRAINT `native_helm_replication_retries_payload_digest_check` CHECK (REGEXP_LIKE(`payload_digest`, '^[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_helm_replication_retries_payload_digest_check` CHECK (REGEXP_LIKE(`payload_digest`, '^[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_helm_replication_retries_request_key_check` CHECK (((CHAR_LENGTH(`request_key`) >= 1) AND (CHAR_LENGTH(`request_key`) <= 200)))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -1313,7 +1313,7 @@ CREATE TABLE `native_helm_source_documents` (
   KEY `ix_native_helm_source_documents_body_key_idx` (`body_key`),
   CONSTRAINT `native_helm_source_documents_body_check` CHECK ((((LENGTH(`body`) >= 1) AND (LENGTH(`body`) <= 1048576)) OR ((`body_digest` IS NOT NULL) AND (LENGTH(`body`) = 0)))),
   CONSTRAINT `native_helm_source_documents_body_ref_check` CHECK (((((`body_digest` IS NULL) AND (`body_size` IS NULL)) AND (`body_key` IS NULL)) OR ((((`body_digest` IS NOT NULL) AND (`body_size` IS NOT NULL)) AND (`body_key` IS NOT NULL)) AND (`body_size` >= 0)))),
-  CONSTRAINT `native_helm_source_documents_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c'))
+  CONSTRAINT `native_helm_source_documents_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `native_helm_source_snapshots` (
@@ -1325,7 +1325,7 @@ CREATE TABLE `native_helm_source_snapshots` (
   `view_version` TEXT NOT NULL,
   PRIMARY KEY (`id`),
   KEY `ix_native_helm_source_snapshots_view_id` (`view_id`),
-  CONSTRAINT `native_helm_source_snapshots_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_helm_source_snapshots_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_helm_source_snapshots_entries_json_check` CHECK ((LENGTH(`entries_json`) <= 8388608))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -1517,10 +1517,10 @@ CREATE TABLE `native_npm_versions` (
   KEY `ix_native_npm_versions_visible_name_trgm_idx` (`package_name`),
   CONSTRAINT `native_npm_versions_body_ref_check` CHECK (((((`body_digest` IS NULL) AND (`body_size` IS NULL)) AND (`body_key` IS NULL)) OR ((((`body_digest` IS NOT NULL) AND (`body_size` IS NOT NULL)) AND (`body_key` IS NOT NULL)) AND (`body_size` >= 0)))),
   CONSTRAINT `native_npm_versions_cached_object_check` CHECK ((((((`object_key` = '') AND (`digest` = '')) AND (`size` = 0)) AND (`cached_at` IS NULL)) OR ((((`object_key` <> '') AND (`digest` <> '')) AND (`size` > 0)) AND (`cached_at` IS NOT NULL)))),
-  CONSTRAINT `native_npm_versions_digest_check` CHECK (((`digest` = '') OR REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c'))),
-  CONSTRAINT `native_npm_versions_integrity_check` CHECK (((`integrity` = '') OR REGEXP_LIKE(`integrity`, '^sha512-[A-Za-z0-9+/]+={0,2}$', 'c'))),
+  CONSTRAINT `native_npm_versions_digest_check` CHECK (((`digest` = '') OR REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn'))),
+  CONSTRAINT `native_npm_versions_integrity_check` CHECK (((`integrity` = '') OR REGEXP_LIKE(`integrity`, '^sha512-[A-Za-z0-9+/]+={0,2}\\z', 'cn'))),
   CONSTRAINT `native_npm_versions_manifest_check` CHECK ((JSON_TYPE(`manifest`) = 'OBJECT')),
-  CONSTRAINT `native_npm_versions_shasum_check` CHECK (((`shasum` = '') OR REGEXP_LIKE(`shasum`, '^[0-9a-f]{40}$', 'c'))),
+  CONSTRAINT `native_npm_versions_shasum_check` CHECK (((`shasum` = '') OR REGEXP_LIKE(`shasum`, '^[0-9a-f]{40}\\z', 'cn'))),
   CONSTRAINT `native_npm_versions_size_check` CHECK ((`size` >= 0)),
   CONSTRAINT `native_npm_versions_state_check` CHECK ((`state` IN ('visible', 'deleted')))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
@@ -1537,9 +1537,9 @@ CREATE TABLE `native_nuget_group_authorities` (
   PRIMARY KEY (`group_id`, `package_id`, `version`),
   KEY `ix_native_nuget_group_authorities_repository_id` (`repository_id`),
   CONSTRAINT `native_nuget_group_authorities_check` CHECK (((`digest` = '') = (`size` = 0))),
-  CONSTRAINT `native_nuget_group_authorities_digest_check` CHECK (((`digest` = '') OR REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c'))),
-  CONSTRAINT `native_nuget_group_authorities_package_id_check` CHECK ((((CHAR_LENGTH(`package_id`) >= 1) AND (CHAR_LENGTH(`package_id`) <= 100)) AND REGEXP_LIKE(`package_id`, '^[a-z0-9_]+([.-][a-z0-9_]+)*$', 'c'))),
-  CONSTRAINT `native_nuget_group_authorities_repository_version_check` CHECK (REGEXP_LIKE(`repository_version`, '^[1-9][0-9]*$', 'c')),
+  CONSTRAINT `native_nuget_group_authorities_digest_check` CHECK (((`digest` = '') OR REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn'))),
+  CONSTRAINT `native_nuget_group_authorities_package_id_check` CHECK ((((CHAR_LENGTH(`package_id`) >= 1) AND (CHAR_LENGTH(`package_id`) <= 100)) AND REGEXP_LIKE(`package_id`, '^[a-z0-9_]+([.-][a-z0-9_]+)*\\z', 'cn'))),
+  CONSTRAINT `native_nuget_group_authorities_repository_version_check` CHECK (REGEXP_LIKE(`repository_version`, '^[1-9][0-9]*\\z', 'cn')),
   CONSTRAINT `native_nuget_group_authorities_size_check` CHECK ((`size` >= 0)),
   CONSTRAINT `native_nuget_group_authorities_version_check` CHECK ((((CHAR_LENGTH(`version`) >= 1) AND (CHAR_LENGTH(`version`) <= 256)) AND (`version` = LOWER(`version`))))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
@@ -1573,8 +1573,8 @@ CREATE TABLE `native_nuget_publication_sessions` (
   CONSTRAINT `native_nuget_publication_sessions_check` CHECK (((`collected_at` IS NULL) OR (`state` = 'expired'))),
   CONSTRAINT `native_nuget_publication_sessions_check1` CHECK (((`state` NOT IN ('staged', 'committed')) OR (LENGTH(`nuspec`) > 0))),
   CONSTRAINT `native_nuget_publication_sessions_check2` CHECK (((`state` = 'committed') = (`committed_at` IS NOT NULL))),
-  CONSTRAINT `native_nuget_publication_sessions_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c')),
-  CONSTRAINT `native_nuget_publication_sessions_package_id_check` CHECK ((((CHAR_LENGTH(`package_id`) >= 1) AND (CHAR_LENGTH(`package_id`) <= 100)) AND REGEXP_LIKE(`package_id`, '^[a-z0-9_]+([.-][a-z0-9_]+)*$', 'c'))),
+  CONSTRAINT `native_nuget_publication_sessions_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
+  CONSTRAINT `native_nuget_publication_sessions_package_id_check` CHECK ((((CHAR_LENGTH(`package_id`) >= 1) AND (CHAR_LENGTH(`package_id`) <= 100)) AND REGEXP_LIKE(`package_id`, '^[a-z0-9_]+([.-][a-z0-9_]+)*\\z', 'cn'))),
   CONSTRAINT `native_nuget_publication_sessions_size_check` CHECK (((`size` > 0) AND (`size` <= 268435456))),
   CONSTRAINT `native_nuget_publication_sessions_state_check` CHECK ((`state` IN ('reserved', 'staged', 'committed', 'expired'))),
   CONSTRAINT `native_nuget_publication_sessions_version_check` CHECK ((((CHAR_LENGTH(`version`) >= 1) AND (CHAR_LENGTH(`version`) <= 256)) AND (`version` = LOWER(`version`))))
@@ -1609,7 +1609,7 @@ CREATE TABLE `native_nuget_publications` (
   UNIQUE KEY `uq_native_nuget_publications_session_id` (`session_id`),
   KEY `ix_native_nuget_publications_body_key_idx` (`body_key`),
   CONSTRAINT `native_nuget_publications_body_ref_check` CHECK (((((`body_digest` IS NULL) AND (`body_size` IS NULL)) AND (`body_key` IS NULL)) OR ((((`body_digest` IS NOT NULL) AND (`body_size` IS NOT NULL)) AND (`body_key` IS NOT NULL)) AND (`body_size` >= 0)))),
-  CONSTRAINT `native_nuget_publications_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_nuget_publications_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_nuget_publications_governance_reason_check` CHECK ((CHAR_LENGTH(`governance_reason`) <= 2048)),
   CONSTRAINT `native_nuget_publications_governance_updated_by_check` CHECK ((CHAR_LENGTH(`governance_updated_by`) <= 512)),
   CONSTRAINT `native_nuget_publications_governance_version_check` CHECK ((`governance_version` > 0)),
@@ -1638,9 +1638,9 @@ CREATE TABLE `native_nuget_replication_items` (
   CONSTRAINT `native_nuget_replication_items_attempts_check` CHECK ((`attempts` >= 0)),
   CONSTRAINT `native_nuget_replication_items_check` CHECK (((`state` IN ('succeeded', 'failed')) = (`completed_at` IS NOT NULL))),
   CONSTRAINT `native_nuget_replication_items_check1` CHECK (((`state` <> 'succeeded') OR (((`target_session_id` IS NOT NULL) AND (`result` <> '')) AND (`listed` IS NOT NULL)))),
-  CONSTRAINT `native_nuget_replication_items_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_nuget_replication_items_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_nuget_replication_items_item_index_check` CHECK (((`item_index` >= 0) AND (`item_index` <= 99))),
-  CONSTRAINT `native_nuget_replication_items_package_id_check` CHECK ((((CHAR_LENGTH(`package_id`) >= 1) AND (CHAR_LENGTH(`package_id`) <= 100)) AND REGEXP_LIKE(`package_id`, '^[a-z0-9_]+([.-][a-z0-9_]+)*$', 'c'))),
+  CONSTRAINT `native_nuget_replication_items_package_id_check` CHECK ((((CHAR_LENGTH(`package_id`) >= 1) AND (CHAR_LENGTH(`package_id`) <= 100)) AND REGEXP_LIKE(`package_id`, '^[a-z0-9_]+([.-][a-z0-9_]+)*\\z', 'cn'))),
   CONSTRAINT `native_nuget_replication_items_result_check` CHECK ((`result` IN ('', 'published', 'already_present'))),
   CONSTRAINT `native_nuget_replication_items_size_check` CHECK (((`size` >= 1) AND (`size` <= 268435456))),
   CONSTRAINT `native_nuget_replication_items_source_governance_version_check` CHECK ((`source_governance_version` > 0)),
@@ -1672,7 +1672,7 @@ CREATE TABLE `native_nuget_replication_jobs` (
   CONSTRAINT `native_nuget_replication_jobs_check` CHECK ((`source_repository_id` <> `target_repository_id`)),
   CONSTRAINT `native_nuget_replication_jobs_check1` CHECK (((`state` = 'running') = (((`lease_owner` <> '') AND (`lease_token` <> '')) AND (`lease_until` IS NOT NULL)))),
   CONSTRAINT `native_nuget_replication_jobs_lease_fence_check` CHECK ((`lease_fence` >= 0)),
-  CONSTRAINT `native_nuget_replication_jobs_plan_digest_check` CHECK (REGEXP_LIKE(`plan_digest`, '^sha256:[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_nuget_replication_jobs_plan_digest_check` CHECK (REGEXP_LIKE(`plan_digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_nuget_replication_jobs_state_check` CHECK ((`state` IN ('queued', 'running', 'succeeded', 'failed'))),
   CONSTRAINT `native_nuget_replication_jobs_version_check` CHECK ((`version` > 0))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
@@ -1683,7 +1683,7 @@ CREATE TABLE `native_nuget_replication_retries` (
   `payload_digest` TEXT NOT NULL,
   `request_key` VARCHAR(200) NOT NULL,
   PRIMARY KEY (`job_id`, `request_key`),
-  CONSTRAINT `native_nuget_replication_retries_payload_digest_check` CHECK (REGEXP_LIKE(`payload_digest`, '^[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_nuget_replication_retries_payload_digest_check` CHECK (REGEXP_LIKE(`payload_digest`, '^[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_nuget_replication_retries_request_key_check` CHECK (((CHAR_LENGTH(`request_key`) >= 1) AND (CHAR_LENGTH(`request_key`) <= 200)))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -1708,8 +1708,8 @@ CREATE TABLE `native_nuget_source_documents` (
   CONSTRAINT `native_nuget_source_documents_body_ref_check` CHECK (((((`body_digest` IS NULL) AND (`body_size` IS NULL)) AND (`body_key` IS NULL)) OR ((((`body_digest` IS NOT NULL) AND (`body_size` IS NOT NULL)) AND (`body_key` IS NOT NULL)) AND (`body_size` >= 0)))),
   CONSTRAINT `native_nuget_source_documents_check` CHECK ((`expires_at` > `fetched_at`)),
   CONSTRAINT `native_nuget_source_documents_check1` CHECK (((`status` = 200) OR (LENGTH(`body`) = 0))),
-  CONSTRAINT `native_nuget_source_documents_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c')),
-  CONSTRAINT `native_nuget_source_documents_source_version_check` CHECK (REGEXP_LIKE(`source_version`, '^[1-9][0-9]*$', 'c')),
+  CONSTRAINT `native_nuget_source_documents_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
+  CONSTRAINT `native_nuget_source_documents_source_version_check` CHECK (REGEXP_LIKE(`source_version`, '^[1-9][0-9]*\\z', 'cn')),
   CONSTRAINT `native_nuget_source_documents_status_check` CHECK ((`status` IN (200, 404))),
   CONSTRAINT `native_nuget_source_documents_url_check` CHECK (((CHAR_LENGTH(`url`) >= 1) AND (CHAR_LENGTH(`url`) <= 4096)))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
@@ -1721,7 +1721,7 @@ CREATE TABLE `native_oci_blobs` (
   `size` BIGINT NOT NULL,
   PRIMARY KEY (`digest`),
   UNIQUE KEY `uq_native_oci_blobs_object_key` (`object_key`),
-  CONSTRAINT `native_oci_blobs_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_oci_blobs_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_oci_blobs_size_check` CHECK ((`size` >= 0))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -1737,7 +1737,7 @@ CREATE TABLE `native_oci_manifest_tombstones` (
   `subject_digest` TEXT NULL,
   `tags` JSON NOT NULL DEFAULT (CAST('[]' AS JSON)),
   PRIMARY KEY (`repository_id`, `name`, `digest`),
-  CONSTRAINT `native_oci_manifest_tombstones_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_oci_manifest_tombstones_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_oci_manifest_tombstones_size_check` CHECK ((`size` >= 0))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -1757,7 +1757,7 @@ CREATE TABLE `native_oci_manifests` (
   KEY `ix_native_oci_manifests_name_trgm_idx` (`name`),
   KEY `ix_native_oci_manifests_referrers_idx` (`repository_id`, `name`, `subject_digest`, `digest`),
   KEY `ix_native_oci_manifests_repository_name_pattern_idx` (`repository_id`, `name`),
-  CONSTRAINT `native_oci_manifests_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_oci_manifests_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_oci_manifests_size_check` CHECK ((`size` >= 0))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -1773,7 +1773,7 @@ CREATE TABLE `native_oci_object_intents` (
   KEY `ix_native_oci_object_intents_repository_id` (`repository_id`),
   KEY `ix_native_oci_object_intents_reclaimable_idx` (`repository_id`, `created_at`),
   KEY `ix_native_oci_object_intents_unclaimed_idx` (`created_at`),
-  CONSTRAINT `native_oci_object_intents_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_oci_object_intents_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_oci_object_intents_size_check` CHECK ((`size` >= 0))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -1839,8 +1839,8 @@ CREATE TABLE `native_pypi_files` (
   KEY `ix_native_pypi_files_reclaim_idx` (`deleted_at`, `object_key`),
   KEY `ix_native_pypi_files_visible_project_trgm_idx` (`project`),
   CONSTRAINT `native_pypi_files_check` CHECK (((((`object_key` = '') AND (`size` = 0)) AND (`cached_at` IS NULL)) OR (((`object_key` <> '') AND (`size` > 0)) AND (`cached_at` IS NOT NULL)))),
-  CONSTRAINT `native_pypi_files_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c')),
-  CONSTRAINT `native_pypi_files_project_check` CHECK (REGEXP_LIKE(`project`, '^[a-z0-9]([a-z0-9-]{0,253}[a-z0-9])?$', 'c')),
+  CONSTRAINT `native_pypi_files_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
+  CONSTRAINT `native_pypi_files_project_check` CHECK (REGEXP_LIKE(`project`, '^[a-z0-9]([a-z0-9-]{0,253}[a-z0-9])?\\z', 'cn')),
   CONSTRAINT `native_pypi_files_size_check` CHECK ((`size` >= 0)),
   CONSTRAINT `native_pypi_files_state_check` CHECK ((`state` IN ('visible', 'deleted'))),
   CONSTRAINT `native_pypi_files_yank_revision_check` CHECK ((`yank_revision` > 0)),
@@ -1882,7 +1882,7 @@ CREATE TABLE `native_raw_objects` (
   UNIQUE KEY `uq_native_raw_objects_object_key` (`object_key`),
   KEY `ix_native_raw_objects_repository_id` (`repository_id`),
   KEY `ix_native_raw_objects_reclaimable_idx` (`repository_id`, `created_at`),
-  CONSTRAINT `native_raw_objects_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_raw_objects_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_raw_objects_size_check` CHECK ((`size` >= 0))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -1967,7 +1967,7 @@ CREATE TABLE `native_rubygems_replication_items` (
   CONSTRAINT `native_rubygems_replication_items_check` CHECK (((`state` IN ('succeeded', 'failed')) = (`completed_at` IS NOT NULL))),
   CONSTRAINT `native_rubygems_replication_items_check1` CHECK (((`state` <> 'succeeded') OR ((`target_session_id` IS NOT NULL) AND (`result` <> '')))),
   CONSTRAINT `native_rubygems_replication_items_code_check` CHECK ((`code` IN ('', 'access_denied', 'source_changed', 'target_conflict', 'identity_conflict', 'quota_exceeded', 'transfer_failed'))),
-  CONSTRAINT `native_rubygems_replication_items_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_rubygems_replication_items_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_rubygems_replication_items_item_index_check` CHECK (((`item_index` >= 0) AND (`item_index` <= 99))),
   CONSTRAINT `native_rubygems_replication_items_name_check` CHECK (((CHAR_LENGTH(`name`) >= 1) AND (CHAR_LENGTH(`name`) <= 128))),
   CONSTRAINT `native_rubygems_replication_items_platform_check` CHECK (((CHAR_LENGTH(`platform`) >= 1) AND (CHAR_LENGTH(`platform`) <= 128))),
@@ -2006,7 +2006,7 @@ CREATE TABLE `native_rubygems_replication_jobs` (
   CONSTRAINT `native_rubygems_replication_jobs_check` CHECK ((`source_repository_id` <> `target_repository_id`)),
   CONSTRAINT `native_rubygems_replication_jobs_check1` CHECK (((`state` = 'running') = (((`lease_owner` <> '') AND (`lease_token` <> '')) AND (`lease_until` IS NOT NULL)))),
   CONSTRAINT `native_rubygems_replication_jobs_lease_fence_check` CHECK ((`lease_fence` >= 0)),
-  CONSTRAINT `native_rubygems_replication_jobs_plan_digest_check` CHECK (REGEXP_LIKE(`plan_digest`, '^sha256:[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_rubygems_replication_jobs_plan_digest_check` CHECK (REGEXP_LIKE(`plan_digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_rubygems_replication_jobs_session_version_check` CHECK ((`session_version` >= 0)),
   CONSTRAINT `native_rubygems_replication_jobs_state_check` CHECK ((`state` IN ('queued', 'running', 'succeeded', 'failed'))),
   CONSTRAINT `native_rubygems_replication_jobs_version_check` CHECK ((`version` > 0))
@@ -2018,7 +2018,7 @@ CREATE TABLE `native_rubygems_replication_retries` (
   `payload_digest` TEXT NOT NULL,
   `request_key` VARCHAR(200) NOT NULL,
   PRIMARY KEY (`job_id`, `request_key`),
-  CONSTRAINT `native_rubygems_replication_retries_payload_digest_check` CHECK (REGEXP_LIKE(`payload_digest`, '^[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_rubygems_replication_retries_payload_digest_check` CHECK (REGEXP_LIKE(`payload_digest`, '^[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_rubygems_replication_retries_request_key_check` CHECK (((CHAR_LENGTH(`request_key`) >= 1) AND (CHAR_LENGTH(`request_key`) <= 200)))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -2059,7 +2059,7 @@ CREATE TABLE `native_rubygems_sessions` (
   CONSTRAINT `native_rubygems_sessions_actor_check` CHECK ((`actor` <> '')),
   CONSTRAINT `native_rubygems_sessions_check` CHECK (((`state` = 'committed') = (`committed_at` IS NOT NULL))),
   CONSTRAINT `native_rubygems_sessions_check1` CHECK (((`collected_at` IS NULL) OR (`state` = 'expired'))),
-  CONSTRAINT `native_rubygems_sessions_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `native_rubygems_sessions_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `native_rubygems_sessions_governance_version_check` CHECK ((`governance_version` >= 1)),
   CONSTRAINT `native_rubygems_sessions_metadata_yaml_check` CHECK (((LENGTH(`metadata_yaml`) >= 1) AND (LENGTH(`metadata_yaml`) <= 1048576))),
   CONSTRAINT `native_rubygems_sessions_name_check` CHECK (((CHAR_LENGTH(`name`) >= 1) AND (CHAR_LENGTH(`name`) <= 128))),
@@ -2165,10 +2165,10 @@ CREATE TABLE `nexus_migration_scan_pages` (
   PRIMARY KEY (`batch_id`, `ordinal`),
   UNIQUE KEY `uq_nexus_migration_scan_pages_batch_id_source_repositor_58204a41` (`batch_id`, `source_repository`, `cursor_sha256`),
   CONSTRAINT `nexus_migration_scan_pages_cursor_check` CHECK ((CHAR_LENGTH(`cursor`) <= 4096)),
-  CONSTRAINT `nexus_migration_scan_pages_cursor_sha256_check` CHECK (REGEXP_LIKE(`cursor_sha256`, '^[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `nexus_migration_scan_pages_cursor_sha256_check` CHECK (REGEXP_LIKE(`cursor_sha256`, '^[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `nexus_migration_scan_pages_ordinal_check` CHECK ((`ordinal` >= 0)),
   CONSTRAINT `nexus_migration_scan_pages_page_check` CHECK ((JSON_TYPE(`page`) = 'OBJECT')),
-  CONSTRAINT `nexus_migration_scan_pages_page_sha256_check` CHECK (REGEXP_LIKE(`page_sha256`, '^[0-9a-f]{64}$', 'c'))
+  CONSTRAINT `nexus_migration_scan_pages_page_sha256_check` CHECK (REGEXP_LIKE(`page_sha256`, '^[0-9a-f]{64}\\z', 'cn'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `nexus_migration_scan_paths` (
@@ -2191,7 +2191,7 @@ CREATE TABLE `nexus_migration_scans` (
   `verified_pages` BIGINT NOT NULL DEFAULT 0,
   PRIMARY KEY (`batch_id`),
   CONSTRAINT `nexus_migration_scans_asset_count_check` CHECK ((`asset_count` >= 0)),
-  CONSTRAINT `nexus_migration_scans_binding_sha256_check` CHECK (REGEXP_LIKE(`binding_sha256`, '^[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `nexus_migration_scans_binding_sha256_check` CHECK (REGEXP_LIKE(`binding_sha256`, '^[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `nexus_migration_scans_check` CHECK (((`verified_pages` >= 0) AND (`verified_pages` <= `page_count`))),
   CONSTRAINT `nexus_migration_scans_cursor_check` CHECK ((CHAR_LENGTH(`cursor`) <= 4096)),
   CONSTRAINT `nexus_migration_scans_metadata_bytes_check` CHECK ((`metadata_bytes` >= 0)),
@@ -2283,8 +2283,8 @@ CREATE TABLE `oci_bound_objects` (
   PRIMARY KEY (`scope`, `owner`, `image`, `digest`),
   KEY `ix_oci_bound_objects_scope_owner_image_subject` (`scope`, `owner`, `image`, `subject`),
   KEY `ix_oci_bound_objects_source_id` (`source_id`),
-  CONSTRAINT `oci_bound_objects_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[a-f0-9]{64}$', 'c')),
-  CONSTRAINT `oci_bound_objects_owner_check` CHECK (REGEXP_LIKE(`owner`, '^[a-f0-9]{64}$', 'c')),
+  CONSTRAINT `oci_bound_objects_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[a-f0-9]{64}\\z', 'cn')),
+  CONSTRAINT `oci_bound_objects_owner_check` CHECK (REGEXP_LIKE(`owner`, '^[a-f0-9]{64}\\z', 'cn')),
   CONSTRAINT `oci_bound_objects_source_version_check` CHECK ((`source_version` > 0))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -2338,9 +2338,9 @@ CREATE TABLE `oci_subject_bindings` (
   `subject` VARCHAR(144) NOT NULL,
   PRIMARY KEY (`scope`, `owner`, `image`, `subject`),
   KEY `ix_oci_subject_bindings_source_id` (`source_id`),
-  CONSTRAINT `oci_subject_bindings_owner_check` CHECK (REGEXP_LIKE(`owner`, '^[a-f0-9]{64}$', 'c')),
+  CONSTRAINT `oci_subject_bindings_owner_check` CHECK (REGEXP_LIKE(`owner`, '^[a-f0-9]{64}\\z', 'cn')),
   CONSTRAINT `oci_subject_bindings_source_version_check` CHECK ((`source_version` > 0)),
-  CONSTRAINT `oci_subject_bindings_subject_check` CHECK (REGEXP_LIKE(`subject`, '^sha256:[a-f0-9]{64}$', 'c'))
+  CONSTRAINT `oci_subject_bindings_subject_check` CHECK (REGEXP_LIKE(`subject`, '^sha256:[a-f0-9]{64}\\z', 'cn'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `public_access_policy` (
@@ -2394,7 +2394,7 @@ CREATE TABLE `replication_checkpoints` (
   KEY `ix_replication_checkpoints_updated_at` (`updated_at`),
   CONSTRAINT `replication_checkpoints_attempts_check` CHECK ((`attempts` >= 0)),
   CONSTRAINT `replication_checkpoints_byte_offset_check` CHECK ((`byte_offset` >= 0)),
-  CONSTRAINT `replication_checkpoints_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}$', 'c')),
+  CONSTRAINT `replication_checkpoints_digest_check` CHECK (REGEXP_LIKE(`digest`, '^sha256:[0-9a-f]{64}\\z', 'cn')),
   CONSTRAINT `replication_checkpoints_size_check` CHECK ((`size` >= 0)),
   CONSTRAINT `replication_checkpoints_state_check` CHECK ((`state` IN ('pending', 'copying', 'verified', 'failed')))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
@@ -2424,8 +2424,8 @@ CREATE TABLE `replication_plans` (
   KEY `ix_replication_plans_claim_idx` (`created_at`),
   KEY `ix_replication_plans_retention_idx` (`completed_at`),
   KEY `ix_replication_plans_retry_idx` (`next_attempt_at`, `created_at`),
-  CONSTRAINT `replication_apt_target_suite_format` CHECK (((`apt_target_suite` = '') OR (((`format` = 'apt') AND REGEXP_LIKE(`apt_target_suite`, '^[a-z0-9][a-z0-9.+-]*$', 'c')) AND (CHAR_LENGTH(`apt_target_suite`) <= 128)))),
-  CONSTRAINT `replication_plans_artifact_identity_check` CHECK ((((`coordinate` = '') AND (`digest` = '')) OR ((`coordinate` <> '') AND REGEXP_LIKE(`digest`, '^sha256:[a-f0-9]{64}$', 'c')))),
+  CONSTRAINT `replication_apt_target_suite_format` CHECK (((`apt_target_suite` = '') OR (((`format` = 'apt') AND REGEXP_LIKE(`apt_target_suite`, '^[a-z0-9][a-z0-9.+-]*\\z', 'cn')) AND (CHAR_LENGTH(`apt_target_suite`) <= 128)))),
+  CONSTRAINT `replication_plans_artifact_identity_check` CHECK ((((`coordinate` = '') AND (`digest` = '')) OR ((`coordinate` <> '') AND REGEXP_LIKE(`digest`, '^sha256:[a-f0-9]{64}\\z', 'cn')))),
   CONSTRAINT `replication_plans_attempts_check` CHECK ((`attempts` >= 0)),
   CONSTRAINT `replication_plans_format_check` CHECK ((`format` IN ('maven', 'oci', 'raw', 'conan', 'npm', 'pypi', 'go', 'apt', 'cargo'))),
   CONSTRAINT `replication_plans_max_attempts_check` CHECK (((`max_attempts` >= 1) AND (`max_attempts` <= 10))),
@@ -2973,7 +2973,7 @@ CREATE TABLE `webhook_subscriptions` (
 
 CREATE TABLE `workload_issuers` (
   `allow_private_network` TINYINT(1) NOT NULL DEFAULT 0,
-  `allowed_algs` JSON NOT NULL DEFAULT (CAST('{RS256,ES256,EdDSA}' AS JSON)),
+  `allowed_algs` JSON NOT NULL DEFAULT (CAST('["RS256","ES256","EdDSA"]' AS JSON)),
   `audiences` JSON NOT NULL,
   `ca_bundle_pem` TEXT NULL,
   `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),

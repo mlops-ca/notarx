@@ -288,11 +288,16 @@ func (p *parser) compare() (node, error) {
 		if err != nil {
 			return node{}, err
 		}
-		flags := "'c'"
+		// 'n' lets . match a line terminator, as it does in PostgreSQL.
+		flags := "'cn'"
 		if strings.HasSuffix(t.text, "*") {
-			flags = "'i'"
+			flags = "'in'"
 		}
-		call := "REGEXP_LIKE(" + left.sql + ", " + right.sql + ", " + flags + ")"
+		pattern := right.sql
+		if right.str != nil {
+			pattern = "'" + escapeLiteral(regexToICU(*right.str)) + "'"
+		}
+		call := "REGEXP_LIKE(" + left.sql + ", " + pattern + ", " + flags + ")"
 		if strings.HasPrefix(t.text, "!") {
 			call = "(NOT " + call + ")"
 		}
@@ -341,6 +346,52 @@ func (p *parser) compare() (node, error) {
 		return node{}, fmt.Errorf("unsupported IS form")
 	}
 	return left, nil
+}
+
+// regexToICU rewrites a PostgreSQL regular expression for MySQL's ICU engine. PostgreSQL's $ matches only at the end of
+// the string, while ICU's also matches before a final line terminator, so a value ending in a newline would pass a CHECK
+// that PostgreSQL refuses; an anchor $ becomes \z. A $ in a bracket expression or behind a backslash is a literal.
+func regexToICU(pattern string) string {
+	var b strings.Builder
+	inClass := false
+	for i := 0; i < len(pattern); i++ {
+		c := pattern[i]
+		switch {
+		case c == '\\' && i+1 < len(pattern):
+			b.WriteByte(c)
+			i++
+			b.WriteByte(pattern[i])
+		case inClass && strings.HasPrefix(pattern[i:], "[:"):
+			// A POSIX class such as [:alpha:] inside a bracket expression: copy it through its closing :].
+			end := strings.Index(pattern[i:], ":]")
+			if end < 0 {
+				b.WriteString(pattern[i:])
+				return b.String()
+			}
+			b.WriteString(pattern[i : i+end+2])
+			i += end + 1
+		case c == '[' && !inClass:
+			inClass = true
+			b.WriteByte(c)
+			// A ] right after [ or [^ is a literal member of the class.
+			if i+1 < len(pattern) && pattern[i+1] == '^' {
+				i++
+				b.WriteByte('^')
+			}
+			if i+1 < len(pattern) && pattern[i+1] == ']' {
+				i++
+				b.WriteByte(']')
+			}
+		case c == ']' && inClass:
+			inClass = false
+			b.WriteByte(c)
+		case c == '$' && !inClass:
+			b.WriteString(`\z`)
+		default:
+			b.WriteByte(c)
+		}
+	}
+	return b.String()
 }
 
 // jsonValue renders a node as a JSON document: an ARRAY literal becomes JSON_ARRAY.
@@ -478,14 +529,24 @@ func (p *parser) unary() (node, error) {
 	return n, nil
 }
 
-// cast consumes a type name: words, an optional (n) and []s. It returns the first word.
+// cast consumes a type name: the multi-word names of PostgreSQL (character varying, double precision, timestamp
+// with time zone, bit varying) or a single word, an optional (n) and []s. It does not run on into the keyword that
+// follows, as in "(x)::text IS NOT NULL". It returns the first word.
 func (p *parser) cast() (string, bool) {
 	if p.peek().kind != tokIdent {
 		return "", false
 	}
-	name := p.peek().text
-	for p.peek().kind == tokIdent {
-		p.pos++
+	name := p.next().text
+	switch name {
+	case "character", "bit":
+		p.acceptWord("varying")
+	case "double":
+		p.acceptWord("precision")
+	case "timestamp", "time":
+		if p.acceptWord("with") || p.acceptWord("without") {
+			p.acceptWord("time")
+			p.acceptWord("zone")
+		}
 	}
 	if p.isOp("(") {
 		for !p.isOp(")") && p.peek().kind != tokEOF {
@@ -609,6 +670,9 @@ func (p *parser) word(word string) (node, error) {
 				return node{}, fmt.Errorf("split_part() is supported for the first field only")
 			}
 			return node{sql: "SUBSTRING_INDEX(" + args[0] + ", " + args[1] + ", 1)"}, nil
+		}
+		if word == "btrim" && len(args) != 1 {
+			return node{}, fmt.Errorf("btrim() with a set of characters has no MySQL translation")
 		}
 		name, ok := functions[word]
 		if !ok {

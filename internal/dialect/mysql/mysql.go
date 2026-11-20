@@ -22,7 +22,7 @@ import (
 // Buckets is the number of rows of notarx_lock_buckets, seeded by the baseline migration
 // (internal/mysqlbaseline.LockBuckets). A key hashes to one bucket, so unrelated keys collide one
 // time in 4096: a collision only serialises two critical sections, it never lets two run together.
-const Buckets = 4096
+const Buckets = dialect.LockBuckets
 
 // New returns the MySQL dialect set. interval is NOTARX_DATABASE_POLL_INTERVAL; it is the cadence of
 // the polling Notifier while work flows (DefaultPollInterval when zero).

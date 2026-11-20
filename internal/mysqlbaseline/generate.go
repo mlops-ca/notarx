@@ -15,11 +15,12 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/mlops-ca/notarx/internal/dialect"
 	"github.com/mlops-ca/notarx/internal/schemaparity"
 )
 
-// LockBuckets is the number of rows of notarx_lock_buckets (ADR 0022).
-const LockBuckets = 4096
+// LockBuckets is the number of rows of notarx_lock_buckets (ADR 0022), shared with the Locker that hashes into it.
+const LockBuckets = dialect.LockBuckets
 
 // maxKeyBytes is the InnoDB DYNAMIC index key limit.
 const maxKeyBytes = 3072
@@ -228,6 +229,7 @@ type keyPart struct {
 var (
 	indexTail  = regexp.MustCompile(`(?: (?:text_pattern_ops|varchar_pattern_ops|gin_trgm_ops|public\.gin_trgm_ops|DESC|ASC|NULLS FIRST|NULLS LAST|COLLATE "[A-Za-z_.0-9-]+"))+$`)
 	identifier = regexp.MustCompile(`^[a-z_][a-z0-9_]*$`)
+	descToken  = regexp.MustCompile(`\sDESC\b`)
 )
 
 // parseIndexDefinition splits a normalized definition ("[unique ]USING btree (a, b DESC) WHERE (p)").
@@ -312,7 +314,7 @@ func (g *generator) planSpecials(t *tablePlan) []specialPlan {
 		expression := false
 		for _, item := range items {
 			text := strings.TrimSpace(indexTail.ReplaceAllString(item, ""))
-			part := keyPart{desc: strings.HasSuffix(item, " DESC")}
+			part := keyPart{desc: descToken.MatchString(item)}
 			text = strings.Trim(text, "\"")
 			if !identifier.MatchString(text) {
 				expression = true

@@ -219,9 +219,10 @@ func balanced(text string) bool {
 }
 
 var (
-	defaultCast  = regexp.MustCompile(`::(?:character varying|timestamp with time zone|timestamp without time zone|double precision|[a-z_][a-z0-9_]*)(?:\[\])*`)
-	defaultNow   = regexp.MustCompile(`^\(?(?:now|clock_timestamp|statement_timestamp|transaction_timestamp)\(\)\)?$|^CURRENT_TIMESTAMP$`)
-	defaultArray = regexp.MustCompile(`^ARRAY\[(.*)\]$`)
+	defaultCast       = regexp.MustCompile(`::(?:character varying|timestamp with time zone|timestamp without time zone|double precision|[a-z_][a-z0-9_]*)(?:\[\])*`)
+	defaultNow        = regexp.MustCompile(`^\(?(?:now|clock_timestamp|statement_timestamp|transaction_timestamp)\(\)\)?$|^CURRENT_TIMESTAMP$`)
+	defaultBraceArray = regexp.MustCompile(`^'\{([^']*)\}'$`)
+	defaultArray      = regexp.MustCompile(`^ARRAY\[(.*)\]$`)
 )
 
 // normalizeDefault turns a PostgreSQL column default into the neutral form of the
@@ -243,6 +244,17 @@ func normalizeDefault(expression, logical string) string {
 	if strings.HasPrefix(logical, "array<") {
 		if text == "'{}'" || text == "ARRAY[]" {
 			return "'[]'"
+		}
+		if m := defaultBraceArray.FindStringSubmatch(text); m != nil {
+			// A PostgreSQL array literal, '{a,b}': only plain elements have a JSON form here.
+			items := strings.Split(m[1], ",")
+			for i, item := range items {
+				if item == "" || strings.ContainsAny(item, "\"'\\{}") || strings.TrimSpace(item) != item {
+					return text
+				}
+				items[i] = "\"" + item + "\""
+			}
+			return "'[" + strings.Join(items, ",") + "]'"
 		}
 		if m := defaultArray.FindStringSubmatch(text); m != nil {
 			items := strings.Split(m[1], ", ")

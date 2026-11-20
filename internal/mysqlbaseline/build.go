@@ -1,6 +1,7 @@
 package mysqlbaseline
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"slices"
@@ -188,6 +189,9 @@ func (g *generator) defaultClause(t *tablePlan, name string, col schemaparity.Co
 				return "(X'" + hex + "')", false
 			}
 		case col.Type == "json" || strings.HasPrefix(col.Type, "array<"):
+			if !json.Valid([]byte(strings.ReplaceAll(body, "''", "'"))) {
+				g.problemf("default of %s is %s, which is not JSON: add it under defaults:", key, normalized)
+			}
 			return "(CAST(" + escaped + " AS JSON))", false
 		case col.Type == "timestamp":
 			return zoneSuffix.ReplaceAllString(escaped, "'"), false

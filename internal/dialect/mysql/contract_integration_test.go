@@ -35,7 +35,9 @@ func openMySQL(t *testing.T) *sql.DB {
 // suite internal/dialect/postgres runs against PostgreSQL.
 func TestMySQLDialectContract(t *testing.T) {
 	db := openMySQL(t)
-	notifier := NewNotifier(Config{Interval: 20 * time.Millisecond, MaxInterval: 200 * time.Millisecond})
+	// The poll interval is far above the latency bound, so only the in-process wake-up (Notify) can meet it: a
+	// Notify that does nothing fails the contract instead of being covered by the next poll tick.
+	notifier := NewNotifier(Config{Interval: 10 * time.Second, MaxInterval: 10 * time.Second})
 	dialecttest.Run(t, dialecttest.Harness{
 		Set:    dialect.Set{Name: database.DriverMySQL, Locker: Locker{}, Claimer: Claimer{}, Notifier: notifier, Classifier: Classifier{}},
 		DB:     db,

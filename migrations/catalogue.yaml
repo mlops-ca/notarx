@@ -3985,7 +3985,7 @@ tables:
     unique: [[issuer], [name]]
     defaults:
       allow_private_network: "false"
-      allowed_algs: '''{RS256,ES256,EdDSA}'''
+      allowed_algs: '''["RS256","ES256","EdDSA"]'''
       created_at: now()
       state: '''active'''
       updated_at: now()

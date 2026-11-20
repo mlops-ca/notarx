@@ -80,6 +80,7 @@ func miniCatalogue() schemaparity.Catalogue {
 				"owners_live":  "unique USING btree (name) WHERE (enabled)",
 				"owners_gin":   "USING gin (note gin_trgm_ops) WITH (fastupdate='on')",
 				"owners_brin":  "USING brin (created_at)",
+				"owners_nulls": "USING btree (created_at DESC NULLS LAST, name)",
 				"owners_flag":  "USING btree (created_at) WHERE (enabled)",
 				"owners_lower": "unique USING btree (lower(note))",
 			},
@@ -130,6 +131,7 @@ func TestGenerateSmallCatalogue(t *testing.T) {
 		"UNIQUE KEY `uq_owners_name` (`name`)",
 		"UNIQUE KEY `uq_owners_path_sha256` (`path_sha256`)",
 		"KEY `ix_owners_created_at_desc_name` (`created_at` DESC, `name`)",
+		"KEY `ix_owners_nulls` (`created_at` DESC, `name`)",
 		"`live_owners_live` TINYINT(1) GENERATED ALWAYS AS (IF((`enabled` <> 0), 1, NULL)) VIRTUAL NULL",
 		"UNIQUE KEY `uq_owners_live` (`name`, `live_owners_live`)",
 		"`is_enabled` TINYINT(1) GENERATED ALWAYS AS (IF((`enabled` <> 0), 1, 0)) VIRTUAL NOT NULL",
@@ -352,10 +354,20 @@ func TestGenerateEscapesLiteralDefaultsAndRejectsBadBooleans(t *testing.T) {
 		"t": {
 			Columns:    map[string]schemaparity.Column{"id": {Type: "uuid"}, "doc": {Type: "json"}, "at": {Type: "timestamp"}, "flag": {Type: "bool"}},
 			PrimaryKey: []string{"id"},
-			Defaults:   map[string]string{"doc": "'{\"re\":\"\\d\"}'", "at": "'2024-01-01 00:00:00+00'", "flag": "'maybe'"},
+			Defaults:   map[string]string{"doc": "'{\"re\":\"\\\\d\"}'", "at": "'2024-01-01 00:00:00+00'", "flag": "'maybe'"},
 		},
 	}, Seeds: map[string][]map[string]string{"t": {{"flag": "perhaps"}}}}
-	_, err := Generate(catalogue, Decisions{Version: 1, DefaultKeyWidth: 32})
+	t0 := catalogue.Tables["t"]
+	t0.Columns["tags"] = schemaparity.Column{Type: "array<text>"}
+	t0.Defaults["tags"] = "'{a,b}'"
+	catalogue.Tables["t"] = t0
+	_, err := Generate(catalogue, Decisions{Version: 1, DefaultKeyWidth: 32, Arrays: map[string]string{"t.tags": "read whole"}})
+	if err == nil || !strings.Contains(err.Error(), "which is not JSON") {
+		t.Fatalf("a PostgreSQL array literal was accepted as a JSON default: %v", err)
+	}
+	delete(t0.Defaults, "tags")
+	delete(t0.Columns, "tags")
+	_, err = Generate(catalogue, Decisions{Version: 1, DefaultKeyWidth: 32})
 	if err == nil || !strings.Contains(err.Error(), "boolean text \"maybe\"") || !strings.Contains(err.Error(), "neither true nor false") {
 		t.Fatalf("err = %v", err)
 	}
@@ -365,7 +377,7 @@ func TestGenerateEscapesLiteralDefaultsAndRejectsBadBooleans(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"DEFAULT (CAST('{\"re\":\"\\\\d\"}' AS JSON))", "DEFAULT '2024-01-01 00:00:00'"} {
+	for _, want := range []string{"DEFAULT (CAST('{\"re\":\"\\\\\\\\d\"}' AS JSON))", "DEFAULT '2024-01-01 00:00:00'"} {
 		if !strings.Contains(output.SQL, want) {
 			t.Errorf("the baseline lacks %q:\n%s", want, output.SQL)
 		}
