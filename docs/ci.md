@@ -204,6 +204,35 @@ steps have one definition. They are separate jobs, not a matrix, so the amd64-on
 out of the arm64 leg. See
 [native builds](native-builds.md).
 
+## Measured effect (issue #482)
+
+These are Go-only pull requests, all with `ci-ok` green.
+
+- **Before:** runs 44640058817, 44633978455, 44626976683 and 44620652504, the four the issue measured. Every arm64 lane ran on pull requests then.
+- **After:** the three attempts of run 44673768958. This was draft #496, a comment-only Go change, so the `arm64` class was off. It is one change re-run three times, so the attempts share a commit and a cache state: read the numbers as indicative. The race and lint caches were cold, because `main` saves them only from the nightly release gates, which had not run yet.
+
+How to read the columns:
+
+- **Wall** runs from the start of the run to the end of `ci-ok`. It is the pull request verdict.
+- **Queue** is the longest wait of any one job for a runner, caused by the other runs of the repository.
+- **Lint** and **unit tests** give the minute each verdict arrived. Before, both came from the one `quality` job, so the two columns are equal.
+
+| Run | Wall (min) | Longest queue (min) | Lint verdict (min) | Unit tests and coverage (min) | Runner-minutes | Jobs |
+| --- | --- | --- | --- | --- | --- | --- |
+| before, 44640058817 | 26.9 | 3.7 | 17.8 (`quality`) | 17.8 (`quality`) | 189 | 46 |
+| before, 44633978455 | 28.7 | 13.7 | 16.1 (`quality`) | 16.1 (`quality`) | 192 | 46 |
+| before, 44626976683 | 34.7 | 12.1 | 23.4 (`quality`) | 23.4 (`quality`) | 179 | 46 |
+| before, 44620652504 | 26.5 | 6.5 | 17.7 (`quality`) | 17.7 (`quality`) | 187 | 46 |
+| after, attempt 1 | 17.1 | 2.0 | 8.6 (`lint`) | 10.9 (`quality`) | 122 | 29 |
+| after, attempt 2 | 18.8 | 6.1 | 6.5 (`lint`) | 6.9 (`quality`) | 104 | 29 |
+| after, attempt 3 | 19.1 | 6.5 | 9.9 (`lint`) | 11.8 (`quality`) | 108 | 29 |
+
+- **Wall time** fell by about a third: medians of 27.8 and 18.8 minutes. With the longest queue subtracted it still fell by about a third, from about 20 to about 13.5 minutes.
+- **Runner-minutes** fell by 32 to 46 percent (122 against 179 at worst, 104 against 192 at best).
+- **The `arm64` class:** a pull request with it on (run 44670328253, the branch of #491) took 14.7 minutes, with 41 jobs and 173 runner-minutes. It is faster than the Go-only attempts although its longest queue was longer (4.8 minutes), because its slowest lane, `core-integration-1` on amd64, took 6.6 minutes, against 9.4 in attempt 1. That lane's time varies from run to run, and #500 evens out the integration shards.
+
+Four targets of the issue are still open: a verdict (wall) in 12 minutes or less, half the runner-minutes, 25 jobs or fewer, and a lint signal in 5 minutes. Issue #500 tracks them. The largest remaining lever is that every contract lane waits for all four `build-images` legs, about 4.9 minutes into the run.
+
 ## Where every former check runs (issue #482)
 
 Issue #482 reshaped the pull request suite (ADR 0016 and ADR 0024, amendments of
