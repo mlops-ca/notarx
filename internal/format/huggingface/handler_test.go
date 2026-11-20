@@ -3,6 +3,7 @@ package huggingface
 import (
 	"context"
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -141,17 +142,17 @@ func TestReadProtocolRequiresPostgreSQL(t *testing.T) {
 
 func TestFlightKeyKeepsRepositoriesApart(t *testing.T) {
 	lfs := File{SHA256: digestSHA}
-	a := flightKey(Object{RepositoryID: "repo-a", CommitID: "c1", Path: "w.bin"}, lfs)
-	b := flightKey(Object{RepositoryID: "repo-b", CommitID: "c1", Path: "w.bin"}, lfs)
-	same := flightKey(Object{RepositoryID: "repo-a", CommitID: "c2", Path: "other.bin"}, lfs)
+	a := flightKey(Object{HFRepoID: "repo-a", CommitID: "c1", Path: "w.bin"}, lfs)
+	b := flightKey(Object{HFRepoID: "repo-b", CommitID: "c1", Path: "w.bin"}, lfs)
+	same := flightKey(Object{HFRepoID: "repo-a", CommitID: "c2", Path: "other.bin"}, lfs)
 	if a == b {
-		t.Fatal("two repositories share a flight: the joiner would inherit the other's quota and credential")
+		t.Fatal("two repos share a flight: the joiner would get no blob row and no cached flag of its own")
 	}
 	if a != same {
 		t.Fatal("one repository must share a flight per digest across commits and paths")
 	}
 	regular := File{}
-	if flightKey(Object{RepositoryID: "repo-a", CommitID: "c1", Path: "a"}, regular) == flightKey(Object{RepositoryID: "repo-a", CommitID: "c1", Path: "b"}, regular) {
+	if flightKey(Object{HFRepoID: "repo-a", CommitID: "c1", Path: "a"}, regular) == flightKey(Object{HFRepoID: "repo-a", CommitID: "c1", Path: "b"}, regular) {
 		t.Fatal("regular files without a digest must be keyed by their path")
 	}
 }
@@ -193,20 +194,22 @@ func TestFailMapsErrorsToStableResponses(t *testing.T) {
 	}
 	for _, tc := range cases {
 		recorder := httptest.NewRecorder()
-		if status := rd.fail(recorder, tc.err); status != tc.status || recorder.Code != tc.status || recorder.Header().Get("X-Error-Code") != tc.code {
+		if status := rd.fail(context.Background(), recorder, tc.err); status != tc.status || recorder.Code != tc.status || recorder.Header().Get("X-Error-Code") != tc.code {
 			t.Errorf("%v = %d %q, want %d %q", tc.err, status, recorder.Header().Get("X-Error-Code"), tc.status, tc.code)
 		}
 	}
 	recorder := httptest.NewRecorder()
-	rd.fail(recorder, ErrFetchInProgress)
+	rd.fail(context.Background(), recorder, ErrFetchInProgress)
 	if recorder.Header().Get("Retry-After") == "" {
 		t.Error("a busy answer must tell the client when to retry")
 	}
 }
 
 func TestFailWritesNothingForAClientThatWentAway(t *testing.T) {
+	gone, cancel := context.WithCancel(context.Background())
+	cancel()
 	recorder := httptest.NewRecorder()
-	if status := (&reader{}).fail(recorder, context.Canceled); status != statusClientClosed {
+	if status := (&reader{}).fail(gone, recorder, context.Canceled); status != statusClientClosed {
 		t.Fatalf("status = %d", status)
 	}
 	if recorder.Body.Len() != 0 || recorder.Header().Get("X-Error-Code") != "" {
@@ -214,5 +217,13 @@ func TestFailWritesNothingForAClientThatWentAway(t *testing.T) {
 	}
 	if auditOutcome(statusClientClosed) != repository.AuditResolved {
 		t.Fatal("an abandoned download is not an upstream error")
+	}
+}
+
+func TestFailAnswersAConnectedClientWhenTheFetchWasCancelledInternally(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	status := (&reader{}).fail(context.Background(), recorder, context.Canceled)
+	if status != http.StatusGatewayTimeout || recorder.Header().Get("X-Error-Code") != "upstream_unavailable" || recorder.Body.Len() == 0 {
+		t.Fatalf("a lost lock lease must not look like an empty success: %d %v %q", status, recorder.Header(), recorder.Body.String())
 	}
 }

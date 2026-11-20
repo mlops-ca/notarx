@@ -17,6 +17,7 @@ func TestValidCoordinateAcceptsOnlyTheCommitForm(t *testing.T) {
 		"model/acme/widget@" + commitSHA,
 		"dataset/acme/data.v2@" + commitSHA,
 		"model/A1/b_c-d@" + commitSHA,
+		"model/acme/_private-test@" + commitSHA,
 	}
 	for _, coordinate := range valid {
 		if !module.ValidCoordinate(coordinate) {

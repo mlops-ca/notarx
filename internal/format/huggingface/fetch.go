@@ -47,6 +47,7 @@ const (
 	FetchQuota          = "quota"
 	FetchTooLarge       = "too_large"
 	FetchCapacity       = "capacity"
+	FetchInProgress     = "in_progress"
 	FetchUpstreamError  = "upstream_error"
 )
 
@@ -282,11 +283,13 @@ func (f *Fetcher) Serve(w http.ResponseWriter, r *http.Request, obj Object, head
 		}
 	}
 	if cached {
-		f.record(FetchHit)
 		written, err := f.serveRanges(w, r, obj.Size, headers, func(ctx context.Context, offset, length int64) (io.ReadCloser, int64, error) {
 			return f.Objects.OpenRange(ctx, BlobKey(file.SHA256), offset, length)
 		})
 		if err == nil || written || !errors.Is(err, objectstore.ErrNotFound) {
+			if err == nil || written {
+				f.record(FetchHit)
+			}
 			return written, err
 		}
 		// The object is gone although the database says it is cached (collected by a racing
@@ -313,14 +316,15 @@ func (f *Fetcher) Serve(w http.ResponseWriter, r *http.Request, obj Object, head
 }
 
 // join returns the flight of the object's digest, starting it when none is running.
-// flightKey identifies one fetch. It includes the repository: a joiner must not inherit the quota,
-// credential or bookkeeping of another repository's fetch. A regular file has no digest before it is
-// read, so it is keyed by its place in the commit.
+// flightKey identifies one fetch. It includes the Hugging Face repo, which belongs to one notarx
+// repository: the blob row and the cached flags a fetch records are per repo, and a joiner must not
+// inherit the quota or credential of another repository's fetch. A regular file has no digest before it
+// is read, so it is keyed by its place in the commit.
 func flightKey(obj Object, file File) string {
 	if file.SHA256 != "" {
-		return obj.RepositoryID + ":" + file.SHA256
+		return obj.HFRepoID + ":" + file.SHA256
 	}
-	return obj.RepositoryID + ":git:" + obj.CommitID + ":" + obj.Path
+	return obj.HFRepoID + ":git:" + obj.CommitID + ":" + obj.Path
 }
 
 func (f *Fetcher) join(ctx context.Context, obj Object, file File) (*flight, func(), error) {
@@ -404,7 +408,7 @@ func (f *Fetcher) run(fl *flight, obj Object, file File) {
 	if errors.Is(err, spool.ErrLocked) {
 		// Another node holds the fetch. Waiting would leave every client without a byte for the
 		// whole transfer, so they are asked to retry; the retry is served from the store.
-		f.record(FetchCapacity)
+		f.record(FetchInProgress)
 		f.end(fl, ErrFetchInProgress)
 		return
 	}

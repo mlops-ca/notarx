@@ -575,6 +575,21 @@ func TestAGroupAnswersNotImplementedInsteadOfLookingAbsent(t *testing.T) {
 	if response.StatusCode != http.StatusNotImplemented || response.Header.Get("X-Error-Code") != "group_not_supported" {
 		t.Fatalf("group read = %d %q", response.StatusCode, response.Header.Get("X-Error-Code"))
 	}
+	// A principal that may not read the group learns nothing: the group looks like a missing repository.
+	key := repository.APIKey{ID: uuid.NewString(), Name: "nobody", SecretHash: authorization.HashAPIKey("nobody-token"), Roles: []string{"member"}}
+	if _, err := env.repos.CreateAPIKey(context.Background(), key); err != nil {
+		t.Fatal(err)
+	}
+	stranger, _ := http.NewRequest(http.MethodGet, env.server.URL+"/hf/hf-group/acme/widget/resolve/main/config.json", nil)
+	stranger.Header.Set("Authorization", "Bearer nobody-token")
+	strangerResponse, err := http.DefaultClient.Do(stranger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = strangerResponse.Body.Close() }()
+	if strangerResponse.StatusCode != http.StatusNotFound {
+		t.Fatalf("a caller without a read grant on the group learned it exists: %d", strangerResponse.StatusCode)
+	}
 	anonymous, err := http.Get(env.server.URL + "/hf/hf-group/acme/widget/resolve/main/config.json")
 	if err != nil {
 		t.Fatal(err)

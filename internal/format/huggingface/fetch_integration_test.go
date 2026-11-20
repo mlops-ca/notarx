@@ -782,3 +782,47 @@ func TestAFailureBeforeTheFirstReadableByteIsAProperErrorResponse(t *testing.T) 
 		t.Fatalf("body = %q", body)
 	}
 }
+
+func TestEachRepoThatSharesADigestGetsItsOwnBlobRow(t *testing.T) {
+	content := weights(2000)
+	env := newFetchEnv(t, map[string]*hubFile{"model.safetensors": {Content: content, LFS: true}})
+	ctx := context.Background()
+	if _, _, err := env.get(t, "model.safetensors", nil); err != nil {
+		t.Fatal(err)
+	}
+	file, _ := env.f.store.GetFile(ctx, env.commit.ID, "model.safetensors")
+	other, err := env.f.store.EnsureRepo(ctx, env.f.repositoryID, RepoTypeModel, "acme/fork")
+	if err != nil {
+		t.Fatal(err)
+	}
+	forkCommit, err := env.f.store.EnsureCommit(ctx, Commit{HFRepoID: other.ID, SHA: commitID(0x79), Source: SourceUpstream})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := env.f.store.ReplaceTree(ctx, forkCommit.ID, []File{{Path: "model.safetensors", Size: file.Size, SHA256: file.SHA256, LFS: true, GitBlobID: file.GitBlobID}}); err != nil {
+		t.Fatal(err)
+	}
+	if forked, _ := env.f.store.GetFile(ctx, forkCommit.ID, "model.safetensors"); forked.Cached {
+		t.Fatal("a digest held by another repo must not mark this repo's file cached: the blob row is per repo")
+	}
+	upstream := env.hub.upstream()
+	object := Object{RepositoryID: env.f.repositoryID, HFRepoID: other.ID, CommitID: forkCommit.ID, Path: "model.safetensors", Size: file.Size,
+		Open: func(ctx context.Context) (*http.Response, error) {
+			return upstream.Open(ctx, RepoTypeModel, hubModel, env.sha, "model.safetensors", nil)
+		}}
+	recorder := httptest.NewRecorder()
+	if written, err := env.fetcher.Serve(recorder, httptest.NewRequest(http.MethodGet, "/", nil), object, http.Header{"ETag": {`"x"`}}); err != nil || !written || recorder.Body.Len() != 2000 {
+		t.Fatalf("Serve = %v %v, %d bytes", written, err, recorder.Body.Len())
+	}
+	for _, repo := range []Repo{env.repo, other} {
+		if has, _ := env.f.store.HasBlob(ctx, repo.ID, file.SHA256); !has {
+			t.Fatalf("repo %s has no blob row", repo.RepoName)
+		}
+	}
+	if forked, _ := env.f.store.GetFile(ctx, forkCommit.ID, "model.safetensors"); !forked.Cached {
+		t.Fatal("the fork's file is not cached after its own fetch")
+	}
+	if bytes, objects := env.f.counter(); bytes != 4000 || objects != 2 {
+		t.Fatalf("counter = %d/%d: a digest counts once per hf repo", bytes, objects)
+	}
+}

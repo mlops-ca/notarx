@@ -224,10 +224,14 @@ func (rd *reader) serve(w http.ResponseWriter, r *http.Request) {
 	absent := err != nil || repo.Format != repository.FormatHuggingFace || repo.State != repository.RepositoryActive ||
 		(repo.Type != repository.RepositoryTypeHosted && repo.Type != repository.RepositoryTypeProxy)
 	principal, allowed := rd.authorize(r, repo, parsed, absent)
-	if absent && principal.Actor != "" && rd.isHuggingFaceGroup(r.Context(), parsed.repository) {
-		// Groups are created and administered, but reading through one is a later slice (ADR 0027).
-		hubError(w, http.StatusNotImplemented, codeGroupUnsupported, "Reading through a Hugging Face group is not implemented yet")
-		return
+	if absent && principal.Actor != "" {
+		if group, ok := rd.huggingFaceGroup(r.Context(), parsed.repository); ok &&
+			rd.Authorizer.AuthorizeResource(r.Context(), principal, group.AsRepository(repository.FormatHuggingFace), authorization.RepositoryRead, parsed.repoType+"/"+parsed.repoName).Allowed {
+			// Groups are created and administered, but reading through one is a later slice (ADR 0027).
+			// Only a caller who may read the group is told it exists.
+			hubError(w, http.StatusNotImplemented, codeGroupUnsupported, "Reading through a Hugging Face group is not implemented yet")
+			return
+		}
 	}
 	if !allowed {
 		if r.Header.Get("Authorization") == "" || principal.Actor == "" {
@@ -284,12 +288,12 @@ func (rd *reader) principal(r *http.Request) (authorization.Principal, bool) {
 	return authorization.Principal{}, false
 }
 
-func (rd *reader) isHuggingFaceGroup(ctx context.Context, name string) bool {
+func (rd *reader) huggingFaceGroup(ctx context.Context, name string) (repository.HostedGroup, bool) {
 	if rd.Groups == nil {
-		return false
+		return repository.HostedGroup{}, false
 	}
 	group, err := rd.Groups.GetHostedGroupByName(ctx, name)
-	return err == nil && group.Format == repository.FormatHuggingFace
+	return group, err == nil && group.Format == repository.FormatHuggingFace
 }
 
 func (rd *reader) hubFor(repo repository.HostedRepository) Hub {
@@ -400,7 +404,7 @@ func (rd *reader) respond(w http.ResponseWriter, r *http.Request, repo repositor
 		return hubError(w, http.StatusNotFound, hubRepoNotFound, "Repository Not Found"), 0, nil
 	}
 	if err != nil {
-		return rd.fail(w, revisionError(err)), 0, nil
+		return rd.fail(ctx, w, revisionError(err)), 0, nil
 	}
 	var resolution Resolution
 	if r.Method == http.MethodGet {
@@ -409,18 +413,18 @@ func (rd *reader) respond(w http.ResponseWriter, r *http.Request, repo repositor
 		resolution, err = ingest.ResolveRevision(ctx, hfRepo, parsed.rev)
 	}
 	if err != nil {
-		return rd.fail(w, revisionError(err)), 0, nil
+		return rd.fail(ctx, w, revisionError(err)), 0, nil
 	}
 	commit, err := ingest.EnsureTree(ctx, hfRepo, resolution.Commit)
 	if err != nil {
-		return rd.fail(w, err), 0, nil
+		return rd.fail(ctx, w, err), 0, nil
 	}
 	file, err := store.GetFile(ctx, commit.ID, parsed.path)
 	if errors.Is(err, ErrNotFound) {
 		return hubError(w, http.StatusNotFound, hubEntryNotFound, "Entry Not Found"), 0, nil
 	}
 	if err != nil {
-		return rd.fail(w, err), 0, nil
+		return rd.fail(ctx, w, err), 0, nil
 	}
 	headers := fileHeaders(commit, file)
 	if resolution.Stale {
@@ -448,7 +452,7 @@ func (rd *reader) respond(w http.ResponseWriter, r *http.Request, repo repositor
 		if written {
 			return http.StatusOK, 0, err
 		}
-		return rd.fail(w, err), 0, nil
+		return rd.fail(ctx, w, err), 0, nil
 	}
 	return http.StatusOK, file.Size, nil
 }
@@ -536,12 +540,15 @@ func revisionError(err error) error {
 var errRevisionNotFound = errors.New("revision not found")
 
 // fail maps an error to the Hub-shaped response and returns the status.
-func (rd *reader) fail(w http.ResponseWriter, err error) int {
+func (rd *reader) fail(ctx context.Context, w http.ResponseWriter, err error) int {
 	var upstream *UpstreamError
 	switch {
-	case errors.Is(err, context.Canceled):
-		// The client went away (or the request context ended): there is nobody to answer.
+	case errors.Is(err, context.Canceled) && ctx.Err() != nil:
+		// The client went away: there is nobody to answer.
 		return statusClientClosed
+	case errors.Is(err, context.Canceled):
+		// Cancelled for a server-side reason (a lost lock lease): the client is still there.
+		return hubError(w, http.StatusGatewayTimeout, CodeUpstreamUnavailable, "The fetch was cancelled; retry")
 	case errors.Is(err, errRevisionNotFound):
 		return hubError(w, http.StatusNotFound, hubRevisionNotFound, "Invalid rev id")
 	case errors.Is(err, ErrNotFound):

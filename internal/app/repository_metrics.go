@@ -449,7 +449,7 @@ func (m *Metrics) recordRawSpoolRejected()    { m.rawSpoolRejected.Add(1) }
 
 // huggingFaceFetchOutcomes is the bounded label set of notarx_hf_object_requests_total; an
 // outcome outside it is not recorded, so a caller can never grow the series.
-var huggingFaceFetchOutcomes = [...]string{"hit", "fetched", "digest_mismatch", "quota", "too_large", "capacity", "upstream_error"}
+var huggingFaceFetchOutcomes = [...]string{"hit", "fetched", "digest_mismatch", "quota", "too_large", "capacity", "in_progress", "upstream_error"}
 
 // RecordHuggingFaceFetch counts one Hugging Face object request by outcome.
 func (m *Metrics) RecordHuggingFaceFetch(outcome string) {

@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"sync"
 	"testing"
@@ -191,7 +192,7 @@ func TestGuardDialRefusesPrivateLiteralAtDialTime(t *testing.T) {
 	guarded := guardDial(func(context.Context, string, string) (net.Conn, error) {
 		called = true
 		return nil, errors.New("reached")
-	})
+	}, Hooks{})
 	for _, address := range []string{"127.0.0.1:443", "10.1.1.1:443", "169.254.169.254:443", "[::1]:443"} {
 		if _, err := guarded(context.Background(), "tcp", address); err == nil || err.Error() == "reached" {
 			t.Fatalf("%s: err = %v, want refusal", address, err)
@@ -205,6 +206,26 @@ func TestGuardDialRefusesPrivateLiteralAtDialTime(t *testing.T) {
 	}
 	if _, err := guarded(context.Background(), "tcp", "93.184.216.34:443"); err == nil || err.Error() != "reached" {
 		t.Fatalf("public address was not forwarded: %v", err)
+	}
+}
+
+func TestGuardDialHonoursTheOperatorsPrivateEndpointRules(t *testing.T) {
+	reached := func(context.Context, string, string) (net.Conn, error) { return nil, errors.New("reached") }
+	prefix := netip.MustParsePrefix("10.20.0.0/16")
+	hooks := Hooks{PrivateEndpointCIDRs: map[string][]netip.Prefix{"cdn.mirror.example": {prefix}}}
+	guarded := guardDial(reached, hooks)
+	if _, err := guarded(context.Background(), "tcp", "10.20.1.2:443"); err == nil || err.Error() != "reached" {
+		t.Fatalf("an address inside an allowed private range was refused at dial time: %v", err)
+	}
+	if _, err := guarded(context.Background(), "tcp", "10.30.1.2:443"); err == nil || err.Error() == "reached" {
+		t.Fatalf("an address outside every allowed range reached the dialer: %v", err)
+	}
+	if _, err := guarded(context.Background(), "tcp", "127.0.0.1:443"); err == nil || err.Error() == "reached" {
+		t.Fatalf("loopback is never covered by a private range rule: %v", err)
+	}
+	override := guardDial(reached, Hooks{AllowPrivateProxy: true})
+	if _, err := override(context.Background(), "tcp", "10.30.1.2:1080"); err == nil || err.Error() != "reached" {
+		t.Fatalf("the explicit private proxy override must reach a private proxy address: %v", err)
 	}
 }
 

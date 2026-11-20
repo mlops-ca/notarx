@@ -299,7 +299,7 @@ func (s *Store) ReplaceTree(ctx context.Context, commitID string, files []File) 
 	}
 	// A digest the repository already holds (the same LFS file in an earlier commit) is cached
 	// already: the new commit needs neither a fetch nor a second reservation.
-	if _, err := s.exec(ctx, tx, "UPDATE hf_files SET cached = ? WHERE commit_id = ? AND sha256 IN (SELECT b.sha256 FROM hf_blobs b JOIN hf_commits c ON c.hf_repo_id = b.hf_repo_id WHERE c.id = ?)", true, commitID, commitID); err != nil {
+	if _, err := s.exec(ctx, tx, "UPDATE hf_files SET cached = ? WHERE commit_id = ? AND sha256 IN (SELECT b.sha256 FROM hf_blobs b JOIN hf_commits c ON c.hf_repo_id = b.hf_repo_id WHERE c.id = ? FOR SHARE)", true, commitID, commitID); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -471,15 +471,18 @@ func (s *Store) DeleteBlob(ctx context.Context, repositoryID, hfRepoID, sha256 s
 	if err != nil {
 		return false, false, err
 	}
+	// The row goes first: it blocks behind a ReplaceTree that is marking files cached from it (that
+	// statement holds a share lock on the row), and the reference check that follows then sees the
+	// new file rows, so a digest a new commit just started to reference is not collected.
+	if _, err := s.exec(ctx, tx, "DELETE FROM hf_blobs WHERE hf_repo_id = ? AND sha256 = ?", hfRepoID, sha256); err != nil {
+		return false, false, err
+	}
 	var referenced int
 	err = s.row(ctx, tx, "SELECT 1 FROM hf_files f JOIN hf_commits c ON c.id = f.commit_id WHERE c.hf_repo_id = ? AND f.sha256 = ? LIMIT 1", hfRepoID, sha256).Scan(&referenced)
 	if err == nil {
-		return false, false, nil
+		return false, false, nil // still referenced: the deferred rollback keeps the row
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
-		return false, false, err
-	}
-	if _, err := s.exec(ctx, tx, "DELETE FROM hf_blobs WHERE hf_repo_id = ? AND sha256 = ?", hfRepoID, sha256); err != nil {
 		return false, false, err
 	}
 	var other int

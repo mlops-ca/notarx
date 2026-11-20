@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"strings"
 
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -77,7 +78,7 @@ func (f *RedirectFollower) Follow(ctx context.Context, from *http.Request, resp 
 		return nil, fmt.Errorf("%w: host is not allowlisted", ErrRedirectRejected)
 	}
 	hooks := f.Hooks
-	hooks.DialContext = guardDial(hooks.DialContext)
+	hooks.DialContext = guardDial(hooks.DialContext, hooks)
 	client, err := ApplyContext(ctx, f.Client, f.Proxy, location.String(), hooks)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrRedirectRejected, err)
@@ -133,17 +134,35 @@ func (f *RedirectFollower) allowed(host string) bool {
 // already dials only addresses that passed the resolution check; this second
 // check at dial time keeps a rebinding or hook regression from reaching a
 // private network.
-func guardDial(next func(ctx context.Context, network, address string) (net.Conn, error)) func(ctx context.Context, network, address string) (net.Conn, error) {
+func guardDial(next func(ctx context.Context, network, address string) (net.Conn, error), hooks Hooks) func(ctx context.Context, network, address string) (net.Conn, error) {
 	return func(ctx context.Context, network, address string) (net.Conn, error) {
 		host, _, err := net.SplitHostPort(address)
 		if err != nil {
 			return nil, err
 		}
-		if ip := net.ParseIP(host); ip != nil && PrivateAddress(ip) {
+		if ip := net.ParseIP(host); ip != nil && PrivateAddress(ip) && !hooks.AllowPrivateProxy && !privateAllowedByPolicy(ip, hooks.PrivateEndpointCIDRs) {
 			return nil, errors.New("egress redirect target dials a private address")
 		}
 		return next(ctx, network, address)
 	}
+}
+
+// privateAllowedByPolicy reports whether the operator's explicit private endpoint rules cover ip: the
+// resolution check already admitted this address under them, and the dial must not undo that.
+func privateAllowedByPolicy(ip net.IP, rules map[string][]netip.Prefix) bool {
+	address, ok := netip.AddrFromSlice(ip)
+	if !ok || !ip.IsPrivate() {
+		return false
+	}
+	address = address.Unmap()
+	for _, prefixes := range rules {
+		for _, prefix := range prefixes {
+			if prefix.Contains(address) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func drainClose(body io.ReadCloser) {

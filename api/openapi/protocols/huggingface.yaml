@@ -9,7 +9,7 @@ x-gateway-protocol-overlay:
     HEAD and the GET that follow it. HEAD answers from stored commit and file metadata, so a
     commit that was read before works offline; a file that was never fetched fails with 504
     upstream_unavailable while upstream is down. Cold objects stream through a tee with sha256
-    verification, and Range and If-Range are served from the staging file or the store. Xet is
+    verification, and Range and If-Range are served from the staging file or the store. A range of a cold object is served as its bytes arrive, before the whole object is verified (ADR 0027): a digest mismatch later discards the object and aborts readers of its tail, but a range already delivered stays delivered. Xet is
     not implemented: X-Xet-Hash and Xet link headers are never forwarded, the Xet read-token
     route is 404, and a file served only through Xet fails with 502 upstream_xet_only. Spaces are
     not supported (404 unsupported_repo_type), and reading through a group answers 501 group_not_supported until group resolution exists. Errors use the Hub shape, a JSON body with an
