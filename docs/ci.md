@@ -206,13 +206,13 @@ lane's verdict, duration and failed steps in the job's step summary; the job fai
 when any lane failed. The arm64 leg of a packed job runs only the lanes whose tier runs
 on arm64 in that scope.
 
-| Job | Lanes | Lane step minutes (run 44692652060 attempt 1, the halves and `core-email` from run 44710459152) |
+| Job | Lanes | Lane step minutes (run 44692652060 attempt 1, the halves and `core-email` from run 44710459152, `perf-load` and `maven-oci-auth` from run 44732449869) |
 | --- | --- | --- |
 | `packed-checks-backup` | `core-checks`, `core-backup` | 1.9 + 4.3 |
 | `packed-email-clients` | `core-email`, `migration-clients` | 5.4 + 0.8 |
-| `packed-perf-native-pypi` | `perf-load`, `core-native-e2e-2`, `pypi-migration` | 2.3 with the image rebuild (about 1.0 without it, estimated) + 4.3 + 0.7 |
+| `packed-perf-native-pypi` | `perf-load`, `core-native-e2e-2`, `pypi-migration` | 0.8 (2.3 when it rebuilt the image) + 4.3 + 0.7 |
 | `packed-native-auth-oci` | `core-native-e2e-1`, `six-format-auth`, `oci-migration` | 3.9 + 1.1 + 0.5 |
-| `packed-maven-helm-npm` | `maven-oci-auth`, `helm`, `npm-migration` | 4.5 + 1.7 + 0.6 |
+| `packed-maven-helm-npm` | 5.2 (6.2 with the Gradle contracts one after another, run 44723845622) + 1.7 + 0.6 |
 | `packed-nuget-rubygems` | `nuget`, `rubygems` | 4.2 + 2.7 |
 | `packed-discovery-inventory` | `oci-discovery`, `inventory` | 2.0 + 3.5 |
 

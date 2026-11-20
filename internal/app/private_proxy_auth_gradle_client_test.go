@@ -39,8 +39,9 @@ func TestPostgresRustFSPrivateProxyGradleOfficialClient(t *testing.T) {
 	}
 	// Every contract owns its repositories, buckets, isolated source fixture and
 	// Gateway, so the four run in parallel. Each starts the official client eight
-	// times with a fresh Gradle home; one after another they took about 4.4 minutes
-	// of the maven-oci-auth lane (issue #518). The key is set here because a
+	// times with a fresh Gradle home; one after another they took 262 s of the
+	// maven-oci-auth lane, in parallel 204 s (issue #518, the official client is
+	// CPU-bound: a run takes about 25 s instead of 8 s, well inside its 90 s limit). The key is set here because a
 	// parallel test cannot set the environment itself.
 	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", upstreamAuthTestKey)
 	for _, scheme := range []repository.UpstreamAuthScheme{repository.UpstreamAuthSchemeBasic, repository.UpstreamAuthSchemeBearer} {
