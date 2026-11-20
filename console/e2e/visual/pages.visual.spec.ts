@@ -233,7 +233,9 @@ const surfaces: Surface[] = [
   {
     name: "authentication",
     path: "/identity-providers",
-    ready: (page) => page.getByText("OIDC").first(),
+    // The authorization cache section loads from a request of its own; waiting
+    // only for the provider form let the screenshot race it.
+    ready: (page) => page.getByText("Authorization cache").first(),
   },
 ];
 
