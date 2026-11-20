@@ -80,6 +80,10 @@ func ddlPostgresServer(overrides map[string]error) *fakesql.Server {
 				row{"widgets", "widgets_live", true, true, false, "btree", "CREATE UNIQUE INDEX widgets_live ON public.widgets USING btree (name) WHERE (tags IS NOT NULL)", "name"},
 				row{"widgets", "widgets_trgm", false, false, false, "gin", "CREATE INDEX widgets_trgm ON public.widgets USING gin (name public.gin_trgm_ops)", "name"},
 				row{"ghost", "ghost_idx", false, false, false, "btree", "CREATE INDEX ghost_idx ON public.ghost USING btree (x)", "x"}), nil
+		case postgresTriggersSQL:
+			return result("n,t,d", row{"widgets_notify", "widgets", "CREATE TRIGGER widgets_notify AFTER INSERT ON public.widgets FOR EACH ROW EXECUTE FUNCTION public.notify('x')"}, row{"g", "ghost", "CREATE TRIGGER g AFTER INSERT ON public.ghost FOR EACH ROW EXECUTE FUNCTION f()"}), nil
+		case postgresViewsSQL:
+			return result("v", row{"b_view"}, row{"a_view"}), nil
 		case postgresChecksSQL:
 			return result("t,n,d", row{"widgets", "widgets_name_check", "CHECK ((length(name) <= 64))"}, row{"ghost", "g", "CHECK ((x > 0))"}), nil
 		}
@@ -109,6 +113,12 @@ func TestIntrospectPostgresDDL(t *testing.T) {
 	if !reflect.DeepEqual(widgets.Checks, map[string]string{"widgets_name_check": "(length(name) <= 64)"}) {
 		t.Errorf("checks: %v", widgets.Checks)
 	}
+	if want := map[string]string{"widgets_notify": "widgets: AFTER INSERT ON widgets FOR EACH ROW EXECUTE FUNCTION notify('x')"}; !reflect.DeepEqual(got.Triggers, want) {
+		t.Errorf("triggers: %v", got.Triggers)
+	}
+	if !reflect.DeepEqual(got.Views, []string{"a_view", "b_view"}) {
+		t.Errorf("views: %v", got.Views)
+	}
 	if _, ok := got.Tables["ghost"]; ok {
 		t.Error("a table outside the catalogue was read")
 	}
@@ -116,7 +126,7 @@ func TestIntrospectPostgresDDL(t *testing.T) {
 
 func TestIntrospectPostgresDDLErrors(t *testing.T) {
 	boom := errors.New("boom")
-	for name, fragment := range map[string]string{"defaults": "pg_attrdef", "indexes": "pg_get_indexdef", "checks": "pg_get_constraintdef"} {
+	for name, fragment := range map[string]string{"defaults": "pg_attrdef", "indexes": "pg_get_indexdef", "checks": "pg_get_constraintdef", "triggers": "pg_trigger", "views": "relkind IN ('v', 'm')"} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := Introspect(context.Background(), ddlPostgresServer(map[string]error{fragment: boom}).Open(t), DialectPostgres); !errors.Is(err, boom) {
 				t.Fatalf("err = %v", err)
@@ -173,11 +183,13 @@ func TestCompareDDL(t *testing.T) {
 	table.Special = nil
 	table.Checks = map[string]string{"c": "a <> 'x'"}
 	drift.Tables["t"] = table
+	drift.Triggers = map[string]string{"extra": "t: x"}
+	drift.Views = []string{"v"}
 	problems := strings.Join(Compare(want, drift, DialectPostgres), "\n")
 	for _, expected := range []string{
 		"table t lacks the index (a)", "table t has the index (a desc), which the catalogue lacks",
 		"table t has the default of column a as \"'x'\"; the catalogue has \"''\"", "table t has the default of column extra, which the catalogue lacks",
-		"table t lacks the special index s", "table t has the check constraint c as \"a <> 'x'\"",
+		"table t lacks the special index s", "has the trigger extra, which the catalogue lacks", "the database has the views [v]", "table t has the check constraint c as \"a <> 'x'\"",
 	} {
 		if !strings.Contains(problems, expected) {
 			t.Errorf("missing %q in\n%s", expected, problems)

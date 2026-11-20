@@ -23,6 +23,14 @@ const CatalogueVersion = 1
 type Catalogue struct {
 	Version int              `yaml:"version"`
 	Tables  map[string]Table `yaml:"tables"`
+	// Triggers maps each trigger name to "table: definition" in its PostgreSQL form, with
+	// the table and function schema removed. MySQL does not mirror them: each one has a
+	// decision in migrations/mysql-decisions.yaml (polling, application code or a MySQL
+	// trigger), and PostgreSQL is compared exactly.
+	Triggers map[string]string `yaml:"triggers,omitempty"`
+	// Views lists the views of PostgreSQL. MySQL gets none of them: each one has a decision
+	// in migrations/mysql-decisions.yaml.
+	Views []string `yaml:"views,omitempty"`
 	// Seeds are the rows a freshly migrated database holds: the singleton rows
 	// the code expects. Timestamps and generated identifiers are left out.
 	Seeds map[string][]map[string]string `yaml:"seeds,omitempty"`

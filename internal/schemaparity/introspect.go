@@ -245,6 +245,9 @@ func introspectPostgres(ctx context.Context, db *sql.DB) (Catalogue, error) {
 	if err := introspectPostgresDDL(ctx, db, catalogue); err != nil {
 		return Catalogue{}, err
 	}
+	if err := introspectPostgresObjects(ctx, db, &catalogue); err != nil {
+		return Catalogue{}, err
+	}
 	return finishCatalogue(catalogue), nil
 }
 

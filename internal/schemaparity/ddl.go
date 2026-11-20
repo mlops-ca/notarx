@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -50,6 +51,51 @@ FROM pg_constraint con
 JOIN pg_class c ON c.oid = con.conrelid
 JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE con.contype = 'c' AND n.nspname = 'public' AND c.relkind IN ('r', 'p') AND NOT c.relispartition AND con.conparentid = 0`
+
+const postgresTriggersSQL = `SELECT t.tgname, c.relname, pg_get_triggerdef(t.oid)
+FROM pg_trigger t
+JOIN pg_class c ON c.oid = t.tgrelid
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE NOT t.tgisinternal AND n.nspname = 'public' AND c.relkind IN ('r', 'p') AND NOT c.relispartition`
+
+const postgresViewsSQL = `SELECT c.relname
+FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public' AND c.relkind IN ('v', 'm')`
+
+var triggerDefinitionPrefix = regexp.MustCompile(`^CREATE (?:OR REPLACE )?(?:CONSTRAINT )?TRIGGER \S+ `)
+
+// introspectPostgresObjects adds the triggers and views the MySQL baseline does not mirror.
+func introspectPostgresObjects(ctx context.Context, db *sql.DB, catalogue *Catalogue) error {
+	if err := rows(ctx, db, postgresTriggersSQL, func(r *sql.Rows) error {
+		var name, table, definition string
+		if err := r.Scan(&name, &table, &definition); err != nil {
+			return err
+		}
+		if _, ok := catalogue.Tables[table]; !ok {
+			return nil
+		}
+		if catalogue.Triggers == nil {
+			catalogue.Triggers = map[string]string{}
+		}
+		text := triggerDefinitionPrefix.ReplaceAllString(definition, "")
+		catalogue.Triggers[name] = table + ": " + strings.ReplaceAll(text, "public.", "")
+		return nil
+	}); err != nil {
+		return fmt.Errorf("list triggers: %w", err)
+	}
+	if err := rows(ctx, db, postgresViewsSQL, func(r *sql.Rows) error {
+		var name string
+		if err := r.Scan(&name); err != nil {
+			return err
+		}
+		catalogue.Views = append(catalogue.Views, name)
+		return nil
+	}); err != nil {
+		return fmt.Errorf("list views: %w", err)
+	}
+	slices.Sort(catalogue.Views)
+	return nil
+}
 
 // introspectPostgresDDL adds the defaults, indexes and CHECK constraints of a migrated PostgreSQL.
 func introspectPostgresDDL(ctx context.Context, db *sql.DB, catalogue Catalogue) error {

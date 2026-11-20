@@ -34,6 +34,12 @@ func Compare(want, got Catalogue, dialect string) []string {
 			add("table %s is not in the catalogue", name)
 		}
 	}
+	if dialect != DialectMySQL {
+		compareMaps("(database)", "trigger", want.Triggers, got.Triggers, add)
+		if !slices.Equal(want.Views, got.Views) {
+			add("the database has the views %v; the catalogue has %v", got.Views, want.Views)
+		}
+	}
 	return problems
 }
 
