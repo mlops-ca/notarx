@@ -32,7 +32,7 @@ func (h generatedRepositoryAPIAdapter) CreateRepositoryPromotion(w http.Response
 			return
 		}
 		h.withRepositoryScopeForPrincipal(w, r, principal, request.TargetRepositoryId.String(), RepositoryAdmin, func(Principal, repository.HostedRepository) {
-			job, perr := PromotionService{h: h}.Request(r.Context(), PromotionRequest{Principal: principal, Source: source, TargetID: request.TargetRepositoryId.String(), Coordinate: request.Coordinate, Digest: request.Digest, AptTargetSuite: request.AptTargetSuite, IdempotencyKey: string(params.IdempotencyKey)})
+			job, perr := newPromotionService(h).Request(r.Context(), PromotionRequest{Principal: principal, Source: source, TargetID: request.TargetRepositoryId.String(), Coordinate: request.Coordinate, Digest: request.Digest, AptTargetSuite: request.AptTargetSuite, IdempotencyKey: string(params.IdempotencyKey)})
 			if perr != nil {
 				writeHostedProblem(w, perr.Status, perr.Code, perr.Message)
 				return
@@ -216,34 +216,28 @@ func (h generatedRepositoryAPIAdapter) CreateRepositoryReplication(w http.Respon
 	})
 }
 
-type distributionRejection struct {
-	status  int
-	code    string
-	message string
-}
-
 func (h generatedRepositoryAPIAdapter) rejectQuarantinedDistribution(w http.ResponseWriter, r *http.Request, principal Principal, source, target repository.HostedRepository, coordinate, digest, operation string) bool {
 	rejection := h.checkQuarantinedDistribution(r.Context(), principal, source, target, coordinate, digest, operation)
 	if rejection == nil {
 		return false
 	}
-	writeHostedProblem(w, rejection.status, rejection.code, rejection.message)
+	writeHostedProblem(w, rejection.Status, rejection.Code, rejection.Message)
 	return true
 }
 
 // checkQuarantinedDistribution refuses a distribution whose artifact is unavailable or quarantined,
 // recording the quarantine denial in the audit log.
-func (h generatedRepositoryAPIAdapter) checkQuarantinedDistribution(ctx context.Context, principal Principal, source, target repository.HostedRepository, coordinate, digest, operation string) *distributionRejection {
+func (h generatedRepositoryAPIAdapter) checkQuarantinedDistribution(ctx context.Context, principal Principal, source, target repository.HostedRepository, coordinate, digest, operation string) *PromotionError {
 	digests, err := h.artifactDistributionDigests(ctx, source, coordinate, digest)
 	if errors.Is(err, repository.ErrNotFound) {
-		return &distributionRejection{http.StatusNotFound, "not_found", "source artifact is unavailable"}
+		return promotionError(http.StatusNotFound, "not_found", "source artifact is unavailable")
 	}
 	if err != nil {
-		return &distributionRejection{http.StatusInternalServerError, "internal_error", "evaluate distribution artifact identities failed"}
+		return promotionError(http.StatusInternalServerError, "internal_error", "evaluate distribution artifact identities failed")
 	}
 	allowed, err := repository.ArtifactDistributionAllowedForDigests(ctx, h.quarantine, source.ID, source.Format, coordinate, digests)
 	if err != nil {
-		return &distributionRejection{http.StatusInternalServerError, "internal_error", "evaluate artifact quarantine failed"}
+		return promotionError(http.StatusInternalServerError, "internal_error", "evaluate artifact quarantine failed")
 	}
 	if allowed {
 		return nil
@@ -258,7 +252,7 @@ func (h generatedRepositoryAPIAdapter) checkQuarantinedDistribution(ctx context.
 			CacheDisposition:    "bypass",
 		})
 	}
-	return &distributionRejection{http.StatusForbidden, repository.ArtifactQuarantinedReason, "artifact is quarantined and cannot be distributed"}
+	return promotionError(http.StatusForbidden, repository.ArtifactQuarantinedReason, "artifact is quarantined and cannot be distributed")
 }
 
 func validConanReplicationCoordinate(value string) bool {
